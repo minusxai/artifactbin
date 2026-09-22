@@ -3,8 +3,8 @@
  * maps to a registry operation's HTTP address, and every operation's address
  * is a real route file — so neither side can gain an entry the other misses.
  *
- * Named exceptions only: the annotations LIST (a history/debug read whose
- * primary form is inlined on get_artifact).
+ * Named exceptions below cover CLI transport helpers and the annotations LIST
+ * (a history/debug read whose primary form is inlined on get_artifact).
  */
 import { readdirSync, statSync } from 'node:fs';
 import path from 'node:path';
@@ -32,6 +32,7 @@ const EXCEPTIONS = new Set([
   '/api/artifacts/reservations', // CLI identity-pool allocation, not an artifact operation
   '/api/artifacts/preflight', // read-only validation of the actual publication body
   '/api/artifacts/{id}/content', // immutable binary content download; no document rendering or imports
+  '/api/artifacts/{id}/comment-images/{imageId}', // binary attachment download; metadata is inlined on annotation reads
   '/api/artifacts/{id}/annotations', // the list view — the primary read is get_artifact, which inlines the open set
 ]);
 

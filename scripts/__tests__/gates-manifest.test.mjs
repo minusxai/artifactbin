@@ -12,14 +12,14 @@ import { describe, expect, it } from 'vitest';
 import { readdirSync, readFileSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import path from 'node:path';
-import { GATE_SPECS, checkManifest, specFor } from '../gates.manifest.mjs';
+import { GATE_SPECS, checkManifest, specFor, browsersFor, shardWeight } from '../gates.manifest.mjs';
 import { parseShard, shardOf } from '../gates.shard.mjs';
 
 const SCRIPTS = path.resolve(import.meta.dirname, '..');
 const onDisk = readdirSync(SCRIPTS).filter((f) => f.startsWith('gate-') && f.endsWith('.mjs')).map((f) => f.slice(5, -4)).sort();
 const source = (name) => readFileSync(path.join(SCRIPTS, `gate-${name}.mjs`), 'utf8');
 const MAIL = /dev-mail|DEV_OUTBOX|startMailSink|\/mail\b|mailSink|MAIL_SINK|readCode|latestCode|becomeAccountOwner/;
-const ALLOWED_FIELDS = new Set(['name', 'needsMail', 'serialGroup', 'timeoutMs']);
+const ALLOWED_FIELDS = new Set(['name', 'needsMail', 'serialGroup', 'timeoutMs', 'browsers']);
 
 describe('the manifest and the disk are one set', () => {
   it('1. every gate file has a row and every row has a file', () => {
@@ -102,7 +102,7 @@ describe('the rows tell the truth about their sources', () => {
  */
 describe('the shards are cut from those rows', () => {
   const NAMES = GATE_SPECS.map((s) => s.name);
-  const weight = (name) => specFor(name).timeoutMs;
+  const weight = shardWeight;
 
   it('9. parseShard reads i/n, is null when the flag is absent, and refuses a shard that cannot exist', () => {
     expect(parseShard('--shard=1/2')).toEqual({ index: 1, total: 2 });
@@ -140,4 +140,29 @@ describe('the shards are cut from those rows', () => {
     expect(first.includes(heaviest[0])).toBe(true);
     expect(first.includes(heaviest[1])).toBe(false);
   });
+});
+
+ describe('browser provisioning follows the selected gates', () => {
+  it('keeps Chromium-only shards free of unused engines', () => {
+    expect(browsersFor(['annotations', 'managed-iframe'])).toEqual(['chromium']);
+  });
+  it('preserves all three engines for screenshot coverage', () => {
+    expect(browsersFor(['annotations', 'screenshot-comments'])).toEqual(['chromium', 'firefox', 'webkit']);
+  });
+  it('rejects unknown gates instead of silently underprovisioning', () => {
+    expect(() => browsersFor(['missing-gate'])).toThrow(/no row/);
+  });
+ });
+
+it('balances the extra cross-browser setup without extending any test timeout', () => {
+  expect(shardWeight('annotations')).toBe(specFor('annotations').timeoutMs);
+  expect(shardWeight('screenshot-comments')).toBe(specFor('screenshot-comments').timeoutMs + 270_000);
+});
+
+it('prints the same browser plan used by shard selection without starting servers', () => {
+  for (let index = 1; index <= 6; index++) {
+    const selected = shardOf(onDisk, {index, total: 6}, shardWeight);
+    const output = execFileSync(process.execPath, [path.join(SCRIPTS, 'gates.mjs'), '--browsers', `--shard=${index}/6`], {encoding: 'utf8'}).trim();
+    expect(output).toBe(browsersFor(selected).join(' '));
+  }
 });

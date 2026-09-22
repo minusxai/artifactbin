@@ -13,90 +13,91 @@ import * as r9 from '@/app/a/[id]/tables/route';
 import * as r10 from '@/app/api/account/profile/route';
 import * as r11 from '@/app/api/artifacts/[id]/annotations/[annId]/route';
 import * as r12 from '@/app/api/artifacts/[id]/annotations/route';
-import * as r13 from '@/app/api/artifacts/[id]/content/route';
-import * as r14 from '@/app/api/artifacts/[id]/edits/route';
-import * as r15 from '@/app/api/artifacts/[id]/export/route';
-import * as r16 from '@/app/api/artifacts/[id]/fork/route';
-import * as r17 from '@/app/api/artifacts/[id]/mutate/route';
-import * as r18 from '@/app/api/artifacts/[id]/policy/route';
-import * as r19 from '@/app/api/artifacts/[id]/query/route';
-import * as r20 from '@/app/api/artifacts/[id]/restore/route';
-import * as r21 from '@/app/api/artifacts/[id]/revert/route';
-import * as r22 from '@/app/api/artifacts/[id]/route';
-import * as r23 from '@/app/api/artifacts/[id]/versions/[version]/route';
-import * as r24 from '@/app/api/artifacts/[id]/versions/route';
-import * as r25 from '@/app/api/artifacts/assets/refresh/route';
-import * as r26 from '@/app/api/artifacts/preflight/route';
-import * as r27 from '@/app/api/artifacts/reservations/route';
-import * as r28 from '@/app/api/artifacts/route';
-import * as r29 from '@/app/api/browser-sessions/route';
-import * as r30 from '@/app/api/capabilities/route';
-import * as r31 from '@/app/api/datasets/discover/route';
-import * as r32 from '@/app/api/datasets/notebook/preview/route';
-import * as r33 from '@/app/api/health/route';
-import * as r34 from '@/app/api/internal/artifact-approval/route';
-import * as r35 from '@/app/api/internal/tokens/route';
-import * as r36 from '@/app/api/my/artifacts/[id]/agent-prompt/route';
-import * as r37 from '@/app/api/my/artifacts/[id]/annotations/[annId]/route';
-import * as r38 from '@/app/api/my/artifacts/[id]/annotations/route';
-import * as r39 from '@/app/api/my/artifacts/[id]/assets/refresh/route';
-import * as r40 from '@/app/api/my/artifacts/[id]/comment-images/[imageId]/route';
-import * as r41 from '@/app/api/my/artifacts/[id]/comment-images/route';
-import * as r42 from '@/app/api/my/artifacts/[id]/edits/route';
-import * as r43 from '@/app/api/my/artifacts/[id]/fork/route';
-import * as r44 from '@/app/api/my/artifacts/[id]/like/route';
-import * as r45 from '@/app/api/my/artifacts/[id]/policy/route';
-import * as r46 from '@/app/api/my/artifacts/[id]/restore/route';
-import * as r47 from '@/app/api/my/artifacts/[id]/revert/route';
-import * as r48 from '@/app/api/my/artifacts/[id]/route';
-import * as r49 from '@/app/api/my/artifacts/[id]/sharing/route';
-import * as r50 from '@/app/api/my/artifacts/[id]/versions/[version]/route';
-import * as r51 from '@/app/api/my/artifacts/[id]/versions/route';
-import * as r52 from '@/app/api/my/artifacts/route';
-import * as r53 from '@/app/api/my/datasets/discover/route';
-import * as r54 from '@/app/api/my/datasets/notebook/preview/route';
-import * as r55 from '@/app/api/my/datasets/preview/route';
-import * as r56 from '@/app/api/my/profile/image/route';
-import * as r57 from '@/app/api/my/profile/route';
-import * as r58 from '@/app/api/my/secrets/route';
-import * as r59 from '@/app/api/my/testusers/[id]/route';
-import * as r60 from '@/app/api/my/testusers/route';
-import * as r61 from '@/app/api/my/tokens/[id]/route';
-import * as r62 from '@/app/api/my/tokens/route';
-import * as r63 from '@/app/api/page/account/route';
-import * as r64 from '@/app/api/page/artifact/[id]/route';
-import * as r65 from '@/app/api/page/artifact/[id]/view/route';
-import * as r66 from '@/app/api/page/assets/route';
-import * as r67 from '@/app/api/page/home/route';
-import * as r68 from '@/app/api/page/profile/[user]/[[...path]]/route';
-import * as r69 from '@/app/api/page/session/route';
-import * as r70 from '@/app/api/page/trash/route';
-import * as r71 from '@/app/api/preview/route';
-import * as r72 from '@/app/api/query/route';
-import * as r73 from '@/app/api/remote/sessions/[id]/exchange/route';
-import * as r74 from '@/app/api/remote/sessions/[id]/route';
-import * as r75 from '@/app/api/remote/sessions/route';
-import * as r76 from '@/app/api/secrets/route';
-import * as r77 from '@/app/api/server/route';
-import * as r78 from '@/app/api/session/token/route';
-import * as r79 from '@/app/api/sessions/[id]/route';
-import * as r80 from '@/app/api/sessions/route';
-import * as r81 from '@/app/api/start/route';
-import * as r82 from '@/app/api/testusers/[id]/route';
-import * as r83 from '@/app/api/testusers/route';
-import * as r84 from '@/app/api/tokens/[id]/route';
-import * as r85 from '@/app/api/tokens/claim/route';
-import * as r86 from '@/app/api/tokens/claimable/route';
-import * as r87 from '@/app/api/tokens/reject/route';
-import * as r88 from '@/app/api/tokens/route';
-import * as r89 from '@/app/api/users/[id]/avatar/route';
-import * as r90 from '@/app/api/users/[id]/follow/route';
-import * as r91 from '@/app/assets/[hash]/route';
-import * as r92 from '@/app/assets/export/[id]/route';
-import * as r93 from '@/app/health/route';
-import * as r94 from '@/app/llms.txt/route';
-import * as r95 from '@/app/tiles/[...tile]/route';
-import * as r96 from '@/app/webfonts/[file]/route';
+import * as r13 from '@/app/api/artifacts/[id]/comment-images/[imageId]/route';
+import * as r14 from '@/app/api/artifacts/[id]/content/route';
+import * as r15 from '@/app/api/artifacts/[id]/edits/route';
+import * as r16 from '@/app/api/artifacts/[id]/export/route';
+import * as r17 from '@/app/api/artifacts/[id]/fork/route';
+import * as r18 from '@/app/api/artifacts/[id]/mutate/route';
+import * as r19 from '@/app/api/artifacts/[id]/policy/route';
+import * as r20 from '@/app/api/artifacts/[id]/query/route';
+import * as r21 from '@/app/api/artifacts/[id]/restore/route';
+import * as r22 from '@/app/api/artifacts/[id]/revert/route';
+import * as r23 from '@/app/api/artifacts/[id]/route';
+import * as r24 from '@/app/api/artifacts/[id]/versions/[version]/route';
+import * as r25 from '@/app/api/artifacts/[id]/versions/route';
+import * as r26 from '@/app/api/artifacts/assets/refresh/route';
+import * as r27 from '@/app/api/artifacts/preflight/route';
+import * as r28 from '@/app/api/artifacts/reservations/route';
+import * as r29 from '@/app/api/artifacts/route';
+import * as r30 from '@/app/api/browser-sessions/route';
+import * as r31 from '@/app/api/capabilities/route';
+import * as r32 from '@/app/api/datasets/discover/route';
+import * as r33 from '@/app/api/datasets/notebook/preview/route';
+import * as r34 from '@/app/api/health/route';
+import * as r35 from '@/app/api/internal/artifact-approval/route';
+import * as r36 from '@/app/api/internal/tokens/route';
+import * as r37 from '@/app/api/my/artifacts/[id]/agent-prompt/route';
+import * as r38 from '@/app/api/my/artifacts/[id]/annotations/[annId]/route';
+import * as r39 from '@/app/api/my/artifacts/[id]/annotations/route';
+import * as r40 from '@/app/api/my/artifacts/[id]/assets/refresh/route';
+import * as r41 from '@/app/api/my/artifacts/[id]/comment-images/[imageId]/route';
+import * as r42 from '@/app/api/my/artifacts/[id]/comment-images/route';
+import * as r43 from '@/app/api/my/artifacts/[id]/edits/route';
+import * as r44 from '@/app/api/my/artifacts/[id]/fork/route';
+import * as r45 from '@/app/api/my/artifacts/[id]/like/route';
+import * as r46 from '@/app/api/my/artifacts/[id]/policy/route';
+import * as r47 from '@/app/api/my/artifacts/[id]/restore/route';
+import * as r48 from '@/app/api/my/artifacts/[id]/revert/route';
+import * as r49 from '@/app/api/my/artifacts/[id]/route';
+import * as r50 from '@/app/api/my/artifacts/[id]/sharing/route';
+import * as r51 from '@/app/api/my/artifacts/[id]/versions/[version]/route';
+import * as r52 from '@/app/api/my/artifacts/[id]/versions/route';
+import * as r53 from '@/app/api/my/artifacts/route';
+import * as r54 from '@/app/api/my/datasets/discover/route';
+import * as r55 from '@/app/api/my/datasets/notebook/preview/route';
+import * as r56 from '@/app/api/my/datasets/preview/route';
+import * as r57 from '@/app/api/my/profile/image/route';
+import * as r58 from '@/app/api/my/profile/route';
+import * as r59 from '@/app/api/my/secrets/route';
+import * as r60 from '@/app/api/my/testusers/[id]/route';
+import * as r61 from '@/app/api/my/testusers/route';
+import * as r62 from '@/app/api/my/tokens/[id]/route';
+import * as r63 from '@/app/api/my/tokens/route';
+import * as r64 from '@/app/api/page/account/route';
+import * as r65 from '@/app/api/page/artifact/[id]/route';
+import * as r66 from '@/app/api/page/artifact/[id]/view/route';
+import * as r67 from '@/app/api/page/assets/route';
+import * as r68 from '@/app/api/page/home/route';
+import * as r69 from '@/app/api/page/profile/[user]/[[...path]]/route';
+import * as r70 from '@/app/api/page/session/route';
+import * as r71 from '@/app/api/page/trash/route';
+import * as r72 from '@/app/api/preview/route';
+import * as r73 from '@/app/api/query/route';
+import * as r74 from '@/app/api/remote/sessions/[id]/exchange/route';
+import * as r75 from '@/app/api/remote/sessions/[id]/route';
+import * as r76 from '@/app/api/remote/sessions/route';
+import * as r77 from '@/app/api/secrets/route';
+import * as r78 from '@/app/api/server/route';
+import * as r79 from '@/app/api/session/token/route';
+import * as r80 from '@/app/api/sessions/[id]/route';
+import * as r81 from '@/app/api/sessions/route';
+import * as r82 from '@/app/api/start/route';
+import * as r83 from '@/app/api/testusers/[id]/route';
+import * as r84 from '@/app/api/testusers/route';
+import * as r85 from '@/app/api/tokens/[id]/route';
+import * as r86 from '@/app/api/tokens/claim/route';
+import * as r87 from '@/app/api/tokens/claimable/route';
+import * as r88 from '@/app/api/tokens/reject/route';
+import * as r89 from '@/app/api/tokens/route';
+import * as r90 from '@/app/api/users/[id]/avatar/route';
+import * as r91 from '@/app/api/users/[id]/follow/route';
+import * as r92 from '@/app/assets/[hash]/route';
+import * as r93 from '@/app/assets/export/[id]/route';
+import * as r94 from '@/app/health/route';
+import * as r95 from '@/app/llms.txt/route';
+import * as r96 from '@/app/tiles/[...tile]/route';
+import * as r97 from '@/app/webfonts/[file]/route';
 
 export interface RouteEntry { path: string; dir: string; methods: string[]; module: Record<string, unknown> }
 export const ROUTES: RouteEntry[] = [
@@ -113,88 +114,89 @@ export const ROUTES: RouteEntry[] = [
   { path: "/api/account/profile", dir: "/api/account/profile", methods: ["GET","PATCH"], module: r10 },
   { path: "/api/artifacts/:id/annotations/:annId", dir: "/api/artifacts/[id]/annotations/[annId]", methods: ["POST","DELETE"], module: r11 },
   { path: "/api/artifacts/:id/annotations", dir: "/api/artifacts/[id]/annotations", methods: ["GET","POST"], module: r12 },
-  { path: "/api/artifacts/:id/content", dir: "/api/artifacts/[id]/content", methods: ["GET"], module: r13 },
-  { path: "/api/artifacts/:id/edits", dir: "/api/artifacts/[id]/edits", methods: ["POST"], module: r14 },
-  { path: "/api/artifacts/:id/export", dir: "/api/artifacts/[id]/export", methods: ["GET"], module: r15 },
-  { path: "/api/artifacts/:id/fork", dir: "/api/artifacts/[id]/fork", methods: ["POST"], module: r16 },
-  { path: "/api/artifacts/:id/mutate", dir: "/api/artifacts/[id]/mutate", methods: ["POST"], module: r17 },
-  { path: "/api/artifacts/:id/policy", dir: "/api/artifacts/[id]/policy", methods: ["GET","PUT"], module: r18 },
-  { path: "/api/artifacts/:id/query", dir: "/api/artifacts/[id]/query", methods: ["POST"], module: r19 },
-  { path: "/api/artifacts/:id/restore", dir: "/api/artifacts/[id]/restore", methods: ["POST"], module: r20 },
-  { path: "/api/artifacts/:id/revert", dir: "/api/artifacts/[id]/revert", methods: ["POST"], module: r21 },
-  { path: "/api/artifacts/:id", dir: "/api/artifacts/[id]", methods: ["GET","PUT","PATCH","DELETE"], module: r22 },
-  { path: "/api/artifacts/:id/versions/:version", dir: "/api/artifacts/[id]/versions/[version]", methods: ["GET"], module: r23 },
-  { path: "/api/artifacts/:id/versions", dir: "/api/artifacts/[id]/versions", methods: ["GET"], module: r24 },
-  { path: "/api/artifacts/assets/refresh", dir: "/api/artifacts/assets/refresh", methods: ["POST"], module: r25 },
-  { path: "/api/artifacts/preflight", dir: "/api/artifacts/preflight", methods: ["POST"], module: r26 },
-  { path: "/api/artifacts/reservations", dir: "/api/artifacts/reservations", methods: ["POST"], module: r27 },
-  { path: "/api/artifacts", dir: "/api/artifacts", methods: ["GET","POST"], module: r28 },
-  { path: "/api/browser-sessions", dir: "/api/browser-sessions", methods: ["POST"], module: r29 },
-  { path: "/api/capabilities", dir: "/api/capabilities", methods: ["GET"], module: r30 },
-  { path: "/api/datasets/discover", dir: "/api/datasets/discover", methods: ["POST"], module: r31 },
-  { path: "/api/datasets/notebook/preview", dir: "/api/datasets/notebook/preview", methods: ["POST"], module: r32 },
-  { path: "/api/health", dir: "/api/health", methods: ["GET"], module: r33 },
-  { path: "/api/internal/artifact-approval", dir: "/api/internal/artifact-approval", methods: ["POST"], module: r34 },
-  { path: "/api/internal/tokens", dir: "/api/internal/tokens", methods: ["POST"], module: r35 },
-  { path: "/api/my/artifacts/:id/agent-prompt", dir: "/api/my/artifacts/[id]/agent-prompt", methods: ["POST"], module: r36 },
-  { path: "/api/my/artifacts/:id/annotations/:annId", dir: "/api/my/artifacts/[id]/annotations/[annId]", methods: ["POST","DELETE"], module: r37 },
-  { path: "/api/my/artifacts/:id/annotations", dir: "/api/my/artifacts/[id]/annotations", methods: ["GET","POST"], module: r38 },
-  { path: "/api/my/artifacts/:id/assets/refresh", dir: "/api/my/artifacts/[id]/assets/refresh", methods: ["POST"], module: r39 },
-  { path: "/api/my/artifacts/:id/comment-images/:imageId", dir: "/api/my/artifacts/[id]/comment-images/[imageId]", methods: ["GET"], module: r40 },
-  { path: "/api/my/artifacts/:id/comment-images", dir: "/api/my/artifacts/[id]/comment-images", methods: ["POST"], module: r41 },
-  { path: "/api/my/artifacts/:id/edits", dir: "/api/my/artifacts/[id]/edits", methods: ["POST"], module: r42 },
-  { path: "/api/my/artifacts/:id/fork", dir: "/api/my/artifacts/[id]/fork", methods: ["POST"], module: r43 },
-  { path: "/api/my/artifacts/:id/like", dir: "/api/my/artifacts/[id]/like", methods: ["GET","POST","DELETE"], module: r44 },
-  { path: "/api/my/artifacts/:id/policy", dir: "/api/my/artifacts/[id]/policy", methods: ["GET","PUT"], module: r45 },
-  { path: "/api/my/artifacts/:id/restore", dir: "/api/my/artifacts/[id]/restore", methods: ["POST"], module: r46 },
-  { path: "/api/my/artifacts/:id/revert", dir: "/api/my/artifacts/[id]/revert", methods: ["POST"], module: r47 },
-  { path: "/api/my/artifacts/:id", dir: "/api/my/artifacts/[id]", methods: ["GET","PUT","PATCH","DELETE"], module: r48 },
-  { path: "/api/my/artifacts/:id/sharing", dir: "/api/my/artifacts/[id]/sharing", methods: ["GET","PUT"], module: r49 },
-  { path: "/api/my/artifacts/:id/versions/:version", dir: "/api/my/artifacts/[id]/versions/[version]", methods: ["GET"], module: r50 },
-  { path: "/api/my/artifacts/:id/versions", dir: "/api/my/artifacts/[id]/versions", methods: ["GET"], module: r51 },
-  { path: "/api/my/artifacts", dir: "/api/my/artifacts", methods: ["GET","POST"], module: r52 },
-  { path: "/api/my/datasets/discover", dir: "/api/my/datasets/discover", methods: ["POST"], module: r53 },
-  { path: "/api/my/datasets/notebook/preview", dir: "/api/my/datasets/notebook/preview", methods: ["POST"], module: r54 },
-  { path: "/api/my/datasets/preview", dir: "/api/my/datasets/preview", methods: ["POST"], module: r55 },
-  { path: "/api/my/profile/image", dir: "/api/my/profile/image", methods: ["PUT","DELETE"], module: r56 },
-  { path: "/api/my/profile", dir: "/api/my/profile", methods: ["GET","PATCH"], module: r57 },
-  { path: "/api/my/secrets", dir: "/api/my/secrets", methods: ["POST"], module: r58 },
-  { path: "/api/my/testusers/:id", dir: "/api/my/testusers/[id]", methods: ["DELETE"], module: r59 },
-  { path: "/api/my/testusers", dir: "/api/my/testusers", methods: ["GET","POST"], module: r60 },
-  { path: "/api/my/tokens/:id", dir: "/api/my/tokens/[id]", methods: ["DELETE"], module: r61 },
-  { path: "/api/my/tokens", dir: "/api/my/tokens", methods: ["GET"], module: r62 },
-  { path: "/api/page/account", dir: "/api/page/account", methods: ["GET"], module: r63 },
-  { path: "/api/page/artifact/:id", dir: "/api/page/artifact/[id]", methods: ["GET"], module: r64 },
-  { path: "/api/page/artifact/:id/view", dir: "/api/page/artifact/[id]/view", methods: ["POST"], module: r65 },
-  { path: "/api/page/assets", dir: "/api/page/assets", methods: ["GET"], module: r66 },
-  { path: "/api/page/home", dir: "/api/page/home", methods: ["GET"], module: r67 },
-  { path: "/api/page/profile/:user/:path{.*}?", dir: "/api/page/profile/[user]/[[...path]]", methods: ["GET"], module: r68 },
-  { path: "/api/page/session", dir: "/api/page/session", methods: ["GET"], module: r69 },
-  { path: "/api/page/trash", dir: "/api/page/trash", methods: ["GET"], module: r70 },
-  { path: "/api/preview", dir: "/api/preview", methods: ["POST"], module: r71 },
-  { path: "/api/query", dir: "/api/query", methods: ["POST"], module: r72 },
-  { path: "/api/remote/sessions/:id/exchange", dir: "/api/remote/sessions/[id]/exchange", methods: ["POST"], module: r73 },
-  { path: "/api/remote/sessions/:id", dir: "/api/remote/sessions/[id]", methods: ["GET","POST","DELETE"], module: r74 },
-  { path: "/api/remote/sessions", dir: "/api/remote/sessions", methods: ["GET","POST"], module: r75 },
-  { path: "/api/secrets", dir: "/api/secrets", methods: ["POST"], module: r76 },
-  { path: "/api/server", dir: "/api/server", methods: ["GET"], module: r77 },
-  { path: "/api/session/token", dir: "/api/session/token", methods: ["POST","DELETE"], module: r78 },
-  { path: "/api/sessions/:id", dir: "/api/sessions/[id]", methods: ["GET","DELETE"], module: r79 },
-  { path: "/api/sessions", dir: "/api/sessions", methods: ["GET"], module: r80 },
-  { path: "/api/start", dir: "/api/start", methods: ["POST"], module: r81 },
-  { path: "/api/testusers/:id", dir: "/api/testusers/[id]", methods: ["DELETE"], module: r82 },
-  { path: "/api/testusers", dir: "/api/testusers", methods: ["GET","POST"], module: r83 },
-  { path: "/api/tokens/:id", dir: "/api/tokens/[id]", methods: ["DELETE"], module: r84 },
-  { path: "/api/tokens/claim", dir: "/api/tokens/claim", methods: ["POST"], module: r85 },
-  { path: "/api/tokens/claimable", dir: "/api/tokens/claimable", methods: ["POST"], module: r86 },
-  { path: "/api/tokens/reject", dir: "/api/tokens/reject", methods: ["POST"], module: r87 },
-  { path: "/api/tokens", dir: "/api/tokens", methods: ["POST"], module: r88 },
-  { path: "/api/users/:id/avatar", dir: "/api/users/[id]/avatar", methods: ["GET"], module: r89 },
-  { path: "/api/users/:id/follow", dir: "/api/users/[id]/follow", methods: ["GET","POST","DELETE"], module: r90 },
-  { path: "/assets/:hash", dir: "/assets/[hash]", methods: ["GET"], module: r91 },
-  { path: "/assets/export/:id", dir: "/assets/export/[id]", methods: ["GET","HEAD"], module: r92 },
-  { path: "/health", dir: "/health", methods: ["GET"], module: r93 },
-  { path: "/llms.txt", dir: "/llms.txt", methods: ["GET"], module: r94 },
-  { path: "/tiles/:tile{.+}", dir: "/tiles/[...tile]", methods: ["GET"], module: r95 },
-  { path: "/webfonts/:file", dir: "/webfonts/[file]", methods: ["GET"], module: r96 },
+  { path: "/api/artifacts/:id/comment-images/:imageId", dir: "/api/artifacts/[id]/comment-images/[imageId]", methods: ["GET"], module: r13 },
+  { path: "/api/artifacts/:id/content", dir: "/api/artifacts/[id]/content", methods: ["GET"], module: r14 },
+  { path: "/api/artifacts/:id/edits", dir: "/api/artifacts/[id]/edits", methods: ["POST"], module: r15 },
+  { path: "/api/artifacts/:id/export", dir: "/api/artifacts/[id]/export", methods: ["GET"], module: r16 },
+  { path: "/api/artifacts/:id/fork", dir: "/api/artifacts/[id]/fork", methods: ["POST"], module: r17 },
+  { path: "/api/artifacts/:id/mutate", dir: "/api/artifacts/[id]/mutate", methods: ["POST"], module: r18 },
+  { path: "/api/artifacts/:id/policy", dir: "/api/artifacts/[id]/policy", methods: ["GET","PUT"], module: r19 },
+  { path: "/api/artifacts/:id/query", dir: "/api/artifacts/[id]/query", methods: ["POST"], module: r20 },
+  { path: "/api/artifacts/:id/restore", dir: "/api/artifacts/[id]/restore", methods: ["POST"], module: r21 },
+  { path: "/api/artifacts/:id/revert", dir: "/api/artifacts/[id]/revert", methods: ["POST"], module: r22 },
+  { path: "/api/artifacts/:id", dir: "/api/artifacts/[id]", methods: ["GET","PUT","PATCH","DELETE"], module: r23 },
+  { path: "/api/artifacts/:id/versions/:version", dir: "/api/artifacts/[id]/versions/[version]", methods: ["GET"], module: r24 },
+  { path: "/api/artifacts/:id/versions", dir: "/api/artifacts/[id]/versions", methods: ["GET"], module: r25 },
+  { path: "/api/artifacts/assets/refresh", dir: "/api/artifacts/assets/refresh", methods: ["POST"], module: r26 },
+  { path: "/api/artifacts/preflight", dir: "/api/artifacts/preflight", methods: ["POST"], module: r27 },
+  { path: "/api/artifacts/reservations", dir: "/api/artifacts/reservations", methods: ["POST"], module: r28 },
+  { path: "/api/artifacts", dir: "/api/artifacts", methods: ["GET","POST"], module: r29 },
+  { path: "/api/browser-sessions", dir: "/api/browser-sessions", methods: ["POST"], module: r30 },
+  { path: "/api/capabilities", dir: "/api/capabilities", methods: ["GET"], module: r31 },
+  { path: "/api/datasets/discover", dir: "/api/datasets/discover", methods: ["POST"], module: r32 },
+  { path: "/api/datasets/notebook/preview", dir: "/api/datasets/notebook/preview", methods: ["POST"], module: r33 },
+  { path: "/api/health", dir: "/api/health", methods: ["GET"], module: r34 },
+  { path: "/api/internal/artifact-approval", dir: "/api/internal/artifact-approval", methods: ["POST"], module: r35 },
+  { path: "/api/internal/tokens", dir: "/api/internal/tokens", methods: ["POST"], module: r36 },
+  { path: "/api/my/artifacts/:id/agent-prompt", dir: "/api/my/artifacts/[id]/agent-prompt", methods: ["POST"], module: r37 },
+  { path: "/api/my/artifacts/:id/annotations/:annId", dir: "/api/my/artifacts/[id]/annotations/[annId]", methods: ["POST","DELETE"], module: r38 },
+  { path: "/api/my/artifacts/:id/annotations", dir: "/api/my/artifacts/[id]/annotations", methods: ["GET","POST"], module: r39 },
+  { path: "/api/my/artifacts/:id/assets/refresh", dir: "/api/my/artifacts/[id]/assets/refresh", methods: ["POST"], module: r40 },
+  { path: "/api/my/artifacts/:id/comment-images/:imageId", dir: "/api/my/artifacts/[id]/comment-images/[imageId]", methods: ["GET"], module: r41 },
+  { path: "/api/my/artifacts/:id/comment-images", dir: "/api/my/artifacts/[id]/comment-images", methods: ["POST"], module: r42 },
+  { path: "/api/my/artifacts/:id/edits", dir: "/api/my/artifacts/[id]/edits", methods: ["POST"], module: r43 },
+  { path: "/api/my/artifacts/:id/fork", dir: "/api/my/artifacts/[id]/fork", methods: ["POST"], module: r44 },
+  { path: "/api/my/artifacts/:id/like", dir: "/api/my/artifacts/[id]/like", methods: ["GET","POST","DELETE"], module: r45 },
+  { path: "/api/my/artifacts/:id/policy", dir: "/api/my/artifacts/[id]/policy", methods: ["GET","PUT"], module: r46 },
+  { path: "/api/my/artifacts/:id/restore", dir: "/api/my/artifacts/[id]/restore", methods: ["POST"], module: r47 },
+  { path: "/api/my/artifacts/:id/revert", dir: "/api/my/artifacts/[id]/revert", methods: ["POST"], module: r48 },
+  { path: "/api/my/artifacts/:id", dir: "/api/my/artifacts/[id]", methods: ["GET","PUT","PATCH","DELETE"], module: r49 },
+  { path: "/api/my/artifacts/:id/sharing", dir: "/api/my/artifacts/[id]/sharing", methods: ["GET","PUT"], module: r50 },
+  { path: "/api/my/artifacts/:id/versions/:version", dir: "/api/my/artifacts/[id]/versions/[version]", methods: ["GET"], module: r51 },
+  { path: "/api/my/artifacts/:id/versions", dir: "/api/my/artifacts/[id]/versions", methods: ["GET"], module: r52 },
+  { path: "/api/my/artifacts", dir: "/api/my/artifacts", methods: ["GET","POST"], module: r53 },
+  { path: "/api/my/datasets/discover", dir: "/api/my/datasets/discover", methods: ["POST"], module: r54 },
+  { path: "/api/my/datasets/notebook/preview", dir: "/api/my/datasets/notebook/preview", methods: ["POST"], module: r55 },
+  { path: "/api/my/datasets/preview", dir: "/api/my/datasets/preview", methods: ["POST"], module: r56 },
+  { path: "/api/my/profile/image", dir: "/api/my/profile/image", methods: ["PUT","DELETE"], module: r57 },
+  { path: "/api/my/profile", dir: "/api/my/profile", methods: ["GET","PATCH"], module: r58 },
+  { path: "/api/my/secrets", dir: "/api/my/secrets", methods: ["POST"], module: r59 },
+  { path: "/api/my/testusers/:id", dir: "/api/my/testusers/[id]", methods: ["DELETE"], module: r60 },
+  { path: "/api/my/testusers", dir: "/api/my/testusers", methods: ["GET","POST"], module: r61 },
+  { path: "/api/my/tokens/:id", dir: "/api/my/tokens/[id]", methods: ["DELETE"], module: r62 },
+  { path: "/api/my/tokens", dir: "/api/my/tokens", methods: ["GET"], module: r63 },
+  { path: "/api/page/account", dir: "/api/page/account", methods: ["GET"], module: r64 },
+  { path: "/api/page/artifact/:id", dir: "/api/page/artifact/[id]", methods: ["GET"], module: r65 },
+  { path: "/api/page/artifact/:id/view", dir: "/api/page/artifact/[id]/view", methods: ["POST"], module: r66 },
+  { path: "/api/page/assets", dir: "/api/page/assets", methods: ["GET"], module: r67 },
+  { path: "/api/page/home", dir: "/api/page/home", methods: ["GET"], module: r68 },
+  { path: "/api/page/profile/:user/:path{.*}?", dir: "/api/page/profile/[user]/[[...path]]", methods: ["GET"], module: r69 },
+  { path: "/api/page/session", dir: "/api/page/session", methods: ["GET"], module: r70 },
+  { path: "/api/page/trash", dir: "/api/page/trash", methods: ["GET"], module: r71 },
+  { path: "/api/preview", dir: "/api/preview", methods: ["POST"], module: r72 },
+  { path: "/api/query", dir: "/api/query", methods: ["POST"], module: r73 },
+  { path: "/api/remote/sessions/:id/exchange", dir: "/api/remote/sessions/[id]/exchange", methods: ["POST"], module: r74 },
+  { path: "/api/remote/sessions/:id", dir: "/api/remote/sessions/[id]", methods: ["GET","POST","DELETE"], module: r75 },
+  { path: "/api/remote/sessions", dir: "/api/remote/sessions", methods: ["GET","POST"], module: r76 },
+  { path: "/api/secrets", dir: "/api/secrets", methods: ["POST"], module: r77 },
+  { path: "/api/server", dir: "/api/server", methods: ["GET"], module: r78 },
+  { path: "/api/session/token", dir: "/api/session/token", methods: ["POST","DELETE"], module: r79 },
+  { path: "/api/sessions/:id", dir: "/api/sessions/[id]", methods: ["GET","DELETE"], module: r80 },
+  { path: "/api/sessions", dir: "/api/sessions", methods: ["GET"], module: r81 },
+  { path: "/api/start", dir: "/api/start", methods: ["POST"], module: r82 },
+  { path: "/api/testusers/:id", dir: "/api/testusers/[id]", methods: ["DELETE"], module: r83 },
+  { path: "/api/testusers", dir: "/api/testusers", methods: ["GET","POST"], module: r84 },
+  { path: "/api/tokens/:id", dir: "/api/tokens/[id]", methods: ["DELETE"], module: r85 },
+  { path: "/api/tokens/claim", dir: "/api/tokens/claim", methods: ["POST"], module: r86 },
+  { path: "/api/tokens/claimable", dir: "/api/tokens/claimable", methods: ["POST"], module: r87 },
+  { path: "/api/tokens/reject", dir: "/api/tokens/reject", methods: ["POST"], module: r88 },
+  { path: "/api/tokens", dir: "/api/tokens", methods: ["POST"], module: r89 },
+  { path: "/api/users/:id/avatar", dir: "/api/users/[id]/avatar", methods: ["GET"], module: r90 },
+  { path: "/api/users/:id/follow", dir: "/api/users/[id]/follow", methods: ["GET","POST","DELETE"], module: r91 },
+  { path: "/assets/:hash", dir: "/assets/[hash]", methods: ["GET"], module: r92 },
+  { path: "/assets/export/:id", dir: "/assets/export/[id]", methods: ["GET","HEAD"], module: r93 },
+  { path: "/health", dir: "/health", methods: ["GET"], module: r94 },
+  { path: "/llms.txt", dir: "/llms.txt", methods: ["GET"], module: r95 },
+  { path: "/tiles/:tile{.+}", dir: "/tiles/[...tile]", methods: ["GET"], module: r96 },
+  { path: "/webfonts/:file", dir: "/webfonts/[file]", methods: ["GET"], module: r97 },
 ];

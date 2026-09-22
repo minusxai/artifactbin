@@ -402,13 +402,21 @@ jobs:
         with:
           path: ~/.cache/ms-playwright
           key: playwright-${{ runner.os }}-${{ hashFiles('node_modules/playwright-core/browsers.json') }}
-      # `--with-deps` apt-installs Chromium's system libraries on EVERY run (~30s) even when the
-      # browser binary came from the cache. ubuntu-latest already ships those libraries, so the
-      # deps pass is only worth paying for when the browser is actually being downloaded.
-      - if: steps.playwright.outputs.cache-hit != 'true'
-        run: npx playwright install --with-deps chromium firefox webkit
-      - if: steps.playwright.outputs.cache-hit == 'true'
-        run: npx playwright install --with-deps chromium firefox webkit
+      # Chromium libraries ship on the runner. Firefox/WebKit need additional system
+      # packages even on a browser-cache hit; install them only on shards that use them.
+      - id: gate-browsers
+        run: echo "browsers=$(node scripts/gates.mjs --browsers --shard=${{ matrix.shard }}/6)" >> "$GITHUB_OUTPUT"
+      - name: Install selected gate browsers
+        env:
+          BROWSERS: ${{ steps.gate-browsers.outputs.browsers }}
+          CACHE_HIT: ${{ steps.playwright.outputs.cache-hit }}
+        run: |
+          read -ra selected_engines <<< "$BROWSERS"
+          deps=()
+          if [[ "$CACHE_HIT" != true || "$BROWSERS" != chromium ]]; then
+            deps+=(--with-deps)
+          fi
+          npx playwright install "${deps[@]}" "${selected_engines[@]}"
       # WHAT `build` BUILT: the SPA, the document runtime and its public assets, the generated route
       # table, the bundled server these shards boot (scripts/gates.mjs runs dist/server.mjs, not a
       # dev server) and the CLI bundle the conformance gates drive. ~40 MB, stored uncompressed, in
