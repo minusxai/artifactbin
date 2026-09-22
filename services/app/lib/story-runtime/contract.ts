@@ -587,6 +587,8 @@ export interface StoryEditRect { x: number; y: number; width: number; height: nu
  * attribute values, which is what the typography toolbar reasons over.
  */
 export interface StoryEditSelection {
+  /** Unclipped drag in this document viewport, separate from the node-relative anchor. */
+  captureRect?: StoryEditRect;
   /** The prose engine owns formatting transactions and their source write-back. */
   editor?: 'prose';
   customHeight?:boolean;

@@ -24,6 +24,8 @@ const browser = await chromium.launch();
 try {
   const context=await browser.newContext({viewport:{width:1280,height:960}});
   const page=await context.newPage();
+  // This gate exercises anchoring. Capture itself is exercised by screenshot-comments.
+  await page.addInitScript(()=>{if(navigator.mediaDevices)Object.defineProperty(navigator.mediaDevices,'setCaptureHandleConfig',{value:undefined});});
   page.on('response',async response=>{if(response.status()>=400&&response.url().includes('/annotations'))console.error('Annotation request failed:',response.status(),await response.text());});
   await becomeOwner(page,base,seed.token);
   await page.goto(`${base}/a/${seed.id}`);
@@ -42,6 +44,8 @@ try {
     if(await button.getAttribute('aria-pressed')!=='true')await button.click();
   };
   const save=async(body)=>{
+    const fallback=page.getByRole('button',{name:'Continue without screenshot',exact:true});
+    if(await fallback.isVisible())await fallback.click();
     await page.getByLabel('Annotation comment',{exact:true}).fill(body);
     await page.getByRole('button',{name:'Save annotation',exact:true}).click();
     await page.getByLabel('Annotation composer',{exact:true}).waitFor({state:'hidden'});

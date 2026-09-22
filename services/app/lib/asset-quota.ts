@@ -58,6 +58,7 @@ export async function assetBytesForToken(tokenId: string): Promise<number> {
          (SELECT COALESCE(SUM((meta->>'bytes')::bigint), 0) FROM artifacts
            WHERE user_id = $1 AND meta ? 'bytes')
        + (SELECT COALESCE(SUM(bytes), 0) FROM web_assets WHERE fetched_by_user_id = $1)
+       + (SELECT COALESCE(SUM(bytes), 0) FROM comment_images WHERE user_id = $1)
          AS n`,
       [userId],
     )
@@ -67,6 +68,7 @@ export async function assetBytesForToken(tokenId: string): Promise<number> {
            WHERE token_id = $1 AND user_id IS NULL AND meta ? 'bytes')
        + (SELECT COALESCE(SUM(bytes), 0) FROM web_assets
            WHERE fetched_by_token_id = $1 AND fetched_by_user_id IS NULL)
+       + (SELECT COALESCE(SUM(bytes), 0) FROM comment_images WHERE token_id = $1 AND user_id IS NULL)
          AS n`,
       [tokenId],
     );
@@ -79,3 +81,6 @@ export async function assetByteQuotaExceeded(tokenId: string): Promise<boolean> 
   if (!cap) return false;
   return (await assetBytesForToken(tokenId)) >= cap;
 }
+
+/** The same cap applies to staged comment images, including incoming bytes. */
+export const assetByteQuotaLimit = (): number | null => override !== undefined ? override : ASSETS_MAX_BYTES_PER_TOKEN;

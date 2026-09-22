@@ -465,10 +465,11 @@ export function createFrameAnnotateSession({ win, channel, isEditing, root }: Fr
   };
 
   /** Report a selection: stamp the node so the owner sees what they picked, tell the page. */
-  const reportSelection = (el: Element | null, extra: { range?: AnnotationRangeOnWire } = {}) => {
+  const reportSelection = (el: Element | null, extra: { range?: AnnotationRangeOnWire; captureRect?: AnnotationRect } = {}) => {
     managedSelection = null;
     const selection = el ? describeCommentSelection(el, nodes) : null;
     if (selection && extra.range && (selection.tag !== 'For' || isTargetRange(selection.range))) selection.range = isTargetRange(selection.range) && !isTargetRange(extra.range) ? {...selection.range, range:extra.range} : extra.range;
+    if(selection && extra.captureRect)selection.captureRect=extra.captureRect;
     selectedPath = selection?.path ?? null;
     applyState();
     post({ type: STORY_SELECTION_MESSAGE, selection });
@@ -641,7 +642,7 @@ export function createFrameAnnotateSession({ win, channel, isEditing, root }: Fr
       const bounds = runtime.getBoundingClientRect();
       if (rect.x >= bounds.x && rect.y >= bounds.y && rect.x+rect.width <= bounds.right && rect.y+rect.height <= bounds.bottom) {
         const box = boxFromRects(bounds,rect);
-        if (box) {reportSelection(runtime,{range:{v:1,kind:'area',box}});return;}
+        if (box) {reportSelection(runtime,{range:{v:1,kind:'area',box},captureRect:rect});return;}
       }
     }
     const path = areaTarget(areaCandidates(), rect);
@@ -650,7 +651,7 @@ export function createFrameAnnotateSession({ win, channel, isEditing, root }: Fr
     const box = boxFromRects(el.getBoundingClientRect(), rect);
     if (!box) return;
     composingArea = { path, box };
-    reportSelection(el, { range: { v: 1, kind: 'area', box } });
+    reportSelection(el, { range: { v: 1, kind: 'area', box }, captureRect:rect });
   };
 
   const cancelDrawing = () => { if (!drawing) return; swallowSelectionClick = false; drawing = null; removeBand(); setPickHovered(null); };

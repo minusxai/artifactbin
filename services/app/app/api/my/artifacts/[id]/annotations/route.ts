@@ -1,3 +1,4 @@
+import {durableMutation,type MutationReceipt} from '@/lib/mutation-receipt';
 import { notifyRemoteComment } from '@/lib/remote/mentions';
 /**
  * The BROWSER's annotation door — where a person's selection becomes a thread
@@ -47,6 +48,8 @@ function parseCreateBody(body: Record<string, unknown>): CreateBodyResult {
   const input: CreateAnnotationInput = { body: body.body };
   if (hasNode) input.nodeId = body.node_id as string;
   else { input.bodyPath = body.path as string; input.baseEditId = body.edit_id as string; }
+  if (body.edit_id !== undefined) { if (typeof body.edit_id !== 'string' || !body.edit_id) return invalid; input.baseEditId=body.edit_id; }
+  if (body.attachment_id !== undefined) { if(typeof body.attachment_id!=='string'||!/^cim_[a-z0-9]+$/.test(body.attachment_id)||!input.baseEditId)return invalid; input.attachmentId=body.attachment_id; }
   if (typeof body.quote === 'string') input.quote = body.quote;
   if (body.range !== undefined && body.range !== null) {
     const range = parseAnnotationRange(body.range);
@@ -84,9 +87,10 @@ export async function POST(request: Request, ctx: { params: Promise<{ id: string
   // The author label is a display SNAPSHOT (never joined at read): the
   // account's public handle, or null for an anonymous cookie owner — the UI
   // then falls back to the kind.
+  const work = async (receipt?:MutationReceipt) => {
   const made = await createAnnotationFor(scoped, id, parsed.input, {
     kind: 'human', label: await ownerUsername(scoped.userId), transport: 'browser',
-  });
+  },receipt);
   if (made instanceof Response) return made; // the anchor edit's named publish refusal
   if (!made) return json({ error: 'not_found' }, 404);
   if ('refused' in made) {
@@ -95,4 +99,9 @@ export async function POST(request: Request, ctx: { params: Promise<{ id: string
   }
   notifyRemoteComment(scoped.userId, id, made.id, made.thread[0]);
   return json(made, 201);
+  };
+  const key=request.headers.get('Idempotency-Key');
+  if(!key)return work();
+  const result=await durableMutation(scoped,request.url,key,{operation:'create_comment',id,body},async receipt=>{const response=await work(receipt);return {status:response.status,body:await response.json()};});
+  return json(result.body,result.status);
 }
