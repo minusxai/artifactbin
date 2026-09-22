@@ -2,7 +2,7 @@ import {API_RESOURCE_PATH,CLI_PROTOCOL_VERSION,normalizeOrigin} from '@artifactb
 import {homedir} from 'node:os';
 import {CliError} from './commands';
 import {CLI_VERSION} from './version';
-import {configDir,loadConnection,saveConnection,normalizeServer,type Connection} from './config';
+import {configDir,remoteContext,loadConnection,saveConnection,normalizeServer,type Connection} from './config';
 interface HttpOptions {connection:Connection;home?:string;env?:NodeJS.ProcessEnv;fetch?:typeof fetch;readOnly?:boolean;account?:string;aliases?:readonly string[];authenticate?:()=>Promise<Connection>}
 /**
  * THE SECOND READ-ONLY PREFLIGHT. A dry run may send nothing that writes, which is why the
@@ -49,6 +49,7 @@ export class HttpClient {
  }
  private async perform(path:string,method:string,body:unknown,headers:Record<string,string>,binary:boolean,timeoutMs=30000,readOnly=false,address:(path:string,server:string)=>URL=apiUrl,signal?:AbortSignal):Promise<unknown>{
   const url=address(path,this.connection.server);
+  const remote=remoteContext(this.options.env);
   if(this.options.readOnly&&!['GET','HEAD'].includes(method)&&url.pathname!=='/api/artifacts/preflight'&&!isForkPreflight(url.pathname,method,body))throw new CliError('unsupported_dry_run','This request has no read-only preflight.');
   const imageExport=address===viewerUrl&&/^\/a\/[A-Za-z0-9]{6}\/export$/.test(url.pathname);
   let refreshed=false,authenticated=false;
@@ -56,6 +57,7 @@ export class HttpClient {
    let response:Response;
    try{response=await (this.options.fetch??fetch)(url.toString(),{method,redirect:imageExport?'manual':'error',signal:signal?AbortSignal.any([signal,AbortSignal.timeout(timeoutMs)]):AbortSignal.timeout(timeoutMs),headers:{
     ...(imageExport?{'X-Artifactbin-Export-Delivery':'redirect'}:{}),
+    ...(remote&&/\/annotations\/[^/]+$/.test(url.pathname)?{'X-Artifactbin-Remote-Session':remote.id,'X-Artifactbin-Remote-Proof':remote.proof}:{}),
     ...headers,Authorization:`Bearer ${this.connection.token}`,'X-Artifactbin-Protocol':String(CLI_PROTOCOL_VERSION),'User-Agent':`afbin/${CLI_VERSION}`,
     ...(body!==undefined?{'Content-Type':'application/json'}:{}),...(this.account?{'X-Artifactbin-Account':this.account}:{}),
     ...(this.options.readOnly?{'X-Artifactbin-Dry-Run':'1'}:{}),

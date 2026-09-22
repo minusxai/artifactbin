@@ -22,6 +22,12 @@ export const flags: Record<string,Flag> = {
  execution:{value:'ID',description:'Read a browser session execution receipt without replaying the script.'},
  as:{value:'WHO',description:'Act as somebody else: a test user id from afbin testuser new, or guest on a session. fork --as <testuser-id> gives the copy to that test user, inside its sandbox; sessions script new --as guest|<testuser-id> chooses who a NEW session\'s pages browse as, once, when it is created. Omit --as and everything runs as you.'},
  all:{description:'Erase every test user this account holds; testuser delete only.'},
+ request:{value:'ID',description:'Correlate a reply to the managed agent request.'},
+ phase:{value:'PHASE',description:'Record acknowledged, completed or blocked with a reply.'},
+ history:{value:'PATH',description:'Snapshot a UTF-8 context handoff for the background agent.'},
+ foreground:{description:'Keep the local terminal attached instead of launching in the background.'},
+ stop:{value:'ID',description:'Stop a managed remote agent and its local process.'},
+ ready:{value:'ID',description:'Acknowledge context loading from the managed agent process.'},
  session:{value:'REF',description:'Attach to an existing authorized remote session instead of launching a command.'},
  output:{short:'o',value:'PATH',description:'Write resulting content to this file or directory.'},
  format:{value:'FORMAT',description:'Select a supported content representation; fixed format names ignore case.'},
@@ -75,7 +81,7 @@ export const commands: Command[] = [
  {name:'log',usage:'<ref> [<ref> ...]',description:'List versions, newest first; @version starts at that version or earlier.',min:1,max:Infinity,flags:['type','filter','limit','cursor'],examples:['afbin log report.jsx --limit 10']},
  {name:'list',usage:'[<ref> ...]',description:'List resources or summaries; default accessible artifacts, newest first.',min:0,max:Infinity,flags:['type','in','filter','limit','cursor','format','output'],examples:['afbin list --json','afbin list --type session','afbin list --type table --in orders.yaml']},
  {name:'delete',usage:'<ref> [<ref> ...]',description:'Soft-delete resources, revoke tokens, terminate sessions or delete comments; keep local files.',min:1,max:Infinity,flags:['type','in','dry-run','force'],examples:['afbin delete report.jsx --dry-run','afbin delete --type comment --in abc123 ann_123']},
- {name:'comment',usage:'<ref> [<ref> ...]',description:'List threads, post an anchored comment, reply, resolve or reopen.',min:1,max:Infinity,flags:['body','input','thread','node','quote','state','filter','limit','cursor','dry-run'],examples:['afbin comment report.jsx','afbin comment report.jsx --node heading --body "Clarify this"','afbin comment report.jsx --thread ann_123 --body "Fixed" --state resolved']},
+ {name:'comment',usage:'<ref> [<ref> ...]',description:'List threads, post an anchored comment, reply, resolve or reopen.',min:1,max:Infinity,flags:['request','phase','body','input','thread','node','quote','state','filter','limit','cursor','dry-run'],examples:['afbin comment report.jsx','afbin comment report.jsx --node heading --body "Clarify this"','afbin comment report.jsx --thread ann_123 --body "Fixed" --state resolved']},
  {name:'open',usage:'<ref> [<ref> ...]',description:'Open the published view of a resource, or print its URL with --json.',min:1,max:Infinity,flags:[],examples:['afbin open report.jsx','afbin open abc123 --json']},
  {name:'help',usage:'[topic]',description:'Read the bundled example, markup, data, themes, templates, schemas or command help; --for <template> prints everything a document of that kind needs in one call.',min:0,max:1,flags:['format','output','for'],examples:['afbin help --for deck','afbin help markup','afbin help dashboard']},
  {name:'serve',description:'Run a persistent authenticated server in the foreground.',usage:'[--dir <path>] [--config <path>] [--port <port>] [--db-url <url>]',min:0,max:0,flags:['config','dir','db-url','port'],examples:['afbin serve --dir ~/team-artifacts --port 7445','afbin serve --dir ~/team-artifacts --db-url postgres://localhost/artifactbin']},
@@ -86,7 +92,7 @@ export const commands: Command[] = [
  {name:'update',usage:'',description:'Update the compatible CLI and selected local skill bundles.',min:0,max:0,flags:['harness','dry-run'],examples:['afbin update --yes --json']},
  {name:'sessions',usage:'script new|<id> | status <id> | close <id>',description:'Run async Playwright scripts in a persistent isolated browser session. Read afbin help live-sessions for context, pages and output.image.',min:2,max:2,flags:['input','execution','as'],examples:['afbin sessions script new --input actions.js --json','afbin sessions script new --as guest --input actions.js --json','afbin sessions script new --as tu_9fA2b --input actions.js --json','afbin sessions status session_id --execution execution_id --json','afbin sessions close session_id --json']},
  {name:'testuser',usage:'new | list | delete <id> | delete --all',description:'Mint, list and erase throwaway test users: the other person on a page you are verifying. Deleting one erases everything it owns.',min:1,max:2,flags:['all'],examples:['afbin testuser new --json','afbin testuser list --json','afbin testuser delete tu_9fA2b --json','afbin testuser delete --all --json']},
- {name:'remote',usage:'[command [args ...]]',description:'Run a local terminal with browser access, or attach to an existing session.',min:0,max:Infinity,flags:['name','session'],examples:['afbin remote pi','afbin remote --name Backend codex','afbin remote --session rs_123']},
+ {name:'remote',usage:'[command [args ...]]',description:'Start a background agent with browser access, or attach to an existing session.',min:0,max:Infinity,flags:['name','session','history','foreground','stop','ready'],examples:['afbin remote pi','afbin remote --name codex2 codex','afbin remote --session rs_123']},
 ];
 /**
  * `--as` NAMES A PERSON, NEVER A KIND. It used to take `test-user` and the server minted a fresh
@@ -187,6 +193,9 @@ export function parseCommand(argv:string[]):ParsedCommand {
   if(op!=='delete'&&(target!==undefined||f.all))throw new CliError('invalid_arguments',`testuser ${op} takes no target.`,'Name a test user only when deleting one: afbin testuser delete <id>.');
   if(op==='delete'&&(f.all?target!==undefined:target===undefined))throw new CliError('invalid_arguments','testuser delete takes one id, or --all for every test user this account holds.','Run afbin testuser list for the ids you hold.');
  }
+ if(command.name==='comment'&&(f.request||f.phase)&&(!f.thread||!f.request||!['acknowledged','completed','blocked'].includes(String(f.phase))||(!f.body&&!f.input)))throw new CliError('invalid_arguments','Use --request and --phase acknowledged|completed|blocked with --thread and a reply.');
+ if(command.name==='remote'&&f.history&&(f.foreground||f.session))throw new CliError('invalid_arguments','--history is only supported for a background launch.');
+ if(command.name==='remote'&&(f.stop||f.ready)){if(result.positionals.length||f.name||f.history||f.foreground||f.session||(f.stop&&f.ready))throw new CliError('invalid_arguments','Use --stop or --ready with one session ID, without launch or attach options.');}
  if(command.name==='remote'&&f.session!==undefined&&(result.positionals.length||f.name!==undefined))throw new CliError('invalid_arguments','--session attaches to an existing session; omit the command and --name.');
  if(command.name==='delete'&&f.in!==undefined&&f.type!=='comment')throw new CliError('invalid_arguments','--in identifies the containing artifact for --type comment only.');
  if(command.name==='delete'&&f.type==='comment'&&f.in===undefined)throw new CliError('invalid_arguments','delete --type comment requires --in <artifact>.');
@@ -202,7 +211,7 @@ export function parseCommand(argv:string[]):ParsedCommand {
  if(['log','comment'].includes(command.name)&&result.positionals.length>1&&f.cursor)throw new CliError('invalid_cursor','--cursor requires one target.');
  if(f.limit!==undefined&&(!/^\d+$/.test(String(f.limit))||Number(f.limit)<1||Number(f.limit)>100))throw new CliError('invalid_limit','--limit must be an integer from 1 to 100.');
  if(f.harness){const targets=(f.harness as string[]).map(value=>enumArgument(value,['claude','codex','pi','opencode','none'],'harness'));f.harness=targets;if(targets.some(x=>!['claude','codex','pi','opencode','none'].includes(x))||(targets.includes('none')&&targets.length>1)||new Set(targets).size!==targets.length)throw new CliError('invalid_harness','Choose unique harness names; none must be used alone.');}
- if(command.name==='remote'&&f.json)throw new CliError('unsupported_flag','afbin remote streams a terminal and does not accept --json.','Run afbin remote -h.');
+ if(command.name==='remote'&&f.json&&(f.foreground||f.session))throw new CliError('unsupported_flag','afbin remote streams a terminal and does not accept --json.','Run afbin remote -h.');
  if(command.name==='query'&&f.write&&(f.remote||f.limit||f.cursor||result.positionals.length!==1||(!f.input&&!f.name)||(f.input&&f.name)))throw new CliError('invalid_arguments','--write requires one target and either --input SQL or a declared mutation --name; --remote, --limit and --cursor apply to reads.');
  if(command.name==='query'&&result.positionals.length>1&&(f.input||f.cursor||f.name))throw new CliError('invalid_arguments','--input, --name and --cursor require one query target.');
  if(command.name==='comment'){
@@ -223,5 +232,5 @@ export function commandHelp(name?:string):string {
  const command=name?commands.find(c=>c.name===name||c.aliases?.includes(name)):undefined;
  if(name&&!command)throw new CliError('unknown_help_topic',`Unknown command ${name}.`);
  if(!command)return `afbin — local files, published artifacts\n\n${commands.map(c=>`  afbin ${c.name} ${c.usage}\n    ${c.description}`).join('\n')}\n\n<ref> = <url|id|path>[@version]. Published references use ref:<id>.\nRun afbin <command> -h for flags and examples.\nLocal topics: commands, example, markup, data, themes, templates, errors.\n`;
- return `afbin ${command.name} ${command.usage}\n\n${command.description}\n\n${[...globalFlags.filter(name=>command.name!=='remote'||name!=='json'),...command.flags].map(name=>{const f=flags[name];return `  ${f.short?`-${f.short}, `:''}--${name}${f.value?` <${f.value}>`:''}\n    ${f.description}`;}).join('\n')}\n\nExamples:\n${command.examples.map(x=>`  ${x}`).join('\n')}\n`;
+ return `afbin ${command.name} ${command.usage}\n\n${command.description}\n\n${[...globalFlags,...command.flags].map(name=>{const f=flags[name];return `  ${f.short?`-${f.short}, `:''}--${name}${f.value?` <${f.value}>`:''}\n    ${f.description}`;}).join('\n')}\n\nExamples:\n${command.examples.map(x=>`  ${x}`).join('\n')}\n`;
 }

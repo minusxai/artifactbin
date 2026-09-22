@@ -107,7 +107,7 @@ describe('the additive DDL is replay-safe', () => {
       // The soft-delete stamp every adopted table carries, appended LAST for
       // the same reason. Nothing writes it on this table yet (a comment is
       // erased, not trashed); the gate in lib/annotations is what it buys.
-      'deleted_at',
+      'deleted_at', 'author_remote',
     ]);
     // Provenance is APPENDED, never inserted: a fork's parent is a column the
     // additive DDL adds on the next boot, with nothing to backfill (NULL is

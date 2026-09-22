@@ -48,3 +48,5 @@ it('guest workspace adoption belongs to app users',()=>{
 });
 
 it('export metadata and refresh claims belong to the app',()=>{expect(declared()['app.export_images']).toBe('app');expect(declared()['app.export_image_cache']).toBe('app');});
+
+it('remote identities and work receipts belong to app',()=>{expect(declared()['app.remote_agents']).toBe('app');expect(declared()['app.remote_work']).toBe('app');});

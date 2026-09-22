@@ -1,5 +1,8 @@
 'use client';
 
+import {replyMentionPrefix,hasReplyText,remoteWorkLabel} from '../lib/remote-reply';
+import {REMOTE_COLOR_CSS,remoteColor} from '../../contracts/src/remote';
+
 /**
  * THE PAGE HALF OF ANNOTATIONS — the Google-Docs shape.
  *
@@ -276,7 +279,7 @@ function AuthorIdentity({ author }: { author: AnnotationCommentWire['author'] })
       ) : (
         <AgentMark label={label} />
       )}
-      {author.kind === 'human' && author.label ? (
+      {author.sessionId ? <a href={`/chat?session=${author.sessionId}`} target="_blank" rel="noopener noreferrer" className="truncate text-[11px] font-semibold" style={{color:REMOTE_COLOR_CSS[author.color??remoteColor(author.sessionId)]}}>@{label}</a> : author.kind === 'human' && author.label ? (
         <a
           href={`/@${encodeURIComponent(author.label)}`}
           aria-label={`View @${author.label} profile`}
@@ -498,14 +501,19 @@ function Thread({
   isCommentFolded: (commentId: string) => boolean;
   onOpen: () => void;
   onHover: (id: string | null) => void;
-  onReply: (body: string) => void;
+  onReply: (body: string) => Promise<boolean>;
   onResolve: () => void;
   onReopen: () => void;
   onDelete: () => void;
   onToggleFold: () => void;
   onToggleComment: (commentId: string) => void;
 }) {
-  const [reply, setReply] = useState('');
+  const prefix=replyMentionPrefix(a.thread);
+  const [reply, setReply] = useState(()=>prefix);
+  const touched=useRef(false);
+  const sending=useRef(false);
+  const [replyError,setReplyError]=useState('');
+  useEffect(()=>{if(!touched.current)setReply(prefix);},[prefix]);
   const [replyPreviewing, setReplyPreviewing] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -515,12 +523,15 @@ function Thread({
 
   // ONE send for the button and for ⌘↵ — the field owns the key, the thread
   // owns whether there is anything to send.
-  const sendReply = useCallback(() => {
-    if (busy || !reply.trim()) return;
-    onReply(reply);
-    setReply('');
-    setReplyPreviewing(false);
-  }, [busy, reply, onReply]);
+  const sendReply = useCallback(async () => {
+    if (busy || sending.current || !hasReplyText(reply)) return;
+    sending.current=true;setReplyError('');
+    try {
+      if(!await onReply(reply))throw new Error('Could not send reply. Your draft is saved here.');
+      touched.current=false;setReply(prefix);setReplyPreviewing(false);
+    } catch {setReplyError('Could not send reply. Your draft is saved here.');}
+    finally {sending.current=false;}
+  }, [busy, reply, onReply,prefix]);
 
   useEffect(() => {
     if (!menuOpen) return;
@@ -574,6 +585,12 @@ function Thread({
           )}
         </div>
       )}
+      {!folded && (a.remote_work??[]).filter((w,i,all)=>!all.slice(i+1).some(next=>next.sessionId===w.sessionId)).map(work=>(
+        <p key={work.id} role="status" className="flex items-center gap-1.5 border-b border-edge px-3 py-1.5 text-[11px] text-muted">
+          <a href={`/chat?session=${work.sessionId}`} target="_blank" rel="noopener noreferrer" style={{color:REMOTE_COLOR_CSS[work.color]}}>@{work.name}</a>
+          <span>{remoteWorkLabel(work)}</span>
+        </p>
+      ))}
       {!folded && targetMissing && !a.orphaned && (
         <p className="border-b border-edge bg-surface/60 px-3 py-1.5 font-mono text-[10px] text-faint">
           Exact target is unavailable. This comment remains attached to its containing block.
@@ -745,24 +762,25 @@ function Thread({
             previewLabel="Reply preview"
             previewToggleLabel="Preview reply"
             value={reply}
-            onChange={setReply}
+            onChange={value=>{touched.current=true;setReply(value);}}
             onSubmit={sendReply}
             previewing={replyPreviewing}
             onPreviewingChange={setReplyPreviewing}
             rows={2}
             placeholder="reply…"
           />
+          {replyError&&<p role="alert" className="text-xs text-red-500">{replyError}</p>}
           <div className="flex justify-end gap-2">
             <button
               type="button"
               aria-label="Cancel reply"
-              onClick={() => { setReply(''); setReplyPreviewing(false); onOpen(); }}
+              onClick={() => { touched.current=true; setReply(''); setReplyPreviewing(false); onOpen(); }}
               className="cursor-pointer rounded-[4px] bg-transparent px-2 py-1 text-muted hover:bg-surface hover:text-fg"
             >
               cancel
             </button>
             <button
-              type="button" aria-label="Send reply" disabled={busy || !reply.trim()}
+              type="button" aria-label="Send reply" disabled={busy || !hasReplyText(reply)}
               onClick={sendReply}
               className="cursor-pointer rounded-[4px] border border-accent bg-accent px-2 py-1 font-semibold text-bg hover:brightness-110 disabled:cursor-default disabled:opacity-40"
             >
@@ -847,6 +865,14 @@ export default function AnnotationLayer({
   // every list change, so the list it needs is read through a ref.
   const annotationsRef = useRef(annotations);
   annotationsRef.current = annotations;
+  const hasRemoteWork=annotations.some(a=>a.remote_work?.length);
+  useEffect(()=>{
+    if(!railOpen||!hasRemoteWork||busy)return;
+    const controller=new AbortController();
+    const timer=setInterval(()=>{void readAnnotationPages(`/api/my/artifacts/${id}/annotations`,{signal:controller.signal}).then(list=>{if(!controller.signal.aborted)setAnnotations(list);}).catch(()=>{});},15000);
+    return ()=>{clearInterval(timer);controller.abort();};
+  },[id,railOpen,hasRemoteWork,busy]);
+
   /*
    * A selection report is only ours while a composer is already open — that is
    * the breadcrumb widening its target. Outside that, `mx:selection` is the
@@ -1124,7 +1150,7 @@ export default function AnnotationLayer({
       const res = await fetch(`/api/my/artifacts/${id}/annotations/${annId}`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
       });
-      if (!res.ok) return;
+      if (!res.ok) return false;
       const wire = (await res.json()) as AnnotationWire;
       setAnnotations((prev) => {
         if (wire.status === 'resolved') return prev.filter((a) => a.id !== annId);
@@ -1146,7 +1172,8 @@ export default function AnnotationLayer({
         setOpenId(annId);
         setJustOpenedId(annId);
       }
-    } finally { setBusy(false); }
+      return true;
+    } catch {return false;} finally { setBusy(false); }
   }, [id]);
 
   const remove = useCallback(async (annId: string) => {
@@ -1474,7 +1501,7 @@ export default function AnnotationLayer({
             isCommentFolded={(commentId) => isFolded(folds, 'comments', commentId)}
             onOpen={() => openThread(a.id)}
             onHover={hoverUi}
-            onReply={(body) => void act(a.id, { reply: body })}
+            onReply={(body) => act(a.id, { reply: body })}
             onResolve={() => void act(a.id, { resolve: true })}
             onReopen={() => {}}
             onDelete={() => void confirmAction({ title: 'Delete this comment?', description: 'This comment and its replies will be permanently deleted. This cannot be undone.', action: 'Delete comment', confirmLabel: 'Confirm delete comment', danger: true }, () => remove(a.id))}
@@ -1512,7 +1539,7 @@ export default function AnnotationLayer({
               setOpenId((current) => current === a.id ? null : a.id);
             }}
             onHover={hoverUi}
-            onReply={() => {}}
+            onReply={async() => false}
             onResolve={() => {}}
             onReopen={() => void act(a.id, { reopen: true })}
             onDelete={() => void confirmAction({ title: 'Delete this comment?', description: 'This comment and its replies will be permanently deleted. This cannot be undone.', action: 'Delete comment', confirmLabel: 'Confirm delete comment', danger: true }, () => remove(a.id))}

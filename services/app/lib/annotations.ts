@@ -1,3 +1,5 @@
+import {remoteAgents,type ReviewReceipt} from './remote/agents';
+import type {RemoteWork,RemoteColor} from '../../contracts/src/remote';
 import {completeMutationReceipt,type MutationReceipt} from './mutation-receipt';
 import type { CommentTarget } from '@/lib/story/comment-target';
 /**
@@ -55,6 +57,8 @@ interface AnnotationAnchor {
 /** Who wrote a comment. Ownership is an ACL relationship, not an author kind. */
 export interface AnnotationAuthor {
   kind: 'human' | 'agent';
+  sessionId?:string;
+  color?:RemoteColor;
   /** Display snapshot (username, token name…); stored beside the row so reads never join. */
   label: string | null;
   /**
@@ -86,6 +90,7 @@ export interface AnnotationCommentWire {
 }
 
 export interface AnnotationWire {
+  remote_work?:RemoteWork[];
   id: string;
   status: 'open' | 'resolved';
   /** null exactly when `orphaned` — the anchor names nothing in the CURRENT version. */
@@ -158,6 +163,7 @@ interface AnnotationRowDb {
   /** Who wrote it, when they had an account — the only thing that can say "your own". */
   author_user_id: string | null;
   author_transport: AnnotationAuthor['transport'];
+  author_remote: {sessionId:string;color:RemoteColor}|null;
   /** The author account's picture key, JOINED in the read (`ANNOTATIONS_READ`) — never stored here. */
   author_image_key: string | null;
   status: 'open' | 'resolved';
@@ -203,6 +209,7 @@ const commentWire = (row: AnnotationRowDb): AnnotationCommentWire => {
     author: {
       kind,
       label: row.author_label,
+      ...(row.author_remote??{}),
       transport: row.author_transport,
       user_id: userId,
       image: userId ? avatarUrl({ id: userId, image_key: row.author_image_key }) : null,
@@ -383,6 +390,7 @@ export async function createAnnotationFor(
     );
     // Read back through the join, not RETURNING: the echo draws the author's face too.
     const inserted = await tx.query<AnnotationRowDb>(`SELECT * FROM ${ANNOTATIONS_READ} WHERE id = $1`, [id]);
+    await remoteAgents.enqueue(tx,actor.userId,artifactId,id,{id,body:input.body,author});
     await notify(tx, artifactId, id);
     const [wire] = await wireFor(tx, row, inserted.rows);
     if(wire&&receipt)await completeMutationReceipt(tx,receipt,{status:201,body:wire as unknown as Record<string,unknown>});
@@ -425,7 +433,7 @@ async function wireFor(db: Queryable, head: ArtifactRow, roots: AnnotationRowDb[
   const source = head.source ?? '';
   const anchors = anchorIndex(source);
 
-  return roots.map((root) => {
+  return Promise.all(roots.map(async (root) => {
     const found = root.anchor_key ? anchors.get(root.anchor_key) : undefined;
     const bodyPath = found ? sourcePathToBodyPath(source, found.path) : null;
     const anchored = !!found && bodyPath !== null;
@@ -444,11 +452,12 @@ async function wireFor(db: Queryable, head: ArtifactRow, roots: AnnotationRowDb[
       quote: root.quote,
       range,
       quote_found: quoteFound(anchored ? found : undefined, root.quote, range),
+      remote_work:await remoteAgents.work(db,head.id,root.id),
       thread: [commentWire(root), ...(byRoot.get(root.id) ?? []).map(commentWire)],
       created_at: root.created_at,
       resolved_at: root.resolved_at,
     };
-  });
+  }));
 }
 
 /**
@@ -515,6 +524,7 @@ export async function actOnAnnotationFor(
   action: AnnotationAction,
   author: AnnotationAuthor,
   receipt?:MutationReceipt,
+  review?:ReviewReceipt,
 ): Promise<AnnotationWire | null> {
   const db = await getDb();
   const scope = annotationScope(actor);
@@ -532,21 +542,24 @@ export async function actOnAnnotationFor(
     const row = await scopedRow(tx, scope, artifactId);
     if (!row) return null;
     const found = await tx.query<AnnotationRowDb>(
-      `SELECT * FROM annotations WHERE id = $1 AND artifact_id = $2 AND root_id IS NULL AND ${LIVE_ANNOTATION_SQL}`,
+      `SELECT * FROM annotations WHERE id = $1 AND artifact_id = $2 AND root_id IS NULL AND ${LIVE_ANNOTATION_SQL} FOR UPDATE`,
       [annotationId, artifactId],
     );
     const root = found.rows[0];
     if (!root) return null;
 
+    const remote=review?await remoteAgents.receipt(tx,actor.userId,artifactId,annotationId,review,!!action.resolve):undefined;
+    const replyId='ann_'+generateInternalId();
     const replied = typeof action.reply === 'string' && action.reply.length > 0;
     if (replied) {
       await tx.query(
         `INSERT INTO annotations
-           (id, artifact_id, root_id, body, author_kind, author_token_id, author_user_id, author_label, author_transport, status, snippet)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'open', '')`,
-        ['ann_' + generateInternalId(), artifactId, root.id, action.reply, author.kind, actor.tokenId, actor.userId, author.label, author.transport],
+           (id, artifact_id, root_id, body, author_kind, author_token_id, author_user_id, author_label, author_transport, status, snippet, author_remote)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'open', '', $10)`,
+        [replyId, artifactId, root.id, action.reply, remote?'agent':author.kind, actor.tokenId, actor.userId, remote?.label??author.label, author.transport,remote?JSON.stringify({sessionId:remote.sessionId,color:remote.color}):null],
       );
     }
+    if(replied)await remoteAgents.enqueue(tx,actor.userId,artifactId,root.id,{id:replyId,body:action.reply!,author});
     let resolved = false;
     if (action.reopen && root.status === 'resolved') {
       await tx.query("UPDATE annotations SET status = 'open', resolved_at = NULL WHERE id = $1", [root.id]);
@@ -604,7 +617,7 @@ export async function deleteAnnotationFor(actor: TokenActor, artifactId: string,
     const row = await scopedRow(tx, scope, artifactId);
     if (!row) return null;
     const found = await tx.query<AnnotationRowDb>(
-      `SELECT anchor_key, author_user_id FROM annotations WHERE id = $1 AND artifact_id = $2 AND root_id IS NULL AND ${LIVE_ANNOTATION_SQL}`,
+      `SELECT anchor_key, author_user_id FROM annotations WHERE id = $1 AND artifact_id = $2 AND root_id IS NULL AND ${LIVE_ANNOTATION_SQL} FOR UPDATE`,
       [annotationId, artifactId],
     );
     if (found.rows.length === 0) return null;

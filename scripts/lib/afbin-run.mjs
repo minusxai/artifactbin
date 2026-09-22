@@ -108,7 +108,8 @@ export async function runAfbin({
   if (!await serverHealthy(port, fetchImpl)) { log(healthRefusal(port)); return 1; }
   if (await cliBuildStale(root)) await build(root);
   const childEnv = afbinChildEnv(env, port, home);
-  const args = [distEntry(root), ...argv, ...serverFlag(argv, port)];
+  const flags = serverFlag(argv, port);
+  const args = [distEntry(root), ...(argv[0] === 'remote' ? [argv[0], ...flags, ...argv.slice(1)] : [...argv, ...flags])];
   return spawnImpl(execPathOf(env), args, { stdio: 'inherit', env: childEnv });
 }
 
@@ -120,7 +121,17 @@ export async function runAfbin({
  * @param {number} port
  */
 export function serverFlag(argv, port) {
-  const chosen = argv.some((arg) => arg === '--server' || arg.startsWith('--server='));
+  let options = argv;
+  if (argv[0] === 'remote') {
+    let end = 1;
+    const values = new Set(['--name','--history','--session','--stop','--ready','--server']);
+    while (end < argv.length && argv[end].startsWith('-')) {
+      const arg = argv[end++];
+      if (values.has(arg)) end++;
+    }
+    options = argv.slice(0, end);
+  }
+  const chosen = options.some((arg) => arg === '--server' || arg.startsWith('--server='));
   return chosen ? [] : ['--server', `http://localhost:${port}`];
 }
 

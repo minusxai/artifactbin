@@ -1,5 +1,5 @@
 import { forwardRef, useEffect, useImperativeHandle, useState } from "react";
-import type { RemoteSessionInfo } from "../../contracts/src/remote";
+import {REMOTE_COLOR_CSS,remoteColor,type RemoteSessionInfo } from "../../contracts/src/remote";
 export interface MentionPickerHandle { keyDown: (key: string) => boolean }
 const agentLabel = (name: string) => (({ claude: "Claude Code", codex: "Codex", pi: "Pi", opencode: "OpenCode" } as Record<string, string>)[name] ?? name);
 export default forwardRef<MentionPickerHandle, { query: string; onSelect: (text: string) => void }>(function RemoteMentionPicker({
@@ -29,7 +29,7 @@ export default forwardRef<MentionPickerHandle, { query: string; onSelect: (text:
   }, []);
   const matches = sessions.filter(
     (s) =>
-      s.online &&
+      (s.managed?s.exitCode===null&&s.activity!=='stopped':s.online) &&
       `${s.name} ${s.harness}`.toLowerCase().includes(query.toLowerCase()),
   );
   const choose = (s: RemoteSessionInfo) => onSelect(`[@${s.name.replace(/[\[\]\\\n]/g, "")}](/chat?session=${s.id}) `);
@@ -58,12 +58,12 @@ export default forwardRef<MentionPickerHandle, { query: string; onSelect: (text:
           onMouseDown={(e) => e.preventDefault()}
           onClick={() => choose(s)}
         >
-          <span aria-hidden="true" className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-accent-soft font-semibold text-accent">@</span>
+          <span aria-hidden="true" style={{color:REMOTE_COLOR_CSS[s.color??remoteColor(s.id)]}} className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-accent-soft font-semibold text-accent">@</span>
           <span className="min-w-0 flex-1">
             <span className="block truncate font-medium text-fg">{s.name}</span>
             <span className="block truncate text-xs text-muted">{agentLabel(s.harness)} · {s.machine}</span>
           </span>
-          <span className="flex shrink-0 items-center gap-1 text-[10px] text-muted"><span className="h-1.5 w-1.5 rounded-full bg-green-500" />Online</span>
+          <span className="flex shrink-0 items-center gap-1 text-[10px] text-muted"><span className="h-1.5 w-1.5 rounded-full bg-green-500" />{s.online?(s.activity??'Online'):'Offline'}</span>
         </button>
       ))}
       {!matches.length && (

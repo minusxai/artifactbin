@@ -1,3 +1,4 @@
+import {remoteAgents} from './agents';
 import { requestOrSessionActor } from "../viewer";
 import { refusesCrossSite } from "../auth";
 import { remoteSessions, RemoteError } from "./registry";
@@ -27,15 +28,15 @@ export async function remoteRoute(
       return json({ error: "Forbidden" }, 403);
     const owner = actor.viewer.userId;
     if (request.method === "GET") {
-      if (!id) return json({ sessions: remoteSessions.list(owner) });
+      if (!id) return json({ sessions: await remoteAgents.list(owner) });
       const since = Number(
         new URL(request.url).searchParams.get("since") ?? -1,
       );
       if (!Number.isSafeInteger(since)) throw new RemoteError("Invalid cursor");
-      return json(await remoteSessions.view(owner, id, since));
+      return json(await remoteAgents.view(owner, id, since));
     }
     if (request.method === "DELETE" && id) {
-      remoteSessions.remove(owner, id);
+      await remoteAgents.remove(owner, id);
       return json({ ok: true });
     }
     if (request.method !== "POST")
@@ -70,9 +71,12 @@ export async function remoteRoute(
     }
     if (!body || typeof body !== "object" || Array.isArray(body))
       throw new RemoteError("Invalid body");
-    if (!id) return json(remoteSessions.create(owner, body), 201);
-    if (exchange) return json(await remoteSessions.exchange(owner, id, body));
-    if (body.type === "input") remoteSessions.input(owner, id, body.data);
+    if (!id) return json(await remoteAgents.create(owner, body), 201);
+    if (exchange) return json(await remoteAgents.exchange(owner, id, body));
+    if(body.type==='ready')await remoteAgents.ready(owner,id,body.proof);
+    else if(body.type==='stopped')await remoteAgents.stopped(owner,id,body.exitCode);
+    else if(body.type==='stop')await remoteAgents.stop(owner,id);
+    else if (body.type === "input") await remoteAgents.input(owner, id, body.data);
     else if (body.type === "control")
       remoteSessions.control(owner, id, body.controller, body.cols, body.rows);
     else throw new RemoteError("Invalid operation");

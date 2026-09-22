@@ -32,7 +32,7 @@ test("remote preserves command flags and bare startup selects help", () => {
  assert.deepEqual(parseCommand(['remote','codex','--yolo','--model','a b']),{command:'remote',positionals:['codex','--yolo','--model','a b'],flags:{}});
 });
 
-for (const entry of [["remote"], ["remote", "codex", "--yolo"]]) test(`real terminal launches from ${["afbin", ...entry].join(" ")}`, async () => {
+for (const entry of [["remote", "--foreground"], ["remote", "--foreground", "codex", "--yolo"]]) test(`real terminal launches from ${["afbin", ...entry].join(" ")}`, async () => {
   const { createServer } = await import("node:http");
   const { pty } = await import("../src/pty");
   const { fileURLToPath } = await import("node:url");
@@ -73,7 +73,7 @@ for (const entry of [["remote"], ["remote", "codex", "--yolo"]]) test(`real term
     assert.match(relayed, /CHOSEN-CODEX/, output);
     assert.match(relayed, /ARG=<--yolo>/);
     assert.doesNotMatch(relayed, /WRONG-HARNESS/);
-    if (entry.length > 1) assert.equal(selected, false, "manual invocation bypasses picker");
+    if (entry.includes("codex")) assert.equal(selected, false, "manual invocation bypasses picker");
     else { assert.ok(selected && flags); assert.match(relayed, /ARG=<a b>/); }
   } finally {
     clearTimeout(timeout);

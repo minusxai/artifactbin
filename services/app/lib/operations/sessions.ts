@@ -1,5 +1,6 @@
+import {remoteAgents} from '../remote/agents';
 import { z } from 'zod';
-import { remoteSessions, RemoteError } from '@/lib/remote/registry';
+import { RemoteError } from '@/lib/remote/registry';
 import { sessionResource } from '@/lib/remote/resource';
 import type { Operation, OpContext, OpReply } from './registry';
 
@@ -44,7 +45,7 @@ const listSessionsOp: Operation = {
   name: 'list_remote_sessions',
   title: 'List remote terminal sessions',
   http: { method: 'GET', path: '/api/sessions' },
-  description: 'List the remote terminal sessions this account is running, as editable-resource records: id, name, harness, machine, cwd, status, size and controller. Sessions are relayed in memory and pruned an hour after their last exchange, so there is no history to page through.',
+  description: 'List the remote terminal sessions this account is running, as editable-resource records: id, name, harness, machine, cwd, status, size and controller. Managed identity and request status survive relay restarts; terminal output is ephemeral.',
   input: {},
   annotations: { readOnly: true },
   example: { input: {} },
@@ -52,7 +53,7 @@ const listSessionsOp: Operation = {
   async run(ctx) {
     const userId = owner(ctx);
     if (typeof userId !== 'string') return userId;
-    return reply({ sessions: remoteSessions.list(userId).map(sessionResource) });
+    return reply({ sessions: (await remoteAgents.list(userId)).map(sessionResource) });
   },
 };
 
@@ -69,7 +70,7 @@ const getSessionOp: Operation = {
     const userId = owner(ctx);
     if (typeof userId !== 'string') return userId;
     try {
-      return reply({ session: sessionResource(remoteSessions.read(userId, String(input.id))) });
+      return reply({ session: sessionResource(await remoteAgents.read(userId, String(input.id))) });
     } catch (error) {
       return fromRemoteError(error);
     }
@@ -90,7 +91,7 @@ const terminateSessionOp: Operation = {
     if (typeof userId !== 'string') return userId;
     const id = String(input.id);
     try {
-      remoteSessions.remove(userId, id);
+      await remoteAgents.remove(userId, id);
     } catch (error) {
       return fromRemoteError(error);
     }

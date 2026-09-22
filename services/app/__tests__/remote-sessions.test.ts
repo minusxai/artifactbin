@@ -245,3 +245,20 @@ it("recovers the same account-scoped session after relay restart and respects di
     expect(() => r.create("a", { ...registration, recoveryKey: "short" })).toThrow();
   } finally { r.clear(); }
 });
+
+ it('managed names are unique across machines, ready requires runner proof, and stop waits for runner exit',async()=>{
+  const r=new RemoteRegistry();
+  const a=r.create('owner',{...registration,name:'claude',managed:true});
+  expect(a.color).toBeTruthy();expect(a.activity).toBe('starting');
+  expect(()=>r.create('owner',{...registration,name:'claude',machine:'other',managed:true})).toThrow(/already running/);
+  expect(()=>r.create('owner',{...registration,name:'two words',managed:true})).toThrow(/name/i);
+  expect(()=>r.ready('owner',a.id,'wrong')).toThrow();
+  r.ready('owner',a.id,a.runnerKey);expect(r.read('owner',a.id).activity).toBe('listening');
+  expect(()=>r.stop('other',a.id)).toThrow();r.stop('owner',a.id);
+  expect(r.read('owner',a.id).activity).toBe('stopping');
+  expect((await r.exchange('owner',a.id,body(a.runnerKey))).stop).toBe(true);
+  await r.exchange('owner',a.id,{...body(a.runnerKey,2),exitCode:0});
+  expect(r.read('owner',a.id).activity).toBe('stopped');
+  expect(r.create('owner',{...registration,name:'claude',managed:true}).id).not.toBe(a.id);
+  r.clear();
+ });

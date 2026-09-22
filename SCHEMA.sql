@@ -32,6 +32,71 @@ create unique index "account_issuer_accountId_uidx" on "auth"."account" ("issuer
 
 -- schema "app" — owned by the app role; tables declared by lib/schema.ts
 
+CREATE TABLE IF NOT EXISTS app.remote_agents (
+  id TEXT NOT NULL,
+  owner TEXT NOT NULL,
+  name TEXT NOT NULL,
+  active BOOLEAN NOT NULL DEFAULT true,
+  proof_hash TEXT NOT NULL,
+  info JSONB NOT NULL,
+  seen_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (id)
+);
+
+ALTER TABLE app.remote_agents ADD COLUMN IF NOT EXISTS id TEXT NOT NULL;
+
+ALTER TABLE app.remote_agents ADD COLUMN IF NOT EXISTS owner TEXT NOT NULL;
+
+ALTER TABLE app.remote_agents ADD COLUMN IF NOT EXISTS name TEXT NOT NULL;
+
+ALTER TABLE app.remote_agents ADD COLUMN IF NOT EXISTS active BOOLEAN NOT NULL DEFAULT true;
+
+ALTER TABLE app.remote_agents ADD COLUMN IF NOT EXISTS proof_hash TEXT NOT NULL;
+
+ALTER TABLE app.remote_agents ADD COLUMN IF NOT EXISTS info JSONB NOT NULL;
+
+ALTER TABLE app.remote_agents ADD COLUMN IF NOT EXISTS seen_at TIMESTAMPTZ NOT NULL DEFAULT now();
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_remote_agent_name ON app.remote_agents (owner, name) WHERE active;
+
+CREATE TABLE IF NOT EXISTS app.remote_work (
+  id TEXT NOT NULL,
+  seq BIGSERIAL NOT NULL,
+  owner TEXT NOT NULL,
+  session_id TEXT NOT NULL,
+  artifact_id TEXT NOT NULL,
+  thread_id TEXT NOT NULL,
+  comment_id TEXT NOT NULL,
+  phase TEXT NOT NULL,
+  data JSONB NOT NULL,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (id)
+);
+
+ALTER TABLE app.remote_work ADD COLUMN IF NOT EXISTS id TEXT NOT NULL;
+
+ALTER TABLE app.remote_work ADD COLUMN IF NOT EXISTS seq BIGSERIAL NOT NULL;
+
+ALTER TABLE app.remote_work ADD COLUMN IF NOT EXISTS owner TEXT NOT NULL;
+
+ALTER TABLE app.remote_work ADD COLUMN IF NOT EXISTS session_id TEXT NOT NULL;
+
+ALTER TABLE app.remote_work ADD COLUMN IF NOT EXISTS artifact_id TEXT NOT NULL;
+
+ALTER TABLE app.remote_work ADD COLUMN IF NOT EXISTS thread_id TEXT NOT NULL;
+
+ALTER TABLE app.remote_work ADD COLUMN IF NOT EXISTS comment_id TEXT NOT NULL;
+
+ALTER TABLE app.remote_work ADD COLUMN IF NOT EXISTS phase TEXT NOT NULL;
+
+ALTER TABLE app.remote_work ADD COLUMN IF NOT EXISTS data JSONB NOT NULL;
+
+ALTER TABLE app.remote_work ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT now();
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_remote_work_comment ON app.remote_work (session_id, comment_id);
+
+CREATE INDEX IF NOT EXISTS idx_remote_work_thread ON app.remote_work (artifact_id, thread_id);
+
 CREATE TABLE IF NOT EXISTS app.export_images (
   id TEXT NOT NULL,
   artifact_id TEXT NOT NULL,
@@ -511,6 +576,7 @@ CREATE TABLE IF NOT EXISTS app.annotations (
   quote TEXT,
   range TEXT,
   deleted_at TIMESTAMPTZ,
+  author_remote JSONB,
   PRIMARY KEY (id)
 );
 
@@ -551,6 +617,8 @@ ALTER TABLE app.annotations ADD COLUMN IF NOT EXISTS quote TEXT;
 ALTER TABLE app.annotations ADD COLUMN IF NOT EXISTS range TEXT;
 
 ALTER TABLE app.annotations ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ;
+
+ALTER TABLE app.annotations ADD COLUMN IF NOT EXISTS author_remote JSONB;
 
 CREATE INDEX IF NOT EXISTS idx_annotations_artifact_seq ON app.annotations (artifact_id, seq);
 

@@ -200,7 +200,7 @@ function SessionTerminal({ id, onClose }: { id: string; onClose: () => void }) {
         <div className="mr-auto">
           <h2 className="font-semibold">{info?.name ?? "Connecting…"}</h2>
           <p className="text-xs text-muted">
-            {info?.harness} · {info?.machine} ·{" "}
+            {info?.harness} · {info?.machine} · {info?.activity ? `${info.activity} · ` : ''}{" "}
             {connection || (online
               ? "Online"
               : info?.exitCode !== null && info?.exitCode !== undefined
@@ -217,15 +217,15 @@ function SessionTerminal({ id, onClose }: { id: string; onClose: () => void }) {
           {mobile ? "Switch to desktop" : "Switch to mobile"}
         </button>}
         <button
-          aria-label={ended ? "Remove session" : "Disconnect remote session"}
+          aria-label={ended ? "Remove session" : info?.managed ? "Stop agent" : "Disconnect remote session"}
           className="rounded border border-edge px-3 py-2"
           onClick={() =>
-            void request(`/${id}`, undefined, "DELETE")
-              .then(onClose)
+            void request(`/${id}`, !ended&&info?.managed ? {type:"stop"} : undefined, !ended&&info?.managed ? "POST" : "DELETE")
+              .then(()=>{if(!info?.managed||ended)onClose();else setInfo({...info,activity:"stopping"});})
               .catch((e) => setError(e.message))
           }
         >
-          {ended ? "Remove session" : "Disconnect"}
+          {ended ? "Remove session" : info?.managed ? (info.activity==='stopping'?'Stopping…':'Stop agent') : "Disconnect"}
         </button>
       </div>
       {connection && <p role="status" className="mb-2 text-sm text-muted">{connection}</p>}
@@ -307,8 +307,7 @@ function SessionTerminal({ id, onClose }: { id: string; onClose: () => void }) {
       <p className="mt-3 text-xs text-muted" hidden={ended}>
         Swipe up or down in the terminal to scroll its history, or use the scroll buttons.
         Full-screen agents may manage their own history. Type directly in the terminal or use the message box. The selected terminal size stays in effect
-        until you switch views. Disconnect removes
-        remote access; your local process keeps running.
+        until you switch views. {info?.managed ? 'Stop agent ends this background process.' : 'Disconnect removes remote access; your local process keeps running.'}
       </p>
       </div>
     </section>
