@@ -37,6 +37,30 @@ await observe('running-executable-replacement',async()=>{
     catch(error){return {replacement:'blocked while running',code:error.code};}
   } finally {child.kill();await exited;}
 });
+await observe('running-executable-rename-aside',async()=>{
+  const suffix=process.platform==='win32'?'.exe':'';
+  const exe=join(directory,'aside'+suffix),backup=join(directory,'aside-backup'+suffix),staged=join(directory,'aside-new'+suffix);
+  await copyFile(process.execPath,exe);await chmod(exe,0o700);await copyFile(process.execPath,staged);
+  const child=spawn(exe,['-e','console.log("ready");setInterval(()=>{},1000)'],{stdio:['ignore','pipe','pipe']});
+  const exited=once(child,'exit');const result={};
+  try {
+    await Promise.race([once(child.stdout,'data'),once(child,'error').then(([e])=>{throw e;})]);
+    try {await rename(exe,backup);await rename(staged,exe);result.replacement='rename aside and replace succeeded';}
+    catch(error){result.replacement='blocked';result.code=error.code;}
+  } finally {child.kill();await exited;}
+  try {await copyFile(process.execPath,staged);await rename(staged,exe);result.afterExit='replacement succeeded';}
+  catch(error){result.afterExit=error.code;}
+  return result;
+});
+await observe('esbuild-native-path-filter',async()=>{
+  const {build}=require('esbuild');const dir=join(directory,'sql','src');await mkdir(dir,{recursive:true});
+  const entry=join(dir,'engine.ts');await writeFile(entry,'export const answer = 42;');let matched=false,observedPath;
+  await build({entryPoints:[entry],bundle:true,write:false,platform:'node',plugins:[{name:'observe-path',setup(b){
+    b.onLoad({filter:/sql\/src\/engine\.ts$/},()=>{matched=true;});
+    b.onLoad({filter:/engine\.ts$/},args=>{observedPath=args.path;});
+  }}]});
+  return {matched,observedPath};
+});
 await observe('windows-path-shapes',async()=>({
   sqlPluginMatches:/sql\/src\/engine\.ts$/.test('C:\\repo\\services\\sql\\src\\engine.ts'),
   ptyPluginMatches:/src\/pty\.ts$/.test('C:\\repo\\services\\cli\\src\\pty.ts'),
@@ -79,7 +103,7 @@ await observe('minimal-sea-executable',async()=>{
   await require('postject').inject(exe,'NODE_SEA_BLOB',await readFile(blob),{sentinelFuse:'NODE_SEA_FUSE_fce680ab2cc467b6e072b8b5df1996b2'});
   return JSON.parse(execFileSync(exe,[],{encoding:'utf8',timeout:15000,cwd:directory}));
 });
-await observe('installed-dependency-versions',async()=>Object.fromEntries(['node-pty','@duckdb/node-api','sharp','playwright','postject'].map(name=>[name,require(name+'/package.json').version])));
+await observe('installed-dependency-versions',async()=>Object.fromEntries(['node-pty','@duckdb/node-api','sharp','playwright','postject','esbuild'].map(name=>[name,require(name+'/package.json').version])));
 const report={platform:process.platform,arch:process.arch,node:process.version,kind:'research observations; not full CLI validation',observations};
 await writeFile(join(output,'observations.json'),JSON.stringify(report,null,2)+'\n');
 console.log(JSON.stringify(report,null,2));

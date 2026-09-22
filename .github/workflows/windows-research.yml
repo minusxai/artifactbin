@@ -22,7 +22,7 @@ jobs:
           New-Item -ItemType Directory -Force $out | Out-Null
           $lock = Get-Content package-lock.json -Raw | ConvertFrom-Json -AsHashtable
           $deps = @{}
-          foreach ($name in @('node-pty','@duckdb/node-api','sharp','playwright','postject')) {
+          foreach ($name in @('node-pty','@duckdb/node-api','sharp','playwright','postject','esbuild')) {
             $deps[$name] = $lock.packages["node_modules/$name"].version
             if (!$deps[$name]) { throw "Missing lock version for $name" }
           }
