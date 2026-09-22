@@ -98,10 +98,17 @@ export async function beginCapture(): Promise<CaptureSession> {
       await bounded(new Promise<void>(resolve=>requestAnimationFrame(()=>requestAnimationFrame(()=>resolve()))),'paint');
       if(disposed)throw new CaptureError('ended');
       if(grabber){
-        // A late result still owns native bitmap memory after a deadline/cancellation.
+        // Drain one queued pre-paint frame, then read the next delivery. Both reads
+        // share one deadline. Every bitmap is released, including late results.
         let expired=false;
-        const pending=grabber.grabFrame();
-        void pending.then(value=>{if(expired)value.close();},()=>{});
+        const pending=(async()=>{
+          const warmup=await grabber.grabFrame();warmup.close();
+          if(expired||disposed)throw new CaptureError(expired?'timeout':'ended','track-frame');
+          const next=await grabber.grabFrame();
+          if(expired){next.close();throw new CaptureError('timeout','track-frame');}
+          return next;
+        })();
+        void pending.catch(()=>{});
         try{bitmap=await bounded(pending,'track-frame');}catch(error){expired=true;throw error;}
       }else if(video){
         const freshFrame=observeFrame(video,'full-frame');

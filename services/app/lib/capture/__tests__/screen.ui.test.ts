@@ -44,9 +44,10 @@ it('identifies a stalled initial frame and stops sharing at the deadline',async(
 
 it.each(['success','timeout','wrong-source','resize','ended'] as const)('reads directly from the track without video callbacks and releases bitmaps (%s)',async(scenario)=>{
  vi.useFakeTimers();let handle='',resolveFrame!:(bitmap:ImageBitmap)=>void;
+ const warmupClose=vi.fn(),warmup={width:window.innerWidth,height:window.innerHeight,close:warmupClose} as unknown as ImageBitmap;
  const close=vi.fn(),bitmap={width:window.innerWidth,height:window.innerHeight,close} as unknown as ImageBitmap;
  const stop=vi.fn(),track=Object.assign(new EventTarget(),{stop,readyState:'live',getSettings:()=>({displaySurface:'browser'}),getCaptureHandle:()=>({handle}),cropTo:()=>{throw new Error('Native region cropping must not be used');}});
- const grabFrame=vi.fn(()=>{if(scenario==='wrong-source')handle='different-tab';if(scenario==='resize'){vi.stubGlobal('innerWidth',innerWidth+10);window.dispatchEvent(new Event('resize'));}if(scenario==='ended')track.dispatchEvent(new Event('ended'));return scenario==='timeout'?new Promise<ImageBitmap>(resolve=>{resolveFrame=resolve;}):Promise.resolve(bitmap);});
+ let reads=0;const grabFrame=vi.fn(()=>{if(reads++===0)return Promise.resolve(warmup);if(scenario==='wrong-source')handle='different-tab';if(scenario==='resize'){vi.stubGlobal('innerWidth',innerWidth+10);window.dispatchEvent(new Event('resize'));}if(scenario==='ended')track.dispatchEvent(new Event('ended'));return scenario==='timeout'?new Promise<ImageBitmap>(resolve=>{resolveFrame=resolve;}):Promise.resolve(bitmap);});
  vi.stubGlobal('ImageCapture',class {grabFrame=grabFrame;});
  vi.stubGlobal('navigator',{mediaDevices:{setCaptureHandleConfig:(config:{handle:string})=>{handle=config.handle;},getDisplayMedia:vi.fn().mockResolvedValue({getTracks:()=>[track],getVideoTracks:()=>[track]})}});
  vi.stubGlobal('CropTarget',{fromElement:async()=>({})});
@@ -62,5 +63,5 @@ it.each(['success','timeout','wrong-source','resize','ended'] as const)('reads d
  if(scenario==='timeout'){expect(result).toMatchObject({code:'timeout',stage:'track-frame'});resolveFrame(bitmap);await Promise.resolve();expect(drawImage).not.toHaveBeenCalled();}
  else if(scenario==='wrong-source'||scenario==='resize'||scenario==='ended'){expect(result).toMatchObject({code:scenario==='resize'?'geometry':scenario});expect(drawImage).not.toHaveBeenCalled();}
  else {expect(result).toMatchObject({method:'canvas',width:200,height:100});expect(drawImage).toHaveBeenCalledWith(bitmap,5,5,200,100,0,0,200,100);}
- expect(close).toHaveBeenCalledOnce();
+ expect(close).toHaveBeenCalledOnce();expect(warmupClose).toHaveBeenCalledOnce();expect(drawImage.mock.calls.every(call=>call[0]!==warmup)).toBe(true);
 });
