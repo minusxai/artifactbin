@@ -5,6 +5,8 @@ export {CliError} from './errors';
 /** Single executable vocabulary for parsing, help, man pages and local skills. */
 export interface Flag { short?: string; value?: string; repeat?: boolean; description: string }
 export const flags: Record<string,Flag> = {
+ image:{value:'ID',description:'Download a comment image by its image.id from the comment listing; requires --output.'},
+ variant:{value:'VARIANT',description:'Comment image: preview (default, includes drawn marks), original (without marks), or thumbnail.'},
  port:{value:'PORT',description:'Listen on this port; serve defaults to 7445, preview chooses an available one.'},
  share:{description:'Allow network access to the selected preview files; everyone who can reach it may edit.'},
  service:{value:'NAME',description:'Prepare a local service for offline use: sql or chromium.'},
@@ -81,7 +83,7 @@ export const commands: Command[] = [
  {name:'log',usage:'<ref> [<ref> ...]',description:'List versions, newest first; @version starts at that version or earlier.',min:1,max:Infinity,flags:['type','filter','limit','cursor'],examples:['afbin log report.jsx --limit 10']},
  {name:'list',usage:'[<ref> ...]',description:'List resources or summaries; default accessible artifacts, newest first.',min:0,max:Infinity,flags:['type','in','filter','limit','cursor','format','output'],examples:['afbin list --json','afbin list --type session','afbin list --type table --in orders.yaml']},
  {name:'delete',usage:'<ref> [<ref> ...]',description:'Soft-delete resources, revoke tokens, terminate sessions or delete comments; keep local files.',min:1,max:Infinity,flags:['type','in','dry-run','force'],examples:['afbin delete report.jsx --dry-run','afbin delete --type comment --in abc123 ann_123']},
- {name:'comment',usage:'<ref> [<ref> ...]',description:'List threads, post an anchored comment, reply, resolve or reopen.',min:1,max:Infinity,flags:['request','phase','body','input','thread','node','quote','state','filter','limit','cursor','dry-run'],examples:['afbin comment report.jsx','afbin comment report.jsx --node heading --body "Clarify this"','afbin comment report.jsx --thread ann_123 --body "Fixed" --state resolved']},
+ {name:'comment',usage:'<ref> [<ref> ...]',description:'List threads, post an anchored comment, reply, resolve or reopen.',min:1,max:Infinity,flags:['image','variant','output','request','phase','body','input','thread','node','quote','state','filter','limit','cursor','dry-run'],examples:['afbin comment report.jsx','afbin comment report.jsx --image cim_123 --output screenshot.webp','afbin comment report.jsx --node heading --body "Clarify this"','afbin comment report.jsx --thread ann_123 --body "Fixed" --state resolved']},
  {name:'open',usage:'<ref> [<ref> ...]',description:'Open the published view of a resource, or print its URL with --json.',min:1,max:Infinity,flags:[],examples:['afbin open report.jsx','afbin open abc123 --json']},
  {name:'help',usage:'[topic]',description:'Read the bundled example, markup, data, themes, templates, schemas or command help; --for <template> prints everything a document of that kind needs in one call.',min:0,max:1,flags:['format','output','for'],examples:['afbin help --for deck','afbin help markup','afbin help dashboard']},
  {name:'serve',description:'Run a persistent authenticated server in the foreground.',usage:'[--dir <path>] [--config <path>] [--port <port>] [--db-url <url>]',min:0,max:0,flags:['config','dir','db-url','port'],examples:['afbin serve --dir ~/team-artifacts --port 7445','afbin serve --dir ~/team-artifacts --db-url postgres://localhost/artifactbin']},
@@ -215,6 +217,12 @@ export function parseCommand(argv:string[]):ParsedCommand {
  if(command.name==='query'&&f.write&&(f.remote||f.limit||f.cursor||result.positionals.length!==1||(!f.input&&!f.name)||(f.input&&f.name)))throw new CliError('invalid_arguments','--write requires one target and either --input SQL or a declared mutation --name; --remote, --limit and --cursor apply to reads.');
  if(command.name==='query'&&result.positionals.length>1&&(f.input||f.cursor||f.name))throw new CliError('invalid_arguments','--input, --name and --cursor require one query target.');
  if(command.name==='comment'){
+  if(f.image!==undefined){
+   if(!/^cim_[A-Za-z0-9_-]{1,128}$/.test(String(f.image))||result.positionals.length!==1)throw new CliError('invalid_image','--image requires one artifact and a comment image ID from afbin comment.');
+   if(typeof f.output!=='string'||f.output==='-')throw new CliError('invalid_output','--image requires --output <local-file>; binary stdout is not supported.');
+   if(['body','input','thread','node','quote','state','filter','limit','cursor','dry-run','request','phase'].some(key=>f[key]!==undefined))throw new CliError('invalid_arguments','Download images separately from comment listing or mutation flags.');
+   if(f.variant!==undefined)f.variant=enumArgument(f.variant,['preview','original','thumbnail'],'variant');
+  }else if(f.output!==undefined||f.variant!==undefined)throw new CliError('invalid_arguments','Comment --output and --variant require --image ID.');
   const body=f.body!==undefined||f.input!==undefined;
   if(f.body!==undefined&&f.input!==undefined)throw new CliError('invalid_comment','Use --body or --input, once.');
   if(f.state&&!f.thread)throw new CliError('invalid_comment','--state requires --thread ID.');

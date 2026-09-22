@@ -98,3 +98,9 @@ export async function readCommentImage(actor:TokenActor,artifactId:string,id:str
 export async function expireCommentImagesFor(tx:Queryable,userId:string,artifactIds:string[]):Promise<void>{
  await tx.query('UPDATE comment_images SET annotation_id=NULL,ready=false,expires_at=now() WHERE user_id=$1 OR artifact_id=ANY($2::text[])',[userId,artifactIds]);
 }
+
+/** Both HTTP doors use identical image bytes, visibility checks and private caching. */
+export async function commentImageResponse(actor:TokenActor,artifactId:string,imageId:string,variant:string):Promise<Response>{
+ const result=await readCommentImage(actor,artifactId,imageId,variant);
+ return result?new Response(new Uint8Array(result.buffer),{headers:{'Content-Type':'image/webp','Cache-Control':'private, no-store','X-Content-Type-Options':'nosniff'}}):json({error:'not_found'},404);
+}

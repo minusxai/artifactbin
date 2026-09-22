@@ -125,3 +125,8 @@ test('OpenCode receives per-process automatic permissions and preserves explicit
  for(const harness of ['claude','codex','pi','sh'])assert.deepEqual(remotePermissionEnv(harness,env),env);
  assert.equal('OPENCODE_PERMISSION' in env,false);
 });
+
+test('every dispatched request teaches downloading and inspecting comment images before answering',()=>{
+ const payload=JSON.parse(remoteRequestInput(JSON.stringify({type:'artifactbin.comment',instruction:'Acknowledge first.'}),'/private/afbin').trim());
+ assert.match(payload.instruction,/--image/);assert.match(payload.instruction,/image viewing tool/);assert.match(payload.instruction,/drawn marks/);
+});

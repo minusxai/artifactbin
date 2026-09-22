@@ -1,7 +1,7 @@
 import {stateFor} from '../src/state-access';
 import {test,describe} from 'node:test';
 import assert from 'node:assert/strict';
-import {mkdtemp,rm,writeFile,readFile} from 'node:fs/promises';
+import {mkdtemp,rm,writeFile,readFile,realpath} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {HttpClient} from '../src/http';
@@ -180,5 +180,40 @@ test('local images render unpublished bytes without authentication, publication 
   await assert.rejects(exportResources(workspace,['draft.jsx'],{...options,output:'draft.jsx',force:true}),/source file/);
   assert.equal(renders,2,'Refuse overwriting the source before starting a renderer');
   assert.equal(await exportResources(workspace,['https://example.com/a/local1'],{...options,output:'remote.png'}),false,'An explicit URL always selects server rendering');
+ }finally{await h.cleanup();}
+});
+
+test('downloads annotated comment images with authenticated transport and an explicit local receipt',async()=>{
+ const h=await cliHarness('afbin-comment-image-',{account:null});
+ try{
+  const bytes=Buffer.from('RIFF0000WEBPimage');
+  const code=await h.invoke(['comment','abc123','--image','cim_test','--output','shot.webp','--json'],({path,method,headers})=>{
+   assert.equal(path,'/api/artifacts/abc123/comment-images/cim_test?variant=preview');
+   assert.equal(method,'GET');assert.equal(headers.authorization,'Bearer test-token');return new Response(bytes,{headers:{'Content-Type':'image/webp'}});
+  });
+  assert.equal(code,0,h.out.join(''));assert.deepEqual(await readFile(join(h.root,'shot.webp')),bytes);
+  assert.equal(h.last().image_id,'cim_test');assert.equal(h.last().variant,'preview');assert.equal(h.last().path,await realpath(join(h.root,'shot.webp')));
+  assert.match(h.last().next,/image.*tool|visually/i);
+  assert.equal(await h.invoke(['comment','abc123','--image','cim_test','--variant','original','--output','clean.webp','--json'],({path})=>{
+   assert.ok(path.endsWith('?variant=original'));return new Response(bytes,{headers:{'Content-Type':'image/webp'}});
+  }),0);
+ }finally{await h.cleanup();}
+});
+
+test('image download refuses ambiguous requests, escapes and failed responses without replacing files',async()=>{
+ const h=await cliHarness('afbin-comment-image-refuse-',{account:null});
+ try{
+  const base=['comment','abc123','--image','cim_test'];
+  for(const args of [[...base],[...base,'--output','-'],[...base,'--output','out.webp','--body','reply'],[...base,'--output','out.webp','--variant','other'],['comment','abc123','def456','--image','cim_test','--output','out.webp'],['comment','abc123','--output','out.webp'],['comment','abc123','--image','../secret','--output','out.webp']]){
+   assert.notEqual(await h.invoke([...args,'--json']),0);assert.equal(h.paths.length,0);
+  }
+  await writeFile(join(h.root,'keep.webp'),'keep');
+  assert.notEqual(await h.invoke([...base,'--output','keep.webp','--json']),0);assert.equal(h.paths.length,0);
+  assert.notEqual(await h.invoke([...base,'--output','../escape.webp','--json']),0);assert.equal(h.paths.length,0);
+  assert.notEqual(await h.invoke([...base,'--output','missing.webp','--json'],()=>Response.json({error:'not_found'},{status:404})),0);
+  await assert.rejects(readFile(join(h.root,'missing.webp')),/ENOENT/);
+  assert.notEqual(await h.invoke([...base,'--output','bad.webp','--json'],()=>new Response('<html>login</html>',{headers:{'Content-Type':'text/html'}})),0);
+  await assert.rejects(readFile(join(h.root,'bad.webp')),/ENOENT/);
+  assert.equal(await readFile(join(h.root,'keep.webp'),'utf8'),'keep');
  }finally{await h.cleanup();}
 });

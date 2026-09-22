@@ -1,3 +1,4 @@
+import {downloadCommentImage} from './comment-images';
 import {collectionFilters} from './collection-filters';
 import {recoverableOperation} from './recoverable-operation';
 import {readFile} from 'node:fs/promises';
@@ -53,7 +54,9 @@ function checkTrackedType(workspace:Workspace,path:string|undefined,requested:st
 
 export async function commentCommand(workspace:Workspace,parsed:ParsedCommand,client:HttpClient,body?:string){
  const ref=await artifactReference(workspace,parsed.positionals[0],client.connection.server,true,client.aliases);
- const {flags}=parsed;const path=`/artifacts/${ref.id}/annotations`;
+ const {flags}=parsed;
+ if(typeof flags.image==='string')return downloadCommentImage(workspace,client,ref.id,flags.image,String(flags.output),typeof flags.variant==='string'?flags.variant:'preview');
+ const path=`/artifacts/${ref.id}/annotations`;
  if(flags['dry-run']){
   const head=await client.request<{capabilities?:{comment?:boolean};annotations?:Array<{id:string}>;nodes?:string[]}>(`/artifacts/${ref.id}`);
   if(head.capabilities&&head.capabilities.comment===false)throw new CliError('forbidden','You cannot comment on this artifact.','Ask the owner for commenter access.');

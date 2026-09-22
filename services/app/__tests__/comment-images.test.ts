@@ -81,3 +81,26 @@ it('carries a staged image and its quota into a claimed account',async()=>{
  const response=await createComment(request(`/api/my/artifacts/${s.doc.id}/annotations`,{method:'POST',cookie:s.cookie,json:{path:'0',edit_id:s.doc.edit_id,body:'Claimed screenshot',attachment_id:stage.id}}),params(s.doc.id));
  expect(response.status,await response.clone().text()).toBe(201);
 });
+
+import {GET as readAgentImage} from '@/app/api/artifacts/[id]/comment-images/[imageId]/route';
+it('serves annotated pixels through bearer auth and preserves attachment access and deletion rules',async()=>{
+ const s=await setup();const preview=await sharp({create:{width:100,height:50,channels:3,background:'blue'}}).png().toBuffer();
+ const stage=await stageCommentImage(s.actor,s.doc.id,s.image,preview,s.metadata);if(stage instanceof Response)throw new Error(await stage.text());
+ const read=(token:string|undefined,id=s.doc.id,variant='')=>readAgentImage(request(`/api/artifacts/${id}/comment-images/${stage.id}${variant?`?variant=${variant}`:''}`,{token}),{params:Promise.resolve({id,imageId:stage.id})});
+ expect((await read(undefined)).status).toBe(401);
+ expect((await read(s.token.token)).status).toBe(404); // Unconsumed stages stay private.
+ const created=await createComment(request(`/api/my/artifacts/${s.doc.id}/annotations`,{method:'POST',cookie:s.cookie,json:{path:'0',edit_id:s.doc.edit_id,body:'Look at the blue marks',attachment_id:stage.id}}),params(s.doc.id));
+ const annotation=await created.json();expect(created.status).toBe(201);
+ const downloaded=await read(s.token.token);expect(downloaded.status).toBe(200);
+ expect(downloaded.headers.get('Content-Type')).toBe('image/webp');expect(downloaded.headers.get('Cache-Control')).toBe('private, no-store');
+ const pixels=await sharp(Buffer.from(await downloaded.arrayBuffer())).raw().toBuffer();expect([...pixels.subarray(0,3)]).toEqual([0,0,255]);
+ const original=await read(s.token.token,s.doc.id,'original');expect(original.status).toBe(200);
+ expect([...(await sharp(Buffer.from(await original.arrayBuffer())).raw().toBuffer()).subarray(0,3)]).toEqual([255,0,0]);
+ const stranger=await mintToken('agent');expect((await read(stranger.token)).status).toBe(404);
+ expect((await read(s.token.token,'zzzzzz')).status).toBe(404);
+ expect((await read(s.token.token,s.doc.id,'invalid')).status).toBe(404);
+ await (await getDb()).query('UPDATE artifacts SET visibility=$2 WHERE id=$1',[s.doc.id,'unlisted']);
+ expect((await read(stranger.token)).status).toBe(200);
+ await (await getDb()).query('UPDATE annotations SET deleted_at=now() WHERE id=$1',[annotation.id]);
+ expect((await read(s.token.token)).status).toBe(404);
+});
