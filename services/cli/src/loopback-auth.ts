@@ -1,3 +1,4 @@
+import {EMAIL_AUTH_HINT} from './browser-auth';
 import {renderConnectionPage} from '../../utils/src/connection-page';
 import {API_RESOURCE_PATH,ARTIFACT_SCOPE} from '@artifactbin/contracts';
 /** Loopback callback carries only a single-use PKCE code, never bearer credentials. */
@@ -31,7 +32,7 @@ export async function loopbackAuthenticate(origin:string,options:Options):Promis
  await new Promise<void>((resolve,reject)=>{listener.once('error',reject);listener.listen(0,'127.0.0.1',()=>{listener.off('error',reject);resolve();});});
  const address=listener.address();if(!address||typeof address==='string')throw new Error('Loopback listener did not bind');
  redirectUri=`http://127.0.0.1:${address.port}/callback`;
- const timer=setTimeout(()=>refuse(new CliError('approval_expired','Browser approval timed out.','Run afbin auth again.')),Math.min(options.timeoutMs??300000,300000));
+ const timer=setTimeout(()=>refuse(new CliError('approval_expired','Browser approval timed out.',EMAIL_AUTH_HINT)),Math.min(options.timeoutMs??300000,300000));
  const post=async(path:string,body:Record<string,unknown>)=>{
   const response=await(options.fetch??fetch)(`${server}${path}`,{method:'POST',redirect:'error',signal:AbortSignal.timeout(15000),headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}).catch(error=>{throw transportFailure(server,error);});
   const data=await response.json().catch(()=>null);
@@ -43,8 +44,8 @@ export async function loopbackAuthenticate(origin:string,options:Options):Promis
   if(typeof registered.client_id!=='string'||!registered.client_id)throw new CliError('invalid_response','Registration did not return a client id.');
   const authorize=new URL('/oauth/authorize',server);
   authorize.search=new URLSearchParams({client_id:registered.client_id,redirect_uri:redirectUri,response_type:'code',code_challenge:createHash('sha256').update(verifier).digest('base64url'),code_challenge_method:'S256',state,scope:ARTIFACT_SCOPE,resource:`${server}${API_RESOURCE_PATH}`}).toString();
-  options.notify?.(`Approve artifactbin in your browser: ${authorize}`);
-  try{await options.open(authorize.toString());}catch{options.notify?.('Could not open the browser. Open the approval URL above.');}
+  options.notify?.(`Approve artifactbin in your browser: ${authorize}\n${EMAIL_AUTH_HINT}`);
+  try{await options.open(authorize.toString());}catch{throw new CliError('browser_unavailable','Could not open the browser.',EMAIL_AUTH_HINT);}
   const code=await completed;
   const token=await post('/oauth/token',{grant_type:'authorization_code',client_id:registered.client_id,redirect_uri:redirectUri,code,code_verifier:verifier,resource:`${server}${API_RESOURCE_PATH}`});
   if(typeof token.access_token!=='string'||typeof token.refresh_token!=='string'||typeof token.expires_in!=='number'||token.expires_in<=0)throw new CliError('invalid_response','Token exchange returned incomplete credentials.');

@@ -1,3 +1,8 @@
+import {mkdtemp,rm} from 'node:fs/promises';
+import {tmpdir} from 'node:os';
+import {join} from 'node:path';
+import {emailAuthenticate} from '../../cli/src/email-auth';
+import {loadConnection} from '../../cli/src/config';
 import { PGlite } from '@electric-sql/pglite';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { assemble, createTokenReader, hashToken } from '@artifactbin/utils';
@@ -315,4 +320,28 @@ it('requires same-origin browser consent and denial issues no authorization code
  const form=approveForm(client);form.set('action','deny');
  const denied=await app.request('/oauth/authorize/approve',{method:'POST',headers:{...cookie,origin:BASE,'content-type':'application/x-www-form-urlencoded'},body:form});
  expect(denied.status).toBe(303);const location=new URL(denied.headers.get('location')!);expect(location.searchParams.get('error')).toBe('access_denied');expect(location.searchParams.has('code')).toBe(false);expect(location.searchParams.get('state')).toBe('st');
+});
+
+
+it('CLI email login uses real OTP and device approval handlers, revokes its web session, and retains a refreshable CLI grant',async()=>{
+ const home=await mkdtemp(join(tmpdir(),'afbin-email-handlers-'));let otp='';
+ try{
+  const human=await createHumanAuth({pglite:pg,secret:'oauth-routes-secret'.padEnd(32,'0'),baseURL:BASE,mail:{send:async message=>{otp=message.otp??'';}}});
+  const options=await optionsOf();
+  const emailApp=assemble(authParts({...options,sessions:{...human.sessions,handler:human.handler}}));
+  const email='mxmx_test_cli_remote@example.com';
+  const request:typeof fetch=async(input,init)=>emailApp.fetch(new Request(input,init));
+  await expect(emailAuthenticate(BASE,email,undefined,{home,fetch:request})).rejects.toMatchObject({code:'otp_required'});
+  expect(otp).toMatch(/^\d{6}$/);
+  const connection=await emailAuthenticate(BASE,email,otp,{home,fetch:request});
+  expect(await loadConnection(BASE,home,{})).toEqual(connection);
+  const owner=(await testDb().query('SELECT user_id FROM tokens WHERE token_hash=$1',[hashToken(connection.token)])).rows[0]?.user_id;
+  expect(owner).toBeTruthy();
+  expect((await testDb().query('SELECT email FROM auth.user WHERE id=$1',[owner])).rows[0]?.email).toBe(email);
+  expect((await testDb().query('SELECT id FROM auth.session WHERE "userId"=$1',[owner])).rows).toHaveLength(0);
+  await expect(emailAuthenticate(BASE,email,otp,{home,fetch:request})).rejects.toMatchObject({code:'otp_rejected'});
+  expect(await loadConnection(BASE,home,{})).toEqual(connection);
+  const refresh=await emailApp.request(BASE+'/oauth/token',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({grant_type:'refresh_token',refresh_token:connection.refreshToken,client_id:connection.clientId})});
+  expect(refresh.status).toBe(200);
+ }finally{await rm(home,{recursive:true,force:true});}
 });

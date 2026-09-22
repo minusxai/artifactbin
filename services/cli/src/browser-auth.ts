@@ -16,10 +16,11 @@ interface Pending { connectionKey?: string; server: string; deviceCode: string; 
 interface DeviceResponse { authorized?: boolean; device_code: string; user_code: string; verification_uri_complete: string; expires_in: number; interval: number }
 /** An unattended agent gives up polling for approval after this bound, failing fast with an actionable error instead of holding the full device-code window. */
 const AGENT_APPROVAL_WAIT_MS = 45_000;
+export const EMAIL_AUTH_HINT = 'If a browser is unavailable, run afbin auth --email <email> (add --server <origin> for another server).';
 export class ApprovalRequired extends Error {
   readonly code = 'approval_required';
   constructor(readonly verificationUrl: string, readonly userCode: string, readonly expiresAt: number) {
-    super(`Approve code ${userCode} at ${verificationUrl}, the pending command will continue after approval.`);
+    super(`Approve code ${userCode} at ${verificationUrl}, the pending command will continue after approval. ${EMAIL_AUTH_HINT}`);
   }
 }
 export interface AuthOptions {
@@ -118,7 +119,10 @@ export async function deviceAuthenticate(origin: string, options: AuthOptions): 
   {
     (options.notify ?? (message=>process.stderr.write(`${message}\n`)))(approval.message);
     try { await (options.open ?? openBrowser)(pending.verificationUrl); }
-    catch (error) { options.notify?.(error instanceof Error ? error.message : 'Open the approval URL in your browser.'); }
+    catch (error) {
+      if(error instanceof CliError)throw error;
+      throw new CliError('browser_unavailable','Could not open the browser.',EMAIL_AUTH_HINT);
+    }
   }
   const deadline = options.interactive ? pending.expiresAt : Math.min(pending.expiresAt, clock() + AGENT_APPROVAL_WAIT_MS);
   while (clock() < deadline) {
@@ -134,13 +138,16 @@ export async function deviceAuthenticate(origin: string, options: AuthOptions): 
     if (data.error !== 'authorization_pending') {
       if (data.error === 'expired_token' || data.error === 'access_denied') await unlink(file);
       const code=data.error==='access_denied'?'access_denied':data.error==='expired_token'?'approval_expired':'auth_failed';
-      throw new CliError(code,code==='access_denied'?'Browser approval was denied.':code==='approval_expired'?'Browser approval expired.':'Browser authentication failed.','Run afbin auth again.');
+      throw new CliError(code,code==='access_denied'?'Browser approval was denied.':code==='approval_expired'?'Browser approval expired.':'Browser authentication failed.',code==='approval_expired'?EMAIL_AUTH_HINT:'Run afbin auth again.');
     }
     await (options.sleep ?? sleep)(Math.min(pending.interval,Math.max(0,deadline-clock())));
   }
-  if (!options.interactive && clock() < pending.expiresAt) throw approval;
+  if (!options.interactive && clock() < pending.expiresAt) {
+    approval.message = `Browser approval timed out. ${EMAIL_AUTH_HINT} Or approve code ${pending.userCode} at ${pending.verificationUrl} and rerun the command before the approval expires.`;
+    throw approval;
+  }
   await unlink(file);
-  throw new CliError('approval_expired','Browser approval expired.','Run afbin auth again.');
+  throw new CliError('approval_expired','Browser approval timed out.',EMAIL_AUTH_HINT);
 }
 function validPending(value: Pending, server: string, approvalOrigins: readonly string[] = [server]): boolean {
   if (!value || value.server !== server || typeof value.deviceCode !== 'string' || !/^[A-Za-z0-9_-]{43}$/.test(value.deviceCode)

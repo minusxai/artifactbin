@@ -1,3 +1,4 @@
+import {emailAuthenticate} from './email-auth';
 import {addFiles,moveFile,localIdentities} from './identities';
 import {servePreview} from './preview-runtime';
 import {previewFiles,type PreviewOptions} from './preview-options';
@@ -247,6 +248,10 @@ export async function runCli(argv:string[],context:CliContext={}):Promise<number
   let connection=await loadConnectionFor(resolved,home,context.env);
   const authenticate=()=>browserAuthenticate(connection?.server??server??declaredServer,{...context.auth,home,env:context.env,interactive,aliases:serverAliases,rejectedToken:connection?.token,fetch:context.fetch,notify:message=>stderr(approvalMessage(message,style)+'\n')});
   if(command==='auth'){
+   if(typeof flags.email==='string'){
+    connection=await emailAuthenticate(server??declaredServer,flags.email,typeof flags.otp==='string'?flags.otp:undefined,{home,env:context.env,fetch:context.fetch,aliases:serverAliases});
+    emit({authenticated:true,server:connection.server});return 0;
+   }
    if(positionals[0]) {
     const ref=await resolveReference(positionals[0],{root:workspace.root,cwd:workspace.cwd,server:server??declaredServer,aliases:[...selectedAddresses],writable:true});
     if(ref.kind!=='id')throw new CliError('invalid_reference','Use the artifact URL or id for approval.');

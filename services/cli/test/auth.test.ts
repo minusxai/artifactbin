@@ -87,6 +87,7 @@ test('afbin auth unattended surfaces approval_expired when the window closes',as
   });
   assert.equal(code,2);
   assert.equal(JSON.parse(output.join('')).error.code,'approval_expired');
+  assert.match(JSON.parse(output.join('')).error.fix,/--email/);
   assert.equal(await loadConnection(origin,home,{}),null);
  }finally{await rm(home,{recursive:true,force:true});}
 });
@@ -284,4 +285,77 @@ describe('a rejected token mid-command', () => {
     assert.doesNotMatch(err.join(''),/at .*\.ts:\d+/);
    }finally{await rm(root,{recursive:true,force:true});}
   });
+});
+
+
+describe('email authentication',()=>{
+ for(const otp of [undefined,'123456'])test(otp?'email OTP approves and saves a CLI connection without a browser':'email sends an OTP and returns instructions without waiting',async()=>{
+  const home=await mkdtemp(join(tmpdir(),'afbin-email-'));const output:string[]=[];const calls:string[]=[];
+  try{
+   await saveConnection({server:origin,token:'previous'},home);
+   const code=await runCli(['auth','--email','mxmx_test_remote@example.com',...(otp?['--otp',otp]:[]),'--server',origin,'--json'],{
+    home,cwd:home,env:{ARTIFACTBIN_SKILLS:'off'},interactive:false,stdout:s=>output.push(s),stderr:()=>{},auth:{open:async()=>assert.fail('email must never open a browser')},
+    fetch:async(input,init)=>{
+     const path=new URL(String(input)).pathname;calls.push(path);const headers=new Headers(init?.headers);
+     assert.equal(headers.get('Authorization'),null);
+     if(path==='/api/server')return Response.json({origin,aliases:[]});
+     if(path==='/api/auth/email-otp/send-verification-otp'){assert.deepEqual(JSON.parse(String(init?.body)),{email:'mxmx_test_remote@example.com',type:'sign-in'});return Response.json({success:true});}
+     if(path==='/api/auth/sign-in/email-otp'){assert.deepEqual(JSON.parse(String(init?.body)),{email:'mxmx_test_remote@example.com',otp});return Response.json({token:'temporary'},{headers:{'set-cookie':'session=temporary; Path=/; HttpOnly'}});}
+     if(path==='/oauth/device')return pairing();
+     if(path==='/oauth/device/approve'){assert.equal(headers.get('cookie'),'session=temporary');assert.equal(headers.get('origin'),origin);assert.equal(new URLSearchParams(String(init?.body)).get('user_code'),'ABCD');return new Response('approved');}
+     if(path==='/oauth/device/token')return credentials();
+     if(path==='/api/auth/sign-out'){assert.equal(headers.get('cookie'),'session=temporary');return Response.json({success:true});}
+     assert.fail('Unexpected request '+path);
+    },
+   });
+   assert.equal(code,otp?0:2,output.join(''));
+   assert.equal((await loadConnection(origin,home,{}))?.token,otp?'new_access':'previous');
+   assert.doesNotMatch(output.join(''),/temporary|new_access|new_refresh/);
+   if(otp){assert.ok(calls.includes('/api/auth/sign-out'));assert.ok(!calls.includes('/api/auth/email-otp/send-verification-otp'));}
+   else {assert.equal(JSON.parse(output.join('')).error.code,'otp_required');assert.match(JSON.parse(output.join('')).error.fix,/--otp/);assert.deepEqual(calls,['/api/server','/api/auth/email-otp/send-verification-otp']);}
+  }finally{await rm(home,{recursive:true,force:true});}
+ });
+ test('a rejected OTP leaves the previous credentials intact and does not start pairing',async()=>{
+  const home=await mkdtemp(join(tmpdir(),'afbin-email-rejected-'));const output:string[]=[];
+  try{
+   await saveConnection({server:origin,token:'previous'},home);
+   const code=await runCli(['auth','--email','mxmx_test_remote@example.com','--otp','123456','--server',origin,'--json'],{home,cwd:home,env:{ARTIFACTBIN_SKILLS:'off'},interactive:false,stdout:s=>output.push(s),stderr:()=>{},auth:{open:async()=>assert.fail('browser')},fetch:async input=>{
+    const path=new URL(String(input)).pathname;if(path==='/api/server')return Response.json({origin,aliases:[]});assert.equal(path,'/api/auth/sign-in/email-otp');return Response.json({message:'secret server detail'},{status:400});
+   }});
+   assert.equal(code,2);assert.equal(JSON.parse(output.join('')).error.code,'otp_rejected');assert.doesNotMatch(output.join(''),/secret server detail/);assert.equal((await loadConnection(origin,home,{}))?.token,'previous');
+  }finally{await rm(home,{recursive:true,force:true});}
+ });
+});
+
+for(const failure of ['launch','timeout'])test('loopback '+failure+' reports email recovery',async()=>{
+ const home=await mkdtemp(join(tmpdir(),'afbin-loopback-fallback-'));const notices:string[]=[];
+ try{await assert.rejects(loopbackAuthenticate(origin,{home,timeoutMs:10,notify:s=>notices.push(s),open:async()=>{if(failure==='launch')throw new Error('unavailable');},fetch:async()=>Response.json({client_id:'client'})}),e=>e instanceof CliError&&e.code===(failure==='launch'?'browser_unavailable':'approval_expired')&&/--email/.test(e.fix??''));assert.match(notices.join(''),/--email/);}
+ finally{await rm(home,{recursive:true,force:true});}
+});
+
+for(const args of [ ['--otp','123456'], ['--email','bad-address'], ['--email','a@example.com','--otp','oops'], ['abc123','--email','a@example.com'] ])test('invalid email auth arguments fail before network: '+args.join(' '),async()=>{
+ const output:string[]=[];
+ assert.equal(await runCli(['auth',...args,'--json'],{env:{ARTIFACTBIN_SKILLS:'off'},stdout:s=>output.push(s),stderr:()=>{},fetch:async()=>assert.fail('invalid input must stay offline')}),2);
+ assert.equal(JSON.parse(output.join('')).error.code,'invalid_arguments');
+});
+
+for(const failure of ['send','cookie','approve','token'])test('email '+failure+' failure never replaces existing credentials',async()=>{
+ const home=await mkdtemp(join(tmpdir(),'afbin-email-failure-'));const output:string[]=[];let signedOut=false;
+ try{
+  await saveConnection({server:origin,token:'previous'},home);
+  const code=await runCli(['auth','--email','mxmx_test_remote@example.com',...(failure==='send'?[]:['--otp','123456']),'--server',origin,'--json'],{home,cwd:home,env:{ARTIFACTBIN_SKILLS:'off'},interactive:false,stdout:s=>output.push(s),stderr:()=>{},auth:{open:async()=>assert.fail('browser')},fetch:async input=>{
+   const path=new URL(String(input)).pathname;
+   if(path==='/api/server')return Response.json({origin,aliases:[]});
+   if(path==='/api/auth/email-otp/send-verification-otp')return Response.json({}, {status:429});
+   if(path==='/api/auth/sign-in/email-otp')return Response.json({}, {headers:failure==='cookie'?{}:{'set-cookie':'session=temporary; HttpOnly'}});
+   if(path==='/oauth/device')return pairing();
+   if(path==='/oauth/device/approve')return new Response('',{status:failure==='approve'?403:200});
+   if(path==='/oauth/device/token')return Response.json({access_token:'incomplete'});
+   if(path==='/api/auth/sign-out'){signedOut=true;return Response.json({});}
+   assert.fail('unexpected '+path);
+  }});
+  assert.equal(code,2);assert.equal((await loadConnection(origin,home,{}))?.token,'previous');
+  assert.equal(signedOut,failure==='approve'||failure==='token');
+  assert.equal(JSON.parse(output.join('')).error.code,({send:'otp_send_failed',cookie:'invalid_response',approve:'auth_failed',token:'invalid_response'})[failure]);
+ }finally{await rm(home,{recursive:true,force:true});}
 });
