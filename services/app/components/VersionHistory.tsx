@@ -46,7 +46,7 @@ const ROW = (selected: boolean) =>
   }`;
 
 export default function VersionHistory({
-  versions, currentVersion, previewing, onPreview, onRestore, onBackToCurrent, onClose, busy, topOffset = 0, embedded = false,
+  versions = [], currentVersion, previewing, onPreview, onRestore, onBackToCurrent, onClose, busy, topOffset = 0, embedded = false,
 }: VersionHistoryProps) {
   const phone = useIsPhoneViewport();
   // Escape closes, like any transient panel.

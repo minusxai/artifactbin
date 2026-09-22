@@ -1230,7 +1230,7 @@ export default function InPlaceEditor({
             <p className="px-3 py-2 font-mono text-[11px] uppercase tracking-wide text-faint">versions</p>
             <VersionHistory
               embedded
-              versions={history.versions}
+              versions={history.versions ?? []}
               currentVersion={live.version}
               previewing={preview?.version ?? null}
               onPreview={(v: number) => void previewVersion(v)}
@@ -1243,7 +1243,15 @@ export default function InPlaceEditor({
           <div className="border-t border-edge p-2">
             <button
               type="button"
-              aria-label="Exit edit mode"
+              /*
+               * A DIFFERENT name from the toolbar's "Exit edit mode", on purpose.
+               * One action behind two doors is fine for a person; two controls
+               * sharing one accessible name is not — every gate and test that
+               * says "Exit edit mode" then matches both and fails strict mode.
+               * The toolbar keeps the established name; this one says what it
+               * says on its face.
+               */
+              aria-label="Done editing"
               onClick={(event) => {
                 event.currentTarget.blur();
                 void onDone();
