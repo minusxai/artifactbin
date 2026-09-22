@@ -40,6 +40,7 @@ jobs:
         shell: pwsh
         run: node "$env:PROBE_OUTPUT/node_modules/playwright/cli.js" install chromium
       - name: Run bounded research observations
+        timeout-minutes: 8
         shell: pwsh
         run: node docs/proposals/windows-support/probe.mjs "$env:PROBE_OUTPUT"
       - name: Preserve observed results and resolved dependency lock

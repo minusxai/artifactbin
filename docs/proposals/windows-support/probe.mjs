@@ -10,8 +10,12 @@ await mkdir(output, {recursive:true});
 const directory = await mkdtemp(join(tmpdir(), 'afbin windows é '));
 const observations = [];
 async function observe(name, action) {
-  try {observations.push({name, result:await action()});}
+  let timer;
+  try {observations.push({name, result:await Promise.race([action(),new Promise((_,reject)=>{timer=setTimeout(()=>reject(Error('Research observation exceeded 45 seconds')),45000);})])});}
   catch(error) {observations.push({name, error:{code:error.code, message:error.message}});}
+  finally {clearTimeout(timer);}
+  console.log(JSON.stringify(observations.at(-1)));
+  await writeFile(join(output,'observations.json'),JSON.stringify({platform:process.platform,arch:process.arch,node:process.version,kind:'partial research observations',observations},null,2)+'\n');
 }
 const require = createRequire(join(output, 'package.json'));
 await observe('mode-roundtrip', async()=>{
@@ -108,3 +112,6 @@ const report={platform:process.platform,arch:process.arch,node:process.version,k
 await writeFile(join(output,'observations.json'),JSON.stringify(report,null,2)+'\n');
 console.log(JSON.stringify(report,null,2));
 await rm(directory,{recursive:true,force:true,maxRetries:5,retryDelay:200});
+
+// This disposable CLI probe owns all child resources; observations above are not lifecycle certification.
+process.exit(0);
