@@ -186,16 +186,10 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
       theme: design.theme,
       colorMode: design.colorMode,
       template: meta.template ?? null,
-      // A ref carries its TITLE as well as its id, for anyone the viewer may
-      // read: the editor names a dataset in the data view, and `C1kWy2` tells
-      // a person nothing. Unreadable refs keep the id alone — a name is a fact
-      // about an artifact, so it follows the same access as the artifact.
-      refs: await Promise.all(((meta.refs ?? []) as Array<{ id: string; kind: string }>).map(async (ref) => {
-        const target = await getArtifactById(ref.id);
-        return target && (await canReadArtifact(target, actor.viewer))
-          ? { ...ref, title: target.title ?? null }
-          : ref;
-      })),
+      // Ids only: the data view that names a dataset is EDIT-only, and it
+      // loads through /api/my/artifacts/:id where the join happens. A reader
+      // never sees a ref's title, so nobody's page pays for the lookups.
+      refs: meta.refs ?? [],
       // Paint first: the DECLARATIONS, not the rows. The page's copy exists to
       // seed the editor, and the editor runs a draft's queries itself — so
       // running them here only held the owner's own page behind the SQL, with
