@@ -98,7 +98,7 @@ interface EditorArtifact {
   /** The stored stylesheet, so the canvas is styled on the FIRST frame. */
   compiledCss?: string | null;
   markup?: string | null;
-  refs?: Array<{ id: string; kind: string }>;
+  refs?: Array<{ id: string; kind: string; title?: string | null }>;
   /**
    * The document's dataflow as the page rendered it (server-run) — the canvas
    * shows charts over these tables from the first frame. Null when the
@@ -1349,7 +1349,13 @@ export default function InPlaceEditor({
           className="fixed right-0 bottom-0 z-20 overflow-y-auto bg-surface p-4"
           style={{ top: barTop + barH, left: leftInset }}
         >
-          <QueryNotebookPanel cells={queryNotebook} onSqlChange={onQuerySqlChange} onSpotlight={edit.spotlight} focus={queryFocus} />
+          <QueryNotebookPanel
+            cells={queryNotebook}
+            onSqlChange={onQuerySqlChange}
+            onSpotlight={edit.spotlight}
+            focus={queryFocus}
+            titles={Object.fromEntries((art.refs ?? []).map((r) => [r.id, r.title ?? null]))}
+          />
         </aside>
       )}
 

@@ -42,7 +42,7 @@ interface Loaded {
    * the draft compile supplies the sheet instead.
    */
   compiledCss?: string | null;
-  refs?: Array<{ id: string; kind: string }>;
+  refs?: Array<{ id: string; kind: string; title?: string | null }>;
   /** Present when SEEDED from the page: the document's server-run dataflow (InPlaceEditor's EditorArtifact). */
   dataflow?: StoryIslandDataflow | null;
 }
@@ -68,7 +68,7 @@ interface EditorSeed {
   compiledCss?: string | null;
   version: number;
   edit_id: string;
-  refs?: Array<{ id: string; kind: string }>;
+  refs?: Array<{ id: string; kind: string; title?: string | null }>;
   dataflow?: StoryIslandDataflow | null;
 }
 
