@@ -80,7 +80,7 @@ await build({
     {
       name: "native-asset",
       setup(b) {
-        b.onLoad({ filter: /src\/pty\.ts$/ }, () => ({
+        b.onLoad({ filter: /src[\\/]pty\.ts$/ }, () => ({
           contents: loader,
           loader: "js",
         }));
@@ -115,7 +115,7 @@ if (process.platform === "darwin")
   execFileSync("codesign", ["--remove-signature", binary]);
 // Pinned runtimes are already stripped. Only prepare an explicitly supplied raw runtime;
 // re-stripping a signed/prepared Mach-O can fail after its signature is removed.
-if (process.env.CLI__NODE) execFileSync("strip", process.platform === "darwin" ? ["-x",binary] : ["--strip-all",binary]);
+if (process.env.CLI__NODE && process.platform!=="win32") execFileSync("strip", process.platform === "darwin" ? ["-x",binary] : ["--strip-all",binary]);
 if (process.platform === 'linux' || process.platform === 'darwin' && process.arch === 'x64') injectNative(binary,resolve("dist/sea.blob"));
 else await inject(binary, "NODE_SEA_BLOB", await readFile("dist/sea.blob"), {
   sentinelFuse: "NODE_SEA_FUSE_fce680ab2cc467b6e072b8b5df1996b2",
@@ -131,7 +131,7 @@ await copyFile("dist/share/man/man1/afbin.1","dist/afbin.1");
 const sha256=data=>createHash('sha256').update(data).digest('hex');
 const rawBytes=await readFile(binary),compressed=gzipSync(rawBytes,{level:9});
 await writeFile(`${binary}.gz`,compressed);
-await writeFile(`${binary}.manifest.json`,JSON.stringify({version:teaching.version,protocol:teaching.protocol,platform:process.platform,arch:process.arch,binary:{file:`afbin-${process.platform}-${process.arch}`,sha256:sha256(rawBytes),gzip:{file:`${basename(binary)}.gz`,sha256:sha256(compressed)}},skills:{file:'afbin-skills.json',sha256:sha256(skills)}},null,2)+'\n');
+await writeFile(`${binary}.manifest.json`,JSON.stringify({version:teaching.version,protocol:teaching.protocol,platform:process.platform,arch:process.arch,binary:{file:basename(binary),sha256:sha256(rawBytes),gzip:{file:`${basename(binary)}.gz`,sha256:sha256(compressed)}},skills:{file:'afbin-skills.json',sha256:sha256(skills)}},null,2)+'\n');
 // The checksum list a release carries, so a local artifactbin can serve this build to its own installer.
 const hostArchive=`afbin-runtime-${process.platform}-${process.arch}.gz`;
 const released=[hostArchive,basename(binary),`${basename(binary)}.manifest.json`,'afbin-skills.json','afbin.1',`${basename(binary)}.gz`,duckdb.file,basename(duckdb.asset),chromium.file,basename(chromium.asset)];

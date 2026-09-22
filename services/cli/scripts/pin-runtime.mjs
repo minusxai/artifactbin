@@ -20,5 +20,11 @@ for(const target of ['darwin-arm64','darwin-x64','linux-arm64','linux-x64']){
  lock.platforms[target]=entry;
  const [platform,arch]=target.split('-');runtimePin(lock,platform,arch);
 }
+const previous=JSON.parse(await readFile(new URL('../runtime-lock.json',import.meta.url),'utf8'));
+const windows=previous.platforms?.['win32-x64'];
+if(windows){
+ assert.equal(windows.recipe.version,lock.version,'Update the official Windows runtime pin to the new Node version before pinning the other platforms.');
+ lock.platforms['win32-x64']=windows;runtimePin(lock,'win32','x64');
+}
 await writeFile(new URL('../runtime-lock.json',import.meta.url),JSON.stringify(lock,null,2)+'\n');
 console.log(`Pinned ${release}; review runtime-lock.json, then run CLI CI using the downloaded runtimes.`);

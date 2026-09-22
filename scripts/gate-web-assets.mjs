@@ -486,6 +486,9 @@ await checkWebImport(B, browser, WEB, check);
   const PRIV = `${WEB}/pic3.png?run=${RUN_ID}`;
   const holder = await browser.newPage();
   await loginViaEmail(holder, B, sink, `mxmx_test_boundassets_${RUN_ID}@example.com`);
+  // Publication may start a thumbnail render before the reader navigates. Count the
+  // one source fetch across publication AND navigation, not after that race starts.
+  const beforePriv = hits.filter((h) => h === '/pic3.png').length;
   const mine = await publishAs(holder, {
     title: 'private bound',
     markup: `<Helmet><Value name="pick" type="string" default="${PRIV}" /></Helmet><div><img src="$pick" alt="a" /></div>`,
@@ -511,7 +514,6 @@ await checkWebImport(B, browser, WEB, check);
     return read();
   });
 
-  const beforePriv = hits.filter((h) => h === '/pic3.png').length;
   await holder.goto(`${B}/a/${mine.id}`, { waitUntil: 'networkidle' });
   const owned = await paints(await artifactDocument(holder, { timeout: 30_000 }));
   check(owned.natural[0] === 48 && owned.natural[1] === 32,
@@ -519,7 +521,7 @@ await checkWebImport(B, browser, WEB, check);
   check(/^\/assets\/[0-9a-f]{64}$/.test(owned.src ?? ''),
     `bound: and its src is the public content address the relay handed back (${owned.src})`);
   check(hits.filter((h) => h === '/pic3.png').length === beforePriv + 1,
-    'bound: the source host was asked exactly once for it');
+    `bound: the source host was asked exactly once for it (before=${beforePriv}, after=${hits.filter(h=>h==='/pic3.png').length})`);
   const listed = await holder.evaluate(async () => (await fetch('/api/my/artifacts')).json());
   check(Array.isArray(listed.artifacts) && listed.artifacts.some((a) => a.id === mine.id),
     'bound: the import created no artifact of its own — the document is still the only one');

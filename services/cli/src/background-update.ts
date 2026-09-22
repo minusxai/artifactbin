@@ -11,6 +11,7 @@ export {BACKGROUND_UPDATE_ARG} from './entry-args';
 export const UPDATE_CHECK_MS=24*60*60*1000;
 export const UPDATE_RETRY_MS=60*60*1000;
 export interface BackgroundOptions {
+ platform?:string;
  home:string;
  server:string;
  launchId?:string;
@@ -28,7 +29,7 @@ function due(state:CheckState|undefined,now:number):boolean {
  return !state||!Number.isFinite(state.attemptedAt)||!Number.isFinite(state.nextAt)||state.attemptedAt>now||state.nextAt<=now||state.nextAt-state.attemptedAt>UPDATE_CHECK_MS;
 }
 function eligible(options:BackgroundOptions):boolean {
- return (options.standalone??isSea())&&autoUpdatePolicy(options.env).enabled;
+ return (options.platform??process.platform)!=='win32'&&(options.standalone??isSea())&&autoUpdatePolicy(options.env).enabled;
 }
 function launchDetached(executable:string,args:string[],env:NodeJS.ProcessEnv):void {
  const child=spawn(executable,args,{detached:true,stdio:'ignore',env});

@@ -31,7 +31,7 @@ export async function duckdbNative(){
       if(architectures.length>1){await copyFile(copy+'.thin',copy);await rm(copy+'.thin');}
       execFileSync('strip',['-x',copy]);
       execFileSync('codesign',['--force','--sign','-',copy]);
-     }else execFileSync('strip',['--strip-unneeded',copy]);
+     }else if(process.platform==='linux')execFileSync('strip',['--strip-unneeded',copy]);
     }
     const bytes=await readFile(source);chunks.push(bytes);files.push({path:join('node_modules',destination,path).split('\\').join('/'),size:bytes.length,sha256:sha256(bytes)});
    }

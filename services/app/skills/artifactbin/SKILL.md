@@ -5,11 +5,12 @@ description: >-
 ---
 ## Read first
 
-artifactbin publishes agent-written documents to read, edit, annotate and share. An artifact is one `.jsx` file: a YAML fence for metadata, then self-contained static JSX — HTML prose and kit components styled with Tailwind via `className` — under a theme and a template. It supports datasets (CSV/JSON), images, PDFs, reader-changeable values, controls and charts; datasets and media are artifacts too.
+artifactbin publishes editable documents. Each `.jsx` file has a YAML fence and self-contained JSX: HTML and kit components styled with Tailwind `className`, under a theme and template. Datasets and media are artifacts too. Use controls and charts.
 
 Every action goes through the `afbin` CLI; the site's HTTP API is not for agents.
 
 - Missing binary: `curl -fsSL [[ base ]]/chat/install.sh | sh`; it verifies the checksum.
+- Windows x64: download `[[ base ]]/chat/install.ps1`, then run it in PowerShell with `-Yes`. Reopen the terminal. Close afbin and rerun it to upgrade.
 - Sign-in is automatic via browser approval, even with `--yes`. If remote/headless or browser login fails/times out, ask for email: `afbin auth --email <email>`. Ask for the code: `afbin auth --email <email> --otp <code>`, then retry. Credentials: `~/.artifactbin/hosts/<origin-id>/credentials.env`; never mint or print tokens.
 - For a supplied artifact: `afbin pull <url-or-id> --output report.jsx`, edit the file, `afbin push report.jsx`. For a new artifact, write the file and push it. Share its returned URL.
 - Several people — shared, friends, a team, each person, sign-up, vote, RSVP, who did what: read `afbin help apps` BEFORE picking a data shape: accounts, never typed names.

@@ -26,6 +26,28 @@ For a shared host see [team on a network](../../docs/extraction/team.md#team-on-
 
 ## Install and authenticate
 
+Windows 11 x64 (PowerShell 5.1 or 7):
+
+```powershell
+Invoke-WebRequest -UseBasicParsing https://app.artifactbin.dev/chat/install.ps1 -OutFile install-afbin.ps1
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\install-afbin.ps1
+```
+
+This installs for the current user in `%LOCALAPPDATA%\artifactbin\bin`, verifies both download
+and executable checksums, adds the directory to user PATH and installs selected agent skills.
+No administrator or Node installation is needed. Open a new terminal afterward. Use `-Yes`
+for unattended installation, `-Harness codex` to select a skill, `-Dir` for another destination,
+and `-Version X.Y.Z` for a specific release. Use your own server's `/chat/install.ps1` URL for
+self-hosted installations. The command allows this script for one process without changing your
+saved execution policy; organization-enforced policies still apply.
+
+To upgrade Windows, close every afbin process and rerun the installer. `afbin update` explains
+this requirement; background self-updates are disabled. Windows ARM64 and background remote
+agents are outside this release's supported scope. The executable is unsigned; desktop trust
+prompts depend on local policy. Native Windows CI verifies installation and packaged services.
+
+macOS/Linux:
+
 ```sh
 curl -fsSL https://app.artifactbin.dev/chat/install.sh | sh
 ```
@@ -50,7 +72,7 @@ On a terminal the installer colours its output and shows a download progress bar
 same script, pinned to the release they were built with;
 `/install.sh` is the separate self-hosted **server** installer.
 
-Standalone releases use Node's small-ICU build: English locale formatting is included; other locale
+macOS/Linux standalone releases use Node's small-ICU build: English locale formatting is included; other locale
 formatting may fall back to English. Unicode normalization, IDN URLs and the Intl APIs remain.
 Core downloads exclude DuckDB. The first local CSV/JSON/document query downloads the matching,
 checksummed SQL package, then runs it locally in the CLI's Node runtime. No local rows are uploaded.
@@ -76,7 +98,7 @@ host preference.
 
 Authentication opens browser approval and saves credentials privately in `~/.artifactbin/hosts/<origin-id>/credentials.env`.
 Skill setup supports Claude Code, Codex, pi and OpenCode and remembers your choices. Standalone executables
-for macOS/Linux arm64/x64 and versioned local skill bundles are published in GitHub releases.
+for Windows x64 and macOS/Linux arm64/x64 and versioned local skill bundles are published in GitHub releases.
 
 ```sh
 afbin pull <artifact-url> report.jsx
@@ -228,9 +250,9 @@ npm run build:binary -w services/cli
 # services/cli/dist/afbin-<platform>-<arch>[.exe]
 ```
 
-Build on each target OS/architecture using Node 22. The build creates a [Node single executable application](https://nodejs.org/docs/latest-v22.x/api/single-executable-applications.html), embeds node-pty and its native helper, and applies ad-hoc signing on macOS. It needs no separately installed Node runtime or node_modules on the destination. Terminal native files extract into a private temporary directory for the process lifetime; SQL uses the verified persistent cache described above. Each of the four release targets has its own build and smoke gate. Public macOS distribution would additionally need your signing/notarization process. No binaries are committed.
+Build on each target OS/architecture using Node 22. The build creates a [Node single executable application](https://nodejs.org/docs/latest-v22.x/api/single-executable-applications.html), embeds node-pty and its native helper, and applies ad-hoc signing on macOS. It needs no separately installed Node runtime or node_modules on the destination. Terminal native files extract into a private temporary directory for the process lifetime; SQL uses the verified persistent cache described above. Each of the five release targets has its own build and smoke gate. Public macOS distribution would additionally need your signing/notarization process. No binaries are committed.
 
-The build downloads the small-ICU Node executable pinned in `runtime-lock.json`, verifies both
+On macOS/Linux the build downloads the small-ICU Node executable pinned in `runtime-lock.json`, verifies both
 compressed and executable SHA-256, and reuses a verified local copy. A cache miss downloads the
 same versioned release asset; ordinary builds never compile Node. `CLI__NODE` is an explicit raw-runtime
 build/test override. GitHub's dependency cache is only an acceleration layer, not the runtime's
@@ -263,14 +285,14 @@ The account and the app server can access the terminal content and input. Keep t
 
 ## Publishing a CLI release
 
-CI builds and smoke-tests macOS/Linux on arm64/x64. A version bump publishes the exact
+CI builds and smoke-tests Windows x64 and macOS/Linux on arm64/x64. A version bump publishes the exact
 assets from successful main CI; unrelated merges leave existing releases unchanged.
 
 **A release is a version and nothing else.** When the whole diff is the version lines
 `npm run release:cli` writes — in
 `services/cli/package.json`, `package-lock.json`, `services/app/public/chat/install.sh`,
 `services/app/public/chat/release.json` — CI selects
-only `checks`, the four binary builds with their smoke tests, and Intel browser proofs in a
+only `checks`, the five binary builds with their smoke tests, and Intel browser proofs in a
 dependent job consuming the exact uploaded executable (`scripts/lib/ci-plan.mjs`). The code under that version is the code that
 already passed; what a release must prove is that the binaries build and run. Any other file in the
 same change makes it an ordinary run again.
@@ -284,14 +306,16 @@ command below. Prose and the CLI's own tests are exempt.
 2. Land the version files in the pull request that changes the CLI. Teaching is generated
    automatically from authored references and command registries; do not commit `src/generated/teaching.json`. For a bump-only release of what is already on main, dispatch `Release afbin` instead: it
    commits the version straight to main (admin PAT), and that push selects only `checks` and the
-   four binary builds.
+   five binary builds.
 3. Successful main CI triggers `Release tested afbin CLI`, which tags that exact commit and
-   publishes all four tested executables, host runtimes, DuckDB/Chromium packages and checksums.
+   publishes all five tested executables, host runtimes, DuckDB/Chromium packages and checksums.
    It publishes the bytes CI built: the run main CI's `tested-run` artifact names when the tree was
    tested elsewhere, the main run itself otherwise. The release stays draft until every asset is
    attached. Published releases are immutable.
 4. Deploy a matching server/installer only after publication succeeds. Rollback keeps the
    previous release available; installers also accept `--version` explicitly.
+
+Windows uses the official Node executable from nodejs.org, pinned by URL, size and SHA-256 in `runtime-lock.json`. Update its pin from the matching official SHASUMS256.txt when advancing Node.
 
 The separate `Build CLI Node runtimes` workflow is manual maintenance for a new pinned
 Node runtime revision. Ordinary CLI builds download and verify the existing runtime.
@@ -300,4 +324,4 @@ A missing release produces a clear download error and leaves any existing instal
 
 ### Standalone download boundaries
 
-The executable carries the CLI and checksum manifests. First preview/serve downloads the versioned `afbin-runtime-<platform>-<arch>.gz` into the private runtime cache. SQL and Chromium retain separate lazy packages. Verified caches work offline; cold first use needs network access. npm installations include their runtime. PGLite in the standalone host includes its ESM runtime, WASM/data and filesystem adapters, without optional extensions, alternate CJS distributions, types or source maps. CI exercises initialization, transactions, restart, preview and real host publication. Size reports separate core, host runtime and SQL; core downloads are capped at 35 MB on all four platforms.
+The executable carries the CLI and checksum manifests. First preview/serve downloads the versioned `afbin-runtime-<platform>-<arch>.gz` into the private runtime cache. SQL and Chromium retain separate lazy packages. Verified caches work offline; cold first use needs network access. npm installations include their runtime. PGLite in the standalone host includes its ESM runtime, WASM/data and filesystem adapters, without optional extensions, alternate CJS distributions, types or source maps. CI exercises initialization, transactions, restart, preview and real host publication. Size reports separate core, host runtime and SQL; core downloads are capped at 35 MB on macOS/Linux platforms (Windows uses the official full-ICU Node executable).

@@ -1,3 +1,4 @@
+import {protectWindowsDirectory} from './platform';
 import { createHash, randomUUID } from 'node:crypto';
 import { chmod, link, lstat, mkdir, open, readFile, rename, unlink } from 'node:fs/promises';
 import { basename, dirname, join } from 'node:path';
@@ -16,7 +17,8 @@ export async function privateDirectory(path: string): Promise<void> {
   await mkdir(path, {recursive: true, mode: 0o700});
   const info = await lstat(path);
   if (!info.isDirectory() || info.isSymbolicLink()) throw new Error(`Expected a private directory: ${path}`);
-  await chmod(path, 0o700);
+  if(process.platform==='win32')await protectWindowsDirectory(path);
+  else await chmod(path, 0o700);
 }
 
 async function syncDirectory(path: string): Promise<void> {

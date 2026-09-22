@@ -201,7 +201,17 @@ async function fetchAsset(url: string, kind: WebAssetKind): Promise<Omit<WebAsse
  * object that already exists would bill it twice and make a popular URL
  * progressively more expensive for everyone who names it.
  */
+// Reader hydration and thumbnail rendering can discover the same bound URL together.
+// Share only the pending import; persistent cache checks, kind checks and quotas remain below.
+const importing = new Map<string, Promise<WebAssetRow>>();
 export async function importWebAsset(url: string, by: WebAssetImporter, kind: WebAssetKind = 'image'): Promise<WebAssetRow> {
+  const key = `${urlHash(url)}:${kind}`;
+  let pending = importing.get(key);
+  if (!pending) { pending = importWebAssetOnce(url, by, kind); importing.set(key, pending); }
+  try { return await pending; }
+  finally { if (importing.get(key) === pending) importing.delete(key); }
+}
+async function importWebAssetOnce(url: string, by: WebAssetImporter, kind: WebAssetKind): Promise<WebAssetRow> {
   const hash = urlHash(url);
   const existing = await webAssetByHash(hash);
   if (existing) return requireKind(existing,kind);

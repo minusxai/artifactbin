@@ -533,8 +533,11 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ ubuntu-24.04, ubuntu-24.04-arm, macos-14, macos-15-intel ]
+        os: [ ubuntu-24.04, ubuntu-24.04-arm, macos-14, macos-15-intel, windows-2022 ]
     steps:
+      - name: Preserve source bytes on Windows
+        if: runner.os == 'Windows'
+        run: git config --global core.autocrlf false
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
@@ -575,11 +578,23 @@ jobs:
         run: npx playwright install-deps chromium
       - name: Build compact standalone CLI
         run: npm run build:binary -w services/cli
-      - run: npm run test:binary -w services/cli
+      - if: runner.os != 'Windows'
+        run: npm run test:binary -w services/cli
+      - name: Windows installed release acceptance
+        if: runner.os == 'Windows'
+        timeout-minutes: 20
+        shell: pwsh
+        run: ./services/cli/scripts/test-windows.ps1
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always() && runner.os == 'Windows'
+        with:
+          name: windows-acceptance-evidence
+          path: .agent/windows-evidence/*
+          if-no-files-found: warn
       # Intel acceptance consumes this exact artifact in cli-preview below. The other
       # platforms fit packaging and acceptance together inside the release-job budget.
       - name: File preview from the actual executable
-        if: matrix.os != 'macos-15-intel'
+        if: matrix.os != 'macos-15-intel' && runner.os != 'Windows'
         working-directory: services/cli
         run: |
           npx playwright install chromium

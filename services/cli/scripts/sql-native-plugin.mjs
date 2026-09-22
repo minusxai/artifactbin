@@ -8,6 +8,6 @@ export function standaloneSqlSource(source){
 }
 /** Both CLI and embedded host redirect the one existing lazy engine import. */
 export function standaloneSqlPlugin(){return {name:'lazy-duckdb',setup(b){
- b.onLoad({filter:/sql\/src\/engine\.ts$/},async({path})=>({contents:standaloneSqlSource(await readFile(path,'utf8')),loader:'ts',resolveDir:dirname(path)}));
+ b.onLoad({filter:/sql[\\/]src[\\/]engine\.ts$/},async({path})=>({contents:standaloneSqlSource(await readFile(path,'utf8')),loader:'ts',resolveDir:dirname(path)}));
  b.onResolve({filter:/^afbin:sql-native$/},()=>({path:fileURLToPath(new URL('../src/standalone-sql.ts',import.meta.url))}));
 }};}

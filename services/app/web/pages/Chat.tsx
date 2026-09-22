@@ -354,7 +354,8 @@ function InstallInstructions() {
   return (
     <div className="mt-4 space-y-4">
       <CopyCommand label="Install CLI" command={`curl -fsSL ${DEFAULT_SERVER}/chat/install.sh | sh\nexport PATH="$HOME/.local/bin:$PATH"`} />
-      <p className="text-xs text-muted">macOS and Linux · Intel and ARM. Windows: use WSL.</p>
+      <p className="text-xs text-muted">Remote agents: macOS and Linux · Intel and ARM. On Windows, use WSL for remote agents; native artifact commands have a PowerShell installer.</p>
+      <CopyCommand label="Install Windows CLI for artifacts" command={`Invoke-WebRequest -UseBasicParsing ${DEFAULT_SERVER}/chat/install.ps1 -OutFile install-afbin.ps1\npowershell.exe -NoProfile -ExecutionPolicy Bypass -File .\\install-afbin.ps1`} />
       <p className="text-xs text-muted">Run afbin to sign in and choose an installed agent, or use the explicit command below.</p>
       <div>
         <label htmlFor="remote-harness" className="mb-2 block text-sm">Choose your agent</label>

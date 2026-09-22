@@ -60,6 +60,18 @@
         "partlyStatic": true,
         "elfType": "EXEC"
       }
+    },
+    "win32-x64": {
+      "format": "raw",
+      "url": "https://nodejs.org/download/release/v22.22.3/win-x64/node.exe",
+      "sha256": "780f44f2c53c108bae261ada21a525b4bfe733c020ac85e41bfe94479090ac9b",
+      "size": 86969160,
+      "recipe": {
+        "version": "22.22.3",
+        "platform": "win32",
+        "arch": "x64",
+        "intl": "full-icu"
+      }
     }
   }
 }

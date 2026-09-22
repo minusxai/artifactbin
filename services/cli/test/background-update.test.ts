@@ -72,7 +72,7 @@ test('a hung detached worker exits at its deadline and leaves recoverable backof
  const module=new URL('../src/background-update.ts',import.meta.url).href;
  try {
   await scheduleBackgroundUpdate({home,server:'https://artifactbin.dev',env:{},standalone:true,launch:(_exe,argv)=>{args=argv.slice(1);}});
-  const script=`import {backgroundUpdateMain} from ${JSON.stringify(module)};await backgroundUpdateMain(${JSON.stringify(args)},{standalone:true,deadlineMs:100,update:async()=>{process.stdout.write('started');await new Promise(()=>{});}});`;
+  const script=`import {backgroundUpdateMain} from ${JSON.stringify(module)};await backgroundUpdateMain(${JSON.stringify(args)},{standalone:true,deadlineMs:1500,update:async()=>{process.stdout.write('started');await new Promise(()=>{});}});`;
   const child=spawn(process.execPath,['--import','tsx','--input-type=module','-e',script],{stdio:['ignore','pipe','pipe']});
   let out='';child.stdout.on('data',d=>{out+=d;});
   const watchdog=setTimeout(()=>child.kill('SIGKILL'),5000);
