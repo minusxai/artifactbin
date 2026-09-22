@@ -26,7 +26,7 @@ export async function emailAuthenticate(origin:string,email:string,otp:string|un
   if(!cookie)throw new CliError('invalid_response','Email login returned no session.');
   try{
    // Reuse the origin-checked pairing and credential persistence boundary. No OS browser is involved.
-   return await deviceAuthenticate(server,{...options,home,interactive:false,notify:()=>{},open:async raw=>{
+   return await deviceAuthenticate(server,{...options,home,resume:false,interactive:false,notify:()=>{},open:async raw=>{
     const url=new URL(raw);
     const approval=await request(`${server}/oauth/device/approve`,{method:'POST',redirect:'error',signal:AbortSignal.timeout(15000),headers:{'Content-Type':'application/x-www-form-urlencoded',Origin:server,Cookie:cookie},body:new URLSearchParams({user_code:url.searchParams.get('user_code')??'',decision:'approve'})}).catch(error=>{throw transportFailure(server,error);});
     if(!approval.ok)throw new CliError('auth_failed',`Email login could not approve the CLI connection (HTTP ${approval.status}).`,retry+'.');

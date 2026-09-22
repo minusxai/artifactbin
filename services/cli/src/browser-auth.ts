@@ -30,6 +30,8 @@ export interface AuthOptions {
   interactive: boolean;
   /** Optional artifact: skip approval if accessible, otherwise connect to its browser owner. */
   artifactId?: string;
+  /** Explicit email sign-in creates its own grant instead of resuming a browser pairing. */
+  resume?: boolean;
   connection?: Connection;
   /**
    * Verified other addresses of the selected server (services/cli/src/server-identity).
@@ -78,7 +80,7 @@ export async function deviceAuthenticate(origin: string, options: AuthOptions): 
     return {response,data};
   };
   let pending: Pending | undefined;
-  const raw = await readOptional(file);
+  const raw = options.resume === false ? null : await readOptional(file);
   if (raw) {
     const value = JSON.parse(raw.toString()) as Pending;
     if (validPending(value, server, [server, ...(options.aliases ?? [])]) && value.expiresAt > clock() && value.connectionKey === (connection ? digest(connection.token) : undefined)) pending = value;

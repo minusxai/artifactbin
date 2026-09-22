@@ -359,3 +359,21 @@ for(const failure of ['send','cookie','approve','token'])test('email '+failure+'
   assert.equal(JSON.parse(output.join('')).error.code,({send:'otp_send_failed',cookie:'invalid_response',approve:'auth_failed',token:'invalid_response'})[failure]);
  }finally{await rm(home,{recursive:true,force:true});}
 });
+
+test('email login starts a fresh approval instead of reusing a stale browser pairing',async()=>{
+ const home=await mkdtemp(join(tmpdir(),'afbin-email-stale-pair-'));const output:string[]=[];
+ try{
+  await assert.rejects(deviceAuthenticate(origin,{home,interactive:false,notify:()=>{},open:async()=>{throw new Error('no browser');},fetch:async()=>pairing()}),e=>e instanceof CliError&&e.code==='browser_unavailable');
+  const code=await runCli(['auth','--email','mxmx_test_remote@example.com','--otp','123456','--server',origin,'--json'],{home,cwd:home,env:{ARTIFACTBIN_SKILLS:'off'},interactive:false,stdout:s=>output.push(s),stderr:()=>{},auth:{open:async()=>assert.fail('browser')},fetch:async(input,init)=>{
+   const path=new URL(String(input)).pathname;
+   if(path==='/api/server')return Response.json({origin,aliases:[]});
+   if(path==='/api/auth/sign-in/email-otp')return Response.json({}, {headers:{'set-cookie':'session=temporary; HttpOnly'}});
+   if(path==='/oauth/device')return Response.json({device_code:'e'.repeat(43),user_code:'FRESH',verification_uri_complete:origin+'/oauth/device?user_code=FRESH',expires_in:300,interval:5});
+   if(path==='/oauth/device/approve'){assert.equal(new URLSearchParams(String(init?.body)).get('user_code'),'FRESH');return new Response('approved');}
+   if(path==='/oauth/device/token'){assert.equal(JSON.parse(String(init?.body)).device_code,'e'.repeat(43));return credentials();}
+   if(path==='/api/auth/sign-out')return Response.json({});
+   assert.fail('unexpected '+path);
+  }});
+  assert.equal(code,0,output.join(''));assert.equal((await loadConnection(origin,home,{}))?.token,'new_access');
+ }finally{await rm(home,{recursive:true,force:true});}
+});
