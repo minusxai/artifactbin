@@ -42,3 +42,10 @@ it('shows a pending mention next to its stable person link',async()=>{
  expect(await screen.findByText('· Pending')).toBeInTheDocument();
  expect(screen.getByRole('link',{name:/@alex/}).getAttribute('href')).toBe('/people/usr_alex');
 });
+
+it('does not crash on a malformed membership response',async()=>{
+ vi.stubGlobal('fetch',vi.fn(async()=>new Response(JSON.stringify({visibility:'public'}))));
+ render(<ArtifactPeople artifactId="abc123"/>);
+ fireEvent.click(screen.getByRole('button',{name:'People'}));
+ expect(await screen.findByRole('alert')).toHaveTextContent('Could not load people');
+});

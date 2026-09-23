@@ -86,7 +86,7 @@ Use `source="ref:<id>"` to choose the dataset and its exposed table names in SQL
 
 Manual data migrations require server shell access (SSH or equivalent infrastructure access). Migration HTTP endpoints and remote clients are not available. No standalone migration command is shipped. Operators must back up and preview changes before using the retained database-level migration functions, validate document data, and pass reviewed snapshot fingerprints when applying dataset changes. Stop the app before opening its PGLite directory from a maintenance process. Automatic schema updates on startup remain separate from manual data migrations.
 
-Stored `Table.columns` accepts `{name,type,choices?,constraints?}` declarations, including native `user` fields. See [user fields](databases-users.md) for membership arrays, `self`, automatic pickers and server validation. `choices` supplies 1–100 distinct values of the column’s type for policy pickers, for example `{name:"status",type:"string",choices:["todo","doing","done"]}`. These are suggested values, not an access restriction; enforce allowed writes with policy checks. Postgres whitelist columns remain strings.
+Stored `Table.columns` accepts `{name,type,choices?,constraints?}` declarations, including native `user` fields. See [user fields](databases-users.md) for membership arrays, `self`, automatic pickers and server validation. `choices`: 1–100 distinct typed suggestions for policy pickers, e.g. `{name:"status",type:"string",choices:["todo","doing","done"]}`. Enforce allowed writes with policy checks. Postgres whitelist columns remain strings.
 
 ## Dates and timestamps
 

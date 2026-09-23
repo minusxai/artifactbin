@@ -282,7 +282,7 @@ body[data-mx-story-root] { padding-top: var(--mx-chrome-inset, 0px) !important; 
   margin: 0 !important; border: 0 !important; border-radius: 999px !important; object-fit: cover !important;
 }
 .mx-reader-face--author { width: 18px !important; height: 18px !important; margin-right: 6px !important; vertical-align: middle !important; }
-.mx-reader-byline > a:has(> .mx-reader-face) { display: inline-flex !important; align-items: center !important; }
+.mx-reader-byline a:has(> .mx-reader-face) { display: inline-flex !important; align-items: center !important; }
 .mx-reader-face--author .mx-reader-face-initial { font-size: 9px !important; }
 /* Open, the face stays and an accent ring says so — offset by the rail's own
    ground, so it reads on the light rail and the dark one alike. */
@@ -296,12 +296,16 @@ body[data-mx-story-root] { padding-top: var(--mx-chrome-inset, 0px) !important; 
    name, because this stylesheet ships inside every document and an anonymous
    one must carry no author mark anywhere in it, stylesheet included. The byline
    holds exactly two anchors, and the other one is create. */
-.mx-reader-byline > a {
+.mx-reader-byline a {
   color: var(--mx-reader-muted) !important; font-weight: ${CHROME_IDENTITY.fontWeight} !important;
   text-decoration: none !important; white-space: nowrap !important;
 }
-.mx-reader-byline > a:hover { color: var(--mx-reader-accent) !important; }
+.mx-reader-byline a:hover { color: var(--mx-reader-accent) !important; }
 .mx-reader-chevron { display: inline-flex !important; flex-shrink: 0 !important; color: var(--mx-reader-muted) !important; }
+.mx-reader-author-group, .mx-reader-title-group { display: flex !important; align-items: center !important; gap: 8px !important; min-width: 0 !important; }
+.mx-reader-author-group { flex: 0 1 auto !important; }
+.mx-reader-title-group { flex: 0 1 auto !important; }
+.mx-reader-membership { flex-shrink: 0 !important; }
 .mx-reader-title {
   font-weight: 600 !important; color: var(--mx-reader-fg) !important; min-width: 0 !important;
   overflow: hidden !important; text-overflow: ellipsis !important; white-space: nowrap !important;
@@ -384,7 +388,7 @@ body[data-mx-story-root] { padding-top: var(--mx-chrome-inset, 0px) !important; 
 
 /* FOLLOW — a pill in the byline, the one outlined control on the page: it is
    the ask the whole chrome exists for. */
-.mx-reader-follow {
+.mx-reader-follow, .mx-reader-membership {
   display: inline-flex !important; align-items: center !important; justify-content: center !important;
   box-sizing: border-box !important; height: 24px !important; margin: 0 !important; padding: 0 9px !important;
   border: 1px solid var(--mx-reader-accent) !important; border-radius: 6px !important;
@@ -469,7 +473,7 @@ body[data-mx-story-root] { padding-top: var(--mx-chrome-inset, 0px) !important; 
   .mx-reader-byline[data-mx-owner-breadcrumb] .mx-reader-title::before { content: none !important; }
   .mx-reader-byline .mx-reader-chevron { display: inline-flex !important; flex-shrink: 0 !important; color: var(--mx-reader-muted) !important; }
   .mx-reader-byline[data-mx-owner-breadcrumb] > a { flex-shrink: 0 !important; }
-  .mx-reader-follow { order: 1 !important; flex: 0 0 auto !important; }
+  .mx-reader-follow, .mx-reader-membership { flex: 0 0 auto !important; }
   /* Group social, document, and account actions without hiding any controls. */
   .mx-reader-action[data-mx-reader-action="fork"], .mx-reader-trigger[data-mx-reader-trigger="controls"] {
     margin-left: 8px !important;
@@ -531,9 +535,9 @@ body[data-mx-story-root] { padding-top: var(--mx-chrome-inset, 0px) !important; 
     box-sizing: border-box !important; padding: 0 !important; font-size: 12px !important;
     text-shadow: 0 1px 2px var(--mx-reader-bg), 0 0 8px var(--mx-reader-bg) !important;
   }
-  .mx-reader-follow { flex: 0 0 auto !important; }
+  .mx-reader-follow, .mx-reader-membership { flex: 0 0 auto !important; }
 
-  .mx-reader-follow { background: color-mix(in srgb, var(--mx-reader-bg) 72%, transparent) !important; }
+  .mx-reader-follow, .mx-reader-membership { background: color-mix(in srgb, var(--mx-reader-bg) 72%, transparent) !important; }
   /* NO SURFACE, the way a Reel does it. The glyphs sit straight on the content
      and carry a soft halo in the page's OWN ground colour — white around ink on a
      light page, black around white on a dark one — so they read over text and
@@ -560,16 +564,13 @@ body[data-mx-story-root] { padding-top: var(--mx-chrome-inset, 0px) !important; 
   .mx-reader-chrome--pinned .mx-reader-github {
     position: static !important; order: -1 !important;
   }
-  /* Two lines: the title first, clipped with an ellipsis; then the handle with
-     Follow beside it. Flex order does the swap so the markup (and the desktop
-     bar, which reads handle · title · follow) stays as it is. */
-  .mx-reader-byline { font-size: 14px !important; flex-wrap: wrap !important; row-gap: 5px !important; column-gap: 8px !important; }
-  .mx-reader-byline .mx-reader-title {
-    order: 0 !important; flex: 1 1 100% !important; min-width: 0 !important;
-    color: var(--mx-reader-fg) !important; font-weight: 600 !important;
-  }
-  .mx-reader-byline > a { order: 1 !important; font-size: 13px !important; font-weight: 500 !important; }
-  .mx-reader-follow { order: 2 !important; }
+  /* Keep each action with its subject; the title wraps instead of disappearing. */
+  .mx-reader-byline { font-size: 14px !important; flex-direction: column !important; align-items: stretch !important; gap: 10px !important; }
+  .mx-reader-byline > .mx-reader-brand-crumb, .mx-reader-byline > .mx-reader-chevron { display: none !important; }
+  .mx-reader-author-group { order: 0 !important; }
+  .mx-reader-title-group { order: 1 !important; align-items: flex-start !important; }
+  .mx-reader-byline .mx-reader-title { white-space: normal !important; overflow-wrap: anywhere !important; }
+  .mx-reader-author-group a { overflow: hidden !important; text-overflow: ellipsis !important; font-size: 13px !important; }
   /* The rail's own vignette: a fade to the ground colour up the right edge,
      behind the glyphs, the twin of the one along the bottom. */
   .mx-reader-chrome::before {

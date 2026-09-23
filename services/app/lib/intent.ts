@@ -22,7 +22,7 @@
  *    (`lib/story/url-values` learned this first and for the same reason).
  */
 
-const INTENTS = ['fork', 'comment', 'like', 'follow'] as const;
+const INTENTS = ['fork', 'comment', 'like', 'follow', 'join'] as const;
 export type Intent = (typeof INTENTS)[number];
 
 /** The parameter's name, in one place: the reader, the stripper and the writer. */

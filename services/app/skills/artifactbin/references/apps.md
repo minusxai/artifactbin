@@ -31,7 +31,7 @@ joins immediately unless they disabled automatic acceptance in Account → Peopl
 not. Otherwise the invitation stays pending, labelled Pending, until accepted.
 For private artefacts, explicitly include viewing access with People → Include viewing access or `afbin invite <ref> @alex --include-access`. This requires sharing authority and saves access and invitation together. Without it, share first.
 
-Owners and editors can join immediately. Other readers request approval:
+For artefacts with dataset mutations, Join sits beside the title; signed-out readers go through login. Pending/Joined opens People. Follow stays beside the author. Owners and editors join immediately; other readers request approval:
 
 ```sh
 afbin join <board-ref> --json

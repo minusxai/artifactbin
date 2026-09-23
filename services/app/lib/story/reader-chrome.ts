@@ -95,6 +95,8 @@ export interface ReaderPerson {
 export interface ReaderChromeInput {
   /** SPA controls are mounted separately in TrustedUi; raw documents retain their own panels. */
   panels?: boolean;
+  /** Dataset mutation membership; omitted on read-only documents. */
+  membership?: 'join' | 'pending' | 'joined';
   /** Only the owner gets the prominent sharing entry point. */
   share?: boolean;
   visibility?: Visibility;
@@ -286,20 +288,25 @@ export function renderReaderChrome(input: ReaderChromeInput): string {
     // The author's face rides INSIDE the handle's link, before the `@`: one
     // target, and a phone byline that wraps can never strand the face on the
     // line above its handle. Decorative — the link's aria-label is its name.
+    + (username ? '<span class="mx-reader-author-group">' : '')
     + (username
       ? `<a class="mx-reader-author" href="/@${escapeHtml(username)}" target="_top"`
         + ` aria-label="View @${escapeHtml(username)}'s profile">${authorFace}@${escapeHtml(username)}</a>`
       : '')
     // FOLLOW rides right beside the handle it follows, and only when there is
     // one: an anonymous document has nobody to follow.
-    + (title ? `<span class="mx-reader-chevron" aria-hidden="true">${ICON_CHEVRON}</span>` : '')
-    + (title ? `<span class="mx-reader-title">${escapeHtml(title)}</span>` : '')
     + (username && (!reactions || reactions.follow)
       ? `<button type="button" class="mx-reader-follow" data-mx-reader-action="follow" data-mx-author="${escapeHtml(username)}"`
         + ` aria-label="${followAria}" data-mx-tip="${followAria}"`
         + (reactions?.follow ? ` data-mx-following="${following}" data-mx-href="${escapeHtml(reactions.follow.href)}"` : '')
         + `>${following ? 'following' : 'follow'}</button>`
       : '')
+    + (username ? '</span>' : '')
+    + (title ? `<span class="mx-reader-chevron" aria-hidden="true">${ICON_CHEVRON}</span>` : '')
+    + (title || (!archived && input.membership) ? '<span class="mx-reader-title-group">' : '')
+    + (title ? `<span class="mx-reader-title">${escapeHtml(title)}</span>` : '')
+    + (!archived && input.membership ? `<button type="button" class="mx-reader-membership" data-mx-reader-action="membership" aria-label="${input.membership === 'joined' ? 'Joined — view people' : input.membership === 'pending' ? 'Pending — view request' : 'Join artefact'}">${input.membership === 'joined' ? 'Joined' : input.membership === 'pending' ? 'Pending' : 'Join'}</button>` : '')
+    + (title || (!archived && input.membership) ? '</span>' : '')
     + '</div>';
 
   // The heading appears when the panel has anything to say about THIS

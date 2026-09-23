@@ -152,3 +152,26 @@ describe('the instruction is consumed, and only it', () => {
     await waitFor(() => expect(window.location.search).toBe(''));
   });
 });
+
+const mutationFlow: NonNullable<ArtifactSurfaceProps['dataflow']> = {flow:{values:[],queries:[],mutations:[{name:'save',sql:'delete from public.rows',target:'data01',refs:['data01'],params:[],start:0,end:0}]}};
+describe('membership in the reader breadcrumb',()=>{
+ it('sends signed-out Join through login with the return intent',async()=>{
+  at('/a/story1', {dataflow:mutationFlow,accountSession:false});
+  fireEvent.click(screen.getByRole('button',{name:'Join artefact'}));
+  await waitFor(()=>expect(window.location.pathname).toBe('/login'));
+  expect(decodeURIComponent(window.location.search)).toContain('intent=join');
+ });
+ it('joins once on return from login and shows the acknowledged state',async()=>{
+  let joined=false;
+  const state={members:[],pending:[],self:null,canManage:true,canInvite:true};
+  vi.stubGlobal('fetch',vi.fn(async(_url:string,options?:RequestInit)=>{if(options?.method==='POST')joined=true;return new Response(JSON.stringify(joined?{...state,self:{status:'accepted',direction:'request'}}:state));}));
+  at('/a/story1?intent=join',{dataflow:mutationFlow,accountSession:true});
+  await waitFor(()=>expect(fetch).toHaveBeenCalledWith('/api/my/artifacts/story1/members',expect.objectContaining({method:'POST',body:JSON.stringify({action:'join'})})));
+  expect(window.location.search).toBe('');
+  expect(await screen.findByRole('button',{name:'Joined — view people'})).toBeInTheDocument();
+ });
+ it('does not offer membership for a document with only local mutations',()=>{
+  at('/a/story1',{dataflow:{flow:{...mutationFlow.flow,mutations:mutationFlow.flow.mutations!.map(m=>({...m,scope:'local'}))}}});
+  expect(screen.queryByRole('button',{name:'Join artefact'})).toBeNull();
+ });
+});
