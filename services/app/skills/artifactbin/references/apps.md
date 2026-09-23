@@ -29,7 +29,7 @@ People → Add people is the same UI operation. A recipient who follows the send
 joins immediately unless they disabled automatic acceptance in Account → People
 & notifications. Mutual follows qualify; following the recipient yourself does
 not. Otherwise the invitation stays pending, labelled Pending, until accepted.
-Private artefacts must be shared with the recipient first.
+For private artefacts, explicitly include viewing access with People → Include viewing access or `afbin invite <ref> @alex --include-access`. This requires sharing authority and saves access and invitation together. Without it, share first.
 
 Owners and editors can join immediately. Other readers request approval:
 
@@ -45,7 +45,7 @@ There is one relationship per person and artefact. Joining does not grant edit o
 comment permission. Pending members cannot run persistent data actions. Filters,
 local table controls and reads do not require joining. Each sender, including all
 agents acting for them, has at most 30 outstanding pending invitations/requests.
-Accepting, declining or withdrawing frees a slot.
+Accepting, declining or withdrawing frees a slot for other people. A declined or withdrawn invitation cannot be resent to the same person, even from another artefact; they can request to join themselves. Explicit invitations can target non-followers. The narrower follower/member rule below applies to tagging, not explicit invitations.
 
 ## Show members
 
@@ -138,6 +138,6 @@ afbin testuser delete tu_example --json
 
 A test user verifies a COPY, never that `abc123` works; nothing a test user does reaches
 the original. An action outside its sandbox returns `sandbox_only`.
-Run each write on the test-user fork. On the original, $_me writes must offer Sign in and change no data
+Run each write on the test-user fork. On the original, $_me writes must stay disabled and change no data
 when checked as a guest. A Mutation can read only the stored table it writes;
 read membership with a Query, not a cross-table mutation subquery.

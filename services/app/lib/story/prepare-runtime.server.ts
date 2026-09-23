@@ -37,6 +37,7 @@ export async function prepareStoryParts(input: StoryDocumentInput) {
     ...(input.viewer ? { viewer: input.viewer } : {}),
     ...(input.queryUrl ? { queryUrl: input.queryUrl } : {}),
     ...(input.mutateUrl ? { mutateUrl: input.mutateUrl } : {}),
+    ...(input.mentionStatuses?{mentionStatuses:input.mentionStatuses}:{}),
     ...(input.assetsUrl ? { assetsUrl: input.assetsUrl } : {}),
     ...(input.managedAssets ? { managedAssets: input.managedAssets } : {}),
     // A SNAPSHOT render refuses every write by name (StoryIslandData.readOnly).

@@ -15,9 +15,13 @@ export interface ArtifactMember {
 export interface MembershipInput {
   action: MembershipAction;
   usernames?: string[];
+  /** Explicitly grant viewing access with an invitation; requires sharing authority. */
+  includeAccess?: boolean;
   userId?: string;
 }
 export interface MembershipState {
+  /** Public status of explicitly saved mentions; never includes invitation details. */
+  mentions?:Record<string,MembershipStatus>;
   members: ArtifactMember[];
   pending: ArtifactMember[];
   self: ArtifactMember | null;

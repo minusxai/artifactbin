@@ -789,7 +789,7 @@ async function deepFork(actor: TokenActor, source: ArtifactRow, overrides: ForkO
         source: copy.row.source,
         meta: copy.row.meta,
         // The copy is as reachable as the page that writes it — no more.
-        visibility,
+        visibility: copy.row.visibility==='private'?'private':visibility,
         access: copy.row.access,
       }, {
         tx,

@@ -1,3 +1,5 @@
+import {PersonMention,PersonMentionProvider} from '@/components/PersonMention';
+import {isPersonMentionHref} from '@/lib/person-mentions';
 import { Mermaid } from '@/components/kit/mermaid';
 /**
  * The ONE view composition for a served markup document. The registry and
@@ -1232,7 +1234,7 @@ const EMPTY_GLYPHS: GlyphMap = {};
 /** A store-less subscribe (a Button rendered outside a document): nothing ever changes. */
 const NO_SUBSCRIBE = () => () => {};
 
-export function StoryRuntimeApp({ nodes, refData, glyphs, dataflow, viewer = null, colorMode, template = null, chrome = true, assetsUrl = null, managedAssets, importAsset, store: givenStore, onMounted, editDecorate, editChildren, onSlideRename }: StoryRuntimeAppProps) {
+export function StoryRuntimeApp({ mentionStatuses, nodes, refData, glyphs, dataflow, viewer = null, colorMode, template = null, chrome = true, assetsUrl = null, managedAssets, importAsset, store: givenStore, onMounted, editDecorate, editChildren, onSlideRename }: StoryRuntimeAppProps) {
   const [localStore] = useState<DataflowStore>(() => givenStore ?? createDataflowStore(dataflow ?? { flow: EMPTY_DATAFLOW }));
   const store = givenStore ?? localStore;
   const actions = useMemo(() => createRowActions(), [store]);
@@ -1270,8 +1272,10 @@ export function StoryRuntimeApp({ nodes, refData, glyphs, dataflow, viewer = nul
   const decorateElement = useMemo(() => (element: ReactElement, node: JsxElement, path: string) => {
     const patch = resolveRefProps(node, element.props as Record<string, unknown>, refData);
     const resolved = patch ? cloneElement(element as ReactElement<Record<string, unknown>>, patch) : element;
+    const href=(resolved.props as Record<string,unknown>).href;
+    const decorated=node.tag==='a'&&typeof href==='string'&&isPersonMentionHref(href)?<PersonMention {...resolved.props as React.AnchorHTMLAttributes<HTMLAnchorElement>}/>:resolved;
     // Edit mode wraps LAST, so it decorates the element the reader actually sees.
-    return editDecorate ? editDecorate(resolved as ReactElement, node, path) : resolved;
+    return editDecorate ? editDecorate(decorated as ReactElement, node, path) : decorated;
   }, [refData, editDecorate]);
 
   // The URLs the browser has answered, for the life of this document. A ref,
@@ -1282,7 +1286,7 @@ export function StoryRuntimeApp({ nodes, refData, glyphs, dataflow, viewer = nul
   const assets = useMemo(() => ({ endpoint: assetsUrl, seen: seen.current, importAsset, images }), [assetsUrl, importAsset, images]);
 
   const body = (
-    <RuntimeAssetContext.Provider value={assets}>
+    <PersonMentionProvider initial={mentionStatuses} artifactId={assetsUrl?.match(/\/a\/([A-Za-z0-9]+)\//)?.[1]}><RuntimeAssetContext.Provider value={assets}>
       <RuntimeEmbedContext.Provider value={{ store, flow: store.flow, state, pending, setValue, fetchPage: store.fetchPage, refData, chrome, colorMode, viewer, managedAssets, importManagedAsset: importAsset }}>
         <RowActionsContext.Provider value={actions}>{renderStoryNodes(nodes, {
           values: signals,
@@ -1299,7 +1303,7 @@ export function StoryRuntimeApp({ nodes, refData, glyphs, dataflow, viewer = nul
           decorateChildren: editChildren,
         })}</RowActionsContext.Provider>
       </RuntimeEmbedContext.Provider>
-    </RuntimeAssetContext.Provider>
+    </RuntimeAssetContext.Provider></PersonMentionProvider>
   );
 
   /*

@@ -19,9 +19,10 @@ import {
 } from "@/components/PolicyConditions";
 import { Button } from "@/components/ui";
 
-type Table = { schema: string; name: string; columns: Array<{ name: string; type?:ColumnType }> };
+type Table = { schema: string; name: string; columns: Array<{ name: string; type?:ColumnType; choices?:import("@artifactbin/contracts").Scalar[] }> };
 type State = {
   people?:Array<{user_id:string;username:string|null;name:string|null}>;
+  artifacts?:Array<{id:string;title:string|null}>;
   canManage?: boolean;
   policy: DatasetPolicy | null;
   revision: number;
@@ -257,7 +258,7 @@ function DatasetPolicyEditor({ artifactId }: { artifactId: string }) {
             draft && (
               <div className="grid min-w-0 items-start gap-6 lg:grid-cols-[minmax(0,1fr)_260px]">
                 <div className="min-w-0 space-y-4">
-                  {draft.version===2&&<DatasetGrants value={draft} onChange={change}/>}
+                  {draft.version===2&&<DatasetGrants value={draft} onChange={change} people={state.people} artifacts={state.artifacts??state.writtenBy}/>}
                   {draft.version===2&&draft.tables===undefined&&<div className="space-y-2"><p className="text-xs text-muted">Granted mutations can change all rows and columns.</p><Button variant="ghost" onClick={()=>change({...draft,tables:state.tables.map(t=>({table:{schema:t.schema,name:t.name}}))})}>Add row and column restrictions</Button></div>}
                   {draft.version===2&&draft.tables!==undefined&&<Button variant="ghost" onClick={()=>{const {tables:_,...next}=draft;change(next);}}>Remove row and column restrictions</Button>}
                   <label className="flex flex-wrap items-center gap-3">

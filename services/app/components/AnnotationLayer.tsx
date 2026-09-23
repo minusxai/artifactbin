@@ -1,3 +1,4 @@
+import {PersonMentionProvider} from './PersonMention';
 'use client';
 
 import {useNewCommentDraft} from './useNewCommentDraft';
@@ -1380,7 +1381,7 @@ export default function AnnotationLayer({
     : null;
 
   return (
-    <>
+    <PersonMentionProvider artifactId={id}>
       {confirmation}
       <style>{`:host-context(.mx-taking-screenshot) [data-capture-chrome],.mx-taking-screenshot [data-capture-chrome]{visibility:hidden!important}`}</style>
       {capture.busy&&!selection&&<div data-capture-chrome role="status" className="fixed bottom-4 left-4 z-50 rounded bg-panel p-3 shadow">Preparing screenshot… <button type="button" onClick={capture.reset}>Cancel capture</button></div>}
@@ -1616,7 +1617,7 @@ export default function AnnotationLayer({
         </div>
       </RailChrome>
       )}
-    </>
+    </PersonMentionProvider>
   );
 }
 

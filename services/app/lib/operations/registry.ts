@@ -127,7 +127,7 @@ const CONTENT_FIELDS = {
   markup: z.string().optional().describe(MARKUP_FIELD_GUIDANCE),
   dataset: z.union([z.array(z.record(z.string(), z.unknown())), z.record(z.string(),z.unknown()), z.string()]).optional().describe(DATASET_FIELD_GUIDANCE),
   sheetUrl: z.string().optional().describe(SHEET_URL_FIELD_GUIDANCE),
-  columns: z.array(z.object({ name: z.string(), type: z.enum(['string', 'number', 'boolean', 'date', 'timestamp']) })).optional().describe('dataset: declared column types (win over inference)'),
+  columns: z.array(z.object({ name: z.string(), type: z.enum(['string', 'number', 'boolean', 'date', 'timestamp']), choices:z.array(z.union([z.string(),z.number(),z.boolean()])).min(1).max(100).optional() })).optional().describe('dataset: declared column types (win over inference)'),
   viz: z.record(z.string(), z.unknown()).optional().describe('viz tier: a recipe {description, engine, bindings, params?, template} with {{slot}} tokens'),
   image: z.string().optional().describe('image tier: a base64 data: URL (png|jpeg|webp|gif|svg+xml)'),
   imageUrl: z.string().optional().describe(IMAGE_URL_FIELD_GUIDANCE),

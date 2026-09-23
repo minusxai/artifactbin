@@ -78,7 +78,7 @@ describe('references/apps.md', () => {
 it('keeps successful test writes on the test-user fork and explains the mutation read boundary',()=>{
  const text=reference();
  expect(text).toContain('Run each write on the test-user fork');
- expect(text).toContain('$_me writes must offer Sign in and change no data');
+ expect(text).toContain('$_me writes must stay disabled and change no data');
  expect(text).toContain('A Mutation can read only the stored table it writes');
 });
 

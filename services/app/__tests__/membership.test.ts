@@ -37,7 +37,7 @@ it('uses recipient-follows-sender direction for candidates and autoaccept, inclu
   expect(await mentionCandidates(w.actor(w.owner),'a1B2c3','member_eve')).toEqual([]);
   await changeMembership({...w.actor(w.owner),tokenId:'agent-token'},'a1B2c3',{action:'invite',usernames:['@member_bob']});
   expect((await membershipState(w.actor(w.bob),'a1B2c3')).self?.status).toBe('accepted');
-  await expect(changeMembership(w.actor(w.owner),'a1B2c3',{action:'invite',usernames:['@member_eve']})).rejects.toThrow(/eligible/i);
+  expect((await changeMembership(w.actor(w.owner),'a1B2c3',{action:'invite',usernames:['@member_eve']})).pending).toEqual([expect.objectContaining({user_id:w.eve.id})]);
 });
 it('keeps invitations pending when autoaccept is disabled; only the recipient accepts', async () => {
   const w=await world();
@@ -115,4 +115,44 @@ it('posts resolved comment mentions atomically for agents and ignores examples i
  expect((await membershipInbox(w.actor(w.bob))).autoAccept).toBe(false);
  const refused=await post('[@member_bob](/people/'+w.bob.id+')');expect(refused).toBeInstanceOf(Response);expect((refused as Response).status).toBe(403);
  expect((await w.db.query('SELECT * FROM annotations')).rows).toHaveLength(2);
+});
+
+it('permits explicit invitations without a follow',async()=>{
+ const w=await world();
+ expect((await changeMembership(w.actor(w.owner),'a1B2c3',{action:'invite',usernames:['@member_bob']})).pending).toHaveLength(1);
+});
+it('refuses another unsolicited invitation after dismissal',async()=>{
+ const w=await world();await link(w.bob.id,'follow',w.owner.id);
+ await w.db.query('UPDATE users SET auto_accept_mentions=false WHERE id=$1',[w.bob.id]);
+ await changeMembership(w.actor(w.owner),'a1B2c3',{action:'invite',usernames:['@member_bob']});
+ await changeMembership(w.actor(w.bob),'a1B2c3',{action:'dismiss'});
+ await expect(changeMembership(w.actor(w.owner),'a1B2c3',{action:'invite',usernames:['@member_bob']})).rejects.toThrow();
+});
+it('gives an existing requester instant membership after receiving edit access',async()=>{
+ const w=await world();await changeMembership(w.actor(w.bob),'a1B2c3',{action:'join'});
+ await w.db.query("INSERT INTO artifact_shares(artifact_id,user_id,email,role) VALUES('a1B2c3',$1,$2,'editor')",[w.bob.id,w.bob.email]);
+ expect((await changeMembership(w.actor(w.bob),'a1B2c3',{action:'join'})).self?.status).toBe('accepted');
+});
+it('includes viewing access atomically only when explicitly requested by an editor',async()=>{
+ const w=await world();await w.db.query("UPDATE artifacts SET visibility='private' WHERE id='a1B2c3'");
+ await expect(changeMembership(w.actor(w.owner),'a1B2c3',{action:'invite',usernames:['@member_bob']})).rejects.toThrow(/access/);
+ await changeMembership(w.actor(w.owner),'a1B2c3',{action:'invite',usernames:['@member_bob'],includeAccess:true});
+ expect(await effectiveRole((await getArtifactById('a1B2c3'))!,w.actor(w.bob))).toBe('viewer');
+ expect((await membershipState(w.actor(w.bob),'a1B2c3')).self?.status).toBe('pending');
+ await expect(changeMembership(w.actor(w.bob),'a1B2c3',{action:'invite',usernames:['@member_eve'],includeAccess:true})).rejects.toThrow(/owners and editors/);
+ await expect(changeMembership(w.actor(w.owner),'a1B2c3',{action:'invite',usernames:['@member_eve','@missing'],includeAccess:true})).rejects.toThrow();
+ expect(await effectiveRole((await getArtifactById('a1B2c3'))!,w.actor(w.eve))).toBe('none');
+});
+it('keeps mention autocomplete restricted while explicit invitations can find non-followers',async()=>{
+ const w=await world();
+ expect(await mentionCandidates(w.actor(w.owner),'a1B2c3','member_bob')).toEqual([]);
+ expect(await mentionCandidates(w.actor(w.owner),'a1B2c3','member_bob','invite')).toEqual([expect.objectContaining({user_id:w.bob.id})]);
+});
+
+it('does not let a new artefact bypass a dismissed invitation',async()=>{
+ const w=await world();
+ await changeMembership(w.actor(w.owner),'a1B2c3',{action:'invite',usernames:['@member_bob']});
+ await changeMembership(w.actor(w.bob),'a1B2c3',{action:'dismiss'});
+ await w.db.query("INSERT INTO artifacts(id,token_id,user_id,format,content,visibility,link_role) VALUES('d4E5f6','owner-token',$1,'markup','hello','public','commenter')",[w.owner.id]);
+ await expect(changeMembership(w.actor(w.owner),'d4E5f6',{action:'invite',usernames:['@member_bob']})).rejects.toThrow(/declined/);
 });

@@ -23,7 +23,7 @@ export interface UserOption { value: string; label: string }
  * user cell has always had (lib/datasets/user-fields); never an email.
  */
 export interface PersonCard { name: string; handle: string | null; image: string | null }
-export interface DatasetColumn { name: string; type: ColumnType; constraints?: UserConstraints }
+export interface DatasetColumn { name: string; type: ColumnType; /** Suggested scalar choices for typed authoring controls; not an access restriction. */ choices?: Scalar[]; constraints?: UserConstraints }
 
 
 export interface TableResult {

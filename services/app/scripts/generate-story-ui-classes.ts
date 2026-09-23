@@ -39,6 +39,7 @@ export const EXTRA_CLASS_SOURCES = [
   // primitives (the reader graph may not reach components/kit) — but a story
   // still renders it, so its classes belong in the sheet.
   join(ROOT, 'components', 'Tooltip.tsx'),
+  join(ROOT, 'components', 'PersonMention.tsx'),
 ];
 const OUT_FILE = join(ROOT, 'lib', 'story-ui', 'recipe-classes.ts');
 

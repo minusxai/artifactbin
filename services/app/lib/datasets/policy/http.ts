@@ -1,6 +1,7 @@
 import {getDb} from '@/lib/db';
 import {
   getArtifactFor,
+  editorScope,
   getSharingFor,
   type TokenActor,
 } from '@/lib/artifacts';
@@ -15,8 +16,10 @@ export async function readDatasetPolicy(
   const row = await getArtifactFor(actor, id);
   if (!row || row.format !== 'dataset')
     return json({ error: 'not_found' }, 404);
+  const db=await getDb(),scope=editorScope(actor);
   return json({
-    people:(await (await getDb()).query<{user_id:string;username:string|null;name:string|null}>(`SELECT id AS user_id,username,name FROM users u WHERE id=$1 OR EXISTS(SELECT 1 FROM relations r WHERE r.verb='follow' AND r.subject_kind='user' AND r.object_kind='user' AND r.deleted_at IS NULL AND ((r.subject_id=u.id AND r.object_id=$1)OR(r.object_id=u.id AND r.subject_id=$1))) ORDER BY username LIMIT 100`,[actor.userId])).rows,
+    artifacts:(await db.query<{id:string;title:string|null}>(`SELECT id,title FROM artifacts WHERE deleted_at IS NULL AND format='markup' AND ${scope.where('$1')} ORDER BY title,id LIMIT 200`,[scope.val])).rows,
+    people:(await (await getDb()).query<{user_id:string;username:string|null;name:string|null}>(`SELECT id AS user_id,username,name FROM users u WHERE kind='account' AND username IS NOT NULL ORDER BY username LIMIT 200`,[])).rows,
     canManage: true,
     policy: row.dataset_policy ?? null,
     revision: row.policy_revision ?? 0,

@@ -34,3 +34,11 @@ test('mention resolves a username without sending an invitation',async()=>{
   assert.equal(h.last().mentions[0].markdown,'[@alex](/people/usr_alex)');
  }finally{await h.cleanup();}
 });
+
+test('invite includes viewing access only with the explicit flag',async()=>{
+ const h=await cliHarness('afbin-invite-access-');try{
+  assert.equal(await h.invoke(['invite','a1B2c3','@alex','--include-access','--json'],call=>{
+   assert.deepEqual(call.body,{action:'invite',usernames:['@alex'],includeAccess:true});return Response.json({pending:[]});
+  }),0);
+ }finally{await h.cleanup();}
+});

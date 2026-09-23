@@ -27,9 +27,10 @@ async function account(actor: RoleActor, artifact: ArtifactRow) {
 }
 const memberFields = 'm.user_id,u.username,u.name,m.status,m.direction,m.initiated_by,m.joined_at';
 export async function membershipState(actor: RoleActor, id: string): Promise<MembershipState> {
-  const {role}=await opened(actor,id), db=await getDb();
+  const {role,artifact}=await opened(actor,id), db=await getDb();
   const rows=(await db.query<ArtifactMember>(`SELECT ${memberFields} FROM artifact_members m JOIN users u ON u.id=m.user_id WHERE m.artifact_id=$1 AND (m.status='accepted' OR m.user_id=$2 OR ($3 AND m.status='pending')) ORDER BY m.joined_at NULLS LAST,u.username`,[id,actor.userId,canEdit(role)])).rows;
-  return {members:rows.filter(m=>m.status==='accepted'),pending:rows.filter(m=>m.status==='pending'),self:rows.find(m=>m.user_id===actor.userId)??null,canManage:canEdit(role),canInvite:!!actor.userId&&canAnnotate(role)};
+  const mentions=await savedMentionStates(artifact);
+  return {mentions,members:rows.filter(m=>m.status==='accepted'),pending:rows.filter(m=>m.status==='pending'),self:rows.find(m=>m.user_id===actor.userId)??null,canManage:canEdit(role),canInvite:!!actor.userId&&canAnnotate(role)};
 }
 async function blocked(tx: Queryable, a: string, b: string): Promise<boolean> {
   return !!(await tx.query('SELECT 1 FROM user_blocks WHERE (user_id=$1 AND blocked_user_id=$2) OR (user_id=$2 AND blocked_user_id=$1)',[a,b])).rows.length;
@@ -41,17 +42,17 @@ async function accepted(tx: Queryable,id:string,userId:string):Promise<boolean> 
   return !!(await tx.query("SELECT 1 FROM artifact_members WHERE artifact_id=$1 AND user_id=$2 AND status='accepted'",[id,userId])).rows.length;
 }
 /** Candidate eligibility is enforced again on send, including when an agent supplies raw IDs. */
-export async function mentionCandidates(actor: RoleActor, id: string, query: string): Promise<Array<{user_id:string;username:string;name:string|null}>> {
+export async function mentionCandidates(actor: RoleActor, id: string, query: string, purpose: 'mention' | 'invite' = 'mention'): Promise<Array<{user_id:string;username:string;name:string|null}>> {
   const {artifact,role}=await opened(actor,id);
   await account(actor,artifact);
   if(!canAnnotate(role))fail('Comment or edit access is required to invite people');
   const db=await getDb();
   return (await db.query<{user_id:string;username:string;name:string|null}>(`SELECT u.id AS user_id,u.username,u.name FROM users u WHERE u.kind IN ('account','testuser') AND u.username IS NOT NULL AND u.id<>$1
     AND (u.username ILIKE $3 OR COALESCE(u.name,'') ILIKE $3)
-    AND (EXISTS(SELECT 1 FROM relations r WHERE r.subject_kind='user' AND r.subject_id=u.id AND r.verb='follow' AND r.object_kind='user' AND r.object_id=$1 AND r.deleted_at IS NULL)
+    AND ($4 OR EXISTS(SELECT 1 FROM relations r WHERE r.subject_kind='user' AND r.subject_id=u.id AND r.verb='follow' AND r.object_kind='user' AND r.object_id=$1 AND r.deleted_at IS NULL)
       OR EXISTS(SELECT 1 FROM artifact_members m WHERE m.artifact_id=$2 AND m.user_id=u.id AND m.status='accepted'))
     AND NOT EXISTS(SELECT 1 FROM user_blocks b WHERE (b.user_id=$1 AND b.blocked_user_id=u.id) OR (b.user_id=u.id AND b.blocked_user_id=$1))
-    ORDER BY u.username LIMIT 30`,[actor.userId,id,query.replace(/^@/,'').replace(/[\\%_]/g,'\\$&')+'%'])).rows;
+    ORDER BY u.username LIMIT 30`,[actor.userId,id,query.replace(/^@/,'').replace(/[\\%_]/g,'\\$&')+'%',purpose==='invite'])).rows;
 }
 interface StoredMember {status:MembershipStatus;direction:MembershipDirection;initiated_by:string;revision:number}
 async function notify(tx:Queryable, artifactId:string,userId:string,sender:string,revision:number,kind:string,recipients:string[]) {
@@ -69,6 +70,7 @@ async function editors(tx:Queryable,artifact:ArtifactRow):Promise<string[]> {
 export async function changeMembership(actor: RoleActor, id: string, input: MembershipInput): Promise<MembershipState> {
   const {artifact,role}=await opened(actor,id), userId=await account(actor,artifact), db=await getDb();
   if(!['join','invite','accept','approve','dismiss','leave'].includes(input.action))fail('Unknown membership action',400);
+  if(input.includeAccess&&(input.action!=='invite'||!canEdit(role)))fail('Only owners and editors can include access with an invitation');
   const targets: string[]=[];
   if(input.action==='invite') {
     if(!canAnnotate(role))fail('Comment or edit access is required to invite people');
@@ -85,7 +87,7 @@ export async function changeMembership(actor: RoleActor, id: string, input: Memb
     if(input.action==='approve'&&!canEdit(role))fail('Only owners and editors can approve requests');
     if(input.action==='dismiss'&&target!==userId&&!canEdit(role))fail('Only owners and editors can dismiss other requests');
     if(['invite','approve','accept'].includes(input.action)) {
-      if(!canRead(await effectiveRole(artifact,{userId:target,tokenId:null})))fail('Give this person access before inviting or approving them');
+      if(!canRead(await effectiveRole(artifact,{userId:target,tokenId:null})) && !(input.action==='invite'&&input.includeAccess&&canEdit(role)))fail('Give this person access before inviting or approving them');
       if(!(await can({userId:target,tokenId:null},'comment',artifact)))fail('Person is not eligible for this artifact');
     }
   }
@@ -94,12 +96,20 @@ export async function changeMembership(actor: RoleActor, id: string, input: Memb
     if(!current||current.user_id!==artifact.user_id||current.token_id!==artifact.token_id||(current.sharing_revision??0)!==(artifact.sharing_revision??0))fail('Artifact access changed; try again',409);
     await tx.query('SELECT id FROM users WHERE id=ANY($1::text[]) ORDER BY id FOR UPDATE',[[...new Set([userId,...targets])]]);
     for(const target of targets) {
-      if(input.action==='invite'){await invitePeople(tx,current,actor,[target]);continue;}
+      if(input.action==='invite'){
+        if(input.includeAccess&&!(await readThrough(tx,current,{userId:target,tokenId:null}))){
+          const recipient=(await tx.query<{email:string|null}>("SELECT email FROM users WHERE id=$1 AND kind='account'",[target])).rows[0];
+          if(!recipient?.email)fail('This person cannot receive shared access');
+          await tx.query("INSERT INTO artifact_shares(artifact_id,user_id,email,role) VALUES($1,$2,$3,'viewer') ON CONFLICT(artifact_id,email) DO NOTHING",[id,target,recipient.email]);
+          await tx.query('UPDATE artifacts SET sharing_revision=sharing_revision+1 WHERE id=$1',[id]);
+        }
+        await invitePeople(tx,current,actor,[target],undefined,true);continue;
+      }
       if(await blocked(tx,userId,target))fail('Person is not eligible for this invitation');
       const previous=(await tx.query<StoredMember>('SELECT status,direction,initiated_by,revision FROM artifact_members WHERE artifact_id=$1 AND user_id=$2',[id,target])).rows[0];
       let status:MembershipStatus, direction:MembershipDirection=previous?.direction??'request',initiator=previous?.initiated_by??userId;
       if(input.action==='join') {
-        if(previous?.status==='accepted'||previous?.status==='pending')continue;
+        if(previous?.status==='accepted'||(previous?.status==='pending'&&!canEdit(role)))continue;
         initiator=userId;
         direction='request';
         status=canEdit(role)?'accepted':'pending';
@@ -118,6 +128,8 @@ export async function changeMembership(actor: RoleActor, id: string, input: Memb
         if(input.action==='dismiss'&&previous.status!=='pending')fail('Only pending requests can be dismissed',409);
         status=input.action==='dismiss'?'dismissed':'left';
       }
+      if(previous?.status==='pending'&&previous.direction==='invitation'&&(status==='dismissed'||status==='left'))
+        await tx.query("UPDATE member_notifications SET kind='dismissed' WHERE artifact_id=$1 AND user_id=$2 AND sender_id=$3 AND kind='invitation'",[id,target,previous.initiated_by]);
       const revision=(previous?.revision??0)+1;
       await tx.query(`INSERT INTO artifact_members(artifact_id,user_id,status,direction,initiated_by,joined_at,revision) VALUES($1,$2,$3,$4,$5,CASE WHEN $3='accepted' THEN now() ELSE NULL END,$6)
         ON CONFLICT(artifact_id,user_id) DO UPDATE SET status=EXCLUDED.status,direction=EXCLUDED.direction,initiated_by=EXCLUDED.initiated_by,joined_at=EXCLUDED.joined_at,revision=EXCLUDED.revision`,[id,target,status,direction,initiator,revision]);
@@ -134,7 +146,7 @@ export async function isArtifactMember(id:string,userId:string|null,tx?:Queryabl
 }
 
 /** The saved artefact is already locked by the caller. Shared by UI, CLI and saved mentions. */
-export async function invitePeople(tx:Queryable,artifact:ArtifactRow,actor:RoleActor,targets:string[],source?:string):Promise<void>{
+export async function invitePeople(tx:Queryable,artifact:ArtifactRow,actor:RoleActor,targets:string[],source?:string,explicitInvitation=false):Promise<void>{
  const sender=actor.userId;if(!sender)return fail('Sign in to mention people');
  await tx.query('SELECT id FROM users WHERE id=ANY($1::text[]) ORDER BY id FOR UPDATE',[[...new Set([sender,...targets])]]);
  const identities=(await tx.query<{id:string;kind:string;auto_accept_mentions:boolean}>('SELECT id,kind,auto_accept_mentions FROM users WHERE id=ANY($1::text[]) AND (expires_at IS NULL OR expires_at>now())',[[sender,...targets,artifact.user_id]])).rows;
@@ -146,10 +158,11 @@ export async function invitePeople(tx:Queryable,artifact:ArtifactRow,actor:RoleA
   if(!recipient||recipient.kind==='guest'||(recipient.kind==='testuser'&&identities.find(u=>u.id===artifact.user_id)?.kind!=='testuser')||await blocked(tx,sender,target))return fail('Person is not eligible for this invitation');
   const previous=(await tx.query<StoredMember>('SELECT status,direction,initiated_by,revision FROM artifact_members WHERE artifact_id=$1 AND user_id=$2',[artifact.id,target])).rows[0];
   const follower=await follows(tx,target,sender);
-  if(!follower&&previous?.status!=='accepted')fail('Person is not eligible for this invitation');
+  if(!explicitInvitation&&!follower&&previous?.status!=='accepted')fail('Person is not eligible for this invitation');
   if(!(await readThrough(tx,artifact,{userId:target,tokenId:null})))fail('Give this person access before mentioning them');
   if(source&&(await tx.query('SELECT 1 FROM member_notifications WHERE artifact_id=$1 AND recipient_id=$2 AND source=$3',[artifact.id,target,source])).rows.length)continue;
   if(previous?.status==='pending'||(previous?.status==='accepted'&&!source))continue;
+  if(previous?.status!=='accepted'&&(await tx.query("SELECT 1 FROM member_notifications WHERE sender_id=$1 AND recipient_id=$2 AND kind='dismissed'",[sender,target])).rows.length)fail('This person declined an earlier invitation; they can request to join instead');
   let kind='mention';
   if(previous?.status!=='accepted'){
    const status=recipient.auto_accept_mentions&&follower?'accepted':'pending';
@@ -161,4 +174,13 @@ export async function invitePeople(tx:Queryable,artifact:ArtifactRow,actor:RoleA
   await tx.query('INSERT INTO member_notifications(id,artifact_id,user_id,recipient_id,sender_id,kind,source) VALUES($1,$2,$3,$3,$4,$5,$6) ON CONFLICT DO NOTHING',[`${artifact.id}:${target}:${source??`invite:${(previous?.revision??0)+1}`}`,artifact.id,target,sender,kind,source??null]);
  }
  await tx.query("SELECT pg_notify('artifact_' || lower($1), 'members')",[artifact.id]);
+}
+
+/** Caller must establish read access to this artefact before exposing these public tag states. */
+export async function savedMentionStates(artifact:ArtifactRow){
+ const db=await getDb();
+  const savedText=[artifact.source??'',...(await db.query<{body:string}>('SELECT body FROM annotations WHERE artifact_id=$1 AND deleted_at IS NULL',[artifact.id])).rows.map(r=>r.body)].join('\n');
+  const mentioned=[...savedText.matchAll(/\/people\/([A-Za-z0-9_-]{1,128})/g)].map(m=>m[1]);
+  const mentions=Object.fromEntries((await db.query<{user_id:string;status:MembershipStatus}>('SELECT user_id,status FROM artifact_members WHERE artifact_id=$1 AND user_id=ANY($2::text[])',[artifact.id,mentioned])).rows.map(m=>[m.user_id,m.status]));
+ return mentions;
 }

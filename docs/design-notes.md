@@ -418,8 +418,10 @@ Version 1 rows and creations with an explicit legacy access setting retain their
 
 `artifact_members` owns one relationship per artefact/account. Accepted
 membership gates persistent v2 artefact actions, not comments or local controls.
-Owners/editors join immediately; other readers request approval. Invitations use
-recipient-follows-sender eligibility and opt-out autoaccept. Blocks and the
+Owners/editors join immediately; other readers request approval. Explicit invitations allow non-followers; saved mentions retain follower/member eligibility.
+Recipient-follows-sender controls opt-out autoaccept. Declined invitation receipts
+prevent another unsolicited invitation to that recipient across artefacts. Explicit
+includeAccess grants viewing access and membership atomically under the artefact lock. Blocks and the
 30-pending budget are checked under account locks. The artefact lock serializes
 membership revocation with mutation commits. Committed membership changes send a
 `members` wakeup; the authorized live stream invalidates `_members` and action
@@ -430,5 +432,5 @@ Resolved document links and comment links use `/people/<stable-user-id>`.
 content and inserting notification receipts are one transaction. Source node IDs
 and comment IDs make notification delivery idempotent. Plain IDs, rendered User
 chips and forks have no mention side effects. `_members(user_id, joined_at)` is
-read-only and scoped to the current saved document. Legacy `memberOf` column
-constraints continue to describe sharing and ownership.
+read-only and scoped to the current saved document. `memberOf` column constraints accept joined members while retaining legacy sharing and ownership.
+A picker sourced from `_members` lists only accepted participants.

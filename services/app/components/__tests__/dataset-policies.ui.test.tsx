@@ -1,3 +1,4 @@
+import {DatasetGrants} from '../DatasetGrants';
 import { afterEach, it, expect, vi } from 'vitest';
 import {
   render,
@@ -236,4 +237,12 @@ it('edits grant defaults without introducing table restrictions',async()=>{
  await waitFor(()=>expect(fetch.mock.calls.some(([,o])=>o?.method==='PUT')).toBe(true));
  const saved=JSON.parse(String(fetch.mock.calls.find(([,o])=>o?.method==='PUT')![1]!.body)).policy;
  expect(saved).toEqual({version:2,allow:[policy.allow[1]]});
+});
+
+it('offers named people and artefacts while storing stable grant IDs',()=>{
+ const onChange=vi.fn();
+ render(<DatasetGrants value={{version:2,allow:[{actions:['read'],from:{user:'$owner',artifact:'abc123'}}]}} onChange={onChange} people={[{user_id:'usr_alex',username:'alex',name:'Alex'}]} artifacts={[{id:'abc123',title:'Tasks'}]}/>);
+ fireEvent.change(screen.getByRole('combobox',{name:'Rule 1 user'}),{target:{value:'usr_alex'}});
+ expect(onChange).toHaveBeenCalledWith({version:2,allow:[{actions:['read'],from:{user:'usr_alex',artifact:'abc123'}}]});
+ expect(screen.getByRole('option',{name:'Tasks'})).toBeInTheDocument();
 });

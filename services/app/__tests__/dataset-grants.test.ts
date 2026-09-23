@@ -81,3 +81,15 @@ it('does not disclose private grant-controlled datasets through direct mutation 
  const denied=await mutateDirect(request(`/api/artifacts/${id}/mutate`,{method:'POST',token:stranger.token,json:{sql:'insert into public.rows values (2)'}}),{params:Promise.resolve({id})});
  expect(denied.status).toBe(404);
 });
+
+it('preserves private dataset visibility in a public fork',async()=>{
+ const owner=await createUser({email:'mxmx_test_audit_fork@example.com'});
+ const token=await mintToken('mxmx_test_audit_fork');await claimToken(owner.id,token.token);
+ const actor={userId:owner.id,tokenId:token.id};
+ const make=async(json:object)=>{const res=await create(request('/api/artifacts',{method:'POST',token:token.token,json}));expect(res.status,await res.clone().text()).toBe(201);return (await res.json()).id;};
+ const ds=await make({dataset:[{n:1}],visibility:'private'});
+ const doc=await make({visibility:'private',markup:`<Helmet><Query name="rows" source="ref:${ds}">{\`select * from public.rows\`}</Query><Mutation name="add" source="ref:${ds}">{\`insert into public.rows values (2)\`}</Mutation></Helmet><Button run="$add">Add</Button>`});
+ const fork=await forkArtifact(actor,(await getArtifactById(doc))!,{visibility:'public'});expect(fork).not.toBeInstanceOf(Response);if(fork instanceof Response)return;
+ expect((await getArtifactById(fork.datasets[0].id))?.visibility).toBe('private');
+ expect(await readableArtifact({userId:null,tokenId:''},fork.datasets[0].id)).toBeNull();
+});

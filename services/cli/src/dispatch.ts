@@ -305,7 +305,7 @@ export async function runCli(argv:string[],context:CliContext={}):Promise<number
    if(action && !['invite','join','accept','approve','dismiss','leave'].includes(action))throw new CliError('invalid_arguments','Choose accept, approve, dismiss or leave.');
    if(action==='approve'&&!positionals[2])throw new CliError('invalid_arguments','Approve requires the requesting user ID.');
    if(command==='members'&&positionals[2]&&!['approve','dismiss'].includes(action??''))throw new CliError('invalid_arguments','Only approve and dismiss take another user ID.');
-   emit(action?await client.request(`/artifacts/${id}/members`,'POST',{action,...(command==='invite'?{usernames:positionals.slice(1)}:{}),...(command==='members'&&positionals[2]?{userId:positionals[2]}:{})}):await client.request(`/artifacts/${id}/members`));return 0;
+   emit(action?await client.request(`/artifacts/${id}/members`,'POST',{action,...(command==='invite'?{usernames:positionals.slice(1),...(flags['include-access']?{includeAccess:true}:{})}:{}),...(command==='members'&&positionals[2]?{userId:positionals[2]}:{})}):await client.request(`/artifacts/${id}/members`));return 0;
   }
   if(command==='testuser'){emit(await testUserCommand(client,positionals[0],positionals[1],{all:!!flags.all}));return 0;}
   if(account){const result=await remoteAccountCommand(workspace,parsed,account,client);if(result.content!==undefined)stdout(result.content);else emit(result.value);return result.exitCode??0;}
@@ -428,7 +428,7 @@ export const PUBLISHED_NEXT='Published: the saved local file contains the publis
  */
 function publishedNext(verified:Awaited<ReturnType<typeof verifiedSummary>>):string{
  const writes=[...new Set((verified??[]).flatMap(file=>file.writes??[]))];
- return writes.length?`${PUBLISHED_NEXT} This page declares ${writes.length===1?'a write':'writes'} (${writes.join(', ')}) that the push did not run: run each in a live session on a test-user fork, once as that test user and once as yourself. On the original page, check actions --as guest: $_me writes offer Sign in and change no data; other actions follow their intended permissions. Do not run successful test writes on the original page (afbin help live-sessions, afbin help apps). Fix, push and fork again before handing it over.`:PUBLISHED_NEXT;
+ return writes.length?`${PUBLISHED_NEXT} This page declares ${writes.length===1?'a write':'writes'} (${writes.join(', ')}) that the push did not run: run each in a live session on a test-user fork, once as that test user and once as yourself. On the original page, check actions --as guest: $_me writes stay disabled and change no data; other actions follow their intended permissions. Do not run successful test writes on the original page (afbin help live-sessions, afbin help apps). Fix, push and fork again before handing it over.`:PUBLISHED_NEXT;
 }
 /** The pushed documents' title, queries, charts and markup — all checked by the server before it accepted them. */
 async function verifiedSummary(workspace:Workspace,paths:string[]):Promise<Array<{path:string;title:string|null;queries:string[];charts:number;checks:string[];writes?:string[]}>|undefined>{

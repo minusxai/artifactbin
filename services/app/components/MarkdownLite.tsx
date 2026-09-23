@@ -1,5 +1,7 @@
 'use client';
 
+import {PersonMention,PersonMentionProvider} from './PersonMention';
+import {isPersonMentionHref} from '@/lib/person-mentions';
 import {Tooltip} from './Tooltip';
 import {REMOTE_COLOR_CSS,remoteColor} from '../../contracts/src/remote';
 
@@ -47,6 +49,7 @@ function renderInline(nodes: MdInline[]): ReactNode[] {
       case 'code':
         return <code key={i} className={CODE_CLASS}>{node.text}</code>;
       case 'link':
+        if(isPersonMentionHref(node.href))return <PersonMention key={i} href={node.href} className="text-accent">{renderInline(node.children)}</PersonMention>;
         if (isSessionMentionHref(node.href)) return (
           <Tooltip key={i} content="Open agent session"><a href={node.href} target="_blank" rel="noopener noreferrer"
             style={{color:REMOTE_COLOR_CSS[remoteColor(node.href.split('=')[1]??'')]}} data-agent-mention
@@ -112,12 +115,13 @@ function renderMarkdownLite(nodes: MdNode[]): ReactNode {
  * One comment body, read. `label` makes the rendering findable when it stands
  * in for a field (the composer's preview); the reading surfaces need none.
  */
-export default function MarkdownLite({ text, label, className = '' }: {
+export default function MarkdownLite({ text, label, artifactId, className = '' }: {
   text: string;
+  artifactId?:string;
   label?: string;
   className?: string;
 }) {
-  return (
+  const content = (
     <div
       data-markdown
       aria-label={label}
@@ -126,4 +130,5 @@ export default function MarkdownLite({ text, label, className = '' }: {
       {renderMarkdownLite(parseMarkdownLite(text))}
     </div>
   );
+  return artifactId?<PersonMentionProvider artifactId={artifactId}>{content}</PersonMentionProvider>:content;
 }

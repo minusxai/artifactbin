@@ -76,6 +76,7 @@ export interface StoryViewer {
 
 /** What the document's JSON island carries — everything the entry needs to hydrate. */
 export interface StoryIslandData {
+  mentionStatuses?:Record<string,import("@artifactbin/contracts").MembershipStatus>;
   nodes: JsxNode[];
   refData: RefDataMap;
   /** The reader's identity (see StoryViewer). Absent or null = a guest. */
