@@ -204,10 +204,9 @@ const run = async () => {
     })).json();
     check(resolved.status === 'resolved' && resolved.thread?.length === 2, 'the agent replies and resolves in one POST');
 
-    // The still-open owner tab loses the highlight AND the sidebar thread
-    // WITHOUT a reload (the live stream); resolved history is listed below it.
-    const gone = await until(() => frame.locator('[data-mx-annotated]').count(), (n) => n === 0, 10000);
-    check(gone === 0, 'the resolve reaches the open tab live: the highlight lifts with no reload');
+    // Resolution retains an actively read thread and its highlight; it moves into resolved history.
+    const retained = await until(() => page.getByLabel('Resolved annotation thread').filter({hasText:'Recomputed'}).count(), n=>n===1,10000);
+    check(retained===1 && await frame.locator('[data-mx-annotated]').count()===1, 'the resolve reaches the open tab live: the conversation and highlight remain readable');
     const threadGone = await until(() => page.locator('[aria-label="Annotation thread"]').count(), (n) => n === 0, 8000);
     check(threadGone === 0, 'the open-thread list empties live too');
     const badgeGone = await until(() => page.locator('[data-mx-reader-count="comment"]').textContent().then((t) => (t ?? '').trim()), (t) => t === '', 5000);

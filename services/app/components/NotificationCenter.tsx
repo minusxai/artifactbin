@@ -1,13 +1,11 @@
-import {createContext,useCallback,useContext,useEffect,useRef,useState,type ReactNode} from 'react';
+import {useCallback,useEffect,useRef,useState,type ReactNode} from 'react';
 import {Bell,X} from 'lucide-react';
 import {useSession} from '@/web/session';
 import MobileSheet,{useIsPhoneViewport} from './MobileSheet';
 import {Tooltip} from './Tooltip';
+import {useDialogKeyboard} from './use-dialog-keyboard';
+import {NotificationContext, useNotifications, type InboxState} from './notification-context';
 import {PeopleInbox} from './PeopleInbox';
-export interface InboxItem {id:string;artifact_id:string|null;user_id:string;status:string|null;direction:string|null;sender_id:string;username:string|null;kind:string;source:string|null;title:string|null;read_at:string|null;revision:number}
-export interface InboxState {autoAccept:boolean;notifications:InboxItem[];blocks:Array<{user_id:string;username:string|null}>;unread:number;next:number|null}
-const Context=createContext<{state:InboxState|null;error:string;load:(input?:object)=>Promise<void>;open:()=>void}|null>(null);
-export const useNotifications=()=>useContext(Context);
 export function NotificationProvider({children}:{children:ReactNode}){
  const {session}=useSession();const user=session?.kind==='account'?session.user?.id:null;
  const [state,setState]=useState<InboxState|null>(null),[error,setError]=useState(''),[opened,setOpened]=useState(false);
@@ -22,10 +20,16 @@ export function NotificationProvider({children}:{children:ReactNode}){
   const refresh=()=>{if(document.visibilityState==='visible')void load();};window.addEventListener('focus',refresh);document.addEventListener('visibilitychange',refresh);
   return()=>{source.close();generation.current++;window.removeEventListener('focus',refresh);document.removeEventListener('visibilitychange',refresh);};
  },[user,load]);
- useEffect(()=>{if(!opened)return;const escape=(e:KeyboardEvent)=>{if(e.key==='Escape')setOpened(false);};window.addEventListener('keydown',escape);return()=>window.removeEventListener('keydown',escape);},[opened]);
  const phone=useIsPhoneViewport();
- const content=<PeopleInbox compact/>;
- return <Context.Provider value={{state,error,load,open:()=>setOpened(true)}}>{children}{opened&&user&&(phone?<MobileSheet label="Notifications" onClose={()=>setOpened(false)} header={<h2>Notifications</h2>}>{content}</MobileSheet>:<><button aria-label="Close notifications by clicking outside" className="fixed inset-0 z-[70] bg-black/10" onClick={()=>setOpened(false)}/><aside role="dialog" aria-label="Notifications" className="fixed right-3 top-14 z-[80] max-h-[80vh] w-96 max-w-[calc(100vw-24px)] overflow-auto rounded-xl border border-edge bg-surface p-4 shadow-xl"><div className="flex items-center justify-between"><h2 className="font-semibold">Notifications</h2><button aria-label="Close notifications" onClick={()=>setOpened(false)}><X size={18}/></button></div>{content}</aside></>)}</Context.Provider>;
+ const close=useCallback(()=>setOpened(false),[]);
+ const content=<NotificationPanel onClose={close}/>;
+ return <NotificationContext.Provider value={{state,error,load,open:()=>setOpened(true)}}>{children}{opened&&user&&(phone?<MobileSheet label="Notifications" onClose={close}>{content}</MobileSheet>:<><button aria-label="Close notifications by clicking outside" className="fixed inset-0 z-[70] bg-black/10" onClick={()=>setOpened(false)}/><aside role="dialog" aria-modal="true" aria-label="Notifications" className="fixed right-3 top-14 z-[80] max-h-[80vh] w-96 max-w-[calc(100vw-24px)] overflow-auto rounded-xl border border-edge bg-surface p-4 shadow-xl">{content}</aside></>)}</NotificationContext.Provider>;
+}
+function NotificationPanel({onClose}:{onClose:()=>void}){
+ const panel=useRef<HTMLDivElement>(null);
+ useDialogKeyboard(panel,onClose,'button:not([disabled]),a[href],input:not([disabled]),summary');
+ useEffect(()=>{const previous=document.activeElement as HTMLElement|null;panel.current?.querySelector<HTMLButtonElement>('button')?.focus();return()=>{if(previous?.isConnected)previous.focus();};},[]);
+ return <div ref={panel}><div className="mb-3 flex items-center justify-between"><h2 className="font-semibold">Notifications</h2><button aria-label="Close notifications" onClick={onClose} className="rounded-md p-2 hover:bg-raised"><X size={18}/></button></div><PeopleInbox compact/><a href="/account#notifications" className="mt-3 block text-xs text-muted hover:text-fg">Notification settings →</a></div>;
 }
 export function NotificationBell(){
  const value=useNotifications();const {session}=useSession();if(!value||session?.kind!=='account')return null;

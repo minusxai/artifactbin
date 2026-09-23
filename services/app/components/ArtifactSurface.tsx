@@ -336,6 +336,7 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
    * sent straight to the mounted runtime, which re-runs the queries reading it.
    */
   const [membershipRevision,setMembershipRevision]=useState(0);
+  useEffect(()=>{if(accountSession&&new URLSearchParams(location.search).has('invitation'))requestPageChrome('controls');},[accountSession,location.search]);
   const onLiveData = useCallback((event: { datasets: string[] }) => {
     if(event.datasets.includes('_members'))setMembershipRevision(n=>n+1);
     runtimeRef.current?.send(

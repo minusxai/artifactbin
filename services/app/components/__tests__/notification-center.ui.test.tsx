@@ -1,0 +1,37 @@
+import {afterEach,expect,it,vi} from 'vitest';
+import {act,cleanup,fireEvent,render,screen,waitFor} from '@testing-library/react';
+import {NotificationProvider,NotificationBell} from '../NotificationCenter';
+const identity=vi.hoisted(()=>({session:{kind:'account',user:{id:'alice'}} as {kind:string;user:{id:string}}|null}));
+vi.mock('@/web/session',()=>({useSession:()=>identity}));
+afterEach(()=>{cleanup();vi.unstubAllGlobals();identity.session={kind:'account',user:{id:'alice'}};});
+it('shares one live inbox, acknowledges the visible revision, and restores bell focus',async()=>{
+ const observers:Array<{callback:IntersectionObserverCallback;targets:Element[]}>=[];
+ vi.stubGlobal('IntersectionObserver',class{entry:{callback:IntersectionObserverCallback;targets:Element[]};constructor(callback:IntersectionObserverCallback){this.entry={callback,targets:[]};observers.push(this.entry);}observe(e:Element){this.entry.targets.push(e);}disconnect(){}});
+ const streams:Array<{onmessage:()=>void;close:ReturnType<typeof vi.fn>}>=[];
+ vi.stubGlobal('EventSource',class{onmessage=()=>{};close=vi.fn();constructor(){streams.push(this);}});
+ let read=false;
+ const fetch=vi.fn(async(_url:string,init?:RequestInit)=>{if(init?.method==='PATCH')read=true;return new Response(JSON.stringify({autoAccept:true,blocks:[],next:null,unread:read?0:1,notifications:[{id:'n1',artifact_id:'doc',kind:'reply',sender_id:'bob',username:'bob',title:'Tasks',source:'comment:ann1',revision:7,read_at:read?'now':null}]}));});
+ vi.stubGlobal('fetch',fetch);
+ render(<NotificationProvider><NotificationBell/></NotificationProvider>);
+ const bell=await screen.findByRole('button',{name:'Notifications, unread updates'});
+ expect(fetch.mock.calls.filter(([,init])=>init?.method==='PATCH')).toHaveLength(0);
+ bell.focus();fireEvent.click(bell);
+ expect(await screen.findByRole('dialog',{name:'Notifications'})).toBeVisible();
+ expect(screen.queryByText('Automatically accept invitations from people I follow.')).toBeNull();
+ const observer=observers.find(o=>o.targets.length)!;
+ await act(async()=>{observer.callback([{target:observer.targets[0],isIntersecting:true,intersectionRatio:1} as IntersectionObserverEntry],{} as IntersectionObserver);});
+ await waitFor(()=>expect(fetch.mock.calls.some(([,init])=>init?.body===JSON.stringify({read:'n1',revision:7}))).toBe(true));
+ expect(await screen.findByRole('button',{name:'Notifications'})).toBeVisible();
+ fireEvent.keyDown(window,{key:'Escape'});expect(screen.queryByRole('dialog')).toBeNull();expect(bell).toHaveFocus();
+ expect(streams).toHaveLength(1);
+ await act(async()=>{streams[0].onmessage();});
+ expect(streams).toHaveLength(1);
+});
+it('removes account data and closes the live stream on sign-out',async()=>{
+ const close=vi.fn();vi.stubGlobal('EventSource',class{close=close;});
+ vi.stubGlobal('fetch',vi.fn(async()=>new Response(JSON.stringify({autoAccept:true,blocks:[],next:null,unread:0,notifications:[]}))));
+ const view=render(<NotificationProvider><NotificationBell/></NotificationProvider>);
+ fireEvent.click(await screen.findByRole('button',{name:'Notifications'}));
+ identity.session=null;view.rerender(<NotificationProvider><NotificationBell/></NotificationProvider>);
+ expect(screen.queryByRole('dialog')).toBeNull();expect(screen.queryByRole('button',{name:'Notifications'})).toBeNull();expect(close).toHaveBeenCalled();
+});

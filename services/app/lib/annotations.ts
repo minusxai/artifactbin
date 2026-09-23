@@ -584,7 +584,7 @@ export async function actOnAnnotationFor(
     }
     if(replied || resolved || (action.reopen && root.status==='resolved')){
       await tx.query('UPDATE annotations SET revision=revision+1 WHERE id=$1',[root.id]);
-      await notifyThread(tx,artifactId,root.id,actor.userId,resolved?(replied?'reply_resolved':'resolved'):action.reopen?'reopened':'reply',!!remote||author.kind==='agent');
+      await notifyThread(tx,artifactId,root.id,actor.userId,resolved?(replied?'reply_resolved':'resolved'):action.reopen?'reopened':'reply',!!remote||author.kind==='agent',replied?replyId:root.id);
     }
     const fresh = await tx.query<AnnotationRowDb>(`SELECT * FROM ${ANNOTATIONS_READ} WHERE id = $1`, [root.id]);
     // A vanished row stays the null: wrapping it in the result object would

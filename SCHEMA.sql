@@ -84,6 +84,7 @@ CREATE TABLE IF NOT EXISTS app.member_notifications (
   read_at TIMESTAMPTZ,
   revision INTEGER NOT NULL DEFAULT 1,
   seen_revision INTEGER NOT NULL DEFAULT 0,
+  first_update_id TEXT,
   PRIMARY KEY (id)
 );
 
@@ -108,6 +109,8 @@ ALTER TABLE app.member_notifications ADD COLUMN IF NOT EXISTS read_at TIMESTAMPT
 ALTER TABLE app.member_notifications ADD COLUMN IF NOT EXISTS revision INTEGER NOT NULL DEFAULT 1;
 
 ALTER TABLE app.member_notifications ADD COLUMN IF NOT EXISTS seen_revision INTEGER NOT NULL DEFAULT 0;
+
+ALTER TABLE app.member_notifications ADD COLUMN IF NOT EXISTS first_update_id TEXT;
 
 CREATE INDEX IF NOT EXISTS idx_member_notifications_recipient ON app.member_notifications (recipient_id, created_at);
 

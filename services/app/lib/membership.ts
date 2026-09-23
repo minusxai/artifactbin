@@ -172,7 +172,7 @@ export async function invitePeople(tx:Queryable,artifact:ArtifactRow,actor:RoleA
     ON CONFLICT(artifact_id,user_id) DO UPDATE SET status=EXCLUDED.status,direction=EXCLUDED.direction,initiated_by=EXCLUDED.initiated_by,joined_at=EXCLUDED.joined_at,revision=EXCLUDED.revision`,[artifact.id,target,status,sender,(previous?.revision??0)+1]);
    kind=status==='pending'?'invitation':'joined';
   }
-  await recordNotification(tx,{id:`${artifact.id}:${target}:${source??`invite:${(previous?.revision??0)+1}`}`,artifactId:artifact.id,recipientId:target,senderId:sender,kind,source,once:true});
+  await recordNotification(tx,{id:source?.startsWith('comment:')?`thread:${source.slice(8)}:${target}`:`${artifact.id}:${target}:${source??`invite:${(previous?.revision??0)+1}`}`,artifactId:artifact.id,recipientId:target,senderId:sender,kind,source,once:true});
  }
  await tx.query("SELECT pg_notify('artifact_' || lower($1), 'members')",[artifact.id]);
 }

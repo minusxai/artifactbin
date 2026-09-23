@@ -1,4 +1,4 @@
-import {useNotifications} from './NotificationCenter';
+import {useNotifications} from './notification-context';
 import { useLayoutEffect,useRef,type ReactNode } from 'react';
 import { renderReaderChrome, READER_CHROME_HIDDEN_CLASS, type ReaderChromeInput } from '@/lib/story/reader-chrome';
 import { STORY_CHROME_CSS } from '@/lib/story-runtime/chrome-css';

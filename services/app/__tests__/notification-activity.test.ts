@@ -10,6 +10,7 @@ it('keeps newer activity unread when an older rendered revision is acknowledged'
  const alice=await createUser({email:'mxmx_test_notify_a@example.com'}),bob=await createUser({email:'mxmx_test_notify_b@example.com'});
  const db=await getDb();
  await db.query("INSERT INTO artifacts(id,token_id,user_id,format,content,visibility) VALUES('notify1','t',$1,'markup','x','public')",[alice.id]);
+ await db.query("INSERT INTO annotations(id,artifact_id,body,author_kind,status,snippet) VALUES('thread','notify1','Hello','human','open','')");
  const input={id:'thread:bob',artifactId:'notify1',recipientId:bob.id,senderId:alice.id,kind:'reply',source:'comment:thread'};
  await db.transaction(tx=>recordNotification(tx,input));
  const actor={userId:bob.id,tokenId:null};
@@ -45,4 +46,20 @@ it('coalesces an agent reply and resolution, including its own account, and noti
  await updateMembershipInbox(actor,{read:inbox.notifications[0]!.id,revision:result!.revision});
  await actOnAnnotationFor(actor,'thread1','ann_thread',{reopen:true},{kind:'agent',label:'helper',transport:'http'});
  inbox=await membershipInbox(actor);expect(inbox.unread).toBe(1);expect(inbox.notifications[0]?.kind).toBe('reopened');
+});
+
+it('keeps a mention and subsequent replies in one conversation item and hides deleted threads',async()=>{
+ const alice=await createUser({email:'mxmx_test_thread_a@example.com'}),bob=await createUser({email:'mxmx_test_thread_b@example.com'});
+ const db=await getDb();
+ await db.query("INSERT INTO artifacts(id,token_id,user_id,format,content,source,visibility) VALUES('thread2','t',$1,'markup','','<p id=\"note\">Hello</p>','public')",[alice.id]);
+ await db.query("INSERT INTO annotations(id,artifact_id,body,author_kind,author_user_id,author_token_id,status,snippet) VALUES('ann_mentions','thread2','Please fix','human',$1,'t','open','')",[alice.id]);
+ await db.query("INSERT INTO artifact_members(artifact_id,user_id,status,direction,initiated_by) VALUES('thread2',$1,'accepted','invitation',$2)",[bob.id,alice.id]);
+ const actor={userId:alice.id,tokenId:'t'},recipient={userId:bob.id,tokenId:null};
+ await actOnAnnotationFor(actor,'thread2','ann_mentions',{reply:`Hi [@bob](/people/${bob.id})`},{kind:'human',label:null,transport:'http'});
+ await actOnAnnotationFor(actor,'thread2','ann_mentions',{reply:'Another update',resolve:true},{kind:'human',label:null,transport:'http'});
+ const inbox=await membershipInbox(recipient);
+ expect(inbox.notifications).toHaveLength(1);
+ expect(inbox.notifications[0]).toMatchObject({id:`thread:ann_mentions:${bob.id}`,source:'comment:ann_mentions',kind:'reply_resolved'});
+ await db.query("UPDATE annotations SET deleted_at=now() WHERE id='ann_mentions'");
+ expect((await membershipInbox(recipient)).notifications).toEqual([]);
 });

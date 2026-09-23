@@ -430,7 +430,37 @@ permissions without reloading the document.
 Resolved document links and comment links use `/people/<stable-user-id>`.
 `invitePeople` applies the same recipient rules for humans and agents; saving
 content and inserting notification receipts are one transaction. Source node IDs
-and comment IDs make notification delivery idempotent. Plain IDs, rendered User
+and thread revisions make notification delivery idempotent. Plain IDs, rendered User
 chips and forks have no mention side effects. `_members(user_id, joined_at)` is
 read-only and scoped to the current saved document. `memberOf` column constraints accept joined members while retaining legacy sharing and ownership.
 A picker sourced from `_members` lists only accepted participants.
+
+### Notification delivery
+
+`member_notifications` is the inbox for membership, social and conversation
+activity. Comments use one item per thread and recipient; a reply plus resolution
+updates that item once. Root revisions and `seen_revision` prevent a stale view
+from clearing a newer update. `first_update_id` retains the first unread comment
+for links. Deleted threads, lost artefact access and blocks share the inbox and
+email eligibility filter. Human self-actions are silent; agent replies can notify
+the human on the same account.
+
+Notification writes and `event_outbox` envelopes commit in the source transaction.
+The publisher retries stable IDs through `EventsService.publish`; `emit` remains
+best-effort telemetry. The existing events service owns subscriber delivery
+receipts, leases, backoff and acknowledgements. Subscribers must tolerate replay;
+registering a subscriber never backfills historical events. Recipient SSE is a
+wakeup over the existing live channel transport; clients refetch authorised state.
+
+The shared bell uses the existing inbox, mobile sheet and dialog keyboard helper.
+Opening an artefact or a collapsed marker does not acknowledge a notification.
+Rendered inbox items and expanded comment updates acknowledge their displayed
+revision. Resolved conversations stay open until dismissed; collapsed markers
+count down for ten visible seconds, pausing while hovered, focused, open, offscreen
+or in a background tab. Expiry hides a marker only. Remote activity uses existing
+work receipts and presence, not a second agent status model.
+
+OSS exposes an optional `NotificationDelivery` deployment capability for email
+preferences and tracked destinations. It does not send notification email.
+`artifactbin-server` owns scheduling, templates, provider delivery and click events;
+mail links never grant access, accept invitations or mark conversations read.

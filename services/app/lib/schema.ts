@@ -718,6 +718,7 @@ const MEMBER_NOTIFICATIONS: Table = {
   {name:'read_at',type:'TIMESTAMPTZ'},
   {name:'revision',type:'INTEGER',notNull:true,default:'1'},
   {name:'seen_revision',type:'INTEGER',notNull:true,default:'0'},
+  {name:'first_update_id',type:'TEXT'},
  ],primaryKey:['id'],indexes:[{name:'idx_member_notifications_recipient',columns:['recipient_id','created_at']}],
 };
 const USER_BLOCKS: Table = {

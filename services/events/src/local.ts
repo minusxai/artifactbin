@@ -82,12 +82,16 @@ export function createEvents(opts: EventsWriterOptions): EventsWriter {
         FROM picked p WHERE d.event_id=p.event_id AND d.subscriber=p.subscriber RETURNING d.event_id
       ) SELECT e.* FROM ${schema}.events e JOIN claimed c ON c.event_id=e.id ORDER BY e.at,e.id`,[subscriber.id,claim]);
       if (!batch.rows.length) continue;
-      try {
-        await subscriber.deliver(batch.rows);
-        await opts.db.query(`UPDATE ${schema}.deliveries SET delivered_at=now(),claim=NULL WHERE subscriber=$1 AND claim=$2`,[subscriber.id,claim]);
-      } catch {
-        await opts.db.query(`UPDATE ${schema}.deliveries SET claim=NULL,available_at=now()+least(3600,power(2,least(attempts,12))) * interval '1 second' WHERE subscriber=$1 AND claim=$2`,[subscriber.id,claim]);
-      }
+      const renew=setInterval(()=>{void opts.db.query(`UPDATE ${schema}.deliveries SET available_at=now()+interval '60 seconds' WHERE subscriber=$1 AND claim=$2`,[subscriber.id,claim]).catch(()=>{});},20000);
+      renew.unref();
+      try { for(const event of batch.rows){
+        try {
+          await subscriber.deliver([event]);
+          await opts.db.query(`UPDATE ${schema}.deliveries SET delivered_at=now(),claim=NULL WHERE subscriber=$1 AND claim=$2 AND event_id=$3`,[subscriber.id,claim,event.id]);
+        } catch {
+          await opts.db.query(`UPDATE ${schema}.deliveries SET claim=NULL,available_at=now()+least(3600,power(2,least(attempts,12))) * interval '1 second' WHERE subscriber=$1 AND claim=$2 AND event_id=$3`,[subscriber.id,claim,event.id]);
+        }
+      }}finally{clearInterval(renew);}
     }
   };
   return {

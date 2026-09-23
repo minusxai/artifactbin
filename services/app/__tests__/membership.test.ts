@@ -91,7 +91,7 @@ it('commits resolved mentions once, reuses pending requests, and refuses blocked
  await w.db.query('UPDATE users SET auto_accept_mentions=false WHERE id=$1',[w.bob.id]);
  const mention=(source:string)=>w.db.transaction(async tx=>{const row=(await tx.query<any>("SELECT * FROM artifacts WHERE id='a1B2c3' FOR UPDATE")).rows[0];await invitePeople(tx,row,w.actor(w.owner),[w.bob.id],source);});
  await mention('comment:one');await mention('comment:one');await mention('comment:two');
- expect((await w.db.query('SELECT * FROM member_notifications')).rows).toHaveLength(1);
+ expect((await w.db.query("SELECT * FROM member_notifications WHERE kind<>'follow'")).rows).toHaveLength(1);
  await changeMembership(w.actor(w.bob),'a1B2c3',{action:'accept'});
  await mention('comment:three');await mention('comment:three');
  expect((await w.db.query("SELECT * FROM member_notifications WHERE kind='mention'")).rows).toHaveLength(1);

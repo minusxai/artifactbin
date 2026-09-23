@@ -1,4 +1,4 @@
-import {useNotifications} from './NotificationCenter';
+import {useNotifications} from './notification-context';
 import {useSession} from '@/web/session';
 import {PersonMentionProvider} from './PersonMention';
 'use client';
@@ -387,8 +387,12 @@ function ThreadPreview({ a, top, hovered, onOpen, onHover, remaining }: {
   const first = a.thread[0];
   const label = first ? authorLabel(first.author) : 'Unknown';
   const messages = a.thread.length;
-  const work=a.remote_work?.at(-1);
-  const working=work?.connection==='online'&&['queued','dispatching','delivered','acknowledged'].includes(work.phase)&&work.activity!=='unknown';
+  const agents=(a.remote_work??[]).filter((w,i,all)=>!all.slice(i+1).some(next=>next.sessionId===w.sessionId));
+  const activeAgents=agents.filter(w=>w.connection==='online'&&['queued','dispatching','delivered','acknowledged'].includes(w.phase)&&w.activity!=='unknown');
+  const work=activeAgents.at(-1)??agents.at(-1);
+  const inbox=useNotifications()?.state;
+  const unread=inbox?.notifications.some(n=>!n.read_at&&n.source===`comment:${a.id}`);
+  const working=activeAgents.length>0;
   const previewRoot=useRef<HTMLElement>(null);
   useEffect(()=>{
     const element=previewRoot.current;
@@ -430,7 +434,10 @@ function ThreadPreview({ a, top, hovered, onOpen, onHover, remaining }: {
         className="absolute inset-0 z-0 cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-accent"
         style={{ borderRadius: hovered ? 5 : '50% 50% 50% 3px' }}
       />
-      {work&&<span className="sr-only">{remoteWorkLabel(work)}</span>}
+      {unread&&<span aria-label="Unread reply" className="pointer-events-none absolute right-0 top-0 z-10 h-2 w-2 rounded-full bg-accent"/>}
+      {a.status==='resolved'&&<span aria-label="Resolved" className="pointer-events-none absolute bottom-0 right-0 z-10 text-xs text-accent">✓</span>}
+      {work&&<span className="sr-only">{remoteWorkLabel(work)}{agents.length>1?` · ${agents.length} agents`:null}</span>}
+      {hovered&&agents.length>1&&<span className="absolute right-2 top-1 text-[10px] text-muted">{agents.length} agents</span>}
       {remaining!==undefined&&<><svg aria-hidden="true" className="pointer-events-none absolute inset-0 h-full w-full motion-reduce:hidden" viewBox="0 0 40 40"><circle cx="20" cy="20" r="18" fill="none" stroke="currentColor" strokeWidth="2" pathLength="100" strokeDasharray={`${remaining/100} 100`} transform="rotate(-90 20 20)"/></svg><span role="status" className="sr-only motion-reduce:not-sr-only">Resolved · {Math.ceil(remaining/1000)} seconds</span></>}
       {first && !hovered && (
         <span className="pointer-events-none absolute inset-0 flex items-center justify-start pl-[7px]">
@@ -538,12 +545,14 @@ function Thread({
   const {session}=useSession();
   const threadElement=useRef<HTMLDivElement>(null);
   const markRead=notifications?.load;
+  const newestFolded=isCommentFolded(a.thread.at(-1)?.id??'');
   useEffect(()=>{
-    if(!open||folded||!session?.user?.id||!markRead||!threadElement.current||typeof IntersectionObserver==='undefined')return;
+    if(!open||folded||newestFolded||!session?.user?.id||!markRead||!threadElement.current||typeof IntersectionObserver==='undefined')return;
     const userId=session.user.id;
     const observer=new IntersectionObserver(entries=>{if(entries.some(e=>e.isIntersecting)&&document.visibilityState==='visible'){void markRead({read:`thread:${a.id}:${userId}`,revision:a.revision??1});observer.disconnect();}},{threshold:0.1});
-    observer.observe(threadElement.current);return()=>observer.disconnect();
-  },[open,folded,a.id,a.revision,session?.user?.id,markRead]);
+    const latest=threadElement.current.querySelector('[data-notification-read-point]');
+    if(latest)observer.observe(latest);return()=>observer.disconnect();
+  },[open,folded,newestFolded,a.id,a.revision,session?.user?.id,markRead]);
   const prefix=replyMentionPrefix(a.thread);
   const [reply, setReply] = useState(()=>prefix);
   const touched=useRef(false);
@@ -670,7 +679,7 @@ function Thread({
            * mechanism scrollIntoView honours for chrome it cannot see.
            */
           return (
-          <li key={c.id + c.created_at} className="scroll-mb-14 sm:scroll-mb-0">
+          <li data-comment-id={c.id} key={c.id + c.created_at} className="scroll-mb-14 sm:scroll-mb-0">
             <div className="mb-1.5 flex min-w-0 items-center gap-2">
               {/* The whole conversation's fold, at the top-left of the card —
                   a row of its own would cost the rail a line it does not have
@@ -774,6 +783,7 @@ function Thread({
                 ? <FoldingBody text={c.body} foldable={!(justOpened && newest)} />
                 : <p className="line-clamp-2 font-sans leading-snug text-fg/90">{previewText(c.body)}</p>}
             {index===0&&a.image&&<CommentScreenshot image={a.image}/>}
+            {newest&&!commentFolded&&open&&<span data-notification-read-point className="block h-px" aria-hidden="true"/>}
           </li>
           );
         })}
@@ -964,13 +974,13 @@ export default function AnnotationLayer({
 
   // Notification links identify a comment; resolve it through the authorized
   // open/resolved indexes so replies open their containing conversation.
-  const [linkedComment] = useState(() => typeof window === 'undefined' ? null : new URLSearchParams(window.location.search).get('thread'));
+  const [linkedComment] = useState(() => typeof window === 'undefined' ? null : new URLSearchParams(window.location.search).get('comment')??new URLSearchParams(window.location.search).get('thread'));
   const followedLink = useRef(false);
   useEffect(() => {
     if (!linkedComment || followedLink.current) return;
     const thread = [...annotations, ...(resolvedList ?? [])].find(a =>
       a.id === linkedComment || a.thread.some(c => c.id === linkedComment));
-    if (thread) { followedLink.current = true; openThread(thread.id); }
+    if (thread) { followedLink.current = true; openThread(thread.id);setFolds(unfold(id,{threads:[thread.id],comments:[linkedComment]})); }
     else if (!railOpenRef.current) {
       openedForThreadRef.current = true;
       onRailOpenChangeRef.current(true);
@@ -1001,7 +1011,8 @@ export default function AnnotationLayer({
        * nothing when the whole thread already fits, so the common case keeps
        * the top of the conversation exactly where it was.
        */
-      thread?.querySelector('li:last-child')?.scrollIntoView?.({ block: 'nearest', inline: 'nearest' });
+      const target=linkedComment?thread?.querySelector(`[data-comment-id="${CSS.escape(linkedComment)}"]`):null;
+      (target??thread?.querySelector('li:last-child'))?.scrollIntoView?.({ block: 'nearest', inline: 'nearest' });
     });
     return () => cancelAnimationFrame(raf);
   }, [openId, railOpen]);
@@ -1389,16 +1400,22 @@ export default function AnnotationLayer({
 
   const visibleResolved=placed.map(p=>p.annotation.id).join(',');
   useEffect(()=>{
-    if(!floating)return;
+    if(!floating||!Object.values(recentResolved).some(v=>v.remaining>0))return;
     let last=performance.now();
     const timer=setInterval(()=>{
       const now=performance.now(),elapsed=Math.min(250,now-last);last=now;
       if(document.visibilityState!=='visible')return;
       const visible=new Set(visibleResolved.split(','));
-      setRecentResolved(current=>Object.fromEntries(Object.entries(current).map(([key,value])=>[key,visible.has(key)&&key!==hoverId&&key!==openId?{...value,remaining:Math.max(0,value.remaining-elapsed)}:value])));
+      setRecentResolved(current=>{
+        let changed=false;
+        const next=Object.fromEntries(Object.entries(current).map(([key,value])=>{
+          if(value.remaining<=0||!visible.has(key)||key===hoverId||key===openId)return [key,value];
+          changed=true;return [key,{...value,remaining:Math.max(0,value.remaining-elapsed)}];
+        }));return changed?next:current;
+      });
     },100);
     return()=>clearInterval(timer);
-  },[floating,visibleResolved,hoverId,openId]);
+  },[floating,visibleResolved,hoverId,openId,Object.values(recentResolved).some(v=>v.remaining>0)]);
 
   // The breadcrumb the edit toolbar taught: nearest ancestors, outermost first.
   const crumbs = selection ? [...selection.ancestors.slice(-2), { path: selection.path, tag: selection.tag, hint: '' }] : [];
