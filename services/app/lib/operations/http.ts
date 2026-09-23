@@ -32,7 +32,7 @@ import { OPERATIONS, type OpContext, type Operation, type OpReply } from './regi
  * precisely the retry the receipt exists to answer.
  */
 const AUTHORIZED: Record<string, (actor: TokenActor, input: Record<string, unknown>) => Promise<boolean>> = {
-  mutate_dataset: async (actor, input) => {const row=await getArtifactById(String(input.id));return !!row&&(grantsOf(row)?await grantsPermitWrite(row,actor):!!await getArtifactFor(actor,row.id));},
+  mutate_dataset: async (actor, input) => {const row=await getArtifactById(String(input.id));return !!row&&(grantsOf(row)?await grantsPermitWrite(row,actor)||!!await getArtifactFor(actor,row.id):!!await getArtifactFor(actor,row.id));},
   annotate: async (actor, input) => {
     const access = await readableArtifact(actor, String(input.id));
     return !!access && canAnnotate(access.role);

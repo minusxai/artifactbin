@@ -1,5 +1,6 @@
+import {readableArtifact} from './artifact-read';
 import {MembershipError} from './membership';
-import {grantsOf} from './datasets/policy/grants';
+import {grantsOf,grantsPermitWrite} from './datasets/policy/grants';
 import {RemoteError} from './remote/registry';
 import type {ReviewReceipt} from './remote/agents';
 import type {MutationReceipt} from './mutation-receipt';
@@ -807,7 +808,7 @@ export async function respondToMutate(
 ): Promise<Response> {
   if (body && typeof body.name === 'string') return respondToDeclaredMutation(actor, id, body, receipt);
   const found = await getArtifactById(id);
-  const dataset = found&&grantsOf(found)?found:await getArtifactFor(actor,id);
+  const dataset = found&&grantsOf(found)&&(await grantsPermitWrite(found,actor)||await readableArtifact(actor,id))?found:await getArtifactFor(actor,id);
   if (!dataset) return json({ error: 'not_found' }, 404);
 
   const refusal = await canWriteDataset(dataset, actor);
@@ -817,7 +818,7 @@ export async function respondToMutate(
   if (refusal) {
     return json({
       error: 'dataset_read_only',
-      details: [`${id} is read-only — publish it writable: afbin push <file> --type dataset --access readwrite (API: PUT here, or PATCH /api/my/artifacts/${id})`],
+      details: [grantsOf(dataset)?'No grant allows this direct write. Use an allowed saved artefact action, or ask a dataset editor to add a user grant for this operation. See afbin help apps.':`${id} is read-only — publish it writable: afbin push <file> --type dataset --access readwrite (API: PUT here, or PATCH /api/my/artifacts/${id})`],
     }, 403);
   }
 

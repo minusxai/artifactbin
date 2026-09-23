@@ -1,3 +1,4 @@
+import {POST as mutateDirect} from '@/app/api/artifacts/[id]/mutate/route';
 import { expect, it } from 'vitest';
 import { useAppHarness, request } from './harness';
 import { createUser, claimToken } from '@/lib/users';
@@ -37,6 +38,12 @@ it('enforces read grants independently of link visibility and keeps owner admini
  const res=await create(request('/api/artifacts',{method:'POST',token:token.token,json:{dataset:[{n:1}]}}));
  const {id}=await res.json();
  expect((await getArtifactById(id))?.dataset_policy).toEqual(defaultDatasetGrants());
+ for(const key of [undefined,'policy-hint-receipt-0001']){
+  const denied=await mutateDirect(request(`/api/artifacts/${id}/mutate`,{method:'POST',token:token.token,headers:key?{'Idempotency-Key':key}:{},json:{sql:'insert into public.rows values (2)'}}),{params:Promise.resolve({id})});
+  expect(denied.status).toBe(403);
+  const details=(await denied.json()).details.join(' ');expect(details).toContain('grant');expect(details).not.toContain('--access readwrite');
+ }
+
  expect(await readableArtifact({userId:null,tokenId:''},id)).not.toBeNull();
  await setDatasetPolicy(actor,id,{version:2,allow:[{actions:['read'],from:{user:'$owner'}}]},0);
  expect(await readableArtifact({userId:null,tokenId:''},id)).toBeNull();
@@ -66,4 +73,11 @@ it('provides accepted membership as a read-only current-artefact table',async()=
  expect(res.status,await res.clone().text()).toBe(201);const {id}=await res.json();
  const result=await dataflowForRow((await getArtifactById(id))!);
  expect(result?.state.tables.people.rows).toEqual([expect.objectContaining({user_id:owner.id})]);
+});
+
+it('does not disclose private grant-controlled datasets through direct mutation refusals',async()=>{
+ const owner=await mintToken('private grant owner'),stranger=await mintToken('private grant stranger');
+ const made=await create(request('/api/artifacts',{method:'POST',token:owner.token,json:{dataset:[{n:1}],visibility:'private'}}));const {id}=await made.json();
+ const denied=await mutateDirect(request(`/api/artifacts/${id}/mutate`,{method:'POST',token:stranger.token,json:{sql:'insert into public.rows values (2)'}}),{params:Promise.resolve({id})});
+ expect(denied.status).toBe(404);
 });
