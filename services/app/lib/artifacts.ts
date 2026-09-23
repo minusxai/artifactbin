@@ -1,5 +1,5 @@
 import {documentMentions} from './saved-mentions';
-import { grantsOf, grantsPermitRead, grantsPermitWrite, type GrantDocument } from './datasets/policy/grants';
+import { grantContext, grantsOf, grantsPermitRead, grantsPermitWrite, type GrantDocument } from './datasets/policy/grants';
 import {storedMediaReferences} from './datasets/media-references';
 import {claimArtifactId,reserveArtifactIds} from './artifact-identities';
 import {collectRefUses} from '@/lib/story/refs';
@@ -182,7 +182,7 @@ export async function canReadArtifact(
   row: Pick<ArtifactRow, 'id' | 'visibility' | 'user_id' | 'link_role'> & Partial<Pick<ArtifactRow,'format'>>,
   viewer: Viewer,
 ): Promise<boolean> {
-  if(row.format==='dataset'){
+  if(row.format==='dataset'||row.format===undefined){
     const dataset=await getArtifactById(row.id);
     if(!dataset)return false;
     if(grantsOf(dataset))return grantsPermitRead(dataset,{userId:viewer?.userId??null,tokenId:null,email:viewer?.email});
@@ -512,7 +512,7 @@ async function insertArtifact(
       (!userId || guestDefault ? (ALLOW_PUBLIC_VISIBILITY ? 'public' : 'unlisted')
         : input.format === 'image' || input.format === 'dataset' || input.format === 'pdf' || input.format === 'file' ? 'unlisted' : 'private');
   const datasetPolicy = atCreation.datasetPolicy?.policy ??
-    (!atCreation.forkedFrom && input.format==='dataset' && catalog?.kind!=='postgres' ? defaultDatasetGrants() : null);
+    (!atCreation.forkedFrom && input.access===undefined && input.format==='dataset' && catalog?.kind!=='postgres' ? defaultDatasetGrants() : null);
   const created = await tx.query<ArtifactRow>(
   // The genesis edit row makes the creation's edit_id resolvable like any
   // other: an agent that creates and then edits against that id is on an
@@ -707,18 +707,19 @@ async function writtenDatasetForkPlan(actor: TokenActor, source: ArtifactRow, ow
   if (!uses) return [];
   const plan: ArtifactRow[] = [];
   const seen = new Set<string>();
-  for (const use of uses) {
+  const written=new Set(uses.filter(use=>use.write).map(use=>use.id));
+  for (const use of [...uses.filter(u=>u.write),...uses.filter(u=>!u.write)]) {
     if(seen.has(use.id))continue;
     seen.add(use.id);
     const candidate=await getArtifactById(use.id);
     if(!candidate||candidate.format!=='dataset'||catalogOf(candidate)?.kind==='postgres')continue;
     const policy=grantsOf(candidate);
     if(policy){
-      if(!use.write&&await grantsPermitRead(candidate,{userId:null,tokenId:null}))continue;
+      if(!written.has(use.id)&&await grantsPermitRead(candidate,{userId:null,tokenId:null}))continue;
       if(!(await grantsPermitRead(candidate,actor,source)))continue;
       plan.push(candidate);continue;
     }
-    if(!use.write)continue;
+    if(!written.has(use.id))continue;
     const own = owner.userId ? await getArtifactFor({ userId: owner.userId, tokenId: '' }, use.id) : await getArtifact(owner.tokenId, use.id);
     if (own) continue;
     const row = (owner.userId !== actor.userId ? await getArtifactFor(actor, use.id) : null) ?? await getLinkReadableArtifact(use.id);
@@ -768,6 +769,14 @@ async function deepFork(actor: TokenActor, source: ArtifactRow, overrides: ForkO
   let created: { artifact: ArtifactRow; datasets: ArtifactRow[] };
   try {
     created = await (await getDb()).transaction(async (tx) => {
+    await tx.query('SELECT id FROM artifacts WHERE id=ANY($1::text[]) ORDER BY id FOR UPDATE',[[source.id,...copies.map(c=>c.row.id)]]);
+    const currentSource=(await tx.query<ArtifactRow>('SELECT * FROM artifacts WHERE id=$1 AND deleted_at IS NULL',[source.id])).rows[0];
+    if(!currentSource||currentSource.edit_id!==source.edit_id)throw new DatasetError('The source changed; retry the fork',409);
+    for(const copy of copies){
+      if(!grantsOf(copy.row))continue;
+      const current=(await tx.query<ArtifactRow>('SELECT * FROM artifacts WHERE id=$1 AND deleted_at IS NULL',[copy.row.id])).rows[0];
+      if(!current||current.edit_id!==copy.row.edit_id||current.policy_revision!==copy.row.policy_revision||!await grantsPermitRead(current,actor,currentSource,tx))throw new DatasetError('A dataset changed or is no longer readable; retry the fork',409);
+    }
     const datasets: ArtifactRow[] = [];
     for (const copy of copies) {
       datasets.push(await createArtifact(owner.tokenId, owner.userId, {
@@ -1898,7 +1907,7 @@ export async function getSharingFor(actor: TokenActor, id: string): Promise<Shar
     shares: shares.rows,
     canPrivate: !!row.user_id,
     ...(row.format === 'dataset'
-      ? { access: row.access, datasetKind: catalogOf(row)?.kind ?? 'stored', writtenBy: await findWritersFor(actor, id) }
+      ? { access: row.access, policyVersion:grantsOf(row)?2:1, datasetKind: catalogOf(row)?.kind ?? 'stored', writtenBy: await findWritersFor(actor, id) }
       : {}),
   };
 }
@@ -2617,6 +2626,10 @@ async function mutationAccessFor(doc: ArtifactRow, flow: Dataflow, state: Datafl
     const actor=viewer??{userId:null,tokenId:null};
     const candidate=await getArtifactById(m.target);
     const dataset=candidate&&grantsOf(candidate)?candidate:await getArtifactFor(writerFor(doc),m.target);
+    if(dataset&&grantsOf(dataset)){
+      try{await grantContext(dataset,actor,{id:doc.id,editId:doc.edit_id});}
+      catch(error){return [m.name,!actor.userId?SIGN_IN_REQUIRED:error instanceof Error?error.message:'Join this artefact to use its actions'];}
+    }
     if(!dataset||await canWriteDataset(dataset,actor,{id:doc.id,editId:doc.edit_id}))return [m.name,'This action requires dataset view access and a writable dataset with a matching data policy.'];
     if(!dataset.dataset_policy)return [m.name,guestOf(m,null)];
     try {

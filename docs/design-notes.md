@@ -414,7 +414,7 @@ owner’s artefacts. `from` selectors are conjunctive; `allow` rules are additiv
 The shared parser/evaluator lives in `services/utils/src/dataset-grants.ts`;
 trusted caller/artefact resolution and commit fences live in the app’s dataset
 policy module. Optional legacy table restrictions are applied after the grant.
-Version 1 rows retain their old behaviour. Private sharing still limits reads.
+Version 1 rows and creations with an explicit legacy access setting retain their old behaviour. Private sharing still limits reads.
 
 `artifact_members` owns one relationship per artefact/account. Accepted
 membership gates persistent v2 artefact actions, not comments or local controls.

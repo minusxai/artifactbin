@@ -52,7 +52,7 @@ it('forks even an owners written dataset independently and resets memberships',a
  const actor={userId:owner.id,tokenId:token.id};
  const make=async(json:object)=>{const res=await create(request('/api/artifacts',{method:'POST',token:token.token,json}));expect(res.status,await res.clone().text()).toBe(201);return (await res.json()).id;};
  const ds=await make({dataset:[{n:1}]});
- const doc=await make({visibility:'public',markup:`<Helmet><Mutation name="add" source="ref:${ds}">{\`insert into public.rows values (2)\`}</Mutation></Helmet><Button run="$add">Add</Button>`});
+ const doc=await make({visibility:'public',markup:`<Helmet><Query name="rows" source="ref:${ds}">{\`select * from public.rows\`}</Query><Mutation name="add" source="ref:${ds}">{\`insert into public.rows values (2)\`}</Mutation></Helmet><Button run="$add">Add</Button>`});
  await setDatasetPolicy(actor,ds,{version:2,allow:[{actions:['read'],from:{user:'*'}},{actions:['insert'],from:{artifact:doc}}]},0);
  const fork=await forkArtifact(actor,(await getArtifactById(doc))!);expect(fork).not.toBeInstanceOf(Response);if(fork instanceof Response)return;
  expect(fork.datasets).toHaveLength(1);expect(fork.datasets[0].id).not.toBe(ds);

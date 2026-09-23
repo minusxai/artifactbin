@@ -36,7 +36,7 @@ describe('the skill’s first page', () => {
 describe('references/apps.md', () => {
   it('teaches accounts, the viewer, the sign-in door, and a form that stays out of the link', () => {
     const text = reference();
-    for (const shape of ['$_me', '<User', '<SignIn', 'url={false}', 'reset="', '"type":"user"', '--policy viewers-write']) expect(text, shape).toContain(shape);
+    for (const shape of ['$_me', '<User', '_members', 'artifactOwner', 'afbin invite', 'afbin mention']) expect(text, shape).toContain(shape);
     expect(text).not.toMatch(/"name":\s*"Me"/);
   });
 
@@ -82,10 +82,10 @@ it('keeps successful test writes on the test-user fork and explains the mutation
  expect(text).toContain('A Mutation can read only the stored table it writes');
 });
 
-it('teaches ordinary participant rows without a platform likes table',()=>{
+it('teaches accepted platform membership without custom join tables',()=>{
  const text=reference();
  expect(text).not.toContain('_likes');
- expect(text).toContain('insert into public.members');
- expect(text).toContain('options="$members"');
- expect(text).toContain('where not exists');
+ expect(text).toContain('select user_id, joined_at from _members');
+ expect(text).not.toContain('insert into public.members');
+ expect(text).toContain('afbin members');
 });

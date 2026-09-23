@@ -22,11 +22,13 @@ export async function readThrough(tx:Queryable,row:ArtifactRow,actor:RoleActor):
 export async function grantContext(dataset:ArtifactRow,actor:RoleActor,document?:GrantDocument,tx?:Queryable):Promise<DatasetGrantContext>{
  const db=tx??await getDb();
  const context:DatasetGrantContext={caller:actor,owner:principalOf(dataset)};
- if(!document)return context;
+ const identity=actor.userId?(await db.query<{kind:string}>("SELECT kind FROM users WHERE id=$1 AND (expires_at IS NULL OR expires_at>now())",[actor.userId])).rows[0]:null;
+ if(actor.userId&&(!identity||identity.kind==='guest'))throw new DatasetError('Sign in to change data',403);
+ if(identity?.kind==='testuser'&&!(await db.query("SELECT 1 FROM users WHERE id=$1 AND kind='testuser'",[dataset.user_id])).rows.length)throw new DatasetError('Test users may only act inside their sandbox',403);
+ if(!document){if(!identity&&!owns(dataset,actor))throw new DatasetError('Sign in to change data',403);return context;}
  const doc=(await db.query<ArtifactRow>('SELECT * FROM artifacts WHERE id=$1 AND deleted_at IS NULL',[document.id])).rows[0];
  if(!doc||doc.format!=='markup'||doc.edit_id!==document.editId||!(await readThrough(db,doc,actor)))throw new DatasetError('Document access or action changed',403);
  const tokenCreator=!doc.user_id&&owns(doc,actor);
- const identity=actor.userId?(await db.query<{kind:string}>("SELECT kind FROM users WHERE id=$1 AND (expires_at IS NULL OR expires_at>now())",[actor.userId])).rows[0]:null;
  if(!tokenCreator){
   if(!identity||identity.kind==='guest')throw new DatasetError('Sign in and join this artifact to use its actions',403);
   if(identity.kind==='testuser'&&!(await db.query("SELECT 1 FROM users WHERE id=$1 AND kind='testuser'",[doc.user_id])).rows.length)throw new DatasetError('Test users may only act inside their sandbox',403);

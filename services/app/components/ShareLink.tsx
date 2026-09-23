@@ -38,6 +38,7 @@ interface SharingState {
   shares: ShareEntry[];
   /** Datasets: the WRITE ACL and the documents that would stop working without it. */
   access?: DatasetAccess;
+  policyVersion?:number;
   writtenBy?: Array<{ id: string; title: string | null; mutations: string[] }>;
   /** False for an anonymous owner — `private` has no ACL to anchor without an account. */
   canPrivate?: boolean;
@@ -184,7 +185,7 @@ export default function ShareLink({
   const postgres = format === 'dataset' && (datasetKind === 'postgres' || state?.datasetKind === 'postgres');
   const writable = !postgres && state?.access === 'readwrite';
   const writers = state?.writtenBy ?? [];
-  const showWrites = format === 'dataset' && !!state && !postgres;
+  const showWrites = format === 'dataset' && !!state && !postgres && state.policyVersion!==2;
   const setAccess = (next: DatasetAccess) => {
     // Closing writes never touches the ROWS — every mutate call re-checks — but
     // it does stop the documents that write, so it says which ones first. With

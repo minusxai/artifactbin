@@ -9,7 +9,8 @@ New stored datasets allow public reads and mutations through their owner’s
 artefacts by default. Publish the dataset, reference it in a page’s saved
 `<Mutation>`, and invite people. Accepted members can run those actions; comments
 and replies depend on sharing permissions, not membership. Existing version 1
-policies keep their previous behaviour until explicitly upgraded.
+policies keep their previous behaviour until explicitly upgraded. Explicit legacy
+`--access` settings on creation retain version 1 behaviour; omit them for new grants.
 
 Use real account IDs in `user` columns and `$_me` for the current user. Never
 invent participant names or seed fake people. [User fields](databases-users.md)
@@ -125,3 +126,18 @@ Verify shared behaviour on a disposable test-user fork with `afbin testuser`,
 `afbin fork --as` and `afbin sessions`; see [live sessions](live-sessions.md).
 Check the owner, a pending recipient, an accepted member, and a member after
 leaving. A successful publish checks syntax and query shapes, not live actions.
+
+
+```sh
+afbin testuser new --json
+afbin fork abc123 --as tu_example --json
+afbin sessions script new --as tu_example --input member.js --json
+afbin sessions script new --input owner.js --json # you, on the same copy
+afbin testuser delete tu_example --json
+```
+
+A test user verifies a COPY, never that `abc123` works; nothing a test user does reaches
+the original. An action outside its sandbox returns `sandbox_only`.
+Run each write on the test-user fork. On the original, $_me writes must offer Sign in and change no data
+when checked as a guest. A Mutation can read only the stored table it writes;
+read membership with a Query, not a cross-table mutation subquery.
