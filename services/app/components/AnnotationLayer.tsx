@@ -974,8 +974,9 @@ export default function AnnotationLayer({
 
   // Notification links identify a comment; resolve it through the authorized
   // open/resolved indexes so replies open their containing conversation.
-  const [linkedComment] = useState(() => typeof window === 'undefined' ? null : new URLSearchParams(window.location.search).get('comment')??new URLSearchParams(window.location.search).get('thread'));
+  const linkedComment = typeof window === 'undefined' ? null : new URLSearchParams(window.location.search).get('comment')??new URLSearchParams(window.location.search).get('thread');
   const followedLink = useRef(false);
+  useEffect(()=>{followedLink.current=false;},[linkedComment,id]);
   useEffect(() => {
     if (!linkedComment || followedLink.current) return;
     const thread = [...annotations, ...(resolvedList ?? [])].find(a =>

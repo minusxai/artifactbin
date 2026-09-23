@@ -29,13 +29,13 @@ export function NotificationProvider({children}:{children:ReactNode}){
  const phone=useIsPhoneViewport();
  const close=useCallback(()=>setOpened(false),[]);
  const content=<NotificationPanel onClose={close}/>;
- return <NotificationContext.Provider value={{state,error,load,loadMore:async()=>{limit.current+=50;await load();},open:()=>setOpened(true)}}>{children}{opened&&user&&(phone?<MobileSheet label="Notifications" onClose={close}>{content}</MobileSheet>:<><button aria-label="Close notifications by clicking outside" className="fixed inset-0 z-[70] bg-black/10" onClick={()=>setOpened(false)}/><aside role="dialog" aria-modal="true" aria-label="Notifications" className="fixed right-3 top-14 z-[80] max-h-[80vh] w-96 max-w-[calc(100vw-24px)] overflow-auto rounded-xl border border-edge bg-surface p-4 shadow-xl">{content}</aside></>)}</NotificationContext.Provider>;
+ return <NotificationContext.Provider value={{state,error,load,close,loadMore:async()=>{limit.current+=50;await load();},open:()=>setOpened(true)}}>{children}{opened&&user&&(phone?<MobileSheet label="Notifications" onClose={close}>{content}</MobileSheet>:<><button aria-label="Close notifications by clicking outside" className="fixed inset-0 z-[70] bg-black/10" onClick={()=>setOpened(false)}/><aside role="dialog" aria-modal="true" aria-label="Notifications" className="fixed right-3 top-14 z-[80] max-h-[80vh] w-96 max-w-[calc(100vw-24px)] overflow-auto rounded-xl border border-edge bg-surface p-4 shadow-xl">{content}</aside></>)}</NotificationContext.Provider>;
 }
 function NotificationPanel({onClose}:{onClose:()=>void}){
  const panel=useRef<HTMLDivElement>(null);
  useDialogKeyboard(panel,onClose,'button:not([disabled]),a[href],input:not([disabled]),summary');
  useEffect(()=>{const previous=document.activeElement as HTMLElement|null;panel.current?.querySelector<HTMLButtonElement>('button')?.focus();return()=>{if(previous?.isConnected)previous.focus();};},[]);
- return <div ref={panel}><div className="mb-3 flex items-center justify-between"><h2 className="font-semibold">Notifications</h2><button aria-label="Close notifications" onClick={onClose} className="rounded-md p-2 hover:bg-raised"><X size={18}/></button></div><PeopleInbox compact/><a href="/account#notifications" className="mt-3 block text-xs text-muted hover:text-fg">Notification settings →</a></div>;
+ return <div ref={panel}><div className="mb-3 flex items-center justify-between"><h2 className="font-semibold">Notifications</h2><button aria-label="Close notifications" onClick={onClose} className="rounded-md p-2 hover:bg-raised"><X size={18}/></button></div><PeopleInbox compact/><a onClick={onClose} href="/account#notifications" className="mt-3 block text-xs text-muted hover:text-fg">Notification settings →</a></div>;
 }
 export function NotificationBell(){
  const value=useNotifications();const {session}=useSession();if(!value||session?.kind!=='account')return null;

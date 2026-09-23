@@ -29,6 +29,7 @@ it('shares one live inbox, acknowledges the visible revision, and restores bell 
  const latest=observers.at(-1)!;
  await act(async()=>{latest.callback([{target:latest.targets[0],isIntersecting:true,intersectionRatio:1} as IntersectionObserverEntry],{} as IntersectionObserver);});
  expect(fetch.mock.calls.some(([,init])=>init?.body===JSON.stringify({read:'n1',revision:8}))).toBe(false);
+ fireEvent.click(screen.getByRole('link',{name:/replied in/}));expect(screen.queryByRole('dialog')).toBeNull();
  expect(streams).toHaveLength(1);
 });
 it('removes account data and closes the live stream on sign-out',async()=>{

@@ -139,3 +139,14 @@ it('restarts a resolved indicator only for a new revision and cancels it on reop
  view.rerender(layer(frame,{showViewComments:true,liveAnnotations:[{...ANN,revision:4}]}));await flush();await flush();expect(screen.queryByRole('status')).toBeNull();
  act(()=>vi.advanceTimersByTime(12000));expect(screen.getByLabelText(/Open annotation conversation/)).toBeVisible();
 });
+
+it('opens a notification target when navigation changes the query on the same artefact',async()=>{
+ const {frame,postMessage}=makeFrame();const open=vi.fn();
+ const view=render(layer(frame,{onRailOpenChange:open}));await flush();await flush();
+ try{
+  window.history.replaceState(null,'',`?thread=${ANN.id}`);
+  view.rerender(layer(frame,{onRailOpenChange:open}));await flush();
+  expect(open).toHaveBeenCalledWith(true);
+  expect(posts(postMessage).at(-1).openId).toBe(ANN.id);
+ }finally{window.history.replaceState(null,'',window.location.pathname);}
+});

@@ -737,8 +737,8 @@ async function foldLeg(browser) {
   check(!!muted && muted.opacity > 0.4 && muted.opacity < 0.8,
     `the resolved card is muted rather than identical to an open one (opacity ${muted?.opacity})`);
   check(muted?.open === null || muted.open === 1, `an open card beside it stays at full opacity (${muted?.open})`);
-  check(await page.locator('[aria-label="Show resolved conversation"]').first().isVisible(),
-    'muted is not disabled: the resolved card still offers its conversation');
+  check(await page.locator('[aria-label="Hide resolved conversation"]').first().isVisible(),
+    'muted is not disabled: the resolved conversation remains open and dismissible');
   await ctx.close();
 }
 
