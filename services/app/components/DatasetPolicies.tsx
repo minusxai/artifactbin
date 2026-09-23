@@ -1,8 +1,10 @@
+import { DatasetGrants } from './DatasetGrants';
 import { useEffect, useState } from "react";
 import { parse as parseYaml } from "yaml";
-import { parseDatasetPolicy } from "@artifactbin/utils/dataset-policy";
+import { parseDatasetAccessPolicy } from "@artifactbin/utils/dataset-grants";
 import type {
-  DatasetPolicy,
+  DatasetAccessPolicy as DatasetPolicy,
+  ColumnType,
   DatasetTablePolicy,
   DatasetOperation,
   InsertPermission,
@@ -12,13 +14,14 @@ import type {
 import { Plus, ShieldCheck, Trash2 } from "lucide-react";
 import { Tooltip } from "@/components/Tooltip";
 import {
-  PolicyConditions,
+  PolicyConditions, PolicyPeopleContext,
   PolicyValueInput,
 } from "@/components/PolicyConditions";
 import { Button } from "@/components/ui";
 
-type Table = { schema: string; name: string; columns: Array<{ name: string }> };
+type Table = { schema: string; name: string; columns: Array<{ name: string; type?:ColumnType }> };
 type State = {
+  people?:Array<{user_id:string;username:string|null;name:string|null}>;
   canManage?: boolean;
   policy: DatasetPolicy | null;
   revision: number;
@@ -108,7 +111,7 @@ function DatasetPolicyEditor({ artifactId }: { artifactId: string }) {
     setNotice("");
     setError("");
   };
-  const selected = draft?.tables[tableIndex];
+  const selected = draft?.tables?.[tableIndex];
   const columns =
     state?.tables.find(
       (t) =>
@@ -117,7 +120,7 @@ function DatasetPolicyEditor({ artifactId }: { artifactId: string }) {
   const updateTable = (next: DatasetTablePolicy) =>
     change({
       ...draft!,
-      tables: draft!.tables.map((t, i) => (i === tableIndex ? next : t)),
+      tables: (draft!.tables ?? []).map((t, i) => (i === tableIndex ? next : t)),
     });
   const permission = (op: DatasetOperation) => {
     const stored = selected?.[`${op}_permissions`]?.find(
@@ -152,7 +155,7 @@ function DatasetPolicyEditor({ artifactId }: { artifactId: string }) {
     setSaving(true);
     setError("");
     try {
-      const policy = draft ? parseDatasetPolicy(draft) : null;
+      const policy = draft ? parseDatasetAccessPolicy(draft) : null;
       const response = await fetch(
         `/api/my/artifacts/${encodeURIComponent(artifactId)}/policy`,
         {
@@ -177,7 +180,7 @@ function DatasetPolicyEditor({ artifactId }: { artifactId: string }) {
   };
   const dirty = state && pretty(draft) !== pretty(state.policy);
   return (
-    <section aria-label="Access policies" className="space-y-6 text-sm">
+    <PolicyPeopleContext.Provider value={state?.people??[]}><section aria-label="Access policies" className="space-y-6 text-sm">
       <header className="flex flex-wrap items-start justify-between gap-4">
         <div className="max-w-xl">
           <h2 className="text-xl font-semibold tracking-tight">
@@ -233,7 +236,7 @@ function DatasetPolicyEditor({ artifactId }: { artifactId: string }) {
                 <Button
                   onClick={() => {
                     try {
-                      change(parseDatasetPolicy(parseYaml(source)));
+                      change(parseDatasetAccessPolicy(parseYaml(source)));
                       setSource(null);
                       setTableIndex(0);
                     } catch (e) {
@@ -254,6 +257,9 @@ function DatasetPolicyEditor({ artifactId }: { artifactId: string }) {
             draft && (
               <div className="grid min-w-0 items-start gap-6 lg:grid-cols-[minmax(0,1fr)_260px]">
                 <div className="min-w-0 space-y-4">
+                  {draft.version===2&&<DatasetGrants value={draft} onChange={change}/>}
+                  {draft.version===2&&draft.tables===undefined&&<div className="space-y-2"><p className="text-xs text-muted">Granted mutations can change all rows and columns.</p><Button variant="ghost" onClick={()=>change({...draft,tables:state.tables.map(t=>({table:{schema:t.schema,name:t.name}}))})}>Add row and column restrictions</Button></div>}
+                  {draft.version===2&&draft.tables!==undefined&&<Button variant="ghost" onClick={()=>{const {tables:_,...next}=draft;change(next);}}>Remove row and column restrictions</Button>}
                   <label className="flex flex-wrap items-center gap-3">
                     <span className="text-xs font-medium text-muted">
                       Rules for table
@@ -264,7 +270,7 @@ function DatasetPolicyEditor({ artifactId }: { artifactId: string }) {
                       value={tableIndex}
                       onChange={(e) => setTableIndex(Number(e.target.value))}
                     >
-                      {draft.tables.map((t, i) => (
+                      {(draft.tables ?? []).map((t, i) => (
                         <option
                           key={`${t.table.schema}.${t.table.name}`}
                           value={i}
@@ -385,7 +391,7 @@ function DatasetPolicyEditor({ artifactId }: { artifactId: string }) {
           </footer>
         </>
       )}
-    </section>
+    </section></PolicyPeopleContext.Provider>
   );
 }
 

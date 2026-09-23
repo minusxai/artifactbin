@@ -1,181 +1,127 @@
 ---
 name: apps
-description: >-
-  An app several people use: account-backed rows, joining by link, a guest door and writes that are tested before handover.
+description: Shared apps with dataset grants, accepted members, mentions and recipient checks.
 order: 1
 ---
 ## Read first
 
-"Shared with my friends", "one row per person", "who paid", "RSVP", "vote" — the
-request is an APP, not a document. Its shape is fixed: an EMPTY stored dataset
-with `user` columns, a page that writes to it, and every person carried as their
-ACCOUNT. Never a typed name, never a seeded person, never a "Me" row.
+New stored datasets allow public reads and mutations through their owner’s
+artefacts by default. Publish the dataset, reference it in a page’s saved
+`<Mutation>`, and invite people. Accepted members can run those actions; comments
+and replies depend on sharing permissions, not membership. Existing version 1
+policies keep their previous behaviour until explicitly upgraded.
 
-[User fields](databases-users.md) is the grammar; this is one whole app, once.
+Use real account IDs in `user` columns and `$_me` for the current user. Never
+invent participant names or seed fake people. [User fields](databases-users.md)
+explains column constraints.
 
-## Contents
-
-The dataset · The page · Three mistakes · Verifying with test users.
-
-## The dataset: declared columns, no rows
-
-A sheet the people using the page fill in later publishes EMPTY. Save the
-definition as `tab.jsx` — it is not your page:
-
-```jsx
-<Dataset kind="stored">
-  <Table schema="public" name="members" rows={[]}
-    columns={[{"name":"person","type":"user","constraints":{"self":true}}]} />
-  <Table schema="public" name="expenses" rows={[]}
-    columns={[{"name":"id","type":"string"},
-              {"name":"paid_by","type":"user","constraints":{"self":true}},
-              {"name":"spent_on","type":"date"},
-              {"name":"item","type":"string"},
-              {"name":"amount","type":"number"}]} />
-</Dataset>
-```
-
-`self: true` on the column that records WHO did it: the server refuses any other
-account there, so a row cannot be filed under someone else. Save `tab.yaml`
-beside it:
-
-```yaml
-type: dataset
-title: Trip tab
-source: tab.jsx
-access: readwrite
-```
+## Build and invite
 
 ```sh
-afbin push tab.yaml --policy viewers-write --yes --json
+afbin push tasks.csv --type dataset --json
+afbin push board.jsx --json
+afbin invite <board-ref> @alex @sam --json
+afbin members <board-ref> --json
 ```
 
-`--policy viewers-write` is the difference between "my friends can read it" and
-"my friends can use it": without it only people you shared it with as editors
-write. Use the returned dataset id in place of `tab123` below.
+People → Add people is the same UI operation. A recipient who follows the sender
+joins immediately unless they disabled automatic acceptance in Account → People
+& notifications. Mutual follows qualify; following the recipient yourself does
+not. Otherwise the invitation stays pending, labelled Pending, until accepted.
+Private artefacts must be shared with the recipient first.
 
-## The page
+Owners and editors can join immediately. Other readers request approval:
 
-Joining is an ordinary app action: a Button inserts `$_me` into `public.members`.
-The table name and button label are yours. The owner joins the same way as anyone
-else. Likes are social feedback and do not change these rows or grant access.
+```sh
+afbin join <board-ref> --json
+afbin members <board-ref> approve <user-id> --json
+afbin members <board-ref> accept --json
+afbin members <board-ref> dismiss --json
+afbin members <board-ref> leave --json
+```
+
+There is one relationship per person and artefact. Joining does not grant edit or
+comment permission. Pending members cannot run persistent data actions. Filters,
+local table controls and reads do not require joining. Each sender, including all
+agents acting for them, has at most 30 outstanding pending invitations/requests.
+Accepting, declining or withdrawing frees a slot.
+
+## Show members
+
+`_members` is the read-only table of accepted members of the current artefact.
+It has `user_id` and `joined_at`; it never includes pending invitations. Do not
+create a dataset table or a mutation to implement joining.
 
 ```jsx
 <Helmet>
-  <Value name="person" type="user" url={false} />
-  <Value name="item" type="string" url={false} />
-  <Value name="amount" type="number" url={false} />
-  <Value name="spent_on" type="date" url={false} />
-  <Query name="members" source="ref:tab123">{`
-    select person from public.members order by person
-  `}</Query>
-  <Mutation name="join" source="ref:tab123">{`
-    insert into public.members (person) select $_me
-    where not exists (select 1 from public.members where person = $_me)
-  `}</Mutation>
-  <Query name="tab" source="ref:tab123">{`
-    select id, spent_on, item, amount, paid_by from public.expenses
-    order by spent_on desc
-  `}</Query>
-  <Query name="balances">{`
-    select p.person, coalesce(sum(e.amount), 0)
-      - (select coalesce(sum(amount), 0) from tab)
-        / nullif((select count(*) from members), 0) as net
-    from members p left join tab e on e.paid_by = p.person
-    where $person is null or p.person = $person
-    group by p.person order by net desc
-  `}</Query>
-  <Query name="participant">{`
-    select person from members where person = $_me
-  `}</Query>
-  <Mutation name="add" source="ref:tab123" reset="item amount spent_on" expectedAffected={1}>{`
-    insert into public.expenses (id, paid_by, spent_on, item, amount)
-    select uuid(), $_me, coalesce($spent_on, current_date), $item, $amount
-    where $_row.person = $_me and length(trim($item)) > 0 and $amount > 0
-  `}</Mutation>
+  <Query name="members">{`select user_id, joined_at from _members`}</Query>
 </Helmet>
-<main className="mx-auto max-w-2xl space-y-6 p-8">
-  <h1>Trip tab</h1>
-  {$_me ? <p>You are <User userId="$_me" />. Join this tab to take part.</p>
-        : <SignIn>Sign in to join this tab</SignIn>}
-  {$_me ? <Button run="$join">Join tab</Button> : null}
-  <Select label="Person filter" value="$person" options="$members" placeholder="Everyone" />
-  <DataTable data="$balances" rowKey="person">
-    <Column col="person" title="Person"><User userId="$_row.person" /></Column>
-    <Column col="net" title="Net" fmt="$,.2f" align="right" />
-  </DataTable>
-  {$_me ? <Card><CardContent className="space-y-3 p-4">
-      <Input value="$item" label="What was it?" />
-      <Input value="$amount" type="number" label="Amount" />
-      <DatePicker value="$spent_on" label="Spent on (blank = today)" />
-      <For each={$participant} keyBy="person"><Button run="$add">Add expense</Button></For>
-    </CardContent></Card> : null}
-  <DataTable data="$tab" />
-</main>
+<DataTable data="$members" rowKey="user_id">
+  <Column col="user_id"><User userId="$_row.user_id" /></Column>
+  <Column col="joined_at" title="Joined" />
+</DataTable>
 ```
 
-The Join insert reads its own table to prevent duplicate rows, including repeat
-clicks. `members` drives the balances, participant action, and dropdown options.
-An explicit `options="$members"` supplies the user IDs; their visible names come
-from the people already returned with the query. Joining grants no platform
-permissions: the dataset's write policy still decides who can write.
+## Mention someone
 
-The expense button appears for a row of `participant`. This is app UI, not an
-access rule: the server checks the row shape and enforces `self` and the dataset
-policy. Its SQL also rejects empty descriptions and nonpositive
-amounts. `expectedAffected={1}` makes a rejected insert an error, not a silent
-success. Input placeholders are hints, never submitted values. Here an unset
-date means today, as the label explains; choosing a date overrides it.
+Type `@username` in a comment and select the person. In the document editor,
+select the text, choose Mention person, then select the username. Saving the
+document or posting the comment sends the notification. Typing alone does not.
 
-`$_me` is the signed-in account, or null. A mutation using it automatically
-offers Sign in to a guest; server checks still refuse a direct guest write.
-`<User userId="…" />` can display known people from the rows returned to the reader. `id` always names the source node, never a person.
-
-## Three mistakes to skip
-
-1. **Typed names.** A `person` column of strings, or a `<Select>` of names you
-   invented, cannot tell two Alices apart, cannot say who is reading, and
-   refuses nobody. Use `type="user"` and `$_me`.
-2. **Seed rows.** A row invented to make the table look alive is a fake person
-   in a real list — and an empty stored `<Table>` with declared `columns` is
-   accepted, so there is nothing to work around.
-3. **A flag left in the link.** A draft or scratch `<Value>` without
-   `url={false}` is copied into the URL a reader shares, and arrives as somebody
-   else's half-finished input.
-
-## Verifying with test users
-
-A push proves the markup and the read queries; it proves NOTHING about a button.
-An app needs two people; the second is a TEST USER: a throwaway person your
-account mints (three at a time, gone in a day) and erases whole.
+Agents select the same eligible recipients:
 
 ```sh
-afbin testuser new --json                    # id, label, expiry
-afbin fork abc123 --as tu_9fA2b --json       # the copy is that person's
-afbin sessions script new --as tu_9fA2b --input join.js --json
-afbin sessions script new --input check.js --json   # you, same copy
-afbin testuser delete tu_9fA2b --json        # erases it and all it made
+afbin mention <board-ref> @alex --json
 ```
 
-Forking copies the datasets the page WRITES under the new owner — rows, columns,
-access and write policy — and repoints the page at those copies; datasets it
-only reads keep their `ref:`, because copying a live source would freeze it.
+This returns stable-ID `markdown` for a comment and `markup` for a document. Put
+the returned fragment in the comment/document, then post/push it. Resolution
+itself sends nothing. Autocomplete and the server allow only recipients who
+follow the sender or already belong to that artefact, excluding blocks.
 
-**The realism gap.** A test user verifies a COPY of your artifact. A clean pass
-proves that an artifact with this markup and these dataset policies works for
-two people — never that `abc123` works — and nothing a test user does reaches
-the original, its datasets or any account's rows. Fix the source, push, fork
-again.
+A new mention invites a non-member; an accepted member gets a normal mention.
+Repeated saves do not notify again, and further tags while pending reuse the
+invitation. Rendering `<User>`, importing IDs, and forking never send mentions.
+An agent uses the human’s eligibility, preferences and 30-request limit.
 
-**What a test user cannot do.** On an artifact an account owns it is exactly a
-guest: it reads what the link grants and nothing else — no `$_me` write, like,
-follow, comment or fork. That refusal is `sandbox_only`, and the answer is never
-to press Join again on the real page: fork it to the test user and use the copy.
+## Dataset rules
 
-Run each write on the test-user fork, once as its test user and once as yourself.
-On the original page, check each action `--as guest` ([live sessions](live-sessions.md)):
-$_me writes must offer Sign in and change no data. Check other actions against their intended permissions.
-Do not run successful test writes on the original page. Fix, push and fork again until every pass is clean.
+The new default policy is:
 
-A Mutation can read only the stored table it writes; a second stored table is not available.
-Put cross-table reads in Queries and bind their results to the action.
+```json
+{"version":2,"allow":[
+  {"actions":["read"],"from":{"user":"*"}},
+  {"actions":["insert","update","delete"],"from":{"artifactOwner":"$owner"}}
+]}
+```
+
+`from.user` matches the acting user; `from.artifact` matches a saved artefact ID;
+`from.artifactOwner` matches its owner. Use a stable ID, `*`, or `$owner` (the
+dataset owner; not valid for `artifact`). Multiple selectors in one rule all
+have to match. Any matching rule grants its actions. The artefact context is
+server-derived, never a caller-supplied impersonation flag.
+
+Examples: `{"user":"$owner"}` allows the owner directly;
+`{"user":"usr_alex"}` allows Alex; `{"artifact":"abc123"}` allows one
+artefact; `{"artifact":"*"}` allows all artefacts. Artefact mutations still
+require accepted membership. `allow: []` locks reads and writes; administration
+remains available to owners/editors. Private sharing remains an audience ceiling
+for reads. Grant changes are revision-checked and apply at mutation commit.
+
+Pull a dataset’s settings to edit its policy:
+`afbin pull <id> --type dataset --output tasks.yaml`. Optional `tables` restrictions
+use the existing column/filter/check grammar and further restrict grants.
+Omitting `tables` leaves granted writes unrestricted; `tables: []` denies writes.
+Connected Postgres datasets remain read-only.
+
+## Fork and verify
+
+Forks copy stored datasets they write, including the owner’s own datasets, and
+remap references and artefact-specific grants. Public read-only references stay
+shared. Restricted dependencies are copied only when the forker can read them.
+No memberships or notifications are copied; the new owner starts as a member.
+
+Verify shared behaviour on a disposable test-user fork with `afbin testuser`,
+`afbin fork --as` and `afbin sessions`; see [live sessions](live-sessions.md).
+Check the owner, a pending recipient, an accepted member, and a member after
+leaving. A successful publish checks syntax and query shapes, not live actions.

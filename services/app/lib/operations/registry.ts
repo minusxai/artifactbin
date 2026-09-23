@@ -1,3 +1,4 @@
+import { MEMBERSHIP_OPERATIONS } from './membership';
 import {createHash} from 'node:crypto';
 import {queryResourceForRequest} from '@/lib/resource-query';
 import type {MutationReceipt} from '@/lib/mutation-receipt';
@@ -713,7 +714,7 @@ const queryResourceOp:Operation={
 };
 
 export const OPERATIONS: Operation[] = [
-  ...DATASET_OPERATIONS,...ACCOUNT_OPERATIONS,...SESSION_OPERATIONS,...BROWSER_SESSION_OPERATIONS,...TESTUSER_OPERATIONS,queryResourceOp,
+  ...MEMBERSHIP_OPERATIONS,...DATASET_OPERATIONS,...ACCOUNT_OPERATIONS,...SESSION_OPERATIONS,...BROWSER_SESSION_OPERATIONS,...TESTUSER_OPERATIONS,queryResourceOp,
   createArtifactOp, updateArtifactOp, editArtifactOp, forkArtifactOp, getArtifactOp, listArtifactsOp,
   listVersionsOp, getVersionOp, updateMetadataOp, revertArtifactOp, deleteArtifactOp, restoreArtifactOp, annotateOp, getDatasetPolicyOp, setDatasetPolicyOp, mutateDatasetOp,
   exportArtifactOp, refreshAssetOp,

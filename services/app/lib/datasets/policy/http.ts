@@ -1,3 +1,4 @@
+import {getDb} from '@/lib/db';
 import {
   getArtifactFor,
   getSharingFor,
@@ -15,6 +16,7 @@ export async function readDatasetPolicy(
   if (!row || row.format !== 'dataset')
     return json({ error: 'not_found' }, 404);
   return json({
+    people:(await (await getDb()).query<{user_id:string;username:string|null;name:string|null}>(`SELECT id AS user_id,username,name FROM users u WHERE id=$1 OR EXISTS(SELECT 1 FROM relations r WHERE r.verb='follow' AND r.subject_kind='user' AND r.object_kind='user' AND r.deleted_at IS NULL AND ((r.subject_id=u.id AND r.object_id=$1)OR(r.object_id=u.id AND r.subject_id=$1))) ORDER BY username LIMIT 100`,[actor.userId])).rows,
     canManage: true,
     policy: row.dataset_policy ?? null,
     revision: row.policy_revision ?? 0,

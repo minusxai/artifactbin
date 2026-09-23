@@ -32,6 +32,76 @@ create unique index "account_issuer_accountId_uidx" on "auth"."account" ("issuer
 
 -- schema "app" — owned by the app role; tables declared by lib/schema.ts
 
+CREATE TABLE IF NOT EXISTS app.artifact_members (
+  artifact_id TEXT NOT NULL,
+  user_id TEXT NOT NULL,
+  status TEXT NOT NULL,
+  direction TEXT NOT NULL,
+  initiated_by TEXT NOT NULL,
+  joined_at TIMESTAMPTZ,
+  revision INTEGER NOT NULL DEFAULT 1,
+  PRIMARY KEY (artifact_id, user_id)
+);
+
+ALTER TABLE app.artifact_members ADD COLUMN IF NOT EXISTS artifact_id TEXT NOT NULL;
+
+ALTER TABLE app.artifact_members ADD COLUMN IF NOT EXISTS user_id TEXT NOT NULL;
+
+ALTER TABLE app.artifact_members ADD COLUMN IF NOT EXISTS status TEXT NOT NULL;
+
+ALTER TABLE app.artifact_members ADD COLUMN IF NOT EXISTS direction TEXT NOT NULL;
+
+ALTER TABLE app.artifact_members ADD COLUMN IF NOT EXISTS initiated_by TEXT NOT NULL;
+
+ALTER TABLE app.artifact_members ADD COLUMN IF NOT EXISTS joined_at TIMESTAMPTZ;
+
+ALTER TABLE app.artifact_members ADD COLUMN IF NOT EXISTS revision INTEGER NOT NULL DEFAULT 1;
+
+CREATE INDEX IF NOT EXISTS idx_members_pending_initiator ON app.artifact_members (initiated_by) WHERE status = 'pending';
+
+CREATE TABLE IF NOT EXISTS app.member_notifications (
+  id TEXT NOT NULL,
+  artifact_id TEXT NOT NULL,
+  user_id TEXT NOT NULL,
+  recipient_id TEXT NOT NULL,
+  sender_id TEXT NOT NULL,
+  kind TEXT NOT NULL,
+  source TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  read_at TIMESTAMPTZ,
+  PRIMARY KEY (id)
+);
+
+ALTER TABLE app.member_notifications ADD COLUMN IF NOT EXISTS id TEXT NOT NULL;
+
+ALTER TABLE app.member_notifications ADD COLUMN IF NOT EXISTS artifact_id TEXT NOT NULL;
+
+ALTER TABLE app.member_notifications ADD COLUMN IF NOT EXISTS user_id TEXT NOT NULL;
+
+ALTER TABLE app.member_notifications ADD COLUMN IF NOT EXISTS recipient_id TEXT NOT NULL;
+
+ALTER TABLE app.member_notifications ADD COLUMN IF NOT EXISTS sender_id TEXT NOT NULL;
+
+ALTER TABLE app.member_notifications ADD COLUMN IF NOT EXISTS kind TEXT NOT NULL;
+
+ALTER TABLE app.member_notifications ADD COLUMN IF NOT EXISTS source TEXT;
+
+ALTER TABLE app.member_notifications ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT now();
+
+ALTER TABLE app.member_notifications ADD COLUMN IF NOT EXISTS read_at TIMESTAMPTZ;
+
+CREATE INDEX IF NOT EXISTS idx_member_notifications_recipient ON app.member_notifications (recipient_id, created_at);
+
+CREATE TABLE IF NOT EXISTS app.user_blocks (
+  user_id TEXT NOT NULL,
+  blocked_user_id TEXT NOT NULL,
+  PRIMARY KEY (user_id, blocked_user_id)
+);
+
+ALTER TABLE app.user_blocks ADD COLUMN IF NOT EXISTS user_id TEXT NOT NULL;
+
+ALTER TABLE app.user_blocks ADD COLUMN IF NOT EXISTS blocked_user_id TEXT NOT NULL;
+
 CREATE TABLE IF NOT EXISTS app.comment_images (
   id TEXT NOT NULL,
   artifact_id TEXT NOT NULL,
@@ -252,6 +322,7 @@ CREATE TABLE IF NOT EXISTS app.users (
   name TEXT,
   username TEXT,
   image_key TEXT,
+  auto_accept_mentions BOOLEAN NOT NULL DEFAULT true,
   welcome_pending BOOLEAN NOT NULL DEFAULT false,
   password_hash TEXT,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -277,6 +348,8 @@ ALTER TABLE app.users ADD COLUMN IF NOT EXISTS name TEXT;
 ALTER TABLE app.users ADD COLUMN IF NOT EXISTS username TEXT;
 
 ALTER TABLE app.users ADD COLUMN IF NOT EXISTS image_key TEXT;
+
+ALTER TABLE app.users ADD COLUMN IF NOT EXISTS auto_accept_mentions BOOLEAN NOT NULL DEFAULT true;
 
 ALTER TABLE app.users ADD COLUMN IF NOT EXISTS welcome_pending BOOLEAN NOT NULL DEFAULT false;
 

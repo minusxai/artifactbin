@@ -1,3 +1,4 @@
+import {personMention} from '../lib/person-mentions';
 import {remoteMention} from '../lib/remote-reply';
 import { forwardRef, useEffect, useImperativeHandle, useState } from "react";
 import { Check, Copy, X } from "lucide-react";
@@ -6,13 +7,16 @@ import {REMOTE_COLOR_CSS,remoteColor,type RemoteSessionInfo } from "../../contra
 const connectionRequest = "Connect to afbin remote so I can @mention you in artifact comments.";
 export interface MentionPickerHandle { keyDown: (key: string) => boolean }
 const agentLabel = (name: string) => (({ claude: "Claude Code", codex: "Codex", pi: "Pi", opencode: "OpenCode" } as Record<string, string>)[name] ?? name);
-export default forwardRef<MentionPickerHandle, { query: string; onSelect: (text: string) => void }>(function RemoteMentionPicker({
-  query,
+export default forwardRef<MentionPickerHandle, { query: string; artifactId?:string; onSelect: (text: string) => void }>(function RemoteMentionPicker({
+  query, artifactId,
   onSelect,
 }: {
   query: string;
+  artifactId?:string;
   onSelect: (text: string) => void;
 }, ref) {
+  const [people,setPeople]=useState<Array<{user_id:string;username:string;name:string|null}>>([]);
+  useEffect(()=>{if(!artifactId)return;const abort=new AbortController();void fetch(`/api/my/artifacts/${encodeURIComponent(artifactId)}/members?query=${encodeURIComponent(query)}`,{signal:abort.signal}).then(r=>r.ok?r.json():{people:[]}).then(r=>setPeople(r.people??[])).catch(()=>{});return()=>abort.abort();},[artifactId,query]);
   const [sessions, setSessions] = useState<RemoteSessionInfo[]>([]);
   const [active, setActive] = useState(0);
   useEffect(() => setActive(0), [query]);
@@ -63,12 +67,13 @@ export default forwardRef<MentionPickerHandle, { query: string; onSelect: (text:
   );
   const choose = (s: RemoteSessionInfo) => onSelect(remoteMention(s));
   useImperativeHandle(ref, () => ({ keyDown(key) {
-    if (!matches.length) return false;
+    const count=people.length+matches.length;
+    if (!count) return false;
     if (key === "ArrowDown" || key === "ArrowUp") {
-      setActive(i => (i + (key === "ArrowDown" ? 1 : matches.length - 1)) % matches.length);
+      setActive(i => (i + (key === "ArrowDown" ? 1 : count - 1)) % count);
       return true;
     }
-    if (key === "Enter" || key === "Tab") { choose(matches[active % matches.length]); return true; }
+    if (key === "Enter" || key === "Tab") { const index=active%count;if(index<people.length)onSelect(personMention(people[index]));else choose(matches[index-people.length]); return true; }
     return false;
   }}));
   return (
@@ -76,14 +81,15 @@ export default forwardRef<MentionPickerHandle, { query: string; onSelect: (text:
       aria-label="Agent sessions"
       className="mb-2 overflow-hidden rounded-lg border border-edge bg-surface p-1.5 text-sm shadow-lg"
     >
+      {artifactId&&<><p className="px-2 py-1.5 text-xs text-muted">Mention a person</p>{people.map((p,i)=><button key={p.user_id} type="button" aria-label={`Mention @${p.username}`} className={`block w-full rounded-md px-2 py-2 text-left ${i===active?'bg-accent-soft':'hover:bg-bg'}`} onMouseDown={e=>e.preventDefault()} onMouseEnter={()=>setActive(i)} onClick={()=>onSelect(personMention(p))}>@{p.username}<span className="ml-2 text-xs text-muted">{p.name}</span></button>)}{!people.length&&<p className="px-2 py-1 text-xs text-muted">No matching followers or members.</p>}</>}
       <p className="px-2 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted">Mention an agent</p>
       {matches.map((s, index) => (
         <div key={s.id} className="flex items-center">
         <button
           type="button"
           aria-label={`Mention ${s.name} (${s.harness})`}
-          className={`flex min-w-0 flex-1 items-center gap-2.5 rounded-md px-2 py-2 text-left transition-colors ${index === active ? "bg-accent-soft" : "hover:bg-bg"}`}
-          onMouseEnter={() => setActive(index)}
+          className={`flex min-w-0 flex-1 items-center gap-2.5 rounded-md px-2 py-2 text-left transition-colors ${index+people.length === active ? "bg-accent-soft" : "hover:bg-bg"}`}
+          onMouseEnter={() => setActive(index+people.length)}
           onMouseDown={(e) => e.preventDefault()}
           onClick={() => choose(s)}
         >

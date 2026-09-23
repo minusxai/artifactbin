@@ -2,7 +2,7 @@ import { useState } from "react";
 import { afterEach, expect, it } from "vitest";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import type { PolicyPredicate } from "@artifactbin/contracts";
-import { PolicyConditions } from "../PolicyConditions";
+import { PolicyConditions, PolicyValueInput } from "../PolicyConditions";
 afterEach(cleanup);
 function Editor({ initial }: { initial: PolicyPredicate }) {
   const [value, setValue] = useState(initial);
@@ -57,4 +57,11 @@ it("can populate an empty Not group loaded from policy source", () => {
   render(<Editor initial={{ _not: {} }} />);
   fireEvent.click(screen.getByLabelText("Add rows.1 empty condition"));
   expect(result()).toEqual({ _not: { quantity: { _eq: "" } } });
+});
+
+it('uses a boolean selector and preserves the boolean type',()=>{
+ let value:unknown;
+ render(<PolicyValueInput label="Enabled value" type="boolean" value={true} onChange={v=>{value=v;}}/>);
+ fireEvent.change(screen.getByRole('combobox',{name:'Enabled value'}),{target:{value:'false'}});
+ expect(value).toBe(false);
 });

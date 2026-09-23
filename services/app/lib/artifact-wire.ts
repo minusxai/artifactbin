@@ -1,3 +1,5 @@
+import {MembershipError} from './membership';
+import {grantsOf} from './datasets/policy/grants';
 import {RemoteError} from './remote/registry';
 import type {ReviewReceipt} from './remote/agents';
 import type {MutationReceipt} from './mutation-receipt';
@@ -749,7 +751,7 @@ export async function respondToAnnotationAction(
   if (!action) return json({ error: 'invalid_annotation_action' }, 400);
   let wire;
   try{wire = await actOnAnnotationFor(actor, id, annId, action, author,receipt,review);}
-  catch(error){if(error instanceof RemoteError)return json({error:'remote_review_refused',message:error.message},error.status);throw error;}
+  catch(error){if(error instanceof MembershipError)return json({error:'mention_refused',detail:error.message},error.status);if(error instanceof RemoteError)return json({error:'remote_review_refused',message:error.message},error.status);throw error;}
   if (!wire) return json({ error: 'not_found' }, 404);
   if (action.reply && author.kind === 'human') notifyRemoteComment(actor.userId, id, annId, wire.thread[wire.thread.length - 1]);
   return json(wire);
@@ -804,7 +806,8 @@ export async function respondToMutate(
   receipt?:MutationReceipt,
 ): Promise<Response> {
   if (body && typeof body.name === 'string') return respondToDeclaredMutation(actor, id, body, receipt);
-  const dataset = await getArtifactFor(actor, id);
+  const found = await getArtifactById(id);
+  const dataset = found&&grantsOf(found)?found:await getArtifactFor(actor,id);
   if (!dataset) return json({ error: 'not_found' }, 404);
 
   const refusal = await canWriteDataset(dataset, actor);

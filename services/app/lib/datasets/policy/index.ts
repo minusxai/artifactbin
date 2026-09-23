@@ -1,10 +1,12 @@
+import { grantMutationPolicy } from '@artifactbin/utils';
+import { grantsOf, grantContext, grantsPermitWrite, type GrantDocument } from './grants';
 import {validateDatasetPolicyForRow} from './validation';
 import { policySession, viewerMutationPolicy } from './viewer-policy';
 import type {
-  DatasetPolicy,
+  DatasetAccessPolicy as DatasetPolicy,
   DatasetMutationPolicy,
 } from '@artifactbin/contracts';
-import { parseDatasetPolicy } from '@artifactbin/utils';
+import { parseDatasetAccessPolicy } from '@artifactbin/utils';
 import { getDb } from '@/lib/db';
 import {
   editorScope,
@@ -33,7 +35,7 @@ export async function canUseDataPolicy(
 ): Promise<boolean> {
   if (!dataset.dataset_policy) return false;
   try {
-    parseDatasetPolicy(dataset.dataset_policy);
+    parseDatasetAccessPolicy(dataset.dataset_policy);
   } catch {
     return false;
   }
@@ -90,10 +92,16 @@ export async function mutationPolicy(
   dataset: ArtifactRow,
   actor: RoleActor,
   table: { schema: string; name: string },
-  declared: boolean,
+  declared: boolean | GrantDocument,
 ): Promise<DatasetMutationPolicy | undefined> {
   if (!dataset.dataset_policy) return undefined;
-  const policy = parseDatasetPolicy(dataset.dataset_policy);
+  const policy = parseDatasetAccessPolicy(dataset.dataset_policy);
+  if(policy.version===2){
+    const context=await grantContext(dataset,actor,typeof declared==='object'?declared:undefined);
+    const selected=grantMutationPolicy(policy,context,table,policySession(actor.userId));
+    if(!selected)throw new Error('No policy permits writes to this table');
+    return selected;
+  }
   if (
     !declared &&
     !(await getArtifactFor(
@@ -122,6 +130,10 @@ export async function recheckMutation(
   document?: MutationDocument,
 ): Promise<ArtifactRow> {
   const current = await getArtifactById(dataset.id);
+  if(current && grantsOf(current)){
+    if((current.policy_revision??0)!==(dataset.policy_revision??0)||!(await grantsPermitWrite(current,actor,document)))throw new Error('Mutation permission changed');
+    return current;
+  }
   if (
     !current ||
     (current.policy_revision ?? 0) !== (dataset.policy_revision ?? 0) ||

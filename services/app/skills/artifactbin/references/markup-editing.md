@@ -7,8 +7,8 @@ order: 2
 ## Read first
 
 Use `<DataTable>` with `<Column>` children to render one template per row.
-A control's `run="$mutation"` saves its cell. Push your dataset with `--access readwrite`
-([datasets](publishing-datasets.md)); see [data](markup-data.md) for queries and controls.
+A control's `run="$mutation"` saves its cell. New datasets permit actions through their owner’s artefacts for accepted members. Legacy datasets use `--access readwrite`
+([datasets](databases.md)); see [data](markup-data.md) for queries and controls.
 
 [User fields](databases-users.md).
 

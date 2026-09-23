@@ -47,6 +47,8 @@ identity fields in an existing report's YAML fence when editing it; publish the
 report with `afbin push report.jsx --yes --json`. CSV infers ordinary columns;
 the Dataset definition above declares native user types and constraints.
 
+For accepted app participants, query `_members` in the document; see [apps](apps.md). The legacy column constraint below still means explicit sharing, not joining.
+
 `memberOf` is always a nonempty array of unique references. Membership in ANY
 listed document is sufficient; other constraints combine with AND. Eligible
 members are its owner and registered users explicitly shared on it, including

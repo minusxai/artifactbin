@@ -1,0 +1,14 @@
+import {useEffect,useState} from 'react';
+import {Button} from './ui';
+type Inbox={autoAccept:boolean;notifications:Array<{id:string;artifact_id:string;sender_id:string;username:string|null;kind:string;source:string|null;title:string|null;read_at:string|null}>;blocks:Array<{user_id:string;username:string|null}>};
+export function PeopleInbox(){
+ const [state,setState]=useState<Inbox|null>(null),[error,setError]=useState(''),[busy,setBusy]=useState(false);
+ async function load(input?:object){setBusy(true);setError('');try{const res=await fetch('/api/my/people',input?{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify(input)}:undefined);const data=await res.json();if(!res.ok)throw Error(data.error??'Could not load notifications');setState(data);}catch(e){setError(e instanceof Error?e.message:'Could not load notifications');}finally{setBusy(false);}}
+ useEffect(()=>{void load();},[]);
+ return <section aria-label="People and notifications" className="space-y-4 rounded-xl border border-edge bg-surface p-5"><h2 className="font-medium">People & notifications</h2>{error&&<p role="alert" className="text-sm text-danger">{error}</p>}{state&&<>
+  <label className="flex items-start gap-3 text-sm"><input className="mt-1" type="checkbox" checked={state.autoAccept} disabled={busy} onChange={e=>void load({autoAccept:e.target.checked})}/><span>Automatically accept invitations from people I follow.<span className="mt-1 block text-xs leading-5 text-muted">Otherwise, you can accept or decline each invitation.</span></span></label>
+  {!state.notifications.length&&<p className="text-sm text-muted">You’re all caught up.</p>}
+  <ul className="divide-y divide-edge">{state.notifications.map(n=><li key={n.id} className="space-y-2 py-3"><a className={`block text-sm hover:text-accent ${n.read_at?'text-muted':'text-fg'}`} href={`/a/${n.artifact_id}${n.source?.startsWith('node:')?`#${n.source.slice(5)}`:n.source?.startsWith('comment:')?`?comment=${n.source.slice(8)}`:''}`} onClick={()=>void load({read:n.id})}>@{n.username??'someone'} {n.kind==='request'?'asked to join':n.kind==='invitation'?'invited you to':n.kind==='joined'?'added you to':'mentioned you in'} <strong>{n.title??'Untitled artefact'}</strong></a><Button variant="ghost" disabled={busy} onClick={()=>void load({block:n.sender_id})}>Block @{n.username??'sender'}</Button></li>)}</ul>
+  {!!state.blocks.length&&<details><summary className="cursor-pointer text-xs text-muted">Blocked people</summary>{state.blocks.map(b=><div className="mt-2 flex items-center justify-between" key={b.user_id}><span className="text-sm">@{b.username??b.user_id}</span><Button variant="ghost" disabled={busy} onClick={()=>void load({unblock:b.user_id})}>Unblock</Button></div>)}</details>}
+ </>}</section>;
+}

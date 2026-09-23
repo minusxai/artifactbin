@@ -405,3 +405,28 @@ only authenticate and translate results. Reserved and ordinary creates share one
 namespace. Claims must belong to the authenticated account and commit with the
 artifact transaction. Consumed IDs are never recycled. CLI write protocol 2
 requires updating clients and hosts together.
+
+
+## Dataset grants and artefact people
+
+New stored datasets use version 2 grants: public reads and mutations through the
+owner’s artefacts. `from` selectors are conjunctive; `allow` rules are additive.
+The shared parser/evaluator lives in `services/utils/src/dataset-grants.ts`;
+trusted caller/artefact resolution and commit fences live in the app’s dataset
+policy module. Optional legacy table restrictions are applied after the grant.
+Version 1 rows retain their old behaviour. Private sharing still limits reads.
+
+`artifact_members` owns one relationship per artefact/account. Accepted
+membership gates persistent v2 artefact actions, not comments or local controls.
+Owners/editors join immediately; other readers request approval. Invitations use
+recipient-follows-sender eligibility and opt-out autoaccept. Blocks and the
+30-pending budget are checked under account locks. The artefact lock serializes
+membership revocation with mutation commits.
+
+Resolved document links and comment links use `/people/<stable-user-id>`.
+`invitePeople` applies the same recipient rules for humans and agents; saving
+content and inserting notification receipts are one transaction. Source node IDs
+and comment IDs make notification delivery idempotent. Plain IDs, rendered User
+chips and forks have no mention side effects. `_members(user_id, joined_at)` is
+read-only and scoped to the current saved document. Legacy `memberOf` column
+constraints continue to describe sharing and ownership.

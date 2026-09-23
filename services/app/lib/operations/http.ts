@@ -1,8 +1,10 @@
+import {MembershipError} from '../membership';
+import {grantsOf,grantsPermitWrite} from '../datasets/policy/grants';
 import {tokenActorForRequest} from '@/lib/viewer';
 import {readableArtifact} from '@/lib/artifact-read';
 import {canAnnotate} from '@/lib/share-roles';
 import {durableMutation} from '@/lib/mutation-receipt';
-import {getArtifactFor} from '@/lib/artifacts';
+import {getArtifactFor,getArtifactById} from '@/lib/artifacts';
 import {ownedArtifactState} from '@/lib/trash';
 import {sessionOwnedBy} from '@/lib/remote/resource';
 /**
@@ -30,7 +32,7 @@ import { OPERATIONS, type OpContext, type Operation, type OpReply } from './regi
  * precisely the retry the receipt exists to answer.
  */
 const AUTHORIZED: Record<string, (actor: TokenActor, input: Record<string, unknown>) => Promise<boolean>> = {
-  mutate_dataset: async (actor, input) => !!(await getArtifactFor(actor, String(input.id))),
+  mutate_dataset: async (actor, input) => {const row=await getArtifactById(String(input.id));return !!row&&(grantsOf(row)?await grantsPermitWrite(row,actor):!!await getArtifactFor(actor,row.id));},
   annotate: async (actor, input) => {
     const access = await readableArtifact(actor, String(input.id));
     return !!access && canAnnotate(access.role);
@@ -85,5 +87,5 @@ export async function runOperation(
     const terminal=!['operation_pending','outcome_unknown','idempotency_mismatch','invalid_idempotency_key'].includes(String(result.body.error));
     return opResponse({...result,...(terminal?{headers:{'X-Artifactbin-Mutation-Receipt':key}}:{})});
   }
-  return opResponse(await operation(name).run(ctx, input));
+  try{return opResponse(await operation(name).run(ctx, input));}catch(error){if(error instanceof MembershipError)return json({error:'mention_refused',detail:error.message},error.status);throw error;}
 }

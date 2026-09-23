@@ -18,6 +18,7 @@ export * from './sharing';
 export type { TokenRecord, TokenReader, TokenReaderOptions, ClaimResult, CodeStore, AgentSession } from './identity';
 export type { Column, Index, Table } from './schema';
 export * from './dataset-policy';
+export * from './dataset-grants';
 
 export * from './cli-auth';
 export * from './resource-file';
@@ -26,3 +27,5 @@ export * from './account-resource';
 
 export { BUILD_ASSET_PATH, BUILD_ASSET_HEADER } from './build-assets';
 export { DEFAULT_UPLOAD_MAX_BYTES } from './upload-limits';
+
+export * from './membership';

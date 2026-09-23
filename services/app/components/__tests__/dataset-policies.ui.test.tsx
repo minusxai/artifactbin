@@ -223,3 +223,15 @@ it('keeps function controls without hosted model controls', async () => {
   await waitFor(()=>expect(fetch.mock.calls.some(([,o])=>o?.method==='PUT')).toBe(true));
   expect(JSON.parse(String(fetch.mock.calls.find(([,o])=>o?.method==='PUT')![1]!.body)).policy.execution).toMatchObject({functions:{deny:['lower','upper']}});
 });
+
+it('edits grant defaults without introducing table restrictions',async()=>{
+ const policy={version:2,allow:[{actions:['read'],from:{user:'*'}},{actions:['insert','update','delete'],from:{artifactOwner:'$owner'}}]};
+ const fetch=vi.fn(async(_url:string,opts?:RequestInit)=>new Response(JSON.stringify(opts?.method==='PUT'?{policy:JSON.parse(String(opts.body)).policy,revision:1}:{policy,revision:0,tables:[],writtenBy:[]})));
+ vi.stubGlobal('fetch',fetch);render(<DatasetPolicies artifactId="ds123"/>);
+ fireEvent.click(screen.getByRole('button',{name:'Manage access policies'}));
+ fireEvent.click(await screen.findByLabelText('Public reads'));
+ fireEvent.click(screen.getByRole('button',{name:'Save access policies'}));
+ await waitFor(()=>expect(fetch.mock.calls.some(([,o])=>o?.method==='PUT')).toBe(true));
+ const saved=JSON.parse(String(fetch.mock.calls.find(([,o])=>o?.method==='PUT')![1]!.body)).policy;
+ expect(saved).toEqual({version:2,allow:[{actions:['insert','update','delete'],from:{artifactOwner:'$owner'}}]});
+});
