@@ -72,7 +72,7 @@ The default schema is fixed: bare `events` always resolves there. Updates retain
 
 `source` is a literal dataset ID. Runtime SQL names only final-whitelist schema/table identifiers. Parameters come from declared scalar Values, with explicit Postgres type binding.
 
-Stored writes use `<Mutation name="edit" source="ref:abc123">{\`update public.items set status=$_value where id=$_row.id\`}</Mutation>`. Publish the dataset those writes land in with `afbin push tasks.csv --type dataset --access readwrite --policy viewers-write`: everyone who can view the dataset may then insert, update and delete rows, which is what a page anyone with the link can work needs. Owner-only writes need no policy — `--access readwrite` alone keeps writes to editors. Sharing sets the audience; one policy covers all of it (Hasura role `viewer`). Finer rules — column lists, row filters, presets — are a `policy:` block in the dataset YAML: `afbin pull <id> --type dataset --output tasks.yaml` writes that YAML beside the rows the dataset was published from and tracks it in their place. `--policy none` removes the grant. Postgres writes are unavailable.
+Stored writes use `<Mutation name="edit" source="ref:abc123">{`update public.items set status=$_value where id=$_row.id`}</Mutation>`. New stored datasets default to public reads and writes through their owner’s artefacts. Accepted members can run saved actions; use `afbin invite <ref> @username` or People → Add people. [Apps](apps.md) explains version 2 grants, joining and mentions. Existing version 1 datasets keep their policies; their legacy writable setting is `--access readwrite --policy viewers-write`. To inspect or change policies, `afbin pull <id> --type dataset --output tasks.yaml` writes tracked settings beside the rows. Optional table/column/row restrictions narrow grants. Postgres writes are unavailable.
 
 ## Preview and freshness
 
@@ -86,7 +86,7 @@ Use `source="ref:<id>"` to choose the dataset and its exposed table names in SQL
 
 Manual data migrations require server shell access (SSH or equivalent infrastructure access). Migration HTTP endpoints and remote clients are not available. No standalone migration command is shipped. Operators must back up and preview changes before using the retained database-level migration functions, validate document data, and pass reviewed snapshot fingerprints when applying dataset changes. Stop the app before opening its PGLite directory from a maintenance process. Automatic schema updates on startup remain separate from manual data migrations.
 
-Stored `Table.columns` accepts `{name,type,constraints?}` declarations, including native `user` fields. See [user fields](databases-users.md) for membership arrays, `self`, automatic pickers and server validation. Postgres whitelist columns remain strings.
+Stored `Table.columns` accepts `{name,type,choices?,constraints?}` declarations, including native `user` fields. See [user fields](databases-users.md) for membership arrays, `self`, automatic pickers and server validation. `choices`: 1–100 distinct typed suggestions for policy pickers, e.g. `{name:"status",type:"string",choices:["todo","doing","done"]}`. Enforce allowed writes with policy checks. Postgres whitelist columns remain strings.
 
 ## Dates and timestamps
 

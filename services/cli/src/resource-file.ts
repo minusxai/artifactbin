@@ -1,5 +1,5 @@
 import {ARTIFACT_RESOURCE_TYPES,type ArtifactResourceFile} from '@artifactbin/contracts';
-import {parseDatasetPolicy} from '../../utils/src/dataset-policy';
+import {parseDatasetAccessPolicy} from '../../utils/src/dataset-grants';
 import {dirname,extname,isAbsolute,relative,resolve} from 'node:path';
 import {enumArgument} from './arguments';
 import {CliError} from './errors';
@@ -56,7 +56,7 @@ export function parseResourceFile(source:string):ArtifactResourceFile {
   result.source=input.source;
  }
  if(input.access!==undefined)result.access=enumArgument(input.access,['read','readwrite'],'access');
- if(input.policy!==undefined){try{result.policy=input.policy===null?null:parseDatasetPolicy(input.policy);}catch(error){throw new CliError('invalid_policy',error instanceof Error?error.message:'Invalid dataset policy.');}}
+ if(input.policy!==undefined){try{result.policy=input.policy===null?null:parseDatasetAccessPolicy(input.policy);}catch(error){throw new CliError('invalid_policy',error instanceof Error?error.message:'Invalid dataset policy.');}}
  if(input.policy_revision!==undefined){
   if(!Number.isSafeInteger(input.policy_revision)||Number(input.policy_revision)<0)throw new CliError('invalid_policy_revision','policy_revision must be a nonnegative integer.');
   result.policy_revision=input.policy_revision;

@@ -1,3 +1,4 @@
+import {changeMembership} from '@/lib/membership';
 import {POST as documentMutation} from '@/app/a/[id]/mutate/route';
 import {describe, expect, it} from 'vitest';
 import {POST as createRoute} from '@/app/api/artifacts/route';
@@ -193,4 +194,16 @@ describe('native user fields',()=>{
    expect(response.status).toBe(400);
   }
  });
+});
+
+it('offers accepted joiners in constrained user fields and permits assigning them',async()=>{
+ const a=await account('joined_owner'), b=await account('joined_reader');
+ const report=await create(a.token,{markup:'<h1>Project</h1>',visibility:'public'});
+ const dataset=await create(a.token,{dataset:[{id:1,assignee:null}],columns:[{name:'assignee',type:'user',constraints:{memberOf:[`ref:${report.id}`]}}],access:'readwrite'});
+ await changeMembership({userId:b.user.id,tokenId:b.tokenId},report.id,{action:'join'});
+ expect((await mutate(a.token,dataset.id,`update public.rows set assignee='${b.user.id}'`)).status).toBe(403);
+ await changeMembership({userId:a.user.id,tokenId:a.tokenId},report.id,{action:'approve',userId:b.user.id});
+ expect((await mutate(a.token,dataset.id,`update public.rows set assignee='${b.user.id}'`)).status).toBe(200);
+ await changeMembership({userId:b.user.id,tokenId:b.tokenId},report.id,{action:'leave'});
+ expect((await mutate(a.token,dataset.id,`update public.rows set assignee='${b.user.id}'`)).status).toBe(403);
 });

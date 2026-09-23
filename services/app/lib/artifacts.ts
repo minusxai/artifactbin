@@ -1,3 +1,5 @@
+import {documentMentions} from './saved-mentions';
+import { grantContext, grantsOf, grantsPermitRead, grantsPermitWrite, type GrantDocument } from './datasets/policy/grants';
 import {storedMediaReferences} from './datasets/media-references';
 import {claimArtifactId,reserveArtifactIds} from './artifact-identities';
 import {collectRefUses} from '@/lib/story/refs';
@@ -38,8 +40,8 @@ import { sourceWithoutAnchors } from './annotation-anchors';
 import { ALLOW_PUBLIC_VISIBILITY, ARTIFACT_QUOTA_PER_TOKEN } from './config';
 import { assetByteQuotaExceeded } from './asset-quota';
 import { getDb, type Queryable } from './db';
-import type {DatasetPolicy} from '@artifactbin/contracts';
-import {parseDatasetPolicy} from '@artifactbin/utils';
+import type {DatasetAccessPolicy as DatasetPolicy} from '@artifactbin/contracts';
+import {defaultDatasetGrants,remapDatasetGrants,parseDatasetAccessPolicy} from '@artifactbin/utils';
 import {validateDatasetPolicyForRow} from './datasets/policy/validation';
 import { actorSubject, emit } from './events';
 import { generateFileId } from './ids';
@@ -180,6 +182,11 @@ export async function canReadArtifact(
   row: Pick<ArtifactRow, 'id' | 'visibility' | 'user_id' | 'link_role'> & Partial<Pick<ArtifactRow,'format'>>,
   viewer: Viewer,
 ): Promise<boolean> {
+  if(row.format==='dataset'||row.format===undefined){
+    const dataset=await getArtifactById(row.id);
+    if(!dataset)return false;
+    if(grantsOf(dataset))return grantsPermitRead(dataset,{userId:viewer?.userId??null,tokenId:null,email:viewer?.email});
+  }
   // One decision, asked one way: reading is simply the bottom of the lattice.
   // A Viewer carries no token id, so bare-token ownership is not consulted
   // here — the same as before, and sound because `private` requires an account
@@ -504,6 +511,8 @@ async function insertArtifact(
     : input.visibility ??
       (!userId || guestDefault ? (ALLOW_PUBLIC_VISIBILITY ? 'public' : 'unlisted')
         : input.format === 'image' || input.format === 'dataset' || input.format === 'pdf' || input.format === 'file' ? 'unlisted' : 'private');
+  const datasetPolicy = atCreation.datasetPolicy?.policy ??
+    (!atCreation.forkedFrom && input.access===undefined && input.format==='dataset' && catalog?.kind!=='postgres' ? defaultDatasetGrants() : null);
   const created = await tx.query<ArtifactRow>(
   // The genesis edit row makes the creation's edit_id resolvable like any
   // other: an agent that creates and then edits against that id is on an
@@ -553,12 +562,14 @@ async function insertArtifact(
     JSON.stringify(sourceIds),
     // A DATASET carried whole, policy included. NULL for every other
     // creation, which is also what makes the audit CTE above a no-op.
-    atCreation.datasetPolicy ? JSON.stringify(atCreation.datasetPolicy.policy) : null,
+    datasetPolicy ? JSON.stringify(datasetPolicy) : null,
     atCreation.datasetPolicy?.revision ?? 0,
   ],
   );
   Object.assign(created.rows[0],await writeShares(tx,id,atCreation.shares??[]));
   await bindCurrentUserScopes(tx,created.rows[0]);
+  if(input.format==='markup'&&userId)await tx.query("INSERT INTO artifact_members(artifact_id,user_id,status,direction,initiated_by,joined_at) VALUES($1,$2,'accepted','request',$2,now()) ON CONFLICT DO NOTHING",[id,userId]);
+  if(!atCreation.forkedFrom)await documentMentions(tx,created.rows[0],{userId,tokenId});
   if (atCreation.operation) await completeCreation(tx,atCreation.operation,created.rows[0]);
   return created.rows[0];
 }
@@ -643,7 +654,7 @@ export async function forkArtifact(
   if (copying.length) return deepFork(actor, source, overrides, copying, creator);
   const input = await forkInput(actor, source, overrides);
   if (input instanceof Response) return input;
-  const row = await createArtifact(creator.tokenId, creator.userId, input, { forkedFrom: source.id, linkRole: source.link_role });
+  const row = await createArtifact(creator.tokenId, creator.userId, input, { forkedFrom: source.id, linkRole: source.link_role, ...(source.format==='dataset'?{datasetPolicy:{policy:source.dataset_policy??null,revision:source.policy_revision??0}}:{}) });
   // Against the SOURCE: "this was forked" is a fact about the original, and the
   // forker is who did it. Never inside a transaction (PGLite deadlock).
   void trackEvent('fork', source.id, { userId: actor.userId, forkId: row.id });
@@ -696,23 +707,21 @@ async function writtenDatasetForkPlan(actor: TokenActor, source: ArtifactRow, ow
   if (!uses) return [];
   const plan: ArtifactRow[] = [];
   const seen = new Set<string>();
-  for (const use of uses) {
-    if (!use.write || seen.has(use.id)) continue;
+  const written=new Set(uses.filter(use=>use.write).map(use=>use.id));
+  for (const use of [...uses.filter(u=>u.write),...uses.filter(u=>!u.write)]) {
+    if(seen.has(use.id))continue;
     seen.add(use.id);
-    // The loader's OWN rule, asked the same way round: their scope first, then
-    // anything the link reads. A dataset they cannot read is never copied —
-    // that would hand them rows the original never shared.
-    //
-    // "Theirs" is the COPY'S OWNER, not the forker: an account forking `as` one
-    // of its test users owns the page's datasets already, and skipping them on
-    // that ground would hand the test user a page pointed at the account's real
-    // data — the exact write this whole kind exists to prevent. The test user
-    // owns nothing, so every dataset the page writes is copied.
+    const candidate=await getArtifactById(use.id);
+    if(!candidate||candidate.format!=='dataset'||catalogOf(candidate)?.kind==='postgres')continue;
+    const policy=grantsOf(candidate);
+    if(policy){
+      if(!written.has(use.id)&&await grantsPermitRead(candidate,{userId:null,tokenId:null}))continue;
+      if(!(await grantsPermitRead(candidate,actor,source)))continue;
+      plan.push(candidate);continue;
+    }
+    if(!written.has(use.id))continue;
     const own = owner.userId ? await getArtifactFor({ userId: owner.userId, tokenId: '' }, use.id) : await getArtifact(owner.tokenId, use.id);
     if (own) continue;
-    // Read AS THE FORKER when the copy is for someone else: the account may
-    // hand its test user a copy of a dataset only the account can read, because
-    // the copy lands inside that test user's sandbox and nowhere else.
     const row = (owner.userId !== actor.userId ? await getArtifactFor(actor, use.id) : null) ?? await getLinkReadableArtifact(use.id);
     if (!row || row.format !== 'dataset' || catalogOf(row)?.kind === 'postgres') continue;
     plan.push(row);
@@ -739,7 +748,9 @@ async function deepFork(actor: TokenActor, source: ArtifactRow, overrides: ForkO
   // Reserved for whoever will OWN the copies: `claimArtifactId` consumes a
   // reservation only for the actor creating the row, so reserving as the forker
   // and inserting as its test user would refuse its own fork.
-  const ids = await reserveArtifactIds(owner, copying.length);
+  const ids = await reserveArtifactIds(owner, copying.length+1);
+  const documentId=ids[copying.length]!;
+  const policyRewrite={[source.id]:documentId};
   const copies = copying.map((row, index) => ({ row, id: ids[index]! }));
   const rewrite = new Map(copies.map((copy) => [copy.row.id, copy.id]));
   const planned = new Map(copies.map((copy) => [copy.id, copy.row]));
@@ -758,6 +769,14 @@ async function deepFork(actor: TokenActor, source: ArtifactRow, overrides: ForkO
   let created: { artifact: ArtifactRow; datasets: ArtifactRow[] };
   try {
     created = await (await getDb()).transaction(async (tx) => {
+    await tx.query('SELECT id FROM artifacts WHERE id=ANY($1::text[]) ORDER BY id FOR UPDATE',[[source.id,...copies.map(c=>c.row.id)]]);
+    const currentSource=(await tx.query<ArtifactRow>('SELECT * FROM artifacts WHERE id=$1 AND deleted_at IS NULL',[source.id])).rows[0];
+    if(!currentSource||currentSource.edit_id!==source.edit_id)throw new DatasetError('The source changed; retry the fork',409);
+    for(const copy of copies){
+      if(!grantsOf(copy.row))continue;
+      const current=(await tx.query<ArtifactRow>('SELECT * FROM artifacts WHERE id=$1 AND deleted_at IS NULL',[copy.row.id])).rows[0];
+      if(!current||current.edit_id!==copy.row.edit_id||current.policy_revision!==copy.row.policy_revision||!await grantsPermitRead(current,actor,currentSource,tx))throw new DatasetError('A dataset changed or is no longer readable; retry the fork',409);
+    }
     const datasets: ArtifactRow[] = [];
     for (const copy of copies) {
       datasets.push(await createArtifact(owner.tokenId, owner.userId, {
@@ -770,7 +789,7 @@ async function deepFork(actor: TokenActor, source: ArtifactRow, overrides: ForkO
         source: copy.row.source,
         meta: copy.row.meta,
         // The copy is as reachable as the page that writes it — no more.
-        visibility,
+        visibility: copy.row.visibility==='private'?'private':visibility,
         access: copy.row.access,
       }, {
         tx,
@@ -780,10 +799,10 @@ async function deepFork(actor: TokenActor, source: ArtifactRow, overrides: ForkO
         // The write policy travels WITH the dataset: a copy whose policy had to
         // be set afterwards would be, for that moment, a writable dataset with
         // no rules, and the fork would need a second call to be usable at all.
-        ...(copy.row.dataset_policy ? { datasetPolicy: { policy: copy.row.dataset_policy, revision: copy.row.policy_revision ?? 0 } } : {}),
+        ...(copy.row.dataset_policy ? { datasetPolicy: { policy: grantsOf(copy.row)?remapDatasetGrants(grantsOf(copy.row)!,policyRewrite):copy.row.dataset_policy, revision: copy.row.policy_revision ?? 0 } } : {}),
       }));
     }
-    return { artifact: await createArtifact(owner.tokenId, owner.userId, input, { tx, forkedFrom: source.id, linkRole: source.link_role }), datasets };
+    return { artifact: await createArtifact(owner.tokenId, owner.userId, input, { tx, reservedId:documentId, forkedFrom: source.id, linkRole: source.link_role }), datasets };
     });
   } catch (error) {
     // A dataset rule refusing a copy is the forker's answer, never a 500.
@@ -1409,6 +1428,7 @@ async function replaceScoped(
     if(opts.shares!==undefined)Object.assign(updated.rows[0],await writeShares(tx,id,opts.shares));
     else updated.rows[0].shares=(await tx.query<ShareEntry>('SELECT email,role FROM artifact_shares WHERE artifact_id=$1 ORDER BY email',[id])).rows;
     await bindCurrentUserScopes(tx,updated.rows[0]);
+    await documentMentions(tx,updated.rows[0],actor,current.source??'');
     await logWholeDocumentWrite(tx, current, updated.rows[0],true);
     const movedAnnotations=new Set<string>();
     for(const change of effects.updates){
@@ -1810,9 +1830,9 @@ export async function applyEditScoped(actor: TokenActor, id: string, input: Edit
     const previousRefs=new Set(((head.meta.refs??[]) as Array<{id:string}>).map(ref=>ref.id));
     const attachesReference=((published.meta.refs??[]) as Array<{id:string}>).some(ref=>!previousRefs.has(ref.id));
     // First attachment changes the dataset schema in the same transaction as the document CAS.
-    const updated=attachesReference?await db.transaction(async tx=>{
+    const updated=attachesReference||storedText.includes('/people/')?await db.transaction(async tx=>{
       const result=await commit(tx);
-      if(result.rows[0])await bindCurrentUserScopes(tx,result.rows[0]);
+      if(result.rows[0]){await bindCurrentUserScopes(tx,result.rows[0]);await documentMentions(tx,result.rows[0],actor,headSource);}
       return result;
     }):await commit(db);
     if (updated.rows[0]) {
@@ -1887,7 +1907,7 @@ export async function getSharingFor(actor: TokenActor, id: string): Promise<Shar
     shares: shares.rows,
     canPrivate: !!row.user_id,
     ...(row.format === 'dataset'
-      ? { access: row.access, datasetKind: catalogOf(row)?.kind ?? 'stored', writtenBy: await findWritersFor(actor, id) }
+      ? { access: row.access, policyVersion:grantsOf(row)?2:1, datasetKind: catalogOf(row)?.kind ?? 'stored', writtenBy: await findWritersFor(actor, id) }
       : {}),
   };
 }
@@ -1971,7 +1991,7 @@ export async function updateSharing(userId: string, id: string, patch: SharingPa
  */
 async function getLinkReadableArtifact(id: string): Promise<ArtifactRow | null> {
   const row = await getArtifactById(id);
-  return row && row.visibility !== 'private' ? row : null;
+  return row && (grantsOf(row)?await grantsPermitRead(row,{userId:null,tokenId:null}):row.visibility !== 'private') ? row : null;
 }
 
 /** Resolve a `ref:<id>`: the caller's own artifacts, then anything link-readable. */
@@ -2252,7 +2272,7 @@ export function refLoaderForActor(actor: TokenActor): RefLoader {
  * an unreadable policy is the write door's refusal to make, not a publish's. */
 function parsedDatasetPolicy(row: ArtifactRow): DatasetPolicy | undefined {
   if (!row.dataset_policy) return undefined;
-  try { return parseDatasetPolicy(row.dataset_policy); } catch { return undefined; }
+  try { return parseDatasetAccessPolicy(row.dataset_policy); } catch { return undefined; }
 }
 
 function rowToResolvedRef(row: ArtifactRow, owned = false): ResolvedRef {
@@ -2280,9 +2300,10 @@ function rowToResolvedRef(row: ArtifactRow, owned = false): ResolvedRef {
 type WriteRefusal = 'not_a_dataset' | 'dataset_read_only';
 
 /** The dataset must allow writes AND the current actor must hold its editor role. */
-export async function canWriteDataset(dataset: ArtifactRow, actor: RoleActor, declared = false): Promise<WriteRefusal | null> {
+export async function canWriteDataset(dataset: ArtifactRow, actor: RoleActor, declared: boolean | GrantDocument = false): Promise<WriteRefusal | null> {
   if (dataset.format !== 'dataset') return 'not_a_dataset';
   if(catalogOf(dataset)?.kind==='postgres')return 'dataset_read_only';
+  if(grantsOf(dataset))return await grantsPermitWrite(dataset,actor,typeof declared==='object'?declared:undefined)?null:'dataset_read_only';
   // An unreachable dataset is reported as read-only, never as "not yours":
   // the caller answers a uniform 404 for anything it could not resolve, and
   // this one it could — the document names it, so its existence is not news.
@@ -2365,10 +2386,12 @@ export async function runDocumentMutation(
   // which exists for reads. An unresolvable target reads as read-only, which
   // is what it is from here.
   const writer = writerFor(doc);
-  const dataset = decl.scope === 'local' ? null : await getArtifactFor(writer, decl.target);
+  const candidate = decl.scope === 'local' ? null : await getArtifactById(decl.target);
+  const dataset = candidate && grantsOf(candidate) ? candidate : decl.scope === 'local' ? null : await getArtifactFor(writer, decl.target);
   if (decl.scope !== 'local') {
     if (!dataset) return { ok: false, reason: 'dataset_read_only' };
-    const refusal = await canWriteDataset(dataset, actor, true);
+    if(grantsOf(dataset)){try{await grantContext(dataset,actor,{id:doc.id,editId:doc.edit_id});}catch(error){return {ok:false,reason:'policy_denied',detail:error instanceof Error?error.message:'Join this artifact to use its actions'};}}
+    const refusal = await canWriteDataset(dataset, actor, {id:doc.id,editId:doc.edit_id});
     if (refusal) return { ok: false, reason: refusal };
     if (localTables !== undefined) return {ok: false, reason: 'invalid_sql', detail: 'Persistent mutations do not accept local table overrides'};
   }
@@ -2533,7 +2556,8 @@ export async function dataflowForRow(
   // GET transport is, and it is the safe default for every caller that has no
   // session to hand over.
   const flow = declarationsForRow(row)?.flow;
-  const result = flow ? await runDeclaredDataflow(flow, datasetResolverForRow(row, opts.viewer ?? null), opts) : null;
+  const members=(await (await getDb()).query<Row>("SELECT user_id,joined_at::text FROM artifact_members WHERE artifact_id=$1 AND status='accepted' ORDER BY joined_at,user_id",[row.id])).rows;
+  const result = flow ? await runDeclaredDataflow(flow, datasetResolverForRow(row, opts.viewer ?? null), {...opts,members}) : null;
   // A document NAMES people when a user-typed value or column reaches it, and
   // now also when it draws a <User> — which a document with no user data at all
   // may do (`<User userId="$_me" />`). The viewer's own id is added for both,
@@ -2601,14 +2625,19 @@ async function mutationAccessFor(doc: ArtifactRow, flow: Dataflow, state: Datafl
     if(m.params.includes('_me') && meRefusal)return [m.name,meRefusal];
     if(m.scope==='local')return [m.name,guestOf(m,null)];
     const actor=viewer??{userId:null,tokenId:null};
-    const dataset=await getArtifactFor(writerFor(doc),m.target);
-    if(!dataset||await canWriteDataset(dataset,actor,true))return [m.name,'This action requires dataset view access and a writable dataset with a matching data policy.'];
+    const candidate=await getArtifactById(m.target);
+    const dataset=candidate&&grantsOf(candidate)?candidate:await getArtifactFor(writerFor(doc),m.target);
+    if(dataset&&grantsOf(dataset)){
+      try{await grantContext(dataset,actor,{id:doc.id,editId:doc.edit_id});}
+      catch(error){return [m.name,!actor.userId?SIGN_IN_REQUIRED:error instanceof Error?error.message:'Join this artefact to use its actions'];}
+    }
+    if(!dataset||await canWriteDataset(dataset,actor,{id:doc.id,editId:doc.edit_id}))return [m.name,'This action requires dataset view access and a writable dataset with a matching data policy.'];
     if(!dataset.dataset_policy)return [m.name,guestOf(m,null)];
     try {
       const name=`ref_${dataset.id}`,catalog=catalogOf(dataset);
       const compiled=m.source&&catalog?compileStoredMutation(catalog,m.sql,name):null;
       const columns=compiled?.table.columns??dataset.meta.columns as DatasetColumn[];
-      const policy=await mutationPolicy(dataset,actor,compiled?.table??{schema:'public',name:'rows'},true);
+      const policy=await mutationPolicy(dataset,actor,compiled?.table??{schema:'public',name:'rows'},{id:doc.id,editId:doc.edit_id});
       const rowColumns = mutationUsesRow(m.sql) ? rowSchemaFor(m.name) : undefined;
       if (mutationUsesRow(m.sql) && !rowColumns) return [m.name,'This action requires an available query result with a matching row schema.'];
       const valueType = rowColumns?.find(c => c.name === scopes.cellColumns[m.name])?.type;
@@ -2681,6 +2710,7 @@ export async function viewerIdentityFor(
 }
 
 interface DataflowRunOptions {
+  members?:Row[];
   /** Request-owned admission, rerun before cache hits, after waits and SQL. */
   authorize?: () => Promise<void>;
   signal?: AbortSignal;
@@ -2714,12 +2744,13 @@ type DatasetResolver = (id: string) => Promise<RefTable | null>;
 type RefTable = { rows: Row[]; columns: DatasetColumn[]; catalog?:import('@/lib/datasets/types').DatasetCatalog };
 
 /** A resolved ref row → its table, under the viewer whose run this is. */
-async function tableForRef(r: ArtifactRow | null, viewer: RoleActor | null): Promise<RefTable | null> {
+async function tableForRef(r: ArtifactRow | null, viewer: RoleActor | null, document?:ArtifactRow): Promise<RefTable | null> {
   if (!r) return null;
   if (r.format === 'folder') {
     return childrenTableFor(r, { userId: viewer?.userId ?? null, email: viewer?.email ?? null, tokenId: viewer?.tokenId ?? null });
   }
   if (r.format !== 'dataset') return null; // wrong kind → the query reports the missing table
+  if(grantsOf(r)&&!(await grantsPermitRead(r,viewer??{userId:null,tokenId:null},document)))return null;
   const catalog=catalogOf(r);
   if(!catalog)return null; // missing storage is unavailable data, never an empty computed source
   const m = (r.meta ?? {}) as { columns?: DatasetColumn[] };
@@ -2734,9 +2765,8 @@ async function tableForRef(r: ArtifactRow | null, viewer: RoleActor | null): Pro
  * VIEWER is separate and rides through: reach is the document's, rows are theirs. */
 const datasetResolverForRow = (row: ArtifactRow, viewer: RoleActor | null): DatasetResolver => async (id) =>
   tableForRef(
-    (await getArtifactFor(writerFor(row), id))
-    ?? (await getLinkReadableArtifact(id)),
-    viewer,
+    await getArtifactById(id).then(async dataset=>dataset&&grantsOf(dataset)?dataset:(await getArtifactFor(writerFor(row),id))??(await getLinkReadableArtifact(id))),
+    viewer, row,
   );
 
 /** A bearer/session actor's scope — the editor running a DRAFT's queries. Reach and viewer are the same person here. */
@@ -2787,7 +2817,7 @@ async function runDeclaredDataflow(flow: Dataflow, resolve: DatasetResolver, opt
   }
   flow=await resolveUserValues(flow,async id=>datasets[id]);
   const usedSources = new Map<string, string>();
-  const state = await runDataflow(flow, datasets, {userId:opts.viewer?.userId??null, values: opts.values, only: opts.only, page: opts.page, localTables: opts.localTables,
+  const state = await runDataflow(flow, datasets, {members:opts.members,userId:opts.viewer?.userId??null, values: opts.values, only: opts.only, page: opts.page, localTables: opts.localTables,
     sourceInput:async id=>{
       // sourceQuery authorizes first and records this same snapshot for the
       // final access check. Only a physical stored public.rows table qualifies;

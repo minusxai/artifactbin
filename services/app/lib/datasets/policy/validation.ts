@@ -1,12 +1,13 @@
-import type {DatasetPolicy,Scalar} from '@artifactbin/contracts';
-import {parseDatasetPolicy,compilePolicyPredicate} from '@artifactbin/utils';
+import type {DatasetAccessPolicy as DatasetPolicy,Scalar} from '@artifactbin/contracts';
+import {parseDatasetAccessPolicy,compilePolicyPredicate} from '@artifactbin/utils';
 import type {ArtifactRow} from '@/lib/artifacts';
 import {catalogOf} from '@/lib/datasets/catalog';
 
 /** Validate governance against the exact row held by the write transaction. */
-export function validateDatasetPolicyForRow(row:Pick<ArtifactRow,'format'|'meta'>&Partial<Pick<ArtifactRow,'content'>>,value:unknown):DatasetPolicy|null {
+export function validateDatasetPolicyForRow(row:Pick<ArtifactRow,'format'|'meta'>&Partial<Pick<ArtifactRow,'content'|'dataset_policy'>>,value:unknown):DatasetPolicy|null {
  if(row.format!=='dataset'||catalogOf(row)?.kind==='postgres')throw new Error('Policies require a stored dataset');
-  const policy = value === null ? null : parseDatasetPolicy(value);
+  if(row.dataset_policy&&typeof row.dataset_policy==='object'&&'version' in row.dataset_policy&&row.dataset_policy.version===2&&(!value||typeof value!=='object'||!('version' in value)||value.version!==2))throw new Error('Keep version 2 policies; use an empty allow list to lock the dataset');
+  const policy = value === null ? null : parseDatasetAccessPolicy(value);
   if (policy) {
     const tables = catalogOf(row)?.tables ?? [
       {
@@ -15,7 +16,7 @@ export function validateDatasetPolicyForRow(row:Pick<ArtifactRow,'format'|'meta'
         columns: (row.meta.columns ?? []) as Array<{ name: string }>,
       },
     ];
-    for (const t of policy.tables) {
+    for (const t of policy.tables ?? []) {
       const target = tables.find(
         (x) => x.schema === t.table.schema && x.name === t.table.name,
       );

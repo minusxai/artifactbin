@@ -1,4 +1,6 @@
 'use client';
+import {ArtifactPeople} from './ArtifactPeople';
+import {useArtifactMembership} from './useArtifactMembership';
 
 import type { SharingVerdict } from '@/lib/visibility-icons';
 import StarterInstructions from '@/components/StarterInstructions';
@@ -303,6 +305,7 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
     // arrives here (via login, or straight back) and the shell performs it.
     else if (intent === 'like') void toggleLike(true);
     else if (intent === 'follow') void toggleFollow(true);
+    else if (intent === 'join' && accountSession && hasDataMutations) void membership.join();
     const next = stripIntent(window.location.search);
     if (next !== window.location.search) {
       void navigate(window.location.pathname + next + window.location.hash, {replace:true, state:route.state});
@@ -332,12 +335,23 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
    * would rebuild every chart to announce that one of them has new rows. It is
    * sent straight to the mounted runtime, which re-runs the queries reading it.
    */
+  const [membershipRevision,setMembershipRevision]=useState(0);
   const onLiveData = useCallback((event: { datasets: string[] }) => {
+    if(event.datasets.includes('_members'))setMembershipRevision(n=>n+1);
     runtimeRef.current?.send(
       { type: STORY_DATA_MESSAGE, datasets: event.datasets } satisfies StoryDataUpdate,
     );
   }, []);
   const live = useLiveArtifact(id, editId, version, !editing, undefined, onLiveData, setLiveAnnotations);
+  const hasDataMutations = format === 'markup' && !archived && (live?.dataflow?.flow ?? dataflow?.flow)?.mutations?.some(m => m.scope !== 'local') === true;
+  const membershipChanged=useCallback(()=>onLiveData({datasets:['_members']}),[onLiveData]);
+  const membership=useArtifactMembership(id,hasDataMutations,membershipRevision,membershipChanged);
+  const joinArtifact=()=>{
+    if(membership.status!=='join'){requestPageChrome('controls');return;}
+    if(!accountSession){void navigate(loginHref(window.location,'join'));return;}
+    void membership.join();
+  };
+
   useEffect(() => { if (live || editing) pageDataChanged(); }, [live, editing]);
   const [liveCatalog, setLiveCatalog] = useState<{ id: string; version: number; catalog: DatasetCatalog } | null>(null);
   // Dataset version frames carry rows, not catalog definitions. Re-read the
@@ -683,6 +697,7 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
    * direct action in the reader bar (and the mobile action rail). */
   const documentControls = (close: () => void) => (
     <div className="space-y-4">
+      {format==='markup'&&<ArtifactPeople hideJoin artifactId={id} revision={membershipRevision} onChange={()=>onLiveData({datasets:['_members']})}/>}
       {(props.author?.forkedFrom || (canAnnotate && format === 'markup') || canEdit) && <section aria-label="Document actions">
         <h2 className="mb-1 font-mono text-[10px] font-semibold uppercase tracking-[0.14em] text-faint">Artifact</h2>
         {props.author?.forkedFrom && <p data-mx-forked-from className="px-2 py-2 font-mono text-xs text-muted">
@@ -757,14 +772,16 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
     return (
       <>
         <TrustedUi overlay layer="navigation">
-        <InlineReaderChrome onShare={owner ? () => setSharingOpen(true) : undefined} pinned={editing || railOpen} input={{artifactId:id, share:owner, archived, visibility:sharingVerdict?.id === id ? sharingVerdict.visibility : props.visibility, hasInvitedUsers:sharingVerdict?.id === id ? sharingVerdict.hasInvitedUsers : props.hasInvitedUsers, title:shownTitle, forkBusy:false, author:props.author ?? null, viewer:readerFace, edit:canEdit, ownerBreadcrumb:owner, reactions:{like:{...likeRef.current,href:'#'},follow:followRef.current ? {...followRef.current,href:'#'} : null,comment:{count:openAnnotationCount,href:'#'}}}} onAction={action => {
+        <InlineReaderChrome onShare={owner ? () => setSharingOpen(true) : undefined} pinned={editing || railOpen} input={{artifactId:id, membership:hasDataMutations?membership.status:undefined, share:owner, archived, visibility:sharingVerdict?.id === id ? sharingVerdict.visibility : props.visibility, hasInvitedUsers:sharingVerdict?.id === id ? sharingVerdict.hasInvitedUsers : props.hasInvitedUsers, title:shownTitle, forkBusy:false, author:props.author ?? null, viewer:readerFace, edit:canEdit, ownerBreadcrumb:owner, reactions:{like:{...likeRef.current,href:'#'},follow:followRef.current ? {...followRef.current,href:'#'} : null,comment:{count:openAnnotationCount,href:'#'}}}} onAction={action => {
           if (action === 'like') void toggleLike();
           else if (action === 'follow') void toggleFollow();
+          else if (action === 'membership') joinArtifact();
           else if (action === 'fork') setForkAsked(true);
           else if (action === 'edit' && canEdit) { if (editing) void finishEdit(); else enterEdit(); }
           else if (action === 'comment') { if (canAnnotate) setRailOpen(value => !value); else void navigate(loginHref(window.location, 'comment')); }
           else if (action === 'controls' || action === 'menu') requestPageChrome(action);
         }} />
+        {membership.error && <div role="alert" className="fixed left-4 top-16 z-50 rounded-lg border border-edge bg-surface p-3 text-sm text-danger">{membership.error}</div>}
         {sharingOpen && <ShareLink version={live?.version ?? version} onSharingChange={onSharingChange} artifactId={id} title={shownTitle} owner={owner} editable={canEdit} format={format} datasetKind={shownCatalog?.kind} variant="dialog" className="" onClose={() => setSharingOpen(false)} onSocialPreview={shownSource !== null && format === 'markup' ? () => { setSharingOpen(false); setSocialPreviewOpen(true); } : undefined} />}
         {editing ? (
           /* EDIT MODE: the document's own bar stays, PINNED at the top, and the

@@ -1,3 +1,4 @@
+import {isPersonMentionHref} from './person-mentions';
 import { isSessionMentionHref } from './session-mentions';
 
 /**
@@ -80,7 +81,7 @@ const URL_NOISE_RE = /[\u0000-\u0020\u007f]/g;
  */
 export function safeHref(url: string): string | null {
   // Session mentions are the one supported relative link; never admit protocol-relative URLs.
-  if (isSessionMentionHref(url)) return url;
+  if (isSessionMentionHref(url)||isPersonMentionHref(url)) return url;
   const cleaned = url.replace(URL_NOISE_RE, '');
   const lower = cleaned.toLowerCase();
   return SCHEMES.some((scheme) => lower.startsWith(scheme)) ? cleaned : null;

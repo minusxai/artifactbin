@@ -2,7 +2,7 @@ import {localIdentities} from './identities';
 import {referenceIds} from './preview/graph';
 import {inferColumns} from '@artifactbin/utils/shape';
 import {viewersWritePolicy} from '../../utils/src/dataset-policy';
-import type {DatasetPolicy} from '@artifactbin/contracts';
+import type {DatasetAccessPolicy as DatasetPolicy} from '@artifactbin/contracts';
 import {parseCsv} from '../../app/lib/data-ingest/csv';
 import {coerceRows} from '../../app/lib/data-ingest/coerce';
 import {readConflicts,persistConflict,clearConflict} from './conflict-state';

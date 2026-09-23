@@ -118,6 +118,7 @@ export interface StoryDocumentInput {
    * them (the canvas, unit tests), where a bound image renders static.
    */
   assetsUrl?: string | null;
+  mentionStatuses?:Record<string,import("@artifactbin/contracts").MembershipStatus>;
   managedAssets?: StoryIslandData['managedAssets'];
   /**
    * WHY every `<Mutation>` on this render is refused (StoryIslandData.readOnly)

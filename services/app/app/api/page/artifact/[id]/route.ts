@@ -1,3 +1,4 @@
+import {savedMentionStates} from '@/lib/membership';
 import { publicCatalogOf } from '@/lib/datasets/catalog';
 import { compactSurface } from '@/lib/story/page-transport';
 /**
@@ -133,7 +134,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
   const runtime = isDoc ? await prepareStoryRuntime({
     source: row.source ?? '', compiledCss, theme: design.theme,
     colorMode: design.colorMode, title: row.title, template: meta.template ?? null,
-    refData, assetUrls, dataflow,
+    refData, assetUrls, dataflow, mentionStatuses:await savedMentionStates(row),
     // A snapshot render refuses every write by name, and carries no write door
     // at all (below) — see lib/archived-version.
     ...(at ? { readOnly: archivedReadOnly(at.version) } : {}),

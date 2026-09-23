@@ -47,6 +47,8 @@ identity fields in an existing report's YAML fence when editing it; publish the
 report with `afbin push report.jsx --yes --json`. CSV infers ordinary columns;
 the Dataset definition above declares native user types and constraints.
 
+For accepted app participants, query `_members` in the document; see [apps](apps.md). The column constraint below accepts joined members as well as legacy owners and explicitly shared users. To list only accepted participants in a picker, supply a query over `_members` as its options.
+
 `memberOf` is always a nonempty array of unique references. Membership in ANY
 listed document is sufficient; other constraints combine with AND. Eligible
 members are its owner and registered users explicitly shared on it, including
@@ -151,7 +153,7 @@ renders nothing for a signed-in reader, so it needs no condition of its own.
 ```
 
 A `<Mutation>` binding `$_me` needs a signed-in reader. A guest's `<Button run>`
-or `<DialogContent run>` then offers "Sign in to do this" instead of running,
+or `<DialogContent run>` stays disabled, preserving its authored content,
 and a direct POST answers `sign_in_required` (403 `policy_denied` for a signed-out
 reader; 401 for a guest browser that only saved a draft). Test users act on the
 copy they own, never here: [apps](apps.md).

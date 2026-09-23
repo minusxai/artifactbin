@@ -1,3 +1,4 @@
+import {DatasetGrants} from '../DatasetGrants';
 import { afterEach, it, expect, vi } from 'vitest';
 import {
   render,
@@ -222,4 +223,26 @@ it('keeps function controls without hosted model controls', async () => {
   fireEvent.click(screen.getByRole('button',{name:'Save access policies'}));
   await waitFor(()=>expect(fetch.mock.calls.some(([,o])=>o?.method==='PUT')).toBe(true));
   expect(JSON.parse(String(fetch.mock.calls.find(([,o])=>o?.method==='PUT')![1]!.body)).policy.execution).toMatchObject({functions:{deny:['lower','upper']}});
+});
+
+it('edits grant defaults without introducing table restrictions',async()=>{
+ const policy={version:2,allow:[{from:{user:'*'},actions:['read']},{from:{artifactOwner:'$owner'},actions:['delete','insert','update']}]};
+ const fetch=vi.fn(async(_url:string,opts?:RequestInit)=>new Response(JSON.stringify(opts?.method==='PUT'?{policy:JSON.parse(String(opts.body)).policy,revision:1}:{policy,revision:0,tables:[],writtenBy:[]})));
+ vi.stubGlobal('fetch',fetch);render(<DatasetPolicies artifactId="ds123"/>);
+ fireEvent.click(screen.getByRole('button',{name:'Manage access policies'}));
+ expect(await screen.findByLabelText('Public reads')).toBeChecked();
+ expect(screen.getByLabelText('Owner’s artefacts can change data')).toBeChecked();
+ fireEvent.click(screen.getByLabelText('Public reads'));
+ fireEvent.click(screen.getByRole('button',{name:'Save access policies'}));
+ await waitFor(()=>expect(fetch.mock.calls.some(([,o])=>o?.method==='PUT')).toBe(true));
+ const saved=JSON.parse(String(fetch.mock.calls.find(([,o])=>o?.method==='PUT')![1]!.body)).policy;
+ expect(saved).toEqual({version:2,allow:[policy.allow[1]]});
+});
+
+it('offers named people and artefacts while storing stable grant IDs',()=>{
+ const onChange=vi.fn();
+ render(<DatasetGrants value={{version:2,allow:[{actions:['read'],from:{user:'$owner',artifact:'abc123'}}]}} onChange={onChange} people={[{user_id:'usr_alex',username:'alex',name:'Alex'}]} artifacts={[{id:'abc123',title:'Tasks'}]}/>);
+ fireEvent.change(screen.getByRole('combobox',{name:'Rule 1 user'}),{target:{value:'usr_alex'}});
+ expect(onChange).toHaveBeenCalledWith({version:2,allow:[{actions:['read'],from:{user:'usr_alex',artifact:'abc123'}}]});
+ expect(screen.getByRole('option',{name:'Tasks'})).toBeInTheDocument();
 });

@@ -80,6 +80,7 @@ const NODE_NAMES: Record<string, string> = {
 const nodeName = (tag: string) => NODE_NAMES[tag] ?? tag;
 
 interface StoryFormatToolbarProps {
+  artifactId?:string;
   selection: StoryEditSelection | null;
   frameRef?: { current: HTMLIFrameElement | null };
   runtimeRef?: DocumentRuntimeRef;
@@ -107,7 +108,7 @@ interface StoryFormatToolbarProps {
 }
 
 export default function StoryFormatToolbar({
-  selection,
+  artifactId, selection,
   onApply,
   onApplyLink,
   onApplyInline,
@@ -118,7 +119,9 @@ export default function StoryFormatToolbar({
   onDelete,
   onComment,
 }: StoryFormatToolbarProps) {
+  const [people,setPeople]=useState<Array<{user_id:string;username:string}>>([]);
   const [linkDraft, setLinkDraft] = useState<string | null>(null);
+  useEffect(()=>{if(!artifactId||!linkDraft?.startsWith('@')){setPeople([]);return;}const abort=new AbortController();void fetch(`/api/my/artifacts/${encodeURIComponent(artifactId)}/members?query=${encodeURIComponent(linkDraft.slice(1))}`,{signal:abort.signal}).then(r=>r.ok?r.json():{people:[]}).then(r=>setPeople(r.people??[])).catch(()=>{});return()=>abort.abort();},[artifactId,linkDraft]);
   const [alignmentOpen, setAlignmentOpen] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
   const linkInputRef = useRef<HTMLInputElement>(null);
@@ -327,6 +330,7 @@ export default function StoryFormatToolbar({
                 <Chip label="Insert link" onClick={() => setLinkDraft('')}>
                   <Link2 size={14} />
                 </Chip>
+                {artifactId&&<Chip label="Mention person" onClick={()=>setLinkDraft('@')}>@</Chip>}
                 <Chip label="Remove link" onClick={() => onApplyLink(selection.path, null)}>
                   <Link2Off size={14} />
                 </Chip>
@@ -336,6 +340,7 @@ export default function StoryFormatToolbar({
                 className="flex items-center gap-1"
                 onSubmit={(e) => {
                   e.preventDefault();
+                  if(linkDraft.startsWith('@'))return;
                   const href = normalizeLinkHref(linkDraft);
                   if (href) onApplyLink(selection.path, href);
                   setLinkDraft(null);
@@ -352,6 +357,7 @@ export default function StoryFormatToolbar({
                   placeholder="https://…"
                   className="w-44 rounded-[3px] border border-edge bg-raised px-1.5 py-0.5 font-mono text-[11px] text-fg focus:border-edge-bright focus:outline-none"
                 />
+                {linkDraft.startsWith('@')&&<div aria-label="People to mention" className="flex max-w-64 flex-wrap gap-1">{people.map(p=><button key={p.user_id} type="button" className="rounded-md bg-accent-soft px-2 py-1 text-xs text-accent" onMouseDown={e=>e.preventDefault()} onClick={()=>{onApplyLink(selection.path,`/people/${p.user_id}`);setLinkDraft(null);}}>@{p.username}</button>)}</div>}
                 <button
                   type="submit"
                   aria-label="Apply link"

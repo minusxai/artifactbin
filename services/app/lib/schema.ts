@@ -50,6 +50,7 @@ const USERS: Table = {
     // (lib/profiles) until they confirm the welcome page. Existing rows take the
     // default and never see it; no backfill needed, which is why this is a flag
     // set at insert rather than a timestamp that would have to be back-dated.
+    { name: 'auto_accept_mentions', type: 'BOOLEAN', notNull: true, default: 'true' },
     { name: 'welcome_pending', type: 'BOOLEAN', notNull: true, default: 'false' },
     // Retired: login is email + OTP, there are no passwords. Existing rows keep
     // their dead bcrypt hash; nothing reads or writes this.
@@ -698,7 +699,29 @@ const COMMENT_IMAGES: Table = {
  indexes:[{name:'idx_comment_images_annotation',columns:['annotation_id']},{name:'idx_comment_images_expiry',columns:['expires_at']}],
 };
 
-export const TABLES: Table[] = [COMMENT_IMAGES, REMOTE_AGENTS, REMOTE_WORK, EXPORT_IMAGES, EXPORT_IMAGE_CACHE, MUTATION_RECEIPTS, DATASET_POLICY_AUDIT, DATASET_USAGE, USERS, TOKENS, ARTIFACTS, ARTIFACT_VERSIONS, ARTIFACT_EDITS, ARTIFACT_SOURCE_IDS, ARTIFACT_NODE_ALIASES, NODE_IDENTITY_MIGRATION_JOBS, ARTIFACT_SHARES, ANNOTATIONS, CODES, ANALYTICS_EVENTS, RELATIONS, WEBFONTS, WEB_ASSETS, DATASET_SECRETS, DATASET_RESULT_CACHE, ARTIFACT_CREATION_OPERATIONS, ID_RESERVATION_BATCHES, ARTIFACT_ID_REGISTRY, BROWSER_TEST_USERS];
+const ARTIFACT_MEMBERS: Table = {
+ name:'artifact_members', columns:[
+  {name:'artifact_id',type:'TEXT',notNull:true},{name:'user_id',type:'TEXT',notNull:true},
+  {name:'status',type:'TEXT',notNull:true},{name:'direction',type:'TEXT',notNull:true},
+  {name:'initiated_by',type:'TEXT',notNull:true},{name:'joined_at',type:'TIMESTAMPTZ'},
+  {name:'revision',type:'INTEGER',notNull:true,default:'1'},
+ ], primaryKey:['artifact_id','user_id'],
+ indexes:[{name:'idx_members_pending_initiator',columns:['initiated_by'],where:"status = 'pending'"}],
+};
+const MEMBER_NOTIFICATIONS: Table = {
+ name:'member_notifications',columns:[
+  {name:'id',type:'TEXT',notNull:true},{name:'artifact_id',type:'TEXT',notNull:true},
+  {name:'user_id',type:'TEXT',notNull:true},{name:'recipient_id',type:'TEXT',notNull:true},
+  {name:'sender_id',type:'TEXT',notNull:true},{name:'kind',type:'TEXT',notNull:true},
+  {name:'source',type:'TEXT'},{name:'created_at',type:'TIMESTAMPTZ',notNull:true,default:'now()'},
+  {name:'read_at',type:'TIMESTAMPTZ'},
+ ],primaryKey:['id'],indexes:[{name:'idx_member_notifications_recipient',columns:['recipient_id','created_at']}],
+};
+const USER_BLOCKS: Table = {
+ name:'user_blocks',columns:[{name:'user_id',type:'TEXT',notNull:true},{name:'blocked_user_id',type:'TEXT',notNull:true}],primaryKey:['user_id','blocked_user_id'],
+};
+
+export const TABLES: Table[] = [ARTIFACT_MEMBERS, MEMBER_NOTIFICATIONS, USER_BLOCKS, COMMENT_IMAGES, REMOTE_AGENTS, REMOTE_WORK, EXPORT_IMAGES, EXPORT_IMAGE_CACHE, MUTATION_RECEIPTS, DATASET_POLICY_AUDIT, DATASET_USAGE, USERS, TOKENS, ARTIFACTS, ARTIFACT_VERSIONS, ARTIFACT_EDITS, ARTIFACT_SOURCE_IDS, ARTIFACT_NODE_ALIASES, NODE_IDENTITY_MIGRATION_JOBS, ARTIFACT_SHARES, ANNOTATIONS, CODES, ANALYTICS_EVENTS, RELATIONS, WEBFONTS, WEB_ASSETS, DATASET_SECRETS, DATASET_RESULT_CACHE, ARTIFACT_CREATION_OPERATIONS, ID_RESERVATION_BATCHES, ARTIFACT_ID_REGISTRY, BROWSER_TEST_USERS];
 
 /** Ordered, individually-executable DDL statements (no splitting needed) — rendered by utils. */
 export const SCHEMA_STATEMENTS: string[] = renderSchema(TABLES);

@@ -1,3 +1,4 @@
+import {savedMentionStates} from '@/lib/membership';
 /**
  * GET /a/:id/raw — the artifact's own bytes (the standalone document for
  * markup, JSON/image bytes for the data tiers), a SUB-PATH of the one
@@ -499,6 +500,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
          * photographs its alt text. Only a key this route VERIFIED is echoed,
          * so nothing a caller invents ever reaches the document.
          */
+        mentionStatuses:await savedMentionStates(artifact),
         assetsUrl: byExportKey ? `${assetsPath(artifact.id)}?key=${encodeURIComponent(key!)}` : assetsPath(artifact.id),
         // Only a document that declares a write gets a write URL: a document
         // that cannot write should not carry the address of a door it never

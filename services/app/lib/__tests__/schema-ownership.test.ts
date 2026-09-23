@@ -52,3 +52,5 @@ it('export metadata and refresh claims belong to the app',()=>{expect(declared()
 it('remote identities and work receipts belong to app',()=>{expect(declared()['app.remote_agents']).toBe('app');expect(declared()['app.remote_work']).toBe('app');});
 
 it('comment image stages and attachments belong to app',()=>{expect(declared()['app.comment_images']).toBe('app');});
+
+it('membership and its notifications belong to the app',()=>{for(const name of ['artifact_members','member_notifications','user_blocks'])expect(declared()['app.'+name]).toBe('app');});

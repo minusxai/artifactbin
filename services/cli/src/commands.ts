@@ -5,6 +5,7 @@ export {CliError} from './errors';
 /** Single executable vocabulary for parsing, help, man pages and local skills. */
 export interface Flag { short?: string; value?: string; repeat?: boolean; description: string }
 export const flags: Record<string,Flag> = {
+ 'include-access':{description:'Explicitly grant viewing access with invitations; requires sharing authority.'},
  image:{value:'ID',description:'Download a comment image by its image.id from the comment listing; requires --output.'},
  variant:{value:'VARIANT',description:'Comment image: preview (default, includes drawn marks), original (without marks), or thumbnail.'},
  port:{value:'PORT',description:'Listen on this port; serve defaults to 7445, preview chooses an available one.'},
@@ -93,6 +94,10 @@ export const commands: Command[] = [
 
  {name:'update',usage:'',description:'Update the compatible CLI and selected local skill bundles.',min:0,max:0,flags:['harness','dry-run'],examples:['afbin update --yes --json']},
  {name:'sessions',usage:'script new|<id> | status <id> | close <id>',description:'Run async Playwright scripts in a persistent isolated browser session. Read afbin help live-sessions for context, pages and output.image.',min:2,max:2,flags:['input','execution','as'],examples:['afbin sessions script new --input actions.js --json','afbin sessions script new --as guest --input actions.js --json','afbin sessions script new --as tu_9fA2b --input actions.js --json','afbin sessions status session_id --execution execution_id --json','afbin sessions close session_id --json']},
+ {name:'mention',usage:'<ref> <@username> [<@username> ...]',description:'Resolve eligible @usernames to stable mentions. Save the returned markup or post the comment to notify them.',min:2,max:31,flags:['include-access'],examples:['afbin mention a1B2c3 @alex --json']},
+ {name:'invite',usage:'<ref> <@username> [<@username> ...]',description:'Invite people by username to an artifact. Auto-accept follows recipient preferences; never forces membership.',min:2,max:31,flags:['include-access'],examples:['afbin invite a1B2c3 @alex @sam --json']},
+ {name:'join',usage:'<ref>',description:'Join as yourself: owners/editors join immediately; other readers request approval.',min:1,max:1,flags:[],examples:['afbin join a1B2c3 --json']},
+ {name:'members',usage:'<ref> [accept | approve <user-id> | dismiss [user-id] | leave]',description:'Read membership or accept, approve, dismiss or leave. Commenting does not require joining.',min:1,max:3,flags:[],examples:['afbin members a1B2c3 --json','afbin members a1B2c3 approve usr_abc --json']},
  {name:'testuser',usage:'new | list | delete <id> | delete --all',description:'Mint, list and erase throwaway test users: the other person on a page you are verifying. Deleting one erases everything it owns.',min:1,max:2,flags:['all'],examples:['afbin testuser new --json','afbin testuser list --json','afbin testuser delete tu_9fA2b --json','afbin testuser delete --all --json']},
  {name:'remote',usage:'[command [args ...]]',description:'Start a background agent with browser access, or attach to an existing session.',min:0,max:Infinity,flags:['name','session','history','foreground','stop','ready'],examples:['afbin remote pi','afbin remote --name codex2 codex','afbin remote --session rs_123']},
 ];

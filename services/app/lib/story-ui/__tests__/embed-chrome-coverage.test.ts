@@ -21,6 +21,7 @@ const REQUIRED_FILES = [
   // hazard by a different route: nothing about its NAME says its classes have
   // stopped compiling.
   'components/Tooltip.tsx',
+  'components/PersonMention.tsx',
 ];
 
 describe('embed wrapper chrome is covered by the story CSS compile', () => {

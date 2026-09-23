@@ -1,3 +1,4 @@
+import {PeopleInbox} from '@/components/PeopleInbox';
 import { usePageData } from '../use-page-data';
 import { Navigate } from 'react-router';
 import AvatarCircle from '@/components/AvatarCircle';
@@ -48,6 +49,7 @@ export function AccountPage() {
         * moment the answer lands (before anyone could have typed into it).
         */}
       <div className="mt-6"><UsernameCard key={data?.username ?? 'loading'} username={data?.username ?? null} /></div>
+      <div className="mt-8"><PeopleInbox/></div>
       <h2 className="mt-8 text-base font-semibold"><span className="text-accent">&gt;</span> connections</h2>
       <p className="mt-2 font-mono text-sm leading-relaxed text-muted">Each row is one afbin CLI connection, made by approving it in this browser. Revoke one and that agent stops. Run <code>afbin auth</code> on a machine to add another.</p>
       <div className="mt-6"><TokensPanel /></div>

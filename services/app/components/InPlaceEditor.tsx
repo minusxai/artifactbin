@@ -1112,7 +1112,7 @@ export default function InPlaceEditor({
         {formattingRow && (
         <div className="col-span-2 min-w-0 self-start">
           {selection && mode === 'design' ? (
-            <StoryFormatToolbar
+            <StoryFormatToolbar artifactId={art.id}
               selection={selection}
               onApply={edit.applyFormat}
               onApplyLink={edit.applyLink}

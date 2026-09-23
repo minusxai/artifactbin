@@ -9,6 +9,7 @@
   "exports": {
     ".": "./src/index.ts",
     "./shape": "./src/shape.ts",
+    "./dataset-grants": "./src/dataset-grants.ts",
     "./dataset-policy": "./src/dataset-policy.ts",
     "./artifact-reference": "./src/artifact-reference.ts",
     "./account-resource": "./src/account-resource.ts"

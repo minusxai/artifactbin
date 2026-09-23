@@ -390,8 +390,9 @@ export function createDataflowStore(
   /** Queries that read these datasets (and their dependents) go dirty. */
   const invalidateDatasets: DataflowStore['invalidateDatasets'] = (datasetIds) => {
     const ids = [...datasetIds];
-    const affected = queriesReadingDatasets(flow, ids);
-    if (flow.mutations?.some(m => ids.includes(m.target))) permissionsDirty = true;
+    const membershipChanged = ids.includes('_members');
+    const affected = membershipChanged ? flow.queries.map(q => q.name) : queriesReadingDatasets(flow, ids);
+    if (flow.mutations?.some(m => membershipChanged || ids.includes(m.target))) permissionsDirty = true;
     if (!affected.length && !permissionsDirty) return;
     for (const q of affected) dirty.add(q);
     pendingChanged();

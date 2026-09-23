@@ -1,8 +1,9 @@
+import {parseDatasetColumn} from '@artifactbin/utils/shape';
 import { useState } from "react";
-import { afterEach, expect, it } from "vitest";
+import { afterEach, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import type { PolicyPredicate } from "@artifactbin/contracts";
-import { PolicyConditions } from "../PolicyConditions";
+import { PolicyConditions, PolicyValueInput } from "../PolicyConditions";
 afterEach(cleanup);
 function Editor({ initial }: { initial: PolicyPredicate }) {
   const [value, setValue] = useState(initial);
@@ -57,4 +58,23 @@ it("can populate an empty Not group loaded from policy source", () => {
   render(<Editor initial={{ _not: {} }} />);
   fireEvent.click(screen.getByLabelText("Add rows.1 empty condition"));
   expect(result()).toEqual({ _not: { quantity: { _eq: "" } } });
+});
+
+it('uses a boolean selector and preserves the boolean type',()=>{
+ let value:unknown;
+ render(<PolicyValueInput label="Enabled value" type="boolean" value={true} onChange={v=>{value=v;}}/>);
+ fireEvent.change(screen.getByRole('combobox',{name:'Enabled value'}),{target:{value:'false'}});
+ expect(value).toBe(false);
+});
+
+it('offers declared choices without changing their scalar type',()=>{
+ const onChange=vi.fn();
+ render(<PolicyValueInput label="Status" type="string" value="todo" choices={['todo','done']} onChange={onChange}/>);
+ fireEvent.change(screen.getByRole('combobox',{name:'Status'}),{target:{value:'1'}});
+ expect(onChange).toHaveBeenCalledWith('done');
+});
+
+it('preserves declared choices and rejects choices with the wrong type',()=>{
+ expect(parseDatasetColumn({name:'status',type:'string',choices:['todo','done']})).toEqual({name:'status',type:'string',choices:['todo','done']});
+ expect(()=>parseDatasetColumn({name:'status',type:'string',choices:[true]})).toThrow(/choices/);
 });

@@ -1,4 +1,4 @@
-import type {DatasetPolicy} from './dataset-policy';
+import type {DatasetAccessPolicy as DatasetPolicy} from './dataset-grants';
 import type {ShareEntry} from './sharing';
 
 /** Editable identity and settings shared by JSX fences and typed resource files. */

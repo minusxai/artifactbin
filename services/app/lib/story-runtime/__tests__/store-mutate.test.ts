@@ -218,6 +218,14 @@ describe('store.mutate with reset', () => {
 });
 
 describe('store.invalidateDatasets', () => {
+  it('refreshes membership-dependent queries and permissions on a membership wakeup', () => {
+    const {store,runs}=harness();
+    runs.length=0;
+    store.invalidateDatasets(['_members']);
+    expect(runs).toHaveLength(1);
+    expect(runs[0].only).toEqual(['tally','top','elsewhere']);
+  });
+
   it('re-runs the readers of a dataset that changed elsewhere — immediately, not on the debounce', () => {
     const { store, runs } = harness();
     runs.length = 0;

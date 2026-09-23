@@ -17,6 +17,7 @@ export { envelope, type EventSubject, type EventObject } from './events';
 export { parseAssetsOrigin, isPublicAssetRequest, publicAssetResponse } from './assets-origin';
 
 export * from './dataset-policy';
+export * from './dataset-grants';
 export {parseSharingEntries} from './sharing';
 export {artifactIdFromSegment,artifactIdFromPath,artifactIdFromPathPrefix} from './artifact-reference';
 

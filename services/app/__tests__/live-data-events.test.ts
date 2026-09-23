@@ -1,3 +1,5 @@
+import {createUser,claimToken} from '@/lib/users';
+import {changeMembership} from '@/lib/membership';
 import {observedRequest} from '@/__tests__/conditional-request';
 /**
  * A document's live stream hears its DATASETS, not only itself. Every write to
@@ -36,6 +38,17 @@ beforeEach(async () => {
 });
 
 describe('GET /a/<id>/events hears the document\'s datasets', () => {
+  it('refreshes membership and action permissions without changing the document version',async()=>{
+    const owner=await createUser({email:'mxmx_test_member_stream@example.com'});
+    const t=await mintToken('member stream');await claimToken(owner.id,t.token);
+    const doc=(await create(t.token,{visibility:'public',markup:'<p>Membership stream</p>'})).id;
+    const res=await eventsRoute(request(`/a/${doc}/events`),params({id:doc}));
+    const leaving=changeMembership({userId:owner.id,tokenId:t.id},doc,{action:'leave'});
+    const events=await readEvents(res.body!,3);
+    await leaving;
+    expect(events.find(e=>e.event==='data')?.data).toMatchObject({datasets:['_members'],version:1});
+  });
+
   it('a write to a dataset the document reads arrives as an `event: data` frame naming it', async () => {
     const t = await mintToken('t');
     const ds = (await create(t.token, { dataset: ROWS, access: 'readwrite' })).id;

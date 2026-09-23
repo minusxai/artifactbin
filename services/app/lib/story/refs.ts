@@ -56,7 +56,7 @@ export interface ResolvedRef {
    * publish door analyzes every declared `<Mutation>` against it, so a button
    * the policy denies is refused here and not at every viewer's click.
    */
-  datasetPolicy?: import('@artifactbin/contracts').DatasetPolicy;
+  datasetPolicy?: import('@artifactbin/contracts').DatasetAccessPolicy;
   /**
    * Resolved through the caller's OWN scope (their token or account), not the
    * link-readable fallback. A write is admitted only when this is true.
@@ -281,11 +281,11 @@ export async function validateRefs(source: string, load: RefLoader): Promise<
         details.push(`ref:${use.id} is not yours to write — a <Mutation> may only write a dataset you own (read it with a <Query> instead, or publish your own copy)`);
         continue;
       }
-      if (!r.owned) {
+      if (!r.owned && r.datasetPolicy?.version!==2) {
         details.push(`ref:${use.id} is not yours to write — a <Mutation> may only write a dataset you own (read it with a <Query> instead, or publish your own copy)`);
         continue;
       }
-      if (r.access !== 'readwrite') {
+      if (r.access !== 'readwrite' && r.datasetPolicy?.version!==2) {
         details.push(`ref:${use.id} is read-only — a <Mutation> needs a writable dataset: publish it with afbin push <file> --type dataset --access readwrite (API: set access on create or PUT, PATCH /api/my/artifacts/${use.id} { "access": "readwrite" }, or use the dataset's share menu)`);
         continue;
       }

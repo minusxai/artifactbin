@@ -30,6 +30,7 @@ import { wrapSelection, type MdMarker } from '@/lib/markdown-lite';
 import { mentionDraft } from '@/lib/mention-draft';
 
 interface MarkdownFieldProps {
+  artifactId?:string;
   /** The textarea's own accessible name — the one the page already used. */
   label: string;
   /** The rendered draft's accessible name while Preview is on. */
@@ -68,7 +69,7 @@ const TOOLBAR = [
 const toolButton = 'inline-flex h-6 w-6 cursor-pointer items-center justify-center rounded-[3px] text-muted hover:bg-surface hover:text-fg';
 
 export default function MarkdownField({
-  label, previewLabel, previewToggleLabel, value, onChange, onSubmit,
+  artifactId, label, previewLabel, previewToggleLabel, value, onChange, onSubmit,
   previewing, onPreviewingChange, rows = 3, placeholder, autoFocus, className = '', children,
 }: MarkdownFieldProps) {
   const [mention, setMention] = useState<{start:number;end:number;query:string}|null>(null);
@@ -178,7 +179,7 @@ export default function MarkdownField({
           className="mb-2 min-h-24 w-full resize-y rounded-md border border-edge bg-surface p-3 font-sans text-sm leading-relaxed placeholder:text-faint focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/10"
         />
       )}
-      {!previewing && mention && <RemoteMentionPicker ref={pickerRef} query={mention.query} onSelect={text=>{
+      {!previewing && mention && <RemoteMentionPicker artifactId={artifactId} ref={pickerRef} query={mention.query} onSelect={text=>{
         const caret=mention.start+text.length;restore.current={start:caret,end:caret};
         onChange(value.slice(0,mention.start)+text+value.slice(mention.end));setMention(null);
       }}/>}

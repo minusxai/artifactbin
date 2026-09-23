@@ -405,3 +405,32 @@ only authenticate and translate results. Reserved and ordinary creates share one
 namespace. Claims must belong to the authenticated account and commit with the
 artifact transaction. Consumed IDs are never recycled. CLI write protocol 2
 requires updating clients and hosts together.
+
+
+## Dataset grants and artefact people
+
+New stored datasets use version 2 grants: public reads and mutations through the
+owner’s artefacts. `from` selectors are conjunctive; `allow` rules are additive.
+The shared parser/evaluator lives in `services/utils/src/dataset-grants.ts`;
+trusted caller/artefact resolution and commit fences live in the app’s dataset
+policy module. Optional legacy table restrictions are applied after the grant.
+Version 1 rows and creations with an explicit legacy access setting retain their old behaviour. Private sharing still limits reads.
+
+`artifact_members` owns one relationship per artefact/account. Accepted
+membership gates persistent v2 artefact actions, not comments or local controls.
+Owners/editors join immediately; other readers request approval. Explicit invitations allow non-followers; saved mentions retain follower/member eligibility.
+Recipient-follows-sender controls opt-out autoaccept. Declined invitation receipts
+prevent another unsolicited invitation to that recipient across artefacts. Explicit
+includeAccess grants viewing access and membership atomically under the artefact lock. Blocks and the
+30-pending budget are checked under account locks. The artefact lock serializes
+membership revocation with mutation commits. Committed membership changes send a
+`members` wakeup; the authorized live stream invalidates `_members` and action
+permissions without reloading the document.
+
+Resolved document links and comment links use `/people/<stable-user-id>`.
+`invitePeople` applies the same recipient rules for humans and agents; saving
+content and inserting notification receipts are one transaction. Source node IDs
+and comment IDs make notification delivery idempotent. Plain IDs, rendered User
+chips and forks have no mention side effects. `_members(user_id, joined_at)` is
+read-only and scoped to the current saved document. `memberOf` column constraints accept joined members while retaining legacy sharing and ownership.
+A picker sourced from `_members` lists only accepted participants.

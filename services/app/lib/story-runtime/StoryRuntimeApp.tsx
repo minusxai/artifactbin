@@ -1,3 +1,5 @@
+import {PersonMention,PersonMentionProvider} from '@/components/PersonMention';
+import {isPersonMentionHref} from '@/lib/person-mentions';
 import { Mermaid } from '@/components/kit/mermaid';
 /**
  * The ONE view composition for a served markup document. The registry and
@@ -39,7 +41,7 @@ import { User } from '@/components/kit/user';
 import { UserImage } from '@/components/kit/user-image';
 import { UserHandle } from '@/components/kit/user-handle';
 import type { PersonCard } from '@artifactbin/contracts';
-import { SIGN_IN_TO_DO_THIS, needsSignIn, refusalText } from '@/lib/story/sign-in-required';
+import { refusalText } from '@/lib/story/sign-in-required';
 import { SignIn } from '@/components/kit/sign-in';
 import { isWebUrl, runtimeAssetUrl } from '@/lib/story/asset-url';
 import {boundImageValue,imageReferenceId} from '@/lib/story/image-source';
@@ -91,7 +93,6 @@ function RuntimeRowAction({props, row, identity, children}: RowActionProps) {
   const state = useSyncExternalStore(actions?.subscribe ?? NO_SUBSCRIBE, () => actions?.get(identity), () => undefined);
   const unavailable = useSyncExternalStore(store?.subscribe ?? NO_SUBSCRIBE, () => name && store ? store.mutationUnavailable(name) : 'Checking edit access…', () => 'Checking edit access…');
   const {run: _run, ...rest} = props;
-  if(needsSignIn(unavailable))return <SignIn {...runtimeTargetIdentity(props)}>{SIGN_IN_TO_DO_THIS}</SignIn>;
   return <>
     <Button {...rest} type="button" disabled={!chrome || !actions || unavailable !== null || state?.pending || props.disabled === true}
       aria-busy={state?.pending || undefined} aria-description={refusalText(unavailable) ?? undefined}
@@ -127,7 +128,7 @@ function RuntimeCellControl({ tag, component: Component, props, row, identity, c
   const error = session?.error ? <span role="alert" className="mx-write-error">{session.error}</span> : null;
   const valueType = tableName ? ctx.state.tables[tableName]?.columns.find((c) => c.name === valueField)?.type : undefined;
   const selectValue = (next: string | null): Scalar => next === null ? null : valueType === 'number' ? next === '' ? null : Number(next) : valueType === 'boolean' ? next === 'true' : next;
-  if(needsSignIn(unavailable))return <SignIn {...runtimeTargetIdentity(props)}>{SIGN_IN_TO_DO_THIS}</SignIn>;
+  // Cell values remain readable even when the viewer cannot mutate them.
   if (tag === 'Select') {
     const options = selectOptions(ctx.state, props.options, `${tableName}.${valueField}`, valueType === 'user')
       .filter((option) => props.exclude === undefined || option.value !== String(props.exclude));
@@ -590,11 +591,8 @@ function DialogContentAdapter(props: Record<string, unknown>) {
   const unavailable = useSyncExternalStore(store?.subscribe ?? NO_SUBSCRIBE,
     () => name ? store?.mutationUnavailable(name) ?? (store ? null : 'Checking edit access…') : null,
     () => name ? 'Checking edit access…' : null);
-  // The one refusal a reader can act on is drawn as the door, not as prose
-  // about it — and a guest reaching it is by construction not signed in, so
-  // <SignIn> is unconditional here.
   const reason = !chrome && name ? 'Read-only preview' : unavailable;
-  return <DialogContent {...props} unavailable={needsSignIn(reason) ? <SignIn>{SIGN_IN_TO_DO_THIS}</SignIn> : refusalText(reason)}
+  return <DialogContent {...props} unavailable={refusalText(reason)}
     onSubmitMutation={name && store ? () => store.mutate(name) : undefined} />;
 }
 
@@ -625,7 +623,6 @@ function ButtonAdapter(props: Record<string, unknown>) {
   );
   const { run: _run, children, ...rest } = props;
   if (!name || !store) return <Button {...(rest as Record<string, unknown>)} run={props.run}>{children as ReactNode}</Button>;
-  if (needsSignIn(unavailable)) return <SignIn {...runtimeTargetIdentity(props)} className={str(props.className)}>{SIGN_IN_TO_DO_THIS}</SignIn>;
   return (
     <>
       <Button
@@ -640,7 +637,7 @@ function ButtonAdapter(props: Record<string, unknown>) {
       >
         {children as ReactNode}
       </Button>
-      {unavailable ? <span className="text-xs text-muted-foreground">{unavailable}</span> : null}
+      {unavailable ? <span className="text-xs text-muted-foreground">{refusalText(unavailable)}</span> : null}
       {error ? <span role="alert" className="mx-write-error">{error}</span> : null}
     </>
   );
@@ -1237,7 +1234,7 @@ const EMPTY_GLYPHS: GlyphMap = {};
 /** A store-less subscribe (a Button rendered outside a document): nothing ever changes. */
 const NO_SUBSCRIBE = () => () => {};
 
-export function StoryRuntimeApp({ nodes, refData, glyphs, dataflow, viewer = null, colorMode, template = null, chrome = true, assetsUrl = null, managedAssets, importAsset, store: givenStore, onMounted, editDecorate, editChildren, onSlideRename }: StoryRuntimeAppProps) {
+export function StoryRuntimeApp({ mentionStatuses, nodes, refData, glyphs, dataflow, viewer = null, colorMode, template = null, chrome = true, assetsUrl = null, managedAssets, importAsset, store: givenStore, onMounted, editDecorate, editChildren, onSlideRename }: StoryRuntimeAppProps) {
   const [localStore] = useState<DataflowStore>(() => givenStore ?? createDataflowStore(dataflow ?? { flow: EMPTY_DATAFLOW }));
   const store = givenStore ?? localStore;
   const actions = useMemo(() => createRowActions(), [store]);
@@ -1275,8 +1272,10 @@ export function StoryRuntimeApp({ nodes, refData, glyphs, dataflow, viewer = nul
   const decorateElement = useMemo(() => (element: ReactElement, node: JsxElement, path: string) => {
     const patch = resolveRefProps(node, element.props as Record<string, unknown>, refData);
     const resolved = patch ? cloneElement(element as ReactElement<Record<string, unknown>>, patch) : element;
+    const href=(resolved.props as Record<string,unknown>).href;
+    const decorated=node.tag==='a'&&typeof href==='string'&&isPersonMentionHref(href)?<PersonMention {...resolved.props as React.AnchorHTMLAttributes<HTMLAnchorElement>}/>:resolved;
     // Edit mode wraps LAST, so it decorates the element the reader actually sees.
-    return editDecorate ? editDecorate(resolved as ReactElement, node, path) : resolved;
+    return editDecorate ? editDecorate(decorated as ReactElement, node, path) : decorated;
   }, [refData, editDecorate]);
 
   // The URLs the browser has answered, for the life of this document. A ref,
@@ -1287,7 +1286,7 @@ export function StoryRuntimeApp({ nodes, refData, glyphs, dataflow, viewer = nul
   const assets = useMemo(() => ({ endpoint: assetsUrl, seen: seen.current, importAsset, images }), [assetsUrl, importAsset, images]);
 
   const body = (
-    <RuntimeAssetContext.Provider value={assets}>
+    <PersonMentionProvider initial={mentionStatuses} artifactId={assetsUrl?.match(/\/a\/([A-Za-z0-9]+)\//)?.[1]}><RuntimeAssetContext.Provider value={assets}>
       <RuntimeEmbedContext.Provider value={{ store, flow: store.flow, state, pending, setValue, fetchPage: store.fetchPage, refData, chrome, colorMode, viewer, managedAssets, importManagedAsset: importAsset }}>
         <RowActionsContext.Provider value={actions}>{renderStoryNodes(nodes, {
           values: signals,
@@ -1304,7 +1303,7 @@ export function StoryRuntimeApp({ nodes, refData, glyphs, dataflow, viewer = nul
           decorateChildren: editChildren,
         })}</RowActionsContext.Provider>
       </RuntimeEmbedContext.Provider>
-    </RuntimeAssetContext.Provider>
+    </RuntimeAssetContext.Provider></PersonMentionProvider>
   );
 
   /*

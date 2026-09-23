@@ -6,7 +6,7 @@ import {createStyle,wrap,visibleWidth,type Style,type StyleOptions} from './styl
 interface ScreenOptions extends StyleOptions {columns?:number}
 export const COMMAND_GROUPS:ReadonlyArray<readonly [string,readonly string[]]>=[
  ['Local files',['add','mv','preview','pull','push','fork','status','diff','validate']],
- ['Published resources',['list','log','export','query','delete','comment','open','sessions','testuser']],
+ ['Published resources',['list','log','export','query','delete','comment','invite','join','members','mention','open','sessions','testuser']],
  ['Setup and help',['setup','config','serve','auth','update','remote','help']],
 ];
 const TAGLINE='Artifactbin: Google docs for agents';

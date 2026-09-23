@@ -1,3 +1,4 @@
+import {MEMBER_COLUMNS} from '@artifactbin/contracts';
 /**
  * One document's dataflow, materialised: the declared tables + the caller's
  * datasets go into the engine, every query runs in dependency order with the
@@ -22,6 +23,8 @@ interface DataflowEngine {run:SqlService['run'];queryRows:(table:{rows:Row[];col
 export type DatasetTables = Record<string, { rows: Row[]; columns: DatasetColumn[] }>;
 
 export interface RunDataflowOptions {
+  /** Accepted members supplied by the saved document’s server context. */
+  members?:Row[];
   /** Trusted caller identity, set only by the server composition. */
   userId?:string|null;
   localTables?: Record<string, Row[]>;
@@ -55,6 +58,7 @@ export async function evaluateDataflow(engine:DataflowEngine,flow: Dataflow, dat
   const tables: DataflowState['tables'] = {};
   const errors: DataflowState['errors'] = {};
   const inputs: Record<string, { rows: Row[]; columns: DatasetColumn[] }> = {};
+  inputs._members={columns:MEMBER_COLUMNS,rows:opts.members??[]};
   const local = localTableOverrides(flow, opts.localTables);
   for (const v of flow.values) {
     if (v.kind !== 'table') continue;

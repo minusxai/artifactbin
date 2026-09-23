@@ -36,8 +36,12 @@ export function parseDatasetColumn(raw: unknown): DatasetColumn {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) throw new Error('Column must be {name, type, constraints?}');
   const c = raw as Record<string, unknown>;
   if (typeof c.name !== 'string' || !c.name || c.name.includes('\0') || !['string','number','boolean','date','timestamp','user'].includes(String(c.type))) throw new Error('Invalid column name or type; use string, number, boolean, date, timestamp or user');
-  if (Object.keys(c).some(k => !['name','type','constraints'].includes(k))) throw new Error('Unknown column attribute');
+  if (Object.keys(c).some(k => !['name','type','constraints','choices'].includes(k))) throw new Error('Unknown column attribute');
   const column: DatasetColumn = {name:c.name, type:c.type as ColumnType};
+  if(c.choices!==undefined){
+    if(!Array.isArray(c.choices)||!c.choices.length||c.choices.length>100||c.choices.some(v=>v===null||typeof v!==(c.type==='number'?'number':c.type==='boolean'?'boolean':'string')||(typeof v==='number'&&!Number.isFinite(v)))||new Set(c.choices).size!==c.choices.length)throw new Error('Column choices must be 1–100 unique values matching its type');
+    column.choices=[...c.choices];
+  }
   if (c.constraints !== undefined) {
     if (c.type !== 'user' || !c.constraints || typeof c.constraints !== 'object' || Array.isArray(c.constraints)) throw new Error('User constraints must be an object');
     const constraints = c.constraints as Record<string,unknown>;

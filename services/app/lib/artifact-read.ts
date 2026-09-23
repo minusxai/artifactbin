@@ -1,3 +1,4 @@
+import {grantsOf,grantsPermitRead} from './datasets/policy/grants';
 import {effectiveRole,getArtifactById,getArtifactFor,type TokenActor} from './artifacts';
 import {canRead,canEdit,canAnnotate} from './share-roles';
 import {artifactToWireWithAnnotations} from './artifact-wire';
@@ -8,6 +9,7 @@ export async function readableArtifact(actor:TokenActor,id:string){
  const row=await getArtifactById(id);
  if(!row)return null;
  const role=await effectiveRole(row,actor);
+ if(grantsOf(row))return await grantsPermitRead(row,actor)?{row,role:role==='none'?'viewer' as const:role}:null;
  return canRead(role)?{row,role}:null;
 }
 

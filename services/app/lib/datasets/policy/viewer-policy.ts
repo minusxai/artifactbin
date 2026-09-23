@@ -1,3 +1,4 @@
+import { viewersWritePolicy } from '@artifactbin/utils';
 /**
  * The policy AS THE ENGINE READS IT — pure, DB-free, and shared by the two
  * doors that must agree: a click (mutationPolicy, next door) and a publish
@@ -8,7 +9,7 @@
  */
 import type {
   DatasetMutationPolicy,
-  DatasetPolicy,
+  DatasetAccessPolicy as DatasetPolicy,
   Scalar,
 } from '@artifactbin/contracts';
 
@@ -51,7 +52,7 @@ export function viewerMutationPolicy(
   table: { schema: string; name: string },
   session: Record<string, Scalar>,
 ): DatasetMutationPolicy | undefined {
-  const selected = policy.tables.find(
+  const selected = (policy.tables ?? (policy.version===2 ? viewersWritePolicy(table).tables : [])).find(
     (t) => t.table.schema === table.schema && t.table.name === table.name,
   );
   if (!selected) return undefined;

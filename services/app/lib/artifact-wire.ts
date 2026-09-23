@@ -1,3 +1,6 @@
+import {readableArtifact} from './artifact-read';
+import {MembershipError} from './membership';
+import {grantsOf,grantsPermitWrite} from './datasets/policy/grants';
 import {RemoteError} from './remote/registry';
 import type {ReviewReceipt} from './remote/agents';
 import type {MutationReceipt} from './mutation-receipt';
@@ -749,7 +752,7 @@ export async function respondToAnnotationAction(
   if (!action) return json({ error: 'invalid_annotation_action' }, 400);
   let wire;
   try{wire = await actOnAnnotationFor(actor, id, annId, action, author,receipt,review);}
-  catch(error){if(error instanceof RemoteError)return json({error:'remote_review_refused',message:error.message},error.status);throw error;}
+  catch(error){if(error instanceof MembershipError)return json({error:'mention_refused',detail:error.message},error.status);if(error instanceof RemoteError)return json({error:'remote_review_refused',message:error.message},error.status);throw error;}
   if (!wire) return json({ error: 'not_found' }, 404);
   if (action.reply && author.kind === 'human') notifyRemoteComment(actor.userId, id, annId, wire.thread[wire.thread.length - 1]);
   return json(wire);
@@ -804,7 +807,8 @@ export async function respondToMutate(
   receipt?:MutationReceipt,
 ): Promise<Response> {
   if (body && typeof body.name === 'string') return respondToDeclaredMutation(actor, id, body, receipt);
-  const dataset = await getArtifactFor(actor, id);
+  const found = await getArtifactById(id);
+  const dataset = found&&grantsOf(found)&&(await grantsPermitWrite(found,actor)||await readableArtifact(actor,id))?found:await getArtifactFor(actor,id);
   if (!dataset) return json({ error: 'not_found' }, 404);
 
   const refusal = await canWriteDataset(dataset, actor);
@@ -814,7 +818,7 @@ export async function respondToMutate(
   if (refusal) {
     return json({
       error: 'dataset_read_only',
-      details: [`${id} is read-only — publish it writable: afbin push <file> --type dataset --access readwrite (API: PUT here, or PATCH /api/my/artifacts/${id})`],
+      details: [grantsOf(dataset)?'No grant allows this direct write. Use an allowed saved artefact action, or ask a dataset editor to add a user grant for this operation. See afbin help apps.':`${id} is read-only — publish it writable: afbin push <file> --type dataset --access readwrite (API: PUT here, or PATCH /api/my/artifacts/${id})`],
     }, 403);
   }
 

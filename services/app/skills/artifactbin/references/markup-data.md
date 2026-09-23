@@ -6,7 +6,7 @@ order: 1
 ---
 ## Read first
 
-Declare Queries/table Values and scalar Values in `<Helmet>`; bind by name.
+Declare queries and values in `<Helmet>`; bind by name.
 
 ```jsx
 <Helmet>
@@ -57,12 +57,11 @@ Editable cells: [editing](markup-editing.md).
   VIEWER: a stranger gets the `public` children; `thumbnail` is null for a
   private child and for folders, `views`/`sparkline` unless you may edit it.<!--/bundle:skip-->
 - `<Mutation name source="ref:abc123">{`insert into public.rows (a) values ($a)`}</Mutation>`
-  — a `<Query>` that WRITES (push the dataset `--access readwrite`,
+  — a `<Query>` that WRITES (new datasets allow owner-artefact actions; legacy datasets use `--access readwrite`,
   [datasets](databases.md)). Exactly one INSERT | UPDATE | DELETE
   naming one shared dataset. Runs on demand, never at render:
   `<Button run="$name">` in the body, or `mx.mutate("name")` from your
-  `<script>`; dry-run at publish, so a button that could not work is a `400`
-  naming the fix.<!--bundle:skip--> `reset="desc amount"` clears those scalars on SUCCESS only. Data policies permit viewer actions; without a policy only editors write. Callers supply VALUES only.
+  `<script>`; SQL is checked at publish; grants are checked per caller.<!--bundle:skip--> `reset="desc amount"` clears those scalars on SUCCESS only. New grants require membership; v1 is unchanged. Supply VALUES only.
   Bound write controls disable automatically; filters and live reads still work. DuckDB's `uuid()` and `now()` give a
   row its own id and timestamp.<!--/bundle:skip-->
 

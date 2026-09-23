@@ -287,6 +287,26 @@ export async function runCli(argv:string[],context:CliContext={}):Promise<number
    const result=await browserSessionCommand(client,positionals[0],positionals[1],{code,execution:typeof flags.execution==='string'?flags.execution:undefined,...(typeof flags.as==='string'?{viewer:viewerChoice(flags.as)}:{}),progress:stderr});
    emit(result);return result.error?1:0;
   }
+  if(command==='invite'||command==='join'||command==='members'||command==='mention'){
+   const {id,version:memberVersion}=await artifactReference(workspace,positionals[0]!,client.connection.server,false,selectedAddresses);
+   if(memberVersion!==undefined)throw new CliError('invalid_reference','Membership belongs to the current artifact, not an archived version.');
+   if(command==='mention'){
+    const mentions=[];
+    for(const raw of positionals.slice(1)){
+     const username=raw.replace(/^@/,'').toLowerCase();
+     const result=await client.request<{people:Array<{user_id:string;username:string}>}>(`/artifacts/${id}/members?query=${encodeURIComponent(username)}`);
+     const person=result.people.find(p=>p.username.toLowerCase()===username);
+     if(!person)throw new CliError('mention_refused',`${raw} is not eligible. Only followers and current members can be mentioned.`);
+     mentions.push({...person,markdown:`[@${person.username}](/people/${person.user_id})`,markup:`<a href="/people/${person.user_id}">@${person.username}</a>`});
+    }
+    emit({mentions});return 0;
+   }
+   const action=command==='members'?positionals[1]:command;
+   if(action && !['invite','join','accept','approve','dismiss','leave'].includes(action))throw new CliError('invalid_arguments','Choose accept, approve, dismiss or leave.');
+   if(action==='approve'&&!positionals[2])throw new CliError('invalid_arguments','Approve requires the requesting user ID.');
+   if(command==='members'&&positionals[2]&&!['approve','dismiss'].includes(action??''))throw new CliError('invalid_arguments','Only approve and dismiss take another user ID.');
+   emit(action?await client.request(`/artifacts/${id}/members`,'POST',{action,...(command==='invite'?{usernames:positionals.slice(1),...(flags['include-access']?{includeAccess:true}:{})}:{}),...(command==='members'&&positionals[2]?{userId:positionals[2]}:{})}):await client.request(`/artifacts/${id}/members`));return 0;
+  }
   if(command==='testuser'){emit(await testUserCommand(client,positionals[0],positionals[1],{all:!!flags.all}));return 0;}
   if(account){const result=await remoteAccountCommand(workspace,parsed,account,client);if(result.content!==undefined)stdout(result.content);else emit(result.value);return result.exitCode??0;}
   if(command==='fork'){emit(await forkResources(workspace,positionals,{...forkOptions(),client}));return 0;}
@@ -408,7 +428,7 @@ export const PUBLISHED_NEXT='Published: the saved local file contains the publis
  */
 function publishedNext(verified:Awaited<ReturnType<typeof verifiedSummary>>):string{
  const writes=[...new Set((verified??[]).flatMap(file=>file.writes??[]))];
- return writes.length?`${PUBLISHED_NEXT} This page declares ${writes.length===1?'a write':'writes'} (${writes.join(', ')}) that the push did not run: run each in a live session on a test-user fork, once as that test user and once as yourself. On the original page, check actions --as guest: $_me writes offer Sign in and change no data; other actions follow their intended permissions. Do not run successful test writes on the original page (afbin help live-sessions, afbin help apps). Fix, push and fork again before handing it over.`:PUBLISHED_NEXT;
+ return writes.length?`${PUBLISHED_NEXT} This page declares ${writes.length===1?'a write':'writes'} (${writes.join(', ')}) that the push did not run: run each in a live session on a test-user fork, once as that test user and once as yourself. On the original page, check actions --as guest: $_me writes stay disabled and change no data; other actions follow their intended permissions. Do not run successful test writes on the original page (afbin help live-sessions, afbin help apps). Fix, push and fork again before handing it over.`:PUBLISHED_NEXT;
 }
 /** The pushed documents' title, queries, charts and markup — all checked by the server before it accepted them. */
 async function verifiedSummary(workspace:Workspace,paths:string[]):Promise<Array<{path:string;title:string|null;queries:string[];charts:number;checks:string[];writes?:string[]}>|undefined>{

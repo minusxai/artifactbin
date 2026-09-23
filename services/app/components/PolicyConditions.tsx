@@ -1,7 +1,9 @@
-import { useEffect, useState } from "react";
+import { createContext, useContext, useEffect, useState } from "react";
 import { Plus, Trash2 } from "lucide-react";
-import type { PolicyPredicate } from "@artifactbin/contracts";
+import type { PolicyPredicate, ColumnType } from "@artifactbin/contracts";
 import { Tooltip } from "@/components/Tooltip";
+
+export const PolicyPeopleContext=createContext<Array<{user_id:string;username:string|null;name:string|null}>>([]);
 
 const input =
   "min-w-0 w-full rounded-lg border border-edge bg-surface px-3 py-2 text-sm text-fg focus:border-accent focus:outline-none";
@@ -31,17 +33,24 @@ const action =
 export function PolicyValueInput({
   label,
   value,
-  onChange,
+  onChange, type, choices,
 }: {
+  type?:ColumnType;
+  choices?:import("@artifactbin/contracts").Scalar[];
   label: string;
   value: unknown;
   onChange: (value: unknown) => void;
 }) {
+  const people=useContext(PolicyPeopleContext);
   const [text, setText] = useState(JSON.stringify(value) ?? "");
   useEffect(() => {
     if (JSON.stringify(parseValue(text)) !== JSON.stringify(value))
       setText(JSON.stringify(value) ?? "");
   }, [value]);
+  if(choices?.length)return <select className={input} aria-label={label} value={String(choices.findIndex(c=>c===value))} onChange={e=>onChange(choices[Number(e.target.value)])}>{!choices.includes(value as import('@artifactbin/contracts').Scalar)&&<option value="-1">{String(value??'Choose a value')}</option>}{choices.map((choice,i)=><option key={i} value={String(i)}>{String(choice)}</option>)}</select>;
+  if(type==='boolean')return <select className={input} aria-label={label} value={String(value)} onChange={e=>onChange(e.target.value==='true')}><option value="true">True</option><option value="false">False</option></select>;
+  if(type==='user')return <select className={input} aria-label={label} value={String(value??'')} onChange={e=>onChange(e.target.value)}><option value="">Choose a person</option><option value="x-hasura-user-id">Current user</option>{people.map(p=><option key={p.user_id} value={p.user_id}>{p.username?`@${p.username}`:p.name??p.user_id}</option>)}{typeof value==='string'&&value&&value!=='x-hasura-user-id'&&!people.some(p=>p.user_id===value)&&<option value={value}>{value}</option>}</select>;
+  if(type)return <input className={input} aria-label={label} type={type==='number'?'number':type==='date'?'date':type==='timestamp'?'datetime-local':'text'} step={type==='number'?'any':undefined} value={String(value??'')} onChange={e=>onChange(type==='number'&&e.target.value!==''?Number(e.target.value):e.target.value)}/>;
   return (
     <input
       className={input}
@@ -81,7 +90,7 @@ export function PolicyConditions({
   label: string;
   title: string;
   value: PolicyPredicate;
-  columns: Array<{ name: string }>;
+  columns: Array<{ name: string; type?:ColumnType;choices?:import("@artifactbin/contracts").Scalar[] }>;
   onChange: (value: PolicyPredicate) => void;
 }) {
   const condition = () => ({ [columns[0]?.name ?? "column"]: { _eq: "" } });
@@ -147,7 +156,7 @@ function Predicate({
 }: {
   label: string;
   value: PolicyPredicate;
-  columns: Array<{ name: string }>;
+  columns: Array<{ name: string; type?:ColumnType;choices?:import("@artifactbin/contracts").Scalar[] }>;
   onChange: (value: PolicyPredicate) => void;
 }) {
   if (!Object.keys(value).length)
@@ -357,6 +366,8 @@ function Predicate({
                   </select>
                   <PolicyValueInput
                     label={`${name} value`}
+                    type={operator==='_is_null'?'boolean':operator==='_in'||operator==='_nin'?undefined:columns.find(c=>c.name===field)?.type}
+                    choices={['_is_null','_in','_nin'].includes(operator)?undefined:columns.find(c=>c.name===field)?.choices}
                     value={constant}
                     onChange={(next) => set(field, operator, next)}
                   />

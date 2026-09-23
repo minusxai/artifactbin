@@ -1,3 +1,4 @@
+import {MEMBER_COLUMNS} from '@artifactbin/contracts';
 import {resolveUserValues} from './user-values';
 import {compileStoredMutation} from '@/lib/datasets/stored-mutation';
 /**
@@ -49,7 +50,7 @@ export async function dryRunDataflow(flow: Dataflow, load: RefLoader, body: JsxN
   | { kind: 'ok'; columns: Record<string, DatasetColumn[]>; rowSchemas: Record<string, DatasetColumn[]>; /** `$_value`'s declared type per cell-editing mutation: the type of the column its editor sits in. */ valueTypes: Record<string, DatasetColumn['type']> }
 > {
   try {flow=await resolveUserValues(flow,load);}catch(error){return {kind:'sql',details:[error instanceof Error?error.message:'Invalid user binding']};}
-  const tables: Record<string, { columns: DatasetColumn[] }> = {};
+  const tables: Record<string, { columns: DatasetColumn[] }> = {_members:{columns:MEMBER_COLUMNS}};
   for (const v of flow.values) if (v.kind === 'table') tables[v.name] = { columns: v.columns };
   const signalColumns = flow.values.filter(v => v.kind === 'scalar').map(v => ({name: v.name, type: v.type}));
   if (signalColumns.length) tables[SIGNALS_TABLE] = {columns: signalColumns};

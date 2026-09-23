@@ -15,7 +15,7 @@ Every action goes through the `afbin` CLI; the site's HTTP API is not for agents
 - For a supplied artifact: `afbin pull <url-or-id> --output report.jsx`, edit the file, `afbin push report.jsx`. For a new artifact, write the file and push it. Share its returned URL.
 - Several people — shared, friends, a team, each person, sign-up, vote, RSVP, who did what: read `afbin help apps` BEFORE picking a data shape: accounts, never typed names.
 - Few turns: `afbin help <template>`, then push a FIRST version within three calls of the pull — title and section headings, one line each — and fill the sections in later pushes; a person is waiting on a blank page. A successful push IS the verification: the head is your file. Skip pulling, diffing, exporting, screenshotting or grepping it afterwards; filling sections is not re-checking.
-- Test every `<Mutation>` in a live session (`afbin help live-sessions`) on a test-user fork, as that user and yourself. On the original, check actions `--as guest`: identity writes offer Sign in and change no data. Fix, push and fork again until clean.
+- Test every `<Mutation>` in a live session (`afbin help live-sessions`) on a test-user fork, as that user and yourself. On the original, check actions `--as guest`: identity writes stay disabled and change no data. Fix, push and fork again until clean.
 - Local files: `afbin add <files> --json` assigns reference IDs; preview/push auto-register named files. Push runs `afbin validate` and publishes unpublished IDs.
 - Native markup first: the components cover text, data, charts, tables, controls and motion; use `<Iframe>` only for an isolated DOM script or canvas, never for layout or content.
 - Preserve its identity: the CLI maintains `id`, `edit_id`, `head_version`, `state` and `version` in the YAML fence. Another artifact is a deliberate fork: copy the file and remove those five fields.
@@ -40,7 +40,7 @@ Before writing, read design, markup, template and theme; a template's frame keep
 - [sync and recovery](references/publishing.md) — status, diff, dry-run, force, uncertain writes.
 - [errors](references/errors.md) — every refusal code and its fix.
 - [comments](references/publishing-annotations.md) — `afbin comment` lists, answers and resolves threads; `afbin help remote-review`.
-- [apps](references/apps.md) — a page several people use.
+- [apps](references/apps.md) — shared pages, grants, mentions.
 - [datasets and media](references/publishing-datasets.md), [catalogs](references/databases.md), [user fields](references/databases-users.md), [queries](references/publishing-query.md).
 - [history](references/publishing-versions.md) — `afbin log`, `afbin delete`, restore, export.
 - [authentication](references/publishing-auth.md) — automatic sign-in, `--harness`, credentials per server.

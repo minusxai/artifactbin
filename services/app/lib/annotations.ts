@@ -1,3 +1,5 @@
+import {commentMentions} from './saved-mentions';
+import {MembershipError} from './membership';
 import {consumeCommentImage,commentImagesFor} from './comment-images';
 import type {CommentImageWire} from '../../contracts/src/comment-image';
 import {remoteAgents,type ReviewReceipt} from './remote/agents';
@@ -395,13 +397,14 @@ export async function createAnnotationFor(
     );
     // Read back through the join, not RETURNING: the echo draws the author's face too.
     const inserted = await tx.query<AnnotationRowDb>(`SELECT * FROM ${ANNOTATIONS_READ} WHERE id = $1`, [id]);
+    await commentMentions(tx,row,actor,input.body,id);
     await remoteAgents.enqueue(tx,actor.userId,artifactId,id,{id,body:input.body,author});
     await notify(tx, artifactId, id);
     const [wire] = await wireFor(tx, row, inserted.rows);
     if(wire&&receipt)await completeMutationReceipt(tx,receipt,{status:201,body:wire as unknown as Record<string,unknown>});
     return wire ?? null;
-  });
-  if (!made || 'refused' in made) return made;
+  }).catch(error=>{if(error instanceof MembershipError)return new Response(JSON.stringify({error:'mention_refused',detail:error.message}),{status:error.status,headers:{'Content-Type':'application/json'}});throw error;});
+  if (!made || made instanceof Response || 'refused' in made) return made;
   await emit(actorSubject(actor), 'annotated', { kind: 'artifact', id: artifactId }, { annotation_id: id });
   return made;
 }
@@ -566,6 +569,7 @@ export async function actOnAnnotationFor(
         [replyId, artifactId, root.id, action.reply, remote?'agent':author.kind, actor.tokenId, actor.userId, remote?.label??author.label, author.transport,remote?JSON.stringify({sessionId:remote.sessionId,color:remote.color}):null],
       );
     }
+    if(replied)await commentMentions(tx,row,actor,action.reply!,replyId);
     if(replied)await remoteAgents.enqueue(tx,actor.userId,artifactId,root.id,{id:replyId,body:action.reply!,author});
     let resolved = false;
     if (action.reopen && root.status === 'resolved') {

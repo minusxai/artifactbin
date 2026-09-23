@@ -258,6 +258,21 @@ describe('<Dialog> bound to the store', () => {
     HTMLDialogElement.prototype.close = function () {this.open = false; this.dispatchEvent(new Event('close'));};
   });
   
+  it('keeps a guest mutation form disabled without inserting a sign-in link',()=>{
+    const {content,body}=splitHelmet(parseJsxOrThrow('<Helmet><Mutation name="save" source="ref:abc123">{`insert into public.rows values ($_me)`}</Mutation></Helmet><Dialog open={true}><DialogContent run="$save" aria-label="Editor"><input aria-label="Title" defaultValue="First"/><button type="submit">Save</button></DialogContent></Dialog>').nodes);
+    const flow={values:content.values,queries:content.queries,mutations:content.mutations};
+    const state={values:{},tables:{},errors:{},mutationAccess:{save:'sign_in_required'}};
+    const mutate=vi.fn();
+    const store=createDataflowStore({flow,state},{transport:{run:vi.fn(),page:vi.fn(),mutate}});
+    const view=render(<StoryRuntimeApp nodes={body} refData={{}} dataflow={{flow,state}} store={store} colorMode="light" chrome />);
+    expect(view.getByLabelText('Title')).toBeDisabled();
+    expect(view.getByRole('button',{name:'Save'})).toBeDisabled();
+    expect(view.queryByRole('link',{name:'Sign in to do this'})).toBeNull();
+    fireEvent.click(view.getByRole('button',{name:'Save'}));
+    expect(mutate).not.toHaveBeenCalled();
+    store.dispose();
+  });
+
   it('binds dialog state two ways and submits with current signals through the existing mutation transport', async () => {
     const parsed = parseJsxOrThrow('<Helmet><Value name="editing" type="boolean" default={false} /><Value name="title" type="string" default="First" /><Mutation name="save" source="ref:abc123">{`insert into public.rows (title) values ($title)`}</Mutation></Helmet><Dialog open="$editing"><DialogTrigger>Open</DialogTrigger><DialogContent run="$save" aria-label="Editor"><input aria-label="Title" value="$title" required /><button type="submit">Save</button><DialogClose>Cancel</DialogClose></DialogContent></Dialog>{$editing && <p>Editing</p>}');
     const {content, body: nodes} = splitHelmet(parsed.nodes);
@@ -502,17 +517,19 @@ describe('the viewer in markup', () => {
   });
 });
 
-it('replaces a guest identity action with the login door instead of a disabled action',()=>{
+it('keeps a guest mutation button disabled with its authored label',()=>{
  const {content,body}=splitHelmet(parseJsxOrThrow('<Helmet><Mutation name="add" source="ref:abc123">{`insert into public.rows values ($_me)`}</Mutation></Helmet><Button id="add1" run="$add">Add expense</Button>').nodes);
  const flow={values:content.values,queries:content.queries,mutations:content.mutations};
  const state={values:{},tables:{},errors:{},mutationAccess:{add:'sign_in_required'}};
  const mutate=vi.fn();
  const store=createDataflowStore({flow,state},{transport:{run:vi.fn(),page:vi.fn(),mutate}});
  const view=render(<StoryRuntimeApp nodes={body} refData={{}} dataflow={{flow,state}} store={store} colorMode="light" chrome />);
- expect(view.queryByRole('button',{name:'Add expense'})).toBeNull();
- const login=view.getByRole('link',{name:'Sign in to do this'});
- expect(login.getAttribute('href')).toMatch(/^\/login(?:\?callbackUrl=|$)/);
- expect(login.id).toBe('add1');
+ const button=view.getByRole('button',{name:'Add expense'}) as HTMLButtonElement;
+ expect(button.disabled).toBe(true);
+ expect(button.id).toBe('add1');
+ expect(view.queryByRole('link',{name:'Sign in to do this'})).toBeNull();
+ expect(view.container.textContent).not.toContain('sign_in_required');
+ fireEvent.click(button);
  expect(mutate).not.toHaveBeenCalled();
  store.dispose();
 });

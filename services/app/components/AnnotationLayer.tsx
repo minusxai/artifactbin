@@ -1,3 +1,4 @@
+import {PersonMentionProvider} from './PersonMention';
 'use client';
 
 import {useNewCommentDraft} from './useNewCommentDraft';
@@ -497,9 +498,10 @@ function ThreadFoldControl({ folded, onToggle }: { folded: boolean; onToggle: ()
 }
 
 function Thread({
-  a, open, resolved, hovered, busy, folded, justOpened, isCommentFolded, targetMissing,
+  artifactId, a, open, resolved, hovered, busy, folded, justOpened, isCommentFolded, targetMissing,
   onOpen, onHover, onReply, onResolve, onReopen, onDelete, onToggleFold, onToggleComment,
 }: {
+  artifactId:string;
   a: AnnotationWire;
   open: boolean;
   resolved?: boolean;
@@ -774,7 +776,7 @@ function Thread({
       )}
       {!folded && open && !resolved && (
         <div className="border-t border-edge px-3 py-2">
-          <MarkdownField
+          <MarkdownField artifactId={artifactId}
             label="Reply to annotation"
             previewLabel="Reply preview"
             previewToggleLabel="Preview reply"
@@ -938,6 +940,21 @@ export default function AnnotationLayer({
     if (!railOpenRef.current) openedForThreadRef.current = true;
     onRailOpenChangeRef.current(true);
   }, [id]);
+
+  // Notification links identify a comment; resolve it through the authorized
+  // open/resolved indexes so replies open their containing conversation.
+  const [linkedComment] = useState(() => typeof window === 'undefined' ? null : new URLSearchParams(window.location.search).get('thread'));
+  const followedLink = useRef(false);
+  useEffect(() => {
+    if (!linkedComment || followedLink.current) return;
+    const thread = [...annotations, ...(resolvedList ?? [])].find(a =>
+      a.id === linkedComment || a.thread.some(c => c.id === linkedComment));
+    if (thread) { followedLink.current = true; openThread(thread.id); }
+    else if (!railOpenRef.current) {
+      openedForThreadRef.current = true;
+      onRailOpenChangeRef.current(true);
+    }
+  }, [linkedComment, annotations, resolvedList, openThread]);
 
   const toggle = useCallback((kind: FoldKind, foldId: string) => {
     setFolds(toggleFold(id, kind, foldId));
@@ -1364,7 +1381,7 @@ export default function AnnotationLayer({
     : null;
 
   return (
-    <>
+    <PersonMentionProvider artifactId={id}>
       {confirmation}
       <style>{`:host-context(.mx-taking-screenshot) [data-capture-chrome],.mx-taking-screenshot [data-capture-chrome]{visibility:hidden!important}`}</style>
       {capture.busy&&!selection&&<div data-capture-chrome role="status" className="fixed bottom-4 left-4 z-50 rounded bg-panel p-3 shadow">Preparing screenshot… <button type="button" onClick={capture.reset}>Cancel capture</button></div>}
@@ -1442,7 +1459,7 @@ export default function AnnotationLayer({
             {capture.busy&&<div role="status" className="mb-3 flex items-center gap-2 rounded-lg border border-edge bg-surface p-4 text-sm text-muted"><LoaderCircle size={16} className="animate-spin"/>Preparing screenshot…</div>}
             {capture.draft&&<ScreenshotEditor image={capture.draft.image} initialStrokes={capture.draft.strokes} exportRef={screenshotExport} busy={busy} onRetake={()=>void beginPick('select')}/>}
             {capture.required&&!capture.draft&&!capture.busy&&<div className="mb-3 space-y-3 rounded-lg border border-edge bg-surface p-3 text-xs"><p role="alert" className="leading-relaxed text-muted">{capture.error||'A screenshot is required for this selection.'}</p><button type="button" className="rounded-lg border border-edge bg-panel px-3 py-2 font-medium hover:border-accent" onClick={()=>void beginPick('select')}>Retry screenshot</button><label className="block space-y-2 font-medium">Upload screenshot<input className="block w-full text-xs text-muted file:mr-2 file:rounded-md file:border-0 file:bg-panel file:px-3 file:py-2 file:text-fg" type="file" accept="image/png,image/jpeg,image/webp" aria-label="Upload screenshot" onChange={event=>{const file=event.target.files?.[0];if(file)void capture.upload(file);event.target.value='';}}/></label><button type="button" className="text-muted underline underline-offset-4 hover:text-fg" onClick={capture.skip}>Continue without screenshot</button></div>}
-            <MarkdownField
+            <MarkdownField artifactId={id}
               label="Annotation comment"
               previewLabel="Comment preview"
               previewToggleLabel="Preview comment"
@@ -1536,7 +1553,7 @@ export default function AnnotationLayer({
           <p className="p-2 font-mono text-xs text-muted">no open comments — select text in the document, or pick a block, to leave one</p>
         )}
         {annotations.map((a) => (
-          <Thread
+          <Thread artifactId={id}
             targetMissing={missingTargets.has(a.id)}
             key={a.id}
             a={a}
@@ -1568,7 +1585,7 @@ export default function AnnotationLayer({
           <span aria-hidden="true" className="h-px flex-1 bg-edge" />
         </div>
         {(resolvedList ?? []).map((a) => (
-          <Thread
+          <Thread artifactId={id}
             targetMissing={missingTargets.has(a.id)}
             key={a.id}
             a={a}
@@ -1600,7 +1617,7 @@ export default function AnnotationLayer({
         </div>
       </RailChrome>
       )}
-    </>
+    </PersonMentionProvider>
   );
 }
 

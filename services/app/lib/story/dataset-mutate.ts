@@ -1,3 +1,4 @@
+import { grantsOf, assertGrantCommit } from '@/lib/datasets/policy/grants';
 import {validateUserWrites} from '@/lib/datasets/user-fields';
 import {DatasetError} from '@/lib/datasets/errors';
 import {artifactState} from '@/lib/artifact-state';
@@ -124,7 +125,7 @@ export async function mutateDataset(
     // refusal rather than thrown: the caller answers the uniform 404 anyway.
     if (!current) return { reason: 'invalid_sql', detail: 'the dataset no longer exists' };
     if(guard.expectedState&&artifactState(current)!==guard.expectedState)return {reason:'row_changed',detail:'The dataset changed since the operation was prepared. Read the current state before proposing a new mutation.'};
-    if ((current.policy_revision??0)!==(dataset.policy_revision??0) || await canWriteDataset(current, actor,!!guard.document)) return {reason:'dataset_read_only',detail:'You no longer have edit access to a writable dataset.'};
+    if ((current.policy_revision??0)!==(dataset.policy_revision??0) || await canWriteDataset(current, actor,guard.document??false)) return {reason:'dataset_read_only',detail:'You no longer have edit access to a writable dataset.'};
 
     if(guard.document){try{await recheckMutation(current,actor,guard.document);}catch(error){return {reason:'dataset_read_only',detail:error instanceof Error?error.message:'Mutation access changed'};}}
     const catalog=catalogOf(current);
@@ -140,7 +141,7 @@ export async function mutateDataset(
     let out:MutationOutcome;
     let policy:DatasetMutationPolicy|undefined;
     try{
-      policy=await mutationPolicy(current,actor,selected??{schema:'public',name:'rows'},!!guard.document);
+      policy=await mutationPolicy(current,actor,selected??{schema:'public',name:'rows'},guard.document??false);
       out = await invocation.run({ policy, table: { name: table, rows, columns }, sql:executedSql, params:{...params,_me:actor.userId}, ...mutationGuard, limit: datasetRowCap() },{mutate:runMutation});
     }catch(error){return {reason:current.dataset_policy?'policy_denied':'invalid_sql',detail:error instanceof Error?error.message:'Dataset mutation failed'};}
     if (isQueryFailure(out)) {
@@ -174,7 +175,9 @@ export async function mutateDataset(
     // ONE guarded statement: swap the pointer if and only if the rows we read
     // are still the rows on disk, archive the previous state (coalesced, like
     // the edit protocol), and wake every document reading this dataset.
+    const v2=!!grantsOf(current);
     const commit=async(tx:Queryable)=>{
+     if(v2)await assertGrantCommit(tx,current,actor,guard.document);
      await validateUserWrites(tx,columns,out.userWrites??[],actor.userId);
      if(guard.expectedState){
       const locked=(await tx.query<ArtifactRow>(`SELECT * FROM artifacts WHERE id=$1 AND ${LIVE_ARTIFACT_SQL} FOR UPDATE`,[dataset.id])).rows[0];
@@ -184,12 +187,12 @@ export async function mutateDataset(
       `WITH updated AS (
          UPDATE artifacts
             SET content = '', meta = $3::jsonb, version = version + 1, edit_id = $4, updated_at = now(), actor_user_id = $13, actor_token_id = $14
-          WHERE id = $1 AND edit_id = $2 AND access = 'readwrite' AND ${LIVE_ARTIFACT_SQL}
-            AND policy_revision=$16 AND (
+          WHERE id = $1 AND edit_id = $2 AND ($21::boolean OR access = 'readwrite') AND ${LIVE_ARTIFACT_SQL}
+            AND policy_revision=$16 AND ($21::boolean OR (
               ($20::text IS NULL AND (${scope.where('$15')})) OR
               ($20='viewer' AND (${policyReaderSql()}) AND ($19::boolean OR (${scope.where('$15')})))
             )
-            AND ($17::text IS NULL OR EXISTS (
+            ) AND ($21::boolean OR $17::text IS NULL OR EXISTS (
               SELECT 1 FROM artifacts d WHERE d.id=$17 AND d.edit_id=$18 AND d.deleted_at IS NULL
               AND (
                 (d.user_id IS NULL AND artifacts.token_id=d.token_id) OR
@@ -221,7 +224,7 @@ export async function mutateDataset(
         dataset.id, current.edit_id, JSON.stringify(meta), newEditId(),
         current.version, current.title, current.description, current.format, current.content, current.source,
         JSON.stringify(current.meta), WRITE_SNAPSHOT_WINDOW_MS,
-        actor.userId, actor.tokenId, scope.val, current.policy_revision??0,guard.document?.id??null,guard.document?.editId??null,!!guard.document&&!!policy,policy?.role??null,
+        actor.userId, actor.tokenId, scope.val, current.policy_revision??0,guard.document?.id??null,guard.document?.editId??null,!!guard.document&&!!policy,policy?.role??null,v2,
       ],
     );
 
@@ -230,7 +233,7 @@ export async function mutateDataset(
      return result;
     };
     let updated;
-    try { updated=guard.receipt||guard.expectedState||columns.some(c=>c.type==='user')?await db.transaction(commit):await commit(db); }
+    try { updated=v2||guard.receipt||guard.expectedState||columns.some(c=>c.type==='user')?await db.transaction(commit):await commit(db); }
     catch(error) { if(error instanceof DatasetError)return {reason:'policy_denied',detail:error.message}; throw error; }
 
     const row = updated.rows[0];

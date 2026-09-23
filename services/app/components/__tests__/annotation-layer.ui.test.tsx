@@ -37,6 +37,19 @@ beforeEach(installAnnotationFetch);
 afterEach(() => vi.unstubAllGlobals());
 
 describe('AnnotationLayer', () => {
+  it('opens a mention notification on the thread containing its reply', async () => {
+    window.history.replaceState(null, '', '/a/example?thread=ann_2');
+    try {
+      const { frame } = makeFrame();
+      const onRailOpenChange = vi.fn();
+      const view = render(layer(frame, { onRailOpenChange }));
+      await waitFor(() => expect(onRailOpenChange).toHaveBeenCalledWith(true));
+      view.rerender(layer(frame, { onRailOpenChange, railOpen: true }));
+      await screen.findByText('one more thought');
+      expect(view.container.querySelector('[data-thread-id="ann_1"]')).not.toBeNull();
+    } finally { window.history.replaceState(null, '', '/'); }
+  });
+
   it('shows distinct local times for a comment and reply on the same day', async () => {
     const { frame, contentWindow } = makeFrame();
     const view = render(layer(frame, { railOpen: true }));
