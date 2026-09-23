@@ -11,8 +11,8 @@
  * A name, where one is needed (a forwarding rule, a test), is
  * `object_kind.verb` — derived, never stored.
  *
- * Telemetry only: nothing in the product gates on the log, `emit` never
- * throws, and a payload carries ids and names, never content or secrets.
+ * Observational events use best-effort `emit`; notification-producing changes
+ * use transactional outbox publication. Payloads carry ids and state, never content or secrets.
  */
 export type SubjectKind = 'user' | 'token' | 'visitor';
 export type ObjectKind = 'artifact' | 'user' | 'token' | 'door' | 'route';
@@ -24,7 +24,8 @@ export type EmptyPayload = Record<string, never>;
 export interface ArtifactActorPayload { client?: string | null; user_id?: string | null }
 /** A create also says WHERE, so a folder create and a filed create read as themselves in the log. Null/absent = the root. */
 export interface ArtifactCreatedPayload extends ArtifactActorPayload { parent_id?: string | null }
-export interface AnnotationPayload { annotation_id: string }
+export interface AnnotationPayload { annotation_id: string; reply_id?: string; agent?: boolean; resolved?: boolean }
+export interface MembershipEventPayload { user_id: string; revision: number; mention_ref?: string | null }
 /** Where a row went. Either end may be the ROOT, which is null — a folder is an artifact, so both are artifact ids. */
 export interface MovedPayload { from_parent_id: string | null; to_parent_id: string | null }
 /** A delete also says what went with it: the row's own format, and the descendants that followed (0 for a document). */
@@ -65,6 +66,13 @@ export interface EventVerbs {
     annotation_resolved: AnnotationPayload;
     annotation_deleted: AnnotationPayload;
     sharing_changed: { visibility?: string | null; link_role?: string | null };
+    join_requested: MembershipEventPayload;
+    invited: MembershipEventPayload;
+    mentioned: MembershipEventPayload;
+    invitation_dismissed: MembershipEventPayload;
+    annotation_reopened: AnnotationPayload;
+    joined: MembershipEventPayload;
+    left: MembershipEventPayload;
     liked: EmptyPayload;
     unliked: EmptyPayload;
   };
@@ -101,7 +109,7 @@ type Complete<K extends ObjectKind, T extends readonly EventVerb<K>[]> =
 const complete = <K extends ObjectKind>() => <const T extends readonly EventVerb<K>[]>(verbs: Complete<K, T>): readonly EventVerb<K>[] => verbs as T;
 
 export const EVENT_VERBS: { readonly [K in ObjectKind]: readonly EventVerb<K>[] } = {
-  artifact: complete<'artifact'>()(['created', 'updated', 'edited', 'reverted', 'deleted', 'moved', 'restored', 'exported', 'mutated', 'viewed', 'forked', 'annotated', 'annotation_resolved', 'annotation_deleted', 'sharing_changed', 'liked', 'unliked']),
+  artifact: complete<'artifact'>()(['created', 'updated', 'edited', 'reverted', 'deleted', 'moved', 'restored', 'exported', 'mutated', 'viewed', 'forked', 'annotated', 'annotation_resolved', 'annotation_deleted', 'sharing_changed', 'liked', 'unliked', 'joined', 'left', 'join_requested', 'invited', 'mentioned', 'invitation_dismissed', 'annotation_reopened']),
   user: complete<'user'>()(['notification_changed', 'signed_up', 'login_sent', 'login_verified', 'oauth_linked', 'followed', 'unfollowed']),
   token: complete<'token'>()(['minted', 'claimed', 'revoked']),
   door: complete<'door'>()(['denied']),

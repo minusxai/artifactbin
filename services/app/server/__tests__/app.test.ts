@@ -117,7 +117,7 @@ describe('the app\'s paths', () => {
   // but a crawler and a `curl` read the status, and a caller that never asked
   // for HTML gets the JSON refusal instead of the page.
   it('serve the SPA under the app CSP, and anything else is a 404', async () => {
-    for (const p of ['/login', '/account', '/welcome', '/chat', '/assets', '/trash', '/tokens', '/docs-human', '/datasets/new', '/files/new']) {
+    for (const p of ['/login', '/account', '/notifications', '/welcome', '/chat', '/assets', '/trash', '/tokens', '/docs-human', '/datasets/new', '/files/new']) {
       const res = await app.request(p);
       expect(res.status, p).toBe(200);
       expect(res.headers.get('content-security-policy'), p).toContain('frame-ancestors');

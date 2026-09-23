@@ -1,31 +1,66 @@
-import {useNotifications,type InboxState} from './notification-context';
 import {useEffect,useRef,useState} from 'react';
-import {Button} from './ui';
-type Inbox=InboxState;
+import {Bell,Check,ShieldBan} from 'lucide-react';
+import {Button,timeAgo} from './ui';
+import Avatar from './Avatar';
+import RowMenu from './RowMenu';
+import {useNotificationInbox} from './use-notification-inbox';
+import type {InboxItem} from './notification-context';
+
+function destination(n:InboxItem){
+ if(n.kind==='follow')return `/people/${n.sender_id}`;
+ const target=n.source?.startsWith('node:')?`#${n.source.slice(5)}`:n.source?.startsWith('comment:')?`?thread=${n.source.slice(8)}${n.first_update_id?`&comment=${encodeURIComponent(n.first_update_id)}`:''}`:'';
+ return `/a/${n.artifact_id}${target}`;
+}
+const actionText:Record<string,string>={request:'asked to join',invitation:'invited you to',joined:'added you to',follow:'followed you',like:'liked',reply_resolved:'replied and resolved your comment in',reply:'replied in',resolved:'resolved a comment in',reopened:'reopened a comment in'};
+
+/** One notification row for the compact menu and the full history. */
+function NotificationRow({item:n,busy,onRead,onRespond,onBlock}:{item:InboxItem;busy:boolean;onRead:()=>void;onRespond:(action:'accept'|'approve'|'dismiss')=>void;onBlock:()=>void}){
+ const invitation=n.kind==='invitation'||n.kind==='request'||n.kind==='joined'||(n.source?.startsWith('comment:')&&n.direction==='invitation');
+ return <li data-notification-id={n.id} className={`relative flex gap-3 px-3 py-3.5 ${n.read_at?'':'bg-accent-soft/40'}`}>
+  <div className="pt-0.5"><Avatar image={null} initial={n.username??'?'} userId={n.sender_id} size={32}/></div>
+  <div className="min-w-0 flex-1">
+   <a className="block break-words text-sm leading-5 text-fg hover:text-accent" href={destination(n)} onClick={onRead}><span className="font-semibold">@{n.username??'someone'}</span>{' '}{actionText[n.kind]??'mentioned you in'}{n.kind!=='follow'&&<> <span className="font-semibold">{n.title??'Untitled artefact'}</span></>}</a>
+   {n.created_at&&<time dateTime={n.created_at} className="mt-1 block text-xs text-muted">{timeAgo(n.created_at)}</time>}
+   {n.status==='pending'&&invitation&&<div className="mt-2 flex gap-2"><Button disabled={busy} onClick={()=>onRespond(n.direction==='request'?'approve':'accept')}>{n.direction==='request'?'Approve request':'Accept invitation'}</Button><Button variant="ghost" disabled={busy} onClick={()=>onRespond('dismiss')}>Dismiss</Button></div>}
+   {n.status==='accepted'&&invitation&&<div className="mt-2 space-y-1"><p role="status" className="flex items-start gap-1 text-xs leading-5 text-accent"><Check size={14} className="mt-0.5 shrink-0"/>{n.kind==='request'?'Approved — this person has joined the artefact.':n.kind==='invitation'?'Accepted — you’ve joined this artefact.':'You’ve joined this artefact.'}</p><a onClick={onRead} className="text-xs text-muted underline underline-offset-2 hover:text-fg" href={`/a/${n.artifact_id}`}>Open artefact</a></div>}
+  </div>
+  <div className="flex shrink-0 flex-col items-center gap-2 pt-1">
+   {!n.read_at&&<span aria-label="Unread" className="h-1.5 w-1.5 rounded-full bg-accent"/>}
+   <RowMenu name={`notification from @${n.username??'someone'}`} items={[{label:`Block @${n.username??'sender'}`,text:'Block sender',icon:<ShieldBan size={13}/>,disabled:busy,onSelect:onBlock}]}/>
+  </div>
+ </li>;
+}
+
 export function PeopleInbox({compact=false}:{compact?:boolean}){
- const shared=useNotifications();
- const displayed=useRef<Map<string,number>|null>(null);
- const [email,setEmail]=useState<{invitations:boolean;comments:boolean;activity:boolean}|null>(null);
- useEffect(()=>{if(compact)return;void fetch('/api/my/people/email').then(r=>r.ok?r.json():null).then(data=>{if(data?.enabled)setEmail(data.preferences);}).catch(()=>{});},[compact]);
- const [state,setState]=useState<Inbox|null>(null),[error,setError]=useState(''),[busy,setBusy]=useState(false);
- async function load(input?:object){if(shared){await shared.load(input);return;}setBusy(true);setError('');try{const res=await fetch('/api/my/people',input?{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify(input)}:undefined);const data=await res.json();if(!res.ok)throw Error(data.error??'Could not load notifications');if(!Array.isArray(data.notifications)||!Array.isArray(data.blocks)||typeof data.autoAccept!=='boolean')throw Error('Could not load notifications');setState(data);}catch(e){setError(e instanceof Error?e.message:'Could not load notifications');}finally{setBusy(false);}}
- async function respond(n:Inbox['notifications'][number],action:'accept'|'approve'|'dismiss'){
+ const {state,error,load,loadMore,close}=useNotificationInbox();
+ const root=useRef<HTMLElement>(null),displayed=useRef<Map<string,number>|null>(null),read=useRef(new Set<string>());
+ const [busy,setBusy]=useState(false),[actionError,setActionError]=useState('');
+ const items=compact?state?.notifications.slice(0,6):state?.notifications;
+ async function respond(n:InboxItem,action:'accept'|'approve'|'dismiss'){
   if(!n.artifact_id)return;
-  setBusy(true);setError('');try{
+  setBusy(true);setActionError('');
+  try{
    const res=await fetch(`/api/my/artifacts/${encodeURIComponent(n.artifact_id)}/members`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action,...(n.direction==='request'?{userId:n.user_id}:{})})});
    if(!res.ok){const result=await res.json();throw Error(result.detail??'Could not update invitation');}
    await load({read:n.id,revision:n.revision});
-  }catch(e){setError(e instanceof Error?e.message:'Could not update invitation');}finally{setBusy(false);}
+  }catch(e){setActionError(e instanceof Error?e.message:'Could not update invitation');}finally{setBusy(false);}
  }
- useEffect(()=>{if(!shared)void load();},[]);
- useEffect(()=>{if(shared){setState(shared.state);setError(shared.error);}},[shared?.state,shared?.error]);
- useEffect(()=>{if(!compact||!state)return;displayed.current??=new Map(state.notifications.map(n=>[n.id,n.revision]));const root=document.getElementById('notification-list');if(!root||typeof IntersectionObserver==='undefined')return;const observer=new IntersectionObserver(entries=>{for(const entry of entries){if(!entry.isIntersecting||document.visibilityState!=='visible')continue;const n=state.notifications.find(n=>n.id===(entry.target as HTMLElement).dataset.notificationId);if(n&&!n.read_at&&displayed.current?.get(n.id)===n.revision)void load({read:n.id,revision:n.revision});}},{root,threshold:0.9});root.querySelectorAll('[data-notification-id]').forEach(e=>observer.observe(e));return()=>observer.disconnect();},[compact,state]);
- return <section id={compact?"notification-list":"notifications"} aria-label="People and notifications" className={compact?"space-y-3":"space-y-4 rounded-xl border border-edge bg-surface p-5"}>{!compact&&<h2 className="font-medium">People & notifications</h2>}{error&&<p role="alert" className="text-sm text-danger">{error} <button onClick={()=>void load()}>Retry</button></p>}{state&&<>
-  {!compact&&<label className="flex items-start gap-3 text-sm"><input className="mt-1" type="checkbox" checked={state.autoAccept} disabled={busy} onChange={e=>void load({autoAccept:e.target.checked})}/><span>Automatically accept invitations from people I follow.<span className="mt-1 block text-xs leading-5 text-muted">Otherwise, you can accept or decline each invitation.</span></span></label>}
-  {email&&!compact&&<fieldset className="space-y-2 border-t border-edge pt-3"><legend className="text-sm font-medium">Email notifications</legend>{(['invitations','comments','activity'] as const).map(key=><label key={key} className="flex items-center gap-2 text-sm"><input type="checkbox" checked={email[key]} onChange={async e=>{const preferences={...email,[key]:e.target.checked};try{const r=await fetch('/api/my/people/email',{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify(preferences)});if(!r.ok)throw Error();setEmail((await r.json()).preferences);}catch{setError('Could not save email preferences');}}}/>{key==='invitations'?'Invitations':key==='comments'?'Unread comment updates':'Daily likes and follows'}</label>)}</fieldset>}
-  {!state.notifications.length&&<p className="text-sm text-muted">You’re all caught up.</p>}
-  <ul className="divide-y divide-edge">{state.notifications.map(n=><li key={n.id} data-notification-id={n.id} className="space-y-2 py-3"><a className={`block text-sm hover:text-accent ${n.read_at?'text-muted':'text-fg'}`} href={n.kind==='follow'?`/people/${n.sender_id}`:`/a/${n.artifact_id}${n.source?.startsWith('node:')?`#${n.source.slice(5)}`:n.source?.startsWith('comment:')?`?thread=${n.source.slice(8)}${n.first_update_id?`&comment=${encodeURIComponent(n.first_update_id)}`:''}`:''}`} onClick={()=>{void load({read:n.id,revision:n.revision});shared?.close?.();}}>@{n.username??'someone'} {n.kind==='request'?'asked to join':n.kind==='invitation'?'invited you to':n.kind==='joined'?'added you to':n.kind==='follow'?'followed you':n.kind==='like'?'liked':n.kind==='reply_resolved'?'replied and resolved your comment in':n.kind==='reply'?'replied in':n.kind==='resolved'?'resolved a comment in':n.kind==='reopened'?'reopened a comment in':'mentioned you in'} <strong>{n.kind==='follow'?'':n.title??'Untitled artefact'}</strong></a>{n.status==='pending'&&(n.kind==='invitation'||n.kind==='request'||(n.source?.startsWith('comment:')&&n.direction==='invitation'))&&<div className="flex gap-2"><Button disabled={busy} onClick={()=>void respond(n,n.direction==='request'?'approve':'accept')}>{n.direction==='request'?'Approve request':'Accept invitation'}</Button><Button variant="ghost" disabled={busy} onClick={()=>void respond(n,'dismiss')}>Dismiss</Button></div>}{n.status==='accepted'&&(n.kind==='invitation'||n.kind==='request'||n.kind==='joined'||(n.source?.startsWith('comment:')&&n.direction==='invitation'))&&<div className="space-y-2"><p role="status" className="text-sm text-accent">{n.kind==='request'?'Approved — this person has joined the artefact.':n.kind==='invitation'?'Accepted — you’ve joined this artefact.':'You’ve joined this artefact.'}</p><a onClick={()=>shared?.close?.()} className="inline-flex rounded-md border border-edge px-3 py-1.5 text-sm hover:bg-raised" href={`/a/${n.artifact_id}`}>Open artefact</a></div>}<details className="text-xs text-muted"><summary className="cursor-pointer">More options</summary><Button variant="ghost" disabled={busy} onClick={()=>void load({block:n.sender_id})}>Block @{n.username??'sender'}</Button></details></li>)}</ul>
-  {state.next!==null&&state.next!==undefined&&<Button onClick={async()=>{if(shared?.loadMore){await shared.loadMore();return;}try{const r=await fetch(`/api/my/people?offset=${state.next}`);if(!r.ok)throw Error();const next=await r.json();setState({...next,notifications:[...state.notifications,...next.notifications]});}catch{setError('Could not load more notifications');}}}>Load more</Button>}
-  {!!state.blocks.length&&<details><summary className="cursor-pointer text-xs text-muted">Blocked people</summary>{state.blocks.map(b=><div className="mt-2 flex items-center justify-between" key={b.user_id}><span className="text-sm">@{b.username??b.user_id}</span><Button variant="ghost" disabled={busy} onClick={()=>void load({unblock:b.user_id})}>Unblock</Button></div>)}</details>}
- </>}</section>;
+ useEffect(()=>{
+  if(!state||!root.current||typeof IntersectionObserver==='undefined')return;
+  displayed.current??=new Map((items??[]).map(n=>[n.id,n.revision]));
+  const observer=new IntersectionObserver(entries=>{for(const entry of entries){
+   if(!entry.isIntersecting||document.visibilityState!=='visible')continue;
+   const n=items?.find(n=>n.id===(entry.target as HTMLElement).dataset.notificationId);
+   if(!n||n.read_at||displayed.current?.get(n.id)!==n.revision)continue;
+   const key=`${n.id}:${n.revision}`;if(read.current.has(key))continue;read.current.add(key);void load({read:n.id,revision:n.revision});
+  }},{threshold:0.9});
+  root.current.querySelectorAll('[data-notification-id]').forEach(e=>observer.observe(e));return()=>observer.disconnect();
+ },[state,compact]);
+ return <section ref={root} aria-label="Notification list" className="font-sans">
+  {(error||actionError)&&<p role="alert" className="p-3 text-sm text-danger">{actionError||error} <button onClick={()=>void load()}>Retry</button></p>}
+  {!state&&!error&&<p role="status" className="p-4 text-sm text-muted">Loading notifications…</p>}
+  {state&&!items?.length&&<div className="px-6 py-10 text-center"><Bell size={24} className="mx-auto mb-3 text-muted"/><p className="text-sm font-medium">You’re all caught up.</p><p className="mt-1 text-xs leading-5 text-muted">Invitations, replies and activity will appear here.</p></div>}
+  <ul className="m-0 list-none divide-y divide-edge p-0">{items?.map(n=><NotificationRow key={n.id} item={n} busy={busy} onRead={()=>{void load({read:n.id,revision:n.revision});close?.();}} onRespond={action=>void respond(n,action)} onBlock={()=>void load({block:n.sender_id})}/>)}</ul>
+  {!compact&&state?.next!=null&&<div className="border-t border-edge p-3 text-center"><Button onClick={()=>void loadMore()}>Load more</Button></div>}
+ </section>;
 }

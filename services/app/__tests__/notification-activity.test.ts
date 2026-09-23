@@ -1,3 +1,5 @@
+import {recordEvent} from '@/lib/notification-events';
+import {link} from '@/lib/relations';
 import {actOnAnnotationFor,deleteAnnotationFor} from '@/lib/annotations';
 import {expect,it} from 'vitest';
 import {useAppHarness} from './harness';
@@ -54,7 +56,7 @@ it('keeps a mention and subsequent replies in one conversation item and hides de
  const db=await getDb();
  await db.query("INSERT INTO artifacts(id,token_id,user_id,format,content,source,visibility) VALUES('thread2','t',$1,'markup','','<p id=\"note\">Hello</p>','public')",[alice.id]);
  await db.query("INSERT INTO annotations(id,artifact_id,body,author_kind,author_user_id,author_token_id,status,snippet) VALUES('ann_mentions','thread2','Please fix','human',$1,'t','open','')",[alice.id]);
- await db.query("INSERT INTO artifact_members(artifact_id,user_id,status,direction,initiated_by) VALUES('thread2',$1,'accepted','invitation',$2)",[bob.id,alice.id]);
+ await db.query("INSERT INTO relations(subject_kind,subject_id,verb,object_kind,object_id,status,direction,initiated_by) VALUES('user',$1,'join','artifact','thread2','accepted','invitation',$2)",[bob.id,alice.id]);
  await db.query("UPDATE artifacts SET link_role='commenter' WHERE id='thread2'");
  const actor={userId:alice.id,tokenId:'t'},recipient={userId:bob.id,tokenId:null};
  await actOnAnnotationFor(actor,'thread2','ann_mentions',{reply:`Hi [@bob](/people/${bob.id})`},{kind:'human',label:null,transport:'http'});
@@ -68,4 +70,25 @@ it('keeps a mention and subsequent replies in one conversation item and hides de
  expect(await deleteAnnotationFor(actor,'thread2','ann_mentions')).toBe(true);
  expect((await db.query("SELECT envelope FROM event_outbox WHERE envelope->'payload'->>'change'='removed'")).rows).toHaveLength(1);
  expect((await membershipInbox(recipient)).notifications).toEqual([]);
+});
+
+it('records the source event and derives a recipient notification in the same transaction',async()=>{
+ const alice=await createUser({email:'mxmx_test_source_a@example.com'}),bob=await createUser({email:'mxmx_test_source_b@example.com'});
+ const db=await getDb();
+ await link(alice.id,'follow',bob.id);
+ const facts=(await db.query<{id:string}>("SELECT id FROM event_outbox WHERE envelope->>'verb'='followed'")).rows;
+ expect(facts).toHaveLength(1);
+ expect((await db.query('SELECT source_event_id FROM member_notifications WHERE recipient_id=$1',[bob.id])).rows).toEqual([{source_event_id:facts[0]!.id}]);
+ await link(alice.id,'follow',bob.id);
+ expect((await db.query("SELECT id FROM event_outbox WHERE envelope->>'verb'='followed'")).rows).toHaveLength(1);
+});
+
+it('rolls back a source fact and its notification together; unrelated facts stay silent',async()=>{
+ const alice=await createUser({email:'mxmx_test_atomic_a@example.com'}),bob=await createUser({email:'mxmx_test_atomic_b@example.com'}),db=await getDb();
+ await expect(db.transaction(async tx=>{await recordEvent(tx,{kind:'user',id:alice.id},'followed',{kind:'user',id:bob.id},{});throw Error('rollback');})).rejects.toThrow('rollback');
+ expect((await db.query('SELECT id FROM event_outbox')).rows).toEqual([]);
+ expect((await db.query('SELECT id FROM member_notifications')).rows).toEqual([]);
+ await db.transaction(tx=>recordEvent(tx,{kind:'user',id:alice.id},'edited',{kind:'artifact',id:'doc'},{}));
+ expect((await db.query('SELECT id FROM event_outbox')).rows).toHaveLength(1);
+ expect((await db.query('SELECT id FROM member_notifications')).rows).toEqual([]);
 });

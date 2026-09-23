@@ -8,8 +8,8 @@ import {
   BookOpen, CircleUser, ChevronRight, FileText, LogIn, LogOut, Menu, Moon,
   SlidersVertical, Sun, User, X,
 } from 'lucide-react';
-import { useEffect, useId, useState } from 'react';
-import MobileSheet, { useIsPhoneViewport } from '@/components/MobileSheet';
+import { useEffect, useState } from 'react';
+import { useIsPhoneViewport } from '@/components/MobileSheet';
 import GitHubStar from '@/components/GitHubStar';
 import { GitHubIcon } from '@/components/brand-icons';
 import { REPO_URL } from '@/lib/repo';
@@ -20,68 +20,20 @@ import { crumbsFor } from '@/lib/breadcrumb';
 import { loginHref } from '@/lib/login-href';
 import { usePathname } from '@/lib/navigation';
 import Avatar from '@/components/Avatar';
-import {NotificationBell} from './NotificationCenter';
+import {NotificationBell,NotificationMenu} from './NotificationCenter';
+import {PagePanel} from './PagePanel';
+import {announcePanel,requestPageChrome,subscribePageChrome,useExclusiveLayer,useOpenOnRequest,type PagePanelName} from './page-chrome-state';
+export {requestPageChrome,subscribePageChrome} from './page-chrome-state';
 import { useSession } from '@/web/session';
 
 export type AppearanceMode = 'light' | 'dark';
 
 const EDGE = 12;
-const OPEN_EVENT = 'mx:page-chrome-open';
-/** The framed document's chrome asks the page to open one of its panels. */
-const REQUEST_EVENT = 'mx:page-chrome-request';
-/** A panel says whether it is open, so the bar's button can show the X. */
-const STATE_EVENT = 'mx:page-chrome-state';
-function announcePanel(which: 'menu' | 'controls', open: boolean) {
-  window.dispatchEvent(new CustomEvent(STATE_EVENT, { detail: { which, open } }));
-}
-export function requestPageChrome(which: 'menu' | 'controls') {
-  window.dispatchEvent(new CustomEvent(REQUEST_EVENT, { detail: which }));
-}
-export function subscribePageChrome(listener:(which:'menu'|'controls',open:boolean)=>void):()=>void {
-  const receive=(event:Event)=>{
-    const detail=(event as CustomEvent<{which:'menu'|'controls';open:boolean}>).detail;
-    if(detail && (detail.which==='menu'||detail.which==='controls') && typeof detail.open==='boolean') listener(detail.which,detail.open);
-  };
-  window.addEventListener(STATE_EVENT,receive);
-  return ()=>window.removeEventListener(STATE_EVENT,receive);
-}
 const ITEM =
   'flex w-full items-center gap-3 rounded-[5px] border-0 bg-transparent px-3 py-3 text-left font-mono text-sm no-underline transition-colors sm:gap-2.5 sm:px-2.5 sm:py-2 sm:text-xs';
 const FLOATING_BUTTON =
   'z-[60] flex h-9 w-9 cursor-pointer items-center justify-center rounded-full border border-edge bg-surface/90 text-muted shadow-sm backdrop-blur-md transition-[color,background-color,transform] hover:bg-raised hover:text-fg active:scale-95';
 
-
-function useExclusiveLayer(open: boolean, setOpen: (open: boolean) => void) {
-  const id = useId();
-  useEffect(() => {
-    const closeOther = (event: Event) => {
-      if ((event as CustomEvent<string>).detail !== id) setOpen(false);
-    };
-    window.addEventListener(OPEN_EVENT, closeOther);
-    return () => window.removeEventListener(OPEN_EVENT, closeOther);
-  }, [id, setOpen]);
-  const toggle = () => {
-    const next = !open;
-    if (next) window.dispatchEvent(new CustomEvent(OPEN_EVENT, { detail: id }));
-    setOpen(next);
-  };
-  return toggle;
-}
-
-/** Open on the framed chrome's request — exclusively, like a click on the trigger. */
-function useOpenOnRequest(which: 'menu' | 'controls', open: boolean, setOpen: (open: boolean) => void) {
-  const id = useId();
-  useEffect(() => {
-    const onRequest = (event: Event) => {
-      if ((event as CustomEvent<string>).detail !== which) return;
-      if (open) { setOpen(false); return; }
-      window.dispatchEvent(new CustomEvent(OPEN_EVENT, { detail: id }));
-      setOpen(true);
-    };
-    window.addEventListener(REQUEST_EVENT, onRequest);
-    return () => window.removeEventListener(REQUEST_EVENT, onRequest);
-  }, [id, open, setOpen, which]);
-}
 
 function triggerPosition(side: 'left' | 'right', fixed: boolean, open: boolean) {
   const position = fixed || open ? 'fixed' : 'absolute';
@@ -171,7 +123,7 @@ export function PageMenu({
 
         {link('/', 'Artifacts', <FileText size={15} strokeWidth={1.5} />, pathname === '/')}
         {link('/chat', 'Remote sessions', <User size={15} strokeWidth={1.5} />, pathname === '/chat')}
-        {link('/account#notifications', 'Notifications', <User size={15} strokeWidth={1.5} />, false)}
+        {link('/notifications', 'Notifications', <User size={15} strokeWidth={1.5} />, false)}
         {link('/account', 'Account', <User size={15} strokeWidth={1.5} />, pathname === '/account')}
         {link('/docs-human', 'Human Docs', <BookOpen size={15} strokeWidth={1.5} />, pathname === '/docs-human')}
 
@@ -316,7 +268,6 @@ export function PageControls({
   /** Where the dropdown starts, when more than the bar sits above it (edit mode). */
   panelTop?: number;
 }) {
-  const phone = useIsPhoneViewport();
   const [open, setOpen] = useState(initialOpen);
   useEffect(()=>{if(initialOpen)setOpen(true);},[initialOpen]);
   const [appMode, setAppMode] = useState<AppearanceMode>(currentAppAppearance);
@@ -390,22 +341,7 @@ export function PageControls({
         </button>
       </Tooltip>}
 
-      {open && (phone ? (
-        <MobileSheet label={label} onClose={close} header={header}>{body}</MobileSheet>
-      ) : (
-        <>
-          <button type="button" aria-label={`Close ${label.toLowerCase()} by clicking outside`} onClick={close} className="fixed inset-0 z-40 cursor-default border-0 bg-transparent p-0" />
-          <aside
-            role="dialog"
-            aria-label={label}
-            className="fixed right-3 top-14 z-50 w-72 animate-[rise_.14s_ease-out] rounded-[7px] border border-edge bg-surface p-3 font-mono text-xs shadow-xl"
-            style={{ ...(rightOffset === EDGE ? {} : { right: rightOffset }), ...(panelTop !== undefined ? { top: panelTop } : {}) }}
-          >
-            {header}
-            {body}
-          </aside>
-        </>
-      ))}
+      <PagePanel open={open} label={label} onClose={close} header={header} rightOffset={rightOffset} panelTop={panelTop}>{body}</PagePanel>
     </>
   );
 }
@@ -439,18 +375,13 @@ export function AppBar({
 }) {
   const pathname = usePathname() ?? '';
   const trail = hideBreadcrumb ? [] : crumbsFor(pathname, title);
-  const [openPanel, setOpenPanel] = useState<'menu' | 'controls' | null>(null);
+  const [openPanel, setOpenPanel] = useState<PagePanelName | null>(null);
   // Outside a SessionProvider this is `session: null`, and the glyph stays.
   const { session } = useSession();
   const person = session?.kind === 'account' ? session.user : null;
-  useEffect(() => {
-    const onState = (event: Event) => {
-      const { which, open } = (event as CustomEvent<{ which: 'menu' | 'controls'; open: boolean }>).detail;
-      setOpenPanel((current) => (open ? which : current === which ? null : current));
-    };
-    window.addEventListener(STATE_EVENT, onState);
-    return () => window.removeEventListener(STATE_EVENT, onState);
-  }, []);
+  useEffect(() => subscribePageChrome((which,open) => {
+    setOpenPanel(current => open ? which : current === which ? null : current);
+  }), []);
   const control = (which: 'menu' | 'controls', name: string, icon: React.ReactNode, face?: React.ReactNode) => {
     const open = openPanel === which;
     return (
@@ -511,6 +442,7 @@ export function AppBar({
           : undefined)}
       </div>
     </header>
+    <NotificationMenu/>
     </>
   );
 }

@@ -1,6 +1,6 @@
 # Working on artifactbin
 
-`CLAUDE.md` imports this file. Setup: [CONTRIBUTING.md](CONTRIBUTING.md). Contracts: [docs/design-notes.md](docs/design-notes.md).
+`CLAUDE.md` imports this file. Setup: [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Working rules
 

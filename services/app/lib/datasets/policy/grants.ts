@@ -1,3 +1,4 @@
+import {JOIN_RELATIONS} from '../../relation-state';
 import type { DatasetGrantContext, DatasetGrantPolicy, Queryable } from '@artifactbin/contracts';
 import { datasetGrantAllows, parseDatasetGrants } from '@artifactbin/utils';
 import type { ArtifactRow, RoleActor } from '@/lib/artifacts';
@@ -32,7 +33,7 @@ export async function grantContext(dataset:ArtifactRow,actor:RoleActor,document?
  if(!tokenCreator){
   if(!identity||identity.kind==='guest')throw new DatasetError('Sign in and join this artifact to use its actions',403);
   if(identity.kind==='testuser'&&!(await db.query("SELECT 1 FROM users WHERE id=$1 AND kind='testuser'",[doc.user_id])).rows.length)throw new DatasetError('Test users may only act inside their sandbox',403);
-  if(!(await db.query("SELECT 1 FROM artifact_members WHERE artifact_id=$1 AND user_id=$2 AND status='accepted'",[doc.id,actor.userId])).rows.length)throw new DatasetError('Join this artifact before using its actions',403);
+  if(!(await db.query(`SELECT 1 FROM ${JOIN_RELATIONS} WHERE artifact_id=$1 AND user_id=$2 AND status='accepted'`,[doc.id,actor.userId])).rows.length)throw new DatasetError('Join this artifact before using its actions',403);
  }
  context.artifact={id:doc.id,owner:principalOf(doc)};
  return context;

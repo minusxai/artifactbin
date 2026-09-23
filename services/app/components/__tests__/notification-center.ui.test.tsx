@@ -1,9 +1,14 @@
 import {afterEach,expect,it,vi} from 'vitest';
-import {act,cleanup,fireEvent,render,screen,waitFor} from '@testing-library/react';
-import {NotificationProvider,NotificationBell} from '../NotificationCenter';
+import {act,cleanup,fireEvent,render,screen,waitFor,within} from '@testing-library/react';
+import {TrustedUi} from '../TrustedUi';
+import {PageControls} from '../PageChrome';
+import {requestPageChrome} from '../page-chrome-state';
+import {NotificationSettings} from '../NotificationSettings';
+import {PeopleInbox} from '../PeopleInbox';
+import {NotificationProvider,NotificationBell,NotificationMenu} from '../NotificationCenter';
 const identity=vi.hoisted(()=>({session:{kind:'account',user:{id:'alice'}} as {kind:string;user:{id:string}}|null}));
 vi.mock('@/web/session',()=>({useSession:()=>identity}));
-afterEach(()=>{cleanup();vi.unstubAllGlobals();identity.session={kind:'account',user:{id:'alice'}};});
+afterEach(()=>{cleanup();vi.restoreAllMocks();vi.unstubAllGlobals();identity.session={kind:'account',user:{id:'alice'}};});
 it('shares one live inbox, acknowledges the visible revision, and restores bell focus',async()=>{
  const observers:Array<{callback:IntersectionObserverCallback;targets:Element[]}>=[];
  vi.stubGlobal('IntersectionObserver',class{entry:{callback:IntersectionObserverCallback;targets:Element[]};constructor(callback:IntersectionObserverCallback){this.entry={callback,targets:[]};observers.push(this.entry);}observe(e:Element){this.entry.targets.push(e);}disconnect(){}});
@@ -12,7 +17,7 @@ it('shares one live inbox, acknowledges the visible revision, and restores bell 
  let read=false,revision=7;
  const fetch=vi.fn(async(_url:string,init?:RequestInit)=>{if(init?.method==='PATCH')read=true;return new Response(JSON.stringify({autoAccept:true,blocks:[],next:null,unread:read?0:1,notifications:[{id:'n1',artifact_id:'doc',kind:'reply',sender_id:'bob',username:'bob',title:'Tasks',source:'comment:ann1',revision,read_at:read?'now':null}]}));});
  vi.stubGlobal('fetch',fetch);
- render(<NotificationProvider><NotificationBell/></NotificationProvider>);
+ render(<NotificationProvider><NotificationBell/><NotificationMenu/></NotificationProvider>);
  const bell=await screen.findByRole('button',{name:'Notifications, unread updates'});
  expect(fetch.mock.calls.filter(([,init])=>init?.method==='PATCH')).toHaveLength(0);
  bell.focus();fireEvent.click(bell);
@@ -35,8 +40,47 @@ it('shares one live inbox, acknowledges the visible revision, and restores bell 
 it('removes account data and closes the live stream on sign-out',async()=>{
  const close=vi.fn();vi.stubGlobal('EventSource',class{close=close;});
  vi.stubGlobal('fetch',vi.fn(async()=>new Response(JSON.stringify({autoAccept:true,blocks:[],next:null,unread:0,notifications:[]}))));
- const view=render(<NotificationProvider><NotificationBell/></NotificationProvider>);
+ const view=render(<NotificationProvider><NotificationBell/><NotificationMenu/></NotificationProvider>);
  fireEvent.click(await screen.findByRole('button',{name:'Notifications'}));
- identity.session=null;view.rerender(<NotificationProvider><NotificationBell/></NotificationProvider>);
+ identity.session=null;view.rerender(<NotificationProvider><NotificationBell/><NotificationMenu/></NotificationProvider>);
  expect(screen.queryByRole('dialog')).toBeNull();expect(screen.queryByRole('button',{name:'Notifications'})).toBeNull();expect(close).toHaveBeenCalled();
+});
+
+it('uses the settings panel system, toggles, and stays in the trusted navigation root',async()=>{
+ vi.spyOn(HTMLElement.prototype,'showPopover').mockImplementation(function(this:HTMLElement){this.style.display='block';});
+ vi.spyOn(HTMLElement.prototype,'hidePopover').mockImplementation(function(this:HTMLElement){this.style.display='none';});
+ vi.stubGlobal('EventSource',class{close=vi.fn();});
+ vi.stubGlobal('fetch',vi.fn(async()=>new Response(JSON.stringify({autoAccept:true,blocks:[],next:null,unread:0,notifications:[]}))));
+ const view=render(<NotificationProvider><TrustedUi overlay layer="navigation"><NotificationBell/><NotificationMenu/><PageControls triggerless/></TrustedUi></NotificationProvider>);
+ const shadow=view.container.querySelector('[data-trusted-ui]')!.shadowRoot!;
+ const ui=within(shadow.querySelector<HTMLElement>('[data-trusted-ui-root]')!);
+ const bell=await ui.findByRole('button',{name:'Notifications'});
+ fireEvent.click(bell);
+ expect(ui.getByRole('dialog',{name:'Notifications'})).toBeVisible();
+ expect(document.querySelector('[role="dialog"]')).toBeNull();
+ expect(ui.getByRole('link',{name:'All notifications'})).toHaveAttribute('href','/notifications');
+ expect(ui.getByRole('link',{name:'Notification settings'})).toHaveAttribute('href','/account#notifications');
+ fireEvent.click(bell);
+ expect(ui.queryByRole('dialog')).toBeNull();expect(bell).toHaveAttribute('aria-expanded','false');
+ act(()=>requestPageChrome('controls'));
+ expect(ui.getByRole('dialog',{name:'Page controls'})).toBeVisible();
+ fireEvent.click(bell);
+ expect(ui.queryByRole('dialog',{name:'Page controls'})).toBeNull();
+ expect(ui.getByRole('dialog',{name:'Notifications'})).toBeVisible();
+ act(()=>requestPageChrome('controls'));
+ expect(ui.queryByRole('dialog',{name:'Notifications'})).toBeNull();
+ expect(ui.getByRole('dialog',{name:'Page controls'})).toBeVisible();
+});
+it('keeps preferences out of history and activity out of settings',async()=>{
+ vi.stubGlobal('EventSource',class{close=vi.fn();});
+ const notifications=Array.from({length:8},(_,i)=>({id:`n${i}`,artifact_id:'doc',kind:'reply',sender_id:'bob',username:'bob',title:`Task ${i}`,source:'comment:ann1',revision:1,created_at:'2026-09-23T10:00:00Z',read_at:null}));
+ vi.stubGlobal('fetch',vi.fn(async(url:string)=>new Response(JSON.stringify(url.endsWith('/email')?{enabled:false}:{autoAccept:true,blocks:[],next:null,unread:8,notifications}))));
+ const view=render(<NotificationProvider><NotificationSettings/></NotificationProvider>);
+ expect(await screen.findByRole('checkbox')).toBeChecked();
+ expect(screen.queryByText('Task 0')).toBeNull();
+ view.rerender(<NotificationProvider><PeopleInbox/></NotificationProvider>);
+ expect(await screen.findAllByRole('listitem')).toHaveLength(8);
+ expect(screen.queryByRole('checkbox')).toBeNull();
+ view.rerender(<NotificationProvider><PeopleInbox compact/></NotificationProvider>);
+ expect(await screen.findAllByRole('listitem')).toHaveLength(6);
 });

@@ -1,3 +1,4 @@
+import {JOIN_RELATIONS,seedOwnerJoin} from './relation-state';
 import {documentMentions} from './saved-mentions';
 import { grantContext, grantsOf, grantsPermitRead, grantsPermitWrite, type GrantDocument } from './datasets/policy/grants';
 import {storedMediaReferences} from './datasets/media-references';
@@ -568,7 +569,7 @@ async function insertArtifact(
   );
   Object.assign(created.rows[0],await writeShares(tx,id,atCreation.shares??[]));
   await bindCurrentUserScopes(tx,created.rows[0]);
-  if(input.format==='markup'&&userId)await tx.query("INSERT INTO artifact_members(artifact_id,user_id,status,direction,initiated_by,joined_at) VALUES($1,$2,'accepted','request',$2,now()) ON CONFLICT DO NOTHING",[id,userId]);
+  if(input.format==='markup'&&userId)await seedOwnerJoin(tx,id,userId);
   if(!atCreation.forkedFrom)await documentMentions(tx,created.rows[0],{userId,tokenId});
   if (atCreation.operation) await completeCreation(tx,atCreation.operation,created.rows[0]);
   return created.rows[0];
@@ -2556,7 +2557,7 @@ export async function dataflowForRow(
   // GET transport is, and it is the safe default for every caller that has no
   // session to hand over.
   const flow = declarationsForRow(row)?.flow;
-  const members=(await (await getDb()).query<Row>("SELECT user_id,joined_at::text FROM artifact_members WHERE artifact_id=$1 AND status='accepted' ORDER BY joined_at,user_id",[row.id])).rows;
+  const members=(await (await getDb()).query<Row>(`SELECT user_id,joined_at::text FROM ${JOIN_RELATIONS} WHERE artifact_id=$1 AND status='accepted' ORDER BY joined_at,user_id`,[row.id])).rows;
   const result = flow ? await runDeclaredDataflow(flow, datasetResolverForRow(row, opts.viewer ?? null), {...opts,members}) : null;
   // A document NAMES people when a user-typed value or column reaches it, and
   // now also when it draws a <User> — which a document with no user data at all

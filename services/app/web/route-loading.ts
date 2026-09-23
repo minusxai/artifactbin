@@ -16,6 +16,7 @@ export function routeLoading(url: Pick<URL, 'pathname' | 'search'>): { identity:
   }
   const app: Record<string, { code: typeof routePages.AccountPage; key?: string }> = {
     '/': { code: routePages.HomePage, key: '/api/page/home?part=core' },
+    '/notifications': { code: routePages.NotificationsPage },
     '/account': { code: routePages.AccountPage, key: '/api/page/account' },
     '/trash': { code: routePages.TrashPage, key: '/api/page/trash' },
     // Custom fallback/error loaders stay with their pages. Copying those here

@@ -19,7 +19,7 @@ const put = (file, value, mode) => {
   mkdirSync(path.dirname(path.join(root, file)), { recursive: true });
   writeFileSync(path.join(root, file), value, mode ? { mode } : undefined);
 };
-for (const file of ['AGENTS.md', 'CONTRIBUTING.md', 'docs/agent-workflows.md', 'docs/design-notes.md',
+for (const file of ['AGENTS.md', 'CONTRIBUTING.md', 'docs/agent-workflows.md',
   'scripts/check-local.mjs', 'scripts/test-changed.mjs', 'scripts/lib/check-evidence.mjs']) {
   put(file, readFileSync(path.join(source, file)));
 }

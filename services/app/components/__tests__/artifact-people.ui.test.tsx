@@ -34,7 +34,9 @@ it('accepts an invitation directly from its notification',async()=>{
  await waitFor(()=>expect(fetch.mock.calls.some(([url,o])=>url.endsWith('/abc123/members')&&o?.body===JSON.stringify({action:'accept'}))).toBe(true));
  expect(await screen.findByText('Accepted — you’ve joined this artefact.')).toBeInTheDocument();
  expect(screen.getByRole('link',{name:'Open artefact'}).getAttribute('href')).toBe('/a/abc123');
- expect(screen.getByRole('button',{name:'Block @sam'})).not.toBeVisible();
+ expect(screen.queryByRole('button',{name:'Block @sam'})).toBeNull();
+ fireEvent.click(screen.getByRole('button',{name:'More actions for notification from @sam'}));
+ expect(screen.getByRole('button',{name:'Block @sam'})).toBeVisible();
 });
 it('shows a pending mention next to its stable person link',async()=>{
  vi.stubGlobal('fetch',vi.fn(async()=>new Response(JSON.stringify({mentions:{usr_alex:'pending'}}))));

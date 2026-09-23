@@ -1,26 +1,17 @@
-import {recordNotification} from './notifications';
-/**
- * RELATIONS — the sentences that are true right now, and the ONLY module that
- * touches the `relations` table. `link` inserts the edge (or revives an undone
- * one, clearing `deleted_at` on the same row) and says `liked`/`followed` to
- * the log; `unlink` sets `deleted_at` and says `unliked`/`unfollowed`. Nothing
- * per-verb leaks out: the object kind and both past tenses come from the
- * contract's RELATION_EVENTS, every read carries the `verb = '…'` literal the
- * partial indexes need, and a verb outside the vocabulary is refused. A count
- * is COUNT(*) of live edges — never derived from the log. An event is said
- * only when the state CHANGED: linking twice is one row and one sentence.
- *
- * Never inside a `db.transaction` callback (the emit would deadlock PGLite).
+import {recordEvent} from './notification-events';
+/** Simple likes/follows and shared relation reads. Membership owns join authorization.
+ * Every state change records its source event transactionally; notification rules
+ * consume that fact through notification-events, not through a second write path.
  */
-import { RELATION_EVENTS, RELATION_VERBS, type RelationVerb } from '@artifactbin/contracts';
+import { RELATION_EVENTS, RELATION_VERBS, type ImmediateRelationVerb, type RelationVerb } from '@artifactbin/contracts';
 import { getDb,type Queryable } from '@/lib/db';
-import { emit } from '@/lib/events';
+
 
 /** What the subject of every relation is today: an account. */
 const RELATION_SUBJECT_KIND = 'user' as const;
 
 /** One catalogue entry: the object kind this verb points at, and its two past tenses. */
-type RelationEvent = (typeof RELATION_EVENTS)[RelationVerb];
+type RelationEvent = (typeof RELATION_EVENTS)[ImmediateRelationVerb];
 /** The past tense a state change is said in — the two keys every catalogue entry carries. */
 type Direction = 'linked' | 'unlinked';
 
@@ -50,29 +41,17 @@ function vocabulary(verb: RelationVerb): RelationEvent {
 const subjectWhere = (verb: RelationVerb, entry: RelationEvent) =>
   `subject_kind = '${RELATION_SUBJECT_KIND}' AND subject_id = $1 AND verb = '${verb}' AND object_kind = '${entry.object}'`;
 
-/**
- * Say the change to the log, in the object's own vocabulary.
- *
- * The two arms narrow on the OBJECT KIND, not on the verb: the past tenses and
- * the kind both still come from the catalogue entry, and no verb string is
- * written here. It is spelled this way because `emit` is generic in the object
- * kind, and a UNION of kinds collapses `keyof EventVerbs[K]` to `never` — one
- * call with a union entry does not type-check. Do not fold it back into one.
- *
- * AWAITED, unlike the fire-and-forget `void emit(...)` of the request paths:
- * this is a state CHANGE being recorded rather than a passing observation, and
- * `emit` never rejects, so awaiting costs a microtask and buys a caller that is
- * told the state moved only after the sentence was handed to the log.
- */
-async function say(entry: RelationEvent, direction: Direction, userId: string, objectId: string): Promise<void> {
+/** Record a relation transition on the existing event log via the source outbox. */
+async function say(tx:Queryable, entry: RelationEvent, direction: Direction, userId: string, objectId: string): Promise<void> {
   const subject = { kind: RELATION_SUBJECT_KIND, id: userId };
-  if (entry.object === 'artifact') await emit(subject, entry[direction], { kind: entry.object, id: objectId }, {});
-  else await emit(subject, entry[direction], { kind: entry.object, id: objectId }, {});
+  if (entry.object === 'artifact') await recordEvent(tx,subject, entry[direction], { kind: entry.object, id: objectId }, {});
+  else await recordEvent(tx,subject, entry[direction], { kind: entry.object, id: objectId }, {});
 }
 
 /** Insert the edge, or revive it. `already` = it was live and nothing changed (no event). */
-export async function link(userId: string, verb: RelationVerb, objectId: string): Promise<'linked' | 'already'> {
+export async function link(userId: string, verb: ImmediateRelationVerb, objectId: string): Promise<'linked' | 'already'> {
   const entry = vocabulary(verb);
+  if((verb as RelationVerb)==='join')throw Error('Join requires the membership lifecycle');
   const db = await getDb();
   /*
    * ONE statement, so an insert and a revival race no one: the conflict target
@@ -85,35 +64,35 @@ export async function link(userId: string, verb: RelationVerb, objectId: string)
   const changed = await db.transaction(async tx=>{
     await tx.query('SELECT id FROM users WHERE id=$1 FOR UPDATE',[userId]);
     const result=await tx.query(
-    `INSERT INTO relations (subject_kind, subject_id, verb, object_kind, object_id)
-     VALUES ('${RELATION_SUBJECT_KIND}', $1, '${verb}', '${entry.object}', $2)
+    `INSERT INTO relations (subject_kind, subject_id, verb, object_kind, object_id,initiated_by,accepted_at)
+     VALUES ('${RELATION_SUBJECT_KIND}', $1, '${verb}', '${entry.object}', $2,$1,now())
      ON CONFLICT (subject_kind, subject_id, verb, object_kind, object_id)
-     DO UPDATE SET deleted_at = NULL WHERE relations.deleted_at IS NOT NULL
+     DO UPDATE SET deleted_at = NULL,status='accepted',accepted_at=now(),initiated_by=EXCLUDED.initiated_by,revision=relations.revision+1 WHERE relations.deleted_at IS NOT NULL
      RETURNING 1`,
     [userId, objectId],
   );
-    if(result.rows.length){
-      const recipient=entry.object==='user'?objectId:(await tx.query<{user_id:string}>('SELECT user_id FROM artifacts WHERE id=$1',[objectId])).rows[0]?.user_id;
-      if(recipient&&recipient!==userId)await recordNotification(tx,{id:`social:${verb}:${userId}:${objectId}`,artifactId:entry.object==='artifact'?objectId:null,recipientId:recipient,senderId:userId,kind:verb,once:true});
-    }
+    if(result.rows.length)await say(tx,entry,'linked',userId,objectId);
     return result;});
   if (changed.rows.length === 0) return 'already';
-  await say(entry, 'linked', userId, objectId);
   return 'linked';
 }
 
 /** Set `deleted_at` on the live edge. `absent` = there was none (no event). */
-export async function unlink(userId: string, verb: RelationVerb, objectId: string): Promise<'unlinked' | 'absent'> {
+export async function unlink(userId: string, verb: ImmediateRelationVerb, objectId: string): Promise<'unlinked' | 'absent'> {
   const entry = vocabulary(verb);
+  if((verb as RelationVerb)==='join')throw Error('Join requires the membership lifecycle');
   const db = await getDb();
   const changed = await db.transaction(async tx=>{
     await tx.query('SELECT id FROM users WHERE id=$1 FOR UPDATE',[userId]);
-    return tx.query(
-    `UPDATE relations SET deleted_at = now() WHERE ${subjectWhere(verb, entry)} AND object_id = $2 AND deleted_at IS NULL RETURNING 1`,
+    const result=await tx.query(
+    `UPDATE relations SET deleted_at = now(),status='left',revision=revision+1 WHERE ${subjectWhere(verb, entry)} AND object_id = $2 AND deleted_at IS NULL AND status='accepted' RETURNING 1`,
     [userId, objectId],
-  );});
+  );
+    if(result.rows.length)await say(tx,entry,'unlinked',userId,objectId);
+    return result;
+  });
   if (changed.rows.length === 0) return 'absent';
-  await say(entry, 'unlinked', userId, objectId);
+
   return 'unlinked';
 }
 
@@ -122,7 +101,7 @@ export async function has(userId: string, verb: RelationVerb, objectId: string):
   const entry = vocabulary(verb);
   const db = await getDb();
   const live = await db.query(
-    `SELECT 1 FROM relations WHERE ${subjectWhere(verb, entry)} AND object_id = $2 AND deleted_at IS NULL`,
+    `SELECT 1 FROM relations WHERE ${subjectWhere(verb, entry)} AND object_id = $2 AND deleted_at IS NULL AND status='accepted'`,
     [userId, objectId],
   );
   return live.rows.length > 0;
@@ -133,7 +112,7 @@ export async function count(verb: RelationVerb, objectId: string): Promise<numbe
   const entry = vocabulary(verb);
   const db = await getDb();
   const total = await db.query<{ n: string | number }>(
-    `SELECT COUNT(*) AS n FROM relations WHERE verb = '${verb}' AND object_kind = '${entry.object}' AND object_id = $1 AND deleted_at IS NULL`,
+    `SELECT COUNT(*) AS n FROM relations WHERE verb = '${verb}' AND object_kind = '${entry.object}' AND object_id = $1 AND deleted_at IS NULL AND status='accepted'`,
     [objectId],
   );
   // COUNT() comes back as a bigint, which both drivers hand over as a string.
@@ -147,18 +126,20 @@ export async function linked(userId: string, verb: RelationVerb,query?:Queryable
   const out = await db.query<{ object_id: string }>(
     // Newest first, then by id: two edges made in the same millisecond still
     // come back in ONE order, so a feed built on this never shuffles.
-    `SELECT object_id FROM relations WHERE ${subjectWhere(verb, entry)} AND deleted_at IS NULL ORDER BY created_at DESC, object_id`,
+    `SELECT object_id FROM relations WHERE ${subjectWhere(verb, entry)} AND deleted_at IS NULL AND status='accepted' ORDER BY created_at DESC, object_id`,
     [userId],
   );
   return out.rows.map((row) => row.object_id);
 }
 
-/** The caller holds the subject's user-row lock. Effects are announced only after commit. */
-export async function replaceLinked(query:Queryable,userId:string,verb:RelationVerb,ids:string[]){
+/** The caller holds the subject's lock; events commit with the replacement. */
+export async function replaceLinked(query:Queryable,userId:string,verb:ImmediateRelationVerb,ids:string[]){
  const entry=vocabulary(verb);
- const removed=await query.query<{object_id:string}>(`UPDATE relations SET deleted_at=now() WHERE ${subjectWhere(verb,entry)} AND deleted_at IS NULL AND NOT (object_id=ANY($2::text[])) RETURNING object_id`,[userId,ids]);
- const added=await query.query<{object_id:string}>(`INSERT INTO relations(subject_kind,subject_id,verb,object_kind,object_id)
- SELECT '${RELATION_SUBJECT_KIND}',$1,'${verb}','${entry.object}',id FROM unnest($2::text[]) AS id
- ON CONFLICT(subject_kind,subject_id,verb,object_kind,object_id) DO UPDATE SET deleted_at=NULL WHERE relations.deleted_at IS NOT NULL RETURNING object_id`,[userId,ids]);
- return async()=>{for(const row of removed.rows)await say(entry,'unlinked',userId,row.object_id);for(const row of added.rows)await say(entry,'linked',userId,row.object_id);};
+ if((verb as RelationVerb)==='join')throw Error('Join requires the membership lifecycle');
+ const removed=await query.query<{object_id:string}>(`UPDATE relations SET deleted_at=now(),status='left',revision=revision+1 WHERE ${subjectWhere(verb,entry)} AND deleted_at IS NULL AND status='accepted' AND NOT (object_id=ANY($2::text[])) RETURNING object_id`,[userId,ids]);
+ const added=await query.query<{object_id:string}>(`INSERT INTO relations(subject_kind,subject_id,verb,object_kind,object_id,initiated_by,accepted_at)
+ SELECT '${RELATION_SUBJECT_KIND}',$1,'${verb}','${entry.object}',id,$1,now() FROM unnest($2::text[]) AS id
+ ON CONFLICT(subject_kind,subject_id,verb,object_kind,object_id) DO UPDATE SET deleted_at=NULL,status='accepted',accepted_at=now(),initiated_by=EXCLUDED.initiated_by,revision=relations.revision+1 WHERE relations.deleted_at IS NOT NULL RETURNING object_id`,[userId,ids]);
+ for(const row of removed.rows)await say(query,entry,'unlinked',userId,row.object_id);
+ for(const row of added.rows)await say(query,entry,'linked',userId,row.object_id);
 }

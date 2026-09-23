@@ -55,7 +55,7 @@ describe('CI change selection', () => {
   });
 
   it('skips expensive jobs only for explicitly classified prose', () => {
-    const plan = planCi(['README.md', 'docs/design-notes.md', 'AGENTS.md']);
+    const plan = planCi(['README.md', 'docs/notifications.md', 'AGENTS.md']);
     expect(Object.entries(plan.jobs).filter(([, run]) => run).map(([job]) => job)).toEqual(['checks']);
     expect(planCi(['services/app/skills/artifactbin/SKILL.md']).jobs.api).toBe(true);
     expect(planCi(['docs/executable.mjs']).full).toBe(true);

@@ -45,33 +45,6 @@ ALTER TABLE app.event_outbox ADD COLUMN IF NOT EXISTS envelope JSONB NOT NULL;
 
 ALTER TABLE app.event_outbox ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT now();
 
-CREATE TABLE IF NOT EXISTS app.artifact_members (
-  artifact_id TEXT NOT NULL,
-  user_id TEXT NOT NULL,
-  status TEXT NOT NULL,
-  direction TEXT NOT NULL,
-  initiated_by TEXT NOT NULL,
-  joined_at TIMESTAMPTZ,
-  revision INTEGER NOT NULL DEFAULT 1,
-  PRIMARY KEY (artifact_id, user_id)
-);
-
-ALTER TABLE app.artifact_members ADD COLUMN IF NOT EXISTS artifact_id TEXT NOT NULL;
-
-ALTER TABLE app.artifact_members ADD COLUMN IF NOT EXISTS user_id TEXT NOT NULL;
-
-ALTER TABLE app.artifact_members ADD COLUMN IF NOT EXISTS status TEXT NOT NULL;
-
-ALTER TABLE app.artifact_members ADD COLUMN IF NOT EXISTS direction TEXT NOT NULL;
-
-ALTER TABLE app.artifact_members ADD COLUMN IF NOT EXISTS initiated_by TEXT NOT NULL;
-
-ALTER TABLE app.artifact_members ADD COLUMN IF NOT EXISTS joined_at TIMESTAMPTZ;
-
-ALTER TABLE app.artifact_members ADD COLUMN IF NOT EXISTS revision INTEGER NOT NULL DEFAULT 1;
-
-CREATE INDEX IF NOT EXISTS idx_members_pending_initiator ON app.artifact_members (initiated_by) WHERE status = 'pending';
-
 CREATE TABLE IF NOT EXISTS app.member_notifications (
   id TEXT NOT NULL,
   artifact_id TEXT,
@@ -85,6 +58,7 @@ CREATE TABLE IF NOT EXISTS app.member_notifications (
   revision INTEGER NOT NULL DEFAULT 1,
   seen_revision INTEGER NOT NULL DEFAULT 0,
   first_update_id TEXT,
+  source_event_id TEXT,
   PRIMARY KEY (id)
 );
 
@@ -111,6 +85,8 @@ ALTER TABLE app.member_notifications ADD COLUMN IF NOT EXISTS revision INTEGER N
 ALTER TABLE app.member_notifications ADD COLUMN IF NOT EXISTS seen_revision INTEGER NOT NULL DEFAULT 0;
 
 ALTER TABLE app.member_notifications ADD COLUMN IF NOT EXISTS first_update_id TEXT;
+
+ALTER TABLE app.member_notifications ADD COLUMN IF NOT EXISTS source_event_id TEXT;
 
 CREATE INDEX IF NOT EXISTS idx_member_notifications_recipient ON app.member_notifications (recipient_id, created_at);
 
@@ -821,6 +797,11 @@ CREATE TABLE IF NOT EXISTS app.relations (
   object_id TEXT NOT NULL,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   deleted_at TIMESTAMPTZ,
+  status TEXT NOT NULL DEFAULT 'accepted',
+  direction TEXT NOT NULL DEFAULT 'request',
+  initiated_by TEXT,
+  accepted_at TIMESTAMPTZ,
+  revision INTEGER NOT NULL DEFAULT 1,
   PRIMARY KEY (subject_kind, subject_id, verb, object_kind, object_id)
 );
 
@@ -837,6 +818,20 @@ ALTER TABLE app.relations ADD COLUMN IF NOT EXISTS object_id TEXT NOT NULL;
 ALTER TABLE app.relations ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT now();
 
 ALTER TABLE app.relations ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ;
+
+ALTER TABLE app.relations ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'accepted';
+
+ALTER TABLE app.relations ADD COLUMN IF NOT EXISTS direction TEXT NOT NULL DEFAULT 'request';
+
+ALTER TABLE app.relations ADD COLUMN IF NOT EXISTS initiated_by TEXT;
+
+ALTER TABLE app.relations ADD COLUMN IF NOT EXISTS accepted_at TIMESTAMPTZ;
+
+ALTER TABLE app.relations ADD COLUMN IF NOT EXISTS revision INTEGER NOT NULL DEFAULT 1;
+
+CREATE INDEX IF NOT EXISTS idx_relations_join_object ON app.relations (object_id, status) WHERE verb = 'join';
+
+CREATE INDEX IF NOT EXISTS idx_relations_pending_initiator ON app.relations (initiated_by) WHERE status = 'pending' AND deleted_at IS NULL;
 
 CREATE INDEX IF NOT EXISTS idx_relations_like_object ON app.relations (object_id) WHERE verb = 'like' AND deleted_at IS NULL;
 

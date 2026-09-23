@@ -497,15 +497,22 @@ const RELATIONS: Table = {
   columns: [
     { name: 'subject_kind', type: 'TEXT', notNull: true }, // 'user'
     { name: 'subject_id', type: 'TEXT', notNull: true },
-    { name: 'verb', type: 'TEXT', notNull: true }, // 'like' | 'follow'
+    { name: 'verb', type: 'TEXT', notNull: true }, // 'like' | 'follow' | 'join'
     { name: 'object_kind', type: 'TEXT', notNull: true }, // 'artifact' | 'user'
     { name: 'object_id', type: 'TEXT', notNull: true },
     { name: 'created_at', type: 'TIMESTAMPTZ', notNull: true, default: 'now()' },
-    /** NULL = live; set = undone (unlike, unfollow). The one generic reversal, for every verb. */
+    /** NULL for pending/accepted edges; set when dismissed or left. */
     { name: 'deleted_at', type: 'TIMESTAMPTZ' },
+    { name: 'status', type: 'TEXT', notNull: true, default: "'accepted'" },
+    { name: 'direction', type: 'TEXT', notNull: true, default: "'request'" },
+    { name: 'initiated_by', type: 'TEXT' },
+    { name: 'accepted_at', type: 'TIMESTAMPTZ' },
+    { name: 'revision', type: 'INTEGER', notNull: true, default: '1' },
   ],
   primaryKey: ['subject_kind', 'subject_id', 'verb', 'object_kind', 'object_id'],
   indexes: [
+    { name: 'idx_relations_join_object', columns: ['object_id', 'status'], where: "verb = 'join'" },
+    { name: 'idx_relations_pending_initiator', columns: ['initiated_by'], where: "status = 'pending' AND deleted_at IS NULL" },
     /** likes on an artifact */
     { name: 'idx_relations_like_object', columns: ['object_id'], where: "verb = 'like' AND deleted_at IS NULL" },
     /** who I follow */
@@ -700,15 +707,6 @@ const COMMENT_IMAGES: Table = {
  indexes:[{name:'idx_comment_images_annotation',columns:['annotation_id']},{name:'idx_comment_images_expiry',columns:['expires_at']}],
 };
 
-const ARTIFACT_MEMBERS: Table = {
- name:'artifact_members', columns:[
-  {name:'artifact_id',type:'TEXT',notNull:true},{name:'user_id',type:'TEXT',notNull:true},
-  {name:'status',type:'TEXT',notNull:true},{name:'direction',type:'TEXT',notNull:true},
-  {name:'initiated_by',type:'TEXT',notNull:true},{name:'joined_at',type:'TIMESTAMPTZ'},
-  {name:'revision',type:'INTEGER',notNull:true,default:'1'},
- ], primaryKey:['artifact_id','user_id'],
- indexes:[{name:'idx_members_pending_initiator',columns:['initiated_by'],where:"status = 'pending'"}],
-};
 const MEMBER_NOTIFICATIONS: Table = {
  name:'member_notifications',columns:[
   {name:'id',type:'TEXT',notNull:true},{name:'artifact_id',type:'TEXT'},
@@ -719,6 +717,7 @@ const MEMBER_NOTIFICATIONS: Table = {
   {name:'revision',type:'INTEGER',notNull:true,default:'1'},
   {name:'seen_revision',type:'INTEGER',notNull:true,default:'0'},
   {name:'first_update_id',type:'TEXT'},
+  {name:'source_event_id',type:'TEXT'},
  ],primaryKey:['id'],indexes:[{name:'idx_member_notifications_recipient',columns:['recipient_id','created_at']}],
 };
 const USER_BLOCKS: Table = {
@@ -729,7 +728,7 @@ const EVENT_OUTBOX: Table = {name:'event_outbox',columns:[
  {name:'id',type:'TEXT',notNull:true},{name:'envelope',type:'JSONB',notNull:true},
  {name:'created_at',type:'TIMESTAMPTZ',notNull:true,default:'now()'},
 ],primaryKey:['id']};
-export const TABLES: Table[] = [EVENT_OUTBOX, ARTIFACT_MEMBERS, MEMBER_NOTIFICATIONS, USER_BLOCKS, COMMENT_IMAGES, REMOTE_AGENTS, REMOTE_WORK, EXPORT_IMAGES, EXPORT_IMAGE_CACHE, MUTATION_RECEIPTS, DATASET_POLICY_AUDIT, DATASET_USAGE, USERS, TOKENS, ARTIFACTS, ARTIFACT_VERSIONS, ARTIFACT_EDITS, ARTIFACT_SOURCE_IDS, ARTIFACT_NODE_ALIASES, NODE_IDENTITY_MIGRATION_JOBS, ARTIFACT_SHARES, ANNOTATIONS, CODES, ANALYTICS_EVENTS, RELATIONS, WEBFONTS, WEB_ASSETS, DATASET_SECRETS, DATASET_RESULT_CACHE, ARTIFACT_CREATION_OPERATIONS, ID_RESERVATION_BATCHES, ARTIFACT_ID_REGISTRY, BROWSER_TEST_USERS];
+export const TABLES: Table[] = [EVENT_OUTBOX, MEMBER_NOTIFICATIONS, USER_BLOCKS, COMMENT_IMAGES, REMOTE_AGENTS, REMOTE_WORK, EXPORT_IMAGES, EXPORT_IMAGE_CACHE, MUTATION_RECEIPTS, DATASET_POLICY_AUDIT, DATASET_USAGE, USERS, TOKENS, ARTIFACTS, ARTIFACT_VERSIONS, ARTIFACT_EDITS, ARTIFACT_SOURCE_IDS, ARTIFACT_NODE_ALIASES, NODE_IDENTITY_MIGRATION_JOBS, ARTIFACT_SHARES, ANNOTATIONS, CODES, ANALYTICS_EVENTS, RELATIONS, WEBFONTS, WEB_ASSETS, DATASET_SECRETS, DATASET_RESULT_CACHE, ARTIFACT_CREATION_OPERATIONS, ID_RESERVATION_BATCHES, ARTIFACT_ID_REGISTRY, BROWSER_TEST_USERS];
 
 /** Ordered, individually-executable DDL statements (no splitting needed) — rendered by utils. */
 export const SCHEMA_STATEMENTS: string[] = renderSchema(TABLES);

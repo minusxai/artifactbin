@@ -1,7 +1,8 @@
+import type {RelationStatus,RelationDirection} from './relations';
 import type {DatasetColumn} from './sql';
 export const PENDING_MEMBERSHIP_LIMIT = 30;
-export type MembershipStatus = 'pending' | 'accepted' | 'dismissed' | 'left';
-export type MembershipDirection = 'invitation' | 'request';
+export type MembershipStatus = RelationStatus;
+export type MembershipDirection = RelationDirection;
 export type MembershipAction = 'join' | 'invite' | 'accept' | 'approve' | 'dismiss' | 'leave';
 export interface ArtifactMember {
   user_id: string;

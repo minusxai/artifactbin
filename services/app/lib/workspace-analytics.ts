@@ -152,7 +152,7 @@ export async function likeSummaryByUser(userId: string, days: number = VIEW_SERI
        COUNT(*)::int AS n
      FROM relations r
      JOIN artifacts a ON a.id = r.object_id
-     WHERE r.verb = 'like' AND r.object_kind = 'artifact' AND r.deleted_at IS NULL
+     WHERE r.verb = 'like' AND r.object_kind = 'artifact' AND r.deleted_at IS NULL AND r.status='accepted'
        AND a.user_id = $1 AND a.format = 'markup' AND a.${LIVE_ARTIFACT_SQL}
      GROUP BY day
      ORDER BY day`,
