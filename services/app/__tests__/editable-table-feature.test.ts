@@ -83,6 +83,13 @@ describe('editable DataTable feature',()=>{
     const same=await Promise.all([update('set_status','backlog',current),update('set_status','done',current)]);
     expect(same.map(r=>r.status).sort()).toEqual([200,409]);
   });
+  it('publishes a DatePicker cell editor and saves the picked date',async()=>{
+    const t=await mintToken('date-editor');const ds=await create(t.token,{dataset:[{id:1,due:'2026-09-01'}],columns:[{name:'id',type:'number'},{name:'due',type:'date'}],access:'readwrite'});
+    const doc=await create(t.token,{markup:`<Helmet><Query name="tasks" source="ref:${ds.id}">{\`select * from public.rows\`}</Query><Mutation name="set_due" expectedAffected={1} source="ref:${ds.id}">{\`update public.rows set due=$_value where id=$_row.id and due is not distinct from $_row.due\`}</Mutation></Helmet><DataTable data="$tasks" rowKey="id"><Column col="id"/><Column col="due"><DatePicker label="Due {$_row.id}" value="$_row.due" run="$set_due"/></Column></DataTable>`});
+    const res=await mutateDoc(request(`/a/${doc.id}/mutate`,{method:'POST',token:t.token,json:{mutation:'set_due',values:{_value:'2026-09-15'},row:{id:1,due:'2026-09-01'}}}),{params:Promise.resolve({id:doc.id})});
+    expect(res.status,await res.clone().text()).toBe(200);
+    expect(await loadDatasetRows((await getArtifactById(ds.id))!)).toEqual([{id:1,due:'2026-09-15'}]);
+  });
   it('rejects unsupported editors and a generic mutation wired as a cell editor',async()=>{
     const t=await mintToken('editors');const ds=await create(t.token,{dataset:[{id:1,status:'backlog'}],access:'readwrite'});
     const source=markup(ds.id);

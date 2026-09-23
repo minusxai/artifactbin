@@ -143,6 +143,18 @@ function RuntimeCellControl({ tag, component: Component, props, row, identity, c
       rest={{ ...shellRest(rest), 'aria-busy': busy || undefined, 'aria-description': unavailable ?? undefined }}
     >{children}</SelectControl>{error}</MutationCellHint>;
   }
+  if (tag === 'DatePicker') {
+    // A pick is the whole edit: stage it and commit in one gesture. A
+    // timestamp column shows (and, like the bound DatePicker, writes) its day.
+    const shown = typeof value === 'string' ? valueType === 'timestamp' ? value.slice(0, 10) : value : null;
+    return <MutationCellHint reason={refusalText(unavailable)}><DateControl
+      appearance="cell" label={label} className={str(props.className)} min={str(props.min)} max={str(props.max)}
+      value={shown} nullable={props.nullable === true}
+      onChange={(next) => { change(next === '' ? null : next); commit(); }}
+      disabled={!ctx.chrome || !writable || busy || props.disabled === true}
+      rest={{ ...shellRest(rest), 'aria-busy': busy || undefined, 'aria-description': unavailable ?? undefined }}
+    />{error}</MutationCellHint>;
+  }
   if (tag === 'input' || tag === 'textarea' || tag === 'select') {
     const Html = tag as 'input' | 'textarea' | 'select';
     const commitDraft = (element: HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement) => {

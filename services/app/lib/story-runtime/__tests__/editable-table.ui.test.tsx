@@ -112,6 +112,19 @@ describe('editable table runtime',()=>{
     expect(v.mutate).toHaveBeenCalledWith({_value:'done'},'set_item',{id:1,item:'one',hours:2});
     expect((v.getByLabelText('Item 1') as HTMLButtonElement).disabled).toBe(true);
   });
+  it('commits a DatePicker cell once with the picked ISO date',async()=>{
+    const v=setup('<Column col="item"><DatePicker label="Item {$_row.id}" value="$_row.item" run="$set_item"/></Column>',[{id:1,item:'2026-09-01',hours:2}]);
+    v.mutate.mockImplementation(()=>new Promise(()=>{}));
+    const trigger=v.getByLabelText('Item 1') as HTMLButtonElement;
+    expect(trigger.textContent).toContain('2026-09-01');
+    fireEvent.click(trigger);
+    fireEvent.click(v.getByLabelText('2026-09-15'));
+    await act(async()=>{});
+    expect(v.mutate).toHaveBeenCalledTimes(1);
+    expect(v.mutate).toHaveBeenCalledWith({_value:'2026-09-15'},'set_item',{id:1,item:'2026-09-01',hours:2});
+    expect(trigger.textContent).toContain('2026-09-15');
+    expect(trigger.disabled).toBe(true);
+  });
   it('renders capture cell controls disabled and updates when a write transport attaches',async()=>{
     const v=setup();
     const store=createDataflowStore(v.dataflow);

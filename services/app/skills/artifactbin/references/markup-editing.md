@@ -76,8 +76,11 @@ Do not split comma-separated data blindly: embedded commas are ambiguous.
   templates such as `label="Status {$_row.id}"` inside a Column. One member
   level only; extract nested JSON with SQL. `_`-prefixed declaration names
   are reserved. `$_value` is the committed scalar in mutation SQL.
-- `run` editors: `<Select>`, `<input type="text">`, `<input type="number">`,
-  `<textarea>`, `<select>` — native tags here, not `<Input>`; others rejected.
+- `run` editors: `<Select>`, `<DatePicker>`, `<input type="text">`,
+  `<input type="number">`, `<textarea>`, `<select>` — native tags here, not
+  `<Input>`; others rejected. Edit a `date` column with
+  `<DatePicker label="Due {$_row.id}" value="$_row.due" run="$set_due" />`,
+  not a text input: a pick saves at once as `YYYY-MM-DD`.
 - `<Button run="$complete">` captures `$_row` on click without `$_value`.
   See [row actions](markup-repeat.md) for pending/error behavior.
 - Row mutations run inside a Column or keyed For. Cell editors capture the row

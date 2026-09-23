@@ -274,7 +274,7 @@ export const REF_ATTRS: {
     Textarea: { value: 'scalar' },
     Select: { value: 'scalar', options: 'table', run: 'mutation' },
     Slider: { value: 'scalar' },
-    DatePicker: { value: 'scalar' },
+    DatePicker: { value: 'scalar', run: 'mutation' },
     Segmented: { value: 'scalar', options: 'table' },
     Switch: { checked: 'scalar' },
     // The one TRIGGER position: a kit <Button run="$name"> runs the named
