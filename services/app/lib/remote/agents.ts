@@ -1,3 +1,4 @@
+import {isTerminalFeedback} from './terminal-input';
 import {getArtifactById,canReadArtifact} from '../artifacts';
 import {createHash,randomUUID} from 'node:crypto';
 import {getDb,type Queryable} from '../db';
@@ -59,7 +60,7 @@ export class RemoteAgents {
    this.relay.input(owner,id,data);
    // Keyboard control may open an unobservable harness modal. Never infer idle
    // from terminal bytes; a new readiness receipt is required after manual work.
-   if(r&&data&&(r.info.activity==='listening'||r.info.activity==='blocked')){r.info.activity='unknown';await this.save(tx,r);this.relay.restore(owner,id,r.info);await this.notifyAgent(tx,id);}
+   if(r&&data&&!isTerminalFeedback(data)&&(r.info.activity==='listening'||r.info.activity==='blocked')){r.info.activity='unknown';await this.save(tx,r);this.relay.restore(owner,id,r.info);await this.notifyAgent(tx,id);}
   });
  }
  async stop(owner:string,id:string){
