@@ -97,7 +97,7 @@ describe('the additive DDL is replay-safe', () => {
        ORDER BY ordinal_position`,
     );
     expect(annotationColumns.rows.map((row) => row.column_name)).toEqual([
-      'id', 'seq', 'artifact_id', 'root_id', 'body',
+      'revision', 'id', 'seq', 'artifact_id', 'root_id', 'body',
       'author_kind', 'author_token_id', 'author_user_id', 'author_label',
       'author_transport',
       'status', 'resolved_at', 'anchor_key', 'anchor_version', 'snippet', 'created_at',

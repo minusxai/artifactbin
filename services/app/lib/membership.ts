@@ -1,3 +1,5 @@
+import {JOIN_RELATIONS,setRelationState} from './relation-state';
+import {recordEvent} from './notification-events';
 import {DatasetError} from './datasets/errors';
 import { readThrough } from './datasets/policy/grants';
 import type { ArtifactMember, MembershipInput, MembershipState, MembershipDirection, MembershipStatus, Queryable } from '@artifactbin/contracts';
@@ -28,7 +30,7 @@ async function account(actor: RoleActor, artifact: ArtifactRow) {
 const memberFields = 'm.user_id,u.username,u.name,m.status,m.direction,m.initiated_by,m.joined_at';
 export async function membershipState(actor: RoleActor, id: string): Promise<MembershipState> {
   const {role,artifact}=await opened(actor,id), db=await getDb();
-  const rows=(await db.query<ArtifactMember>(`SELECT ${memberFields} FROM artifact_members m JOIN users u ON u.id=m.user_id WHERE m.artifact_id=$1 AND (m.status='accepted' OR m.user_id=$2 OR ($3 AND m.status='pending')) ORDER BY m.joined_at NULLS LAST,u.username`,[id,actor.userId,canEdit(role)])).rows;
+  const rows=(await db.query<ArtifactMember>(`SELECT ${memberFields} FROM ${JOIN_RELATIONS} m JOIN users u ON u.id=m.user_id WHERE m.artifact_id=$1 AND (m.status='accepted' OR m.user_id=$2 OR ($3 AND m.status='pending')) ORDER BY m.joined_at NULLS LAST,u.username`,[id,actor.userId,canEdit(role)])).rows;
   const mentions=await savedMentionStates(artifact);
   return {mentions,members:rows.filter(m=>m.status==='accepted'),pending:rows.filter(m=>m.status==='pending'),self:rows.find(m=>m.user_id===actor.userId)??null,canManage:canEdit(role),canInvite:!!actor.userId&&canAnnotate(role)};
 }
@@ -36,10 +38,10 @@ async function blocked(tx: Queryable, a: string, b: string): Promise<boolean> {
   return !!(await tx.query('SELECT 1 FROM user_blocks WHERE (user_id=$1 AND blocked_user_id=$2) OR (user_id=$2 AND blocked_user_id=$1)',[a,b])).rows.length;
 }
 async function follows(tx: Queryable, follower: string, followed: string): Promise<boolean> {
-  return !!(await tx.query("SELECT 1 FROM relations WHERE subject_kind='user' AND subject_id=$1 AND verb='follow' AND object_kind='user' AND object_id=$2 AND deleted_at IS NULL",[follower,followed])).rows.length;
+  return !!(await tx.query("SELECT 1 FROM relations WHERE subject_kind='user' AND subject_id=$1 AND verb='follow' AND object_kind='user' AND object_id=$2 AND deleted_at IS NULL AND status='accepted'",[follower,followed])).rows.length;
 }
 async function accepted(tx: Queryable,id:string,userId:string):Promise<boolean> {
-  return !!(await tx.query("SELECT 1 FROM artifact_members WHERE artifact_id=$1 AND user_id=$2 AND status='accepted'",[id,userId])).rows.length;
+  return !!(await tx.query(`SELECT 1 FROM ${JOIN_RELATIONS} WHERE artifact_id=$1 AND user_id=$2 AND status='accepted'`,[id,userId])).rows.length;
 }
 /** Candidate eligibility is enforced again on send, including when an agent supplies raw IDs. */
 export async function mentionCandidates(actor: RoleActor, id: string, query: string, purpose: 'mention' | 'invite' = 'mention'): Promise<Array<{user_id:string;username:string;name:string|null}>> {
@@ -49,23 +51,12 @@ export async function mentionCandidates(actor: RoleActor, id: string, query: str
   const db=await getDb();
   return (await db.query<{user_id:string;username:string;name:string|null}>(`SELECT u.id AS user_id,u.username,u.name FROM users u WHERE u.kind IN ('account','testuser') AND u.username IS NOT NULL AND u.id<>$1
     AND (u.username ILIKE $3 OR COALESCE(u.name,'') ILIKE $3)
-    AND ($4 OR EXISTS(SELECT 1 FROM relations r WHERE r.subject_kind='user' AND r.subject_id=u.id AND r.verb='follow' AND r.object_kind='user' AND r.object_id=$1 AND r.deleted_at IS NULL)
-      OR EXISTS(SELECT 1 FROM artifact_members m WHERE m.artifact_id=$2 AND m.user_id=u.id AND m.status='accepted'))
+    AND ($4 OR EXISTS(SELECT 1 FROM relations r WHERE r.subject_kind='user' AND r.subject_id=u.id AND r.verb='follow' AND r.object_kind='user' AND r.object_id=$1 AND r.deleted_at IS NULL AND r.status='accepted')
+      OR EXISTS(SELECT 1 FROM ${JOIN_RELATIONS} m WHERE m.artifact_id=$2 AND m.user_id=u.id AND m.status='accepted'))
     AND NOT EXISTS(SELECT 1 FROM user_blocks b WHERE (b.user_id=$1 AND b.blocked_user_id=u.id) OR (b.user_id=u.id AND b.blocked_user_id=$1))
     ORDER BY u.username LIMIT 30`,[actor.userId,id,query.replace(/^@/,'').replace(/[\\%_]/g,'\\$&')+'%',purpose==='invite'])).rows;
 }
 interface StoredMember {status:MembershipStatus;direction:MembershipDirection;initiated_by:string;revision:number}
-async function notify(tx:Queryable, artifactId:string,userId:string,sender:string,revision:number,kind:string,recipients:string[]) {
-  for(const recipient of new Set(recipients)) {
-    if(recipient===sender || await blocked(tx,sender,recipient))continue;
-    await tx.query('INSERT INTO member_notifications(id,artifact_id,user_id,recipient_id,sender_id,kind) VALUES($1,$2,$3,$4,$5,$6) ON CONFLICT(id) DO NOTHING',[`${artifactId}:${userId}:${revision}:${kind}:${recipient}`,artifactId,userId,recipient,sender,kind]);
-  }
-}
-async function editors(tx:Queryable,artifact:ArtifactRow):Promise<string[]> {
-  const rows=(await tx.query<{id:string}>(`SELECT u.id FROM users u WHERE u.id=$2 OR EXISTS(SELECT 1 FROM artifact_shares s WHERE s.artifact_id=$1 AND s.role='editor' AND (s.user_id=u.id OR (s.user_id IS NULL AND s.email=u.email)))`,[artifact.id,artifact.user_id])).rows;
-  return rows.map(r=>r.id);
-}
-
 /** One transaction owns the pair, the account's 30-slot budget, and its notification receipts. */
 export async function changeMembership(actor: RoleActor, id: string, input: MembershipInput): Promise<MembershipState> {
   const {artifact,role}=await opened(actor,id), userId=await account(actor,artifact), db=await getDb();
@@ -106,7 +97,7 @@ export async function changeMembership(actor: RoleActor, id: string, input: Memb
         await invitePeople(tx,current,actor,[target],undefined,true);continue;
       }
       if(await blocked(tx,userId,target))fail('Person is not eligible for this invitation');
-      const previous=(await tx.query<StoredMember>('SELECT status,direction,initiated_by,revision FROM artifact_members WHERE artifact_id=$1 AND user_id=$2',[id,target])).rows[0];
+      const previous=(await tx.query<StoredMember>(`SELECT status,direction,initiated_by,revision FROM ${JOIN_RELATIONS} WHERE artifact_id=$1 AND user_id=$2`,[id,target])).rows[0];
       let status:MembershipStatus, direction:MembershipDirection=previous?.direction??'request',initiator=previous?.initiated_by??userId;
       if(input.action==='join') {
         if(previous?.status==='accepted'||(previous?.status==='pending'&&!canEdit(role)))continue;
@@ -114,7 +105,7 @@ export async function changeMembership(actor: RoleActor, id: string, input: Memb
         direction='request';
         status=canEdit(role)?'accepted':'pending';
         if(status==='pending') {
-          const count=Number((await tx.query<{n:string}>("SELECT count(*) AS n FROM artifact_members WHERE initiated_by=$1 AND status='pending'",[userId])).rows[0]!.n);
+          const count=Number((await tx.query<{n:string}>(`SELECT count(*) AS n FROM ${JOIN_RELATIONS} WHERE initiated_by=$1 AND status='pending'`,[userId])).rows[0]!.n);
           if(count>=PENDING_MEMBERSHIP_LIMIT)fail(`You already have ${PENDING_MEMBERSHIP_LIMIT} pending requests`,409);
         }
       } else if(input.action==='accept'||input.action==='approve') {
@@ -131,10 +122,8 @@ export async function changeMembership(actor: RoleActor, id: string, input: Memb
       if(previous?.status==='pending'&&previous.direction==='invitation'&&(status==='dismissed'||status==='left'))
         await tx.query("UPDATE member_notifications SET kind='dismissed' WHERE artifact_id=$1 AND user_id=$2 AND sender_id=$3 AND kind='invitation'",[id,target,previous.initiated_by]);
       const revision=(previous?.revision??0)+1;
-      await tx.query(`INSERT INTO artifact_members(artifact_id,user_id,status,direction,initiated_by,joined_at,revision) VALUES($1,$2,$3,$4,$5,CASE WHEN $3='accepted' THEN now() ELSE NULL END,$6)
-        ON CONFLICT(artifact_id,user_id) DO UPDATE SET status=EXCLUDED.status,direction=EXCLUDED.direction,initiated_by=EXCLUDED.initiated_by,joined_at=EXCLUDED.joined_at,revision=EXCLUDED.revision`,[id,target,status,direction,initiator,revision]);
-      if(status==='pending')await notify(tx,id,target,userId,revision,direction,direction==='request'?await editors(tx,current):[target]);
-      else if(status==='accepted')await notify(tx,id,target,userId,revision,'joined',[target]);
+      await setRelationState(tx,target,'join',id,{status,direction,initiatedBy:initiator,revision});
+      await recordEvent(tx,{kind:'user',id:userId},status==='pending'?'join_requested':status==='accepted'?'joined':status==='left'?'left':'invitation_dismissed',{kind:'artifact',id},{user_id:target,revision});
     }
     await tx.query("SELECT pg_notify('artifact_' || lower($1), 'members')",[id]);
   });
@@ -156,7 +145,7 @@ export async function invitePeople(tx:Queryable,artifact:ArtifactRow,actor:RoleA
   if(target===sender)continue;
   const recipient=identities.find(u=>u.id===target);
   if(!recipient||recipient.kind==='guest'||(recipient.kind==='testuser'&&identities.find(u=>u.id===artifact.user_id)?.kind!=='testuser')||await blocked(tx,sender,target))return fail('Person is not eligible for this invitation');
-  const previous=(await tx.query<StoredMember>('SELECT status,direction,initiated_by,revision FROM artifact_members WHERE artifact_id=$1 AND user_id=$2',[artifact.id,target])).rows[0];
+  const previous=(await tx.query<StoredMember>(`SELECT status,direction,initiated_by,revision FROM ${JOIN_RELATIONS} WHERE artifact_id=$1 AND user_id=$2`,[artifact.id,target])).rows[0];
   const follower=await follows(tx,target,sender);
   if(!explicitInvitation&&!follower&&previous?.status!=='accepted')fail('Person is not eligible for this invitation');
   if(!(await readThrough(tx,artifact,{userId:target,tokenId:null})))fail('Give this person access before mentioning them');
@@ -166,12 +155,11 @@ export async function invitePeople(tx:Queryable,artifact:ArtifactRow,actor:RoleA
   let kind='mention';
   if(previous?.status!=='accepted'){
    const status=recipient.auto_accept_mentions&&follower?'accepted':'pending';
-   if(status==='pending'&&Number((await tx.query<{n:string}>("SELECT count(*) AS n FROM artifact_members WHERE initiated_by=$1 AND status='pending'",[sender])).rows[0]!.n)>=PENDING_MEMBERSHIP_LIMIT)fail('You already have 30 pending requests',409);
-   await tx.query(`INSERT INTO artifact_members(artifact_id,user_id,status,direction,initiated_by,joined_at,revision) VALUES($1,$2,$3,'invitation',$4,CASE WHEN $3='accepted' THEN now() ELSE NULL END,$5)
-    ON CONFLICT(artifact_id,user_id) DO UPDATE SET status=EXCLUDED.status,direction=EXCLUDED.direction,initiated_by=EXCLUDED.initiated_by,joined_at=EXCLUDED.joined_at,revision=EXCLUDED.revision`,[artifact.id,target,status,sender,(previous?.revision??0)+1]);
+   if(status==='pending'&&Number((await tx.query<{n:string}>(`SELECT count(*) AS n FROM ${JOIN_RELATIONS} WHERE initiated_by=$1 AND status='pending'`,[sender])).rows[0]!.n)>=PENDING_MEMBERSHIP_LIMIT)fail('You already have 30 pending requests',409);
+   await setRelationState(tx,target,'join',artifact.id,{status,direction:'invitation',initiatedBy:sender,revision:(previous?.revision??0)+1});
    kind=status==='pending'?'invitation':'joined';
   }
-  await tx.query('INSERT INTO member_notifications(id,artifact_id,user_id,recipient_id,sender_id,kind,source) VALUES($1,$2,$3,$3,$4,$5,$6) ON CONFLICT DO NOTHING',[`${artifact.id}:${target}:${source??`invite:${(previous?.revision??0)+1}`}`,artifact.id,target,sender,kind,source??null]);
+  await recordEvent(tx,{kind:'user',id:sender},kind==='invitation'?'invited':kind==='joined'?'joined':'mentioned',{kind:'artifact',id:artifact.id},{user_id:target,revision:previous?.status==='accepted'?previous.revision:(previous?.revision??0)+1,mention_ref:source});
  }
  await tx.query("SELECT pg_notify('artifact_' || lower($1), 'members')",[artifact.id]);
 }
@@ -181,6 +169,6 @@ export async function savedMentionStates(artifact:ArtifactRow){
  const db=await getDb();
   const savedText=[artifact.source??'',...(await db.query<{body:string}>('SELECT body FROM annotations WHERE artifact_id=$1 AND deleted_at IS NULL',[artifact.id])).rows.map(r=>r.body)].join('\n');
   const mentioned=[...savedText.matchAll(/\/people\/([A-Za-z0-9_-]{1,128})/g)].map(m=>m[1]);
-  const mentions=Object.fromEntries((await db.query<{user_id:string;status:MembershipStatus}>('SELECT user_id,status FROM artifact_members WHERE artifact_id=$1 AND user_id=ANY($2::text[])',[artifact.id,mentioned])).rows.map(m=>[m.user_id,m.status]));
+  const mentions=Object.fromEntries((await db.query<{user_id:string;status:MembershipStatus}>(`SELECT user_id,status FROM ${JOIN_RELATIONS} WHERE artifact_id=$1 AND user_id=ANY($2::text[])`,[artifact.id,mentioned])).rows.map(m=>[m.user_id,m.status]));
  return mentions;
 }

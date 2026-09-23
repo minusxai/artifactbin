@@ -1,3 +1,5 @@
+import {setRelationState} from '@/lib/relation-state';
+import {has,count,linked} from '@/lib/relations';
 import {createAnnotationFor} from '@/lib/annotations';
 import {membershipInbox,updateMembershipInbox} from '@/lib/membership-inbox';
 import { expect, it } from 'vitest';
@@ -91,7 +93,7 @@ it('commits resolved mentions once, reuses pending requests, and refuses blocked
  await w.db.query('UPDATE users SET auto_accept_mentions=false WHERE id=$1',[w.bob.id]);
  const mention=(source:string)=>w.db.transaction(async tx=>{const row=(await tx.query<any>("SELECT * FROM artifacts WHERE id='a1B2c3' FOR UPDATE")).rows[0];await invitePeople(tx,row,w.actor(w.owner),[w.bob.id],source);});
  await mention('comment:one');await mention('comment:one');await mention('comment:two');
- expect((await w.db.query('SELECT * FROM member_notifications')).rows).toHaveLength(1);
+ expect((await w.db.query("SELECT * FROM member_notifications WHERE kind<>'follow'")).rows).toHaveLength(1);
  await changeMembership(w.actor(w.bob),'a1B2c3',{action:'accept'});
  await mention('comment:three');await mention('comment:three');
  expect((await w.db.query("SELECT * FROM member_notifications WHERE kind='mention'")).rows).toHaveLength(1);
@@ -155,4 +157,28 @@ it('does not let a new artefact bypass a dismissed invitation',async()=>{
  await changeMembership(w.actor(w.bob),'a1B2c3',{action:'dismiss'});
  await w.db.query("INSERT INTO artifacts(id,token_id,user_id,format,content,visibility,link_role) VALUES('d4E5f6','owner-token',$1,'markup','hello','public','commenter')",[w.owner.id]);
  await expect(changeMembership(w.actor(w.owner),'d4E5f6',{action:'invite',usernames:['@member_bob']})).rejects.toThrow(/declined/);
+});
+
+it('stores the complete join lifecycle in one relation without changing a follow',async()=>{
+ const w=await world();
+ await link(w.bob.id,'follow',w.owner.id);
+ await changeMembership(w.actor(w.owner),'a1B2c3',{action:'invite',usernames:['@member_eve']});
+ const read=async()=> (await w.db.query("SELECT status,direction,initiated_by,accepted_at,revision,deleted_at FROM relations WHERE subject_id=$1 AND verb='join' AND object_id='a1B2c3'",[w.eve.id])).rows[0];
+ expect(await read()).toMatchObject({status:'pending',direction:'invitation',initiated_by:w.owner.id,accepted_at:null,revision:1,deleted_at:null});
+ await changeMembership(w.actor(w.eve),'a1B2c3',{action:'accept'});
+ expect(await read()).toMatchObject({status:'accepted',revision:2,accepted_at:expect.any(String)});
+ await changeMembership(w.actor(w.eve),'a1B2c3',{action:'leave'});
+ expect(await read()).toMatchObject({status:'left',revision:3,deleted_at:expect.any(String)});
+ expect((await w.db.query("SELECT status FROM relations WHERE subject_id=$1 AND verb='follow'",[w.bob.id])).rows).toEqual([{status:'accepted'}]);
+});
+
+it('does not treat pending follows as followers or autoaccept invitations',async()=>{
+ const w=await world();
+ await w.db.transaction(tx=>setRelationState(tx,w.bob.id,'follow',w.owner.id,{status:'pending',direction:'request',initiatedBy:w.bob.id,revision:1}));
+ expect(await has(w.bob.id,'follow',w.owner.id)).toBe(false);
+ expect(await count('follow',w.owner.id)).toBe(0);
+ expect(await linked(w.bob.id,'follow')).toEqual([]);
+ expect(await mentionCandidates(w.actor(w.owner),'a1B2c3','member_bob')).toEqual([]);
+ await changeMembership(w.actor(w.owner),'a1B2c3',{action:'invite',usernames:['@member_bob']});
+ expect((await membershipState(w.actor(w.bob),'a1B2c3')).self?.status).toBe('pending');
 });

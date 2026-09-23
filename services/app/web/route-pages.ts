@@ -5,6 +5,7 @@ import { lazyPage } from './lazy-page';
 export const routePages = {
   StartPage: lazyPage<Record<string, never>>(() => import('./pages/Start').then(m => ({ default: m.StartPage }))),
   ChatPage: lazyPage<Record<string, never>>(() => import('./pages/Chat').then(m => ({ default: m.ChatPage }))),
+  NotificationsPage: lazyPage<Record<string, never>>(() => import('./pages/Notifications').then(m => ({ default: m.NotificationsPage }))),
   AccountPage: lazyPage<Record<string, never>>(() => import('./pages/Account').then(m => ({ default: m.AccountPage }))),
   AssetsPage: lazyPage<Record<string, never>>(() => import('./pages/Assets').then(m => ({ default: m.AssetsPage }))),
   DatasetEditorPage: lazyPage<{artifactId?: string; onSaved?: () => Promise<unknown>}>(() => import('./pages/DatasetEditor').then(m => ({ default: m.DatasetEditorPage }))),

@@ -51,4 +51,13 @@ export const EVENTS_TABLE: Table = {
   ],
 };
 
-export const EVENTS_TABLES: Table[] = [EVENTS_TABLE];
+export const DELIVERIES_TABLE: Table = {
+  name: 'deliveries', columns: [
+    {name:'event_id',type:'TEXT',notNull:true}, {name:'subscriber',type:'TEXT',notNull:true},
+    {name:'available_at',type:'TIMESTAMPTZ',notNull:true,default:'now()'},
+    {name:'attempts',type:'INTEGER',notNull:true,default:'0'},
+    {name:'claim',type:'TEXT'}, {name:'delivered_at',type:'TIMESTAMPTZ'},
+  ], primaryKey:['event_id','subscriber'],
+  indexes:[{name:'idx_delivery_pending',columns:['subscriber','available_at'],where:'delivered_at IS NULL'}],
+};
+export const EVENTS_TABLES: Table[] = [EVENTS_TABLE, DELIVERIES_TABLE];

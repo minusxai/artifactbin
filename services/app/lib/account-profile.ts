@@ -24,7 +24,7 @@ export async function updateAccountProfile(actor:TokenActor,input:unknown,receip
  if(!resource.state)return {status:400,body:{error:'state_required'}};
  for(const id of resource.liked??[])if(!await readableArtifact(actor,id))return {status:404,body:{error:'not_found'}};
  for(const id of resource.following??[])if(id===actor.userId||!await getUserById(id))return {status:400,body:{error:'invalid_follow',id}};
- const effects:Array<()=>Promise<void>>=[];let result:MutationReply;
+ let result:MutationReply;
  try{result=await (await getDb()).transaction(async query=>{
   if(!await getUserById(actor.userId!,query,true))return {status:404,body:{error:'not_found'}};
   const current=await accountProfile(actor.userId!,query);
@@ -34,10 +34,10 @@ export async function updateAccountProfile(actor:TokenActor,input:unknown,receip
    if(resource.username===null)return {status:400,body:{error:'invalid_username'}};
    const changed=await setUsername(actor.userId!,resource.username,query);if('error'in changed)return {status:400,body:{error:'invalid_username'}};
   }
-  if(resource.liked!==undefined)effects.push(await replaceLinked(query,actor.userId!,'like',resource.liked));
-  if(resource.following!==undefined)effects.push(await replaceLinked(query,actor.userId!,'follow',resource.following));
+  if(resource.liked!==undefined)await replaceLinked(query,actor.userId!,'like',resource.liked);
+  if(resource.following!==undefined)await replaceLinked(query,actor.userId!,'follow',resource.following);
   const value=await accountProfile(actor.userId!,query);const response={status:200,body:value as unknown as Record<string,unknown>};
   if(receipt)await completeMutationReceipt(query,receipt,response);return response;
  });}catch(error){if((error as {code?:string}).code==='23505')return {status:409,body:{error:'username_taken'}};throw error;}
- if(result.status===200)for(const effect of effects)await effect();return result;
+ return result;
 }

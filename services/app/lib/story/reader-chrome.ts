@@ -93,6 +93,7 @@ export interface ReaderPerson {
 }
 
 export interface ReaderChromeInput {
+  notifications?: {unread:number};
   /** SPA controls are mounted separately in TrustedUi; raw documents retain their own panels. */
   panels?: boolean;
   /** Dataset mutation membership; omitted on read-only documents. */
@@ -196,7 +197,7 @@ const label = (text: string): string =>
  * is `data-mx-href`, decided by the route and acted on by the entry, so a
  * framed copy can hand the press to its page instead of navigating itself.
  */
-const action = (name: 'like' | 'comment' | 'share' | 'edit' | 'fork', aria: string, icon: string, extra = '', inner = ''): string =>
+const action = (name: 'like' | 'comment' | 'share' | 'edit' | 'fork' | 'notifications', aria: string, icon: string, extra = '', inner = ''): string =>
   `<button type="button" class="mx-reader-action" data-mx-reader-action="${name}" aria-label="${aria}" data-mx-tip="${aria}"${extra}>`
   + `${icon}${inner}${label(name)}</button>`;
 
@@ -338,6 +339,7 @@ export function renderReaderChrome(input: ReaderChromeInput): string {
     + (archived ? '' : input.panels === false ? action('fork', 'Fork artifact', ICON_FORK, input.forkBusy ? ' disabled aria-busy="true"' : '') : fork ? renderFork(fork) : '')
     + (edit ? action('edit', 'Edit', ICON_PENCIL) : '')
     + (input.share ? action('share', 'Share', `<span data-mx-visibility="${input.visibility ?? 'private'}" data-mx-sharing-icon="${sharingIcon}">${ICON(visibilityIconPaths(sharingIcon))}</span>`, '', '<span class="mx-reader-share-text">Share</span>') : '')
+    + (viewer && input.notifications ? action('notifications','Notifications',ICON('<path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9"/><path d="M10 21h4"/>'),'',input.notifications.unread?'<span aria-label="Unread notifications" style="position:absolute;right:4px;top:4px;width:7px;height:7px;border-radius:50%;background:#dc2626"></span>':''):'')
     + trigger('controls', 'Open artifact controls', ICON_SLIDERS, 'settings', 'Artifact settings')
     + (viewer ? faceTrigger(viewer) : trigger('menu', 'Open menu', ICON_PROFILE, 'profile', 'Profile'))
     + '</div>'

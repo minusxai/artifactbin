@@ -259,7 +259,8 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
    * comment, in EVERY mode — including while editing, so commenting on the
    * paragraph under the caret needs no detour.
    */
-  const showViewComments = canAnnotate && openAnnotationCount > 0;
+  // The layer owns both open markers and the brief resolved countdown.
+  const showViewComments = canAnnotate;
 
   /**
    * `?intent=` — ONE instruction, carried out ONCE, then taken off the address.
@@ -336,6 +337,7 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
    * sent straight to the mounted runtime, which re-runs the queries reading it.
    */
   const [membershipRevision,setMembershipRevision]=useState(0);
+  const invitationLanding=accountSession&&new URLSearchParams(route.search).has('invitation');
   const onLiveData = useCallback((event: { datasets: string[] }) => {
     if(event.datasets.includes('_members'))setMembershipRevision(n=>n+1);
     runtimeRef.current?.send(
@@ -697,7 +699,7 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
    * direct action in the reader bar (and the mobile action rail). */
   const documentControls = (close: () => void) => (
     <div className="space-y-4">
-      {format==='markup'&&<ArtifactPeople hideJoin artifactId={id} revision={membershipRevision} onChange={()=>onLiveData({datasets:['_members']})}/>}
+      {format==='markup'&&<ArtifactPeople initialOpen={invitationLanding} hideJoin artifactId={id} revision={membershipRevision} onChange={()=>onLiveData({datasets:['_members']})}/>}
       {(props.author?.forkedFrom || (canAnnotate && format === 'markup') || canEdit) && <section aria-label="Document actions">
         <h2 className="mb-1 font-mono text-[10px] font-semibold uppercase tracking-[0.14em] text-faint">Artifact</h2>
         {props.author?.forkedFrom && <p data-mx-forked-from className="px-2 py-2 font-mono text-xs text-muted">
@@ -788,7 +790,7 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
              editor's toolbar sits under it. The panels drop below both. */
           <>
             <PageMenu authed={accountSession} anon={anonSession} title={shownTitle} fixed triggerless panelTop={APP_BAR_H + EDIT_BAR_H + 8} />
-            <PageControls fixed triggerless label="Artifact controls" mode={readerMode} onModeChange={setReaderMode} active={railOpen} badge={openAnnotationCount} panelTop={APP_BAR_H + EDIT_BAR_H + 8}>
+            <PageControls initialOpen={invitationLanding} fixed triggerless label="Artifact controls" mode={readerMode} onModeChange={setReaderMode} active={railOpen} badge={openAnnotationCount} panelTop={APP_BAR_H + EDIT_BAR_H + 8}>
               {documentControls}
             </PageControls>
           </>
@@ -798,6 +800,7 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
           <>
             <PageMenu authed={accountSession} anon={anonSession} title={shownTitle} fixed triggerless />
             <PageControls
+              initialOpen={invitationLanding}
               fixed
               triggerless
               rightOffset={railOpen && !phone ? RIGHT_RAIL_W + 12 : 12}

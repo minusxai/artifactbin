@@ -34,7 +34,9 @@ it('accepts an invitation directly from its notification',async()=>{
  await waitFor(()=>expect(fetch.mock.calls.some(([url,o])=>url.endsWith('/abc123/members')&&o?.body===JSON.stringify({action:'accept'}))).toBe(true));
  expect(await screen.findByText('Accepted — you’ve joined this artefact.')).toBeInTheDocument();
  expect(screen.getByRole('link',{name:'Open artefact'}).getAttribute('href')).toBe('/a/abc123');
- expect(screen.getByRole('button',{name:'Block @sam'})).not.toBeVisible();
+ expect(screen.queryByRole('button',{name:'Block @sam'})).toBeNull();
+ fireEvent.click(screen.getByRole('button',{name:'More actions for notification from @sam'}));
+ expect(screen.getByRole('button',{name:'Block @sam'})).toBeVisible();
 });
 it('shows a pending mention next to its stable person link',async()=>{
  vi.stubGlobal('fetch',vi.fn(async()=>new Response(JSON.stringify({mentions:{usr_alex:'pending'}}))));
@@ -48,4 +50,17 @@ it('does not crash on a malformed membership response',async()=>{
  render(<ArtifactPeople artifactId="abc123"/>);
  fireEvent.click(screen.getByRole('button',{name:'People'}));
  expect(await screen.findByRole('alert')).toHaveTextContent('Could not load people');
+});
+
+it('opens a pending invitation at its destination without an extra People click',async()=>{
+ vi.stubGlobal('fetch',vi.fn(async()=>new Response(JSON.stringify({members:[],pending:[],self:{status:'pending',direction:'invitation'},canManage:false,canInvite:false}))));
+ render(<ArtifactPeople artifactId="abc123" initialOpen/>);
+ expect(await screen.findByRole('button',{name:'Accept invitation'})).toBeVisible();
+});
+
+it('keeps conversation updates focused on the comment rather than membership',async()=>{
+ vi.stubGlobal('fetch',vi.fn(async()=>new Response(JSON.stringify({autoAccept:true,blocks:[],notifications:[{id:'n1',artifact_id:'abc123',user_id:'alex',sender_id:'sam',username:'sam',kind:'reply_resolved',status:'accepted',direction:'invitation',title:'Tasks',read_at:null,source:'comment:ann1',revision:1}]}))));
+ render(<PeopleInbox/>);
+ expect(await screen.findByRole('link',{name:'@sam replied and resolved your comment in Tasks'})).toHaveAttribute('href','/a/abc123?thread=ann1');
+ expect(screen.queryByText('You’ve joined this artefact.')).toBeNull();
 });

@@ -33,6 +33,7 @@ interface Crumb {
 
 /** The app's own pages, named for the bar. */
 const PAGE_NAMES: Record<string, string> = {
+  '/notifications': 'notifications',
   '/account': 'account',
   '/tokens': 'tokens',
   '/login': 'log in',

@@ -1,3 +1,6 @@
+import {NotificationMenu} from './NotificationCenter';
+import {requestPageChrome,type PagePanelName} from './page-chrome-state';
+import {useNotifications} from './notification-context';
 import { useLayoutEffect,useRef,type ReactNode } from 'react';
 import { renderReaderChrome, READER_CHROME_HIDDEN_CLASS, type ReaderChromeInput } from '@/lib/story/reader-chrome';
 import { STORY_CHROME_CSS } from '@/lib/story-runtime/chrome-css';
@@ -26,18 +29,19 @@ function updateChrome(current: Element, next: Element) {
 }
 
 /** What a trigger says: its panel's name, and whether pressing it opens or closes it (the served rail's words). */
-const triggerLabel=(which:'menu'|'controls',open:boolean)=>which==='menu'?(open?'Close menu':'Open menu'):(open?'Close artifact controls':'Open artifact controls');
+const triggerLabel=(which:PagePanelName,open:boolean)=>which==='notifications'?'Notifications':which==='menu'?(open?'Close menu':'Open menu'):(open?'Close artifact controls':'Open artifact controls');
 
 /** Identical desktop/mobile reader layout, with local handlers inside TrustedUi. */
 export function InlineReaderChrome({ input, onAction,onShare,pinned=false }: { input: ReaderChromeInput; onAction(action:string):void;onShare?:()=>void;pinned?:boolean }): ReactNode {
+  const notifications=useNotifications();
   const holder=useRef<HTMLDivElement>(null);
   const state=useRef<ChromeState|null>(null);
   const artifact=useRef(input.artifactId);
   const sharing=useRef<ReturnType<typeof wireReaderSharing>|null>(null);
   // The page's panels that are open. Held across renders: the markup is always
   // rendered shut, so a re-render (a count, a title, a face) must re-apply it.
-  const panels=useRef(new Set<'menu'|'controls'>());
-  const html = renderReaderChrome({...input,panels:false}).replaceAll('target="_top"', 'target="_self"');
+  const panels=useRef(new Set<PagePanelName>());
+  const html = renderReaderChrome({...input,panels:false,notifications:notifications?{unread:notifications.state?.unread??0}:undefined}).replaceAll('target="_top"', 'target="_self"');
   useLayoutEffect(()=>{
     const container=holder.current;
     if(!container)return;
@@ -53,8 +57,8 @@ export function InlineReaderChrome({ input, onAction,onShare,pinned=false }: { i
     const stopGithubStar=wireGithubStar(root);
     const stopFaces=wireFaceFallback(root);
     let queued=false;let raf=0;
-    const mark=(which:'menu'|'controls',open:boolean)=>{
-      const trigger=root.querySelector<HTMLElement>(`[data-mx-reader-trigger="${which}"]`);
+    const mark=(which:PagePanelName,open:boolean)=>{
+      const trigger=root.querySelector<HTMLElement>(which==='notifications'?'[data-mx-reader-action="notifications"]':`[data-mx-reader-trigger="${which}"]`);
       trigger?.setAttribute('aria-expanded',String(open));trigger?.setAttribute('aria-label',triggerLabel(which,open));
     };
     for(const which of panels.current)mark(which,true);
@@ -79,11 +83,13 @@ export function InlineReaderChrome({ input, onAction,onShare,pinned=false }: { i
     return ()=>{stopGithubStar();stopFaces();stop();sharing.current?.dispose();sharing.current=null;window.cancelAnimationFrame(raf);window.removeEventListener('scroll',schedule);window.removeEventListener('resize',schedule);};
   },[html,pinned,input.artifactId]);
   return <>
+    <NotificationMenu/>
     <style>{STORY_CHROME_CSS}</style>
     <div ref={holder} onClick={event => {
       const target = (event.target as Element).closest<HTMLElement>('[data-mx-reader-action],[data-mx-reader-trigger]');
       if (!target) return;
       event.preventDefault();
+      if(target.getAttribute('data-mx-reader-action')==='notifications'){requestPageChrome('notifications');return;}
       if(target.getAttribute('data-mx-reader-action')==='share'){if(onShare)onShare();else sharing.current?.share();return;}
       onAction(target.getAttribute('data-mx-reader-action') ?? target.getAttribute('data-mx-reader-trigger') ?? '');
     }} />

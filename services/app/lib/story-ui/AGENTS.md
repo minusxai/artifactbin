@@ -3,8 +3,7 @@
 These rules cover `lib/story-ui` and the parser in `lib/jsx`, and only what is specific to markup.
 The shared rules live once elsewhere and are not restated here: working rules and app chrome
 (tooltips included) in the root [AGENTS.md](../../../../AGENTS.md); node identity, the runtime
-composition and build inputs in the [design notes](../../../../docs/design-notes.md); the author-script
-sandbox boundary in [serving and security](../../../../docs/serving-and-security.md). Read those first.
+the author-script sandbox boundary in [serving and security](../../../../docs/serving-and-security.md). Read those first.
 
 - Static JSX is data. `lib/jsx/parse.ts` uses acorn/acorn-jsx and records non-static expressions.
   Validation accepts only allowlisted reactive/row expressions in permitted scopes and rejects the

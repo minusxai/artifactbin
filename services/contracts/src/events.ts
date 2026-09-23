@@ -11,8 +11,8 @@
  * A name, where one is needed (a forwarding rule, a test), is
  * `object_kind.verb` — derived, never stored.
  *
- * Telemetry only: nothing in the product gates on the log, `emit` never
- * throws, and a payload carries ids and names, never content or secrets.
+ * Observational events use best-effort `emit`; notification-producing changes
+ * use transactional outbox publication. Payloads carry ids and state, never content or secrets.
  */
 export type SubjectKind = 'user' | 'token' | 'visitor';
 export type ObjectKind = 'artifact' | 'user' | 'token' | 'door' | 'route';
@@ -24,7 +24,8 @@ export type EmptyPayload = Record<string, never>;
 export interface ArtifactActorPayload { client?: string | null; user_id?: string | null }
 /** A create also says WHERE, so a folder create and a filed create read as themselves in the log. Null/absent = the root. */
 export interface ArtifactCreatedPayload extends ArtifactActorPayload { parent_id?: string | null }
-export interface AnnotationPayload { annotation_id: string }
+export interface AnnotationPayload { annotation_id: string; reply_id?: string; agent?: boolean; resolved?: boolean }
+export interface MembershipEventPayload { user_id: string; revision: number; mention_ref?: string | null }
 /** Where a row went. Either end may be the ROOT, which is null — a folder is an artifact, so both are artifact ids. */
 export interface MovedPayload { from_parent_id: string | null; to_parent_id: string | null }
 /** A delete also says what went with it: the row's own format, and the descendants that followed (0 for a document). */
@@ -65,10 +66,18 @@ export interface EventVerbs {
     annotation_resolved: AnnotationPayload;
     annotation_deleted: AnnotationPayload;
     sharing_changed: { visibility?: string | null; link_role?: string | null };
+    join_requested: MembershipEventPayload;
+    invited: MembershipEventPayload;
+    mentioned: MembershipEventPayload;
+    invitation_dismissed: MembershipEventPayload;
+    annotation_reopened: AnnotationPayload;
+    joined: MembershipEventPayload;
+    left: MembershipEventPayload;
     liked: EmptyPayload;
     unliked: EmptyPayload;
   };
   user: {
+    notification_changed: {notification_id:string;revision:number;change:"updated"|"read"|"removed"};
     /** The one place an email may travel: identity events, where the id alone says nothing to an operator. */
     /** A user row came into being — the first verified login. Fires once per account, before that login's `login_verified`. */
     signed_up: { email: string };
@@ -100,8 +109,8 @@ type Complete<K extends ObjectKind, T extends readonly EventVerb<K>[]> =
 const complete = <K extends ObjectKind>() => <const T extends readonly EventVerb<K>[]>(verbs: Complete<K, T>): readonly EventVerb<K>[] => verbs as T;
 
 export const EVENT_VERBS: { readonly [K in ObjectKind]: readonly EventVerb<K>[] } = {
-  artifact: complete<'artifact'>()(['created', 'updated', 'edited', 'reverted', 'deleted', 'moved', 'restored', 'exported', 'mutated', 'viewed', 'forked', 'annotated', 'annotation_resolved', 'annotation_deleted', 'sharing_changed', 'liked', 'unliked']),
-  user: complete<'user'>()(['signed_up', 'login_sent', 'login_verified', 'oauth_linked', 'followed', 'unfollowed']),
+  artifact: complete<'artifact'>()(['created', 'updated', 'edited', 'reverted', 'deleted', 'moved', 'restored', 'exported', 'mutated', 'viewed', 'forked', 'annotated', 'annotation_resolved', 'annotation_deleted', 'sharing_changed', 'liked', 'unliked', 'joined', 'left', 'join_requested', 'invited', 'mentioned', 'invitation_dismissed', 'annotation_reopened']),
+  user: complete<'user'>()(['notification_changed', 'signed_up', 'login_sent', 'login_verified', 'oauth_linked', 'followed', 'unfollowed']),
   token: complete<'token'>()(['minted', 'claimed', 'revoked']),
   door: complete<'door'>()(['denied']),
   route: complete<'route'>()(['failed']),
@@ -128,11 +137,15 @@ export const eventName = (e: Pick<EventEnvelope, 'object_kind' | 'verb'>): strin
 /** What an emitter holds. `emit` NEVER rejects; `close` flushes whatever is queued (a batching client) and is optional. */
 export interface EventsService {
   emit(events: EventEnvelope[]): Promise<void>;
+  /** Durable acceptance: rejects until storage commits. Source outboxes retry stable IDs. */
+  publish?(events: EventEnvelope[]): Promise<void>;
   close?(): Promise<void>;
 }
 
 /** Where the service hands a stored batch next — empty in the OSS composition; a deployment fills the list. Never throws into the writer. */
+export interface EventSubscriber { id: string; deliver: EventSink }
+
 export type EventSink = (events: EventEnvelope[]) => Promise<void>;
 
 /** The wire: one POST. `serveEvents`/`eventsClient` implement exactly this. */
-export const EVENTS_ROUTES = { emit: '/emit' } as const;
+export const EVENTS_ROUTES = { emit: '/emit', publish: '/publish' } as const;

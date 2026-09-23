@@ -1,3 +1,4 @@
+import {recordEvent} from './notification-events';
 import {commentMentions} from './saved-mentions';
 import {MembershipError} from './membership';
 import {consumeCommentImage,commentImagesFor} from './comment-images';
@@ -28,7 +29,7 @@ import { canGovern } from '@/lib/share-roles';
 import { ANNOTATION_ANCHOR_ATTR } from '@/lib/annotation-anchors';
 import { avatarUrl } from '@/lib/avatars';
 import { getDb, type Queryable } from '@/lib/db';
-import { actorSubject, emit } from '@/lib/events';
+import { actorSubject } from '@/lib/events';
 import { generateInternalId } from '@/lib/ids';
 import { parseJsx, type JsxElement, type JsxNode } from '@/lib/jsx';
 import {
@@ -94,6 +95,7 @@ export interface AnnotationCommentWire {
 }
 
 export interface AnnotationWire {
+  revision?: number;
   image?: CommentImageWire;
   remote_work?:RemoteWork[];
   id: string;
@@ -158,6 +160,7 @@ export interface AnnotationAction {
 const ANNOTATION_SNIPPET_MAX = 200;
 
 interface AnnotationRowDb {
+  revision: number;
   id: string;
   seq: string | number;
   artifact_id: string;
@@ -397,6 +400,7 @@ export async function createAnnotationFor(
     );
     // Read back through the join, not RETURNING: the echo draws the author's face too.
     const inserted = await tx.query<AnnotationRowDb>(`SELECT * FROM ${ANNOTATIONS_READ} WHERE id = $1`, [id]);
+    await recordEvent(tx,actorSubject(actor),'annotated',{kind:'artifact',id:artifactId},{annotation_id:id,agent:author.kind==='agent'});
     await commentMentions(tx,row,actor,input.body,id);
     await remoteAgents.enqueue(tx,actor.userId,artifactId,id,{id,body:input.body,author});
     await notify(tx, artifactId, id);
@@ -405,7 +409,6 @@ export async function createAnnotationFor(
     return wire ?? null;
   }).catch(error=>{if(error instanceof MembershipError)return new Response(JSON.stringify({error:'mention_refused',detail:error.message}),{status:error.status,headers:{'Content-Type':'application/json'}});throw error;});
   if (!made || made instanceof Response || 'refused' in made) return made;
-  await emit(actorSubject(actor), 'annotated', { kind: 'artifact', id: artifactId }, { annotation_id: id });
   return made;
 }
 
@@ -449,6 +452,7 @@ async function wireFor(db: Queryable, head: ArtifactRow, roots: AnnotationRowDb[
     const range = storedRange(root.range);
     return {
       id: root.id,
+      revision: root.revision,
       ...(images.has(root.id) ? {image:images.get(root.id)} : {}),
       status: root.status,
       anchor: anchored
@@ -578,6 +582,10 @@ export async function actOnAnnotationFor(
       await tx.query("UPDATE annotations SET status = 'resolved', resolved_at = now() WHERE id = $1", [root.id]);
       resolved = true;
     }
+    if(replied || resolved || (action.reopen && root.status==='resolved')){
+      await tx.query('UPDATE annotations SET revision=revision+1 WHERE id=$1',[root.id]);
+      await recordEvent(tx,actorSubject(actor),replied?'annotated':resolved?'annotation_resolved':'annotation_reopened',{kind:'artifact',id:artifactId},{annotation_id:root.id,...(replied?{reply_id:replyId,resolved}:{}),agent:!!remote||author.kind==='agent'});
+    }
     const fresh = await tx.query<AnnotationRowDb>(`SELECT * FROM ${ANNOTATIONS_READ} WHERE id = $1`, [root.id]);
     // A vanished row stays the null: wrapping it in the result object would
     // make every miss truthy.
@@ -588,12 +596,6 @@ export async function actOnAnnotationFor(
     return { row: fresh.rows[0], replied, resolved,...(wire?{wire}:{}) };
   });
   if (!updated) return null;
-  const subject = actorSubject(actor);
-  const thread = { kind: 'artifact', id: artifactId } as const;
-  // The payload names the ROOT for both, never the reply's own id: an owner's
-  // feed reads "commented on X", and the thread is what it opens.
-  if (updated.replied) await emit(subject, 'annotated', thread, { annotation_id: annotationId });
-  if (updated.resolved) await emit(subject, 'annotation_resolved', thread, { annotation_id: annotationId });
 
   if(updated.wire)return updated.wire;
   const head = await scopedRow(db, scope, artifactId);
@@ -638,17 +640,17 @@ export async function deleteAnnotationFor(actor: TokenActor, artifactId: string,
     // is deleted as a whole, and a reply left live under a deleted root would
     // be a thread with no first message.
     await tx.query('UPDATE annotations SET deleted_at = now() WHERE (id = $1 OR root_id = $1) AND deleted_at IS NULL', [annotationId]);
+    await recordEvent(tx,actorSubject(actor),'annotation_deleted',{kind:'artifact',id:artifactId},{annotation_id:annotationId});
+    await notify(tx, artifactId, annotationId);
     const anchorKey = found.rows[0].anchor_key;
     if (!anchorKey) return { anchorKey: null };
     const others = await tx.query(`SELECT 1 FROM annotations WHERE artifact_id = $1 AND anchor_key = $2 AND root_id IS NULL AND ${LIVE_ANNOTATION_SQL}`, [artifactId, anchorKey]);
-    await notify(tx, artifactId, annotationId);
     return { anchorKey: others.rows.length === 0 ? anchorKey : null };
   });
   if (!cleanup) return false;
   // A cleanup is only produced when the UPDATE ran, so this is the deletion
   // itself rather than an attempt at one. Said before the anchor is swept out
   // of the source, which is a document edit with a verb of its own.
-  await emit(actorSubject(actor), 'annotation_deleted', { kind: 'artifact', id: artifactId }, { annotation_id: annotationId });
 
   return true;
 }

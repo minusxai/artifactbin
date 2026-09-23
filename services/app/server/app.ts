@@ -205,7 +205,7 @@ export function candidateDocument(pathname: string): { id: string } | null {
 
 
 /** Every static address web/App.tsx routes: a direct load or a reload of one missing here is a 404. */
-const SPA_PATHS = /^(\/|\/login|\/start|\/account|\/welcome|\/chat|\/assets|\/trash|\/tokens|\/docs-human|\/datasets\/new|\/files\/new)$/;
+const SPA_PATHS = /^(\/|\/login|\/start|\/account|\/notifications|\/welcome|\/chat|\/assets|\/trash|\/tokens|\/docs-human|\/datasets\/new|\/files\/new)$/;
 
 /**
  * A guessed machine address is answered in the machine's language. A path

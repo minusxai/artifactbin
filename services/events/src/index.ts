@@ -9,7 +9,7 @@
  */
 import http from 'node:http';
 import { Pool } from 'pg';
-import type { EventsService, EventSink, Queryable } from '@artifactbin/contracts';
+import type { EventsService, EventSink, EventSubscriber, Queryable } from '@artifactbin/contracts';
 import { EVENTS_ROUTES, SERVICE_AUTH_HEADER } from '@artifactbin/contracts';
 import { createEnv, log, serviceSecretForServer, type JsonServer } from '@artifactbin/utils';
 import { createEvents, ensureEventsSchema } from './local';
@@ -29,8 +29,14 @@ const HEALTH = '/health';
  * secret set. Mirrors services/sql's shell line for line: the secret guard,
  * the method guard, the body cap, the name-only error.
  */
-export function serveEvents(svc: EventsService, opts: { maxBody?: number; serviceSecret?: string } = {}): JsonServer {
+export function serveEvents(svc: EventsService, opts: { maxBody?: number; serviceSecret?: string; routes?: Record<string,(body:unknown)=>Promise<unknown>> } = {}): JsonServer {
   const routes: Record<string, (body: unknown) => Promise<unknown>> = {
+    ...opts.routes,
+    [EVENTS_ROUTES.publish]: async b => {
+      if (!Array.isArray(b) || !svc.publish) throw new Error('Durable publication unavailable');
+      await svc.publish(b);
+      return {accepted:b.length};
+    },
     [EVENTS_ROUTES.emit]: async (b) => {
       // The wire IS the envelope array; anything else is a 400 whose detail
       // stays in the operator log (the catch below).
@@ -131,7 +137,9 @@ export function loadEventsConfig(source: Record<string, string | undefined>, opt
 
 /** How a deployment composes against the OSS boot: the sinks, and (tests only) the database. */
 export interface EventsOverrides {
+  routes?: Record<string,(body:unknown)=>Promise<unknown>>;
   sinks?: EventSink[];
+  subscribers?: EventSubscriber[];
   /** A Queryable to write through instead of a pg Pool on `databaseUrl` — tests and the single image. */
   db?: Queryable;
 }
@@ -173,8 +181,10 @@ export async function runEvents(config: EventsConfig, overrides: EventsOverrides
     if (pool) await pool.end();
     throw error;
   }
-  const svc = createEvents({ db, schema: config.schema, ...(overrides.sinks ? { sinks: overrides.sinks } : {}) });
-  const server = serveEvents(svc, config.serviceSecret ? { serviceSecret: config.serviceSecret } : {});
+  const svc = createEvents({ db, schema: config.schema, ...overrides });
+  const timer = setInterval(() => { void svc.drain().catch(error => boot.error('Delivery drain failed', {error:String(error)})); }, 1000);
+  timer.unref();
+  const server = serveEvents(svc, {serviceSecret:config.serviceSecret,routes:overrides.routes});
   const listening = server.listen(config.port, config.host);
   boot.info(`listening on ${listening.url}`, { schema: config.schema });
 
@@ -183,7 +193,7 @@ export async function runEvents(config: EventsConfig, overrides: EventsOverrides
     url: listening.url,
     close: () => {
       closing ??= (async () => {
-        try { await server.close(); } finally { if (pool) await pool.end(); }
+        try { clearInterval(timer); await server.close(); await svc.drain(); } finally { if (pool) await pool.end(); }
       })();
       return closing;
     },

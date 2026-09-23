@@ -229,7 +229,7 @@ export async function eraseTestUser(testUserId: string, database?: Database): Pr
       "DELETE FROM relations WHERE (subject_kind = 'user' AND subject_id = $1) OR (object_kind = 'user' AND object_id = $1)", [testUserId],
     );
     await tx.query('DELETE FROM member_notifications WHERE recipient_id=$1 OR sender_id=$1',[testUserId]);
-    await tx.query('DELETE FROM artifact_members WHERE initiated_by=$1',[testUserId]);
+    await tx.query('DELETE FROM relations WHERE initiated_by=$1',[testUserId]);
     await tx.query('DELETE FROM user_blocks WHERE blocked_user_id=$1',[testUserId]);
     await tx.query('DELETE FROM annotations WHERE author_user_id = $1', [testUserId]);
     await tx.query('DELETE FROM users WHERE id = $1', [testUserId]);

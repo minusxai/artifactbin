@@ -204,10 +204,9 @@ const run = async () => {
     })).json();
     check(resolved.status === 'resolved' && resolved.thread?.length === 2, 'the agent replies and resolves in one POST');
 
-    // The still-open owner tab loses the highlight AND the sidebar thread
-    // WITHOUT a reload (the live stream); resolved history is listed below it.
-    const gone = await until(() => frame.locator('[data-mx-annotated]').count(), (n) => n === 0, 10000);
-    check(gone === 0, 'the resolve reaches the open tab live: the highlight lifts with no reload');
+    // Resolution retains an actively read thread and its highlight; it moves into resolved history.
+    const retained = await until(() => page.getByLabel('Resolved annotation thread').filter({hasText:'Recomputed'}).count(), n=>n===1,10000);
+    check(retained===1 && await frame.locator('[data-mx-annotated]').count()===1, 'the resolve reaches the open tab live: the conversation and highlight remain readable');
     const threadGone = await until(() => page.locator('[aria-label="Annotation thread"]').count(), (n) => n === 0, 8000);
     check(threadGone === 0, 'the open-thread list empties live too');
     const badgeGone = await until(() => page.locator('[data-mx-reader-count="comment"]').textContent().then((t) => (t ?? '').trim()), (t) => t === '', 5000);
@@ -215,8 +214,14 @@ const run = async () => {
     const resolvedCard = await until(() => page.locator('[aria-label="Resolved annotation thread"]').count(), (n) => n === 1, 8000);
     check(resolvedCard === 1, 'resolved history lists the closed thread below the open list');
 
-    // The owner's delete erases the thread outright once its collapsed
-    // conversation is opened.
+    // The last resolved thread must retain its marker even though the open count is zero.
+    await page.getByLabel('Close comments').click();
+    await page.locator('[aria-label^="Open annotation conversation by"]').waitFor({timeout:5000});
+    check(true,'the last resolved thread keeps its countdown marker after closing the rail');
+    await page.locator('[aria-label^="Open annotation conversation by"]').click();
+    await page.getByLabel('Hide resolved conversation').waitFor({timeout:5000});
+    // Closing the retained conversation leaves it in history; reopen it to delete.
+    await page.getByLabel('Hide resolved conversation').click();
     await page.locator('[aria-label="Show resolved conversation"]').click();
     await page.locator('[aria-label="Annotation actions"]').click();
     await page.locator('[aria-label="Delete annotation"]').click();
@@ -738,8 +743,8 @@ async function foldLeg(browser) {
   check(!!muted && muted.opacity > 0.4 && muted.opacity < 0.8,
     `the resolved card is muted rather than identical to an open one (opacity ${muted?.opacity})`);
   check(muted?.open === null || muted.open === 1, `an open card beside it stays at full opacity (${muted?.open})`);
-  check(await page.locator('[aria-label="Show resolved conversation"]').first().isVisible(),
-    'muted is not disabled: the resolved card still offers its conversation');
+  check(await page.locator('[aria-label="Hide resolved conversation"]').first().isVisible(),
+    'muted is not disabled: the resolved conversation remains open and dismissible');
   await ctx.close();
 }
 

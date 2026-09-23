@@ -15,10 +15,11 @@ export function useDialogKeyboard(
       const stops = [...panel.current.querySelectorAll<HTMLElement>(focusable)];
       if (stops.length === 0) return;
       const first = stops[0], last = stops[stops.length - 1];
-      if (event.shiftKey && document.activeElement === first) {
+      const active = (panel.current.getRootNode() as Document | ShadowRoot).activeElement;
+      if (event.shiftKey && active === first) {
         event.preventDefault();
         last.focus();
-      } else if (!event.shiftKey && document.activeElement === last) {
+      } else if (!event.shiftKey && active === last) {
         event.preventDefault();
         first.focus();
       }
