@@ -1041,6 +1041,7 @@ export default function AnnotationLayer({
     const abort=new AbortController();
     void readAnnotationPages(`/api/my/artifacts/${id}/annotations?status=resolved`,{signal:abort.signal}).then(list=>{
       if(abort.signal.aborted)return;
+      list=list.filter(row=>!annotations.some(open=>open.id===row.id));
       setResolvedList(list);
       setRecentResolved(current=>{
         const next:typeof current={};
@@ -1398,7 +1399,7 @@ export default function AnnotationLayer({
     ?? { top: topOffset, height: window.innerHeight - topOffset };
   const placed = floating ? positionedComments(floatingRows, anchorRects, markerRect, window.innerHeight) : [];
 
-  const visibleResolved=placed.map(p=>p.annotation.id).join(',');
+  const visibleResolved=placed.filter(p=>p.top>=0&&p.top+VIEW_COMMENT_COLLAPSED_H<=window.innerHeight).map(p=>p.annotation.id).join(',');
   useEffect(()=>{
     if(!floating||!Object.values(recentResolved).some(v=>v.remaining>0))return;
     let last=performance.now();

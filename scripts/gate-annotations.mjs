@@ -214,8 +214,8 @@ const run = async () => {
     const resolvedCard = await until(() => page.locator('[aria-label="Resolved annotation thread"]').count(), (n) => n === 1, 8000);
     check(resolvedCard === 1, 'resolved history lists the closed thread below the open list');
 
-    // The owner's delete erases the thread outright once its collapsed
-    // conversation is opened.
+    // Closing the retained conversation leaves it in history; reopen it to delete.
+    await page.getByLabel('Hide resolved conversation').click();
     await page.locator('[aria-label="Show resolved conversation"]').click();
     await page.locator('[aria-label="Annotation actions"]').click();
     await page.locator('[aria-label="Delete annotation"]').click();

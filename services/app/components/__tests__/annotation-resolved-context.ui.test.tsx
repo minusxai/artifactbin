@@ -5,12 +5,12 @@
  * shows the passage when it can; the card shows the original quote when it cannot.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { fireEvent, render, screen } from '@testing-library/react';
-import { STORY_ANNOTATIONS_MESSAGE, STORY_ANNOTATION_PIN_MESSAGE } from '@/lib/story-runtime/contract';
+import { act, fireEvent, render, screen } from '@testing-library/react';
+import { STORY_ANNOTATIONS_MESSAGE, STORY_ANNOTATION_PIN_MESSAGE, STORY_ANNOTATION_LAYOUT_MESSAGE } from '@/lib/story-runtime/contract';
 import { ANN, NONCE, RESOLVED, flush, fromFrame, installAnnotationFetch, layer, makeFrame } from '@/test/helpers/annotation-layer';
 
 beforeEach(installAnnotationFetch);
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => {vi.useRealTimers();vi.restoreAllMocks();vi.unstubAllGlobals();});
 
 /** Serve this row as the resolved history; everything else keeps the shared stub. */
 function serveResolved(row: typeof RESOLVED) {
@@ -87,7 +87,7 @@ describe('selecting a resolved thread', () => {
   });
   /**
    * Expanding a resolved thread is a choice the reader makes. A thread that was open and is
-   * resolved by SOMEONE ELSE, live, is not that choice: its highlight lifts, as it always did.
+   * resolved by someone else remains visible until the reader closes it.
    */
   it('keeps an open thread visible when resolved from elsewhere', async () => {
     const { frame, postMessage, contentWindow } = makeFrame();
@@ -102,4 +102,39 @@ describe('selecting a resolved thread', () => {
     await flush(); await flush();
     expect(posts(postMessage).at(-1)).toMatchObject({ openId: ANN.id, pins: [{id:ANN.id}] });
   });
+});
+
+it('counts only visible unpaused seconds and expires without acknowledging the notification',async()=>{
+ vi.useFakeTimers({toFake:['setInterval','clearInterval','performance']});
+ const visibility=vi.spyOn(document,'visibilityState','get').mockReturnValue('visible');
+ const {frame,contentWindow}=makeFrame();
+ const view=render(layer(frame,{showViewComments:true}));await flush();await flush();
+ const position=(y:number)=>fromFrame(contentWindow,{type:STORY_ANNOTATION_LAYOUT_MESSAGE,nonce:NONCE,positions:[{id:ANN.id,rect:{x:10,y,width:300,height:40}}]});
+ position(220);
+ serveResolved({...ANN,status:'resolved',revision:2,resolved_at:'2026-09-23T00:00:00Z'});
+ view.rerender(layer(frame,{showViewComments:true,liveAnnotations:[]}));await flush();await flush();
+ const remaining=()=>screen.queryByRole('status')?.textContent;
+ expect(remaining()).toContain('10 seconds');
+ visibility.mockReturnValue('hidden');act(()=>vi.advanceTimersByTime(12000));expect(remaining()).toContain('10 seconds');
+ visibility.mockReturnValue('visible');position(900);act(()=>vi.advanceTimersByTime(12000));
+ position(220);expect(remaining()).toContain('10 seconds');
+ const marker=screen.getByLabelText(/Open annotation conversation/);
+ fireEvent.focus(marker);act(()=>vi.advanceTimersByTime(12000));expect(remaining()).toContain('10 seconds');
+ fireEvent.blur(marker);act(()=>vi.advanceTimersByTime(4000));expect(remaining()).toContain('6 seconds');
+ const card=marker.closest('[data-annotation-id]')!;
+ fireEvent.mouseEnter(card);act(()=>vi.advanceTimersByTime(12000));expect(remaining()).toContain('6 seconds');
+ fireEvent.mouseLeave(card);act(()=>vi.advanceTimersByTime(6100));
+ expect(screen.queryByLabelText(/Open annotation conversation/)).toBeNull();
+});
+it('restarts a resolved indicator only for a new revision and cancels it on reopening',async()=>{
+ vi.useFakeTimers({toFake:['setInterval','clearInterval','performance']});
+ vi.spyOn(document,'visibilityState','get').mockReturnValue('visible');
+ const {frame,contentWindow}=makeFrame();const view=render(layer(frame,{showViewComments:true}));await flush();await flush();
+ fromFrame(contentWindow,{type:STORY_ANNOTATION_LAYOUT_MESSAGE,nonce:NONCE,positions:[{id:ANN.id,rect:{x:10,y:220,width:300,height:40}}]});
+ serveResolved({...ANN,status:'resolved',revision:2});view.rerender(layer(frame,{showViewComments:true,liveAnnotations:[]}));await flush();await flush();
+ act(()=>vi.advanceTimersByTime(4000));expect(screen.getByRole('status')).toHaveTextContent('6 seconds');
+ view.rerender(layer(frame,{showViewComments:true,liveAnnotations:[]}));await flush();await flush();expect(screen.getByRole('status')).toHaveTextContent('6 seconds');
+ serveResolved({...ANN,status:'resolved',revision:3});view.rerender(layer(frame,{showViewComments:true,liveAnnotations:[]}));await flush();await flush();expect(screen.getByRole('status')).toHaveTextContent('10 seconds');
+ view.rerender(layer(frame,{showViewComments:true,liveAnnotations:[{...ANN,revision:4}]}));await flush();await flush();expect(screen.queryByRole('status')).toBeNull();
+ act(()=>vi.advanceTimersByTime(12000));expect(screen.getByLabelText(/Open annotation conversation/)).toBeVisible();
 });
