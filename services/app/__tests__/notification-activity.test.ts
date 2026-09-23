@@ -1,4 +1,4 @@
-import {actOnAnnotationFor} from '@/lib/annotations';
+import {actOnAnnotationFor,deleteAnnotationFor} from '@/lib/annotations';
 import {expect,it} from 'vitest';
 import {useAppHarness} from './harness';
 import {getDb} from '@/lib/db';
@@ -65,6 +65,7 @@ it('keeps a mention and subsequent replies in one conversation item and hides de
  await db.query("UPDATE artifacts SET link_role='viewer' WHERE id='thread2'");
  expect((await membershipInbox(recipient)).notifications).toEqual([]);
  await db.query("UPDATE artifacts SET link_role='commenter' WHERE id='thread2'");
- await db.query("UPDATE annotations SET deleted_at=now() WHERE id='ann_mentions'");
+ expect(await deleteAnnotationFor(actor,'thread2','ann_mentions')).toBe(true);
+ expect((await db.query("SELECT envelope FROM event_outbox WHERE envelope->'payload'->>'change'='removed'")).rows).toHaveLength(1);
  expect((await membershipInbox(recipient)).notifications).toEqual([]);
 });

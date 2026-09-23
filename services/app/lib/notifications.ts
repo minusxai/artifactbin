@@ -27,3 +27,9 @@ export async function notifyThread(tx:Queryable,artifactId:string,threadId:strin
   await recordNotification(tx,{id:`thread:${threadId}:${id}`,artifactId,recipientId:id,senderId,kind,source:`comment:${threadId}`,revision,firstUpdateId:updateId});
  }
 }
+
+/** Remove a conversation from live inboxes and pending delivery through the shared event path. */
+export async function removeThreadNotifications(tx:Queryable,artifactId:string,threadId:string):Promise<void>{
+ const rows=(await tx.query<{id:string;recipient_id:string;revision:number}>('SELECT id,recipient_id,revision FROM member_notifications WHERE artifact_id=$1 AND source=$2',[artifactId,`comment:${threadId}`])).rows;
+ for(const row of rows)await notificationChanged(tx,row.id,row.recipient_id,row.revision,'removed');
+}

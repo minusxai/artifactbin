@@ -1,4 +1,4 @@
-import {notifyThread} from './notifications';
+import {notifyThread,removeThreadNotifications} from './notifications';
 import {commentMentions} from './saved-mentions';
 import {MembershipError} from './membership';
 import {consumeCommentImage,commentImagesFor} from './comment-images';
@@ -646,10 +646,11 @@ export async function deleteAnnotationFor(actor: TokenActor, artifactId: string,
     // is deleted as a whole, and a reply left live under a deleted root would
     // be a thread with no first message.
     await tx.query('UPDATE annotations SET deleted_at = now() WHERE (id = $1 OR root_id = $1) AND deleted_at IS NULL', [annotationId]);
+    await removeThreadNotifications(tx, artifactId, annotationId);
+    await notify(tx, artifactId, annotationId);
     const anchorKey = found.rows[0].anchor_key;
     if (!anchorKey) return { anchorKey: null };
     const others = await tx.query(`SELECT 1 FROM annotations WHERE artifact_id = $1 AND anchor_key = $2 AND root_id IS NULL AND ${LIVE_ANNOTATION_SQL}`, [artifactId, anchorKey]);
-    await notify(tx, artifactId, annotationId);
     return { anchorKey: others.rows.length === 0 ? anchorKey : null };
   });
   if (!cleanup) return false;
