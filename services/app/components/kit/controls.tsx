@@ -54,6 +54,62 @@ const SELECT_POPUP_TOKENS = [
   '--radius', '--font-body', '--font-mono',
 ] as const;
 
+/** The dark/light scope a portaled popup must carry to keep the anchor's theme. */
+function popupTheme(root: HTMLElement): { dataTheme?: string; className?: string } {
+  const themed = root.closest('[data-theme], .dark, .light') as HTMLElement | null;
+  return { dataTheme: themed?.dataset.theme, className: cn(themed?.classList.contains('dark') && 'dark', themed?.classList.contains('light') && 'light') || undefined };
+}
+
+/**
+ * Fixed-position geometry for a popup portaled out of its anchor (popupHost),
+ * so a DataTable cell's scroll clipping never cuts it off. Flips above when
+ * there is more room there, follows scroll/resize, and copies the anchor's
+ * resolved tokens onto the popup: the body portal leaves the artifact's token
+ * scope, and data-theme alone cannot recreate author overrides on an ancestor.
+ * The author CSS compiler deliberately removes fixed/sticky classes, so the
+ * geometry is inline style owned here. `width` fixes the popup's width;
+ * otherwise it matches the anchor (at least 200px).
+ */
+function useAnchoredPopup(open: boolean, rootRef: React.RefObject<HTMLElement | null>, popupRef: React.RefObject<HTMLElement | null>, deps: readonly unknown[], width?: number): React.CSSProperties {
+  const [position, setPosition] = useState<React.CSSProperties>({ position: 'fixed', zIndex: 50 });
+  useLayoutEffect(() => {
+    if (!open) return;
+    const root = rootRef.current!;
+    const win = root.ownerDocument.defaultView!;
+    const syncTheme = () => {
+      const popup = popupRef.current;
+      if (!popup) return;
+      const style = win.getComputedStyle(root);
+      for (const token of SELECT_POPUP_TOKENS) {
+        const value = style.getPropertyValue(token);
+        if (value) popup.style.setProperty(token, value);
+        else popup.style.removeProperty(token);
+      }
+      popup.style.fontFamily = style.fontFamily;
+      popup.style.colorScheme = style.colorScheme;
+      popup.style.direction = style.direction;
+    };
+    const place = () => {
+      syncTheme();
+      const rect = root.getBoundingClientRect();
+      const w = Math.min(width ?? Math.max(rect.width, 200), win.innerWidth - 16);
+      const height = popupRef.current?.getBoundingClientRect().height ?? 0;
+      const below = win.innerHeight - rect.bottom - 12;
+      const top = below >= height || below >= rect.top - 12 ? rect.bottom + 4 : rect.top - height - 4;
+      setPosition({position:'fixed', zIndex:50, width: w, left: Math.max(8, Math.min(rect.left, win.innerWidth - w - 8)), top: Math.max(8, Math.min(top, win.innerHeight - height - 8)), maxHeight: win.innerHeight - 16, overflowY:'auto'});
+    };
+    place();
+    const observer = new win.MutationObserver(syncTheme);
+    for (let ancestor: HTMLElement | null = root; ancestor; ancestor = ancestor.parentElement) {
+      observer.observe(ancestor, {attributes: true, attributeFilter: ['class', 'style', 'data-theme']});
+    }
+    win.addEventListener('resize', place);
+    root.ownerDocument.addEventListener('scroll', place, true);
+    return () => { observer.disconnect(); win.removeEventListener('resize', place); root.ownerDocument.removeEventListener('scroll', place, true); };
+  }, [open, width, ...deps]);
+  return position;
+}
+
 /**
  * Authored `options` → a uniform list: a `$table` reference resolves through
  * the supplied table (column 1 the value, column 2 the label when present),
@@ -132,9 +188,9 @@ const CHECK = (
     <path d="M20 6 9 17l-5-5" />
   </svg>
 );
-const CALENDAR = (
+const calendarIcon = (className: string) => (
   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-    strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="size-4 shrink-0 opacity-50" aria-hidden="true">
+    strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={cn(className, 'shrink-0 opacity-50')} aria-hidden="true">
     <path d="M8 2v4" /><path d="M16 2v4" /><rect width="18" height="18" x="3" y="4" rx="2" /><path d="M3 10h18" />
   </svg>
 );
@@ -287,47 +343,7 @@ export function SelectControl({ appearance = 'field', children, multiple = false
       createValue(query.trim());
     }
   };
-  // The author CSS compiler deliberately removes fixed/sticky classes. Runtime
-  // overlays own their geometry, so their positioning cannot depend on that CSS.
-  const [position, setPosition] = useState<React.CSSProperties>({ position: 'fixed', zIndex: 50 });
-  useLayoutEffect(() => {
-    if (!open || inert) return;
-    const root = rootRef.current!;
-    const win = root.ownerDocument.defaultView!;
-    // The body portal escapes table clipping, but also leaves the artifact's
-    // token scope. Copy resolved values, including author overrides, rather
-    // than relying on data-theme to recreate an ancestor's CSS inheritance.
-    const syncTheme = () => {
-      const popup = popupRef.current;
-      if (!popup) return;
-      const style = win.getComputedStyle(root);
-      for (const token of SELECT_POPUP_TOKENS) {
-        const value = style.getPropertyValue(token);
-        if (value) popup.style.setProperty(token, value);
-        else popup.style.removeProperty(token);
-      }
-      popup.style.fontFamily = style.fontFamily;
-      popup.style.colorScheme = style.colorScheme;
-      popup.style.direction = style.direction;
-    };
-    const place = () => {
-      syncTheme();
-      const rect = root.getBoundingClientRect();
-      const width = Math.min(Math.max(rect.width, 200), win.innerWidth - 16);
-      const height = popupRef.current?.getBoundingClientRect().height ?? 0;
-      const below = win.innerHeight - rect.bottom - 12;
-      const top = below >= height || below >= rect.top - 12 ? rect.bottom + 4 : rect.top - height - 4;
-      setPosition({position:'fixed', zIndex:50, width, left: Math.max(8, Math.min(rect.left, win.innerWidth - width - 8)), top: Math.max(8, Math.min(top, win.innerHeight - height - 8)), maxHeight: win.innerHeight - 16, overflowY:'auto'});
-    };
-    place();
-    const observer = new win.MutationObserver(syncTheme);
-    for (let ancestor: HTMLElement | null = root; ancestor; ancestor = ancestor.parentElement) {
-      observer.observe(ancestor, {attributes: true, attributeFilter: ['class', 'style', 'data-theme']});
-    }
-    win.addEventListener('resize', place);
-    root.ownerDocument.addEventListener('scroll', place, true);
-    return () => { observer.disconnect(); win.removeEventListener('resize', place); root.ownerDocument.removeEventListener('scroll', place, true); };
-  }, [open, inert, query, draft.length]);
+  const position = useAnchoredPopup(open && !inert, rootRef, popupRef, [query, draft.length]);
   const onTriggerKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); cancelDraft(); return; }
     if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
@@ -368,13 +384,13 @@ export function SelectControl({ appearance = 'field', children, multiple = false
         </button>
         {invalid ? <span role="alert">Expected a JSON array of strings.</span> : null}
         {open && !inert && rootRef.current ? createPortal((() => {
-          const themed = rootRef.current!.closest('[data-theme], .dark, .light') as HTMLElement | null;
-          return <div ref={popupRef} data-theme={themed?.dataset.theme} onBlur={(e) => {
+          const theme = popupTheme(rootRef.current!);
+          return <div ref={popupRef} data-theme={theme.dataTheme} onBlur={(e) => {
             if (!openRef.current) return;
             const next = e.relatedTarget as Node | null;
             if (next && (popupRef.current?.contains(next) || rootRef.current?.contains(next))) return;
             if (multiple) commitDraft(false); else finishClose(false);
-          }} onKeyDown={(e) => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); cancelDraft(); } }} className={cn(themed?.classList.contains('dark') && 'dark', themed?.classList.contains('light') && 'light', 'rounded-md border border-border bg-popover text-popover-foreground shadow-md')} style={position}>
+          }} onKeyDown={(e) => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); cancelDraft(); } }} className={cn(theme.className, 'rounded-md border border-border bg-popover text-popover-foreground shadow-md')} style={position}>
             <div className="border-b border-border p-1.5">
               <input
                 ref={searchRef}
@@ -480,6 +496,8 @@ export function SliderControl({ label, className, min, max, step, format, prefix
 // ── DatePicker ──────────────────────────────────────────────────────────────
 
 interface DateControlProps {
+  /** `cell` is the borderless DataTable editor (as SelectControl's). */
+  appearance?: 'field' | 'cell';
   label?: string;
   className?: string;
   min?: string;
@@ -521,18 +539,23 @@ function monthGrid(y: number, m: number): { iso: string; day: number; inMonth: b
   return cells;
 }
 
-export function DateControl({ label, className, min, max, value, nullable, disabled, onChange, bound, rest }: DateControlProps) {
+export function DateControl({ appearance = 'field', label, className, min, max, value, nullable, disabled, onChange, bound, rest }: DateControlProps) {
   const [open, setOpen] = useState(false);
   // The month on display; (re)seeded from the value each time the calendar opens.
   const [view, setView] = useState<{ y: number; m: number } | null>(null);
   const rootRef = useRef<HTMLDivElement>(null);
+  const popupRef = useRef<HTMLDivElement>(null);
   const inert = disabled || !onChange;
+  const position = useAnchoredPopup(open && !inert, rootRef, popupRef, [view], 256);
 
   useEffect(() => {
     if (!open) return;
     const doc = rootRef.current?.ownerDocument;
     if (!doc) return;
-    const onDown = (e: Event) => { if (!rootRef.current?.contains(e.target as Node)) setOpen(false); };
+    const onDown = (e: Event) => {
+      const target = e.target as Node;
+      if (!rootRef.current?.contains(target) && !popupRef.current?.contains(target)) setOpen(false);
+    };
     doc.addEventListener('mousedown', onDown);
     return () => doc.removeEventListener('mousedown', onDown);
   }, [open]);
@@ -550,14 +573,14 @@ export function DateControl({ label, className, min, max, value, nullable, disab
   const choose = (iso: string | null) => { onChange?.(iso ?? ''); setOpen(false); };
 
   return (
-    <ControlShell label={label} bound={bound} className={className} rest={rest}>
+    <ControlShell label={appearance === 'cell' ? undefined : label} bound={bound} className={cn(appearance === 'cell' && 'flex w-full min-w-0', className)} rest={rest}>
       {/* The calendar is OUR popover, in the document's own tokens — the
           native <input type="date"> popup is browser chrome no CSS reaches
-          (a white light-mode sheet over a nocturne dashboard). Inline rather
-          than portaled, and otherwise the SelectControl pattern: closed in the
-          SSR string, no useId, outside-click on the control's OWN document
-          (the canvas renders into another realm). */}
-      <div ref={rootRef} className="relative">
+          (a white light-mode sheet over a nocturne dashboard). Portaled like
+          SelectControl's list so a DataTable cell cannot clip it: closed in
+          the SSR string, no useId, outside-click on the control's OWN
+          document (the canvas renders into another realm). */}
+      <div ref={rootRef} className={cn('relative', appearance === 'cell' && 'w-full min-w-0')}>
         <button
           type="button"
           aria-label={label}
@@ -566,13 +589,16 @@ export function DateControl({ label, className, min, max, value, nullable, disab
           disabled={inert}
           onClick={openCalendar}
           onKeyDown={(e) => { if (e.key === 'Escape') setOpen(false); }}
-          className="inline-flex h-9 w-40 items-center justify-between gap-2 rounded-md border border-input bg-background px-3 text-sm tabular-nums shadow-xs transition-colors hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
+          className={cn('inline-flex items-center justify-between rounded-md text-sm tabular-nums transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50', appearance === 'cell' ? 'h-8 w-full min-w-0 gap-1 border border-transparent bg-transparent px-1 hover:border-border hover:bg-muted/60' : 'h-9 w-40 gap-2 border border-input bg-background px-3 shadow-xs hover:bg-muted/40')}
         >
           <span className={cn('truncate', value === null && 'text-muted-foreground')}>{value ?? 'Pick a date'}</span>
-          {CALENDAR}
+          {calendarIcon(appearance === 'cell' ? 'size-3.5' : 'size-4')}
         </button>
-        {open ? (
-          <div role="dialog" aria-label={label ? `${label} calendar` : 'calendar'} className="absolute left-0 top-full z-50 mt-1 w-64 rounded-md border border-border bg-popover p-3 text-popover-foreground shadow-md">
+        {open && !inert && rootRef.current ? createPortal((() => {
+          const theme = popupTheme(rootRef.current!);
+          return <div ref={popupRef} role="dialog" aria-label={label ? `${label} calendar` : 'calendar'} data-theme={theme.dataTheme}
+            onKeyDown={(e) => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); setOpen(false); } }}
+            className={cn(theme.className, 'rounded-md border border-border bg-popover p-3 text-popover-foreground shadow-md')} style={position}>
             <div className="flex items-center justify-between">
               <span className="px-1 text-sm font-medium">{MONTHS[shown.m - 1]} {shown.y}</span>
               <span className="flex items-center gap-1">
@@ -620,8 +646,8 @@ export function DateControl({ label, className, min, max, value, nullable, disab
                 )}
               </div>
             )}
-          </div>
-        ) : null}
+          </div>;
+        })(), popupHost(rootRef.current)) : null}
       </div>
     </ControlShell>
   );

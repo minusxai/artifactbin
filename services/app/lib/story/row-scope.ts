@@ -133,8 +133,8 @@ export function analyzeRowScopes(nodes: JsxNode[], columns?: Record<string, impo
         actionMutations.add(run);
         if (['value', 'checked', 'options'].some(name => attr(node, name) !== undefined)) errors.push('Row action buttons do not accept editor bindings');
       }
-      if (!(scope.repeat ? ['Button'] : ['Button', 'Select', 'input', 'textarea', 'select']).includes(node.tag) || (node.tag === 'input' && inputType !== undefined && inputType !== 'text' && inputType !== 'number')) {
-        errors.push('Row run= supports Button and DataTable editors: Select, input type="text" or "number", textarea, and native select');
+      if (!(scope.repeat ? ['Button'] : ['Button', 'Select', 'DatePicker', 'input', 'textarea', 'select']).includes(node.tag) || (node.tag === 'input' && inputType !== undefined && inputType !== 'text' && inputType !== 'number')) {
+        errors.push('Row run= supports Button and DataTable editors: Select, DatePicker, input type="text" or "number", textarea, and native select');
       }
       if (typeof scope.key !== 'string' || !scope.key) errors.push(scope.repeat ? 'For actions require keyBy=' : 'editable DataTable requires rowKey=');
       else if (columns && !columns[scope.table]?.some((c) => c.name === scope.key)) errors.push(`rowKey "${scope.key}" is absent from $${scope.table}`);
