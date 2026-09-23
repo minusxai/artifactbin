@@ -39,7 +39,7 @@ import { User } from '@/components/kit/user';
 import { UserImage } from '@/components/kit/user-image';
 import { UserHandle } from '@/components/kit/user-handle';
 import type { PersonCard } from '@artifactbin/contracts';
-import { SIGN_IN_TO_DO_THIS, needsSignIn, refusalText } from '@/lib/story/sign-in-required';
+import { refusalText } from '@/lib/story/sign-in-required';
 import { SignIn } from '@/components/kit/sign-in';
 import { isWebUrl, runtimeAssetUrl } from '@/lib/story/asset-url';
 import {boundImageValue,imageReferenceId} from '@/lib/story/image-source';
@@ -91,7 +91,6 @@ function RuntimeRowAction({props, row, identity, children}: RowActionProps) {
   const state = useSyncExternalStore(actions?.subscribe ?? NO_SUBSCRIBE, () => actions?.get(identity), () => undefined);
   const unavailable = useSyncExternalStore(store?.subscribe ?? NO_SUBSCRIBE, () => name && store ? store.mutationUnavailable(name) : 'Checking edit access…', () => 'Checking edit access…');
   const {run: _run, ...rest} = props;
-  if(needsSignIn(unavailable))return <SignIn {...runtimeTargetIdentity(props)}>{SIGN_IN_TO_DO_THIS}</SignIn>;
   return <>
     <Button {...rest} type="button" disabled={!chrome || !actions || unavailable !== null || state?.pending || props.disabled === true}
       aria-busy={state?.pending || undefined} aria-description={refusalText(unavailable) ?? undefined}
@@ -590,11 +589,8 @@ function DialogContentAdapter(props: Record<string, unknown>) {
   const unavailable = useSyncExternalStore(store?.subscribe ?? NO_SUBSCRIBE,
     () => name ? store?.mutationUnavailable(name) ?? (store ? null : 'Checking edit access…') : null,
     () => name ? 'Checking edit access…' : null);
-  // The one refusal a reader can act on is drawn as the door, not as prose
-  // about it — and a guest reaching it is by construction not signed in, so
-  // <SignIn> is unconditional here.
   const reason = !chrome && name ? 'Read-only preview' : unavailable;
-  return <DialogContent {...props} unavailable={needsSignIn(reason) ? <SignIn>{SIGN_IN_TO_DO_THIS}</SignIn> : refusalText(reason)}
+  return <DialogContent {...props} unavailable={refusalText(reason)}
     onSubmitMutation={name && store ? () => store.mutate(name) : undefined} />;
 }
 
@@ -625,7 +621,6 @@ function ButtonAdapter(props: Record<string, unknown>) {
   );
   const { run: _run, children, ...rest } = props;
   if (!name || !store) return <Button {...(rest as Record<string, unknown>)} run={props.run}>{children as ReactNode}</Button>;
-  if (needsSignIn(unavailable)) return <SignIn {...runtimeTargetIdentity(props)} className={str(props.className)}>{SIGN_IN_TO_DO_THIS}</SignIn>;
   return (
     <>
       <Button
@@ -640,7 +635,7 @@ function ButtonAdapter(props: Record<string, unknown>) {
       >
         {children as ReactNode}
       </Button>
-      {unavailable ? <span className="text-xs text-muted-foreground">{unavailable}</span> : null}
+      {unavailable ? <span className="text-xs text-muted-foreground">{refusalText(unavailable)}</span> : null}
       {error ? <span role="alert" className="mx-write-error">{error}</span> : null}
     </>
   );

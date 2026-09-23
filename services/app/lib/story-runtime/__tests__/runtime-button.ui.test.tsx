@@ -205,6 +205,16 @@ describe.each(['For', 'DataTable'])('%s row actions', (kind) => {
     const view = render(<StoryRuntimeApp nodes={nodes} refData={{}} dataflow={dataflow} store={store} colorMode="light" chrome />);
     return {...view,store,mutate,dataflow,nodes};
   }
+  it('keeps guest row actions disabled with their authored labels',async()=>{
+    const v=setup();
+    await act(async()=>v.store.replaceFlow({...v.dataflow,state:{...v.dataflow.state,mutationAccess:{complete:'sign_in_required'}}}));
+    const button=v.getByRole('button',{name:'Complete 1'}) as HTMLButtonElement;
+    expect(button.disabled).toBe(true);
+    expect(button.textContent).toBe('Complete');
+    expect(v.queryByRole('link',{name:'Sign in to do this'})).toBeNull();
+    fireEvent.click(button);
+    expect(v.mutate).not.toHaveBeenCalled();
+  });
   it('captures the clicked row, prevents duplicate clicks, and leaves other rows enabled through reorder', async()=>{
     const v=setup(); let settle!: (value:{dataset:string})=>void;
     v.mutate.mockImplementation(()=>new Promise(resolve=>{settle=resolve;}));

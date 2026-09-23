@@ -153,7 +153,7 @@ renders nothing for a signed-in reader, so it needs no condition of its own.
 ```
 
 A `<Mutation>` binding `$_me` needs a signed-in reader. A guest's `<Button run>`
-or `<DialogContent run>` then offers "Sign in to do this" instead of running,
+or `<DialogContent run>` stays disabled, preserving its authored content,
 and a direct POST answers `sign_in_required` (403 `policy_denied` for a signed-out
 reader; 401 for a guest browser that only saved a draft). Test users act on the
 copy they own, never here: [apps](apps.md).
