@@ -64,6 +64,8 @@ export default function MobileSheet({ label, onClose, size = 'tall', header, chi
     return () => document.removeEventListener('keydown', onKey);
   }, [onClose]);
 
+  // Reader chrome uses 2147483003–3005 inside the trusted navigation root.
+  // Sheets must cover that chrome as well as the document beneath it.
   return createPortal(
     <>
       {/* A half sheet gets NO scrim at all: the subject must stay readable AND
@@ -74,14 +76,14 @@ export default function MobileSheet({ label, onClose, size = 'tall', header, chi
           type="button"
           aria-label="Close sheet"
           onClick={onClose}
-          className="fixed inset-0 z-40 cursor-default border-0 bg-black/40 p-0"
+          className="fixed inset-0 z-[2147483006] cursor-default border-0 bg-black/40 p-0"
         />
       )}
       <div
         role="dialog"
         aria-modal="true"
         aria-label={label}
-        className={`fixed inset-x-0 bottom-0 z-50 ${size === 'half' ? 'max-h-[50vh]' : 'max-h-[80vh]'} flex animate-[sheet-in_.2s_ease-out] flex-col rounded-t-[10px] border-t border-edge bg-surface p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] font-mono text-xs shadow-lg`}
+        className={`fixed inset-x-0 bottom-0 z-[2147483007] ${size === 'half' ? 'max-h-[50vh]' : 'max-h-[80vh]'} flex animate-[sheet-in_.2s_ease-out] flex-col rounded-t-[10px] border-t border-edge bg-surface p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] font-mono text-xs shadow-lg`}
       >
         <div aria-hidden="true" className="mx-auto mb-2 h-1 w-9 shrink-0 rounded-full bg-edge" />
         {header && <div className="shrink-0">{header}</div>}
