@@ -20,6 +20,23 @@ function setup(body = '<Column col="id"/><Column col="item"><input aria-label="I
   return {...view,store,mutate,transport,nodes,dataflow};
 }
 describe('editable table runtime',()=>{
+  it('preserves cell values and disables editing when sign-in is required',async()=>{
+    const v=setup('<Column col="item"><textarea aria-label="Item {$_row.id}" value="$_row.item" run="$set_item"/></Column><Column col="hours"><Select label="Hours {$_row.id}" value="$_row.hours" options={[{value:2,label:"Two"},{value:3,label:"Three"}]} run="$set_hours"/></Column>');
+    await act(async()=>v.store.replaceFlow({...v.dataflow,state:{...v.dataflow.state,mutationAccess:{set_item:'sign_in_required',set_hours:'sign_in_required'}}}));
+    const item=v.getByLabelText('Item 1') as HTMLTextAreaElement;
+    const hours=v.getByLabelText('Hours 1') as HTMLButtonElement;
+    expect(item.value).toBe('one');
+    expect(item.disabled).toBe(true);
+    expect(hours.textContent).toContain('Two');
+    expect(hours.disabled).toBe(true);
+    expect(v.queryByRole('link',{name:'Sign in to do this'})).toBeNull();
+    await expect(v.store.mutate('set_item',{_value:'changed'},{id:1,item:'one',hours:2})).rejects.toThrow();
+    expect(v.mutate).not.toHaveBeenCalled();
+    await act(async()=>v.store.replaceFlow(v.dataflow));
+    expect(item.disabled).toBe(false);
+    expect(hours.disabled).toBe(false);
+  });
+
   it('disables only denied mutation controls and retains a draft when permission is revoked',async()=>{
     const v=setup();const input=v.getByLabelText('Hours 1') as HTMLInputElement;
     fireEvent.focus(input);fireEvent.change(input,{target:{value:'7'}});

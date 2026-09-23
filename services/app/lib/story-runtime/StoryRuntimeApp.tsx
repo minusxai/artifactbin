@@ -127,7 +127,7 @@ function RuntimeCellControl({ tag, component: Component, props, row, identity, c
   const error = session?.error ? <span role="alert" className="mx-write-error">{session.error}</span> : null;
   const valueType = tableName ? ctx.state.tables[tableName]?.columns.find((c) => c.name === valueField)?.type : undefined;
   const selectValue = (next: string | null): Scalar => next === null ? null : valueType === 'number' ? next === '' ? null : Number(next) : valueType === 'boolean' ? next === 'true' : next;
-  if(needsSignIn(unavailable))return <SignIn {...runtimeTargetIdentity(props)}>{SIGN_IN_TO_DO_THIS}</SignIn>;
+  // Cell values remain readable even when the viewer cannot mutate them.
   if (tag === 'Select') {
     const options = selectOptions(ctx.state, props.options, `${tableName}.${valueField}`, valueType === 'user')
       .filter((option) => props.exclude === undefined || option.value !== String(props.exclude));
