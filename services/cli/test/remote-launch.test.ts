@@ -80,7 +80,7 @@ test('local stop is server scoped and uses a worker request instead of signaling
  }finally{state.close();await rm(home,{recursive:true,force:true});}
 });
 
-import {remoteRequestInput} from '../src/remote-context';
+import {remoteRequestInput,REMOTE_REVIEW_POLICY,COMMENT_IMAGE_INSTRUCTIONS} from '../src/remote-context';
 test('every request repeats the exact CLI executable so a login shell or compaction cannot select an old installation',()=>{
  const data=remoteRequestInput(JSON.stringify({type:'artifactbin.comment',body:'a "quote"',request_id:'request'})+'\r',"/private/context's/afbin");
  assert.equal(data.at(-1),'\r');const payload=JSON.parse(data.trim());
@@ -129,4 +129,18 @@ test('OpenCode receives per-process automatic permissions and preserves explicit
 test('every dispatched request teaches downloading and inspecting comment images before answering',()=>{
  const payload=JSON.parse(remoteRequestInput(JSON.stringify({type:'artifactbin.comment',instruction:'Acknowledge first.'}),'/private/afbin').trim());
  assert.match(payload.instruction,/--image/);assert.match(payload.instruction,/image viewing tool/);assert.match(payload.instruction,/drawn marks/);
+});
+
+
+test('startup and repeated requests require published edits, with a compact per-request reminder',()=>{
+ const payload=JSON.parse(remoteRequestInput(JSON.stringify({type:'artifactbin.comment',instruction:'Acknowledge first.',body:'Please fix the title',request_id:'edit-request'}),'/private/afbin').trim());
+ for(const instruction of [REMOTE_REVIEW_POLICY,payload.instruction]){
+  assert.match(instruction,/update and publish the artifact before reporting completion or resolving/);
+  assert.match(instruction,/For questions, answer directly without unsolicited edits/);
+ }
+ assert.equal(payload.body,'Please fix the title');assert.equal(payload.request_id,'edit-request');
+ assert.match(payload.instruction,/Acknowledge first/);
+ assert.ok(!payload.instruction.includes(COMMENT_IMAGE_INSTRUCTIONS),'full screenshot policy belongs in startup');
+ assert.match(payload.instruction,/--image <image-id> --output <fresh-workspace-path>.webp --json/);
+ assert.match(payload.instruction,/blocked/);
 });

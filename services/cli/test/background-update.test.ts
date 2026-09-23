@@ -93,3 +93,18 @@ test('a saved updates=false suppresses both scheduling and an already launched w
   assert.equal(launches,0);assert.equal(checks,0);
  }finally{await rm(home,{recursive:true,force:true});}
 });
+
+
+test('successful background checks become due at one hour without foreground discovery',async()=>{
+ const home=await mkdtemp(join(tmpdir(),'afbin-auto-hourly-'));let now=100000000,launches=0,checks=0;
+ try {
+  const options={home,server:'https://artifactbin.dev',env:{},standalone:true,now:()=>now};
+  await runBackgroundUpdate({...options,update:async()=>{checks++;}});
+  const schedule={...options,launch:()=>{launches++;},update:async()=>assert.fail('foreground must not discover updates')};
+  now+=60*60*1000-1;
+  await scheduleBackgroundUpdate(schedule);assert.equal(launches,0);
+  now++;
+  await scheduleBackgroundUpdate(schedule);assert.equal(launches,1);
+  assert.equal(checks,1);
+ }finally{await rm(home,{recursive:true,force:true});}
+});

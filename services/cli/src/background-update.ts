@@ -8,7 +8,7 @@ import {updateCli} from './update';
 /** Detached update boundary: the command path only reads local scheduling state. */
 import {BACKGROUND_UPDATE_ARG} from './entry-args';
 export {BACKGROUND_UPDATE_ARG} from './entry-args';
-export const UPDATE_CHECK_MS=24*60*60*1000;
+export const UPDATE_CHECK_MS=60*60*1000;
 export const UPDATE_RETRY_MS=60*60*1000;
 export interface BackgroundOptions {
  platform?:string;

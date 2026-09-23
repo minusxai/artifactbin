@@ -1,4 +1,4 @@
-import type {RemoteWork} from '../../contracts/src/remote';
+import type {RemoteWork, RemoteSessionInfo} from '../../contracts/src/remote';
 import {sessionMentions} from './session-mentions';
 /** The latest human explicit targets are defaults, never inferred from an agent reply. */
 export function replyMentionPrefix(thread:ReadonlyArray<{body:string;author:{kind:string}}>):string{
@@ -20,4 +20,9 @@ export function remoteWorkLabel(work:RemoteWork):string{
  if(work.phase==='queued'&&work.activity==='starting')return phase+' · loading context';
  if(work.phase==='completed'&&work.activity==='listening')return phase+' · listening';
  return phase;
+}
+
+/** One canonical mention format for manual choices and composer defaults. */
+export function remoteMention(session: Pick<RemoteSessionInfo, 'id' | 'name'>): string {
+ return `[@${session.name.replace(/[\[\]\\\n]/g, '')}](/chat?session=${session.id}) `;
 }

@@ -50,6 +50,7 @@ function SessionTerminal({ id, onClose }: { id: string; onClose: () => void }) {
   const [draft, setDraft] = useState("");
   const [sending, setSending] = useState(false);
   const [mobile, setMobile] = useState(false);
+  const [acting, setActing] = useState(false);
   const [resizing, setResizing] = useState(false);
   const queue = useRef(Promise.resolve());
   const send = (body: unknown) => {
@@ -194,6 +195,8 @@ function SessionTerminal({ id, onClose }: { id: string; onClose: () => void }) {
   const online = info?.online ?? false;
   const canType = online && !connection;
   const ended = info?.exitCode !== null && info?.exitCode !== undefined;
+  const canStop = !!info?.managed && online && !ended;
+  const actionLabel = ended ? "Remove session" : info?.managed ? (canStop ? "Stop agent" : "Remove agent") : "Disconnect remote session";
   return (
     <section className="min-w-0 flex-1">
       <div className="mb-3 flex flex-wrap items-center gap-3">
@@ -217,15 +220,18 @@ function SessionTerminal({ id, onClose }: { id: string; onClose: () => void }) {
           {mobile ? "Switch to desktop" : "Switch to mobile"}
         </button>}
         <button
-          aria-label={ended ? "Remove session" : info?.managed ? "Stop agent" : "Disconnect remote session"}
-          className="rounded border border-edge px-3 py-2"
-          onClick={() =>
-            void request(`/${id}`, !ended&&info?.managed ? {type:"stop"} : undefined, !ended&&info?.managed ? "POST" : "DELETE")
-              .then(()=>{if(!info?.managed||ended)onClose();else setInfo({...info,activity:"stopping"});})
+          aria-label={actionLabel}
+          disabled={!info || acting || (canStop && info.activity === 'stopping')}
+          className="rounded border border-edge px-3 py-2 disabled:opacity-40"
+          onClick={() => {
+            setActing(true);
+            void request(`/${id}`, canStop ? {type:"stop"} : undefined, canStop ? "POST" : "DELETE")
+              .then(()=>{if(!canStop)onClose();else setInfo({...info!,activity:"stopping"});})
               .catch((e) => setError(e.message))
-          }
+              .finally(() => setActing(false));
+          }}
         >
-          {ended ? "Remove session" : info?.managed ? (info.activity==='stopping'?'Stopping…':'Stop agent') : "Disconnect"}
+          {acting ? (canStop ? 'Stopping…' : 'Removing…') : canStop && info.activity === 'stopping' ? 'Stopping…' : actionLabel}
         </button>
       </div>
       {connection && <p role="status" className="mb-2 text-sm text-muted">{connection}</p>}
@@ -307,7 +313,7 @@ function SessionTerminal({ id, onClose }: { id: string; onClose: () => void }) {
       <p className="mt-3 text-xs text-muted" hidden={ended}>
         Swipe up or down in the terminal to scroll its history, or use the scroll buttons.
         Full-screen agents may manage their own history. Type directly in the terminal or use the message box. The selected terminal size stays in effect
-        until you switch views. {info?.managed ? 'Stop agent ends this background process.' : 'Disconnect removes remote access; your local process keeps running.'}
+        until you switch views. {info?.managed ? (canStop ? 'Stop agent ends this background process.' : 'Remove agent removes remote access and prevents this session from reconnecting. The local process may still be running.') : 'Disconnect removes remote access; your local process keeps running.'}
       </p>
       </div>
     </section>

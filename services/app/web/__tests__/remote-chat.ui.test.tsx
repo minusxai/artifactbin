@@ -151,3 +151,14 @@ it("reloads a snapshot when relay generation changes even if the sequence is reu
   await waitFor(() => expect(write).toHaveBeenCalledWith("restored screen", expect.any(Function)));
   expect(urls.slice(0, 3)).toEqual(["/api/remote/sessions/gen?since=-1", "/api/remote/sessions/gen?since=1", "/api/remote/sessions/gen?since=-1"]);
 });
+
+it.each([true,false])('uses stop only for online managed agents (online=%s)', async (online) => {
+ vi.stubGlobal('ResizeObserver',class {observe(){} disconnect(){}});
+ const session={id:'managed',name:'Review',harness:'codex',managed:true,online,activity:'unknown',exitCode:null,cols:80,rows:24};
+ const fetch=vi.fn(async (url:string,options?:RequestInit)=>({ok:true,json:async()=>options?.method==='DELETE'||options?.method==='POST'?{ok:true}:url==='/api/remote/sessions'?{sessions:[session]}:{session,seq:0,frames:[]}}));
+ vi.stubGlobal('fetch',fetch);
+ render(<MemoryRouter initialEntries={['/chat?session=managed']}><ChatPage /></MemoryRouter>);
+ fireEvent.click(await screen.findByRole('button',{name:online?'Stop agent':'Remove agent'}));
+ await waitFor(()=>expect(fetch).toHaveBeenCalledWith('/api/remote/sessions/managed',expect.objectContaining({method:online?'POST':'DELETE'})));
+ if(!online) await waitFor(()=>expect(screen.queryByRole('button',{name:'Open Review'})).toBeNull());
+});

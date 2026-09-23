@@ -1,3 +1,4 @@
+import {isTerminalFeedback} from './terminal-input';
 import {getArtifactById,canReadArtifact} from '../artifacts';
 import {createHash,randomUUID} from 'node:crypto';
 import {getDb,type Queryable} from '../db';
@@ -7,7 +8,7 @@ import {RemoteRegistry,RemoteError,remoteSessions,type Registration} from './reg
 import {REMOTE_WORK_LIMIT,REMOTE_WORK_BYTES,remoteColor} from '../../../contracts/src/remote';
 import type {RemoteSessionInfo,RemoteExchange,RemoteWork,RemoteWorkPhase} from '../../../contracts/src/remote';
 const hash=(value:string)=>createHash('sha256').update(value).digest('hex');
-interface AgentRow {id:string;owner:string;active:boolean;proof_hash:string;info:RemoteSessionInfo}
+interface AgentRow {id:string;owner:string;active:boolean;proof_hash:string;info:RemoteSessionInfo & {removed?:boolean}}
 interface WorkRow {agent_info?:RemoteSessionInfo;connected?:boolean;active?:boolean;id:string;session_id:string;artifact_id:string;thread_id:string;comment_id:string;phase:RemoteWorkPhase;data:{name:string;color:RemoteWork['color'];reason?:RemoteWork['reason'];payload:Record<string,unknown>};updated_at:string}
 export interface ReviewReceipt {id:string;sessionId:string;proof:string;phase:'acknowledged'|'completed'|'blocked'}
 /** Durable names and work receipts; terminal bytes and interactive input remain in the relay. */
@@ -38,11 +39,11 @@ export class RemoteAgents {
   }
  }
  async list(owner:string){
-  const db=await getDb();const saved=(await db.query<AgentRow>('SELECT * FROM remote_agents WHERE owner=$1 ORDER BY seen_at DESC LIMIT 100',[owner])).rows;
+  const db=await getDb();const saved=(await db.query<AgentRow>("SELECT * FROM remote_agents WHERE owner=$1 AND COALESCE(info->>'removed','false')<>'true' ORDER BY seen_at DESC LIMIT 100",[owner])).rows;
   const live=this.relay.list(owner);return [...live.filter(s=>!s.managed),...saved.map(r=>({...r.info,online:live.some(s=>s.id===r.id&&s.online)}))];
  }
- async read(owner:string,id:string){const saved=await this.row(await getDb(),owner,id);if(saved){let online=false;try{online=this.relay.read(owner,id).online;}catch{/* absent relay */}return {...saved.info,online};}return this.relay.read(owner,id);}
- async view(owner:string,id:string,since:number){try{return await this.relay.view(owner,id,since);}catch(error){if(!(error instanceof RemoteError)||error.status!==404)throw error;const session=await this.read(owner,id);return {session,seq:0,frames:[],snapshot:'',generation:`offline-${id}`};}}
+ async read(owner:string,id:string){const saved=await this.row(await getDb(),owner,id);if(saved){if(saved.info.removed)throw new RemoteError('Session removed',410);let online=false;try{online=this.relay.read(owner,id).online;}catch{/* absent relay */}return {...saved.info,online};}return this.relay.read(owner,id);}
+ async view(owner:string,id:string,since:number){const session=await this.read(owner,id);try{return {...await this.relay.view(owner,id,since),session};}catch(error){if(!(error instanceof RemoteError)||error.status!==404)throw error;return {session,seq:0,frames:[],snapshot:'',generation:`offline-${id}`};}}
  async owns(owner:string,id:string){return this.relay.owns(owner,id)||!!await this.row(await getDb(),owner,id);}
  async ready(owner:string,id:string,proof:string){
   const db=await getDb();await db.transaction(async tx=>{
@@ -59,7 +60,7 @@ export class RemoteAgents {
    this.relay.input(owner,id,data);
    // Keyboard control may open an unobservable harness modal. Never infer idle
    // from terminal bytes; a new readiness receipt is required after manual work.
-   if(r&&data&&(r.info.activity==='listening'||r.info.activity==='blocked')){r.info.activity='unknown';await this.save(tx,r);this.relay.restore(owner,id,r.info);await this.notifyAgent(tx,id);}
+   if(r&&data&&!isTerminalFeedback(data)&&(r.info.activity==='listening'||r.info.activity==='blocked')){r.info.activity='unknown';await this.save(tx,r);this.relay.restore(owner,id,r.info);await this.notifyAgent(tx,id);}
   });
  }
  async stop(owner:string,id:string){
@@ -71,8 +72,9 @@ export class RemoteAgents {
  }
  async remove(owner:string,id:string){
   if(!await this.owns(owner,id))throw new RemoteError('Session not found',404);
-  const db=await getDb();await db.transaction(async tx=>{const r=await this.row(tx,owner,id,true);if(r){r.active=false;r.info.activity='stopped';r.info.online=false;await this.save(tx,r);await this.unavailable(tx,id);}});
-  if(this.relay.owns(owner,id))this.relay.remove(owner,id);
+  const db=await getDb();const managed=await db.transaction(async tx=>{const r=await this.row(tx,owner,id,true);if(r){r.active=false;r.info.removed=true;r.info.activity='stopped';r.info.online=false;await this.save(tx,r);await this.unavailable(tx,id);}return !!r;});
+  // Durable agents can outlive their relay; legacy sessions retain its 410 on repeated removal.
+  try{this.relay.remove(owner,id);}catch(error){if(!managed||!(error instanceof RemoteError)||![404,410].includes(error.status))throw error;}
  }
  private check(row:AgentRow,proof:string){if(typeof proof!=='string'||row.proof_hash!==hash(proof))throw new RemoteError('Invalid runner credential',403);}
  private async save(tx:Queryable,r:AgentRow){await tx.query('UPDATE remote_agents SET info=$2,active=$3,seen_at=now() WHERE id=$1',[r.id,JSON.stringify(r.info),r.active]);}

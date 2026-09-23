@@ -97,3 +97,26 @@ it('keeps the connection request available when clipboard access fails', async (
   expect(await screen.findByRole('status')).toHaveTextContent('Could not copy. Select and copy the request above.');
   expect(screen.getByText('Connect to afbin remote so I can @mention you in artifact comments.')).toBeTruthy();
 });
+
+it.each([true, false])('offers setup alongside an existing agent (online=%s)', async (online) => {
+ vi.stubGlobal('fetch',vi.fn().mockResolvedValue({ok:true,json:async()=>({sessions:[{id:'agent',name:'review',harness:'codex',managed:true,exitCode:null,online}]})}));
+ render(<RemoteMentionPicker query="" onSelect={vi.fn()} />);
+ await screen.findByLabelText('Mention review (codex)');
+ fireEvent.click(screen.getByRole('button',{name:'Add another agent'}));
+ expect(screen.getByRole('button',{name:'Copy connection request'})).toBeTruthy();
+});
+it('removes an offline agent without selecting it and keeps failures retryable', async () => {
+ let fail=true;
+ const fetch=vi.fn(async (_url:string,options?:RequestInit)=> options?.method==='DELETE'
+  ? {ok:!fail,json:async()=>({error:'Try again'})}
+  : {ok:true,json:async()=>({sessions:[{id:'agent',name:'review',harness:'codex',managed:true,exitCode:null,online:false}]})});
+ vi.stubGlobal('fetch',fetch);const select=vi.fn();
+ render(<RemoteMentionPicker query="" onSelect={select} />);
+ fireEvent.click(await screen.findByRole('button',{name:'Remove review'}));
+ expect(await screen.findByRole('alert')).toHaveTextContent('Try again');
+ expect(screen.getByLabelText('Mention review (codex)')).toBeTruthy();
+ fail=false;fireEvent.click(screen.getByRole('button',{name:'Remove review'}));
+ await waitFor(()=>expect(screen.queryByLabelText('Mention review (codex)')).toBeNull());
+ expect(select).not.toHaveBeenCalled();
+ expect(screen.getByRole('button',{name:'Copy connection request'})).toBeTruthy();
+});

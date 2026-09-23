@@ -96,3 +96,55 @@ it('a blocked request releases the agent to handle another thread while preservi
  expect(next.inputs).toHaveLength(1);expect(next.inputs[0].requestId).not.toBe(input.requestId);
  expect((await a.work(db,artifactId,'first'))[0].phase).toBe('blocked');
 });
+
+it('removes offline agents durably, preserves ended history, and releases their names', async () => {
+ const a=fresh();const s=await a.create('owner',registration);
+ await expect(a.remove('other',s.id)).rejects.toMatchObject({status:404});
+ const offline=fresh();await offline.remove('owner',s.id);
+ expect(await offline.list('owner')).toEqual([]);
+ await expect(offline.read('owner',s.id)).rejects.toMatchObject({status:410});
+ const restarted=fresh();
+ await expect(restarted.create('owner',registration)).rejects.toMatchObject({status:410});
+ await restarted.remove('owner',s.id);
+ const next=await restarted.create('owner',{...registration,recoveryKey:'c'.repeat(64)});
+ await restarted.stopped('owner',next.id,0);
+ expect(await restarted.list('owner')).toEqual([expect.objectContaining({id:next.id,exitCode:0})]);
+ await restarted.remove('owner',next.id);
+ expect(await restarted.list('owner')).toEqual([]);
+});
+it('shows stopping immediately without waiting for a runner exchange', async () => {
+ const a=fresh();const s=await a.create('owner',registration);
+ await a.stop('owner',s.id);
+ expect((await a.view('owner',s.id,0)).session.activity).toBe('stopping');
+});
+
+
+it.each([
+ '\x1b[1;1R', '\x1b[?12;34R', '\x1b[0n', '\x1b[?1;2c', '\x1b[>0;276;0c',
+ '\x1b[?25;1$y', '\x1b[8;24;80t', '\x1b]10;rgb:ffff/ffff/ffff\x1b\\',
+ '\x1b]11;rgb:0000/0000/0000\x07', '\x1bP1$r0m\x1b\\', '\x1b[I', '\x1b[O',
+ '\x1b[0n\x1b[1;1R',
+])('terminal feedback %j preserves readiness and still reaches the runner',async(data)=>{
+ const a=fresh(),s=await a.create('owner',registration);
+ await a.ready('owner',s.id,s.runnerKey);
+ await a.input('owner',s.id,data);
+ expect((await a.read('owner',s.id)).activity).toBe('listening');
+ expect((await a.exchange('owner',s.id,exchange(s.runnerKey))).inputs).toEqual([expect.objectContaining({data})]);
+});
+it.each(['\x1b[1;1R\n','\x1b[1;1R\r','\x1b[1;','hello\r','\x1b[A','\x03','\x1b[200~pasted task\x1b[201~','\x1b[1;1Rtask\r'])('human input %j still clears readiness',async(data)=>{
+ const a=fresh(),s=await a.create('owner',registration);
+ await a.ready('owner',s.id,s.runnerKey);await a.input('owner',s.id,data);
+ expect((await a.read('owner',s.id)).activity).toBe('unknown');
+});
+it('delivers a startup comment after readiness despite a web terminal cursor report',async()=>{
+ const token=await mintToken('startup');const user=await createUser({email:'mxmx_test_startup@example.com'});await claimToken(user.id,token.token);
+ const made=await publish(request('/api/artifacts',{method:'POST',token:token.token,json:{markup:'<p>startup</p>'}}));const artifactId=(await made.json()).id;
+ const a=fresh(),s=await a.create(user.id,registration),db=await getDb();
+ await db.transaction(tx=>a.enqueue(tx,user.id,artifactId,'thread',{id:'startup',body:`[@claude](/chat?session=${s.id}) check`,author:{kind:'human',label:'Owner'}}));
+ expect((await a.exchange(user.id,s.id,exchange(s.runnerKey))).inputs).toEqual([]);
+ await a.ready(user.id,s.id,s.runnerKey);
+ await a.input(user.id,s.id,'\x1b[1;1R');
+ const sent=await a.exchange(user.id,s.id,exchange(s.runnerKey));
+ expect(sent.inputs.some(input=>input.requestId)).toBe(true);
+ expect((await a.work(db,artifactId,'thread'))[0].phase).toBe('dispatching');
+});
