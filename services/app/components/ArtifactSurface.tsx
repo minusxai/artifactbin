@@ -259,7 +259,8 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
    * comment, in EVERY mode — including while editing, so commenting on the
    * paragraph under the caret needs no detour.
    */
-  const showViewComments = canAnnotate && openAnnotationCount > 0;
+  // The layer owns both open markers and the brief resolved countdown.
+  const showViewComments = canAnnotate;
 
   /**
    * `?intent=` — ONE instruction, carried out ONCE, then taken off the address.

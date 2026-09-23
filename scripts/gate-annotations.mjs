@@ -214,6 +214,12 @@ const run = async () => {
     const resolvedCard = await until(() => page.locator('[aria-label="Resolved annotation thread"]').count(), (n) => n === 1, 8000);
     check(resolvedCard === 1, 'resolved history lists the closed thread below the open list');
 
+    // The last resolved thread must retain its marker even though the open count is zero.
+    await page.getByLabel('Close comments').click();
+    await page.locator('[aria-label^="Open annotation conversation by"]').waitFor({timeout:5000});
+    check(true,'the last resolved thread keeps its countdown marker after closing the rail');
+    await page.locator('[aria-label^="Open annotation conversation by"]').click();
+    await page.getByLabel('Hide resolved conversation').waitFor({timeout:5000});
     // Closing the retained conversation leaves it in history; reopen it to delete.
     await page.getByLabel('Hide resolved conversation').click();
     await page.locator('[aria-label="Show resolved conversation"]').click();
