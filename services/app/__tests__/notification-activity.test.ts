@@ -1,0 +1,48 @@
+import {actOnAnnotationFor} from '@/lib/annotations';
+import {expect,it} from 'vitest';
+import {useAppHarness} from './harness';
+import {getDb} from '@/lib/db';
+import {createUser} from '@/lib/users';
+import {membershipInbox,updateMembershipInbox} from '@/lib/membership-inbox';
+import {recordNotification} from '@/lib/notifications';
+useAppHarness();
+it('keeps newer activity unread when an older rendered revision is acknowledged',async()=>{
+ const alice=await createUser({email:'mxmx_test_notify_a@example.com'}),bob=await createUser({email:'mxmx_test_notify_b@example.com'});
+ const db=await getDb();
+ await db.query("INSERT INTO artifacts(id,token_id,user_id,format,content,visibility) VALUES('notify1','t',$1,'markup','x','public')",[alice.id]);
+ const input={id:'thread:bob',artifactId:'notify1',recipientId:bob.id,senderId:alice.id,kind:'reply',source:'comment:thread'};
+ await db.transaction(tx=>recordNotification(tx,input));
+ const actor={userId:bob.id,tokenId:null};
+ const first=(await membershipInbox(actor)).notifications[0]!;
+ await db.transaction(tx=>recordNotification(tx,{...input,kind:'resolved'}));
+ await updateMembershipInbox(actor,{read:first.id,revision:first.revision});
+ const inbox=await membershipInbox(actor);
+ expect(inbox.unread).toBe(1);expect(inbox.notifications[0]?.revision).toBe(2);
+ await updateMembershipInbox(actor,{read:first.id,revision:2});
+ expect((await membershipInbox(actor)).unread).toBe(0);
+ expect((await db.query('SELECT * FROM event_outbox')).rows.length).toBeGreaterThanOrEqual(3);
+});
+it('commits notification and outgoing event together, rolling both back on failure',async()=>{
+ const db=await getDb();
+ await expect(db.transaction(async tx=>{
+  await recordNotification(tx,{id:'rollback',artifactId:'missing',recipientId:'bob',senderId:'alice',kind:'reply'});
+  throw Error('rollback');
+ })).rejects.toThrow('rollback');
+ expect((await db.query("SELECT * FROM member_notifications WHERE id='rollback'")).rows).toEqual([]);
+ expect((await db.query('SELECT * FROM event_outbox')).rows).toEqual([]);
+});
+it('coalesces an agent reply and resolution, including its own account, and notifies reopening',async()=>{
+ const owner=await createUser({email:'mxmx_test_notify_agent@example.com'});
+ const db=await getDb();
+ await db.query("INSERT INTO artifacts(id,token_id,user_id,format,content,source,visibility) VALUES('thread1','t',$1,'markup','','<p id=\"note\">Hello</p>','public')",[owner.id]);
+ await db.query("INSERT INTO annotations(id,artifact_id,body,author_kind,author_user_id,author_token_id,status,snippet) VALUES('ann_thread','thread1','Please fix','human',$1,'t','open','')",[owner.id]);
+ const actor={userId:owner.id,tokenId:'t'};
+ const result=await actOnAnnotationFor(actor,'thread1','ann_thread',{reply:'Fixed it',resolve:true},{kind:'agent',label:'helper',transport:'http'});
+ expect(result?.status).toBe('resolved');
+ let inbox=await membershipInbox(actor);
+ expect(inbox.notifications).toHaveLength(1);expect(inbox.notifications[0]?.kind).toBe('reply_resolved');
+ expect(inbox.notifications[0]?.revision).toBe(result?.revision);
+ await updateMembershipInbox(actor,{read:inbox.notifications[0]!.id,revision:result!.revision});
+ await actOnAnnotationFor(actor,'thread1','ann_thread',{reopen:true},{kind:'agent',label:'helper',transport:'http'});
+ inbox=await membershipInbox(actor);expect(inbox.unread).toBe(1);expect(inbox.notifications[0]?.kind).toBe('reopened');
+});

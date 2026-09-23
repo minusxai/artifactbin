@@ -32,6 +32,19 @@ create unique index "account_issuer_accountId_uidx" on "auth"."account" ("issuer
 
 -- schema "app" — owned by the app role; tables declared by lib/schema.ts
 
+CREATE TABLE IF NOT EXISTS app.event_outbox (
+  id TEXT NOT NULL,
+  envelope JSONB NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (id)
+);
+
+ALTER TABLE app.event_outbox ADD COLUMN IF NOT EXISTS id TEXT NOT NULL;
+
+ALTER TABLE app.event_outbox ADD COLUMN IF NOT EXISTS envelope JSONB NOT NULL;
+
+ALTER TABLE app.event_outbox ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT now();
+
 CREATE TABLE IF NOT EXISTS app.artifact_members (
   artifact_id TEXT NOT NULL,
   user_id TEXT NOT NULL,
@@ -61,7 +74,7 @@ CREATE INDEX IF NOT EXISTS idx_members_pending_initiator ON app.artifact_members
 
 CREATE TABLE IF NOT EXISTS app.member_notifications (
   id TEXT NOT NULL,
-  artifact_id TEXT NOT NULL,
+  artifact_id TEXT,
   user_id TEXT NOT NULL,
   recipient_id TEXT NOT NULL,
   sender_id TEXT NOT NULL,
@@ -69,12 +82,14 @@ CREATE TABLE IF NOT EXISTS app.member_notifications (
   source TEXT,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   read_at TIMESTAMPTZ,
+  revision INTEGER NOT NULL DEFAULT 1,
+  seen_revision INTEGER NOT NULL DEFAULT 0,
   PRIMARY KEY (id)
 );
 
 ALTER TABLE app.member_notifications ADD COLUMN IF NOT EXISTS id TEXT NOT NULL;
 
-ALTER TABLE app.member_notifications ADD COLUMN IF NOT EXISTS artifact_id TEXT NOT NULL;
+ALTER TABLE app.member_notifications ADD COLUMN IF NOT EXISTS artifact_id TEXT;
 
 ALTER TABLE app.member_notifications ADD COLUMN IF NOT EXISTS user_id TEXT NOT NULL;
 
@@ -89,6 +104,10 @@ ALTER TABLE app.member_notifications ADD COLUMN IF NOT EXISTS source TEXT;
 ALTER TABLE app.member_notifications ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT now();
 
 ALTER TABLE app.member_notifications ADD COLUMN IF NOT EXISTS read_at TIMESTAMPTZ;
+
+ALTER TABLE app.member_notifications ADD COLUMN IF NOT EXISTS revision INTEGER NOT NULL DEFAULT 1;
+
+ALTER TABLE app.member_notifications ADD COLUMN IF NOT EXISTS seen_revision INTEGER NOT NULL DEFAULT 0;
 
 CREATE INDEX IF NOT EXISTS idx_member_notifications_recipient ON app.member_notifications (recipient_id, created_at);
 
@@ -665,6 +684,7 @@ ALTER TABLE app.artifact_shares ADD COLUMN IF NOT EXISTS user_id TEXT;
 ALTER TABLE app.artifact_shares ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT now();
 
 CREATE TABLE IF NOT EXISTS app.annotations (
+  revision INTEGER NOT NULL DEFAULT 1,
   id TEXT NOT NULL,
   seq BIGSERIAL NOT NULL,
   artifact_id TEXT NOT NULL,
@@ -687,6 +707,8 @@ CREATE TABLE IF NOT EXISTS app.annotations (
   author_remote JSONB,
   PRIMARY KEY (id)
 );
+
+ALTER TABLE app.annotations ADD COLUMN IF NOT EXISTS revision INTEGER NOT NULL DEFAULT 1;
 
 ALTER TABLE app.annotations ADD COLUMN IF NOT EXISTS id TEXT NOT NULL;
 
@@ -1133,4 +1155,28 @@ CREATE INDEX IF NOT EXISTS idx_events_object_at ON events.events (object_id, at)
 CREATE INDEX IF NOT EXISTS idx_events_subject_at ON events.events (subject_id, at);
 
 CREATE INDEX IF NOT EXISTS idx_events_kind_verb_at ON events.events (object_kind, verb, at);
+
+CREATE TABLE IF NOT EXISTS events.deliveries (
+  event_id TEXT NOT NULL,
+  subscriber TEXT NOT NULL,
+  available_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  attempts INTEGER NOT NULL DEFAULT 0,
+  claim TEXT,
+  delivered_at TIMESTAMPTZ,
+  PRIMARY KEY (event_id, subscriber)
+);
+
+ALTER TABLE events.deliveries ADD COLUMN IF NOT EXISTS event_id TEXT NOT NULL;
+
+ALTER TABLE events.deliveries ADD COLUMN IF NOT EXISTS subscriber TEXT NOT NULL;
+
+ALTER TABLE events.deliveries ADD COLUMN IF NOT EXISTS available_at TIMESTAMPTZ NOT NULL DEFAULT now();
+
+ALTER TABLE events.deliveries ADD COLUMN IF NOT EXISTS attempts INTEGER NOT NULL DEFAULT 0;
+
+ALTER TABLE events.deliveries ADD COLUMN IF NOT EXISTS claim TEXT;
+
+ALTER TABLE events.deliveries ADD COLUMN IF NOT EXISTS delivered_at TIMESTAMPTZ;
+
+CREATE INDEX IF NOT EXISTS idx_delivery_pending ON events.deliveries (subscriber, available_at) WHERE delivered_at IS NULL;
 

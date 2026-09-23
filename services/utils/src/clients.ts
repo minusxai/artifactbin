@@ -169,6 +169,7 @@ export function eventsClient(url: string, opts: EventsClientOptions = {}): Event
   };
 
   return {
+    async publish(events: EventEnvelope[]): Promise<void> { await client.post(EVENTS_ROUTES.publish, events); },
     async emit(events: EventEnvelope[]): Promise<void> {
       if (events.length === 0 || closed) return;
       for (const event of events) {

@@ -54,3 +54,5 @@ it('remote identities and work receipts belong to app',()=>{expect(declared()['a
 it('comment image stages and attachments belong to app',()=>{expect(declared()['app.comment_images']).toBe('app');});
 
 it('membership and its notifications belong to the app',()=>{for(const name of ['artifact_members','member_notifications','user_blocks'])expect(declared()['app.'+name]).toBe('app');});
+
+it('notification outbox and subscriber receipts stay with their existing owners',()=>{expect(declared()['app.event_outbox']).toBe('app');expect(declared()['events.deliveries']).toBe('events');});

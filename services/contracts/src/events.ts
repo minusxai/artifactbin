@@ -69,6 +69,7 @@ export interface EventVerbs {
     unliked: EmptyPayload;
   };
   user: {
+    notification_changed: {notification_id:string;revision:number;change:"updated"|"read"|"removed"};
     /** The one place an email may travel: identity events, where the id alone says nothing to an operator. */
     /** A user row came into being — the first verified login. Fires once per account, before that login's `login_verified`. */
     signed_up: { email: string };
@@ -101,7 +102,7 @@ const complete = <K extends ObjectKind>() => <const T extends readonly EventVerb
 
 export const EVENT_VERBS: { readonly [K in ObjectKind]: readonly EventVerb<K>[] } = {
   artifact: complete<'artifact'>()(['created', 'updated', 'edited', 'reverted', 'deleted', 'moved', 'restored', 'exported', 'mutated', 'viewed', 'forked', 'annotated', 'annotation_resolved', 'annotation_deleted', 'sharing_changed', 'liked', 'unliked']),
-  user: complete<'user'>()(['signed_up', 'login_sent', 'login_verified', 'oauth_linked', 'followed', 'unfollowed']),
+  user: complete<'user'>()(['notification_changed', 'signed_up', 'login_sent', 'login_verified', 'oauth_linked', 'followed', 'unfollowed']),
   token: complete<'token'>()(['minted', 'claimed', 'revoked']),
   door: complete<'door'>()(['denied']),
   route: complete<'route'>()(['failed']),
@@ -128,11 +129,15 @@ export const eventName = (e: Pick<EventEnvelope, 'object_kind' | 'verb'>): strin
 /** What an emitter holds. `emit` NEVER rejects; `close` flushes whatever is queued (a batching client) and is optional. */
 export interface EventsService {
   emit(events: EventEnvelope[]): Promise<void>;
+  /** Durable acceptance: rejects until storage commits. Source outboxes retry stable IDs. */
+  publish?(events: EventEnvelope[]): Promise<void>;
   close?(): Promise<void>;
 }
 
 /** Where the service hands a stored batch next — empty in the OSS composition; a deployment fills the list. Never throws into the writer. */
+export interface EventSubscriber { id: string; deliver: EventSink }
+
 export type EventSink = (events: EventEnvelope[]) => Promise<void>;
 
 /** The wire: one POST. `serveEvents`/`eventsClient` implement exactly this. */
-export const EVENTS_ROUTES = { emit: '/emit' } as const;
+export const EVENTS_ROUTES = { emit: '/emit', publish: '/publish' } as const;

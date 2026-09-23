@@ -1,3 +1,4 @@
+import {notifyThread} from './notifications';
 import {commentMentions} from './saved-mentions';
 import {MembershipError} from './membership';
 import {consumeCommentImage,commentImagesFor} from './comment-images';
@@ -94,6 +95,7 @@ export interface AnnotationCommentWire {
 }
 
 export interface AnnotationWire {
+  revision?: number;
   image?: CommentImageWire;
   remote_work?:RemoteWork[];
   id: string;
@@ -158,6 +160,7 @@ export interface AnnotationAction {
 const ANNOTATION_SNIPPET_MAX = 200;
 
 interface AnnotationRowDb {
+  revision: number;
   id: string;
   seq: string | number;
   artifact_id: string;
@@ -449,6 +452,7 @@ async function wireFor(db: Queryable, head: ArtifactRow, roots: AnnotationRowDb[
     const range = storedRange(root.range);
     return {
       id: root.id,
+      revision: root.revision,
       ...(images.has(root.id) ? {image:images.get(root.id)} : {}),
       status: root.status,
       anchor: anchored
@@ -577,6 +581,10 @@ export async function actOnAnnotationFor(
     } else if (action.resolve && root.status === 'open') {
       await tx.query("UPDATE annotations SET status = 'resolved', resolved_at = now() WHERE id = $1", [root.id]);
       resolved = true;
+    }
+    if(replied || resolved || (action.reopen && root.status==='resolved')){
+      await tx.query('UPDATE annotations SET revision=revision+1 WHERE id=$1',[root.id]);
+      await notifyThread(tx,artifactId,root.id,actor.userId,resolved?(replied?'reply_resolved':'resolved'):action.reopen?'reopened':'reply',!!remote||author.kind==='agent');
     }
     const fresh = await tx.query<AnnotationRowDb>(`SELECT * FROM ${ANNOTATIONS_READ} WHERE id = $1`, [root.id]);
     // A vanished row stays the null: wrapping it in the result object would

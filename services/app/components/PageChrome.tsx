@@ -20,6 +20,7 @@ import { crumbsFor } from '@/lib/breadcrumb';
 import { loginHref } from '@/lib/login-href';
 import { usePathname } from '@/lib/navigation';
 import Avatar from '@/components/Avatar';
+import {NotificationBell} from './NotificationCenter';
 import { useSession } from '@/web/session';
 
 export type AppearanceMode = 'light' | 'dark';
@@ -500,6 +501,7 @@ export function AppBar({
         <GitHubStar placement="mobile-bar" />
         {actions}
         {/* The document bar's glyphs, at its size and stroke, so the two bars read as one. */}
+        <NotificationBell/>
         {control('controls', label.toLowerCase(), <SlidersVertical size={20} strokeWidth={1.5} />)}
         {control('menu', 'menu', <CircleUser size={20} strokeWidth={1.5} />, person
           ? <Avatar image={person.image} initial={person.username || person.email || '?'} userId={person.id} size={24} />

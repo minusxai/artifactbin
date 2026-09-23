@@ -30,7 +30,7 @@ import type { Pool } from 'pg';
 import { say } from '../events';
 import { pgliteDialect } from './pglite';
 
-export interface OutgoingMail { to: string; kind: 'otp' | 'verify-email' | 'change-email' | 'other'; subject: string; text: string; otp?: string; url?: string }
+export interface OutgoingMail { to: string; kind: 'otp' | 'verify-email' | 'change-email' | 'other'; subject: string; text: string; html?:string; idempotencyKey?:string; otp?: string; url?: string }
 export interface Mailer { send(mail: OutgoingMail): Promise<void> }
 
 export interface OidcProvider {

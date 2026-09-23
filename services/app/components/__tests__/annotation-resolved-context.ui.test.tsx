@@ -89,7 +89,7 @@ describe('selecting a resolved thread', () => {
    * Expanding a resolved thread is a choice the reader makes. A thread that was open and is
    * resolved by SOMEONE ELSE, live, is not that choice: its highlight lifts, as it always did.
    */
-  it('lifts the highlight when the open thread is resolved from elsewhere', async () => {
+  it('keeps an open thread visible when resolved from elsewhere', async () => {
     const { frame, postMessage, contentWindow } = makeFrame();
     const view = render(layer(frame, { railOpen: true }));
     await flush(); await flush();
@@ -100,6 +100,6 @@ describe('selecting a resolved thread', () => {
     serveResolved({ ...ANN, status: 'resolved', resolved_at: '2026-08-28T00:00:00Z' });
     view.rerender(layer(frame, { railOpen: true, liveAnnotations: [] }));
     await flush(); await flush();
-    expect(posts(postMessage).at(-1)).toMatchObject({ openId: null, pins: [] });
+    expect(posts(postMessage).at(-1)).toMatchObject({ openId: ANN.id, pins: [{id:ANN.id}] });
   });
 });

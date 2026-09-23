@@ -1,3 +1,4 @@
+import {NotificationProvider} from '@/components/NotificationCenter';
 import { Navigate, Route, Routes } from 'react-router';
 import { SessionProvider } from './session';
 import { Shell } from './Shell';
@@ -10,6 +11,7 @@ const { ChatPage, AccountPage, AssetsPage, DatasetEditorPage, FileUploadPage, Do
 export function App() {
   return (
     <SessionProvider>
+    <NotificationProvider>
       <NavigationPreloads>
       {/* Around the WHOLE table: a new account is intercepted wherever it
         * landed, not only on the routes somebody remembered to guard. */}
@@ -38,6 +40,7 @@ export function App() {
       </Routes>
       </OnboardingGate>
       </NavigationPreloads>
+    </NotificationProvider>
     </SessionProvider>
   );
 }

@@ -1,3 +1,4 @@
+import {recordNotification} from './notifications';
 /**
  * RELATIONS — the sentences that are true right now, and the ONLY module that
  * touches the `relations` table. `link` inserts the edge (or revives an undone
@@ -83,14 +84,19 @@ export async function link(userId: string, verb: RelationVerb, objectId: string)
    */
   const changed = await db.transaction(async tx=>{
     await tx.query('SELECT id FROM users WHERE id=$1 FOR UPDATE',[userId]);
-    return tx.query(
+    const result=await tx.query(
     `INSERT INTO relations (subject_kind, subject_id, verb, object_kind, object_id)
      VALUES ('${RELATION_SUBJECT_KIND}', $1, '${verb}', '${entry.object}', $2)
      ON CONFLICT (subject_kind, subject_id, verb, object_kind, object_id)
      DO UPDATE SET deleted_at = NULL WHERE relations.deleted_at IS NOT NULL
      RETURNING 1`,
     [userId, objectId],
-  );});
+  );
+    if(result.rows.length){
+      const recipient=entry.object==='user'?objectId:(await tx.query<{user_id:string}>('SELECT user_id FROM artifacts WHERE id=$1',[objectId])).rows[0]?.user_id;
+      if(recipient&&recipient!==userId)await recordNotification(tx,{id:`social:${verb}:${userId}:${objectId}`,artifactId:entry.object==='artifact'?objectId:null,recipientId:recipient,senderId:userId,kind:verb,once:true});
+    }
+    return result;});
   if (changed.rows.length === 0) return 'already';
   await say(entry, 'linked', userId, objectId);
   return 'linked';

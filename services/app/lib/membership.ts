@@ -1,3 +1,4 @@
+import {recordNotification} from './notifications';
 import {DatasetError} from './datasets/errors';
 import { readThrough } from './datasets/policy/grants';
 import type { ArtifactMember, MembershipInput, MembershipState, MembershipDirection, MembershipStatus, Queryable } from '@artifactbin/contracts';
@@ -58,7 +59,7 @@ interface StoredMember {status:MembershipStatus;direction:MembershipDirection;in
 async function notify(tx:Queryable, artifactId:string,userId:string,sender:string,revision:number,kind:string,recipients:string[]) {
   for(const recipient of new Set(recipients)) {
     if(recipient===sender || await blocked(tx,sender,recipient))continue;
-    await tx.query('INSERT INTO member_notifications(id,artifact_id,user_id,recipient_id,sender_id,kind) VALUES($1,$2,$3,$4,$5,$6) ON CONFLICT(id) DO NOTHING',[`${artifactId}:${userId}:${revision}:${kind}:${recipient}`,artifactId,userId,recipient,sender,kind]);
+    await recordNotification(tx,{id:`${artifactId}:${userId}:${revision}:${kind}:${recipient}`,artifactId,userId,recipientId:recipient,senderId:sender,kind,once:true});
   }
 }
 async function editors(tx:Queryable,artifact:ArtifactRow):Promise<string[]> {
@@ -171,7 +172,7 @@ export async function invitePeople(tx:Queryable,artifact:ArtifactRow,actor:RoleA
     ON CONFLICT(artifact_id,user_id) DO UPDATE SET status=EXCLUDED.status,direction=EXCLUDED.direction,initiated_by=EXCLUDED.initiated_by,joined_at=EXCLUDED.joined_at,revision=EXCLUDED.revision`,[artifact.id,target,status,sender,(previous?.revision??0)+1]);
    kind=status==='pending'?'invitation':'joined';
   }
-  await tx.query('INSERT INTO member_notifications(id,artifact_id,user_id,recipient_id,sender_id,kind,source) VALUES($1,$2,$3,$3,$4,$5,$6) ON CONFLICT DO NOTHING',[`${artifact.id}:${target}:${source??`invite:${(previous?.revision??0)+1}`}`,artifact.id,target,sender,kind,source??null]);
+  await recordNotification(tx,{id:`${artifact.id}:${target}:${source??`invite:${(previous?.revision??0)+1}`}`,artifactId:artifact.id,recipientId:target,senderId:sender,kind,source,once:true});
  }
  await tx.query("SELECT pg_notify('artifact_' || lower($1), 'members')",[artifact.id]);
 }

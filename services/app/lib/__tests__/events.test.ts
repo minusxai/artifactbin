@@ -35,6 +35,7 @@ const FIXTURES: Fixtures = {
     unliked: {},
   },
   user: {
+    notification_changed: {notification_id:"n",revision:1,change:"updated"},
     signed_up: { email: 'someone@example.com' },
     login_sent: { email: 'someone@example.com' },
     login_verified: { email: 'someone@example.com' },

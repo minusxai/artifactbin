@@ -31,8 +31,8 @@ export function resendMailer(opts: ResendOptions): Mailer {
       const text = mail.kind === 'otp' ? `Your artifactbin login code is ${mail.otp}\n\nIt expires in 10 minutes. If you didn't ask to log in, ignore this email.` : mail.text;
       const res = await doFetch(`${RESEND_API_URL}/emails`, {
         method: 'POST',
-        headers: { Authorization: `Bearer ${opts.apiKey}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ from: opts.from, to: [mail.to], subject, html: html(mail), text }),
+        headers: { Authorization: `Bearer ${opts.apiKey}`, 'Content-Type': 'application/json',...(mail.idempotencyKey?{'Idempotency-Key':mail.idempotencyKey}:{}) },
+        body: JSON.stringify({ from: opts.from, to: [mail.to], subject, html: mail.html??html(mail), text }),
       });
       if (!res.ok) throw new MailSendFailed(res.status, await res.text().catch(() => ''));
     },

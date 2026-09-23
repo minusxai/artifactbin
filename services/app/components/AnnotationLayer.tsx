@@ -1,3 +1,5 @@
+import {useNotifications} from './NotificationCenter';
+import {useSession} from '@/web/session';
 import {PersonMentionProvider} from './PersonMention';
 'use client';
 
@@ -374,8 +376,9 @@ function CompactAuthorMark({ author }: { author: AnnotationCommentWire['author']
 }
 
 /** A quiet identity mark until intent is shown; then enough context to choose. */
-function ThreadPreview({ a, top, hovered, onOpen, onHover }: {
+function ThreadPreview({ a, top, hovered, onOpen, onHover, remaining }: {
   a: AnnotationWire;
+  remaining?:number;
   top: number;
   hovered: boolean;
   onOpen: () => void;
@@ -384,6 +387,8 @@ function ThreadPreview({ a, top, hovered, onOpen, onHover }: {
   const first = a.thread[0];
   const label = first ? authorLabel(first.author) : 'Unknown';
   const messages = a.thread.length;
+  const work=a.remote_work?.at(-1);
+  const working=work?.connection==='online'&&['queued','dispatching','delivered','acknowledged'].includes(work.phase)&&work.activity!=='unknown';
   const previewRoot=useRef<HTMLElement>(null);
   useEffect(()=>{
     const element=previewRoot.current;
@@ -404,9 +409,10 @@ function ThreadPreview({ a, top, hovered, onOpen, onHover }: {
       ref={previewRoot}
       data-annotation-id={a.id}
       data-hovered={hovered ? 'true' : undefined}
-      className={`group pointer-events-auto overflow-hidden border text-left shadow-md transition-[top,width,height,border-color,background-color,box-shadow] duration-150 ${hovered ? 'z-10 border-edge-bright bg-comment-hover px-3 py-2.5 shadow-xl' : 'border-transparent bg-raised hover:bg-raised'}`}
+      className={`${working?'motion-safe:animate-pulse':''} group pointer-events-auto overflow-hidden border text-left shadow-md transition-[top,width,height,border-color,background-color,box-shadow] duration-150 ${hovered ? 'z-10 border-edge-bright bg-comment-hover px-3 py-2.5 shadow-xl' : 'border-transparent bg-raised hover:bg-raised'}`}
       style={{
         position: 'fixed',
+        outline:work?`2px solid ${REMOTE_COLOR_CSS[work.color]}`:undefined,
         top,
         right: VIEW_COMMENT_INSET,
         width: hovered ? 288 : compactWidth,
@@ -424,6 +430,8 @@ function ThreadPreview({ a, top, hovered, onOpen, onHover }: {
         className="absolute inset-0 z-0 cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-accent"
         style={{ borderRadius: hovered ? 5 : '50% 50% 50% 3px' }}
       />
+      {work&&<span className="sr-only">{remoteWorkLabel(work)}</span>}
+      {remaining!==undefined&&<><svg aria-hidden="true" className="pointer-events-none absolute inset-0 h-full w-full motion-reduce:hidden" viewBox="0 0 40 40"><circle cx="20" cy="20" r="18" fill="none" stroke="currentColor" strokeWidth="2" pathLength="100" strokeDasharray={`${remaining/100} 100`} transform="rotate(-90 20 20)"/></svg><span role="status" className="sr-only motion-reduce:not-sr-only">Resolved · {Math.ceil(remaining/1000)} seconds</span></>}
       {first && !hovered && (
         <span className="pointer-events-none absolute inset-0 flex items-center justify-start pl-[7px]">
           <CompactAuthorMark author={first.author} />
@@ -526,6 +534,16 @@ function Thread({
   onToggleFold: () => void;
   onToggleComment: (commentId: string) => void;
 }) {
+  const notifications=useNotifications();
+  const {session}=useSession();
+  const threadElement=useRef<HTMLDivElement>(null);
+  const markRead=notifications?.load;
+  useEffect(()=>{
+    if(!open||folded||!session?.user?.id||!markRead||!threadElement.current||typeof IntersectionObserver==='undefined')return;
+    const userId=session.user.id;
+    const observer=new IntersectionObserver(entries=>{if(entries.some(e=>e.isIntersecting)&&document.visibilityState==='visible'){void markRead({read:`thread:${a.id}:${userId}`,revision:a.revision??1});observer.disconnect();}},{threshold:0.1});
+    observer.observe(threadElement.current);return()=>observer.disconnect();
+  },[open,folded,a.id,a.revision,session?.user?.id,markRead]);
   const prefix=replyMentionPrefix(a.thread);
   const [reply, setReply] = useState(()=>prefix);
   const touched=useRef(false);
@@ -569,6 +587,7 @@ function Thread({
 
   return (
     <div
+      ref={threadElement}
       aria-label={resolved ? 'Resolved annotation thread' : 'Annotation thread'}
       data-thread-id={a.id}
       data-hovered={hovered ? 'true' : undefined}
@@ -839,6 +858,8 @@ export default function AnnotationLayer({
   // a thread resolved or opened here is reflected at once, not when the live
   // stream next says so — which in edit mode, with the stream off, is never.
   useEffect(() => { onAnnotationsChange?.(annotations); }, [annotations, onAnnotationsChange]);
+  const [recentResolved,setRecentResolved]=useState<Record<string,{row:AnnotationWire;remaining:number}>>({});
+  const previousOpen=useRef(new Set<string>());
   const [resolvedList, setResolvedList] = useState<AnnotationWire[] | null>(null);
   /*
    * ONE OPEN THREAD, open or resolved. A resolved thread somebody expands IS
@@ -892,7 +913,7 @@ export default function AnnotationLayer({
   annotationsRef.current = annotations;
   const hasRemoteWork=annotations.some(a=>a.remote_work?.length);
   useEffect(()=>{
-    if(!railOpen||!hasRemoteWork||busy)return;
+    if(!hasRemoteWork||busy)return;
     const controller=new AbortController();
     const timer=setInterval(()=>{void readAnnotationPages(`/api/my/artifacts/${id}/annotations`,{signal:controller.signal}).then(list=>{if(!controller.signal.aborted)setAnnotations(list);}).catch(()=>{});},15000);
     return ()=>{clearInterval(timer);controller.abort();};
@@ -999,28 +1020,27 @@ export default function AnnotationLayer({
   useEffect(() => {
     if (liveAnnotations) setAnnotations(liveAnnotations);
   }, [liveAnnotations]);
-  /*
-   * A thread that was OPEN and has left the open list — resolved or deleted by
-   * someone else, live — stops being the open thread, so its highlight lifts as
-   * it always did. Expanding a resolved row is the reader's own choice and is
-   * untouched: that thread was never in the open list to leave it.
-   */
-  const openListIds = useRef<Set<string>>(new Set());
+  // Refresh the authorised resolved index when open threads disappear. Never infer
+  // resolution from absence: deletion/revocation must remove the content instead.
   useEffect(() => {
-    const was = openListIds.current;
-    openListIds.current = new Set(annotations.map((a) => a.id));
-    setOpenId((cur) => (cur && was.has(cur) && !openListIds.current.has(cur) ? null : cur));
-  }, [annotations]);
-
-  // The resolved index is read only while the rail is open: its rows stay
-  // collapsed until one is clicked, so history does not compete with open work.
-  useEffect(() => {
-    if (!railOpen) return;
-    let gone = false;const abort=new AbortController();
-    void readAnnotationPages(`/api/my/artifacts/${id}/annotations?status=resolved`,{signal:abort.signal})
-      .then((list) => { if (!gone) setResolvedList(list); })
-      .catch(() => {});
-    return () => { gone = true;abort.abort(); };
+    const before=previousOpen.current;
+    previousOpen.current=new Set(annotations.map(a=>a.id));
+    const removed=[...before].filter(id=>!previousOpen.current.has(id));
+    if(!railOpen&&!removed.length&&!Object.keys(recentResolved).length)return;
+    const abort=new AbortController();
+    void readAnnotationPages(`/api/my/artifacts/${id}/annotations?status=resolved`,{signal:abort.signal}).then(list=>{
+      if(abort.signal.aborted)return;
+      setResolvedList(list);
+      setRecentResolved(current=>{
+        const next:typeof current={};
+        for(const row of list){const old=current[row.id];
+          if(removed.includes(row.id)||old)next[row.id]={row,remaining:old&&old.row.revision===row.revision?old.remaining:10000};
+        }
+        return next;
+      });
+      setOpenId(cur=>cur&&(removed.includes(cur)||recentResolved[cur])&&!list.some(a=>a.id===cur)&&!previousOpen.current.has(cur)?null:cur);
+    }).catch(()=>{if(!abort.signal.aborted){setRecentResolved({});setResolvedList(null);setOpenId(null);}});
+    return()=>abort.abort();
   }, [id, railOpen, annotations]);
 
   /*
@@ -1072,7 +1092,7 @@ export default function AnnotationLayer({
      * for a pin that landed a message later. Nothing resolved is painted at
      * rest: collapsing the card, or opening another thread, takes it out again.
      */
-    const openResolved = openId ? (resolvedList ?? []).find((a) => a.id === openId) ?? null : null;
+    const openResolved = openId ? (resolvedList ?? []).find((a) => a.id === openId) ?? recentResolved[openId]?.row ?? null : null;
     const message: StoryAnnotationsMessage = {
       type: STORY_ANNOTATIONS_MESSAGE,
       // Annotations are ambient whenever this capability exists. The frame
@@ -1095,7 +1115,7 @@ export default function AnnotationLayer({
       pick,
     };
     postToFrame(message);
-  }, [annotations, hoverId, openId, pick, resolvedList, selection, sessionNonce, postToFrame, capture.busy]);
+  }, [annotations, hoverId, openId, pick, resolvedList, recentResolved, selection, sessionNonce, postToFrame, capture.busy]);
   // Closing the rail drops what only the rail was showing; the pins stay.
   useEffect(() => {
     if (!railOpen) setOpenId(null);
@@ -1361,10 +1381,24 @@ export default function AnnotationLayer({
 
   // The collapsed 36px identity mark is small enough for phones too; clicking
   // it opens the same rail as a bottom sheet, with no hover dependency.
-  const floating = !railOpen && showViewComments && annotations.length > 0;
+  const floatingRows=[...annotations,...Object.values(recentResolved).filter(v=>v.remaining>0&&!annotations.some(a=>a.id===v.row.id)).map(v=>v.row)];
+  const floating = !railOpen && showViewComments && floatingRows.length > 0;
   const markerRect = documentRect({ frameRef, runtimeRef })
     ?? { top: topOffset, height: window.innerHeight - topOffset };
-  const placed = floating ? positionedComments(annotations, anchorRects, markerRect, window.innerHeight) : [];
+  const placed = floating ? positionedComments(floatingRows, anchorRects, markerRect, window.innerHeight) : [];
+
+  const visibleResolved=placed.map(p=>p.annotation.id).join(',');
+  useEffect(()=>{
+    if(!floating)return;
+    let last=performance.now();
+    const timer=setInterval(()=>{
+      const now=performance.now(),elapsed=Math.min(250,now-last);last=now;
+      if(document.visibilityState!=='visible')return;
+      const visible=new Set(visibleResolved.split(','));
+      setRecentResolved(current=>Object.fromEntries(Object.entries(current).map(([key,value])=>[key,visible.has(key)&&key!==hoverId&&key!==openId?{...value,remaining:Math.max(0,value.remaining-elapsed)}:value])));
+    },100);
+    return()=>clearInterval(timer);
+  },[floating,visibleResolved,hoverId,openId]);
 
   // The breadcrumb the edit toolbar taught: nearest ancestors, outermost first.
   const crumbs = selection ? [...selection.ancestors.slice(-2), { path: selection.path, tag: selection.tag, hint: '' }] : [];
@@ -1396,6 +1430,7 @@ export default function AnnotationLayer({
               key={annotation.id}
               a={annotation}
               top={top}
+              remaining={recentResolved[annotation.id]?.remaining}
               hovered={hoverId === annotation.id}
               onOpen={() => openThread(annotation.id)}
               onHover={hoverUi}

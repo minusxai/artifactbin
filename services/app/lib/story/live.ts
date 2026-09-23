@@ -158,7 +158,7 @@ export function subscribeToAnnotations(artifactId: string, handler: LiveHandler)
   return subscribeChannel(channelForAnnotations(artifactId), handler);
 }
 
-async function subscribeChannel(channel: string, handler: LiveHandler): Promise<() => Promise<void>> {
+export async function subscribeChannel(channel: string, handler: LiveHandler): Promise<() => Promise<void>> {
   let sub = channels.get(channel);
   if (!sub) {
     // Only a NEW channel can push us over: extra watchers of a document we

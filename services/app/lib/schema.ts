@@ -319,6 +319,7 @@ const ARTIFACT_SHARES: Table = {
 const ANNOTATIONS: Table = {
   name: 'annotations',
   columns: [
+    {name:'revision',type:'INTEGER',notNull:true,default:'1'},
     { name: 'id', type: 'TEXT', notNull: true }, // 'ann_' + 96-bit base36
     { name: 'seq', type: 'BIGSERIAL', notNull: true }, // stable thread order (created_at ties)
     { name: 'artifact_id', type: 'TEXT', notNull: true },
@@ -710,18 +711,24 @@ const ARTIFACT_MEMBERS: Table = {
 };
 const MEMBER_NOTIFICATIONS: Table = {
  name:'member_notifications',columns:[
-  {name:'id',type:'TEXT',notNull:true},{name:'artifact_id',type:'TEXT',notNull:true},
+  {name:'id',type:'TEXT',notNull:true},{name:'artifact_id',type:'TEXT'},
   {name:'user_id',type:'TEXT',notNull:true},{name:'recipient_id',type:'TEXT',notNull:true},
   {name:'sender_id',type:'TEXT',notNull:true},{name:'kind',type:'TEXT',notNull:true},
   {name:'source',type:'TEXT'},{name:'created_at',type:'TIMESTAMPTZ',notNull:true,default:'now()'},
   {name:'read_at',type:'TIMESTAMPTZ'},
+  {name:'revision',type:'INTEGER',notNull:true,default:'1'},
+  {name:'seen_revision',type:'INTEGER',notNull:true,default:'0'},
  ],primaryKey:['id'],indexes:[{name:'idx_member_notifications_recipient',columns:['recipient_id','created_at']}],
 };
 const USER_BLOCKS: Table = {
  name:'user_blocks',columns:[{name:'user_id',type:'TEXT',notNull:true},{name:'blocked_user_id',type:'TEXT',notNull:true}],primaryKey:['user_id','blocked_user_id'],
 };
 
-export const TABLES: Table[] = [ARTIFACT_MEMBERS, MEMBER_NOTIFICATIONS, USER_BLOCKS, COMMENT_IMAGES, REMOTE_AGENTS, REMOTE_WORK, EXPORT_IMAGES, EXPORT_IMAGE_CACHE, MUTATION_RECEIPTS, DATASET_POLICY_AUDIT, DATASET_USAGE, USERS, TOKENS, ARTIFACTS, ARTIFACT_VERSIONS, ARTIFACT_EDITS, ARTIFACT_SOURCE_IDS, ARTIFACT_NODE_ALIASES, NODE_IDENTITY_MIGRATION_JOBS, ARTIFACT_SHARES, ANNOTATIONS, CODES, ANALYTICS_EVENTS, RELATIONS, WEBFONTS, WEB_ASSETS, DATASET_SECRETS, DATASET_RESULT_CACHE, ARTIFACT_CREATION_OPERATIONS, ID_RESERVATION_BATCHES, ARTIFACT_ID_REGISTRY, BROWSER_TEST_USERS];
+const EVENT_OUTBOX: Table = {name:'event_outbox',columns:[
+ {name:'id',type:'TEXT',notNull:true},{name:'envelope',type:'JSONB',notNull:true},
+ {name:'created_at',type:'TIMESTAMPTZ',notNull:true,default:'now()'},
+],primaryKey:['id']};
+export const TABLES: Table[] = [EVENT_OUTBOX, ARTIFACT_MEMBERS, MEMBER_NOTIFICATIONS, USER_BLOCKS, COMMENT_IMAGES, REMOTE_AGENTS, REMOTE_WORK, EXPORT_IMAGES, EXPORT_IMAGE_CACHE, MUTATION_RECEIPTS, DATASET_POLICY_AUDIT, DATASET_USAGE, USERS, TOKENS, ARTIFACTS, ARTIFACT_VERSIONS, ARTIFACT_EDITS, ARTIFACT_SOURCE_IDS, ARTIFACT_NODE_ALIASES, NODE_IDENTITY_MIGRATION_JOBS, ARTIFACT_SHARES, ANNOTATIONS, CODES, ANALYTICS_EVENTS, RELATIONS, WEBFONTS, WEB_ASSETS, DATASET_SECRETS, DATASET_RESULT_CACHE, ARTIFACT_CREATION_OPERATIONS, ID_RESERVATION_BATCHES, ARTIFACT_ID_REGISTRY, BROWSER_TEST_USERS];
 
 /** Ordered, individually-executable DDL statements (no splitting needed) — rendered by utils. */
 export const SCHEMA_STATEMENTS: string[] = renderSchema(TABLES);

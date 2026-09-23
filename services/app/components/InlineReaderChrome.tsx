@@ -1,3 +1,4 @@
+import {useNotifications} from './NotificationCenter';
 import { useLayoutEffect,useRef,type ReactNode } from 'react';
 import { renderReaderChrome, READER_CHROME_HIDDEN_CLASS, type ReaderChromeInput } from '@/lib/story/reader-chrome';
 import { STORY_CHROME_CSS } from '@/lib/story-runtime/chrome-css';
@@ -30,6 +31,7 @@ const triggerLabel=(which:'menu'|'controls',open:boolean)=>which==='menu'?(open?
 
 /** Identical desktop/mobile reader layout, with local handlers inside TrustedUi. */
 export function InlineReaderChrome({ input, onAction,onShare,pinned=false }: { input: ReaderChromeInput; onAction(action:string):void;onShare?:()=>void;pinned?:boolean }): ReactNode {
+  const notifications=useNotifications();
   const holder=useRef<HTMLDivElement>(null);
   const state=useRef<ChromeState|null>(null);
   const artifact=useRef(input.artifactId);
@@ -37,7 +39,7 @@ export function InlineReaderChrome({ input, onAction,onShare,pinned=false }: { i
   // The page's panels that are open. Held across renders: the markup is always
   // rendered shut, so a re-render (a count, a title, a face) must re-apply it.
   const panels=useRef(new Set<'menu'|'controls'>());
-  const html = renderReaderChrome({...input,panels:false}).replaceAll('target="_top"', 'target="_self"');
+  const html = renderReaderChrome({...input,panels:false,notifications:notifications?{unread:notifications.state?.unread??0}:undefined}).replaceAll('target="_top"', 'target="_self"');
   useLayoutEffect(()=>{
     const container=holder.current;
     if(!container)return;
@@ -84,6 +86,7 @@ export function InlineReaderChrome({ input, onAction,onShare,pinned=false }: { i
       const target = (event.target as Element).closest<HTMLElement>('[data-mx-reader-action],[data-mx-reader-trigger]');
       if (!target) return;
       event.preventDefault();
+      if(target.getAttribute('data-mx-reader-action')==='notifications'){notifications?.open();return;}
       if(target.getAttribute('data-mx-reader-action')==='share'){if(onShare)onShare();else sharing.current?.share();return;}
       onAction(target.getAttribute('data-mx-reader-action') ?? target.getAttribute('data-mx-reader-trigger') ?? '');
     }} />
