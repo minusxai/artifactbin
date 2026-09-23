@@ -55,7 +55,7 @@ describe('publishing a document with a <Mutation>', () => {
 
   it('refuses a read-only target, naming the push flag that opens it', async () => {
     const t = await mintToken('t');
-    const ds = await dataset(t.token);
+    const ds = await dataset(t.token, { access: 'read' });
     const res = await create(t.token, { markup: POLL(ds) });
     expect(res.status).toBe(400);
     const text = await details(res);

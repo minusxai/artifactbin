@@ -940,6 +940,21 @@ export default function AnnotationLayer({
     onRailOpenChangeRef.current(true);
   }, [id]);
 
+  // Notification links identify a comment; resolve it through the authorized
+  // open/resolved indexes so replies open their containing conversation.
+  const [linkedComment] = useState(() => typeof window === 'undefined' ? null : new URLSearchParams(window.location.search).get('thread'));
+  const followedLink = useRef(false);
+  useEffect(() => {
+    if (!linkedComment || followedLink.current) return;
+    const thread = [...annotations, ...(resolvedList ?? [])].find(a =>
+      a.id === linkedComment || a.thread.some(c => c.id === linkedComment));
+    if (thread) { followedLink.current = true; openThread(thread.id); }
+    else if (!railOpenRef.current) {
+      openedForThreadRef.current = true;
+      onRailOpenChangeRef.current(true);
+    }
+  }, [linkedComment, annotations, resolvedList, openThread]);
+
   const toggle = useCallback((kind: FoldKind, foldId: string) => {
     setFolds(toggleFold(id, kind, foldId));
   }, [id]);

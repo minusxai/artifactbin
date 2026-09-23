@@ -36,7 +36,7 @@ await becomeOwner(p, B, tok);
 const csv = 'month,revenue,zip,note\n2026-01,120,01234,ok\n2026-02,,09876,\n2026-03,190,01234,fine';
 const made = await (await fetch(`${B}/api/artifacts`, { method: 'POST',
   headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${tok}` },
-  body: JSON.stringify({ title: 'Q3 Revenue', dataset: csv }) })).json();
+  body: JSON.stringify({ title: 'Q3 Revenue', dataset: csv, access: 'read' }) })).json();
 check(!!made.id, `the dataset lands with a usable reference (${made.ref})`);
 /*
  * The create response must TELL the agent how to consume the dataset. A bare

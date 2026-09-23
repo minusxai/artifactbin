@@ -197,6 +197,7 @@ check(refused === 403, `a write to a closed dataset is refused (${refused})`);
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${owner.token}` },
     body: JSON.stringify({
       title: 'Relay votes',
+      access: 'read',
       dataset: [{ choice: 'ramen', who: 'seed' }],
       columns: [{ name: 'choice', type: 'string' }, { name: 'who', type: 'string' }],
       visibility: 'unlisted',

@@ -170,6 +170,7 @@ export function PageMenu({
 
         {link('/', 'Artifacts', <FileText size={15} strokeWidth={1.5} />, pathname === '/')}
         {link('/chat', 'Remote sessions', <User size={15} strokeWidth={1.5} />, pathname === '/chat')}
+        {link('/account#notifications', 'Notifications', <User size={15} strokeWidth={1.5} />, false)}
         {link('/account', 'Account', <User size={15} strokeWidth={1.5} />, pathname === '/account')}
         {link('/docs-human', 'Human Docs', <BookOpen size={15} strokeWidth={1.5} />, pathname === '/docs-human')}
 
