@@ -71,16 +71,14 @@ Do not split comma-separated data blindly: embedded commas are ambiguous.
 - `<Column>` must be a direct DataTable child. Use children **or** the
   `columns={…}` specification, never both. `col`, `title`, `fmt`, `align`,
   `bar`, `colorScale`, `width`, and `kind` use the existing column settings.
-  A Column without a template renders its ordinary formatted value.
+  A Column without a template renders its formatted value.
 - `$_row.field` works in control bindings, `{$_row.field}` text, and string
   templates such as `label="Status {$_row.id}"` inside a Column. One member
   level only; extract nested JSON with SQL. `_`-prefixed declaration names
   are reserved. `$_value` is the committed scalar in mutation SQL.
 - `run` editors: `<Select>`, `<DatePicker>`, `<input type="text">`,
-  `<input type="number">`, `<textarea>`, `<select>` — native tags here, not
-  `<Input>`; others rejected. Edit a `date` column with
-  `<DatePicker label="Due {$_row.id}" value="$_row.due" run="$set_due" />`,
-  not a text input: a pick saves at once as `YYYY-MM-DD`.
+  `<input type="number">`, `<textarea>`, `<select>` — native tags, not
+  `<Input>`; others rejected.
 - `<Button run="$complete">` captures `$_row` on click without `$_value`.
   See [row actions](markup-repeat.md) for pending/error behavior.
 - Row mutations run inside a Column or keyed For. Cell editors capture the row
@@ -97,7 +95,7 @@ Do not split comma-separated data blindly: embedded commas are ambiguous.
 Text and numbers save once on Enter or blur; Escape cancels. Textarea
 Shift+Enter inserts a newline. Empty text writes `''`; an empty number writes
 `null`, never zero; invalid numbers do not submit. Unchanged edits do not
-write. Single Select saves on selection. Multi-select keeps a draft until
+write. Single Select and DatePicker save on selection. Multi-select keeps a draft until
 Done or outside dismissal (including keyboard focus leaving); Escape cancels.
 
 Select children render as footer actions; clicking cancels the cell draft.
@@ -109,16 +107,16 @@ Multi-select requires `valueFormat="json"` and stores unique strings, with
 `allowCreate` adds values absent from the options. Missing selections remain visible by raw value and removable; options
 refreshes never drop them. Malformed JSON or non-string members block editing without erasing data.
 
-Pending cells are disabled. Saved values stay visible until refreshed;
+Pending cells are disabled. Saved values stay visible until refresh;
 errors retain drafts and original snapshots. Captures and static previews disable editors.
 
-Use **both** `expectedAffected={1}` and the original-value predicate shown
+Use **both** `expectedAffected={1}` and the original-value predicate
 above. `IS NOT DISTINCT FROM` compares nulls correctly and checks only the
 edited field, allowing different-field edits to coexist. Zero matched rows
 returns `row_changed` (stale, deleted, or rejected by a predicate); multiple
 matches return `row_not_unique`. Both leave dataset data and version unchanged.
 The guard runs on every retry. Publish checks SQL syntax/types,
-not the runtime row count. This is
+not the runtime row count. It is
 value-based conflict detection: an A→B→A history is not detected.
 
 ## References and authorization
@@ -129,7 +127,7 @@ Integer dependency IDs cast through BIGINT before VARCHAR to match JSON strings.
 Unscheduled writes the existing `''` sprint sentinel.
 
 A query filter is **not authorization**: client-supplied row values do not
-prove query membership. Put any permitted-subset restriction in the stored
+prove query membership. Put any permitted-subset restriction in the
 mutation SQL. Writes require dataset edit permission; denied controls disable. Cycle checks
 and cross-dataset foreign-key enforcement are deferred; the mutation engine
 registers only its target dataset, so the dropdown alone does not enforce
