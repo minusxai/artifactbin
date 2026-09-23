@@ -20,7 +20,7 @@ it('allows a recipient through a saved owner artifact only after approval',async
  const docResponse=await create(request('/api/artifacts',{method:'POST',token:token.token,json:{visibility:'public',markup:`<Helmet><Mutation name="add" source="ref:${ds}">{\`insert into public.rows values (2)\`}</Mutation></Helmet><Button run="$add">Add</Button>`}}));
  expect(docResponse.status,await docResponse.clone().text()).toBe(201);const doc=(await docResponse.json()).id;
  const click=()=>mutate(request(`/a/${doc}/mutate`,{method:'POST',origin:'same',actor:{credential:'session',userId:bob.id,email:bob.email!,emailVerified:true},json:{mutation:'add',values:{}}}),{params:Promise.resolve({id:doc})});
- expect((await click()).status).toBe(403);
+ const refused=await click();expect(refused.status).toBe(403);expect((await refused.json()).detail).toMatch(/join/i);
  await changeMembership({userId:bob.id,tokenId:null},doc,{action:'join'});
  expect((await click()).status).toBe(403);
  await changeMembership(actor,doc,{action:'approve',userId:bob.id});

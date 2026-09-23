@@ -215,7 +215,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
 
   // The catch-up read. Re-reading (rather than trusting the payload) is what
   // makes a missed or duplicated wakeup harmless.
-  const pushCurrent = async () => {
+  const pushCurrent = async (payload?: string) => {
     if (closed) return;
     const row = await getArtifactById(id);
     if (!row) return void close(); // deleted while watching
@@ -224,11 +224,12 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
     // was public kept receiving everything written after it was made private
     // — revocation that never reached the one reader it was aimed at.
     if (!(await canReadArtifact(row, viewer))) return void close();
+    if (payload === 'members') void sendData({datasets:['_members'],version:row.version});
     queueRow(row);
   };
 
   try {
-    unsubscribe = await subscribeToArtifact(artifactId, () => void pushCurrent());
+    unsubscribe = await subscribeToArtifact(artifactId, payload => void pushCurrent(payload));
     // The document's DATA dependencies are subscribed at CONNECT, from the row
     // this handler opened with — not from the first frame. The opening frame is
     // queued rather than awaited (see below), so waiting for it would leave a

@@ -160,4 +160,5 @@ export async function invitePeople(tx:Queryable,artifact:ArtifactRow,actor:RoleA
   }
   await tx.query('INSERT INTO member_notifications(id,artifact_id,user_id,recipient_id,sender_id,kind,source) VALUES($1,$2,$3,$3,$4,$5,$6) ON CONFLICT DO NOTHING',[`${artifact.id}:${target}:${source??`invite:${(previous?.revision??0)+1}`}`,artifact.id,target,sender,kind,source??null]);
  }
+ await tx.query("SELECT pg_notify('artifact_' || lower($1), 'members')",[artifact.id]);
 }

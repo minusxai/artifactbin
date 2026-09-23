@@ -6,7 +6,7 @@ order: 1
 ---
 ## Read first
 
-Declare Queries/table Values and scalar Values in `<Helmet>`; bind by name.
+Declare queries and values in `<Helmet>`; bind by name.
 
 ```jsx
 <Helmet>
@@ -61,8 +61,7 @@ Editable cells: [editing](markup-editing.md).
   [datasets](databases.md)). Exactly one INSERT | UPDATE | DELETE
   naming one shared dataset. Runs on demand, never at render:
   `<Button run="$name">` in the body, or `mx.mutate("name")` from your
-  `<script>`; dry-run at publish, so a button that could not work is a `400`
-  naming the fix.<!--bundle:skip--> `reset="desc amount"` clears those scalars on SUCCESS only. New dataset grants require accepted membership for artefact actions. Existing version 1 policies keep their behaviour. Callers supply VALUES only.
+  `<script>`; SQL is checked at publish; grants are checked per caller.<!--bundle:skip--> `reset="desc amount"` clears those scalars on SUCCESS only. New grants require membership; v1 is unchanged. Supply VALUES only.
   Bound write controls disable automatically; filters and live reads still work. DuckDB's `uuid()` and `now()` give a
   row its own id and timestamp.<!--/bundle:skip-->
 

@@ -2390,6 +2390,7 @@ export async function runDocumentMutation(
   const dataset = candidate && grantsOf(candidate) ? candidate : decl.scope === 'local' ? null : await getArtifactFor(writer, decl.target);
   if (decl.scope !== 'local') {
     if (!dataset) return { ok: false, reason: 'dataset_read_only' };
+    if(grantsOf(dataset)){try{await grantContext(dataset,actor,{id:doc.id,editId:doc.edit_id});}catch(error){return {ok:false,reason:'policy_denied',detail:error instanceof Error?error.message:'Join this artifact to use its actions'};}}
     const refusal = await canWriteDataset(dataset, actor, {id:doc.id,editId:doc.edit_id});
     if (refusal) return { ok: false, reason: refusal };
     if (localTables !== undefined) return {ok: false, reason: 'invalid_sql', detail: 'Persistent mutations do not accept local table overrides'};

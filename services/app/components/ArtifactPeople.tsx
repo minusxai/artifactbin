@@ -3,13 +3,13 @@ import {Users} from 'lucide-react';
 import type {MembershipInput,MembershipState} from '@artifactbin/contracts';
 import {Button,Input} from './ui';
 type Person={user_id:string;username:string;name:string|null};
-export function ArtifactPeople({artifactId}:{artifactId:string}){
+export function ArtifactPeople({artifactId,revision=0,onChange}:{artifactId:string;revision?:number;onChange?:()=>void}){
  const [open,setOpen]=useState(false),[state,setState]=useState<MembershipState|null>(null),[error,setError]=useState(''),[busy,setBusy]=useState(false);
  const [query,setQuery]=useState(''),[candidates,setCandidates]=useState<Person[]>([]),[selected,setSelected]=useState<Person[]>([]);
  const endpoint=`/api/my/artifacts/${encodeURIComponent(artifactId)}/members`;
- useEffect(()=>{if(!open)return;const abort=new AbortController();void fetch(endpoint,{signal:abort.signal}).then(async r=>{const result=await r.json();if(!r.ok)throw Error(result.detail??'Could not load people');setState(result);}).catch(e=>{if(!abort.signal.aborted)setError(e.message);});return()=>abort.abort();},[endpoint,open]);
+ useEffect(()=>{if(!open)return;const abort=new AbortController();void fetch(endpoint,{signal:abort.signal}).then(async r=>{const result=await r.json();if(!r.ok)throw Error(result.detail??'Could not load people');setState(result);}).catch(e=>{if(!abort.signal.aborted)setError(e.message);});return()=>abort.abort();},[endpoint,open,revision]);
  useEffect(()=>{if(!open||!state?.canInvite)return;const abort=new AbortController();void fetch(`${endpoint}?query=${encodeURIComponent(query)}`,{signal:abort.signal}).then(r=>r.json()).then(r=>setCandidates(r.people??[])).catch(()=>{});return()=>abort.abort();},[endpoint,query,open,state?.canInvite]);
- const act=async(input:MembershipInput)=>{setBusy(true);setError('');try{const res=await fetch(endpoint,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(input)});const result=await res.json();if(!res.ok)throw Error(result.detail??'Could not update people');setState(result);if(input.action==='invite'){setSelected([]);setQuery('');}}catch(e){setError(e instanceof Error?e.message:'Could not update people');}finally{setBusy(false);}};
+ const act=async(input:MembershipInput)=>{setBusy(true);setError('');try{const res=await fetch(endpoint,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(input)});const result=await res.json();if(!res.ok)throw Error(result.detail??'Could not update people');setState(result);onChange?.();if(input.action==='invite'){setSelected([]);setQuery('');}}catch(e){setError(e instanceof Error?e.message:'Could not update people');}finally{setBusy(false);}};
  return <section aria-label="Artefact people" className="space-y-3">
   <button type="button" aria-expanded={open} onClick={()=>setOpen(!open)} className="flex w-full items-center gap-2 rounded-md px-2 py-2 text-sm hover:bg-raised"><Users size={16}/><span>People</span>{state&&<span className="ml-auto text-xs text-muted">{state.members.length}</span>}</button>
   {open&&<div className="space-y-4 rounded-xl border border-edge bg-surface p-4">

@@ -333,7 +333,9 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
    * would rebuild every chart to announce that one of them has new rows. It is
    * sent straight to the mounted runtime, which re-runs the queries reading it.
    */
+  const [membershipRevision,setMembershipRevision]=useState(0);
   const onLiveData = useCallback((event: { datasets: string[] }) => {
+    if(event.datasets.includes('_members'))setMembershipRevision(n=>n+1);
     runtimeRef.current?.send(
       { type: STORY_DATA_MESSAGE, datasets: event.datasets } satisfies StoryDataUpdate,
     );
@@ -684,7 +686,7 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
    * direct action in the reader bar (and the mobile action rail). */
   const documentControls = (close: () => void) => (
     <div className="space-y-4">
-      {format==='markup'&&<ArtifactPeople artifactId={id}/>}
+      {format==='markup'&&<ArtifactPeople artifactId={id} revision={membershipRevision} onChange={()=>onLiveData({datasets:['_members']})}/>}
       {(props.author?.forkedFrom || (canAnnotate && format === 'markup') || canEdit) && <section aria-label="Document actions">
         <h2 className="mb-1 font-mono text-[10px] font-semibold uppercase tracking-[0.14em] text-faint">Artifact</h2>
         {props.author?.forkedFrom && <p data-mx-forked-from className="px-2 py-2 font-mono text-xs text-muted">

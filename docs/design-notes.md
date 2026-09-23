@@ -421,7 +421,9 @@ membership gates persistent v2 artefact actions, not comments or local controls.
 Owners/editors join immediately; other readers request approval. Invitations use
 recipient-follows-sender eligibility and opt-out autoaccept. Blocks and the
 30-pending budget are checked under account locks. The artefact lock serializes
-membership revocation with mutation commits.
+membership revocation with mutation commits. Committed membership changes send a
+`members` wakeup; the authorized live stream invalidates `_members` and action
+permissions without reloading the document.
 
 Resolved document links and comment links use `/people/<stable-user-id>`.
 `invitePeople` applies the same recipient rules for humans and agents; saving
