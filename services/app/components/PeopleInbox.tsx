@@ -15,7 +15,7 @@ const actionText:Record<string,string>={request:'asked to join',invitation:'invi
 
 /** One notification row for the compact menu and the full history. */
 function NotificationRow({item:n,busy,onRead,onRespond,onBlock}:{item:InboxItem;busy:boolean;onRead:()=>void;onRespond:(action:'accept'|'approve'|'dismiss')=>void;onBlock:()=>void}){
- const invitation=n.kind==='invitation'||n.kind==='request'||n.kind==='joined'||(n.source?.startsWith('comment:')&&n.direction==='invitation');
+ const invitation=n.kind==='invitation'||n.kind==='request'||n.kind==='joined'||(n.kind==='mention'&&n.direction==='invitation');
  return <li data-notification-id={n.id} className={`relative flex gap-3 px-3 py-3.5 ${n.read_at?'':'bg-accent-soft/40'}`}>
   <div className="pt-0.5"><Avatar image={null} initial={n.username??'?'} userId={n.sender_id} size={32}/></div>
   <div className="min-w-0 flex-1">
