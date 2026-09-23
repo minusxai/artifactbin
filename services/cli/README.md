@@ -133,7 +133,7 @@ A pending browser approval returns its URL and expiry; approve it and rerun setu
 approve the browser or imply `--force`. No noninteractive prompt waits for input.
 
 Managed standalone installations check for updates in a detached background process, at most
-once a day. Normal commands only inspect local state and launch the worker; they never wait for
+once an hour. Normal commands only inspect local state and launch the worker; they never wait for
 update network requests. Failed or interrupted attempts retry after an hour on a later invocation.
 The worker uses an OS-held lock (released even after SIGKILL), 30-second download stall timeouts
 and a five-minute overall deadline. It downloads checksummed releases from the configured server's
