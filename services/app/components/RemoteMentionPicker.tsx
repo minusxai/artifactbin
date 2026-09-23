@@ -1,7 +1,7 @@
 import {personMention} from '../lib/person-mentions';
 import {remoteMention} from '../lib/remote-reply';
 import { forwardRef, useEffect, useImperativeHandle, useState } from "react";
-import { Check, Copy, X } from "lucide-react";
+import { Check, ChevronDown, Copy, Plus, X } from "lucide-react";
 import { Tooltip } from "./Tooltip";
 import {REMOTE_COLOR_CSS,remoteColor,type RemoteSessionInfo } from "../../contracts/src/remote";
 const connectionRequest = "Connect to afbin remote so I can @mention you in artifact comments.";
@@ -111,9 +111,11 @@ export default forwardRef<MentionPickerHandle, { query: string; artifactId?:stri
       ))}
       {error && <p role="alert" className="px-2 py-1.5 text-sm text-muted">{error}</p>}
       {loaded && matches.length > 0 && <button type="button" aria-expanded={setupExpanded}
-        className="w-full rounded-md px-2 py-2 text-left text-xs text-muted hover:text-fg"
+        className="mt-1 flex w-full cursor-pointer items-center gap-2 rounded-md border border-edge bg-bg px-2 py-2 text-left text-xs font-medium text-fg transition-colors hover:bg-accent-soft focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
         onMouseDown={event => event.preventDefault()} onClick={() => setSetupExpanded(value => !value)}>
+        <Plus size={14} aria-hidden="true" />
         Add another agent
+        <ChevronDown size={14} aria-hidden="true" className={`ml-auto transition-transform ${setupExpanded ? "rotate-180" : ""}`} />
       </button>}
       {(!matches.length || setupExpanded) && (
         <div className="px-2 py-1.5 text-muted">
