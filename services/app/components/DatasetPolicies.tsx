@@ -296,9 +296,7 @@ function DatasetPolicyEditor({ artifactId }: { artifactId: string }) {
                     <ShieldCheck size={18} className="mb-3 text-accent" />
                     <h3 className="font-medium">One shared set of rules</h3>
                     <p className="mt-2 text-xs leading-5 text-muted">
-                      Sharing decides who has access. These rules apply to
-                      viewers, commenters, editors and owners. Existing data
-                      stays visible.
+                      {draft.version===2?'Read grants and sharing decide who can see data. Mutation grants decide which callers and saved artefacts can change it.':'Sharing decides who has access. These rules apply to viewers, commenters, editors and owners. Existing data stays visible.'}
                     </p>
                   </section>
                   <section className="space-y-4 rounded-xl border border-edge bg-surface p-4">

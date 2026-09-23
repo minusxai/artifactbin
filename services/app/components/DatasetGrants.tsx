@@ -5,7 +5,7 @@ const presets:Array<{label:string;description:string;grant:DatasetGrant}>=[
  {label:'Public reads',description:'Anyone can read this dataset, including forked artefacts. Private sharing still limits access.',grant:{actions:['read'],from:{user:'*'}}},
  {label:"Owner’s artefacts can change data",description:'Accepted members can run saved actions in artefacts owned by this dataset’s owner.',grant:{actions:['insert','update','delete'],from:{artifactOwner:'$owner'}}},
 ];
-const same=(a:DatasetGrant,b:DatasetGrant)=>JSON.stringify(a)===JSON.stringify(b);
+const same=(a:DatasetGrant,b:DatasetGrant)=>a.actions.length===b.actions.length&&a.actions.every(action=>b.actions.includes(action))&&(['user','artifact','artifactOwner'] as const).every(key=>a.from[key]===b.from[key]);
 const input='w-full rounded-lg border border-edge bg-surface px-3 py-2 text-sm';
 export function DatasetGrants({value,onChange}:{value:DatasetGrantPolicy;onChange:(v:DatasetGrantPolicy)=>void}){
  const replace=(i:number,g:DatasetGrant)=>onChange({...value,allow:value.allow.map((old,n)=>i===n?g:old)});
