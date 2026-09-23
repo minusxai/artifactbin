@@ -288,7 +288,7 @@ export function renderReaderChrome(input: ReaderChromeInput): string {
     // The author's face rides INSIDE the handle's link, before the `@`: one
     // target, and a phone byline that wraps can never strand the face on the
     // line above its handle. Decorative — the link's aria-label is its name.
-    + (username ? '<span class="mx-reader-author-group">' : '')
+    + (username ? '<span class="mx-reader-identity-group">' : '')
     + (username
       ? `<a class="mx-reader-author" href="/@${escapeHtml(username)}" target="_top"`
         + ` aria-label="View @${escapeHtml(username)}'s profile">${authorFace}@${escapeHtml(username)}</a>`

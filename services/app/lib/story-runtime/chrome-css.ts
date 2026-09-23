@@ -302,8 +302,8 @@ body[data-mx-story-root] { padding-top: var(--mx-chrome-inset, 0px) !important; 
 }
 .mx-reader-byline a:hover { color: var(--mx-reader-accent) !important; }
 .mx-reader-chevron { display: inline-flex !important; flex-shrink: 0 !important; color: var(--mx-reader-muted) !important; }
-.mx-reader-author-group, .mx-reader-title-group { display: flex !important; align-items: center !important; gap: 8px !important; min-width: 0 !important; }
-.mx-reader-author-group { flex: 0 1 auto !important; }
+.mx-reader-identity-group, .mx-reader-title-group { display: flex !important; align-items: center !important; gap: 8px !important; min-width: 0 !important; }
+.mx-reader-identity-group { flex: 0 1 auto !important; }
 .mx-reader-title-group { flex: 0 1 auto !important; }
 .mx-reader-membership { flex-shrink: 0 !important; }
 .mx-reader-title {
@@ -567,10 +567,10 @@ body[data-mx-story-root] { padding-top: var(--mx-chrome-inset, 0px) !important; 
   /* Keep each action with its subject; the title wraps instead of disappearing. */
   .mx-reader-byline { font-size: 14px !important; flex-direction: column !important; align-items: stretch !important; gap: 10px !important; }
   .mx-reader-byline > .mx-reader-brand-crumb, .mx-reader-byline > .mx-reader-chevron { display: none !important; }
-  .mx-reader-author-group { order: 0 !important; }
+  .mx-reader-identity-group { order: 0 !important; }
   .mx-reader-title-group { order: 1 !important; align-items: flex-start !important; }
   .mx-reader-byline .mx-reader-title { white-space: normal !important; overflow-wrap: anywhere !important; }
-  .mx-reader-author-group a { overflow: hidden !important; text-overflow: ellipsis !important; font-size: 13px !important; }
+  .mx-reader-identity-group a { overflow: hidden !important; text-overflow: ellipsis !important; font-size: 13px !important; }
   /* The rail's own vignette: a fade to the ground colour up the right edge,
      behind the glyphs, the twin of the one along the bottom. */
   .mx-reader-chrome::before {
