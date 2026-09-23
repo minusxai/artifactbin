@@ -29,11 +29,19 @@ export async function checkBackgroundUpdate(binary){
   // If discovery were awaited or stdio inherited, the execFile above could not finish.
   const second=await run(binary,['help'],{env,cwd:home,timeout:10000,maxBuffer:1048576});
   assert.equal(second.stderr,'');assert.equal(requests,1,'a live worker suppresses duplicate discovery');
+  const readCheck=()=>{
+   let db;
+   try{db=new DatabaseSync(join(state,'state.sqlite'),{readOnly:true});const row=db.prepare("select value from records where kind='background-update'").get();return row&&JSON.parse(row.value);}
+   finally{db?.close();}
+  };
+  const pending=readCheck();
+  // Success and retry both use one hour. Observe a new completion timestamp,
+  // not merely the retry deadline written before the worker starts its request.
+  await sleep(5);
   held.end(JSON.stringify({version,protocol:2}));
   await until(()=>{
-   let db;
-   try{db=new DatabaseSync(join(state,'state.sqlite'),{readOnly:true});const row=db.prepare("select value from records where kind='background-update'").get();const value=row&&JSON.parse(row.value);return value&&value.nextAt-value.attemptedAt===86400000;}
-   catch{return false;}finally{db?.close();}
+   try{const value=readCheck();return value&&value.attemptedAt>pending.attemptedAt&&value.nextAt-value.attemptedAt===60*60*1000;}
+   catch{return false;}
   });
   await run(binary,['help'],{env,cwd:home,timeout:10000,maxBuffer:1048576});
   assert.equal(requests,1,'completed checks are throttled across invocations');

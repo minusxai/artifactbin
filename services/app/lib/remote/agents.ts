@@ -72,8 +72,9 @@ export class RemoteAgents {
  }
  async remove(owner:string,id:string){
   if(!await this.owns(owner,id))throw new RemoteError('Session not found',404);
-  const db=await getDb();await db.transaction(async tx=>{const r=await this.row(tx,owner,id,true);if(r){r.active=false;r.info.removed=true;r.info.activity='stopped';r.info.online=false;await this.save(tx,r);await this.unavailable(tx,id);}});
-  try{this.relay.remove(owner,id);}catch(error){if(!(error instanceof RemoteError)||![404,410].includes(error.status))throw error;}
+  const db=await getDb();const managed=await db.transaction(async tx=>{const r=await this.row(tx,owner,id,true);if(r){r.active=false;r.info.removed=true;r.info.activity='stopped';r.info.online=false;await this.save(tx,r);await this.unavailable(tx,id);}return !!r;});
+  // Durable agents can outlive their relay; legacy sessions retain its 410 on repeated removal.
+  try{this.relay.remove(owner,id);}catch(error){if(!managed||!(error instanceof RemoteError)||![404,410].includes(error.status))throw error;}
  }
  private check(row:AgentRow,proof:string){if(typeof proof!=='string'||row.proof_hash!==hash(proof))throw new RemoteError('Invalid runner credential',403);}
  private async save(tx:Queryable,r:AgentRow){await tx.query('UPDATE remote_agents SET info=$2,active=$3,seen_at=now() WHERE id=$1',[r.id,JSON.stringify(r.info),r.active]);}
