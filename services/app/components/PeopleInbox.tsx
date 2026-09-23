@@ -1,9 +1,10 @@
 import {useNotifications,type InboxState} from './notification-context';
-import {useEffect,useState} from 'react';
+import {useEffect,useRef,useState} from 'react';
 import {Button} from './ui';
 type Inbox=InboxState;
 export function PeopleInbox({compact=false}:{compact?:boolean}){
  const shared=useNotifications();
+ const displayed=useRef<Map<string,number>|null>(null);
  const [email,setEmail]=useState<{invitations:boolean;comments:boolean;activity:boolean}|null>(null);
  useEffect(()=>{if(compact)return;void fetch('/api/my/people/email').then(r=>r.ok?r.json():null).then(data=>{if(data?.enabled)setEmail(data.preferences);}).catch(()=>{});},[compact]);
  const [state,setState]=useState<Inbox|null>(null),[error,setError]=useState(''),[busy,setBusy]=useState(false);
@@ -18,7 +19,7 @@ export function PeopleInbox({compact=false}:{compact?:boolean}){
  }
  useEffect(()=>{if(!shared)void load();},[]);
  useEffect(()=>{if(shared){setState(shared.state);setError(shared.error);}},[shared?.state,shared?.error]);
- useEffect(()=>{if(!compact||!state)return;const root=document.getElementById('notification-list');if(!root||typeof IntersectionObserver==='undefined')return;const observer=new IntersectionObserver(entries=>{for(const entry of entries){if(!entry.isIntersecting||document.visibilityState!=='visible')continue;const n=state.notifications.find(n=>n.id===(entry.target as HTMLElement).dataset.notificationId);if(n&&!n.read_at)void load({read:n.id,revision:n.revision});}},{root,threshold:0.9});root.querySelectorAll('[data-notification-id]').forEach(e=>observer.observe(e));return()=>observer.disconnect();},[compact,state]);
+ useEffect(()=>{if(!compact||!state)return;displayed.current??=new Map(state.notifications.map(n=>[n.id,n.revision]));const root=document.getElementById('notification-list');if(!root||typeof IntersectionObserver==='undefined')return;const observer=new IntersectionObserver(entries=>{for(const entry of entries){if(!entry.isIntersecting||document.visibilityState!=='visible')continue;const n=state.notifications.find(n=>n.id===(entry.target as HTMLElement).dataset.notificationId);if(n&&!n.read_at&&displayed.current?.get(n.id)===n.revision)void load({read:n.id,revision:n.revision});}},{root,threshold:0.9});root.querySelectorAll('[data-notification-id]').forEach(e=>observer.observe(e));return()=>observer.disconnect();},[compact,state]);
  return <section id={compact?"notification-list":"notifications"} aria-label="People and notifications" className={compact?"space-y-3":"space-y-4 rounded-xl border border-edge bg-surface p-5"}>{!compact&&<h2 className="font-medium">People & notifications</h2>}{error&&<p role="alert" className="text-sm text-danger">{error} <button onClick={()=>void load()}>Retry</button></p>}{state&&<>
   {!compact&&<label className="flex items-start gap-3 text-sm"><input className="mt-1" type="checkbox" checked={state.autoAccept} disabled={busy} onChange={e=>void load({autoAccept:e.target.checked})}/><span>Automatically accept invitations from people I follow.<span className="mt-1 block text-xs leading-5 text-muted">Otherwise, you can accept or decline each invitation.</span></span></label>}
   {email&&!compact&&<fieldset className="space-y-2 border-t border-edge pt-3"><legend className="text-sm font-medium">Email notifications</legend>{(['invitations','comments','activity'] as const).map(key=><label key={key} className="flex items-center gap-2 text-sm"><input type="checkbox" checked={email[key]} onChange={async e=>{const preferences={...email,[key]:e.target.checked};try{const r=await fetch('/api/my/people/email',{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify(preferences)});if(!r.ok)throw Error();setEmail((await r.json()).preferences);}catch{setError('Could not save email preferences');}}}/>{key==='invitations'?'Invitations':key==='comments'?'Unread comment updates':'Daily likes and follows'}</label>)}</fieldset>}

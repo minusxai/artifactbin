@@ -288,6 +288,7 @@ function applyAppAppearance(mode: AppearanceMode) {
 }
 
 export function PageControls({
+  initialOpen = false,
   fixed = false,
   rightOffset = EDGE,
   label = 'Page controls',
@@ -299,6 +300,7 @@ export function PageControls({
   triggerless = false,
   panelTop,
 }: {
+  initialOpen?: boolean;
   fixed?: boolean;
   /** Distance from the viewport's right edge. Artifact rails move the control
       to the document edge so it never covers the rail's own close button. */
@@ -315,7 +317,8 @@ export function PageControls({
   panelTop?: number;
 }) {
   const phone = useIsPhoneViewport();
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(initialOpen);
+  useEffect(()=>{if(initialOpen)setOpen(true);},[initialOpen]);
   const [appMode, setAppMode] = useState<AppearanceMode>(currentAppAppearance);
   const toggle = useExclusiveLayer(open, setOpen);
   useOpenOnRequest('controls', open, setOpen);

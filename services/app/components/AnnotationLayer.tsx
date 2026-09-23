@@ -1092,6 +1092,7 @@ export default function AnnotationLayer({
     setPick(null);   // the subject was chosen another way
   }, [initialSelection]);
 
+  const retainedPinIds=Object.values(recentResolved).filter(v=>v.remaining>0).map(v=>v.row.id).join(',');
   // The pin set, re-posted whole on every change — the frame holds no
   // annotation state it could get out of step on. Gated on the nonce: its
   // announcement is the signal that the runtime's listener exists.
@@ -1110,7 +1111,7 @@ export default function AnnotationLayer({
       // Annotations are ambient whenever this capability exists. The frame
       // decides how pins/tints coexist with view and edit mode.
       mode: capture.busy ? 'off' : 'on',
-      pins: [...annotations, ...(openResolved ? [openResolved] : [])]
+      pins: [...annotations, ...(openResolved ? [openResolved] : []), ...Object.values(recentResolved).filter(v=>v.remaining>0&&v.row.id!==openResolved?.id&&!annotations.some(a=>a.id===v.row.id)).map(v=>v.row)]
         .filter((a) => !a.orphaned && a.anchor)
         // The range travels with the pin so the frame can paint the words
         // themselves; ids, body paths and the words' own positions are still
@@ -1127,7 +1128,7 @@ export default function AnnotationLayer({
       pick,
     };
     postToFrame(message);
-  }, [annotations, hoverId, openId, pick, resolvedList, recentResolved, selection, sessionNonce, postToFrame, capture.busy]);
+  }, [annotations, hoverId, openId, pick, resolvedList, retainedPinIds, selection, sessionNonce, postToFrame, capture.busy]);
   // Closing the rail drops what only the rail was showing; the pins stay.
   useEffect(() => {
     if (!railOpen) setOpenId(null);

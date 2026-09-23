@@ -49,3 +49,9 @@ it('does not crash on a malformed membership response',async()=>{
  fireEvent.click(screen.getByRole('button',{name:'People'}));
  expect(await screen.findByRole('alert')).toHaveTextContent('Could not load people');
 });
+
+it('opens a pending invitation at its destination without an extra People click',async()=>{
+ vi.stubGlobal('fetch',vi.fn(async()=>new Response(JSON.stringify({members:[],pending:[],self:{status:'pending',direction:'invitation'},canManage:false,canInvite:false}))));
+ render(<ArtifactPeople artifactId="abc123" initialOpen/>);
+ expect(await screen.findByRole('button',{name:'Accept invitation'})).toBeVisible();
+});

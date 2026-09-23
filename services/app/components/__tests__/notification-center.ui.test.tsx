@@ -9,8 +9,8 @@ it('shares one live inbox, acknowledges the visible revision, and restores bell 
  vi.stubGlobal('IntersectionObserver',class{entry:{callback:IntersectionObserverCallback;targets:Element[]};constructor(callback:IntersectionObserverCallback){this.entry={callback,targets:[]};observers.push(this.entry);}observe(e:Element){this.entry.targets.push(e);}disconnect(){}});
  const streams:Array<{onmessage:()=>void;close:ReturnType<typeof vi.fn>}>=[];
  vi.stubGlobal('EventSource',class{onmessage=()=>{};close=vi.fn();constructor(){streams.push(this);}});
- let read=false;
- const fetch=vi.fn(async(_url:string,init?:RequestInit)=>{if(init?.method==='PATCH')read=true;return new Response(JSON.stringify({autoAccept:true,blocks:[],next:null,unread:read?0:1,notifications:[{id:'n1',artifact_id:'doc',kind:'reply',sender_id:'bob',username:'bob',title:'Tasks',source:'comment:ann1',revision:7,read_at:read?'now':null}]}));});
+ let read=false,revision=7;
+ const fetch=vi.fn(async(_url:string,init?:RequestInit)=>{if(init?.method==='PATCH')read=true;return new Response(JSON.stringify({autoAccept:true,blocks:[],next:null,unread:read?0:1,notifications:[{id:'n1',artifact_id:'doc',kind:'reply',sender_id:'bob',username:'bob',title:'Tasks',source:'comment:ann1',revision,read_at:read?'now':null}]}));});
  vi.stubGlobal('fetch',fetch);
  render(<NotificationProvider><NotificationBell/></NotificationProvider>);
  const bell=await screen.findByRole('button',{name:'Notifications, unread updates'});
@@ -24,7 +24,11 @@ it('shares one live inbox, acknowledges the visible revision, and restores bell 
  expect(await screen.findByRole('button',{name:'Notifications'})).toBeVisible();
  fireEvent.keyDown(window,{key:'Escape'});expect(screen.queryByRole('dialog')).toBeNull();expect(bell).toHaveFocus();
  expect(streams).toHaveLength(1);
- await act(async()=>{streams[0].onmessage();});
+ fireEvent.click(bell);
+ revision=8;read=false;await act(async()=>{streams[0].onmessage();});
+ const latest=observers.at(-1)!;
+ await act(async()=>{latest.callback([{target:latest.targets[0],isIntersecting:true,intersectionRatio:1} as IntersectionObserverEntry],{} as IntersectionObserver);});
+ expect(fetch.mock.calls.some(([,init])=>init?.body===JSON.stringify({read:'n1',revision:8}))).toBe(false);
  expect(streams).toHaveLength(1);
 });
 it('removes account data and closes the live stream on sign-out',async()=>{

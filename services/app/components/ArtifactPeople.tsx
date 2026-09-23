@@ -3,8 +3,9 @@ import {Users} from 'lucide-react';
 import type {MembershipInput,MembershipState} from '@artifactbin/contracts';
 import {Button,Input} from './ui';
 type Person={user_id:string;username:string;name:string|null};
-export function ArtifactPeople({artifactId,revision=0,onChange,hideJoin=false}:{artifactId:string;revision?:number;onChange?:()=>void;hideJoin?:boolean}){
- const [open,setOpen]=useState(false),[state,setState]=useState<MembershipState|null>(null),[error,setError]=useState(''),[busy,setBusy]=useState(false);
+export function ArtifactPeople({artifactId,revision=0,onChange,hideJoin=false,initialOpen=false}:{artifactId:string;revision?:number;onChange?:()=>void;hideJoin?:boolean;initialOpen?:boolean}){
+ const [open,setOpen]=useState(initialOpen),[state,setState]=useState<MembershipState|null>(null),[error,setError]=useState(''),[busy,setBusy]=useState(false);
+ useEffect(()=>{if(initialOpen)setOpen(true);},[initialOpen]);
  const [query,setQuery]=useState(''),[candidates,setCandidates]=useState<Person[]>([]),[selected,setSelected]=useState<Person[]>([]),[includeAccess,setIncludeAccess]=useState(false);
  const endpoint=`/api/my/artifacts/${encodeURIComponent(artifactId)}/members`;
  useEffect(()=>{const abort=new AbortController();void fetch(endpoint,{signal:abort.signal}).then(async r=>{const result=await r.json();if(!r.ok||!Array.isArray(result.members)||!Array.isArray(result.pending))throw Error(result.detail??'Could not load people');setState(result);}).catch(e=>{if(!abort.signal.aborted)setError(e.message);});return()=>abort.abort();},[endpoint,open,revision]);

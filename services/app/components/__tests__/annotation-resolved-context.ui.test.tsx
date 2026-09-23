@@ -107,7 +107,7 @@ describe('selecting a resolved thread', () => {
 it('counts only visible unpaused seconds and expires without acknowledging the notification',async()=>{
  vi.useFakeTimers({toFake:['setInterval','clearInterval','performance']});
  const visibility=vi.spyOn(document,'visibilityState','get').mockReturnValue('visible');
- const {frame,contentWindow}=makeFrame();
+ const {frame,contentWindow,postMessage}=makeFrame();
  const view=render(layer(frame,{showViewComments:true}));await flush();await flush();
  const position=(y:number)=>fromFrame(contentWindow,{type:STORY_ANNOTATION_LAYOUT_MESSAGE,nonce:NONCE,positions:[{id:ANN.id,rect:{x:10,y,width:300,height:40}}]});
  position(220);
@@ -115,6 +115,7 @@ it('counts only visible unpaused seconds and expires without acknowledging the n
  view.rerender(layer(frame,{showViewComments:true,liveAnnotations:[]}));await flush();await flush();
  const remaining=()=>screen.queryByRole('status')?.textContent;
  expect(remaining()).toContain('10 seconds');
+ expect(posts(postMessage).at(-1).pins.map((p:{id:string})=>p.id)).toContain(ANN.id);
  visibility.mockReturnValue('hidden');act(()=>vi.advanceTimersByTime(12000));expect(remaining()).toContain('10 seconds');
  visibility.mockReturnValue('visible');position(900);act(()=>vi.advanceTimersByTime(12000));
  position(220);expect(remaining()).toContain('10 seconds');
