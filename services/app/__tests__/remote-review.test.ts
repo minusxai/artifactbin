@@ -96,3 +96,24 @@ it('a blocked request releases the agent to handle another thread while preservi
  expect(next.inputs).toHaveLength(1);expect(next.inputs[0].requestId).not.toBe(input.requestId);
  expect((await a.work(db,artifactId,'first'))[0].phase).toBe('blocked');
 });
+
+it('removes offline agents durably, preserves ended history, and releases their names', async () => {
+ const a=fresh();const s=await a.create('owner',registration);
+ await expect(a.remove('other',s.id)).rejects.toMatchObject({status:404});
+ const offline=fresh();await offline.remove('owner',s.id);
+ expect(await offline.list('owner')).toEqual([]);
+ await expect(offline.read('owner',s.id)).rejects.toMatchObject({status:410});
+ const restarted=fresh();
+ await expect(restarted.create('owner',registration)).rejects.toMatchObject({status:410});
+ await restarted.remove('owner',s.id);
+ const next=await restarted.create('owner',{...registration,recoveryKey:'c'.repeat(64)});
+ await restarted.stopped('owner',next.id,0);
+ expect(await restarted.list('owner')).toEqual([expect.objectContaining({id:next.id,exitCode:0})]);
+ await restarted.remove('owner',next.id);
+ expect(await restarted.list('owner')).toEqual([]);
+});
+it('shows stopping immediately without waiting for a runner exchange', async () => {
+ const a=fresh();const s=await a.create('owner',registration);
+ await a.stop('owner',s.id);
+ expect((await a.view('owner',s.id,0)).session.activity).toBe('stopping');
+});

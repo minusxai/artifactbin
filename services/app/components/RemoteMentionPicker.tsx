@@ -1,5 +1,5 @@
 import { forwardRef, useEffect, useImperativeHandle, useState } from "react";
-import { Check, Copy } from "lucide-react";
+import { Check, Copy, X } from "lucide-react";
 import { Tooltip } from "./Tooltip";
 import {REMOTE_COLOR_CSS,remoteColor,type RemoteSessionInfo } from "../../contracts/src/remote";
 const connectionRequest = "Connect to afbin remote so I can @mention you in artifact comments.";
@@ -15,6 +15,22 @@ export default forwardRef<MentionPickerHandle, { query: string; onSelect: (text:
   const [sessions, setSessions] = useState<RemoteSessionInfo[]>([]);
   const [active, setActive] = useState(0);
   useEffect(() => setActive(0), [query]);
+  const [setupExpanded, setSetupExpanded] = useState(false);
+  const [removing, setRemoving] = useState<string | null>(null);
+  const [error, setError] = useState('');
+  const remove = async (id: string) => {
+    setRemoving(id); setError('');
+    try {
+      const response = await fetch(`/api/remote/sessions/${id}`, { method: 'DELETE', credentials: 'same-origin' });
+      if (!response.ok) {
+        const data = await response.json().catch(() => null);
+        throw new Error(data?.error ?? 'Could not remove agent. Try again.');
+      }
+      setSessions(items => items.filter(item => item.id !== id));
+      setActive(0);
+    } catch (error) { setError(error instanceof Error ? error.message : 'Could not remove agent. Try again.'); }
+    finally { setRemoving(null); }
+  };
   const [loaded, setLoaded] = useState(false);
   const [copyState, setCopyState] = useState<'idle' | 'copied' | 'error'>('idle');
   const copyRequest = async () => {
@@ -61,11 +77,11 @@ export default forwardRef<MentionPickerHandle, { query: string; onSelect: (text:
     >
       <p className="px-2 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted">Mention an agent</p>
       {matches.map((s, index) => (
+        <div key={s.id} className="flex items-center">
         <button
-          key={s.id}
           type="button"
           aria-label={`Mention ${s.name} (${s.harness})`}
-          className={`flex w-full items-center gap-2.5 rounded-md px-2 py-2 text-left transition-colors ${index === active ? "bg-accent-soft" : "hover:bg-bg"}`}
+          className={`flex min-w-0 flex-1 items-center gap-2.5 rounded-md px-2 py-2 text-left transition-colors ${index === active ? "bg-accent-soft" : "hover:bg-bg"}`}
           onMouseEnter={() => setActive(index)}
           onMouseDown={(e) => e.preventDefault()}
           onClick={() => choose(s)}
@@ -75,12 +91,26 @@ export default forwardRef<MentionPickerHandle, { query: string; onSelect: (text:
             <span className="block truncate font-medium text-fg">{s.name}</span>
             <span className="block truncate text-xs text-muted">{agentLabel(s.harness)} · {s.machine}</span>
           </span>
-          <span className="flex shrink-0 items-center gap-1 text-[10px] text-muted"><span className="h-1.5 w-1.5 rounded-full bg-green-500" />{s.online?(s.activity??'Online'):'Offline'}</span>
+          <span className="flex shrink-0 items-center gap-1 text-[10px] text-muted"><span className={`h-1.5 w-1.5 rounded-full ${s.online ? "bg-green-500" : "bg-muted"}`} />{s.online?(s.activity??'Online'):'Offline'}</span>
         </button>
+        {!s.online && <Tooltip content="Remove agent">
+          <button type="button" aria-label={`Remove ${s.name}`} disabled={removing !== null}
+            className="rounded-md p-2 text-muted hover:text-fg disabled:opacity-40"
+            onMouseDown={event => event.preventDefault()} onClick={() => void remove(s.id)}>
+            <X size={14} aria-hidden="true" />
+          </button>
+        </Tooltip>}
+        </div>
       ))}
-      {!matches.length && (
+      {error && <p role="alert" className="px-2 py-1.5 text-sm text-muted">{error}</p>}
+      {loaded && matches.length > 0 && <button type="button" aria-expanded={setupExpanded}
+        className="w-full rounded-md px-2 py-2 text-left text-xs text-muted hover:text-fg"
+        onMouseDown={event => event.preventDefault()} onClick={() => setSetupExpanded(value => !value)}>
+        Add another agent
+      </button>}
+      {(!matches.length || setupExpanded) && (
         <div className="px-2 py-1.5 text-muted">
-          <p>{loaded ? "No matching online sessions." : "Loading sessions…"}</p>
+          {!matches.length && <p>{loaded ? "No matching agents." : "Loading sessions…"}</p>}
           {loaded && <>
             <p className="mt-2">Ask your agent to connect:</p>
             <div className="mt-2 flex items-start gap-2 rounded-md border border-edge bg-bg p-2">
