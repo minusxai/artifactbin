@@ -28,6 +28,53 @@ beforeEach(installAnnotationFetch);
 afterEach(() => vi.unstubAllGlobals());
 
 describe('the annotation composer', () => {
+  const openComposer = () => {
+    const {frame} = makeFrame();
+    render(layer(frame, {initialSelection: {
+      kind: 'text', path: '1', tag: 'p', rect: {x: 5, y: 6, width: 200, height: 40}, className: '', style: '', ancestors: [],
+    }}));
+  };
+  const sessionsResponse = (sessions: object[]) => new Response(JSON.stringify({sessions}));
+  const online = {id: '11111111-1111-1111-1111-111111111111', name: 'review', online: true, managed: true, exitCode: null, activity: 'listening'};
+  function withSessions(response: () => Promise<Response>) {
+    const fallback = globalThis.fetch;
+    vi.stubGlobal('fetch', (url: string, init?: RequestInit) => url === '/api/remote/sessions' ? response() : fallback(url, init));
+  }
+  it('prefills the sole online agent with its stable session target and requires comment text', async () => {
+    withSessions(async () => sessionsResponse([online, {...online, id: 'offline', online: false}]));
+    openComposer(); await flush();
+    const field = screen.getByLabelText('Annotation comment');
+    expect(field).toHaveValue('@review ');
+    expect(screen.getByLabelText('Save annotation')).toBeDisabled();
+    fireEvent.change(field, {target: {value: '@review Please update this'}});
+    fireEvent.click(screen.getByLabelText('Save annotation')); await flush();
+    const create = fetchCalls.find(c => c.init?.method === 'POST');
+    expect(JSON.parse(String(create?.init?.body)).body).toBe('[@review](/chat?session=11111111-1111-1111-1111-111111111111) Please update this');
+  });
+  it.each([[], [online, {...online, id: 'second'}], [{...online, online: false}], [{...online, activity: 'stopped'}]].map(sessions => ({sessions})))('leaves new comments empty without a sole eligible online agent: %j', async ({sessions}) => {
+    withSessions(async () => sessionsResponse(sessions));
+    openComposer(); await flush();
+    expect(screen.getByLabelText('Annotation comment')).toHaveValue('');
+  });
+  it.each(['My draft', ''])('preserves an edited draft when sessions arrive late: %j', async value => {
+    let resolve!: (response: Response) => void;
+    withSessions(() => new Promise(done => {resolve = done;}));
+    openComposer(); await flush();
+    const field = screen.getByLabelText('Annotation comment');
+    fireEvent.change(field, {target: {value: 'My draft'}});
+    fireEvent.change(field, {target: {value}});
+    resolve(sessionsResponse([online])); await flush();
+    expect(field).toHaveValue(value);
+  });
+  it('keeps a removed default removed for the current composer', async () => {
+    withSessions(async () => sessionsResponse([online]));
+    openComposer(); await flush();
+    const field = screen.getByLabelText('Annotation comment');
+    expect(field).toHaveValue('@review ');
+    fireEvent.change(field, {target: {value: ''}}); await flush();
+    expect(field).toHaveValue('');
+  });
+
   it('forwards the selection quote and its anchor-relative range in the create POST', async () => {
     const { frame } = makeFrame();
     render(layer(frame, {

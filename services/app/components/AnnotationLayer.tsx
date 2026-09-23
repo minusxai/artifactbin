@@ -1,5 +1,7 @@
 'use client';
 
+import {useNewCommentDraft} from './useNewCommentDraft';
+
 import {replyMentionPrefix,hasReplyText,remoteWorkLabel} from '../lib/remote-reply';
 import {REMOTE_COLOR_CSS,remoteColor} from '../../contracts/src/remote';
 
@@ -871,7 +873,7 @@ export default function AnnotationLayer({
   /** On a phone the rail is a bottom sheet — a 320px rail over a 390px screen
       is the whole document covered, with a strip too narrow to read. */
   const phoneRail = useIsPhoneViewport();
-  const [draft, setDraft] = useState('');
+  const [draft, setDraft] = useNewCommentDraft(selection !== null);
   /** Reading the draft as it will be read — a view of the same text, not a mode. */
   const [previewing, setPreviewing] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -1211,7 +1213,7 @@ export default function AnnotationLayer({
   }, [id]);
 
   const save = useCallback(async () => {
-    if (!selection || !draft.trim() || capture.busy || (capture.required&&!capture.draft)) return;
+    if (!selection || !hasReplyText(draft) || capture.busy || (capture.required&&!capture.draft)) return;
     if (!selection.nodeId) {
       setFailure('Wait for this change to save before commenting. Your draft is still here.');
       return;
@@ -1268,7 +1270,7 @@ export default function AnnotationLayer({
   }, [postToFrame]);
 
   const submitDraft = useCallback(() => {
-    if (busy || !draft.trim()) return;
+    if (busy || !hasReplyText(draft)) return;
     void save();
   }, [busy, draft, save]);
 
@@ -1487,7 +1489,7 @@ export default function AnnotationLayer({
                 cancel
               </button>
               <button
-                type="button" aria-label="Save annotation" disabled={busy || capture.busy || (capture.required&&!capture.draft) || !draft.trim()}
+                type="button" aria-label="Save annotation" disabled={busy || capture.busy || (capture.required&&!capture.draft) || !hasReplyText(draft)}
                 onClick={submitDraft}
                 className="cursor-pointer rounded-[4px] border border-accent bg-accent px-2 py-1 font-semibold text-bg hover:brightness-110 disabled:cursor-default disabled:opacity-40"
               >

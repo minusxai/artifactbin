@@ -1,3 +1,4 @@
+import {remoteMention} from '../lib/remote-reply';
 import { forwardRef, useEffect, useImperativeHandle, useState } from "react";
 import { Check, Copy, X } from "lucide-react";
 import { Tooltip } from "./Tooltip";
@@ -60,7 +61,7 @@ export default forwardRef<MentionPickerHandle, { query: string; onSelect: (text:
       (s.managed?s.exitCode===null&&s.activity!=='stopped':s.online) &&
       `${s.name} ${s.harness}`.toLowerCase().includes(query.toLowerCase()),
   );
-  const choose = (s: RemoteSessionInfo) => onSelect(`[@${s.name.replace(/[\[\]\\\n]/g, "")}](/chat?session=${s.id}) `);
+  const choose = (s: RemoteSessionInfo) => onSelect(remoteMention(s));
   useImperativeHandle(ref, () => ({ keyDown(key) {
     if (!matches.length) return false;
     if (key === "ArrowDown" || key === "ArrowUp") {
