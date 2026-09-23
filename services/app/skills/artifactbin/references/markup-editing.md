@@ -8,7 +8,7 @@ order: 2
 
 Use `<DataTable>` with `<Column>` for row templates.
 A control's `run="$mutation"` saves its cell. See [apps](apps.md) for grants/membership,
-[data](markup-data.md) for queries and controls, and [datasets](databases.md) for legacy writes.
+[data](markup-data.md) for queries and controls, and [datasets](databases.md) for legacy `--access readwrite`.
 
 [User fields](databases-users.md).
 
