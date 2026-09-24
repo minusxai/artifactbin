@@ -59,6 +59,24 @@ describe('runtime dependency closure', () => {
         expect(devDependencies[spec.package]).toBe(spec.version);
       }
     });
+    /*
+     * PR #79 declared the <DeckGL> engine's packages as app runtime dependencies. The server image
+     * installs every runtime dependency (`npm install --omit=dev`), so WebGL code the
+     * server never imports pushed the app image past its size budget and blocked the deploy. They
+     * reach only the lazy browser chunk (components/kit/deck-gl-engine.tsx), which the SSR build
+     * stubs; MapLibre's CSP worker is copied into lib/story-runtime/dist/ at build time.
+     */
+    it('browser-only map packages are pinned build dependencies, excluded from runtime installs', () => {
+      const { dependencies = {}, devDependencies = {} } = pkg('services/app/package.json');
+      const mapPackages = [
+        '@deck.gl/aggregation-layers', '@deck.gl/core', '@deck.gl/layers', '@deck.gl/mapbox', '@deck.gl/react',
+        'h3-js', 'maplibre-gl', 'react-map-gl',
+      ];
+      for (const dep of mapPackages) {
+        expect(dependencies, dep).not.toHaveProperty(dep);
+        expect(devDependencies[dep], dep).toMatch(/^\d+\.\d+\.\d+$/);
+      }
+    });
     it('the CSS toolchain is a dev dependency', () => {
       const { dependencies = {}, devDependencies = {} } = pkg('services/app/package.json');
       for (const dep of ['@tailwindcss/postcss', 'tailwindcss']) {
