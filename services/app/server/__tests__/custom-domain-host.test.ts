@@ -8,6 +8,12 @@
  * copy of a public document whose owner has a verified domain names the domain
  * as canonical; the certificate ask check answers from verified rows alone.
  */
+import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { createElement } from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
+import { JSDOM } from 'jsdom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const settings = vi.hoisted(() => ({ target: 'domains.example.test' as string | null, session: '' }));
@@ -20,7 +26,12 @@ vi.mock('@/auth', () => ({ auth: async () => (settings.session ? { user: { id: s
 
 import { useAppHarness, request } from '@/__tests__/harness';
 import { POST as createRoute } from '@/app/api/artifacts/route';
+import { fakeBrowser } from '@artifactbin/utils';
 import { getArtifactById } from '@/lib/artifacts';
+import { setAvatar } from '@/lib/avatars';
+import { resetExportRenderer } from '@/lib/export';
+import { setServices } from '@/lib/services';
+import { ProfileListing } from '@/web/pages/Profile';
 import { attachDomain, removeDomain, setDomainResolver, verifyDomain, type DomainResolver } from '@/lib/custom-domains';
 import { mintToken } from '@/lib/tokens';
 import { getDb } from '@/lib/db';
@@ -34,7 +45,8 @@ useAppHarness();
 const APP = 'https://app.example.test';
 const HOST = 'https://blog.example.org';
 const TARGET_IP = '203.0.113.10';
-const SHELL = '<!doctype html><html><head><title>artifactbin</title></head><body><div id="root"></div></body></html>';
+/** The SPA's shell, with the stylesheet the app page links (web/index.html). */
+const SHELL = '<!doctype html><html><head><title>artifactbin</title><link rel="stylesheet" href="/shell.css" /></head><body><div id="root"></div></body></html>';
 const app = () => createAppServer({ indexHtml: async () => SHELL });
 
 /** DNS that agrees with whatever hostname and token the test verifies. */
@@ -95,7 +107,7 @@ beforeEach(() => { settings.target = 'domains.example.test'; settings.session = 
 afterEach(() => { setDomainResolver(null); });
 
 describe('the home page on a verified host', () => {
-  it('lists only the owner\'s public documents, filed or not, server-rendered with links and the footer', async () => {
+  it('lists the owner\'s public root documents, server-rendered with links and the footer, and nothing private', async () => {
     const w = await world();
     const res = await app().request(`${HOST}/`, { headers: { accept: 'text/html', cookie: 'mx_session=anything' } });
     expect(res.status).toBe(200);
@@ -104,15 +116,158 @@ describe('the home page on a verified host', () => {
     const html = await res.text();
     expect(html).toContain(`href="/${w.post.id}-hello-world"`);
     expect(html).toContain('Hello World');
-    expect(html).toContain('A first post');
-    expect(html).toContain(`href="/${w.filed.id}-filed-post"`);
-    for (const hidden of ['Unlisted draft', 'Private plan', 'Stranger post', 'Notes']) expect(html).not.toContain(hidden);
+    // The profile's own data: its root, with no folder tile (a folder page is
+    // not served here), so a filed post is reached at its own address only.
+    for (const hidden of ['Unlisted draft', 'Private plan', 'Stranger post', 'Notes', 'Filed post']) expect(html).not.toContain(hidden);
+    for (const id of [w.quiet.id, w.secret.id, w.theirs.id, w.folder.id, w.filed.id]) expect(html).not.toContain(id);
     expect(html).toContain('<link rel="canonical" href="https://blog.example.org/">');
     expect(html).toMatch(/Made with <a href="https:\/\/app\.example\.test\/@vivek"[^>]*>artifactbin<\/a>/);
     expect(html).toContain('<title>');
-    // No app shell: no SPA root, no bootstrap.
+    // No app shell: no SPA root, no bootstrap, no script at all, no app navigation or Follow.
     expect(html).not.toContain('id="root"');
+    expect(html).not.toMatch(/<script/i);
+    expect(html).not.toMatch(/aria-label="(?:Follow|Unfollow|Search artifacts|Grid view)"/);
+    expect(html).not.toContain('/login');
+    expect(html).not.toContain('/@vivek/');
     expect((await app().request(`${HOST}/`, { method: 'HEAD' })).status).toBe(200);
+  });
+
+  it('is the same ProfileListing a guest gets on /@handle: the same markup, less Follow and the toolbar, with host addresses', async () => {
+    const maya = await owner('maya');
+    const first = await create(maya.token, { markup: '<h1>One</h1>', title: 'First Light', description: 'Morning notes', visibility: 'public' });
+    const second = await create(maya.token, { markup: '<h1>Two</h1>', title: 'Second Wind', visibility: 'public' });
+    await create(maya.token, { markup: '<h1>Q</h1>', title: 'Quiet one', visibility: 'unlisted' });
+    await create(maya.token, { markup: '<h1>S</h1>', title: 'Secret one', visibility: 'private' });
+    await verified(maya.userId, 'maya.example.org');
+
+    // The app's answer for a guest, through the real route, drawn by the component /@maya mounts.
+    const data = await (await app().request(`${APP}/api/page/profile/@maya`)).json();
+    expect(data.kind).toBe('public-profile');
+    const expected = new JSDOM(renderToStaticMarkup(createElement(ProfileListing, { data }))).window.document.body;
+    // The documented differences, and nothing else:
+    // no Follow (it needs a session and /api)…
+    const follow = expected.querySelector('[aria-label="Follow"]');
+    expect(follow).not.toBeNull();
+    follow!.remove();
+    // …no search/filter/view toolbar (controls that need the SPA's script)…
+    const toolbar = expected.querySelector('section[aria-label="Shelf"] > div');
+    expect(toolbar?.querySelector('[aria-label="Search artifacts"]')).not.toBeNull();
+    toolbar!.remove();
+    // …and addresses on this host instead of the app's.
+    for (const link of expected.querySelectorAll('a[href]')) link.setAttribute('href', link.getAttribute('href')!.replace(/^\/@maya(?:\/|$)/, '/'));
+
+    const page = await app().request('https://maya.example.org/', { headers: { accept: 'text/html' } });
+    expect(page.status).toBe(200);
+    const html = await page.text();
+    const listing = new JSDOM(html).window.document.querySelector('main');
+    expect(listing).not.toBeNull();
+    expect(listing!.innerHTML).toBe(expected.innerHTML);
+    expect(html).toContain(`href="/${first.id}-first-light"`);
+    expect(html).toContain(`href="/${second.id}-second-wind"`);
+    expect(html).not.toMatch(/Quiet one|Secret one/);
+  });
+
+  it('links the stylesheet the app page links, and its policy admits only this host\'s styles, fonts and images', async () => {
+    await world();
+    const hrefs = (html: string) => [...html.matchAll(/<link\b[^>]*\brel="stylesheet"[^>]*>/g)].map((m) => /href="([^"]+)"/.exec(m[0])?.[1]);
+    const spa = await (await app().request(`${APP}/login`, { headers: { accept: 'text/html' } })).text();
+    expect(hrefs(spa)).toEqual(['/shell.css']);
+    const res = await app().request(`${HOST}/`, { headers: { accept: 'text/html' } });
+    expect(hrefs(await res.text())).toEqual(hrefs(spa));
+    const csp = res.headers.get('content-security-policy') ?? '';
+    expect(csp).toContain("default-src 'none'");
+    expect(csp).toMatch(/style-src 'self'/);
+    expect(csp).toContain("font-src 'self'");
+    expect(csp).toContain("img-src 'self' data:");
+    expect(csp).not.toMatch(/script-src|https?:/);
+  });
+
+  it('serves the built stylesheet and its fonts on the host, never a script', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'domain-home-web-'));
+    mkdirSync(join(dir, 'assets'));
+    writeFileSync(join(dir, 'index.html'), '<!doctype html><html><head><link rel="stylesheet" crossorigin href="/assets/shell-Ab12cd.css"><script type="module" crossorigin src="/assets/main-Cd34ef.js"></script></head><body><div id="root"></div></body></html>');
+    writeFileSync(join(dir, 'assets', 'shell-Ab12cd.css'), 'body{color:red}');
+    writeFileSync(join(dir, 'assets', 'main-Cd34ef.js'), 'console.log(1)');
+    writeFileSync(join(dir, 'assets', 'plex-Ef56ab.woff2'), 'wOF2');
+    mkdirSync(join(dir, '.vite'));
+    writeFileSync(join(dir, '.vite', 'manifest.json'), JSON.stringify({ 'main.tsx': { file: 'assets/main-Cd34ef.js', css: ['assets/shell-Ab12cd.css'], assets: ['assets/plex-Ef56ab.woff2'] } }));
+    const built = createAppServer({ webDir: dir });
+    await world();
+    const html = await (await built.request(`${HOST}/`, { headers: { accept: 'text/html' } })).text();
+    expect(html).toContain('href="/assets/shell-Ab12cd.css"');
+    expect(html).not.toContain('main-Cd34ef.js');
+    const css = await built.request(`${HOST}/assets/shell-Ab12cd.css`, { headers: { cookie: 'mx_session=anything' } });
+    expect(css.status).toBe(200);
+    expect(css.headers.get('content-type')).toContain('text/css');
+    noCookie(css);
+    expect((await built.request(`${HOST}/assets/plex-Ef56ab.woff2`)).status).toBe(200);
+    expect((await built.request(`${HOST}/assets/plex-Ef56ab.woff2`, { method: 'HEAD' })).status).toBe(200);
+    for (const path of ['/assets/main-Cd34ef.js', '/assets/missing-Zz99yy.css', '/index.html']) expect((await built.request(`${HOST}${path}`)).status, path).toBe(404);
+    expect((await built.request(`${HOST}/assets/shell-Ab12cd.css`, { method: 'POST' })).status).toBe(404);
+    // The manifest-checked door the proxy asks first (BUILD_ASSET_PATH) answers the same way on this host.
+    expect((await built.request(`${HOST}/api/internal/build-assets/assets/shell-Ab12cd.css`)).status).toBe(200);
+    expect((await built.request(`${HOST}/api/internal/build-assets/assets/main-Cd34ef.js`)).status).toBe(404);
+  });
+});
+
+/** What the fake browser photographs: any decodable image will do (lib/export reads its size). */
+const shot = () => new Uint8Array(PNG);
+const unescapeAttr = (value: string) => value.replace(/&amp;/g, '&');
+
+describe('card thumbnails and the owner\'s picture on a verified host', () => {
+  let browser: ReturnType<typeof fakeBrowser>;
+  beforeEach(async () => {
+    await resetExportRenderer();
+    browser = fakeBrowser({ ok: true, mime: 'image/jpeg', bytes: shot() });
+    setServices({ browser });
+  });
+  afterEach(() => setServices({}));
+
+  it('serves the card image of a listed post, as bytes, to a guest; nothing else is exported', async () => {
+    const w = await world();
+    const html = await (await app().request(`${HOST}/`, { headers: { accept: 'text/html' } })).text();
+    const src = new RegExp(`/a/${w.post.id}/export\\?[^"]+`).exec(html)?.[0];
+    expect(src, 'the card thumbnail Shelf draws').toBeTruthy();
+    const url = unescapeAttr(src!);
+    expect(url).toMatch(/format=jpg&mode=card&v=\d+&r=\d+$/);
+    const card = await app().request(`${HOST}${url}`, { headers: { cookie: 'mx_session=anything' } });
+    expect(card.status, await card.clone().text()).toBe(200);
+    expect(card.headers.get('content-type')).toBe('image/jpeg');
+    expect(new Uint8Array(await card.arrayBuffer())).toEqual(shot());
+    noCookie(card);
+    const head = await app().request(`${HOST}${url}`, { method: 'HEAD' });
+    expect(head.status).toBe(200);
+    expect(await head.text()).toBe('');
+    // A forced re-render is not the reader's to ask for: the cached card answers.
+    expect((await app().request(`${HOST}${url}&refresh=1`)).status).toBe(200);
+    expect(browser.calls).toHaveLength(1);
+
+    const query = url.slice(url.indexOf('?'));
+    for (const id of [w.quiet.id, w.secret.id, w.theirs.id, w.folder.id, w.ds.id, 'zzzzzz']) {
+      const res = await app().request(`${HOST}/a/${id}/export${query}`);
+      expect(res.status, id).toBe(404);
+      noCookie(res);
+    }
+    for (const other of ['?mode=card', '?format=png&mode=card', '?format=jpg&mode=full', '?format=jpg', '?format=jpg&mode=preview']) {
+      expect((await app().request(`${HOST}/a/${w.post.id}/export${other}`)).status, other).toBe(404);
+    }
+    expect((await app().request(`${HOST}${url}`, { method: 'POST' })).status).toBe(404);
+  });
+
+  it('serves the owner\'s picture the hero draws, and no other account\'s', async () => {
+    const w = await world();
+    await setAvatar(w.vivek.userId, PNG, 'image/png');
+    await setAvatar(w.other.userId, PNG, 'image/png');
+    const html = await (await app().request(`${HOST}/`, { headers: { accept: 'text/html' } })).text();
+    const src = new RegExp(`/api/users/${w.vivek.userId}/avatar\\?v=[^"]+`).exec(html)?.[0];
+    expect(src, 'the hero draws the owner\'s picture').toBeTruthy();
+    const picture = await app().request(`${HOST}${unescapeAttr(src!)}`, { headers: { cookie: 'mx_session=anything' } });
+    expect(picture.status).toBe(200);
+    expect(picture.headers.get('content-type')).toMatch(/^image\//);
+    noCookie(picture);
+    expect((await app().request(`${HOST}${unescapeAttr(src!)}`, { method: 'HEAD' })).status).toBe(200);
+    expect((await app().request(`${HOST}/api/users/${w.other.userId}/avatar`)).status).toBe(404);
+    expect((await app().request(`${HOST}/api/users/${w.vivek.userId}/follow`, { method: 'POST' })).status).toBe(404);
   });
 });
 

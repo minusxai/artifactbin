@@ -9,7 +9,12 @@ import { baseUrl, json } from '@/lib/http';
 import { ID_RE } from '@/lib/ids';
 import { canEdit } from '@/lib/share-roles';
 
-export async function GET(request: Request, ctx: { params: Promise<{ id: string }> }) {
+/**
+ * `delivery: 'bytes'` is for a caller that cannot follow the redirect to the
+ * export asset: a custom domain's home page (server/custom-host), whose
+ * thumbnails must come from that host alone.
+ */
+export async function GET(request: Request, ctx: { params: Promise<{ id: string }>; delivery?: 'bytes' }) {
   const { id } = await ctx.params;
   if (!ID_RE.test(id)) return json({ error: 'not_found' }, 404);
   const artifact = await getArtifactById(id);
@@ -49,7 +54,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
   // validates them, so an export cannot disagree with what it photographs.
   // Installed older CLIs reject redirects. They keep the streaming binary
   // adapter until they advertise support; browser/OG URLs use redirects.
-  const delivery=request.headers.has('X-Artifactbin-Protocol')&&request.headers.get('X-Artifactbin-Export-Delivery')!=='redirect'?'bytes':'redirect';
+  const delivery=ctx.delivery??(request.headers.has('X-Artifactbin-Protocol')&&request.headers.get('X-Artifactbin-Export-Delivery')!=='redirect'?'bytes':'redirect');
   // The ARCHIVED shot photographs that version's own source — the selection and
   // the social crop are read from the markup being shot, not from the head's.
   return exportImageResponse(at ? rowAtVersion(artifact, at) : artifact, {

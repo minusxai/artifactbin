@@ -3,9 +3,9 @@ import { usePageData } from '../use-page-data';
 import { takeBootstrap } from '../bootstrap';
 import { PageLoading } from '../PageLoading';
 import { Navigate, useLocation, useParams } from 'react-router';
-import { ListingHero, ListingShell, NothingHere } from '@/components/Listing';
-import Shelf from '@/components/Shelf';
-import { artifactViewPath, canonicalArtifactPath, parsePrettyPath } from '@/lib/urls';
+import { ListingShell } from '@/components/Listing';
+import { ProfileListing } from '@/components/ProfileListing';
+import { artifactViewPath, parsePrettyPath } from '@/lib/urls';
 import { routePages } from '../route-pages';
 import { NotFoundPage } from './NotFound';
 
@@ -44,48 +44,5 @@ function ResolvedProfile({ user, rest }: { user: string | undefined; rest: strin
   );
 }
 
-/**
- * EVERYTHING INSIDE THE SHELL, as one component, so the page and the suite
- * render the same pieces rather than each composing them by hand.
- *
- * Count documents and folders: the assets band is withheld below, so counting
- * datasets would promise rows that are not there.
- */
-export function ProfileListing({ data }: { data: { handle: string; owner?: { id: string; image?: string | null }; follow?: { following: boolean; count: number }; authed?: boolean; files: Array<Record<string, unknown> & { id: string; format: string }> } }) {
-  // Folders are ROWS in this listing (`format: 'folder'`), reached at their
-  // own address, so there is no derived folder panel and no path crumb to draw.
-  return (
-    <>
-      <ListingHero
-        handle={data.handle}
-        label="public index"
-        count={data.files.filter((a) => a.format === 'markup' || a.format === 'folder').length}
-        noun="public artifact"
-        // Everyone's, owner included: the route ships `owner` on both branches.
-        {...(data.owner ? { owner: { id: data.owner.id, image: data.owner.image ?? null } } : {})}
-        // The follow control is the STRANGER's half: the route ships `follow`
-        // on that branch alone, and it needs the owner's id to act on.
-        {...(data.owner && data.follow ? { follow: { userId: data.owner.id, ...data.follow, signedIn: !!data.authed } } : {})}
-      />
-      {data.files.length === 0 ? <NothingHere /> : <ProfileShelf handle={data.handle} files={data.files} />}
-    </>
-  );
-}
-
-/**
- * The owner's own profile root is the dashboard's shelf asked a different
- * question — same account, same root. Never the row verbs: `actions` stays
- * `share`, because a page whose whole point is handing someone a link should
- * not be where a document is edited or deleted.
- */
-function ProfileShelf({ handle, files }: { handle: string; files: Array<Record<string, unknown> & { id: string; format: string }> }) {
-  return (
-    <Shelf
-      actions="share"
-      showVisibility={false}
-      assets={false}
-      dates="absolute"
-      rows={files.map((a) => ({ ...a, url: canonicalArtifactPath(a as never, handle) }) as never)}
-    />
-  );
-}
+/** The listing is shared with the custom-domain home page (components/ProfileListing). */
+export { ProfileListing };

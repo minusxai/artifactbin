@@ -8,6 +8,12 @@ import PageChrome from '@/components/PageChrome';
 import { PAGE_COLUMN, MicroLabel } from '@/components/ui';
 
 /**
+ * Where a listing is drawn: the app (`/@handle`, in the SPA) or the owner's
+ * custom domain (server-rendered, no script, no session, no `/api`).
+ */
+export type ListingSurface = 'app' | 'domain';
+
+/**
  * Compact app bar and the shared column every listing view lives in.
  */
 export function ListingShell({ authed = false, anon = false, children }: {
@@ -17,11 +23,19 @@ export function ListingShell({ authed = false, anon = false, children }: {
   return (
     <>
       <PageChrome authed={authed} anon={anon} />
-      {/* Profiles keep the standard reading column. The populated homepage
-        * widens separately because it also carries the analytics rail. */}
-      <main className={`${PAGE_COLUMN} pt-10 pb-24`}>{children}</main>
+      <ListingColumn>{children}</ListingColumn>
     </>
   );
+}
+
+/**
+ * The column alone — what the custom-domain home page draws, with no app bar
+ * above it.
+ */
+export function ListingColumn({ children }: { children: React.ReactNode }) {
+  // Profiles keep the standard reading column. The populated homepage
+  // widens separately because it also carries the analytics rail.
+  return <main className={`${PAGE_COLUMN} pt-10 pb-24`}>{children}</main>;
 }
 
 /**
@@ -33,7 +47,7 @@ export function ListingShell({ authed = false, anon = false, children }: {
  * `ancestor_ids` is drawn on the folder's own page. There is nothing here to
  * segment.
  */
-export function ListingHero({ handle, label, count, noun, owner, follow }: {
+export function ListingHero({ handle, label, count, noun, owner, follow, surface = 'app' }: {
   handle: string; label: string; count: number; noun: string;
   /**
    * Whose listing: their id (the face's colour) and picture (lib/avatars, or
@@ -49,14 +63,17 @@ export function ListingHero({ handle, label, count, noun, owner, follow }: {
    * owner looking at their own listing, with nobody to follow.
    */
   follow?: { userId: string; following: boolean; count: number; signedIn: boolean };
+  /** On a custom domain the handle links to the domain's own root, and nobody is followed there. */
+  surface?: ListingSurface;
 }) {
+  const domain = surface === 'domain';
   return (
     <header className="reveal mb-8">
       <MicroLabel>{label}</MicroLabel>
       <div className="mt-2 flex items-center gap-3">
         {owner && <Avatar userId={owner.id} image={owner.image} initial={handle} size={48} />}
         <h1 className="flex flex-wrap items-baseline gap-x-1.5 text-3xl font-semibold tracking-tight text-fg">
-          <a href={`/@${handle}`} aria-label="Profile root" className="no-underline transition-colors hover:text-accent">
+          <a href={domain ? '/' : `/@${handle}`} aria-label="Profile root" className="no-underline transition-colors hover:text-accent">
             <span className="text-accent">@</span>{handle}
           </a>
         </h1>
@@ -66,7 +83,7 @@ export function ListingHero({ handle, label, count, noun, owner, follow }: {
           {count} {noun}
           {count === 1 ? '' : 's'}
         </p>
-        {follow && <FollowButton {...follow} />}
+        {follow && !domain && <FollowButton {...follow} />}
       </div>
     </header>
   );
