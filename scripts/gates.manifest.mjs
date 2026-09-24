@@ -26,6 +26,8 @@
 
 /** @type {readonly GateSpec[]} */
 export const GATE_SPECS = Object.freeze([
+  // New gate: start at the 60s floor; measured by its first CI run.
+  { name: 'mdx-editor', needsMail: false, timeoutMs: 60_000 },
   { name: 'screenshot-comments', browsers: ['chromium', 'firefox', 'webkit'], needsMail: false, timeoutMs: 150_000 },
   { name: 'cli-conformance', needsMail: true, timeoutMs: 180_000 },
   { name: 'browser-sessions', needsMail: false, timeoutMs: 150_000 },
