@@ -57,8 +57,12 @@ export function InlineReaderChrome({ input, onAction,onShare,pinned=false }: { i
     sharing.current=wireReaderSharing(window,document,root);
     const stopGithubStar=wireGithubStar(root);
     const stopFaces=wireFaceFallback(root);
-    // A phone sheet paints below this chrome's top layer: step aside while one is open.
-    const stopSheets=subscribeSheets(open=>root.classList.toggle('mx-reader-chrome--covered',open));
+    // A phone sheet or the page's own panel (profile menu, settings,
+    // notifications) owns the screen; each has its own X. The rail steps aside
+    // while any is open (the CSS applies this on a phone only).
+    let sheetOpen=false;
+    const cover=()=>root.classList.toggle('mx-reader-chrome--covered',sheetOpen||panels.current.size>0);
+    const stopSheets=subscribeSheets(open=>{sheetOpen=open;cover();});
     let queued=false;let raf=0;
     const mark=(which:PagePanelName,open:boolean)=>{
       const trigger=root.querySelector<HTMLElement>(which==='notifications'?'[data-mx-reader-action="notifications"]':`[data-mx-reader-trigger="${which}"]`);
@@ -79,7 +83,7 @@ export function InlineReaderChrome({ input, onAction,onShare,pinned=false }: { i
     const schedule=()=>{if(!queued){queued=true;raf=window.requestAnimationFrame(sample);}};
     const stop=subscribePageChrome((which,open)=>{
       if(open)panels.current.add(which);else panels.current.delete(which);
-      mark(which,open);sample();
+      mark(which,open);cover();sample();
     });
     window.addEventListener('scroll',schedule,{passive:true});window.addEventListener('resize',schedule);
     sample();

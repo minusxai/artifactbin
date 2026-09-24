@@ -94,3 +94,13 @@ it('steps aside while a sheet is open, even pinned, and returns when it closes',
  sheet.unmount();
  expect(root).not.toHaveClass('mx-reader-chrome--covered');
 });
+
+it('steps aside while the page opens the profile menu or settings from the rail', () => {
+ const view=render(<InlineReaderChrome input={{artifactId:'story1',title:'Title',author:null}} onAction={vi.fn()} />);
+ const root=view.container.querySelector('[data-mx-reader-chrome]')!;
+ act(()=>announce('menu',true));
+ expect(root).toHaveClass('mx-reader-chrome--covered');
+ expect(screen.getByLabelText('Close menu')).toHaveAttribute('aria-expanded','true');
+ act(()=>announce('menu',false));
+ expect(root).not.toHaveClass('mx-reader-chrome--covered');
+});
