@@ -35,12 +35,13 @@ export function setDocumentNodeProps(view:EditorView,pos:number,patch:Record<str
 export function dimensionPreview(view:EditorView,pos:number,dom:HTMLElement){
  const originalWidth=dom.style.width,originalHeight=dom.style.minHeight,flex=parentFlex(view,pos);
  const content=dom.querySelector<HTMLElement>(':scope > .mdx-container-content'),originalContentHeight=content?.style.minHeight;
+ const canvas=view.state.doc.attrs.props.layout==='canvas',originalFixedHeight=dom.style.height,originalWidthPriority=dom.style.getPropertyPriority('width'),originalHeightPriority=dom.style.getPropertyPriority('height');
  const sheet=document.createElement('style');document.head.append(sheet);
  return {
   update(width:number,height:number){
-   dom.style.width=`${width}px`;dom.style.minHeight=`${height}px`;if(content)content.style.minHeight=`${height}px`;
+   dom.style.setProperty('width',`${width}px`,canvas?'important':'');if(canvas)dom.style.setProperty('height',`${height}px`,'important');dom.style.minHeight=`${height}px`;if(content)content.style.minHeight=`${height}px`;
    if(flex){const axis=flex.node.attrs.props.direction==='column'?'height':'width',extent=nodeParentExtent(view,pos,axis),sizes=setFlexChildShare(flexRatios(flex.node.attrs.props.sizes,flex.node.childCount),flex.index,widthPercentage(axis==='width'?width:height,extent));sheet.textContent=sizes.map((size,i)=>`.mdx-container[data-node-id="${flex.node.attrs.id}"] > .mdx-container-content > :nth-child(${i+1}){flex:${size} 1 0!important}`).join('');}
   },
-  clear(){sheet.remove();dom.style.width=originalWidth;dom.style.minHeight=originalHeight;if(content)content.style.minHeight=originalContentHeight??'';},
+  clear(){sheet.remove();dom.style.setProperty('width',originalWidth,originalWidthPriority);if(canvas)dom.style.setProperty('height',originalFixedHeight,originalHeightPriority);dom.style.minHeight=originalHeight;if(content)content.style.minHeight=originalContentHeight??'';},
  };
 }

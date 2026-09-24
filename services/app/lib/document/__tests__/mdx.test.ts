@@ -61,3 +61,20 @@ it('exports whole-paragraph styling as a div, without a second annotation syntax
  const parsed=parseDocumentMdx(source);expect(parsed.nodes[parsed.nodes[parsed.rootId].children![0]]).toMatchObject({type:'paragraph',props:{className:'font-serif'}});
  expect(parseDocumentMdx(serializeDocumentMdx(d))).toEqual(d);
 });
+
+it('keeps line breaks inside styled MDX text as breaks rather than literal backslashes',()=>{
+ const doc=parseDocumentMdx('<div id="title"><span className="desktop-title">First<br />Second</span></div>');
+ const roundtrip=parseDocumentMdx(serializeDocumentMdx(doc));expect(roundtrip).toEqual(doc);
+ const values=Object.values(doc.nodes).flatMap(n=>n.content??[]);expect(values.some(v=>v.type==='break')).toBe(true);
+});
+
+it('keeps a styled span around its line breaks for responsive text',()=>{
+ const doc=parseDocumentMdx('<div id="title"><span className="desktop-title">First<br />Second</span></div>');
+ const runs=Object.values(doc.nodes).flatMap(n=>n.content??[]);expect(runs.find(n=>n.type==='break')).toEqual({type:'break',marks:[{type:'span',attrs:{className:'desktop-title'}}]});
+ expect(parseDocumentMdx(serializeDocumentMdx(doc))).toEqual(doc);
+});
+
+it('keeps authored canvas dimensions when rendering a saved text container',()=>{
+ const d=parseDocumentMdx('<div id="note">Text</div>');d.nodes[d.rootId].props.layout='canvas';const node=Object.values(d.nodes).find(n=>n.props.id==='note')!;node.props.width=240;node.props.height=160;
+ expect(documentJsx(d)).toContain('w-[240px]!');expect(documentJsx(d)).toContain('h-[160px]!');expect(documentJsx(d)).not.toContain('max-w-[1000px]');
+});

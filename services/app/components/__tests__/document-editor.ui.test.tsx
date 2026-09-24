@@ -11,7 +11,7 @@ it('renders one editor across prose and nested layouts without emitting visual m
  await act(async()=>{await Promise.resolve();});
  expect(screen.getAllByRole('textbox',{name:'Document editor'})).toHaveLength(1);
  expect(screen.getByText('Left')).toBeTruthy();expect(screen.getByText('Right')).toBeTruthy();
- expect(screen.getByRole('button',{name:'Resize layout divider 1'})).toBeTruthy();expect(onChange).not.toHaveBeenCalled();
+ expect(screen.queryByRole('button',{name:'Resize layout divider 1'})).toBeNull();expect(onChange).not.toHaveBeenCalled();
  result.unmount();
 });
 it('inserts a layout through the toolbar and emits a canonical document',async()=>{
@@ -51,10 +51,13 @@ it('supports keyboard sizing and does not edit when readonly',async()=>{
 it('puts divider handles in their own boundary layer and gives the parent a separate resize handle',async()=>{
  const onChange=vi.fn();render(<DocumentEditor document={parseDocumentMdx('<Flex direction="row" sizes={[2,1]}>\n\n<div>Left</div>\n\n<div>Right</div>\n\n</Flex>')} onChange={onChange}/>);
  await act(async()=>{await Promise.resolve();});
+ expect(screen.queryByRole('button',{name:'Resize layout divider 1'})).toBeNull();
+ fireEvent.mouseDown(screen.getByRole('button',{name:'Select Flex'}));
  const divider=screen.getByRole('button',{name:'Resize layout divider 1'});
  expect(divider.parentElement?.className).toBe('mdx-layout-dividers');
  expect(screen.getAllByRole('button',{name:'Resize container'}).length).toBe(3);
  fireEvent.mouseDown(screen.getAllByRole('button',{name:'Select container'})[0]);
+ expect(screen.queryByRole('button',{name:'Resize layout divider 1'})).toBeNull();
  fireEvent.change(screen.getByRole('spinbutton',{name:'Width of parent (%)'}),{target:{value:'50'}});
  const next=onChange.mock.lastCall![0];expect(Object.values(next.nodes).find((n:unknown)=>(n as {name?:string}).name==='Flex')).toMatchObject({props:{sizes:[1.5,1.5]}});
  fireEvent.change(screen.getByRole('spinbutton',{name:'Width of parent (%)'}),{target:{value:'3'}});expect((screen.getByRole('spinbutton',{name:'Width of parent (%)'}) as HTMLInputElement).value).toBe('3');
@@ -128,4 +131,25 @@ it('refreshes selected properties when returning from a version preview',async()
  expect((screen.getByRole('spinbutton',{name:'Component height'}) as HTMLInputElement).value).toBe('420');
  rerender(<DocumentEditor document={next} onChange={()=>{}}/>);
  await waitFor(()=>expect((screen.getByRole('spinbutton',{name:'Component height'}) as HTMLInputElement).value).toBe('180'));
+});
+
+it('preserves authored canvas tags, ids and direct-child layout without editor wrappers',async()=>{
+ const document=parseDocumentMdx('<section id="story" className="relative">\n\n<div id="card" className="absolute">\n\n## Editable heading\n\nEditable body.\n\n</div>\n\n</section>');document.nodes[document.rootId].props.layout='canvas';
+ render(<DocumentEditor document={document} onChange={()=>{}}/>);await act(async()=>{await Promise.resolve();});
+ const editor=screen.getByRole('textbox',{name:'Document editor'});expect(editor.querySelector('section#story.relative > div#card.absolute > h2')?.textContent).toBe('Editable heading');
+ expect(editor.querySelector('.mdx-container-content')).toBeNull();
+});
+
+it('resizes canvas nodes outside authored DOM and cancels a preview without saving',async()=>{
+ const measure=vi.spyOn(HTMLElement.prototype,'getBoundingClientRect').mockImplementation(function(this:HTMLElement){const width=parseFloat(this.style.width)||240,height=parseFloat(this.style.height)||360;return new DOMRect(0,0,width,height);});
+ try{
+  const document=parseDocumentMdx('<div width={240} height={360}>\n\nOne\n\nTwo\n\n</div>');document.nodes[document.rootId].props.layout='canvas';const onChange=vi.fn();render(<DocumentEditor document={document} onChange={onChange}/>);
+  const block=screen.getByText('One').parentElement!;fireEvent.mouseMove(block);fireEvent.mouseDown(screen.getByRole('button',{name:'Select block'}));
+  const handle=screen.getByRole('button',{name:'Resize selected block height'}) as HTMLButtonElement;handle.setPointerCapture=vi.fn();
+  expect(screen.getByRole('textbox',{name:'Document editor'}).contains(handle)).toBe(false);
+  handle.onpointerdown!(new MouseEvent('pointerdown',{clientX:0,clientY:360}) as PointerEvent);fireEvent(handle,new MouseEvent('pointermove',{clientX:0,clientY:280}));expect(block.style.height).toBe('280px');
+  fireEvent(handle,new MouseEvent('pointercancel'));expect(block.style.height).toBe('360px');expect(onChange).not.toHaveBeenCalled();
+  handle.onpointerdown!(new MouseEvent('pointerdown',{clientX:0,clientY:360}) as PointerEvent);fireEvent(handle,new MouseEvent('pointermove',{clientX:0,clientY:300}));fireEvent(handle,new MouseEvent('pointerup'));
+  await waitFor(()=>expect(onChange).toHaveBeenCalled());const next=onChange.mock.lastCall![0];expect(next.nodes[next.nodes[next.rootId].children[0]].props.height).toBe(300);
+ }finally{measure.mockRestore();}
 });

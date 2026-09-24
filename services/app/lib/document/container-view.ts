@@ -9,8 +9,8 @@ import {dimensionPreview,nodeParentExtent,setDocumentNodeProps} from './editor-l
 export function containerNodeView(node:PmNode,view:EditorView,getPos:()=>number|undefined,editable:()=>boolean):NodeView{
  const dom=document.createElement('div'),contentDOM=document.createElement('div'),controls=document.createElement('div');
  dom.className='mdx-container';contentDOM.className='mdx-container-content';controls.className='mdx-container-controls';controls.contentEditable='false';dom.append(contentDOM,controls);
- let current=node,destroyed=false,frame=0;
- const dividers=document.createElement('div');dividers.className='mdx-layout-dividers';
+ let current=node,destroyed=false,frame=0,isSelected=false;
+ const dividers=document.createElement('div');dividers.className='mdx-layout-dividers';dividers.hidden=true;
  const sheet=document.createElement('style'),feedback=document.createElement('output');feedback.className='mdx-size-feedback';feedback.hidden=true;
  let handles:HTMLButtonElement[]=[];
  function button(label:string,className:string,text=''){const b=document.createElement('button');b.type='button';b.className=className;b.setAttribute('aria-label',label);b.textContent=text;controls.append(b);return b;}
@@ -44,7 +44,7 @@ export function containerNodeView(node:PmNode,view:EditorView,getPos:()=>number|
   contentDOM.className=`mdx-container-content ${typeof props.className==='string'?props.className:''}`;
   contentDOM.style.minHeight=typeof props.height==='number'?`${Math.max(0,props.height)}px`:'';
   contentDOM.style.display=current.attrs.name==='Flex'?'flex':'block';contentDOM.style.flexDirection=props.direction==='column'?'column':'row';contentDOM.style.gap='16px';
-  feedback.removeAttribute('style');controls.replaceChildren();controls.hidden=!editable();dividers.replaceChildren();handles=[];
+  feedback.removeAttribute('style');controls.replaceChildren();controls.hidden=!editable();dividers.replaceChildren();dividers.hidden=!isSelected;handles=[];
   const grip=button(`Select ${current.attrs.name??'container'}`,'mdx-container-grip','⠿');grip.draggable=true;grip.onmousedown=selected;grip.onclick=e=>{if(e.detail===0)selected();};
   controls.append(dividers,sheet,feedback);resizeHandle('width');resizeHandle('height');resizeHandle('both');
   if(current.attrs.name!=='Flex')return;
@@ -62,5 +62,5 @@ export function containerNodeView(node:PmNode,view:EditorView,getPos:()=>number|
   layout(sizes);schedule();
  }
  queueMicrotask(draw);
- return {dom,contentDOM,update(next){if(next.type!==current.type)return false;current=next;queueMicrotask(draw);return true;},ignoreMutation:m=>m.type!=='selection'&&(m.type==='attributes'&&(m.attributeName==='style'||m.target===contentDOM&&m.attributeName==='class')||!contentDOM.contains(m.target)),stopEvent:e=>!e.type.startsWith('drag')&&e.type!=='drop'&&controls.contains(e.target as Node),destroy(){destroyed=true;observer?.disconnect();cancelAnimationFrame(frame);}};
+ return {dom,contentDOM,selectNode(){isSelected=true;dom.classList.add('ProseMirror-selectednode');dividers.hidden=false;},deselectNode(){isSelected=false;dom.classList.remove('ProseMirror-selectednode');dividers.hidden=true;},update(next){if(next.type!==current.type)return false;current=next;queueMicrotask(draw);return true;},ignoreMutation:m=>m.type!=='selection'&&(m.type==='attributes'&&(m.attributeName==='style'||m.target===contentDOM&&m.attributeName==='class')||!contentDOM.contains(m.target)),stopEvent:e=>!e.type.startsWith('drag')&&e.type!=='drop'&&controls.contains(e.target as Node),destroy(){destroyed=true;observer?.disconnect();cancelAnimationFrame(frame);}};
 }

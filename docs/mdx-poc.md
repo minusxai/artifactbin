@@ -96,3 +96,23 @@ transitions. Broad local tests deferred (726 files); PR CI owns full coverage. T
 first redesign CI passed API/node/UI/build/validation and five browser shards; its
 MDX gate needed its text locator scoped to the editor because the artifact's hidden
 reader stays mounted. The real PostgreSQL concurrency job passed.
+
+The next interaction pass keeps Flex dividers hidden and non-interactive unless
+that Flex is selected. Selecting a child shows only its outline and handles;
+node selections suppress native text highlighting. Enter keeps paragraph semantics,
+Shift+Enter inserts a hard break, and default paragraph spacing is tighter.
+
+The supplied cult pitch-training website (9sB3GK, v82) is now an exact-content MDX
+fixture, including its original CSS, artwork, fonts and responsive layout. Its
+78 paragraphs/headings are Markdown nodes. A root `layout: "canvas"` property
+preserves authored tags, IDs and direct-child relationships in the editor;
+controls live outside that DOM. This is the same editor/session/JSONB contract,
+not a separate application. Author styles are scoped through the existing CSS
+isolation policy, and native DOM rendering filters executable tags and attributes.
+Hard breaks retain span marks, so responsive hidden text also hides its breaks.
+Copied elements receive fresh DOM IDs as well as fresh document node IDs.
+
+Create the reference demo at `/documents/new?example=case-study`. Its source is
+`services/app/lib/document/examples/cult-pitch.mdx`; fonts carry their original
+licenses under `public/assets/mdx-demo`. Browser coverage checks the actual
+website, line-break persistence, source round-trips and the existing history UI.

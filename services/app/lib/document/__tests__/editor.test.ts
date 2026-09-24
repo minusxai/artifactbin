@@ -1,3 +1,5 @@
+import {canvasAttributes,canvasTag} from '../canvas-dom';
+import type {EditorView} from 'prosemirror-view';
 import {describe,expect,it} from 'vitest';
 import {TextSelection} from 'prosemirror-state';
 import {splitBlock,joinBackward,toggleMark} from 'prosemirror-commands';
@@ -37,4 +39,23 @@ it('retains inline component contents and remints the complete subtree on paste'
  expect(editorDocument(state.doc)).toEqual(d);
  state=state.applyTransaction(state.tr.insert(state.doc.content.size,state.doc.firstChild!)).state;
  const after=editorDocument(state.doc);assertDocument(after);expect(Object.values(after.nodes).filter(n=>n.name==='Badge')).toHaveLength(2);
+});
+
+it('inserts Shift+Enter as a line break inside the same styled paragraph',()=>{
+ const d=parseDocumentMdx('**Hello world**');let state=createDocumentEditorState(d);state=state.apply(state.tr.setSelection(TextSelection.create(state.doc,6)));
+ const view={get state(){return state;},dispatch(tr:Parameters<typeof state.apply>[0]){state=state.applyTransaction(tr).state;}} as EditorView;
+ const handled=state.plugins.some(plugin=>plugin.props.handleKeyDown?.call(plugin,view,{key:'Enter',keyCode:13,shiftKey:true} as KeyboardEvent));
+ expect(handled).toBe(true);const next=editorDocument(state.doc);assertDocument(next);expect(Object.keys(next.nodes)).toEqual(Object.keys(d.nodes));
+ const paragraph=next.nodes[next.nodes[next.rootId].children![0]];expect(paragraph.content).toEqual([{type:'text',text:'Hello',marks:[{type:'strong'}]},{type:'break',marks:[{type:'strong'}]},{type:'text',text:' world',marks:[{type:'strong'}]}]);
+ expect(undo(state,tr=>{state=state.applyTransaction(tr).state;})).toBe(true);expect(editorDocument(state.doc)).toEqual(d);
+});
+
+it('gives a copied authored element a fresh DOM id as well as a fresh node id',()=>{
+ const d=parseDocumentMdx('Hello');const id=d.nodes[d.rootId].children![0];d.nodes[id].props.id='authored-id';let state=createDocumentEditorState(d);state=state.applyTransaction(state.tr.insert(state.doc.content.size,state.doc.firstChild!)).state;
+ const next=editorDocument(state.doc);const ids=next.nodes[next.rootId].children!;expect(next.nodes[ids[0]].props.id).toBe('authored-id');expect(next.nodes[ids[1]].props.id).toBe(ids[1]);
+});
+
+it('filters executable attributes and tags at the native canvas render boundary',()=>{
+ expect(canvasTag('script')).toBe('div');expect(canvasTag('section')).toBe('section');
+ expect(canvasAttributes({id:'card',className:'absolute',src:'javascript:alert(1)',onload:'alert(1)',style:'position:fixed',srcdoc:'<script/>','aria-label':'Card'})).toEqual({id:'card',class:'absolute','aria-label':'Card'});
 });

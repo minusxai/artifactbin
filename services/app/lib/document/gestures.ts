@@ -1,3 +1,4 @@
+import {canvasResize} from './canvas-resize';
 /** Transient gesture ink lives outside the editable document and never enters JSONB. */
 import {Plugin,NodeSelection} from 'prosemirror-state';
 import {dropPoint} from 'prosemirror-transform';
@@ -9,6 +10,7 @@ export function resizeGuides(view:EditorView){
  return {update(rect:DOMRect){const page=view.dom.getBoundingClientRect(),toolbar=view.dom.closest('.mdx-editor-shell')?.querySelector('.mdx-toolbar')?.getBoundingClientRect().bottom??0,top=Math.max(toolbar,page.top,0);Object.assign(vertical.style,{left:`${rect.right}px`,top:`${top}px`,height:`${Math.max(0,rect.bottom-top)}px`,width:'1px'});Object.assign(horizontal.style,{left:`${page.left}px`,top:`${rect.bottom}px`,width:`${page.width}px`,height:'1px'});},clear(){layer.remove();view.dom.classList.remove('mdx-gesture-active');}};
 }
 export function documentGestures(){return new Plugin({view(view){
+ const sizing=view.state.doc.attrs.props.layout==='canvas'?canvasResize(view):null;
  const marker=document.createElement('div');marker.className='mdx-drop-marker';marker.hidden=true;marker.setAttribute('aria-hidden','true');document.body.append(marker);
  const grip=document.createElement('button');grip.type='button';grip.className='mdx-block-grip';grip.setAttribute('aria-label','Select block');grip.textContent='⠿';grip.draggable=true;grip.hidden=true;document.body.append(grip);
  let hoverPos:number|null=null;
@@ -41,5 +43,5 @@ export function documentGestures(){return new Plugin({view(view){
  }
  view.dom.addEventListener('mousemove',hover);view.dom.addEventListener('dragover',over);document.addEventListener('drop',clear);document.addEventListener('dragend',clear);
  const hide=()=>{grip.hidden=true;};window.addEventListener('scroll',hide,true);
- return {destroy(){marker.remove();grip.remove();view.dom.removeEventListener('mousemove',hover);view.dom.removeEventListener('dragover',over);document.removeEventListener('drop',clear);document.removeEventListener('dragend',clear);window.removeEventListener('scroll',hide,true);}};
+ return {update(){sizing?.update();},destroy(){sizing?.destroy();marker.remove();grip.remove();view.dom.removeEventListener('mousemove',hover);view.dom.removeEventListener('dragover',over);document.removeEventListener('drop',clear);document.removeEventListener('dragend',clear);window.removeEventListener('scroll',hide,true);}};
  }});}

@@ -1,3 +1,4 @@
+import {canvasNodeView} from './canvas-node-view';
 import {resizeGuides} from './gestures';
 /** DOM ownership boundary: editable slots belong to ProseMirror; component contents belong to React.
  * Layout styles live outside editable children so resizing never feeds back as text mutations.
@@ -14,8 +15,9 @@ import {documentJsx} from './markup';
 import {parseJsx} from '../jsx/parse';
 import {StoryRuntimeApp} from '../story-runtime/StoryRuntimeApp';
 import type {DataflowStore} from '../story-runtime/store';
-export function documentNodeViews(store:DataflowStore,editable:()=>boolean){
+export function documentNodeViews(store:DataflowStore,editable:()=>boolean,canvas=false){
   function componentView(node:PmNode,v:EditorView,getPos:()=>number|undefined):NodeView{
+   if(canvas&&(node.attrs.tag==='img'||node.attrs.name==='Helmet'))return canvasNodeView(node);
    const dom=window.document.createElement(node.isInline?'span':'div');dom.className='mdx-component';dom.contentEditable='false';
    const content=window.document.createElement(node.isInline?'span':'div');dom.append(content);let current=node;const root:Root=createRoot(content);
    const select=window.document.createElement('button');select.type='button';select.className='mdx-component-select';select.textContent='⠿';select.draggable=true;select.setAttribute('aria-label',`Select ${node.attrs.name??node.attrs.tag??'component'}`);dom.append(select);
@@ -44,5 +46,5 @@ export function documentNodeViews(store:DataflowStore,editable:()=>boolean){
    queueMicrotask(()=>{if(dom.isConnected)draw();});
    return {dom,update(next){if(next.type!==current.type)return false;current=next;draw();return true;},selectNode(){dom.classList.add('ProseMirror-selectednode');},deselectNode(){dom.classList.remove('ProseMirror-selectednode');},stopEvent:event=>!event.type.startsWith('drag')&&event.type!=='drop'&&(event.target===handle||!!(event.target as Element)?.closest?.('iframe,input,select,textarea,button')),ignoreMutation:()=>true,destroy(){queueMicrotask(()=>root.unmount());}};
   }
- return {component:componentView,inline_component:componentView,container:(node:PmNode,view:EditorView,getPos:()=>number|undefined)=>containerNodeView(node,view,getPos,editable)};
+ return {component:componentView,inline_component:componentView,html_text:canvasNodeView,container:(node:PmNode,view:EditorView,getPos:()=>number|undefined)=>canvas?canvasNodeView(node):containerNodeView(node,view,getPos,editable)};
 }

@@ -1,5 +1,6 @@
+import {isolateStoryCss} from '@/lib/story/inline-css';
 import {Undo2,Redo2,Bold,Italic,List,Quote,Columns2,SquareDashed,ImagePlus} from 'lucide-react';
-import {useEffect,useRef,useState} from 'react';
+import {useEffect,useMemo,useRef,useState} from 'react';
 import {EditorView} from 'prosemirror-view';
 import {NodeSelection, type Transaction} from 'prosemirror-state';
 import {toggleMark,setBlockType,wrapIn} from 'prosemirror-commands';
@@ -17,6 +18,7 @@ import {splitHelmet} from '@/lib/story/helmet';
 import {createAuthenticatedTransport} from '@/lib/story-runtime/authenticated-transport';
 import type {DataflowStore} from '@/lib/story-runtime/store';
 import {Tooltip} from './Tooltip';
+import 'prosemirror-view/style/prosemirror.css';
 import './document-editor.css';
 
 /** Keep the user's partial number while typing; layout clamps must not rewrite their next digit. */
@@ -24,9 +26,11 @@ function DimensionInput({label,value,min,max,onChange}:{label:string;value:numbe
  const [draft,setDraft]=useState<string|null>(null);
  return <input aria-label={label} type="number" min={min} max={max} step="0.1" value={draft??value} onChange={e=>{setDraft(e.target.value);if(e.target.value!==''&&Number.isFinite(e.target.valueAsNumber))onChange(e.target.valueAsNumber);}} onBlur={()=>setDraft(null)}/>;
 }
-interface Props {artifactId?:string;document:RichDocument;editable?:boolean;onChange:(document:RichDocument)=>void}
+interface Props {artifactId?:string;document:RichDocument;compiledCss?:string|null;editable?:boolean;onChange:(document:RichDocument)=>void}
 /** The view owns selection and IME; parent save/status renders never recreate it. */
-export function DocumentEditor({document:initial,editable=true,onChange,artifactId}:Props){
+export function DocumentEditor({document:initial,editable=true,onChange,artifactId,compiledCss}:Props){
+ const canvas=initial.nodes[initial.rootId].props.layout==='canvas';
+ const documentCss=useMemo(()=>{const author=splitHelmet(parseDocumentJsx(documentJsx(initial))).content.style??'';return `@scope ([data-mdx-style-scope]) { ${isolateStoryCss([compiledCss,author].filter(Boolean).join('\n'))} }`;},[compiledCss,initial]);
  const host=useRef<HTMLDivElement>(null),view=useRef<EditorView|null>(null),latest=useRef({onChange,editable});latest.current={onChange,editable};
  const [selection,setSelection]=useState<{id:string;props:Record<string,DocumentJson>;name:string;text?:string;resizable:boolean;widthPercent:number}|null>(null);
  const [history,setHistory]=useState({undo:false,redo:false});
@@ -40,7 +44,7 @@ export function DocumentEditor({document:initial,editable=true,onChange,artifact
  useEffect(()=>{
   if(!host.current)return;
   const store=createDataflowStore({flow:flow(initial)});dataflow.current=store;
-  const v=new EditorView(host.current,{state:createDocumentEditorState(initial),editable:()=>latest.current.editable,attributes:{'aria-label':'Document editor',role:'textbox','aria-multiline':'true'},nodeViews:documentNodeViews(store,()=>latest.current.editable),dispatchTransaction(tr){
+  const v=new EditorView(host.current,{state:createDocumentEditorState(initial),editable:()=>latest.current.editable,attributes:{'aria-label':'Document editor',role:'textbox','aria-multiline':'true'},nodeViews:documentNodeViews(store,()=>latest.current.editable,canvas),dispatchTransaction(tr){
    try{
     const next=v.state.applyTransaction(tr).state;
     if(tr.docChanged){const document=editorDocument(next.doc);validateDocumentMarkup(document);v.updateState(next);latest.current.onChange(document);}else v.updateState(next);
@@ -71,7 +75,7 @@ export function DocumentEditor({document:initial,editable=true,onChange,artifact
  function button(label:string,action:()=>void,disabled=false){const Icon=icons[label];return <Tooltip content={label}><button type="button" aria-label={label} disabled={disabled} onMouseDown={e=>e.preventDefault()} onClick={action}>{Icon?<Icon size={16}/>:label}</button></Tooltip>;}
  function dispatch(v:EditorView){return (tr:Transaction)=>v.dispatch(tr);}
  const s=documentEditorSchema;
- return <div className="mdx-editor-shell">
+ return <div className={`mdx-editor-shell${canvas?' mdx-canvas-editor':''}`}>
   {editable&&<div className="mdx-toolbar" role="toolbar" aria-label="Document formatting">
    {button('Undo',()=>command(v=>undo(v.state,dispatch(v))),!history.undo)}{button('Redo',()=>command(v=>redo(v.state,dispatch(v))),!history.redo)}
    {!selection?.resizable&&<>
@@ -93,6 +97,6 @@ export function DocumentEditor({document:initial,editable=true,onChange,artifact
    </div>}
   </div>}
 
-  {error&&<p role="alert">{error}</p>}<div ref={host} className="mdx-editor-body"/>
+  {error&&<p role="alert">{error}</p>}<div ref={host} data-mdx-style-scope="" data-mdx-canvas={canvas?'':undefined} data-mx-inline-story="" className="mdx-editor-body"><style>{documentCss}</style></div>
  </div>;
 }

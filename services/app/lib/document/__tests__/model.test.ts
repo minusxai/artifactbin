@@ -76,3 +76,8 @@ it('compiles typing to one code-point splice inside its text run',()=>{
  const ops=diffDocument(before,after);expect(ops).toEqual([{kind:'text',nodeId:'B',path:['content','0','text'],start:1,deleteCount:3,text:'🦋bc!'}]);
  expect(applyDocumentOperations(before,ops)).toEqual(after);
 });
+
+it('validates formatting on hard breaks just as it validates text formatting',()=>{
+ const d=fixture();d.nodes.B.content=[{type:'break',marks:[{type:'span',attrs:{className:'hidden'}}]}];expect(()=>assertDocument(d)).not.toThrow();
+ d.nodes.B.content=[{type:'break',marks:[{type:'script'}]}];expect(()=>assertDocument(d)).toThrow('Invalid mark');
+});

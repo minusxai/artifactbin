@@ -1,7 +1,7 @@
 /** Canonical document data. Parser positions and editor engine state are never persisted. */
 export type DocumentJson = null | boolean | number | string | DocumentJson[] | {[key: string]: DocumentJson};
 export interface DocumentMark {type: string; attrs?: Record<string, DocumentJson>}
-export type DocumentInline = {type: 'text'; text: string; marks: DocumentMark[]} | {type: 'break'} | {type: 'nodeRef'; nodeId: string};
+export type DocumentInline = {type: 'text'; text: string; marks: DocumentMark[]} | {type: 'break'; marks?: DocumentMark[]} | {type: 'nodeRef'; nodeId: string};
 export interface DocumentNode {
   type: string;
   name?: string;

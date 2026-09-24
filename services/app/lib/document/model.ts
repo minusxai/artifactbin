@@ -38,6 +38,7 @@ export function assertDocumentNode(node: DocumentNode): void {
   for(const item of node.content){
    requireThat(item && ['text','break','nodeRef'].includes(item.type),'Invalid inline item');
    if(item.type==='text'){requireThat(typeof item.text==='string'&&Array.isArray(item.marks),'Invalid text run');for(const mark of item.marks)requireThat(typeof mark.type==='string'&&['strong','emphasis','strike','code','link','span','underline','sup','sub'].includes(mark.type),'Invalid mark');}
+   if(item.type==='break'&&item.marks!==undefined){requireThat(Array.isArray(item.marks),'Invalid break marks');for(const mark of item.marks)requireThat(mark&&typeof mark.type==='string'&&['strong','emphasis','strike','code','link','span','underline','sup','sub'].includes(mark.type),'Invalid mark');}
    if(item.type==='nodeRef')requireThat(validNodeId(item.nodeId),'Invalid inline reference');
   }
  }

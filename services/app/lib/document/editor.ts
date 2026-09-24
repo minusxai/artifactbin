@@ -1,9 +1,10 @@
+import {canvasAttributes,canvasTag} from './canvas-dom';
 import {documentGestures} from './gestures';
 /** One ProseMirror tree owns text, layouts and component selection; no nested editor instances. */
 import {Schema, type Node as PmNode, type NodeSpec, type MarkSpec, type DOMOutputSpec} from 'prosemirror-model';
-import {EditorState, Plugin} from 'prosemirror-state';
+import {EditorState, Plugin, TextSelection} from 'prosemirror-state';
 import {keymap} from 'prosemirror-keymap';
-import {baseKeymap, toggleMark} from 'prosemirror-commands';
+import {baseKeymap, toggleMark, chainCommands, newlineInCode} from 'prosemirror-commands';
 import {history, undo, redo} from 'prosemirror-history';
 import {splitListItem, sinkListItem, liftListItem} from 'prosemirror-schema-list';
 import type {DocumentInline, DocumentJson, DocumentNode, RichDocument} from '@artifactbin/contracts';
@@ -11,7 +12,7 @@ import {assertDocument, childIds, documentValueEqual, normalizeInline} from './m
 
 const attrs={payload:{default:null},id:{default:null},props:{default:{}},name:{default:null},tag:{default:null},nodeType:{default:null},text:{default:null},bindings:{default:null},childIds:{default:[]}};
 const fresh=()=>`n_${crypto.randomUUID().replaceAll('-','')}`;
-const domAttrs=(node:PmNode)=>({'data-node-id':node.attrs.id??'',...(typeof node.attrs.props.className==='string'?{class:node.attrs.props.className}:{})});
+const domAttrs=(node:PmNode)=>({...canvasAttributes(node.attrs.props),'data-node-id':node.attrs.id??''});
 function block(tag:string,content:string,extra:Partial<NodeSpec>={}):NodeSpec{return {attrs,group:'block',content,toDOM:n=>[tag,domAttrs(n),0],parseDOM:[{tag}],...extra};}
 const mark=(tag:string):MarkSpec=>({toDOM:()=>[tag,0],parseDOM:[{tag}]});
 export const documentEditorSchema=new Schema({
@@ -30,24 +31,25 @@ export const documentEditorSchema=new Schema({
   container:block('div','block*',{defining:true,draggable:true,toDOM:n=>['div',{'data-document-container':n.attrs.name??n.attrs.tag,...domAttrs(n)},0]}),
   component:{attrs,group:'block',atom:true,draggable:true,selectable:true,toDOM:n=>['div',domAttrs(n),n.attrs.name??n.attrs.tag??'Component']},
   inline_component:{attrs,group:'inline',inline:true,atom:true,draggable:true,selectable:true,toDOM:n=>['span',domAttrs(n),n.attrs.name??n.attrs.tag??'Component']},
+  html_text:block('div','inline*',{toDOM:n=>[canvasTag(n.attrs.tag),domAttrs(n),0]}),
   hard_break:{inline:true,group:'inline',selectable:false,toDOM:()=>['br'],parseDOM:[{tag:'br'}]},
   text:{group:'inline'},
  },
  marks:{
   strong:{...mark('strong'),parseDOM:[{tag:'strong'},{tag:'b'}]},emphasis:mark('em'),strike:mark('s'),code:mark('code'),underline:mark('u'),sup:mark('sup'),sub:mark('sub'),
   link:{attrs:{href:{default:''},title:{default:null}},inclusive:false,toDOM:m=>['a',m.attrs,0],parseDOM:[{tag:'a[href]',getAttrs:el=>({href:el.getAttribute('href'),title:el.getAttribute('title')})}]},
-  span:{attrs:{className:{default:''}},toDOM:m=>['span',{class:m.attrs.className},0],parseDOM:[{tag:'span[class]',getAttrs:el=>({className:el.className})}]},
+  span:{attrs:{className:{default:''},id:{default:null}},toDOM:m=>['span',{class:m.attrs.className,...(m.attrs.id?{id:m.attrs.id}:{})},0],parseDOM:[{tag:'span[class]',getAttrs:el=>({className:el.className})}]},
  },
 });
 function editorNode(d:RichDocument,id:string,inline=false):PmNode {
  const n=d.nodes[id]!;
- const type=n.type==='document'?'doc':n.type==='list'?(n.props.ordered?'ordered_list':'bullet_list'):({code:'code_block',listItem:'list_item',tableRow:'table_row',tableCell:'table_cell',thematicBreak:'thematic_break'} as Record<string,string>)[n.type]??(['component','html','expression'].includes(n.type)?inline?'inline_component':n.children?'container':'component':n.type);
+ const type=n.type==='document'?'doc':n.type==='html'&&n.content&&!inline?'html_text':n.type==='list'?(n.props.ordered?'ordered_list':'bullet_list'):({code:'code_block',listItem:'list_item',tableRow:'table_row',tableCell:'table_cell',thematicBreak:'thematic_break'} as Record<string,string>)[n.type]??(['component','html','expression'].includes(n.type)?inline?'inline_component':n.children?'container':'component':n.type);
  const payloadNodes:Record<string,DocumentNode>={};
  function collect(key:string){payloadNodes[key]=d.nodes[key];for(const child of childIds(d.nodes[key]))collect(child);}
  if(type==='inline_component'||type==='component')collect(id);
  const a={payload:Object.keys(payloadNodes).length?{rootId:id,nodes:payloadNodes}:null,id,props:n.props,name:n.name??null,tag:n.tag??null,nodeType:n.type,text:n.text??null,bindings:n.bindings??null,childIds:n.name==='Flex'?n.children??[]:[]};
  const contents=a.payload?[]:n.type==='code'?(n.text?[documentEditorSchema.text(n.text)]:[]):n.content?n.content.flatMap(item=>{
-  if(item.type==='break')return [documentEditorSchema.nodes.hard_break.create()];
+  if(item.type==='break')return [documentEditorSchema.nodes.hard_break.create(null,null,(item.marks??[]).map(m=>documentEditorSchema.marks[m.type].create(m.attrs)))];
   if(item.type==='nodeRef')return [editorNode(d,item.nodeId,true)];
   return item.text?[documentEditorSchema.text(item.text,item.marks.map(m=>documentEditorSchema.marks[m.type].create(m.attrs)))]:[];
  }):(n.children??[]).map(c=>editorNode(d,c));
@@ -66,7 +68,7 @@ export function editorDocument(root:PmNode):RichDocument {
   if(type==='code')n.text=pm.textContent;
   else if(pm.isTextblock){
    const content:DocumentInline[]=[];
-   pm.forEach(child=>{if(child.isText)content.push({type:'text',text:child.text!,marks:child.marks.map(m=>({type:m.type.name,...(Object.keys(m.attrs).length?{attrs:Object.fromEntries(Object.entries(m.attrs).filter(([,v])=>v!==null)) as Record<string,DocumentJson>}:{})}))});else if(child.type.name==='hard_break')content.push({type:'break'});else content.push({type:'nodeRef',nodeId:visit(child)});});
+   pm.forEach(child=>{if(child.isText)content.push({type:'text',text:child.text!,marks:child.marks.map(m=>({type:m.type.name,...(Object.keys(m.attrs).length?{attrs:Object.fromEntries(Object.entries(m.attrs).filter(([,v])=>v!==null)) as Record<string,DocumentJson>}:{})}))});else if(child.type.name==='hard_break')content.push({type:'break',...(child.marks.length?{marks:child.marks.map(m=>({type:m.type.name,...(Object.keys(m.attrs).length?{attrs:Object.fromEntries(Object.entries(m.attrs).filter(([,v])=>v!==null)) as Record<string,DocumentJson>}:{})}))}:{})});else content.push({type:'nodeRef',nodeId:visit(child)});});
    n.content=normalizeInline(content);
   }else if(!pm.isAtom||pm.type.name==='doc'||pm.type.name==='container'){
    n.children=[];pm.forEach(child=>n.children!.push(visit(child)));
@@ -93,13 +95,13 @@ const identities=new Plugin({appendTransaction(transactions,_old,state){
     const mapping=new Map(Object.keys(payload.nodes).map(key=>[key,key===payload!.rootId?next:fresh()]));
     const nodes:Record<string,DocumentNode>={};
     for(const [key,value] of Object.entries(payload.nodes)){
-     const copy=structuredClone(value);if(copy.children)copy.children=copy.children.map(c=>mapping.get(c)!);
+     const copy=structuredClone(value);if(typeof copy.props.id==='string')copy.props.id=mapping.get(key)!;if(copy.children)copy.children=copy.children.map(c=>mapping.get(c)!);
      if(copy.slots)copy.slots=Object.fromEntries(Object.entries(copy.slots).map(([slot,ids])=>[slot,ids.map(c=>mapping.get(c)!)]));
      if(copy.content)copy.content=copy.content.map(item=>item.type==='nodeRef'?{...item,nodeId:mapping.get(item.nodeId)!}:item);
      nodes[mapping.get(key)!]=copy;
     }payload={rootId:next,nodes};
    }
-   tr.setNodeMarkup(pos,undefined,{...node.attrs,id:next,payload});seen.add(next);
+   tr.setNodeMarkup(pos,undefined,{...node.attrs,id:next,props:{...node.attrs.props,...(typeof node.attrs.props.id==='string'?{id:next}:{})},payload});seen.add(next);
   }else seen.add(id);
  });
  tr.doc.descendants((node,pos)=>{
@@ -112,6 +114,8 @@ const identities=new Plugin({appendTransaction(transactions,_old,state){
 }});
 export function createDocumentEditorState(d:RichDocument):EditorState {
  const s=documentEditorSchema;
- return EditorState.create({doc:documentEditorNode(d),plugins:[identities,documentGestures(),history(),keymap({'Mod-z':undo,'Mod-Shift-z':redo,'Mod-y':redo,'Mod-b':toggleMark(s.marks.strong),'Mod-i':toggleMark(s.marks.emphasis),'Enter':splitListItem(s.nodes.list_item),'Tab':sinkListItem(s.nodes.list_item),'Shift-Tab':liftListItem(s.nodes.list_item)}),keymap(baseKeymap)]});
+ const state=EditorState.create({doc:documentEditorNode(d),plugins:[identities,documentGestures(),history(),keymap({'Mod-z':undo,'Mod-Shift-z':redo,'Mod-y':redo,'Shift-Enter':chainCommands(newlineInCode,(state,dispatch)=>{if(!state.selection.$from.parent.inlineContent)return false;dispatch?.(state.tr.replaceSelectionWith(s.nodes.hard_break.create()).scrollIntoView());return true;}),'Mod-b':toggleMark(s.marks.strong),'Mod-i':toggleMark(s.marks.emphasis),'Enter':splitListItem(s.nodes.list_item),'Tab':sinkListItem(s.nodes.list_item),'Shift-Tab':liftListItem(s.nodes.list_item)}),keymap(baseKeymap)]});
+ if(d.nodes[d.rootId].props.layout==='canvas'){let first:number|undefined;state.doc.descendants((node,pos)=>{if(first===undefined&&node.isTextblock)first=pos+1;});if(first!==undefined)return state.apply(state.tr.setSelection(TextSelection.create(state.doc,first)));}
+ return state;
 }
 export type {DOMOutputSpec};

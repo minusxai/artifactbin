@@ -47,6 +47,12 @@ try{
  await save(()=>controls.getByRole('button',{name:'Resize container width',exact:true}).press('ArrowLeft'));
  assert.deepEqual((await head()).document.nodes[flexId].props.sizes,ratios,'Resizing the parent must preserve child shares');
  await layout.getByRole('button',{name:'Select container',exact:true}).first().click();
+ assert.equal(await layout.locator('.mdx-layout-divider').isVisible(),false,'Only selecting Flex exposes its divider hit area');
+ await layout.getByRole('button',{name:'Select container',exact:true}).nth(1).click();
+ assert.equal(await page.locator('.ProseMirror-selectednode').getAttribute('data-node-id'),initial.document.nodes[flexId].children[1],'Right-hand grip must not be intercepted by a divider');
+ assert.equal(await page.locator('.ProseMirror-selectednode').evaluate(el=>getComputedStyle(el,'::selection').backgroundColor),'rgba(0, 0, 0, 0)');
+ await layout.getByRole('button',{name:'Select container',exact:true}).first().click();
+
  await save(()=>page.getByLabel('Width of parent (%)',{exact:true}).fill('35'));
  const shares=(await head()).document.nodes[flexId].props.sizes;
  assert.ok(Math.abs(shares[0]/(shares[0]+shares[1])-.35)<.001,'Typing 35% must retain both digits');
@@ -85,5 +91,28 @@ try{
  await page.getByRole('button',{name:'Exit edit mode',exact:true}).click();await page.waitForURL(url=>url.hash!=='#edit');
  assert.equal(await page.getByRole('textbox',{name:'Document editor',exact:true}).count(),0);
  await page.getByRole('button',{name:'Edit',exact:true}).click();await page.getByRole('textbox',{name:'Document editor',exact:true}).waitFor();
- console.log('ok MDX inline range fonts, dimensions, float, pointer resizing, source identities and saved reload');
+
+ // Exercise the actual supplied website as MDX, not a simplified approximation.
+ await page.goto(`${base}/documents/new?example=case-study`);
+ await page.getByRole('button',{name:'Create document',exact:true}).click();await page.waitForURL(url=>!url.pathname.startsWith('/documents/')&&url.hash==='#edit');
+ await page.getByRole('textbox',{name:'Document editor',exact:true}).waitFor();
+ const demoId=new URL(page.url()).pathname.match(/\/([A-Za-z0-9]{6})(?:-|$)/)[1];
+ const demoHead=()=>page.evaluate(async id=>(await fetch(`/api/documents/${id}`)).json(),demoId);
+ await page.locator('.ProseMirror #title').waitFor();
+ assert.equal((await page.locator('.ProseMirror #title').innerText()).trim(),'How We Built\nAI-Powered Pitch Training\nfor cult Centre Managers');
+ assert.equal(await page.locator('.ProseMirror .case-study').evaluate(el=>getComputedStyle(el).backgroundColor),'rgb(3, 6, 28)');
+ assert.equal(await page.locator('.ProseMirror .mdx-container-content').count(),0,'Canvas must preserve direct-child website CSS');
+ const demoBefore=await demoHead();
+ const prose=page.locator('.ProseMirror #h2WU');await prose.scrollIntoViewIfNeeded();
+ await prose.evaluate(p=>{const range=document.createRange();range.setStart(p.firstChild,12);range.collapse(true);const selection=getSelection();selection.removeAllRanges();selection.addRange(range);p.closest('.ProseMirror').focus();});
+ const saved=page.waitForResponse(r=>r.request().method()==='PATCH'&&new URL(r.url()).pathname===`/api/documents/${demoId}`);
+ await page.keyboard.press('Shift+Enter');assert.equal((await saved).status(),200);
+ await page.getByRole('status').filter({hasText:'All changes saved'}).waitFor();
+ const demoAfter=await demoHead();assert.equal(demoAfter.document.nodes.h2WU.content.filter(run=>run.type==='break').length,1);
+ assert.equal(Object.keys(demoAfter.document.nodes).length,Object.keys(demoBefore.document.nodes).length,'A line break must retain the paragraph and node identities');
+ await page.reload();await page.locator('.ProseMirror #h2WU br').waitFor();
+ await page.getByRole('button',{name:'Exit edit mode',exact:true}).click();await page.waitForURL(url=>url.hash!=='#edit');
+ assert.equal((await page.locator('[data-mx-inline-story] #title').innerText()).trim(),'How We Built\nAI-Powered Pitch Training\nfor cult Centre Managers');
+ console.log('ok MDX gestures, preserved history, exact website canvas, line breaks, save and reload');
+
 }finally{await browser.close();}

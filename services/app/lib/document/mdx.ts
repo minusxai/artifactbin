@@ -20,7 +20,7 @@ interface MdNode {
  attributes?:Array<{type:string;name?:string;value?:string|null|{type:string;value:string}}>;
  position?:{start:{offset?:number};end:{offset?:number}};
 }
-interface Identity {id:string;type:string;props:Record<string,DocumentJson>}
+interface Identity {id:string;type:string;inline?:boolean;props:Record<string,DocumentJson>}
 const processor=unified().use(remarkParse).use(remarkMdx).use(remarkGfm).use(remarkStringify);
 const fresh=()=>`n_${crypto.randomUUID().replaceAll('-','')}`;
 function attributeSource(n:MdNode):string {
@@ -30,7 +30,8 @@ function attributeSource(n:MdNode):string {
  }).join(' ');
 }
 /** Source metadata preserves stable identity and non-Markdown properties; it is never executed. */
-export function parseDocumentMdx(source:string):RichDocument {
+export function parseDocumentMdx(source:string,previous?:RichDocument):RichDocument {
+ const inlineIds=new Set(Object.values(previous?.nodes??{}).filter(n=>n.type==='html'&&n.content&&typeof n.props.id==='string').map(n=>n.props.id));
  const tree=processor.parse(source) as unknown as MdNode;
  let identities:Identity[]=[];
  const first=tree.children?.[0];
@@ -46,14 +47,15 @@ export function parseDocumentMdx(source:string):RichDocument {
   const id=identity?.id??fresh();d.nodes[id]=identity?{...node,props:['component','html'].includes(node.type)?node.props:identity.props}:node;return id;
  }
  function inline(nodes:MdNode[],marks:DocumentMark[]=[]):DocumentInline[]{return normalizeInline(nodes.flatMap((n):DocumentInline[]=>{
+  if(n.type==='paragraph')return inline(n.children??[],marks);
   if(n.type==='text')return [{type:'text',text:n.value??'',marks}];
-  if(n.type==='break')return [{type:'break'}];
+  if(n.type==='break'||['mdxJsxTextElement','mdxJsxFlowElement'].includes(n.type)&&n.name==='br')return [{type:'break',...(marks.length?{marks}:{})}];
   if(['strong','emphasis','delete','inlineCode','link'].includes(n.type)){
    const mark:DocumentMark={type:n.type==='delete'?'strike':n.type==='inlineCode'?'code':n.type};
    if(n.type==='link')mark.attrs={href:n.url??'',...(n.title?{title:n.title}:{})};
    return inline(n.type==='inlineCode'?[{type:'text',value:n.value}]:n.children??[],[...marks,mark]);
   }
-  if(n.type==='mdxJsxTextElement'&&['span','u','sup','sub'].includes(n.name??'')){
+  if(['mdxJsxTextElement','mdxJsxFlowElement'].includes(n.type)&&['span','u','sup','sub'].includes(n.name??'')){
    const parsed=jsx(`<${n.name} ${attributeSource(n)} />`)[0] as JsxElement;
    const attrs:Record<string,DocumentJson>={};for(const a of parsed.attributes){if(!a.value.static)throw new DocumentError('Text styling must be literal data');attrs[a.name]=a.value.json;}
    return inline(n.children??[],[...marks,{type:n.name==='u'?'underline':n.name!,attrs}]);
@@ -85,7 +87,7 @@ export function parseDocumentMdx(source:string):RichDocument {
     node={type:el.isComponent?'component':'html',...(el.isComponent?{name:el.tag}:{tag:el.tag}),props:{},children:[]};
     for(const a of el.attributes){if(a.value.static)node.props[a.name]=a.value.json;else(node.bindings??={})[a.name]={source:a.value.source,scope:'reactive'};}
     if(!n.children?.length&&!['Flex','div','section','article'].includes(n.name))delete node.children;
-    if(n.type==='mdxJsxTextElement'){node.content=[];delete node.children;}
+    if(n.type==='mdxJsxTextElement'||identities[ordinal]?.inline||el.attributes.some(a=>a.name==='id'&&a.value.static&&inlineIds.has(a.value.json))){node.content=[];delete node.children;}
     if(n.name==='Iframe'||n.name==='Helmet'){
      const raw=source.slice(n.position?.start.offset,n.position?.end.offset);const iframe=jsx(raw)[0];
      if(iframe?.type!=='element')throw new DocumentError('Invalid iframe source');node.text=serializeJsx(iframe.children);delete node.children;delete node.content;
@@ -96,7 +98,7 @@ export function parseDocumentMdx(source:string):RichDocument {
    default:throw new DocumentError(`Unsupported document syntax: ${n.type}`);
   }
   const id=add(node);node=d.nodes[id]!;
-  if(node.content)node.content=inline(n.children??[]);
+  if(node.content)node.content=inline((n.children??[]).flatMap(child=>child.type==='paragraph'?child.children??[]:[child]));
   else if(node.children){
    const children:MdNode[]=[];let run:MdNode[]=[];
    const flush=()=>{if(run.length){children.push({type:'paragraph',children:run});run=[];}};
@@ -115,11 +117,10 @@ export function serializeDocumentMdx(d:RichDocument,includeIdentity=true):string
  assertDocument(d);validateDocumentMarkup(d);
  const identities:Identity[]=[];
  function inline(items:DocumentInline[]):MdNode[]{return items.map(item=>{
-  if(item.type==='break')return {type:'break'};
   if(item.type==='nodeRef'){const node=block(item.nodeId);if(node.type==='mdxJsxFlowElement')node.type='mdxJsxTextElement';if(node.type==='mdxFlowExpression')node.type='mdxTextExpression';return node;}
-  let node:MdNode={type:'text',value:item.text};
-  for(const mark of [...item.marks].reverse()){
-   if(mark.type==='code'){node={type:'inlineCode',value:item.text};continue;}
+  let node:MdNode=item.type==='break'?{type:'mdxJsxTextElement',name:'br',attributes:[],children:[]}:{type:'text',value:item.text};
+  for(const mark of [...(item.marks??[])].reverse()){
+   if(mark.type==='code'&&item.type==='text'){node={type:'inlineCode',value:item.text};continue;}
    if(['strong','emphasis','strike','link'].includes(mark.type)){node={type:mark.type==='strike'?'delete':mark.type,children:[node],...(mark.type==='link'?{url:String(mark.attrs?.href??''),title:mark.attrs?.title?String(mark.attrs.title):null}:{})};}
    else node={type:'mdxJsxTextElement',name:mark.type==='underline'?'u':mark.type,attributes:attributes(mark.attrs??{}),children:[node]};
   }
@@ -131,7 +132,7 @@ export function serializeDocumentMdx(d:RichDocument,includeIdentity=true):string
   return ['paragraph','heading','blockquote','list','code'].includes(n.type)&&typeof n.props.className==='string'&&n.props.className?{type:'mdxJsxFlowElement',name:'div',attributes:attributes({className:n.props.className}),children:[node]}:node;
  }
  function core(id:string):MdNode {
-  const n=d.nodes[id]!;identities.push({id,type:n.type,props:n.type==='component'||n.type==='html'?{}:n.props});
+  const n=d.nodes[id]!;identities.push({id,type:n.type,...(n.type==='html'&&n.content?{inline:true}:{}),props:n.type==='component'||n.type==='html'?{}:n.props});
   const children=()=>n.content?inline(n.content):(n.children??[]).map(block);
   switch(n.type){
    case 'document':return {type:'root',children:children()};
@@ -162,7 +163,7 @@ export function serializeDocumentMdx(d:RichDocument,includeIdentity=true):string
  * Markdown-owned properties come from source; visual prose properties stay on the node.
  */
 export function reparseDocumentMdx(previous:RichDocument,source:string):RichDocument {
- const next=parseDocumentMdx(source),mapping=new Map<string,string>();
+ const next=parseDocumentMdx(source,previous),mapping=new Map<string,string>();
  const compatible=(a:DocumentNode,b:DocumentNode)=>a.type===b.type&&a.name===b.name&&a.tag===b.tag;
  const signature=(n:DocumentNode)=>JSON.stringify([n.type,n.name,n.tag,n.text,n.content?.map(c=>c.type==='nodeRef'?{type:c.type}:c)]);
  function match(oldId:string,newId:string){
