@@ -26,7 +26,8 @@ import { isIP } from 'node:net';
 import { ALIAS_ORIGINS, ASSETS_ORIGIN, AUTH_SECRET, CUSTOM_DOMAINS_TARGET, PUBLIC_BASE_URL } from '@/lib/config';
 import { LIVE_ARTIFACT_SQL, type ArtifactRow } from '@/lib/artifacts';
 import { getDb } from '@/lib/db';
-import { titleSlug } from '@/lib/urls';
+import { canonicalArtifactPath, titleSlug } from '@/lib/urls';
+import { ownerUsername } from '@/lib/users';
 
 export type DomainStatus = 'pending' | 'verified';
 /** One CAA property, as `tag value` (`issue letsencrypt.org`). `critical` is the issuer-critical flag. */
@@ -236,6 +237,16 @@ export async function removeDomain(userId: string): Promise<boolean> {
   return removed.rows.length > 0;
 }
 
+/**
+ * Could this request host ever be a custom domain? The normalized name when it
+ * could; null for our own hosts, an IP, a single label (`localhost`) or
+ * garbage — so the app's own traffic never costs a lookup.
+ */
+export function customHostCandidate(hostname: string): string | null {
+  const host = normalizeHostname(hostname);
+  return host && !isOwnHost(host) ? host : null;
+}
+
 /** Which account a VERIFIED hostname serves; null for anything else, including a malformed host. */
 export async function ownerForHost(hostname: string): Promise<string | null> {
   const host = normalizeHostname(hostname);
@@ -362,4 +373,18 @@ export async function listDomainPosts(ownerId: string): Promise<DomainPost[]> {
     [ownerId],
   );
   return rows.rows;
+}
+
+/**
+ * The canonical address of a document's ARTIFACTBIN copy (the app page and
+ * `/a/<id>/raw`). A public document whose owner has a verified domain is
+ * canonical on that domain; everything else is canonical at its own app
+ * address, on the one canonical origin (APP__PUBLIC_BASE_URL).
+ */
+export async function canonicalDocumentUrl(row: Pick<ArtifactRow, 'id' | 'title' | 'user_id' | 'visibility' | 'format'>): Promise<string> {
+  if (row.user_id && row.visibility === 'public' && row.format === 'markup') {
+    const host = await verifiedHostOf(row.user_id);
+    if (host) return domainPostUrl(host, row);
+  }
+  return `${PUBLIC_BASE_URL.replace(/\/+$/, '')}${canonicalArtifactPath(row, await ownerUsername(row.user_id))}`;
 }

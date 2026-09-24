@@ -5,6 +5,7 @@ import AvatarCircle from '@/components/AvatarCircle';
 import DatasetUpload from '@/components/DatasetUpload';
 import TokensPanel from '@/components/TokensPanel';
 import UsernameCard from '@/components/UsernameCard';
+import CustomDomainCard from '@/components/CustomDomainCard';
 import { useSession } from '../session';
 
 export function AccountPage() {
@@ -50,6 +51,8 @@ export function AccountPage() {
         */}
       <div className="mt-6"><UsernameCard key={data?.username ?? 'loading'} username={data?.username ?? null} /></div>
       <div className="mt-8"><NotificationSettings/></div>
+      {/* Renders nothing unless attaching is on or this account already has a domain. */}
+      <div className="mt-8 empty:hidden"><CustomDomainCard /></div>
       <h2 className="mt-8 text-base font-semibold"><span className="text-accent">&gt;</span> connections</h2>
       <p className="mt-2 font-mono text-sm leading-relaxed text-muted">Each row is one afbin CLI connection, made by approving it in this browser. Revoke one and that agent stops. Run <code>afbin auth</code> on a machine to add another.</p>
       <div className="mt-6"><TokensPanel /></div>

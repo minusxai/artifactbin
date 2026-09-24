@@ -219,6 +219,17 @@ export interface StoryDocumentInput {
   ownerBreadcrumb?: boolean;
   /** Like and follow counts, this viewer's own state, and the doors (lib/story/reader-chrome ReaderReactions). */
   reactions?: ReaderReactions | null;
+  /**
+   * THE BARE PAGE — a document served as a post on its owner's custom domain
+   * (lib/custom-domains). A reader render in every other respect, but it
+   * carries NO reader chrome at all: no rail, logo, byline, panels or doors.
+   * It ends in one footer line, "Made with artifactbin", linking to
+   * `footerHref` (the document's own app address), and gains a plain
+   * `<meta name="description">` when the document declares none.
+   */
+  bare?: { footerHref: string } | null;
+  /** `<link rel="canonical">` — the address search engines should index this copy under. */
+  canonical?: string | null;
 }
 
 /**
@@ -356,12 +367,23 @@ const MODE_PRELUDE =
   + 'c.toggle("dark",s.mode==="dark");c.toggle("light",s.mode!=="dark");'
   + '}catch(e){}})()';
 
+/**
+ * The bare page's one line of attribution, outside the story root so the
+ * hydrated tree never sees it. Theme-neutral: it inherits the document's own
+ * colour and face and only quiets them.
+ */
+export const DOMAIN_FOOTER_TEXT = 'Made with';
+const DOMAIN_FOOTER_CSS = '[data-mx-domain-footer]{box-sizing:border-box;max-width:100%;margin:0;padding:40px 16px 48px;text-align:center;font-size:13px;line-height:1.5;opacity:.65}'
+  + '[data-mx-domain-footer] a{color:inherit;text-decoration:underline;text-underline-offset:2px}';
+const domainFooter = (href: string): string =>
+  `<footer data-mx-domain-footer="">${DOMAIN_FOOTER_TEXT} <a href="${escapeHtml(href)}" rel="noopener">artifactbin</a></footer>`;
+
 /** `</style` inside CSS would close the tag early; CSS has no use for the sequence. */
 const styleTag = (attr: string, css: string): string =>
   `<style ${attr}>${css.replace(/<\/style/gi, '')}</style>`;
 
 export async function buildStoryDocument(input: StoryDocumentInput): Promise<string> {
-  const { source, compiledCss, theme, runtimeSrc, anchorSrc, commentSrc, live = null, chrome = true, social = null, help = null, signIn = null, fork = null } = input;
+  const { source, compiledCss, theme, runtimeSrc, anchorSrc, commentSrc, live = null, chrome = true, social = null, help = null, signIn = null, fork = null, bare = null, canonical = null } = input;
   const dataflow = input.dataflow ?? null;
 
   /*
@@ -386,7 +408,7 @@ export async function buildStoryDocument(input: StoryDocumentInput): Promise<str
    * the omission is structural: /export photographs this frame, and neither the
    * rail nor the attribution belongs in an unfurl card.
    */
-  const readerChrome = chrome
+  const readerChrome = chrome && !bare
     ? renderReaderChrome({
       // Snapshot-only readers still need document identity for their chrome;
       // live eligibility controls subscription attributes, not attribution.
@@ -433,7 +455,8 @@ export async function buildStoryDocument(input: StoryDocumentInput): Promise<str
     // border and padding, and nothing else styles it back
     // (lib/story-surface/bare-controls).
     styleTag('data-mx-bare-controls', STORY_BARE_CONTROLS_CSS),
-    chrome ? styleTag('data-mx-chrome', STORY_CHROME_CSS) : '',
+    chrome && !bare ? styleTag('data-mx-chrome', STORY_CHROME_CSS) : '',
+    bare ? styleTag('data-mx-domain-footer', DOMAIN_FOOTER_CSS) : '',
     styleTag('data-mx-embed', STORY_EMBED_CSS),
     // Every table its own scroll box, every document, capture included: a
     // table is a table either way (lib/story-runtime/chrome-css STORY_TABLE_CSS).
@@ -530,7 +553,11 @@ export async function buildStoryDocument(input: StoryDocumentInput): Promise<str
     `<meta name="viewport" content="width=device-width, initial-scale=1">` +
     `<base target="_top">` +
     `<title>${escapeHtml(title)}</title>` +
+    (canonical ? `<link rel="canonical" href="${escapeHtml(canonical)}">` : '') +
     helmet.meta.map((m) => `<meta name="${escapeHtml(m.name)}" content="${escapeHtml(m.content)}">`).join('') +
+    (bare && social?.description && !helmet.meta.some((m) => m.name.toLowerCase() === 'description')
+      ? `<meta name="description" content="${escapeHtml(social.description)}">`
+      : '') +
     // The author's own <meta> comes first, so a document that declares its own
     // description keeps it; these add what only the platform knows.
     (social
@@ -556,6 +583,7 @@ export async function buildStoryDocument(input: StoryDocumentInput): Promise<str
     `<body ${STORY_ROOT_ATTR}${live ? ` data-mx-live-id="${escapeHtml(live.id)}" data-mx-live-edit="${escapeHtml(live.editId)}"` : ''}>` +
     `<div id="${STORY_ROOT_ID}">${bodyHtml}</div>` +
     readerChrome +
+    (bare ? domainFooter(bare.footerHref) : '') +
     /*
      * The page holds its own copy of this text until we say we have painted,
      * and parse time IS the paint: everything above is server-rendered markup.

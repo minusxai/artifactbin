@@ -52,6 +52,8 @@ import { AUTHOR_FRAME_PATH } from '@/lib/story-runtime/author-frame';
 import { GITHUB_EXTERNAL_URL } from '@/lib/github-star';
 import { createReaderPreloader } from './reader-preloads';
 import { mountBuildAssets } from './build-assets';
+import { customHostBoundary } from './custom-host';
+import { canonicalDocumentUrl } from '@/lib/custom-domains';
 
 /**
  * The `<link rel="help">` and `<meta name="afbin">` an agent that fetched any page reads, on the caller's
@@ -234,6 +236,9 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
   // Transport identity must be attached before any app middleware or route
   // asks viewer.ts who is calling.
   if (opts.actorSecret) actorReceiver(opts.actorSecret).mount(app);
+  // A verified custom domain is answered by its own boundary before any app
+  // route can see it (server/custom-host); every other host passes straight on.
+  app.use('*', customHostBoundary());
   const assetsOrigin = ASSETS_ORIGIN;
   app.get(AUTHOR_FRAME_PATH, c => authorFrameResponse(c.req.raw, assetsOrigin, baseUrl(c.req.raw)));
   if (assetsOrigin) app.use('*', async (c, next) => {
@@ -275,7 +280,7 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
    * no fetch round trip, no chrome settling, no address healing a beat later.
    * The endpoints stay the truth; this is the same data, arriving earlier.
    */
-  const page = async (c: { req: { raw: Request; url: string } }, status?: 200 | 404) => {
+  const page = async (c: { req: { raw: Request; url: string } }, status?: 200 | 404, canonical?: string) => {
     const html = await index(c.req.url);
     const data = await bootstrapFor(c.req.raw);
     // An @-address whose profile resolves to NOTHING is a miss, and a miss is
@@ -296,8 +301,10 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
     const shell = surface?.surface?.runtime
       ? withInitialStory(preloadReader(discovered), surface.surface.runtime, surface.surface.id, surface.description, baseUrl(c.req.raw), isStartPlaceholder(surface.surface.source, surface.surface.version))
       : withGenericSocial(discovered, baseUrl(c.req.raw));
+    // The address search engines index a document under (lib/custom-domains canonicalDocumentUrl).
+    const indexed = canonical ? shell.replace('</head>', () => `<link rel="canonical" href="${escapeHtml(canonical)}"></head>`) : shell;
     // Last, so the pointer is the page's final line whatever else was inlined.
-    return new Response(withAgentDiscoveryTail(data ? withBootstrap(shell, data) : shell, agentDiscovery(baseUrl(c.req.raw))), { status: code, headers: {
+    return new Response(withAgentDiscoveryTail(data ? withBootstrap(indexed, data) : indexed, agentDiscovery(baseUrl(c.req.raw))), { status: code, headers: {
       'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store', ...APP_SECURITY_HEADERS,
       ...(opts.devHmrPort !== undefined ? { 'content-security-policy': developmentAppCsp(c.req.url, opts.devHmrPort) } : {}),
       ...(surface?.surface?.runtime ? { Link: `<${baseUrl(c.req.raw)}/llms.txt>; rel="help"` } : {}),
@@ -349,7 +356,7 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
    * leaks its owner through a redirect target; a valid export key skips the
    * healing, because a capture must stay at the address it was handed.
    */
-  const documentPreparation = async (request: Request): Promise<{ status: 200 | 404; redirect?: string }> => {
+  const documentPreparation = async (request: Request): Promise<{ status: 200 | 404; redirect?: string; canonical?: string }> => {
     const url = new URL(request.url);
     const found = candidateDocument(url.pathname);
     if (!found) return { status: 200 };
@@ -363,7 +370,8 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
     if (!(await canReadArtifact(row, actor?.viewer ?? null))) return { status: 404 };
     if (url.searchParams.has('key')) return { status: 200 };
     const canonical = canonicalArtifactPath(row, await ownerUsername(row.user_id)) + (url.pathname.endsWith('/edit') ? '/edit' : '');
-    return { status: 200, ...(canonical !== url.pathname ? { redirect: canonical + url.search } : {}) };
+    if (canonical !== url.pathname) return { status: 200, redirect: canonical + url.search };
+    return { status: 200, canonical: await canonicalDocumentUrl(row) };
   };
 
   // Static: content-addressed trees are immutable; everything else is served plainly.
@@ -446,7 +454,7 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
     // Canonical readers share the app document so its router can transition
     // without changing security policy. Only /raw and exports retain the
     // standalone top-level sandbox; authored scripts still run in Iframes.
-    const { status, redirect } = await runWithRequest(c.req.raw, () => documentPreparation(c.req.raw));
+    const { status, redirect, canonical } = await runWithRequest(c.req.raw, () => documentPreparation(c.req.raw));
     // A browser follows Location and never shows this body; a fetch that stops
     // here (curl without -L, a HEAD) still reads the canonical address and the
     // agent pointer — in the header and in the body.
@@ -460,7 +468,7 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
     // Admission's 404 is final; its 200 can mean "not a document
     // address" — a pretty path under an unknown handle still misses, and
     // page() derives that from the profile resolution it already ran.
-    return page(c, status === 404 ? 404 : undefined);
+    return page(c, status === 404 ? 404 : undefined, canonical);
   };
 
   app.get('/a/:id/edit', documentAddress);
