@@ -28,6 +28,22 @@ export function publicCatalogOf(row:{meta:unknown;content?:string}):DatasetCatal
  return {kind:catalog.kind,defaultSchema:catalog.defaultSchema,refreshSeconds:catalog.refreshSeconds,tables:catalog.tables.map(({schema,name,columns})=>({schema,name,columns}))};
 }
 const key=(table:{schema:string;name:string})=>JSON.stringify([table.schema,table.name]);
+/**
+ * The columns a stored table re-declared WITHOUT rows adds to its stored shape.
+ * Adding is safe: every kept row reads null there. Dropping or retyping a stored
+ * column would lose or mistype data the push never restated, so it is refused.
+ * A bare name keeps its stored type; an undeclared column list keeps the shape.
+ */
+function reshapeWithoutRows(table:{schema:string;name:string;columns?:Array<string|DatasetColumn>},prior:DatasetTable):DatasetColumn[] {
+ if(!table.columns)return [];
+ const declared=table.columns.map(c=>typeof c==='string'?{name:c}:c),names=new Set(declared.map(c=>c.name));
+ const where=`${table.schema}.${table.name}`;
+ const dropped=prior.columns.filter(c=>!names.has(c.name)).map(c=>c.name);
+ if(dropped.length)throw new DatasetError(`${where}: dropping stored column ${dropped.join(', ')} needs the table's rows restated; add rows={[...]} to reshape it`);
+ const retyped=declared.filter((c):c is DatasetColumn=>'type' in c&&prior.columns.some(p=>p.name===c.name&&p.type!==c.type)).map(c=>c.name);
+ if(retyped.length)throw new DatasetError(`${where}: retyping stored column ${retyped.join(', ')} needs the table's rows restated; add rows={[...]} to reshape it`);
+ return declared.filter(c=>!prior.columns.some(p=>p.name===c.name)).map(c=>'type' in c?c as DatasetColumn:{name:c.name,type:'string' as const});
+}
 export async function prepareCatalog(input:unknown,actor:TokenActor,previous?:ArtifactRow,objects?:ContentObjects):Promise<StoredContent|Response> {
  try{
   const authored=typeof input==='string'?parseDatasetDefinition(input):input;
@@ -64,7 +80,14 @@ export async function prepareCatalog(input:unknown,actor:TokenActor,previous?:Ar
    if(t.sql){if(t.source||t.rows)throw new DatasetError('A model has SQL, not a second source');tables.push({schema:t.schema,name:t.name,sql:t.sql,columns:[]});continue;}
    if(t.source)throw new DatasetError('Stored tables do not have a remote source');
    const prior=old?.tables.find(p=>key(p)===key(t));
-   if(!t.rows&&prior?.objectKey){tables.push({...prior});continue;}
+   if(!t.rows&&prior?.objectKey){
+    const added=reshapeWithoutRows(t,prior);
+    if(!added.length){tables.push({...prior});continue;}
+    // Omitted rows mean KEEP them: republish the stored rows under the widened shape, null in each new column.
+    const rows=objects?JSON.parse((await objects.get(prior.objectKey)).toString('utf8')):await loadDatasetRows({content:'',meta:{objectKey:prior.objectKey}});
+    const stored=await publishDataset({columns:[...prior.columns,...added]},rows,objects);if(stored instanceof Response)return stored;
+    tables.push({schema:t.schema,name:t.name,columns:stored.meta.columns as DatasetTable['columns'],objectKey:stored.meta.objectKey as string});continue;
+   }
    const declared=t.columns?.filter(c=>typeof c!=='string')??prior?.columns.filter(c=>c.type==='user');
    /*
     * A table with NO ROWS has nothing to infer from, so the names it declares
