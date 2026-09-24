@@ -1,4 +1,6 @@
 'use client';
+import type {RichDocument} from '@artifactbin/contracts';
+
 
 /**
  * Version history as ONE capability: list, read one, restore.
@@ -27,6 +29,7 @@ export interface ArtifactVersionSummary {
 
 /** One archived version, with everything needed to RENDER it. */
 export interface ArtifactVersionSnapshot {
+  document?: RichDocument;
   version: number;
   html: string;
   markup: string | null;

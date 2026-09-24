@@ -29,12 +29,14 @@ interface Props {artifactId?:string;document:RichDocument;editable?:boolean;onCh
 export function DocumentEditor({document:initial,editable=true,onChange,artifactId}:Props){
  const host=useRef<HTMLDivElement>(null),view=useRef<EditorView|null>(null),latest=useRef({onChange,editable});latest.current={onChange,editable};
  const [selection,setSelection]=useState<{id:string;props:Record<string,DocumentJson>;name:string;text?:string;resizable:boolean;widthPercent:number}|null>(null);
+ const [history,setHistory]=useState({undo:false,redo:false});
  const [error,setError]=useState('');const dataflow=useRef<DataflowStore|null>(null);
  function flow(document:RichDocument){const {values,queries,mutations}=splitHelmet(parseDocumentJsx(documentJsx(document))).content;return {values,queries,mutations};}
  useEffect(()=>{
   if(!host.current)return;
   const store=createDataflowStore({flow:flow(initial)});dataflow.current=store;
   function updateSelection(v:EditorView){
+   setHistory({undo:undo(v.state),redo:redo(v.state)});
    const {selection:s}=v.state;const node=s instanceof NodeSelection?s.node:s.$from.parent;
    setSelection(node.attrs.id?{id:node.attrs.id,props:node.attrs.props,resizable:['container','component','inline_component'].includes(node.type.name),widthPercent:nodeWidthPercentage(v,s instanceof NodeSelection?s.from:s.$from.depth?s.$from.before():0),text:node.attrs.text??undefined,name:node.attrs.name??node.attrs.nodeType??node.type.name}:null);
   }
@@ -57,25 +59,24 @@ export function DocumentEditor({document:initial,editable=true,onChange,artifact
   const target=documentEditorNode(initial),start=v.state.doc.content.findDiffStart(target.content);if(start===null)return;
   const end=v.state.doc.content.findDiffEnd(target.content)!;const overlap=start-Math.min(end.a,end.b);
   const tr=v.state.tr.replace(start,end.a+Math.max(0,overlap),target.slice(start,end.b+Math.max(0,overlap))).setMeta('addToHistory',false);
-  v.updateState(v.state.applyTransaction(tr).state);
+  v.updateState(v.state.applyTransaction(tr).state);setHistory({undo:undo(v.state),redo:redo(v.state)});
  },[initial,editable]);
  function command(run:(v:EditorView)=>void,focus=true){const v=view.current;if(v){run(v);if(focus)v.focus();}}
  function props(patch:Record<string,DocumentJson>){command(v=>{const pos=v.state.selection instanceof NodeSelection?v.state.selection.from:v.state.selection.$from.depth?v.state.selection.$from.before():-1;if(pos>=0)setDocumentNodeProps(v,pos,patch);},false);}
  function widthPercent(value:number){command(v=>{const pos=v.state.selection instanceof NodeSelection?v.state.selection.from:v.state.selection.$from.depth?v.state.selection.$from.before():-1;if(pos>=0)setNodeWidthPercentage(v,pos,value);},false);}
  function insert(source:string){command(v=>{const added=documentEditorNode(parseDocumentMdx(source));v.dispatch(v.state.tr.replaceSelectionWith(added.firstChild!).scrollIntoView());});}
  const icons:Record<string,typeof Bold>={'Undo':Undo2,'Redo':Redo2,'Bold':Bold,'Italic':Italic,'Bullet list':List,'Quote':Quote,'Insert columns':Columns2,'Style block':SquareDashed,'Insert image':ImagePlus};
- function button(label:string,action:()=>void){const Icon=icons[label];return <Tooltip content={label}><button type="button" aria-label={label} onMouseDown={e=>e.preventDefault()} onClick={action}>{Icon?<Icon size={16}/>:label}</button></Tooltip>;}
+ function button(label:string,action:()=>void,disabled=false){const Icon=icons[label];return <Tooltip content={label}><button type="button" aria-label={label} disabled={disabled} onMouseDown={e=>e.preventDefault()} onClick={action}>{Icon?<Icon size={16}/>:label}</button></Tooltip>;}
  function dispatch(v:EditorView){return (tr:Transaction)=>v.dispatch(tr);}
  const s=documentEditorSchema;
  return <div className="mdx-editor-shell">
   {editable&&<div className="mdx-toolbar" role="toolbar" aria-label="Document formatting">
-   {button('Undo',()=>command(v=>undo(v.state,dispatch(v))))}{button('Redo',()=>command(v=>redo(v.state,dispatch(v))))}
+   {button('Undo',()=>command(v=>undo(v.state,dispatch(v))),!history.undo)}{button('Redo',()=>command(v=>redo(v.state,dispatch(v))),!history.redo)}
    {!selection?.resizable&&<>
    <select aria-label="Block style" onChange={e=>command(v=>setBlockType(e.target.value==='paragraph'?s.nodes.paragraph:s.nodes.heading,{id:selection?.id,props:e.target.value==='paragraph'?{}:{depth:Number(e.target.value)},nodeType:e.target.value==='paragraph'?'paragraph':'heading'})(v.state,dispatch(v)))} defaultValue="paragraph"><option value="paragraph">Paragraph</option>{[1,2,3].map(n=><option key={n} value={n}>Heading {n}</option>)}</select>
    {button('Bold',()=>command(v=>toggleMark(s.marks.strong)(v.state,dispatch(v))))}{button('Italic',()=>command(v=>toggleMark(s.marks.emphasis)(v.state,dispatch(v))))}
    {button('Bullet list',()=>command(v=>wrapInList(s.nodes.bullet_list)(v.state,dispatch(v))))}{button('Quote',()=>command(v=>wrapIn(s.nodes.blockquote)(v.state,dispatch(v))))}
    <select aria-label="Text font" defaultValue="" onChange={e=>command(v=>{if(v.state.selection.empty)props({className:e.target.value});else v.dispatch(v.state.tr.addMark(v.state.selection.from,v.state.selection.to,s.marks.span.create({className:e.target.value})));})}><option value="">Font</option><option value="font-sans">Sans</option><option value="font-serif">Serif</option><option value="font-mono">Mono</option></select>
-   <input aria-label="Text CSS class" placeholder="Text class" onChange={e=>command(v=>{if(v.state.selection.empty)props({className:e.target.value});else v.dispatch(v.state.tr.addMark(v.state.selection.from,v.state.selection.to,s.marks.span.create({className:e.target.value})));},false)}/>
    </>}
    {button('Insert columns',()=>insert('<Flex direction="row" sizes={[1,1]}>\n\n<div>\n\nFirst column\n\n</div>\n\n<div>\n\nSecond column\n\n</div>\n\n</Flex>'))}
    {button('Style block',()=>command(v=>wrapIn(s.nodes.container,{tag:'div',nodeType:'html',props:{className:'p-6 bg-slate-50 rounded-lg'}})(v.state,dispatch(v))))}

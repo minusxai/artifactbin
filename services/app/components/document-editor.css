@@ -36,8 +36,8 @@
 .mdx-toolbar button{height:30px;min-width:30px;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0}
 .mdx-toolbar select{max-width:150px}.mdx-toolbar input[aria-label="Block CSS class"]{width:180px}
 .mdx-toolbar :focus-visible{outline:2px solid #54899d;outline-offset:1px}
-.mdx-artifact-editor .mdx-toolbar{position:fixed;top:88px;left:0;right:0;z-index:40}
-.mdx-document-actions{position:fixed;top:44px;left:0;right:0;height:44px;z-index:40;background:var(--surface,#fff);display:flex;align-items:center;justify-content:flex-end;gap:12px;padding:6px 20px;border-bottom:1px solid var(--edge,#e4e7eb);font:12px system-ui}
+.mdx-artifact-editor .mdx-toolbar{position:fixed;top:88px;left:var(--mdx-left-inset,0px);right:0;z-index:40}
+.mdx-document-actions{position:fixed;top:44px;left:var(--mdx-left-inset,0px);right:0;height:44px;z-index:40;background:var(--surface,#fff);display:flex;align-items:center;justify-content:flex-end;gap:12px;padding:6px 20px;border-bottom:1px solid var(--edge,#e4e7eb);font:12px system-ui}
 .mdx-save-state{margin-right:auto;color:#66717d}.mdx-document-actions button{padding:5px 10px;border-radius:5px}.mdx-document-actions button:hover{background:var(--raised,#f1f4f6)}.mdx-document-actions .mdx-done{background:#235b70;color:white}
 .mdx-save-error{position:sticky;top:132px;z-index:45;padding:12px 24px;background:#fff2df;font:13px system-ui}.mdx-save-error button{margin-left:12px;text-decoration:underline}
 .mdx-source-panel{max-width:1000px;margin:auto;padding:24px}.mdx-source-panel textarea{width:100%;min-height:65vh;padding:24px;background:var(--surface,#fff);font:14px/1.7 ui-monospace,monospace;border:1px solid var(--edge,#e4e7eb);border-radius:8px}
@@ -50,3 +50,7 @@
 .mdx-size-feedback{box-shadow:none;font-size:11px;background:#284b5a}
 .mdx-editor-body .mdx-container-content>p:last-child{margin-bottom:0}
 @media(prefers-reduced-motion:no-preference){.mdx-container-grip,.mdx-component-select{transition:opacity 100ms ease}}
+
+.mdx-editor-body [contenteditable=false] .mdx-container-controls,.mdx-editor-body [contenteditable=false] .mdx-component-select,.mdx-editor-body [contenteditable=false] .mdx-resize{display:none}
+
+.mdx-toolbar button:disabled { opacity: .35; cursor: default; pointer-events: none; }

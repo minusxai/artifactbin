@@ -1,3 +1,6 @@
+import {EditorView} from 'prosemirror-view';
+import {createDocumentEditorState} from '@/lib/document/editor';
+import {dimensionPreview} from '@/lib/document/editor-layout';
 import {act,fireEvent,render,screen,waitFor} from '@testing-library/react';
 import {expect,it,vi} from 'vitest';
 import {DocumentEditor} from '../DocumentEditor';
@@ -85,4 +88,35 @@ it('refreshes percentage after a committed resize has reached the DOM',async()=>
   fireEvent.change(screen.getByRole('spinbutton',{name:'Component width'}),{target:{value:'320'}});
   await waitFor(()=>expect((screen.getByRole('spinbutton',{name:'Width of parent (%)'}) as HTMLInputElement).value).toBe('32'));
  }finally{measure.mockRestore();}
+});
+
+it('offers user formatting without a text CSS class field',()=>{
+ render(<DocumentEditor document={parseDocumentMdx('Hello')} onChange={()=>{}}/>);
+ expect(screen.queryByRole('textbox',{name:'Text CSS class'})).toBeNull();
+ expect(screen.getByRole('combobox',{name:'Text font'})).toBeTruthy();
+});
+
+it('disables unavailable undo and redo as edits move through history',async()=>{
+ // jsdom has no range geometry; ProseMirror scrolls the restored selection.
+ const rects=Object.getOwnPropertyDescriptor(Range.prototype,'getClientRects');
+ Object.defineProperty(Range.prototype,'getClientRects',{configurable:true,value:()=>[new DOMRect(0,0,10,10)]});
+ try{
+ render(<DocumentEditor document={parseDocumentMdx('Hello')} onChange={()=>{}}/>);
+ expect((screen.getByRole('button',{name:'Undo'}) as HTMLButtonElement).disabled).toBe(true);expect((screen.getByRole('button',{name:'Redo'}) as HTMLButtonElement).disabled).toBe(true);
+ fireEvent.click(screen.getByRole('button',{name:'Style block'}));
+ await waitFor(()=>expect((screen.getByRole('button',{name:'Undo'}) as HTMLButtonElement).disabled).toBe(false));expect((screen.getByRole('button',{name:'Redo'}) as HTMLButtonElement).disabled).toBe(true);
+ fireEvent.click(screen.getByRole('button',{name:'Undo'}));await waitFor(()=>expect((screen.getByRole('button',{name:'Undo'}) as HTMLButtonElement).disabled).toBe(true));expect((screen.getByRole('button',{name:'Redo'}) as HTMLButtonElement).disabled).toBe(false);
+ fireEvent.click(screen.getByRole('button',{name:'Redo'}));await waitFor(()=>expect((screen.getByRole('button',{name:'Undo'}) as HTMLButtonElement).disabled).toBe(false));expect((screen.getByRole('button',{name:'Redo'}) as HTMLButtonElement).disabled).toBe(true);
+ }finally{if(rects)Object.defineProperty(Range.prototype,'getClientRects',rects);else Reflect.deleteProperty(Range.prototype,'getClientRects');}
+});
+
+it('previews the styled content height before committing and restores it on cancellation',()=>{
+ const view=new EditorView(document.createElement('div'),{state:createDocumentEditorState(parseDocumentMdx('Hello'))});
+ const dom=document.createElement('div'),content=document.createElement('div');dom.append(content);content.className='mdx-container-content';dom.style.minHeight=content.style.minHeight='363px';
+ try{
+  const preview=dimensionPreview(view,0,dom);preview.update(462,144);
+  expect(content.style.minHeight).toBe('144px');expect(dom.style.minHeight).toBe('144px');
+  preview.update(462,420);expect(content.style.minHeight).toBe('420px');
+  preview.clear();expect(content.style.minHeight).toBe('363px');expect(dom.style.minHeight).toBe('363px');
+ }finally{view.destroy();}
 });

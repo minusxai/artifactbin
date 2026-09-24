@@ -83,8 +83,10 @@ The redesign now routes saved MDX through the ordinary artifact URL and shell.
 Class-only single-block divs import as Markdown node properties; spans remain inline
 marks; grouping divs remain real nodes. No Pandoc annotation syntax is introduced.
 Reader markup derives page measure, dimensions and float from the same document.
-The existing history drawer opens archived snapshots through authorized artifact
-routes, with archived JSONB rendered into source on read.
+History retains the existing left rail, in-place version preview, return to current,
+and Restore action. Both editors share the navigation component. MDX restoration
+saves the selected snapshot through the same JSONB operation session. Archived
+artifact URLs also render their JSONB snapshots correctly.
 
 Observed checks: focused model/API/UI checks passed (39 tests before the final
 percentage and source-exit regressions). Both additional regressions were observed

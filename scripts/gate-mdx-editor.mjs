@@ -24,6 +24,17 @@ try{
  const handle=block.locator(':scope > .mdx-container-controls').getByRole('button',{name:'Resize container',exact:true});await handle.scrollIntoViewIfNeeded();const box=await handle.boundingBox();
  await save(async()=>{await page.mouse.move(box.x+box.width/2,box.y+box.height/2);await page.mouse.down();await page.mouse.move(box.x+box.width/2+40,box.y+box.height/2+30,{steps:6});await page.mouse.up();});
  assert.ok((await head()).document.nodes[iframeId].props.width>320);
+ // Shrinking a previously sized styled block updates its painted content before pointer-up.
+ await save(()=>page.getByLabel('Component height',{exact:true}).fill('420'));
+ const bottom=block.locator(':scope > .mdx-container-controls').getByRole('button',{name:'Resize container height',exact:true});
+ await bottom.scrollIntoViewIfNeeded();const bottomBox=await bottom.boundingBox();const beforeHeight=(await block.boundingBox()).height;
+ await save(async()=>{
+  await page.mouse.move(bottomBox.x+bottomBox.width/2,bottomBox.y+bottomBox.height/2);await page.mouse.down();
+  await page.mouse.move(bottomBox.x+bottomBox.width/2,bottomBox.y+bottomBox.height/2-80,{steps:6});
+  assert.ok((await block.boundingBox()).height<beforeHeight-60,'Styled block must visibly shrink during dragging');
+  await page.mouse.up();
+ });
+
  await page.getByRole('button',{name:'Select Flex',exact:true}).click();
  const flexId=Object.keys(initial.document.nodes).find(id=>initial.document.nodes[id].name==='Flex');
  const divider=page.getByRole('button',{name:'Resize layout divider 1',exact:true});await divider.scrollIntoViewIfNeeded();const dividerBox=await divider.boundingBox();
@@ -45,7 +56,7 @@ try{
  await save(()=>page.getByLabel('Text font',{exact:true}).selectOption('font-mono'));
  const styled=await head();const paragraphId=styled.document.nodes[styled.document.rootId].children[1];
  assert.ok(styled.document.nodes[paragraphId].content.some(run=>run.marks?.some(mark=>mark.attrs?.className==='font-mono')));
- await page.getByRole('button',{name:'MDX source',exact:true}).click();const source=page.getByRole('textbox',{name:'MDX source',exact:true});await source.fill(`${await source.inputValue()}\n\nAn added paragraph from source.\n`);
+ await page.getByRole('button',{name:'Edit the source',exact:true}).click();const source=page.getByRole('textbox',{name:'MDX source',exact:true});await source.fill(`${await source.inputValue()}\n\nAn added paragraph from source.\n`);
  await save(()=>page.getByRole('button',{name:'Apply MDX',exact:true}).click());
  assert.deepEqual((await head()).document.nodes[paragraphId],styled.document.nodes[paragraphId]);
  await page.reload();await page.getByRole('textbox',{name:'Document editor',exact:true}).waitFor();assert.ok(await page.getByRole('textbox',{name:'Document editor',exact:true}).getByText('An added paragraph from source.',{exact:true}).isVisible());
@@ -64,7 +75,14 @@ try{
   await page.mouse.up();
  });
  const moved=await head();const column=moved.document.nodes[flexId].children[0];assert.ok(moved.document.nodes[column].children.includes(iframeId),'Dragging moves the same component identity into the column');
- await page.getByRole('button',{name:'Done',exact:true}).click();await page.waitForURL(url=>url.hash!=='#edit');
+ const currentVersion=moved.version;
+ await page.getByRole('button',{name:`Preview version ${currentVersion-1}`,exact:true}).click();
+ await page.getByRole('status').filter({hasText:`Previewing v${currentVersion-1}`}).waitFor();
+ assert.equal(await page.getByRole('textbox',{name:'Document editor',exact:true}).getAttribute('contenteditable'),'false');
+ assert.equal((await head()).version,currentVersion,'Preview must not save');
+ await page.getByRole('button',{name:'Show the current version',exact:true}).click();
+ assert.equal(await page.getByRole('textbox',{name:'Document editor',exact:true}).getAttribute('contenteditable'),'true');
+ await page.getByRole('button',{name:'Exit edit mode',exact:true}).click();await page.waitForURL(url=>url.hash!=='#edit');
  assert.equal(await page.getByRole('textbox',{name:'Document editor',exact:true}).count(),0);
  await page.getByRole('button',{name:'Edit',exact:true}).click();await page.getByRole('textbox',{name:'Document editor',exact:true}).waitFor();
  console.log('ok MDX inline range fonts, dimensions, float, pointer resizing, source identities and saved reload');

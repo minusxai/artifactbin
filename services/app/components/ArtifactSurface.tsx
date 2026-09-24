@@ -842,7 +842,7 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
             </div>
           )}
           {showStarter && <TrustedUi><StarterInstructions id={id} /></TrustedUi>}
-          {editing && props.document && <MdxArtifactEditor id={id} snapshot={{id,version,document:props.document}} compiledCss={compiledCss} onDone={finishEdit} flushRef={editorFlush}/> }
+          {editing && props.document && <MdxArtifactEditor id={id} snapshot={{id,version,document:props.document}} compiledCss={compiledCss} onDone={finishEdit} flushRef={editorFlush} onLeftInsetChange={setEditorLeftInset}/> }
           <div hidden={showStarter || (editing && !!props.document)}>
           <InlineStoryRuntime
             key={id}

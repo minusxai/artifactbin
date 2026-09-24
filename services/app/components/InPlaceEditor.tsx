@@ -1,4 +1,6 @@
 'use client';
+import {ArtifactParts} from './ArtifactParts';
+
 
 import type { EditorSelectionChange } from '@/lib/editor-v2/bookmark';
 
@@ -27,7 +29,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import SourceEditor from '@/components/SourceEditorPane';
 import { editBlock } from '@/lib/editor-v2/block-edit';
 import { SourceHistory } from '@/lib/editor-v2/history';
-import { Check, Code, Database, History, Undo2, Redo2, Paintbrush } from 'lucide-react';
+import { Check, Database, History, Undo2, Redo2 } from 'lucide-react';
 import { TrustedUi } from '@/components/TrustedUi';
 
 import ThemePicker, { ModeChip, TemplateChip } from '@/components/ThemePicker';
@@ -1203,40 +1205,7 @@ export default function InPlaceEditor({
         * longer a fight over one edge.
         */}
       {!phone && (
-        <nav
-          aria-label="Artifact parts"
-          className="fixed left-0 bottom-0 z-40 flex flex-col border-r border-edge bg-surface"
-          style={{ top: barTop, width: LEFT_RAIL_W }}
-        >
-          <div className="flex flex-col gap-0.5 p-2">
-            {(
-              [
-                ['design', 'app', <Paintbrush key="d" size={14} />, mode === 'design' && !queriesOpen],
-                ['code', 'code', <Code key="c" size={14} />, mode === 'code'],
-              ] as const
-            ).map(([m, label, icon, active]) => (
-              <button
-                key={m}
-                type="button"
-                aria-label={m === 'design' ? 'Edit on the page' : 'Edit the source'}
-                aria-pressed={active}
-                onClick={() => {
-                  // app, code and queries are three views of ONE document, so
-                  // choosing any of them leaves the other two. Clearing this
-                  // only for code left "app" setting the mode under a queries
-                  // view that stayed on top of it.
-                  setMode(m);
-                  setQueriesOpen(false);
-                }}
-                className={`inline-flex h-8 cursor-pointer items-center gap-2 rounded-[4px] px-2 font-mono text-[11px] ${
-                  active ? 'bg-accent-soft text-accent' : 'text-muted hover:bg-raised hover:text-fg'
-                }`}
-              >
-                {icon}
-                <span>{label}</span>
-              </button>
-            ))}
-            {queryNotebook.length > 0 && (
+        <ArtifactParts top={barTop} mode={mode} queriesOpen={queriesOpen} onModeChange={next=>{setMode(next);setQueriesOpen(false);}} onDone={()=>void onDone()} extraViews={queryNotebook.length > 0 && (
               <button
                 type="button"
                 aria-label="Show data"
@@ -1254,13 +1223,7 @@ export default function InPlaceEditor({
                 <Database size={14} />
                 <span>data</span>
               </button>
-            )}
-          </div>
-          {/* Versions are LISTED, not behind a switch: the rail is wide enough to
-              hold them, and "which version am I looking at" is a question the
-              editor should answer without being asked. */}
-          <div className="flex min-h-0 flex-1 flex-col border-t border-edge">
-            <p className="px-3 py-2 font-mono text-[11px] uppercase tracking-wide text-faint">versions</p>
+            )}>
             <VersionHistory
               embedded
               versions={history.versions ?? []}
@@ -1272,30 +1235,7 @@ export default function InPlaceEditor({
               onClose={() => {}}
               busy={history.busy}
             />
-          </div>
-          <div className="border-t border-edge p-2">
-            <button
-              type="button"
-              /*
-               * A DIFFERENT name from the toolbar's "Exit edit mode", on purpose.
-               * One action behind two doors is fine for a person; two controls
-               * sharing one accessible name is not — every gate and test that
-               * says "Exit edit mode" then matches both and fails strict mode.
-               * The toolbar keeps the established name; this one says what it
-               * says on its face.
-               */
-              aria-label="Done editing"
-              onClick={(event) => {
-                event.currentTarget.blur();
-                void onDone();
-              }}
-              className="inline-flex h-8 w-full cursor-pointer items-center gap-2 rounded-[4px] border border-accent/40 bg-accent-soft px-2 font-mono text-[11px] text-accent hover:border-accent"
-            >
-              <Check size={13} />
-              <span>done editing</span>
-            </button>
-          </div>
-        </nav>
+        </ArtifactParts>
       )}
 
       {inspector && mode === 'design' && (

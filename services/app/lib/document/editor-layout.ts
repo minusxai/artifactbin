@@ -31,15 +31,16 @@ export function setDocumentNodeProps(view:EditorView,pos:number,patch:Record<str
  tr=tr.setNodeMarkup(pos,undefined,{...node.attrs,props});
  if(view.state.selection instanceof NodeSelection)tr.setSelection(NodeSelection.create(tr.doc,pos));view.dispatch(tr);
 }
-/** Preview lives outside editable children; never mutate ProseMirror-owned child attributes. */
+/** Preview changes node-view-owned sizing only; editable child nodes stay untouched. */
 export function dimensionPreview(view:EditorView,pos:number,dom:HTMLElement){
  const originalWidth=dom.style.width,originalHeight=dom.style.minHeight,flex=parentFlex(view,pos);
+ const content=dom.querySelector<HTMLElement>(':scope > .mdx-container-content'),originalContentHeight=content?.style.minHeight;
  const sheet=document.createElement('style');document.head.append(sheet);
  return {
   update(width:number,height:number){
-   dom.style.width=`${width}px`;dom.style.minHeight=`${height}px`;
+   dom.style.width=`${width}px`;dom.style.minHeight=`${height}px`;if(content)content.style.minHeight=`${height}px`;
    if(flex){const axis=flex.node.attrs.props.direction==='column'?'height':'width',extent=nodeParentExtent(view,pos,axis),sizes=setFlexChildShare(flexRatios(flex.node.attrs.props.sizes,flex.node.childCount),flex.index,widthPercentage(axis==='width'?width:height,extent));sheet.textContent=sizes.map((size,i)=>`.mdx-container[data-node-id="${flex.node.attrs.id}"] > .mdx-container-content > :nth-child(${i+1}){flex:${size} 1 0!important}`).join('');}
   },
-  clear(){sheet.remove();dom.style.width=originalWidth;dom.style.minHeight=originalHeight;},
+  clear(){sheet.remove();dom.style.width=originalWidth;dom.style.minHeight=originalHeight;if(content)content.style.minHeight=originalContentHeight??'';},
  };
 }
