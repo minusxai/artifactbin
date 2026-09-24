@@ -70,6 +70,35 @@ const USERS: Table = {
   ],
 };
 
+/**
+ * CUSTOM DOMAINS (lib/custom-domains) — one hostname an ACCOUNT serves its
+ * public documents at. Keyed by the hostname (lowercase, the pk: one owner per
+ * name, pending or verified) and unique per `user_id` (one domain per account).
+ * The domain belongs to the account id, never the username, so a rename moves
+ * nothing. `token` is the TXT value that proves ownership; `missing_since` is
+ * the daily re-check's clock, and three days of it detach the row.
+ *
+ * No declared foreign key: the schema renderer has none, so the account's
+ * deletion cascades in code — test users are erased through every table with
+ * a `user_id` column (lib/testusers ERASE_BY_USER), this one included.
+ */
+const CUSTOM_DOMAINS: Table = {
+  name: 'custom_domains',
+  columns: [
+    { name: 'hostname', type: 'TEXT', notNull: true },
+    { name: 'user_id', type: 'TEXT', notNull: true },
+    { name: 'token', type: 'TEXT', notNull: true },
+    // 'pending' | 'verified'
+    { name: 'status', type: 'TEXT', notNull: true, default: "'pending'" },
+    { name: 'created_at', type: 'TIMESTAMPTZ', notNull: true, default: 'now()' },
+    { name: 'verified_at', type: 'TIMESTAMPTZ' },
+    { name: 'missing_since', type: 'TIMESTAMPTZ' },
+  ],
+  primaryKey: ['hostname'],
+  // An index, not `uniques`: only an index reaches a database that already exists.
+  indexes: [{ name: 'idx_custom_domains_user', columns: ['user_id'], unique: true }],
+};
+
 const TOKENS: Table = {
   name: 'tokens',
   columns: [
@@ -728,7 +757,7 @@ const EVENT_OUTBOX: Table = {name:'event_outbox',columns:[
  {name:'id',type:'TEXT',notNull:true},{name:'envelope',type:'JSONB',notNull:true},
  {name:'created_at',type:'TIMESTAMPTZ',notNull:true,default:'now()'},
 ],primaryKey:['id']};
-export const TABLES: Table[] = [EVENT_OUTBOX, MEMBER_NOTIFICATIONS, USER_BLOCKS, COMMENT_IMAGES, REMOTE_AGENTS, REMOTE_WORK, EXPORT_IMAGES, EXPORT_IMAGE_CACHE, MUTATION_RECEIPTS, DATASET_POLICY_AUDIT, DATASET_USAGE, USERS, TOKENS, ARTIFACTS, ARTIFACT_VERSIONS, ARTIFACT_EDITS, ARTIFACT_SOURCE_IDS, ARTIFACT_NODE_ALIASES, NODE_IDENTITY_MIGRATION_JOBS, ARTIFACT_SHARES, ANNOTATIONS, CODES, ANALYTICS_EVENTS, RELATIONS, WEBFONTS, WEB_ASSETS, DATASET_SECRETS, DATASET_RESULT_CACHE, ARTIFACT_CREATION_OPERATIONS, ID_RESERVATION_BATCHES, ARTIFACT_ID_REGISTRY, BROWSER_TEST_USERS];
+export const TABLES: Table[] = [EVENT_OUTBOX, MEMBER_NOTIFICATIONS, USER_BLOCKS, COMMENT_IMAGES, REMOTE_AGENTS, REMOTE_WORK, EXPORT_IMAGES, EXPORT_IMAGE_CACHE, MUTATION_RECEIPTS, DATASET_POLICY_AUDIT, DATASET_USAGE, USERS, CUSTOM_DOMAINS, TOKENS, ARTIFACTS, ARTIFACT_VERSIONS, ARTIFACT_EDITS, ARTIFACT_SOURCE_IDS, ARTIFACT_NODE_ALIASES, NODE_IDENTITY_MIGRATION_JOBS, ARTIFACT_SHARES, ANNOTATIONS, CODES, ANALYTICS_EVENTS, RELATIONS, WEBFONTS, WEB_ASSETS, DATASET_SECRETS, DATASET_RESULT_CACHE, ARTIFACT_CREATION_OPERATIONS, ID_RESERVATION_BATCHES, ARTIFACT_ID_REGISTRY, BROWSER_TEST_USERS];
 
 /** Ordered, individually-executable DDL statements (no splitting needed) — rendered by utils. */
 export const SCHEMA_STATEMENTS: string[] = renderSchema(TABLES);
