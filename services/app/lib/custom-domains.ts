@@ -24,7 +24,9 @@ import { createHmac } from 'node:crypto';
 import { Resolver } from 'node:dns/promises';
 import { isIP } from 'node:net';
 import { ALIAS_ORIGINS, ASSETS_ORIGIN, AUTH_SECRET, CUSTOM_DOMAINS_TARGET, PUBLIC_BASE_URL } from '@/lib/config';
-import { LIVE_ARTIFACT_SQL, type ArtifactRow } from '@/lib/artifacts';
+import { canReadArtifact, LIVE_ARTIFACT_SQL, type ArtifactRow } from '@/lib/artifacts';
+import { urlHash } from '@/lib/story/asset-url';
+import { collectExternalAssetUrls } from '@/lib/story/external-images';
 import { getDb } from '@/lib/db';
 import { canonicalArtifactPath, titleSlug } from '@/lib/urls';
 import { ownerUsername } from '@/lib/users';
@@ -368,6 +370,39 @@ export function startDomainRecheck(resolve: () => DomainResolver = domainResolve
 /** A document the host may serve: the owner's, PUBLIC, a markup document, not in the trash. */
 export function servesDocument(ownerId: string, row: Pick<ArtifactRow, 'user_id' | 'visibility' | 'format'> & { deleted_at?: unknown }): boolean {
   return row.user_id === ownerId && row.visibility === 'public' && row.format === 'markup' && !row.deleted_at;
+}
+
+/** The ref kinds a post embeds by bytes (lib/story/ref-data): `<img src="ref:…">`, a `<File>` card, a PDF. */
+const EMBEDDED_FORMATS = new Set(['image', 'file', 'pdf']);
+/** The owner's public, live markup documents, as the SQL both embed rules below scope to. */
+const OWNER_POSTS_SQL = `user_id = $1 AND visibility = 'public' AND format = 'markup' AND ${LIVE_ARTIFACT_SQL}`;
+
+/**
+ * An uploaded image (or file, or PDF) the host may serve at `/a/<id>/raw`:
+ * one of the owner's public documents REFERENCES it (`meta.refs`, what
+ * publish records and refDataForRow renders from), and a guest may read it —
+ * the same rule the app copy applies when a guest loads that document's
+ * images. Nothing else's bytes are reachable on the host, markup included.
+ */
+export async function servesEmbeddedArtifact(ownerId: string, row: ArtifactRow): Promise<boolean> {
+  if (!EMBEDDED_FORMATS.has(row.format) || !(await canReadArtifact(row, null))) return false;
+  const db = await getDb();
+  const referencing = await db.query(
+    `SELECT 1 FROM artifacts WHERE ${OWNER_POSTS_SQL} AND meta->'refs' @> $2::jsonb LIMIT 1`,
+    [ownerId, JSON.stringify([{ id: row.id }])],
+  );
+  return referencing.rows.length > 0;
+}
+
+/**
+ * Our copy of a web image (`/assets/<sha of its url>`, lib/story/asset-url)
+ * the host may serve: one of the owner's public documents names that URL —
+ * the same URLs the serving path maps to our copies (webAssetsForSource).
+ */
+export async function servesWebAsset(ownerId: string, hash: string): Promise<boolean> {
+  const db = await getDb();
+  const posts = await db.query<{ source: string | null }>(`SELECT source FROM artifacts WHERE ${OWNER_POSTS_SQL} AND source IS NOT NULL`, [ownerId]);
+  return posts.rows.some((post) => collectExternalAssetUrls(post.source!).all.some((url) => urlHash(url) === hash));
 }
 
 /** A post's path on the custom host: `/<id>-<slug>`, or `/<id>` for a title with no slug. */

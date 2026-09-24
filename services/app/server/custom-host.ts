@@ -12,7 +12,9 @@
  *   /a/<id>/events, /events/frame   GET
  *   /a/<id>/resolve                 GET/HEAD
  *   /a/<id>/assets                  GET
- *   /story, /fonts, /libraries, /geojson, /favicon.ico   the static runtime
+ *   GET/HEAD /a/<id>/raw            an image, file or PDF one of the owner's public posts embeds
+ *   GET/HEAD /assets/<sha>          our copy of a web image one of those posts names
+ *   /story, /fonts, /webfonts, /libraries, /geojson, /favicon.ico   the static runtime
  *
  * Every `/a/<id>` route and every post is scoped to the OWNER's PUBLIC markup
  * documents — the app's own doors also admit unlisted ones to anyone, so that
@@ -27,7 +29,7 @@ import { artifactIdFromSegment } from '@artifactbin/utils/artifact-reference';
 import { ACTOR_HEADER } from '@artifactbin/contracts';
 import { getArtifactById, declarationsForRow } from '@/lib/artifacts';
 import { PUBLIC_BASE_URL } from '@/lib/config';
-import { customHostCandidate, domainPostPath, listDomainPosts, ownerForHost, servesDocument } from '@/lib/custom-domains';
+import { customHostCandidate, domainPostPath, listDomainPosts, ownerForHost, servesDocument, servesEmbeddedArtifact, servesWebAsset } from '@/lib/custom-domains';
 import { DOMAIN_HOME_CSP, renderDomainHome } from '@/lib/custom-domain-home';
 import { baseUrl, json } from '@/lib/http';
 import { ID_RE } from '@/lib/ids';
@@ -40,11 +42,12 @@ import { GET as eventsGet } from '@/app/a/[id]/events/route';
 import { GET as eventsFrameGet } from '@/app/a/[id]/events/frame/route';
 import { GET as resolveGet } from '@/app/a/[id]/resolve/route';
 import { GET as assetsGet } from '@/app/a/[id]/assets/route';
+import { GET as webAssetGet } from '@/app/assets/[hash]/route';
 
 type Handler = (request: Request, ctx: { params: Promise<{ id: string }> }) => Promise<Response> | Response;
 
 /** Static trees the served document and its runtime load from; passed on to the app's own static handlers. */
-const STATIC = /^\/(?:story|fonts|libraries|geojson)\/|^\/favicon\.ico$/;
+const STATIC = /^\/(?:story|fonts|webfonts|libraries|geojson)\/|^\/favicon\.ico$/;
 /** Credentials never reach a handler on a custom host: the reader is a guest, by construction. */
 const CREDENTIAL_HEADERS = ['cookie', 'authorization', 'proxy-authorization', ACTOR_HEADER];
 
@@ -151,6 +154,37 @@ async function documentRoute(request: Request, id: string, route: string, ownerI
   }
 }
 
+/**
+ * The bytes a post embeds. An uploaded image renders as `/a/<id>/raw?v=<n>[&w=]`
+ * (lib/story/ref-data imageRawUrl), a web image as our copy at `/assets/<sha>`
+ * (lib/story/asset-url). Each is served only when one of the owner's public
+ * posts embeds it, through the app's own handler, to a guest.
+ */
+async function embedded(request: Request, path: string, ownerId: string): Promise<Response | null> {
+  const raw = /^\/a\/([^/]+)\/raw$/.exec(path);
+  if (raw) {
+    const id = raw[1]!;
+    const row = ID_RE.test(id) ? await getArtifactById(id) : null;
+    if (!row || !(await servesEmbeddedArtifact(ownerId, row))) return notFound();
+    // No capability rides in on the URL: an export key never admits bytes here.
+    const url = new URL(request.url);
+    url.searchParams.delete('key');
+    const guest = await asGuest(new Request(url, request));
+    return call(request.method === 'HEAD' ? rawHead : rawGet, guest, id);
+  }
+  const asset = /^\/assets\/([0-9a-f]{64})$/.exec(path);
+  if (asset) {
+    const hash = asset[1]!;
+    if (!(await servesWebAsset(ownerId, hash))) return notFound();
+    const guest = await asGuest(request);
+    return runWithRequest(guest, async () => {
+      const res = await webAssetGet(guest, { params: Promise.resolve({ hash }) });
+      return request.method === 'HEAD' ? new Response(null, { status: res.status, headers: res.headers }) : res;
+    });
+  }
+  return null;
+}
+
 const DOCUMENT_ROUTE = /^\/a\/([^/]+)\/(query|mutate|events|events\/frame|resolve|assets)$/;
 
 /**
@@ -178,6 +212,10 @@ export function customHostBoundary(): MiddlewareHandler {
       return;
     }
     if (path === '/' && readable) return withoutCookies(await home(request, hostname, ownerId));
+    if (readable) {
+      const bytes = await embedded(request, path, ownerId);
+      if (bytes) return withoutCookies(bytes);
+    }
     const document = DOCUMENT_ROUTE.exec(path);
     if (document) return withoutCookies(await documentRoute(request, document[1]!, document[2]!, ownerId));
     const segment = /^\/([^/]+)$/.exec(path)?.[1];

@@ -23,6 +23,9 @@ import { POST as createRoute } from '@/app/api/artifacts/route';
 import { getArtifactById } from '@/lib/artifacts';
 import { attachDomain, removeDomain, setDomainResolver, verifyDomain, type DomainResolver } from '@/lib/custom-domains';
 import { mintToken } from '@/lib/tokens';
+import { getDb } from '@/lib/db';
+import { objectKey, objectStore } from '@/lib/object-store';
+import { urlHash } from '@/lib/story/asset-url';
 import { claimToken, createUser, setUsername } from '@/lib/users';
 import { createAppServer } from '../app';
 
@@ -219,6 +222,65 @@ describe('everything else on a verified host is 404', () => {
     expect((await mutate(w.theirs.id, { mutation: 'inc' })).status).toBe(404);
     const preflight = await app().request(`${HOST}/a/${w.local.id}/mutate`, { method: 'OPTIONS' });
     expect(preflight.status).toBe(204);
+  });
+});
+
+const PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==', 'base64');
+async function upload(token: string, visibility: string) {
+  const res = await createRoute(new Request(`http://localhost:3000/api/artifacts?visibility=${visibility}`, {
+    method: 'POST', headers: { 'content-type': 'image/png', authorization: `Bearer ${token}` }, body: new Uint8Array(PNG),
+  }));
+  expect(res.status, await res.clone().text()).toBe(201);
+  return (await res.json()) as { id: string };
+}
+/** A web image we already hold a copy of, as publish leaves it: our bytes at /assets/<sha of its url>. */
+async function heldWebImage(url: string) {
+  const key = objectKey('webasset', Buffer.concat([PNG, Buffer.from(url)]));
+  await objectStore().put(key, PNG, 'image/png');
+  await (await getDb()).query('INSERT INTO web_assets (url_hash, url, object_key, content_type, bytes) VALUES ($1, $2, $3, $4, $5)', [urlHash(url), url, key, 'image/png', PNG.length]);
+  return urlHash(url);
+}
+
+describe('images in posts on a verified host', () => {
+  it('serves the uploaded and the web images a public post embeds, and no other artifact bytes', async () => {
+    const w = await world();
+    const pic = await upload(w.vivek.token, 'unlisted');
+    const loose = await upload(w.vivek.token, 'public');
+    const quietPic = await upload(w.vivek.token, 'unlisted');
+    const theirPic = await upload(w.other.token, 'public');
+    const webHash = await heldWebImage('https://cdn.example.test/cover.png');
+    const strayHash = await heldWebImage('https://cdn.example.test/stray.png');
+    const post = await create(w.vivek.token, { title: 'Pictures', visibility: 'public',
+      markup: `<h1>Pictures</h1><img src="ref:${pic.id}" alt="uploaded" /><img src="https://cdn.example.test/cover.png" alt="from the web" />` });
+    await create(w.vivek.token, { title: 'Quiet pictures', visibility: 'unlisted', markup: `<img src="ref:${quietPic.id}" alt="quiet" />` });
+    await create(w.other.token, { title: 'Their pictures', visibility: 'public', markup: `<img src="ref:${theirPic.id}" alt="theirs" />` });
+
+    const html = await (await app().request(`${HOST}/${post.id}-pictures`)).text();
+    const src = new RegExp(`/a/${pic.id}/raw\\?v=\\d+`).exec(html)?.[0];
+    expect(src, 'the uploaded image is served from /a/<id>/raw').toBeTruthy();
+    expect(html).toContain(`/assets/${webHash}`);
+
+    const image = await app().request(`${HOST}${src}`, { headers: { cookie: 'mx_session=anything' } });
+    expect(image.status).toBe(200);
+    expect(image.headers.get('content-type')).toMatch(/^image\//);
+    noCookie(image);
+    expect((await app().request(`${HOST}${src}`, { method: 'HEAD' })).status).toBe(200);
+    const web = await app().request(`${HOST}/assets/${webHash}`);
+    expect(web.status).toBe(200);
+    expect(web.headers.get('content-type')).toBe('image/png');
+
+    // Bytes no public post of the owner embeds stay 404: an unreferenced upload,
+    // one only an unlisted document embeds, another owner's, a stray web copy,
+    // and every markup document's own /raw.
+    for (const path of [`/a/${loose.id}/raw`, `/a/${quietPic.id}/raw`, `/a/${theirPic.id}/raw`, `/assets/${strayHash}`, `/a/${post.id}/raw`, `/a/${w.post.id}/raw`, `/a/${w.ds.id}/raw`]) {
+      expect((await app().request(`${HOST}${path}`)).status, path).toBe(404);
+    }
+    const write = await app().request(`${HOST}/a/${pic.id}/raw`, { method: 'POST' });
+    expect(write.status).toBe(404);
+    // The app copy's rule holds too: once the image is private a guest cannot read it, here or there.
+    await (await getDb()).query("UPDATE artifacts SET visibility = 'private' WHERE id = $1", [pic.id]);
+    expect((await app().request(`${APP}${src}`)).status).toBe(404);
+    expect((await app().request(`${HOST}${src}`)).status).toBe(404);
   });
 });
 
