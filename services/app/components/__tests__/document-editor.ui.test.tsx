@@ -44,3 +44,15 @@ it('supports keyboard sizing and does not edit when readonly',async()=>{
  onChange.mockClear();rerender(<DocumentEditor document={document} onChange={onChange} editable={false}/>);
  fireEvent.keyDown(screen.getByLabelText('Resize component'),{key:'ArrowRight'});expect(onChange).not.toHaveBeenCalled();
 });
+
+it('puts divider handles in their own boundary layer and gives the parent a separate resize handle',async()=>{
+ const onChange=vi.fn();render(<DocumentEditor document={parseDocumentMdx('<Flex direction="row" sizes={[2,1]}>\n\n<div>Left</div>\n\n<div>Right</div>\n\n</Flex>')} onChange={onChange}/>);
+ await act(async()=>{await Promise.resolve();});
+ const divider=screen.getByRole('button',{name:'Resize layout divider 1'});
+ expect(divider.parentElement?.className).toBe('mdx-layout-dividers');
+ expect(screen.getAllByRole('button',{name:'Resize container'}).length).toBe(3);
+ fireEvent.mouseDown(screen.getAllByRole('button',{name:'Select container'})[0]);
+ fireEvent.change(screen.getByRole('spinbutton',{name:'Width of parent (%)'}),{target:{value:'50'}});
+ const next=onChange.mock.lastCall![0];expect(Object.values(next.nodes).find((n:unknown)=>(n as {name?:string}).name==='Flex')).toMatchObject({props:{sizes:[1.5,1.5]}});
+ fireEvent.change(screen.getByRole('spinbutton',{name:'Width of parent (%)'}),{target:{value:'3'}});expect((screen.getByRole('spinbutton',{name:'Width of parent (%)'}) as HTMLInputElement).value).toBe('3');
+});

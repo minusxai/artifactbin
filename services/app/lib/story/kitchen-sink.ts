@@ -55,6 +55,8 @@ export function kitchenSinkMarkup(refs: KitchenSinkRefs): string {
   <Badge variant="outline">{$_row.region}</Badge>
 </For>
 
+<Flex direction="row" sizes={[2,1]}><p>Flexible main column</p><p>Supporting column</p></Flex>
+
 <Separator className="my-10" />
 
 <section>

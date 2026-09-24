@@ -27,6 +27,17 @@ try{
  const divider=page.getByRole('button',{name:'Resize layout divider 1',exact:true});await divider.scrollIntoViewIfNeeded();const dividerBox=await divider.boundingBox();
  await save(async()=>{await page.mouse.move(dividerBox.x+dividerBox.width/2,dividerBox.y+dividerBox.height/2);await page.mouse.down();await page.mouse.move(dividerBox.x+dividerBox.width/2-60,dividerBox.y+dividerBox.height/2,{steps:6});await page.mouse.up();});
  assert.notDeepEqual((await head()).document.nodes[flexId].props.sizes,[2,1]);
+ const layout=page.locator(`[data-node-id="${flexId}"]`),controls=page.locator(`[data-node-id="${flexId}"] > .mdx-container-controls`);
+ const geometry=await layout.evaluate(el=>{const [a,b]=el.querySelector('.mdx-container-content').children,A=a.getBoundingClientRect(),B=b.getBoundingClientRect(),D=el.querySelector('.mdx-layout-divider').getBoundingClientRect();return {gap:(A.right+B.left)/2,handle:D.left+D.width/2};});
+ assert.ok(Math.abs(geometry.gap-geometry.handle)<3,'Divider must sit between the children');
+ const ratios=(await head()).document.nodes[flexId].props.sizes;
+ await save(()=>controls.getByRole('button',{name:'Resize container width',exact:true}).press('ArrowLeft'));
+ assert.deepEqual((await head()).document.nodes[flexId].props.sizes,ratios,'Resizing the parent must preserve child shares');
+ await layout.getByRole('button',{name:'Select container',exact:true}).first().click();
+ await save(()=>page.getByLabel('Width of parent (%)',{exact:true}).fill('35'));
+ const shares=(await head()).document.nodes[flexId].props.sizes;
+ assert.ok(Math.abs(shares[0]/(shares[0]+shares[1])-.35)<.001,'Typing 35% must retain both digits');
+
  // Select a range, apply a font, switch to source and edit prose without losing its identity.
  await page.locator('.ProseMirror > p').first().evaluate(p=>{const range=document.createRange();range.setStart(p.firstChild,0);range.setEnd(p.firstChild,5);const selection=getSelection();selection.removeAllRanges();selection.addRange(range);});
  await save(()=>page.getByLabel('Text font',{exact:true}).selectOption('font-mono'));

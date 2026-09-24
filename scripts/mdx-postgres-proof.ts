@@ -10,7 +10,7 @@ const actor={tokenId:'mdx-proof-owner',userId:null};
 const document:RichDocument={schemaVersion:1,rootId:'root',nodes:{root:{type:'document',props:{},children:['a','b']},a:{type:'paragraph',props:{},content:[]},b:{type:'paragraph',props:{},content:[]}}};
 let serial=0;
 const request=(nodeId:string,baseVersion=1):DocumentEdit=>({baseVersion,operationId:`proof-${++serial}`,changedIds:[nodeId],ancestorIds:['root'],operations:[{kind:'set',nodeId,path:['props','className'],value:`edit-${serial}`}]});
-async function seed(){await db.query("DELETE FROM artifacts WHERE id='mdxpg1'");await db.query("INSERT INTO artifacts(id,token_id,title,content,document) VALUES ('mdxpg1',$1,'MDX race proof','',$2::jsonb)",[actor.tokenId,JSON.stringify(document)]);}
+async function seed(){await db.query("DELETE FROM artifact_versions WHERE artifact_id='mdxpg1'");await db.query("DELETE FROM artifacts WHERE id='mdxpg1'");await db.query("INSERT INTO artifacts(id,token_id,title,content,document) VALUES ('mdxpg1',$1,'MDX race proof','',$2::jsonb)",[actor.tokenId,JSON.stringify(document)]);}
 /** Hold the target row until every edit has actually reached its blocking UPDATE. */
 async function race(edits:DocumentEdit[],trash=false){
  let unlock!:()=>void,ready!:()=>void;const readyPromise=new Promise<void>(resolve=>{ready=resolve;}),release=new Promise<void>(resolve=>{unlock=resolve;});

@@ -7,6 +7,7 @@ import {undo,redo} from 'prosemirror-history';
 import type {RichDocument,DocumentJson} from '@artifactbin/contracts';
 import {createDocumentEditorState,documentEditorNode,documentEditorSchema,editorDocument} from '@/lib/document/editor';
 import {parseDocumentMdx,validateDocumentMarkup} from '@/lib/document/mdx';
+import {nodeWidthPercentage,setNodeWidthPercentage,setDocumentNodeProps} from '@/lib/document/editor-layout';
 import {documentNodeViews} from '@/lib/document/node-views';
 import {documentValueEqual} from '@/lib/document/model';
 import {createDataflowStore} from '@/lib/story-runtime/store';
@@ -17,11 +18,16 @@ import type {DataflowStore} from '@/lib/story-runtime/store';
 import {Tooltip} from './Tooltip';
 import './document-editor.css';
 
+/** Keep the user's partial number while typing; layout clamps must not rewrite their next digit. */
+function DimensionInput({label,value,min,max,onChange}:{label:string;value:number|string;min:number;max?:number;onChange:(value:number)=>void}){
+ const [draft,setDraft]=useState<string|null>(null);
+ return <input aria-label={label} type="number" min={min} max={max} step="0.1" value={draft??value} onChange={e=>{setDraft(e.target.value);if(e.target.value!==''&&Number.isFinite(e.target.valueAsNumber))onChange(e.target.valueAsNumber);}} onBlur={()=>setDraft(null)}/>;
+}
 interface Props {artifactId?:string;document:RichDocument;editable?:boolean;onChange:(document:RichDocument)=>void}
 /** The view owns selection and IME; parent save/status renders never recreate it. */
 export function DocumentEditor({document:initial,editable=true,onChange,artifactId}:Props){
  const host=useRef<HTMLDivElement>(null),view=useRef<EditorView|null>(null),latest=useRef({onChange,editable});latest.current={onChange,editable};
- const [selection,setSelection]=useState<{id:string;props:Record<string,DocumentJson>;name:string;text?:string}|null>(null);
+ const [selection,setSelection]=useState<{id:string;props:Record<string,DocumentJson>;name:string;text?:string;widthPercent:number}|null>(null);
  const [error,setError]=useState('');const [componentSource,setComponentSource]=useState<string|null>(null);const dataflow=useRef<DataflowStore|null>(null);
  function flow(document:RichDocument){const {values,queries,mutations}=splitHelmet(parseDocumentJsx(documentJsx(document))).content;return {values,queries,mutations};}
  useEffect(()=>{
@@ -29,7 +35,7 @@ export function DocumentEditor({document:initial,editable=true,onChange,artifact
   const store=createDataflowStore({flow:flow(initial)});dataflow.current=store;
   function updateSelection(v:EditorView){
    const {selection:s}=v.state;const node=s instanceof NodeSelection?s.node:s.$from.parent;
-   setSelection(node.attrs.id?{id:node.attrs.id,props:node.attrs.props,text:node.attrs.text??undefined,name:node.attrs.name??node.attrs.nodeType??node.type.name}:null);
+   setSelection(node.attrs.id?{id:node.attrs.id,props:node.attrs.props,widthPercent:nodeWidthPercentage(v,s instanceof NodeSelection?s.from:s.$from.depth?s.$from.before():0),text:node.attrs.text??undefined,name:node.attrs.name??node.attrs.nodeType??node.type.name}:null);
   }
   const v=new EditorView(host.current,{state:createDocumentEditorState(initial),editable:()=>latest.current.editable,attributes:{'aria-label':'Document editor',role:'textbox','aria-multiline':'true'},nodeViews:documentNodeViews(store,()=>latest.current.editable),dispatchTransaction(tr){
    try{
@@ -53,7 +59,8 @@ export function DocumentEditor({document:initial,editable=true,onChange,artifact
   v.updateState(v.state.applyTransaction(tr).state);
  },[initial,editable]);
  function command(run:(v:EditorView)=>void,focus=true){const v=view.current;if(v){run(v);if(focus)v.focus();}}
- function props(patch:Record<string,DocumentJson>){command(v=>{const selected=v.state.selection instanceof NodeSelection?v.state.selection.from:v.state.selection.$from.before();if(selected<0)return;const node=v.state.doc.nodeAt(selected);if(node){const tr=v.state.tr.setNodeMarkup(selected,undefined,{...node.attrs,props:{...node.attrs.props,...patch}});if(v.state.selection instanceof NodeSelection)tr.setSelection(NodeSelection.create(tr.doc,selected));v.dispatch(tr);}},false);}
+ function props(patch:Record<string,DocumentJson>){command(v=>{const pos=v.state.selection instanceof NodeSelection?v.state.selection.from:v.state.selection.$from.depth?v.state.selection.$from.before():-1;if(pos>=0)setDocumentNodeProps(v,pos,patch);},false);}
+ function widthPercent(value:number){command(v=>{const pos=v.state.selection instanceof NodeSelection?v.state.selection.from:v.state.selection.$from.depth?v.state.selection.$from.before():-1;if(pos>=0)setNodeWidthPercentage(v,pos,value);},false);}
  function insert(source:string){command(v=>{const added=documentEditorNode(parseDocumentMdx(source));v.dispatch(v.state.tr.replaceSelectionWith(added.firstChild!).scrollIntoView());});}
  function button(label:string,action:()=>void){return <Tooltip content={label}><button type="button" aria-label={label} onMouseDown={e=>e.preventDefault()} onClick={action}>{label}</button></Tooltip>;}
  function dispatch(v:EditorView){return (tr:Transaction)=>v.dispatch(tr);}
@@ -71,8 +78,9 @@ export function DocumentEditor({document:initial,editable=true,onChange,artifact
    {selection?.name==='Flex'&&<select aria-label="Layout direction" value={String(selection.props.direction??'row')} onChange={e=>props({direction:e.target.value})}><option value="row">Columns</option><option value="column">Rows</option></select>}
    {selection?.text!==undefined&&button('Edit component source',()=>setComponentSource(selection.text!))}
    <select aria-label="Float component" value={String(selection?.props.float??'disabled')} onChange={e=>props({float:e.target.value})}><option value="disabled">No float</option><option value="left">Float left</option><option value="right">Float right</option></select>
-   <label>Width <input aria-label="Component width" type="number" min="48" value={typeof selection?.props.width==='number'?selection.props.width:''} onChange={e=>props({width:Number(e.target.value)})}/></label>
-   <label>Height <input aria-label="Component height" type="number" min="32" value={typeof selection?.props.height==='number'?selection.props.height:''} onChange={e=>props({height:Number(e.target.value)})}/></label>
+   <label>Width <DimensionInput key={selection?.id} label="Width of parent (%)" min={1} max={100} value={selection?.widthPercent??''} onChange={widthPercent}/> %</label>
+   <label>px <DimensionInput key={selection?.id} label="Component width" min={48} value={typeof selection?.props.width==='number'?selection.props.width:''} onChange={width=>props({width})}/></label>
+   <label>Height <DimensionInput key={selection?.id} label="Component height" min={32} value={typeof selection?.props.height==='number'?selection.props.height:''} onChange={height=>props({height})}/></label>
   </div>}
   {componentSource!==null&&<section className="mdx-component-source"><label>Component source<textarea aria-label="Component source" value={componentSource} onChange={e=>setComponentSource(e.target.value)}/></label><button type="button" onClick={()=>command(v=>{if(!(v.state.selection instanceof NodeSelection))return;const pos=v.state.selection.from;const tr=v.state.tr.setNodeMarkup(pos,undefined,{...v.state.selection.node.attrs,text:componentSource});const next=editorDocument(v.state.applyTransaction(tr).state.doc);try{validateDocumentMarkup(next);v.dispatch(tr);setComponentSource(null);}catch(e){setError(e instanceof Error?e.message:'Invalid component source');}},false)}>Apply component source</button><button type="button" onClick={()=>setComponentSource(null)}>Cancel</button></section>}
   {error&&<p role="alert">{error}</p>}<div ref={host} className="mdx-editor-body"/>
