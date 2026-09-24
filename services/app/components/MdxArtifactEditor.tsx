@@ -17,14 +17,14 @@ export default function MdxArtifactEditor({id,snapshot,compiledCss,onDone,flushR
  const [historyOpen,setHistoryOpen]=useState(false);
  const history=useArtifactVersions({id,currentVersion:session.version});
  const [css,setCss]=useState(compiledCss);
- const [,render]=useState(0);const [source,setSource]=useState<string|null>(null);const [error,setError]=useState('');const live=useRef(true);
+ const [,render]=useState(0);const [source,setSource]=useState<string|null>(null);const [error,setError]=useState('');const live=useRef(true);const sourceDraft=useRef(source);sourceDraft.current=source;
  useEffect(()=>{
   live.current=true;const unsubscribe=session.subscribe(()=>render(n=>n+1));
-  flushRef.current=async()=>{try{await session.drain();}catch(e){setError(e instanceof Error?e.message:'Could not finish saving');throw e;}};
+  flushRef.current=async()=>{try{if(sourceDraft.current!==null)throw Error('Apply your source changes or return to the document first.');await session.drain();}catch(e){setError(e instanceof Error?e.message:'Could not finish saving');throw e;}};
   const timer=setInterval(()=>{if(session.status==='pending')void session.flush();},400);
   void fetch(`/api/documents/${id}`).then(r=>r.ok?r.json():null).then(next=>{if(next&&live.current)session.receive(next);}).catch(()=>{});
   const poll=setInterval(()=>{if(session.status==='saved')void fetch(`/api/documents/${id}`).then(r=>r.ok?r.json():null).then(next=>{if(next&&live.current)session.receive(next);}).catch(()=>{});},2000);
-  const unload=(e:BeforeUnloadEvent)=>{if(session.status!=='saved'){e.preventDefault();e.returnValue='';}};window.addEventListener('beforeunload',unload);
+  const unload=(e:BeforeUnloadEvent)=>{if(session.status!=='saved'||sourceDraft.current!==null){e.preventDefault();e.returnValue='';}};window.addEventListener('beforeunload',unload);
   return()=>{live.current=false;unsubscribe();clearInterval(timer);clearInterval(poll);flushRef.current=null;window.removeEventListener('beforeunload',unload);};
  },[id,session,flushRef]);
  useEffect(()=>{

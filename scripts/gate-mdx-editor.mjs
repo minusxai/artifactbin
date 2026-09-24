@@ -48,7 +48,7 @@ try{
  await page.getByRole('button',{name:'MDX source',exact:true}).click();const source=page.getByRole('textbox',{name:'MDX source',exact:true});await source.fill(`${await source.inputValue()}\n\nAn added paragraph from source.\n`);
  await save(()=>page.getByRole('button',{name:'Apply MDX',exact:true}).click());
  assert.deepEqual((await head()).document.nodes[paragraphId],styled.document.nodes[paragraphId]);
- await page.reload();await page.getByRole('textbox',{name:'Document editor',exact:true}).waitFor();assert.ok(await page.getByText('An added paragraph from source.',{exact:true}).isVisible());
+ await page.reload();await page.getByRole('textbox',{name:'Document editor',exact:true}).waitFor();assert.ok(await page.getByRole('textbox',{name:'Document editor',exact:true}).getByText('An added paragraph from source.',{exact:true}).isVisible());
  assert.equal((await head()).document.nodes[iframeId].props.float,'left');
  // A native drag needs a dragover after dragstart, including across the iframe boundary.
  await blockGrip.scrollIntoViewIfNeeded();

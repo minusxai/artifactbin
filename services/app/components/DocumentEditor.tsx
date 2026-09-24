@@ -42,7 +42,7 @@ export function DocumentEditor({document:initial,editable=true,onChange,artifact
    try{
     const next=v.state.applyTransaction(tr).state;
     if(tr.docChanged){const document=editorDocument(next.doc);validateDocumentMarkup(document);v.updateState(next);latest.current.onChange(document);}else v.updateState(next);
-    updateSelection(v);setError('');
+    updateSelection(v);queueMicrotask(()=>{if(view.current===v)updateSelection(v);});setError('');
    }catch(e){setError(e instanceof Error?e.message:'Could not apply this change.');}
   }});
   view.current=v;updateSelection(v);

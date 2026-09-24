@@ -77,3 +77,12 @@ it('applies a container class to the editable content itself',async()=>{
  await act(async()=>{await Promise.resolve();});
  expect(screen.getByText('Styled prose').closest('.mdx-container-content')?.classList.contains('font-mono')).toBe(true);
 });
+it('refreshes percentage after a committed resize has reached the DOM',async()=>{
+ const measure=vi.spyOn(HTMLElement.prototype,'getBoundingClientRect').mockImplementation(function(this:HTMLElement){const width=this.style.width?parseFloat(this.style.width):1000;return {left:0,top:0,right:width,bottom:100,width,height:100,x:0,y:0,toJSON:()=>({})};});
+ try{
+  render(<DocumentEditor document={parseDocumentMdx('<div width={240}>\n\nOne\n\nTwo\n\n</div>')} onChange={()=>{}}/>);
+  await act(async()=>{await Promise.resolve();});fireEvent.mouseDown(screen.getByRole('button',{name:'Select container'}));
+  fireEvent.change(screen.getByRole('spinbutton',{name:'Component width'}),{target:{value:'320'}});
+  await waitFor(()=>expect((screen.getByRole('spinbutton',{name:'Width of parent (%)'}) as HTMLInputElement).value).toBe('32'));
+ }finally{measure.mockRestore();}
+});

@@ -6,7 +6,7 @@ export function insertionLine(rect:{left:number;right:number;top:number;bottom:n
 export function resizeGuides(view:EditorView){
  const layer=document.createElement('div');layer.className='mdx-gesture-guides';layer.setAttribute('aria-hidden','true');document.body.append(layer);
  const vertical=document.createElement('i'),horizontal=document.createElement('i');layer.append(vertical,horizontal);view.dom.classList.add('mdx-gesture-active');
- return {update(rect:DOMRect){const page=view.dom.getBoundingClientRect();Object.assign(vertical.style,{left:`${rect.right}px`,top:`${Math.max(0,page.top)}px`,height:`${Math.max(0,rect.bottom-Math.max(0,page.top))}px`,width:'1px'});Object.assign(horizontal.style,{left:`${page.left}px`,top:`${rect.bottom}px`,width:`${page.width}px`,height:'1px'});},clear(){layer.remove();view.dom.classList.remove('mdx-gesture-active');}};
+ return {update(rect:DOMRect){const page=view.dom.getBoundingClientRect(),toolbar=view.dom.closest('.mdx-editor-shell')?.querySelector('.mdx-toolbar')?.getBoundingClientRect().bottom??0,top=Math.max(toolbar,page.top,0);Object.assign(vertical.style,{left:`${rect.right}px`,top:`${top}px`,height:`${Math.max(0,rect.bottom-top)}px`,width:'1px'});Object.assign(horizontal.style,{left:`${page.left}px`,top:`${rect.bottom}px`,width:`${page.width}px`,height:'1px'});},clear(){layer.remove();view.dom.classList.remove('mdx-gesture-active');}};
 }
 export function documentGestures(){return new Plugin({view(view){
  const marker=document.createElement('div');marker.className='mdx-drop-marker';marker.hidden=true;marker.setAttribute('aria-hidden','true');document.body.append(marker);

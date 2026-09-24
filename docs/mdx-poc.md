@@ -78,3 +78,19 @@ components remain readable without changing the static-markup execution contract
 Behavioral checks cover artifact routing, styled-block operations, gesture geometry,
 selection continuity and save draining. Browser verification must cover first drag,
 nested drop destination, resize guides, reader/edit transitions and persistence.
+
+The redesign now routes saved MDX through the ordinary artifact URL and shell.
+Class-only single-block divs import as Markdown node properties; spans remain inline
+marks; grouping divs remain real nodes. No Pandoc annotation syntax is introduced.
+Reader markup derives page measure, dimensions and float from the same document.
+The existing history drawer opens archived snapshots through authorized artifact
+routes, with archived JSONB rendered into source on read.
+
+Observed checks: focused model/API/UI checks passed (39 tests before the final
+percentage and source-exit regressions). Both additional regressions were observed
+failing and passing. Manual Chrome verification confirmed native nested drag/drop,
+visible insertion feedback, resize guides/readouts, saved dimensions, and reader/edit
+transitions. Broad local tests deferred (726 files); PR CI owns full coverage. The
+first redesign CI passed API/node/UI/build/validation and five browser shards; its
+MDX gate needed its text locator scoped to the editor because the artifact's hidden
+reader stays mounted. The real PostgreSQL concurrency job passed.
