@@ -42,6 +42,34 @@ describe('the editor bar', () => {
     expect(lastQueued()).toMatchObject({ title: 'renamed' });
   });
 
+  it('switches through sharing without a modal and reports visibility changes to the page', async () => {
+    const onSharingChange = vi.fn();
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ visibility: 'private', shares: [], canPrivate: true }))));
+    mount({ onSharingChange });
+    fireEvent.click(screen.getByLabelText('Show sharing'));
+    await waitFor(() => expect(screen.getByLabelText('Make public')).toBeTruthy());
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(onSharingChange).toHaveBeenCalledWith({ visibility: 'private', hasInvitedUsers: false });
+    fireEvent.click(screen.getByLabelText('Edit the source'));
+    expect(screen.queryByLabelText('Sharing settings')).toBeNull();
+    expect(screen.getByLabelText('Markup source')).toBeTruthy();
+  });
+
+  it('makes files and data reachable on a phone', () => {
+    const width = window.innerWidth;
+    Object.defineProperty(window, 'innerWidth', { configurable: true, value: 390 });
+    try {
+      mount();
+      fireEvent.click(screen.getByRole('button', { name: 'Show files' }));
+      expect(screen.getByLabelText('Files')).toBeTruthy();
+      fireEvent.click(screen.getByRole('button', { name: 'Show data' }));
+      expect(screen.getByLabelText('Data')).toBeTruthy();
+      expect(screen.queryByLabelText('Files')).toBeNull();
+    } finally {
+      Object.defineProperty(window, 'innerWidth', { configurable: true, value: width });
+    }
+  });
+
   it('queues a colour-mode pick and tells the document; theme default queues null', () => {
     mount();
     env.posted.length = 0;
@@ -145,10 +173,20 @@ describe('the query notebook', () => {
     + '<div data-design="tw" className="p-4"><Question data="$sales" /></div>';
   const withQuery = () => mount({ art: { ...art, markup: QUERY_SOURCE } as EditorArt });
 
-  it('offers the notebook only when the document declares a query', () => {
+  it('offers data settings even when the document declares no queries', () => {
     mount();
-    expect(screen.queryByLabelText('Show data')).toBeNull();
-    expect(screen.queryByLabelText('Queries')).toBeNull();
+    fireEvent.click(screen.getByLabelText('Show data'));
+    expect(screen.getByLabelText('Data')).toBeTruthy();
+    expect(screen.getByText('No referenced datasets.')).toBeTruthy();
+  });
+
+  it('opens Files and switches back to the app without opening a dialog', () => {
+    mount();
+    fireEvent.click(screen.getByLabelText('Show files'));
+    expect(screen.getByLabelText('Files')).toBeTruthy();
+    expect(screen.getByText('No referenced files.')).toBeTruthy();
+    fireEvent.click(screen.getByLabelText('Edit on the page'));
+    expect(screen.queryByLabelText('Files')).toBeNull();
   });
 
   it('opens data as a VIEW with each query as a cell, and the view switch leaves it', () => {
