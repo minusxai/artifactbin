@@ -5,7 +5,7 @@ description: >-
 ---
 ## Read first
 
-Editable `.jsx` artifacts combine a YAML fence with self-contained HTML and kit JSX, styled with Tailwind `className`, a theme and template. Datasets and media are artifacts too. Bind `<Query>` results with `data="$name"`.
+artifactbin publishes editable `.jsx` artifacts combining a YAML fence with self-contained HTML and kit JSX, styled with Tailwind `className`, a theme and template. Datasets and media are artifacts too.
 
 Every action goes through the `afbin` CLI; the site's HTTP API is not for agents.
 
