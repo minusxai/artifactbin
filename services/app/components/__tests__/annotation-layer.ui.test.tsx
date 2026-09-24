@@ -200,6 +200,39 @@ describe('AnnotationLayer', () => {
     expect(screen.getByLabelText('Reply to annotation')).toBeTruthy();
   });
 
+  it('expands replies after sustained hover, cancels a brief hover, and resets on leaving the preview', async () => {
+    const { frame, contentWindow } = makeFrame();
+    const onRailOpenChange = vi.fn();
+    const view = render(<TrustedUi overlay>{layer(frame, { showViewComments: true, onRailOpenChange })}</TrustedUi>);
+    await flush();
+    fromFrame(contentWindow, { type: STORY_ANNOTATION_LAYOUT_MESSAGE, nonce: NONCE,
+      positions: [{ id: ANN.id, rect: { x: 10, y: 220, width: 300, height: 40 } }] });
+    const shadow = view.container.querySelector('[data-trusted-ui]')!.shadowRoot!;
+    const card = shadow.querySelector('[data-annotation-id]')!;
+    fireEvent.mouseEnter(card);
+    const more = shadow.querySelector<HTMLButtonElement>('[aria-label="Expand replies"]');
+    expect(more).not.toBeNull();
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    try {
+      fireEvent.mouseEnter(more!);
+      act(() => vi.advanceTimersByTime(400));
+      expect(card.textContent).not.toContain('one more thought');
+      fireEvent.mouseLeave(more!);
+      act(() => vi.advanceTimersByTime(600));
+      expect(card.textContent).not.toContain('one more thought');
+      fireEvent.mouseEnter(more!);
+      act(() => vi.advanceTimersByTime(600));
+      expect(card.textContent).toContain('one more thought');
+      expect(more).toHaveAttribute('aria-expanded', 'true');
+      expect(onRailOpenChange).not.toHaveBeenCalled();
+      fireEvent.mouseLeave(card);
+      fireEvent.mouseEnter(card);
+      expect(card.textContent).not.toContain('one more thought');
+      fireEvent.click(shadow.querySelector('[aria-label="Expand replies"]')!);
+      expect(card.textContent).toContain('one more thought');
+    } finally { vi.useRealTimers(); }
+  });
+
   it('the sidebar resolves and replies; resolving drops the pin', async () => {
     const { frame, postMessage, contentWindow } = makeFrame();
     render(layer(frame, { railOpen: true }));

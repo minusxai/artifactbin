@@ -384,6 +384,25 @@ function ThreadPreview({ a, top, hovered, onOpen, onHover, remaining }: {
   onOpen: () => void;
   onHover: (id: string | null) => void;
 }) {
+  const [repliesExpanded, setRepliesExpanded] = useState(false);
+  const continuationRef = useRef<HTMLButtonElement>(null);
+  // Native events preserve hover targets inside TrustedUi's shadow root.
+  // The preview owns the delay; leaving or unmounting always cancels it.
+  useEffect(() => {
+    if (!hovered) { setRepliesExpanded(false); return; }
+    const button = continuationRef.current;
+    if (!button) return;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const cancel = () => { clearTimeout(timer); };
+    const enter = () => { cancel(); timer = setTimeout(() => setRepliesExpanded(true), 600); };
+    button.addEventListener('mouseenter', enter);
+    button.addEventListener('mouseleave', cancel);
+    return () => {
+      cancel();
+      button.removeEventListener('mouseenter', enter);
+      button.removeEventListener('mouseleave', cancel);
+    };
+  }, [hovered]);
   const first = a.thread[0];
   const label = first ? authorLabel(first.author) : 'Unknown';
   const messages = a.thread.length;
@@ -411,6 +430,8 @@ function ThreadPreview({ a, top, hovered, onOpen, onHover, remaining }: {
   return (
     <article
       ref={previewRoot}
+      onFocus={() => onHover(a.id)}
+      onBlur={(event) => { if (!event.currentTarget.contains(event.relatedTarget)) onHover(null); }}
       data-annotation-id={a.id}
       data-hovered={hovered ? 'true' : undefined}
       className={`${working?'motion-safe:animate-pulse':''} group pointer-events-auto overflow-hidden border text-left shadow-md transition-[top,width,height,border-color,background-color,box-shadow] duration-150 ${hovered ? 'z-10 border-edge-bright bg-comment-hover px-3 py-2.5 shadow-xl' : 'border-transparent bg-raised hover:bg-raised'}`}
@@ -421,7 +442,9 @@ function ThreadPreview({ a, top, hovered, onOpen, onHover, remaining }: {
         right: VIEW_COMMENT_INSET,
         width: hovered ? 288 : compactWidth,
         maxWidth: `calc(100vw - ${VIEW_COMMENT_INSET * 2}px)`,
-        height: hovered ? VIEW_COMMENT_EXPANDED_H : VIEW_COMMENT_COLLAPSED_H,
+        height: hovered ? (repliesExpanded ? 'auto' : VIEW_COMMENT_EXPANDED_H) : VIEW_COMMENT_COLLAPSED_H,
+        maxHeight: hovered && repliesExpanded ? `calc(100dvh - ${top + VIEW_COMMENT_INSET}px)` : undefined,
+        overflowY: hovered && repliesExpanded ? 'auto' : undefined,
         borderRadius: hovered ? 5 : '50% 50% 50% 3px',
       }}
     >
@@ -429,8 +452,6 @@ function ThreadPreview({ a, top, hovered, onOpen, onHover, remaining }: {
         type="button"
         aria-label={`Open annotation conversation by ${label}, ${messages} message${messages === 1 ? '' : 's'}`}
         onClick={onOpen}
-        onFocus={() => onHover(a.id)}
-        onBlur={() => onHover(null)}
         className="absolute inset-0 z-0 cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-accent"
         style={{ borderRadius: hovered ? 5 : '50% 50% 50% 3px' }}
       />
@@ -438,10 +459,13 @@ function ThreadPreview({ a, top, hovered, onOpen, onHover, remaining }: {
       {a.status==='resolved'&&<span aria-label="Resolved" className="pointer-events-none absolute bottom-0 right-0 z-10 text-xs text-accent">✓</span>}
       {work&&<span className="sr-only">{remoteWorkLabel(work)}{agents.length>1?` · ${agents.length} agents`:null}</span>}
       {hovered&&agents.length>1&&<span className="absolute right-2 top-1 text-[10px] text-muted">{agents.length} agents</span>}
-      {remaining!==undefined&&<><svg aria-hidden="true" className="pointer-events-none absolute inset-0 h-full w-full motion-reduce:hidden" viewBox="0 0 40 40"><circle cx="20" cy="20" r="18" fill="none" stroke="currentColor" strokeWidth="2" pathLength="100" strokeDasharray={`${remaining/100} 100`} transform="rotate(-90 20 20)"/></svg><span role="status" className="sr-only motion-reduce:not-sr-only">Resolved · {Math.ceil(remaining/1000)} seconds</span></>}
+      {remaining!==undefined&&<span role="status" className="sr-only motion-reduce:not-sr-only">Resolved · {Math.ceil(remaining/1000)} seconds</span>}
       {first && !hovered && (
         <span className="pointer-events-none absolute inset-0 flex items-center justify-start pl-[7px]">
-          <CompactAuthorMark author={first.author} />
+          <span className="relative flex h-[22px] w-[22px] shrink-0 items-center justify-center">
+            {remaining!==undefined&&<svg aria-hidden="true" className="pointer-events-none absolute -left-1 -top-1 h-[30px] w-[30px] motion-reduce:hidden" viewBox="0 0 40 40"><circle cx="20" cy="20" r="18" fill="none" stroke="currentColor" strokeWidth="2" pathLength="100" strokeDasharray={`${remaining/100} 100`} transform="rotate(-90 20 20)"/></svg>}
+            <CompactAuthorMark author={first.author} />
+          </span>
           {messages > 1 && (
             <span data-thread-count aria-hidden="true" className="absolute right-1.5 top-1/2 -translate-y-1/2 font-mono text-[9px] font-bold leading-none text-fg">
               {messages > 9 ? '9+' : messages}
@@ -457,9 +481,22 @@ function ThreadPreview({ a, top, hovered, onOpen, onHover, remaining }: {
           </span>
           <span className="mt-1.5 line-clamp-2 block font-sans text-sm leading-snug text-fg/90">{previewText(first.body)}</span>
           <span className="mt-auto flex items-center justify-between font-mono text-[10px] text-faint">
-            <ThreadContinuation thread={a.thread} />
+            {messages > 1 ? <button
+              ref={continuationRef}
+              type="button"
+              aria-label="Expand replies"
+              aria-expanded={repliesExpanded}
+              onClick={() => setRepliesExpanded(true)}
+              className="pointer-events-auto cursor-pointer rounded-sm text-left hover:text-accent focus-visible:outline-2 focus-visible:outline-accent"
+            ><ThreadContinuation thread={a.thread} /></button> : <ThreadContinuation thread={a.thread} />}
             <span className="transition-colors group-hover:text-accent">open →</span>
           </span>
+          {repliesExpanded && <span role="list" aria-label="Thread replies" className="pointer-events-auto mt-2 flex flex-col gap-3 border-t border-edge pt-2">
+            {a.thread.slice(1).map(reply => <span role="listitem" key={reply.id} className="block">
+              <AuthorIdentity author={reply.author} />
+              <span className="mt-1 block whitespace-pre-wrap break-words font-sans text-sm leading-snug text-fg/90">{previewText(reply.body)}</span>
+            </span>)}
+          </span>}
         </span>
       )}
     </article>
