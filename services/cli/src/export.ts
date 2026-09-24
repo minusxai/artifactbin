@@ -14,6 +14,7 @@ import {rowsCsv} from './tabular';
 import {parseCsv} from '../../app/lib/data-ingest/csv';
 import {coerceRows} from '../../app/lib/data-ingest/coerce';
 import type {HttpClient} from './http';
+import {datasetFileRows,isDatasetFile} from './dataset-file';
 import type {Workspace,Snapshot} from './workspace';
 
 /** Published rendering stays on its host; local images use the lazy preview/browser runtime. */
@@ -151,9 +152,8 @@ async function convertLocal(workspace:Workspace,target:ExportTarget,options:Expo
  }
  if(target.format==='original')return content;
  if(options.name!==undefined||/\.jsx$/i.test(source))return serialize(await namedRows(workspace,source,options),target.format);
- const extension=extname(source).toLowerCase();
- if(!['.csv','.json'].includes(extension))throw new CliError('unsupported_format',`${path} has no ${target.format} representation.`,'Export --format original for its bytes, or select a named result with --name.');
- return serialize(readRows(content,extension,path),target.format);
+ if(!isDatasetFile(source))throw new CliError('unsupported_format',`${path} has no ${target.format} representation.`,'Export --format original for its bytes, or select a named result with --name.');
+ return serialize(datasetFileRows(source,content,path),target.format);
 }
 
 async function convertRemote(target:ExportTarget,options:ExportOptions):Promise<Buffer>{
