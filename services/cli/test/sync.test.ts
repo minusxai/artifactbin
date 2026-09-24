@@ -9,7 +9,10 @@ import {saveTestConnection,seedIdentityPool} from './connection';
 import {parseDocument} from '../src/document';
 import {digest} from '../src/files';
 import {stageRequest,savePendingResponse} from '../src/pending-request';
-import {tracking,readRecord} from './tracking';
+import {tracking,readRecord,writeRecord} from './tracking';
+import {loadWorkspace} from '../src/workspace';
+import {localIdentities} from '../src/identities';
+import {readLocalDataset} from '../src/preview/local-inputs';
 import {parseResourceFile} from '../src/resource-file';
 import {parseDatasetPolicy} from '../../utils/src/dataset-policy';
 import {fork,type ChildProcess} from 'node:child_process';
@@ -808,6 +811,14 @@ test('pull --output <name>.yaml adopts the CSV a tracked dataset was published f
   // The rows stay where they were; one path tracks the dataset, and it is the YAML.
   assert.equal(await readFile(join(cwd,'tasks.csv'),'utf8'),'id,title,status\n1,Ship,todo\n');
   assert.deepEqual(Object.keys((await tracking(home,cwd)).files),['tasks.yaml']);
+  // Local export and preview resolve the id through the YAML to its source rows, not the retired path.
+  const workspace=await loadWorkspace(cwd,home),local=await localIdentities(workspace);
+  assert.equal(local.tasks09,'tasks.yaml');
+  assert.equal(await readRecord(home,cwd,'draft-identity','tasks.csv'),null,'the adopted path keeps no identity of its own');
+  assert.deepEqual((await readLocalDataset(workspace.root,local.tasks09!,'tasks09'))?.rows,[{id:1,title:'Ship',status:'todo'}]);
+  // State an older CLI left behind: a stale draft row never outranks the tracked path.
+  await writeRecord(home,cwd,'draft-identity','tasks.csv',{id:'tasks09'});
+  assert.equal((await localIdentities(await loadWorkspace(cwd,home))).tasks09,'tasks.yaml');
   // A dataset a page has written to is AHEAD of the local rows: the same pull brings them down.
   rows=[{id:1,title:'Ship',status:'done'}];head={...head,version:2,edit_id:'e2',state:digest('t2')};
   const refreshed=await invoke(['pull','tasks.yaml']);

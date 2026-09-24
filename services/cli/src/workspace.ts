@@ -33,7 +33,10 @@ interface TrackingUpdate {server:string;account:string;set?:Record<string,Tracke
 /** Synchronous by design: the caller runs it inside one `state.transaction`. */
 export function writeTracking(state:State,root:string,update:TrackingUpdate):void{
  state.put(root,'workspace',root,{server:normalizeServer(update.server),account:update.account} satisfies WorkspaceRecord);
- for(const path of update.remove??[])state.delete(root,'tracked',path);
+ // One path owns an identity: a path that stops tracking, or loses its id to another path, keeps no draft row for it.
+ const taken=new Map(Object.entries(update.set??{}).map(([path,entry])=>[entry.id,path]));
+ for(const path of update.remove??[]){state.delete(root,'tracked',path);state.delete(root,'draft-identity',path);}
+ for(const row of state.list<{id:string}>(root,'draft-identity'))if(taken.has(row.value.id)&&taken.get(row.value.id)!==row.key)state.delete(root,'draft-identity',row.key);
  for(const [path,entry] of Object.entries(update.set??{}))state.put(root,'tracked',path,entry);
 }
 /** Write tracking on its own, when no file change accompanies it. */
