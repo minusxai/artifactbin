@@ -94,3 +94,54 @@ test('preview resolves image refs only from selected dataset inputs and refreshe
   assert.equal((await image('ref:hidden')).status,403,'SQL cannot grant access to another reference');
  }finally{await session?.close();await rm(root,{recursive:true,force:true});}
 });
+
+test('a dataset tracked as typed YAML resolves through its source file, not the YAML bytes',async()=>{
+ const root=await mkdtemp(join(tmpdir(),'preview-yaml-dataset-'));let session:Awaited<ReturnType<typeof startPreview>>|undefined;
+ const remote:string[]=[];
+ try{
+  await writeFile(join(root,'report.jsx'),'<Helmet><Query name="stored" source="ref:data01">{`select sum(amount) as total from public.rows`}</Query><Query name="connected" source="ref:conn01">{`select count(*) as n from public.rows`}</Query></Helmet><p>Report</p>');
+  await writeFile(join(root,'feedback.yaml'),'shares:\n  - email: reviewer@example.com\n    role: editor\ntype: dataset\nid: data01\nhead_version: 1\nsource: feedback.json\n');
+  await writeFile(join(root,'feedback.json'),JSON.stringify([{amount:10},{amount:32}]));
+  await writeFile(join(root,'orders.yaml'),'type: dataset\nid: conn01\nhead_version: 1\nsource: orders.jsx\n');
+  await writeFile(join(root,'orders.jsx'),'<Dataset></Dataset>\n');
+  session=await startPreview({root,home:root,files:['report.jsx'],localFiles:{data01:'feedback.yaml',conn01:'orders.yaml'},capture:true,
+   dataset:async id=>{remote.push(id);return {columns:[{name:'x',type:'number'}],rows:[{x:1},{x:2}]};}});
+  const result=await(await fetch(session.url+'/query',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({file:'report.jsx',values:{}})})).json();
+  assert.equal(session.failure(),undefined,JSON.stringify(result));
+  assert.deepEqual(result.tables.stored.rows,[{total:42}]);
+  assert.deepEqual(result.tables.connected.rows,[{n:2}]);
+  assert.deepEqual(remote,['conn01'],'a definition-backed dataset has no local rows and reads the host');
+ }finally{await session?.close();await rm(root,{recursive:true,force:true});}
+});
+
+test('an unreadable local dataset names its file instead of leaking a parser error',async()=>{
+ const root=await mkdtemp(join(tmpdir(),'preview-bad-dataset-'));let session:Awaited<ReturnType<typeof startPreview>>|undefined;
+ try{
+  await writeFile(join(root,'report.jsx'),'<Helmet><Query name="rows" source="ref:data01">{`select * from public.rows`}</Query></Helmet><p>Report</p>');
+  await writeFile(join(root,'rows.json'),'shares:\n  - not json\n');
+  session=await startPreview({root,home:root,files:['report.jsx'],localFiles:{data01:'rows.json'},capture:true});
+  const response=await fetch(session.url+'/query',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({file:'report.jsx',values:{}})});
+  assert.equal(response.status,422);
+  assert.match(session.failure()!,/rows\.json/);assert.match(session.failure()!,/data01/);
+  assert.doesNotMatch(session.failure()!,/Unexpected token|is not valid JSON/);
+  await session.close();
+  await writeFile(join(root,'rows.yaml'),'- not\n- a mapping\n');
+  session=await startPreview({root,home:root,files:['report.jsx'],localFiles:{data01:'rows.yaml'},capture:true});
+  assert.equal((await fetch(session.url+'/query',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({file:'report.jsx',values:{}})})).status,422);
+  assert.match(session.failure()!,/data01/);assert.match(session.failure()!,/rows\.yaml/);
+ }finally{await session?.close();await rm(root,{recursive:true,force:true});}
+});
+
+test('an image tracked as typed YAML serves its source bytes',async()=>{
+ const root=await mkdtemp(join(tmpdir(),'preview-yaml-image-'));let session:Awaited<ReturnType<typeof startPreview>>|undefined;
+ try{
+  const png=Buffer.from('89504e470d0a1a0a0000000d49484452','hex');
+  await writeFile(join(root,'report.jsx'),'<img src="ref:img001" alt="Cover" />');
+  await writeFile(join(root,'cover.yaml'),'type: file\nid: img001\nhead_version: 1\nsource: cover.png\n');
+  await writeFile(join(root,'cover.png'),png);
+  session=await startPreview({root,home:root,files:['report.jsx'],localFiles:{img001:'cover.yaml'},capture:true,asset:async()=>assert.fail('a local image is not fetched from the host')});
+  const response=await fetch(session.url+'/remote/img001');
+  assert.equal(response.status,200);assert.equal(response.headers.get('content-type'),'image/png');
+  assert.deepEqual(Buffer.from(await response.arrayBuffer()),png);
+ }finally{await session?.close();await rm(root,{recursive:true,force:true});}
+});
