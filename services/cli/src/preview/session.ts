@@ -22,9 +22,8 @@ import {digest,atomicWrite} from '../files';
 import {parseJsx} from '../../../app/lib/jsx';
 import {splitHelmet} from '../../../app/lib/story/helmet';
 import {stampNodeIds} from '../../../app/lib/story/node-ids';
-import {parseCsv} from '../../../app/lib/data-ingest/csv';
-import {coerceRows} from '../../../app/lib/data-ingest/coerce';
-import {inferColumns} from '../../../utils/src/shape';
+import {localInputPath,readLocalDataset} from './local-inputs';
+import {CliError} from '../errors';
 import {evaluateDataflow,type DatasetTables} from '../../../app/lib/sql/dataflow-core';
 import {createSql} from '../../../sql/src/local';
 import {tableQueryInput} from '../../../utils/src/index';
@@ -88,14 +87,14 @@ export async function startPreview(options:{root:string;files:string[];home:stri
    if(local&&allowed.has(local)){res.writeHead(302,{Location:'/workspace/'+local.split('/').map(encodeURIComponent).join('/')});return res.end();}
   }
   if(req.method==='GET'&&/^\/a\/[A-Za-z0-9]{6,12}$/.test(target.pathname)&&options.origin){res.writeHead(302,{Location:options.origin+target.pathname});return res.end();}
-  if(req.method==='GET'&&target.pathname.startsWith('/remote/')){const id=target.pathname.slice(8);const local=options.localFiles?.[id];if(remoteIds.has(id)&&local&&resources.has(local)){res.setHeader('Content-Type',fileContentType(local)??'application/octet-stream');return res.end(await readFile(await confinedPath(root,join(root,local))));}if(!remoteIds.has(id)||!options.asset)throw new Refusal(403,'Remote reference is not selected');const asset=await options.asset(id);res.setHeader('Content-Type',asset.contentType);return res.end(asset.bytes);}
+  if(req.method==='GET'&&target.pathname.startsWith('/remote/')){const id=target.pathname.slice(8);const mapped=options.localFiles?.[id];const local=remoteIds.has(id)&&mapped&&resources.has(mapped)?await localInputPath(root,mapped):undefined;if(local){res.setHeader('Content-Type',fileContentType(local)??'application/octet-stream');return res.end(await readFile(await confinedPath(root,join(root,local))));}if(!remoteIds.has(id)||!options.asset)throw new Refusal(403,'Remote reference is not selected');const asset=await options.asset(id);res.setHeader('Content-Type',asset.contentType);return res.end(asset.bytes);}
   if(req.method==='GET'&&target.pathname.startsWith('/fonts/')&&options.publicAssets){const path=await confinedPath(options.publicAssets,target.pathname.slice(1));res.setHeader('Content-Type',fileContentType(path)??'font/woff2');return res.end(await readFile(path));}
   if(req.method==='GET'&&target.pathname==='/files')return json([...allowed]);
   if(req.method==='GET'&&target.pathname==='/image'){
    const current=await read(file),id=imageReferenceId(target.searchParams.get('u')??'');
    const sources=current.flow.queries.flatMap(query=>query.source?[query.source]:query.refs);
    if(!id||!sources.some(source=>datasetImages.get(source)?.has(id)))throw new Refusal(403,'Image reference is not selected');
-   const local=options.localFiles?.[id];
+   const mapped=options.localFiles?.[id],local=mapped?await localInputPath(root,mapped):undefined;
    const asset=local?{bytes:await readFile(await confinedPath(root,join(root,local))),contentType:fileContentType(local)??'application/octet-stream'}:await options.asset?.(id);
    if(!asset||!asset.contentType.startsWith('image/'))throw new Refusal(404,'Image unavailable');
    res.setHeader('Content-Type',asset.contentType);return res.end(asset.bytes);
@@ -126,10 +125,8 @@ export async function startPreview(options:{root:string;files:string[];home:stri
      if(!remoteIds.has(id))throw new Refusal(403,'Remote reference is not selected');
      const local=options.localFiles?.[id];
      if(local&&resources.has(local)){
-      const bytes=await readFile(await confinedPath(root,join(root,local)),'utf8');
-      const csv=local.endsWith('.csv')?parseCsv(bytes):null;
-      const rows=csv?coerceRows(csv.headers,csv.rows):JSON.parse(bytes);
-      datasets[id]={rows,columns:inferColumns(rows)};continue;
+      const table=await readLocalDataset(root,local,id).catch(error=>{throw error instanceof CliError?new Refusal(422,error.message):error;});
+      if(table){datasets[id]=table;continue;}
      }
      if(!options.dataset)throw new Refusal(422,`Remote dataset ${id} requires its host connection`);
      datasets[id]=await options.dataset(id);
