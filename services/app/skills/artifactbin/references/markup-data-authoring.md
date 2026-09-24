@@ -6,6 +6,9 @@ description: Chart authoring.
 
 ## Theme, legends and labels
 
+Use theme colors, readable axis names/units, and legends unless directly labeled.
+
+<!--bundle:skip-->
 Leave color ranges and schemes unset: categorical and continuous scales use
 the theme. Do not add literal colors or named palettes unless the user explicitly
 requests custom colors. For thematic emphasis, use `"var(--chart-2)"` (or another
@@ -23,6 +26,7 @@ color/size measures; name the measure and units in `title`. Use `legend: null`
 only when direct labels convey the same meaning or the legend is redundant.
 For layered charts, explicitly encode each series rather than coloring each
 layer with a literal. Recipe `columnFormats` aliases provide readable names.
+<!--/bundle:skip-->
 
 ## Build chart attributes without counting braces
 

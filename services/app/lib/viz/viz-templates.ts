@@ -223,7 +223,8 @@ const waterfall: VizTemplate = {
           },
         },
         {
-          mark: { type: 'text', dy: -8, tooltip: false },
+          // Keep signed labels outside either end of the bar, regardless of its color.
+          mark: { type: 'text', dy: { expr: 'datum.__mx_amount < 0 ? 14 : -8' }, tooltip: false },
           encoding: {
             x,
             y: { field: '__mx_sum', type: 'quantitative', title: yTitle },
