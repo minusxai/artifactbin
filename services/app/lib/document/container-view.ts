@@ -43,7 +43,7 @@ export function containerNodeView(node:PmNode,view:EditorView,getPos:()=>number|
   contentDOM.style.minHeight=typeof props.height==='number'?`${Math.max(0,props.height-24)}px`:'';
   contentDOM.style.display=current.attrs.name==='Flex'?'flex':'block';contentDOM.style.flexDirection=props.direction==='column'?'column':'row';contentDOM.style.gap='16px';
   feedback.removeAttribute('style');controls.replaceChildren();controls.hidden=!editable();dividers.replaceChildren();handles=[];
-  const grip=button(`Select ${current.attrs.name??'container'}`,'mdx-container-grip','⠿');grip.draggable=true;grip.onmousedown=e=>{e.preventDefault();selected();};
+  const grip=button(`Select ${current.attrs.name??'container'}`,'mdx-container-grip','⠿');grip.draggable=true;grip.onmousedown=selected;grip.onclick=e=>{if(e.detail===0)selected();};
   controls.append(dividers,sheet,feedback);resizeHandle('width');resizeHandle('height');resizeHandle('both');
   if(current.attrs.name!=='Flex')return;
   const sizes=flexRatios(props.sizes,current.childCount),column=props.direction==='column';

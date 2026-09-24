@@ -18,7 +18,7 @@ export function documentNodeViews(store:DataflowStore,editable:()=>boolean){
    const dom=window.document.createElement(node.isInline?'span':'div');dom.className='mdx-component';dom.contentEditable='false';
    const content=window.document.createElement(node.isInline?'span':'div');dom.append(content);let current=node;const root:Root=createRoot(content);
    const select=window.document.createElement('button');select.type='button';select.className='mdx-component-select';select.textContent='⠿';select.draggable=true;select.setAttribute('aria-label',`Select ${node.attrs.name??node.attrs.tag??'component'}`);dom.append(select);
-   select.onmousedown=e=>{e.preventDefault();const pos=getPos();if(pos!==undefined)v.dispatch(v.state.tr.setSelection(NodeSelection.create(v.state.doc,pos)));};
+   select.onmousedown=()=>{const pos=getPos();if(pos!==undefined)v.dispatch(v.state.tr.setSelection(NodeSelection.create(v.state.doc,pos)));};select.onclick=e=>{if(e.detail===0){const pos=getPos();if(pos!==undefined)v.dispatch(v.state.tr.setSelection(NodeSelection.create(v.state.doc,pos)));}};
    const handle=window.document.createElement('button');handle.type='button';handle.className='mdx-resize';handle.setAttribute('aria-label','Resize component');handle.textContent='↘';dom.append(handle);
    function draw(){
     dom.dataset.nodeId=current.attrs.id;

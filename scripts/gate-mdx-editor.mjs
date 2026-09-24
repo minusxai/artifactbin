@@ -48,5 +48,7 @@ try{
  assert.deepEqual((await head()).document.nodes[paragraphId],styled.document.nodes[paragraphId]);
  await page.reload();await page.getByRole('textbox',{name:'Document editor',exact:true}).waitFor();assert.ok(await page.getByText('An added paragraph from source.',{exact:true}).isVisible());
  assert.equal((await head()).document.nodes[iframeId].props.float,'left');
+ await save(()=>page.getByRole('button',{name:'Select Iframe',exact:true}).dragTo(page.getByRole('heading',{name:'Room for an idea',exact:true})));
+ const moved=await head();const column=moved.document.nodes[flexId].children[0];assert.ok(moved.document.nodes[column].children.includes(iframeId),'Dragging moves the same component identity into the column');
  console.log('ok MDX inline range fonts, dimensions, float, pointer resizing, source identities and saved reload');
 }finally{await browser.close();}

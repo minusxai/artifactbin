@@ -56,3 +56,9 @@ it('puts divider handles in their own boundary layer and gives the parent a sepa
  const next=onChange.mock.lastCall![0];expect(Object.values(next.nodes).find((n:unknown)=>(n as {name?:string}).name==='Flex')).toMatchObject({props:{sizes:[1.5,1.5]}});
  fireEvent.change(screen.getByRole('spinbutton',{name:'Width of parent (%)'}),{target:{value:'3'}});expect((screen.getByRole('spinbutton',{name:'Width of parent (%)'}) as HTMLInputElement).value).toBe('3');
 });
+
+it('keeps native dragging enabled when selecting a component handle',()=>{
+ render(<DocumentEditor document={parseDocumentMdx('<Iframe title="Demo"><p>Hello</p></Iframe>')} onChange={()=>{}}/>);
+ const event=new MouseEvent('mousedown',{bubbles:true,cancelable:true});
+ screen.getByRole('button',{name:'Select Iframe'}).dispatchEvent(event);expect(event.defaultPrevented).toBe(false);
+});
