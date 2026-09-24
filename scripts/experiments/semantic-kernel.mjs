@@ -34,6 +34,7 @@ const get=(obj,path)=>path.reduce((n,k)=>n[k],obj);
 const bytes=s=>Buffer.byteLength(s,'utf8');
 const safe=s=>{try{encodeProseText(s);return !/<\/?style\b/i.test(s);}catch{return false;}};
 const raw=s=>encodeProseText(s);
+export function encodeSemanticProseText(value){assert.ok(safe(value),'Needs semantic operation');return raw(value);}
 const walk=(tree,visit)=>{const each=(nodes,ancestors=[])=>nodes.forEach(n=>{visit(n,ancestors);if(n.type==='element')each(n.children,[...ancestors,n]);});each(tree.roots);};
 const ids=tree=>{const found=[];walk(tree,n=>{if(n.slot)found.push(n.slot);});assert.equal(new Set(found).size,found.length,'A prose slot may occur only once');return found;};
 // Only the nearest prose element is significant. Kit/For/fragment ancestors do not
@@ -50,7 +51,7 @@ function scannerIsolated(tree){let isolated=true;walk(tree,n=>{
 export function renderState(document){const tree=clone(document.tree);walk(tree,n=>{if(n.slot){assert.ok(document.prose[n.slot]);n.value=document.prose[n.slot].value;delete n.slot;}});return decodeSource(tree);}
 function fixedBytes(tree){const copy=clone(tree);walk(copy,n=>{if(n.slot)n.value='';});return bytes(decodeSource(copy));}
 function project(tree,observations,{extract=true}={}){
- const consumed=new Set(),fresh={};let isolated=scannerIsolated(tree);
+ const consumed=new Set(),fresh={},used=new Set([...Object.keys(observations),...ids(tree)]);let isolated=scannerIsolated(tree);
  const hydrate=n=>{assert.ok(observations[n.slot],`Missing context for slot ${n.slot}`);consumed.add(n.slot);n.value=observations[n.slot].value;delete n.slot;};
  // Adjacent text nodes can form scanner syntax across two independently edited leaves.
  // Materialize their whole run; parsing the published result merges it before recertifying.
@@ -61,7 +62,7 @@ function project(tree,observations,{extract=true}={}){
  isolated=scannerIsolated(tree);
  if(!isolated)walk(tree,n=>{if(n.slot)hydrate(n);});
  if(extract&&isolated)walk(tree,(n,parents)=>{if(!n.slot&&eligible(n,parents)&&!adjacent.has(n)&&safe(n.value)){
-  const slot=key();fresh[slot]={value:n.value,bytes:bytes(raw(n.value))};n.value='';n.slot=slot;
+  let slot=key();while(used.has(slot))slot=key();used.add(slot);fresh[slot]={value:n.value,bytes:bytes(raw(n.value))};n.value='';n.slot=slot;
  }});
  return {tree,consumed,fresh};
 }

@@ -10,13 +10,12 @@ import {storyCssCompileVersion} from '../../services/app/lib/data/story/story-cs
 import {editorScope} from '../../services/app/lib/artifacts.ts';
 import {newEditId} from '../../services/app/lib/story/splice.ts';
 import {trackEvent} from '../../services/app/lib/analytics.ts';
-import {encodeProseText} from './validated-operations.mjs';
-import {createSemanticState,renderState} from './semantic-kernel.mjs';
+import {createSemanticState,renderState,encodeSemanticProseText} from './semantic-kernel.mjs';
 const POLICY='semantic-artifact-prose-v1';
 const encode=(source,meta)=>{
  const {document,contextRequired}=createSemanticState(source,typeof meta==='string'?JSON.parse(meta):meta);
  const parsed=parseJsx(source);assert.ok(parsed.ok);let beforeUnits=0,order=0;
- const visit=(a,b)=>{if(a.slot){const raw=encodeProseText(document.prose[a.slot].value);assert.equal(source.slice(b.start,b.end),raw);Object.assign(document.prose[a.slot],{fixedStart:b.start-beforeUnits,order:order++,units:raw.length});beforeUnits+=raw.length;}if(a.children)a.children.forEach((n,i)=>visit(n,b.children[i]));};
+ const visit=(a,b)=>{if(a.slot){const raw=encodeSemanticProseText(document.prose[a.slot].value);assert.equal(source.slice(b.start,b.end),raw);Object.assign(document.prose[a.slot],{fixedStart:b.start-beforeUnits,order:order++,units:raw.length});beforeUnits+=raw.length;}if(a.children)a.children.forEach((n,i)=>visit(n,b.children[i]));};
  document.tree.roots.forEach((n,i)=>visit(n,parsed.nodes[i]));
  return {...document,policy:POLICY,contextRequired};
 };
@@ -69,14 +68,15 @@ export async function createSemanticArtifactWriter(pool){
  const compiler=storyCssCompileVersion();
  const columns=(await pool.query("SELECT column_name FROM information_schema.columns WHERE table_name='artifacts' AND table_schema='public' ORDER BY ordinal_position")).rows.map(r=>`u."${r.column_name}"`).join(',');
  return async(actor,id,input)=>{
-  assert.deepEqual(Object.keys(input).sort(),['baseVersion','epoch','newText','oldText','sharingRevision','slot']);
-  const {slot,oldText,newText,baseVersion,epoch,sharingRevision}=input;
+  assert.deepEqual(Object.keys(input).sort(),['baseVersion','epoch','newText','oldText','order','sharingRevision','slot']);
+  const {slot,oldText,newText,baseVersion,epoch,sharingRevision,order}=input;
+  assert.ok(Number.isSafeInteger(order)&&order>=0);
   assert.ok([baseVersion,epoch,sharingRevision].every(Number.isSafeInteger)&&baseVersion>=1&&epoch>=1&&sharingRevision>=0);
-  const before=encodeProseText(oldText),after=encodeProseText(newText);assert.notEqual(before,after);
+  const before=encodeSemanticProseText(oldText),after=encodeSemanticProseText(newText);assert.notEqual(before,after);
   const scope=editorScope(actor),editId=newEditId();
   // Offsets are UTF-16 code units, exactly like the existing app log. The fixed part
   // excludes all prose; current preceding leaf lengths are summed on the locked row.
-  const start=`(source#>>ARRAY['prose',$3,'fixedStart'])::int+COALESCE((SELECT sum((p.value->>'units')::int)::int FROM jsonb_each(source->'prose') p WHERE (p.value->>'order')::int<(source#>>ARRAY['prose',$3,'order'])::int),0)`;
+  const start=`(source#>>ARRAY['prose',$3,'fixedStart'])::int+COALESCE((SELECT sum((p.value->>'units')::int)::int FROM jsonb_each(source->'prose') p WHERE (p.value->>'order')::int<$20::int),0)`;
   const old=['id','version','title','description','format','content','source','meta','actor_user_id','actor_token_id','bench_archived_at'];
   const result=await pool.query(`WITH updated AS (
    UPDATE artifacts SET source=jsonb_set(source,ARRAY['prose',$3],(source#>ARRAY['prose',$3])||jsonb_build_object('value',$4::text,'bytes',$5::int,'units',$6::int,'revision',version+1),false),
@@ -85,7 +85,7 @@ export async function createSemanticArtifactWriter(pool){
     version=version+1,edit_id=$8,actor_user_id=$9,actor_token_id=$10,updated_at=now()
    WHERE id=$1 AND ${scope.where('$2')} AND format='markup' AND sharing_revision=$11 AND bench_epoch=$12 AND version>=$13
     AND source->'prose' ? $3 AND source#>>ARRAY['prose',$3,'value']=$14
-    AND (source#>>ARRAY['prose',$3,'revision'])::int<=$13
+    AND (source#>>ARRAY['prose',$3,'revision'])::int<=$13 AND (source#>>ARRAY['prose',$3,'order'])::int=$20
     AND source->>'policy'=$15 AND source->>'contextRequired'='false' AND meta->>'cssCompileVersion'=$16
     AND bench_source_bytes+$7::int BETWEEN 0 AND 2000000
    RETURNING WITH (OLD AS o,NEW AS n) n.*,${old.map(k=>`o.${k} AS previous_${k}`).join(',')}
@@ -99,7 +99,7 @@ export async function createSemanticArtifactWriter(pool){
    SELECT id,edit_id,bench_last_start,$17,$18,bench_last_start,bench_last_start+$19::int,$9,$10 FROM updated
    RETURNING pg_notify('artifact_'||lower(artifact_id),edit_id)
   ) SELECT ${columns},COALESCE((SELECT jsonb_agg(jsonb_build_object('email',s.email,'role',s.role) ORDER BY s.email) FROM artifact_shares s WHERE s.artifact_id=u.id),'[]'::jsonb) shares FROM updated u WHERE EXISTS(SELECT 1 FROM logged)`,
-  [id,scope.val,slot,newText,Buffer.byteLength(after),after.length,Buffer.byteLength(after)-Buffer.byteLength(before),editId,actor.userId,actor.tokenId||null,sharingRevision,epoch,baseVersion,oldText,POLICY,compiler,before,after,before.length]);
+  [id,scope.val,slot,newText,Buffer.byteLength(after),after.length,Buffer.byteLength(after)-Buffer.byteLength(before),editId,actor.userId,actor.tokenId||null,sharingRevision,epoch,baseVersion,oldText,POLICY,compiler,before,after,before.length,order]);
   const row=result.rows[0];if(!row)return null;decodeArtifactRow(row);void trackEvent('edit',row.id,{userId:row.user_id});return row;
  };
 }

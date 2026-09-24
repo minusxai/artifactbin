@@ -28,7 +28,7 @@ try{
  const original=db.query.bind(db),transaction=db.transaction.bind(db);db.query=counted(original);db.transaction=fn=>{metrics.transactions++;return transaction(tx=>fn({...tx,query:counted(tx.query.bind(tx))}));};
  const writer=mode==='semantic'?await createSemanticArtifactWriter({query:counted(pool.query.bind(pool))}):null;
  const token=await mintToken('mxmx_test_semantic_app'),actor={tokenId:token.id,userId:null};
- const request=(row,i,newText)=>{const slot=row.bench_semantic_state.tree.roots[0].children[i].children[0].slot;return {slot,oldText:row.bench_semantic_state.prose[slot].value,newText,baseVersion:row.version,epoch:row.bench_epoch,sharingRevision:row.sharing_revision??0};};
+ const request=(row,i,newText)=>{const slot=row.bench_semantic_state.tree.roots[0].children[i].children[0].slot;return {slot,order:row.bench_semantic_state.prose[slot].order,oldText:row.bench_semantic_state.prose[slot].value,newText,baseVersion:row.version,epoch:row.bench_epoch,sharingRevision:row.sharing_revision??0};};
  const verify=async(id)=>{
   const head=await getArtifactById(id),log=(await db.query('SELECT * FROM artifact_edits WHERE artifact_id=$1 ORDER BY seq',[id])).rows;
   let replay='';const versions=new Map();
@@ -66,15 +66,17 @@ try{
   const elapsed=performance.now()-started,counts={...metrics};
   const head=await verify(initial.id);assert.equal(head.version,49);for(let i=0;i<16;i++)assert.ok(head.source.includes(value(i,3)));
   const identities=(await db.query('SELECT source_id,retired_version FROM artifact_source_ids WHERE artifact_id=$1',[initial.id])).rows;assert.equal(identities.length,paragraphs+1);assert.ok(identities.every(x=>x.retired_version==null));
-  if(mode!=='whole')assert.equal((await db.query('SELECT count(*)::int n FROM artifact_versions WHERE artifact_id=$1',[initial.id])).rows[0].n,1);
+  // Long measurements can cross the real 120-second coalescing window.
+  // Exact archive preimages are checked by verify above; short runs have one archive.
+  if(mode!=='whole'&&elapsed<119000)assert.equal((await db.query('SELECT count(*)::int n FROM artifact_versions WHERE artifact_id=$1',[initial.id])).rows[0].n,1);
   if(mode==='semantic'){assert.equal(counts.queries-counts.telemetry,48);assert.equal(counts.selects,0);}
   const entry={run:run+1,sourceBytes:Buffer.byteLength(published.source),concurrency:16,accepted:48,elapsedMs:elapsed,acceptedPerSecond:48000/elapsed,p95Ms:quantile(samples.map(s=>s.ms),.95),p50Ms:quantile(samples.map(s=>s.ms),.5),clientRetries:samples.reduce((n,s)=>n+s.retries,0),...counts};
   results.runs.push(entry);console.error(JSON.stringify(entry));
   results.checks.push('all 48 changes retained; app logs replay exactly; every archive preimage matches; public IDs unchanged; source/hash/bytes/CSS agree');
   if(mode==='semantic'&&run===0){
    const probe=request(head,0,'Checked');
-   for(const override of [{baseVersion:head.version+100},{sharingRevision:probe.sharingRevision+1},{slot:'unknown'}])assert.equal(await writer(actor,initial.id,{...probe,...override}),null);
-   for(const newText of ['{$_row.name}','className="bg-red-500"','\0'])await assert.rejects(writer(actor,initial.id,{...probe,newText}));
+   for(const override of [{baseVersion:head.version+100},{sharingRevision:probe.sharingRevision+1},{slot:'unknown'},{order:probe.order+1}])assert.equal(await writer(actor,initial.id,{...probe,...override}),null);
+   for(const newText of ['{$_row.name}','className="bg-red-500"','<style>p { color: red }</style>','\0'])await assert.rejects(writer(actor,initial.id,{...probe,newText}));
    await assert.rejects(writer(actor,initial.id,{...probe,annotationOps:[]}));
    await pool.query("UPDATE artifacts SET source=jsonb_set(source,'{policy}','\"stale\"') WHERE id=$1",[initial.id]);
    assert.equal(await writer(actor,initial.id,probe),null);
