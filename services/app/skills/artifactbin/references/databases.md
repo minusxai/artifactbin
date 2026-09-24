@@ -54,7 +54,7 @@ Cells query qualified raw tables such as `public.events` and reference **earlier
 
 The final whitelist selects physical columns or model output columns independently of notebook inputs. The example exposes only `models.activity`; its `raw_events` helper and `public.events` source remain unavailable to readers. To expose physical columns directly, add a table such as `<Table schema="public" name="events" sourceSchema="public" sourceTable="events" columns={["user_id"]} />`. In the UI, a cell's Expose checkbox and its whitelist tree entry control the same selection.
 
-Structured `CatalogInput` objects remain accepted in `dataset`, including `kind:"stored"` tables with `rows`. Omit rows on an existing table to retain its data. Arrays/CSV remain the single-table `public.rows` case.
+Structured `CatalogInput` objects remain accepted in `dataset`, including `kind:"stored"` tables with `rows`. Omit rows on an existing table to retain its data; columns it newly declares are added, null in every kept row. Dropping or retyping a stored column needs the rows restated. Arrays/CSV remain the single-table `public.rows` case.
 
 The default schema is fixed: bare `events` always resolves there. Updates retain optimistic concurrency and version history.
 
