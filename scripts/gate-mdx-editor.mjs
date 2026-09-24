@@ -110,7 +110,8 @@ try{
  await page.getByRole('status').filter({hasText:'All changes saved'}).waitFor();
  const demoAfter=await demoHead();assert.equal(demoAfter.document.nodes.h2WU.content.filter(run=>run.type==='break').length,1);
  assert.equal(Object.keys(demoAfter.document.nodes).length,Object.keys(demoBefore.document.nodes).length,'A line break must retain the paragraph and node identities');
- await page.reload();await page.locator('.ProseMirror #h2WU br').waitFor();
+ await page.reload();await page.locator('.ProseMirror #h2WU br').waitFor({state:'attached'});
+ assert.ok((await page.locator('.ProseMirror #h2WU').innerText()).includes('\n'),'The saved break must split the rendered paragraph');
  await page.getByRole('button',{name:'Exit edit mode',exact:true}).click();await page.waitForURL(url=>url.hash!=='#edit');
  assert.equal((await page.locator('[data-mx-inline-story] #title').innerText()).trim(),'How We Built\nAI-Powered Pitch Training\nfor cult Centre Managers');
  console.log('ok MDX gestures, preserved history, exact website canvas, line breaks, save and reload');
