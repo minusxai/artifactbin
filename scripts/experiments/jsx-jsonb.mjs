@@ -1,12 +1,16 @@
 /** Architecture probe only. No app schema, production writes, or editor changes.
  * Run: npx tsx scripts/experiments/jsx-jsonb.mjs
- * Requires the retained POC commit in git history. Uses fresh in-memory PGLite.
+ * Requires the retained POC commit in git history. Starts a disposable local PostgreSQL cluster with durability enabled.
  */
 import assert from 'node:assert/strict';
 import {execFileSync} from 'node:child_process';
 import {performance} from 'node:perf_hooks';
+import {createHash} from 'node:crypto';
 import {build} from 'esbuild';
-import {PGlite} from '@electric-sql/pglite';
+import pg from 'pg';
+import {mkdtempSync,rmSync} from 'node:fs';
+import {tmpdir} from 'node:os';
+import {join} from 'node:path';
 import {parseJsx} from '../../services/app/lib/jsx/parse.ts';
 import {serializeJsx} from '../../services/app/lib/jsx/serialize.ts';
 
@@ -15,8 +19,14 @@ const readPoc=path=>execFileSync('git',['show',`${POC}:${path}`],{encoding:'utf8
 // Execute the actual POC compiler/model without porting either into product code.
 const bundle=await build({stdin:{contents:readPoc('services/app/lib/document/sql.ts'),loader:'ts',resolveDir:process.cwd()},bundle:true,write:false,platform:'node',format:'esm',plugins:[{name:'poc-model',setup(builder){builder.onResolve({filter:/^\.\/model$/},()=>({path:'model',namespace:'poc'}));builder.onLoad({filter:/.*/,namespace:'poc'},()=>({contents:readPoc('services/app/lib/document/model.ts'),loader:'ts'}));}}]});
 const {compileDocumentOperations}=await import(`data:text/javascript;base64,${Buffer.from(bundle.outputFiles[0].text).toString('base64')}`);
-const db=new PGlite();
-const results={base:execFileSync('git',['rev-parse','HEAD'],{encoding:'utf8'}).trim(),poc:POC,engine:'PGLite 0.4.6, in-memory, one connection; NOT a multi-writer PostgreSQL benchmark'};
+const cluster=mkdtempSync(join(tmpdir(),'jsx-jsonb-pg-'));const data=join(cluster,'data');
+execFileSync('initdb',['-D',data,'-U','probe','--auth=trust','--no-locale','-E','UTF8'],{stdio:'ignore'});
+execFileSync('pg_ctl',['-D',data,'-l',join(cluster,'server.log'),'-o',`-k ${cluster} -p 55483 -c listen_addresses=''`,'-w','start'],{stdio:'ignore'});
+const client=new pg.Client({host:cluster,port:55483,user:'probe',database:'postgres'});await client.connect();
+const db={query:(...args)=>client.query(...args),exec:sql=>client.query(sql)};
+try {
+const settings=(await db.query("SELECT version() AS version, current_setting('fsync') AS fsync,current_setting('synchronous_commit') AS synchronous_commit,current_setting('full_page_writes') AS full_page_writes,current_setting('default_toast_compression') AS compression,current_setting('block_size') AS block_size")).rows[0];
+const results={base:execFileSync('git',['rev-parse','HEAD'],{encoding:'utf8'}).trim(),poc:POC,engine:settings,scope:'local PostgreSQL, disposable disk-backed cluster, Unix socket, one writer; NOT a multi-writer benchmark'};
 const clean=value=>Array.isArray(value)?value.map(clean):value&&typeof value==='object'?Object.fromEntries(Object.entries(value).filter(([key])=>!['start','end'].includes(key)).map(([key,v])=>[key,clean(v)])):value;
 function parsed(source){const result=parseJsx(source);assert.equal(result.ok,true,result.error);return result.nodes;}
 function normalize(ast){let serial=0;const nodes={};const visit=node=>{const sourceId=node.type==='element'&&!node.control&&node.attributes.find(a=>a.name==='id'&&a.value.static)?.value.json;const id=typeof sourceId==='string'?`source:${sourceId}`:`internal:${++serial}`;assert.ok(!nodes[id]);nodes[id]={...clean(node),...(node.type==='element'?{children:node.children.map(visit)}:{})};return id;};return {schemaVersion:1,roots:ast.map(visit),nodes};}
@@ -75,18 +85,38 @@ results.validity={danglingReferenceAcceptedByPrimitiveCompiler:true,conclusion:'
 const ordered=normalize(parsed('<div id="ordered" data-options={{z:1,a:2}} />'));
 const reordered=(await db.query('SELECT $1::jsonb AS doc',[JSON.stringify(ordered)])).rows[0].doc;
 results.sourceOrder={before:serializeJsx(restore(ordered)),after:serializeJsx(restore(reordered))};
-// Isolate database update costs. No rendering, authorization, history, network or contention.
+// Isolate costs: real alternating writes, varied deterministic text, no full-document RETURNING.
+// Separate-node rows are a storage experiment, not a proposal implementation.
+await db.exec('CREATE TABLE node_probe (id text PRIMARY KEY, node jsonb NOT NULL)');
 const timings=[];
-for(const count of [100,1000,10000]){
- const nodes=Object.fromEntries(Array.from({length:count},(_,i)=>[`n${i}`,{type:'html',tag:'p',props:{className:'prose'},text:'x'.repeat(160)}]));
- const doc={schemaVersion:1,rootId:'n0',nodes},json=JSON.stringify(doc);
- await db.query('UPDATE probe SET document=$1::jsonb WHERE id=1',[json]);
- const compiled=compileDocumentOperations([{kind:'set',nodeId:'n50',path:['text'],value:'updated'}]);
- const sql=`WITH input AS (SELECT document FROM probe WHERE id=1),${compiled.ctes} UPDATE probe SET document=x.document FROM ${compiled.result} x WHERE id=1`;
- const measure=async(fn)=>{const samples=[];for(let i=0;i<12;i++){const t=performance.now();await fn();if(i>=2)samples.push(performance.now()-t);}samples.sort((a,b)=>a-b);return +samples[Math.floor(samples.length/2)].toFixed(2);};
- const patchMs=await measure(()=>db.query(sql,compiled.params));
- const replaceMs=await measure(()=>db.query('UPDATE probe SET document=$1::jsonb WHERE id=1',[json]));
- timings.push({nodes:count,bytes:Buffer.byteLength(json),patchParameterBytes:Buffer.byteLength(JSON.stringify(compiled.params)),patchMedianMs:patchMs,replaceMedianMs:replaceMs});
+const measure=async(fn)=>{const samples=[];for(let i=0;i<14;i++){const t=performance.now();await fn(i);if(i>=4)samples.push(performance.now()-t);}samples.sort((a,b)=>a-b);return {medianMs:+samples[5].toFixed(2),p90Ms:+samples[8].toFixed(2)};};
+for(const count of [1000,10000,22000,45000,90000]){
+ const nodes=Object.fromEntries(Array.from({length:count},(_,i)=>[`n${i}`,{type:'html',tag:'p',props:{className:'prose'},text:`Paragraph ${i}: ${createHash('sha256').update(String(i)).digest('hex')} ${createHash('sha256').update(`second${i}`).digest('hex')}`.padEnd(160,'.').slice(0,160)}]));
+ const doc={schemaVersion:1,rootId:'n0',nodes};
+ const replacement=['A','B'].map(prefix=>prefix+nodes.n50.text.slice(1));
+ const jsons=replacement.map(text=>JSON.stringify({...doc,nodes:{...nodes,n50:{...nodes.n50,text}}}));
+ await db.query('UPDATE probe SET document=$1::jsonb WHERE id=1',[jsons[0]]);
+ const compiled=replacement.map(value=>compileDocumentOperations([{kind:'set',nodeId:'n50',path:['text'],value}]));
+ const sql=`WITH input AS (SELECT document FROM probe WHERE id=1),${compiled[0].ctes} UPDATE probe SET document=x.document FROM ${compiled[0].result} x WHERE id=1`;
+ const patch=await measure(i=>db.query(sql,compiled[i%2].params));
+ const directPatch=await measure(i=>db.query("UPDATE probe SET document=jsonb_set(document,'{nodes,n50,text}',$1::jsonb,false) WHERE id=1",[JSON.stringify(replacement[i%2])]));
+ const constructOnly=await measure(i=>db.query("SELECT pg_column_size(jsonb_set(document,'{nodes,n50,text}',$1::jsonb,false)) AS bytes FROM probe WHERE id=1",[JSON.stringify(replacement[i%2])]));
+ const subscript=await measure(i=>db.query("UPDATE probe SET document['nodes']['n50']['text']=$1::jsonb WHERE id=1",[JSON.stringify(replacement[i%2])]));
+ const untouchedColumn=await measure(()=>db.query('UPDATE probe SET version=version+1 WHERE id=1'));
+ const replace=await measure(i=>db.query('UPDATE probe SET document=$1::jsonb WHERE id=1',[jsons[i%2]]));
+ await db.exec('TRUNCATE node_probe');
+ await db.query("INSERT INTO node_probe SELECT key,value FROM probe, jsonb_each(document->'nodes')");
+ const separateNode=await measure(i=>db.query("UPDATE node_probe SET node=jsonb_set(node,'{text}',$1::jsonb,false) WHERE id='n50'",[JSON.stringify(replacement[i%2])]));
+ const stored=(await db.query('SELECT pg_column_size(document) AS stored_bytes FROM probe WHERE id=1')).rows[0].stored_bytes;
+ const explain=async(query,params=[])=>{const plan=(await db.query(`EXPLAIN (ANALYZE,BUFFERS,WAL,FORMAT JSON) ${query}`,params)).rows[0]['QUERY PLAN'][0];return {executionMs:plan['Execution Time'],walBytes:plan.Plan['WAL Bytes']??0,walRecords:plan.Plan['WAL Records']??0,sharedHitBlocks:plan.Plan['Shared Hit Blocks']??0,sharedDirtiedBlocks:plan.Plan['Shared Dirtied Blocks']??0,tempWrittenBlocks:plan.Plan['Temp Written Blocks']??0};};
+ const evidence={compiled:await explain(sql,compiled[0].params),direct:await explain("UPDATE probe SET document=jsonb_set(document,'{nodes,n50,text}',$1::jsonb,false) WHERE id=1",[JSON.stringify(replacement[1])]),subscript:await explain("UPDATE probe SET document['nodes']['n50']['text']=$1::jsonb WHERE id=1",[JSON.stringify(replacement[0])]),untouched:await explain('UPDATE probe SET version=version+1 WHERE id=1'),separateNode:await explain("UPDATE node_probe SET node=jsonb_set(node,'{text}',$1::jsonb,false) WHERE id='n50'",[JSON.stringify(replacement[0])])};
+ timings.push({nodes:count,jsonBytes:Buffer.byteLength(jsons[0]),storedDatumBytes:stored,patchParameterBytes:Buffer.byteLength(JSON.stringify(compiled[0].params)),patch,directPatch,subscript,constructOnly,untouchedColumn,replace,separateNode,evidence});
+ // EXPLAIN ANALYZE executes writes too; its last mutation writes variant zero.
+ assert.equal((await db.query("SELECT document #>> '{nodes,n50,text}' AS text FROM probe")).rows[0].text,replacement[0]);
+ assert.equal((await db.query("SELECT node->>'text' AS text FROM node_probe WHERE id='n50'")).rows[0].text,replacement[0]);
+ console.error(`Measured ${count} nodes / ${(Buffer.byteLength(jsons[0])/1e6).toFixed(2)} MB`);
 }
+results.method={samples:10,warmups:4,percentile:'sorted samples[8] for p90',writes:'alternating equal-length text; real changes',text:'160 characters per node including deterministic SHA256 strings; not repeated x',size:'decimal MB of UTF-8 JSON input; stored datum size also reported',constructOnly:'jsonb_set plus pg_column_size, without UPDATE or full JSON result transfer',separateNode:'indexed row per node; excludes document coordination, history and rendering'};
 results.timings=timings;
-console.log(JSON.stringify(results,null,2));await db.close();
+console.log(JSON.stringify(results,null,2));
+} finally {await client.end();execFileSync('pg_ctl',['-D',data,'-m','fast','-w','stop'],{stdio:'ignore'});rmSync(cluster,{recursive:true,force:true});}
