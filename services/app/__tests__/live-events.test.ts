@@ -104,7 +104,7 @@ describe('GET /a/<id>/events', () => {
     expect(frames[frames.length - 1]).toMatchObject({ version: 2 });
   });
 
-  it('the frame carries dataset content inline; a document carries its source', async () => {
+  it('the frame carries dataset preview data; a document carries its source', async () => {
     const { token } = await setup();
     const make = async (body: Record<string, unknown>) => {
       const r = await createArtifactRoute(request('/api/artifacts', { method: 'POST', token: token, json: body }));
@@ -115,9 +115,9 @@ describe('GET /a/<id>/events', () => {
     const html = await make({ markup: '<p>hi</p>' });
     const dsFrame = await (await frameRoute(request(`/a/${ds.id}/events/frame`), params({ id: ds.id }))).json();
     expect(dsFrame).toMatchObject({ format: 'dataset', source: null });
-    expect(JSON.parse(String(dsFrame.content))).toEqual([{ m: 'Jan', v: 1 }]);
+    expect(JSON.parse(String(dsFrame.dataPreview))).toEqual([{ m: 'Jan', v: 1 }]);
     const htmlFrame = await (await frameRoute(request(`/a/${html.id}/events/frame`), params({ id: html.id }))).json();
-    expect(htmlFrame).toMatchObject({ format: 'markup', content: null });
+    expect(htmlFrame).toMatchObject({ format: 'markup', dataPreview: null });
     expect(htmlFrame.source).toContain('hi');
     expect(htmlFrame.editId).toBe(html.edit_id);
   });
