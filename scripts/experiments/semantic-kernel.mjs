@@ -8,6 +8,7 @@
 import assert from 'node:assert/strict';
 import {createHash,randomBytes} from 'node:crypto';
 import {isDeepStrictEqual} from 'node:util';
+import {repairJsxSource} from '../../services/app/lib/jsx/repair.ts';
 import {parseJsx} from '../../services/app/lib/jsx/parse.ts';
 import {splitHelmet} from '../../services/app/lib/story/helmet.ts';
 import {documentFonts} from '../../services/app/lib/story/document-fonts.ts';
@@ -35,7 +36,9 @@ const safe=s=>{try{encodeProseText(s);return !/<\/?style\b/i.test(s);}catch{retu
 const raw=s=>encodeProseText(s);
 const walk=(tree,visit)=>{const each=(nodes,ancestors=[])=>nodes.forEach(n=>{visit(n,ancestors);if(n.type==='element')each(n.children,[...ancestors,n]);});each(tree.roots);};
 const ids=tree=>{const found=[];walk(tree,n=>{if(n.slot)found.push(n.slot);});assert.equal(new Set(found).size,found.length,'A prose slot may occur only once');return found;};
-const eligible=(node,parents)=>node.type==='text'&&parents.length>0&&parents.every(p=>plain.has(p.tag)&&!p.control);
+// Only the nearest prose element is significant. Kit/For/fragment ancestors do not
+// inspect that leaf's inert value; Helmet and the executable iframe boundary do.
+const eligible=(node,parents)=>node.type==='text'&&plain.has(parents.at(-1)?.tag)&&!parents.some(p=>p.tag==='Helmet'||p.tag==='Iframe');
 // Source scanners are global regular expressions. A scanner-like token in an opaque
 // value defeats isolation; conservatively materialize all prose for those documents.
 const scanners=/\b(?:class(?:Name)?|data-design|style)\s*=|<\/?style\b/i;
@@ -79,14 +82,15 @@ function needsContext(tree,meta){
 const admitted=new WeakMap();
 function certificate(details){const result=Object.freeze({});admitted.set(result,clone(details));return result;}
 
+const inputTree=source=>encodeSource(repairJsxSource(source)?.source??source);
 function applyOperations(tree,operations){
  assert.ok(Array.isArray(operations)&&operations.length>0);
  for(const op of operations){
-  if(op.kind==='replaceDocument'){tree=encodeSource(op.source);continue;}
+  if(op.kind==='replaceDocument'){tree=inputTree(op.source);continue;}
   if(op.kind==='insert'){
    const list=op.parent.length?get(tree,op.parent).children:tree.roots;
    assert.ok(Array.isArray(list)&&Number.isInteger(op.index)&&op.index>=0&&op.index<=list.length);
-   list.splice(op.index,0,...encodeSource(op.source).roots);continue;
+   list.splice(op.index,0,...inputTree(op.source).roots);continue;
   }
   assert.ok(Array.isArray(op.path)&&op.path.length>=2);const node=get(tree,op.path);assert.ok(node);
   if(op.kind==='setAttribute'||op.kind==='removeAttribute'){
@@ -99,7 +103,7 @@ function applyOperations(tree,operations){
   if(op.kind==='setText'){assert.equal(node.type,'text');assert.equal(typeof op.value,'string');delete node.slot;node.value=op.value;continue;}
   const list=get(tree,op.path.slice(0,-1)),index=Number(op.path.at(-1));assert.ok(Array.isArray(list)&&list[index]===node);
   if(op.kind==='delete'){list.splice(index,1);continue;}
-  if(op.kind==='replace'){list.splice(index,1,...encodeSource(op.source).roots);continue;}
+  if(op.kind==='replace'){list.splice(index,1,...inputTree(op.source).roots);continue;}
   if(op.kind==='move'){
    const parent=op.parent.length?get(tree,op.parent):null,target=parent?parent.children:tree.roots;
    assert.ok(Array.isArray(target));const descendants=new Set();walk({roots:[node]},n=>descendants.add(n));assert.ok(!descendants.has(parent),'Move would create a cycle');
@@ -156,6 +160,13 @@ export async function planProse(base,{slot,oldText,newText},context){
  if(published instanceof Response)return published;
  if(!isDeepStrictEqual(published.meta,base.meta))return new Response(JSON.stringify({error:'validation_context_changed'}),{status:409});
  return certificate({kind:'contextualText',id:base.id,base:base.version,epoch:base.epoch,hash:fingerprint(base.document.tree),meta:base.meta,slot,oldText,newText});
+}
+
+export function createSemanticState(source,meta){
+ const projected=project(encodeSource(source),{});
+ const document={tree:projected.tree,prose:Object.fromEntries(Object.entries(projected.fresh).map(([id,v])=>[id,{...v,revision:1}]))};
+ assert.equal(renderState(document),source);
+ return {document,contextRequired:needsContext(document.tree,meta)};
 }
 
 export async function createKernel(pool,context,{actorId='mxmx_test_semantic'}={}){

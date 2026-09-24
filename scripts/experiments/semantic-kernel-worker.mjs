@@ -197,6 +197,31 @@ try {
   assert.deepEqual(doc,row.document);assert.deepEqual(meta,row.meta);assert.equal(renderState(doc),renderState(row.document));
   const restored=await mutate(row,[{kind:'replaceDocument',source:renderState(initial.document)}]);assert.equal(renderState(restored.document),renderState(initial.document));
  });
+
+ await check('paragraphs inside kit components and For retain independent prose identities',async()=>{
+  const fixtures=[
+   '<Card><CardContent><p>Alpha</p><p>Beta</p></CardContent></Card>',
+   '<Helmet><Value name="items" type="table" value={[{"name":"A"}]}/></Helmet><For each={$items} keyBy="name"><div><p>Alpha</p><p>Beta</p></div></For>',
+   '<><div><p>Alpha</p><p>Beta</p></div></>',
+  ];
+  for(const source of fixtures){const base=await make(source),slots=slotsOf(base);assert.equal(slots.length,2);const writes=await Promise.all(slots.map(slot=>kernel.text(base.id,{base:1,epoch:1,slot,oldText:base.document.prose[slot].value,newText:'Independent '+base.document.prose[slot].value})));assert.equal(writes.filter(Boolean).length,2);await assertValid(await kernel.read(base.id));}
+ });
+ await check('a failed log insert rolls back the entire statement',async()=>{
+  const base=await make(),slot=slotsOf(base)[0];await pool.query("INSERT INTO semantic_edits VALUES($1,2,'{}')",[base.id]);
+  await assert.rejects(kernel.text(base.id,{base:1,epoch:1,slot,oldText:'Alpha',newText:'Never stored'}));assert.deepEqual(await kernel.read(base.id),base);
+  assert.equal((await pool.query('SELECT count(*)::int n FROM semantic_history WHERE id=$1',[base.id])).rows[0].n,0);
+  await pool.query('DELETE FROM semantic_edits WHERE id=$1',[base.id]);
+ });
+
+ await check('existing input repairs remain supported by structural operations',async()=>{
+  const source='<Helmet><Query name="q">{\\`select 1 as n\\`}</Query></Helmet><p>Repaired</p>'.replaceAll('\\\\','\\');
+  const expected=await publishJsx({},source,context);assert.ok(!(expected instanceof Response));
+  const base=await make();const row=await mutate(base,[{kind:'replaceDocument',source}]);assert.equal(renderState(row.document),expected.source);
+ });
+ await check('projection expansion near 2 MB falls back without losing a valid document',async()=>{
+  const source='<div data-note="'+'x'.repeat(1_999_900)+'"><p>A</p><p>B</p></div>';
+  const base=await make(source);const row=await mutate(base,[{kind:'setAttribute',path:['roots','0'],name:'title',value:'ok'}]);assert.ok(row.source_bytes<2_000_000);assert.match(renderState(row.document),/title="ok"/);
+ });
  await check('history coalesces while each accepted write has an operation log',async()=>{
   const rows=(await pool.query('SELECT id,version FROM semantic_documents')).rows;
   for(const row of rows){const counts=(await pool.query('SELECT (SELECT count(*)::int FROM semantic_history WHERE id=$1) h,(SELECT count(*)::int FROM semantic_edits WHERE id=$1) e',[row.id])).rows[0];assert.ok(counts.h<=counts.e);assert.ok(counts.e===0||counts.h>=1);}
