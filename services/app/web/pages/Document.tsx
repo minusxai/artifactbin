@@ -2,7 +2,7 @@ import {useEffect,useRef,useState} from 'react';
 import {useNavigate,useParams} from 'react-router';
 import type {DocumentEditResult,DocumentSnapshot,RichDocument} from '@artifactbin/contracts';
 import {DocumentEditor} from '@/components/DocumentEditor';
-import {parseDocumentMdx,serializeDocumentMdx} from '@/lib/document/mdx';
+import {parseDocumentMdx,reparseDocumentMdx,serializeDocumentMdx} from '@/lib/document/mdx';
 import {DocumentSession} from '@/lib/document/session';
 
 const example=`# A document you can shape
@@ -82,6 +82,6 @@ export function DocumentPage(){
    {id&&<button onClick={()=>void navigator.clipboard.writeText(window.location.href)}>Copy link</button>}
   </header>
   {error&&<div role="alert" style={{padding:16,background:'#fff2df'}}>{error}{status==='offline'&&<button onClick={()=>void session.current?.flush()}>Retry save</button>}{status==='conflict'&&<><button onClick={download}>Download my draft</button><button onClick={()=>void create()}>Save draft as a new document</button></>}</div>}
-  {source!==null?<section style={{padding:24}}><textarea aria-label="MDX source" value={source} readOnly={!editable} onChange={e=>setSource(e.target.value)} style={{width:'100%',minHeight:'60vh',fontFamily:'monospace',padding:16}}/>{editable&&<button onClick={()=>{try{const next=parseDocumentMdx(source);const root=next.nodes[next.rootId];delete next.nodes[next.rootId];next.rootId=document.rootId;next.nodes[next.rootId]=root;change(next);setSource(null);setError('');}catch(e){setError(e instanceof Error?e.message:'Invalid MDX');}}}>Apply MDX</button>}</section>:<DocumentEditor document={document} editable={editable} onChange={change}/>}
+  {source!==null?<section style={{padding:24}}><textarea aria-label="MDX source" value={source} readOnly={!editable} onChange={e=>setSource(e.target.value)} style={{width:'100%',minHeight:'60vh',fontFamily:'monospace',padding:16}}/>{editable&&<button onClick={()=>{try{const next=reparseDocumentMdx(document,source);change(next);setSource(null);setError('');}catch(e){setError(e instanceof Error?e.message:'Invalid MDX');}}}>Apply MDX</button>}</section>:<DocumentEditor artifactId={id} document={document} editable={editable} onChange={change}/>}
  </main>;
 }

@@ -49,6 +49,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
 
   const role = await roleFor(artifact, actor);
   const kind = await browserSessionKind(request, actor);
+  if(artifact.document)return json({canonical:`/documents/${artifact.id}`,role,kind,mdx:true},200,{'Cache-Control':'no-store'});
 
   /*
    * A FOLDER IS A LISTING, NOT A DOCUMENT — so its page is answered HERE and

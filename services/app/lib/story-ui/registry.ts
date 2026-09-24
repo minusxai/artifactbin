@@ -73,6 +73,7 @@ import {
   PopoverTitle,
   PopoverDescription,
 } from '@/components/kit/popover';
+import { Flex } from '@/components/kit/flex';
 import { Grid, GridItem } from '@/components/kit/grid';
 import { Input, Textarea, Select, Slider, DatePicker, Segmented, Switch } from '@/components/kit/controls';
 import { Icon } from '@/components/kit/icon';
@@ -90,6 +91,7 @@ import { managedFrameLayout } from '@/lib/story/managed-frame-layout';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export const STORY_UI_COMPONENTS: Record<string, React.ComponentType<any>> = {
+  Flex,
   Dialog, DialogTrigger, DialogContent, DialogClose,
   Iframe: props => {
     const { label, pixels } = managedFrameLayout(props.title, props.height);

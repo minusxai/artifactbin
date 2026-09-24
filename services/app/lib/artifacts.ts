@@ -1,3 +1,4 @@
+import {documentJsx} from './document/markup';
 import {JOIN_RELATIONS,seedOwnerJoin} from './relation-state';
 import {documentMentions} from './saved-mentions';
 import { grantContext, grantsOf, grantsPermitRead, grantsPermitWrite, type GrantDocument } from './datasets/policy/grants';
@@ -913,10 +914,13 @@ async function listArtifactsScoped(scope: Scope): Promise<ArtifactSummary[]> {
  * one render pays the lookup once. Outside a React render (route handlers,
  * tests) cache() is a pass-through, so it can never serve a stale row.
  */
+/** Derived render source is never a second persisted authority for JSONB documents. */
+function documentRenderRow(row:ArtifactRow|undefined):ArtifactRow|null {return row?.document?{...row,source:documentJsx(row.document)}:row??null;}
+
 export const getArtifactById = cache(async (id: string): Promise<ArtifactRow | null> => {
   const db = await getDb();
   const r = await db.query<ArtifactRow>(`SELECT * FROM artifacts WHERE id = $1 AND ${LIVE_ARTIFACT_SQL}`, [id]);
-  return r.rows[0] ?? null;
+  return documentRenderRow(r.rows[0]);
 });
 
 interface VersionSummary {
@@ -1071,7 +1075,7 @@ async function writeShares(tx:Queryable,id:string,shares:ShareEntry[]):Promise<{
 async function getArtifactScoped(scope: Scope, id: string): Promise<ArtifactRow | null> {
   const db = await getDb();
   const r = await db.query<ArtifactRow>(`SELECT artifacts.*, ${SHARES_PROJECTION} FROM artifacts WHERE id = $1 AND ${scope.where('$2')}`, [id, scope.val]);
-  return r.rows[0] ?? null;
+  return documentRenderRow(r.rows[0]);
 }
 
 /**
@@ -1232,6 +1236,7 @@ async function revertScoped(actor: TokenActor, id: string, version: number, opts
   const scope = editorScope(actor);
   const initial = (await db.query<ArtifactRow>(`SELECT * FROM artifacts WHERE id=$1 AND ${scope.where('$2')}`, [id,scope.val])).rows[0];
   if (!initial) return null;
+  if(initial.document)return {notArchived:true,refusal:json({error:"document_operations_required",detail:"Restore MDX content through document operations."},409)};
   // A governed dataset is not revertible: restoring an archived table would
   // drop the rows viewers have written under the policy since. The GUARD is
   // unchanged — what changed is that it now says so instead of answering the
@@ -1335,6 +1340,7 @@ async function replaceScoped(
       await tx.query<ArtifactRow>(`SELECT * FROM artifacts WHERE id = $1 AND ${scope.where('$2')} FOR UPDATE`, [id, scope.val])
     ).rows[0];
     if (!current) return null;
+    if(current.document)return json({error:'document_operations_required',detail:'Edit this document through its document operations endpoint.'},409);
     /*
      * A GOVERNED DATASET IS THE OWNER'S TO REPUBLISH — AND NOBODY ELSE'S.
      *
@@ -1594,6 +1600,7 @@ export async function applyEditScoped(actor: TokenActor, id: string, input: Edit
       await db.query<ArtifactRow>(`SELECT artifacts.*, ${SHARES_PROJECTION} FROM artifacts WHERE id = $1 AND ${scope.where('$2')}`, [id, scope.val])
     ).rows[0];
     if (!head) return null;
+    if(head.document)return json({error:'document_operations_required',detail:'Edit this document through its document operations endpoint.'},409);
     // Documents edit; VALUES do not. A dataset/viz/image is a blob whose
     // meaning lives in its structure, so a text splice into it is meaningless.
     // A FOLDER is a document — its source is the markup we stamped, and

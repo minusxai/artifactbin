@@ -2,6 +2,8 @@ import {afterAll, describe, expect, it} from 'vitest';
 import type {DocumentPrimitive, RichDocument} from '@artifactbin/contracts';
 import {getDb, resetDb} from '../../db';
 import {compileDocumentOperations} from '../sql';
+import {parseDocumentMdx} from '../mdx';
+import {assertDocument,diffDocument,moveDocumentNode,splitDocumentBlock,joinDocumentBlocks,removeDocumentNodes} from '../model';
 
 const fixture = (): RichDocument => ({schemaVersion:1,rootId:'root',nodes:{root:{type:'document',props:{},children:['p']},p:{type:'paragraph',props:{},content:[{type:'text',text:'a😀bc',marks:[]}]}}});
 afterAll(resetDb);
@@ -40,4 +42,23 @@ describe('native JSONB operation compiler',()=>{
   const sql=compileDocumentOperations([{kind:'insert',nodeId:'root',path:['children'],index:0,value:'q'}]).ctes;
   expect(sql).not.toMatch(/jsonb_array_elements|CREATE FUNCTION|jsonb_agg/i);
  });
+});
+it('rejects offsets outside PostgreSQL integer bounds before executing SQL',()=>{
+ expect(()=>compileDocumentOperations([{kind:'text',nodeId:'p',path:['content','0','text'],start:2**40,deleteCount:0,text:''}])).toThrow(/range/);
+ expect(()=>compileDocumentOperations([{kind:'remove',nodeId:'p',path:['content'],index:2**40}])).toThrow(/index/);
+});
+
+it('matches the invariant oracle across composed structural edits, undo and iframe source changes',async()=>{
+ let current=parseDocumentMdx('<Flex direction="row">\n\nA **Unicode 🦋** paragraph\n\nAnother paragraph\n\n</Flex>\n\n<Iframe title="Demo"><p>Hello</p></Iframe>');
+ const flex=Object.keys(current.nodes).find(id=>current.nodes[id].name==='Flex')!,[a,b]=current.nodes[flex].children!;
+ const states=[current];
+ states.push(splitDocumentBlock(current,a,3,'split'));
+ states.push(joinDocumentBlocks(states.at(-1)!,a,'split'));
+ states.push(moveDocumentNode(states.at(-1)!,b,current.rootId,1));
+ states.push(removeDocumentNodes(states.at(-1)!,[flex],'empty'));
+ for(const next of [...states.slice(1),...states.slice(0,-1).reverse()]){
+  const result=await run(diffDocument(current,next),current);assertDocument(result);expect(result).toEqual(next);current=next;
+ }
+ const after=structuredClone(current),iframe=Object.values(after.nodes).find(n=>n.name==='Iframe')!;iframe.text='<p>Changed &amp; still safe</p>';
+ expect(await run(diffDocument(current,after),current)).toEqual(after);
 });

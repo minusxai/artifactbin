@@ -32,3 +32,9 @@ describe('one continuous document editor',()=>{
   const next=editorDocument(state.doc);assertDocument(next);expect(next.nodes[next.rootId].children).toHaveLength(2);
  });
 });
+it('retains inline component contents and remints the complete subtree on paste',()=>{
+ const d=parseDocumentMdx('Hello <Badge>new</Badge>.');let state=createDocumentEditorState(d);
+ expect(editorDocument(state.doc)).toEqual(d);
+ state=state.applyTransaction(state.tr.insert(state.doc.content.size,state.doc.firstChild!)).state;
+ const after=editorDocument(state.doc);assertDocument(after);expect(Object.values(after.nodes).filter(n=>n.name==='Badge')).toHaveLength(2);
+});

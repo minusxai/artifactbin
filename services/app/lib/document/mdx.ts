@@ -6,12 +6,11 @@ import remarkGfm from 'remark-gfm';
 import remarkStringify from 'remark-stringify';
 import type {Root} from 'mdast';
 import type {DocumentInline, DocumentJson, DocumentMark, DocumentNode, RichDocument} from '@artifactbin/contracts';
-import {parseJsx} from '../jsx/parse';
+import {validateDocumentMarkup,documentElement as element,parseDocumentJsx as jsx} from './markup';
+export {documentJsx,validateDocumentMarkup} from './markup';
 import {serializeJsx} from '../jsx/serialize';
-import {validateJsx} from '../jsx/validate';
-import type {JsxElement, JsxNode} from '../jsx/types';
-import {STORY_UI_COMPONENT_NAME_LIST} from '../story-ui/component-names';
-import {assertDocument, DocumentError, normalizeInline, validNodeId} from './model';
+import type {JsxElement} from '../jsx/types';
+import {assertDocument, childIds, DocumentError, normalizeInline, validNodeId} from './model';
 
 interface MdNode {
  type:string; value?:string; name?:string; children?:MdNode[];
@@ -24,9 +23,6 @@ interface MdNode {
 interface Identity {id:string;type:string;props:Record<string,DocumentJson>}
 const processor=unified().use(remarkParse).use(remarkMdx).use(remarkGfm).use(remarkStringify);
 const fresh=()=>`n_${crypto.randomUUID().replaceAll('-','')}`;
-function jsx(source:string):JsxNode[]{const parsed=parseJsx(source);if(!parsed.ok)throw new DocumentError(parsed.error);return parsed.nodes;}
-function element(tag:string,props:Record<string,DocumentJson>,children:JsxNode[]=[]):JsxElement{return {type:'element',tag,isComponent:/^[A-Z]/.test(tag),attributes:Object.entries(props).map(([name,json])=>({name,value:{static:true as const,json},start:0,end:0})),children,selfClosing:children.length===0,start:0,end:0};}
-const textNode=(value:string):JsxNode=>({type:'text',value,start:0,end:0});
 function attributeSource(n:MdNode):string {
  return (n.attributes??[]).map(a=>{
   if(a.type!=='mdxJsxAttribute'||!a.name)throw new DocumentError('Spread attributes are not document data');
@@ -47,7 +43,7 @@ export function parseDocumentMdx(source:string):RichDocument {
  function add(node:DocumentNode):string {
   const identity=identities[ordinal++];
   if(identity&&(!validNodeId(identity.id)||identity.type!==node.type||Object.hasOwn(d.nodes,identity.id)))throw new DocumentError('Document metadata no longer matches its structure');
-  const id=identity?.id??fresh();d.nodes[id]=identity?{...node,props:{...node.props,...identity.props}}:node;return id;
+  const id=identity?.id??fresh();d.nodes[id]=identity?{...node,props:['component','html'].includes(node.type)?node.props:identity.props}:node;return id;
  }
  function inline(nodes:MdNode[],marks:DocumentMark[]=[]):DocumentInline[]{return normalizeInline(nodes.flatMap((n):DocumentInline[]=>{
   if(n.type==='text')return [{type:'text',text:n.value??'',marks}];
@@ -65,6 +61,8 @@ export function parseDocumentMdx(source:string):RichDocument {
   return [{type:'nodeRef',nodeId:block(n)}];
  }));}
  function block(n:MdNode):string {
+  const only=n.children?.[0];
+  if(n.type==='paragraph'&&n.children?.length===1&&only?.type==='mdxJsxTextElement'&&!['span','u','sup','sub','a','em','strong','code'].includes(only.name??''))return block({...only,type:'mdxJsxFlowElement'});
   let node:DocumentNode;
   switch(n.type){
    case 'root':node={type:'document',props:{},children:[]};break;
@@ -81,9 +79,11 @@ export function parseDocumentMdx(source:string):RichDocument {
     const el=jsx(`<${n.name} ${attributeSource(n)} />`)[0] as JsxElement;
     node={type:el.isComponent?'component':'html',...(el.isComponent?{name:el.tag}:{tag:el.tag}),props:{},children:[]};
     for(const a of el.attributes){if(a.value.static)node.props[a.name]=a.value.json;else(node.bindings??={})[a.name]={source:a.value.source,scope:'reactive'};}
-    if(n.name==='Iframe'){
+    if(!n.children?.length&&!['Flex','div','section','article'].includes(n.name))delete node.children;
+    if(n.type==='mdxJsxTextElement'){node.content=[];delete node.children;}
+    if(n.name==='Iframe'||n.name==='Helmet'){
      const raw=source.slice(n.position?.start.offset,n.position?.end.offset);const iframe=jsx(raw)[0];
-     if(iframe?.type!=='element')throw new DocumentError('Invalid iframe source');node.text=serializeJsx(iframe.children);delete node.children;
+     if(iframe?.type!=='element')throw new DocumentError('Invalid iframe source');node.text=serializeJsx(iframe.children);delete node.children;delete node.content;
     }
     break;
    }
@@ -92,39 +92,19 @@ export function parseDocumentMdx(source:string):RichDocument {
   }
   const id=add(node);node=d.nodes[id]!;
   if(node.content)node.content=inline(n.children??[]);
-  else if(node.children)node.children=(n.children??[]).map(block);
+  else if(node.children){
+   const children:MdNode[]=[];let run:MdNode[]=[];
+   const flush=()=>{if(run.length){children.push({type:'paragraph',children:run});run=[];}};
+   for(const child of n.children??[]){if(['text','strong','emphasis','delete','inlineCode','link','image','break','mdxJsxTextElement','mdxTextExpression'].includes(child.type))run.push(child);else{flush();children.push(child);}}
+   flush();node.children=children.map(block);
+  }
   if(node.name==='Flex'){node.props.direction??='row';node.props.sizes??=(node.children??[]).map(()=>1);}
   return id;
  }
+ if(!tree.children?.length)tree.children=[{type:'paragraph',children:[]}];
  d.rootId=block(tree);
  if(identities.length&&ordinal!==identities.length)throw new DocumentError('Document metadata no longer matches its structure');
  assertDocument(d);validateDocumentMarkup(d);return d;
-}
-function nodeJsx(d:RichDocument,id:string):JsxNode[]{
- const n=d.nodes[id]!;
- const contents=()=>n.content?inlineJsx(d,n.content):(n.children??[]).flatMap(child=>nodeJsx(d,child));
- if(n.type==='document')return contents();
- if(n.type==='expression')return jsx(`{${n.text??''}}`);
- if(n.type==='code')return [element('pre',n.props,[element('code',{},[textNode(n.text??'')])])];
- const tag=n.type==='component'?n.name!:n.type==='html'?n.tag!:({paragraph:'p',heading:`h${n.props.depth}`,blockquote:'blockquote',list:n.props.ordered?'ol':'ul',listItem:'li',thematicBreak:'hr',table:'table',tableRow:'tr',tableCell:'td'} as Record<string,string>)[n.type];
- if(!tag)throw new DocumentError(`Cannot render ${n.type}`);
- const props={...n.props,id};
- const el=element(tag,props,n.name==='Iframe'?jsx(n.text??''):contents());
- for(const [name,binding] of Object.entries(n.bindings??{})){
-  const bindingNode=jsx(`<${tag} ${name}={${binding.source}} />`)[0] as JsxElement;el.attributes.push(...bindingNode.attributes);
- }
- return [el];
-}
-function inlineJsx(d:RichDocument,items:DocumentInline[]):JsxNode[]{return items.flatMap(item=>{
- if(item.type==='break')return [element('br',{})];if(item.type==='nodeRef')return nodeJsx(d,item.nodeId);
- let node:JsxNode=textNode(item.text);
- for(const mark of [...item.marks].reverse())node=element(({strong:'strong',emphasis:'em',strike:'s',code:'code',link:'a',span:'span',underline:'u',sup:'sup',sub:'sub'} as Record<string,string>)[mark.type]!,mark.attrs??{},[node]);
- return [node];
-});}
-export function documentJsx(d:RichDocument):string{return serializeJsx(nodeJsx(d,d.rootId));}
-export function validateDocumentMarkup(d:RichDocument):void {
- const errors=validateJsx(nodeJsx(d,d.rootId),{components:[...STORY_UI_COMPONENT_NAME_LIST,'Flex'],stylePolicy:'no-inline-style'});
- if(errors.length)throw new DocumentError(errors.map(e=>e.message).join('\n'));
 }
 export function serializeDocumentMdx(d:RichDocument,includeIdentity=true):string {
  assertDocument(d);validateDocumentMarkup(d);
@@ -155,13 +135,8 @@ export function serializeDocumentMdx(d:RichDocument,includeIdentity=true):string
    case 'thematicBreak':return {type:'thematicBreak'};
    case 'expression':return {type:'mdxFlowExpression',value:n.text??''};
    case 'component':case 'html':{
-    let childNodes:MdNode[];
-    if(n.name==='Iframe'){
-     const parsed=processor.parse(documentJsx({...d,rootId:id})) as unknown as MdNode;
-     const wrapper=parsed.children?.[0];
-     const iframe=wrapper?.type==='paragraph'?wrapper.children?.[0]:wrapper;
-     childNodes=iframe?.children??[];
-    }else childNodes=children();
+    if(n.name==='Iframe'||n.name==='Helmet')return {type:'html',value:serializeJsx([element(n.name,n.props,jsx(n.text??''))])};
+    const childNodes=children();
     return {type:'mdxJsxFlowElement',name:n.name??n.tag,attributes:[...attributes(n.props),...Object.entries(n.bindings??{}).map(([name,b])=>({type:'mdxJsxAttribute',name,value:{type:'mdxJsxAttributeValueExpression',value:b.source}}))],children:childNodes};
    }
    default:throw new DocumentError(`Cannot export ${n.type}`);
@@ -171,4 +146,35 @@ export function serializeDocumentMdx(d:RichDocument,includeIdentity=true):string
  const metadata=JSON.stringify(identities).replaceAll('*/','*\\u002f');
  if(includeIdentity)tree.children!.unshift({type:'mdxFlowExpression',value:`/* @afbin-document ${metadata} */`});
  return processor.stringify(tree as unknown as Root);
+}
+
+/** Reconcile source edits against the open draft. Unchanged siblings anchor identity;
+ * same-shaped gaps retain identity on text edits. New blocks receive new IDs.
+ * Markdown-owned properties come from source; visual prose properties stay on the node.
+ */
+export function reparseDocumentMdx(previous:RichDocument,source:string):RichDocument {
+ const next=parseDocumentMdx(source),mapping=new Map<string,string>();
+ const compatible=(a:DocumentNode,b:DocumentNode)=>a.type===b.type&&a.name===b.name&&a.tag===b.tag;
+ const signature=(n:DocumentNode)=>JSON.stringify([n.type,n.name,n.tag,n.text,n.content?.map(c=>c.type==='nodeRef'?{type:c.type}:c)]);
+ function match(oldId:string,newId:string){
+  const old=previous.nodes[oldId],node=next.nodes[newId];if(!compatible(old,node))return;
+  mapping.set(newId,oldId);
+  if(!['component','html'].includes(node.type)){
+   const visual=Object.fromEntries(Object.entries(old.props).filter(([key])=>!['depth','ordered','start','checked','align','lang','meta'].includes(key)));
+   node.props={...visual,...node.props};
+  }
+  const before=childIds(old),after=childIds(node),positions=new Map<string,number[]>();
+  before.forEach((id,index)=>{const key=signature(previous.nodes[id]);positions.set(key,[...(positions.get(key)??[]),index]);});
+  const anchors:Array<[number,number]>=[];let cursor=0;
+  after.forEach((id,index)=>{const candidates=positions.get(signature(next.nodes[id]));while(candidates?.length&&candidates[0]<cursor)candidates.shift();const pos=candidates?.shift();if(pos!==undefined){anchors.push([pos,index]);cursor=pos+1;}});
+  anchors.push([before.length,after.length]);let a=0,b=0;
+  for(const [i,j] of anchors){
+   if(i-a===j-b)for(let k=0;k<i-a;k++)match(before[a+k],after[b+k]);
+   if(i<before.length)match(before[i],after[j]);a=i+1;b=j+1;
+  }
+ }
+ match(previous.rootId,next.rootId);
+ const remap=(id:string)=>mapping.get(id)??id;
+ next.nodes=Object.fromEntries(Object.entries(next.nodes).map(([id,node])=>[remap(id),{...node,...(node.children?{children:node.children.map(remap)}:{}),...(node.slots?{slots:Object.fromEntries(Object.entries(node.slots).map(([key,ids])=>[key,ids.map(remap)]))}:{}),...(node.content?{content:node.content.map(c=>c.type==='nodeRef'?{...c,nodeId:remap(c.nodeId)}:c)}:{})}]));
+ next.rootId=remap(next.rootId);assertDocument(next);validateDocumentMarkup(next);return next;
 }

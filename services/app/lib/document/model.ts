@@ -5,8 +5,15 @@ const ID = /^[A-Za-z0-9_-]{1,128}$/;
 const prohibited = new Set(['__proto__', 'prototype', 'constructor']);
 const prose = new Set(['paragraph', 'heading', 'code']);
 export class DocumentError extends Error {}
+/** JSONB does not preserve object key order. Equality must not manufacture edits on read-back. */
+export function documentValueEqual(a:unknown,b:unknown):boolean {
+ if(a===b)return true;
+ if(!a||!b||typeof a!=='object'||typeof b!=='object'||Array.isArray(a)!==Array.isArray(b))return false;
+ const left=Object.keys(a),right=Object.keys(b);
+ return left.length===right.length&&left.every(key=>Object.hasOwn(b,key)&&documentValueEqual((a as Record<string,unknown>)[key],(b as Record<string,unknown>)[key]));
+}
 function requireThat(value: unknown, message: string): asserts value {if (!value) throw new DocumentError(message);}
-export function validNodeId(id: string): boolean {return ID.test(id) && !prohibited.has(id);}
+export function validNodeId(id: string): boolean {return typeof id==='string' && ID.test(id) && !prohibited.has(id);}
 export function assertJson(value: unknown, depth = 0): asserts value is DocumentJson {
  requireThat(depth <= 100, 'Document nesting is too deep');
  if (value === null || typeof value === 'string' || typeof value === 'boolean') return;
@@ -58,7 +65,7 @@ export function parentMap(d:RichDocument): Map<string,string> {const result=new 
 export function ancestorsOf(id:string,parents:Map<string,string>):string[]{const out:string[]=[];let p=parents.get(id);while(p){requireThat(!out.includes(p),'Cyclic ancestry');out.push(p);p=parents.get(p);}return out;}
 export function documentChanges(before:RichDocument,after:RichDocument):{changedIds:string[];ancestorIds:string[]}{
  const oldParents=parentMap(before),newParents=parentMap(after);
- const changedIds=[...new Set([...Object.keys(before.nodes),...Object.keys(after.nodes)])].filter(id=>JSON.stringify(before.nodes[id])!==JSON.stringify(after.nodes[id])||oldParents.get(id)!==newParents.get(id));
+ const changedIds=[...new Set([...Object.keys(before.nodes),...Object.keys(after.nodes)])].filter(id=>!documentValueEqual(before.nodes[id],after.nodes[id])||oldParents.get(id)!==newParents.get(id));
  const ancestorIds=[...new Set(changedIds.flatMap(id=>[...ancestorsOf(id,oldParents),...ancestorsOf(id,newParents)]))];return {changedIds,ancestorIds};
 }
 export function assertPrimitive(op:DocumentPrimitive):void{
@@ -68,8 +75,8 @@ export function assertPrimitive(op:DocumentPrimitive):void{
  requireThat(['set','unset','text','insert','remove'].includes(op.kind)&&validNodeId(op.nodeId),'Invalid operation');
  requireThat(Array.isArray(op.path)&&op.path.length>0&&op.path.length<=100&&op.path.every(p=>typeof p==='string'&&p.length>0&&!prohibited.has(p)),'Invalid path');
  if(op.kind==='set'||op.kind==='insert')assertJson(op.value);
- if(op.kind==='text')requireThat(typeof op.text==='string'&&Number.isSafeInteger(op.start)&&op.start>=0&&Number.isSafeInteger(op.deleteCount)&&op.deleteCount>=0,'Invalid text range');
- if(op.kind==='insert'||op.kind==='remove')requireThat(Number.isSafeInteger(op.index)&&op.index>=0,'Invalid array index');
+ if(op.kind==='text')requireThat(typeof op.text==='string'&&Number.isSafeInteger(op.start)&&op.start>=0&&op.start<2147483647&&Number.isSafeInteger(op.deleteCount)&&op.deleteCount>=0&&op.deleteCount<=2147483647,'Invalid text range');
+ if(op.kind==='insert'||op.kind==='remove')requireThat(Number.isSafeInteger(op.index)&&op.index>=0&&op.index<=2147483647,'Invalid array index');
 }
 function at(value:unknown,path:string[]):unknown {let v=value;for(const p of path){requireThat(v!==null&&typeof v==='object'&&Object.hasOwn(v,p),'Missing path');v=(v as Record<string,unknown>)[p];}return v;}
 export function applyDocumentOperations(before:RichDocument,ops:DocumentPrimitive[]):RichDocument{
@@ -86,19 +93,40 @@ export function applyDocumentOperations(before:RichDocument,ops:DocumentPrimitiv
  }
  assertDocument(d);return d;
 }
+/** Lower semantic changes to native primitives; bulk arrays are replaced only at their owning node. */
 export function diffDocument(before:RichDocument,after:RichDocument):DocumentPrimitive[]{
  const ops:DocumentPrimitive[]=[];const added:Record<string,DocumentNode>={};
+ function change(nodeId:string,path:string[],prev:DocumentJson|undefined,next:DocumentJson|undefined):void {
+  if(documentValueEqual(prev,next))return;
+  if(next===undefined){ops.push({kind:'unset',nodeId,path});return;}
+  if(typeof prev==='string'&&typeof next==='string'&&path.at(-1)==='text'){
+   const a=Array.from(prev),b=Array.from(next);let start=0,end=0;
+   while(start<a.length&&start<b.length&&a[start]===b[start])start++;
+   while(end<a.length-start&&end<b.length-start&&a[a.length-1-end]===b[b.length-1-end])end++;
+   ops.push({kind:'text',nodeId,path,start,deleteCount:a.length-start-end,text:b.slice(start,b.length-end).join('')});return;
+  }
+  if(Array.isArray(prev)&&Array.isArray(next)){
+   if(path[0]==='content'&&prev.length===next.length){for(let i=0;i<next.length;i++)change(nodeId,[...path,String(i)],prev[i],next[i]);return;}
+   let first=0;while(first<prev.length&&first<next.length&&documentValueEqual(prev[first],next[first]))first++;
+   if(next.length===prev.length+1&&documentValueEqual(prev.slice(first),next.slice(first+1))){ops.push({kind:'insert',nodeId,path,index:first,value:next[first]!});return;}
+   if(prev.length===next.length+1&&documentValueEqual(prev.slice(first+1),next.slice(first))){ops.push({kind:'remove',nodeId,path,index:first});return;}
+  }
+  if(prev&&next&&typeof prev==='object'&&typeof next==='object'&&!Array.isArray(prev)&&!Array.isArray(next)){
+   const from=ops.length;
+   for(const key of new Set([...Object.keys(prev),...Object.keys(next)]))change(nodeId,[...path,key],prev[key],next[key]);
+   if(ops.length-from<=16)return;
+   ops.splice(from);
+  }
+  ops.push({kind:'set',nodeId,path,value:next});
+ }
  for(const [id,node] of Object.entries(after.nodes)){
   const old=before.nodes[id];if(!old){added[id]=node;continue;}
-  for(const key of new Set([...Object.keys(old),...Object.keys(node)])){
-   const prev=(old as unknown as Record<string,DocumentJson>)[key],next=(node as unknown as Record<string,DocumentJson>)[key];
-   if(JSON.stringify(prev)===JSON.stringify(next))continue;
-   ops.push(next===undefined?{kind:'unset',nodeId:id,path:[key]}:{kind:'set',nodeId:id,path:[key],value:next});
-  }
+  for(const key of new Set([...Object.keys(old),...Object.keys(node)]))change(id,[key],(old as unknown as Record<string,DocumentJson>)[key],(node as unknown as Record<string,DocumentJson>)[key]);
  }
  if(Object.keys(added).length)ops.unshift({kind:'addNodes',nodes:added});
  const removed=Object.keys(before.nodes).filter(id=>!after.nodes[id]);if(removed.length)ops.push({kind:'removeNodes',ids:removed});return ops;
 }
+
 function children(d:RichDocument,id:string):string[]{const n=d.nodes[id];requireThat(n&&Array.isArray(n.children),'Destination has no editable child slot');return n.children;}
 function removeChild(d:RichDocument,parent:string,id:string):number {const n=d.nodes[parent],list=children(d,parent),index=list.indexOf(id);requireThat(index>=0,'Missing child');list.splice(index,1);if(n.name==='Flex')(n.props.sizes as DocumentJson[]).splice(index,1);return index;}
 function insertChild(d:RichDocument,parent:string,id:string,index:number):void{const n=d.nodes[parent],list=children(d,parent);requireThat(Number.isInteger(index)&&index>=0&&index<=list.length,'Invalid destination');list.splice(index,0,id);if(n.name==='Flex')(n.props.sizes as DocumentJson[]).splice(index,0,1);}
@@ -109,7 +137,7 @@ export function moveDocumentNode(before:RichDocument,id:string,parent:string,ind
 function splitInline(content:DocumentInline[],offset:number):[DocumentInline[],DocumentInline[]]{const left:DocumentInline[]=[],right:DocumentInline[]=[];let rest=offset;
  for(const item of content){const size=item.type==='text'?Array.from(item.text).length:1;if(rest>=size){left.push(item);rest-=size;}else if(rest>0&&item.type==='text'){const chars=Array.from(item.text);left.push({...item,text:chars.slice(0,rest).join('')});right.push({...item,text:chars.slice(rest).join('')});rest=0;}else right.push(item);}
  requireThat(Number.isInteger(offset)&&offset>=0&&rest===0,'Invalid split position');return [left,right];}
-export function normalizeInline(content:DocumentInline[]):DocumentInline[]{const out:DocumentInline[]=[];for(const item of content){if(item.type==='text'&&!item.text)continue;const last=out.at(-1);if(last?.type==='text'&&item.type==='text'&&JSON.stringify(last.marks)===JSON.stringify(item.marks))last.text+=item.text;else out.push(structuredClone(item));}return out;}
+export function normalizeInline(content:DocumentInline[]):DocumentInline[]{const out:DocumentInline[]=[];for(const item of content){if(item.type==='text'&&!item.text)continue;const last=out.at(-1);if(last?.type==='text'&&item.type==='text'&&documentValueEqual(last.marks,item.marks))last.text+=item.text;else out.push(structuredClone(item));}return out;}
 export function splitDocumentBlock(before:RichDocument,id:string,offset:number,newId:string):RichDocument{
  const d=structuredClone(before),node=d.nodes[id],parent=parentMap(d).get(id);requireThat(node&&prose.has(node.type)&&node.content&&parent&&validNodeId(newId)&&!d.nodes[newId],'Invalid split');const [left,right]=splitInline(node.content,offset);node.content=left;d.nodes[newId]={...structuredClone(node),content:right};insertChild(d,parent,newId,children(d,parent).indexOf(id)+1);assertDocument(d);return d;
 }

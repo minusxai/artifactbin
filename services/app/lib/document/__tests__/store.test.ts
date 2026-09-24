@@ -1,5 +1,6 @@
 import {beforeEach, describe, expect, it} from 'vitest';
 import type {DocumentEdit, RichDocument} from '@artifactbin/contracts';
+import {getArtifactById,replaceArtifactFor,revertArtifactFor} from '@/lib/artifacts';
 import {useAppHarness} from '@/__tests__/harness';
 import {editDocument,createDocument} from '../store';
 const harness=useAppHarness();
@@ -73,4 +74,21 @@ it('retires deleted identities and reactivates them on undo in the same atomic c
  const restored:DocumentEdit={baseVersion:2,operationId:'restore-a',changedIds:['root','a'],ancestorIds:['root'],operations:[{kind:'addNodes',nodes:{a:document.nodes.a}},{kind:'insert',nodeId:'root',path:['children'],index:0,value:'a'}]};
  expect((await editDocument(actor,'doc123',restored)).updated).toBe(true);
  expect((await (await harness.db()).query("SELECT retired_version FROM artifact_source_ids WHERE artifact_id='doc123' AND source_id='a'")).rows[0].retired_version).toBeNull();
+});
+it('derives render source from canonical JSONB without storing a second document',async()=>{
+ const row=await getArtifactById('doc123');expect(row?.source).toContain('<p');
+ expect((await (await harness.db()).query("SELECT source FROM artifacts WHERE id='doc123'")).rows[0].source).toBeNull();
+});
+
+it('refuses the old source-replacement path for canonical JSONB documents',async()=>{
+ const result=await replaceArtifactFor(actor,'doc123',{format:'markup',source:'<p>wrong editor</p>',content:'',meta:{}});
+ expect(result).toBeInstanceOf(Response);expect((result as Response).status).toBe(409);expect((await head()).document).toEqual(document);
+});
+
+it('refuses legacy source revert without corrupting JSONB snapshots',async()=>{
+ await editDocument(actor,'doc123',edit());
+ const result=await revertArtifactFor(actor,'doc123',1);
+ expect(result).toMatchObject({notArchived:true});
+ expect(result&&'refusal' in result&&result.refusal?.status).toBe(409);
+ expect((await head()).version).toBe(2);
 });

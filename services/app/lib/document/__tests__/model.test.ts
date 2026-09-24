@@ -65,3 +65,14 @@ describe('structural commands',()=>{
   expect(documentChanges(before,after)).toEqual({changedIds:['B'],ancestorIds:['A','root']});
  });
 });
+it('ignores JSONB object key ordering when deriving edits',()=>{
+ const before=fixture();
+ const reorder=(value:unknown):unknown=>Array.isArray(value)?value.map(reorder):value&&typeof value==='object'?Object.fromEntries(Object.entries(value).reverse().map(([k,v])=>[k,reorder(v)])):value;
+ const after=reorder(before) as RichDocument;
+ expect(diffDocument(before,after)).toEqual([]);expect(documentChanges(before,after).changedIds).toEqual([]);
+});
+it('compiles typing to one code-point splice inside its text run',()=>{
+ const before=fixture(),after=structuredClone(before);after.nodes.B.content=[{type:'text',text:'a🦋bc!',marks:[{type:'strong'}]}];
+ const ops=diffDocument(before,after);expect(ops).toEqual([{kind:'text',nodeId:'B',path:['content','0','text'],start:1,deleteCount:3,text:'🦋bc!'}]);
+ expect(applyDocumentOperations(before,ops)).toEqual(after);
+});

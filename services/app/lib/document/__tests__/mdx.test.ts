@@ -1,5 +1,5 @@
 import {describe, expect, it} from 'vitest';
-import {parseDocumentMdx, serializeDocumentMdx, documentJsx} from '../mdx';
+import {parseDocumentMdx, serializeDocumentMdx, documentJsx, reparseDocumentMdx} from '../mdx';
 import {assertDocument} from '../model';
 
 describe('MDX as document data',()=>{
@@ -27,4 +27,26 @@ describe('MDX as document data',()=>{
  it('round-trips code and literal punctuation without evaluating it',()=>{
   const d=parseDocumentMdx('```js\nconst x = "<>&{}";\n```\n\nA & B.');expect(parseDocumentMdx(serializeDocumentMdx(d))).toEqual(d);
  });
+});
+it('supports ordinary component text',()=>{
+ const d=parseDocumentMdx('<Card>Simple **card** text.</Card>');
+ expect(parseDocumentMdx(serializeDocumentMdx(d))).toEqual(d);
+});
+it('reuses the current declaration and embed validation boundary',()=>{
+ const d=parseDocumentMdx('<Helmet><Value name="total" type="number" default={42} /><Query name="totals">{`select $total as value`}</Query></Helmet>\n\nTotal: {$total}\n\n<Number data="$totals" col="value" agg="sum" />');
+ expect(parseDocumentMdx(serializeDocumentMdx(d))).toEqual(d);
+ expect(()=>parseDocumentMdx('<Helmet><Value name="total" type="number" default="wrong" /></Helmet>')).toThrow();
+});
+
+it('keeps prose styling and identities when editing source or inserting a paragraph',()=>{
+ const before=parseDocumentMdx('# Title\n\nFirst paragraph\n\nLast paragraph');
+ const ids=before.nodes[before.rootId].children!;before.nodes[ids[2]].props.className='font-serif';
+ expect(reparseDocumentMdx(before,serializeDocumentMdx(before,false))).toEqual(before);
+ const next=reparseDocumentMdx(before,'## Title\n\nFirst paragraph\n\nInserted paragraph\n\nLast paragraph');
+ expect(next.rootId).toBe(before.rootId);expect(next.nodes[ids[0]].props.depth).toBe(2);
+ expect(next.nodes[ids[2]].props.className).toBe('font-serif');
+ expect(next.nodes[next.rootId].children?.at(-1)).toBe(ids[2]);
+});
+it('gives an empty source an editable paragraph',()=>{
+ const d=parseDocumentMdx('');expect(d.nodes[d.rootId].children).toHaveLength(1);
 });

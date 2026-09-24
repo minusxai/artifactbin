@@ -37,6 +37,11 @@ export class DocumentSession {
     // The server's accepted document includes independent edits since our original base.
     // Replay only keystrokes made AFTER this request; never rebase a rejected request.
     const buffered=diffDocument(pending.document,this.draft);
+    const local=documentChanges(pending.document,this.draft),remote=documentChanges(pending.document,result.document);
+    const changed=new Set(remote.changedIds),ancestors=new Set(remote.ancestorIds);
+    if(local.changedIds.some(id=>changed.has(id)||ancestors.has(id))||local.ancestorIds.some(id=>changed.has(id))){
+     this.status='conflict';this.detail='Another edit overlaps changes you typed while saving. Your draft is preserved.';return;
+    }
     this.draft=buffered.length?applyDocumentOperations(result.document,buffered):result.document;
     this.base={...this.base,version:result.version,document:result.document};this.pending=null;
     this.status=buffered.length?'pending':'saved';this.detail='';

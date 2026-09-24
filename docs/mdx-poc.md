@@ -38,6 +38,16 @@ High-risk implementation tests: Unicode/IME and mark boundaries; complete old/ne
 - Local browser at port 3030: rendered nested Flex and managed iframe, typed prose, saved a new document, inserted a paragraph with Unicode and reloaded with those changes retained. Disposable account `mxmx_test_mdx_20260924@example.com`, isolated browser context. Further layout/collaboration checks remain.
 - `npm run validate` passed. Routine `npm test` deferred 724 files to CI (exit 2): NOT a test pass. Opening a draft PR for CI while finishing integration.
 
-## Remaining implementation review
+## Integration checkpoint
 
-Finish browser resize/float and independent-editor checks; integrate canonical document navigation with artifact links; verify shared component/dataflow behavior and source import limits; expand semantic edge cases; refactor view/layout boundaries; inspect CI. This is not yet a completed POC.
+- Canonical document links now open the inline editor; legacy whole-source edit/revert endpoints refuse these documents. Derived JSX is computed for existing rendering/query consumers, never persisted as another authority.
+- Source editing retains matching identities and paragraph styling. Imported empty source gets an editable paragraph. Inline components retain their child content through copy/paste.
+- Flex rendering and editor resizing share geometry; width/height, float, row/column direction, range fonts, keyboard sizing, and selected iframe source editing are exposed in the editor. Reactive expressions share one document data store.
+- New regressions were observed failing before fixes: source styling, old revert, dataflow expressions, component selection across width edits, buffered edits overlapping a remote change, and oversized SQL offsets.
+- Latest focused SQL/model/store/editor/layout run: 55 tests passed. Session: 4 passed. UI: 6 passed in its latest run. Source codec/store checkpoint: 29 passed. These are focused checks, not substitutes for the deferred full suite.
+- Two running browser editors submitted edits to different paragraphs from base version 2; both saved and both displayed both edits. Two edits to the same paragraph from base version 4 yielded one save and one preserved conflicting draft.
+- Browser width/float controls worked and persisted. The browser tool's drag generated pointer movement but omitted pointer-up; explicitly completing that event verified resize persistence. A complete physical pointer gesture still needs the CI/browser check.
+- First PR CI checkpoint passed API/node/UI tests, all six browser-gate shards, build and validation. The job-timing gate failed because node shard 1 exceeded 240 seconds by six seconds. Later changes require fresh CI.
+- Added a CI-only real-PostgreSQL service proof that holds a row lock until independent service connections wait, then checks CAS retries, overlapping edits, duplicate requests and trash races. It has not been run locally (CI-only repository rule).
+
+Remaining verification: final CI, source/formatting/resize smoke checks on the latest build, and retry recovery. POC limits: collaboration uses polling and node-level conflict refusal, with no character-level merge or presence. Arbitrary author-script and referenced-artifact editor parity are not established by these checks.

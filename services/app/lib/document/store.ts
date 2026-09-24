@@ -4,7 +4,7 @@ import {getDb} from '../db';
 import {createArtifact, editorScope, type TokenActor} from '../artifacts';
 import {assertDocument, assertPrimitive, DocumentError, validNodeId} from './model';
 import {compileDocumentOperations} from './sql';
-import {validateDocumentMarkup} from './mdx';
+import {validateDocumentMarkup} from './markup';
 
 export async function createDocument(actor:TokenActor,title:string,document:RichDocument):Promise<DocumentSnapshot>{
  assertDocument(document);validateDocumentMarkup(document);
@@ -49,6 +49,7 @@ export async function editDocument(actor:TokenActor,id:string,edit:DocumentEdit)
      actor_user_id=$7, actor_token_id=$8, updated_at=now(), edit_id=$4
    FROM eligible o, ${compiled.result} result
    WHERE artifacts.id=o.id AND artifacts.version=o.version AND artifacts.sharing_revision=o.sharing_revision
+     AND artifacts.deleted_at IS NULL AND artifacts.user_id IS NOT DISTINCT FROM o.user_id AND artifacts.token_id=o.token_id
    RETURNING artifacts.version,artifacts.document
  ), archived AS (
    INSERT INTO artifact_versions(artifact_id,version,title,description,format,content,source,document,meta,actor_user_id,actor_token_id,operation_id,changed_ids,ancestor_ids)

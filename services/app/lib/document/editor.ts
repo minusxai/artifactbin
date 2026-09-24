@@ -6,9 +6,9 @@ import {baseKeymap, toggleMark} from 'prosemirror-commands';
 import {history, undo, redo} from 'prosemirror-history';
 import {splitListItem, sinkListItem, liftListItem} from 'prosemirror-schema-list';
 import type {DocumentInline, DocumentJson, DocumentNode, RichDocument} from '@artifactbin/contracts';
-import {assertDocument, normalizeInline} from './model';
+import {assertDocument, childIds, documentValueEqual, normalizeInline} from './model';
 
-const attrs={id:{default:null},props:{default:{}},name:{default:null},tag:{default:null},nodeType:{default:null},text:{default:null},bindings:{default:null},childIds:{default:[]}};
+const attrs={payload:{default:null},id:{default:null},props:{default:{}},name:{default:null},tag:{default:null},nodeType:{default:null},text:{default:null},bindings:{default:null},childIds:{default:[]}};
 const fresh=()=>`n_${crypto.randomUUID().replaceAll('-','')}`;
 const domAttrs=(node:PmNode)=>({'data-node-id':node.attrs.id??'',...(typeof node.attrs.props.className==='string'?{class:node.attrs.props.className}:{})});
 function block(tag:string,content:string,extra:Partial<NodeSpec>={}):NodeSpec{return {attrs,group:'block',content,toDOM:n=>[tag,domAttrs(n),0],parseDOM:[{tag}],...extra};}
@@ -41,8 +41,11 @@ export const documentEditorSchema=new Schema({
 function editorNode(d:RichDocument,id:string,inline=false):PmNode {
  const n=d.nodes[id]!;
  const type=n.type==='document'?'doc':n.type==='list'?(n.props.ordered?'ordered_list':'bullet_list'):({code:'code_block',listItem:'list_item',tableRow:'table_row',tableCell:'table_cell',thematicBreak:'thematic_break'} as Record<string,string>)[n.type]??(['component','html','expression'].includes(n.type)?inline?'inline_component':n.children?'container':'component':n.type);
- const a={id,props:n.props,name:n.name??null,tag:n.tag??null,nodeType:n.type,text:n.text??null,bindings:n.bindings??null,childIds:n.children??[]};
- const contents=n.type==='code'?(n.text?[documentEditorSchema.text(n.text)]:[]):n.content?n.content.flatMap(item=>{
+ const payloadNodes:Record<string,DocumentNode>={};
+ function collect(key:string){payloadNodes[key]=d.nodes[key];for(const child of childIds(d.nodes[key]))collect(child);}
+ if(type==='inline_component'||type==='component')collect(id);
+ const a={payload:Object.keys(payloadNodes).length?{rootId:id,nodes:payloadNodes}:null,id,props:n.props,name:n.name??null,tag:n.tag??null,nodeType:n.type,text:n.text??null,bindings:n.bindings??null,childIds:n.name==='Flex'?n.children??[]:[]};
+ const contents=a.payload?[]:n.type==='code'?(n.text?[documentEditorSchema.text(n.text)]:[]):n.content?n.content.flatMap(item=>{
   if(item.type==='break')return [documentEditorSchema.nodes.hard_break.create()];
   if(item.type==='nodeRef')return [editorNode(d,item.nodeId,true)];
   return item.text?[documentEditorSchema.text(item.text,item.marks.map(m=>documentEditorSchema.marks[m.type].create(m.attrs)))]:[];
@@ -55,6 +58,8 @@ export function editorDocument(root:PmNode):RichDocument {
  function visit(pm:PmNode):string {
   const id=pm.attrs.id as string;
   const type=pm.attrs.nodeType??({code_block:'code',doc:'document',bullet_list:'list',ordered_list:'list',list_item:'listItem',table_row:'tableRow',table_cell:'tableCell',thematic_break:'thematicBreak'} as Record<string,string>)[pm.type.name]??pm.type.name;
+  const payload=pm.attrs.payload as {rootId:string;nodes:Record<string,DocumentNode>}|null;
+  if(payload){Object.assign(nodes,structuredClone(payload.nodes));nodes[id]={...nodes[payload.rootId],props:{...pm.attrs.props},...(pm.attrs.text===null?{}:{text:pm.attrs.text})};return id;}
   const n:DocumentNode={type,props:{...pm.attrs.props}};nodes[id]=n;
   if(pm.attrs.name)n.name=pm.attrs.name;if(pm.attrs.tag)n.tag=pm.attrs.tag;if(pm.attrs.bindings)n.bindings=pm.attrs.bindings;
   if(type==='code')n.text=pm.textContent;
@@ -81,7 +86,27 @@ const identities=new Plugin({appendTransaction(transactions,_old,state){
  state.doc.descendants((node,pos)=>{
   if(node.isText||node.type.name==='hard_break')return;
   const id=node.attrs.id as string|null;
-  if(!id||seen.has(id)){const next=fresh();tr.setNodeMarkup(pos,undefined,{...node.attrs,id:next});seen.add(next);}else seen.add(id);
+  if(!id||seen.has(id)){
+   const next=fresh();let payload=node.attrs.payload as {rootId:string;nodes:Record<string,DocumentNode>}|null;
+   if(payload){
+    const mapping=new Map(Object.keys(payload.nodes).map(key=>[key,key===payload!.rootId?next:fresh()]));
+    const nodes:Record<string,DocumentNode>={};
+    for(const [key,value] of Object.entries(payload.nodes)){
+     const copy=structuredClone(value);if(copy.children)copy.children=copy.children.map(c=>mapping.get(c)!);
+     if(copy.slots)copy.slots=Object.fromEntries(Object.entries(copy.slots).map(([slot,ids])=>[slot,ids.map(c=>mapping.get(c)!)]));
+     if(copy.content)copy.content=copy.content.map(item=>item.type==='nodeRef'?{...item,nodeId:mapping.get(item.nodeId)!}:item);
+     nodes[mapping.get(key)!]=copy;
+    }payload={rootId:next,nodes};
+   }
+   tr.setNodeMarkup(pos,undefined,{...node.attrs,id:next,payload});seen.add(next);
+  }else seen.add(id);
+ });
+ tr.doc.descendants((node,pos)=>{
+  if(node.attrs.name!=='Flex')return;
+  const ids:string[]=[];node.forEach(child=>ids.push(child.attrs.id));
+  if(documentValueEqual(ids,node.attrs.childIds))return;
+  const sizes=ids.map(id=>{const index=(node.attrs.childIds as string[]).indexOf(id);return index<0?1:node.attrs.props.sizes?.[index]??1;});
+  tr.setNodeMarkup(pos,undefined,{...node.attrs,childIds:ids,props:{...node.attrs.props,sizes}});
  });return tr.docChanged?tr:null;
 }});
 export function createDocumentEditorState(d:RichDocument):EditorState {

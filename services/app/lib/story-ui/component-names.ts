@@ -21,7 +21,7 @@ export const STORY_UI_COMPONENT_NAME_LIST = [
   'Collapsible', 'CollapsibleTrigger', 'CollapsibleContent',
   'Tooltip', 'TooltipTrigger', 'TooltipContent', 'TooltipProvider',
   'Popover', 'PopoverTrigger', 'PopoverContent', 'PopoverAnchor', 'PopoverHeader', 'PopoverTitle', 'PopoverDescription',
-  'Grid', 'GridItem',
+  'Grid', 'GridItem', 'Flex',
   // The bound-control kit (components/kit/controls.tsx): themed two-way
   // controls over Helmet `<Value>`s — the fancy siblings of the bindable
   // native `input`/`select`/`textarea` (lib/story/dataflow.ts REF_ATTRS).
