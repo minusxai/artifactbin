@@ -4,11 +4,9 @@ description: Chart authoring.
 ---
 ## Read first
 
+<!--bundle:skip-->
 ## Theme, legends and labels
 
-Use theme colors, readable axis names/units, and legends unless directly labeled.
-
-<!--bundle:skip-->
 Leave color ranges and schemes unset: categorical and continuous scales use
 the theme. Do not add literal colors or named palettes unless the user explicitly
 requests custom colors. For thematic emphasis, use `"var(--chart-2)"` (or another
