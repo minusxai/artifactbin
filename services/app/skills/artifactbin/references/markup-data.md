@@ -29,6 +29,7 @@ Published artifacts use `ref:<id>` in source, image and recipe attributes. SQL n
 `data="ref:<id>"`, inline `data={[…]}` and Param are refused. [Catalogs](databases.md).
 
 Editable cells: [editing](markup-editing.md).
+SQL functions: [reference](markup-sql.md).
 
 
 ## Declarations (Helmet only)
@@ -130,7 +131,10 @@ First read [chart authoring](markup-data-authoring.md).
   - `<DatePicker value="$since" min max />` (a `date` Value), `<Switch checked="$flag" />` (a boolean).
   - `<Input value="$item" type="number" placeholder min max step />` and
     `<Textarea value="$note" rows={3} />` — text fields.
-  Dropdowns belong in a control row, never in a `<GridItem>`.
+  Put dashboard filters in a control row; Select menus escape Grid clipping.
+
+Standalone [multi-select](markup-select.md): `multiple valueFormat="json"` binds a JSON-array string.
+
 
 
 [Keyed templates](markup-repeat.md).

@@ -34,9 +34,11 @@ describe('the installed short skill',()=>{
   expect(fewTurns).toMatch(/is not re-checking/);
   // Vague encouragement is the failure mode this replaced; it must not come back.
   for(const vague of ['first few calls','early','as soon as you can'])expect(fewTurns,vague).not.toContain(vague);
-  // The verification rule is kept verbatim, not softened by the new flow.
+  // Publication acceptance and visual review are distinct checks.
   expect(fewTurns).toContain('A successful push IS the verification');
-  expect(fewTurns).toMatch(/Skip pulling, diffing, exporting[^.]*afterwards/);
+  expect(fewTurns).toContain('source was accepted');
+  expect(fewTurns).toContain('just to confirm publication');
+  expect(fewTurns).not.toMatch(/Skip[^.]*exporting/);
   expect(fewTurns).not.toContain('write the whole document');
   expect(fewTurns.length).toBeLessThan(600);
   const native=bullet('- Native markup first');
@@ -76,6 +78,8 @@ describe('the installed short skill',()=>{
   // skill, a palette tool or image tooling is a turn spent on something the document already has.
   expect(sheet).toContain('no other skill, palette tool or image tooling is needed');
   expect(sheet).toContain('the theme carries the palette');
+  expect(sheet).toContain('does not verify appearance');
+  expect(sheet).toContain('For visual review');
   const annotations=renderDoc('artifactbin/references/publishing-annotations.md','https://example.test');
   for(const flag of ['--thread','--state resolved','--quote'])expect(annotations).toContain(flag);
  });

@@ -103,9 +103,10 @@ TILE DISCIPLINE:
   else, it renders a table).
 - Embeds fill their cells — NEVER `height=` on a `<Question>` inside a GridItem; size
   with `h`. One embed per GridItem.
-- ONE `<Grid>` per section holds everything visual (readers drag and resize tiles in edit
+- ONE `<Grid>` per section (readers drag and resize tiles in edit
   mode; hand-rolled flex/grid forfeits that); order GridItems top-left → bottom-right —
   on phones the grid stacks in SOURCE order.
+- [Editable tables](markup-editing.md) go outside Grid.
 
 <!--bundle:skip-->
 Do
@@ -115,7 +116,7 @@ Do
 Don't
 - Bold or display-face headlines; prose between tiles; shadows or gradients on tiles; a
   bare number where its trend exists; zero controls; a query that ignores the controls
-  without reason; dropdowns inside Grid tiles (they clip); `height=` on embeds inside
+  without reason; `height=` on embeds inside
   cells; nested Grids; a Grid wrapping the command bar or footer.
 - Entrance or reveal animation on tiles — hover states and the controls' own transitions
   are the only motion a dashboard needs.
