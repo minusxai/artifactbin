@@ -23,7 +23,7 @@ Invalid JSX returns `400 {"error":"invalid_jsx","details":[…]}` with exact spa
   container variants for responsive layout.
 - Data (`<Query source="ref:abc123">`, `<Value>`, `<Mutation>`, embeds, controls): [data](markup-data.md).
   Editable dataset cells: [editing](markup-editing.md).
-  [motion](markup-motion.md) · [video](markup-video.md) · [svg](markup-svg.md).
+  <!--bundle:skip-->[maps](markup-maps.md) · <!--/bundle:skip-->[motion](markup-motion.md) · [video](markup-video.md) · [svg](markup-svg.md).
 
 <!--bundle:skip-->
 ## Contents

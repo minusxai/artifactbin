@@ -103,12 +103,13 @@ import * as r99 from '@/app/api/users/[id]/avatar/route';
 import * as r100 from '@/app/api/users/[id]/follow/route';
 import * as r101 from '@/app/assets/[hash]/route';
 import * as r102 from '@/app/assets/export/[id]/route';
-import * as r103 from '@/app/email/[id]/route';
-import * as r104 from '@/app/health/route';
-import * as r105 from '@/app/llms.txt/route';
-import * as r106 from '@/app/people/[id]/route';
-import * as r107 from '@/app/tiles/[...tile]/route';
-import * as r108 from '@/app/webfonts/[file]/route';
+import * as r103 from '@/app/basemap/[...path]/route';
+import * as r104 from '@/app/email/[id]/route';
+import * as r105 from '@/app/health/route';
+import * as r106 from '@/app/llms.txt/route';
+import * as r107 from '@/app/people/[id]/route';
+import * as r108 from '@/app/tiles/[...tile]/route';
+import * as r109 from '@/app/webfonts/[file]/route';
 
 export interface RouteEntry { path: string; dir: string; methods: string[]; module: Record<string, unknown> }
 export const ROUTES: RouteEntry[] = [
@@ -215,10 +216,11 @@ export const ROUTES: RouteEntry[] = [
   { path: "/api/users/:id/follow", dir: "/api/users/[id]/follow", methods: ["GET","POST","DELETE"], module: r100 },
   { path: "/assets/:hash", dir: "/assets/[hash]", methods: ["GET"], module: r101 },
   { path: "/assets/export/:id", dir: "/assets/export/[id]", methods: ["GET","HEAD"], module: r102 },
-  { path: "/email/:id", dir: "/email/[id]", methods: ["GET"], module: r103 },
-  { path: "/health", dir: "/health", methods: ["GET"], module: r104 },
-  { path: "/llms.txt", dir: "/llms.txt", methods: ["GET"], module: r105 },
-  { path: "/people/:id", dir: "/people/[id]", methods: ["GET"], module: r106 },
-  { path: "/tiles/:tile{.+}", dir: "/tiles/[...tile]", methods: ["GET"], module: r107 },
-  { path: "/webfonts/:file", dir: "/webfonts/[file]", methods: ["GET"], module: r108 },
+  { path: "/basemap/:path{.+}", dir: "/basemap/[...path]", methods: ["GET"], module: r103 },
+  { path: "/email/:id", dir: "/email/[id]", methods: ["GET"], module: r104 },
+  { path: "/health", dir: "/health", methods: ["GET"], module: r105 },
+  { path: "/llms.txt", dir: "/llms.txt", methods: ["GET"], module: r106 },
+  { path: "/people/:id", dir: "/people/[id]", methods: ["GET"], module: r107 },
+  { path: "/tiles/:tile{.+}", dir: "/tiles/[...tile]", methods: ["GET"], module: r108 },
+  { path: "/webfonts/:file", dir: "/webfonts/[file]", methods: ["GET"], module: r109 },
 ];

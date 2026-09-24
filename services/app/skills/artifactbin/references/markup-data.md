@@ -100,10 +100,8 @@ First read [chart authoring](markup-data-authoring.md).
   (`category`, `value`)<!--/bundle:skip-->, `minusx/radar@1`<!--bundle:skip--> (`metric`, `value` multi, optional
   `series`)<!--/bundle:skip-->, `minusx/combo@1`<!--bundle:skip--> (`x`, `bar`, `line`, optional `series`)<!--/bundle:skip-->,
   `minusx/single-value@1`<!--bundle:skip--> (`value` — the FIRST row's cell; `params`: `label`,
-  `caption`, `align`, `valueColor`)<!--/bundle:skip-->, `minusx/choropleth@1`<!--bundle:skip--> (`region`, `value`;
-  `params.mapName`: `us-states`|`us-counties`|`world`|`india-states`)<!--/bundle:skip-->,
-  `minusx/point-map@1`<!--bundle:skip--> (`lat`, `lng`, optional `size`/`color`; with
-  `lat2`/`lng2` each row draws an origin→destination flow)<!--/bundle:skip-->.
+  `caption`, `align`, `valueColor`)<!--/bundle:skip-->, `minusx/choropleth@1` and
+  `minusx/point-map@1` (deprecated: [maps](markup-maps.md)).
 - `<Number data="$table" col="revenue" agg="sum" prefix="$" suffix=" M" format=",.0f" />`
   — one live aggregated figure, inline. `agg` defaults to `first` (the first
   row's cell), so a total needs `agg="sum"` written out; `avg`, `min`, `max`,

@@ -1,4 +1,5 @@
 import {MEMBER_COLUMNS} from '@artifactbin/contracts';
+import { deckColumns, GEOMETRY_COLUMN } from '@/lib/viz/deck-spec';
 import {resolveUserValues} from './user-values';
 import {compileStoredMutation} from '@/lib/datasets/stored-mutation';
 /**
@@ -186,6 +187,17 @@ async function validateQueryBindings(body: JsxNode[], columns: Record<string, Da
   const visit = (nodes: JsxNode[]) => {
     for (const n of nodes) {
       if (n.type !== 'element') continue;
+      if (n.isComponent && n.tag === 'DeckGL') {
+        const data = n.attributes.find((a) => a.name === 'data')?.value;
+        const layers = n.attributes.find((a) => a.name === 'layers')?.value;
+        const name = data?.static ? refName(data.json) : null;
+        if (name && columns[name] && layers?.static) {
+          const known = new Set(columns[name].map((c) => c.name));
+          for (const col of deckColumns(layers.json)) {
+            if (!known.has(col)) out.push(`query $${name}: DeckGL reads column "${col}", which the query does not return${col === GEOMETRY_COLUMN ? ' (a GeoJsonLayer without data draws each row\'s geometry column — add your GeoJSON as a dataset, or use data "boundary:<id>")' : ''}`);
+          }
+        }
+      }
       if (n.isComponent && n.tag === 'Question') {
         const data = n.attributes.find((a) => a.name === 'data')?.value;
         const viz = n.attributes.find((a) => a.name === 'viz')?.value;

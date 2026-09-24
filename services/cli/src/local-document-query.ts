@@ -8,12 +8,11 @@ import {selectedQueries,type Dataflow} from '../../app/lib/story/dataflow';
 import {validateQueryValues} from '../../app/lib/story/query-values';
 import {evaluateDataflow,type DatasetTables} from '../../app/lib/sql/dataflow-core';
 import {tableQueryInput} from '@artifactbin/utils';
-import {parseCsv} from '../../app/lib/data-ingest/csv';
-import {coerceRows} from '../../app/lib/data-ingest/coerce';
 import {parseDocument} from './document';
 import {parseResourceFile,readResourceSource} from './resource-file';
 import {readOptional,digest} from './files';
 import {CliError,type ParsedCommand} from './commands';
+import {datasetFileRows,isDatasetFile} from './dataset-file';
 import type {Workspace} from './workspace';
 
 export async function localDocumentQuery(workspace:Workspace,path:string,source:Buffer,flags:ParsedCommand['flags'],values:Record<string,Scalar>){
@@ -36,10 +35,8 @@ export async function localDocumentQuery(workspace:Workspace,path:string,source:
    if(!native)throw new CliError('missing_local_input',`Dataset ${input} requires remote inputs.`);
    input=native.path;bytes=Buffer.from(native.bytes,'base64');
   }
-  let rows:unknown;
-  if(/\.csv$/i.test(input)){const csv=parseCsv(bytes.toString());rows=coerceRows(csv.headers,csv.rows);}
-  else if(/\.json$/i.test(input)){try{rows=JSON.parse(bytes.toString());}catch{throw new CliError('invalid_dataset',`${input} contains invalid JSON.`);}}
-  if(!Array.isArray(rows)||!rows.every(row=>row&&typeof row==='object'&&!Array.isArray(row)))throw new CliError('invalid_dataset',`${input} must contain CSV or JSON row objects.`);
+  if(!isDatasetFile(input))throw new CliError('invalid_dataset',`${input} must be CSV, JSON or GeoJSON rows.`);
+  const rows=datasetFileRows(input,bytes);
   fingerprints.push(digest(bytes));datasets[id]={rows,columns:inferColumns(rows)};
  }
  const limit=Number(flags.limit??20),fingerprint=digest(JSON.stringify([path,digest(source),fingerprints,selected,values,limit]));let offset=0;

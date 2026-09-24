@@ -1,15 +1,14 @@
 import {localDocumentQuery} from './local-document-query';
-import {extname,join} from 'node:path';
+import {join} from 'node:path';
 import {createSql} from '@artifactbin/sql/local';
 import {inferColumns} from '@artifactbin/utils/shape';
 import {isQueryFailure,type Scalar} from '@artifactbin/contracts';
 import {tableQueryInput} from '@artifactbin/utils';
-import {parseCsv} from '../../app/lib/data-ingest/csv';
-import {coerceRows} from '../../app/lib/data-ingest/coerce';
 import {resolveReference} from './reference';
 import {readOptional,digest} from './files';
 import {CliError,type ParsedCommand} from './commands';
 import type {Workspace} from './workspace';
+import {datasetFileRows,isDatasetFile} from './dataset-file';
 import {parseResourceFile,readResourceSource} from './resource-file';
 
 export function queryParameters(values:string[]=[]):Record<string,Scalar>{
@@ -44,12 +43,8 @@ export async function localQuery(workspace:Workspace,parsed:ParsedCommand,sql:st
    if(resource.type==='artifact'){if(sql!==undefined)throw new CliError('invalid_query','Use --name for a declared document query.');return localDocumentQuery(workspace,path,Buffer.from(source.bytes,'base64'),flags,params);}
    path=source.path;bytes=Buffer.from(source.bytes,'base64');
   }
-  if(!['.csv','.json'].includes(extname(path).toLowerCase()))return null;
-  let rows:unknown;
-  if(extname(path).toLowerCase()==='.csv'){const csv=parseCsv(bytes.toString());rows=coerceRows(csv.headers,csv.rows);}
-  else try{rows=JSON.parse(bytes.toString());}catch{throw new CliError('invalid_dataset',`${input} must contain JSON row objects.`);}
-  if(!Array.isArray(rows)||!rows.every(row=>row&&typeof row==='object'&&!Array.isArray(row)))throw new CliError('invalid_dataset',`${input} must contain an array of row objects.`);
-  sources.push({path:ref.path,bytes,rows:rows as Record<string,unknown>[]});
+  if(!isDatasetFile(path))return null;
+  sources.push({path:ref.path,bytes,rows:datasetFileRows(path,bytes,input)});
  }
  const results=[];
  for(const source of sources){

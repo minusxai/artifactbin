@@ -20,6 +20,23 @@ test('local SQL uses bound parameters, supports mixed-case file extensions, and 
  }finally{await rm(root,{recursive:true,force:true});}
 });
 
+test('a .geojson file is a dataset: one row per feature, its geometry in a geometry column; GeoJSON named .json is refused by name',async()=>{
+ const root=await mkdtemp(join(tmpdir(),'afbin-geojson-'));
+ const invoke=async(args:string[])=>{const out:string[]=[];const code=await runCli([...args,'--json'],{cwd:root,home:root,env:{},interactive:false,fetch:async()=>{throw Error('must stay offline');},stdout:s=>out.push(s),stderr:()=>{}});return {code,result:JSON.parse(out.join(''))};};
+ const zones={type:'FeatureCollection',features:[
+  {type:'Feature',properties:{zone:'North'},geometry:{type:'Point',coordinates:[77.6,13.0]}},
+  {type:'Feature',properties:{zone:'South'},geometry:{type:'Point',coordinates:[77.6,12.9]}},
+ ]};
+ try{
+  await writeFile(join(root,'zones.geojson'),JSON.stringify(zones));
+  await writeFile(join(root,'read.sql'),"select zone, geometry from public.rows order by zone");
+  const query=await invoke(['query','zones.geojson','--input','read.sql']);assert.equal(query.code,0,JSON.stringify(query));
+  assert.deepEqual(query.result.results[0].rows,[{zone:'North',geometry:'{"type":"Point","coordinates":[77.6,13]}'},{zone:'South',geometry:'{"type":"Point","coordinates":[77.6,12.9]}'}]);
+  await writeFile(join(root,'zones.json'),JSON.stringify(zones));
+  const misnamed=await invoke(['query','zones.json','--input','read.sql']);assert.equal(misnamed.result.error.code,'invalid_dataset');assert.match(misnamed.result.error.message,/\.geojson/);
+ }finally{await rm(root,{recursive:true,force:true});}
+});
+
 test('local query pagination rejects a cursor after the input data changes',async()=>{
  const root=await mkdtemp(join(tmpdir(),'afbin-query-pages-'));
  const invoke=async(args:string[])=>{const out:string[]=[];const code=await runCli(['query','rows.json',...args,'--json'],{cwd:root,home:root,env:{},interactive:false,fetch:async()=>{throw Error('must stay offline');},stdout:s=>out.push(s),stderr:()=>{}});return {code,result:JSON.parse(out.join(''))};};

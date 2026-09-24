@@ -5,6 +5,7 @@ import {type LocalDocument} from './document';
 import {baselineOf,inspectWorkspace,type LocalFile,type Snapshot,type Workspace} from './workspace';
 import {readResourceSource} from './resource-file';
 import {skillStatus} from './skill-install';
+import {isDatasetFile} from './dataset-file';
 import {extname} from 'node:path';
 export function snapshotDocument(snapshot:Snapshot):LocalDocument{
  return{metadata:{...(snapshot.shares!==undefined?{shares:snapshot.shares as ShareEntry[]}:{}),...(snapshot.description!==undefined?{description:snapshot.description as string|null}:{}),...(snapshot.colorMode!==undefined?{colorMode:snapshot.colorMode as 'light'|'dark'|null}:{}),id:snapshot.id,title:snapshot.title??null,theme:snapshot.theme??null,template:snapshot.template??null,
@@ -30,6 +31,6 @@ export async function localSourceDiff(workspace:Workspace,file:LocalFile){
  if(!file.resource)return;
  const source=await readResourceSource(file.resource,file.path,workspace.root);if(!source||source.bytes===file.tracked?.source?.bytes)return;
  const before=Buffer.from(file.tracked?.source?.bytes??'','base64').toString(),after=Buffer.from(source.bytes,'base64').toString();
- const text=['.csv','.json','.jsx'].includes(extname(source.path).toLowerCase());
+ const text=(isDatasetFile(source.path)||extname(source.path).toLowerCase()==='.jsx');
  return{path:source.path,resource:file.path,diff:text?createTwoFilesPatch(`base/${source.path}`,`local/${source.path}`,before,after,'last observed','working file',{context:3}):`Binary file ${source.path} differs`};
 }

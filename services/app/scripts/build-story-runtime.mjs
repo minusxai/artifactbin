@@ -164,11 +164,12 @@ const dynamicChunks = (browser.metafile.outputs[entryOut[0]].imports ?? [])
  * need: the chart module. Edit mode is also a dynamic import, but it is loaded
  * on demand by an owner who has pressed Edit — preloading it would make every
  * reader of every charted document download an editor they will never open.
- * Mermaid likewise loads only for a Mermaid component, not every chart.
+ * Mermaid likewise loads only for a Mermaid component, and the map engine
+ * (deck.gl, MapLibre) only for a <DeckGL>, not for every chart.
  * These need no preload entry: the runtime resolves them from their own URLs.
  */
 const lazy = dynamicChunks
-  .filter((c) => !c.from.some((f) => f.includes('lib/story-runtime/edit/') || f.endsWith('components/kit/mermaid-render.ts')))
+  .filter((c) => !c.from.some((f) => f.includes('lib/story-runtime/edit/') || f.endsWith('components/kit/mermaid-render.ts') || f.endsWith('components/kit/deck-gl-engine.tsx')))
   .map((c) => c.url);
 
 /*
@@ -233,6 +234,21 @@ fs.writeFileSync(path.join(outdir, 'manifest.json'), JSON.stringify(manifest, nu
 // Server renderer loaded by lib/story/ssr.server.ts through createRequire.
 // The CJS bundle carries React. Vega stays external because its Node ESM
 // build uses top-level await; SSR renders chart placeholders, not charts.
+/*
+ * The map engine (deck.gl, MapLibre) never runs on the server: <DeckGL> loads it
+ * from an effect, so server rendering always emits the placeholder. The CJS
+ * server bundle cannot split, and would otherwise inline megabytes of WebGL code
+ * that no server path reaches — including MapLibre's optional history.replaceState
+ * (URL-hash sync), which the served document's history freeze forbids.
+ */
+const serverMapEngineStub = {
+  name: 'server-map-engine-stub',
+  setup(build) {
+    build.onResolve({ filter: /\/deck-gl-engine$/ }, () => ({ path: 'deck-gl-engine', namespace: 'server-stub' }));
+    build.onLoad({ filter: /.*/, namespace: 'server-stub' }, () => ({ contents: 'export function DeckEngine() { return null; }', loader: 'js' }));
+  },
+};
+
 const ssrBuild = await esbuild.build({
   ...shared,
   entryPoints: [path.join(root, 'lib/story-runtime/ssr-entry.tsx')],
@@ -240,6 +256,7 @@ const ssrBuild = await esbuild.build({
   format: 'cjs',
   platform: 'node',
   external: ['vega', 'vega-lite', 'vega-embed', 'vega-interpreter', 'canvas'],
+  plugins: [serverMapEngineStub],
   metafile: true,
 });
 
@@ -255,6 +272,10 @@ if (cache) {
   const inputs = {};
   const addGraph = (metafile) => {
     for (const key of Object.keys(metafile.inputs)) {
+      // Virtual inputs have no file behind them: a package's `browser` field
+      // stubbing a Node builtin (`(disabled):zlib`), or a plugin namespace such
+      // as the server map-engine stub (`server-stub:deck-gl-engine`).
+      if (/^(\(disabled\)|[\w-]+):/.test(key)) continue;
       const abs = path.resolve(process.cwd(), key);
       if (abs.split(path.sep).includes('node_modules')) continue;
       const rel = path.relative(root, abs);
