@@ -455,7 +455,9 @@ export async function buildStoryDocument(input: StoryDocumentInput): Promise<str
     // border and padding, and nothing else styles it back
     // (lib/story-surface/bare-controls).
     styleTag('data-mx-bare-controls', STORY_BARE_CONTROLS_CSS),
-    chrome && !bare ? styleTag('data-mx-chrome', STORY_CHROME_CSS) : '',
+    // The document's own navigation (deck rail, outline, reading column) keeps its
+    // styles on a bare page too; only the reader chrome's MARKUP is withheld.
+    chrome ? styleTag('data-mx-chrome', STORY_CHROME_CSS) : '',
     bare ? styleTag('data-mx-domain-footer', DOMAIN_FOOTER_CSS) : '',
     styleTag('data-mx-embed', STORY_EMBED_CSS),
     // Every table its own scroll box, every document, capture included: a

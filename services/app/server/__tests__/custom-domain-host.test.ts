@@ -121,7 +121,10 @@ describe('a post on a verified host', () => {
     noCookie(res);
     const html = await res.text();
     expect(html).toContain('Hello from my blog');
-    expect(html).not.toMatch(/mx-reader-|data-mx-login|data-mx-reader/);
+    // The document keeps its own layout styles; no reader-chrome ELEMENT is rendered.
+    const markup = html.replace(/<style[\s\S]*?<\/style>/g, '');
+    expect(markup).not.toMatch(/mx-reader-|data-mx-login|data-mx-reader/);
+    expect(html).toContain('data-mx-domain-footer');
     expect(html).toContain(`<link rel="canonical" href="https://blog.example.org/${w.post.id}-hello-world">`);
     expect(html).toMatch(new RegExp(`Made with <a href="https://app\\.example\\.test/a/${w.post.id}"[^>]*>artifactbin</a>`));
     expect(html).toContain('<meta property="og:title" content="Hello World">');
