@@ -13,7 +13,7 @@ const head=contents=>`<Helmet>${contents}</Helmet>`;
 const query=sql=>`<Query name="q">{\`${sql}\`}</Query>`;
 const p='<p id="p">Ready</p>';
 
-export async function auditOperationContracts(q,context){
+export async function auditOperationContracts(q,context,onCase){
  const evidence=[];
  await q('CREATE TABLE operation_audit(id text PRIMARY KEY, document jsonb NOT NULL)');
  const publish=source=>publishJsx({},source,context);
@@ -46,6 +46,7 @@ export async function auditOperationContracts(q,context){
   ['script: forbidden closing token',head('<script>{`const x = 1`}</script>')+p,head('<script>{`const x = "</script"`}</script>')+p,'script boundary'],
  ];
  for(const [name,beforeSource,afterSource,dependency] of cases){
+  if(onCase)await onCase({name,beforeSource,afterSource,dependency});
   const before=await valid(beforeSource),beforeAst=encodeSource(before.source),afterAst=encodeSource(afterSource);
   await q('INSERT INTO operation_audit VALUES($1,$2::jsonb) ON CONFLICT(id) DO UPDATE SET document=EXCLUDED.document',[name,JSON.stringify(beforeAst)]);
   const params=[name];let expression='document';const patches=diff(beforeAst,afterAst);

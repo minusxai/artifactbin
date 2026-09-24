@@ -12,8 +12,9 @@ import {serializeJsx} from '../../services/app/lib/jsx/serialize.ts';
 import {publishJsx} from '../../services/app/lib/story/jsx-tier.ts';
 import {analyzeRowScopes} from '../../services/app/lib/story/row-scope.ts';
 
-const pack=value=>Array.isArray(value)?['array',value.map(pack)]:value&&typeof value==='object'?['object',Object.entries(value).map(([k,v])=>[k,pack(v)])]:['value',value];
-const unpack=([type,value])=>type==='object'?Object.fromEntries(value.map(([k,v])=>[k,unpack(v)])):type==='array'?value.map(unpack):value;
+const needsStringEncoding=value=>typeof value==='string'&&(value.includes('\0')||!value.isWellFormed());
+const pack=value=>needsStringEncoding(value)?['string16',Buffer.from(value,'utf16le').toString('base64')]:Array.isArray(value)?['array',value.map(pack)]:value&&typeof value==='object'?['object',Object.entries(value).map(([k,v])=>[needsStringEncoding(k)?pack(k):k,pack(v)])]:['value',value];
+const unpack=([type,value])=>type==='string16'?Buffer.from(value,'base64').toString('utf16le'):type==='object'?Object.fromEntries(value.map(([k,v])=>[Array.isArray(k)?unpack(k):k,unpack(v)])):type==='array'?value.map(unpack):value;
 function encode(value){
  if(Array.isArray(value))return value.map(encode);
  if(!value||typeof value!=='object')return value;
