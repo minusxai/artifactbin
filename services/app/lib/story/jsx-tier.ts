@@ -36,6 +36,7 @@ import type { AssetWarning, WebAssetKind } from '@/lib/web-assets';
 import { documentFonts, invalidFontFamilies } from './document-fonts';
 import { MAX_EXTERNAL_ASSETS_PER_PUBLISH, MAX_EXTERNAL_IMAGES_PER_PUBLISH } from '@/lib/config';
 import { checkDocumentData } from './data-checks';
+import { validateIconNames } from './icon-validation.server';
 
 /** The full story vocabulary: kit registry + the data embeds (minusx JSX_STORY_COMPONENT_NAMES verbatim). */
 export const JSX_TIER_COMPONENTS = JSX_STORY_COMPONENT_NAMES;
@@ -149,7 +150,7 @@ export async function prepareJsx(body: Record<string, unknown>, sourceIn: string
   if (badFamilies.length > 0) {
     return json({ error: 'unknown_font', details: badFamilies.map((f) => `"${f}" is not a font family name`) }, 400);
   }
-  const errors = structural.errors;
+  const errors = [...structural.errors, ...validateIconNames(split.body)];
   if (errors.length > 0) {
     // An agent's only route out of a tag rejection is knowing the set. It rides
     // ONCE on the response — not inside each offending tag's message, which is
