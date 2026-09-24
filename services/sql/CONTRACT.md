@@ -16,6 +16,10 @@ one write on `/mutate`), params bound never spliced, a row cap and a per-query i
 may lower the caps, never raise them), a 64 MiB body. A document's dependent queries MUST travel in one `run`.
 No credentials, no storage, no request identity, no network from inside the engine. Private network only.
 
+Paged reads retain `totalRows`, the count before the page window. `truncated` is true only when
+the returned rows omit part of that result; requesting a page does not itself mean truncation.
+A complete result (including an empty result) omits the flag, just like an unpaged read.
+
 Trusted composition roots may supply `createSql(caps, extensions)` with a mutation connection hook.
 The hook runs before preparation on mutation and dry-run connections; reads remain unaffected.
 Opaque `extensions` input and `continuation` failures cross the same local/HTTP contract.

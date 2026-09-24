@@ -413,7 +413,8 @@ async function runOne(
     const counted = await counter.start().readAll();
     if (timer) { clearTimeout(timer); timer = null; }
     const n = counted.getRowObjects()[0]?.n;
-    return { rows, columns, truncated: true, totalRows: typeof n === 'bigint' ? Number(n) : Number(n) };
+    const totalRows = Number(n);
+    return { rows, columns, ...(totalRows > rows.length ? { truncated: true } : {}), totalRows };
   } catch (e) {
     if (timedOut) {
       return { error: `<Query name="${query.name}"> ran too long and was stopped (limit ${timeoutMs}ms) — narrow it (filter, aggregate, or LIMIT)`, timedOut: true };

@@ -39,6 +39,19 @@ describe.each<[string, SqlService]>([['in-process', local], ['over HTTP', remote
     const r = await svc.run({ tables: { t: TABLE }, queries: [{ name: 'q', sql: 'select a from t where a > $min' }], params: { min: 2 } });
     expect(!isQueryFailure(r.q) && r.q.rows).toEqual([{ a: 3 }, { a: 4 }]);
   });
+  it.each([
+    { sql: 'select count(*) as n from t', limit: 3, offset: 0, shown: 1, total: 1, truncated: false },
+    { sql: 'select a from t where a <= 3', limit: 3, offset: 0, shown: 3, total: 3, truncated: false },
+    { sql: 'select a from t where false', limit: 3, offset: 0, shown: 0, total: 0, truncated: false },
+    { sql: 'select a from t order by a', limit: 3, offset: 0, shown: 3, total: 4, truncated: true },
+    { sql: 'select a from t order by a', limit: 3, offset: 3, shown: 1, total: 4, truncated: true },
+  ])('reports actual truncation for a page: $shown of $total at offset $offset', async ({ sql, limit, offset, shown, total, truncated }) => {
+    const result = await svc.run({ tables: { t: TABLE }, queries: [{ name: 'q', sql }], params: {}, page: { name: 'q', limit, offset } });
+    if (isQueryFailure(result.q)) throw new Error(JSON.stringify(result));
+    expect(result.q.rows).toHaveLength(shown);
+    expect(result.q.totalRows).toBe(total);
+    expect(result.q.truncated).toBe(truncated ? true : undefined);
+  });
   it('mutates one table and answers its new rows', async () => {
     const r = await svc.mutate({ table: { name: 'ref_x', rows: [{ a: 1 }, { a: 2 }], columns: TABLE.columns }, sql: 'insert into ref_x values ($v)', params: { v: 5 } });
     expect(!isQueryFailure(r) && r.affected).toBe(1);
