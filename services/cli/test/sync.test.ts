@@ -366,13 +366,25 @@ describe('a declared write that names the viewer', () => {
     assert.deepEqual(forged.bodies,[]);
    }finally{await rm(root,{recursive:true,force:true});}
   });
-  test('says a row action runs from the page, not from a command line',async()=>{
+  test('refuses a row action and points at the dataset it writes, not only at the page',async()=>{
    const root=await mkdtemp(join(tmpdir(),'afbin-me-write-'));
    try{
     await saveTestConnection({server:'https://example.com',token:'test'},root);
-    const row=await run(root,['--name','remove'],[{name:'remove',params:[{name:'_row'},{name:'_me',type:'user'}]}]);
+    const row=await run(root,['--name','remove'],[{name:'remove',target:'ds9Kq2',params:[{name:'_row'},{name:'_me',type:'user'}]}]);
     assert.notEqual(row.code,0);
     assert.equal(row.result.error.code,'row_mutation');
+    assert.match(row.result.error.fix,/afbin query ds9Kq2 --write --input/);
+    assert.match(row.result.error.fix,/live-sessions/);
+    assert.deepEqual(row.bodies,[]);
+   }finally{await rm(root,{recursive:true,force:true});}
+  });
+  test('a page-local row action has no dataset to write, so only the page can run it',async()=>{
+   const root=await mkdtemp(join(tmpdir(),'afbin-me-write-'));
+   try{
+    await saveTestConnection({server:'https://example.com',token:'test'},root);
+    const row=await run(root,['--name','pick'],[{name:'pick',scope:'local',target:'choices',params:[{name:'_row'}]}]);
+    assert.equal(row.result.error.code,'row_mutation');
+    assert.doesNotMatch(row.result.error.fix,/afbin query/);
     assert.match(row.result.error.fix,/live-sessions/);
     assert.deepEqual(row.bodies,[]);
    }finally{await rm(root,{recursive:true,force:true});}

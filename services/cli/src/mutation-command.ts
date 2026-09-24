@@ -7,7 +7,7 @@ import type {Workspace,Snapshot} from './workspace';
 import type {HttpClient} from './http';
 
 interface MutationParameter {name:string;type?:string;required?:boolean;default?:Scalar}
-interface MutationDeclaration {name:string;params?:MutationParameter[];target?:string}
+interface MutationDeclaration {name:string;params?:MutationParameter[];target?:string;scope?:'local'}
 
 /** A declared mutation is the document's own statement; the caller supplies bound values, never SQL. */
 function declaredMutation(head:Snapshot,name:string,values:Record<string,Scalar>):Record<string,unknown>{
@@ -17,10 +17,14 @@ function declaredMutation(head:Snapshot,name:string,values:Record<string,Scalar>
  /*
   * What the SERVER binds is never the caller's to supply. `$_me` is whoever is signed in; `$_row`
   * and `$_value` exist only where a page draws a row. Asking for `_me` made an agent look up its
-  * own account id and pass it; the server ignores it, but the question was wrong to ask.
+  * own account id and pass it; the server ignores it, but the question was wrong to ask. Pointing only
+  * at a live session sent an agent that wanted to change rows off to script clicks on the page.
   */
  if(Object.hasOwn(values,'_me'))throw new CliError('invalid_parameter',`${name} binds $_me from your sign-in; it cannot be supplied.`,'Remove --param _me: the server signs the write as you.');
- if((selected.params??[]).some(param=>param.name==='_row'||param.name==='_value'))throw new CliError('row_mutation',`${name} is a row action: it runs on the row a page draws it beside.`,'Press it in a live session instead (afbin help live-sessions).');
+ if((selected.params??[]).some(param=>param.name==='_row'||param.name==='_value')){
+  const dataset=selected.scope!=='local'&&selected.target&&selected.target!==head.id?selected.target:undefined;
+  throw new CliError('row_mutation',`${name} is a row action: it runs on the row a page draws it beside.`,dataset?`To change rows, write the dataset it targets: afbin query ${dataset} --write --input change.sql (needs write access to ${dataset}). To test the control itself, press it in a live session (afbin help live-sessions).`:'Press it in a live session instead (afbin help live-sessions).');
+ }
  const params=(selected.params??[]).filter(param=>param.name!=='_me');
  for(const key of Object.keys(values))if(!params.some(param=>param.name===key))throw new CliError('unknown_parameter',`${name} does not declare the parameter ${key}.`,`Declared parameters: ${params.map(param=>param.name).join(', ')||'none'}.`);
  const missing=params.filter(param=>param.required!==false&&param.default===undefined&&!Object.hasOwn(values,param.name)).map(param=>param.name);
