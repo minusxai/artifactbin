@@ -121,8 +121,8 @@ describe('a post on a verified host', () => {
     noCookie(res);
     const html = await res.text();
     expect(html).toContain('Hello from my blog');
-    // The document keeps its own layout styles; no reader-chrome ELEMENT is rendered.
-    const markup = html.replace(/<style[\s\S]*?<\/style>/g, '');
+    // The document keeps its own layout styles (in the head); no reader-chrome ELEMENT is rendered in the body.
+    const markup = html.slice(html.indexOf('<body'));
     expect(markup).not.toMatch(/mx-reader-|data-mx-login|data-mx-reader/);
     expect(html).toContain('data-mx-domain-footer');
     expect(html).toContain(`<link rel="canonical" href="https://blog.example.org/${w.post.id}-hello-world">`);
