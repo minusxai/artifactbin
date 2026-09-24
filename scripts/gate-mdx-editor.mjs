@@ -48,7 +48,16 @@ try{
  assert.deepEqual((await head()).document.nodes[paragraphId],styled.document.nodes[paragraphId]);
  await page.reload();await page.getByRole('textbox',{name:'Document editor',exact:true}).waitFor();assert.ok(await page.getByText('An added paragraph from source.',{exact:true}).isVisible());
  assert.equal((await head()).document.nodes[iframeId].props.float,'left');
- await save(()=>page.getByRole('button',{name:'Select Iframe',exact:true}).dragTo(page.getByRole('heading',{name:'Room for an idea',exact:true})));
+ // A native drag needs a dragover after dragstart, including across the iframe boundary.
+ await page.getByRole('button',{name:'Select Iframe',exact:true}).scrollIntoViewIfNeeded();
+ await save(async()=>{
+  const from=await page.getByRole('button',{name:'Select Iframe',exact:true}).boundingBox(),to=await page.getByRole('heading',{name:'Room for an idea',exact:true}).boundingBox();
+  await page.mouse.move(from.x+from.width/2,from.y+from.height/2);await page.mouse.down();
+  const selected=await page.getByRole('button',{name:'Select Iframe',exact:true}).boundingBox();assert.ok(Math.abs(selected.y-from.y)<1,'Selection must not shift the canvas under the drag pointer');
+  await page.mouse.move(from.x+from.width/2+10,from.y+from.height/2+10,{steps:3});
+  await page.mouse.move(to.x+to.width/2,to.y+to.height/2,{steps:8});
+  await page.mouse.move(to.x+to.width/2+1,to.y+to.height/2+1);await page.mouse.up();
+ });
  const moved=await head();const column=moved.document.nodes[flexId].children[0];assert.ok(moved.document.nodes[column].children.includes(iframeId),'Dragging moves the same component identity into the column');
  console.log('ok MDX inline range fonts, dimensions, float, pointer resizing, source identities and saved reload');
 }finally{await browser.close();}

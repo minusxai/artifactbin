@@ -75,14 +75,14 @@ export function DocumentEditor({document:initial,editable=true,onChange,artifact
    {button('Insert columns',()=>insert('<Flex direction="row" sizes={[1,1]}>\n\n<div>\n\nFirst column\n\n</div>\n\n<div>\n\nSecond column\n\n</div>\n\n</Flex>'))}
    {button('Insert iframe',()=>insert('<Iframe title="Interactive example" height={180}><div style="padding:24px;background:#e0f2fe">An editable HTML component</div></Iframe>'))}
    {button('Insert image',()=>insert('<img src="https://images.unsplash.com/photo-1441974231531-c6227db76b6e?w=600" alt="Forest" width={240} />'))}
-   {selection?.resizable&&<>
+   <div className="mdx-selection-tools">{selection?.resizable&&<>
    {selection?.name==='Flex'&&<select aria-label="Layout direction" value={String(selection.props.direction??'row')} onChange={e=>props({direction:e.target.value})}><option value="row">Columns</option><option value="column">Rows</option></select>}
    {selection?.text!==undefined&&button('Edit component source',()=>setComponentSource(selection.text!))}
    <select aria-label="Float component" value={String(selection?.props.float??'disabled')} onChange={e=>props({float:e.target.value})}><option value="disabled">No float</option><option value="left">Float left</option><option value="right">Float right</option></select>
    <label>Width <DimensionInput key={selection?.id} label="Width of parent (%)" min={1} max={100} value={selection?.widthPercent??''} onChange={widthPercent}/> %</label>
    <label>px <DimensionInput key={selection?.id} label="Component width" min={48} value={typeof selection?.props.width==='number'?selection.props.width:''} onChange={width=>props({width})}/></label>
    <label>Height <DimensionInput key={selection?.id} label="Component height" min={32} value={typeof selection?.props.height==='number'?selection.props.height:''} onChange={height=>props({height})}/></label>
-   </>}
+   </>}</div>
   </div>}
   {componentSource!==null&&<section className="mdx-component-source"><label>Component source<textarea aria-label="Component source" value={componentSource} onChange={e=>setComponentSource(e.target.value)}/></label><button type="button" onClick={()=>command(v=>{if(!(v.state.selection instanceof NodeSelection))return;const pos=v.state.selection.from;const tr=v.state.tr.setNodeMarkup(pos,undefined,{...v.state.selection.node.attrs,text:componentSource});const next=editorDocument(v.state.applyTransaction(tr).state.doc);try{validateDocumentMarkup(next);v.dispatch(tr);setComponentSource(null);}catch(e){setError(e instanceof Error?e.message:'Invalid component source');}},false)}>Apply component source</button><button type="button" onClick={()=>setComponentSource(null)}>Cancel</button></section>}
   {error&&<p role="alert">{error}</p>}<div ref={host} className="mdx-editor-body"/>

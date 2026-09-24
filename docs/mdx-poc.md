@@ -51,3 +51,13 @@ High-risk implementation tests: Unicode/IME and mark boundaries; complete old/ne
 - Added a CI-only real-PostgreSQL service proof that holds a row lock until independent service connections wait, then checks CAS retries, overlapping edits, duplicate requests and trash races. It has not been run locally (CI-only repository rule).
 
 Remaining verification: final CI, source/formatting/resize smoke checks on the latest build, and retry recovery. POC limits: collaboration uses polling and node-level conflict refusal, with no character-level merge or presence. Arbitrary author-script and referenced-artifact editor parity are not established by these checks.
+
+## Resize and drag UX revision
+
+The divider lives in the actual gutter between adjacent children. It previews and commits their shared proportions; the parent's outer width/height handles resize the whole container. Width is displayed as a percentage of the immediate parent (Flex children use their parent's shares); height remains pixels for normal flow. Numeric input retains partial digits while typing. Resize/float controls appear only for a selected layout or component, in a fixed-height toolbar row so selecting a drag handle cannot move the canvas under the pointer.
+
+Observed browser checks: 35% changed the selected child; 85% changed its whole parent without changing child proportions. First-gesture component movement into a column now works after removing canceled native mousedown events and toolbar layout shift. Width/float, font range, saved reload, separate-node concurrent edits, overlapping draft preservation and an interrupted-save retry were also checked locally.
+
+CI's real PostgreSQL service proof passed: independent concurrent updates, overlaps, duplicate requests and a trash race. Its initial fixture mistakenly retained archived rows between scenarios; fixing fixture cleanup made the proof pass. Full CI then passed all API/node/UI suites and build, with the newly added first-gesture drag gate exposing the toolbar shift above. The final revision is pushed for that check; consult PR #77 for the current result.
+
+The POC is available at `/documents/new`. Existing documents are not migrated. Collaboration uses two-second polling and node-level conflict refusal, without character-level merge or presence; unsaved/conflicting drafts are retained in the open editor and can be exported or saved as a new document. Full author-script and referenced-artifact editor parity are outside the demonstrated surface.

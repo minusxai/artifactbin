@@ -27,3 +27,7 @@
 .mdx-editor-body .ProseMirror-selectednode{outline:2px solid #54899d}.mdx-editor-body .ProseMirror-gapcursor{display:none;pointer-events:none;position:absolute}.mdx-editor-body .ProseMirror:after{content:"";display:block;clear:both}
 @media(max-width:700px){.mdx-editor-body{padding:24px 18px}.mdx-toolbar{position:static}.mdx-container-content{flex-wrap:wrap}.mdx-container-content>*{flex-basis:100%!important}}
 .mdx-component-select{position:absolute;left:-22px;top:0;width:20px;background:#fff;border:1px solid #b3c2cc;border-radius:3px;cursor:grab;opacity:0}.mdx-component:hover .mdx-component-select,.mdx-component.ProseMirror-selectednode .mdx-component-select{opacity:1}
+
+/* Keep selection controls from moving the canvas under a pointer starting a drag. */
+.mdx-selection-tools{flex-basis:100%;height:34px;display:flex;align-items:center;gap:6px;overflow-x:auto;white-space:nowrap}
+.mdx-selection-tools>*{flex-shrink:0}
