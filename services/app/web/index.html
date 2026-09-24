@@ -13,8 +13,8 @@
          FIRST thing inside <head> so a truncated fetch still sees it: one source,
          lib/agent-discovery. The tour for people is /docs-human. -->
     <!-- The theme is stamped BEFORE paint, from the same localStorage key the toggle writes.
-         LIGHT is the default and carries no attribute, so only dark is stamped. -->
-    <script>try{if(localStorage.getItem('mx_theme')==='dark')document.documentElement.dataset.theme='dark'}catch(e){}</script>
+         A stored choice wins; with none, the device's dark setting does. -->
+    <script>try{var t=localStorage.getItem('mx_theme');if(t==='dark'||(!t&&matchMedia('(prefers-color-scheme: dark)').matches))document.documentElement.dataset.theme='dark'}catch(e){}</script>
   </head>
   <body>
     <div id="root"></div>

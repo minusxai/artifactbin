@@ -72,8 +72,8 @@ export function ListingHero({ handle, label, count, noun, owner, follow, surface
       <MicroLabel>{label}</MicroLabel>
       <div className="mt-2 flex items-center gap-3">
         {owner && <Avatar userId={owner.id} image={owner.image} initial={handle} size={48} />}
-        <h1 className="flex flex-wrap items-baseline gap-x-1.5 text-3xl font-semibold tracking-tight text-fg">
-          <a href={domain ? '/' : `/@${handle}`} aria-label="Profile root" className="no-underline transition-colors hover:text-accent">
+        <h1 className="flex min-w-0 flex-wrap items-baseline gap-x-1.5 text-3xl font-semibold tracking-tight text-fg">
+          <a href={domain ? '/' : `/@${handle}`} aria-label="Profile root" className="min-w-0 [overflow-wrap:anywhere] no-underline transition-colors hover:text-accent">
             <span className="text-accent">@</span>{handle}
           </a>
         </h1>

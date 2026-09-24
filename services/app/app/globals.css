@@ -146,6 +146,14 @@ body {
   min-height: 100vh;
 }
 
+/* iOS Safari zooms the page into any field under 16px when it takes focus.
+ * Unlayered, so it outranks a field's text-xs/text-sm utility — on a phone only. */
+@media (max-width: 639px) {
+  input:not([type='checkbox'], [type='radio'], [type='range'], [type='color']), textarea, select {
+    font-size: 16px;
+  }
+}
+
 /* A tint, and the text keeps its own color: the solid accent+bg pair measured
  * 3.3:1 in light mode, where WCAG AA needs 4.5. */
 ::selection {
