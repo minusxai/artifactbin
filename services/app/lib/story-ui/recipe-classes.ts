@@ -813,6 +813,7 @@ export const STORY_UI_RECIPE_CLASSES: readonly string[] = [
   "opacity-30",
   "opacity-50",
   "opacity-70",
+  "open:flex",
   "option",
   "options",
   "origin-(--radix-popover-content-transform-origin)",

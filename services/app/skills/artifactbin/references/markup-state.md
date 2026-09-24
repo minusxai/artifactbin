@@ -34,8 +34,10 @@ embeds keep their old rows and show “updating…”; failures show the engine 
   <DialogTrigger>Edit</DialogTrigger>
   <DialogContent aria-label="Draft editor" run="$add">
     <Input label="Title" value="$title" required autoFocus />
-    <button type="submit">Add draft</button>
-    <DialogClose>Cancel</DialogClose>
+    <div className="flex justify-end gap-2">
+      <DialogClose>Cancel</DialogClose>
+      <Button type="submit">Add draft</Button>
+    </div>
   </DialogContent>
 </Dialog>
 ```
@@ -44,7 +46,9 @@ embeds keep their old rows and show “updating…”; failures show the engine 
 successful submit sets it false and restores focus to the trigger. A failed
 Mutation leaves the dialog open and shows the server message. `DialogContent`
 uses normal form validity before running its Mutation. The dialog is styled by
-default (your `className` wins); `Select` and `DatePicker` open inside it.
+default and stacks its children in a column; a `className` on `DialogContent`
+replaces that layout with yours. `DialogTrigger` draws a button and `DialogClose`
+an outlined one unless you style them. `Select` and `DatePicker` open inside it.
 Enter in a text field submits the enclosing `run=` form.
 
 Every scalar Value travels in the link unless it says otherwise, so a form field
