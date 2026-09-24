@@ -13,7 +13,7 @@ Do the requested work and verify it. Reply in the same thread with evidence usin
 Use afbin commands, not direct HTTP. Never include credentials or this private handoff in a published artifact. If a permission or login needs a person, leave it for the person in the web terminal; do not bypass it.`;
 /** Explicit permission options win over managed-session defaults, including profile settings. */
 function permissionArguments(harness:string,args:readonly string[]):string[]{
- if(harness==='claude')return args.some(arg=>/^(--permission-mode(?:=|$)|--dangerously-skip-permissions$)/.test(arg))?[]:['--permission-mode','auto'];
+ if(harness==='claude')return args.some(arg=>/^(--permission-mode(?:=|$)|--dangerously-skip-permissions$)/.test(arg))?[]:['--dangerously-skip-permissions'];
  if(harness!=='codex')return []; // Pi has no built-in tool approval prompts; OpenCode uses its environment.
  const explicit=args.some((arg,index)=>{
   if(/^(--(?:yolo|dangerously-bypass-approvals-and-sandbox|approve-for-me|full-auto)$|--(?:sandbox|ask-for-approval|profile)(?:=|$)|-[sap](?:=|$))/.test(arg))return true;

@@ -1,5 +1,6 @@
 /** CI-only: the same remote-host conformance against a packaged foreground OSS team server. */
 import {spawn} from 'node:child_process';
+import {stopTeamHost} from './team-host-process.mjs';
 import {createServer} from 'node:http';
 import {mkdtemp,mkdir,readFile,writeFile,rm} from 'node:fs/promises';
 import {tmpdir,homedir} from 'node:os';
@@ -32,7 +33,7 @@ try{
  for(const name of ['sql','chromium'])await completed(command,[...prefix,'setup','--service',name,'--json']);
  const file=join(operator,'server.env');
  await writeFile(file,`APP__HOST=127.0.0.1\nAPP__PORT=${port}\nAPP__PUBLIC_BASE_URL=${origin}\nAUTH__SECRET=${randomBytes(32).toString('hex')}\nEMAIL__DEV_OUTBOX_PATH=${outbox}\n`,{mode:0o600});
- server=spawn(command,[...prefix,'serve','--config',file,'--dir',operator,...(process.env.CONFORMANCE__DB_URL?['--db-url',process.env.CONFORMANCE__DB_URL]:[])],{env,cwd:root,stdio:['ignore','pipe','pipe']});
+ server=spawn(command,[...prefix,'serve','--config',file,'--dir',operator,...(process.env.CONFORMANCE__DB_URL?['--db-url',process.env.CONFORMANCE__DB_URL]:[])],{env,cwd:root,detached:true,stdio:['ignore','pipe','pipe']});
  for(const stream of [server.stdout,server.stderr])stream.on('data',chunk=>{log=(log+chunk).slice(-8000);});
  let ready=false;
  for(let n=0;n<180;n++){
@@ -42,8 +43,8 @@ try{
  if(!ready)throw new Error('Team host failed readiness: '+log);
  const gate=fileURLToPath(new URL('../../../scripts/gate-cli-conformance.mjs',import.meta.url));
  await completed(process.execPath,[gate,origin],{env:{...env,PLAYWRIGHT_BROWSERS_PATH:process.env.PLAYWRIGHT_BROWSERS_PATH??join(homedir(),'.cache/ms-playwright'),CONFORMANCE__CLI:executable}});
- console.log('Packaged OSS team host passed the existing remote-host conformance suite.');
 }catch(error){console.error(log);throw error;}finally{
- if(server&&server.exitCode===null){server.kill('SIGTERM');await new Promise(resolve=>{const timer=setTimeout(()=>{server.kill('SIGKILL');resolve();},10000);server.once('exit',()=>{clearTimeout(timer);resolve();});});}
+ await stopTeamHost(server);
  mirror.closeAllConnections();await new Promise(resolve=>mirror.close(resolve));await rm(root,{recursive:true,force:true});
 }
+console.log('Packaged OSS team host passed the existing remote-host conformance suite and cleanup.');

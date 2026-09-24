@@ -27,7 +27,9 @@ test("real PTY delivers a remote line and relays output and exit, acknowledging 
       JSON.stringify({
         controller: "local",
         inputs: ack
-          ? []
+          ? ack===1&&output.includes("received:from-comment")
+            ? [{id:2,kind:"input",source:"comment",data:"finish\r"}]
+            : []
           : [
               {
                 id: 1,
@@ -45,7 +47,9 @@ test("real PTY delivers a remote line and relays output and exit, acknowledging 
     const code = await runRemote({
       client: new HttpClient({ connection: { server: `http://127.0.0.1:${address.port}`, token: "test" } }),
       command: "/bin/sh",
-      args: ["-c", 'read line; printf "received:%s\\n" "$line"; exit 7'],
+      // Keep the PTY open until the relay observes output; immediate shell exit can
+      // discard unread terminal bytes on Linux under concurrent CI load.
+      args: ["-c", 'read line; printf "received:%s\\n" "$line"; read finish; exit 7'],
       interactive: false,
       onOutput: (data) => (local += data),
       signal: AbortSignal.timeout(10000),
@@ -53,7 +57,7 @@ test("real PTY delivers a remote line and relays output and exit, acknowledging 
     assert.equal(code, 7);
     assert.match(output, /received:from-comment/, JSON.stringify({local,ack,exit,exchanges}));
     assert.match(local, /received:from-comment/);
-    assert.equal(ack, 1);
+    assert.equal(ack, 2);
     assert.equal(exit, 7);
     assert.ok(exchanges >= 2);
   } finally {

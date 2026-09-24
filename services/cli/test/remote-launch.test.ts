@@ -102,7 +102,7 @@ test('failure to persist the startup receipt kills the spawned PTY and releases 
 
 test('managed harness defaults avoid routine permission prompts without changing caller arguments',()=>{
  const supplied=['--model','chosen'];
- assert.deepEqual(remoteArguments('/usr/local/bin/claude',supplied,'context'),[...supplied,'--permission-mode','auto','context']);
+ assert.deepEqual(remoteArguments('/usr/local/bin/claude',supplied,'context'),[...supplied,'--dangerously-skip-permissions','context']);
  assert.deepEqual(remoteArguments('codex',supplied,'context'),[...supplied,'--yolo','context']);
  assert.deepEqual(remoteArguments('pi',supplied,'context'),[...supplied,'context']);
  assert.deepEqual(supplied,['--model','chosen']);
