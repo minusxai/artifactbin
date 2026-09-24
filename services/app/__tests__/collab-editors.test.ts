@@ -130,6 +130,21 @@ describe('a viewer share is read-only, exactly as before', () => {
 });
 
 describe('an editor edits through every write door, and nothing else', () => {
+  it('names readable image references in the editor, without leaking private titles to collaborators', async () => {
+    const w = await world();
+    const image = await create(w.ta.token, { image: PNG, title: 'Private logo', visibility: 'private' });
+    asSession(w.owner);
+    const id = w.doc.id;
+    const updated = await putMineRoute(await jreq(`/api/my/artifacts/${id}`, 'PUT', { markup: `<img src="ref:${image.id}" />` }), params({ id }));
+    expect(updated.status).toBe(200);
+    const ownerRead = await getMineRoute(await jreq(`/api/my/artifacts/${id}`, 'GET'), params({ id }));
+    expect((await ownerRead.json()).refs).toContainEqual({ id: image.id, kind: 'image', title: 'Private logo' });
+    await inviteEditor(w);
+    asSession(w.bob);
+    const editorRead = await getMineRoute(await jreq(`/api/my/artifacts/${id}`, 'GET'), params({ id }));
+    expect((await editorRead.json()).refs).toContainEqual({ id: image.id, kind: 'image' });
+  });
+
   it('session: reach, edits, PUT, revert and versions answer; sharing answers too; delete and moving do not', async () => {
     const w = await world();
     await inviteEditor(w);

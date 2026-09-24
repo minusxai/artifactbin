@@ -1091,6 +1091,7 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
         {/* Edit mode is CHROME around the document, not a replacement for it. */}
         {editing && (editorSeed || !needsEditorPart || editorPartFailed) && (
           <ArtifactEditor
+            onSharingChange={onSharingChange}
             id={id}
             seed={editorSeed}
             onExit={finishEdit}

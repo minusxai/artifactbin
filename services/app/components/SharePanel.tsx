@@ -28,15 +28,18 @@ export const shareTitle = (title: string | null | undefined, format: string | un
 
 /** One viewport-level sharing surface. Portaling keeps it centered even when
  * its trigger lives inside an animated controls popover. */
-export function SharePanel({ onClose, children, title, busy = false }: {
+export function SharePanel({ onClose, children, title, busy = false, embedded = false }: {
   title: string;
   onClose: () => void;
   children: ReactNode;
   /** The content is still downloading (ShareLinkOnDemand). */
   busy?: boolean;
+  /** Editor workspace surface, without modal behavior. */
+  embedded?: boolean;
 }) {
   const portal = useTrustedPortalContainer();
   useEffect(() => {
+    if (embedded) return;
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
     const escape = (event: KeyboardEvent) => { if (event.key === 'Escape') onClose(); };
@@ -45,7 +48,13 @@ export function SharePanel({ onClose, children, title, busy = false }: {
       document.body.style.overflow = previousOverflow;
       window.removeEventListener('keydown', escape);
     };
-  }, [onClose]);
+  }, [onClose, embedded]);
+
+  if (embedded) return <section aria-label="Sharing settings" className="w-full max-w-2xl font-mono text-xs">
+    <h2 className="mb-2 break-words text-base font-semibold text-fg">{title}</h2>
+    <p className="mb-6 text-muted">Manage access, invite people, or copy the link.</p>
+    {children}
+  </section>;
 
   return createPortal(
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-3 sm:p-8">

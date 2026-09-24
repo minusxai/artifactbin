@@ -54,6 +54,11 @@ describe('the edit panel on a wide window', () => {
     await fromFrame({ type: STORY_SELECTION_MESSAGE, selection: chart() });
     fireEvent.click(screen.getByLabelText('Edit the source'));
     fireEvent.click(screen.getByLabelText('Edit on the page'));
+    fireEvent.click(screen.getByLabelText('Show files'));
+    expect(screen.getByLabelText('Files')).toHaveStyle({ left: '0px', right: '320px' });
+    fireEvent.click(screen.getByLabelText('Show data'));
+    expect(screen.getByLabelText('Data')).toHaveStyle({ left: '0px', right: '320px' });
+    fireEvent.click(screen.getByLabelText('Edit on the page'));
 
     // Every value ever reported, not just the last: a 320 → 0 → 320 flicker
     // inside one act is exactly the jump this panel exists to remove.

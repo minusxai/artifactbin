@@ -34,6 +34,21 @@ afterEach(() => {
 });
 
 describe('ShareLink', () => {
+  it('embeds the same sharing writes without a modal or scroll lock', async () => {
+    render(<ShareLink className="" artifactId="Ab3xK9" editable variant="embedded" />);
+    await waitFor(() => expect(screen.getByLabelText('Make public')).toBeTruthy());
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(screen.queryByLabelText('Share')).toBeNull();
+    expect(document.body.style.overflow).not.toBe('hidden');
+    fireEvent.click(screen.getByLabelText('Make public'));
+    await waitFor(() => expect(sharingState.visibility).toBe('public'));
+    fireEvent.change(screen.getByLabelText('Invite email'), { target: { value: 'Friend@Example.com' } });
+    fireEvent.click(screen.getByLabelText('Add email'));
+    await waitFor(() => expect(sharingState.shares).toEqual([{ email: 'friend@example.com', role: 'viewer' }]));
+    fireEvent.keyDown(window, { key: 'Escape' });
+    expect(screen.getByLabelText('Copy link')).toBeTruthy();
+  });
+
   it('keeps the plain one-click copy button for non-owners (no dialog)', async () => {
     render(<ShareLink className="x" />);
     fireEvent.click(screen.getByLabelText('Share'));
