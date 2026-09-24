@@ -32,14 +32,14 @@ export function DocumentEditor({document:initial,editable=true,onChange,artifact
  const [history,setHistory]=useState({undo:false,redo:false});
  const [error,setError]=useState('');const dataflow=useRef<DataflowStore|null>(null);
  function flow(document:RichDocument){const {values,queries,mutations}=splitHelmet(parseDocumentJsx(documentJsx(document))).content;return {values,queries,mutations};}
- useEffect(()=>{
-  if(!host.current)return;
-  const store=createDataflowStore({flow:flow(initial)});dataflow.current=store;
   function updateSelection(v:EditorView){
    setHistory({undo:undo(v.state),redo:redo(v.state)});
    const {selection:s}=v.state;const node=s instanceof NodeSelection?s.node:s.$from.parent;
    setSelection(node.attrs.id?{id:node.attrs.id,props:node.attrs.props,resizable:['container','component','inline_component'].includes(node.type.name),widthPercent:nodeWidthPercentage(v,s instanceof NodeSelection?s.from:s.$from.depth?s.$from.before():0),text:node.attrs.text??undefined,name:node.attrs.name??node.attrs.nodeType??node.type.name}:null);
   }
+ useEffect(()=>{
+  if(!host.current)return;
+  const store=createDataflowStore({flow:flow(initial)});dataflow.current=store;
   const v=new EditorView(host.current,{state:createDocumentEditorState(initial),editable:()=>latest.current.editable,attributes:{'aria-label':'Document editor',role:'textbox','aria-multiline':'true'},nodeViews:documentNodeViews(store,()=>latest.current.editable),dispatchTransaction(tr){
    try{
     const next=v.state.applyTransaction(tr).state;
@@ -59,7 +59,9 @@ export function DocumentEditor({document:initial,editable=true,onChange,artifact
   const target=documentEditorNode(initial),start=v.state.doc.content.findDiffStart(target.content);if(start===null)return;
   const end=v.state.doc.content.findDiffEnd(target.content)!;const overlap=start-Math.min(end.a,end.b);
   const tr=v.state.tr.replace(start,end.a+Math.max(0,overlap),target.slice(start,end.b+Math.max(0,overlap))).setMeta('addToHistory',false);
-  v.updateState(v.state.applyTransaction(tr).state);setHistory({undo:undo(v.state),redo:redo(v.state)});
+  const selectedId=v.state.selection instanceof NodeSelection?v.state.selection.node.attrs.id:null;
+  if(selectedId)tr.doc.descendants((node,pos)=>{if(node.attrs.id===selectedId)tr.setSelection(NodeSelection.create(tr.doc,pos));});
+  v.updateState(v.state.applyTransaction(tr).state);updateSelection(v);queueMicrotask(()=>{if(view.current===v)updateSelection(v);});
  },[initial,editable]);
  function command(run:(v:EditorView)=>void,focus=true){const v=view.current;if(v){run(v);if(focus)v.focus();}}
  function props(patch:Record<string,DocumentJson>){command(v=>{const pos=v.state.selection instanceof NodeSelection?v.state.selection.from:v.state.selection.$from.depth?v.state.selection.$from.before():-1;if(pos>=0)setDocumentNodeProps(v,pos,patch);},false);}

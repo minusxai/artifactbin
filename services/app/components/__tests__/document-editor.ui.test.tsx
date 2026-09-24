@@ -120,3 +120,12 @@ it('previews the styled content height before committing and restores it on canc
   preview.clear();expect(content.style.minHeight).toBe('363px');expect(dom.style.minHeight).toBe('363px');
  }finally{view.destroy();}
 });
+
+it('refreshes selected properties when returning from a version preview',async()=>{
+ const document=parseDocumentMdx('<div height={420}>\n\nOne\n\nTwo\n\n</div>');const next=structuredClone(document);const id=document.nodes[document.rootId].children![0];next.nodes[id].props!.height=180;
+ const {rerender}=render(<DocumentEditor document={document} onChange={()=>{}}/>);
+ await act(async()=>{await Promise.resolve();});fireEvent.mouseDown(screen.getByRole('button',{name:'Select container'}));
+ expect((screen.getByRole('spinbutton',{name:'Component height'}) as HTMLInputElement).value).toBe('420');
+ rerender(<DocumentEditor document={next} onChange={()=>{}}/>);
+ await waitFor(()=>expect((screen.getByRole('spinbutton',{name:'Component height'}) as HTMLInputElement).value).toBe('180'));
+});
