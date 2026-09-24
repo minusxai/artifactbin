@@ -101,7 +101,7 @@ First read [chart authoring](markup-data-authoring.md).
   `series`)<!--/bundle:skip-->, `minusx/combo@1`<!--bundle:skip--> (`x`, `bar`, `line`, optional `series`)<!--/bundle:skip-->,
   `minusx/single-value@1`<!--bundle:skip--> (`value` — the FIRST row's cell; `params`: `label`,
   `caption`, `align`, `valueColor`)<!--/bundle:skip-->, `minusx/choropleth@1` and
-  `minusx/point-map@1` (both deprecated: draw maps with `<DeckGL>`, [maps](markup-maps.md)).
+  `minusx/point-map@1` (deprecated: [maps](markup-maps.md)).
 - `<Number data="$table" col="revenue" agg="sum" prefix="$" suffix=" M" format=",.0f" />`
   — one live aggregated figure, inline. `agg` defaults to `first` (the first
   row's cell), so a total needs `agg="sum"` written out; `avg`, `min`, `max`,

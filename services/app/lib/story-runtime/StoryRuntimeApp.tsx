@@ -932,9 +932,13 @@ const RUNTIME_REGISTRY: Record<string, ComponentType<Record<string, unknown>>> =
   DeckGL: props => {
     const { colorMode, state } = useContext(RuntimeEmbedContext);
     const name = refName(props.data);
-    const rows = (name ? state.tables[name] : undefined) as unknown;
-    const list = Array.isArray(rows) ? rows : Array.isArray((rows as { rows?: unknown })?.rows) ? (rows as { rows: unknown[] }).rows : [];
-    return <div {...runtimeTargetIdentity(props)}><DeckGLMap {...(props as unknown as Parameters<typeof DeckGLMap>[0])} rows={list as never} colorMode={colorMode} /></div>;
+    // The identity lands on the adapter's own box; the map inside must not repeat it.
+    const { id: _id, 'data-mx-ast': _ast, ...mapProps } = props;
+    return (
+      <div {...runtimeTargetIdentity(props)}>
+        <DeckGLMap {...(mapProps as unknown as Parameters<typeof DeckGLMap>[0])} rows={name ? state.tables[name]?.rows ?? [] : []} colorMode={colorMode} />
+      </div>
+    );
   },
   Files: FilesAdapter,
   Question: QuestionAdapter,
