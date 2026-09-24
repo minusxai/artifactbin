@@ -147,3 +147,7 @@ rows remain usable. Failures appear beside the button; retry captures the
 current row. Existing mutation access checks and query refresh behavior apply.
 Captures and static previews disable actions. This example changes local
 reader state; declare a dataset-backed Mutation to persist shared changes.
+
+The CLI cannot run a mutation that binds `$_row` or `$_value`; press it in a
+live session. `afbin query <dataset> --write --input change.sql` works only
+where the dataset's policy grants you direct writes, never by default.
