@@ -53,7 +53,8 @@ import { displayTitle } from '@/lib/story/title';
 import { CARD_RENDER_GENERATION } from '@/lib/export-card';
 import type { StoryThemeName } from '@/lib/validation/atlas-schemas';
 import { catalogOf,publicCatalogOf } from '@/lib/datasets/catalog';
-import { ASSETS_ORIGIN } from '@/lib/config';
+import { ASSETS_ORIGIN, PUBLIC_BASE_URL } from '@/lib/config';
+import { canonicalDocumentUrl, domainPostUrl, servesDocument } from '@/lib/custom-domains';
 
 // The markup document's policy — per document, built in lib/story/markup-csp:
 // content-independent except for the ONE connect-src that admits exactly this
@@ -70,11 +71,22 @@ const notFound = () =>
   new Response(NOT_FOUND, { status: 404, headers: { 'Content-Type': 'text/html; charset=utf-8', ...COMMON } });
 
 
-export async function GET(request: Request, ctx: { params: Promise<{ id: string }> }) {
+/**
+ * A POST ON ITS OWNER'S CUSTOM DOMAIN (server/custom-host). Only the host
+ * boundary sets it — the router passes params alone — so no request can ask
+ * for this mode. It renders the reader copy with no reader chrome and no doors,
+ * a footer back to the app, and a self-canonical on the domain; every
+ * capture, archive and editing switch on the URL is ignored.
+ */
+export interface DomainPost { hostname: string; ownerId: string }
+
+export async function GET(request: Request, ctx: { params: Promise<{ id: string }>; domain?: DomainPost }) {
   const { id } = await ctx.params;
+  const domain = ctx.domain ?? null;
   if (!ID_RE.test(id)) return notFound();
   const artifact = await getArtifactById(id);
   if (!artifact) return notFound();
+  if (domain && !servesDocument(domain.ownerId, artifact)) return notFound();
   /*
    * The ACL decides before any bytes leave; a denied private doc is
    * indistinguishable from a missing one.
@@ -89,7 +101,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
    * admits a reader; it does not relax the sandbox, which is set below either
    * way.
    */
-  const key = new URL(request.url).searchParams.get('key');
+  const key = domain ? null : new URL(request.url).searchParams.get('key');
   // The SAME viewer the proxy and the page decide ownership with: sessionActor
   // uses the proxy-attached actor first, then direct compatibility and the
   // agent cookie. Resolving it any other way — the account session alone —
@@ -244,7 +256,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
        * and a version that was never archived all get the SAME uniform 404 the
        * rest of this route answers, so nobody learns the parameter exists.
        */
-      const at = await archivedVersionFor(request, artifact, { capture: byExportKey });
+      const at = domain ? null : await archivedVersionFor(request, artifact, { capture: byExportKey });
       if (at === 'not_found') return notFound();
       // Everything below renders THIS row: the artifact wearing that version's
       // bytes when one was asked for, the artifact itself otherwise. One
@@ -270,7 +282,9 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
       // ?chrome=0 — the capture path (lib/export screenshots this frame, so the
       // document's own rail/present bar and attribution footer would land in
       // every OG card).
-      const chrome = new URL(request.url).searchParams.get('chrome') !== '0';
+      const chrome = domain ? true : new URL(request.url).searchParams.get('chrome') !== '0';
+      // The app's own reader chrome, doors and agent pointers — never on a custom domain.
+      const reader = chrome && !domain;
       // A signed capture is fetched over the exporter's internal transport.
       // A cohost HTTPS proxy can otherwise stamp https onto an HTTP backend,
       // breaking scoped asset imports and the capture's CSP before rendering.
@@ -283,7 +297,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
        */
       // Never on an archived render: there is nothing here to write back TO —
       // the head has moved on — so the editor would be an invitation to lose work.
-      const editable = !at && new URL(request.url).searchParams.get('edit') === '1';
+      const editable = !domain && !at && new URL(request.url).searchParams.get('edit') === '1';
       /*
        * ?comment=1 — a COMMENTER's copy. Commenting happens in the frame (only
        * the document can see a Selection at an opaque origin) but needs no
@@ -293,7 +307,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
        */
       // Nor on an archived render: a comment anchors to text in the CURRENT
       // document, and these paragraphs may not be there any more.
-      const commenting = !at && new URL(request.url).searchParams.get('comment') === '1';
+      const commenting = !domain && !at && new URL(request.url).searchParams.get('comment') === '1';
       // `none` whenever the link grants no more than a guest already has, which
       // is every ordinary public document — see lib/share-roles roleBehindLogin.
       const behindLogin = roleBehindLogin(linkRoleOf(artifact));
@@ -352,8 +366,8 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
           // — the viewer alone would photograph a stranger's view of it.
           : dataflowForRow(row, { values: urlValues, viewer: { userId: viewer?.userId ?? null, tokenId: actor.tokenId ?? null, email: viewer?.email ?? null } }),
         // The author's row, once: their handle (the byline) and their picture.
-        chrome && artifact.user_id ? getUserById(artifact.user_id) : Promise.resolve(null),
-        chrome ? forkedFromCredit(artifact.forked_from) : Promise.resolve(null),
+        reader && artifact.user_id ? getUserById(artifact.user_id) : Promise.resolve(null),
+        reader ? forkedFromCredit(artifact.forked_from) : Promise.resolve(null),
         /*
          * WHO IS READING — `$_me` in markup, and the name a <User> shows.
          *
@@ -370,7 +384,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
          * a person signed in), and never on a capture, for the same reason as
          * above. It makes these bytes per-viewer; the markup is `no-store`.
          */
-        chrome && actor.credential === 'session' && viewer?.userId ? getUserById(viewer.userId) : Promise.resolve(null),
+        reader && actor.credential === 'session' && viewer?.userId ? getUserById(viewer.userId) : Promise.resolve(null),
       ]);
       const creatorUsername = creator?.username ?? null;
       const runtime = storyRuntimeAssets();
@@ -385,14 +399,14 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
         : `/login?callbackUrl=${encodeURIComponent(`/a/${artifact.id}${withIntent('', kind)}`)}`);
       const viewerId = viewer?.userId ?? null;
       const role = await roleFor(artifact, actor);
-      const ownerBreadcrumb = chrome && role === 'owner';
+      const ownerBreadcrumb = reader && role === 'owner';
       /*
        * AN ARCHIVED RENDER HAS NO DOORS. Like, follow and comment all act on
        * the artifact as it is now, and offering them beside bytes that are no
        * longer the document is how a reader ends up commenting on a paragraph
        * nobody can see. The rail draws none of them (lib/story/reader-chrome).
        */
-      const reactions = chrome && !at
+      const reactions = reader && !at
         ? {
           like: { count: await count('like', artifact.id), liked: viewerId ? await has(viewerId, 'like', artifact.id) : false, href: door('like') },
           follow: artifact.user_id && artifact.user_id !== viewerId
@@ -424,11 +438,12 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
             // URL and by others not at all. baseUrl reads the forwarding
             // headers, so behind the proxy this is the public origin — never
             // the container's.
-            image: `${base}/a/${artifact.id}/export?mode=card&v=${artifact.version}&r=${CARD_RENDER_GENERATION}`,
+            // A custom domain serves no /export: its card is photographed on the app.
+            image: `${domain ? PUBLIC_BASE_URL.replace(/\/+$/, '') : base}/a/${artifact.id}/export?mode=card&v=${artifact.version}&r=${CARD_RENDER_GENERATION}`,
           }
           : null,
-    help: chrome ? agentDiscovery(base) : null,
-        author: chrome ? { username: creatorUsername, id: creator?.id ?? null, image: creator ? avatarUrl(creator) : null, forkedFrom } : null,
+    help: reader ? agentDiscovery(base) : null,
+        author: reader ? { username: creatorUsername, id: creator?.id ?? null, image: creator ? avatarUrl(creator) : null, forkedFrom } : null,
         readerFace: readerRow ? { id: readerRow.id, name: readerRow.username || viewer?.email || readerRow.email || '', image: avatarUrl(readerRow) } : null,
         /*
          * THE WAY IN. A guest — no account, so ANONYMOUS_CEILING holds them at
@@ -441,7 +456,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
          * sign in, effectiveRole finds the link role by itself and the shell
          * follows — the path a signed-in stranger takes.
          */
-        signIn: chrome && !at && !viewer && signInUnlocks
+        signIn: reader && !at && !viewer && signInUnlocks
           // Back to the document AND back to what the door offered: someone who
           // logged in to comment returns to an open conversation rather than to
           // a document that has forgotten why they left (lib/intent).
@@ -458,11 +473,11 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
          * the document only carries the ASK — it is sandboxed at an opaque
          * origin and holds no session, so it could not POST the fork itself.
          */
-        edit: chrome && editable,
-        login: chrome && !viewer ? { href: `/login?callbackUrl=${encodeURIComponent(`/a/${artifact.id}`)}` } : null,
+        edit: reader && editable,
+        login: reader && !viewer ? { href: `/login?callbackUrl=${encodeURIComponent(`/a/${artifact.id}`)}` } : null,
         // Forking an archived version is a copy of something that is not this
         // document — out of scope for the read-only view, so the door is shut.
-        fork: chrome && !at ? { href: viewer ? `/a/${artifact.id}${withIntent('', 'fork')}` : `/login?callbackUrl=${encodeURIComponent(`/a/${artifact.id}${withIntent('', 'fork')}`)}` } : null,
+        fork: reader && !at ? { href: viewer ? `/a/${artifact.id}${withIntent('', 'fork')}` : `/login?callbackUrl=${encodeURIComponent(`/a/${artifact.id}${withIntent('', 'fork')}`)}` } : null,
         source: row.source ?? '',
         compiledCss,
         theme: design.theme,
@@ -522,13 +537,17 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
         // edits, and adopting them would quietly turn version N into version M.
         live: chrome && !at ? { id: artifact.id, editId: artifact.edit_id } : null,
         viewer: readerIdentity,
+        // On its domain: no chrome at all, a footer back to the app, canonical to itself.
+        bare: domain ? { footerHref: `${PUBLIC_BASE_URL.replace(/\/+$/, '')}/a/${artifact.id}` } : null,
+        // A capture needs none; every reader copy names the address to index it under.
+        canonical: domain ? domainPostUrl(domain.hostname, artifact) : chrome ? await canonicalDocumentUrl(artifact) : null,
       });
       return new Response(html, {
         status: 200,
         headers: {
           'Content-Type': 'text/html; charset=utf-8',
           'Content-Security-Policy': markupCsp(base, artifact.id, ASSETS_ORIGIN ?? undefined),
-      ...(chrome ? { Link: `<${agentDiscovery(base).url}>; rel="help"` } : {}),
+      ...(reader ? { Link: `<${agentDiscovery(base).url}>; rel="help"` } : {}),
           ...COMMON,
         },
       });
@@ -556,7 +575,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
  * a HEAD and never opens a stream; every other format pays for a body it then
  * discards — honest, and what a HEAD costs anywhere.
  */
-export async function HEAD(request: Request, ctx: { params: Promise<{ id: string }> }) {
+export async function HEAD(request: Request, ctx: { params: Promise<{ id: string }>; domain?: DomainPost }) {
   const res = await GET(request, ctx);
   // Cancel rather than leak: an unread stream holds its file handle open.
   await res.body?.cancel().catch(() => {});

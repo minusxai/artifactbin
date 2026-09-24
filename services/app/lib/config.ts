@@ -291,6 +291,22 @@ export const ANALYTICS_SECRET = env('ANALYTICS', 'SECRET') ?? AUTH_SECRET;
 export const ALLOW_PUBLIC_VISIBILITY = env('ARTIFACTS', 'ALLOW_PUBLIC') === '1' || IS_DEV;
 
 /**
+ * CUSTOM DOMAINS — the DNS target hostname a person points their own domain at
+ * (`domains.artifactbin.dev`): a CNAME/ALIAS to it, or an A record to the
+ * address it resolves to. Unset or empty is OFF.
+ *
+ * It gates ATTACHING and VERIFYING only (lib/custom-domains). Serving a
+ * verified domain, the certificate ask check, the daily re-check and removal
+ * all ignore it, so switching it off never breaks a live domain or locks an
+ * owner into one they cannot detach.
+ */
+export function parseCustomDomainsTarget(value: string | undefined): string | null {
+  const target = value?.trim().toLowerCase().replace(/\.$/, '') ?? '';
+  return target || null;
+}
+export const CUSTOM_DOMAINS_TARGET = parseCustomDomainsTarget(env('FLAG', 'CUSTOM_DOMAINS'));
+
+/**
  * Where Chromium runs. Set, the export renders through an HTTP client to the
  * browser service (`services/browser`, `node server` in its own container) and
  * this image needs no Playwright at all; unset — the self-host default — the
