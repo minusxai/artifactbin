@@ -17,7 +17,6 @@
  * caller keeps the default per-mark tooltip.
  */
 import * as vegaExports from 'vega';
-import { WATERFALL_UP_COLOR, WATERFALL_DOWN_COLOR, WATERFALL_TOTAL_COLOR } from './viz-templates';
 import { unitOf } from './encoding-edit';
 
 // vega re-exports vega-statistics (bin, quartiles) at runtime, but its .d.ts omits them.
@@ -398,13 +397,13 @@ function waterfallData(rows: Array<Record<string, unknown>>, plan: TooltipPlan, 
   for (const [key, g] of sums) {
     running += g.sum;
     index.set(key, { xRaw: g.xRaw, rows: [
-      { label: series.valueLabel, value: g.sum, colorKey: series.valueLabel, color: g.sum < 0 ? WATERFALL_DOWN_COLOR : WATERFALL_UP_COLOR },
+      { label: series.valueLabel, value: g.sum, colorKey: g.sum < 0 ? 'Decrease' : 'Increase' },
       { label: 'Running total', value: running, colorKey: 'Running total' },
     ] });
   }
   if (sums.size > 0) {
     index.set('Total', { xRaw: 'Total', rows: [
-      { label: series.valueLabel, value: running, colorKey: series.valueLabel, color: WATERFALL_TOTAL_COLOR },
+      { label: series.valueLabel, value: running, colorKey: 'Total' },
     ] });
   }
   return index;

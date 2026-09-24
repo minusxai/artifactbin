@@ -7,6 +7,7 @@
  * Passed as external compiler config — spec-internal `config` wins natively.
  */
 import type { Config as VegaLiteConfig } from 'vega-lite';
+import { scale } from 'vega';
 import { COLOR_PALETTE, LIGHT_THEME, DARK_THEME, getChartFontFamily } from '@/lib/chart/chart-theme';
 
 /**
@@ -18,7 +19,26 @@ export function getSurfaceColor(mode: 'light' | 'dark'): string {
   return (mode === 'light' ? LIGHT_THEME : DARK_THEME).bgSurface;
 }
 
-export function getVegaLiteConfig(mode: 'light' | 'dark'): VegaLiteConfig {
+/** All color scale defaults share the same palette, in both grammar engines.
+ * Ordered values use a lightness ramp, not a sequence of unrelated category hues.
+ * Explicit spec ranges/schemes still win in Vega's normal config precedence.
+ */
+function chartRanges(mode: 'light' | 'dark', palette?: string[] | null) {
+  const category = palette?.length ? palette : COLOR_PALETTE;
+  const primary = category[0];
+  const surface = getSurfaceColor(mode);
+  const tint = scale('linear')().domain([0, 1]).range([surface, primary]);
+  const ramp = [tint(0.2) as string, primary];
+  return {
+    category,
+    ordinal: category,
+    ramp,
+    heatmap: ramp,
+    diverging: [category[1] ?? primary, surface, primary],
+  };
+}
+
+export function getVegaLiteConfig(mode: 'light' | 'dark', palette?: string[] | null): VegaLiteConfig {
   const colors = mode === 'light' ? LIGHT_THEME : DARK_THEME;
   return {
     // getChartFontFamily resolves the ACTUAL loaded font family (the document's
@@ -31,20 +51,7 @@ export function getVegaLiteConfig(mode: 'light' | 'dark'): VegaLiteConfig {
     numberFormat: '.3~s',
     // The card owns the surface; charts inherit it.
     background: 'transparent',
-    range: {
-      category: COLOR_PALETTE,
-      // Quantitative colour on rect marks (heatmaps) pulls from `heatmap`: the
-      // GitHub contribution-graph greens, per mode. Lives HERE (like the house
-      // donut) so a bare `mark: rect` + quantitative color — what agents and the
-      // UI transform both produce — gets the look; a spec-level `scale.scheme`
-      // or `scale.range` opts out.
-      // Dark low end is #21262d (GitHub's border gray), NOT GitHub's #161b22
-      // empty-cell colour — that's identical to our dark card surface, and a
-      // lowest-value cell must still read as a cell, not a hole.
-      heatmap: mode === 'light'
-        ? ['#ebedf0', '#9be9a8', '#40c463', '#30a14e', '#216e39']
-        : ['#21262d', '#0e4429', '#006d32', '#26a641', '#39d353'],
-    },
+    range: chartRanges(mode, palette),
     axis: {
       labelColor: colors.fgMuted,
       titleColor: colors.fgDefault,
@@ -72,7 +79,7 @@ export function getVegaLiteConfig(mode: 'light' | 'dark'): VegaLiteConfig {
     // Automatic tooltips everywhere: hovering any mark shows its encoded fields
     // (with their titles/formats). A spec-level `tooltip` encoding overrides this
     // with a custom field list; `mark: {tooltip: null}` opts a spec out.
-    mark: { tooltip: { content: 'encoding' } },
+    mark: { color: (palette?.length ? palette : COLOR_PALETTE)[0], tooltip: { content: 'encoding' } },
     // Text marks default to BLACK in vega-lite — unreadable in dark mode. Theme them
     // like axis titles; specs/recipes override per-layer where they need contrast.
     text: { color: colors.fgDefault, fontSize: 11 },
@@ -127,12 +134,12 @@ export function getVegaLiteConfig(mode: 'light' | 'dark'): VegaLiteConfig {
  * Same token source as the VL config so the tiers can't drift. Applied at
  * vega.parse; spec-level properties win natively.
  */
-export function getVegaParserConfig(mode: 'light' | 'dark'): Record<string, unknown> {
+export function getVegaParserConfig(mode: 'light' | 'dark', palette?: string[] | null): Record<string, unknown> {
   const colors = mode === 'light' ? LIGHT_THEME : DARK_THEME;
   const font = getChartFontFamily();
   return {
     background: 'transparent',
-    range: { category: COLOR_PALETTE },
+    range: chartRanges(mode, palette),
     text: { fill: colors.fgDefault, font, fontSize: 11 },
     legend: {
       orient: 'top',

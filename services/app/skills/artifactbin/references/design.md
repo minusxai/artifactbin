@@ -144,9 +144,16 @@ SVG element — then stop; one motif, total commitment, no second conceit.
 
 ## Charts
 
-- The title states the takeaway; axes and units do the explaining.
-- Direct labels beat legends; gridlines stay barely-there; no gradients,
-  shadows, or 3D — data-ink only.
+- The title states the takeaway. Label every data axis with a readable name
+  and known units; keep tick labels visible. Sparklines and directly labeled
+  diagrams may omit axes.
+- Show a legend when color, shape, size or line style identifies a series or
+  measure. Omit it only when direct labels make the same meaning clear.
+- Chart colors follow the theme. Never invent hex colors or named palettes
+  unless the user explicitly requests custom colors. Use theme tokens for a
+  deliberate emphasis; keep the same series color across related charts.
+- Keep gridlines quiet; no decorative shadows or 3D. Continuous color scales
+  may use thematic gradients to encode values.
 
 <!--bundle:skip-->
 ## Copy is design material

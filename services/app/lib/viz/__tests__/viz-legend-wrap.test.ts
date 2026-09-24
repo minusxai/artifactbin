@@ -181,11 +181,11 @@ describe('compileVegaLite legend plan injection', () => {
     expect(legend?.title).toBeUndefined();
   });
 
-  it('suppresses explicitly authored legend titles and channel aliases', () => {
+  it('preserves explicitly authored legend titles and channel aliases', () => {
     const explicit = { ...BASE, encoding: { ...BASE.encoding, color: { ...BASE.encoding.color, legend: { title: 'Menu Section' } } } };
-    expect(legendsOf(compileVegaLite(explicit as Record<string, unknown>, 'dark'))[0]?.title).toBeUndefined();
+    expect(legendsOf(compileVegaLite(explicit as Record<string, unknown>, 'dark'))[0]?.title).toBe('Menu Section');
     const aliased = { ...BASE, encoding: { ...BASE.encoding, color: { ...BASE.encoding.color, title: 'Product Category' } } };
-    expect(legendsOf(compileVegaLite(aliased as Record<string, unknown>, 'dark'))[0]?.title).toBeUndefined();
+    expect(legendsOf(compileVegaLite(aliased as Record<string, unknown>, 'dark'))[0]?.title).toBe('Product Category');
   });
 
   it('suppresses default legend titles inside layered specs too', () => {

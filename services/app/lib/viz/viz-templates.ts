@@ -144,7 +144,8 @@ const funnel: VizTemplate = {
               ? { x: seq, y: taper, y2: taper2 }
               : { y: seq, x: taper, x2: taper2 }),
             detail: { field: '__mx_rank' },
-            color: { value: '#16a085' },
+            // One thematic series; stage names and values are directly labeled.
+            color: { datum: aliasOf(formats, value), type: 'nominal', legend: null },
             // Zebra: alternate band opacity on stage parity (odd ranks the brighter one).
             fillOpacity: {
               condition: { test: 'datum.__mx_rank % 2 === 1', value: FUNNEL_OPACITY_ODD },
@@ -180,9 +181,7 @@ const funnel: VizTemplate = {
 // matching the classic ECharts waterfall. Value labels ride each bar.
 
 // Exported for the shared tooltip (tooltip-plan), whose waterfall rows mirror the bars.
-export const WATERFALL_UP_COLOR = '#16a085';
-export const WATERFALL_DOWN_COLOR = '#c0392b';
-export const WATERFALL_TOTAL_COLOR = '#2980b9';
+const WATERFALL_COLOR_DOMAIN = ['Increase', 'Decrease', 'Total'];
 
 const waterfall: VizTemplate = {
   id: 'minusx/waterfall@1',
@@ -199,12 +198,13 @@ const waterfall: VizTemplate = {
     const catTitle = aliasOf(formats, category);
     const fmt = formats?.[value]?.format;
     const numTip = (field: string, title: string) => ({ field, type: 'quantitative', title, ...(fmt ? { format: fmt } : {}) });
-    const x = { field: category, type: 'nominal', sort: null, title: null };
+    const x = { field: category, type: 'nominal', sort: null, title: catTitle };
     return {
       transform: [
         { aggregate: [{ op: 'sum', field: value, as: '__mx_amount' }], groupby: [category] },
         { window: [{ op: 'sum', field: '__mx_amount', as: '__mx_sum' }] },
         { calculate: 'datum.__mx_sum - datum.__mx_amount', as: '__mx_prev' },
+        { calculate: "datum.__mx_amount < 0 ? 'Decrease' : 'Increase'", as: '__mx_direction' },
         { calculate: `datum.__mx_amount >= 0 ? '+' + ${numExpr('datum.__mx_amount', formats, value)} : ${numExpr('datum.__mx_amount', formats, value)}`, as: '__mx_label' },
       ],
       layer: [
@@ -215,8 +215,8 @@ const waterfall: VizTemplate = {
             y: { field: '__mx_prev', type: 'quantitative', title: yTitle },
             y2: { field: '__mx_sum' },
             color: {
-              condition: { test: 'datum.__mx_amount < 0', value: WATERFALL_DOWN_COLOR },
-              value: WATERFALL_UP_COLOR,
+              field: '__mx_direction', type: 'nominal',
+              scale: { domain: WATERFALL_COLOR_DOMAIN }, legend: { title: null },
             },
             // Clean tooltip (Step + change + running total) — no __mx internals leak.
             tooltip: [{ field: category, type: 'nominal', title: catTitle }, numTip('__mx_amount', yTitle), numTip('__mx_sum', 'Running total')],
@@ -230,7 +230,7 @@ const waterfall: VizTemplate = {
             text: { field: '__mx_label', type: 'nominal' },
           },
         },
-        // Closing Total bar (classic waterfall; palette blue like the ECharts builder).
+        // Closing Total bar shares the same thematic scale and legend.
         {
           transform: [
             { aggregate: [{ op: 'sum', field: '__mx_amount', as: '__mx_total' }] },
@@ -241,7 +241,7 @@ const waterfall: VizTemplate = {
             x,
             y: { field: '__mx_total', type: 'quantitative', title: yTitle },
             y2: { datum: 0 },
-            color: { value: WATERFALL_TOTAL_COLOR },
+            color: { datum: 'Total', type: 'nominal', scale: { domain: WATERFALL_COLOR_DOMAIN }, legend: { title: null } },
             tooltip: [{ field: category, type: 'nominal', title: catTitle }, numTip('__mx_total', yTitle)],
           },
         },

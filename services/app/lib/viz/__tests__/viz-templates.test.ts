@@ -183,5 +183,8 @@ describe('headless rendering of materialized recipes', () => {
     expect(svg).toContain('Total'); // closing total bar
     expect(svg).toContain('720');   // 500 + 300 - 200 + 120
     expect(svg).toMatch(/role-axis-title[\s\S]{0,600}?>users</); // VISIBLE y-axis title, not an aria string
+    expect(svg).toMatch(/role-axis-title[\s\S]{0,600}?>stage</);
+    expect(svg).toContain('Increase');
+    expect(svg).toContain('Decrease');
   });
 });
