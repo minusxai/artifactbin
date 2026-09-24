@@ -1,6 +1,7 @@
 import { render,screen,fireEvent,act } from '@testing-library/react';
 import { expect,it,vi,afterEach } from 'vitest';
 import { InlineReaderChrome } from '../InlineReaderChrome';
+import MobileSheet from '../MobileSheet';
 // What the page's drawer announces when it opens or shuts (PageChrome announcePanel).
 const announce=(which:'menu'|'controls',open:boolean)=>window.dispatchEvent(new CustomEvent('mx:page-chrome-state',{detail:{which,open}}));
 afterEach(()=>{vi.restoreAllMocks();vi.unstubAllGlobals();});
@@ -82,4 +83,14 @@ it('shows the initial when a face fails to load',()=>{
  act(()=>{face.querySelector('img')!.dispatchEvent(new Event('error'));});
  expect(face.querySelector('img')).toBeNull();
  expect(face.querySelector('.mx-reader-face-initial')).toHaveTextContent('M');
+});
+
+it('steps aside while a sheet is open, even pinned, and returns when it closes', () => {
+ const view=render(<InlineReaderChrome input={{artifactId:'story1',title:'Title',author:null}} pinned onAction={vi.fn()} />);
+ const root=view.container.querySelector('[data-mx-reader-chrome]')!;
+ expect(root).not.toHaveClass('mx-reader-chrome--covered');
+ const sheet=render(<MobileSheet label="Comments" onClose={vi.fn()} size="half">c</MobileSheet>);
+ expect(root).toHaveClass('mx-reader-chrome--covered');
+ sheet.unmount();
+ expect(root).not.toHaveClass('mx-reader-chrome--covered');
 });

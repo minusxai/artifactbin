@@ -6,6 +6,7 @@ import { renderReaderChrome, READER_CHROME_HIDDEN_CLASS, type ReaderChromeInput 
 import { STORY_CHROME_CSS } from '@/lib/story-runtime/chrome-css';
 import { chromeAfterSample,type ChromeState } from '@/lib/story-runtime/reader-chrome-policy';
 import { subscribePageChrome } from './PageChrome';
+import { subscribeSheets } from './MobileSheet';
 import { wireReaderSharing } from '@/lib/story-runtime/reader-share';
 import { wireGithubStar } from '@/lib/github-star';
 import { wireFaceFallback } from '@/lib/story-runtime/reader-chrome-actions';
@@ -56,6 +57,8 @@ export function InlineReaderChrome({ input, onAction,onShare,pinned=false }: { i
     sharing.current=wireReaderSharing(window,document,root);
     const stopGithubStar=wireGithubStar(root);
     const stopFaces=wireFaceFallback(root);
+    // A phone sheet paints below this chrome's top layer: step aside while one is open.
+    const stopSheets=subscribeSheets(open=>root.classList.toggle('mx-reader-chrome--covered',open));
     let queued=false;let raf=0;
     const mark=(which:PagePanelName,open:boolean)=>{
       const trigger=root.querySelector<HTMLElement>(which==='notifications'?'[data-mx-reader-action="notifications"]':`[data-mx-reader-trigger="${which}"]`);
@@ -80,7 +83,7 @@ export function InlineReaderChrome({ input, onAction,onShare,pinned=false }: { i
     });
     window.addEventListener('scroll',schedule,{passive:true});window.addEventListener('resize',schedule);
     sample();
-    return ()=>{stopGithubStar();stopFaces();stop();sharing.current?.dispose();sharing.current=null;window.cancelAnimationFrame(raf);window.removeEventListener('scroll',schedule);window.removeEventListener('resize',schedule);};
+    return ()=>{stopGithubStar();stopFaces();stopSheets();stop();sharing.current?.dispose();sharing.current=null;window.cancelAnimationFrame(raf);window.removeEventListener('scroll',schedule);window.removeEventListener('resize',schedule);};
   },[html,pinned,input.artifactId]);
   return <>
     <NotificationMenu/>
