@@ -33,7 +33,7 @@ test('teaching bootstraps without its output and repairs stale output determinis
   const launch=remoteGuide.match(/```sh\n(afbin remote --json codex)\n```/);
   assert.ok(launch,'remote guide includes an afbin JSON launch example');
   assert.deepEqual(parseCommand(launch[1].split(' ').slice(1)),{command:'remote',flags:{json:true},positionals:['codex']});
-  for(const text of ['--permission-mode auto','--yolo','OPENCODE_PERMISSION','Pi has no built-in tool approval prompts','Explicit permission flags'])assert.ok(remoteGuide.includes(text),text);
+  for(const text of ['--dangerously-skip-permissions','--yolo','OPENCODE_PERMISSION','Pi has no built-in tool approval prompts','Explicit permission flags'])assert.ok(remoteGuide.includes(text),text);
   for(const guide of [remoteGuide,bundle.files['references/publishing-annotations.md']]){
    assert.ok(guide.includes('--image'));assert.ok(guide.includes('image viewing tool'));assert.ok(guide.includes('drawn marks'));
   }
