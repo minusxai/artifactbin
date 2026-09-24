@@ -8,7 +8,8 @@
  * copy of a public document whose owner has a verified domain names the domain
  * as canonical; the certificate ask check answers from verified rows alone.
  */
-import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createElement } from 'react';
@@ -123,9 +124,9 @@ describe('the home page on a verified host', () => {
     expect(html).toContain('<link rel="canonical" href="https://blog.example.org/">');
     expect(html).toMatch(/Made with <a href="https:\/\/app\.example\.test\/@vivek"[^>]*>artifactbin<\/a>/);
     expect(html).toContain('<title>');
-    // No app shell: no SPA root, no bootstrap, no script at all, no app navigation or Follow.
+    // No app shell: no SPA root, no bootstrap, no script but the theme stamp, no app navigation or Follow.
     expect(html).not.toContain('id="root"');
-    expect(html).not.toMatch(/<script/i);
+    expect(html.match(/<script\b/gi)).toHaveLength(1);
     expect(html).not.toMatch(/aria-label="(?:Follow|Unfollow|Search artifacts|Grid view)"/);
     expect(html).not.toContain('/login');
     expect(html).not.toContain('/@vivek/');
@@ -179,7 +180,26 @@ describe('the home page on a verified host', () => {
     expect(csp).toMatch(/style-src 'self'/);
     expect(csp).toContain("font-src 'self'");
     expect(csp).toContain("img-src 'self' data:");
-    expect(csp).not.toMatch(/script-src|https?:/);
+    expect(csp).not.toMatch(/https?:/);
+  });
+
+  it('follows the theme the way the app page does: web/index.html\'s own stamp, admitted by its hash and nothing else', async () => {
+    await world();
+    const shell = readFileSync(join(__dirname, '..', '..', 'web', 'index.html'), 'utf8');
+    const stamps = [...shell.matchAll(/<script(?![^>]*\ssrc=)[^>]*>([\s\S]*?)<\/script>/g)].map((m) => m[1]!);
+    expect(stamps).toHaveLength(1);
+    const res = await app().request(`${HOST}/`, { headers: { accept: 'text/html' } });
+    const html = await res.text();
+    const scripts = [...html.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script>/gi)];
+    expect(scripts).toHaveLength(1);
+    expect(scripts[0]![1]).not.toMatch(/\bsrc=/);
+    expect(scripts[0]![2]).toBe(stamps[0]);
+    // Before paint: in the head, ahead of the stylesheet.
+    expect(html.indexOf('<script')).toBeLessThan(html.indexOf('rel="stylesheet"'));
+    expect(html.indexOf('<script')).toBeLessThan(html.indexOf('</head>'));
+    const hash = createHash('sha256').update(stamps[0]!, 'utf8').digest('base64');
+    const scriptSrc = (res.headers.get('content-security-policy') ?? '').split('; ').find((d) => d.startsWith('script-src'));
+    expect(scriptSrc).toBe(`script-src 'sha256-${hash}'`);
   });
 
   it('serves the built stylesheet and its fonts on the host, never a script', async () => {

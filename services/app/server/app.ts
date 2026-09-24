@@ -54,6 +54,7 @@ import { createReaderPreloader } from './reader-preloads';
 import { mountBuildAssets } from './build-assets';
 import { customHostBoundary } from './custom-host';
 import { linkedStylesheets } from '@/lib/custom-domain-home';
+import { THEME_BOOTSTRAP_HASH } from '@/lib/theme-bootstrap';
 import { canonicalDocumentUrl } from '@/lib/custom-domains';
 
 /**
@@ -118,7 +119,7 @@ export function withInitialStory(html: string, runtime: PreparedStoryRuntime, id
 // Keeping the hashes explicit preserves the production policy while allowing
 // React Fast Refresh to install its hook when this server hosts Vite middleware.
 export const APP_INLINE_SCRIPT_HASHES = [
-  "'sha256-MKCvCRsPxrVldjRT7eukzwMMAlrlAXCz+AyDpcVL9Fg='", // theme bootstrap (web/index.html — pinned by lib/__tests__/app-page-csp)
+  THEME_BOOTSTRAP_HASH, // theme bootstrap (web/index.html — lib/theme-bootstrap, pinned by lib/__tests__/app-page-csp)
   "'sha256-Z2/iFzh9VMlVkEOar1f/oSHWwQk3ve1qk/C2WdsC4Xk='", // Vite React-refresh preamble
 ].join(' ');
 
