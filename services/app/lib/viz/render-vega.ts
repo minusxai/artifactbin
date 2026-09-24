@@ -110,13 +110,7 @@ export function toVegaSpec(
   options?: CompileVegaLiteOptions,
 ): { vegaSpec: VegaSpec; parserConfig?: Record<string, unknown> } {
   if (resolved.engine === 'vega') {
-    const parserConfig = getVegaParserConfig(mode) as Record<string, unknown>;
-    if (options?.categoryRange?.length) {
-      parserConfig.range = {
-        ...(parserConfig.range as Record<string, unknown> | undefined),
-        category: options.categoryRange,
-      };
-    }
+    const parserConfig = getVegaParserConfig(mode, options?.categoryRange);
     return { vegaSpec: resolved.spec as unknown as VegaSpec, parserConfig };
   }
   return { vegaSpec: compileVegaLite(resolved.spec, mode, options) };
@@ -240,9 +234,8 @@ interface LegendWrapPlan {
 }
 
 /**
- * Drop all Vega-Lite legend titles. They repeat what the chart and entry labels
- * already communicate and consume scarce horizontal space. A channel-level
- * `title` still renames tooltips/axes without surfacing as a legend heading.
+ * Omit only redundant, implicit category headings. Quantitative legends need
+ * their measure/units; explicit legend titles and channel aliases always survive.
  */
 const LEGEND_CHANNELS = ['color', 'fill', 'stroke', 'opacity', 'shape', 'size', 'strokeDash'] as const;
 
@@ -254,7 +247,8 @@ function suppressLegendTitles(spec: Record<string, unknown>): void {
     const d = def as Record<string, unknown>;
     if (typeof d.field !== 'string') continue;
     const legend = d.legend as Record<string, unknown> | null | undefined;
-    if (legend === null) continue;
+    if (legend === null || legend?.title !== undefined || d.title !== undefined) continue;
+    if (d.type !== 'nominal' && d.type !== 'ordinal') continue;
     d.legend = { ...(legend ?? {}), title: null };
   }
   const layers = spec.layer;
@@ -462,9 +456,9 @@ interface CompileVegaLiteOptions {
   /** Initial container-bounded dimensions for top-level facet child plots. */
   facetLayout?: FacetLayoutPlan | null;
   /**
-   * Categorical color range override — the surrounding design theme's `--chart-1..5` tokens
+   * Palette override — the surrounding design theme's `--chart-1..5` tokens
    * (lib/viz/chart-tokens.ts). null/undefined = the house palette. Applied to both engines:
-   * baked into the VL config at compile; merged into the parser config for native Vega.
+   * categorical and continuous defaults are derived in theme.ts for both engines.
    */
   categoryRange?: string[] | null;
 }
@@ -539,14 +533,9 @@ export function compileVegaLite(
       }
     }
   }
-  // House look: legends are entry labels only, with no redundant heading.
+  // Keep meaningful measure/units and authored titles; omit redundant category headings.
   if (!composed) suppressLegendTitles(prepared);
-  const config = getVegaLiteConfig(mode);
-  // Theme chart tokens: a surrounding [data-theme] scope's --chart-1..5
-  // (resolved by the renderer via lib/viz/chart-tokens.ts) replace the house categorical palette.
-  if (options?.categoryRange?.length) {
-    config.range = { ...config.range, category: options.categoryRange as never };
-  }
+  const config = getVegaLiteConfig(mode, options?.categoryRange);
   const { spec: vegaSpec } = compile(prepared as unknown as TopLevelSpec, { config });
   // Center top legends within the chart width (a Vega-level legend layout — VL's
   // config surface doesn't expose it, so it's merged into the compiled config).

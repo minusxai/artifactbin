@@ -5,7 +5,7 @@
  */
 import { describe, it, expect } from 'vitest';
 import { buildTooltipPlan, buildTooltipData, tooltipEntryMatchesFacet, tooltipXKey, renderSharedTooltipHtml } from '../tooltip-plan';
-import { materializeRecipe, WATERFALL_UP_COLOR, WATERFALL_DOWN_COLOR, WATERFALL_TOTAL_COLOR } from '../viz-templates';
+import { materializeRecipe } from '../viz-templates';
 
 const foldArea = {
   mark: { type: 'area' },
@@ -279,14 +279,14 @@ describe('buildTooltipData — waterfall', () => {
     ], plan);
     expect([...idx.keys()]).toEqual(['start', 'refunds', 'upsell', 'Total']);
     expect(idx.get('start')!.rows).toEqual([
-      { label: 'amount', value: 10, colorKey: 'amount', color: WATERFALL_UP_COLOR },
+      { label: 'amount', value: 10, colorKey: 'Increase' },
       { label: 'Running total', value: 10, colorKey: 'Running total' },
     ]);
     expect(idx.get('refunds')!.rows[0]).toEqual(
-      { label: 'amount', value: -4, colorKey: 'amount', color: WATERFALL_DOWN_COLOR });
+      { label: 'amount', value: -4, colorKey: 'Decrease' });
     expect(idx.get('refunds')!.rows[1].value).toBe(6);
     expect(idx.get('Total')!.rows).toEqual([
-      { label: 'amount', value: 12, colorKey: 'amount', color: WATERFALL_TOTAL_COLOR },
+      { label: 'amount', value: 12, colorKey: 'Total' },
     ]);
   });
 

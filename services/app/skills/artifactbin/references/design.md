@@ -144,9 +144,9 @@ SVG element — then stop; one motif, total commitment, no second conceit.
 
 ## Charts
 
-- The title states the takeaway; axes and units do the explaining.
-- Direct labels beat legends; gridlines stay barely-there; no gradients,
-  shadows, or 3D — data-ink only.
+- Label axes with names, units and ticks. Keep legends unless directly labeled.
+- Theme colors only, unless the user requests custom colors.
+  [Chart guidance](markup-data-authoring.md).
 
 <!--bundle:skip-->
 ## Copy is design material

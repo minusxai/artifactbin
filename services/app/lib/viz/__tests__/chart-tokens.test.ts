@@ -8,7 +8,7 @@
  */
 import { describe, it, expect } from 'vitest';
 import { chartTokenRange, resolveCssVarColors } from '../chart-tokens';
-import { compileVegaLite, toVegaSpec } from '../render-vega';
+import { compileVegaLite, toVegaSpec, createVegaView } from '../render-vega';
 import { COLOR_PALETTE } from '@/lib/chart/chart-theme';
 
 const readerOf = (vars: Record<string, string>) => (name: string) => vars[name] ?? '';
@@ -50,6 +50,33 @@ const UNIT_SPEC = {
 };
 
 describe('compileVegaLite — categoryRange override', () => {
+  it.each(['light', 'dark'] as const)('themes continuous scales and preserves labels and explicit colors in %s mode', async mode => {
+    const tokens = ['#753bbd', '#b96c25', '#329089'];
+    for (const mark of ['rect', 'circle']) {
+      const spec = compileVegaLite({
+        mark,
+        encoding: {
+          x: { field: 'cat', type: 'nominal', title: 'Region' },
+          y: { field: 'val', type: 'quantitative', title: 'Revenue (USD)' },
+          color: { field: 'val', type: 'quantitative', title: 'Revenue (USD)' },
+        },
+      }, mode, { categoryRange: tokens });
+      const view = createVegaView(spec, [{ cat: 'A', val: 0 }, { cat: 'B', val: 10 }], { renderer: 'none', width: 400, height: 300 });
+      try {
+        await view.runAsync();
+        expect(view.scale('color')(10)).toBe('rgb(117, 59, 189)');
+        const svg = await view.toSVG();
+        expect(svg).toContain('Region');
+        expect(svg).toContain('Revenue (USD)');
+        expect(svg).toContain('role-legend-title');
+      } finally { view.finalize(); }
+    }
+    const custom = compileVegaLite({ ...UNIT_SPEC, encoding: {
+      ...UNIT_SPEC.encoding, color: { field: 'val', type: 'quantitative', scale: { range: ['#fff', '#f00'] } },
+    } }, mode, { categoryRange: tokens });
+    expect(custom.scales?.find(s => s.name === 'color')).toMatchObject({ range: ['#fff', '#f00'] });
+  });
+
   it('bakes the token range into the compiled config as range.category', () => {
     const tokens = ['oklch(0.6 0.2 30)', 'oklch(0.5 0.1 200)'];
     const spec = compileVegaLite(UNIT_SPEC, 'light', { categoryRange: tokens }) as unknown as
@@ -71,6 +98,7 @@ describe('toVegaSpec — native-vega engine gets the range via parser config', (
       { spec: { marks: [] }, engine: 'vega' }, 'light', { categoryRange: tokens },
     );
     expect((parserConfig as { range?: { category?: unknown } }).range?.category).toEqual(tokens);
+    expect(parserConfig?.range).toMatchObject({ ramp: [expect.any(String), 'red'], diverging: ['blue', '#FFFFFF', 'red'] });
   });
 
   it('leaves the parser config untouched without a range', () => {
