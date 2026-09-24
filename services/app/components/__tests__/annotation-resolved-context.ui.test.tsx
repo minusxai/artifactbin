@@ -123,8 +123,14 @@ it('counts only visible unpaused seconds and expires without acknowledging the n
  fireEvent.focus(marker);act(()=>vi.advanceTimersByTime(12000));expect(remaining()).toContain('10 seconds');
  fireEvent.blur(marker);act(()=>vi.advanceTimersByTime(4000));expect(remaining()).toContain('6 seconds');
  const card=marker.closest('[data-annotation-id]')!;
+ expect(card.querySelector('circle')).not.toBeNull();
+ const ringAnchor=card.querySelector('svg')!.parentElement!;
+ expect(ringAnchor.textContent).toBe('V'); // ring shares the avatar's box, excluding the reply count
  fireEvent.mouseEnter(card);act(()=>vi.advanceTimersByTime(12000));expect(remaining()).toContain('6 seconds');
- fireEvent.mouseLeave(card);act(()=>vi.advanceTimersByTime(6100));
+ expect(card.querySelector('circle')).toBeNull(); // paused countdown must not stretch over the preview
+ fireEvent.mouseLeave(card);
+ expect(card.querySelector('circle')).not.toBeNull();
+ act(()=>vi.advanceTimersByTime(6100));
  expect(screen.queryByLabelText(/Open annotation conversation/)).toBeNull();
 });
 it('restarts a resolved indicator only for a new revision and cancels it on reopening',async()=>{
