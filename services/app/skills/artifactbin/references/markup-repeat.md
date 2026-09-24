@@ -148,6 +148,6 @@ current row. Existing mutation access checks and query refresh behavior apply.
 Captures and static previews disable actions. This example changes local
 reader state; declare a dataset-backed Mutation to persist shared changes.
 
-The CLI cannot run a mutation that binds `$_row` or `$_value`. To change rows
-yourself, write the dataset it targets: `afbin query <dataset> --write --input
-change.sql` (needs write access). A live session only tests the control.
+The CLI cannot run a mutation that binds `$_row` or `$_value`; press it in a
+live session. `afbin query <dataset> --write --input change.sql` works only
+where the dataset's policy grants you direct writes, never by default.

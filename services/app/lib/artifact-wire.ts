@@ -200,9 +200,10 @@ export async function artifactToWire(row: ArtifactRow, base: string) {
           template: m.template ?? null,
           colorMode: design.colorMode,
           refs: (meta as { refs?: unknown }).refs ?? [],
-          // Declared mutations by name and parameter, so a CLI can validate a
-          // `--name --write` call before it sends anything.
-          mutations: (declarationsForRow(row)?.flow.mutations ?? []).filter((decl) => decl.scope !== 'local').map((decl) => ({ name: decl.name, params: decl.params.map((name) => ({ name })) })),
+          // Declared mutations by name, parameter and the dataset each writes, so a CLI can
+          // validate a `--name --write` call before it sends anything and name that dataset
+          // when a row action cannot run from a command line.
+          mutations: (declarationsForRow(row)?.flow.mutations ?? []).filter((decl) => decl.scope !== 'local').map((decl) => ({ name: decl.name, params: decl.params.map((name) => ({ name })), target: decl.target })),
         }
       : {}),
     theme: design.theme,

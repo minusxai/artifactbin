@@ -366,7 +366,7 @@ describe('a declared write that names the viewer', () => {
     assert.deepEqual(forged.bodies,[]);
    }finally{await rm(root,{recursive:true,force:true});}
   });
-  test('refuses a row action and points at the dataset it writes, not only at the page',async()=>{
+  test('refuses a row action, points at the page and names the dataset it writes',async()=>{
    const root=await mkdtemp(join(tmpdir(),'afbin-me-write-'));
    try{
     await saveTestConnection({server:'https://example.com',token:'test'},root);
@@ -378,11 +378,11 @@ describe('a declared write that names the viewer', () => {
     assert.deepEqual(row.bodies,[]);
    }finally{await rm(root,{recursive:true,force:true});}
   });
-  test('a page-local row action has no dataset to write, so only the page can run it',async()=>{
+  test('a row action from an older server without a target still points at the page',async()=>{
    const root=await mkdtemp(join(tmpdir(),'afbin-me-write-'));
    try{
     await saveTestConnection({server:'https://example.com',token:'test'},root);
-    const row=await run(root,['--name','pick'],[{name:'pick',scope:'local',target:'choices',params:[{name:'_row'}]}]);
+    const row=await run(root,['--name','pick'],[{name:'pick',params:[{name:'_row'}]}]);
     assert.equal(row.result.error.code,'row_mutation');
     assert.doesNotMatch(row.result.error.fix,/afbin query/);
     assert.match(row.result.error.fix,/live-sessions/);
