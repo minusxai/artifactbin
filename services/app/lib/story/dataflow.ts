@@ -261,6 +261,7 @@ export const REF_ATTRS: {
     Question: { data: 'table' },
     Number: { data: 'table' },
     DataTable: { data: 'table' },
+    DeckGL: { data: 'table' },
     // A folder's listing, bound to the children table its <Query> reads.
     Files: { data: 'table' },
     // The kit CONTROL components (components/kit/controls.tsx): the same

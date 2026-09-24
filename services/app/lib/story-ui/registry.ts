@@ -1,6 +1,7 @@
 import type * as React from 'react';
 import { createElement } from 'react';
 import { Mermaid } from '@/components/kit/mermaid';
+import { DeckGLMap } from '@/components/kit/deck-gl';
 
 import {
   Card,
@@ -96,6 +97,7 @@ export const STORY_UI_COMPONENTS: Record<string, React.ComponentType<any>> = {
     return createElement('div', { id: props.id, className: props.className, 'data-mx-ast': props['data-mx-ast'], 'data-mx-managed-frame': '', 'aria-label': label, style: { height: pixels, width: '100%' } }, createElement('div', { style: { height: '100%' } }));
   },
   Mermaid,
+  DeckGL: DeckGLMap as unknown as React.ComponentType<any>, // eslint-disable-line @typescript-eslint/no-explicit-any
   Card,
   CardHeader,
   CardTitle,

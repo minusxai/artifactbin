@@ -255,6 +255,9 @@ if (cache) {
   const inputs = {};
   const addGraph = (metafile) => {
     for (const key of Object.keys(metafile.inputs)) {
+      // A package's `browser` field can stub a Node builtin out; esbuild lists
+      // it as a virtual `(disabled):<name>` input with no file behind it.
+      if (key.startsWith('(disabled):')) continue;
       const abs = path.resolve(process.cwd(), key);
       if (abs.split(path.sep).includes('node_modules')) continue;
       const rel = path.relative(root, abs);

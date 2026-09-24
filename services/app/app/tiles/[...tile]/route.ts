@@ -6,9 +6,10 @@
  */
 import { tileUpstreamUrl } from '@/lib/tiles';
 
-export async function GET(_request: Request, ctx: { params: Promise<{ tile: string[] }> }) {
+export async function GET(_request: Request, ctx: { params: Promise<{ tile: string | string[] }> }) {
   const { tile } = await ctx.params;
-  const upstream = tileUpstreamUrl(tile);
+  // The server adapter hands a catch-all its matched path as ONE string.
+  const upstream = tileUpstreamUrl(typeof tile === 'string' ? tile.split('/') : tile);
   if (!upstream) return new Response('not found', { status: 404 });
   const resp = await fetch(upstream);
   if (!resp.ok) return new Response('bad gateway', { status: 502 });

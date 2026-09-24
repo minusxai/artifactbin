@@ -1,6 +1,7 @@
 import {PersonMention,PersonMentionProvider} from '@/components/PersonMention';
 import {isPersonMentionHref} from '@/lib/person-mentions';
 import { Mermaid } from '@/components/kit/mermaid';
+import { DeckGLMap } from '@/components/kit/deck-gl';
 /**
  * The ONE view composition for a served markup document. The registry and
  * adapters are shared by server rendering and the browser runtime, while
@@ -927,6 +928,13 @@ const RUNTIME_REGISTRY: Record<string, ComponentType<Record<string, unknown>>> =
   Iframe: props => {
     const { store, managedAssets, importManagedAsset } = useContext(RuntimeEmbedContext);
     return store ? <ManagedIframeView {...props} compiled={props.compiled as ManagedIframeContent} store={store} assets={managedAssets} importAsset={importManagedAsset} /> : null;
+  },
+  DeckGL: props => {
+    const { colorMode, state } = useContext(RuntimeEmbedContext);
+    const name = refName(props.data);
+    const rows = (name ? state.tables[name] : undefined) as unknown;
+    const list = Array.isArray(rows) ? rows : Array.isArray((rows as { rows?: unknown })?.rows) ? (rows as { rows: unknown[] }).rows : [];
+    return <div {...runtimeTargetIdentity(props)}><DeckGLMap {...(props as unknown as Parameters<typeof DeckGLMap>[0])} rows={list as never} colorMode={colorMode} /></div>;
   },
   Files: FilesAdapter,
   Question: QuestionAdapter,
