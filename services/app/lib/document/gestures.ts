@@ -1,3 +1,4 @@
+import {dragPreview} from './drag-preview';
 import {canvasResize} from './canvas-resize';
 /** Transient gesture ink lives outside the editable document and never enters JSONB. */
 import {Plugin,NodeSelection} from 'prosemirror-state';
@@ -13,10 +14,12 @@ export function documentGestures(){return new Plugin({view(view){
  const sizing=view.state.doc.attrs.props.layout==='canvas'?canvasResize(view):null;
  const marker=document.createElement('div');marker.className='mdx-drop-marker';marker.hidden=true;marker.setAttribute('aria-hidden','true');document.body.append(marker);
  const grip=document.createElement('button');grip.type='button';grip.className='mdx-block-grip';grip.setAttribute('aria-label','Select block');grip.textContent='⠿';grip.draggable=true;grip.hidden=true;document.body.append(grip);
- let hoverPos:number|null=null;
- function clear(){marker.hidden=true;view.dom.classList.remove('mdx-dragging');}
+ let hoverPos:number|null=null,preview:HTMLElement|null=null;
+ function clear(){view.dragging=null;preview?.remove();preview=null;marker.hidden=true;view.dom.classList.remove('mdx-dragging');}
  function hover(event:MouseEvent){
   if(!view.editable||view.dragging)return;
+  // Keep the route from the block's top-left edge to its floating handle stable.
+  if(!grip.hidden&&hoverPos!==null){const previous=view.nodeDOM(hoverPos);if(previous instanceof Element){const box=previous.getBoundingClientRect();if(event.clientX>=box.left-32&&event.clientX<=box.left+16&&event.clientY>=box.top-8&&event.clientY<=box.top+32)return;}}
   const target=(event.target as Element).closest?.('[data-node-id]');
   if(!target||!view.dom.contains(target)||target.classList.contains('mdx-container')||target.classList.contains('mdx-component')){grip.hidden=true;return;}
   const pos=view.posAtDOM(target,0),resolved=view.state.doc.resolve(pos);hoverPos=resolved.depth?resolved.before():null;
@@ -27,8 +30,13 @@ export function documentGestures(){return new Plugin({view(view){
   if(!(view.state.selection instanceof NodeSelection)||!event.dataTransfer)return;
   // Native PM dragging can originate outside its DOM (the floating handle).
   const slice=view.state.selection.content();view.dragging={slice,move:true};event.dataTransfer.setData('text/plain',view.state.selection.node.textContent);event.dataTransfer.effectAllowed='move';
-  const dom=view.nodeDOM(view.state.selection.from);if(dom instanceof Element)event.dataTransfer.setDragImage(dom,0,0);view.dom.classList.add('mdx-dragging');
+  view.dom.classList.add('mdx-dragging');
  };
+ function start(event:DragEvent){
+  if(!view.editable||!event.dataTransfer||!(view.state.selection instanceof NodeSelection)||(!(event.target instanceof Node))||!(view.dom.contains(event.target)||grip.contains(event.target)))return;
+  const dom=view.nodeDOM(view.state.selection.from);if(!(dom instanceof HTMLElement))return;
+  preview?.remove();preview=dragPreview(dom);event.dataTransfer.setDragImage(preview,0,0);
+ }
  function over(event:DragEvent){
   if(!view.editable||!view.dragging)return;view.dom.classList.add('mdx-dragging');grip.hidden=true;
   const found=view.posAtCoords({left:event.clientX,top:event.clientY});if(!found){marker.hidden=true;return;}
@@ -41,7 +49,7 @@ export function documentGestures(){return new Plugin({view(view){
   else {const coords=view.coordsAtPos(pos);const parent=resolved.depth?view.nodeDOM(resolved.before()):view.dom;const box=(parent instanceof Element?parent:view.dom).getBoundingClientRect();line={left:box.left,top:coords.top,width:box.width};}
   marker.hidden=false;Object.assign(marker.style,{left:`${line.left}px`,top:`${line.top}px`,width:`${line.width}px`});
  }
- view.dom.addEventListener('mousemove',hover);view.dom.addEventListener('dragover',over);document.addEventListener('drop',clear);document.addEventListener('dragend',clear);
+ view.dom.addEventListener('mousemove',hover);view.dom.addEventListener('dragover',over);document.addEventListener('dragstart',start);document.addEventListener('drop',clear);document.addEventListener('dragend',clear);
  const hide=()=>{grip.hidden=true;};window.addEventListener('scroll',hide,true);
- return {update(){sizing?.update();},destroy(){sizing?.destroy();marker.remove();grip.remove();view.dom.removeEventListener('mousemove',hover);view.dom.removeEventListener('dragover',over);document.removeEventListener('drop',clear);document.removeEventListener('dragend',clear);window.removeEventListener('scroll',hide,true);}};
+ return {update(){sizing?.update();},destroy(){clear();sizing?.destroy();marker.remove();grip.remove();view.dom.removeEventListener('mousemove',hover);view.dom.removeEventListener('dragover',over);document.removeEventListener('dragstart',start);document.removeEventListener('drop',clear);document.removeEventListener('dragend',clear);window.removeEventListener('scroll',hide,true);}};
  }});}

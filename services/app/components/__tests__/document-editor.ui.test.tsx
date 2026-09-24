@@ -153,3 +153,24 @@ it('resizes canvas nodes outside authored DOM and cancels a preview without savi
   await waitFor(()=>expect(onChange).toHaveBeenCalled());const next=onChange.mock.lastCall![0];expect(next.nodes[next.nodes[next.rootId].children[0]].props.height).toBe(300);
  }finally{measure.mockRestore();}
 });
+
+it('uses an isolated bounded drag preview and removes it when dragging ends',()=>{
+ const result=render(<DocumentEditor document={parseDocumentMdx('Move only this paragraph\n\nLeave this behind')} onChange={()=>{}}/>);
+ const paragraph=screen.getByText('Move only this paragraph');fireEvent.mouseMove(paragraph);
+ const grip=screen.getByRole('button',{name:'Select block'});fireEvent.mouseDown(grip);
+ const transfer={setData:vi.fn(),setDragImage:vi.fn(),effectAllowed:''};fireEvent.dragStart(grip,{dataTransfer:transfer});
+ const preview=transfer.setDragImage.mock.calls[0]?.[0] as HTMLElement;
+ expect(preview).not.toBe(paragraph);expect(preview?.dataset.mdxDragPreview).toBe('');
+ expect(preview.textContent).toBe('Move only this paragraph');expect(preview.querySelector('[data-node-id]')).toBeNull();
+ expect(preview.style.overflow).toBe('hidden');expect(preview.parentElement).toBe(document.body);
+ fireEvent.dragEnd(grip);expect(preview.isConnected).toBe(false);fireEvent.mouseMove(screen.getByText('Leave this behind'),{clientX:50,clientY:50});fireEvent.mouseDown(grip);expect(screen.getByText('Leave this behind').classList.contains('ProseMirror-selectednode')).toBe(true);result.unmount();
+});
+
+it('keeps the block handle stable while crossing the gap to reach it',()=>{
+ render(<DocumentEditor document={parseDocumentMdx('<div>\n\nReach this paragraph\n\n</div>')} onChange={()=>{}}/>);
+ const paragraph=screen.getByText('Reach this paragraph');vi.spyOn(paragraph,'getBoundingClientRect').mockReturnValue({left:100,top:100,right:400,bottom:180,width:300,height:80,x:100,y:100,toJSON:()=>({})});
+ fireEvent.mouseMove(paragraph,{clientX:110,clientY:110});const grip=screen.getByRole('button',{name:'Select block'});
+ fireEvent.mouseMove(paragraph.closest('.mdx-container')!,{clientX:95,clientY:110});
+ expect(grip.hidden).toBe(false);expect(grip.style.left).toBe('75px');
+ fireEvent.mouseDown(grip);expect(paragraph.classList.contains('ProseMirror-selectednode')).toBe(true);
+});

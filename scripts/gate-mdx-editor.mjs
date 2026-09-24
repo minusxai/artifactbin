@@ -102,6 +102,18 @@ try{
  assert.equal((await page.locator('.ProseMirror #title').innerText()).trim(),'How We Built\nAI-Powered Pitch Training\nfor cult Centre Managers');
  assert.equal(await page.locator('.ProseMirror .case-study').evaluate(el=>getComputedStyle(el).backgroundColor),'rgb(3, 6, 28)');
  assert.equal(await page.locator('.ProseMirror .mdx-container-content').count(),0,'Canvas must preserve direct-child website CSS');
+ // Crossing the gutter must not retarget the handle to a large layout ancestor.
+ const demoParagraph=page.locator('.ProseMirror #h2WU');await demoParagraph.scrollIntoViewIfNeeded();
+ const paragraphBox=await demoParagraph.boundingBox();
+ await page.mouse.move(paragraphBox.x+30,paragraphBox.y+10);await page.mouse.move(paragraphBox.x-5,paragraphBox.y+10,{steps:5});
+ const blockGrip=page.getByRole('button',{name:'Select block',exact:true});assert.equal(await blockGrip.isVisible(),true);
+ await blockGrip.click();assert.equal(await page.locator('.ProseMirror-selectednode').getAttribute('id'),'h2WU');
+ await blockGrip.dispatchEvent('dragstart',{dataTransfer:await page.evaluateHandle(()=>new DataTransfer())});
+ const dragCopy=page.locator('[data-mdx-drag-preview]');const dragBox=await dragCopy.boundingBox();
+ assert.ok(dragBox.width<=361&&dragBox.height<=241,'Drag copy must be bounded independently of page zoom');
+ assert.equal(await dragCopy.textContent(),await demoParagraph.textContent());
+ assert.equal(await dragCopy.locator('[data-node-id]').count(),0);
+ await blockGrip.dispatchEvent('dragend');assert.equal(await dragCopy.count(),0);
  const demoBefore=await demoHead();
  const prose=page.locator('.ProseMirror #h2WU');await prose.scrollIntoViewIfNeeded();
  await prose.evaluate(p=>{const range=document.createRange();range.setStart(p.firstChild,12);range.collapse(true);const selection=getSelection();selection.removeAllRanges();selection.addRange(range);p.closest('.ProseMirror').focus();});
