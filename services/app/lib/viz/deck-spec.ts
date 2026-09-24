@@ -11,7 +11,7 @@
  * refused rather than passed through. Accessors are parsed into a small tree and
  * interpreted — never `eval`, never a property walk off the row object.
  */
-import { GEO_ASSETS } from './geo-assets';
+import { BOUNDARY_IDS, isBoundary } from './geo-assets';
 
 type Rgb = readonly [number, number, number];
 /** Theme colours the engine resolves from the document; the accessor colour functions draw from them. */
@@ -74,8 +74,10 @@ export const layerBoundary = (layer: Row): string | null =>
  * Every problem with a `<DeckGL>`'s props, as author-facing messages. Empty
  * means the engine will build exactly these layers.
  */
-export function validateDeckMap(props: { layers?: unknown; basemap?: unknown; initialViewState?: unknown; tooltip?: unknown }): string[] {
+export function validateDeckMap(props: { layers?: unknown; basemap?: unknown; initialViewState?: unknown; tooltip?: unknown; legend?: unknown; title?: unknown }): string[] {
   const out: string[] = [];
+  if (props.legend !== undefined && typeof props.legend !== 'boolean') out.push('DeckGL legend must be true or false');
+  if (props.title !== undefined && typeof props.title !== 'string') out.push('DeckGL title must be a string (the map\'s accessible name)');
   if (props.tooltip !== undefined && typeof props.tooltip !== 'boolean' && !(Array.isArray(props.tooltip) && props.tooltip.every(c => typeof c === 'string'))) {
     out.push('DeckGL tooltip must be true, false or a list of columns, e.g. ["city", "orders"]');
   }
@@ -111,8 +113,8 @@ function validateLayer(layer: unknown, index: number): string[] {
         out.push(`${at}: data must be omitted (the component's query) or "${BOUNDARY_PREFIX}<id>" — never a URL; your own GeoJSON is a dataset you query`);
       } else if (type !== 'GeoJsonLayer') {
         out.push(`${at}: only a GeoJsonLayer draws a boundary; point layers read the component's query`);
-      } else if (!(boundary in GEO_ASSETS)) {
-        out.push(`${at}: unknown boundary "${boundary}" (bundled: ${Object.keys(GEO_ASSETS).join(', ')})`);
+      } else if (!isBoundary(boundary)) {
+        out.push(`${at}: unknown boundary "${boundary}" (bundled: ${BOUNDARY_IDS.join(', ')}; any other geography is your own GeoJSON dataset)`);
       }
       continue;
     }
@@ -286,6 +288,58 @@ function column(row: unknown, name: string): unknown {
   return props && typeof props === 'object' ? own(props) : undefined;
 }
 
+/** What a legend shows for one theme-colour function in an accessor. */
+export type ColorScale =
+  | { kind: 'ramp'; label: string; min: number; max: number; colors: readonly Rgb[] }
+  | { kind: 'category'; label: string; entries: Array<{ value: string; color: Rgb }> };
+
+const MAX_LEGEND_ENTRIES = 12;
+const NO_COLOR = [160, 160, 160, 80];
+
+/**
+ * The colour scales an accessor's `ramp()`/`category()` calls resolve to over
+ * `data` — one builder shared by the accessor and the legend, so the two can
+ * never disagree about which colour a value gets.
+ */
+function buildScales(root: Node, data: readonly unknown[], palette: DeckPalette) {
+  const scales = new Map<Node, { color: (v: unknown) => number[]; describe: ColorScale }>();
+  walk(root, n => {
+    if (n.k !== 'call' || !COLOR_FUNCTIONS.has(n.fn)) return;
+    const arg = n.args[0]!;
+    const label = arg.k === 'col' ? arg.name : n.fn === 'ramp' ? 'value' : 'category';
+    const values = data.map(d => evaluate(arg, d, new Map()));
+    if (n.fn === 'ramp') {
+      const nums = values.map(Number).filter(Number.isFinite);
+      const lo = nums.length ? Math.min(...nums) : 0, hi = nums.length ? Math.max(...nums) : 1;
+      const steps = palette.sequential;
+      scales.set(n, {
+        color: v => {
+          const x = Number(v);
+          if (v === null || v === undefined || !Number.isFinite(x) || !steps.length) return NO_COLOR;
+          const t = hi > lo ? (x - lo) / (hi - lo) : 0.5;
+          return [...steps[Math.round(t * (steps.length - 1))]!, 255];
+        },
+        describe: { kind: 'ramp', label, min: lo, max: hi, colors: steps },
+      });
+    } else {
+      const order = new Map<string, number>();
+      for (const v of values) if (v !== null && v !== undefined && !order.has(String(v))) order.set(String(v), order.size);
+      const colors = palette.categorical;
+      const colorAt = (i: number): Rgb => colors.length ? colors[i % colors.length]! : [160, 160, 160];
+      scales.set(n, {
+        color: v => order.has(String(v)) ? [...colorAt(order.get(String(v))!), 255] : NO_COLOR,
+        describe: { kind: 'category', label, entries: [...order.keys()].slice(0, MAX_LEGEND_ENTRIES).map((value, i) => ({ value, color: colorAt(i) })) },
+      });
+    }
+  });
+  return scales;
+}
+
+/** The legend entries for one `@@=` expression (without the prefix) over `data`. */
+export function colorScales(src: string, data: readonly unknown[], palette: DeckPalette): ColorScale[] {
+  return [...buildScales(parse(src), data, palette).values()].map(s => s.describe);
+}
+
 /**
  * Compile a `@@=` expression (without the prefix) into a deck accessor over
  * `data`. `ramp(col)` spreads the column's numeric domain over the sequential
@@ -293,60 +347,43 @@ function column(row: unknown, name: string): unknown {
  */
 export function compileAccessor(src: string, data: readonly unknown[], palette: DeckPalette): (row: unknown) => unknown {
   const root = parse(src);
-  const scales = new Map<Node, (v: unknown) => number[]>();
-  walk(root, n => {
-    if (n.k !== 'call' || !COLOR_FUNCTIONS.has(n.fn)) return;
-    const arg = n.args[0]!;
-    const values = data.map(d => evaluate(arg, d));
-    if (n.fn === 'ramp') {
-      const nums = values.map(Number).filter(Number.isFinite);
-      const lo = nums.length ? Math.min(...nums) : 0, hi = nums.length ? Math.max(...nums) : 1;
-      const steps = palette.sequential;
-      scales.set(n, v => {
-        const x = Number(v);
-        if (!Number.isFinite(x) || !steps.length) return [160, 160, 160, 80];
-        const t = hi > lo ? (x - lo) / (hi - lo) : 0.5;
-        return [...steps[Math.round(t * (steps.length - 1))]!, 255];
-      });
-    } else {
-      const order = new Map<string, number>();
-      for (const v of values) if (!order.has(String(v))) order.set(String(v), order.size);
-      const colors = palette.categorical;
-      scales.set(n, v => colors.length ? [...colors[(order.get(String(v)) ?? 0) % colors.length]!, 255] : [160, 160, 160, 255]);
+  const scales = new Map([...buildScales(root, data, palette)].map(([node, s]) => [node, s.color]));
+  return row => evaluate(root, row, scales);
+}
+
+function evaluate(n: Node, row: unknown, scales: ReadonlyMap<Node, (v: unknown) => number[]>): unknown {
+  const ev = (x: Node) => evaluate(x, row, scales);
+  switch (n.k) {
+    case 'num': case 'str': case 'lit': return n.v;
+    case 'col': return column(row, n.name);
+    case 'arr': return n.items.map(ev);
+    case 'un': { const v = ev(n.arg); return n.op === '-' ? -Number(v) : !v; }
+    case 'if': return ev(n.test) ? ev(n.then) : ev(n.else);
+    case 'call': {
+      const scale = scales.get(n);
+      if (scale) return scale(ev(n.args[0]!));
+      if (COLOR_FUNCTIONS.has(n.fn)) return NO_COLOR;
+      return MATH[n.fn]!(...n.args.map(x => Number(ev(x))));
     }
-  });
-  function evaluate(n: Node, row: unknown): unknown {
-    switch (n.k) {
-      case 'num': case 'str': case 'lit': return n.v;
-      case 'col': return column(row, n.name);
-      case 'arr': return n.items.map(x => evaluate(x, row));
-      case 'un': { const v = evaluate(n.arg, row); return n.op === '-' ? -Number(v) : !v; }
-      case 'if': return evaluate(n.test, row) ? evaluate(n.then, row) : evaluate(n.else, row);
-      case 'call': {
-        const scale = scales.get(n);
-        if (scale) return scale(evaluate(n.args[0]!, row));
-        return MATH[n.fn]!(...n.args.map(x => Number(evaluate(x, row))));
-      }
-      case 'bin': {
-        if (n.op === '&&') return evaluate(n.a, row) && evaluate(n.b, row);
-        if (n.op === '||') return evaluate(n.a, row) || evaluate(n.b, row);
-        const a = evaluate(n.a, row), b = evaluate(n.b, row);
-        switch (n.op) {
-          case '==': return a === b || (a != null && b != null && String(a) === String(b));
-          case '!=': return !(a === b || (a != null && b != null && String(a) === String(b)));
-          case '+': return typeof a === 'string' || typeof b === 'string' ? `${a ?? ''}${b ?? ''}` : Number(a) + Number(b);
-          case '-': return Number(a) - Number(b);
-          case '*': return Number(a) * Number(b);
-          case '/': return Number(a) / Number(b);
-          case '%': return Number(a) % Number(b);
-          case '<': return Number(a) < Number(b);
-          case '<=': return Number(a) <= Number(b);
-          case '>': return Number(a) > Number(b);
-          case '>=': return Number(a) >= Number(b);
-        }
+    case 'bin': {
+      if (n.op === '&&') return ev(n.a) && ev(n.b);
+      if (n.op === '||') return ev(n.a) || ev(n.b);
+      const a = ev(n.a), b = ev(n.b);
+      const same = a === b || (a != null && b != null && String(a) === String(b));
+      switch (n.op) {
+        case '==': return same;
+        case '!=': return !same;
+        case '+': return typeof a === 'string' || typeof b === 'string' ? `${a ?? ''}${b ?? ''}` : Number(a) + Number(b);
+        case '-': return Number(a) - Number(b);
+        case '*': return Number(a) * Number(b);
+        case '/': return Number(a) / Number(b);
+        case '%': return Number(a) % Number(b);
+        case '<': return Number(a) < Number(b);
+        case '<=': return Number(a) <= Number(b);
+        case '>': return Number(a) > Number(b);
+        case '>=': return Number(a) >= Number(b);
       }
     }
-    return undefined;
   }
-  return row => evaluate(root, row);
+  return undefined;
 }

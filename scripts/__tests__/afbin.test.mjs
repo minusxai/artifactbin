@@ -129,6 +129,18 @@ describe('npm run afbin', () => {
     } finally { await rm(root,{recursive:true,force:true}); }
   });
 
+  it('rebuilds when a shared source the CLI bundles changed — app/lib, utils, contracts, sql', async () => {
+    for (const dir of [['app', 'lib'], ['utils', 'src'], ['contracts', 'src'], ['sql', 'src']]) {
+      const root = await fakeCheckout({ distAge: 10, srcAge: 20 });
+      try {
+        expect(await cliBuildStale(root), dir.join('/')).toBe(false);
+        await mkdir(path.join(root, 'services', ...dir, 'viz'), { recursive: true });
+        await writeFile(path.join(root, 'services', ...dir, 'viz', 'shared.ts'), 'export {};\n');
+        expect(await cliBuildStale(root), dir.join('/')).toBe(true);
+      } finally { await rm(root, { recursive: true, force: true }); }
+    }
+  });
+
   it('builds first when the dist is stale, and forwards the child exit code', async () => {
     const root = await fakeCheckout({ distAge: 10, srcAge: 0 });
     const run = recorder();

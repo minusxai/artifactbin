@@ -18,7 +18,7 @@ import { cellToBoundary, cellToLatLng, isValidCell } from 'h3-js';
 // @ts-expect-error The CSP build ships no typings of its own; it is the default build's twin.
 import maplibregl from 'maplibre-gl/dist/maplibre-gl-csp';
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { compileAccessor, layerBoundary, GEOMETRY_COLUMN, DECK_LAYERS, type DeckPalette } from '@/lib/viz/deck-spec';
+import { colorScales, compileAccessor, layerBoundary, GEOMETRY_COLUMN, DECK_LAYERS, type ColorScale, type DeckPalette } from '@/lib/viz/deck-spec';
 import { loadGeoFeatures } from '@/lib/viz/geo-assets';
 import { basemapStyleUrl, basemapTransformRequest, BASEMAP_WORKER_URL } from '@/lib/basemap';
 import { createVegaTooltipHandler, hideVegaTooltip } from '@/lib/viz/vega-tooltip-handler';
@@ -125,11 +125,12 @@ export interface DeckEngineProps {
   colorMode: 'light' | 'dark';
   initialViewState?: Partial<MapViewState>;
   tooltip?: boolean | string[];
+  legend?: boolean;
   title?: string;
   height: number;
 }
 
-export function DeckEngine({ rows, layers, basemap = 'auto', colorMode, initialViewState, tooltip = true, title = 'Map', height }: DeckEngineProps) {
+export function DeckEngine({ rows, layers, basemap = 'auto', colorMode, initialViewState, tooltip = true, legend = true, title = 'Map', height }: DeckEngineProps) {
   const specs = useMemo(() => (Array.isArray(layers) ? layers : [])
     .filter((l): l is Row => !!l && typeof l === 'object' && String((l as Row)['@@type']) in LAYER_CLASSES), [layers]);
   const [boundaries, setBoundaries] = useState<Record<string, Feature[]>>({});
@@ -163,6 +164,16 @@ export function DeckEngine({ rows, layers, basemap = 'auto', colorMode, initialV
     return [{ spec, data, accessors, layer: new LAYER_CLASSES[spec['@@type'] as keyof typeof LAYER_CLASSES](props) }];
   }), [specs, rows, boundaries, palette]);
 
+  // ── The legend: one entry per distinct ramp()/category() the colour accessors use ─
+  const scales = useMemo(() => {
+    const seen = new Map<string, ColorScale>();
+    for (const { spec, data } of built) for (const [key, value] of Object.entries(spec)) {
+      if (!key.startsWith('get') || !key.endsWith('Color') || typeof value !== 'string' || !value.startsWith('@@=')) continue;
+      try { for (const scale of colorScales(value.slice(3), data, palette)) seen.set(`${scale.kind}:${scale.label}`, scale); } catch { /* validation reports it */ }
+    }
+    return [...seen.values()];
+  }, [built, palette]);
+
   // ── The view: fitted to the data until the reader moves it ──────────────────
   const box = useRef<HTMLDivElement>(null);
   const extent = useMemo(() => extentOf(built), [built]);
@@ -187,7 +198,8 @@ export function DeckEngine({ rows, layers, basemap = 'auto', colorMode, initialV
   const [view, setView] = useState<MapViewState>(fitted);
   const moved = useRef(false);
   useEffect(() => { if (!moved.current) setView(fitted); }, [fitted]);
-  const move = (next: MapViewState) => { moved.current = true; setView(next); };
+  // Only a reader's own gesture stops the fit; the engines also report programmatic and resize changes.
+  const move = (next: MapViewState, byReader = true) => { if (byReader) moved.current = true; setView(next); };
   const zoomBy = (delta: number) => move({ ...view, zoom: Math.max(0, Math.min(20, view.zoom + delta)) });
   const reset = () => { moved.current = false; setView(fitted); };
 
@@ -207,18 +219,21 @@ export function DeckEngine({ rows, layers, basemap = 'auto', colorMode, initialV
   const style = basemap === 'none' ? null : basemap === 'light' ? 'light' : basemap === 'dark' ? 'dark' : colorMode;
   const layerList = built.map(b => b.layer);
   return (
-    <div ref={box} role="region" aria-label={title} className="relative w-full overflow-hidden rounded-md" style={{ height }}
+    <div ref={box} role="figure" aria-label={title} className="relative w-full overflow-hidden rounded-md" style={{ height }}
       onPointerLeave={() => { if (box.current) hideVegaTooltip(box.current.ownerDocument); }}>
       {style ? (
-        <BaseMap mapLib={maplibregl} {...view} onMove={e => move(e.viewState as MapViewState)} attributionControl={false}
+        <BaseMap mapLib={maplibregl} {...view} onMove={e => move(e.viewState as MapViewState, !!e.originalEvent)} attributionControl={false}
+          // MapLibre names its canvas region "Map"; a document with several maps needs each one's own name.
+          locale={{ 'Map.Title': title }}
           mapStyle={basemapStyleUrl(style)} transformRequest={basemapTransformRequest}>
           <DeckOverlay layers={layerList} onHover={onHover} />
         </BaseMap>
       ) : (
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        <DeckGL viewState={view} controller onViewStateChange={({ viewState }) => move(viewState as MapViewState)} layers={layerList as any} onHover={onHover as never} />
+        <DeckGL viewState={view} controller onViewStateChange={({ viewState, interactionState }) => move(viewState as MapViewState, Object.values(interactionState ?? {}).some(Boolean))} layers={layerList as any} onHover={onHover as never} />
       )}
       <MapControls onZoomIn={() => zoomBy(1)} onZoomOut={() => zoomBy(-1)} onReset={reset} />
+      {legend && scales.length > 0 && <MapLegend scales={scales} />}
       {style && <p className="pointer-events-none absolute bottom-1 right-2 m-0 text-[10px] leading-none text-muted-foreground">© OpenFreeMap © OpenMapTiles © OpenStreetMap contributors</p>}
     </div>
   );
@@ -241,6 +256,38 @@ function MapControls({ onZoomIn, onZoomOut, onReset }: { onZoomIn: () => void; o
       <MapButton label="Zoom in" onClick={onZoomIn}><svg {...icon}><path d="M12 5v14M5 12h14" /></svg></MapButton>
       <MapButton label="Zoom out" onClick={onZoomOut}><svg {...icon}><path d="M5 12h14" /></svg></MapButton>
       <MapButton label="Reset view" onClick={onReset}><svg {...icon}><path d="M3 12a9 9 0 1 0 3-6.7M3 4v5h5" /></svg></MapButton>
+    </div>
+  );
+}
+
+const compact = new Intl.NumberFormat(undefined, { notation: 'compact', maximumFractionDigits: 1 });
+const css = (c: readonly number[]) => `rgb(${c[0]}, ${c[1]}, ${c[2]})`;
+
+/** One entry per theme-colour scale: a gradient with its range, or swatches per category. */
+function MapLegend({ scales }: { scales: readonly ColorScale[] }) {
+  return (
+    <div className="absolute bottom-5 left-2 flex max-w-[45%] flex-col gap-2 rounded-md border border-border bg-background/90 px-2 py-1.5 text-[11px] leading-tight text-foreground shadow-sm">
+      {scales.map(scale => (
+        <div key={`${scale.kind}:${scale.label}`} className="flex flex-col gap-1">
+          <span className="font-medium text-muted-foreground">{scale.label}</span>
+          {scale.kind === 'ramp' ? (
+            <div className="flex items-center gap-1.5">
+              <span>{compact.format(scale.min)}</span>
+              <span className="h-2 w-24 rounded-sm" style={{ background: `linear-gradient(to right, ${scale.colors.map(css).join(', ')})` }} />
+              <span>{compact.format(scale.max)}</span>
+            </div>
+          ) : (
+            <ul className="m-0 flex list-none flex-wrap gap-x-2 gap-y-0.5 p-0">
+              {scale.entries.map(entry => (
+                <li key={entry.value} className="flex items-center gap-1">
+                  <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: css(entry.color) }} />
+                  <span className="truncate">{entry.value}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      ))}
     </div>
   );
 }

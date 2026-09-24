@@ -13,7 +13,7 @@ way you would for deck.gl or pydeck. The Vega recipes `minusx/choropleth@1`
 and `minusx/point-map@1` still render but are deprecated: use `<DeckGL>`.
 
 ```jsx
-<DeckGL data="$stores" height="420px" basemap="auto" tooltip={["city","orders"]}
+<DeckGL data="$stores" title="Stores by region" height="420px" tooltip={["city","orders"]}
   layers={[{"@@type":"ScatterplotLayer","getPosition":"@@=[lng, lat]",
     "getRadius":"@@=sqrt(orders)","radiusScale":800,"getFillColor":"@@=category(region)"}]} />
 ```
@@ -26,7 +26,9 @@ and `minusx/point-map@1` still render but are deprecated: use `<DeckGL>`.
   "latitude":12.97,"zoom":10,"pitch":45,"bearing":0}}` only to frame it
   deliberately; `pitch` tilts the camera for 3D layers.
 - `tooltip`: `true` (the default; the row's columns), a list of columns, or
-  `false`. Readers get zoom and reset buttons; scrolling and dragging move it.
+  `false`. `legend={false}` hides the legend `ramp()`/`category()` colours get.
+- `title` names the map for screen readers — give each map on a page its own.
+  Readers get zoom and reset buttons; scrolling and dragging move the map.
 
 ## Layers
 
@@ -66,14 +68,20 @@ A `GeoJsonLayer` with `"data":"boundary:<id>"` draws a bundled boundary set;
 the feature it names, so accessors read your columns:
 
 ```jsx
-<DeckGL data="$by_state" basemap="none" tooltip={["state","revenue"]}
+<DeckGL data="$by_state" title="Revenue by state" basemap="none" tooltip={["state","revenue"]}
   layers={[{"@@type":"GeoJsonLayer","data":"boundary:india-states",
-    "@@join":["name","state"],"getFillColor":"@@=ramp(revenue)",
+    "@@join":["code","state_code"],"getFillColor":"@@=ramp(revenue)",
     "getLineColor":[255,255,255],"lineWidthMinPixels":1}]} />
 ```
 
-Bundled: `world` (countries), `us-states`, `us-counties`, `india-states`. All
-key on `name`: make the query's region values match those names exactly.
+Bundled, with the properties to join on:
+
+- `countries` — `name`, `iso_a2`, `iso_a3` (prefer the ISO codes);
+- `us-states` — `name`, `postal` (`CA`), `fips` (`06`); `us-counties` — `name`, `fips`;
+- `india-states` — `name`, `code` (`IN-KA`), `postal` (`KA`).
+
+Names must match exactly, so join on a code when the data has one. Any other
+geography (states of another country, districts, zones) is your own GeoJSON.
 
 ## Your own GeoJSON
 

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { compileAccessor, deckColumns, validateDeckMap, type DeckPalette } from '../deck-spec';
+import { colorScales, compileAccessor, deckColumns, validateDeckMap, type DeckPalette } from '../deck-spec';
 
 const PALETTE: DeckPalette = {
   sequential: [[0, 0, 0], [100, 100, 100], [200, 200, 200]],
@@ -117,5 +117,22 @@ describe('deck columns', () => {
       { '@@type': 'ArcLayer', getSourcePosition: '@@=[lng, lat]', getTargetPosition: '@@=[lng2, lat2]', getSourceColor: '@@=category(city)' },
       { '@@type': 'GeoJsonLayer', data: 'boundary:world', '@@join': ['name', 'country'], getFillColor: '@@=ramp(gdp)' },
     ]).sort()).toEqual(['city', 'country', 'lat', 'lat2', 'lng', 'lng2']);
+  });
+});
+
+describe('deck legends', () => {
+  const rows = [{ v: 0, c: 'a' }, { v: 5, c: 'b' }, { v: 10, c: 'a' }];
+  it('describes a ramp by its column, range and colour steps', () => {
+    expect(colorScales('ramp(v)', rows, PALETTE)).toEqual([{ kind: 'ramp', label: 'v', min: 0, max: 10, colors: PALETTE.sequential }]);
+  });
+  it('describes a category by its values in first-seen order, with their colours', () => {
+    expect(colorScales('category(c)', rows, PALETTE)).toEqual([{ kind: 'category', label: 'c', entries: [{ value: 'a', color: [255, 0, 0] }, { value: 'b', color: [0, 255, 0] }] }]);
+  });
+  it('has nothing to say about a literal or a plain column', () => {
+    expect(colorScales('[1, 2, 3]', rows, PALETTE)).toEqual([]);
+  });
+  it('accepts legend and title as component props', () => {
+    expect(validateDeckMap({ layers: [], legend: false, title: 'Stores by region' })).toEqual([]);
+    expect(validateDeckMap({ layers: [], legend: 'yes' })[0]).toMatch(/legend/);
   });
 });

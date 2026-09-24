@@ -36,7 +36,10 @@ export function devHome(port, home = homedir()) { return path.join(home, '.artif
 
 /** The built entry this script runs, and the trees it is built from. */
 const distEntry = (root) => path.join(root, 'services', 'cli', 'dist', 'afbin.mjs');
-const sourceRoots = (root) => ['src', 'scripts'].map((dir) => path.join(root, 'services', 'cli', dir));
+// The CLI bundles more than its own tree: app/lib (validation, the markup and map
+// contracts) and the shared packages. A change there is a change to the CLI.
+const sourceRoots = (root) => [['cli', 'src'], ['cli', 'scripts'], ['app', 'lib'], ['utils', 'src'], ['contracts', 'src'], ['sql', 'src']]
+  .map((dir) => path.join(root, 'services', ...dir));
 
 async function newestMtime(dir) {
   let newest = 0;

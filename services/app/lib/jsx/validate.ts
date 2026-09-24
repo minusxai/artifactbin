@@ -131,7 +131,7 @@ function walk(
       const value = node.attributes.find(a => a.name === name)?.value;
       return value?.static ? value.json : value ? null : undefined;
     };
-    for (const message of validateDeckMap({ layers: prop('layers'), basemap: prop('basemap'), initialViewState: prop('initialViewState'), tooltip: prop('tooltip') })) {
+    for (const message of validateDeckMap({ layers: prop('layers'), basemap: prop('basemap'), initialViewState: prop('initialViewState'), tooltip: prop('tooltip'), legend: prop('legend'), title: prop('title') })) {
       errors.push({ message, tag: node.tag, start: node.start, end: node.end });
     }
   }
