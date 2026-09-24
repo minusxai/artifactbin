@@ -27,6 +27,39 @@ it('opens, cancels, and returns focus to the trigger', async () => {
   expect(trigger).toHaveFocus();
 });
 
+/**
+ * An artifact dialog opens with the non-modal `show()` and traps focus itself,
+ * so the modality a screen reader announces has to be said out loud.
+ */
+it('announces itself as a modal dialog under the author\'s label, in both scopes', () => {
+  for (const scoped of [false, true]) {
+    const tree = <Dialog defaultOpen><DialogContent aria-label="Editor"><p>Body</p></DialogContent></Dialog>;
+    const view = render(scoped ? <ArtifactDialogScope>{tree}</ArtifactDialogScope> : tree);
+    expect(screen.getByRole('dialog', {name: 'Editor'})).toHaveAttribute('aria-modal', 'true');
+    view.unmount();
+  }
+});
+
+/**
+ * The documented example is a field, a submit and a Close written as siblings;
+ * in a block box they ran together on one line. An unstyled panel stacks them
+ * — `open:` keeps the UA's `display:none` on a closed dialog — and the form and
+ * fieldset step aside so their children are the ones stacked. A panel the
+ * author styled keeps exactly the flow it had.
+ */
+it('stacks the children of an unstyled panel, and leaves a styled one alone', () => {
+  const view = render(<Dialog defaultOpen><DialogContent aria-label="Plain" onSubmitMutation={async () => {}}><input aria-label="Name" /><button type="submit">Save</button></DialogContent></Dialog>);
+  const plain = screen.getByRole('dialog', {name: 'Plain'});
+  expect(plain.className.split(' ')).toEqual(expect.arrayContaining(['open:flex', 'flex-col', 'gap-4']));
+  expect(plain.querySelector('form')).toHaveClass('contents');
+  view.unmount();
+  render(<Dialog defaultOpen><DialogContent aria-label="Styled" className="p-0" onSubmitMutation={async () => {}}><input aria-label="Name" /></DialogContent></Dialog>);
+  const styled = screen.getByRole('dialog', {name: 'Styled'});
+  expect(styled).not.toHaveClass('open:flex');
+  expect(styled).not.toHaveClass('gap-4');
+  expect(styled.querySelector('form')).not.toHaveClass('contents');
+});
+
 /** The delegating trigger owns no focusable box of its own, so closing has to find the author's control. */
 it('returns focus to the Button inside a delegating trigger, not to the span around it', async () => {
   render(<Dialog><DialogTrigger wrapsControl><Button>Add task</Button></DialogTrigger><DialogContent aria-label="Add"><DialogClose>Cancel</DialogClose></DialogContent></Dialog>);

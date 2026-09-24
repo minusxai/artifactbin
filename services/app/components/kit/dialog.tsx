@@ -13,6 +13,17 @@ import {cn} from './cn';
  * scoped inline `style` (position/inset/margin/zIndex) is separate and untouched.
  */
 const DIALOG_CONTENT_CLASS = 'm-auto max-h-[calc(100svh-4rem)] w-fit max-w-[min(32rem,calc(100vw-2rem))] overflow-auto rounded-lg border border-border bg-background p-6 text-foreground shadow-lg';
+/**
+ * How an UNSTYLED panel lays out what the author put in it: one column.
+ *
+ * The documented shape — a field, a submit and a Close written as siblings —
+ * ran together on one line in a block box. `open:` keeps the UA's
+ * `display:none` on a closed dialog, and the form steps aside (`contents`, as
+ * its fieldset already does) so the author's children are the ones stacked.
+ * A panel the author styled keeps the flow it had: the same rule as the
+ * trigger's default look.
+ */
+const DIALOG_STACK_CLASS = 'open:flex flex-col gap-4';
 
 interface DialogState {
   open: boolean;
@@ -115,6 +126,7 @@ export function DialogContent({children, run, onSubmitMutation, unavailable, con
   const submitting = useRef(false);
   const [error, setError] = useState<string | null>(null);
   const open = context?.open ?? false;
+  const stacked = !props.className;
   useEffect(() => {
     const dialog = ref.current;
     if (!dialog) return;
@@ -135,8 +147,9 @@ export function DialogContent({children, run, onSubmitMutation, unavailable, con
   }, [open, context, artifactScoped]);
   return <>
   {artifactScoped && open && <div aria-hidden="true" data-artifact-dialog-backdrop="" style={{position:'fixed', inset:0, zIndex:2147482000, background:'rgb(0 0 0 / .45)'}} onClick={() => {if (!submitting.current) context?.setOpen(false);}} />}
-  <dialog {...props} ref={ref} tabIndex={props.tabIndex ?? -1}
-    className={cn(DIALOG_CONTENT_CLASS, props.className)}
+  {/* Modal in both scopes: an artifact dialog opens with show() and traps focus itself, so it says so. */}
+  <dialog aria-modal="true" {...props} ref={ref} tabIndex={props.tabIndex ?? -1}
+    className={cn(DIALOG_CONTENT_CLASS, stacked && DIALOG_STACK_CLASS, props.className)}
     style={artifactScoped ? {...props.style, position:'fixed', inset:0, margin:'auto', zIndex:2147482001} : props.style}
     onKeyDown={event => {
       props.onKeyDown?.(event);
@@ -154,7 +167,7 @@ export function DialogContent({children, run, onSubmitMutation, unavailable, con
     event.preventDefault();
     if (!submitting.current) context?.setOpen(false);
   }} onClose={() => {if (open && !submitting.current) context?.setOpen(false);}}>
-    {run || onSubmitMutation ? <form onSubmit={event => {
+    {run || onSubmitMutation ? <form className={stacked ? 'contents' : undefined} onSubmit={event => {
       event.preventDefault();
       if (submitting.current || unavailable || !onSubmitMutation || !event.currentTarget.reportValidity()) return;
       submitting.current = true;
