@@ -8,6 +8,7 @@
  */
 import esbuild from 'esbuild';
 import crypto from 'node:crypto';
+import { createRequire } from 'node:module';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -260,6 +261,20 @@ const ssrBuild = await esbuild.build({
   metafile: true,
 });
 
+/*
+ * MapLibre's CSP worker, served same-origin at /basemap/worker.js (app/basemap).
+ * maplibre-gl is a BUILD dependency — the production image installs runtime
+ * dependencies only — so the route cannot resolve it from node_modules at
+ * request time. It is copied beside the SSR bundle instead, into the gitignored
+ * lib/story-runtime/dist/ that the server image and `afbin serve` both ship.
+ */
+const workerOut = path.join(distDir, 'maplibre-gl-csp-worker.js');
+fs.copyFileSync(
+  createRequire(path.join(root, 'package.json')).resolve('maplibre-gl/dist/maplibre-gl-csp-worker.js'),
+  workerOut,
+);
+if (!fs.existsSync(workerOut)) throw new Error(`build-story-runtime: the MapLibre worker is not at ${workerOut}`);
+
 // Record what this build consumed and produced so a `--cache` run can decide
 // whether to skip. The INPUTS are the union of every esbuild metafile's own
 // module graph (exact — a new import lands because the file that added it
@@ -289,6 +304,7 @@ if (cache) {
   }
   const outputs = [
     'lib/story-runtime/dist/story-ssr.cjs',
+    'lib/story-runtime/dist/maplibre-gl-csp-worker.js',
     'public/story/manifest.json',
     ...[manifest.entry, manifest.anchor, manifest.comment, ...manifest.lazy].map((url) => `public${url}`),
     ...listFiles(path.join(root, 'public/libraries')).map((file) => path.relative(root, file)),
