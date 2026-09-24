@@ -97,7 +97,7 @@ const surfaceProps = (over: Partial<ArtifactSurfaceProps>): ArtifactSurfaceProps
   template: null,
   refs: [],
   version: 1,
-  content: '<p>hi</p>',
+  dataPreview: '<p>hi</p>',
   columns: [],
   compiledCss: null,
   theme: null,
@@ -316,7 +316,7 @@ describe('the surface header buttons are owner chrome', () => {
     const requests: string[] = [];
     vi.stubGlobal('fetch', vi.fn(async (url: string) => {
       requests.push(url);
-      if (url.endsWith('/events/frame')) return new Response(JSON.stringify({ editId: 'edit_2', version: 2, format: 'dataset', content: '[]', title: 'updated' }));
+      if (url.endsWith('/events/frame')) return new Response(JSON.stringify({ editId: 'edit_2', version: 2, format: 'dataset', dataPreview: '[]', title: 'updated' }));
       if (url === '/api/page/artifact/story1') return new Response(JSON.stringify({ surface: { version: 2, catalog: { ...initialCatalog, tables: initialCatalog.tables.map(t => ({ ...t, objectKey: 'v2', columns: [...t.columns, { name: 'added', type: 'string' }] })) } } }));
       return new Response(JSON.stringify({ rows: [{ value: latest === 1 ? 42 : 84, added: 'new column' }], columns: latest === 1 ? [{ name: 'value', type: 'number' }] : [{ name: 'value', type: 'number' }, { name: 'added', type: 'string' }], truncated: false, refreshedAt: '2026-09-06T10:00:00Z' }));
     }));
@@ -353,7 +353,7 @@ describe('the surface header buttons are owner chrome', () => {
   });
 
   it('dataset tier: the ref copy is for authors, not readers', () => {
-    const dataset = surfaceProps({ format: 'dataset', content: '[{"a":1}]', columns: [{ name: 'a', type: 'number' }] });
+    const dataset = surfaceProps({ format: 'dataset', dataPreview: '[{"a":1}]', columns: [{ name: 'a', type: 'number' }] });
     const reader = render(<ArtifactSurface {...dataset} />);
     expect(screen.queryByLabelText('Copy dataset reference')).not.toBeInTheDocument();
     reader.unmount();
@@ -616,7 +616,7 @@ describe('the fork row', () => {
     // Data artifacts expose the same action directly in their app bar.
     render(
       <ArtifactShell role="owner">
-        <ArtifactSurface {...surfaceProps({ format: 'dataset', content: '[]', columns: [] })} />
+        <ArtifactSurface {...surfaceProps({ format: 'dataset', dataPreview: '[]', columns: [] })} />
       </ArtifactShell>,
     );
     openDocumentControls();

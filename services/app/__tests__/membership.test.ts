@@ -18,7 +18,7 @@ async function world() {
   const eve = await createUser({ email: 'mxmx_test_members_eve@example.com' });
   const db = await getDb();
   for (const [user, username] of [[owner,'member_owner'],[bob,'member_bob'],[eve,'member_eve']] as const) await db.query('UPDATE users SET username=$2 WHERE id=$1',[user.id,username]);
-  await db.query("INSERT INTO artifacts(id,token_id,user_id,format,content,visibility,link_role) VALUES('a1B2c3','owner-token',$1,'markup','hello','public','commenter')",[owner.id]);
+  await db.query("INSERT INTO artifacts(id,token_id,user_id,format,visibility,link_role) VALUES('a1B2c3','owner-token',$1,'markup','public','commenter')",[owner.id]);
   return { db, owner, bob, eve, actor: (user: {id:string}) => ({ userId:user.id,tokenId:null }) };
 }
 it('joins an owner immediately; readers request and only an editor can approve', async () => {
@@ -68,7 +68,7 @@ it('caps outstanding requests across artefacts and frees slots on withdrawal', a
   const w=await world();
   for(let i=0;i<30;i++) {
     const id=`cap${String(i).padStart(3,'0')}`;
-    await w.db.query("INSERT INTO artifacts(id,token_id,user_id,format,content,visibility) VALUES($1,'owner-token',$2,'markup','x','public')",[id,w.owner.id]);
+    await w.db.query("INSERT INTO artifacts(id,token_id,user_id,format,visibility) VALUES($1,'owner-token',$2,'markup','public')",[id,w.owner.id]);
     await changeMembership(w.actor(w.bob),id,{action:'join'});
   }
   await expect(changeMembership(w.actor(w.bob),'a1B2c3',{action:'join'})).rejects.toThrow(/30/);
@@ -155,7 +155,7 @@ it('does not let a new artefact bypass a dismissed invitation',async()=>{
  const w=await world();
  await changeMembership(w.actor(w.owner),'a1B2c3',{action:'invite',usernames:['@member_bob']});
  await changeMembership(w.actor(w.bob),'a1B2c3',{action:'dismiss'});
- await w.db.query("INSERT INTO artifacts(id,token_id,user_id,format,content,visibility,link_role) VALUES('d4E5f6','owner-token',$1,'markup','hello','public','commenter')",[w.owner.id]);
+ await w.db.query("INSERT INTO artifacts(id,token_id,user_id,format,visibility,link_role) VALUES('d4E5f6','owner-token',$1,'markup','public','commenter')",[w.owner.id]);
  await expect(changeMembership(w.actor(w.owner),'d4E5f6',{action:'invite',usernames:['@member_bob']})).rejects.toThrow(/declined/);
 });
 

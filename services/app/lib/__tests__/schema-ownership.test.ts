@@ -62,3 +62,14 @@ it('custom domains belong to app accounts: one per account, one VERIFIED owner p
  expect(renderedSchema().schema).toMatch(/CREATE TABLE IF NOT EXISTS app\.custom_domains \([\s\S]*PRIMARY KEY \(user_id\)/);
  expect(renderedSchema().schema).toMatch(/CREATE UNIQUE INDEX IF NOT EXISTS idx_custom_domains_verified_host ON app\.custom_domains \(hostname\) WHERE status = 'verified'/);
 });
+
+
+it('artifact heads and archived versions store source without a content column', () => {
+  const sql = renderedSchema().schema;
+  for (const table of ['artifacts', 'artifact_versions']) {
+    const declaration = sql.split(`CREATE TABLE IF NOT EXISTS app.${table} (`)[1]?.split(');')[0];
+    expect(declaration).toBeDefined();
+    expect(declaration).not.toMatch(/\bcontent TEXT/);
+    expect(sql).toContain(`ALTER TABLE app.${table} DROP COLUMN IF EXISTS content`);
+  }
+});

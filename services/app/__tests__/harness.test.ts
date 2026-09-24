@@ -21,7 +21,7 @@ describe('one database per file, wiped before every test — in any order', () =
     const db = await sameInstance();
     for (const table of ['artifacts', 'tokens', 'users']) expect(await count(db, table), table).toBe('0');
     const t = await mintToken('a');
-    await createArtifact(t.id, null, { format: 'markup', content: '', source: '<div />', meta: {}, title: 'left behind', description: null });
+    await createArtifact(t.id, null, { format: 'markup', source: '<div />', meta: {}, title: 'left behind', description: null });
     await createUser({ email: 'mxmx_test_harness@example.com' });
     expect(await count(db, 'artifacts')).toBe('1');
   });

@@ -124,7 +124,6 @@ export interface ArtifactRow {
   title: string | null;
   description: string | null;
   format: ArtifactFormat;
-  content: string;
   source: string | null;
   meta: Record<string, unknown>;
   version: number;
@@ -329,14 +328,13 @@ async function namedRoleFor(
 // `link_role` is deliberately absent: SUMMARY_COLS does not select it, and a
 // listing is an index rather than a bulk read. The general-access role is read
 // through the sharing surface, where it is edited.
-export type ArtifactSummary = Omit<ArtifactRow, 'content' | 'source' | 'token_id' | 'user_id' | 'actor_user_id' | 'actor_token_id' | 'link_role' | 'forked_from' | 'deleted_at'>;
+export type ArtifactSummary = Omit<ArtifactRow, 'source' | 'token_id' | 'user_id' | 'actor_user_id' | 'actor_token_id' | 'link_role' | 'forked_from' | 'deleted_at'>;
 
 /** The stored representation of one artifact state (built by parseContentInput). */
 export interface ArtifactInput {
   title?: string | null;
   description?: string | null;
   format: ArtifactFormat;
-  content: string;
   source: string | null;
   meta: Record<string, unknown>;
   /** Absent on replace = keep the current value. */
@@ -494,7 +492,7 @@ async function insertArtifact(
   // not rows the forker wrote — so a user column's "must be the logged-in user"
   // rule is not re-judged under the forker's id: that would make every app
   // whose rows name its members unforkable by anyone but the one person named.
-  if (!atCreation.forkedFrom) await validateUserContent(tx,input,userId,key=>loadDatasetRows({content:"",meta:{objectKey:key}}));
+  if (!atCreation.forkedFrom) await validateUserContent(tx,input,userId,key=>loadDatasetRows({meta:{objectKey:key}}));
   const catalog=catalogOf(input);
   if(catalog?.kind==='postgres'&&catalog.connection)await claimPendingDatasetSecret(catalog.connection,{tokenId,userId},id,tx);
   const ownerKind = await userKindOf(userId, tx);
@@ -520,17 +518,17 @@ async function insertArtifact(
   // ordinary (if empty) base, not an unknown one. Data-modifying CTEs
   // always execute, so the log row lands even though nothing reads it.
   `WITH created AS (
-     INSERT INTO artifacts (id, token_id, user_id, title, description, format, content, source, meta, visibility, link_role, ancestor_ids, edit_id, access, forked_from, actor_user_id, actor_token_id, dataset_policy, policy_revision)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $3, $2, $17::jsonb, $18::int) RETURNING *
+     INSERT INTO artifacts (id, token_id, user_id, title, description, format, source, meta, visibility, link_role, ancestor_ids, edit_id, access, forked_from, actor_user_id, actor_token_id, dataset_policy, policy_revision)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $3, $2, $16::jsonb, $17::int) RETURNING *
    ), genesis AS (
      INSERT INTO artifact_edits (artifact_id, edit_id, splice_start, removed, inserted, span_start, span_end, actor_user_id, actor_token_id)
-     SELECT id, edit_id, 0, '', COALESCE(source, content), 0, 0, $3, $2 FROM created
+     SELECT id, edit_id, 0, '', COALESCE(source, ''), 0, 0, $3, $2 FROM created
    ), reserved AS (
      INSERT INTO artifact_source_ids (artifact_id, source_id, provenance, first_version)
-     SELECT $1, value #>> '{}', 'authored', 1 FROM jsonb_array_elements($16::jsonb)
+     SELECT $1, value #>> '{}', 'authored', 1 FROM jsonb_array_elements($15::jsonb)
    ), policy_audit AS (
      INSERT INTO dataset_policy_audit (dataset_id, revision, policy, actor_user_id, actor_token_id)
-     SELECT $1, $18::int, $17::jsonb, $3, $2 WHERE $17::jsonb IS NOT NULL
+     SELECT $1, $17::int, $16::jsonb, $3, $2 WHERE $16::jsonb IS NOT NULL
    )
    SELECT * FROM created`,
   [
@@ -540,7 +538,6 @@ async function insertArtifact(
     input.title ?? null,
     input.description ?? null,
     input.format,
-    input.content,
     input.source,
     JSON.stringify(input.meta),
     // Guest identities retain anonymous public defaults. Registered
@@ -786,7 +783,6 @@ async function deepFork(actor: TokenActor, source: ArtifactRow, overrides: ForkO
         format: 'dataset',
         // The same content and the same object key: dataset bytes are
         // content-addressed, so a copy of a million rows re-uploads nothing.
-        content: copy.row.content,
         source: copy.row.source,
         meta: copy.row.meta,
         // The copy is as reachable as the page that writes it — no more.
@@ -850,7 +846,7 @@ async function forkInput(
   if (source.format !== 'markup') {
     const refusal=postgresForkRefusal(source);
     if(refusal)return refusal;
-    return { ...carried, format: source.format, content: source.content, source: source.source, meta: source.meta };
+    return { ...carried, format: source.format, source: source.source, meta: source.meta };
   }
   const meta = source.meta as { theme?: string; template?: string; colorMode?: 'light' | 'dark' | null };
   // Publish the LIVE vocabulary, exactly as the wire echo does: a stored
@@ -930,9 +926,9 @@ interface VersionSummary {
 /** Archive the head as it stands — its author rides along, so history can say who. */
 async function archiveVersion(tx: Queryable, current: ArtifactRow): Promise<void> {
   await tx.query(
-    `INSERT INTO artifact_versions (artifact_id, version, title, description, format, content, source, meta, actor_user_id, actor_token_id)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
-    [current.id, current.version, current.title, current.description, current.format, current.content, current.source, JSON.stringify(current.meta), current.actor_user_id, current.actor_token_id],
+    `INSERT INTO artifact_versions (artifact_id, version, title, description, format, source, meta, actor_user_id, actor_token_id)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+    [current.id, current.version, current.title, current.description, current.format, current.source, JSON.stringify(current.meta), current.actor_user_id, current.actor_token_id],
   );
 }
 
@@ -1081,8 +1077,8 @@ async function getArtifactScoped(scope: Scope, id: string): Promise<ArtifactRow 
  * Callers must already hold the row inside `tx`.
  */
 async function logWholeDocumentWrite(tx: Queryable, before: ArtifactRow, after: ArtifactRow, nodeScoped=false): Promise<void> {
-  const oldText = before.source ?? before.content;
-  const newText = after.source ?? after.content;
+  const oldText = before.source ?? '';
+  const newText = after.source ?? '';
   const changes=nodeScoped&&before.format==='markup'&&after.format==='markup'?sourceChanges(oldText,newText):null;
   if(changes&&!changes.length)changes.push({splice:{start:0,removed:'',inserted:''},span:{start:0,end:0}});
   await tx.query(
@@ -1104,15 +1100,15 @@ export async function commitNormalizedMarkup(
   tx: Queryable,
   actor: TokenActor | null,
   current: ArtifactRow,
-  normalized: { source: string; content: string; meta: Record<string, unknown>; ids: readonly string[]; aliases?: readonly { legacyKey: string; nodeId: string; path: string }[]; title?: string | null; description?: string | null; format?: ArtifactFormat },
+  normalized: { source: string; meta: Record<string, unknown>; ids: readonly string[]; aliases?: readonly { legacyKey: string; nodeId: string; path: string }[]; title?: string | null; description?: string | null; format?: ArtifactFormat },
 ): Promise<ArtifactRow> {
   normalized = { ...normalized, meta: finalizeArtifactMetadata(normalized.format ?? current.format, normalized.source, normalized.meta) };
   await archiveVersion(tx, current);
   const editId = newEditId();
   const result = await tx.query<ArtifactRow>(
-    `UPDATE artifacts SET source=$2, content=$3, meta=$4::jsonb, title=$9, description=$10, format=$11, version=version+1, edit_id=$5,
-       actor_user_id=$6, actor_token_id=$7, updated_at=now() WHERE id=$1 AND edit_id=$8 RETURNING *`,
-    [current.id, normalized.source, normalized.content, JSON.stringify(normalized.meta), editId, ...(actor ? actorStamp(actor) : [null, null]), current.edit_id, normalized.title === undefined ? current.title : normalized.title, normalized.description === undefined ? current.description : normalized.description, normalized.format ?? current.format],
+    `UPDATE artifacts SET source=$2, meta=$3::jsonb, title=$8, description=$9, format=$10, version=version+1, edit_id=$4,
+       actor_user_id=$5, actor_token_id=$6, updated_at=now() WHERE id=$1 AND edit_id=$7 RETURNING *`,
+    [current.id, normalized.source, JSON.stringify(normalized.meta), editId, ...(actor ? actorStamp(actor) : [null, null]), current.edit_id, normalized.title === undefined ? current.title : normalized.title, normalized.description === undefined ? current.description : normalized.description, normalized.format ?? current.format],
   );
   const updated = result.rows[0];
   if (!updated) throw new Error('artifact changed after identity preparation');
@@ -1141,7 +1137,7 @@ export async function publishMarkupForArtifact(
   current: ArtifactRow,
   source: string,
   metaOverride: Record<string, unknown> = current.meta,
-): Promise<Response | { source: string; content: string; meta: Record<string, unknown>; ids: string[]; aliases: Array<{ legacyKey: string; nodeId: string; path: string }> }> {
+): Promise<Response | { source: string; meta: Record<string, unknown>; ids: string[]; aliases: Array<{ legacyKey: string; nodeId: string; path: string }> }> {
   const currentMeta = metaOverride as { theme?: unknown; template?: unknown; colorMode?: unknown };
   const context = {
     loadRef: refLoaderForActor(writerFor(current)),
@@ -1159,7 +1155,7 @@ export async function publishMarkupForArtifact(
     published = await publishJsx({ theme: currentMeta.theme ?? null, template: currentMeta.template ?? null, colorMode: currentMeta.colorMode ?? null }, identity.source, context);
     if (published instanceof Response) return published;
   }
-  return { source: published.source ?? '', content: published.content, meta: published.meta, ids: identity.ids, aliases: identity.aliases };
+  return { source: published.source ?? '', meta: published.meta, ids: identity.ids, aliases: identity.aliases };
 }
 
 async function listVersionsScoped(scope: Scope, id: string): Promise<VersionSummary[] | null> {
@@ -1176,7 +1172,6 @@ async function listVersionsScoped(scope: Scope, id: string): Promise<VersionSumm
 }
 
 interface VersionContent extends VersionSummary {
-  content: string;
   source: string | null;
   meta: Record<string, unknown>;
 }
@@ -1187,7 +1182,7 @@ async function getVersionScoped(scope: Scope, id: string, version: number): Prom
   const owned = await db.query(`SELECT 1 FROM artifacts WHERE id = $1 AND ${scope.where('$2')}`, [id, scope.val]);
   if (owned.rows.length === 0) return null;
   const r = await db.query<VersionContent>(
-    `SELECT v.version, v.title, v.description, v.format, v.content, v.source, v.meta, u.username AS by, v.created_at
+    `SELECT v.version, v.title, v.description, v.format, v.source, v.meta, u.username AS by, v.created_at
      FROM artifact_versions v LEFT JOIN users u ON u.id = v.actor_user_id
      WHERE v.artifact_id = $1 AND v.version = $2`,
     [id, version],
@@ -1241,7 +1236,7 @@ async function revertScoped(actor: TokenActor, id: string, version: number, opts
     return null;
   };
   const refusal = condition(initial); if (refusal) return {notArchived:true,refusal};
-  let target = (await db.query<ArtifactRow>('SELECT title,description,format,content,source,meta FROM artifact_versions WHERE artifact_id=$1 AND version=$2',[id,version])).rows[0];
+  let target = (await db.query<ArtifactRow>('SELECT title,description,format,source,meta FROM artifact_versions WHERE artifact_id=$1 AND version=$2',[id,version])).rows[0];
   if (!target) return {notArchived:true};
   const prepared = target.format === 'markup' ? await publishMarkupForArtifact(initial,target.source??'',target.meta) : null;
   if (prepared instanceof Response) return {notArchived:true,refusal:prepared};
@@ -1258,7 +1253,7 @@ async function revertScoped(actor: TokenActor, id: string, version: number, opts
     if(prepared) return commitNormalizedMarkup(tx,actor,current,{...prepared,title:target.title,description:target.description,format:target.format});
     if(target.format==='dataset'&&!catalogOf(target))return {notArchived:true,refusal:json({error:'dataset_error',details:['Historical dataset has no catalog or stored object key']},400)};
     target=retainUserScope(target,current);
-    try {await validateUserContent(tx,target,actor.userId,key=>loadDatasetRows({content:"",meta:{objectKey:key}}));}catch(error){if(error instanceof DatasetError)return {notArchived:true,refusal:json({error:"dataset_error",details:[error.message]},error.status)};throw error;}
+    try {await validateUserContent(tx,target,actor.userId,key=>loadDatasetRows({meta:{objectKey:key}}));}catch(error){if(error instanceof DatasetError)return {notArchived:true,refusal:json({error:"dataset_error",details:[error.message]},error.status)};throw error;}
     const targetCatalog=catalogOf(target);
     if(targetCatalog?.kind==='postgres'&&targetCatalog.connection){
       try{await resolveDatasetConnection(targetCatalog.connection,undefined,current.id,tx);}
@@ -1271,10 +1266,10 @@ async function revertScoped(actor: TokenActor, id: string, version: number, opts
     await archiveVersion(tx, current);
     const updated = await tx.query<ArtifactRow>(
       `UPDATE artifacts
-       SET title = $3, description = $4, format = $5, content = $6, source = $7, meta = $8, version = version + 1,
-           edit_id = $9, actor_user_id = $10, actor_token_id = $11, updated_at = now()
+       SET title = $3, description = $4, format = $5, source = $6, meta = $7, version = version + 1,
+           edit_id = $8, actor_user_id = $9, actor_token_id = $10, updated_at = now()
        WHERE id = $1 AND ${scope.where('$2')} RETURNING *`,
-      [id, scope.val, target.title, target.description, target.format, target.content, target.source, JSON.stringify(target.meta), newEditId(), ...actorStamp(actor)],
+      [id, scope.val, target.title, target.description, target.format, target.source, JSON.stringify(target.meta), newEditId(), ...actorStamp(actor)],
     );
     await logWholeDocumentWrite(tx, current, updated.rows[0]);
     if (updated.rows[0].format === 'markup' && updated.rows[0].source) {
@@ -1365,10 +1360,10 @@ async function replaceScoped(
      * are untouched by a replace: what was granted stays granted.
      */
     if (current.dataset_policy) {
-      try { validateDatasetPolicyForRow({format:input.format,meta:input.meta,content:input.content}, current.dataset_policy); }
+      try { validateDatasetPolicyForRow({format:input.format,meta:input.meta}, current.dataset_policy); }
       catch (error) { return json({error:'policy_mismatch',detail:error instanceof Error?error.message:'The dataset policy does not fit this replacement.'},400); }
     }
-    await validateUserContent(tx,input,actor.userId,key=>loadDatasetRows({content:"",meta:{objectKey:key}}));
+    await validateUserContent(tx,input,actor.userId,key=>loadDatasetRows({meta:{objectKey:key}}));
     const replacementCatalog=catalogOf(input);
     if(replacementCatalog?.kind==='postgres'&&replacementCatalog.connection)await resolveDatasetConnection(replacementCatalog.connection,undefined,current.id,tx);
 
@@ -1397,16 +1392,15 @@ async function replaceScoped(
 
     const updated = await tx.query<ArtifactRow>(
       `UPDATE artifacts
-       SET format = $3, content = $4, source = $5, meta = $6, title = $7, description = $8,
-           visibility = COALESCE($10, visibility), ancestor_ids = COALESCE($11::text[], ancestor_ids),
-           access = COALESCE($12, access), link_role = COALESCE($15, link_role),
-           version = version + 1, edit_id = $9, actor_user_id = $13, actor_token_id = $14, updated_at = now()
+       SET format = $3, source = $4, meta = $5, title = $6, description = $7,
+           visibility = COALESCE($9, visibility), ancestor_ids = COALESCE($10::text[], ancestor_ids),
+           access = COALESCE($11, access), link_role = COALESCE($14, link_role),
+           version = version + 1, edit_id = $8, actor_user_id = $12, actor_token_id = $13, updated_at = now()
        WHERE id = $1 AND ${scope.where('$2')} RETURNING *`,
       [
         id,
         scope.val,
         input.format,
-        input.content,
         replacementIdentity?.source ?? input.source,
         JSON.stringify(finalizeArtifactMetadata(input.format, replacementIdentity?.source ?? input.source, input.meta)),
         input.title !== undefined ? input.title : current.title,
@@ -1599,7 +1593,7 @@ export async function applyEditScoped(actor: TokenActor, id: string, input: Edit
     // here like every other change).
     if (!isDocumentFormat(head.format)) return { applied: false, reason: 'not_editable' };
 
-    // The document's truth is `source` (markup rows keep `content` empty).
+    // The document's truth is `source`.
     const headSource = head.source ?? '';
 
     // 1. Resolve the claimed base: head itself, or a still-logged ancestor.
@@ -1760,42 +1754,42 @@ export async function applyEditScoped(actor: TokenActor, id: string, input: Edit
     const freshEditId = newEditId();
     const commit = (queryable:Queryable) => queryable.query<ArtifactRow>(
       `WITH updated AS (
-         UPDATE artifacts SET content = $3, source = $4, meta = $5, version = version + 1,
-                edit_id = $6, title = $21, actor_user_id = $22, actor_token_id = $23, updated_at = now()
-         WHERE id = $1 AND ${scope.where('$2')} AND edit_id = $7 AND sharing_revision=$32
-           AND meta = $14::jsonb AND title IS NOT DISTINCT FROM $9 AND description IS NOT DISTINCT FROM $10
+         UPDATE artifacts SET source = $3, meta = $4, version = version + 1,
+                edit_id = $5, title = $19, actor_user_id = $20, actor_token_id = $21, updated_at = now()
+         WHERE id = $1 AND ${scope.where('$2')} AND edit_id = $6 AND sharing_revision=$30
+           AND meta = $12::jsonb AND title IS NOT DISTINCT FROM $8 AND description IS NOT DISTINCT FROM $9
          RETURNING *
        ), archived AS (
-         INSERT INTO artifact_versions (artifact_id, version, title, description, format, content, source, meta, actor_user_id, actor_token_id)
-         SELECT $1, $8, $9, $10, $11, $12, $13, $14::jsonb, $24, $25
+         INSERT INTO artifact_versions (artifact_id, version, title, description, format, source, meta, actor_user_id, actor_token_id)
+         SELECT $1, $7, $8, $9, $10, $11, $12::jsonb, $22, $23
          WHERE EXISTS (SELECT 1 FROM updated)
            -- Coalesce on ARCHIVING activity, not edit activity: the first edit
            -- after a quiet spell preserves the pre-edit state (including the
            -- created draft), and the rest of the burst rides on that snapshot.
            AND NOT EXISTS (
              SELECT 1 FROM artifact_versions
-             WHERE artifact_id = $1 AND created_at > now() - ($15::int * interval '1 millisecond')
+             WHERE artifact_id = $1 AND created_at > now() - ($13::int * interval '1 millisecond')
            )
          ON CONFLICT DO NOTHING
        ), moved_annotations AS (
          UPDATE annotations a SET anchor_key=x->'after'->>'anchor', range=x->'after'->>'range'
-         FROM jsonb_array_elements($30::jsonb) x
+         FROM jsonb_array_elements($28::jsonb) x
          WHERE a.artifact_id=$1 AND a.id=x->>'annotationId' AND a.root_id IS NULL AND a.deleted_at IS NULL
            AND a.anchor_key=x->'before'->>'anchor' AND a.range IS NOT DISTINCT FROM (x->'before'->>'range')
            AND EXISTS (SELECT 1 FROM updated)
          RETURNING a.id
        ), logged AS (
          INSERT INTO artifact_edits (artifact_id, edit_id, splice_start, removed, inserted, span_start, span_end, changes, actor_user_id, actor_token_id, annotation_changes)
-         SELECT id, $6, $16, $17, $18, $19, $20, $26::jsonb, $22, $23,
-           (SELECT jsonb_agg(receipt) FROM jsonb_array_elements($31::jsonb) receipt WHERE receipt->>'annotationId'='' OR receipt->>'annotationId' IN (SELECT id FROM moved_annotations)) FROM updated
-         RETURNING pg_notify('artifact_' || lower(artifact_id), $6)
+         SELECT id, $5, $14, $15, $16, $17, $18, $24::jsonb, $20, $21,
+           (SELECT jsonb_agg(receipt) FROM jsonb_array_elements($29::jsonb) receipt WHERE receipt->>'annotationId'='' OR receipt->>'annotationId' IN (SELECT id FROM moved_annotations)) FROM updated
+         RETURNING pg_notify('artifact_' || lower(artifact_id), $5)
        ), reserved_ids AS (
          INSERT INTO artifact_source_ids (artifact_id, source_id, provenance, first_version)
-         SELECT $1, value #>> '{}', 'authored', $8 + 1 FROM jsonb_array_elements($27::jsonb)
+         SELECT $1, value #>> '{}', 'authored', $7 + 1 FROM jsonb_array_elements($25::jsonb)
          WHERE EXISTS (SELECT 1 FROM updated) ON CONFLICT DO NOTHING
        ), aliases AS (
          INSERT INTO artifact_node_aliases (artifact_id, legacy_key, source_id, source_path, created_version)
-         SELECT $1, x->>'legacyKey', x->>'nodeId', x->>'path', $8 + 1 FROM jsonb_array_elements($28::jsonb) x
+         SELECT $1, x->>'legacyKey', x->>'nodeId', x->>'path', $7 + 1 FROM jsonb_array_elements($26::jsonb) x
          WHERE EXISTS (SELECT 1 FROM updated) ON CONFLICT (artifact_id, legacy_key) DO NOTHING
          RETURNING legacy_key,source_id
        ), migrated_annotations AS (
@@ -1803,18 +1797,18 @@ export async function applyEditScoped(actor: TokenActor, id: string, input: Edit
          FROM aliases x
          WHERE a.artifact_id = $1 AND a.anchor_key = x.legacy_key AND EXISTS (SELECT 1 FROM updated)
        ), active_ids AS (
-         UPDATE artifact_source_ids SET retired_version=NULL WHERE artifact_id=$1 AND source_id=ANY($29::text[])
+         UPDATE artifact_source_ids SET retired_version=NULL WHERE artifact_id=$1 AND source_id=ANY($27::text[])
            AND EXISTS (SELECT 1 FROM updated)
        ), retired_ids AS (
-         UPDATE artifact_source_ids SET retired_version=$8+1
-         WHERE artifact_id=$1 AND retired_version IS NULL AND NOT (source_id=ANY($29::text[]))
+         UPDATE artifact_source_ids SET retired_version=$7+1
+         WHERE artifact_id=$1 AND retired_version IS NULL AND NOT (source_id=ANY($27::text[]))
            AND EXISTS (SELECT 1 FROM updated)
        )
        SELECT u.* FROM updated u WHERE EXISTS (SELECT 1 FROM logged)`,
       [
         id, scope.val,
-        published.content, storedText, JSON.stringify(finalizeArtifactMetadata('markup', storedText, published.meta)), freshEditId, head.edit_id,
-        head.version, head.title, head.description, head.format, head.content, head.source, JSON.stringify(head.meta),
+        storedText, JSON.stringify(finalizeArtifactMetadata('markup', storedText, published.meta)), freshEditId, head.edit_id,
+        head.version, head.title, head.description, head.format, head.source, JSON.stringify(head.meta),
         EDIT_SNAPSHOT_WINDOW_MS,
         storedSplice.start, storedSplice.removed, storedSplice.inserted, storedSpan.start, storedSpan.end,
         input.meta?.title !== undefined ? input.meta.title : head.title,
@@ -2290,7 +2284,7 @@ function rowToResolvedRef(row: ArtifactRow, owned = false): ResolvedRef {
     // A folder's shape is FIXED and computed, never stored — the publish door
     // and the dry run both need it to judge a <Query> over `ref_<folderId>`.
     ...(row.format === 'folder' ? { columns: CHILDREN_COLUMNS, query: (sql: string, params: Record<string, Scalar>) => queryRows({columns: CHILDREN_COLUMNS, rows: []}, sql, params) } : {}),
-    ...(row.format === 'viz' ? { recipe: JSON.parse(row.content) } : {}),
+    ...(row.format === 'viz' ? { recipe: JSON.parse(row.source ?? '') } : {}),
   };
 }
 
@@ -2828,9 +2822,8 @@ async function runDeclaredDataflow(flow: Dataflow, resolve: DatasetResolver, opt
       if(!table.catalog)return table;
       if(table.catalog.kind!=='stored')return undefined;
       const stored=table.catalog.tables.find(t=>t.schema==='public'&&t.name==='rows');
-      if(stored?.legacyContent)return {rows:await loadDatasetRows({content:stored.legacyContent,meta:{}}),columns:stored.columns};
       if(!stored?.objectKey||stored.sql||stored.source||stored.modelCellId)return undefined;
-      return {rows:await loadDatasetRows({content:'',meta:{objectKey:stored.objectKey}}),columns:stored.columns};
+      return {rows:await loadDatasetRows({meta:{objectKey:stored.objectKey}}),columns:stored.columns};
     },
     sourceQuery:async(q,values,page)=>{
       const table = datasets[q.source!] as RefTable | undefined;
@@ -2909,7 +2902,7 @@ export async function refDataForRow(
     const r = await referencedArtifactForRow(row, ref.id);
     if (!r) continue; // deleted ref → the embed degrades to its fallback
     if (r.format === 'viz') {
-      try { out[r.id] = { kind: 'viz', recipe: JSON.parse(r.content) }; } catch { /* skip */ }
+      try { out[r.id] = { kind: 'viz', recipe: JSON.parse(r.source ?? '') }; } catch { /* skip */ }
     } else if (r.format === 'image') {
       out[r.id] = imageRefData(r,opts.capture);
     } else if (r.format === 'file') {

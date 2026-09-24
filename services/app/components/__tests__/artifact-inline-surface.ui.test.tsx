@@ -96,7 +96,7 @@ describe('adopting a new version into the live surface', () => {
  let served:ArtifactLiveEvent;
  function version(source:string,over:Partial<ArtifactLiveEvent>={}):ArtifactLiveEvent{
   const parsed=parseJsx(source);if(!parsed.ok)throw Error(parsed.error);
-  return {editId:'edit_2',version:2,format:'markup',title:'Document',source,content:null,theme:null,colorMode:null,template:null,nodes:parsed.nodes,...over} as ArtifactLiveEvent;
+  return {editId:'edit_2',version:2,format:'markup',title:'Document',source,dataPreview:null,theme:null,colorMode:null,template:null,nodes:parsed.nodes,...over} as ArtifactLiveEvent;
  }
  beforeEach(()=>{setupSurface();vi.stubGlobal('fetch',vi.fn(async(url:string)=>{
   if(String(url).endsWith('/events/frame'))return new Response(JSON.stringify(served));
@@ -167,7 +167,7 @@ describe('the artifact viewport boundary', () => {
  const footerProps: ArtifactSurfaceProps = {
   id: 'story1', editId: 'edit_1', format: 'dataset', title: 'doc',
   source: null, template: null, refs: [], version: 1,
-  content: '<p>hi</p>', columns: [], compiledCss: null, theme: null, colorMode: null,
+  dataPreview: '<p>hi</p>', columns: [], compiledCss: null, theme: null, colorMode: null,
  };
 
  beforeEach(() => {

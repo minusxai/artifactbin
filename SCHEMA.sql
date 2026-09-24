@@ -460,7 +460,6 @@ CREATE TABLE IF NOT EXISTS app.artifacts (
   title TEXT,
   description TEXT,
   format TEXT NOT NULL DEFAULT 'markup',
-  content TEXT NOT NULL,
   source TEXT,
   meta JSONB NOT NULL DEFAULT '{}',
   version INTEGER NOT NULL DEFAULT 1,
@@ -500,8 +499,6 @@ ALTER TABLE app.artifacts ADD COLUMN IF NOT EXISTS description TEXT;
 
 ALTER TABLE app.artifacts ADD COLUMN IF NOT EXISTS format TEXT NOT NULL DEFAULT 'markup';
 
-ALTER TABLE app.artifacts ADD COLUMN IF NOT EXISTS content TEXT NOT NULL;
-
 ALTER TABLE app.artifacts ADD COLUMN IF NOT EXISTS source TEXT;
 
 ALTER TABLE app.artifacts ADD COLUMN IF NOT EXISTS meta JSONB NOT NULL DEFAULT '{}';
@@ -524,6 +521,8 @@ ALTER TABLE app.artifacts ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ;
 
 ALTER TABLE app.artifacts DROP COLUMN IF EXISTS folder;
 
+ALTER TABLE app.artifacts DROP COLUMN IF EXISTS content;
+
 CREATE INDEX IF NOT EXISTS idx_artifacts_token_updated ON app.artifacts (token_id, updated_at DESC);
 
 CREATE INDEX IF NOT EXISTS idx_artifacts_ancestors ON app.artifacts USING gin (ancestor_ids);
@@ -538,7 +537,6 @@ CREATE TABLE IF NOT EXISTS app.artifact_versions (
   title TEXT,
   description TEXT,
   format TEXT NOT NULL DEFAULT 'markup',
-  content TEXT NOT NULL,
   source TEXT,
   meta JSONB NOT NULL DEFAULT '{}',
   actor_user_id TEXT,
@@ -557,8 +555,6 @@ ALTER TABLE app.artifact_versions ADD COLUMN IF NOT EXISTS description TEXT;
 
 ALTER TABLE app.artifact_versions ADD COLUMN IF NOT EXISTS format TEXT NOT NULL DEFAULT 'markup';
 
-ALTER TABLE app.artifact_versions ADD COLUMN IF NOT EXISTS content TEXT NOT NULL;
-
 ALTER TABLE app.artifact_versions ADD COLUMN IF NOT EXISTS source TEXT;
 
 ALTER TABLE app.artifact_versions ADD COLUMN IF NOT EXISTS meta JSONB NOT NULL DEFAULT '{}';
@@ -568,6 +564,8 @@ ALTER TABLE app.artifact_versions ADD COLUMN IF NOT EXISTS actor_user_id TEXT;
 ALTER TABLE app.artifact_versions ADD COLUMN IF NOT EXISTS actor_token_id TEXT;
 
 ALTER TABLE app.artifact_versions ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT now();
+
+ALTER TABLE app.artifact_versions DROP COLUMN IF EXISTS content;
 
 CREATE TABLE IF NOT EXISTS app.artifact_edits (
   seq BIGSERIAL NOT NULL,

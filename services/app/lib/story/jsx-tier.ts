@@ -7,7 +7,6 @@
  * at publish time (classes used ∪ recipe union, all six theme token blocks —
  * theme switching is a `data-theme` attribute flip, never a recompile). The
  * the page at /a/<id> renders the source with the ported interpreter;
- * `content` stays empty for this tier.
  *
  * (The file keeps its jsx-* name because JSX is the SYNTAX; the stored and
  * wire format is `markup`.)
@@ -198,7 +197,6 @@ export async function prepareJsx(body: Record<string, unknown>, sourceIn: string
 
   const content: StoredContent = {
     format: 'markup',
-    content: '',
     source: sanitized,
     meta: {
       format: 'markup',

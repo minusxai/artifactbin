@@ -128,7 +128,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
     }
 
     case 'viz':
-      return new Response(artifact.content, {
+      return new Response(artifact.source ?? '', {
         status: 200,
         headers: { 'Content-Type': 'application/json; charset=utf-8', ...COMMON },
       });

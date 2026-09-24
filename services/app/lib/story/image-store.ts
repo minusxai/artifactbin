@@ -1,10 +1,10 @@
 /**
  * Where image BYTES actually live — the exact shape of lib/story/dataset-store.
  *
- * Not in `artifacts.content` as a base64 `data:` URL: that is ~33% larger than
+ * Image bytes live in object storage; a base64 `data:` URL is ~33% larger than
  * the bytes, lives in a TEXT column read on every render, and is capped by the
  * JSON-body limit. So the bytes go to the object store and the row keeps a
- * reference (`meta.objectKey`); `content` stays empty. Both directions live
+ * reference (`meta.objectKey`). Both directions live
  * here so no caller has to know where an image's bytes are.
  */
 import { objectKey, objectStore } from '@/lib/object-store';
@@ -75,7 +75,7 @@ interface LoadImageOptions {
  * than throwing when the object is gone: a missing image is a not-found, not a
  * server error.
  */
-export async function loadImage(row: { content?: string; meta: unknown }, opts: LoadImageOptions = {}): Promise<StoredImage | null> {
+export async function loadImage(row: { meta: unknown }, opts: LoadImageOptions = {}): Promise<StoredImage | null> {
   const meta = row.meta as {
     objectKey?: unknown; contentType?: unknown; smallObjectKey?: unknown; smallWidth?: unknown;
   } | null;
@@ -84,12 +84,7 @@ export async function loadImage(row: { content?: string; meta: unknown }, opts: 
     return { body: await objectStore().get(meta.smallObjectKey), contentType: VARIANT_CONTENT_TYPE };
   }
   if (typeof meta?.objectKey !== 'string' || !meta.objectKey) {
-    // Legacy: image rows written before the object store kept the bytes inline
-    // as a base64 data: URL in `content`. Serve those rather than 404 — a
-    // broken image is far more visible than an empty chart, and re-publishing
-    // every old row is not a precondition for deploying this.
-    const m = /^data:([^;]+);base64,(.*)$/.exec(row.content ?? '');
-    return m ? { body: Buffer.from(m[2], 'base64'), contentType: m[1] } : null;
+    return null;
   }
 const body = await objectStore().get(meta.objectKey);
   return {

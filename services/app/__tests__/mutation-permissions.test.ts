@@ -56,7 +56,7 @@ it('refuses a save when the share is revoked while its SQL is running',async()=>
  const f=await fixture();await f.share(f.ds,'editor');
  const db=await getDb();const original=db.query.bind(db);let revoked=false;
  const spy=vi.spyOn(db,'query').mockImplementation(async(sql:string,values?:unknown[])=>{
-   if(!revoked && sql.includes('WITH updated AS') && sql.includes('actor_user_id = $13')){
+   if(!revoked && sql.includes('WITH updated AS') && sql.includes('actor_user_id = $12')){
      revoked=true;await original('DELETE FROM artifact_shares WHERE artifact_id = $1',[f.ds]);
    }
    return original(sql,values);

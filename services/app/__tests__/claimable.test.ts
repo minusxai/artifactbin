@@ -46,7 +46,7 @@ const claimableResponse = async (tokenIds: string[]) => {
 
 /** Publish an artifact owned by `tokenId`, unclaimed. */
 const publish = (tokenId: string, title: string) =>
-  createArtifact(tokenId, null, { format: 'markup', content: '', source: '<div />', meta: {}, title, description: null });
+  createArtifact(tokenId, null, { format: 'markup', source: '<div />', meta: {}, title, description: null });
 
 let user: { id: string };
 

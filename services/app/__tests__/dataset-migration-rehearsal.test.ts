@@ -31,8 +31,8 @@ it('rehearses dry-run, apply, joined query execution and reverting migrated hist
   await db.query('UPDATE artifacts SET source=$2 WHERE id=$1',[doc.id,legacySource]);
   // Seed the exact pre-cutover storage shape, retaining a real published source.
   await db.query("UPDATE artifacts SET meta=meta-'catalog' WHERE id=ANY($1::text[])", [[orders.id, labels.id]]);
-  await db.query(`INSERT INTO artifact_versions (artifact_id,version,title,description,format,content,source,meta)
-    SELECT id,version,title,description,format,content,source,meta FROM artifacts WHERE id=$1`, [doc.id]);
+  await db.query(`INSERT INTO artifact_versions (artifact_id,version,title,description,format,source,meta)
+    SELECT id,version,title,description,format,source,meta FROM artifacts WHERE id=$1`, [doc.id]);
   await db.query("UPDATE artifacts SET version=2,source=replace(source,'Original','Current') WHERE id=$1", [doc.id]);
   const before = (await db.query<{ source: string; edit_id: string }>('SELECT source,edit_id FROM artifacts WHERE id=$1', [doc.id])).rows[0];
   const runQuery = async () => {

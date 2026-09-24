@@ -9,8 +9,6 @@ export interface DatasetTable {
   source?: { schema: string; table: string };
   sql?: string;
   objectKey?: string;
-  /** Read-time legacy adapter only; migration persists these bytes to object storage. */
-  legacyContent?: string;
   modelCellId?: string;
 }
 /** Connection configuration belongs to the dataset; only this ID names a secret. */

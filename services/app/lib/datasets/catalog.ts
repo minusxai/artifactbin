@@ -19,11 +19,11 @@ import {catalogFromMetadata} from './catalog-metadata';
 const shape=catalogInputShape;
 
 /** Transitional legacy normalization stays at this boundary until catalog migration is complete. */
-export function catalogOf(row:{meta:unknown;content?:string}):DatasetCatalog|null {
- return catalogFromMetadata(row.meta,row.content);
+export function catalogOf(row:{meta:unknown}):DatasetCatalog|null {
+ return catalogFromMetadata(row.meta);
 }
 /** Reader-safe catalog: public relations only, never connection or notebook internals. */
-export function publicCatalogOf(row:{meta:unknown;content?:string}):DatasetCatalog|null {
+export function publicCatalogOf(row:{meta:unknown}):DatasetCatalog|null {
  const catalog=catalogOf(row);if(!catalog)return null;
  return {kind:catalog.kind,defaultSchema:catalog.defaultSchema,refreshSeconds:catalog.refreshSeconds,tables:catalog.tables.map(({schema,name,columns})=>({schema,name,columns}))};
 }
@@ -48,7 +48,7 @@ export async function prepareCatalog(input:unknown,actor:TokenActor,previous?:Ar
    const tables:DatasetTable[]=definition.tables.map(table=>{if(table.modelCellId){const columns=outputs.get(table.modelCellId);if(!columns)throw new DatasetError(`Unknown model cell: ${table.modelCellId}`);const selected=(table.columns??[]).map(name=>{const column=columns.find(item=>item.name===name);if(!column)throw new DatasetError(`Model column is unavailable: ${table.schema}.${table.name}.${name}`);return column;});return {schema:table.schema,name:table.name,modelCellId:table.modelCellId,columns:selected};}if(!table.source||!table.columns)throw new DatasetError('A whitelisted table requires a source and columns');const source=discovered.find(item=>item.schema===table.source!.schema&&item.name===table.source!.table);const columns=table.columns.map(name=>{const column=source?.columns.find(item=>item.name===name);if(!column)throw new DatasetError(`Source column is unavailable: ${table.schema}.${table.name}.${name}`);return column;});return {schema:table.schema,name:table.name,source:table.source,columns};});
    const catalog:DatasetCatalog={kind:'postgres',connection,notebook,notebookSources:discovered,defaultSchema,refreshSeconds:definition.refreshSeconds??60,tables};
    const canonical=serializeDatasetDefinition({...definition,connection,defaultSchema:catalog.defaultSchema,refreshSeconds:catalog.refreshSeconds});
-   return {format:'dataset',source:canonical,content:'',derivedTitle:null,meta:{catalog,columns:[]}};
+   return {format:'dataset',source:canonical,derivedTitle:null,meta:{catalog,columns:[]}};
   }
   const parsed=shape.safeParse(authored);if(!parsed.success)throw new DatasetError(parsed.error.issues.map(i=>`${i.path.join('.')}: ${i.message}`).join('; '));
   const data={...parsed.data,defaultSchema:parsed.data.defaultSchema??'public',refreshSeconds:parsed.data.refreshSeconds??60};const seen=new Set<string>();for(const t of data.tables){if(seen.has(key(t)))throw new DatasetError('Table names must be unique within a schema');seen.add(key(t));}
@@ -85,9 +85,9 @@ export async function prepareCatalog(input:unknown,actor:TokenActor,previous?:Ar
   }
   // Keep the original single-table alias pinned to public.rows; adding tables never rebinds it.
   const legacy=tables.find(t=>t.schema==='public'&&t.name==='rows'&&t.objectKey);
-  return {format:'dataset',source:serializeDatasetDefinition(data),content:'',derivedTitle:null,meta:{catalog,...(legacy?{objectKey:legacy.objectKey,columns:legacy.columns}:{}),columns:legacy?.columns??[]}};
+  return {format:'dataset',source:serializeDatasetDefinition(data),derivedTitle:null,meta:{catalog,...(legacy?{objectKey:legacy.objectKey,columns:legacy.columns}:{}),columns:legacy?.columns??[]}};
  }catch(error){return json({error:'invalid_dataset',details:[error instanceof Error?error.message:'Dataset validation failed']},error instanceof DatasetError?error.status:400);}
 }
 export async function storedTables(catalog:DatasetCatalog,objects?:Pick<ContentObjects,'get'>):Promise<Record<string,{rows:Record<string,unknown>[];columns:DatasetTable['columns']}>> {
- return Object.fromEntries(await Promise.all(catalog.tables.map(async(t,i)=>[ `dataset_table_${i}`,{rows:t.legacyContent?JSON.parse(t.legacyContent):t.objectKey?(objects?JSON.parse((await objects.get(t.objectKey)).toString('utf8')):await loadDatasetRows({content:'',meta:{objectKey:t.objectKey}})):[],columns:t.columns}] as const)));
+ return Object.fromEntries(await Promise.all(catalog.tables.map(async(t,i)=>[ `dataset_table_${i}`,{rows:t.objectKey?(objects?JSON.parse((await objects.get(t.objectKey)).toString('utf8')):await loadDatasetRows({meta:{objectKey:t.objectKey}})):[],columns:t.columns}] as const)));
 }

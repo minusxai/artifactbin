@@ -177,7 +177,6 @@ const ARTIFACTS: Table = {
     { name: 'title', type: 'TEXT' },
     { name: 'description', type: 'TEXT' },
     { name: 'format', type: 'TEXT', notNull: true, default: "'markup'" }, // ArtifactFormat (lib/story/input.ts); no CHECK on purpose
-    { name: 'content', type: 'TEXT', notNull: true }, // what /a/<id> serves (rendered, for stories)
     { name: 'source', type: 'TEXT' }, // story markup for round-trip editing; NULL in html mode
     { name: 'meta', type: 'JSONB', notNull: true, default: "'{}'" }, // stories: {theme}
     { name: 'version', type: 'INTEGER', notNull: true, default: '1' },
@@ -224,7 +223,7 @@ const ARTIFACTS: Table = {
   // `folder` was a materialized PATH of names ('2026/08/reports'). Placement is
   // `ancestor_ids` now — ids, so two sibling folders may share a name and a
   // rename breaks nothing — and the old column is dead data, dropped on boot.
-  dropped: ['folder'],
+  dropped: ['folder', 'content'],
 };
 
 // Append-only; a row is the state BEFORE a PUT replaced it.
@@ -236,7 +235,6 @@ const ARTIFACT_VERSIONS: Table = {
     { name: 'title', type: 'TEXT' },
     { name: 'description', type: 'TEXT' },
     { name: 'format', type: 'TEXT', notNull: true, default: "'markup'" },
-    { name: 'content', type: 'TEXT', notNull: true },
     { name: 'source', type: 'TEXT' },
     { name: 'meta', type: 'JSONB', notNull: true, default: "'{}'" },
     // Who produced THIS state (artifacts.actor_* at the moment it was archived).
@@ -245,6 +243,7 @@ const ARTIFACT_VERSIONS: Table = {
     { name: 'created_at', type: 'TIMESTAMPTZ', notNull: true, default: 'now()' },
   ],
   primaryKey: ['artifact_id', 'version'],
+  dropped: ['content'],
 };
 
 // Append-only edit log (concurrent-edits protocol). A row records one accepted

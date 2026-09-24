@@ -52,7 +52,7 @@ describe('node project through real routes',()=>{
   });
   it('refuses malformed markup at direct storage instead of bypassing identity validation',async()=>{
     const t=await mintToken('invalid-direct-create');
-    await expect(createArtifact(t.id,null,{format:'markup',content:'',source:'<main>',meta:{}})).rejects.toThrow('node-ids: invalid JSX');
+    await expect(createArtifact(t.id,null,{format:'markup',source:'<main>',meta:{}})).rejects.toThrow('node-ids: invalid JSX');
     const db=await getDb();
     expect((await db.query('SELECT id FROM artifacts WHERE token_id=$1',[t.id])).rows).toHaveLength(0);
   });
@@ -118,14 +118,14 @@ describe('node project through real routes',()=>{
   });
   it('stamps direct storage creation rather than relying on an HTTP wire',async()=>{
     const t=await mintToken('direct-create');
-    const row=await createArtifact(t.id,null,{format:'markup',content:'',source:'<main><p>Direct</p></main>',meta:{}});
+    const row=await createArtifact(t.id,null,{format:'markup',source:'<main><p>Direct</p></main>',meta:{}});
     const ids=bodyIds(row.source!);expect(ids).toHaveLength(2);expect(ids.every(Boolean)).toBe(true);
   });
   it('normalizes and reserves identities when reverting a pre-identity archive',async()=>{
     const s=await setup('<main id="root"><p id="current">Current</p></main>');const db=await getDb();
     await db.query('UPDATE artifacts SET version=2 WHERE id=$1',[s.doc.id]);
-    await db.query(`INSERT INTO artifact_versions(artifact_id,version,title,description,format,content,source,meta)
-      VALUES($1,1,'old',NULL,'markup','',$2,$3)`,[s.doc.id,'<main><p>Archived</p></main>',JSON.stringify({theme:'modernist',template:null,colorMode:'light'})]);
+    await db.query(`INSERT INTO artifact_versions(artifact_id,version,title,description,format,source,meta)
+      VALUES($1,1,'old',NULL,'markup',$2,$3)`,[s.doc.id,'<main><p>Archived</p></main>',JSON.stringify({theme:'modernist',template:null,colorMode:'light'})]);
     const response=await revertRoute(await observedRequest(`/api/artifacts/${s.doc.id}/revert`,{method:'POST',token:s.t.token,json:{version:1}}),params(s.doc.id));
     expect(response.status,await response.clone().text()).toBe(200);
     const head=await s.read();const ids=bodyIds(head.markup) as string[];expect(ids).toHaveLength(2);expect(ids.every(Boolean)).toBe(true);
@@ -136,7 +136,7 @@ describe('node project through real routes',()=>{
   });
   it('a refused archived publish leaves head and history unchanged',async()=>{
     const s=await setup('<p id="safe">Safe</p>');const db=await getDb();await db.query('UPDATE artifacts SET version=2 WHERE id=$1',[s.doc.id]);
-    await db.query(`INSERT INTO artifact_versions(artifact_id,version,title,format,content,source,meta) VALUES($1,1,'bad','markup','',$2,'{}')`,[s.doc.id,'<p id="bad" style="color:red">Bad</p>']);
+    await db.query(`INSERT INTO artifact_versions(artifact_id,version,title,format,source,meta) VALUES($1,1,'bad','markup',$2,'{}')`,[s.doc.id,'<p id="bad" style="color:red">Bad</p>']);
     const before=await history(s.doc.id);const head=await s.read();
     const response=await revertRoute(await observedRequest(`/api/artifacts/${s.doc.id}/revert`,{method:'POST',token:s.t.token,json:{version:1}}),params(s.doc.id));
     expect(response.status).toBe(400);expect((await response.json()).error).toBe('invalid_jsx');

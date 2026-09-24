@@ -111,7 +111,6 @@ it('cannot evade active policy through ordinary file replacement', async () => {
   const editor = { tokenId: f.token.id, userId: f.user.id };
   const refused = await replaceArtifactFor(editor, f.ds, {
     format: 'dataset',
-    content: '',
     source: null,
     meta: row.meta,
   });
@@ -244,7 +243,7 @@ it('rechecks dataset sharing inside the commit even after successful execution',
       if (
         !revoked &&
         sql.includes('WITH updated AS') &&
-        sql.includes('actor_user_id = $13')
+        sql.includes('actor_user_id = $12')
       ) {
         revoked = true;
         await original('DELETE FROM artifact_shares WHERE artifact_id=$1', [

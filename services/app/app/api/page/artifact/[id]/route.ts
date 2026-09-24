@@ -115,7 +115,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
   const viewerId = actor.viewer?.userId ?? null;
   // Independent reads begin only after ACL admission. These values belong to
   // this request; no identity or permission answer is retained across requests.
-  const [author, forkedFrom, compiledCss, refData, assetUrls, liked, likeCount, following, followCount, openAnnotations, content] = await Promise.all([
+  const [author, forkedFrom, compiledCss, refData, assetUrls, liked, likeCount, following, followCount, openAnnotations, dataPreview] = await Promise.all([
     // The author's row, once: the handle (byline, canonical) and their face.
     artifact.user_id ? getUserById(artifact.user_id) : Promise.resolve(null), forkedFromCredit(artifact.forked_from),
     isDoc ? currentStoryCss(meta, row.source) : Promise.resolve(meta.compiledCss ?? null),
@@ -126,7 +126,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
     artifact.user_id && artifact.user_id !== viewerId && viewerId ? has(viewerId, 'follow', artifact.user_id) : Promise.resolve(false),
     artifact.user_id && artifact.user_id !== viewerId ? count('follow', artifact.user_id) : Promise.resolve(0),
     canAnnotate(role) && isDoc ? countOpenAnnotations(artifact.id) : Promise.resolve(0),
-    artifact.format === 'dataset' ? loadDatasetRows(artifact).then(rows => JSON.stringify(rows)) : Promise.resolve(isDoc ? '' : row.content),
+    artifact.format === 'dataset' ? loadDatasetRows(artifact).then(rows => JSON.stringify(rows)) : Promise.resolve(isDoc ? '' : (artifact.format === 'viz' ? artifact.source ?? '' : '')),
   ]);
   const authorUsername = author?.username ?? null;
   const declared = isDoc && row.source ? declarationsForRow(row) : null;
@@ -177,7 +177,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
       author: { username: authorUsername, id: author?.id ?? null, image: author ? avatarUrl(author) : null, forkedFrom },
       ...(runtime ? { runtime } : {}),
       source: artifact.format==='dataset'&&role!=='owner'&&role!=='editor'?null:row.source,
-      content,
+      dataPreview,
       columns: meta.columns ?? [],
       ...(artifact.format==='dataset' && (artifact.meta as Record<string,unknown>).catalog ? {catalog:publicCatalogOf(artifact)!}:{}),
       // A stored FILE is not a document the app can render, so its view is the

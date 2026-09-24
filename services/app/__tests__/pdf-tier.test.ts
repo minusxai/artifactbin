@@ -85,7 +85,7 @@ describe('a PDF as a data: URL', () => {
     expect(row.format).toBe('pdf');
     // `content` stays empty: the bytes live in the object store, like every
     // other tier that is measured in megabytes.
-    expect(row.content).toBe('');
+    expect(row).not.toHaveProperty('content');
     const meta = row.meta as { objectKey: string; bytes: number; pages?: number; contentType: string };
     expect(meta.contentType).toBe('application/pdf');
     expect(meta.bytes).toBe(samplePdf(3).byteLength);

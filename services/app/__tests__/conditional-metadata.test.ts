@@ -25,7 +25,7 @@ it('serializes metadata writers against observed state without creating a conten
 it('refuses a whole replacement after a metadata-only change, even when version is unchanged',async()=>{
  const {actor,row}=await document();
  await setMetadataFor(actor,row.id,{title:'Concurrent title'});
- const result=await replaceArtifactFor(actor,row.id,{format:row.format,content:row.content,source:'<p>Changed</p>',meta:row.meta,title:'Stale title'},{expectedVersion:row.version,expectedState:artifactState(row)});
+ const result=await replaceArtifactFor(actor,row.id,{format:row.format,source:'<p>Changed</p>',meta:row.meta,title:'Stale title'},{expectedVersion:row.version,expectedState:artifactState(row)});
  expect(isVersionConflict(result)).toBe(true);
  const current=(await getArtifactFor(actor,row.id))!;expect(current.title).toBe('Concurrent title');expect(current.source).toBe(row.source);
 });
