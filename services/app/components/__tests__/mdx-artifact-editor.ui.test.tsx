@@ -10,9 +10,9 @@ it('prevents exiting while source changes are unapplied and keeps the draft visi
  vi.stubGlobal('fetch',vi.fn(async()=>({ok:true,json:async()=>snapshot})));
  const flushRef:EditorFlushRef={current:null};const done=vi.fn();
  render(<MdxArtifactEditor id="abc123" snapshot={snapshot} compiledCss={null} flushRef={flushRef} onDone={done}/>);
- await act(async()=>{await Promise.resolve();});fireEvent.click(screen.getByRole('button',{name:'MDX source',exact:true}));
- fireEvent.change(screen.getByRole('textbox',{name:'MDX source',exact:true}),{target:{value:'My source draft'}});
+ await act(async()=>{await Promise.resolve();});fireEvent.click(screen.getByRole('button',{name:'MDX source'}));
+ fireEvent.change(screen.getByRole('textbox',{name:'MDX source'}),{target:{value:'My source draft'}});
  await act(async()=>{await expect(flushRef.current!()).rejects.toThrow('Apply your source changes');});
- expect((screen.getByRole('textbox',{name:'MDX source',exact:true}) as HTMLTextAreaElement).value).toBe('My source draft');expect(done).not.toHaveBeenCalled();
- fireEvent.click(screen.getByRole('button',{name:'Apply MDX'}));await waitFor(()=>expect(screen.queryByRole('textbox',{name:'MDX source',exact:true})).toBeNull());
+ expect((screen.getByRole('textbox',{name:'MDX source'}) as HTMLTextAreaElement).value).toBe('My source draft');expect(done).not.toHaveBeenCalled();
+ fireEvent.click(screen.getByRole('button',{name:'Apply MDX'}));await waitFor(()=>expect(screen.queryByRole('textbox',{name:'MDX source'})).toBeNull());
 });

@@ -9,7 +9,7 @@ try{
  const start=await startDocument(base);await becomeOwner(page,base,start.token);
  await page.goto(`${base}/documents/new`);
  await page.getByLabel('Document title',{exact:true}).fill('MDX browser proof');
- await page.getByRole('button',{name:'Save document',exact:true}).click();
+ await page.getByRole('button',{name:'Create document',exact:true}).click();
  await page.waitForURL(url=>!url.pathname.startsWith('/documents/')&&url.hash==='#edit');
  const id=new URL(page.url()).pathname.match(/\/([A-Za-z0-9]{6})(?:-|$)/)[1];
  const head=()=>page.evaluate(async id=>(await fetch(`/api/documents/${id}`)).json(),id);
