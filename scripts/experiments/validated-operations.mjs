@@ -10,6 +10,7 @@ import assert from 'node:assert/strict';
 import {parseJsx} from '../../services/app/lib/jsx/parse.ts';
 import {serializeJsx} from '../../services/app/lib/jsx/serialize.ts';
 import {publishJsx} from '../../services/app/lib/story/jsx-tier.ts';
+import {analyzeRowScopes} from '../../services/app/lib/story/row-scope.ts';
 
 const pack=value=>Array.isArray(value)?['array',value.map(pack)]:value&&typeof value==='object'?['object',Object.entries(value).map(([k,v])=>[k,pack(v)])]:['value',value];
 const unpack=([type,value])=>type==='object'?Object.fromEntries(value.map(([k,v])=>[k,unpack(v)])):type==='array'?value.map(unpack):value;
@@ -62,7 +63,7 @@ export async function commitOperation(query,id,certificate){
  */
 const plainTags=new Set(['section','article','div','p','span','h1','h2','h3','h4','h5','h6','ul','ol','li','strong','em','blockquote']);
 const scannerSyntax=/\b(?:class(?:Name)?|data-design|style)\s*=/i;
-const validText=s=>typeof s==='string'&&!s.includes('\0')&&!s.includes('\r\n')&&s.isWellFormed()&&!scannerSyntax.test(s);
+const validText=s=>typeof s==='string'&&!s.includes('\0')&&!s.includes('\r\n')&&s.isWellFormed()&&!scannerSyntax.test(s)&&analyzeRowScopes([{type:'text',value:s,start:0,end:s.length}]).errors.length===0;
 const textSource=s=>serializeJsx([{type:'text',value:s,start:0,end:0}]);
 export function encodeProseText(value){assert.ok(validText(value),'Text requires full preparation');return textSource(value);}
 export function certifyPlainDocument(document){

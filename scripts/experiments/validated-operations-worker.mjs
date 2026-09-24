@@ -9,6 +9,8 @@ import {createSql} from '@artifactbin/sql/local';
 import {setServices} from '../../services/app/lib/services.ts';
 import {MAX_QUERY_ROWS,QUERY_TIMEOUT_MS} from '../../services/app/lib/config.ts';
 import {certifyReadFreeSource} from './read-free-prose.mjs';
+import {auditDependencyGuards} from './dependency-guards.mjs';
+import {auditOperationContracts} from './operation-contract-audit.mjs';
 import {touchedSpanFor} from '../../services/app/lib/story/splice.ts';
 import {encodeSource,decodeSource,prepareOperation,commitOperation,certifyPlainDocument,preparePlainText,commitPlainText} from './validated-operations.mjs';
 
@@ -81,6 +83,12 @@ try{
   assert.notDeepEqual(extractClassCandidates('<p>Plain</p>'),extractClassCandidates('<p>className="bg-red-500"</p>'));
   const a=await publishJsx({},'<p>Plain</p>',context);const b=await publishJsx({},'<p>className="bg-red-500"</p>',context);
   assert.ok(!(a instanceof Response)&&!(b instanceof Response));assert.notEqual(a.meta.compiledCss,b.meta.compiledCss);
+ });
+ await check('escaped row templates remain contextual syntax, not freely editable prose',async()=>{
+  const op=()=>preparePlainText({path:['roots','0','children','0','value'],oldText:'Safe',newText:'{$_row.name}',baseVersion:1,epoch:1});
+  assert.throws(op,/Text requires full preparation/);
+  const rejected=await publishJsx({},'<p>&#123;$_row.name&#125;</p>',context);
+  assert.ok(rejected instanceof Response);assert.equal(rejected.status,400);
  });
  await check('source byte cap is enforced by candidate admission',async()=>{
   const before=await head();const op=await prepareOperation(before,'<p>'+'x'.repeat(2_000_000)+'</p>',context);
@@ -184,6 +192,8 @@ try{
    await client.query('COMMIT');assert.equal((await pending[0]).length,0);
   }finally{await client.query('ROLLBACK');client.release();await Promise.allSettled(pending);}
  });
+ await check('native semantic read/write dependency guards',async()=>{const guards=await auditDependencyGuards(db.raw().pool);writeFileSync('/tmp/artifact-dependency-guards.json',JSON.stringify({checks:guards},null,2));});
+ await check('all-operation dependency counterexamples and composite semantics',async()=>{await auditOperationContracts(q,context);});
  writeFileSync('/tmp/artifact-validity-results.json',JSON.stringify({engine:'native PostgreSQL',checks:results},null,2));
  console.log(`${results.length} validity checks passed`);
 }finally{await resetDb();}
