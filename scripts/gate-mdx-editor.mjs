@@ -10,16 +10,18 @@ try{
  await page.goto(`${base}/documents/new`);
  await page.getByLabel('Document title',{exact:true}).fill('MDX browser proof');
  await page.getByRole('button',{name:'Save document',exact:true}).click();
- await page.waitForURL(/\/documents\/(?!new)[A-Za-z0-9]+$/);
- const id=new URL(page.url()).pathname.split('/').at(-1);
+ await page.waitForURL(url=>!url.pathname.startsWith('/documents/')&&url.hash==='#edit');
+ const id=new URL(page.url()).pathname.match(/\/([A-Za-z0-9]{6})(?:-|$)/)[1];
  const head=()=>page.evaluate(async id=>(await fetch(`/api/documents/${id}`)).json(),id);
  const save=async(action)=>{const response=page.waitForResponse(r=>r.request().method()==='PATCH'&&new URL(r.url()).pathname===`/api/documents/${id}`);await action();assert.equal((await response).status(),200);await page.getByRole('status').filter({hasText:'All changes saved'}).waitFor();};
- const initial=await head();const iframeId=Object.keys(initial.document.nodes).find(id=>initial.document.nodes[id].name==='Iframe');
- await page.getByRole('button',{name:'Select Iframe',exact:true}).click();
+ const initial=await head();const iframeId=initial.document.nodes[initial.document.rootId].children[3];
+ const block=page.locator(`[data-node-id="${iframeId}"]`);
+ const blockGrip=block.locator(':scope > .mdx-container-controls').getByRole('button',{name:'Select container',exact:true});
+ await blockGrip.click();
  await save(()=>page.getByLabel('Component width',{exact:true}).fill('320'));
  await save(()=>page.getByLabel('Float component',{exact:true}).selectOption('left'));
  assert.equal((await head()).document.nodes[iframeId].props.float,'left');
- const handle=page.getByRole('button',{name:'Resize component',exact:true});await handle.scrollIntoViewIfNeeded();const box=await handle.boundingBox();
+ const handle=block.locator(':scope > .mdx-container-controls').getByRole('button',{name:'Resize container',exact:true});await handle.scrollIntoViewIfNeeded();const box=await handle.boundingBox();
  await save(async()=>{await page.mouse.move(box.x+box.width/2,box.y+box.height/2);await page.mouse.down();await page.mouse.move(box.x+box.width/2+40,box.y+box.height/2+30,{steps:6});await page.mouse.up();});
  assert.ok((await head()).document.nodes[iframeId].props.width>320);
  await page.getByRole('button',{name:'Select Flex',exact:true}).click();
@@ -49,15 +51,21 @@ try{
  await page.reload();await page.getByRole('textbox',{name:'Document editor',exact:true}).waitFor();assert.ok(await page.getByText('An added paragraph from source.',{exact:true}).isVisible());
  assert.equal((await head()).document.nodes[iframeId].props.float,'left');
  // A native drag needs a dragover after dragstart, including across the iframe boundary.
- await page.getByRole('button',{name:'Select Iframe',exact:true}).scrollIntoViewIfNeeded();
+ await blockGrip.scrollIntoViewIfNeeded();
  await save(async()=>{
-  const from=await page.getByRole('button',{name:'Select Iframe',exact:true}).boundingBox(),to=await page.getByRole('heading',{name:'Room for an idea',exact:true}).boundingBox();
+  const from=await blockGrip.boundingBox(),to=await page.getByRole('heading',{name:'Room for an idea',exact:true}).boundingBox();
   await page.mouse.move(from.x+from.width/2,from.y+from.height/2);await page.mouse.down();
-  const selected=await page.getByRole('button',{name:'Select Iframe',exact:true}).boundingBox();assert.ok(Math.abs(selected.y-from.y)<1,'Selection must not shift the canvas under the drag pointer');
+  const selected=await blockGrip.boundingBox();assert.ok(Math.abs(selected.y-from.y)<1,'Selection must not shift the canvas under the drag pointer');
   await page.mouse.move(from.x+from.width/2+10,from.y+from.height/2+10,{steps:3});
   await page.mouse.move(to.x+to.width/2,to.y+to.height/2,{steps:8});
-  await page.mouse.move(to.x+to.width/2+1,to.y+to.height/2+1);await page.mouse.up();
+  await page.mouse.move(to.x+to.width/2+1,to.y+to.height/2+1);
+  await page.locator('.mdx-drop-marker:not([hidden])').waitFor();
+  assert.equal(await page.locator('.mdx-container.ProseMirror-selectednode').evaluate(el=>getComputedStyle(el).outlineStyle),'none');
+  await page.mouse.up();
  });
  const moved=await head();const column=moved.document.nodes[flexId].children[0];assert.ok(moved.document.nodes[column].children.includes(iframeId),'Dragging moves the same component identity into the column');
+ await page.getByRole('button',{name:'Done',exact:true}).click();await page.waitForURL(url=>url.hash!=='#edit');
+ assert.equal(await page.getByRole('textbox',{name:'Document editor',exact:true}).count(),0);
+ await page.getByRole('button',{name:'Edit',exact:true}).click();await page.getByRole('textbox',{name:'Document editor',exact:true}).waitFor();
  console.log('ok MDX inline range fonts, dimensions, float, pointer resizing, source identities and saved reload');
 }finally{await browser.close();}

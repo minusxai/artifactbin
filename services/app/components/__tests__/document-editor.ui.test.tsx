@@ -62,3 +62,18 @@ it('keeps native dragging enabled when selecting a component handle',()=>{
  const event=new MouseEvent('mousedown',{bubbles:true,cancelable:true});
  screen.getByRole('button',{name:'Select Iframe'}).dispatchEvent(event);expect(event.defaultPrevented).toBe(false);
 });
+
+it('wraps the current Markdown in a styled block without an HTML workflow',async()=>{
+ const onChange=vi.fn();render(<DocumentEditor document={parseDocumentMdx('Keep writing here')} onChange={onChange}/>);
+ expect(screen.queryByRole('button',{name:'Insert iframe'})).toBeNull();
+ fireEvent.click(screen.getByRole('button',{name:'Style block'}));
+ await waitFor(()=>expect(onChange).toHaveBeenCalled());
+ const next=onChange.mock.lastCall![0];const block=next.nodes[next.nodes[next.rootId].children[0]];
+ expect(block).toMatchObject({type:'html',tag:'div'});
+ expect(next.nodes[block.children[0]].content[0].text).toBe('Keep writing here');
+});
+it('applies a container class to the editable content itself',async()=>{
+ render(<DocumentEditor document={parseDocumentMdx('<div className="font-mono">\n\nStyled prose\n\nAnother paragraph\n\n</div>')} onChange={()=>{}}/>);
+ await act(async()=>{await Promise.resolve();});
+ expect(screen.getByText('Styled prose').closest('.mdx-container-content')?.classList.contains('font-mono')).toBe(true);
+});

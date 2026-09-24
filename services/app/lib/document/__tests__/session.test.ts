@@ -31,3 +31,11 @@ it('does not advance buffered edits past an overlapping independent server chang
  const accepted=structuredClone(sent);accepted.nodes[b].props.className='other user';finish({updated:true,version:3,document:accepted});await saving;
  expect(session.status).toBe('conflict');expect(session.document).toEqual(draft);
 });
+it('drains edits queued during an in-flight save before leaving',async()=>{
+ const document=parseDocumentMdx('Hello');let release!:(result:DocumentEditResult)=>void;
+ let count=0;const session:DocumentSession=new DocumentSession({id:'doc123',version:1,document},async()=>{count++;if(count===1)return new Promise(resolve=>{release=resolve;});return {updated:true,version:3,document:session.document};});
+ const first=structuredClone(document);first.nodes[first.rootId].props.className='first';session.update(first);const saving=session.flush();
+ const second=structuredClone(first);second.nodes[second.rootId].props.className='second';session.update(second);
+ let done=false;const drain=session.drain().then(()=>{done=true;});await Promise.resolve();expect(done).toBe(false);
+ release({updated:true,version:2,document:first});await saving;await drain;expect(count).toBe(2);expect(session.status).toBe('saved');
+});

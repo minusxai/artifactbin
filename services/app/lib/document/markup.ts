@@ -11,12 +11,19 @@ const textNode=(value:string):JsxNode=>({type:'text',value,start:0,end:0});
 function nodeJsx(d:RichDocument,id:string):JsxNode[]{
  const n=d.nodes[id]!;
  const contents=()=>n.content?inlineJsx(d,n.content):(n.children??[]).flatMap(child=>nodeJsx(d,child));
- if(n.type==='document')return contents();
+ if(n.type==='document'){
+  const nodes=contents(),helmet=nodes.filter(n=>n.type==='element'&&n.tag==='Helmet'),body=nodes.filter(n=>!(n.type==='element'&&n.tag==='Helmet'));
+  return [...helmet,documentElement('div',{id,className:'mdx-document mx-auto max-w-[1000px] px-10 py-12 text-[17px] leading-[1.7] flow-root [&_p]:mb-[1em] [&_h1]:text-[2.4em] [&_h1]:leading-[1.15] [&_h1]:mb-[0.7em] [&_h2]:text-[1.7em] [&_h2]:mt-[1em] [&_h2]:mb-[0.5em] [&_h3]:text-[1.3em]'},body)];
+ }
  if(n.type==='expression')return parseDocumentJsx(`{${n.text??''}}`);
  if(n.type==='code')return [documentElement('pre',n.props,[documentElement('code',{},[textNode(n.text??'')])])];
  const tag=n.type==='component'?n.name!:n.type==='html'?n.tag!:({paragraph:'p',heading:`h${n.props.depth}`,blockquote:'blockquote',list:n.props.ordered?'ol':'ul',listItem:'li',thematicBreak:'hr',table:'table',tableRow:'tr',tableCell:'td'} as Record<string,string>)[n.type];
  if(!tag)throw new DocumentError(`Cannot render ${n.type}`);
- const props={...n.props,...(n.name==='Helmet'?{}:{id})};
+ const props:Record<string,DocumentJson>={...n.props,...(n.name==='Helmet'?{}:{id})};
+ if(n.children&&(n.type==='html'||n.name==='Flex')){
+  props.className=[props.className??'','my-4 min-w-0 max-w-full',typeof props.width==='number'?`w-[${props.width}px]`:'',typeof props.height==='number'?`min-h-[${props.height}px]`:'',props.float==='left'?'float-left mr-4':props.float==='right'?'float-right ml-4':''].filter(Boolean).join(' ');
+  if(n.type==='html'){delete props.width;delete props.height;delete props.float;}
+ }
  const el=documentElement(tag,props,n.name==='Iframe'||n.name==='Helmet'?parseDocumentJsx(n.text??''):contents());
  for(const [name,binding] of Object.entries(n.bindings??{})){
   const bindingNode=parseDocumentJsx(`<${tag} ${name}={${binding.source}} />`)[0] as JsxElement;el.attributes.push(...bindingNode.attributes);

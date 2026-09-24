@@ -1,3 +1,4 @@
+import {resizeGuides} from './gestures';
 /** DOM ownership boundary: editable slots belong to ProseMirror; component contents belong to React.
  * Layout styles live outside editable children so resizing never feeds back as text mutations.
  */
@@ -34,10 +35,10 @@ export function documentNodeViews(store:DataflowStore,editable:()=>boolean){
    handle.onkeydown=event=>{if(!editable()||!['ArrowLeft','ArrowRight','ArrowUp','ArrowDown'].includes(event.key))return;event.preventDefault();const rect=dom.getBoundingClientRect();resize(Number(current.attrs.props.width??rect.width)+(event.key==='ArrowRight'?10:event.key==='ArrowLeft'?-10:0),Number(current.attrs.props.height??rect.height)+(event.key==='ArrowDown'?10:event.key==='ArrowUp'?-10:0));};
    handle.onpointerdown=event=>{
     if(!editable())return;event.preventDefault();event.stopPropagation();const x=event.clientX,y=event.clientY,rect=dom.getBoundingClientRect();handle.setPointerCapture(event.pointerId);
-    const feedback=document.createElement('output');feedback.className='mdx-size-feedback';dom.append(feedback);const pos=getPos(),preview=pos===undefined?null:dimensionPreview(v,pos,dom);
-    const move=(e:PointerEvent)=>{preview?.update(Math.max(48,rect.width+e.clientX-x),Math.max(32,rect.height+e.clientY-y));feedback.textContent=`${widthPercentage(Math.max(48,rect.width+e.clientX-x),pos===undefined?0:nodeParentExtent(v,pos))}% · ${Math.round(Math.max(32,rect.height+e.clientY-y))} px`;dom.style.width=`${Math.max(48,rect.width+e.clientX-x)}px`;dom.style.minHeight=`${Math.max(32,rect.height+e.clientY-y)}px`;};
-    const up=(e:PointerEvent)=>{handle.removeEventListener('pointermove',move);handle.removeEventListener('pointerup',up);preview?.clear();feedback.remove();resize(rect.width+e.clientX-x,rect.height+e.clientY-y);};
-    handle.addEventListener('pointermove',move);handle.addEventListener('pointerup',up,{once:true});handle.addEventListener('pointercancel',()=>{handle.removeEventListener('pointermove',move);handle.removeEventListener('pointerup',up);preview?.clear();feedback.remove();draw();},{once:true});
+    const guides=resizeGuides(v);const feedback=document.createElement('output');feedback.className='mdx-size-feedback';dom.append(feedback);const pos=getPos(),preview=pos===undefined?null:dimensionPreview(v,pos,dom);
+    const move=(e:PointerEvent)=>{preview?.update(Math.max(48,rect.width+e.clientX-x),Math.max(32,rect.height+e.clientY-y));guides.update(dom.getBoundingClientRect());feedback.textContent=`${widthPercentage(Math.max(48,rect.width+e.clientX-x),pos===undefined?0:nodeParentExtent(v,pos))}% · ${Math.round(Math.max(32,rect.height+e.clientY-y))} px`;dom.style.width=`${Math.max(48,rect.width+e.clientX-x)}px`;dom.style.minHeight=`${Math.max(32,rect.height+e.clientY-y)}px`;};
+    const up=(e:PointerEvent)=>{handle.removeEventListener('pointermove',move);handle.removeEventListener('pointerup',up);preview?.clear();guides.clear();feedback.remove();resize(rect.width+e.clientX-x,rect.height+e.clientY-y);};
+    handle.addEventListener('pointermove',move);handle.addEventListener('pointerup',up,{once:true});handle.addEventListener('pointercancel',()=>{handle.removeEventListener('pointermove',move);handle.removeEventListener('pointerup',up);preview?.clear();guides.clear();feedback.remove();draw();},{once:true});
    };
    // NodeViews are constructed while the EditorView is still initializing.
    queueMicrotask(()=>{if(dom.isConnected)draw();});

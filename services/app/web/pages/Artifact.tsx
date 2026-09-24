@@ -7,7 +7,7 @@ import { useEffect, useMemo, useRef } from 'react';
 import { usePageData } from '../use-page-data';
 import { expandSurface, type CompactSurface } from '@/lib/story/page-transport';
 import { takeBootstrap } from '../bootstrap';
-import { Navigate, useLocation, useNavigate, useParams } from 'react-router';
+import { useLocation, useNavigate, useParams } from 'react-router';
 import ArtifactShell from '@/components/ArtifactShell';
 import ArtifactSurface from '@/components/ArtifactSurface';
 import type { AccountWorkspace } from '@/lib/workspace';
@@ -30,14 +30,13 @@ import { useArtifactView } from '../use-artifact-view';
  * second meaning for the word is how a payload starts lying about itself.
  */
 type Page =
-  | {canonical:string;role:Parameters<typeof ArtifactShell>[0]['role'];kind:string;mdx:true;surface?:undefined;folder?:undefined}
   | { canonical: string; role: Parameters<typeof ArtifactShell>[0]['role']; kind: string; folder: Parameters<typeof FolderPage>[0]['folder']; workspace?: AccountWorkspace; ownerUsername?: string | null; surface?: undefined }
   | { canonical: string; role: Parameters<typeof ArtifactShell>[0]['role']; kind: string; like?: { liked: boolean; count: number }; follow?: { userId: string; following: boolean; count: number } | null;
       /** `?version=N` on this page's own address, resolved by the endpoint (lib/archived-version). Absent for the head. */
       archived?: { version: number; head: number };
       surface: Parameters<typeof ArtifactSurface>[0]; folder?: undefined };
 
-type TransportPage = Extract<Page,{mdx:true}> | Extract<Page, { folder: unknown }> | (Omit<Extract<Page, { surface: object }>, 'surface'> & { surface: CompactSurface<Parameters<typeof ArtifactSurface>[0]> });
+type TransportPage = Extract<Page, { folder: unknown }> | (Omit<Extract<Page, { surface: object }>, 'surface'> & { surface: CompactSurface<Parameters<typeof ArtifactSurface>[0]> });
 function decodePage(page: TransportPage): Page {
   return page.surface ? { ...page, surface: expandSurface<Parameters<typeof ArtifactSurface>[0]>(page.surface) } : page;
 }
@@ -69,7 +68,6 @@ function ArtifactDocument({ id }: { id: string }) {
     }
   }, [page, editingRoute, search, location.pathname, location.hash, location.state, navigate]);
   if (page === null) return error ? <NotFoundPage /> : <PageLoading />;
-  if ('mdx' in page) return <Navigate to={page.canonical} replace />;
   if (editingRoute && !canEdit(page.role)) return <NotFoundPage />;
   if (editingRoute && page.surface?.format === 'dataset') {
     const { DatasetEditorPage } = routePages;

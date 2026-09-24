@@ -1,3 +1,4 @@
+import type {RichDocument} from '@artifactbin/contracts';
 'use client';
 import {ArtifactPeople} from './ArtifactPeople';
 import {useArtifactMembership} from './useArtifactMembership';
@@ -68,6 +69,7 @@ const DatasetCatalogView = dynamic(() => import('@/components/DatasetCatalogView
 });
 
 const InlineStoryRuntime = dynamic(() => import('@/lib/story-runtime/InlineStoryRuntime').then(module => ({default:module.InlineStoryRuntime})), { ssr: false });
+const MdxArtifactEditor = dynamic(() => import('@/components/MdxArtifactEditor'), {ssr:false});
 const ArtifactEditor = dynamic(() => import('@/components/ArtifactEditor'), {
   ssr: false,
   loading: () => <p className="mt-10 text-center text-xs text-faint">loading the editor…</p>,
@@ -79,6 +81,7 @@ const SocialPreviewDialog = dynamic(() => import('@/components/SocialPreviewDial
 });
 
 export interface ArtifactSurfaceProps {
+  document?: RichDocument;
   runtime?: PreparedStoryRuntime;
   /** The author: handle, and the account id and picture their face is drawn with (null on an anonymous document). */
   author?: { username: string | null; id?: string | null; image?: string | null; forkedFrom?: ReaderForkedFrom | null } | null;
@@ -829,7 +832,7 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
           }}
         >
           {/* Loading ink must read on both fallback grounds before the runtime is ready. */}
-          {!frameLoaded && !showStarter && (
+          {!frameLoaded && !showStarter && !(editing && props.document) && (
             <div
               aria-label="Loading document"
               className="absolute inset-0 flex items-center justify-center font-mono text-xs"
@@ -839,7 +842,8 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
             </div>
           )}
           {showStarter && <TrustedUi><StarterInstructions id={id} /></TrustedUi>}
-          <div hidden={showStarter}>
+          {editing && props.document && <MdxArtifactEditor id={id} snapshot={{id,version,document:props.document}} compiledCss={compiledCss} onDone={finishEdit} flushRef={editorFlush}/> }
+          <div hidden={showStarter || (editing && !!props.document)}>
           <InlineStoryRuntime
             key={id}
             data={initialRuntimeData}
@@ -873,7 +877,7 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
           />
         )}
         {/* Edit mode is CHROME around the document, not a replacement for it. */}
-        {editing && (
+        {editing && !props.document && (
           <ArtifactEditor
             id={id}
             seed={editorSeed}

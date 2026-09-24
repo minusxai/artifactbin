@@ -1182,6 +1182,7 @@ async function listVersionsScoped(scope: Scope, id: string): Promise<VersionSumm
 }
 
 interface VersionContent extends VersionSummary {
+  document?: RichDocument | null;
   content: string;
   source: string | null;
   meta: Record<string, unknown>;
@@ -1193,12 +1194,13 @@ async function getVersionScoped(scope: Scope, id: string, version: number): Prom
   const owned = await db.query(`SELECT 1 FROM artifacts WHERE id = $1 AND ${scope.where('$2')}`, [id, scope.val]);
   if (owned.rows.length === 0) return null;
   const r = await db.query<VersionContent>(
-    `SELECT v.version, v.title, v.description, v.format, v.content, v.source, v.meta, u.username AS by, v.created_at
+    `SELECT v.version, v.title, v.description, v.format, v.content, v.source, v.document, v.meta, u.username AS by, v.created_at
      FROM artifact_versions v LEFT JOIN users u ON u.id = v.actor_user_id
      WHERE v.artifact_id = $1 AND v.version = $2`,
     [id, version],
   );
-  return r.rows[0] ?? null;
+  const versionRow=r.rows[0];
+  return versionRow?.document?{...versionRow,source:documentJsx(versionRow.document)}:versionRow??null;
 }
 
 /**

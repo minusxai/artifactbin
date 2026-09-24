@@ -1,3 +1,4 @@
+import {Undo2,Redo2,Bold,Italic,List,Quote,Columns2,SquareDashed,ImagePlus} from 'lucide-react';
 import {useEffect,useRef,useState} from 'react';
 import {EditorView} from 'prosemirror-view';
 import {NodeSelection, type Transaction} from 'prosemirror-state';
@@ -28,7 +29,7 @@ interface Props {artifactId?:string;document:RichDocument;editable?:boolean;onCh
 export function DocumentEditor({document:initial,editable=true,onChange,artifactId}:Props){
  const host=useRef<HTMLDivElement>(null),view=useRef<EditorView|null>(null),latest=useRef({onChange,editable});latest.current={onChange,editable};
  const [selection,setSelection]=useState<{id:string;props:Record<string,DocumentJson>;name:string;text?:string;resizable:boolean;widthPercent:number}|null>(null);
- const [error,setError]=useState('');const [componentSource,setComponentSource]=useState<string|null>(null);const dataflow=useRef<DataflowStore|null>(null);
+ const [error,setError]=useState('');const dataflow=useRef<DataflowStore|null>(null);
  function flow(document:RichDocument){const {values,queries,mutations}=splitHelmet(parseDocumentJsx(documentJsx(document))).content;return {values,queries,mutations};}
  useEffect(()=>{
   if(!host.current)return;
@@ -62,29 +63,33 @@ export function DocumentEditor({document:initial,editable=true,onChange,artifact
  function props(patch:Record<string,DocumentJson>){command(v=>{const pos=v.state.selection instanceof NodeSelection?v.state.selection.from:v.state.selection.$from.depth?v.state.selection.$from.before():-1;if(pos>=0)setDocumentNodeProps(v,pos,patch);},false);}
  function widthPercent(value:number){command(v=>{const pos=v.state.selection instanceof NodeSelection?v.state.selection.from:v.state.selection.$from.depth?v.state.selection.$from.before():-1;if(pos>=0)setNodeWidthPercentage(v,pos,value);},false);}
  function insert(source:string){command(v=>{const added=documentEditorNode(parseDocumentMdx(source));v.dispatch(v.state.tr.replaceSelectionWith(added.firstChild!).scrollIntoView());});}
- function button(label:string,action:()=>void){return <Tooltip content={label}><button type="button" aria-label={label} onMouseDown={e=>e.preventDefault()} onClick={action}>{label}</button></Tooltip>;}
+ const icons:Record<string,typeof Bold>={'Undo':Undo2,'Redo':Redo2,'Bold':Bold,'Italic':Italic,'Bullet list':List,'Quote':Quote,'Insert columns':Columns2,'Style block':SquareDashed,'Insert image':ImagePlus};
+ function button(label:string,action:()=>void){const Icon=icons[label];return <Tooltip content={label}><button type="button" aria-label={label} onMouseDown={e=>e.preventDefault()} onClick={action}>{Icon?<Icon size={16}/>:label}</button></Tooltip>;}
  function dispatch(v:EditorView){return (tr:Transaction)=>v.dispatch(tr);}
  const s=documentEditorSchema;
  return <div className="mdx-editor-shell">
   {editable&&<div className="mdx-toolbar" role="toolbar" aria-label="Document formatting">
    {button('Undo',()=>command(v=>undo(v.state,dispatch(v))))}{button('Redo',()=>command(v=>redo(v.state,dispatch(v))))}
+   {!selection?.resizable&&<>
    <select aria-label="Block style" onChange={e=>command(v=>setBlockType(e.target.value==='paragraph'?s.nodes.paragraph:s.nodes.heading,{id:selection?.id,props:e.target.value==='paragraph'?{}:{depth:Number(e.target.value)},nodeType:e.target.value==='paragraph'?'paragraph':'heading'})(v.state,dispatch(v)))} defaultValue="paragraph"><option value="paragraph">Paragraph</option>{[1,2,3].map(n=><option key={n} value={n}>Heading {n}</option>)}</select>
    {button('Bold',()=>command(v=>toggleMark(s.marks.strong)(v.state,dispatch(v))))}{button('Italic',()=>command(v=>toggleMark(s.marks.emphasis)(v.state,dispatch(v))))}
    {button('Bullet list',()=>command(v=>wrapInList(s.nodes.bullet_list)(v.state,dispatch(v))))}{button('Quote',()=>command(v=>wrapIn(s.nodes.blockquote)(v.state,dispatch(v))))}
    <select aria-label="Text font" defaultValue="" onChange={e=>command(v=>{if(v.state.selection.empty)props({className:e.target.value});else v.dispatch(v.state.tr.addMark(v.state.selection.from,v.state.selection.to,s.marks.span.create({className:e.target.value})));})}><option value="">Font</option><option value="font-sans">Sans</option><option value="font-serif">Serif</option><option value="font-mono">Mono</option></select>
+   <input aria-label="Text CSS class" placeholder="Text class" onChange={e=>command(v=>{if(v.state.selection.empty)props({className:e.target.value});else v.dispatch(v.state.tr.addMark(v.state.selection.from,v.state.selection.to,s.marks.span.create({className:e.target.value})));},false)}/>
+   </>}
    {button('Insert columns',()=>insert('<Flex direction="row" sizes={[1,1]}>\n\n<div>\n\nFirst column\n\n</div>\n\n<div>\n\nSecond column\n\n</div>\n\n</Flex>'))}
-   {button('Insert iframe',()=>insert('<Iframe title="Interactive example" height={180}><div style="padding:24px;background:#e0f2fe">An editable HTML component</div></Iframe>'))}
+   {button('Style block',()=>command(v=>wrapIn(s.nodes.container,{tag:'div',nodeType:'html',props:{className:'p-6 bg-slate-50 rounded-lg'}})(v.state,dispatch(v))))}
    {button('Insert image',()=>insert('<img src="https://images.unsplash.com/photo-1441974231531-c6227db76b6e?w=600" alt="Forest" width={240} />'))}
-   <div className="mdx-selection-tools">{selection?.resizable&&<>
+   {selection?.resizable&&<div className="mdx-selection-tools">
    {selection?.name==='Flex'&&<select aria-label="Layout direction" value={String(selection.props.direction??'row')} onChange={e=>props({direction:e.target.value})}><option value="row">Columns</option><option value="column">Rows</option></select>}
-   {selection?.text!==undefined&&button('Edit component source',()=>setComponentSource(selection.text!))}
    <select aria-label="Float component" value={String(selection?.props.float??'disabled')} onChange={e=>props({float:e.target.value})}><option value="disabled">No float</option><option value="left">Float left</option><option value="right">Float right</option></select>
+   <label>Class <input aria-label="Block CSS class" value={String(selection.props.className??'')} onChange={e=>props({className:e.target.value})}/></label>
    <label>Width <DimensionInput key={selection?.id} label="Width of parent (%)" min={1} max={100} value={selection?.widthPercent??''} onChange={widthPercent}/> %</label>
    <label>px <DimensionInput key={selection?.id} label="Component width" min={48} value={typeof selection?.props.width==='number'?selection.props.width:''} onChange={width=>props({width})}/></label>
    <label>Height <DimensionInput key={selection?.id} label="Component height" min={32} value={typeof selection?.props.height==='number'?selection.props.height:''} onChange={height=>props({height})}/></label>
-   </>}</div>
+   </div>}
   </div>}
-  {componentSource!==null&&<section className="mdx-component-source"><label>Component source<textarea aria-label="Component source" value={componentSource} onChange={e=>setComponentSource(e.target.value)}/></label><button type="button" onClick={()=>command(v=>{if(!(v.state.selection instanceof NodeSelection))return;const pos=v.state.selection.from;const tr=v.state.tr.setNodeMarkup(pos,undefined,{...v.state.selection.node.attrs,text:componentSource});const next=editorDocument(v.state.applyTransaction(tr).state.doc);try{validateDocumentMarkup(next);v.dispatch(tr);setComponentSource(null);}catch(e){setError(e instanceof Error?e.message:'Invalid component source');}},false)}>Apply component source</button><button type="button" onClick={()=>setComponentSource(null)}>Cancel</button></section>}
+
   {error&&<p role="alert">{error}</p>}<div ref={host} className="mdx-editor-body"/>
  </div>;
 }

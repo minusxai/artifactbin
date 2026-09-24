@@ -50,3 +50,14 @@ it('keeps prose styling and identities when editing source or inserting a paragr
 it('gives an empty source an editable paragraph',()=>{
  const d=parseDocumentMdx('');expect(d.nodes[d.rootId].children).toHaveLength(1);
 });
+it('renders document measure and block dimensions in the shared artifact runtime',()=>{
+ const d=parseDocumentMdx('<div width={320} height={180} float="left" className="p-6">\n\nText\n\n</div>');
+ const source=documentJsx(d);
+ expect(source).toContain('max-w-[1000px]');expect(source).toContain('w-[320px]');expect(source).toContain('min-h-[180px]');expect(source).toContain('float-left');
+});
+it('exports whole-paragraph styling as a div, without a second annotation syntax',()=>{
+ const d=parseDocumentMdx('Text');d.nodes[d.nodes[d.rootId].children![0]].props.className='font-serif';
+ const source=serializeDocumentMdx(d,false);expect(source).toContain('<div className="font-serif">');
+ const parsed=parseDocumentMdx(source);expect(parsed.nodes[parsed.nodes[parsed.rootId].children![0]]).toMatchObject({type:'paragraph',props:{className:'font-serif'}});
+ expect(parseDocumentMdx(serializeDocumentMdx(d))).toEqual(d);
+});

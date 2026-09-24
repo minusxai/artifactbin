@@ -77,6 +77,11 @@ export function parseDocumentMdx(source:string):RichDocument {
    case 'mdxJsxFlowElement':case 'mdxJsxTextElement':{
     if(!n.name)throw new DocumentError('Use a named container instead of a JSX fragment');
     const el=jsx(`<${n.name} ${attributeSource(n)} />`)[0] as JsxElement;
+    // A class-only div around one Markdown block is styling, not a grouping node.
+    // Explicit container identities retain their grouping across lossless exports.
+    if(n.name==='div'&&n.children?.length===1&&['paragraph','heading','blockquote','list','code'].includes(n.children[0].type)&&el.attributes.length===1&&el.attributes[0].name==='className'&&el.attributes[0].value.static&&typeof el.attributes[0].value.json==='string'&&identities[ordinal]?.type!=='html'){
+     const id=block(n.children[0]);d.nodes[id].props.className=el.attributes[0].value.json;return id;
+    }
     node={type:el.isComponent?'component':'html',...(el.isComponent?{name:el.tag}:{tag:el.tag}),props:{},children:[]};
     for(const a of el.attributes){if(a.value.static)node.props[a.name]=a.value.json;else(node.bindings??={})[a.name]={source:a.value.source,scope:'reactive'};}
     if(!n.children?.length&&!['Flex','div','section','article'].includes(n.name))delete node.children;
@@ -122,6 +127,10 @@ export function serializeDocumentMdx(d:RichDocument,includeIdentity=true):string
  });}
  function attributes(props:Record<string,DocumentJson>):NonNullable<MdNode['attributes']>{return Object.entries(props).map(([name,value])=>({type:'mdxJsxAttribute',name,value:typeof value==='string'?value:{type:'mdxJsxAttributeValueExpression',value:JSON.stringify(value)}}));}
  function block(id:string):MdNode {
+  const n=d.nodes[id],node=core(id);
+  return ['paragraph','heading','blockquote','list','code'].includes(n.type)&&typeof n.props.className==='string'&&n.props.className?{type:'mdxJsxFlowElement',name:'div',attributes:attributes({className:n.props.className}),children:[node]}:node;
+ }
+ function core(id:string):MdNode {
   const n=d.nodes[id]!;identities.push({id,type:n.type,props:n.type==='component'||n.type==='html'?{}:n.props});
   const children=()=>n.content?inline(n.content):(n.children??[]).map(block);
   switch(n.type){

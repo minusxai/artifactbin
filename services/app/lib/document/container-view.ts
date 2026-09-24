@@ -1,3 +1,4 @@
+import {resizeGuides} from './gestures';
 /** Layout chrome follows physical boundaries; the content slot remains owned by ProseMirror. */
 import {NodeSelection} from 'prosemirror-state';
 import type {Node as PmNode} from 'prosemirror-model';
@@ -30,9 +31,9 @@ export function containerNodeView(node:PmNode,view:EditorView,getPos:()=>number|
   handle.onpointerdown=event=>{
    if(!editable())return;event.preventDefault();event.stopPropagation();const pos=getPos();if(pos===undefined)return;
    const rect=dom.getBoundingClientRect(),startX=event.clientX,startY=event.clientY,preview=dimensionPreview(view,pos,dom);let width=rect.width,height=rect.height;
-   handle.setPointerCapture(event.pointerId);feedback.hidden=false;dom.classList.add('mdx-resizing');
-   const move=(e:PointerEvent)=>{width=Math.max(48,rect.width+(axis==='height'?0:e.clientX-startX));height=Math.max(32,rect.height+(axis==='width'?0:e.clientY-startY));preview.update(width,height);feedback.textContent=axis==='height'?`${Math.round(height)} px`:`${widthPercentage(width,nodeParentExtent(view,pos))}%${axis==='both'?` · ${Math.round(height)} px`:''}`;position();};
-   const finish=(commit:boolean)=>{handle.removeEventListener('pointermove',move);handle.removeEventListener('pointerup',up);handle.removeEventListener('pointercancel',cancel);preview.clear();feedback.hidden=true;dom.classList.remove('mdx-resizing');if(commit&&editable())setDocumentNodeProps(view,pos,{...(axis==='height'?{}:{width:Math.round(width)}),...(axis==='width'?{}:{height:Math.round(height)})});};
+   const guides=resizeGuides(view);handle.setPointerCapture(event.pointerId);feedback.hidden=false;dom.classList.add('mdx-resizing');
+   const move=(e:PointerEvent)=>{width=Math.max(48,rect.width+(axis==='height'?0:e.clientX-startX));height=Math.max(32,rect.height+(axis==='width'?0:e.clientY-startY));preview.update(width,height);guides.update(dom.getBoundingClientRect());feedback.textContent=axis==='height'?`${Math.round(height)} px`:`${widthPercentage(width,nodeParentExtent(view,pos))}%${axis==='both'?` · ${Math.round(height)} px`:''}`;position();};
+   const finish=(commit:boolean)=>{handle.removeEventListener('pointermove',move);handle.removeEventListener('pointerup',up);handle.removeEventListener('pointercancel',cancel);preview.clear();guides.clear();feedback.hidden=true;dom.classList.remove('mdx-resizing');if(commit&&editable())setDocumentNodeProps(view,pos,{...(axis==='height'?{}:{width:Math.round(width)}),...(axis==='width'?{}:{height:Math.round(height)})});};
    const up=()=>finish(true),cancel=()=>finish(false);handle.addEventListener('pointermove',move);handle.addEventListener('pointerup',up);handle.addEventListener('pointercancel',cancel);
   };
   handle.onkeydown=e=>{if(!editable()||!['ArrowLeft','ArrowRight','ArrowUp','ArrowDown'].includes(e.key))return;e.preventDefault();const pos=getPos();if(pos===undefined)return;const rect=dom.getBoundingClientRect();setDocumentNodeProps(view,pos,{...(axis==='height'?{}:{width:Math.max(48,rect.width+(e.key==='ArrowRight'?10:e.key==='ArrowLeft'?-10:0))}),...(axis==='width'?{}:{height:Math.max(32,rect.height+(e.key==='ArrowDown'?10:e.key==='ArrowUp'?-10:0))})});};
@@ -40,7 +41,8 @@ export function containerNodeView(node:PmNode,view:EditorView,getPos:()=>number|
  function draw(){
   if(destroyed)return;const props=current.attrs.props;dom.dataset.nodeId=current.attrs.id;dom.dataset.container=current.attrs.name??current.attrs.tag;
   dom.style.minHeight=typeof props.height==='number'?`${props.height}px`:'';dom.style.width=typeof props.width==='number'?`${props.width}px`:'';dom.style.cssFloat=['left','right'].includes(props.float)?props.float:'none';
-  contentDOM.style.minHeight=typeof props.height==='number'?`${Math.max(0,props.height-24)}px`:'';
+  contentDOM.className=`mdx-container-content ${typeof props.className==='string'?props.className:''}`;
+  contentDOM.style.minHeight=typeof props.height==='number'?`${Math.max(0,props.height)}px`:'';
   contentDOM.style.display=current.attrs.name==='Flex'?'flex':'block';contentDOM.style.flexDirection=props.direction==='column'?'column':'row';contentDOM.style.gap='16px';
   feedback.removeAttribute('style');controls.replaceChildren();controls.hidden=!editable();dividers.replaceChildren();handles=[];
   const grip=button(`Select ${current.attrs.name??'container'}`,'mdx-container-grip','⠿');grip.draggable=true;grip.onmousedown=selected;grip.onclick=e=>{if(e.detail===0)selected();};
@@ -51,14 +53,14 @@ export function containerNodeView(node:PmNode,view:EditorView,getPos:()=>number|
    const handle=document.createElement('button');handle.type='button';handle.className='mdx-layout-divider';handle.setAttribute('aria-label',`Resize layout divider ${i+1}`);dividers.append(handle);handles.push(handle);
    handle.onkeydown=e=>{if(!editable()||!['ArrowLeft','ArrowRight','ArrowUp','ArrowDown'].includes(e.key))return;e.preventDefault();setSizes(resizeFlexRatios(sizes,i,['ArrowRight','ArrowDown'].includes(e.key)?20:-20,column?contentDOM.clientHeight:contentDOM.clientWidth));};
    handle.onpointerdown=event=>{
-    if(!editable())return;event.preventDefault();event.stopPropagation();const start=column?event.clientY:event.clientX,extent=column?contentDOM.clientHeight:contentDOM.clientWidth;let next=sizes.slice();handle.setPointerCapture(event.pointerId);dom.classList.add('mdx-resizing');feedback.hidden=false;
-    const move=(e:PointerEvent)=>{next=resizeFlexRatios(sizes,i,(column?e.clientY:e.clientX)-start,extent);layout(next);const total=next.reduce((a,b)=>a+b,0);feedback.textContent=`${widthPercentage(next[i],total)}% / ${widthPercentage(next[i+1],total)}%`;Object.assign(feedback.style,{left:`${handle.offsetLeft+16}px`,top:`${handle.offsetTop}px`,right:'auto',bottom:'auto'});};
-    const finish=(commit:boolean)=>{handle.removeEventListener('pointermove',move);handle.removeEventListener('pointerup',up);handle.removeEventListener('pointercancel',cancel);feedback.hidden=true;dom.classList.remove('mdx-resizing');if(commit)setSizes(next);else layout(sizes);};
+    if(!editable())return;event.preventDefault();event.stopPropagation();const start=column?event.clientY:event.clientX,extent=column?contentDOM.clientHeight:contentDOM.clientWidth;let next=sizes.slice();const guides=resizeGuides(view);handle.setPointerCapture(event.pointerId);dom.classList.add('mdx-resizing');feedback.hidden=false;
+    const move=(e:PointerEvent)=>{next=resizeFlexRatios(sizes,i,(column?e.clientY:e.clientX)-start,extent);layout(next);guides.update(contentDOM.children[i].getBoundingClientRect());const total=next.reduce((a,b)=>a+b,0);feedback.textContent=`${widthPercentage(next[i],total)}% / ${widthPercentage(next[i+1],total)}%`;Object.assign(feedback.style,{left:`${handle.offsetLeft+16}px`,top:`${handle.offsetTop}px`,right:'auto',bottom:'auto'});};
+    const finish=(commit:boolean)=>{handle.removeEventListener('pointermove',move);handle.removeEventListener('pointerup',up);handle.removeEventListener('pointercancel',cancel);feedback.hidden=true;guides.clear();dom.classList.remove('mdx-resizing');if(commit)setSizes(next);else layout(sizes);};
     const up=()=>finish(true),cancel=()=>finish(false);handle.addEventListener('pointermove',move);handle.addEventListener('pointerup',up);handle.addEventListener('pointercancel',cancel);
    };
   }
   layout(sizes);schedule();
  }
  queueMicrotask(draw);
- return {dom,contentDOM,update(next){if(next.type!==current.type)return false;current=next;queueMicrotask(draw);return true;},ignoreMutation:m=>m.type!=='selection'&&(m.type==='attributes'&&m.attributeName==='style'||!contentDOM.contains(m.target)),stopEvent:e=>!e.type.startsWith('drag')&&e.type!=='drop'&&controls.contains(e.target as Node),destroy(){destroyed=true;observer?.disconnect();cancelAnimationFrame(frame);}};
+ return {dom,contentDOM,update(next){if(next.type!==current.type)return false;current=next;queueMicrotask(draw);return true;},ignoreMutation:m=>m.type!=='selection'&&(m.type==='attributes'&&(m.attributeName==='style'||m.target===contentDOM&&m.attributeName==='class')||!contentDOM.contains(m.target)),stopEvent:e=>!e.type.startsWith('drag')&&e.type!=='drop'&&controls.contains(e.target as Node),destroy(){destroyed=true;observer?.disconnect();cancelAnimationFrame(frame);}};
 }

@@ -23,6 +23,14 @@ export class DocumentSession {
   if(this.status!=='saved'||snapshot.version<=this.base.version)return false;
   this.base=snapshot;this.draft=snapshot.document;this.emit();return true;
  }
+ async drain():Promise<void>{
+  while(true){
+   if(this.running){await new Promise<void>(resolve=>{const off=this.subscribe(()=>{if(!this.running){off();resolve();}});});continue;}
+   await this.flush();
+   if(this.status==='saved')return;
+   if(this.status!=='pending')throw Error(this.detail||'Your draft has not been saved.');
+  }
+ }
  async flush():Promise<void>{
   if(this.running||this.status==='conflict'||this.status==='invalid')return;
   if(!this.pending){

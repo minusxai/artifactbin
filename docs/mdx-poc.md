@@ -61,3 +61,20 @@ Observed browser checks: 35% changed the selected child; 85% changed its whole p
 CI's real PostgreSQL service proof passed: independent concurrent updates, overlaps, duplicate requests and a trash race. Its initial fixture mistakenly retained archived rows between scenarios; fixing fixture cleanup made the proof pass. Full CI then passed all API/node/UI suites and build, with the newly added first-gesture drag gate exposing the toolbar shift above. The final revision is pushed for that check; consult PR #77 for the current result.
 
 The POC is available at `/documents/new`. Existing documents are not migrated. Collaboration uses two-second polling and node-level conflict refusal, without character-level merge or presence; unsaved/conflicting drafts are retained in the open editor and can be exported or saved as a new document. Full author-script and referenced-artifact editor parity are outside the demonstrated surface.
+
+### Artifact editing redesign (September 24)
+
+The artifact page owns navigation, permissions, sharing and edit mode. A lazy MDX
+adapter owns the JSONB session and drains pending operations before Done. Readers
+continue using the artifact runtime; editing replaces its canvas with one editable
+Markdown tree. The editor toolbar is contextual and keeps a stable height.
+
+Canvas feedback has one owner: a gesture overlay draws insertion markers and
+alignment guides, without mutating the document. Container node views own only
+editable slots and hit targets. Styled Markdown uses real div wrappers; fragments
+cannot carry CSS. No HTML insertion/source workflow is exposed. Existing isolated
+components remain readable without changing the static-markup execution contract.
+
+Behavioral checks cover artifact routing, styled-block operations, gesture geometry,
+selection continuity and save draining. Browser verification must cover first drag,
+nested drop destination, resize guides, reader/edit transitions and persistence.

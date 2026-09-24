@@ -49,7 +49,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
 
   const role = await roleFor(artifact, actor);
   const kind = await browserSessionKind(request, actor);
-  if(artifact.document)return json({canonical:`/documents/${artifact.id}`,role,kind,mdx:true},200,{'Cache-Control':'no-store'});
+
 
   /*
    * A FOLDER IS A LISTING, NOT A DOCUMENT — so its page is answered HERE and
@@ -168,6 +168,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
       ? { userId: artifact.user_id, following, count: followCount }
       : null,
     surface: compactSurface({
+      ...(artifact.document && !at ? {document:artifact.document} : {}),
       captureKey: exporting ? key : null,
       id: artifact.id,
       editId: artifact.edit_id,

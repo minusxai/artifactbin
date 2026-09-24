@@ -1,3 +1,4 @@
+import {documentGestures} from './gestures';
 /** One ProseMirror tree owns text, layouts and component selection; no nested editor instances. */
 import {Schema, type Node as PmNode, type NodeSpec, type MarkSpec, type DOMOutputSpec} from 'prosemirror-model';
 import {EditorState, Plugin} from 'prosemirror-state';
@@ -111,6 +112,6 @@ const identities=new Plugin({appendTransaction(transactions,_old,state){
 }});
 export function createDocumentEditorState(d:RichDocument):EditorState {
  const s=documentEditorSchema;
- return EditorState.create({doc:documentEditorNode(d),plugins:[identities,history(),keymap({'Mod-z':undo,'Mod-Shift-z':redo,'Mod-y':redo,'Mod-b':toggleMark(s.marks.strong),'Mod-i':toggleMark(s.marks.emphasis),'Enter':splitListItem(s.nodes.list_item),'Tab':sinkListItem(s.nodes.list_item),'Shift-Tab':liftListItem(s.nodes.list_item)}),keymap(baseKeymap)]});
+ return EditorState.create({doc:documentEditorNode(d),plugins:[identities,documentGestures(),history(),keymap({'Mod-z':undo,'Mod-Shift-z':redo,'Mod-y':redo,'Mod-b':toggleMark(s.marks.strong),'Mod-i':toggleMark(s.marks.emphasis),'Enter':splitListItem(s.nodes.list_item),'Tab':sinkListItem(s.nodes.list_item),'Shift-Tab':liftListItem(s.nodes.list_item)}),keymap(baseKeymap)]});
 }
 export type {DOMOutputSpec};

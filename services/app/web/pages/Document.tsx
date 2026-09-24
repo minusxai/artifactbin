@@ -1,5 +1,5 @@
 import {useEffect,useRef,useState} from 'react';
-import {useNavigate,useParams} from 'react-router';
+import {Navigate,useNavigate,useParams} from 'react-router';
 import type {DocumentEditResult,DocumentSnapshot,RichDocument} from '@artifactbin/contracts';
 import {DocumentEditor} from '@/components/DocumentEditor';
 import {parseDocumentMdx,reparseDocumentMdx,serializeDocumentMdx} from '@/lib/document/mdx';
@@ -29,7 +29,13 @@ Drag a divider to change the proportions.
 
 </Flex>
 
-<Iframe title="A live HTML component" height={160}><div style="padding:24px;background:#e0f2fe;font-family:system-ui"><strong>Hello from HTML</strong><p>Resize this component or float it beside your text.</p></div></Iframe>
+<div className="p-6 bg-slate-50 rounded-lg" width={360}>
+
+### Make it yours
+
+Keep writing Markdown inside a styled block. Resize it, change its class, or float it beside your text.
+
+</div>
 
 Ordinary paragraphs remain Markdown. Components keep their properties, and selected text can carry a span class. The rendered document is where you edit.
 `;
@@ -67,10 +73,11 @@ export function DocumentPage(){
   try{
    const response=await fetch('/api/documents',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify({title,document:sent})});const result=await response.json();
    if(!response.ok)throw Error(result.detail??(response.status===401?'Sign in to save this document.':result.error));
-   const buffered=draft.current;attach({...result,title,editable:true});if(buffered!==sent)session.current?.update(buffered);adopted.current=result.id;void navigate(`/documents/${result.id}`,{replace:true});
+   const buffered=draft.current;attach({...result,title,editable:true});if(buffered!==sent)session.current?.update(buffered);adopted.current=result.id;void navigate(`/a/${result.id}#edit`,{replace:true});
   }catch(e){setStatus('Not saved');setError(e instanceof Error?e.message:'Could not save.');}
  }
  function download(){const blob=new Blob([serializeDocumentMdx(document)],{type:'text/mdx'});const url=URL.createObjectURL(blob);const a=window.document.createElement('a');a.href=url;a.download=`${title||'document'}.mdx`;a.click();URL.revokeObjectURL(url);}
+ if(id)return <Navigate to={`/a/${id}#edit`} replace/>;
  if(loading)return <p role="status">Loading document…</p>;
  return <main style={{maxWidth:1200,margin:'0 auto',background:'var(--surface,#fff)',minHeight:'100vh'}}>
   <header style={{display:'flex',gap:12,alignItems:'center',flexWrap:'wrap',padding:'20px 28px',borderBottom:'1px solid #dce0e5'}}>
