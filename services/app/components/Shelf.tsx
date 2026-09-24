@@ -85,6 +85,12 @@ export interface ShelfProps {
   parentId?: string | null;
   /** Folder pages opt into creation without inheriting the homepage's row actions. */
   canCreateFolders?: boolean;
+  /**
+   * `'domain'`: the owner's custom-domain home page, server-rendered with no
+   * script, so the toolbar (search, filters, the grid/list toggle) is not
+   * drawn — every control in it needs the app's script to do anything.
+   */
+  surface?: 'app' | 'domain';
 }
 
 /** Create a child folder in place, preserving the shelf's current view state. */
@@ -443,7 +449,7 @@ function FilterChip({ value, active, onToggle }: { value: string; active: boolea
   );
 }
 
-export default function Shelf({ rows, actions = 'none', showVisibility = true, assets = true, dates = 'relative', scopeParentId, parentId = null, canCreateFolders = false }: ShelfProps) {
+export default function Shelf({ rows, actions = 'none', showVisibility = true, assets = true, dates = 'relative', scopeParentId, parentId = null, canCreateFolders = false, surface = 'app' }: ShelfProps) {
   const [query, setQuery] = useState('');
   const [picks, setPicks] = useState<string[]>([]);
   const [made, setMade] = useState<ShelfRow[]>([]);
@@ -518,7 +524,7 @@ export default function Shelf({ rows, actions = 'none', showVisibility = true, a
 
   return (
     <section aria-label="Shelf" data-shelf-view={view} className="flex flex-col gap-4">
-      {(all.length > 0 || canCreateFolders) && (
+      {surface === 'app' && (all.length > 0 || canCreateFolders) && (
         <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:gap-x-2 sm:gap-y-1.5 sm:rounded-[6px] sm:border sm:border-edge sm:bg-surface sm:px-3 sm:py-1.5">
           <div className={`flex min-w-0 items-center gap-2 px-3 py-1.5 ${PANEL} sm:flex-1 sm:border-0 sm:bg-transparent sm:p-0 sm:shadow-none`}>
             <Search size={13} className="shrink-0 text-faint" />

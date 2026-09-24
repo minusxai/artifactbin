@@ -53,6 +53,8 @@ import { GITHUB_EXTERNAL_URL } from '@/lib/github-star';
 import { createReaderPreloader } from './reader-preloads';
 import { mountBuildAssets } from './build-assets';
 import { customHostBoundary } from './custom-host';
+import { linkedStylesheets } from '@/lib/custom-domain-home';
+import { THEME_BOOTSTRAP_HASH } from '@/lib/theme-bootstrap';
 import { canonicalDocumentUrl } from '@/lib/custom-domains';
 
 /**
@@ -117,7 +119,7 @@ export function withInitialStory(html: string, runtime: PreparedStoryRuntime, id
 // Keeping the hashes explicit preserves the production policy while allowing
 // React Fast Refresh to install its hook when this server hosts Vite middleware.
 export const APP_INLINE_SCRIPT_HASHES = [
-  "'sha256-MKCvCRsPxrVldjRT7eukzwMMAlrlAXCz+AyDpcVL9Fg='", // theme bootstrap (web/index.html — pinned by lib/__tests__/app-page-csp)
+  THEME_BOOTSTRAP_HASH, // theme bootstrap (web/index.html — lib/theme-bootstrap, pinned by lib/__tests__/app-page-csp)
   "'sha256-Z2/iFzh9VMlVkEOar1f/oSHWwQk3ve1qk/C2WdsC4Xk='", // Vite React-refresh preamble
 ].join(' ');
 
@@ -236,9 +238,16 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
   // Transport identity must be attached before any app middleware or route
   // asks viewer.ts who is calling.
   if (opts.actorSecret) actorReceiver(opts.actorSecret).mount(app);
+  const webDir = opts.webDir ?? path.resolve('dist/web');
+  let indexCache: string | null = null;
+  const index = async (url: string): Promise<string> => {
+    if (opts.indexHtml) return opts.indexHtml(url);
+    return (indexCache ??= readFileSync(path.join(webDir, 'index.html'), 'utf8'));
+  };
   // A verified custom domain is answered by its own boundary before any app
   // route can see it (server/custom-host); every other host passes straight on.
-  app.use('*', customHostBoundary());
+  // Its home page links the stylesheets THIS page links, read from the same shell.
+  app.use('*', customHostBoundary({ stylesheets: async (url) => linkedStylesheets(await index(url)) }));
   const assetsOrigin = ASSETS_ORIGIN;
   app.get(AUTHOR_FRAME_PATH, c => authorFrameResponse(c.req.raw, assetsOrigin, baseUrl(c.req.raw)));
   if (assetsOrigin) app.use('*', async (c, next) => {
@@ -262,17 +271,11 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
       if (match) opts.onTokenRevoked?.(decodeURIComponent(match[1]));
     });
   }
-  const webDir = opts.webDir ?? path.resolve('dist/web');
   if (!opts.indexHtml) mountBuildAssets(app, webDir);
   const preloadReader = opts.indexHtml ? (html: string) => html : createReaderPreloader(webDir);
   app.get(GITHUB_EXTERNAL_URL, createGithubResponse());
   const publicDir = opts.publicDir ?? path.resolve('public');
   const cliReleaseDir = opts.cliReleaseDir ?? path.resolve(publicDir, '..', '..', 'cli', 'dist');
-  let indexCache: string | null = null;
-  const index = async (url: string): Promise<string> => {
-    if (opts.indexHtml) return opts.indexHtml(url);
-    return (indexCache ??= readFileSync(path.join(webDir, 'index.html'), 'utf8'));
-  };
   /**
    * The app page. When the address names something the page will immediately
    * ask for — a document, a profile — the server answers that question HERE

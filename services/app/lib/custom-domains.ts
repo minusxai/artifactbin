@@ -28,7 +28,7 @@ import { canReadArtifact, LIVE_ARTIFACT_SQL, type ArtifactRow } from '@/lib/arti
 import { urlHash } from '@/lib/story/asset-url';
 import { collectExternalAssetUrls } from '@/lib/story/external-images';
 import { getDb } from '@/lib/db';
-import { canonicalArtifactPath, titleSlug } from '@/lib/urls';
+import { canonicalArtifactPath, domainPostPath } from '@/lib/urls';
 import { ownerUsername } from '@/lib/users';
 
 export type DomainStatus = 'pending' | 'verified';
@@ -405,29 +405,9 @@ export async function servesWebAsset(ownerId: string, hash: string): Promise<boo
   return posts.rows.some((post) => collectExternalAssetUrls(post.source!).all.some((url) => urlHash(url) === hash));
 }
 
-/** A post's path on the custom host: `/<id>-<slug>`, or `/<id>` for a title with no slug. */
-export function domainPostPath(row: Pick<ArtifactRow, 'id' | 'title'>): string {
-  const slug = titleSlug(row.title);
-  return `/${slug ? `${row.id}-${slug}` : row.id}`;
-}
-
 /** The canonical address of a post: on the custom host, over HTTPS (the edge serves nothing else). */
 export function domainPostUrl(hostname: string, row: Pick<ArtifactRow, 'id' | 'title'>): string {
   return `https://${hostname}${domainPostPath(row)}`;
-}
-
-export interface DomainPost { id: string; title: string | null; description: string | null; updated_at: string | Date; created_at: string | Date }
-
-/** The home page's list: every public markup document the owner has, newest first, filed or not. */
-export async function listDomainPosts(ownerId: string): Promise<DomainPost[]> {
-  const db = await getDb();
-  const rows = await db.query<DomainPost>(
-    `SELECT id, title, description, created_at, updated_at FROM artifacts
-     WHERE user_id = $1 AND visibility = 'public' AND format = 'markup' AND ${LIVE_ARTIFACT_SQL}
-     ORDER BY created_at DESC LIMIT 500`,
-    [ownerId],
-  );
-  return rows.rows;
 }
 
 /**

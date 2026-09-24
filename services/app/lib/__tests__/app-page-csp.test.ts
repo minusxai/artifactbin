@@ -11,6 +11,8 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { APP_CSP, APP_INLINE_SCRIPT_HASHES, createAppServer } from '@/server/app';
+import { DOMAIN_HOME_CSP } from '@/lib/custom-domain-home';
+import { THEME_BOOTSTRAP_HASH, THEME_BOOTSTRAP_SCRIPT } from '@/lib/theme-bootstrap';
 
 const app = createAppServer({ indexHtml: async () => '<!doctype html><div id="root">SPA</div>' });
 
@@ -96,6 +98,10 @@ describe('the app CSP', () => {
     expect(inline).toHaveLength(1);
     const hash = createHash('sha256').update(inline[0], 'utf8').digest('base64');
     expect(APP_INLINE_SCRIPT_HASHES).toContain(`'sha256-${hash}'`);
+    // The one copy other pages emit (a custom domain's home page) is these bytes under this hash.
+    expect(THEME_BOOTSTRAP_SCRIPT).toBe(inline[0]);
+    expect(THEME_BOOTSTRAP_HASH).toBe(`'sha256-${hash}'`);
+    expect(DOMAIN_HOME_CSP).toContain(`script-src 'sha256-${hash}';`);
   });
 
   it('serves app images under the same-origin image policy', () => {

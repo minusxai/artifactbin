@@ -51,6 +51,16 @@ export function canonicalArtifactPath(
   return `/@${ownerUsername}/${slug ? `${doc.id}-${slug}` : doc.id}`;
 }
 
+/**
+ * A post's path on its owner's custom domain (lib/custom-domains): `/<id>-<slug>`,
+ * or `/<id>` for a title with no slug. The same id-and-slug as the owned form,
+ * without the handle — the host already names whose it is.
+ */
+export function domainPostPath(doc: { id: string; title: string | null }): string {
+  const slug = titleSlug(doc.title);
+  return `/${slug ? `${doc.id}-${slug}` : doc.id}`;
+}
+
 /** Edit is a route mode on the artifact's address. */
 export const artifactViewPath = (pathname: string): string => pathname.replace(/\/edit\/?$/, '');
 export const artifactEditPath = (id: string): string => `/a/${encodeURIComponent(id)}/edit`;
