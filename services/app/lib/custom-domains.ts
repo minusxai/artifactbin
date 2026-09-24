@@ -54,7 +54,7 @@ export interface AttachedDomain {
   missingSince: string | null;
 }
 export type AttachRefusal = 'disabled' | 'invalid_hostname' | 'taken' | 'limit';
-export type VerifyRefusal = 'disabled' | 'not_found' | 'txt_missing' | 'not_pointing' | 'caa_blocks';
+export type VerifyRefusal = 'disabled' | 'not_found' | 'taken' | 'txt_missing' | 'not_pointing' | 'caa_blocks';
 
 /** The TXT record's label; the name we ask for is `_artifactbin.<hostname>`. */
 export const TXT_LABEL = '_artifactbin';
@@ -140,10 +140,13 @@ async function rowForUser(userId: string): Promise<DomainRow | null> {
   return (await db.query<DomainRow>(`SELECT ${COLUMNS} FROM custom_domains WHERE user_id = $1`, [userId])).rows[0] ?? null;
 }
 
-async function rowForHost(hostname: string): Promise<DomainRow | null> {
+/** The VERIFIED row for a hostname — the only row that holds the name. */
+async function verifiedRowForHost(hostname: string): Promise<DomainRow | null> {
   const db = await getDb();
-  return (await db.query<DomainRow>(`SELECT ${COLUMNS} FROM custom_domains WHERE hostname = $1`, [hostname])).rows[0] ?? null;
+  return (await db.query<DomainRow>(`SELECT ${COLUMNS} FROM custom_domains WHERE hostname = $1 AND status = 'verified'`, [hostname])).rows[0] ?? null;
 }
+
+const isUniqueViolation = (error: unknown): boolean => (error as { code?: string }).code === '23505';
 
 /** The account's domain, pending or verified — what the settings page shows. */
 export async function domainOf(userId: string): Promise<AttachedDomain | null> {
@@ -153,7 +156,10 @@ export async function domainOf(userId: string): Promise<AttachedDomain | null> {
 
 /**
  * Attach `hostname` to the account as PENDING. The same hostname again is the
- * same answer; any other name while one is attached is `limit`.
+ * same answer; any other name while one is attached is `limit`. Only a
+ * VERIFIED hostname is `taken`: a pending claim holds nothing, so nobody can
+ * squat a name by attaching it and never verifying — several accounts may
+ * wait on the same name, and only the one whose TXT token is in DNS verifies.
  */
 export async function attachDomain(userId: string, hostname: string): Promise<AttachedDomain | { error: AttachRefusal }> {
   if (!CUSTOM_DOMAINS_TARGET) return { error: 'disabled' };
@@ -166,7 +172,7 @@ export async function attachDomain(userId: string, hostname: string): Promise<At
   };
   const mine = await rowForUser(userId);
   if (mine) return mine.hostname === host ? view(mine) : { error: 'limit' };
-  if (await rowForHost(host)) return { error: 'taken' };
+  if (await verifiedRowForHost(host)) return { error: 'taken' };
   const db = await getDb();
   try {
     const inserted = await db.query<DomainRow>(
@@ -175,8 +181,8 @@ export async function attachDomain(userId: string, hostname: string): Promise<At
     );
     return view(inserted.rows[0]!);
   } catch (error) {
-    // A concurrent attach won the hostname or this account's one slot.
-    if ((error as { code?: string }).code === '23505') return settle();
+    // A concurrent attach took this account's one slot.
+    if (isUniqueViolation(error)) return settle();
     throw error;
   }
 }
@@ -204,7 +210,9 @@ async function holdsToken(row: Pick<DomainRow, 'hostname' | 'token'>, resolver: 
 /**
  * Check the account's pending (or verified) domain and mark it verified. The
  * first failing check is the answer: `txt_missing`, `not_pointing`,
- * `caa_blocks`. A failure leaves the row as it was.
+ * `caa_blocks`. A failure leaves the row as it was. A name another account
+ * has already verified is `taken`. Success clears every OTHER account's
+ * pending claim on the name, in the same transaction, after the DNS is asked.
  */
 export async function verifyDomain(userId: string, hostname: string, resolver: DomainResolver): Promise<AttachedDomain | { error: VerifyRefusal }> {
   const target = CUSTOM_DOMAINS_TARGET;
@@ -220,14 +228,27 @@ export async function verifyDomain(userId: string, hostname: string, resolver: D
   if (await caaForbidsUs(row.hostname, resolver)) return { error: 'caa_blocks' };
 
   const db = await getDb();
-  const updated = await db.query<DomainRow>(
-    `UPDATE custom_domains SET status = 'verified', verified_at = COALESCE(verified_at, now()), missing_since = NULL
-     WHERE hostname = $1 AND user_id = $2 RETURNING ${COLUMNS}`,
-    [row.hostname, userId],
-  );
-  const verified = updated.rows[0];
-  // Removed while DNS was being asked: there is nothing left to verify.
-  return verified ? view(verified) : { error: 'not_found' };
+  try {
+    const verified = await db.transaction(async (tx) => {
+      const held = await tx.query<{ user_id: string }>(`SELECT user_id FROM custom_domains WHERE hostname = $1 AND status = 'verified' AND user_id <> $2`, [row.hostname, userId]);
+      if (held.rows.length) return 'taken' as const;
+      const updated = await tx.query<DomainRow>(
+        `UPDATE custom_domains SET status = 'verified', verified_at = COALESCE(verified_at, now()), missing_since = NULL
+         WHERE hostname = $1 AND user_id = $2 RETURNING ${COLUMNS}`,
+        [row.hostname, userId],
+      );
+      // Removed while DNS was being asked: there is nothing left to verify.
+      if (!updated.rows[0]) return null;
+      await tx.query(`DELETE FROM custom_domains WHERE hostname = $1 AND user_id <> $2 AND status = 'pending'`, [row.hostname, userId]);
+      return updated.rows[0];
+    });
+    if (verified === 'taken') return { error: 'taken' };
+    return verified ? view(verified) : { error: 'not_found' };
+  } catch (error) {
+    // A concurrent verify of the same name won the one verified slot (the partial unique index).
+    if (isUniqueViolation(error)) return { error: 'taken' };
+    throw error;
+  }
 }
 
 /** Detach the account's domain, whatever the flag says. True when there was one. */
@@ -251,8 +272,7 @@ export function customHostCandidate(hostname: string): string | null {
 export async function ownerForHost(hostname: string): Promise<string | null> {
   const host = normalizeHostname(hostname);
   if (!host) return null;
-  const row = await rowForHost(host);
-  return row?.status === 'verified' ? row.user_id : null;
+  return (await verifiedRowForHost(host))?.user_id ?? null;
 }
 
 /** The certificate ask check: may the edge obtain a certificate for this name? Verified only; flag ignored. */
@@ -280,11 +300,11 @@ export async function recheckDomains(resolver: DomainResolver, now: Date = new D
     let present: boolean;
     try { present = await holdsToken(row, resolver); } catch { continue; }
     if (present) {
-      if (row.missing_since !== null) await db.query('UPDATE custom_domains SET missing_since = NULL WHERE hostname = $1', [row.hostname]);
+      if (row.missing_since !== null) await db.query('UPDATE custom_domains SET missing_since = NULL WHERE user_id = $1', [row.user_id]);
       continue;
     }
     if (row.missing_since === null) {
-      await db.query('UPDATE custom_domains SET missing_since = $2 WHERE hostname = $1 AND missing_since IS NULL', [row.hostname, now.toISOString()]);
+      await db.query('UPDATE custom_domains SET missing_since = $2 WHERE user_id = $1 AND missing_since IS NULL', [row.user_id, now.toISOString()]);
       missing++;
       continue;
     }

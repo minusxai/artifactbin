@@ -72,11 +72,13 @@ const USERS: Table = {
 
 /**
  * CUSTOM DOMAINS (lib/custom-domains) — one hostname an ACCOUNT serves its
- * public documents at. Keyed by the hostname (lowercase, the pk: one owner per
- * name, pending or verified) and unique per `user_id` (one domain per account).
- * The domain belongs to the account id, never the username, so a rename moves
- * nothing. `token` is the TXT value that proves ownership; `missing_since` is
- * the daily re-check's clock, and three days of it detach the row.
+ * public documents at. Keyed by the account (`user_id`: one domain per
+ * account). A hostname is HELD only once verified: several accounts may hold a
+ * PENDING row for the same name, each with its own TXT token, and a partial
+ * unique index lets exactly one row per hostname be `verified`. Verifying
+ * clears the other accounts' pending rows. The domain belongs to the account
+ * id, never the username, so a rename moves nothing. `missing_since` is the
+ * daily re-check's clock; three days of it detach the row.
  *
  * No declared foreign key: the schema renderer has none, so the account's
  * deletion cascades in code — test users are erased through every table with
@@ -85,8 +87,9 @@ const USERS: Table = {
 const CUSTOM_DOMAINS: Table = {
   name: 'custom_domains',
   columns: [
-    { name: 'hostname', type: 'TEXT', notNull: true },
     { name: 'user_id', type: 'TEXT', notNull: true },
+    // Lowercase, normalized (lib/custom-domains normalizeHostname).
+    { name: 'hostname', type: 'TEXT', notNull: true },
     { name: 'token', type: 'TEXT', notNull: true },
     // 'pending' | 'verified'
     { name: 'status', type: 'TEXT', notNull: true, default: "'pending'" },
@@ -94,9 +97,12 @@ const CUSTOM_DOMAINS: Table = {
     { name: 'verified_at', type: 'TIMESTAMPTZ' },
     { name: 'missing_since', type: 'TIMESTAMPTZ' },
   ],
-  primaryKey: ['hostname'],
-  // An index, not `uniques`: only an index reaches a database that already exists.
-  indexes: [{ name: 'idx_custom_domains_user', columns: ['user_id'], unique: true }],
+  primaryKey: ['user_id'],
+  indexes: [
+    // One VERIFIED owner per hostname; pending claims may share a name.
+    { name: 'idx_custom_domains_verified_host', columns: ['hostname'], unique: true, where: "status = 'verified'" },
+    { name: 'idx_custom_domains_host', columns: ['hostname'] },
+  ],
 };
 
 const TOKENS: Table = {

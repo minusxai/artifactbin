@@ -118,13 +118,39 @@ describe('attaching', () => {
     expect(await attached(user, 'blog.example.test')).toMatchObject({ hostname: 'blog.example.test' });
   });
 
-  it('refuses a hostname another account holds, pending or verified', async () => {
+  it('lets a pending claim block nobody: the real owner still attaches and verifies, and the squatter is cleared', async () => {
+    const squatter = await account('squatter');
     const owner = await account('holder');
-    const other = await account('squatter');
+    const squat = await attached(squatter, 'blog.example.org');
+    // Pending is not held: the real owner attaches the same name.
+    const domain = await attached(owner, 'BLOG.example.org');
+    expect(domain.txtValue).not.toBe(squat.txtValue);
+    // The squatter cannot verify with the owner's record: the token is per account.
+    const ownersDns = followed('blog.example.org', domain.txtValue);
+    expect(await verifyDomain(squatter, 'blog.example.org', ownersDns)).toEqual({ error: 'txt_missing' });
+    expect(await verifyDomain(owner, 'blog.example.org', ownersDns)).toMatchObject({ status: 'verified' });
+    expect(await ownerForHost('blog.example.org')).toBe(owner);
+    // Verifying clears every other account's pending claim on the name.
+    expect(await domainOf(squatter)).toBeNull();
+    const rows = await (await harness.db()).query<{ user_id: string }>('SELECT user_id FROM custom_domains WHERE hostname = $1', ['blog.example.org']);
+    expect(rows.rows.map((r) => r.user_id)).toEqual([owner]);
+  });
+
+  it('refuses a VERIFIED hostname to everyone else, at attach and at verify', async () => {
+    const owner = await account('verifiedholder');
+    const late = await account('latecomer');
+    const racer = await account('racer');
+    // Two pending claims; the second one's verify races the first.
     const domain = await attached(owner, 'blog.example.org');
-    expect(await attachDomain(other, 'BLOG.example.org')).toEqual({ error: 'taken' });
+    const racing = await attached(racer, 'blog.example.org');
     await verifyDomain(owner, 'blog.example.org', followed('blog.example.org', domain.txtValue));
-    expect(await attachDomain(other, 'blog.example.org')).toEqual({ error: 'taken' });
+    expect(await attachDomain(late, 'blog.example.org')).toEqual({ error: 'taken' });
+    // The racer's pending row is gone, so its verify finds nothing to verify.
+    expect(await verifyDomain(racer, 'blog.example.org', followed('blog.example.org', racing.txtValue))).toEqual({ error: 'not_found' });
+    // Even if a pending row survives beside a verified one, verifying it is refused.
+    await (await harness.db()).query("INSERT INTO custom_domains (hostname, user_id, token, status) VALUES ($1, $2, $3, 'pending')", ['blog.example.org', racer, racing.txtValue]);
+    expect(await verifyDomain(racer, 'blog.example.org', followed('blog.example.org', racing.txtValue))).toEqual({ error: 'taken' });
+    expect(await ownerForHost('blog.example.org')).toBe(owner);
   });
 
   it('holds one domain per account: the same name again is the same answer, a second name is `limit`', async () => {

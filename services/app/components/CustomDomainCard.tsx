@@ -42,6 +42,8 @@ export function verifyRefusal(error: string, domain: Domain, target: string | nu
       return `${domain.hostname} does not point at ${target ?? 'our servers'} yet. If your DNS host proxies it (Cloudflare's orange cloud), set the record to DNS only.`;
     case 'caa_blocks':
       return `A CAA record on ${domain.hostname} does not allow Let's Encrypt, which issues its certificate. Add a CAA record: 0 issue "letsencrypt.org".`;
+    case 'taken':
+      return `Another account has already verified ${domain.hostname}.`;
     case 'disabled':
       return 'Verification is paused on this server right now; your domain will wait.';
     default:

@@ -57,7 +57,8 @@ it('membership and its notifications belong to the app',()=>{for(const name of [
 
 it('notification outbox and subscriber receipts stay with their existing owners',()=>{expect(declared()['app.event_outbox']).toBe('app');expect(declared()['events.deliveries']).toBe('events');});
 
-it('custom domains belong to app accounts, one hostname per account',()=>{
+it('custom domains belong to app accounts: one per account, one VERIFIED owner per hostname',()=>{
  expect(declared()['app.custom_domains']).toBe('app');
- expect(renderedSchema().schema).toMatch(/CREATE UNIQUE INDEX IF NOT EXISTS idx_custom_domains_user ON app\.custom_domains \(user_id\)/);
+ expect(renderedSchema().schema).toMatch(/CREATE TABLE IF NOT EXISTS app\.custom_domains \([\s\S]*PRIMARY KEY \(user_id\)/);
+ expect(renderedSchema().schema).toMatch(/CREATE UNIQUE INDEX IF NOT EXISTS idx_custom_domains_verified_host ON app\.custom_domains \(hostname\) WHERE status = 'verified'/);
 });
