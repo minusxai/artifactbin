@@ -25,6 +25,7 @@
  * configured, the asset origin on `script`/`img`/`font`/`media-src`. Guarded by
  * __tests__/raw-document.test.ts.
  */
+import { BASEMAP_PATH } from '@/lib/basemap';
 /** Where each kind of subresource may come from — content-independent. */
 const SOURCE_DIRECTIVES = [
   "default-src 'none'",
@@ -117,7 +118,7 @@ export function markupCsp(origin: string, id: string, assetOrigin?: string): str
   // without a trailing slash exactly, so `/events` does not cover `/events/frame`.
   // GLB loaders fetch embedded textures/buffers through local blob/data URLs;
   // these add no network destination or access to the application's APIs.
-  const connect = `connect-src ${self}${queryPath(id)} ${self}${eventsPath(id)} ${self}${eventsPath(id)}/frame ${self}${mutatePath(id)} ${self}${resolvePath(id)} ${self}${GEOJSON_DIR_PATH} ${self}/basemap/ blob: data:`;
+  const connect = `connect-src ${self}${queryPath(id)} ${self}${eventsPath(id)} ${self}${eventsPath(id)}/frame ${self}${mutatePath(id)} ${self}${resolvePath(id)} ${self}${GEOJSON_DIR_PATH} ${self}${BASEMAP_PATH} blob: data:`;
   if(assetOrigin && (new URL(assetOrigin).origin!==assetOrigin||!/^https?:\/\//.test(assetOrigin)))throw Error('Invalid asset origin');
   const sources=SOURCE_DIRECTIVES.map(d=>{
     // Firefox evaluates inherited 'self' against the opaque srcdoc realm for

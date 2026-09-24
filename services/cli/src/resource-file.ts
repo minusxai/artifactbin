@@ -10,6 +10,7 @@ import {assetInput} from './upload-input';
 import {stringify} from 'yaml';
 import type {Snapshot} from './workspace';
 import {snapshotDocument} from './local';
+import {isDatasetFile} from './dataset-file';
 import {isDeepStrictEqual} from 'node:util';
 
 /** `path` is workspace-relative; `declared` is the spelling the YAML file uses for it. */
@@ -83,6 +84,6 @@ export async function resourceContent(resource:ArtifactResourceFile,path:string,
   if(!text.trimStart().startsWith('<Dataset'))throw new CliError('invalid_resource_source','A dataset .jsx source must hold one <Dataset> definition.','Name a CSV or JSON file for stored rows.');
   return {dataset:text};
  }
- if(resource.type==='dataset'&&!['.csv','.json'].includes(extension)||resource.type==='file'&&['.csv','.json','.jsx','.yaml','.yml'].includes(extension))throw new CliError('invalid_resource_source',`The source format does not match type ${resource.type}.`);
+ if(resource.type==='dataset'&&!isDatasetFile(source)||resource.type==='file'&&(isDatasetFile(source)||['.jsx','.yaml','.yml'].includes(extension)))throw new CliError('invalid_resource_source',`The source format does not match type ${resource.type}.`);
  return assetInput(source,bytes);
 }

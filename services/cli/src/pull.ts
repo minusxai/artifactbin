@@ -18,6 +18,7 @@ import {HttpClient} from './http';
 import {reconcileDocument} from './reconcile';
 import {stat} from 'node:fs/promises';
 import {parseResourceFile,type ResourceSource} from './resource-file';
+import {datasetFileBytes,isDatasetFile} from './dataset-file';
 import {prepareResourcePull} from './resource-pull';
 /** `adopt` is the row file a dataset was published from, becoming the pulled YAML's `source`. */
 interface PullTarget {id:string;version?:number;path?:string;directory?:string;before:Buffer|null;previousPath?:string;adopt?:string}
@@ -52,7 +53,7 @@ export async function preparePull(workspace:Workspace,args:string[],force=false,
   // Pulling a tracked dataset AS a resource file is not a second working copy: the YAML takes over
   // the identity and the rows it was published from become its `source`, the shape a YAML dataset
   // already has. Any other second path for one id stays refused.
-  const adopt=path&&prior&&prior[0]!==path&&/\.ya?ml$/i.test(path)&&['.csv','.json'].includes(extname(prior[0]).toLowerCase())?prior[0]:undefined;
+  const adopt=path&&prior&&prior[0]!==path&&/\.ya?ml$/i.test(path)&&isDatasetFile(prior[0])?prior[0]:undefined;
   if(adopt){
    const bytes=await readOptional(await confinedPath(workspace.root,adopt));
    if(bytes&&digest(bytes)!==prior![1].file&&!force)throw new CliError('local_changed',`${adopt} has local changes.`,`Push them first, or pull --force to replace them with the published rows.`);
@@ -158,7 +159,7 @@ export async function pull(workspace:Workspace,args:string[],client:HttpClient,o
     if(snapshot.format!=='dataset')bytes=content.bytes;
     // A connected or multi-table dataset has no rows to keep beside a bare file; its source belongs to typed YAML.
     else if(!content.contentType.startsWith('application/json'))throw new CliError('unsupported_pull_format','This dataset is defined by a <Dataset> definition, not rows.','Pull it as a typed resource: afbin pull <ref> --format yaml.');
-    else{const rows=datasetRows(content.bytes);bytes=Buffer.from(extname(path).toLowerCase()==='.csv'?rowsCsv(rows):JSON.stringify(rows,null,2)+'\n');}
+    else bytes=datasetFileBytes(path,datasetRows(content.bytes));
    }else throw new CliError('unsupported_pull_format',`The ${snapshot.format} artifact has no local file representation.`,'Pull it as a dataset resource once definition retrieval is integrated.');
    const wantsBackup=!!options.force&&!!before&&!before.equals(bytes);
    if(options.dryRun){operations.push({path,...(wantsBackup?{backup:'would_back_up'}:{}),id:head.id,version:snapshot.version,head_version:head.version,status:'would_write'});continue;}

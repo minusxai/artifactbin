@@ -6,6 +6,7 @@
  * dangerous URL schemes. Parsing alone does not enforce these constraints.
  */
 import { mermaidSourceError } from '@/lib/story-ui/mermaid-source';
+import { validateDeckMap } from '@/lib/viz/deck-spec';
 import { parseRowRef } from '@/lib/story/row-scope';
 import { isReactiveExpression, reactiveNames, REACTIVE_BOOLEAN_PROPS } from './reactive';
 import { compileManagedIframe } from '@/lib/story/managed-iframe';
@@ -124,6 +125,15 @@ function walk(
     const code = node.attributes.find(a => a.name === 'code')?.value;
     const error = mermaidSourceError(code?.static ? code.json : undefined);
     if (error) errors.push({ message: error, tag: node.tag, start: node.start, end: node.end });
+  }
+  if (node.isComponent && node.tag === 'DeckGL') {
+    const prop = (name: string) => {
+      const value = node.attributes.find(a => a.name === name)?.value;
+      return value?.static ? value.json : value ? null : undefined;
+    };
+    for (const message of validateDeckMap({ layers: prop('layers'), basemap: prop('basemap'), initialViewState: prop('initialViewState'), tooltip: prop('tooltip') })) {
+      errors.push({ message, tag: node.tag, start: node.start, end: node.end });
+    }
   }
   if (node.tag === 'Iframe') {
     try { compileManagedIframe(node); }

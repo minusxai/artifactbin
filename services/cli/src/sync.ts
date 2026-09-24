@@ -3,8 +3,6 @@ import {referenceIds} from './preview/graph';
 import {inferColumns} from '@artifactbin/utils/shape';
 import {viewersWritePolicy} from '../../utils/src/dataset-policy';
 import type {DatasetAccessPolicy as DatasetPolicy} from '@artifactbin/contracts';
-import {parseCsv} from '../../app/lib/data-ingest/csv';
-import {coerceRows} from '../../app/lib/data-ingest/coerce';
 import {readConflicts,persistConflict,clearConflict} from './conflict-state';
 import {isDeepStrictEqual} from 'node:util';
 import {extname,resolve} from 'node:path';
@@ -24,6 +22,7 @@ import {checkRetiredCreate,retireDeletedCreate,stageRequest,readPendingRequest,s
 import {HttpClient} from './http';
 import {describeConflict} from './conflict';
 import {reconcileDocument} from './reconcile';
+import {datasetFileRows,isDatasetFile} from './dataset-file';
 import {parseResourceFile,readResourceSource,reconcileResource,resourceContent,snapshotResource,writeResourceFile,type ResourceSource} from './resource-file';
 /**
  * `access` is the pushed dataset's row access — the CLI door to a dataset a document may WRITE to —
@@ -82,7 +81,7 @@ export async function planPush(workspace:Workspace,paths?:string[],options:PushO
   const resource=file.resource;
   // One access per pushed dataset: the YAML states it, --access states it for a bare CSV/JSON push,
   // and a disagreement is refused rather than silently resolved in either direction.
-  const datasetFile=resource?resource.type==='dataset':!file.document&&['.csv','.json'].includes(extname(file.path).toLowerCase());
+  const datasetFile=resource?resource.type==='dataset':!file.document&&isDatasetFile(file.path);
   // A viewers' write grant is meaningless on a read-only dataset, so the policy implies the access.
   const requestedAccess=options.access??(options.policy==='viewers-write'?'readwrite':undefined);
   if(options.access!==undefined||options.policy!==undefined){
@@ -367,13 +366,8 @@ function datasetAccess(snapshot:Snapshot,body:Record<string,unknown>):{access?:s
  */
 function datasetColumns(path:string,bytes:Buffer|null):{columns?:Array<{name:string;type:string}>}{
  if(!bytes)return{};
- const ext=extname(path).toLowerCase();
  try{
-  let rows:unknown;
-  if(ext==='.csv'){const csv=parseCsv(bytes.toString());rows=coerceRows(csv.headers,csv.rows);}
-  else if(ext==='.json')rows=JSON.parse(bytes.toString());
-  else return{};
-  if(!Array.isArray(rows)||!rows.every(row=>row&&typeof row==='object'&&!Array.isArray(row)))return{};
-  return{columns:inferColumns(rows as Record<string,unknown>[]).map(c=>({name:c.name,type:c.type}))};
+  if(!isDatasetFile(path))return{};
+  return{columns:inferColumns(datasetFileRows(path,bytes)).map(c=>({name:c.name,type:c.type}))};
  }catch{return{};}
 }

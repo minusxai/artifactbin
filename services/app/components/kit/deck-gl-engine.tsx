@@ -1,119 +1,246 @@
-// SPIKE (M0): the lazily loaded deck.gl engine. Throwaway — measures bundle, CSP and export.
+/**
+ * The `<DeckGL>` engine — the lazily loaded chunk behind components/kit/deck-gl.
+ * Every layer is built from the lib/viz/deck-spec contract (allowlisted types
+ * and props, interpreted accessors), never from the authored JSON directly, so
+ * stored content that predates validation still cannot reach deck.gl.
+ *
+ * With a basemap, MapLibre draws the OpenFreeMap style and deck draws INTO its
+ * GL context (interleaved): Chrome caps a page near 16 contexts, and a document
+ * may hold many maps. Without one, deck draws alone.
+ */
 import { DeckGL } from '@deck.gl/react';
-import { WebMercatorViewport, type MapViewState } from '@deck.gl/core';
+import { WebMercatorViewport, type MapViewState, type PickingInfo } from '@deck.gl/core';
 import { ScatterplotLayer, ArcLayer, GeoJsonLayer, ColumnLayer, PolygonLayer } from '@deck.gl/layers';
 import { HexagonLayer, HeatmapLayer, GridLayer } from '@deck.gl/aggregation-layers';
 import { Map as BaseMap, useControl } from 'react-map-gl/maplibre';
 import { MapboxOverlay } from '@deck.gl/mapbox';
-import { cellToBoundary } from 'h3-js';
-// @ts-expect-error SPIKE: the CSP build ships no typings of its own.
+import { cellToBoundary, cellToLatLng, isValidCell } from 'h3-js';
+// @ts-expect-error The CSP build ships no typings of its own; it is the default build's twin.
 import maplibregl from 'maplibre-gl/dist/maplibre-gl-csp';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { compileAccessor, layerBoundary, GEOMETRY_COLUMN, DECK_LAYERS, type DeckPalette } from '@/lib/viz/deck-spec';
 import { loadGeoFeatures } from '@/lib/viz/geo-assets';
-// MapLibre may not spawn a blob: worker under the document CSP; serve it same-origin.
-maplibregl.setWorkerUrl('/basemap/worker.js');
-import { useEffect, useMemo, useState } from 'react';
+import { basemapStyleUrl, basemapTransformRequest, BASEMAP_WORKER_URL } from '@/lib/basemap';
+import { createVegaTooltipHandler, hideVegaTooltip } from '@/lib/viz/vega-tooltip-handler';
+import { COLOR_PALETTE } from '@/lib/chart/chart-theme';
+
+// MapLibre may not spawn a blob: worker under the document CSP; it loads a same-origin script.
+maplibregl.setWorkerUrl(BASEMAP_WORKER_URL);
 
 type Row = Record<string, unknown>;
-type LayerSpec = Record<string, unknown> & { '@@type': string };
+type Rgb = [number, number, number];
+type Feature = { type: 'Feature'; properties: Row; geometry: unknown };
+interface Built { spec: Row; data: readonly unknown[]; accessors: Row; layer: unknown }
 
-// @deck.gl/geo-layers imports loaders.gl code that compiles WebAssembly on load,
-// which the document CSP refuses; H3 cells are drawn as polygons from h3-js instead.
+// H3 cells drawn from h3-js: @deck.gl/geo-layers imports loaders.gl code that
+// compiles WebAssembly on load, which the document CSP refuses.
 class H3HexagonLayer extends PolygonLayer<Row> {
   static override layerName = 'H3HexagonLayer';
   constructor(props: Record<string, unknown>) {
-    const getHexagon = props.getHexagon as (d: Row) => string;
+    const getHexagon = props.getHexagon as (d: Row) => unknown;
     super({ ...props, getPolygon: (d: Row) => cellToBoundary(String(getHexagon(d)), true) } as never);
   }
 }
-const LAYERS = { ScatterplotLayer, ArcLayer, GeoJsonLayer, ColumnLayer, HexagonLayer, HeatmapLayer, GridLayer, H3HexagonLayer } as const;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const LAYER_CLASSES: Record<keyof typeof DECK_LAYERS, new (props: any) => unknown> = {
+  ScatterplotLayer, ArcLayer, GeoJsonLayer, ColumnLayer, HexagonLayer, HeatmapLayer, GridLayer, H3HexagonLayer,
+};
+const POSITION_PROPS = ['getPosition', 'getSourcePosition', 'getTargetPosition'];
 
-// One GL context per map: deck draws INTO MapLibre's context (Chrome caps a page near 16).
-function DeckOverlay({ layers }: { layers: unknown[] }) {
+const hexRgb = (hex: string): Rgb => [1, 3, 5].map(i => Number.parseInt(hex.slice(i, i + 2), 16)) as Rgb;
+const mix = (a: Rgb, b: Rgb, t: number): Rgb => a.map((v, i) => Math.round(v + (b[i]! - v) * t)) as Rgb;
+/** The chart palette for category(), and a ramp from the surface towards the chart blue for ramp(). */
+function paletteFor(dark: boolean): DeckPalette {
+  const low: Rgb = dark ? [30, 41, 59] : [226, 236, 246];
+  const high = hexRgb(COLOR_PALETTE[1]!);
+  return { sequential: Array.from({ length: 7 }, (_, i) => mix(low, high, i / 6)), categorical: COLOR_PALETTE.map(hexRgb) };
+}
+
+/** Query rows that carry an author's GeoJSON, as features: the geometry column parsed, the rest as properties. */
+function rowsAsFeatures(rows: readonly Row[]): Feature[] {
+  return rows.flatMap(({ [GEOMETRY_COLUMN]: geometry, ...properties }) => {
+    try {
+      const parsed = typeof geometry === 'string' ? JSON.parse(geometry) : geometry;
+      return parsed && typeof parsed === 'object' ? [{ type: 'Feature' as const, properties, geometry: parsed }] : [];
+    } catch { return []; }
+  });
+}
+
+/** Every [lng, lat] the built layers draw — the extent the view fits to. */
+function extentOf(layers: readonly Built[]): [[number, number], [number, number]] | null {
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  const add = (x: unknown, y: unknown) => {
+    const lng = Number(x), lat = Number(y);
+    if (!Number.isFinite(lng) || !Number.isFinite(lat) || Math.abs(lat) > 90 || Math.abs(lng) > 180) return;
+    minX = Math.min(minX, lng); maxX = Math.max(maxX, lng); minY = Math.min(minY, lat); maxY = Math.max(maxY, lat);
+  };
+  const walk = (c: unknown): void => {
+    if (!Array.isArray(c)) return;
+    if (typeof c[0] === 'number') add(c[0], c[1]);
+    else for (const x of c) walk(x);
+  };
+  for (const { spec, data, accessors } of layers) {
+    if (spec['@@type'] === 'GeoJsonLayer') { for (const f of data as Feature[]) walk((f.geometry as { coordinates?: unknown } | null)?.coordinates); continue; }
+    const getHexagon = accessors.getHexagon;
+    if (typeof getHexagon === 'function') {
+      for (const d of data) { const h = String(getHexagon(d)); if (isValidCell(h)) { const [lat, lng] = cellToLatLng(h); add(lng, lat); } }
+      continue;
+    }
+    for (const prop of POSITION_PROPS) {
+      const get = accessors[prop];
+      if (typeof get === 'function') for (const d of data) walk(get(d));
+    }
+  }
+  return Number.isFinite(minX) ? [[minX, minY], [maxX, maxY]] : null;
+}
+
+type HoverHandler = (info: PickingInfo, event: { srcEvent: Event }) => void;
+/** deck draws into MapLibre's own GL context: one context per map. */
+function DeckOverlay({ layers, onHover }: { layers: unknown[]; onHover: HoverHandler }) {
   const overlay = useControl(() => new MapboxOverlay({ interleaved: true, layers: [] }));
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  overlay.setProps({ layers: layers as any, getTooltip: ({ object }: { object?: Row & { properties?: Row } }) => object ? JSON.stringify(object.properties ?? object).slice(0, 200) : null });
+  overlay.setProps({ layers: layers as any, onHover: onHover as never });
   return null;
 }
 
-// Spike accessor: `@@=col`, `@@=[a, b]`, `@@ramp=col`, or a literal. The real one is a vetted grammar.
-const field = (d: Row, c: string) => d[c] ?? (d as { properties?: Row }).properties?.[c];
-const RAMP = [[239, 243, 255], [189, 215, 238], [107, 174, 214], [49, 130, 189], [8, 81, 156]];
-function accessor(v: unknown, data: Row[]): unknown {
-  if (typeof v !== 'string' || !v.startsWith('@@')) return v;
-  if (v.startsWith('@@ramp=')) {
-    const col = v.slice(7).trim();
-    const vals = data.map(d => Number(field(d, col))).filter(Number.isFinite);
-    const lo = Math.min(...vals), hi = Math.max(...vals);
-    return (d: Row) => {
-      const n = Number(field(d, col));
-      if (!Number.isFinite(n)) return [200, 200, 200, 60];
-      const t = hi > lo ? (n - lo) / (hi - lo) : 0.5;
-      return [...RAMP[Math.min(RAMP.length - 1, Math.floor(t * RAMP.length))]!, 210];
-    };
-  }
-  const expr = v.slice(3).trim();
-  if (expr.startsWith('[')) {
-    const cols = expr.slice(1, -1).split(',').map(s => s.trim());
-    return (d: Row) => cols.map(c => (/^-?\d/.test(c) ? Number(c) : Number(field(d, c))));
-  }
-  return (d: Row) => field(d, expr);
+/** The tooltip record for a picked object: a feature's properties, a bin's count, or the row itself. */
+function tooltipRecord(object: unknown, columns: readonly string[] | null): Row | null {
+  if (!object || typeof object !== 'object') return null;
+  const o = object as Row;
+  const source: Row = o.properties && typeof o.properties === 'object' ? o.properties as Row
+    : 'count' in o && 'position' in o ? { count: o.count, ...(o.colorValue !== undefined && o.colorValue !== o.count ? { value: o.colorValue } : {}) }
+      : o;
+  const keys = columns ?? Object.keys(source).filter(k => k !== GEOMETRY_COLUMN && k !== 'position').slice(0, 8);
+  const out: Row = {};
+  for (const k of keys) if (source[k] !== undefined && source[k] !== null) out[k] = source[k];
+  return Object.keys(out).length ? out : null;
 }
 
-export function DeckEngine({ rows, layers, basemap, colorMode, initialViewState, height }: {
-  rows: Row[]; layers: LayerSpec[]; basemap?: string; colorMode: 'light' | 'dark'; initialViewState?: MapViewState; height: number;
-}) {
-  const [boundaries, setBoundaries] = useState<Record<string, unknown[]>>({});
-  const ids = useMemo(() => layers.map(l => l.data).filter((d): d is string => typeof d === 'string' && d.startsWith('boundary:')).map(d => d.slice(9)), [layers]);
+const WORLD: MapViewState = { longitude: 0, latitude: 20, zoom: 1, pitch: 0, bearing: 0 };
+
+export interface DeckEngineProps {
+  rows: Row[];
+  layers: unknown;
+  basemap?: string;
+  colorMode: 'light' | 'dark';
+  initialViewState?: Partial<MapViewState>;
+  tooltip?: boolean | string[];
+  title?: string;
+  height: number;
+}
+
+export function DeckEngine({ rows, layers, basemap = 'auto', colorMode, initialViewState, tooltip = true, title = 'Map', height }: DeckEngineProps) {
+  const specs = useMemo(() => (Array.isArray(layers) ? layers : [])
+    .filter((l): l is Row => !!l && typeof l === 'object' && String((l as Row)['@@type']) in LAYER_CLASSES), [layers]);
+  const [boundaries, setBoundaries] = useState<Record<string, Feature[]>>({});
+  const boundaryKey = specs.map(layerBoundary).filter(Boolean).join(',');
   useEffect(() => {
-    for (const id of ids) void loadGeoFeatures(id).then(f => setBoundaries(b => ({ ...b, [id]: f })));
-  }, [ids]);
+    for (const id of new Set(boundaryKey.split(',').filter(Boolean))) {
+      void loadGeoFeatures(id).then(f => setBoundaries(b => ({ ...b, [id]: f as unknown as Feature[] }))).catch(() => {});
+    }
+  }, [boundaryKey]);
 
-  const deckLayers = useMemo(() => {
-    const out: unknown[] = [];
-    layers.forEach((spec, i) => {
-      const Ctor = LAYERS[spec['@@type'] as keyof typeof LAYERS];
-      if (!Ctor) return;
-      const d = spec.data;
-      let data: Row[] = rows;
-      if (typeof d === 'string' && d.startsWith('boundary:')) {
-        const features = (boundaries[d.slice(9)] ?? []) as Array<{ properties: Row }>;
-        const join = spec['@@join'] as [string, string] | undefined;
-        const byKey = join ? new Map(rows.map(r => [String(r[join[1]]), r])) : null;
-        data = features.map(f => ({ ...f, properties: { ...f.properties, ...(byKey?.get(String(f.properties[join![0]])) ?? {}) } }));
-      }
-      const props: Record<string, unknown> = { id: `l${i}`, pickable: true };
-      for (const [k, v] of Object.entries(spec)) if (k !== '@@type' && k !== '@@join') props[k] = accessor(v, data);
-      props.data = data;
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      out.push(new (Ctor as any)(props));
-    });
-    return out;
-  }, [layers, rows, boundaries]);
-  const style = basemap === 'none' ? null : (basemap === 'dark' || (basemap !== 'light' && colorMode === 'dark')) ? 'dark' : 'positron';
+  const palette = useMemo(() => paletteFor(colorMode === 'dark'), [colorMode]);
+  const built = useMemo<Built[]>(() => specs.flatMap((spec, i) => {
+    const boundary = layerBoundary(spec);
+    let data: readonly unknown[] = rows;
+    if (boundary !== null) {
+      const features = boundaries[boundary];
+      if (!features) return [];
+      const join = spec['@@join'] as [string, string] | undefined;
+      const byKey = join ? new Map(rows.map(r => [String(r[join[1]]), r])) : null;
+      data = join ? features.map(f => ({ ...f, properties: { ...f.properties, ...(byKey!.get(String(f.properties?.[join[0]])) ?? {}) } })) : features;
+    } else if (spec['@@type'] === 'GeoJsonLayer') data = rowsAsFeatures(rows);
+    const accessors: Row = {};
+    const props: Row = { id: `layer-${i}`, pickable: spec['@@type'] !== 'HeatmapLayer', data };
+    for (const [key, value] of Object.entries(spec)) {
+      if (key === '@@type' || key === '@@join' || key === 'data') continue;
+      if (typeof value === 'string' && value.startsWith('@@')) {
+        if (!value.startsWith('@@=')) return [];
+        try { props[key] = accessors[key] = compileAccessor(value.slice(3), data, palette); } catch { return []; }
+      } else props[key] = value;
+    }
+    return [{ spec, data, accessors, layer: new LAYER_CLASSES[spec['@@type'] as keyof typeof LAYER_CLASSES](props) }];
+  }), [specs, rows, boundaries, palette]);
 
-  const viewState = useMemo<MapViewState>(() => {
-    if (initialViewState) return initialViewState;
-    const pts = rows.flatMap(r => [[Number(r.lng), Number(r.lat)], [Number(r.lng2), Number(r.lat2)]]).filter(p => p.every(Number.isFinite));
-    if (!pts.length) return { longitude: 0, latitude: 20, zoom: 1 };
-    const lngs = pts.map(p => p[0]!), lats = pts.map(p => p[1]!);
-    const vp = new WebMercatorViewport({ width: 800, height });
-    const { longitude, latitude, zoom } = vp.fitBounds([[Math.min(...lngs), Math.min(...lats)], [Math.max(...lngs), Math.max(...lats)]], { padding: 40 });
-    return { longitude, latitude, zoom };
-  }, [rows, initialViewState, height]);
+  // ── The view: fitted to the data until the reader moves it ──────────────────
+  const box = useRef<HTMLDivElement>(null);
+  const extent = useMemo(() => extentOf(built), [built]);
+  const [width, setWidth] = useState(0);
+  useEffect(() => {
+    const el = box.current;
+    if (!el) return;
+    const observer = new ResizeObserver(() => setWidth(el.clientWidth));
+    observer.observe(el);
+    setWidth(el.clientWidth);
+    return () => observer.disconnect();
+  }, []);
+  const fitted = useMemo<MapViewState>(() => {
+    if (initialViewState) return { ...WORLD, ...initialViewState };
+    if (!extent || !width) return WORLD;
+    const [[x0, y0], [x1, y1]] = extent;
+    const padding = Math.max(8, Math.min(40, width / 10, height / 10));
+    const { longitude, latitude, zoom } = new WebMercatorViewport({ width, height }).fitBounds(
+      [[x0, y0], [x1 === x0 ? x0 + 0.01 : x1, y1 === y0 ? y0 + 0.01 : y1]], { padding });
+    return { longitude, latitude, zoom: Math.min(zoom, 14), pitch: 0, bearing: 0 };
+  }, [initialViewState, extent, width, height]);
+  const [view, setView] = useState<MapViewState>(fitted);
+  const moved = useRef(false);
+  useEffect(() => { if (!moved.current) setView(fitted); }, [fitted]);
+  const move = (next: MapViewState) => { moved.current = true; setView(next); };
+  const zoomBy = (delta: number) => move({ ...view, zoom: Math.max(0, Math.min(20, view.zoom + delta)) });
+  const reset = () => { moved.current = false; setView(fitted); };
 
+  // ── The tooltip: the same card, styles and dismiss policy as the Vega charts ─
+  const onHover: HoverHandler = (info, event) => {
+    const container = box.current;
+    if (!container || tooltip === false) return;
+    const record = tooltipRecord(info.object, Array.isArray(tooltip) ? tooltip : null);
+    if (!record) { hideVegaTooltip(container.ownerDocument); return; }
+    createVegaTooltipHandler(container, colorMode)(null as never, event.srcEvent as MouseEvent, null as never, record);
+  };
+  useEffect(() => {
+    const el = box.current;
+    return () => { if (el) hideVegaTooltip(el.ownerDocument); };
+  }, []);
+
+  const style = basemap === 'none' ? null : basemap === 'light' ? 'light' : basemap === 'dark' ? 'dark' : colorMode;
+  const layerList = built.map(b => b.layer);
   return (
-    <div style={{ position: 'relative', width: '100%', height }} data-mx-deck-ready={deckLayers.length ? '' : undefined}>
+    <div ref={box} role="region" aria-label={title} className="relative w-full overflow-hidden rounded-md" style={{ height }}
+      onPointerLeave={() => { if (box.current) hideVegaTooltip(box.current.ownerDocument); }}>
       {style ? (
-        <BaseMap mapLib={maplibregl} initialViewState={viewState} mapStyle={`${location.origin}/basemap/styles/${style}`} attributionControl={false}
-          onError={(e: { error?: Error }) => console.error('maplibre:', e.error?.message ?? e)}
-          transformRequest={(url: string) => ({ url: url.replace('https://tiles.openfreemap.org', `${location.origin}/basemap`) })}>
-          <DeckOverlay layers={deckLayers} />
+        <BaseMap mapLib={maplibregl} {...view} onMove={e => move(e.viewState as MapViewState)} attributionControl={false}
+          mapStyle={basemapStyleUrl(style)} transformRequest={basemapTransformRequest}>
+          <DeckOverlay layers={layerList} onHover={onHover} />
         </BaseMap>
       ) : (
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        <DeckGL initialViewState={viewState} controller layers={deckLayers as any} getTooltip={({ object }) => object ? JSON.stringify(object.properties ?? object).slice(0, 200) : null} />
+        <DeckGL viewState={view} controller onViewStateChange={({ viewState }) => move(viewState as MapViewState)} layers={layerList as any} onHover={onHover as never} />
       )}
-      <div style={{ position: 'absolute', right: 4, bottom: 2, fontSize: 10, opacity: 0.7 }}>© OpenFreeMap © OpenMapTiles © OpenStreetMap contributors</div>
+      <MapControls onZoomIn={() => zoomBy(1)} onZoomOut={() => zoomBy(-1)} onReset={reset} />
+      {style && <p className="pointer-events-none absolute bottom-1 right-2 m-0 text-[10px] leading-none text-muted-foreground">© OpenFreeMap © OpenMapTiles © OpenStreetMap contributors</p>}
+    </div>
+  );
+}
+
+function MapButton({ label, onClick, children }: { label: string; onClick: () => void; children: ReactNode }) {
+  return (
+    <button type="button" aria-label={label} onClick={onClick}
+      className="flex h-7 w-7 cursor-pointer items-center justify-center border-0 bg-background p-0 text-foreground hover:bg-muted focus-visible:outline-2 focus-visible:outline-ring">
+      {children}
+    </button>
+  );
+}
+
+/** Zoom and reset: the map's only chrome, in the document's own theme. */
+function MapControls({ onZoomIn, onZoomOut, onReset }: { onZoomIn: () => void; onZoomOut: () => void; onReset: () => void }) {
+  const icon = { width: 14, height: 14, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 2, strokeLinecap: 'round' as const, 'aria-hidden': true };
+  return (
+    <div className="absolute right-2 top-2 flex flex-col divide-y divide-border overflow-hidden rounded-md border border-border shadow-sm">
+      <MapButton label="Zoom in" onClick={onZoomIn}><svg {...icon}><path d="M12 5v14M5 12h14" /></svg></MapButton>
+      <MapButton label="Zoom out" onClick={onZoomOut}><svg {...icon}><path d="M5 12h14" /></svg></MapButton>
+      <MapButton label="Reset view" onClick={onReset}><svg {...icon}><path d="M3 12a9 9 0 1 0 3-6.7M3 4v5h5" /></svg></MapButton>
     </div>
   );
 }
