@@ -219,12 +219,12 @@ try {
   assert.deepEqual(JSON.parse(saved.rows.find(row=>row.id===1).depends_on),['2']);
   check('draft survives virtual unmount and sorting preserves record identity');
 
-  // A refreshed query resets its window; find the saved row in that window.
+  // Scroll to the edge after refresh; complete results retain their local sort.
   await a.waitForFunction(() => document.querySelector('[aria-label="DataTable embed"]')?.getAttribute('aria-busy') === 'false');
   await a.locator(box).evaluate(el=>{el.scrollTop=el.scrollHeight;});
 
   // A menu near the scroll edge must portal out of the table's overflow container.
-  await a.getByLabel('Status 500',{exact:true}).click();
+  await a.locator(box).getByRole('button', { name: /^Status \d+$/ }).last().click();
   assert.equal(await a.getByRole('listbox').evaluate(el=>!!el.closest('[data-slot="data-table"]')),false);
   await aPage.keyboard.press('Escape');
   await a.getByLabel('Filter status', { exact: true }).click();
