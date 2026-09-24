@@ -72,9 +72,26 @@ export default function GetStarted({ heading = true, frame = true }: { heading?:
   // Empty until hydration, so server and client render the same relative
   // URL; the absolute one lands with the first client paint.
   const [origin, setOrigin] = useState('');
+  const [isWindows, setIsWindows] = useState(false);
   useEffect(() => {
     setOrigin(window.location.origin);
+    setIsWindows(/^Win/i.test(window.navigator.platform));
   }, []);
+
+  const windowsInstructions = (
+    <>
+      <p className="mt-2 text-xs text-muted">Windows x64 · PowerShell</p>
+      <CopyBlock className="mt-2" text={`Invoke-WebRequest -UseBasicParsing ${origin || DEFAULT_SERVER}/chat/install.ps1 -OutFile install-afbin.ps1\npowershell.exe -NoProfile -ExecutionPolicy Bypass -File .\\install-afbin.ps1`} label="Copy the Windows CLI install command" />
+      <p className="mt-2 text-xs text-muted">Open a new terminal after installation.</p>
+    </>
+  );
+  const unixInstructions = (
+    <CopyBlock
+      className="mt-2"
+      text={`curl -fsSL ${origin || DEFAULT_SERVER}/chat/install.sh | sh`}
+      label="Copy the CLI install command"
+    />
+  );
 
   return (
     <section aria-label="Get started">
@@ -99,14 +116,21 @@ export default function GetStarted({ heading = true, frame = true }: { heading?:
             </>
           }
         >
-          <CopyBlock
-            className="mt-2"
-            text={`curl -fsSL ${origin || DEFAULT_SERVER}/chat/install.sh | sh`}
-            label="Copy the CLI install command"
-          />
-          <p className="mt-3 text-xs text-muted">Windows x64 · PowerShell</p>
-          <CopyBlock className="mt-2" text={`Invoke-WebRequest -UseBasicParsing ${origin || DEFAULT_SERVER}/chat/install.ps1 -OutFile install-afbin.ps1\npowershell.exe -NoProfile -ExecutionPolicy Bypass -File .\\install-afbin.ps1`} label="Copy the Windows CLI install command" />
-          <p className="mt-2 text-xs text-muted">Open a new terminal after installation.</p>
+          {isWindows ? (
+            <>
+              {windowsInstructions}
+              <p className="mt-3 text-xs text-muted">macOS / Linux</p>
+              {unixInstructions}
+            </>
+          ) : (
+            <>
+              {unixInstructions}
+              <details className="mt-3">
+                <summary className="cursor-pointer text-xs text-muted hover:text-fg focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-accent">See Windows instructions</summary>
+                {windowsInstructions}
+              </details>
+            </>
+          )}
           {/* WHICH AGENTS, as badges — mark left, name right — under the
             * install command that puts their skills there. The marks stay in
             * brand colour: this is the one place the page shows which agents
