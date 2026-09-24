@@ -185,18 +185,20 @@ describe('the home page on a verified host', () => {
 
   it('follows the theme the way the app page does: web/index.html\'s own stamp, admitted by its hash and nothing else', async () => {
     await world();
-    const shell = readFileSync(join(__dirname, '..', '..', 'web', 'index.html'), 'utf8');
-    const stamps = [...shell.matchAll(/<script(?![^>]*\ssrc=)[^>]*>([\s\S]*?)<\/script>/g)].map((m) => m[1]!);
+    // Parsed, not pattern-matched: the browser's own reading of each document.
+    const shell = new JSDOM(readFileSync(join(__dirname, '..', '..', 'web', 'index.html'), 'utf8')).window.document;
+    const stamps = [...shell.querySelectorAll('script:not([src])')].map((script) => script.textContent ?? '');
     expect(stamps).toHaveLength(1);
     const res = await app().request(`${HOST}/`, { headers: { accept: 'text/html' } });
-    const html = await res.text();
-    const scripts = [...html.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script>/gi)];
+    const page = new JSDOM(await res.text()).window.document;
+    const scripts = [...page.querySelectorAll('script')];
     expect(scripts).toHaveLength(1);
-    expect(scripts[0]![1]).not.toMatch(/\bsrc=/);
-    expect(scripts[0]![2]).toBe(stamps[0]);
+    expect(scripts[0]!.hasAttribute('src')).toBe(false);
+    expect(scripts[0]!.textContent).toBe(stamps[0]);
     // Before paint: in the head, ahead of the stylesheet.
-    expect(html.indexOf('<script')).toBeLessThan(html.indexOf('rel="stylesheet"'));
-    expect(html.indexOf('<script')).toBeLessThan(html.indexOf('</head>'));
+    expect(scripts[0]!.parentElement?.tagName).toBe('HEAD');
+    const stylesheet = page.querySelector('link[rel="stylesheet"]')!;
+    expect(scripts[0]!.compareDocumentPosition(stylesheet) & 4 /* FOLLOWING */).toBeTruthy();
     const hash = createHash('sha256').update(stamps[0]!, 'utf8').digest('base64');
     const scriptSrc = (res.headers.get('content-security-policy') ?? '').split('; ').find((d) => d.startsWith('script-src'));
     expect(scriptSrc).toBe(`script-src 'sha256-${hash}'`);
