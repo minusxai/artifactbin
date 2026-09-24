@@ -80,9 +80,10 @@ export async function addFiles(workspace:Workspace,paths:string[],client:HttpCli
   return assigned;
  }));
 }
+/** Id → workspace path. A tracked path outranks a draft row, so a row an older CLI left behind cannot redirect a tracked id. */
 export async function localIdentities(workspace:Workspace):Promise<Record<string,string>>{
  const state=await readState(workspace.home);
- return Object.fromEntries([...Object.entries(workspace.tracking?.files??{}).map(([path,value])=>[value.id,path]),...(state?.list<{id:string}>(workspace.root,'draft-identity').map(row=>[row.value.id,row.key])??[])]);
+ return Object.fromEntries([...(state?.list<{id:string}>(workspace.root,'draft-identity').map(row=>[row.value.id,row.key])??[]),...Object.entries(workspace.tracking?.files??{}).map(([path,value])=>[value.id,path])]);
 }
 /** Hard-link then unlink gives no-overwrite moves; the journal repairs a crash between the steps. */
 async function recoverMove(workspace:Workspace):Promise<void>{
