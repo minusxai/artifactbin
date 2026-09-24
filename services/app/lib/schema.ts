@@ -143,6 +143,7 @@ const ARTIFACTS: Table = {
     { name: 'description', type: 'TEXT' },
     { name: 'format', type: 'TEXT', notNull: true, default: "'markup'" }, // ArtifactFormat (lib/story/input.ts); no CHECK on purpose
     { name: 'content', type: 'TEXT', notNull: true }, // what /a/<id> serves (rendered, for stories)
+    { name: 'document', type: 'JSONB' }, // Canonical structured document for the MDX editor.
     { name: 'source', type: 'TEXT' }, // story markup for round-trip editing; NULL in html mode
     { name: 'meta', type: 'JSONB', notNull: true, default: "'{}'" }, // stories: {theme}
     { name: 'version', type: 'INTEGER', notNull: true, default: '1' },
@@ -203,6 +204,11 @@ const ARTIFACT_VERSIONS: Table = {
     { name: 'format', type: 'TEXT', notNull: true, default: "'markup'" },
     { name: 'content', type: 'TEXT', notNull: true },
     { name: 'source', type: 'TEXT' },
+    { name: 'document', type: 'JSONB' },
+    // Outgoing edit metadata: archived v describes the transition v -> v+1.
+    { name: 'operation_id', type: 'TEXT' },
+    { name: 'changed_ids', type: 'TEXT[]' },
+    { name: 'ancestor_ids', type: 'TEXT[]' },
     { name: 'meta', type: 'JSONB', notNull: true, default: "'{}'" },
     // Who produced THIS state (artifacts.actor_* at the moment it was archived).
     { name: 'actor_user_id', type: 'TEXT' },
@@ -210,6 +216,7 @@ const ARTIFACT_VERSIONS: Table = {
     { name: 'created_at', type: 'TIMESTAMPTZ', notNull: true, default: 'now()' },
   ],
   primaryKey: ['artifact_id', 'version'],
+  indexes: [{ name: 'idx_artifact_versions_operation', columns: ['artifact_id', 'operation_id'], unique: true }],
 };
 
 // Append-only edit log (concurrent-edits protocol). A row records one accepted

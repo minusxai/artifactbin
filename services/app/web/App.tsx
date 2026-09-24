@@ -6,7 +6,7 @@ import { routePages } from './route-pages';
 import { NavigationPreloads } from './navigation-preloads';
 import { OnboardingGate } from './OnboardingGate';
 
-const { NotificationsPage, ChatPage, AccountPage, AssetsPage, DatasetEditorPage, FileUploadPage, DocsPage, HomePage, LoginPage, NotFoundPage, ProfilePage, StartPage, TrashPage, WelcomePage } = routePages;
+const { DocumentPage, NotificationsPage, ChatPage, AccountPage, AssetsPage, DatasetEditorPage, FileUploadPage, DocsPage, HomePage, LoginPage, NotFoundPage, ProfilePage, StartPage, TrashPage, WelcomePage } = routePages;
 
 export function App() {
   return (
@@ -26,6 +26,8 @@ export function App() {
           <Route path="/account" element={<AccountPage />} />
           <Route path="/welcome" element={<WelcomePage />} />
           <Route path="/assets" element={<AssetsPage />} />
+          <Route path="/documents/new" element={<DocumentPage />} />
+          <Route path="/documents/:id" element={<DocumentPage />} />
           <Route path="/datasets/new" element={<DatasetEditorPage />} />
           <Route path="/files/new" element={<FileUploadPage />} />
           <Route path="/tokens" element={<Navigate to="/account" replace />} />

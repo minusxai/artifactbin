@@ -56,3 +56,13 @@ it('comment image stages and attachments belong to app',()=>{expect(declared()['
 it('membership and its notifications belong to the app',()=>{for(const name of ['relations','member_notifications','user_blocks'])expect(declared()['app.'+name]).toBe('app');});
 
 it('notification outbox and subscriber receipts stay with their existing owners',()=>{expect(declared()['app.event_outbox']).toBe('app');expect(declared()['events.deliveries']).toBe('events');});
+
+it('keeps canonical documents and outgoing edit metadata in existing artifact tables',()=>{
+ const sql=renderedSchema().schema;
+ expect(sql).toContain('document JSONB');
+ expect(sql).toContain('changed_ids TEXT[]');
+ expect(sql).toContain('operation_id TEXT');
+ expect(sql).toContain('idx_artifact_versions_operation');
+ expect(declared()['app.artifact_versions']).toBe('app');
+ expect(declared()['app.document_nodes']).toBeUndefined();
+});

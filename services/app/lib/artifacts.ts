@@ -5,7 +5,7 @@ import {storedMediaReferences} from './datasets/media-references';
 import {claimArtifactId,reserveArtifactIds} from './artifact-identities';
 import {collectRefUses} from '@/lib/story/refs';
 import {hasDocumentEditorAccess,type VerifiedAccount} from './document-policy';
-import {isQueryFailure} from '@artifactbin/contracts';
+import {isQueryFailure, type RichDocument} from '@artifactbin/contracts';
 import {resolveUserValues} from '@/lib/story/user-values';
 import type {DataflowState} from '@/lib/story/dataflow';
 import {parseDatasetDefinition,serializeDatasetDefinition} from '@/lib/datasets/definition';
@@ -117,6 +117,7 @@ export const DATASET_ACCESS: readonly DatasetAccess[] = ['read', 'readwrite'];
 export { SHARE_ROLES, type ArtifactRole, type ShareEntry, type ShareRole } from './share-roles';
 
 export interface ArtifactRow {
+  document?: RichDocument | null;
   id: string;
   token_id: string;
   /** Owner account; NULL until the creating token is claimed. */
@@ -438,13 +439,13 @@ export async function createArtifact(
    *                inside a transaction would enqueue a query behind the
    *                transaction that holds PGLite's one connection.
    */
-  atCreation: { reservedId?:string; forkedFrom?: string; linkRole?: ShareRole | null; operation?: CreationOperation | null; shares?:ShareEntry[]; datasetPolicy?: { policy: unknown; revision: number }; tx?: Queryable } = {},
+  atCreation: { document?:RichDocument; reservedId?:string; forkedFrom?: string; linkRole?: ShareRole | null; operation?: CreationOperation | null; shares?:ShareEntry[]; datasetPolicy?: { policy: unknown; revision: number }; tx?: Queryable } = {},
 ): Promise<ArtifactRow> {
   if (input.format === 'markup' && input.source) {
     input = { ...input, source: stampNodeIds(input.source, { retireLegacyAliases: true }).source };
   }
   input = { ...input, meta: finalizeArtifactMetadata(input.format, input.source, input.meta) };
-  let sourceIds: string[] = [];
+  let sourceIds: string[] = Object.keys(atCreation.document?.nodes ?? {});
   if(input.format==='markup'&&input.source) {
     sourceIds=[...nodeIndex(input.source).keys()];
   }
@@ -520,8 +521,8 @@ async function insertArtifact(
   // ordinary (if empty) base, not an unknown one. Data-modifying CTEs
   // always execute, so the log row lands even though nothing reads it.
   `WITH created AS (
-     INSERT INTO artifacts (id, token_id, user_id, title, description, format, content, source, meta, visibility, link_role, ancestor_ids, edit_id, access, forked_from, actor_user_id, actor_token_id, dataset_policy, policy_revision)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $3, $2, $17::jsonb, $18::int) RETURNING *
+     INSERT INTO artifacts (id, token_id, user_id, title, description, format, content, source, meta, visibility, link_role, ancestor_ids, edit_id, access, forked_from, actor_user_id, actor_token_id, dataset_policy, policy_revision, document)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $3, $2, $17::jsonb, $18::int, $19::jsonb) RETURNING *
    ), genesis AS (
      INSERT INTO artifact_edits (artifact_id, edit_id, splice_start, removed, inserted, span_start, span_end, actor_user_id, actor_token_id)
      SELECT id, edit_id, 0, '', COALESCE(source, content), 0, 0, $3, $2 FROM created
@@ -565,6 +566,7 @@ async function insertArtifact(
     // creation, which is also what makes the audit CTE above a no-op.
     datasetPolicy ? JSON.stringify(datasetPolicy) : null,
     atCreation.datasetPolicy?.revision ?? 0,
+    atCreation.document ? JSON.stringify(atCreation.document) : null,
   ],
   );
   Object.assign(created.rows[0],await writeShares(tx,id,atCreation.shares??[]));
