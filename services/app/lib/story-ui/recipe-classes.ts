@@ -489,6 +489,7 @@ export const STORY_UI_RECIPE_CLASSES: readonly string[] = [
   "data-[variant=line]:rounded-none",
   "data-color-mode",
   "data-mx-asset",
+  "data-mx-ast",
   "data-mx-bound",
   "data-mx-slide-title",
   "data-table",
