@@ -44,3 +44,17 @@ it('reports resource warnings to the author without adding them to the committed
  const update=await prepareClientDocumentPublication(base,{source:source+'<img src="https://example.com/missing.png" />'},async()=>({warnings}),received);
  expect(received).toHaveBeenCalledWith(warnings);expect(update).not.toHaveProperty('warnings');
 });
+
+it.each([false,true])('keeps formatted sibling text edits independent (preserveSource=%s)',preserveSource=>{
+ const formatted='<main id="root">\n  <p id="a">Alpha</p>\n  <p id="b">Beta</p>\n  <p id="c">Gamma</p>\n</main>\n';
+ const document=createDocumentGraph(formatted,1,{preserveSource}),base={document,version:1,meta:{}};
+ const a=prepareClientDocumentUpdate(base,{source:formatted.replace('Alpha','Changed A')});
+ const b=prepareClientDocumentUpdate(base,{source:formatted.replace('Beta','Changed B')});
+ expect(a.patch.inserted).toEqual({});expect(a.patch.removed).toEqual([]);
+ expect(b.patch.inserted).toEqual({});expect(b.patch.removed).toEqual([]);
+ for(const [first,second] of [[a,b],[b,a]]){
+  const result=applyGraphPatch(applyGraphPatch(document,1,first!.patch)!,2,second!.patch);
+  expect(result).not.toBeNull();expect(graphIntegrity(result!)).toEqual([]);
+  expect(graphSource(result!)).toContain('Changed A');expect(graphSource(result!)).toContain('Changed B');
+ }
+});

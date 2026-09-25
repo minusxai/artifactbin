@@ -45,3 +45,12 @@ it('rejects ambiguous authored identities rather than assigning one key twice',(
  const before=createDocumentGraph('<p id="a">Alpha</p>',1);
  expect(()=>graphFromSource(before,'<p id="a">Alpha</p><p id="a">Beta</p>',2)).toThrow('Duplicate authored node identity');
 });
+it('preserves repeated anonymous nodes only when the sibling arrangement stays unchanged',()=>{
+ const source='<main id="m">\n<p id="a">Alpha</p>\n<p id="b">Beta</p>\n</main>';
+ const before=createDocumentGraph(source,1);
+ const unchanged=graphFromSource(before,source.replace('Alpha','Changed'),2);
+ for(const index of [0,2,4])expect(graphNodeAt(unchanged,[0,index])).toBe(graphNodeAt(before,[0,index]));
+ const moved=graphFromSource(before,'<main id="m">\n<p id="b">Beta</p>\n<p id="a">Alpha</p>\n</main>',2);
+ expect(graphNodeAt(moved,[0,1])).toBe(graphNodeAt(before,[0,3]));
+ for(const index of [0,2,4])expect(Object.hasOwn(before.nodes,graphNodeAt(moved,[0,index]))).toBe(false);
+});
