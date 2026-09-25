@@ -13,6 +13,7 @@ import { GET as artifactPage } from '@/app/api/page/artifact/[id]/route';
 import { GET as profilePage } from '@/app/api/page/profile/[user]/[[...path]]/route';
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 import { updateSharingFor } from '@/lib/artifacts';
+import { link, unlink } from '@/lib/relations';
 
 
 import { mintToken } from '@/lib/tokens';
@@ -222,6 +223,54 @@ describe('GET /api/page/profile/@user/...', () => {
     const root = await (await profilePage(request(`/api/page/profile/@${h}`), params({ user: `@${h}` }))).json();
     expect(root.files).toEqual(strangers.files);
     for (const f of root.files) expect(f).not.toHaveProperty('ancestor_ids');
+  });
+
+  /*
+   * THE SOCIAL HEADER, as X draws it: both counts for everyone; for a signed-in
+   * stranger, whether each follows the other and which of the people THEY follow
+   * also follow this profile — named up to three, the rest counted.
+   */
+  it('ships follow counts to everyone and the relationship to a signed-in stranger', async () => {
+    const w = await world();
+    const h = w.owner.username!;
+    const person = async (name: string) => ensureUsername(await createUser({ email: `mxmx_test_${name}@example.com` }));
+    const [me, ann, bob, cat, dan, quiet] = await Promise.all(['me', 'ann', 'bob', 'cat', 'dan', 'quiet'].map(person));
+    const follows = async (a: { id: string }, b: { id: string }) => link(a.id, 'follow', b.id);
+    // I follow ann, bob, cat and dan; all four follow the owner; so does quiet, whom I do not follow.
+    for (const friend of [ann, bob, cat, dan]) { await follows(me, friend); await follows(friend, w.owner); }
+    await follows(quiet, w.owner);
+    // The owner follows me back, and follows ann.
+    await follows(w.owner, me); await follows(w.owner, ann);
+    // A friend who UNfollowed the owner is not someone who follows them.
+    await unlink(dan.id, 'follow', w.owner.id);
+
+    const anonymous = await (await profilePage(request(`/api/page/profile/@${h}`), params({ user: `@${h}` }))).json();
+    expect(anonymous.social).toEqual({ followers: 4, following: 2 });
+
+    asSession(me);
+    const stranger = await (await profilePage(request(`/api/page/profile/@${h}`), params({ user: `@${h}` }))).json();
+    expect(stranger.social).toMatchObject({ followers: 4, following: 2, relation: { youFollow: false, followsYou: true, knownTotal: 3 } });
+    expect(stranger.social.relation.known.map((k: { username: string }) => k.username).sort()).toEqual([ann.username, bob.username, cat.username].sort());
+    for (const k of stranger.social.relation.known) expect(Object.keys(k).sort()).toEqual(['id', 'image', 'username']);
+
+    asSession(w.owner);
+    const own = await (await profilePage(request(`/api/page/profile/@${h}`), params({ user: `@${h}` }))).json();
+    expect(own.social).toEqual({ followers: 4, following: 2 });
+  });
+
+  it('names at most three followers you know and counts the rest', async () => {
+    const w = await world();
+    const h = w.owner.username!;
+    const me = await ensureUsername(await createUser({ email: 'mxmx_test_counter@example.com' }));
+    for (const n of [1, 2, 3, 4, 5]) {
+      const friend = await ensureUsername(await createUser({ email: `mxmx_test_friend${n}@example.com` }));
+      await link(me.id, 'follow', friend.id); await link(friend.id, 'follow', w.owner.id);
+    }
+    await link(me.id, 'follow', w.owner.id);
+    asSession(me);
+    const page = await (await profilePage(request(`/api/page/profile/@${h}`), params({ user: `@${h}` }))).json();
+    expect(page.social).toMatchObject({ followers: 6, relation: { youFollow: true, followsYou: false, knownTotal: 5 } });
+    expect(page.social.relation.known).toHaveLength(3);
   });
 
   it('lists the same public root for the owner and every visitor', async () => {

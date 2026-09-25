@@ -119,6 +119,40 @@ export async function count(verb: RelationVerb, objectId: string): Promise<numbe
   return Number(total.rows[0]?.n ?? 0);
 }
 
+/** Live edges OUT of a user for a verb: how many users they follow, artifacts they like. */
+export async function countLinked(userId: string, verb: RelationVerb): Promise<number> {
+  const entry = vocabulary(verb);
+  const db = await getDb();
+  const total = await db.query<{ n: string | number }>(
+    `SELECT COUNT(*) AS n FROM relations WHERE ${subjectWhere(verb, entry)} AND deleted_at IS NULL AND status='accepted'`,
+    [userId],
+  );
+  return Number(total.rows[0]?.n ?? 0);
+}
+
+/**
+ * FOLLOWERS YOU KNOW: the people `viewerId` follows who also follow `userId`,
+ * newest first, as X names them under a profile. Only accounts with a handle
+ * are counted, so "and N others" never counts someone the list could not name.
+ */
+export async function followersYouKnow(viewerId: string, userId: string, limit: number): Promise<{ total: number; users: Array<{ id: string; username: string; image_key: string | null }> }> {
+  const entry = vocabulary('follow');
+  const edge = (alias: string) =>
+    `${alias}.subject_kind = '${RELATION_SUBJECT_KIND}' AND ${alias}.verb = 'follow' AND ${alias}.object_kind = '${entry.object}' AND ${alias}.deleted_at IS NULL AND ${alias}.status = 'accepted'`;
+  const db = await getDb();
+  const rows = await db.query<{ id: string; username: string; image_key: string | null; total: string | number }>(
+    `SELECT u.id, u.username, u.image_key, COUNT(*) OVER () AS total
+       FROM relations theirs
+       JOIN relations mine ON ${edge('mine')} AND mine.subject_id = $1 AND mine.object_id = theirs.subject_id
+       JOIN users u ON u.id = theirs.subject_id AND u.username IS NOT NULL
+      WHERE ${edge('theirs')} AND theirs.object_id = $2
+      ORDER BY theirs.created_at DESC, u.id
+      LIMIT ${Math.max(1, Math.floor(limit))}`,
+    [viewerId, userId],
+  );
+  return { total: Number(rows.rows[0]?.total ?? 0), users: rows.rows.map(({ id, username, image_key }) => ({ id, username, image_key })) };
+}
+
 /** Live edges OUT of a user for a verb: the artifacts they like, the users they follow — the audience of a feed. */
 export async function linked(userId: string, verb: RelationVerb,query?:Queryable): Promise<string[]> {
   const entry = vocabulary(verb);
