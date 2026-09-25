@@ -35,9 +35,8 @@ describe('the chrome the selection drives', () => {
     mount();
     expect(screen.getByLabelText('Editor toolbar')).toHaveStyle({ height: '88px' });
     const actions = screen.getByLabelText('Document actions');
-    // Exit is offered in the toolbar AND at the foot of the rail; this case is
-    // about the toolbar's half staying put. View switching and version history
-    // both live in the rail now, so neither is asserted here.
+    // This case is about the toolbar's actions half staying put; the view
+    // switch and the panel are components/__tests__/in-place-editor-panel's.
     expect(actions).toContainElement(screen.getByLabelText('Exit edit mode'));
     const title = screen.getByLabelText('Title');
     await fromFrame({ type: STORY_SELECTION_MESSAGE, selection: selection() });

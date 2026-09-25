@@ -41,15 +41,20 @@ export const RIGHT_RAIL_W = 320;
 export const QUERY_RAIL_W = 480;
 
 /**
- * The LEFT RAIL's width — the icon strip that names what the artifact is made
- * of (app, code, queries, history).
- *
- * It exists to give the two edges MEANINGS: left is the document's own
- * structure, right is annotation about it. That reverses the inspector rule
- * above for the left side only — a left panel RESERVES like the comments rail
- * rather than overlaying, because a panel that covers the document it edits is
- * the thing readers kept reporting. Comments keep the right edge to themselves,
- * so the two surfaces never negotiate for it.
+ * THE EDIT PANEL — one right panel for the whole edit session (components/
+ * EditPanel): Selection, History and Comments as tabs of RIGHT_RAIL_W, or a
+ * strip of their icons this wide when the viewer collapsed it.
  */
-export const LEFT_RAIL_W = 232;
+export const EDIT_PANEL_STRIP_W = 44;
 
+/**
+ * The narrowest document the panel may sit beside. Below
+ * RIGHT_RAIL_W + this (960px) there is no side panel at all: the document keeps
+ * the full width and the panel's tabs open as bottom sheets instead.
+ */
+export const EDIT_PANEL_MIN_DOC_W = 640;
+export const EDIT_PANEL_BREAKPOINT = RIGHT_RAIL_W + EDIT_PANEL_MIN_DOC_W;
+
+/** By innerWidth, like isPhoneViewport: readable anywhere, settable by a test. */
+export const isWideEditViewport = (width = typeof window === 'undefined' ? 0 : window.innerWidth) =>
+  width >= EDIT_PANEL_BREAKPOINT;

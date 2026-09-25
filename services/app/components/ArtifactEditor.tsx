@@ -72,7 +72,7 @@ interface EditorSeed {
   dataflow?: StoryIslandDataflow | null;
 }
 
-export default function ArtifactEditor({ id, seed, onExit, flushRef, frameRef, runtimeRef, sessionNonce, initialSelectionPath = null, onComment, onLeftInsetChange, onRightInsetChange, rightInset = 0 }: {
+export default function ArtifactEditor({ id, seed, onExit, flushRef, frameRef, runtimeRef, sessionNonce, initialSelectionPath = null, onComment, onRightInsetChange, rightInset = 0, commentsOpen, onCommentsOpenChange, onCommentsHost }: {
   id: string;
   seed?: EditorSeed;
   onExit: () => void;
@@ -85,10 +85,12 @@ export default function ArtifactEditor({ id, seed, onExit, flushRef, frameRef, r
   initialSelectionPath?: string | null;
   /** Comment on the selected node — the page owns the composer and the drain. */
   onComment?: (selection: StoryEditSelection) => void;
-  /** The editor's left rail and panel; the PAGE reserves the width, the editor decides it. */
-  onLeftInsetChange?: (px: number) => void;
-  /** The inspector's reserved width, so the page can narrow the document for it. */
+  /** The edit panel's width; the PAGE decides whether to reserve it (InPlaceEditor). */
   onRightInsetChange?: (px: number) => void;
+  /** The page's comments rail, which is the edit panel's Comments tab. */
+  commentsOpen?: boolean;
+  onCommentsOpenChange?: (open: boolean) => void;
+  onCommentsHost?: (host: HTMLElement | null) => void;
   rightInset?: number;
   /**
    * Where the mounted editor publishes its drain, so the page can empty it
@@ -221,8 +223,10 @@ export default function ArtifactEditor({ id, seed, onExit, flushRef, frameRef, r
       onComment={onComment}
       rightInset={rightInset}
       onDone={onExit}
-      onLeftInsetChange={onLeftInsetChange}
       onRightInsetChange={onRightInsetChange}
+      commentsOpen={commentsOpen}
+      onCommentsOpenChange={onCommentsOpenChange}
+      onCommentsHost={onCommentsHost}
     />
   );
 }

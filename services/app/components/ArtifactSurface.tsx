@@ -23,7 +23,7 @@ import { datasetQuerySnippet } from '@/lib/story/dataset-usage';
  */
 import dynamic from '@/lib/dynamic';
 import { MessageSquare, Pencil } from 'lucide-react';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { InlineStoryController } from '@/lib/story-runtime/InlineStoryRuntime';
 import { createAuthenticatedTransport } from '@/lib/story-runtime/authenticated-transport';
 import { subscribeDocument } from '@/lib/story-runtime/document-endpoint';
@@ -48,6 +48,8 @@ import { useIsPhoneViewport } from '@/components/MobileSheet';
  * comes from a leaf module, because importing it from the editor would put the
  * editor in every reader's bundle (lib/__tests__/reader-bundle-hygiene). */
 import { APP_BAR_H, EDIT_BAR_H, RIGHT_RAIL_W } from '@/lib/story/edit-bar';
+import { editPanelWidth, readEditPanelCollapsed, useWideEditViewport } from '@/lib/story/use-edit-panel';
+import { panelFitsInMargin } from '@/lib/story/edit-panel-fit';
 import type { ArtifactFormat } from '@/lib/story/input';
 import { useLiveArtifact } from '@/lib/story/use-live-artifact';
 import { pageDataChanged } from '@/web/page-data-events';
@@ -663,18 +665,42 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
   }, [exitEdit]);
 
   /*
-   * ONE reservation for the right edge. Comments and the editor's inspector
-   * share that column by design — same width, higher layer — so the page takes
-   * the larger of the two, never the sum.
+   * THE RIGHT EDGE. Reading: the comments rail, reserved while it is open.
+   *
+   * Editing on a wide window: ONE panel for the whole session
+   * (components/EditPanel), and whether its width comes out of the document's
+   * margin or its width is decided ONCE, as edit mode opens, by measuring the
+   * document as the reader was looking at it. From then on nothing inside the
+   * session moves the document — not a selection, a tab, comments, a preview.
+   * Only the collapse button changes the panel's width (editorRightInset), and
+   * only a reserved panel passes that on. Comments already open at entry keep
+   * their reserve: the document was laid out beside them, so it would measure
+   * as fitting and then re-centre.
+   *
+   * Editing below the breakpoint: no side panel and no reserve; the tabs open
+   * as bottom sheets, and a half-screen of room under the document lets the
+   * selection scroll above one.
    */
+  const wideEdit = useWideEditViewport();
+  const viewportRef = useRef<HTMLDivElement>(null);
   const [editorRightInset, setEditorRightInset] = useState(0);
-  const railInset = Math.max(railOpen && !phone ? RIGHT_RAIL_W : 0, phone ? 0 : editorRightInset);
-  /*
-   * The EDITOR's left rail and whichever panel it has open. Reserved exactly as
-   * the comments rail is on the right: the document narrows rather than being
-   * covered, so the two edges behave the same way and neither hides what it edits.
-   */
-  const [editorLeftInset, setEditorLeftInset] = useState(0);
+  const [panelFits, setPanelFits] = useState<boolean | null>(null);
+  const railOpenRef = useRef(railOpen);
+  railOpenRef.current = railOpen;
+  useLayoutEffect(() => {
+    if (!editing) { setPanelFits(null); return; }
+    if (!wideEdit || panelFits !== null) return;
+    const root = viewportRef.current;
+    setEditorRightInset(editPanelWidth(readEditPanelCollapsed()));
+    setPanelFits(!railOpenRef.current && !!root && panelFitsInMargin(root, document.documentElement.clientWidth, RIGHT_RAIL_W));
+  }, [editing, wideEdit, panelFits]);
+  const readingRail = railOpen && !phone ? RIGHT_RAIL_W : 0;
+  const railInset = !editing ? readingRail
+    : !wideEdit ? 0
+    : panelFits === null ? readingRail
+    : panelFits ? 0 : editorRightInset;
+  /** The edit panel's Comments tab body, which the comments rail renders into. */
+  const [commentsHost, setCommentsHost] = useState<HTMLElement | null>(null);
 
   /*
    * WHAT THE EDITOR IS GIVEN. Ownership is decided once, on the server, for
@@ -816,13 +842,14 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
         )}
         </TrustedUi>
         <div
+          ref={viewportRef}
           aria-label="Artifact viewport"
           className="relative min-h-screen"
           style={{
             // Edit/annotation controls change the inset, not runtime identity.
             paddingTop: (phone ? 0 : APP_BAR_H) + (editing ? EDIT_BAR_H : 0),
             paddingRight: railInset,
-            paddingLeft: editing ? editorLeftInset : 0,
+            paddingBottom: editing && !wideEdit ? '50vh' : 0,
             right: 0,
             // The starter uses the app's existing dotted body background.
             background: showStarter ? 'transparent' : readerMode === 'dark' ? DOCUMENT_GROUND.dark : DOCUMENT_GROUND.light,
@@ -870,6 +897,11 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
             // and gets a sheet anyway), and under the editor toolbar too.
             topOffset={(phone ? 0 : APP_BAR_H) + (editing ? EDIT_BAR_H : 0)}
             onAnnotationsChange={setLayerAnnotations}
+            // Editing: the rail is the edit panel's Comments tab on a wide
+            // window, a bottom sheet below it.
+            railHost={editing && wideEdit ? commentsHost : undefined}
+            railSheet={editing && !wideEdit}
+            panelWidth={editing && wideEdit ? editorRightInset : undefined}
           />
         )}
         {/* Edit mode is CHROME around the document, not a replacement for it. */}
@@ -883,8 +915,10 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
             sessionNonce={sessionNonce}
             initialSelectionPath={initialEditSelectionPath}
             onComment={canEdit ? commentOnSelection : undefined}
-            onLeftInsetChange={setEditorLeftInset}
             onRightInsetChange={setEditorRightInset}
+            commentsOpen={railOpen}
+            onCommentsOpenChange={canAnnotate ? setRailOpen : undefined}
+            onCommentsHost={setCommentsHost}
           />
         )}
         {forkAsked && <ForkConfirm id={id} title={shownTitle} onClose={() => setForkAsked(false)} />}
