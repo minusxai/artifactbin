@@ -9,10 +9,32 @@ interface GridGeometry {
   positioned: boolean;
 }
 export interface NodeChrome {
-  select(element: HTMLElement | null, path: string | null, grid?: GridGeometry): void;
+  /** `resizable: false` keeps move and delete but offers no resize control (the block cannot take one). */
+  select(element: HTMLElement | null, path: string | null, grid?: GridGeometry, options?: { resizable?: boolean }): void;
+  /** The block under the pointer gets a faint grip in its left margin; null hides it. */
+  hover(element: HTMLElement | null): void;
   cancel(): boolean;
   dispose(): void;
 }
+/** The margin grip lives outside the selected-block overlay: it is shown for a block that is NOT selected. */
+export const HOVER_GRIP_ATTR = 'data-mx-hover-grip';
+/** Every element this module draws. Pointer and click handlers treat them as chrome, never as document. */
+export const NODE_CHROME_SELECTOR = `[data-mx-node-chrome], [${HOVER_GRIP_ATTR}]`;
+const P = SELECTION_PRESENTATION;
+/**
+ * Handle colours live in a sheet, not inline, so they can darken on :hover and
+ * ring on :focus-visible. Neutral translucent grey reads on light and dark
+ * grounds, so no handle paints a background of its own.
+ */
+const HANDLE_CSS = [
+  `:is([data-mx-node-chrome], [${HOVER_GRIP_ATTR}])[data-mx-chrome-root] > button > span { color: ${P.handleColor}; }`,
+  `:is([data-mx-node-chrome], [${HOVER_GRIP_ATTR}])[data-mx-chrome-root] > button[data-mx-dot] > span { background: ${P.handleDot}; }`,
+  `:is([data-mx-node-chrome], [${HOVER_GRIP_ATTR}])[data-mx-chrome-root] > button:hover { background: ${P.handleActiveGround}; }`,
+  `:is([data-mx-node-chrome], [${HOVER_GRIP_ATTR}])[data-mx-chrome-root] > button[data-mx-dot]:hover { background: transparent; }`,
+  `:is([data-mx-node-chrome], [${HOVER_GRIP_ATTR}])[data-mx-chrome-root] > button:hover > span { color: ${P.handleActive}; }`,
+  `:is([data-mx-node-chrome], [${HOVER_GRIP_ATTR}])[data-mx-chrome-root] > button[data-mx-dot]:hover > span { background: ${P.handleActive}; }`,
+  `:is([data-mx-node-chrome], [${HOVER_GRIP_ATTR}])[data-mx-chrome-root] > button:focus-visible { outline: 2px solid ${P.handleActive}; outline-offset: -2px; }`,
+].join('\n');
 type GestureKind = 'move' | 'resize' | 'width' | 'height' | 'divider';
 interface Gesture {
   kind: GestureKind;
@@ -26,9 +48,15 @@ interface Gesture {
   steps: number;
   pairTotal?: number;
 }
-export function createNodeChrome(doc: Document, commit: (command: BlockEdit) => void): NodeChrome {
+export function createNodeChrome(
+  doc: Document,
+  commit: (command: BlockEdit) => void,
+  /** Pressing the margin grip asks the owner to select that block, then drags it like the selected grip. */
+  grab?: (element: HTMLElement) => void,
+): NodeChrome {
   const root = doc.createElement('div');
   root.setAttribute('data-mx-node-chrome', '');
+  root.setAttribute('data-mx-chrome-root', '');
   Object.assign(root.style, {
     position: 'fixed',
     zIndex: '45',
@@ -45,6 +73,9 @@ export function createNodeChrome(doc: Document, commit: (command: BlockEdit) => 
   const previewStyle = doc.createElement('style');
   const previewId = crypto.randomUUID();
   doc.head.append(previewStyle);
+  const handleStyle = doc.createElement('style');
+  handleStyle.textContent = HANDLE_CSS;
+  doc.head.append(handleStyle);
   let previewElement: HTMLElement | null = null;
   let previewPeer: HTMLElement | null = null;
   let frame = 0;
@@ -72,19 +103,17 @@ export function createNodeChrome(doc: Document, commit: (command: BlockEdit) => 
     const dot = doc.createElement('span');
     dot.textContent = text;
     dot.setAttribute('aria-hidden', 'true');
+    const isDot = !!kind && kind !== 'move';
     Object.assign(dot.style, {
       display: 'grid',
       placeItems: 'center',
-      width: kind && kind !== 'move' ? '9px' : '18px',
-      height: kind && kind !== 'move' ? '9px' : '18px',
+      width: isDot ? '7px' : '18px',
+      height: isDot ? '7px' : '18px',
       borderRadius: '50%',
-      border: '1px solid rgba(100,116,139,.4)',
-      background: 'white',
-      color: '#64748b',
-      boxShadow: '0 1px 3px rgba(15,23,42,.08)',
       font: kind === 'move' ? '12px system-ui' : '16px/1 system-ui',
       pointerEvents: 'none',
     });
+    if (isDot) b.setAttribute('data-mx-dot', '');
     b.append(dot);
     b.setAttribute('aria-label', label);
     Object.assign(b.style, {
@@ -124,7 +153,7 @@ export function createNodeChrome(doc: Document, commit: (command: BlockEdit) => 
   // Center every hit-target size on the shared selection outline.
   const near = `${-SELECTION_PRESENTATION.handleOutset}px`;
   const far = `calc(100% + ${SELECTION_PRESENTATION.handleOutset}px)`;
-  button('Move selected block', '⠿', { left: near, top: near }, 'move');
+  const moveButton = button('Move selected block', '⠿', { left: near, top: near }, 'move');
   const remove = button('Delete selected block', '', { left: far, top: near });
   const trash = doc.createElementNS('http://www.w3.org/2000/svg', 'svg');
   for (const [name, value] of Object.entries({
@@ -142,6 +171,56 @@ export function createNodeChrome(doc: Document, commit: (command: BlockEdit) => 
   button('Resize block width', '', { left: far, top: '50%' }, 'width');
   button('Resize block height', '', { left: '50%', top: far }, 'height');
   const divider = button('Resize adjacent columns', '', { left: far, top: '50%' }, 'divider');
+  // The margin grip: the same glyph and drag as the selected grip, offered
+  // beside whatever block the pointer is on, so a block can be picked up
+  // without first being selected. Its hit area abuts the block's left edge so
+  // the pointer can travel onto it without crossing another block.
+  const GRIP = 24;
+  const gripRoot = doc.createElement('div');
+  gripRoot.setAttribute(HOVER_GRIP_ATTR, '');
+  gripRoot.setAttribute('data-mx-chrome-root', '');
+  Object.assign(gripRoot.style, { position: 'fixed', zIndex: '45', pointerEvents: 'none', display: 'none' });
+  const gripButton = doc.createElement('button');
+  gripButton.type = 'button';
+  gripButton.tabIndex = -1; // pointer affordance; the selected block's grip is the keyboard path
+  gripButton.setAttribute('aria-label', 'Drag block');
+  Object.assign(gripButton.style, {
+    width: `${GRIP}px`,
+    height: `${GRIP}px`,
+    padding: '0',
+    border: '0',
+    borderRadius: '4px',
+    background: 'transparent',
+    display: 'grid',
+    placeItems: 'center',
+    pointerEvents: 'auto',
+    touchAction: 'none',
+    cursor: 'grab',
+  });
+  const gripGlyph = doc.createElement('span');
+  gripGlyph.textContent = '⠿';
+  gripGlyph.setAttribute('aria-hidden', 'true');
+  Object.assign(gripGlyph.style, { font: '12px system-ui', pointerEvents: 'none' });
+  gripButton.append(gripGlyph);
+  gripRoot.append(gripButton);
+  doc.body.append(gripRoot);
+  let hovered: HTMLElement | null = null;
+  const placeGrip = () => {
+    const target = hovered;
+    if (!target?.isConnected || target === element || gesture) {
+      gripRoot.style.display = 'none';
+      return;
+    }
+    const r = target.getBoundingClientRect();
+    Object.assign(gripRoot.style, { display: 'block', left: `${Math.max(0, r.left - GRIP)}px`, top: `${r.top}px` });
+  };
+  gripButton.addEventListener('pointerdown', (e) => {
+    e.preventDefault();
+    const target = hovered;
+    if (!target || !grab) return;
+    grab(target);
+    if (element === target && path && moveButton.style.display !== 'none') begin(e, 'move');
+  });
   remove.addEventListener('click', () => {
     if (path) {
       const p = path;
@@ -150,6 +229,7 @@ export function createNodeChrome(doc: Document, commit: (command: BlockEdit) => 
     }
   });
   const position = () => {
+    placeGrip();
     if (!element?.isConnected) {
       root.style.display = 'none';
       return;
@@ -371,8 +451,9 @@ export function createNodeChrome(doc: Document, commit: (command: BlockEdit) => 
   doc.defaultView?.addEventListener('scroll', position, true);
   doc.defaultView?.addEventListener('resize', position);
   return {
-    select(el, p, g) {
+    select(el, p, g, options) {
       if (gesture) return;
+      const resizable = options?.resizable ?? true;
       if (settling && el && p === path && previewElement !== el) {
         previewElement?.removeAttribute('data-mx-resize-preview');
         previewElement = el;
@@ -390,8 +471,10 @@ export function createNodeChrome(doc: Document, commit: (command: BlockEdit) => 
         Math.abs(next.getBoundingClientRect().top - el!.getBoundingClientRect().top) < 3;
       for (const [button, kind] of controls)
         button.style.display =
-          g?.positioned || (kind === 'divider' && !paired) || (kind === 'width' && paired) ? 'none' : 'grid';
-      divider.style.display = paired ? 'grid' : 'none';
+          g?.positioned || (kind === 'divider' && !paired) || (kind === 'width' && paired) || (!resizable && kind !== 'move')
+            ? 'none'
+            : 'grid';
+      divider.style.display = paired && resizable ? 'grid' : 'none';
       for (const b of root.querySelectorAll('button'))
         b.setAttribute(
           'aria-description',
@@ -399,13 +482,19 @@ export function createNodeChrome(doc: Document, commit: (command: BlockEdit) => 
         );
       position();
     },
+    hover(el) {
+      hovered = el;
+      placeGrip();
+    },
     cancel,
     dispose() {
       cancel();
       clearPreview();
       dragPreview.dispose();
       previewStyle.remove();
+      handleStyle.remove();
       root.remove();
+      gripRoot.remove();
       doc.removeEventListener('pointermove', onMove, true);
       doc.removeEventListener('pointerup', onUp, true);
       doc.removeEventListener('pointercancel', cancel, true);

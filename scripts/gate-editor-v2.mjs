@@ -254,9 +254,10 @@ try {
   await range('second', 4, 'lp', 5);
   await page.waitForFunction(() => getSelection().toString().includes('Left '));
   check(await page.locator('[data-mx-node-chrome]').isVisible() === false, 'text selection has no container resize controls');
+  const unhoveredOutline = await page.locator('#second').evaluate(el => getComputedStyle(el).outline);
   await page.locator('#second').hover();
-  check(await page.locator('#second').evaluate(el => getComputedStyle(el).backgroundColor) === 'rgba(245, 158, 11, 0.08)', 'hover uses the shared subtle amber tint');
-  check(await page.locator('#second').evaluate(el => getComputedStyle(el).outlineWidth) === '1px', 'hover uses the shared thin outline');
+  check(await page.locator('#second').evaluate(el => getComputedStyle(el).backgroundColor) === 'rgba(0, 0, 0, 0)', 'hovered text is not tinted');
+  check(await page.locator('#second').evaluate(el => getComputedStyle(el).outline) === unhoveredOutline, 'hovering text adds no outline');
   await page.mouse.move(0, 0);
   check(await page.locator('#second').evaluate(el => getComputedStyle(el).backgroundColor) === 'rgba(0, 0, 0, 0)',
     'block selection does not flood the text background');

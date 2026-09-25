@@ -168,3 +168,49 @@ it.each([false, true])('keeps all control hit areas disjoint on small blocks (to
     vi.unstubAllGlobals();
   }
 });
+
+it('offers no resize control for a block that cannot be resized, and keeps move and delete', () => {
+  chrome = createNodeChrome(document, vi.fn());
+  const p = document.createElement('p');
+  document.body.append(p);
+  chrome.select(p, '0', undefined, { resizable: false });
+  expect(screen.getByRole('button', { name: 'Move selected block' })).toBeVisible();
+  expect(screen.getByRole('button', { name: 'Delete selected block' })).toBeVisible();
+  for (const name of ['Resize selected block', 'Resize block width', 'Resize block height', 'Resize adjacent columns'])
+    expect(screen.queryByRole('button', { name })).toBeNull();
+  chrome.select(p, '0');
+  expect(screen.getByRole('button', { name: 'Resize selected block' })).toBeVisible();
+});
+
+it('draws handles in faint neutral grey that darken under the pointer, never an accent colour', () => {
+  chrome = createNodeChrome(document, vi.fn());
+  const p = document.createElement('p');
+  document.body.append(p);
+  chrome.select(p, '0');
+  const dot = screen.getByRole('button', { name: 'Resize selected block' }).firstElementChild!;
+  const grip = screen.getByRole('button', { name: 'Move selected block' }).firstElementChild!;
+  expect(getComputedStyle(dot).backgroundColor).toBe('rgba(100, 116, 139, 0.45)');
+  expect(getComputedStyle(grip).color).toBe('rgba(100, 116, 139, 0.6)');
+  const css = [...document.querySelectorAll('style')].map((s) => s.textContent).join('\n');
+  expect(css).toMatch(/:hover/);
+  expect(css).toMatch(/:focus-visible/);
+  expect(css + document.body.innerHTML).not.toMatch(/245, ?158, ?11|white/);
+});
+
+it('shows a margin grip beside a hovered block and hides it for the selected one', () => {
+  const grab = vi.fn();
+  chrome = createNodeChrome(document, vi.fn(), grab);
+  const p = document.createElement('p');
+  document.body.append(p);
+  p.getBoundingClientRect = () => new DOMRect(120, 40, 300, 24);
+  chrome.hover(p);
+  const grip = screen.getByRole('button', { name: 'Drag block' });
+  expect(grip.closest('[data-mx-node-chrome]')).toBeNull();
+  expect(grip.parentElement).toHaveStyle({ left: '96px', top: '40px' });
+  chrome.select(p, '0');
+  expect(screen.queryByRole('button', { name: 'Drag block' })).toBeNull();
+  chrome.select(null, null);
+  expect(screen.getByRole('button', { name: 'Drag block' })).toBeVisible();
+  chrome.hover(null);
+  expect(screen.queryByRole('button', { name: 'Drag block' })).toBeNull();
+});

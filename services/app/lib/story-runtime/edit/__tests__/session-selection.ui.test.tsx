@@ -4,8 +4,9 @@
  * the parent — plus the hover boundary and the keys that act on the selection.
  */
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { fireEvent } from '@testing-library/react';
+import { fireEvent, screen } from '@testing-library/react';
 import {
+  STORY_BLOCK_EDIT_MESSAGE,
   STORY_EDIT_KEY_MESSAGE,
   STORY_SELECTION_MESSAGE,
   STORY_SELECT_MESSAGE,
@@ -112,14 +113,122 @@ describe('selection', () => {
 });
 
 describe('hover boundaries', () => {
-  it('keeps amber feedback visible on a focused editable heading', () => {
+  const NEUTRAL_HOVER = '1px solid rgba(100, 116, 139, 0.28)';
+  const NEUTRAL_SELECTED = '1px solid rgba(100, 116, 139, 0.55)';
+  const boxOf = (el: Element) => {
+    const style = window.getComputedStyle(el);
+    // No rule computes as '' and a focused host's own reset as 'none': both draw nothing.
+    return { outline: /solid/.test(style.outline) ? style.outline : 'none', background: style.backgroundColor };
+  };
+  const CLEAR = 'rgba(0, 0, 0, 0)';
+  const NO_BOX = { outline: 'none', background: CLEAR };
+  const grip = () => screen.queryByRole('button', { name: 'Drag block', hidden: true });
+
+  it('draws no box on a text host, hovered or focused: the caret is the indicator', () => {
     const { at } = mount();
     const heading = at('0.0');
     heading.focus();
     fireEvent.pointerOver(heading);
-    expect(window.getComputedStyle(heading).outline).toBe('1px solid rgba(245, 158, 11, 0.9)');
+    expect(boxOf(heading)).toEqual(NO_BOX);
     fireEvent.pointerOut(heading, { relatedTarget: document.body });
-    expect(window.getComputedStyle(heading).outline).toBe('1px solid rgba(245, 158, 11, 0.85)');
+    expect(heading.hasAttribute(EDIT_SELECTED_ATTR)).toBe(true);
+    expect(boxOf(heading)).toEqual(NO_BOX);
+  });
+
+  it('outlines a hovered non-text block faintly in neutral grey, with no fill', () => {
+    const { at } = mount('<div className="p-8"><p>text</p><div className="card p-4"><p>inside</p></div></div>');
+    fireEvent.pointerOver(at('0.1'));
+    expect(boxOf(at('0.1'))).toEqual({ outline: NEUTRAL_HOVER, background: CLEAR });
+  });
+
+  it('reacts only for the innermost hovered thing: text in a card shows nothing for the card', () => {
+    const { at } = mount('<div className="p-8"><p>text</p><div className="card p-4"><p>inside</p></div></div>');
+    fireEvent.pointerOver(at('0.1.0'));
+    expect(document.querySelectorAll(`[${EDIT_HOVER_ATTR}]`)).toHaveLength(1);
+    expect(boxOf(at('0.1'))).toEqual(NO_BOX);
+    expect(boxOf(at('0.1.0'))).toEqual(NO_BOX);
+    fireEvent.pointerOver(at('0.1'));
+    expect(boxOf(at('0.1'))).toEqual({ outline: NEUTRAL_HOVER, background: CLEAR });
+    expect(boxOf(at('0.1.0'))).toEqual(NO_BOX);
+  });
+
+  it('treats controls as blocks even when their label is editable text', () => {
+    const { at } = mount('<div className="p-8"><button>Go</button><a href="https://example.com">Docs</a></div>');
+    fireEvent.pointerOver(at('0.0'));
+    expect(boxOf(at('0.0'))).toEqual({ outline: NEUTRAL_HOVER, background: CLEAR });
+    fireEvent.pointerOver(at('0.1'));
+    expect(boxOf(at('0.1'))).toEqual({ outline: NEUTRAL_HOVER, background: CLEAR });
+  });
+
+  it('outlines a selected non-text block solidly in neutral grey, and never a selected text host', () => {
+    const { at } = mount();
+    fireEvent.click(at('0.2'), { bubbles: true });
+    expect(boxOf(at('0.2'))).toEqual({ outline: NEUTRAL_SELECTED, background: CLEAR });
+    fireEvent.pointerOver(at('0.2'));
+    expect(boxOf(at('0.2'))).toEqual({ outline: NEUTRAL_SELECTED, background: CLEAR });
+    fireEvent.click(at('0.1'), { bubbles: true });
+    expect(at('0.1').hasAttribute(EDIT_SELECTED_ATTR)).toBe(true);
+    expect(boxOf(at('0.1'))).toEqual(NO_BOX);
+  });
+
+  it('puts a drag grip in the left margin of the hovered block, and only there', () => {
+    const { at } = mount('<div className="p-8"><p>text</p><div className="card p-4"><p>inside</p></div></div>');
+    const inside = at('0.1.0');
+    inside.getBoundingClientRect = () => new DOMRect(100, 200, 300, 24);
+    fireEvent.pointerOver(inside);
+    const handle = grip()!;
+    expect(handle).toBeVisible();
+    const box = handle.parentElement!;
+    expect(Number.parseFloat(box.style.left) + Number.parseFloat(handle.style.width || '0')).toBeLessThanOrEqual(100);
+    expect(box.style.top).toBe('200px');
+    fireEvent.pointerOut(inside, { relatedTarget: document.body });
+    expect(grip()).not.toBeVisible();
+  });
+
+  it('keeps the hover while the pointer travels onto the grip', () => {
+    const { at } = mount();
+    fireEvent.pointerOver(at('0.1'));
+    fireEvent.pointerOut(at('0.1'), { relatedTarget: grip() });
+    fireEvent.pointerOver(grip()!);
+    expect(at('0.1').hasAttribute(EDIT_HOVER_ATTR)).toBe(true);
+    expect(grip()).toBeVisible();
+  });
+
+  it('hides the margin grip on the selected block, which has its own', () => {
+    const { at } = mount();
+    fireEvent.click(at('0.2'), { bubbles: true });
+    fireEvent.pointerOver(at('0.2'));
+    expect(grip()).not.toBeVisible();
+    expect(screen.getByRole('button', { name: 'Move selected block' })).toBeVisible();
+  });
+
+  it('dragging the grip selects its block and moves it', () => {
+    const { at } = mount();
+    const pointer = (type: string, target: EventTarget, x: number) =>
+      target.dispatchEvent(Object.assign(new Event(type, { bubbles: true, cancelable: true }), { pointerId: 1, clientX: x, clientY: 10 }));
+    const elementFromPoint = document.elementFromPoint;
+    document.elementFromPoint = () => at('0.2');
+    try {
+      fireEvent.pointerOver(at('0.1'));
+      pointer('pointerdown', grip()!, 10);
+      expect(last(STORY_SELECTION_MESSAGE)).toMatchObject({ selection: { path: '0.1' } });
+      pointer('pointermove', document, 60);
+      pointer('pointerup', document, 60);
+    } finally {
+      document.elementFromPoint = elementFromPoint;
+    }
+    expect(last(STORY_BLOCK_EDIT_MESSAGE)).toMatchObject({ command: { kind: 'move', path: '0.1', target: '0.2' } });
+  });
+
+  it('offers resize dots only when the selected block can be resized', () => {
+    const { at } = mount('<div className="p-8"><p className="lede">static</p><p className={row.tone}>computed</p></div>');
+    fireEvent.click(at('0.0'), { bubbles: true });
+    expect(screen.getByRole('button', { name: 'Resize selected block' })).toBeVisible();
+    fireEvent.click(at('0.1'), { bubbles: true });
+    expect(screen.getByRole('button', { name: 'Move selected block' })).toBeVisible();
+    expect(screen.getByRole('button', { name: 'Delete selected block' })).toBeVisible();
+    for (const name of ['Resize selected block', 'Resize block width', 'Resize block height'])
+      expect(screen.queryByRole('button', { name })).toBeNull();
   });
 
   it('marks the selectable node under the pointer and transfers the boundary as it moves', () => {

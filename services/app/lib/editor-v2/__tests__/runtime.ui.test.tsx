@@ -199,3 +199,34 @@ it('reports the actual source block for hover, click, and caret selection in for
     session.dispose();
   }
 });
+
+it('in a prose region, text draws no hover box while a container edge is a block', () => {
+  const parsed = parseJsxOrThrow(`<section id="root">
+    <p id="lead">Lead paragraph</p>
+    <blockquote id="quote"><p id="quoted">Quoted words</p></blockquote>
+  </section>`);
+  const session = createFrameEditSession({
+    win: window, requestRender: () => {},
+    channel: { nonce: 'x'.repeat(32), post: vi.fn(), innerHtmlOf: (el) => el.innerHTML },
+  });
+  session.setNodes(parsed.nodes);
+  const view = render(<>{renderStoryNodes(parsed.nodes, {
+    components: {}, decorateElement: session.decorate, decorateChildren: session.decorateChildren,
+  })}</>);
+  const at = (id: string) => view.container.querySelector(`#${id}`)!;
+  const outline = (el: Element) => getComputedStyle(el).outline;
+  try {
+    expect(at('quoted').closest('.ProseMirror')).not.toBeNull();
+    fireEvent.pointerOver(at('lead'));
+    expect(at('lead').getAttribute('data-mx-edit-hover')).toBe('text');
+    expect(outline(at('lead'))).not.toMatch(/solid/);
+    fireEvent.pointerOver(at('quoted'));
+    expect(outline(at('quoted'))).not.toMatch(/solid/);
+    expect(outline(at('quote'))).not.toMatch(/solid/);
+    fireEvent.pointerOver(at('quote'));
+    expect(at('quote').getAttribute('data-mx-edit-hover')).toBe('block');
+    expect(outline(at('quote'))).toBe('1px solid rgba(100, 116, 139, 0.28)');
+  } finally {
+    session.dispose();
+  }
+});

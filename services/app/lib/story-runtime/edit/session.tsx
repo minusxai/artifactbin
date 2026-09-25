@@ -19,7 +19,7 @@ import { cloneElement, createElement } from 'react';
 import { serializeJsx, type JsxElement, type JsxNode } from '@/lib/jsx';
 import { restoreBookmark, type EditorBookmark, type EditorSelectionChange } from '@/lib/editor-v2/bookmark';
 import { FlowEditor } from '@/lib/editor-v2/flow-editor';
-import { createNodeChrome } from '@/lib/editor-v2/node-chrome';
+import { createNodeChrome, HOVER_GRIP_ATTR, NODE_CHROME_SELECTOR } from '@/lib/editor-v2/node-chrome';
 import { createBlockSelection } from '@/lib/editor-v2/block-selection';
 import { gridCols, gridRowHeight } from '@/lib/story-ui/grid-layout';
 import { resolveJsxNodeAtPath } from '@/lib/story-ui/host-classify';
@@ -60,12 +60,13 @@ import { GridEdit } from './grid-edit';
 import { imageFileFromTransfer } from './image-drop';
 import { collectTextRegions, createRegionGeometry, navigateAcrossRegions } from './arrow-navigation';
 import { SELECTION_PRESENTATION } from '../selection-presentation';
+import { canResize, editChromeKind, gripTarget } from './edit-chrome';
 
-/** Marks the selected node so the reader can see what the toolbar is pointed at. */
+/** Marks the selected node so the reader can see what the toolbar is pointed at. Value: its edit-chrome kind. */
 export const EDIT_SELECTED_ATTR = 'data-mx-selected';
 /** Marks the selected COMPONENT. Its own attribute: two writers on one attribute take turns clearing each other. */
 export const EDIT_EMBED_SELECTED_ATTR = 'data-mx-embed-selected';
-/** Marks the selectable node under the pointer while edit mode is live. */
+/** Marks the selectable node under the pointer while edit mode is live. Value: 'text' (no box) or 'block'. */
 export const EDIT_HOVER_ATTR = 'data-mx-edit-hover';
 /** Marks nodes the page pointed at (STORY_SPOTLIGHT_MESSAGE) — outlined, never selected. */
 export const EDIT_SPOTLIGHT_ATTR = 'data-mx-edit-spotlight';
@@ -76,11 +77,12 @@ export const EDIT_SPOTLIGHT_ATTR = 'data-mx-edit-spotlight';
  * or apply editor chrome.
  */
 const EDIT_MODE_CSS = [
-  '[data-mx-block-selected] { outline: 1px solid rgba(100,116,139,.18); outline-offset: 2px; }',
+  `[data-mx-block-selected][data-mx-block-selected] { ${SELECTION_PRESENTATION.editSelectedCss} }`,
   '.ProseMirror { outline: none; white-space: pre-wrap; overflow-wrap: break-word; }',
   '[contenteditable="true"]:focus { outline: none; }',
-  `[${EDIT_SELECTED_ATTR}][${EDIT_SELECTED_ATTR}], [${EDIT_EMBED_SELECTED_ATTR}][${EDIT_EMBED_SELECTED_ATTR}] { ${SELECTION_PRESENTATION.selectedCss} }`,
-  `[${EDIT_HOVER_ATTR}][${EDIT_HOVER_ATTR}] { ${SELECTION_PRESENTATION.hoverCss} }`,
+  // Text ('text') draws nothing; hover precedes selection so a selected block keeps its stronger line.
+  `[${EDIT_HOVER_ATTR}="block"][${EDIT_HOVER_ATTR}] { ${SELECTION_PRESENTATION.editHoverCss} }`,
+  `[${EDIT_SELECTED_ATTR}="block"][${EDIT_SELECTED_ATTR}], [${EDIT_EMBED_SELECTED_ATTR}="block"][${EDIT_EMBED_SELECTED_ATTR}] { ${SELECTION_PRESENTATION.editSelectedCss} }`,
   `[${EDIT_SPOTLIGHT_ATTR}][${EDIT_SPOTLIGHT_ATTR}] { ${SELECTION_PRESENTATION.spotlightCss} }`,
 ].join('\n');
 
@@ -152,10 +154,14 @@ export function createFrameEditSession({
   const blockSelection = createBlockSelection(doc, scope, (command) =>
     post({ type: STORY_BLOCK_EDIT_MESSAGE, command }),
   );
-  const chrome = createNodeChrome(doc, (command) => {
-    commitHost(active);
-    post({ type: STORY_BLOCK_EDIT_MESSAGE, command });
-  });
+  const chrome = createNodeChrome(
+    doc,
+    (command) => {
+      commitHost(active);
+      post({ type: STORY_BLOCK_EDIT_MESSAGE, command });
+    },
+    (el) => reportSelection(describeWithQuote(el)),
+  );
 
   // ── selection ─────────────────────────────────────────────────────────────
   const stampSelection = () => {
@@ -174,7 +180,7 @@ export function createFrameEditSession({
       return;
     }
     const kind = describeSelection(el, nodes)?.kind;
-    el.setAttribute(kind === 'embed' ? EDIT_EMBED_SELECTED_ATTR : EDIT_SELECTED_ATTR, '');
+    el.setAttribute(kind === 'embed' ? EDIT_EMBED_SELECTED_ATTR : EDIT_SELECTED_ATTR, editChromeKind(el));
     const node = resolveJsxNodeAtPath(nodes, selectedPath);
     const parent = resolveJsxNodeAtPath(nodes, selectedPath.split('.').slice(0, -1).join('.'));
     const props =
@@ -196,7 +202,9 @@ export function createFrameEditSession({
         node.tag,
       ) ||
         (el.namespaceURI === 'http://www.w3.org/2000/svg' && node.tag !== 'svg'));
-    chrome.select(inlineOrDrawingPart ? null : (el as HTMLElement), inlineOrDrawingPart ? null : selectedPath, grid);
+    chrome.select(inlineOrDrawingPart ? null : (el as HTMLElement), inlineOrDrawingPart ? null : selectedPath, grid, {
+      resizable: node?.type === 'element' && canResize(node),
+    });
   };
 
   /**
@@ -282,7 +290,7 @@ export function createFrameEditSession({
     if (
       !element?.closest ||
       (root && !root.contains(element)) ||
-      element.closest('.mx-rail, .mx-present, [data-mx-node-chrome]')
+      element.closest(`.mx-rail, .mx-present, ${NODE_CHROME_SELECTOR}`)
     )
       return null;
     const stamped = element.closest(`[${AST_PATH_ATTR}]`);
@@ -293,7 +301,8 @@ export function createFrameEditSession({
     if (hovered === next) return;
     hovered?.removeAttribute(EDIT_HOVER_ATTR);
     hovered = next;
-    hovered?.setAttribute(EDIT_HOVER_ATTR, '');
+    hovered?.setAttribute(EDIT_HOVER_ATTR, editChromeKind(hovered));
+    chrome.hover(hovered && gripTarget(hovered, nodes));
   };
 
   /** The whole set each time (the message is idempotent); the first found scrolls into view. */
@@ -325,8 +334,14 @@ export function createFrameEditSession({
   };
   doc.addEventListener('selectionchange', onSelectionChange);
 
-  const onPointerOver = (event: PointerEvent) => setHovered(selectableAt(event.target));
-  const onPointerOut = (event: PointerEvent) => setHovered(selectableAt(event.relatedTarget));
+  // The margin grip sits beside the hovered block: travelling onto it keeps that hover.
+  const onGrip = (target: EventTarget | null) => !!(target as Element | null)?.closest?.(`[${HOVER_GRIP_ATTR}]`);
+  const onPointerOver = (event: PointerEvent) => {
+    if (!onGrip(event.target)) setHovered(selectableAt(event.target));
+  };
+  const onPointerOut = (event: PointerEvent) => {
+    if (!onGrip(event.relatedTarget)) setHovered(selectableAt(event.relatedTarget));
+  };
 
   const onClick = (event: Event) => {
     const target = event.target as Element | null;
@@ -335,7 +350,7 @@ export function createFrameEditSession({
     // Chrome the document draws for itself (the deck rail and its slide
     // previews) re-renders the slide's own nodes, so ids and AST stamps appear
     // twice — a click there must never select the preview copy.
-    if (target.closest('.mx-rail, .mx-present, [data-mx-node-chrome]')) return;
+    if (target.closest(`.mx-rail, .mx-present, ${NODE_CHROME_SELECTOR}`)) return;
     if (target.closest('.ProseMirror') && target.closest('a')) event.preventDefault();
     // A drag ends with a click on the common ancestor. It is still a text
     // selection, never an instruction to resize that entire container.
