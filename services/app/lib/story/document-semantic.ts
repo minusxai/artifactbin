@@ -5,6 +5,8 @@
 import {createHash,randomUUID} from 'node:crypto';
 import type {DocumentOperation} from '@artifactbin/contracts';
 import type {JsxNode,JsxElement} from '../jsx/types';
+import {json} from '../http';
+import {repairJsxSource} from '../jsx/repair';
 import {parseJsx} from '../jsx/parse';
 import {serializeJsx} from '../jsx/serialize';
 import {decodeDocument,decodeDocumentNodes,encodeDocumentNodes,type SemanticDocument,type StoredProse,type StoredTree} from './document-codec';
@@ -15,14 +17,14 @@ import {splitHelmet} from './helmet';
 import {documentFonts} from './document-fonts';
 import type {ReferenceValidationState,ResolvedRef} from './refs';
 import {publishJsx} from './jsx-tier';
-import {MAX_CONTENT_BYTES,type ContentInputCtx} from './input';
+import {MAX_CONTENT_BYTES,type ContentInputCtx,type StoredContent} from './input';
 import {prepareDocumentPatch,type DocumentPatch} from './document-patch';
 
 export const SEMANTIC_POLICY='semantic-prose-v1';
 type Node=JsxNode & {slot?:string};
 export interface SemanticBaseline {id:string;version:number;document:SemanticDocument;meta:Record<string,unknown>;reservedIds?:string[]}
 export interface SemanticPlan {
- references:ReferenceValidationState[];id:string;baseVersion:number;epoch:string;hash:string;expectedMeta:Record<string,unknown>;
+ warnings?:StoredContent['warnings'];references:ReferenceValidationState[];id:string;baseVersion:number;epoch:string;hash:string;expectedMeta:Record<string,unknown>;
  beforeTree:StoredTree;tree:StoredTree;nextHash:string;nextEpoch:string;patches:DocumentPatch[];
  reads:string[];removed:string[];fresh:Record<string,StoredProse>;observed:Record<string,StoredProse>;
  contextRequired:boolean;ids:string[];aliases:Array<{legacyKey:string;nodeId:string;path:string}>;layout:Record<string,{fixedStart:number;order:number}>;fixedDelta:number;meta:Record<string,unknown>;
@@ -118,6 +120,8 @@ async function prepareSemanticNodes(base:SemanticBaseline,candidate:Node[],conte
   const materialized=structuredClone(projected.nodes);
   walk(materialized,n=>{if(n.type==='text'&&n.slot){const p=projected.fresh[n.slot]??base.document.prose[n.slot];if(!p)throw new Error('Missing prose dependency');if(base.document.prose[n.slot])projected.consumed.add(n.slot);n.value=p.value;delete n.slot;}});
   published=await publishJsx(fields,serializeJsx(materialized),context);if(published instanceof Response)return published;
+  const identity=stampNodeIds(published.source!,{previousSource:decodeDocument(base.document),reservedIds:base.reservedIds,retireLegacyAliases:true});aliases=identity.aliases;
+  if(identity.source!==published.source){published=await publishJsx(fields,identity.source,context);if(published instanceof Response)return published;}
   nodes=parse(published.source!);
  }
  if(published instanceof Response)return published;
@@ -125,8 +129,10 @@ async function prepareSemanticNodes(base:SemanticBaseline,candidate:Node[],conte
  const removed=[...prior].filter(slot=>!remaining.has(slot));
  const fresh=Object.fromEntries(Object.entries(projected.fresh).filter(([slot])=>remaining.has(slot)));
  for(const slot of remaining)if(!prior.has(slot)&&!fresh[slot])throw new Error('Unbound prose slot');
+ const bytes=fixedBytes(nodes)+[...remaining].reduce((sum,slot)=>sum+(fresh[slot]??base.document.prose[slot])!.bytes,0);
+ if(bytes>MAX_CONTENT_BYTES)return json({error:'too_large',maxBytes:MAX_CONTENT_BYTES},413);
  const tree=encodeDocumentNodes(nodes),token=Object.freeze({}) as SemanticAdmission;
- admissions.set(token,{references:[...references.values()],id:base.id,baseVersion:base.version,epoch:base.document.epoch,hash:fingerprint(base.document.tree),expectedMeta:structuredClone(base.meta),beforeTree:base.document.tree,tree,nextHash:fingerprint(tree),nextEpoch:randomUUID(),patches:prepareDocumentPatch(base.document.tree,tree),reads:[...new Set([...removed,...projected.consumed])],removed,fresh,observed:structuredClone(base.document.prose),contextRequired:published.source!.includes('ref:')||documentFonts(splitHelmet(parse(published.source!)).content).families.length>0,ids:[...nodeIndex(serializeJsx(nodes)).keys()],aliases,layout:layoutOf(nodes),fixedDelta:fixedBytes(nodes)-fixedBytes(before),meta:published.meta});
+ admissions.set(token,{warnings:published.warnings,references:[...references.values()],id:base.id,baseVersion:base.version,epoch:base.document.epoch,hash:fingerprint(base.document.tree),expectedMeta:structuredClone(base.meta),beforeTree:base.document.tree,tree,nextHash:fingerprint(tree),nextEpoch:randomUUID(),patches:prepareDocumentPatch(base.document.tree,tree),reads:[...new Set([...removed,...projected.consumed])],removed,fresh,observed:structuredClone(base.document.prose),contextRequired:published.source!.includes('ref:')||documentFonts(splitHelmet(parse(published.source!)).content).families.length>0,ids:[...nodeIndex(serializeJsx(nodes)).keys()],aliases,layout:layoutOf(nodes),fixedDelta:fixedBytes(nodes)-fixedBytes(before),meta:published.meta});
  return token;
 }
 /** Reference application for differential tests and SQL compiler conformance. */
@@ -161,7 +167,12 @@ export function semanticSourceSegments(tree:StoredTree):Array<{text:string}|{slo
  * Full replacements deliberately consume every leaf. */
 export async function prepareSemanticSource(base:SemanticBaseline,source:string,context:ContentInputCtx,body:Record<string,unknown>={},replace=false):Promise<SemanticAdmission|Response>{
  if(!context.loadRef)throw new Error('Document admission requires publication reference checks');
- const candidate=parse(source);
+ if(source.includes('\0'))return json({error:'invalid_source_encoding',details:['Document source cannot contain a NUL character.']},400);
+ if(!source.isWellFormed())source=Buffer.from(source,'utf8').toString('utf8');
+ source=repairJsxSource(source)?.source??source;
+ const parsed=parseJsx(source);
+ if(!parsed.ok){const result=await publishJsx(body,source,context);if(result instanceof Response)return result;source=result.source!;}
+ const candidate=parsed.ok?parsed.nodes:parse(source);
  if(!replace){
   const originals=new Map<string,JsxElement>();
   const id=(node:JsxElement)=>{const a=node.attributes.find(a=>a.name==='id')?.value;return a?.static&&typeof a.json==='string'?a.json:null;};

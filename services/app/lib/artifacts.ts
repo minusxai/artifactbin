@@ -1,9 +1,9 @@
 import {commitProseOperation} from './story/document-prose-write';
 import {proseOperation,applyProseOperation,type ProseOperation} from './story/document-prose';
 import type {DocumentOperation} from '@artifactbin/contracts';
-import type {SemanticDocument,StoredDocument} from './story/document-codec';
+import {decodeDocument,type SemanticDocument,type StoredDocument} from './story/document-codec';
 import {applyDocumentOperations,DocumentOperationError} from './story/document-operation';
-import {createSemanticDocument,prepareSemanticSource,type SemanticAdmission} from './story/document-semantic';
+import {createSemanticDocument,prepareSemanticSource,semanticPlan,applySemanticPlan,type SemanticAdmission} from './story/document-semantic';
 import {commitSemanticOperation} from './story/document-semantic-write';
 import {artifactQuery,loadArtifactDocument,sourceStorage,decodeArtifactDocument} from './artifact-document';
 import {JOIN_RELATIONS,seedOwnerJoin} from './relation-state';
@@ -54,7 +54,7 @@ import {defaultDatasetGrants,remapDatasetGrants,parseDatasetAccessPolicy} from '
 import {validateDatasetPolicyForRow} from './datasets/policy/validation';
 import { actorSubject, emit } from './events';
 import { generateFileId } from './ids';
-import { isDocumentFormat, parseContentInput, type ArtifactFormat } from './story/input';
+import { isDocumentFormat, parseContentInput, type ArtifactFormat,type StoredContent } from './story/input';
 import { canonicalizeMarkup, publishJsx, prepareJsx } from './story/jsx-tier';
 import { imageRawUrl, imageRefData, pdfRawUrl } from './story/ref-data';
 import { displayTitle } from './story/title';
@@ -573,7 +573,7 @@ async function insertArtifact(
     // creation, which is also what makes the audit CTE above a no-op.
     datasetPolicy ? JSON.stringify(datasetPolicy) : null,
     atCreation.datasetPolicy?.revision ?? 0,
-    sourceStorage(input.format,input.source,true).document,
+    sourceStorage(input.format,input.source,!atCreation.forkedFrom).document,
   ],
   );
   Object.assign(created.rows[0],await writeShares(tx,id,atCreation.shares??[]));
@@ -1653,6 +1653,7 @@ export async function applyEditScoped(actor: TokenActor, id: string, input: Edit
     //    the caller actually read is what makes a stale base resolvable at all.
     //    A metadata-only edit has no splice and skips straight to the write.
     let candidate = headSource;
+    let batchChanges:BatchChange[]|undefined;
     if (input.change) {
       if ('edits' in input.change) {
         const resolved = resolveEditBatch(baseSource, input.change.edits);
@@ -1660,6 +1661,7 @@ export async function applyEditScoped(actor: TokenActor, id: string, input: Edit
         const rebased = rebaseEditBatch(headSource, resolved.changes, intervening);
         if (!rebased.ok) return { applied: false, reason: 'doc_changed', head: headOf(head) };
         candidate = rebased.source;
+        batchChanges=rebased.changes;
       } else {
       let splice: Splice;
       if ('oldString' in input.change) {
@@ -1704,11 +1706,28 @@ export async function applyEditScoped(actor: TokenActor, id: string, input: Edit
       if(text){const result=await commitProseOperation(db,actor,id,input.baseEditId,text,scope,SHARES_PROJECTION);if(result)return result;}
     }
 
-    // 4. Validate/sanitize/compile the candidate — a pure function of content,
-    //    so it runs with no lock held (a concurrent landing just loses the CAS).
-    //    Theme/colorMode ride along because they change the compiled stylesheet.
+    // Admission owns publication and identity. Dry runs retain the pure publisher
+    // so previewing never imports assets or performs persistence side effects.
+    const existing=storedHead.document?.schema===2?storedHead.document:null;
+    let baseline=existing;
+    if(!baseline){try{baseline=createSemanticDocument(canonicalizeMarkup(headSource),head.version);}catch{baseline=createSemanticDocument('',head.version);}}
+    let admitted:SemanticAdmission;
+    let published:StoredContent|Response;
+    let identity:{source:string;ids:string[];aliases:Array<{legacyKey:string;nodeId:string;path:string}>};
+    if(!opts.dryRun){
+      const reserved=await db.query<{source_id:string}>('SELECT source_id FROM artifact_source_ids WHERE artifact_id=$1',[id]);
+      const result=await prepareSemanticSource({id,version:head.version,document:baseline,meta:head.meta,reservedIds:reserved.rows.map(r=>r.source_id)},candidate,{
+        loadRef:refLoaderForActor(writerFor(head)),importAsset:assetImporterFor(head.token_id,head.user_id),resolveFont:fontResolver(),overByteQuota:byteQuotaFor(head.token_id),
+      },{theme:input.meta?.theme!==undefined?input.meta.theme:head.meta.theme??null,template:head.meta.template??null,colorMode:input.meta?.colorMode!==undefined?input.meta.colorMode:head.meta.colorMode??null},!existing);
+      if(result instanceof Response)return result;
+      admitted=result;
+      const plan=semanticPlan(admitted),next=applySemanticPlan(baseline,head.version,admitted);
+      if(!next)throw new Error('Admitted document did not apply to its baseline');
+      published={format:'markup',content:'',source:decodeDocument(next),meta:plan.meta,warnings:plan.warnings,derivedTitle:null};
+      identity={source:published.source!,ids:plan.ids,aliases:plan.aliases};
+    }else{
     const meta = head.meta as { theme?: unknown; template?: unknown; colorMode?: unknown };
-    let published = await publishCandidate(
+    published = await publishCandidate(
       {
         theme: input.meta?.theme !== undefined ? input.meta.theme : meta.theme ?? null,
         template: meta.template ?? null,
@@ -1729,7 +1748,7 @@ export async function applyEditScoped(actor: TokenActor, id: string, input: Edit
       },
     );
     if (published instanceof Response) return published;
-    let identity = { source: published.source ?? '', ids: [...nodeIndex(published.source ?? '').keys()], aliases: [] as Array<{ legacyKey: string; nodeId: string; path: string }> };
+    identity = { source: published.source ?? '', ids: [...nodeIndex(published.source ?? '').keys()], aliases: [] as Array<{ legacyKey: string; nodeId: string; path: string }> };
     if (input.change) {
       const reserved = await db.query<{ source_id: string }>('SELECT source_id FROM artifact_source_ids WHERE artifact_id = $1', [id]);
       identity = stampNodeIds(published.source ?? '', {
@@ -1749,6 +1768,7 @@ export async function applyEditScoped(actor: TokenActor, id: string, input: Edit
         { loadRef: refLoaderForActor(writerFor(head)), importAsset: assetImporterFor(head.token_id, head.user_id), resolveFont: fontResolver(), overByteQuota: byteQuotaFor(head.token_id) },
       );
       if (published instanceof Response) return published;
+    }
     }
     const aliasTargets = new Map<string, string>();
     for (const alias of identity.aliases) {
@@ -1782,16 +1802,10 @@ export async function applyEditScoped(actor: TokenActor, id: string, input: Edit
     const sideEffects = operations.length
       ? annotationEffects(headSource, storedText, operations, annotationRows, storedReceipts)
       : { updates: [], receipts: [] };
-    const existing=storedHead.document?.schema===2?storedHead.document:null;
-    let baseline=existing;
-    if(!baseline){try{baseline=createSemanticDocument(canonicalizeMarkup(headSource),head.version);}catch{baseline=createSemanticDocument('',head.version);}}
-    const admitted=await prepareSemanticSource({id,version:head.version,document:baseline,meta:head.meta},storedText,{
-      loadRef:refLoaderForActor(writerFor(head)),importAsset:assetImporterFor(head.token_id,head.user_id),resolveFont:fontResolver(),overByteQuota:byteQuotaFor(head.token_id),
-    },{theme:published.meta.theme,template:published.meta.template,colorMode:published.meta.colorMode},!existing);
-    if(admitted instanceof Response)return admitted;
     const commit=async(queryable:Queryable)=>{
-      const row=await commitSemanticOperation(queryable,actor,scope,admitted,{
+      const row=await commitSemanticOperation(queryable,actor,scope,admitted!,{
         ...(input.meta?.title!==undefined?{title:input.meta.title}:{}),effects:sideEffects,
+        historyChanges:{source:headSource,changes:batchChanges&&candidate===storedText?batchChanges:sourceChanges(headSource,storedText)},
         ...(!existing?{initialize:{document:baseline,source:headSource},expectedEditId:head.edit_id}:operations.length?{expectedEditId:head.edit_id}:{}),
       });
       return {rows:row?[row]:[]};

@@ -49,3 +49,10 @@ it('an ancestor attribute change depends on its descendants but not a sibling pa
  const current=structuredClone(base.document),slot=Object.keys(current.prose).find(k=>current.prose[k]!.value==='Alpha')!;current.prose[slot]!.revision=2;
  expect(applySemanticPlan(current,2,token)).toBeNull();
 });
+
+it('rejects a prose expansion beyond the document limit during admission',async()=>{
+ const base=await setup();
+ const result=await prepareSemanticOperation(base,[{kind:'setText',path:[0,0,0],value:'x'.repeat(2_000_001)}],context);
+ expect(result).toBeInstanceOf(Response);
+ expect((result as Response).status).toBe(413);
+});

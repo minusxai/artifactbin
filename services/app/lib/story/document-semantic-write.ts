@@ -7,8 +7,9 @@ import {semanticPlan,semanticSourceSegments,SEMANTIC_POLICY,type SemanticAdmissi
 import {semanticOperationSql} from './document-semantic-sql';
 import type {SemanticDocument} from './document-codec';
 import type {annotationEffects} from './annotation-edits';
+import type {BatchChange} from './edit-batch';
 import {newEditId} from './splice';
-export interface SemanticCommitOptions {archive?:'always'|'coalesce';history?:'whole'|'nodes';title?:string|null;description?:string|null;expectedEditId?:string;initialize?:{document:SemanticDocument;source:string};effects?:ReturnType<typeof annotationEffects>;aliases?:Array<{legacyKey:string;nodeId:string;path:string}>;visibility?:string;ancestorIds?:string[];access?:string;linkRole?:string|null;provenance?:'migration'|'authored'}
+export interface SemanticCommitOptions {historyChanges?:{source:string;changes:BatchChange[]};archive?:'always'|'coalesce';history?:'whole'|'nodes';title?:string|null;description?:string|null;expectedEditId?:string;initialize?:{document:SemanticDocument;source:string};effects?:ReturnType<typeof annotationEffects>;aliases?:Array<{legacyKey:string;nodeId:string;path:string}>;visibility?:string;ancestorIds?:string[];access?:string;linkRole?:string|null;provenance?:'migration'|'authored'}
 export async function commitSemanticOperation(db:Queryable,actor:TokenActor|null,scope:Scope,token:SemanticAdmission,options:SemanticCommitOptions={}):Promise<ArtifactRow|null>{
  const plan=semanticPlan(token),editId=newEditId();
  const effective=options.initialize?'$6::jsonb':'l.document';
@@ -24,6 +25,10 @@ export async function commitSemanticOperation(db:Queryable,actor:TokenActor|null
  const beforeSegments=semanticSourceSegments(plan.beforeTree),afterSegments=semanticSourceSegments(plan.tree);
  const before=originalSource?null:param(JSON.stringify(beforeSegments)),after=param(JSON.stringify(afterSegments));
  const source=(segments:string,document:string)=>`COALESCE((SELECT string_agg(CASE WHEN segment ? 'text' THEN segment->>'text' ELSE ${document}#>>ARRAY['prose',segment->>'slot','source'] END,'' ORDER BY ordinal) FROM jsonb_array_elements(${segments}::jsonb) WITH ORDINALITY AS parts(segment,ordinal)),'')`;
+ // Compatibility batches are valid only against the exact locked preimage.
+ // A concurrently updated prose leaf instead uses the semantic log's exact diff.
+ const historySource=param(options.historyChanges?.source??null),historyChanges=param(JSON.stringify(options.historyChanges?.changes??null));
+ const priorSource=originalSource?`${originalSource}::text`:source(before!,"(u.previous->'document')");
  const fixedUnits=options.initialize?options.initialize.source.length:beforeSegments.reduce((sum,s)=>sum+('text'in s?s.text.length:0),0),fixed=param(fixedUnits);
  const result=await db.query<{artifact:ArtifactRow}>(`WITH reference_witnesses AS MATERIALIZED (
   SELECT * FROM jsonb_to_recordset(${references}::jsonb) AS witness(id text,version int,"sharingRevision" int,"policyRevision" int)
@@ -57,10 +62,11 @@ export async function commitSemanticOperation(db:Queryable,actor:TokenActor|null
   WHERE a.artifact_id=$1 AND a.id=x->>'annotationId' AND a.root_id IS NULL AND a.deleted_at IS NULL
    AND a.anchor_key=x->'before'->>'anchor' AND a.range IS NOT DISTINCT FROM (x->'before'->>'range') AND EXISTS(SELECT 1 FROM updated) RETURNING a.id
  ), logged AS (
-  INSERT INTO artifact_edits(artifact_id,edit_id,splice_start,removed,inserted,span_start,span_end,actor_user_id,actor_token_id,document_state,annotation_changes)
+  INSERT INTO artifact_edits(artifact_id,edit_id,splice_start,removed,inserted,span_start,span_end,actor_user_id,actor_token_id,document_state,annotation_changes,changes)
   SELECT u.id,u.edit_id,0,${originalSource?`${originalSource}::text`:source(before!,"(u.previous->'document')")},${source(after,'u.document')},0,
    ${fixed}::int+COALESCE((SELECT sum((p.value->>'units')::int)::int FROM jsonb_each(u.previous#>'{document,prose}') p),0),$4,$5,
-   jsonb_build_object('epoch',u.document->>'epoch','version',u.version,'kind','${options.history==='whole'?'whole':'semantic'}'),(SELECT jsonb_agg(receipt) FROM jsonb_array_elements(${receipts}::jsonb) receipt WHERE receipt->>'annotationId'='' OR receipt->>'annotationId' IN(SELECT id FROM moved_annotations)) FROM updated u
+   jsonb_build_object('epoch',u.document->>'epoch','version',u.version,'kind','${options.history==='whole'?'whole':'semantic'}'),(SELECT jsonb_agg(receipt) FROM jsonb_array_elements(${receipts}::jsonb) receipt WHERE receipt->>'annotationId'='' OR receipt->>'annotationId' IN(SELECT id FROM moved_annotations)),
+   CASE WHEN ${historySource}::text=${priorSource} THEN ${historyChanges}::jsonb ELSE NULL END FROM updated u
   RETURNING pg_notify('artifact_'||lower(artifact_id),edit_id)
  ), reserved AS (
   INSERT INTO artifact_source_ids(artifact_id,source_id,provenance,first_version)
