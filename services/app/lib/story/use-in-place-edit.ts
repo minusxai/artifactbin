@@ -106,7 +106,7 @@ export interface InPlaceEditController {
   pasteMarkdown: (value: string) => void;
   restoreSelection: (bookmark: EditorBookmark) => void;
   /** Select a node by path (a breadcrumb click, a panel opening) or clear it. */
-  select: (path: string | null, options?: { reveal?: boolean }) => void;
+  select: (path: string | null, options?: { reveal?: boolean; nodeId?: string }) => void;
   /** Outline nodes by path WITHOUT selecting them (the query notebook pointing at what a query powers); [] clears. */
   spotlight: (paths: string[]) => void;
   /**
@@ -322,7 +322,7 @@ export function useInPlaceEdit(options: InPlaceEditOptions): InPlaceEditControll
   );
 
   const select = useCallback(
-    (path: string | null, options?: { reveal?: boolean }) => {
+    (path: string | null, options?: { reveal?: boolean; nodeId?: string }) => {
       /*
        * DESELECTING NEEDS NO ANSWER. Selecting does — only the document can
        * describe what is at a path (its rect, its classes, its ancestors), so
@@ -332,7 +332,12 @@ export function useInPlaceEdit(options: InPlaceEditOptions): InPlaceEditControll
        * The document is still told, so it drops its own selected stamp.
        */
       if (path === null) setSelection(null);
-      postToFrame({ type: STORY_SELECT_MESSAGE, path, ...(options?.reveal ? { reveal: true } : {}) });
+      postToFrame({
+        type: STORY_SELECT_MESSAGE,
+        path,
+        ...(options?.reveal ? { reveal: true } : {}),
+        ...(options?.nodeId ? { nodeId: options.nodeId } : {}),
+      });
     },
     [postToFrame],
   );

@@ -144,7 +144,7 @@ describe('inserting an image', () => {
     expect(screen.queryByRole('dialog')).toBeNull();
     const update = posted.filter((m) => m.type === 'mx:document' && m.refData).at(-1);
     expect(update?.refData).toEqual({ New222: { kind: 'image', url: '/a/New222/raw?v=1' } });
-    expect(posted.filter((m) => m.type === 'mx:select').at(-1)).toMatchObject({ path: '0.2', reveal: true });
+    expect(posted.filter((m) => m.type === 'mx:select').at(-1)).toMatchObject({ path: '0.2', reveal: true, nodeId: expect.stringMatching(/^[A-Za-z][A-Za-z0-9]{3}$/) });
 
     await act(async () => { fireEvent.click(screen.getByLabelText('Undo')); });
     await waitFor(() => expect(inserted()).toBe(DOC));

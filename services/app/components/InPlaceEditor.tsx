@@ -954,11 +954,12 @@ export default function InPlaceEditor({
   const insertImage = useCallback(
     async (anchor: JsxInsertAnchor | null, image: ChosenImage) => {
       if (!(await drainTyping())) return;
-      const placed = placeImageInJsx(sourceRef.current, image.id, anchor, { nodeId: freshNodeId(sourceRef.current) });
+      const nodeId = freshNodeId(sourceRef.current);
+      const placed = placeImageInJsx(sourceRef.current, image.id, anchor, { nodeId });
       if (placed.source === sourceRef.current || !placed.path) return;
       commitStructural(placed.source, refDataFor(image));
       const bodyPath = sourcePathToBodyPath(placed.source, placed.path);
-      if (bodyPath) editRef.current?.select(bodyPath, { reveal: true });
+      if (bodyPath) editRef.current?.select(bodyPath, { reveal: true, nodeId });
     },
     [commitStructural, drainTyping],
   );

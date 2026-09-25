@@ -406,4 +406,28 @@ describe('createFrameEditSession — selecting what was just inserted', () => {
     expect(last(STORY_SELECTION_MESSAGE)).toMatchObject({ selection: { path: '0.1', tag: 'img' } });
     expect(scrolled).toEqual([late]);
   });
+
+  /*
+   * Found in a real browser: the OLD document still has an element at the new
+   * image's path until the re-render lands, and the reveal selected that one.
+   * The page names the node (its id); only that node is the one it meant.
+   */
+  it('does not take whatever still sits at the path — it waits for the node with that id', async () => {
+    const { session, at } = mount('<div className="p-8"><p>one</p><p>two</p></div>');
+    session.setNodes(nodesOf('<div className="p-8"><p>one</p><img id="Qx7k" src="https://example.com/a.png" alt="" /><p>two</p></div>'));
+    const before = sent(STORY_SELECTION_MESSAGE).length;
+    session.onParentMessage({ type: STORY_SELECT_MESSAGE, path: '0.1', reveal: true, nodeId: 'Qx7k' } as StoryEditParentMessage);
+    expect(sent(STORY_SELECTION_MESSAGE)).toHaveLength(before); // the stale <p> at 0.1 is not it
+    await new Promise((r) => setTimeout(r, 60));
+    expect(sent(STORY_SELECTION_MESSAGE)).toHaveLength(before);
+    at('0.1').remove();
+    const img = document.createElement('img');
+    img.id = 'Qx7k';
+    img.setAttribute('data-mx-ast', '0.1');
+    at('0').insertBefore(img, at('0.0').nextSibling);
+    await new Promise((r) => setTimeout(r, 60));
+    expect(last(STORY_SELECTION_MESSAGE)).toMatchObject({ selection: { path: '0.1', tag: 'img' } });
+    expect(img.hasAttribute(EDIT_SELECTED_ATTR)).toBe(true);
+  });
 });
+

@@ -761,6 +761,8 @@ interface StorySelectMessage {
    * document is still rendering), so wait briefly for it, then scroll it into view.
    */
   reveal?: boolean;
+  /** With `reveal`: the id of the node meant — until the re-render lands, an OLD node sits at that path. */
+  nodeId?: string;
 }
 
 /**

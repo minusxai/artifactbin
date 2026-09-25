@@ -1021,6 +1021,7 @@ export function createFrameEditSession({
           const path = message.path;
           const described = () => {
             const el = scope.querySelector(`[${AST_PATH_ATTR}="${CSS.escape(path)}"]`);
+            if (el && message.nodeId && el.id !== message.nodeId) return null; // the old document, still drawn
             return el && describeSelection(el, nodes) ? { el } : null;
           };
           /** Scroll it to the middle — and again once an image has its height, or it lands half-shown. */
