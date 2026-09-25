@@ -298,7 +298,7 @@ export default function StoryFormatToolbar({
               className="inline-flex h-8 shrink-0 cursor-pointer items-center gap-1.5 rounded-md px-2 font-mono text-[11px] leading-none text-fg hover:bg-surface"
             >
               <ImageUp size={12} />
-              Replace
+              <span className="hidden sm:inline">Replace</span>
             </button>
             <StoryToolbarMenu
               label={image.alt === null ? 'Add alt text' : 'Alt text'}
