@@ -221,11 +221,11 @@ const updateArtifactOp: Operation = {
   name: 'update_artifact',
   title: 'Replace an artifact',
   http: { method: 'PUT', path: '/api/artifacts/{id}' },
-  description: 'Full replace of an artifact you own (same one-of content fields as create). Archives the current state as a version; the URL never changes. Both expectedVersion and expectedState from the observed head are required. A changed version or metadata state refuses the write; inspect the current head, merge and retry with its conditions. Dataset/recipe refreshes return warnings naming dependent artifacts whose bindings broke. On a FOLDER only title, visibility and parent_id apply, and they apply as METADATA — no new version, nothing archived — because a folder has no content to replace; renaming one is this call, and a content field answers not_editable.',
-  input: { id: z.string(), expectedVersion: z.number().int().positive(), expectedState: z.string().regex(/^[a-f0-9]{64}$/), ...CONTENT_FIELDS },
+  description: 'Replace a non-document artifact using the same one-of content fields as create. Markup documents require a prepared document_update, including whole replacements; use afbin push or edit_artifact. Archives the current state as a version; the URL never changes. Both expectedVersion and expectedState from the observed head are required. A changed version or metadata state refuses the write; inspect the current head, merge and retry with its conditions. Dataset/recipe refreshes return warnings naming dependent artifacts whose bindings broke. On a FOLDER only title, visibility and parent_id apply, and they apply as METADATA — no new version, nothing archived — because a folder has no content to replace; renaming one is this call, and a content field answers not_editable.',
+  input: { id: z.string(), document_update:z.json().optional(),edit_id:z.string().optional(),expectedVersion: z.number().int().positive().optional(), expectedState: z.string().regex(/^[a-f0-9]{64}$/).optional(), ...CONTENT_FIELDS },
   annotations: { idempotent: true },
   example: {
-    input: { id: 'aB3xK9', markup: '<div data-design="tw" className="p-8"><h1 className="text-3xl">v2</h1></div>', expectedVersion: 1, expectedState: 'a'.repeat(64) },
+    input: { id: 'aB3xK9', csv:'name,value\nExample,2', expectedVersion: 1, expectedState: 'a'.repeat(64) },
   },
   errors: [
     NOT_FOUND,
@@ -245,35 +245,17 @@ const updateArtifactOp: Operation = {
   },
 };
 
+/** A metadata-only example keeps the prepared wire shape readable. Real clients
+ * generate patches from their authoring graph; agents use afbin push. */
+const exampleDocumentUpdate={schema:1,patch:{baseVersion:1,reads:[],selections:[],inserted:{},removed:[],updated:{},touched:[],byteDelta:0,unitDeltas:{},claims:[]},effects:{css:false,references:false},metadata:{title:'Updated title'},expectedMetadata:{title:null}};
 const editArtifactOp: Operation = {
-  name: 'edit_artifact',
-  title: 'Edit an artifact in place',
-  http: { method: 'POST', path: '/api/artifacts/{id}/edits' },
-  description: 'Edit markup using source (a complete proposed JSX body), one old_string/new_string pair OR an edits list of 1–64 pairs; exactly one input form. Each old_string must match EXACTLY ONCE against the evolving in-memory source. Only the final document is validated and committed: one version or nothing; failures identify zero-based edit_index. Use the edit_id from your last create/get/edit response. Preserve persistent ids when moving nodes; include the nearest id-bearing context to distinguish repeated text. Unrelated concurrent edits rebase; conflicting regions return doc_changed with the current edit_id and source. Prefer this targeted operation over update_artifact, which replaces the whole document.',
-  input: {
-    id: z.string(), edit_id: z.string(),
-    source: z.string().optional().describe("The complete proposed JSX body; use instead of old_string/new_string or edits. The edit_id identifies its base for conservative rebase."),
-    old_string: z.string().optional(), new_string: z.string().optional(),
-    edits: z.array(z.object({ old_string: z.string(), new_string: z.string() })).min(1).max(64).optional(),
-  },
-  annotations: {},
-  example: {
-    input: { id: 'aB3xK9', edit_id: '<from your last read>', old_string: 'exact text once in the document', new_string: 'replacement' },
-  },
-  errors: [
-    NOT_FOUND,
-    { status: 409, code: 'doc_changed', fix: 'the touched node changed under you — rebase on the returned source + edit_id and retry' },
-    { status: 409, code: 'stale_edit_id', fix: 'your edit_id is not the head — take the returned edit_id and source' },
-    { status: 400, code: 'bad_diff', fix: 'Read current stored markup. old_string must match it exactly once; a rejected write changed nothing.' },
-    { status: 400, code: 'not_editable', fix: 'only markup artifacts take edits — a data tier is replaced whole, and a folder has no content at all (rename one with update_artifact {title})' },
-    INVALID_JSX,
-    // An edit re-publishes the whole document, refs included, so it answers
-    // this exactly as create and replace do.
-    INVALID_REFS,
-  ],
-  async run(ctx, input) {
-    return fromResponse(await respondToEdit(ctx.base, input, (i) => applyEditFor(ctx.actor, String(input.id), i)));
-  },
+ name:'edit_artifact',title:'Edit an artifact in place',http:{method:'POST',path:'/api/artifacts/{id}/edits'},
+ description:'Submit a client-prepared document_update generated from the JSONB document and version returned by get_artifact. The client validates the final composite and prepares dependencies before submission; afbin push and the browser editor do this automatically. Preserve persistent ids when moving nodes. Permissions, dependency guards, JSONB changes and history commit in one SQL statement. Independent edits from an older version can succeed; conflicting dependencies return doc_changed without partial changes. Text, attributes, styling, insertions, deletions, moves, metadata and whole-document replacement all use this protocol. The response contains the new authoring snapshot.',
+ input:{id:z.string(),edit_id:z.string(),document_update:z.json().describe('Prepared DocumentUpdate schema 1: patch, effects, optional metadata/settings and whole replacement. Generated by the shared authoring compiler, not SQL supplied by the caller.')},
+ annotations:{},example:{input:{id:'aB3xK9',edit_id:'<from your last read>',document_update:exampleDocumentUpdate}},
+ errors:[NOT_FOUND,{status:409,code:'doc_changed',fix:'Read the current authoring snapshot, reconcile the affected nodes and prepare the operation again.'},
+  {status:400,code:'invalid_edit_body',fix:'Use the current CLI or browser editor to prepare document_update; raw source and string-diff bodies are no longer accepted.'}],
+ async run(ctx,input){return fromResponse(await respondToEdit(ctx.base,input,i=>applyEditFor(ctx.actor,String(input.id),i)));},
 };
 
 const getArtifactOp: Operation = {
@@ -382,7 +364,7 @@ const getVersionOp: Operation = {
 
 const updateMetadataOp: Operation = {
  name:'update_metadata', title:'Update metadata without a content version', http:{method:'PATCH',path:'/api/artifacts/{id}'},
- description:'Change only the supplied metadata fields, conditional on expectedState from the observed head. Omitted fields stay unchanged; null clears nullable fields. This does not archive content or change version/edit_id. Sharing and folder placement require ownership. The response is the complete canonical artifact, including its new state.',
+ description:'For markup, use a client-prepared document_update through edit_artifact; it records a new version. For other formats, change only the supplied metadata fields, conditional on expectedState from the observed head. Omitted fields stay unchanged; null clears nullable fields. This does not archive content or change version/edit_id. Sharing and folder placement require ownership. The response is the complete canonical artifact, including its new state.',
  input:{id:z.string(),expectedState:z.string().regex(/^[a-f0-9]{64}$/),expectedVersion:z.number().int().positive().optional(),
   title:z.string().nullable().optional(),description:z.string().nullable().optional(),theme:z.string().nullable().optional(),template:z.string().nullable().optional(),colorMode:z.enum(['light','dark']).nullable().optional(),
   visibility:z.enum(['public','unlisted','private']).optional(),linkRole:z.enum(['viewer','commenter','editor']).optional(),parent_id:z.string().nullable().optional(),access:z.enum(['read','readwrite']).optional(),
@@ -396,7 +378,7 @@ const revertArtifactOp: Operation = {
   name: 'revert_artifact',
   title: 'Revert to an archived version',
   http: { method: 'POST', path: '/api/artifacts/{id}/revert' },
-  description: 'Restore an archived version as a NEW head version (the current state is archived first, so reverts are undoable). Answers the complete canonical head, including restored markup, metadata, edit_id and state for the next conditional write.',
+  description: 'For markup, read the archived version and use the client compiler to submit a whole document_update through edit_artifact. This endpoint restores non-document artifacts as a NEW head version (the current state is archived first, so reverts are undoable). Answers the complete canonical head, including restored markup, metadata, edit_id and state for the next conditional write.',
   input: { id: z.string(), version: z.number(), expectedVersion: z.number().int().positive(), expectedState: z.string().regex(/^[a-f0-9]{64}$/) },
   annotations: {},
   example: { input: { id: 'aB3xK9', version: 1, expectedVersion: 2, expectedState: 'a'.repeat(64) } },

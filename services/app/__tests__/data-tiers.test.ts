@@ -93,6 +93,13 @@ describe('viz recipe tier', () => {
     const { status, body } = await create(t.token, { title: 'bar', viz: RECIPE });
     expect(status).toBe(201);
     expect(body.format).toBe('viz');
+    const row = await getArtifactById(body.id);
+    expect(row).not.toHaveProperty('content');
+    expect(JSON.parse(row!.source!)).toEqual(RECIPE);
+    const details = await getArtifactRoute(request(`/api/artifacts/${body.id}`, { token: t.token }), params({ id: body.id }));
+    expect((await details.json()).recipe).toEqual(RECIPE);
+    const raw = await serveArtifact(request(`/a/${body.id}/raw`), params({ id: body.id }));
+    expect(await raw.json()).toEqual(RECIPE);
     expect(body.slots).toEqual([
       { name: 'x', accepts: ['nominal', 'temporal'] },
       { name: 'y', accepts: ['quantitative'] },
@@ -145,7 +152,7 @@ describe('image tier', () => {
     const t = await mintToken('t');
     const { body } = await create(t.token, { title: 'px', image: PIXEL });
     const row = await getArtifactById(body.id);
-    expect(row!.content).toBe(''); // bytes are elsewhere; content is empty by design
+    expect(row).not.toHaveProperty('content');
     const meta = row!.meta as { objectKey?: string; bytes?: number; contentType?: string };
     expect(meta.objectKey).toMatch(/^image\//);
     expect(meta.bytes).toBeGreaterThan(20);
@@ -181,16 +188,13 @@ describe('image tier', () => {
     expect(res.headers.get('Content-Security-Policy')).toContain("default-src 'none'");
   });
 
-  it('serves a legacy inline-data-url image row (pre-object-store back-compat)', async () => {
-    // A row shaped like the old image tier: bytes in `content`, no objectKey.
+  it('does not serve an image without an object key', async () => {
     const t = await mintToken('t');
     const { body } = await create(t.token, { title: 'px', image: PIXEL });
     const db = await harness.db();
-    await db.query(`UPDATE artifacts SET content = $1, meta = '{"contentType":"image/png"}' WHERE id = $2`, [PIXEL, body.id]);
+    await db.query(`UPDATE artifacts SET meta = '{"contentType":"image/png"}' WHERE id = $1`, [body.id]);
     const res = await serveArtifact(request(`/a/${body.id}/raw`), params({ id: body.id }));
-    expect(res.status).toBe(200);
-    expect(res.headers.get('Content-Type')).toBe('image/png');
-    expect((await res.arrayBuffer()).byteLength).toBeGreaterThan(20);
+    expect(res.status).toBe(404);
   });
 
   it('rejects an image over the size cap (413)', async () => {

@@ -6,18 +6,29 @@
  */
 import { act, renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import {resolveEditBatch} from '@/lib/story/edit-batch';
+import {createDocumentGraph,graphSource,type DocumentGraph} from '@/lib/story/document-graph';
+import {applyGraphPatch} from '@/lib/story/document-graph-patch';
+import type {DocumentUpdate} from '@artifactbin/contracts';
 import { useLiveEdits } from '@/lib/story/use-live-edits';
 
 const ID = 'live01';
+const snapshots=new Map<string,{document:DocumentGraph;version:number;ids:boolean}>();
+function snapshot(editId:string,source:string,version:number){const document=createDocumentGraph(source,version);snapshots.set(editId,{document,version,ids:/ id=/.test(source)});return document;}
+function sourceOf(body:{edit_id:string;document_update:DocumentUpdate}){
+ const base=snapshots.get(body.edit_id)!;const graph=applyGraphPatch(base.document,base.version,body.document_update.patch);expect(graph).not.toBeNull();
+ const source=graphSource(graph!);return base.ids?source:source.replace(/ id="[A-Za-z0-9]+"/g,'');
+}
+
 
 function setup(opts: { isUserEditing?: () => boolean; initialSource?:string } = {}) {
   const adopted: string[] = [];
+  const document=snapshot('edit-1',opts.initialSource??'<p>Initial</p>',1);
   const hook = renderHook(() =>
     useLiveEdits({
       id: ID,
       initialEditId: 'edit-1',
       initialVersion: 1,
+      initialDocument:document,
       onRemoteDocument: (s) => adopted.push(s),
       ...opts,
     }),
@@ -25,8 +36,10 @@ function setup(opts: { isUserEditing?: () => boolean; initialSource?:string } = 
   return { hook, adopted };
 }
 
-const okResponse = (body: Record<string, unknown>) =>
-  ({ ok: true, status: 200, json: async () => body }) as Response;
+const okResponse = (body: Record<string, unknown>) => {
+ const document=typeof body.markup==='string'?snapshot(String(body.edit_id),body.markup,Number(body.version)):undefined;
+ return ({ok:true,status:200,json:async()=>({...body,document})}) as Response;
+};
 const errResponse = (status: number, body: Record<string, unknown>) =>
   ({ ok: false, status, json: async () => body }) as Response;
 
@@ -34,6 +47,7 @@ let fetchMock: ReturnType<typeof vi.fn>;
 
 beforeEach(() => {
   vi.useFakeTimers();
+  snapshots.clear();
   fetchMock = vi.fn().mockResolvedValue(okResponse({ edit_id: 'edit-2', version: 2, markup: '<p>x</p>' }));
   vi.stubGlobal('fetch', fetchMock);
 });
@@ -55,7 +69,7 @@ describe('buffering is batching, never a draft', () => {
     expect(hook.result.current.state.status).toMatch(/not saved/);
     await act(async () => { allowed = await hook.result.current.flushForNavigation(async () => {}); });
     expect(allowed).toBe(true);
-    expect(JSON.parse(fetchMock.mock.calls[1][1].body).source).toBe('<p>last typed text</p>');
+    expect(sourceOf(JSON.parse(fetchMock.mock.calls[1][1].body))).toBe('<p>last typed text</p>');
   });
 
   it('navigation conflict does not replace the local DOM/source with the remote document', async () => {
@@ -93,17 +107,16 @@ describe('buffering is batching, never a draft', () => {
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
     const body = JSON.parse(fetchMock.mock.calls[0][1].body as string);
-    expect(body).toMatchObject({ edit_id: 'edit-1', source: '<p>abc</p>' });
+    expect(body.edit_id).toBe('edit-1');expect(sourceOf(body)).toBe('<p>abc</p>');
   });
 
-  it('sends metadata through the state-guarded metadata protocol', async () => {
+  it('sends metadata with a guarded JSONB operation in one request', async () => {
     fetchMock.mockResolvedValue(okResponse({state:'a'.repeat(64),version:1,edit_id:'edit-1'}));
     const { hook } = setup();
-    act(() => { hook.result.current.queue({ title: 'T', theme: 'nocturne', colorMode: 'dark' }); });
+    act(() => { hook.result.current.queue({ title: 'T', theme: 'modernist', colorMode: 'dark' }); });
     await act(async () => { await vi.advanceTimersByTimeAsync(600); });
-    expect(JSON.parse(fetchMock.mock.calls[1][1].body as string)).toMatchObject({
-      expectedState: 'a'.repeat(64), title: 'T', theme: 'nocturne', colorMode: 'dark',
-    });
+    expect(fetchMock).toHaveBeenCalledOnce();
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body as string).document_update.metadata).toEqual({title:'T',theme:'modernist',colorMode:'dark'});
   });
 
   it('advances the head pointer so the NEXT edit is based on what landed', async () => {
@@ -133,7 +146,7 @@ describe('buffering is batching, never a draft', () => {
 
     await act(async () => { await vi.advanceTimersByTimeAsync(600); });
     expect(fetchMock).toHaveBeenCalledTimes(2);
-    expect(JSON.parse(fetchMock.mock.calls[1][1].body as string).source).toBe('<p>a</p>');
+    expect(sourceOf(JSON.parse(fetchMock.mock.calls[1][1].body as string))).toBe('<p>a</p>');
   });
 });
 
@@ -278,7 +291,7 @@ describe('flushNow drains EVERYTHING owed, not just what is idle', () => {
     await act(async () => { await drain; });
 
     expect(fetchMock).toHaveBeenCalledTimes(2);
-    expect(JSON.parse(fetchMock.mock.calls[1][1].body as string)).toMatchObject({ edit_id: 'edit-2', source: '<p>ab</p>' });
+    const body=JSON.parse(fetchMock.mock.calls[1][1].body as string);expect(body.edit_id).toBe('edit-2');expect(sourceOf(body)).toBe('<p>ab</p>');
     expect(hook.result.current.state.editId).toBe('edit-3');
   });
 });
@@ -286,16 +299,15 @@ describe('flushNow drains EVERYTHING owed, not just what is idle', () => {
 
 describe('V2 atomic source queue',()=> {
   const initial='<p id="a">one</p><p id="b">two</p><p id="c">three</p>';
-  it('sends disjoint node edits through the existing batch protocol',async()=> {
+  it('sends disjoint node edits as one graph patch',async()=> {
     const next=initial.replace('one','long one').replace('three','3');
     const {hook}=setup({initialSource:initial});
     act(()=>hook.result.current.queue({source:next}));
     await act(async()=>{await vi.advanceTimersByTimeAsync(600);});
     const body=JSON.parse(fetchMock.mock.calls[0][1].body);
     expect(body.source).toBeUndefined();
-    expect(body.edits).toHaveLength(2);
-    expect(body.edits[0]).toEqual({old_string:expect.any(String),new_string:expect.any(String)});
-    expect(resolveEditBatch(initial,body.edits.map((e:{old_string:string;new_string:string})=>({oldString:e.old_string,newString:e.new_string})))).toMatchObject({ok:true,source:next});
+    expect(Object.keys(body.document_update.patch.updated)).toHaveLength(2);
+    expect(sourceOf(body)).toBe(next);
   });
   it('undo before the first save produces no source request',async()=> {
     const {hook}=setup({initialSource:initial});
@@ -315,7 +327,7 @@ describe('V2 atomic source queue',()=> {
     await act(async()=>{await hook.result.current.flushNow();});
     const body=JSON.parse(fetchMock.mock.calls[1][1].body);
     expect(body.edit_id).toBe('edit-2');
-    expect(resolveEditBatch(changed,body.edits.map((e:{old_string:string;new_string:string})=>({oldString:e.old_string,newString:e.new_string})))).toMatchObject({ok:true,source:initial});
+    expect(sourceOf(body)).toBe(initial);
   });
 });
 
@@ -333,7 +345,7 @@ it('rebases a pending undo over an unrelated edit included in the save response'
   accept(okResponse({edit_id:'edit-2',version:2,markup:accepted}));
   await act(async()=>{await hook.result.current.flushNow();});
   const next=JSON.parse(fetchMock.mock.calls[1][1].body);
-  expect(resolveEditBatch(accepted,next.edits.map((e:{old_string:string;new_string:string})=>({oldString:e.old_string,newString:e.new_string})))).toMatchObject({ok:true,source:base.replace('two','remote two')});
+  expect(sourceOf(next)).toBe(base.replace('two','remote two'));
   expect(adopted[0]).toBe(base.replace('two','remote two'));
 });
 
@@ -346,7 +358,7 @@ it('retries a preserved draft against a fresh head without overwriting unrelated
  fetchMock.mockResolvedValueOnce(okResponse({edit_id:'merged-head',version:3,markup:draft.replace('two','remote')}));
  await act(async()=>{await hook.result.current.recover('retry');});
  const body=JSON.parse(fetchMock.mock.calls.at(-1)![1].body);
- expect(body.edit_id).toBe('remote-head');expect(body.edits).toEqual([{old_string:'<p id="a">one</p>',new_string:'<p id="a">local</p>'}]);
+ expect(body.edit_id).toBe('remote-head');expect(sourceOf(body)).toBe(draft.replace('two','remote'));
  expect(adopted.at(-1)).toBe(draft.replace('two','remote'));expect(hook.result.current.state.status).toBe('');
 });
 
@@ -361,8 +373,8 @@ it('retains annotation operations when newer source is queued during a failed sa
  fetchMock.mockResolvedValue(okResponse({edit_id:'edit-2',version:2,markup:'<p>merged and typed</p>'}));
  await act(async()=>{await hook.result.current.flushForNavigation(async()=>{});});
  const body=JSON.parse(fetchMock.mock.calls.at(-1)![1].body);
- expect(body.source).toBe('<p>merged and typed</p>');
- expect(body.annotation_ops).toEqual([operation]);
+ expect(sourceOf(body)).toBe('<p>merged and typed</p>');
+ expect(body.document_update.annotationOps).toEqual([operation]);
 });
 
 it('defers an accepted remote rebase until composition finishes, preserving both changes',async()=>{
@@ -379,4 +391,15 @@ it('defers an accepted remote rebase until composition finishes, preserving both
  composing=false;
  await act(async()=>{await vi.advanceTimersByTimeAsync(50);});
  expect(adopted).toContain(accepted.replace('one!','one!日本語'));
+});
+
+it('keeps a locally invalid draft without labelling it offline or retrying forever',async()=>{
+ const {hook}=setup({initialSource:'<p>Initial</p>'});
+ act(()=>hook.result.current.queue({source:'<p onClick="bad">Invalid</p>'}));
+ await act(async()=>{await vi.advanceTimersByTimeAsync(501);});
+ expect(hook.result.current.state.status).toMatch(/not saved/);
+ expect(fetchMock).not.toHaveBeenCalled();
+ await act(async()=>{await vi.advanceTimersByTimeAsync(2000);});
+ expect(fetchMock).not.toHaveBeenCalled();
+ expect(await hook.result.current.flushForNavigation(async()=>{})).toBe(false);
 });

@@ -1,3 +1,4 @@
+import {restoreDocument,observedTextBody} from './prepared-document';
 import {observedRequest} from '@/__tests__/conditional-request';
 /**
  * Account-wide bearer scope: a token CLAIMED BY AN ACCOUNT acts for the whole
@@ -16,7 +17,6 @@ import {
   GET as getArtifactRoute,
   PUT as putArtifact,
 } from '@/app/api/artifacts/[id]/route';
-import { POST as revertRoute } from '@/app/api/artifacts/[id]/revert/route';
 import { GET as getVersionRoute } from '@/app/api/artifacts/[id]/versions/[version]/route';
 import { GET as listVersionsRoute } from '@/app/api/artifacts/[id]/versions/route';
 import { GET as listArtifactsRoute, POST as createArtifactRoute } from '@/app/api/artifacts/route';
@@ -62,7 +62,7 @@ describe('account-wide bearer scope', () => {
 
     // Edit: the concurrent-edit protocol, based on the head the second token read.
     const edited = await editRoute(
-      request(`/api/artifacts/${made.id}/edits`, { method: 'POST', token: second.token, json: { edit_id: row.edit_id, old_string: 'alpha text', new_string: 'gamma text' } }),
+      request(`/api/artifacts/${made.id}/edits`, { method: 'POST', token: second.token, json: await observedTextBody(made.id,'alpha text','gamma text') }),
       params({ id: made.id }),
     );
     expect(edited.status).toBe(200);
@@ -87,10 +87,7 @@ describe('account-wide bearer scope', () => {
     );
     expect(one.status).toBe(200);
 
-    const reverted = await revertRoute(
-      await observedRequest(`/api/artifacts/${made.id}/revert`, { method: 'POST', token: second.token, json: { version: archived } }),
-      params({ id: made.id }),
-    );
+    const reverted = await restoreDocument(second.token,made.id,archived);
     expect(reverted.status).toBe(200);
   });
 

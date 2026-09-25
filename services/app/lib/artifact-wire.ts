@@ -1,3 +1,5 @@
+import {parseDocumentUpdate} from '@artifactbin/contracts';
+import {applyEditFor} from './artifacts';
 import {readableArtifact} from './artifact-read';
 import {MembershipError} from './membership';
 import {grantsOf,grantsPermitWrite} from './datasets/policy/grants';
@@ -171,7 +173,7 @@ export async function artifactToWire(row: ArtifactRow, base: string) {
   // `deleted_at` is dropped with the ownership columns: the trash gate means a
   // row a caller can read is always live, so the field could only ever echo
   // null — a key in every agent's context that can carry no news.
-  const { content, source, token_id: _token, user_id: _owner, deleted_at: _trashed, meta, format, ...rest } = row;
+  const { source, token_id: _token, user_id: _owner, deleted_at: _trashed, meta, format, ...rest } = row;
   const m = meta as { theme?: string; template?: string; colorMode?: 'light' | 'dark' | null };
   // Echo the LIVE vocabulary: a stored retired theme reads back as its
   // successor, so an agent that read-before-writes never learns a name that
@@ -192,7 +194,7 @@ export async function artifactToWire(row: ArtifactRow, base: string) {
     // Annotations are sidecar state (lib/annotations) — the write path never
     // round-trips them, so every echo carries the open COUNT as the signal;
     // the artifact GET additionally inlines the full open set.
-    ...(isDoc ? { open_annotations: await countOpenAnnotations(row.id) } : {}),
+    ...(isDoc ? { open_annotations: row.open_annotations ?? await countOpenAnnotations(row.id) } : {}),
     // markup (story-engine) tier only: the source IS the artifact;
     // template/colorMode ride meta.
     ...(isDoc
@@ -223,7 +225,7 @@ export async function artifactToWire(row: ArtifactRow, base: string) {
           rows: await loadDatasetRows(row),
         }
       : {}),
-    ...(format === 'viz' ? { slots: (meta as { slots?: unknown }).slots ?? [], recipe: safeJson(content) } : {}),
+    ...(format === 'viz' ? { slots: (meta as { slots?: unknown }).slots ?? [], recipe: safeJson(source ?? '') } : {}),
     ...(format === 'image' ? { contentType: (meta as { contentType?: unknown }).contentType ?? null } : {}),
     ...(format === 'file' ? { filename: (meta as { filename?: string }).filename, contentType: (meta as { contentType?: string }).contentType, bytes: (meta as { bytes?: number }).bytes } : {}),
     ...(format === 'pdf' ? { contentType: (meta as { contentType?: unknown }).contentType ?? null, bytes: (meta as { bytes?: unknown }).bytes ?? 0, pages: (meta as { pages?: unknown }).pages ?? null } : {}),
@@ -368,6 +370,8 @@ export async function replaceArtifactWithBody(
   options: {dryRun?:boolean} = {},
 ): Promise<Response> {
   if (!body) return json({ error: 'invalid_json' }, 400);
+  if(Object.hasOwn(body,'document_update'))return respondToEdit(base,body,input=>applyEditFor(actor,id,input,options));
+  if(typeof body.markup==='string')return json({error:'jsonb_operations_required',hint:'Submit document_update using the current CLI or browser editor.'},400);
   // The row FIRST: refs and imports resolve as the DOCUMENT's owner, never as
   // the writer — an editor (artifact_shares.role) replacing a document that
   // carries its owner's <Mutation> or private image must not fail on assets
@@ -417,7 +421,7 @@ export async function replaceArtifactWithBody(
     }
   }
   const prepared: PreparedContent | Response = current.format === 'folder'
-    ? {content: { format: 'folder', content: '', source: '', meta: {}, derivedTitle: null }, objects: []}
+    ? {content: { format: 'folder', source: '', meta: {}, derivedTitle: null }, objects: []}
     : await prepareContentInput({...(current.format==='dataset'?{columns:((current.meta.columns??[]) as import('@artifactbin/contracts').DatasetColumn[]).filter(c=>c.type==='user')}:{}),theme:current.meta.theme,template:current.meta.template,colorMode:current.meta.colorMode,...body}, {
       prepareDataset: (input,objects) => prepareCatalog(input,actor,current,objects),
       normalizeMarkup,
@@ -637,7 +641,7 @@ export function createdArtifactWire(row: ArtifactRow, base: string, sentMarkup: 
     id: row.id, url: `${base}/a/${row.id}`, version: row.version, visibility: row.visibility,
     // The read-proof for the edit protocol: an agent can start editing straight
     // after create, without a round trip to learn the head pointer.
-    edit_id: row.edit_id, state: artifactState(row),...(row.shares!==undefined?{shares:row.shares}:{}),
+    edit_id: row.edit_id, state: artifactState(row),...(row.document?{document:row.document}:{}),sharing_revision:row.sharing_revision??0,colorMode:row.meta.colorMode??null,...(row.shares!==undefined?{shares:row.shares}:{}),
     format: row.format, title: row.title,description:row.description,theme:row.meta.theme??null,template:row.meta.template??null,link_role:row.link_role??'viewer',
     // Where it landed. `parent_id` is what a caller writes back, so the create
     // reply hands it straight into the next call.
@@ -664,27 +668,17 @@ function parseEditBody(body: Record<string, unknown>): EditInput | null {
   const editId = body.edit_id;
   if (typeof editId !== 'string' || editId.length === 0) return null;
 
-  const mentionsDiff = Object.hasOwn(body, 'old_string') || Object.hasOwn(body, 'new_string');
-  const mentionsSource = Object.hasOwn(body, 'source');
-  const mentionsBatch = Object.hasOwn(body, 'edits');
-  if ([mentionsDiff, mentionsSource, mentionsBatch].filter(Boolean).length > 1) return null;
-  const hasDiff = typeof body.old_string === 'string' && typeof body.new_string === 'string';
-  const hasSource = typeof body.source === 'string';
-  const hasBatch = Array.isArray(body.edits) && body.edits.length > 0 && body.edits.length <= 64
-    && body.edits.every((edit) => !!edit && typeof edit === 'object'
-      && typeof (edit as Record<string, unknown>).old_string === 'string'
-      && typeof (edit as Record<string, unknown>).new_string === 'string');
-  if ((mentionsDiff && !hasDiff) || (mentionsSource && !hasSource) || (mentionsBatch && !hasBatch)) return null;
-  const change = hasDiff
-    ? { oldString: body.old_string as string, newString: body.new_string as string }
-    : hasSource
-      ? { newSource: body.source as string }
-      : hasBatch
-        ? { edits: (body.edits as Array<Record<string, string>>).map((edit) => ({ oldString: edit.old_string, newString: edit.new_string })) }
-        : undefined;
+  if(Object.hasOwn(body,'document_update')){
+    let documentUpdate=parseDocumentUpdate(body.document_update);
+    if(!documentUpdate||!parseAnnotationOperations(documentUpdate.annotationOps??[])||annotationOps.length||['operations','text','source','edits','old_string','new_string'].some(k=>Object.hasOwn(body,k)))return null;
+    if(documentUpdate.settings?.shares!==undefined){
+      const shares=parseShareEntries(documentUpdate.settings.shares);if(shares instanceof Response)return null;
+      documentUpdate={...documentUpdate,settings:{...documentUpdate.settings,shares}};
+    }
+    return {baseEditId:editId,documentUpdate};
+  }
 
-  if (!change) return null;
-  return {baseEditId: editId, change, ...(annotationOps.length ? {annotationOps} : {})};
+  return null;
 }
 
 /**

@@ -16,7 +16,7 @@ import ArtifactSurface from '@/components/ArtifactSurface';
 vi.mock('@/lib/story/use-live-artifact', () => ({ useLiveArtifact: () => null }));
 
 const base = {
-  id: 'art_1', editId: 'e1', format: 'markup' as const, source: '', content: '',
+  id: 'art_1', editId: 'e1', format: 'markup' as const, source: '', dataPreview: '',
   columns: [], compiledCss: null, theme: null, colorMode: null,
   template: null, refs: [], version: 1,
 };

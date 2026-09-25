@@ -1,3 +1,4 @@
+import {artifactQuery} from '@/lib/artifact-document';
 import {observedRequest} from '@/__tests__/conditional-request';
 /**
  * ANNOTATIONS — human/agent comments pinned to nodes, with reply/state transitions.
@@ -86,7 +87,7 @@ describe('creating (browser door, owner only)', () => {
     // Rows from the pre-human contract said `owner`; readers normalize them
     // without requiring a destructive data migration.
     const db = await harness.db();
-    await db.query("UPDATE annotations SET author_kind = 'owner' WHERE id = $1", [a.id]);
+    await artifactQuery(db,"UPDATE annotations SET author_kind = 'owner' WHERE id = $1", [a.id]);
     const legacy = await myListAnnotationsRoute(request(`/api/my/artifacts/${doc.id}/annotations`, { cookie: cookie }), params({ id: doc.id }));
     const legacyWire = (await legacy.json()) as { annotations: AnnotationWire[] };
     expect(legacyWire.annotations[0].thread[0].author.kind).toBe('human');
@@ -115,13 +116,13 @@ describe('creating (browser door, owner only)', () => {
     const db = await harness.db();
     // Simulate a pre-existing row that does not satisfy today's no-inline-style rule. The
     // body path still resolves; it is the real anchor EDIT that publish refuses.
-    await db.query('UPDATE artifacts SET source = $2 WHERE id = $1', [doc.id, '<p style="color:red">pre-existing</p>']);
+    await artifactQuery(db,'UPDATE artifacts SET document=NULL,source= $2 WHERE id = $1', [doc.id, '<p style="color:red">pre-existing</p>']);
 
     const res = await annotate(doc.id, cookie, { path: '0', edit_id: doc.edit_id, body: 'look here' });
     expect(res.status).toBe(400);
     const body = (await res.json()) as { error: string; details?: Array<{ message: string }> };
     expect(body.error).toBe('bad_path');
-    expect((await db.query<{source:string}>('SELECT source FROM artifacts WHERE id=$1',[doc.id])).rows[0].source).toBe('<p style="color:red">pre-existing</p>');
+    expect((await artifactQuery<{source:string}>(db,'SELECT document,source FROM artifacts WHERE id=$1',[doc.id])).rows[0].source).toBe('<p style="color:red">pre-existing</p>');
   });
 
   it('a stranger\'s cookie is sent to sign in; a cross-site owner cookie is refused', async () => {
@@ -255,7 +256,7 @@ describe('reply / resolve — the agent\'s one mutation', () => {
 
     const db = await harness.db();
     const imageKey = `avatar/${user.id}/abc123`;
-    await db.query('UPDATE users SET image_key = $2 WHERE id = $1', [user.id, imageKey]);
+    await artifactQuery(db,'UPDATE users SET image_key = $2 WHERE id = $1', [user.id, imageKey]);
     const image = avatarUrl({ id: user.id, image_key: imageKey });
     expect(image).toBeTruthy();
 
@@ -370,7 +371,7 @@ describe('lifecycle', () => {
      * survive, and the five gated readers are what make the thread gone.
      */
     const db = await harness.db();
-    const rows = await db.query<{ id: string; deleted_at: string | null }>(
+    const rows = await artifactQuery<{ id: string; deleted_at: string | null }>(db,
       'SELECT id, deleted_at FROM annotations WHERE id = $1 OR root_id = $1', [a.id]);
     expect(rows.rows, 'the root and its reply are both still there').toHaveLength(2);
     for (const r of rows.rows) expect(r.deleted_at, r.id).not.toBeNull();
@@ -390,9 +391,9 @@ describe('lifecycle', () => {
     // conversation back with the document. They are unreachable meanwhile —
     // the artifact is (trashed-rows.test.ts), so everything hanging off it is.
     // And there is no sweep to take them later: nothing is ever erased.
-    expect((await db.query('SELECT 1 FROM annotations WHERE artifact_id = $1', [doc.id])).rows).toHaveLength(1);
-    await db.query(`UPDATE artifacts SET deleted_at = now() - interval '400 days' WHERE id = $1`, [doc.id]);
-    expect((await db.query('SELECT 1 FROM annotations WHERE artifact_id = $1', [doc.id])).rows).toHaveLength(1);
+    expect((await artifactQuery(db,'SELECT 1 FROM annotations WHERE artifact_id = $1', [doc.id])).rows).toHaveLength(1);
+    await artifactQuery(db,`UPDATE artifacts SET deleted_at = now() - interval '400 days' WHERE id = $1`, [doc.id]);
+    expect((await artifactQuery(db,'SELECT 1 FROM annotations WHERE artifact_id = $1', [doc.id])).rows).toHaveLength(1);
   });
 });
 

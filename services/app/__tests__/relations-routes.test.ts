@@ -22,7 +22,7 @@ describe('POST/DELETE/GET /api/my/artifacts/[id]/like', () => {
     const owner = await createUser({ email: 'mxmx_test_rel_owner@example.com' });
     const fan = await createUser({ email: 'mxmx_test_rel_fan@example.com' });
     const db = await harness.db();
-    await db.query(`INSERT INTO artifacts (id, token_id, user_id, content, visibility) VALUES ('art0pu', 'tok_o', $1, 'x', 'public'), ('art0pr', 'tok_o', $1, 'x', 'private')`, [owner.id]);
+    await db.query(`INSERT INTO artifacts (id, token_id, user_id, visibility) VALUES ('art0pu', 'tok_o', $1, 'public'), ('art0pr', 'tok_o', $1, 'private')`, [owner.id]);
 
     expect((await like(request('/api/my/artifacts/art0pu/like', { method: 'POST', origin: 'same' }), ctx('art0pu'))).status).toBe(401);
 

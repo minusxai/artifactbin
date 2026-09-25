@@ -1,3 +1,4 @@
+import {createDocumentGraph} from '../../app/lib/story/document-graph';
 /**
  * FORKING SOMEBODY ELSE'S ARTIFACT FROM THE CLI.
  *
@@ -30,7 +31,7 @@ const SERVER_COPY='cpy001';
 const APP=(dataset:string)=>`<Helmet><Query name="rows" source="ref:${dataset}">{\`select * from public.rows\`}</Query>`
  +`<Mutation name="join" source="ref:${dataset}">{\`insert into public.rows (who) select $_me\`}</Mutation></Helmet>`
  +'<div><Button run="$join">Join</Button><DataTable data="$rows" /></div>';
-const snapshot=(id:string,markup:string)=>({id,version:1,edit_id:'e1',state:'a'.repeat(64),format:'markup',markup,title:'Splitwise tracker',visibility:'unlisted'});
+const snapshot=(id:string,markup:string)=>({id,document:createDocumentGraph(markup,1),version:1,edit_id:'e1',state:'a'.repeat(64),format:'markup',markup,title:'Splitwise tracker',visibility:'unlisted'});
 
 /** A server that forks the page deeply: the dry run names the dataset, the fork copies it. */
 function appServer(){

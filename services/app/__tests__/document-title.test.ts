@@ -1,3 +1,5 @@
+import {getArtifactById} from '@/lib/artifacts';
+import {documentEditBody} from './prepared-document';
 import {patchMetadata} from '@/__tests__/conditional-request';
 /**
  * What a document is CALLED follows its own heading until someone names it.
@@ -37,9 +39,10 @@ const start = async (): Promise<Start> => {
 /** Match the seeded heading text without depending on its freshly generated id. */
 const PLACEHOLDER_H1 = '>Untitled</h1>';
 
+async function editBody(id:string,old:string,value:string){const row=(await getArtifactById(id))!;return documentEditBody(row,{source:row.source!.replace(old,value)});}
 const retitle = async (doc: Start, heading: string) => {
   const res = await editRoute(
-    request(`/api/artifacts/${doc.id}/edits`, { method: 'POST', token: doc.token, json: { edit_id: doc.edit_id, old_string: PLACEHOLDER_H1, new_string: `>${heading}</h1>` } }),
+    request(`/api/artifacts/${doc.id}/edits`, { method: 'POST', token: doc.token, json: await editBody(doc.id,PLACEHOLDER_H1,`>${heading}</h1>`) }),
     params({ id: doc.id }),
   );
   expect(res.status).toBe(200);
@@ -62,9 +65,9 @@ describe('the page title follows the document', () => {
 
   it('keeps following later edits — the derived name never sticks', async () => {
     const doc = await start();
-    const after = await retitle(doc, 'First Draft');
+    await retitle(doc, 'First Draft');
     const res = await editRoute(
-      request(`/api/artifacts/${doc.id}/edits`, { method: 'POST', token: doc.token, json: { edit_id: after.edit_id, old_string: 'First Draft', new_string: 'Second Draft' } }),
+      request(`/api/artifacts/${doc.id}/edits`, { method: 'POST', token: doc.token, json: await editBody(doc.id,'First Draft','Second Draft') }),
       params({ id: doc.id }),
     );
     expect(res.status).toBe(200);
@@ -75,9 +78,9 @@ describe('the page title follows the document', () => {
     const doc = await start();
     const res = await patchMetadata(doc.token,doc.id,{title:'Named by hand'});
     expect(res.status).toBe(200);
-    const after = (await res.json()) as { edit_id: string };
+    await res.json();
     const headingEdit = await editRoute(
-      request(`/api/artifacts/${doc.id}/edits`, { method: 'POST', token: doc.token, json: { edit_id: after.edit_id, old_string: PLACEHOLDER_H1, new_string: '>A New Heading</h1>' } }),
+      request(`/api/artifacts/${doc.id}/edits`, { method: 'POST', token: doc.token, json: await editBody(doc.id,PLACEHOLDER_H1,'>A New Heading</h1>') }),
       params({ id: doc.id }),
     );
     expect(headingEdit.status).toBe(200);

@@ -63,15 +63,16 @@ async function build(row: ArtifactRow): Promise<LiveFrame> {
     ? storyUpdateParts(row.source, assetLookupFrom(assets))
     : null;
   return {
+    ...(row.document?.kind==='graph'?{document:row.document}:{}),
     editId: row.edit_id,
     version: row.version,
     by: await authorHandle(row),
     format: row.format,
     title: row.title,
     source: row.format === 'markup' ? row.source : null,
-    content:
+    dataPreview:
       row.format === 'dataset' ? JSON.stringify(await loadDatasetRows(row))
-      : row.format === 'viz' ? row.content
+      : row.format === 'viz' ? row.source
       : null,
     compiledCss: css,
     authorCss: parts?.authorCss ?? null,

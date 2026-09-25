@@ -30,5 +30,5 @@ export async function POST(request: Request) {
   const parsed = await parseContentInput(body);
   if (parsed instanceof Response) return parsed;
   const css = parsed.format === 'markup' ? ((parsed.meta as { compiledCss?: string | null }).compiledCss ?? null) : undefined;
-  return json({ html: parsed.content, format: parsed.format, ...(css !== undefined ? { css } : {}) });
+  return json({ html: '', format: parsed.format, ...(css !== undefined ? { css } : {}) });
 }

@@ -38,7 +38,7 @@ afterEach(() => setServices({}));
 
 async function doc(): Promise<string> {
   const t = await mintToken('t');
-  const row = await createArtifact(t.id, null, { format: 'markup', content: '', source: '<div>hi</div>', meta: {}, title: 'hi', description: null });
+  const row = await createArtifact(t.id, null, { format: 'markup', source: '<div>hi</div>', meta: {}, title: 'hi', description: null });
   return row.id;
 }
 
@@ -73,8 +73,7 @@ describe('the export route through the browser seam', () => {
     browser();
     const t = await mintToken('crop');
     const row = await createArtifact(t.id, null, {
-      format: 'markup', content: '',
-      source: '<Helmet><meta name="artifactbin:og-crop" content="x=300;y=900;width=800" /></Helmet><div>hi</div>',
+      format: 'markup', source: '<Helmet><meta name="artifactbin:og-crop" content="x=300;y=900;width=800" /></Helmet><div>hi</div>',
       meta: {}, title: 'hi', description: null,
     });
     await exportImage(new Request(`${BASE}/a/${row.id}/export?mode=card`), params(row.id));
@@ -85,7 +84,7 @@ describe('the export route through the browser seam', () => {
     browser();
     const t = await mintToken('preview');
     const row = await createArtifact(t.id, null, {
-      format: 'markup', content: '', source: '<div>hi</div>', meta: {}, title: 'hi', description: null,
+      format: 'markup', source: '<div>hi</div>', meta: {}, title: 'hi', description: null,
     });
     const anonymous = await exportImage(new Request(`${BASE}/a/${row.id}/export?mode=preview`), params(row.id));
     expect(anonymous.status).toBe(404);
@@ -97,7 +96,7 @@ describe('the export route through the browser seam', () => {
     expect(lastRequest()).toMatchObject({ capture: 'preview', viewport: { width: 1600, height: 840 } });
 
     const dataset = await createArtifact(t.id, null, {
-      format: 'dataset', content: 'a\n1', source: null, meta: {}, title: 'data', description: null,
+      format: 'dataset', source: null, meta: {}, title: 'data', description: null,
     });
     const unsupported = await exportImage(new Request(`${BASE}/a/${dataset.id}/export?mode=preview`, {
       headers: { authorization: `Bearer ${t.token}` },
@@ -109,7 +108,7 @@ describe('the export route through the browser seam', () => {
     browser();
     const t = await mintToken('draft-owner');
     const row = await createArtifact(t.id, null, {
-      format: 'markup', content: '', source: '<div>hi</div>', meta: {}, title: 'hi', description: null,
+      format: 'markup', source: '<div>hi</div>', meta: {}, title: 'hi', description: null,
     });
     const res = await exportImage(new Request(
       `${BASE}/a/${row.id}/export?mode=preview&format=png&crop=x%3D120%3By%3D640%3Bwidth%3D600`,

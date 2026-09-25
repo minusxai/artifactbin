@@ -21,7 +21,7 @@ export async function checkWebImport(B, browser, WEB, ok) {
     }),
   });
   const sourceBody = await sourcePut.json();
-  ok(sourcePut.status === 200 && sourceBody.markup_changed === false,
+  ok(sourcePut.status === 200 && sourceBody.markup?.includes(`src="${WEB}/photo.png"`),
     'a simple URL import preserves source without a markup rewrite');
   const fontPut = await fetch(`${B}/api/artifacts/${fontDoc.id}`, {
     method: 'PUT',

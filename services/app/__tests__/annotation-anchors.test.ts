@@ -1,3 +1,5 @@
+import {getArtifactById,getVersionFor} from '@/lib/artifacts';
+import {documentEditBody,documentPublicationBody} from './prepared-document';
 import {observedRequest} from '@/__tests__/conditional-request';
 /**
  * THE ANCHOR LIVES IN THE DOCUMENT — `data-annotation-anchor="<key>"` on the annotated
@@ -14,7 +16,7 @@ import { describe, expect, it } from 'vitest';
 import { GET as listAnnotationsRoute } from '@/app/api/artifacts/[id]/annotations/route';
 import { POST as editsRoute } from '@/app/api/artifacts/[id]/edits/route';
 import { GET as getArtifactRoute, PUT as putArtifactRoute } from '@/app/api/artifacts/[id]/route';
-import { POST as revertRoute } from '@/app/api/artifacts/[id]/revert/route';
+import { POST as revertRoute } from '@/app/api/artifacts/[id]/edits/route';
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 import { PUT as replaceArtifactRoute } from '@/app/api/artifacts/[id]/route';
 import { createAnnotationFor } from '@/lib/annotations';
@@ -87,9 +89,9 @@ describe('the annotation anchor', () => {
 
   it('an ordinary edit elsewhere leaves the anchor standing', async () => {
     const { t, doc, ann } = await setup();
-    const h = await head(t.token, doc.id);
+    const h=(await getArtifactById(doc.id))!;
     const edited = await editsRoute(
-      request(`/api/artifacts/${doc.id}/edits`, { method: 'POST', token: t.token, json: { edit_id: h.edit_id, old_string: 'An intro paragraph here.', new_string: 'A different opening.' } }),
+      request(`/api/artifacts/${doc.id}/edits`, { method: 'POST', token: t.token, json: documentEditBody(h,{source:h.source!.replace('An intro paragraph here.','A different opening.')}) }),
       params({ id: doc.id }),
     );
     expect(edited.status, await edited.clone().text()).toBe(200);
@@ -127,8 +129,9 @@ describe('the annotation anchor', () => {
     const { t, doc, ann } = await setup();
     await put(t.token,doc.id,'<p>replacement</p>');
     expect((await list(t.token,doc.id))[0].orphaned).toBe(true);
+    const current=(await getArtifactById(doc.id))!;const archived=await getVersionFor({tokenId:t.id,userId:null},doc.id,doc.version);
     const back = await revertRoute(
-      await observedRequest(`/api/artifacts/${doc.id}/revert`, { method: 'POST', token: t.token, json: { version: doc.version } }),
+      request(`/api/artifacts/${doc.id}/edits`, { method: 'POST', token: t.token, json: documentEditBody(current,{source:archived!.source!,whole:true}) }),
       params({ id: doc.id }),
     );
     expect(back.status, await back.clone().text()).toBe(200);
@@ -222,12 +225,12 @@ describe('annotation ops through an edit', () => {
       return r.json();
     };
     const change = async (source: string, ops: unknown[], bearer = token.token) => {
-      const current = await head();
+      const current=(await getArtifactById(doc.id))!;
       return editsRoute(
         request(`/api/artifacts/${doc.id}/edits`, {
           method: 'POST',
           token: bearer,
-          json: { edit_id: current.edit_id, source, annotation_ops: ops },
+          json: documentPublicationBody(current,{source,annotation_ops:ops}),
         }),
         params({ id: doc.id }),
       );
@@ -262,14 +265,8 @@ describe('annotation ops through an edit', () => {
     expect(current.annotations[0].anchor.key).toBe('a');
     expect(current.annotations[0].range.parts[0].start).toBe(0);
     const stable = await head();
-    expect(
-      (
-        await change(MERGE_AFTER, [
-          { ...MERGE_OP, maps: [{ ...MERGE_OP.maps[0], segments: [{ from: -1, to: 0, length: 4 }] }] },
-        ])
-      ).status,
-    ).toBe(400);
-    expect((await change('<script>bad</script>', [MERGE_OP])).status).toBe(400);
+    await expect(change(MERGE_AFTER,[{...MERGE_OP,maps:[{...MERGE_OP.maps[0],segments:[{from:-1,to:0,length:4}]}]}])).rejects.toThrow('Invalid annotation operations');
+    await expect(change('<script>bad</script>',[MERGE_OP])).rejects.toThrow();
     expect((await change(MERGE_AFTER, [{ id: 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee', kind: 'undo' }])).status).toBe(409);
     const refused = await head();
     expect(refused.markup).toBe(stable.markup);
@@ -286,11 +283,11 @@ describe('annotation ops through an edit', () => {
    const doc=await response.json();
    await createAnnotationFor({tokenId:token.id,userId:null},doc.id,{nodeId:'b',body:'suffix',quote:'same',range:{v:1,parts:[{rel:'',start:5,end:9,text:'same'}]}},{kind:'human',label:'Tester',transport:'browser'});
    const get=async()=> (await getArtifactRoute(request(`/api/artifacts/${doc.id}`,{token:token.token}),params({ id: doc.id }))).json();
-   const head=await get();
-   const result=await replaceArtifactRoute(request(`/api/artifacts/${doc.id}`,{method:'PUT',token:token.token,json:{markup:MERGE_AFTER,title:'Retitled',expectedVersion:head.version,expectedState:head.state,annotation_ops:[MERGE_OP]}}),params({ id: doc.id }));
+   const head=(await getArtifactById(doc.id))!;
+   const result=await replaceArtifactRoute(request(`/api/artifacts/${doc.id}`,{method:'PUT',token:token.token,json:documentPublicationBody(head,{markup:MERGE_AFTER,title:'Retitled',annotation_ops:[MERGE_OP]},true)}),params({ id: doc.id }));
    expect(result.status,await result.clone().text()).toBe(200);
    const changed=await get();expect(changed.title).toBe('Retitled');expect(changed.annotations[0].anchor.key).toBe('a');
-   const undone=await editsRoute(request(`/api/artifacts/${doc.id}/edits`,{method:'POST',token:token.token,json:{edit_id:changed.edit_id,source:MERGE_BEFORE,annotation_ops:[{id:MERGE_OP.id,kind:'undo'}]}}),params({ id: doc.id }));
+   const undone=await editsRoute(request(`/api/artifacts/${doc.id}/edits`,{method:'POST',token:token.token,json:documentPublicationBody((await getArtifactById(doc.id))!,{source:MERGE_BEFORE,annotation_ops:[{id:MERGE_OP.id,kind:'undo'}]})}),params({ id: doc.id }));
    expect(undone.status,await undone.clone().text()).toBe(200);expect((await get()).annotations[0].anchor.key).toBe('b');
   });
 });

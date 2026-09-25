@@ -347,7 +347,7 @@ describe('PATCH /api/my/artifacts/:id — the metadata-only move', () => {
     // The retired path field is answered BY NAME, and an unreachable parent is
     // the one refusal.
     for (const [body, error] of [
-      [{ folder: '2026/08' }, 'invalid_metadata'],
+      [{ folder: '2026/08' }, 'invalid_edit_body'],
       [{ parent_id: 'zzzzzz' }, 'invalid_parent'],
       [{ parent_id: doc.id }, 'invalid_parent'],
     ] as const) {

@@ -1,3 +1,5 @@
+import {documentEditBody,restoreDocument} from './prepared-document';
+import {getArtifactById} from '@/lib/artifacts';
 import {describe,expect,it} from 'vitest';
 import {useAppHarness} from './harness';
 import {mintToken} from '@/lib/tokens';
@@ -42,9 +44,9 @@ describe('advanced HTTP parity',()=>{
     expect(versions.data.versions).toHaveLength(2);
     const original = await operationHttp(t.token, 'get_version', { id, version: 1 });
     expect(original.isError).toBe(false);
-    const reverted = await operationHttp(t.token, 'revert_artifact', { id, version: 1 });
-    expect(reverted.isError).toBe(false);
-    expect(reverted.data.version).toBe(3);
+    const reverted = await restoreDocument(t.token,id,1);
+    expect(reverted.ok).toBe(true);
+    expect((await reverted.json()).version).toBe(3);
 
     // Another token can read this public document but cannot edit it.
     const other = await mintToken('other');
@@ -111,14 +113,15 @@ describe('advanced HTTP parity',()=>{
     expect(doc.isError).toBe(false);
     expect(doc.data.edit_id).toMatch(/^[a-f0-9]{32}$/);
 
+    const base=(await getArtifactById(String(doc.data.id)))!;
     const first = await operationHttp(t.token, 'edit_artifact', {
-      id: doc.data.id, edit_id: doc.data.edit_id, old_string: 'alpha text', new_string: 'ALPHA',
+      id: doc.data.id,...documentEditBody(base,{source:base.source!.replace('alpha text','ALPHA')}),
     });
     expect(first.isError).toBe(false);
     expect(first.data.edit_id).not.toBe(doc.data.edit_id);
 
     const clash = await operationHttp(t.token, 'edit_artifact', {
-      id: doc.data.id, edit_id: doc.data.edit_id, old_string: 'alpha', new_string: 'x',
+      id: doc.data.id,...documentEditBody(base,{source:base.source!.replace('alpha','x')}),
     });
     expect(clash.isError).toBe(true);
     expect(clash.data.error).toBe('doc_changed');
@@ -146,7 +149,7 @@ describe('advanced HTTP parity',()=>{
   });
 });
 describe('HTTP optimistic concurrency', () => {
-  it('update_artifact with a stale expectedVersion reports version_conflict; replay converges', async () => {
+  it('update_artifact with a stale expectedVersion reports doc_changed; replay converges', async () => {
     const t = await mintToken('agent');
     const created = await operationHttp(t.token, 'create_artifact', { markup: '<h1 className="text-2xl">v1</h1>' });
     expect(created.isError).toBe(false);
@@ -159,8 +162,8 @@ describe('HTTP optimistic concurrency', () => {
     // This agent still holds v1 — the guarded update must conflict, not clobber.
     const stale = await operationHttp(t.token, 'update_artifact', { id, markup: '<h1 className="text-2xl">mine</h1>', expectedVersion: 1 });
     expect(stale.isError).toBe(true);
-    expect(stale.data.error).toBe('version_conflict');
-    expect(stale.data.currentVersion).toBe(2);
+    expect(stale.data.error).toBe('doc_changed');
+    expect(stale.data.version).toBe(2);
 
     // Replay at the reported head converges.
     const replay = await operationHttp(t.token, 'update_artifact', { id, markup: '<h1 className="text-2xl">mine</h1>', expectedVersion: 2 });

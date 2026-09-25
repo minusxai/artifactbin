@@ -60,8 +60,9 @@ describe('the bearer and browser replace paths answer alike', () => {
     for (const wire of [viaBearer, viaBrowser]) {
       expect(wire.edit_id, 'a replace must hand back the new head pointer').toEqual(expect.any(String));
       expect(wire.version).toBe(2);
-      // Neither path echoes a document it stored verbatim; both must SAY so.
-      expect(wire.markup_changed).toBe(false);
+      // Operation commits return the canonical authoring graph and source.
+      expect(wire.document.kind).toBe('graph');
+      expect(wire.markup).toContain('<h1 id="heading">');
       expect(wire.visibility).toBe('public'); // anonymous token ⇒ born public
     }
   });
@@ -78,7 +79,7 @@ describe('the bearer and browser replace paths answer alike', () => {
       params({ id: b.id }),
     );
     expect([bearer.status, browser.status]).toEqual([409, 409]);
-    for(const response of [bearer,browser])expect(await response.json()).toMatchObject({error:'version_conflict',currentVersion:1,currentState:expect.stringMatching(/^[a-f0-9]{64}$/)});
+    for(const response of [bearer,browser])expect(await response.json()).toMatchObject({error:'doc_changed',version:1,edit_id:expect.any(String),source:expect.any(String)});
   });
 
   it('both refuse `private` on an anonymous credential — never a silent downgrade', async () => {

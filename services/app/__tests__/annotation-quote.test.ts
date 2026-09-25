@@ -1,3 +1,5 @@
+import {getArtifactById} from '@/lib/artifacts';
+import {documentEditBody} from './prepared-document';
 /**
  * A comment keeps the exact selection.
  *
@@ -67,6 +69,7 @@ const RANGE: AnnotationRange = {
     { rel: '', start: 12, end: 23, text: ' 40% in Q3,' },
   ],
 };
+async function preparedText(id:string,old:string,text:string){const row=(await getArtifactById(id))!;return documentEditBody(row,{source:row.source!.replace(old,text)});}
 const QUOTE = 'grew 40% in Q3,';
 
 describe('a comment keeps its quote and range', () => {
@@ -95,9 +98,9 @@ describe('a comment keeps its quote and range', () => {
   it('quote_found follows the document: an edit that removes the words flips it, the anchor stays', async () => {
     const w = await setup();
     expect((await comment(w, { quote: QUOTE, range: RANGE })).status).toBe(201);
-    const { edit_id } = await head(w.t.token, w.doc.id);
+    const {edit_id}=await head(w.t.token, w.doc.id);void edit_id;
     const edited = await editsRoute(
-      request(`/api/artifacts/${w.doc.id}/edits`, { method: 'POST', token: w.t.token, json: { edit_id, old_string: 'grew</strong> 40% in Q3,', new_string: 'fell</strong> 12% in Q4,' } }),
+      request(`/api/artifacts/${w.doc.id}/edits`, { method: 'POST', token: w.t.token, json: await preparedText(w.doc.id,'grew</strong> 40% in Q3,','fell</strong> 12% in Q4,') }),
       params({ id: w.doc.id }),
     );
     expect(edited.status, await edited.clone().text()).toBe(200);
@@ -113,9 +116,9 @@ describe('a comment keeps its quote and range', () => {
   it('quote_found survives an edit elsewhere, and a whole-document PUT that keeps the anchor', async () => {
     const w = await setup();
     expect((await comment(w, { quote: QUOTE, range: RANGE })).status).toBe(201);
-    const { edit_id } = await head(w.t.token, w.doc.id);
+    const {edit_id}=await head(w.t.token, w.doc.id);void edit_id;
     const edited = await editsRoute(
-      request(`/api/artifacts/${w.doc.id}/edits`, { method: 'POST', token: w.t.token, json: { edit_id, old_string: 'An intro paragraph here.', new_string: 'A brand new intro, and a second sentence.' } }),
+      request(`/api/artifacts/${w.doc.id}/edits`, { method: 'POST', token: w.t.token, json: await preparedText(w.doc.id,'An intro paragraph here.','A brand new intro, and a second sentence.') }),
       params({ id: w.doc.id }),
     );
     expect(edited.status, await edited.clone().text()).toBe(200);
@@ -131,7 +134,7 @@ describe('a comment keeps its quote and range', () => {
     expect(first.range).toBeNull();
     expect(first.quote_found).toBe(true);
 
-    const { edit_id } = await head(w.t.token, w.doc.id);
+    const {edit_id}=await head(w.t.token, w.doc.id);void edit_id;
     const plain = await myCreateAnnotationRoute(
       request(`/api/my/artifacts/${w.doc.id}/annotations`, { method: 'POST', cookie: w.cookie, json: { path: '2', edit_id, body: 'plain' } }),
       params({ id: w.doc.id }),
@@ -212,7 +215,7 @@ describe('resolving a range against the SOURCE', () => {
       { rel: '0', start: 8, end: 12, text: 'grew' },
       { rel: '+1', start: 0, end: 15, text: 'Costs fell too.' },
     ]) {
-      const { edit_id } = await head(w.t.token, w.doc.id);
+      const {edit_id}=await head(w.t.token, w.doc.id);void edit_id;
       const one = await myCreateAnnotationRoute(
         request(`/api/my/artifacts/${w.doc.id}/annotations`, {
           method: 'POST', cookie: w.cookie,
@@ -255,9 +258,9 @@ describe('what "found" means', () => {
   it('one part written away is enough to say the quote is gone', async () => {
     const w = await setup();
     expect((await comment(w, { quote: QUOTE, range: RANGE })).status).toBe(201);
-    const { edit_id } = await head(w.t.token, w.doc.id);
+    const {edit_id}=await head(w.t.token, w.doc.id);void edit_id;
     const edited = await editsRoute(
-      request(`/api/artifacts/${w.doc.id}/edits`, { method: 'POST', token: w.t.token, json: { edit_id, old_string: 'grew</strong>', new_string: 'fell</strong>' } }),
+      request(`/api/artifacts/${w.doc.id}/edits`, { method: 'POST', token: w.t.token, json: await preparedText(w.doc.id,'grew</strong>','fell</strong>') }),
       params({ id: w.doc.id }),
     );
     expect(edited.status, await edited.clone().text()).toBe(200);

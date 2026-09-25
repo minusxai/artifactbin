@@ -19,7 +19,7 @@ describe('persistent export delivery',()=>{
   ['http://localhost:3030',302],
   ['https://assets.example.com',302],
  ])('delivers image bytes safely when the configured asset origin is %s',async(origin,status)=>{
-  const token=await mintToken('delivery'),row=await createArtifact(token.id,null,{format:'markup',content:'',source:'<p>delivery</p>',meta:{},title:'Delivery',description:null});
+  const token=await mintToken('delivery'),row=await createArtifact(token.id,null,{format:'markup',source:'<p>delivery</p>',meta:{},title:'Delivery',description:null});
   const png=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAACXBIWXMAAAPoAAAD6AG1e1JrAAAADUlEQVQImWP4////fwAJ+wP9CNHoHgAAAABJRU5ErkJggg==','base64');
   const location=`${origin}/assets/export/${id}?key=${mintExportKey(`export-asset:${id}`)}`;
   const spy=vi.spyOn(assetDelivery,'exportAssetUrl').mockReturnValue(location);
@@ -33,7 +33,7 @@ describe('persistent export delivery',()=>{
  });
 
  it('redirects an authorized export to the persistent image and retains it across renderer resets',async()=>{
-  const token=await mintToken('export'),row=await createArtifact(token.id,null,{format:'markup',content:'',source:'<p>hello</p>',meta:{},title:'Export',description:null});
+  const token=await mintToken('export'),row=await createArtifact(token.id,null,{format:'markup',source:'<p>hello</p>',meta:{},title:'Export',description:null});
   let calls=0;
   const png=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAACXBIWXMAAAPoAAAD6AG1e1JrAAAADUlEQVQImWP4////fwAJ+wP9CNHoHgAAAABJRU5ErkJggg==','base64');
   setServices({browser:{render:async()=>{calls++;return {ok:true,mime:'image/png',bytes:png};}}});
@@ -52,7 +52,7 @@ describe('persistent export delivery',()=>{
   }finally{await resetExportRenderer();setServices({});}
  });
  it('keeps S3 exports working when a browser has not enabled direct uploads',async()=>{
-  const token=await mintToken('rollout'),row=await createArtifact(token.id,null,{format:'markup',content:'',source:'<p>hello</p>',meta:{},title:'Rollout',description:null});
+  const token=await mintToken('rollout'),row=await createArtifact(token.id,null,{format:'markup',source:'<p>hello</p>',meta:{},title:'Rollout',description:null});
   const store=objectStore(),original=store.signedUpload;let renders=0,uploads=0;
   store.signedUpload=async()=>({url:'https://storage.example/exports/objects/test.png',contentType:'image/png'});
   setServices({browser:{render:async()=>{renders++;return {ok:true,mime:'image/png',bytes:Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAACXBIWXMAAAPoAAAD6AG1e1JrAAAADUlEQVQImWP4////fwAJ+wP9CNHoHgAAAABJRU5ErkJggg==','base64')};},renderAndUpload:async()=>{uploads++;return {ok:false,reason:'upload_unavailable'};}}});

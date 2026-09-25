@@ -1,7 +1,7 @@
 import { vi } from 'vitest';
 import type { ArtifactSurfaceProps } from '@/components/ArtifactSurface';
 export const surfaceProps = (over:Partial<ArtifactSurfaceProps> = {}):ArtifactSurfaceProps => ({
- id:'story1',editId:'edit_1',format:'markup',title:'Document',source:'<p>Document body</p>',template:null,refs:[],version:1,content:'',columns:[],compiledCss:null,theme:null,colorMode:null,...over,
+ id:'story1',editId:'edit_1',format:'markup',title:'Document',source:'<p>Document body</p>',template:null,refs:[],version:1,dataPreview:'',columns:[],compiledCss:null,theme:null,colorMode:null,...over,
 });
 export class SurfaceEvents {
  static last:SurfaceEvents;

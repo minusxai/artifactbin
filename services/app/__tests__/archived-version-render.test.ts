@@ -10,7 +10,7 @@ import { GET as pageData } from '@/app/api/page/artifact/[id]/route';
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 import { PUT as replaceRoute } from '@/app/api/artifacts/[id]/route';
 import { archivedReadOnly } from '@/lib/archived-version';
-import { artifactState } from '@/lib/artifact-state';
+import {documentEditBody} from './prepared-document';
 import { getArtifactById, updateSharingFor } from '@/lib/artifacts';
 import { mintToken } from '@/lib/tokens';
 import { claimToken, createUser } from '@/lib/users';
@@ -24,7 +24,7 @@ async function twoVersions() {
   expect(created.status, await created.clone().text()).toBe(201);
   const id = (await created.json()).id as string;
   const head = (await getArtifactById(id))!;
-  const replaced = await replaceRoute(request(`/api/artifacts/${id}`, { method: 'PUT', token: owner.token, json: { markup: '<p>Version two</p>', expectedVersion: 1, expectedState: artifactState(head) } }), params({ id }));
+  const replaced = await replaceRoute(request(`/api/artifacts/${id}`, { method: 'PUT', token: owner.token, json: documentEditBody(head,{source:'<p>Version two</p>',whole:true}) }), params({ id }));
   expect(replaced.status, await replaced.clone().text()).toBe(200);
   return { owner, id };
 }

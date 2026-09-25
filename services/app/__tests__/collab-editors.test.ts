@@ -1,3 +1,5 @@
+import {documentPublicationBody} from './prepared-document';
+import {request} from './harness';
 import {observedRequest} from '@/__tests__/conditional-request';
 /**
  * Multi-user editing: a share carries a ROLE.
@@ -24,9 +26,9 @@ import { GET as getArtifactRoute, PUT as putArtifactRoute } from '@/app/api/arti
 import { POST as editsRoute } from '@/app/api/artifacts/[id]/edits/route';
 import { POST as annotateBearerRoute } from '@/app/api/artifacts/[id]/annotations/route';
 import { GET as listArtifactsRoute, POST as createArtifactRoute } from '@/app/api/artifacts/route';
-import { DELETE as deleteMineRoute, GET as getMineRoute, PATCH as patchMineRoute, PUT as putMineRoute } from '@/app/api/my/artifacts/[id]/route';
-import { POST as editsMineRoute } from '@/app/api/my/artifacts/[id]/edits/route';
-import { POST as revertMineRoute } from '@/app/api/my/artifacts/[id]/revert/route';
+import { DELETE as deleteMineRoute, GET as getMineRoute, PUT as putMineRoute } from '@/app/api/my/artifacts/[id]/route';
+import { POST as editsMineRoute, POST as patchMineRoute } from '@/app/api/my/artifacts/[id]/edits/route';
+import { POST as revertMineRoute } from '@/app/api/my/artifacts/[id]/edits/route';
 import { GET as getSharingRoute, PUT as putSharingRoute } from '@/app/api/my/artifacts/[id]/sharing/route';
 import { GET as versionsMineRoute } from '@/app/api/my/artifacts/[id]/versions/route';
 import { POST as createAnnotationRoute } from '@/app/api/my/artifacts/[id]/annotations/route';
@@ -35,7 +37,7 @@ import { GET as eventsRoute } from '@/app/a/[id]/events/route';
 import { GET as versionMineRoute } from '@/app/api/my/artifacts/[id]/versions/[version]/route';
 import { POST as agentPromptRoute } from '@/app/api/my/artifacts/[id]/agent-prompt/route';
 import { roleFor as requestRoleFor } from '@/lib/viewer';
-import { canReadArtifact, effectiveRole as roleFor, getArtifactById } from '@/lib/artifacts';
+import { canReadArtifact, effectiveRole as roleFor, getArtifactById,getVersionFor } from '@/lib/artifacts';
 import { mintToken } from '@/lib/tokens';
 import { claimToken, createUser, ensureUsername } from '@/lib/users';
 
@@ -46,7 +48,21 @@ vi.mock('@/auth', () => ({
 }));
 
 const params = <T extends Record<string, string>>(p: T) => ({ params: Promise.resolve(p) });
-const jreq = (path: string, method: string, body?: unknown, token?: string) => observedRequest(path,{method,json:body,token});
+const jreq = async(path:string,method:string,body?:unknown,token?:string)=>{
+ const match=path.match(/^\/api\/(?:my\/)?artifacts\/([^/]+)(?:\/(edits|revert))?$/);
+ if(match&&body&&typeof body==='object'&&!Array.isArray(body)){
+  const row=await getArtifactById(match[1]);
+  if(row?.format==='markup'&&(match[2]||method==='PATCH')){
+   let input=body as Record<string,unknown>;
+   if(match[2]==='revert'){
+    const archived=await getVersionFor({tokenId:row.token_id,userId:row.user_id},row.id,Number(input.version));
+    if(!archived)throw new Error('Fixture archive missing');input={source:archived.source};
+   }
+   return request(path,{method:'POST',token,json:documentPublicationBody(row,input,match[2]==='revert')});
+  }
+ }
+ return observedRequest(path,{method,json:body,token});
+};
 const create = async (token: string, body: Record<string, unknown>) => {
   const res = await createArtifactRoute(await jreq('/api/artifacts', 'POST', body, token));
   expect(res.status, await res.clone().text()).toBe(201);
@@ -162,8 +178,8 @@ describe('an editor edits through every write door, and nothing else', () => {
     const before = (await head(id)).version;
     for (const parent_id of [box.id, null]) {
       const moved = await putMineRoute(await jreq(`/api/my/artifacts/${id}`, 'PUT', { markup: PROSE2, parent_id }), params({ id }));
-      expect(moved.status, await moved.clone().text()).toBe(400);
-      expect(await moved.json()).toMatchObject({ error: 'invalid_parent' });
+      expect(moved.status, await moved.clone().text()).toBe(403);
+      expect(await moved.json()).toMatchObject({ error: 'owner_only' });
     }
     expect((await head(id)).ancestor_ids).toEqual([]);
     expect((await head(id)).version).toBe(before);

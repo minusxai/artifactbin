@@ -23,7 +23,7 @@ vi.mock('@/auth', () => ({ auth: async () => (sessionUser.id ? { user: { id: ses
 
 const body = (r: Response) => r.json() as Promise<Record<string, unknown>>;
 const draft = (tokenId: string, title: string) =>
-  createArtifact(tokenId, null, { format: 'markup', content: '', source: '<div />', meta: {}, title, description: null });
+  createArtifact(tokenId, null, { format: 'markup', source: '<div />', meta: {}, title, description: null });
 type Draft = { id: string; url: string; title: string | null };
 
 beforeEach(async () => {

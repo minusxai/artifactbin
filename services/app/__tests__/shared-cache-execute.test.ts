@@ -17,7 +17,7 @@ async function setup(){
  const token=await mintToken('cache-execute'),actor={tokenId:token.id,userId:null};
  const secret=await createDatasetSecret(actor,'fixture-pass',target);
  const catalog:DatasetCatalog={kind:'postgres',connection:{...target,passwordSecretId:secret.id},refreshSeconds:60,defaultSchema:'public',tables:[{schema:'public',name:'rows',source:{schema:'public',table:'rows'},columns:[{name:'n',type:'number'}]}]};
- const row=await createArtifact(token.id,null,{format:'dataset',source:null,content:'',meta:{catalog},visibility:'public'});
+ const row=await createArtifact(token.id,null,{format:'dataset',source:null,meta:{catalog},visibility:'public'});
  return {row,catalog,token,actor,secret};
 }
 it('executeCatalog persists shared results and separates dataset ids, params and windows',async()=>{

@@ -36,7 +36,7 @@ async function account(email: string) {
 
 async function docOf(owner: { user: { id: string }; token: { id: string } }, visibility: Visibility): Promise<ArtifactRow> {
   return createArtifact(owner.token.id, owner.user.id, {
-    format: 'markup', content: '', source: '<div><p>x</p></div>', meta: {}, visibility, title: 't',
+    format: 'markup', source: '<div><p>x</p></div>', meta: {}, visibility, title: 't',
   });
 }
 
@@ -115,7 +115,7 @@ describe('effectiveRole — ownership, the share list and the link, composed by 
 
   it('a bare token owns what it created — an anonymous owner is still an owner', async () => {
     const token = await mintToken('anon');
-    const row = await createArtifact(token.id, null, { format: 'markup', content: '', source: '<div><p>x</p></div>', meta: {}, visibility: 'unlisted', title: 't' });
+    const row = await createArtifact(token.id, null, { format: 'markup', source: '<div><p>x</p></div>', meta: {}, visibility: 'unlisted', title: 't' });
     expect(await effectiveRole(row, { userId: null, tokenId: token.id })).toBe('owner');
     expect(await effectiveRole(row, { userId: null, tokenId: 'tok_someone_else' })).toBe('viewer');
   });

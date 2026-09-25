@@ -2,15 +2,8 @@
 import type { Node as EditorNode } from 'prosemirror-model';
 import type { Transaction } from 'prosemirror-state';
 import type { JsxElement } from '@/lib/jsx';
-interface IdentityTextMap {
-  fromId: string;
-  toId: string;
-  fromText: string;
-  toText: string;
-  segments: Array<{ from: number; to: number; length: number }>;
-}
-export type AnnotationOperation =
-  { id: string; kind: 'map'; maps: IdentityTextMap[] } | { id: string; kind: 'undo' | 'redo' };
+import type {DocumentIdentityTextMap as IdentityTextMap,DocumentAnnotationOperation as AnnotationOperation} from '@artifactbin/contracts';
+export type {DocumentAnnotationOperation as AnnotationOperation} from '@artifactbin/contracts';
 const idOf = (node: EditorNode) => {
   const id = (node.attrs.source as JsxElement | null)?.attributes.find((a) => a.name === 'id')?.value;
   return id?.static && typeof id.json === 'string' ? id.json : null;

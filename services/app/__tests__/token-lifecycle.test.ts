@@ -138,7 +138,7 @@ describe('resolve: expired is nothing, on both paths', () => {
 describe('claim: ownership transfers, usability never returns', () => {
   it('claiming an EXPIRED held token moves its artifacts to the account and leaves the token expired', async () => {
     const t = await mintToken('draft');
-    const artifact = await createArtifact(t.id, null, { format: 'markup', content: '', source: '<div />', meta: {}, title: 'draft', description: null });
+    const artifact = await createArtifact(t.id, null, { format: 'markup', source: '<div />', meta: {}, title: 'draft', description: null });
     await setExpiry(t.id, -60_000);
     const user = await createUser({ email: 'claimer@example.com' });
     const claimed = await claimTokenById(user.id, t.id);

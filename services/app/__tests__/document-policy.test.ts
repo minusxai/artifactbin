@@ -1,3 +1,4 @@
+import {documentEditBody} from './prepared-document';
 import {afterEach,beforeEach,expect,it} from 'vitest';
 import {setDocumentEditorPolicy} from '@/lib/document-policy';
 import type {Actor} from '@artifactbin/contracts';
@@ -16,7 +17,7 @@ const path='/api/my/artifacts/abc123';
 const context={params:Promise.resolve({id:'abc123'})};
 beforeEach(async()=>{
  setDocumentEditorPolicy(actor=>actor.userId==='usr_admin' && actor.emailVerified===true);
- await (await harness.db()).query(`INSERT INTO artifacts(id,token_id,user_id,title,source,content,format,visibility,edit_id) VALUES ('abc123','tok_owner','usr_owner','Private document','<p id="intro">Before</p>','','markup','private','base-edit')`);
+ await (await harness.db()).query(`INSERT INTO artifacts(id,token_id,user_id,title,source,format,visibility,edit_id) VALUES ('abc123','tok_owner','usr_owner','Private document','<p id="intro">Before</p>','markup','private','base-edit')`);
 });
 it('opens private documents in the ordinary editor with server-provided editor permission',async()=>{
  const req=request(path,options),actor=await sessionActor(req),row=(await getArtifactById('abc123'))!;
@@ -27,11 +28,12 @@ it('opens private documents in the ordinary editor with server-provided editor p
  expect((await DELETE(request(path,{...options,method:'DELETE'}),context)).status).toBe(404);
 });
 it('saves through the normal edit and replacement routes with real actor attribution and history',async()=>{
- const response=await edit(request(path+'/edits',{...options,method:'POST',json:{edit_id:'base-edit',source:'<p id="intro">Edited</p>'}}),context);
+ const response=await edit(request(path+'/edits',{...options,method:'POST',json:documentEditBody((await getArtifactById('abc123'))!,{source:'<p id="intro">Edited</p>',whole:true})}),context);
  expect(response.status,await response.clone().text()).toBe(200);
  const replaced=await PUT(await observedRequest(path,{...options,method:'PUT',json:{markup:'<p id="intro">Replaced</p>'}}),context);
  expect(replaced.status,await replaced.clone().text()).toBe(200);
- const stale=await PUT(request(path,{...options,method:'PUT',json:{markup:'<p>Stale</p>',expectedVersion:1,expectedState:'0'.repeat(64)}}),context);
+ const outdated=documentEditBody((await getArtifactById('abc123'))!,{source:'<p>Stale</p>',whole:true});outdated.document_update.patch.baseVersion=1;
+ const stale=await PUT(request(path,{...options,method:'PUT',json:outdated}),context);
  expect(stale.status).toBe(409);
  const row=(await getArtifactById('abc123'))!;
  expect(row).toMatchObject({user_id:'usr_owner',actor_user_id:'usr_admin',visibility:'private',version:3});

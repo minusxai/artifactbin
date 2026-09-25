@@ -1,3 +1,4 @@
+import {artifactQuery} from '@/lib/artifact-document';
 import {observedRequest} from '@/__tests__/conditional-request';
 /**
  * API contract tests — real route handlers, in-memory PGLite (NODE_ENV=test ⇒
@@ -122,11 +123,11 @@ describe('artifact CRUD', () => {
 
     // A document's truth is `source` (markup rows keep `content` empty).
     const db = await harness.db();
-    const versions = await db.query<{ version: number; source: string }>(
-      'SELECT version, source FROM artifact_versions WHERE artifact_id = $1',
+    const versions = await artifactQuery<{ version: number; source: string }>(db,
+      'SELECT document,version, source FROM artifact_versions WHERE artifact_id = $1',
       [created.id],
     );
-    expect(versions.rows).toEqual([{ version: 1, source: '<h1 id="head">v1</h1>' }]);
+    expect(versions.rows).toEqual([{ version:1,source:'<h1 id="head">v1</h1>',document:expect.objectContaining({kind:'graph'}) }]);
 
     const read = await getArtifactRoute(request(`/api/artifacts/${created.id}`, { token: token }), params({ id: created.id }));
     expect((await read.json()).markup).toBe('<h1 id="head">v2</h1>');

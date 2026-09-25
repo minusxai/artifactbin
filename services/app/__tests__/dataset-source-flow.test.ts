@@ -10,7 +10,7 @@ import {POST as mutate} from '@/app/a/[id]/mutate/route';
 import {migrateMarkupSource} from '@/lib/datasets/migrate';
 import {runQueries} from '@/lib/sql/engine';
 import {runDocumentDataflow} from '@/lib/artifacts';
-const harness=useAppHarness();
+useAppHarness();
 const ctx=(id:string)=>({params:Promise.resolve({id})});
 
 it('preserves legacy DuckDB computations, types and parameters through migration', async () => {
@@ -125,17 +125,4 @@ it('publishes and reads native DuckDB source queries used by older artifacts',as
  const response=await query(request(`/a/${did}/query`,{method:'POST',token:token.token,json:{}}),ctx(did));
  expect(response.status,await response.clone().text()).toBe(200);
  expect((await response.json()).tables.legacy.rows).toEqual([{median:2.5,month:'2026-01'}]);
-});
-
-it('keeps every surviving inline dataset row available to dependent legacy computations',async()=>{
- const token=await mintToken('mxmx_test_inline_source');
- const rows=Array.from({length:1700},(_,i)=>({hours:i+1}));
- const made=await create(request('/api/artifacts',{method:'POST',token:token.token,json:{dataset:rows}}));
- expect(made.status).toBe(201);const id=(await made.json()).id;
- await (await harness.db()).query("UPDATE artifacts SET content=$2,meta=meta-'catalog'-'objectKey' WHERE id=$1",[id,JSON.stringify(rows)]);
- const doc=await create(request('/api/artifacts',{method:'POST',token:token.token,json:{markup:`<Helmet><Query name="input" source="ref:${id}">{\`select * from public.rows\`}</Query><Query name="summary">{\`select count(*) as n,median(hours) as median from input\`}</Query></Helmet><DataTable data="$summary" />`}}));
- expect(doc.status,await doc.clone().text()).toBe(201);const did=(await doc.json()).id;
- const response=await query(request(`/a/${did}/query`,{method:'POST',token:token.token,json:{}}),ctx(did));
- expect(response.status,await response.clone().text()).toBe(200);
- const result=await response.json();expect(result.tables.input.truncated).toBe(true);expect(result.tables.summary.rows).toEqual([{n:1700,median:850.5}]);
 });

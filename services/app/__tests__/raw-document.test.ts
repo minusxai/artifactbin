@@ -240,8 +240,8 @@ describe('/a/<id>/raw for a row from a retired tier', () => {
     );
     const { id } = (await res.json()) as { id: string };
     // Force the row into the shape production actually holds.
-    await db.query(`UPDATE artifacts SET format = $1, content = $2, source = NULL WHERE id = $3`,
-      [format, '<!doctype html><title>old</title><p>an html-tier document</p>', id]);
+    await db.query(`UPDATE artifacts SET format = $1, source = NULL WHERE id = $2`,
+      [format, id]);
     return id;
   };
 

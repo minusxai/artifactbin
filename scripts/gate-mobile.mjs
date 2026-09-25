@@ -445,7 +445,7 @@ const CHART_DOC = '<Helmet><Value name="rows" type="table" value={[{"m":"Jan","v
 const chart = await (await fetch(`${B}/api/artifacts`, {
   method: 'POST',
   headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${st.token}` },
-  body: JSON.stringify({ title: 'mobile gate — chart', markup: CHART_DOC, theme: 'manuscript' }),
+  body: JSON.stringify({ title: 'mobile gate — chart', visibility:'public', markup: CHART_DOC, theme: 'manuscript' }),
 })).json();
 if (!chart.id) throw new Error(`the chart document did not publish: ${JSON.stringify(chart)}`);
 

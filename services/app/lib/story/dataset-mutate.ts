@@ -1,3 +1,4 @@
+import {artifactQuery} from '@/lib/artifact-document';
 import { grantsOf, assertGrantCommit } from '@/lib/datasets/policy/grants';
 import {validateUserWrites} from '@/lib/datasets/user-fields';
 import {DatasetError} from '@/lib/datasets/errors';
@@ -120,7 +121,7 @@ export async function mutateDataset(
     // CAS miss means someone else's rows are now the base for ours.
     const current = attempt === 0
       ? dataset
-      : (await db.query<ArtifactRow>(`SELECT * FROM artifacts WHERE id = $1 AND ${LIVE_ARTIFACT_SQL}`, [dataset.id])).rows[0];
+      : (await artifactQuery<ArtifactRow>(db,`SELECT * FROM artifacts WHERE id = $1 AND ${LIVE_ARTIFACT_SQL}`, [dataset.id])).rows[0];
     // Deleted under us — the write has nothing to apply to. Reported as a
     // refusal rather than thrown: the caller answers the uniform 404 anyway.
     if (!current) return { reason: 'invalid_sql', detail: 'the dataset no longer exists' };
@@ -136,7 +137,7 @@ export async function mutateDataset(
       catch(error){return {reason:'invalid_sql',detail:error instanceof Error?error.message:'Invalid stored mutation'};}
     }
     const columns = selected?.columns ?? ((current.meta as { columns?: DatasetColumn[] }).columns) ?? [];
-    const rows = await loadDatasetRows(selected?{content:'',meta:{objectKey:selected.objectKey}}:current);
+    const rows = await loadDatasetRows(selected?{meta:{objectKey:selected.objectKey}}:current);
     const {source:_,document:__,...mutationGuard}=guard;
     let out:MutationOutcome;
     let policy:DatasetMutationPolicy|undefined;
@@ -180,20 +181,20 @@ export async function mutateDataset(
      if(v2)await assertGrantCommit(tx,current,actor,guard.document);
      await validateUserWrites(tx,columns,out.userWrites??[],actor.userId);
      if(guard.expectedState){
-      const locked=(await tx.query<ArtifactRow>(`SELECT * FROM artifacts WHERE id=$1 AND ${LIVE_ARTIFACT_SQL} FOR UPDATE`,[dataset.id])).rows[0];
+      const locked=(await artifactQuery<ArtifactRow>(tx,`SELECT * FROM artifacts WHERE id=$1 AND ${LIVE_ARTIFACT_SQL} FOR UPDATE`,[dataset.id])).rows[0];
       if(!locked||artifactState(locked)!==guard.expectedState)return {rows:[] as ArtifactRow[]};
      }
-     const result=await tx.query<ArtifactRow>(
+     const result=await artifactQuery<ArtifactRow>(tx,
       `WITH updated AS (
          UPDATE artifacts
-            SET content = '', meta = $3::jsonb, version = version + 1, edit_id = $4, updated_at = now(), actor_user_id = $13, actor_token_id = $14
-          WHERE id = $1 AND edit_id = $2 AND ($21::boolean OR access = 'readwrite') AND ${LIVE_ARTIFACT_SQL}
-            AND policy_revision=$16 AND ($21::boolean OR (
-              ($20::text IS NULL AND (${scope.where('$15')})) OR
-              ($20='viewer' AND (${policyReaderSql()}) AND ($19::boolean OR (${scope.where('$15')})))
+            SET meta = $3::jsonb, version = version + 1, edit_id = $4, updated_at = now(), actor_user_id = $12, actor_token_id = $13
+          WHERE id = $1 AND edit_id = $2 AND ($20::boolean OR access = 'readwrite') AND ${LIVE_ARTIFACT_SQL}
+            AND policy_revision=$15 AND ($20::boolean OR (
+              ($19::text IS NULL AND (${scope.where('$14')})) OR
+              ($19='viewer' AND (${policyReaderSql('$12', '$13')}) AND ($18::boolean OR (${scope.where('$14')})))
             )
-            ) AND ($21::boolean OR $17::text IS NULL OR EXISTS (
-              SELECT 1 FROM artifacts d WHERE d.id=$17 AND d.edit_id=$18 AND d.deleted_at IS NULL
+            ) AND ($20::boolean OR $16::text IS NULL OR EXISTS (
+              SELECT 1 FROM artifacts d WHERE d.id=$16 AND d.edit_id=$17 AND d.deleted_at IS NULL
               AND (
                 (d.user_id IS NULL AND artifacts.token_id=d.token_id) OR
                 (d.user_id IS NOT NULL AND (artifacts.user_id=d.user_id OR
@@ -203,26 +204,26 @@ export async function mutateDataset(
                       (writer_share.user_id IS NULL AND writer_share.email=(SELECT email FROM users WHERE id=d.user_id)))
                   )))
               )
-              AND (d.visibility <> 'private' OR d.user_id=$13 OR d.token_id=$14 OR EXISTS (
+              AND (d.visibility <> 'private' OR d.user_id=$12 OR d.token_id=$13 OR EXISTS (
                 SELECT 1 FROM artifact_shares s WHERE s.artifact_id=d.id AND
-                (s.user_id=$13 OR (s.user_id IS NULL AND s.email=(SELECT email FROM users WHERE id=$13)))
+                (s.user_id=$12 OR (s.user_id IS NULL AND s.email=(SELECT email FROM users WHERE id=$12)))
               ))
             ))
           RETURNING *
        ), archived AS (
-         INSERT INTO artifact_versions (artifact_id, version, title, description, format, content, source, meta)
-         SELECT $1, $5, $6, $7, $8, $9, $10, $11::jsonb
+         INSERT INTO artifact_versions (artifact_id, version, title, description, format, source, meta)
+         SELECT $1, $5, $6, $7, $8, $9, $10::jsonb
           WHERE EXISTS (SELECT 1 FROM updated)
             AND NOT EXISTS (
               SELECT 1 FROM artifact_versions
-               WHERE artifact_id = $1 AND created_at > now() - ($12::int * interval '1 millisecond')
+               WHERE artifact_id = $1 AND created_at > now() - ($11::int * interval '1 millisecond')
             )
          ON CONFLICT DO NOTHING
        )
        SELECT u.*, pg_notify('artifact_' || lower(u.id), u.edit_id) FROM updated u`,
       [
         dataset.id, current.edit_id, JSON.stringify(meta), newEditId(),
-        current.version, current.title, current.description, current.format, current.content, current.source,
+        current.version, current.title, current.description, current.format, current.source,
         JSON.stringify(current.meta), WRITE_SNAPSHOT_WINDOW_MS,
         actor.userId, actor.tokenId, scope.val, current.policy_revision??0,guard.document?.id??null,guard.document?.editId??null,!!guard.document&&!!policy,policy?.role??null,v2,
       ],

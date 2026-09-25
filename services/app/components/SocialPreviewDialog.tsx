@@ -1,4 +1,5 @@
 'use client';
+import {writeBrowserArtifact} from '@/lib/browser-artifact-write';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { RotateCcw, X } from 'lucide-react';
@@ -253,11 +254,7 @@ export default function SocialPreviewDialog({ id, source, editId, version, onClo
     if (imageId) nextSource = writeSocialPreviewImageCrop(nextSource, persisted);
     else if (cropDirty || !initialImage) nextSource = writeSocialPreviewCrop(nextSource, persisted);
     try {
-      const res = await fetch(`/api/my/artifacts/${id}/edits`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ edit_id: base.editId, source: nextSource }),
-      });
+      const res = await writeBrowserArtifact(id,{source:nextSource},base.editId);
       const body = (await res.json().catch(() => ({}))) as SaveResponse;
       if (res.ok) { onClose(); return; }
       if (res.status === 409 && body.edit_id && typeof body.source === 'string') {

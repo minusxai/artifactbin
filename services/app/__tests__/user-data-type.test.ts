@@ -1,3 +1,5 @@
+import {documentPublicationWithResources} from './prepared-document';
+import {patchMetadata} from './conditional-request';
 import {changeMembership} from '@/lib/membership';
 import {POST as documentMutation} from '@/app/a/[id]/mutate/route';
 import {describe, expect, it} from 'vitest';
@@ -6,7 +8,7 @@ import {PUT as replaceRoute} from '@/app/api/artifacts/[id]/route';
 import {observedRequest} from '@/__tests__/conditional-request';
 import {POST as mutateRoute} from '@/app/api/artifacts/[id]/mutate/route';
 import {getDb} from '@/lib/db';
-import {getArtifactById,dataflowForRow,setMetadataFor,applyEditFor,commitNormalizedMarkup,publishMarkupForArtifact,viewerIdentityFor} from '@/lib/artifacts';
+import {getArtifactById,dataflowForRow,applyEditFor,commitNormalizedMarkup,publishMarkupForArtifact,viewerIdentityFor} from '@/lib/artifacts';
 import {loadDatasetRows} from '@/lib/story/dataset-store';
 import {mintToken} from '@/lib/tokens';
 import {claimToken, createUser} from '@/lib/users';
@@ -81,7 +83,7 @@ describe('native user fields',()=>{
   if(prepared instanceof Response)throw new Error(await prepared.text());
   if(kind==='normalized')await (await getDb()).transaction(tx=>commitNormalizedMarkup(tx,null,current,prepared));
   else {
-   const result=await applyEditFor({tokenId:a.tokenId,userId:a.user.id},report.id,{baseEditId:current.edit_id,change:{newSource:prepared.source}});
+   const result=await applyEditFor({tokenId:a.tokenId,userId:a.user.id},report.id,{baseEditId:current.edit_id,documentUpdate:(await documentPublicationWithResources(current,{source:prepared.source})).document_update});
    expect(result).toMatchObject({applied:true});
   }
   expect((await getArtifactById(dataset.id))!.meta.columns).toContainEqual({name:'assignee',type:'user',constraints:{memberOf:[`ref:${report.id}`]}});
@@ -101,7 +103,7 @@ describe('native user fields',()=>{
   const two=await create(a.token,{markup:'<h1>Two</h1>',shares:[{email:b.user.email,role:'viewer'}]});
   const dataset=await create(a.token,{dataset:[{who:null}],columns:[{name:'who',type:'user',constraints:{memberOf:[`ref:${one.id}`,`ref:${two.id}`]}}],access:'readwrite'});
   expect((await mutate(a.token,dataset.id,`update public.rows set who='${b.user.id}'`)).status).toBe(200);
-  await setMetadataFor({tokenId:a.tokenId,userId:a.user.id},two.id,{shares:[]});
+  expect((await patchMetadata(a.token,two.id,{shares:[]})).status).toBe(200);
   expect((await mutate(a.token,dataset.id,`update public.rows set who='${b.user.id}'`)).status).toBe(403);
  });
  it('executes a row button as its caller and rejects an anonymous $_me',async()=>{

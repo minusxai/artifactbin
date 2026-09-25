@@ -29,7 +29,7 @@ describe('GET /a/:id (the document itself)', () => {
 
   it('carries Link: <base>/llms.txt; rel="help" and the head pointer, on the request base', async () => {
     const t = await mintToken('t');
-    const row = await createArtifact(t.id, null, { format: 'markup', content: '', source: '<div>hi</div>', meta: {}, title: 'hi', description: null });
+    const row = await createArtifact(t.id, null, { format: 'markup', source: '<div>hi</div>', meta: {}, title: 'hi', description: null });
     const res = await rawRoute(new Request(`${BASE}/a/${row.id}`), params(row.id));
     expect(res.status).toBe(200);
     expect(res.headers.get('link')).toBe(`<${BASE}/llms.txt>; rel="help"`);
@@ -61,21 +61,21 @@ describe('GET /a/:id (the document itself)', () => {
     expect(text).toContain(`${BASE}/chat/install.ps1`);
     expect(text).not.toContain('afbin setup');
     const t = await mintToken('t');
-    const row = await createArtifact(t.id, null, { format: 'markup', content: '', source: '<div>hi</div>', meta: {}, title: 'hi', description: null });
+    const row = await createArtifact(t.id, null, { format: 'markup', source: '<div>hi</div>', meta: {}, title: 'hi', description: null });
     const refused = await app.request(`${BASE}/api/artifacts/${row.id}`);
     expect(refused.status).toBe(401);
     expect(await refused.json()).toMatchObject({ error: 'unauthorized', help: `Retry — afbin authenticates itself when it needs the server; there is nothing to set up. Install it if it is missing: curl -fsSL ${BASE}/chat/install.sh | sh`, guide: `${BASE}/llms.txt` });
   });
   it('follows x-forwarded-proto/host like every other absolute URL the app emits', async () => {
     const t = await mintToken('t');
-    const row = await createArtifact(t.id, null, { format: 'markup', content: '', source: '<div>hi</div>', meta: {}, title: 'hi', description: null });
+    const row = await createArtifact(t.id, null, { format: 'markup', source: '<div>hi</div>', meta: {}, title: 'hi', description: null });
     const res = await rawRoute(new Request(`${BASE}/a/${row.id}`, { headers: { 'x-forwarded-proto': 'https', 'x-forwarded-host': 'docs.example' } }), params(row.id));
     expect(res.headers.get('link')).toBe('<https://docs.example/llms.txt>; rel="help"');
   });
   it('a healing 302 carries the pointer in its header and body, so an unfollowed redirect still names the way on', async () => {
     const owner = await ensureUsername(await createUser({ email: 'redirect-help@example.com' }));
     const t = await mintToken('t', owner.id);
-    const row = await createArtifact(t.id, owner.id, { format: 'markup', content: '', source: '<div>hop</div>', meta: {}, title: 'Hop', description: null, visibility: 'public' });
+    const row = await createArtifact(t.id, owner.id, { format: 'markup', source: '<div>hop</div>', meta: {}, title: 'Hop', description: null, visibility: 'public' });
     const app = createAppServer({ indexHtml: async () => '<!doctype html><html><head><title>SPA</title></head><body><div id="root">SPA</div></body></html>' });
     const res = await app.request(`${BASE}/a/${row.id}`);
     expect(res.status).toBe(302);
@@ -92,7 +92,7 @@ describe('GET /a/:id (the document itself)', () => {
   it('repeats the pointer as the LAST thing before </body>, where a tail-keeping reader still sees it', async () => {
     const owner = await ensureUsername(await createUser({ email: 'tail-help@example.com' }));
     const t = await mintToken('t', owner.id);
-    const row = await createArtifact(t.id, owner.id, { format: 'markup', content: '', source: '<div>tail</div>', meta: {}, title: 'Tail', description: null, visibility: 'public' });
+    const row = await createArtifact(t.id, owner.id, { format: 'markup', source: '<div>tail</div>', meta: {}, title: 'Tail', description: null, visibility: 'public' });
     const app = createAppServer({ indexHtml: async () => '<!doctype html><html><head><title>SPA</title></head><body><div id="root">SPA</div></body></html>' });
     const tail = `<!-- Agents: read this to create, edit, or operate artifacts on the CLI using afbin: ${BASE}/llms.txt. afbin: a CLI to operate artifacts. Install: curl -fsSL ${BASE}/chat/install.sh | sh; Windows: /chat/install.ps1 (PowerShell) --></body>`;
     for (const path of [`/@${owner.username}/${row.id}-tail`, '/login', `/a/${row.id}/raw`]) {
@@ -106,7 +106,7 @@ describe('GET /a/:id (the document itself)', () => {
   it('carries the same header and head pointer at an owned artifact pretty URL', async () => {
     const owner = await ensureUsername(await createUser({ email: 'pretty-help@example.com' }));
     const t = await mintToken('t', owner.id);
-    const row = await createArtifact(t.id, owner.id, { format: 'markup', content: '', source: '<div>pretty</div>', meta: {}, title: 'Pretty help', description: null, visibility: 'public' });
+    const row = await createArtifact(t.id, owner.id, { format: 'markup', source: '<div>pretty</div>', meta: {}, title: 'Pretty help', description: null, visibility: 'public' });
     const app = createAppServer({ indexHtml: async () => '<!doctype html><html><head><title>SPA</title></head><body><div id="root">SPA</div></body></html>' });
     const res = await app.request(`${BASE}/@${owner.username}/${row.id}-pretty-help`);
     expect(res.status).toBe(200);
