@@ -53,7 +53,8 @@ describe('ImageDialog', () => {
     expect(screen.getByRole('progressbar', { name: 'Uploading…' })).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Insert' })).toBeDisabled();
     await d.finishUpload();
-    expect(screen.getByAltText('Preview of the chosen image')).toHaveAttribute('src', 'blob:preview');
+    // The preview is the SERVER's copy: proof the upload landed, and never a string from the page.
+    expect(screen.getByAltText('Preview of the chosen image')).toHaveAttribute('src', '/a/New222/raw?v=1');
     expect(d.onConfirm).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole('button', { name: 'Insert' }));
     expect(d.onConfirm).toHaveBeenCalledWith({ id: 'New222', rawUrl: '/a/New222/raw?v=1' });
@@ -91,6 +92,16 @@ describe('ImageDialog', () => {
     expect(screen.getByAltText('Preview of the chosen image')).toHaveAttribute('src', '/a/New222/raw?v=1');
     fireEvent.click(screen.getByRole('button', { name: 'Insert' }));
     expect(d.onConfirm).toHaveBeenCalledTimes(1);
+  });
+
+  it('previews nothing for an answer that is not an image id', async () => {
+    const d = mount('insert', { ok: true, image: { id: '"><script>' } });
+    fireEvent.change(screen.getByLabelText('Image URL'), { target: { value: 'https://example.com/b.png' } });
+    await act(async () => { fireEvent.click(screen.getByLabelText('Import image from URL')); });
+    expect(d.onImportUrl).toHaveBeenCalled();
+    expect(screen.queryByAltText('Preview of the chosen image')).toBeNull();
+    expect(screen.getByRole('button', { name: 'Insert' })).toBeDisabled();
+    expect(screen.getByRole('alert').textContent).toContain('Could not');
   });
 
   it('says what is missing when Import is pressed with no URL', () => {

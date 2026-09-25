@@ -14,6 +14,7 @@ import { useEffect, useId, useRef, useState, type DragEvent } from 'react';
 import { ImagePlus, Link2, X } from 'lucide-react';
 import { DEFAULT_UPLOAD_MAX_BYTES } from '@artifactbin/contracts';
 import { useDialogKeyboard } from '@/components/use-dialog-keyboard';
+import { imageRawUrl } from '@/lib/story/ref-data';
 
 /** What the upload door takes (lib/story/data-tiers). */
 export const IMAGE_ACCEPT = 'image/png,image/jpeg,image/webp,image/gif,image/svg+xml';
@@ -26,6 +27,8 @@ export interface ChosenImage {
 }
 export type ImageChoice = { ok: true; image: ChosenImage } | { ok: false; error: string };
 
+/** An artifact id as the upload door mints it — the only thing a preview is built from. */
+const IMAGE_ID = /^[A-Za-z0-9]{6,12}$/;
 const FOCUSABLE = 'button:not([disabled]),input:not([disabled])';
 
 export default function ImageDialog({
@@ -52,18 +55,14 @@ export default function ImageDialog({
   const [url, setUrl] = useState('');
   const [busy, setBusy] = useState<null | 'Uploading…' | 'Importing…'>(null);
   const [error, setError] = useState<string | null>(null);
-  const [chosen, setChosen] = useState<{ image: ChosenImage; preview: string } | null>(null);
+  const [chosen, setChosen] = useState<ChosenImage | null>(null);
   const [dragging, setDragging] = useState(false);
   /** Answers arriving after a newer choice (or after closing) are dropped. */
   const attempt = useRef(0);
   useDialogKeyboard(panel, onClose, FOCUSABLE);
   useEffect(() => () => void (attempt.current = -1), []);
-  // A local preview of a file is an object URL; give it back when it is replaced.
-  useEffect(() => () => {
-    if (chosen?.preview.startsWith('blob:')) URL.revokeObjectURL(chosen.preview);
-  }, [chosen]);
 
-  const run = async (label: 'Uploading…' | 'Importing…', obtain: () => Promise<ImageChoice>, preview: (image: ChosenImage) => string) => {
+  const run = async (label: 'Uploading…' | 'Importing…', obtain: () => Promise<ImageChoice>) => {
     const mine = ++attempt.current;
     setBusy(label);
     setError(null);
@@ -71,8 +70,9 @@ export default function ImageDialog({
     const result = await obtain().catch((): ImageChoice => ({ ok: false, error: 'Something went wrong. Try again.' }));
     if (mine !== attempt.current) return;
     setBusy(null);
-    if (result.ok) setChosen({ image: result.image, preview: preview(result.image) });
-    else setError(result.error);
+    // Only an image id the door minted is previewed — and from the server's copy.
+    if (result.ok && IMAGE_ID.test(result.image.id)) setChosen(result.image);
+    else setError(result.ok ? 'Could not use that image. Try again.' : result.error);
   };
 
   const chooseFile = (file: File | undefined) => {
@@ -87,7 +87,7 @@ export default function ImageDialog({
       setError(`That image is larger than ${LIMIT_MB} MB.`);
       return;
     }
-    void run('Uploading…', () => onUploadFile(file), () => URL.createObjectURL(file));
+    void run('Uploading…', () => onUploadFile(file));
   };
   const chooseUrl = () => {
     const value = url.trim();
@@ -95,7 +95,7 @@ export default function ImageDialog({
       setError('Paste the address of an image first.');
       return;
     }
-    void run('Importing…', () => onImportUrl(value), (image) => image.rawUrl ?? `/a/${image.id}/raw`);
+    void run('Importing…', () => onImportUrl(value));
   };
   const onDrop = (event: DragEvent) => {
     event.preventDefault();
@@ -209,7 +209,7 @@ export default function ImageDialog({
           )}
           {chosen && (
             <figure className="flex justify-center rounded-md bg-raised p-2">
-              <img src={chosen.preview} alt="Preview of the chosen image" className="max-h-48 max-w-full rounded object-contain" />
+              <img src={imageRawUrl(chosen.id, 1)} alt="Preview of the chosen image" className="max-h-48 max-w-full rounded object-contain" />
             </figure>
           )}
         </div>
@@ -221,7 +221,7 @@ export default function ImageDialog({
           <button
             type="button"
             disabled={!chosen || busy !== null}
-            onClick={() => chosen && onConfirm(chosen.image)}
+            onClick={() => chosen && onConfirm(chosen)}
             className="rounded-md bg-accent px-3 py-1.5 text-sm font-medium text-white disabled:opacity-40"
           >
             {action}

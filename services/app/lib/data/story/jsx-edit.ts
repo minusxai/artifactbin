@@ -317,10 +317,15 @@ export function placeImageInJsx(
 const NODE_ID_RE = /^[A-Za-z][A-Za-z0-9]{3}$/;
 const ID_FIRST = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz';
 const ID_REST = `${ID_FIRST}0123456789`;
-const randomNodeId = (): string => {
-  const bytes = globalThis.crypto.getRandomValues(new Uint8Array(4));
-  return ID_FIRST[bytes[0] % ID_FIRST.length] + [...bytes.slice(1)].map((b) => ID_REST[b % ID_REST.length]).join('');
+/** One unbiased pick from `alphabet`: bytes past the last whole multiple of its length are rejected. */
+const pick = (alphabet: string): string => {
+  const limit = 256 - (256 % alphabet.length);
+  for (;;) {
+    const [byte] = globalThis.crypto.getRandomValues(new Uint8Array(1));
+    if (byte < limit) return alphabet[byte % alphabet.length];
+  }
 };
+const randomNodeId = (): string => pick(ID_FIRST) + pick(ID_REST) + pick(ID_REST) + pick(ID_REST);
 
 /**
  * A node id for something the editor inserts, in the server's shape and not
