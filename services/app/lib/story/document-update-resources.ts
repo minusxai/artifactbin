@@ -21,11 +21,11 @@ export function documentResourceSql(bindings:DocumentUpdate['datasetBindings'],p
   FROM resource_ready r WHERE d.id=r.id AND r.meta->>'userScopeDocument' IS DISTINCT FROM $1 AND EXISTS(SELECT 1 FROM updated)
   RETURNING d.*,to_jsonb(r)-'x' AS previous
  ), resource_archived AS (
-  INSERT INTO artifact_versions(artifact_id,version,title,description,format,content,source,meta,actor_user_id,actor_token_id,document)
-  SELECT id,(previous->>'version')::int,previous->>'title',previous->>'description',previous->>'format',previous->>'content',previous->>'source',previous->'meta',previous->>'actor_user_id',previous->>'actor_token_id',previous->'document' FROM resource_updated ON CONFLICT DO NOTHING
+  INSERT INTO artifact_versions(artifact_id,version,title,description,format,source,meta,actor_user_id,actor_token_id,document)
+  SELECT id,(previous->>'version')::int,previous->>'title',previous->>'description',previous->>'format',previous->>'source',previous->'meta',previous->>'actor_user_id',previous->>'actor_token_id',previous->'document' FROM resource_updated ON CONFLICT DO NOTHING
  ), resource_logged AS (
   INSERT INTO artifact_edits(artifact_id,edit_id,splice_start,removed,inserted,span_start,span_end,actor_user_id,actor_token_id)
-  SELECT id,edit_id,0,COALESCE(previous->>'source',previous->>'content'),COALESCE(source,content),0,length(COALESCE(previous->>'source',previous->>'content')),actor_user_id,actor_token_id FROM resource_updated
+  SELECT id,edit_id,0,COALESCE(previous->>'source',''),COALESCE(source,''),0,length(COALESCE(previous->>'source','')),actor_user_id,actor_token_id FROM resource_updated
   RETURNING pg_notify('artifact_'||lower(artifact_id),edit_id)
  ),`;
  return {before,guard,after};

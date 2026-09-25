@@ -9,22 +9,16 @@ import { ARTIFACT_ID_PATTERN, ARTIFACT_REFERENCE_PATTERN } from '@artifactbin/co
 import { removedSqlReferenceTokens } from '@/lib/story/sql-reference-tokens';
 import { newEditId } from '@/lib/story/splice';
 import { finalizeArtifactMetadata } from '@/lib/story/parsed-artifact-metadata';
-import {objectKey,objectStore} from '@/lib/object-store';
-import { catalogFromMetadata, legacyDatasetRows } from './catalog-metadata';
+import { catalogFromMetadata } from './catalog-metadata';
 
 interface MigrationDiagnostic { artifactId?: string; version?: number; reason: string }
 interface SourceMigration { source: string; changed: boolean; diagnostics: MigrationDiagnostic[] }
 
 type LegacyMeta = Record<string, unknown> & { objectKey?: string; columns?: DatasetColumn[]; catalog?: DatasetCatalog };
 
-export function catalogMetadata(meta: LegacyMeta, content?: unknown): LegacyMeta {
+export function catalogMetadata(meta: LegacyMeta): LegacyMeta {
   if (meta.catalog) return meta;
-  const catalog=catalogFromMetadata(meta,content);
-  if(catalog?.tables[0]?.legacyContent){
-    const {legacyContent,...table}=catalog.tables[0];
-    const key=objectKey('dataset',legacyContent);
-    return {...meta,objectKey:key,catalog:{...catalog,tables:[{...table,objectKey:key}]}};
-  }
+  const catalog=catalogFromMetadata(meta);
   return catalog ? { ...meta, catalog } : meta;
 }
 
@@ -141,11 +135,11 @@ interface HistoricalException { artifactId: string; version: number; reason: str
 interface DatasetMigrationReport { plans: DatasetMigrationPlan[]; nextCursor: string | null; processed: number; changed: number; datasets: number; documents: number; versions: number; conflicts: MigrationDiagnostic[]; historicalExceptions: HistoricalException[]; done: boolean; dryRun: boolean }
 
 function planRecord(row:Record<string,unknown>,markupOptions:MarkupMigrationOptions) {
-  const meta=row.format==='dataset'?catalogMetadata((row.meta??{}) as LegacyMeta,row.content):row.meta;
+  const meta=row.format==='dataset'?catalogMetadata((row.meta??{}) as LegacyMeta):row.meta;
   const source=row.format==='markup'?migrateMarkupSource(String(row.source??''),markupOptions):{
     source:row.source as string|null,changed:false,diagnostics:[] as MigrationDiagnostic[],
   };
-  if(row.format==='dataset'&&!catalogFromMetadata(row.meta,row.content))source.diagnostics.push({reason:'Dataset has no catalog or stored object key'});
+  if(row.format==='dataset'&&!catalogFromMetadata(row.meta))source.diagnostics.push({reason:'Dataset has no catalog or stored object key'});
   return {meta,source};
 }
 
@@ -229,14 +223,6 @@ export async function runDatasetCatalogMigrationBatch(db: Db, options: DatasetMi
       const locked = (await artifactQuery<Record<string, unknown>>(tx,'SELECT * FROM artifacts WHERE id=$1 FOR UPDATE', [artifactId])).rows[0];
       const lockedHistory=await artifactQuery<Record<string,unknown>>(tx,'SELECT * FROM artifact_versions WHERE artifact_id=$1 ORDER BY version FOR UPDATE',[artifactId]);
       if (!locked || fingerprint({head:locked,history:lockedHistory.rows}) !== fingerprint(before)) return false;
-      // Immutable object writes occur only after the reviewed DB snapshot is locked.
-      // A failed transaction may leave an unreferenced object, never a missing row reference.
-      const records=[{before:locked,after:after.head},...historyChanged.map(entry=>({before:entry.version,after:after.history.find(version=>version.version===entry.version.version)!}))];
-      for(const record of records){
-        if(record.before.format!=='dataset'||catalogFromMetadata(record.before.meta)||!legacyDatasetRows(record.before.content))continue;
-        const content=String(record.before.content),key=objectKey('dataset',content);
-        if((record.after.meta as LegacyMeta).objectKey===key)await objectStore().put(key,content,'application/json');
-      }
       for (const entry of historyChanged) await tx.query('UPDATE artifact_versions SET meta=$3::jsonb,source=CASE WHEN $5::jsonb IS NULL THEN $4::text ELSE NULL END,document=$5::jsonb WHERE artifact_id=$1 AND version=$2', [artifactId, entry.version.version, JSON.stringify(after.history.find(version=>version.version===entry.version.version)!.meta), entry.source.source,sourceStorage(String(entry.version.format),entry.source.source).document]);
       if (headChanged) await tx.query('UPDATE artifacts SET meta=$2::jsonb,source=CASE WHEN $5::jsonb IS NULL THEN $3::text ELSE NULL END,document=$5::jsonb,edit_id=$4 WHERE id=$1', [artifactId, JSON.stringify(after.head.meta), plannedSource.source, after.head.edit_id,sourceStorage(format,plannedSource.source).document]);
       options.failBeforeCommit?.(); return true;

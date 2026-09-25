@@ -141,7 +141,7 @@ export interface ArtifactSurfaceProps {
   /** Who to follow and whether we do — null for an anonymous document, or the owner's own. */
   follow?: { userId: string; following: boolean; count: number } | null;
   document?:DocumentGraph;
-  content: string;
+  dataPreview: string;
   columns: Array<{ name: string; type?: string }>;
   catalog?: DatasetCatalog;
   compiledCss: string | null;
@@ -201,7 +201,7 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
   const { session } = useSession();
   const person = session?.kind === 'account' ? session.user : null;
   const readerFace = useMemo(() => person ? { id: person.id, name: person.username || person.email || '', image: person.image } : null, [person]);
-  const { id, editId, format, title, source, content, columns, bytes: fileBytes = 0, pages: filePages = null, compiledCss, theme, colorMode, template, refs, dataflow = null, search = '', accountSession = false, anonSession = false, version, openAnnotations = 0, like = { liked: false, count: 0 }, follow = null } = props;
+  const { id, editId, format, title, source, dataPreview, columns, bytes: fileBytes = 0, pages: filePages = null, compiledCss, theme, colorMode, template, refs, dataflow = null, search = '', accountSession = false, anonSession = false, version, openAnnotations = 0, like = { liked: false, count: 0 }, follow = null } = props;
   const [editing, setEditing] = useState(false);
   /** A view-mode text selection asks edit mode to open on its containing node. */
   const [initialEditSelectionPath, setInitialEditSelectionPath] = useState<string | null>(null);
@@ -404,7 +404,7 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
   // The stream omits compiledCss when unchanged, so `undefined` means "keep
   // what we have" while `null` means "there is none".
   const shownCss = live && live.compiledCss !== undefined ? live.compiledCss : compiledCss;
-  const shownContent = live?.content ?? content;
+  const shownContent = live?.dataPreview ?? dataPreview;
   // The DESIGN travels with the document (see the events route): an agent that
   // publishes a theme onto a page someone is watching must repaint it, not hand
   // them new content in the design this page happened to load with.

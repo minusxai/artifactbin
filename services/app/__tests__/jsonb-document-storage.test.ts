@@ -93,7 +93,7 @@ it('can replace a document with a native dataset without retaining its JSONB gra
 it('first-load archive migration preserves durable legacy identities after the node was removed',async()=>{
  const {id,actor}=await create(),db=await getDb();
  await db.query("INSERT INTO artifact_node_aliases(artifact_id,legacy_key,source_id,source_path,created_version) VALUES($1,'old','kept','0',1)",[id]);
- await db.query("INSERT INTO artifact_versions(artifact_id,version,format,content,source,meta) VALUES($1,99,'markup','',$2,'{}')",[id,'<p data-annotation-anchor="old">Archived</p>']);
+ await db.query("INSERT INTO artifact_versions(artifact_id,version,format,source,meta) VALUES($1,99,'markup',$2,'{}')",[id,'<p data-annotation-anchor="old">Archived</p>']);
  const version=await getVersionFor(actor,id,99);
  expect(version?.source).toBe('<p id="kept">Archived</p>');
  expect((await getVersionFor(actor,id,99))?.source).toBe(version?.source);

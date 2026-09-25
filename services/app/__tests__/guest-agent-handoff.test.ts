@@ -117,9 +117,9 @@ describe('shared guest ownership', () => {
   });
   it('only merges after a verified login and preserves the guest ceiling on unrelated links', async () => {
     const guest = await createGuestOwner();
-    const owned = await createArtifact(guest.tokenId, guest.userId, { format: 'markup', source: '<h1>Guest</h1>', content: '<h1>Guest</h1>', meta: {} });
+    const owned = await createArtifact(guest.tokenId, guest.userId, { format: 'markup', source: '<h1>Guest</h1>', meta: {} });
     const user = await createUser({ email: 'mxmx_test_verified_merge@example.test' });
-    const other = await createArtifact('', user.id, { format: 'markup', source: '<h1>Other</h1>', content: '<h1>Other</h1>', meta: {}, visibility: 'public', link_role: 'editor' });
+    const other = await createArtifact('', user.id, { format: 'markup', source: '<h1>Other</h1>', meta: {}, visibility: 'public', link_role: 'editor' });
     expect(await effectiveRole({ ...other, link_role: 'editor' }, { tokenId: guest.tokenId, userId: guest.userId })).toBe('viewer');
     expect(await getArtifactFor({ tokenId: guest.tokenId, userId: guest.userId }, other.id)).toBeNull();
     const login = (verified: boolean) => homePage(request('/api/page/home', { actor: { credential: 'session', userId: user.id, email: user.email, emailVerified: verified, heldTokenIds: [guest.tokenId] } }));
@@ -131,7 +131,7 @@ describe('shared guest ownership', () => {
   });
   it('merges guest artifacts and all approved CLI credentials into a verified account', async () => {
     const guest = await createGuestOwner();
-    const first = await createArtifact(guest.tokenId, guest.userId, { format: 'markup', source: '<h1>First</h1>', content: '<h1>First</h1>', meta: {} });
+    const first = await createArtifact(guest.tokenId, guest.userId, { format: 'markup', source: '<h1>First</h1>', meta: {} });
     const cli = await mintToken('cli', guest.userId);
     const account = await createUser({ email: 'mxmx_test_merge@example.test' });
     const stranger = await createGuestOwner();

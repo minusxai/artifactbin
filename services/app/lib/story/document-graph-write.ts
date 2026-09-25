@@ -59,7 +59,7 @@ async function commitGraphMutation(db:Queryable,actor:TokenActor|null,scope:Scop
   WHERE l.format='markup' AND ${effective}->>'policy'=${policy} AND (${expectedEdit}::text IS NULL OR l.edit_id=${expectedEdit}::text) AND ${sql.guard}
    AND NOT EXISTS(SELECT 1 FROM jsonb_each(${expectedFields}::jsonb) f WHERE COALESCE(l.meta->f.key,'null'::jsonb) IS DISTINCT FROM f.value)
  ), updated AS (
-  UPDATE artifacts SET document=l.next_document,source=NULL,content='',meta=${prose?"l.meta-'parsedArtifact'":`(l.meta||${meta}::jsonb||jsonb_build_object('refs',${graphReferencesSql('l.next_document')}))-'parsedArtifact'-'compiledCss'-'cssCompileVersion'`},version=l.version+1,edit_id=$3,
+  UPDATE artifacts SET document=l.next_document,source=NULL,meta=${prose?"l.meta-'parsedArtifact'":`(l.meta||${meta}::jsonb||jsonb_build_object('refs',${graphReferencesSql('l.next_document')}))-'parsedArtifact'-'compiledCss'-'cssCompileVersion'`},version=l.version+1,edit_id=$3,
    title=CASE WHEN ${hasTitle}::boolean THEN ${title}::text ELSE l.title END,
    description=CASE WHEN ${hasDescription}::boolean THEN ${description}::text ELSE l.description END,
    visibility=COALESCE(${visibility}::text,l.visibility),ancestor_ids=COALESCE(${ancestors}::text[],l.ancestor_ids),access=COALESCE(${access}::text,l.access),link_role=COALESCE(${linkRole}::text,l.link_role),
@@ -68,8 +68,8 @@ async function commitGraphMutation(db:Queryable,actor:TokenActor|null,scope:Scop
   FROM transformed l WHERE artifacts.id=l.id
   RETURNING artifacts.*,to_jsonb(l)-'next_document' AS previous
  ), archived AS (
-  INSERT INTO artifact_versions(artifact_id,version,title,description,format,content,source,meta,actor_user_id,actor_token_id,document)
-  SELECT id,(previous->>'version')::int,previous->>'title',previous->>'description',previous->>'format',previous->>'content',previous->>'source',previous->'meta',previous->>'actor_user_id',previous->>'actor_token_id',previous->'document' FROM updated
+  INSERT INTO artifact_versions(artifact_id,version,title,description,format,source,meta,actor_user_id,actor_token_id,document)
+  SELECT id,(previous->>'version')::int,previous->>'title',previous->>'description',previous->>'format',previous->>'source',previous->'meta',previous->>'actor_user_id',previous->>'actor_token_id',previous->'document' FROM updated
   WHERE ${archive}::boolean OR previous->>'document_archived_at' IS NULL OR (previous->>'document_archived_at')::timestamptz<=now()-interval '120 seconds' ON CONFLICT DO NOTHING
  ), moved_annotations AS (
   UPDATE annotations a SET anchor_key=x->'after'->>'anchor',range=x->'after'->>'range' FROM jsonb_array_elements(${updates}::jsonb) x

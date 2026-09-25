@@ -43,7 +43,7 @@ describe('creating a folder', () => {
     // A folder's page is a listing computed from the row, so there is nothing
     // stored on it and nothing to serve (__tests__/folder-page.test.ts).
     expect(row.source).toBe('');
-    expect(row.content).toBe('');
+    expect(row).not.toHaveProperty('content');
     const g = await readBack(o.token, r.body.id);
     expect(g.body.format).toBe('folder');
     expect(g.body.parent_id).toBeNull();

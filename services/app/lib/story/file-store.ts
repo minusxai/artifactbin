@@ -85,7 +85,7 @@ export async function storeFileContent(bytes: Buffer, contentType: string, filen
   const key = objectKey('file', bytes);
   await objects.put(key, bytes, contentType);
   const meta: FileMeta = { objectKey: key, bytes: bytes.length, contentType, filename, sha256: uploadedSha256(bytes) };
-  return { format: 'file', content: '', source: null, meta: { ...meta }, derivedTitle: filename };
+  return { format: 'file', source: null, meta: { ...meta }, derivedTitle: filename };
 }
 
 /** Serves stored file/image/PDF objects without ever interpreting their content. ACL belongs to the caller. */

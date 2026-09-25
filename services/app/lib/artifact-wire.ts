@@ -173,7 +173,7 @@ export async function artifactToWire(row: ArtifactRow, base: string) {
   // `deleted_at` is dropped with the ownership columns: the trash gate means a
   // row a caller can read is always live, so the field could only ever echo
   // null — a key in every agent's context that can carry no news.
-  const { content, source, token_id: _token, user_id: _owner, deleted_at: _trashed, meta, format, ...rest } = row;
+  const { source, token_id: _token, user_id: _owner, deleted_at: _trashed, meta, format, ...rest } = row;
   const m = meta as { theme?: string; template?: string; colorMode?: 'light' | 'dark' | null };
   // Echo the LIVE vocabulary: a stored retired theme reads back as its
   // successor, so an agent that read-before-writes never learns a name that
@@ -225,7 +225,7 @@ export async function artifactToWire(row: ArtifactRow, base: string) {
           rows: await loadDatasetRows(row),
         }
       : {}),
-    ...(format === 'viz' ? { slots: (meta as { slots?: unknown }).slots ?? [], recipe: safeJson(content) } : {}),
+    ...(format === 'viz' ? { slots: (meta as { slots?: unknown }).slots ?? [], recipe: safeJson(source ?? '') } : {}),
     ...(format === 'image' ? { contentType: (meta as { contentType?: unknown }).contentType ?? null } : {}),
     ...(format === 'file' ? { filename: (meta as { filename?: string }).filename, contentType: (meta as { contentType?: string }).contentType, bytes: (meta as { bytes?: number }).bytes } : {}),
     ...(format === 'pdf' ? { contentType: (meta as { contentType?: unknown }).contentType ?? null, bytes: (meta as { bytes?: unknown }).bytes ?? 0, pages: (meta as { pages?: unknown }).pages ?? null } : {}),
@@ -421,7 +421,7 @@ export async function replaceArtifactWithBody(
     }
   }
   const prepared: PreparedContent | Response = current.format === 'folder'
-    ? {content: { format: 'folder', content: '', source: '', meta: {}, derivedTitle: null }, objects: []}
+    ? {content: { format: 'folder', source: '', meta: {}, derivedTitle: null }, objects: []}
     : await prepareContentInput({...(current.format==='dataset'?{columns:((current.meta.columns??[]) as import('@artifactbin/contracts').DatasetColumn[]).filter(c=>c.type==='user')}:{}),theme:current.meta.theme,template:current.meta.template,colorMode:current.meta.colorMode,...body}, {
       prepareDataset: (input,objects) => prepareCatalog(input,actor,current,objects),
       normalizeMarkup,

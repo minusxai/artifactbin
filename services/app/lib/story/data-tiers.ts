@@ -109,7 +109,6 @@ export async function publishDataset(body: Record<string, unknown>, rows: unknow
   const located = await storeDatasetRows(flat, objects);
   return {
     format: 'dataset',
-    content: located.content,
     source: null,
     meta: {
       columns,
@@ -171,7 +170,6 @@ export function publishVizRecipe(_body: Record<string, unknown>, recipe: unknown
 
   return {
     format: 'viz',
-    content: JSON.stringify(r),
     source: JSON.stringify(r, null, 2),
     meta: { slots: bindings.map((b) => ({ name: b.name, accepts: b.accepts, ...(b.multi ? { multi: true } : {}) })) },
     derivedTitle: null,
@@ -185,7 +183,7 @@ const IMAGE_DATA_URL_RE = /^data:(image\/(?:png|jpeg|webp|gif|svg\+xml));base64,
 /**
  * Store already-decoded image bytes. The single home for both entry points: a
  * base64 `data:` URL (publishImage) and a raw-body upload (the route). Bytes go
- * to the object store; the row keeps `meta.objectKey` and `content` stays empty
+ * to the object store; the row keeps `meta.objectKey` and the row stores no payload
  * (see lib/story/image-store).
  */
 export async function storeImageContent(buffer: Buffer, contentType: string, objects?: ContentObjects): Promise<StoredContent | Response> {
@@ -243,7 +241,7 @@ export async function storeImageContent(buffer: Buffer, contentType: string, obj
       ...(fit.width && fit.height ? { width: fit.width, height: fit.height } : {}),
       ...(fit.placeholder ? { placeholder: fit.placeholder } : {}),
   };
-  return { format: 'image', content: '', source: null, meta: { ...meta }, derivedTitle: null };
+  return { format: 'image', source: null, meta: { ...meta }, derivedTitle: null };
 }
 
 export async function publishImage(_body: Record<string, unknown>, dataUrl: string, objects?: ContentObjects): Promise<StoredContent | Response> {
@@ -287,7 +285,7 @@ export async function storePdfContent(buffer: Buffer, objects?: ContentObjects):
     // count it was told and never one it invented (lib/story/pdf-store).
     ...(() => { const pages = pdfPageCount(buffer); return pages ? { pages } : {}; })(),
   };
-  return { format: 'pdf', content: '', source: null, meta: { ...meta }, derivedTitle: null };
+  return { format: 'pdf', source: null, meta: { ...meta }, derivedTitle: null };
 }
 
 export async function publishPdf(_body: Record<string, unknown>, dataUrl: string, objects?: ContentObjects): Promise<StoredContent | Response> {

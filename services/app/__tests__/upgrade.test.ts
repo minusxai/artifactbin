@@ -142,7 +142,7 @@ describe('the additive DDL is replay-safe', () => {
     // and one caller's edit_id would then be a valid write proof for every
     // document in the database.
     for (const id of ['aaa111', 'bbb222', 'ccc333']) {
-      await fresh.query('INSERT INTO artifacts (id, token_id, content) VALUES ($1, $2, $3)', [id, 'tok_x', '<p>x</p>']);
+      await fresh.query('INSERT INTO artifacts (id, token_id) VALUES ($1, $2)', [id, 'tok_x']);
     }
     const rows = await fresh.query<{ edit_id: string }>('SELECT edit_id FROM artifacts ORDER BY id');
     const heads = rows.rows.map((r) => r.edit_id);

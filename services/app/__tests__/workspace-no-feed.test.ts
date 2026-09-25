@@ -12,7 +12,7 @@ it('omits activity while retaining account listings, events and view insights', 
   const db = await harness.db();
   const user = await createUser({ email: 'mxmx_test_feed_disabled@example.com' });
   const token = await mintToken('feed-disabled', user.id);
-  await db.query("INSERT INTO artifacts (id,user_id,token_id,format,title,content,meta,version) VALUES ('doc123',$1,$2,'markup','Document','','{}',1)", [user.id, token.id]);
+  await db.query("INSERT INTO artifacts (id,user_id,token_id,format,title,meta,version) VALUES ('doc123',$1,$2,'markup','Document','{}',1)", [user.id, token.id]);
   const events = createEvents({ db, schema: EVENTS_SCHEMA });
   await events.emit([{ id: 'feed-disabled-view', at: new Date().toISOString(), source: 'app', subject_kind: 'visitor', subject_id: 'visitor-one', verb: 'viewed', object_kind: 'artifact', object_id: 'doc123', payload: {} }]);
   try {

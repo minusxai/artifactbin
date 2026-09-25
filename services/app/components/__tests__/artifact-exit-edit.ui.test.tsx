@@ -75,7 +75,7 @@ const props = (over: Partial<ArtifactSurfaceProps> = {}): ArtifactSurfaceProps =
   template: null,
   refs: [],
   version: 1,
-  content: '',
+  dataPreview: '',
   columns: [],
   compiledCss: null,
   theme: null,

@@ -14,11 +14,11 @@ beforeEach(async () => {
   const db = await harness.db();
   setServices({ events: createEvents({ db, schema: EVENTS_SCHEMA }) });
   owner = await createUser({ email: 'mxmx_test_views@example.com' });
-  await db.query(`INSERT INTO artifacts (id, token_id, user_id, content, format, visibility) VALUES
-    ('viewpu', 'tok_v', $1, 'x', 'markup', 'public'),
-    ('viewpr', 'tok_v', $1, 'x', 'markup', 'private'),
-    ('viewun', 'tok_v', $1, 'x', 'markup', 'unlisted'),
-    ('viewfo', 'tok_v', $1, '', 'folder', 'public')`, [owner.id]);
+  await db.query(`INSERT INTO artifacts (id, token_id, user_id, format, visibility) VALUES
+    ('viewpu', 'tok_v', $1, 'markup', 'public'),
+    ('viewpr', 'tok_v', $1, 'markup', 'private'),
+    ('viewun', 'tok_v', $1, 'markup', 'unlisted'),
+    ('viewfo', 'tok_v', $1, 'folder', 'public')`, [owner.id]);
 });
 const open = (id: string, options: Parameters<typeof request>[1] = {}, query = '') => {
   const req = request(`/api/page/artifact/${id}/view${query}`, { method: 'POST', origin: 'same', headers: { 'user-agent': 'Mozilla/5.0 view-test' }, ...options });

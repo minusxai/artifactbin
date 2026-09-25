@@ -45,7 +45,7 @@ async function docOf(
   linkRole?: ShareRole,
 ): Promise<ArtifactRow> {
   const row = await createArtifact(owner.token.id, owner.user.id, {
-    format: 'markup', content: '', source: SOURCE, meta: {}, visibility, title: 't',
+    format: 'markup', source: SOURCE, meta: {}, visibility, title: 't',
   });
   if (!linkRole) return row;
   await updateSharingFor({ tokenId: '', userId: owner.user.id }, row.id, { linkRole });

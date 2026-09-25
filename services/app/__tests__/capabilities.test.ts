@@ -23,8 +23,8 @@ async function world() {
   const guest = await createGuestOwner();
   const minted = await createTestUser({ tokenId: t.id, userId: acct.id });
   if (!minted.ok) throw new Error(minted.error);
-  const real = await createArtifact(t.id, acct.id, { format: 'markup', content: '', source: '<p>real</p>', meta: {}, visibility: 'unlisted' });
-  const sandbox = await createArtifact(minted.tokenId, minted.userId, { format: 'markup', content: '', source: '<p>sandbox</p>', meta: {}, visibility: 'unlisted' });
+  const real = await createArtifact(t.id, acct.id, { format: 'markup', source: '<p>real</p>', meta: {}, visibility: 'unlisted' });
+  const sandbox = await createArtifact(minted.tokenId, minted.userId, { format: 'markup', source: '<p>sandbox</p>', meta: {}, visibility: 'unlisted' });
   return {
     account: { tokenId: t.id, userId: acct.id },
     guest: { tokenId: guest.tokenId, userId: guest.userId },

@@ -39,7 +39,7 @@ it('uses the locked preimage after independent prose changes and denies other wr
 });
 
 it('rejects a reference that changes after publication admission',async()=>{
- const {db,actor,base}=await setup(),ref=await createArtifact(actor.tokenId,null,{format:'image',content:'',source:null,meta:{}});
+ const {db,actor,base}=await setup(),ref=await createArtifact(actor.tokenId,null,{format:'image',source:null,meta:{}});
  const admission=await prepareGraphOperation(base,[{kind:'insert',parent:[],index:1,source:`<img src="ref:${ref.id}" />`}],{loadRef:refLoaderForActor(actor)});
  if(admission instanceof Response)throw new Error(await admission.text());
  await db.query('UPDATE artifacts SET version=version+1 WHERE id=$1',[ref.id]);

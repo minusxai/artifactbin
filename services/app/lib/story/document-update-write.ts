@@ -57,7 +57,7 @@ export async function commitDocumentUpdate(db:Queryable,actor:TokenActor|null,sc
      ELSE COALESCE(l.meta->f.key,'null'::jsonb) END IS DISTINCT FROM f.value)
  )`;
  const commit=` , updated AS (
-  UPDATE artifacts SET format='markup',document=l.next_document,source=NULL,content='',access='read',meta=((CASE WHEN l.format='markup' THEN l.meta ELSE '{}'::jsonb END)||${meta}::jsonb${refs})${strip},
+  UPDATE artifacts SET format='markup',document=l.next_document,source=NULL,access='read',meta=((CASE WHEN l.format='markup' THEN l.meta ELSE '{}'::jsonb END)||${meta}::jsonb${refs})${strip},
    visibility=COALESCE(${visibility}::text,l.visibility),link_role=COALESCE(${linkRole}::text,l.link_role),
    ancestor_ids=CASE WHEN ${hasParent}::boolean THEN COALESCE((SELECT ancestors FROM destination),ARRAY[]::text[]) ELSE l.ancestor_ids END,
    sharing_revision=l.sharing_revision+CASE WHEN ${visibility}::text IS NOT NULL OR ${linkRole}::text IS NOT NULL OR ${shares}::jsonb IS NOT NULL THEN 1 ELSE 0 END,
@@ -67,8 +67,8 @@ export async function commitDocumentUpdate(db:Queryable,actor:TokenActor|null,sc
    document_archived_at=CASE WHEN ${whole}::boolean OR l.document_archived_at IS NULL OR l.document_archived_at<=now()-interval '120 seconds' THEN now() ELSE l.document_archived_at END
   FROM transformed l WHERE artifacts.id=l.id RETURNING artifacts.*,to_jsonb(l)-'next_document' AS previous
  ), archived AS (
-  INSERT INTO artifact_versions(artifact_id,version,title,description,format,content,source,meta,actor_user_id,actor_token_id,document)
-  SELECT id,(previous->>'version')::int,previous->>'title',previous->>'description',previous->>'format',previous->>'content',previous->>'source',previous->'meta',previous->>'actor_user_id',previous->>'actor_token_id',NULLIF(previous->'document','null'::jsonb) FROM updated
+  INSERT INTO artifact_versions(artifact_id,version,title,description,format,source,meta,actor_user_id,actor_token_id,document)
+  SELECT id,(previous->>'version')::int,previous->>'title',previous->>'description',previous->>'format',previous->>'source',previous->'meta',previous->>'actor_user_id',previous->>'actor_token_id',NULLIF(previous->'document','null'::jsonb) FROM updated
   WHERE ${whole}::boolean OR previous->>'document_archived_at' IS NULL OR (previous->>'document_archived_at')::timestamptz<=now()-interval '120 seconds' ON CONFLICT DO NOTHING
  ), ${documentAnnotationSql(annotationOps,aliases)}, logged AS (
   INSERT INTO artifact_edits(artifact_id,edit_id,splice_start,removed,inserted,span_start,span_end,actor_user_id,actor_token_id,document_state,annotation_changes)

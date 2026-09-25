@@ -7,8 +7,8 @@ const harness=useAppHarness();
 
 async function artifact(id:string,source:string,version=1) {
   const db=await harness.db();
-  await artifactQuery(db,`INSERT INTO artifacts (id,token_id,content,source,format,version)
-    VALUES ($1,'tok_migration','',$2,'markup',$3)`,[id,source,version]);
+  await artifactQuery(db,`INSERT INTO artifacts (id,token_id,source,format,version)
+    VALUES ($1,'tok_migration',$2,'markup',$3)`,[id,source,version]);
 }
 
 async function annotation(id:string,artifactId:string,key:string) {
@@ -118,8 +118,8 @@ describe('app-owned source identity migration contract',()=>{
 
   it('bounds history per artifact and reports rather than partially reserving',async()=>{
     await artifact('aaaaaa','<p id="head">Now</p>',3); const db=await harness.db();
-    await artifactQuery(db,`INSERT INTO artifact_versions (artifact_id,version,content,source,format) VALUES
-      ('aaaaaa',1,'','<p id="past">One</p>','markup'),('aaaaaa',2,'','<p id="older">Two</p>','markup')`);
+    await artifactQuery(db,`INSERT INTO artifact_versions (artifact_id,version,source,format) VALUES
+      ('aaaaaa',1,'<p id="past">One</p>','markup'),('aaaaaa',2,'<p id="older">Two</p>','markup')`);
     const report=await runNodeIdentityMigrationBatch(db,{batchSize:1,maxHistoricalVersionsPerArtifact:1});
     expect(report).toMatchObject({cursor:null,processed:0,done:false,conflicts:[{artifactId:'aaaaaa',reason:'history_limit'}]});
     expect((await artifactQuery(db,'SELECT 1 FROM artifact_source_ids')).rows).toHaveLength(0);
@@ -138,7 +138,7 @@ describe('app-owned source identity migration contract',()=>{
   it('discovers reservations in history without rewriting archived bytes',async()=>{
     await artifact('aaaaaa','<p id="head">Now</p>',3); const db=await harness.db();
     const historical='<p id="past" data-annotation-anchor="old">Then</p>';
-    await artifactQuery(db,`INSERT INTO artifact_versions (artifact_id,version,content,source,format) VALUES ('aaaaaa',1,'',$1,'markup')`,[historical]);
+    await artifactQuery(db,`INSERT INTO artifact_versions (artifact_id,version,source,format) VALUES ('aaaaaa',1,$1,'markup')`,[historical]);
     await runNodeIdentityMigrationBatch(db,{batchSize:1});
     expect((await artifactQuery(db,'SELECT source_id FROM artifact_source_ids ORDER BY source_id')).rows).toEqual([{source_id:'head'},{source_id:'past'}]);
     expect((await artifactQuery<{source:string}>(db,'SELECT document,source FROM artifact_versions WHERE artifact_id=$1 AND version=1',['aaaaaa'])).rows[0].source).toBe(historical);

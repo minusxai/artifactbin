@@ -43,8 +43,8 @@ describe('asset byte quota', () => {
     const { id } = await mintToken('t', user.id);
     const db = await getDb();
     await db.query(
-      `insert into artifacts (id, token_id, user_id, content, format, meta, deleted_at)
-       values ('qdel01', $1, $2, '', 'image', '{"bytes":4000000}'::jsonb, now())`,
+      `insert into artifacts (id, token_id, user_id, format, meta, deleted_at)
+       values ('qdel01', $1, $2, 'image', '{"bytes":4000000}'::jsonb, now())`,
       [id, user.id],
     );
     expect(await assetBytesForToken(id)).toBe(4_000_000);

@@ -14,7 +14,7 @@ const app=createAppServer({actorSecret:secret,indexHtml:async()=>shell});
 const actor=(value:Actor)=>({[ACTOR_HEADER]:signActor(value,secret)});
 const publish=async(visibility:'public'|'unlisted'|'private'='public',source='<h1 id="heading">Readable body</h1>',userId:string|null=null)=>{
  const token=await mintToken('reader',userId);
- const row=await createArtifact(token.id,userId,{format:'markup',content:'',source,meta:{},title:'Document',description:null,visibility});
+ const row=await createArtifact(token.id,userId,{format:'markup',source,meta:{},title:'Document',description:null,visibility});
  return {token,row};
 };
 describe('reader delivery over HTTP',()=>{
@@ -50,7 +50,7 @@ describe('reader delivery over HTTP',()=>{
   const html=await(await app.request(`/a/${row.id}?$count=4`)).text();expect(html).toContain('"authorScript":"globalThis.shouldNotRun=true"');expect(html).not.toContain('<script>globalThis.shouldNotRun');expect(html).toContain('"values":{"count":4}');
  });
  it('keeps datasets on their existing app representation',async()=>{
-  const token=await mintToken('dataset'),row=await createArtifact(token.id,null,{format:'dataset',content:'[]',source:null,meta:{},title:'Data',description:null,visibility:'public'});
+  const token=await mintToken('dataset'),row=await createArtifact(token.id,null,{format:'dataset',source:null,meta:{},title:'Data',description:null,visibility:'public'});
   const response=await app.request(`/a/${row.id}`),html=await response.text();expect(response.status).toBe(200);expect(html).toContain('"format":"dataset"');expect(html).not.toContain('data-mx-initial-story');
  });
 });

@@ -86,7 +86,7 @@ it.each(['2026-09-10T00:01:00Z', '2026-09-10T23:59:00Z'])('history timestamps st
 async function seedHistory(db: Queryable): Promise<void> {
   // One UTC day for the entire fixture, even if seeding crosses midnight.
   const now = Date.now();
-  await db.query(`INSERT INTO artifacts (id, token_id, user_id, content) VALUES ('art0a1', 'tok_a', 'usr_a', 'x'), ('art0a2', 'tok_a', 'usr_a', 'x'), ('art0b1', 'tok_b', 'usr_b', 'x')`);
+  await db.query(`INSERT INTO artifacts (id, token_id, user_id) VALUES ('art0a1', 'tok_a', 'usr_a'), ('art0a2', 'tok_a', 'usr_a'), ('art0b1', 'tok_b', 'usr_b')`);
   const rows: Array<[string, string, string | null, string | null, string | null, string]> = [];
   for (let d = 0; d < 40; d += 1) {
     if (d % 2 === 0) { rows.push(['view', 'art0a1', null, 'browser', `h${d}`.padEnd(32, 'h'), at(d, 1, now)], ['view', 'art0a1', null, 'browser', `h${d}`.padEnd(32, 'h'), at(d, 2, now)]); }
@@ -127,7 +127,7 @@ describe('the dashboard reads the log', () => {
     // legacy row only analytics_events has. Reading the legacy table would
     // answer 1.
     const db = await harness.db();
-    await db.query(`INSERT INTO artifacts (id, token_id, user_id, content) VALUES ('art0a1', 'tok_a', 'usr_a', 'x')`);
+    await db.query(`INSERT INTO artifacts (id, token_id, user_id) VALUES ('art0a1', 'tok_a', 'usr_a')`);
     await ensureEventsSchema(db, EVENTS_SCHEMA);
     await db.query(
       `INSERT INTO ${EVENTS_SCHEMA}.events (id, at, source, subject_kind, subject_id, verb, object_kind, object_id, payload)
@@ -150,7 +150,7 @@ describe('the dashboard reads the log', () => {
     const db = await harness.db();
     const queryable: Queryable = { query: async <T = Record<string, unknown>>(sql: string, params: unknown[] = []) => ({ rows: (await db.query<T>(sql, params)).rows }) };
     setServices({ events: createEvents({ db: queryable, schema: EVENTS_SCHEMA }) });
-    await db.query(`INSERT INTO artifacts (id, token_id, user_id, content) VALUES ('art0a1', 'tok_a', 'usr_a', 'x')`);
+    await db.query(`INSERT INTO artifacts (id, token_id, user_id) VALUES ('art0a1', 'tok_a', 'usr_a')`);
     requestHeaders.set('user-agent', 'Mozilla/5.0 (visitor one)');
     await trackEvent('view', 'art0a1');
     await trackEvent('view', 'art0a1');
@@ -182,7 +182,7 @@ describe('the aggregates, over the log', () => {
 
   it('viewSeriesByUser zero-fills daily buckets, oldest first', async () => {
     const db = await harness.db();
-    await db.query(`INSERT INTO artifacts (id, token_id, user_id, content) VALUES ('art0a1', 'tok_a', 'usr_a', 'x')`);
+    await db.query(`INSERT INTO artifacts (id, token_id, user_id) VALUES ('art0a1', 'tok_a', 'usr_a')`);
     await db.query(
       `INSERT INTO analytics_events (event, artifact_id, created_at) VALUES
        ('view', 'art0a1', now()), ('view', 'art0a1', now()), ('view', 'art0a1', now() - interval '2 days'),
@@ -198,7 +198,7 @@ describe('the aggregates, over the log', () => {
 
   it('dailyViewsByUser buckets all owned artifacts per day, zero-filled to today', async () => {
     const db = await harness.db();
-    await db.query(`INSERT INTO artifacts (id, token_id, user_id, content) VALUES ('art0a1', 'tok_a', 'usr_a', 'x'), ('art0a2', 'tok_a', 'usr_a', 'x')`);
+    await db.query(`INSERT INTO artifacts (id, token_id, user_id) VALUES ('art0a1', 'tok_a', 'usr_a'), ('art0a2', 'tok_a', 'usr_a')`);
     await db.query(
       `INSERT INTO analytics_events (event, artifact_id, created_at) VALUES
        ('view', 'art0a1', now()), ('view', 'art0a1', now()), ('view', 'art0a2', now()),
@@ -227,7 +227,7 @@ describe('the backfill and the dual-write do not say the same thing twice', () =
     const db = await harness.db();
     const queryable: Queryable = { query: async <T = Record<string, unknown>>(sql: string, params: unknown[] = []) => ({ rows: (await db.query<T>(sql, params)).rows }) };
     setServices({ events: createEvents({ db: queryable, schema: EVENTS_SCHEMA }) });
-    await db.query(`INSERT INTO artifacts (id, token_id, user_id, content) VALUES ('art0a1', 'tok_a', 'usr_a', 'x')`);
+    await db.query(`INSERT INTO artifacts (id, token_id, user_id) VALUES ('art0a1', 'tok_a', 'usr_a')`);
 
     // The live path: one counter row and one sentence for the same moment.
     await trackEvent('create', 'art0a1', { userId: 'usr_a' });

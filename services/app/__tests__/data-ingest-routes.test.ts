@@ -39,7 +39,7 @@ const create = async (body: Record<string, unknown>) => {
 /** The stored rows, as a chart would read them — wherever they actually live. */
 const storedRows = async (id: string) => {
   const db = await harness.db();
-  const r = await db.query<{ content: string; meta: unknown }>('SELECT content, meta FROM artifacts WHERE id = $1', [id]);
+  const r = await db.query<{ meta: unknown }>('SELECT meta FROM artifacts WHERE id = $1', [id]);
   return loadDatasetRows(r.rows[0]);
 };
 
@@ -161,15 +161,15 @@ describe('the JSON array path is unchanged', () => {
 });
 
 describe('rows live in the object store, not the database column', () => {
-  it('leaves artifacts.content EMPTY and records the key in meta', async () => {
+  it('stores an object key without a duplicate artifact payload', async () => {
     // The whole point of the change: a 27 MB sheet must not sit in a column
     // that every render and every /edits write reads and parses.
     const { body } = await create({ title: 'stored', dataset: 'month,revenue\n2026-01,120' });
     const db = await harness.db();
-    const row = (await db.query<{ content: string; meta: { objectKey?: string; rowCount?: number } }>(
-      'SELECT content, meta FROM artifacts WHERE id = $1', [body.id],
+    const row = (await db.query<{ meta: { objectKey?: string; rowCount?: number } }>(
+      'SELECT meta FROM artifacts WHERE id = $1', [body.id],
     )).rows[0];
-    expect(row.content).toBe('');
+    expect(row).not.toHaveProperty('content');
     expect(row.meta.objectKey).toMatch(/^dataset\/[0-9a-f]{32}$/);
     // Metadata stays in the row, so listing and binding need no object fetch.
     expect(row.meta.rowCount).toBe(1);
@@ -186,15 +186,8 @@ describe('rows live in the object store, not the database column', () => {
     expect(keys[0]).toBe(keys[1]);
   });
 
-  it('recovers surviving legacy inline JSON when no object key exists', async () => {
-    // Surviving pre-object-store rows are recoverable; corrupt bytes are not.
-    const { body } = await create({ title: 'legacy', dataset: 'a\n1' });
-    const db = await harness.db();
-    await db.query(`UPDATE artifacts SET content = '[{"a":42}]', meta = meta - 'objectKey' - 'catalog' WHERE id = $1`, [body.id]);
-    const row = (await db.query<{ content: string; meta: unknown }>('SELECT content, meta FROM artifacts WHERE id = $1', [body.id])).rows[0];
-    expect(await loadDatasetRows(row)).toEqual([{a:42}]);
-    expect(await loadDatasetRows({content:'invalid JSON',meta:{}})).toEqual([]);
-    expect(await loadDatasetRows({content:'[{"nested":{"a":42}}]',meta:{}})).toEqual([]);
+  it('treats a dataset without an object key as empty', async () => {
+    expect(await loadDatasetRows({meta:{}})).toEqual([]);
   });
 });
 

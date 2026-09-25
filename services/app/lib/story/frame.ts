@@ -70,9 +70,9 @@ async function build(row: ArtifactRow): Promise<LiveFrame> {
     format: row.format,
     title: row.title,
     source: row.format === 'markup' ? row.source : null,
-    content:
+    dataPreview:
       row.format === 'dataset' ? JSON.stringify(await loadDatasetRows(row))
-      : row.format === 'viz' ? row.content
+      : row.format === 'viz' ? row.source
       : null,
     compiledCss: css,
     authorCss: parts?.authorCss ?? null,

@@ -11,7 +11,7 @@ useAppHarness();
 it('keeps newer activity unread when an older rendered revision is acknowledged',async()=>{
  const alice=await createUser({email:'mxmx_test_notify_a@example.com'}),bob=await createUser({email:'mxmx_test_notify_b@example.com'});
  const db=await getDb();
- await db.query("INSERT INTO artifacts(id,token_id,user_id,format,content,visibility) VALUES('notify1','t',$1,'markup','x','public')",[alice.id]);
+ await db.query("INSERT INTO artifacts(id,token_id,user_id,format,visibility) VALUES('notify1','t',$1,'markup','public')",[alice.id]);
  await db.query("INSERT INTO annotations(id,artifact_id,body,author_kind,status,snippet) VALUES('thread','notify1','Hello','human','open','')");
  await db.query("UPDATE artifacts SET link_role='commenter' WHERE id='notify1'");
  const input={id:'thread:bob',artifactId:'notify1',recipientId:bob.id,senderId:alice.id,kind:'reply',source:'comment:thread'};
@@ -38,7 +38,7 @@ it('commits notification and outgoing event together, rolling both back on failu
 it('coalesces an agent reply and resolution, including its own account, and notifies reopening',async()=>{
  const owner=await createUser({email:'mxmx_test_notify_agent@example.com'});
  const db=await getDb();
- await db.query("INSERT INTO artifacts(id,token_id,user_id,format,content,source,visibility) VALUES('thread1','t',$1,'markup','','<p id=\"note\">Hello</p>','public')",[owner.id]);
+ await db.query("INSERT INTO artifacts(id,token_id,user_id,format,source,visibility) VALUES('thread1','t',$1,'markup','<p id=\"note\">Hello</p>','public')",[owner.id]);
  await db.query("INSERT INTO annotations(id,artifact_id,body,author_kind,author_user_id,author_token_id,status,snippet) VALUES('ann_thread','thread1','Please fix','human',$1,'t','open','')",[owner.id]);
  const actor={userId:owner.id,tokenId:'t'};
  const result=await actOnAnnotationFor(actor,'thread1','ann_thread',{reply:'Fixed it',resolve:true},{kind:'agent',label:'helper',transport:'http'});
@@ -54,7 +54,7 @@ it('coalesces an agent reply and resolution, including its own account, and noti
 it('keeps a mention and subsequent replies in one conversation item and hides deleted threads',async()=>{
  const alice=await createUser({email:'mxmx_test_thread_a@example.com'}),bob=await createUser({email:'mxmx_test_thread_b@example.com'});
  const db=await getDb();
- await db.query("INSERT INTO artifacts(id,token_id,user_id,format,content,source,visibility) VALUES('thread2','t',$1,'markup','','<p id=\"note\">Hello</p>','public')",[alice.id]);
+ await db.query("INSERT INTO artifacts(id,token_id,user_id,format,source,visibility) VALUES('thread2','t',$1,'markup','<p id=\"note\">Hello</p>','public')",[alice.id]);
  await db.query("INSERT INTO annotations(id,artifact_id,body,author_kind,author_user_id,author_token_id,status,snippet) VALUES('ann_mentions','thread2','Please fix','human',$1,'t','open','')",[alice.id]);
  await db.query("INSERT INTO relations(subject_kind,subject_id,verb,object_kind,object_id,status,direction,initiated_by) VALUES('user',$1,'join','artifact','thread2','accepted','invitation',$2)",[bob.id,alice.id]);
  await db.query("UPDATE artifacts SET link_role='commenter' WHERE id='thread2'");

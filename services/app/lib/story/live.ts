@@ -58,11 +58,11 @@ export interface ArtifactLiveEvent {
   /** markup source (the document tier) — null for other tiers. */
   source: string | null;
   /**
-   * dataset/viz content, which the page previews inline. image is
+   * Dataset/viz preview data, which the page displays inline. Images are
    * deliberately absent: it renders straight from ./raw, so the client only
    * needs to know the document changed (the editId) to refetch.
    */
-  content: string | null;
+  dataPreview: string | null;
   /**
    * OMITTED when it has not changed since the last frame on this connection.
    * The compiled stylesheet is ~65KB and changes only when new Tailwind

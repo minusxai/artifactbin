@@ -271,8 +271,8 @@ describe('cli-preconditions', () => {
 describe('cli-pages', () => {
   it('paginates artifacts with an opaque cursor without duplicates or leaking another account',async()=>{
    const token=await mintToken('pages');const other=await mintToken('other');
-   for(let i=0;i<5;i++)await createArtifact(token.id,null,{title:String(i),format:'markup',content:'',source:'<p />',meta:{}});
-   await createArtifact(other.id,null,{title:'secret',format:'markup',content:'',source:'<p />',meta:{}});
+   for(let i=0;i<5;i++)await createArtifact(token.id,null,{title:String(i),format:'markup',source:'<p />',meta:{}});
+   await createArtifact(other.id,null,{title:'secret',format:'markup',source:'<p />',meta:{}});
    const ids:string[]=[];let cursor:string|undefined;
    do{const response=await list(request('/api/artifacts?limit=2'+(cursor?'&cursor='+encodeURIComponent(cursor):''),{token:token.token}));expect(response.status).toBe(200);const page=await response.json();expect(page.artifacts.length).toBeLessThanOrEqual(2);ids.push(...page.artifacts.map((row:{id:string})=>row.id));cursor=page.next_cursor;}while(cursor);
    expect(ids).toHaveLength(5);expect(new Set(ids).size).toBe(5);
@@ -281,7 +281,7 @@ describe('cli-pages', () => {
 
   it('lists the current head in version history and refuses foreign or malformed cursors', async()=>{
    const token=await mintToken('history');
-   const artifact=await createArtifact(token.id,null,{title:'head',format:'markup',content:'',source:'<p />',meta:{}});
+   const artifact=await createArtifact(token.id,null,{title:'head',format:'markup',source:'<p />',meta:{}});
    const response=await versions(request(`/api/artifacts/${artifact.id}/versions?limit=1`,{token:token.token}),{params:Promise.resolve({id:artifact.id})});
    expect(response.status).toBe(200);const page=await response.json();expect(page.versions.map((v:{version:number})=>v.version)).toEqual([1]);expect(page.next_cursor).toBeNull();
    const bad=await list(request('/api/artifacts?cursor=garbage',{token:token.token}));expect(bad.status).toBe(400);
@@ -289,7 +289,7 @@ describe('cli-pages', () => {
 
   it('version history can begin at a selected historical version',async()=>{
    const token=await mintToken('selected-history');
-   const artifact=await createArtifact(token.id,null,{title:'one',format:'markup',content:'',source:'<p />',meta:{}});
+   const artifact=await createArtifact(token.id,null,{title:'one',format:'markup',source:'<p />',meta:{}});
    for(const title of ['two','three'])expect((await replace(request(`/api/artifacts/${artifact.id}`,{method:'PUT',token:token.token,json:documentPublicationBody((await getArtifactById(artifact.id))!,{title,source:`<p>${title}</p>`},true)}),{params:Promise.resolve({id:artifact.id})})).status).toBe(200);
    const response=await versions(request(`/api/artifacts/${artifact.id}/versions?version=2&limit=1`,{token:token.token}),{params:Promise.resolve({id:artifact.id})});
    expect(response.status).toBe(200);const page=await response.json();expect(page.versions.map((v:{version:number})=>v.version)).toEqual([2]);expect(page.next_cursor).toBeTruthy();

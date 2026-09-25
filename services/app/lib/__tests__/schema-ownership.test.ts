@@ -72,3 +72,12 @@ it('atomic document operations keep baseline state in the app edit log',()=>{
  expect(renderedSchema().schema).toContain('document_state JSONB');
  expect(renderedSchema().schema).toContain('document_archived_at TIMESTAMPTZ');
 });
+
+it('artifact heads and archived versions have no content column',()=>{
+ const sql=renderedSchema().schema;
+ for(const table of ['artifacts','artifact_versions']){
+  const declaration=sql.split(`CREATE TABLE IF NOT EXISTS app.${table} (`)[1]?.split(');')[0];
+  expect(declaration).toBeDefined();expect(declaration).not.toMatch(/\bcontent TEXT/);
+  expect(sql).toContain(`ALTER TABLE app.${table} DROP COLUMN IF EXISTS content`);
+ }
+});
