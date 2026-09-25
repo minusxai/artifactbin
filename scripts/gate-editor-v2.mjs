@@ -498,8 +498,9 @@ try {
     // and on a phone alike.
     for (const viewport of [{ width: 900, height: 700 }, { width: 390, height: 844 }]) {
       await humanPage.setViewportSize(viewport);
-      check((await humanPage.getByRole('complementary', { name: 'Edit panel' }).count()) === 0,
-        `no side panel at ${viewport.width}px`);
+      // The panel leaves on the window's resize event, a render after the resize resolves.
+      check(await humanPage.getByRole('complementary', { name: 'Edit panel' }).waitFor({ state: 'detached', timeout: 5000 })
+        .then(() => true, () => false), `no side panel at ${viewport.width}px`);
       await humanPage.getByRole('button', { name: 'Open version history', exact: true }).click();
       const sheet = humanPage.getByRole('dialog', { name: 'Version history' });
       await sheet.waitFor({ state: 'visible' });
