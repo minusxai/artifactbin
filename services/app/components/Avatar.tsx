@@ -4,9 +4,9 @@
  * A PERSON, DRAWN. Display only: the generated initial on the colour their id
  * decides, and — when they have one — their picture painted OVER it.
  *
- * The ONE app-side React face: `AvatarCircle` (the picture as a control, on
- * /welcome and /account), the app bar's menu button and the profile header all
- * draw through this. The colour and the letter come from `lib/person-face`, the
+ * The ONE app-side React face: `AvatarCircle` (the uploader on /welcome and
+ * /account, once there IS a picture — with none it draws an empty circle, not
+ * this), the app bar's menu button and the profile header all draw through this. The colour and the letter come from `lib/person-face`, the
  * same module the document kit and the reader rail draw from, so a person is
  * one colour and one letter everywhere.
  *
