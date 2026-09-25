@@ -1063,6 +1063,8 @@ export default function InPlaceEditor({
    * the toolbar acts on the node.
    */
   const InspectIcon = inspector ? INSPECT_ICON[inspector] : null;
+  /** An embed whose inspector can show now: the toolbar offers Edit chart / number / diagram. */
+  const inspectable = !!inspector && mode === 'design' && !preview;
   const selectionBody = inspector && mode === 'design' && !preview ? (
     <section aria-label={INSPECTOR_LABEL[inspector]}>
       <div className="mb-3 flex items-center justify-between">
@@ -1208,7 +1210,7 @@ export default function InPlaceEditor({
       >
         {/* Settings scroll independently; mode, history and Done stay visible.
             The formatting row below owns its own overflow and portalled menus. */}
-        <div className="flex min-w-0 flex-1 items-center gap-2 overflow-x-auto">
+        <div className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto sm:gap-2">
           <input
             aria-label="Title"
             value={title}
@@ -1217,7 +1219,7 @@ export default function InPlaceEditor({
               queue({ title: e.target.value });
             }}
             placeholder="untitled"
-            className="w-36 shrink-0 rounded-[4px] border border-transparent bg-transparent px-1.5 py-1 font-mono text-xs font-semibold text-fg hover:border-edge focus:border-edge-bright focus:outline-none sm:w-48"
+            className="w-0 min-w-[3.5rem] flex-1 rounded-[4px] border border-transparent bg-transparent px-1.5 py-1 font-mono text-xs font-semibold text-fg hover:border-edge focus:border-edge-bright focus:outline-none sm:w-48 sm:flex-none sm:shrink-0"
           />
           {/*
             * WHAT YOU ARE EDITING: app and code are two renderings of the
@@ -1227,14 +1229,15 @@ export default function InPlaceEditor({
             * bar that scrolls this row still shows it.
             */}
           <div role="group" aria-label="Editor view" className="flex shrink-0 items-center rounded-[4px] border border-edge p-0.5">
+            {/* Icon-only on a phone, where every control in this row must fit; the names stay. */}
             {(
               [
                 ['design', 'app', <Paintbrush key="d" size={12} />, mode === 'design' && !queriesOpen],
                 ['code', 'code', <Code key="c" size={12} />, mode === 'code'],
               ] as const
             ).map(([m, label, icon, active]) => (
+              <Tooltip key={m} content={m === 'design' ? 'edit on the page' : 'edit the source'}>
               <button
-                key={m}
                 type="button"
                 aria-label={m === 'design' ? 'Edit on the page' : 'Edit the source'}
                 aria-pressed={active}
@@ -1242,15 +1245,17 @@ export default function InPlaceEditor({
                   setMode(m);
                   setQueriesOpen(false);
                 }}
-                className={`inline-flex h-6 cursor-pointer items-center gap-1 rounded-[3px] px-1.5 font-mono text-[11px] ${
+                className={`inline-flex h-6 cursor-pointer items-center gap-1 rounded-[3px] px-1 font-mono text-[11px] sm:px-1.5 ${
                   active ? 'bg-accent-soft text-accent' : 'text-muted hover:bg-raised hover:text-fg'
                 }`}
               >
                 {icon}
-                <span>{label}</span>
+                <span className="hidden sm:inline">{label}</span>
               </button>
+              </Tooltip>
             ))}
             {queryNotebook.length > 0 && (
+              <Tooltip content="the document's queries">
               <button
                 type="button"
                 aria-label="Show data"
@@ -1261,13 +1266,14 @@ export default function InPlaceEditor({
                   // The notebook is a view over the document: nothing on the page is selected under it.
                   if (!queriesOpen) edit.select(null);
                 }}
-                className={`inline-flex h-6 cursor-pointer items-center gap-1 rounded-[3px] px-1.5 font-mono text-[11px] ${
+                className={`inline-flex h-6 cursor-pointer items-center gap-1 rounded-[3px] px-1 font-mono text-[11px] sm:px-1.5 ${
                   queriesOpen ? 'bg-accent-soft text-accent' : 'text-muted hover:bg-raised hover:text-fg'
                 }`}
               >
                 <Database size={12} />
-                <span>data</span>
+                <span className="hidden sm:inline">data</span>
               </button>
+              </Tooltip>
             )}
           </div>
           <ThemePicker
@@ -1308,11 +1314,11 @@ export default function InPlaceEditor({
           />
         </div>
 
-        <div aria-label="Document actions" className="flex shrink-0 items-center gap-2">
+        <div aria-label="Document actions" className="flex shrink-0 items-center gap-1.5 sm:gap-2">
           <span role="status" className="hidden text-xs text-muted lg:inline">
             {live.status || (live.pending ? 'Saving…' : `v${live.version} · Saved`)}
           </span>
-          {inspector && InspectIcon && mode === 'design' && !preview && (
+          {wide && inspectable && inspector && InspectIcon && (
             <Tooltip content={`${INSPECT_LABEL[inspector]} settings`}>
               <button
                 type="button"
@@ -1325,18 +1331,20 @@ export default function InPlaceEditor({
               </button>
             </Tooltip>
           )}
-          {/* Below the panel breakpoint the panel's tabs are these three, each a bottom sheet. */}
+          {/* Below the panel breakpoint the panel's tabs are these three, each a
+              bottom sheet. The selection one IS Edit chart while a chart is
+              selected: one control, not two beside each other on a phone. */}
           {!wide && (
             <>
-              <Tooltip content="selection settings">
+              <Tooltip content={inspectable && inspector ? `${INSPECT_LABEL[inspector]} settings` : 'selection settings'}>
                 <button
                   type="button"
-                  aria-label="Show selection settings"
+                  aria-label={inspectable && inspector ? INSPECT_LABEL[inspector] : 'Show selection settings'}
                   aria-expanded={sheet === 'selection'}
                   onClick={() => openSheet(sheet === 'selection' ? null : 'selection')}
                   className={narrowTabClass(sheet === 'selection')}
                 >
-                  <SlidersHorizontal size={12} className="shrink-0" />
+                  {inspectable && InspectIcon ? <InspectIcon size={12} className="shrink-0" /> : <SlidersHorizontal size={12} className="shrink-0" />}
                 </button>
               </Tooltip>
               <Tooltip content="version history">

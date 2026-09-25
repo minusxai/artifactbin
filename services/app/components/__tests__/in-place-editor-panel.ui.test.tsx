@@ -277,6 +277,28 @@ describe('below the panel breakpoint', () => {
     }
   });
 
+  it('offers ONE selection button, named for what is selected, so a phone row has no duplicate', async () => {
+    vi.stubGlobal('scrollBy', vi.fn());
+    setWidth(390);
+    mount();
+    expect(screen.getByRole('button', { name: 'Show selection settings' })).toBeTruthy();
+    await fromFrame({ type: STORY_SELECTION_MESSAGE, selection: chart() });
+    expect(screen.getAllByRole('button', { name: 'Edit chart' })).toHaveLength(1);
+    expect(screen.queryByRole('button', { name: 'Show selection settings' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Edit chart' }));
+    expect(screen.getByRole('dialog', { name: 'Selection settings' })).toBeTruthy();
+  });
+
+  it('draws the app / code switch icon-only on a phone, keeping its names', () => {
+    setWidth(390);
+    mount();
+    for (const name of ['Edit on the page', 'Edit the source']) {
+      const button = screen.getByRole('button', { name });
+      const label = [...button.querySelectorAll('span')].find((el) => el.textContent);
+      expect(label?.className).toMatch(/\bhidden\b.*\bsm:inline\b/);
+    }
+  });
+
   it('opens history and comments from the bar, one sheet at a time', () => {
     const onCommentsOpenChange = vi.fn();
     mount({ onCommentsOpenChange });
