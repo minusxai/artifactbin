@@ -168,8 +168,15 @@ describe('typing and block selection', () => {
     host.focus();
     window.getSelection()!.setBaseAndExtent(host.firstChild!, 1, host.firstChild!, 1);
     fireEvent.pointerOver(host);
-    fireEvent.pointerDown(grip()!, { pointerId: 1 });
-    fireEvent.pointerUp(document, { pointerId: 1 });
+    // Pressing the grip starts a drag, which asks what is under the pointer; jsdom has no layout.
+    const elementFromPoint = document.elementFromPoint;
+    document.elementFromPoint = () => host;
+    try {
+      fireEvent.pointerDown(grip()!, { pointerId: 1 });
+      fireEvent.pointerUp(document, { pointerId: 1 });
+    } finally {
+      document.elementFromPoint = elementFromPoint;
+    }
     expect(last(STORY_SELECTION_MESSAGE)).toMatchObject({ selection: { path: '0.1' } });
     expect(window.getSelection()!.rangeCount).toBe(0);
     expect(document.activeElement).not.toBe(host);
