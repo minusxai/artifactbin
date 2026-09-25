@@ -1,3 +1,4 @@
+import {artifactQuery} from '@/lib/artifact-document';
 /**
  * GENERAL ACCESS — the link carries a ROLE, not merely read-or-not.
  *
@@ -52,14 +53,14 @@ async function docOf(
 
 async function head(id: string): Promise<ArtifactRow | null> {
   const db = await harness.db();
-  const r = await db.query<ArtifactRow>('SELECT * FROM artifacts WHERE id = $1', [id]);
+  const r = await artifactQuery<ArtifactRow>(db,'SELECT * FROM artifacts WHERE id = $1', [id]);
   return r.rows[0] ?? null;
 }
 
 /** A row exactly as it was written before the column existed. */
 async function clearLinkRole(id: string): Promise<ArtifactRow> {
   const db = await harness.db();
-  await db.query('UPDATE artifacts SET link_role = NULL WHERE id = $1', [id]);
+  await artifactQuery(db,'UPDATE artifacts SET link_role = NULL WHERE id = $1', [id]);
   return (await head(id))!;
 }
 

@@ -1,3 +1,4 @@
+import {artifactQuery} from '@/lib/artifact-document';
 import {patchMetadata} from '@/__tests__/conditional-request';
 import {observedRequest} from '@/__tests__/conditional-request';
 /** Integrated acceptance for identity, atomic batches and relation-only comments. */
@@ -34,27 +35,27 @@ const bodyIds=(source:string)=>{
 };
 async function history(id:string) {
   const db=await getDb();
-  return {edits:(await db.query('SELECT * FROM artifact_edits WHERE artifact_id=$1 ORDER BY seq',[id])).rows,versions:(await db.query('SELECT * FROM artifact_versions WHERE artifact_id=$1 ORDER BY version',[id])).rows};
+  return {edits:(await artifactQuery(db,'SELECT * FROM artifact_edits WHERE artifact_id=$1 ORDER BY seq',[id])).rows,versions:(await artifactQuery(db,'SELECT * FROM artifact_versions WHERE artifact_id=$1 ORDER BY version',[id])).rows};
 }
 describe('node project through real routes',()=>{
   it('restores the migrated identity of a historical legacy alias after its node was removed',async()=>{
     const s=await setup('<p id="seed">Seed</p>');const db=await getDb();
     const legacy='<p id="intro">Authored</p><p data-annotation-anchor="intro">Legacy</p>';
-    await db.query('UPDATE artifacts SET source=$2 WHERE id=$1',[s.doc.id,legacy]);
+    await artifactQuery(db,'UPDATE artifacts SET document=NULL,source=$2 WHERE id=$1',[s.doc.id,legacy]);
     await runNodeIdentityMigrationBatch(db,{batchSize:10,mint:()=> 'z001'});
     const migrated=await s.read();expect(migrated.markup).toContain('id="z001"');
-    await db.query("INSERT INTO annotations(id,artifact_id,body,author_kind,status,anchor_key,snippet) VALUES('ann_after',$1,'Authored node','human','open','intro','')",[s.doc.id]);
+    await artifactQuery(db,"INSERT INTO annotations(id,artifact_id,body,author_kind,status,anchor_key,snippet) VALUES('ann_after',$1,'Authored node','human','open','intro','')",[s.doc.id]);
     expect((await s.edit({edit_id:migrated.edit_id,old_string:'<p id="z001">Legacy</p>',new_string:''})).status).toBe(200);
     const restored=await revertRoute(await observedRequest(`/api/artifacts/${s.doc.id}/revert`,{method:'POST',token:s.t.token,json:{version:1}}),params(s.doc.id));
     expect(restored.status).toBe(200);
     expect((await s.read()).markup).toContain('<p id="z001">Legacy</p>');
-    expect((await db.query('SELECT anchor_key FROM annotations WHERE id=$1',['ann_after'])).rows).toEqual([{anchor_key:'intro'}]);
+    expect((await artifactQuery(db,'SELECT anchor_key FROM annotations WHERE id=$1',['ann_after'])).rows).toEqual([{anchor_key:'intro'}]);
   });
   it('refuses malformed markup at direct storage instead of bypassing identity validation',async()=>{
     const t=await mintToken('invalid-direct-create');
     await expect(createArtifact(t.id,null,{format:'markup',content:'',source:'<main>',meta:{}})).rejects.toThrow('node-ids: invalid JSX');
     const db=await getDb();
-    expect((await db.query('SELECT id FROM artifacts WHERE token_id=$1',[t.id])).rows).toHaveLength(0);
+    expect((await artifactQuery(db,'SELECT id FROM artifacts WHERE token_id=$1',[t.id])).rows).toHaveLength(0);
   });
   it('echoes generated ids on replacement and rejects malformed JSX without throwing',async()=>{
     const s=await setup('<p id="para">Before</p>');
@@ -113,7 +114,7 @@ describe('node project through real routes',()=>{
     expect(changed.status,await changed.clone().text()).toBe(200);
     const head=await s.read();const nextIds=bodyIds(head.markup) as string[];
     expect(nextIds).not.toContain(removed);
-    const db=await getDb();const ledger=await db.query<{source_id:string;retired_version:number|null}>('SELECT source_id,retired_version FROM artifact_source_ids WHERE artifact_id=$1',[s.doc.id]);
+    const db=await getDb();const ledger=await artifactQuery<{source_id:string;retired_version:number|null}>(db,'SELECT source_id,retired_version FROM artifact_source_ids WHERE artifact_id=$1',[s.doc.id]);
     expect(ledger.rows.find(row=>row.source_id===removed)?.retired_version).toBe(head.version);
   });
   it('stamps direct storage creation rather than relying on an HTTP wire',async()=>{
@@ -123,20 +124,20 @@ describe('node project through real routes',()=>{
   });
   it('normalizes and reserves identities when reverting a pre-identity archive',async()=>{
     const s=await setup('<main id="root"><p id="current">Current</p></main>');const db=await getDb();
-    await db.query('UPDATE artifacts SET version=2 WHERE id=$1',[s.doc.id]);
-    await db.query(`INSERT INTO artifact_versions(artifact_id,version,title,description,format,content,source,meta)
+    await artifactQuery(db,'UPDATE artifacts SET version=2 WHERE id=$1',[s.doc.id]);
+    await artifactQuery(db,`INSERT INTO artifact_versions(artifact_id,version,title,description,format,content,source,meta)
       VALUES($1,1,'old',NULL,'markup','',$2,$3)`,[s.doc.id,'<main><p>Archived</p></main>',JSON.stringify({theme:'modernist',template:null,colorMode:'light'})]);
     const response=await revertRoute(await observedRequest(`/api/artifacts/${s.doc.id}/revert`,{method:'POST',token:s.t.token,json:{version:1}}),params(s.doc.id));
     expect(response.status,await response.clone().text()).toBe(200);
     const head=await s.read();const ids=bodyIds(head.markup) as string[];expect(ids).toHaveLength(2);expect(ids.every(Boolean)).toBe(true);
-    const reserved=await db.query<{source_id:string}>('SELECT source_id FROM artifact_source_ids WHERE artifact_id=$1',[s.doc.id]);
+    const reserved=await artifactQuery<{source_id:string}>(db,'SELECT source_id FROM artifact_source_ids WHERE artifact_id=$1',[s.doc.id]);
     expect(ids.every(id=>reserved.rows.some(row=>row.source_id===id))).toBe(true);
-    const stored=(await db.query<{format:string;meta:Record<string,unknown>}>('SELECT format,meta FROM artifacts WHERE id=$1',[s.doc.id])).rows[0];
+    const stored=(await artifactQuery<{format:string;meta:Record<string,unknown>}>(db,'SELECT format,meta FROM artifacts WHERE id=$1',[s.doc.id])).rows[0];
     expect(stored.format).toBe('markup');expect(stored.meta.colorMode).toBe('light');expect(stored.meta.theme).toBe('modernist');
   });
   it('a refused archived publish leaves head and history unchanged',async()=>{
-    const s=await setup('<p id="safe">Safe</p>');const db=await getDb();await db.query('UPDATE artifacts SET version=2 WHERE id=$1',[s.doc.id]);
-    await db.query(`INSERT INTO artifact_versions(artifact_id,version,title,format,content,source,meta) VALUES($1,1,'bad','markup','',$2,'{}')`,[s.doc.id,'<p id="bad" style="color:red">Bad</p>']);
+    const s=await setup('<p id="safe">Safe</p>');const db=await getDb();await artifactQuery(db,'UPDATE artifacts SET version=2 WHERE id=$1',[s.doc.id]);
+    await artifactQuery(db,`INSERT INTO artifact_versions(artifact_id,version,title,format,content,source,meta) VALUES($1,1,'bad','markup','',$2,'{}')`,[s.doc.id,'<p id="bad" style="color:red">Bad</p>']);
     const before=await history(s.doc.id);const head=await s.read();
     const response=await revertRoute(await observedRequest(`/api/artifacts/${s.doc.id}/revert`,{method:'POST',token:s.t.token,json:{version:1}}),params(s.doc.id));
     expect(response.status).toBe(400);expect((await response.json()).error).toBe('invalid_jsx');
@@ -145,17 +146,17 @@ describe('node project through real routes',()=>{
   it('metadata-only edits preserve source bytes',async()=>{
     const s=await setup('<main id="root"><p id="para">Same</p></main>');
     const legacy="<main id='root'><p>Same</p></main>";
-    await (await getDb()).query('UPDATE artifacts SET source=$2 WHERE id=$1',[s.doc.id,legacy]);
+    await (await getDb()).query('UPDATE artifacts SET document=NULL,source=$2 WHERE id=$1',[s.doc.id,legacy]);
     const response=await patchMetadata(s.t.token,s.doc.id,{title:'Renamed'});expect(response.status).toBe(200);
     expect((await s.read()).markup).toBe(legacy);
   });
   it('reactivates a retired id when an archived source is restored',async()=>{
     const s=await setup('<main id="root"><p id="returning">Back</p></main>');const base=await s.read();
     expect((await s.edit({edit_id:base.edit_id,old_string:'<p id="returning">Back</p>',new_string:''})).status).toBe(200);
-    const db=await getDb();expect((await db.query<{retired_version:number|null}>('SELECT retired_version FROM artifact_source_ids WHERE artifact_id=$1 AND source_id=$2',[s.doc.id,'returning'])).rows[0].retired_version).not.toBeNull();
+    const db=await getDb();expect((await artifactQuery<{retired_version:number|null}>(db,'SELECT retired_version FROM artifact_source_ids WHERE artifact_id=$1 AND source_id=$2',[s.doc.id,'returning'])).rows[0].retired_version).not.toBeNull();
     const restored=await revertRoute(await observedRequest(`/api/artifacts/${s.doc.id}/revert`,{method:'POST',token:s.t.token,json:{version:base.version}}),params(s.doc.id));
     expect(restored.status,await restored.clone().text()).toBe(200);
-    expect((await db.query<{retired_version:number|null}>('SELECT retired_version FROM artifact_source_ids WHERE artifact_id=$1 AND source_id=$2',[s.doc.id,'returning'])).rows[0].retired_version).toBeNull();
+    expect((await artifactQuery<{retired_version:number|null}>(db,'SELECT retired_version FROM artifact_source_ids WHERE artifact_id=$1 AND source_id=$2',[s.doc.id,'returning'])).rows[0].retired_version).toBeNull();
   });
   it.each(['"old"','{"old"}'])('duplicate legacy aliases %s refuse a full replace without mutation',async value=>{
     const s=await setup('<main id="root"><p id="para">Same</p></main>');const before=await s.read();const beforeHistory=await history(s.doc.id);

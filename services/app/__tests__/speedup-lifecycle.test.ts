@@ -1,3 +1,4 @@
+import {artifactQuery} from '@/lib/artifact-document';
 import {patchMetadata} from '@/__tests__/conditional-request';
 import {observedRequest} from '@/__tests__/conditional-request';
 import {expect,it} from 'vitest';
@@ -29,11 +30,11 @@ it('batch, metadata-only, fork and restore persist metadata atomically with fina
 it('failed batch changes neither source nor metadata and legacy reads do not edit',async()=>{
  const {id,token}=await setup(),before=await check(id);
  const failed=await edit(request(`/api/artifacts/${id}/edits`,{method:'POST',token:token.token,json:{edit_id:before.edit_id,edits:[{old_string:'Before',new_string:'After'},{old_string:'missing',new_string:'no'}]}}),ctx(id));expect(failed.status).toBe(400);expect(await getArtifactById(id)).toEqual(before);
- const db=await getDb();await db.query("UPDATE artifacts SET meta=meta-'parsedArtifact' WHERE id=$1",[id]);const legacy=(await getArtifactById(id))!;
+ const db=await getDb();await artifactQuery(db,"UPDATE artifacts SET meta=meta-'parsedArtifact' WHERE id=$1",[id]);const legacy=(await getArtifactById(id))!;
  expect(declarationsForRow(legacy)?.flow.values[0].name).toBe('choice');expect(await getArtifactById(id)).toEqual(legacy);
 });
 it('legacy normalization finalizes metadata after stamping new node ids',async()=>{
  const {id}=await setup(),db=await getDb();
- await db.query("UPDATE artifacts SET source='<p>Legacy</p>',meta=meta-'parsedArtifact' WHERE id=$1",[id]);
+ await artifactQuery(db,"UPDATE artifacts SET document=NULL,source='<p>Legacy</p>',meta=meta-'parsedArtifact' WHERE id=$1",[id]);
  await runNodeIdentityMigrationBatch(db,{batchSize:10});const row=await check(id);expect(row.source).toMatch(/id="/);
 });

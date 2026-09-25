@@ -2,7 +2,7 @@ import {expect,it,vi} from 'vitest';
 import {useAppHarness,request} from './harness';
 import {mintToken} from '@/lib/tokens';
 import {getDb} from '@/lib/db';
-import {getArtifactById,applyEditScoped,getVersionFor,revertArtifactFor} from '@/lib/artifacts';
+import {getArtifactById,applyEditScoped,getVersionFor,revertArtifactFor,forkArtifact} from '@/lib/artifacts';
 import {POST as createRoute} from '@/app/api/artifacts/route';
 useAppHarness();
 async function create(){const token=await mintToken('mxmx_test_jsonb');const response=await createRoute(request('/api/artifacts',{method:'POST',token:token.token,json:{markup:'<section><p>Alpha</p><p>Beta</p></section>'}}));expect(response.status).toBe(201);const {id}=await response.json();return {token,id,actor:{tokenId:token.id,userId:null},row:(await getArtifactById(id))!};}
@@ -32,4 +32,25 @@ it('edits archive JSONB, old archives migrate on read, and restore stays JSONB',
  let archive=(await db.query('SELECT * FROM artifact_versions WHERE artifact_id=$1',[id])).rows[0];expect(archive.source).toBeNull();expect(archive.document).not.toBeNull();
  await db.query('UPDATE artifact_versions SET document=NULL,source=$2 WHERE artifact_id=$1',[id,row.source]);expect((await getVersionFor(actor,id,1))?.source).toBe(row.source);archive=(await db.query('SELECT * FROM artifact_versions WHERE artifact_id=$1',[id])).rows[0];expect(archive.source).toBeNull();expect(archive.document).not.toBeNull();
  const restored=await revertArtifactFor(actor,id,1,{expectedVersion:2});expect(restored&&'source'in restored&&restored.source).toBe(row.source);expect((await stored(id)).document).not.toBeNull();
+});
+it('concurrent first loads converge without adding authored edits',async()=>{
+ const {id,row}=await create(),db=await getDb();await db.query('UPDATE artifacts SET source=$2,document=NULL WHERE id=$1',[id,row.source]);
+ const reads=await Promise.all(Array.from({length:8},()=>getArtifactById(id)));expect(reads.every(r=>r?.source===row.source&&r?.version===1)).toBe(true);
+ expect((await db.query('SELECT count(*)::int n FROM artifact_edits WHERE artifact_id=$1',[id])).rows[0].n).toBe(1);
+ expect((await stored(id)).source).toBeNull();
+});
+it('a reader without history access cannot trigger conversion of an archived document',async()=>{
+ const {id,row,actor}=await create(),db=await getDb();await applyEditScoped(actor,id,{baseEditId:row.edit_id,change:{oldString:'Alpha',newString:'Edited'}});
+ await db.query('UPDATE artifact_versions SET document=NULL,source=$2 WHERE artifact_id=$1',[id,row.source]);
+ const foreign=await mintToken('mxmx_test_jsonb_foreign');expect(await getVersionFor({tokenId:foreign.id,userId:null},id,1)).toBeNull();
+ expect((await db.query('SELECT document,source FROM artifact_versions WHERE artifact_id=$1',[id])).rows[0]).toEqual({document:null,source:row.source});
+});
+it('forking a JSONB document creates another JSONB head with its own history',async()=>{
+ const {id,row,actor}=await create();const result=await forkArtifact(actor,row);expect(result).not.toBeInstanceOf(Response);if(result instanceof Response)throw new Error(await result.text());
+ expect(result.artifact.id).not.toBe(id);expect(result.artifact.source).toContain('Alpha');expect(result.artifact.version).toBe(1);expect((await stored(result.artifact.id)).source).toBeNull();expect((await stored(result.artifact.id)).document).not.toBeNull();
+ expect((await getArtifactById(id))?.edit_id).toBe(row.edit_id);
+});
+it('invalid publications leave JSONB and the existing edit protocol untouched',async()=>{
+ const {id,row,actor}=await create(),before=await stored(id);const bad=await applyEditScoped(actor,id,{baseEditId:row.edit_id,change:{oldString:'Alpha',newString:'<script>run()</script>'}});expect(bad).toBeInstanceOf(Response);
+ expect(await stored(id)).toEqual(before);expect((await getArtifactById(id))?.edit_id).toBe(row.edit_id);
 });

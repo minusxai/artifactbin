@@ -10,11 +10,10 @@ export function sourceStorage(format:string,source:string|null):{source:string|n
 }
 export function decodeArtifactDocument<T>(value:T):T {
  const row=value as T&SourceRow;
- if(row.document==null)return value;
  const {document,...rest}=row;
- return {...rest,source:decodeDocument(document)} as T;
+ return {...rest,...(document==null?{}:{source:decodeDocument(document)})} as T;
 }
-export async function artifactQuery<T>(db:Queryable,sql:string,params:unknown[]=[]):Promise<{rows:T[]}> {
+export async function artifactQuery<T=Record<string,unknown>>(db:Queryable,sql:string,params:unknown[]=[]):Promise<{rows:T[]}> {
  const result=await db.query<T>(sql,params);
  return {...result,rows:result.rows.map(decodeArtifactDocument)};
 }
