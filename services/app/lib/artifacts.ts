@@ -1558,15 +1558,17 @@ const EDIT_CAS_RETRIES = 3;
  */
 export const MAX_STALE_EDITS = 200;
 
-/** The log rows written after `baseEditId`, oldest→newest; null when that id is unknown here. */
-async function interveningEdits(q: Queryable, artifactId: string, baseEditId: string): Promise<EditRecord[] | null> {
+/** Bound the log to the exact head snapshot being reconstructed. Commits after
+ * that read are handled by atomic guards, never inverse-applied to older source. */
+async function interveningEdits(q: Queryable, artifactId: string, baseEditId: string, headEditId:string): Promise<EditRecord[] | null> {
   const r = await q.query<{
     seq: string; edit_id: string; splice_start: number; removed: string; inserted: string; span_start: number; span_end: number; changes: BatchChange[] | string | null; document_state?:{kind?:string};
   }>(
     `SELECT seq, edit_id, splice_start, removed, inserted, span_start, span_end, changes, document_state FROM artifact_edits
      WHERE artifact_id = $1 AND seq > (SELECT seq FROM artifact_edits WHERE artifact_id = $1 AND edit_id = $2)
+     AND seq <= (SELECT seq FROM artifact_edits WHERE artifact_id = $1 AND edit_id = $3)
      ORDER BY seq`,
-    [artifactId, baseEditId],
+    [artifactId, baseEditId,headEditId],
   );
   // The subselect yields NULL for an unknown base, and `seq > NULL` matches
   // nothing — indistinguishable from "no intervening edits", so confirm the
@@ -1629,7 +1631,7 @@ export async function applyEditScoped(actor: TokenActor, id: string, input: Edit
     // 1. Resolve the claimed base: head itself, or a still-logged ancestor.
     let intervening: EditRecord[] = [];
     if (input.baseEditId !== head.edit_id) {
-      const found = await interveningEdits(db, id, input.baseEditId);
+      const found = await interveningEdits(db, id, input.baseEditId,head.edit_id);
       // Unknown, or so far behind that rebasing is worse than re-reading —
       // both answer with head, which is all the caller needs either way.
       if (found === null || new Set(found.map((edit) => edit.seq)).size > MAX_STALE_EDITS) {

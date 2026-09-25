@@ -68,12 +68,8 @@ export function applyDocumentPatch(before:unknown,patches:readonly DocumentPatch
 }
 export function documentPatchSql(column:string,patches:DocumentPatch[],initial:unknown[]):{expression:string;params:unknown[]}{
  const params=[...initial,JSON.stringify(patches)],bound=`$${params.length}::jsonb`;
- const expression=`(WITH RECURSIVE document_steps(value,step) AS (
-  SELECT ${column},0
-  UNION ALL
-  SELECT ${documentPatchStepSql('d.value',`(${bound}->d.step)`)},d.step+1
-  FROM document_steps d WHERE d.step<jsonb_array_length(${bound})
- ) SELECT value FROM document_steps WHERE step=jsonb_array_length(${bound}))`;
+ const stages=patches.map((_,step)=>`CROSS JOIN LATERAL (SELECT ${documentPatchStepSql(step?`s${step-1}.value`:'base.value',`(${bound}->${step})`)} AS value OFFSET 0) s${step}`);
+ const expression=patches.length?`(SELECT s${patches.length-1}.value FROM (SELECT ${column} AS value OFFSET 0) base ${stages.join(' ')})`:column;
  return {expression,params};
 }
 
