@@ -48,7 +48,7 @@ describe('the chrome the selection drives', () => {
     expect(screen.getByLabelText('Selection breadcrumb').textContent).toContain('>Paragraph');
     expect(screen.queryByRole('button', { name: 'Paste Markdown' })).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: 'Insert' }));
-    expect(fireEvent.mouseDown(screen.getByLabelText('Image URL'))).toBe(true);
+    expect(screen.getByRole('button', { name: 'Image…' })).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Paste Markdown' }));
     expect(screen.getByLabelText('Markdown to insert')).toBeTruthy();
   });

@@ -34,6 +34,7 @@ import {
   STORY_EDIT_KEY_MESSAGE,
   STORY_EDIT_READY_MESSAGE,
   STORY_IMAGE_DROP_MESSAGE,
+  STORY_IMAGE_REPLACE_MESSAGE,
   STORY_SELECTION_MESSAGE,
   STORY_INLINE_MESSAGE,
   STORY_PASTE_MESSAGE,
@@ -71,6 +72,12 @@ export const EDIT_EMBED_SELECTED_ATTR = 'data-mx-embed-selected';
 export const EDIT_HOVER_ATTR = 'data-mx-edit-hover';
 /** Marks nodes the page pointed at (STORY_SPOTLIGHT_MESSAGE) — outlined, never selected. */
 export const EDIT_SPOTLIGHT_ATTR = 'data-mx-edit-spotlight';
+/** Marks the image a dragged file would REPLACE if dropped now. */
+export const EDIT_DROP_REPLACE_ATTR = 'data-mx-drop-replace';
+/** The "Drop to replace" label drawn over that image — chrome, never document. */
+const DROP_REPLACE_LABEL_ATTR = 'data-mx-drop-replace-label';
+/** That image's mark: a dashed neutral line and a faint veil, so "drop here" never reads as selected. */
+const DROP_REPLACE_CSS = 'outline: 2px dashed rgba(100, 116, 139, 0.9) !important; outline-offset: 3px !important; opacity: 0.75 !important;';
 
 /** The story root while editing: focusable, so a block selection keeps the keyboard in the document. */
 const EDIT_ROOT_ATTR = 'data-mx-edit-root';
@@ -92,6 +99,7 @@ const EDIT_MODE_CSS = [
   `[${EDIT_SELECTED_ATTR}="block"][${EDIT_SELECTED_ATTR}], [${EDIT_EMBED_SELECTED_ATTR}="block"][${EDIT_EMBED_SELECTED_ATTR}] { ${SELECTION_PRESENTATION.editSelectedCss} }`,
   `[data-mx-block-selected][data-mx-block-selected] { ${SELECTION_PRESENTATION.editSelectedCss} }`,
   `[${EDIT_SPOTLIGHT_ATTR}][${EDIT_SPOTLIGHT_ATTR}] { ${SELECTION_PRESENTATION.spotlightCss} }`,
+  `[${EDIT_DROP_REPLACE_ATTR}][${EDIT_DROP_REPLACE_ATTR}] { ${DROP_REPLACE_CSS} }`,
 ].join('\n');
 
 const EDIT_CSS_ATTR = 'data-mx-edit-css';
@@ -493,6 +501,102 @@ export function createFrameEditSession({
     post({ type: STORY_EDIT_KEY_MESSAGE, key: event.key });
   };
 
+  // ── replacing an image ────────────────────────────────────────────────────
+  /** Whether the source node at a body path is a plain `<img>` — the only image this edits. */
+  const isImagePath = (path: string | null): path is string => {
+    const node = path ? resolveJsxNodeAtPath(nodes, path) : null;
+    return node?.type === 'element' && !node.isComponent && node.tag === 'img';
+  };
+  /** The plain `<img>` an event landed on, or null. Component-drawn images and CSS backgrounds are not. */
+  const replaceableImageAt = (target: EventTarget | null): HTMLElement | null => {
+    const el = selectableAt(target);
+    return el && el.localName === 'img' && isImagePath(el.getAttribute(AST_PATH_ATTR)) ? (el as HTMLElement) : null;
+  };
+
+  /**
+   * "Drop to replace": the image under a dragged file carries a mark, and a
+   * label sits over it. An `<img>` cannot hold a pseudo-element, so the label
+   * is its own element — styled through CSSOM (the document's CSP refuses a
+   * style attribute) and transparent to the pointer, so the drop still lands
+   * on the image.
+   */
+  /** The latest select request; a waiting reveal gives way to any newer one. */
+  let selectRequest = 0;
+  let dropTarget: HTMLElement | null = null;
+  let dropLabel: HTMLElement | null = null;
+  const markDropTarget = (el: HTMLElement | null) => {
+    if (el !== dropTarget) {
+      dropTarget?.removeAttribute(EDIT_DROP_REPLACE_ATTR);
+      dropLabel?.remove();
+      dropLabel = null;
+      dropTarget = el;
+      if (!el) return;
+      el.setAttribute(EDIT_DROP_REPLACE_ATTR, '');
+      dropLabel = doc.createElement('div');
+      dropLabel.setAttribute(DROP_REPLACE_LABEL_ATTR, '');
+      dropLabel.setAttribute('aria-hidden', 'true');
+      dropLabel.textContent = 'Drop to replace';
+      Object.assign(dropLabel.style, {
+        position: 'fixed',
+        zIndex: '46',
+        pointerEvents: 'none',
+        transform: 'translate(-50%, -50%)',
+        padding: '4px 10px',
+        borderRadius: '999px',
+        background: 'rgba(15, 23, 42, 0.78)',
+        color: '#fff',
+        font: '500 12px/1.4 system-ui, sans-serif',
+        whiteSpace: 'nowrap',
+      });
+      doc.body.append(dropLabel);
+    }
+    if (el && dropLabel) {
+      const r = el.getBoundingClientRect();
+      dropLabel.style.left = `${r.x + r.width / 2}px`;
+      dropLabel.style.top = `${r.y + r.height / 2}px`;
+    }
+  };
+
+  /** Parts of a line: never a gap of their own — the block holding them is. */
+  const LINE_PARTS = new Set(['span', 'strong', 'b', 'em', 'i', 'a', 'code', 'br', 'small', 'sup', 'sub', 's', 'del', 'u', 'mark']);
+  const isLinePart = (el: Element) => {
+    const node = resolveJsxNodeAtPath(nodes, el.getAttribute(AST_PATH_ATTR) ?? '');
+    return node?.type === 'element' && LINE_PARTS.has(node.tag);
+  };
+  /**
+   * The gap a file dropped at `clientY` over `target` lands in: over a block,
+   * the side of it the pointer is on; over a container's own space (its
+   * padding, the space between its blocks), before the first of its blocks
+   * below the pointer, or after the last. Null outside every block.
+   */
+  const dropGapAt = (target: EventTarget | null, clientY: number): { path: string; side: 'before' | 'after' } | null => {
+    let block = selectableAt(target);
+    while (block && isLinePart(block)) block = selectableAt(block.parentElement);
+    if (!block) return null;
+    const kids = [...block.querySelectorAll(`[${AST_PATH_ATTR}]`)].filter(
+      (el) => el.parentElement?.closest(`[${AST_PATH_ATTR}]`) === block && !isLinePart(el),
+    );
+    const sideOf = (el: Element) => {
+      const r = el.getBoundingClientRect();
+      return clientY < r.top + r.height / 2 ? ('before' as const) : ('after' as const);
+    };
+    if (kids.length === 0) return { path: block.getAttribute(AST_PATH_ATTR)!, side: sideOf(block) };
+    const below = kids.find((el) => sideOf(el) === 'before');
+    return below
+      ? { path: below.getAttribute(AST_PATH_ATTR)!, side: 'before' }
+      : { path: kids[kids.length - 1].getAttribute(AST_PATH_ATTR)!, side: 'after' };
+  };
+
+  /** A double-click on an image opens the replace picker; the page owns the picker. */
+  const onDoubleClick = (event: MouseEvent) => {
+    const img = replaceableImageAt(event.target);
+    if (!img) return;
+    event.preventDefault();
+    const path = img.getAttribute(AST_PATH_ATTR)!;
+    reportSelection(describeWithQuote(img));
+    post({ type: STORY_IMAGE_REPLACE_MESSAGE, path });
+  };
+
   /**
    * Paste and drop are ONE door: both carry a DataTransfer, and an image in
    * either means the same insert. The event is taken over only when an image is
@@ -501,12 +605,24 @@ export function createFrameEditSession({
    * than silently eaten.
    */
   const onImageTransfer = (event: ClipboardEvent | DragEvent) => {
-    if (root && !root.contains(event.target as Node)) return;
+    // A selected image holds no focus, so ⌘V lands on the unfocused <body> —
+    // outside a rooted session's story, yet plainly meant for that image.
+    const onBody = event.target === doc.body || event.target === doc.documentElement;
+    const forSelectedImage = event.type === 'paste' && onBody && isImagePath(selectedPath);
+    if (root && !root.contains(event.target as Node) && !forSelectedImage) return;
     const data = 'clipboardData' in event ? event.clipboardData : event.dataTransfer;
     const file = imageFileFromTransfer(data);
+    if (event.type === 'drop') markDropTarget(null);
     if (!file) return;
     event.preventDefault();
-    post({ type: STORY_IMAGE_DROP_MESSAGE, file });
+    // Onto an image, or pasted while one is selected: that image is replaced.
+    const target =
+      event.type === 'drop'
+        ? replaceableImageAt(event.target)?.getAttribute(AST_PATH_ATTR)
+        : isImagePath(selectedPath) ? selectedPath : null;
+    // Not onto an image: a drop lands in the gap it was dropped in; a paste is placed by the page.
+    const at = !target && event.type === 'drop' ? { at: dropGapAt(event.target, (event as DragEvent).clientY) } : {};
+    post({ type: STORY_IMAGE_DROP_MESSAGE, file, ...(target ? { target } : {}), ...at });
   };
 
   /**
@@ -515,9 +631,21 @@ export function createFrameEditSession({
    * so it is prevented only while a FILE is being dragged.
    */
   const onDragOver = (event: DragEvent) => {
-    if (root && !root.contains(event.target as Node)) return;
-    if (event.dataTransfer?.types?.includes('Files')) event.preventDefault();
+    if (root && !root.contains(event.target as Node)) {
+      markDropTarget(null);
+      return;
+    }
+    const files = !!event.dataTransfer?.types?.includes('Files');
+    if (files) event.preventDefault();
+    markDropTarget(files ? replaceableImageAt(event.target) : null);
   };
+  /** Leaving the image (or the window) takes the mark; entering another element re-marks on its dragover. */
+  const onDragLeave = (event: DragEvent) => {
+    if (!dropTarget) return;
+    const next = event.relatedTarget as Node | null;
+    if (!next || !dropTarget.contains(next)) markDropTarget(null);
+  };
+  const onDragEnd = () => markDropTarget(null);
 
   let scrollQueued = false;
   const onScroll = () => {
@@ -550,6 +678,9 @@ export function createFrameEditSession({
   doc.addEventListener('paste', onLegacyPaste, true);
   doc.addEventListener('drop', onImageTransfer as EventListener, true);
   doc.addEventListener('dragover', onDragOver as EventListener, true);
+  doc.addEventListener('dragleave', onDragLeave as EventListener, true);
+  doc.addEventListener('dragend', onDragEnd, true);
+  doc.addEventListener('dblclick', onDoubleClick, true);
   win.addEventListener('scroll', onScroll, { passive: true });
   win.addEventListener('resize', onScroll, { passive: true });
 
@@ -882,13 +1013,41 @@ export function createFrameEditSession({
           post({ type: STORY_COMMITTED_MESSAGE });
           break;
         case STORY_SELECT_MESSAGE: {
+          const request = ++selectRequest;
           if (!message.path) {
             reportSelection(null);
             break;
           }
-          const el = scope.querySelector(`[${AST_PATH_ATTR}="${CSS.escape(message.path)}"]`);
-          if (el) selectBlock(el);
-          else reportSelection(null);
+          const path = message.path;
+          const described = () => {
+            const el = scope.querySelector(`[${AST_PATH_ATTR}="${CSS.escape(path)}"]`);
+            if (el && message.nodeId && el.id !== message.nodeId) return null; // the old document, still drawn
+            return el && describeSelection(el, nodes) ? { el } : null;
+          };
+          /** Scroll it to the middle — and again once an image has its height, or it lands half-shown. */
+          const bringIntoView = (el: Element) => {
+            const go = () => el.scrollIntoView?.({ block: 'center', behavior: 'smooth' });
+            if (el.localName === 'img' && !(el as HTMLImageElement).complete) el.addEventListener('load', go, { once: true });
+            go();
+          };
+          const found = described();
+          if (found || !message.reveal) {
+            if (found) selectBlock(found.el);
+            else reportSelection(null);
+            if (found && message.reveal) bringIntoView(found.el);
+            break;
+          }
+          // Just inserted: the new document may not be drawn yet. Wait for it, briefly.
+          let tries = 0;
+          const wait = () => {
+            if (disposed || request !== selectRequest) return;
+            const late = described();
+            if (late) {
+              selectBlock(late.el);
+              bringIntoView(late.el);
+            } else if (++tries < 60) win.setTimeout(wait, 25);
+          };
+          win.setTimeout(wait, 25);
           break;
         }
         case STORY_SPOTLIGHT_MESSAGE:
@@ -917,6 +1076,10 @@ export function createFrameEditSession({
       doc.removeEventListener('paste', onLegacyPaste, true);
       doc.removeEventListener('drop', onImageTransfer as EventListener, true);
       doc.removeEventListener('dragover', onDragOver as EventListener, true);
+      doc.removeEventListener('dragleave', onDragLeave as EventListener, true);
+      doc.removeEventListener('dragend', onDragEnd, true);
+      doc.removeEventListener('dblclick', onDoubleClick, true);
+      markDropTarget(null);
       win.removeEventListener('scroll', onScroll);
       win.removeEventListener('resize', onScroll);
       for (const el of scope.querySelectorAll(`[${EDIT_SELECTED_ATTR}], [${EDIT_EMBED_SELECTED_ATTR}]`)) {

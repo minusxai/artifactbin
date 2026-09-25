@@ -67,6 +67,16 @@ describe('describeSelection', () => {
     expect(sel.ancestors.map((a) => a.hint)).toEqual(['flex']);
   });
 
+  it('offers a CARD as a breadcrumb — the container you insert into and comment on', () => {
+    const src = '<div className="p-8"><Card><CardContent><p>in card</p></CardContent></Card></div>';
+    const parsed = parseJsx(src);
+    if (!parsed.ok) throw new Error('fixture does not parse');
+    document.body.innerHTML = '<div data-mx-ast="0"><div data-mx-ast="0.0" class="rounded-xl border">'
+      + '<div data-mx-ast="0.0.0" class="p-6"><p data-mx-ast="0.0.0.0">in card</p></div></div></div>';
+    const sel = describeSelection(document.querySelector('[data-mx-ast="0.0.0.0"]')!, parsed.nodes)!;
+    expect(sel.ancestors.map((a) => [a.path, a.tag])).toEqual([['0.0', 'Card']]);
+  });
+
   it('describes a component as an embed', () => {
     const at = mount();
     expect(describeSelection(at('0.2'), nodes)).toMatchObject({ kind: 'embed', tag: 'Question' });

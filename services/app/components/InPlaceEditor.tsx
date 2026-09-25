@@ -52,8 +52,21 @@ import { useArtifactVersions, type ArtifactVersionSnapshot } from '@/lib/story/u
 import { storyUpdateParts } from '@/lib/story/update-parts';
 import { isWebUrl } from '@/lib/story/asset-url';
 import { imageRawUrl, type RefDataMap } from '@/lib/story/ref-data';
-import { bodyPathToSourcePath } from '@/lib/story/edit-compose';
-import { insertImageInJsx, removeJsxNodeAtPath } from '@/lib/data/story/jsx-edit';
+import { bodyPathToSourcePath, sourcePathToBodyPath } from '@/lib/story/edit-compose';
+import {
+  freshNodeId,
+  imageAltInJsx,
+  imageTargetInJsx,
+  nodeTargetInJsx,
+  placeImageInJsx,
+  removeJsxNodeAtPath,
+  replaceImageSrcInJsx,
+  setImageAltInJsx,
+  type JsxImageTarget,
+  type JsxInsertAnchor,
+} from '@/lib/data/story/jsx-edit';
+import ImageDialog, { IMAGE_ACCEPT, type ChosenImage, type ImageChoice } from '@/components/views/story/ImageDialog';
+import type { ImageDropPlacement } from '@/lib/story/use-in-place-edit';
 import {
   readQuestionChart,
   updateQuestionChartInJsx,
@@ -231,7 +244,6 @@ export default function InPlaceEditor({
     writeEditPanelCollapsed(next);
   }, []);
   const [sheet, setSheet] = useState<'selection' | 'history' | null>(null);
-  const imageInputRef = useRef<HTMLInputElement>(null);
 
   /** Read by callbacks that run after an await, when `source` may have moved on. */
   const sourceRef = useRef(source);
@@ -405,7 +417,11 @@ export default function InPlaceEditor({
     window.addEventListener('keydown', onKey, true);
     return () => window.removeEventListener('keydown', onKey, true);
   }, [applyHistory]);
-  const insertImageRef = useRef<((file: File) => void) | null>(null);
+  /** The image doors the frame reaches (defined below, after commitStructural and the uploads). */
+  const imageDoorsRef = useRef<{
+    dropped: (file: File, where?: ImageDropPlacement) => void;
+    pick: (bodyPath: string) => void;
+  } | null>(null);
   const edit = useInPlaceEdit({
     frameRef,
     runtimeRef,
@@ -415,8 +431,11 @@ export default function InPlaceEditor({
     onHistory: (direction) => {
       void applyHistory(direction);
     },
-    onImageDrop: useCallback((file: File) => {
-      insertImageRef.current?.(file);
+    onImageDrop: useCallback((file: File, where?: ImageDropPlacement) => {
+      imageDoorsRef.current?.dropped(file, where);
+    }, []),
+    onImageReplaceRequest: useCallback((path: string) => {
+      imageDoorsRef.current?.pick(path);
     }, []),
     editing: mode === 'design' && !preview,
     sourceRef,
@@ -850,59 +869,54 @@ export default function InPlaceEditor({
 
   // ── images ────────────────────────────────────────────────────────────────
   const [imageMenuOpen, setImageMenuOpen] = useState(false);
-  const [imageUrlDraft, setImageUrlDraft] = useState('');
   /**
-   * The URL half of insert-image: the browser door ingests-and-owns it
-   * (POST {imageUrl} — the same lib/web-ingest path the agent door runs), and
-   * the source gets `ref:<id>` exactly like an upload. The door's refusal is
-   * SHOWN verbatim-ish: it names the URL and the reason, which is the point.
+   * The insert/replace dialog, with its TARGET captured when it opened: focus
+   * moving into the dialog can clear the document's selection, and the upload
+   * is async — the node the person was on is remembered, not re-read.
    */
-  const insertImageFromUrl = useCallback(async () => {
-    const url = imageUrlDraft.trim();
-    if (!url) return;
-    setImageError(null);
+  const [imageDialog, setImageDialog] = useState<
+    { mode: 'insert'; anchor: JsxInsertAnchor | null } | { mode: 'replace'; target: JsxImageTarget } | null
+  >(null);
+
+  /**
+   * The URL door: the browser ingests-and-owns it (POST {imageUrl} — the same
+   * lib/web-ingest path the agent door runs), and the source gets `ref:<id>`
+   * exactly like an upload. The door's refusal names the URL and the reason,
+   * which is the point, so it is handed back as the sentence to show.
+   */
+  const importImageUrl = useCallback(async (url: string): Promise<ImageChoice> => {
     const res = await fetch('/api/my/artifacts?visibility=unlisted', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ imageUrl: url }),
     }).catch(() => null);
-    if (!res) {
-      setImageError('Import failed — check your connection and try again.');
-      return;
-    }
+    if (!res) return { ok: false, error: 'Import failed — check your connection and try again.' };
     if (!res.ok) {
       const body = (await res.json().catch(() => null)) as { error?: string; details?: string[] } | null;
-      setImageError(
-        body?.details?.[0] ??
-          (res.status === 403 ? 'You have reached your artifact limit.' : 'Could not import that image.'),
-      );
-      return;
+      return {
+        ok: false,
+        error: body?.details?.[0] ?? (res.status === 403 ? 'You have reached your artifact limit.' : 'Could not import that image.'),
+      };
     }
-    const created = (await res.json()) as { id: string; rawUrl?: string };
-    commitStructural(insertImageInJsx(sourceRef.current, created.id), refDataFor(created));
-    setImageUrlDraft('');
-    setImageMenuOpen(false);
-  }, [imageUrlDraft, commitStructural]);
+    return { ok: true, image: (await res.json()) as ChosenImage };
+  }, []);
 
-  const insertImage = useCallback(
-    async (file: File) => {
-      if (!file.type.startsWith('image/')) return;
-      setImageError(null);
-      const res = await fetch('/api/my/artifacts?visibility=unlisted', {
-        method: 'POST',
-        headers: { 'Content-Type': file.type },
-        body: file,
-      }).catch(() => null);
-      if (!res) {
-        setImageError('Upload failed — check your connection and try again.');
-        return;
-      }
-      if (!res.ok) {
-        const code = await res
-          .json()
-          .then((b) => b?.error)
-          .catch(() => null);
-        setImageError(
+  /** The upload door — one type list, one size cap — for every insert and every replace. */
+  const uploadImage = useCallback(async (file: File): Promise<ImageChoice> => {
+    const res = await fetch('/api/my/artifacts?visibility=unlisted', {
+      method: 'POST',
+      headers: { 'Content-Type': file.type },
+      body: file,
+    }).catch(() => null);
+    if (!res) return { ok: false, error: 'Upload failed — check your connection and try again.' };
+    if (!res.ok) {
+      const code = await res
+        .json()
+        .then((b) => b?.error)
+        .catch(() => null);
+      return {
+        ok: false,
+        error:
           res.status === 413
             ? 'That image is too large to upload.'
             : res.status === 403
@@ -910,15 +924,129 @@ export default function InPlaceEditor({
               : code === 'invalid_image'
                 ? 'That image type is not supported (png, jpeg, webp, gif, svg).'
                 : 'Could not upload that image.',
-        );
+      };
+    }
+    return { ok: true, image: (await res.json()) as ChosenImage };
+  }, []);
+
+  /** Typing the document has not committed yet must be in the source an image edit composes against. */
+  const drainTyping = useCallback(async (): Promise<boolean> => {
+    try {
+      await editRef.current?.commitPending();
+      return true;
+    } catch (error) {
+      setImageError(error instanceof Error ? error.message : 'Could not change the document.');
+      return false;
+    }
+  }, []);
+
+  /** The anchor for "the node the person is on", captured from a BODY path now. */
+  const anchorAt = useCallback((bodyPath: string | null | undefined): JsxInsertAnchor | null => {
+    if (!bodyPath) return null;
+    return nodeTargetInJsx(sourceRef.current, bodyPathToSourcePath(sourceRef.current, bodyPath));
+  }, []);
+
+  /**
+   * INSERT — the one path every insert door ends in: placed at the anchor
+   * (lib/data/story/jsx-edit placeImageInJsx), one structural commit (one undo
+   * step), then selected and scrolled into view so it is plainly there.
+   */
+  const insertImage = useCallback(
+    async (anchor: JsxInsertAnchor | null, image: ChosenImage) => {
+      if (!(await drainTyping())) return;
+      const nodeId = freshNodeId(sourceRef.current);
+      const placed = placeImageInJsx(sourceRef.current, image.id, anchor, { nodeId });
+      if (placed.source === sourceRef.current || !placed.path) return;
+      commitStructural(placed.source, refDataFor(image));
+      const bodyPath = sourcePathToBodyPath(placed.source, placed.path);
+      if (bodyPath) editRef.current?.select(bodyPath, { reveal: true, nodeId });
+    },
+    [commitStructural, drainTyping],
+  );
+
+  /**
+   * REPLACE — the one path every replace door ends in. Only `src` changes, as
+   * one structural commit: one undo step, the old asset untouched.
+   */
+  const replaceImage = useCallback(
+    async (target: JsxImageTarget, image: ChosenImage) => {
+      if (!(await drainTyping())) return;
+      const next = replaceImageSrcInJsx(sourceRef.current, target, image.id);
+      if (next === sourceRef.current) {
+        setImageError('That image changed while the new one was uploading. Select it and try again.');
         return;
       }
-      const created = (await res.json()) as { id: string; rawUrl?: string };
-      commitStructural(insertImageInJsx(sourceRef.current, created.id), refDataFor(created));
+      commitStructural(next, refDataFor(image));
     },
-    [commitStructural],
+    [commitStructural, drainTyping],
   );
-  insertImageRef.current = insertImage;
+
+  /** The image a BODY path names, captured now — null when it is not a plain <img>. */
+  const imageTargetAt = useCallback(
+    (bodyPath: string) => imageTargetInJsx(sourceRef.current, bodyPathToSourcePath(sourceRef.current, bodyPath)),
+    [],
+  );
+
+  /** Doors without a dialog (paste, drop, the double-click picker) show a refusal in the banner. */
+  const uploadOrSay = useCallback(
+    async (file: File): Promise<ChosenImage | null> => {
+      if (!file.type.startsWith('image/')) return null;
+      setImageError(null);
+      const result = await uploadImage(file);
+      if (!result.ok) setImageError(result.error);
+      return result.ok ? result.image : null;
+    },
+    [uploadImage],
+  );
+
+  const replaceInputRef = useRef<HTMLInputElement>(null);
+  /** The image the double-click picker is open for, captured at the double-click. */
+  const replacePickRef = useRef<JsxImageTarget | null>(null);
+  imageDoorsRef.current = {
+    /** A paste (placed at the selection) or a drop (onto an image, or into a gap). */
+    dropped: (file, where) => {
+      if (where?.replace) {
+        const target = imageTargetAt(where.replace);
+        if (!target) return;
+        void uploadOrSay(file).then((image) => image && replaceImage(target, image));
+        return;
+      }
+      const anchor = where && 'at' in where
+        ? (where.at ? { ...(anchorAt(where.at.path) ?? { path: '' }), side: where.at.side } : null)
+        : anchorAt(selectionRef.current?.path);
+      void uploadOrSay(file).then((image) => image && insertImage(anchor?.path ? anchor : null, image));
+    },
+    /** A double-click on an image: straight to the file picker, while the click's activation lasts. */
+    pick: (bodyPath) => {
+      replacePickRef.current = imageTargetAt(bodyPath);
+      if (replacePickRef.current) replaceInputRef.current?.click();
+    },
+  };
+
+  const openInsertDialog = useCallback(() => {
+    setImageMenuOpen(false);
+    setImageDialog({ mode: 'insert', anchor: anchorAt(selectionRef.current?.path) });
+  }, [anchorAt]);
+
+  /** The image toolbar's half: alt text read from the SOURCE (the selection is a DOM snapshot), and the doors. */
+  const selectedImagePath = selection?.tag === 'img' ? selection.path : null;
+  const selectedImageAlt = useMemo(
+    () => (selectedImagePath ? imageAltInJsx(source, { path: bodyPathToSourcePath(source, selectedImagePath) }) : null),
+    [source, selectedImagePath],
+  );
+  const imageControls = selectedImagePath
+    ? {
+        alt: selectedImageAlt,
+        onReplace: () => {
+          const target = imageTargetAt(selectedImagePath);
+          if (target) setImageDialog({ mode: 'replace', target });
+        },
+        onAlt: (alt: string) =>
+          commitStructural(
+            setImageAltInJsx(sourceRef.current, { path: bodyPathToSourcePath(sourceRef.current, selectedImagePath) }, alt),
+          ),
+      }
+    : undefined;
 
   // ── version history ───────────────────────────────────────────────────────
   const history = useArtifactVersions({ id: art.id, currentVersion: live.version });
@@ -989,69 +1117,28 @@ export default function InPlaceEditor({
     </>
   );
   const insertionControls = (
-    <>
-      <input
-        ref={imageInputRef}
-        type="file"
-        accept="image/png,image/jpeg,image/webp,image/gif,image/svg+xml"
-        aria-label="Upload image file"
-        className="hidden"
-        onChange={(e) => {
-          const f = e.target.files?.[0];
-          if (f) void insertImage(f);
-          e.target.value = '';
-        }}
-      />
-      <StoryToolbarMenu label="Insert" open={imageMenuOpen} onOpenChange={setImageMenuOpen}>
-        <div className="w-64 max-w-full">
-          <button
-            type="button"
-            aria-label="Paste Markdown"
-            onClick={() => {
-              setImageMenuOpen(false);
-              setMarkdownDraft('');
-            }}
-            className="mb-2 w-full rounded px-2 py-1.5 text-left text-xs hover:bg-raised"
-          >
-            Paste Markdown
-          </button>
-          <button
-            type="button"
-            aria-label="Upload image from file"
-            onClick={() => {
-              setImageMenuOpen(false);
-              imageInputRef.current?.click();
-            }}
-            className="w-full cursor-pointer rounded-[4px] border border-edge px-2 py-1 text-left font-mono text-[11px] text-fg hover:border-edge-bright hover:bg-raised"
-          >
-            upload a file…
-          </button>
-          <div className="mt-2 flex gap-1.5">
-            <input
-              aria-label="Image URL"
-              value={imageUrlDraft}
-              placeholder="or paste an image URL (https://…)"
-              onChange={(e) => setImageUrlDraft(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') {
-                  e.preventDefault();
-                  void insertImageFromUrl();
-                }
-              }}
-              className="min-w-0 flex-1 rounded-[4px] border border-edge bg-transparent px-1.5 py-1 font-mono text-[11px] text-fg focus:border-edge-bright focus:outline-none"
-            />
-            <button
-              type="button"
-              aria-label="Import image from URL"
-              onClick={() => void insertImageFromUrl()}
-              className="cursor-pointer rounded-[4px] border border-edge px-2 py-1 font-mono text-[11px] text-fg hover:border-edge-bright hover:bg-raised"
-            >
-              import
-            </button>
-          </div>
-        </div>
-      </StoryToolbarMenu>
-    </>
+    <StoryToolbarMenu label="Insert" open={imageMenuOpen} onOpenChange={setImageMenuOpen}>
+      <div className="flex w-44 flex-col">
+        <button
+          type="button"
+          onClick={openInsertDialog}
+          className="flex items-center gap-2 rounded px-2 py-1.5 text-left text-xs hover:bg-raised"
+        >
+          Image…
+        </button>
+        <button
+          type="button"
+          aria-label="Paste Markdown"
+          onClick={() => {
+            setImageMenuOpen(false);
+            setMarkdownDraft('');
+          }}
+          className="flex items-center gap-2 rounded px-2 py-1.5 text-left text-xs hover:bg-raised"
+        >
+          Paste Markdown
+        </button>
+      </div>
+    </StoryToolbarMenu>
   );
 
   /*
@@ -1103,6 +1190,35 @@ export default function InPlaceEditor({
 
   return (
     <div className="contents" data-app-appearance={surfaceMode}>
+      {/* The double-click picker: a file chosen here replaces the image that was double-clicked. */}
+      <input
+        ref={replaceInputRef}
+        type="file"
+        accept={IMAGE_ACCEPT}
+        aria-label="Replacement image file"
+        className="hidden"
+        onChange={(e) => {
+          const f = e.target.files?.[0];
+          const target = replacePickRef.current;
+          replacePickRef.current = null;
+          e.target.value = '';
+          if (f && target) void uploadOrSay(f).then((image) => image && replaceImage(target, image));
+        }}
+      />
+      {imageDialog && (
+        <ImageDialog
+          mode={imageDialog.mode}
+          onUploadFile={uploadImage}
+          onImportUrl={importImageUrl}
+          onClose={() => setImageDialog(null)}
+          onConfirm={(image) => {
+            const open = imageDialog;
+            setImageDialog(null);
+            if (open.mode === 'insert') void insertImage(open.anchor, image);
+            else void replaceImage(open.target, image);
+          }}
+        />
+      )}
       {markdownDraft !== null && (
         <MarkdownPasteDialog
           value={markdownDraft}
@@ -1412,6 +1528,7 @@ export default function InPlaceEditor({
               onSelect={edit.select}
               onDelete={deleteSelected}
               onComment={onComment}
+              image={imageControls}
             />
           ) : (
             <div className="flex flex-col">

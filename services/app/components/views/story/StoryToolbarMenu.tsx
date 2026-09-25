@@ -12,12 +12,15 @@ import { useTrustedPortalContainer } from '@/components/TrustedUi';
 export function StoryToolbarMenu({
   label,
   name = label,
+  hint = false,
   open,
   onOpenChange,
   children,
 }: {
   label: string;
   name?: string;
+  /** A quiet "this wants attention" state (an image with no alt text): muted, dashed, never loud. */
+  hint?: boolean;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   children: ReactNode;
@@ -30,7 +33,9 @@ export function StoryToolbarMenu({
           type="button"
           aria-label={name}
           onMouseDown={(event) => event.preventDefault()}
-          className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-md px-2 font-mono text-[11px] font-normal leading-none text-fg hover:bg-surface"
+          className={`inline-flex h-8 shrink-0 items-center gap-1.5 rounded-md px-2 font-mono text-[11px] font-normal leading-none hover:bg-surface ${
+            hint ? 'text-muted underline decoration-dotted underline-offset-4 hover:text-fg' : 'text-fg'
+          }`}
         >
           {label}
           <ChevronDown size={12} />
