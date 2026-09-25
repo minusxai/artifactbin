@@ -185,3 +185,20 @@ it('normalizes a legacy annotation alias before composing its text mapping',asyn
  const row=(await db.query<{anchor_key:string;range:string}>("SELECT anchor_key,range FROM annotations WHERE id='legacy_join'")).rows[0]!;
  expect(row.anchor_key).toBe('a');expect(JSON.parse(row.range).parts[0]).toMatchObject({start:5,end:9});
 });
+it('restores an archived document over a native dataset using one guarded replacement statement',async()=>{
+ const {db,actor,id,row}=await setup();
+ await db.query("UPDATE artifacts SET format='dataset',document=NULL,source='table: rows',meta='{\"catalog\":{\"kind\":\"stored\"}}',version=2 WHERE id=$1",[id]);
+ const update=prepareClientDocumentReplacement(row.source!,2);
+ const spy=vi.spyOn(db,'query');const result=await commitDocumentUpdate(db,actor,editorScope(actor),id,update);
+ expect(spy.mock.calls).toHaveLength(1);spy.mockRestore();expect(result?.applied).toBe(true);
+ if(!result?.applied)throw new Error('Restore failed');
+ expect(result.row.format).toBe('markup');expect(result.row.source).toBe(row.source);expect(result.row.meta).not.toHaveProperty('catalog');
+ expect((await db.query('SELECT format,source FROM artifact_versions WHERE artifact_id=$1 AND version=2',[id])).rows).toEqual([{format:'dataset',source:'table: rows'}]);
+});
+it('whole document replacement cannot bypass a dataset write policy',async()=>{
+ const {db,actor,id,row}=await setup();
+ await db.query("UPDATE artifacts SET format='dataset',document=NULL,source='table: rows',dataset_policy='{}'::jsonb WHERE id=$1",[id]);
+ const update=prepareClientDocumentReplacement(row.source!,1);
+ expect((await commitDocumentUpdate(db,actor,editorScope(actor),id,update))?.applied).toBe(false);
+ expect((await db.query('SELECT format,version FROM artifacts WHERE id=$1',[id])).rows).toEqual([{format:'dataset',version:1}]);
+});

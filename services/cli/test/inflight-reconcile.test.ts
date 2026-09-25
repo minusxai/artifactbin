@@ -64,3 +64,18 @@ test('an untracked document retains its observed graph to recover a lost edit re
   assert.match(parseDocument(await readFile(join(root,'doc.jsx'),'utf8')).body,/Changed/);
  }finally{await rm(root,{recursive:true,force:true});}
 });
+test('publishing JSX over a native resource submits a whole JSONB replacement',async()=>{
+ const root=await mkdtemp(join(tmpdir(),'afbin-native-to-document-'));let submitted:any;
+ try{
+  await saveTestConnection({server:'https://example.com',token:'test'},root);
+  await writeFile(join(root,'doc.jsx'),writeDocument({metadata:{id:'abc123',head_version:2,state:digest('native'),edit_id:'native'},body:'<p id="restored">Restored</p>'}));
+  const out:string[]=[];const code=await runCli(['push','doc.jsx','--json'],{cwd:root,home:root,env:{},interactive:false,stdout:s=>out.push(s),stderr:()=>{},fetch:async(_input,init)=>{
+   if(init?.method==='POST'){
+    submitted=JSON.parse(String(init.body));const document=submitted.document_update.replacement;
+    return Response.json({id:'abc123',version:3,edit_id:'restored',state:digest('restored'),format:'markup',markup:graphSource(document),document},{headers:{'X-Artifactbin-Account':'account'}});
+   }
+   return Response.json({id:'abc123',version:2,edit_id:'native',state:digest('native'),format:'dataset'},{headers:{'X-Artifactbin-Account':'account'}});
+  }});
+  assert.equal(code,0,out.join(''));assert.equal(submitted.document_update.whole,true);assert.equal(submitted.document_update.patch.baseVersion,2);
+ }finally{await rm(root,{recursive:true,force:true});}
+});

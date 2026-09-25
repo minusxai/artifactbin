@@ -1,3 +1,4 @@
+import {observedSourceBody,observedTextBody} from './prepared-document';
 /**
  * The documents that were already published when canonical form changed.
  *
@@ -49,7 +50,7 @@ async function legacyRow(): Promise<{ id: string; token: string; editId: string 
   const doc = await created.json();
 
   const db = await harness.db();
-  await db.query('UPDATE artifacts SET source = $1 WHERE id = $2', [LEGACY, doc.id]);
+  await db.query('UPDATE artifacts SET document=NULL,source = $1 WHERE id = $2', [LEGACY, doc.id]);
   await db.query('UPDATE artifact_edits SET inserted = $1 WHERE artifact_id = $2', [LEGACY, doc.id]);
   return { id: doc.id, token, editId: doc.edit_id };
 }
@@ -71,10 +72,10 @@ describe('a document stored before the nesting rule existed', () => {
   });
 
   it('takes an edit cleanly, and comes out canonical', async () => {
-    const { id, token, editId } = await legacyRow();
+    const { id, token } = await legacyRow();
     const next = LEGACY.replace('First para.', 'First paragraph, edited.');
     const res = await editRoute(
-      request(`/api/artifacts/${id}/edits`, { method: 'POST', token: token, json: { edit_id: editId, source: next } }),
+      request(`/api/artifacts/${id}/edits`, { method: 'POST', token: token, json: await observedSourceBody(id,next) }),
       params({ id }),
     );
     expect(res.status).toBe(200);
@@ -89,16 +90,16 @@ describe('a document stored before the nesting rule existed', () => {
   });
 
   it('a second edit is ordinary — the migration is not paid twice', async () => {
-    const { id, token, editId } = await legacyRow();
+    const { id, token } = await legacyRow();
     const first = await editRoute(
-      request(`/api/artifacts/${id}/edits`, { method: 'POST', token: token, json: { edit_id: editId, source: LEGACY.replace('First para.', 'One.') } }),
+      request(`/api/artifacts/${id}/edits`, { method: 'POST', token: token, json: await observedSourceBody(id,LEGACY.replace('First para.','One.')) }),
       params({ id }),
     );
     expect(first.status).toBe(200);
     const afterFirst = await first.json();
 
     const res = await editRoute(
-      request(`/api/artifacts/${id}/edits`, { method: 'POST', token: token, json: { edit_id: afterFirst.edit_id, source: (afterFirst.markup as string).replace('Second para.', 'Two.') } }),
+      request(`/api/artifacts/${id}/edits`, { method: 'POST', token: token, json: await observedSourceBody(id,(afterFirst.markup as string).replace('Second para.','Two.')) }),
       params({ id }),
     );
     expect(res.status).toBe(200);
@@ -122,7 +123,7 @@ describe('a document stored before the nesting rule existed', () => {
     expect(storedMarkup(doc, clean)).toBe(clean);
 
     const res = await editRoute(
-      request(`/api/artifacts/${doc.id}/edits`, { method: 'POST', token: token, json: { edit_id: doc.edit_id, source: clean.replace('<p id="body">Only words here.</p>', '<p className="lede" id="body"><div id="block">Now a block.</div></p>') } }),
+      request(`/api/artifacts/${doc.id}/edits`, { method: 'POST', token: token, json: await observedSourceBody(doc.id,clean.replace('<p id="body">Only words here.</p>', '<p className="lede" id="body"><div id="block">Now a block.</div></p>')) }),
       params({ id: doc.id }),
     );
     expect(res.status).toBe(200);
@@ -136,9 +137,9 @@ describe('a document stored before the nesting rule existed', () => {
   it('a narrow edit elsewhere in the document still applies', async () => {
     // The heading is outside the rewritten element entirely, so the migration
     // must not turn an unrelated edit into a whole-document conflict.
-    const { id, token, editId } = await legacyRow();
+    const { id, token } = await legacyRow();
     const res = await editRoute(
-      request(`/api/artifacts/${id}/edits`, { method: 'POST', token: token, json: { edit_id: editId, old_string: 'Built something cool?', new_string: 'Built something great?' } }),
+      request(`/api/artifacts/${id}/edits`, { method: 'POST', token: token, json: await observedTextBody(id,'Built something cool?','Built something great?') }),
       params({ id }),
     );
     expect(res.status).toBe(200);

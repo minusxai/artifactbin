@@ -1,3 +1,5 @@
+import {observedTextBody,documentEditBody} from './prepared-document';
+import {getArtifactById} from '@/lib/artifacts';
 /**
  * SCHEMA REPLAY SAFETY — the boot path, not the fresh-install path.
  *
@@ -203,42 +205,20 @@ describe('an artifact whose edit log has been pruned', () => {
     const token = await mint();
     const doc = await withPrunedLog(token);
     const res = await editRoute(
-      request(`/api/artifacts/${doc.id}/edits`, { method: 'POST', token: token, json: { edit_id: doc.edit_id, old_string: 'alpha text', new_string: 'ALPHA' } }),
+      request(`/api/artifacts/${doc.id}/edits`, { method: 'POST', token: token, json: await observedTextBody(doc.id,'alpha text','ALPHA') }),
       params({ id: doc.id }),
     );
     expect(res.status).toBe(200);
     expect(((await res.json()) as Wire).markup).toContain('ALPHA');
   });
 
-  it('SELF-HEALS a stale base instead of looping: reject once, then the re-read works', async () => {
-    const token = await mint();
-    const doc = await withPrunedLog(token);
-    // Someone else moves head first, so the caller's base is now stale AND
-    // unresolvable (there is no log entry to reconstruct that version from).
-    const first = await editRoute(
-      request(`/api/artifacts/${doc.id}/edits`, { method: 'POST', token: token, json: { edit_id: doc.edit_id, old_string: 'beta text', new_string: 'BETA' } }),
-      params({ id: doc.id }),
-    );
-    expect(first.status).toBe(200);
-
-    const stale = await editRoute(
-      request(`/api/artifacts/${doc.id}/edits`, { method: 'POST', token: token, json: { edit_id: doc.edit_id, old_string: 'alpha text', new_string: 'ALPHA' } }),
-      params({ id: doc.id }),
-    );
-    expect(stale.status).toBe(409);
-    const body = await stale.json();
-    expect(body.error).toBe('stale_edit_id');
-
-    // The critical part: retrying on the head it just handed back SUCCEEDS.
-    // If it did not, a pruned artifact would be permanently uneditable.
-    const retry = await editRoute(
-      request(`/api/artifacts/${doc.id}/edits`, { method: 'POST', token: token, json: { edit_id: body.edit_id, old_string: 'alpha text', new_string: 'ALPHA' } }),
-      params({ id: doc.id }),
-    );
-    expect(retry.status).toBe(200);
-    const final = (await retry.json()) as Wire;
-    expect(final.markup).toContain('ALPHA');
-    expect(final.markup).toContain('BETA');
+  it('a stale independent operation needs no pruned history; an overlapping operation still conflicts',async()=>{
+    const token=await mint(),doc=await withPrunedLog(token),base=(await getArtifactById(doc.id))!;
+    const submit=(source:string)=>editRoute(request(`/api/artifacts/${doc.id}/edits`,{method:'POST',token,json:documentEditBody(base,{source})}),params({id:doc.id}));
+    expect((await submit(base.source!.replace('beta text','BETA'))).status).toBe(200);
+    const independent=await submit(base.source!.replace('alpha text','ALPHA'));expect(independent.status).toBe(200);
+    const final=await independent.json();expect(final.markup).toContain('ALPHA');expect(final.markup).toContain('BETA');
+    const clash=await submit(base.source!.replace('alpha text','OTHER'));expect(clash.status).toBe(409);expect((await clash.json()).error).toBe('doc_changed');
   });
 
   it('a second document with a pruned log edits too', async () => {
@@ -251,7 +231,7 @@ describe('an artifact whose edit log has been pruned', () => {
     await db.query('DELETE FROM artifact_edits WHERE artifact_id = $1', [doc.id]);
 
     const edit = await editRoute(
-      request(`/api/artifacts/${doc.id}/edits`, { method: 'POST', token: token, json: { edit_id: doc.edit_id, old_string: 'hello', new_string: 'goodbye' } }),
+      request(`/api/artifacts/${doc.id}/edits`, { method: 'POST', token: token, json: await observedTextBody(doc.id,'hello','goodbye') }),
       params({ id: doc.id }),
     );
     expect(edit.status).toBe(200);

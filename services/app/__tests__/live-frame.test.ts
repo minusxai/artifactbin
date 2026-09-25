@@ -1,3 +1,4 @@
+import {observedSourceBody} from './prepared-document';
 /**
  * THE FRAME IS STATELESS AND COMPLETE, AND THE STREAM CARRIES ONLY PINGS.
  *
@@ -81,7 +82,7 @@ describe('GET /a/<id>/events/frame', () => {
     await frameRoute(jreq(`/a/${doc.id}/events/frame`), params(doc.id));
     await frameRoute(jreq(`/a/${doc.id}/events/frame`), params(doc.id));
     expect(frameBuilds() - before).toBe(1);
-    const edit = await editsRoute(jreq(`/api/artifacts/${doc.id}/edits`, 'POST', { edit_id: doc.edit_id, source: '<div><p>changed</p></div>' }, t.token), params(doc.id));
+    const edit = await editsRoute(jreq(`/api/artifacts/${doc.id}/edits`, 'POST', await observedSourceBody(doc.id,'<div><p>changed</p></div>'), t.token), params(doc.id));
     expect(edit.status).toBe(200);
     const fresh = await (await frameRoute(jreq(`/a/${doc.id}/events/frame`), params(doc.id))).json();
     expect(fresh.version).toBe(2);

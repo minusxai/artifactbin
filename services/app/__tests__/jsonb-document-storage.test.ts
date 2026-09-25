@@ -25,7 +25,7 @@ it('a first-load conversion cannot overwrite a winning edit',async()=>{
  const {id,row,actor}=await create(),db=await getDb();await db.query('UPDATE artifacts SET document=NULL,source=$2 WHERE id=$1',[id,row.source]);
  const query=db.query.bind(db);let raced=false;
  const spy=vi.spyOn(db,'query').mockImplementation(async(sql,params)=>{
-  if(!raced&&sql.includes('document IS NOT DISTINCT FROM')&&sql.includes('UPDATE artifacts')){raced=true;const result=await applyEditScoped(actor,id,documentEdit((await getArtifactById(id))!,{source:row.source!.replace('Alpha','Winner')}));expect(result&&!(result instanceof Response)&&result.applied).toBe(true);}
+  if(!raced&&sql.includes('IS NOT DISTINCT FROM $4::jsonb')&&sql.includes('UPDATE artifacts')){raced=true;const result=await applyEditScoped(actor,id,documentEdit((await getArtifactById(id))!,{source:row.source!.replace('Alpha','Winner')}));expect(result&&!(result instanceof Response)&&result.applied).toBe(true);}
   return query(sql,params);
  });
  try{expect((await getArtifactById(id))?.source).toContain('Winner');expect(raced).toBe(true);}finally{spy.mockRestore();}
@@ -89,4 +89,12 @@ it('can replace a document with a native dataset without retaining its JSONB gra
  expect(response.status,await response.clone().text()).toBe(200);
  const head=await stored(id);expect(head.format).toBe('dataset');expect(head.document).toBeNull();
  expect((await getVersionFor({tokenId:token.id,userId:null},id,row.version))?.source).toBe(row.source);
+});
+it('first-load archive migration preserves durable legacy identities after the node was removed',async()=>{
+ const {id,actor}=await create(),db=await getDb();
+ await db.query("INSERT INTO artifact_node_aliases(artifact_id,legacy_key,source_id,source_path,created_version) VALUES($1,'old','kept','0',1)",[id]);
+ await db.query("INSERT INTO artifact_versions(artifact_id,version,format,content,source,meta) VALUES($1,99,'markup','',$2,'{}')",[id,'<p data-annotation-anchor="old">Archived</p>']);
+ const version=await getVersionFor(actor,id,99);
+ expect(version?.source).toBe('<p id="kept">Archived</p>');
+ expect((await getVersionFor(actor,id,99))?.source).toBe(version?.source);
 });

@@ -11,7 +11,7 @@ import {prepareJsx,applyPreparedJsx} from './jsx-tier';
 export async function prepareDocumentAuthoringContext(actor:TokenActor,id:string,body:Record<string,unknown>):Promise<Response>{
  if(typeof body.source!=='string'||Buffer.byteLength(body.source)>MAX_DOCUMENT_BYTES)return json({error:'invalid_authoring_context'},400);
  const db=await getDb(),scope=editorScope(actor);
- const owner=(await db.query<{token_id:string;user_id:string|null}>(`SELECT token_id,user_id FROM artifacts WHERE id=$1 AND format='markup' AND ${scope.where('$2')}`,[id,scope.val])).rows[0];
+ const owner=(await db.query<{token_id:string;user_id:string|null}>(`SELECT token_id,user_id FROM artifacts WHERE id=$1 AND format<>'folder' AND ${scope.where('$2')}`,[id,scope.val])).rows[0];
  if(!owner)return json({error:'not_found'},404);
  const prepared=await prepareJsx({},body.source,{loadRef:refLoaderForActor({tokenId:owner.token_id,userId:owner.user_id})});
  if(prepared instanceof Response)return prepared;

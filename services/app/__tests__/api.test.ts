@@ -127,7 +127,7 @@ describe('artifact CRUD', () => {
       'SELECT document,version, source FROM artifact_versions WHERE artifact_id = $1',
       [created.id],
     );
-    expect(versions.rows).toEqual([{ version: 1, source: '<h1 id="head">v1</h1>' }]);
+    expect(versions.rows).toEqual([{ version:1,source:'<h1 id="head">v1</h1>',document:expect.objectContaining({kind:'graph'}) }]);
 
     const read = await getArtifactRoute(request(`/api/artifacts/${created.id}`, { token: token }), params({ id: created.id }));
     expect((await read.json()).markup).toBe('<h1 id="head">v2</h1>');

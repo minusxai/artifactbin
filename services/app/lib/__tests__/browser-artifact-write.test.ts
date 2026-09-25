@@ -1,7 +1,7 @@
 import {createDocumentGraph,graphSource} from '../story/document-graph';
 import {applyGraphPatch} from '../story/document-graph-patch';
 import {afterEach,expect,it,vi} from 'vitest';
-import {writeBrowserArtifact} from '../browser-artifact-write';
+import {writeBrowserArtifact,restoreBrowserArtifact} from '../browser-artifact-write';
 afterEach(()=>vi.unstubAllGlobals());
 it('prepares metadata and mixed edits locally for the same atomic JSONB endpoint',async()=>{
  const document=createDocumentGraph('<p id="a">Original</p>',1);
@@ -20,4 +20,26 @@ it('refuses unsupported document fields instead of silently discarding them',asy
  const fetcher=vi.fn(async()=>Response.json({format:'markup',document:createDocumentGraph('<p id="a">X</p>',1),edit_id:'e',version:1,state:'a'.repeat(64)}));vi.stubGlobal('fetch',fetcher);
  const result=await writeBrowserArtifact('abc123',{access:'readwrite'});
  expect(result.status).toBe(400);expect(fetcher).toHaveBeenCalledTimes(1);
+});
+it('restores document history over a native format through a validated whole JSONB operation',async()=>{
+ const calls:Array<{url:string;body:Record<string,any>}>=[];
+ vi.stubGlobal('fetch',vi.fn(async(url:string,init?:RequestInit)=>{
+  calls.push({url,body:JSON.parse(String(init?.body??'{}'))});
+  if(url.endsWith('/versions/1'))return Response.json({format:'markup',markup:'<h1 id="old">Archived</h1>',title:'Old title',meta:{theme:'organic'}});
+  return Response.json({format:'dataset',version:3,state:'a'.repeat(64),edit_id:'head',title:'New title'});
+ }));
+ await restoreBrowserArtifact('abc123',1);
+ const commit=calls.at(-1)!;expect(commit.url).toBe('/api/my/artifacts/abc123/edits');
+ expect(commit.body.document_update).toMatchObject({whole:true,patch:{baseVersion:3},metadata:{title:'Old title',theme:'organic'}});
+ expect(graphSource(commit.body.document_update.replacement)).toContain('Archived');
+});
+it('keeps native-format history on its conditional restore endpoint',async()=>{
+ const calls:Array<{url:string;body:Record<string,any>}>=[];
+ vi.stubGlobal('fetch',vi.fn(async(url:string,init?:RequestInit)=>{
+  calls.push({url,body:JSON.parse(String(init?.body??'{}'))});
+  if(url.endsWith('/versions/1'))return Response.json({format:'image',markup:null,meta:{}});
+  return Response.json({format:'markup',version:3,state:'a'.repeat(64),edit_id:'head'});
+ }));
+ await restoreBrowserArtifact('abc123',1);
+ expect(calls.at(-1)).toEqual({url:'/api/my/artifacts/abc123/revert',body:{version:1,expectedVersion:3,expectedState:'a'.repeat(64)}});
 });

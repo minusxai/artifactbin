@@ -1,3 +1,4 @@
+import {createDocumentGraph} from '../../app/lib/story/document-graph';
 import {documentOutcomePresent} from './document-recovery';
 import {prepareClientDocumentPublication} from '../../app/lib/story/document-update-client';
 import type {DocumentGraph,DocumentUpdate} from '@artifactbin/contracts';
@@ -168,7 +169,8 @@ async function prepareDocumentPlan(plan:PushPlan,client:HttpClient,force:boolean
  if(!plan.file.document||!plan.id||['create','missing','none'].includes(plan.mode))return plan;
  let head=plan.file.tracked?.snapshot;
  if(force||!head?.document)head=await client.request<Snapshot>(`/artifacts/${plan.id}`);
- const document=head.document as DocumentGraph|undefined;
+ const native=['dataset','viz','image','pdf'].includes(head.format??'');
+ const document=(native?createDocumentGraph('',head.version):head.document) as DocumentGraph|undefined;
  if(document?.kind!=='graph')throw new CliError('invalid_response','The artifact has no editable JSONB snapshot.');
  if(!force&&!plan.file.tracked&&(plan.body.expectedVersion!==undefined&&plan.body.expectedVersion!==head.version||plan.body.expectedState!==undefined&&plan.body.expectedState!==head.state))throw new CliError('state_conflict','The remote artifact differs from the state recorded in this file.','Inspect afbin diff --remote before deciding how to reconcile the changes.',{head},3);
  const desired=metadataInput(plan.file.document.metadata),observed=metadataInput(snapshotDocument(head).metadata);
@@ -180,7 +182,7 @@ async function prepareDocumentPlan(plan:PushPlan,client:HttpClient,force:boolean
   ...(delta.parent_id!==undefined?{parentId:delta.parent_id as string|null}:{}),
   ...(delta.shares!==undefined?{shares:delta.shares as NonNullable<DocumentUpdate['settings']>['shares']}:{}),
  };
- const update=await prepareClientDocumentPublication({document,version:head.version,title:head.title,description:head.description as string|null,meta:{theme:head.theme,template:head.template,colorMode:head.colorMode}},{source:plan.file.document.body,metadata,whole:force||plan.file.document.metadata.version!==undefined},async source=>client.request(`/artifacts/${plan.id}/prepare`,'POST',{source,dryRun}));
+ const update=await prepareClientDocumentPublication({document,version:head.version,title:head.title,description:head.description as string|null,meta:{theme:head.theme,template:head.template,colorMode:head.colorMode}},{source:plan.file.document.body,metadata,whole:native||force||plan.file.document.metadata.version!==undefined},async source=>client.request(`/artifacts/${plan.id}/prepare`,'POST',{source,dryRun}));
  if(Object.keys(settings).length)Object.assign(update,{settings,expectedSharingRevision:Number(head.sharing_revision??0),expectedParentIds:head.ancestor_ids??[]});
  return {...plan,authoringBase:head,mode:'edit',reconcile:false,body:{edit_id:head.edit_id,document_update:update}};
 }

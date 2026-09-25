@@ -1,3 +1,4 @@
+import {stampNodeIds,hasAmbiguousLegacyAliases} from './story/node-ids';
 /** The artifact persistence boundary. SQL remains explicit at its owning write path;
  * only stored JSONB↔public JSX conversion and lazy migration live here. Never issue
  * an out-of-transaction query: callers always supply their own Queryable.
@@ -40,11 +41,19 @@ interface MigratableRow extends SourceRow {id?:string;artifact_id?:string;format
 export async function loadArtifactDocument<T extends MigratableRow>(db:Queryable,sql:string,params:unknown[]):Promise<T|null> {
  const row=(await db.query<T>(sql,params)).rows[0];
  if(!row)return null;
- if(row.format!=='markup'||row.document?.kind==='graph'||row.document==null&&row.source==null)return decodeArtifactDocument(row);
+ if(row.format!=='markup'||row.document==null&&row.source==null)return decodeArtifactDocument(row);
  const source=row.document?decodeDocument(row.document):row.source!;
- const document=createDocumentGraph(source,row.version),history=row.artifact_id!==undefined;
+ const history=row.artifact_id!==undefined;
+ if(row.document?.kind==='graph'&&(!history||!source.includes('data-annotation-anchor')))return decodeArtifactDocument(row);
+ let authoringSource=source;
+ if(history&&source.includes('data-annotation-anchor')&&!hasAmbiguousLegacyAliases(source)){
+  const aliases=await db.query<{legacy_key:string;source_id:string}>('SELECT legacy_key,source_id FROM artifact_node_aliases WHERE artifact_id=$1',[row.artifact_id]);
+  if(aliases.rows.length)authoringSource=stampNodeIds(source,{legacyAliases:new Map(aliases.rows.map(a=>[a.legacy_key,a.source_id])),retireLegacyAliases:true}).source;
+ }
+ if(row.document?.kind==='graph'&&authoringSource===source)return decodeArtifactDocument(row);
+ const document=createDocumentGraph(authoringSource,row.version);
  const result=await db.query(`UPDATE ${history?'artifact_versions':'artifacts'} SET document=$1::jsonb,source=NULL
- WHERE ${history?'artifact_id':'id'}=$2 AND version=$3 AND document IS NOT DISTINCT FROM $4::jsonb AND source IS NOT DISTINCT FROM $5::text
+ WHERE ${history?'artifact_id':'id'}=$2 AND version=$3 AND NULLIF(document,'null'::jsonb) IS NOT DISTINCT FROM $4::jsonb AND source IS NOT DISTINCT FROM $5::text
  ${history?'':'AND edit_id=$6'} RETURNING document`,history?[JSON.stringify(document),row.artifact_id,row.version,row.document?JSON.stringify(row.document):null,row.source??null]:[JSON.stringify(document),row.id,row.version,row.document?JSON.stringify(row.document):null,row.source??null,row.edit_id]);
  if(result.rows.length)return decodeArtifactDocument({...row,document,source:null});
  return (await artifactQuery<T>(db,sql,params)).rows[0]??null;

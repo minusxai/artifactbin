@@ -1521,6 +1521,7 @@ export async function applyEditScoped(actor: TokenActor, id: string, input: Edit
     if(input.documentUpdate.settings?.visibility==='public'&&!ALLOW_PUBLIC_VISIBILITY)return json({error:'public_not_enabled'},400);
     const committed=await commitDocumentUpdate(db,actor,scope,id,input.documentUpdate,{dryRun:opts.dryRun});
     if(!committed)return null;
+    if(!committed.applied&&committed.head.dataset_policy&&update.whole)return policyLocked('a dataset with a write policy cannot be replaced by a document');
     if(!committed.applied&&committed.head.format!=='markup')return {applied:false,reason:'not_editable'};
     if(!committed.applied&&committed.ownerOnly)return json({error:'owner_only'},403);
     if(!committed.applied&&committed.refusal)return json({error:'mention_refused',detail:committed.refusal},403);

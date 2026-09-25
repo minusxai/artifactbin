@@ -1,3 +1,4 @@
+import {createDocumentGraph} from './story/document-graph';
 /** Controls outside the live editor load an authoring snapshot, validate locally,
  * then submit one permission-scoped JSONB commit. Non-document metadata retains
  * its existing conditional protocol. */
@@ -21,4 +22,19 @@ export async function writeBrowserArtifact(id:string,change:Record<string,unknow
  }
  if(source!==undefined)return Response.json({error:'not_editable'},{status:400});
  return fetch(path,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({...fields,expectedState:head.state})});
+}
+
+/** History keeps the same UX across format changes. Only document restores
+ * compile a graph; restoring a native resource keeps its existing protocol. */
+export async function restoreBrowserArtifact(id:string,version:number):Promise<Response>{
+ const path=`/api/my/artifacts/${encodeURIComponent(id)}`;
+ const observed=await fetch(path);if(!observed.ok)return observed;
+ const head=await observed.json() as {document?:DocumentGraph;version:number;state:string;edit_id:string;title?:string|null;description?:string|null};
+ const archived=await fetch(`${path}/versions/${version}`);if(!archived.ok)return archived;
+ const target=await archived.json() as {format:string;markup:string|null;title?:string|null;description?:string|null;meta:{theme?:string|null;template?:string|null;colorMode?:'light'|'dark'|null}};
+ if(target.format!=='markup')return fetch(`${path}/revert`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({version,expectedVersion:head.version,expectedState:head.state})});
+ if(typeof target.markup!=='string')return Response.json({error:'invalid_archived_document'},{status:422});
+ const document=head.document?.kind==='graph'?head.document:createDocumentGraph('',head.version);
+ const update=await prepareBrowserDocumentUpdate(id,{...head,document,meta:head},{source:target.markup,whole:true,metadata:{title:target.title??null,description:target.description??null,theme:target.meta.theme??null,template:target.meta.template??null,colorMode:target.meta.colorMode??null}});
+ return fetch(`${path}/edits`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({edit_id:head.edit_id,document_update:update})});
 }
