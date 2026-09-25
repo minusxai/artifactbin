@@ -9,8 +9,17 @@ interface GridGeometry {
   positioned: boolean;
 }
 export interface NodeChrome {
-  /** `resizable: false` keeps move and delete but offers no resize control (the block cannot take one). */
-  select(element: HTMLElement | null, path: string | null, grid?: GridGeometry, options?: { resizable?: boolean }): void;
+  /**
+   * `resizable: false` keeps move and delete but offers no resize control (the
+   * block cannot take one). `label`/`parent` name the block and its parent for
+   * the drag label.
+   */
+  select(
+    element: HTMLElement | null,
+    path: string | null,
+    grid?: GridGeometry,
+    options?: { resizable?: boolean; label?: string; parent?: string },
+  ): void;
   /** The block under the pointer gets a faint grip in its left margin; null hides it. */
   hover(element: HTMLElement | null): void;
   cancel(): boolean;
@@ -172,8 +181,25 @@ export function createNodeChrome(
   // The margin grip: the same glyph and drag as the selected grip, offered
   // beside whatever block the pointer is on, so a block can be picked up
   // without first being selected. Its hit area abuts the block's left edge so
-  // the pointer can travel onto it without crossing another block.
-  const GRIP = 24;
+  // the pointer can travel onto it without crossing another block. A finger
+  // needs 44px; the glyph stays small inside that invisible target.
+  const GRIP = touch ? 44 : 24;
+  /**
+   * Outside the block's left edge when there is room (the viewport edge, or a
+   * block beside it in the same row, bounds that room); just inside it when
+   * there is not — a phone's narrow margin, a right-hand column.
+   */
+  const gripOutside = (el: HTMLElement, r: DOMRect) => {
+    let bound = 0;
+    for (let prev = el.previousElementSibling; prev; prev = prev.previousElementSibling) {
+      const p = prev.getBoundingClientRect();
+      if (p.bottom > r.top && p.top < r.bottom && p.right <= r.left) {
+        bound = Math.max(bound, p.right);
+        break;
+      }
+    }
+    return r.left - bound >= GRIP;
+  };
   const gripRoot = doc.createElement('div');
   gripRoot.setAttribute(HOVER_GRIP_ATTR, '');
   gripRoot.setAttribute('data-mx-chrome-root', '');
@@ -203,14 +229,20 @@ export function createNodeChrome(
   gripRoot.append(gripButton);
   doc.body.append(gripRoot);
   let hovered: HTMLElement | null = null;
+  let labels = { label: 'Block', parent: 'container' };
+  // One grip at a time: while a block is selected its own grip is the grip.
   const placeGrip = () => {
     const target = hovered;
-    if (!target?.isConnected || target === element || gesture) {
+    if (!target?.isConnected || element || gesture) {
       gripRoot.style.display = 'none';
       return;
     }
     const r = target.getBoundingClientRect();
-    Object.assign(gripRoot.style, { display: 'block', left: `${Math.max(0, r.left - GRIP)}px`, top: `${r.top}px` });
+    Object.assign(gripRoot.style, {
+      display: 'block',
+      left: `${gripOutside(target, r) ? r.left - GRIP : r.left}px`,
+      top: `${r.top}px`,
+    });
   };
   gripButton.addEventListener('pointerdown', (e) => {
     e.preventDefault();
@@ -246,9 +278,17 @@ export function createNodeChrome(
     const width = grid ? r.width : size.width;
     const height = Math.max(size.height, r.height);
     for (const button of [...controls.keys(), remove]) {
+      if (button === moveButton) continue;
       button.style.width = `${Math.min(targetSize, width / 2 + SELECTION_PRESENTATION.handleOutset)}px`;
       button.style.height = `${Math.min(targetSize, height / 2 + SELECTION_PRESENTATION.handleOutset)}px`;
     }
+    // The selected block's grip sits where the margin grip did.
+    Object.assign(moveButton.style, {
+      width: `${GRIP}px`,
+      height: `${GRIP}px`,
+      left: `${gripOutside(element, r) ? -GRIP / 2 : GRIP / 2}px`,
+      top: `${GRIP / 2}px`,
+    });
     if (gesture?.kind === 'move') moveDestination();
   };
   function start(kind: GestureKind, pointer: number | null, x = 0, y = 0) {
@@ -271,7 +311,7 @@ export function createNodeChrome(
           : undefined,
     };
     if (kind === 'move') {
-      dragPreview.start(element, path);
+      dragPreview.start(element, path, labels);
       preview();
     }
   }
@@ -452,6 +492,7 @@ export function createNodeChrome(
     select(el, p, g, options) {
       if (gesture) return;
       const resizable = options?.resizable ?? true;
+      labels = { label: options?.label ?? 'Block', parent: options?.parent ?? 'container' };
       if (settling && el && p === path && previewElement !== el) {
         previewElement?.removeAttribute('data-mx-resize-preview');
         previewElement = el;

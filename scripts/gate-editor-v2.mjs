@@ -92,6 +92,12 @@ async function range(startId, start, endId = startId, end = start) {
   );
   await page.waitForTimeout(40);
 }
+/** Typing shows no block handles: Esc selects the caret's block. */
+async function selectBlock(id) {
+  await range(id, 2);
+  await page.keyboard.press('Escape');
+  await page.locator('[data-mx-node-chrome]').waitFor({ state: 'visible' });
+}
 async function undo(predicate, label) {
   await page.keyboard.press(`${mod}+z`);
   return stored(predicate, label);
@@ -175,6 +181,9 @@ try {
   await stored((s) => s.includes('**literal**') && !s.includes('<strong'), 'code paste stays literal');
   await undo((s) => !s.includes('**literal**'), 'code paste undo');
   await range('first', 2);
+  check(await page.locator('[data-mx-node-chrome]').isVisible() === false, 'a caret in text shows no block handles');
+  await page.keyboard.press('Escape');
+  await page.locator('[data-mx-node-chrome]').waitFor({ state: 'visible' });
   const blockedControls = await page.locator('[data-mx-node-chrome]').evaluate((root) =>
     [...root.querySelectorAll('button')].flatMap((button) => {
       const rect = button.getBoundingClientRect();
@@ -187,7 +196,7 @@ try {
   await page.getByRole('button', { name: 'Delete selected block', exact: true }).click();
   await stored((s) => !s.includes('id="first"'), 'selected trash control deletes exactly its source block');
   await undo((s) => s.includes('id="first"'), 'node deletion restores its identity');
-  await range('first', 2);
+  await selectBlock('first');
   const handle = page.getByRole('button', { name: 'Resize block height', exact: true });
   await handle.focus();
   await page.keyboard.press('ArrowDown');
@@ -196,7 +205,7 @@ try {
   await stored((s) => /id="first"[^>]*min-h-\[/.test(s), 'keyboard resize commits one explicit minimum height');
   await undo((s) => !/id="first"[^>]*min-h-\[/.test(s), 'resize undo');
   // A pointer preview is cancellable and never persists until release.
-  await range('first', 2);
+  await selectBlock('first');
   const pointerHandle = page.getByRole('button', { name: 'Resize block height', exact: true });
   const bounds = await pointerHandle.boundingBox();
   const beforeCancel = (await head()).markup;
@@ -206,7 +215,7 @@ try {
   await page.keyboard.press('Escape');
   await page.mouse.up();
   check((await head()).markup === beforeCancel, 'a cancelled pointer resize writes nothing at all');
-  await range('first',2);
+  await selectBlock('first');
   const corner=await page.getByRole('button',{name:'Resize selected block',exact:true}).boundingBox();
   const beforeResize=await head();
   await page.mouse.move(corner.x+corner.width/2,corner.y+corner.height/2);await page.mouse.down();
@@ -219,30 +228,36 @@ try {
   const resized=await stored(s=>/id="first"[^>]*w-\[680px\]/.test(s)&&/id="first"[^>]*min-h-\[/.test(s),'pointer drag changes width and height');
   check(resized.version === beforeResize.version + 1, 'one resize gesture creates one saved version');
   await undo(s=>/id="first"[^>]*w-\[600px\]/.test(s)&&!/id="first"[^>]*min-h-\[/.test(s),'pointer resize undoes both dimensions together');
-  await range('first', 2);
+  await selectBlock('first');
   const move = page.getByRole('button', { name: 'Move selected block', exact: true });
   const grip = await move.boundingBox(), destination = await page.locator('#second').boundingBox();
   const beforeMove = await head();
+  const own = await page.locator('#first').boundingBox();
   await page.mouse.move(grip.x + grip.width / 2, grip.y + grip.height / 2);
   await page.mouse.down();
+  await page.mouse.move(own.x + own.width / 2, own.y + own.height / 2, {steps:4});
+  await page.locator('[data-mx-drag-preview][data-mx-drop-state="none"]').waitFor({state:'visible'});
+  check(await page.locator('[data-mx-drag-preview]').textContent() === '⠿ Paragraph', 'the drag label names the block, neutral over itself');
+  check(await page.locator('[data-mx-drop-marker]').isVisible() === false, 'and offers no insertion marker there');
   await page.mouse.move(5, 5, {steps:4});
-  await page.locator('[data-mx-drag-preview][data-mx-drop-valid="false"]').waitFor({state:'visible'});
-  check(await page.locator('[data-mx-drag-preview]').textContent() === '', 'invalid drag feedback contains no text');
-  check(await page.locator('[data-mx-drop-marker]').isVisible() === false, 'and offers no insertion marker');
+  await page.locator('[data-mx-drag-preview][data-mx-drop-state="valid"]').waitFor({state:'visible'});
+  check(await page.locator('[data-mx-drop-marker]').isVisible(), 'outside the parent the marker snaps to the nearest slot');
+  await page.mouse.move(own.x + own.width / 2, own.y + own.height / 2, {steps:4});
+  await page.locator('[data-mx-drag-preview][data-mx-drop-state="none"]').waitFor({state:'visible'});
   await page.mouse.up();
-  check((await head()).markup === beforeMove.markup, 'invalid drop does not edit source');
+  check((await head()).markup === beforeMove.markup, 'releasing over the block itself does not edit source');
   await page.mouse.move(grip.x + grip.width / 2, grip.y + grip.height / 2);
   await page.mouse.down();
   await page.mouse.move(destination.x + 20, destination.y + destination.height / 2, {steps:6});
-  await page.locator('[data-mx-drag-preview][data-mx-drop-valid="true"]').waitFor({state:'visible'});
-  check(await page.locator('[data-mx-drag-preview]').textContent() === '', 'valid drag feedback contains no text');
+  await page.locator('[data-mx-drag-preview][data-mx-drop-state="valid"]').waitFor({state:'visible'});
+  check(await page.locator('[data-mx-drag-preview]').textContent() === '⠿ Paragraph', 'valid drag feedback stays a neutral label');
   await page.locator('[data-mx-drop-marker]').waitFor({state:'visible'});
   check((await head()).markup === beforeMove.markup, 'drag feedback does not edit source');
   await page.mouse.up();
   await stored(s=>s.indexOf('id="second"')<s.indexOf('id="first"'), 'pointer drop follows the visible insertion marker');
   check(await page.locator('[data-mx-drag-preview]').isVisible() === false, 'and the preview disappears on release');
   await undo(s=>s.indexOf('id="first"')<s.indexOf('id="second"'), 'pointer move undoes in one step');
-  await range('first', 2);
+  await selectBlock('first');
   await move.focus();
   await page.keyboard.press('ArrowDown');
   await page.keyboard.press('Enter');
@@ -262,7 +277,7 @@ try {
   check(await page.locator('#second').evaluate(el => getComputedStyle(el).backgroundColor) === 'rgba(0, 0, 0, 0)',
     'block selection does not flood the text background');
   await page.keyboard.press('Escape');
-  await range('first', 2);
+  await selectBlock('first');
   const narrowHandle = await page.getByRole('button', {name:'Resize block width',exact:true}).boundingBox();
   await page.mouse.move(narrowHandle.x+narrowHandle.width/2,narrowHandle.y+narrowHandle.height/2);
   await page.mouse.down();
@@ -275,7 +290,7 @@ try {
   await stored(s=>/id="first"[^>]*w-\[420px\]/.test(s),'shrinking saves the previewed width');
   await undo(s=>/id="first"[^>]*w-\[600px\]/.test(s),'shrinking remains one undo action');
   await range('lp', 2);
-  await page.getByRole('button', { name: 'Select GridItem', exact: true }).click();
+  await page.getByRole('button', { name: 'Select Grid cell', exact: true }).click();
   const divider = page.getByRole('button', { name: 'Resize adjacent columns', exact: true });
   await divider.focus();
   await page.keyboard.press('ArrowRight');

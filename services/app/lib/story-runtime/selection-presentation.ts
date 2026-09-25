@@ -11,13 +11,12 @@ export const SELECTION_PRESENTATION = {
   /** Commenting keeps amber: it is the colour of every comment mark. */
   selectedCss: `${outline('rgba(245, 158, 11, 0.85)')} border-radius: 3px;`,
   /**
-   * Edit mode is calm: a selected NON-TEXT block gets a thin neutral line, a
-   * hovered one half that, and neither ever fills. Text gets neither — the
-   * caret is its selection indicator. No border-radius: the outline must not
-   * reshape an authored rounded card while the pointer is on it.
+   * Edit mode is calm: only a BLOCK selection (a grip, Esc, the breadcrumb,
+   * a click on a chart) is outlined, thin, neutral and never filled. Typing
+   * shows the caret alone, and hover draws nothing. No border-radius: the
+   * outline must not reshape an authored rounded card.
    */
   editSelectedCss: important(outline(neutral(0.55))),
-  editHoverCss: important(outline(neutral(0.28))),
   /** Handles are faint until the pointer is on them. */
   handleColor: neutral(0.6),
   handleDot: neutral(0.45),

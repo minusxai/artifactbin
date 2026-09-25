@@ -151,7 +151,7 @@ describe('the chrome the selection drives', () => {
     mount({ onComment });
     await fromFrame({ type: STORY_SELECTION_MESSAGE, selection: selection({ kind: 'embed', tag: 'Question', path: '0.2' }) });
     expect(screen.getByLabelText('Typography toolbar')).toBeTruthy();
-    expect(screen.getByLabelText('Selection breadcrumb').textContent).toContain('Question');
+    expect(screen.getByLabelText('Selection breadcrumb').textContent).toContain('Chart');
     expect(screen.getByLabelText('Comment on selection')).toBeTruthy();
     expect(screen.getByLabelText('Delete element')).toBeTruthy();
     expect(screen.queryByLabelText('Toggle bold')).toBeNull();

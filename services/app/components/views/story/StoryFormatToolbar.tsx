@@ -57,27 +57,8 @@ import type { StoryEditSelection } from '@/lib/story-runtime/contract';
 import type { ComposableFormatEdit } from '@/lib/story/edit-compose';
 import { StoryToolbarMenu } from './StoryToolbarMenu';
 import { Tooltip } from '@/components/Tooltip';
+import { nodeName } from '@/lib/story-ui/node-names';
 
-const NODE_NAMES: Record<string, string> = {
-  p: 'Paragraph',
-  div: 'Container',
-  section: 'Section',
-  article: 'Article',
-  img: 'Image',
-  span: 'Text',
-  a: 'Link',
-  li: 'List item',
-  ul: 'Bulleted list',
-  ol: 'Numbered list',
-  blockquote: 'Quote',
-  h1: 'Heading 1',
-  h2: 'Heading 2',
-  h3: 'Heading 3',
-  h4: 'Heading 4',
-  h5: 'Heading 5',
-  h6: 'Heading 6',
-};
-const nodeName = (tag: string) => NODE_NAMES[tag] ?? tag;
 
 interface StoryFormatToolbarProps {
   artifactId?:string;
@@ -202,7 +183,7 @@ export default function StoryFormatToolbar({
           <span className="text-[11px] text-muted">{'>'}</span>
           {selection.ancestors.length > 0 && (
             <>
-              {selection.ancestors.slice(-2).map((crumb) => (
+              {selection.ancestors.map((crumb) => (
                 <Fragment key={crumb.path}>
                   <Tooltip content={crumb.hint || crumb.tag}>
                     <button
