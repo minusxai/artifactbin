@@ -58,6 +58,7 @@ import { captureSelection } from './selection-range';
 import { EditableHost } from './editable-host';
 import { GridEdit } from './grid-edit';
 import { imageFileFromTransfer } from './image-drop';
+import { collectTextRegions, createRegionGeometry, navigateAcrossRegions } from './arrow-navigation';
 import { SELECTION_PRESENTATION } from '../selection-presentation';
 
 /** Marks the selected node so the reader can see what the toolbar is pointed at. */
@@ -354,8 +355,21 @@ export function createFrameEditSession({
     reportSelection(selection);
   };
 
+  const regionGeometry = createRegionGeometry(win);
   const onKeyDown = (event: KeyboardEvent) => {
     if (root && !root.contains(event.target as Node)) return;
+    // An arrow on a region's edge line continues into the next text region.
+    // Block selection keeps its own arrow behaviour.
+    if (
+      event.key.startsWith('Arrow') &&
+      blockSelection.paths().length === 0 &&
+      navigateAcrossRegions(event, {
+        regions: collectTextRegions(scope, views),
+        selection: win.getSelection(),
+        geometry: regionGeometry,
+      })
+    )
+      return;
     if ((event.ctrlKey || event.metaKey) && ['z', 'y'].includes(event.key.toLowerCase())) {
       event.preventDefault();
       commitHost(active);
