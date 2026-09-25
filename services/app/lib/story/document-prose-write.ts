@@ -14,17 +14,19 @@ export async function commitProseOperation(db:Queryable,actor:TokenActor,id:stri
  if(!Array.isArray(op.path)||!op.path.every(x=>typeof x==='string')||!inertProse(op.oldText)||!inertProse(op.newText)||!op.newText.length||op.oldText===op.newText)return null;
  const before=proseSource(op.oldText),after=proseSource(op.newText),key=JSON.stringify(op.path),editId=newEditId();
  const slot="l.document#>ARRAY['prose','slots',$3]";
- const start=`((${slot})->>'fixedStart')::int+COALESCE((SELECT sum((entry.value->>'units')::int)::int FROM jsonb_each(l.document#>'{prose,slots}') entry WHERE (entry.value->>'order')::int<((${slot})->>'order')::int),0)`;
+ const start=`l.fixed_start+COALESCE((SELECT sum((entry.value->>'units')::int)::int FROM jsonb_each(l.document#>'{prose,slots}') entry WHERE (entry.value->>'order')::int<l.text_order),0)`;
  const next=`jsonb_set(jsonb_set(jsonb_set(l.document,$4::text[],to_jsonb($5::text),false),ARRAY['prose','slots',$3],(${slot})||jsonb_build_object('units',$6::int,'revision',l.version+1),false),'{prose,bytes}',to_jsonb((l.document#>>'{prose,bytes}')::int+$7::int),false)`;
  const result=await db.query<{artifact:ArtifactRow}>(`WITH observed AS MATERIALIZED (
   SELECT id,sharing_revision FROM artifacts WHERE id=$1 AND ${scope.where('$2')}
  ), locked AS MATERIALIZED (
   SELECT artifacts.*, ${shares} FROM artifacts WHERE id=$1 AND ${scope.where('$2')} AND sharing_revision=(SELECT sharing_revision FROM observed) FOR UPDATE OF artifacts
+ ), positioned AS MATERIALIZED (
+  SELECT l.*, ((${slot})->>'fixedStart')::int AS fixed_start, ((${slot})->>'order')::int AS text_order FROM locked l
  ), base AS (
   SELECT document_state FROM artifact_edits WHERE artifact_id=$1 AND edit_id=$8
  ), updated AS (
   UPDATE artifacts SET document=${next},source=NULL,meta=l.meta-'parsedArtifact',document_archived_at=CASE WHEN l.document_archived_at IS NULL OR l.document_archived_at<=now()-interval '120 seconds' THEN now() ELSE l.document_archived_at END,version=l.version+1,edit_id=$9,actor_user_id=$10,actor_token_id=$11,updated_at=now()
-  FROM locked l,base b
+  FROM positioned l,base b
   WHERE artifacts.id=l.id AND l.format='markup' AND l.document#>>'{prose,epoch}'=b.document_state->>'epoch'
    AND (l.document#>'{prose,slots}') ? $3 AND l.document#>>$4::text[]=$12
    AND ((${slot})->>'revision')::int<=(b.document_state->>'version')::int

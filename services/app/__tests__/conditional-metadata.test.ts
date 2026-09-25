@@ -43,9 +43,18 @@ it('body-only edits preserve metadata changed while their source was being prepa
   return result;
  });
  try {
-  const result=await applyEditFor(actor,row.id,{baseEditId:row.edit_id,change:{oldString:'Original',newString:'Changed'}});
+  const result=await applyEditFor(actor,row.id,{baseEditId:row.edit_id,change:{oldString:'Original',newString:'Changed <em>structure</em>'}});
   expect(result).toMatchObject({applied:true});
   const current=(await getArtifactFor(actor,row.id))!;
   expect(current.source).toContain('Changed');expect(current.title).toBe('Concurrent title');expect(current.meta.colorMode).toBe('dark');
  } finally {publish.mockRestore();}
+});
+
+it('atomic prose preserves metadata updated after the client read its base',async()=>{
+ const {actor,row}=await document();
+ await setMetadataFor(actor,row.id,{title:'Concurrent title',colorMode:'dark'});
+ const result=await applyEditFor(actor,row.id,{baseEditId:row.edit_id,text:{path:['roots','0','children','0','value'],oldText:'Original',newText:'Changed'}});
+ expect(result).toMatchObject({applied:true});
+ const current=(await getArtifactFor(actor,row.id))!;
+ expect(current.source).toContain('Changed');expect(current.title).toBe('Concurrent title');expect(current.meta.colorMode).toBe('dark');
 });

@@ -4,9 +4,10 @@ import {mintToken} from '@/lib/tokens';
 import {getDb} from '@/lib/db';
 import {getArtifactById,applyEditScoped} from '@/lib/artifacts';
 import {proseOperation} from '@/lib/story/document-prose';
+import {POST as editRoute} from '@/app/api/artifacts/[id]/edits/route';
 import {POST as createRoute} from '@/app/api/artifacts/route';
 useAppHarness();
-async function setup(){const token=await mintToken('mxmx_test_atomic_jsonb');const response=await createRoute(request('/api/artifacts',{method:'POST',token:token.token,json:{markup:'<section><p>Alpha</p><p>Beta</p></section>'}}));expect(response.status).toBe(201);const {id}=await response.json();return {id,actor:{tokenId:token.id,userId:null},row:(await getArtifactById(id))!};}
+async function setup(){const token=await mintToken('mxmx_test_atomic_jsonb');const response=await createRoute(request('/api/artifacts',{method:'POST',token:token.token,json:{markup:'<section><p>Alpha</p><p>Beta</p></section>'}}));expect(response.status).toBe(201);const {id}=await response.json();return {id,token,actor:{tokenId:token.id,userId:null},row:(await getArtifactById(id))!};}
 it('two stale independent variable-length Unicode edits each use one atomic statement',async()=>{
  const {id,actor,row}=await setup(),db=await getDb();const a=proseOperation(row.source!,row.source!.replace('Alpha','First 👩🏽‍💻')),b=proseOperation(row.source!,row.source!.replace('Beta','Second &amp; β'));expect(a).not.toBeNull();expect(b).not.toBeNull();
  const spy=vi.spyOn(db,'query');
@@ -56,4 +57,12 @@ it('does not let a stale child edit bypass a parent mutation',async()=>{
 it('read migrations do not manufacture validation certificates',async()=>{
  const {id,row}=await setup(),db=await getDb();await db.query('UPDATE artifacts SET document=NULL,source=$2 WHERE id=$1',[id,row.source]);await getArtifactById(id);
  expect((await db.query<{document:{prose?:unknown}}>('SELECT document FROM artifacts WHERE id=$1',[id])).rows[0]!.document.prose).toBeUndefined();
+});
+
+it('the public edit operation accepts a text primitive and rejects mixed forms',async()=>{
+ const {id,token,row}=await setup(),text=proseOperation(row.source!,row.source!.replace('Alpha','Wire edit'))!;
+ const response=await editRoute(request(`/api/artifacts/${id}/edits`,{method:'POST',token:token.token,json:{edit_id:row.edit_id,text}}),{params:Promise.resolve({id})});
+ expect(response.status).toBe(200);const body=await response.json();expect(body.markup).toContain('Wire edit');expect(body.version).toBe(2);expect(body.document).toBeUndefined();
+ const mixed=await editRoute(request(`/api/artifacts/${id}/edits`,{method:'POST',token:token.token,json:{edit_id:body.edit_id,text,source:row.source}}),{params:Promise.resolve({id})});
+ expect(mixed.status).toBe(400);expect((await getArtifactById(id))?.version).toBe(2);
 });
