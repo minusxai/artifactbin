@@ -4,13 +4,13 @@ import {publishJsx} from '../../services/app/lib/story/jsx-tier.ts';
 import {createArtifact,getArtifactById,applyEditScoped,editorScope,refLoaderForActor} from '../../services/app/lib/artifacts.ts';
 import {decodeDocument} from '../../services/app/lib/story/document-codec.ts';
 import {proseOperation} from '../../services/app/lib/story/document-prose.ts';
-import {prepareSemanticOperation} from '../../services/app/lib/story/document-semantic.ts';
-import {commitSemanticOperation} from '../../services/app/lib/story/document-semantic-write.ts';
+import {prepareGraphOperation} from '../../services/app/lib/story/document-graph-admission.ts';
+import {commitGraphOperation} from '../../services/app/lib/story/document-graph-write.ts';
 import {mintToken} from '../../services/app/lib/tokens.ts';
 const db=await getDb(),raw=db.raw();assert.equal(raw.kind,'pg');const pool=raw.pool;
 try{
  const token=await mintToken('mxmx_test_jsonb_operations'),actor={tokenId:token.id,userId:null};
- const input=await publishJsx({},'<section>'+Array.from({length:32},(_,i)=>`<p id="p${i}">Text ${i}</p>`).join('')+'</section>');assert.ok(!(input instanceof Response));
+ const input=await publishJsx({},'<section id="root">'+Array.from({length:32},(_,i)=>`<p id="p${i}">Text ${i}</p>`).join('')+'</section>');assert.ok(!(input instanceof Response));
  const initial=await createArtifact(token.id,null,{...input,title:'mxmx_test_operations',visibility:'unlisted'});
  const edit=(base,i,text)=>applyEditScoped(actor,initial.id,{baseEditId:base.edit_id,text:proseOperation(base.source,base.source.replace(`Text ${i}`,text))});
  const all=await Promise.all(Array.from({length:16},(_,i)=>edit(initial,i,`Changed ${i} 👩🏽‍💻 `+'long '.repeat(i))));assert.ok(all.every(r=>r?.applied));
@@ -47,14 +47,14 @@ try{
  head=await getArtifactById(initial.id);
  const rawHead=(await db.query('SELECT document FROM artifacts WHERE id=$1',[initial.id])).rows[0];
  const base={id:initial.id,version:head.version,document:rawHead.document,meta:head.meta};
- const structural=await prepareSemanticOperation(base,[{kind:'setAttribute',path:[0,28],name:'className',value:'underline'},{kind:'insert',parent:[0],index:32,source:'<h2>New section</h2>'}],{loadRef:refLoaderForActor(actor)});assert.ok(!(structural instanceof Response));
+ const structural=await prepareGraphOperation(base,[{kind:'setAttribute',path:[0,28],name:'className',value:'underline'},{kind:'insert',parent:[0],index:32,source:'<h2>New section</h2>'}],{loadRef:refLoaderForActor(actor)});assert.ok(!(structural instanceof Response));
  // Hold the predecessor, force the structural statement to wait, then assert its
  // archive and source log contain the new prose rather than the planning snapshot.
  const holding=await pool.connect();let waiting;
  try{
   await holding.query('BEGIN');db.query=holding.query.bind(holding);
   assert.ok((await edit(head,29,'Concurrent structural predecessor 👩🏽‍💻')).applied);db.query=original;
-  waiting=commitSemanticOperation(db,actor,editorScope(actor),structural);
+  waiting=commitGraphOperation(db,actor,editorScope(actor),structural);
   for(let i=0;;i++){const n=(await pool.query("SELECT count(*)::int n FROM pg_stat_activity WHERE wait_event_type='Lock' AND pid<>pg_backend_pid()")).rows[0].n;if(n)break;assert.ok(i<200);await new Promise(r=>setTimeout(r,10));}
   await holding.query('COMMIT');assert.ok(await waiting);
  }finally{db.query=original;await holding.query('ROLLBACK');holding.release();}
@@ -64,11 +64,11 @@ try{
  console.log('PASS text/attribute/remove/move/replace/delete composite is one valid history step');
  const ref=await createArtifact(token.id,null,{format:'image',content:'',source:null,meta:{}});
  head=await getArtifactById(initial.id);const snapshot=(await db.query('SELECT document FROM artifacts WHERE id=$1',[initial.id])).rows[0];
- const referencePlan=await prepareSemanticOperation({id:initial.id,version:head.version,document:snapshot.document,meta:head.meta},[{kind:'insert',parent:[],index:1,source:`<img src="ref:${ref.id}" />`}],{loadRef:refLoaderForActor(actor)});assert.ok(!(referencePlan instanceof Response));
+ const referencePlan=await prepareGraphOperation({id:initial.id,version:head.version,document:snapshot.document,meta:head.meta},[{kind:'insert',parent:[],index:1,source:`<img src="ref:${ref.id}" />`}],{loadRef:refLoaderForActor(actor)});assert.ok(!(referencePlan instanceof Response));
  const refConnection=await pool.connect();
  try{
   await refConnection.query('BEGIN');await refConnection.query('UPDATE artifacts SET version=version+1 WHERE id=$1',[ref.id]);
-  const pendingReference=commitSemanticOperation(db,actor,editorScope(actor),referencePlan);
+  const pendingReference=commitGraphOperation(db,actor,editorScope(actor),referencePlan);
   for(let i=0;;i++){const n=(await pool.query("SELECT count(*)::int n FROM pg_stat_activity WHERE wait_event_type='Lock' AND pid<>pg_backend_pid()")).rows[0].n;if(n)break;assert.ok(i<200);await new Promise(r=>setTimeout(r,10));}
   await refConnection.query('COMMIT');assert.equal(await pendingReference,null);
  }finally{await refConnection.query('ROLLBACK');refConnection.release();}

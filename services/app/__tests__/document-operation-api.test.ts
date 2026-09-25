@@ -1,5 +1,5 @@
 import {observedRequest} from './conditional-request';
-import * as semanticWriter from '@/lib/story/document-semantic-write';
+import * as graphWriter from '@/lib/story/document-graph-write';
 import {expect,it,vi} from 'vitest';
 import {useAppHarness,request} from './harness';
 import {mintToken} from '@/lib/tokens';
@@ -16,7 +16,7 @@ it('accepts a complete composite through the real edit route and commits JSONB p
  expect(response.status).toBe(200);
  expect(spy.mock.calls.filter(([sql])=>/UPDATE artifacts SET document=/.test(sql))).toHaveLength(1);spy.mockRestore();
  const head=(await getArtifactById(id))!;expect(head.source).toContain('Moved β');expect(head.source).toContain('Heading');expect(head.source).toContain('className="p-4"');
- expect((await db.query<{document:{kind:string};source:null}>('SELECT document,source FROM artifacts WHERE id=$1',[id])).rows[0]).toMatchObject({source:null,document:{kind:'semantic'}});
+ expect((await db.query<{document:{kind:string};source:null}>('SELECT document,source FROM artifacts WHERE id=$1',[id])).rows[0]).toMatchObject({source:null,document:{kind:'graph'}});
 });
 it('rejects an invalid composite without changing the document or adding history',async()=>{
  const {token,id,row}=await setup();
@@ -32,7 +32,7 @@ it('two agents changing independent paragraphs through composite operations reta
 });
 
 it('whole replacement and restore use the same atomic document/history writer',async()=>{
- const {token,id,row}=await setup(),spy=vi.spyOn(semanticWriter,'commitSemanticOperation');
+ const {token,id,row}=await setup(),spy=vi.spyOn(graphWriter,'commitGraphOperation');
  const replaced=await replaceRoute(await observedRequest(`/api/artifacts/${id}`,{method:'PUT',token:token.token,json:{markup:'<h1>Replacement</h1>',expectedVersion:row.version}}),{params:Promise.resolve({id})});expect(replaced.status).toBe(200);
  const restored=await revertArtifactFor({tokenId:token.id,userId:null},id,1);expect(restored&&'source'in restored&&restored.source).toBe(row.source);
  expect(spy).toHaveBeenCalledTimes(2);spy.mockRestore();

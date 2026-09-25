@@ -16,7 +16,7 @@ const mode=arg('mode','jsonb'),paragraphs=Number(arg('paragraphs','1000')),round
 assert.ok(['jsonb','text','whole'].includes(mode));
 const db=await getDb();assert.equal(db.raw().kind,'pg');
 let statementCounts={},statementMs={},explained=false;const query=db.query.bind(db);
-db.query=async(sql,params)=>{const label=sql.includes('WITH observed')?'atomic':sql.includes('WITH updated')?'general':sql.trim().split(/\s+/)[0];const start=performance.now();
+db.query=async(sql,params)=>{const label=(sql.includes('WITH observed')||sql.includes('WITH reference_witnesses'))?'atomic':sql.includes('WITH updated')?'general':sql.trim().split(/\s+/)[0];const start=performance.now();
  if(process.argv.includes('--explain')&&label==='atomic'&&!explained){explained=true;const c=await db.raw().pool.connect();try{await c.query('BEGIN');const plan=await c.query('EXPLAIN (ANALYZE,BUFFERS,FORMAT JSON) '+sql,params);writeFileSync('/tmp/jsonb-operation-plan.json',JSON.stringify(plan.rows,null,2));await c.query('ROLLBACK');}finally{c.release();}}
  const result=await query(sql,params);statementCounts[label]=(statementCounts[label]??0)+1;statementMs[label]=(statementMs[label]??0)+performance.now()-start;return result;};
 const value=(i,r)=>`agent_${i}_${String(r).padStart(6,'0')} ${createHash('sha256').update('a'+i).digest('hex')} ${createHash('sha256').update('b'+i).digest('hex')}${r?' 🎉 '+('variable length '.repeat(r)):''}`;

@@ -2,6 +2,7 @@ import {describe,expect,it} from 'vitest';
 import {encodeDocument,decodeDocument,type StoredDocument} from '../document-codec';
 import {parseJsx} from '../../jsx/parse';
 import {serializeJsx} from '../../jsx/serialize';
+import {createDocumentGraph} from '../document-graph';
 const databaseOrder=(v:unknown):unknown=>Array.isArray(v)?v.map(databaseOrder):v&&typeof v==='object'?Object.fromEntries(Object.entries(v).sort(([a],[b])=>a.localeCompare(b)).map(([k,x])=>[k,databaseOrder(x)])):v;
 const canonical=(source:string)=>{const parsed=parseJsx(source);if(!parsed.ok)throw new Error(parsed.error);return serializeJsx(parsed.nodes);};
 describe('persisted JSX codec',()=>{
@@ -23,4 +24,9 @@ describe('persisted JSX codec',()=>{
  it('does not mistake unsupported schema or malformed data for an empty document',()=>{
   for(const value of [{schema:2,kind:'jsx',roots:[]},{schema:1,kind:'other'},{schema:1,kind:'jsx',roots:null}])expect(()=>decodeDocument(value as StoredDocument)).toThrow();
  });
+});
+
+it('decodes graph documents through the common artifact codec',()=>{
+ const source='<section id="root"><p>Graph β</p></section>';
+ expect(decodeDocument(createDocumentGraph(source,1))).toBe(source);
 });

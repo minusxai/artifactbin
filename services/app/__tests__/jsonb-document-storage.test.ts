@@ -2,13 +2,14 @@ import {expect,it,vi} from 'vitest';
 import {useAppHarness,request} from './harness';
 import {mintToken} from '@/lib/tokens';
 import {getDb} from '@/lib/db';
+import {encodeDocument,decodeDocumentNodes,encodeDocumentNodes} from '@/lib/story/document-codec';
 import {getArtifactById,applyEditScoped,getVersionFor,revertArtifactFor,forkArtifact} from '@/lib/artifacts';
 import {POST as createRoute} from '@/app/api/artifacts/route';
 useAppHarness();
 async function create(){const token=await mintToken('mxmx_test_jsonb');const response=await createRoute(request('/api/artifacts',{method:'POST',token:token.token,json:{markup:'<section><p>Alpha</p><p>Beta</p></section>'}}));expect(response.status).toBe(201);const {id}=await response.json();return {token,id,actor:{tokenId:token.id,userId:null},row:(await getArtifactById(id))!};}
 const stored=async(id:string)=>(await (await getDb()).query('SELECT * FROM artifacts WHERE id=$1',[id])).rows[0];
 it('writes new markup as JSONB, while reads and edit logs retain exact JSX',async()=>{
- const {id,row}=await create();const raw=await stored(id);expect(raw.source).toBeNull();expect(raw.document).toMatchObject({schema:2,kind:'semantic'});
+ const {id,row}=await create();const raw=await stored(id);expect(raw.source).toBeNull();expect(raw.document).toMatchObject({schema:3,kind:'graph'});
  expect(row.source).toContain('Alpha');const log=(await(await getDb()).query('SELECT inserted FROM artifact_edits WHERE artifact_id=$1',[id])).rows[0];expect(log.inserted).toBe(row.source);
 });
 it('migrates old markup once without changing its version, identity, metadata, timestamps or history',async()=>{
@@ -53,4 +54,19 @@ it('forking a JSONB document creates another JSONB head with its own history',as
 it('invalid publications leave JSONB and the existing edit protocol untouched',async()=>{
  const {id,row,actor}=await create(),before=await stored(id);const bad=await applyEditScoped(actor,id,{baseEditId:row.edit_id,change:{oldString:'Alpha',newString:'<script>run()</script>'}});expect(bad).toBeInstanceOf(Response);
  expect(await stored(id)).toEqual(before);expect((await getArtifactById(id))?.edit_id).toBe(row.edit_id);
+});
+it('reads the earlier JSONB representation and upgrades it on its first validated edit',async()=>{
+ const {id,row,actor}=await create(),db=await getDb();
+ // Build the earlier semantic shape from the public source, without bringing
+ // the retired writer back into the application.
+ const tree=encodeDocument(row.source!);if(tree.kind!=='jsx')throw new Error('Expected canonical source');
+ const nodes=decodeDocumentNodes(tree),root=nodes[0];if(root?.type!=='element')throw new Error('Expected root');
+ const paragraph=root.children[0];if(paragraph?.type!=='element')throw new Error('Expected paragraph');
+ const leaf=paragraph.children[0];if(leaf?.type!=='text')throw new Error('Expected text');Object.assign(leaf,{value:'',slot:'legacy'});
+ const document={schema:2,kind:'semantic',tree:encodeDocumentNodes(nodes),prose:{legacy:{value:'Alpha',source:'Alpha',bytes:5,units:5,revision:1,fixedStart:row.source!.indexOf('Alpha'),order:0}},epoch:'legacy',hash:'legacy',bytes:Buffer.byteLength(row.source!),policy:'semantic-prose-v1',contextRequired:false};
+ await db.query('UPDATE artifacts SET document=$2::jsonb WHERE id=$1',[id,JSON.stringify(document)]);
+ expect((await getArtifactById(id))?.source).toBe(row.source);
+ const edited=await applyEditScoped(actor,id,{baseEditId:row.edit_id,change:{oldString:'Alpha',newString:'Upgraded'}});
+ expect(edited&&!(edited instanceof Response)&&edited.applied).toBe(true);
+ expect((await stored(id)).document).toMatchObject({schema:3,kind:'graph'});
 });

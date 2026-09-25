@@ -1,10 +1,11 @@
-import {commitProseOperation} from './story/document-prose-write';
-import {proseOperation,applyProseOperation,type ProseOperation} from './story/document-prose';
+import {applyProseOperation,type ProseOperation} from './story/document-prose';
 import type {DocumentOperation} from '@artifactbin/contracts';
-import {decodeDocument,type SemanticDocument,type StoredDocument} from './story/document-codec';
+import {decodeDocument,type StoredDocument} from './story/document-codec';
 import {applyDocumentOperations,DocumentOperationError} from './story/document-operation';
-import {createSemanticDocument,prepareSemanticSource,semanticPlan,applySemanticPlan,type SemanticAdmission} from './story/document-semantic';
-import {commitSemanticOperation} from './story/document-semantic-write';
+import {createDocumentGraph,GRAPH_POLICY,type DocumentGraph} from './story/document-graph';
+import {prepareGraphSource,graphAdmissionPlan,type GraphAdmission} from './story/document-graph-admission';
+import {applyGraphPatch} from './story/document-graph-patch';
+import {commitGraphOperation,commitGraphProseOperation} from './story/document-graph-write';
 import {artifactQuery,loadArtifactDocument,sourceStorage,decodeArtifactDocument} from './artifact-document';
 import {JOIN_RELATIONS,seedOwnerJoin} from './relation-state';
 import {documentMentions} from './saved-mentions';
@@ -1108,14 +1109,14 @@ async function logWholeDocumentWrite(tx: Queryable, before: ArtifactRow, after: 
  */
 export interface PreparedMarkupWrite {
  source:string;content:string;meta:Record<string,unknown>;ids:string[];aliases:Array<{legacyKey:string;nodeId:string;path:string}>;
- admission:SemanticAdmission;initialize?:{document:SemanticDocument;source:string};
+ admission:GraphAdmission;initialize?:{document:DocumentGraph;source:string};
 }
 export async function commitNormalizedMarkup(
  tx:Queryable,actor:TokenActor|null,current:ArtifactRow,
  normalized:PreparedMarkupWrite & {title?:string|null;description?:string|null;format?:ArtifactFormat},
 ):Promise<ArtifactRow>{
  const scope=actor?editorScope(actor):{val:current.id,where:(param:string)=>`id=${param}`};
- const updated=await commitSemanticOperation(tx,actor,scope,normalized.admission,{
+ const updated=await commitGraphOperation(tx,actor,scope,normalized.admission,{
   archive:'always',history:'whole',expectedEditId:current.edit_id,initialize:normalized.initialize,title:normalized.title,description:normalized.description,aliases:normalized.aliases,provenance:'migration',
  });
  if(!updated)throw new Error('artifact changed after identity preparation');
@@ -1147,10 +1148,10 @@ export async function publishMarkupForArtifact(
   }
   const stored=(await db.query<{document:StoredDocument|null}>('SELECT document FROM artifacts WHERE id=$1 AND edit_id=$2',[current.id,current.edit_id])).rows[0];
   if(!stored)return json({error:'doc_changed'},409);
-  const existing=stored.document?.schema===2?stored.document:null;
+  const existing=stored.document?.schema===3&&stored.document.policy===GRAPH_POLICY?stored.document:null;
   let baseline=existing;
-  if(!baseline){try{baseline=createSemanticDocument(canonicalizeMarkup(current.source??''),current.version);}catch{baseline=createSemanticDocument('',current.version);}}
-  const admission=await prepareSemanticSource({id:current.id,version:current.version,document:baseline,meta:current.meta,reservedIds:reserved.rows.map(r=>r.source_id)},published.source??'',context,{theme:published.meta.theme,template:published.meta.template,colorMode:published.meta.colorMode},true);
+  if(!baseline){try{baseline=createDocumentGraph(canonicalizeMarkup(current.source??''),current.version);}catch{baseline=createDocumentGraph('',current.version);}}
+  const admission=await prepareGraphSource({id:current.id,version:current.version,document:baseline,meta:current.meta,reservedIds:reserved.rows.map(r=>r.source_id)},published.source??'',context,{theme:published.meta.theme,template:published.meta.template,colorMode:published.meta.colorMode},true);
   if(admission instanceof Response)return admission;
   return {source:published.source??'',content:published.content,meta:published.meta,ids:identity.ids,aliases:identity.aliases,admission,...(!existing?{initialize:{document:baseline,source:current.source??''}}:{})};
 }
@@ -1378,7 +1379,7 @@ async function replaceScoped(
       const receipts=operations.length?(await tx.query<{annotation_changes:AnnotationReceipt[]}>(`SELECT annotation_changes FROM artifact_edits WHERE artifact_id=$1 AND EXISTS(SELECT 1 FROM jsonb_array_elements(annotation_changes) receipt WHERE receipt->>'operationId'=ANY($2::text[]))`,[id,operations.map(op=>op.id)])).rows.flatMap(r=>r.annotation_changes??[]):[];
       if(operations.some(op=>op.kind==='undo'&&!receipts.some(r=>r.operationId===op.id&&r.direction==='map')))return {conflict:true,reason:'doc_changed',currentVersion:current.version};
       const effects=annotationEffects(current.source??'',preparedMarkup.source,operations,annotationRows,receipts);
-      const updated=await commitSemanticOperation(tx,actor,scope,preparedMarkup.admission,{
+      const updated=await commitGraphOperation(tx,actor,scope,preparedMarkup.admission,{
         archive:'always',expectedEditId:current.edit_id,initialize:preparedMarkup.initialize,effects,aliases:preparedMarkup.aliases,
         title:input.title,description:input.description,visibility:input.visibility,ancestorIds:input.ancestor_ids,access:input.access,linkRole:input.link_role,
       });
@@ -1576,8 +1577,8 @@ async function interveningEdits(q: Queryable, artifactId: string, baseEditId: st
   }
   return r.rows.flatMap((row) => {
     const recorded=typeof row.changes==='string'?JSON.parse(row.changes) as BatchChange[]:row.changes;
-    const parsed=recorded??(row.document_state?.kind==='semantic'?sourceChanges(row.removed,row.inserted):null);
-    const changes = row.document_state?.kind==='semantic'&&!parsed?.length ? [{splice:{start:0,removed:'',inserted:''},span:{start:0,end:0}}] : parsed?.length ? [...parsed].reverse() : [{
+    const parsed=recorded??(['semantic','graph'].includes(row.document_state?.kind??'')?sourceChanges(row.removed,row.inserted):null);
+    const changes = ['semantic','graph'].includes(row.document_state?.kind??'')&&!parsed?.length ? [{splice:{start:0,removed:'',inserted:''},span:{start:0,end:0}}] : parsed?.length ? [...parsed].reverse() : [{
       splice: { start: row.splice_start, removed: row.removed, inserted: row.inserted },
       span: { start: row.span_start, end: row.span_end },
     }];
@@ -1607,11 +1608,8 @@ export async function applyEditScoped(actor: TokenActor, id: string, input: Edit
   const scope = opts.scope ?? editorScope(actor);
 
   if(input.text&&!input.change&&!input.meta&&!input.annotationOps?.length&&!opts.dryRun){
-    const outcome=await commitProseOperation(db,actor,id,input.baseEditId,input.text,scope,SHARES_PROJECTION);
-    if(outcome)return outcome;
-    // Missing certification (including a lazily migrated legacy document) uses
-    // normal validation. A true stale conflict still fails the existing rebase.
-
+    const row=await commitGraphProseOperation(db,actor,id,input.baseEditId,input.text,scope);
+    if(row){void trackEvent('edit',row.id,{userId:row.user_id});return {applied:true,row};}
   }
 
   for (let attempt = 0; ; attempt++) {
@@ -1700,29 +1698,22 @@ export async function applyEditScoped(actor: TokenActor, id: string, input: Edit
       return { applied: false, reason: 'bad_diff', detail: 'identical' };
     }
 
-    // Legacy source clients can use the same primitive after translating their
-    // claimed base. New clients submit the primitive directly and skip this read.
-    if(input.change&&!input.meta&&!input.annotationOps?.length&&!opts.dryRun){
-      const text=proseOperation(baseSource,candidate);
-      if(text){const result=await commitProseOperation(db,actor,id,input.baseEditId,text,scope,SHARES_PROJECTION);if(result)return result;}
-    }
-
     // Admission owns publication and identity. Dry runs retain the pure publisher
     // so previewing never imports assets or performs persistence side effects.
-    const existing=storedHead.document?.schema===2?storedHead.document:null;
+    const existing=storedHead.document?.schema===3&&storedHead.document.policy===GRAPH_POLICY?storedHead.document:null;
     let baseline=existing;
-    if(!baseline){try{baseline=createSemanticDocument(canonicalizeMarkup(headSource),head.version);}catch{baseline=createSemanticDocument('',head.version);}}
-    let admitted:SemanticAdmission;
+    if(!baseline){try{baseline=createDocumentGraph(canonicalizeMarkup(headSource),head.version);}catch{baseline=createDocumentGraph('',head.version);}}
+    let admitted:GraphAdmission;
     let published:StoredContent|Response;
     let identity:{source:string;ids:string[];aliases:Array<{legacyKey:string;nodeId:string;path:string}>};
     if(!opts.dryRun){
       const reserved=await db.query<{source_id:string}>('SELECT source_id FROM artifact_source_ids WHERE artifact_id=$1',[id]);
-      const result=await prepareSemanticSource({id,version:head.version,document:baseline,meta:head.meta,reservedIds:reserved.rows.map(r=>r.source_id)},candidate,{
+      const result=await prepareGraphSource({id,version:head.version,document:baseline,meta:head.meta,reservedIds:reserved.rows.map(r=>r.source_id)},candidate,{
         loadRef:refLoaderForActor(writerFor(head)),importAsset:assetImporterFor(head.token_id,head.user_id),resolveFont:fontResolver(),overByteQuota:byteQuotaFor(head.token_id),
       },{theme:input.meta?.theme!==undefined?input.meta.theme:head.meta.theme??null,template:head.meta.template??null,colorMode:input.meta?.colorMode!==undefined?input.meta.colorMode:head.meta.colorMode??null},!existing);
       if(result instanceof Response)return result;
       admitted=result;
-      const plan=semanticPlan(admitted),next=applySemanticPlan(baseline,head.version,admitted);
+      const plan=graphAdmissionPlan(admitted),next=applyGraphPatch(baseline,head.version,plan.patch);
       if(!next)throw new Error('Admitted document did not apply to its baseline');
       published={format:'markup',content:'',source:decodeDocument(next),meta:plan.meta,warnings:plan.warnings,derivedTitle:null};
       identity={source:published.source!,ids:plan.ids,aliases:plan.aliases};
@@ -1804,7 +1795,7 @@ export async function applyEditScoped(actor: TokenActor, id: string, input: Edit
       ? annotationEffects(headSource, storedText, operations, annotationRows, storedReceipts)
       : { updates: [], receipts: [] };
     const commit=async(queryable:Queryable)=>{
-      const row=await commitSemanticOperation(queryable,actor,scope,admitted!,{
+      const row=await commitGraphOperation(queryable,actor,scope,admitted!,{
         ...(input.meta?.title!==undefined?{title:input.meta.title}:{}),effects:sideEffects,
         historyChanges:{source:headSource,changes:batchChanges&&candidate===storedText?batchChanges:sourceChanges(headSource,storedText)},
         ...(!existing?{initialize:{document:baseline,source:headSource},expectedEditId:head.edit_id}:operations.length?{expectedEditId:head.edit_id}:{}),
