@@ -6,7 +6,7 @@
  * the bar's "opens version history" case stops at.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, act, within } from '@testing-library/react';
 import VersionHistory from '../VersionHistory';
 import {
   STORY_DOCUMENT_MESSAGE,
@@ -62,26 +62,24 @@ describe('the editor bar', () => {
     expect(lastQueued()).toMatchObject({ source: '<p>rewritten</p>' });
   });
 
-  it('lists the versions in the rail rather than behind a switch', () => {
+  it('lists the versions in the edit panel\'s History tab rather than behind a drawer switch', () => {
     mount();
-    // "which version am I looking at" is answered without being asked, so
-    // there is no longer an expand control to press.
+    // A wide window has the panel, so the narrow bar's drawer switch is absent.
     expect(screen.queryByLabelText('Open version history')).toBeNull();
-    expect(screen.getByLabelText('Version history')).toBeTruthy();
+    fireEvent.click(screen.getByRole('tab', { name: 'History' }));
+    expect(within(screen.getByLabelText('Edit panel')).getByLabelText('Version history')).toBeTruthy();
   });
 });
 
 describe('leaving', () => {
-  it('offers the way out twice — in the toolbar and at the foot of the rail — and each leaves once', () => {
+  it('offers the way out in the toolbar, and it leaves once', () => {
     const onDone = vi.fn();
     mount({ onDone });
-    // Two doors, two NAMES: sharing one would make every locator that says
-    // "Exit edit mode" match both (the browser gates do).
+    // The left rail and its second door are gone; the toolbar's is the one.
     const bar = screen.getByLabelText('Exit edit mode');
-    const rail = screen.getByLabelText('Done editing');
     expect(screen.getByLabelText('Document actions')).toContainElement(bar);
-    expect(screen.getByLabelText('Artifact parts')).toContainElement(rail);
-    fireEvent.click(rail);
+    expect(screen.queryByLabelText('Done editing')).toBeNull();
+    fireEvent.click(bar);
     expect(onDone).toHaveBeenCalledTimes(1);
   });
 
@@ -136,8 +134,8 @@ describe('VersionHistory', () => {
 });
 
 /**
- * The query notebook: every <Query> the document declares, in the right rail
- * as cells. The bar offers it only when there is something to show, and a
+ * The query notebook: every <Query> the document declares, as cells in a view
+ * over the document (the toolbar's app / code / data switch). The bar offers it only when there is something to show, and a
  * cell's edit is a structural edit like any other — it rewrites the
  * declaration and goes out through the same queue.
  */
@@ -153,13 +151,13 @@ describe('the query notebook', () => {
     expect(screen.queryByLabelText('Queries')).toBeNull();
   });
 
-  it('opens data as a VIEW with each query as a cell, and the rail switches away from it', () => {
+  it('opens data as a VIEW with each query as a cell, and the view switch leaves it', () => {
     withQuery();
     fireEvent.click(screen.getByLabelText('Show data'));
     expect(screen.getByLabelText('Data')).toBeTruthy();
     expect((screen.getByLabelText('Query $sales SQL') as HTMLTextAreaElement).value).toBe('select 1 as x');
     // app, code and data are three views of one document: a view does not close
-    // itself, the rail picks another — so there is no close button to press.
+    // itself, the switch picks another — so there is no close button to press.
     expect(screen.queryByLabelText('Close queries')).toBeNull();
     fireEvent.click(screen.getByLabelText('Edit on the page'));
     expect(screen.queryByLabelText('Data')).toBeNull();

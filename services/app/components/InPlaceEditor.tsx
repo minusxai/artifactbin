@@ -27,13 +27,15 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import SourceEditor from '@/components/SourceEditorPane';
 import { editBlock } from '@/lib/editor-v2/block-edit';
 import { SourceHistory } from '@/lib/editor-v2/history';
-import { Check, Code, Database, History, Undo2, Redo2, Paintbrush } from 'lucide-react';
+import { ChartColumn, Check, Code, Database, Hash, History, MessageSquare, Undo2, Redo2, Paintbrush, SlidersHorizontal, Workflow, X } from 'lucide-react';
 import { TrustedUi } from '@/components/TrustedUi';
 
 import ThemePicker, { ModeChip, TemplateChip } from '@/components/ThemePicker';
 import { Tooltip } from '@/components/Tooltip';
-import { APP_BAR_H, EDIT_BAR_H, EDIT_BAR_ROW_H, LEFT_RAIL_W, RIGHT_RAIL_W } from '@/lib/story/edit-bar';
-import { useIsPhoneViewport } from '@/components/MobileSheet';
+import { APP_BAR_H, EDIT_BAR_H, EDIT_BAR_ROW_H } from '@/lib/story/edit-bar';
+import MobileSheet, { useIsPhoneViewport } from '@/components/MobileSheet';
+import EditPanel, { SELECTION_HINT, type EditPanelTab } from '@/components/EditPanel';
+import { editPanelWidth, readEditPanelCollapsed, useWideEditViewport, writeEditPanelCollapsed } from '@/lib/story/use-edit-panel';
 import VersionHistory from '@/components/VersionHistory';
 import VizEditorPanel from '@/components/views/story/VizEditorPanel';
 import NumberEditorPanel from '@/components/views/story/NumberEditorPanel';
@@ -68,8 +70,18 @@ import type { DataflowState } from '@/lib/story/dataflow';
 import type { StoryThemeName } from '@/lib/validation/atlas-schemas';
 import type { StoryEditSelection, StoryIslandDataflow } from '@/lib/story-runtime/contract';
 
-/** The embed inspectors the right rail can show, by the selected embed's kind. */
+/** The embed inspectors the Selection tab can show, by the selected embed's kind. */
 const INSPECTOR_LABEL = { chart: 'Chart inspector', number: 'Number inspector', diagram: 'Diagram inspector' } as const;
+/** The toolbar's way to the inspector of what is selected. */
+const INSPECT_LABEL = { chart: 'Edit chart', number: 'Edit number', diagram: 'Edit diagram' } as const;
+const INSPECT_ICON = { chart: ChartColumn, number: Hash, diagram: Workflow } as const;
+/** Two taps this close in time and place are a double-tap (touch emits no reliable dblclick). */
+const DOUBLE_TAP_MS = 350;
+const DOUBLE_TAP_PX = 24;
+const narrowTabClass = (active: boolean) =>
+  `inline-flex h-6 cursor-pointer items-center gap-1.5 rounded-[4px] border px-1.5 font-mono text-[11px] ${
+    active ? 'border-accent/40 bg-accent-soft text-accent' : 'border-edge text-muted hover:border-edge-bright hover:text-fg'
+  }`;
 
 /**
  * WHICH EXTERNAL URLs THE SERVER HOLDS, from the editor's side: all of them.
@@ -126,8 +138,10 @@ export default function InPlaceEditor({
   onComment,
   rightInset = 0,
   onDone = () => {},
-  onLeftInsetChange,
   onRightInsetChange,
+  commentsOpen = false,
+  onCommentsOpenChange,
+  onCommentsHost,
 }: {
   art: EditorArtifact;
   /** Optional standalone document frame compatibility ref; the active page uses runtimeRef. */
@@ -148,10 +162,18 @@ export default function InPlaceEditor({
   rightInset?: number;
   /** Drain-and-exit belongs to the page, because browser back uses the same contract. */
   onDone?: () => void | Promise<void>;
-  /** How far the page must inset the document for the left rail and its open panel. */
-  onLeftInsetChange?: (px: number) => void;
-  /** The RIGHT width the editor needs reserved — its embed inspector, which used to overlay. */
+  /**
+   * The width of the edit panel on the right (components/EditPanel): constant
+   * for the session except when the viewer collapses or expands it, 0 below
+   * the panel breakpoint. The PAGE decides whether that width is reserved.
+   */
   onRightInsetChange?: (px: number) => void;
+  /** The page's comments rail is open — in edit mode, the panel's Comments tab. */
+  commentsOpen?: boolean;
+  /** Open or close the comments rail. Absent for anyone who may not comment: no Comments tab. */
+  onCommentsOpenChange?: (open: boolean) => void;
+  /** The Comments tab's body, for the page's comments rail to render into; null while it is not showing. */
+  onCommentsHost?: (host: HTMLElement | null) => void;
 }) {
   const [title, setTitle] = useState(art.title ?? '');
   const [theme, setTheme] = useState<StoryThemeName | null>((art.theme as StoryThemeName) ?? null);
@@ -195,8 +217,20 @@ export default function InPlaceEditor({
   const [dataflowPending, setDataflowPending] = useState(false);
   /** An older version, shown in the document itself. Read-only while it is up. */
   const [preview, setPreview] = useState<ArtifactVersionSnapshot | null>(null);
-  /** PHONE ONLY: there is no rail to list versions in, so they keep the drawer. */
-  const [historyOpen, setHistoryOpen] = useState(false);
+  /*
+   * THE PANEL. On a wide window one right panel for the session, its tab and
+   * collapse held here; below the breakpoint the same three things open as
+   * bottom sheets from the bar (`sheet`), and the comments one is the page's.
+   */
+  const wide = useWideEditViewport();
+  const [panelTab, setPanelTab] = useState<EditPanelTab>(commentsOpen && onCommentsOpenChange ? 'comments' : 'selection');
+  // Comments already open on entry are an explicit request to see them: never "open" behind a strip.
+  const [collapsed, setCollapsedState] = useState(() => !(commentsOpen && onCommentsOpenChange) && readEditPanelCollapsed());
+  const setCollapsed = useCallback((next: boolean) => {
+    setCollapsedState(next);
+    writeEditPanelCollapsed(next);
+  }, []);
+  const [sheet, setSheet] = useState<'selection' | 'history' | null>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
 
   /** Read by callbacks that run after an await, when `source` may have moved on. */
@@ -655,13 +689,6 @@ export default function InPlaceEditor({
     setQueryFocus(null);
   }, [notebookVisible, spotlight]);
   /*
-   * WHAT THE PAGE MUST RESERVE on the left: the rail, plus its open panel. The
-   * page owns the document's padding (ArtifactSurface's Artifact viewport), the
-   * editor owns which panel is open, so the number crosses that boundary rather
-   * than either side guessing. A phone gets none — the rail is a sheet there.
-   */
-  const leftInset = phone ? 0 : LEFT_RAIL_W;
-  /*
    * "Select an element to format" is an instruction you cannot follow from the
    * source or the query notebook — there is no page there to select on. So the
    * app view draws both rows and every other view draws one, and the panes
@@ -669,22 +696,142 @@ export default function InPlaceEditor({
    */
   const formattingRow = mode === 'design' && !notebookVisible;
   const barH = formattingRow ? EDIT_BAR_H : EDIT_BAR_ROW_H;
-  useEffect(() => {
-    onLeftInsetChange?.(leftInset);
-  }, [leftInset, onLeftInsetChange]);
-  // Leaving edit mode gives the width back; the page must not keep a gap for a rail that has gone.
-  useEffect(() => () => onLeftInsetChange?.(0), [onLeftInsetChange]);
   /*
-   * The inspector RESERVES now, like the comments rail, instead of covering the
-   * chart it edits. The page takes the MAX of the two rather than the sum: they
-   * deliberately share one column (same width, higher layer), so two open
-   * panels must not push the document twice.
+   * THE ONE WIDTH the page is told about: the panel's, which nothing in the
+   * session changes but collapse / expand (and a window crossing the
+   * breakpoint). Not a selection, not a tab on an open panel, not a preview
+   * or the code view — each of those used to move the document sideways,
+   * usually right under whatever the pointer was reaching for.
    */
-  const rightReserve = phone || preview || !(inspector && mode === 'design') ? 0 : RIGHT_RAIL_W;
+  const panelWidth = wide ? editPanelWidth(collapsed) : 0;
+  // Through a ref: a caller passing a fresh callback each render must not get
+  // a 0 from the old one's cleanup — that is the flicker this width exists to prevent.
+  const onRightInsetChangeRef = useRef(onRightInsetChange);
+  onRightInsetChangeRef.current = onRightInsetChange;
   useEffect(() => {
-    onRightInsetChange?.(rightReserve);
-  }, [rightReserve, onRightInsetChange]);
-  useEffect(() => () => onRightInsetChange?.(0), [onRightInsetChange]);
+    onRightInsetChangeRef.current?.(panelWidth);
+  }, [panelWidth]);
+  // Leaving edit mode gives the width back; the page must not keep a gap for a panel that has gone.
+  useEffect(() => () => onRightInsetChangeRef.current?.(0), []);
+
+  /*
+   * THE TAB FOLLOWS THE PAGE'S COMMENTS RAIL, both ways: a pin click, the
+   * reader bar's comment glyph or a posted comment opens it from outside, and
+   * closing the rail from its own header hands the panel back to Selection.
+   */
+  const commentsTab = !!onCommentsOpenChange;
+  /*
+   * EXPLICIT REQUESTS EXPAND a collapsed panel — a tab icon, Edit chart, a
+   * double-click, comments opened from anywhere — and clear the saved choice:
+   * that is the person asking, so the one width change is theirs. A selection
+   * on its own never does. Comments therefore can never be open with nothing
+   * visible.
+   */
+  useEffect(() => {
+    if (!commentsTab) return;
+    if (commentsOpen) {
+      setPanelTab('comments');
+      setSheet(null);
+      setCollapsedState((current) => {
+        if (current) writeEditPanelCollapsed(false);
+        return false;
+      });
+    } else setPanelTab((current) => (current === 'comments' ? 'selection' : current));
+  }, [commentsOpen, commentsTab]);
+  const chooseTab = useCallback(
+    (next: EditPanelTab) => {
+      if (collapsed) setCollapsed(false);
+      setPanelTab(next);
+      if (next === 'comments') onCommentsOpenChange?.(true);
+      else if (commentsOpen) onCommentsOpenChange?.(false);
+    },
+    [collapsed, setCollapsed, commentsOpen, onCommentsOpenChange],
+  );
+  /*
+   * On any other tab a new selection does not take the panel over — the
+   * Selection tab carries a dot instead, and Edit chart or a double-click on
+   * the chart is how you ask for it.
+   */
+  const selectionDot = panelTab !== 'selection' && inspector !== null && mode === 'design' && !preview;
+
+  /**
+   * BELOW THE BREAKPOINT a sheet covers the lower half, so the selected thing is
+   * scrolled into the half above it — just under the bars. The page keeps a
+   * half-screen of room under the document for the whole narrow session
+   * (ArtifactSurface), so this can reach the last chart and closing the sheet
+   * has nothing to clamp.
+   */
+  const revealAboveSheet = useCallback(() => {
+    const rect = selectionRef.current?.rect;
+    if (!rect) return;
+    const top = barTop + barH + 8;
+    if (rect.y >= top && rect.y + rect.height <= window.innerHeight / 2) return;
+    window.scrollBy({ top: rect.y - top, behavior: 'smooth' });
+  }, [barTop, barH]);
+  const sheetRef = useRef(sheet);
+  sheetRef.current = sheet;
+  const openSheet = useCallback(
+    (next: 'selection' | 'history' | null) => {
+      if (next && commentsOpen) onCommentsOpenChange?.(false);
+      // Asked again while it is already up (a double-tap that also fires
+      // dblclick): the rect it would scroll by is the one already used.
+      const reveal = next === 'selection' && sheetRef.current !== 'selection';
+      sheetRef.current = next;
+      setSheet(next);
+      if (reveal) revealAboveSheet();
+    },
+    [commentsOpen, onCommentsOpenChange, revealAboveSheet],
+  );
+  /** "Show me what is selected": the Selection tab on a wide window, its sheet below that. */
+  const inspectSelection = useCallback(() => {
+    if (wide) chooseTab('selection');
+    else openSheet('selection');
+  }, [wide, chooseTab, openSheet]);
+  const inspectRef = useRef({ inspectSelection, inspector });
+  inspectRef.current = { inspectSelection, inspector };
+  /*
+   * DOUBLE-CLICK (or double-tap) ON THE SELECTED EMBED opens its inspector. The
+   * document runtime shares this window, so the page listens — capture phase,
+   * nothing prevented — and acts only on a point inside the document viewport
+   * and inside the selection's own rect: the first click selected it.
+   */
+  useEffect(() => {
+    let lastTap = { at: -Infinity, x: 0, y: 0 };
+    // A touch double-tap may ALSO arrive as dblclick; the tap already answered it.
+    let touchOpenedAt = -Infinity;
+    const hit = (event: MouseEvent) => {
+      const { inspector: kind } = inspectRef.current;
+      const rect = selectionRef.current?.rect;
+      if (!kind || !rect) return false;
+      const target = event.target as Element | null;
+      if (!target?.closest?.('[aria-label="Artifact viewport"]')) return false;
+      const { clientX: x, clientY: y } = event;
+      return x >= rect.x && x <= rect.x + rect.width && y >= rect.y && y <= rect.y + rect.height;
+    };
+    const onDoubleClick = (event: MouseEvent) => {
+      if (event.timeStamp - touchOpenedAt < 1000) return;
+      if (hit(event)) inspectRef.current.inspectSelection();
+    };
+    const onPointerUp = (event: PointerEvent) => {
+      if (event.pointerType !== 'touch') return;
+      const near = Math.hypot(event.clientX - lastTap.x, event.clientY - lastTap.y) <= DOUBLE_TAP_PX;
+      if (event.timeStamp - lastTap.at <= DOUBLE_TAP_MS && near) {
+        lastTap = { at: -Infinity, x: 0, y: 0 };
+        if (hit(event)) {
+          touchOpenedAt = event.timeStamp;
+          inspectRef.current.inspectSelection();
+        }
+        return;
+      }
+      lastTap = { at: event.timeStamp, x: event.clientX, y: event.clientY };
+    };
+    window.addEventListener('dblclick', onDoubleClick, true);
+    window.addEventListener('pointerup', onPointerUp, true);
+    return () => {
+      window.removeEventListener('dblclick', onDoubleClick, true);
+      window.removeEventListener('pointerup', onPointerUp, true);
+    };
+  }, []);
   /** "edit in queries" from an inspector: the selection goes (the inspector holds the rail), the notebook lands on the cell. */
   const onOpenQuery = useCallback(
     (name: string) => {
@@ -907,6 +1054,53 @@ export default function InPlaceEditor({
     </>
   );
 
+  /*
+   * THE SELECTION TAB'S BODY — the inspector for the selected embed, or the
+   * hint. The same body on a wide window's panel and in a narrow window's sheet.
+   * No delete here: the selection toolbar offers it for EVERY selection
+   * (lib/story/selection-toolbar ALWAYS_OFFERED), and a second trash an inch
+   * from `close` was the one people hit by mistake. The inspector inspects;
+   * the toolbar acts on the node.
+   */
+  const InspectIcon = inspector ? INSPECT_ICON[inspector] : null;
+  /** An embed whose inspector can show now: the toolbar offers Edit chart / number / diagram. */
+  const inspectable = !!inspector && mode === 'design' && !preview;
+  const selectionBody = inspector && mode === 'design' && !preview ? (
+    <section aria-label={INSPECTOR_LABEL[inspector]}>
+      <div className="mb-3 flex items-center justify-between">
+        <span className="font-mono text-[11px] uppercase tracking-wide text-faint">{inspector}</span>
+        {/* Deselects. The panel's only: a sheet's own close puts the sheet away instead. */}
+        {wide && (
+          <button
+            type="button"
+            aria-label={`Close ${INSPECTOR_LABEL[inspector].toLowerCase()}`}
+            onClick={() => edit.select(null)}
+            className="cursor-pointer font-mono text-[11px] text-muted hover:text-fg"
+          >
+            close
+          </button>
+        )}
+      </div>
+      {chart ? (
+        <VizEditorPanel
+          viz={chart.viz}
+          title={chart.title}
+          table={chart.table}
+          tables={tables}
+          onChange={onChartChange}
+          onTitleChange={onChartTitleChange}
+          onOpenQuery={onOpenQuery}
+        />
+      ) : numberEmbed ? (
+        <NumberEditorPanel binding={numberEmbed} tables={tables} onChange={onNumberChange} onOpenQuery={onOpenQuery} />
+      ) : (
+        <MermaidEditorPanel embed={mermaidEmbed!} onChange={onMermaidChange} />
+      )}
+    </section>
+  ) : (
+    <p className="px-1 py-2 font-sans text-xs text-muted">{SELECTION_HINT}</p>
+  );
+
   return (
     <div className="contents" data-app-appearance={surfaceMode}>
       {markdownDraft !== null && (
@@ -1012,11 +1206,11 @@ export default function InPlaceEditor({
         className={`fixed z-30 grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-2 bg-surface px-3 ${
           formattingRow ? 'grid-rows-[44px_44px]' : 'grid-rows-[44px]'
         }`}
-        style={{ top: barTop, height: barH, left: leftInset, right: rightInset }}
+        style={{ top: barTop, height: barH, left: 0, right: rightInset }}
       >
         {/* Settings scroll independently; mode, history and Done stay visible.
             The formatting row below owns its own overflow and portalled menus. */}
-        <div className="flex min-w-0 flex-1 items-center gap-2 overflow-x-auto">
+        <div className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto sm:gap-2">
           <input
             aria-label="Title"
             value={title}
@@ -1025,8 +1219,63 @@ export default function InPlaceEditor({
               queue({ title: e.target.value });
             }}
             placeholder="untitled"
-            className="w-36 shrink-0 rounded-[4px] border border-transparent bg-transparent px-1.5 py-1 font-mono text-xs font-semibold text-fg hover:border-edge focus:border-edge-bright focus:outline-none sm:w-48"
+            className="w-0 min-w-[3.5rem] flex-1 rounded-[4px] border border-transparent bg-transparent px-1.5 py-1 font-mono text-xs font-semibold text-fg hover:border-edge focus:border-edge-bright focus:outline-none sm:w-48 sm:flex-none sm:shrink-0"
           />
+          {/*
+            * WHAT YOU ARE EDITING: app and code are two renderings of the
+            * document, data is the queries it reads — three views of ONE
+            * document, so choosing any of them leaves the other two. First of
+            * the document-wide choices (theme and mode follow), so a narrow
+            * bar that scrolls this row still shows it.
+            */}
+          <div role="group" aria-label="Editor view" className="flex shrink-0 items-center rounded-[4px] border border-edge p-0.5">
+            {/* Icon-only on a phone, where every control in this row must fit; the names stay. */}
+            {(
+              [
+                ['design', 'app', <Paintbrush key="d" size={12} />, mode === 'design' && !queriesOpen],
+                ['code', 'code', <Code key="c" size={12} />, mode === 'code'],
+              ] as const
+            ).map(([m, label, icon, active]) => (
+              <Tooltip key={m} content={m === 'design' ? 'edit on the page' : 'edit the source'}>
+              <button
+                type="button"
+                aria-label={m === 'design' ? 'Edit on the page' : 'Edit the source'}
+                aria-pressed={active}
+                onClick={() => {
+                  setMode(m);
+                  setQueriesOpen(false);
+                }}
+                className={`inline-flex h-6 cursor-pointer items-center gap-1 rounded-[3px] px-1 font-mono text-[11px] sm:px-1.5 ${
+                  active ? 'bg-accent-soft text-accent' : 'text-muted hover:bg-raised hover:text-fg'
+                }`}
+              >
+                {icon}
+                <span className="hidden sm:inline">{label}</span>
+              </button>
+              </Tooltip>
+            ))}
+            {queryNotebook.length > 0 && (
+              <Tooltip content="the document's queries">
+              <button
+                type="button"
+                aria-label="Show data"
+                aria-pressed={queriesOpen}
+                onClick={() => {
+                  setQueriesOpen((v) => !v);
+                  setMode('design');
+                  // The notebook is a view over the document: nothing on the page is selected under it.
+                  if (!queriesOpen) edit.select(null);
+                }}
+                className={`inline-flex h-6 cursor-pointer items-center gap-1 rounded-[3px] px-1 font-mono text-[11px] sm:px-1.5 ${
+                  queriesOpen ? 'bg-accent-soft text-accent' : 'text-muted hover:bg-raised hover:text-fg'
+                }`}
+              >
+                <Database size={12} />
+                <span className="hidden sm:inline">data</span>
+              </button>
+              </Tooltip>
+            )}
+          </div>
           <ThemePicker
             value={theme}
             colorMode={colorMode}
@@ -1065,35 +1314,68 @@ export default function InPlaceEditor({
           />
         </div>
 
-        <div aria-label="Document actions" className="flex shrink-0 items-center gap-2">
-          {/* View switching lives in the left rail: app, code and queries are
-              three views of one document, and two controls with one accessible
-              name is a bug for anyone driving by keyboard or by name. */}
-          {/* queries moved to the left rail, beside the other things the artifact is made of. */}
-          <span role="status" className="hidden text-xs text-muted md:inline">
+        <div aria-label="Document actions" className="flex shrink-0 items-center gap-1.5 sm:gap-2">
+          <span role="status" className="hidden text-xs text-muted lg:inline">
             {live.status || (live.pending ? 'Saving…' : `v${live.version} · Saved`)}
           </span>
-          {/* Version history lives in the left rail — except on a phone, which
-              draws no rail, so the drawer and its switch stay for that width. */}
-          {phone && (
-            <Tooltip content="version history">
+          {wide && inspectable && inspector && InspectIcon && (
+            <Tooltip content={`${INSPECT_LABEL[inspector]} settings`}>
               <button
                 type="button"
-                aria-label="Open version history"
-                aria-expanded={historyOpen}
-                onClick={() => setHistoryOpen((v) => !v)}
-                className={`inline-flex h-6 cursor-pointer items-center gap-1.5 rounded-[4px] border px-1.5 font-mono text-[11px] ${
-                  historyOpen ? 'border-accent/40 bg-accent-soft text-accent' : 'border-edge text-muted hover:border-edge-bright hover:text-fg'
-                }`}
+                aria-label={INSPECT_LABEL[inspector]}
+                onClick={inspectSelection}
+                className="inline-flex h-6 cursor-pointer items-center gap-1 rounded-[4px] border border-edge px-1.5 font-mono text-[11px] text-muted hover:border-edge-bright hover:text-fg"
               >
-                <History size={12} className="shrink-0" />
+                <InspectIcon size={12} className="shrink-0" />
+                <span className="hidden lg:inline">{INSPECT_LABEL[inspector]}</span>
               </button>
             </Tooltip>
           )}
-          {/* The way out is offered TWICE on purpose — here and at the foot of
-              the rail — because it is the one action you may want from
-              wherever you are. They share an accessible name, which is honest
-              (one action, two doors) but does mean a test must say which. */}
+          {/* Below the panel breakpoint the panel's tabs are these three, each a
+              bottom sheet. The selection one IS Edit chart while a chart is
+              selected: one control, not two beside each other on a phone. */}
+          {!wide && (
+            <>
+              <Tooltip content={inspectable && inspector ? `${INSPECT_LABEL[inspector]} settings` : 'selection settings'}>
+                <button
+                  type="button"
+                  aria-label={inspectable && inspector ? INSPECT_LABEL[inspector] : 'Show selection settings'}
+                  aria-expanded={sheet === 'selection'}
+                  onClick={() => openSheet(sheet === 'selection' ? null : 'selection')}
+                  className={narrowTabClass(sheet === 'selection')}
+                >
+                  {inspectable && InspectIcon ? <InspectIcon size={12} className="shrink-0" /> : <SlidersHorizontal size={12} className="shrink-0" />}
+                </button>
+              </Tooltip>
+              <Tooltip content="version history">
+                <button
+                  type="button"
+                  aria-label="Open version history"
+                  aria-expanded={sheet === 'history'}
+                  onClick={() => openSheet(sheet === 'history' ? null : 'history')}
+                  className={narrowTabClass(sheet === 'history')}
+                >
+                  <History size={12} className="shrink-0" />
+                </button>
+              </Tooltip>
+              {commentsTab && (
+                <Tooltip content="comments">
+                  <button
+                    type="button"
+                    aria-label="Show comments"
+                    aria-expanded={commentsOpen}
+                    onClick={() => {
+                      setSheet(null);
+                      onCommentsOpenChange?.(!commentsOpen);
+                    }}
+                    className={narrowTabClass(commentsOpen)}
+                  >
+                    <MessageSquare size={12} className="shrink-0" />
+                  </button>
+                </Tooltip>
+              )}
+            </>
+          )}
           <Tooltip content="done editing">
             <button
               type="button"
@@ -1152,8 +1434,8 @@ export default function InPlaceEditor({
       {imageError && (
         <div
           aria-label="Image upload error"
-          className="fixed right-0 z-30 flex items-center justify-between gap-3 border-b border-red-300 bg-red-50 px-4 py-1.5 font-mono text-[11px] text-red-800"
-          style={{ top: barTop + barH, left: leftInset }}
+          className="fixed z-30 flex items-center justify-between gap-3 border-b border-red-300 bg-red-50 px-4 py-1.5 font-mono text-[11px] text-red-800"
+          style={{ top: barTop + barH, left: 0, right: panelWidth }}
         >
           <span>{imageError}</span>
           <button
@@ -1170,7 +1452,7 @@ export default function InPlaceEditor({
       {/* Editing the source: an overlay over the document, not a second pane —
           the document IS the preview, and one click away is close enough. */}
       {mode === 'code' && (
-        <div className="fixed right-0 bottom-0 z-20" style={{ top: barTop + barH, left: leftInset }} aria-label="Source pane">
+        <div className="fixed bottom-0 z-20" style={{ top: barTop + barH, left: 0, right: panelWidth }} aria-label="Source pane">
           <SourceEditor
             value={source}
             revision={sourceRevision}
@@ -1184,83 +1466,26 @@ export default function InPlaceEditor({
         </div>
       )}
 
-      {/* The embed inspector: a fixed panel, since the thing it edits lives in
-          another realm and anchoring to it buys only positioning bugs.
-          It is the RIGHT RAIL's other occupant — one width for both, since the
-          comments rail can be up at the same time. It takes the rail while a
-          chart is selected: same width, higher layer, so the two read as one
-          column rather than two panels fighting for an edge. */}
       {/*
-        * THE LEFT RAIL — what this artifact is made of, as a strip rather than
-        * as buttons scattered through the toolbar. Two pairs, not four peers:
-        * app/code are two renderings of the DOCUMENT, queries is the DATA it
-        * reads, and history is a dimension over either. Grouping them by that
-        * is the whole point; a flat row of four said they were the same kind
-        * of thing, which is what made the old bar hard to read.
-        *
-        * Left means structure, right means annotation. Nothing here ever takes
-        * the comments rail, so opening a panel and opening a comment are no
-        * longer a fight over one edge.
+        * THE PANEL (wide) or its SHEETS (narrow). The inspector, the version list
+        * and the comments rail are one column that is there for the whole
+        * session, so selecting a chart fills it instead of opening it — the
+        * document never moves under the pointer. The page decides whether the
+        * column comes out of the document's margin or its width.
         */}
-      {!phone && (
-        <nav
-          aria-label="Artifact parts"
-          className="fixed left-0 bottom-0 z-40 flex flex-col border-r border-edge bg-surface"
-          style={{ top: barTop, width: LEFT_RAIL_W }}
+      {wide && (
+        <EditPanel
+          top={barTop + barH}
+          tab={panelTab}
+          onTab={chooseTab}
+          collapsed={collapsed}
+          onCollapsedChange={setCollapsed}
+          selectionDot={selectionDot}
+          commentsAvailable={commentsTab}
         >
-          <div className="flex flex-col gap-0.5 p-2">
-            {(
-              [
-                ['design', 'app', <Paintbrush key="d" size={14} />, mode === 'design' && !queriesOpen],
-                ['code', 'code', <Code key="c" size={14} />, mode === 'code'],
-              ] as const
-            ).map(([m, label, icon, active]) => (
-              <button
-                key={m}
-                type="button"
-                aria-label={m === 'design' ? 'Edit on the page' : 'Edit the source'}
-                aria-pressed={active}
-                onClick={() => {
-                  // app, code and queries are three views of ONE document, so
-                  // choosing any of them leaves the other two. Clearing this
-                  // only for code left "app" setting the mode under a queries
-                  // view that stayed on top of it.
-                  setMode(m);
-                  setQueriesOpen(false);
-                }}
-                className={`inline-flex h-8 cursor-pointer items-center gap-2 rounded-[4px] px-2 font-mono text-[11px] ${
-                  active ? 'bg-accent-soft text-accent' : 'text-muted hover:bg-raised hover:text-fg'
-                }`}
-              >
-                {icon}
-                <span>{label}</span>
-              </button>
-            ))}
-            {queryNotebook.length > 0 && (
-              <button
-                type="button"
-                aria-label="Show data"
-                aria-pressed={queriesOpen}
-                onClick={() => {
-                  setQueriesOpen((v) => !v);
-                  setMode('design');
-                  // The notebook wants the rail; a selected embed's inspector would keep it.
-                  if (!queriesOpen) edit.select(null);
-                }}
-                className={`inline-flex h-8 cursor-pointer items-center gap-2 rounded-[4px] px-2 font-mono text-[11px] ${
-                  queriesOpen ? 'bg-accent-soft text-accent' : 'text-muted hover:bg-raised hover:text-fg'
-                }`}
-              >
-                <Database size={14} />
-                <span>data</span>
-              </button>
-            )}
-          </div>
-          {/* Versions are LISTED, not behind a switch: the rail is wide enough to
-              hold them, and "which version am I looking at" is a question the
-              editor should answer without being asked. */}
-          <div className="flex min-h-0 flex-1 flex-col border-t border-edge">
-            <p className="px-3 py-2 font-mono text-[11px] uppercase tracking-wide text-faint">versions</p>
+          {collapsed ? null : panelTab === 'selection' ? (
+            <div className="min-h-0 flex-1 overflow-y-auto p-3">{selectionBody}</div>
+          ) : panelTab === 'history' ? (
             <VersionHistory
               embedded
               versions={history.versions ?? []}
@@ -1272,82 +1497,45 @@ export default function InPlaceEditor({
               onClose={() => {}}
               busy={history.busy}
             />
-          </div>
-          <div className="border-t border-edge p-2">
-            <button
-              type="button"
-              /*
-               * A DIFFERENT name from the toolbar's "Exit edit mode", on purpose.
-               * One action behind two doors is fine for a person; two controls
-               * sharing one accessible name is not — every gate and test that
-               * says "Exit edit mode" then matches both and fails strict mode.
-               * The toolbar keeps the established name; this one says what it
-               * says on its face.
-               */
-              aria-label="Done editing"
-              onClick={(event) => {
-                event.currentTarget.blur();
-                void onDone();
-              }}
-              className="inline-flex h-8 w-full cursor-pointer items-center gap-2 rounded-[4px] border border-accent/40 bg-accent-soft px-2 font-mono text-[11px] text-accent hover:border-accent"
-            >
-              <Check size={13} />
-              <span>done editing</span>
-            </button>
-          </div>
-        </nav>
-      )}
-
-      {inspector && mode === 'design' && (
-        <aside
-          aria-label={INSPECTOR_LABEL[inspector]}
-          className="fixed right-0 bottom-0 z-30 overflow-y-auto border-l border-edge bg-surface p-3"
-          style={{ top: barTop + barH, width: RIGHT_RAIL_W }}
-        >
-          {/* No delete here: the selection toolbar offers it for EVERY
-              selection (lib/story/selection-toolbar ALWAYS_OFFERED), and a
-              second trash an inch from `close` was the one people hit by
-              mistake. The inspector inspects; the toolbar acts on the node. */}
-          <div className="mb-3 flex items-center justify-between">
-            <span className="font-mono text-[11px] uppercase tracking-wide text-faint">
-              {inspector}
-            </span>
-            <button
-              type="button"
-              aria-label={`Close ${INSPECTOR_LABEL[inspector].toLowerCase()}`}
-              onClick={() => edit.select(null)}
-              className="cursor-pointer font-mono text-[11px] text-muted hover:text-fg"
-            >
-              close
-            </button>
-          </div>
-          {chart ? (
-            <VizEditorPanel
-              viz={chart.viz}
-              title={chart.title}
-              table={chart.table}
-              tables={tables}
-              onChange={onChartChange}
-              onTitleChange={onChartTitleChange}
-              onOpenQuery={onOpenQuery}
-            />
-          ) : numberEmbed ? (
-            <NumberEditorPanel binding={numberEmbed} tables={tables} onChange={onNumberChange} onOpenQuery={onOpenQuery} />
           ) : (
-            <MermaidEditorPanel embed={mermaidEmbed!} onChange={onMermaidChange} />
+            <div ref={onCommentsHost} className="flex min-h-0 flex-1 flex-col" />
           )}
-        </aside>
+        </EditPanel>
+      )}
+      {!wide && sheet === 'selection' && (
+        <TrustedUi overlay layer="navigation">
+          <MobileSheet
+            label="Selection settings"
+            size="half"
+            swipeToClose
+            onClose={() => setSheet(null)}
+            header={
+              <div className="flex items-center justify-between px-1 pb-2">
+                <span className="font-mono text-xs font-semibold text-fg">selection</span>
+                <button
+                  type="button"
+                  aria-label="Close selection settings"
+                  onClick={() => setSheet(null)}
+                  className="cursor-pointer rounded p-1 text-muted hover:text-fg"
+                >
+                  <X size={13} />
+                </button>
+              </div>
+            }
+          >
+            {selectionBody}
+          </MobileSheet>
+        </TrustedUi>
       )}
 
-      {/* The query notebook: the rail's other occupant. The inspector wins while an
-          embed is selected (same edge, same layer — one column); deselect and the
-          notebook is back. Wider than the inspectors (QUERY_RAIL_W): SQL and result
-          tables are column-shaped. Design mode only: in code mode the SQL is already on screen. */}
+      {/* The query notebook: a VIEW over the document, like the source pane — it
+          ends at the panel's edge and reserves nothing, so opening it moves no
+          width. Design mode only: in code mode the SQL is already on screen. */}
       {notebookVisible && (
         <aside
           aria-label="Data"
-          className="fixed right-0 bottom-0 z-20 overflow-y-auto bg-surface p-4"
-          style={{ top: barTop + barH, left: leftInset }}
+          className="fixed bottom-0 z-20 overflow-y-auto bg-surface p-4"
+          style={{ top: barTop + barH, left: 0, right: panelWidth }}
         >
           <QueryNotebookPanel
             cells={queryNotebook}
@@ -1359,11 +1547,12 @@ export default function InPlaceEditor({
         </aside>
       )}
 
-      {phone && historyOpen && (
-        // The open panel must receive clicks ABOVE the reader's navigation
+      {!wide && sheet === 'history' && (
+        // The open sheet must receive clicks ABOVE the reader's navigation
         // rail; without this wrapper a trusted-ui layer swallows them.
         <TrustedUi overlay layer="navigation">
         <VersionHistory
+          sheet
           topOffset={barTop + barH}
           versions={history.versions ?? []}
           currentVersion={live.version}
@@ -1371,7 +1560,7 @@ export default function InPlaceEditor({
           onPreview={(v: number) => void previewVersion(v)}
           onRestore={(v: number) => void restoreVersion(v)}
           onBackToCurrent={backToCurrent}
-          onClose={() => setHistoryOpen(false)}
+          onClose={() => setSheet(null)}
           busy={history.busy}
         />
         </TrustedUi>

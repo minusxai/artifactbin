@@ -48,6 +48,7 @@ import type {ScreenshotDrawing} from './ScreenshotEditor';
 import {useCommentCapture} from '@/lib/capture/use-comment-capture';
 import CommentScreenshot from './CommentScreenshot';
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Check, ChevronDown, ChevronRight, EllipsisVertical, MessageSquare, LoaderCircle, SquareDashedMousePointer, Trash2, X } from 'lucide-react';
 import {readAnnotationPages} from '@/lib/annotation-pages';
 import type { AnnotationCommentWire, AnnotationWire } from '@/lib/annotations';
@@ -105,6 +106,20 @@ interface AnnotationLayerProps {
   topOffset: number;
   /** What the rail leaves free on the right: the frame's own scrollbar, which stays at the window's edge. */
   rightInset?: number;
+  /**
+   * The editor's right panel hosts the rail (its Comments tab): the rail renders
+   * INTO this element instead of as its own fixed column. `null` means hosted
+   * but the tab is not showing, so the rail draws nowhere. Absent: its own home.
+   */
+  railHost?: HTMLElement | null;
+  /** The rail is a bottom sheet at this width too (the editor below its panel breakpoint). */
+  railSheet?: boolean;
+  /**
+   * The right-edge panel that is up whether or not comments are — the editor's
+   * — so the composer and the markers keep clear of it. Absent: the rail's own
+   * width while it is open.
+   */
+  panelWidth?: number;
 }
 
 const cardClass = 'rounded-[6px] border border-edge bg-raised text-sm';
@@ -894,6 +909,7 @@ function Thread({
 export default function AnnotationLayer({
   id, editId, frameRef, runtimeRef, sessionNonce, railOpen, liveAnnotations, showViewComments,
   onRailOpenChange, initialSelection = null, topOffset, onAnnotationsChange, pickOnOpen = true, rightInset = 0,
+  railHost, railSheet = false, panelWidth,
 }: AnnotationLayerProps) {
   const capture=useCommentCapture(id,editId);
   const screenshotExport=useRef<(()=>Promise<ScreenshotDrawing>)|null>(null);
@@ -1462,7 +1478,7 @@ export default function AnnotationLayer({
   // The frame is full-width under an open rail (the rail overlays its right
   // edge below the bar), so what the composer and the pill may use is the
   // frame LESS the rail — never the frame's own width.
-  const railWidth = railOpen && !phoneRail ? RIGHT_RAIL_W : 0;
+  const railWidth = panelWidth ?? (railOpen && !phoneRail && !railSheet && railHost === undefined ? RIGHT_RAIL_W : 0);
   const measured = documentRect({ frameRef, runtimeRef });
   const frameRect = measured
     ? { left: measured.left, top: measured.top, width: Math.max(0, measured.width - railWidth) }
@@ -1612,9 +1628,10 @@ export default function AnnotationLayer({
       {/* The rail — a panel, open in either mode. On desktop the page narrows
           the document's viewport by exactly its width while it is up; on a
           phone it is a bottom sheet instead (RailChrome). */}
-      {railOpen && (
+      {railOpen && railHost !== null && (
       <RailChrome
-        phone={phoneRail}
+        phone={phoneRail || railSheet}
+        host={railHost}
         topOffset={topOffset}
         rightInset={rightInset}
         onClose={() => onRailOpenChange(false)}
@@ -1719,8 +1736,10 @@ export default function AnnotationLayer({
  * on a phone. The content between them is identical; this wrapper is the only
  * thing that knows the difference.
  */
-function RailChrome({ phone, topOffset, rightInset, onClose, header, children }: {
+function RailChrome({ phone, host, topOffset, rightInset, onClose, header, children }: {
   phone: boolean;
+  /** The editor's panel, when it hosts the rail: rendered into it, not as a column of its own. */
+  host?: HTMLElement;
   topOffset: number;
   rightInset: number;
   onClose: () => void;
@@ -1734,6 +1753,15 @@ function RailChrome({ phone, topOffset, rightInset, onClose, header, children }:
       <MobileSheet label="Annotation sidebar" onClose={onClose} size="half" header={header}>
         <div className="flex flex-col gap-2.5">{children}</div>
       </MobileSheet>
+    );
+  }
+  if (host) {
+    return createPortal(
+      <section data-capture-chrome aria-label="Annotation sidebar" className="flex min-h-0 flex-1 flex-col gap-2.5 bg-bg p-2.5">
+        <div className="shrink-0">{header}</div>
+        <div className="flex min-h-0 flex-1 flex-col gap-2.5 overflow-y-auto">{children}</div>
+      </section>,
+      host,
     );
   }
   return (
