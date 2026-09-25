@@ -36,7 +36,20 @@ function ownParts(node:JsxNode):string[] {
   return parts;
 }
 
-export function createDocumentGraph(source:string|JsxNode[],version:number):DocumentGraph {
+/** Migration-only source boundaries come from the parser, including comments,
+ * fragments and literal spelling. Ordinary publications use canonical parts. */
+function originalParts(source:string,start:number,end:number,children:JsxNode[]):string[] {
+  const parts:string[]=[];let offset=start;
+  for(const child of children){
+    if(child.start<offset||child.end<child.start||child.end>end)throw new Error('Invalid original source boundary');
+    parts.push(source.slice(offset,child.start));offset=child.end;
+  }
+  parts.push(source.slice(offset,end));return parts;
+}
+
+export function createDocumentGraph(source:string|JsxNode[],version:number,options:{preserveSource?:boolean}={}):DocumentGraph {
+  if(options.preserveSource&&typeof source!=='string')throw new Error('Original source is required for lossless migration');
+  const original=options.preserveSource&&typeof source==='string'?source:null;
   const parsed=typeof source==='string'?parseJsx(source):{ok:true as const,nodes:source};
   if(!parsed.ok)throw new Error(parsed.error);
   const nodes:Record<string,DocumentGraphNode>={};
@@ -47,7 +60,11 @@ export function createDocumentGraph(source:string|JsxNode[],version:number):Docu
     if(key===GRAPH_ROOT||Object.hasOwn(nodes,key))throw new Error('Duplicate internal node identity');
     const {graphKey:discarded,...plain}=node;
     void discarded;
-    const parts=implicit?['']:ownParts(node),own=plain.type==='element'?{...plain,children:[]}:plain;
+    const children=node.type==='element'?node.children:[];
+    const and=node.type==='element'&&node.control?.kind==='and';
+    const parts=implicit?['']:original===null?ownParts(node):originalParts(original,node.start,node.end,and?children.slice(0,1):children);
+    if(original!==null&&and&&!implicit)parts.push('');
+    const own=plain.type==='element'?{...plain,children:[]}:plain;
     const referenceNode=node.type==='element'&&['Query','Mutation'].includes(node.tag)?node:own;
     const refs=isolated||node.type!=='element'||node.control?[]:(collectRefUses(serializeJsx([referenceNode]))??[]).map(({id,kind})=>({id,kind}));
     const record:DocumentGraphNode={ast:encodeDocumentNodes([own]),selectors:isolated?[]:graphSelectors(node),refs,parent,children:[],parts,bytes:byteLength(parts.join('')),units:parts.reduce((sum,p)=>sum+p.length,0),partUnits:parts.map(part=>part.length),subtreeUnits:0,prose:node.type==='text'&&!isolated&&!helmet&&PROSE_HTML_PARENTS.has(parentTag)&&inertProse(node.value),selfVersion:version,childrenVersion:version,subtreeVersion:version};
@@ -57,7 +74,9 @@ export function createDocumentGraph(source:string|JsxNode[],version:number):Docu
     return key;
   };
   const children=parsed.nodes.map(node=>visit(node,GRAPH_ROOT));
-  nodes[GRAPH_ROOT]={ast:null,selectors:[],refs:[],parent:null,children,parts:children.map(()=>'' ).concat(''),bytes:0,units:0,partUnits:children.map(()=>0).concat(0),subtreeUnits:children.reduce((sum,child)=>sum+nodes[child]!.subtreeUnits,0),prose:false,selfVersion:version,childrenVersion:version,subtreeVersion:version};
+  const parts=original===null?children.map(()=>'' ).concat(''):originalParts(original,0,original.length,parsed.nodes);
+  const units=parts.reduce((sum,part)=>sum+part.length,0);
+  nodes[GRAPH_ROOT]={ast:null,selectors:[],refs:[],parent:null,children,parts,bytes:byteLength(parts.join('')),units,partUnits:parts.map(part=>part.length),subtreeUnits:units+children.reduce((sum,child)=>sum+nodes[child]!.subtreeUnits,0),prose:false,selfVersion:version,childrenVersion:version,subtreeVersion:version};
   return {schema:3,kind:'graph',policy:GRAPH_POLICY,nodes,claimedIds:Object.fromEntries(Object.values(nodes).flatMap(node=>node.selectors.filter(selector=>selector.startsWith('id:')).map(selector=>[selector.slice(3),version]))),bytes:Object.values(nodes).reduce((sum,n)=>sum+n.bytes,0)};
 }
 
