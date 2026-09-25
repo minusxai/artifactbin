@@ -30,8 +30,8 @@ export function AccountPage() {
         * drop the busy/refusal state of an upload already in flight, and the
         * one control on this page would momentarily be a DIFFERENT element,
         * which is exactly what made a loaded CI shard fail to find it.
-        * Unkeyed, it is in the document from FIRST PAINT — no picture, neutral
-        * initial — and simply fills in when the data arrives.
+        * Unkeyed, it is in the document from FIRST PAINT — no picture yet, so
+        * the empty uploader — and simply fills in when the data arrives.
         */}
       <div className="mt-6">
         <AvatarCircle
