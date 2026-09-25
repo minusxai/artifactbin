@@ -12,7 +12,7 @@
 import { canReadArtifact, getArtifactById, type ArtifactSummary } from '@/lib/artifacts';
 import { avatarUrl } from '@/lib/avatars';
 import { json } from '@/lib/http';
-import { count, has } from '@/lib/relations';
+import { profileSocial } from '@/lib/profile-social';
 import { canonicalArtifactPath, parsePrettyPath } from '@/lib/urls';
 import { getUserByUsername, listPublicArtifactsByUser, ownerUsername } from '@/lib/users';
 import { browserSessionKind, sessionActor } from '@/lib/viewer';
@@ -49,24 +49,14 @@ export async function GET(request: Request, ctx: { params: Promise<{ user: strin
   // Root public folders list alongside root documents; filed work stays inside folders.
   const files = await listPublicArtifactsByUser(owner.id);
   const anon = !viewer && (await browserSessionKind(request)) === 'anon';
-  const stranger = !viewer || viewer.userId !== owner.id;
-  // FOLLOW is the stranger's half — there is nobody to follow on your own
-  // page. The OWNER half is everyone's: the hero draws this person's picture
-  // whoever is looking, and a payload that withheld it from them would show
-  // the one visitor who can change it a profile without it.
-  const relationship = stranger
-    ? {
-        follow: {
-          following: viewer?.userId ? await has(viewer.userId, 'follow', owner.id) : false,
-          count: await count('follow', owner.id),
-        },
-      }
-    : {};
+  // The follow counts are everyone's, owner included; how the viewer and the
+  // owner relate is a signed-in stranger's alone (lib/profile-social).
+  const social = await profileSocial(owner.id, viewer?.userId ?? null);
   return json({
     kind: 'public-profile',
     handle,
     owner: { id: owner.id, image: avatarUrl(owner) },
-    ...relationship,
+    social,
     files: strip(files).map(({ ancestor_ids: _placement, ...card }) => card),
     authed: !!viewer,
     anon,
