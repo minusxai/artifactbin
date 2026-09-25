@@ -2,17 +2,20 @@
 import {parseJsx} from '../jsx/parse';
 import type {JsxNode} from '../jsx/types';
 type Packed = ['value', unknown] | ['string16', string] | ['array', Packed[]] | ['object', Array<[string | Packed, Packed]>];
-export type StoredTree = {schema: 1; kind: 'jsx'; roots: unknown[]} | {schema: 1; kind: 'source'; source: string};
+import type {DocumentTree as StoredTree} from '@artifactbin/contracts';
+export type {DocumentTree as StoredTree} from '@artifactbin/contracts';
+function encode16(value:string):string {let bytes='';for(let i=0;i<value.length;i++){const n=value.charCodeAt(i);bytes+=String.fromCharCode(n&255,n>>>8);}return btoa(bytes);}
+function decode16(value:string):string {const bytes=atob(value);let text='';for(let i=0;i<bytes.length;i+=2)text+=String.fromCharCode(bytes.charCodeAt(i)|(bytes.charCodeAt(i+1)<<8));return text;}
 const needsEncoding=(v:unknown):v is string=>typeof v==='string'&&(v.includes('\0')||!v.isWellFormed());
 function pack(v:unknown):Packed {
- if(needsEncoding(v))return ['string16',Buffer.from(v,'utf16le').toString('base64')];
+ if(needsEncoding(v))return ['string16',encode16(v)];
  if(Array.isArray(v))return ['array',v.map(pack)];
  if(v&&typeof v==='object')return ['object',Object.entries(v).map(([k,x])=>[needsEncoding(k)?pack(k):k,pack(x)])];
  return ['value',v];
 }
 function unpack(v:Packed):unknown {
  switch(v[0]){
-  case 'string16':return Buffer.from(v[1],'base64').toString('utf16le');
+  case 'string16':return decode16(v[1]);
   case 'array':return v[1].map(unpack);
   case 'object':return Object.fromEntries(v[1].map(([k,x])=>[typeof k==='string'?k:unpack(k),unpack(x)]));
   case 'value':return v[1];

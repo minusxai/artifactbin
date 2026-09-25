@@ -18,7 +18,7 @@ export function decodeArtifactDocument<T>(value:T):T {
  const {document,...rest}=row;
  if(document==null)return rest as T;
  const source=decodeDocument(document),meta=(rest as {meta?:Record<string,unknown>}).meta;
- return {...rest,source,...(('prose' in document||document.kind==='graph')&&meta&&!meta.parsedArtifact?{meta:finalizeArtifactMetadata('markup',source,meta)}:{})} as T;
+ return {...rest,document,source,...(('prose' in document||document.kind==='graph')&&meta&&!meta.parsedArtifact?{meta:finalizeArtifactMetadata('markup',source,meta)}:{})} as T;
 }
 /** Derived rendering data is computed from the committed graph, never a stale
  * admission snapshot. Compilation has no database write or transaction callback. */
@@ -40,11 +40,12 @@ interface MigratableRow extends SourceRow {id?:string;artifact_id?:string;format
 export async function loadArtifactDocument<T extends MigratableRow>(db:Queryable,sql:string,params:unknown[]):Promise<T|null> {
  const row=(await db.query<T>(sql,params)).rows[0];
  if(!row)return null;
- if(row.document!=null||row.format!=='markup'||row.source==null)return decodeArtifactDocument(row);
- const storage=sourceStorage(row.format,row.source),history=row.artifact_id!==undefined;
+ if(!['markup','folder'].includes(row.format)||row.document?.kind==='graph'||row.document==null&&row.source==null)return decodeArtifactDocument(row);
+ const source=row.document?decodeDocument(row.document):row.source!;
+ const document=createDocumentGraph(source,row.version),history=row.artifact_id!==undefined;
  const result=await db.query(`UPDATE ${history?'artifact_versions':'artifacts'} SET document=$1::jsonb,source=NULL
- WHERE ${history?'artifact_id':'id'}=$2 AND version=$3 AND format='markup' AND document IS NULL AND source=$4
- ${history?'':'AND edit_id=$5'} RETURNING document`,history?[storage.document,row.artifact_id,row.version,row.source]:[storage.document,row.id,row.version,row.source,row.edit_id]);
- if(result.rows.length)return decodeArtifactDocument({...row,document:JSON.parse(storage.document!),source:null});
+ WHERE ${history?'artifact_id':'id'}=$2 AND version=$3 AND document IS NOT DISTINCT FROM $4::jsonb AND source IS NOT DISTINCT FROM $5::text
+ ${history?'':'AND edit_id=$6'} RETURNING document`,history?[JSON.stringify(document),row.artifact_id,row.version,row.document?JSON.stringify(row.document):null,row.source??null]:[JSON.stringify(document),row.id,row.version,row.document?JSON.stringify(row.document):null,row.source??null,row.edit_id]);
+ if(result.rows.length)return decodeArtifactDocument({...row,document,source:null});
  return (await artifactQuery<T>(db,sql,params)).rows[0]??null;
 }

@@ -169,6 +169,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
     surface: compactSurface({
       captureKey: exporting ? key : null,
       id: artifact.id,
+      ...(row.document?.kind==='graph'?{document:row.document}:{}),
       editId: artifact.edit_id,
       format: artifact.format,
       visibility: artifact.visibility,

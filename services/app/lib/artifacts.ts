@@ -1,12 +1,13 @@
-import {applyProseOperation,proseOperation,type ProseOperation} from './story/document-prose';
+import {graphPatchSql} from './story/document-graph-sql';
+import type {DocumentUpdate} from '@artifactbin/contracts';
+import {commitDocumentUpdate} from './story/document-update-write';
+import type {ProseOperation} from './story/document-prose';
 import type {DocumentOperation} from '@artifactbin/contracts';
-import {decodeDocument,type StoredDocument} from './story/document-codec';
-import {applyDocumentOperations,DocumentOperationError} from './story/document-operation';
+import type {StoredDocument} from './story/document-codec';
 import {createDocumentGraph,GRAPH_POLICY,type DocumentGraph} from './story/document-graph';
-import {prepareGraphSource,graphAdmissionPlan,type GraphAdmission} from './story/document-graph-admission';
-import {applyGraphPatch} from './story/document-graph-patch';
-import {commitGraphOperation,commitGraphProseOperation} from './story/document-graph-write';
-import {artifactQuery,loadArtifactDocument,sourceStorage,decodeArtifactDocument} from './artifact-document';
+import {prepareGraphSource,type GraphAdmission} from './story/document-graph-admission';
+import {commitGraphOperation} from './story/document-graph-write';
+import {artifactQuery,loadArtifactDocument,sourceStorage} from './artifact-document';
 import {JOIN_RELATIONS,seedOwnerJoin} from './relation-state';
 import {documentMentions} from './saved-mentions';
 import { grantContext, grantsOf, grantsPermitRead, grantsPermitWrite, type GrantDocument } from './datasets/policy/grants';
@@ -55,8 +56,8 @@ import {defaultDatasetGrants,remapDatasetGrants,parseDatasetAccessPolicy} from '
 import {validateDatasetPolicyForRow} from './datasets/policy/validation';
 import { actorSubject, emit } from './events';
 import { generateFileId } from './ids';
-import { isDocumentFormat, parseContentInput, type ArtifactFormat,type StoredContent } from './story/input';
-import { canonicalizeMarkup, publishJsx, prepareJsx } from './story/jsx-tier';
+import { parseContentInput, type ArtifactFormat } from './story/input';
+import { canonicalizeMarkup, publishJsx } from './story/jsx-tier';
 import { imageRawUrl, imageRefData, pdfRawUrl } from './story/ref-data';
 import { displayTitle } from './story/title';
 import { assetWarningFor, importWebAsset, WebAssetRefused, type AssetWarning, type WebAssetKind } from './web-assets';
@@ -64,11 +65,8 @@ import { resolveWebFont, UnknownFontError } from './webfonts';
 import { webIngestRateLimited } from './auth';
 import { json } from './http';
 import { loadDatasetRows } from './story/dataset-store';
-import {
-  applySplice, deriveSpliceByDiff, deriveSpliceFromStrings, newEditId, reconstructBaseSource,
-  normalizeSplice, shiftThroughEdits, touchedSpanFor, type EditRecord, type Splice,
-} from './story/splice';
-import { rebaseEditBatch, resolveEditBatch, type BatchChange, type StringEdit } from './story/edit-batch';
+import {newEditId} from './story/splice';
+import type {StringEdit} from './story/edit-batch';
 import { nodeIndex, stampNodeIds } from './story/node-ids';
 import { finalizeArtifactMetadata, readParsedArtifactMetadata } from './story/parsed-artifact-metadata';
 import { parseJsx } from '@/lib/jsx';
@@ -126,6 +124,8 @@ export const DATASET_ACCESS: readonly DatasetAccess[] = ['read', 'readwrite'];
 export { SHARE_ROLES, type ArtifactRole, type ShareEntry, type ShareRole } from './share-roles';
 
 export interface ArtifactRow {
+  document?:StoredDocument|null;
+  open_annotations?:number;
   id: string;
   token_id: string;
   /** Owner account; NULL until the creating token is claimed. */
@@ -1236,8 +1236,8 @@ async function revertScoped(actor: TokenActor, id: string, version: number, opts
   const refusal = condition(initial); if (refusal) return {notArchived:true,refusal};
   let target = (await artifactQuery<ArtifactRow>(db,'SELECT title,description,format,content,source,document,meta FROM artifact_versions WHERE artifact_id=$1 AND version=$2',[id,version])).rows[0];
   if (!target) return {notArchived:true};
-  const prepared = target.format === 'markup' ? await publishMarkupForArtifact(initial,target.source??'',target.meta) : null;
-  if (prepared instanceof Response) return {notArchived:true,refusal:prepared};
+  if(target.format==='markup')return {notArchived:true,refusal:json({error:'jsonb_operations_required',hint:'Read the archived version and submit a client-validated whole JSONB replacement.'},400)};
+
   // Event fires post-txn: an unawaited query from inside the callback would
   // deadlock PGLite's serialized op queue.
   const result: ArtifactRow | null | VersionNotArchived = await db.transaction(async (tx) => {
@@ -1248,7 +1248,7 @@ async function revertScoped(actor: TokenActor, id: string, version: number, opts
     if (current.dataset_policy) return {notArchived:true,refusal:policyLocked('a dataset with a write policy cannot be reverted — republish the rows you want as the owner')};
     const refusal = condition(current); if (refusal) return {notArchived:true,refusal};
     if(artifactState(current)!==artifactState(initial)) return {notArchived:true,conflictVersion:current.version};
-    if(prepared) return commitNormalizedMarkup(tx,actor,current,{...prepared,title:target.title,description:target.description,format:target.format});
+
     if(target.format==='dataset'&&!catalogOf(target))return {notArchived:true,refusal:json({error:'dataset_error',details:['Historical dataset has no catalog or stored object key']},400)};
     target=retainUserScope(target,current);
     try {await validateUserContent(tx,target,actor.userId,key=>loadDatasetRows({content:"",meta:{objectKey:key}}));}catch(error){if(error instanceof DatasetError)return {notArchived:true,refusal:json({error:"dataset_error",details:[error.message]},error.status)};throw error;}
@@ -1318,14 +1318,7 @@ async function replaceScoped(
 ): Promise<ArtifactRow | null | VersionConflict | Response> {
   const db = await getDb();
   const scope = editorScope(actor);
-  let preparedMarkup:PreparedMarkupWrite|null=null;
-  if(input.format==='markup'){
-    const initial=(await artifactQuery<ArtifactRow>(db,`SELECT * FROM artifacts WHERE id=$1 AND ${scope.where('$2')}`,[id,scope.val])).rows[0];
-    if(!initial)return null;
-    const prepared=await publishMarkupForArtifact(initial,input.source??'',input.meta);
-    if(prepared instanceof Response)return prepared;
-    preparedMarkup=prepared;
-  }
+  if(input.format==='markup')return json({error:'jsonb_operations_required'},400);
   // Event and the parent wakeups fire post-txn — an unawaited query from
   // inside the callback would deadlock PGLite's serialized op queue.
   let moved: { from: string | null; to: string | null } | null = null;
@@ -1334,6 +1327,7 @@ async function replaceScoped(
       await artifactQuery<ArtifactRow>(tx,`SELECT * FROM artifacts WHERE id = $1 AND ${scope.where('$2')} FOR UPDATE`, [id, scope.val])
     ).rows[0];
     if (!current) return null;
+    if(current.format==='markup')return json({error:'jsonb_operations_required'},400);
     /*
      * A GOVERNED DATASET IS THE OWNER'S TO REPUBLISH — AND NOBODY ELSE'S.
      *
@@ -1372,22 +1366,6 @@ async function replaceScoped(
     await validateUserContent(tx,input,actor.userId,key=>loadDatasetRows({content:"",meta:{objectKey:key}}));
     const replacementCatalog=catalogOf(input);
     if(replacementCatalog?.kind==='postgres'&&replacementCatalog.connection)await resolveDatasetConnection(replacementCatalog.connection,undefined,current.id,tx);
-
-    if(preparedMarkup){
-      const operations=opts.annotationOps??[];
-      const annotationRows=operations.length?(await tx.query<AnnotationRecord>('SELECT id,anchor_key,range FROM annotations WHERE artifact_id=$1 AND root_id IS NULL AND deleted_at IS NULL FOR UPDATE',[id])).rows:[];
-      const receipts=operations.length?(await tx.query<{annotation_changes:AnnotationReceipt[]}>(`SELECT annotation_changes FROM artifact_edits WHERE artifact_id=$1 AND EXISTS(SELECT 1 FROM jsonb_array_elements(annotation_changes) receipt WHERE receipt->>'operationId'=ANY($2::text[]))`,[id,operations.map(op=>op.id)])).rows.flatMap(r=>r.annotation_changes??[]):[];
-      if(operations.some(op=>op.kind==='undo'&&!receipts.some(r=>r.operationId===op.id&&r.direction==='map')))return {conflict:true,reason:'doc_changed',currentVersion:current.version};
-      const effects=annotationEffects(current.source??'',preparedMarkup.source,operations,annotationRows,receipts);
-      const updated=await commitGraphOperation(tx,actor,scope,preparedMarkup.admission,{
-        archive:'always',expectedEditId:current.edit_id,initialize:preparedMarkup.initialize,effects,aliases:preparedMarkup.aliases,
-        title:input.title,description:input.description,visibility:input.visibility,ancestorIds:input.ancestor_ids,access:input.access,linkRole:input.link_role,
-      });
-      if(!updated)return {conflict:true,reason:'doc_changed',currentVersion:current.version};
-      if(opts.shares!==undefined)Object.assign(updated,await writeShares(tx,id,opts.shares));
-      await bindCurrentUserScopes(tx,updated);await documentMentions(tx,updated,actor,current.source??'');
-      moved={from:parentOf(current),to:parentOf(updated)};return updated;
-    }
 
     const replacementIdentity = input.format === 'markup' && input.source
       ? stampNodeIds(input.source, {
@@ -1511,6 +1489,7 @@ function sayMoved(actor: TokenActor, id: string, moved: { from: string | null; t
  * prefix/suffix diff — sound because stored source is canonical).
  */
 export interface EditInput {
+  documentUpdate?:DocumentUpdate;
   operations?:DocumentOperation[];
   text?: ProseOperation;
   annotationOps?: AnnotationOperation[];
@@ -1547,294 +1526,28 @@ export type EditOutcome =
  */
 
 /** How many times a lost CAS race is retried before we give up and report the conflict. */
-const EDIT_CAS_RETRIES = 3;
-
-/**
- * How far behind head a base may be and still be resolved. Reconstructing a
- * base means inverse-applying every edit after it, so an unbounded lag is
- * unbounded work — and a caller that far behind is better served re-reading
- * than rebasing. Refusing is safe: `stale_edit_id` carries head, which is
- * exactly what they need. This is also what makes the log prunable.
- */
 export const MAX_STALE_EDITS = 200;
-
-/** Bound the log to the exact head snapshot being reconstructed. Commits after
- * that read are handled by atomic guards, never inverse-applied to older source. */
-async function interveningEdits(q: Queryable, artifactId: string, baseEditId: string, headEditId:string): Promise<EditRecord[] | null> {
-  const r = await q.query<{
-    seq: string; edit_id: string; splice_start: number; removed: string; inserted: string; span_start: number; span_end: number; changes: BatchChange[] | string | null; document_state?:{kind?:string};
-  }>(
-    `SELECT seq, edit_id, splice_start, removed, inserted, span_start, span_end, changes, document_state FROM artifact_edits
-     WHERE artifact_id = $1 AND seq > (SELECT seq FROM artifact_edits WHERE artifact_id = $1 AND edit_id = $2)
-     AND seq <= (SELECT seq FROM artifact_edits WHERE artifact_id = $1 AND edit_id = $3)
-     ORDER BY seq`,
-    [artifactId, baseEditId,headEditId],
-  );
-  // The subselect yields NULL for an unknown base, and `seq > NULL` matches
-  // nothing — indistinguishable from "no intervening edits", so confirm the
-  // base actually exists before trusting an empty list.
-  if (r.rows.length === 0) {
-    const known = await q.query('SELECT 1 FROM artifact_edits WHERE artifact_id = $1 AND edit_id = $2', [artifactId, baseEditId]);
-    if (known.rows.length === 0) return null;
-  }
-  return r.rows.flatMap((row) => {
-    const recorded=typeof row.changes==='string'?JSON.parse(row.changes) as BatchChange[]:row.changes;
-    const parsed=recorded??(['semantic','graph'].includes(row.document_state?.kind??'')?sourceChanges(row.removed,row.inserted):null);
-    const changes = ['semantic','graph'].includes(row.document_state?.kind??'')&&!parsed?.length ? [{splice:{start:0,removed:'',inserted:''},span:{start:0,end:0}}] : parsed?.length ? [...parsed].reverse() : [{
-      splice: { start: row.splice_start, removed: row.removed, inserted: row.inserted },
-      span: { start: row.span_start, end: row.span_end },
-    }];
-    return changes.map((change) => ({ seq: Number(row.seq), editId: row.edit_id, ...change }));
-  });
-}
 
 const headOf = (row: ArtifactRow) => ({ editId: row.edit_id, source: row.source ?? '', version: row.version });
 
-/**
- * Resolve one edit: fast path = single guarded CTE (UPDATE + archive + log
- * INSERT + NOTIFY) when the base is head; slow path = shift through
- * intervening log rows, apply iff node-disjoint. Fail closed everywhere: a CAS
- * miss retries (bounded), a shift that lands on text ≠ `removed` rejects as
- * doc_changed. The logged splice is always the delta between STORED versions
- * (post-sanitize), never the caller's literal diff, so reconstruction from any
- * still-logged base is exact.
- */
+/** Clients own semantic validation and patch preparation. This boundary owns
+ * authorization and the atomic operation/dependency/history commit. */
 export async function applyEditScoped(actor: TokenActor, id: string, input: EditInput, opts: { scope?: Scope; dryRun?:boolean } = {}): Promise<EditOutcome | Response | null> {
   const db = await getDb();
-  const publishCandidate: typeof publishJsx = opts.dryRun ? async(fields,source,ctx={})=>{
-    const prepared=await prepareJsx(fields,source,{loadRef:ctx.loadRef,normalizeMarkup:ctx.normalizeMarkup});
-    return prepared instanceof Response?prepared:prepared.content;
-  } : publishJsx;
-  // Who may reach the row: editors by default; an annotation anchor stamp
-  // (lib/annotations) widens it to commenters, whose only "edit" this is.
   const scope = opts.scope ?? editorScope(actor);
-
-  if(input.text&&!input.change&&!input.meta&&!input.annotationOps?.length&&!opts.dryRun){
-    const row=await commitGraphProseOperation(db,actor,id,input.baseEditId,input.text,scope);
-    if(row){void trackEvent('edit',row.id,{userId:row.user_id});return {applied:true,row};}
+  if(input.documentUpdate){
+    if(opts.dryRun){
+      const sql=graphPatchSql('l.document','l.version',input.documentUpdate.patch,[id,scope.val]);
+      const checked=await db.query(`SELECT ${sql.expression} AS document FROM (SELECT * FROM artifacts WHERE id=$1 AND ${scope.where('$2')}) l WHERE ${sql.guard}`,sql.params);
+      return checked.rows.length?json({valid:true,dry_run:true,commit_checks:['authorization','dependency_revisions','metadata','sharing','size']}):json({error:'doc_changed'},409);
+    }
+    const committed=await commitDocumentUpdate(db,actor,scope,id,input.documentUpdate);
+    if(!committed)return null;
+    return committed.applied?{applied:true,row:committed.row}:{applied:false,reason:'doc_changed',head:headOf(committed.head)};
   }
 
-  for (let attempt = 0; ; attempt++) {
-    const storedHead=(await db.query<ArtifactRow & {document?:StoredDocument}>(`SELECT artifacts.*, ${SHARES_PROJECTION} FROM artifacts WHERE id = $1 AND ${scope.where('$2')}`, [id, scope.val])).rows[0];
-    const head=storedHead?decodeArtifactDocument(storedHead):null;
-    if (!head) return null;
-    // Documents edit; VALUES do not. A dataset/viz/image is a blob whose
-    // meaning lives in its structure, so a text splice into it is meaningless.
-    // A FOLDER is a document — its source is the markup we stamped, and
-    // renaming one IS this protocol (the editor's Title field writes through
-    // here like every other change).
-    if (!isDocumentFormat(head.format)) return { applied: false, reason: 'not_editable' };
 
-    // The document's truth is `source` (markup rows keep `content` empty).
-    const headSource = head.source ?? '';
-
-    // 1. Resolve the claimed base: head itself, or a still-logged ancestor.
-    let intervening: EditRecord[] = [];
-    if (input.baseEditId !== head.edit_id) {
-      const found = await interveningEdits(db, id, input.baseEditId,head.edit_id);
-      // Unknown, or so far behind that rebasing is worse than re-reading —
-      // both answer with head, which is all the caller needs either way.
-      if (found === null || new Set(found.map((edit) => edit.seq)).size > MAX_STALE_EDITS) {
-        return { applied: false, reason: 'stale_edit_id', head: headOf(head) };
-      }
-      intervening = found;
-    }
-    const baseSource = reconstructBaseSource(headSource, intervening);
-    if(input.operations){
-      try{input={...input,operations:undefined,change:{newSource:applyDocumentOperations(baseSource,input.operations)}};}
-      catch(error){if(error instanceof DocumentOperationError)return json({error:'invalid_operation',detail:error.message,operationIndex:error.operationIndex},400);throw error;}
-    }
-    if(input.text){
-      const newSource=applyProseOperation(baseSource,input.text);
-      if(newSource===null)return {applied:false,reason:'bad_diff',detail:'no_match'};
-      input={...input,text:undefined,change:{newSource}};
-    }
-
-    // 2. Derive the splice in the BASE's coordinates — anchoring on the version
-    //    the caller actually read is what makes a stale base resolvable at all.
-    //    A metadata-only edit has no splice and skips straight to the write.
-    let candidate = headSource;
-    let batchChanges:BatchChange[]|undefined;
-    if (input.change) {
-      if ('edits' in input.change) {
-        const resolved = resolveEditBatch(baseSource, input.change.edits);
-        if (!resolved.ok) return { applied: false, reason: 'bad_diff', detail: resolved.reason, editIndex: resolved.editIndex };
-        const rebased = rebaseEditBatch(headSource, resolved.changes, intervening);
-        if (!rebased.ok) return { applied: false, reason: 'doc_changed', head: headOf(head) };
-        candidate = rebased.source;
-        batchChanges=rebased.changes;
-      } else {
-      let splice: Splice;
-      if ('oldString' in input.change) {
-        const derived = deriveSpliceFromStrings(baseSource, input.change.oldString, input.change.newString);
-        if (!derived.ok) return { applied: false, reason: 'bad_diff', detail: derived.reason };
-        splice = derived.splice;
-      } else {
-        const derived = deriveSpliceByDiff(baseSource, canonicalizeMarkup(input.change.newSource));
-        if (!derived) {
-          // No text change. Fine when metadata is also being set; otherwise
-          // there is nothing to do.
-          if (!input.meta) return opts.dryRun?json({valid:true,dry_run:true,changed:false,markup:headSource}):{ applied: false, reason: 'bad_diff', detail: 'identical' };
-          splice = { start: 0, removed: '', inserted: '' };
-        } else {
-          splice = derived;
-        }
-      }
-
-      // 3. Place it at the best-scoped position among its equivalents, then
-      //    carry it to head coords, rejecting when an intervening edit touched
-      //    the same node. Without normalization a whole-document submission
-      //    (every editor flush) can land inside a tag and touch everything.
-      splice = normalizeSplice(baseSource, splice);
-      const shifted = shiftThroughEdits(
-        { splice, span: touchedSpanFor(baseSource, splice) },
-        intervening,
-      );
-      if (!shifted.ok) return { applied: false, reason: 'doc_changed', head: headOf(head) };
-      // Defence in depth: the shifted range must still name the text it claims.
-      const at = headSource.slice(shifted.splice.start, shifted.splice.start + shifted.splice.removed.length);
-      if (at !== shifted.splice.removed) return { applied: false, reason: 'doc_changed', head: headOf(head) };
-      candidate = applySplice(headSource, shifted.splice);
-      }
-    } else if (!input.meta) {
-      return { applied: false, reason: 'bad_diff', detail: 'identical' };
-    }
-
-    // Legacy source clients receive the same compact text log as typed clients.
-    // Rebase already checked the original base; bind this derived path to the
-    // observed head so a concurrent structural change cannot retarget it.
-    if(input.change&&!input.meta&&!input.annotationOps?.length&&!opts.dryRun){
-      const text=proseOperation(headSource,candidate);
-      if(text){
-        const row=await commitGraphProseOperation(db,actor,id,head.edit_id,text,scope);
-        if(row){void trackEvent('edit',row.id,{userId:row.user_id});return {applied:true,row};}
-      }
-    }
-
-    // Admission owns publication and identity. Dry runs retain the pure publisher
-    // so previewing never imports assets or performs persistence side effects.
-    const existing=storedHead.document?.schema===3&&storedHead.document.policy===GRAPH_POLICY?storedHead.document:null;
-    let baseline=existing;
-    if(!baseline){try{baseline=createDocumentGraph(canonicalizeMarkup(headSource),head.version);}catch{baseline=createDocumentGraph('',head.version);}}
-    let admitted:GraphAdmission;
-    let published:StoredContent|Response;
-    let identity:{source:string;ids:string[];aliases:Array<{legacyKey:string;nodeId:string;path:string}>};
-    if(!opts.dryRun){
-      const reserved=await db.query<{source_id:string}>('SELECT source_id FROM artifact_source_ids WHERE artifact_id=$1',[id]);
-      const result=await prepareGraphSource({id,version:head.version,document:baseline,meta:head.meta,reservedIds:reserved.rows.map(r=>r.source_id)},candidate,{
-        loadRef:refLoaderForActor(writerFor(head)),importAsset:assetImporterFor(head.token_id,head.user_id),resolveFont:fontResolver(),overByteQuota:byteQuotaFor(head.token_id),
-      },{theme:input.meta?.theme!==undefined?input.meta.theme:head.meta.theme??null,template:head.meta.template??null,colorMode:input.meta?.colorMode!==undefined?input.meta.colorMode:head.meta.colorMode??null},!existing);
-      if(result instanceof Response)return result;
-      admitted=result;
-      const plan=graphAdmissionPlan(admitted),next=applyGraphPatch(baseline,head.version,plan.patch);
-      if(!next)throw new Error('Admitted document did not apply to its baseline');
-      published={format:'markup',content:'',source:decodeDocument(next),meta:plan.meta,warnings:plan.warnings,derivedTitle:null};
-      identity={source:published.source!,ids:plan.ids,aliases:plan.aliases};
-    }else{
-    const meta = head.meta as { theme?: unknown; template?: unknown; colorMode?: unknown };
-    published = await publishCandidate(
-      {
-        theme: input.meta?.theme !== undefined ? input.meta.theme : meta.theme ?? null,
-        template: meta.template ?? null,
-        colorMode: input.meta?.colorMode !== undefined ? input.meta.colorMode : meta.colorMode ?? null,
-      },
-      candidate,
-      {
-        // Refs resolve as the DOCUMENT's owner, never the writer: an editor's
-        // edit to a document carrying its owner's <Mutation> or private image
-        // must not fail on assets the editor could never own. Same rule as
-        // the importer below and runDocumentMutation.
-        loadRef: refLoaderForActor(writerFor(head)),
-        // An agent pasting a web image mid-edit imports like a publish would;
-        // the created asset belongs to whoever the DOCUMENT belongs to.
-        importAsset: assetImporterFor(head.token_id, head.user_id),
-        resolveFont: fontResolver(),
-        overByteQuota: byteQuotaFor(head.token_id),
-      },
-    );
-    if (published instanceof Response) return published;
-    identity = { source: published.source ?? '', ids: [...nodeIndex(published.source ?? '').keys()], aliases: [] as Array<{ legacyKey: string; nodeId: string; path: string }> };
-    if (input.change) {
-      const reserved = await db.query<{ source_id: string }>('SELECT source_id FROM artifact_source_ids WHERE artifact_id = $1', [id]);
-      identity = stampNodeIds(published.source ?? '', {
-        previousSource: headSource,
-        reservedIds: reserved.rows.map((entry) => entry.source_id),
-        retireLegacyAliases: true,
-      });
-    }
-    if (input.change && identity.source !== published.source) {
-      published = await publishCandidate(
-        {
-          theme: input.meta?.theme !== undefined ? input.meta.theme : meta.theme ?? null,
-          template: meta.template ?? null,
-          colorMode: input.meta?.colorMode !== undefined ? input.meta.colorMode : meta.colorMode ?? null,
-        },
-        identity.source,
-        { loadRef: refLoaderForActor(writerFor(head)), importAsset: assetImporterFor(head.token_id, head.user_id), resolveFont: fontResolver(), overByteQuota: byteQuotaFor(head.token_id) },
-      );
-      if (published instanceof Response) return published;
-    }
-    }
-    const aliasTargets = new Map<string, string>();
-    for (const alias of identity.aliases) {
-      const prior = aliasTargets.get(alias.legacyKey);
-      if (prior && prior !== alias.nodeId) return json({ error: 'ambiguous_node_alias' }, 400);
-      aliasTargets.set(alias.legacyKey, alias.nodeId);
-    }
-    const storedText = input.change ? published.source ?? '' : headSource;
-    if(opts.dryRun)return json({valid:true,dry_run:true,changed:storedText!==headSource,markup:storedText,edit_id:head.edit_id,version:head.version,state:artifactState(head),commit_checks:['authorization','references','edit_base']});
-
-    if(storedText===headSource&&!input.meta)return {applied:false,reason:'bad_diff',detail:'identical'};
-
-    const operations = input.annotationOps ?? [];
-    const annotationRows = operations.length
-      ? (await db.query<AnnotationRecord>(
-          'SELECT id,anchor_key,range FROM annotations WHERE artifact_id=$1 AND root_id IS NULL AND deleted_at IS NULL',
-          [id],
-        )).rows
-      : [];
-    const storedReceipts = operations.length
-      ? (await db.query<{ annotation_changes: AnnotationReceipt[] }>(
-          `SELECT annotation_changes FROM artifact_edits WHERE artifact_id=$1 AND EXISTS (
-             SELECT 1 FROM jsonb_array_elements(annotation_changes) receipt
-             WHERE receipt->>'operationId'=ANY($2::text[])
-           )`,
-          [id, operations.map((op) => op.id)],
-        )).rows.flatMap((r) => r.annotation_changes ?? [])
-      : [];
-    if (operations.some((op) => op.kind === 'undo' && !storedReceipts.some((r) => r.operationId === op.id && r.direction === 'map')))
-      return { applied: false, reason: 'doc_changed', head: headOf(head) };
-    const sideEffects = operations.length
-      ? annotationEffects(headSource, storedText, operations, annotationRows, storedReceipts)
-      : { updates: [], receipts: [] };
-    const commit=async(queryable:Queryable)=>{
-      const row=await commitGraphOperation(queryable,actor,scope,admitted!,{
-        ...(input.meta?.title!==undefined?{title:input.meta.title}:{}),effects:sideEffects,
-        historyChanges:{source:headSource,changes:batchChanges&&candidate===storedText?batchChanges:sourceChanges(headSource,storedText)},
-        ...(!existing?{initialize:{document:baseline,source:headSource},expectedEditId:head.edit_id}:operations.length?{expectedEditId:head.edit_id}:{}),
-      });
-      return {rows:row?[row]:[]};
-    };
-    const previousRefs=new Set(((head.meta.refs??[]) as Array<{id:string}>).map(ref=>ref.id));
-    const attachesReference=((published.meta.refs??[]) as Array<{id:string}>).some(ref=>!previousRefs.has(ref.id));
-    // First attachment changes the dataset schema in the same transaction as the document CAS.
-    const updated=attachesReference||storedText.includes('/people/')?await db.transaction(async tx=>{
-      const result=await commit(tx);
-      if(result.rows[0]){await bindCurrentUserScopes(tx,result.rows[0]);await documentMentions(tx,result.rows[0],actor,headSource);}
-      return result;
-    }):await commit(db);
-    if (updated.rows[0]) {
-      void trackEvent('edit', updated.rows[0].id, { userId: updated.rows[0].user_id });
-      return { applied: true, row: {...updated.rows[0],shares:head.shares}, ...(published.warnings?.length ? { warnings: published.warnings } : {}) };
-    }
-    // Lost the CAS: someone landed between our read and our write. Re-read and
-    // redo — our base is now an ordinary stale base, so the node-scope check
-    // decides it. (Near-unreachable on PGLite, which serializes all ops.)
-    if (attempt >= EDIT_CAS_RETRIES) {
-      const now = (await artifactQuery<ArtifactRow>(db,`SELECT artifacts.*, ${SHARES_PROJECTION} FROM artifacts WHERE id = $1 AND ${scope.where('$2')}`, [id, scope.val])).rows[0];
-      return now ? { applied: false, reason: 'doc_changed', head: headOf(now) } : null;
-    }
-  }
+  return json({error:'jsonb_operations_required',hint:'Prepare document_update from the graph returned by the last read. Use the current CLI or browser editor.'},400);
 }
 
 /**
@@ -2210,6 +1923,7 @@ export async function setMetadataFor(actor: TokenActor, id: string, patch: Metad
   const result = await db.transaction<ArtifactRow | VersionConflict | null>(async tx => {
     const current = (await artifactQuery<ArtifactRow>(tx,`SELECT * FROM artifacts WHERE id=$1 AND ${scope.where('$2')} FOR UPDATE`, [id,scope.val])).rows[0];
     if (!current) return null;
+    if(current.format==='markup')return null;
     if (opts.expectedState !== undefined && artifactState(current) !== opts.expectedState) return {conflict:true,reason:'state_conflict',currentVersion:current.version,currentState:artifactState(current)};
     if (opts.expectedVersion !== undefined && current.version !== opts.expectedVersion) return {conflict:true,currentVersion:current.version};
     if(patch.policy!==undefined&&current.policy_revision!==opts.expectedPolicyRevision)return {conflict:true,reason:'state_conflict',currentVersion:current.version,currentState:artifactState(current)};

@@ -1,4 +1,5 @@
 'use client';
+import type {DocumentGraph} from '@artifactbin/contracts';
 
 /**
  * The owner's gate into editing, mounted BY the artifact page (/a/<id>) when
@@ -27,6 +28,7 @@ import { LINK, PANEL } from '@/components/ui';
 import type { EditorFlushRef } from '@/lib/story/use-live-edits';
 
 interface Loaded {
+  document?:DocumentGraph;
   id: string;
   title: string | null;
   markup: string | null;
@@ -54,6 +56,7 @@ interface Loaded {
  * what the server just sent — the round trip was the whole "flash".
  */
 interface EditorSeed {
+  document?:DocumentGraph;
   id: string;
   title: string | null;
   markup: string | null;
@@ -205,6 +208,7 @@ export default function ArtifactEditor({ id, seed, onExit, flushRef, frameRef, r
       sessionNonce={sessionNonce}
       art={{
         id: art.id,
+        document:art.document,
         version: art.version,
         edit_id: art.edit_id,
         title: art.title,

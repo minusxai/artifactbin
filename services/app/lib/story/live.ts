@@ -1,3 +1,4 @@
+import type {DocumentGraph} from '@artifactbin/contracts';
 /**
  * Live document wakeups — the down-sync half of concurrent editing.
  *
@@ -43,6 +44,7 @@ export interface ArtifactVersionPing {
 }
 
 export interface ArtifactLiveEvent {
+  document?:DocumentGraph;
   editId: string;
   version: number;
   /**

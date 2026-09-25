@@ -252,6 +252,7 @@ const editArtifactOp: Operation = {
   description: 'Edit markup using source (a complete proposed JSX body), one old_string/new_string pair OR an edits list of 1–64 pairs; exactly one input form. Each old_string must match EXACTLY ONCE against the evolving in-memory source. Only the final document is validated and committed: one version or nothing; failures identify zero-based edit_index. Use the edit_id from your last create/get/edit response. Preserve persistent ids when moving nodes; include the nearest id-bearing context to distinguish repeated text. Unrelated concurrent edits rebase; conflicting regions return doc_changed with the current edit_id and source. Prefer this targeted operation over update_artifact, which replaces the whole document.',
   input: {
     id: z.string(), edit_id: z.string(),
+    document_update:z.json().optional(),
     operations:z.array(z.discriminatedUnion('kind',[
       z.object({kind:z.literal('setText'),path:z.array(z.number().int().nonnegative()).min(1).max(128),value:z.string()}),
       z.object({kind:z.literal('setAttribute'),path:z.array(z.number().int().nonnegative()).min(1).max(128),name:z.string(),value:z.json()}),

@@ -22,7 +22,7 @@ it('a first-load conversion cannot overwrite a winning edit',async()=>{
  const {id,row,actor}=await create(),db=await getDb();await db.query('UPDATE artifacts SET document=NULL,source=$2 WHERE id=$1',[id,row.source]);
  const query=db.query.bind(db);let raced=false;
  const spy=vi.spyOn(db,'query').mockImplementation(async(sql,params)=>{
-  if(!raced&&sql.includes('document IS NULL')&&sql.includes('UPDATE artifacts')){raced=true;const result=await applyEditScoped(actor,id,{baseEditId:row.edit_id,change:{oldString:'Alpha',newString:'Winner'}});expect(result&&!(result instanceof Response)&&result.applied).toBe(true);}
+  if(!raced&&sql.includes('document IS NOT DISTINCT FROM')&&sql.includes('UPDATE artifacts')){raced=true;const result=await applyEditScoped(actor,id,{baseEditId:row.edit_id,change:{oldString:'Alpha',newString:'Winner'}});expect(result&&!(result instanceof Response)&&result.applied).toBe(true);}
   return query(sql,params);
  });
  try{expect((await getArtifactById(id))?.source).toContain('Winner');expect(raced).toBe(true);}finally{spy.mockRestore();}

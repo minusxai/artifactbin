@@ -3,27 +3,9 @@
  */
 import {GRAPH_ROOT,graphAncestors,type DocumentGraph,type DocumentGraphNode} from './document-graph';
 import {applyDocumentPatch,prepareDocumentPatch,type DocumentPatch} from './document-patch';
-import {MAX_CONTENT_BYTES} from './input';
+import {MAX_DOCUMENT_BYTES as MAX_CONTENT_BYTES,type GraphPatch,type GraphRead,type GraphFacet} from '@artifactbin/contracts';
+export type {GraphPatch,GraphRead,GraphFacet,GraphNodeWrite} from '@artifactbin/contracts';
 
-export type GraphFacet='selfVersion'|'childrenVersion'|'subtreeVersion';
-export interface GraphRead {key:string;facet:GraphFacet;version:number}
-export interface GraphNodeWrite {
-  patches:DocumentPatch[];
-  self:boolean;
-  children:boolean;
-}
-export interface GraphPatch {
-  baseVersion:number;
-  reads:GraphRead[];
-  selections:Array<{selector:string;keys:string[]}>;
-  inserted:Record<string,DocumentGraphNode>;
-  removed:string[];
-  updated:Record<string,GraphNodeWrite>;
-  touched:string[];
-  byteDelta:number;
-  unitDeltas:Record<string,number>;
-  claims:Array<{id:string;version:number|null}>;
-}
 const canonical=(v:unknown):unknown=>Array.isArray(v)?v.map(canonical):v&&typeof v==='object'?Object.fromEntries(Object.entries(v).sort(([a],[b])=>a.localeCompare(b)).map(([k,x])=>[k,canonical(x)])):v;
 const equal=(a:unknown,b:unknown)=>JSON.stringify(canonical(a))===JSON.stringify(canonical(b));
 

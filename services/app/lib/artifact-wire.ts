@@ -1,4 +1,5 @@
-import {parseDocumentOperations} from './story/document-operation';
+import {parseDocumentUpdate} from '@artifactbin/contracts';
+import {applyEditFor} from './artifacts';
 import {readableArtifact} from './artifact-read';
 import {MembershipError} from './membership';
 import {grantsOf,grantsPermitWrite} from './datasets/policy/grants';
@@ -193,7 +194,7 @@ export async function artifactToWire(row: ArtifactRow, base: string) {
     // Annotations are sidecar state (lib/annotations) — the write path never
     // round-trips them, so every echo carries the open COUNT as the signal;
     // the artifact GET additionally inlines the full open set.
-    ...(isDoc ? { open_annotations: await countOpenAnnotations(row.id) } : {}),
+    ...(isDoc ? { open_annotations: row.open_annotations ?? await countOpenAnnotations(row.id) } : {}),
     // markup (story-engine) tier only: the source IS the artifact;
     // template/colorMode ride meta.
     ...(isDoc
@@ -369,6 +370,8 @@ export async function replaceArtifactWithBody(
   options: {dryRun?:boolean} = {},
 ): Promise<Response> {
   if (!body) return json({ error: 'invalid_json' }, 400);
+  if(Object.hasOwn(body,'document_update'))return respondToEdit(base,body,input=>applyEditFor(actor,id,input,options));
+  if(typeof body.markup==='string')return json({error:'jsonb_operations_required',hint:'Submit document_update using the current CLI or browser editor.'},400);
   // The row FIRST: refs and imports resolve as the DOCUMENT's owner, never as
   // the writer — an editor (artifact_shares.role) replacing a document that
   // carries its owner's <Mutation> or private image must not fail on assets
@@ -665,39 +668,13 @@ function parseEditBody(body: Record<string, unknown>): EditInput | null {
   const editId = body.edit_id;
   if (typeof editId !== 'string' || editId.length === 0) return null;
 
-  if(Object.hasOwn(body,'operations')){
-    const operations=parseDocumentOperations(body.operations);
-    if(!operations||['text','source','edits','old_string','new_string'].some(k=>Object.hasOwn(body,k)))return null;
-    return {baseEditId:editId,operations,...(annotationOps.length?{annotationOps}:{})};
+  if(Object.hasOwn(body,'document_update')){
+    const documentUpdate=parseDocumentUpdate(body.document_update);
+    if(!documentUpdate||!parseAnnotationOperations(documentUpdate.annotationOps??[])||annotationOps.length||['operations','text','source','edits','old_string','new_string'].some(k=>Object.hasOwn(body,k)))return null;
+    return {baseEditId:editId,documentUpdate};
   }
 
-  if(Object.hasOwn(body,'text')){
-    const text=body.text as Record<string,unknown>|null;
-    if(!text||typeof text!=='object'||!Array.isArray(text.path)||text.path.length>128||!text.path.every(x=>typeof x==='string')||typeof text.oldText!=='string'||typeof text.newText!=='string'||annotationOps.length||['source','edits','old_string','new_string'].some(k=>Object.hasOwn(body,k)))return null;
-    return {baseEditId:editId,text:{path:text.path as string[],oldText:text.oldText,newText:text.newText}};
-  }
-
-  const mentionsDiff = Object.hasOwn(body, 'old_string') || Object.hasOwn(body, 'new_string');
-  const mentionsSource = Object.hasOwn(body, 'source');
-  const mentionsBatch = Object.hasOwn(body, 'edits');
-  if ([mentionsDiff, mentionsSource, mentionsBatch].filter(Boolean).length > 1) return null;
-  const hasDiff = typeof body.old_string === 'string' && typeof body.new_string === 'string';
-  const hasSource = typeof body.source === 'string';
-  const hasBatch = Array.isArray(body.edits) && body.edits.length > 0 && body.edits.length <= 64
-    && body.edits.every((edit) => !!edit && typeof edit === 'object'
-      && typeof (edit as Record<string, unknown>).old_string === 'string'
-      && typeof (edit as Record<string, unknown>).new_string === 'string');
-  if ((mentionsDiff && !hasDiff) || (mentionsSource && !hasSource) || (mentionsBatch && !hasBatch)) return null;
-  const change = hasDiff
-    ? { oldString: body.old_string as string, newString: body.new_string as string }
-    : hasSource
-      ? { newSource: body.source as string }
-      : hasBatch
-        ? { edits: (body.edits as Array<Record<string, string>>).map((edit) => ({ oldString: edit.old_string, newString: edit.new_string })) }
-        : undefined;
-
-  if (!change) return null;
-  return {baseEditId: editId, change, ...(annotationOps.length ? {annotationOps} : {})};
+  return null;
 }
 
 /**

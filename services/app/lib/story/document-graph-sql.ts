@@ -39,8 +39,7 @@ export function graphPatchSql(document:string,version:string,patch:GraphPatch,in
         FROM jsonb_each(${nodes}) n WHERE (n.value->'selectors') ? s.selector))
     AND NOT (${nodes} ?| ARRAY(SELECT jsonb_object_keys(${inserted}::jsonb)))
     AND NOT EXISTS(SELECT 1 FROM jsonb_to_recordset(${reads}::jsonb) r(key text,facet text,version int)
-      LEFT JOIN jsonb_each(${nodes}) n ON n.key=r.key
-      WHERE n.key IS NULL OR (n.value->>r.facet)::int IS DISTINCT FROM r.version)`;
+      WHERE ${nodes}->r.key IS NULL OR (${nodes}->r.key->>r.facet)::int IS DISTINCT FROM r.version)`;
   return {expression,guard,params};
 }
 

@@ -2,7 +2,10 @@
  * This module knows serialization and tree integrity, never publication policy.
  * Source fragments are server-derived; they are not a second JSX interpreter.
  */
-import {randomUUID} from 'node:crypto';
+import type {DocumentGraph,DocumentGraphNode} from '@artifactbin/contracts';
+export type {DocumentGraph,DocumentGraphNode} from '@artifactbin/contracts';
+const randomUUID=()=>globalThis.crypto.randomUUID();
+const byteLength=(value:string)=>new TextEncoder().encode(value).length;
 import type {DocumentPath} from '@artifactbin/contracts';
 import type {JsxNode} from '../jsx/types';
 import {parseJsx} from '../jsx/parse';
@@ -10,36 +13,11 @@ import {serializeJsx} from '../jsx/serialize';
 import {graphSelectors} from './document-graph-selectors';
 import {collectRefUses} from './refs';
 import {inertProse,PROSE_HTML_PARENTS} from './document-prose';
-import {encodeDocumentNodes,decodeDocumentNodes,type StoredTree} from './document-node-codec';
+import {encodeDocumentNodes,decodeDocumentNodes} from './document-node-codec';
 
 export const GRAPH_ROOT='$root';
 export const GRAPH_POLICY='validated-graph-v3';
 export type GraphAstNode=JsxNode & {graphKey?:string};
-export interface DocumentGraphNode {
-  ast:StoredTree|null;
-  selectors:string[];
-  refs:Array<{id:string;kind:string}>;
-  parent:string|null;
-  children:string[];
-  /** Parts surround children: parts[0], child[0], parts[1], … */
-  parts:string[];
-  bytes:number;
-  units:number;
-  partUnits:number[];
-  subtreeUnits:number;
-  prose:boolean;
-  selfVersion:number;
-  childrenVersion:number;
-  subtreeVersion:number;
-}
-export interface DocumentGraph {
-  schema:3;
-  kind:'graph';
-  policy:string;
-  nodes:Record<string,DocumentGraphNode>;
-  claimedIds:Record<string,number>;
-  bytes:number;
-}
 
 function ownParts(node:JsxNode):string[] {
   if(node.type!=='element'||!node.children.length)return [serializeJsx([node])];
@@ -72,7 +50,7 @@ export function createDocumentGraph(source:string|JsxNode[],version:number):Docu
     const parts=implicit?['']:ownParts(node),own=plain.type==='element'?{...plain,children:[]}:plain;
     const referenceNode=node.type==='element'&&['Query','Mutation'].includes(node.tag)?node:own;
     const refs=isolated||node.type!=='element'||node.control?[]:(collectRefUses(serializeJsx([referenceNode]))??[]).map(({id,kind})=>({id,kind}));
-    const record:DocumentGraphNode={ast:encodeDocumentNodes([own]),selectors:isolated?[]:graphSelectors(node),refs,parent,children:[],parts,bytes:Buffer.byteLength(parts.join('')),units:parts.reduce((sum,p)=>sum+p.length,0),partUnits:parts.map(part=>part.length),subtreeUnits:0,prose:node.type==='text'&&!isolated&&!helmet&&PROSE_HTML_PARENTS.has(parentTag)&&inertProse(node.value),selfVersion:version,childrenVersion:version,subtreeVersion:version};
+    const record:DocumentGraphNode={ast:encodeDocumentNodes([own]),selectors:isolated?[]:graphSelectors(node),refs,parent,children:[],parts,bytes:byteLength(parts.join('')),units:parts.reduce((sum,p)=>sum+p.length,0),partUnits:parts.map(part=>part.length),subtreeUnits:0,prose:node.type==='text'&&!isolated&&!helmet&&PROSE_HTML_PARENTS.has(parentTag)&&inertProse(node.value),selfVersion:version,childrenVersion:version,subtreeVersion:version};
     nodes[key]=record;
     if(node.type==='element')record.children=node.children.map((child,index)=>visit(child,key,{implicit:node.control?.kind==='and'&&index===1,isolated:isolated||node.tag==='Iframe',helmet:helmet||node.tag==='Helmet',parentTag:node.tag}));
     record.subtreeUnits=record.units+record.children.reduce((sum,child)=>sum+nodes[child]!.subtreeUnits,0);
@@ -144,7 +122,7 @@ export function graphIntegrity(graph:DocumentGraph):string[] {
     visited.add(key);active.add(key);
     if(node.parent!==parent)errors.push(`Wrong parent ${key}`);
     if(node.parts.length!==node.children.length+1)errors.push(`Wrong parts ${key}`);
-    if(node.bytes!==Buffer.byteLength(node.parts.join(''))||node.units!==node.parts.join('').length)errors.push(`Wrong lengths ${key}`);
+    if(node.bytes!==byteLength(node.parts.join(''))||node.units!==node.parts.join('').length)errors.push(`Wrong lengths ${key}`);
     if(JSON.stringify(node.partUnits)!==JSON.stringify(node.parts.map(part=>part.length)))errors.push(`Wrong part lengths ${key}`);
     if(node.subtreeUnits!==node.units+node.children.reduce((sum,child)=>sum+(graph.nodes[child]?.subtreeUnits??0),0))errors.push(`Wrong subtree length ${key}`);
     node.children.forEach(child=>visit(child,key));active.delete(key);

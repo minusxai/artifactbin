@@ -1,4 +1,5 @@
 'use client';
+import type {DocumentGraph} from '@artifactbin/contracts';
 
 import type { EditorSelectionChange } from '@/lib/editor-v2/bookmark';
 
@@ -87,6 +88,7 @@ const INSPECTOR_LABEL = { chart: 'Chart inspector', number: 'Number inspector', 
 const HELD_ASSETS = isWebUrl;
 
 interface EditorArtifact {
+  document?:DocumentGraph;
   id: string;
   version: number;
   /** Head pointer this session bases its edits on. */
@@ -323,6 +325,8 @@ export default function InPlaceEditor({
     id: art.id,
     initialEditId: art.edit_id,
     initialVersion: art.version,
+    initialDocument:art.document,
+    initialMetadata:{title:art.title,theme:art.theme,template:art.template,colorMode:art.colorMode},
     initialSource: art.markup ?? '',
     onRemoteDocument,
     isUserEditing,
@@ -444,7 +448,7 @@ export default function InPlaceEditor({
   const remote = useLiveArtifact(art.id, art.edit_id, art.version, true, isOwnEdit);
   useEffect(() => {
     if (!remote || remote.format !== 'markup' || typeof remote.source !== 'string') return;
-    if (!adoptRemote(remote.editId, remote.source, remote.by)) return;
+    if (!adoptRemote(remote.editId, remote.source, remote.by,remote.document,remote.version,{title:remote.title,theme:remote.theme,template:remote.template,colorMode:remote.colorMode})) return;
     /*
      * The document under the inspector is not the one it opened on. AST paths
      * are POSITIONAL, so a node inserted before the selected chart shifts it

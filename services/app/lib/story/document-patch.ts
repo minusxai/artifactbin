@@ -1,9 +1,7 @@
 /** Server-owned JSONB primitives. They compose on values inside one statement;
  * publication admission must bind them to the exact node facets it validated. */
-export type DocumentPatch=
- | {kind:'set'|'insert';path:string[];value:unknown}
- | {kind:'delete';path:string[]}
- | {kind:'text';path:string[];value:string;start:number;deleteCount:number};
+import type {JsonDocumentPatch as DocumentPatch} from '@artifactbin/contracts';
+export type {JsonDocumentPatch as DocumentPatch} from '@artifactbin/contracts';
 const record=(value:unknown):value is Record<string,unknown>=>!!value&&typeof value==='object'&&!Array.isArray(value);
 function equal(a:unknown,b:unknown):boolean {
  if(Object.is(a,b))return true;

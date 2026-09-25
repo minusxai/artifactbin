@@ -1,0 +1,60 @@
+import {STORY_THEME_NAMES,STORY_TEMPLATE_NAMES} from '../validation/atlas-schemas';
+import {canonicalText} from './annotation-range';
+import type {JsxNode} from '../jsx/types';
+import {parseAnnotationOperations} from './annotation-edits';
+/** Trusted authoring boundary shared by browser and CLI. Pure and browser-safe:
+ * validation/normalization happens before submission, not under a database lock.
+ * The server independently retains authorization and atomic dependency checks. */
+import {MAX_DOCUMENT_BYTES,type DocumentGraph,type DocumentOperation,type DocumentUpdate} from '@artifactbin/contracts';
+import {createDocumentGraph,graphNodes,graphSource,graphReferences} from './document-graph';
+import {graphFromSource} from './document-graph-source';
+import {prepareGraphPatch} from './document-graph-patch';
+import {graphValidationScope} from './document-graph-scope';
+import {applyOperationsToNodes} from './document-operation';
+import {validateMarkupStructure} from './local-validation';
+import {stampNodeIds,nodeIndex} from './node-ids';
+import {canonicalizeMarkup} from './canonical-source';
+import {repairJsxSource} from '../jsx/repair';
+import {sanitizeStoryMarkupCss} from '../data/story/banned-css';
+import {remapMarkupStyleViewportUnits,transformOutsideManagedIframes} from './managed-iframe-source';
+import {extractClassCandidates,hasDesignSystemMarker} from '../data/story/story-css';
+export interface ClientDocumentSnapshot {document:DocumentGraph;version:number;meta:Record<string,unknown>;title?:string|null;description?:string|null}
+export interface ClientDocumentChange {source?:string;operations?:readonly DocumentOperation[];metadata?:DocumentUpdate['metadata'];whole?:boolean;annotationOps?:DocumentUpdate['annotationOps']}
+export function prepareClientDocumentUpdate(base:ClientDocumentSnapshot,change:ClientDocumentChange):DocumentUpdate {
+ const before=graphSource(base.document);
+ let source=change.operations?graphSource(createDocumentGraph(applyOperationsToNodes(graphNodes(base.document),change.operations),base.version)):change.source??before;
+ source=repairJsxSource(source)?.source??source;
+ if(source.includes('\0')||!source.isWellFormed())throw new Error('Document source must be valid Unicode without NUL characters');
+ source=canonicalizeMarkup(remapMarkupStyleViewportUnits(transformOutsideManagedIframes(source,sanitizeStoryMarkupCss)));
+ const identity=stampNodeIds(source,{previousSource:before,reservedIds:Object.keys(base.document.claimedIds),retireLegacyAliases:true});
+ const checked=validateMarkupStructure(identity.source);
+ if(checked.errors.length)throw new Error(checked.errors.map(error=>error.message).join('\n'));
+ const whole=change.whole||change.operations?.some(operation=>operation.kind==='replaceDocument')||false;
+ const candidate=whole?createDocumentGraph(identity.source,base.version):graphFromSource(base.document,identity.source,base.version);
+ if(candidate.bytes>MAX_DOCUMENT_BYTES)throw new Error('Document exceeds the publication size limit');
+ const scope=graphValidationScope(base.document,candidate);
+ if(scope.errors.length)throw new Error(scope.errors.join('\n'));
+ const metadata=change.metadata??{};
+ if(metadata.theme!=null&&!STORY_THEME_NAMES.includes(metadata.theme as never))throw new Error('Unknown theme');
+ if(metadata.template!=null&&!STORY_TEMPLATE_NAMES.includes(metadata.template as never))throw new Error('Unknown template');
+ if(metadata.colorMode!=null&&!['light','dark'].includes(metadata.colorMode))throw new Error('Unknown color mode');
+ const annotations=change.annotationOps??[];
+ if(!parseAnnotationOperations(annotations))throw new Error('Invalid annotation operations');
+ const oldIds=nodeIndex(before),newIds=nodeIndex(identity.source);
+ const text=(nodes:JsxNode[]):string=>nodes.map(n=>n.type==='text'?n.value:n.type==='element'?text(n.children):'').join('');
+ const annotationOps=annotations.map(op=>op.kind!=='map'?op:{...op,maps:op.maps.filter(map=>{
+  const from=oldIds.get(map.fromId),to=newIds.get(map.toId);
+  return from&&to&&!newIds.has(map.fromId)&&canonicalText(text(from.node.children))===map.fromText&&canonicalText(text(to.node.children))===map.toText;
+ }).map(map=>({...map,segments:map.segments.filter(s=>map.fromText.slice(s.from,s.from+s.length)===map.toText.slice(s.to,s.to+s.length))}))});
+ const css=JSON.stringify(extractClassCandidates(before))!==JSON.stringify(extractClassCandidates(identity.source))||hasDesignSystemMarker(before)!==hasDesignSystemMarker(identity.source)||['theme','template','colorMode'].some(key=>Object.hasOwn(metadata,key)&&metadata[key as keyof typeof metadata]!==base.meta[key]);
+ return {schema:1,...(annotationOps.length?{annotationOps}:{}),...(identity.aliases.length?{aliases:identity.aliases}:{}),patch:prepareGraphPatch(base.document,candidate,base.version,{whole,reads:scope.reads,selectors:scope.selectors}),
+  effects:{css,references:JSON.stringify(graphReferences(base.document))!==JSON.stringify(graphReferences(candidate))},
+  ...(Object.keys(metadata).length?{metadata,expectedMetadata:Object.fromEntries(Object.keys(metadata).map(key=>[key,(key==='title'?base.title:key==='description'?base.description:base.meta[key])??null]))}:{}),...(whole?{whole:true,replacement:candidate}:{})};
+}
+
+/** Recovery does not require the old AST to be readable. The version is the
+ * complete concurrency guard for this intentionally whole-document operation. */
+export function prepareClientDocumentReplacement(source:string,version:number,metadata?:DocumentUpdate['metadata']):DocumentUpdate {
+ const update=prepareClientDocumentUpdate({document:createDocumentGraph('',version),version,meta:{}},{source,whole:true,metadata});
+ delete update.expectedMetadata;return update;
+}

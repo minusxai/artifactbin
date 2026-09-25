@@ -63,6 +63,7 @@ async function build(row: ArtifactRow): Promise<LiveFrame> {
     ? storyUpdateParts(row.source, assetLookupFrom(assets))
     : null;
   return {
+    ...(row.document?.kind==='graph'?{document:row.document}:{}),
     editId: row.edit_id,
     version: row.version,
     by: await authorHandle(row),

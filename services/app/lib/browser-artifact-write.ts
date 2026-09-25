@@ -1,13 +1,22 @@
-/** Browser metadata controls observe state just before a conditional write; body-only typing uses edits. */
+/** Controls outside the live editor load an authoring snapshot, validate locally,
+ * then submit one permission-scoped JSONB commit. Non-document metadata retains
+ * its existing conditional protocol. */
+import type {DocumentGraph,DocumentUpdate} from '@artifactbin/contracts';
+import {prepareClientDocumentUpdate} from './story/document-update-client';
 export async function writeBrowserArtifact(id:string,change:Record<string,unknown>,editId?:string):Promise<Response>{
  const path=`/api/my/artifacts/${encodeURIComponent(id)}`;
- const observed=await fetch(path);
- if(!observed.ok)return observed;
- const head=await observed.json() as {state?:string;version?:number;edit_id?:string;markup?:string};
+ const observed=await fetch(path);if(!observed.ok)return observed;
+ const head=await observed.json() as {document?:DocumentGraph;format?:string;state?:string;version:number;edit_id:string;markup?:string;title?:string|null;description?:string|null;theme?:string|null;template?:string|null;colorMode?:string|null;sharing_revision?:number;ancestor_ids?:string[]};
  if(typeof head.state!=='string'||!Number.isSafeInteger(head.version))return Response.json({error:'invalid_response',details:[{message:'Refresh the artifact before saving.'}]},{status:502});
- const {source,annotationOps,...metadata}=change;
+ const {source,annotationOps,...fields}=change;
  if(source!==undefined&&head.edit_id!==editId)return Response.json({error:'doc_changed',edit_id:head.edit_id,version:head.version,source:head.markup},{status:409});
- return fetch(path,{method:source===undefined?'PATCH':'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({
-  ...metadata,expectedState:head.state,...(source!==undefined&&Array.isArray(annotationOps)&&annotationOps.length?{annotation_ops:annotationOps}:{}),...(source!==undefined?{markup:source,expectedVersion:head.version}:{}),
- })});
+ if(head.document?.kind==='graph'&&head.format!=='folder'){
+  const metadata=Object.fromEntries(Object.entries(fields).filter(([k])=>['title','description','theme','template','colorMode'].includes(k))) as DocumentUpdate['metadata'];
+  const update=prepareClientDocumentUpdate({...head,document:head.document,meta:head},{source:source as string|undefined,metadata,annotationOps:annotationOps as DocumentUpdate['annotationOps']});
+  const settings=Object.fromEntries(Object.entries(fields).filter(([k])=>['visibility','linkRole','parent_id','shares'].includes(k)).map(([k,v])=>[k==='parent_id'?'parentId':k,v])) as DocumentUpdate['settings'];
+  if(Object.keys(settings!).length)Object.assign(update,{settings,expectedSharingRevision:head.sharing_revision??0,expectedParentIds:head.ancestor_ids??[]});
+  return fetch(`${path}/edits`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({edit_id:head.edit_id,document_update:update})});
+ }
+ if(source!==undefined)return Response.json({error:'not_editable'},{status:400});
+ return fetch(path,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({...fields,expectedState:head.state})});
 }

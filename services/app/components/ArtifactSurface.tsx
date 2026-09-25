@@ -1,4 +1,5 @@
 'use client';
+import type {DocumentGraph} from '@artifactbin/contracts';
 import {ArtifactPeople} from './ArtifactPeople';
 import {useArtifactMembership} from './useArtifactMembership';
 
@@ -139,6 +140,7 @@ export interface ArtifactSurfaceProps {
   like?: { liked: boolean; count: number };
   /** Who to follow and whether we do — null for an anonymous document, or the owner's own. */
   follow?: { userId: string; following: boolean; count: number } | null;
+  document?:DocumentGraph;
   content: string;
   columns: Array<{ name: string; type?: string }>;
   catalog?: DatasetCatalog;
@@ -685,6 +687,7 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
    * document nobody has — and hand it a stale head pointer.
    */
   const editorSeed = canEdit ? {
+    document: live?.document ?? props.document,
     id,
     version: live?.version ?? version,
     edit_id: live?.editId ?? editId,
