@@ -3,6 +3,7 @@
  */
 import {GRAPH_POLICY,GRAPH_ROOT} from './document-graph';
 import type {GraphPatch} from './document-graph-patch';
+import {documentPatchStepSql} from './document-patch';
 import {MAX_CONTENT_BYTES} from './input';
 
 export function graphPatchSql(document:string,version:string,patch:GraphPatch,initial:unknown[]):{expression:string;guard:string;params:unknown[]} {
@@ -11,14 +12,19 @@ export function graphPatchSql(document:string,version:string,patch:GraphPatch,in
   const reads=param(JSON.stringify(patch.reads)),inserted=param(JSON.stringify(patch.inserted)),removed=param(patch.removed),updated=param(JSON.stringify(patch.updated)),touched=param(patch.touched),delta=param(patch.byteDelta),base=param(patch.baseVersion),limit=param(MAX_CONTENT_BYTES),policy=param(GRAPH_POLICY);
   const selections=param(JSON.stringify(patch.selections)),unitDeltas=param(JSON.stringify(patch.unitDeltas)),claims=param(JSON.stringify(patch.claims));
   const nodes=`(${document}->'nodes')`;
-  const replacement=`((${nodes}-${removed}::text[])||COALESCE((SELECT jsonb_object_agg(n.key,
-    n.value||COALESCE(w.value->'value','{}'::jsonb)
+  const replacement=`((${nodes}-${removed}::text[])||COALESCE((WITH RECURSIVE patched(key,value,step,patches,flags) AS (
+    SELECT key,COALESCE(${inserted}::jsonb->key,${nodes}->key),0,
+      COALESCE(${updated}::jsonb->key->'patches','[]'::jsonb),${updated}::jsonb->key
+    FROM unnest(${touched}::text[]) key
+    UNION ALL
+    SELECT n.key,${documentPatchStepSql('n.value','(n.patches->n.step)')},n.step+1,n.patches,n.flags
+    FROM patched n WHERE n.step<jsonb_array_length(n.patches)
+  ) SELECT jsonb_object_agg(n.key,n.value
     ||jsonb_build_object('subtreeUnits',(n.value->>'subtreeUnits')::int+COALESCE((${unitDeltas}::jsonb->>n.key)::int,0))
-    ||CASE WHEN ${inserted}::jsonb ? n.key OR (w.value->>'self')::boolean THEN jsonb_build_object('selfVersion',${version}+1) ELSE '{}'::jsonb END
-    ||CASE WHEN ${inserted}::jsonb ? n.key OR (w.value->>'children')::boolean THEN jsonb_build_object('childrenVersion',${version}+1) ELSE '{}'::jsonb END
-    ||CASE WHEN n.key=ANY(${touched}::text[]) THEN jsonb_build_object('subtreeVersion',${version}+1) ELSE '{}'::jsonb END)
-    FROM (SELECT key,COALESCE(${inserted}::jsonb->key,${nodes}->key) AS value FROM unnest(${touched}::text[]) key) n
-    LEFT JOIN jsonb_each(${updated}::jsonb) w ON w.key=n.key),'{}'::jsonb))`;
+    ||CASE WHEN ${inserted}::jsonb ? n.key OR (n.flags->>'self')::boolean THEN jsonb_build_object('selfVersion',${version}+1) ELSE '{}'::jsonb END
+    ||CASE WHEN ${inserted}::jsonb ? n.key OR (n.flags->>'children')::boolean THEN jsonb_build_object('childrenVersion',${version}+1) ELSE '{}'::jsonb END
+    ||jsonb_build_object('subtreeVersion',${version}+1))
+    FROM patched n WHERE n.step=jsonb_array_length(n.patches)),'{}'::jsonb))`;
   const expression=`(${document}||jsonb_build_object('claimedIds',(${document}->'claimedIds')||COALESCE((SELECT jsonb_object_agg(c.id,${version}+1) FROM jsonb_to_recordset(${claims}::jsonb) c(id text,version int)),'{}'::jsonb),'nodes',${replacement},'bytes',(${document}->>'bytes')::int+${delta}::int))`;
   const guard=`${document}->>'policy'=${policy} AND ${document}->>'kind'='graph'
     AND ${version}-${base}::int BETWEEN 0 AND 200

@@ -67,3 +67,9 @@ it('allows an intentional restore against observed identity history',()=>{
  const restore=prepareGraphPatch(deleted,createDocumentGraph(applyOperationsToNodes(graphNodes(deleted),[{kind:'insert',parent:[0,0],index:0,source:'<p id="a">Restored</p>'}]),3),2);
  expect(applyGraphPatch(deleted,2,restore)).not.toBeNull();
 });
+it('does not resend a large attribute when adding another attribute to the same node',()=>{
+ const base=createDocumentGraph(`<div id="root" data-payload={{"large":"${'unchanged '.repeat(10000)}"}} />`,1);
+ const patch=plan(base,[{kind:'setAttribute',path:[0],name:'title',value:'Small edit'}]);
+ expect(JSON.stringify(patch).length).toBeLessThan(2000);
+ const result=applyGraphPatch(base,1,patch)!;expect(graphSource(result)).toContain('title="Small edit"');expect(graphIntegrity(result)).toEqual([]);
+});

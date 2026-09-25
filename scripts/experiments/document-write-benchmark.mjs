@@ -1,3 +1,4 @@
+import {currentStoryCss} from '../../services/app/lib/data/story/story-css.server.ts';
 /** Application-service comparison. Run this identical worker in the TEXT baseline
  * checkout and the JSONB checkout. Each mode validates, archives, logs, returns
  * full source/metadata, and verifies no accepted edit is lost. No HTTP measured.
@@ -53,7 +54,7 @@ try{
   for(const e of logs){assert.equal(source.slice(e.splice_start,e.splice_start+e.removed.length),e.removed);source=source.slice(0,e.splice_start)+e.inserted+source.slice(e.splice_start+e.removed.length);versions.set(versions.size+1,source);}
   assert.equal(source,head.source);
   for(const v of (await db.query('SELECT version FROM artifact_versions WHERE artifact_id=$1',[initial.id])).rows)assert.equal((await getVersionFor(actor,initial.id,v.version)).source,versions.get(v.version));
-  const validated=await publishJsx({},head.source);assert.ok(!(validated instanceof Response));assert.equal(validated.source,head.source);assert.equal(validated.meta.compiledCss,head.meta.compiledCss);
+  const validated=await publishJsx({},head.source);assert.ok(!(validated instanceof Response));assert.equal(validated.source,head.source);assert.equal(validated.meta.compiledCss,await currentStoryCss(head.meta,head.source));
   const sorted=samples.map(s=>s.ms).sort((a,b)=>a-b),entry={run:run+1,sourceBytes:Buffer.byteLength(published.source),accepted:samples.length,elapsedMs,editsPerSecond:samples.length/elapsedMs*1000,p50Ms:sorted[Math.ceil(sorted.length*.5)-1],p95Ms:sorted[Math.ceil(sorted.length*.95)-1],directQueryCounts:counts,directQueryMs:times,clientRetries:samples.reduce((n,s)=>n+s.retries,0)};
   results.runs.push(entry);writeFileSync(output,JSON.stringify(results,null,2));console.log(JSON.stringify(entry));
  }

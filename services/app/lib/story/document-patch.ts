@@ -1,32 +1,90 @@
-/** JSONB persistence primitives, behind the publication validator. Callers must bind
- * the plan to the exact baseline they validated. These are not client capabilities.
- * Arrays with a changed length are replaced at their nearest array boundary: no SQL
- * array expansion, ordering aggregate, or one UPDATE per child.
- */
-export interface DocumentPatch {path:string[];value:unknown}
+/** Server-owned JSONB primitives. They compose on values inside one statement;
+ * publication admission must bind them to the exact node facets it validated. */
+export type DocumentPatch=
+ | {kind:'set'|'insert';path:string[];value:unknown}
+ | {kind:'delete';path:string[]}
+ | {kind:'text';path:string[];value:string;start:number;deleteCount:number};
 const record=(value:unknown):value is Record<string,unknown>=>!!value&&typeof value==='object'&&!Array.isArray(value);
+function equal(a:unknown,b:unknown):boolean {
+ if(Object.is(a,b))return true;
+ if(Array.isArray(a)&&Array.isArray(b))return a.length===b.length&&a.every((value,index)=>equal(value,b[index]));
+ if(record(a)&&record(b)){const keys=Object.keys(a);return keys.length===Object.keys(b).length&&keys.every(key=>Object.hasOwn(b,key)&&equal(a[key],b[key]));}
+ return false;
+}
 export function prepareDocumentPatch(before:unknown,after:unknown):DocumentPatch[]{
  const patches:DocumentPatch[]=[];
  const visit=(a:unknown,b:unknown,path:string[])=>{
-  if(Object.is(a,b))return;
-  if(Array.isArray(a)&&Array.isArray(b)&&a.length===b.length){b.forEach((v,i)=>visit(a[i],v,[...path,String(i)]));return;}
-  if(record(a)&&record(b)){
-   const keys=Object.keys(b);
-   if(Object.keys(a).length===keys.length&&keys.every(key=>Object.hasOwn(a,key))){keys.forEach(key=>visit(a[key],b[key],[...path,key]));return;}
+  if(equal(a,b))return;
+  if(typeof a==='string'&&typeof b==='string'){
+   // PostgreSQL substring offsets count code points, not JavaScript UTF-16 units.
+   const left=Array.from(a),right=Array.from(b);let start=0,end=0;
+   while(start<left.length&&start<right.length&&left[start]===right[start])start++;
+   while(end<left.length-start&&end<right.length-start&&left[left.length-end-1]===right[right.length-end-1])end++;
+   const patch:DocumentPatch={kind:'text',path,start,deleteCount:left.length-start-end,value:right.slice(start,right.length-end).join('')};
+   if(JSON.stringify(patch).length<JSON.stringify({kind:'set',path,value:b}).length){patches.push(patch);return;}
   }
-  patches.push({path,value:b});
+  if(Array.isArray(a)&&Array.isArray(b)){
+   if(a.length===b.length){b.forEach((value,index)=>visit(a[index],value,[...path,String(index)]));return;}
+   let start=0,end=0;
+   while(start<a.length&&start<b.length&&equal(a[start],b[start]))start++;
+   while(end<a.length-start&&end<b.length-start&&equal(a[a.length-end-1],b[b.length-end-1]))end++;
+   for(let index=a.length-end-1;index>=start;index--)patches.push({kind:'delete',path:[...path,String(index)]});
+   for(let index=start;index<b.length-end;index++)patches.push({kind:'insert',path:[...path,String(index)],value:b[index]});
+   return;
+  }
+  if(record(a)&&record(b)){
+   for(const key of Object.keys(a))if(!Object.hasOwn(b,key))patches.push({kind:'delete',path:[...path,key]});
+   for(const [key,value] of Object.entries(b))if(Object.hasOwn(a,key))visit(a[key],value,[...path,key]);else patches.push({kind:'set',path:[...path,key],value});
+   return;
+  }
+  patches.push({kind:'set',path,value:b});
  };
  visit(before,after,[]);
- // Bound expression depth and parameter count for a broad replacement. This is
- // still one atomic statement, and ordinary leaf edits never hit this bound.
- return patches.length>48?[{path:[],value:after}]:patches;
+ // Bound per-node expression/recursion depth for dense replacements. This never
+ // turns an ordinary edit into a whole-document replacement in the graph writer.
+ return patches.length>48?[{kind:'set',path:[],value:after}]:patches;
+}
+
+/** Reference interpreter for compiler conformance and graph admission tests. */
+export function applyDocumentPatch(before:unknown,patches:readonly DocumentPatch[]):unknown {
+ let value=structuredClone(before);
+ for(const patch of patches){
+  let parent=value;
+  for(const key of patch.path.slice(0,-1))parent=(parent as Record<string,unknown>)[key];
+  const key=patch.path.at(-1),old=key===undefined?value:(parent as Record<string,unknown>)[key];
+  if(patch.kind==='delete'){
+   if(Array.isArray(parent))parent.splice(Number(key),1);else delete (parent as Record<string,unknown>)[key!];
+   continue;
+  }
+  let next=structuredClone(patch.value);
+  if(patch.kind==='text'){
+   const points=Array.from(old as string);next=points.slice(0,patch.start).join('')+patch.value+points.slice(patch.start+patch.deleteCount).join('');
+  }
+  if(key===undefined)value=next;
+  else if(patch.kind==='insert'&&Array.isArray(parent))parent.splice(Number(key),0,next);
+  else Object.defineProperty(parent,key,{value:next,enumerable:true,writable:true,configurable:true});
+ }
+ return value;
 }
 export function documentPatchSql(column:string,patches:DocumentPatch[],initial:unknown[]):{expression:string;params:unknown[]}{
- const params=[...initial];let expression=column;
- for(const patch of patches){
-  if(!patch.path.length){params.push(JSON.stringify(patch.value));expression=`$${params.length}::jsonb`;continue;}
-  params.push(patch.path,JSON.stringify(patch.value));
-  expression=`jsonb_set(${expression},$${params.length-1}::text[],$${params.length}::jsonb,false)`;
- }
+ const params=[...initial,JSON.stringify(patches)],bound=`$${params.length}::jsonb`;
+ const expression=`(WITH RECURSIVE document_steps(value,step) AS (
+  SELECT ${column},0
+  UNION ALL
+  SELECT ${documentPatchStepSql('d.value',`(${bound}->d.step)`)},d.step+1
+  FROM document_steps d WHERE d.step<jsonb_array_length(${bound})
+ ) SELECT value FROM document_steps WHERE step=jsonb_array_length(${bound}))`;
  return {expression,params};
+}
+
+/** One dynamic step, used by the bounded per-node SQL fold. No stored function,
+ * full-array expansion, or second database statement is needed. */
+export function documentPatchStepSql(value:string,patch:string):string {
+ const path=`ARRAY(SELECT jsonb_array_elements_text(${patch}->'path'))`;
+ const old=`(${value}#>>${path})`,text=`to_jsonb(left(${old},(${patch}->>'start')::int)||(${patch}->>'value')||substring(${old} FROM (${patch}->>'start')::int+(${patch}->>'deleteCount')::int+1))`;
+ return `(CASE ${patch}->>'kind'
+  WHEN 'delete' THEN ${value}#-${path}
+  WHEN 'insert' THEN jsonb_insert(${value},${path},${patch}->'value',false)
+  WHEN 'text' THEN CASE WHEN jsonb_array_length(${patch}->'path')=0 THEN ${text} ELSE jsonb_set(${value},${path},${text},true) END
+  ELSE CASE WHEN jsonb_array_length(${patch}->'path')=0 THEN ${patch}->'value' ELSE jsonb_set(${value},${path},${patch}->'value',true) END END)`;
 }

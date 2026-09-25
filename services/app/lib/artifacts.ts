@@ -1,4 +1,4 @@
-import {applyProseOperation,type ProseOperation} from './story/document-prose';
+import {applyProseOperation,proseOperation,type ProseOperation} from './story/document-prose';
 import type {DocumentOperation} from '@artifactbin/contracts';
 import {decodeDocument,type StoredDocument} from './story/document-codec';
 import {applyDocumentOperations,DocumentOperationError} from './story/document-operation';
@@ -1696,6 +1696,17 @@ export async function applyEditScoped(actor: TokenActor, id: string, input: Edit
       }
     } else if (!input.meta) {
       return { applied: false, reason: 'bad_diff', detail: 'identical' };
+    }
+
+    // Legacy source clients receive the same compact text log as typed clients.
+    // Rebase already checked the original base; bind this derived path to the
+    // observed head so a concurrent structural change cannot retarget it.
+    if(input.change&&!input.meta&&!input.annotationOps?.length&&!opts.dryRun){
+      const text=proseOperation(headSource,candidate);
+      if(text){
+        const row=await commitGraphProseOperation(db,actor,id,head.edit_id,text,scope);
+        if(row){void trackEvent('edit',row.id,{userId:row.user_id});return {applied:true,row};}
+      }
     }
 
     // Admission owns publication and identity. Dry runs retain the pure publisher

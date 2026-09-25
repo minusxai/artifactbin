@@ -27,3 +27,18 @@ it('handles literal nulls, removed properties, arrays and whole representation t
   expect((await db.query(`SELECT ${sql.expression} AS value, $1::jsonb AS baseline`,sql.params)).rows[0].value).toEqual(after);
  }
 });
+it.each([
+ {before:{large:'unchanged '.repeat(10000)},after:{large:'unchanged '.repeat(10000),title:'Small addition'}},
+ {before:[{large:'unchanged '.repeat(10000)}],after:['new',{large:'unchanged '.repeat(10000)}]},
+ {before:{text:'👩 β '.repeat(10000)},after:{text:'👩 β '.repeat(5000)+'changed '+'👩 β '.repeat(5000)}},
+])('keeps a deep edit payload small without retransmitting its unchanged surroundings',async({before,after})=>{
+ const db=await getDb(),patch=prepareDocumentPatch(before,after),sql=documentPatchSql('$1::jsonb',patch,[JSON.stringify(before)]);
+ expect(JSON.stringify(sql.params.slice(1)).length).toBeLessThan(500);
+ expect((await db.query(`SELECT ${sql.expression} AS value`,sql.params)).rows[0].value).toEqual(after);
+});
+it('bounds SQL expression size when composing several text splices',async()=>{
+ const before=Array.from({length:8},()=> 'unchanged '.repeat(1000)),after=before.map((text,index)=>text+' '+index);
+ const sql=documentPatchSql('$1::jsonb',prepareDocumentPatch(before,after),[JSON.stringify(before)]);
+ expect(sql.expression.length).toBeLessThan(20_000);
+ const db=await getDb();expect((await db.query(`SELECT ${sql.expression} AS value`,sql.params)).rows[0].value).toEqual(after);
+});

@@ -1,3 +1,4 @@
+import {currentStoryCss} from '../../services/app/lib/data/story/story-css.server.ts';
 import assert from 'node:assert/strict';
 import {getDb,resetDb} from '../../services/app/lib/db.ts';
 import {publishJsx} from '../../services/app/lib/story/jsx-tier.ts';
@@ -18,7 +19,7 @@ try{
   const row=await getArtifactById(initial.id),logs=(await db.query('SELECT * FROM artifact_edits WHERE artifact_id=$1 ORDER BY seq',[initial.id])).rows;
   let source='';const sources=new Map();
   for(const e of logs){assert.equal(source.slice(e.splice_start,e.splice_start+e.removed.length),e.removed,'log offsets');source=source.slice(0,e.splice_start)+e.inserted+source.slice(e.splice_start+e.removed.length);sources.set(sources.size+1,source);}
-  assert.equal(source,row.source);const valid=await publishJsx({},source);assert.ok(!(valid instanceof Response));assert.equal(valid.source,source);assert.equal(valid.meta.compiledCss,row.meta.compiledCss);
+  assert.equal(source,row.source);const valid=await publishJsx({},source);assert.ok(!(valid instanceof Response));assert.equal(valid.source,source);assert.equal(valid.meta.compiledCss,await currentStoryCss(row.meta,row.source));
   for(const v of (await db.query('SELECT * FROM artifact_versions WHERE artifact_id=$1',[initial.id])).rows)assert.equal(decodeDocument(v.document),sources.get(v.version));
   return row;
  };

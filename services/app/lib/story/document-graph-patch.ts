@@ -2,12 +2,13 @@
  * policy dependencies to this plan; only the admitted wrapper may reach SQL.
  */
 import {GRAPH_ROOT,graphAncestors,type DocumentGraph,type DocumentGraphNode} from './document-graph';
+import {applyDocumentPatch,prepareDocumentPatch,type DocumentPatch} from './document-patch';
 import {MAX_CONTENT_BYTES} from './input';
 
 export type GraphFacet='selfVersion'|'childrenVersion'|'subtreeVersion';
 export interface GraphRead {key:string;facet:GraphFacet;version:number}
 export interface GraphNodeWrite {
-  value:Partial<DocumentGraphNode>;
+  patches:DocumentPatch[];
   self:boolean;
   children:boolean;
 }
@@ -47,7 +48,7 @@ export function prepareGraphPatch(before:DocumentGraph,after:DocumentGraph,baseV
     const value:Partial<DocumentGraphNode>={parts:next.parts,partUnits:next.partUnits,bytes:next.bytes,units:next.units};
     if(self){Object.assign(value,{ast:next.ast,parent:next.parent,selectors:next.selectors,refs:next.refs,prose:next.prose});read(key,'subtreeVersion');}
     if(children){value.children=next.children;read(key,'childrenVersion');read(key,'selfVersion');}
-    updated[key]={value,self,children};touched.add(key);ancestors(before,key);ancestors(after,key);
+    updated[key]={patches:prepareDocumentPatch(node,{...node,...value}),self,children};touched.add(key);ancestors(before,key);ancestors(after,key);
   }
   for(const [key,node] of Object.entries(after.nodes))if(!before.nodes[key]){
     inserted[key]=structuredClone(node);touched.add(key);ancestors(after,key);
@@ -77,7 +78,7 @@ export function applyGraphPatch(current:DocumentGraph,version:number,patch:Graph
   for(const [key,node] of Object.entries(patch.inserted))next.nodes[key]={...structuredClone(node),selfVersion:revision,childrenVersion:revision,subtreeVersion:revision};
   for(const [key,write] of Object.entries(patch.updated)){
     const node=next.nodes[key];if(!node)return null;
-    Object.assign(node,structuredClone(write.value));
+    Object.assign(node,applyDocumentPatch(node,write.patches));
     if(write.self)node.selfVersion=revision;
     if(write.children)node.childrenVersion=revision;
   }
