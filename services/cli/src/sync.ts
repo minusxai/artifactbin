@@ -169,7 +169,7 @@ async function prepareDocumentPlan(plan:PushPlan,client:HttpClient,force:boolean
  if(!plan.file.document||!plan.id||['create','missing','none'].includes(plan.mode))return plan;
  let head=plan.file.tracked?.snapshot;
  if(force||!head?.document)head=await client.request<Snapshot>(`/artifacts/${plan.id}`);
- const native=['dataset','viz','image','pdf'].includes(head.format??'');
+ const native=['dataset','viz','image','pdf','file'].includes(head.format??'');
  const document=(native?createDocumentGraph('',head.version):head.document) as DocumentGraph|undefined;
  if(document?.kind!=='graph')throw new CliError('invalid_response','The artifact has no editable JSONB snapshot.');
  if(!force&&!plan.file.tracked&&(plan.body.expectedVersion!==undefined&&plan.body.expectedVersion!==head.version||plan.body.expectedState!==undefined&&plan.body.expectedState!==head.state))throw new CliError('state_conflict','The remote artifact differs from the state recorded in this file.','Inspect afbin diff --remote before deciding how to reconcile the changes.',{head},3);
