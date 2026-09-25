@@ -80,8 +80,9 @@ beforeEach(() => {
   URL.revokeObjectURL = vi.fn();
 });
 const lastSource = () => (queue.mock.calls.at(-1)?.[0] as { source?: string } | undefined)?.source ?? '';
+/** The editor's CREATE posts only — the draft stylesheet compile posts too, on its own timer. */
 const posts = (spy: ReturnType<typeof stubFetch>) =>
-  spy.mock.calls.filter(([, i]) => (i as RequestInit)?.method === 'POST') as Array<[string, RequestInit]>;
+  spy.mock.calls.filter(([u, i]) => (i as RequestInit)?.method === 'POST' && String(u).includes('/api/my/artifacts')) as Array<[string, RequestInit]>;
 const selectionOf = (path: string, tag: string, kind = 'element') => ({
   kind, path, tag, rect: { x: 0, y: 0, width: 10, height: 10 }, className: '', style: '', ancestors: [],
 });

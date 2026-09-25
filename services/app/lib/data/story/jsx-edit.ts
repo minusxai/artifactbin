@@ -325,7 +325,7 @@ const pick = (alphabet: string): string => {
     if (byte < limit) return alphabet[byte % alphabet.length];
   }
 };
-const randomNodeId = (): string => pick(ID_FIRST) + pick(ID_REST) + pick(ID_REST) + pick(ID_REST);
+const randomNodeId = (): string => [ID_FIRST, ID_REST, ID_REST, ID_REST].map(pick).join('');
 
 /**
  * A node id for something the editor inserts, in the server's shape and not
