@@ -33,17 +33,24 @@ const TEXT_TAGS = ['p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'li', 'blockquote', 
 interface SelectionToolbarPlan {
   /** Font size / weight / italic / underline steppers. */
   text: boolean;
-  /** The class algebra: alignment, text color, the spacing/width row. */
+  /** The class algebra: alignment and the spacing/width row. */
   format: boolean;
+  /** Text colour — a text tool, so not for a block selection. */
+  color: boolean;
   /** Insert/remove link — needs the live Range a focused text host holds. */
   link: boolean;
 }
 
-export function selectionToolbarPlan(selection: Pick<StoryEditSelection, 'kind' | 'tag'>): SelectionToolbarPlan {
-  if (selection.kind === 'embed') return { text: false, format: false, link: false };
+export function selectionToolbarPlan(
+  selection: Pick<StoryEditSelection, 'kind' | 'tag' | 'mode'>,
+): SelectionToolbarPlan {
+  if (selection.kind === 'embed') return { text: false, format: false, color: false, link: false };
+  // A BLOCK selection has no caret: text tools would act on nothing the user can see.
+  if (selection.mode === 'block') return { text: false, format: true, color: false, link: false };
   return {
     text: selection.kind === 'text' || TEXT_TAGS.includes(selection.tag.toLowerCase()),
     format: true,
+    color: true,
     link: selection.kind === 'text',
   };
 }

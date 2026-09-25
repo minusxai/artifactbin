@@ -80,3 +80,15 @@ it("explains, in red, a block that has nowhere to go", () => {
   preview.clear();
   expect(cursorRule()).not.toMatch(/not-allowed/);
 });
+it("keeps the whole label on screen, flipping to the pointer's other side near an edge", () => {
+  fixture();
+  preview.update(30, 110);
+  label().getBoundingClientRect = () => new DOMRect(0, 0, 120, 22);
+  const { innerWidth: w, innerHeight: h } = window;
+  preview.update(w - 10, h - 10);
+  expect(label().style.left).toBe(`${w - 10 - 14 - 120}px`);
+  expect(label().style.top).toBe(`${h - 10 - 14 - 22}px`);
+  preview.update(30, 110);
+  expect(label().style.left).toBe("44px");
+  expect(label().style.top).toBe("124px");
+});

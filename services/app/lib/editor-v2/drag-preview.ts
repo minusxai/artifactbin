@@ -98,11 +98,17 @@ export function createDragPreview(doc: Document): DragPreview {
     indicator.setAttribute("data-mx-drop-state", state);
     indicator.style.background = state === "invalid" ? "rgba(220, 38, 38, 0.92)" : "rgba(51, 65, 85, 0.92)";
     cursor.textContent = `* { cursor: ${state === "invalid" ? "not-allowed" : "grabbing"} !important; }`;
-    Object.assign(indicator.style, {
-      display: "block",
-      left: `${Math.max(8, Math.min(x + 14, (doc.defaultView?.innerWidth ?? 1000) - 16))}px`,
-      top: `${Math.max(8, Math.min(y + 14, (doc.defaultView?.innerHeight ?? 800) - 16))}px`,
-    });
+    indicator.style.display = "block";
+    // Beside the pointer, on whichever side keeps the WHOLE label on screen.
+    const { width, height } = indicator.getBoundingClientRect();
+    const place = (at: number, size: number, room: number) => {
+      const after = at + 14,
+        before = at - 14 - size;
+      const pick = after + size <= room - 8 || before < 8 ? after : before;
+      return Math.max(8, Math.min(pick, room - size - 8));
+    };
+    indicator.style.left = `${place(x, width, doc.defaultView?.innerWidth ?? 1000)}px`;
+    indicator.style.top = `${place(y, height, doc.defaultView?.innerHeight ?? 800)}px`;
     if (state !== "valid") marker.style.display = "none";
   };
   return {

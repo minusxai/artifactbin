@@ -288,6 +288,7 @@ export default function StoryFormatToolbar({
               </div>
             </StoryToolbarMenu>
 
+            {plan.color && (<>
             <span className="mx-0.5 h-4 w-px bg-edge" />
             <Tooltip content="text color">
               <label
@@ -304,6 +305,7 @@ export default function StoryFormatToolbar({
                 />
               </label>
             </Tooltip>
+            </>)}
           </>
         )}
 

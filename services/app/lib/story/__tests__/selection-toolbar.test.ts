@@ -17,14 +17,23 @@ describe('the unconditional controls', () => {
 describe('what varies, by kind', () => {
   it('a component gets no class algebra — its classes are render output', () => {
     for (const tag of ['Question', 'Number', 'GridItem', 'Card']) {
-      expect(selectionToolbarPlan({ kind: 'embed', tag })).toEqual({ text: false, format: false, link: false });
+      expect(selectionToolbarPlan({ kind: 'embed', tag })).toEqual({ text: false, format: false, color: false, link: false });
     }
   });
   it('a text-bearing tag gets the type controls; a container only layout', () => {
-    expect(selectionToolbarPlan({ kind: 'element', tag: 'p' })).toEqual({ text: true, format: true, link: false });
-    expect(selectionToolbarPlan({ kind: 'element', tag: 'div' })).toEqual({ text: false, format: true, link: false });
+    expect(selectionToolbarPlan({ kind: 'element', tag: 'p' })).toEqual({ text: true, format: true, color: true, link: false });
+    expect(selectionToolbarPlan({ kind: 'element', tag: 'div' })).toEqual({ text: false, format: true, color: true, link: false });
   });
   it('links need the live Range only a focused text host holds', () => {
-    expect(selectionToolbarPlan({ kind: 'text', tag: 'p' })).toEqual({ text: true, format: true, link: true });
+    expect(selectionToolbarPlan({ kind: 'text', tag: 'p' })).toEqual({ text: true, format: true, color: true, link: true });
+    expect(selectionToolbarPlan({ kind: 'text', tag: 'p', mode: 'typing' })).toEqual({ text: true, format: true, color: true, link: true });
+  });
+});
+
+describe('what a BLOCK selection offers', () => {
+  it('drops the text-only tools (size, weight, colour, links) and keeps the block ones (align, spacing)', () => {
+    expect(selectionToolbarPlan({ kind: 'text', tag: 'p', mode: 'block' })).toEqual({ text: false, format: true, color: false, link: false });
+    expect(selectionToolbarPlan({ kind: 'element', tag: 'div', mode: 'block' })).toEqual({ text: false, format: true, color: false, link: false });
+    expect(selectionToolbarPlan({ kind: 'embed', tag: 'Question', mode: 'block' })).toEqual({ text: false, format: false, color: false, link: false });
   });
 });

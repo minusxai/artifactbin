@@ -154,7 +154,7 @@ describe('typing and block selection', () => {
     const { at } = mount();
     fireEvent.click(at('0.1'), { bubbles: true });
     fireEvent.focus(at('0.1'));
-    expect(last(STORY_SELECTION_MESSAGE)).toMatchObject({ selection: { kind: 'text', path: '0.1' } });
+    expect(last(STORY_SELECTION_MESSAGE)).toMatchObject({ selection: { kind: 'text', path: '0.1', mode: 'typing' } });
     noBoxAnywhere();
     expect(screen.queryByRole('button', { name: 'Delete selected block' })).toBeNull();
     expect(screen.queryByRole('button', { name: /^Resize/ })).toBeNull();
@@ -177,7 +177,7 @@ describe('typing and block selection', () => {
     } finally {
       document.elementFromPoint = elementFromPoint;
     }
-    expect(last(STORY_SELECTION_MESSAGE)).toMatchObject({ selection: { path: '0.1' } });
+    expect(last(STORY_SELECTION_MESSAGE)).toMatchObject({ selection: { path: '0.1', mode: 'block' } });
     expect(window.getSelection()!.rangeCount).toBe(0);
     expect(document.activeElement).not.toBe(host);
     expect(boxOf(host)).toEqual({ outline: NEUTRAL_SELECTED, background: CLEAR });

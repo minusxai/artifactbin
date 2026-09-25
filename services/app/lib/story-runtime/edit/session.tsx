@@ -284,6 +284,7 @@ export function createFrameEditSession({
   const reportSelection = (selection: StoryEditSelection | null, block = false) => {
     selectedPath = selection?.path ?? null;
     blockMode = !!selection && block;
+    if (selection) selection.mode = blockMode ? 'block' : 'typing';
     stampSelection();
     post({ type: STORY_SELECTION_MESSAGE, selection });
   };
@@ -294,6 +295,7 @@ export function createFrameEditSession({
     const path = active?.path ?? selectedPath!;
     const el = scope.querySelector(`[${AST_PATH_ATTR}="${CSS.escape(path)}"]`);
     const selection = el ? describeWithQuote(el) : null;
+    if (selection) selection.mode = blockMode && !active ? 'block' : 'typing';
     post({ type: STORY_SELECTION_MESSAGE, selection });
   };
 

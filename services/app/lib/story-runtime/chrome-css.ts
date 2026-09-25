@@ -506,6 +506,9 @@ body[data-mx-story-root] { padding-top: var(--mx-chrome-inset, 0px) !important; 
 /* PHONE — logo top-left, action rail on the right edge, byline along the bottom. */
 @media (max-width: 639px) {
   .mx-reader-chrome { inset: 0 !important; pointer-events: none !important; }
+  /* While editing, the rail and byline would sit over the document (and the
+     selected block's handles); the editor's own bar carries Done. */
+  .mx-reader-chrome--editing { display: none !important; }
   .mx-reader-github {
     position: fixed !important; top: max(10px, env(safe-area-inset-top)) !important;
     right: max(10px, env(safe-area-inset-right)) !important;
