@@ -690,9 +690,25 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
   useLayoutEffect(() => {
     if (!editing) { setPanelFits(null); return; }
     if (!wideEdit || panelFits !== null) return;
-    const root = viewportRef.current;
-    setEditorRightInset(editPanelWidth(readEditPanelCollapsed()));
-    setPanelFits(!railOpenRef.current && !!root && panelFitsInMargin(root, document.documentElement.clientWidth, RIGHT_RAIL_W));
+    /*
+     * Measured on the DOCUMENT, never on what stands in for it: a page opened
+     * straight on #edit has only the loading placeholder at first, which would
+     * measure as an empty margin and put the panel over the text that renders
+     * a moment later. So wait (a frame at a time) for the runtime's root to
+     * hold content; until then the reading reserve applies, and a document
+     * that never arrives gets the reserve — covering is the failure here.
+     */
+    let frame = 0;
+    let frames = 0;
+    const decide = () => {
+      const root = viewportRef.current?.querySelector('[data-mx-inline-story]');
+      const ready = !!root && root.childElementCount > 0;
+      if (!ready && !railOpenRef.current && frames++ < 300) { frame = requestAnimationFrame(decide); return; }
+      setEditorRightInset(editPanelWidth(readEditPanelCollapsed()));
+      setPanelFits(!railOpenRef.current && ready && panelFitsInMargin(root!, document.documentElement.clientWidth, RIGHT_RAIL_W));
+    };
+    decide();
+    return () => cancelAnimationFrame(frame);
   }, [editing, wideEdit, panelFits]);
   const readingRail = railOpen && !phone ? RIGHT_RAIL_W : 0;
   const railInset = !editing ? readingRail

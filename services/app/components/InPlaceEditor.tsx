@@ -755,11 +755,17 @@ export default function InPlaceEditor({
     if (rect.y >= top && rect.y + rect.height <= window.innerHeight / 2) return;
     window.scrollBy({ top: rect.y - top, behavior: 'smooth' });
   }, [barTop, barH]);
+  const sheetRef = useRef(sheet);
+  sheetRef.current = sheet;
   const openSheet = useCallback(
     (next: 'selection' | 'history' | null) => {
       if (next && commentsOpen) onCommentsOpenChange?.(false);
+      // Asked again while it is already up (a double-tap that also fires
+      // dblclick): the rect it would scroll by is the one already used.
+      const reveal = next === 'selection' && sheetRef.current !== 'selection';
+      sheetRef.current = next;
       setSheet(next);
-      if (next === 'selection') revealAboveSheet();
+      if (reveal) revealAboveSheet();
     },
     [commentsOpen, onCommentsOpenChange, revealAboveSheet],
   );
@@ -778,6 +784,8 @@ export default function InPlaceEditor({
    */
   useEffect(() => {
     let lastTap = { at: -Infinity, x: 0, y: 0 };
+    // A touch double-tap may ALSO arrive as dblclick; the tap already answered it.
+    let touchOpenedAt = -Infinity;
     const hit = (event: MouseEvent) => {
       const { inspector: kind } = inspectRef.current;
       const rect = selectionRef.current?.rect;
@@ -788,6 +796,7 @@ export default function InPlaceEditor({
       return x >= rect.x && x <= rect.x + rect.width && y >= rect.y && y <= rect.y + rect.height;
     };
     const onDoubleClick = (event: MouseEvent) => {
+      if (event.timeStamp - touchOpenedAt < 1000) return;
       if (hit(event)) inspectRef.current.inspectSelection();
     };
     const onPointerUp = (event: PointerEvent) => {
@@ -795,7 +804,10 @@ export default function InPlaceEditor({
       const near = Math.hypot(event.clientX - lastTap.x, event.clientY - lastTap.y) <= DOUBLE_TAP_PX;
       if (event.timeStamp - lastTap.at <= DOUBLE_TAP_MS && near) {
         lastTap = { at: -Infinity, x: 0, y: 0 };
-        if (hit(event)) inspectRef.current.inspectSelection();
+        if (hit(event)) {
+          touchOpenedAt = event.timeStamp;
+          inspectRef.current.inspectSelection();
+        }
         return;
       }
       lastTap = { at: event.timeStamp, x: event.clientX, y: event.clientY };
