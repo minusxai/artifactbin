@@ -11,6 +11,21 @@ import {POST as createRoute} from '@/app/api/artifacts/route';
 useAppHarness();
 async function create(){const token=await mintToken('mxmx_test_jsonb');const response=await createRoute(request('/api/artifacts',{method:'POST',token:token.token,json:{markup:'<section><p>Alpha</p><p>Beta</p></section>'}}));expect(response.status).toBe(201);const {id}=await response.json();return {token,id,actor:{tokenId:token.id,userId:null},row:(await getArtifactById(id))!};}
 const stored=async(id:string)=>(await (await getDb()).query('SELECT * FROM artifacts WHERE id=$1',[id])).rows[0];
+it('preserves noncanonical legacy source bytes behind the same edit identity',async()=>{
+ const {id,row}=await create(),db=await getDb();
+ const source="{/* keep */}<section><p id='a'>Alpha &amp; Beta</p></section>";
+ await db.query('UPDATE artifacts SET document=NULL,source=$2 WHERE id=$1',[id,source]);
+ expect((await getArtifactById(id))?.source).toBe(source);
+ expect((await getArtifactById(id))?.edit_id).toBe(row.edit_id);
+ expect((await stored(id)).document).toMatchObject({schema:3,kind:'graph'});
+});
+it('preserves an already-invalid archived source in JSONB without making it a new valid publication',async()=>{
+ const {id,actor}=await create(),db=await getDb(),source='<p>Unclosed archived JSX';
+ await db.query("INSERT INTO artifact_versions(artifact_id,version,format,source,meta) VALUES($1,99,'markup',$2,'{}')",[id,source]);
+ for(let i=0;i<2;i++)expect((await getVersionFor(actor,id,99))?.source).toBe(source);
+ expect((await db.query('SELECT document,source FROM artifact_versions WHERE artifact_id=$1 AND version=99',[id])).rows[0]).toEqual({source:null,document:{schema:1,kind:'source',source}});
+ const head=(await getArtifactById(id))!;expect(()=>documentEdit(head,{source,whole:true})).toThrow();
+});
 it('writes new markup as JSONB, while reads and edit logs retain exact JSX',async()=>{
  const {id,row}=await create();const raw=await stored(id);expect(raw.source).toBeNull();expect(raw.document).toMatchObject({schema:3,kind:'graph'});
  expect(row.source).toContain('Alpha');const log=(await(await getDb()).query('SELECT inserted FROM artifact_edits WHERE artifact_id=$1',[id])).rows[0];expect(log.inserted).toBe(row.source);

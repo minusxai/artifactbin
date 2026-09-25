@@ -24,8 +24,11 @@ export function prepareGraphPatch(before:DocumentGraph,after:DocumentGraph,baseV
   for(const [key,node] of Object.entries(before.nodes)){
     const next=after.nodes[key];
     if(!next){removed.push(key);read(key,'subtreeVersion');ancestors(before,key);continue;}
-    const self=!equal(node.ast,next.ast)||!equal(node.selectors,next.selectors)||!equal(node.refs,next.refs)||node.prose!==next.prose||node.parent!==next.parent;
     const children=!equal(node.children,next.children);
+    // Adding child slots alone changes parts' arity, not this node's own
+    // spelling. Normalizing migrated source does change its own read facet.
+    const spelling=!equal(node.parts,next.parts)&&(!children||node.parts.join('')!==next.parts.join(''));
+    const self=!equal(node.ast,next.ast)||spelling||!equal(node.selectors,next.selectors)||!equal(node.refs,next.refs)||node.prose!==next.prose||node.parent!==next.parent;
     if(!self&&!children)continue;
     const value:Partial<DocumentGraphNode>={parts:next.parts,partUnits:next.partUnits,bytes:next.bytes,units:next.units};
     if(self){Object.assign(value,{ast:next.ast,parent:next.parent,selectors:next.selectors,refs:next.refs,prose:next.prose});read(key,'subtreeVersion');}

@@ -4,6 +4,7 @@ import {stampNodeIds,hasAmbiguousLegacyAliases} from './story/node-ids';
  * an out-of-transaction query: callers always supply their own Queryable.
  */
 import {createDocumentGraph} from './story/document-graph';
+import {parseJsx} from './jsx/parse';
 import {currentStoryCss,storyCssCompileVersion} from './data/story/story-css.server';
 import {finalizeArtifactMetadata} from './story/parsed-artifact-metadata';
 import type {Queryable} from '@artifactbin/contracts';
@@ -51,7 +52,11 @@ export async function loadArtifactDocument<T extends MigratableRow>(db:Queryable
   if(aliases.rows.length)authoringSource=stampNodeIds(source,{legacyAliases:new Map(aliases.rows.map(a=>[a.legacy_key,a.source_id])),retireLegacyAliases:true}).source;
  }
  if(row.document?.kind==='graph'&&authoringSource===source)return decodeArtifactDocument(row);
- const document=createDocumentGraph(authoringSource,row.version);
+ // Broken historical snapshots remain recoverable byte-for-byte. This does not
+ // admit an invalid publication or bypass the normal edit validation contract.
+ const invalidArchive=history&&!parseJsx(authoringSource).ok;
+ if(invalidArchive&&row.document?.kind==='source'&&row.source==null)return decodeArtifactDocument(row);
+ const document:StoredDocument=invalidArchive?{schema:1,kind:'source',source:authoringSource}:createDocumentGraph(authoringSource,row.version,{preserveSource:true});
  const result=await db.query(`UPDATE ${history?'artifact_versions':'artifacts'} SET document=$1::jsonb,source=NULL
  WHERE ${history?'artifact_id':'id'}=$2 AND version=$3 AND NULLIF(document,'null'::jsonb) IS NOT DISTINCT FROM $4::jsonb AND source IS NOT DISTINCT FROM $5::text
  ${history?'':'AND edit_id=$6'} RETURNING document`,history?[JSON.stringify(document),row.artifact_id,row.version,row.document?JSON.stringify(row.document):null,row.source??null]:[JSON.stringify(document),row.id,row.version,row.document?JSON.stringify(row.document):null,row.source??null,row.edit_id]);

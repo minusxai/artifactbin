@@ -1,7 +1,21 @@
 import {expect,it} from 'vitest';
-import {createDocumentGraph,graphNodeAt,graphSource} from '../document-graph';
+import {createDocumentGraph,graphIntegrity,graphNodeAt,graphSource} from '../document-graph';
 import {graphFromSource} from '../document-graph-source';
 import {applyGraphPatch,prepareGraphPatch} from '../document-graph-patch';
+it.each([
+ "\n{/* original comment */}<><p id='a' title = 'Hello'>A &amp; B</p></>\n",
+ '<div>{/* gap */}<p data-options={{ x: 1, y: "two" }}>Text</p>{/* trailing */}</div>',
+ '<div>{$show ? <><p>A</p><p>B</p></> : null}</div>',
+ '<div>{$show && <p>A</p>}</div>',
+ '<div>{$show ? "yes" : false}</div>',
+])('preserves every legacy source byte while producing an editable graph: %s',source=>{
+ const graph=createDocumentGraph(source,7,{preserveSource:true});
+ expect(graphSource(graph)).toBe(source);expect(graphIntegrity(graph)).toEqual([]);
+ const replacement=source.replace('Text','Edited').replace('A</p>','Changed</p>');
+ const patch=prepareGraphPatch(graph,graphFromSource(graph,replacement,8),7);
+ const edited=applyGraphPatch(graph,7,patch)!;
+ expect(edited).not.toBeNull();expect(graphIntegrity(edited)).toEqual([]);
+});
 it('retains authored identities across moves and text changes',()=>{
  const before=createDocumentGraph('<main id="m"><p id="a">Alpha</p><p id="b">Beta</p></main>',1);
  const next=graphFromSource(before,'<main id="m"><p id="b">Changed</p><p id="a">Alpha</p></main>',2);
