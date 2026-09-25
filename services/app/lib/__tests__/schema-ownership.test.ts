@@ -62,3 +62,8 @@ it('custom domains belong to app accounts: one per account, one VERIFIED owner p
  expect(renderedSchema().schema).toMatch(/CREATE TABLE IF NOT EXISTS app\.custom_domains \([\s\S]*PRIMARY KEY \(user_id\)/);
  expect(renderedSchema().schema).toMatch(/CREATE UNIQUE INDEX IF NOT EXISTS idx_custom_domains_verified_host ON app\.custom_domains \(hostname\) WHERE status = 'verified'/);
 });
+
+it('canonical document storage belongs to artifact heads and archived versions',()=>{
+ const sql=renderedSchema().schema;
+ for(const table of ['artifacts','artifact_versions'])expect(sql).toMatch(new RegExp('CREATE TABLE IF NOT EXISTS app\\.'+table+' \\([\\s\\S]*?document JSONB'));
+});

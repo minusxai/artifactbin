@@ -1,3 +1,4 @@
+import {artifactQuery} from '@/lib/artifact-document';
 import {recordEvent} from './notification-events';
 import {commentMentions} from './saved-mentions';
 import {MembershipError} from './membership';
@@ -188,7 +189,7 @@ interface AnnotationRowDb {
 }
 
 const scopedRow = async (q: Queryable, scope: Scope, id: string): Promise<ArtifactRow | null> => {
-  const r = await q.query<ArtifactRow>(`SELECT * FROM artifacts WHERE id = $1 AND ${scope.where('$2')}`, [id, scope.val]);
+  const r = await artifactQuery<ArtifactRow>(q,`SELECT * FROM artifacts WHERE id = $1 AND ${scope.where('$2')}`, [id, scope.val]);
   return r.rows[0] ?? null;
 };
 
@@ -366,7 +367,7 @@ export async function createAnnotationFor(
   // door validates the range's grammar, this owns the stored form.
   const quote = input.quote === undefined ? null : canonicalQuote(input.quote) || null;
   const made = await db.transaction(async (tx): Promise<AnnotationWire | CreateAnnotationRefusal | null> => {
-    const row = (await tx.query<ArtifactRow>(`SELECT * FROM artifacts WHERE id=$1 AND ${scope.where('$2')} FOR UPDATE`, [artifactId, scope.val])).rows[0];
+    const row = (await artifactQuery<ArtifactRow>(tx,`SELECT * FROM artifacts WHERE id=$1 AND ${scope.where('$2')} FOR UPDATE`, [artifactId, scope.val])).rows[0];
     if (!row) return null;
     if (row.format !== 'markup') return { refused: 'not_markup' };
     if (input.baseEditId && input.baseEditId !== row.edit_id) return stale({ editId: row.edit_id, version: row.version });

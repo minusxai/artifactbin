@@ -1,3 +1,4 @@
+import {artifactQuery,loadArtifactDocument,sourceStorage} from './artifact-document';
 import {JOIN_RELATIONS,seedOwnerJoin} from './relation-state';
 import {documentMentions} from './saved-mentions';
 import { grantContext, grantsOf, grantsPermitRead, grantsPermitWrite, type GrantDocument } from './datasets/policy/grants';
@@ -395,7 +396,7 @@ async function bindCurrentUserScopes(tx:Queryable,document:ArtifactRow):Promise<
  if(document.format!=='markup')return;
  const refs=(document.meta.refs as Array<{id:string}>|undefined)??[];
  for(const ref of [...refs].sort((a,b)=>a.id.localeCompare(b.id))) {
-  const dataset=(await tx.query<ArtifactRow>("SELECT * FROM artifacts WHERE id=$1 AND format='dataset' AND deleted_at IS NULL FOR UPDATE",[ref.id])).rows[0];
+  const dataset=(await artifactQuery<ArtifactRow>(tx,"SELECT * FROM artifacts WHERE id=$1 AND format='dataset' AND deleted_at IS NULL FOR UPDATE",[ref.id])).rows[0];
   const catalog=dataset?catalogOf(dataset):null;
   if(!dataset||!catalog||!catalog.tables.some(t=>t.columns.some(c=>c.constraints?.memberOf?.includes('current'))))continue;
   if(document.user_id ? dataset.user_id!==document.user_id : dataset.token_id!==document.token_id)throw new DatasetError('Only the dataset owner can bind memberOf current to a report',403);
@@ -408,7 +409,7 @@ async function bindCurrentUserScopes(tx:Queryable,document:ArtifactRow):Promise<
   }
   await archiveVersion(tx,dataset);
   const meta={...dataset.meta,userScopeDocument:document.id,catalog:bound,columns:columns((dataset.meta.columns??[]) as DatasetColumn[])};
-  const updated=(await tx.query<ArtifactRow>('UPDATE artifacts SET meta=$2,source=$3,version=version+1,edit_id=$4,updated_at=now() WHERE id=$1 RETURNING *',[dataset.id,JSON.stringify(meta),source,newEditId()])).rows[0];
+  const updated=(await artifactQuery<ArtifactRow>(tx,'UPDATE artifacts SET meta=$2,source=$3,version=version+1,edit_id=$4,updated_at=now() WHERE id=$1 RETURNING *',[dataset.id,JSON.stringify(meta),source,newEditId()])).rows[0];
   await logWholeDocumentWrite(tx,dataset,updated);
  }
 }
@@ -514,17 +515,17 @@ async function insertArtifact(
         : input.format === 'image' || input.format === 'dataset' || input.format === 'pdf' || input.format === 'file' ? 'unlisted' : 'private');
   const datasetPolicy = atCreation.datasetPolicy?.policy ??
     (!atCreation.forkedFrom && input.access===undefined && input.format==='dataset' && catalog?.kind!=='postgres' ? defaultDatasetGrants() : null);
-  const created = await tx.query<ArtifactRow>(
+  const created = await artifactQuery<ArtifactRow>(tx,
   // The genesis edit row makes the creation's edit_id resolvable like any
   // other: an agent that creates and then edits against that id is on an
   // ordinary (if empty) base, not an unknown one. Data-modifying CTEs
   // always execute, so the log row lands even though nothing reads it.
   `WITH created AS (
-     INSERT INTO artifacts (id, token_id, user_id, title, description, format, content, source, meta, visibility, link_role, ancestor_ids, edit_id, access, forked_from, actor_user_id, actor_token_id, dataset_policy, policy_revision)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $3, $2, $17::jsonb, $18::int) RETURNING *
+     INSERT INTO artifacts (id, token_id, user_id, title, description, format, content, source, meta, visibility, link_role, ancestor_ids, edit_id, access, forked_from, actor_user_id, actor_token_id, dataset_policy, policy_revision, document)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, CASE WHEN $19::jsonb IS NULL THEN $8::text ELSE NULL END, $9, $10, $11, $12, $13, $14, $15, $3, $2, $17::jsonb, $18::int, $19::jsonb) RETURNING *
    ), genesis AS (
      INSERT INTO artifact_edits (artifact_id, edit_id, splice_start, removed, inserted, span_start, span_end, actor_user_id, actor_token_id)
-     SELECT id, edit_id, 0, '', COALESCE(source, content), 0, 0, $3, $2 FROM created
+     SELECT id, edit_id, 0, '', COALESCE($8::text, content), 0, 0, $3, $2 FROM created
    ), reserved AS (
      INSERT INTO artifact_source_ids (artifact_id, source_id, provenance, first_version)
      SELECT $1, value #>> '{}', 'authored', 1 FROM jsonb_array_elements($16::jsonb)
@@ -565,6 +566,7 @@ async function insertArtifact(
     // creation, which is also what makes the audit CTE above a no-op.
     datasetPolicy ? JSON.stringify(datasetPolicy) : null,
     atCreation.datasetPolicy?.revision ?? 0,
+    sourceStorage(input.format,input.source).document,
   ],
   );
   Object.assign(created.rows[0],await writeShares(tx,id,atCreation.shares??[]));
@@ -771,11 +773,11 @@ async function deepFork(actor: TokenActor, source: ArtifactRow, overrides: ForkO
   try {
     created = await (await getDb()).transaction(async (tx) => {
     await tx.query('SELECT id FROM artifacts WHERE id=ANY($1::text[]) ORDER BY id FOR UPDATE',[[source.id,...copies.map(c=>c.row.id)]]);
-    const currentSource=(await tx.query<ArtifactRow>('SELECT * FROM artifacts WHERE id=$1 AND deleted_at IS NULL',[source.id])).rows[0];
+    const currentSource=(await artifactQuery<ArtifactRow>(tx,'SELECT * FROM artifacts WHERE id=$1 AND deleted_at IS NULL',[source.id])).rows[0];
     if(!currentSource||currentSource.edit_id!==source.edit_id)throw new DatasetError('The source changed; retry the fork',409);
     for(const copy of copies){
       if(!grantsOf(copy.row))continue;
-      const current=(await tx.query<ArtifactRow>('SELECT * FROM artifacts WHERE id=$1 AND deleted_at IS NULL',[copy.row.id])).rows[0];
+      const current=(await artifactQuery<ArtifactRow>(tx,'SELECT * FROM artifacts WHERE id=$1 AND deleted_at IS NULL',[copy.row.id])).rows[0];
       if(!current||current.edit_id!==copy.row.edit_id||current.policy_revision!==copy.row.policy_revision||!await grantsPermitRead(current,actor,currentSource,tx))throw new DatasetError('A dataset changed or is no longer readable; retry the fork',409);
     }
     const datasets: ArtifactRow[] = [];
@@ -883,14 +885,12 @@ function postgresForkRefusal(source:ArtifactRow):Response|null {
 
 async function getArtifact(tokenId: string, id: string): Promise<ArtifactRow | null> {
   const db = await getDb();
-  const r = await db.query<ArtifactRow>(`SELECT * FROM artifacts WHERE id = $1 AND token_id = $2 AND ${LIVE_ARTIFACT_SQL}`, [id, tokenId]);
-  return r.rows[0] ?? null;
+  return loadArtifactDocument<ArtifactRow>(db,`SELECT * FROM artifacts WHERE id = $1 AND token_id = $2 AND ${LIVE_ARTIFACT_SQL}`, [id, tokenId]);
 }
 
 async function getArtifactByUser(userId: string, id: string): Promise<ArtifactRow | null> {
   const db = await getDb();
-  const r = await db.query<ArtifactRow>(`SELECT * FROM artifacts WHERE id = $1 AND user_id = $2 AND ${LIVE_ARTIFACT_SQL}`, [id, userId]);
-  return r.rows[0] ?? null;
+  return loadArtifactDocument<ArtifactRow>(db,`SELECT * FROM artifacts WHERE id = $1 AND user_id = $2 AND ${LIVE_ARTIFACT_SQL}`, [id, userId]);
 }
 
 async function listArtifactsScoped(scope: Scope): Promise<ArtifactSummary[]> {
@@ -913,8 +913,7 @@ async function listArtifactsScoped(scope: Scope): Promise<ArtifactSummary[]> {
  */
 export const getArtifactById = cache(async (id: string): Promise<ArtifactRow | null> => {
   const db = await getDb();
-  const r = await db.query<ArtifactRow>(`SELECT * FROM artifacts WHERE id = $1 AND ${LIVE_ARTIFACT_SQL}`, [id]);
-  return r.rows[0] ?? null;
+  return loadArtifactDocument<ArtifactRow>(db,`SELECT * FROM artifacts WHERE id = $1 AND ${LIVE_ARTIFACT_SQL}`, [id]);
 });
 
 interface VersionSummary {
@@ -930,9 +929,9 @@ interface VersionSummary {
 /** Archive the head as it stands — its author rides along, so history can say who. */
 async function archiveVersion(tx: Queryable, current: ArtifactRow): Promise<void> {
   await tx.query(
-    `INSERT INTO artifact_versions (artifact_id, version, title, description, format, content, source, meta, actor_user_id, actor_token_id)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
-    [current.id, current.version, current.title, current.description, current.format, current.content, current.source, JSON.stringify(current.meta), current.actor_user_id, current.actor_token_id],
+    `INSERT INTO artifact_versions (artifact_id, version, title, description, format, content, source, meta, actor_user_id, actor_token_id, document)
+     VALUES ($1, $2, $3, $4, $5, $6, CASE WHEN $11::jsonb IS NULL THEN $7::text ELSE NULL END, $8, $9, $10, $11::jsonb)`,
+    [current.id, current.version, current.title, current.description, current.format, current.content, current.source, JSON.stringify(current.meta), current.actor_user_id, current.actor_token_id,sourceStorage(current.format,current.source).document],
   );
 }
 
@@ -1068,8 +1067,7 @@ async function writeShares(tx:Queryable,id:string,shares:ShareEntry[]):Promise<{
 }
 async function getArtifactScoped(scope: Scope, id: string): Promise<ArtifactRow | null> {
   const db = await getDb();
-  const r = await db.query<ArtifactRow>(`SELECT artifacts.*, ${SHARES_PROJECTION} FROM artifacts WHERE id = $1 AND ${scope.where('$2')}`, [id, scope.val]);
-  return r.rows[0] ?? null;
+  return loadArtifactDocument<ArtifactRow>(db,`SELECT artifacts.*, ${SHARES_PROJECTION} FROM artifacts WHERE id = $1 AND ${scope.where('$2')}`, [id, scope.val]);
 }
 
 /**
@@ -1109,10 +1107,10 @@ export async function commitNormalizedMarkup(
   normalized = { ...normalized, meta: finalizeArtifactMetadata(normalized.format ?? current.format, normalized.source, normalized.meta) };
   await archiveVersion(tx, current);
   const editId = newEditId();
-  const result = await tx.query<ArtifactRow>(
-    `UPDATE artifacts SET source=$2, content=$3, meta=$4::jsonb, title=$9, description=$10, format=$11, version=version+1, edit_id=$5,
+  const result = await artifactQuery<ArtifactRow>(tx,
+    `UPDATE artifacts SET source=CASE WHEN $12::jsonb IS NULL THEN $2::text ELSE NULL END, document=$12::jsonb, content=$3, meta=$4::jsonb, title=$9, description=$10, format=$11, version=version+1, edit_id=$5,
        actor_user_id=$6, actor_token_id=$7, updated_at=now() WHERE id=$1 AND edit_id=$8 RETURNING *`,
-    [current.id, normalized.source, normalized.content, JSON.stringify(normalized.meta), editId, ...(actor ? actorStamp(actor) : [null, null]), current.edit_id, normalized.title === undefined ? current.title : normalized.title, normalized.description === undefined ? current.description : normalized.description, normalized.format ?? current.format],
+    [current.id, normalized.source, normalized.content, JSON.stringify(normalized.meta), editId, ...(actor ? actorStamp(actor) : [null, null]), current.edit_id, normalized.title === undefined ? current.title : normalized.title, normalized.description === undefined ? current.description : normalized.description, normalized.format ?? current.format,sourceStorage(normalized.format ?? current.format,normalized.source).document],
   );
   const updated = result.rows[0];
   if (!updated) throw new Error('artifact changed after identity preparation');
@@ -1186,13 +1184,12 @@ async function getVersionScoped(scope: Scope, id: string, version: number): Prom
   const db = await getDb();
   const owned = await db.query(`SELECT 1 FROM artifacts WHERE id = $1 AND ${scope.where('$2')}`, [id, scope.val]);
   if (owned.rows.length === 0) return null;
-  const r = await db.query<VersionContent>(
-    `SELECT v.version, v.title, v.description, v.format, v.content, v.source, v.meta, u.username AS by, v.created_at
+  return loadArtifactDocument<VersionContent>(db,
+    `SELECT v.artifact_id, v.document, v.version, v.title, v.description, v.format, v.content, v.source, v.meta, u.username AS by, v.created_at
      FROM artifact_versions v LEFT JOIN users u ON u.id = v.actor_user_id
      WHERE v.artifact_id = $1 AND v.version = $2`,
     [id, version],
   );
-  return r.rows[0] ?? null;
 }
 
 /**
@@ -1228,7 +1225,7 @@ const policyLocked = (detail: string): Response => json({error:'policy_locked',d
 async function revertScoped(actor: TokenActor, id: string, version: number, opts: ReplaceOpts = {}): Promise<ArtifactRow | null | VersionNotArchived> {
   const db = await getDb();
   const scope = editorScope(actor);
-  const initial = (await db.query<ArtifactRow>(`SELECT * FROM artifacts WHERE id=$1 AND ${scope.where('$2')}`, [id,scope.val])).rows[0];
+  const initial = (await artifactQuery<ArtifactRow>(db,`SELECT * FROM artifacts WHERE id=$1 AND ${scope.where('$2')}`, [id,scope.val])).rows[0];
   if (!initial) return null;
   // A governed dataset is not revertible: restoring an archived table would
   // drop the rows viewers have written under the policy since. The GUARD is
@@ -1241,7 +1238,7 @@ async function revertScoped(actor: TokenActor, id: string, version: number, opts
     return null;
   };
   const refusal = condition(initial); if (refusal) return {notArchived:true,refusal};
-  let target = (await db.query<ArtifactRow>('SELECT title,description,format,content,source,meta FROM artifact_versions WHERE artifact_id=$1 AND version=$2',[id,version])).rows[0];
+  let target = (await artifactQuery<ArtifactRow>(db,'SELECT title,description,format,content,source,document,meta FROM artifact_versions WHERE artifact_id=$1 AND version=$2',[id,version])).rows[0];
   if (!target) return {notArchived:true};
   const prepared = target.format === 'markup' ? await publishMarkupForArtifact(initial,target.source??'',target.meta) : null;
   if (prepared instanceof Response) return {notArchived:true,refusal:prepared};
@@ -1249,7 +1246,7 @@ async function revertScoped(actor: TokenActor, id: string, version: number, opts
   // deadlock PGLite's serialized op queue.
   const result: ArtifactRow | null | VersionNotArchived = await db.transaction(async (tx) => {
     const current = (
-      await tx.query<ArtifactRow>(`SELECT * FROM artifacts WHERE id = $1 AND ${scope.where('$2')} FOR UPDATE`, [id, scope.val])
+      await artifactQuery<ArtifactRow>(tx,`SELECT * FROM artifacts WHERE id = $1 AND ${scope.where('$2')} FOR UPDATE`, [id, scope.val])
     ).rows[0];
     if (!current) return null;
     if (current.dataset_policy) return {notArchived:true,refusal:policyLocked('a dataset with a write policy cannot be reverted — republish the rows you want as the owner')};
@@ -1269,12 +1266,12 @@ async function revertScoped(actor: TokenActor, id: string, version: number, opts
     }
 
     await archiveVersion(tx, current);
-    const updated = await tx.query<ArtifactRow>(
+    const updated = await artifactQuery<ArtifactRow>(tx,
       `UPDATE artifacts
-       SET title = $3, description = $4, format = $5, content = $6, source = $7, meta = $8, version = version + 1,
+       SET title = $3, description = $4, format = $5, content = $6, source = CASE WHEN $12::jsonb IS NULL THEN $7::text ELSE NULL END, document=$12::jsonb, meta = $8, version = version + 1,
            edit_id = $9, actor_user_id = $10, actor_token_id = $11, updated_at = now()
        WHERE id = $1 AND ${scope.where('$2')} RETURNING *`,
-      [id, scope.val, target.title, target.description, target.format, target.content, target.source, JSON.stringify(target.meta), newEditId(), ...actorStamp(actor)],
+      [id, scope.val, target.title, target.description, target.format, target.content, target.source, JSON.stringify(target.meta), newEditId(), ...actorStamp(actor),sourceStorage(target.format,target.source).document],
     );
     await logWholeDocumentWrite(tx, current, updated.rows[0]);
     if (updated.rows[0].format === 'markup' && updated.rows[0].source) {
@@ -1330,7 +1327,7 @@ async function replaceScoped(
   let moved: { from: string | null; to: string | null } | null = null;
   const result: ArtifactRow | null | VersionConflict | Response = await db.transaction(async (tx) => {
     const current = (
-      await tx.query<ArtifactRow>(`SELECT * FROM artifacts WHERE id = $1 AND ${scope.where('$2')} FOR UPDATE`, [id, scope.val])
+      await artifactQuery<ArtifactRow>(tx,`SELECT * FROM artifacts WHERE id = $1 AND ${scope.where('$2')} FOR UPDATE`, [id, scope.val])
     ).rows[0];
     if (!current) return null;
     /*
@@ -1395,9 +1392,9 @@ async function replaceScoped(
     const effects=operations.length?annotationEffects(current.source??'',replacementIdentity?.source??input.source??'',operations,annotationRows,receipts):{updates:[],receipts:[]};
     await archiveVersion(tx, current);
 
-    const updated = await tx.query<ArtifactRow>(
+    const updated = await artifactQuery<ArtifactRow>(tx,
       `UPDATE artifacts
-       SET format = $3, content = $4, source = $5, meta = $6, title = $7, description = $8,
+       SET format = $3, content = $4, source = CASE WHEN $16::jsonb IS NULL THEN $5::text ELSE NULL END, document=$16::jsonb, meta = $6, title = $7, description = $8,
            visibility = COALESCE($10, visibility), ancestor_ids = COALESCE($11::text[], ancestor_ids),
            access = COALESCE($12, access), link_role = COALESCE($15, link_role),
            version = version + 1, edit_id = $9, actor_user_id = $13, actor_token_id = $14, updated_at = now()
@@ -1417,6 +1414,7 @@ async function replaceScoped(
         input.access ?? null,
         ...actorStamp(actor),
         input.link_role ?? null,
+        sourceStorage(input.format,replacementIdentity?.source ?? input.source).document,
       ],
     );
     // A replace may also FILE the row. When the row is a folder, its whole
@@ -1589,7 +1587,7 @@ export async function applyEditScoped(actor: TokenActor, id: string, input: Edit
 
   for (let attempt = 0; ; attempt++) {
     const head = (
-      await db.query<ArtifactRow>(`SELECT artifacts.*, ${SHARES_PROJECTION} FROM artifacts WHERE id = $1 AND ${scope.where('$2')}`, [id, scope.val])
+      await artifactQuery<ArtifactRow>(db,`SELECT artifacts.*, ${SHARES_PROJECTION} FROM artifacts WHERE id = $1 AND ${scope.where('$2')}`, [id, scope.val])
     ).rows[0];
     if (!head) return null;
     // Documents edit; VALUES do not. A dataset/viz/image is a blob whose
@@ -1758,16 +1756,16 @@ export async function applyEditScoped(actor: TokenActor, id: string, input: Edit
       ? annotationEffects(headSource, storedText, operations, annotationRows, storedReceipts)
       : { updates: [], receipts: [] };
     const freshEditId = newEditId();
-    const commit = (queryable:Queryable) => queryable.query<ArtifactRow>(
+    const commit = (queryable:Queryable) => artifactQuery<ArtifactRow>(queryable,
       `WITH updated AS (
-         UPDATE artifacts SET content = $3, source = $4, meta = $5, version = version + 1,
+         UPDATE artifacts SET content = $3, source = CASE WHEN $33::jsonb IS NULL THEN $4::text ELSE NULL END, document=$33::jsonb, meta = $5, version = version + 1,
                 edit_id = $6, title = $21, actor_user_id = $22, actor_token_id = $23, updated_at = now()
          WHERE id = $1 AND ${scope.where('$2')} AND edit_id = $7 AND sharing_revision=$32
            AND meta = $14::jsonb AND title IS NOT DISTINCT FROM $9 AND description IS NOT DISTINCT FROM $10
          RETURNING *
        ), archived AS (
-         INSERT INTO artifact_versions (artifact_id, version, title, description, format, content, source, meta, actor_user_id, actor_token_id)
-         SELECT $1, $8, $9, $10, $11, $12, $13, $14::jsonb, $24, $25
+         INSERT INTO artifact_versions (artifact_id, version, title, description, format, content, source, meta, actor_user_id, actor_token_id, document)
+         SELECT $1, $8, $9, $10, $11, $12, CASE WHEN $34::jsonb IS NULL THEN $13::text ELSE NULL END, $14::jsonb, $24, $25, $34::jsonb
          WHERE EXISTS (SELECT 1 FROM updated)
            -- Coalesce on ARCHIVING activity, not edit activity: the first edit
            -- after a quiet spell preserves the pre-edit state (including the
@@ -1826,6 +1824,7 @@ export async function applyEditScoped(actor: TokenActor, id: string, input: Edit
         identity.ids,
         JSON.stringify(sideEffects.updates),
         JSON.stringify(sideEffects.receipts),head.sharing_revision??0,
+        sourceStorage('markup',storedText).document,sourceStorage(head.format,head.source).document,
       ],
     );
     const previousRefs=new Set(((head.meta.refs??[]) as Array<{id:string}>).map(ref=>ref.id));
@@ -1844,7 +1843,7 @@ export async function applyEditScoped(actor: TokenActor, id: string, input: Edit
     // redo — our base is now an ordinary stale base, so the node-scope check
     // decides it. (Near-unreachable on PGLite, which serializes all ops.)
     if (attempt >= EDIT_CAS_RETRIES) {
-      const now = (await db.query<ArtifactRow>(`SELECT artifacts.*, ${SHARES_PROJECTION} FROM artifacts WHERE id = $1 AND ${scope.where('$2')}`, [id, scope.val])).rows[0];
+      const now = (await artifactQuery<ArtifactRow>(db,`SELECT artifacts.*, ${SHARES_PROJECTION} FROM artifacts WHERE id = $1 AND ${scope.where('$2')}`, [id, scope.val])).rows[0];
       return now ? { applied: false, reason: 'doc_changed', head: headOf(now) } : null;
     }
   }
@@ -1863,7 +1862,7 @@ export function setAccessFor(actor: TokenActor, id: string, access: DatasetAcces
 
 async function setAccessScoped(scope: Scope, id: string, access: DatasetAccess): Promise<ArtifactRow | null> {
   const db = await getDb();
-  const r = await db.query<ArtifactRow>(
+  const r = await artifactQuery<ArtifactRow>(db,
     `UPDATE artifacts SET access = $3 WHERE id = $1 AND ${scope.where('$2')} AND format = 'dataset' AND ($3 <> 'readwrite' OR COALESCE(meta->'catalog'->>'kind','stored') <> 'postgres') RETURNING *, pg_notify('artifact_' || lower(id), edit_id)`,
     [id, scope.val, access],
   );
@@ -1932,7 +1931,7 @@ export async function updateSharingFor(actor: TokenActor, id: string, patch: Sha
   const db = await getDb();
   const scope = editorScope(actor);
   const done = await db.transaction(async (tx) => {
-    const owned = await tx.query<ArtifactRow>(`SELECT * FROM artifacts WHERE id = $1 AND ${scope.where('$2')} FOR UPDATE`, [id, scope.val]);
+    const owned = await artifactQuery<ArtifactRow>(tx,`SELECT * FROM artifacts WHERE id = $1 AND ${scope.where('$2')} FOR UPDATE`, [id, scope.val]);
     if (owned.rows.length === 0) return false;
     if (patch.visibility) {
       await tx.query(`UPDATE artifacts SET visibility = $2 WHERE id = $1 `, [id, patch.visibility]);
@@ -2221,7 +2220,7 @@ export async function setMetadataFor(actor: TokenActor, id: string, patch: Metad
   const scope = opts.allowEditor?editorScope(actor):ownerScope(actor);
   let moved: {from: string | null; to: string | null} | null = null;
   const result = await db.transaction<ArtifactRow | VersionConflict | null>(async tx => {
-    const current = (await tx.query<ArtifactRow>(`SELECT * FROM artifacts WHERE id=$1 AND ${scope.where('$2')} FOR UPDATE`, [id,scope.val])).rows[0];
+    const current = (await artifactQuery<ArtifactRow>(tx,`SELECT * FROM artifacts WHERE id=$1 AND ${scope.where('$2')} FOR UPDATE`, [id,scope.val])).rows[0];
     if (!current) return null;
     if (opts.expectedState !== undefined && artifactState(current) !== opts.expectedState) return {conflict:true,reason:'state_conflict',currentVersion:current.version,currentState:artifactState(current)};
     if (opts.expectedVersion !== undefined && current.version !== opts.expectedVersion) return {conflict:true,currentVersion:current.version};
@@ -2231,7 +2230,7 @@ export async function setMetadataFor(actor: TokenActor, id: string, patch: Metad
     const meta = {...current.meta};
     for (const key of ['theme','template','colorMode'] as const) if (patch[key] !== undefined) meta[key] = patch[key];
     if(opts.dryRun)return {...current,...patch,meta};
-    const updated = (await tx.query<ArtifactRow>(`UPDATE artifacts SET title=$3,description=$4,meta=$5::jsonb,
+    const updated = (await artifactQuery<ArtifactRow>(tx,`UPDATE artifacts SET title=$3,description=$4,meta=$5::jsonb,
       visibility=$6,access=$7,ancestor_ids=$8::text[],link_role=$9,updated_at=now(),actor_user_id=$10,actor_token_id=$11
       WHERE id=$1 AND ${scope.where('$2')} RETURNING *`, [id,scope.val,
       patch.title === undefined ? current.title : patch.title?.trim() ?? null,
@@ -2492,7 +2491,7 @@ async function findWritersFor(actor: TokenActor, datasetId: string): Promise<Arr
 async function findDependentsScoped(scope: Scope, refId: string): Promise<ArtifactRow[]> {
   const db = await getDb();
   const image=(await getArtifactById(refId))?.format==='image';
-  const res = await db.query(
+  const res = await artifactQuery<ArtifactRow>(db,
     `SELECT * FROM artifacts WHERE ${scope.where('$1')} AND ${image ? "format IN ('markup','dataset')" : "format = 'markup' AND meta::text LIKE $2"}`,
     image ? [scope.val] : [scope.val,`%"${refId}"%`],
   );

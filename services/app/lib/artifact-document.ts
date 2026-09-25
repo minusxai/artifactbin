@@ -1,0 +1,35 @@
+/** The artifact persistence boundary. SQL remains explicit at its owning write path;
+ * only stored JSONB↔public JSX conversion and lazy migration live here. Never issue
+ * an out-of-transaction query: callers always supply their own Queryable.
+ */
+import type {Queryable} from '@artifactbin/contracts';
+import {encodeDocument,decodeDocument,type StoredDocument} from './story/document-codec';
+interface SourceRow {source?:string|null;document?:StoredDocument|null}
+export function sourceStorage(format:string,source:string|null):{source:string|null;document:string|null} {
+ return format==='markup'&&source!==null?{source:null,document:JSON.stringify(encodeDocument(source))}:{source,document:null};
+}
+export function decodeArtifactDocument<T>(value:T):T {
+ const row=value as T&SourceRow;
+ if(row.document==null)return value;
+ const {document,...rest}=row;
+ return {...rest,source:decodeDocument(document)} as T;
+}
+export async function artifactQuery<T>(db:Queryable,sql:string,params:unknown[]=[]):Promise<{rows:T[]}> {
+ const result=await db.query<T>(sql,params);
+ return {...result,rows:result.rows.map(decodeArtifactDocument)};
+}
+interface MigratableRow extends SourceRow {id?:string;artifact_id?:string;format:string;version:number;edit_id?:string}
+/** The reload uses exactly the caller's original ACL/projection after a lost migration CAS.
+ * Representation-only writes do not mint edit IDs, timestamps, history or notifications.
+ */
+export async function loadArtifactDocument<T extends MigratableRow>(db:Queryable,sql:string,params:unknown[]):Promise<T|null> {
+ const row=(await db.query<T>(sql,params)).rows[0];
+ if(!row)return null;
+ if(row.document!=null||row.format!=='markup'||row.source==null)return decodeArtifactDocument(row);
+ const storage=sourceStorage(row.format,row.source),history=row.artifact_id!==undefined;
+ const result=await db.query(`UPDATE ${history?'artifact_versions':'artifacts'} SET document=$1::jsonb,source=NULL
+ WHERE ${history?'artifact_id':'id'}=$2 AND version=$3 AND format='markup' AND document IS NULL AND source=$4
+ ${history?'':'AND edit_id=$5'} RETURNING document`,history?[storage.document,row.artifact_id,row.version,row.source]:[storage.document,row.id,row.version,row.source,row.edit_id]);
+ if(result.rows.length)return decodeArtifactDocument({...row,document:JSON.parse(storage.document!),source:null});
+ return (await artifactQuery<T>(db,sql,params)).rows[0]??null;
+}

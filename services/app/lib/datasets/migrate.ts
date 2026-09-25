@@ -1,3 +1,4 @@
+import {artifactQuery,sourceStorage} from '../artifact-document';
 /** Pure planning plus transactional execution for the legacy dataset catalog cutover. */
 import { createHash } from 'node:crypto';
 import { parseJsx, type JsxElement, type JsxNode } from '@/lib/jsx';
@@ -187,7 +188,7 @@ export async function runDatasetCatalogMigrationBatch(db: Db, options: DatasetMi
   const knownTargetIds=new Set(targets.rows.filter(row=>row.format==='dataset'||row.format==='folder').map(row=>row.id));
   const folderIds=new Set(targets.rows.filter(row=>row.format==='folder').map(row=>row.id));
   const markupOptions={knownTargetIds,folderIds};
-  const candidates = await db.query<Record<string, unknown>>(options.expected ? 'SELECT * FROM artifacts WHERE id=ANY($1::text[]) ORDER BY id' : `SELECT * FROM artifacts a WHERE (
+  const candidates = await artifactQuery<Record<string, unknown>>(db,options.expected ? 'SELECT * FROM artifacts WHERE id=ANY($1::text[]) ORDER BY id' : `SELECT * FROM artifacts a WHERE (
     (format='dataset' AND (meta->'catalog' IS NULL OR meta->'catalog'='null'::jsonb)) OR format='markup' OR EXISTS (
       SELECT 1 FROM artifact_versions v WHERE v.artifact_id=a.id AND ((v.format='dataset' AND (v.meta->'catalog' IS NULL OR v.meta->'catalog'='null'::jsonb)) OR v.format='markup')
     )) AND id > $1 ORDER BY id`, [options.expected ? Object.keys(options.expected) : options.after ?? '']);
@@ -200,7 +201,7 @@ export async function runDatasetCatalogMigrationBatch(db: Db, options: DatasetMi
   for (const row of candidates.rows) {
     if(processed>=options.batchSize){nextCursor=String(candidates.rows[candidates.rows.indexOf(row)-1].id);break;}
     const artifactId = String(row.id); const format = String(row.format);
-    const history = await db.query<Record<string, unknown>>('SELECT * FROM artifact_versions WHERE artifact_id=$1 ORDER BY version', [artifactId]);
+    const history = await artifactQuery<Record<string, unknown>>(db,'SELECT * FROM artifact_versions WHERE artifact_id=$1 ORDER BY version', [artifactId]);
     const before = {head:row,history:history.rows};
     if(options.expected && options.expected[artifactId] !== fingerprint(before)){conflicts.push({artifactId,reason:'reviewed_snapshot_changed'});processed++;continue;}
     const planned=await planSnapshot(before,markupOptions,options);
@@ -220,8 +221,8 @@ export async function runDatasetCatalogMigrationBatch(db: Db, options: DatasetMi
     if (dryRun) continue;
     await options.beforeCommit?.(artifactId);
     const committed = await db.transaction(async (tx) => {
-      const locked = (await tx.query<Record<string, unknown>>('SELECT * FROM artifacts WHERE id=$1 FOR UPDATE', [artifactId])).rows[0];
-      const lockedHistory=await tx.query<Record<string,unknown>>('SELECT * FROM artifact_versions WHERE artifact_id=$1 ORDER BY version FOR UPDATE',[artifactId]);
+      const locked = (await artifactQuery<Record<string, unknown>>(tx,'SELECT * FROM artifacts WHERE id=$1 FOR UPDATE', [artifactId])).rows[0];
+      const lockedHistory=await artifactQuery<Record<string,unknown>>(tx,'SELECT * FROM artifact_versions WHERE artifact_id=$1 ORDER BY version FOR UPDATE',[artifactId]);
       if (!locked || fingerprint({head:locked,history:lockedHistory.rows}) !== fingerprint(before)) return false;
       // Immutable object writes occur only after the reviewed DB snapshot is locked.
       // A failed transaction may leave an unreferenced object, never a missing row reference.
@@ -231,19 +232,19 @@ export async function runDatasetCatalogMigrationBatch(db: Db, options: DatasetMi
         const content=String(record.before.content),key=objectKey('dataset',content);
         if((record.after.meta as LegacyMeta).objectKey===key)await objectStore().put(key,content,'application/json');
       }
-      for (const entry of historyChanged) await tx.query('UPDATE artifact_versions SET meta=$3::jsonb,source=$4 WHERE artifact_id=$1 AND version=$2', [artifactId, entry.version.version, JSON.stringify(after.history.find(version=>version.version===entry.version.version)!.meta), entry.source.source]);
-      if (headChanged) await tx.query('UPDATE artifacts SET meta=$2::jsonb,source=$3,edit_id=$4 WHERE id=$1', [artifactId, JSON.stringify(after.head.meta), plannedSource.source, after.head.edit_id]);
+      for (const entry of historyChanged) await tx.query('UPDATE artifact_versions SET meta=$3::jsonb,source=CASE WHEN $5::jsonb IS NULL THEN $4::text ELSE NULL END,document=$5::jsonb WHERE artifact_id=$1 AND version=$2', [artifactId, entry.version.version, JSON.stringify(after.history.find(version=>version.version===entry.version.version)!.meta), entry.source.source,sourceStorage(String(entry.version.format),entry.source.source).document]);
+      if (headChanged) await tx.query('UPDATE artifacts SET meta=$2::jsonb,source=CASE WHEN $5::jsonb IS NULL THEN $3::text ELSE NULL END,document=$5::jsonb,edit_id=$4 WHERE id=$1', [artifactId, JSON.stringify(after.head.meta), plannedSource.source, after.head.edit_id,sourceStorage(format,plannedSource.source).document]);
       options.failBeforeCommit?.(); return true;
     });
     if (!committed) { changed--; if (format === 'dataset') datasets--; else documents--; versions -= historyChanged.length; conflicts.push({ artifactId, reason: 'concurrent_change' }); }
   }
-  const remaining = await db.query<Record<string, unknown>>(`SELECT * FROM artifacts a WHERE (
+  const remaining = await artifactQuery<Record<string, unknown>>(db,`SELECT * FROM artifacts a WHERE (
     (format='dataset' AND (meta->'catalog' IS NULL OR meta->'catalog'='null'::jsonb)) OR format='markup' OR EXISTS (
       SELECT 1 FROM artifact_versions v WHERE v.artifact_id=a.id AND ((v.format='dataset' AND (v.meta->'catalog' IS NULL OR v.meta->'catalog'='null'::jsonb)) OR v.format='markup')
     ))`);
   let hasRemaining=false;
   for(const row of remaining.rows){
-    const history=await db.query<Record<string,unknown>>('SELECT * FROM artifact_versions WHERE artifact_id=$1 ORDER BY version',[row.id]);
+    const history=await artifactQuery<Record<string,unknown>>(db,'SELECT * FROM artifact_versions WHERE artifact_id=$1 ORDER BY version',[row.id]);
     const planned=await planSnapshot({head:row,history:history.rows},markupOptions,options);
     if(planned.conflicts.length||planned.headChanged||planned.historyChanged.length){hasRemaining=true;break;}
   }

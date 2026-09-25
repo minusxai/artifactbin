@@ -1,3 +1,4 @@
+import {artifactQuery} from '@/lib/artifact-document';
 import { grantsOf, assertGrantCommit } from '@/lib/datasets/policy/grants';
 import {validateUserWrites} from '@/lib/datasets/user-fields';
 import {DatasetError} from '@/lib/datasets/errors';
@@ -120,7 +121,7 @@ export async function mutateDataset(
     // CAS miss means someone else's rows are now the base for ours.
     const current = attempt === 0
       ? dataset
-      : (await db.query<ArtifactRow>(`SELECT * FROM artifacts WHERE id = $1 AND ${LIVE_ARTIFACT_SQL}`, [dataset.id])).rows[0];
+      : (await artifactQuery<ArtifactRow>(db,`SELECT * FROM artifacts WHERE id = $1 AND ${LIVE_ARTIFACT_SQL}`, [dataset.id])).rows[0];
     // Deleted under us — the write has nothing to apply to. Reported as a
     // refusal rather than thrown: the caller answers the uniform 404 anyway.
     if (!current) return { reason: 'invalid_sql', detail: 'the dataset no longer exists' };
@@ -180,10 +181,10 @@ export async function mutateDataset(
      if(v2)await assertGrantCommit(tx,current,actor,guard.document);
      await validateUserWrites(tx,columns,out.userWrites??[],actor.userId);
      if(guard.expectedState){
-      const locked=(await tx.query<ArtifactRow>(`SELECT * FROM artifacts WHERE id=$1 AND ${LIVE_ARTIFACT_SQL} FOR UPDATE`,[dataset.id])).rows[0];
+      const locked=(await artifactQuery<ArtifactRow>(tx,`SELECT * FROM artifacts WHERE id=$1 AND ${LIVE_ARTIFACT_SQL} FOR UPDATE`,[dataset.id])).rows[0];
       if(!locked||artifactState(locked)!==guard.expectedState)return {rows:[] as ArtifactRow[]};
      }
-     const result=await tx.query<ArtifactRow>(
+     const result=await artifactQuery<ArtifactRow>(tx,
       `WITH updated AS (
          UPDATE artifacts
             SET content = '', meta = $3::jsonb, version = version + 1, edit_id = $4, updated_at = now(), actor_user_id = $13, actor_token_id = $14

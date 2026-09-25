@@ -462,6 +462,7 @@ CREATE TABLE IF NOT EXISTS app.artifacts (
   format TEXT NOT NULL DEFAULT 'markup',
   content TEXT NOT NULL,
   source TEXT,
+  document JSONB,
   meta JSONB NOT NULL DEFAULT '{}',
   version INTEGER NOT NULL DEFAULT 1,
   edit_id TEXT NOT NULL DEFAULT md5(random()::text),
@@ -504,6 +505,8 @@ ALTER TABLE app.artifacts ADD COLUMN IF NOT EXISTS content TEXT NOT NULL;
 
 ALTER TABLE app.artifacts ADD COLUMN IF NOT EXISTS source TEXT;
 
+ALTER TABLE app.artifacts ADD COLUMN IF NOT EXISTS document JSONB;
+
 ALTER TABLE app.artifacts ADD COLUMN IF NOT EXISTS meta JSONB NOT NULL DEFAULT '{}';
 
 ALTER TABLE app.artifacts ADD COLUMN IF NOT EXISTS version INTEGER NOT NULL DEFAULT 1;
@@ -540,6 +543,7 @@ CREATE TABLE IF NOT EXISTS app.artifact_versions (
   format TEXT NOT NULL DEFAULT 'markup',
   content TEXT NOT NULL,
   source TEXT,
+  document JSONB,
   meta JSONB NOT NULL DEFAULT '{}',
   actor_user_id TEXT,
   actor_token_id TEXT,
@@ -560,6 +564,8 @@ ALTER TABLE app.artifact_versions ADD COLUMN IF NOT EXISTS format TEXT NOT NULL 
 ALTER TABLE app.artifact_versions ADD COLUMN IF NOT EXISTS content TEXT NOT NULL;
 
 ALTER TABLE app.artifact_versions ADD COLUMN IF NOT EXISTS source TEXT;
+
+ALTER TABLE app.artifact_versions ADD COLUMN IF NOT EXISTS document JSONB;
 
 ALTER TABLE app.artifact_versions ADD COLUMN IF NOT EXISTS meta JSONB NOT NULL DEFAULT '{}';
 

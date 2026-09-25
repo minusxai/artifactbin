@@ -1,3 +1,4 @@
+import {artifactQuery} from '@/lib/artifact-document';
 import {JOIN_RELATIONS,setRelationState} from './relation-state';
 import {recordEvent} from './notification-events';
 import {DatasetError} from './datasets/errors';
@@ -83,7 +84,7 @@ export async function changeMembership(actor: RoleActor, id: string, input: Memb
     }
   }
   await db.transaction(async tx=>{
-    const current=(await tx.query<ArtifactRow>('SELECT * FROM artifacts WHERE id=$1 AND deleted_at IS NULL FOR UPDATE',[id])).rows[0];
+    const current=(await artifactQuery<ArtifactRow>(tx,'SELECT * FROM artifacts WHERE id=$1 AND deleted_at IS NULL FOR UPDATE',[id])).rows[0];
     if(!current||current.user_id!==artifact.user_id||current.token_id!==artifact.token_id||(current.sharing_revision??0)!==(artifact.sharing_revision??0))fail('Artifact access changed; try again',409);
     await tx.query('SELECT id FROM users WHERE id=ANY($1::text[]) ORDER BY id FOR UPDATE',[[...new Set([userId,...targets])]]);
     for(const target of targets) {

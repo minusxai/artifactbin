@@ -178,7 +178,8 @@ const ARTIFACTS: Table = {
     { name: 'description', type: 'TEXT' },
     { name: 'format', type: 'TEXT', notNull: true, default: "'markup'" }, // ArtifactFormat (lib/story/input.ts); no CHECK on purpose
     { name: 'content', type: 'TEXT', notNull: true }, // what /a/<id> serves (rendered, for stories)
-    { name: 'source', type: 'TEXT' }, // story markup for round-trip editing; NULL in html mode
+    { name: 'source', type: 'TEXT' }, // legacy markup and non-markup formats; cleared after document conversion
+    { name: 'document', type: 'JSONB' }, // canonical markup AST; old TEXT rows migrate lazily
     { name: 'meta', type: 'JSONB', notNull: true, default: "'{}'" }, // stories: {theme}
     { name: 'version', type: 'INTEGER', notNull: true, default: '1' },
     // Head pointer of the edit protocol: unguessable, regenerated on every
@@ -237,7 +238,8 @@ const ARTIFACT_VERSIONS: Table = {
     { name: 'description', type: 'TEXT' },
     { name: 'format', type: 'TEXT', notNull: true, default: "'markup'" },
     { name: 'content', type: 'TEXT', notNull: true },
-    { name: 'source', type: 'TEXT' },
+    { name: 'source', type: 'TEXT' }, // legacy archive source
+    { name: 'document', type: 'JSONB' },
     { name: 'meta', type: 'JSONB', notNull: true, default: "'{}'" },
     // Who produced THIS state (artifacts.actor_* at the moment it was archived).
     { name: 'actor_user_id', type: 'TEXT' },
