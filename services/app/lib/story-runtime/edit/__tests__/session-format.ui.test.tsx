@@ -5,7 +5,8 @@
  * what leaving takes with it.
  */
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { fireEvent, act } from '@testing-library/react';
+import { fireEvent, act, render } from '@testing-library/react';
+import { renderStoryNodes } from '@/lib/story-ui/interpreter';
 import {
   STORY_APPLY_FORMAT_MESSAGE,
   STORY_IMAGE_DROP_MESSAGE,
@@ -15,7 +16,9 @@ import {
   STORY_TEXT_EDIT_MESSAGE,
   type StoryEditParentMessage,
 } from '@/lib/story-runtime/contract';
-import { EDIT_SELECTED_ATTR, EDIT_EMBED_SELECTED_ATTR, EDIT_HOVER_ATTR, EDIT_DROP_REPLACE_ATTR } from '@/lib/story-runtime/edit/session';
+import {
+  createFrameEditSession, EDIT_SELECTED_ATTR, EDIT_EMBED_SELECTED_ATTR, EDIT_HOVER_ATTR, EDIT_DROP_REPLACE_ATTR,
+} from '@/lib/story-runtime/edit/session';
 import {
   NONCE,
   disposeEditSessions,
@@ -294,6 +297,33 @@ describe('createFrameEditSession — replacing an image', () => {
     const { at } = mount(IMG_SRC);
     fireOn(at('0.1'), 'dragover', { types: ['text/plain'], items: [], files: [] });
     expect(at('0.1').hasAttribute(EDIT_DROP_REPLACE_ATTR)).toBe(false);
+  });
+
+  /*
+   * Found in a real browser: a selected image holds no focus, so ⌘V fires on
+   * <body> — OUTSIDE the story root the inline runtime scopes itself to — and
+   * the paste went nowhere. With an image selected, a paste on the page's
+   * unfocused body is that image's.
+   */
+  it('a paste on the unfocused page body replaces the selected image when the session is rooted', () => {
+    const nodes = nodesOf(IMG_SRC);
+    const holder = document.createElement('div');
+    document.body.append(holder);
+    const view = render(<>{renderStoryNodes(nodes, { components: {} })}</>, { container: holder });
+    const session = createFrameEditSession({ win: window, channel: env.channel, requestRender: () => {}, root: view.container });
+    session.setNodes(nodes);
+    try {
+      fireEvent.click(view.container.querySelector('[data-mx-ast="0.1"]')!, { bubbles: true });
+      fireOn(document.body, 'paste', transfer([png()]));
+      expect(last(STORY_IMAGE_DROP_MESSAGE)).toMatchObject({ target: '0.1' });
+      // Nothing selected: a paste outside the document is not the document's.
+      const before = sent(STORY_IMAGE_DROP_MESSAGE).length;
+      session.onParentMessage({ type: STORY_SELECT_MESSAGE, path: null } as StoryEditParentMessage);
+      fireOn(document.body, 'paste', transfer([png()]));
+      expect(sent(STORY_IMAGE_DROP_MESSAGE)).toHaveLength(before);
+    } finally {
+      session.dispose();
+    }
   });
 
   it('leaving edit mode takes the mark with it', () => {

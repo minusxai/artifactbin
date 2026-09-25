@@ -571,7 +571,11 @@ export function createFrameEditSession({
    * than silently eaten.
    */
   const onImageTransfer = (event: ClipboardEvent | DragEvent) => {
-    if (root && !root.contains(event.target as Node)) return;
+    // A selected image holds no focus, so ⌘V lands on the unfocused <body> —
+    // outside a rooted session's story, yet plainly meant for that image.
+    const onBody = event.target === doc.body || event.target === doc.documentElement;
+    const forSelectedImage = event.type === 'paste' && onBody && isImagePath(selectedPath);
+    if (root && !root.contains(event.target as Node) && !forSelectedImage) return;
     const data = 'clipboardData' in event ? event.clipboardData : event.dataTransfer;
     const file = imageFileFromTransfer(data);
     if (event.type === 'drop') markDropTarget(null);
