@@ -106,6 +106,12 @@ export default function StoryFormatToolbar({
   const [alignmentOpen, setAlignmentOpen] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
   const linkInputRef = useRef<HTMLInputElement>(null);
+  // A deep trail overflows on a phone: keep its end, the selected node, in view.
+  const crumbsRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const crumbs = crumbsRef.current;
+    if (crumbs) crumbs.scrollLeft = crumbs.scrollWidth;
+  }, [selection?.path]);
 
   useEffect(() => {
     setLinkDraft(null);
@@ -171,7 +177,7 @@ export default function StoryFormatToolbar({
         className="flex h-8 max-w-[50%] shrink-0 items-center gap-1 border-r border-edge px-2"
         aria-label="Selection breadcrumb"
       >
-        <div className="flex min-w-0 items-center gap-1 overflow-x-auto whitespace-nowrap">
+        <div ref={crumbsRef} className="flex min-w-0 items-center gap-1 overflow-x-auto whitespace-nowrap">
           <button
             type="button"
             aria-label="Document options"
