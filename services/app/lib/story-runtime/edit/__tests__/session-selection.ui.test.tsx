@@ -185,6 +185,16 @@ describe('hover boundaries', () => {
     expect(grip()).not.toBeVisible();
   });
 
+  it('puts the grip of a table cell beside the table: a cell is text, the table is the block', () => {
+    const { at } = mount('<div className="p-8"><table><tbody><tr><td>January</td><td>120</td></tr></tbody></table></div>');
+    const table = at('0.0');
+    table.getBoundingClientRect = () => new DOMRect(200, 300, 400, 80);
+    fireEvent.pointerOver(at('0.0.0.0.0'));
+    expect(boxOf(at('0.0.0.0.0'))).toEqual(NO_BOX);
+    expect(boxOf(table)).toEqual(NO_BOX);
+    expect(grip()!.parentElement).toHaveStyle({ left: '176px', top: '300px' });
+  });
+
   it('keeps the hover while the pointer travels onto the grip', () => {
     const { at } = mount();
     fireEvent.pointerOver(at('0.1'));

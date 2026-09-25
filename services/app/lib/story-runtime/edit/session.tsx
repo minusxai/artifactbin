@@ -77,12 +77,12 @@ export const EDIT_SPOTLIGHT_ATTR = 'data-mx-edit-spotlight';
  * or apply editor chrome.
  */
 const EDIT_MODE_CSS = [
-  `[data-mx-block-selected][data-mx-block-selected] { ${SELECTION_PRESENTATION.editSelectedCss} }`,
   '.ProseMirror { outline: none; white-space: pre-wrap; overflow-wrap: break-word; }',
   '[contenteditable="true"]:focus { outline: none; }',
   // Text ('text') draws nothing; hover precedes selection so a selected block keeps its stronger line.
   `[${EDIT_HOVER_ATTR}="block"][${EDIT_HOVER_ATTR}] { ${SELECTION_PRESENTATION.editHoverCss} }`,
   `[${EDIT_SELECTED_ATTR}="block"][${EDIT_SELECTED_ATTR}], [${EDIT_EMBED_SELECTED_ATTR}="block"][${EDIT_EMBED_SELECTED_ATTR}] { ${SELECTION_PRESENTATION.editSelectedCss} }`,
+  `[data-mx-block-selected][data-mx-block-selected] { ${SELECTION_PRESENTATION.editSelectedCss} }`,
   `[${EDIT_SPOTLIGHT_ATTR}][${EDIT_SPOTLIGHT_ATTR}] { ${SELECTION_PRESENTATION.spotlightCss} }`,
 ].join('\n');
 

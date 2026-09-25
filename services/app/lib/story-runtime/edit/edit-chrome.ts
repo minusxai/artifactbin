@@ -19,6 +19,8 @@ const CONTROL_TAGS = new Set(['a', 'button', 'input', 'select', 'textarea', 'sum
 /** Parts of a line, not blocks: a grip on them would pick up a word. Mirrors the session's selection rule. */
 const INLINE_TAGS = new Set(['span', 'strong', 'b', 'em', 'i', 'a', 'code', 'br', 'small', 'sup', 'sub', 's', 'del', 'u']);
 const SVG_NS = 'http://www.w3.org/2000/svg';
+/** A table moves as one: its sections, rows and cells are never picked up alone by a grip. */
+const TABLE_PART_TAGS = new Set(['thead', 'tbody', 'tfoot', 'tr', 'td', 'th', 'caption', 'colgroup', 'col']);
 
 /**
  * Text is where the caret goes: a text block in a ProseMirror flow region, or
@@ -36,7 +38,7 @@ export function editChromeKind(el: Element): EditChromeKind {
 
 /**
  * The block a margin grip beside `el` moves: `el` itself, or its nearest
- * stamped block when `el` is an inline or drawing part. Null when nothing
+ * stamped block when `el` is an inline, drawing or table part. Null when nothing
  * there can be moved by the grip (a positioned grid lays its items out itself).
  */
 export function gripTarget(el: Element, nodes: JsxNode[]): HTMLElement | null {
@@ -44,7 +46,8 @@ export function gripTarget(el: Element, nodes: JsxNode[]): HTMLElement | null {
     const path = at.getAttribute(AST_PATH_ATTR);
     const node = path ? resolveJsxNodeAtPath(nodes, path) : null;
     if (node?.type !== 'element') return null;
-    if (INLINE_TAGS.has(node.tag) || (at.namespaceURI === SVG_NS && node.tag !== 'svg')) continue;
+    if (INLINE_TAGS.has(node.tag) || TABLE_PART_TAGS.has(node.tag) || (at.namespaceURI === SVG_NS && node.tag !== 'svg'))
+      continue;
     if (node.tag === 'GridItem') {
       const parent = resolveJsxNodeAtPath(nodes, path!.split('.').slice(0, -1).join('.'));
       const mode = parent?.type === 'element' ? parent.attributes.find((a) => a.name === 'mode')?.value : undefined;
