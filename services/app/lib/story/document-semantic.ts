@@ -43,10 +43,8 @@ const walk=(nodes:Node[],visit:(node:Node,parents:JsxElement[])=>void,parents:Js
 const slotIds=(nodes:Node[])=>{
  const ids:string[]=[];walk(nodes,n=>{if(n.slot)ids.push(n.slot);});if(new Set(ids).size!==ids.length)throw new Error('Duplicate prose slot');return ids;
 };
-const fingerprint=(tree:StoredTree):string=>{
- const canonical=(v:unknown):unknown=>Array.isArray(v)?v.map(canonical):v&&typeof v==='object'?Object.fromEntries(Object.entries(v).sort(([a],[b])=>a.localeCompare(b)).map(([k,x])=>[k,canonical(x)])):v;
- return createHash('sha256').update(JSON.stringify(canonical(tree))).digest('hex');
-};
+const canonical=(v:unknown):unknown=>Array.isArray(v)?v.map(canonical):v&&typeof v==='object'?Object.fromEntries(Object.entries(v).sort(([a],[b])=>a.localeCompare(b)).map(([k,x])=>[k,canonical(x)])):v;
+const fingerprint=(tree:StoredTree):string=>createHash('sha256').update(JSON.stringify(canonical(tree))).digest('hex');
 const parse=(source:string):Node[]=>{const result=parseJsx(source);if(!result.ok)throw new Error(result.error);return result.nodes;};
 const eligible=(n:Node,parents:JsxElement[])=>n.type==='text'&&plain.has(parents.at(-1)?.tag??'')&&!parents.some(p=>p.tag==='Helmet'||p.tag==='Iframe');
 function project(nodes:Node[],observed:Record<string,StoredProse>){
@@ -102,7 +100,7 @@ async function prepareSemanticNodes(base:SemanticBaseline,candidate:Node[],conte
  }};
  const before=decodeDocumentNodes(base.document.tree);
  const contexts=new Map<string,string>();
- const contextKey=(parents:JsxElement[])=>JSON.stringify(parents.map(n=>[n.tag,n.control,n.attributes.map(a=>[a.name,a.value])]));
+ const contextKey=(parents:JsxElement[])=>JSON.stringify(canonical(parents.map(n=>[n.tag,n.control,n.attributes.map(a=>[a.name,a.value])])));
  walk(before,(n,parents)=>{if(n.slot)contexts.set(n.slot,contextKey(parents));});
  walk(candidate,(n,parents)=>{if(n.type==='text'&&n.slot&&contexts.get(n.slot)!==contextKey(parents)){n.value=base.document.prose[n.slot]!.value;delete n.slot;}});
  const projected=project(candidate,base.document.prose),marked=projectedSource(projected.nodes);

@@ -19,8 +19,9 @@ export function semanticOperationSql(document:string,version:string,meta:string,
  AND ${version}-${base}::int BETWEEN 0 AND 200
  AND (${meta}-'parsedArtifact')=(${expectedMeta}::jsonb-'parsedArtifact')
  AND NOT EXISTS(SELECT 1 FROM jsonb_to_recordset(${dependencies}::jsonb) dep(slot text,value text)
-   WHERE NOT (${oldProse} ? dep.slot) OR (${oldProse}->dep.slot->>'revision')::int>${base}::int
-    OR (${oldProse}->dep.slot->>'value') IS DISTINCT FROM dep.value)
+   LEFT JOIN jsonb_each(${oldProse}) current ON current.key=dep.slot
+   WHERE current.key IS NULL OR (current.value->>'revision')::int>${base}::int
+    OR (current.value->>'value') IS DISTINCT FROM dep.value)
  AND (${document}->>'bytes')::int+${delta} BETWEEN 0 AND ${limit}::int`;
  return {expression,guard,params};
 }

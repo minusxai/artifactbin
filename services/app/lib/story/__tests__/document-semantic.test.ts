@@ -1,5 +1,5 @@
 import {expect,it} from 'vitest';
-import {createSemanticDocument,prepareSemanticOperation,semanticPlan,applySemanticPlan} from '../document-semantic';
+import {createSemanticDocument,prepareSemanticOperation,prepareSemanticSource,semanticPlan,applySemanticPlan} from '../document-semantic';
 import {decodeDocument} from '../document-codec';
 import {publishJsx} from '../jsx-tier';
 const context={loadRef:async()=>null};
@@ -55,4 +55,15 @@ it('rejects a prose expansion beyond the document limit during admission',async(
  const result=await prepareSemanticOperation(base,[{kind:'setText',path:[0,0,0],value:'x'.repeat(2_000_001)}],context);
  expect(result).toBeInstanceOf(Response);
  expect((result as Response).status).toBe(413);
+});
+
+it('source admission retains independent slots after JSONB object-key reordering',async()=>{
+ const base=await setup();
+ const reorder=(v:unknown):unknown=>Array.isArray(v)?v.map(reorder):v&&typeof v==='object'?Object.fromEntries(Object.entries(v).sort(([a],[b])=>a.localeCompare(b)).map(([k,x])=>[k,reorder(x)])):v;
+ base.document=reorder(base.document) as typeof base.document;
+ const candidate=decodeDocument(base.document).replace('<p id="a">','<p id="a" title="Changed">');
+ const token=await prepareSemanticSource(base,candidate,context);if(token instanceof Response)throw new Error(await token.text());
+ expect(semanticPlan(token).reads).toHaveLength(1);
+ const beta=Object.keys(base.document.prose).find(k=>base.document.prose[k]!.value==='Beta')!;
+ expect(semanticPlan(token).removed).not.toContain(beta);
 });
