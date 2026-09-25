@@ -1,3 +1,7 @@
+import {commitProseOperation} from './story/document-prose-write';
+import {proseOperation,applyProseOperation,type ProseOperation} from './story/document-prose';
+import {encodeDocument} from './story/document-codec';
+import {prepareDocumentPatch,documentPatchSql} from './story/document-patch';
 import {artifactQuery,loadArtifactDocument,sourceStorage} from './artifact-document';
 import {JOIN_RELATIONS,seedOwnerJoin} from './relation-state';
 import {documentMentions} from './saved-mentions';
@@ -524,8 +528,8 @@ async function insertArtifact(
      INSERT INTO artifacts (id, token_id, user_id, title, description, format, content, source, meta, visibility, link_role, ancestor_ids, edit_id, access, forked_from, actor_user_id, actor_token_id, dataset_policy, policy_revision, document)
      VALUES ($1, $2, $3, $4, $5, $6, $7, CASE WHEN $19::jsonb IS NULL THEN $8::text ELSE NULL END, $9, $10, $11, $12, $13, $14, $15, $3, $2, $17::jsonb, $18::int, $19::jsonb) RETURNING *
    ), genesis AS (
-     INSERT INTO artifact_edits (artifact_id, edit_id, splice_start, removed, inserted, span_start, span_end, actor_user_id, actor_token_id)
-     SELECT id, edit_id, 0, '', COALESCE($8::text, content), 0, 0, $3, $2 FROM created
+     INSERT INTO artifact_edits (artifact_id, edit_id, splice_start, removed, inserted, span_start, span_end, actor_user_id, actor_token_id, document_state)
+     SELECT id, edit_id, 0, '', COALESCE($8::text, content), 0, 0, $3, $2, jsonb_build_object('epoch',document#>>'{prose,epoch}','version',version) FROM created
    ), reserved AS (
      INSERT INTO artifact_source_ids (artifact_id, source_id, provenance, first_version)
      SELECT $1, value #>> '{}', 'authored', 1 FROM jsonb_array_elements($16::jsonb)
@@ -566,7 +570,7 @@ async function insertArtifact(
     // creation, which is also what makes the audit CTE above a no-op.
     datasetPolicy ? JSON.stringify(datasetPolicy) : null,
     atCreation.datasetPolicy?.revision ?? 0,
-    sourceStorage(input.format,input.source).document,
+    sourceStorage(input.format,input.source,true).document,
   ],
   );
   Object.assign(created.rows[0],await writeShares(tx,id,atCreation.shares??[]));
@@ -933,6 +937,7 @@ async function archiveVersion(tx: Queryable, current: ArtifactRow): Promise<void
      VALUES ($1, $2, $3, $4, $5, $6, CASE WHEN $11::jsonb IS NULL THEN $7::text ELSE NULL END, $8, $9, $10, $11::jsonb)`,
     [current.id, current.version, current.title, current.description, current.format, current.content, current.source, JSON.stringify(current.meta), current.actor_user_id, current.actor_token_id,sourceStorage(current.format,current.source).document],
   );
+  await tx.query('UPDATE artifacts SET document_archived_at=now() WHERE id=$1',[current.id]);
 }
 
 /** The two actor columns a write stamps, in the order every statement binds them. */
@@ -1491,6 +1496,7 @@ function sayMoved(actor: TokenActor, id: string, moved: { from: string | null; t
  * prefix/suffix diff — sound because stored source is canonical).
  */
 export interface EditInput {
+  text?: ProseOperation;
   annotationOps?: AnnotationOperation[];
   baseEditId: string;
   /** The content change, if this edit has one. */
@@ -1585,6 +1591,14 @@ export async function applyEditScoped(actor: TokenActor, id: string, input: Edit
   // (lib/annotations) widens it to commenters, whose only "edit" this is.
   const scope = opts.scope ?? editorScope(actor);
 
+  if(input.text&&!input.change&&!input.meta&&!input.annotationOps?.length&&!opts.dryRun){
+    const outcome=await commitProseOperation(db,actor,id,input.baseEditId,input.text,scope,SHARES_PROJECTION);
+    if(outcome)return outcome;
+    // Missing certification (including a lazily migrated legacy document) uses
+    // normal validation. A true stale conflict still fails the existing rebase.
+
+  }
+
   for (let attempt = 0; ; attempt++) {
     const head = (
       await artifactQuery<ArtifactRow>(db,`SELECT artifacts.*, ${SHARES_PROJECTION} FROM artifacts WHERE id = $1 AND ${scope.where('$2')}`, [id, scope.val])
@@ -1612,6 +1626,11 @@ export async function applyEditScoped(actor: TokenActor, id: string, input: Edit
       intervening = found;
     }
     const baseSource = reconstructBaseSource(headSource, intervening);
+    if(input.text){
+      const newSource=applyProseOperation(baseSource,input.text);
+      if(newSource===null)return {applied:false,reason:'bad_diff',detail:'no_match'};
+      input={...input,text:undefined,change:{newSource}};
+    }
 
     // 2. Derive the splice in the BASE's coordinates — anchoring on the version
     //    the caller actually read is what makes a stale base resolvable at all.
@@ -1661,6 +1680,13 @@ export async function applyEditScoped(actor: TokenActor, id: string, input: Edit
       }
     } else if (!input.meta) {
       return { applied: false, reason: 'bad_diff', detail: 'identical' };
+    }
+
+    // Legacy source clients can use the same primitive after translating their
+    // claimed base. New clients submit the primitive directly and skip this read.
+    if(input.change&&!input.meta&&!input.annotationOps?.length&&!opts.dryRun){
+      const text=proseOperation(baseSource,candidate);
+      if(text){const result=await commitProseOperation(db,actor,id,input.baseEditId,text,scope,SHARES_PROJECTION);if(result)return result;}
     }
 
     // 4. Validate/sanitize/compile the candidate — a pure function of content,
@@ -1756,12 +1782,16 @@ export async function applyEditScoped(actor: TokenActor, id: string, input: Edit
       ? annotationEffects(headSource, storedText, operations, annotationRows, storedReceipts)
       : { updates: [], receipts: [] };
     const freshEditId = newEditId();
+    const nextDocument=JSON.parse(sourceStorage('markup',storedText,true).document!);
+    const {prose:proseCertificate,...nextTree}=nextDocument;
+    const documentPatch=documentPatchSql("(COALESCE(document,$34::jsonb)-'prose')",prepareDocumentPatch(encodeDocument(headSource),nextTree),Array(34).fill(null));
+    const documentExpression=`CASE WHEN $33::jsonb IS NULL THEN ${documentPatch.expression} ELSE jsonb_set(${documentPatch.expression},'{prose}',$33::jsonb,true) END`;
     const commit = (queryable:Queryable) => artifactQuery<ArtifactRow>(queryable,
       `WITH updated AS (
-         UPDATE artifacts SET content = $3, source = CASE WHEN $33::jsonb IS NULL THEN $4::text ELSE NULL END, document=$33::jsonb, meta = $5, version = version + 1,
+         UPDATE artifacts SET content = $3, source = NULL, document=${documentExpression}, document_archived_at=CASE WHEN NOT EXISTS(SELECT 1 FROM artifact_versions WHERE artifact_id=$1 AND created_at>now()-($15::int*interval '1 millisecond')) THEN now() ELSE document_archived_at END, meta = $5, version = version + 1,
                 edit_id = $6, title = $21, actor_user_id = $22, actor_token_id = $23, updated_at = now()
          WHERE id = $1 AND ${scope.where('$2')} AND edit_id = $7 AND sharing_revision=$32
-           AND meta = $14::jsonb AND title IS NOT DISTINCT FROM $9 AND description IS NOT DISTINCT FROM $10
+           AND $4::text IS NOT NULL AND (meta-'parsedArtifact') = ($14::jsonb-'parsedArtifact') AND title IS NOT DISTINCT FROM $9 AND description IS NOT DISTINCT FROM $10
          RETURNING *
        ), archived AS (
          INSERT INTO artifact_versions (artifact_id, version, title, description, format, content, source, meta, actor_user_id, actor_token_id, document)
@@ -1783,9 +1813,9 @@ export async function applyEditScoped(actor: TokenActor, id: string, input: Edit
            AND EXISTS (SELECT 1 FROM updated)
          RETURNING a.id
        ), logged AS (
-         INSERT INTO artifact_edits (artifact_id, edit_id, splice_start, removed, inserted, span_start, span_end, changes, actor_user_id, actor_token_id, annotation_changes)
+         INSERT INTO artifact_edits (artifact_id, edit_id, splice_start, removed, inserted, span_start, span_end, changes, actor_user_id, actor_token_id, annotation_changes, document_state)
          SELECT id, $6, $16, $17, $18, $19, $20, $26::jsonb, $22, $23,
-           (SELECT jsonb_agg(receipt) FROM jsonb_array_elements($31::jsonb) receipt WHERE receipt->>'annotationId'='' OR receipt->>'annotationId' IN (SELECT id FROM moved_annotations)) FROM updated
+           (SELECT jsonb_agg(receipt) FROM jsonb_array_elements($31::jsonb) receipt WHERE receipt->>'annotationId'='' OR receipt->>'annotationId' IN (SELECT id FROM moved_annotations)), jsonb_build_object('epoch',document#>>'{prose,epoch}','version',version) FROM updated
          RETURNING pg_notify('artifact_' || lower(artifact_id), $6)
        ), reserved_ids AS (
          INSERT INTO artifact_source_ids (artifact_id, source_id, provenance, first_version)
@@ -1824,7 +1854,7 @@ export async function applyEditScoped(actor: TokenActor, id: string, input: Edit
         identity.ids,
         JSON.stringify(sideEffects.updates),
         JSON.stringify(sideEffects.receipts),head.sharing_revision??0,
-        sourceStorage('markup',storedText).document,sourceStorage(head.format,head.source).document,
+        proseCertificate?JSON.stringify(proseCertificate):null,sourceStorage(head.format,head.source).document,...documentPatch.params.slice(34),
       ],
     );
     const previousRefs=new Set(((head.meta.refs??[]) as Array<{id:string}>).map(ref=>ref.id));

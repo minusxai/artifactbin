@@ -2,16 +2,23 @@
  * only stored JSONB↔public JSX conversion and lazy migration live here. Never issue
  * an out-of-transaction query: callers always supply their own Queryable.
  */
+import {randomUUID} from 'node:crypto';
+import {proseSlots,PROSE_POLICY} from './story/document-prose';
+import {finalizeArtifactMetadata} from './story/parsed-artifact-metadata';
 import type {Queryable} from '@artifactbin/contracts';
 import {encodeDocument,decodeDocument,type StoredDocument} from './story/document-codec';
 interface SourceRow {source?:string|null;document?:StoredDocument|null}
-export function sourceStorage(format:string,source:string|null):{source:string|null;document:string|null} {
- return format==='markup'&&source!==null?{source:null,document:JSON.stringify(encodeDocument(source))}:{source,document:null};
+export function sourceStorage(format:string,source:string|null,certified=false):{source:string|null;document:string|null} {
+ if(format!=='markup'||source===null)return {source,document:null};
+ const document=encodeDocument(source),slots=certified?proseSlots(source):null;
+ return {source:null,document:JSON.stringify({...document,...(slots?{prose:{policy:PROSE_POLICY,epoch:randomUUID(),bytes:Buffer.byteLength(source),slots}}:{})})};
 }
 export function decodeArtifactDocument<T>(value:T):T {
  const row=value as T&SourceRow;
  const {document,...rest}=row;
- return {...rest,...(document==null?{}:{source:decodeDocument(document)})} as T;
+ if(document==null)return rest as T;
+ const source=decodeDocument(document),meta=(rest as {meta?:Record<string,unknown>}).meta;
+ return {...rest,source,...('prose' in document&&meta&&!meta.parsedArtifact?{meta:finalizeArtifactMetadata('markup',source,meta)}:{})} as T;
 }
 export async function artifactQuery<T=Record<string,unknown>>(db:Queryable,sql:string,params:unknown[]=[]):Promise<{rows:T[]}> {
  const result=await db.query<T>(sql,params);

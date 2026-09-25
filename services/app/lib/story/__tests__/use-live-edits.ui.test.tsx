@@ -6,6 +6,7 @@
  */
 import { act, renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import {applyProseOperation} from '@/lib/story/document-prose';
 import {resolveEditBatch} from '@/lib/story/edit-batch';
 import { useLiveEdits } from '@/lib/story/use-live-edits';
 
@@ -315,7 +316,7 @@ describe('V2 atomic source queue',()=> {
     await act(async()=>{await hook.result.current.flushNow();});
     const body=JSON.parse(fetchMock.mock.calls[1][1].body);
     expect(body.edit_id).toBe('edit-2');
-    expect(resolveEditBatch(changed,body.edits.map((e:{old_string:string;new_string:string})=>({oldString:e.old_string,newString:e.new_string})))).toMatchObject({ok:true,source:initial});
+    expect(applyProseOperation(changed,body.text)).toBe(initial);
   });
 });
 
@@ -333,7 +334,7 @@ it('rebases a pending undo over an unrelated edit included in the save response'
   accept(okResponse({edit_id:'edit-2',version:2,markup:accepted}));
   await act(async()=>{await hook.result.current.flushNow();});
   const next=JSON.parse(fetchMock.mock.calls[1][1].body);
-  expect(resolveEditBatch(accepted,next.edits.map((e:{old_string:string;new_string:string})=>({oldString:e.old_string,newString:e.new_string})))).toMatchObject({ok:true,source:base.replace('two','remote two')});
+  expect(applyProseOperation(accepted,next.text)).toBe(base.replace('two','remote two'));
   expect(adopted[0]).toBe(base.replace('two','remote two'));
 });
 
@@ -346,7 +347,7 @@ it('retries a preserved draft against a fresh head without overwriting unrelated
  fetchMock.mockResolvedValueOnce(okResponse({edit_id:'merged-head',version:3,markup:draft.replace('two','remote')}));
  await act(async()=>{await hook.result.current.recover('retry');});
  const body=JSON.parse(fetchMock.mock.calls.at(-1)![1].body);
- expect(body.edit_id).toBe('remote-head');expect(body.edits).toEqual([{old_string:'<p id="a">one</p>',new_string:'<p id="a">local</p>'}]);
+ expect(body.edit_id).toBe('remote-head');expect(applyProseOperation(remote,body.text)).toBe(draft.replace('two','remote'));
  expect(adopted.at(-1)).toBe(draft.replace('two','remote'));expect(hook.result.current.state.status).toBe('');
 });
 

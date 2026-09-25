@@ -67,3 +67,8 @@ it('canonical document storage belongs to artifact heads and archived versions',
  const sql=renderedSchema().schema;
  for(const table of ['artifacts','artifact_versions'])expect(sql).toMatch(new RegExp('CREATE TABLE IF NOT EXISTS app\\.'+table+' \\([\\s\\S]*?document JSONB'));
 });
+
+it('atomic document operations keep baseline state in the app edit log',()=>{
+ expect(renderedSchema().schema).toContain('document_state JSONB');
+ expect(renderedSchema().schema).toContain('document_archived_at TIMESTAMPTZ');
+});

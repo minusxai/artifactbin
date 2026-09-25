@@ -180,6 +180,7 @@ const ARTIFACTS: Table = {
     { name: 'content', type: 'TEXT', notNull: true }, // what /a/<id> serves (rendered, for stories)
     { name: 'source', type: 'TEXT' }, // legacy markup and non-markup formats; cleared after document conversion
     { name: 'document', type: 'JSONB' }, // canonical markup AST; old TEXT rows migrate lazily
+    { name: 'document_archived_at', type: 'TIMESTAMPTZ' }, // coalescing guard carried on the locked head
     { name: 'meta', type: 'JSONB', notNull: true, default: "'{}'" }, // stories: {theme}
     { name: 'version', type: 'INTEGER', notNull: true, default: '1' },
     // Head pointer of the edit protocol: unguessable, regenerated on every
@@ -268,6 +269,7 @@ const ARTIFACT_EDITS: Table = {
     { name: 'span_end', type: 'INTEGER', notNull: true },
     { name: 'changes', type: 'JSONB' },
     { name: 'annotation_changes', type: 'JSONB' },
+    { name: 'document_state', type: 'JSONB' }, // baseline epoch/version for direct JSONB operations
     // Who made the splice — NULL on rows that predate attribution.
     { name: 'actor_user_id', type: 'TEXT' },
     { name: 'actor_token_id', type: 'TEXT' },

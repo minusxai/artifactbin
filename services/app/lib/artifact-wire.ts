@@ -664,6 +664,12 @@ function parseEditBody(body: Record<string, unknown>): EditInput | null {
   const editId = body.edit_id;
   if (typeof editId !== 'string' || editId.length === 0) return null;
 
+  if(Object.hasOwn(body,'text')){
+    const text=body.text as Record<string,unknown>|null;
+    if(!text||typeof text!=='object'||!Array.isArray(text.path)||text.path.length>128||!text.path.every(x=>typeof x==='string')||typeof text.oldText!=='string'||typeof text.newText!=='string'||annotationOps.length||['source','edits','old_string','new_string'].some(k=>Object.hasOwn(body,k)))return null;
+    return {baseEditId:editId,text:{path:text.path as string[],oldText:text.oldText,newText:text.newText}};
+  }
+
   const mentionsDiff = Object.hasOwn(body, 'old_string') || Object.hasOwn(body, 'new_string');
   const mentionsSource = Object.hasOwn(body, 'source');
   const mentionsBatch = Object.hasOwn(body, 'edits');
