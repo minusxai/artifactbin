@@ -137,7 +137,15 @@ const browser = await chromium.launch();
   const st = await mint();
   const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
   await openEditor(page, st);
-  await page.setInputFiles('[aria-label="Upload image file"]', { name: 'shot.png', mimeType: 'image/png', buffer: PNG_BUF });
+  // Insert ▸ Image… opens the dialog; a chosen file is uploaded and previewed, and Insert places it.
+  await page.getByRole('button', { name: 'Insert', exact: true }).click();
+  await page.getByRole('button', { name: 'Image…', exact: true }).click();
+  const dialog = page.getByRole('dialog', { name: 'Insert image' });
+  await dialog.locator('[aria-label="Image file"]').setInputFiles({ name: 'shot.png', mimeType: 'image/png', buffer: PNG_BUF });
+  const insert = dialog.getByRole('button', { name: 'Insert', exact: true });
+  await insert.waitFor();
+  for (let i = 0; i < 80 && !(await insert.isEnabled()); i++) await page.waitForTimeout(250);
+  await insert.click();
   check((await paintedImages(page)) >= 1, 'file picker: the uploaded image paints in the canvas');
 
   // ── 2. it persists across `done` + reload — the whole point ──────────────

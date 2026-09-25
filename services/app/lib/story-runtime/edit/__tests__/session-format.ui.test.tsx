@@ -336,3 +336,74 @@ describe('createFrameEditSession — replacing an image', () => {
     expect(sent(STORY_IMAGE_REPLACE_MESSAGE)).toHaveLength(0);
   });
 });
+
+/**
+ * A file dropped NOT onto an image is inserted where it was dropped: the gap
+ * between the blocks nearest the pointer. The frame names the gap (a block and
+ * a side); the parent composes the source. A paste carries no gap — the page
+ * places it at its own selection.
+ */
+describe('createFrameEditSession — where a dropped image goes', () => {
+  const DOC = '<div className="p-8"><p>one</p><p>two</p><div className="card"><p>in card</p></div></div>';
+  const png = () => new File(['x'], 'clip.png', { type: 'image/png' });
+  const transfer = () => ({ types: ['Files'], items: [{ kind: 'file', type: 'image/png', getAsFile: png }], files: [png()] });
+  /** jsdom lays nothing out: give each block a box, stacked 100px apart. */
+  const boxes = (at: (p: string) => HTMLElement, rects: Record<string, [number, number]>) => {
+    for (const [path, [top, height]] of Object.entries(rects))
+      at(path).getBoundingClientRect = () => ({ x: 0, y: top, top, bottom: top + height, left: 0, right: 600, width: 600, height, toJSON: () => ({}) }) as DOMRect;
+  };
+  const drop = (target: Element, clientY: number) => {
+    const event = new Event('drop', { bubbles: true, cancelable: true });
+    Object.defineProperty(event, 'dataTransfer', { value: transfer() });
+    Object.defineProperty(event, 'clientY', { value: clientY });
+    target.dispatchEvent(event);
+  };
+
+  it('on a block: before or after it, by which half the pointer is in', () => {
+    const { at } = mount(DOC);
+    boxes(at, { '0': [0, 400], '0.0': [0, 50], '0.1': [100, 50], '0.2': [200, 100] });
+    drop(at('0.1'), 110);
+    expect(last(STORY_IMAGE_DROP_MESSAGE)).toMatchObject({ at: { path: '0.1', side: 'before' } });
+    drop(at('0.1'), 140);
+    expect(last(STORY_IMAGE_DROP_MESSAGE)).toMatchObject({ at: { path: '0.1', side: 'after' } });
+  });
+
+  it('in a container\'s gap: before the first block below the pointer, or after the last', () => {
+    const { at } = mount(DOC);
+    boxes(at, { '0': [0, 400], '0.0': [0, 50], '0.1': [100, 50], '0.2': [200, 100] });
+    drop(at('0'), 75); // between one and two
+    expect(last(STORY_IMAGE_DROP_MESSAGE)).toMatchObject({ at: { path: '0.1', side: 'before' } });
+    drop(at('0'), 390); // below everything
+    expect(last(STORY_IMAGE_DROP_MESSAGE)).toMatchObject({ at: { path: '0.2', side: 'after' } });
+  });
+
+  it('a drop outside every block says so (null), so the page appends rather than guessing', () => {
+    mount(DOC);
+    drop(document.body, 10);
+    expect(last(STORY_IMAGE_DROP_MESSAGE)).toMatchObject({ at: null });
+  });
+
+  it('a paste carries no gap — the page places it at its own selection', () => {
+    mount(DOC);
+    const event = new Event('paste', { bubbles: true, cancelable: true });
+    Object.defineProperty(event, 'clipboardData', { value: transfer() });
+    document.dispatchEvent(event);
+    expect(last(STORY_IMAGE_DROP_MESSAGE)).not.toHaveProperty('at');
+  });
+});
+
+describe('createFrameEditSession — selecting what was just inserted', () => {
+  it('waits for a node the re-render has not drawn yet, then selects it and brings it into view', async () => {
+    const { session, at } = mount('<div className="p-8"><p>one</p></div>');
+    const scrolled: Element[] = [];
+    const late = document.createElement('img');
+    late.setAttribute('data-mx-ast', '0.1');
+    late.scrollIntoView = function () { scrolled.push(this); };
+    session.setNodes(nodesOf('<div className="p-8"><p>one</p><img src="https://example.com/a.png" alt="" /></div>'));
+    session.onParentMessage({ type: STORY_SELECT_MESSAGE, path: '0.1', reveal: true } as StoryEditParentMessage);
+    at('0').append(late); // the re-render lands a moment later
+    await new Promise((r) => setTimeout(r, 120));
+    expect(last(STORY_SELECTION_MESSAGE)).toMatchObject({ selection: { path: '0.1', tag: 'img' } });
+    expect(scrolled).toEqual([late]);
+  });
+});

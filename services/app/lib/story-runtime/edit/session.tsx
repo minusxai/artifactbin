@@ -520,6 +520,8 @@ export function createFrameEditSession({
    * style attribute) and transparent to the pointer, so the drop still lands
    * on the image.
    */
+  /** The latest select request; a waiting reveal gives way to any newer one. */
+  let selectRequest = 0;
   let dropTarget: HTMLElement | null = null;
   let dropLabel: HTMLElement | null = null;
   const markDropTarget = (el: HTMLElement | null) => {
@@ -555,6 +557,36 @@ export function createFrameEditSession({
     }
   };
 
+  /** Parts of a line: never a gap of their own — the block holding them is. */
+  const LINE_PARTS = new Set(['span', 'strong', 'b', 'em', 'i', 'a', 'code', 'br', 'small', 'sup', 'sub', 's', 'del', 'u', 'mark']);
+  const isLinePart = (el: Element) => {
+    const node = resolveJsxNodeAtPath(nodes, el.getAttribute(AST_PATH_ATTR) ?? '');
+    return node?.type === 'element' && LINE_PARTS.has(node.tag);
+  };
+  /**
+   * The gap a file dropped at `clientY` over `target` lands in: over a block,
+   * the side of it the pointer is on; over a container's own space (its
+   * padding, the space between its blocks), before the first of its blocks
+   * below the pointer, or after the last. Null outside every block.
+   */
+  const dropGapAt = (target: EventTarget | null, clientY: number): { path: string; side: 'before' | 'after' } | null => {
+    let block = selectableAt(target);
+    while (block && isLinePart(block)) block = selectableAt(block.parentElement);
+    if (!block) return null;
+    const kids = [...block.querySelectorAll(`[${AST_PATH_ATTR}]`)].filter(
+      (el) => el.parentElement?.closest(`[${AST_PATH_ATTR}]`) === block && !isLinePart(el),
+    );
+    const sideOf = (el: Element) => {
+      const r = el.getBoundingClientRect();
+      return clientY < r.top + r.height / 2 ? ('before' as const) : ('after' as const);
+    };
+    if (kids.length === 0) return { path: block.getAttribute(AST_PATH_ATTR)!, side: sideOf(block) };
+    const below = kids.find((el) => sideOf(el) === 'before');
+    return below
+      ? { path: below.getAttribute(AST_PATH_ATTR)!, side: 'before' }
+      : { path: kids[kids.length - 1].getAttribute(AST_PATH_ATTR)!, side: 'after' };
+  };
+
   /** A double-click on an image opens the replace picker; the page owns the picker. */
   const onDoubleClick = (event: MouseEvent) => {
     const img = replaceableImageAt(event.target);
@@ -588,7 +620,9 @@ export function createFrameEditSession({
       event.type === 'drop'
         ? replaceableImageAt(event.target)?.getAttribute(AST_PATH_ATTR)
         : isImagePath(selectedPath) ? selectedPath : null;
-    post({ type: STORY_IMAGE_DROP_MESSAGE, file, ...(target ? { target } : {}) });
+    // Not onto an image: a drop lands in the gap it was dropped in; a paste is placed by the page.
+    const at = !target && event.type === 'drop' ? { at: dropGapAt(event.target, (event as DragEvent).clientY) } : {};
+    post({ type: STORY_IMAGE_DROP_MESSAGE, file, ...(target ? { target } : {}), ...at });
   };
 
   /**
@@ -979,13 +1013,34 @@ export function createFrameEditSession({
           post({ type: STORY_COMMITTED_MESSAGE });
           break;
         case STORY_SELECT_MESSAGE: {
+          const request = ++selectRequest;
           if (!message.path) {
             reportSelection(null);
             break;
           }
-          const el = scope.querySelector(`[${AST_PATH_ATTR}="${CSS.escape(message.path)}"]`);
-          if (el) selectBlock(el);
-          else reportSelection(null);
+          const path = message.path;
+          const described = () => {
+            const el = scope.querySelector(`[${AST_PATH_ATTR}="${CSS.escape(path)}"]`);
+            return el && describeSelection(el, nodes) ? { el } : null;
+          };
+          const found = described();
+          if (found || !message.reveal) {
+            if (found) selectBlock(found.el);
+            else reportSelection(null);
+            if (found && message.reveal) found.el.scrollIntoView?.({ block: 'center', behavior: 'smooth' });
+            break;
+          }
+          // Just inserted: the new document may not be drawn yet. Wait for it, briefly.
+          let tries = 0;
+          const wait = () => {
+            if (disposed || request !== selectRequest) return;
+            const late = described();
+            if (late) {
+              selectBlock(late.el);
+              late.el.scrollIntoView?.({ block: 'center', behavior: 'smooth' });
+            } else if (++tries < 60) win.setTimeout(wait, 25);
+          };
+          win.setTimeout(wait, 25);
           break;
         }
         case STORY_SPOTLIGHT_MESSAGE:

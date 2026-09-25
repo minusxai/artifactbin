@@ -105,7 +105,7 @@ describe('StoryFormatToolbar for a selected image', () => {
       kind: 'element', path: '0.3', tag: 'img', rect: { x: 0, y: 0, width: 100, height: 100 },
       className: 'my-6 w-1/2 rounded-xl', style: '', ancestors: [],
     };
-    const image = { alt, onReplaceFile: vi.fn(), onReplaceUrl: vi.fn(), onAlt: vi.fn() };
+    const image = { alt, onReplace: vi.fn(), onAlt: vi.fn() };
     render(
       <StoryFormatToolbar
         artifactId="doc1"
@@ -129,15 +129,11 @@ describe('StoryFormatToolbar for a selected image', () => {
     for (const name of TEXT_ONLY) expect(screen.queryByLabelText(name)).toBeNull();
   });
 
-  it('replaces from a file or from a URL', () => {
+  it('Replace opens the replace dialog — one button, no menu', () => {
     const image = renderImage('A chart');
     fireEvent.click(screen.getByLabelText('Replace image'));
-    fireEvent.click(screen.getByLabelText('Replace image from file'));
-    expect(image.onReplaceFile).toHaveBeenCalledTimes(1);
-    fireEvent.click(screen.getByLabelText('Replace image'));
-    fireEvent.change(screen.getByLabelText('Replacement image URL'), { target: { value: 'https://example.com/b.png' } });
-    fireEvent.click(screen.getByLabelText('Replace image from URL'));
-    expect(image.onReplaceUrl).toHaveBeenCalledWith('https://example.com/b.png');
+    expect(image.onReplace).toHaveBeenCalledTimes(1);
+    expect(screen.queryByLabelText('Replace image options')).toBeNull();
   });
 
   it('hints when the image has no alt text, and commits an edit once', () => {

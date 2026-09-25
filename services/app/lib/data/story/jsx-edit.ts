@@ -184,36 +184,137 @@ export function setStaticJsxAttr(el: JsxElement, name: string, json: JsonValue |
 }
 
 /**
- * Insert an uploaded image (`<img src="ref:<id>" />`) into a story body.
- *
- * Appended to the first top-level container's children (or the top level if the
- * document is bare) rather than at a clicked cursor: mapping an iframe text
- * caret to an AST path is fragile, and — decisively — the upload is ASYNC, so a
- * captured path could name a different node by the time the bytes land (the same
- * positional-path hazard the chart selection drops a selection to avoid). "End
- * of the document" is always valid against whatever the source currently is, so
- * this stays correct even if the document was replaced while the upload was in
- * flight. Returns `source` unchanged if it doesn't parse, the id is malformed,
- * or the result would fail validation — a bad insert must never corrupt a body.
+ * Where an inserted image goes: the node the person is on (the toolbar's
+ * selection, captured when the insert was asked for — its source path, and
+ * its authored id when it has one, since the upload is async), and optionally
+ * which side of it. A drop names a side (the gap it landed in); the toolbar
+ * and a paste leave it to `placeImageInJsx`'s rule.
  */
-export function insertImageInJsx(source: string, imageId: string): string {
-  if (!/^[A-Za-z0-9]{6,12}$/.test(imageId)) return source;
-  const parsed = parseJsx(source);
-  if (!parsed.ok) return source;
-  const imgParsed = parseJsx(`<img src="ref:${imageId}" alt="" className="my-6 block w-full rounded-md" />`);
-  if (!imgParsed.ok) return source;
-  const img = imgParsed.nodes.find((n): n is JsxElement => n.type === 'element');
-  if (!img) return source;
+export interface JsxInsertAnchor {
+  path: string;
+  nodeId?: string;
+  side?: 'before' | 'after' | 'inside';
+}
 
+/** Parts of a line: an image never goes inside one — it goes below the block holding it. */
+const INLINE_TAGS = immutableSet(['span', 'strong', 'b', 'em', 'i', 'a', 'code', 'br', 'small', 'sup', 'sub', 's', 'del', 'u', 'mark', 'kbd', 'abbr', 'time']);
+/** A table and a list take no loose image among their parts: below the whole table or list. */
+const WHOLE_PARTS = immutableSet(['thead', 'tbody', 'tfoot', 'tr', 'td', 'th', 'caption', 'colgroup', 'col', 'li']);
+/** Things an image goes INSIDE, at the end of their contents. */
+const CONTAINER_COMPONENTS = immutableSet(['Card', 'CardContent', 'CardHeader', 'CardFooter', 'GridItem', 'Slide']);
+const CONTAINER_TAGS = immutableSet(['div', 'section', 'article', 'main', 'aside', 'header', 'footer', 'figure', 'nav']);
+
+interface Located { node: JsxElement; parts: number[] }
+
+/** The element an anchor names — by id first (it survives moves), else by path. */
+function locateAnchor(nodes: JsxNode[], anchor: { path: string; nodeId?: string }): Located | null {
+  if (anchor.nodeId) {
+    const found: Located[] = [];
+    const visit = (list: JsxNode[], prefix: number[]) => list.forEach((n, i) => {
+      if (n.type !== 'element') return;
+      const id = n.attributes.find((a) => a.name === 'id');
+      if (id?.value.static && id.value.json === anchor.nodeId) found.push({ node: n, parts: [...prefix, i] });
+      visit(n.children, [...prefix, i]);
+    });
+    visit(nodes, []);
+    return found.length === 1 ? found[0] : null;
+  }
+  const parts = anchor.path.split('.').map(Number);
+  if (!anchor.path || parts.some((n) => !Number.isInteger(n) || n < 0)) return null;
+  const node = resolveByPath(nodes, anchor.path);
+  return node?.type === 'element' ? { node, parts } : null;
+}
+
+const elementAt = (nodes: JsxNode[], parts: number[]): JsxElement | null => {
+  const node = parts.length ? resolveByPath(nodes, parts.join('.')) : null;
+  return node?.type === 'element' ? node : null;
+};
+
+/**
+ * Put an uploaded image (`<img src="ref:<id>" />`) where the person is:
+ *  - a text block (or any inline part of one): directly below that block,
+ *    in the same container — a caret mid-paragraph never splits it;
+ *  - a container (a card, its content, a grid cell, a section, a div of
+ *    blocks): inside it, at the end of its contents;
+ *  - anything else — a chart, an image, a table, a list, a grid: directly
+ *    below it (a list item or table cell counts as its whole list or table);
+ *  - no anchor, or one the document no longer has: the end of the first
+ *    top-level container (the only case that appends).
+ * A drop's explicit side is honoured, except that a grid cell's gap is its
+ * inside — an image is never a loose child of `<Grid>`.
+ *
+ * Returns the new source and the image's SOURCE path (so the editor can
+ * select it), or `source` unchanged and a null path when it does not parse or
+ * the id is malformed — a bad insert must never corrupt a body.
+ */
+export function placeImageInJsx(
+  source: string, imageId: string, anchor?: JsxInsertAnchor | null,
+): { source: string; path: string | null } {
+  const unchanged = { source, path: null };
+  if (!/^[A-Za-z0-9]{6,12}$/.test(imageId)) return unchanged;
+  const parsed = parseJsx(source);
+  if (!parsed.ok) return unchanged;
+  const imgParsed = parseJsx(`<img src="ref:${imageId}" alt="" className="my-6 block w-full rounded-md" />`);
+  const img = imgParsed.ok ? imgParsed.nodes.find((n): n is JsxElement => n.type === 'element') : undefined;
+  if (!img) return unchanged;
   const roots = parsed.nodes;
-  const container = roots.find((n): n is JsxElement => n.type === 'element' && !n.isComponent);
-  if (container) container.children.push(img);
-  else roots.push(img);
+
+  let at = anchor ? locateAnchor(roots, anchor) : null;
+  // Climb out of line parts and table/list parts to the block that holds them.
+  while (at && (INLINE_TAGS.has(at.node.tag) || WHOLE_PARTS.has(at.node.tag)
+    || elementAt(roots, at.parts.slice(0, -1))?.tag === 'li') && at.parts.length > 1) {
+    const parts = at.parts.slice(0, -1);
+    const parent = elementAt(roots, parts);
+    at = parent ? { node: parent, parts } : null;
+  }
+
+  if (at) {
+    const { node, parts } = at;
+    const isContainer = node.isComponent
+      ? CONTAINER_COMPONENTS.has(node.tag)
+      : CONTAINER_TAGS.has(node.tag) && !isEditableTextHost(node);
+    let side = anchor?.side ?? (isContainer ? 'inside' : 'after');
+    if (node.tag === 'GridItem') side = 'inside';
+    if (side === 'inside') {
+      node.children.push(img);
+      node.selfClosing = false;
+      return { source: serializeJsx(roots), path: [...parts, node.children.length - 1].join('.') };
+    }
+    const siblings = parts.length > 1 ? elementAt(roots, parts.slice(0, -1))?.children : roots;
+    if (siblings) {
+      const index = parts[parts.length - 1] + (side === 'after' ? 1 : 0);
+      siblings.splice(index, 0, img);
+      return { source: serializeJsx(roots), path: [...parts.slice(0, -1), index].join('.') };
+    }
+  }
 
   // A plain <img> with a ref: src is exactly what the publish path already
   // accepts, and it re-validates the whole body on save — so the structural
   // insert is all that is owed here.
-  return serializeJsx(roots);
+  const containerIndex = roots.findIndex((n) => n.type === 'element' && !n.isComponent);
+  const container = containerIndex === -1 ? null : (roots[containerIndex] as JsxElement);
+  if (container) {
+    container.children.push(img);
+    container.selfClosing = false;
+    return { source: serializeJsx(roots), path: `${containerIndex}.${container.children.length - 1}` };
+  }
+  roots.push(img);
+  return { source: serializeJsx(roots), path: String(roots.length - 1) };
+}
+
+/** `placeImageInJsx`'s source alone — the insert without the editor's follow-up selection. */
+export function insertImageInJsx(source: string, imageId: string, anchor?: JsxInsertAnchor | null): string {
+  return placeImageInJsx(source, imageId, anchor).source;
+}
+
+/** Capture the element at a source path as an insert anchor: its path, and its authored id when it has one. */
+export function nodeTargetInJsx(source: string, path: string): { path: string; nodeId?: string } | null {
+  const parsed = parseJsx(source);
+  if (!parsed.ok) return null;
+  const node = resolveByPath(parsed.nodes, path);
+  if (!node || node.type !== 'element') return null;
+  const id = node.attributes.find((a) => a.name === 'id');
+  return id?.value.static && typeof id.value.json === 'string' && id.value.json ? { path, nodeId: id.value.json } : { path };
 }
 
 /**

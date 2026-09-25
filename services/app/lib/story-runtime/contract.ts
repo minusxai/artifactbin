@@ -668,6 +668,13 @@ interface StoryImageDropMessage {
    * only says which image the person meant.
    */
   target?: string;
+  /**
+   * Where a DROPPED file lands when it is not replacing: the gap between the
+   * blocks nearest the pointer, as a block and a side of it. Null when the drop
+   * was outside every block (the page then appends). Absent on a paste, which
+   * the page places at its own selection.
+   */
+  at?: { path: string; side: 'before' | 'after' | 'inside' } | null;
 }
 
 /**
@@ -746,7 +753,15 @@ interface StoryCommittedMessage { type: typeof STORY_COMMITTED_MESSAGE; nonce: s
 
 /** Parent → frame: select an element by path (a breadcrumb click, a panel opening), or clear with null. */
 export const STORY_SELECT_MESSAGE = 'mx:select';
-interface StorySelectMessage { type: typeof STORY_SELECT_MESSAGE; path: string | null }
+interface StorySelectMessage {
+  type: typeof STORY_SELECT_MESSAGE;
+  path: string | null;
+  /**
+   * Something the page just inserted: the node may not be drawn yet (the new
+   * document is still rendering), so wait briefly for it, then scroll it into view.
+   */
+  reveal?: boolean;
+}
 
 /**
  * Parent → frame: SPOTLIGHT nodes by BODY path without selecting them — the

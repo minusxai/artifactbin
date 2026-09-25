@@ -39,6 +39,24 @@ import { editBlock } from '@/lib/editor-v2/block-edit';
 import { replaceProseRegion } from '@/lib/editor-v2/source-edit';
 import { composeSource, type ComposableFormatEdit } from '@/lib/story/edit-compose';
 
+/**
+ * Where a pasted/dropped image goes: `replace` names the image it replaces;
+ * `at` is the gap a drop landed in (null: outside every block, so append).
+ * Absent, the page places it at its own selection.
+ */
+export interface ImageDropPlacement {
+  replace?: string;
+  at?: { path: string; side: 'before' | 'after' | 'inside' } | null;
+}
+
+const SIDES = new Set(['before', 'after', 'inside']);
+function dropGap(at: unknown): ImageDropPlacement['at'] {
+  const gap = at as { path?: unknown; side?: unknown } | null;
+  return gap && typeof gap.path === 'string' && typeof gap.side === 'string' && SIDES.has(gap.side)
+    ? { path: gap.path, side: gap.side as 'before' | 'after' | 'inside' }
+    : null;
+}
+
 interface InPlaceEditOptions {
   onError?: (message: string) => void;
   onRejectedEdit?: (fragment: string) => void;
@@ -67,7 +85,7 @@ interface InPlaceEditOptions {
    * frame (that is the realm the event fires in), so it arrives as a message;
    * the page runs the same insert the file picker does.
    */
-  onImageDrop?: (file: File, target?: string) => void;
+  onImageDrop?: (file: File, where?: ImageDropPlacement) => void;
   /** An image was double-clicked: open the replace picker for the image at this BODY path. */
   onImageReplaceRequest?: (path: string) => void;
 }
@@ -88,7 +106,7 @@ export interface InPlaceEditController {
   pasteMarkdown: (value: string) => void;
   restoreSelection: (bookmark: EditorBookmark) => void;
   /** Select a node by path (a breadcrumb click, a panel opening) or clear it. */
-  select: (path: string | null) => void;
+  select: (path: string | null, options?: { reveal?: boolean }) => void;
   /** Outline nodes by path WITHOUT selecting them (the query notebook pointing at what a query powers); [] clears. */
   spotlight: (paths: string[]) => void;
   /**
@@ -233,8 +251,11 @@ export function useInPlaceEdit(options: InPlaceEditOptions): InPlaceEditControll
           const file = event.data.file;
           // A drop ONTO an image, or a paste while one is selected, replaces it.
           const target = typeof event.data.target === 'string' ? event.data.target : null;
+          const where: ImageDropPlacement | null = target
+            ? { replace: target }
+            : 'at' in event.data ? { at: dropGap(event.data.at) } : null;
           const drain = commitPendingRef.current?.() ?? Promise.resolve();
-          drain.then(() => (target ? onImageDropRef.current?.(file, target) : onImageDropRef.current?.(file)));
+          drain.then(() => (where ? onImageDropRef.current?.(file, where) : onImageDropRef.current?.(file)));
           break;
         }
         case 'mx:image-replace':
@@ -301,7 +322,7 @@ export function useInPlaceEdit(options: InPlaceEditOptions): InPlaceEditControll
   );
 
   const select = useCallback(
-    (path: string | null) => {
+    (path: string | null, options?: { reveal?: boolean }) => {
       /*
        * DESELECTING NEEDS NO ANSWER. Selecting does — only the document can
        * describe what is at a path (its rect, its classes, its ancestors), so
@@ -311,7 +332,7 @@ export function useInPlaceEdit(options: InPlaceEditOptions): InPlaceEditControll
        * The document is still told, so it drops its own selected stamp.
        */
       if (path === null) setSelection(null);
-      postToFrame({ type: STORY_SELECT_MESSAGE, path });
+      postToFrame({ type: STORY_SELECT_MESSAGE, path, ...(options?.reveal ? { reveal: true } : {}) });
     },
     [postToFrame],
   );

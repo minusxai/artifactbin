@@ -8,7 +8,8 @@
 import { describe, it, expect } from 'vitest';
 
 import {
-  imageAltInJsx, imageTargetInJsx, insertImageInJsx, removeJsxNodeAtPath, replaceImageSrcInJsx, setImageAltInJsx,
+  imageAltInJsx, imageTargetInJsx, insertImageInJsx, nodeTargetInJsx, placeImageInJsx, removeJsxNodeAtPath, replaceImageSrcInJsx,
+  setImageAltInJsx,
 } from '@/lib/data/story/jsx-edit';
 import { parseJsx } from '@/lib/jsx';
 import { expectValidStoryJsx } from '@/test/helpers/jsx';
@@ -183,5 +184,99 @@ describe('imageTargetInJsx / imageAltInJsx — capturing the image an edit means
     expect(imageTargetInJsx(src, '0.1')).toBeNull();
     expect(imageTargetInJsx(src, '0.7')).toBeNull();
     expect(imageTargetInJsx('<div><img', '0.0')).toBeNull();
+  });
+});
+
+/**
+ * WHERE AN INSERTED IMAGE GOES: at the node the person is on — the toolbar's
+ * selection, the same node they see highlighted.
+ *  - a text block (caret anywhere in it): directly below it, same container;
+ *  - a container (card, card content, grid cell, section): inside, at the end;
+ *  - a non-text leaf (chart, image, table): directly below it;
+ *  - nothing: the end of the document — the only case that appends.
+ * The result names the new image's path so the editor can select it.
+ */
+describe('placeImageInJsx', () => {
+  const DOC = '<div className="p-8"><h1>T</h1><p>one</p><p>two <strong>bold</strong></p>'
+    + '<Card><CardContent><p>in card</p></CardContent></Card>'
+    + '<Grid mode="flow"><GridItem w={6}><p>cell</p></GridItem></Grid>'
+    + '<ul><li>a</li><li>b</li></ul><table><tbody><tr><td>x</td></tr></tbody></table>'
+    + '<Question data="$q" /><img src="ref:Old111" alt="o" /><section><p>s</p></section></div>';
+  const IMG = '<img src="ref:New222" alt="" className="my-6 block w-full rounded-md" />';
+  const place = (anchor?: Parameters<typeof placeImageInJsx>[2]) => placeImageInJsx(DOC, 'New222', anchor);
+  const at = (out: { source: string; path: string | null }, before: string) => {
+    expect(out.source).toContain(`${before}${IMG}`);
+    expectValidStoryJsx(out.source);
+  };
+
+  it('a text block: directly below it', () => {
+    const out = place({ path: '0.1' });
+    at(out, '<p>one</p>');
+    expect(out.path).toBe('0.2');
+    at(place({ path: '0.0' }), '<h1>T</h1>');
+  });
+
+  it('an inline part of a paragraph: below the paragraph, never inside it', () => {
+    const out = place({ path: '0.2.1' }); // <strong>
+    at(out, '<p>two <strong>bold</strong></p>');
+    expect(out.path).toBe('0.3');
+  });
+
+  it('a text block inside a card: below it, still inside the card', () => {
+    const out = place({ path: '0.3.0.0' });
+    at(out, '<p>in card</p>');
+    expect(out.path).toBe('0.3.0.1');
+  });
+
+  it('a container — card, card content, grid cell, section — takes it inside, at the end', () => {
+    expect(place({ path: '0.3' }).source).toContain(`</CardContent>${IMG}</Card>`);
+    expect(place({ path: '0.3.0' }).source).toContain(`<p>in card</p>${IMG}</CardContent>`);
+    expect(place({ path: '0.4.0' }).source).toContain(`<p>cell</p>${IMG}</GridItem>`);
+    const section = place({ path: '0.9' });
+    expect(section.source).toContain(`<p>s</p>${IMG}</section>`);
+    expect(section.path).toBe('0.9.1');
+  });
+
+  it('the grid itself is a leaf: below it, never loose among its cells', () => {
+    at(place({ path: '0.4' }), '</Grid>');
+  });
+
+  it('a list item or a table cell: below the whole list or table', () => {
+    at(place({ path: '0.5.1' }), '</ul>');
+    at(place({ path: '0.6.0.0.0' }), '</table>');
+  });
+
+  it('a non-text leaf — a chart, an image: directly below it', () => {
+    at(place({ path: '0.7' }), '<Question data="$q" />');
+    at(place({ path: '0.8' }), '<img src="ref:Old111" alt="o" />');
+  });
+
+  it('nothing selected, or a target that is gone: the end of the document', () => {
+    for (const out of [place(), place({ path: '0.99' }), place({ path: '0.1', nodeId: 'gone' })]) {
+      expect(out.source).toContain(`<section><p>s</p></section>${IMG}</div>`);
+      expect(out.path).toBe('0.10');
+    }
+  });
+
+  it('follows the authored id when the path moved while the upload ran', () => {
+    const src = '<div><p id="a">a</p><p id="b">b</p></div>';
+    const moved = '<div><p id="z">new</p><p id="a">a</p><p id="b">b</p></div>';
+    expect(nodeTargetInJsx(src, '0.0')).toEqual({ path: '0.0', nodeId: 'a' });
+    const out = placeImageInJsx(moved, 'New222', { path: '0.0', nodeId: 'a' });
+    expect(out.source).toContain(`<p id="a">a</p>${IMG}<p id="b">`);
+    expect(out.path).toBe('0.2');
+  });
+
+  it('an explicit side from a drop: before, after or inside', () => {
+    expect(place({ path: '0.1', side: 'before' }).source).toContain(`<h1>T</h1>${IMG}<p>one</p>`);
+    at(place({ path: '0.1', side: 'after' }), '<p>one</p>');
+    expect(place({ path: '0.3.0', side: 'inside' }).source).toContain(`<p>in card</p>${IMG}</CardContent>`);
+    // A grid cell's gap is its inside: an image is never a loose child of <Grid>.
+    expect(place({ path: '0.4.0', side: 'before' }).source).toContain(`<GridItem w={6}><p>cell</p>${IMG}</GridItem>`);
+  });
+
+  it('insertImageInJsx still appends when given no anchor, and takes one when given', () => {
+    expect(insertImageInJsx(DOC, 'New222')).toBe(place().source);
+    expect(insertImageInJsx(DOC, 'New222', { path: '0.1' })).toBe(place({ path: '0.1' }).source);
   });
 });

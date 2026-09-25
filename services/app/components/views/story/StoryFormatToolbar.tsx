@@ -32,6 +32,7 @@ import {
   ArrowUpToLine,
   Baseline,
   Bold,
+  ImageUp,
   Italic,
   Link2,
   Link2Off,
@@ -97,10 +98,8 @@ interface StoryFormatToolbarProps {
 export interface ImageControls {
   /** The image's alt text; null when it has none (the button then hints). */
   alt: string | null;
-  /** Open the file picker whose choice replaces this image. */
-  onReplaceFile: () => void;
-  /** Import a URL and replace this image with it. */
-  onReplaceUrl: (url: string) => void;
+  /** Open the "Replace image" dialog for this image. */
+  onReplace: () => void;
   /** Commit new alt text; blank removes it. Called once per committed change. */
   onAlt: (alt: string) => void;
 }
@@ -123,8 +122,6 @@ export default function StoryFormatToolbar({
   useEffect(()=>{if(!artifactId||!linkDraft?.startsWith('@')){setPeople([]);return;}const abort=new AbortController();void fetch(`/api/my/artifacts/${encodeURIComponent(artifactId)}/members?query=${encodeURIComponent(linkDraft.slice(1))}`,{signal:abort.signal}).then(r=>r.ok?r.json():{people:[]}).then(r=>setPeople(r.people??[])).catch(()=>{});return()=>abort.abort();},[artifactId,linkDraft]);
   const [alignmentOpen, setAlignmentOpen] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
-  const [replaceOpen, setReplaceOpen] = useState(false);
-  const [replaceUrl, setReplaceUrl] = useState('');
   const [altDraft, setAltDraft] = useState<string | null>(null);
   const linkInputRef = useRef<HTMLInputElement>(null);
   // A deep trail overflows on a phone: keep its end, the selected node, in view.
@@ -138,8 +135,6 @@ export default function StoryFormatToolbar({
     setLinkDraft(null);
     setMoreOpen(false);
     setAlignmentOpen(false);
-    setReplaceOpen(false);
-    setReplaceUrl('');
     setAltDraft(null);
   }, [selection?.path]);
   useEffect(() => {
@@ -164,13 +159,6 @@ export default function StoryFormatToolbar({
       ? onApplyInline(group === 'weight' ? 'strong' : group === 'fontStyle' ? 'em' : 'u')
       : apply(applyTypographyChoice(cls, group, currentChoice(cls, group) === token ? null : token));
 
-  const replaceFromUrl = () => {
-    const url = replaceUrl.trim();
-    if (!url || !image) return;
-    image.onReplaceUrl(url);
-    setReplaceUrl('');
-    setReplaceOpen(false);
-  };
   /** One committed change, one call: an unchanged draft is not an edit. */
   const commitAlt = () => {
     if (altDraft === null || !image) return;
@@ -302,43 +290,16 @@ export default function StoryFormatToolbar({
 
         {plan.image && image && (
           <>
-            <StoryToolbarMenu label="Replace" name="Replace image" open={replaceOpen} onOpenChange={setReplaceOpen}>
-              <div className="w-64 max-w-full">
-                <button
-                  type="button"
-                  aria-label="Replace image from file"
-                  onClick={() => {
-                    setReplaceOpen(false);
-                    image.onReplaceFile();
-                  }}
-                  className="w-full cursor-pointer rounded-[4px] border border-edge px-2 py-1 text-left font-mono text-[11px] text-fg hover:border-edge-bright hover:bg-raised"
-                >
-                  Upload file…
-                </button>
-                <div className="mt-2 flex gap-1.5">
-                  <input
-                    aria-label="Replacement image URL"
-                    value={replaceUrl}
-                    placeholder="or an image URL (https://…)"
-                    onChange={(e) => setReplaceUrl(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key !== 'Enter') return;
-                      e.preventDefault();
-                      replaceFromUrl();
-                    }}
-                    className="min-w-0 flex-1 rounded-[4px] border border-edge bg-transparent px-1.5 py-1 font-mono text-[11px] text-fg focus:border-edge-bright focus:outline-none"
-                  />
-                  <button
-                    type="button"
-                    aria-label="Replace image from URL"
-                    onClick={replaceFromUrl}
-                    className="cursor-pointer rounded-[4px] border border-edge px-2 py-1 font-mono text-[11px] text-fg hover:border-edge-bright hover:bg-raised"
-                  >
-                    replace
-                  </button>
-                </div>
-              </div>
-            </StoryToolbarMenu>
+            <button
+              type="button"
+              aria-label="Replace image"
+              onMouseDown={keepFocus}
+              onClick={image.onReplace}
+              className="inline-flex h-8 shrink-0 cursor-pointer items-center gap-1.5 rounded-md px-2 font-mono text-[11px] leading-none text-fg hover:bg-surface"
+            >
+              <ImageUp size={12} />
+              Replace
+            </button>
             <StoryToolbarMenu
               label={image.alt === null ? 'Add alt text' : 'Alt text'}
               hint={image.alt === null}

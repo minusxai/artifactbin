@@ -18,7 +18,7 @@ const NONCE = 'n'.repeat(24);
 const png = () => new File(['x'], 'clip.png', { type: 'image/png' });
 
 function Harness({ onImageDrop, onImageReplaceRequest }: {
-  onImageDrop: (file: File, target?: string) => void;
+  onImageDrop: (file: File, where?: { replace?: string; at?: unknown }) => void;
   onImageReplaceRequest?: (path: string) => void;
 }) {
   const frameRef = useRef<HTMLIFrameElement | null>(null);
@@ -107,7 +107,7 @@ describe('useInPlaceEdit — an image dropped ONTO an image', () => {
     const file = png();
     await dispatchMessage(frame.contentWindow, { type: STORY_IMAGE_DROP_MESSAGE, nonce: NONCE, file, target: '0.2' });
     await dispatchMessage(frame.contentWindow, { type: 'mx:committed', nonce: NONCE });
-    expect(onImageDrop).toHaveBeenCalledWith(file, '0.2');
+    expect(onImageDrop).toHaveBeenCalledWith(file, { replace: '0.2' });
   });
 
   it('ignores a target that is not a path', async () => {
@@ -116,6 +116,27 @@ describe('useInPlaceEdit — an image dropped ONTO an image', () => {
     await dispatchMessage(frame.contentWindow, { type: STORY_IMAGE_DROP_MESSAGE, nonce: NONCE, file, target: { evil: 1 } });
     await dispatchMessage(frame.contentWindow, { type: 'mx:committed', nonce: NONCE });
     expect(onImageDrop).toHaveBeenCalledWith(file);
+  });
+});
+
+describe('useInPlaceEdit — a file dropped between blocks', () => {
+  it('hands on the gap it landed in, or null for "outside every block"', async () => {
+    const { onImageDrop, frame } = mount();
+    const file = png();
+    await dispatchMessage(frame.contentWindow, { type: STORY_IMAGE_DROP_MESSAGE, nonce: NONCE, file, at: { path: '0.1', side: 'before' } });
+    await dispatchMessage(frame.contentWindow, { type: 'mx:committed', nonce: NONCE });
+    expect(onImageDrop).toHaveBeenLastCalledWith(file, { at: { path: '0.1', side: 'before' } });
+    await dispatchMessage(frame.contentWindow, { type: STORY_IMAGE_DROP_MESSAGE, nonce: NONCE, file, at: null });
+    await dispatchMessage(frame.contentWindow, { type: 'mx:committed', nonce: NONCE });
+    expect(onImageDrop).toHaveBeenLastCalledWith(file, { at: null });
+  });
+
+  it('drops a malformed gap rather than trusting it', async () => {
+    const { onImageDrop, frame } = mount();
+    const file = png();
+    await dispatchMessage(frame.contentWindow, { type: STORY_IMAGE_DROP_MESSAGE, nonce: NONCE, file, at: { path: 7, side: 'sideways' } });
+    await dispatchMessage(frame.contentWindow, { type: 'mx:committed', nonce: NONCE });
+    expect(onImageDrop).toHaveBeenLastCalledWith(file, { at: null });
   });
 });
 

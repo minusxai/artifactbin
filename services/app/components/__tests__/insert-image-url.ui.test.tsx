@@ -6,7 +6,7 @@
  * source. A refusal SHOWS — the door's whole point is naming what failed.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, fireEvent, waitFor, act, cleanup } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, act, cleanup, within } from '@testing-library/react';
 
 const queue = vi.fn();
 const flushNow = vi.fn(async () => {});
@@ -58,95 +58,143 @@ afterEach(() => {
   document.body.innerHTML = '';
 });
 
-const mount = () =>
-  render(
+/** A document that answers every commit request, as the real frame does. */
+let posted: Array<Record<string, unknown>>;
+let frameWin: Window;
+const fromFrame = async (data: Record<string, unknown>) => {
+  await act(async () => {
+    window.dispatchEvent(new MessageEvent('message', { data: { nonce: NONCE, ...data }, source: frameWin }));
+    await Promise.resolve();
+  });
+};
+beforeEach(() => {
+  posted = [];
+  frameWin = {
+    postMessage: (m: Record<string, unknown>) => {
+      posted.push(m);
+      if (m.type === 'mx:commit' && !m.restore) setTimeout(() => void fromFrame({ type: 'mx:committed' }), 0);
+    },
+  } as unknown as Window;
+  Object.defineProperty(frameEl, 'contentWindow', { configurable: true, value: frameWin });
+  URL.createObjectURL = vi.fn(() => 'blob:preview');
+  URL.revokeObjectURL = vi.fn();
+});
+const lastSource = () => (queue.mock.calls.at(-1)?.[0] as { source?: string } | undefined)?.source ?? '';
+const posts = (spy: ReturnType<typeof stubFetch>) =>
+  spy.mock.calls.filter(([, i]) => (i as RequestInit)?.method === 'POST') as Array<[string, RequestInit]>;
+const selectionOf = (path: string, tag: string, kind = 'element') => ({
+  kind, path, tag, rect: { x: 0, y: 0, width: 10, height: 10 }, className: '', style: '', ancestors: [],
+});
+
+/**
+ * INSERTING AN IMAGE: Insert ▸ Image… opens one dialog (Upload / From URL,
+ * preview, then Insert), and the image goes AT THE NODE the person is on —
+ * below a text block, inside a container, at the end only when nothing is
+ * selected — then is selected and scrolled to. One undo takes it out.
+ */
+describe('inserting an image', () => {
+  const DOC = '<div data-design="tw" className="p-4"><h1 id="h">Title</h1><p id="p1">one</p><p id="p2">two</p>'
+    + '<Card id="c"><CardContent id="cc"><p id="p3">in card</p></CardContent></Card></div>';
+  const IMG = (id: string) => `<img src="ref:${id}" alt="" className="my-6 block w-full rounded-md" />`;
+  const mountDoc = () => render(
     <InPlaceEditor
-      art={art as React.ComponentProps<typeof InPlaceEditor>['art']}
+      art={{ ...art, markup: DOC } as React.ComponentProps<typeof InPlaceEditor>['art']}
       frameRef={{ current: frameEl }}
       sessionNonce={NONCE}
     />,
   );
-
-describe('insert image from a URL', () => {
-  it('offers both ways in behind the one insert-image control', () => {
-    mount();
-    const trigger = screen.getByRole('button', { name: 'Insert' });
-    expect(trigger).toHaveAttribute('aria-expanded', 'false');
-    fireEvent.click(trigger);
-    expect(trigger).toHaveAttribute('aria-expanded', 'true');
-    expect(fireEvent.mouseDown(screen.getByLabelText('Image URL'))).toBe(true);
-    expect(fireEvent.mouseDown(screen.getByLabelText('Import image from URL'))).toBe(false);
-    expect(screen.getByLabelText('Import image from URL')).toBeTruthy();
-    expect(screen.getByLabelText('Upload image file')).toBeTruthy(); // the file path survives
-  });
-
-  it('imports the URL through the browser door and inserts the ref it became', async () => {
-    const fetchSpy = stubFetch(new Response(JSON.stringify({ id: 'img999' }), { status: 201 }));
-    mount();
+  const openDialog = () => {
     fireEvent.click(screen.getByRole('button', { name: 'Insert' }));
-    fireEvent.change(screen.getByLabelText('Image URL'), { target: { value: 'https://example.com/logo.png' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Image…' }));
+    return screen.getByRole('dialog', { name: 'Insert image' });
+  };
+  const importUrl = async (url = 'https://example.com/b.png') => {
+    fireEvent.change(screen.getByLabelText('Image URL'), { target: { value: url } });
     await act(async () => { fireEvent.click(screen.getByLabelText('Import image from URL')); });
+  };
+  const confirm = async () => {
+    await waitFor(() => expect(within(screen.getByRole('dialog')).getByRole('button', { name: 'Insert' })).not.toBeDisabled());
+    await act(async () => { fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Insert' })); });
+  };
 
-    const create = fetchSpy.mock.calls.find(([, i]) => (i as RequestInit)?.method === 'POST') as [string, RequestInit];
-    expect(create[0]).toContain('/api/my/artifacts');
-    expect(JSON.parse(String(create[1].body))).toEqual({ imageUrl: 'https://example.com/logo.png' });
-
-    await waitFor(() => expect(queue).toHaveBeenCalled());
-    const queued = queue.mock.calls.at(-1)?.[0] as { source?: string };
-    expect(queued.source).toContain('ref:img999');
-  });
-
-  it('pushes the new image\'s ref WITH the insert — otherwise it renders a broken `ref:` string', async () => {
-    // The served document's ref map was built before this image existed, so
-    // without the entry the interpreter writes the literal `ref:<id>` into
-    // src and the reader sees a 0×0 image until a full reload.
-    const posted: Array<Record<string, unknown>> = [];
-    Object.defineProperty(frameEl, 'contentWindow', {
-      configurable: true,
-      value: { postMessage: (m: Record<string, unknown>) => posted.push(m) },
-    });
-    stubFetch(new Response(JSON.stringify({ id: 'img777', rawUrl: '/a/img777/raw?v=1' }), { status: 201 }));
-    mount();
+  it('Insert is a plain menu: Image… and Paste Markdown', () => {
+    mountDoc();
     fireEvent.click(screen.getByRole('button', { name: 'Insert' }));
-    fireEvent.change(screen.getByLabelText('Image URL'), { target: { value: 'https://example.com/logo.png' } });
-    await act(async () => { fireEvent.click(screen.getByLabelText('Import image from URL')); });
-
-    await waitFor(() => expect(posted.some((m) => m.type === 'mx:document' && m.refData)).toBe(true));
-    const update = posted.filter((m) => m.type === 'mx:document' && m.refData).at(-1)!;
-    expect(update.refData).toEqual({ img777: { kind: 'image', url: '/a/img777/raw?v=1' } });
+    const menu = screen.getByLabelText('Insert options');
+    expect(within(menu).getAllByRole('button').map((b) => b.textContent)).toEqual(['Image…', 'Paste Markdown']);
+    fireEvent.click(screen.getByRole('button', { name: 'Image…' }));
+    expect(screen.getByRole('dialog', { name: 'Insert image' })).toBeTruthy();
   });
 
-  it('shows the door\'s refusal — a dead URL is an error the human reads, not silence', async () => {
+  it('with a caret in a paragraph: imports, inserts directly below it, selects and reveals it; one undo removes it', async () => {
+    const fetchSpy = stubFetch(new Response(JSON.stringify({ id: 'New222', rawUrl: '/a/New222/raw?v=1' }), { status: 201 }));
+    mountDoc();
+    await fromFrame({ type: 'mx:selection', selection: selectionOf('0.1', 'p', 'text') });
+    openDialog();
+    // Focus moving into the dialog can clear the document's selection; the target was captured on open.
+    await fromFrame({ type: 'mx:selection', selection: null });
+    await importUrl();
+    expect(JSON.parse(String(posts(fetchSpy)[0]![1].body))).toEqual({ imageUrl: 'https://example.com/b.png' });
+    expect(queue).not.toHaveBeenCalled(); // nothing changes before Insert
+    await confirm();
+    await waitFor(() => expect(lastSource()).toBe(DOC.replace('<p id="p1">one</p>', `<p id="p1">one</p>${IMG('New222')}`)));
+    expect(screen.queryByRole('dialog')).toBeNull();
+    const update = posted.filter((m) => m.type === 'mx:document' && m.refData).at(-1);
+    expect(update?.refData).toEqual({ New222: { kind: 'image', url: '/a/New222/raw?v=1' } });
+    expect(posted.filter((m) => m.type === 'mx:select').at(-1)).toMatchObject({ path: '0.2', reveal: true });
+
+    await act(async () => { fireEvent.click(screen.getByLabelText('Undo')); });
+    await waitFor(() => expect(lastSource()).toBe(DOC));
+  });
+
+  it('with a card selected: inside the card, at the end of its contents', async () => {
+    stubFetch(new Response(JSON.stringify({ id: 'New333' }), { status: 201 }));
+    mountDoc();
+    await fromFrame({ type: 'mx:selection', selection: selectionOf('0.3.0', 'CardContent', 'embed') });
+    openDialog();
+    await importUrl();
+    await confirm();
+    await waitFor(() => expect(lastSource()).toContain(`<p id="p3">in card</p>${IMG('New333')}</CardContent>`));
+  });
+
+  it('with nothing selected: at the end of the document', async () => {
+    const fetchSpy = stubFetch(new Response(JSON.stringify({ id: 'New444' }), { status: 201 }));
+    mountDoc();
+    openDialog();
+    const file = new File(['x'], 'a.png', { type: 'image/png' });
+    await act(async () => { fireEvent.change(screen.getByLabelText('Image file'), { target: { files: [file] } }); });
+    expect(posts(fetchSpy)[0]![1]).toMatchObject({ body: file, headers: { 'Content-Type': 'image/png' } });
+    await confirm();
+    await waitFor(() => expect(lastSource()).toBe(DOC.replace('</Card></div>', `</Card>${IMG('New444')}</div>`)));
+  });
+
+  it('shows the door\'s refusal in the dialog — a dead URL is a sentence, not silence', async () => {
     stubFetch(new Response(
       JSON.stringify({ error: 'image_fetch_failed', details: ['https://example.com/gone.png: answered 404'] }),
       { status: 400 },
     ));
-    mount();
-    fireEvent.click(screen.getByRole('button', { name: 'Insert' }));
-    fireEvent.change(screen.getByLabelText('Image URL'), { target: { value: 'https://example.com/gone.png' } });
-    await act(async () => { fireEvent.click(screen.getByLabelText('Import image from URL')); });
-
-    await waitFor(() => expect(screen.getByLabelText('Image upload error').textContent).toContain('404'));
+    mountDoc();
+    const dialog = openDialog();
+    await importUrl('https://example.com/gone.png');
+    await waitFor(() => expect(within(dialog).getByRole('alert').textContent).toContain('404'));
+    expect(within(dialog).getByRole('button', { name: 'Insert' })).toBeDisabled();
     expect(queue).not.toHaveBeenCalled();
   });
 
-  it('does nothing with an empty field', async () => {
-    const fetchSpy = stubFetch(new Response('{}', { status: 201 }));
-    mount();
-    fireEvent.click(screen.getByRole('button', { name: 'Insert' }));
-    await act(async () => { fireEvent.click(screen.getByLabelText('Import image from URL')); });
-    // The mount's own reads may fire; an IMPORT (a POST) must not.
-    expect(fetchSpy.mock.calls.some(([, i]) => (i as RequestInit)?.method === 'POST')).toBe(false);
+  it('a pasted image lands below the block with the caret; a dropped one in the gap it was dropped in', async () => {
+    stubFetch(new Response(JSON.stringify({ id: 'New555' }), { status: 201 }));
+    mountDoc();
+    await fromFrame({ type: 'mx:selection', selection: selectionOf('0.2', 'p', 'text') });
+    await fromFrame({ type: 'mx:image-drop', file: new File(['x'], 'p.png', { type: 'image/png' }) });
+    await waitFor(() => expect(lastSource()).toContain(`<p id="p2">two</p>${IMG('New555')}`));
+    expect(posted.filter((m) => m.type === 'mx:select').at(-1)).toMatchObject({ path: '0.3', reveal: true });
+
+    stubFetch(new Response(JSON.stringify({ id: 'New666' }), { status: 201 }));
+    await fromFrame({ type: 'mx:image-drop', file: new File(['x'], 'd.png', { type: 'image/png' }), at: { path: '0.1', side: 'before' } });
+    await waitFor(() => expect(lastSource()).toContain(`<h1 id="h">Title</h1>${IMG('New666')}<p id="p1">`));
   });
 });
 
-/**
- * REPLACING AN IMAGE from the editor: every door — the toolbar's Upload file
- * and From URL, a double-click, a drop onto the image, a paste while it is
- * selected — reaches ONE replace. Only `src` changes; the node keeps its id,
- * classes and alt text; the new ref is pushed with it (or it renders as a
- * literal `ref:` string); and one undo brings the old picture back.
- */
 describe('replacing an image', () => {
   const IMG_SOURCE = '<div data-design="tw" className="p-4"><h1 id="h">Title</h1>'
     + '<img id="im" src="ref:Old111" alt="A chart" className="my-6 w-1/2 rounded-xl" /></div>';
@@ -155,26 +203,6 @@ describe('replacing an image', () => {
     kind: 'element', path: '0.1', tag: 'img', rect: { x: 0, y: 0, width: 10, height: 10 },
     className: 'my-6 w-1/2 rounded-xl', style: '', ancestors: [],
   };
-
-  /** A document that answers every commit request, as the real frame does. */
-  let posted: Array<Record<string, unknown>>;
-  let frameWin: Window;
-  const fromFrame = async (data: Record<string, unknown>) => {
-    await act(async () => {
-      window.dispatchEvent(new MessageEvent('message', { data: { nonce: NONCE, ...data }, source: frameWin }));
-      await Promise.resolve();
-    });
-  };
-  beforeEach(() => {
-    posted = [];
-    frameWin = {
-      postMessage: (m: Record<string, unknown>) => {
-        posted.push(m);
-        if (m.type === 'mx:commit' && !m.restore) setTimeout(() => void fromFrame({ type: 'mx:committed' }), 0);
-      },
-    } as unknown as Window;
-    Object.defineProperty(frameEl, 'contentWindow', { configurable: true, value: frameWin });
-  });
 
   const mountImage = async () => {
     const view = render(
@@ -187,17 +215,19 @@ describe('replacing an image', () => {
     await fromFrame({ type: 'mx:selection', selection: IMG_SELECTION });
     return view;
   };
-  const lastSource = () => (queue.mock.calls.at(-1)?.[0] as { source?: string }).source ?? '';
   const replaced = (id: string) => IMG_SOURCE.replace('ref:Old111', `ref:${id}`);
-  const posts = (spy: ReturnType<typeof stubFetch>) =>
-    spy.mock.calls.filter(([, i]) => (i as RequestInit)?.method === 'POST') as Array<[string, RequestInit]>;
+  const replaceIn = async () => {
+    await waitFor(() => expect(within(screen.getByRole('dialog', { name: 'Replace image' })).getByRole('button', { name: 'Replace' })).not.toBeDisabled());
+    await act(async () => { fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Replace' })); });
+  };
 
-  it('Replace ▸ From URL swaps only the src, pushes the new ref, and one undo restores the old picture', async () => {
+  it('Replace ▸ From URL (the dialog) swaps only the src, pushes the new ref, and one undo restores the old picture', async () => {
     const fetchSpy = stubFetch(new Response(JSON.stringify({ id: 'New222', rawUrl: '/a/New222/raw?v=1' }), { status: 201 }));
     await mountImage();
     fireEvent.click(screen.getByLabelText('Replace image'));
-    fireEvent.change(screen.getByLabelText('Replacement image URL'), { target: { value: 'https://example.com/b.png' } });
-    await act(async () => { fireEvent.click(screen.getByLabelText('Replace image from URL')); });
+    fireEvent.change(screen.getByLabelText('Image URL'), { target: { value: 'https://example.com/b.png' } });
+    await act(async () => { fireEvent.click(screen.getByLabelText('Import image from URL')); });
+    await replaceIn();
 
     expect(JSON.parse(String(posts(fetchSpy)[0]![1].body))).toEqual({ imageUrl: 'https://example.com/b.png' });
     await waitFor(() => expect(lastSource()).toBe(replaced('New222')));
@@ -208,17 +238,13 @@ describe('replacing an image', () => {
     await waitFor(() => expect(lastSource()).toBe(IMG_SOURCE));
   });
 
-  it('Replace ▸ Upload file sends the file through the upload door and replaces', async () => {
+  it('Replace ▸ Upload in the dialog sends the file through the upload door and replaces', async () => {
     const fetchSpy = stubFetch(new Response(JSON.stringify({ id: 'New333' }), { status: 201 }));
-    const pick = vi.spyOn(HTMLInputElement.prototype, 'click').mockImplementation(() => {});
     await mountImage();
     fireEvent.click(screen.getByLabelText('Replace image'));
-    fireEvent.click(screen.getByLabelText('Replace image from file'));
-    const input = screen.getByLabelText('Replacement image file') as HTMLInputElement;
-    expect(pick.mock.contexts.at(-1)).toBe(input);
     const file = new File(['x'], 'b.png', { type: 'image/png' });
-    await act(async () => { fireEvent.change(input, { target: { files: [file] } }); });
-
+    await act(async () => { fireEvent.change(screen.getByLabelText('Image file'), { target: { files: [file] } }); });
+    await replaceIn();
     await waitFor(() => expect(lastSource()).toBe(replaced('New333')));
     expect(posts(fetchSpy)[0]![1]).toMatchObject({ body: file, headers: { 'Content-Type': 'image/png' } });
   });
