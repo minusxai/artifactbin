@@ -1575,7 +1575,8 @@ async function interveningEdits(q: Queryable, artifactId: string, baseEditId: st
     if (known.rows.length === 0) return null;
   }
   return r.rows.flatMap((row) => {
-    const parsed = row.document_state?.kind==='semantic'?sourceChanges(row.removed,row.inserted):typeof row.changes === 'string' ? JSON.parse(row.changes) as BatchChange[] : row.changes;
+    const recorded=typeof row.changes==='string'?JSON.parse(row.changes) as BatchChange[]:row.changes;
+    const parsed=recorded??(row.document_state?.kind==='semantic'?sourceChanges(row.removed,row.inserted):null);
     const changes = row.document_state?.kind==='semantic'&&!parsed?.length ? [{splice:{start:0,removed:'',inserted:''},span:{start:0,end:0}}] : parsed?.length ? [...parsed].reverse() : [{
       splice: { start: row.splice_start, removed: row.removed, inserted: row.inserted },
       span: { start: row.span_start, end: row.span_end },
