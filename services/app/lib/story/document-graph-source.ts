@@ -40,6 +40,17 @@ export function graphFromSource(before:DocumentGraph,source:string,version:numbe
    const source=serializeJsx([node]),candidates=oldSources.get(source);
    if(candidates?.length===1&&newCounts.get(source)===1)bind(node,candidates[0]);
   }
+  // Repeated formatting nodes are not unique subtrees. When every identified
+  // sibling stays in its slot and every other slot is byte-equivalent, the
+  // anonymous identities can stay too: a text edit must not rewrite the
+  // parent's ordered children merely because it contains several newlines.
+  const sameSlots=fresh.length===old.length&&fresh.every((node,index)=>{
+   const prior=old[index]!;
+   return pairs.has(node)?pairs.get(node)===prior:
+    !authoredId(node)&&!authoredId(prior)&&!!prior.graphKey&&!used.has(prior.graphKey)
+     &&serializeJsx([node])===serializeJsx([prior]);
+  });
+  if(sameSlots)fresh.forEach((node,index)=>{if(!pairs.has(node))bind(node,old[index]);});
   // A single remaining anonymous node of a compatible kind is a local edit.
   const remainingOld=old.filter(node=>!authoredId(node)&&node.graphKey&&!used.has(node.graphKey));
   const remainingNew=fresh.filter(node=>!authoredId(node)&&!pairs.has(node));

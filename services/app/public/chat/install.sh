@@ -2,7 +2,7 @@
 set -eu
 
 main() {
-  version=0.2.4
+  version=0.2.5
   install_dir="${HOME}/.local/bin"
   # The server that served this script fills this in; afbin then talks to it by default.
   origin=''
@@ -17,7 +17,7 @@ main() {
         shift 2;;
       --help|-h)
         cat <<'USAGE'
-Install afbin: sh install.sh [--version 0.2.4] [--dir PATH] [--yes]
+Install afbin: sh install.sh [--version 0.2.5] [--dir PATH] [--yes]
   --version X.Y.Z   install this release instead of the pinned one
   --dir PATH        install directory (default ~/.local/bin)
   --yes, -y         accept default skills without a checklist or sign-in
