@@ -12,25 +12,29 @@ import { describe, expect, it, vi } from 'vitest';
 import { act, render } from '@testing-library/react';
 
 import { useInPlaceEdit } from '@/lib/story/use-in-place-edit';
-import { STORY_IMAGE_DROP_MESSAGE } from '@/lib/story-runtime/contract';
+import { STORY_IMAGE_DROP_MESSAGE, STORY_IMAGE_REPLACE_MESSAGE } from '@/lib/story-runtime/contract';
 
 const NONCE = 'n'.repeat(24);
 const png = () => new File(['x'], 'clip.png', { type: 'image/png' });
 
-function Harness({ onImageDrop }: { onImageDrop: (file: File) => void }) {
+function Harness({ onImageDrop, onImageReplaceRequest }: {
+  onImageDrop: (file: File, target?: string) => void;
+  onImageReplaceRequest?: (path: string) => void;
+}) {
   const frameRef = useRef<HTMLIFrameElement | null>(null);
   const sourceRef = useRef('<p>hello</p>');
   useInPlaceEdit({
     frameRef, editing: true, sessionNonce: NONCE, sourceRef,
-    onSourceEdited: () => {}, onImageDrop,
+    onSourceEdited: () => {}, onImageDrop, onImageReplaceRequest,
   });
   return <iframe title="artifact" ref={frameRef} />;
 }
 
 const mount = () => {
   const onImageDrop = vi.fn();
-  const view = render(<Harness onImageDrop={onImageDrop} />);
-  return { onImageDrop, frame: view.container.querySelector('iframe')! };
+  const onImageReplaceRequest = vi.fn();
+  const view = render(<Harness onImageDrop={onImageDrop} onImageReplaceRequest={onImageReplaceRequest} />);
+  return { onImageDrop, onImageReplaceRequest, frame: view.container.querySelector('iframe')! };
 };
 
 /** The insert drains first, so delivery lands a microtask later than the post. */
@@ -89,5 +93,43 @@ describe('useInPlaceEdit — an image insert drains uncommitted typing first', (
 
     await dispatchMessage(frame.contentWindow, { type: 'mx:committed', nonce: NONCE });
     expect(onImageDrop).toHaveBeenCalledWith(file);
+  });
+});
+
+/**
+ * REPLACING rather than inserting: a drop onto an image, or a paste while one
+ * is selected, names that image's body path. The page hands it on so the
+ * replace path runs instead of the insert; no target is still an insert.
+ */
+describe('useInPlaceEdit — an image dropped ONTO an image', () => {
+  it('hands the file on WITH the image it targets', async () => {
+    const { onImageDrop, frame } = mount();
+    const file = png();
+    await dispatchMessage(frame.contentWindow, { type: STORY_IMAGE_DROP_MESSAGE, nonce: NONCE, file, target: '0.2' });
+    await dispatchMessage(frame.contentWindow, { type: 'mx:committed', nonce: NONCE });
+    expect(onImageDrop).toHaveBeenCalledWith(file, '0.2');
+  });
+
+  it('ignores a target that is not a path', async () => {
+    const { onImageDrop, frame } = mount();
+    const file = png();
+    await dispatchMessage(frame.contentWindow, { type: STORY_IMAGE_DROP_MESSAGE, nonce: NONCE, file, target: { evil: 1 } });
+    await dispatchMessage(frame.contentWindow, { type: 'mx:committed', nonce: NONCE });
+    expect(onImageDrop).toHaveBeenCalledWith(file);
+  });
+});
+
+describe('useInPlaceEdit — a double-clicked image asks to be replaced', () => {
+  it('asks the page AT ONCE — the file picker needs the click\'s activation', async () => {
+    const { onImageReplaceRequest, frame } = mount();
+    await dispatchMessage(frame.contentWindow, { type: STORY_IMAGE_REPLACE_MESSAGE, nonce: NONCE, path: '0.2' });
+    expect(onImageReplaceRequest).toHaveBeenCalledWith('0.2');
+  });
+
+  it('ignores a forged request', async () => {
+    const { onImageReplaceRequest, frame } = mount();
+    await dispatchMessage(frame.contentWindow, { type: STORY_IMAGE_REPLACE_MESSAGE, nonce: 'x'.repeat(24), path: '0.2' });
+    await dispatchMessage(window, { type: STORY_IMAGE_REPLACE_MESSAGE, nonce: NONCE, path: '0.2' });
+    expect(onImageReplaceRequest).not.toHaveBeenCalled();
   });
 });

@@ -67,7 +67,9 @@ interface InPlaceEditOptions {
    * frame (that is the realm the event fires in), so it arrives as a message;
    * the page runs the same insert the file picker does.
    */
-  onImageDrop?: (file: File) => void;
+  onImageDrop?: (file: File, target?: string) => void;
+  /** An image was double-clicked: open the replace picker for the image at this BODY path. */
+  onImageReplaceRequest?: (path: string) => void;
 }
 
 export interface InPlaceEditController {
@@ -229,10 +231,17 @@ export function useInPlaceEdit(options: InPlaceEditOptions): InPlaceEditControll
           // moment ago is still only in the frame's DOM. Ask for it first, or
           // the insert writes a source that never had it.
           const file = event.data.file;
+          // A drop ONTO an image, or a paste while one is selected, replaces it.
+          const target = typeof event.data.target === 'string' ? event.data.target : null;
           const drain = commitPendingRef.current?.() ?? Promise.resolve();
-          drain.then(() => onImageDropRef.current?.(file));
+          drain.then(() => (target ? onImageDropRef.current?.(file, target) : onImageDropRef.current?.(file)));
           break;
         }
+        case 'mx:image-replace':
+          // Synchronously: the page may open a file picker only while the
+          // double-click's activation lasts. Draining happens before the commit.
+          if (typeof event.data.path === 'string') optionsRef.current.onImageReplaceRequest?.(event.data.path);
+          break;
         default:
           break;
       }

@@ -23,5 +23,7 @@ export const SELECTION_PRESENTATION = {
   handleActive: neutral(0.95),
   /** Pointed at from outside (the query notebook): dashed amber, so it never reads as the selection; last and important, so hover never hides it. */
   spotlightCss: important(`outline: 2px dashed rgba(245, 158, 11, 0.9); outline-offset: ${offset}px; border-radius: 3px; background: rgba(245, 158, 11, 0.06);`),
+  /** The image a dragged file would replace: a dashed neutral line and a faint veil, so "drop here" never reads as selected. */
+  dropReplaceCss: important(`outline: 2px dashed ${neutral(0.9)}; outline-offset: ${offset}px; opacity: 0.75;`),
   handleOutset: offset + width / 2,
 };

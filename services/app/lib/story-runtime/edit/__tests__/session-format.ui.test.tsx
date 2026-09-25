@@ -9,12 +9,13 @@ import { fireEvent, act } from '@testing-library/react';
 import {
   STORY_APPLY_FORMAT_MESSAGE,
   STORY_IMAGE_DROP_MESSAGE,
+  STORY_IMAGE_REPLACE_MESSAGE,
   STORY_SELECTION_MESSAGE,
   STORY_SELECT_MESSAGE,
   STORY_TEXT_EDIT_MESSAGE,
   type StoryEditParentMessage,
 } from '@/lib/story-runtime/contract';
-import { EDIT_SELECTED_ATTR, EDIT_EMBED_SELECTED_ATTR, EDIT_HOVER_ATTR } from '@/lib/story-runtime/edit/session';
+import { EDIT_SELECTED_ATTR, EDIT_EMBED_SELECTED_ATTR, EDIT_HOVER_ATTR, EDIT_DROP_REPLACE_ATTR } from '@/lib/story-runtime/edit/session';
 import {
   NONCE,
   disposeEditSessions,
@@ -212,5 +213,96 @@ describe('createFrameEditSession — inserting an image by paste or drop', () =>
     session.dispose();
     fire('paste', transfer([png()]));
     expect(sent(STORY_IMAGE_DROP_MESSAGE)).toHaveLength(0);
+  });
+});
+
+/**
+ * REPLACING an image, from inside the document: the frame says WHICH image the
+ * person meant — by double-clicking it, dropping a file onto it, or pasting
+ * while it is selected — and the parent does the rest. Anywhere else a file
+ * still inserts.
+ */
+describe('createFrameEditSession — replacing an image', () => {
+  const IMG_SRC = '<div className="p-8"><p className="lede">text</p>'
+    + '<img src="https://example.com/a.png" alt="a chart" className="rounded-xl" /><p>after</p></div>';
+  const png = () => new File(['x'], 'clip.png', { type: 'image/png' });
+  const transfer = (files: File[]) => ({
+    types: ['Files'], items: files.map((f) => ({ kind: 'file', type: f.type, getAsFile: () => f })), files,
+  });
+  const fireOn = (target: EventTarget, kind: string, data: unknown, init: Record<string, unknown> = {}) => {
+    const event = new Event(kind, { bubbles: true, cancelable: true });
+    Object.defineProperty(event, kind === 'paste' ? 'clipboardData' : 'dataTransfer', { value: data });
+    for (const [key, value] of Object.entries(init)) Object.defineProperty(event, key, { value });
+    target.dispatchEvent(event);
+    return event;
+  };
+  const label = () => document.querySelector('[data-mx-drop-replace-label]');
+
+  it('a double-click on an image selects it and asks the page to replace it', () => {
+    const { at } = mount(IMG_SRC);
+    fireEvent.doubleClick(at('0.1'));
+    expect(last(STORY_IMAGE_REPLACE_MESSAGE)).toMatchObject({ nonce: NONCE, path: '0.1' });
+    expect(last(STORY_SELECTION_MESSAGE)).toMatchObject({ selection: { path: '0.1', tag: 'img' } });
+  });
+
+  it('a double-click on text asks nothing — that is selecting a word', () => {
+    const { at } = mount(IMG_SRC);
+    fireEvent.doubleClick(at('0.0'));
+    expect(sent(STORY_IMAGE_REPLACE_MESSAGE)).toHaveLength(0);
+  });
+
+  it('a file dropped ONTO an image names it; dropped elsewhere it does not', () => {
+    const { at } = mount(IMG_SRC);
+    const file = png();
+    expect(fireOn(at('0.1'), 'drop', transfer([file])).defaultPrevented).toBe(true);
+    expect(last(STORY_IMAGE_DROP_MESSAGE)).toMatchObject({ file, target: '0.1' });
+    fireOn(at('0.0'), 'drop', transfer([file]));
+    expect(last(STORY_IMAGE_DROP_MESSAGE)).not.toHaveProperty('target');
+  });
+
+  it('a paste while an image is selected replaces it; with text selected it inserts', () => {
+    const { at } = mount(IMG_SRC);
+    fireEvent.click(at('0.1'), { bubbles: true });
+    fireOn(document, 'paste', transfer([png()]));
+    expect(last(STORY_IMAGE_DROP_MESSAGE)).toMatchObject({ target: '0.1' });
+    fireEvent.click(at('0.2'), { bubbles: true });
+    fireOn(document, 'paste', transfer([png()]));
+    expect(last(STORY_IMAGE_DROP_MESSAGE)).not.toHaveProperty('target');
+  });
+
+  it('dragging a file over an image marks it "Drop to replace", and the mark follows the pointer out', () => {
+    const { at } = mount(IMG_SRC);
+    const over = fireOn(at('0.1'), 'dragover', transfer([png()]));
+    expect(over.defaultPrevented).toBe(true);
+    expect(at('0.1').hasAttribute(EDIT_DROP_REPLACE_ATTR)).toBe(true);
+    expect(label()?.textContent).toBe('Drop to replace');
+    fireOn(at('0.0'), 'dragover', transfer([png()]));
+    expect(at('0.1').hasAttribute(EDIT_DROP_REPLACE_ATTR)).toBe(false);
+    expect(label()).toBeNull();
+
+    fireOn(at('0.1'), 'dragover', transfer([png()]));
+    fireOn(at('0.1'), 'dragleave', transfer([png()]), { relatedTarget: null });
+    expect(at('0.1').hasAttribute(EDIT_DROP_REPLACE_ATTR)).toBe(false);
+
+    fireOn(at('0.1'), 'dragover', transfer([png()]));
+    fireOn(at('0.1'), 'drop', transfer([png()]));
+    expect(at('0.1').hasAttribute(EDIT_DROP_REPLACE_ATTR)).toBe(false);
+    expect(label()).toBeNull();
+  });
+
+  it('a drag that carries no file marks nothing', () => {
+    const { at } = mount(IMG_SRC);
+    fireOn(at('0.1'), 'dragover', { types: ['text/plain'], items: [], files: [] });
+    expect(at('0.1').hasAttribute(EDIT_DROP_REPLACE_ATTR)).toBe(false);
+  });
+
+  it('leaving edit mode takes the mark with it', () => {
+    const { session, at } = mount(IMG_SRC);
+    fireOn(at('0.1'), 'dragover', transfer([png()]));
+    session.dispose();
+    expect(at('0.1').hasAttribute(EDIT_DROP_REPLACE_ATTR)).toBe(false);
+    expect(label()).toBeNull();
+    fireEvent.doubleClick(at('0.1'));
+    expect(sent(STORY_IMAGE_REPLACE_MESSAGE)).toHaveLength(0);
   });
 });

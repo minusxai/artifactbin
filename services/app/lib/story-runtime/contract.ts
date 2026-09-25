@@ -657,7 +657,27 @@ export interface StorySelectionActionsMessage {
  * doors share one ingest, one size cap and one type list.
  */
 export const STORY_IMAGE_DROP_MESSAGE = 'mx:image-drop';
-interface StoryImageDropMessage { type: typeof STORY_IMAGE_DROP_MESSAGE; nonce: string; file: File }
+interface StoryImageDropMessage {
+  type: typeof STORY_IMAGE_DROP_MESSAGE;
+  nonce: string;
+  file: File;
+  /**
+   * The BODY path of the plain `<img>` this file REPLACES — present when it was
+   * dropped onto an image, or pasted while one was selected. Absent, the file
+   * is inserted as before. Either way the parent composes the source; the frame
+   * only says which image the person meant.
+   */
+  target?: string;
+}
+
+/**
+ * Frame → parent: an image was double-clicked in edit mode — open the replace
+ * file picker for it. Handled synchronously, while the click's user activation
+ * still lets the page open a picker; the chosen file takes the same replace
+ * path as the toolbar's "Upload file".
+ */
+export const STORY_IMAGE_REPLACE_MESSAGE = 'mx:image-replace';
+interface StoryImageReplaceMessage { type: typeof STORY_IMAGE_REPLACE_MESSAGE; nonce: string; path: string }
 
 /** Frame → parent: Delete/Backspace pressed while NO text host had focus — the parent decides what it removes. */
 export const STORY_EDIT_KEY_MESSAGE = 'mx:edit-key';
@@ -846,7 +866,7 @@ type StoryEditFrameMessage =
   | StoryEditErrorMessage | StoryBlockEditMessage | StoryHistoryMessage | StoryFlowEditMessage | StoryEditReadyMessage | StoryTextEditMessage | StoryTypingMessage | StorySelectionMessage
   | StorySelectionActionMessage
   | StoryEditKeyMessage | StoryCommittedMessage | StoryLayoutEditMessage | StorySlideTitleMessage
-  | StoryImageDropMessage | StoryAnnotationPinMessage | StoryAnnotationHoverMessage | StoryAnnotationLayoutMessage;
+  | StoryImageDropMessage | StoryImageReplaceMessage | StoryAnnotationPinMessage | StoryAnnotationHoverMessage | StoryAnnotationLayoutMessage;
 export type StoryEditParentMessage =
   | StoryInlineMessage | StoryPasteMessage | StoryEditModeMessage | StoryApplyFormatMessage | StoryApplyLinkMessage | StorySelectMessage | StorySpotlightMessage | StoryCommitMessage
   | StoryAnnotationsMessage | StorySelectionActionsMessage;
@@ -855,7 +875,7 @@ const EDIT_FRAME_TYPES: ReadonlySet<string> = new Set([
   'mx:edit-error', STORY_BLOCK_EDIT_MESSAGE, STORY_HISTORY_MESSAGE, STORY_FLOW_EDIT_MESSAGE, STORY_EDIT_READY_MESSAGE, STORY_TEXT_EDIT_MESSAGE, STORY_TYPING_MESSAGE, STORY_SELECTION_MESSAGE,
   STORY_SELECTION_ACTION_MESSAGE,
   STORY_EDIT_KEY_MESSAGE, STORY_COMMITTED_MESSAGE,
-  STORY_LAYOUT_EDIT_MESSAGE, STORY_SLIDE_TITLE_MESSAGE, STORY_IMAGE_DROP_MESSAGE,
+  STORY_LAYOUT_EDIT_MESSAGE, STORY_SLIDE_TITLE_MESSAGE, STORY_IMAGE_DROP_MESSAGE, STORY_IMAGE_REPLACE_MESSAGE,
   STORY_ANNOTATION_PIN_MESSAGE, STORY_ANNOTATION_HOVER_MESSAGE, STORY_ANNOTATION_LAYOUT_MESSAGE,
 ]);
 const EDIT_PARENT_TYPES: ReadonlySet<string> = new Set([
