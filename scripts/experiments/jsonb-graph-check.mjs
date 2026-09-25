@@ -1,5 +1,5 @@
 /** Native PostgreSQL guard experiment; uses only the runner's disposable cluster.
- * This checks the graph compiler, not the still-to-be-integrated artifact route. */
+ * This checks the graph compiler directly; jsonb-operations-check covers the application writer. */
 import assert from 'node:assert/strict';
 import {getDb,resetDb} from '../../services/app/lib/db.ts';
 import {createDocumentGraph,graphNodes,graphSource,graphIntegrity} from '../../services/app/lib/story/document-graph.ts';
@@ -27,5 +27,10 @@ try{
  assert.ok(await commit(plan([{kind:'insert',parent:[0,20],index:1,source:'<DataTable data="$rows" />'}])));
  assert.equal(await commit(absence),null);
  console.log('PASS native PostgreSQL: concurrent newly inserted dependency invalidates absence witness');
+ await db.query('UPDATE graph_probe SET document=$1::jsonb,version=1',[JSON.stringify(base)]);
+ const dense=plan(Array.from({length:30},(_,index)=>({kind:'insert',parent:[0,0],index:index+1,source:`<p>Dense ${index}</p>`})));
+ assert.ok(await commit(plan([{kind:'setText',path:[0,0,0,0],value:'Concurrent longer Unicode 👩 text'}])));
+ const merged=await commit(dense);assert.ok(merged);assert.deepEqual(graphIntegrity(merged.document),[]);
+ console.log('PASS native PostgreSQL: dense insertion preserves concurrent descendant aggregates');
  console.log((await db.query('SELECT version()')).rows[0].version);
 }finally{await resetDb();}

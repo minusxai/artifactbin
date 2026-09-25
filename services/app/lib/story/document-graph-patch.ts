@@ -48,7 +48,12 @@ export function prepareGraphPatch(before:DocumentGraph,after:DocumentGraph,baseV
     const value:Partial<DocumentGraphNode>={parts:next.parts,partUnits:next.partUnits,bytes:next.bytes,units:next.units};
     if(self){Object.assign(value,{ast:next.ast,parent:next.parent,selectors:next.selectors,refs:next.refs,prose:next.prose});read(key,'subtreeVersion');}
     if(children){value.children=next.children;read(key,'childrenVersion');read(key,'selfVersion');}
-    updated[key]={patches:prepareDocumentPatch(node,{...node,...value}),self,children};touched.add(key);ancestors(before,key);ancestors(after,key);
+    const ownBefore=Object.fromEntries(Object.keys(value).map(field=>[field,node[field as keyof DocumentGraphNode]]));
+    const primitives=prepareDocumentPatch(ownBefore,value);
+    // Dense edits may replace individual own fields, never revision/aggregate
+    // fields belonging to concurrent descendants of this node.
+    const patches=primitives.flatMap((primitive):DocumentPatch[]=>primitive.path.length?[primitive]:Object.entries(value).map(([field,value])=>({kind:'set',path:[field],value})));
+    updated[key]={patches,self,children};touched.add(key);ancestors(before,key);ancestors(after,key);
   }
   for(const [key,node] of Object.entries(after.nodes))if(!before.nodes[key]){
     inserted[key]=structuredClone(node);touched.add(key);ancestors(after,key);

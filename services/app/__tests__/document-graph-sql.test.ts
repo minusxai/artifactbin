@@ -46,3 +46,11 @@ it('derives committed reference metadata in source order without stale snapshot 
  const result=await db.query<{refs:Array<{id:string;kind:string}>}>(`SELECT ${graphReferencesSql('$1::jsonb')} AS refs`,[JSON.stringify(graph)]);
  expect(result.rows[0]!.refs).toEqual([{id:'abc123',kind:'image'},{id:'def456',kind:'image'}]);
 });
+
+it('preserves descendant aggregates through a dense child-list SQL update',async()=>{
+ const {graph,commit}=await setup();
+ const dense=plan(graph,Array.from({length:30},(_,index):DocumentOperation=>({kind:'insert',parent:[0],index:index+2,source:`<p>Inserted ${index}</p>`})));
+ const text=plan(graph,[{kind:'setText',path:[0,0,0],value:'Concurrent much longer Unicode 👩 text'}]);
+ const current=(await commit(text))!;
+ expect(await commit(dense)).toEqual(applyGraphPatch(current,2,dense));
+});

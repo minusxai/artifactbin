@@ -73,3 +73,12 @@ it('does not resend a large attribute when adding another attribute to the same 
  expect(JSON.stringify(patch).length).toBeLessThan(2000);
  const result=applyGraphPatch(base,1,patch)!;expect(graphSource(result)).toContain('title="Small edit"');expect(graphIntegrity(result)).toEqual([]);
 });
+
+it('preserves concurrent descendant lengths when a dense child-list edit exceeds the primitive cap',()=>{
+ const base=setup(),insertions=Array.from({length:30},(_,index):DocumentOperation=>({kind:'insert',parent:[0,0],index:index+1,source:`<p>Inserted ${index}</p>`}));
+ const dense=plan(base,insertions),text=plan(base,[{kind:'setText',path:[0,0,0,0],value:'Concurrent much longer Unicode 👩 text'}]);
+ const current=applyGraphPatch(base,1,text)!;
+ const result=applyGraphPatch(current,2,dense);
+ expect(result).not.toBeNull();expect(graphIntegrity(result!)).toEqual([]);
+ expect(graphSource(result!)).toContain('Concurrent much longer Unicode 👩 text');
+});
