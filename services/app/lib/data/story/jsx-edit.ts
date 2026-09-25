@@ -248,13 +248,14 @@ const elementAt = (nodes: JsxNode[], parts: number[]): JsxElement | null => {
  * the id is malformed — a bad insert must never corrupt a body.
  */
 export function placeImageInJsx(
-  source: string, imageId: string, anchor?: JsxInsertAnchor | null,
+  source: string, imageId: string, anchor?: JsxInsertAnchor | null, options: { nodeId?: string } = {},
 ): { source: string; path: string | null } {
   const unchanged = { source, path: null };
   if (!/^[A-Za-z0-9]{6,12}$/.test(imageId)) return unchanged;
   const parsed = parseJsx(source);
   if (!parsed.ok) return unchanged;
-  const imgParsed = parseJsx(`<img src="ref:${imageId}" alt="" className="my-6 block w-full rounded-md" />`);
+  const id = options.nodeId && NODE_ID_RE.test(options.nodeId) ? ` id="${options.nodeId}"` : '';
+  const imgParsed = parseJsx(`<img src="ref:${imageId}" alt="" className="my-6 block w-full rounded-md"${id} />`);
   const img = imgParsed.ok ? imgParsed.nodes.find((n): n is JsxElement => n.type === 'element') : undefined;
   if (!img) return unchanged;
   const roots = parsed.nodes;
@@ -300,6 +301,31 @@ export function placeImageInJsx(
   }
   roots.push(img);
   return { source: serializeJsx(roots), path: String(roots.length - 1) };
+}
+
+/** The server's node-id shape (lib/story/node-ids): a letter, then three letters or digits. */
+const NODE_ID_RE = /^[A-Za-z][A-Za-z0-9]{3}$/;
+const ID_FIRST = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz';
+const ID_REST = `${ID_FIRST}0123456789`;
+const randomNodeId = (): string => {
+  const bytes = globalThis.crypto.getRandomValues(new Uint8Array(4));
+  return ID_FIRST[bytes[0] % ID_FIRST.length] + [...bytes.slice(1)].map((b) => ID_REST[b % ID_REST.length]).join('');
+};
+
+/**
+ * A node id for something the editor inserts, in the server's shape and not
+ * one the document already uses. Minted HERE so the inserted node is whole in
+ * the source the editor holds: an id the server added later arrives as a
+ * change inside the span an undo removes, and the undo is refused. The server
+ * keeps an explicit id and repairs a duplicate, so a clash costs only that.
+ */
+export function freshNodeId(source: string, mint: () => string = randomNodeId): string {
+  const taken = new Set([...source.matchAll(/\bid="([^"]*)"/g)].map((m) => m[1]));
+  for (let attempt = 0; attempt < 64; attempt++) {
+    const candidate = mint();
+    if (NODE_ID_RE.test(candidate) && !taken.has(candidate)) return candidate;
+  }
+  return randomNodeId();
 }
 
 /** `placeImageInJsx`'s source alone — the insert without the editor's follow-up selection. */

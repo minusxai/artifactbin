@@ -54,6 +54,7 @@ import { isWebUrl } from '@/lib/story/asset-url';
 import { imageRawUrl, type RefDataMap } from '@/lib/story/ref-data';
 import { bodyPathToSourcePath, sourcePathToBodyPath } from '@/lib/story/edit-compose';
 import {
+  freshNodeId,
   imageAltInJsx,
   imageTargetInJsx,
   nodeTargetInJsx,
@@ -953,7 +954,7 @@ export default function InPlaceEditor({
   const insertImage = useCallback(
     async (anchor: JsxInsertAnchor | null, image: ChosenImage) => {
       if (!(await drainTyping())) return;
-      const placed = placeImageInJsx(sourceRef.current, image.id, anchor);
+      const placed = placeImageInJsx(sourceRef.current, image.id, anchor, { nodeId: freshNodeId(sourceRef.current) });
       if (placed.source === sourceRef.current || !placed.path) return;
       commitStructural(placed.source, refDataFor(image));
       const bodyPath = sourcePathToBodyPath(placed.source, placed.path);

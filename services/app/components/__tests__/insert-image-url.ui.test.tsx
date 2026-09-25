@@ -96,6 +96,8 @@ describe('inserting an image', () => {
   const DOC = '<div data-design="tw" className="p-4"><h1 id="h">Title</h1><p id="p1">one</p><p id="p2">two</p>'
     + '<Card id="c"><CardContent id="cc"><p id="p3">in card</p></CardContent></Card></div>';
   const IMG = (id: string) => `<img src="ref:${id}" alt="" className="my-6 block w-full rounded-md" />`;
+  /** The inserted image carries a freshly minted node id; compare without it. */
+  const inserted = () => lastSource().replace(/(<img src="ref:New\d+"[^>]*?) id="[A-Za-z][A-Za-z0-9]{3}"/g, '$1');
   const mountDoc = () => render(
     <InPlaceEditor
       art={{ ...art, markup: DOC } as React.ComponentProps<typeof InPlaceEditor>['art']}
@@ -137,14 +139,15 @@ describe('inserting an image', () => {
     expect(JSON.parse(String(posts(fetchSpy)[0]![1].body))).toEqual({ imageUrl: 'https://example.com/b.png' });
     expect(queue).not.toHaveBeenCalled(); // nothing changes before Insert
     await confirm();
-    await waitFor(() => expect(lastSource()).toBe(DOC.replace('<p id="p1">one</p>', `<p id="p1">one</p>${IMG('New222')}`)));
+    await waitFor(() => expect(inserted()).toBe(DOC.replace('<p id="p1">one</p>', `<p id="p1">one</p>${IMG('New222')}`)));
+    expect(lastSource()).toMatch(/<img src="ref:New222"[^>]* id="[A-Za-z][A-Za-z0-9]{3}" \/>/);
     expect(screen.queryByRole('dialog')).toBeNull();
     const update = posted.filter((m) => m.type === 'mx:document' && m.refData).at(-1);
     expect(update?.refData).toEqual({ New222: { kind: 'image', url: '/a/New222/raw?v=1' } });
     expect(posted.filter((m) => m.type === 'mx:select').at(-1)).toMatchObject({ path: '0.2', reveal: true });
 
     await act(async () => { fireEvent.click(screen.getByLabelText('Undo')); });
-    await waitFor(() => expect(lastSource()).toBe(DOC));
+    await waitFor(() => expect(inserted()).toBe(DOC));
   });
 
   it('with a card selected: inside the card, at the end of its contents', async () => {
@@ -154,7 +157,7 @@ describe('inserting an image', () => {
     openDialog();
     await importUrl();
     await confirm();
-    await waitFor(() => expect(lastSource()).toContain(`<p id="p3">in card</p>${IMG('New333')}</CardContent>`));
+    await waitFor(() => expect(inserted()).toContain(`<p id="p3">in card</p>${IMG('New333')}</CardContent>`));
   });
 
   it('with nothing selected: at the end of the document', async () => {
@@ -165,7 +168,7 @@ describe('inserting an image', () => {
     await act(async () => { fireEvent.change(screen.getByLabelText('Image file'), { target: { files: [file] } }); });
     expect(posts(fetchSpy)[0]![1]).toMatchObject({ body: file, headers: { 'Content-Type': 'image/png' } });
     await confirm();
-    await waitFor(() => expect(lastSource()).toBe(DOC.replace('</Card></div>', `</Card>${IMG('New444')}</div>`)));
+    await waitFor(() => expect(inserted()).toBe(DOC.replace('</Card></div>', `</Card>${IMG('New444')}</div>`)));
   });
 
   it('shows the door\'s refusal in the dialog — a dead URL is a sentence, not silence', async () => {
@@ -186,12 +189,12 @@ describe('inserting an image', () => {
     mountDoc();
     await fromFrame({ type: 'mx:selection', selection: selectionOf('0.2', 'p', 'text') });
     await fromFrame({ type: 'mx:image-drop', file: new File(['x'], 'p.png', { type: 'image/png' }) });
-    await waitFor(() => expect(lastSource()).toContain(`<p id="p2">two</p>${IMG('New555')}`));
+    await waitFor(() => expect(inserted()).toContain(`<p id="p2">two</p>${IMG('New555')}`));
     expect(posted.filter((m) => m.type === 'mx:select').at(-1)).toMatchObject({ path: '0.3', reveal: true });
 
     stubFetch(new Response(JSON.stringify({ id: 'New666' }), { status: 201 }));
     await fromFrame({ type: 'mx:image-drop', file: new File(['x'], 'd.png', { type: 'image/png' }), at: { path: '0.1', side: 'before' } });
-    await waitFor(() => expect(lastSource()).toContain(`<h1 id="h">Title</h1>${IMG('New666')}<p id="p1">`));
+    await waitFor(() => expect(inserted()).toContain(`<h1 id="h">Title</h1>${IMG('New666')}<p id="p1">`));
   });
 });
 

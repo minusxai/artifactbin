@@ -8,7 +8,7 @@
 import { describe, it, expect } from 'vitest';
 
 import {
-  imageAltInJsx, imageTargetInJsx, insertImageInJsx, nodeTargetInJsx, placeImageInJsx, removeJsxNodeAtPath, replaceImageSrcInJsx,
+  freshNodeId, imageAltInJsx, imageTargetInJsx, insertImageInJsx, nodeTargetInJsx, placeImageInJsx, removeJsxNodeAtPath, replaceImageSrcInJsx,
   setImageAltInJsx,
 } from '@/lib/data/story/jsx-edit';
 import { parseJsx } from '@/lib/jsx';
@@ -278,5 +278,26 @@ describe('placeImageInJsx', () => {
   it('insertImageInJsx still appends when given no anchor, and takes one when given', () => {
     expect(insertImageInJsx(DOC, 'New222')).toBe(place().source);
     expect(insertImageInJsx(DOC, 'New222', { path: '0.1' })).toBe(place({ path: '0.1' }).source);
+  });
+});
+
+/**
+ * An inserted image carries its node id FROM THE START. Left to the server,
+ * the id arrives in the save's echo as a change inside the very span undo
+ * would remove — and undo refused the insert as "changed elsewhere".
+ */
+describe('an inserted image\'s id', () => {
+  it('is written with the image when given', () => {
+    const out = placeImageInJsx('<div><p id="a">a</p></div>', 'New222', { path: '0.0' }, { nodeId: 'Qx7k' });
+    expect(out.source).toBe('<div><p id="a">a</p><img src="ref:New222" alt="" className="my-6 block w-full rounded-md" id="Qx7k" /></div>');
+  });
+
+  it('is minted in the server\'s shape, never one the document already uses', () => {
+    const taken = ['Aaaa', 'Bbbb'];
+    const picks = ['Aaaa', 'Bbbb', 'Cc12'];
+    const id = freshNodeId(`<div id="Aaaa"><p id="Bbbb">x</p></div>`, () => picks.shift()!);
+    expect(id).toBe('Cc12');
+    expect(taken).not.toContain(id);
+    expect(freshNodeId('<div />')).toMatch(/^[A-Za-z][A-Za-z0-9]{3}$/);
   });
 });
