@@ -20,15 +20,12 @@ export const EDIT_BAR_ROW_H = 44;
 export const APP_BAR_H = 44;
 
 /**
- * The RIGHT RAIL's width, reserved the same way: the page narrows the
- * document's viewport by exactly this while the rail is open, so the rail
- * never covers the document it is about (the Google-Docs squeeze).
- *
- * ONE number for both occupants. It was two — a 320px annotation sidebar and
- * the editor's own 288px embed inspector — and they never met only because
- * annotate and edit were mutually exclusive modes. Taking the mode away
- * introduces them, so they share a width and a reservation rather than
- * discovering each other at runtime.
+ * The RIGHT RAIL's width. Reading, the comments rail: the page narrows the
+ * document's viewport by exactly this while it is open, so it never covers the
+ * document it is about (the Google-Docs squeeze). Editing, the edit panel
+ * (components/EditPanel), whose Selection, History and Comments tabs share it:
+ * decided once on entry — out of the document's empty margin when it fits,
+ * reserved when it does not — and unchanged by anything inside the session.
  */
 export const RIGHT_RAIL_W = 320;
 
