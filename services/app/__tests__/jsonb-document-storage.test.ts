@@ -1,3 +1,5 @@
+import {observedRequest} from './conditional-request';
+import {PUT as replaceRoute} from '@/app/api/artifacts/[id]/route';
 import {documentEdit} from './prepared-document';
 import {expect,it,vi} from 'vitest';
 import {useAppHarness,request} from './harness';
@@ -70,4 +72,21 @@ it('reads the earlier JSONB representation and upgrades it on its first validate
  const edited=await applyEditScoped(actor,id,documentEdit((await getArtifactById(id))!,{source:row.source!.replace('Alpha','Upgraded')}));
  expect(edited&&!(edited instanceof Response)&&edited.applied).toBe(true);
  expect((await stored(id)).document).toMatchObject({schema:3,kind:'graph'});
+});
+
+it('does not migrate folders into editable document graphs',async()=>{
+ const token=await mintToken('mxmx_test_folder_storage');
+ const response=await createRoute(request('/api/artifacts',{method:'POST',token:token.token,json:{format:'folder',title:'Folder'}}));
+ expect(response.status).toBe(201);const {id}=await response.json();
+ await (await getDb()).query('UPDATE artifacts SET source=$2 WHERE id=$1',[id,'<p>Legacy folder description</p>']);
+ const before=await stored(id);expect(before.format).toBe('folder');
+ await getArtifactById(id);
+ expect(await stored(id)).toEqual(before);
+});
+it('can replace a document with a native dataset without retaining its JSONB graph',async()=>{
+ const {id,token,row}=await create();
+ const response=await replaceRoute(await observedRequest(`/api/artifacts/${id}`,{method:'PUT',token:token.token,json:{dataset:[{value:1}]}}),{params:Promise.resolve({id})});
+ expect(response.status,await response.clone().text()).toBe(200);
+ const head=await stored(id);expect(head.format).toBe('dataset');expect(head.document).toBeNull();
+ expect((await getVersionFor({tokenId:token.id,userId:null},id,row.version))?.source).toBe(row.source);
 });

@@ -23,6 +23,7 @@ it('checks permissions, mutates JSONB and records compact history in one query',
  const {db,actor,id,base}=await setup(),update=prepareClientDocumentUpdate(base,{operations:[{kind:'setText',path:[0,0,0],value:'Longer α'},{kind:'setAttribute',path:[0,0],name:'title',value:'Tip'}]});
  const spy=vi.spyOn(db,'query');const result=await commitDocumentUpdate(db,actor,editorScope(actor),id,update);
  expect(spy.mock.calls).toHaveLength(1);spy.mockRestore();expect(result?.applied).toBe(true);
+ expect((await db.query("SELECT event FROM analytics_events WHERE artifact_id=$1 AND event='edit'",[id])).rows).toEqual([{event:'edit'}]);
  const logs=(await db.query<{removed:string;inserted:string;document_state:DocumentOperationHistory}>('SELECT * FROM artifact_edits WHERE artifact_id=$1 ORDER BY seq DESC LIMIT 1',[id])).rows;
  expect(logs[0]!.removed).toBe('');expect(logs[0]!.inserted).toBe('');expect(logs[0]!.document_state.kind).toBe('operations');
  const replay=applyGraphPatch(base.document,1,logs[0]!.document_state.forward)!;expect(graphIntegrity(replay)).toEqual([]);expect(graphSource(replay)).toContain('Longer α');

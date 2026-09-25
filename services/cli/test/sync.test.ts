@@ -1,3 +1,5 @@
+import {createDocumentGraph,graphSource} from '../../app/lib/story/document-graph';
+import {applyGraphPatch} from '../../app/lib/story/document-graph-patch';
 import {hostDirectory} from '../src/config';
 import {test,describe} from 'node:test';
 import assert from 'node:assert/strict';
@@ -29,10 +31,11 @@ test('push recovers a lost create reply with frozen bytes, then publishes newer 
    const key=new Headers(init?.headers).get('Idempotency-Key');assert.ok(key);
    if(operations.has(key))return Response.json(operations.get(key),{status:201,headers:{'X-Artifactbin-Account':'usr_one'}});
    head={id:'abc123',version:1,edit_id:'edit1',state:digest('state1'),markup:body.markup.replace('<p>','<p id="p001">'),title:null,theme:null,template:null,visibility:'unlisted',link_role:'viewer',parent_id:null,format:'markup',url:'https://example.com/a/abc123'};
+   head.document=createDocumentGraph(head.markup,head.version);
    operations.set(key,structuredClone(head));if(lost){lost=false;throw new Error('lost reply');}return Response.json(head,{status:201,headers:{'X-Artifactbin-Account':'usr_one'}});
   }
   if(path==='/api/artifacts/abc123/edits'){
-   assert.equal(body.edit_id,head.edit_id);head={...head,markup:body.source.replace('<p>','<p id="p001">'),version:2,edit_id:'edit2',state:digest('state2')};return Response.json(head,{headers:{'X-Artifactbin-Account':'usr_one'}});
+   assert.equal(body.edit_id,head.edit_id);const document=applyGraphPatch(head.document,head.version,body.document_update.patch);assert.ok(document);head={...head,document,markup:graphSource(document),version:2,edit_id:'edit2',state:digest('state2')};return Response.json(head,{headers:{'X-Artifactbin-Account':'usr_one'}});
   }
   throw new Error(`Unexpected ${method} ${path}`);
  };
@@ -152,11 +155,11 @@ test('an untracked file with complete fence conditions never replaces them with 
   await writeFile(join(root,'doc.jsx'),`---\nid: abc123\nhead_version: 1\nstate: ${digest('old')}\nedit_id: old\n---\n<p>Local</p>`);
   const output:string[]=[];const code=await runCli(['push','doc.jsx','--json'],{cwd:root,home:root,interactive:false,stdout:s=>output.push(s),stderr:()=>{},fetch:async(_input,init)=>{
    calls.push(init?.method??'GET');
-   if(init?.method==='GET')return Response.json({id:'abc123',version:2,edit_id:'new',state:digest('new'),markup:'<p>Remote</p>',format:'markup'},{headers:{'X-Artifactbin-Account':'usr_one'}});
+   if(init?.method==='GET')return Response.json({id:'abc123',version:2,edit_id:'new',state:digest('new'),markup:'<p>Remote</p>',document:createDocumentGraph('<p>Remote</p>',2),format:'markup'},{headers:{'X-Artifactbin-Account':'usr_one'}});
    const body=JSON.parse(String(init?.body));assert.equal(body.expectedVersion,1);assert.equal(body.expectedState,digest('old'));
    return Response.json({error:'version_conflict',currentVersion:2},{status:409,headers:{'X-Artifactbin-Account':'usr_one'}});
   }});
-  assert.notEqual(code,0);assert.deepEqual(calls,['PUT','GET']);assert.equal(JSON.parse(output[0]).error.code,'version_conflict');
+  assert.notEqual(code,0);assert.deepEqual(calls,['GET']);assert.equal(JSON.parse(output[0]).error.code,'state_conflict');
  }finally{await rm(root,{recursive:true,force:true});}
 });
 test('composed push reports a published dependency when the document is refused',async()=>{
@@ -226,7 +229,7 @@ test('missing tracked files are reported and skipped by push without deleting or
 });
 test('a refused overlapping edit returns a local conflict diff without another read or changing the working file',async()=>{
  const root=await mkdtemp(join(tmpdir(),'afbin-conflict-diff-'));let writes=0;
- const head={id:'abc123',version:1,edit_id:'one',state:digest('one'),format:'markup',markup:'<p id="p001">Original</p>'};
+ const head={id:'abc123',version:1,edit_id:'one',state:digest('one'),format:'markup',markup:'<p id="p001">Original</p>',document:createDocumentGraph('<p id="p001">Original</p>',1)};
  const invoke=async()=>{const output:string[]=[];const code=await runCli(['push','doc.jsx','--json'],{cwd:root,home:root,interactive:false,stdout:s=>output.push(s),stderr:()=>{},fetch:async(_input,init)=>{
   assert.equal(init?.method,'POST');writes++;
   return writes===1?Response.json(head,{status:201,headers:{'X-Artifactbin-Account':'usr_one'}}):Response.json({error:'doc_changed',source:'<p id="p001">Other writer</p>',edit_id:'two',version:2},{status:409,headers:{'X-Artifactbin-Account':'usr_one'}});
@@ -239,7 +242,7 @@ test('a refused overlapping edit returns a local conflict diff without another r
  }finally{await rm(root,{recursive:true,force:true});}
 });
 test('forced pull resolves an ambiguous conditional write while preserving its proposal in recovery history',async()=>{
- const root=await mkdtemp(join(tmpdir(),'afbin-force-recover-'));let head={id:'abc123',version:1,edit_id:'one',state:digest('one'),format:'markup',markup:'<p id="p001">Original</p>'};
+ const root=await mkdtemp(join(tmpdir(),'afbin-force-recover-'));let head={id:'abc123',version:1,edit_id:'one',state:digest('one'),format:'markup',markup:'<p id="p001">Original</p>',document:createDocumentGraph('<p id="p001">Original</p>',1)};
  const invoke=async(args:string[])=>{const output:string[]=[];const code=await runCli([...args,'--json'],{cwd:root,home:root,interactive:false,stdout:s=>output.push(s),stderr:()=>{},fetch:async(_input,init)=>{
   if(init?.method==='GET')return Response.json(head,{headers:{'X-Artifactbin-Account':'usr_one'}});
   if(head.version===1){head={...head,version:2,edit_id:'two',state:digest('two'),markup:'<p id="p001">Other writer</p>'};throw new Error('reply lost');}

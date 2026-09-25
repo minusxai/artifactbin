@@ -34,7 +34,7 @@ import {parseResourceFile,readResourceSource,reconcileResource,resourceContent,s
  * rides a second request inside the same command (`plan.policy`), never a second command.
  */
 interface PushOptions {force?:boolean;dryRun?:boolean;access?:'read'|'readwrite';policy?:'viewers-write'|'none'}
-interface PushPlan {confirmed?:Snapshot;source?:ResourceSource;reconcile?:boolean;file:LocalFile;body:Record<string,unknown>;mode:'create'|'edit'|'metadata'|'replace'|'none'|'missing';id?:string;policy?:DatasetPolicy|null;policyName?:string}
+interface PushPlan {authoringBase?:Snapshot;confirmed?:Snapshot;source?:ResourceSource;reconcile?:boolean;file:LocalFile;body:Record<string,unknown>;mode:'create'|'edit'|'metadata'|'replace'|'none'|'missing';id?:string;policy?:DatasetPolicy|null;policyName?:string}
 const fieldMap:Record<string,string>={link:'linkRole',folder:'parent_id'};
 /**
  * The tables `--policy viewers-write` is aimed at: the ones the pushed `<Dataset>` definition
@@ -182,7 +182,7 @@ async function prepareDocumentPlan(plan:PushPlan,client:HttpClient,force:boolean
  };
  const update=await prepareClientDocumentPublication({document,version:head.version,title:head.title,description:head.description as string|null,meta:{theme:head.theme,template:head.template,colorMode:head.colorMode}},{source:plan.file.document.body,metadata,whole:force||plan.file.document.metadata.version!==undefined},async source=>client.request(`/artifacts/${plan.id}/prepare`,'POST',{source,dryRun}));
  if(Object.keys(settings).length)Object.assign(update,{settings,expectedSharingRevision:Number(head.sharing_revision??0),expectedParentIds:head.ancestor_ids??[]});
- return {...plan,mode:'edit',reconcile:false,body:{edit_id:head.edit_id,document_update:update}};
+ return {...plan,authoringBase:head,mode:'edit',reconcile:false,body:{edit_id:head.edit_id,document_update:update}};
 }
 async function observeConditions(plan:PushPlan,client:HttpClient,force:boolean):Promise<PushPlan>{
  if(!plan.id||!force&&(plan.file.tracked||plan.body.expectedVersion!==undefined&&plan.body.expectedState!==undefined))return plan;
@@ -252,7 +252,7 @@ export async function push(workspace:Workspace,paths:string[],client:HttpClient,
    plan=await reconcileMixed(plan,client,workspace);
    const method=plan.mode==='metadata'?'PATCH':plan.mode==='replace'?'PUT':'POST';
    const path=plan.mode==='create'?'/artifacts':`/artifacts/${plan.id}${plan.mode==='edit'?'/edits':''}`;
-   let staged=await stageRequest(workspace.home,workspace.root,{server:client.connection.server,account:client.account,credential:digest(client.connection.token),request:{path,method,body:plan.body},file:{source:plan.source,path:plan.file.path,bytes:plan.file.bytes!.toString('base64'),tracked:plan.file.tracked,renamedFrom:plan.file.renamedFrom}});
+   let staged=await stageRequest(workspace.home,workspace.root,{server:client.connection.server,account:client.account,credential:digest(client.connection.token),request:{path,method,body:plan.body},file:{authoringBase:plan.authoringBase,source:plan.source,path:plan.file.path,bytes:plan.file.bytes!.toString('base64'),tracked:plan.file.tracked,renamedFrom:plan.file.renamedFrom}});
    if(plan.confirmed)staged=await savePendingResponse(workspace.home,workspace.root,staged,plan.confirmed,client.account);
    const snapshot=await recoverRequest(workspace,client,staged);workspace=await loadWorkspace(workspace.cwd,workspace.home);
    const operation:Record<string,unknown>={path:plan.file.path,status:'published',id:snapshot.id,version:snapshot.version,...sourceRewrite(snapshot,plan.file.document?.body),...(snapshot.affected_dependents?{affected_dependents:snapshot.affected_dependents}:{}),...datasetColumns(plan.file.path,plan.file.bytes),...datasetAccess(snapshot,plan.body)};
@@ -278,9 +278,9 @@ async function recoverRequest(workspace:Workspace,client:HttpClient,pending:Pend
   const source=pending.request.body.source??pending.request.body.markup??(pending.request.body.document_update?parseDocument(Buffer.from(pending.file.bytes,'base64').toString()).body:undefined);
   const editable=new Set([...metadataFields.map(key=>fieldMap[key]??key),'access','policy']);
   const metadataMatches=Object.entries(pending.request.body.document_update?(pending.request.body.document_update as DocumentUpdate).metadata??{}:pending.request.body).filter(([key])=>editable.has(key)).every(([key,value])=>isDeepStrictEqual(head[key==='linkRole'?'link_role':key==='policy'?'dataset_policy':key],value));
-  const contentMatches=pending.request.body.document_update?documentOutcomePresent(head,pending.file.tracked?.snapshot,pending.request.body.document_update as DocumentUpdate):typeof source==='string'?canonicalizeMarkup(source)===head.markup:pending.request.method==='PATCH';
+  const contentMatches=pending.request.body.document_update?documentOutcomePresent(head,pending.file.authoringBase??pending.file.tracked?.snapshot,pending.request.body.document_update as DocumentUpdate):typeof source==='string'?canonicalizeMarkup(source)===head.markup:pending.request.method==='PATCH';
   if(contentMatches&&metadataMatches){pending=await savePendingResponse(workspace.home,workspace.root,pending,head,client.account);}
-  else if(head.state!==pending.file.tracked?.snapshot.state)throw new CliError('outcome_unknown','The remote head changed after the unconfirmed write; automatic replay would be ambiguous.','Inspect afbin diff --remote and preserve both writers before resolving this pending operation.',{head,pending_key:pending.key});
+  else if(head.state!==(pending.file.authoringBase??pending.file.tracked?.snapshot)?.state)throw new CliError('outcome_unknown','The remote head changed after the unconfirmed write; automatic replay would be ambiguous.','Inspect afbin diff --remote and preserve both writers before resolving this pending operation.',{head,pending_key:pending.key});
  }
  if(!pending.response){
   let response:Record<string,unknown>;
@@ -376,7 +376,7 @@ async function writeDatasetPolicy(workspace:Workspace,client:HttpClient,plan:Pus
  if(observed&&isDeepStrictEqual(observed.dataset_policy??null,plan.policy??null))return snapshot;
  const staged=await stageRequest(workspace.home,workspace.root,{server:client.connection.server,account:client.account,credential:digest(client.connection.token),
   request:{path:`/artifacts/${snapshot.id}`,method:'PATCH',body:{policy:plan.policy,expectedPolicyRevision:Number(observed?.policy_revision??snapshot.policy_revision??0),expectedState:typeof observed?.state==='string'?observed.state:snapshot.state}},
-  file:{source:plan.source,path:plan.file.path,bytes:plan.file.bytes!.toString('base64'),tracked:workspace.tracking?.files[plan.file.path]}});
+  file:{authoringBase:plan.authoringBase,source:plan.source,path:plan.file.path,bytes:plan.file.bytes!.toString('base64'),tracked:workspace.tracking?.files[plan.file.path]}});
  return recoverRequest(workspace,client,staged);
 }
 /**

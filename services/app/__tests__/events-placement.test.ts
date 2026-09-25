@@ -1,3 +1,5 @@
+import {getDb} from '@/lib/db';
+import type {EventEnvelope} from '@artifactbin/contracts';
 import {observedRequest} from '@/__tests__/conditional-request';
 /**
  * THE PLACEMENT MOMENTS — the log's half of the folders and the trash.
@@ -28,11 +30,14 @@ const params = (id: string) => ({ params: Promise.resolve({ id }) });
 
 let fake: FakeEvents;
 /** A fresh log per assertion, so a fixture's own moments never count against the one under test. */
-const listen = () => { fake = fakeEvents(); setServices({ events: fake }); };
+let prior=new Set<string>();
+const listen = async() => { fake = fakeEvents(); setServices({ events: fake }); prior=new Set((await (await getDb()).query<{id:string}>('SELECT id FROM event_outbox')).rows.map(row=>row.id)); };
 beforeEach(listen);
 
-const verbs = () => fake.events.filter((e) => e.object_kind === 'artifact').map((e) => e.verb);
-const said = (verb: string) => fake.events.filter((e) => e.verb === verb);
+// Document events are durable in the commit; other actions emit directly.
+const recorded=async()=>[...fake.events,...(await (await getDb()).query<{id:string;envelope:EventEnvelope}>('SELECT id,envelope FROM event_outbox')).rows.filter(row=>!prior.has(row.id)).map(row=>row.envelope)];
+const verbs=async()=>(await recorded()).filter(e=>e.object_kind==='artifact').map(e=>e.verb);
+const said=async(verb:string)=>(await recorded()).filter(e=>e.verb===verb);
 
 async function world() {
   const t = await mintToken('o');
@@ -53,11 +58,11 @@ describe('a create says where it landed', () => {
     const folder = await w.mk({ format: 'folder', title: 'F' });
     // trackEvent is fire-and-forget; the emit is the last thing it does.
     await new Promise((r) => setTimeout(r, 50));
-    expect(said('created').at(-1)?.payload).toMatchObject({ parent_id: null });
-    listen();
+    expect((await said('created')).at(-1)?.payload).toMatchObject({ parent_id: null });
+    await listen();
     const doc = await w.mk({ markup: '<h1>x</h1>', title: 'D', parent_id: folder.id });
     await new Promise((r) => setTimeout(r, 50));
-    const created = said('created').at(-1);
+    const created = (await said('created')).at(-1);
     expect(created?.object_id).toBe(doc.id);
     expect(created?.payload).toMatchObject({ parent_id: folder.id });
   });
@@ -68,10 +73,10 @@ describe('a move is its own verb, at both placement doors', () => {
     const w = await world();
     const folder = await w.mk({ format: 'folder', title: 'F' });
     const doc = await w.mk({ markup: '<h1>x</h1>', title: 'D' });
-    listen();
+    await listen();
     const r = await patchRoute(await observedRequest(`/api/my/artifacts/${doc.id}`, { method: 'PATCH', json: { parent_id: folder.id }, cookie: w.cookie }), params(doc.id));
     expect(r.status).toBe(200);
-    const moved = said('moved');
+    const moved = (await said('moved'));
     expect(moved).toHaveLength(1);
     expect(moved[0]).toMatchObject({ object_kind: 'artifact', object_id: doc.id, subject_kind: 'user', subject_id: w.userId, payload: { from_parent_id: null, to_parent_id: folder.id } });
   });
@@ -80,23 +85,23 @@ describe('a move is its own verb, at both placement doors', () => {
     const w = await world();
     const folder = await w.mk({ format: 'folder', title: 'F' });
     const doc = await w.mk({ markup: '<h1>x</h1>', title: 'D', parent_id: folder.id });
-    listen();
+    await listen();
     await patchRoute(await observedRequest(`/api/my/artifacts/${doc.id}`, { method: 'PATCH', json: { parent_id: null }, cookie: w.cookie }), params(doc.id));
-    expect(said('moved')[0]?.payload).toMatchObject({ from_parent_id: folder.id, to_parent_id: null });
+    expect((await said('moved'))[0]?.payload).toMatchObject({ from_parent_id: folder.id, to_parent_id: null });
   });
 
   it('a PUT that files the row says it too, and a PUT that does not says nothing', async () => {
     const w = await world();
     const folder = await w.mk({ format: 'folder', title: 'F' });
     const doc = await w.mk({ markup: '<h1>x</h1>', title: 'D' });
-    listen();
+    await listen();
     const filed = await replaceOneRoute(await observedRequest(`/api/artifacts/${doc.id}`, { method: 'PUT', json: { markup: '<h1>y</h1>', title: 'D', parent_id: folder.id }, token: w.token }), params(doc.id));
     expect(filed.status).toBe(200);
-    expect(said('moved')[0]).toMatchObject({ object_id: doc.id, payload: { from_parent_id: null, to_parent_id: folder.id } });
-    listen();
+    expect((await said('moved'))[0]).toMatchObject({ object_id: doc.id, payload: { from_parent_id: null, to_parent_id: folder.id } });
+    await listen();
     const plain = await replaceOneRoute(await observedRequest(`/api/artifacts/${doc.id}`, { method: 'PUT', json: { markup: '<h1>z</h1>', title: 'D' }, token: w.token }), params(doc.id));
     expect(plain.status).toBe(200);
-    expect(said('moved')).toHaveLength(0);
+    expect((await said('moved'))).toHaveLength(0);
   });
 });
 
@@ -104,14 +109,14 @@ describe('a delete is said once, at the door, and never twice', () => {
   it('DELETE says artifact.deleted with the format and no subtree, and says nothing else', async () => {
     const w = await world();
     const doc = await w.mk({ markup: '<h1>x</h1>', title: 'D' });
-    listen();
+    await listen();
     const r = await deleteRoute(request(`/api/my/artifacts/${doc.id}`, { method: 'DELETE', cookie: w.cookie }), params(doc.id));
     expect(r.status).toBe(200);
     await new Promise((res) => setTimeout(res, 80));
-    expect(said('deleted')).toHaveLength(1);
-    expect(said('deleted')[0]).toMatchObject({ object_id: doc.id, subject_kind: 'user', subject_id: w.userId, payload: { format: 'markup', subtree: 0 } });
+    expect((await said('deleted'))).toHaveLength(1);
+    expect((await said('deleted'))[0]).toMatchObject({ object_id: doc.id, subject_kind: 'user', subject_id: w.userId, payload: { format: 'markup', subtree: 0 } });
     // The verb `trashed` does not exist: there is one deletion, and this is it.
-    expect(verbs()).not.toContain('trashed');
+    expect(await verbs()).not.toContain('trashed');
   });
 
   it('deleting a folder counts what went with it', async () => {
@@ -119,10 +124,10 @@ describe('a delete is said once, at the door, and never twice', () => {
     const folder = await w.mk({ format: 'folder', title: 'F' });
     await w.mk({ markup: '<h1>a</h1>', title: 'A', parent_id: folder.id });
     await w.mk({ markup: '<h1>b</h1>', title: 'B', parent_id: folder.id });
-    listen();
+    await listen();
     await deleteRoute(request(`/api/my/artifacts/${folder.id}`, { method: 'DELETE', cookie: w.cookie }), params(folder.id));
     await new Promise((res) => setTimeout(res, 80));
-    expect(said('deleted')[0]).toMatchObject({ object_id: folder.id, payload: { format: 'folder', subtree: 2 } });
+    expect((await said('deleted'))[0]).toMatchObject({ object_id: folder.id, payload: { format: 'folder', subtree: 2 } });
   });
 
   it('a restore says where the row landed', async () => {
@@ -130,11 +135,11 @@ describe('a delete is said once, at the door, and never twice', () => {
     const folder = await w.mk({ format: 'folder', title: 'F' });
     const doc = await w.mk({ markup: '<h1>x</h1>', title: 'D', parent_id: folder.id });
     await deleteRoute(request(`/api/my/artifacts/${doc.id}`, { method: 'DELETE', cookie: w.cookie }), params(doc.id));
-    listen();
+    await listen();
     const r = await restoreRoute(request(`/api/my/artifacts/${doc.id}/restore`, { method: 'POST', cookie: w.cookie }), params(doc.id));
     expect(r.status).toBe(200);
-    expect(said('restored')).toHaveLength(1);
-    expect(said('restored')[0]).toMatchObject({ object_id: doc.id, payload: { landed_at_root: false } });
+    expect((await said('restored'))).toHaveLength(1);
+    expect((await said('restored'))[0]).toMatchObject({ object_id: doc.id, payload: { landed_at_root: false } });
   });
 
   it('a restore whose folder is still in the trash says it landed at the root', async () => {
@@ -143,8 +148,8 @@ describe('a delete is said once, at the door, and never twice', () => {
     const doc = await w.mk({ markup: '<h1>x</h1>', title: 'D', parent_id: folder.id });
     await deleteRoute(request(`/api/my/artifacts/${folder.id}`, { method: 'DELETE', cookie: w.cookie }), params(folder.id));
     // Restore the CHILD alone: its folder is still trashed, so it re-roots.
-    listen();
+    await listen();
     await restoreRoute(request(`/api/my/artifacts/${doc.id}/restore`, { method: 'POST', cookie: w.cookie }), params(doc.id));
-    expect(said('restored')[0]?.payload).toMatchObject({ landed_at_root: true });
+    expect((await said('restored'))[0]?.payload).toMatchObject({ landed_at_root: true });
   });
 });

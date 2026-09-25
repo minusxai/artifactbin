@@ -15,7 +15,7 @@ import {prepareGraphPatch} from './document-graph-patch';
 import {graphValidationScope} from './document-graph-scope';
 import {applyOperationsToNodes} from './document-operation';
 import {validateMarkupStructure} from './local-validation';
-import {stampNodeIds,nodeIndex} from './node-ids';
+import {stampNodeIds,nodeIndex,hasAmbiguousLegacyAliases} from './node-ids';
 import {canonicalizeMarkup} from './canonical-source';
 import {repairJsxSource} from '../jsx/repair';
 import {sanitizeStoryMarkupCss} from '../data/story/banned-css';
@@ -29,6 +29,7 @@ function prepareDocument(base:ClientDocumentSnapshot,change:ClientDocumentChange
  source=repairJsxSource(source)?.source??source;
  if(source.includes('\0')||!source.isWellFormed())throw new Error('Document source must be valid Unicode without NUL characters');
  source=canonicalizeMarkup(remapMarkupStyleViewportUnits(transformOutsideManagedIframes(source,sanitizeStoryMarkupCss)));
+ if(hasAmbiguousLegacyAliases(source))throw new Error('Ambiguous duplicate legacy annotation anchors');
  const identity=stampNodeIds(source,{previousSource:before,reservedIds:Object.keys(base.document.claimedIds),retireLegacyAliases:true});
  const checked=validateMarkupStructure(identity.source);
  if(checked.errors.length)throw new Error(checked.errors.map(error=>error.message).join('\n'));

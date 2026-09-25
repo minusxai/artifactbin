@@ -1308,7 +1308,6 @@ async function replaceScoped(
       await artifactQuery<ArtifactRow>(tx,`SELECT * FROM artifacts WHERE id = $1 AND ${scope.where('$2')} FOR UPDATE`, [id, scope.val])
     ).rows[0];
     if (!current) return null;
-    if(current.format==='markup')return json({error:'jsonb_operations_required'},400);
     /*
      * A GOVERNED DATASET IS THE OWNER'S TO REPUBLISH — AND NOBODY ELSE'S.
      *
@@ -1517,17 +1516,16 @@ export async function applyEditScoped(actor: TokenActor, id: string, input: Edit
   const db = await getDb();
   const scope = opts.scope ?? editorScope(actor);
   if(input.documentUpdate){
+    const update=input.documentUpdate;
+    if(!update.whole&&!Object.keys(update.patch.updated).length&&!Object.keys(update.patch.inserted).length&&!update.patch.removed.length&&!Object.keys(update.metadata??{}).length&&!Object.keys(update.settings??{}).length&&!update.annotationOps?.length&&!update.aliases?.length&&!update.datasetBindings?.length)return json({error:'bad_diff',detail:'identical'},400);
     if(input.documentUpdate.settings?.visibility==='public'&&!ALLOW_PUBLIC_VISIBILITY)return json({error:'public_not_enabled'},400);
     const committed=await commitDocumentUpdate(db,actor,scope,id,input.documentUpdate,{dryRun:opts.dryRun});
     if(!committed)return null;
+    if(!committed.applied&&committed.head.format!=='markup')return {applied:false,reason:'not_editable'};
     if(!committed.applied&&committed.ownerOnly)return json({error:'owner_only'},403);
     if(!committed.applied&&committed.refusal)return json({error:'mention_refused',detail:committed.refusal},403);
     if(!committed.applied&&input.documentUpdate.settings?.visibility==='private'&&!committed.head.user_id)return json({error:'private_requires_account'},400);
     if(opts.dryRun)return committed.applied?json({valid:true,dry_run:true,commit_checks:['authorization','dependency_revisions','metadata','sharing','size']}):json({error:'doc_changed'},409);
-    if(committed.applied){
-      void trackEvent('edit',committed.row.id,{userId:committed.row.user_id});
-      if(input.documentUpdate.settings?.parentId!==undefined)sayMoved(actor,id,{from:input.documentUpdate.expectedParentIds?.at(-1)??null,to:input.documentUpdate.settings.parentId});
-    }
     return committed.applied?{applied:true,row:committed.row}:{applied:false,reason:'doc_changed',head:headOf(committed.head)};
   }
 

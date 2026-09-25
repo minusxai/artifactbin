@@ -1,3 +1,4 @@
+import {documentEditEventSql} from '../analytics';
 import {documentResourceSql} from './document-update-resources';
 import {documentMentionSql} from './document-update-mentions';
 import {documentReplacementSql} from './document-replacement-sql';
@@ -33,6 +34,7 @@ export async function commitDocumentUpdate(db:Queryable,actor:TokenActor|null,sc
  const mention=documentMentionSql(actor,id,update.mentions,param,visibility,shares,!!options.dryRun);
  const resources=documentResourceSql(update.datasetBindings,param,!!options.dryRun);
  const ownerOnly=`(${hasParent}::boolean AND NOT EXISTS(SELECT 1 FROM locked WHERE ${owner.where(ownerValue)}))`;
+ const editEvents=await documentEditEventSql(id,actor,param,hasParent);
  const prefix=`WITH RECURSIVE observed AS MATERIALIZED (
   SELECT id,sharing_revision FROM artifacts WHERE id=$1 AND ${scope.where('$2')}
  ), locked AS MATERIALIZED (
@@ -108,7 +110,7 @@ export async function commitDocumentUpdate(db:Queryable,actor:TokenActor|null,sc
   RETURNING artifact_id,legacy_key,source_id
  ), anchors AS (
   UPDATE annotations a SET anchor_key=x.source_id FROM aliases x WHERE a.artifact_id=x.artifact_id AND a.anchor_key=x.legacy_key AND NOT EXISTS(SELECT 1 FROM moved_annotations m WHERE m.id=a.id)
- ), ${mention.after} ${resources.after} response AS (
+ ), ${mention.after} ${resources.after} ${editEvents} response AS (
   SELECT true AS applied,to_jsonb(u)-'previous' AS artifact,u.id FROM updated u WHERE EXISTS(SELECT 1 FROM logged) AND (SELECT count(*) FROM parent_notifications)>=0 ${update.mentions?.length?'AND (SELECT count(*) FROM mention_wake)>=0':''}
   UNION ALL SELECT false,to_jsonb(l),l.id FROM locked l WHERE NOT EXISTS(SELECT 1 FROM updated)
  ) SELECT applied,${mention.refusal} AS refusal,${ownerOnly} AS owner_only,artifact||jsonb_build_object('open_annotations',(SELECT count(*) FROM annotations a WHERE a.artifact_id=response.id AND a.root_id IS NULL AND a.deleted_at IS NULL AND a.status='open'),'shares',COALESCE(CASE WHEN applied THEN ${shares}::jsonb END,(SELECT jsonb_agg(jsonb_build_object('email',s.email,'role',s.role) ORDER BY s.email) FROM artifact_shares s WHERE s.artifact_id=response.id),'[]'::jsonb)) AS artifact FROM response`;

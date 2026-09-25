@@ -32,6 +32,10 @@ try{
  for(let run=0;run<repeats;run++){
   const published=await publishJsx({},'<section id="root" className="prose">'+Array.from({length:paragraphs},(_,i)=>paragraph(i,0)).join('')+'</section>');assert.ok(!(published instanceof Response));
   const initial=await createArtifact(token.id,null,{...published,title:'mxmx_test_benchmark',visibility:'unlisted'});
+  // Creation telemetry is asynchronous setup work, not an edit query. Drain it
+  // before resetting counters so slow callbacks cannot contaminate a batch.
+  const setupDeadline=performance.now()+5000;
+  while(!(await db.query("SELECT 1 FROM analytics_events WHERE artifact_id=$1 AND event='create'",[initial.id])).rows.length){assert.ok(performance.now()<setupDeadline,'Creation telemetry did not drain');await new Promise(resolve=>setTimeout(resolve,5));}
   statementCounts={};statementMs={};const samples=[];let elapsedMs=0,clientPreparationMs=0;
   const heads=Array.from({length:concurrency},()=>initial);
   for(let round=1;round<=rounds;round++){

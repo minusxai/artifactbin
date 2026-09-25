@@ -4,12 +4,12 @@ import {confinedPath} from './journal';
 import {readState,stateFor} from './state-access';
 import {normalizeServer} from './config';
 import {CliError} from './commands';
-import type {TrackedFile} from './workspace';
+import type {TrackedFile,Snapshot} from './workspace';
 import type {ResourceSource} from './resource-file';
 interface RequestIntent {
  server:string;account?:string;credential:string;
  request:{path:string;method:string;body:Record<string,unknown>};
- file:{source?:ResourceSource;path:string;bytes:string;tracked?:TrackedFile;renamedFrom?:string};
+ file:{authoringBase?:Snapshot;source?:ResourceSource;path:string;bytes:string;tracked?:TrackedFile;renamedFrom?:string};
 }
 export interface PendingRequest extends RequestIntent {version:1;key:string;checksum:string;response?:Record<string,unknown>;responseAccount?:string;responseChecksum?:string}
 const CURRENT='current';

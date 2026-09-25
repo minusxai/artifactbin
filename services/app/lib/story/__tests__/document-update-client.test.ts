@@ -34,3 +34,7 @@ it('requests authoring context only for affected data, icons, fonts or imported 
  verify.mockRejectedValueOnce(new Error('Unknown font'));
  await expect(prepareClientDocumentPublication(base,{source:'<Helmet><meta name="font-body" content="Missing Font" /></Helmet>'+source},verify)).rejects.toThrow('Unknown font');
 });
+it('refuses ambiguous legacy anchors before normalization can discard them',()=>{
+ const base={document:createDocumentGraph(source,1),version:1,meta:{}};
+ for(const anchor of ['"old"','{"old"}'])expect(()=>prepareClientDocumentUpdate(base,{source:`<main><p data-annotation-anchor=${anchor}>First</p><p data-annotation-anchor=${anchor}>Second</p></main>`,whole:true})).toThrow(/ambiguous|duplicate/i);
+});

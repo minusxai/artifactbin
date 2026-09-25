@@ -40,7 +40,7 @@ interface MigratableRow extends SourceRow {id?:string;artifact_id?:string;format
 export async function loadArtifactDocument<T extends MigratableRow>(db:Queryable,sql:string,params:unknown[]):Promise<T|null> {
  const row=(await db.query<T>(sql,params)).rows[0];
  if(!row)return null;
- if(!['markup','folder'].includes(row.format)||row.document?.kind==='graph'||row.document==null&&row.source==null)return decodeArtifactDocument(row);
+ if(row.format!=='markup'||row.document?.kind==='graph'||row.document==null&&row.source==null)return decodeArtifactDocument(row);
  const source=row.document?decodeDocument(row.document):row.source!;
  const document=createDocumentGraph(source,row.version),history=row.artifact_id!==undefined;
  const result=await db.query(`UPDATE ${history?'artifact_versions':'artifacts'} SET document=$1::jsonb,source=NULL
