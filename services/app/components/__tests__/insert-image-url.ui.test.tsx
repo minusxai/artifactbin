@@ -264,6 +264,30 @@ describe('replacing an image', () => {
     expect(queue).not.toHaveBeenCalled();
   });
 
+  /*
+   * The document never renders its <Helmet>, so BODY paths (what the frame
+   * reports) are offset from SOURCE paths. Replace and alt must translate.
+   */
+  it('replaces and describes the right image in a document with a <Helmet>', async () => {
+    const HELMET = `<Helmet><title>t</title></Helmet>${IMG_SOURCE}`;
+    stubFetch(new Response(JSON.stringify({ id: 'New888' }), { status: 201 }));
+    render(
+      <InPlaceEditor
+        art={{ ...imgArt, markup: HELMET } as React.ComponentProps<typeof InPlaceEditor>['art']}
+        frameRef={{ current: frameEl }}
+        sessionNonce={NONCE}
+      />,
+    );
+    await fromFrame({ type: 'mx:selection', selection: IMG_SELECTION }); // body path 0.1
+    await fromFrame({ type: 'mx:image-drop', file: new File(['x'], 'h.png', { type: 'image/png' }), target: '0.1' });
+    await waitFor(() => expect(lastSource()).toBe(HELMET.replace('ref:Old111', 'ref:New888')));
+    fireEvent.click(screen.getByLabelText('Alt text'));
+    expect((screen.getByLabelText('Image alt text') as HTMLInputElement).value).toBe('A chart');
+    fireEvent.change(screen.getByLabelText('Image alt text'), { target: { value: 'Revenue' } });
+    await act(async () => { fireEvent.click(screen.getByLabelText('Save alt text')); });
+    expect(lastSource()).toBe(HELMET.replace('ref:Old111', 'ref:New888').replace('alt="A chart"', 'alt="Revenue"'));
+  });
+
   it('alt text: add, edit and remove, each one undoable step', async () => {
     await mountImage();
     fireEvent.click(screen.getByLabelText('Alt text'));

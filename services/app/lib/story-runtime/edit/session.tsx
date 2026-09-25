@@ -76,6 +76,8 @@ export const EDIT_SPOTLIGHT_ATTR = 'data-mx-edit-spotlight';
 export const EDIT_DROP_REPLACE_ATTR = 'data-mx-drop-replace';
 /** The "Drop to replace" label drawn over that image — chrome, never document. */
 const DROP_REPLACE_LABEL_ATTR = 'data-mx-drop-replace-label';
+/** That image's mark: a dashed neutral line and a faint veil, so "drop here" never reads as selected. */
+const DROP_REPLACE_CSS = 'outline: 2px dashed rgba(100, 116, 139, 0.9) !important; outline-offset: 3px !important; opacity: 0.75 !important;';
 
 /** The story root while editing: focusable, so a block selection keeps the keyboard in the document. */
 const EDIT_ROOT_ATTR = 'data-mx-edit-root';
@@ -97,7 +99,7 @@ const EDIT_MODE_CSS = [
   `[${EDIT_SELECTED_ATTR}="block"][${EDIT_SELECTED_ATTR}], [${EDIT_EMBED_SELECTED_ATTR}="block"][${EDIT_EMBED_SELECTED_ATTR}] { ${SELECTION_PRESENTATION.editSelectedCss} }`,
   `[data-mx-block-selected][data-mx-block-selected] { ${SELECTION_PRESENTATION.editSelectedCss} }`,
   `[${EDIT_SPOTLIGHT_ATTR}][${EDIT_SPOTLIGHT_ATTR}] { ${SELECTION_PRESENTATION.spotlightCss} }`,
-  `[${EDIT_DROP_REPLACE_ATTR}][${EDIT_DROP_REPLACE_ATTR}] { ${SELECTION_PRESENTATION.dropReplaceCss} }`,
+  `[${EDIT_DROP_REPLACE_ATTR}][${EDIT_DROP_REPLACE_ATTR}] { ${DROP_REPLACE_CSS} }`,
 ].join('\n');
 
 const EDIT_CSS_ATTR = 'data-mx-edit-css';
