@@ -139,6 +139,21 @@ describe('the chrome the selection drives', () => {
     expect(screen.getByLabelText('Delete element')).toBeTruthy();
   });
 
+  it('a BLOCK-selected paragraph gets block tools only; typing in it gets the text tools back', async () => {
+    mount({ onComment: vi.fn() });
+    const textOnly = ['Decrease font size', 'Toggle bold', 'Toggle italic', 'Toggle underline', 'Text color', 'Insert link', 'Remove link'];
+    await fromFrame({ type: STORY_SELECTION_MESSAGE, selection: selection({ kind: 'text', mode: 'block' }) });
+    for (const label of textOnly) expect(screen.queryByLabelText(label), label).toBeNull();
+    expect(screen.getByLabelText('Selection breadcrumb').textContent).toContain('Paragraph');
+    expect(screen.getByLabelText('Alignment')).toBeTruthy();
+    expect(screen.getByLabelText('More formatting controls')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Insert' })).toBeTruthy();
+    expect(screen.getByLabelText('Comment on selection')).toBeTruthy();
+    expect(screen.getByLabelText('Delete element')).toBeTruthy();
+    await fromFrame({ type: STORY_SELECTION_MESSAGE, selection: selection({ kind: 'text', mode: 'typing' }) });
+    for (const label of textOnly) expect(screen.getByLabelText(label), label).toBeTruthy();
+  });
+
   it('a component gets the toolbar too — name, comment, delete; no format chips', async () => {
     /*
      * Every element is clickable and every click lands somewhere useful
@@ -151,7 +166,7 @@ describe('the chrome the selection drives', () => {
     mount({ onComment });
     await fromFrame({ type: STORY_SELECTION_MESSAGE, selection: selection({ kind: 'embed', tag: 'Question', path: '0.2' }) });
     expect(screen.getByLabelText('Typography toolbar')).toBeTruthy();
-    expect(screen.getByLabelText('Selection breadcrumb').textContent).toContain('Question');
+    expect(screen.getByLabelText('Selection breadcrumb').textContent).toContain('Chart');
     expect(screen.getByLabelText('Comment on selection')).toBeTruthy();
     expect(screen.getByLabelText('Delete element')).toBeTruthy();
     expect(screen.queryByLabelText('Toggle bold')).toBeNull();

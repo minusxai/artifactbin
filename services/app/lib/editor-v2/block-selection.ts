@@ -1,5 +1,6 @@
 /** Explicit fallback for ranges crossing independent editor/component boundaries. */
 import type { BlockEdit } from './block-edit';
+import { NODE_CHROME_SELECTOR } from './node-chrome';
 const BLOCK =
   'p[data-mx-ast],h1[data-mx-ast],h2[data-mx-ast],h3[data-mx-ast],h4[data-mx-ast],h5[data-mx-ast],h6[data-mx-ast],li[data-mx-ast],pre[data-mx-ast]';
 export function createBlockSelection(
@@ -79,7 +80,7 @@ export function createBlockSelection(
     across(block(range.anchorNode), block(range.focusNode));
   };
   const onDown = (e: PointerEvent) => {
-    if (!scope.contains(e.target as Node) || (e.target as Element)?.closest?.('[data-mx-node-chrome]'))
+    if (!scope.contains(e.target as Node) || (e.target as Element)?.closest?.(NODE_CHROME_SELECTOR))
       return;
     clear();
     anchor = block(e.target as Node);

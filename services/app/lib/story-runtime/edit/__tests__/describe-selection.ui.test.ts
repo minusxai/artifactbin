@@ -9,6 +9,7 @@
 import { describe, it, expect } from 'vitest';
 import { parseJsx } from '@/lib/jsx';
 import { describeSelection, selectionKindAt, ancestorCrumbs } from '../describe-selection';
+import { gripTarget } from '../edit-chrome';
 
 const SRC = '<div id="runtime-source-root" className="p-8 max-w-2xl"><h1 className="text-3xl">Title</h1>'
   + '<div className="flex gap-2"><p id="persisted-paragraph" className="lede" style="color: red">hello world</p></div>'
@@ -95,6 +96,30 @@ describe('ancestorCrumbs', () => {
   it('is empty at the root', () => {
     const at = mount();
     expect(ancestorCrumbs(at('0'), nodes)).toEqual([]);
+  });
+
+  /*
+   * The breadcrumb and Esc climb the SAME list. A card is a block the author
+   * placed, so it is named; its CardContent is part of the card (selecting it
+   * outlined an inset box inside the card), so it folds into the card.
+   */
+  const NESTED = '<div className="p-8"><Card className="mt-6"><CardContent className="p-6"><Grid mode="flow"><GridItem w={6}><p>left</p></GridItem></Grid></CardContent></Card></div>';
+  const nested = (() => { const p = parseJsx(NESTED); if (!p.ok) throw new Error('fixture does not parse'); return p.nodes; })();
+  const mountNested = () => {
+    document.body.innerHTML = '<div data-mx-ast="0"><div data-mx-ast="0.0" class="mt-6"><div data-mx-ast="0.0.0" class="p-6">'
+      + '<div data-mx-ast="0.0.0.0"><div data-mx-ast="0.0.0.0.0"><p data-mx-ast="0.0.0.0.0.0">left</p></div></div></div></div></div>';
+    return (path: string) => document.querySelector(`[data-mx-ast="${path}"]`)!;
+  };
+
+  it('names container components on the way up and folds a component\'s own parts into it', () => {
+    const at = mountNested();
+    expect(ancestorCrumbs(at('0.0.0.0.0.0'), nested).map((c) => c.tag)).toEqual(['Card', 'Grid', 'GridItem']);
+  });
+
+  it('gives a component part\'s padding the grip of the component', () => {
+    const at = mountNested();
+    expect(gripTarget(at('0.0.0'), nested)).toBe(at('0.0'));
+    expect(gripTarget(at('0.0.0.0.0'), nested)).toBe(at('0.0.0.0.0'));
   });
 });
 

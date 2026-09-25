@@ -10,6 +10,7 @@ import {
   STORY_APPLY_FORMAT_MESSAGE,
   STORY_IMAGE_DROP_MESSAGE,
   STORY_SELECTION_MESSAGE,
+  STORY_SELECT_MESSAGE,
   STORY_TEXT_EDIT_MESSAGE,
   type StoryEditParentMessage,
 } from '@/lib/story-runtime/contract';
@@ -129,7 +130,7 @@ describe('embeds that would navigate', () => {
 describe('a new document arriving underneath', () => {
   it('drops a selection the new document no longer has', () => {
     const { session, at } = mount();
-    fireEvent.click(at('0.2'), { bubbles: true });
+    session.onParentMessage({ type: STORY_SELECT_MESSAGE, path: '0.2' } as StoryEditParentMessage);
     expect(at('0.2').hasAttribute(EDIT_SELECTED_ATTR)).toBe(true);
     act(() => { document.body.innerHTML = ''; });
     session.setNodes(nodesOf('<div className="p-8"><p>only this now</p></div>'));

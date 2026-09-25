@@ -57,14 +57,16 @@ const COMPONENTS = {
 /** Every session listens on `document`; one left alive leaks into the next test. */
 const live: Array<{ dispose(): void }> = [];
 
-export function mount(src = SRC, requestRender = vi.fn()) {
+/** `root: true` scopes the session to a story root, as the inline runtime does. */
+export function mount(src = SRC, requestRender = vi.fn(), options: { root?: boolean } = {}) {
   const nodes = nodesOf(src);
-  const session = createFrameEditSession({ win: window, channel: env.channel, requestRender });
+  const root = options.root ? document.body.appendChild(document.createElement('div')) : undefined;
+  const session = createFrameEditSession({ win: window, channel: env.channel, requestRender, root });
   live.push(session);
   session.setNodes(nodes);
-  const view = render(<>{renderStoryNodes(nodes, { components: COMPONENTS, decorateElement: session.decorate })}</>);
+  const view = render(<>{renderStoryNodes(nodes, { components: COMPONENTS, decorateElement: session.decorate })}</>, root ? { container: root } : {});
   const at = (path: string) => view.container.querySelector(`[data-mx-ast="${path}"]`) as HTMLElement;
-  return { session, view, at, requestRender, nodes };
+  return { session, view, at, requestRender, nodes, root };
 }
 
 /** Call from `beforeEach`. */

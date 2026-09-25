@@ -57,27 +57,8 @@ import type { StoryEditSelection } from '@/lib/story-runtime/contract';
 import type { ComposableFormatEdit } from '@/lib/story/edit-compose';
 import { StoryToolbarMenu } from './StoryToolbarMenu';
 import { Tooltip } from '@/components/Tooltip';
+import { nodeName } from '@/lib/story-ui/node-names';
 
-const NODE_NAMES: Record<string, string> = {
-  p: 'Paragraph',
-  div: 'Container',
-  section: 'Section',
-  article: 'Article',
-  img: 'Image',
-  span: 'Text',
-  a: 'Link',
-  li: 'List item',
-  ul: 'Bulleted list',
-  ol: 'Numbered list',
-  blockquote: 'Quote',
-  h1: 'Heading 1',
-  h2: 'Heading 2',
-  h3: 'Heading 3',
-  h4: 'Heading 4',
-  h5: 'Heading 5',
-  h6: 'Heading 6',
-};
-const nodeName = (tag: string) => NODE_NAMES[tag] ?? tag;
 
 interface StoryFormatToolbarProps {
   artifactId?:string;
@@ -125,6 +106,12 @@ export default function StoryFormatToolbar({
   const [alignmentOpen, setAlignmentOpen] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
   const linkInputRef = useRef<HTMLInputElement>(null);
+  // A deep trail overflows on a phone: keep its end, the selected node, in view.
+  const crumbsRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const crumbs = crumbsRef.current;
+    if (crumbs) crumbs.scrollLeft = crumbs.scrollWidth;
+  }, [selection?.path]);
 
   useEffect(() => {
     setLinkDraft(null);
@@ -190,7 +177,7 @@ export default function StoryFormatToolbar({
         className="flex h-8 max-w-[50%] shrink-0 items-center gap-1 border-r border-edge px-2"
         aria-label="Selection breadcrumb"
       >
-        <div className="flex min-w-0 items-center gap-1 overflow-x-auto whitespace-nowrap">
+        <div ref={crumbsRef} className="flex min-w-0 items-center gap-1 overflow-x-auto whitespace-nowrap">
           <button
             type="button"
             aria-label="Document options"
@@ -202,7 +189,7 @@ export default function StoryFormatToolbar({
           <span className="text-[11px] text-muted">{'>'}</span>
           {selection.ancestors.length > 0 && (
             <>
-              {selection.ancestors.slice(-2).map((crumb) => (
+              {selection.ancestors.map((crumb) => (
                 <Fragment key={crumb.path}>
                   <Tooltip content={crumb.hint || crumb.tag}>
                     <button
@@ -301,6 +288,7 @@ export default function StoryFormatToolbar({
               </div>
             </StoryToolbarMenu>
 
+            {plan.color && (<>
             <span className="mx-0.5 h-4 w-px bg-edge" />
             <Tooltip content="text color">
               <label
@@ -317,6 +305,7 @@ export default function StoryFormatToolbar({
                 />
               </label>
             </Tooltip>
+            </>)}
           </>
         )}
 

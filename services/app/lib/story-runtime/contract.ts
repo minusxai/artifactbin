@@ -596,6 +596,13 @@ export interface StoryEditSelection {
   inline?:Record<'strong'|'em'|'u',boolean|'mixed'>;
   /** 'text': a focused editable host · 'element': a click-selected container · 'embed': a component. */
   kind: 'text' | 'element' | 'embed';
+  /**
+   * 'typing': a caret in text (the toolbar offers text tools). 'block': the node
+   * itself is selected (grip, Esc, breadcrumb, a click on a chart) — the caret
+   * is gone, so the toolbar offers block tools only. Absent from older frames:
+   * treated as before.
+   */
+  mode?: 'typing' | 'block';
   path: string;
   /** Authored persistent DOM id of the source node. Absent until autosave has persisted one. */
   nodeId?: string;

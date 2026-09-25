@@ -19,7 +19,7 @@ import { cloneElement, createElement } from 'react';
 import { serializeJsx, type JsxElement, type JsxNode } from '@/lib/jsx';
 import { restoreBookmark, type EditorBookmark, type EditorSelectionChange } from '@/lib/editor-v2/bookmark';
 import { FlowEditor } from '@/lib/editor-v2/flow-editor';
-import { createNodeChrome } from '@/lib/editor-v2/node-chrome';
+import { createNodeChrome, HOVER_GRIP_ATTR, NODE_CHROME_SELECTOR } from '@/lib/editor-v2/node-chrome';
 import { createBlockSelection } from '@/lib/editor-v2/block-selection';
 import { gridCols, gridRowHeight } from '@/lib/story-ui/grid-layout';
 import { resolveJsxNodeAtPath } from '@/lib/story-ui/host-classify';
@@ -53,22 +53,27 @@ import {
   type StoryEditParentMessage,
   type StoryEditSelection,
 } from '../contract';
-import { describeSelection } from './describe-selection';
+import { ancestorCrumbs, describeSelection } from './describe-selection';
 import { captureSelection } from './selection-range';
 import { EditableHost } from './editable-host';
 import { GridEdit } from './grid-edit';
 import { imageFileFromTransfer } from './image-drop';
 import { collectTextRegions, createRegionGeometry, navigateAcrossRegions } from './arrow-navigation';
 import { SELECTION_PRESENTATION } from '../selection-presentation';
+import { canResize, editChromeKind, gripTarget, isComponentPart } from './edit-chrome';
+import { nodeName } from '@/lib/story-ui/node-names';
 
-/** Marks the selected node so the reader can see what the toolbar is pointed at. */
+/** Marks the selected node so the reader can see what the toolbar is pointed at. Value: 'block' when block-selected, else 'text' (typing). */
 export const EDIT_SELECTED_ATTR = 'data-mx-selected';
 /** Marks the selected COMPONENT. Its own attribute: two writers on one attribute take turns clearing each other. */
 export const EDIT_EMBED_SELECTED_ATTR = 'data-mx-embed-selected';
-/** Marks the selectable node under the pointer while edit mode is live. */
+/** Marks the selectable node under the pointer while edit mode is live. Value: its edit-chrome kind (drives the cursor only). */
 export const EDIT_HOVER_ATTR = 'data-mx-edit-hover';
 /** Marks nodes the page pointed at (STORY_SPOTLIGHT_MESSAGE) — outlined, never selected. */
 export const EDIT_SPOTLIGHT_ATTR = 'data-mx-edit-spotlight';
+
+/** The story root while editing: focusable, so a block selection keeps the keyboard in the document. */
+const EDIT_ROOT_ATTR = 'data-mx-edit-root';
 
 /**
  * Selection chrome, injected on entering edit mode and removed on leaving.
@@ -76,11 +81,16 @@ export const EDIT_SPOTLIGHT_ATTR = 'data-mx-edit-spotlight';
  * or apply editor chrome.
  */
 const EDIT_MODE_CSS = [
-  '[data-mx-block-selected] { outline: 1px solid rgba(100,116,139,.18); outline-offset: 2px; }',
   '.ProseMirror { outline: none; white-space: pre-wrap; overflow-wrap: break-word; }',
   '[contenteditable="true"]:focus { outline: none; }',
-  `[${EDIT_SELECTED_ATTR}][${EDIT_SELECTED_ATTR}], [${EDIT_EMBED_SELECTED_ATTR}][${EDIT_EMBED_SELECTED_ATTR}] { ${SELECTION_PRESENTATION.selectedCss} }`,
-  `[${EDIT_HOVER_ATTR}][${EDIT_HOVER_ATTR}] { ${SELECTION_PRESENTATION.hoverCss} }`,
+  // Hover draws nothing: the cursor says what a click does, and one grip sits in the margin.
+  `[${EDIT_HOVER_ATTR}="block"][${EDIT_HOVER_ATTR}] { cursor: pointer; }`,
+  `[${EDIT_HOVER_ATTR}="container"][${EDIT_HOVER_ATTR}] { cursor: default; }`,
+  // Block mode keeps keyboard focus on the story root; it is not a control to ring.
+  `[${EDIT_ROOT_ATTR}]:focus { outline: none; }`,
+  // Only a BLOCK selection is outlined; typing shows the caret and nothing else.
+  `[${EDIT_SELECTED_ATTR}="block"][${EDIT_SELECTED_ATTR}], [${EDIT_EMBED_SELECTED_ATTR}="block"][${EDIT_EMBED_SELECTED_ATTR}] { ${SELECTION_PRESENTATION.editSelectedCss} }`,
+  `[data-mx-block-selected][data-mx-block-selected] { ${SELECTION_PRESENTATION.editSelectedCss} }`,
   `[${EDIT_SPOTLIGHT_ATTR}][${EDIT_SPOTLIGHT_ATTR}] { ${SELECTION_PRESENTATION.spotlightCss} }`,
 ].join('\n');
 
@@ -126,6 +136,11 @@ export function createFrameEditSession({
   let nodesContent = JSON.stringify(nodes);
   let active: ActiveHost | null = null;
   let selectedPath: string | null = null;
+  /**
+   * TYPING (a caret in text: no outline, no handles) or BLOCK SELECTED (the
+   * block's outline, handles and toolbar options; no caret) — never both.
+   */
+  let blockMode = false;
   let hovered: Element | null = null;
   let typingReported = false;
   let bodyEpoch = 0;
@@ -152,10 +167,14 @@ export function createFrameEditSession({
   const blockSelection = createBlockSelection(doc, scope, (command) =>
     post({ type: STORY_BLOCK_EDIT_MESSAGE, command }),
   );
-  const chrome = createNodeChrome(doc, (command) => {
-    commitHost(active);
-    post({ type: STORY_BLOCK_EDIT_MESSAGE, command });
-  });
+  const chrome = createNodeChrome(
+    doc,
+    (command) => {
+      commitHost(active);
+      post({ type: STORY_BLOCK_EDIT_MESSAGE, command });
+    },
+    (el) => selectBlock(el),
+  );
 
   // ── selection ─────────────────────────────────────────────────────────────
   const stampSelection = () => {
@@ -164,17 +183,17 @@ export function createFrameEditSession({
       el.removeAttribute(EDIT_EMBED_SELECTED_ATTR);
     }
     const range = win.getSelection();
-    if (!selectedPath || blockSelection.paths().length || (range && !range.isCollapsed && scope.contains(range.anchorNode))) {
+    const deselect = () => {
       chrome.select(null, null);
-      return;
-    }
+      refreshGrip();
+    };
+    if (!selectedPath || blockSelection.paths().length || (range && !range.isCollapsed && scope.contains(range.anchorNode)))
+      return deselect();
     const el = scope.querySelector(`[${AST_PATH_ATTR}="${CSS.escape(selectedPath)}"]`);
-    if (!el) {
-      chrome.select(null, null);
-      return;
-    }
+    if (!el) return deselect();
     const kind = describeSelection(el, nodes)?.kind;
-    el.setAttribute(kind === 'embed' ? EDIT_EMBED_SELECTED_ATTR : EDIT_SELECTED_ATTR, '');
+    el.setAttribute(kind === 'embed' ? EDIT_EMBED_SELECTED_ATTR : EDIT_SELECTED_ATTR, blockMode ? 'block' : 'text');
+    if (!blockMode) return deselect();
     const node = resolveJsxNodeAtPath(nodes, selectedPath);
     const parent = resolveJsxNodeAtPath(nodes, selectedPath.split('.').slice(0, -1).join('.'));
     const props =
@@ -196,7 +215,47 @@ export function createFrameEditSession({
         node.tag,
       ) ||
         (el.namespaceURI === 'http://www.w3.org/2000/svg' && node.tag !== 'svg'));
-    chrome.select(inlineOrDrawingPart ? null : (el as HTMLElement), inlineOrDrawingPart ? null : selectedPath, grid);
+    chrome.select(inlineOrDrawingPart ? null : (el as HTMLElement), inlineOrDrawingPart ? null : selectedPath, grid, {
+      resizable: node?.type === 'element' && canResize(node),
+      label: node?.type === 'element' ? nodeName(node.tag) : 'Block',
+      parent: parentName(selectedPath),
+    });
+    refreshGrip();
+  };
+
+  /** What the block's parent is called, a component's own parts folded into the component. */
+  const parentName = (path: string) => {
+    for (let at = path.split('.').slice(0, -1); at.length; at.pop()) {
+      const node = resolveJsxNodeAtPath(nodes, at.join('.'));
+      if (node?.type !== 'element') break;
+      if (!isComponentPart(node, resolveJsxNodeAtPath(nodes, at.slice(0, -1).join('.')))) return nodeName(node.tag);
+    }
+    return 'document';
+  };
+
+  /** One grip: beside the block under the pointer, else (a touch screen has no hover) the block with the caret. */
+  const refreshGrip = () => {
+    const caret = !blockMode && selectedPath ? scope.querySelector(`[${AST_PATH_ATTR}="${CSS.escape(selectedPath)}"]`) : null;
+    const under = hovered ?? caret;
+    chrome.hover(under && gripTarget(under, nodes));
+  };
+
+  /**
+   * BLOCK-select `el` (a grip, the breadcrumb, Esc, a click on a chart): the
+   * caret goes, and keyboard focus stays in the document (on the story root)
+   * so the next Esc climbs and Delete deletes.
+   */
+  const selectBlock = (el: Element) => {
+    const target = gripTarget(el, nodes) ?? el;
+    const focused = doc.activeElement as HTMLElement | null;
+    if (focused && focused !== root && scope.contains(focused)) focused.blur();
+    win.getSelection()?.removeAllRanges();
+    if (root) {
+      root.setAttribute(EDIT_ROOT_ATTR, '');
+      if (!root.hasAttribute('tabindex')) root.tabIndex = -1;
+      root.focus({ preventScroll: true });
+    }
+    reportSelection(describeSelection(target, nodes), true);
   };
 
   /**
@@ -222,8 +281,10 @@ export function createFrameEditSession({
     return selection;
   };
 
-  const reportSelection = (selection: StoryEditSelection | null) => {
+  const reportSelection = (selection: StoryEditSelection | null, block = false) => {
     selectedPath = selection?.path ?? null;
+    blockMode = !!selection && block;
+    if (selection) selection.mode = blockMode ? 'block' : 'typing';
     stampSelection();
     post({ type: STORY_SELECTION_MESSAGE, selection });
   };
@@ -234,6 +295,7 @@ export function createFrameEditSession({
     const path = active?.path ?? selectedPath!;
     const el = scope.querySelector(`[${AST_PATH_ATTR}="${CSS.escape(path)}"]`);
     const selection = el ? describeWithQuote(el) : null;
+    if (selection) selection.mode = blockMode && !active ? 'block' : 'typing';
     post({ type: STORY_SELECTION_MESSAGE, selection });
   };
 
@@ -282,7 +344,7 @@ export function createFrameEditSession({
     if (
       !element?.closest ||
       (root && !root.contains(element)) ||
-      element.closest('.mx-rail, .mx-present, [data-mx-node-chrome]')
+      element.closest(`.mx-rail, .mx-present, ${NODE_CHROME_SELECTOR}`)
     )
       return null;
     const stamped = element.closest(`[${AST_PATH_ATTR}]`);
@@ -293,7 +355,8 @@ export function createFrameEditSession({
     if (hovered === next) return;
     hovered?.removeAttribute(EDIT_HOVER_ATTR);
     hovered = next;
-    hovered?.setAttribute(EDIT_HOVER_ATTR, '');
+    hovered?.setAttribute(EDIT_HOVER_ATTR, editChromeKind(hovered));
+    refreshGrip();
   };
 
   /** The whole set each time (the message is idempotent); the first found scrolls into view. */
@@ -325,8 +388,14 @@ export function createFrameEditSession({
   };
   doc.addEventListener('selectionchange', onSelectionChange);
 
-  const onPointerOver = (event: PointerEvent) => setHovered(selectableAt(event.target));
-  const onPointerOut = (event: PointerEvent) => setHovered(selectableAt(event.relatedTarget));
+  // The margin grip sits beside the hovered block: travelling onto it keeps that hover.
+  const onGrip = (target: EventTarget | null) => !!(target as Element | null)?.closest?.(`[${HOVER_GRIP_ATTR}]`);
+  const onPointerOver = (event: PointerEvent) => {
+    if (!onGrip(event.target)) setHovered(selectableAt(event.target));
+  };
+  const onPointerOut = (event: PointerEvent) => {
+    if (!onGrip(event.relatedTarget)) setHovered(selectableAt(event.relatedTarget));
+  };
 
   const onClick = (event: Event) => {
     const target = event.target as Element | null;
@@ -335,7 +404,7 @@ export function createFrameEditSession({
     // Chrome the document draws for itself (the deck rail and its slide
     // previews) re-renders the slide's own nodes, so ids and AST stamps appear
     // twice — a click there must never select the preview copy.
-    if (target.closest('.mx-rail, .mx-present, [data-mx-node-chrome]')) return;
+    if (target.closest(`.mx-rail, .mx-present, ${NODE_CHROME_SELECTOR}`)) return;
     if (target.closest('.ProseMirror') && target.closest('a')) event.preventDefault();
     // A drag ends with a click on the common ancestor. It is still a text
     // selection, never an instruction to resize that entire container.
@@ -347,6 +416,20 @@ export function createFrameEditSession({
     const stamped = target.closest(`[${AST_PATH_ATTR}]`);
     if (!stamped) {
       reportSelection(null);
+      return;
+    }
+    const chromeKind = editChromeKind(stamped);
+    // Nothing to type in a chart or an image: a click selects it.
+    if (chromeKind === 'block') {
+      if (describeSelection(stamped, nodes)) selectBlock(stamped);
+      return;
+    }
+    // A container's padding selects nothing (its grip, Esc and the breadcrumb
+    // do) — unless the click put a caret in text inside it.
+    if (chromeKind === 'container') {
+      const anchor = native?.anchorNode;
+      if (!(anchor && stamped.contains(anchor) && (doc.activeElement as HTMLElement | null)?.isContentEditable))
+        reportSelection(null);
       return;
     }
     const selection = describeWithQuote(stamped);
@@ -380,7 +463,24 @@ export function createFrameEditSession({
       return;
     }
     if (event.key === 'Escape') {
-      post({ type: STORY_EDIT_KEY_MESSAGE, key: 'Escape' });
+      // A dialog or menu in the document closes itself first.
+      if ((event.target as Element | null)?.closest?.('dialog, [role="dialog"], [role="menu"], [role="listbox"]')) return;
+      // Esc CLIMBS: the caret's block, then each container up the breadcrumb,
+      // then nothing. With nothing selected it keeps its old meaning.
+      const el = selectedPath && scope.querySelector(`[${AST_PATH_ATTR}="${CSS.escape(selectedPath)}"]`);
+      if (!el) {
+        post({ type: STORY_EDIT_KEY_MESSAGE, key: 'Escape' });
+        return;
+      }
+      event.preventDefault();
+      if (!blockMode) {
+        selectBlock(el);
+        return;
+      }
+      const up = ancestorCrumbs(el, nodes).at(-1);
+      const parent = up && scope.querySelector(`[${AST_PATH_ATTR}="${CSS.escape(up.path)}"]`);
+      if (parent) selectBlock(parent);
+      else reportSelection(null);
       return;
     }
     if (event.key !== 'Delete' && event.key !== 'Backspace') return;
@@ -787,7 +887,8 @@ export function createFrameEditSession({
             break;
           }
           const el = scope.querySelector(`[${AST_PATH_ATTR}="${CSS.escape(message.path)}"]`);
-          reportSelection(el ? describeWithQuote(el) : null);
+          if (el) selectBlock(el);
+          else reportSelection(null);
           break;
         }
         case STORY_SPOTLIGHT_MESSAGE:
