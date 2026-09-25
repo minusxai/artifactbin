@@ -1,3 +1,4 @@
+import {prepareClientDocumentUpdate} from '@/lib/story/document-update-client';
 import { describe, expect, it } from 'vitest';
 import { useAppHarness } from './harness';
 import { mintToken, resolveToken, revokeToken } from '@/lib/tokens';
@@ -59,7 +60,7 @@ describe('shared guest ownership', () => {
       expect(await (await cliCheck()).json()).toEqual({ authorized: true });
       const edit = await host.fetch(new Request(base + `/api/artifacts/${artifactId}`, { method: 'PUT', headers: {
         authorization: `Bearer ${credential.access_token}`, 'content-type': 'application/json', 'X-Artifactbin-Account': workspaceAccount,
-      }, body: JSON.stringify({ markup: '<h1>Edited after login</h1>', expectedVersion: snapshot.version, expectedState: snapshot.state }) }));
+      }, body: JSON.stringify({edit_id:snapshot.edit_id,document_update:prepareClientDocumentUpdate({...snapshot,meta:snapshot}, {source:'<h1>Edited after login</h1>',whole:true})}) }));
       expect(edit.status, await edit.clone().text()).toBe(200);
       expect(edit.headers.get('X-Artifactbin-Account')).toBe(workspaceAccount);
       expect(await (await publish()).json()).toEqual(published);

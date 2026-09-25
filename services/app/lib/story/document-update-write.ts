@@ -12,7 +12,7 @@ import {hydrateArtifactDocument} from '../artifact-document';
 import {GRAPH_POLICY} from './document-graph';
 import {graphPatchSql,graphReferencesSql} from './document-graph-sql';
 import {newEditId} from './splice';
-export type DocumentCommitResult={applied:true;row:ArtifactRow}|{applied:false;head:ArtifactRow;refusal?:string;ownerOnly?:boolean};
+export type DocumentCommitResult={applied:true;row:ArtifactRow}|{applied:false;head:ArtifactRow;refusal?:string;ownerOnly?:boolean;invalidParent?:boolean};
 export async function commitDocumentUpdate(db:Queryable,actor:TokenActor|null,scope:Scope,id:string,update:DocumentUpdate,options:{dryRun?:boolean}={}):Promise<DocumentCommitResult|null>{
  const initial=[id,scope.val,newEditId(),actor?.userId??null,actor?.tokenId||null];
  const sql=update.replacement?documentReplacementSql(update.replacement,update.patch.baseVersion,initial):graphPatchSql('l.document','l.version',update.patch,initial);
@@ -34,6 +34,7 @@ export async function commitDocumentUpdate(db:Queryable,actor:TokenActor|null,sc
  const mention=documentMentionSql(actor,id,update.mentions,param,visibility,shares,!!options.dryRun);
  const resources=documentResourceSql(update.datasetBindings,param,!!options.dryRun);
  const ownerOnly=`(${hasParent}::boolean AND NOT EXISTS(SELECT 1 FROM locked WHERE ${owner.where(ownerValue)}))`;
+ const invalidParent=`(${hasParent}::boolean AND ${parent}::text IS NOT NULL AND NOT EXISTS(SELECT 1 FROM destination))`;
  const editEvents=await documentEditEventSql(id,actor,param,hasParent);
  const prefix=`WITH RECURSIVE observed AS MATERIALIZED (
   SELECT id,sharing_revision FROM artifacts WHERE id=$1 AND ${scope.where('$2')}
@@ -113,8 +114,8 @@ export async function commitDocumentUpdate(db:Queryable,actor:TokenActor|null,sc
  ), ${mention.after} ${resources.after} ${editEvents} response AS (
   SELECT true AS applied,to_jsonb(u)-'previous' AS artifact,u.id FROM updated u WHERE EXISTS(SELECT 1 FROM logged) AND (SELECT count(*) FROM parent_notifications)>=0 ${update.mentions?.length?'AND (SELECT count(*) FROM mention_wake)>=0':''}
   UNION ALL SELECT false,to_jsonb(l),l.id FROM locked l WHERE NOT EXISTS(SELECT 1 FROM updated)
- ) SELECT applied,${mention.refusal} AS refusal,${ownerOnly} AS owner_only,artifact||jsonb_build_object('open_annotations',(SELECT count(*) FROM annotations a WHERE a.artifact_id=response.id AND a.root_id IS NULL AND a.deleted_at IS NULL AND a.status='open'),'shares',COALESCE(CASE WHEN applied THEN ${shares}::jsonb END,(SELECT jsonb_agg(jsonb_build_object('email',s.email,'role',s.role) ORDER BY s.email) FROM artifact_shares s WHERE s.artifact_id=response.id),'[]'::jsonb)) AS artifact FROM response`;
- const preview=`SELECT true AS applied,to_jsonb(t)-'next_document' AS artifact,${mention.refusal} AS refusal,${ownerOnly} AS owner_only FROM transformed t UNION ALL SELECT false,to_jsonb(l),${mention.refusal},${ownerOnly} FROM locked l WHERE NOT EXISTS(SELECT 1 FROM transformed)`;
+ ) SELECT applied,${mention.refusal} AS refusal,${ownerOnly} AS owner_only,${invalidParent} AS invalid_parent,artifact||jsonb_build_object('open_annotations',(SELECT count(*) FROM annotations a WHERE a.artifact_id=response.id AND a.root_id IS NULL AND a.deleted_at IS NULL AND a.status='open'),'shares',COALESCE(CASE WHEN applied THEN ${shares}::jsonb END,(SELECT jsonb_agg(jsonb_build_object('email',s.email,'role',s.role) ORDER BY s.email) FROM artifact_shares s WHERE s.artifact_id=response.id),'[]'::jsonb)) AS artifact FROM response`;
+ const preview=`SELECT true AS applied,to_jsonb(t)-'next_document' AS artifact,${mention.refusal} AS refusal,${ownerOnly} AS owner_only,${invalidParent} AS invalid_parent FROM transformed t UNION ALL SELECT false,to_jsonb(l),${mention.refusal},${ownerOnly},${invalidParent} FROM locked l WHERE NOT EXISTS(SELECT 1 FROM transformed)`;
  const query=prefix+(options.dryRun?preview:commit);
  // Dry-run omits commit-only parameters as well as every write CTE. Compact
  // placeholders so PostgreSQL never receives an untyped, unused parameter.
@@ -124,8 +125,8 @@ export async function commitDocumentUpdate(db:Queryable,actor:TokenActor|null,sc
   if(position<0){position=bindings.length;bindings.push(original);}
   return `$${position+1}`;
  });
- const result=await db.query<{applied:boolean;artifact:ArtifactRow;refusal:string|null;owner_only:boolean}>(statement,bindings.map(index=>sql.params[index]));
+ const result=await db.query<{applied:boolean;artifact:ArtifactRow;refusal:string|null;owner_only:boolean;invalid_parent:boolean}>(statement,bindings.map(index=>sql.params[index]));
  const row=result.rows[0];if(!row)return null;
  const artifact=await hydrateArtifactDocument(row.artifact);
- return row.applied?{applied:true,row:artifact}:{applied:false,head:artifact,...(row.refusal?{refusal:row.refusal}:{}),...(row.owner_only?{ownerOnly:true}:{})};
+ return row.applied?{applied:true,row:artifact}:{applied:false,head:artifact,...(row.refusal?{refusal:row.refusal}:{}),...(row.owner_only?{ownerOnly:true}:{}),...(row.invalid_parent?{invalidParent:true}:{})};
 }

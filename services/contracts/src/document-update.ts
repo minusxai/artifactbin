@@ -23,8 +23,9 @@ export interface GraphPatch {
 }
 export interface DocumentIdentityTextMap {fromId:string;toId:string;fromText:string;toText:string;segments:Array<{from:number;to:number;length:number}>}
 export type DocumentAnnotationOperation={id:string;kind:'map';maps:DocumentIdentityTextMap[]}|{id:string;kind:'undo'|'redo'};
-export interface DocumentResourcePreparation {datasetBindings?:Array<{id:string;version:number;source:string|null;meta:Record<string,unknown>}>}
-export interface DocumentUpdate extends DocumentResourcePreparation {
+export interface DocumentAssetWarning {code:string;url:string;fix:string}
+export interface DocumentResourcePreparation {warnings?:DocumentAssetWarning[];datasetBindings?:Array<{id:string;version:number;source:string|null;meta:Record<string,unknown>}>}
+export interface DocumentUpdate extends Pick<DocumentResourcePreparation,'datasetBindings'> {
  mentions?:Array<{nodeId:string;userId:string}>;
  settings?:{visibility?:'private'|'unlisted'|'public';linkRole?:'viewer'|'commenter'|'editor';parentId?:string|null;shares?:Array<{email:string;role:'viewer'|'commenter'|'editor'}>};
  expectedSharingRevision?:number;

@@ -1,3 +1,4 @@
+import {documentPublicationBody} from './prepared-document';
 /**
  * Account-scoped resources through the REAL handlers: the profile, typed deletes over a mixed
  * workspace, remote sessions, dataset governance and what a reader may address.
@@ -21,7 +22,6 @@ import { remoteSessions } from '@/lib/remote/registry';
 import { GET as listRoute } from '@/app/api/sessions/route';
 import { GET as readRoute, DELETE as terminateRoute } from '@/app/api/sessions/[id]/route';
 import { State } from '../../cli/src/state';
-import { artifactState } from '@/lib/artifact-state';
 import { getDb } from '@/lib/db';
 import { GET as content } from '@/app/api/artifacts/[id]/content/route';
 
@@ -287,7 +287,7 @@ describe('cli-governance', () => {
    const {id}=await response.json();const base=(await getArtifactById(id))!;
    const shares=[{email:'mxmx_test_reader@example.com',role:'viewer' as const}];
    await updateSharingFor(actor,id,{shares});
-   const result=await replace(request(`/api/artifacts/${id}`,{method:'PUT',token:token.token,json:{markup:'<p>Stale write</p>',shares:[],expectedVersion:base.version,expectedState:artifactState(base)}}),{params:Promise.resolve({id})});
+   const result=await replace(request(`/api/artifacts/${id}`,{method:'PUT',token:token.token,json:documentPublicationBody(base,{markup:'<p>Stale write</p>',shares:[]},true)}),{params:Promise.resolve({id})});
    expect(result.status).toBe(409);
    expect((await getArtifactById(id))?.source).toContain('Original');expect((await getSharingFor(actor,id))?.shares).toEqual(shares);
   });
@@ -297,7 +297,7 @@ describe('cli-governance', () => {
    const response=await create(request('/api/artifacts',{method:'POST',token:token.token,json:{markup:'<p>Original</p>'}}));const {id}=await response.json();
    await updateSharingFor(actor,id,{shares:[{email:'mxmx_test_reader@example.com',role:'viewer'}]});
    const base=(await getArtifactById(id))!;
-   const result=await replace(request(`/api/artifacts/${id}`,{method:'PUT',token:token.token,json:{markup:'<p>Updated</p>',shares:[],expectedVersion:base.version,expectedState:artifactState(base)}}),{params:Promise.resolve({id})});
+   const result=await replace(request(`/api/artifacts/${id}`,{method:'PUT',token:token.token,json:documentPublicationBody(base,{markup:'<p>Updated</p>',shares:[]},true)}),{params:Promise.resolve({id})});
    expect(result.status).toBe(200);expect((await result.json()).shares).toEqual([]);
    expect((await getArtifactById(id))?.source).toContain('Updated');expect((await getSharingFor(actor,id))?.shares).toEqual([]);
   });
@@ -315,7 +315,7 @@ describe('cli-readable', () => {
    expect((await read(request(path,{token:stranger.token}),params)).status).toBe(404);
    expect((await content(request(path+'/content',{token:reader.token}),params)).status).toBe(200);
    expect((await content(request(path+'/content',{token:stranger.token}),params)).status).toBe(404);
-   expect((await replace(request(path,{method:'PUT',token:reader.token,json:{markup:'<p>Denied</p>',expectedState:doc.state,expectedVersion:doc.version}}),params)).status).toBe(404);
+   expect((await replace(request(path,{method:'PUT',token:reader.token,json:documentPublicationBody((await getArtifactById(doc.id))!,{markup:'<p>Denied</p>'},true)}),params)).status).toBe(404);
   });
 
   it('public dataset snapshots expose rows but hide the source definition, policy and internal catalog from viewers',async()=>{
@@ -334,7 +334,7 @@ describe('cli-readable', () => {
    expect((await read(request(path,{token:reader.token}),context)).status).toBe(200);
    await (await getDb()).query('UPDATE users SET email=$2 WHERE id=$1',[readerUser.id,'mxmx_test_new_address@example.com']);
    const head=await (await read(request(path,{token:owner.token}),context)).json();
-   const changed=await replace(request(path,{method:'PUT',token:owner.token,json:{markup:head.markup,expectedState:head.state,expectedVersion:head.version,shares:[{email:readerUser.email,role:'viewer'},{email:'mxmx_test_another@example.com',role:'viewer'}]}}),context);expect(changed.status).toBe(200);
+   const changed=await replace(request(path,{method:'PUT',token:owner.token,json:documentPublicationBody((await getArtifactById(doc.id))!,{markup:head.markup,shares:[{email:readerUser.email,role:'viewer'},{email:'mxmx_test_another@example.com',role:'viewer'}]},true)}),context);expect(changed.status).toBe(200);
    expect((await read(request(path,{token:reader.token}),context)).status).toBe(200);
    const newcomer=await createUser({email:readerUser.email}),token=await mintToken('mxmx_test_reused_email');await claimToken(newcomer.id,token.token);
    expect((await read(request(path,{token:token.token}),context)).status).toBe(404);

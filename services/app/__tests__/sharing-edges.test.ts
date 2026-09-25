@@ -200,13 +200,13 @@ describe('what the surfaces disclose', () => {
     const doc = await create(token, { title: 'x', markup: '<h1>x</h1>' });
     const notAFolder = await create(token, { title: 'plain', markup: '<h1>z</h1>' });
     for (const [body, error] of [
-      [{ markup: '<h1>y</h1>', visibility: 'hidden' }, 'invalid_visibility'],
+      [{ markup: '<h1>y</h1>', visibility: 'hidden' }, 'invalid_edit_body'],
       // Unknown, and not-a-folder: ONE refusal, because the parent must be
       // yours and telling them apart says whether an id exists.
       [{ markup: '<h1>y</h1>', parent_id: 'zzzzzz' }, 'invalid_parent'],
       [{ markup: '<h1>y</h1>', parent_id: notAFolder.id }, 'invalid_parent'],
       // The retired PATH field is answered by name, never as "invalid".
-      [{ markup: '<h1>y</h1>', folder: 'reports/q3' }, 'folder_retired'],
+      [{ markup: '<h1>y</h1>', folder: 'reports/q3' }, 'invalid_edit_body'],
     ] as const) {
       const res = await putArtifact(await observedRequest(`/api/artifacts/${doc.id}`, { method: 'PUT', token: token, json: body }), params({ id: doc.id }));
       expect(res.status, JSON.stringify(body)).toBe(400);

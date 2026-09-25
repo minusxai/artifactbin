@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { useAppHarness, request } from '@/__tests__/harness';
 import { POST as createArtifact } from '@/app/api/artifacts/route';
-import { GET as getArtifact, PUT as putArtifact } from '@/app/api/artifacts/[id]/route';
+import { GET as getArtifact } from '@/app/api/artifacts/[id]/route';
 import { mintToken } from '@/lib/tokens';
 import { observedRequest } from '@/__tests__/conditional-request';
 
@@ -48,12 +48,10 @@ describe('Icon publish validation', () => {
     expect(created.status).toBe(201);
     const { id } = await created.json();
     const params = { params: Promise.resolve({ id }) };
-    const response = await putArtifact(await observedRequest(`/api/artifacts/${id}`, {
+    await expect(observedRequest(`/api/artifacts/${id}`, {
       method: 'PUT', token: token.token,
       json: { markup: '<Icon name="definitely-not-an-icon" id="calendar" />' },
-    }), params);
-    expect(response.status).toBe(400);
-    expect(await response.json()).toMatchObject({ error: 'invalid_jsx' });
+    })).rejects.toThrow(/invalid_jsx/);
     const read = await getArtifact(request(`/api/artifacts/${id}`, { token: token.token }), params);
     expect(await read.json()).toMatchObject({ markup });
   });

@@ -1524,6 +1524,7 @@ export async function applyEditScoped(actor: TokenActor, id: string, input: Edit
     if(!committed.applied&&committed.head.dataset_policy&&update.whole)return policyLocked('a dataset with a write policy cannot be replaced by a document');
     if(!committed.applied&&committed.head.format!=='markup')return {applied:false,reason:'not_editable'};
     if(!committed.applied&&committed.ownerOnly)return json({error:'owner_only'},403);
+    if(!committed.applied&&committed.invalidParent)return json({error:'invalid_parent'},400);
     if(!committed.applied&&committed.refusal)return json({error:'mention_refused',detail:committed.refusal},403);
     if(!committed.applied&&input.documentUpdate.settings?.visibility==='private'&&!committed.head.user_id)return json({error:'private_requires_account'},400);
     if(opts.dryRun)return committed.applied?json({valid:true,dry_run:true,commit_checks:['authorization','dependency_revisions','metadata','sharing','size']}):json({error:'doc_changed'},409);

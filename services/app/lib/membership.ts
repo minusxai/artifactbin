@@ -1,3 +1,4 @@
+import {lockMembershipUsers} from './membership-lock';
 import {artifactQuery} from '@/lib/artifact-document';
 import {JOIN_RELATIONS,setRelationState} from './relation-state';
 import {recordEvent} from './notification-events';
@@ -86,7 +87,7 @@ export async function changeMembership(actor: RoleActor, id: string, input: Memb
   await db.transaction(async tx=>{
     const current=(await artifactQuery<ArtifactRow>(tx,'SELECT * FROM artifacts WHERE id=$1 AND deleted_at IS NULL FOR UPDATE',[id])).rows[0];
     if(!current||current.user_id!==artifact.user_id||current.token_id!==artifact.token_id||(current.sharing_revision??0)!==(artifact.sharing_revision??0))fail('Artifact access changed; try again',409);
-    await tx.query('SELECT id FROM users WHERE id=ANY($1::text[]) ORDER BY id FOR UPDATE',[[...new Set([userId,...targets])]]);
+    await lockMembershipUsers(tx,[userId,...targets]);
     for(const target of targets) {
       if(input.action==='invite'){
         if(input.includeAccess&&!(await readThrough(tx,current,{userId:target,tokenId:null}))){
@@ -138,7 +139,7 @@ export async function isArtifactMember(id:string,userId:string|null,tx?:Queryabl
 /** The saved artefact is already locked by the caller. Shared by UI, CLI and saved mentions. */
 export async function invitePeople(tx:Queryable,artifact:ArtifactRow,actor:RoleActor,targets:string[],source?:string,explicitInvitation=false):Promise<void>{
  const sender=actor.userId;if(!sender)return fail('Sign in to mention people');
- await tx.query('SELECT id FROM users WHERE id=ANY($1::text[]) ORDER BY id FOR UPDATE',[[...new Set([sender,...targets])]]);
+ await lockMembershipUsers(tx,[sender,...targets]);
  const identities=(await tx.query<{id:string;kind:string;auto_accept_mentions:boolean}>('SELECT id,kind,auto_accept_mentions FROM users WHERE id=ANY($1::text[]) AND (expires_at IS NULL OR expires_at>now())',[[sender,...targets,artifact.user_id]])).rows;
  const initiator=identities.find(u=>u.id===sender);
  if(!initiator||initiator.kind==='guest'||(initiator.kind==='testuser'&&identities.find(u=>u.id===artifact.user_id)?.kind!=='testuser'))fail('Sign in to mention people');

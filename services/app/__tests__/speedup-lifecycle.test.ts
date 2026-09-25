@@ -1,6 +1,6 @@
+import {documentEditBody,restoreDocument} from './prepared-document';
 import {artifactQuery} from '@/lib/artifact-document';
 import {patchMetadata} from '@/__tests__/conditional-request';
-import {observedRequest} from '@/__tests__/conditional-request';
 import {expect,it} from 'vitest';
 import {useAppHarness,request} from './harness';
 import {mintToken} from '@/lib/tokens';
@@ -10,7 +10,6 @@ import {compileParsedArtifactMetadata} from '@/lib/story/parsed-artifact-metadat
 import {runNodeIdentityMigrationBatch} from '@/lib/node-identity-migration';
 import {POST as create} from '@/app/api/artifacts/route';
 import {POST as edit} from '@/app/api/artifacts/[id]/edits/route';
-import {POST as revert} from '@/app/api/artifacts/[id]/revert/route';
 import {POST as fork} from '@/app/api/artifacts/[id]/fork/route';
 useAppHarness();
 const ctx=(id:string)=>({params:Promise.resolve({id})});
@@ -22,10 +21,10 @@ async function setup(){
 async function check(id:string){const row=(await getArtifactById(id))!;expect(row.meta.parsedArtifact).toEqual(compileParsedArtifactMetadata(row.source!));return row;}
 it('batch, metadata-only, fork and restore persist metadata atomically with final source',async()=>{
  const {id,token}=await setup();let row=await check(id);
- const changed=await edit(request(`/api/artifacts/${id}/edits`,{method:'POST',token:token.token,json:{edit_id:row.edit_id,edits:[{old_string:'Before',new_string:'After'},{old_string:'<p id="para">',new_string:'<section id="wrap"><p id="para">'},{old_string:'</p>',new_string:'</p></section>'}]}}),ctx(id));expect(changed.status,await changed.clone().text()).toBe(200);row=await check(id);
+ const changed=await edit(request(`/api/artifacts/${id}/edits`,{method:'POST',token:token.token,json:documentEditBody(row,{source:row.source!.replace('Before','After').replace('<p id="para">','<section id="wrap"><p id="para">').replace('</p>','</p></section>')})}),ctx(id));expect(changed.status,await changed.clone().text()).toBe(200);row=await check(id);
  const metadata=await patchMetadata(token.token,id,{colorMode:'light'});expect(metadata.status,await metadata.clone().text()).toBe(200);await check(id);
  const copied=await fork(request(`/api/artifacts/${id}/fork`,{method:'POST',token:token.token,json:{}}),ctx(id));expect(copied.status,await copied.clone().text()).toBe(201);await check((await copied.json()).id);
- const restored=await revert(await observedRequest(`/api/artifacts/${id}/revert`,{method:'POST',token:token.token,json:{version:1}}),ctx(id));expect(restored.status,await restored.clone().text()).toBe(200);await check(id);
+ const restored=await restoreDocument(token.token,id,1);expect(restored.status,await restored.clone().text()).toBe(200);await check(id);
 });
 it('failed batch changes neither source nor metadata and legacy reads do not edit',async()=>{
  const {id,token}=await setup(),before=await check(id);

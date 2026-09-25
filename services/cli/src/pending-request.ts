@@ -1,3 +1,4 @@
+import type {DocumentAssetWarning} from '@artifactbin/contracts';
 import {randomUUID} from 'node:crypto';
 import {digest,readOptional} from './files';
 import {confinedPath} from './journal';
@@ -9,7 +10,7 @@ import type {ResourceSource} from './resource-file';
 interface RequestIntent {
  server:string;account?:string;credential:string;
  request:{path:string;method:string;body:Record<string,unknown>};
- file:{authoringBase?:Snapshot;source?:ResourceSource;path:string;bytes:string;tracked?:TrackedFile;renamedFrom?:string};
+ file:{warnings?:DocumentAssetWarning[];authoringBase?:Snapshot;source?:ResourceSource;path:string;bytes:string;tracked?:TrackedFile;renamedFrom?:string};
 }
 export interface PendingRequest extends RequestIntent {version:1;key:string;checksum:string;response?:Record<string,unknown>;responseAccount?:string;responseChecksum?:string}
 const CURRENT='current';

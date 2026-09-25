@@ -14,8 +14,10 @@ export function documentMentionSql(actor:TokenActor|null,id:string,mentions:Docu
    notificationEvent:envelope({kind:'user',id:m.userId},'notification_changed',{kind:'user',id:m.userId},{notification_id:notificationId,revision:1,change:'updated'})};
  })));
  const before=`mention_input AS MATERIALIZED (SELECT DISTINCT ON(x->>'nodeId',x->>'userId') x FROM jsonb_array_elements(${inputs}::jsonb) x),
- mention_users AS MATERIALIZED (
-  SELECT u.* FROM users u WHERE u.id=$4 OR u.id IN(SELECT x->>'userId' FROM mention_input) OR u.id=(SELECT user_id FROM locked)
+ mention_user_versions AS MATERIALIZED (
+  SELECT u.id,u.xmin::text AS revision FROM users u WHERE u.id=$4 OR u.id IN(SELECT x->>'userId' FROM mention_input) OR u.id=(SELECT user_id FROM locked)
+ ), mention_users AS MATERIALIZED (
+  SELECT u.* FROM users u JOIN mention_user_versions v ON v.id=u.id AND v.revision=u.xmin::text
   ORDER BY u.id ${dryRun?'':'FOR UPDATE OF u'}
  ), mention_candidates AS MATERIALIZED (
   SELECT i.x,t.id AS target,t.kind AS target_kind,t.expires_at AS target_expiry,s.id AS sender,s.kind AS sender_kind,s.expires_at AS sender_expiry,o.kind AS owner_kind,
@@ -34,7 +36,7 @@ export function documentMentionSql(actor:TokenActor|null,id:string,mentions:Docu
   WHERE i.x->>'userId' IS DISTINCT FROM $4
  ), mention_actions AS MATERIALIZED (
   SELECT c.*,CASE WHEN previous_status='accepted' OR(auto_accept_mentions AND follows) THEN 'accepted' ELSE 'pending' END AS next_status
-  FROM mention_candidates c WHERE NOT already_notified AND previous_status IS DISTINCT FROM 'pending' AND (previous_status='accepted' OR target_order=1)
+  FROM mention_candidates c WHERE NOT already_notified AND previous_status IS DISTINCT FROM 'pending' AND (previous_status='accepted' OR(auto_accept_mentions AND follows) OR target_order=1)
  ), mention_refusal AS MATERIALIZED (
   SELECT 'Sign in to mention people'::text AS reason WHERE EXISTS(SELECT 1 FROM mention_input) AND NOT EXISTS(SELECT 1 FROM mention_users s CROSS JOIN locked l LEFT JOIN mention_users o ON o.id=l.user_id
    WHERE s.id=$4 AND s.kind<>'guest' AND (s.kind<>'testuser' OR o.kind='testuser') AND(s.expires_at IS NULL OR s.expires_at>now()))
@@ -44,19 +46,21 @@ export function documentMentionSql(actor:TokenActor|null,id:string,mentions:Docu
   UNION ALL SELECT 'You already have ${PENDING_MEMBERSHIP_LIMIT} pending requests' WHERE
    (SELECT count(*) FROM ${JOIN_RELATIONS} m WHERE m.initiated_by=$4 AND m.status='pending')+(SELECT count(*) FROM mention_actions WHERE next_status='pending')>${PENDING_MEMBERSHIP_LIMIT}
  ),`;
- const after=`mention_relations AS (
+ const after=`mention_user_fence AS (
+  UPDATE users SET id=id WHERE id=$4 AND EXISTS(SELECT 1 FROM updated)
+ ), mention_relations AS (
   INSERT INTO relations(subject_kind,subject_id,verb,object_kind,object_id,status,direction,initiated_by,accepted_at,revision,deleted_at)
   SELECT 'user',a.target,'join','artifact',$1,a.next_status,'invitation',$4,CASE WHEN a.next_status='accepted' THEN now() END,COALESCE(a.previous_revision,0)+1,NULL
-  FROM mention_actions a WHERE a.previous_status IS DISTINCT FROM 'accepted' AND EXISTS(SELECT 1 FROM updated)
+  FROM mention_actions a WHERE a.previous_status IS DISTINCT FROM 'accepted' AND a.target_order=1 AND EXISTS(SELECT 1 FROM updated)
   ON CONFLICT(subject_kind,subject_id,verb,object_kind,object_id) DO UPDATE SET status=EXCLUDED.status,direction=EXCLUDED.direction,initiated_by=EXCLUDED.initiated_by,accepted_at=EXCLUDED.accepted_at,revision=EXCLUDED.revision,deleted_at=NULL
  ), mention_events AS (
   INSERT INTO event_outbox(id,envelope)
-  SELECT a.x#>>'{event,id}',(a.x->'event')||jsonb_build_object('verb',CASE WHEN a.previous_status='accepted' THEN 'mentioned' WHEN a.next_status='pending' THEN 'invited' ELSE 'joined' END,
+  SELECT a.x#>>'{event,id}',(a.x->'event')||jsonb_build_object('verb',CASE WHEN a.previous_status='accepted' OR(a.next_status='accepted' AND a.target_order>1) THEN 'mentioned' WHEN a.next_status='pending' THEN 'invited' ELSE 'joined' END,
    'payload',(a.x#>'{event,payload}')||jsonb_build_object('revision',CASE WHEN a.previous_status='accepted' THEN a.previous_revision ELSE COALESCE(a.previous_revision,0)+1 END))
   FROM mention_actions a WHERE EXISTS(SELECT 1 FROM updated) ON CONFLICT DO NOTHING
  ), mention_notifications AS (
   INSERT INTO member_notifications(id,artifact_id,user_id,recipient_id,sender_id,kind,source,source_event_id)
-  SELECT a.x->>'notificationId',$1,a.target,a.target,$4,CASE WHEN a.previous_status='accepted' THEN 'mention' WHEN a.next_status='pending' THEN 'invitation' ELSE 'joined' END,a.x->>'source',a.x#>>'{event,id}'
+  SELECT a.x->>'notificationId',$1,a.target,a.target,$4,CASE WHEN a.previous_status='accepted' OR(a.next_status='accepted' AND a.target_order>1) THEN 'mention' WHEN a.next_status='pending' THEN 'invitation' ELSE 'joined' END,a.x->>'source',a.x#>>'{event,id}'
   FROM mention_actions a WHERE EXISTS(SELECT 1 FROM updated) ON CONFLICT DO NOTHING RETURNING id,recipient_id,revision
  ), mention_notification_events AS (
   INSERT INTO event_outbox(id,envelope)
@@ -64,7 +68,7 @@ export function documentMentionSql(actor:TokenActor|null,id:string,mentions:Docu
  ), mention_existing_seeds AS MATERIALIZED (
   SELECT a.x,n.id AS notification_id,n.revision,gen_random_uuid()::text AS event_id
   FROM mention_actions a JOIN member_notifications n ON n.artifact_id=$1 AND n.user_id=a.target
-  WHERE a.next_status='accepted' AND a.previous_status IS DISTINCT FROM 'accepted' AND EXISTS(SELECT 1 FROM updated)
+  WHERE a.next_status='accepted' AND a.previous_status IS DISTINCT FROM 'accepted' AND a.target_order=1 AND EXISTS(SELECT 1 FROM updated)
  ), mention_existing_events AS (
   INSERT INTO event_outbox(id,envelope)
   SELECT event_id,(x->'notificationEvent')||jsonb_build_object('id',event_id,'payload',(x#>'{notificationEvent,payload}')||jsonb_build_object('notification_id',notification_id,'revision',revision))
@@ -72,5 +76,5 @@ export function documentMentionSql(actor:TokenActor|null,id:string,mentions:Docu
  ), mention_wake AS MATERIALIZED (
   SELECT pg_notify(a.x->>'channel',a.x->>'notificationId') FROM mention_actions a WHERE EXISTS(SELECT 1 FROM updated)
  ),`;
- return {before,guard:'NOT EXISTS(SELECT 1 FROM mention_refusal)',after,refusal:'(SELECT reason FROM mention_refusal LIMIT 1)'};
+ return {before,guard:'NOT EXISTS(SELECT 1 FROM mention_refusal) AND (SELECT count(*) FROM mention_users)=(SELECT count(*) FROM mention_user_versions)',after,refusal:'(SELECT reason FROM mention_refusal LIMIT 1)'};
 }

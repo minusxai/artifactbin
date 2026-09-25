@@ -202,3 +202,15 @@ it('whole document replacement cannot bypass a dataset write policy',async()=>{
  expect((await commitDocumentUpdate(db,actor,editorScope(actor),id,update))?.applied).toBe(false);
  expect((await db.query('SELECT format,version FROM artifacts WHERE id=$1',[id])).rows).toEqual([{format:'dataset',version:1}]);
 });
+it('keeps every mention when a recipient automatically joins through the first one',async()=>{
+ const {db,id,base,actor:tokenActor}=await setup();
+ const owner=await createUser({email:'mxmx_test_multi_owner@example.com'}),recipient=await createUser({email:'mxmx_test_multi_target@example.com'});
+ await db.query('UPDATE artifacts SET user_id=$2 WHERE id=$1',[id,owner.id]);
+ await db.query('UPDATE users SET auto_accept_mentions=true WHERE id=$1',[recipient.id]);
+ await db.query("INSERT INTO relations(subject_kind,subject_id,verb,object_kind,object_id,status) VALUES('user',$1,'follow','user',$2,'accepted')",[recipient.id,owner.id]);
+ const actor={...tokenActor,userId:owner.id};
+ const update=prepareClientDocumentUpdate(base,{source:`<p id="first"><a id="mention_a" href="/people/${recipient.id}">One</a><a id="mention_b" href="/people/${recipient.id}">Two</a></p>`});
+ expect((await commitDocumentUpdate(db,actor,editorScope(actor),id,update))?.applied).toBe(true);
+ expect((await db.query('SELECT kind,source FROM member_notifications WHERE artifact_id=$1 ORDER BY source',[id])).rows).toEqual([{kind:'joined',source:'node:mention_a'},{kind:'mention',source:'node:mention_b'}]);
+ expect((await db.query("SELECT status,revision FROM relations WHERE verb='join' AND subject_id=$1 AND object_id=$2",[recipient.id,id])).rows).toEqual([{status:'accepted',revision:1}]);
+});

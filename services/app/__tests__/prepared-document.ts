@@ -18,7 +18,7 @@ export function documentEditBody(row:ArtifactRow,change:ClientDocumentChange){
 /** Fixture counterpart of the browser controls: request intent becomes a
  * prepared operation before it reaches the real route. No server fallback. */
 export function documentPublicationBody(row:ArtifactRow,body:Record<string,unknown>,whole=false){
- const metadata=Object.fromEntries(Object.entries(body).filter(([key])=>['title','description','theme','template','colorMode'].includes(key)));
+ const metadata=Object.fromEntries(Object.entries(body).filter(([key])=>['title','description','theme','template','colorMode','access','folder'].includes(key)));
  const prepared=documentEditBody(row,{source:(body.markup??body.source) as string|undefined,metadata,whole,annotationOps:(body.annotationOps??body.annotation_ops) as ClientDocumentChange['annotationOps']});
  const settings=Object.fromEntries(Object.entries(body).filter(([key])=>['visibility','linkRole','parent_id','shares'].includes(key)).map(([key,value])=>[key==='parent_id'?'parentId':key,value]));
  if(Object.keys(settings).length)Object.assign(prepared.document_update,{settings,expectedSharingRevision:row.sharing_revision,expectedParentIds:row.ancestor_ids});

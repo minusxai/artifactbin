@@ -7,6 +7,7 @@ import {commitDocumentUpdate} from '../../services/app/lib/story/document-update
 import {graphIntegrity,graphSource} from '../../services/app/lib/story/document-graph.ts';
 import {documentAfterOperation} from '../../services/app/lib/story/document-update-history.ts';
 import {parseDocumentUpdate} from '../../services/contracts/src/document-update.ts';
+import {createUser} from '../../services/app/lib/users.ts';
 import {mintToken} from '../../services/app/lib/tokens.ts';
 const db=await getDb(),raw=db.raw();assert.equal(raw.kind,'pg');
 try{
@@ -58,5 +59,22 @@ try{
   assert.equal((await getArtifactById(initial.id)).version,head.version);
  }finally{await locker.query('ROLLBACK');locker.release();}
  console.log('PASS permission revocation while the operation waits on the row lock refuses the entire edit');
+ const owner=await createUser({email:'mxmx_test_pending_owner@example.com'}),recipient=await createUser({email:'mxmx_test_pending_target@example.com'});
+ await db.query('UPDATE users SET auto_accept_mentions=false WHERE id=$1',[recipient.id]);
+ await db.query("INSERT INTO relations(subject_kind,subject_id,verb,object_kind,object_id,status) VALUES('user',$1,'follow','user',$2,'accepted')",[recipient.id,owner.id]);
+ await db.query("INSERT INTO relations(subject_kind,subject_id,verb,object_kind,object_id,status,initiated_by) SELECT 'user',$1,'join','artifact','pending_'||i,'pending',$2 FROM generate_series(1,29) i",[recipient.id,owner.id]);
+ const author={tokenId:token.id,userId:owner.id};
+ const docs=await Promise.all(['One','Two'].map(title=>createArtifact(token.id,owner.id,{...input,title,visibility:'public'})));
+ const proposals=docs.map(doc=>prepareClientDocumentUpdate(doc,{source:doc.source.replace('Text 0',`<a id="cap_mention" href="/people/${recipient.id}">Target</a>`)}));
+ const fence=await raw.pool.connect();let capResults;
+ try{
+  await fence.query('BEGIN');await fence.query('SELECT id FROM users WHERE id=$1 FOR UPDATE',[owner.id]);
+  const waiting=docs.map((doc,i)=>commitDocumentUpdate(db,author,editorScope(author),doc.id,proposals[i]));
+  for(let i=0;;i++){const n=(await raw.pool.query("SELECT count(*)::int n FROM pg_stat_activity WHERE wait_event_type='Lock' AND pid<>pg_backend_pid()")).rows[0].n;if(n>=2)break;assert.ok(i<200);await new Promise(r=>setTimeout(r,10));}
+  await fence.query('COMMIT');capResults=await Promise.all(waiting);
+ }finally{await fence.query('ROLLBACK');fence.release();}
+ assert.equal(capResults.filter(r=>r?.applied).length,1);
+ assert.equal(Number((await db.query("SELECT count(*) n FROM relations WHERE verb='join' AND initiated_by=$1 AND status='pending'",[owner.id])).rows[0].n),30);
+ console.log('PASS concurrent mentions across different artifacts cannot exceed the pending invitation limit');
  console.log((await raw.pool.query('SELECT version()')).rows[0].version);
 }finally{await resetDb();}

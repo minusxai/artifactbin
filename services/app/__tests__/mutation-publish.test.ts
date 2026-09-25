@@ -175,8 +175,6 @@ describe('publishing a document with a <Mutation>', () => {
     const ds = await dataset(t.token, { access: 'readwrite' });
     const doc = ((await (await create(t.token, { markup: POLL(ds) })).json()) as { id: string }).id;
     await putArtifactRoute(await observedRequest(`/api/artifacts/${ds}`, { method: 'PUT', token: t.token, json: { dataset: ROWS, access: 'read' } }), params({ id: ds }));
-    const res = await putArtifactRoute(await observedRequest(`/api/artifacts/${doc}`, { method: 'PUT', token: t.token, json: { markup: POLL(ds) } }), params({ id: doc }));
-    expect(res.status).toBe(400);
-    expect(await details(res)).toMatch(/read-only/);
+    await expect(observedRequest(`/api/artifacts/${doc}`, { method: 'PUT', token: t.token, json: { markup: POLL(ds) } })).rejects.toThrow(/read-only/);
   });
 });

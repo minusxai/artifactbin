@@ -1,3 +1,4 @@
+import {documentEdit} from './prepared-document';
 import {expect,it,vi} from 'vitest';
 import {useAppHarness,request} from './harness';
 import {getDb} from '@/lib/db';
@@ -55,7 +56,7 @@ it('rejects conflicting metadata changes without partially saving their node edi
  const head=await getArtifactById(base.id);expect(head?.meta.colorMode).toBe('light');expect(head?.source).not.toContain('Second');
 });
 
-it('bounds history reconstruction to the head read before a concurrent commit',async()=>{
+it('applies a stale independent operation after a concurrent commit without a head read',async()=>{
  const {db,actor,row,base}=await setup();
  const first=await prepareGraphOperation(base,[{kind:'setText',path:[0,0,0],value:'First longer value'}],{loadRef:async()=>null});
  if(first instanceof Response)throw new Error(await first.text());
@@ -63,16 +64,14 @@ it('bounds history reconstruction to the head read before a concurrent commit',a
  const stored=(await db.query<{document:typeof base.document}>('SELECT document FROM artifacts WHERE id=$1',[base.id])).rows[0]!;
  const next=await prepareGraphOperation({...base,version:head.version,document:stored.document,meta:head.meta},[{kind:'setText',path:[0,0,0],value:'Concurrent much longer text 👩'}],{loadRef:async()=>null});
  if(next instanceof Response)throw new Error(await next.text());
- const original=db.query.bind(db);let injected=false;
- const spy=vi.spyOn(db,'query').mockImplementation(async(sql,params)=>{
-  const result=await original(sql,params);
-  if(!injected&&sql.startsWith('SELECT artifacts.*')){injected=true;expect(await commitGraphOperation(db,actor,editorScope(actor),next)).not.toBeNull();}
-  return result;
- });
+ expect(await commitGraphOperation(db,actor,editorScope(actor),next)).not.toBeNull();
+ const update=documentEdit({...row,document:base.document},{source:row.source!.replace('Beta','Updated Beta')});
+ const spy=vi.spyOn(db,'query');
  try{
-  const result=await applyEditScoped(actor,base.id,{baseEditId:row.edit_id,operations:[{kind:'setText',path:[0,1,0],value:'Updated Beta'}]});
+  const result=await applyEditScoped(actor,base.id,update);
   expect(result).not.toBeInstanceOf(Response);expect(result&&!(result instanceof Response)&&result.applied).toBe(true);
-  expect((await getArtifactById(base.id))?.source).toContain('Concurrent much longer text 👩');
-  expect((await getArtifactById(base.id))?.source).toContain('Updated Beta');
+  expect(spy.mock.calls).toHaveLength(1);
  }finally{spy.mockRestore();}
+ expect((await getArtifactById(base.id))?.source).toContain('Concurrent much longer text 👩');
+ expect((await getArtifactById(base.id))?.source).toContain('Updated Beta');
 });

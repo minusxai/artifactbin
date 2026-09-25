@@ -1,5 +1,5 @@
+import {restoreDocument} from './prepared-document';
 import {artifactQuery} from '@/lib/artifact-document';
-import {observedRequest} from '@/__tests__/conditional-request';
 import { expect, it } from 'vitest';
 import { request, useAppHarness } from './harness';
 import { mintToken } from '@/lib/tokens';
@@ -9,7 +9,6 @@ import { refLoaderForActor, writerFor, type ArtifactRow } from '@/lib/artifacts'
 import { checkDocumentData } from '@/lib/story/data-checks';
 import { POST as addComment, GET as listComments } from '@/app/api/artifacts/[id]/annotations/route';
 import { POST as query } from '@/app/a/[id]/query/route';
-import { POST as revert } from '@/app/api/artifacts/[id]/revert/route';
 
 const harness = useAppHarness();
 const ctx = (id: string) => ({ params: Promise.resolve({ id }) });
@@ -62,7 +61,7 @@ it('rehearses dry-run, apply, joined query execution and reverting migrated hist
   const saved = (await artifactQuery<{ source: string }>(db,'SELECT document,source FROM artifact_versions WHERE artifact_id=$1', [doc.id])).rows[0];
   expect(saved.source).toContain(`source="ref:${orders.id}"`);
   expect(saved.source).not.toContain(`ref_${orders.id}`);
-  const restored = await revert(await observedRequest(`/api/artifacts/${doc.id}/revert`, { method: 'POST', token: owner.token, json: { version: 1 } }), ctx(doc.id));
+  const restored = await restoreDocument(owner.token,doc.id,1);
   expect(restored.status, await restored.clone().text()).toBe(200);
   expect((await restored.json()).markup).toContain('Original');
   expect(await runQuery()).toEqual(expected);

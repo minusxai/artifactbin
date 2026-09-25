@@ -216,6 +216,11 @@ export async function runDatasetCatalogMigrationBatch(db: Db, options: DatasetMi
       head:headChanged?{...row,meta:finalizeArtifactMetadata(format,plannedSource.source,plannedMeta as Record<string,unknown>),source:plannedSource.source,edit_id:newEditId()}:row,
       history:plannedHistory.map(entry=>historyChanged.includes(entry)?{...entry.version,meta:finalizeArtifactMetadata(String(entry.version.format),entry.source.source,entry.meta as Record<string,unknown>),source:entry.source.source}:entry.version),
     };
+    // The reviewed snapshot includes the same representation stored by the commit.
+    for(const record of [...(headChanged?[after.head]:[]),...after.history.filter(version=>historyChanged.some(entry=>entry.version.version===version.version))]){
+      const stored=sourceStorage(String(record.format),record.source as string|null);
+      record.document=stored.document?JSON.parse(stored.document):null;
+    }
     plans.push({artifactId,fingerprint:fingerprint(before),before,after});
     changed++; if (format === 'dataset') datasets++; else documents++; versions += historyChanged.length;
     if (dryRun) continue;

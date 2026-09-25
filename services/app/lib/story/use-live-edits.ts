@@ -15,7 +15,7 @@
  * `doc_changed`. On rejection, keep the local draft and block navigation until it is saved
  * or the user explicitly recovers the remote version.
  */
-import type {DocumentGraph} from '@artifactbin/contracts';
+import type {DocumentGraph,DocumentAssetWarning} from '@artifactbin/contracts';
 import {prepareBrowserDocumentUpdate} from './document-authoring-client';
 import { combineAnnotationOperations, type AnnotationOperation } from '@/lib/editor-v2/annotation-map';
 import { rebaseEditBatch } from '@/lib/story/edit-batch';
@@ -158,7 +158,8 @@ export function useLiveEdits({
         const snapshot=snapshotRef.current;
         if(!snapshot.document)throw new Error('Refresh the document before saving.');
         const {source,annotationOps,...metadata}=change;
-        const documentUpdate=await prepareBrowserDocumentUpdate(id,{...snapshot,document:snapshot.document,title:snapshot.meta.title as string|null,description:snapshot.meta.description as string|null},{source,annotationOps,metadata});
+        let warnings:DocumentAssetWarning[]=[];
+        const documentUpdate=await prepareBrowserDocumentUpdate(id,{...snapshot,document:snapshot.document,title:snapshot.meta.title as string|null,description:snapshot.meta.description as string|null},{source,annotationOps,metadata},received=>{warnings=received;});
         prepared=true;
         const res = await fetch(endpoint, {
           method:'POST',headers:{'Content-Type':'application/json'},
@@ -203,7 +204,7 @@ export function useLiveEdits({
             }
             baseSourceRef.current = accepted;
           }
-          setState({ editId: body.edit_id, version: body.version, status: '', pending: false });
+          setState({ editId: body.edit_id, version: body.version, status: warnings.length?`saved — ${warnings[0]!.fix}${warnings.length>1?` (+${warnings.length-1} more)`:''}`:'', pending: false });
         } else if (body.detail === 'identical') {
           failedChangeRef.current = null;
           // The flush carried no real change (e.g. a blur that committed nothing).

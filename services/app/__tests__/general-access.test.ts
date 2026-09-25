@@ -1,3 +1,4 @@
+import {documentEdit} from './prepared-document';
 import {artifactQuery} from '@/lib/artifact-document';
 /**
  * GENERAL ACCESS — the link carries a ROLE, not merely read-or-not.
@@ -213,16 +214,12 @@ describe('the SQL scopes admit the link — the doors, not just the predicate', 
     const asStranger = { tokenId: stranger.token.id, userId: stranger.user.id };
 
     const editable = await docOf(owner, 'public', 'editor');
-    const ok = await applyEditFor(asStranger, editable.id, {
-      baseEditId: editable.edit_id, change: { oldString: 'hello', newString: 'edited' },
-    });
+    const ok = await applyEditFor(asStranger, editable.id, documentEdit(editable,{source:editable.source!.replace('hello','edited')}));
     expect(ok, JSON.stringify(ok)).toMatchObject({ applied: true });
     expect((await head(editable.id))?.source).toContain('edited');
 
     const commentable = await docOf(owner, 'public', 'commenter');
-    const refused = await applyEditFor(asStranger, commentable.id, {
-      baseEditId: commentable.edit_id, change: { oldString: 'hello', newString: 'nope' },
-    });
+    const refused = await applyEditFor(asStranger, commentable.id, documentEdit(commentable,{source:commentable.source!.replace('hello','nope')}));
     expect(refused, 'a commenter link is not an edit link').toBeNull();
   });
 

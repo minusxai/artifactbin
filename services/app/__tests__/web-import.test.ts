@@ -1,3 +1,6 @@
+import {documentPublicationWithResources} from './prepared-document';
+import {prepareDocumentAuthoringContext} from '@/lib/story/document-authoring-context';
+import {prepareClientDocumentPublication} from '@/lib/story/document-update-client';
 import {observedRequest} from '@/__tests__/conditional-request';
 /**
  * Importing assets FROM THE WEB, through the real doors: ingest-and-own.
@@ -219,25 +222,24 @@ describe('the agent door — external <img src> is imported and the URL is KEPT'
   it('the EDITS door REPORTS what it could not import, like create and PUT', async () => {
     const t = await mintToken('t');
     const made = await (await createArtifact(request('/api/artifacts', { method: 'POST', token: t.token, json: { markup: '<div id="root"><p id="body">hello</p></div>' } }))).json();
-    const res = await editsRoute(request(`/api/artifacts/${made.id}/edits`, { method: 'POST', token: t.token, json: {
-      edit_id: made.edit_id,
-      old_string: '<p id="body">hello</p>',
-      new_string: `<p id="body">hello</p><img id="missing" src="${web}/gone.png" alt="missing" />`,
-    } }), params({ id: made.id }));
+    const row=(await getArtifactById(made.id))!;
+    if(row.document?.kind!=='graph')throw new Error('Missing authoring graph');
+    let warnings:unknown[]=[];
+    const update=await prepareClientDocumentPublication({...row,document:row.document},{source:row.source!.replace('</div>',`<img id="missing" src="${web}/gone.png" alt="missing" /></div>`)},async source=>{
+      const response=await prepareDocumentAuthoringContext({tokenId:t.id,userId:null},made.id,{source});
+      expect(response.ok).toBe(true);return response.json();
+    },received=>{warnings=received;});
+    const res=await editsRoute(request(`/api/artifacts/${made.id}/edits`,{method:'POST',token:t.token,json:{edit_id:row.edit_id,document_update:update}}),params({id:made.id}));
     expect(res.status).toBe(200);
-    // The edit path runs the SAME publish door, so it must answer the same way:
-    // a dead link is news wherever the write came in.
-    expect((await res.json()).asset_warnings).toEqual([expect.objectContaining({ code: 'bad_status', url: `${web}/gone.png` })]);
+    expect(warnings).toEqual([expect.objectContaining({code:'bad_status',url:`${web}/gone.png`})]);
   });
 
   it('the EDITS door imports too — an agent pasting a web image mid-edit', async () => {
     const t = await mintToken('t');
     const made = await (await createArtifact(request('/api/artifacts', { method: 'POST', token: t.token, json: { markup: '<div id="root"><p id="body">hello</p></div>' } }))).json();
-    const res = await editsRoute(request(`/api/artifacts/${made.id}/edits`, { method: 'POST', token: t.token, json: {
-      edit_id: made.edit_id,
-      old_string: '<p id="body">hello</p>',
-      new_string: `<p id="body">hello</p><img id="logo" src="${web}/logo.png" />`,
-    } }), params({ id: made.id }));
+    const row=(await getArtifactById(made.id))!;
+    const body=await documentPublicationWithResources(row,{source:row.source!.replace('</div>',`<img id="logo" src="${web}/logo.png" /></div>`)});
+    const res=await editsRoute(request(`/api/artifacts/${made.id}/edits`,{method:'POST',token:t.token,json:body}),params({id:made.id}));
     expect(res.status).toBe(200);
     expect((await getArtifactById(made.id))!.source).toContain(`${web}/logo.png`);
     const html = await (await rawRoute(request(`/a/${made.id}/raw`), params({ id: made.id }))).text();

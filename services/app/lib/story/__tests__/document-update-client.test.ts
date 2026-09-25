@@ -38,3 +38,9 @@ it('refuses ambiguous legacy anchors before normalization can discard them',()=>
  const base={document:createDocumentGraph(source,1),version:1,meta:{}};
  for(const anchor of ['"old"','{"old"}'])expect(()=>prepareClientDocumentUpdate(base,{source:`<main><p data-annotation-anchor=${anchor}>First</p><p data-annotation-anchor=${anchor}>Second</p></main>`,whole:true})).toThrow(/ambiguous|duplicate/i);
 });
+it('reports resource warnings to the author without adding them to the committed operation',async()=>{
+ const base={document:createDocumentGraph(source,1),version:1,meta:{}};
+ const warnings=[{code:'bad_status',url:'https://example.com/missing.png',fix:'Check the URL'}],received=vi.fn();
+ const update=await prepareClientDocumentPublication(base,{source:source+'<img src="https://example.com/missing.png" />'},async()=>({warnings}),received);
+ expect(received).toHaveBeenCalledWith(warnings);expect(update).not.toHaveProperty('warnings');
+});

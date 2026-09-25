@@ -68,9 +68,9 @@ export function prepareClientDocumentUpdate(base:ClientDocumentSnapshot,change:C
 }
 /** External reference shapes and cached assets are authoring inputs. Resolve
  * only the affected context before submitting the independent atomic commit. */
-export async function prepareClientDocumentPublication(base:ClientDocumentSnapshot,change:ClientDocumentChange,prepareContext:(source:string)=>Promise<DocumentResourcePreparation|void>):Promise<DocumentUpdate> {
+export async function prepareClientDocumentPublication(base:ClientDocumentSnapshot,change:ClientDocumentChange,prepareContext:(source:string)=>Promise<DocumentResourcePreparation|void>,onWarnings?:(warnings:NonNullable<DocumentResourcePreparation['warnings']>)=>void):Promise<DocumentUpdate> {
  const prepared=prepareDocument(base,change);
- if(prepared.context){const resources=await prepareContext(prepared.context);if(resources?.datasetBindings?.length)prepared.update.datasetBindings=resources.datasetBindings;}
+ if(prepared.context){const resources=await prepareContext(prepared.context);if(resources?.warnings?.length)onWarnings?.(resources.warnings);if(resources?.datasetBindings?.length)prepared.update.datasetBindings=resources.datasetBindings;}
  return prepared.update;
 }
 function needsAuthoringContext(source:string):boolean {
