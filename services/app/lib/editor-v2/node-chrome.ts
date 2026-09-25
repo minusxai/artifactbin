@@ -29,8 +29,6 @@ const P = SELECTION_PRESENTATION;
 const HANDLE_CSS = [
   `:is([data-mx-node-chrome], [${HOVER_GRIP_ATTR}])[data-mx-chrome-root] > button > span { color: ${P.handleColor}; }`,
   `:is([data-mx-node-chrome], [${HOVER_GRIP_ATTR}])[data-mx-chrome-root] > button[data-mx-dot] > span { background: ${P.handleDot}; }`,
-  `:is([data-mx-node-chrome], [${HOVER_GRIP_ATTR}])[data-mx-chrome-root] > button:hover { background: ${P.handleActiveGround}; }`,
-  `:is([data-mx-node-chrome], [${HOVER_GRIP_ATTR}])[data-mx-chrome-root] > button[data-mx-dot]:hover { background: transparent; }`,
   `:is([data-mx-node-chrome], [${HOVER_GRIP_ATTR}])[data-mx-chrome-root] > button:hover > span { color: ${P.handleActive}; }`,
   `:is([data-mx-node-chrome], [${HOVER_GRIP_ATTR}])[data-mx-chrome-root] > button[data-mx-dot]:hover > span { background: ${P.handleActive}; }`,
   `:is([data-mx-node-chrome], [${HOVER_GRIP_ATTR}])[data-mx-chrome-root] > button:focus-visible { outline: 2px solid ${P.handleActive}; outline-offset: -2px; }`,

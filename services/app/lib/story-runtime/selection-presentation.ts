@@ -22,7 +22,6 @@ export const SELECTION_PRESENTATION = {
   handleColor: neutral(0.6),
   handleDot: neutral(0.45),
   handleActive: neutral(0.95),
-  handleActiveGround: neutral(0.14),
   /** Pointed at from outside (the query notebook): dashed amber, so it never reads as the selection; last and important, so hover never hides it. */
   spotlightCss: important(`outline: 2px dashed rgba(245, 158, 11, 0.9); outline-offset: ${offset}px; border-radius: 3px; background: rgba(245, 158, 11, 0.06);`),
   handleOutset: offset + width / 2,
