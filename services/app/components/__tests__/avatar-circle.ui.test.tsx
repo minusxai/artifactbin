@@ -54,7 +54,9 @@ describe('<AvatarCircle> with no picture', () => {
   it('shows an empty circle and "Upload a photo" with the accepted formats and size — no initial', () => {
     const { container } = render(<Harness />);
     expect(screen.getByRole('button', { name: 'Upload a photo' })).toBeInTheDocument();
-    expect(screen.getByText(`PNG, JPEG, WebP, GIF or AVIF · up to ${DEFAULT_UPLOAD_MAX_BYTES / 1_000_000} MB`)).toBeInTheDocument();
+    const hint = `PNG, JPEG, WebP, GIF or AVIF · up to ${DEFAULT_UPLOAD_MAX_BYTES / 1_000_000} MB`;
+    // The whole sentence, read as a person does: the size limit is its own nowrap span.
+    expect(screen.getByText((_, el) => el?.tagName === 'P' && el.textContent === hint)).toBeInTheDocument();
     expect(container.querySelector('[data-face-initial]')).toBeNull();
     expect(screen.queryByText('A')).toBeNull();
     expect(container.querySelector('img')).toBeNull();

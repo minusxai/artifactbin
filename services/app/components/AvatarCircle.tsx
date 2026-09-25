@@ -158,7 +158,8 @@ export default function AvatarCircle({ image, initial, userId, onChange, onRemov
               </button>
             )}
           </div>
-          {!image && <p className="mt-2 text-xs text-muted">PNG, JPEG, WebP, GIF or AVIF · up to {MAX_MB} MB</p>}
+          {/* Held together so a narrow column wraps at the dot, not inside "50 MB". */}
+          {!image && <p className="mt-2 text-xs text-muted">PNG, JPEG, WebP, GIF or AVIF <span className="whitespace-nowrap">· up to {MAX_MB} MB</span></p>}
         </div>
       </div>
       {status && <p role="status" className="mt-3 text-center font-mono text-xs text-danger min-[400px]:text-left">{status}</p>}
