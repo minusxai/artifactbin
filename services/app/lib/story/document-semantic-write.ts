@@ -24,7 +24,7 @@ export async function commitSemanticOperation(db:Queryable,actor:TokenActor|null
  const references=param(JSON.stringify(plan.references)),referenceCount=param(plan.references.length);
  const beforeSegments=semanticSourceSegments(plan.beforeTree),afterSegments=semanticSourceSegments(plan.tree);
  const before=originalSource?null:param(JSON.stringify(beforeSegments)),after=param(JSON.stringify(afterSegments));
- const source=(segments:string,document:string)=>`COALESCE((SELECT string_agg(CASE WHEN segment ? 'text' THEN segment->>'text' ELSE ${document}#>>ARRAY['prose',segment->>'slot','source'] END,'' ORDER BY ordinal) FROM jsonb_array_elements(${segments}::jsonb) WITH ORDINALITY AS parts(segment,ordinal)),'')`;
+ const source=(segments:string,document:string)=>`COALESCE((SELECT string_agg(CASE WHEN segment ? 'text' THEN segment->>'text' ELSE leaf.value->>'source' END,'' ORDER BY ordinal) FROM jsonb_array_elements(${segments}::jsonb) WITH ORDINALITY AS parts(segment,ordinal) LEFT JOIN jsonb_each(${document}->'prose') leaf ON leaf.key=segment->>'slot'),'')`;
  // Compatibility batches are valid only against the exact locked preimage.
  // A concurrently updated prose leaf instead uses the semantic log's exact diff.
  const historySource=param(options.historyChanges?.source??null),historyChanges=param(JSON.stringify(options.historyChanges?.changes??null));
