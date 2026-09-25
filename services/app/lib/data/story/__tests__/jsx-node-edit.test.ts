@@ -7,7 +7,7 @@
  */
 import { describe, it, expect } from 'vitest';
 
-import { insertImageInJsx, removeJsxNodeAtPath } from '@/lib/data/story/jsx-edit';
+import { insertImageInJsx, removeJsxNodeAtPath, replaceImageSrcInJsx, setImageAltInJsx } from '@/lib/data/story/jsx-edit';
 import { parseJsx } from '@/lib/jsx';
 import { expectValidStoryJsx } from '@/test/helpers/jsx';
 
@@ -98,5 +98,70 @@ describe('removeJsxNodeAtPath — element deletion (the editor\'s delete afforda
     const out = removeJsxNodeAtPath(src, '0.0.1.0'); // the first <li>
     expect(out).toBe('<div className="p-8"><section><h2 className="text-xl">A</h2><ul><li>two</li></ul></section></div>');
     expectValidStoryJsx(out);
+  });
+});
+
+/**
+ * REPLACING AN IMAGE swaps only the picture: the same node keeps its id (the
+ * anchor its comments hang on), its position, its classes and its alt text.
+ * The upload is async, so the node is found by its authored id first and by
+ * path only when it has none — a stale target is refused, never guessed.
+ */
+describe('replaceImageSrcInJsx', () => {
+  const SRC = '<div id="root" className="p-8"><p id="p1">intro</p>'
+    + '<img id="img1" src="ref:Old111" alt="A chart" className="my-6 w-1/2 rounded-xl" /><p id="p2">after</p></div>';
+
+  it('changes only src, keeping id, className, alt and position', () => {
+    const out = replaceImageSrcInJsx(SRC, { path: '0.1' }, 'New222');
+    expect(out).toBe(SRC.replace('ref:Old111', 'ref:New222'));
+    expectValidStoryJsx(out);
+  });
+
+  it('finds the image by its id when the path has moved during the upload', () => {
+    const moved = SRC.replace('<p id="p1">intro</p>', '<p id="p0">new first</p><p id="p1">intro</p>');
+    const out = replaceImageSrcInJsx(moved, { path: '0.1', nodeId: 'img1' }, 'New222');
+    expect(out).toBe(moved.replace('ref:Old111', 'ref:New222'));
+  });
+
+  it('refuses a target that is not a plain <img> — a stale path must not rewrite a neighbour', () => {
+    expect(replaceImageSrcInJsx(SRC, { path: '0.0' }, 'New222')).toBe(SRC);
+    expect(replaceImageSrcInJsx(SRC, { path: '0.9' }, 'New222')).toBe(SRC);
+    expect(replaceImageSrcInJsx(SRC, { path: '0.1', nodeId: 'gone' }, 'New222')).toBe(SRC);
+    expect(replaceImageSrcInJsx('<div><Question data="$q" /></div>', { path: '0.0' }, 'New222'))
+      .toBe('<div><Question data="$q" /></div>');
+  });
+
+  it('refuses a malformed image id and unparseable source', () => {
+    expect(replaceImageSrcInJsx(SRC, { path: '0.1' }, 'bad id!')).toBe(SRC);
+    expect(replaceImageSrcInJsx('<div><img src="x"', { path: '0.0' }, 'New222')).toBe('<div><img src="x"');
+  });
+
+  it('replaces a URL src and drops a srcSet that would keep showing the old picture', () => {
+    const src = '<div><img src="https://example.com/a.png" srcSet="https://example.com/a2.png 2x" sizes="100vw" alt="x" /></div>';
+    const out = replaceImageSrcInJsx(src, { path: '0.0' }, 'New222');
+    expect(out).toBe('<div><img src="ref:New222" alt="x" /></div>');
+  });
+});
+
+describe('setImageAltInJsx', () => {
+  const SRC = '<div><img id="i" src="ref:Old111" className="rounded" /></div>';
+
+  it('adds, edits and removes the alt attribute', () => {
+    const added = setImageAltInJsx(SRC, { path: '0.0' }, 'A red square');
+    expect(added).toBe('<div><img id="i" src="ref:Old111" className="rounded" alt="A red square" /></div>');
+    expectValidStoryJsx(added);
+    const edited = setImageAltInJsx(added, { path: '0.0', nodeId: 'i' }, '  A blue square ');
+    expect(edited).toContain('alt="A blue square"');
+    expect(setImageAltInJsx(edited, { path: '0.0' }, '   ')).toBe(SRC);
+  });
+
+  it('escapes what the author typed rather than breaking the attribute', () => {
+    const out = setImageAltInJsx(SRC, { path: '0.0' }, 'say "hi" <b>');
+    expectValidStoryJsx(out);
+    expect(parseJsx(out).ok).toBe(true);
+  });
+
+  it('refuses anything but a plain <img>', () => {
+    expect(setImageAltInJsx('<div><p>x</p></div>', { path: '0.0' }, 'alt')).toBe('<div><p>x</p></div>');
   });
 });

@@ -217,6 +217,80 @@ export function insertImageInJsx(source: string, imageId: string): string {
 }
 
 /**
+ * Which `<img>` an image edit means: its SOURCE path when the edit was asked
+ * for, and its authored id when it had one. The id wins — a replace waits on an
+ * upload, and a node inserted above the image meanwhile moves its path.
+ */
+export interface JsxImageTarget {
+  path: string;
+  nodeId?: string;
+}
+
+/** The plain `<img>` a target names, or null when the target is stale or not an image. */
+function resolveImageTarget(nodes: JsxNode[], target: JsxImageTarget): JsxElement | null {
+  const isImage = (n: JsxNode | null | undefined): n is JsxElement =>
+    !!n && n.type === 'element' && !n.isComponent && n.tag === 'img';
+  if (target.nodeId) {
+    const found: JsxElement[] = [];
+    const visit = (list: JsxNode[]) => {
+      for (const n of list) {
+        if (n.type !== 'element') continue;
+        const id = n.attributes.find((a) => a.name === 'id');
+        if (id?.value.static && id.value.json === target.nodeId) found.push(n);
+        visit(n.children);
+      }
+    };
+    visit(nodes);
+    return found.length === 1 && isImage(found[0]) ? found[0] : null;
+  }
+  const node = resolveByPath(nodes, target.path);
+  return isImage(node) ? node : null;
+}
+
+/**
+ * REPLACE the picture an `<img>` shows with an uploaded image (`ref:<id>`).
+ *
+ * Only `src` changes: the node keeps its id (what its comments are anchored
+ * to), its place, its classes and its alt text, so the replacement is the same
+ * image in every respect the author arranged. A `srcSet`/`sizes` pair is
+ * dropped with the old src — left behind, the browser would keep drawing the
+ * old picture from it. Returns `source` unchanged when it does not parse, the
+ * id is malformed or the target no longer names a plain `<img>`.
+ */
+export function replaceImageSrcInJsx(source: string, target: JsxImageTarget, imageId: string): string {
+  if (!/^[A-Za-z0-9]{6,12}$/.test(imageId)) return source;
+  const parsed = parseJsx(source);
+  if (!parsed.ok) return source;
+  const img = resolveImageTarget(parsed.nodes, target);
+  if (!img) return source;
+  setStaticJsxAttr(img, 'src', `ref:${imageId}`);
+  img.attributes = img.attributes.filter((a) => !['srcset', 'sizes'].includes(a.name.toLowerCase()));
+  return serializeJsx(parsed.nodes);
+}
+
+/**
+ * Set an `<img>`'s alt text. Blank removes the attribute, which is what "no
+ * description" means in the source. Same refusals as the replace above.
+ */
+export function setImageAltInJsx(source: string, target: JsxImageTarget, alt: string): string {
+  const parsed = parseJsx(source);
+  if (!parsed.ok) return source;
+  const img = resolveImageTarget(parsed.nodes, target);
+  if (!img) return source;
+  const value = alt.trim();
+  setStaticJsxAttr(img, 'alt', value === '' ? undefined : value);
+  return serializeJsx(parsed.nodes);
+}
+
+/** The alt text of the `<img>` a target names; null when it has none or is not an image. */
+export function imageAltInJsx(source: string, target: JsxImageTarget): string | null {
+  const parsed = parseJsx(source);
+  if (!parsed.ok) return null;
+  const alt = resolveImageTarget(parsed.nodes, target)?.attributes.find((a) => a.name === 'alt');
+  return alt?.value.static && typeof alt.value.json === 'string' && alt.value.json.trim() !== '' ? alt.value.json : null;
+}
+
+/**
  * Remove the ELEMENT at `astPath` from a story body (the editor's delete affordance —
  * toolbar button, inspector button, Delete/Backspace on a selection). Splicing a node out
  * shifts every later sibling's AST path, so callers must treat the result as a NEW document
