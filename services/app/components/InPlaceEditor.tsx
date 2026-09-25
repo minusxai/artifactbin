@@ -53,7 +53,15 @@ import { storyUpdateParts } from '@/lib/story/update-parts';
 import { isWebUrl } from '@/lib/story/asset-url';
 import { imageRawUrl, type RefDataMap } from '@/lib/story/ref-data';
 import { bodyPathToSourcePath } from '@/lib/story/edit-compose';
-import { insertImageInJsx, removeJsxNodeAtPath } from '@/lib/data/story/jsx-edit';
+import {
+  imageAltInJsx,
+  imageTargetInJsx,
+  insertImageInJsx,
+  removeJsxNodeAtPath,
+  replaceImageSrcInJsx,
+  setImageAltInJsx,
+  type JsxImageTarget,
+} from '@/lib/data/story/jsx-edit';
 import {
   readQuestionChart,
   updateQuestionChartInJsx,
@@ -97,6 +105,9 @@ const narrowTabClass = (active: boolean) =>
  * the document's own CSP will not load an off-origin `<img>`.
  */
 const HELD_ASSETS = isWebUrl;
+
+/** What the upload door takes — the insert and replace pickers offer the same list. */
+const IMAGE_ACCEPT = 'image/png,image/jpeg,image/webp,image/gif,image/svg+xml';
 
 interface EditorArtifact {
   id: string;
@@ -406,6 +417,7 @@ export default function InPlaceEditor({
     return () => window.removeEventListener('keydown', onKey, true);
   }, [applyHistory]);
   const insertImageRef = useRef<((file: File) => void) | null>(null);
+  const replaceImageRef = useRef<{ file: (file: File, bodyPath: string) => void; pick: (bodyPath: string) => void } | null>(null);
   const edit = useInPlaceEdit({
     frameRef,
     runtimeRef,
@@ -415,8 +427,12 @@ export default function InPlaceEditor({
     onHistory: (direction) => {
       void applyHistory(direction);
     },
-    onImageDrop: useCallback((file: File) => {
-      insertImageRef.current?.(file);
+    onImageDrop: useCallback((file: File, target?: string) => {
+      if (target) replaceImageRef.current?.file(file, target);
+      else insertImageRef.current?.(file);
+    }, []),
+    onImageReplaceRequest: useCallback((path: string) => {
+      replaceImageRef.current?.pick(path);
     }, []),
     editing: mode === 'design' && !preview,
     sourceRef,
@@ -851,15 +867,14 @@ export default function InPlaceEditor({
   // ── images ────────────────────────────────────────────────────────────────
   const [imageMenuOpen, setImageMenuOpen] = useState(false);
   const [imageUrlDraft, setImageUrlDraft] = useState('');
+  type CreatedImage = { id: string; rawUrl?: string };
   /**
-   * The URL half of insert-image: the browser door ingests-and-owns it
-   * (POST {imageUrl} — the same lib/web-ingest path the agent door runs), and
-   * the source gets `ref:<id>` exactly like an upload. The door's refusal is
-   * SHOWN verbatim-ish: it names the URL and the reason, which is the point.
+   * The URL door: the browser ingests-and-owns it (POST {imageUrl} — the same
+   * lib/web-ingest path the agent door runs), and the source gets `ref:<id>`
+   * exactly like an upload. The door's refusal is SHOWN verbatim-ish: it names
+   * the URL and the reason, which is the point. Insert and replace share it.
    */
-  const insertImageFromUrl = useCallback(async () => {
-    const url = imageUrlDraft.trim();
-    if (!url) return;
+  const importImageUrl = useCallback(async (url: string): Promise<CreatedImage | null> => {
     setImageError(null);
     const res = await fetch('/api/my/artifacts?visibility=unlisted', {
       method: 'POST',
@@ -868,7 +883,7 @@ export default function InPlaceEditor({
     }).catch(() => null);
     if (!res) {
       setImageError('Import failed — check your connection and try again.');
-      return;
+      return null;
     }
     if (!res.ok) {
       const body = (await res.json().catch(() => null)) as { error?: string; details?: string[] } | null;
@@ -876,49 +891,121 @@ export default function InPlaceEditor({
         body?.details?.[0] ??
           (res.status === 403 ? 'You have reached your artifact limit.' : 'Could not import that image.'),
       );
-      return;
+      return null;
     }
-    const created = (await res.json()) as { id: string; rawUrl?: string };
+    return (await res.json()) as CreatedImage;
+  }, []);
+
+  /** The upload door — one type list, one size cap — for every insert and every replace. */
+  const uploadImage = useCallback(async (file: File): Promise<CreatedImage | null> => {
+    if (!file.type.startsWith('image/')) return null;
+    setImageError(null);
+    const res = await fetch('/api/my/artifacts?visibility=unlisted', {
+      method: 'POST',
+      headers: { 'Content-Type': file.type },
+      body: file,
+    }).catch(() => null);
+    if (!res) {
+      setImageError('Upload failed — check your connection and try again.');
+      return null;
+    }
+    if (!res.ok) {
+      const code = await res
+        .json()
+        .then((b) => b?.error)
+        .catch(() => null);
+      setImageError(
+        res.status === 413
+          ? 'That image is too large to upload.'
+          : res.status === 403
+            ? 'You have reached your artifact limit.'
+            : code === 'invalid_image'
+              ? 'That image type is not supported (png, jpeg, webp, gif, svg).'
+              : 'Could not upload that image.',
+      );
+      return null;
+    }
+    return (await res.json()) as CreatedImage;
+  }, []);
+
+  const insertImageFromUrl = useCallback(async () => {
+    const url = imageUrlDraft.trim();
+    if (!url) return;
+    const created = await importImageUrl(url);
+    if (!created) return;
     commitStructural(insertImageInJsx(sourceRef.current, created.id), refDataFor(created));
     setImageUrlDraft('');
     setImageMenuOpen(false);
-  }, [imageUrlDraft, commitStructural]);
+  }, [imageUrlDraft, importImageUrl, commitStructural]);
 
   const insertImage = useCallback(
     async (file: File) => {
-      if (!file.type.startsWith('image/')) return;
-      setImageError(null);
-      const res = await fetch('/api/my/artifacts?visibility=unlisted', {
-        method: 'POST',
-        headers: { 'Content-Type': file.type },
-        body: file,
-      }).catch(() => null);
-      if (!res) {
-        setImageError('Upload failed — check your connection and try again.');
+      const created = await uploadImage(file);
+      if (created) commitStructural(insertImageInJsx(sourceRef.current, created.id), refDataFor(created));
+    },
+    [uploadImage, commitStructural],
+  );
+  insertImageRef.current = insertImage;
+
+  /**
+   * REPLACE — the one path every replace door ends in. The target is captured
+   * when the replace is ASKED for (its path, and its id when it has one), since
+   * the upload is async and the document may move meanwhile. Only `src`
+   * changes, as one structural commit: one undo step, the old asset untouched.
+   */
+  const replaceImage = useCallback(
+    async (bodyPath: string, obtain: () => Promise<CreatedImage | null>) => {
+      const target: JsxImageTarget | null = imageTargetInJsx(
+        sourceRef.current,
+        bodyPathToSourcePath(sourceRef.current, bodyPath),
+      );
+      if (!target) return;
+      const created = await obtain();
+      if (!created) return;
+      try {
+        // Typing the document has not committed yet must be in the source the replace composes against.
+        await editRef.current?.commitPending();
+      } catch (error) {
+        setImageError(error instanceof Error ? error.message : 'Could not replace that image.');
         return;
       }
-      if (!res.ok) {
-        const code = await res
-          .json()
-          .then((b) => b?.error)
-          .catch(() => null);
-        setImageError(
-          res.status === 413
-            ? 'That image is too large to upload.'
-            : res.status === 403
-              ? 'You have reached your artifact limit.'
-              : code === 'invalid_image'
-                ? 'That image type is not supported (png, jpeg, webp, gif, svg).'
-                : 'Could not upload that image.',
-        );
+      const next = replaceImageSrcInJsx(sourceRef.current, target, created.id);
+      if (next === sourceRef.current) {
+        setImageError('That image changed while the new one was uploading. Select it and try again.');
         return;
       }
-      const created = (await res.json()) as { id: string; rawUrl?: string };
-      commitStructural(insertImageInJsx(sourceRef.current, created.id), refDataFor(created));
+      commitStructural(next, refDataFor(created));
     },
     [commitStructural],
   );
-  insertImageRef.current = insertImage;
+  const replaceInputRef = useRef<HTMLInputElement>(null);
+  /** The image the replace file picker is open for (its body path). */
+  const replacePathRef = useRef<string | null>(null);
+  const pickReplacement = useCallback((bodyPath: string) => {
+    replacePathRef.current = bodyPath;
+    replaceInputRef.current?.click();
+  }, []);
+  replaceImageRef.current = {
+    file: (file, bodyPath) => void replaceImage(bodyPath, () => uploadImage(file)),
+    pick: pickReplacement,
+  };
+  /** The image toolbar's half: alt text read from the SOURCE (the selection is a DOM snapshot), and the doors. */
+  const selectedImagePath = selection?.tag === 'img' ? selection.path : null;
+  const selectedImageAlt = useMemo(
+    () => (selectedImagePath ? imageAltInJsx(source, { path: bodyPathToSourcePath(source, selectedImagePath) }) : null),
+    [source, selectedImagePath],
+  );
+  const imageControls = selectedImagePath
+    ? {
+        alt: selectedImageAlt,
+        onReplaceFile: () => pickReplacement(selectedImagePath),
+        onReplaceUrl: (url: string) => void replaceImage(selectedImagePath, () => importImageUrl(url)),
+        onAlt: (alt: string) =>
+          commitStructural(
+            setImageAltInJsx(sourceRef.current, { path: bodyPathToSourcePath(sourceRef.current, selectedImagePath) }, alt),
+          ),
+      }
+    : undefined;
 
   // ── version history ───────────────────────────────────────────────────────
   const history = useArtifactVersions({ id: art.id, currentVersion: live.version });
@@ -993,7 +1080,7 @@ export default function InPlaceEditor({
       <input
         ref={imageInputRef}
         type="file"
-        accept="image/png,image/jpeg,image/webp,image/gif,image/svg+xml"
+        accept={IMAGE_ACCEPT}
         aria-label="Upload image file"
         className="hidden"
         onChange={(e) => {
@@ -1103,6 +1190,21 @@ export default function InPlaceEditor({
 
   return (
     <div className="contents" data-app-appearance={surfaceMode}>
+      {/* The replace picker: opened by the toolbar's Upload file and by a double-click on an image. */}
+      <input
+        ref={replaceInputRef}
+        type="file"
+        accept={IMAGE_ACCEPT}
+        aria-label="Replacement image file"
+        className="hidden"
+        onChange={(e) => {
+          const f = e.target.files?.[0];
+          const path = replacePathRef.current;
+          replacePathRef.current = null;
+          if (f && path) replaceImageRef.current?.file(f, path);
+          e.target.value = '';
+        }}
+      />
       {markdownDraft !== null && (
         <MarkdownPasteDialog
           value={markdownDraft}
@@ -1412,6 +1514,7 @@ export default function InPlaceEditor({
               onSelect={edit.select}
               onDelete={deleteSelected}
               onComment={onComment}
+              image={imageControls}
             />
           ) : (
             <div className="flex flex-col">

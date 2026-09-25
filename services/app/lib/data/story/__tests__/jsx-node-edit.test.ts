@@ -7,7 +7,9 @@
  */
 import { describe, it, expect } from 'vitest';
 
-import { insertImageInJsx, removeJsxNodeAtPath, replaceImageSrcInJsx, setImageAltInJsx } from '@/lib/data/story/jsx-edit';
+import {
+  imageAltInJsx, imageTargetInJsx, insertImageInJsx, removeJsxNodeAtPath, replaceImageSrcInJsx, setImageAltInJsx,
+} from '@/lib/data/story/jsx-edit';
 import { parseJsx } from '@/lib/jsx';
 import { expectValidStoryJsx } from '@/test/helpers/jsx';
 
@@ -163,5 +165,23 @@ describe('setImageAltInJsx', () => {
 
   it('refuses anything but a plain <img>', () => {
     expect(setImageAltInJsx('<div><p>x</p></div>', { path: '0.0' }, 'alt')).toBe('<div><p>x</p></div>');
+  });
+});
+
+describe('imageTargetInJsx / imageAltInJsx — capturing the image an edit means', () => {
+  it('captures the path and the authored id of a plain <img>, and reads its alt', () => {
+    const src = '<div><p>x</p><img id="im" src="ref:Old111" alt="A chart" /><img src="ref:Old222" alt="" /></div>';
+    expect(imageTargetInJsx(src, '0.1')).toEqual({ path: '0.1', nodeId: 'im' });
+    expect(imageTargetInJsx(src, '0.2')).toEqual({ path: '0.2' });
+    expect(imageAltInJsx(src, { path: '0.1' })).toBe('A chart');
+    expect(imageAltInJsx(src, { path: '0.2' })).toBeNull(); // empty alt is no description
+  });
+
+  it('is null for anything that is not a plain <img>', () => {
+    const src = '<div><p>x</p><Question data="$q" /></div>';
+    expect(imageTargetInJsx(src, '0.0')).toBeNull();
+    expect(imageTargetInJsx(src, '0.1')).toBeNull();
+    expect(imageTargetInJsx(src, '0.7')).toBeNull();
+    expect(imageTargetInJsx('<div><img', '0.0')).toBeNull();
   });
 });

@@ -282,6 +282,20 @@ export function setImageAltInJsx(source: string, target: JsxImageTarget, alt: st
   return serializeJsx(parsed.nodes);
 }
 
+/**
+ * Capture the image an edit means at the moment it is asked for: its source
+ * path and, when it has one, its authored id. Null when the path does not name
+ * a plain `<img>` — nothing is uploaded for a target that cannot be replaced.
+ */
+export function imageTargetInJsx(source: string, path: string): JsxImageTarget | null {
+  const parsed = parseJsx(source);
+  if (!parsed.ok) return null;
+  const img = resolveImageTarget(parsed.nodes, { path });
+  if (!img) return null;
+  const id = img.attributes.find((a) => a.name === 'id');
+  return id?.value.static && typeof id.value.json === 'string' && id.value.json ? { path, nodeId: id.value.json } : { path };
+}
+
 /** The alt text of the `<img>` a target names; null when it has none or is not an image. */
 export function imageAltInJsx(source: string, target: JsxImageTarget): string | null {
   const parsed = parseJsx(source);
