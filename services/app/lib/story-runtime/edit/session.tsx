@@ -1023,11 +1023,17 @@ export function createFrameEditSession({
             const el = scope.querySelector(`[${AST_PATH_ATTR}="${CSS.escape(path)}"]`);
             return el && describeSelection(el, nodes) ? { el } : null;
           };
+          /** Scroll it to the middle — and again once an image has its height, or it lands half-shown. */
+          const bringIntoView = (el: Element) => {
+            const go = () => el.scrollIntoView?.({ block: 'center', behavior: 'smooth' });
+            if (el.localName === 'img' && !(el as HTMLImageElement).complete) el.addEventListener('load', go, { once: true });
+            go();
+          };
           const found = described();
           if (found || !message.reveal) {
             if (found) selectBlock(found.el);
             else reportSelection(null);
-            if (found && message.reveal) found.el.scrollIntoView?.({ block: 'center', behavior: 'smooth' });
+            if (found && message.reveal) bringIntoView(found.el);
             break;
           }
           // Just inserted: the new document may not be drawn yet. Wait for it, briefly.
@@ -1037,7 +1043,7 @@ export function createFrameEditSession({
             const late = described();
             if (late) {
               selectBlock(late.el);
-              late.el.scrollIntoView?.({ block: 'center', behavior: 'smooth' });
+              bringIntoView(late.el);
             } else if (++tries < 60) win.setTimeout(wait, 25);
           };
           win.setTimeout(wait, 25);

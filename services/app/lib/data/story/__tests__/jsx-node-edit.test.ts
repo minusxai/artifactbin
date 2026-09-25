@@ -229,7 +229,9 @@ describe('placeImageInJsx', () => {
   });
 
   it('a container — card, card content, grid cell, section — takes it inside, at the end', () => {
-    expect(place({ path: '0.3' }).source).toContain(`</CardContent>${IMG}</Card>`);
+    // The card's contents live in its CardContent: that is where "the end of the card" is.
+    expect(place({ path: '0.3' }).source).toContain(`<p>in card</p>${IMG}</CardContent></Card>`);
+    expect(place({ path: '0.3' }).path).toBe('0.3.0.1');
     expect(place({ path: '0.3.0' }).source).toContain(`<p>in card</p>${IMG}</CardContent>`);
     expect(place({ path: '0.4.0' }).source).toContain(`<p>cell</p>${IMG}</GridItem>`);
     const section = place({ path: '0.9' });

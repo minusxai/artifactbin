@@ -277,6 +277,16 @@ export function placeImageInJsx(
     let side = anchor?.side ?? (isContainer ? 'inside' : 'after');
     if (node.tag === 'GridItem') side = 'inside';
     if (side === 'inside') {
+      // A card's contents live in its (last) CardContent: that is its end.
+      if (node.tag === 'Card') {
+        const index = node.children.findLastIndex((c) => c.type === 'element' && c.tag === 'CardContent');
+        if (index !== -1) {
+          const content = node.children[index] as JsxElement;
+          content.children.push(img);
+          content.selfClosing = false;
+          return { source: serializeJsx(roots), path: [...parts, index, content.children.length - 1].join('.') };
+        }
+      }
       node.children.push(img);
       node.selfClosing = false;
       return { source: serializeJsx(roots), path: [...parts, node.children.length - 1].join('.') };
