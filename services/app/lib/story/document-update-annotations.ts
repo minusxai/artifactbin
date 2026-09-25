@@ -1,7 +1,22 @@
+import type {DocumentUpdate} from '@artifactbin/contracts';
 /** Lower client-validated text lineage to conditional sidecar updates. Reads
  * current annotation relations inside the document commit, including comments
  * added since the client loaded. All offsets remain UTF-16 integer offsets. */
-export function documentAnnotationSql(operations:string):string {
+/** SQL substrings use code points; editor ranges use UTF-16. Boundaries are
+ * derived from the supplied mapping, never a read/reparse of the document. */
+export function annotationSqlInput(operations:DocumentUpdate['annotationOps']){
+ return (operations??[]).map(op=>op.kind!=='map'?op:{...op,maps:op.maps.map(map=>{
+  let units=0,points=0;const boundaries:Record<string,number>={'0':0};
+  for(const char of map.fromText){units+=char.length;boundaries[units]=++points;}
+  return {...map,boundaries};
+ })});
+}
+export function annotationSqlGuard(operations:string):string {
+ return `NOT EXISTS(SELECT 1 FROM jsonb_array_elements(${operations}::jsonb) op WHERE op->>'kind' IN ('undo','redo')
+  AND NOT EXISTS(SELECT 1 FROM artifact_edits e CROSS JOIN LATERAL jsonb_array_elements(e.annotation_changes) r
+   WHERE e.artifact_id=$1 AND r->>'operationId'=op->>'id' AND r->>'direction'='map'))`;
+}
+export function documentAnnotationSql(operations:string,aliases:string):string {
  return `annotation_steps AS MATERIALIZED (
   SELECT row_number() OVER(ORDER BY op.ordinal,m.ordinal)::int AS step,op.value->>'id' AS operation_id,
    op.value->>'kind' AS kind,m.value AS mapping
@@ -13,9 +28,9 @@ export function documentAnnotationSql(operations:string):string {
    AND EXISTS(SELECT 1 FROM annotation_steps s WHERE s.operation_id=r->>'operationId')
  ), annotation_walk AS (
   SELECT a.id,0 AS step,a.anchor_key AS original_anchor,a.range AS original_range,
-   a.anchor_key AS anchor,a.range AS range,'[]'::jsonb AS receipts
+   COALESCE((SELECT x->>'nodeId' FROM jsonb_array_elements(${aliases}::jsonb) x WHERE x->>'legacyKey'=a.anchor_key LIMIT 1),a.anchor_key) AS anchor,a.range AS range,'[]'::jsonb AS receipts
   FROM annotations a WHERE a.artifact_id=$1 AND a.root_id IS NULL AND a.deleted_at IS NULL
-   AND EXISTS(SELECT 1 FROM updated) AND EXISTS(SELECT 1 FROM annotation_steps)
+   AND EXISTS(SELECT 1 FROM updated) AND (EXISTS(SELECT 1 FROM annotation_steps) OR jsonb_array_length(${aliases}::jsonb)>0)
   UNION ALL
   SELECT w.id,s.step,w.original_anchor,w.original_range,COALESCE(next.relation->>'anchor',w.anchor),
    CASE WHEN next.relation IS NULL THEN w.range ELSE next.relation->>'range' END,
@@ -30,6 +45,7 @@ export function documentAnnotationSql(operations:string):string {
    FROM jsonb_array_elements(s.mapping->'segments') segment
    WHERE s.kind='map' AND w.anchor=s.mapping->>'fromId' AND w.range IS NOT NULL
     AND COALESCE(w.range::jsonb->>'kind','text') NOT IN ('area','target') AND jsonb_array_length(w.range::jsonb->'parts')=1
+    AND substring(s.mapping->>'fromText' FROM (s.mapping->'boundaries'->>(w.range::jsonb#>>'{parts,0,start}'))::int+1 FOR (s.mapping->'boundaries'->>(w.range::jsonb#>>'{parts,0,end}'))::int-(s.mapping->'boundaries'->>(w.range::jsonb#>>'{parts,0,start}'))::int)=w.range::jsonb#>>'{parts,0,text}'
     AND w.range::jsonb#>>'{parts,0,rel}'='' AND (segment->>'from')::int<=(w.range::jsonb#>>'{parts,0,start}')::int
     AND (segment->>'from')::int+(segment->>'length')::int>=(w.range::jsonb#>>'{parts,0,end}')::int
     AND NOT EXISTS(SELECT 1 FROM annotation_saved r WHERE r.receipt->>'operationId'=s.operation_id)
@@ -41,7 +57,7 @@ export function documentAnnotationSql(operations:string):string {
   ) next ON true
  ), moved_annotations AS (
   UPDATE annotations a SET anchor_key=w.anchor,range=w.range FROM annotation_walk w
-  WHERE w.step=(SELECT max(step) FROM annotation_steps) AND a.id=w.id
+  WHERE w.step=COALESCE((SELECT max(step) FROM annotation_steps),0) AND a.id=w.id
    AND a.anchor_key=w.original_anchor AND a.range IS NOT DISTINCT FROM w.original_range
    AND (a.anchor_key IS DISTINCT FROM w.anchor OR a.range IS DISTINCT FROM w.range)
   RETURNING a.id,w.receipts

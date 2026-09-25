@@ -1,3 +1,4 @@
+import {documentEditBody} from './prepared-document';
 /**
  * A SHARE CARRIES A ROLE — and the third role is COMMENTER: a named person who
  * may read the document and annotate it (open threads, reply, resolve), and
@@ -102,9 +103,9 @@ describe('the commenter role', () => {
 
   it('may NOT edit, replace, or delete — every write door is the uniform 404', async () => {
     const w = await world();
-    const edit = await editsRoute(jreq(`/api/artifacts/${w.doc.id}/edits`, 'POST', { edit_id: w.row.edit_id, source: '<div><p>changed</p></div>' }, w.tc.token), params({ id: w.doc.id }));
+    const edit = await editsRoute(jreq(`/api/artifacts/${w.doc.id}/edits`, 'POST', documentEditBody(w.row,{source:'<div><p>changed</p></div>'}), w.tc.token), params({ id: w.doc.id }));
     expect(edit.status).toBe(404);
-    const put = await putArtifactRoute(jreq(`/api/artifacts/${w.doc.id}`, 'PUT', { markup: '<div><p>changed</p></div>' }, w.tc.token), params({ id: w.doc.id }));
+    const put = await putArtifactRoute(jreq(`/api/artifacts/${w.doc.id}`, 'PUT', documentEditBody(w.row,{source:'<div><p>changed</p></div>',whole:true}), w.tc.token), params({ id: w.doc.id }));
     expect(put.status).toBe(404);
     expect((await getArtifactById(w.doc.id))!.version).toBe(1);
   });

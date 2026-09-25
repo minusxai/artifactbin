@@ -159,3 +159,28 @@ it('binds newly attached dataset scopes and archives them in the document commit
  expect((await db.query("SELECT count(*)::int AS n FROM artifact_versions WHERE artifact_id='ScpDat'")).rows[0]).toEqual({n:1});
  expect((await db.query("SELECT count(*)::int AS n FROM artifact_edits WHERE artifact_id='ScpDat'")).rows[0]).toEqual({n:1});
 });
+
+it('maps UTF-16 annotation ranges only when their quote still matches and refuses unknown undo receipts',async()=>{
+ const {db,actor,id,base}=await setup();
+ const seeded=await commitDocumentUpdate(db,actor,editorScope(actor),id,prepareClientDocumentUpdate(base,{source:'<main id="root"><p id="a">Alpha</p><p id="b">😀Beta</p></main>'}));
+ if(!seeded?.applied||seeded.row.document?.kind!=='graph')throw new Error('Missing graph');
+ for(const [key,text] of [['good','Beta'],['stale','Old!']])await db.query("INSERT INTO annotations(id,artifact_id,body,author_kind,anchor_key,range) VALUES($1,$2,'Comment','agent','b',$3)",[key,id,JSON.stringify({v:1,parts:[{rel:'',start:2,end:6,text}]})]);
+ const snapshot={...seeded.row,document:seeded.row.document};
+ const change={source:'<main id="root"><p id="a">Alpha😀Beta</p></main>',annotationOps:[{id:'utf16-mapping-abcdefghijkl',kind:'map' as const,maps:[{fromId:'b',toId:'a',fromText:'😀Beta',toText:'Alpha😀Beta',segments:[{from:0,to:5,length:6}]}]}]};
+ const joined=await commitDocumentUpdate(db,actor,editorScope(actor),id,prepareClientDocumentUpdate(snapshot,change));expect(joined?.applied).toBe(true);
+ const rows=(await db.query<{id:string;anchor_key:string;range:string}>('SELECT id,anchor_key,range FROM annotations WHERE artifact_id=$1 ORDER BY id',[id])).rows;
+ expect(rows[0]!.anchor_key).toBe('a');expect(JSON.parse(rows[0]!.range).parts[0]).toMatchObject({start:7,end:11,text:'Beta'});expect(rows[1]!.anchor_key).toBe('b');
+ if(!joined?.applied||joined.row.document?.kind!=='graph')throw new Error('Missing joined graph');
+ const unknown=prepareClientDocumentUpdate({...joined.row,document:joined.row.document},{source:seeded.row.source!,annotationOps:[{kind:'undo',id:'unknown-abcdefghijklmnop'}]});
+ expect((await commitDocumentUpdate(db,actor,editorScope(actor),id,unknown))?.applied).toBe(false);expect((await getArtifactById(id))!.version).toBe(joined.row.version);
+});
+
+it('normalizes a legacy annotation alias before composing its text mapping',async()=>{
+ const {db,actor,id,base}=await setup();
+ await db.query("INSERT INTO annotations(id,artifact_id,body,author_kind,anchor_key,range) VALUES('legacy_join',$1,'Comment','agent','old-b',$2)",[id,JSON.stringify({v:1,parts:[{rel:'',start:0,end:4,text:'Beta'}]})]);
+ const update=prepareClientDocumentUpdate(base,{source:'<main id="root"><p id="a">AlphaBeta</p></main>',annotationOps:[{id:'legacy-map-abcdefghijkl',kind:'map',maps:[{fromId:'b',toId:'a',fromText:'Beta',toText:'AlphaBeta',segments:[{from:0,to:5,length:4}]}]}]});
+ update.aliases=[{legacyKey:'old-b',nodeId:'b',path:'0.1'}];
+ expect((await commitDocumentUpdate(db,actor,editorScope(actor),id,update))?.applied).toBe(true);
+ const row=(await db.query<{anchor_key:string;range:string}>("SELECT anchor_key,range FROM annotations WHERE id='legacy_join'")).rows[0]!;
+ expect(row.anchor_key).toBe('a');expect(JSON.parse(row.range).parts[0]).toMatchObject({start:5,end:9});
+});

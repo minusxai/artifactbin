@@ -29,6 +29,7 @@ function routePaths(dir: string, prefix: string, out: string[] = []): string[] {
 
 /** Routes that are deliberately NOT operations, each with its reason beside it here. */
 const EXCEPTIONS = new Set([
+  '/api/artifacts/{id}/prepare', // authoring resource preparation; never edits the target document
   '/api/artifacts/reservations', // CLI identity-pool allocation, not an artifact operation
   '/api/artifacts/preflight', // read-only validation of the actual publication body
   '/api/artifacts/{id}/content', // immutable binary content download; no document rendering or imports

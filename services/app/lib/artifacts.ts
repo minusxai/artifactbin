@@ -3,9 +3,9 @@ import {commitDocumentUpdate} from './story/document-update-write';
 import type {ProseOperation} from './story/document-prose';
 import type {DocumentOperation} from '@artifactbin/contracts';
 import type {StoredDocument} from './story/document-codec';
-import {createDocumentGraph,GRAPH_POLICY,type DocumentGraph} from './story/document-graph';
-import {prepareGraphSource,type GraphAdmission} from './story/document-graph-admission';
-import {commitGraphOperation} from './story/document-graph-write';
+import {createDocumentGraph} from './story/document-graph';
+import {prepareClientDocumentPublication} from './story/document-update-client';
+import {prepareDocumentAuthoringContext} from './story/document-authoring-context';
 import {artifactQuery,loadArtifactDocument,sourceStorage} from './artifact-document';
 import {JOIN_RELATIONS,seedOwnerJoin} from './relation-state';
 import {documentMentions} from './saved-mentions';
@@ -56,7 +56,6 @@ import {validateDatasetPolicyForRow} from './datasets/policy/validation';
 import { actorSubject, emit } from './events';
 import { generateFileId } from './ids';
 import { parseContentInput, type ArtifactFormat } from './story/input';
-import { canonicalizeMarkup, publishJsx } from './story/jsx-tier';
 import { imageRawUrl, imageRefData, pdfRawUrl } from './story/ref-data';
 import { displayTitle } from './story/title';
 import { assetWarningFor, importWebAsset, WebAssetRefused, type AssetWarning, type WebAssetKind } from './web-assets';
@@ -1108,51 +1107,34 @@ async function logWholeDocumentWrite(tx: Queryable, before: ArtifactRow, after: 
  */
 export interface PreparedMarkupWrite {
  source:string;content:string;meta:Record<string,unknown>;ids:string[];aliases:Array<{legacyKey:string;nodeId:string;path:string}>;
- admission:GraphAdmission;initialize?:{document:DocumentGraph;source:string};
+ update:DocumentUpdate;
 }
 export async function commitNormalizedMarkup(
  tx:Queryable,actor:TokenActor|null,current:ArtifactRow,
  normalized:PreparedMarkupWrite & {title?:string|null;description?:string|null;format?:ArtifactFormat},
 ):Promise<ArtifactRow>{
  const scope=actor?editorScope(actor):{val:current.id,where:(param:string)=>`id=${param}`};
- const updated=await commitGraphOperation(tx,actor,scope,normalized.admission,{
-  archive:'always',history:'whole',expectedEditId:current.edit_id,initialize:normalized.initialize,title:normalized.title,description:normalized.description,aliases:normalized.aliases,provenance:'migration',
- });
- if(!updated)throw new Error('artifact changed after identity preparation');
- await bindCurrentUserScopes(tx,updated);return updated;
+ const committed=await commitDocumentUpdate(tx,actor,scope,current.id,{...normalized.update,aliases:normalized.aliases});
+ if(!committed?.applied)throw new Error('artifact changed after identity preparation');
+ return committed.row;
 }
 
-/** Artifact-aware publish preparation shared with the administrative migration. */
-export async function publishMarkupForArtifact(
-  current: ArtifactRow,
-  source: string,
-  metaOverride: Record<string, unknown> = current.meta,
-): Promise<Response | PreparedMarkupWrite> {
-  const currentMeta = metaOverride as { theme?: unknown; template?: unknown; colorMode?: unknown };
-  const context = {
-    loadRef: refLoaderForActor(writerFor(current)),
-    importAsset: assetImporterFor(current.token_id, current.user_id),
-    resolveFont: fontResolver(),
-    overByteQuota: byteQuotaFor(current.token_id),
-  };
-  let published = await publishJsx({ theme: currentMeta.theme ?? null, template: currentMeta.template ?? null, colorMode: currentMeta.colorMode ?? null }, source, context);
-  if (published instanceof Response) return published;
-  const db = await getDb();
-  const reserved = await db.query<{ source_id: string }>('SELECT source_id FROM artifact_source_ids WHERE artifact_id=$1', [current.id]);
-  const aliases = await db.query<{ legacy_key: string; source_id: string }>('SELECT legacy_key,source_id FROM artifact_node_aliases WHERE artifact_id=$1', [current.id]);
-  const identity = stampNodeIds(published.source ?? '', { previousSource: current.source, reservedIds: reserved.rows.map((row) => row.source_id), legacyAliases: new Map(aliases.rows.map(row => [row.legacy_key,row.source_id])), retireLegacyAliases: true });
-  if (identity.source !== published.source) {
-    published = await publishJsx({ theme: currentMeta.theme ?? null, template: currentMeta.template ?? null, colorMode: currentMeta.colorMode ?? null }, identity.source, context);
-    if (published instanceof Response) return published;
-  }
-  const stored=(await db.query<{document:StoredDocument|null}>('SELECT document FROM artifacts WHERE id=$1 AND edit_id=$2',[current.id,current.edit_id])).rows[0];
-  if(!stored)return json({error:'doc_changed'},409);
-  const existing=stored.document?.schema===3&&stored.document.policy===GRAPH_POLICY?stored.document:null;
-  let baseline=existing;
-  if(!baseline){try{baseline=createDocumentGraph(canonicalizeMarkup(current.source??''),current.version);}catch{baseline=createDocumentGraph('',current.version);}}
-  const admission=await prepareGraphSource({id:current.id,version:current.version,document:baseline,meta:current.meta,reservedIds:reserved.rows.map(r=>r.source_id)},published.source??'',context,{theme:published.meta.theme,template:published.meta.template,colorMode:published.meta.colorMode},true);
-  if(admission instanceof Response)return admission;
-  return {source:published.source??'',content:published.content,meta:published.meta,ids:identity.ids,aliases:identity.aliases,admission,...(!existing?{initialize:{document:baseline,source:current.source??''}}:{})};
+/** Administrative authoring uses the same client compiler and commit contract. */
+export async function publishMarkupForArtifact(current:ArtifactRow,source:string,metaOverride:Record<string,unknown>=current.meta):Promise<Response|PreparedMarkupWrite>{
+ const db=await getDb();
+ const reserved=await db.query<{source_id:string}>('SELECT source_id FROM artifact_source_ids WHERE artifact_id=$1',[current.id]);
+ const aliases=await db.query<{legacy_key:string;source_id:string}>('SELECT legacy_key,source_id FROM artifact_node_aliases WHERE artifact_id=$1',[current.id]);
+ const identity=stampNodeIds(source,{previousSource:current.source,reservedIds:reserved.rows.map(row=>row.source_id),legacyAliases:new Map(aliases.rows.map(row=>[row.legacy_key,row.source_id])),retireLegacyAliases:true});
+ try{
+  const document=current.document?.kind==='graph'?current.document:createDocumentGraph(current.source??'',current.version);
+  const metadata={theme:(metaOverride.theme??null) as string|null,template:(metaOverride.template??null) as string|null,colorMode:(metaOverride.colorMode??null) as 'light'|'dark'|null};
+  const update=await prepareClientDocumentPublication({...current,document},{source:identity.source,metadata,whole:true},async context=>{
+   const response=await prepareDocumentAuthoringContext(writerFor(current),current.id,{source:context});
+   if(!response.ok)throw response;
+   return response.json();
+  });
+  return {source:identity.source,content:'',meta:metaOverride,ids:identity.ids,aliases:identity.aliases,update};
+ }catch(error){return error instanceof Response?error:json({error:'invalid_jsx',details:[String(error)]},400);}
 }
 
 async function listVersionsScoped(scope: Scope, id: string): Promise<VersionSummary[] | null> {
@@ -1538,6 +1520,7 @@ export async function applyEditScoped(actor: TokenActor, id: string, input: Edit
     if(input.documentUpdate.settings?.visibility==='public'&&!ALLOW_PUBLIC_VISIBILITY)return json({error:'public_not_enabled'},400);
     const committed=await commitDocumentUpdate(db,actor,scope,id,input.documentUpdate,{dryRun:opts.dryRun});
     if(!committed)return null;
+    if(!committed.applied&&committed.ownerOnly)return json({error:'owner_only'},403);
     if(!committed.applied&&committed.refusal)return json({error:'mention_refused',detail:committed.refusal},403);
     if(!committed.applied&&input.documentUpdate.settings?.visibility==='private'&&!committed.head.user_id)return json({error:'private_requires_account'},400);
     if(opts.dryRun)return committed.applied?json({valid:true,dry_run:true,commit_checks:['authorization','dependency_revisions','metadata','sharing','size']}):json({error:'doc_changed'},409);

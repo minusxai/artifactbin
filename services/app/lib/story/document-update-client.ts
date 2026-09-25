@@ -69,7 +69,7 @@ export function prepareClientDocumentUpdate(base:ClientDocumentSnapshot,change:C
  * only the affected context before submitting the independent atomic commit. */
 export async function prepareClientDocumentPublication(base:ClientDocumentSnapshot,change:ClientDocumentChange,prepareContext:(source:string)=>Promise<DocumentResourcePreparation|void>):Promise<DocumentUpdate> {
  const prepared=prepareDocument(base,change);
- if(prepared.context)Object.assign(prepared.update,await prepareContext(prepared.context));
+ if(prepared.context){const resources=await prepareContext(prepared.context);if(resources?.datasetBindings?.length)prepared.update.datasetBindings=resources.datasetBindings;}
  return prepared.update;
 }
 function needsAuthoringContext(source:string):boolean {

@@ -59,12 +59,12 @@ describe('app-owned source identity migration contract',()=>{
     await annotation('ann_one','aaaaaa','old'); const db=await harness.db();
     const report=await runNodeIdentityMigrationBatch(db,{batchSize:1});
     expect(report).toMatchObject({changed:1,reserved:1,aliases:1,cursor:'aaaaaa'});
-    expect((await artifactQuery<{source:string;version:number}>(db,'SELECT document,source,version FROM artifacts WHERE id=$1',['aaaaaa'])).rows[0]).toEqual({source:'<p id="intro">A</p>',version:5});
+    expect((await artifactQuery<{source:string;version:number}>(db,'SELECT document,source,version FROM artifacts WHERE id=$1',['aaaaaa'])).rows[0]).toMatchObject({source:'<p id="intro">A</p>',version:5});
     expect((await artifactQuery<{anchor_key:string}>(db,'SELECT anchor_key FROM annotations WHERE id=$1',['ann_one'])).rows[0].anchor_key).toBe('intro');
     expect((await artifactQuery(db,'SELECT legacy_key,source_id,source_path FROM artifact_node_aliases')).rows).toEqual([{legacy_key:'old',source_id:'intro',source_path:'0'}]);
     expect((await artifactQuery(db,'SELECT source_id FROM artifact_source_ids')).rows).toEqual([{source_id:'intro'}]);
     expect((await artifactQuery<{source:string}>(db,'SELECT document,source FROM artifact_versions WHERE artifact_id=$1 AND version=4',['aaaaaa'])).rows[0].source).toContain('data-annotation-anchor="old"');
-    expect((await artifactQuery(db,'SELECT 1 FROM artifact_edits WHERE artifact_id=$1',['aaaaaa'])).rows).toHaveLength(1);
+    expect((await artifactQuery(db,"SELECT document_state->>'kind' AS kind FROM artifact_edits WHERE artifact_id=$1",['aaaaaa'])).rows).toEqual([{kind:'operations'}]);
   });
 
   it('rolls the whole artifact and cursor back when failure is injected before commit',async()=>{
