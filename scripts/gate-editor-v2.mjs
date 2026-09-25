@@ -92,6 +92,12 @@ async function range(startId, start, endId = startId, end = start) {
   );
   await page.waitForTimeout(40);
 }
+/** Typing shows no block handles: Esc selects the caret's block. */
+async function selectBlock(id) {
+  await range(id, 2);
+  await page.keyboard.press('Escape');
+  await page.locator('[data-mx-node-chrome]').waitFor({ state: 'visible' });
+}
 async function undo(predicate, label) {
   await page.keyboard.press(`${mod}+z`);
   return stored(predicate, label);
@@ -175,6 +181,9 @@ try {
   await stored((s) => s.includes('**literal**') && !s.includes('<strong'), 'code paste stays literal');
   await undo((s) => !s.includes('**literal**'), 'code paste undo');
   await range('first', 2);
+  check(await page.locator('[data-mx-node-chrome]').isVisible() === false, 'a caret in text shows no block handles');
+  await page.keyboard.press('Escape');
+  await page.locator('[data-mx-node-chrome]').waitFor({ state: 'visible' });
   const blockedControls = await page.locator('[data-mx-node-chrome]').evaluate((root) =>
     [...root.querySelectorAll('button')].flatMap((button) => {
       const rect = button.getBoundingClientRect();
@@ -187,7 +196,7 @@ try {
   await page.getByRole('button', { name: 'Delete selected block', exact: true }).click();
   await stored((s) => !s.includes('id="first"'), 'selected trash control deletes exactly its source block');
   await undo((s) => s.includes('id="first"'), 'node deletion restores its identity');
-  await range('first', 2);
+  await selectBlock('first');
   const handle = page.getByRole('button', { name: 'Resize block height', exact: true });
   await handle.focus();
   await page.keyboard.press('ArrowDown');
@@ -196,7 +205,7 @@ try {
   await stored((s) => /id="first"[^>]*min-h-\[/.test(s), 'keyboard resize commits one explicit minimum height');
   await undo((s) => !/id="first"[^>]*min-h-\[/.test(s), 'resize undo');
   // A pointer preview is cancellable and never persists until release.
-  await range('first', 2);
+  await selectBlock('first');
   const pointerHandle = page.getByRole('button', { name: 'Resize block height', exact: true });
   const bounds = await pointerHandle.boundingBox();
   const beforeCancel = (await head()).markup;
@@ -206,7 +215,7 @@ try {
   await page.keyboard.press('Escape');
   await page.mouse.up();
   check((await head()).markup === beforeCancel, 'a cancelled pointer resize writes nothing at all');
-  await range('first',2);
+  await selectBlock('first');
   const corner=await page.getByRole('button',{name:'Resize selected block',exact:true}).boundingBox();
   const beforeResize=await head();
   await page.mouse.move(corner.x+corner.width/2,corner.y+corner.height/2);await page.mouse.down();
@@ -219,30 +228,36 @@ try {
   const resized=await stored(s=>/id="first"[^>]*w-\[680px\]/.test(s)&&/id="first"[^>]*min-h-\[/.test(s),'pointer drag changes width and height');
   check(resized.version === beforeResize.version + 1, 'one resize gesture creates one saved version');
   await undo(s=>/id="first"[^>]*w-\[600px\]/.test(s)&&!/id="first"[^>]*min-h-\[/.test(s),'pointer resize undoes both dimensions together');
-  await range('first', 2);
+  await selectBlock('first');
   const move = page.getByRole('button', { name: 'Move selected block', exact: true });
   const grip = await move.boundingBox(), destination = await page.locator('#second').boundingBox();
   const beforeMove = await head();
+  const own = await page.locator('#first').boundingBox();
   await page.mouse.move(grip.x + grip.width / 2, grip.y + grip.height / 2);
   await page.mouse.down();
+  await page.mouse.move(own.x + own.width / 2, own.y + own.height / 2, {steps:4});
+  await page.locator('[data-mx-drag-preview][data-mx-drop-state="none"]').waitFor({state:'visible'});
+  check(await page.locator('[data-mx-drag-preview]').textContent() === '⠿ Paragraph', 'the drag label names the block, neutral over itself');
+  check(await page.locator('[data-mx-drop-marker]').isVisible() === false, 'and offers no insertion marker there');
   await page.mouse.move(5, 5, {steps:4});
-  await page.locator('[data-mx-drag-preview][data-mx-drop-valid="false"]').waitFor({state:'visible'});
-  check(await page.locator('[data-mx-drag-preview]').textContent() === '', 'invalid drag feedback contains no text');
-  check(await page.locator('[data-mx-drop-marker]').isVisible() === false, 'and offers no insertion marker');
+  await page.locator('[data-mx-drag-preview][data-mx-drop-state="valid"]').waitFor({state:'visible'});
+  check(await page.locator('[data-mx-drop-marker]').isVisible(), 'outside the parent the marker snaps to the nearest slot');
+  await page.mouse.move(own.x + own.width / 2, own.y + own.height / 2, {steps:4});
+  await page.locator('[data-mx-drag-preview][data-mx-drop-state="none"]').waitFor({state:'visible'});
   await page.mouse.up();
-  check((await head()).markup === beforeMove.markup, 'invalid drop does not edit source');
+  check((await head()).markup === beforeMove.markup, 'releasing over the block itself does not edit source');
   await page.mouse.move(grip.x + grip.width / 2, grip.y + grip.height / 2);
   await page.mouse.down();
   await page.mouse.move(destination.x + 20, destination.y + destination.height / 2, {steps:6});
-  await page.locator('[data-mx-drag-preview][data-mx-drop-valid="true"]').waitFor({state:'visible'});
-  check(await page.locator('[data-mx-drag-preview]').textContent() === '', 'valid drag feedback contains no text');
+  await page.locator('[data-mx-drag-preview][data-mx-drop-state="valid"]').waitFor({state:'visible'});
+  check(await page.locator('[data-mx-drag-preview]').textContent() === '⠿ Paragraph', 'valid drag feedback stays a neutral label');
   await page.locator('[data-mx-drop-marker]').waitFor({state:'visible'});
   check((await head()).markup === beforeMove.markup, 'drag feedback does not edit source');
   await page.mouse.up();
   await stored(s=>s.indexOf('id="second"')<s.indexOf('id="first"'), 'pointer drop follows the visible insertion marker');
   check(await page.locator('[data-mx-drag-preview]').isVisible() === false, 'and the preview disappears on release');
   await undo(s=>s.indexOf('id="first"')<s.indexOf('id="second"'), 'pointer move undoes in one step');
-  await range('first', 2);
+  await selectBlock('first');
   await move.focus();
   await page.keyboard.press('ArrowDown');
   await page.keyboard.press('Enter');
@@ -254,14 +269,15 @@ try {
   await range('second', 4, 'lp', 5);
   await page.waitForFunction(() => getSelection().toString().includes('Left '));
   check(await page.locator('[data-mx-node-chrome]').isVisible() === false, 'text selection has no container resize controls');
+  const unhoveredOutline = await page.locator('#second').evaluate(el => getComputedStyle(el).outline);
   await page.locator('#second').hover();
-  check(await page.locator('#second').evaluate(el => getComputedStyle(el).backgroundColor) === 'rgba(245, 158, 11, 0.08)', 'hover uses the shared subtle amber tint');
-  check(await page.locator('#second').evaluate(el => getComputedStyle(el).outlineWidth) === '1px', 'hover uses the shared thin outline');
+  check(await page.locator('#second').evaluate(el => getComputedStyle(el).backgroundColor) === 'rgba(0, 0, 0, 0)', 'hovered text is not tinted');
+  check(await page.locator('#second').evaluate(el => getComputedStyle(el).outline) === unhoveredOutline, 'hovering text adds no outline');
   await page.mouse.move(0, 0);
   check(await page.locator('#second').evaluate(el => getComputedStyle(el).backgroundColor) === 'rgba(0, 0, 0, 0)',
     'block selection does not flood the text background');
   await page.keyboard.press('Escape');
-  await range('first', 2);
+  await selectBlock('first');
   const narrowHandle = await page.getByRole('button', {name:'Resize block width',exact:true}).boundingBox();
   await page.mouse.move(narrowHandle.x+narrowHandle.width/2,narrowHandle.y+narrowHandle.height/2);
   await page.mouse.down();
@@ -274,7 +290,7 @@ try {
   await stored(s=>/id="first"[^>]*w-\[420px\]/.test(s),'shrinking saves the previewed width');
   await undo(s=>/id="first"[^>]*w-\[600px\]/.test(s),'shrinking remains one undo action');
   await range('lp', 2);
-  await page.getByRole('button', { name: 'Select GridItem', exact: true }).click();
+  await page.getByRole('button', { name: 'Select Grid cell', exact: true }).click();
   const divider = page.getByRole('button', { name: 'Resize adjacent columns', exact: true });
   await divider.focus();
   await page.keyboard.press('ArrowRight');
@@ -461,39 +477,43 @@ try {
     check((await humanPage.mainFrame().locator('svg.marks, canvas').count()) > 0, 'embeds render inside the editor');
     check((await humanPage.locator('[aria-label="Save"]').count()) === 0, 'the editor has no Save button');
 
-    // Versions are LISTED in the left rail on a desktop — no drawer to open,
-    // so what must hold is that the list clears the toolbar and stays reachable
-    // as the window narrows. The phone case below still uses the sheet.
-    for (const viewport of [{ width: 1400, height: 950 }, { width: 900, height: 700 }]) {
-      await humanPage.setViewportSize(viewport);
-      const rail = humanPage.getByRole('navigation', { name: 'Artifact parts' });
-      const history = rail.getByRole('region', { name: 'Version history' });
+    // Versions are the edit panel's History tab on a wide window — the panel
+    // is up for the whole session, so what must hold is that the list clears
+    // the toolbar and its current row is in view.
+    {
+      const panel = humanPage.getByRole('complementary', { name: 'Edit panel' });
+      await panel.getByRole('tab', { name: 'History' }).click();
+      const history = panel.getByRole('region', { name: 'Version history' });
       const toolbar = await humanPage.getByRole('banner', { name: 'Editor toolbar' }).boundingBox();
       const list = await history.boundingBox();
-      check(!!toolbar && !!list && list.y >= toolbar.y,
-        `the version list clears the toolbar at ${viewport.width}px`);
+      check(!!toolbar && !!list && list.y >= toolbar.y + toolbar.height - 1, 'the version list clears the toolbar at 1400px');
       const current = await history.getByRole('button', { name: 'Show the current version' }).boundingBox();
-      check(!!current && !!list && current.y >= list.y && current.y <= viewport.height,
-        `the current version is in view at ${viewport.width}px`);
+      check(!!current && !!list && current.y >= list.y && current.y <= 950, 'the current version is in view at 1400px');
       check((await humanPage.getByRole('button', { name: 'Open version history' }).count()) === 0,
-        `no drawer switch on a desktop at ${viewport.width}px`);
+        'no drawer switch beside the panel at 1400px');
+      await panel.getByRole('tab', { name: 'Selection' }).click();
     }
-    await humanPage.setViewportSize({ width: 390, height: 844 });
-    // The rail is gone at this width, so the drawer switch is back — press it.
-    await humanPage.getByRole('button', { name: 'Open version history', exact: true }).click();
-    const sheet = humanPage.getByRole('dialog', { name: 'Version history' });
-    await sheet.waitFor({ state: 'visible' });
-    // The sheet SLIDES in. Opening it after the resize (the rail owns versions
-    // on a desktop, so there is nothing to press until this width) means its
-    // header is still moving when the checks below reach for it.
-    await humanPage.waitForTimeout(600);
-    check(await sheet.getByRole('button', { name: 'Show the current version' }).isVisible(),
-      'phone history keeps the current version visible in its bottom sheet');
-    await sheet.getByRole('button', { name: 'Close version history' }).click();
-    check(await humanPage.getByRole('button', { name: 'Open version history' }).getAttribute('aria-expanded') === 'false',
-      'phone history close button remains usable');
-    // Escape also works on a broken layout, so a failed geometry check cannot stall the gate.
-    await humanPage.keyboard.press('Escape');
+    // Below the panel breakpoint (960px) there is no side panel: the bar's
+    // switch opens the versions as a bottom sheet, at a laptop-narrow width
+    // and on a phone alike.
+    for (const viewport of [{ width: 900, height: 700 }, { width: 390, height: 844 }]) {
+      await humanPage.setViewportSize(viewport);
+      // The panel leaves on the window's resize event, a render after the resize resolves.
+      check(await humanPage.getByRole('complementary', { name: 'Edit panel' }).waitFor({ state: 'detached', timeout: 5000 })
+        .then(() => true, () => false), `no side panel at ${viewport.width}px`);
+      await humanPage.getByRole('button', { name: 'Open version history', exact: true }).click();
+      const sheet = humanPage.getByRole('dialog', { name: 'Version history' });
+      await sheet.waitFor({ state: 'visible' });
+      // The sheet SLIDES in; its header is still moving when the checks reach for it.
+      await humanPage.waitForTimeout(600);
+      check(await sheet.getByRole('button', { name: 'Show the current version' }).isVisible(),
+        `history keeps the current version visible in its bottom sheet at ${viewport.width}px`);
+      await sheet.getByRole('button', { name: 'Close version history' }).click();
+      check(await humanPage.getByRole('button', { name: 'Open version history' }).getAttribute('aria-expanded') === 'false',
+        `history close button remains usable at ${viewport.width}px`);
+      // Escape also works on a broken layout, so a failed geometry check cannot stall the gate.
+      await humanPage.keyboard.press('Escape');
+    }
     await humanPage.setViewportSize({ width: 1400, height: 950 });
 
     // Idle must not spend versions: nothing typed ⇒ nothing written.

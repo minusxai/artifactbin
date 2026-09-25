@@ -13,7 +13,7 @@
  * mode, the editor queues it for save. Cards preview in their EFFECTIVE mode:
  * the document's explicit colorMode, else each theme's own default.
  */
-import { Check, ChevronDown, X } from 'lucide-react';
+import { Check, ChevronDown, Moon, Sun, X } from 'lucide-react';
 import { useState } from 'react';
 import AnchoredPanel from '@/components/AnchoredPanel';
 import { getStoryTheme, resolveStoryMode } from '@/lib/data/story/story-themes';
@@ -84,10 +84,14 @@ export const ModeChip = ({ mode, themeDefault, onPick }: {
           type="button"
           aria-label="Color mode"
           aria-expanded={open}
-          className="inline-flex h-6 cursor-pointer items-center gap-1.5 rounded-[4px] border border-edge px-2 font-mono text-xs text-fg hover:bg-raised"
+          className="inline-flex h-6 cursor-pointer items-center gap-1.5 rounded-[4px] border border-edge px-1.5 font-mono text-xs text-fg hover:bg-raised sm:px-2"
         >
-          <span className="normal-case opacity-60">Mode:</span>
-          {mode ?? themeDefault}
+          {/* A phone's editor bar fits every control in one row: the mode is its icon there. */}
+          {(mode ?? themeDefault) === 'dark'
+            ? <Moon size={12} aria-hidden="true" className="shrink-0 sm:hidden" />
+            : <Sun size={12} aria-hidden="true" className="shrink-0 sm:hidden" />}
+          <span className="hidden normal-case opacity-60 sm:inline">Mode:</span>
+          <span className="hidden sm:inline">{mode ?? themeDefault}</span>
           <ChevronDown size={12} className="shrink-0 opacity-60" />
         </button>
       }
@@ -175,7 +179,7 @@ export default function ThemePicker({ value, colorMode = null, onPick }: ThemePi
           type="button"
           aria-label="Theme"
           aria-expanded={open}
-          className="inline-flex h-6 cursor-pointer items-center gap-1.5 rounded-[4px] border border-edge px-2 font-mono text-xs text-fg capitalize hover:bg-raised"
+          className="inline-flex h-6 cursor-pointer items-center gap-1.5 rounded-[4px] border border-edge px-1.5 font-mono text-xs text-fg capitalize hover:bg-raised sm:px-2"
         >
           <ThemeDot theme={value} colorMode={colorMode} />
           <span className="hidden normal-case opacity-60 sm:inline">Theme:</span>

@@ -17,6 +17,9 @@
  *    their OWN text rather than a container's.
  *  - `link` needs the live Range only a focused text host holds; the parent
  *    has no Selection to wrap.
+ *  - `image` is a plain `<img>`: it takes replace and alt text instead of the
+ *    text vocabulary (no size, weight, colour or link — it has no text), and
+ *    keeps the layout half of `format` (alignment, spacing).
  *
  * Components with richer editing (a <Question>'s chart, a <Number>) keep
  * their own inspector panels — those open BESIDE this toolbar, they do not
@@ -33,17 +36,29 @@ const TEXT_TAGS = ['p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'li', 'blockquote', 
 interface SelectionToolbarPlan {
   /** Font size / weight / italic / underline steppers. */
   text: boolean;
-  /** The class algebra: alignment, text color, the spacing/width row. */
+  /** The class algebra: alignment and the spacing/width row. */
   format: boolean;
+  /** Text colour — a text tool, so not for a block selection. */
+  color: boolean;
   /** Insert/remove link — needs the live Range a focused text host holds. */
   link: boolean;
+  /** Replace the picture and edit its alt text — a plain `<img>`. */
+  image: boolean;
 }
 
-export function selectionToolbarPlan(selection: Pick<StoryEditSelection, 'kind' | 'tag'>): SelectionToolbarPlan {
-  if (selection.kind === 'embed') return { text: false, format: false, link: false };
+export function selectionToolbarPlan(
+  selection: Pick<StoryEditSelection, 'kind' | 'tag' | 'mode'>,
+): SelectionToolbarPlan {
+  if (selection.kind === 'embed') return { text: false, format: false, color: false, link: false, image: false };
+  // An image is never text, in either mode: replace and alt text instead, plus layout.
+  if (selection.tag.toLowerCase() === 'img') return { text: false, format: true, color: false, link: false, image: true };
+  // A BLOCK selection has no caret: text tools would act on nothing the user can see.
+  if (selection.mode === 'block') return { text: false, format: true, color: false, link: false, image: false };
   return {
     text: selection.kind === 'text' || TEXT_TAGS.includes(selection.tag.toLowerCase()),
     format: true,
+    color: true,
     link: selection.kind === 'text',
+    image: false,
   };
 }

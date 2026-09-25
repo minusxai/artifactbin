@@ -32,6 +32,7 @@ import {
   ArrowUpToLine,
   Baseline,
   Bold,
+  ImageUp,
   Italic,
   Link2,
   Link2Off,
@@ -57,27 +58,8 @@ import type { StoryEditSelection } from '@/lib/story-runtime/contract';
 import type { ComposableFormatEdit } from '@/lib/story/edit-compose';
 import { StoryToolbarMenu } from './StoryToolbarMenu';
 import { Tooltip } from '@/components/Tooltip';
+import { nodeName } from '@/lib/story-ui/node-names';
 
-const NODE_NAMES: Record<string, string> = {
-  p: 'Paragraph',
-  div: 'Container',
-  section: 'Section',
-  article: 'Article',
-  img: 'Image',
-  span: 'Text',
-  a: 'Link',
-  li: 'List item',
-  ul: 'Bulleted list',
-  ol: 'Numbered list',
-  blockquote: 'Quote',
-  h1: 'Heading 1',
-  h2: 'Heading 2',
-  h3: 'Heading 3',
-  h4: 'Heading 4',
-  h5: 'Heading 5',
-  h6: 'Heading 6',
-};
-const nodeName = (tag: string) => NODE_NAMES[tag] ?? tag;
 
 interface StoryFormatToolbarProps {
   artifactId?:string;
@@ -105,6 +87,21 @@ interface StoryFormatToolbarProps {
    * range fights the caret.
    */
   onComment?: (selection: StoryEditSelection) => void;
+  /**
+   * What an `<img>` selection can do besides layout. The editor reads the alt
+   * text from the SOURCE (the selection description is a snapshot of the DOM)
+   * and owns the uploads; this only asks.
+   */
+  image?: ImageControls;
+}
+
+export interface ImageControls {
+  /** The image's alt text; null when it has none (the button then hints). */
+  alt: string | null;
+  /** Open the "Replace image" dialog for this image. */
+  onReplace: () => void;
+  /** Commit new alt text; blank removes it. Called once per committed change. */
+  onAlt: (alt: string) => void;
 }
 
 export default function StoryFormatToolbar({
@@ -118,18 +115,27 @@ export default function StoryFormatToolbar({
   onSelect,
   onDelete,
   onComment,
+  image,
 }: StoryFormatToolbarProps) {
   const [people,setPeople]=useState<Array<{user_id:string;username:string}>>([]);
   const [linkDraft, setLinkDraft] = useState<string | null>(null);
   useEffect(()=>{if(!artifactId||!linkDraft?.startsWith('@')){setPeople([]);return;}const abort=new AbortController();void fetch(`/api/my/artifacts/${encodeURIComponent(artifactId)}/members?query=${encodeURIComponent(linkDraft.slice(1))}`,{signal:abort.signal}).then(r=>r.ok?r.json():{people:[]}).then(r=>setPeople(r.people??[])).catch(()=>{});return()=>abort.abort();},[artifactId,linkDraft]);
   const [alignmentOpen, setAlignmentOpen] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
+  const [altDraft, setAltDraft] = useState<string | null>(null);
   const linkInputRef = useRef<HTMLInputElement>(null);
+  // A deep trail overflows on a phone: keep its end, the selected node, in view.
+  const crumbsRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const crumbs = crumbsRef.current;
+    if (crumbs) crumbs.scrollLeft = crumbs.scrollWidth;
+  }, [selection?.path]);
 
   useEffect(() => {
     setLinkDraft(null);
     setMoreOpen(false);
     setAlignmentOpen(false);
+    setAltDraft(null);
   }, [selection?.path]);
   useEffect(() => {
     if (linkDraft !== null) linkInputRef.current?.focus();
@@ -152,6 +158,13 @@ export default function StoryFormatToolbar({
     onApplyInline
       ? onApplyInline(group === 'weight' ? 'strong' : group === 'fontStyle' ? 'em' : 'u')
       : apply(applyTypographyChoice(cls, group, currentChoice(cls, group) === token ? null : token));
+
+  /** One committed change, one call: an unchanged draft is not an edit. */
+  const commitAlt = () => {
+    if (altDraft === null || !image) return;
+    if (altDraft.trim() !== (image.alt ?? '')) image.onAlt(altDraft);
+    setAltDraft(null);
+  };
 
   /** Keeping focus in the document is what makes a format edit compose with typing. */
   const keepFocus = (e: MouseEvent) => e.preventDefault();
@@ -190,7 +203,7 @@ export default function StoryFormatToolbar({
         className="flex h-8 max-w-[50%] shrink-0 items-center gap-1 border-r border-edge px-2"
         aria-label="Selection breadcrumb"
       >
-        <div className="flex min-w-0 items-center gap-1 overflow-x-auto whitespace-nowrap">
+        <div ref={crumbsRef} className="flex min-w-0 items-center gap-1 overflow-x-auto whitespace-nowrap">
           <button
             type="button"
             aria-label="Document options"
@@ -202,7 +215,7 @@ export default function StoryFormatToolbar({
           <span className="text-[11px] text-muted">{'>'}</span>
           {selection.ancestors.length > 0 && (
             <>
-              {selection.ancestors.slice(-2).map((crumb) => (
+              {selection.ancestors.map((crumb) => (
                 <Fragment key={crumb.path}>
                   <Tooltip content={crumb.hint || crumb.tag}>
                     <button
@@ -275,6 +288,56 @@ export default function StoryFormatToolbar({
           </>
         )}
 
+        {plan.image && image && (
+          <>
+            <button
+              type="button"
+              aria-label="Replace image"
+              onMouseDown={keepFocus}
+              onClick={image.onReplace}
+              className="inline-flex h-8 shrink-0 cursor-pointer items-center gap-1.5 rounded-md px-2 font-mono text-[11px] leading-none text-fg hover:bg-surface"
+            >
+              <ImageUp size={12} />
+              <span className="hidden sm:inline">Replace</span>
+            </button>
+            <StoryToolbarMenu
+              label={image.alt === null ? 'Add alt text' : 'Alt text'}
+              hint={image.alt === null}
+              open={altDraft !== null}
+              onOpenChange={(open) => setAltDraft(open ? (image.alt ?? '') : null)}
+            >
+              <div className="flex w-72 max-w-full gap-1.5">
+                <input
+                  aria-label="Image alt text"
+                  autoFocus
+                  value={altDraft ?? ''}
+                  placeholder="Describe the image for people who can't see it"
+                  onChange={(e) => setAltDraft(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      commitAlt();
+                    } else if (e.key === 'Escape') {
+                      e.preventDefault();
+                      setAltDraft(null);
+                    }
+                  }}
+                  className="min-w-0 flex-1 rounded-[4px] border border-edge bg-transparent px-1.5 py-1 text-[12px] text-fg focus:border-edge-bright focus:outline-none"
+                />
+                <button
+                  type="button"
+                  aria-label="Save alt text"
+                  onClick={commitAlt}
+                  className="cursor-pointer rounded-[4px] border border-edge px-2 py-1 font-mono text-[11px] text-fg hover:border-edge-bright hover:bg-raised"
+                >
+                  save
+                </button>
+              </div>
+            </StoryToolbarMenu>
+            <span className="mx-0.5 h-4 w-px bg-edge" />
+          </>
+        )}
+
         {plan.format && (
           <>
             <StoryToolbarMenu label="Align" name="Alignment" open={alignmentOpen} onOpenChange={setAlignmentOpen}>
@@ -301,6 +364,7 @@ export default function StoryFormatToolbar({
               </div>
             </StoryToolbarMenu>
 
+            {plan.color && (<>
             <span className="mx-0.5 h-4 w-px bg-edge" />
             <Tooltip content="text color">
               <label
@@ -317,6 +381,7 @@ export default function StoryFormatToolbar({
                 />
               </label>
             </Tooltip>
+            </>)}
           </>
         )}
 

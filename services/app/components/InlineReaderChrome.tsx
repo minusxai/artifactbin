@@ -32,7 +32,8 @@ function updateChrome(current: Element, next: Element) {
 const triggerLabel=(which:PagePanelName,open:boolean)=>which==='notifications'?'Notifications':which==='menu'?(open?'Close menu':'Open menu'):(open?'Close artifact controls':'Open artifact controls');
 
 /** Identical desktop/mobile reader layout, with local handlers inside TrustedUi. */
-export function InlineReaderChrome({ input, onAction,onShare,pinned=false }: { input: ReaderChromeInput; onAction(action:string):void;onShare?:()=>void;pinned?:boolean }): ReactNode {
+/** `editing`: on a phone the rail would sit over the document being edited, so it steps off (the editor bar has Done). */
+export function InlineReaderChrome({ input, onAction,onShare,pinned=false,editing=false }: { input: ReaderChromeInput; onAction(action:string):void;onShare?:()=>void;pinned?:boolean;editing?:boolean }): ReactNode {
   const notifications=useNotifications();
   const holder=useRef<HTMLDivElement>(null);
   const state=useRef<ChromeState|null>(null);
@@ -65,6 +66,7 @@ export function InlineReaderChrome({ input, onAction,onShare,pinned=false }: { i
     const paint=(visible:boolean)=>{
       root.classList.toggle(READER_CHROME_HIDDEN_CLASS,!visible);
       root.classList.toggle('mx-reader-chrome--pinned',pinned);
+      root.classList.toggle('mx-reader-chrome--editing',editing);
       root.setAttribute('data-mx-reader-state',visible?'shown':'hidden');
     };
     const sample=()=>{
@@ -81,7 +83,7 @@ export function InlineReaderChrome({ input, onAction,onShare,pinned=false }: { i
     window.addEventListener('scroll',schedule,{passive:true});window.addEventListener('resize',schedule);
     sample();
     return ()=>{stopGithubStar();stopFaces();stop();sharing.current?.dispose();sharing.current=null;window.cancelAnimationFrame(raf);window.removeEventListener('scroll',schedule);window.removeEventListener('resize',schedule);};
-  },[html,pinned,input.artifactId]);
+  },[html,pinned,editing,input.artifactId]);
   return <>
     <NotificationMenu/>
     <style>{STORY_CHROME_CSS}</style>

@@ -20,15 +20,12 @@ export const EDIT_BAR_ROW_H = 44;
 export const APP_BAR_H = 44;
 
 /**
- * The RIGHT RAIL's width, reserved the same way: the page narrows the
- * document's viewport by exactly this while the rail is open, so the rail
- * never covers the document it is about (the Google-Docs squeeze).
- *
- * ONE number for both occupants. It was two — a 320px annotation sidebar and
- * the editor's own 288px embed inspector — and they never met only because
- * annotate and edit were mutually exclusive modes. Taking the mode away
- * introduces them, so they share a width and a reservation rather than
- * discovering each other at runtime.
+ * The RIGHT RAIL's width. Reading, the comments rail: the page narrows the
+ * document's viewport by exactly this while it is open, so it never covers the
+ * document it is about (the Google-Docs squeeze). Editing, the edit panel
+ * (components/EditPanel), whose Selection, History and Comments tabs share it:
+ * decided once on entry — out of the document's empty margin when it fits,
+ * reserved when it does not — and unchanged by anything inside the session.
  */
 export const RIGHT_RAIL_W = 320;
 
@@ -41,15 +38,20 @@ export const RIGHT_RAIL_W = 320;
 export const QUERY_RAIL_W = 480;
 
 /**
- * The LEFT RAIL's width — the icon strip that names what the artifact is made
- * of (app, code, queries, history).
- *
- * It exists to give the two edges MEANINGS: left is the document's own
- * structure, right is annotation about it. That reverses the inspector rule
- * above for the left side only — a left panel RESERVES like the comments rail
- * rather than overlaying, because a panel that covers the document it edits is
- * the thing readers kept reporting. Comments keep the right edge to themselves,
- * so the two surfaces never negotiate for it.
+ * THE EDIT PANEL — one right panel for the whole edit session (components/
+ * EditPanel): Selection, History and Comments as tabs of RIGHT_RAIL_W, or a
+ * strip of their icons this wide when the viewer collapsed it.
  */
-export const LEFT_RAIL_W = 232;
+export const EDIT_PANEL_STRIP_W = 44;
 
+/**
+ * The narrowest document the panel may sit beside. Below
+ * RIGHT_RAIL_W + this (960px) there is no side panel at all: the document keeps
+ * the full width and the panel's tabs open as bottom sheets instead.
+ */
+export const EDIT_PANEL_MIN_DOC_W = 640;
+export const EDIT_PANEL_BREAKPOINT = RIGHT_RAIL_W + EDIT_PANEL_MIN_DOC_W;
+
+/** By innerWidth, like isPhoneViewport: readable anywhere, settable by a test. */
+export const isWideEditViewport = (width = typeof window === 'undefined' ? 0 : window.innerWidth) =>
+  width >= EDIT_PANEL_BREAKPOINT;

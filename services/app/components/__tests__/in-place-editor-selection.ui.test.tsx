@@ -35,9 +35,8 @@ describe('the chrome the selection drives', () => {
     mount();
     expect(screen.getByLabelText('Editor toolbar')).toHaveStyle({ height: '88px' });
     const actions = screen.getByLabelText('Document actions');
-    // Exit is offered in the toolbar AND at the foot of the rail; this case is
-    // about the toolbar's half staying put. View switching and version history
-    // both live in the rail now, so neither is asserted here.
+    // This case is about the toolbar's actions half staying put; the view
+    // switch and the panel are components/__tests__/in-place-editor-panel's.
     expect(actions).toContainElement(screen.getByLabelText('Exit edit mode'));
     const title = screen.getByLabelText('Title');
     await fromFrame({ type: STORY_SELECTION_MESSAGE, selection: selection() });
@@ -49,7 +48,7 @@ describe('the chrome the selection drives', () => {
     expect(screen.getByLabelText('Selection breadcrumb').textContent).toContain('>Paragraph');
     expect(screen.queryByRole('button', { name: 'Paste Markdown' })).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: 'Insert' }));
-    expect(fireEvent.mouseDown(screen.getByLabelText('Image URL'))).toBe(true);
+    expect(screen.getByRole('button', { name: 'Image…' })).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Paste Markdown' }));
     expect(screen.getByLabelText('Markdown to insert')).toBeTruthy();
   });
@@ -139,6 +138,21 @@ describe('the chrome the selection drives', () => {
     expect(screen.getByLabelText('Delete element')).toBeTruthy();
   });
 
+  it('a BLOCK-selected paragraph gets block tools only; typing in it gets the text tools back', async () => {
+    mount({ onComment: vi.fn() });
+    const textOnly = ['Decrease font size', 'Toggle bold', 'Toggle italic', 'Toggle underline', 'Text color', 'Insert link', 'Remove link'];
+    await fromFrame({ type: STORY_SELECTION_MESSAGE, selection: selection({ kind: 'text', mode: 'block' }) });
+    for (const label of textOnly) expect(screen.queryByLabelText(label), label).toBeNull();
+    expect(screen.getByLabelText('Selection breadcrumb').textContent).toContain('Paragraph');
+    expect(screen.getByLabelText('Alignment')).toBeTruthy();
+    expect(screen.getByLabelText('More formatting controls')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Insert' })).toBeTruthy();
+    expect(screen.getByLabelText('Comment on selection')).toBeTruthy();
+    expect(screen.getByLabelText('Delete element')).toBeTruthy();
+    await fromFrame({ type: STORY_SELECTION_MESSAGE, selection: selection({ kind: 'text', mode: 'typing' }) });
+    for (const label of textOnly) expect(screen.getByLabelText(label), label).toBeTruthy();
+  });
+
   it('a component gets the toolbar too — name, comment, delete; no format chips', async () => {
     /*
      * Every element is clickable and every click lands somewhere useful
@@ -151,7 +165,7 @@ describe('the chrome the selection drives', () => {
     mount({ onComment });
     await fromFrame({ type: STORY_SELECTION_MESSAGE, selection: selection({ kind: 'embed', tag: 'Question', path: '0.2' }) });
     expect(screen.getByLabelText('Typography toolbar')).toBeTruthy();
-    expect(screen.getByLabelText('Selection breadcrumb').textContent).toContain('Question');
+    expect(screen.getByLabelText('Selection breadcrumb').textContent).toContain('Chart');
     expect(screen.getByLabelText('Comment on selection')).toBeTruthy();
     expect(screen.getByLabelText('Delete element')).toBeTruthy();
     expect(screen.queryByLabelText('Toggle bold')).toBeNull();
