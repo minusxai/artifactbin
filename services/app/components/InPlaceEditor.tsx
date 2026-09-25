@@ -27,7 +27,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import SourceEditor from '@/components/SourceEditorPane';
 import { editBlock } from '@/lib/editor-v2/block-edit';
 import { SourceHistory } from '@/lib/editor-v2/history';
-import { Check, Code, Database, History, MessageSquare, Undo2, Redo2, Paintbrush, SlidersHorizontal } from 'lucide-react';
+import { ChartColumn, Check, Code, Database, Hash, History, MessageSquare, Undo2, Redo2, Paintbrush, SlidersHorizontal, Workflow, X } from 'lucide-react';
 import { TrustedUi } from '@/components/TrustedUi';
 
 import ThemePicker, { ModeChip, TemplateChip } from '@/components/ThemePicker';
@@ -74,6 +74,7 @@ import type { StoryEditSelection, StoryIslandDataflow } from '@/lib/story-runtim
 const INSPECTOR_LABEL = { chart: 'Chart inspector', number: 'Number inspector', diagram: 'Diagram inspector' } as const;
 /** The toolbar's way to the inspector of what is selected. */
 const INSPECT_LABEL = { chart: 'Edit chart', number: 'Edit number', diagram: 'Edit diagram' } as const;
+const INSPECT_ICON = { chart: ChartColumn, number: Hash, diagram: Workflow } as const;
 /** Two taps this close in time and place are a double-tap (touch emits no reliable dblclick). */
 const DOUBLE_TAP_MS = 350;
 const DOUBLE_TAP_PX = 24;
@@ -1036,18 +1037,22 @@ export default function InPlaceEditor({
    * from `close` was the one people hit by mistake. The inspector inspects;
    * the toolbar acts on the node.
    */
+  const InspectIcon = inspector ? INSPECT_ICON[inspector] : null;
   const selectionBody = inspector && mode === 'design' && !preview ? (
     <section aria-label={INSPECTOR_LABEL[inspector]}>
       <div className="mb-3 flex items-center justify-between">
         <span className="font-mono text-[11px] uppercase tracking-wide text-faint">{inspector}</span>
-        <button
-          type="button"
-          aria-label={`Close ${INSPECTOR_LABEL[inspector].toLowerCase()}`}
-          onClick={() => edit.select(null)}
-          className="cursor-pointer font-mono text-[11px] text-muted hover:text-fg"
-        >
-          close
-        </button>
+        {/* Deselects. The panel's only: a sheet's own close puts the sheet away instead. */}
+        {wide && (
+          <button
+            type="button"
+            aria-label={`Close ${INSPECTOR_LABEL[inspector].toLowerCase()}`}
+            onClick={() => edit.select(null)}
+            className="cursor-pointer font-mono text-[11px] text-muted hover:text-fg"
+          >
+            close
+          </button>
+        )}
       </div>
       {chart ? (
         <VizEditorPanel
@@ -1189,47 +1194,12 @@ export default function InPlaceEditor({
             placeholder="untitled"
             className="w-36 shrink-0 rounded-[4px] border border-transparent bg-transparent px-1.5 py-1 font-mono text-xs font-semibold text-fg hover:border-edge focus:border-edge-bright focus:outline-none sm:w-48"
           />
-          <ThemePicker
-            value={theme}
-            colorMode={colorMode}
-            onPick={(t) => {
-              setTheme(t);
-              queue({ theme: t });
-              // The document carries its own design attributes; tell it directly
-              // rather than making it wait for the save to come back around. With
-              // no author pick the MODE follows the new theme's declared default.
-              sendDocument(
-                { frameRef, runtimeRef },
-                {
-                  type: 'mx:document',
-                  nodes: storyUpdateParts(sourceRef.current, HELD_ASSETS)?.nodes ?? [],
-                  theme: t,
-                  colorMode: colorMode ?? storyThemeDefaultMode(t) ?? 'light',
-                },
-              );
-            }}
-          />
-          <TemplateChip template={art.template} />
-          {/* The AUTHOR'S DEFAULT mode, beside the theme it composes with. Every
-            theme carries both palettes, so this is meaningful for every
-            document; "theme default" stores an explicit null so the mode
-            follows a later theme switch. Readers can still flip their own view. */}
-          <ModeChip
-            mode={colorMode}
-            themeDefault={storyThemeDefaultMode(theme) ?? 'light'}
-            onPick={(next) => {
-              setColorMode(next);
-              const effective = next ?? storyThemeDefaultMode(theme) ?? 'light';
-              colorModeRef.current = effective;
-              queue({ colorMode: next });
-              showInDocument(sourceRef.current, { colorMode: effective });
-            }}
-          />
           {/*
             * WHAT YOU ARE EDITING: app and code are two renderings of the
             * document, data is the queries it reads — three views of ONE
-            * document, so choosing any of them leaves the other two. Beside
-            * theme and mode, the other document-wide choices.
+            * document, so choosing any of them leaves the other two. First of
+            * the document-wide choices (theme and mode follow), so a narrow
+            * bar that scrolls this row still shows it.
             */}
           <div role="group" aria-label="Editor view" className="flex shrink-0 items-center rounded-[4px] border border-edge p-0.5">
             {(
@@ -1275,13 +1245,49 @@ export default function InPlaceEditor({
               </button>
             )}
           </div>
+          <ThemePicker
+            value={theme}
+            colorMode={colorMode}
+            onPick={(t) => {
+              setTheme(t);
+              queue({ theme: t });
+              // The document carries its own design attributes; tell it directly
+              // rather than making it wait for the save to come back around. With
+              // no author pick the MODE follows the new theme's declared default.
+              sendDocument(
+                { frameRef, runtimeRef },
+                {
+                  type: 'mx:document',
+                  nodes: storyUpdateParts(sourceRef.current, HELD_ASSETS)?.nodes ?? [],
+                  theme: t,
+                  colorMode: colorMode ?? storyThemeDefaultMode(t) ?? 'light',
+                },
+              );
+            }}
+          />
+          <TemplateChip template={art.template} />
+          {/* The AUTHOR'S DEFAULT mode, beside the theme it composes with. Every
+            theme carries both palettes, so this is meaningful for every
+            document; "theme default" stores an explicit null so the mode
+            follows a later theme switch. Readers can still flip their own view. */}
+          <ModeChip
+            mode={colorMode}
+            themeDefault={storyThemeDefaultMode(theme) ?? 'light'}
+            onPick={(next) => {
+              setColorMode(next);
+              const effective = next ?? storyThemeDefaultMode(theme) ?? 'light';
+              colorModeRef.current = effective;
+              queue({ colorMode: next });
+              showInDocument(sourceRef.current, { colorMode: effective });
+            }}
+          />
         </div>
 
         <div aria-label="Document actions" className="flex shrink-0 items-center gap-2">
-          <span role="status" className="hidden text-xs text-muted md:inline">
+          <span role="status" className="hidden text-xs text-muted lg:inline">
             {live.status || (live.pending ? 'Saving…' : `v${live.version} · Saved`)}
           </span>
-          {inspector && mode === 'design' && !preview && (
+          {inspector && InspectIcon && mode === 'design' && !preview && (
             <Tooltip content={`${INSPECT_LABEL[inspector]} settings`}>
               <button
                 type="button"
@@ -1289,8 +1295,8 @@ export default function InPlaceEditor({
                 onClick={inspectSelection}
                 className="inline-flex h-6 cursor-pointer items-center gap-1 rounded-[4px] border border-edge px-1.5 font-mono text-[11px] text-muted hover:border-edge-bright hover:text-fg"
               >
-                <SlidersHorizontal size={12} className="shrink-0" />
-                <span className="hidden sm:inline">{INSPECT_LABEL[inspector]}</span>
+                <InspectIcon size={12} className="shrink-0" />
+                <span className="hidden lg:inline">{INSPECT_LABEL[inspector]}</span>
               </button>
             </Tooltip>
           )}
@@ -1472,14 +1478,14 @@ export default function InPlaceEditor({
             onClose={() => setSheet(null)}
             header={
               <div className="flex items-center justify-between px-1 pb-2">
-                <span className="font-mono text-[11px] uppercase tracking-wide text-faint">selection</span>
+                <span className="font-mono text-xs font-semibold text-fg">selection</span>
                 <button
                   type="button"
                   aria-label="Close selection settings"
                   onClick={() => setSheet(null)}
-                  className="cursor-pointer font-mono text-[11px] text-muted hover:text-fg"
+                  className="cursor-pointer rounded p-1 text-muted hover:text-fg"
                 >
-                  close
+                  <X size={13} />
                 </button>
               </div>
             }
