@@ -8,7 +8,7 @@ useAppHarness();
 async function create(){const token=await mintToken('mxmx_test_jsonb');const response=await createRoute(request('/api/artifacts',{method:'POST',token:token.token,json:{markup:'<section><p>Alpha</p><p>Beta</p></section>'}}));expect(response.status).toBe(201);const {id}=await response.json();return {token,id,actor:{tokenId:token.id,userId:null},row:(await getArtifactById(id))!};}
 const stored=async(id:string)=>(await (await getDb()).query('SELECT * FROM artifacts WHERE id=$1',[id])).rows[0];
 it('writes new markup as JSONB, while reads and edit logs retain exact JSX',async()=>{
- const {id,row}=await create();const raw=await stored(id);expect(raw.source).toBeNull();expect(raw.document).toMatchObject({schema:1,kind:'jsx'});
+ const {id,row}=await create();const raw=await stored(id);expect(raw.source).toBeNull();expect(raw.document).toMatchObject({schema:2,kind:'semantic'});
  expect(row.source).toContain('Alpha');const log=(await(await getDb()).query('SELECT inserted FROM artifact_edits WHERE artifact_id=$1',[id])).rows[0];expect(log.inserted).toBe(row.source);
 });
 it('migrates old markup once without changing its version, identity, metadata, timestamps or history',async()=>{

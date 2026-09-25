@@ -4,38 +4,23 @@
  */
 import {parseJsx} from '../jsx/parse';
 import {serializeJsx} from '../jsx/serialize';
-import type {JsxNode} from '../jsx/types';
-export const PROSE_POLICY='inert-prose-v1';
 export interface ProseOperation {path:string[];oldText:string;newText:string}
-export interface ProseSlot {path:string[];fixedStart:number;order:number;units:number;revision:number}
-export interface ProseCertificate {epoch:string;bytes:number;slots:Record<string,ProseSlot>}
-const plain=new Set(['section','article','div','p','span','h1','h2','h3','h4','h5','h6','ul','ol','li','strong','em','blockquote','header','footer','main','aside','b','i','u','s']);
 const scanner=/\b(?:class(?:Name)?|data-design|style)\s*=|<\/?style\b|\{\s*\$_row\.|\/people\//i;
 export const inertProse=(value:unknown):value is string=>typeof value==='string'&&!value.includes('\0')&&!value.includes('\r')&&value.isWellFormed()&&!scanner.test(value);
 export const proseSource=(value:string):string=>serializeJsx([{type:'text',value,start:0,end:0}]);
-export function proseSlots(source:string):Record<string,ProseSlot>|null{
- const parsed=parseJsx(source);if(!parsed.ok||serializeJsx(parsed.nodes)!==source)return null;
- const slots:Record<string,ProseSlot>={};let precedingUnits=0,order=0;
- const visit=(node:JsxNode,path:string[]):boolean=>{
-  if(node.type==='text'){
-   if(!inertProse(node.value)||source.slice(node.start,node.end)!==proseSource(node.value))return false;
-   const valuePath=[...path,'value'];slots[JSON.stringify(valuePath)]={path:valuePath,fixedStart:node.start-precedingUnits,order:order++,units:node.end-node.start,revision:0};precedingUnits+=node.end-node.start;return true;
-  }
-  return node.type==='element'&&!node.control&&plain.has(node.tag)&&node.attributes.every(a=>['id','className'].includes(a.name)&&a.value.static&&typeof a.value.json==='string'&&!/["'=<>]/.test(a.value.json))&&node.children.every((child,i)=>visit(child,[...path,'children',String(i)]));
- };
- return parsed.nodes.every((node,i)=>visit(node,['roots',String(i)]))?slots:null;
-}
 /** The client only suggests the operation. SQL checks the server-owned slot and
  * its epoch/revision; client parsing is never a validation certificate. */
 export function proseOperation(before:string,after:string):ProseOperation|null{
  const a=parseJsx(before),b=parseJsx(after);if(!a.ok||!b.ok)return null;
- const slots=proseSlots(before);if(!slots)return null;
  let result:ProseOperation|null=null,valid=true;
  const strip=(v:unknown):unknown=>Array.isArray(v)?v.map(strip):v&&typeof v==='object'?Object.fromEntries(Object.entries(v).filter(([k])=>k!=='start'&&k!=='end').map(([k,x])=>[k,strip(x)])):v;
  const visit=(x:unknown,y:unknown,path:string[])=>{
   if(JSON.stringify(strip(x))===JSON.stringify(strip(y)))return;
-  const slot=slots[JSON.stringify(path)];
-  if(slot&&inertProse(x)&&inertProse(y)&&y.length>0&&!result){result={path,oldText:x,newText:y};return;}
+  if(x&&y&&typeof x==='object'&&typeof y==='object'&&'type'in x&&'type'in y&&x.type==='text'&&y.type==='text'&&'value'in x&&'value'in y){
+   const left=x as {value:unknown},right=y as {value:unknown};
+   if(inertProse(left.value)&&inertProse(right.value)&&right.value.length&&!result){result={path:[...path,'value'],oldText:left.value,newText:right.value};return;}
+   valid=false;return;
+  }
   if(Array.isArray(x)&&Array.isArray(y)&&x.length===y.length){x.forEach((v,i)=>visit(v,y[i],[...path,String(i)]));return;}
   if(x&&y&&typeof x==='object'&&typeof y==='object'&&!Array.isArray(x)&&!Array.isArray(y)){
    const ax=x as Record<string,unknown>,by=y as Record<string,unknown>,keys=Object.keys(ax).filter(k=>k!=='start'&&k!=='end');

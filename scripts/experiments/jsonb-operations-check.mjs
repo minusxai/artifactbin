@@ -1,9 +1,11 @@
 import assert from 'node:assert/strict';
 import {getDb,resetDb} from '../../services/app/lib/db.ts';
 import {publishJsx} from '../../services/app/lib/story/jsx-tier.ts';
-import {createArtifact,getArtifactById,applyEditScoped} from '../../services/app/lib/artifacts.ts';
+import {createArtifact,getArtifactById,applyEditScoped,editorScope,refLoaderForActor} from '../../services/app/lib/artifacts.ts';
 import {decodeDocument} from '../../services/app/lib/story/document-codec.ts';
 import {proseOperation} from '../../services/app/lib/story/document-prose.ts';
+import {prepareSemanticOperation} from '../../services/app/lib/story/document-semantic.ts';
+import {commitSemanticOperation} from '../../services/app/lib/story/document-semantic-write.ts';
 import {mintToken} from '../../services/app/lib/tokens.ts';
 const db=await getDb(),raw=db.raw();assert.equal(raw.kind,'pg');const pool=raw.pool;
 try{
@@ -38,5 +40,38 @@ try{
  assert.equal(await applyEditScoped({tokenId:foreign.id,userId:null},initial.id,{baseEditId:head.edit_id,text:proseOperation(head.source,head.source.replace('Text 25','Forbidden'))}),null);
  const invalid=await applyEditScoped(actor,initial.id,{baseEditId:head.edit_id,change:{oldString:'</section>',newString:'<script>run()</script></section>'}});assert.ok(invalid instanceof Response);assert.equal(invalid.status,400);
  console.log('PASS foreign writer and invalid JSX cannot commit');
+ // Full operation vocabulary uses the actual application path and same edit history.
+ head=await getArtifactById(initial.id);
+ const parallel=await Promise.all([26,27].map(index=>applyEditScoped(actor,initial.id,{baseEditId:head.edit_id,operations:[{kind:'setAttribute',path:[0,index],name:'className',value:index===26?'font-bold':'italic'}]})));
+ assert.ok(parallel.every(r=>r?.applied));await verify();console.log('PASS independent structural edits through application admission');
+ head=await getArtifactById(initial.id);
+ const rawHead=(await db.query('SELECT document FROM artifacts WHERE id=$1',[initial.id])).rows[0];
+ const base={id:initial.id,version:head.version,document:rawHead.document,meta:head.meta};
+ const structural=await prepareSemanticOperation(base,[{kind:'setAttribute',path:[0,28],name:'className',value:'underline'},{kind:'insert',parent:[0],index:32,source:'<h2>New section</h2>'}],{loadRef:refLoaderForActor(actor)});assert.ok(!(structural instanceof Response));
+ // Hold the predecessor, force the structural statement to wait, then assert its
+ // archive and source log contain the new prose rather than the planning snapshot.
+ const holding=await pool.connect();let waiting;
+ try{
+  await holding.query('BEGIN');db.query=holding.query.bind(holding);
+  assert.ok((await edit(head,29,'Concurrent structural predecessor 👩🏽‍💻')).applied);db.query=original;
+  waiting=commitSemanticOperation(db,actor,editorScope(actor),structural);
+  for(let i=0;;i++){const n=(await pool.query("SELECT count(*)::int n FROM pg_stat_activity WHERE wait_event_type='Lock' AND pid<>pg_backend_pid()")).rows[0].n;if(n)break;assert.ok(i<200);await new Promise(r=>setTimeout(r,10));}
+  await holding.query('COMMIT');assert.ok(await waiting);
+ }finally{db.query=original;await holding.query('ROLLBACK');holding.release();}
+ await verify();console.log('PASS structural statement after row-lock wait preserves prose, exact archive and replay');
+ head=await getArtifactById(initial.id);
+ const composite=await applyEditScoped(actor,initial.id,{baseEditId:head.edit_id,operations:[{kind:'setText',path:[0,30,0],value:'Composite text'},{kind:'removeAttribute',path:[0,26],name:'className'},{kind:'move',path:[0,32],parent:[0],index:0},{kind:'replace',path:[0,32],source:'<p>Replacement</p>'},{kind:'delete',path:[0,31]}]});assert.ok(composite?.applied);await verify();
+ console.log('PASS text/attribute/remove/move/replace/delete composite is one valid history step');
+ const ref=await createArtifact(token.id,null,{format:'image',content:'',source:null,meta:{}});
+ head=await getArtifactById(initial.id);const snapshot=(await db.query('SELECT document FROM artifacts WHERE id=$1',[initial.id])).rows[0];
+ const referencePlan=await prepareSemanticOperation({id:initial.id,version:head.version,document:snapshot.document,meta:head.meta},[{kind:'insert',parent:[],index:1,source:`<img src="ref:${ref.id}" />`}],{loadRef:refLoaderForActor(actor)});assert.ok(!(referencePlan instanceof Response));
+ const refConnection=await pool.connect();
+ try{
+  await refConnection.query('BEGIN');await refConnection.query('UPDATE artifacts SET version=version+1 WHERE id=$1',[ref.id]);
+  const pendingReference=commitSemanticOperation(db,actor,editorScope(actor),referencePlan);
+  for(let i=0;;i++){const n=(await pool.query("SELECT count(*)::int n FROM pg_stat_activity WHERE wait_event_type='Lock' AND pid<>pg_backend_pid()")).rows[0].n;if(n)break;assert.ok(i<200);await new Promise(r=>setTimeout(r,10));}
+  await refConnection.query('COMMIT');assert.equal(await pendingReference,null);
+ }finally{await refConnection.query('ROLLBACK');refConnection.release();}
+ assert.equal((await getArtifactById(initial.id)).edit_id,head.edit_id);console.log('PASS reference lock wait rejects changed validation context without a partial document write');
  console.log((await pool.query('SELECT version()')).rows[0].version);
 }finally{await resetDb();}

@@ -7,7 +7,10 @@ import {serializeJsx} from '../jsx/serialize';
 import type {JsxNode} from '../jsx/types';
 
 type Packed = ['value', unknown] | ['string16', string] | ['array', Packed[]] | ['object', Array<[string | Packed, Packed]>];
-export type StoredDocument = {schema: 1; kind: 'jsx'; roots: unknown[]} | {schema: 1; kind: 'source'; source: string};
+export type StoredTree = {schema: 1; kind: 'jsx'; roots: unknown[]} | {schema: 1; kind: 'source'; source: string};
+export interface StoredProse {value:string;source:string;bytes:number;units:number;revision:number;fixedStart:number;order:number}
+export interface SemanticDocument {schema:2;kind:'semantic';tree:StoredTree;prose:Record<string,StoredProse>;epoch:string;hash:string;bytes:number;policy:string;contextRequired:boolean}
+export type StoredDocument=StoredTree|SemanticDocument;
 const needsEncoding=(v:unknown):v is string=>typeof v==='string'&&(v.includes('\0')||!v.isWellFormed());
 function pack(v:unknown):Packed {
  if(needsEncoding(v))return ['string16',Buffer.from(v,'utf16le').toString('base64')];
@@ -33,10 +36,15 @@ function decode(v:unknown):unknown {
  if(!v||typeof v!=='object')return v;
  return Object.fromEntries(Object.entries(v).map(([k,x])=>[k,k==='json'?unpack(x as Packed):decode(x)]));
 }
-export function encodeDocument(source:string):StoredDocument {
+export const encodeDocumentNodes=(nodes:JsxNode[]):StoredTree=>({schema:1,kind:'jsx',roots:encode(nodes) as unknown[]});
+export function decodeDocumentNodes(tree:StoredTree):JsxNode[]{
+ if(tree.kind==='jsx')return decode(tree.roots) as JsxNode[];
+ const parsed=parseJsx(tree.source);if(!parsed.ok)throw new Error(parsed.error);return parsed.nodes;
+}
+export function encodeDocument(source:string):StoredTree {
  const parsed=parseJsx(source);
  if(parsed.ok){
-  const document:StoredDocument={schema:1,kind:'jsx',roots:encode(parsed.nodes) as unknown[]};
+  const document:StoredTree={schema:1,kind:'jsx',roots:encode(parsed.nodes) as unknown[]};
   if(decodeDocument(document)===source)return document;
  }
  // A storage migration must not normalize an old source behind existing edit IDs.
@@ -44,6 +52,13 @@ export function encodeDocument(source:string):StoredDocument {
  return {schema:1,kind:'source',source};
 }
 export function decodeDocument(document:StoredDocument):string {
+ if(document?.schema===2&&document.kind==='semantic'){
+  const nodes=decodeDocumentNodes(document.tree);
+  const visit=(node:JsxNode & {slot?:string})=>{
+   if(node.type==='text'&&node.slot){const value=document.prose[node.slot];if(!value)throw new Error('Missing prose slot');node.value=value.value;}
+   if(node.type==='element')node.children.forEach(visit);
+  };nodes.forEach(visit);return serializeJsx(nodes);
+ }
  if(!document||document.schema!==1)throw new Error('Unsupported document storage schema');
  if(document.kind==='source'&&typeof document.source==='string')return document.source;
  if(document.kind==='jsx'&&Array.isArray(document.roots))return serializeJsx(decode(document.roots) as JsxNode[]);

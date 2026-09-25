@@ -1,3 +1,4 @@
+import {parseDocumentOperations} from './story/document-operation';
 import {readableArtifact} from './artifact-read';
 import {MembershipError} from './membership';
 import {grantsOf,grantsPermitWrite} from './datasets/policy/grants';
@@ -663,6 +664,12 @@ function parseEditBody(body: Record<string, unknown>): EditInput | null {
   if(!annotationOps)return null;
   const editId = body.edit_id;
   if (typeof editId !== 'string' || editId.length === 0) return null;
+
+  if(Object.hasOwn(body,'operations')){
+    const operations=parseDocumentOperations(body.operations);
+    if(!operations||['text','source','edits','old_string','new_string'].some(k=>Object.hasOwn(body,k)))return null;
+    return {baseEditId:editId,operations,...(annotationOps.length?{annotationOps}:{})};
+  }
 
   if(Object.hasOwn(body,'text')){
     const text=body.text as Record<string,unknown>|null;

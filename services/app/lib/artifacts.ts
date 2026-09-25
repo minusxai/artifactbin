@@ -1,8 +1,11 @@
 import {commitProseOperation} from './story/document-prose-write';
 import {proseOperation,applyProseOperation,type ProseOperation} from './story/document-prose';
-import {encodeDocument} from './story/document-codec';
-import {prepareDocumentPatch,documentPatchSql} from './story/document-patch';
-import {artifactQuery,loadArtifactDocument,sourceStorage} from './artifact-document';
+import type {DocumentOperation} from '@artifactbin/contracts';
+import type {SemanticDocument,StoredDocument} from './story/document-codec';
+import {applyDocumentOperations,DocumentOperationError} from './story/document-operation';
+import {createSemanticDocument,prepareSemanticSource,type SemanticAdmission} from './story/document-semantic';
+import {commitSemanticOperation} from './story/document-semantic-write';
+import {artifactQuery,loadArtifactDocument,sourceStorage,decodeArtifactDocument} from './artifact-document';
 import {JOIN_RELATIONS,seedOwnerJoin} from './relation-state';
 import {documentMentions} from './saved-mentions';
 import { grantContext, grantsOf, grantsPermitRead, grantsPermitWrite, type GrantDocument } from './datasets/policy/grants';
@@ -529,7 +532,7 @@ async function insertArtifact(
      VALUES ($1, $2, $3, $4, $5, $6, $7, CASE WHEN $19::jsonb IS NULL THEN $8::text ELSE NULL END, $9, $10, $11, $12, $13, $14, $15, $3, $2, $17::jsonb, $18::int, $19::jsonb) RETURNING *
    ), genesis AS (
      INSERT INTO artifact_edits (artifact_id, edit_id, splice_start, removed, inserted, span_start, span_end, actor_user_id, actor_token_id, document_state)
-     SELECT id, edit_id, 0, '', COALESCE($8::text, content), 0, 0, $3, $2, jsonb_build_object('epoch',document#>>'{prose,epoch}','version',version) FROM created
+     SELECT id, edit_id, 0, '', COALESCE($8::text, content), 0, 0, $3, $2, jsonb_build_object('epoch',COALESCE(document->>'epoch',document#>>'{prose,epoch}'),'version',version) FROM created
    ), reserved AS (
      INSERT INTO artifact_source_ids (artifact_id, source_id, provenance, first_version)
      SELECT $1, value #>> '{}', 'authored', 1 FROM jsonb_array_elements($16::jsonb)
@@ -1103,40 +1106,20 @@ async function logWholeDocumentWrite(tx: Queryable, before: ArtifactRow, after: 
  * single reservation/history boundary; events are emitted by the caller only
  * after its surrounding transaction commits.
  */
+export interface PreparedMarkupWrite {
+ source:string;content:string;meta:Record<string,unknown>;ids:string[];aliases:Array<{legacyKey:string;nodeId:string;path:string}>;
+ admission:SemanticAdmission;initialize?:{document:SemanticDocument;source:string};
+}
 export async function commitNormalizedMarkup(
-  tx: Queryable,
-  actor: TokenActor | null,
-  current: ArtifactRow,
-  normalized: { source: string; content: string; meta: Record<string, unknown>; ids: readonly string[]; aliases?: readonly { legacyKey: string; nodeId: string; path: string }[]; title?: string | null; description?: string | null; format?: ArtifactFormat },
-): Promise<ArtifactRow> {
-  normalized = { ...normalized, meta: finalizeArtifactMetadata(normalized.format ?? current.format, normalized.source, normalized.meta) };
-  await archiveVersion(tx, current);
-  const editId = newEditId();
-  const result = await artifactQuery<ArtifactRow>(tx,
-    `UPDATE artifacts SET source=CASE WHEN $12::jsonb IS NULL THEN $2::text ELSE NULL END, document=$12::jsonb, content=$3, meta=$4::jsonb, title=$9, description=$10, format=$11, version=version+1, edit_id=$5,
-       actor_user_id=$6, actor_token_id=$7, updated_at=now() WHERE id=$1 AND edit_id=$8 RETURNING *`,
-    [current.id, normalized.source, normalized.content, JSON.stringify(normalized.meta), editId, ...(actor ? actorStamp(actor) : [null, null]), current.edit_id, normalized.title === undefined ? current.title : normalized.title, normalized.description === undefined ? current.description : normalized.description, normalized.format ?? current.format,sourceStorage(normalized.format ?? current.format,normalized.source).document],
-  );
-  const updated = result.rows[0];
-  if (!updated) throw new Error('artifact changed after identity preparation');
-  await tx.query(
-    `INSERT INTO artifact_source_ids (artifact_id, source_id, provenance, first_version)
-     SELECT $1, value #>> '{}', 'migration', $2 FROM jsonb_array_elements($3::jsonb)
-     ON CONFLICT DO NOTHING`,
-    [current.id, updated.version, JSON.stringify(normalized.ids)],
-  );
-  await tx.query('UPDATE artifact_source_ids SET retired_version=NULL WHERE artifact_id=$1 AND source_id=ANY($2::text[])',[current.id,normalized.ids]);
-  await tx.query('UPDATE artifact_source_ids SET retired_version=$2 WHERE artifact_id=$1 AND retired_version IS NULL AND NOT(source_id=ANY($3::text[]))',[current.id,updated.version,normalized.ids]);
-  await tx.query(`WITH added AS (
-    INSERT INTO artifact_node_aliases(artifact_id,legacy_key,source_id,source_path,created_version)
-    SELECT $1,x->>'legacyKey',x->>'nodeId',x->>'path',$3 FROM jsonb_array_elements($2::jsonb) x
-    ON CONFLICT DO NOTHING RETURNING legacy_key,source_id)
-    UPDATE annotations a SET anchor_key=x.source_id FROM added x
-    WHERE a.artifact_id=$1 AND a.anchor_key=x.legacy_key`,
-    [current.id, JSON.stringify(normalized.aliases ?? []),updated.version]);
-  await bindCurrentUserScopes(tx,updated);
-  await logWholeDocumentWrite(tx, current, updated);
-  return updated;
+ tx:Queryable,actor:TokenActor|null,current:ArtifactRow,
+ normalized:PreparedMarkupWrite & {title?:string|null;description?:string|null;format?:ArtifactFormat},
+):Promise<ArtifactRow>{
+ const scope=actor?editorScope(actor):{val:current.id,where:(param:string)=>`id=${param}`};
+ const updated=await commitSemanticOperation(tx,actor,scope,normalized.admission,{
+  archive:'always',history:'whole',expectedEditId:current.edit_id,initialize:normalized.initialize,title:normalized.title,description:normalized.description,aliases:normalized.aliases,provenance:'migration',
+ });
+ if(!updated)throw new Error('artifact changed after identity preparation');
+ await bindCurrentUserScopes(tx,updated);return updated;
 }
 
 /** Artifact-aware publish preparation shared with the administrative migration. */
@@ -1144,7 +1127,7 @@ export async function publishMarkupForArtifact(
   current: ArtifactRow,
   source: string,
   metaOverride: Record<string, unknown> = current.meta,
-): Promise<Response | { source: string; content: string; meta: Record<string, unknown>; ids: string[]; aliases: Array<{ legacyKey: string; nodeId: string; path: string }> }> {
+): Promise<Response | PreparedMarkupWrite> {
   const currentMeta = metaOverride as { theme?: unknown; template?: unknown; colorMode?: unknown };
   const context = {
     loadRef: refLoaderForActor(writerFor(current)),
@@ -1162,7 +1145,14 @@ export async function publishMarkupForArtifact(
     published = await publishJsx({ theme: currentMeta.theme ?? null, template: currentMeta.template ?? null, colorMode: currentMeta.colorMode ?? null }, identity.source, context);
     if (published instanceof Response) return published;
   }
-  return { source: published.source ?? '', content: published.content, meta: published.meta, ids: identity.ids, aliases: identity.aliases };
+  const stored=(await db.query<{document:StoredDocument|null}>('SELECT document FROM artifacts WHERE id=$1 AND edit_id=$2',[current.id,current.edit_id])).rows[0];
+  if(!stored)return json({error:'doc_changed'},409);
+  const existing=stored.document?.schema===2?stored.document:null;
+  let baseline=existing;
+  if(!baseline){try{baseline=createSemanticDocument(canonicalizeMarkup(current.source??''),current.version);}catch{baseline=createSemanticDocument('',current.version);}}
+  const admission=await prepareSemanticSource({id:current.id,version:current.version,document:baseline,meta:current.meta,reservedIds:reserved.rows.map(r=>r.source_id)},published.source??'',context,{theme:published.meta.theme,template:published.meta.template,colorMode:published.meta.colorMode},true);
+  if(admission instanceof Response)return admission;
+  return {source:published.source??'',content:published.content,meta:published.meta,ids:identity.ids,aliases:identity.aliases,admission,...(!existing?{initialize:{document:baseline,source:current.source??''}}:{})};
 }
 
 async function listVersionsScoped(scope: Scope, id: string): Promise<VersionSummary[] | null> {
@@ -1327,6 +1317,14 @@ async function replaceScoped(
 ): Promise<ArtifactRow | null | VersionConflict | Response> {
   const db = await getDb();
   const scope = editorScope(actor);
+  let preparedMarkup:PreparedMarkupWrite|null=null;
+  if(input.format==='markup'){
+    const initial=(await artifactQuery<ArtifactRow>(db,`SELECT * FROM artifacts WHERE id=$1 AND ${scope.where('$2')}`,[id,scope.val])).rows[0];
+    if(!initial)return null;
+    const prepared=await publishMarkupForArtifact(initial,input.source??'',input.meta);
+    if(prepared instanceof Response)return prepared;
+    preparedMarkup=prepared;
+  }
   // Event and the parent wakeups fire post-txn — an unawaited query from
   // inside the callback would deadlock PGLite's serialized op queue.
   let moved: { from: string | null; to: string | null } | null = null;
@@ -1373,6 +1371,22 @@ async function replaceScoped(
     await validateUserContent(tx,input,actor.userId,key=>loadDatasetRows({content:"",meta:{objectKey:key}}));
     const replacementCatalog=catalogOf(input);
     if(replacementCatalog?.kind==='postgres'&&replacementCatalog.connection)await resolveDatasetConnection(replacementCatalog.connection,undefined,current.id,tx);
+
+    if(preparedMarkup){
+      const operations=opts.annotationOps??[];
+      const annotationRows=operations.length?(await tx.query<AnnotationRecord>('SELECT id,anchor_key,range FROM annotations WHERE artifact_id=$1 AND root_id IS NULL AND deleted_at IS NULL FOR UPDATE',[id])).rows:[];
+      const receipts=operations.length?(await tx.query<{annotation_changes:AnnotationReceipt[]}>(`SELECT annotation_changes FROM artifact_edits WHERE artifact_id=$1 AND EXISTS(SELECT 1 FROM jsonb_array_elements(annotation_changes) receipt WHERE receipt->>'operationId'=ANY($2::text[]))`,[id,operations.map(op=>op.id)])).rows.flatMap(r=>r.annotation_changes??[]):[];
+      if(operations.some(op=>op.kind==='undo'&&!receipts.some(r=>r.operationId===op.id&&r.direction==='map')))return {conflict:true,reason:'doc_changed',currentVersion:current.version};
+      const effects=annotationEffects(current.source??'',preparedMarkup.source,operations,annotationRows,receipts);
+      const updated=await commitSemanticOperation(tx,actor,scope,preparedMarkup.admission,{
+        archive:'always',expectedEditId:current.edit_id,initialize:preparedMarkup.initialize,effects,aliases:preparedMarkup.aliases,
+        title:input.title,description:input.description,visibility:input.visibility,ancestorIds:input.ancestor_ids,access:input.access,linkRole:input.link_role,
+      });
+      if(!updated)return {conflict:true,reason:'doc_changed',currentVersion:current.version};
+      if(opts.shares!==undefined)Object.assign(updated,await writeShares(tx,id,opts.shares));
+      await bindCurrentUserScopes(tx,updated);await documentMentions(tx,updated,actor,current.source??'');
+      moved={from:parentOf(current),to:parentOf(updated)};return updated;
+    }
 
     const replacementIdentity = input.format === 'markup' && input.source
       ? stampNodeIds(input.source, {
@@ -1496,6 +1510,7 @@ function sayMoved(actor: TokenActor, id: string, moved: { from: string | null; t
  * prefix/suffix diff — sound because stored source is canonical).
  */
 export interface EditInput {
+  operations?:DocumentOperation[];
   text?: ProseOperation;
   annotationOps?: AnnotationOperation[];
   baseEditId: string;
@@ -1529,7 +1544,6 @@ export type EditOutcome =
  * everything inside the burst rides on it. The decision is made in SQL (a NOT
  * EXISTS over the edit log) so it costs no extra round trip.
  */
-const EDIT_SNAPSHOT_WINDOW_MS = 120_000;
 
 /** How many times a lost CAS race is retried before we give up and report the conflict. */
 const EDIT_CAS_RETRIES = 3;
@@ -1546,9 +1560,9 @@ export const MAX_STALE_EDITS = 200;
 /** The log rows written after `baseEditId`, oldest→newest; null when that id is unknown here. */
 async function interveningEdits(q: Queryable, artifactId: string, baseEditId: string): Promise<EditRecord[] | null> {
   const r = await q.query<{
-    seq: string; edit_id: string; splice_start: number; removed: string; inserted: string; span_start: number; span_end: number; changes: BatchChange[] | string | null;
+    seq: string; edit_id: string; splice_start: number; removed: string; inserted: string; span_start: number; span_end: number; changes: BatchChange[] | string | null; document_state?:{kind?:string};
   }>(
-    `SELECT seq, edit_id, splice_start, removed, inserted, span_start, span_end, changes FROM artifact_edits
+    `SELECT seq, edit_id, splice_start, removed, inserted, span_start, span_end, changes, document_state FROM artifact_edits
      WHERE artifact_id = $1 AND seq > (SELECT seq FROM artifact_edits WHERE artifact_id = $1 AND edit_id = $2)
      ORDER BY seq`,
     [artifactId, baseEditId],
@@ -1561,8 +1575,8 @@ async function interveningEdits(q: Queryable, artifactId: string, baseEditId: st
     if (known.rows.length === 0) return null;
   }
   return r.rows.flatMap((row) => {
-    const parsed = typeof row.changes === 'string' ? JSON.parse(row.changes) as BatchChange[] : row.changes;
-    const changes = parsed?.length ? [...parsed].reverse() : [{
+    const parsed = row.document_state?.kind==='semantic'?sourceChanges(row.removed,row.inserted):typeof row.changes === 'string' ? JSON.parse(row.changes) as BatchChange[] : row.changes;
+    const changes = row.document_state?.kind==='semantic'&&!parsed?.length ? [{splice:{start:0,removed:'',inserted:''},span:{start:0,end:0}}] : parsed?.length ? [...parsed].reverse() : [{
       splice: { start: row.splice_start, removed: row.removed, inserted: row.inserted },
       span: { start: row.span_start, end: row.span_end },
     }];
@@ -1600,9 +1614,8 @@ export async function applyEditScoped(actor: TokenActor, id: string, input: Edit
   }
 
   for (let attempt = 0; ; attempt++) {
-    const head = (
-      await artifactQuery<ArtifactRow>(db,`SELECT artifacts.*, ${SHARES_PROJECTION} FROM artifacts WHERE id = $1 AND ${scope.where('$2')}`, [id, scope.val])
-    ).rows[0];
+    const storedHead=(await db.query<ArtifactRow & {document?:StoredDocument}>(`SELECT artifacts.*, ${SHARES_PROJECTION} FROM artifacts WHERE id = $1 AND ${scope.where('$2')}`, [id, scope.val])).rows[0];
+    const head=storedHead?decodeArtifactDocument(storedHead):null;
     if (!head) return null;
     // Documents edit; VALUES do not. A dataset/viz/image is a blob whose
     // meaning lives in its structure, so a text splice into it is meaningless.
@@ -1626,6 +1639,10 @@ export async function applyEditScoped(actor: TokenActor, id: string, input: Edit
       intervening = found;
     }
     const baseSource = reconstructBaseSource(headSource, intervening);
+    if(input.operations){
+      try{input={...input,operations:undefined,change:{newSource:applyDocumentOperations(baseSource,input.operations)}};}
+      catch(error){if(error instanceof DocumentOperationError)return json({error:'invalid_operation',detail:error.message,operationIndex:error.operationIndex},400);throw error;}
+    }
     if(input.text){
       const newSource=applyProseOperation(baseSource,input.text);
       if(newSource===null)return {applied:false,reason:'bad_diff',detail:'no_match'};
@@ -1636,7 +1653,6 @@ export async function applyEditScoped(actor: TokenActor, id: string, input: Edit
     //    the caller actually read is what makes a stale base resolvable at all.
     //    A metadata-only edit has no splice and skips straight to the write.
     let candidate = headSource;
-    let batchChanges: BatchChange[] | null = null;
     if (input.change) {
       if ('edits' in input.change) {
         const resolved = resolveEditBatch(baseSource, input.change.edits);
@@ -1644,7 +1660,6 @@ export async function applyEditScoped(actor: TokenActor, id: string, input: Edit
         const rebased = rebaseEditBatch(headSource, resolved.changes, intervening);
         if (!rebased.ok) return { applied: false, reason: 'doc_changed', head: headOf(head) };
         candidate = rebased.source;
-        batchChanges = rebased.changes;
       } else {
       let splice: Splice;
       if ('oldString' in input.change) {
@@ -1744,21 +1759,7 @@ export async function applyEditScoped(actor: TokenActor, id: string, input: Edit
     const storedText = input.change ? published.source ?? '' : headSource;
     if(opts.dryRun)return json({valid:true,dry_run:true,changed:storedText!==headSource,markup:storedText,edit_id:head.edit_id,version:head.version,state:artifactState(head),commit_checks:['authorization','references','edit_base']});
 
-    // 5. Log what actually LANDED (the sanitizer may have rewritten the text),
-    //    normalized for the same reason: the logged span is what every future
-    //    stale-base edit is tested against.
-    const rawStored = deriveSpliceByDiff(headSource, storedText);
-    if (!rawStored && !input.meta) return { applied: false, reason: 'bad_diff', detail: 'identical' };
-    // A metadata-only write logs a zero-width edit: it moves the head pointer
-    // and wakes watchers, but touches no node, so it conflicts with nothing.
-    const storedSplice = rawStored ? normalizeSplice(headSource, rawStored) : { start: 0, removed: '', inserted: '' };
-    const storedSpan = rawStored ? touchedSpanFor(headSource, storedSplice) : { start: 0, end: 0 };
-    // Batch changes are already ordered in head coordinates. When publishing
-    // rewrites bytes beyond those changes, the broad stored splice remains the
-    // exact rollback record and is the safe grouped history fallback.
-    const storedChanges = batchChanges && batchChanges.reduceRight((text, change) => applySplice(text, change.splice), headSource) === storedText
-      ? batchChanges
-      : null;
+    if(storedText===headSource&&!input.meta)return {applied:false,reason:'bad_diff',detail:'identical'};
 
     const operations = input.annotationOps ?? [];
     const annotationRows = operations.length
@@ -1781,82 +1782,20 @@ export async function applyEditScoped(actor: TokenActor, id: string, input: Edit
     const sideEffects = operations.length
       ? annotationEffects(headSource, storedText, operations, annotationRows, storedReceipts)
       : { updates: [], receipts: [] };
-    const freshEditId = newEditId();
-    const nextDocument=JSON.parse(sourceStorage('markup',storedText,true).document!);
-    const {prose:proseCertificate,...nextTree}=nextDocument;
-    const documentPatch=documentPatchSql("(COALESCE(document,$34::jsonb)-'prose')",prepareDocumentPatch(encodeDocument(headSource),nextTree),Array(34).fill(null));
-    const documentExpression=`CASE WHEN $33::jsonb IS NULL THEN ${documentPatch.expression} ELSE jsonb_set(${documentPatch.expression},'{prose}',$33::jsonb,true) END`;
-    const commit = (queryable:Queryable) => artifactQuery<ArtifactRow>(queryable,
-      `WITH updated AS (
-         UPDATE artifacts SET content = $3, source = NULL, document=${documentExpression}, document_archived_at=CASE WHEN NOT EXISTS(SELECT 1 FROM artifact_versions WHERE artifact_id=$1 AND created_at>now()-($15::int*interval '1 millisecond')) THEN now() ELSE document_archived_at END, meta = $5, version = version + 1,
-                edit_id = $6, title = $21, actor_user_id = $22, actor_token_id = $23, updated_at = now()
-         WHERE id = $1 AND ${scope.where('$2')} AND edit_id = $7 AND sharing_revision=$32
-           AND $4::text IS NOT NULL AND (meta-'parsedArtifact') = ($14::jsonb-'parsedArtifact') AND title IS NOT DISTINCT FROM $9 AND description IS NOT DISTINCT FROM $10
-         RETURNING *
-       ), archived AS (
-         INSERT INTO artifact_versions (artifact_id, version, title, description, format, content, source, meta, actor_user_id, actor_token_id, document)
-         SELECT $1, $8, $9, $10, $11, $12, CASE WHEN $34::jsonb IS NULL THEN $13::text ELSE NULL END, $14::jsonb, $24, $25, $34::jsonb
-         WHERE EXISTS (SELECT 1 FROM updated)
-           -- Coalesce on ARCHIVING activity, not edit activity: the first edit
-           -- after a quiet spell preserves the pre-edit state (including the
-           -- created draft), and the rest of the burst rides on that snapshot.
-           AND NOT EXISTS (
-             SELECT 1 FROM artifact_versions
-             WHERE artifact_id = $1 AND created_at > now() - ($15::int * interval '1 millisecond')
-           )
-         ON CONFLICT DO NOTHING
-       ), moved_annotations AS (
-         UPDATE annotations a SET anchor_key=x->'after'->>'anchor', range=x->'after'->>'range'
-         FROM jsonb_array_elements($30::jsonb) x
-         WHERE a.artifact_id=$1 AND a.id=x->>'annotationId' AND a.root_id IS NULL AND a.deleted_at IS NULL
-           AND a.anchor_key=x->'before'->>'anchor' AND a.range IS NOT DISTINCT FROM (x->'before'->>'range')
-           AND EXISTS (SELECT 1 FROM updated)
-         RETURNING a.id
-       ), logged AS (
-         INSERT INTO artifact_edits (artifact_id, edit_id, splice_start, removed, inserted, span_start, span_end, changes, actor_user_id, actor_token_id, annotation_changes, document_state)
-         SELECT id, $6, $16, $17, $18, $19, $20, $26::jsonb, $22, $23,
-           (SELECT jsonb_agg(receipt) FROM jsonb_array_elements($31::jsonb) receipt WHERE receipt->>'annotationId'='' OR receipt->>'annotationId' IN (SELECT id FROM moved_annotations)), jsonb_build_object('epoch',document#>>'{prose,epoch}','version',version) FROM updated
-         RETURNING pg_notify('artifact_' || lower(artifact_id), $6)
-       ), reserved_ids AS (
-         INSERT INTO artifact_source_ids (artifact_id, source_id, provenance, first_version)
-         SELECT $1, value #>> '{}', 'authored', $8 + 1 FROM jsonb_array_elements($27::jsonb)
-         WHERE EXISTS (SELECT 1 FROM updated) ON CONFLICT DO NOTHING
-       ), aliases AS (
-         INSERT INTO artifact_node_aliases (artifact_id, legacy_key, source_id, source_path, created_version)
-         SELECT $1, x->>'legacyKey', x->>'nodeId', x->>'path', $8 + 1 FROM jsonb_array_elements($28::jsonb) x
-         WHERE EXISTS (SELECT 1 FROM updated) ON CONFLICT (artifact_id, legacy_key) DO NOTHING
-         RETURNING legacy_key,source_id
-       ), migrated_annotations AS (
-         UPDATE annotations a SET anchor_key = x.source_id
-         FROM aliases x
-         WHERE a.artifact_id = $1 AND a.anchor_key = x.legacy_key AND EXISTS (SELECT 1 FROM updated)
-       ), active_ids AS (
-         UPDATE artifact_source_ids SET retired_version=NULL WHERE artifact_id=$1 AND source_id=ANY($29::text[])
-           AND EXISTS (SELECT 1 FROM updated)
-       ), retired_ids AS (
-         UPDATE artifact_source_ids SET retired_version=$8+1
-         WHERE artifact_id=$1 AND retired_version IS NULL AND NOT (source_id=ANY($29::text[]))
-           AND EXISTS (SELECT 1 FROM updated)
-       )
-       SELECT u.* FROM updated u WHERE EXISTS (SELECT 1 FROM logged)`,
-      [
-        id, scope.val,
-        published.content, storedText, JSON.stringify(finalizeArtifactMetadata('markup', storedText, published.meta)), freshEditId, head.edit_id,
-        head.version, head.title, head.description, head.format, head.content, head.source, JSON.stringify(head.meta),
-        EDIT_SNAPSHOT_WINDOW_MS,
-        storedSplice.start, storedSplice.removed, storedSplice.inserted, storedSpan.start, storedSpan.end,
-        input.meta?.title !== undefined ? input.meta.title : head.title,
-        ...actorStamp(actor),
-        head.actor_user_id, head.actor_token_id,
-        storedChanges ? JSON.stringify(storedChanges) : null,
-        JSON.stringify(identity.ids),
-        JSON.stringify(identity.aliases),
-        identity.ids,
-        JSON.stringify(sideEffects.updates),
-        JSON.stringify(sideEffects.receipts),head.sharing_revision??0,
-        proseCertificate?JSON.stringify(proseCertificate):null,sourceStorage(head.format,head.source).document,...documentPatch.params.slice(34),
-      ],
-    );
+    const existing=storedHead.document?.schema===2?storedHead.document:null;
+    let baseline=existing;
+    if(!baseline){try{baseline=createSemanticDocument(canonicalizeMarkup(headSource),head.version);}catch{baseline=createSemanticDocument('',head.version);}}
+    const admitted=await prepareSemanticSource({id,version:head.version,document:baseline,meta:head.meta},storedText,{
+      loadRef:refLoaderForActor(writerFor(head)),importAsset:assetImporterFor(head.token_id,head.user_id),resolveFont:fontResolver(),overByteQuota:byteQuotaFor(head.token_id),
+    },{theme:published.meta.theme,template:published.meta.template,colorMode:published.meta.colorMode},!existing);
+    if(admitted instanceof Response)return admitted;
+    const commit=async(queryable:Queryable)=>{
+      const row=await commitSemanticOperation(queryable,actor,scope,admitted,{
+        ...(input.meta?.title!==undefined?{title:input.meta.title}:{}),effects:sideEffects,
+        ...(!existing?{initialize:{document:baseline,source:headSource},expectedEditId:head.edit_id}:operations.length?{expectedEditId:head.edit_id}:{}),
+      });
+      return {rows:row?[row]:[]};
+    };
     const previousRefs=new Set(((head.meta.refs??[]) as Array<{id:string}>).map(ref=>ref.id));
     const attachesReference=((published.meta.refs??[]) as Array<{id:string}>).some(ref=>!previousRefs.has(ref.id));
     // First attachment changes the dataset schema in the same transaction as the document CAS.
@@ -2311,6 +2250,7 @@ function rowToResolvedRef(row: ArtifactRow, owned = false): ResolvedRef {
   return {
     id: row.id,
     format: row.format,
+    validationState:{id:row.id,version:row.version,sharingRevision:row.sharing_revision??0,policyRevision:row.policy_revision??0},
     owned,
     ...(row.format === 'dataset' ? { columns: meta.columns ?? [], access: row.access, catalog:catalog??undefined, datasetPolicy:parsedDatasetPolicy(row), query: async(sql:string,params:Record<string,Scalar>,paramTypes?:Record<string,DatasetColumn["type"]>) => {
       if(!catalog)throw new DatasetError(`Dataset source ref:${row.id} has no catalog or stored object key`);

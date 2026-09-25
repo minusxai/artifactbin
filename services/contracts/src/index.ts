@@ -29,3 +29,5 @@ export { BUILD_ASSET_PATH, BUILD_ASSET_HEADER } from './build-assets';
 export { DEFAULT_UPLOAD_MAX_BYTES } from './upload-limits';
 
 export * from './membership';
+
+export * from './document-operation';

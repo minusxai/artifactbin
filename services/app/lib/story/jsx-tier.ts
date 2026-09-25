@@ -51,6 +51,9 @@ export interface PreparedMarkup {
 
 /** Validation and compilation have no import or persistence capability. */
 export async function prepareJsx(body: Record<string, unknown>, sourceIn: string, ctx: Pick<ContentInputCtx, 'loadRef' | 'normalizeMarkup'> = {}): Promise<PreparedMarkup | Response> {
+  if(sourceIn.includes('\0'))return json({error:'invalid_source_encoding',details:['Document source cannot contain a NUL character.']},400);
+  // Match UTF-8 transport before validation rather than changing bytes at SQL time.
+  if(!sourceIn.isWellFormed())sourceIn=Buffer.from(sourceIn,'utf8').toString('utf8');
   /*
    * REPAIR FIRST, above everything that reads the source. The one fault we fix
    * rather than refuse is the shell-escaped backtick (lib/jsx/repair — it costs
@@ -173,6 +176,8 @@ export async function prepareJsx(body: Record<string, unknown>, sourceIn: string
   const normalized = typeof normalization === 'string' ? normalization : normalization.source;
   if (typeof normalization !== 'string') repairs.push(...normalization.repairs);
   const sanitized = canonicalizeMarkup(remapMarkupStyleViewportUnits(transformOutsideManagedIframes(normalized, sanitizeStoryMarkupCss)));
+  if(sanitized.includes('\0'))return json({error:'invalid_source_encoding',details:['Document source cannot contain a NUL character.']},400);
+  if(!sanitized.isWellFormed())return prepareJsx(body,Buffer.from(sanitized,'utf8').toString('utf8'),ctx);
   if (Buffer.byteLength(sanitized, 'utf8') > MAX_CONTENT_BYTES) return json({ error: 'too_large', maxBytes: MAX_CONTENT_BYTES }, 413);
 
   // The reference graph: every ref:<id> resolves to one of the

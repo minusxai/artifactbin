@@ -252,6 +252,16 @@ const editArtifactOp: Operation = {
   description: 'Edit markup using source (a complete proposed JSX body), one old_string/new_string pair OR an edits list of 1–64 pairs; exactly one input form. Each old_string must match EXACTLY ONCE against the evolving in-memory source. Only the final document is validated and committed: one version or nothing; failures identify zero-based edit_index. Use the edit_id from your last create/get/edit response. Preserve persistent ids when moving nodes; include the nearest id-bearing context to distinguish repeated text. Unrelated concurrent edits rebase; conflicting regions return doc_changed with the current edit_id and source. Prefer this targeted operation over update_artifact, which replaces the whole document.',
   input: {
     id: z.string(), edit_id: z.string(),
+    operations:z.array(z.discriminatedUnion('kind',[
+      z.object({kind:z.literal('setText'),path:z.array(z.number().int().nonnegative()).min(1).max(128),value:z.string()}),
+      z.object({kind:z.literal('setAttribute'),path:z.array(z.number().int().nonnegative()).min(1).max(128),name:z.string(),value:z.json()}),
+      z.object({kind:z.literal('removeAttribute'),path:z.array(z.number().int().nonnegative()).min(1).max(128),name:z.string()}),
+      z.object({kind:z.literal('insert'),parent:z.array(z.number().int().nonnegative()).max(128),index:z.number().int().nonnegative(),source:z.string()}),
+      z.object({kind:z.literal('delete'),path:z.array(z.number().int().nonnegative()).min(1).max(128)}),
+      z.object({kind:z.literal('replace'),path:z.array(z.number().int().nonnegative()).min(1).max(128),source:z.string()}),
+      z.object({kind:z.literal('move'),path:z.array(z.number().int().nonnegative()).min(1).max(128),parent:z.array(z.number().int().nonnegative()).max(128),index:z.number().int().nonnegative()}),
+      z.object({kind:z.literal('replaceDocument'),source:z.string()}),
+    ])).min(1).max(64).optional().describe('Ordered JSONB document operations against the edit_id snapshot. Paths contain child indexes; [] is the root parent. Move indexes refer to the destination after removal. The final composite is validated and committed atomically.'),
     text: z.object({path:z.array(z.string()).max(128),oldText:z.string(),newText:z.string()}).strict().optional().describe('A text-leaf operation against the static JSX AST from your last read; mutually exclusive with the source and string-edit forms. The server certifies eligibility and validates the operation.'),
     source: z.string().optional().describe("The complete proposed JSX body; use instead of old_string/new_string or edits. The edit_id identifies its base for conservative rebase."),
     old_string: z.string().optional(), new_string: z.string().optional(),
