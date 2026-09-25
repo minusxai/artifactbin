@@ -50,7 +50,7 @@ const BUTTON = 'inline-flex cursor-pointer items-center gap-1.5 whitespace-nowra
 const SOLID = `${BUTTON} border-fg bg-fg text-bg hover:opacity-90`;
 const OUTLINED = `${BUTTON} border-edge-bright bg-transparent hover:border-accent hover:text-accent`;
 
-export default function AvatarCircle({ image, initial, userId, onChange, onRemove }: {
+export default function AvatarCircle({ image: given, initial, userId, onChange, onRemove }: {
   /** The picture's address, or null for the empty uploader. */
   image: string | null;
   /** The name whose initial `Avatar` keeps beneath a picture, in case its address fails. */
@@ -68,32 +68,51 @@ export default function AvatarCircle({ image, initial, userId, onChange, onRemov
   onRemove?: () => void;
 }) {
   const picker = useRef<HTMLInputElement>(null);
+  /*
+   * THE SERVER'S LAST ANSWER, and the `image` it arrived over. A page that
+   * re-fetches instead of handing the address straight back (the account page)
+   * still passes the OLD image until its data lands; showing that would flash
+   * "Upload a photo" right after an upload. The answer stands only while the
+   * page's prop is unchanged — the moment the page says anything new, it wins.
+   */
+  const [answer, setAnswer] = useState<{ image: string | null; over: string | null } | null>(null);
+  // Dropped (during render, React's derive-from-props pattern) as soon as the prop moves.
+  if (answer && answer.over !== given) setAnswer(null);
+  const image = answer && answer.over === given ? answer.image : given;
   // WHICH request is in flight, not a flag: only an upload is "Uploading…".
   const [pending, setPending] = useState<'upload' | 'remove' | null>(null);
   const [status, setStatus] = useState<string | null>(null);
   const busy = pending !== null;
   const uploading = pending === 'upload';
 
-  const send = async (action: 'upload' | 'remove', init: RequestInit): Promise<{ image?: string | null; error?: string } | null> => {
+  /**
+   * One request, and everything its answer changes IN ORDER: the answer is
+   * recorded and busy cleared together, BEFORE the page is told anything. The
+   * page-data events can re-render the page synchronously, and doing them first
+   * drew one frame of the old state ("Upload a photo") right after an upload.
+   */
+  const send = async (action: 'upload' | 'remove', init: RequestInit): Promise<{ image: string | null } | null> => {
     setPending(action);
     setStatus(null);
     const res = await fetch('/api/my/profile/image', { credentials: 'same-origin', ...init }).catch(() => null);
+    const body = res ? ((await res.json().catch(() => ({}))) as { image?: string | null; error?: string }) : null;
+    if (!res || !body) { setPending(null); setStatus('could not reach the server'); return null; }
+    if (!res.ok) { setPending(null); setStatus(REFUSALS[body.error ?? ''] ?? 'could not save that picture'); return null; }
+    const image = action === 'upload' ? body.image ?? null : null;
+    setAnswer({ image, over: given });
     setPending(null);
-    if (!res) { setStatus('could not reach the server'); return null; }
-    const body = (await res.json().catch(() => ({}))) as { image?: string | null; error?: string };
-    if (!res.ok) { setStatus(REFUSALS[body.error ?? ''] ?? 'could not save that picture'); return null; }
     // Anything that draws this person elsewhere is now stale — the app bar's
     // face included, which is the session's to re-read.
     pageDataChanged();
     profileChanged();
-    return body;
+    return { image };
   };
 
   const upload = async (file: File) => {
     // The FILE's type, not a guess: the server sniffs the bytes anyway, and a
     // header it can read is one less thing for it to refuse.
     const body = await send('upload', { method: 'PUT', headers: { 'Content-Type': file.type || 'application/octet-stream' }, body: file });
-    if (body) onChange(body.image ?? null);
+    if (body) onChange(body.image);
   };
 
   const remove = async () => {

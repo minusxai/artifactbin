@@ -142,3 +142,34 @@ describe('<AvatarCircle> with a picture', () => {
     expect(screen.queryByRole('button', { name: 'Remove photo' })).toBeNull();
   });
 });
+
+/**
+ * The ACCOUNT page does not hand the new address straight back: it re-fetches
+ * its data, and until that lands its `image` prop is still the old one. The
+ * uploader must show what the server just answered in that gap, or a person who
+ * uploaded a picture sees "Upload a photo" flash as if nothing happened.
+ */
+describe('<AvatarCircle> while the page is still catching up', () => {
+  it('shows the uploaded picture before the page passes it back, then follows the page', async () => {
+    // A Response whose body is read a macrotask later, as a real network's is.
+    vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, status: 200, json: () => new Promise((r) => setTimeout(() => r({ image: IMAGE }), 20)) })));
+    const { container, rerender } = render(<AvatarCircle image={null} initial="ada" userId="usr_ada" onChange={() => {}} />);
+    // Every label the button shows, in order: an upload never goes back through "Upload a photo".
+    const labels: string[] = [];
+    const record = () => { const l = container.querySelector('button')?.textContent ?? ''; if (labels.at(-1) !== l) labels.push(l); };
+    record();
+    const observer = new MutationObserver(record);
+    observer.observe(container, { subtree: true, childList: true, characterData: true });
+    choose(container);
+    await screen.findByRole('button', { name: 'Change photo' });
+    observer.disconnect();
+    expect(labels).toEqual(['Upload a photo', 'Uploading…', 'Change photo']);
+    expect(screen.queryByRole('button', { name: 'Upload a photo' })).toBeNull();
+    // The page's own answer is the truth once it arrives, whatever it says.
+    rerender(<AvatarCircle image={null} initial="ada" userId="usr_ada" onChange={() => {}} />);
+    expect(screen.getByRole('button', { name: 'Change photo' })).toBeInTheDocument();
+    rerender(<AvatarCircle image="/api/users/usr_ada/avatar?v=next" initial="ada" userId="usr_ada" onChange={() => {}} />);
+    rerender(<AvatarCircle image={null} initial="ada" userId="usr_ada" onChange={() => {}} />);
+    expect(screen.getByRole('button', { name: 'Upload a photo' })).toBeInTheDocument();
+  });
+});
