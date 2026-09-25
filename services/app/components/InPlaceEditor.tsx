@@ -224,7 +224,8 @@ export default function InPlaceEditor({
    */
   const wide = useWideEditViewport();
   const [panelTab, setPanelTab] = useState<EditPanelTab>(commentsOpen && onCommentsOpenChange ? 'comments' : 'selection');
-  const [collapsed, setCollapsedState] = useState(readEditPanelCollapsed);
+  // Comments already open on entry are an explicit request to see them: never "open" behind a strip.
+  const [collapsed, setCollapsedState] = useState(() => !(commentsOpen && onCommentsOpenChange) && readEditPanelCollapsed());
   const setCollapsed = useCallback((next: boolean) => {
     setCollapsedState(next);
     writeEditPanelCollapsed(next);
@@ -697,8 +698,8 @@ export default function InPlaceEditor({
   const barH = formattingRow ? EDIT_BAR_H : EDIT_BAR_ROW_H;
   /*
    * THE ONE WIDTH the page is told about: the panel's, which nothing in the
-   * session changes but the collapse button (and a window crossing the
-   * breakpoint). Not the inspector, not the tab, not comments, not a preview
+   * session changes but collapse / expand (and a window crossing the
+   * breakpoint). Not a selection, not a tab on an open panel, not a preview
    * or the code view — each of those used to move the document sideways,
    * usually right under whatever the pointer was reaching for.
    */
@@ -719,20 +720,32 @@ export default function InPlaceEditor({
    * closing the rail from its own header hands the panel back to Selection.
    */
   const commentsTab = !!onCommentsOpenChange;
+  /*
+   * EXPLICIT REQUESTS EXPAND a collapsed panel — a tab icon, Edit chart, a
+   * double-click, comments opened from anywhere — and clear the saved choice:
+   * that is the person asking, so the one width change is theirs. A selection
+   * on its own never does. Comments therefore can never be open with nothing
+   * visible.
+   */
   useEffect(() => {
     if (!commentsTab) return;
     if (commentsOpen) {
       setPanelTab('comments');
       setSheet(null);
+      setCollapsedState((current) => {
+        if (current) writeEditPanelCollapsed(false);
+        return false;
+      });
     } else setPanelTab((current) => (current === 'comments' ? 'selection' : current));
   }, [commentsOpen, commentsTab]);
   const chooseTab = useCallback(
     (next: EditPanelTab) => {
+      if (collapsed) setCollapsed(false);
       setPanelTab(next);
       if (next === 'comments') onCommentsOpenChange?.(true);
       else if (commentsOpen) onCommentsOpenChange?.(false);
     },
-    [commentsOpen, onCommentsOpenChange],
+    [collapsed, setCollapsed, commentsOpen, onCommentsOpenChange],
   );
   /*
    * On any other tab a new selection does not take the panel over — the

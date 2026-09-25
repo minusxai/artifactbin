@@ -127,7 +127,7 @@ describe('the edit panel on a wide window', () => {
     expect(screen.queryByRole('tab', { name: 'Comments' })).toBeNull();
   });
 
-  it('collapses and expands ONLY from its button, and remembers the choice', async () => {
+  it('collapses from its button, remembers it, and a selection alone never expands it', async () => {
     const widths: number[] = [];
     const first = mount({ onRightInsetChange: (px) => widths.push(px) });
     fireEvent.click(screen.getByLabelText('Collapse panel'));
@@ -138,17 +138,76 @@ describe('the edit panel on a wide window', () => {
     mount({ onRightInsetChange: (px) => widths.push(px) });
     expect(screen.getByLabelText('Expand panel')).toBeTruthy();
     widths.length = 0;
-    // A selection, the Edit chart button and a tab icon all leave it collapsed.
     await fromFrame({ type: STORY_SELECTION_MESSAGE, selection: chart() });
-    fireEvent.click(screen.getByRole('button', { name: 'Edit chart' }));
-    fireEvent.click(tab('History'));
+    await fromFrame({ type: STORY_SELECTION_MESSAGE, selection: null });
+    await fromFrame({ type: STORY_SELECTION_MESSAGE, selection: chart() });
     expect(screen.getByLabelText('Expand panel')).toBeTruthy();
-    expect(screen.queryByLabelText('Chart inspector')).toBeNull();
-    expect(widths.filter((w) => w !== 44)).toEqual([]);
+    expect(widths).toEqual([]);
 
     fireEvent.click(screen.getByLabelText('Expand panel'));
     expect(widths.at(-1)).toBe(320);
     expect(window.localStorage.getItem('mx:edit-panel-collapsed')).toBeNull();
+  });
+
+  describe('explicit requests expand a collapsed panel and clear the saved choice', () => {
+    const collapsedMount = (over: Parameters<typeof mount>[0] = {}) => {
+      window.localStorage.setItem('mx:edit-panel-collapsed', '1');
+      const widths: number[] = [];
+      const view = mount({ onRightInsetChange: (px) => widths.push(px), ...over });
+      expect(screen.getByLabelText('Expand panel')).toBeTruthy();
+      return { view, widths };
+    };
+    const expandedOn = (name: string, widths: number[]) => {
+      expect(screen.queryByLabelText('Expand panel')).toBeNull();
+      expect(tab(name).getAttribute('aria-selected')).toBe('true');
+      expect(widths.at(-1)).toBe(320);
+      expect(window.localStorage.getItem('mx:edit-panel-collapsed')).toBeNull();
+    };
+
+    it('a strip tab icon', () => {
+      const { widths } = collapsedMount();
+      fireEvent.click(tab('History'));
+      expandedOn('History', widths);
+      expect(screen.getByLabelText('Version history')).toBeTruthy();
+    });
+
+    it('Edit chart', async () => {
+      const { widths } = collapsedMount();
+      await fromFrame({ type: STORY_SELECTION_MESSAGE, selection: chart() });
+      fireEvent.click(screen.getByRole('button', { name: 'Edit chart' }));
+      expandedOn('Selection', widths);
+      expect(screen.getByLabelText('Chart inspector')).toBeTruthy();
+    });
+
+    it('a double-click on the selected chart', async () => {
+      const page = document.createElement('div');
+      page.setAttribute('aria-label', 'Artifact viewport');
+      document.body.appendChild(page);
+      try {
+        const { widths } = collapsedMount();
+        await fromFrame({ type: STORY_SELECTION_MESSAGE, selection: chart() });
+        fireEvent.dblClick(page, { clientX: 50, clientY: 450 });
+        expandedOn('Selection', widths);
+      } finally {
+        page.remove();
+      }
+    });
+
+    it('comments opened from elsewhere — never open with nothing visible', () => {
+      const hosts: Array<HTMLElement | null> = [];
+      const props = { onCommentsOpenChange: vi.fn(), onCommentsHost: (el: HTMLElement | null) => hosts.push(el) };
+      const { view, widths } = collapsedMount(props);
+      view.rerender(editorElement({ ...props, onRightInsetChange: (px) => widths.push(px), commentsOpen: true }));
+      expandedOn('Comments', widths);
+      expect(hosts.at(-1)).toBeInstanceOf(HTMLElement);
+    });
+
+    it('comments already open when the session starts', () => {
+      window.localStorage.setItem('mx:edit-panel-collapsed', '1');
+      mount({ onCommentsOpenChange: vi.fn(), commentsOpen: true });
+      expect(screen.queryByLabelText('Expand panel')).toBeNull();
+      expect(tab('Comments').getAttribute('aria-selected')).toBe('true');
+    });
   });
 
   it('survives storage that throws', () => {

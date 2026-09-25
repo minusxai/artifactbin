@@ -672,7 +672,7 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
    * margin or its width is decided ONCE, as edit mode opens, by measuring the
    * document as the reader was looking at it. From then on nothing inside the
    * session moves the document — not a selection, a tab, comments, a preview.
-   * Only the collapse button changes the panel's width (editorRightInset), and
+   * Only collapse / expand changes the panel's width (editorRightInset), and
    * only a reserved panel passes that on. Comments already open at entry keep
    * their reserve: the document was laid out beside them, so it would measure
    * as fitting and then re-centre.

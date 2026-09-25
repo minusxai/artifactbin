@@ -8,8 +8,9 @@
  * Its width is decided when edit mode opens and nothing inside the session
  * changes it: selecting, deselecting, switching tabs and opening comments all
  * happen INSIDE a column that is already there, so the document never moves
- * under the pointer. Only the collapse button changes the width, because only
- * then did the person ask for it.
+ * under the pointer. Only collapsing or expanding changes the width: the
+ * collapse button, or an explicit request to see a tab while collapsed (the
+ * caller's call) — because only then did the person ask for it.
  *
  * The panel owns its frame — tabs, the dot, collapse — and nothing else. What
  * each tab shows is the caller's: the selection's inspector, the version list,
