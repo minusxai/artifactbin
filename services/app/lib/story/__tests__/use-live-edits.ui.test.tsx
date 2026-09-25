@@ -392,3 +392,14 @@ it('defers an accepted remote rebase until composition finishes, preserving both
  await act(async()=>{await vi.advanceTimersByTimeAsync(50);});
  expect(adopted).toContain(accepted.replace('one!','one!日本語'));
 });
+
+it('keeps a locally invalid draft without labelling it offline or retrying forever',async()=>{
+ const {hook}=setup({initialSource:'<p>Initial</p>'});
+ act(()=>hook.result.current.queue({source:'<p onClick="bad">Invalid</p>'}));
+ await act(async()=>{await vi.advanceTimersByTimeAsync(501);});
+ expect(hook.result.current.state.status).toMatch(/not saved/);
+ expect(fetchMock).not.toHaveBeenCalled();
+ await act(async()=>{await vi.advanceTimersByTimeAsync(2000);});
+ expect(fetchMock).not.toHaveBeenCalled();
+ expect(await hook.result.current.flushForNavigation(async()=>{})).toBe(false);
+});

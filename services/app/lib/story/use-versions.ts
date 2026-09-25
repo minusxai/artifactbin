@@ -8,13 +8,13 @@
  * each in its own scope (lib/agent-session) — there is no per-caller endpoint
  * choice.
  *
- * Read-only by nature except for `restore`, which is a plain POST to revert —
+ * Read-only by nature except for `restore`, which submits a prepared whole-document JSONB update —
  * and a revert creates a NEW version server-side, so restoring is itself
  * undoable and nothing is ever lost by trying one.
  */
 import { useCallback, useEffect, useState } from 'react';
 import type {DocumentGraph} from '@artifactbin/contracts';
-import {prepareClientDocumentUpdate} from './document-update-client';
+import {prepareBrowserDocumentUpdate} from './document-authoring-client';
 
 /** A row of history: what changed and when, without the content. */
 export interface ArtifactVersionSummary {
@@ -83,7 +83,7 @@ export function useArtifactVersions({ id, currentVersion }: {
       const observed=await fetch(base);if(!observed.ok)return null;
       const head=await observed.json() as {document:DocumentGraph;version:number;edit_id:string;title:string|null;description:string|null;theme:string|null;template:string|null;colorMode:'light'|'dark'|null};
       const target=await fetchVersion(version);if(!target?.markup||head.document?.kind!=='graph')return null;
-      const documentUpdate=prepareClientDocumentUpdate({...head,meta:head},{source:target.markup,whole:true,metadata:{title:target.title??null,description:target.description??null,theme:target.meta.theme??null,template:target.meta.template??null,colorMode:target.meta.colorMode??null}});
+      const documentUpdate=await prepareBrowserDocumentUpdate(id,{...head,meta:head},{source:target.markup,whole:true,metadata:{title:target.title??null,description:target.description??null,theme:target.meta.theme??null,template:target.meta.template??null,colorMode:target.meta.colorMode??null}});
       const res = await fetch(`${base}/edits`, {
         method:'POST',headers:{'Content-Type':'application/json'},
         body:JSON.stringify({edit_id:head.edit_id,document_update:documentUpdate}),

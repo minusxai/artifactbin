@@ -1,3 +1,5 @@
+import {createDocumentGraph,graphSource} from '@/lib/story/document-graph';
+import {applyGraphPatch} from '@/lib/story/document-graph-patch';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import SocialPreviewDialog from '../SocialPreviewDialog';
@@ -20,9 +22,28 @@ const response = (status: number, body: unknown) => ({
   json: async () => body,
 });
 
+/** Model the actual authoring transport, including the read snapshot and the
+ * JSONB commit, so geometry assertions inspect the resulting document. */
+function documentFetch(source:string,imageId='image1'){
+ const document=createDocumentGraph(source,1);let saved:string|undefined;
+ const mock=vi.fn(async(input:RequestInfo|URL,init?:RequestInit)=>{
+  const path=String(input);
+  if(path==='/api/my/artifacts')return response(201,{id:imageId});
+  if(path.endsWith('/prepare'))return response(200,{valid:true});
+  if(path.endsWith('/edits')){
+   const update=JSON.parse(String(init?.body)).document_update;
+   const next=applyGraphPatch(document,1,update.patch);expect(next).not.toBeNull();
+   saved=graphSource(next!).replace(/ id="[A-Za-z0-9]+"/g,'');
+   return response(200,{edit_id:'e2',version:2,document:next,markup:saved});
+  }
+  return response(200,{edit_id:'e1',version:1,state:'a'.repeat(64),format:'markup',document,markup:source});
+ });
+ return Object.assign(mock,{savedSource:()=>saved});
+}
+
 describe('social preview dialog', () => {
   it('loads the versioned, editor-only overview and resets by removing the directive', async () => {
-    const fetchMock = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => response(200, { edit_id: 'e2' }));
+    const fetchMock = documentFetch('<Helmet><meta name="artifactbin:og-crop" content="x=300;y=900;width=800" /></Helmet><p>x</p>','image1');
     vi.stubGlobal('fetch', fetchMock);
     const close = vi.fn();
     render(
@@ -47,13 +68,13 @@ describe('social preview dialog', () => {
     fireEvent.click(screen.getByLabelText('Reset social preview'));
     fireEvent.click(screen.getByText('save preview'));
     await waitFor(() => expect(close).toHaveBeenCalled());
-    const sent = JSON.parse(fetchMock.mock.calls[0][1]?.body as string);
+    const sent = JSON.parse(String(fetchMock.mock.calls.find(([url])=>String(url).endsWith('/edits'))![1]?.body));
     expect(sent.edit_id).toBe('e1');
-    expect(sent.source).toBe('<Helmet></Helmet><p>x</p>');
+    expect(fetchMock.savedSource()).toBe('<Helmet></Helmet><p>x</p>');
   });
 
   it('moves and resizes with the keyboard while preserving the locked-ratio model', async () => {
-    const fetchMock = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => response(200, { edit_id: 'e2' }));
+    const fetchMock = documentFetch("<p>x</p>",'image1');
     vi.stubGlobal('fetch', fetchMock);
     render(<SocialPreviewDialog id="story1" source="<p>x</p>" editId="e1" version={1} onClose={() => {}} />);
     loadOverview();
@@ -63,9 +84,8 @@ describe('social preview dialog', () => {
     fireEvent.keyDown(resize, { key: 'ArrowLeft' });
     expect(frame).toHaveAttribute('aria-valuetext', 'x 0, y 10, width 1580');
     fireEvent.click(screen.getByText('save preview'));
-    await waitFor(() => expect(fetchMock).toHaveBeenCalled());
-    const sent = JSON.parse(fetchMock.mock.calls[0][1]?.body as string);
-    expect(sent.source).toContain('content="x=0;y=10;width=1580"');
+    await waitFor(() => expect(fetchMock.savedSource()).toBeDefined());
+    expect(fetchMock.savedSource()).toContain('content="x=0;y=10;width=1580"');
   });
 
   it('keeps an inward resize stable, then focuses and sharpens it on release', () => {
@@ -117,7 +137,7 @@ describe('social preview dialog', () => {
 });
 
 it('uploads an asset before saving its Helmet reference and retains the crop', async () => {
-  const fetchMock = vi.fn(async (input: RequestInfo | URL) => response(input === '/api/my/artifacts' ? 201 : 200, { id: 'image1', edit_id: 'e2' }));
+  const fetchMock = documentFetch('<Helmet><meta name="artifactbin:og-crop" content="x=20;y=30;width=600" /></Helmet><p>x</p>','image1');
   vi.stubGlobal('fetch', fetchMock);
   const close = vi.fn();
   const source = '<Helmet><meta name="artifactbin:og-crop" content="x=20;y=30;width=600" /></Helmet><p>x</p>';
@@ -132,21 +152,20 @@ it('uploads an asset before saving its Helmet reference and retains the crop', a
   expect(close).not.toHaveBeenCalled();
   fireEvent.click(screen.getByText('save preview'));
   await waitFor(() => expect(close).toHaveBeenCalled());
-  const options = (fetchMock.mock.calls[1] as unknown as [string, RequestInit])[1];
-  expect(JSON.parse(options.body as string).source).toContain('name="artifactbin:og-image" content="ref:image1"');
-  expect(JSON.parse(options.body as string).source).toContain('x=20;y=30;width=600');
+  expect(fetchMock.savedSource()).toContain('name="artifactbin:og-image" content="ref:image1"');
+  expect(fetchMock.savedSource()).toContain('x=20;y=30;width=600');
 });
 
 it('removing an uploaded image restores the existing crop', async () => {
-  const fetchMock = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => response(200, {}));
+  const fetchMock = documentFetch('<Helmet><meta name="artifactbin:og-crop" content="x=20;y=30;width=600" /><meta name="artifactbin:og-image" content="ref:image1" /></Helmet><p>x</p>','image1');
   vi.stubGlobal('fetch', fetchMock);
   const source = '<Helmet><meta name="artifactbin:og-crop" content="x=20;y=30;width=600" /><meta name="artifactbin:og-image" content="ref:image1" /></Helmet><p>x</p>';
   render(<SocialPreviewDialog id="story1" source={source} editId="e1" version={1} onClose={() => {}} />);
   fireEvent.click(screen.getByText('use document framing'));
   loadOverview();
   fireEvent.click(screen.getByText('save preview'));
-  await waitFor(() => expect(fetchMock).toHaveBeenCalled());
-  const saved = JSON.parse(fetchMock.mock.calls[0][1]?.body as string).source;
+  await waitFor(() => expect(fetchMock.savedSource()).toBeDefined());
+  const saved = fetchMock.savedSource();
   expect(saved).not.toContain('og-image');
   expect(saved).toContain('x=20;y=30;width=600');
 });
@@ -161,7 +180,7 @@ it('keeps the current choice and allows retry after upload failure', async () =>
 });
 
 it('pans and resizes an uploaded image, saving independent bounds and reopening them', async () => {
-  const fetchMock = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => response(200, {}));
+  const fetchMock = documentFetch('<Helmet><meta name="artifactbin:og-image" content="ref:image1" /><meta name="artifactbin:og-crop" content="x=0;y=900;width=800" /><meta name="artifactbin:og-image-crop" content="x=400;y=200;width=800" /></Helmet><p>x</p>','image1');
   vi.stubGlobal('fetch', fetchMock);
   const source = '<Helmet><meta name="artifactbin:og-image" content="ref:image1" /><meta name="artifactbin:og-crop" content="x=0;y=900;width=800" /><meta name="artifactbin:og-image-crop" content="x=400;y=200;width=800" /></Helmet><p>x</p>';
   render(<SocialPreviewDialog id="story1" source={source} editId="e1" version={1} onClose={() => {}} />);
@@ -177,14 +196,14 @@ it('pans and resizes an uploaded image, saving independent bounds and reopening 
   expect(frame).toHaveAttribute('aria-valuetext', 'x 400, y 210, width 780');
   expect(document.querySelector('img[src*="focus=1"]')).toBeNull();
   fireEvent.click(screen.getByText('save preview'));
-  await waitFor(() => expect(fetchMock).toHaveBeenCalled());
-  const saved = JSON.parse(fetchMock.mock.calls[0][1]?.body as string).source;
+  await waitFor(() => expect(fetchMock.savedSource()).toBeDefined());
+  const saved = fetchMock.savedSource();
   expect(saved).toContain('name="artifactbin:og-image-crop" content="x=400;y=210;width=780"');
   expect(saved).toContain('name="artifactbin:og-crop" content="x=0;y=900;width=800"');
 });
 
 it('resets an image to its centered crop without clearing document framing', async () => {
-  const fetchMock = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => response(200, {}));
+  const fetchMock = documentFetch('<Helmet><meta name="artifactbin:og-image" content="ref:image1" /><meta name="artifactbin:og-image-crop" content="x=400;y=200;width=800" /><meta name="artifactbin:og-crop" content="x=0;y=900;width=800" /></Helmet><p>x</p>','image1');
   vi.stubGlobal('fetch', fetchMock);
   render(<SocialPreviewDialog id="story1" source='<Helmet><meta name="artifactbin:og-image" content="ref:image1" /><meta name="artifactbin:og-image-crop" content="x=400;y=200;width=800" /><meta name="artifactbin:og-crop" content="x=0;y=900;width=800" /></Helmet><p>x</p>' editId="e1" version={1} onClose={() => {}} />);
   const image = screen.getByAltText('Uploaded social preview');
@@ -194,14 +213,14 @@ it('resets an image to its centered crop without clearing document framing', asy
   fireEvent.click(screen.getByLabelText('Reset social preview'));
   expect(screen.getByLabelText('Move social preview crop')).toHaveAttribute('aria-valuetext', 'x 0, y 180, width 1600');
   fireEvent.click(screen.getByText('save preview'));
-  await waitFor(() => expect(fetchMock).toHaveBeenCalled());
-  const saved = JSON.parse(fetchMock.mock.calls[0][1]?.body as string).source;
+  await waitFor(() => expect(fetchMock.savedSource()).toBeDefined());
+  const saved = fetchMock.savedSource();
   expect(saved).not.toContain('og-image-crop');
   expect(saved).toContain('og-crop');
 });
 
 it('starts a replacement image with fresh centered framing', async () => {
-  const fetchMock = vi.fn(async (input: RequestInfo | URL, _init?: RequestInit) => response(200, input === '/api/my/artifacts' ? { id: 'image2' } : {}));
+  const fetchMock = documentFetch('<Helmet><meta name="artifactbin:og-image" content="ref:image1" /><meta name="artifactbin:og-image-crop" content="x=400;y=200;width=800" /></Helmet><p>x</p>','image2');
   vi.stubGlobal('fetch', fetchMock);
   render(<SocialPreviewDialog id="story1" source='<Helmet><meta name="artifactbin:og-image" content="ref:image1" /><meta name="artifactbin:og-image-crop" content="x=400;y=200;width=800" /></Helmet><p>x</p>' editId="e1" version={1} onClose={() => {}} />);
   fireEvent.change(screen.getByLabelText('Upload social preview image'), { target: { files: [new File(['x'], 'replacement.png', { type: 'image/png' })] } });
@@ -212,8 +231,8 @@ it('starts a replacement image with fresh centered framing', async () => {
   fireEvent.load(image);
   expect(screen.getByLabelText('Move social preview crop')).toHaveAttribute('aria-valuetext', 'x 700, y 0, width 200');
   fireEvent.click(screen.getByText('save preview'));
-  await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
-  const saved = JSON.parse(fetchMock.mock.calls[1][1]?.body as string).source;
+  await waitFor(() => expect(fetchMock.savedSource()).toBeDefined());
+  const saved = fetchMock.savedSource();
   expect(saved).toContain('content="ref:image2"');
   expect(saved).toContain('content="x=700;y=0;width=200"');
 });

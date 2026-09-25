@@ -1,4 +1,6 @@
-import {documentBeforeOperation,type DocumentOperationHistory} from '@/lib/story/document-update-history';
+import {createUser} from '@/lib/users';
+import {prepareDocumentAuthoringContext} from '@/lib/story/document-authoring-context';
+import {documentAfterOperation,documentBeforeOperation,type DocumentOperationHistory} from '@/lib/story/document-update-history';
 import {expect,it,vi} from 'vitest';
 import {useAppHarness,request} from './harness';
 import {getDb} from '@/lib/db';
@@ -71,4 +73,89 @@ it('recovers a damaged head by validated whole JSONB replacement without reading
  expect(spy.mock.calls).toHaveLength(1);spy.mockRestore();expect(result?.applied).toBe(true);
  if(!result?.applied||result.row.document?.kind!=='graph')throw new Error('Missing restored graph');
  expect(graphIntegrity(result.row.document)).toEqual([]);expect(result.row.source).toBe(row.source);
+});
+
+it('dry-run shares commit guards and never changes document or history',async()=>{
+ const {db,actor,id,base}=await setup();
+ const update=prepareClientDocumentUpdate(base,{source:'<p id="new">Replacement</p>',whole:true,metadata:{title:'Changed'}});
+ const before=await db.query('SELECT version,edit_id,document FROM artifacts WHERE id=$1',[id]);
+ const spy=vi.spyOn(db,'query');
+ const result=await commitDocumentUpdate(db,actor,editorScope(actor),id,update,{dryRun:true});
+ expect(result?.applied).toBe(true);expect(spy.mock.calls).toHaveLength(1);spy.mockRestore();
+ expect((await db.query('SELECT version,edit_id,document FROM artifacts WHERE id=$1',[id])).rows).toEqual(before.rows);
+ const invalid={...update,expectedMetadata:{title:'A title that was never observed'}};
+ expect((await commitDocumentUpdate(db,actor,editorScope(actor),id,invalid,{dryRun:true}))?.applied).toBe(false);
+ expect((await commitDocumentUpdate(db,actor,editorScope(actor),id,{...update,settings:{visibility:'private'}},{dryRun:true}))?.applied).toBe(false);
+});
+
+it('replays a whole replacement exactly and preserves lifetime ids on restore',async()=>{
+ const {db,actor,id,base}=await setup();
+ const update=prepareClientDocumentReplacement('<p id="new">Whole</p>',base.version);
+ const committed=await commitDocumentUpdate(db,actor,editorScope(actor),id,update);
+ if(!committed?.applied||committed.row.document?.kind!=='graph')throw new Error('Commit failed');
+ const history=(await db.query<{document_state:DocumentOperationHistory}>('SELECT document_state FROM artifact_edits WHERE artifact_id=$1 ORDER BY seq DESC LIMIT 1',[id])).rows[0]!.document_state;
+ expect(documentAfterOperation(base.document,history)).toEqual(committed.row.document);
+ expect(documentBeforeOperation(committed.row.document,history)).toEqual(base.document);
+ expect(committed.row.document.claimedIds).toHaveProperty('a');
+});
+
+it('resolves authoring inputs without loading or mutating the target document',async()=>{
+ const {db,actor,id}=await setup();
+ const previous=(await db.query('SELECT document,version FROM artifacts WHERE id=$1',[id])).rows;
+ const spy=vi.spyOn(db,'query');
+ const invalid=await prepareDocumentAuthoringContext(actor,id,{source:'<Icon name="not-a-real-icon-xyz" />',dryRun:true});
+ expect(invalid.status).toBe(400);
+ expect(spy.mock.calls.filter(([sql])=>/FROM artifacts WHERE id=/.test(String(sql))).every(([sql])=>String(sql).startsWith('SELECT token_id,user_id'))).toBe(true);
+ spy.mockRestore();
+ expect((await db.query('SELECT document,version FROM artifacts WHERE id=$1',[id])).rows).toEqual(previous);
+ expect((await prepareDocumentAuthoringContext({tokenId:'stranger',userId:null},id,{source:'<Icon name="calendar" />'})).status).toBe(404);
+ expect((await prepareDocumentAuthoringContext(actor,id,{source:'<Icon name="calendar" />',dryRun:true})).status).toBe(200);
+});
+
+it('binds an unresolved editor grant during the same commit and preserves it after an email change',async()=>{
+ const {db,id,base}=await setup();
+ const editor=await createUser({email:'mxmx_test_editor@example.com'});
+ await db.query("INSERT INTO artifact_shares(artifact_id,email,role) VALUES($1,$2,'editor')",[id,editor.email]);
+ const actor={userId:editor.id,tokenId:'unused'};
+ const update=prepareClientDocumentUpdate(base,{source:'<main id="root"><p id="a">From editor</p><p id="b">Beta</p></main>'});
+ const spy=vi.spyOn(db,'query');const result=await commitDocumentUpdate(db,actor,editorScope(actor),id,update);expect(result?.applied).toBe(true);expect(spy.mock.calls).toHaveLength(1);spy.mockRestore();
+ expect((await db.query('SELECT user_id FROM artifact_shares WHERE artifact_id=$1',[id])).rows[0]!.user_id).toBe(editor.id);
+ await db.query('UPDATE users SET email=$2 WHERE id=$1',[editor.id,'mxmx_test_renamed@example.com']);
+ if(!result?.applied||result.row.document?.kind!=='graph')throw new Error('Missing committed graph');
+ expect((await commitDocumentUpdate(db,actor,editorScope(actor),id,prepareClientDocumentUpdate({...result.row,document:result.row.document},{metadata:{title:'Still editor'}})))?.applied).toBe(true);
+});
+
+it('commits saved mentions with the document and refuses ineligible recipients without partial writes',async()=>{
+ const {db,id,base,actor:tokenActor}=await setup();
+ const owner=await createUser({email:'mxmx_test_mention_owner@example.com'}),recipient=await createUser({email:'mxmx_test_mention_target@example.com'});
+ await db.query('UPDATE artifacts SET user_id=$2 WHERE id=$1',[id,owner.id]);
+ await db.query('UPDATE users SET auto_accept_mentions=false WHERE id=$1',[recipient.id]);
+ await db.query("INSERT INTO relations(subject_kind,subject_id,verb,object_kind,object_id,status) VALUES('user',$1,'follow','user',$2,'accepted')",[recipient.id,owner.id]);
+ const actor={...tokenActor,userId:owner.id};
+ const update=prepareClientDocumentUpdate(base,{source:`<main id="root"><p id="a">Alpha</p><p id="b"><a id="mention" href="/people/${recipient.id}">@target</a></p></main>`});
+ const spy=vi.spyOn(db,'query');const result=await commitDocumentUpdate(db,actor,editorScope(actor),id,update);expect(result?.applied).toBe(true);expect(spy.mock.calls).toHaveLength(1);spy.mockRestore();
+ expect((await db.query("SELECT status FROM relations WHERE subject_id=$1 AND verb='join' AND object_id=$2",[recipient.id,id])).rows).toEqual([{status:'pending'}]);
+ expect((await db.query('SELECT kind,source FROM member_notifications WHERE artifact_id=$1',[id])).rows).toEqual([{kind:'invitation',source:'node:mention'}]);
+ const stranger=await createUser({email:'mxmx_test_mention_stranger@example.com'});
+ if(!result?.applied||result.row.document?.kind!=='graph')throw new Error('Missing mention graph');
+ const bad=prepareClientDocumentUpdate({...result.row,document:result.row.document},{source:result.row.source!.replace(recipient.id,stranger.id)});
+ expect((await commitDocumentUpdate(db,actor,editorScope(actor),id,bad))?.applied).toBe(false);
+ expect((await getArtifactById(id))?.version).toBe(result.row.version);
+});
+
+it('binds newly attached dataset scopes and archives them in the document commit, rejecting stale preparation',async()=>{
+ const {db,actor,id,base}=await setup();
+ const dataset=await db.query<{id:string}>(`INSERT INTO artifacts(id,token_id,title,format,content,source,meta) VALUES('ScpDat',$1,'Tasks','dataset','','<Dataset kind="stored"><Table schema="public" name="rows" columns={[{"name":"assignee","type":"user","constraints":{"memberOf":["current"]}}]} /></Dataset>',$2) RETURNING id`,[actor.tokenId,JSON.stringify({catalog:{kind:'stored',defaultSchema:'public',tables:[{schema:'public',name:'rows',columns:[{name:'assignee',type:'user',constraints:{memberOf:['current']}}]}]},columns:[{name:'assignee',type:'user',constraints:{memberOf:['current']}}]})]);
+ const source=`<main id="root"><p id="a">Alpha</p><p id="b">Beta</p><Helmet><Query name="tasks" source="ref:${dataset.rows[0]!.id}">{\`select * from public.rows\`}</Query></Helmet><DataTable data="$tasks" /></main>`;
+ const prepared=await prepareDocumentAuthoringContext(actor,id,{source,dryRun:true});expect(prepared.status,await prepared.clone().text()).toBe(200);
+ const {datasetBindings}=await prepared.json();expect(datasetBindings).toHaveLength(1);
+ const update={...prepareClientDocumentUpdate(base,{source}),datasetBindings};
+ await db.query("UPDATE artifacts SET version=version+1 WHERE id='ScpDat'");
+ expect((await commitDocumentUpdate(db,actor,editorScope(actor),id,update))?.applied).toBe(false);
+ expect((await getArtifactById(id))!.version).toBe(1);
+ update.datasetBindings[0].version++;
+ const spy=vi.spyOn(db,'query');expect((await commitDocumentUpdate(db,actor,editorScope(actor),id,update))?.applied).toBe(true);expect(spy.mock.calls).toHaveLength(1);spy.mockRestore();
+ const bound=(await getArtifactById('ScpDat'))!;expect(bound.meta.userScopeDocument).toBe(id);expect(bound.source).toContain(`ref:${id}`);expect(bound.source).not.toContain('current');
+ expect((await db.query("SELECT count(*)::int AS n FROM artifact_versions WHERE artifact_id='ScpDat'")).rows[0]).toEqual({n:1});
+ expect((await db.query("SELECT count(*)::int AS n FROM artifact_edits WHERE artifact_id='ScpDat'")).rows[0]).toEqual({n:1});
 });

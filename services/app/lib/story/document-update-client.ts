@@ -1,11 +1,14 @@
+import {isPersonMentionHref} from '../person-mentions';
 import {STORY_THEME_NAMES,STORY_TEMPLATE_NAMES} from '../validation/atlas-schemas';
+import {parseJsx} from '../jsx/parse';
+import {collectExternalAssetUrls} from './external-images';
 import {canonicalText} from './annotation-range';
 import type {JsxNode} from '../jsx/types';
 import {parseAnnotationOperations} from './annotation-edits';
 /** Trusted authoring boundary shared by browser and CLI. Pure and browser-safe:
  * validation/normalization happens before submission, not under a database lock.
  * The server independently retains authorization and atomic dependency checks. */
-import {MAX_DOCUMENT_BYTES,type DocumentGraph,type DocumentOperation,type DocumentUpdate} from '@artifactbin/contracts';
+import {MAX_DOCUMENT_BYTES,type DocumentResourcePreparation,type DocumentGraph,type DocumentOperation,type DocumentUpdate} from '@artifactbin/contracts';
 import {createDocumentGraph,graphNodes,graphSource,graphReferences} from './document-graph';
 import {graphFromSource} from './document-graph-source';
 import {prepareGraphPatch} from './document-graph-patch';
@@ -20,7 +23,7 @@ import {remapMarkupStyleViewportUnits,transformOutsideManagedIframes} from './ma
 import {extractClassCandidates,hasDesignSystemMarker} from '../data/story/story-css';
 export interface ClientDocumentSnapshot {document:DocumentGraph;version:number;meta:Record<string,unknown>;title?:string|null;description?:string|null}
 export interface ClientDocumentChange {source?:string;operations?:readonly DocumentOperation[];metadata?:DocumentUpdate['metadata'];whole?:boolean;annotationOps?:DocumentUpdate['annotationOps']}
-export function prepareClientDocumentUpdate(base:ClientDocumentSnapshot,change:ClientDocumentChange):DocumentUpdate {
+function prepareDocument(base:ClientDocumentSnapshot,change:ClientDocumentChange):{update:DocumentUpdate;context?:string} {
  const before=graphSource(base.document);
  let source=change.operations?graphSource(createDocumentGraph(applyOperationsToNodes(graphNodes(base.document),change.operations),base.version)):change.source??before;
  source=repairJsxSource(source)?.source??source;
@@ -46,10 +49,41 @@ export function prepareClientDocumentUpdate(base:ClientDocumentSnapshot,change:C
   const from=oldIds.get(map.fromId),to=newIds.get(map.toId);
   return from&&to&&!newIds.has(map.fromId)&&canonicalText(text(from.node.children))===map.fromText&&canonicalText(text(to.node.children))===map.toText;
  }).map(map=>({...map,segments:map.segments.filter(s=>map.fromText.slice(s.from,s.from+s.length)===map.toText.slice(s.to,s.to+s.length))}))});
+ const mentions=[...newIds].flatMap(([nodeId,{node}])=>{
+  const href=node.attributes.find(a=>a.name==='href')?.value;
+  if(node.tag!=='a'||!href?.static||typeof href.json!=='string'||!isPersonMentionHref(href.json))return [];
+  const old=oldIds.get(nodeId)?.node.attributes.find(a=>a.name==='href')?.value;
+  return old?.static&&old.json===href.json?[]:[{nodeId,userId:href.json.slice('/people/'.length)}];
+ });
  const css=JSON.stringify(extractClassCandidates(before))!==JSON.stringify(extractClassCandidates(identity.source))||hasDesignSystemMarker(before)!==hasDesignSystemMarker(identity.source)||['theme','template','colorMode'].some(key=>Object.hasOwn(metadata,key)&&metadata[key as keyof typeof metadata]!==base.meta[key]);
- return {schema:1,...(annotationOps.length?{annotationOps}:{}),...(identity.aliases.length?{aliases:identity.aliases}:{}),patch:prepareGraphPatch(base.document,candidate,base.version,{whole,reads:scope.reads,selectors:scope.selectors}),
+ const update:DocumentUpdate={schema:1,...(mentions.length?{mentions}:{}),...(annotationOps.length?{annotationOps}:{}),...(identity.aliases.length?{aliases:identity.aliases}:{}),patch:prepareGraphPatch(base.document,candidate,base.version,{whole,reads:scope.reads,selectors:scope.selectors}),
   effects:{css,references:JSON.stringify(graphReferences(base.document))!==JSON.stringify(graphReferences(candidate))},
   ...(Object.keys(metadata).length?{metadata,expectedMetadata:Object.fromEntries(Object.keys(metadata).map(key=>[key,(key==='title'?base.title:key==='description'?base.description:base.meta[key])??null]))}:{}),...(whole?{whole:true,replacement:candidate}:{})};
+ return {update,...(needsAuthoringContext(scope.source)?{context:scope.source}:{})};
+}
+/** Pure local compiler; tests and offline preparation can use it without IO. */
+export function prepareClientDocumentUpdate(base:ClientDocumentSnapshot,change:ClientDocumentChange):DocumentUpdate {
+ return prepareDocument(base,change).update;
+}
+/** External reference shapes and cached assets are authoring inputs. Resolve
+ * only the affected context before submitting the independent atomic commit. */
+export async function prepareClientDocumentPublication(base:ClientDocumentSnapshot,change:ClientDocumentChange,prepareContext:(source:string)=>Promise<DocumentResourcePreparation|void>):Promise<DocumentUpdate> {
+ const prepared=prepareDocument(base,change);
+ if(prepared.context)Object.assign(prepared.update,await prepareContext(prepared.context));
+ return prepared.update;
+}
+function needsAuthoringContext(source:string):boolean {
+ const assets=collectExternalAssetUrls(source);
+ if(assets.images.length||assets.fonts.length||assets.pdfs.length)return true;
+ const parsed=parseJsx(source);if(!parsed.ok)return false;
+ const needs=(nodes:JsxNode[]):boolean=>nodes.some(node=>{
+  if(node.type!=='element'||node.tag==='Iframe')return false;
+  if(['Icon','Query','Mutation','Question'].includes(node.tag))return true;
+  if(node.tag==='meta'&&node.attributes.some(a=>a.name==='name'&&a.value.static&&String(a.value.json).startsWith('font-')))return true;
+  if(node.attributes.some(a=>a.value.static&&typeof a.value.json==='string'&&a.value.json.startsWith('ref:')))return true;
+  return needs(node.children);
+ });
+ return needs(parsed.nodes);
 }
 
 /** Recovery does not require the old AST to be readable. The version is the

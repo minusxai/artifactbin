@@ -47,10 +47,10 @@ describe('cli-sync-integration', () => {
     await cli.invoke(['push']);expect(routesCalled(calls).at(-1)).toBe(`POST /api/artifacts/${first.metadata.id}/edits`);expect(calls).toHaveLength(2);
     const updated=parseDocument(await readFile(join(root,'doc.jsx'),'utf8'));expect(updated.metadata.head_version).toBe(2);
     updated.metadata.title='Changed title';await writeFile(join(root,'doc.jsx'),writeDocument(updated));
-    await cli.invoke(['push']);expect(routesCalled(calls).at(-1)).toBe(`PATCH /api/artifacts/${first.metadata.id}`);expect(routesCalled(calls).slice(-2)).toEqual([`GET /api/artifacts/${first.metadata.id}`,`PATCH /api/artifacts/${first.metadata.id}`]);expect(calls).toHaveLength(4);
-    const renamed=parseDocument(await readFile(join(root,'doc.jsx'),'utf8'));expect(renamed.metadata.title).toBe('Changed title');expect(renamed.metadata.head_version).toBe(2);
+    await cli.invoke(['push']);expect(routesCalled(calls).at(-1)).toBe(`POST /api/artifacts/${first.metadata.id}/edits`);expect(calls).toHaveLength(3);
+    const renamed=parseDocument(await readFile(join(root,'doc.jsx'),'utf8'));expect(renamed.metadata.title).toBe('Changed title');expect(renamed.metadata.head_version).toBe(3);
     await cli.invoke(['pull']);expect(routesCalled(calls).at(-1)).toBe(`GET /api/artifacts/${first.metadata.id}`);
-    await cli.invoke(['push']);expect(calls).toHaveLength(5);
+    await cli.invoke(['push']);expect(calls).toHaveLength(4);
    }finally{await cli.cleanup();}
   });
   it('reports source rewrites and duplicate node repairs, but not metadata-only changes',async()=>{
@@ -89,7 +89,7 @@ describe('cli-sync-integration', () => {
     expect(parseDocument(await readFile(join(root,'doc.jsx'),'utf8')).body).toContain(`source="ref:${oldAsset}"`);
     const old=await read(new Request(`http://localhost:3000/api/artifacts/${oldAsset}`,{headers:{Authorization:`Bearer ${token.token}`}}),{params:Promise.resolve({id:oldAsset})});expect((await old.json()).version).toBe(2);
     const titled=parseDocument(await readFile(join(root,'doc.jsx'),'utf8'));titled.metadata.title='Sales';await writeFile(join(root,'doc.jsx'),writeDocument(titled));
-    calls.length=0;await cli.invoke(['push','doc.jsx']);expect(routesCalled(calls)).toEqual([`GET /api/artifacts/${titled.metadata.id}`,`PATCH /api/artifacts/${titled.metadata.id}`]);
+    calls.length=0;await cli.invoke(['push','doc.jsx']);expect(routesCalled(calls)).toEqual([`POST /api/artifacts/${titled.metadata.id}/edits`]);
    }finally{await cli.cleanup();}
   });
 });

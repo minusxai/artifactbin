@@ -1,3 +1,5 @@
+import {documentHead,applyDocumentUpdate,acceptedDocumentUpdate} from './document-server';
+import {prepareClientDocumentUpdate} from '../../app/lib/story/document-update-client';
 import {test,describe} from 'node:test';
 import assert from 'node:assert/strict';
 import {mkdtemp,readFile,writeFile,rm} from 'node:fs/promises';
@@ -10,23 +12,22 @@ import {parseDocument,writeDocument} from '../src/document';
 import {readRecord} from './tracking';
 import {cliHarness} from './harness';
 
-test('mixed content and metadata push rebases unrelated remote nodes before its conditional atomic write',async()=>{
+test('mixed content and metadata push applies one prepared operation without a head read',async()=>{
  const root=await mkdtemp(join(tmpdir(),'afbin-mixed-push-'));let writes=0;
- let head={id:'abc123',version:1,edit_id:'one',state:digest('one'),format:'markup',title:'Original',markup:'<div><p id="first">First</p><p id="second">Second</p></div>'};
+ let head=documentHead({id:'abc123',version:1,edit_id:'one',state:digest('one'),format:'markup',title:'Original',markup:'<div id="root"><p id="first">First</p><p id="second">Second</p></div>'});
  const invoke=async(args:string[])=>{const out:string[]=[];const code=await runCli([...args,'--json'],{home:root,cwd:root,env:{},interactive:false,stdout:s=>out.push(s),stderr:()=>{},fetch:async(_input,init)=>{
-  if(init?.method==='PUT'){
+  if(init?.method==='POST'){
    writes++;const body=JSON.parse(String(init.body));
-   if(body.expectedState!==head.state)return Response.json({error:'state_conflict'},{status:409});
-   assert.equal(body.expectedVersion,2);assert.equal(body.title,'My title');
-   assert.match(body.markup,/Local/);assert.match(body.markup,/Remote/);
-   head={...head,title:body.title,markup:body.markup,version:3,edit_id:'three',state:digest('three')};
+   assert.equal(body.document_update.metadata.title,'My title');
+   head=acceptedDocumentUpdate(head,body.document_update);
+   assert.match(head.markup,/Local/);assert.match(head.markup,/Remote/);
   }else assert.equal(init?.method,'GET');
   return Response.json(head,{headers:{'X-Artifactbin-Account':'account'}});
  }});return{code,result:JSON.parse(out.join(''))};};
  try{
   await saveTestConnection({server:'https://example.com',token:'test'},root);assert.equal((await invoke(['pull','abc123','--output','doc.jsx'])).code,0);
   const local=parseDocument(await readFile(join(root,'doc.jsx'),'utf8'));local.body=local.body.replace('First','Local');local.metadata.title='My title';await writeFile(join(root,'doc.jsx'),writeDocument(local));
-  head={...head,version:2,edit_id:'two',state:digest('two'),markup:head.markup.replace('Second','Remote')};
+  head=acceptedDocumentUpdate(head,prepareClientDocumentUpdate({...head,meta:{}},{source:head.markup.replace('Second','Remote')}));
   const result=await invoke(['push','doc.jsx']);assert.equal(result.code,0,JSON.stringify(result.result));assert.equal(writes,1);
   assert.match(await readFile(join(root,'doc.jsx'),'utf8'),/Remote/);
  }finally{await rm(root,{recursive:true,force:true});}
@@ -34,12 +35,20 @@ test('mixed content and metadata push rebases unrelated remote nodes before its 
 
 test('mixed push records overlapping proposals and dry-run leaves no conflict state',async()=>{
  const root=await mkdtemp(join(tmpdir(),'afbin-mixed-overlap-'));
- let head={id:'abc123',version:1,edit_id:'one',state:digest('one'),format:'markup',title:'Original',markup:'<p id="first">First</p>'};
- const invoke=async(args:string[])=>{const out:string[]=[];const code=await runCli([...args,'--json'],{home:root,cwd:root,env:{},interactive:false,stdout:s=>out.push(s),stderr:()=>{},fetch:async(_input,init)=>{assert.equal(init?.method,'GET');return Response.json(head,{headers:{'X-Artifactbin-Account':'account'}});}});return{code,result:JSON.parse(out.join(''))};};
+ let head=documentHead({id:'abc123',version:1,edit_id:'one',state:digest('one'),format:'markup',title:'Original',markup:'<p id="first">First</p>'});
+ const invoke=async(args:string[])=>{const out:string[]=[];const code=await runCli([...args,'--json'],{home:root,cwd:root,env:{},interactive:false,stdout:s=>out.push(s),stderr:()=>{},fetch:async(_input,init)=>{
+  if(init?.method==='POST'){
+   const body=JSON.parse(String(init.body)),update=(body.input??body).document_update;
+   const next=applyDocumentUpdate(head,update);
+   if(!next)return Response.json({error:'doc_changed',edit_id:head.edit_id,version:head.version,source:head.markup},{status:409});
+   if(String(_input).endsWith('/preflight'))return Response.json({valid:true,dry_run:true});head=next;
+  }else assert.equal(init?.method,'GET');
+  return Response.json(head,{headers:{'X-Artifactbin-Account':'account'}});
+ }});return{code,result:JSON.parse(out.join(''))};};
  try{
   await saveTestConnection({server:'https://example.com',token:'test'},root);assert.equal((await invoke(['pull','abc123','--output','doc.jsx'])).code,0);
   const local=parseDocument(await readFile(join(root,'doc.jsx'),'utf8'));local.body=local.body.replace('First','Local');local.metadata.title='My title';await writeFile(join(root,'doc.jsx'),writeDocument(local));
-  head={...head,version:2,edit_id:'two',state:digest('two'),markup:head.markup.replace('First','Remote')};
+  head=acceptedDocumentUpdate(head,prepareClientDocumentUpdate({...head,meta:{}},{source:head.markup.replace('First','Remote')}));
   assert.equal((await invoke(['push','doc.jsx','--dry-run'])).code,3);assert.equal(await readRecord(root,root,'conflict','abc123'),null);
   assert.equal((await invoke(['push','doc.jsx'])).code,3);
   const conflict=(await readRecord<{path:string;code:string;details:any}>(root,root,'conflict','abc123'))!;assert.ok(conflict);
@@ -67,29 +76,16 @@ describe('a workspace of artifacts and a profile', () => {
   });
 });
 
-/**
- * WHY `metadata_requires_patch` IS NOT AN afbin REFUSAL.
- *
- * The server's edits door answers metadata keys with
- * `metadata_requires_patch`, whose hint is "Use PATCH with expectedState … or
- * PUT with expectedVersion …" — two methods an agent driving afbin never
- * chooses. It stays worded for the HTTP surface because the CLI cannot reach
- * it: `planPush` only picks `edit` when the metadata delta is EMPTY, and an
- * edit body is exactly {source, edit_id}. The moment a fence field moves too,
- * the plan is a conditional replacement. This pins both halves.
- */
-test('a body-only push sends source and edit_id to /edits; a fence change makes it a conditional replace instead',async()=>{
+test('body-only and mixed metadata pushes both use prepared JSONB operations',async()=>{
  const root=await mkdtemp(join(tmpdir(),'afbin-edit-door-'));
- let head={id:'abc123',version:1,edit_id:'one',state:digest('one'),format:'markup',title:'Original',markup:'<p id="first">First</p>'};
+ let head=documentHead({id:'abc123',version:1,edit_id:'one',state:digest('one'),format:'markup',title:'Original',markup:'<p id="first">First</p>'});
  const seen:Array<{path:string;method:string;body:Record<string,unknown>}>=[];
  const invoke=async(args:string[])=>{const out:string[]=[];const code=await runCli([...args,'--json'],{home:root,cwd:root,env:{},interactive:false,stdout:s=>out.push(s),stderr:()=>{},fetch:async(input,init)=>{
   const method=init?.method??'GET';
   if(method!=='GET'){
    const body=JSON.parse(String(init!.body)) as Record<string,unknown>;
    seen.push({path:new URL(String(input)).pathname,method,body});
-   head={...head,version:head.version+1,edit_id:`e${head.version+1}`,state:digest(`e${head.version+1}`),
-    ...(typeof body.source==='string'?{markup:body.source}:{}),...(typeof body.markup==='string'?{markup:body.markup}:{}),
-    ...(typeof body.title==='string'?{title:body.title}:{})};
+   head=acceptedDocumentUpdate(head,body.document_update as import('@artifactbin/contracts').DocumentUpdate);
   }
   return Response.json(head,{headers:{'X-Artifactbin-Account':'account'}});
  }});return{code,result:JSON.parse(out.join(''))};};
@@ -103,15 +99,48 @@ test('a body-only push sends source and edit_id to /edits; a fence change makes 
   const edit=seen.at(-1)!;
   assert.match(edit.path,/\/artifacts\/abc123\/edits$/);
   assert.equal(edit.method,'POST');
-  assert.deepEqual(Object.keys(edit.body).sort(),['edit_id','source'],'an edit body carries no metadata key, so the edits door never refuses one');
+  assert.deepEqual(Object.keys(edit.body).sort(),['document_update','edit_id']);
 
   const mixed=parseDocument(await readFile(join(root,'doc.jsx'),'utf8'));
   mixed.body=mixed.body.replace('Edited','Edited again');mixed.metadata.title='Renamed';
   await writeFile(join(root,'doc.jsx'),writeDocument(mixed));
   assert.equal((await invoke(['push','doc.jsx'])).code,0);
   const replace=seen.at(-1)!;
-  assert.equal(replace.method,'PUT');
-  assert.ok(!replace.path.endsWith('/edits'),'a fence change never travels through the edits door');
-  assert.equal(replace.body.title,'Renamed');
+  assert.equal(replace.method,'POST');
+  assert.ok(replace.path.endsWith('/edits'));
+  assert.equal((replace.body.document_update as import('@artifactbin/contracts').DocumentUpdate).metadata?.title,'Renamed');
+ }finally{await rm(root,{recursive:true,force:true});}
+});
+
+test('an untracked document cannot overwrite a head newer than its recorded conditions',async()=>{
+ const root=await mkdtemp(join(tmpdir(),'afbin-untracked-jsonb-'));
+ const head=documentHead({id:'abc123',version:2,edit_id:'new',state:digest('new'),format:'markup',title:null,markup:'<p id="a">Remote</p>'});let writes=0;
+ try{
+  await saveTestConnection({server:'https://example.com',token:'test'},root);
+  await writeFile(join(root,'doc.jsx'),writeDocument({metadata:{id:'abc123',head_version:1,edit_id:'old',state:digest('old')},body:'<p id="a">Local</p>'}));
+  const output:string[]=[];
+  const code=await runCli(['push','doc.jsx','--json'],{home:root,cwd:root,env:{},interactive:false,stdout:s=>output.push(s),stderr:()=>{},fetch:async(_input,init)=>{if(init?.method==='POST')writes++;return Response.json(head,{headers:{'X-Artifactbin-Account':'account'}});}});
+  assert.equal(code,3,output.join(''));assert.equal(JSON.parse(output.join('')).error.code,'state_conflict');assert.equal(writes,0);
+ }finally{await rm(root,{recursive:true,force:true});}
+});
+
+test('recovers a lost JSONB reply after an independent remote edit without resubmitting',async()=>{
+ const root=await mkdtemp(join(tmpdir(),'afbin-jsonb-recovery-'));
+ let head=documentHead({id:'abc123',version:1,edit_id:'one',state:digest('one'),format:'markup',title:'Original',markup:'<main id="root"><p id="first">First</p><p id="second">Second</p></main>'}),writes=0;
+ const invoke=async(args:string[])=>{const out:string[]=[];const code=await runCli([...args,'--json'],{home:root,cwd:root,env:{},interactive:false,stdout:s=>out.push(s),stderr:()=>{},fetch:async(_input,init)=>{
+  if(init?.method==='POST'){
+   writes++;head=acceptedDocumentUpdate(head,JSON.parse(String(init.body)).document_update);
+   head=acceptedDocumentUpdate(head,prepareClientDocumentUpdate({...head,meta:{}},{source:head.markup.replace('Second','Remote')}));
+   throw new Error('reply lost');
+  }
+  return Response.json(head,{headers:{'X-Artifactbin-Account':'account'}});
+ }});return{code,result:JSON.parse(out.join(''))};};
+ try{
+  await saveTestConnection({server:'https://example.com',token:'test'},root);
+  assert.equal((await invoke(['pull','abc123','--output','doc.jsx'])).code,0);
+  const local=parseDocument(await readFile(join(root,'doc.jsx'),'utf8'));local.body=local.body.replace('First','Local');local.metadata.title='Updated';await writeFile(join(root,'doc.jsx'),writeDocument(local));
+  assert.notEqual((await invoke(['push','doc.jsx'])).code,0);
+  const recovered=await invoke(['push','doc.jsx']);assert.equal(recovered.code,0,JSON.stringify(recovered.result));assert.equal(writes,1);
+  const saved=await readFile(join(root,'doc.jsx'),'utf8');assert.match(saved,/Local/);assert.match(saved,/Remote/);
  }finally{await rm(root,{recursive:true,force:true});}
 });

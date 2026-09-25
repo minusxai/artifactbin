@@ -1,4 +1,5 @@
-import {prepareClientDocumentUpdate} from '../../app/lib/story/document-update-client';
+import {documentOutcomePresent} from './document-recovery';
+import {prepareClientDocumentPublication} from '../../app/lib/story/document-update-client';
 import type {DocumentGraph,DocumentUpdate} from '@artifactbin/contracts';
 import {localIdentities} from './identities';
 import {referenceIds} from './preview/graph';
@@ -163,12 +164,13 @@ export async function finishLocalPush(workspace:Workspace,paths:string[],options
 /** Prepare the complete document mutation locally from its tracked graph. A
  * missing graph needs one read to upgrade the client's snapshot, not a server
  * read/validate/retry write pipeline. */
-async function prepareDocumentPlan(plan:PushPlan,client:HttpClient,force:boolean):Promise<PushPlan>{
+async function prepareDocumentPlan(plan:PushPlan,client:HttpClient,force:boolean,dryRun=false):Promise<PushPlan>{
  if(!plan.file.document||!plan.id||['create','missing','none'].includes(plan.mode))return plan;
  let head=plan.file.tracked?.snapshot;
  if(force||!head?.document)head=await client.request<Snapshot>(`/artifacts/${plan.id}`);
  const document=head.document as DocumentGraph|undefined;
  if(document?.kind!=='graph')throw new CliError('invalid_response','The artifact has no editable JSONB snapshot.');
+ if(!force&&!plan.file.tracked&&(plan.body.expectedVersion!==undefined&&plan.body.expectedVersion!==head.version||plan.body.expectedState!==undefined&&plan.body.expectedState!==head.state))throw new CliError('state_conflict','The remote artifact differs from the state recorded in this file.','Inspect afbin diff --remote before deciding how to reconcile the changes.',{head},3);
  const desired=metadataInput(plan.file.document.metadata),observed=metadataInput(snapshotDocument(head).metadata);
  const delta=Object.fromEntries(Object.entries(desired).filter(([k,v])=>!isDeepStrictEqual(v,observed[k])));
  const metadata=Object.fromEntries(Object.entries(delta).filter(([k])=>['title','description','theme','template','colorMode'].includes(k))) as DocumentUpdate['metadata'];
@@ -178,7 +180,7 @@ async function prepareDocumentPlan(plan:PushPlan,client:HttpClient,force:boolean
   ...(delta.parent_id!==undefined?{parentId:delta.parent_id as string|null}:{}),
   ...(delta.shares!==undefined?{shares:delta.shares as NonNullable<DocumentUpdate['settings']>['shares']}:{}),
  };
- const update=prepareClientDocumentUpdate({document,version:head.version,title:head.title,description:head.description as string|null,meta:{theme:head.theme,template:head.template,colorMode:head.colorMode}},{source:plan.file.document.body,metadata,whole:force||plan.file.document.metadata.version!==undefined});
+ const update=await prepareClientDocumentPublication({document,version:head.version,title:head.title,description:head.description as string|null,meta:{theme:head.theme,template:head.template,colorMode:head.colorMode}},{source:plan.file.document.body,metadata,whole:force||plan.file.document.metadata.version!==undefined},async source=>client.request(`/artifacts/${plan.id}/prepare`,'POST',{source,dryRun}));
  if(Object.keys(settings).length)Object.assign(update,{settings,expectedSharingRevision:Number(head.sharing_revision??0),expectedParentIds:head.ancestor_ids??[]});
  return {...plan,mode:'edit',reconcile:false,body:{edit_id:head.edit_id,document_update:update}};
 }
@@ -226,7 +228,7 @@ export async function push(workspace:Workspace,paths:string[],client:HttpClient,
   const plans=await planPush(workspace,paths,options);const results=[];
   for(let plan of plans){
    if(plan.mode==='missing'){results.push({path:plan.file.path,status:'skipped',reason:'missing_file'});continue;}
-   plan=await prepareDocumentPlan(plan,client,!!options.force);
+   plan=await prepareDocumentPlan(plan,client,!!options.force,!!options.dryRun);
    if(!plan.body.document_update)plan=await observeConditions(plan,client,!!options.force);
    plan=await reconcileMixed(plan,client);
    const mode=plan.mode==='none'?'replace':plan.mode;
@@ -245,7 +247,7 @@ export async function push(workspace:Workspace,paths:string[],client:HttpClient,
   for(let plan of plans){
    if(plan.mode==='missing'){operations.push({path:plan.file.path,status:'skipped',reason:'missing_file'});continue;}
    if(plan.mode==='none'){if(localChanged(plan)){await acknowledgeLocal(workspace,plan);workspace=await loadWorkspace(workspace.cwd,workspace.home);}operations.push({path:plan.file.path,status:plan.file.renamedFrom?'renamed':'skipped',reason:'no_remote_changes'});continue;}
-   plan=await prepareDocumentPlan(plan,client,!!options.force);
+   plan=await prepareDocumentPlan(plan,client,!!options.force,!!options.dryRun);
    if(!plan.body.document_update)plan=await observeConditions(plan,client,!!options.force);
    plan=await reconcileMixed(plan,client,workspace);
    const method=plan.mode==='metadata'?'PATCH':plan.mode==='replace'?'PUT':'POST';
@@ -276,7 +278,7 @@ async function recoverRequest(workspace:Workspace,client:HttpClient,pending:Pend
   const source=pending.request.body.source??pending.request.body.markup??(pending.request.body.document_update?parseDocument(Buffer.from(pending.file.bytes,'base64').toString()).body:undefined);
   const editable=new Set([...metadataFields.map(key=>fieldMap[key]??key),'access','policy']);
   const metadataMatches=Object.entries(pending.request.body.document_update?(pending.request.body.document_update as DocumentUpdate).metadata??{}:pending.request.body).filter(([key])=>editable.has(key)).every(([key,value])=>isDeepStrictEqual(head[key==='linkRole'?'link_role':key==='policy'?'dataset_policy':key],value));
-  const contentMatches=typeof source==='string'?canonicalizeMarkup(source)===head.markup:pending.request.method==='PATCH';
+  const contentMatches=pending.request.body.document_update?documentOutcomePresent(head,pending.file.tracked?.snapshot,pending.request.body.document_update as DocumentUpdate):typeof source==='string'?canonicalizeMarkup(source)===head.markup:pending.request.method==='PATCH';
   if(contentMatches&&metadataMatches){pending=await savePendingResponse(workspace.home,workspace.root,pending,head,client.account);}
   else if(head.state!==pending.file.tracked?.snapshot.state)throw new CliError('outcome_unknown','The remote head changed after the unconfirmed write; automatic replay would be ambiguous.','Inspect afbin diff --remote and preserve both writers before resolving this pending operation.',{head,pending_key:pending.key});
  }

@@ -641,7 +641,7 @@ export function createdArtifactWire(row: ArtifactRow, base: string, sentMarkup: 
     id: row.id, url: `${base}/a/${row.id}`, version: row.version, visibility: row.visibility,
     // The read-proof for the edit protocol: an agent can start editing straight
     // after create, without a round trip to learn the head pointer.
-    edit_id: row.edit_id, state: artifactState(row),...(row.shares!==undefined?{shares:row.shares}:{}),
+    edit_id: row.edit_id, state: artifactState(row),...(row.document?{document:row.document}:{}),sharing_revision:row.sharing_revision??0,colorMode:row.meta.colorMode??null,...(row.shares!==undefined?{shares:row.shares}:{}),
     format: row.format, title: row.title,description:row.description,theme:row.meta.theme??null,template:row.meta.template??null,link_role:row.link_role??'viewer',
     // Where it landed. `parent_id` is what a caller writes back, so the create
     // reply hands it straight into the next call.
@@ -669,8 +669,12 @@ function parseEditBody(body: Record<string, unknown>): EditInput | null {
   if (typeof editId !== 'string' || editId.length === 0) return null;
 
   if(Object.hasOwn(body,'document_update')){
-    const documentUpdate=parseDocumentUpdate(body.document_update);
+    let documentUpdate=parseDocumentUpdate(body.document_update);
     if(!documentUpdate||!parseAnnotationOperations(documentUpdate.annotationOps??[])||annotationOps.length||['operations','text','source','edits','old_string','new_string'].some(k=>Object.hasOwn(body,k)))return null;
+    if(documentUpdate.settings?.shares!==undefined){
+      const shares=parseShareEntries(documentUpdate.settings.shares);if(shares instanceof Response)return null;
+      documentUpdate={...documentUpdate,settings:{...documentUpdate.settings,shares}};
+    }
     return {baseEditId:editId,documentUpdate};
   }
 

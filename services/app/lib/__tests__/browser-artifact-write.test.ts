@@ -16,3 +16,8 @@ it('does not replace a newer source when a mixed edit was based on an older edit
  const request=vi.fn(async()=>Response.json({edit_id:'newer',version:2,state:'b'.repeat(64),markup:'<p>Remote</p>'}));vi.stubGlobal('fetch',request);
  const response=await writeBrowserArtifact('abc123',{source:'<p>Local</p>',title:'Local'},'older');expect(response.status).toBe(409);expect(request).toHaveBeenCalledTimes(1);
 });
+it('refuses unsupported document fields instead of silently discarding them',async()=>{
+ const fetcher=vi.fn(async()=>Response.json({format:'markup',document:createDocumentGraph('<p id="a">X</p>',1),edit_id:'e',version:1,state:'a'.repeat(64)}));vi.stubGlobal('fetch',fetcher);
+ const result=await writeBrowserArtifact('abc123',{access:'readwrite'});
+ expect(result.status).toBe(400);expect(fetcher).toHaveBeenCalledTimes(1);
+});

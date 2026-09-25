@@ -1,6 +1,6 @@
-import {expect,it} from 'vitest';
+import {expect,it,vi} from 'vitest';
 import {createDocumentGraph,graphIntegrity,graphSource} from '../document-graph';
-import {prepareClientDocumentUpdate} from '../document-update-client';
+import {prepareClientDocumentUpdate,prepareClientDocumentPublication} from '../document-update-client';
 import {applyGraphPatch} from '../document-graph-patch';
 const source='<main id="root"><p id="a">Alpha</p><p id="b">Beta</p></main>';
 it('prepares composable client operations without server publication or unrelated cache work',()=>{
@@ -23,4 +23,14 @@ it('invalidates CSS only when its candidate inputs change and guards whole repla
  const styled=prepareClientDocumentUpdate(base,{source:source.replace('id="a"','id="a" className="font-bold"')});expect(styled.effects.css).toBe(true);
  const whole=prepareClientDocumentUpdate(base,{source:'<p id="x">New</p>',whole:true});
  expect(whole.patch.reads).toContainEqual({key:'$root',facet:'subtreeVersion',version:1});
+});
+
+it('requests authoring context only for affected data, icons, fonts or imported assets',async()=>{
+ const verify=vi.fn(async(_source:string)=>{}),base={document:createDocumentGraph(source,1),version:1,meta:{}};
+ await prepareClientDocumentPublication(base,{source:source.replace('Alpha','Writing')},verify);
+ expect(verify).not.toHaveBeenCalled();
+ await prepareClientDocumentPublication(base,{source:source.replace('Alpha','<Icon name="calendar" />')},verify);
+ expect(verify).toHaveBeenCalledOnce();expect(verify.mock.calls[0]![0]).toContain('Icon');
+ verify.mockRejectedValueOnce(new Error('Unknown font'));
+ await expect(prepareClientDocumentPublication(base,{source:'<Helmet><meta name="font-body" content="Missing Font" /></Helmet>'+source},verify)).rejects.toThrow('Unknown font');
 });

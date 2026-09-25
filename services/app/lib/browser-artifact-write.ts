@@ -2,7 +2,7 @@
  * then submit one permission-scoped JSONB commit. Non-document metadata retains
  * its existing conditional protocol. */
 import type {DocumentGraph,DocumentUpdate} from '@artifactbin/contracts';
-import {prepareClientDocumentUpdate} from './story/document-update-client';
+import {prepareBrowserDocumentUpdate} from './story/document-authoring-client';
 export async function writeBrowserArtifact(id:string,change:Record<string,unknown>,editId?:string):Promise<Response>{
  const path=`/api/my/artifacts/${encodeURIComponent(id)}`;
  const observed=await fetch(path);if(!observed.ok)return observed;
@@ -11,8 +11,10 @@ export async function writeBrowserArtifact(id:string,change:Record<string,unknow
  const {source,annotationOps,...fields}=change;
  if(source!==undefined&&head.edit_id!==editId)return Response.json({error:'doc_changed',edit_id:head.edit_id,version:head.version,source:head.markup},{status:409});
  if(head.document?.kind==='graph'&&head.format!=='folder'){
+  const allowed=new Set(['title','description','theme','template','colorMode','visibility','linkRole','parent_id','shares']);
+  if(Object.keys(fields).some(key=>!allowed.has(key)))return Response.json({error:'invalid_metadata',allowed:[...allowed]},{status:400});
   const metadata=Object.fromEntries(Object.entries(fields).filter(([k])=>['title','description','theme','template','colorMode'].includes(k))) as DocumentUpdate['metadata'];
-  const update=prepareClientDocumentUpdate({...head,document:head.document,meta:head},{source:source as string|undefined,metadata,annotationOps:annotationOps as DocumentUpdate['annotationOps']});
+  const update=await prepareBrowserDocumentUpdate(id,{...head,document:head.document,meta:head},{source:source as string|undefined,metadata,annotationOps:annotationOps as DocumentUpdate['annotationOps']});
   const settings=Object.fromEntries(Object.entries(fields).filter(([k])=>['visibility','linkRole','parent_id','shares'].includes(k)).map(([k,v])=>[k==='parent_id'?'parentId':k,v])) as DocumentUpdate['settings'];
   if(Object.keys(settings!).length)Object.assign(update,{settings,expectedSharingRevision:head.sharing_revision??0,expectedParentIds:head.ancestor_ids??[]});
   return fetch(`${path}/edits`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({edit_id:head.edit_id,document_update:update})});

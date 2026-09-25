@@ -1,9 +1,10 @@
+import {documentEdit} from './prepared-document';
 import {expect,it,vi} from 'vitest';
 import {useAppHarness,request} from './harness';
 import {mintToken} from '@/lib/tokens';
 import {getDb} from '@/lib/db';
 import {encodeDocument,decodeDocumentNodes,encodeDocumentNodes} from '@/lib/story/document-codec';
-import {getArtifactById,applyEditScoped,getVersionFor,revertArtifactFor,forkArtifact} from '@/lib/artifacts';
+import {getArtifactById,applyEditScoped,getVersionFor,forkArtifact} from '@/lib/artifacts';
 import {POST as createRoute} from '@/app/api/artifacts/route';
 useAppHarness();
 async function create(){const token=await mintToken('mxmx_test_jsonb');const response=await createRoute(request('/api/artifacts',{method:'POST',token:token.token,json:{markup:'<section><p>Alpha</p><p>Beta</p></section>'}}));expect(response.status).toBe(201);const {id}=await response.json();return {token,id,actor:{tokenId:token.id,userId:null},row:(await getArtifactById(id))!};}
@@ -22,17 +23,17 @@ it('a first-load conversion cannot overwrite a winning edit',async()=>{
  const {id,row,actor}=await create(),db=await getDb();await db.query('UPDATE artifacts SET document=NULL,source=$2 WHERE id=$1',[id,row.source]);
  const query=db.query.bind(db);let raced=false;
  const spy=vi.spyOn(db,'query').mockImplementation(async(sql,params)=>{
-  if(!raced&&sql.includes('document IS NOT DISTINCT FROM')&&sql.includes('UPDATE artifacts')){raced=true;const result=await applyEditScoped(actor,id,{baseEditId:row.edit_id,change:{oldString:'Alpha',newString:'Winner'}});expect(result&&!(result instanceof Response)&&result.applied).toBe(true);}
+  if(!raced&&sql.includes('document IS NOT DISTINCT FROM')&&sql.includes('UPDATE artifacts')){raced=true;const result=await applyEditScoped(actor,id,documentEdit((await getArtifactById(id))!,{source:row.source!.replace('Alpha','Winner')}));expect(result&&!(result instanceof Response)&&result.applied).toBe(true);}
   return query(sql,params);
  });
  try{expect((await getArtifactById(id))?.source).toContain('Winner');expect(raced).toBe(true);}finally{spy.mockRestore();}
  expect((await stored(id)).source).toBeNull();expect((await getArtifactById(id))?.version).toBe(2);
 });
 it('edits archive JSONB, old archives migrate on read, and restore stays JSONB',async()=>{
- const {id,row,actor}=await create(),db=await getDb();const result=await applyEditScoped(actor,id,{baseEditId:row.edit_id,change:{oldString:'Alpha',newString:'Edited'}});expect(result&&!(result instanceof Response)&&result.applied).toBe(true);
+ const {id,row,actor}=await create(),db=await getDb();const result=await applyEditScoped(actor,id,documentEdit(row,{source:row.source!.replace('Alpha','Edited')}));expect(result&&!(result instanceof Response)&&result.applied).toBe(true);
  let archive=(await db.query('SELECT * FROM artifact_versions WHERE artifact_id=$1',[id])).rows[0];expect(archive.source).toBeNull();expect(archive.document).not.toBeNull();
  await db.query('UPDATE artifact_versions SET document=NULL,source=$2 WHERE artifact_id=$1',[id,row.source]);expect((await getVersionFor(actor,id,1))?.source).toBe(row.source);archive=(await db.query('SELECT * FROM artifact_versions WHERE artifact_id=$1',[id])).rows[0];expect(archive.source).toBeNull();expect(archive.document).not.toBeNull();
- const restored=await revertArtifactFor(actor,id,1,{expectedVersion:2});expect(restored&&'source'in restored&&restored.source).toBe(row.source);expect((await stored(id)).document).not.toBeNull();
+ const restored=await applyEditScoped(actor,id,documentEdit((await getArtifactById(id))!,{source:(await getVersionFor(actor,id,1))!.source!,whole:true}));expect(restored&&!(restored instanceof Response)&&restored.applied&&restored.row.source).toBe(row.source);expect((await stored(id)).document).not.toBeNull();
 });
 it('concurrent first loads converge without adding authored edits',async()=>{
  const {id,row}=await create(),db=await getDb();await db.query('UPDATE artifacts SET source=$2,document=NULL WHERE id=$1',[id,row.source]);
@@ -41,7 +42,7 @@ it('concurrent first loads converge without adding authored edits',async()=>{
  expect((await stored(id)).source).toBeNull();
 });
 it('a reader without history access cannot trigger conversion of an archived document',async()=>{
- const {id,row,actor}=await create(),db=await getDb();await applyEditScoped(actor,id,{baseEditId:row.edit_id,change:{oldString:'Alpha',newString:'Edited'}});
+ const {id,row,actor}=await create(),db=await getDb();await applyEditScoped(actor,id,documentEdit(row,{source:row.source!.replace('Alpha','Edited')}));
  await db.query('UPDATE artifact_versions SET document=NULL,source=$2 WHERE artifact_id=$1',[id,row.source]);
  const foreign=await mintToken('mxmx_test_jsonb_foreign');expect(await getVersionFor({tokenId:foreign.id,userId:null},id,1)).toBeNull();
  expect((await db.query('SELECT document,source FROM artifact_versions WHERE artifact_id=$1',[id])).rows[0]).toEqual({document:null,source:row.source});
@@ -52,7 +53,7 @@ it('forking a JSONB document creates another JSONB head with its own history',as
  expect((await getArtifactById(id))?.edit_id).toBe(row.edit_id);
 });
 it('invalid publications leave JSONB and the existing edit protocol untouched',async()=>{
- const {id,row,actor}=await create(),before=await stored(id);const bad=await applyEditScoped(actor,id,{baseEditId:row.edit_id,change:{oldString:'Alpha',newString:'<script>run()</script>'}});expect(bad).toBeInstanceOf(Response);
+ const {id,row}=await create(),before=await stored(id);expect(()=>documentEdit(row,{source:row.source!.replace('Alpha','<script>run()</script>')})).toThrow();
  expect(await stored(id)).toEqual(before);expect((await getArtifactById(id))?.edit_id).toBe(row.edit_id);
 });
 it('reads the earlier JSONB representation and upgrades it on its first validated edit',async()=>{
@@ -66,7 +67,7 @@ it('reads the earlier JSONB representation and upgrades it on its first validate
  const document={schema:2,kind:'semantic',tree:encodeDocumentNodes(nodes),prose:{legacy:{value:'Alpha',source:'Alpha',bytes:5,units:5,revision:1,fixedStart:row.source!.indexOf('Alpha'),order:0}},epoch:'legacy',hash:'legacy',bytes:Buffer.byteLength(row.source!),policy:'semantic-prose-v1',contextRequired:false};
  await db.query('UPDATE artifacts SET document=$2::jsonb WHERE id=$1',[id,JSON.stringify(document)]);
  expect((await getArtifactById(id))?.source).toBe(row.source);
- const edited=await applyEditScoped(actor,id,{baseEditId:row.edit_id,change:{oldString:'Alpha',newString:'Upgraded'}});
+ const edited=await applyEditScoped(actor,id,documentEdit((await getArtifactById(id))!,{source:row.source!.replace('Alpha','Upgraded')}));
  expect(edited&&!(edited instanceof Response)&&edited.applied).toBe(true);
  expect((await stored(id)).document).toMatchObject({schema:3,kind:'graph'});
 });

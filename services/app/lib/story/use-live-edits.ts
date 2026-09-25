@@ -16,7 +16,7 @@
  * or the user explicitly recovers the remote version.
  */
 import type {DocumentGraph} from '@artifactbin/contracts';
-import {prepareClientDocumentUpdate} from './document-update-client';
+import {prepareBrowserDocumentUpdate} from './document-authoring-client';
 import { combineAnnotationOperations, type AnnotationOperation } from '@/lib/editor-v2/annotation-map';
 import { rebaseEditBatch } from '@/lib/story/edit-batch';
 import { sourceChanges } from '@/lib/editor-v2/history';
@@ -153,11 +153,13 @@ export function useLiveEdits({
     setState((s) => ({ ...s, pending: true, status: 'saving…' }));
 
     const run = (async () => {
+      let prepared=false;
       try {
         const snapshot=snapshotRef.current;
         if(!snapshot.document)throw new Error('Refresh the document before saving.');
         const {source,annotationOps,...metadata}=change;
-        const documentUpdate=prepareClientDocumentUpdate({...snapshot,document:snapshot.document,title:snapshot.meta.title as string|null,description:snapshot.meta.description as string|null},{source,annotationOps,metadata});
+        const documentUpdate=await prepareBrowserDocumentUpdate(id,{...snapshot,document:snapshot.document,title:snapshot.meta.title as string|null,description:snapshot.meta.description as string|null},{source,annotationOps,metadata});
+        prepared=true;
         const res = await fetch(endpoint, {
           method:'POST',headers:{'Content-Type':'application/json'},
           body:JSON.stringify({edit_id:editIdRef.current,document_update:documentUpdate}),
@@ -228,12 +230,12 @@ export function useLiveEdits({
             pending: false,
           }));
         }
-      } catch {
+      } catch (error) {
         failedRef.current = true;
         failedChangeRef.current = mergePending(change, pendingRef.current);
         // Offline or a dropped request: keep the change and let the next tick retry.
-        pendingRef.current = mergePending(change, pendingRef.current);
-        setState((s) => ({ ...s, status: 'offline — will retry', pending: false }));
+        pendingRef.current = prepared?mergePending(change,pendingRef.current):null;
+        setState((s) => ({ ...s, status: prepared?'offline — will retry':`not saved — ${error instanceof Error?error.message:'Document validation failed'}`, pending: false }));
       } finally {
         inFlightRef.current = null;
         // Anything queued while we were in flight (including a retry) drains now.
@@ -245,7 +247,7 @@ export function useLiveEdits({
     })();
     inFlightRef.current = run;
     return run;
-  }, [endpoint, onRemoteDocument, isUserEditing]);
+  }, [id, endpoint, onRemoteDocument, isUserEditing]);
 
   /** Queue a change; it persists on its own within one debounce window. */
   const queue = useCallback(
