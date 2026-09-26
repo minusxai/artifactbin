@@ -191,12 +191,13 @@ export function convertDocument(source: string, lookups: ConvertLookups): Docume
       const refuse = (reason: string) => manual.push({ declaration: name, reason: `the _signals mutation ${reason}; set= takes literals and $values only`, start: el.start, end: el.end });
       if (typeof set === 'string') { refuse(set); continue; }
       if (el.attributes.some((a) => a.name === 'reset' || a.name === 'expectedAffected')) { refuse('has reset= or expectedAffected='); continue; }
-      if (new RegExp(`mutate\\(\\s*["'\`]${name}["'\`]`).test(scriptText)) { refuse('is run from the script by mx.mutate'); continue; }
+      // A script may run it by a name it computes, so any mx.mutate call keeps it.
+      if (scriptText.includes('mutate(')) { refuse('may be run by the script (it calls mx.mutate)'); continue; }
       const sites: JsxElement[] = [];
       const visit = (nodes: JsxNode[]) => { for (const n of elements(nodes)) { if (staticString(n, 'run') === `$${name}`) sites.push(n); visit(n.children); } };
       visit(parsed.nodes);
-      const busy = sites.find((site) => site.attributes.some((a) => a.name === 'set'));
-      if (busy) { refuse('is run by a control that already has set='); continue; }
+      if (sites.some((site) => site.attributes.some((a) => a.name === 'set'))) { refuse('is run by a control that already has set='); continue; }
+      if (!sites.length && scriptText.trim()) { refuse('has no control that runs it, and the script might'); continue; }
       edits.push(elementRemoval(source, el));
       for (const site of sites) {
         const run = site.attributes.find((a) => a.name === 'run')!;
@@ -210,9 +211,9 @@ export function convertDocument(source: string, lookups: ConvertLookups): Docume
     const legacy = postgres ? [] : [...new Set(removedSqlReferenceTokens(child.sql).tokens.map((token) => token.id))];
     const pgLegacy = legacy.find((id) => lookups.isPostgres(id));
     if (pgLegacy) { manual.push({ declaration: name, reason: `reads the connected Postgres dataset ${pgLegacy} as ref_${pgLegacy}`, start: child.node.start, end: child.node.end }); continue; }
-    const schemas = ref && !postgres ? { public: importFor(ref) } : undefined;
+    const dataset = ref && !postgres ? importFor(ref) : undefined;
     const tables = Object.fromEntries(legacy.map((id) => [`ref_${id}`.toLowerCase(), `${importFor(id)}.rows`]));
-    const result = translateSql(child.sql, { statement, ...(postgres ? { dialect: 'postgres' as const } : {}), ...(schemas ? { schemas } : {}), tables });
+    const result = translateSql(child.sql, { statement, ...(postgres ? { dialect: 'postgres' as const } : {}), ...(dataset ? { dataset } : {}), tables });
     if (result.manual.length) { manual.push(...result.manual.map(at)); continue; }
     if (ref && !postgres) {
       edits.push(removal(source, sourceAttr!));
