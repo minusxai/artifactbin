@@ -97,10 +97,22 @@ function inlinedAssets(source: string, island: JsxNode[]): Map<string, string> {
   return found;
 }
 
-/** Every `/assets/<hash>` address the file holds bytes for, swapped for those bytes. */
-function withInlinedAssets(nodes: JsxNode[], assets: ReadonlyMap<string, string>): JsxNode[] {
-  if (!assets.size) return nodes;
-  return JSON.parse(JSON.stringify(nodes).replace(ASSET_ADDRESS, (address, hash: string) => assets.get(hash) ?? address)) as JsxNode[];
+/** Every `/assets/<hash>` address the file holds bytes for, swapped for those bytes, anywhere in a JSON value. */
+function withInlinedAssets<T>(value: T, assets: ReadonlyMap<string, string>): T {
+  if (!assets.size) return value;
+  return JSON.parse(JSON.stringify(value).replace(ASSET_ADDRESS, (address, hash: string) => assets.get(hash) ?? address)) as T;
+}
+
+/**
+ * For the page that hosts the editor: the editor pushes each new version of
+ * the document to the runtime with every web image at its `/assets/<hash>`
+ * address (InPlaceEditor's HELD_ASSETS — right on the site, a request the
+ * file's CSP refuses offline). This puts the bytes the file carries back in
+ * their place, in whatever the editor sends.
+ */
+export function fileAssetInliner(file: Pick<ArtifactFile, 'source' | 'island'>): <T>(value: T) => T {
+  const assets = inlinedAssets(file.source, file.island.nodes);
+  return (value) => withInlinedAssets(value, assets);
 }
 
 // ── comments' anchors, against the current source ───────────────────────────

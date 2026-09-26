@@ -21,7 +21,7 @@ import type { ArtifactBackend, BackendFeature } from '@/lib/artifact-backend/typ
 import {
   OFFLINE_ASSET_REASON, OFFLINE_QUERY_REASON, parseArtifactFile, type ArtifactFile,
 } from '../file-format';
-import { createFileBackend, LOCAL_DELETE_ONLY, OFFLINE_REASONS } from '../file-backend';
+import { createFileBackend, fileAssetInliner, LOCAL_DELETE_ONLY, OFFLINE_REASONS } from '../file-backend';
 
 const FIXTURE = path.resolve(process.cwd(), '../../scripts/fixtures/offline-file/artifact-file.json');
 const fixture = (): ArtifactFile => parseArtifactFile(JSON.parse(readFileSync(FIXTURE, 'utf8')));
@@ -198,6 +198,12 @@ describe('commitEdit — applied exactly as the server applies it', () => {
     expect(island).toContain(png);
     expect(island).toContain('A caption');
     expect(island).not.toContain('/assets/');
+    // And the frame the editor pushes (every web URL at its /assets/ address) gets the same bytes back.
+    const pushed = { type: 'mx:document', nodes: storyUpdateParts(latest().source, isWebUrl)!.nodes };
+    expect(JSON.stringify(pushed)).toMatch(/\/assets\/[0-9a-f]{64}/);
+    const inlined = JSON.stringify(fileAssetInliner(file)(pushed));
+    expect(inlined).toContain(png);
+    expect(inlined).not.toContain('/assets/');
   });
 });
 

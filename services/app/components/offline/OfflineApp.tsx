@@ -46,7 +46,7 @@ import type { ArtifactBackend } from '@/lib/artifact-backend/types';
 import { APP_BAR_H, EDIT_BAR_H, RIGHT_RAIL_W } from '@/lib/story/edit-bar';
 import { useWideEditViewport } from '@/lib/story/use-edit-panel';
 import type { EditorFlushRef } from '@/lib/story/use-live-edits';
-import { createFileBackend } from '@/lib/offline/file-backend';
+import { createFileBackend, fileAssetInliner } from '@/lib/offline/file-backend';
 import { OFFLINE_FILTER_REASON, OFFLINE_MUTATION_REASON, type ArtifactFile, type ArtifactFileEdit } from '@/lib/offline/file-format';
 import { clearDraft, readDraft, readName, writeDraft, writeName, type Draft } from '@/lib/offline/local-state';
 import { saveArtifactFile, suggestedFileName, type SaveHandle } from '@/lib/offline/save-file';
@@ -258,10 +258,16 @@ function OfflineSurface({ file, restored, code, fileName }: { file: ArtifactFile
   /** The snapshot over the declarations as they are NOW (an edited query says it needs a connection). */
   const transportFactory = useCallback(() => backend.queryTransport(), [backend]);
   const frozenValues = useMemo(() => Object.fromEntries(file.snapshot.frozen.map((value) => [value, OFFLINE_FILTER_REASON])), [file]);
+  /*
+   * The editor talks to the runtime through this ref. What it pushes names web
+   * images by their artifactbin address; the file carries those bytes, so each
+   * command is given them back on the way through (fileAssetInliner).
+   */
+  const inlineAssets = useMemo(() => fileAssetInliner(file), [file]);
   const onController = useCallback((next: InlineStoryController | null) => {
-    runtimeRef.current = next;
+    runtimeRef.current = next && { ...next, send: (command: unknown) => next.send(inlineAssets(command)) };
     setSessionNonce(next?.nonce ?? null);
-  }, []);
+  }, [inlineAssets]);
 
   // ── editing ───────────────────────────────────────────────────────────────
   const [editing, setEditing] = useState(false);
