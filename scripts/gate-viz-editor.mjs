@@ -114,9 +114,22 @@ const optionsOf = async (pg, label) => {
 // ── the journey ─────────────────────────────────────────────────────────────
 await openEditor();
 check((await p.locator('[aria-label="Chart editor"]').count()) === 0, 'the inspector stays shut until a chart is clicked');
+/*
+ * THE DOCUMENT DOES NOT MOVE inside an edit session. The inspector fills the
+ * edit panel, which has been there since entry (components/EditPanel): select,
+ * close and select-something-else all leave the text column exactly where it
+ * was — it used to jump sideways under the pointer on every one of them.
+ */
+const column = () => p.evaluate(() => {
+  const r = document.querySelector('[data-mx-inline-story] p')?.getBoundingClientRect();
+  return r ? `${Math.round(r.left)}/${Math.round(r.width)}` : 'missing';
+});
+const entered = await column();
+check(entered !== 'missing', `the document column is measurable in edit mode (${entered})`);
 
 await clickChart();
 check(await p.locator('[aria-label="Chart editor"]').isVisible(), 'clicking a chart opens the inspector');
+check(await column() === entered, `selecting a chart moves no document (${entered} → ${await column()})`);
 check((await triggerText(p, 'Table')).includes('$sales'), 'it opens on the table the document names');
 check((await triggerText(p, 'Chart type')).includes('table'), 'and reports a viz-less Question as a table');
 // The shelf is the DOCUMENT's own declarations — nothing fetched, nothing to wait for.
@@ -185,6 +198,7 @@ check((await p.locator('[aria-label="Chart editor"]').count()) === 0, 'close shu
   await f.locator('h1').first().click();
   await p.waitForTimeout(300);
   check((await p.locator('[aria-label="Chart editor"]').count()) === 0, 'clicking prose leaves the chart inspector shut');
+  check(await column() === entered, `closing the inspector and selecting prose move no document (${entered} → ${await column()})`);
 }
 
 // ── "loading" belongs to ONE chart, not the document ────────────────────────

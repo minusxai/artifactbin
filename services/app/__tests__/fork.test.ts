@@ -106,6 +106,19 @@ describe('POST /api/my/artifacts/:id/fork', () => {
     expect(source.edit_id).toBe(w.doc.edit_id);
   });
 
+  it('does not certify grandfathered source when copying a fork', async () => {
+    const w = await world();
+    const db = await getDb();
+    await db.query("UPDATE artifacts SET document=NULL,source=$2 WHERE id=$1", [w.doc.id, '<p id="old">Legacy</p>']);
+    asSession(w.bob);
+    const response = await fork(w.doc.id);
+    expect(response.status).toBe(201);
+    const copy = await response.json();
+    const row = (await db.query<{document:{schema:number};source:string|null}>('SELECT document,source FROM artifacts WHERE id=$1',[copy.id])).rows[0]!;
+    expect(row.source).toBeNull();
+    expect(row.document.schema).toBe(1);
+  });
+
   it('legacy annotation metadata does not travel, while source identity and prose do', async () => {
     const w = await world();
     const source = await head(w.doc.id);

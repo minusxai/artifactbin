@@ -14,7 +14,7 @@ export function artifactState(row: ArtifactRow): string {
     sharing_revision:row.sharing_revision??0,policy_revision:row.policy_revision??0,
     id: row.id, version: row.version, edit_id: row.edit_id,
     title: row.title, description: row.description, format: row.format,
-    source: row.source, content: row.content, visibility: row.visibility, access: row.access,
+    source: row.source, visibility: row.visibility, access: row.access,
     link_role: row.link_role ?? 'viewer', ancestor_ids: row.ancestor_ids, metadata,
   }))).digest('hex');
 }

@@ -1,3 +1,4 @@
+import {restoreDocument,documentEdit} from './prepared-document';
 import {observedRequest} from '@/__tests__/conditional-request';
 /**
  * Management surface: token listing/revocation (dashboard), artifact deletion,
@@ -14,7 +15,7 @@ import {
 import { GET as listVersionsRoute } from '@/app/api/artifacts/[id]/versions/route';
 import { POST as revertRoute } from '@/app/api/artifacts/[id]/revert/route';
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
-import { isVersionNotArchived, listVersionsFor, revertArtifactFor } from '@/lib/artifacts';
+import { getArtifactById,getVersionFor,applyEditFor,listVersionsFor,revertArtifactFor } from '@/lib/artifacts';
 import { mintToken } from '@/lib/tokens';
 import { createUser, listAccountTokenRows, revokeUserToken } from '@/lib/users';
 
@@ -133,10 +134,7 @@ describe('versions + revert', () => {
     const art = await create(t.token, '<h1 id="head">v1</h1>');
     await put(t.token, art.id, '<h1 id="head">v2</h1>');
 
-    const res = await revertRoute(
-      await observedRequest(`/api/artifacts/${art.id}/revert`, { method: 'POST', token: t.token, json: { version: 1 } }),
-      params({ id: art.id }),
-    );
+    const res=await restoreDocument(t.token,art.id,1);
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(body.version).toBe(3);
@@ -189,9 +187,10 @@ describe('user-scoped versions + revert (dashboard)', () => {
     const versions = await listVersionsFor({ tokenId: '', userId: user.id }, art.id);
     expect(versions?.map((v) => v.version)).toEqual([1]);
 
-    const reverted = await revertArtifactFor({ tokenId: '', userId: user.id }, art.id, 1);
-    expect(isVersionNotArchived(reverted)).toBe(false);
-    if (isVersionNotArchived(reverted)) return;
+    const actor={tokenId:'',userId:user.id},target=(await getVersionFor(actor,art.id,1))!;
+    const outcome=await applyEditFor(actor,art.id,documentEdit((await getArtifactById(art.id))!,{source:target.source!,whole:true}));
+    expect(outcome).toMatchObject({applied:true});if(!outcome||outcome instanceof Response||!outcome.applied)throw new Error('Restore failed');
+    const reverted=outcome.row;
     expect(reverted?.version).toBe(3);
     // A document's truth is `source`; markup rows keep `content` empty.
     expect(reverted?.source).toBe('<h1 id="head">v1</h1>');

@@ -8,11 +8,12 @@
  * each in its own scope (lib/agent-session) — there is no per-caller endpoint
  * choice.
  *
- * Read-only by nature except for `restore`, which is a plain POST to revert —
+ * Read-only by nature except for `restore`, which submits a prepared whole-document JSONB update —
  * and a revert creates a NEW version server-side, so restoring is itself
  * undoable and nothing is ever lost by trying one.
  */
 import { useCallback, useEffect, useState } from 'react';
+import {restoreBrowserArtifact} from '../browser-artifact-write';
 
 /** A row of history: what changed and when, without the content. */
 export interface ArtifactVersionSummary {
@@ -29,8 +30,10 @@ export interface ArtifactVersionSummary {
 export interface ArtifactVersionSnapshot {
   version: number;
   html: string;
+  title?:string|null;description?:string|null;
   markup: string | null;
   meta: {
+    template?:string|null;
     theme?: string | null;
     colorMode?: 'light' | 'dark' | null;
     compiledCss?: string | null;
@@ -76,19 +79,13 @@ export function useArtifactVersions({ id, currentVersion }: {
   const restore = useCallback(async (version: number) => {
     setBusy(true);
     try {
-      const observed=await fetch(base);if(!observed.ok)return null;
-      const head=await observed.json() as {version:number;state:string};
-      const res = await fetch(`${base}/revert`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ version, expectedVersion:head.version, expectedState:head.state }),
-      });
+      const res=await restoreBrowserArtifact(id,version);
       if (!res.ok) return null;
       return ((await res.json()) as { version: number }).version;
     } finally {
       setBusy(false);
     }
-  }, [base]);
+  }, [id]);
 
   return { versions, busy, refresh, fetchVersion, restore };
 }

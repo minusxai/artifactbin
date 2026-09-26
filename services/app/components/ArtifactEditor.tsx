@@ -1,4 +1,5 @@
 'use client';
+import type {DocumentGraph} from '@artifactbin/contracts';
 
 /**
  * The owner's gate into editing, mounted BY the artifact page (/a/<id>) when
@@ -27,6 +28,7 @@ import { LINK, PANEL } from '@/components/ui';
 import type { EditorFlushRef } from '@/lib/story/use-live-edits';
 
 interface Loaded {
+  document?:DocumentGraph;
   id: string;
   title: string | null;
   markup: string | null;
@@ -54,6 +56,7 @@ interface Loaded {
  * what the server just sent — the round trip was the whole "flash".
  */
 interface EditorSeed {
+  document?:DocumentGraph;
   id: string;
   title: string | null;
   markup: string | null;
@@ -72,7 +75,7 @@ interface EditorSeed {
   dataflow?: StoryIslandDataflow | null;
 }
 
-export default function ArtifactEditor({ id, seed, onExit, flushRef, frameRef, runtimeRef, sessionNonce, initialSelectionPath = null, onComment, onLeftInsetChange, onRightInsetChange, rightInset = 0 }: {
+export default function ArtifactEditor({ id, seed, onExit, flushRef, frameRef, runtimeRef, sessionNonce, initialSelectionPath = null, onComment, onRightInsetChange, rightInset = 0, commentsOpen, onCommentsOpenChange, onCommentsHost }: {
   id: string;
   seed?: EditorSeed;
   onExit: () => void;
@@ -85,10 +88,12 @@ export default function ArtifactEditor({ id, seed, onExit, flushRef, frameRef, r
   initialSelectionPath?: string | null;
   /** Comment on the selected node — the page owns the composer and the drain. */
   onComment?: (selection: StoryEditSelection) => void;
-  /** The editor's left rail and panel; the PAGE reserves the width, the editor decides it. */
-  onLeftInsetChange?: (px: number) => void;
-  /** The inspector's reserved width, so the page can narrow the document for it. */
+  /** The edit panel's width; the PAGE decides whether to reserve it (InPlaceEditor). */
   onRightInsetChange?: (px: number) => void;
+  /** The page's comments rail, which is the edit panel's Comments tab. */
+  commentsOpen?: boolean;
+  onCommentsOpenChange?: (open: boolean) => void;
+  onCommentsHost?: (host: HTMLElement | null) => void;
   rightInset?: number;
   /**
    * Where the mounted editor publishes its drain, so the page can empty it
@@ -205,6 +210,7 @@ export default function ArtifactEditor({ id, seed, onExit, flushRef, frameRef, r
       sessionNonce={sessionNonce}
       art={{
         id: art.id,
+        document:art.document,
         version: art.version,
         edit_id: art.edit_id,
         title: art.title,
@@ -221,8 +227,10 @@ export default function ArtifactEditor({ id, seed, onExit, flushRef, frameRef, r
       onComment={onComment}
       rightInset={rightInset}
       onDone={onExit}
-      onLeftInsetChange={onLeftInsetChange}
       onRightInsetChange={onRightInsetChange}
+      commentsOpen={commentsOpen}
+      onCommentsOpenChange={onCommentsOpenChange}
+      onCommentsHost={onCommentsHost}
     />
   );
 }

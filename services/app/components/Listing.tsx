@@ -3,7 +3,8 @@
  * in the browser from /api/page/profile.
  */
 import Avatar from '@/components/Avatar';
-import { FollowButton } from '@/components/FollowButton';
+import { ProfileSocialHeader } from '@/components/ProfileSocial';
+import type { ProfileSocial } from '@/lib/profile-social';
 import PageChrome from '@/components/PageChrome';
 import { PAGE_COLUMN, MicroLabel } from '@/components/ui';
 
@@ -47,7 +48,7 @@ export function ListingColumn({ children }: { children: React.ReactNode }) {
  * `ancestor_ids` is drawn on the folder's own page. There is nothing here to
  * segment.
  */
-export function ListingHero({ handle, label, count, noun, owner, follow, surface = 'app' }: {
+export function ListingHero({ handle, label, count, noun, owner, social, surface = 'app' }: {
   handle: string; label: string; count: number; noun: string;
   /**
    * Whose listing: their id (the face's colour) and picture (lib/avatars, or
@@ -58,11 +59,10 @@ export function ListingHero({ handle, label, count, noun, owner, follow, surface
    */
   owner?: { id: string; image: string | null };
   /**
-   * The follow control, on a STRANGER's profile only — the page route ships
-   * `follow` on that branch alone, so an absent prop is exactly the
-   * owner looking at their own listing, with nobody to follow.
+   * The follow counts and, for a signed-in stranger, how they relate to this
+   * person (components/ProfileSocial). Absent → no social header at all.
    */
-  follow?: { userId: string; following: boolean; count: number; signedIn: boolean };
+  social?: { userId: string; signedIn: boolean; social: ProfileSocial };
   /** On a custom domain the handle links to the domain's own root, and nobody is followed there. */
   surface?: ListingSurface;
 }) {
@@ -78,13 +78,11 @@ export function ListingHero({ handle, label, count, noun, owner, follow, surface
           </a>
         </h1>
       </div>
-      <div className="mt-3 flex flex-wrap items-center gap-3">
-        <p className="font-mono text-xs text-muted">
-          {count} {noun}
-          {count === 1 ? '' : 's'}
-        </p>
-        {follow && !domain && <FollowButton {...follow} />}
-      </div>
+      {social && !domain && <ProfileSocialHeader {...social} />}
+      <p className="mt-3 font-mono text-xs text-muted">
+        {count} {noun}
+        {count === 1 ? '' : 's'}
+      </p>
     </header>
   );
 }

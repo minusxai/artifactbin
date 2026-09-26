@@ -131,7 +131,7 @@ describe('access on the browser surfaces', () => {
     );
     expect([viaSharing.status, viaPatch.status]).toEqual([400, 400]);
     expect(((await viaSharing.json()) as { error: string }).error).toBe('access_datasets_only');
-    expect(((await viaPatch.json()) as { error: string }).error).toBe('access_datasets_only');
+    expect(((await viaPatch.json()) as { error: string }).error).toBe('invalid_edit_body');
   });
 
   it('opens a dataset for writes through every browser door without a preview flag', async () => {

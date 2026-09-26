@@ -127,13 +127,14 @@ describe('the home page on a verified host', () => {
     // No app shell: no SPA root, no bootstrap, no script but the theme stamp, no app navigation or Follow.
     expect(html).not.toContain('id="root"');
     expect(html.match(/<script\b/gi)).toHaveLength(1);
-    expect(html).not.toMatch(/aria-label="(?:Follow|Unfollow|Search artifacts|Grid view)"/);
+    expect(html).not.toMatch(/aria-label="(?:Follows|Follow|Following|Search artifacts|Grid view)"/);
+    expect(html).not.toMatch(/Followers?\b/);
     expect(html).not.toContain('/login');
     expect(html).not.toContain('/@vivek/');
     expect((await app().request(`${HOST}/`, { method: 'HEAD' })).status).toBe(200);
   });
 
-  it('is the same ProfileListing a guest gets on /@handle: the same markup, less Follow and the toolbar, with host addresses', async () => {
+  it('is the same ProfileListing a guest gets on /@handle: the same markup, less the follow header and the toolbar, with host addresses', async () => {
     const maya = await owner('maya');
     const first = await create(maya.token, { markup: '<h1>One</h1>', title: 'First Light', description: 'Morning notes', visibility: 'public' });
     const second = await create(maya.token, { markup: '<h1>Two</h1>', title: 'Second Wind', visibility: 'public' });
@@ -146,10 +147,10 @@ describe('the home page on a verified host', () => {
     expect(data.kind).toBe('public-profile');
     const expected = new JSDOM(renderToStaticMarkup(createElement(ProfileListing, { data }))).window.document.body;
     // The documented differences, and nothing else:
-    // no Follow (it needs a session and /api)…
-    const follow = expected.querySelector('[aria-label="Follow"]');
-    expect(follow).not.toBeNull();
-    follow!.remove();
+    // no follow header — counts, button and all (it needs a session and /api)…
+    const follows = expected.querySelector('[role="group"][aria-label="Follows"]');
+    expect(follows?.querySelector('[aria-label="Follow"]')).not.toBeNull();
+    follows!.remove();
     // …no search/filter/view toolbar (controls that need the SPA's script)…
     const toolbar = expected.querySelector('section[aria-label="Shelf"] > div');
     expect(toolbar?.querySelector('[aria-label="Search artifacts"]')).not.toBeNull();

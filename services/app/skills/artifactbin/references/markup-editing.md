@@ -80,7 +80,7 @@ Do not split comma-separated data blindly: embedded commas are ambiguous.
   `<input type="number">`, `<textarea>`, `<select>` — native tags, not
   `<Input>`; others rejected.
 - `<Button run="$complete">` captures `$_row` on click without `$_value`.
-  See [row actions](markup-repeat.md) for pending/error behavior.
+  See [action menus](markup-actions.md) for a complete example.
 - Row mutations run inside a Column or keyed For. Cell editors capture the row
   when editing begins. Publish validates row fields/types against the query
   result; mutations reused across tables require compatible schemas.

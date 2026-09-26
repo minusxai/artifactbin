@@ -14,7 +14,7 @@ it('workspace view totals exclude non-markup artifacts', async () => {
   const db = await harness.db();
   const user = await createUser({ email: 'mxmx_test_views@example.com' });
   const token = await mintToken('views');
-  await db.query("INSERT INTO artifacts (id, user_id, token_id, format, title, content, meta, version) VALUES ('doc123', $1, $2, 'markup', 'Document', '', '{}', 1), ('data12', $1, $2, 'dataset', 'Data', '', '{}', 1)", [user.id, token.id]);
+  await db.query("INSERT INTO artifacts (id, user_id, token_id, format, title, meta, version) VALUES ('doc123', $1, $2, 'markup', 'Document', '{}', 1), ('data12', $1, $2, 'dataset', 'Data', '{}', 1)", [user.id, token.id]);
   await ensureEventsSchema(db, EVENTS_SCHEMA);
   await db.query(`INSERT INTO ${EVENTS_SCHEMA}.events (id, at, source, verb, object_kind, object_id, subject_kind, subject_id, payload) VALUES ('view_doc', now(), 'app', 'viewed', 'artifact', 'doc123', 'visitor', 'a', '{}'), ('view_data', now(), 'app', 'viewed', 'artifact', 'data12', 'visitor', 'b', '{}')`);
   const insights = await accountWorkspaceInsightsFor(user.id);
@@ -42,7 +42,7 @@ it('anonymous insights requests do not expose account activity and are never cac
 it('keeps source metadata and analytics queries out of core while retaining shared search fields', async () => {
   const db = await harness.db(), user = await createUser({ email: 'mxmx_test_slim@example.com' }), other = await createUser({ email: 'mxmx_test_other@example.com' });
   const token = await mintToken('slim');
-  await db.query("INSERT INTO artifacts (id,user_id,token_id,format,title,description,content,meta,version) VALUES ('own123',$1,$3,'markup','Owned','owned description','', $4,1),('shr123',$2,$3,'markup','Shared','searchable description','',$4,1)", [user.id, other.id, token.id, JSON.stringify({ unnecessary: 'large source metadata'.repeat(1000) })]);
+  await db.query("INSERT INTO artifacts (id,user_id,token_id,format,title,description,meta,version) VALUES ('own123',$1,$3,'markup','Owned','owned description', $4,1),('shr123',$2,$3,'markup','Shared','searchable description',$4,1)", [user.id, other.id, token.id, JSON.stringify({ unnecessary: 'large source metadata'.repeat(1000) })]);
   await db.query("INSERT INTO artifact_shares (artifact_id,email,role) VALUES ('shr123',$1,'viewer')", [user.email]);
   const query = vi.spyOn(db, 'query');
   try {
@@ -61,7 +61,7 @@ it('keeps source metadata and analytics queries out of core while retaining shar
 it('deferred lifetime counts preserve distinct visitors, exclude trash and remain in full workspaces', async () => {
   const db = await harness.db(), user = await createUser({ email: 'mxmx_test_counts@example.com' });
   const token = await mintToken('counts');
-  await db.query("INSERT INTO artifacts (id,user_id,token_id,format,title,content,meta,version) VALUES ('cnt123',$1,$2,'markup','Counted','','{}',1),('trash1',$1,$2,'markup','Trash','','{}',1)", [user.id, token.id]);
+  await db.query("INSERT INTO artifacts (id,user_id,token_id,format,title,meta,version) VALUES ('cnt123',$1,$2,'markup','Counted','{}',1),('trash1',$1,$2,'markup','Trash','{}',1)", [user.id, token.id]);
   await db.query("UPDATE artifacts SET deleted_at=now() WHERE id='trash1'");
   await db.query("INSERT INTO analytics_events (event,artifact_id,visitor) VALUES ('view','cnt123','same'),('view','cnt123','same'),('view','cnt123','different'),('view','cnt123',NULL),('edit','cnt123','ignored'),('view','trash1','hidden')");
   const insights = await accountWorkspaceInsightsFor(user.id);
@@ -77,12 +77,12 @@ it('separates the 1000-document shelf, aggregate totals and paginated assets', a
   const user = await createUser({ email: 'mxmx_test_inventory@example.com' });
   const other = await createUser({ email: 'mxmx_test_other_inventory@example.com' });
   const token = await mintToken('inventory');
-  await db.query(`INSERT INTO artifacts (id, user_id, token_id, format, title, content, meta, version, updated_at)
-    SELECT 'doc' || n, $1, $2, 'markup', 'Document ' || n, '', '{}', 1, '2020-01-01'::timestamptz FROM generate_series(1, 1005) n`, [user.id, token.id]);
-  await db.query(`INSERT INTO artifacts (id, user_id, token_id, format, title, content, meta, version, updated_at)
-    SELECT 'asset' || lpad(n::text, 4, '0'), $1, $2, 'image', 'Image ' || n, '', '{}', 1, now() FROM generate_series(1, 205) n`, [user.id, token.id]);
-  await db.query(`INSERT INTO artifacts (id, user_id, token_id, format, title, content, meta, version)
-    VALUES ('foreign', $1, $2, 'image', 'Foreign', '', '{}', 1)`, [other.id, token.id]);
+  await db.query(`INSERT INTO artifacts (id, user_id, token_id, format, title, meta, version, updated_at)
+    SELECT 'doc' || n, $1, $2, 'markup', 'Document ' || n, '{}', 1, '2020-01-01'::timestamptz FROM generate_series(1, 1005) n`, [user.id, token.id]);
+  await db.query(`INSERT INTO artifacts (id, user_id, token_id, format, title, meta, version, updated_at)
+    SELECT 'asset' || lpad(n::text, 4, '0'), $1, $2, 'image', 'Image ' || n, '{}', 1, now() FROM generate_series(1, 205) n`, [user.id, token.id]);
+  await db.query(`INSERT INTO artifacts (id, user_id, token_id, format, title, meta, version)
+    VALUES ('foreign', $1, $2, 'image', 'Foreign', '{}', 1)`, [other.id, token.id]);
   await db.query("UPDATE artifacts SET deleted_at = now() WHERE id IN ('doc1005', 'asset0205')");
   await db.query("INSERT INTO analytics_events (artifact_id, event, visitor) VALUES ('doc1004', 'view', 'v'), ('doc1004', 'view', 'v'), ('doc1', 'view', 'v'), ('doc1005', 'view', 'v'), ('asset0001', 'view', 'v')");
   const actor = { credential: 'session' as const, userId: user.id, email: user.email!, emailVerified: true };

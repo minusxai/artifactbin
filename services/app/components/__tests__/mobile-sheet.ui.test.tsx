@@ -67,6 +67,25 @@ describe('MobileSheet', () => {
     expect(panel.textContent).toContain('comments-head');
   });
 
+  it('swipeToClose: dragging the header down far enough dismisses it; a short drag or a body drag does not', () => {
+    const onClose = vi.fn();
+    render(
+      <MobileSheet label="Selection settings" onClose={onClose} size="half" swipeToClose header={<span>sheet-head</span>}>
+        <p>sheet-body</p>
+      </MobileSheet>,
+    );
+    const drag = (el: Element, dy: number) => {
+      fireEvent.touchStart(el, { touches: [{ clientY: 100 }] });
+      fireEvent.touchMove(el, { touches: [{ clientY: 100 + dy }] });
+      fireEvent.touchEnd(el);
+    };
+    drag(screen.getByText('sheet-body'), 200);
+    drag(screen.getByText('sheet-head'), 30);
+    expect(onClose).not.toHaveBeenCalled();
+    drag(screen.getByText('sheet-head'), 120);
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
   it('closes on Escape', () => {
     const onClose = vi.fn();
     render(<MobileSheet label="Sharing" onClose={onClose}>hi</MobileSheet>);

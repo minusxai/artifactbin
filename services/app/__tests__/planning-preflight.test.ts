@@ -1,11 +1,9 @@
 import { expect, it, vi } from 'vitest';
 import { prepareJsx } from '@/lib/story/jsx-tier';
 import { objectStore } from '@/lib/object-store';
-import { parseContentInput } from '@/lib/story/input';
 import {queryRows} from '@/lib/datasets/query-rows';
 import { inferColumns } from '@/lib/story/dataset-shape';
 import { useAppHarness } from '@/__tests__/harness';
-import * as datasetStore from '@/lib/story/dataset-store';
 
 useAppHarness();
 it('real markup preparation validates proposed dataset columns without persistence or fetching', async () => {
@@ -22,16 +20,4 @@ it('real markup preparation validates proposed dataset columns without persisten
     expect((bad as Response).status).toBe(400);
     expect(put).not.toHaveBeenCalled(); expect(network).not.toHaveBeenCalled();
   } finally { put.mockRestore(); network.mockRestore(); }
-});
-it('legacy row-array preparation needs an ephemeral storage adapter, not only prepareDataset', async () => {
-  const put = vi.spyOn(objectStore(), 'put').mockImplementation(async () => { throw Error('unexpected persistence'); });
-  // Prototype the extracted persistence capability at the real publication seam.
-  const rows = vi.spyOn(datasetStore, 'storeDatasetRows').mockImplementation(async values => ({ content: JSON.stringify(values), objectKey: null }));
-  try {
-    const proposed = await parseContentInput({ dataset: [{ amount: 7 }] }, {
-      prepareDataset: async input => ({ format: 'dataset', source: null, content: JSON.stringify(input), derivedTitle: null, meta: { columns: inferColumns(input as Record<string, unknown>[]) } }),
-    });
-    expect(proposed).not.toBeInstanceOf(Response); expect(put).not.toHaveBeenCalled();
-    expect(rows).toHaveBeenCalledOnce();
-  } finally { put.mockRestore(); rows.mockRestore(); }
 });

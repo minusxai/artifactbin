@@ -17,6 +17,7 @@ import type { JsxElement, JsxNode } from '@/lib/jsx';
 // gzipped to ask "is this a paragraph").
 import { crumbHint, isEditableTextHost, resolveJsxNodeAtPath } from '@/lib/story-ui/host-classify';
 import { AST_PATH_ATTR } from '@/lib/story-ui/ast-path';
+import { isComponentPart } from './edit-chrome';
 import type { StoryEditCrumb, StoryEditSelection } from '../contract';
 
 /** What kind of thing the source says this path is. Null when the path is not in the source at all. */
@@ -31,13 +32,14 @@ export function selectionKindAt(nodes: JsxNode[], path: string): StoryEditSelect
 }
 
 /**
- * A breadcrumb destination: plain HTML, not a text host (focus owns those),
- * and never a root node — the same rule the canvas used.
+ * A breadcrumb (and Esc) destination: any container the author placed —
+ * plain HTML or a component, never a component's own part, never a text host
+ * (focus owns those), and never a root node.
  */
-function isSelectableAncestor(path: string, node: JsxNode | null): node is JsxElement {
+function isSelectableAncestor(path: string, node: JsxNode | null, nodes: JsxNode[]): node is JsxElement {
   return !!node
     && node.type === 'element'
-    && (!node.isComponent || ['Grid','GridItem','Slide'].includes(node.tag))
+    && !isComponentPart(node, resolveJsxNodeAtPath(nodes, path.split('.').slice(0, -1).join('.')))
     && !isEditableTextHost(node)
     && path.includes('.');
 }
@@ -52,7 +54,7 @@ export function ancestorCrumbs(el: Element, nodes: JsxNode[]): StoryEditCrumb[] 
     // The ATTRIBUTE, never `className`: on an SVG ancestor that property is an
     // SVGAnimatedString, and reading it as a string threw out of every drawn
     // area on a document carrying an inline sketch.
-    if (isSelectableAncestor(path, node)) out.push({ path, tag: node.tag, hint: crumbHint(p.getAttribute('class') ?? '') });
+    if (isSelectableAncestor(path, node, nodes)) out.push({ path, tag: node.tag, hint: crumbHint(p.getAttribute('class') ?? '') });
   }
   return out.reverse();
 }

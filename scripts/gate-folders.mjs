@@ -225,7 +225,7 @@ await owner.waitForSelector('[aria-label="Filter folders"]', { timeout: 5000 }).
 });
 check((await owner.locator('[aria-label="Move to Field Notes"]').count()) === 1, 'the picker offers the account’s folders by name');
 await Promise.all([
-  owner.waitForResponse((r) => r.request().method() === 'PATCH' && r.status() === 200, { timeout: 15000 }),
+  owner.waitForResponse((r) => r.request().method() === 'POST' && r.url().endsWith(`/artifacts/${live.id}/edits`) && r.status() === 200, { timeout: 15000 }),
   owner.locator('[aria-label="Move to root"]').first().click(),
 ]);
 const moved = await owner.evaluate(async (id) => (await (await fetch(`/api/my/artifacts/${id}`)).json()), live.id);

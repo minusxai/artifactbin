@@ -1,19 +1,6 @@
 import {observedRequest} from '@/__tests__/conditional-request';
-/**
- * A write echoes the stored document only when storing CHANGED it.
- *
- * The echo exists so an agent edits against canonical form — a `<p>` holding a
- * block becomes a `<div>`, a `<Helmet>` is hoisted — and sending the old shape
- * back just gets rewritten again. But when canonicalization changed nothing,
- * the echo is the agent's OWN bytes handed back: measured on the deck task,
- * ~3.5k tokens per write, replayed in every later turn, and one leg made
- * fifteen write attempts.
- *
- * So the field is present exactly when it is NEWS, and `markup_changed` says
- * which case it is rather than leaving an absent field ambiguous. `/edits` is
- * deliberately exempt: its caller sent a splice, never a document, so the
- * resulting markup is always something it does not have.
- */
+import {observedTextBody} from './prepared-document';
+/** Creates elide unchanged markup; operation commits return the canonical graph and source. */
 import { beforeEach, describe, expect, it } from 'vitest';
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 import { PUT as putArtifact } from '@/app/api/artifacts/[id]/route';
@@ -63,22 +50,22 @@ describe('the write echo is present only when it is news', () => {
     expect(body.markup).not.toBe(NEEDS_REWRITE);
   });
 
-  it('a PUT follows the same rule', async () => {
+  it('an operation replacement returns the canonical authoring snapshot', async () => {
     const { body: made } = await create(CANONICAL);
     const unchanged = await (await putArtifact(await observedRequest(`/api/artifacts/${made.id}`, { method: 'PUT', token: token, json: { markup: CANONICAL } }), params({ id: made.id }))).json();
-    expect(unchanged.markup_changed).toBe(false);
-    expect(unchanged.markup).toBeUndefined();
+    expect(unchanged.document.kind).toBe('graph');
+    expect(unchanged.markup).toBe(CANONICAL);
     expect(unchanged.edit_id).toEqual(expect.any(String));
 
     const rewritten = await (await putArtifact(await observedRequest(`/api/artifacts/${made.id}`, { method: 'PUT', token: token, json: { markup: NEEDS_REWRITE } }), params({ id: made.id }))).json();
-    expect(rewritten.markup_changed).toBe(true);
+    expect(rewritten.document.kind).toBe('graph');
     expect(rewritten.markup).toEqual(expect.any(String));
   });
 
   it('/edits ALWAYS echoes: its caller sent a splice, not a document', async () => {
     const { body: made } = await create(CANONICAL);
     const res = await editArtifact(
-      request(`/api/artifacts/${made.id}/edits`, { method: 'POST', token: token, json: { edit_id: made.edit_id, old_string: 'Body copy.', new_string: 'Different copy.' } }),
+      request(`/api/artifacts/${made.id}/edits`, { method: 'POST', token: token, json: await observedTextBody(made.id,'Body copy.','Different copy.') }),
       params({ id: made.id }),
     );
     const body = await res.json();
@@ -94,6 +81,6 @@ describe('the write echo is present only when it is news', () => {
     );
     const body = await res.json();
     expect(body.title ?? 'Named').toBeTruthy();
-    expect(body.markup_changed).toBe(false);
+    expect(body.document.kind).toBe('graph');
   });
 });

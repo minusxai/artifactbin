@@ -4,6 +4,7 @@ import { takeBootstrap } from '../bootstrap';
 import { PageLoading } from '../PageLoading';
 import { Navigate, useLocation, useParams } from 'react-router';
 import { ListingShell } from '@/components/Listing';
+import type { ProfileSocial } from '@/lib/profile-social';
 import { ProfileListing } from '@/components/ProfileListing';
 import { artifactViewPath, parsePrettyPath } from '@/lib/urls';
 import { routePages } from '../route-pages';
@@ -15,7 +16,7 @@ const { ArtifactPage } = routePages;
 type Resolved =
   | { kind: 'redirect'; to: string }
   | { kind: 'artifact'; id: string }
-  | { kind: 'public-profile'; handle: string; owner?: { id: string; image: string | null }; follow?: { following: boolean; count: number }; files: never[]; authed: boolean; anon: boolean };
+  | { kind: 'public-profile'; handle: string; owner?: { id: string; image: string | null }; social?: ProfileSocial; files: never[]; authed: boolean; anon: boolean };
 
 export function ProfilePage() {
   const { user, '*': rest, id } = useParams();

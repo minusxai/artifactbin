@@ -1,3 +1,7 @@
+import {beforeEach} from 'vitest';
+import {getArtifactById,type ArtifactRow} from '@/lib/artifacts';
+import {documentPublicationBody} from './prepared-document';
+import {GET as archivedRoute} from '@/app/api/artifacts/[id]/versions/[version]/route';
 import {patchMetadata} from '@/__tests__/conditional-request';
 import {observedRequest} from '@/__tests__/conditional-request';
 /**
@@ -10,7 +14,6 @@ import { describe, expect, it } from 'vitest';
 import { useAppHarness, request } from '@/__tests__/harness';
 import { POST as editRoute } from '@/app/api/artifacts/[id]/edits/route';
 import { DELETE as deleteRoute, GET as getArtifactRoute, PUT as putArtifact } from '@/app/api/artifacts/[id]/route';
-import { POST as revertRoute } from '@/app/api/artifacts/[id]/revert/route';
 import { GET as listVersionsRoute } from '@/app/api/artifacts/[id]/versions/route';
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 import { POST as mintTokenRoute } from '@/app/api/tokens/route';
@@ -19,6 +22,9 @@ import { MAX_STALE_EDITS } from '@/lib/artifacts';
 
 const SECRET = 'test-secret';
 const harness = useAppHarness();
+const snapshots=new Map<string,ArtifactRow>();
+beforeEach(()=>snapshots.clear());
+async function remember(id:string){const row=await getArtifactById(id);if(row)snapshots.set(row.edit_id,row);return row;}
 
 const params = <T extends Record<string, string>>(p: T) => ({ params: Promise.resolve(p) });
 
@@ -49,16 +55,40 @@ async function createMarkup(token: string, markup = MARKUP): Promise<Wire> {
   const wire = await res.json();
   // The echo is skipped when storing changed nothing (`markup_changed:false`),
   // so the canonical source is what we sent — the same reasoning an agent does.
+  await remember(wire.id);
   return { ...wire, markup: wire.markup ?? markup };
 }
 
+/** Authoring client retains its observed graph and compiles text intent locally. */
 async function edit(token: string, id: string, body: Record<string, unknown>) {
-  return editRoute(request(`/api/artifacts/${id}/edits`, { method: 'POST', token: token, json: body }), params({ id }));
+  if(typeof body.edit_id!=='string'||(!Object.hasOwn(body,'source')&&!Object.hasOwn(body,'old_string'))||(Object.hasOwn(body,'source')&&Object.hasOwn(body,'old_string')))
+    return editRoute(request(`/api/artifacts/${id}/edits`,{method:'POST',token,json:body}),params({id}));
+  const base=snapshots.get(body.edit_id)??await remember(id);
+  if(!base?.document)throw new Error('Missing client snapshot');
+  let source=body.source as string|undefined;
+  if(source===undefined){
+    const old=String(body.old_string),next=String(body.new_string),matches=base.source!.split(old).length-1;
+    if(matches!==1)throw new Error(matches===0?'no_match':'multiple_matches');
+    source=base.source!.replace(old,next);
+  }
+  const prepared=documentPublicationBody(base,{source});
+  if(!snapshots.has(body.edit_id))prepared.document_update.patch.baseVersion=999999;
+  const response=await editRoute(request(`/api/artifacts/${id}/edits`,{method:'POST',token,json:prepared}),params({id}));
+  await remember(id);
+  return response;
+}
+async function restore(token:string,id:string,version:number){
+ const archive=await archivedRoute(request(`/api/artifacts/${id}/versions/${version}`,{token}),params({id,version:String(version)}));
+ if(!archive.ok)return archive;
+ const saved=await archive.json(),head=await remember(id);
+ if(!head)throw new Error('Missing client snapshot');
+ return editRoute(request(`/api/artifacts/${id}/edits`,{method:'POST',token,json:documentPublicationBody(head,{source:saved.markup},true)}),params({id}));
 }
 
 async function read(token: string, id: string): Promise<Wire> {
   const res = await getArtifactRoute(request(`/api/artifacts/${id}`, { token: token }), params({ id }));
   expect(res.status).toBe(200);
+  await remember(id);
   return res.json();
 }
 
@@ -130,13 +160,13 @@ describe('fast path (base = head)', () => {
 });
 
 describe('rejects', () => {
-  it('unknown base edit_id → 409 stale_edit_id with head to rebase on', async () => {
+  it('unknown base version → 409 doc_changed with current head', async () => {
     const t = await mint();
     const doc = await createMarkup(t.token);
     const res = await edit(t.token, doc.id, { edit_id: 'f'.repeat(32), old_string: 'alpha', new_string: 'x' });
     expect(res.status).toBe(409);
     const body = await res.json();
-    expect(body.error).toBe('stale_edit_id');
+    expect(body.error).toBe('doc_changed');
     expect(body.edit_id).toBe(doc.edit_id);
     expect(body.source).toBe(doc.markup);
     expect(body.version).toBe(doc.version);
@@ -150,25 +180,19 @@ describe('rejects', () => {
       [' text', 'x', 'multiple_matches'],
       ['alpha', 'alpha', 'identical'],
     ] as const) {
+      if(detail!=='identical'){await expect(edit(t.token,doc.id,{edit_id:doc.edit_id,old_string,new_string})).rejects.toThrow(detail);continue;}
       const res = await edit(t.token, doc.id, { edit_id: doc.edit_id, old_string, new_string });
       expect(res.status).toBe(400);
       const body = await res.json();
       expect(body.error).toBe('bad_diff');
       expect(body.detail).toBe(detail);
-      if (detail === 'no_match') expect(body.recovery).toContain('A rejected write changed nothing');
     }
   });
 
   it('invalid candidate markup → publish-pipeline 400, doc untouched', async () => {
     const t = await mint();
     const doc = await createMarkup(t.token);
-    const res = await edit(t.token, doc.id, {
-      edit_id: doc.edit_id,
-      old_string: elementWith(doc.markup!, 'alpha text'),
-      new_string: '<script>alert(1)</script>',
-    });
-    expect(res.status).toBe(400);
-    expect((await res.json()).error).toBe('invalid_jsx');
+    await expect(edit(t.token, doc.id, {edit_id:doc.edit_id,old_string:elementWith(doc.markup!,'alpha text'),new_string:'<script>alert(1)</script>'})).rejects.toThrow();
     const got = await read(t.token, doc.id);
     expect(got.version).toBe(doc.version);
     expect(got.edit_id).toBe(doc.edit_id);
@@ -219,14 +243,7 @@ describe('rejects', () => {
     it('an agent that edits the head cannot smuggle a second Helmet in', async () => {
       const t = await mint();
       const doc = await createMarkup(t.token, WITH_HELMET);
-      const res = await edit(t.token, doc.id, {
-        edit_id: doc.edit_id,
-        old_string: doc.markup!.match(/<section[^>]*>/)![0],
-        new_string: '<Helmet><title>Sneaky</title></Helmet>' + doc.markup!.match(/<section[^>]*>/)![0],
-      });
-      expect(res.status).toBe(400);
-      const body = (await res.json()) as { error: string; details?: Array<{ message: string }> };
-      expect(JSON.stringify(body)).toMatch(/one <Helmet>/i);
+      await expect(edit(t.token,doc.id,{edit_id:doc.edit_id,old_string:doc.markup!.match(/<section[^>]*>/)![0],new_string:'<Helmet><title>Sneaky</title></Helmet>'+doc.markup!.match(/<section[^>]*>/)![0]})).rejects.toThrow(/one <Helmet>/i);
     });
   });
 
@@ -236,7 +253,9 @@ describe('rejects', () => {
       request('/api/artifacts', { method: 'POST', token: t.token, json: { title: 'ds', dataset: [{ a: 1 }] } }),
     );
     const doc = (await res0.json()) as Wire;
-    const res = await edit(t.token, doc.id, { edit_id: doc.edit_id, old_string: '1', new_string: '2' });
+    const authoring=await createMarkup(t.token);
+    const prepared=documentPublicationBody(snapshots.get(authoring.edit_id)!,{source:authoring.markup!.replace('alpha','ALPHA')});
+    const res=await editRoute(request(`/api/artifacts/${doc.id}/edits`,{method:'POST',token:t.token,json:prepared}),params({id:doc.id}));
     expect(res.status).toBe(400);
     expect((await res.json()).error).toBe('not_editable');
   });
@@ -342,10 +361,7 @@ describe('stale bases — the node-scope decision', () => {
     const first = await edit(t.token, doc.id, { edit_id: doc.edit_id, old_string: 'alpha text', new_string: 'ALPHA' });
     expect(first.status).toBe(200);
     const firstWire = (await first.json()) as Wire;
-    const rev = await revertRoute(
-      await observedRequest(`/api/artifacts/${doc.id}/revert`, { method: 'POST', token: t.token, json: { version: 1 } }),
-      params({ id: doc.id }),
-    );
+    const rev = await restore(t.token,doc.id,1);
     expect(rev.status).toBe(200);
     const reverted = (await rev.json()) as { edit_id: string };
     // Guard against a vacuous compare: the field must exist and be fresh.
@@ -426,12 +442,12 @@ describe('bounded staleness', () => {
     // refuse to do — answer with head so the caller simply re-reads.
     const res = await edit(t.token, doc.id, { edit_id: doc.edit_id, old_string: 'beta text', new_string: 'BETA' });
     expect(res.status).toBe(409);
-    expect((await res.json()).error).toBe('stale_edit_id');
+    expect((await res.json()).error).toBe('doc_changed');
   });
 });
 
 describe('version history is CHECKPOINTS, and says so', () => {
-  it('a version that exists but was never archived is refused distinguishably, not as a bare 404', async () => {
+  it('an unarchived version cannot be read for restoration; an archived version can', async () => {
     const t = await mint();
     // Keep a deterministic ID collision: tiny text anchors may also occur in
     // generated node IDs, so each edit must include its paragraph context.
@@ -450,18 +466,12 @@ describe('version history is CHECKPOINTS, and says so', () => {
     // Save-less typing coalesces snapshots, so intermediate versions exist as
     // numbers but were never archived. Asking for one must not look like a
     // missing artifact — the caller has already proved ownership.
-    const res = await revertRoute(
-      await observedRequest(`/api/artifacts/${doc.id}/revert`, { method: 'POST', token: t.token, json: { version: head.version - 1 } }),
-      params({ id: doc.id }),
-    );
-    expect(res.status).toBe(409);
-    expect((await res.json()).error).toBe('version_not_archived');
+    const res = await restore(t.token,doc.id,head.version - 1);
+    expect(res.status).toBe(404);
+    expect((await res.json()).error).toBe('not_found');
 
     // A version that IS archived still reverts.
-    const ok = await revertRoute(
-      await observedRequest(`/api/artifacts/${doc.id}/revert`, { method: 'POST', token: t.token, json: { version: 1 } }),
-      params({ id: doc.id }),
-    );
+    const ok = await restore(t.token,doc.id,1);
     expect(ok.status).toBe(200);
   });
 
@@ -469,10 +479,7 @@ describe('version history is CHECKPOINTS, and says so', () => {
     const t = await mint();
     const other = await mint();
     const doc = await createMarkup(t.token);
-    const res = await revertRoute(
-      await observedRequest(`/api/artifacts/${doc.id}/revert`, { method: 'POST', token: other.token, json: { version: 1 } }),
-      params({ id: doc.id }),
-    );
+    const res = await restore(other.token,doc.id,1);
     expect(res.status).toBe(404);
   });
 });
@@ -483,7 +490,7 @@ describe('document-level meta edits', () => {
     const doc = await createMarkup(t.token);
     const set = await patchMetadata(t.token,doc.id,{colorMode:'dark'});
     expect(set.status).toBe(200);
-    expect((await set.json()).version).toBe(doc.version);
+    expect((await set.json()).version).toBe(doc.version+1);
     expect((await read(t.token, doc.id)).colorMode).toBe('dark');
     // The dropdown's "theme default" option is an explicit CLEAR, not an absence.
     const clear = await patchMetadata(t.token,doc.id,{colorMode:null});
@@ -546,13 +553,13 @@ describe('version coalescing and the edits log', () => {
     const updated = (await res.json()) as Wire;
 
     // Genesis (the create) + this edit — every id that was ever head is logged.
-    const rows = await db.query<{ edit_id: string; removed: string; inserted: string }>(
-      'SELECT edit_id, removed, inserted FROM artifact_edits WHERE artifact_id = $1 ORDER BY seq',
+    const rows = await db.query<{ edit_id: string; removed: string; inserted: string; kind:string }>(
+      `SELECT edit_id, removed, inserted,document_state->>'kind' AS kind FROM artifact_edits WHERE artifact_id = $1 ORDER BY seq`,
       [doc.id],
     );
     expect(rows.rows).toEqual([
-      { edit_id: doc.edit_id, removed: '', inserted: doc.markup },
-      { edit_id: updated.edit_id, removed: 'alpha text', inserted: 'ALPHA' },
+      { edit_id: doc.edit_id, removed: '', inserted: doc.markup,kind:null },
+      { edit_id: updated.edit_id, removed: '', inserted: '',kind:'operations' },
     ]);
 
     await new Promise((r) => setTimeout(r, 100));
@@ -575,12 +582,7 @@ describe('version coalescing and the edits log', () => {
       + '<script>{`var a = 1;`}</script></Helmet>';
     const doc = await createMarkup(t.token, `${helmet}<p>body</p>`);
 
-    const res = await edit(t.token, doc.id, {
-      edit_id: doc.edit_id,
-      source: `<Helmet><title>second</title></Helmet>${helmet}<p>body</p>`,
-    });
-    expect(res.status).toBe(400);
-    expect(JSON.stringify(await res.json())).toContain('only one <Helmet>');
+    await expect(edit(t.token,doc.id,{edit_id:doc.edit_id,source:`<Helmet><title>second</title></Helmet>${helmet}<p>body</p>`})).rejects.toThrow('only one <Helmet>');
 
     // and the document it would have gutted is untouched
     const after = await read(t.token, doc.id);

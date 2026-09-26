@@ -104,3 +104,16 @@ it('steps aside while the page opens the profile menu or settings from the rail'
  act(()=>announce('menu',false));
  expect(root).not.toHaveClass('mx-reader-chrome--covered');
 });
+
+it('steps off a phone while editing, where its rail would sit over the document; a desktop keeps it', () => {
+ const input={artifactId:'story1',title:'Title',author:null};
+ const view=render(<InlineReaderChrome input={input} pinned editing onAction={vi.fn()} />);
+ const root=view.container.querySelector('[data-mx-reader-chrome]')!;
+ expect(root).toHaveClass('mx-reader-chrome--editing');
+ const css=[...view.container.querySelectorAll('style')].map((s)=>s.textContent).join('\n');
+ const phone=css.slice(css.indexOf('@media (max-width: 639px)'));
+ expect(phone).toMatch(/\.mx-reader-chrome--editing\s*\{\s*display:\s*none !important;/);
+ expect(css.slice(0, css.indexOf('@media (max-width: 639px)'))).not.toMatch(/\.mx-reader-chrome--editing/);
+ view.rerender(<InlineReaderChrome input={input} pinned onAction={vi.fn()} />);
+ expect(root).not.toHaveClass('mx-reader-chrome--editing');
+});

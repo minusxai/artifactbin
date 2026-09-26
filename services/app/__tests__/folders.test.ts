@@ -43,7 +43,7 @@ describe('creating a folder', () => {
     // A folder's page is a listing computed from the row, so there is nothing
     // stored on it and nothing to serve (__tests__/folder-page.test.ts).
     expect(row.source).toBe('');
-    expect(row.content).toBe('');
+    expect(row).not.toHaveProperty('content');
     const g = await readBack(o.token, r.body.id);
     expect(g.body.format).toBe('folder');
     expect(g.body.parent_id).toBeNull();
@@ -212,7 +212,7 @@ describe('a folder is not a document', () => {
    * whole instead". There is no second word to learn and no second rule: the
    * edit protocol asks `isDocumentFormat`, and a folder is not one.
    */
-  it('refuses the edit protocol with the code the data tiers answer', async () => {
+  it('refuses the retired source edit protocol for folders and datasets', async () => {
     const o = await owner();
     const folder = (await create(o.token, { format: 'folder', title: 'Before' })).body;
     const refusedFolder = await j(await editRoute(
@@ -220,7 +220,7 @@ describe('a folder is not a document', () => {
       params(folder.id),
     ));
     expect(refusedFolder.status).toBe(400);
-    expect(refusedFolder.body).toMatchObject({ error: 'not_editable' });
+    expect(refusedFolder.body).toMatchObject({ error: 'invalid_edit_body' });
     expect((await getArtifactById(folder.id))!.title, 'the title is unchanged').toBe('Before');
     const ds = (await create(o.token, { dataset: [{ a: 1 }] })).body;
     const refused = await j(await editRoute(
@@ -228,7 +228,7 @@ describe('a folder is not a document', () => {
       params(ds.id),
     ));
     expect(refused.status).toBe(400);
-    expect(refused.body).toMatchObject({ error: 'not_editable' });
+    expect(refused.body).toMatchObject({ error: 'invalid_edit_body' });
   });
 
   it('the list carries parent_id and ancestor_ids and the shelf files folders in their own partition', async () => {

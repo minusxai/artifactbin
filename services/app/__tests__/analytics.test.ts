@@ -1,3 +1,5 @@
+import {getArtifactById,getVersionFor} from '@/lib/artifacts';
+import {documentEditBody} from './prepared-document';
 import {observedRequest} from '@/__tests__/conditional-request';
 /**
  * Fire-and-forget analytics (lib/analytics.ts + the analytics_events table).
@@ -19,7 +21,7 @@ import {
   PUT as putArtifact,
 } from '@/app/api/artifacts/[id]/route';
 import { POST as editRoute } from '@/app/api/artifacts/[id]/edits/route';
-import { POST as revertRoute } from '@/app/api/artifacts/[id]/revert/route';
+import { POST as revertRoute } from '@/app/api/artifacts/[id]/edits/route';
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 import { DELETE as deleteMyArtifactRoute } from '@/app/api/my/artifacts/[id]/route';
 import { GET as listMyArtifactsRoute } from '@/app/api/my/artifacts/route';
@@ -131,15 +133,16 @@ describe('write events', () => {
     expect(await expectEvent(doc.id, 'create')).toMatchObject({ user_id: user.id });
   });
 
-  it('PUT logs update; revert logs revert; DELETE logs delete (and does not deadlock)', async () => {
+  it('prepared replacement and restore log edits; DELETE logs delete (and does not deadlock)', async () => {
     const t = await mintToken('t');
     const doc = await create(t.token, { markup: '<h1>v1</h1>' });
 
     expect((await putArtifact(await observedRequest(`/api/artifacts/${doc.id}`, { method: 'PUT', token: t.token, json: { markup: '<h1>v2</h1>' } }), params({ id: doc.id }))).status).toBe(200);
-    await expectEvent(doc.id, 'update');
+    await expectEvent(doc.id, 'edit');
 
-    expect((await revertRoute(await observedRequest(`/api/artifacts/${doc.id}/revert`, { method: 'POST', token: t.token, json: { version: 1 } }), params({ id: doc.id }))).status).toBe(200);
-    await expectEvent(doc.id, 'revert');
+    const head=(await getArtifactById(doc.id))!;const archived=await getVersionFor({tokenId:t.id,userId:null},doc.id,1);
+    expect((await revertRoute(request(`/api/artifacts/${doc.id}/edits`,{method:'POST',token:t.token,json:documentEditBody(head,{source:archived!.source!,whole:true})}),params({id:doc.id}))).status).toBe(200);
+    expect((await eventRows(doc.id)).filter(row=>row.event==='edit')).toHaveLength(2);
 
     // The delete path is transactional: this completing at all proves the
     // event fires OUTSIDE the txn (an inside fire deadlocks PGLite's queue).
@@ -151,8 +154,10 @@ describe('write events', () => {
     const t = await mintToken('t');
     const doc = await create(t.token, { markup: '<section><p>alpha text</p><p>beta text</p></section>' });
 
+    const row=(await getArtifactById(doc.id))!;const prepared=documentEditBody(row,{source:row.source!.replace('alpha','gamma')});
+    const stale=structuredClone(prepared);stale.document_update.patch.baseVersion=999;
     const bad = await editRoute(
-      request(`/api/artifacts/${doc.id}/edits`, { method: 'POST', token: t.token, json: { edit_id: 'bogus', old_string: 'alpha', new_string: 'gamma' } }),
+      request(`/api/artifacts/${doc.id}/edits`, { method: 'POST', token: t.token, json: stale }),
       params({ id: doc.id }),
     );
     expect(bad.status).toBe(409);
@@ -160,7 +165,7 @@ describe('write events', () => {
     expect((await eventRows(doc.id)).filter((r) => r.event === 'edit')).toHaveLength(0);
 
     const good = await editRoute(
-      request(`/api/artifacts/${doc.id}/edits`, { method: 'POST', token: t.token, json: { edit_id: doc.edit_id, old_string: 'alpha', new_string: 'gamma' } }),
+      request(`/api/artifacts/${doc.id}/edits`, { method: 'POST', token: t.token, json: prepared }),
       params({ id: doc.id }),
     );
     expect(good.status).toBe(200);

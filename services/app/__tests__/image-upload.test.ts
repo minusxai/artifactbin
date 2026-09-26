@@ -184,8 +184,7 @@ describe('session raw-body image upload', () => {
       ...(stored as StoredContent), title: null, description: null,
     });
     const doc = await createArtifact(tokenA.id, user.id, {
-      format: 'markup', content: '',
-      source: `<div data-design="tw"><img src="ref:${img.id}" alt="" /></div>`,
+      format: 'markup', source: `<div data-design="tw"><img src="ref:${img.id}" alt="" /></div>`,
       meta: { refs: [{ id: img.id, kind: 'image' }] }, title: 'doc', description: null,
     });
 

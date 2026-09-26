@@ -199,3 +199,39 @@ it('reports the actual source block for hover, click, and caret selection in for
     session.dispose();
   }
 });
+
+it('in a prose region, text is typed in and a container edge is neither outlined nor selected by a click', () => {
+  const parsed = parseJsxOrThrow(`<section id="root">
+    <p id="lead">Lead paragraph</p>
+    <blockquote id="quote"><p id="quoted">Quoted words</p></blockquote>
+  </section>`);
+  const post = vi.fn();
+  const session = createFrameEditSession({
+    win: window, requestRender: () => {},
+    channel: { nonce: 'x'.repeat(32), post, innerHtmlOf: (el) => el.innerHTML },
+  });
+  session.setNodes(parsed.nodes);
+  const view = render(<>{renderStoryNodes(parsed.nodes, {
+    components: {}, decorateElement: session.decorate, decorateChildren: session.decorateChildren,
+  })}</>);
+  const at = (id: string) => view.container.querySelector(`#${id}`)!;
+  const outline = (el: Element) => getComputedStyle(el).outline;
+  const lastSelection = () => post.mock.calls.filter(([m]) => m.type === 'mx:selection').at(-1)?.[0].selection;
+  try {
+    expect(at('quoted').closest('.ProseMirror')).not.toBeNull();
+    fireEvent.pointerOver(at('lead'));
+    expect(at('lead').getAttribute('data-mx-edit-hover')).toBe('text');
+    expect(outline(at('lead'))).not.toMatch(/solid/);
+    fireEvent.pointerOver(at('quote'));
+    expect(at('quote').getAttribute('data-mx-edit-hover')).toBe('container');
+    expect(outline(at('quote'))).not.toMatch(/solid/);
+    expect(getComputedStyle(at('quote')).cursor).toBe('default');
+    window.getSelection()!.removeAllRanges();
+    fireEvent.click(at('quote'));
+    expect(lastSelection()).toBeNull();
+    fireEvent.click(at('quoted'));
+    expect(lastSelection()).toMatchObject({ nodeId: 'quoted', kind: 'text' });
+  } finally {
+    session.dispose();
+  }
+});

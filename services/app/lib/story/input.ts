@@ -8,7 +8,7 @@ import type {ContentObjects} from './prepared-objects';
  *   - `format: 'folder'` — the ONE body with no content field at all. A folder
  *     has NO CONTENT: its page is a listing built from the row, so there is
  *     nothing for a caller to send and nothing here to parse. It leaves with
- *     `content: ''`, `source: ''`, and stays that way — the replace door
+ *     `source: ''`, and stays that way — the replace door
  *     refuses content on a folder rather than turning it into a document.
  *
  * markdown and html are not inputs: HTML is the VOCABULARY inside a document,
@@ -69,7 +69,6 @@ import type { SourceRepair } from '@/lib/jsx/repair';
 
 export interface StoredContent {
   format: ArtifactFormat;
-  content: string; // what /a/<id> serves
   source: string | null; // markup source for round-trip editing
   meta: Record<string, unknown>;
   /** Title derived from the source's first heading — used only when the body has no title. */
@@ -188,7 +187,7 @@ export async function parseContentInput(body: Record<string, unknown>, ctx: Cont
    * the one-of refusal — it is asking for two things.
    */
   if (ctx.creating && body.format === 'folder' && present.length === 0) {
-    return { format: 'folder', content: '', source: '', meta: {}, derivedTitle: null };
+    return { format: 'folder', source: '', meta: {}, derivedTitle: null };
   }
   if (present.length !== 1) return json({ error: 'one_of_markup_dataset_viz_image_pdf' }, 400);
   const kind = present[0];

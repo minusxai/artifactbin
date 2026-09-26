@@ -1,3 +1,4 @@
+import {artifactQuery} from './artifact-document';
 /**
  * CUSTOM DOMAINS — one hostname an ACCOUNT serves its public documents at.
  *
@@ -401,7 +402,7 @@ export async function servesEmbeddedArtifact(ownerId: string, row: ArtifactRow):
  */
 export async function servesWebAsset(ownerId: string, hash: string): Promise<boolean> {
   const db = await getDb();
-  const posts = await db.query<{ source: string | null }>(`SELECT source FROM artifacts WHERE ${OWNER_POSTS_SQL} AND source IS NOT NULL`, [ownerId]);
+  const posts = await artifactQuery<{ source: string | null }>(db,`SELECT source,document FROM artifacts WHERE ${OWNER_POSTS_SQL} AND (source IS NOT NULL OR document IS NOT NULL)`, [ownerId]);
   return posts.rows.some((post) => collectExternalAssetUrls(post.source!).all.some((url) => urlHash(url) === hash));
 }
 

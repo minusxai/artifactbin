@@ -1,3 +1,4 @@
+import {observedSourceBody,observedTextBody} from './prepared-document';
 /**
  * POST /api/start — the home page's "hand this to your agent" button. The
  * magic moment depends on all of this being true at once: a real document
@@ -90,7 +91,7 @@ describe('POST /api/start', () => {
     const read = await artifactPage(request(`/api/artifacts/${body.id}`, { token: stranger.token }), params({ id: body.id }));
     expect(read.status).toBe(200);
     const write = await putArtifact(
-      request(`/api/artifacts/${body.id}`, { method: 'PUT', token: stranger.token, json: { markup: '<h1>Not yours</h1>' } }),
+      request(`/api/artifacts/${body.id}`, { method: 'PUT', token: stranger.token, json: await observedSourceBody(body.id,'<h1>Not yours</h1>') }),
       params({ id: body.id }),
     );
     expect(write.status).toBe(404);
@@ -124,7 +125,7 @@ describe('POST /api/start', () => {
     })();
 
     const edit = await editRoute(
-      request(`/api/artifacts/${doc.id}/edits`, { method: 'POST', token: agent.token, json: { edit_id: doc.edit_id, old_string: 'Waiting for your agent…', new_string: 'Q3 revenue is up 12%.' } }),
+      request(`/api/artifacts/${doc.id}/edits`, { method: 'POST', token: agent.token, json: await observedTextBody(doc.id,'Waiting for your agent…','Q3 revenue is up 12%.') }),
       params({ id: doc.id }),
     );
     expect(edit.status).toBe(200);

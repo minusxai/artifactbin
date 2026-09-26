@@ -136,7 +136,7 @@ describe('refusals an afbin command reaches name the afbin action', () => {
     const o = await claimed('folderowner');
     const folder = await create(o.token, { format: 'folder', title: 'Reports' });
     const res = await putArtifactRoute(
-      request(`/api/artifacts/${folder.id}`, { method: 'PUT', token: o.token, json: { markup: '<p>nope</p>', expectedVersion: folder.version, expectedState: folder.state } }),
+      request(`/api/artifacts/${folder.id}`, { method: 'PUT', token: o.token, json: { dataset: [{value:1}], expectedVersion: folder.version, expectedState: folder.state } }),
       params({ id: folder.id }),
     );
     expect(res.status).toBe(400);

@@ -41,7 +41,10 @@ interface RefUse {
 /** A dataset's write ACL (lib/artifacts DatasetAccess, mirrored here so this module stays DB-free). */
 type RefAccess = 'read' | 'readwrite';
 
+export interface ReferenceValidationState {id:string;version:number;sharingRevision:number;policyRevision:number}
 export interface ResolvedRef {
+  /** Server persistence witness, never an author-provided validation claim. */
+  validationState?:ReferenceValidationState;
   catalog?:import("@/lib/datasets/types").DatasetCatalog;
   query?: (sql:string,params:Record<string,import("./dataflow").Scalar>,paramTypes?:Record<string,DatasetColumn["type"]>)=>Promise<import("./dataflow").TableResult>;
   id: string;

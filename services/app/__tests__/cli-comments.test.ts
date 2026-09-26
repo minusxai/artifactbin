@@ -18,7 +18,7 @@ useAppHarness();
 
 it('creates agent comments by unambiguous quote without editing the document, and refuses ambiguous quotes',async()=>{
  const token=await mintToken('comments');const actor={tokenId:token.id,userId:null};
- const row=await createArtifact(token.id,null,{title:'comments',format:'markup',content:'',source:'<div id="container"><p id="first">One unique sentence.</p><p id="second">Repeated</p><p id="third">Repeated</p></div>',meta:{}});
+ const row=await createArtifact(token.id,null,{title:'comments',format:'markup',source:'<div id="container"><p id="first">One unique sentence.</p><p id="second">Repeated</p><p id="third">Repeated</p></div>',meta:{}});
  const post=(annotations as unknown as {POST:typeof annotations.GET}).POST;expect(post).toBeTypeOf('function');
  const call=(body:Record<string,unknown>)=>post(request(`/api/artifacts/${row.id}/annotations`,{method:'POST',token:token.token,json:body}),{params:Promise.resolve({id:row.id})});
  const made=await call({quote:'unique sentence',body:'Clarify this'});expect(made.status).toBe(201);expect((await made.json()).anchor.nodeId).toBe('first');
@@ -31,7 +31,7 @@ it('creates agent comments by unambiguous quote without editing the document, an
 
 it('pages comment threads in creation order with a bounded database read',async()=>{
  const token=await mintToken('comment-pages');
- const row=await createArtifact(token.id,null,{title:'pages',format:'markup',content:'',source:'<p id="paragraph">Text</p>',meta:{}});
+ const row=await createArtifact(token.id,null,{title:'pages',format:'markup',source:'<p id="paragraph">Text</p>',meta:{}});
  const ctx={params:Promise.resolve({id:row.id})};
  for(let i=0;i<3;i++)expect((await createComment(request(`/api/artifacts/${row.id}/annotations`,{method:'POST',token:token.token,json:{node_id:'paragraph',body:String(i)}}),ctx)).status).toBe(201);
  let cursor:string|undefined;const bodies:string[]=[];
@@ -46,7 +46,7 @@ it('pages comment threads in creation order with a bounded database read',async(
 it('deletes a thread for an account-claimed owner, refuses anonymous tokens and outsiders, and answers 404 on repeat',async()=>{
  const user=await createUser({email:'mxmx_test_comment_delete@example.com'});
  const token=await mintToken('mxmx_test_comment_delete');await claimToken(user.id,token.token);
- const row=await createArtifact(token.id,user.id,{title:'delete',format:'markup',content:'',source:'<p id="paragraph">Text</p>',meta:{}});
+ const row=await createArtifact(token.id,user.id,{title:'delete',format:'markup',source:'<p id="paragraph">Text</p>',meta:{}});
  const ctx={params:Promise.resolve({id:row.id})};
  const made=await createComment(request(`/api/artifacts/${row.id}/annotations`,{method:'POST',token:token.token,json:{node_id:'paragraph',body:'Remove me'}}),ctx);expect(made.status).toBe(201);
  const annId=(await made.json()).id as string;

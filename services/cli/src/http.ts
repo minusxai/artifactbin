@@ -50,7 +50,7 @@ export class HttpClient {
  private async perform(path:string,method:string,body:unknown,headers:Record<string,string>,binary:boolean,timeoutMs=30000,readOnly=false,address:(path:string,server:string)=>URL=apiUrl,signal?:AbortSignal):Promise<unknown>{
   const url=address(path,this.connection.server);
   const remote=remoteContext(this.options.env);
-  if(this.options.readOnly&&!['GET','HEAD'].includes(method)&&url.pathname!=='/api/artifacts/preflight'&&!isForkPreflight(url.pathname,method,body))throw new CliError('unsupported_dry_run','This request has no read-only preflight.');
+  if(this.options.readOnly&&!['GET','HEAD'].includes(method)&&url.pathname!=='/api/artifacts/preflight'&&!(/^\/api\/artifacts\/[A-Za-z0-9]{6}\/prepare$/.test(url.pathname)&&method==='POST'&&(body as {dryRun?:boolean})?.dryRun===true)&&!isForkPreflight(url.pathname,method,body))throw new CliError('unsupported_dry_run','This request has no read-only preflight.');
   const imageExport=address===viewerUrl&&/^\/a\/[A-Za-z0-9]{6}\/export$/.test(url.pathname);
   let refreshed=false,authenticated=false;
   for(let attempt=0;attempt<3;attempt++){

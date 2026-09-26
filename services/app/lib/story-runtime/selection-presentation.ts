@@ -1,13 +1,27 @@
 /** Inert selection visuals shared by commenting, editing, and edit-handle geometry. */
 const width = 1;
 const offset = 3;
-const outline = (opacity: number) =>
-  `outline: ${width}px solid rgba(245, 158, 11, ${opacity}); outline-offset: ${offset}px; border-radius: 3px;`;
+const outline = (color: string) => `outline: ${width}px solid ${color}; outline-offset: ${offset}px;`;
+/** Authored utilities are compiled !important (a kit button's `outline-none`); edit chrome must still show. */
+const important = (css: string) => css.replaceAll(';', ' !important;');
+/** Slate at low alpha reads on light and dark grounds alike, so edit chrome needs no theme hook. */
+const neutral = (opacity: number) => `rgba(100, 116, 139, ${opacity})`;
 
 export const SELECTION_PRESENTATION = {
-  selectedCss: outline(0.85),
-  hoverCss: `${outline(0.9)} background: rgba(245, 158, 11, 0.08);`,
-  /** Pointed at from outside (the query notebook): dashed, so it never reads as the selection. */
-  spotlightCss: `outline: 2px dashed rgba(245, 158, 11, 0.9); outline-offset: ${offset}px; border-radius: 3px; background: rgba(245, 158, 11, 0.06);`,
+  /** Commenting keeps amber: it is the colour of every comment mark. */
+  selectedCss: `${outline('rgba(245, 158, 11, 0.85)')} border-radius: 3px;`,
+  /**
+   * Edit mode is calm: only a BLOCK selection (a grip, Esc, the breadcrumb,
+   * a click on a chart) is outlined, thin, neutral and never filled. Typing
+   * shows the caret alone, and hover draws nothing. No border-radius: the
+   * outline must not reshape an authored rounded card.
+   */
+  editSelectedCss: important(outline(neutral(0.55))),
+  /** Handles are faint until the pointer is on them. */
+  handleColor: neutral(0.6),
+  handleDot: neutral(0.45),
+  handleActive: neutral(0.95),
+  /** Pointed at from outside (the query notebook): dashed amber, so it never reads as the selection; last and important, so hover never hides it. */
+  spotlightCss: important(`outline: 2px dashed rgba(245, 158, 11, 0.9); outline-offset: ${offset}px; border-radius: 3px; background: rgba(245, 158, 11, 0.06);`),
   handleOutset: offset + width / 2,
 };

@@ -56,7 +56,6 @@ export interface ArchivedRender {
   /** The head version at this moment — the `M` in "version N of M". */
   head: number;
   source: string;
-  content: string;
   meta: Record<string, unknown>;
   title: string | null;
   description: string | null;
@@ -80,7 +79,6 @@ export function versionAsked(url: string): number | 'none' | 'invalid' {
 /** The head as an {@link ArchivedRender} — `?version=<head>` renders it with the same banner. */
 const headRender = (row: ArtifactRow): Omit<ArchivedRender, 'version' | 'head'> => ({
   source: row.source ?? '',
-  content: row.content,
   meta: (row.meta ?? {}) as Record<string, unknown>,
   title: row.title,
   description: row.description,
@@ -112,7 +110,7 @@ export async function archivedVersionFor(
   if (opts.capture) {
     if (asked === head) return archived(asked, head, headRender(row));
     const shot = await versionForCapture(row, asked);
-    return shot ? archived(asked, head, { source: shot.source ?? '', content: shot.content, meta: shot.meta, title: shot.title, description: shot.description }) : 'not_found';
+    return shot ? archived(asked, head, { source: shot.source ?? '', meta: shot.meta, title: shot.title, description: shot.description }) : 'not_found';
   }
   const actor = actorForArtifacts(await requestOrSessionActor(request));
   if (!actor) return 'not_found';
@@ -126,10 +124,10 @@ export async function archivedVersionFor(
    */
   if (asked === head) return (await listVersionsFor(actor, row.id)) ? archived(asked, head, headRender(row)) : 'not_found';
   const found = await getVersionFor(actor, row.id, asked);
-  return found ? archived(asked, head, { source: found.source ?? '', content: found.content, meta: found.meta, title: found.title, description: found.description }) : 'not_found';
+  return found ? archived(asked, head, { source: found.source ?? '', meta: found.meta, title: found.title, description: found.description }) : 'not_found';
 }
 
 /** The row an archived render renders FROM: this artifact, wearing that version's bytes. */
 export function rowAtVersion(row: ArtifactRow, at: ArchivedRender): ArtifactRow {
-  return { ...row, source: at.source, content: at.content, meta: at.meta as ArtifactRow['meta'], title: at.title, description: at.description };
+  return { ...row, source: at.source, meta: at.meta as ArtifactRow['meta'], title: at.title, description: at.description };
 }

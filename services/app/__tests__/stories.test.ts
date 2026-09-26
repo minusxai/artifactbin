@@ -1,3 +1,4 @@
+import {restoreDocument,documentEdit} from './prepared-document';
 import {observedRequest} from '@/__tests__/conditional-request';
 /**
  * Document-tier lifecycle over the story engine: format switching, versioning
@@ -9,10 +10,9 @@ import {observedRequest} from '@/__tests__/conditional-request';
 import { describe, expect, it } from 'vitest';
 import { GET as serveArtifact } from '@/app/a/[id]/raw/route';
 import { GET as getArtifactRoute, PUT as putArtifact } from '@/app/api/artifacts/[id]/route';
-import { POST as revertRoute } from '@/app/api/artifacts/[id]/revert/route';
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 import { POST as previewRoute } from '@/app/api/preview/route';
-import { replaceArtifactFor } from '@/lib/artifacts';
+import { applyEditFor,getArtifactById } from '@/lib/artifacts';
 
 
 import { parseContentInput } from '@/lib/story/input';
@@ -107,10 +107,7 @@ describe('document editing', () => {
     expect(read.markup).toContain('Second');
     expect(read.theme).toBe('industry');
 
-    const revert = await revertRoute(
-      await observedRequest(`/api/artifacts/${created.id}/revert`, { method: 'POST', token: t.token, json: { version: 1 } }),
-      params({ id: created.id }),
-    );
+    const revert = await restoreDocument(t.token,created.id,1);
     expect(revert.status).toBe(200);
 
     read = await (
@@ -133,14 +130,16 @@ describe('document editing', () => {
 
     const parsed = await parseContentInput({ markup: '<h1>Edited</h1>', theme: 'organic' });
     if (parsed instanceof Response) throw new Error('parse failed');
-    const row = await replaceArtifactFor({ tokenId: '', userId: user.id }, created.id, parsed);
-    if (row === null || row instanceof Response || 'conflict' in row) throw new Error('replace failed');
+    const prepared=documentEdit((await getArtifactById(created.id))!,{source:parsed.source!,metadata:{theme:'organic'},whole:true});
+    const result=await applyEditFor({tokenId:'',userId:user.id},created.id,prepared);
+    if(!result||result instanceof Response||!result.applied)throw new Error('replace failed');
+    const row=result.row;
     expect(row?.version).toBe(2);
     expect(row?.source).toContain('Edited');
     expect(row?.source).toMatch(/<h1\s[^>]*id="[^"]+"[^>]*>/);
 
     const other = await createUser({ email: 'other@x.com' });
-    expect(await replaceArtifactFor({ tokenId: '', userId: other.id }, created.id, parsed)).toBeNull();
+    expect(await applyEditFor({ tokenId:'',userId:other.id },created.id,prepared)).toBeNull();
   });
 
   it('preview compiles the document tier without persisting (bearer auth)', async () => {

@@ -67,8 +67,8 @@ describe('a folder has no content', () => {
     const o = await owner('nowrite');
     const f = await create(o.token, { format: 'folder', title: 'Reports' });
     for (const [door, run] of [
-      ['bearer', async () => putRoute(await observedRequest(`/api/artifacts/${f.id}`, { method: 'PUT', json: { markup: '<p>hi</p>' }, token: o.token }), params(f.id))],
-      ['session', async () => putMineRoute(await observedRequest(`/api/my/artifacts/${f.id}`, { method: 'PUT', json: { markup: '<p>hi</p>' }, cookie: o.cookie, origin: 'same' }), params(f.id))],
+      ['bearer', async () => putRoute(await observedRequest(`/api/artifacts/${f.id}`, { method: 'PUT', json: { dataset: [{value:1}] }, token: o.token }), params(f.id))],
+      ['session', async () => putMineRoute(await observedRequest(`/api/my/artifacts/${f.id}`, { method: 'PUT', json: { dataset: [{value:1}] }, cookie: o.cookie, origin: 'same' }), params(f.id))],
     ] as const) {
       const r = await j(await run());
       expect(r.status, `${door}: ${JSON.stringify(r.body)}`).toBe(400);

@@ -1,3 +1,5 @@
+import {restoreDocument} from './prepared-document';
+import {observedRequest} from './conditional-request';
 /**
  * The HTTP surface the CLI speaks to: conditional requests and ranges on the artifact routes, and
  * the unauthenticated capabilities document that pins the protocol and the authoring allowlists.
@@ -12,7 +14,6 @@ import { request, useAppHarness } from './harness';
 import { mintToken } from '@/lib/tokens';
 import { POST as create } from '@/app/api/artifacts/route';
 import { PUT as replace, GET as read } from '@/app/api/artifacts/[id]/route';
-import { POST as revert } from '@/app/api/artifacts/[id]/revert/route';
 import { GET as exportImage } from '@/app/api/artifacts/[id]/export/route';
 import { CLI_PROTOCOL_VERSION } from '@artifactbin/contracts';
 import { STORY_THEME_NAMES, STORY_TEMPLATE_NAMES } from '@/lib/validation/atlas-schemas';
@@ -26,8 +27,9 @@ describe('cli-advanced-http', () => {
   it('revert returns the complete canonical head so the next write needs no read-back',async()=>{
    const token=await mintToken('cli-revert');const original=await(await create(request('/api/artifacts',{method:'POST',token:token.token,json:{markup:'<p>Original</p>',title:'Doc'}}))).json();
    const params={params:Promise.resolve({id:original.id})},path=`/api/artifacts/${original.id}`;
-   const updated=await(await replace(request(path,{method:'PUT',token:token.token,json:{markup:'<p>Changed</p>',expectedVersion:original.version,expectedState:original.state}}),params)).json();
-   const restored=await revert(request(path+'/revert',{method:'POST',token:token.token,json:{version:original.version,expectedVersion:updated.version,expectedState:updated.state}}),params);
+   const updated=await(await replace(await observedRequest(path,{method:'PUT',token:token.token,json:{markup:'<p>Changed</p>',expectedVersion:original.version,expectedState:original.state}}),params)).json();
+   expect(updated.version).toBe(original.version+1);
+   const restored=await restoreDocument(token.token,original.id,original.version);
    expect(restored.status).toBe(200);const body=await restored.json();
    const canonical=await(await read(request(path,{token:token.token}),params)).json();
    for(const key of ['id','version','edit_id','state','markup','title','theme','template','visibility'])expect(body[key],key).toEqual(canonical[key]);

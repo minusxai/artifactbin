@@ -16,8 +16,10 @@ import { services, setServices } from '@/lib/services';
 describe('the registry is curated, not generated', () => {
   it('teaches atomic batches and persistent ids in the model-facing descriptions',()=>{
     const edit=OPERATIONS.find(op=>op.name==='edit_artifact')!.description;
-    expect(edit).toMatch(/edits.*64/);
-    expect(edit).toMatch(/final.*validat/i);
+    expect(edit).toContain('document_update');
+    expect(edit).toMatch(/one SQL statement/);
+    expect(edit).not.toContain('old_string');
+    expect(edit).toMatch(/client.*validat/i);
     expect(edit).toMatch(/preserve.*ids/i);
     const read=OPERATIONS.find(op=>op.name==='get_artifact')!.description;
     expect(read).toContain('anchor.nodeId');

@@ -50,7 +50,7 @@ afterEach(() => { vi.unstubAllGlobals(); });
 
 const props = (over: Partial<ArtifactSurfaceProps> = {}): ArtifactSurfaceProps => ({
   id: 'story1', editId: 'edit_1', format: 'markup', title: 'Quarterly report', source: null, template: null,
-  refs: [], version: 1, content: '', columns: [], compiledCss: null, theme: null, colorMode: null,
+  refs: [], version: 1, dataPreview: '', columns: [], compiledCss: null, theme: null, colorMode: null,
   ...over,
 });
 

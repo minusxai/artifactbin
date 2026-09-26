@@ -38,11 +38,12 @@ describe('the account page', () => {
     // paint, so nothing about how loaded the machine is can make it late. A
     // `findBy` here would pass for the wrong reason (and time out under a busy
     // shard, which is how the keyed remount below was found).
-    expect(screen.getByLabelText('Change picture')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Upload a photo|Change photo/ })).toBeInTheDocument();
     await waitFor(() => {
       expect(container.querySelector('img')?.getAttribute('src')).toBe('/api/users/usr_1/avatar?v=abc123');
     });
-    expect(screen.getByRole('button', { name: 'Remove picture' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Change photo' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Remove photo' })).toBeInTheDocument();
   });
 
   it('keeps account utilities together by offering data upload beside connection management', () => {

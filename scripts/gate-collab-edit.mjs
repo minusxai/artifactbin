@@ -21,6 +21,8 @@
  */
 import { mergeGuestIntoAccount } from './lib/start-doc.mjs';
 import { createChecker } from './lib/assert.mjs';
+import {tsImport} from 'tsx/esm/api';
+const {prepareClientDocumentUpdate}=await tsImport('../services/app/lib/story/document-update-client.ts',import.meta.url);
 import {fixtureFetch as fetch} from './lib/fixture-http.mjs';
 import { chromium } from 'playwright';
 import { openArtifactControls } from './lib/reveal-chrome.mjs';
@@ -111,11 +113,11 @@ const annotated = await commenter.evaluate(async ({ id, editId }) => {
   return r.status;
 }, { id: doc.id, editId: head.edit_id });
 check(annotated === 201, `the commenter may open a thread from the browser (${annotated})`);
-const editAttempt = await commenter.evaluate(async ({ id }) => {
-  const h = await (await fetch(`/api/artifacts/${id}`)).json().catch(() => ({}));
-  const r = await fetch(`/api/my/artifacts/${id}/edits`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ edit_id: h.edit_id ?? 'x', source: '<div><p>nope</p></div>' }) });
+const forbiddenUpdate=prepareClientDocumentUpdate({...head,meta:head},{source:'<div><p>nope</p></div>'});
+const editAttempt = await commenter.evaluate(async ({ id, update, editId }) => {
+  const r = await fetch(`/api/my/artifacts/${id}/edits`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ edit_id:editId,document_update:update }) });
   return r.status;
-}, { id: doc.id });
+}, { id: doc.id,update:forbiddenUpdate,editId:head.edit_id });
 check(editAttempt === 404, `…and may not edit — the uniform 404 (${editAttempt})`);
 await commenterCtx.close();
 

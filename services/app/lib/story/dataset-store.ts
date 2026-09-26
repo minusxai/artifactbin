@@ -1,24 +1,17 @@
 /**
  * Where dataset ROWS actually live.
  *
- * Not in `artifacts.content` as JSON. That is fine for the twenty rows an agent
- * hand-writes and wrong for a file: a real Google Sheet arrives at 27 MB, and
- * every render and every /edits write would read and parse the whole column —
- * with PGLite holding it in one process. So the rows go to the object store and
- * the row keeps a reference.
+ * Rows live in the object store. A real sheet can be tens of megabytes, so
+ * artifact reads and edits carry only its object key.
  *
  * Both directions live here so no caller has to know where a given
  * artifact's rows are.
  */
-import {legacyDatasetRows} from '@/lib/datasets/catalog-metadata';
 import { objectKey, objectStore } from '@/lib/object-store';
 
-/** Where a dataset's rows are, if not inline. */
+/** Where a dataset's rows are. */
 interface DatasetLocation {
-  /** JSON to store in `artifacts.content` — empty when the rows went to the store. */
-  content: string;
-  /** Object key, or null when the rows are inline. */
-  objectKey: string | null;
+  objectKey: string;
 }
 
 /**
@@ -29,18 +22,16 @@ export async function storeDatasetRows(rows: unknown[], store: Pick<import('@/li
   const json = JSON.stringify(rows);
   const key = objectKey('dataset', json);
   await store.put(key, json, 'application/json');
-  // `content` is NOT NULL, and an empty string is the honest value: the rows
-  // are elsewhere. A reader keys off objectKey, never off content being empty.
-  return { content: '', objectKey: key };
+  return { objectKey: key };
 }
 
 /**
- * Read object-backed rows or validated surviving legacy inline bytes. An unreadable
+ * Read object-backed rows. An unreadable
  * referenced object throws; it must never masquerade as an empty table.
  */
-export async function loadDatasetRows(row: { content: string; meta: unknown }): Promise<Record<string, unknown>[]> {
+export async function loadDatasetRows(row: { meta: unknown }): Promise<Record<string, unknown>[]> {
   const key = (row.meta as { objectKey?: unknown } | null)?.objectKey;
-  if (typeof key !== 'string' || !key) return legacyDatasetRows(row.content) ?? [];
+  if (typeof key !== 'string' || !key) return [];
   // A row that names a key promises rows; a store that cannot produce them
   // is an ERROR (ObjectUnavailable) the caller surfaces — never `[]`, which
   // would draw an empty chart over a broken bucket. Repeat reads cost one

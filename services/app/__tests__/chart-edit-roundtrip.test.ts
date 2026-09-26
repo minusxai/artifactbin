@@ -1,3 +1,5 @@
+import {getArtifactById} from '@/lib/artifacts';
+import {documentEditBody} from './prepared-document';
 /**
  * A chart edit surviving the trip to the server and back, through the REAL
  * handlers.
@@ -70,8 +72,10 @@ async function createStory() {
   return { ...wire, markup: storedMarkup(wire, sent) };
 }
 
-const submit = (id: string, editId: string, newSource: string) =>
-  editRoute(request(`/api/artifacts/${id}/edits`, { method: 'POST', token, json: { edit_id: editId, source: newSource } }), params(id));
+const submit = async(id:string,editId:string,newSource:string)=>{
+ const row=(await getArtifactById(id))!;expect(row.edit_id).toBe(editId);
+ return editRoute(request(`/api/artifacts/${id}/edits`,{method:'POST',token,json:documentEditBody(row,{source:newSource})}),params(id));
+};
 
 const readBack = async (id: string) =>
   (await (await getArtifactRoute(request(`/api/artifacts/${id}`, { token }), params(id))).json()) as { markup: string; version: number };
@@ -145,10 +149,6 @@ describe('a chart edit through /edits', () => {
     // The picker only offers what the document declares, but the write-back
     // must not be the only thing standing between a typo and an empty chart.
     const story = await createStory();
-    const res = await submit(story.id, story.edit_id, updateQuestionChartInJsx(story.markup, PATH, { viz: BAR, table: 'zzzzzz' }));
-    expect(res.status).toBe(400);
-    const body = (await res.json()) as { error: string; details: Array<{ message: string }> };
-    expect(body.error).toBe('invalid_jsx');
-    expect(body.details[0].message).toContain('$zzzzzz');
+    await expect(submit(story.id,story.edit_id,updateQuestionChartInJsx(story.markup,PATH,{viz:BAR,table:'zzzzzz'}))).rejects.toThrow('$zzzzzz');
   });
 });

@@ -1,3 +1,7 @@
+import {createDocumentGraph} from '../../app/lib/story/document-graph';
+import {documentOutcomePresent} from './document-recovery';
+import {prepareClientDocumentPublication} from '../../app/lib/story/document-update-client';
+import type {DocumentGraph,DocumentUpdate,DocumentAssetWarning} from '@artifactbin/contracts';
 import {localIdentities} from './identities';
 import {referenceIds} from './preview/graph';
 import {inferColumns} from '@artifactbin/utils/shape';
@@ -31,7 +35,7 @@ import {parseResourceFile,readResourceSource,reconcileResource,resourceContent,s
  * rides a second request inside the same command (`plan.policy`), never a second command.
  */
 interface PushOptions {force?:boolean;dryRun?:boolean;access?:'read'|'readwrite';policy?:'viewers-write'|'none'}
-interface PushPlan {confirmed?:Snapshot;source?:ResourceSource;reconcile?:boolean;file:LocalFile;body:Record<string,unknown>;mode:'create'|'edit'|'metadata'|'replace'|'none'|'missing';id?:string;policy?:DatasetPolicy|null;policyName?:string}
+interface PushPlan {warnings?:DocumentAssetWarning[];authoringBase?:Snapshot;confirmed?:Snapshot;source?:ResourceSource;reconcile?:boolean;file:LocalFile;body:Record<string,unknown>;mode:'create'|'edit'|'metadata'|'replace'|'none'|'missing';id?:string;policy?:DatasetPolicy|null;policyName?:string}
 const fieldMap:Record<string,string>={link:'linkRole',folder:'parent_id'};
 /**
  * The tables `--policy viewers-write` is aimed at: the ones the pushed `<Dataset>` definition
@@ -158,6 +162,31 @@ export async function finishLocalPush(workspace:Workspace,paths:string[],options
   return{operations};
  });
 }
+/** Prepare the complete document mutation locally from its tracked graph. A
+ * missing graph needs one read to upgrade the client's snapshot, not a server
+ * read/validate/retry write pipeline. */
+async function prepareDocumentPlan(plan:PushPlan,client:HttpClient,force:boolean,dryRun=false):Promise<PushPlan>{
+ if(!plan.file.document||!plan.id||['create','missing','none'].includes(plan.mode))return plan;
+ let head=plan.file.tracked?.snapshot;
+ if(force||!head?.document)head=await client.request<Snapshot>(`/artifacts/${plan.id}`);
+ const native=['dataset','viz','image','pdf','file'].includes(head.format??'');
+ const document=(native?createDocumentGraph('',head.version):head.document) as DocumentGraph|undefined;
+ if(document?.kind!=='graph')throw new CliError('invalid_response','The artifact has no editable JSONB snapshot.');
+ if(!force&&!plan.file.tracked&&(plan.body.expectedVersion!==undefined&&plan.body.expectedVersion!==head.version||plan.body.expectedState!==undefined&&plan.body.expectedState!==head.state))throw new CliError('state_conflict','The remote artifact differs from the state recorded in this file.','Inspect afbin diff --remote before deciding how to reconcile the changes.',{head},3);
+ const desired=metadataInput(plan.file.document.metadata),observed=metadataInput(snapshotDocument(head).metadata);
+ const delta=Object.fromEntries(Object.entries(desired).filter(([k,v])=>!isDeepStrictEqual(v,observed[k])));
+ const metadata=Object.fromEntries(Object.entries(delta).filter(([k])=>['title','description','theme','template','colorMode'].includes(k))) as DocumentUpdate['metadata'];
+ const settings:NonNullable<DocumentUpdate['settings']>={
+  ...(delta.visibility!==undefined?{visibility:delta.visibility as 'private'|'unlisted'|'public'}:{}),
+  ...(delta.linkRole!==undefined?{linkRole:delta.linkRole as 'viewer'|'commenter'|'editor'}:{}),
+  ...(delta.parent_id!==undefined?{parentId:delta.parent_id as string|null}:{}),
+  ...(delta.shares!==undefined?{shares:delta.shares as NonNullable<DocumentUpdate['settings']>['shares']}:{}),
+ };
+ let warnings:DocumentAssetWarning[]=[];
+ const update=await prepareClientDocumentPublication({document,version:head.version,title:head.title,description:head.description as string|null,meta:{theme:head.theme,template:head.template,colorMode:head.colorMode}},{source:plan.file.document.body,metadata,whole:native||force||plan.file.document.metadata.version!==undefined},async source=>client.request(`/artifacts/${plan.id}/prepare`,'POST',{source,dryRun}),received=>{warnings=received;});
+ if(Object.keys(settings).length)Object.assign(update,{settings,expectedSharingRevision:Number(head.sharing_revision??0),expectedParentIds:head.ancestor_ids??[]});
+ return {...plan,warnings,authoringBase:head,mode:'edit',reconcile:false,body:{edit_id:head.edit_id,document_update:update}};
+}
 async function observeConditions(plan:PushPlan,client:HttpClient,force:boolean):Promise<PushPlan>{
  if(!plan.id||!force&&(plan.file.tracked||plan.body.expectedVersion!==undefined&&plan.body.expectedState!==undefined))return plan;
  const head=await client.request<Snapshot>(`/artifacts/${plan.id}`);
@@ -202,11 +231,12 @@ export async function push(workspace:Workspace,paths:string[],client:HttpClient,
   const plans=await planPush(workspace,paths,options);const results=[];
   for(let plan of plans){
    if(plan.mode==='missing'){results.push({path:plan.file.path,status:'skipped',reason:'missing_file'});continue;}
-   plan=await observeConditions(plan,client,!!options.force);
+   plan=await prepareDocumentPlan(plan,client,!!options.force,!!options.dryRun);
+   if(!plan.body.document_update)plan=await observeConditions(plan,client,!!options.force);
    plan=await reconcileMixed(plan,client);
    const mode=plan.mode==='none'?'replace':plan.mode;
    const preflight=await client.request<Record<string,unknown>>('/artifacts/preflight','POST',{...(plan.id?{id:plan.id}:{}),...(mode!=='create'?{mode}:{}),input:plan.body});
-   results.push({path:plan.file.path,...preflight});
+   results.push({path:plan.file.path,...preflight,...(plan.warnings?.length?{asset_warnings:plan.warnings}:{})});
   }
   return{dry_run:true,operations:results};
  }
@@ -214,20 +244,21 @@ export async function push(workspace:Workspace,paths:string[],client:HttpClient,
   await recoverFiles(workspace.home,workspace.root);workspace=await loadWorkspace(workspace.cwd,workspace.home);
   const pending=await readPendingRequest(workspace.home,workspace.root);
   const operations:Array<Record<string,unknown>>=[];
-  if(pending){const recovered=await recoverRequest(workspace,client,pending,true);operations.push({path:pending.file.path,status:'recovered',...sourceRewrite(recovered,pending.request.body.markup??pending.request.body.source)});workspace=await loadWorkspace(workspace.cwd,workspace.home);}
+  if(pending){const recovered=await recoverRequest(workspace,client,pending,true);operations.push({path:pending.file.path,status:'recovered',...(pending.file.warnings?.length?{asset_warnings:pending.file.warnings}:{}),...sourceRewrite(recovered,pending.request.body.markup??pending.request.body.source)});workspace=await loadWorkspace(workspace.cwd,workspace.home);}
   try{
   const plans=await planPush(workspace,paths,options);
   for(let plan of plans){
    if(plan.mode==='missing'){operations.push({path:plan.file.path,status:'skipped',reason:'missing_file'});continue;}
    if(plan.mode==='none'){if(localChanged(plan)){await acknowledgeLocal(workspace,plan);workspace=await loadWorkspace(workspace.cwd,workspace.home);}operations.push({path:plan.file.path,status:plan.file.renamedFrom?'renamed':'skipped',reason:'no_remote_changes'});continue;}
-   plan=await observeConditions(plan,client,!!options.force);
+   plan=await prepareDocumentPlan(plan,client,!!options.force,!!options.dryRun);
+   if(!plan.body.document_update)plan=await observeConditions(plan,client,!!options.force);
    plan=await reconcileMixed(plan,client,workspace);
    const method=plan.mode==='metadata'?'PATCH':plan.mode==='replace'?'PUT':'POST';
    const path=plan.mode==='create'?'/artifacts':`/artifacts/${plan.id}${plan.mode==='edit'?'/edits':''}`;
-   let staged=await stageRequest(workspace.home,workspace.root,{server:client.connection.server,account:client.account,credential:digest(client.connection.token),request:{path,method,body:plan.body},file:{source:plan.source,path:plan.file.path,bytes:plan.file.bytes!.toString('base64'),tracked:plan.file.tracked,renamedFrom:plan.file.renamedFrom}});
+   let staged=await stageRequest(workspace.home,workspace.root,{server:client.connection.server,account:client.account,credential:digest(client.connection.token),request:{path,method,body:plan.body},file:{warnings:plan.warnings,authoringBase:plan.authoringBase,source:plan.source,path:plan.file.path,bytes:plan.file.bytes!.toString('base64'),tracked:plan.file.tracked,renamedFrom:plan.file.renamedFrom}});
    if(plan.confirmed)staged=await savePendingResponse(workspace.home,workspace.root,staged,plan.confirmed,client.account);
    const snapshot=await recoverRequest(workspace,client,staged);workspace=await loadWorkspace(workspace.cwd,workspace.home);
-   const operation:Record<string,unknown>={path:plan.file.path,status:'published',id:snapshot.id,version:snapshot.version,...sourceRewrite(snapshot,plan.file.document?.body),...(snapshot.affected_dependents?{affected_dependents:snapshot.affected_dependents}:{}),...datasetColumns(plan.file.path,plan.file.bytes),...datasetAccess(snapshot,plan.body)};
+   const operation:Record<string,unknown>={path:plan.file.path,status:'published',...(plan.warnings?.length?{asset_warnings:plan.warnings}:{}),id:snapshot.id,version:snapshot.version,...sourceRewrite(snapshot,plan.file.document?.body),...(snapshot.affected_dependents?{affected_dependents:snapshot.affected_dependents}:{}),...datasetColumns(plan.file.path,plan.file.bytes),...datasetAccess(snapshot,plan.body)};
    operations.push(operation);
    // The policy the content write could not carry, on the published dataset, inside the same command.
    if(plan.policy!==undefined){await writeDatasetPolicy(workspace,client,plan,snapshot);workspace=await loadWorkspace(workspace.cwd,workspace.home);}
@@ -247,12 +278,12 @@ async function recoverRequest(workspace:Workspace,client:HttpClient,pending:Pend
   const id=pending.file.tracked?.id??parseDocument(Buffer.from(pending.file.bytes,'base64').toString()).metadata.id;
   if(!id)throw new CliError('outcome_unknown','Cannot identify the artifact for conditional-write recovery.');
   const head=await client.request<Snapshot>(`/artifacts/${id}`);
-  const source=pending.request.body.source??pending.request.body.markup;
+  const source=pending.request.body.source??pending.request.body.markup??(pending.request.body.document_update?parseDocument(Buffer.from(pending.file.bytes,'base64').toString()).body:undefined);
   const editable=new Set([...metadataFields.map(key=>fieldMap[key]??key),'access','policy']);
-  const metadataMatches=Object.entries(pending.request.body).filter(([key])=>editable.has(key)).every(([key,value])=>isDeepStrictEqual(head[key==='linkRole'?'link_role':key==='policy'?'dataset_policy':key],value));
-  const contentMatches=typeof source==='string'?canonicalizeMarkup(source)===head.markup:pending.request.method==='PATCH';
+  const metadataMatches=Object.entries(pending.request.body.document_update?(pending.request.body.document_update as DocumentUpdate).metadata??{}:pending.request.body).filter(([key])=>editable.has(key)).every(([key,value])=>isDeepStrictEqual(head[key==='linkRole'?'link_role':key==='policy'?'dataset_policy':key],value));
+  const contentMatches=pending.request.body.document_update?documentOutcomePresent(head,pending.file.authoringBase??pending.file.tracked?.snapshot,pending.request.body.document_update as DocumentUpdate):typeof source==='string'?canonicalizeMarkup(source)===head.markup:pending.request.method==='PATCH';
   if(contentMatches&&metadataMatches){pending=await savePendingResponse(workspace.home,workspace.root,pending,head,client.account);}
-  else if(head.state!==pending.file.tracked?.snapshot.state)throw new CliError('outcome_unknown','The remote head changed after the unconfirmed write; automatic replay would be ambiguous.','Inspect afbin diff --remote and preserve both writers before resolving this pending operation.',{head,pending_key:pending.key});
+  else if(head.state!==(pending.file.authoringBase??pending.file.tracked?.snapshot)?.state)throw new CliError('outcome_unknown','The remote head changed after the unconfirmed write; automatic replay would be ambiguous.','Inspect afbin diff --remote and preserve both writers before resolving this pending operation.',{head,pending_key:pending.key});
  }
  if(!pending.response){
   let response:Record<string,unknown>;
@@ -348,7 +379,7 @@ async function writeDatasetPolicy(workspace:Workspace,client:HttpClient,plan:Pus
  if(observed&&isDeepStrictEqual(observed.dataset_policy??null,plan.policy??null))return snapshot;
  const staged=await stageRequest(workspace.home,workspace.root,{server:client.connection.server,account:client.account,credential:digest(client.connection.token),
   request:{path:`/artifacts/${snapshot.id}`,method:'PATCH',body:{policy:plan.policy,expectedPolicyRevision:Number(observed?.policy_revision??snapshot.policy_revision??0),expectedState:typeof observed?.state==='string'?observed.state:snapshot.state}},
-  file:{source:plan.source,path:plan.file.path,bytes:plan.file.bytes!.toString('base64'),tracked:workspace.tracking?.files[plan.file.path]}});
+  file:{warnings:plan.warnings,authoringBase:plan.authoringBase,source:plan.source,path:plan.file.path,bytes:plan.file.bytes!.toString('base64'),tracked:workspace.tracking?.files[plan.file.path]}});
  return recoverRequest(workspace,client,staged);
 }
 /**

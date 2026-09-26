@@ -1,3 +1,4 @@
+import {artifactQuery} from '@/lib/artifact-document';
 /**
  * App-owned, resumable source-identity backfill contract.
  *
@@ -73,7 +74,7 @@ export async function runNodeIdentityMigrationBatch(
   const conflicts: NodeIdentityMigrationConflict[] = [];
 
   while (processed < options.batchSize) {
-    const next = await db.query<ArtifactRow>(
+    const next = await artifactQuery<ArtifactRow>(db,
       "SELECT * FROM artifacts WHERE format='markup' AND id > COALESCE($1,'') ORDER BY id LIMIT 1", [cursor],
     );
     const current = next.rows[0];
@@ -94,7 +95,7 @@ export async function runNodeIdentityMigrationBatch(
       )).rows[0];
       if (job.version !== NODE_IDENTITY_MIGRATION_VERSION) throw new Error(`node-identity-migration: unsupported stored version ${job.version}`);
       if (job.cursor !== cursor || job.completed_at) return false;
-      const locked = (await tx.query<ArtifactRow>('SELECT * FROM artifacts WHERE id=$1 FOR UPDATE', [current.id])).rows[0];
+      const locked = (await artifactQuery<ArtifactRow>(tx,'SELECT * FROM artifacts WHERE id=$1 FOR UPDATE', [current.id])).rows[0];
       if (!locked || locked.edit_id !== current.edit_id || locked.source !== current.source) return false;
       let insertedCount = 0;
       for (const [id, firstVersion] of prepared.missingReservations) {
@@ -142,8 +143,8 @@ async function prepareArtifact(db: Queryable, current: ArtifactRow, historyCap: 
   if ([...facts.legacyCounts.values()].some((count) => count > 1)) {
     return { conflict: { artifactId: current.id, reason: 'ambiguous_legacy_key' } as NodeIdentityMigrationConflict };
   }
-  const history = await db.query<{ version: number; source: string | null }>(
-    'SELECT version,source FROM artifact_versions WHERE artifact_id=$1 ORDER BY version LIMIT $2', [current.id, historyCap + 1],
+  const history = await artifactQuery<{ version: number; source: string | null }>(db,
+    'SELECT version,source,document FROM artifact_versions WHERE artifact_id=$1 ORDER BY version LIMIT $2', [current.id, historyCap + 1],
   );
   if (history.rows.length > historyCap) return { conflict: { artifactId: current.id, reason: 'history_limit' } as NodeIdentityMigrationConflict };
   const existing = await db.query<{ source_id: string }>('SELECT source_id FROM artifact_source_ids WHERE artifact_id=$1', [current.id]);

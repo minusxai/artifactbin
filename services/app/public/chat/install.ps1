@@ -1,7 +1,7 @@
 # Install afbin for the current user. PowerShell 5.1 or newer; no administrator or Node required.
 [CmdletBinding()]
 param(
-  [string]$Version = '0.2.1',
+  [string]$Version = '0.2.5',
   [string]$Dir = (Join-Path $env:LOCALAPPDATA 'artifactbin\bin'),
   [switch]$Yes,
   [string[]]$Harness

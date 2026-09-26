@@ -1,6 +1,6 @@
 import type { SourceRepair } from '@/lib/jsx/repair';
 /** Source identity policy only; storage reserves emitted ids in its write transaction. */
-import crypto from 'crypto';
+
 import { parseJsx, serializeJsx, type JsxAttribute, type JsxElement, type JsxNode } from '@/lib/jsx';
 
 interface NodeIdEntry { id: string; path: string; node: JsxElement; legacyKey: string | null }
@@ -90,16 +90,17 @@ export function hasAmbiguousLegacyAliases(source: string): boolean {
 const encoded = (value: unknown): string => JSON.stringify(value) ?? 'undefined';
 
 /** Linear structural digest of exact parsed content, ignoring only identity attributes. */
-function signatures(nodes: JsxNode[]): Map<JsxElement, string> {
+function signatures(nodes: JsxNode[], pool:Map<string,string>): Map<JsxElement, string> {
+  const intern=(value:string)=>{let id=pool.get(value);if(id===undefined){id=String(pool.size);pool.set(value,id);}return id;};
   const result = new Map<JsxElement, string>();
   const digest = (node: JsxNode): string => {
-    if (node.type === 'text') return crypto.createHash('sha256').update(encoded(['text', node.value])).digest('hex');
-    if (node.type === 'expression') return crypto.createHash('sha256').update(encoded(['expression', node.value])).digest('hex');
+    if (node.type === 'text') return intern(encoded(['text', node.value]));
+    if (node.type === 'expression') return intern(encoded(['expression', node.value]));
     const attributes = node.attributes
       .filter((a) => a.name !== ID_ATTR && a.name !== LEGACY_ATTR)
       .map((a) => [a.name, a.value]);
     const children = node.children.map(digest);
-    const value = crypto.createHash('sha256').update(encoded(['element', node.tag, node.selfClosing, attributes, children])).digest('hex');
+    const value = intern(encoded(['element', node.tag, node.selfClosing, attributes, children]));
     result.set(node, value);
     return value;
   };
@@ -108,8 +109,9 @@ function signatures(nodes: JsxNode[]): Map<JsxElement, string> {
 }
 
 function defaultMint(): string {
-  return FIRST[crypto.randomInt(FIRST.length)]
-    + Array.from({ length: 3 }, () => REST[crypto.randomInt(REST.length)]).join('');
+  const randomInt=(max:number)=>{const values=new Uint32Array(1),limit=Math.floor(0x100000000/max)*max;do{globalThis.crypto.getRandomValues(values);}while(values[0]!>=limit);return values[0]!%max;};
+  return FIRST[randomInt(FIRST.length)]
+    + Array.from({ length: 3 }, () => REST[randomInt(REST.length)]).join('');
 }
 
 function setStringAttr(node: JsxElement, name: string, value: string): void {
@@ -144,8 +146,9 @@ export function stampNodeIds(source: string, options: NodeIdOptions = {}): NodeI
     const id = stringValue(attr(node, ID_ATTR));
     if (id) used.add(id);
   }
-  const currentSignatures = signatures(nodes);
-  const previousSignatures = signatures(previousNodes);
+  const pool=new Map<string,string>();
+  const currentSignatures = signatures(nodes,pool);
+  const previousSignatures = signatures(previousNodes,pool);
   const currentCounts = new Map<string, number>();
   const previousMatches = new Map<string, string[]>();
   for (const { node } of walked) {

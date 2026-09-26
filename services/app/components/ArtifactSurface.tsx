@@ -1,4 +1,5 @@
 'use client';
+import type {DocumentGraph} from '@artifactbin/contracts';
 import {ArtifactPeople} from './ArtifactPeople';
 import {useArtifactMembership} from './useArtifactMembership';
 
@@ -23,7 +24,7 @@ import { datasetQuerySnippet } from '@/lib/story/dataset-usage';
  */
 import dynamic from '@/lib/dynamic';
 import { MessageSquare, Pencil } from 'lucide-react';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { InlineStoryController } from '@/lib/story-runtime/InlineStoryRuntime';
 import { createAuthenticatedTransport } from '@/lib/story-runtime/authenticated-transport';
 import { subscribeDocument } from '@/lib/story-runtime/document-endpoint';
@@ -48,6 +49,8 @@ import { useIsPhoneViewport } from '@/components/MobileSheet';
  * comes from a leaf module, because importing it from the editor would put the
  * editor in every reader's bundle (lib/__tests__/reader-bundle-hygiene). */
 import { APP_BAR_H, EDIT_BAR_H, RIGHT_RAIL_W } from '@/lib/story/edit-bar';
+import { editPanelWidth, readEditPanelCollapsed, useWideEditViewport } from '@/lib/story/use-edit-panel';
+import { panelFitsInMargin } from '@/lib/story/edit-panel-fit';
 import type { ArtifactFormat } from '@/lib/story/input';
 import { useLiveArtifact } from '@/lib/story/use-live-artifact';
 import { pageDataChanged } from '@/web/page-data-events';
@@ -139,7 +142,8 @@ export interface ArtifactSurfaceProps {
   like?: { liked: boolean; count: number };
   /** Who to follow and whether we do — null for an anonymous document, or the owner's own. */
   follow?: { userId: string; following: boolean; count: number } | null;
-  content: string;
+  document?:DocumentGraph;
+  dataPreview: string;
   columns: Array<{ name: string; type?: string }>;
   catalog?: DatasetCatalog;
   compiledCss: string | null;
@@ -199,7 +203,7 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
   const { session } = useSession();
   const person = session?.kind === 'account' ? session.user : null;
   const readerFace = useMemo(() => person ? { id: person.id, name: person.username || person.email || '', image: person.image } : null, [person]);
-  const { id, editId, format, title, source, content, columns, bytes: fileBytes = 0, pages: filePages = null, compiledCss, theme, colorMode, template, refs, dataflow = null, search = '', accountSession = false, anonSession = false, version, openAnnotations = 0, like = { liked: false, count: 0 }, follow = null } = props;
+  const { id, editId, format, title, source, dataPreview, columns, bytes: fileBytes = 0, pages: filePages = null, compiledCss, theme, colorMode, template, refs, dataflow = null, search = '', accountSession = false, anonSession = false, version, openAnnotations = 0, like = { liked: false, count: 0 }, follow = null } = props;
   const [editing, setEditing] = useState(false);
   /** A view-mode text selection asks edit mode to open on its containing node. */
   const [initialEditSelectionPath, setInitialEditSelectionPath] = useState<string | null>(null);
@@ -402,7 +406,7 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
   // The stream omits compiledCss when unchanged, so `undefined` means "keep
   // what we have" while `null` means "there is none".
   const shownCss = live && live.compiledCss !== undefined ? live.compiledCss : compiledCss;
-  const shownContent = live?.content ?? content;
+  const shownContent = live?.dataPreview ?? dataPreview;
   // The DESIGN travels with the document (see the events route): an agent that
   // publishes a theme onto a page someone is watching must repaint it, not hand
   // them new content in the design this page happened to load with.
@@ -663,18 +667,58 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
   }, [exitEdit]);
 
   /*
-   * ONE reservation for the right edge. Comments and the editor's inspector
-   * share that column by design — same width, higher layer — so the page takes
-   * the larger of the two, never the sum.
+   * THE RIGHT EDGE. Reading: the comments rail, reserved while it is open.
+   *
+   * Editing on a wide window: ONE panel for the whole session
+   * (components/EditPanel), and whether its width comes out of the document's
+   * margin or its width is decided ONCE, as edit mode opens, by measuring the
+   * document as the reader was looking at it. From then on nothing inside the
+   * session moves the document — not a selection, a tab, comments, a preview.
+   * Only collapse / expand changes the panel's width (editorRightInset), and
+   * only a reserved panel passes that on. Comments already open at entry keep
+   * their reserve: the document was laid out beside them, so it would measure
+   * as fitting and then re-centre.
+   *
+   * Editing below the breakpoint: no side panel and no reserve; the tabs open
+   * as bottom sheets, and a half-screen of room under the document lets the
+   * selection scroll above one.
    */
+  const wideEdit = useWideEditViewport();
+  const viewportRef = useRef<HTMLDivElement>(null);
   const [editorRightInset, setEditorRightInset] = useState(0);
-  const railInset = Math.max(railOpen && !phone ? RIGHT_RAIL_W : 0, phone ? 0 : editorRightInset);
-  /*
-   * The EDITOR's left rail and whichever panel it has open. Reserved exactly as
-   * the comments rail is on the right: the document narrows rather than being
-   * covered, so the two edges behave the same way and neither hides what it edits.
-   */
-  const [editorLeftInset, setEditorLeftInset] = useState(0);
+  const [panelFits, setPanelFits] = useState<boolean | null>(null);
+  const railOpenRef = useRef(railOpen);
+  railOpenRef.current = railOpen;
+  useLayoutEffect(() => {
+    if (!editing) { setPanelFits(null); return; }
+    if (!wideEdit || panelFits !== null) return;
+    /*
+     * Measured on the DOCUMENT, never on what stands in for it: a page opened
+     * straight on #edit has only the loading placeholder at first, which would
+     * measure as an empty margin and put the panel over the text that renders
+     * a moment later. So wait (a frame at a time) for the runtime's root to
+     * hold content; until then the reading reserve applies, and a document
+     * that never arrives gets the reserve — covering is the failure here.
+     */
+    let frame = 0;
+    let frames = 0;
+    const decide = () => {
+      const root = viewportRef.current?.querySelector('[data-mx-inline-story]');
+      const ready = !!root && root.childElementCount > 0;
+      if (!ready && !railOpenRef.current && frames++ < 300) { frame = requestAnimationFrame(decide); return; }
+      setEditorRightInset(editPanelWidth(readEditPanelCollapsed()));
+      setPanelFits(!railOpenRef.current && ready && panelFitsInMargin(root!, document.documentElement.clientWidth, RIGHT_RAIL_W));
+    };
+    decide();
+    return () => cancelAnimationFrame(frame);
+  }, [editing, wideEdit, panelFits]);
+  const readingRail = railOpen && !phone ? RIGHT_RAIL_W : 0;
+  const railInset = !editing ? readingRail
+    : !wideEdit ? 0
+    : panelFits === null ? readingRail
+    : panelFits ? 0 : editorRightInset;
+  /** The edit panel's Comments tab body, which the comments rail renders into. */
+  const [commentsHost, setCommentsHost] = useState<HTMLElement | null>(null);
 
   /*
    * WHAT THE EDITOR IS GIVEN. Ownership is decided once, on the server, for
@@ -685,6 +729,7 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
    * document nobody has — and hand it a stale head pointer.
    */
   const editorSeed = canEdit ? {
+    document: live?.document ?? props.document,
     id,
     version: live?.version ?? version,
     edit_id: live?.editId ?? editId,
@@ -774,7 +819,7 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
     return (
       <>
         <TrustedUi overlay layer="navigation">
-        <InlineReaderChrome onShare={owner ? () => setSharingOpen(true) : undefined} pinned={editing || railOpen} input={{artifactId:id, ground:readerMode, editing, membership:hasDataMutations?membership.status:undefined, share:owner, archived, visibility:sharingVerdict?.id === id ? sharingVerdict.visibility : props.visibility, hasInvitedUsers:sharingVerdict?.id === id ? sharingVerdict.hasInvitedUsers : props.hasInvitedUsers, title:shownTitle, forkBusy:false, author:props.author ?? null, viewer:readerFace, edit:canEdit, ownerBreadcrumb:owner, reactions:{like:{...likeRef.current,href:'#'},follow:followRef.current ? {...followRef.current,href:'#'} : null,comment:{count:openAnnotationCount,href:'#'}}}} onAction={action => {
+        <InlineReaderChrome onShare={owner ? () => setSharingOpen(true) : undefined} pinned={editing || railOpen} editing={editing} input={{artifactId:id, ground:readerMode, editing, membership:hasDataMutations?membership.status:undefined, share:owner, archived, visibility:sharingVerdict?.id === id ? sharingVerdict.visibility : props.visibility, hasInvitedUsers:sharingVerdict?.id === id ? sharingVerdict.hasInvitedUsers : props.hasInvitedUsers, title:shownTitle, forkBusy:false, author:props.author ?? null, viewer:readerFace, edit:canEdit, ownerBreadcrumb:owner, reactions:{like:{...likeRef.current,href:'#'},follow:followRef.current ? {...followRef.current,href:'#'} : null,comment:{count:openAnnotationCount,href:'#'}}}} onAction={action => {
           if (action === 'like') void toggleLike();
           else if (action === 'follow') void toggleFollow();
           else if (action === 'membership') joinArtifact();
@@ -816,13 +861,14 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
         )}
         </TrustedUi>
         <div
+          ref={viewportRef}
           aria-label="Artifact viewport"
           className="relative min-h-screen"
           style={{
             // Edit/annotation controls change the inset, not runtime identity.
             paddingTop: (phone ? 0 : APP_BAR_H) + (editing ? EDIT_BAR_H : 0),
             paddingRight: railInset,
-            paddingLeft: editing ? editorLeftInset : 0,
+            paddingBottom: editing && !wideEdit ? '50vh' : 0,
             right: 0,
             // The starter uses the app's existing dotted body background.
             background: showStarter ? 'transparent' : readerMode === 'dark' ? DOCUMENT_GROUND.dark : DOCUMENT_GROUND.light,
@@ -870,6 +916,11 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
             // and gets a sheet anyway), and under the editor toolbar too.
             topOffset={(phone ? 0 : APP_BAR_H) + (editing ? EDIT_BAR_H : 0)}
             onAnnotationsChange={setLayerAnnotations}
+            // Editing: the rail is the edit panel's Comments tab on a wide
+            // window, a bottom sheet below it.
+            railHost={editing && wideEdit ? commentsHost : undefined}
+            railSheet={editing && !wideEdit}
+            panelWidth={editing && wideEdit ? editorRightInset : undefined}
           />
         )}
         {/* Edit mode is CHROME around the document, not a replacement for it. */}
@@ -883,8 +934,10 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
             sessionNonce={sessionNonce}
             initialSelectionPath={initialEditSelectionPath}
             onComment={canEdit ? commentOnSelection : undefined}
-            onLeftInsetChange={setEditorLeftInset}
             onRightInsetChange={setEditorRightInset}
+            commentsOpen={railOpen}
+            onCommentsOpenChange={canAnnotate ? setRailOpen : undefined}
+            onCommentsHost={setCommentsHost}
           />
         )}
         {forkAsked && <ForkConfirm id={id} title={shownTitle} onClose={() => setForkAsked(false)} />}

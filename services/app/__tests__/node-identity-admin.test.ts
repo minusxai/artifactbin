@@ -8,8 +8,8 @@ const app = createAppServer();
 describe('migration HTTP endpoints are removed', () => {
   it.each(['/api/admin/node-identity', '/api/admin/dataset-catalog'])('%s is absent even with the operator credential', async (endpoint) => {
     const db = await harness.db();
-    await db.query(`INSERT INTO artifacts (id,token_id,content,source,format)
-      VALUES ('aaaaaa','tok_admin','','<p>Legacy</p>','markup')`);
+    await db.query(`INSERT INTO artifacts (id,token_id,source,format)
+      VALUES ('aaaaaa','tok_admin','<p>Legacy</p>','markup')`);
     const before = (await db.query('SELECT * FROM artifacts')).rows;
     const credentials: Record<string, string>[] = [{}, { 'x-shared-secret': 'wrong' }, { 'x-shared-secret': 'test-secret' }, { authorization: 'Bearer test-secret' }];
     for (const headers of credentials) {

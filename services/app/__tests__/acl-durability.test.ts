@@ -1,3 +1,4 @@
+import {documentEditBody,documentPublicationBody} from './prepared-document';
 import {patchMetadata} from '@/__tests__/conditional-request';
 import {observedRequest} from '@/__tests__/conditional-request';
 /**
@@ -13,11 +14,11 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { GET as rawRoute } from '@/app/a/[id]/raw/route';
 import { PUT as putArtifact } from '@/app/api/artifacts/[id]/route';
 import { POST as editRoute } from '@/app/api/artifacts/[id]/edits/route';
-import { POST as revertRoute } from '@/app/api/artifacts/[id]/revert/route';
+import { POST as revertRoute } from '@/app/api/artifacts/[id]/edits/route';
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
-import { PATCH as patchMineRoute } from '@/app/api/my/artifacts/[id]/route';
+import { POST as patchMineRoute } from '@/app/api/my/artifacts/[id]/edits/route';
 
-import { getArtifactById } from '@/lib/artifacts';
+import { getArtifactById,getVersionFor } from '@/lib/artifacts';
 
 import { mintToken } from '@/lib/tokens';
 import { claimToken, createUser, ensureUsername, setUsername } from '@/lib/users';
@@ -55,6 +56,8 @@ const stateOf = async (id: string) => {
   return { visibility: row!.visibility, ancestor_ids: row!.ancestor_ids };
 };
 
+async function preparedText(id:string,old:string,text:string){const row=(await getArtifactById(id))!;return documentEditBody(row,{source:row.source!.replace(old,text)});}
+
 beforeEach(async () => {
   sessionUser.id = '';
   sessionUser.email = '';
@@ -70,7 +73,7 @@ describe('a private document stays private through every write', () => {
     expect(await stateOf(doc.id)).toEqual({ visibility: 'private', ancestor_ids: [folderId] });
 
     const edited = await editRoute(
-      request(`/api/artifacts/${doc.id}/edits`, { method: 'POST', token: token, json: { edit_id: doc.edit_id, old_string: 'alpha text', new_string: 'beta text' } }),
+      request(`/api/artifacts/${doc.id}/edits`, { method: 'POST', token: token, json: await preparedText(doc.id,'alpha text','beta text') }),
       params({ id: doc.id }),
     );
     expect(edited.status).toBe(200);
@@ -110,8 +113,10 @@ describe('a private document stays private through every write', () => {
     );
     expect(await stateOf(doc.id)).toEqual({ visibility: 'private', ancestor_ids: [vault] });
 
+    const current=(await getArtifactById(doc.id))!;
+    const archived=await getVersionFor({tokenId:current.token_id,userId:current.user_id},doc.id,1);
     const reverted = await revertRoute(
-      await observedRequest(`/api/artifacts/${doc.id}/revert`, { method: 'POST', token: token, json: { version: 1 } }),
+      request(`/api/artifacts/${doc.id}/edits`, { method: 'POST', token, json: documentEditBody((await getArtifactById(doc.id))!,{source:archived!.source!,whole:true}) }),
       params({ id: doc.id }),
     );
     expect(reverted.status).toBe(200);
@@ -128,7 +133,7 @@ describe('a private document stays private through every write', () => {
     sessionUser.id = owner.id;
     sessionUser.email = owner.email;
     const res = await patchMineRoute(
-      await observedRequest(`/api/my/artifacts/${doc.id}`, { method: 'PATCH', json: { parent_id: moved } }),
+      request(`/api/my/artifacts/${doc.id}/edits`, { method: 'POST', json: documentPublicationBody((await getArtifactById(doc.id))!,{parent_id:moved}) }),
       params({ id: doc.id }),
     );
     expect(res.status).toBe(200);
@@ -143,7 +148,7 @@ describe('a public document stays public through the same writes', () => {
       title: 'Open', markup: '<section><p>alpha text</p></section>', visibility: 'public',
     });
     await editRoute(
-      request(`/api/artifacts/${doc.id}/edits`, { method: 'POST', token: token, json: { edit_id: doc.edit_id, old_string: 'alpha text', new_string: 'beta text' } }),
+      request(`/api/artifacts/${doc.id}/edits`, { method: 'POST', token: token, json: await preparedText(doc.id,'alpha text','beta text') }),
       params({ id: doc.id }),
     );
     expect((await stateOf(doc.id)).visibility).toBe('public');

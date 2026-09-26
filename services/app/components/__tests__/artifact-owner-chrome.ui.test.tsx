@@ -70,6 +70,16 @@ class FakeEventSource {
   close() {}
 }
 
+/** The element's paddingRight now, then every different one it takes — a flicker inside one act included. */
+function watchPaddingRight(element: HTMLElement) {
+  const seen: string[] = [element.style.paddingRight];
+  const observer = new MutationObserver(() => {
+    if (seen.at(-1) !== element.style.paddingRight) seen.push(element.style.paddingRight);
+  });
+  observer.observe(element, { attributes: true, attributeFilter: ['style'] });
+  return async () => { await Promise.resolve(); observer.disconnect(); return seen; };
+}
+
 beforeEach(() => {
   resetRouter();
   runtimes.length = 0;
@@ -97,7 +107,7 @@ const surfaceProps = (over: Partial<ArtifactSurfaceProps>): ArtifactSurfaceProps
   template: null,
   refs: [],
   version: 1,
-  content: '<p>hi</p>',
+  dataPreview: '<p>hi</p>',
   columns: [],
   compiledCss: null,
   theme: null,
@@ -316,7 +326,7 @@ describe('the surface header buttons are owner chrome', () => {
     const requests: string[] = [];
     vi.stubGlobal('fetch', vi.fn(async (url: string) => {
       requests.push(url);
-      if (url.endsWith('/events/frame')) return new Response(JSON.stringify({ editId: 'edit_2', version: 2, format: 'dataset', content: '[]', title: 'updated' }));
+      if (url.endsWith('/events/frame')) return new Response(JSON.stringify({ editId: 'edit_2', version: 2, format: 'dataset', dataPreview: '[]', title: 'updated' }));
       if (url === '/api/page/artifact/story1') return new Response(JSON.stringify({ surface: { version: 2, catalog: { ...initialCatalog, tables: initialCatalog.tables.map(t => ({ ...t, objectKey: 'v2', columns: [...t.columns, { name: 'added', type: 'string' }] })) } } }));
       return new Response(JSON.stringify({ rows: [{ value: latest === 1 ? 42 : 84, added: 'new column' }], columns: latest === 1 ? [{ name: 'value', type: 'number' }] : [{ name: 'value', type: 'number' }, { name: 'added', type: 'string' }], truncated: false, refreshedAt: '2026-09-06T10:00:00Z' }));
     }));
@@ -353,7 +363,7 @@ describe('the surface header buttons are owner chrome', () => {
   });
 
   it('dataset tier: the ref copy is for authors, not readers', () => {
-    const dataset = surfaceProps({ format: 'dataset', content: '[{"a":1}]', columns: [{ name: 'a', type: 'number' }] });
+    const dataset = surfaceProps({ format: 'dataset', dataPreview: '[{"a":1}]', columns: [{ name: 'a', type: 'number' }] });
     const reader = render(<ArtifactSurface {...dataset} />);
     expect(screen.queryByLabelText('Copy dataset reference')).not.toBeInTheDocument();
     reader.unmount();
@@ -426,17 +436,69 @@ describe('the view-mode selection bubble is granted, and re-checked, by the page
     expect(screen.getByLabelText('Artifact viewport').style.right).toBe('0px');
     expect(layerProps.at(-1)).toMatchObject({ railOpen: true, topOffset: 44 });
 
-    // Under the editor the rail drops below BOTH bars; the runtime survives.
+    // Under the editor the rail drops below BOTH bars and becomes the edit
+    // panel's Comments tab; the document was laid out beside it, so the panel
+    // keeps that reserve. The runtime survives.
+    const reserved = watchPaddingRight(viewport);
     openDocumentControls();
     fireEvent.click(screen.getByLabelText('Edit artifact'));
     await waitFor(() => expect(screen.getByLabelText('Exit edit mode')).toBeInTheDocument());
     expect(viewport).toHaveStyle({paddingTop: '132px', paddingRight: '320px'});
-    expect(layerProps.at(-1)).toMatchObject({ railOpen: true, topOffset: 132 });
+    expect(layerProps.at(-1)).toMatchObject({ railOpen: true, topOffset: 132, panelWidth: 320, railSheet: false });
 
+    // Closing comments inside the session moves nothing — at no point.
     openDocumentControls();
     fireEvent.click(screen.getByLabelText('Toggle comments'));
-    expect(viewport).toHaveStyle({paddingTop: '132px', paddingRight: '0px'});
+    openDocumentControls();
+    fireEvent.click(screen.getByLabelText('Toggle comments'));
+    expect(viewport).toHaveStyle({paddingTop: '132px', paddingRight: '320px'});
+    expect(await reserved()).toEqual(['320px']);
     expect(currentRuntime()).toBe(win);
+  });
+
+  it('edit mode takes the panel out of an empty margin once, and comments never move the document', async () => {
+    // A wide window whose document paints nothing near its right edge: the
+    // panel fits in the margin, so the document does not move at all.
+    vi.spyOn(document.documentElement, 'clientWidth', 'get').mockReturnValue(1440);
+    render(
+      <ArtifactShell role="owner">
+        <ArtifactSurface {...surfaceProps({})} />
+      </ArtifactShell>,
+    );
+    const viewport = screen.getByLabelText('Artifact viewport');
+    const reserved = watchPaddingRight(viewport);
+    openDocumentControls();
+    fireEvent.click(screen.getByLabelText('Edit artifact'));
+    await waitFor(() => expect(screen.getByLabelText('Exit edit mode')).toBeInTheDocument());
+    openDocumentControls();
+    fireEvent.click(screen.getByLabelText('Toggle comments'));
+    expect(layerProps.at(-1)).toMatchObject({ railOpen: true, railHost: null, panelWidth: 320 });
+    openDocumentControls();
+    fireEvent.click(screen.getByLabelText('Toggle comments'));
+    expect(viewport).toHaveStyle({paddingRight: '0px'});
+    expect(await reserved()).toEqual(['0px']);
+  });
+
+  it('below the panel breakpoint edit mode reserves no width, sheets the comments and leaves room under the document', async () => {
+    Object.defineProperty(window, 'innerWidth', { value: 800, configurable: true });
+    try {
+      render(
+        <ArtifactShell role="owner">
+          <ArtifactSurface {...surfaceProps({})} />
+        </ArtifactShell>,
+      );
+      const viewport = screen.getByLabelText('Artifact viewport');
+      openDocumentControls();
+      fireEvent.click(screen.getByLabelText('Edit artifact'));
+      await waitFor(() => expect(screen.getByLabelText('Exit edit mode')).toBeInTheDocument());
+      openDocumentControls();
+      fireEvent.click(screen.getByLabelText('Toggle comments'));
+      expect(viewport.style.paddingRight).toBe('0px');
+      expect(viewport.style.paddingBottom).toBe('50vh');
+      expect(layerProps.at(-1)).toMatchObject({ railOpen: true, railSheet: true, railHost: undefined });
+    } finally {
+      Object.defineProperty(window, 'innerWidth', { value: 1024, configurable: true });
+    }
   });
 
   it('grants a named editor BOTH actions, and a reader nothing at all', () => {
@@ -616,7 +678,7 @@ describe('the fork row', () => {
     // Data artifacts expose the same action directly in their app bar.
     render(
       <ArtifactShell role="owner">
-        <ArtifactSurface {...surfaceProps({ format: 'dataset', content: '[]', columns: [] })} />
+        <ArtifactSurface {...surfaceProps({ format: 'dataset', dataPreview: '[]', columns: [] })} />
       </ArtifactShell>,
     );
     openDocumentControls();

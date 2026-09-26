@@ -88,3 +88,95 @@ describe('StoryFormatToolbar placement', () => {
     expect(toolbar.classList.contains('fixed')).toBe(false);
   });
 });
+
+/**
+ * AN IMAGE IS NOT TEXT. Selecting one swaps the text vocabulary (size, weight,
+ * colour, links) for what an image takes: replace the picture, describe it.
+ * Layout (align, spacing), comment and delete stay, as for every block.
+ */
+describe('StoryFormatToolbar for a selected image', () => {
+  const TEXT_ONLY = [
+    'Decrease font size', 'Increase font size', 'Toggle bold', 'Toggle italic', 'Toggle underline',
+    'Text color', 'Insert link', 'Mention person', 'Remove link',
+  ];
+
+  function renderImage(alt: string | null) {
+    const selection: StoryEditSelection = {
+      kind: 'element', path: '0.3', tag: 'img', rect: { x: 0, y: 0, width: 100, height: 100 },
+      className: 'my-6 w-1/2 rounded-xl', style: '', ancestors: [],
+    };
+    const image = { alt, onReplace: vi.fn(), onAlt: vi.fn() };
+    render(
+      <StoryFormatToolbar
+        artifactId="doc1"
+        selection={selection}
+        onApply={vi.fn()}
+        onApplyLink={vi.fn()}
+        onSelect={vi.fn()}
+        onDelete={vi.fn()}
+        onComment={vi.fn()}
+        image={image}
+      />,
+    );
+    return image;
+  }
+
+  it('offers Replace, Alt text, Align, Spacing, Comment and delete — and no text controls', () => {
+    renderImage('A chart');
+    expect(screen.getByLabelText('Selection breadcrumb').textContent).toContain('Image');
+    for (const name of ['Replace image', 'Alt text', 'Alignment', 'More formatting controls', 'Comment on selection', 'Delete element'])
+      expect(screen.getByLabelText(name)).toBeTruthy();
+    for (const name of TEXT_ONLY) expect(screen.queryByLabelText(name)).toBeNull();
+  });
+
+  it('Replace opens the replace dialog — one button, no menu', () => {
+    const image = renderImage('A chart');
+    fireEvent.click(screen.getByLabelText('Replace image'));
+    expect(image.onReplace).toHaveBeenCalledTimes(1);
+    expect(screen.queryByLabelText('Replace image options')).toBeNull();
+  });
+
+  it('hints when the image has no alt text, and commits an edit once', () => {
+    const image = renderImage(null);
+    const button = screen.getByLabelText('Add alt text');
+    expect(button.textContent).toContain('Add alt text');
+    fireEvent.click(button);
+    const field = screen.getByLabelText('Image alt text') as HTMLInputElement;
+    expect(field.value).toBe('');
+    fireEvent.change(field, { target: { value: 'A red square' } });
+    fireEvent.keyDown(field, { key: 'Enter' });
+    expect(image.onAlt).toHaveBeenCalledTimes(1);
+    expect(image.onAlt).toHaveBeenCalledWith('A red square');
+  });
+
+  it('edits and clears existing alt text; Escape changes nothing', () => {
+    const image = renderImage('A chart');
+    fireEvent.click(screen.getByLabelText('Alt text'));
+    const field = screen.getByLabelText('Image alt text') as HTMLInputElement;
+    expect(field.value).toBe('A chart');
+    fireEvent.change(field, { target: { value: 'discarded' } });
+    fireEvent.keyDown(field, { key: 'Escape' });
+    expect(image.onAlt).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByLabelText('Alt text'));
+    fireEvent.change(screen.getByLabelText('Image alt text'), { target: { value: '' } });
+    fireEvent.click(screen.getByLabelText('Save alt text'));
+    expect(image.onAlt).toHaveBeenCalledWith('');
+  });
+
+  it('leaves a text selection exactly as it was', () => {
+    render(
+      <StoryFormatToolbar
+        artifactId="doc1"
+        selection={{ kind: 'text', path: '0.1', tag: 'p', rect: { x: 0, y: 0, width: 1, height: 1 }, className: '', style: '', ancestors: [] }}
+        onApply={vi.fn()}
+        onApplyLink={vi.fn()}
+        onSelect={vi.fn()}
+        onDelete={vi.fn()}
+      />,
+    );
+    for (const name of TEXT_ONLY) expect(screen.getByLabelText(name)).toBeTruthy();
+    expect(screen.queryByLabelText('Replace image')).toBeNull();
+    expect(screen.queryByLabelText('Alt text')).toBeNull();
+    expect(screen.queryByLabelText('Add alt text')).toBeNull();
+  });
+});

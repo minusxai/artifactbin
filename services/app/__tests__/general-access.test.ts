@@ -1,3 +1,5 @@
+import {documentEdit} from './prepared-document';
+import {artifactQuery} from '@/lib/artifact-document';
 /**
  * GENERAL ACCESS — the link carries a ROLE, not merely read-or-not.
  *
@@ -43,7 +45,7 @@ async function docOf(
   linkRole?: ShareRole,
 ): Promise<ArtifactRow> {
   const row = await createArtifact(owner.token.id, owner.user.id, {
-    format: 'markup', content: '', source: SOURCE, meta: {}, visibility, title: 't',
+    format: 'markup', source: SOURCE, meta: {}, visibility, title: 't',
   });
   if (!linkRole) return row;
   await updateSharingFor({ tokenId: '', userId: owner.user.id }, row.id, { linkRole });
@@ -52,14 +54,14 @@ async function docOf(
 
 async function head(id: string): Promise<ArtifactRow | null> {
   const db = await harness.db();
-  const r = await db.query<ArtifactRow>('SELECT * FROM artifacts WHERE id = $1', [id]);
+  const r = await artifactQuery<ArtifactRow>(db,'SELECT * FROM artifacts WHERE id = $1', [id]);
   return r.rows[0] ?? null;
 }
 
 /** A row exactly as it was written before the column existed. */
 async function clearLinkRole(id: string): Promise<ArtifactRow> {
   const db = await harness.db();
-  await db.query('UPDATE artifacts SET link_role = NULL WHERE id = $1', [id]);
+  await artifactQuery(db,'UPDATE artifacts SET link_role = NULL WHERE id = $1', [id]);
   return (await head(id))!;
 }
 
@@ -212,16 +214,12 @@ describe('the SQL scopes admit the link — the doors, not just the predicate', 
     const asStranger = { tokenId: stranger.token.id, userId: stranger.user.id };
 
     const editable = await docOf(owner, 'public', 'editor');
-    const ok = await applyEditFor(asStranger, editable.id, {
-      baseEditId: editable.edit_id, change: { oldString: 'hello', newString: 'edited' },
-    });
+    const ok = await applyEditFor(asStranger, editable.id, documentEdit(editable,{source:editable.source!.replace('hello','edited')}));
     expect(ok, JSON.stringify(ok)).toMatchObject({ applied: true });
     expect((await head(editable.id))?.source).toContain('edited');
 
     const commentable = await docOf(owner, 'public', 'commenter');
-    const refused = await applyEditFor(asStranger, commentable.id, {
-      baseEditId: commentable.edit_id, change: { oldString: 'hello', newString: 'nope' },
-    });
+    const refused = await applyEditFor(asStranger, commentable.id, documentEdit(commentable,{source:commentable.source!.replace('hello','nope')}));
     expect(refused, 'a commenter link is not an edit link').toBeNull();
   });
 

@@ -1,3 +1,4 @@
+import {artifactQuery} from '@/lib/artifact-document';
 import {JOIN_RELATIONS} from '../../relation-state';
 import type { DatasetGrantContext, DatasetGrantPolicy, Queryable } from '@artifactbin/contracts';
 import { datasetGrantAllows, parseDatasetGrants } from '@artifactbin/utils';
@@ -27,7 +28,7 @@ export async function grantContext(dataset:ArtifactRow,actor:RoleActor,document?
  if(actor.userId&&(!identity||identity.kind==='guest'))throw new DatasetError('Sign in to change data',403);
  if(identity?.kind==='testuser'&&!(await db.query("SELECT 1 FROM users WHERE id=$1 AND kind='testuser'",[dataset.user_id])).rows.length)throw new DatasetError('Test users may only act inside their sandbox',403);
  if(!document){if(!identity&&!owns(dataset,actor))throw new DatasetError('Sign in to change data',403);return context;}
- const doc=(await db.query<ArtifactRow>('SELECT * FROM artifacts WHERE id=$1 AND deleted_at IS NULL',[document.id])).rows[0];
+ const doc=(await artifactQuery<ArtifactRow>(db,'SELECT * FROM artifacts WHERE id=$1 AND deleted_at IS NULL',[document.id])).rows[0];
  if(!doc||doc.format!=='markup'||doc.edit_id!==document.editId||!(await readThrough(db,doc,actor)))throw new DatasetError('Document access or action changed',403);
  const tokenCreator=!doc.user_id&&owns(doc,actor);
  if(!tokenCreator){
@@ -45,7 +46,7 @@ export async function grantsPermitWrite(dataset:ArtifactRow,actor:RoleActor,docu
 /** Lock the document with the dataset so membership/access revocation cannot race the commit. */
 export async function assertGrantCommit(tx:Queryable,dataset:ArtifactRow,actor:RoleActor,document?:GrantDocument):Promise<void>{
  await tx.query('SELECT id FROM artifacts WHERE id=ANY($1::text[]) ORDER BY id FOR UPDATE',[[...new Set([dataset.id,...(document?[document.id]:[])])]]);
- const current=(await tx.query<ArtifactRow>('SELECT * FROM artifacts WHERE id=$1 AND deleted_at IS NULL',[dataset.id])).rows[0];
+ const current=(await artifactQuery<ArtifactRow>(tx,'SELECT * FROM artifacts WHERE id=$1 AND deleted_at IS NULL',[dataset.id])).rows[0];
  if(!current||(current.policy_revision??0)!==(dataset.policy_revision??0)||!(await grantsPermitWrite(current,actor,document,tx)))throw new DatasetError('Mutation permission changed',403);
 }
 

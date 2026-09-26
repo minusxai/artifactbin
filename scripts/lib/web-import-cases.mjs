@@ -21,7 +21,7 @@ export async function checkWebImport(B, browser, WEB, ok) {
     }),
   });
   const sourceBody = await sourcePut.json();
-  ok(sourcePut.status === 200 && sourceBody.markup_changed === false,
+  ok(sourcePut.status === 200 && sourceBody.markup?.includes(`src="${WEB}/photo.png"`),
     'a simple URL import preserves source without a markup rewrite');
   const fontPut = await fetch(`${B}/api/artifacts/${fontDoc.id}`, {
     method: 'PUT',
@@ -58,11 +58,17 @@ export async function checkWebImport(B, browser, WEB, ok) {
     await page.goto(`${B}/a/${doc.id}#edit`, { waitUntil: 'load' });
     await page.waitForSelector('[aria-label="Insert"]', { timeout: 60000 });
     await page.click('[aria-label="Insert"]');
+    await page.getByRole('button', { name: 'Image…', exact: true }).click();
     const urlField = await page.waitForSelector('[aria-label="Image URL"]', { timeout: 10000 }).catch(() => null);
     ok(!!urlField, 'the insert-image control offers a URL field');
     if (urlField) {
       await page.fill('[aria-label="Image URL"]', `${WEB}/photo.png`);
       await page.click('[aria-label="Import image from URL"]');
+      // The import previews first; Insert places it.
+      const insert = page.getByRole('dialog', { name: 'Insert image' }).getByRole('button', { name: 'Insert', exact: true });
+      await insert.waitFor();
+      for (let i = 0; i < 40 && !(await insert.isEnabled()); i++) await page.waitForTimeout(250);
+      await insert.click();
       // POLL, don't sleep. The insert commits, the save debounces, and the
       // document re-renders with refData that knows the new id — the `ref:` is
       // resolved to a URL only on that pass, so a single early read sees the raw

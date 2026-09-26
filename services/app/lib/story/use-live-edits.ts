@@ -15,7 +15,8 @@
  * `doc_changed`. On rejection, keep the local draft and block navigation until it is saved
  * or the user explicitly recovers the remote version.
  */
-import {writeBrowserArtifact} from '@/lib/browser-artifact-write';
+import type {DocumentGraph,DocumentAssetWarning} from '@artifactbin/contracts';
+import {prepareBrowserDocumentUpdate} from './document-authoring-client';
 import { combineAnnotationOperations, type AnnotationOperation } from '@/lib/editor-v2/annotation-map';
 import { rebaseEditBatch } from '@/lib/story/edit-batch';
 import { sourceChanges } from '@/lib/editor-v2/history';
@@ -67,6 +68,8 @@ function mergePending(first: PendingChange | null, second: PendingChange | null)
 }
 
 interface FlushResponse {
+  document?:DocumentGraph;
+  title?:string|null;theme?:string|null;template?:string|null;colorMode?:string|null;
   edit_id: string;
   version: number;
   markup: string | null;
@@ -81,6 +84,8 @@ interface UseLiveEditsOptions {
   id: string;
   initialEditId: string;
   initialVersion: number;
+  initialDocument?:DocumentGraph;
+  initialMetadata?:Record<string,unknown>;
   /** V2 snapshots lower to atomic source batches against this acknowledged base. */
   initialSource?: string;
   /** Called when the server's document should replace what the editor shows. */
@@ -100,6 +105,8 @@ export function useLiveEdits({
   initialEditId,
   initialVersion,
   initialSource,
+  initialDocument,
+  initialMetadata={},
   onRemoteDocument,
   isUserEditing,
 }: UseLiveEditsOptions) {
@@ -112,6 +119,7 @@ export function useLiveEdits({
 
   const aliveRef = useRef(true);
   const editIdRef = useRef(initialEditId);
+  const snapshotRef=useRef({document:initialDocument,version:initialVersion,meta:initialMetadata});
   const baseSourceRef = useRef(initialSource);
   const pendingRef = useRef<PendingChange | null>(null);
   /** The request on the wire, so a drain can wait for it rather than skip past it. */
@@ -145,25 +153,17 @@ export function useLiveEdits({
     setState((s) => ({ ...s, pending: true, status: 'saving…' }));
 
     const run = (async () => {
+      let prepared=false;
       try {
-        const metadata=change.title!==undefined||change.theme!==undefined||change.colorMode!==undefined;
-        const res = metadata ? await writeBrowserArtifact(id,{...change},editIdRef.current) : await fetch(endpoint, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            edit_id: editIdRef.current,
-            ...(change.annotationOps?.length ? { annotation_ops: change.annotationOps } : {}),
-            ...(edits
-              ? edits.length
-                ? { edits: edits.map((edit) => ({ old_string: edit.oldString, new_string: edit.newString })) }
-                : {}
-              : change.source !== undefined
-                ? { source: change.source }
-                : {}),
-            ...(change.title !== undefined ? { title: change.title } : {}),
-            ...(change.theme !== undefined ? { theme: change.theme } : {}),
-            ...(change.colorMode !== undefined ? { colorMode: change.colorMode } : {}),
-          }),
+        const snapshot=snapshotRef.current;
+        if(!snapshot.document)throw new Error('Refresh the document before saving.');
+        const {source,annotationOps,...metadata}=change;
+        let warnings:DocumentAssetWarning[]=[];
+        const documentUpdate=await prepareBrowserDocumentUpdate(id,{...snapshot,document:snapshot.document,title:snapshot.meta.title as string|null,description:snapshot.meta.description as string|null},{source,annotationOps,metadata},received=>{warnings=received;});
+        prepared=true;
+        const res = await fetch(endpoint, {
+          method:'POST',headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({edit_id:editIdRef.current,document_update:documentUpdate}),
         });
         const body = (await res.json().catch(() => ({}))) as FlushResponse;
 
@@ -175,6 +175,7 @@ export function useLiveEdits({
           if (!aliveRef.current) return;
           failedChangeRef.current = null;
           editIdRef.current = body.edit_id;
+          snapshotRef.current={document:body.document,version:body.version,meta:{title:body.title,theme:body.theme,template:body.template,colorMode:body.colorMode}};
           if (baseSourceRef.current !== undefined && change.source !== undefined) {
             const accepted = body.markup ?? change.source;
             const pending = pendingRef.current as PendingChange | null;
@@ -203,7 +204,7 @@ export function useLiveEdits({
             }
             baseSourceRef.current = accepted;
           }
-          setState({ editId: body.edit_id, version: body.version, status: '', pending: false });
+          setState({ editId: body.edit_id, version: body.version, status: warnings.length?`saved — ${warnings[0]!.fix}${warnings.length>1?` (+${warnings.length-1} more)`:''}`:'', pending: false });
         } else if (body.detail === 'identical') {
           failedChangeRef.current = null;
           // The flush carried no real change (e.g. a blur that committed nothing).
@@ -230,12 +231,12 @@ export function useLiveEdits({
             pending: false,
           }));
         }
-      } catch {
+      } catch (error) {
         failedRef.current = true;
         failedChangeRef.current = mergePending(change, pendingRef.current);
         // Offline or a dropped request: keep the change and let the next tick retry.
-        pendingRef.current = mergePending(change, pendingRef.current);
-        setState((s) => ({ ...s, status: 'offline — will retry', pending: false }));
+        pendingRef.current = prepared?mergePending(change,pendingRef.current):null;
+        setState((s) => ({ ...s, status: prepared?'offline — will retry':`not saved — ${error instanceof Error?error.message:'Document validation failed'}`, pending: false }));
       } finally {
         inFlightRef.current = null;
         // Anything queued while we were in flight (including a retry) drains now.
@@ -247,7 +248,7 @@ export function useLiveEdits({
     })();
     inFlightRef.current = run;
     return run;
-  }, [endpoint, onRemoteDocument, isUserEditing]);
+  }, [id, endpoint, onRemoteDocument, isUserEditing]);
 
   /** Queue a change; it persists on its own within one debounce window. */
   const queue = useCallback(
@@ -335,9 +336,10 @@ export function useLiveEdits({
    * stale one would undo the edit that was just made.
    */
   const adoptRemote = useCallback(
-    (remoteEditId: string, source: string, by: string | null = null) => {
+    (remoteEditId: string, source: string, by: string | null = null,document?:DocumentGraph,version?:number,meta:Record<string,unknown>={}) => {
       if (remoteEditId === editIdRef.current || !isIdle() || isUserEditing?.()) return false;
       editIdRef.current = remoteEditId;
+      snapshotRef.current={document,version:version??snapshotRef.current.version,meta};
       // Say WHO moved the document when the stream knows (a named collaborator);
       // an agent or an anonymous writer has no handle and the chip stays quiet.
       setState((s) => ({ ...s, editId: remoteEditId, status: by ? `updated by @${by}` : s.status }));
@@ -377,6 +379,7 @@ export function useLiveEdits({
         } else if (mode === 'retry' && draft.source !== undefined) next = draft.source;
         baseSourceRef.current = remote.markup;
         editIdRef.current = remote.edit_id;
+        snapshotRef.current={document:remote.document,version:remote.version,meta:{title:remote.title,theme:remote.theme,template:remote.template,colorMode:remote.colorMode}};
         pendingRef.current = null;
         failedChangeRef.current = null;
         failedRef.current = false;

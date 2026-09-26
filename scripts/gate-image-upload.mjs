@@ -9,6 +9,8 @@
  * Section 5 presses the REAL keystroke rather than dispatching an event, and
  * section 6 holds the bytes in flight to see what a reader looks at while a
  * ref: image loads: the blur placeholder, in a box of the recorded size.
+ * Section 7 REPLACES an image that is already there — a file dropped onto it,
+ * and a real ⌘V while it is selected — and asserts only its src changed.
  *
  * The paste/drop half is realm-sensitive: the listeners live inside the SERVED
  * document (its own window, sandboxed without allow-same-origin), so the events
@@ -32,6 +34,9 @@ const check = createChecker('image-upload');
 // A 2×2 red PNG (non-zero dimensions so a real paint is measurable).
 const PNG_B64 = 'iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAYAAABytg0kAAAAEklEQVR42mP8z8Dwn4EIwDiqkL4KAcT9GO0U4BxjAAAAAElFTkSuQmCC';
 const PNG_BUF = Buffer.from(PNG_B64, 'base64');
+
+/** A VALID 48×32 png (the 2×2 above is malformed for sharp; see section 6). */
+const VALID_PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAADAAAAAgCAIAAADbtmxLAAAACXBIWXMAAAPoAAAD6AG1e1JrAAAASUlEQVRYhe2WAQkAQAwCF8dMpruoH2PPOFgAET03KV/drCuIgtChmqHYMtbxE8GIDtUMxZaxDqH4oKFDNUOxZcghBGOdjhwe1weeF8xbShDdKgAAAABJRU5ErkJggg==';
 
 const MARKUP = '<div data-design="tw" className="p-10">'
   + '<h1 className="text-4xl font-bold">Image gate</h1>'
@@ -132,7 +137,15 @@ const browser = await chromium.launch();
   const st = await mint();
   const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
   await openEditor(page, st);
-  await page.setInputFiles('[aria-label="Upload image file"]', { name: 'shot.png', mimeType: 'image/png', buffer: PNG_BUF });
+  // Insert ▸ Image… opens the dialog; a chosen file is uploaded and previewed, and Insert places it.
+  await page.getByRole('button', { name: 'Insert', exact: true }).click();
+  await page.getByRole('button', { name: 'Image…', exact: true }).click();
+  const dialog = page.getByRole('dialog', { name: 'Insert image' });
+  await dialog.locator('[aria-label="Image file"]').setInputFiles({ name: 'shot.png', mimeType: 'image/png', buffer: PNG_BUF });
+  const insert = dialog.getByRole('button', { name: 'Insert', exact: true });
+  await insert.waitFor();
+  for (let i = 0; i < 80 && !(await insert.isEnabled()); i++) await page.waitForTimeout(250);
+  await insert.click();
   check((await paintedImages(page)) >= 1, 'file picker: the uploaded image paints in the canvas');
 
   // ── 2. it persists across `done` + reload — the whole point ──────────────
@@ -284,7 +297,6 @@ const browser = await chromium.launch();
  * thumbnail can be made of it and it correctly gets no blur.
  */
 {
-  const VALID_PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAADAAAAAgCAIAAADbtmxLAAAACXBIWXMAAAPoAAAD6AG1e1JrAAAASUlEQVRYhe2WAQkAQAwCF8dMpruoH2PPOFgAET03KV/drCuIgtChmqHYMtbxE8GIDtUMxZaxDqH4oKFDNUOxZcghBGOdjhwe1weeF8xbShDdKgAAAABJRU5ErkJggg==';
   // Both artifacts live under ONE token: a `ref:` only resolves to the
   // caller's own artifacts, so a two-token setup fails validation, not the
   // feature.
@@ -338,6 +350,92 @@ const browser = await chromium.launch();
   });
   check(after > 0, `and the real image covers it once it lands (naturalWidth ${after})`);
   await page.close();
+}
+
+// ── 7. replacing an image that is already in the document ─────────────────
+/*
+ * A file dropped ONTO an image, or pasted while one is selected, replaces
+ * that image instead of inserting another: same node (id, classes, alt), one
+ * image still, a new `ref:`. The paste is a REAL keystroke because the real
+ * one is what broke: a selected image holds no focus, so ⌘V fires on the
+ * page's <body>, outside the story root, and was silently dropped.
+ */
+{
+  const PASTE = process.platform === 'darwin' ? 'Meta+V' : 'Control+V';
+  const chrome = await chromium.launch({ channel: 'chrome', headless: true })
+    .catch(() => chromium.launch({ headless: true }));
+  const context = await chrome.newContext({ viewport: { width: 1280, height: 900 } });
+  await context.grantPermissions(['clipboard-read', 'clipboard-write'], { origin: B });
+  const page = await context.newPage();
+
+  const st = await mint();
+  const auth = { 'Content-Type': 'application/json', Authorization: `Bearer ${st.token}` };
+  // The minted artifact becomes the ORIGINAL picture; the document shows it.
+  await fetch(`${B}/api/artifacts/${st.id}`, { method: 'PUT', headers: auth, body: JSON.stringify({ title: 'original', image: VALID_PNG }) });
+  const doc = await (await fetch(`${B}/api/artifacts`, {
+    method: 'POST',
+    headers: auth,
+    body: JSON.stringify({
+      title: 'replace doc',
+      markup: '<div data-design="tw" className="p-10"><p className="text-lg">Replace probe</p>'
+        + `<img src="ref:${st.id}" alt="the original" className="w-40 rounded-xl" /></div>`,
+    }),
+  })).json();
+  const stored = async () => (await (await fetch(`${B}/api/artifacts/${doc.id}`, { headers: auth })).json()).markup ?? '';
+  const imgTag = (markup) => /<img\b[^>]*\/>/.exec(markup)?.[0] ?? '';
+  const idOf = (tag) => / id="([^"]+)"/.exec(tag)?.[1];
+  const srcOf = (tag) => / src="([^"]+)"/.exec(tag)?.[1];
+  const waitReplaced = async (from) => {
+    let tag = '';
+    for (let i = 0; i < 30; i++) {
+      if (i) await page.waitForTimeout(500);
+      tag = imgTag(await stored());
+      if (srcOf(tag) !== from) break;
+    }
+    return tag;
+  };
+  const original = imgTag(await stored());
+  await openEditor(page, { id: doc.id, token: st.token });
+  const frame = await documentFrame(page);
+
+  // 7a. drop onto the image
+  const marked = await frame.evaluate((b64) => {
+    const bytes = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+    const dt = new DataTransfer();
+    dt.items.add(new File([bytes], 'r.png', { type: 'image/png' }));
+    const img = document.querySelector('[data-mx-inline-story] img[alt="the original"]');
+    img.dispatchEvent(new DragEvent('dragover', { bubbles: true, cancelable: true, dataTransfer: dt }));
+    const label = document.querySelector('[data-mx-drop-replace-label]')?.textContent ?? null;
+    img.dispatchEvent(new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer: dt }));
+    return label;
+  }, VALID_PNG.split(',')[1]);
+  check(marked === 'Drop to replace', `dragging a file over an image says it will replace it (${marked})`);
+  const dropped = await waitReplaced(srcOf(original));
+  const afterDrop = await stored();
+  check(srcOf(dropped) !== srcOf(original) && /^ref:/.test(srcOf(dropped) ?? ''), `a drop onto the image changes its src (${srcOf(original)} → ${srcOf(dropped)})`);
+  check(idOf(dropped) && idOf(dropped) === idOf(original), 'and it is the same node: the id is kept');
+  check(dropped.includes('alt="the original"') && dropped.includes('w-40 rounded-xl'), 'with its alt text and classes');
+  check((afterDrop.match(/<img\b/g) ?? []).length === 1, 'and nothing was inserted beside it');
+
+  // 7b. a real ⌘V while the image is selected
+  await page.evaluate(async () => {
+    const canvas = document.createElement('canvas');
+    canvas.width = 64; canvas.height = 64;
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle = '#0d9488'; ctx.fillRect(0, 0, 64, 64);
+    const blob = await new Promise((res) => canvas.toBlob(res, 'image/png'));
+    await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
+  });
+  await (await frame.$('[data-mx-inline-story] img[alt="the original"]')).click();
+  await page.waitForTimeout(400);
+  await page.keyboard.press(PASTE);
+  const pasted = await waitReplaced(srcOf(dropped));
+  const afterPaste = await stored();
+  check(srcOf(pasted) !== srcOf(dropped), `a real paste with the image selected replaces it (${srcOf(dropped)} → ${srcOf(pasted)})`);
+  check(idOf(pasted) === idOf(original), 'same node again');
+  check((afterPaste.match(/<img\b/g) ?? []).length === 1, 'and the paste inserted nothing');
+  check(await paintedImages(page) > 0, 'and the replacement paints');
+  await chrome.close();
 }
 
 await browser.close();

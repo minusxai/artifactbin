@@ -117,10 +117,14 @@ it.each([false, true])('centers controls on the selection outline (touch: %s)', 
     chrome = createNodeChrome(document, vi.fn());
     const p = document.createElement('p');
     document.body.append(p);
-    p.getBoundingClientRect = () => new DOMRect(0, 0, 300, 100);
+    p.getBoundingClientRect = () => new DOMRect(100, 0, 300, 100);
     chrome.select(p, '0');
+    // The grip sits in the left margin, where the hover grip was: one place to grab a block.
+    const hit = touch ? 44 : 24;
+    expect(screen.getByRole('button', { name: 'Move selected block' })).toHaveStyle({
+      left: `${-hit / 2}px`, top: `${hit / 2}px`, transform: 'translate(-50%, -50%)', width: `${hit}px`, height: `${hit}px`,
+    });
     for (const [name, left, top] of [
-      ['Move selected block', '-3.5px', '-3.5px'],
       ['Delete selected block', 'calc(100% + 3.5px)', '-3.5px'],
       ['Resize selected block', 'calc(100% + 3.5px)', 'calc(100% + 3.5px)'],
       ['Resize block width', 'calc(100% + 3.5px)', '50%'],
@@ -145,7 +149,7 @@ it.each([false, true])('keeps all control hit areas disjoint on small blocks (to
     const p = document.createElement('p');
     document.body.append(p);
     for (const [width, height] of [[300, 20], [20, 100], [20, 20], [300, 100]]) {
-      p.getBoundingClientRect = () => new DOMRect(0, 0, width, height);
+      p.getBoundingClientRect = () => new DOMRect(100, 0, width, height);
       chrome.select(p, '0');
       const buttons = screen.getAllByRole('button');
       const point = (value: string, size: number) => value === '50%' ? size / 2
@@ -162,9 +166,96 @@ it.each([false, true])('keeps all control hit areas disjoint on small blocks (to
           `${width}x${height}: ${a.name} overlaps ${b.name}`).toBe(true);
       }
       if (width === 300 && height === 100)
-        for (const button of buttons) expect(button).toHaveStyle({ width: touch ? '44px' : '28px', height: touch ? '44px' : '28px' });
+        for (const button of buttons.filter((b) => b.getAttribute('aria-label') !== 'Move selected block'))
+          expect(button).toHaveStyle({ width: touch ? '44px' : '28px', height: touch ? '44px' : '28px' });
     }
   } finally {
     vi.unstubAllGlobals();
   }
+});
+
+it('offers no resize control for a block that cannot be resized, and keeps move and delete', () => {
+  chrome = createNodeChrome(document, vi.fn());
+  const p = document.createElement('p');
+  document.body.append(p);
+  chrome.select(p, '0', undefined, { resizable: false });
+  expect(screen.getByRole('button', { name: 'Move selected block' })).toBeVisible();
+  expect(screen.getByRole('button', { name: 'Delete selected block' })).toBeVisible();
+  for (const name of ['Resize selected block', 'Resize block width', 'Resize block height', 'Resize adjacent columns'])
+    expect(screen.queryByRole('button', { name })).toBeNull();
+  chrome.select(p, '0');
+  expect(screen.getByRole('button', { name: 'Resize selected block' })).toBeVisible();
+});
+
+it('draws handles in faint neutral grey that darken under the pointer, never an accent colour', () => {
+  chrome = createNodeChrome(document, vi.fn());
+  const p = document.createElement('p');
+  document.body.append(p);
+  chrome.select(p, '0');
+  const dot = screen.getByRole('button', { name: 'Resize selected block' }).firstElementChild!;
+  const grip = screen.getByRole('button', { name: 'Move selected block' }).firstElementChild!;
+  expect(getComputedStyle(dot).backgroundColor).toBe('rgba(100, 116, 139, 0.45)');
+  expect(getComputedStyle(grip).color).toBe('rgba(100, 116, 139, 0.6)');
+  const css = [...document.querySelectorAll('style')].map((s) => s.textContent).join('\n');
+  expect(css).toMatch(/:hover/);
+  expect(css).toMatch(/:focus-visible/);
+  expect(css + document.body.innerHTML).not.toMatch(/245, ?158, ?11|background: white/);
+});
+
+it('shows a margin grip beside a hovered block and hides it for the selected one', () => {
+  const grab = vi.fn();
+  chrome = createNodeChrome(document, vi.fn(), grab);
+  const p = document.createElement('p');
+  document.body.append(p);
+  p.getBoundingClientRect = () => new DOMRect(120, 40, 300, 24);
+  chrome.hover(p);
+  const grip = screen.getByRole('button', { name: 'Drag block' });
+  expect(grip.closest('[data-mx-node-chrome]')).toBeNull();
+  expect(grip.parentElement).toHaveStyle({ left: '96px', top: '40px' });
+  chrome.select(p, '0');
+  expect(screen.queryByRole('button', { name: 'Drag block' })).toBeNull();
+  const other = document.createElement('p');
+  document.body.append(other);
+  chrome.hover(other);
+  expect(screen.queryByRole('button', { name: 'Drag block' })).toBeNull();
+  chrome.select(null, null);
+  expect(screen.getByRole('button', { name: 'Drag block' })).toBeVisible();
+  chrome.hover(null);
+  expect(screen.queryByRole('button', { name: 'Drag block' })).toBeNull();
+});
+
+it.each([false, true])('sizes the grip for the pointer and keeps it on screen at a narrow margin (touch: %s)', (touch) => {
+  vi.stubGlobal('matchMedia', vi.fn(() => ({ matches: touch })));
+  try {
+    chrome = createNodeChrome(document, vi.fn(), vi.fn());
+    const p = document.createElement('p');
+    document.body.append(p);
+    const hit = touch ? 44 : 24;
+    p.getBoundingClientRect = () => new DOMRect(100, 40, 300, 24);
+    chrome.hover(p);
+    const grip = screen.getByRole('button', { name: 'Drag block' });
+    expect(grip).toHaveStyle({ width: `${hit}px`, height: `${hit}px` });
+    expect(grip.firstElementChild).toHaveStyle({ font: '12px system-ui' });
+    expect(grip.parentElement).toHaveStyle({ left: `${100 - hit}px` });
+    // A phone: the block starts 16px from the edge, so the grip goes just inside it.
+    p.getBoundingClientRect = () => new DOMRect(16, 40, 300, 24);
+    chrome.hover(null);
+    chrome.hover(p);
+    expect(grip.parentElement).toHaveStyle({ left: '16px' });
+  } finally {
+    vi.unstubAllGlobals();
+  }
+});
+
+it('hands the drag its block and parent names', () => {
+  chrome = createNodeChrome(document, vi.fn());
+  const parent = document.createElement('div');
+  parent.setAttribute('data-mx-ast', '0');
+  const p = document.createElement('p');
+  p.setAttribute('data-mx-ast', '0.0');
+  parent.append(p);
+  document.body.append(parent);
+  chrome.select(p, '0.0', undefined, { label: 'Paragraph', parent: 'Card' });
+  fireEvent.keyDown(screen.getByRole('button', { name: 'Move selected block' }), { key: 'ArrowDown' });
+  expect(document.querySelector('[data-mx-drag-preview]')).toHaveTextContent('Can only move within this card');
 });

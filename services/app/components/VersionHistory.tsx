@@ -31,8 +31,10 @@ interface VersionHistoryProps {
   busy: boolean;
   /** Space reserved above the desktop drawer by the caller's toolbars. */
   topOffset?: number;
-  /** Render as a SECTION of a surrounding panel (the editor's left rail) rather than as a fixed drawer. */
+  /** Render as a SECTION of a surrounding panel (the editor's right panel) rather than as a fixed drawer. */
   embedded?: boolean;
+  /** Render as the bottom sheet at any width — the editor below its panel breakpoint, not only a phone. */
+  sheet?: boolean;
 }
 
 /**
@@ -46,7 +48,7 @@ const ROW = (selected: boolean) =>
   }`;
 
 export default function VersionHistory({
-  versions = [], currentVersion, previewing, onPreview, onRestore, onBackToCurrent, onClose, busy, topOffset = 0, embedded = false,
+  versions = [], currentVersion, previewing, onPreview, onRestore, onBackToCurrent, onClose, busy, topOffset = 0, embedded = false, sheet = false,
 }: VersionHistoryProps) {
   const phone = useIsPhoneViewport();
   // Escape closes, like any transient panel.
@@ -180,9 +182,9 @@ export default function VersionHistory({
 
   // On a phone the drawer is a HALF bottom sheet — previewing a version is
   // the whole point, and the document being previewed must stay visible.
-  if (phone) {
+  if (phone || sheet) {
     return (
-      <MobileSheet label="Version history" onClose={onClose} size="half" header={head}>
+      <MobileSheet label="Version history" onClose={onClose} size="half" header={head} swipeToClose={sheet}>
         <div className="flex flex-col">{content}</div>
       </MobileSheet>
     );

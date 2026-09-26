@@ -14,7 +14,7 @@
  * rendered in place, `bottom-0` would anchor the sheet to the BAR's bottom
  * edge, hanging it just under the chrome.
  */
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useTrustedPortalContainer } from './TrustedUi';
 
@@ -68,7 +68,10 @@ export function subscribeSheets(listener: (open: boolean) => void): () => void {
   return () => { sheetListeners.delete(listener); };
 }
 
-export default function MobileSheet({ label, onClose, size = 'tall', header, children }: {
+/** How far the handle must be dragged down before letting go closes the sheet. */
+const SWIPE_CLOSE_PX = 64;
+
+export default function MobileSheet({ label, onClose, size = 'tall', header, swipeToClose = false, children }: {
   label: string;
   onClose: () => void;
   /** `half` caps the sheet at half the screen — for a panel ABOUT the
@@ -79,10 +82,31 @@ export default function MobileSheet({ label, onClose, size = 'tall', header, chi
   /** Rides ABOVE the scrolling body — a title row and its close control must
       stay reachable however far the list below has scrolled. */
   header?: React.ReactNode;
+  /** Dragging the handle or header down dismisses the sheet (the editor's panels). */
+  swipeToClose?: boolean;
   children: React.ReactNode;
 }) {
   const portalContainer = useTrustedPortalContainer();
   useEffect(markSheetOpen, []);
+  // Only the handle and header drag: the body is a scroller, and a downward
+  // swipe there means "scroll up", not "go away".
+  const dragFrom = useRef<number | null>(null);
+  const [dragged, setDragged] = useState(0);
+  const swipe = swipeToClose
+    ? {
+        onTouchStart: (event: React.TouchEvent) => { dragFrom.current = event.touches[0]?.clientY ?? null; },
+        onTouchMove: (event: React.TouchEvent) => {
+          if (dragFrom.current === null) return;
+          setDragged(Math.max(0, (event.touches[0]?.clientY ?? dragFrom.current) - dragFrom.current));
+        },
+        onTouchEnd: () => {
+          const close = dragged >= SWIPE_CLOSE_PX;
+          dragFrom.current = null;
+          setDragged(0);
+          if (close) onClose();
+        },
+      }
+    : {};
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       if (event.key === 'Escape') onClose();
@@ -110,10 +134,13 @@ export default function MobileSheet({ label, onClose, size = 'tall', header, chi
         role="dialog"
         aria-modal="true"
         aria-label={label}
+        style={dragged ? { transform: `translateY(${dragged}px)` } : undefined}
         className={`fixed inset-x-0 bottom-0 z-[2147483007] ${size === 'half' ? 'max-h-[50vh]' : 'max-h-[80vh]'} flex animate-[sheet-in_.2s_ease-out] flex-col rounded-t-[10px] border-t border-edge bg-surface p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] font-mono text-xs shadow-lg`}
       >
-        <div aria-hidden="true" className="mx-auto mb-2 h-1 w-9 shrink-0 rounded-full bg-edge" />
-        {header && <div className="shrink-0">{header}</div>}
+        <div {...swipe} className={swipeToClose ? 'shrink-0 touch-none' : 'contents'}>
+          <div aria-hidden="true" className="mx-auto mb-2 h-1 w-9 shrink-0 rounded-full bg-edge" />
+          {header && <div className="shrink-0">{header}</div>}
+        </div>
         {/* The body is the ONLY scroller — the handle and header stay put. */}
         <div className="min-h-0 flex-1 overflow-y-auto">{children}</div>
       </div>

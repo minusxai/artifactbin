@@ -67,7 +67,8 @@ const Routed = () => (
 describe('the welcome page', () => {
   it('offers exactly the picture, the handle and Confirm — each one named', async () => {
     renderPage();
-    expect(await screen.findByLabelText('Change picture')).toBeInTheDocument();
+    // No picture yet: the uploader offers an upload, not a generated initial.
+    expect(await screen.findByRole('button', { name: 'Upload a photo' })).toBeInTheDocument();
     await waitFor(() => expect((screen.getByLabelText('Username') as HTMLInputElement).value).toBe('newbie_ab12'));
     expect(screen.getByRole('button', { name: 'Confirm' })).toBeInTheDocument();
   });
@@ -104,7 +105,7 @@ describe('the welcome page', () => {
 
   it('puts the chosen picture on the page without a reload', async () => {
     const { container } = renderPage();
-    await screen.findByLabelText('Change picture');
+    await screen.findByRole('button', { name: 'Upload a photo' });
     const file = container.querySelector('input[type="file"]') as HTMLInputElement;
     expect(file.accept).toBe('image/png,image/jpeg,image/webp,image/gif,image/avif');
 
@@ -112,6 +113,7 @@ describe('the welcome page', () => {
     await waitFor(() => {
       expect(container.querySelector('img')?.getAttribute('src')).toBe('/api/users/usr_new1/avatar?v=deadbeef');
     });
+    expect(screen.getByRole('button', { name: 'Change photo' })).toBeInTheDocument();
   });
 
   it('shows a refused picture as a sentence and keeps the page', async () => {
@@ -123,11 +125,11 @@ describe('the welcome page', () => {
       return new Response(JSON.stringify({}), { status: 200 });
     }));
     const { container } = renderPage();
-    await screen.findByLabelText('Change picture');
+    await screen.findByRole('button', { name: 'Upload a photo' });
     const file = container.querySelector('input[type="file"]') as HTMLInputElement;
     fireEvent.change(file, { target: { files: [new File([new Uint8Array([1])], 'huge.png', { type: 'image/png' })] } });
 
-    expect(await screen.findByText(/50 MB/)).toBeInTheDocument();
+    expect(await screen.findByText(/over 50 MB/)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Confirm' })).toBeInTheDocument();
   });
 

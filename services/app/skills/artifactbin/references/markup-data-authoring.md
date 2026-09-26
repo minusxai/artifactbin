@@ -26,9 +26,27 @@ For layered charts, explicitly encode each series rather than coloring each
 layer with a literal. Recipe `columnFormats` aliases provide readable names.
 <!--/bundle:skip-->
 
+<!--bundle:skip-->
+## Inline theme-token example
+
+An explicit range can emphasize categories while following theme switches:
+
+```jsx
+<Helmet>
+  <Value name="totals" type="table" value={[{"region":"EU","revenue":100},{"region":"NA","revenue":200}]} />
+</Helmet>
+<Question data="$totals" height="280px" viz={{"kind":"vega-lite","spec":{"mark":"bar","encoding":{"x":{"field":"region","type":"nominal","title":"Region"},"y":{"field":"revenue","type":"quantitative","title":"Revenue"},"color":{"field":"region","type":"nominal","scale":{"range":["var(--chart-1)","var(--chart-2)"]}}}}}} />
+```
+
+The renderer resolves CSS token strings inside the spec, including scale ranges;
+omit the range for the default theme palette. Use a stored dataset for shared data;
+the inline table here only makes the example self-contained.
+<!--/bundle:skip-->
+
 ## Build chart attributes without counting braces
 
 Construct the viz object as JSON, then serialize it inside ONE JSX expression.
+<!--bundle:skip-->
 For example, in task-local Python (no SDK):
 
 ```python
@@ -39,6 +57,7 @@ viz = {"kind": "vega-lite", "spec": {"mark": "bar", "encoding": {
 chart = '<Question data="$sales" viz={' + json.dumps(viz) + '} />'
 ```
 
+<!--/bundle:skip-->
 Use the generated element in the document. JavaScript's `JSON.stringify` works
 the same way. After a brace error, regenerate the attribute from the object;
 do not repeatedly patch a guessed run of closing braces.<!--bundle:skip--> A failed publish did

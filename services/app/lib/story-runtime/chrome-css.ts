@@ -526,6 +526,9 @@ body[data-mx-story-root] { padding-top: var(--mx-chrome-inset, 0px) !important; 
   .mx-reader-chrome.mx-reader-chrome--covered {
     opacity: 0 !important; visibility: hidden !important; pointer-events: none !important;
   }
+  /* While editing, the rail and byline would sit over the document (and the
+     selected block's handles); the editor's own bar carries Done. */
+  .mx-reader-chrome--editing { display: none !important; }
   .mx-reader-chrome > * { pointer-events: auto !important; }
   .mx-reader-home {
     position: absolute !important; top: max(10px, env(safe-area-inset-top)) !important;
