@@ -426,10 +426,16 @@ export function compileDataflow(flow: Dataflow, ctx: CompileContext, body?: JsxN
 
 /**
  * The dry run: every SQLite query over the document's own data (inline
- * tables, empty imports, the declared defaults, a guest at `ctx.now`). A
- * column the projections left untyped takes the type its values show; one
- * with no values to show stays null.
+ * tables, one row of each imported table's declared types, the declared
+ * defaults, a guest at `ctx.now`). SQLite knows an expression's type only
+ * from its values, so each import lends one typed sample row: `amount * 2`
+ * shows a number even when the real table is empty. A column the
+ * projections left untyped takes the type its values show; one with no
+ * values to show (filtered out, all NULL) stays null.
  */
+const SAMPLE: Record<ColumnType, Scalar> = { string: 'text', number: 1, boolean: true, date: '2026-01-01', timestamp: '2026-01-01T00:00:00.000Z', user: null };
+const sampleRow = (columns: DatasetColumn[]): Record<string, Scalar> => Object.fromEntries(columns.map((c) => [c.name, SAMPLE[c.type]]));
+
 function typeFromDryRun(ctx: CompileContext, queries: CompiledQuery[], imports: CompiledImport[], flow: Dataflow, types: Record<string, ColumnType>): void {
   const local = queries.filter((q) => q.engine === 'sqlite');
   if (!local.some((q) => q.columns.some((c) => c.type === null))) return;
@@ -443,7 +449,7 @@ function typeFromDryRun(ctx: CompileContext, queries: CompiledQuery[], imports: 
   for (const v of flow.values) if (v.kind === 'scalar') params[v.name] = v.default;
   const paramTypes: Record<string, ColumnType> = { ...types, [paramSqlName('_me.id')]: 'user', _now: 'timestamp', _tz: 'string' };
   const results = ctx.engine.run({
-    tables, imports: Object.fromEntries(imports.map((i) => [i.name, Object.fromEntries(i.tables.map((t) => [t.name, { rows: [], columns: t.columns }]))])),
+    tables, imports: Object.fromEntries(imports.map((i) => [i.name, Object.fromEntries(i.tables.map((t) => [t.name, { rows: [sampleRow(t.columns)], columns: t.columns }]))])),
     queries: local.map((q) => ({ name: q.name, sql: q.sql })), params, paramTypes,
   }, { limit: 1000, pageLimit: 1000, timeoutMs: 2000 });
   for (const q of local) {
@@ -466,6 +472,8 @@ function typeFromDryRun(ctx: CompileContext, queries: CompiledQuery[], imports: 
  */
 export function checkBindings(flow: CompiledDataflow, body: JsxNode[]): { errors: ValidationError[]; contexts: Record<string, Pick<CompiledMutation, 'rowTypes' | 'valueType'>> } {
   const errors: ValidationError[] = [];
+  /** The mutations some control runs. */
+  const ran = new Set<string>();
   /** What each mutation's controls supply, typed where they sit; one mutation run from two places must agree. */
   const contexts: Record<string, Pick<CompiledMutation, 'rowTypes' | 'valueType'>> = {};
   const supply = (m: CompiledMutation, rowTypes: Record<string, ColumnType | null> | undefined, valueType: ColumnType | null | undefined, where: { tag: string; attr: string; start: number; end: number }) => {
@@ -513,6 +521,7 @@ export function checkBindings(flow: CompiledDataflow, body: JsxNode[]): { errors
       }
       if (runName) {
         const m = mutations.get(runName);
+        if (m) ran.add(m.name);
         const map = args ? (args.value.static ? bindingMap(args.value.json) : null) : {};
         if (args && !map) errors.push({ message: `args= takes a flat object: {"argument": "$value" | "$_row.column" | literal, …}`, ...where(args, ARGS_ATTR) });
         if (m && map) {
@@ -520,6 +529,7 @@ export function checkBindings(flow: CompiledDataflow, body: JsxNode[]): { errors
           for (const a of m.args) if (!Object.hasOwn(map, a.name) && !scalars.has(a.name)) errors.push({ message: `<${n.tag} run="$${m.name}"> cannot fill $${a.name} — declare <Value name="${a.name}" …/> or pass it: args={{"${a.name}": …}}`, ...where(run!, 'run') });
           const fields = m.reads.builtins.flatMap((b) => rowField(b) ?? []);
           const edits = m.reads.builtins.includes('_value') && editing && n.tag !== 'Button';
+          if (editing && n.tag !== 'Button' && !m.reads.builtins.includes('_value')) errors.push({ message: `<${n.tag} run="$${m.name}"> edits a cell, so ${m.name} writes the value it holds: read $_value in its statement, or run it from a <Button>`, ...where(run!, 'run') });
           supply(m, fields.length && scope ? Object.fromEntries(fields.map((f) => [f, typed(scope, f)])) : undefined, edits ? typed(scope, cellColumn ?? '') : undefined, { tag: n.tag, attr: 'run', start: run!.start, end: run!.end });
           for (const b of m.reads.builtins) {
             const field = typeof b === 'string' ? rowField(b) : null;
@@ -534,6 +544,11 @@ export function checkBindings(flow: CompiledDataflow, body: JsxNode[]): { errors
     }
   };
   visit(body, undefined, false, undefined);
+  // A row action nothing runs has no row to read: said once, at the declaration.
+  for (const m of flow.mutations) {
+    const context = m.reads.builtins.find((b) => rowField(b) || b === '_value');
+    if (context && !ran.has(m.name)) errors.push({ message: `<Mutation name="${m.name}"> reads $${context} — it must be invoked inside a DataTable Column or keyed For: put a control with run="$${m.name}" there`, tag: MUTATION_TAG, attr: 'name', start: m.start, end: m.end });
+  }
   return { errors, contexts };
 }
 
