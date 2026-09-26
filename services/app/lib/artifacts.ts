@@ -2122,6 +2122,8 @@ export async function runDocumentMutation(
   if (fields.length) {
     const missing = fields.filter((f) => !request.row || !Object.hasOwn(request.row, f));
     if (missing.length) return { ok: false, reason: 'invalid_row', detail: `this row mutation reads $_row.${missing.join(', $_row.')} — send the row its control sits in` };
+    const extra = Object.keys(request.row!).filter((k) => !fields.includes(k));
+    if (extra.length) return { ok: false, reason: 'invalid_row', detail: `the row carries ${extra.join(', ')}, which ${m.name} does not read — send only $_row.${fields.join(', $_row.')}` };
     for (const f of fields) {
       const type = m.rowTypes?.[f] ?? null;
       const value = request.row![f]!;
