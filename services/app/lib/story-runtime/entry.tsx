@@ -81,8 +81,9 @@ if (island?.textContent && root) {
     const transport = createDocumentTransport(window, data.queryUrl, appOrigin, undefined, data.mutateUrl);
     // `readOnly` is a SNAPSHOT render's refusal, carried on the island so every
     // button says which version cannot be written rather than "this view".
-    // What the reader may hold runs in this page (lib/story-runtime/page-sqlite); the rest through the transport.
-    const store: DataflowStore = createDataflowStore(data.dataflow ?? { flow: EMPTY_COMPILED_DATAFLOW }, { transport, writesUnavailable: data.readOnly ?? null, page: pageEngineFor(data, transport) });
+    // What the reader may hold runs in this page (lib/story-runtime/page-sqlite); the rest through the
+    // transport. Its doors carry no credential, so the page binds `$_me.id` as they do: to nobody.
+    const store: DataflowStore = createDataflowStore(data.dataflow ?? { flow: EMPTY_COMPILED_DATAFLOW }, { transport, writesUnavailable: data.readOnly ?? null, page: pageEngineFor(data, transport, null) });
     authorSession = createAuthorScriptSession(store);
     window.addEventListener('pagehide', event => { if (!event.persisted) authorSession?.dispose(); });
     /*
