@@ -14,8 +14,10 @@ import { StoryRuntimeApp } from '../StoryRuntimeApp';
 import type { StoryIslandDataflow } from '../contract';
 import type { DataflowState } from '@/lib/story/dataflow';
 import { parseJsxOrThrow } from '@/test/helpers/jsx';
+import { compiledSource } from '@/test/helpers/compiled';
 
-const HELMET = '<Helmet><Query name="sales">{`select * from ref_abc123`}</Query></Helmet>';
+const HELMET = '<Helmet><Import name="orders" src="ref:abc123" /><Query name="sales">{`select * from orders.rows`}</Query></Helmet>';
+const FLOW = await compiledSource(HELMET, { abc123: [{ name: 'region', type: 'string' }, { name: 'revenue', type: 'number' }] });
 
 const STATE: DataflowState = {
   values: {},
@@ -30,8 +32,8 @@ const STATE: DataflowState = {
 
 function renderBody(body: string) {
   const parsed = parseJsxOrThrow(HELMET + body);
-  const { content, body: nodes } = splitHelmet(parsed.nodes as JsxNode[]);
-  const dataflow: StoryIslandDataflow = { flow: { values: content.values, queries: content.queries }, state: STATE };
+  const { body: nodes } = splitHelmet(parsed.nodes as JsxNode[]);
+  const dataflow: StoryIslandDataflow = { flow: FLOW, state: STATE };
   const { container } = renderWithProviders(
     <StoryRuntimeApp nodes={nodes} refData={{}} dataflow={dataflow} colorMode="light" chrome={false} />,
   );

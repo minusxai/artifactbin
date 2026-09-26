@@ -16,7 +16,7 @@ import {REFERENCE_POSITIONS} from './reference-positions';
 import { urlListUrls } from '@/lib/jsx/url-attrs';
 import { videoEmbedUrl } from '@/lib/story-ui/video-embed';
 import { collectFieldRefs, collectDerivedFieldNames, hasUnverifiableTransform } from '@/lib/viz/field-refs';
-import { MUTATION_TAG, QUERY_TAG, carriesRef, parseMutationDecl, parseQueryDecl, refName } from './dataflow';
+import { IMPORT_TAG, QUERY_TAG, carriesRef, parseImportDecl, parseQueryDecl, refName } from './dataflow';
 import type { DatasetColumn } from './data-tiers';
 import type { VizRecipeBinding, VizRecipeContent } from '@/lib/validation/atlas-schemas';
 import { isNumberFormat, NUMBER_FORMAT_HINT } from './number-format';
@@ -29,11 +29,6 @@ interface RefUse {
   kind: 'dataset' | 'viz' | 'image' | 'pdf' | 'file' | 'asset';
   /** A `<Query>`/`<Mutation>` reaching its dataset through `source="ref:<id>"`, not a rendered position. */
   via?: 'sql';
-  /**
-   * The use WRITES the dataset (a `<Mutation>` target). Reads resolve by the
-   * link-readable rule; a write needs the target OWNED and `readwrite`.
-   */
-  write?: boolean;
   /** For recipe binding validation: the viz envelope + `data` ref carried by the same element. */
   element?: { viz?: Record<string, unknown> | null; dataRef?: string | null };
 }
@@ -97,20 +92,20 @@ export function collectRefUses(source: string): RefUse[] | null {
   const uses: RefUse[] = [];
   walk(parsed.nodes, (el) => {
     const tag = el.tag;
-    // A <Query> names its dataset with `source="ref:<id>"`
+    // An <Import> names the dataset (or folder) its tables are read from, and
+    // a <Query source=…> the connected database it runs inside
     // (lib/story/dataflow.ts). Real refs: they resolve through the loader like
     // any other and land in meta.refs (dependents warnings), but their rows go
-    // through the engine, never onto the page.
-    if (el.isComponent && tag === QUERY_TAG) {
-      const q = parseQueryDecl(el);
-      if (q.ok) for (const id of q.decl.refs) uses.push({ id, kind: 'dataset', via: 'sql' });
+    // through the engine, never onto the page. Which of them a <Mutation>
+    // WRITES is the compiler's to say (lib/story/data-checks `writeRefusal`).
+    if (el.isComponent && tag === IMPORT_TAG) {
+      const i = parseImportDecl(el);
+      if (i.ok) uses.push({ id: i.decl.ref, kind: 'dataset', via: 'sql' });
       return;
     }
-    // A <Mutation> WRITES its one dataset: the same ref (ownership, dependents,
-    // meta.refs) with the stricter admission below.
-    if (el.isComponent && tag === MUTATION_TAG) {
-      const m = parseMutationDecl(el);
-      if (m.ok && m.decl.scope !== 'local') uses.push({ id: m.decl.target, kind: 'dataset', via: 'sql', write: true });
+    if (el.isComponent && tag === QUERY_TAG) {
+      const q = parseQueryDecl(el);
+      if (q.ok && q.decl.source) uses.push({ id: q.decl.source, kind: 'dataset', via: 'sql' });
       return;
     }
     if (!el.isComponent && tag.toLowerCase() === 'meta' && attrValue(el, 'name') === 'artifactbin:og-image') {
@@ -234,16 +229,30 @@ export function findExternalSubresources(source: string): ValidationError[] {
 }
 
 /**
- * A FOLDER READS AS A DATASET, and only in a read position. Its children are a
- * table the dataflow registers under the same `ref_<id>` name, so a <Query>
- * naming one is admitted exactly as a dataset is; the WRITE branch below
- * refuses it separately, because a listing is computed and there is nothing
- * there to write.
+ * A FOLDER READS AS A DATASET, and only in a read position: an `<Import>` of
+ * one reads its children as `<name>.rows`, and a <Mutation> that writes it is
+ * refused (a listing is computed; there is nothing there to write).
  */
 const KIND_FOR_FORMAT: Record<string, RefUse['kind']> = { dataset: 'dataset', viz: 'viz', image: 'image', pdf: 'pdf', file:'file', folder: 'dataset' };
 
 const colKind = (t: DatasetColumn['type']): 'quantitative' | 'temporal' | 'nominal' =>
   t === 'number' ? 'quantitative' : (t === 'date' || t === 'timestamp') ? 'temporal' : 'nominal';
+
+/**
+ * A WRITE is admitted narrower than a read, twice over. The dataset must be
+ * the publisher's OWN — the link-readable fallback exists so a document can
+ * chart any public dataset, and nothing about "public" says "anyone may append
+ * rows to it" — and its owner must have opened it for writes (or its data
+ * policy admits the writer). Both refusals name the fix; neither is an
+ * existence oracle (the row was already admitted for reading).
+ */
+export function writeRefusal(r: ResolvedRef): string | null {
+  const notYours = `ref:${r.id} is not yours to write — a <Mutation> may only write a dataset you own (read it with a <Query> instead, or publish your own copy)`;
+  if (r.format === 'folder') return notYours;
+  if (!r.owned && r.datasetPolicy?.version !== 2) return notYours;
+  if (r.access !== 'readwrite' && r.datasetPolicy?.version !== 2) return `ref:${r.id} is read-only — a <Mutation> needs a writable dataset: publish it with afbin push <file> --type dataset --access readwrite (API: set access on create or PUT, PATCH /api/my/artifacts/${r.id} { "access": "readwrite" }, or use the dataset's share menu)`;
+  return null;
+}
 
 /**
  * Resolve + validate every ref. Returns the deduped ref list for meta.refs, or
@@ -268,30 +277,6 @@ export async function validateRefs(source: string, load: RefLoader): Promise<
     if (use.kind==='asset'?!['file','image','pdf'].includes(r.format):kind!==use.kind) {
       details.push(`ref:${use.id} is a ${r.format ?? 'unknown'} artifact — this position needs a ${use.kind}`);
       continue;
-    }
-    // A WRITE is admitted narrower than a read, twice over. The dataset must
-    // be the publisher's OWN — the link-readable fallback exists so a document
-    // can chart any public dataset, and nothing about "public" says "anyone
-    // may append rows to it" — and its owner must have opened it for writes.
-    // Both refusals name the fix; neither is an existence oracle (the row was
-    // already admitted for reading by the rule above).
-    if (use.write) {
-      // A folder's children are COMPUTED, per viewer, from the artifacts table
-      // — there is no stored table under it for a statement to change. Same
-      // message as a foreign dataset on purpose: the fix is the same one, a
-      // dataset of your own.
-      if (r.format === 'folder') {
-        details.push(`ref:${use.id} is not yours to write — a <Mutation> may only write a dataset you own (read it with a <Query> instead, or publish your own copy)`);
-        continue;
-      }
-      if (!r.owned && r.datasetPolicy?.version!==2) {
-        details.push(`ref:${use.id} is not yours to write — a <Mutation> may only write a dataset you own (read it with a <Query> instead, or publish your own copy)`);
-        continue;
-      }
-      if (r.access !== 'readwrite' && r.datasetPolicy?.version!==2) {
-        details.push(`ref:${use.id} is read-only — a <Mutation> needs a writable dataset: publish it with afbin push <file> --type dataset --access readwrite (API: set access on create or PUT, PATCH /api/my/artifacts/${use.id} { "access": "readwrite" }, or use the dataset's share menu)`);
-        continue;
-      }
     }
   }
   // Recipe slot checks: every declared slot bound. Column checks against the

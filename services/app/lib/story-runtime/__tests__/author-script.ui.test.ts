@@ -1,4 +1,5 @@
 import {bindManagedComments} from '../managed-comment-host';
+import { EMPTY_COMPILED_DATAFLOW } from '@/lib/story/compiled-dataflow';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createAuthorScriptSession, startAuthorScript } from '../author-script';
 import { createDataflowStore } from '../store';
@@ -13,7 +14,7 @@ describe('isolated author script host', () => {
     vi.useFakeTimers();
     const port={postMessage:vi.fn(),start:vi.fn(),close:vi.fn(),onmessage:null as null | ((event:{data:unknown})=>void)};
     vi.stubGlobal('MessageChannel',class {port1=port;port2={};});
-    const store=createDataflowStore({flow:{values:[{kind:'scalar',name:'n',type:'number',default:0,start:0,end:0}],queries:[]}});
+    const store=createDataflowStore({flow:{...EMPTY_COMPILED_DATAFLOW,values:[{kind:'scalar',name:'n',type:'number',default:0}]}});
     const dispose=startAuthorScript('void 0',store);
     document.querySelector('iframe')!.dispatchEvent(new Event('load'));
     port.onmessage!({data:{id:1,op:'subscribe',names:['n']}});
@@ -34,7 +35,7 @@ describe('isolated author script host', () => {
     expect(packets()).toHaveLength(2);expect(port.close).toHaveBeenCalledOnce();
   });
   it('preserves unchanged code, replaces changed code, and revokes removed code', () => {
-    const store = createDataflowStore({ flow: { values: [], queries: [] } });
+    const store = createDataflowStore({ flow: EMPTY_COMPILED_DATAFLOW });
     const session = createAuthorScriptSession(store);
     session.replace('void 1');
     const first = document.querySelector('iframe');
@@ -53,7 +54,7 @@ describe('isolated author script host', () => {
   it('creates only an opaque, hidden script frame; never executes in the document realm', () => {
     const port={postMessage:vi.fn(),start:vi.fn(),close:vi.fn(),onmessage:null};
     vi.stubGlobal('MessageChannel',class {port1=port;port2={};});
-    const store = createDataflowStore({ flow: { values: [], queries: [] } });
+    const store = createDataflowStore({ flow: EMPTY_COMPILED_DATAFLOW });
     const cleanup = startAuthorScript('window.__authorEscaped = true', store);
     const frame = document.querySelector('iframe')!;
     expect(frame.title).toBe(AUTHOR_SCRIPT_FRAME_TITLE);
@@ -72,7 +73,7 @@ describe('isolated author script host', () => {
     const port={postMessage:vi.fn(),start:vi.fn(),close:vi.fn(),onmessage:null as null|((event:{data:any})=>void)};
     vi.stubGlobal('MessageChannel',class {port1=port;port2={};});
     const relay=vi.fn(async()=>({url:'https://assets.example/assets/'+'a'.repeat(64)}));
-    startAuthorScript('',createDataflowStore({flow:{values:[],queries:[]}}),document,{host:document.body,title:'x',html:'',document:AUTHOR_SCRIPT_DOCUMENT,scripts:[],assets:{origin:'https://assets.example',resolveUrl:'https://app.example/a/abc123/assets'},importAsset:relay});
+    startAuthorScript('',createDataflowStore({flow:EMPTY_COMPILED_DATAFLOW}),document,{host:document.body,title:'x',html:'',document:AUTHOR_SCRIPT_DOCUMENT,scripts:[],assets:{origin:'https://assets.example',resolveUrl:'https://app.example/a/abc123/assets'},importAsset:relay});
     document.querySelector('iframe')!.dispatchEvent(new Event('load'));
     port.onmessage!({data:{op:'asset',id:5,url:'https://cdn.example/a.js',kind:'script'}});
     await vi.waitFor(()=>expect(relay).toHaveBeenCalledTimes(1));
@@ -82,7 +83,7 @@ describe('isolated author script host', () => {
   });
   it('fails closed when the wrapper never completes its handshake',()=>{
     vi.useFakeTimers();
-    const store=createDataflowStore({flow:{values:[],queries:[]}});
+    const store=createDataflowStore({flow:EMPTY_COMPILED_DATAFLOW});
     startAuthorScript('void 0',store);
     vi.advanceTimersByTime(15_000);
     expect(document.querySelector('iframe')).toBeNull();
@@ -95,7 +96,7 @@ it('connects only the visible managed owner and routes comment events outside au
   document.body.innerHTML='<div id="owner" data-mx-managed-frame="" data-mx-ast="0"><div id="mount"></div></div>';
   const owner=document.getElementById('owner')!,receive=vi.fn();
   const binding=bindManagedComments(document,{state:()=>({enabled:true,picking:true,canComment:true,pins:[],openId:null,hoverId:null,selection:null}),receive});
-  const dispose=startAuthorScript('',createDataflowStore({flow:{values:[],queries:[]}}),document,{host:document.getElementById('mount')!,title:'Managed',html:'',scripts:[],document:AUTHOR_SCRIPT_DOCUMENT});
+  const dispose=startAuthorScript('',createDataflowStore({flow:EMPTY_COMPILED_DATAFLOW}),document,{host:document.getElementById('mount')!,title:'Managed',html:'',scripts:[],document:AUTHOR_SCRIPT_DOCUMENT});
   document.querySelector('iframe')!.dispatchEvent(new Event('load'));
   const state=port.postMessage.mock.calls.find(c=>c[0].type==='comment-state')![0];
   expect(state).toMatchObject({enabled:true,picking:true});

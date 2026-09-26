@@ -173,9 +173,9 @@ export const MAX_ROWS_LIMIT = Number(env('SQL', 'MAX_ROWS') ?? '10000');
 export const MAX_QUERY_ROWS = Number(env('SQL', 'MAX_QUERY_ROWS') ?? String(MAX_ROWS_LIMIT));
 
 /**
- * How long one query may run before it is interrupted. The engine is in-process
- * and a document renders behind it, so a runaway query is a hung page; DuckDB's
- * own interrupt makes stopping one cheap and leaves the connection usable.
+ * How long one query may run before it is interrupted. A document renders
+ * behind its queries, so a runaway query is a hung page; the engine's progress
+ * handler interrupts it inside the statement, and its thread is free again.
  */
 export const QUERY_TIMEOUT_MS = Number(env('SQL', 'QUERY_TIMEOUT_MS') ?? '5000');
 
@@ -318,10 +318,10 @@ export const INTERNAL_SERVICE_SECRET = env('INTERNAL', 'SERVICE_SECRET');
 
 /**
  * Where the SQL engine runs. Unset (the self-host default) it runs IN THIS
- * PROCESS on the native DuckDB module — one throwaway instance per call. Set,
- * every run travels to that service instead, which runs the same module under
- * the same guards: what leaves this process is the SQL, the params and the
- * rows to register, never a document and never a credential.
+ * PROCESS, SQLite in a few worker threads — one throwaway database per call.
+ * Set, every run travels to that service instead, which runs the same engine
+ * under the same guards: what leaves this process is the SQL, the params and
+ * the rows to register, never a document and never a credential.
  */
 export const SQL_SERVICE_URL = env('SQL', 'SERVICE_URL');
 

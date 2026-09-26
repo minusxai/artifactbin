@@ -22,7 +22,8 @@ describe('createRelayTransport', () => {
     const { target, messages } = fakeParent();
     const t = createRelayTransport(target, APP, window);
     const p = t.run({ region: 'EU' }, ['sales']);
-    expect(messages()[0]).toEqual({ type: STORY_QUERY_MESSAGE, id: 1, values: { region: 'EU' }, only: ['sales'] });
+    // The reader's zone travels with every run: it is $_tz.
+    expect(messages()[0]).toEqual({ type: STORY_QUERY_MESSAGE, id: 1, values: { region: 'EU' }, only: ['sales'], tz: Intl.DateTimeFormat().resolvedOptions().timeZone });
     deliver(target, { type: STORY_QUERY_RESULT_MESSAGE, id: 1, tables: { sales: { rows: [{ a: 1 }], columns: [] } }, errors: {} });
     expect(await p).toEqual({ tables: { sales: { rows: [{ a: 1 }], columns: [] } }, errors: {} });
   });
@@ -41,7 +42,7 @@ describe('createRelayTransport', () => {
     const { target, messages } = fakeParent();
     const t = createRelayTransport(target, APP, window);
     const p = t.page({ region: 'EU' }, 'sales', { offset: 50, limit: 25, sort: { col: 'a', dir: 'asc' } });
-    expect(messages()[0]).toEqual({ type: STORY_QUERY_MESSAGE, id: 1, values: { region: 'EU' }, only: ['sales'], page: { name: 'sales', offset: 50, limit: 25, sort: { col: 'a', dir: 'asc' } } });
+    expect(messages()[0]).toEqual({ type: STORY_QUERY_MESSAGE, id: 1, values: { region: 'EU' }, only: ['sales'], page: { name: 'sales', offset: 50, limit: 25, sort: { col: 'a', dir: 'asc' } }, tz: Intl.DateTimeFormat().resolvedOptions().timeZone });
     deliver(target, { type: STORY_QUERY_RESULT_MESSAGE, id: 1, tables: { sales: { rows: [{ a: 51 }], columns: [], totalRows: 900, truncated: true } }, errors: {} });
     expect(await p).toEqual({ rows: [{ a: 51 }], columns: [], totalRows: 900, truncated: true });
   });

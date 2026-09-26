@@ -1,12 +1,11 @@
 import { describe, expect, it, vi } from 'vitest';
 import { createDataflowStore } from '../store';
 import { createAuthorScriptBridge } from '../author-script-bridge';
-import type { Dataflow } from '@/lib/story/dataflow';
+import { EMPTY_COMPILED_DATAFLOW } from '@/lib/story/compiled-dataflow';
+import { compiledOf } from '@/test/helpers/compiled';
 
-const flow: Dataflow = {
-  values: [{ kind: 'scalar', name: 'count', type: 'number', default: 0, start: 0, end: 0 }],
-  queries: [],
-};
+const flow = await compiledOf('<Value name="count" type="number" default={0} />');
+const SAVE_FLOW = await compiledOf('<Import name="owned" src="ref:owned1" /><Value name="count" type="number" default={0} /><Mutation name="save">{`update owned.rows set n=$count`}</Mutation>', { owned1: [{ name: 'n', type: 'number' }] });
 const setup = () => {
   const store = createDataflowStore({ flow });
   return { store, bridge: createAuthorScriptBridge(store) };
@@ -34,7 +33,7 @@ describe('author script capability boundary', () => {
   });
   it('uses current declarations after a document replacement', async () => {
     const { store, bridge } = setup();
-    store.replaceFlow({ flow: { values: [], queries: [] } });
+    store.replaceFlow({ flow: EMPTY_COMPILED_DATAFLOW });
     expect(await bridge.request({ id: 3, op: 'set', values: { count: 1 } })).toMatchObject({ ok: false });
   });
   it('revokes the channel on dispose', async () => {
@@ -65,14 +64,13 @@ describe('author script capability boundary', () => {
   });
   it('runs an allowed declared mutation through the real permission-checked store', async () => {
     const mutate = vi.fn(async () => ({ dataset: 'owned' }));
-    const mutations = [{ name: 'save', sql: 'update ref_owned set n=$count', params: ['count'], target: 'owned', refs: ['owned'], start: 0, end: 0 }];
-    const store = createDataflowStore({ flow: { ...flow, mutations }, state: { values: { count: 0 }, tables: {}, errors: {}, mutationAccess: { save: null } } }, {
+    const store = createDataflowStore({ flow: SAVE_FLOW, state: { values: { count: 0 }, tables: {}, errors: {}, mutationAccess: { save: null } } }, {
       transport: { mutate, run: async () => ({ tables: {}, errors: {} }), page: async () => ({ rows: [], columns: [] }) },
     });
     const bridge = createAuthorScriptBridge(store);
     expect(await bridge.request({ id: 1, op: 'mutate', name: 'save', args: { count: 9 } })).toMatchObject({ ok: true });
-    expect(mutate).toHaveBeenCalledWith({ count: 9 }, 'save');
-    store.replaceFlow({ flow: { ...flow, mutations }, state: { values: { count: 0 }, tables: {}, errors: {}, mutationAccess: { save: 'No edit access' } } });
+    expect(mutate).toHaveBeenCalledWith({ mutation: 'save', args: { count: 9 } });
+    store.replaceFlow({ flow: SAVE_FLOW, state: { values: { count: 0 }, tables: {}, errors: {}, mutationAccess: { save: 'No edit access' } } });
     expect(await bridge.request({ id: 2, op: 'mutate', name: 'save' })).toMatchObject({ ok: false });
     expect(mutate).toHaveBeenCalledTimes(1);
     bridge.dispose();

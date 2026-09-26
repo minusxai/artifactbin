@@ -3,7 +3,7 @@ import {parseJsx,validateJsx,type ValidationError,type JsxNode} from '@/lib/jsx'
 import {syntaxErrorDetail} from '@/lib/jsx/syntax-error';
 import {JSX_STORY_COMPONENT_NAMES} from '@/lib/jsx/components';
 import {STORY_HTML_TAGS} from '@/lib/story-ui/component-names';
-import {splitHelmet,validateHelmet,type HelmetSplit} from './helmet';
+import {dataflowOf,splitHelmet,validateHelmet,type HelmetSplit} from './helmet';
 import {analyzeRowScopes} from './row-scope';
 import {collectRefNameUses,validateDataflow} from './dataflow';
 import {managedIframeSourceErrors} from './managed-iframe-source';
@@ -20,7 +20,7 @@ export function validateMarkupStructure(source:string):{errors:ValidationError[]
   ...analyzeRowScopes(split.body,split.content.queries.length ? undefined : Object.fromEntries(split.content.values.flatMap(value=>value.kind==='table'?[[value.name,value.columns]]:[]))).errors.map(message=>({message})),
   ...validateJsx(split.body,{components:JSX_STORY_COMPONENT_NAMES,allowedHtmlTags:STORY_HTML_TAGS,stylePolicy:'no-inline-style'}),
   ...managedIframeSourceErrors(split.body),...findExternalSubresources(source),...findBrokenEmbeds(source),
-  ...(helmetErrors.length?[]:validateDataflow({values:split.content.values,queries:split.content.queries,mutations:split.content.mutations},collectRefNameUses(split.body))),
+  ...(helmetErrors.length?[]:validateDataflow(dataflowOf(split.content),collectRefNameUses(split.body))),
  ]};
 }
 

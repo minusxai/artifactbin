@@ -10,9 +10,9 @@ import { createSqliteSql } from '@artifactbin/sql/sqlite';
 import { serveSql, sqlClient } from '@artifactbin/sql';
 import type { DatasetMutationPolicy, SqlService } from '@artifactbin/contracts';
 
-const local = createSql(), server = serveSql(local), remote = sqlClient(server.listen(0).url);
+const pool = createSql({}, { workers: 1 }), server = serveSql(pool), remote = sqlClient(server.listen(0).url);
 const sqlite = createSqliteSql(), sqliteServer = serveSql(sqlite), sqliteRemote = sqlClient(sqliteServer.listen(0).url);
-afterAll(() => Promise.all([server.close(), sqliteServer.close()]));
+afterAll(async () => { await Promise.all([server.close(), sqliteServer.close()]); await pool.close(); });
 
 const table = {
   name: 'rows',
@@ -36,7 +36,7 @@ const open: DatasetMutationPolicy = {
 };
 const INSERT = "insert into rows (id, body, due) select 2, 'two', coalesce($due, current_date)";
 
-describe.each<[string, 'duckdb' | 'sqlite', SqlService]>([['duckdb local', 'duckdb', local], ['duckdb HTTP', 'duckdb', remote], ['sqlite local', 'sqlite', sqlite], ['sqlite HTTP', 'sqlite', sqliteRemote]])('typed scalar params %s', (_, engine, svc) => {
+describe.each<[string, SqlService]>([['worker threads', pool], ['worker threads HTTP', remote], ['this thread', sqlite], ['this thread HTTP', sqliteRemote]])('typed scalar params %s', (_, svc) => {
   it('plans a declared date as a date, so a policed insert with a date commits', async () => {
     const result = await svc.mutate({ table, sql: INSERT, params: { due: '2026-09-01' }, paramTypes: { due: 'date' }, policy: open });
     expect(result).not.toHaveProperty('error');
@@ -44,15 +44,9 @@ describe.each<[string, 'duckdb' | 'sqlite', SqlService]>([['duckdb local', 'duck
   });
 
   it('plans a declared type even when the value is null, so a type clash is caught before any reader clicks', async () => {
-    if (engine === 'sqlite') {
-      // SQLite has no plan-time types; its preview RUNS the statement on the empty table, so a value the column cannot hold is caught there.
-      const clash = await svc.mutate({ table, sql: "insert into rows (id, body, due) select coalesce($n, 'x'), 'two', '2026-09-01'", params: { n: null }, paramTypes: { n: 'string' }, policy: open, policyPreview: true });
-      expect(String((clash as { error?: unknown }).error)).toMatch(/cannot store TEXT value in REAL column rows\.id/);
-      return;
-    }
-    const preview = await svc.mutate({ table, sql: INSERT, params: { due: null }, paramTypes: { due: 'string' }, policy: open, policyPreview: true });
-    expect(preview).toHaveProperty('error');
-    expect(String((preview as { error: unknown }).error)).toMatch(/cannot be safely analyzed|VARCHAR/i);
+    // SQLite has no plan-time types; its preview RUNS the statement on the empty table, so a value the column cannot hold is caught there.
+    const clash = await svc.mutate({ table, sql: "insert into rows (id, body, due) select coalesce($n, 'x'), 'two', '2026-09-01'", params: { n: null }, paramTypes: { n: 'string' }, policy: open, policyPreview: true });
+    expect(String((clash as { error?: unknown }).error)).toMatch(/cannot store TEXT value in REAL column rows\.id/);
   });
 
   it('keeps today’s inference when no type is declared', async () => {

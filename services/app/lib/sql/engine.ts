@@ -2,7 +2,7 @@
  * THE APP'S VIEW OF SQL: the shared contract, reached through the
  * services registry — an HTTP client when `SQL__SERVICE_URL` is set, the
  * in-process engine a composition root registered otherwise. Nothing else in
- * the app knows DuckDB exists; the guards, the caps and the wire live in the
+ * the app knows which engine runs; the guards, the caps and the wire live in the
  * package (services/sql/CONTRACT.md).
  */
 import type { SqlService } from '@artifactbin/contracts';

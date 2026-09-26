@@ -18,7 +18,7 @@
  *  - no attributes on `<Helmet>` or its children;
  *  - children: at most one each of `<title>`, `<style>`, `<script>`, plus any
  *    number of `<meta>` (unique `name`s) and of the DATA declarations
- *    `<Value>` / `<Query>` / `<Mutation>` (lib/story/dataflow.ts owns their shape and the
+ *    `<Import>` / `<Value>` / `<Query>` / `<Mutation>` (lib/story/dataflow.ts owns their shape and the
  *    `$name` reference rules; the grammar here only admits them);
  *  - `<meta>` carries `name` + `content` and NOTHING else: `http-equiv` is a
  *    policy channel (an authored CSP would rewrite the document's own
@@ -32,7 +32,7 @@
  *    CSS has no use for the sequence; the snapshot's styleTag precedent.)
  */
 import { parseJsx, type JsxElement, type JsxNode, type ValidationError } from '@/lib/jsx';
-import { MUTATION_TAG, QUERY_TAG, VALUE_TAG, carriesRef, parseMutationDecl, parseQueryDecl, parseValueDecl, type MutationDecl, type QueryDecl, type ValueDecl } from './dataflow';
+import { IMPORT_TAG, MUTATION_TAG, QUERY_TAG, VALUE_TAG, carriesRef, parseImportDecl, parseMutationDecl, parseQueryDecl, parseValueDecl, type Dataflow, type ImportDecl, type MutationDecl, type QueryDecl, type ValueDecl } from './dataflow';
 
 export const HELMET_TAG = 'Helmet';
 
@@ -49,6 +49,8 @@ export interface HelmetContent {
   script: string | null;
   /** `<meta name content>` pairs in authored order; names are unique. */
   meta: HelmetMeta[];
+  /** `<Import>` declarations in authored order (lib/story/dataflow.ts). */
+  imports: ImportDecl[];
   /** `<Value>` declarations in authored order (lib/story/dataflow.ts). */
   values: ValueDecl[];
   /** `<Query>` declarations in authored order (lib/story/dataflow.ts). */
@@ -65,10 +67,21 @@ export interface HelmetSplit {
   body: JsxNode[];
 }
 
-export const EMPTY_HELMET_CONTENT: HelmetContent = { title: null, style: null, script: null, meta: [], values: [], queries: [], mutations: [] };
+export const EMPTY_HELMET_CONTENT: HelmetContent = { title: null, style: null, script: null, meta: [], imports: [], values: [], queries: [], mutations: [] };
 
-/** The three DATA declarations a Helmet may repeat (lib/story/dataflow.ts owns their shapes). */
-const DATA_TAGS: Record<string, (el: JsxElement) => { ok: true; decl: ValueDecl | QueryDecl | MutationDecl } | { ok: false; errors: ValidationError[] }> = {
+/** The data declarations of a markup source, or null when it does not parse. */
+export function declarationsOf(source: string): Dataflow | null {
+  const parsed = parseJsx(source);
+  return parsed.ok ? dataflowOf(splitHelmet(parsed.nodes).content) : null;
+}
+
+/** The data declarations of a split Helmet, as one `Dataflow`. */
+export const dataflowOf = (content: HelmetContent): Dataflow =>
+  ({ imports: content.imports, values: content.values, queries: content.queries, mutations: content.mutations });
+
+/** The DATA declarations a Helmet may repeat (lib/story/dataflow.ts owns their shapes). */
+const DATA_TAGS: Record<string, (el: JsxElement) => { ok: true; decl: ImportDecl | ValueDecl | QueryDecl | MutationDecl } | { ok: false; errors: ValidationError[] }> = {
+  [IMPORT_TAG]: parseImportDecl,
   [VALUE_TAG]: parseValueDecl,
   [QUERY_TAG]: parseQueryDecl,
   [MUTATION_TAG]: parseMutationDecl,
@@ -137,7 +150,7 @@ export function validateHelmet(nodes: JsxNode[]): ValidationError[] {
   const seen = new Set<HelmetChildTag>();
   const seenMetaNames = new Set<string>();
   for (const child of contentChildren(helmet)) {
-    // The three DATA declarations (lib/story/dataflow.ts owns their shape; the
+    // The DATA declarations (lib/story/dataflow.ts owns their shape; the
     // grammar here only knows they exist and repeat). Graph-level rules —
     // duplicate names, undeclared `$refs`, cycles — involve the body and run
     // in publishJsx's always-on pass, not here.
@@ -148,7 +161,7 @@ export function validateHelmet(nodes: JsxNode[]): ValidationError[] {
     }
     if (child.type !== 'element' || !(CHILD_TAGS as readonly string[]).includes(child.tag.toLowerCase()) || child.isComponent) {
       errors.push({
-        message: `<Helmet> may only contain <title>, <style>, <script>, <meta>, <Value>, <Query>, <Mutation>`,
+        message: `<Helmet> may only contain <title>, <style>, <script>, <meta>, <Import>, <Value>, <Query>, <Mutation>`,
         start: child.start, end: child.end, ...(child.type === 'element' ? { tag: child.tag } : {}),
       });
       continue;
@@ -216,11 +229,12 @@ export function validateHelmet(nodes: JsxNode[]): ValidationError[] {
 
 /** Extracted contents of a (validated) Helmet element. */
 function helmetContent(helmet: JsxElement): HelmetContent {
-  const content: HelmetContent = { ...EMPTY_HELMET_CONTENT, meta: [], values: [], queries: [], mutations: [] };
+  const content: HelmetContent = { ...EMPTY_HELMET_CONTENT, meta: [], imports: [], values: [], queries: [], mutations: [] };
   for (const child of contentChildren(helmet)) {
     if (child.type !== 'element') continue;
     if (child.isComponent) {
-      if (child.tag === VALUE_TAG) { const p = parseValueDecl(child); if (p.ok) content.values.push(p.decl); }
+      if (child.tag === IMPORT_TAG) { const p = parseImportDecl(child); if (p.ok) content.imports.push(p.decl); }
+      else if (child.tag === VALUE_TAG) { const p = parseValueDecl(child); if (p.ok) content.values.push(p.decl); }
       else if (child.tag === QUERY_TAG) { const p = parseQueryDecl(child); if (p.ok) content.queries.push(p.decl); }
       else if (child.tag === MUTATION_TAG) { const p = parseMutationDecl(child); if (p.ok) content.mutations.push(p.decl); }
       continue;

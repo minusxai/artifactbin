@@ -32,6 +32,12 @@ export interface OutputColumn {
    * only through a direct projection.
    */
   declaredType: ColumnType | null;
+  /**
+   * The loaded column it directly references, when there is one — what lets
+   * the compiler type a projection of an earlier query's result by that
+   * query's own (compiled) column type.
+   */
+  origin?: { schema: string; table: string; column: string };
 }
 
 export interface StatementAnalysis {

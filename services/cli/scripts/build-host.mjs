@@ -12,8 +12,8 @@ const cli=resolve(dirname(fileURLToPath(import.meta.url)),'..'),repo=resolve(cli
 const runtime=join(cli,'dist/runtime'),app=join(repo,'services/app');
 execFileSync(process.execPath,[process.env.npm_execpath??join(dirname(process.execPath),'node_modules/npm/bin/npm-cli.js'),'run','build','-w','services/app'],{cwd:repo,stdio:'inherit'});
 await rm(runtime,{recursive:true,force:true});await mkdir(runtime,{recursive:true});
-execFileSync(process.execPath,[join(repo,'scripts/build-server.mjs'),join(runtime,'host.mjs'),join(cli,'src/team-entry.ts'),'sharp','--standalone-sql'],{cwd:repo,stdio:'inherit'});
-execFileSync(process.execPath,[join(repo,'scripts/build-server.mjs'),join(runtime,'preview.mjs'),join(cli,'src/preview-entry.ts'),'sharp','--standalone-sql'],{cwd:repo,stdio:'inherit'});
+execFileSync(process.execPath,[join(repo,'scripts/build-server.mjs'),join(runtime,'host.mjs'),join(cli,'src/team-entry.ts'),'sharp'],{cwd:repo,stdio:'inherit'});
+execFileSync(process.execPath,[join(repo,'scripts/build-server.mjs'),join(runtime,'preview.mjs'),join(cli,'src/preview-entry.ts'),'sharp'],{cwd:repo,stdio:'inherit'});
 await build({entryPoints:[join(cli,'src/preview/client.tsx')],bundle:true,format:'esm',splitting:true,outdir:join(runtime,'preview'),platform:'browser',target:'es2022',jsx:'automatic',alias:{'@':app},define:{'process.env.NODE_ENV':'"production"'},loader:{'.woff2':'dataurl','.css':'empty'}});
 for(const name of ['public','skills','orchestrator','lib/story-runtime/dist','dist/web','package.json']){
  await mkdir(dirname(join(runtime,name)),{recursive:true});await cp(join(app,name),join(runtime,name),{recursive:true});
@@ -35,8 +35,8 @@ async function install(name,from,parent=runtime){
   await install(dependency,directory,destination);
  }
 }
-// DuckDB's Node package is installed by npm consumers, or embedded separately for SEA. Vite is development-only.
-for(const name of [...EXTERNALS.filter(name=>!['vite','@duckdb/node-api'].includes(name)),'sharp'])await install(name,repo);
+// Vite is development-only.
+for(const name of [...EXTERNALS.filter(name=>name!=='vite'),'sharp'])await install(name,repo);
 const {version}=JSON.parse(await readFile(join(cli,'package.json'),'utf8'));
 const archive=`afbin-runtime-${process.platform}-${process.arch}.gz`;
 const manifest=await archiveDirectory(runtime,{prefix:'node_modules/@artifactbin/host-runtime',out:join(cli,'dist',archive),url:`https://github.com/minusxai/artifactbin/releases/download/afbin-v${version}/${archive}`});

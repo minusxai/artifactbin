@@ -7,9 +7,11 @@ import { StoryRuntimeApp } from '../StoryRuntimeApp';
 import type { StoryIslandDataflow } from '../contract';
 import { createDataflowStore } from '../store';
 import { parseJsxOrThrow } from '@/test/helpers/jsx';
+import { compiledSource } from '@/test/helpers/compiled';
+import { EMPTY_COMPILED_DATAFLOW } from '@/lib/story/compiled-dataflow';
 
 const LOADED: StoryIslandDataflow = {
-  flow: { values: [], queries: [] },
+  flow: EMPTY_COMPILED_DATAFLOW,
   state: {
     values: {},
     tables: {
@@ -51,7 +53,7 @@ describe('persisted source ids reach runtime embed targets', () => {
   it('keeps identity on a DataTable error target', () => {
     const parsed = parseJsxOrThrow('<DataTable id="failed-table" data="$failed" />');
     const dataflow: StoryIslandDataflow = {
-      flow: { values: [], queries: [] },
+      flow: EMPTY_COMPILED_DATAFLOW,
       state: { values: {}, tables: {}, errors: { failed: 'query failed' } },
     };
     const { container } = render(
@@ -67,9 +69,9 @@ describe('persisted source ids reach runtime embed targets', () => {
       '<Helmet><Value name="pick" default="a" /><Query name="rows">{`select $pick label, 12 amount`}</Query></Helmet>'
       + '<div><Question id="pending-question" data="$rows" /><Number id="pending-number" data="$rows" col="amount" /><DataTable id="pending-table" data="$rows" /></div>',
     );
-    const { content, body: nodes } = splitHelmet(parsed.nodes as JsxNode[]);
+    const { body: nodes } = splitHelmet(parsed.nodes as JsxNode[]);
     const dataflow: StoryIslandDataflow = {
-      flow: { values: content.values, queries: content.queries },
+      flow: await compiledSource('<Helmet><Value name="pick" default="a" /><Query name="rows">{`select $pick label, 12 amount`}</Query></Helmet>'),
       state: LOADED.state,
     };
     const store = createDataflowStore(dataflow, {

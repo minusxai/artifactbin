@@ -23,6 +23,7 @@ import { inferColumns } from '@artifactbin/utils/shape';
 import { DEFAULT_CAPS } from '../caps';
 import { SqliteDatabase, TimedOut, sqlValue, type Prepared } from './database';
 import type { Sqlite3 } from './wasm';
+import type { SqlExtensions } from '../extensions';
 
 export interface WriteBounds { limit: number; timeoutMs: number }
 
@@ -44,7 +45,7 @@ class Effect {
   readonly #defaulted: number[];
   readonly unset: string;
 
-  constructor(private readonly db: SqliteDatabase, private readonly table: string, columns: number) {
+  constructor(private readonly db: SqliteDatabase, private readonly target: string, columns: number) {
     this.#defaulted = Array.from({ length: columns }, () => 0);
     this.unset = db.internalFunction((i) => { if (this.#recording) this.#defaulted[Number(i)]!++; return null; }, 1);
   }
@@ -59,7 +60,7 @@ class Effect {
       else { this.updated.push(Number(before)); if (before !== after) this.moved = true; }
       return null;
     }, 3);
-    const on = `main.${quote(this.table)}`;
+    const on = this.target;
     for (const body of [
       `BEFORE UPDATE ON ${on} WHEN ${skip}(OLD.rowid) BEGIN SELECT RAISE(IGNORE); END`,
       `BEFORE DELETE ON ${on} WHEN ${skip}(OLD.rowid) BEGIN SELECT RAISE(IGNORE); END`,
@@ -107,20 +108,23 @@ function permitted(permission: Permission, written: string[]): void {
     refuse('a written column is not permitted');
 }
 
-export function runMutation(sqlite3: Sqlite3, input: MutationInput, bounds: WriteBounds): MutationOutcome {
+export function runMutation(sqlite3: Sqlite3, input: MutationInput, bounds: WriteBounds, extensions: SqlExtensions = {}): MutationOutcome {
   const started = performance.now();
   const remaining = () => Math.max(0, bounds.timeoutMs - (performance.now() - started));
   const columns: DatasetColumn[] = input.table.columns.length ? input.table.columns : inferColumns(input.table.rows);
   const names = columns.map((c) => c.name);
-  const spec = { schema: 'main', table: input.table.name, columns };
+  const spec = { schema: input.table.schema ?? 'main', table: input.table.name, columns };
+  const target = `${quote(spec.schema)}.${quote(spec.table)}`;
   const db = new SqliteDatabase(sqlite3);
   const open: Prepared[] = [];
   try {
     // The effect is keyed by rowid, so a column may not shadow it.
     if (names.some((n) => /^(rowid|oid|_rowid_)$/i.test(n))) throw new Error(`a column named ${names.find((n) => /^(rowid|oid|_rowid_)$/i.test(n))} cannot be written by a <Mutation>`);
-    const effect = new Effect(db, input.table.name, columns.length);
+    const continuation = extensions.setupMutation?.(db, { input, dryRun: false });
+    const effect = new Effect(db, target, columns.length);
     db.createTable(spec, (i) => `${effect.unset}(${i})`);
     db.insertRows(spec, input.table.rows);
+    for (const read of input.reads ?? []) db.load(read);
     effect.install();
 
     const statement = db.prepare(input.sql, 'write', spec);
@@ -130,7 +134,7 @@ export function runMutation(sqlite3: Sqlite3, input: MutationInput, bounds: Writ
     const permission = p ? admit(p, op, statement.analysis, names, input.params) : null;
     if (p && permission && 'filter' in permission) {
       const filter = compilePolicyPredicate(permission.filter, names, p.session, '__policy_filter');
-      effect.visible = new Set(db.exec(`SELECT rowid AS id FROM main.${quote(input.table.name)} WHERE ${filter.sql}`, bindOf(filter.params)).map((r) => Number(r.id)));
+      effect.visible = new Set(db.exec(`SELECT rowid AS id FROM ${target} WHERE ${filter.sql}`, bindOf(filter.params)).map((r) => Number(r.id)));
     }
     statement.bind(input.params, input.paramTypes).run(remaining());
     effect.stop();
@@ -145,7 +149,6 @@ export function runMutation(sqlite3: Sqlite3, input: MutationInput, bounds: Writ
     if (p && input.policyPreview) return { rows: input.table.rows, columns, affected: 0, analysis };
 
     const ids = JSON.stringify(op === 'insert' ? effect.inserted : effect.updated);
-    const target = `main.${quote(input.table.name)}`;
     const writtenRows = 'rowid IN (SELECT value FROM json_each($__policy_ids))';
     const presets = p && permission && 'set' in permission && permission.set ? Object.entries(permission.set) : [];
     if (presets.length) {
@@ -174,6 +177,8 @@ export function runMutation(sqlite3: Sqlite3, input: MutationInput, bounds: Writ
       if (affected > input.expectedAffected) return { error: `the mutation matched ${affected} rows; expected ${input.expectedAffected}`, code: 'row_not_unique' };
       return { error: `the mutation changed ${affected} rows; expected ${input.expectedAffected}`, code: 'row_changed' };
     }
+    const pending = continuation?.();
+    if (pending) return { error: 'Execution requires continuation', continuation: pending };
     // The table as it is now, read one row past the cap: a write that would leave too many rows is refused whole.
     const after = db.prepare(`SELECT * FROM ${target}`, 'read');
     open.push(after);
@@ -198,13 +203,14 @@ export function runMutation(sqlite3: Sqlite3, input: MutationInput, bounds: Writ
  * typed NULLs and run against its own EMPTY target — exactly the world a
  * click sees, so "no such table" here is the message a click would produce.
  */
-export function dryRunMutations(sqlite3: Sqlite3, input: DryRunMutationsInput): DryRunMutationsResult {
+export function dryRunMutations(sqlite3: Sqlite3, input: DryRunMutationsInput, extensions: SqlExtensions = {}): DryRunMutationsResult {
   const errors: DryRunMutationsResult['errors'] = [];
   const params = Object.fromEntries(input.paramNames.map((p) => [p, null]));
   for (const m of input.mutations) {
     const db = new SqliteDatabase(sqlite3);
     let statement: Prepared | null = null;
     try {
+      extensions.setupMutation?.(db, { dryRun: true });
       const table = m.tableName ?? `ref_${m.target}`;
       const target = input.tables[table];
       if (target) db.createTable({ schema: 'main', table, columns: target.columns });

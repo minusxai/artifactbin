@@ -125,7 +125,7 @@ export class Prepared {
     for (let i = 1; i <= this.stmt.parameterCount; i++) {
       const name = capi.sqlite3_bind_parameter_name(this.stmt.pointer!, i)!.slice(1);
       const value = sqlValue(Object.hasOwn(types, name) ? types[name] : undefined, Object.hasOwn(params, name) ? params[name] : null, `parameter $${name}`);
-      // Numbers bind as REAL, as DuckDB's DOUBLE did: `$n / 2` must not be integer division.
+      // Numbers bind as REAL: `$n / 2` must not be integer division.
       if (typeof value === 'number') capi.sqlite3_bind_double(this.stmt.pointer!, i, value);
       else this.stmt.bind(i, value);
     }
@@ -161,6 +161,8 @@ export class SqliteDatabase {
   readonly #views = new Set<string>();
   /** Names of the engine's own triggers; only events they cause bypass the rules. */
   readonly #internal = new Set<string>();
+  /** Functions a trusted extension installed on this database (extensionFunction). */
+  readonly #extensions = new Set<string>();
   readonly #virtual: ReadonlySet<string>;
   #trusted = 0;
   #mode: StatementMode = 'read';
@@ -207,6 +209,17 @@ export class SqliteDatabase {
     const name = this.internalName();
     this.#db.createFunction({ name, arity, xFunc: (_ctx: number, ...args: Array<string | number | null>) => fn(...args) } as never);
     return name;
+  }
+  /**
+   * A trusted composition's own function (SqlExtensions), callable by author
+   * SQL in THIS database only — the one throwaway database of the write it was
+   * installed for. Never a SQLite or library name: it cannot shadow one.
+   */
+  extensionFunction(name: string, fn: (...args: Array<string | number | null>) => string | number | null, arity: number): void {
+    const lower = name.toLowerCase();
+    if (!/^[a-z_][a-z0-9_]*$/.test(lower) || CORE_FUNCTIONS.has(lower) || LIBRARY_NAMES.has(lower)) throw new Error(`invalid extension function name ${name}`);
+    this.#db.createFunction({ name: lower, arity, xFunc: (_ctx: number, ...args: Array<string | number | null>) => fn(...args) } as never);
+    this.#extensions.add(lower);
   }
   /** A fresh unguessable identifier; events attributed to a trigger of this name are the engine's own. */
   internalName(): string {
@@ -382,7 +395,7 @@ export class SqliteDatabase {
         return null;
       case capi.SQLITE_FUNCTION: {
         const name = (e.column ?? '').toLowerCase();
-        return CORE_FUNCTIONS.has(name) || LIBRARY_NAMES.has(name) ? null : `function ${name}() is not available`;
+        return CORE_FUNCTIONS.has(name) || LIBRARY_NAMES.has(name) || this.#extensions.has(name) ? null : `function ${name}() is not available`;
       }
       case capi.SQLITE_INSERT:
       case capi.SQLITE_UPDATE:
@@ -443,7 +456,10 @@ export class SqliteDatabase {
       if (!name || name.startsWith('?')) throw new Refused('parameters are named ($name); ? placeholders are not supported');
       params.push(name.slice(1));
     }
-    const columns: OutputColumn[] = Array.from({ length: stmt.columnCount }, (_, i) => ({ name: stmt.getColumnName(i), declaredType: this.#origin(stmt, i)?.type ?? null }));
+    const columns: OutputColumn[] = Array.from({ length: stmt.columnCount }, (_, i) => {
+      const origin = this.#originOf(stmt, i);
+      return { name: stmt.getColumnName(i), declaredType: origin?.column.type ?? null, ...(origin ? { origin: origin.at } : {}) };
+    });
     const kind: StatementKind = writes[0]?.op ?? 'select';
     return { kind, reads, writes, functions, params, columns };
   }
@@ -463,13 +479,15 @@ export class SqliteDatabase {
     if (clocked) throw new Refused(`function ${clocked}() is allowed only in a <Mutation> — its result would differ between runs`);
   }
 
-  /** The loaded column an output column directly references, if any. */
-  #origin(stmt: Stmt, i: number): DatasetColumn | null {
+  /** The loaded column an output column directly references, if any, and where it lives. */
+  #originOf(stmt: Stmt, i: number): { column: DatasetColumn; at: { schema: string; table: string; column: string } } | null {
     const { capi } = this.sqlite3;
     const db = capi.sqlite3_column_database_name(stmt.pointer!, i), table = capi.sqlite3_column_table_name(stmt.pointer!, i), column = capi.sqlite3_column_origin_name(stmt.pointer!, i);
     if (!db || !table || !column) return null;
-    return this.#relations.get(key(db, table))?.get(column.toLowerCase()) ?? null;
+    const found = this.#relations.get(key(db, table))?.get(column.toLowerCase());
+    return found ? { column: found, at: { schema: db, table, column } } : null;
   }
+  #origin(stmt: Stmt, i: number): DatasetColumn | null { return this.#originOf(stmt, i)?.column ?? null; }
 
   /**
    * An output column's type: its origin's declared column (all of it, for

@@ -1,10 +1,9 @@
 #!/usr/bin/env node
-import {standaloneSqlPlugin} from '../services/cli/scripts/sql-native-plugin.mjs';
 /**
  * Bundle a server for the image: ONE ESM file, with the native and
- * heavy-at-runtime packages left external — PGLite/pg (native), DuckDB and
- * vega (native or top-level-await), playwright (spawns its own driver from
- * real paths), and vite (dev only) — so the image
+ * heavy-at-runtime packages left external — PGLite/pg (native), sqlite-wasm
+ * (reads its wasm beside its module), vega (top-level-await), playwright
+ * (spawns its own driver from real paths), and vite (dev only) — so the image
  * carries them as node_modules, exactly as it did before.
  *
  *   node scripts/build-server.mjs [outfile] [entry]
@@ -19,7 +18,8 @@ import {standaloneSqlPlugin} from '../services/cli/scripts/sql-native-plugin.mjs
  * by construction and NOT true of a scratch directory.
  */
 import esbuild from 'esbuild';
-import {dirname} from 'node:path';
+import {dirname, join} from 'node:path';
+import {fileURLToPath} from 'node:url';
 import { generateTeaching } from './lib/generate-teaching.mjs';
 import { existsSync, mkdirSync, readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
@@ -45,12 +45,24 @@ await esbuild.build({
   target: 'node22',
   outfile: out,
   external: [...EXTERNALS, ...process.argv.slice(4).filter(arg=>!arg.startsWith('--'))],
-  plugins: process.argv.includes('--standalone-sql')?[standaloneSqlPlugin()]:[],
   define: tailwindDefine,
   // `require` for the bundled CJS deps, under a name nothing else can collide
   // with: the app itself uses createRequire (lib/story/document loads the SSR
   // bundle that way), and a plain banner declared it twice — a SyntaxError at
   // the first line of the image's only entrypoint.
+  banner: { js: "import { createRequire as __mxCreateRequire } from 'node:module'; const require = __mxCreateRequire(import.meta.url);" },
+  logLevel: 'warning',
+});
+/*
+ * THE SQL ENGINE'S THREADS: the worker pool (services/sql/src/pool.ts) starts
+ * `pool-worker.mjs` from beside the bundle that holds it, so it is emitted
+ * here, with the same externals.
+ */
+await esbuild.build({
+  entryPoints: [fileURLToPath(new URL('../services/sql/src/pool-worker.ts', import.meta.url))],
+  bundle: true, platform: 'node', format: 'esm', target: 'node22',
+  outfile: join(dirname(out), 'pool-worker.mjs'),
+  external: EXTERNALS,
   banner: { js: "import { createRequire as __mxCreateRequire } from 'node:module'; const require = __mxCreateRequire(import.meta.url);" },
   logLevel: 'warning',
 });

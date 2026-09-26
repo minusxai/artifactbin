@@ -149,9 +149,9 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
    * as an ordinary `event: data` frame naming the folder's id, so the folder
    * page and an authored `<Files>` document both re-read on the same ping.
    */
-  const followDatasets = async (row: { format: string; id: string; source: string | null }) => {
+  const followDatasets = async (row: NonNullable<Awaited<ReturnType<typeof getArtifactById>>>) => {
     if (closed) return;
-    const wanted = new Set(row.format === 'folder' ? [row.id] : datasetsForDocument(isDocumentFormat(row.format) ? row : null));
+    const wanted = new Set(row.format === 'folder' ? [row.id] : await datasetsForDocument(isDocumentFormat(row.format) ? row : null));
     for (const [datasetId, drop] of datasetUnsubs) {
       if (wanted.has(datasetId)) continue;
       datasetUnsubs.delete(datasetId);

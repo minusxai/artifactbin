@@ -25,6 +25,7 @@ import type { StoryIslandDataflow } from '../contract';
 import type { DataflowState } from '@/lib/story/dataflow';
 import { urlHash } from '@/lib/story/asset-url';
 import { parseJsxOrThrow } from '@/test/helpers/jsx';
+import { compiledSource } from '@/test/helpers/compiled';
 import {createDataflowStore} from '../store';
 
 const CAT = 'https://cdn.example.com/cat.png';
@@ -38,13 +39,14 @@ const HELMET =
   + '<Value name="key" type="string" default="cat" />'
   + '<Value name="empty" type="string" />'
   + '</Helmet>';
+const FLOW = await compiledSource(HELMET);
 
 const state = (values: Record<string, string | null>): DataflowState => ({ values, tables: {}, errors: {} });
 
 function build(body: string, values: Record<string, string | null>) {
   const parsed = parseJsxOrThrow(HELMET + body);
-  const { content, body: nodes } = splitHelmet(parsed.nodes as JsxNode[]);
-  const dataflow: StoryIslandDataflow = { flow: { values: content.values, queries: content.queries }, state: state(values) };
+  const { body: nodes } = splitHelmet(parsed.nodes as JsxNode[]);
+  const dataflow: StoryIslandDataflow = { flow: FLOW, state: state(values) };
   return { nodes, dataflow };
 }
 
@@ -60,15 +62,14 @@ const img = (container: HTMLElement) => container.querySelector('img')!;
 describe('row image bindings',()=>{
  const rows=[{id:'a',title:'Red book',cover_ref:'ref:red123'},{id:'b',title:'Blue book',cover_ref:'ref:blue12'}];
  const template='<For each={$books} keyBy="id"><article><img src="$_row.cover_ref" alt="$_row.title" loading="lazy" width={180} height={240}/><h2>{$_row.title}</h2></article></For>';
- const setup=(initial:Record<string,unknown>[]=rows)=>{
-  const parsed=parseJsxOrThrow('<Helmet><Value name="books" type="table" value={'+JSON.stringify(initial)+'}/></Helmet>'+template);
-  const split=splitHelmet(parsed.nodes);
-  const flow={values:split.content.values,queries:split.content.queries};
-  const store=createDataflowStore({flow});
+ const setup=async(initial:Record<string,unknown>[]=rows)=>{
+  const source='<Helmet><Value name="books" type="table" value={'+JSON.stringify(initial)+'} columns={[{"name":"id","type":"string"},{"name":"title","type":"string"},{"name":"cover_ref","type":"string"}]}/></Helmet>'+template;
+  const split=splitHelmet(parseJsxOrThrow(source).nodes);
+  const store=createDataflowStore({flow:await compiledSource(source)});
   return {store,nodes:split.body};
  };
- it('uses each row source, preserves native image props, and keeps images paired after replacement and sorting',()=>{
-  const {store,nodes}=setup();
+ it('uses each row source, preserves native image props, and keeps images paired after replacement and sorting',async()=>{
+  const {store,nodes}=await setup();
   const {container}=render(<StoryRuntimeApp nodes={nodes} refData={{}} store={store} colorMode="light" assetsUrl={ASSETS_URL}/>);
   const check=(expected:typeof rows)=>{
    const articles=[...container.querySelectorAll('article')];expect(articles).toHaveLength(expected.length);
@@ -81,16 +82,17 @@ describe('row image bindings',()=>{
   };
   check(rows);
   const replacement=[{...rows[1]!,cover_ref:'ref:other1'},rows[0]!];
-  act(()=>store.replaceFlow({flow:setup(replacement).store.flow}));check(replacement);
+  const next=(await setup(replacement)).store.flow;
+  act(()=>store.replaceFlow({flow:next}));check(replacement);
  });
- it('omits empty and invalid sources without requesting the document or literal binding',()=>{
-  const {store,nodes}=setup([null,'','ref:bad','javascript:alert(1)',false,42].map((cover_ref,i)=>({id:String(i),title:'missing',cover_ref})));
+ it('omits empty and invalid sources without requesting the document or literal binding',async()=>{
+  const {store,nodes}=await setup([null,'','ref:bad','javascript:alert(1)',false,42].map((cover_ref,i)=>({id:String(i),title:'missing',cover_ref})));
   const {container}=render(<StoryRuntimeApp nodes={nodes} refData={{}} store={store} colorMode="light" assetsUrl={ASSETS_URL}/>);
   for(const image of container.querySelectorAll('img')){expect(image.hasAttribute('src')).toBe(false);expect(image.hasAttribute('srcset')).toBe(false);}
  });
- it('renders 1,000 paired items using the same small template in SSR',()=>{
+ it('renders 1,000 paired items using the same small template in SSR',async()=>{
   const thousand=Array.from({length:1000},(_,i)=>({...rows[i%2]!,id:String(i)}));
-  const {store,nodes}=setup(thousand);
+  const {store,nodes}=await setup(thousand);
   const html=renderToString(<StoryRuntimeApp nodes={nodes} refData={{}} store={store} colorMode="light" assetsUrl={ASSETS_URL}/>);
   const container=document.createElement('div');container.innerHTML=html;
   expect(container.querySelectorAll('article')).toHaveLength(1000);
@@ -176,12 +178,13 @@ describe('with no endpoint (a render that is not a served document)', () => {
 describe('a DataTable image column', () => {
   const TABLE_HELMET =
     '<Helmet><Value name="rows" type="table" value={[{"name":"cat","logo":"https://cdn.example.com/cat.png"}]} /></Helmet>';
+  const TABLE_FLOW = { imports: [], queries: [], mutations: [], values: [{ kind: 'table' as const, name: 'rows', type: 'table' as const, default: null, rows: [{ name: 'cat', logo: CAT }], columns: [{ name: 'name', type: 'string' as const }, { name: 'logo', type: 'string' as const }] }] };
 
   const table = (columns: string) => {
     const parsed = parseJsxOrThrow(`${TABLE_HELMET}<DataTable data="$rows" columns={${columns}} />`);
-    const { content, body: nodes } = splitHelmet(parsed.nodes as JsxNode[]);
+    const { body: nodes } = splitHelmet(parsed.nodes as JsxNode[]);
     const dataflow: StoryIslandDataflow = {
-      flow: { values: content.values, queries: content.queries },
+      flow: TABLE_FLOW,
       state: {
         values: {},
         tables: { rows: { rows: [{ name: 'cat', logo: CAT }], columns: [{ name: 'name', type: 'string' }, { name: 'logo', type: 'string' }] } },

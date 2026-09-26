@@ -4,7 +4,7 @@ import { useLayoutEffect, useMemo, useRef, useState, type ComponentType, type Re
 import type { StoryDocumentUpdate, StoryIslandData } from './contract';
 import type { QueryTransport } from './store';
 import { createDataflowStore } from './store';
-import { EMPTY_DATAFLOW } from '@/lib/story/dataflow';
+import { EMPTY_COMPILED_DATAFLOW } from '@/lib/story/compiled-dataflow';
 import { StoryRuntimeApp } from './StoryRuntimeApp';
 import { createAuthorScriptSession } from './author-script';
 import type { FrameEditSession } from './edit/session';
@@ -75,7 +75,7 @@ export function InlineStoryRuntime(props: InlineStoryRuntimeProps): ReactNode {
   const createLifetime = () => {
     const transport = latest.current.transportFactory?.() ?? latest.current.transport;
     const { writesUnavailable, frozenValues } = latest.current;
-    return { transport, store:createDataflowStore(latest.current.data.dataflow ?? {flow:EMPTY_DATAFLOW}, {transport, ...(writesUnavailable ? {writesUnavailable} : {}), ...(frozenValues ? {frozenValues} : {})}) };
+    return { transport, store:createDataflowStore(latest.current.data.dataflow ?? {flow:EMPTY_COMPILED_DATAFLOW}, {transport, ...(writesUnavailable ? {writesUnavailable} : {}), ...(frozenValues ? {frozenValues} : {})}) };
   };
   const [lifetime, setLifetime] = useState(createLifetime);
   const { store } = lifetime;

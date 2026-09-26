@@ -129,7 +129,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
     artifact.format === 'dataset' ? loadDatasetRows(artifact).then(rows => JSON.stringify(rows)) : Promise.resolve(isDoc ? '' : (artifact.format === 'viz' ? artifact.source ?? '' : '')),
   ]);
   const authorUsername = author?.username ?? null;
-  const declared = isDoc && row.source ? declarationsForRow(row) : null;
+  const declared = isDoc && row.source ? await declarationsForRow(row) : null;
   const dataflow = declared ? { ...declared, values: readUrlValues(new URL(request.url).search, declared.flow) } : null;
   const runtime = isDoc ? await prepareStoryRuntime({
     source: row.source ?? '', compiledCss, theme: design.theme,

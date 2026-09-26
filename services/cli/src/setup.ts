@@ -1,5 +1,6 @@
 import {chromiumExecutable} from './standalone-browser';
-import {createSql} from '@artifactbin/sql/local';
+import './sqlite-wasm';
+import {createSqliteSql} from '@artifactbin/sql/sqlite';
 import {isQueryFailure} from '@artifactbin/contracts';
 import {CliError} from './commands';
 import {installSkills,selectSkills,harnessLabels,type SkillChoice,type SkillHarness,type SkillInstallation} from './skill-install';
@@ -27,11 +28,11 @@ export function setupSummary(installations:readonly SkillInstallation[],s:Style)
  return rows.join('\n')+'\n';
 }
 
-/** Explicit prefetch prepares SQL for later offline queries; it never authenticates or sends local data. */
+/** Explicit check that the SQL engine (carried by the CLI itself) runs here; it never authenticates or sends local data. */
 export async function setupService(name:string){
  if(name==='chromium'){await chromiumExecutable();return {services:[{name:'chromium',status:'ready',execution:'local'}]};}
  if(name!=='sql')throw new CliError('unknown_service','Supported services: sql, chromium.','Run afbin setup --service sql or afbin setup --service chromium.');
- const result=(await createSql().run({tables:{},params:{},queries:[{name:'ready',sql:'select 1 as ready'}]})).ready;
+ const result=(await createSqliteSql().run({tables:{},params:{},queries:[{name:'ready',sql:'select 1 as ready'}]})).ready;
  if(!result||isQueryFailure(result))throw new CliError('service_unavailable',result?.error??'SQL service did not start.','Connect once and run afbin setup --service sql before using local queries offline.');
  return {services:[{name:'sql',status:'ready',execution:'local'}]};
 }

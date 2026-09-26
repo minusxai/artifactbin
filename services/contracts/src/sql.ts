@@ -72,8 +72,10 @@ export interface RunInput {
   paramTypes?: Record<string,ColumnType>;
   /** One catalog query; table keys are transport identities, never SQL names. */
   catalog?: SqlReadCatalog;
-  /** Registered tables by SQL name — `ref_<id>` for datasets, the declared name for inline tables. */
+  /** Tables in `main` by SQL name: a document's table Values, its built-in tables, an earlier result. */
   tables: Record<string, { rows: Row[]; columns: DatasetColumn[] }>;
+  /** Imported artifacts, each attached as a schema of its own: `imports.bookings.rows` is `bookings.rows` in SQL. */
+  imports?: Record<string, Record<string, { rows: Row[]; columns: DatasetColumn[] }>>;
   /** Queries in RUN ORDER (dependencies first). */
   queries: SqlQuery[];
   /** Current scalar values, bound by name. Missing/undefined binds NULL. */
@@ -92,8 +94,10 @@ export interface MutationInput {
   policyPreview?: boolean;
   /** Opaque downstream execution context. Never contains credentials. */
   extensions?: Record<string,unknown>;
-  /** The ONE table the statement may touch — the dataset, under its `ref_<id>` name. */
-  table: { name: string; rows: Row[]; columns: DatasetColumn[] };
+  /** The ONE table the statement may write, as SQL names it: `schema.name` (`bookings.rows`), `main` when absent. */
+  table: { name: string; schema?: string; rows: Row[]; columns: DatasetColumn[] };
+  /** Every other relation the statement may READ (the document's other imports, table Values, built-in tables), never write. */
+  reads?: Array<{ schema: string; table: string; rows: Row[]; columns: DatasetColumn[] }>;
   sql: string;
   params: Record<string, Scalar>;
   /** Declared types of scalar params. Policy analysis and binding use these instead of guessing from the JS value. */
@@ -118,6 +122,8 @@ export type MutationOutcome = MutationResult | QueryFailure;
 export interface DryRunInput {
   paramTypes?: Record<string,ColumnType>;
   tables: Record<string, { columns: DatasetColumn[] }>;
+  /** Imported artifacts' shapes, attached as their own schemas (see RunInput.imports). */
+  imports?: Record<string, Record<string, { columns: DatasetColumn[] }>>;
   queries: SqlQuery[];
   /** An ARRAY on the wire — a Set serialises to `{}` and binds nothing. */
   paramNames: string[];

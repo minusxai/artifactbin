@@ -8,24 +8,24 @@
  * waits for the live stream to tell this document about its own write.
  */
 import { describe, expect, it, vi } from 'vitest';
-import { type JsxNode } from '@/lib/jsx';
-import { splitHelmet } from '@/lib/story/helmet';
 import { ACCESS_PENDING, createDataflowStore, type QueryTransport } from '@/lib/story-runtime/store';
-import type { Dataflow, DataflowState, Scalar } from '@/lib/story/dataflow';
-import { parseJsxOrThrow } from '@/test/helpers/jsx';
+import type { DataflowState, Scalar } from '@/lib/story/dataflow';
+import type { MutationRequest } from '@/lib/story/mutation-request';
+import { compiledOf } from '@/test/helpers/compiled';
 
-const flowOf = (helmetChildren: string): Dataflow => {
-  const parsed = parseJsxOrThrow(`<Helmet>${helmetChildren}</Helmet>`);
-  const { content } = splitHelmet(parsed.nodes as JsxNode[]);
-  return { values: content.values, queries: content.queries, mutations: content.mutations };
+const SOURCES = {
+  abc123: [{ name: 'choice', type: 'string' as const }, { name: 'payer', type: 'string' as const }, { name: 'd', type: 'string' as const }, { name: 'a', type: 'number' as const }],
+  zzzzzz: [{ name: 'n', type: 'number' as const }],
 };
+const flowOf = (helmetChildren: string) => compiledOf(helmetChildren, SOURCES);
 
-const FLOW = flowOf(
-  '<Value name="choice" type="string" default="ramen" />'
-  + '<Query name="tally" source="ref:abc123">{`select choice, count(*) votes from public.rows group by 1`}</Query>'
+const FLOW = await flowOf(
+  '<Import name="votes" src="ref:abc123" /><Import name="other" src="ref:zzzzzz" />'
+  + '<Value name="choice" type="string" default="ramen" />'
+  + '<Query name="tally">{`select choice, count(*) votes from votes.rows group by 1`}</Query>'
   + '<Query name="top">{`select * from tally limit 1`}</Query>'
-  + '<Query name="elsewhere" source="ref:zzzzzz">{`select * from public.rows`}</Query>'
-  + '<Mutation name="vote" source="ref:abc123">{`insert into public.rows (choice) values ($choice)`}</Mutation>',
+  + '<Query name="elsewhere">{`select * from other.rows`}</Query>'
+  + '<Mutation name="vote">{`insert into votes.rows (choice) values ($choice)`}</Mutation>',
 );
 const STATE: DataflowState = {
   mutationAccess: {vote:null},
@@ -36,14 +36,14 @@ const STATE: DataflowState = {
 
 function harness() {
   const runs: Array<{ values: Record<string, Scalar>; only: string[] }> = [];
-  const writes: Array<{ values: Record<string, Scalar>; name: string }> = [];
+  const writes: MutationRequest[] = [];
   let resolveWrite: ((r: { dataset: string }) => void) | null = null;
   let rejectWrite: ((e: Error) => void) | null = null;
   const transport: QueryTransport = {
     run: (values, only) => { runs.push({ values, only }); return Promise.resolve({ tables: {}, errors: {} }); },
     page: () => Promise.reject(new Error('unused')),
-    mutate: (values, name) => {
-      writes.push({ values, name });
+    mutate: (request) => {
+      writes.push(request);
       return new Promise((resolve, reject) => { resolveWrite = resolve; rejectWrite = reject; });
     },
   };
@@ -51,12 +51,28 @@ function harness() {
   return { store, runs, writes, settle: (id = 'abc123') => resolveWrite!({ dataset: id }), fail: (m: string) => rejectWrite!(new Error(m)) };
 }
 
+const RESET_FLOW = await flowOf(
+  '<Import name="bills" src="ref:abc123" />'
+  + '<Value name="desc" type="string" />'
+  + '<Value name="amount" type="number" default={0} />'
+  + '<Value name="payer" type="string" default="me" />'
+  + '<Query name="mine">{`select * from bills.rows where payer = $payer`}</Query>'
+  + '<Mutation name="add" reset="desc amount">{`insert into bills.rows (d, a) values ($desc, $amount)`}</Mutation>',
+);
+
+const CHECK_FLOW = await flowOf(
+  '<Import name="votes" src="ref:abc123" /><Value name="choice" type="string" default="ramen" />'
+  + '<Query name="mine">{`select $choice as choice`}</Query>'
+  + '<Query name="tally">{`select * from votes.rows`}</Query>'
+  + '<Mutation name="vote">{`insert into votes.rows (choice) values ($choice)`}</Mutation>',
+);
+
 describe('store.mutate', () => {
-  it('sends the mutation NAME and the current values, and marks itself busy meanwhile', async () => {
+  it('sends the mutation NAME and its arguments from the current values, and marks itself busy meanwhile', async () => {
     const { store, writes, settle } = harness();
     store.setValue('choice', 'tacos');
     const done = store.mutate('vote');
-    expect(writes).toEqual([{ name: 'vote', values: { choice: 'tacos' } }]);
+    expect(writes).toEqual([{ mutation: 'vote', args: { choice: 'tacos' } }]);
     expect([...store.mutating()]).toEqual(['vote']);
     settle();
     await done;
@@ -134,13 +150,6 @@ describe('store.mutate', () => {
  * two, and a refusal leaves everything the person typed exactly where it is.
  */
 describe('store.mutate with reset', () => {
-  const RESET_FLOW = flowOf(
-    '<Value name="desc" type="string" />'
-    + '<Value name="amount" type="number" default={0} />'
-    + '<Value name="payer" type="string" default="me" />'
-    + '<Query name="mine" source="ref:abc123">{`select * from public.rows where payer = $payer`}</Query>'
-    + '<Mutation name="add" source="ref:abc123" reset="desc amount">{`insert into public.rows (d, a) values ($desc, $amount)`}</Mutation>',
-  );
   const RESET_STATE: DataflowState = {
     mutationAccess: { add: null },
     values: { desc: null, amount: 0, payer: 'me' },
@@ -193,9 +202,9 @@ describe('store.mutate with reset', () => {
   });
 
   it('leaves a mutation without reset alone', async () => {
-    const plainFlow = flowOf(
-      '<Value name="desc" type="string" />'
-      + '<Mutation name="add" source="ref:abc123">{`insert into public.rows (d) values ($desc)`}</Mutation>',
+    const plainFlow = await flowOf(
+      '<Import name="bills" src="ref:abc123" /><Value name="desc" type="string" />'
+      + '<Mutation name="add">{`insert into bills.rows (d) values ($desc)`}</Mutation>',
     );
     let resolveWrite: ((r: { dataset: string }) => void) | null = null;
     const store = createDataflowStore({
@@ -264,12 +273,6 @@ describe('store.invalidateDatasets', () => {
  * One failed run keeps the last answer instead of greying out every button.
  */
 describe('write checks', () => {
-  const CHECK_FLOW = flowOf(
-    '<Value name="choice" type="string" default="ramen" />'
-    + '<Query name="mine">{`select $choice as choice`}</Query>'
-    + '<Query name="tally" source="ref:abc123">{`select * from public.rows`}</Query>'
-    + '<Mutation name="vote" source="ref:abc123">{`insert into public.rows (choice) values ($choice)`}</Mutation>',
-  );
   const settle = async () => { for (let i = 0; i < 5; i++) await Promise.resolve(); };
 
   function checks(state: Partial<DataflowState> = { mutationAccess: { vote: null } }) {

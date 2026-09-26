@@ -3,7 +3,7 @@
  * and events run locally unless their service URLs select HTTP implementations.
  * `--app-only` supports development of the app without login routes.
  * Engine imports stay lazy at this composition boundary so remote service
- * selections never load DuckDB or Playwright into the app process.
+ * selections never start SQL engine threads or Playwright in the app process.
  */
 import http from 'node:http';
 import { randomBytes } from 'node:crypto';
@@ -74,7 +74,7 @@ async function main(): Promise<void> {
 
   /**
    * THE SERVICES, INJECTED ONCE — this is the only place the process decides
-   * where DuckDB, Chromium and the event log live (`lib/services` registry).
+   * where the SQL engine, Chromium and the event log live (`lib/services` registry).
    * Registered only when no URL names a service, because `./local` is the
    * entry that loads the native module, Playwright or the writer's own DDL,
    * and the lean image has none of them.
@@ -141,7 +141,7 @@ async function main(): Promise<void> {
       // derive it from our own port so two checkouts never fight over it.
       server: { middlewareMode: true, ws: { port: hmrPort } },
       appType: 'custom',
-      // Vite pre-bundles what the SPA imports; the server-only trees (vega, duckdb,
+      // Vite pre-bundles what the SPA imports; the server-only trees (vega, sqlite-wasm,
       // playwright, PGLite) are the app's, never the browser's.
       ...developmentViteOptions(process.cwd(), port),
     });

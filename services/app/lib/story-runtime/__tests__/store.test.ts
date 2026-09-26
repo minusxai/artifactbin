@@ -4,22 +4,18 @@
  * continuous input) → merged results, with superseded answers dropped. React-free.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { type JsxNode } from '@/lib/jsx';
-import { splitHelmet } from '@/lib/story/helmet';
 import { createDataflowStore, type QueryTransport } from '@/lib/story-runtime/store';
-import type { Dataflow, DataflowState, Scalar } from '@/lib/story/dataflow';
-import { parseJsxOrThrow } from '@/test/helpers/jsx';
+import type { DataflowState, Scalar } from '@/lib/story/dataflow';
+import { compiledOf } from '@/test/helpers/compiled';
 
-const flowOf = (helmetChildren: string): Dataflow => {
-  const parsed = parseJsxOrThrow(`<Helmet>${helmetChildren}</Helmet>`);
-  const { content } = splitHelmet(parsed.nodes as JsxNode[]);
-  return { values: content.values, queries: content.queries };
-};
+const SALES = { abc123: [{ name: 'region', type: 'string' as const }, { name: 'revenue', type: 'number' as const }] };
+const flowOf = (helmetChildren: string) => compiledOf(helmetChildren, SALES);
 
-const FLOW = flowOf(
+const FLOW = await flowOf(
+  '<Import name="sales_data" src="ref:abc123" />' +
   '<Value name="region" type="string" />' +
   '<Value name="min_rev" type="number" default={0} />' +
-  '<Query name="sales" source="ref:abc123">{`select * from public.rows where region = $region and revenue >= $min_rev`}</Query>' +
+  '<Query name="sales">{`select * from sales_data.rows where region = $region and revenue >= $min_rev`}</Query>' +
   '<Query name="top">{`select * from sales limit 1`}</Query>' +
   '<Query name="other">{`select 1`}</Query>',
 );
@@ -54,6 +50,13 @@ function fakeTransport() {
 
 beforeEach(() => { vi.useFakeTimers(); });
 afterEach(() => { vi.useRealTimers(); });
+
+const TWO = await flowOf(
+  '<Value name="region" type="string" />' +
+  '<Value name="window" type="number" default={7} />' +
+  '<Query name="sales">{`select $region as region`}</Query>' +
+  '<Query name="trend">{`select $window as days`}</Query>',
+);
 
 describe('createDataflowStore', () => {
   it('seeds from the island and keeps snapshot identity until something changes', () => {
@@ -197,12 +200,6 @@ describe('createDataflowStore', () => {
  * `sales` survives a later run for `trend` that a different value started.
  */
 describe('independent runs', () => {
-  const TWO = flowOf(
-    '<Value name="region" type="string" />' +
-    '<Value name="window" type="number" default={7} />' +
-    '<Query name="sales">{`select $region as region`}</Query>' +
-    '<Query name="trend">{`select $window as days`}</Query>',
-  );
   const TWO_STATE: DataflowState = {
     values: { region: null, window: 7 },
     tables: { sales: { rows: [{ region: null }], columns: [] }, trend: { rows: [{ days: 7 }], columns: [] } },
@@ -227,10 +224,11 @@ describe('independent runs', () => {
   });
 
   it('a dataset invalidation does not strand a reader run already in flight', async () => {
-    const flow = flowOf(
+    const flow = await flowOf(
+      '<Import name="stock_data" src="ref:abc123" />' +
       '<Value name="region" type="string" />' +
       '<Query name="sales">{`select $region as region`}</Query>' +
-      '<Query name="stock" source="ref:abc123">{`select * from public.rows`}</Query>',
+      '<Query name="stock">{`select * from stock_data.rows`}</Query>',
     );
     const { transport, calls, resolveNth } = fakeTransport();
     const store = createDataflowStore({ flow, state: { values: { region: null }, tables: {}, errors: {} } }, { transport, debounceMs: 10 });
@@ -256,7 +254,7 @@ describe('document store disposal', () => {
     let finish!: (value: {tables: {}; errors: {}}) => void;
     const run = vi.fn(() => new Promise<{tables: {}; errors: {}}>(resolve => { finish = resolve; }));
     const transport = { run, page: vi.fn() } satisfies QueryTransport;
-    const store = createDataflowStore({ flow: { values: [{ kind:'scalar', name:'n', type:'number', default:0, start:0, end:0 }], queries:[{name:'q',sql:'select 1',start:0,end:0,params:[],refs:[]}] } }, { transport });
+    const store = createDataflowStore({ flow: await flowOf('<Value name="n" type="number" default={0} /><Query name="q">{`select 1 as one`}</Query>') }, { transport });
     store.start();
     const before = store.getState();
     const listener = vi.fn();

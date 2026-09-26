@@ -1,7 +1,7 @@
 {
   "name": "@artifactbin/sql",
   "version": "0.1.0",
-  "description": "The SQL service: DuckDB or SQLite, in this process or in one of its own. Rows in, rows out; nothing persists between calls. `.` is the contract, the HTTP client and the server shell; `./shape` is the pure column inference, importable from a browser bundle; `./core` is the browser-safe SQLite engine (official sqlite-wasm); `./local` is the DuckDB engine and the only entry that loads the native module; `./sqlite` is the SQLite engine as a SqlService.",
+  "description": "The SQL service: SQLite (the official wasm build), in this process or in one of its own. Rows in, rows out; nothing persists between calls. `.` is the contract, the HTTP client and the server shell; `./shape` is the pure column inference, importable from a browser bundle; `./core` is the browser-safe SQLite engine; `./sqlite` is that engine as a SqlService in the calling thread (a CLI, a test); `./local` is the same engine in a pool of worker threads, for a server.",
   "license": "Apache-2.0",
   "type": "module",
   "main": "./src/index.ts",
@@ -13,11 +13,13 @@
     "./core": "./src/sqlite/index.ts",
     "./sqlite": "./src/sqlite-local.ts"
   },
-  "files": ["src", "CONTRACT.md"],
+  "files": [
+    "src",
+    "CONTRACT.md"
+  ],
   "dependencies": {
     "@artifactbin/contracts": "*",
     "@artifactbin/utils": "*",
-    "@duckdb/node-api": "1.5.5-r.4",
     "@sqlite.org/sqlite-wasm": "3.53.4-build1"
   },
   "devDependencies": {

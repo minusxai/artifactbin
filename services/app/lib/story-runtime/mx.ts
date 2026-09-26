@@ -2,6 +2,7 @@ import { runtimeId } from './runtime-id';
 /** One capability implementation for the public page and the managed iframe transport. */
 import type { MxApi, MxSnapshot, MxReadOptions } from '@artifactbin/contracts';
 import { DECL_NAME_RE, scalarMatches, type Scalar } from '@/lib/story/dataflow';
+import type { CompiledMutation } from '@/lib/story/compiled-dataflow';
 import { ACCESS_PENDING, type DataflowStore } from './store';
 
 export type { MxApi } from '@artifactbin/contracts';
@@ -13,7 +14,10 @@ const flowKeys = new WeakMap<DataflowStore['flow'], string>();
 export function mxFlowKey(flow: DataflowStore['flow']): string {
   let key = flowKeys.get(flow);
   if (key === undefined) {
-    key = JSON.stringify([flow.values, flow.queries, flow.mutations ?? []].map(group => group.map(({ start: _start, end: _end, ...declaration }) => declaration)));
+    key = JSON.stringify([flow.imports, flow.values, flow.queries, flow.mutations].map(group => group.map((declaration) => {
+      const { start: _start, end: _end, ...rest } = declaration as typeof declaration & { start?: number; end?: number };
+      return rest;
+    })));
     flowKeys.set(flow, key);
   }
   return key;
@@ -22,6 +26,15 @@ const record = (value: unknown): value is Record<string, unknown> => !!value && 
 const fail = (code: string, message: string, snapshot?: MxSnapshot) => Object.assign(new Error(message), { code, ...(snapshot ? { snapshot } : {}) });
 const validScalar = (value: unknown): value is Scalar => value === null || typeof value === 'boolean'
   || (typeof value === 'string' && value.length <= 65536) || (typeof value === 'number' && Number.isFinite(value));
+
+/** A mutation's scope for a script: a dataset write, or the reader's own table Value. */
+const scopeOf = (m: CompiledMutation): 'dataset' | 'local' => ('import' in m.target ? 'dataset' : 'local');
+/** What `mx.mutate` accepts: the signature's arguments, and the row / edited value the statement reads. */
+const argumentsOf = (m: CompiledMutation): string[] => [
+  ...m.args.map((a) => a.name),
+  ...(m.reads.builtins.some((b) => b.startsWith('_row.')) ? ['_row'] : []),
+  ...(m.reads.builtins.includes('_value') ? ['_value'] : []),
+];
 
 export function createMx(store: DataflowStore): MxApi {
   const cached = instances.get(store);
@@ -48,7 +61,7 @@ export function createMx(store: DataflowStore): MxApi {
     if (!record(values) || Object.keys(values).length > 256) throw fail('INVALID_PATCH', 'Expected an object with up to 256 scalar values');
     for (const [name, value] of Object.entries(values)) {
       const decl = flow.values.find(d => d.name === name);
-      if (!decl || decl.kind !== 'scalar') throw fail('NOT_WRITABLE', `Signal ${name} is not a writable scalar`);
+      if (!decl || decl.kind !== 'scalar' || decl.type === 'table') throw fail('NOT_WRITABLE', `Signal ${name} is not a writable scalar`);
       if (!validScalar(value) || !scalarMatches(value, decl.type)) throw fail('INVALID_VALUE', `Invalid ${decl.type} value for ${name}`);
     }
     return values as Record<string, Scalar>;
@@ -66,13 +79,13 @@ export function createMx(store: DataflowStore): MxApi {
     async describe() {
       alive();
       return structuredClone({ instanceEpoch,
-        signals: declarations.map(d => ({ name: d.name, kind: 'kind' in d ? d.kind : 'query', writable: 'kind' in d && d.kind === 'scalar',
-          ...('type' in d ? { type: d.type } : {}), ...('columns' in d ? { columns: d.columns } : store.getTable(d.name) ? { columns: store.getTable(d.name)!.columns } : {}),
+        signals: declarations.map(d => ({ name: d.name, kind: 'kind' in d ? d.kind : 'query' as const, writable: 'kind' in d && d.kind === 'scalar',
+          ...('kind' in d && d.type !== 'table' ? { type: d.type } : {}), ...('kind' in d && d.columns ? { columns: d.columns } : store.getTable(d.name) ? { columns: store.getTable(d.name)!.columns } : {}),
           // Reported only where the declaration carries it, so a document that
           // asked for neither describes itself exactly as it did before.
           ...('url' in d && d.url === false ? { url: false as const } : {}),
         })),
-        mutations: (flow.mutations ?? []).map(d => ({ name: d.name, scope: d.scope ?? 'dataset', args: d.params,
+        mutations: flow.mutations.map(d => ({ name: d.name, scope: scopeOf(d), args: argumentsOf(d),
           available: store.canMutate(d.name), unavailableReason: store.mutationUnavailable(d.name),
           ...(d.reset?.length ? { reset: d.reset } : {}) })),
       });
@@ -107,11 +120,12 @@ export function createMx(store: DataflowStore): MxApi {
     },
     async mutate(name, args = {}) {
       alive();
-      const decl = flow.mutations?.find(d => d.name === name);
+      const decl = flow.mutations.find(d => d.name === name);
       if (!decl) throw fail('UNKNOWN_MUTATION', 'Expected a declared mutation name');
-      if (!record(args) || Object.keys(args).some(key => !decl.params.includes(key))) throw fail('UNKNOWN_ARGUMENT', 'Only the mutation’s declared arguments can be supplied');
+      if (!record(args) || Object.keys(args).some(key => !argumentsOf(decl).includes(key))) throw fail('UNKNOWN_ARGUMENT', 'Only the mutation’s declared arguments can be supplied');
       const { _row, _value, ...scalars } = args;
-      const values = validatePatch(scalars);
+      if (Object.keys(scalars).length > 256 || Object.values(scalars).some((v) => !validScalar(v))) throw fail('INVALID_VALUE', 'Arguments must be scalars');
+      const values = scalars as Record<string, Scalar>;
       let row: Record<string, Scalar> | undefined;
       if (_row !== undefined) {
         if (!record(_row) || Object.keys(_row).length > 256 || Object.entries(_row).some(([key, value]) => !DECL_NAME_RE.test(key) || !validScalar(value))) throw fail('INVALID_VALUE', 'Row arguments must be named scalars');
@@ -129,7 +143,7 @@ export function createMx(store: DataflowStore): MxApi {
       if (!store.canMutate(name)) throw fail('FORBIDDEN', store.mutationUnavailable(name) ?? 'Mutation is unavailable');
       const operationId = runtimeId();
       await store.mutate(name, values, row);
-      return { operationId, scope: decl.scope ?? 'dataset', status: 'committed' };
+      return { operationId, scope: scopeOf(decl), status: 'committed' };
     },
     subscribe(names, callback) {
       validateNames(names);

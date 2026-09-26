@@ -10,15 +10,17 @@
  */
 import { describe, expect, it, vi } from 'vitest';
 import { createDataflowStore, type QueryTransport } from '../store';
-import type { Dataflow, DataflowState } from '@/lib/story/dataflow';
+import type { DataflowState, Scalar } from '@/lib/story/dataflow';
+import type { CompiledDataflow, CompiledQuery, CompiledValue } from '@/lib/story/compiled-dataflow';
 
-const flowOf = (values: Dataflow['values'], queries: Dataflow['queries']): Dataflow => ({ values, queries });
+// The store's own unit: compiled records built by shape (the compiler's output is covered in lib/story).
+const flowOf = (values: CompiledValue[], queries: CompiledQuery[]): CompiledDataflow => ({ imports: [], values, queries, mutations: [] });
 
-const scalar = (name: string, type: 'string' | 'number' = 'string', def: unknown = null) =>
-  ({ kind: 'scalar' as const, name, type, default: def } as Dataflow['values'][number]);
+const scalar = (name: string, type: 'string' | 'number' = 'string', def: Scalar = null): CompiledValue =>
+  ({ kind: 'scalar', name, type, default: def });
 
-const query = (name: string, params: string[] = []) =>
-  ({ name, sql: `select 1 where $${params[0] ?? 'x'} is null`, params, refs: [], start: 0, end: 0 } as Dataflow['queries'][number]);
+const query = (name: string, params: string[] = []): CompiledQuery =>
+  ({ name, engine: 'sqlite', sql: `select 1 where $${params[0] ?? 'x'} is null`, params, reads: { imports: [], queries: [], values: params, builtins: [] }, columns: [], start: 0, end: 0 });
 
 const state = (values: Record<string, unknown>, tables: Record<string, unknown> = {}): DataflowState =>
   ({ values, tables, errors: {} } as DataflowState);
