@@ -9,13 +9,15 @@
   "exports": {
     ".": "./src/index.ts",
     "./shape": "./src/dataset-shape.ts",
-    "./local": "./src/local.ts"
+    "./local": "./src/local.ts",
+    "./core": "./src/sqlite/index.ts"
   },
   "files": ["src", "CONTRACT.md"],
   "dependencies": {
     "@artifactbin/contracts": "*",
     "@artifactbin/utils": "*",
-    "@duckdb/node-api": "1.5.5-r.4"
+    "@duckdb/node-api": "1.5.5-r.4",
+    "@sqlite.org/sqlite-wasm": "3.53.4-build1"
   },
   "devDependencies": {
     "vitest": "4.1.11"
