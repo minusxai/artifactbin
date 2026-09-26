@@ -29,7 +29,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import SourceEditor from '@/components/SourceEditorPane';
 import { editBlock } from '@/lib/editor-v2/block-edit';
 import { SourceHistory } from '@/lib/editor-v2/history';
-import { ChartColumn, Check, Code, Database, Hash, History, MessageSquare, Undo2, Redo2, Paintbrush, SlidersHorizontal, Workflow, X, Files, Users } from 'lucide-react';
+import { ChartColumn, Check, Code, Database, Hash, Undo2, Redo2, Paintbrush, SlidersHorizontal, Workflow, X } from 'lucide-react';
 import ShareLink from '@/components/ShareLink';
 import { ReferencedFiles } from '@/components/ReferencedFiles';
 import { TrustedUi } from '@/components/TrustedUi';
@@ -38,7 +38,7 @@ import ThemePicker, { ModeChip, TemplateChip } from '@/components/ThemePicker';
 import { Tooltip } from '@/components/Tooltip';
 import { APP_BAR_H, EDIT_BAR_H, EDIT_BAR_ROW_H } from '@/lib/story/edit-bar';
 import MobileSheet, { useIsPhoneViewport } from '@/components/MobileSheet';
-import EditPanel, { SELECTION_HINT, type EditPanelTab } from '@/components/EditPanel';
+import EditPanel, { EditPanelPicker, SELECTION_HINT, type EditPanelTab } from '@/components/EditPanel';
 import { editPanelWidth, readEditPanelCollapsed, useWideEditViewport, writeEditPanelCollapsed } from '@/lib/story/use-edit-panel';
 import VersionHistory from '@/components/VersionHistory';
 import VizEditorPanel from '@/components/views/story/VizEditorPanel';
@@ -231,11 +231,9 @@ export default function InPlaceEditor({
   }, [onComment]);
   /** The right rail's query notebook (components/views/story/QueryNotebookPanel). */
   const [queriesOpen, setQueriesOpen] = useState(false);
-  const [settingsView, setSettingsView] = useState<'files' | 'sharing' | null>(null);
   const chooseView = (view: string) => {
     setMode(view === 'code' ? 'code' : 'design');
     setQueriesOpen(view === 'data');
-    setSettingsView(view === 'files' || view === 'sharing' ? view : null);
     if (view !== 'design' && view !== 'code') edit.select(null);
   };
   /** The cell the notebook lands on when opened FROM an embed's inspector; null once the rail has gone. */
@@ -246,7 +244,7 @@ export default function InPlaceEditor({
   const [preview, setPreview] = useState<ArtifactVersionSnapshot | null>(null);
   /*
    * THE PANEL. On a wide window one right panel for the session, its tab and
-   * collapse held here; below the breakpoint the same three things open as
+   * collapse held here; below the breakpoint the same panels open as
    * bottom sheets from the bar (`sheet`), and the comments one is the page's.
    */
   const wide = useWideEditViewport();
@@ -257,7 +255,7 @@ export default function InPlaceEditor({
     setCollapsedState(next);
     writeEditPanelCollapsed(next);
   }, []);
-  const [sheet, setSheet] = useState<'selection' | 'history' | null>(null);
+  const [sheet, setSheet] = useState<Exclude<EditPanelTab, 'comments'> | null>(null);
 
   /** Read by callbacks that run after an await, when `source` may have moved on. */
   const sourceRef = useRef(source);
@@ -711,7 +709,7 @@ export default function InPlaceEditor({
     (name: string, sql: string) => commitStructural(updateQuerySqlInJsx(sourceRef.current, name, sql)),
     [commitStructural],
   );
-  const notebookVisible = queriesOpen && !inspector && mode === 'design' && !preview && !settingsView;
+  const notebookVisible = queriesOpen && !inspector && mode === 'design' && !preview;
   /*
    * A spotlight is the notebook's, so it leaves with the notebook: a cell that
    * was focused when the rail closed, or when a selection handed the rail to
@@ -729,7 +727,7 @@ export default function InPlaceEditor({
    * app view draws both rows and every other view draws one, and the panes
    * below start at whichever height the bar actually is.
    */
-  const formattingRow = mode === 'design' && !notebookVisible && !settingsView;
+  const formattingRow = mode === 'design' && !notebookVisible;
   const barH = formattingRow ? EDIT_BAR_H : EDIT_BAR_ROW_H;
   /*
    * THE ONE WIDTH the page is told about: the panel's, which nothing in the
@@ -806,7 +804,7 @@ export default function InPlaceEditor({
   const sheetRef = useRef(sheet);
   sheetRef.current = sheet;
   const openSheet = useCallback(
-    (next: 'selection' | 'history' | null) => {
+    (next: Exclude<EditPanelTab, 'comments'> | null) => {
       if (next && commentsOpen) onCommentsOpenChange?.(false);
       // Asked again while it is already up (a double-tap that also fires
       // dblclick): the rect it would scroll by is the one already used.
@@ -872,7 +870,6 @@ export default function InPlaceEditor({
     (name: string) => {
       select(null);
       setQueryFocus(name);
-      setSettingsView(null);
       setQueriesOpen(true);
     },
     [select],
@@ -1205,6 +1202,52 @@ export default function InPlaceEditor({
     <p className="px-1 py-2 font-sans text-xs text-muted">{SELECTION_HINT}</p>
   );
 
+  const settingsBody = (panel: EditPanelTab) => (
+    <div className="min-h-0 flex-1 overflow-auto p-4">
+      {panel === 'files' || panel === 'datasets' ? <ReferencedFiles source={source} references={art.refs ?? []} datasetsOnly={panel === 'datasets'} />
+        : panel === 'sharing' ? <ShareLink className="" artifactId={art.id} title={title} editable format="markup" variant="embedded" onSharingChange={onSharingChange} />
+        : <div className="flex flex-col items-start gap-4">
+          <h2 className="text-sm font-semibold">Artifact settings</h2>
+          <ThemePicker
+            value={theme}
+            colorMode={colorMode}
+            onPick={(t) => {
+              setTheme(t);
+              queue({ theme: t });
+              // The document carries its own design attributes; tell it directly
+              // rather than making it wait for the save to come back around. With
+              // no author pick the MODE follows the new theme's declared default.
+              sendDocument(
+                { frameRef, runtimeRef },
+                {
+                  type: 'mx:document',
+                  nodes: storyUpdateParts(sourceRef.current, HELD_ASSETS)?.nodes ?? [],
+                  theme: t,
+                  colorMode: colorMode ?? storyThemeDefaultMode(t) ?? 'light',
+                },
+              );
+            }}
+          />
+          <TemplateChip template={art.template} />
+          {/* The AUTHOR'S DEFAULT mode, beside the theme it composes with. Every
+            theme carries both palettes, so this is meaningful for every
+            document; "theme default" stores an explicit null so the mode
+            follows a later theme switch. Readers can still flip their own view. */}
+          <ModeChip
+            mode={colorMode}
+            themeDefault={storyThemeDefaultMode(theme) ?? 'light'}
+            onPick={(next) => {
+              setColorMode(next);
+              const effective = next ?? storyThemeDefaultMode(theme) ?? 'light';
+              colorModeRef.current = effective;
+              queue({ colorMode: next });
+              showInDocument(sourceRef.current, { colorMode: effective });
+            }}
+          />
+        </div>}
+    </div>
+  );
+
   return (
     <div className="contents" data-app-appearance={surfaceMode}>
       {/* The double-click picker: a file chosen here replaces the image that was double-clicked. */}
@@ -1341,7 +1384,7 @@ export default function InPlaceEditor({
         }`}
         style={{ top: barTop, height: barH, left: 0, right: rightInset }}
       >
-        {/* Settings scroll independently; mode, history and Done stay visible.
+        {/* Title and workspace share one row; panel controls and Done stay visible.
             The formatting row below owns its own overflow and portalled menus. */}
         <div className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto sm:gap-2">
           <input
@@ -1357,15 +1400,13 @@ export default function InPlaceEditor({
           {/*
             * WHAT YOU ARE EDITING: app and code are two renderings of the
             * document, data is the queries it reads — three views of ONE
-            * document, so choosing any of them leaves the other two. First of
-            * the document-wide choices (theme and mode follow), so a narrow
-            * bar that scrolls this row still shows it.
+            * document, so choosing any of them leaves the other two. The panel is independent of this choice.
             */}
           <div role="group" aria-label="Editor view" className="flex shrink-0 items-center rounded-[4px] border border-edge p-0.5">
             {/* Icon-only on a phone, where every control in this row must fit; the names stay. */}
             {(
               [
-                ['design', 'app', <Paintbrush key="d" size={12} />, mode === 'design' && !queriesOpen && !settingsView],
+                ['design', 'app', <Paintbrush key="d" size={12} />, mode === 'design' && !queriesOpen],
                 ['code', 'code', <Code key="c" size={12} />, mode === 'code'],
               ] as const
             ).map(([m, label, icon, active]) => (
@@ -1404,52 +1445,8 @@ export default function InPlaceEditor({
               </button>
               </Tooltip>
             )}
-            {([['files', 'Show files', Files], ['sharing', 'Show sharing', Users]] as const).map(([view, label, Icon]) => (
-              <Tooltip key={view} content={label.toLowerCase()}>
-                <button type="button" aria-label={label} aria-pressed={settingsView === view}
-                  onClick={() => chooseView(view)}
-                  className={`inline-flex h-6 cursor-pointer items-center gap-1 rounded-[3px] px-1 font-mono text-[11px] sm:px-1.5 ${settingsView === view ? 'bg-accent-soft text-accent' : 'text-muted hover:bg-raised hover:text-fg'}`}>
-                  <Icon size={12} /><span className="hidden sm:inline">{view}</span>
-                </button>
-              </Tooltip>
-            ))}
           </div>
-          <ThemePicker
-            value={theme}
-            colorMode={colorMode}
-            onPick={(t) => {
-              setTheme(t);
-              queue({ theme: t });
-              // The document carries its own design attributes; tell it directly
-              // rather than making it wait for the save to come back around. With
-              // no author pick the MODE follows the new theme's declared default.
-              sendDocument(
-                { frameRef, runtimeRef },
-                {
-                  type: 'mx:document',
-                  nodes: storyUpdateParts(sourceRef.current, HELD_ASSETS)?.nodes ?? [],
-                  theme: t,
-                  colorMode: colorMode ?? storyThemeDefaultMode(t) ?? 'light',
-                },
-              );
-            }}
-          />
-          <TemplateChip template={art.template} />
-          {/* The AUTHOR'S DEFAULT mode, beside the theme it composes with. Every
-            theme carries both palettes, so this is meaningful for every
-            document; "theme default" stores an explicit null so the mode
-            follows a later theme switch. Readers can still flip their own view. */}
-          <ModeChip
-            mode={colorMode}
-            themeDefault={storyThemeDefaultMode(theme) ?? 'light'}
-            onPick={(next) => {
-              setColorMode(next);
-              const effective = next ?? storyThemeDefaultMode(theme) ?? 'light';
-              colorModeRef.current = effective;
-              queue({ colorMode: next });
-              showInDocument(sourceRef.current, { colorMode: effective });
-            }}
-          />
+
         </div>
 
         <div aria-label="Document actions" className="flex shrink-0 items-center gap-1.5 sm:gap-2">
@@ -1469,8 +1466,7 @@ export default function InPlaceEditor({
               </button>
             </Tooltip>
           )}
-          {/* Below the panel breakpoint the panel's tabs are these three, each a
-              bottom sheet. The selection one IS Edit chart while a chart is
+          {/* Below the panel breakpoint the chooser opens bottom sheets. The selection one IS Edit chart while a chart is
               selected: one control, not two beside each other on a phone. */}
           {!wide && (
             <>
@@ -1485,33 +1481,13 @@ export default function InPlaceEditor({
                   {inspectable && InspectIcon ? <InspectIcon size={12} className="shrink-0" /> : <SlidersHorizontal size={12} className="shrink-0" />}
                 </button>
               </Tooltip>
-              <Tooltip content="version history">
-                <button
-                  type="button"
-                  aria-label="Open version history"
-                  aria-expanded={sheet === 'history'}
-                  onClick={() => openSheet(sheet === 'history' ? null : 'history')}
-                  className={narrowTabClass(sheet === 'history')}
-                >
-                  <History size={12} className="shrink-0" />
-                </button>
-              </Tooltip>
-              {commentsTab && (
-                <Tooltip content="comments">
-                  <button
-                    type="button"
-                    aria-label="Show comments"
-                    aria-expanded={commentsOpen}
-                    onClick={() => {
-                      setSheet(null);
-                      onCommentsOpenChange?.(!commentsOpen);
-                    }}
-                    className={narrowTabClass(commentsOpen)}
-                  >
-                    <MessageSquare size={12} className="shrink-0" />
-                  </button>
-                </Tooltip>
-              )}
+              <EditPanelPicker compact value={commentsOpen ? 'comments' : sheet ?? ''} commentsAvailable={commentsTab}
+                onChange={next => {
+                  if (next === 'comments') {
+                    setSheet(null);
+                    onCommentsOpenChange?.(true);
+                  } else openSheet(next);
+                }} />
             </>
           )}
           <Tooltip content="done editing">
@@ -1636,7 +1612,7 @@ export default function InPlaceEditor({
               onClose={() => {}}
               busy={history.busy}
             />
-          ) : (
+          ) : panelTab !== 'comments' ? settingsBody(panelTab) : (
             <div ref={onCommentsHost} className="flex min-h-0 flex-1 flex-col" />
           )}
         </EditPanel>
@@ -1676,7 +1652,6 @@ export default function InPlaceEditor({
           className="fixed bottom-0 z-20 overflow-y-auto bg-surface p-4"
           style={{ top: barTop + barH, left: 0, right: panelWidth }}
         >
-          <div className="mb-8"><ReferencedFiles source={source} references={art.refs ?? []} datasetsOnly /></div>
           <h2 className="mb-4 text-base font-semibold text-fg">Queries</h2>
           {queryNotebook.length === 0 && <p className="text-sm text-muted">No queries in this artifact.</p>}
           <QueryNotebookPanel
@@ -1689,13 +1664,14 @@ export default function InPlaceEditor({
         </aside>
       )}
 
-      {settingsView && !preview && (
-        <aside aria-label={settingsView === 'files' ? 'Files' : 'Sharing'}
-          className="fixed bottom-0 z-20 overflow-y-auto bg-surface p-4 sm:p-6"
-          style={{ top: barTop + barH, left: 0, right: panelWidth }}>
-          {settingsView === 'files' ? <ReferencedFiles source={source} references={art.refs ?? []} />
-            : <ShareLink className="" artifactId={art.id} title={title} editable format="markup" variant="embedded" onSharingChange={onSharingChange} />}
-        </aside>
+      {!wide && sheet && sheet !== 'selection' && sheet !== 'history' && (
+        <TrustedUi overlay layer="navigation">
+          <MobileSheet label={sheet === 'settings' ? 'Artifact settings' : sheet === 'datasets' ? 'Dataset settings' : sheet === 'files' ? 'Files' : 'Sharing'}
+            size="half" swipeToClose onClose={() => setSheet(null)}
+            header={<div className="flex justify-end"><button type="button" aria-label={`Close ${sheet === 'files' ? 'Files' : sheet === 'sharing' ? 'Sharing' : 'settings'}`} onClick={() => setSheet(null)} className="rounded p-1 text-muted"><X size={13} /></button></div>}>
+            {settingsBody(sheet)}
+          </MobileSheet>
+        </TrustedUi>
       )}
 
       {!wide && sheet === 'history' && (

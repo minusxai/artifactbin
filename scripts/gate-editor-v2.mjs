@@ -482,7 +482,7 @@ try {
     // the toolbar and its current row is in view.
     {
       const panel = humanPage.getByRole('complementary', { name: 'Edit panel' });
-      await panel.getByRole('tab', { name: 'History' }).click();
+      await panel.getByRole('combobox', { name: 'Editor panel' }).selectOption('history');
       const history = panel.getByRole('region', { name: 'Version history' });
       const toolbar = await humanPage.getByRole('banner', { name: 'Editor toolbar' }).boundingBox();
       const list = await history.boundingBox();
@@ -491,7 +491,7 @@ try {
       check(!!current && !!list && current.y >= list.y && current.y <= 950, 'the current version is in view at 1400px');
       check((await humanPage.getByRole('button', { name: 'Open version history' }).count()) === 0,
         'no drawer switch beside the panel at 1400px');
-      await panel.getByRole('tab', { name: 'Selection' }).click();
+      await panel.getByRole('combobox', { name: 'Editor panel' }).selectOption('selection');
     }
     // Below the panel breakpoint (960px) there is no side panel: the bar's
     // switch opens the versions as a bottom sheet, at a laptop-narrow width
@@ -501,7 +501,7 @@ try {
       // The panel leaves on the window's resize event, a render after the resize resolves.
       check(await humanPage.getByRole('complementary', { name: 'Edit panel' }).waitFor({ state: 'detached', timeout: 5000 })
         .then(() => true, () => false), `no side panel at ${viewport.width}px`);
-      await humanPage.getByRole('button', { name: 'Open version history', exact: true }).click();
+      await humanPage.getByRole('combobox', { name: 'Editor panel' }).selectOption('history');
       const sheet = humanPage.getByRole('dialog', { name: 'Version history' });
       await sheet.waitFor({ state: 'visible' });
       // The sheet SLIDES in; its header is still moving when the checks reach for it.
@@ -509,7 +509,7 @@ try {
       check(await sheet.getByRole('button', { name: 'Show the current version' }).isVisible(),
         `history keeps the current version visible in its bottom sheet at ${viewport.width}px`);
       await sheet.getByRole('button', { name: 'Close version history' }).click();
-      check(await humanPage.getByRole('button', { name: 'Open version history' }).getAttribute('aria-expanded') === 'false',
+      check(await humanPage.getByRole('combobox', { name: 'Editor panel' }).inputValue() === '',
         `history close button remains usable at ${viewport.width}px`);
       // Escape also works on a broken layout, so a failed geometry check cannot stall the gate.
       await humanPage.keyboard.press('Escape');
