@@ -2,11 +2,12 @@ import { expect, it, vi } from 'vitest';
 import { useAppHarness } from './harness';
 import { dataflowForRow, datasetsForDocument, type ArtifactRow } from '@/lib/artifacts';
 import { COMPILED_DATAFLOW, finalizeArtifactMetadata } from '@/lib/story/parsed-artifact-metadata';
+import { DATA_SYNTAX_META } from '@/lib/story/data-syntax';
 import { compiledSource, type TestSource } from '@/test/helpers/compiled';
 
-/** A stored document's meta, as the publish door leaves it. */
+/** A stored document's meta, as the publish door leaves it: compiled, and in the current data syntax. */
 const storedMeta = async (source: string, sources: Record<string, TestSource> = {}) =>
-  finalizeArtifactMetadata('markup', source, { [COMPILED_DATAFLOW]: await compiledSource(source, sources) } as Record<string, unknown>);
+  finalizeArtifactMetadata('markup', source, { ...DATA_SYNTAX_META, [COMPILED_DATAFLOW]: await compiledSource(source, sources) } as Record<string, unknown>);
 import * as jsx from '@/lib/jsx';
 
 useAppHarness();
