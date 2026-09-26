@@ -4,7 +4,9 @@
  * One JSON block inside the file (`#afbin-file`) holds everything the page
  * needs to render, edit and comment without a network: the document source,
  * the runtime island (URLs stripped), compiled CSS with fonts inlined, the
- * data snapshot with precomputed filter variants, the comment threads and a
+ * data snapshot — the rows of what the downloader may hold, which the file's
+ * own engine queries live, and precomputed filter variants for the queries
+ * that need the server — the comment threads and a
  * journal of offline edits. The server writes it at download
  * (lib/offline/download.server.ts); the file's own Save rewrites it
  * (lib/offline/file-html.ts). Both sides go through this contract.
@@ -16,6 +18,7 @@
 import type { AnnotationWire } from '@/lib/annotations';
 import type { StoryIslandData } from '@/lib/story-runtime/contract';
 import type { DataflowState, Scalar, TableResult } from '@/lib/story/dataflow';
+import type { ImportTables } from '@/lib/story/compiled-flow';
 
 export const ARTIFACT_FILE_FORMAT = 1 as const;
 
@@ -31,11 +34,21 @@ export interface ArtifactFileSnapshot {
   at: string;
   /** The results at the document's values when downloaded. */
   state: DataflowState;
-  /** Results for other filter combinations, computed by the server's own engine. */
+  /**
+   * Every row of each import the downloader may hold (lib/story/placement), by
+   * import name: the file's own SQLite engine runs every query over them live,
+   * so nothing is precomputed for those. Absent in a file saved before it existed.
+   */
+  held?: Record<string, ImportTables[string]>;
+  /**
+   * Results for other filter combinations of the queries that need the server
+   * (a connected database, data the downloader may not hold), computed by the
+   * server's own engine.
+   */
   variants: ArtifactFileVariant[];
   /**
-   * Values that feed a query but could not be precomputed (free text, dates,
-   * numbers, or past the cap). Their controls are disabled offline with
+   * Values that feed such a query but could not be precomputed (free text,
+   * dates, numbers, or past the cap). Their controls are disabled offline with
    * OFFLINE_FILTER_REASON.
    */
   frozen: string[];
@@ -180,6 +193,7 @@ function isWellFormed(v: Json): boolean {
     && isObject(v.css) && isString(v.css.base) && isStringOrNull(v.css.compiled) && isStringOrNull(v.css.author)
     && isObject(island) && Array.isArray(island.nodes) && isObject(island.refData)
     && isObject(snapshot) && isString(snapshot.at) && isState(snapshot.state)
+      && (snapshot.held === undefined || isRecordOf(snapshot.held, (tables) => isRecordOf(tables, isTable)))
       && Array.isArray(snapshot.variants) && snapshot.variants.every(isVariant) && isStringList(snapshot.frozen)
     && Array.isArray(v.journal) && v.journal.every(isEdit)
     && Array.isArray(v.threads) && v.threads.every(isObject)

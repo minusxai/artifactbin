@@ -134,37 +134,55 @@ describe('access', () => {
 });
 
 describe('the snapshot', () => {
-  it('carries the base rows, one variant per region with its own sums, and freezes the free-text filter', async () => {
+  it('carries the rows of every import the downloader may hold, so their queries run live and nothing is precomputed for them', async () => {
     const w = await world();
     const file = await download(w.doc, w.owner.actor);
     expect(file.snapshot.state.values).toMatchObject({ region: null, note: null });
     expect(file.snapshot.state.tables.regions?.rows).toEqual([{ region: 'east' }, { region: 'west' }]);
     expect(revenue(file.snapshot.state.tables.sales)).toBe(307);
-    expect(file.snapshot.variants.map((v) => v.values.region).sort()).toEqual(['east', 'west']);
-    expect(revenue(variantFor(file, 'west')?.tables.sales)).toBe(107);
-    expect(revenue(variantFor(file, 'east')?.tables.sales)).toBe(200);
-    // Only the queries a region changes travel in its variant.
-    expect(Object.keys(variantFor(file, 'west')!.tables).sort()).toEqual(['mine', 'sales']);
-    expect(file.snapshot.frozen).toEqual(['note']);
+    expect(file.island.dataflow?.hold).toEqual(['regions_data', 'sales_data', 'noted_data', 'mine_data', 'secrets_data']);
+    expect(file.snapshot.held?.sales_data?.rows?.rows).toHaveLength(3);
+    expect(file.snapshot.held?.secrets_data?.rows?.rows).toEqual([{ code: 'owner-only' }]);
+    // Every query runs in the file's own engine: no combination is precomputed, no filter frozen.
+    expect(file.snapshot.variants).toEqual([]);
+    expect(file.snapshot.frozen).toEqual([]);
     expect(file.metadata).toMatchObject({ title: 'Sales' });
     expect(file).toMatchObject({ origin: ORIGIN, liveUrl: `${ORIGIN}/a/${w.doc}`, journal: [], localIds: [], bundle: 'core' });
     expect(file.base.source).toBe(file.source);
     expect(file.downloadedBy).not.toContain('@');
   });
 
-  it('contains only the rows the downloader may see, in the base and in every variant', async () => {
+  it('precomputes one variant per region only for the queries that stay on the server, and freezes their free-text filter', async () => {
+    const w = await world();
+    // Rows the document reads by its owner's reach, which its reader may not hold.
+    const legacy = await create(w.owner.token.token, {
+      dataset: [{ region: 'west', revenue: 100, who: w.owner.user.id }, { region: 'east', revenue: 200, who: w.owner.user.id }, { region: 'west', revenue: 7, who: w.bob.user.id }],
+      visibility: 'private', access: 'read',
+    });
+    const doc = await create(w.owner.token.token, { markup: DASHBOARD(legacy, w.secret, w.img), visibility: 'unlisted' });
+    const file = await download(doc, reader(w.bob));
+    expect(file.island.dataflow?.hold).toEqual([]);
+    expect(file.snapshot.held ?? {}).toEqual({});
+    expect(file.snapshot.variants.map((v) => v.values.region).sort()).toEqual(['east', 'west']);
+    expect(revenue(variantFor(file, 'west')?.tables.sales)).toBe(107);
+    expect(revenue(variantFor(file, 'east')?.tables.sales)).toBe(200);
+    // Only the queries a region changes travel in its variant.
+    expect(Object.keys(variantFor(file, 'west')!.tables).sort()).toEqual(['mine', 'sales']);
+    expect(revenue(variantFor(file, 'west')?.tables.mine)).toBe(7);
+    expect(file.snapshot.frozen).toEqual(['note']);
+  });
+
+  it('contains only the rows the downloader may see, in the base, the held imports and every variant', async () => {
     const w = await world();
     const mine = await download(w.doc, w.owner.actor);
     const theirs = await download(w.doc, reader(w.bob));
     expect(revenue(mine.snapshot.state.tables.mine)).toBe(300);
     expect(revenue(theirs.snapshot.state.tables.mine)).toBe(7);
-    expect(revenue(variantFor(mine, 'west')?.tables.mine)).toBe(100);
-    expect(revenue(variantFor(theirs, 'west')?.tables.mine)).toBe(7);
-    expect(revenue(variantFor(theirs, 'east')?.tables.mine) ?? null).toBeNull();
     // A dataset whose read grant names only its owner never reaches anyone else's file.
     expect(mine.snapshot.state.tables.secrets?.rows).toEqual([{ code: 'owner-only' }]);
     expect(theirs.snapshot.state.tables.secrets).toBeUndefined();
     expect(theirs.snapshot.state.errors.secrets).toBeTruthy();
+    expect(theirs.island.dataflow?.hold).not.toContain('secrets_data');
     expect(JSON.stringify(theirs)).not.toContain('owner-only');
   });
 });

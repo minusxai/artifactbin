@@ -8,9 +8,9 @@
  "base": {
   "version": 1,
   "editId": "e1",
-  "source": "<Helmet>\n  <title>Regional sales</title>\n  <Import name=\"sales_data\" src=\"ref:Ds1a2b\" />\n  <Value name=\"region\" type=\"string\" />\n  <Value name=\"note\" type=\"string\" />\n  <Query name=\"regions\">{`select distinct region from sales_data.rows order by 1`}</Query>\n  <Query name=\"sales\">{`select region, month, revenue from sales_data.rows where $region is null or region = $region order by 1, 2`}</Query>\n  <Query name=\"matches\">{`select count(*) as n from sales_data.rows where $note is null or region like $note`}</Query>\n  <Mutation name=\"add\">{`insert into sales_data.rows (region, month, revenue) values ('north', '2026-09', 1)`}</Mutation>\n</Helmet>\n<div className=\"@container p-8 space-y-6\" id=\"W4Nj\">\n  <h1 className=\"text-3xl font-bold tracking-tight\" id=\"g1nd\">Regional sales</h1>\n  <p className=\"text-muted-foreground\" id=\"TM0z\">Revenue by region and month, as the offline file gate expects it.</p>\n  <div className=\"flex flex-wrap gap-4\" id=\"ncKJ\">\n    <Select label=\"Region\" value=\"$region\" options=\"$regions\" placeholder=\"All regions\" id=\"nQIC\" />\n    <Input label=\"Region pattern\" value=\"$note\" placeholder=\"e.g. we%\" id=\"mvAw\" />\n  </div>\n  <DataTable data=\"$sales\" columns={[{\"col\":\"region\",\"title\":\"Region\"},{\"col\":\"month\",\"title\":\"Month\"},{\"col\":\"revenue\",\"title\":\"Revenue\",\"fmt\":\"$,.0f\"}]} id=\"k9Sf\" />\n  <Question title=\"Revenue by month\" data=\"$sales\" viz={{\"kind\":\"vega-lite\",\"spec\":{\"mark\":\"bar\",\"encoding\":{\"x\":{\"field\":\"month\",\"type\":\"nominal\"},\"y\":{\"field\":\"revenue\",\"type\":\"quantitative\",\"aggregate\":\"sum\"}}}}} height=\"300px\" id=\"sAzP\" />\n  <p id=\"jPYk\">Matching rows: <Number data=\"$matches\" col=\"n\" id=\"kU85\" /></p>\n  <Button run=\"$add\" id=\"Ty9E\">Add a row</Button>\n</div>"
+  "source": "<Helmet>\n  <title>Regional sales</title>\n  <Import name=\"sales_data\" src=\"ref:Ds1a2b\" />\n  <Import name=\"targets_data\" src=\"ref:Tg9z8y\" />\n  <Value name=\"region\" type=\"string\" />\n  <Value name=\"note\" type=\"string\" />\n  <Query name=\"regions\">{`select distinct region from sales_data.rows order by 1`}</Query>\n  <Query name=\"sales\">{`select region, month, revenue from sales_data.rows where $region is null or region = $region order by 1, 2`}</Query>\n  <Query name=\"matches\">{`select count(*) as n from targets_data.rows where $note is null or region like $note`}</Query>\n  <Mutation name=\"add\">{`insert into sales_data.rows (region, month, revenue) values ('north', '2026-09', 1)`}</Mutation>\n</Helmet>\n<div className=\"@container p-8 space-y-6\" id=\"Eng7\">\n  <h1 className=\"text-3xl font-bold tracking-tight\" id=\"hkD1\">Regional sales</h1>\n  <p className=\"text-muted-foreground\" id=\"cBWf\">Revenue by region and month, as the offline file gate expects it.</p>\n  <div className=\"flex flex-wrap gap-4\" id=\"ODWL\">\n    <Select label=\"Region\" value=\"$region\" options=\"$regions\" placeholder=\"All regions\" id=\"VVgD\" />\n    <Input label=\"Region pattern\" value=\"$note\" placeholder=\"e.g. we%\" id=\"uGqY\" />\n  </div>\n  <DataTable data=\"$sales\" columns={[{\"col\":\"region\",\"title\":\"Region\"},{\"col\":\"month\",\"title\":\"Month\"},{\"col\":\"revenue\",\"title\":\"Revenue\",\"fmt\":\"$,.0f\"}]} id=\"GfmX\" />\n  <Question title=\"Revenue by month\" data=\"$sales\" viz={{\"kind\":\"vega-lite\",\"spec\":{\"mark\":\"bar\",\"encoding\":{\"x\":{\"field\":\"month\",\"type\":\"nominal\"},\"y\":{\"field\":\"revenue\",\"type\":\"quantitative\",\"aggregate\":\"sum\"}}}}} height=\"300px\" id=\"ejvk\" />\n  <p id=\"oXOH\">Matching rows: <Number data=\"$matches\" col=\"n\" id=\"RbOU\" /></p>\n  <Button run=\"$add\" id=\"G0Eu\">Add a row</Button>\n</div>"
  },
- "source": "<Helmet>\n  <title>Regional sales</title>\n  <Import name=\"sales_data\" src=\"ref:Ds1a2b\" />\n  <Value name=\"region\" type=\"string\" />\n  <Value name=\"note\" type=\"string\" />\n  <Query name=\"regions\">{`select distinct region from sales_data.rows order by 1`}</Query>\n  <Query name=\"sales\">{`select region, month, revenue from sales_data.rows where $region is null or region = $region order by 1, 2`}</Query>\n  <Query name=\"matches\">{`select count(*) as n from sales_data.rows where $note is null or region like $note`}</Query>\n  <Mutation name=\"add\">{`insert into sales_data.rows (region, month, revenue) values ('north', '2026-09', 1)`}</Mutation>\n</Helmet>\n<div className=\"@container p-8 space-y-6\" id=\"W4Nj\">\n  <h1 className=\"text-3xl font-bold tracking-tight\" id=\"g1nd\">Regional sales</h1>\n  <p className=\"text-muted-foreground\" id=\"TM0z\">Revenue by region and month, as the offline file gate expects it.</p>\n  <div className=\"flex flex-wrap gap-4\" id=\"ncKJ\">\n    <Select label=\"Region\" value=\"$region\" options=\"$regions\" placeholder=\"All regions\" id=\"nQIC\" />\n    <Input label=\"Region pattern\" value=\"$note\" placeholder=\"e.g. we%\" id=\"mvAw\" />\n  </div>\n  <DataTable data=\"$sales\" columns={[{\"col\":\"region\",\"title\":\"Region\"},{\"col\":\"month\",\"title\":\"Month\"},{\"col\":\"revenue\",\"title\":\"Revenue\",\"fmt\":\"$,.0f\"}]} id=\"k9Sf\" />\n  <Question title=\"Revenue by month\" data=\"$sales\" viz={{\"kind\":\"vega-lite\",\"spec\":{\"mark\":\"bar\",\"encoding\":{\"x\":{\"field\":\"month\",\"type\":\"nominal\"},\"y\":{\"field\":\"revenue\",\"type\":\"quantitative\",\"aggregate\":\"sum\"}}}}} height=\"300px\" id=\"sAzP\" />\n  <p id=\"jPYk\">Matching rows: <Number data=\"$matches\" col=\"n\" id=\"kU85\" /></p>\n  <Button run=\"$add\" id=\"Ty9E\">Add a row</Button>\n</div>",
+ "source": "<Helmet>\n  <title>Regional sales</title>\n  <Import name=\"sales_data\" src=\"ref:Ds1a2b\" />\n  <Import name=\"targets_data\" src=\"ref:Tg9z8y\" />\n  <Value name=\"region\" type=\"string\" />\n  <Value name=\"note\" type=\"string\" />\n  <Query name=\"regions\">{`select distinct region from sales_data.rows order by 1`}</Query>\n  <Query name=\"sales\">{`select region, month, revenue from sales_data.rows where $region is null or region = $region order by 1, 2`}</Query>\n  <Query name=\"matches\">{`select count(*) as n from targets_data.rows where $note is null or region like $note`}</Query>\n  <Mutation name=\"add\">{`insert into sales_data.rows (region, month, revenue) values ('north', '2026-09', 1)`}</Mutation>\n</Helmet>\n<div className=\"@container p-8 space-y-6\" id=\"Eng7\">\n  <h1 className=\"text-3xl font-bold tracking-tight\" id=\"hkD1\">Regional sales</h1>\n  <p className=\"text-muted-foreground\" id=\"cBWf\">Revenue by region and month, as the offline file gate expects it.</p>\n  <div className=\"flex flex-wrap gap-4\" id=\"ODWL\">\n    <Select label=\"Region\" value=\"$region\" options=\"$regions\" placeholder=\"All regions\" id=\"VVgD\" />\n    <Input label=\"Region pattern\" value=\"$note\" placeholder=\"e.g. we%\" id=\"uGqY\" />\n  </div>\n  <DataTable data=\"$sales\" columns={[{\"col\":\"region\",\"title\":\"Region\"},{\"col\":\"month\",\"title\":\"Month\"},{\"col\":\"revenue\",\"title\":\"Revenue\",\"fmt\":\"$,.0f\"}]} id=\"GfmX\" />\n  <Question title=\"Revenue by month\" data=\"$sales\" viz={{\"kind\":\"vega-lite\",\"spec\":{\"mark\":\"bar\",\"encoding\":{\"x\":{\"field\":\"month\",\"type\":\"nominal\"},\"y\":{\"field\":\"revenue\",\"type\":\"quantitative\",\"aggregate\":\"sum\"}}}}} height=\"300px\" id=\"ejvk\" />\n  <p id=\"oXOH\">Matching rows: <Number data=\"$matches\" col=\"n\" id=\"RbOU\" /></p>\n  <Button run=\"$add\" id=\"G0Eu\">Add a row</Button>\n</div>",
  "metadata": {
   "title": "Regional sales",
   "description": null,
@@ -28,8 +28,8 @@
    {
     "type": "text",
     "value": "\n",
-    "start": 649,
-    "end": 650
+    "start": 701,
+    "end": 702
    },
    {
     "type": "element",
@@ -42,25 +42,25 @@
        "static": true,
        "json": "@container p-8 space-y-6"
       },
-      "start": 655,
-      "end": 691
+      "start": 707,
+      "end": 743
      },
      {
       "name": "id",
       "value": {
        "static": true,
-       "json": "W4Nj"
+       "json": "Eng7"
       },
-      "start": 692,
-      "end": 701
+      "start": 744,
+      "end": 753
      }
     ],
     "children": [
      {
       "type": "text",
       "value": "\n  ",
-      "start": 702,
-      "end": 705
+      "start": 754,
+      "end": 757
      },
      {
       "type": "element",
@@ -73,36 +73,36 @@
          "static": true,
          "json": "text-3xl font-bold tracking-tight"
         },
-        "start": 709,
-        "end": 754
+        "start": 761,
+        "end": 806
        },
        {
         "name": "id",
         "value": {
          "static": true,
-         "json": "g1nd"
+         "json": "hkD1"
         },
-        "start": 755,
-        "end": 764
+        "start": 807,
+        "end": 816
        }
       ],
       "children": [
        {
         "type": "text",
         "value": "Regional sales",
-        "start": 765,
-        "end": 779
+        "start": 817,
+        "end": 831
        }
       ],
       "selfClosing": false,
-      "start": 705,
-      "end": 784
+      "start": 757,
+      "end": 836
      },
      {
       "type": "text",
       "value": "\n  ",
-      "start": 784,
-      "end": 787
+      "start": 836,
+      "end": 839
      },
      {
       "type": "element",
@@ -115,36 +115,36 @@
          "static": true,
          "json": "text-muted-foreground"
         },
-        "start": 790,
-        "end": 823
+        "start": 842,
+        "end": 875
        },
        {
         "name": "id",
         "value": {
          "static": true,
-         "json": "TM0z"
+         "json": "cBWf"
         },
-        "start": 824,
-        "end": 833
+        "start": 876,
+        "end": 885
        }
       ],
       "children": [
        {
         "type": "text",
         "value": "Revenue by region and month, as the offline file gate expects it.",
-        "start": 834,
-        "end": 899
+        "start": 886,
+        "end": 951
        }
       ],
       "selfClosing": false,
-      "start": 787,
-      "end": 903
+      "start": 839,
+      "end": 955
      },
      {
       "type": "text",
       "value": "\n  ",
-      "start": 903,
-      "end": 906
+      "start": 955,
+      "end": 958
      },
      {
       "type": "element",
@@ -157,25 +157,25 @@
          "static": true,
          "json": "flex flex-wrap gap-4"
         },
-        "start": 911,
-        "end": 943
+        "start": 963,
+        "end": 995
        },
        {
         "name": "id",
         "value": {
          "static": true,
-         "json": "ncKJ"
+         "json": "ODWL"
         },
-        "start": 944,
-        "end": 953
+        "start": 996,
+        "end": 1005
        }
       ],
       "children": [
        {
         "type": "text",
         "value": "\n    ",
-        "start": 954,
-        "end": 959
+        "start": 1006,
+        "end": 1011
        },
        {
         "type": "element",
@@ -188,8 +188,8 @@
            "static": true,
            "json": "Region"
           },
-          "start": 967,
-          "end": 981
+          "start": 1019,
+          "end": 1033
          },
          {
           "name": "value",
@@ -197,8 +197,8 @@
            "static": true,
            "json": "$region"
           },
-          "start": 982,
-          "end": 997
+          "start": 1034,
+          "end": 1049
          },
          {
           "name": "options",
@@ -206,8 +206,8 @@
            "static": true,
            "json": "$regions"
           },
-          "start": 998,
-          "end": 1016
+          "start": 1050,
+          "end": 1068
          },
          {
           "name": "placeholder",
@@ -215,29 +215,29 @@
            "static": true,
            "json": "All regions"
           },
-          "start": 1017,
-          "end": 1042
+          "start": 1069,
+          "end": 1094
          },
          {
           "name": "id",
           "value": {
            "static": true,
-           "json": "nQIC"
+           "json": "VVgD"
           },
-          "start": 1043,
-          "end": 1052
+          "start": 1095,
+          "end": 1104
          }
         ],
         "children": [],
         "selfClosing": true,
-        "start": 959,
-        "end": 1055
+        "start": 1011,
+        "end": 1107
        },
        {
         "type": "text",
         "value": "\n    ",
-        "start": 1055,
-        "end": 1060
+        "start": 1107,
+        "end": 1112
        },
        {
         "type": "element",
@@ -250,8 +250,8 @@
            "static": true,
            "json": "Region pattern"
           },
-          "start": 1067,
-          "end": 1089
+          "start": 1119,
+          "end": 1141
          },
          {
           "name": "value",
@@ -259,8 +259,8 @@
            "static": true,
            "json": "$note"
           },
-          "start": 1090,
-          "end": 1103
+          "start": 1142,
+          "end": 1155
          },
          {
           "name": "placeholder",
@@ -268,40 +268,40 @@
            "static": true,
            "json": "e.g. we%"
           },
-          "start": 1104,
-          "end": 1126
+          "start": 1156,
+          "end": 1178
          },
          {
           "name": "id",
           "value": {
            "static": true,
-           "json": "mvAw"
+           "json": "uGqY"
           },
-          "start": 1127,
-          "end": 1136
+          "start": 1179,
+          "end": 1188
          }
         ],
         "children": [],
         "selfClosing": true,
-        "start": 1060,
-        "end": 1139
+        "start": 1112,
+        "end": 1191
        },
        {
         "type": "text",
         "value": "\n  ",
-        "start": 1139,
-        "end": 1142
+        "start": 1191,
+        "end": 1194
        }
       ],
       "selfClosing": false,
-      "start": 906,
-      "end": 1148
+      "start": 958,
+      "end": 1200
      },
      {
       "type": "text",
       "value": "\n  ",
-      "start": 1148,
-      "end": 1151
+      "start": 1200,
+      "end": 1203
      },
      {
       "type": "element",
@@ -314,8 +314,8 @@
          "static": true,
          "json": "$sales"
         },
-        "start": 1162,
-        "end": 1175
+        "start": 1214,
+        "end": 1227
        },
        {
         "name": "columns",
@@ -337,29 +337,29 @@
           }
          ]
         },
-        "start": 1176,
-        "end": 1303
+        "start": 1228,
+        "end": 1355
        },
        {
         "name": "id",
         "value": {
          "static": true,
-         "json": "k9Sf"
+         "json": "GfmX"
         },
-        "start": 1304,
-        "end": 1313
+        "start": 1356,
+        "end": 1365
        }
       ],
       "children": [],
       "selfClosing": true,
-      "start": 1151,
-      "end": 1316
+      "start": 1203,
+      "end": 1368
      },
      {
       "type": "text",
       "value": "\n  ",
-      "start": 1316,
-      "end": 1319
+      "start": 1368,
+      "end": 1371
      },
      {
       "type": "element",
@@ -372,8 +372,8 @@
          "static": true,
          "json": "Revenue by month"
         },
-        "start": 1329,
-        "end": 1353
+        "start": 1381,
+        "end": 1405
        },
        {
         "name": "data",
@@ -381,8 +381,8 @@
          "static": true,
          "json": "$sales"
         },
-        "start": 1354,
-        "end": 1367
+        "start": 1406,
+        "end": 1419
        },
        {
         "name": "viz",
@@ -406,8 +406,8 @@
           }
          }
         },
-        "start": 1368,
-        "end": 1532
+        "start": 1420,
+        "end": 1584
        },
        {
         "name": "height",
@@ -415,29 +415,29 @@
          "static": true,
          "json": "300px"
         },
-        "start": 1533,
-        "end": 1547
+        "start": 1585,
+        "end": 1599
        },
        {
         "name": "id",
         "value": {
          "static": true,
-         "json": "sAzP"
+         "json": "ejvk"
         },
-        "start": 1548,
-        "end": 1557
+        "start": 1600,
+        "end": 1609
        }
       ],
       "children": [],
       "selfClosing": true,
-      "start": 1319,
-      "end": 1560
+      "start": 1371,
+      "end": 1612
      },
      {
       "type": "text",
       "value": "\n  ",
-      "start": 1560,
-      "end": 1563
+      "start": 1612,
+      "end": 1615
      },
      {
       "type": "element",
@@ -448,18 +448,18 @@
         "name": "id",
         "value": {
          "static": true,
-         "json": "jPYk"
+         "json": "oXOH"
         },
-        "start": 1566,
-        "end": 1575
+        "start": 1618,
+        "end": 1627
        }
       ],
       "children": [
        {
         "type": "text",
         "value": "Matching rows: ",
-        "start": 1576,
-        "end": 1591
+        "start": 1628,
+        "end": 1643
        },
        {
         "type": "element",
@@ -472,8 +472,8 @@
            "static": true,
            "json": "$matches"
           },
-          "start": 1599,
-          "end": 1614
+          "start": 1651,
+          "end": 1666
          },
          {
           "name": "col",
@@ -481,34 +481,34 @@
            "static": true,
            "json": "n"
           },
-          "start": 1615,
-          "end": 1622
+          "start": 1667,
+          "end": 1674
          },
          {
           "name": "id",
           "value": {
            "static": true,
-           "json": "kU85"
+           "json": "RbOU"
           },
-          "start": 1623,
-          "end": 1632
+          "start": 1675,
+          "end": 1684
          }
         ],
         "children": [],
         "selfClosing": true,
-        "start": 1591,
-        "end": 1635
+        "start": 1643,
+        "end": 1687
        }
       ],
       "selfClosing": false,
-      "start": 1563,
-      "end": 1639
+      "start": 1615,
+      "end": 1691
      },
      {
       "type": "text",
       "value": "\n  ",
-      "start": 1639,
-      "end": 1642
+      "start": 1691,
+      "end": 1694
      },
      {
       "type": "element",
@@ -521,41 +521,41 @@
          "static": true,
          "json": "$add"
         },
-        "start": 1650,
-        "end": 1660
+        "start": 1702,
+        "end": 1712
        },
        {
         "name": "id",
         "value": {
          "static": true,
-         "json": "Ty9E"
+         "json": "G0Eu"
         },
-        "start": 1661,
-        "end": 1670
+        "start": 1713,
+        "end": 1722
        }
       ],
       "children": [
        {
         "type": "text",
         "value": "Add a row",
-        "start": 1671,
-        "end": 1680
+        "start": 1723,
+        "end": 1732
        }
       ],
       "selfClosing": false,
-      "start": 1642,
-      "end": 1689
+      "start": 1694,
+      "end": 1741
      },
      {
       "type": "text",
       "value": "\n",
-      "start": 1689,
-      "end": 1690
+      "start": 1741,
+      "end": 1742
      }
     ],
     "selfClosing": false,
-    "start": 650,
-    "end": 1696
+    "start": 702,
+    "end": 1748
    }
   ],
   "refData": {},
@@ -568,6 +568,29 @@
      {
       "name": "sales_data",
       "ref": "Ds1a2b",
+      "tables": [
+       {
+        "name": "rows",
+        "columns": [
+         {
+          "name": "region",
+          "type": "string"
+         },
+         {
+          "name": "month",
+          "type": "string"
+         },
+         {
+          "name": "revenue",
+          "type": "number"
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "name": "targets_data",
+      "ref": "Tg9z8y",
       "tables": [
        {
         "name": "rows",
@@ -623,8 +646,8 @@
         "type": "string"
        }
       ],
-      "start": 169,
-      "end": 257
+      "start": 219,
+      "end": 307
      },
      {
       "name": "sales",
@@ -657,19 +680,19 @@
         "type": "number"
        }
       ],
-      "start": 260,
-      "end": 398
+      "start": 310,
+      "end": 448
      },
      {
       "name": "matches",
       "engine": "sqlite",
-      "sql": "select count(*) as n from sales_data.rows where $note is null or region like $note",
+      "sql": "select count(*) as n from targets_data.rows where $note is null or region like $note",
       "params": [
        "note"
       ],
       "reads": {
        "imports": [
-        "sales_data"
+        "targets_data"
        ],
        "queries": [],
        "values": [
@@ -683,8 +706,8 @@
         "type": "number"
        }
       ],
-      "start": 401,
-      "end": 517
+      "start": 451,
+      "end": 569
      }
     ],
     "mutations": [
@@ -702,8 +725,8 @@
        "values": [],
        "builtins": []
       },
-      "start": 520,
-      "end": 639
+      "start": 572,
+      "end": 691
      }
     ]
    },
@@ -795,7 +818,10 @@
      }
     },
     "errors": {}
-   }
+   },
+   "hold": [
+    "sales_data"
+   ]
   }
  },
  "snapshot": {
@@ -889,116 +915,59 @@
    },
    "errors": {}
   },
-  "variants": [
-   {
-    "values": {
-     "region": "east"
-    },
-    "tables": {
-     "sales": {
-      "rows": [
-       {
-        "region": "east",
-        "month": "2026-07",
-        "revenue": 120
-       },
-       {
-        "region": "east",
-        "month": "2026-08",
-        "revenue": 180
-       }
-      ],
-      "columns": [
-       {
-        "name": "region",
-        "type": "string"
-       },
-       {
-        "name": "month",
-        "type": "string"
-       },
-       {
-        "name": "revenue",
-        "type": "number"
-       }
-      ]
-     }
-    },
-    "errors": {}
-   },
-   {
-    "values": {
-     "region": "north"
-    },
-    "tables": {
-     "sales": {
-      "rows": [
-       {
-        "region": "north",
-        "month": "2026-07",
-        "revenue": 40
-       },
-       {
-        "region": "north",
-        "month": "2026-08",
-        "revenue": 65
-       }
-      ],
-      "columns": [
-       {
-        "name": "region",
-        "type": "string"
-       },
-       {
-        "name": "month",
-        "type": "string"
-       },
-       {
-        "name": "revenue",
-        "type": "number"
-       }
-      ]
-     }
-    },
-    "errors": {}
-   },
-   {
-    "values": {
-     "region": "west"
-    },
-    "tables": {
-     "sales": {
-      "rows": [
-       {
-        "region": "west",
-        "month": "2026-07",
-        "revenue": 210
-       },
-       {
-        "region": "west",
-        "month": "2026-08",
-        "revenue": 260
-       }
-      ],
-      "columns": [
-       {
-        "name": "region",
-        "type": "string"
-       },
-       {
-        "name": "month",
-        "type": "string"
-       },
-       {
-        "name": "revenue",
-        "type": "number"
-       }
-      ]
-     }
-    },
-    "errors": {}
+  "held": {
+   "sales_data": {
+    "rows": {
+     "rows": [
+      {
+       "region": "east",
+       "month": "2026-07",
+       "revenue": 120
+      },
+      {
+       "region": "east",
+       "month": "2026-08",
+       "revenue": 180
+      },
+      {
+       "region": "north",
+       "month": "2026-07",
+       "revenue": 40
+      },
+      {
+       "region": "north",
+       "month": "2026-08",
+       "revenue": 65
+      },
+      {
+       "region": "west",
+       "month": "2026-07",
+       "revenue": 210
+      },
+      {
+       "region": "west",
+       "month": "2026-08",
+       "revenue": 260
+      }
+     ],
+     "columns": [
+      {
+       "name": "region",
+       "type": "string"
+      },
+      {
+       "name": "month",
+       "type": "string"
+      },
+      {
+       "name": "revenue",
+       "type": "number"
+      }
+     ]
+    }
    }
-  ],
+  },
+  "variants": [],
   "frozen": [
    "note"
   ]
@@ -1007,5 +976,5 @@
  "threads": [],
  "localIds": [],
  "bundle": "core",
- "derivedFrom": "fnv1a:551846d71597606c"
+ "derivedFrom": "fnv1a:f3e63a0bc76fd733"
 }

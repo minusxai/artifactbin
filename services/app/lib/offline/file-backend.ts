@@ -565,6 +565,12 @@ export function createFileBackend(initial: ArtifactFile, hooks: FileBackendHooks
           if (unran.has(name)) throw new Error(OFFLINE_QUERY_REASON);
           return transport.page!(values, name, page);
         },
+        /** What the file's own engine runs over: every row of each import the downloader could hold. */
+        async hold(name) {
+          const tables = file.snapshot.held?.[name];
+          if (!tables) throw new Error(OFFLINE_QUERY_REASON);
+          return tables;
+        },
         dispose() {},
       };
     },
