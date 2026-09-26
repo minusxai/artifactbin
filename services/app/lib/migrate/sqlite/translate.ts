@@ -27,8 +27,12 @@ export interface TranslateContext {
   statement: 'query' | 'mutation';
   /** `postgres`: the statement stays Postgres; only `$_me` → `$_me.id` applies. */
   dialect?: 'duckdb' | 'postgres';
-  /** Old schema → Import name, by lower-cased name: `{public: 'bookings'}` makes `public.rows` read `bookings.rows`. */
-  schemas?: Record<string, string>;
+  /**
+   * The Import a `source="ref:X"` statement's dataset became. Its tables were
+   * `public.<t>` or plain `<t>`; both read `<dataset>.<t>`. A table in any
+   * other schema needs a person.
+   */
+  dataset?: string;
   /** Legacy table → its new qualified name, by lower-cased name: `{ref_abc123: 'bookings.rows'}`. */
   tables?: Record<string, string>;
 }
@@ -331,14 +335,38 @@ const viewer: Rule = (v) => {
   return i < 0 ? null : { edits: [v.replace(i, i, '$_me.id')] };
 };
 
+/** Where a statement names a table: after FROM, JOIN, UPDATE, INTO, or a comma in a FROM list. */
+const tablePosition = (v: View, i: number): boolean => {
+  const before = v.sig[i - 1];
+  return ['from', 'join', 'update', 'into'].includes(word(before)) || (before?.text === ',' && v.clauseOf(i) === 'from');
+};
+
+/** Names the statement defines for itself: `with name[(cols)] as (…)`. */
+function cteNames(v: View): Set<string> {
+  const names = new Set<string>();
+  v.sig.forEach((token, i) => {
+    const next = v.sig[i + 1]?.text === '(' ? v.pairs.get(i + 1)! + 1 : i + 1;
+    if (['word', 'quoted'].includes(token.kind) && word(v.sig[next]) === 'as' && v.sig[next + 1]?.text === '(') names.add(identifier(token)!);
+  });
+  return names;
+}
+
+/** Legacy `ref_<id>` tables, and a sourced statement's `public.<t>` and bare `<t>`, → the Import. */
 const renames: Rule = (v, context) => {
+  const ctes = context.dataset ? cteNames(v) : new Set<string>();
   for (let i = 0; i < v.sig.length; i++) {
     const name = identifier(v.sig[i]);
-    if (name === null || v.sig[i - 1]?.text === '.' || v.sig[i + 1]?.text === '(') continue;
+    if (name === null || v.sig[i - 1]?.text === '.') continue;
+    const call = v.sig[i + 1]?.text === '(' && word(v.sig[i - 1]) !== 'into';
+    const qualified = v.sig[i + 1]?.text === '.' && ['word', 'quoted'].includes(v.sig[i + 2]?.kind ?? '');
     const table = context.tables?.[name];
-    if (table && table.toLowerCase() !== name) return { edits: [v.replace(i, i, table)] };
-    const schema = context.schemas?.[name];
-    if (schema && schema.toLowerCase() !== name && v.sig[i + 1]?.text === '.' && ['word', 'quoted'].includes(v.sig[i + 2]?.kind ?? '')) return { edits: [v.replace(i, i, schema)] };
+    if (table && !call && table.toLowerCase() !== name) return { edits: [v.replace(i, i, table)] };
+    const dataset = context.dataset;
+    if (!dataset || call || name === dataset.toLowerCase()) continue;
+    if (qualified && name === 'public') return { edits: [v.replace(i, i, dataset)] };
+    if (!tablePosition(v, i) || ctes.has(name) || name.startsWith('_') || context.tables?.[name]) continue;
+    if (qualified) return v.manual(`reads ${v.slice(i, i + 2)}: only the dataset's public tables have an Import name`, i, i + 2);
+    return { edits: [v.replace(i, i, `${dataset}.${v.sig[i].text}`)] };
   }
   return null;
 };
@@ -615,7 +643,7 @@ const MAX_REWRITES = 5000;
 
 /**
  * Translate one statement. `context.statement` says whether it is a query or
- * a mutation; `schemas`/`tables` carry the document converter's renames.
+ * a mutation; `dataset`/`tables` carry the document converter's renames.
  */
 export function translateSql(sql: string, context: TranslateContext): SqlTranslation {
   const refuse = (reason: string, start: number, end: number): SqlTranslation => ({ sql, notes: [], manual: [{ reason, start, end }] });
