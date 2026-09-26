@@ -11,12 +11,15 @@
  * checker must find the documents it strands.
  */
 import { describe, expect, it } from 'vitest';
-import type { DataflowState, Row, Scalar } from '@/lib/story/dataflow';
+import { type JsxNode } from '@/lib/jsx';
+import { splitHelmet } from '@/lib/story/helmet';
+import { queriesDependingOn, queriesReadingDatasets, type DataflowState, type Row, type Scalar } from '@/lib/story/dataflow';
+import { parseJsxOrThrow } from '@/test/helpers/jsx';
 import {
   accessSettled, createCore, pendingOf, step,
   type CoreEffect, type CoreEvent, type CoreState, type RunAnswer, type Versions,
 } from '../dataflow-core';
-import type { RuntimeGraph } from '../runtime-graph';
+import { graphOfDataflow, type RuntimeGraph } from '../runtime-graph';
 
 /** mulberry32: small, seedable, good enough to shuffle a schedule. */
 function prng(seed: number) {
@@ -214,5 +217,45 @@ describe('the runtime core under random interleavings', () => {
     const violations = SEEDS.map((seed) => scenario(seed, 'newest-run')).filter(Boolean);
     expect(violations.length).toBeGreaterThan(0);
     expect(violations.some((v) => /still pending at rest/.test(v!))).toBe(true);
+  });
+});
+
+/*
+ * The graph a parsed document becomes must make stale exactly what the
+ * store's text-level rules always re-ran: the queries a scalar feeds, and the
+ * readers of a dataset — transitively, through `_signals` and upstream queries.
+ */
+describe('graphOfDataflow', () => {
+  const parsed = parseJsxOrThrow('<Helmet>'
+    + '<Value name="region" type="string" />'
+    + '<Value name="min_rev" type="number" default={0} />'
+    + '<Value name="choice" type="string" default="a" />'
+    + '<Query name="sales" source="ref:abc123">{`select * from public.rows where region = $region and revenue >= $min_rev`}</Query>'
+    + '<Query name="top">{`select * from sales limit 1`}</Query>'
+    + '<Query name="signals">{`select * from _signals`}</Query>'
+    + '<Query name="mine">{`select $choice as c`}</Query>'
+    + '<Query name="stock" source="ref:zzzzzz">{`select * from public.rows`}</Query>'
+    + '<Query name="both">{`select * from top join stock on true`}</Query>'
+    + '<Mutation name="vote" source="ref:abc123">{`insert into public.rows (choice) values ($choice)`}</Mutation>'
+    + '</Helmet>');
+  const { content } = splitHelmet(parsed.nodes as JsxNode[]);
+  const flow = { values: content.values, queries: content.queries, mutations: content.mutations };
+  const rest = () => createCore(graphOfDataflow(flow), { state: { values: {}, tables: {}, errors: {}, mutationAccess: { vote: null } } });
+
+  it.each(['region', 'min_rev', 'choice'])('setting %s makes stale what queriesDependingOn names', (name) => {
+    const { state } = step(rest(), { type: 'set', values: { [name]: 'x' } });
+    expect([...pendingOf(state)].sort()).toEqual(queriesDependingOn(flow, [name]).sort());
+  });
+
+  it.each(['abc123', 'zzzzzz'])('a write to %s makes stale what queriesReadingDatasets names, and its write checks', (id) => {
+    const { state } = step(rest(), { type: 'sources', ids: [id] });
+    expect([...pendingOf(state)].sort()).toEqual(queriesReadingDatasets(flow, [id]).sort());
+    expect(accessSettled(state)).toBe(id !== 'abc123');
+  });
+
+  it('a membership change makes every query and every write check stale', () => {
+    const { state } = step(rest(), { type: 'sources', ids: ['_members'] });
+    expect([...pendingOf(state)].sort()).toEqual(flow.queries.map((q) => q.name).sort());
+    expect(accessSettled(state)).toBe(false);
   });
 });
