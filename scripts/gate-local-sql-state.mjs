@@ -85,7 +85,8 @@ const exercise = async (page, framed, documentId) => {
   check(validity.value === 'changed' && !validity.disabled && validity.valid && validity.formValid && !validity.submitDisabled,
     `Dialog field is filled, enabled, and valid before submit (${JSON.stringify(validity)})`);
   await frame.click('[aria-label="Save dialog"]');
-  await frame.waitForFunction(() => document.querySelector('[aria-label="Count"]')?.textContent === '1', null, {timeout:15_000});
+  // set= changes Count on the click; the Dialog closes once its run= write has committed.
+  await frame.waitForFunction(() => document.querySelector('[aria-label="Count"]')?.textContent === '1' && document.querySelector('[aria-label="Draft dialog"]')?.open === false, null, {timeout:15_000});
   check((await frame.locator('[aria-label="Draft dialog"]').evaluate(el => el.open)) === false && (await frame.textContent('[aria-label="Positive"]')) === 'positive', 'submit closes Dialog and set= drives && rendering');
   check(await frame.locator('[aria-label="Open dialog"]').evaluate(el => el === document.activeElement), 'successful submit restores focus to the trigger');
   await frame.click('[aria-label="Open dialog"]');
