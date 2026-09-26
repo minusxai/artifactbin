@@ -10,7 +10,7 @@ import sqlite3InitModule from '@sqlite.org/sqlite-wasm';
 export type Sqlite3 = Awaited<ReturnType<typeof sqlite3InitModule>>;
 
 // The package types its initializer without the Emscripten module argument it forwards.
-const init = sqlite3InitModule as unknown as (module?: { wasmBinary?: ArrayBuffer | Uint8Array }) => Promise<Sqlite3>;
+const init = sqlite3InitModule as unknown as (module?: { wasmBinary?: ArrayBuffer | Uint8Array; locateFile?: (path: string) => string }) => Promise<Sqlite3>;
 let fromPackage: Promise<Sqlite3> | null = null;
 /** Bytes a host supplied for the default module (a single-file binary cannot read the package's own file). */
 let supplied: ArrayBuffer | Uint8Array | null = null;
@@ -25,7 +25,11 @@ export function provideSqliteWasm(wasm: ArrayBuffer | Uint8Array): void {
 }
 
 async function start(wasmBinary?: ArrayBuffer | Uint8Array): Promise<Sqlite3> {
-  const sqlite3 = await init(wasmBinary ? { wasmBinary } : undefined);
+  // Supplied bytes are never fetched, but the module still names its wasm by
+  // resolving against `import.meta.url` — which a classic script (the offline
+  // file's inline bundle) does not have, and `new URL(…, undefined)` throws.
+  // Naming the file ourselves skips that resolution.
+  const sqlite3 = await init(wasmBinary ? { wasmBinary, locateFile: (path) => path } : undefined);
   // Failures reach the caller as errors; the library's own console warnings would only duplicate them.
   sqlite3.config.warn = () => {};
   return sqlite3;
