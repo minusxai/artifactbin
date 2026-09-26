@@ -305,7 +305,7 @@ export async function validateRefs(source: string, load: RefLoader): Promise<
  * chart bound to `data="$sales"` is checked against what `sales` really
  * yields).
  */
-export function validateVizAgainstColumns(viz: Record<string, unknown>, columns: DatasetColumn[], label: string): string[] {
+export function validateVizAgainstColumns(viz: Record<string, unknown>, columns: ReadonlyArray<Pick<DatasetColumn, 'name'>>, label: string): string[] {
   const kind = viz.kind;
   if (kind !== 'vega-lite' && kind !== 'vega') return [];
   const spec = viz.spec as Record<string, unknown> | undefined;
@@ -321,15 +321,19 @@ export function validateVizAgainstColumns(viz: Record<string, unknown>, columns:
   return out;
 }
 
+/** A result column as a binding check reads it: its type null when the compiler cannot tell it. */
+export type BoundColumn = Pick<DatasetColumn, 'name'> & { type: DatasetColumn['type'] | null };
+
 /**
- * recipe use: every declared slot bound; bound columns exist + match accepts.
+ * recipe use: every declared slot bound; bound columns exist + match accepts
+ * (a column of unknown type — no sample row reached it — is not judged by type).
  * `recipeLabel` names the recipe in diagnostics — `ref:<id>` for a viz
  * artifact, the registry id (`minusx/trend@1`) for a shipped recipe.
  */
 export function validateRecipeUse(
   viz: Record<string, unknown>,
   recipe: Pick<VizRecipeContent, 'bindings'>,
-  columns: DatasetColumn[] | null,
+  columns: readonly BoundColumn[] | null,
   recipeLabel: string,
 ): string[] {
   const out: string[] = [];
@@ -356,7 +360,7 @@ export function validateRecipeUse(
       const col = columns.find((x) => x.name === c);
       if (!col) {
         out.push(`recipe ${recipeLabel} slot "${slot.name}" binds "${c}" — not a dataset column (columns: ${columns.map((x) => x.name).join(', ')})`);
-      } else if (!slot.accepts.includes(colKind(col.type))) {
+      } else if (col.type !== null && !slot.accepts.includes(colKind(col.type))) {
         out.push(`recipe ${recipeLabel} slot "${slot.name}" accepts ${slot.accepts.join('|')} but "${c}" is ${colKind(col.type)} — change the query so "${c}" is ${slot.accepts.join(' or ')} (a cast such as cast("${c}" as text), or an aggregate), or bind another column`);
       }
     }
