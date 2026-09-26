@@ -128,6 +128,17 @@ describe('convertDocument', () => {
     expect(names({ abc123: 'Status' }, '<Value name="status" type="string" />')).toEqual(['status_2']);
   });
 
+  it('names the one untitled dataset of a document plainly data', () => {
+    const names = (titles: Record<string, string | null>, declared = '') => {
+      const refs = Object.keys(titles);
+      const doc = `<Helmet>${declared}${refs.map((ref, i) => `<Query name="q${i}" source="ref:${ref}">{\`select 1 from public.rows\`}</Query>`).join('')}</Helmet>`;
+      return convertDocument(doc, { importName: (ref) => titles[ref], kind: () => 'dataset' }).changes.filter((c) => c.rule === 'import').map((c) => c.declaration);
+    };
+    expect(names({ aaa111: null })).toEqual(['data']);
+    expect(names({ aaa111: null, sal001: 'Sales' })).toEqual(['data', 'sales']);
+    expect(names({ aaa111: null }, '<Value name="data" type="string" />')).toEqual(['data_2']);
+  });
+
   it('turns a literal-only _signals mutation into set= on every control that ran it', () => {
     golden(`<Helmet>
   <Value name="view" type="string" default="table" />

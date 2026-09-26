@@ -184,11 +184,18 @@ export function convertDocument(source: string, lookups: ConvertLookups): Docume
   const taken = new Set(declarations.map((el) => staticString(el, 'name')?.toLowerCase()).filter((n): n is string => !!n));
 
   // ── imports, in first-appearance order ─────────────────────────────────
+  // A document that reads exactly one dataset with no usable title calls it
+  // plainly `data` (`data.rows`); several untitled ones keep their ids apart.
+  const sourced = new Set(statements.map((el) => {
+    const value = el.attributes.find((a) => a.name === 'source')?.value;
+    return value?.static && typeof value.json === 'string' ? ARTIFACT_REFERENCE_PATTERN.exec(value.json)?.[1] : undefined;
+  }).filter((ref): ref is string => !!ref && lookups.kind(ref) !== 'postgres'));
+  const untitled = [...sourced].filter((ref) => !slug(lookups.importName(ref)));
   const imports = new Map<string, string>();
   const importFor = (ref: string): string => {
     const known = imports.get(ref);
     if (known) return known;
-    const base = slug(lookups.importName(ref)) ?? `data_${ref}`;
+    const base = slug(lookups.importName(ref)) ?? (untitled.length === 1 && untitled[0] === ref ? 'data' : `data_${ref}`);
     let name = base;
     for (let n = 2; taken.has(name.toLowerCase()); n++) name = `${base}_${n}`;
     taken.add(name.toLowerCase());
