@@ -86,7 +86,7 @@ describe('the booking document, on the server', () => {
     for (const d of [...stored!.queries, ...stored!.mutations]) expect(row.source!.slice(d.start, d.end)).toMatch(new RegExp(`^<(Query|Mutation) name="${d.name}"`));
     // A read uses the stored record: a loader that would be needed to compile again is never called.
     const refuse = async () => { throw new Error('recompiled on read'); };
-    expect(await readCompiledDataflow(row.meta, row.source!, refuse)).toEqual(stored);
+    expect(await readCompiledDataflow(row.meta, row.source!, refuse)).toEqual({ ok: true, compiled: stored });
   });
 
   it('answers its queries, books a slot as the owner, refuses a double booking, and cancels', async () => {

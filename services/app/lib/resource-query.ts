@@ -48,7 +48,9 @@ async function queryResource(actor:TokenActor,id:string,body:Record<string,unkno
   }
   if(body.sql!==undefined)return json({error:'invalid_query',hint:'Use --name for a declared document query; --input SQL applies to datasets.'},400);
   if(row.format!=='markup'&&row.format!=='folder')return json({error:'not_queryable'},400);
-  const flow=(await declarationsForRow(row))?.flow;const names=flow?.queries.map(query=>query.name)??[];
+  const declared=await declarationsForRow(row),flow=declared?.flow;
+  // A document that cannot run still has its queries: each answers why (lib/artifacts unrunnableDataflow).
+  const names=declared?.state?Object.keys(declared.state.errors):flow?.queries.map(query=>query.name)??[];
   if(body.name&&!names.includes(String(body.name)))return json({error:'unknown_query',names},400);
   const invalid=validateQueryValues(flow??{values:[]},parsed.values??{});if(invalid)return json({error:invalid.code,names:invalid.names},400);
   const selected=body.name?[String(body.name)]:names;

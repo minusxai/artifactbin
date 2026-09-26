@@ -69,10 +69,11 @@ import { COMPILED_DATAFLOW, finalizeArtifactMetadata, readCompiledDataflow, stor
 import { DATA_SYNTAX_META, hasCurrentDataSyntax, PREVIOUS_ENGINE, previousEngineRestore } from './story/data-syntax';
 import { inCurrentSyntax } from './migrate/sqlite/stored';
 import { convertArtifactNow } from './sqlite-syntax-migration';
-import { EMPTY_DATAFLOW, isEmptyDataflow, type Row, type Scalar } from '@/lib/story/dataflow';
+import { EMPTY_DATAFLOW, isEmptyDataflow, type QueryDecl, type Row, type Scalar } from '@/lib/story/dataflow';
 import { EMPTY_COMPILED_DATAFLOW, type CompiledDataflow, type CompiledMutation } from '@/lib/story/compiled-dataflow';
-import { compileWithLoader } from '@/lib/story/compile-dataflow';
+import { compileWithLoader, type CompileResult } from '@/lib/story/compile-dataflow';
 import { declarationsOf } from '@/lib/story/helmet';
+import type { ValidationError } from '@/lib/jsx';
 import { bindParams, bindTypes, dataRefs, importRef, initialTables, initialValues, mutationParams, mutationReads, mutationTargetRef, selectQueries, type ImportTables } from '@/lib/story/compiled-flow';
 import { bindMutationRequest } from '@/lib/story/mutation-request';
 import { HOLD_MAX_BYTES, HOLD_MAX_ROWS } from '@/lib/story/placement';
@@ -134,7 +135,7 @@ export interface ArtifactRow {
   /**
    * Not a column: set only on a SERVED row (lib/migrate/sqlite/stored
    * inCurrentSyntax) written for the previous query engine and not
-   * convertible without a person. Its dataflow is {@link previousEngineDataflow}.
+   * convertible without a person. Its dataflow is {@link unrunnableDataflow}.
    */
   previousEngine?: true;
   id: string;
@@ -2110,7 +2111,10 @@ export async function runDocumentMutation(
   receipt?: MutationReceipt,
 ): Promise<DocumentMutationOutcome> {
   if (doc.format !== 'markup' || !doc.source) return { ok: false, reason: 'unknown_mutation' };
-  const flow = await compiledForRow(doc);
+  const compiled = await compileResultForRow(doc);
+  // A document whose data does not compile runs nothing, and says why.
+  if (compiled && !compiled.ok) return { ok: false, reason: 'invalid_sql', detail: compileErrorText(compiled.errors) };
+  const flow = compiled?.compiled ?? null;
   const m = flow?.mutations.find((x) => x.name === request.mutation);
   if (!flow || !m) return { ok: false, reason: 'unknown_mutation' };
 
@@ -2195,17 +2199,29 @@ async function acceptedMembers(artifactId: string): Promise<Row[]> {
 }
 
 /**
- * A document's compiled dataflow: the record its publish stored, or — stale,
- * missing, compiled by an older compiler — a fresh compile under the
- * document's own reach (the author's scope, as every read resolves). Null when
- * the source no longer compiles.
+ * A document's compiled dataflow as the compiler answers it: the record its
+ * publish stored, or — stale, missing, compiled by an older compiler — a fresh
+ * compile under the document's own reach (the author's scope, as every read
+ * resolves), with the compiler's errors when the source no longer compiles.
+ * Null when there is nothing to compile: no source, a version written for the
+ * previous engine, or a source that does not parse.
  */
-export async function compiledForRow(stored: Pick<ArtifactRow, 'id' | 'version' | 'source' | 'meta' | 'token_id' | 'user_id' | 'previousEngine'>): Promise<CompiledDataflow | null> {
+async function compileResultForRow(stored: CompilableRow): Promise<CompileResult | null> {
   // What runs is the document in the current data syntax (lib/migrate/sqlite/stored).
   const row = await inCurrentSyntax(stored);
   if (!row.source || row.previousEngine) return null;
   return readCompiledDataflow(row.meta, row.source, schemaLoaderFor(refLoaderForActor(writerFor(row))));
 }
+type CompilableRow = Pick<ArtifactRow, 'id' | 'version' | 'source' | 'meta' | 'token_id' | 'user_id' | 'previousEngine'>;
+
+/** {@link compileResultForRow} for callers that only act on a document that compiles: null otherwise. */
+export async function compiledForRow(stored: CompilableRow): Promise<CompiledDataflow | null> {
+  const result = await compileResultForRow(stored);
+  return result?.ok ? result.compiled : null;
+}
+
+/** Compile errors as publish reports them, one per line: each names its declaration. */
+const compileErrorText = (errors: ValidationError[]): string => errors.map((e) => e.message).join('\n');
 
 /**
  * The documents in the owner's scope that WRITE this dataset, with the
@@ -2294,11 +2310,13 @@ export async function dataflowForRow(
 ): Promise<RanDataflow | null> {
   if (!stored.source) return null;
   const row = await inCurrentSyntax(stored);
-  if (row.previousEngine) return previousEngineDataflow(row);
+  const declared = await declarationsForRow(row);
+  // A document that cannot run arrives already answered (unrunnableDataflow).
+  if (declared?.state) return { ...declared, state: declared.state };
   // `viewer` absent is ANONYMOUS, deliberately — that is what the document's own
   // GET transport is, and it is the safe default for every caller that has no
   // session to hand over.
-  const flow = (await declarationsForRow(row))?.flow;
+  const flow = declared?.flow;
   const members = await acceptedMembers(row.id);
   const result = flow ? await runDeclaredDataflow(flow, datasetResolverForRow(row, opts.viewer ?? null), {...opts,members}) : null;
   // A document NAMES people when a user-typed value or column reaches it, and
@@ -2395,28 +2413,43 @@ async function mutationAccessFor(doc: ArtifactRow, flow: CompiledDataflow, state
  * render and an ~8ms one, and 231 KB of a 365 KB page.
  */
 /**
- * AN ARCHIVED VERSION WRITTEN FOR THE PREVIOUS QUERY ENGINE that the
- * migration's converter could not carry over (lib/archived-version): its
- * Values at their defaults and every query answering PREVIOUS_ENGINE, as state
- * that has already run — so nothing runs, and the reader never fetches the
- * head's rows under the same names. Declarations come from the Helmet; only
- * the Values are compiled, as nothing else in the old syntax would.
+ * A DOCUMENT THAT CANNOT RUN, as state that has already run: its Values at
+ * their defaults and every query answering why — so nothing runs, the reader
+ * never fetches, and no query is ever silent. Declarations come from the
+ * Helmet; only the Values are compiled. Two causes:
+ *  - an archived version written for the previous query engine that the
+ *    migration's converter could not carry over (lib/archived-version): every
+ *    query answers PREVIOUS_ENGINE, and the reader never fetches the head's
+ *    rows under the same names;
+ *  - a document whose data half does not compile (what it imports changed
+ *    shape since publish, or a conversion the compiler refuses): each query
+ *    answers with its own compile errors, or the document's when it has none —
+ *    by declaration name, as publish would have refused it.
  */
-async function previousEngineDataflow(row: Pick<ArtifactRow, 'source' | 'token_id' | 'user_id'>): Promise<RanDataflow | null> {
+async function unrunnableDataflow(row: Pick<ArtifactRow, 'source' | 'token_id' | 'user_id'>, answer: (query: QueryDecl) => string): Promise<RanDataflow | null> {
   const declared = declarationsOf(row.source ?? '');
   if (!declared || isEmptyDataflow(declared)) return null;
   const compiled = await compileWithLoader({ ...EMPTY_DATAFLOW, values: declared.values }, schemaLoaderFor(refLoaderForActor(writerFor(row))));
   const flow = compiled.ok ? compiled.compiled : EMPTY_COMPILED_DATAFLOW;
-  return { flow, state: { values: initialValues(flow), tables: initialTables(flow), errors: Object.fromEntries(declared.queries.map((q) => [q.name, PREVIOUS_ENGINE])) } };
+  return { flow, state: { values: initialValues(flow), tables: initialTables(flow), errors: Object.fromEntries(declared.queries.map((q) => [q.name, answer(q)])) } };
 }
 
-export async function declarationsForRow(stored: Pick<ArtifactRow, 'id' | 'version' | 'source' | 'meta' | 'token_id' | 'user_id' | 'previousEngine'>): Promise<StoryIslandDataflow | null> {
+/** A declaration's own compile errors (by source span), else the document's. */
+const errorsOf = (errors: ValidationError[]) => (declaration: { start: number; end: number }): string => {
+  const own = errors.filter((e) => e.start !== undefined && e.start >= declaration.start && (e.end ?? e.start) <= declaration.end);
+  return compileErrorText(own.length ? own : errors);
+};
+
+export async function declarationsForRow(stored: CompilableRow): Promise<StoryIslandDataflow | null> {
   const row = await inCurrentSyntax(stored);
-  if (row.previousEngine) return previousEngineDataflow(row);
-  try {
-    const flow = await compiledForRow(row);
-    return flow && !isEmptyCompiled(flow) ? { flow } : null;
-  } catch { return null; }
+  if (row.previousEngine) return unrunnableDataflow(row, () => PREVIOUS_ENGINE);
+  let result: CompileResult | null;
+  // Loading what the document imports can fail too (the store is unreachable): that is said, not swallowed.
+  try { result = await compileResultForRow(row); }
+  catch (error) { return unrunnableDataflow(row, () => `The document's data could not be compiled: ${error instanceof Error ? error.message : String(error)}`); }
+  if (!result) return null;
+  if (!result.ok) return unrunnableDataflow(row, errorsOf(result.errors));
+  return isEmptyCompiled(result.compiled) ? null : { flow: result.compiled };
 }
 
 /**
