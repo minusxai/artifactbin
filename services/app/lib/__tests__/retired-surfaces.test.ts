@@ -22,7 +22,7 @@ import { MARKUP_FIELD_GUIDANCE } from '@/lib/agent-guidance';
 import { buildQuickSheet, renderTree, skillTree } from '@/lib/skills';
 import { JSX_TIER_COMPONENTS } from '@/lib/story/jsx-tier';
 import { HELMET_TAG } from '@/lib/story/helmet';
-import { MUTATION_TAG, QUERY_TAG, VALUE_TAG } from '@/lib/story/dataflow';
+import { IMPORT_TAG, MUTATION_TAG, QUERY_TAG, VALUE_TAG } from '@/lib/story/dataflow';
 import teaching from '../../../cli/src/generated/teaching.json';
 
 const BASE = 'https://example.test';
@@ -121,7 +121,7 @@ describe('no teaching surface names a retired one', () => {
  * validation cannot drift apart.
  */
 describe('the components we promise to agents', () => {
-  const KNOWN = new Set<string>([...JSX_TIER_COMPONENTS, HELMET_TAG, VALUE_TAG, QUERY_TAG, MUTATION_TAG]);
+  const KNOWN = new Set<string>([...JSX_TIER_COMPONENTS, HELMET_TAG, IMPORT_TAG, VALUE_TAG, QUERY_TAG, MUTATION_TAG]);
   const AGENT_FACING = ['artifactbin/references/markup.md', 'artifactbin/references/markup-data.md', 'artifactbin/SKILL.md'];
   const rendered = (path: string) => renderTree(skillTree(), BASE).find(({ file }) => file.path === path)!.text;
   /** Capitalized JSX-shaped tags named in that prose: `<Name>`, `<Name …`, `</Name>`. */

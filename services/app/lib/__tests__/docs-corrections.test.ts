@@ -120,14 +120,16 @@ describe('the publishing skill', () => {
    * now names the flag that sets it.
    */
   it('every writable-dataset mention names the push flag that sets it', () => {
+    // A default dataset is already written by its owner's pages; the flag that opens it to everyone
+    // with the link belongs on the push that creates it, and the worked example uses exactly that.
     const datasets = renderDoc('artifactbin/references/publishing-datasets.md', BASE);
-    expect(datasets).toContain('--type dataset --access readwrite');
-    const editing = renderDoc('artifactbin/references/markup-editing.md', BASE);
-    const data = renderDoc('artifactbin/references/markup-data.md', BASE);
-    for (const text of [editing, data]) {
-      expect(text).toContain('--access readwrite');
-      expect(text).not.toMatch(/`access: readwrite`/);
+    expect(datasets).toContain('Add `--policy viewers-write` to the push that CREATES it');
+    const example = renderDoc('artifactbin/references/markup-data-example.md', BASE);
+    expect(example).toContain('afbin push bookings.yaml --policy viewers-write');
+    for (const path of ['markup-editing', 'markup-data', 'markup-data-example']) {
+      expect(renderDoc(`artifactbin/references/${path}.md`, BASE)).not.toMatch(/`access: readwrite`/);
     }
+    // A legacy read-only dataset still answers dataset_read_only, whose fix names the flag.
     expect(renderDoc('artifactbin/references/errors.md', BASE)).toContain('--access readwrite');
   });
   /*

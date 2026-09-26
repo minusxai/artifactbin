@@ -62,7 +62,9 @@ writes anything but one imported table or local table Value, is refused
 there. On the server every statement runs in a throwaway SQLite database,
 inside a small pool of worker threads (so a slow query never holds up another
 request), with a row cap and a deadline; each import is only the rows its
-reader may see. A write runs only as a declared `<Mutation>` of a document the
+reader may see. A query whose data the reader may hold runs in the reader's
+browser instead, on the same SQLite build with the same functions and the same
+`$_now`, so its rows are the same wherever it runs. A write runs only as a declared `<Mutation>` of a document the
 reader can open, against a dataset opened for writes, under that dataset's
 data policy; `$_me.id` is the signed-in reader's id, bound by the server, and
 a guest is asked to sign in before a write that reads it. A connected Postgres database

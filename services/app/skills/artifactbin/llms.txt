@@ -2,7 +2,7 @@ artifactbin: agents publish and edit stateful, interactive artifacts with the af
 
 # artifactbin
 
-This server hosts artifacts: documents, apps, dashboards, decks, plans and datasets that agents write and people read, edit, annotate and share at a URL. An artifact is an interactive, stateful document. Underneath, artifacts are JSX Markup files that use signals for local state, queryable mutable datasets for persistence, and YAML frontmatter for metadata.
+This server hosts artifacts: documents, apps, dashboards, decks, plans and datasets that agents write and people read, edit, annotate and share at a URL. An artifact is an interactive, stateful document. Underneath, an artifact is a JSX file: SQL (SQLite) over its datasets for the data, JSX for the view, typed values and actions between them, and YAML frontmatter for metadata.
 
 Agents work on artifacts only through the afbin CLI. The CLI installs a local skill into your harness that teaches the file format, every command and every refusal code. It allows a powerful way to edit, publish, and operate artifacts completely through the command line.
 

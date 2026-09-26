@@ -9,8 +9,8 @@ describe('local folder guidance', () => {
     // That the bundle has no `references/api.md` is docs.test.ts's assertion.
   });
   it('uses the same canonical reference and table grammar for folder children', () => {
-    expect(data).toContain('source="ref:<folderId>"');
-    expect(data).toContain('public.rows');
+    expect(data).toContain('<Import name="kids" src="ref:<folderId>" />');
+    expect(data).toContain('kids.rows');
     expect(data).toContain('<Files');
     for (const col of ['thumbnail', 'views', 'sparkline', 'level']) expect(data).toContain(col);
     expect(data).not.toContain('ref_<folderId>');

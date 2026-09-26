@@ -88,7 +88,8 @@ caps rule as the server pool. It is the only engine: the app, the CLI and the of
 - **The guard is SQLite's authorizer**, armed for every author statement and re-armed on any re-prepare: exactly one
   statement (the tail must prepare to nothing), a read is one SELECT, a write one INSERT/UPDATE/DELETE on its target
   and no RETURNING; PRAGMA, ATTACH/DETACH, DDL, transactions, ANALYZE, EXPLAIN are refused; functions are SQLite's
-  listed core set plus `SQL_FUNCTIONS`, and `MUTATION_ONLY_FUNCTIONS` are refused in reads; `sqlite_*`, `pragma_*`
+  listed core set (`CORE_FUNCTIONS`) plus `SQL_FUNCTIONS`, and `MUTATION_ONLY_FUNCTIONS` are refused in reads (the
+  skill's SQL reference renders its function lists from those same two sets); `sqlite_*`, `pragma_*`
   and every virtual table but `json_each`/`json_tree` are unreadable, as is any relation the call did not load.
   Values over 32 MiB and statements over 1 MB of text are refused; a deadline interrupts through the progress handler.
 - **Mutations are judged on their effect.** Engine-owned temp triggers (unguessable names) record the rows the
