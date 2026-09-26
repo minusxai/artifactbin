@@ -130,7 +130,7 @@ describe('runSqliteSyntaxMigrationBatch', () => {
     const report = await runSqliteSyntaxMigrationBatch(db, { batchSize: 10 });
     expect(report).toMatchObject({ processed: 2, done: true, cursor: 'bbbbbb' });
     const [conflict, plain] = report.documents;
-    expect(conflict).toMatchObject({ artifactId: 'aaaaaa', outcome: 'conflict', manual: [{ declaration: 'next', reason: expect.stringMatching(/expression/) }] });
+    expect(conflict).toMatchObject({ artifactId: 'aaaaaa', outcome: 'conflict', manual: [{ declaration: 'next', reason: expect.stringMatching(/computes step from page values/) }] });
     const span = conflict.manual![0];
     expect(NEEDS_A_PERSON.slice(span.start, span.end)).toContain('update _signals set step = step + 1');
     expect(await head('aaaaaa')).toMatchObject({ source: NEEDS_A_PERSON, version: 1 });

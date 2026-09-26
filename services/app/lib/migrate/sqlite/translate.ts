@@ -522,6 +522,37 @@ function term(v: View, range: Range): string {
 }
 
 /**
+ * `(values …) [as] t(a, b)` / `(select …) [as] t(a, b)` in FROM: SQLite names
+ * no columns at a derived table's alias, but a CTE takes a column list →
+ * `(with t(a, b) as (…) select * from t) as t`. DuckDB renamed only as many
+ * columns as the list names; a shorter list is a person's call.
+ */
+const derivedColumns: Rule = (v) => {
+  for (let i = 1; i < v.sig.length; i++) {
+    const first = word(v.sig[i + 1]);
+    if (v.sig[i]!.text !== '(' || (first !== 'values' && first !== 'select') || !tablePosition(v, i)) continue;
+    const close = v.pairs.get(i)!;
+    const k = word(v.sig[close + 1]) === 'as' ? close + 2 : close + 1;
+    const alias = v.sig[k];
+    if (!alias || !['word', 'quoted'].includes(alias.kind) || KEYWORDS.has(word(alias)) || v.sig[k + 1]?.text !== '(') continue;
+    const listClose = v.pairs.get(k + 1)!;
+    const names = v.items(k + 2, listClose - 1).length;
+    let columns: number | null = null;
+    if (first === 'values') columns = v.sig[i + 2]?.text === '(' ? v.items(i + 3, v.pairs.get(i + 2)! - 1).length : null;
+    else {
+      const start = ['distinct', 'all'].includes(word(v.sig[i + 2])) ? i + 3 : i + 2;
+      const end = v.find(start, close, ['from', 'where', 'group', 'order', 'limit', 'union', 'intersect', 'except']);
+      const items = v.items(start, (end < 0 ? close : end) - 1);
+      columns = items.some((item) => v.sig[item.to]!.text === '*') ? null : items.length;
+    }
+    if (columns === null) return v.manual('a derived table naming columns it does not show (select *)', i, listClose);
+    if (columns !== names) return v.manual(`a derived table that names ${names} of its ${columns} columns`, i, listClose);
+    return { edits: [v.replace(i, listClose, `(with ${alias.text}(${v.slice(k + 2, listClose - 1)}) as ${v.slice(i, close)} select * from ${alias.text}) as ${alias.text}`)] };
+  }
+  return null;
+};
+
+/**
  * `generate_series(a, b[, step])` / `range(…)` (which stops before b): as a
  * FROM item → date_series or a recursive CTE; anywhere else DuckDB built a
  * list, so → date_series itself, or the CTE gathered into a JSON list, null
@@ -924,6 +955,16 @@ const duckFunctions: Rule = (v) => {
         if (call.name === 'len') return v.manual('len() of a value that may be a list: DuckDB counts a list\'s items and a text\'s characters', call.at, call.close);
         continue;
       }
+      case 'lpad': case 'rpad': {
+        if (args.length !== 3) continue;
+        // DuckDB pads to the length, or cuts longer text to it; a literal length and fill spell the padding out.
+        const n = v.sig[call.args[1]!.from]!.kind === 'number' && call.args[1]!.from === call.args[1]!.to ? Number(args[1]) : NaN;
+        const fill = v.literal(call.args[2]);
+        if (!Number.isInteger(n) || n < 0 || !fill) return v.manual(`${call.name}() with a computed length or fill, or an empty fill`, call.at, call.close);
+        const padding = `substr('${fill.repeat(n).replaceAll("'", "''")}', 1, max(${n} - length(${args[0]}), 0))`;
+        const text = `substr(${args[0]}, 1, ${n})`;
+        return to(call.name === 'lpad' ? `${padding} || ${text}` : `${text} || ${padding}`);
+      }
       case 'bool_or': case 'bool_and':
         if (args.length !== 1) continue;
         return to(`${call.name === 'bool_or' ? 'max' : 'min'}((${args[0]}) <> 0)`);
@@ -1169,7 +1210,7 @@ const exclude: Rule = (v, context) => {
   return null;
 };
 
-const DUCKDB_RULES: Rule[] = [viewer, renames, dateArithmetic, typedLiterals, series, lambdas, dateAdd, intervals, castOperator, castFunction, tryCast, functions, duckFunctions, similarTo, distinctFrom, ilike, listLiterals, unnestFrom, unnest, qualify, compoundOrder, orderByOutput, exclude, integerDivision, division];
+const DUCKDB_RULES: Rule[] = [viewer, renames, dateArithmetic, typedLiterals, series, derivedColumns, lambdas, dateAdd, intervals, castOperator, castFunction, tryCast, functions, duckFunctions, similarTo, distinctFrom, ilike, listLiterals, unnestFrom, unnest, qualify, compoundOrder, orderByOutput, exclude, integerDivision, division];
 const POSTGRES_RULES: Rule[] = [viewer];
 /** More rewrites than any real statement needs: a rule that failed to remove its match. */
 const MAX_REWRITES = 5000;

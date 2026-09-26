@@ -146,7 +146,7 @@ describe('runMigration', () => {
     const real: SqliteSyntaxMigrationOutcome[] = [];
     expect(await runMigration(db, runSqliteSyntaxMigrationBatch, { batchSize: 2, dryRun: false }, (o) => real.push(...o))).toEqual({ batches: 2, documents: 3 });
     const text = conflictReport(real);
-    expect(text).toMatch(/^bbbbbb\n {2}manual next \[\d+-\d+\]: the _signals mutation .*expression/);
+    expect(text).toMatch(/^bbbbbb\n {2}manual next \[\d+-\d+\]: the _signals mutation computes s from page values/);
     expect(text.split('\n').at(-1)).toBe('documents 3: converted 0, unchanged 2, current 0, conflict 1');
   });
 });
