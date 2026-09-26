@@ -26,7 +26,7 @@ it('rejects malformed nested JSONB declarations, columns, spans and graph edges,
   for(const b of bad){
     const parsedArtifact={...record,compiled:b};
     expect(storedCompiledDataflow({parsedArtifact},source)).toBeNull();
-    expect(await readCompiledDataflow({parsedArtifact},source,async()=>null)).toEqual(compiled);
+    expect(await readCompiledDataflow({parsedArtifact},source,async()=>null)).toEqual({ok:true,compiled});
   }
   // Another source, or another compiler revision, is stale.
   expect(storedCompiledDataflow(meta,`${source} `)).toBeNull();
@@ -40,7 +40,7 @@ it('persists inline rows and reset, and round trips valid metadata without recom
   expect(compiled.mutations[0]).toMatchObject({target:{local:'ui'},reset:['choice']});
   const roundTrip=JSON.parse(JSON.stringify(meta));
   expect(storedCompiledDataflow(roundTrip,source)).toEqual(compiled);
-  expect(await readCompiledDataflow(roundTrip,source,refuse)).toEqual(compiled);
+  expect(await readCompiledDataflow(roundTrip,source,refuse)).toEqual({ok:true,compiled});
 });
 
 it('only the door can hand the commit a record: a JSON parsedArtifact on a new source is dropped',async()=>{

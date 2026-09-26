@@ -35,7 +35,7 @@ it('malformed, missing and stale manifest data is reconstructed from canonical s
   expect(storedCompiledDataflow({parsedArtifact:record},source)).toEqual(expected);
   for(const parsedArtifact of [null,{...record,schemaVersion:999},{...record,compiled:{values:'bad'}},{...record,sourceHash:'stale'},{...record,compilerRevision:'old'}]) {
     expect(storedCompiledDataflow({parsedArtifact},source)).toBeNull();
-    expect(await readCompiledDataflow({parsedArtifact},source,async()=>null)).toEqual(expected);
+    expect(await readCompiledDataflow({parsedArtifact},source,async()=>null)).toEqual({ok:true,compiled:expected});
   }
   expect(expected.queries.find((q)=>q.name==='b')!.reads.queries).toContain('a');
 });
