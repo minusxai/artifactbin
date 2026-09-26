@@ -29,7 +29,8 @@ describe('the registered library', () => {
   const EXTENSIONS = new Set(['bm25', 'fts5', 'fts5_get_locale', 'fts5_insttoken', 'fts5_locale', 'fts5_source_id', 'highlight', 'match', 'rtreecheck', 'rtreedepth', 'rtreenode', 'snippet']);
   it('is exactly the manifest: names, arities and kinds, as SQLite lists them', async () => {
     const engine = await loadSqlite();
-    const expected = SQL_FUNCTIONS.flatMap((f) => f.arity.map((n) => `${f.name}/${n}/${f.kind}`)).sort();
+    // Every library aggregate also runs over a window, which SQLite lists as its kind.
+    const expected = SQL_FUNCTIONS.flatMap((f) => f.arity.map((n) => `${f.name}/${n}/${f.kind === 'aggregate' ? 'window' : f.kind}`)).sort();
     const registered = engine.libraryFunctions().filter((f) => !EXTENSIONS.has(f.name));
     expect(registered.map((f) => `${f.name}/${f.arity}/${f.kind}`).sort()).toEqual(expected);
   });
@@ -99,6 +100,33 @@ describe('dates', () => {
       .toEqual({ before: '2026-03-29T00:30:00.000', after: '2026-03-29T02:30:00.000', ny: '2027-01-01T10:00:00.000', bound: '2026-09-30T06:30:00.000' });
     expect(await failure("select to_timezone('2026-09-30T10:30:00Z', 'Mars/Olympus')")).toMatch(/Mars\/Olympus/);
   });
+  it('builds a date from its parts, and fails on one the calendar does not have', async () => {
+    expect(await row('select make_date(2026, 9, 3) as d, make_date(2024.0, 2, 29) as leap')).toEqual({ d: '2026-09-03', leap: '2024-02-29' });
+    expect(await failure('select make_date(2026, 2, 30)')).toMatch(/make_date: 2026-02-30 is not a calendar date/);
+    expect(await failure('select make_date(2026, 1.5, 3)')).toMatch(/make_date: expected whole numbers/);
+  });
+  it('reads the calendar day a date or timestamp names, and fails on text that names none', async () => {
+    expect(await row(`select to_date('2026-09-30') as a, to_date('2026-9-3') as b, to_date('2026/09/30') as c, to_date(' 2026-09-30 ') as d,
+      to_date('2026-09-30T23:30:00.000Z') as e, to_date('2026-09-30 10:00:00') as f`))
+      .toEqual({ a: '2026-09-30', b: '2026-09-03', c: '2026-09-30', d: '2026-09-30', e: '2026-09-30', f: '2026-09-30' });
+    expect(await failure("select to_date('2026-09')")).toMatch(/to_date: 2026-09 is not a date/);
+    expect(await failure("select to_date('2026-02-30')")).toMatch(/to_date: 2026-02-30 is not a date/);
+  });
+});
+
+describe('text', () => {
+  it('splits text into a JSON list, and picks one part', async () => {
+    expect(await row(`select string_split('a,b,,c', ',') as parts, string_split('abc', '') as chars, string_split('', ',') as empty,
+      split_part('a/b/c', '/', 2) as second, split_part('a/b', '/', 5) as beyond, split_part('a/b/c', '/', -1) as last, split_part('a/b', '/', 0) as zero`))
+      .toEqual({ parts: '["a","b","","c"]', chars: '["a","b","c"]', empty: '[""]', second: 'b', beyond: '', last: 'c', zero: '' });
+  });
+});
+
+describe('round', () => {
+  it('rounds half away from zero on the scaled value, as the digits read', async () => {
+    expect(await row('select round(13.975, 2) as a, round(14.85, 1) as b, round(2.5) as c, round(-2.5) as d, round(123.456, -1) as e, round(1.005, 2) as f, round(7, 2) as g'))
+      .toEqual({ a: 13.98, b: 14.9, c: 3, d: -3, e: 120, f: 1, g: 7 });
+  });
 });
 
 describe('aggregates', () => {
@@ -111,6 +139,25 @@ describe('aggregates', () => {
     expect(result.rows[0]!.top).toBe(10);
     expect(result.rows[0]!.sd).toBeCloseTo(4.0311, 3);
     expect(await row('select median(x) as m, stddev(x) as s from (select 1 as x where 0)')).toEqual({ m: null, s: null });
+  });
+  const run = async (query: string, tables: Record<string, typeof table> = { t: table }) => {
+    const result = (await sql.run({ tables, params: {}, queries: [{ name: 'q', sql: query }] })).q!;
+    if (isQueryFailure(result)) throw new Error(result.error);
+    return result.rows;
+  };
+  it('population deviation, least-squares slope, and the argument at the least or greatest value, skipping incomplete rows', async () => {
+    const pairs = { rows: [{ y: 1, x: 1 }, { y: 2, x: 2 }, { y: 4, x: 3 }, { y: null, x: 5 }, { y: 7, x: null }, { y: 9, x: 3 }], columns: [{ name: 'y', type: 'number' as const }, { name: 'x', type: 'number' as const }] };
+    const [r] = await run('select stddev_pop(x) as p, regr_slope(y, x) as slope, arg_min(y, x) as ymin, arg_max(y, x) as ymax from p', { p: pairs });
+    expect(r!.p).toBeCloseTo(1.32665, 4);
+    expect(r!.slope).toBeCloseTo(2.909091, 5);
+    expect(r).toMatchObject({ ymin: 1, ymax: 4 });
+    expect(await row('select stddev_pop(x) as one from (select 5 as x)')).toEqual({ one: 0 });
+  });
+  it('median, quantile and stddev run as window functions over a moving frame', async () => {
+    const rows = await run('select x, median(x) over w as med, stddev(x) over w as sd, quantile(x, 0.5) over w as q from t where x is not null window w as (order by x rows between 1 preceding and current row)');
+    expect(rows.map((r) => [r.x, r.med, r.q])).toEqual([[1, 1, 1], [2, 1.5, 1.5], [4, 3, 3], [10, 7, 7]]);
+    expect(rows[0]!.sd).toBeNull();
+    expect(rows[3]!.sd).toBeCloseTo(4.2426, 3);
   });
 });
 
