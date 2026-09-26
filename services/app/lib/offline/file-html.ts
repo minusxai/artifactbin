@@ -3,27 +3,76 @@
  *
  * Used by the server at download and by the file's own Save, so a saved copy
  * is byte-for-byte the same shape as a downloaded one. The page is a static
- * shell with three blocks and no server-rendered markup:
+ * shell with no server-rendered markup:
  *
+ *  - right after the doctype, a plain-English note for a coding agent asked
+ *    to edit the file (artifactFileAgentNote), and in `<head>` the same
+ *    discovery tags every served page carries (lib/agent-discovery-tags) —
+ *    neither is fetched;
+ *  - `#afbin-file`  the ArtifactFile JSON (application/json, `<` escaped),
+ *    `source` its second key — FIRST, so a reader that stops early sees it;
  *  - `#afbin-code`  the offline bundle, gzip then base64 (application/octet-stream);
- *  - `#afbin-file`  the ArtifactFile JSON (application/json, `<` escaped);
  *  - a small inline boot script that gunzips `#afbin-code` with
  *    DecompressionStream and runs it as INLINE script text.
  *
  * No Blob URLs, workers or module scripts: Chromium and WebKit refuse them
  * from file:// (probed 2026-09-26). The meta CSP forbids every network
- * request, so a forgotten fetch fails closed instead of calling home.
+ * request but one — code view's extras script from the file's own origin
+ * (lib/offline/extras) — so a forgotten fetch fails closed instead of calling home.
  */
+import { agentDiscovery, agentDiscoveryHead, afbinInstallCommand } from '@/lib/agent-discovery-tags';
 import { ArtifactFileError, parseArtifactFile, type ArtifactFile } from './file-format';
 
+/** The file's origin as a CSP source (scheme://host[:port]), or null when it is not an http(s) origin. */
+function cspOrigin(origin: string): string | null {
+  try {
+    const url = new URL(origin);
+    return url.protocol === 'https:' || url.protocol === 'http:' ? url.origin : null;
+  } catch {
+    return null;
+  }
+}
+
 /**
+ * The file's Content-Security-Policy. Nothing may be fetched — `connect-src`
+ * falls back to `default-src 'none'` — except ONE kind of script: code view's
+ * extras, from the origin the file came from (and only by an SRI-pinned tag
+ * lib/offline/extras inserts when code view is first opened).
+ *
  * No `'unsafe-eval'`: charts evaluate Vega expressions with vega-interpreter,
  * and no served app page allows eval either. Measured by
  * scripts/gate-offline-file.mjs, which counts `securitypolicyviolation`
  * events in Chromium, Firefox and WebKit (zero with this policy).
  */
-export const ARTIFACT_FILE_CSP =
-  "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:; font-src data:; media-src data:";
+export function artifactFileCsp(origin: string): string {
+  const scripts = ["'unsafe-inline'", cspOrigin(origin)].filter(Boolean).join(' ');
+  return `default-src 'none'; script-src ${scripts}; style-src 'unsafe-inline'; img-src data:; font-src data:; media-src data:`;
+}
+
+/**
+ * An HTML comment's text that cannot end (or nest) the comment, whatever a
+ * title holds: `-->`, `--!>` and `<!--` all need two dashes in a row.
+ */
+const commentSafe = (text: string) => text.replace(/-(?=-)/g, '- ');
+
+/**
+ * The note an agent reads first: what the file is and how to edit it
+ * correctly — change the top-level `source` and nothing else. Every claim is
+ * what the file really does (lib/offline/file-backend's rebuildArtifactFile,
+ * components/offline/OfflineApp's banner); pinned by file-html.ui.test.
+ */
+export function artifactFileAgentNote(file: Pick<ArtifactFile, 'origin' | 'liveUrl' | 'metadata'>): string {
+  const help = agentDiscovery(file.origin);
+  // The title as the JSON below writes it (quoted, `<` as \u003c): a title is the author's text, never markup here.
+  const title = JSON.stringify(file.metadata.title).replace(/</g, '\\u003c');
+  return `artifactbin offline file for ${title} (${file.liveUrl}). `
+    + 'To edit the document, change the top-level "source" string (the second key) in the <script id="afbin-file"> JSON below. '
+    + `It is artifactbin JSX (reference: ${help.url}; the afbin CLI: ${afbinInstallCommand(file.origin)}, then "afbin help markup"). `
+    + 'Keep the JSON valid and write "<" as \\u003c inside it. '
+    + 'Leave "#afbin-code" untouched. '
+    + 'The file rebuilds everything else from "source" when it is opened, and shows validation errors if the markup is invalid. '
+    + 'Comments are in "threads".';
+}
 
 export interface ArtifactFileParts {
   file: ArtifactFile;
@@ -74,14 +123,17 @@ const BASE64 = /^[A-Za-z0-9+/]*={0,2}$/;
 /** The complete `.html` text for these parts. Pure; safe for any JSON content (no `</script>` break-out). */
 export function renderArtifactFileHtml(parts: ArtifactFileParts): string {
   if (!BASE64.test(parts.code)) throw new ArtifactFileError('The offline bundle is not base64.');
-  const title = escapeHtml(parts.file.metadata.title);
-  return '<!doctype html>\n<html lang="en">\n<head>\n<meta charset="utf-8">\n'
-    + `<meta http-equiv="Content-Security-Policy" content="${escapeHtml(ARTIFACT_FILE_CSP)}">\n`
+  const { file } = parts;
+  const title = escapeHtml(file.metadata.title);
+  // `source` right after `format`: the first "source" in the text is the one to edit, not `base.source`.
+  const { format, source, ...rest } = file;
+  return `<!doctype html>\n<!-- ${commentSafe(artifactFileAgentNote(file))} -->\n<html lang="en">\n<head>\n<meta charset="utf-8">\n`
+    + `<meta http-equiv="Content-Security-Policy" content="${escapeHtml(artifactFileCsp(file.origin))}">\n`
     + '<meta name="viewport" content="width=device-width,initial-scale=1">\n'
-    + `<title>${title}</title>\n<style>${BOOT_CSS}</style>\n</head>\n<body>\n`
+    + `<title>${title}</title>\n${agentDiscoveryHead(agentDiscovery(file.origin))}\n<style>${BOOT_CSS}</style>\n</head>\n<body>\n`
     + `<div id="${ARTIFACT_FILE_IDS.root}"><p id="${ARTIFACT_FILE_IDS.boot}" role="status">Opening ${title}\u2026</p></div>\n`
+    + `<script type="application/json" id="${ARTIFACT_FILE_IDS.file}">${scriptSafeJson({ format, source, ...rest })}</script>\n`
     + `<script type="application/octet-stream" id="${ARTIFACT_FILE_IDS.code}">${parts.code}</script>\n`
-    + `<script type="application/json" id="${ARTIFACT_FILE_IDS.file}">${scriptSafeJson(parts.file)}</script>\n`
     + `<script>${ARTIFACT_FILE_BOOT}</script>\n</body>\n</html>\n`;
 }
 

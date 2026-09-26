@@ -30,13 +30,13 @@ import { isWebUrl } from '@/lib/story/asset-url';
 import type { Dataflow, DataflowState, QueryDecl } from '@/lib/story/dataflow';
 import { createDocumentGraph, graphNodes, graphSource, type GraphAstNode } from '@/lib/story/document-graph';
 import { applyGraphPatch } from '@/lib/story/document-graph-patch';
-import { needsAuthoringContext } from '@/lib/story/document-update-client';
+import { needsAuthoringContext, prepareClientDocumentReplacement } from '@/lib/story/document-update-client';
 import { documentAfterOperation } from '@/lib/story/document-update-history';
 import { sourcePathToBodyPath } from '@/lib/story/edit-compose';
 import { collectExternalAssetUrls } from '@/lib/story/external-images';
 import { storyUpdateParts } from '@/lib/story/update-parts';
 import {
-  OFFLINE_ASSET_REASON, OFFLINE_QUERY_REASON, type ArtifactFile, type ArtifactFileEdit,
+  OFFLINE_ASSET_REASON, OFFLINE_QUERY_REASON, sourceDigest, type ArtifactFile, type ArtifactFileEdit,
 } from './file-format';
 import { createSnapshotTransport } from './snapshot-transport';
 
@@ -74,22 +74,41 @@ const ASSET_ADDRESS = /\/assets\/([0-9a-f]{64})(?:\?[^\s"'()<>,\\]*)?/g;
  * The `data:` URI the download inlined for each web asset, recovered by walking
  * the file's own island beside the same source rendered with every web URL
  * mapped to its `/assets/<hash>` address (the editor's own mapping, HELD
- * assets = every web URL). The two trees have one shape; only those values differ.
+ * assets = every web URL). The two trees have one shape when the island was
+ * built from this source; only those values differ. When it was NOT (the
+ * source was changed outside the file), elements are matched by their node
+ * `id` first, so an image that moved still finds its bytes, and a pair whose
+ * tag or id disagrees is never read.
  */
 function inlinedAssets(source: string, island: JsxNode[]): Map<string, string> {
   const found = new Map<string, string>();
   const mapped = storyUpdateParts(source, isWebUrl)?.nodes;
   if (!mapped) return found;
+  const idOf = (node: JsxElement): string | null => {
+    const value = node.attributes.find((a) => a.name === 'id')?.value;
+    return value?.static && typeof value.json === 'string' ? value.json : null;
+  };
+  const byId = new Map<string, JsxElement>();
+  const index = (nodes: JsxNode[]) => { for (const node of nodes) if (node.type === 'element') { const id = idOf(node); if (id && !byId.has(id)) byId.set(id, node); index(node.children); } };
+  index(island);
+  const read = (x: JsxElement, y: JsxElement) => {
+    for (const attr of x.attributes) {
+      if (!attr.value.static || typeof attr.value.json !== 'string') continue;
+      const other = y.attributes.find((candidate) => candidate.name === attr.name)?.value;
+      if (!other?.static || typeof other.json !== 'string' || !other.json.startsWith('data:')) continue;
+      for (const match of attr.value.json.matchAll(ASSET_ADDRESS)) found.set(match[1]!, other.json);
+    }
+  };
   const pair = (a: JsxNode[], b: JsxNode[]) => {
-    for (let i = 0; i < Math.min(a.length, b.length); i++) {
-      const x = a[i]!, y = b[i]!;
-      if (x.type !== 'element' || y.type !== 'element') continue;
-      for (const attr of x.attributes) {
-        if (!attr.value.static || typeof attr.value.json !== 'string') continue;
-        const other = y.attributes.find((candidate) => candidate.name === attr.name)?.value;
-        if (!other?.static || typeof other.json !== 'string' || !other.json.startsWith('data:')) continue;
-        for (const match of attr.value.json.matchAll(ASSET_ADDRESS)) found.set(match[1]!, other.json);
-      }
+    for (let i = 0; i < a.length; i++) {
+      const x = a[i]!;
+      if (x.type !== 'element') continue;
+      const id = idOf(x);
+      const positional = b[i];
+      const y = (id ? byId.get(id) : undefined)
+        ?? (positional?.type === 'element' && positional.tag === x.tag && idOf(positional) === id ? positional : undefined);
+      if (!y || y.tag !== x.tag) continue;
+      read(x, y);
       pair(x.children, y.children);
     }
   };
@@ -261,12 +280,113 @@ function unranQueries(flow: Dataflow, ran: Dataflow): Set<string> {
   return new Set(flow.queries.filter((q) => !sameQuery(before.get(q.name), q)).map((q) => q.name));
 }
 
+// ── what a source derives: exactly what a commit rebuilds ──────────────────
+
+/** The same stylesheet, whatever its url()s point at (the download inlined them as data: URIs). */
+const styleShape = (css: string | null) => css === null ? null : css.replace(/url\(\s*(['"]?)[^)'"]*\1\s*\)/g, 'url()');
+
+/**
+ * The island and stylesheets `source` derives, as a commit derives them: the
+ * body and dataflow from the one update-parts builder, web images given back
+ * the bytes the file carries, the Tailwind sheet compiled in the browser
+ * (`css`: when the classes may have changed), the author's `<style>` taken
+ * from the source unless it is the one the file already has inlined.
+ */
+async function derive(
+  file: ArtifactFile, source: string, metadata: ArtifactFile['metadata'], assets: ReadonlyMap<string, string>,
+  { css, priorStyle }: { css: boolean; priorStyle: (style: string | null) => boolean },
+): Promise<Pick<ArtifactFile, 'css' | 'island' | 'derivedFrom'>> {
+  const parts = storyUpdateParts(source, isWebUrl);
+  const compiled = css || !file.css.compiled ? await compileStoryCss(source, { force: true }) : file.css.compiled;
+  const island: StoryIslandData = {
+    ...file.island,
+    ...(parts ? { nodes: withInlinedAssets(parts.nodes, assets) } : {}),
+    ...(metadata.colorMode ? { colorMode: metadata.colorMode } : {}),
+  };
+  if (parts) {
+    const flow = parts.flow;
+    if (flow.values.length || flow.queries.length || flow.mutations?.length) island.dataflow = { ...(file.island.dataflow ?? {}), flow };
+    else delete island.dataflow;
+  }
+  const style = parts?.authorCss ?? null;
+  return {
+    css: { ...file.css, compiled, author: priorStyle(style) ? file.css.author : style },
+    island,
+    derivedFrom: sourceDigest(source),
+  };
+}
+
+/** The journal line for a source changed outside the file (by hand, or by an agent), rebuilt when it was opened. */
+export const CHANGED_OUTSIDE = 'Changed outside the file';
+
+/** True when `source` is not the one the island and stylesheets were built from. */
+export function sourceChangedOutside(file: ArtifactFile): boolean {
+  return typeof file.derivedFrom === 'string' && sourceDigest(file.source) !== file.derivedFrom;
+}
+
+export interface RebuildResult {
+  /** The file to open: rebuilt from its source, or unchanged when that could not be done. */
+  file: ArtifactFile;
+  /** True when `file` differs from the file as it was stored (and wants saving). */
+  rebuilt: boolean;
+  /** Why the changed source could not be used — the validator's words; the file keeps its last good render. */
+  error: string | null;
+}
+
+/**
+ * When the file was opened with a source changed outside it: validate that
+ * source as a commit does (the browser's own document-update compiler — parse,
+ * repair, canonical form, node ids, structure and scope) and refuse what needs
+ * artifactbin as a commit in the file does, then rebuild everything derived
+ * from it and add CHANGED_OUTSIDE to the journal. A source that fails leaves the
+ * file exactly as it is, with the reason.
+ */
+export async function rebuildArtifactFile(file: ArtifactFile, author: string | null = null): Promise<RebuildResult> {
+  if (!sourceChangedOutside(file)) return { file, rebuilt: false, error: null };
+  const version = file.base.version + file.journal.length;
+  let source: string;
+  try {
+    const update = prepareClientDocumentReplacement(file.source, version);
+    source = update.replacement ? graphSource(update.replacement) : file.source;
+  } catch (error) {
+    return { file, rebuilt: false, error: error instanceof Error && error.message ? error.message : 'The source is not valid.' };
+  }
+  if (needsAuthoringContext(source)) {
+    /*
+     * What the download could resolve: the inputs its source named (every
+     * commit in the file was held to those, so any source it saved names no
+     * more), and the refs its island carries.
+     */
+    const have = authoringInputs(file.base.source);
+    for (const id of Object.keys(file.island.refData ?? {})) have.add(`ref:ref:${id}`);
+    for (const input of authoringInputs(source)) if (!have.has(input)) return { file, rebuilt: false, error: OFFLINE_ASSET_REASON };
+  }
+  const derived = await derive(file, source, file.metadata, inlinedAssets(source, file.island.nodes), {
+    css: true,
+    // The source is all there is to go on: keep the inlined sheet only when it is the same sheet.
+    priorStyle: (style) => styleShape(style) === styleShape(file.css.author),
+  });
+  const entry: ArtifactFileEdit = { at: new Date().toISOString(), by: author?.trim() || UNNAMED_AUTHOR, summary: CHANGED_OUTSIDE };
+  return { file: { ...file, source, ...derived, journal: [...file.journal, entry] }, rebuilt: true, error: null };
+}
+
 // ── the backend ─────────────────────────────────────────────────────────────
 
 export function createFileBackend(initial: ArtifactFile, hooks: FileBackendHooks): ArtifactBackend {
   let file = initial;
-  /** ONE graph for the life of the page: its internal keys are minted once, and every patch names them. */
-  let graph = createDocumentGraph(file.source, file.base.version + file.journal.length, { preserveSource: true });
+  /**
+   * ONE graph for the life of the page: its internal keys are minted once, and
+   * every patch names them. Null for a source that does not parse (changed
+   * outside the file and not rebuilt): the page offers no editing then, and
+   * the document requests below say why.
+   */
+  let unreadable: string | null = null;
+  let graph = ((): DocumentGraph => {
+    try { return createDocumentGraph(file.source, file.base.version + file.journal.length, { preserveSource: true }); } catch (error) {
+      unreadable = error instanceof Error && error.message ? error.message : 'The source does not parse.';
+      return createDocumentGraph('', file.base.version + file.journal.length);
+    }
+  })();
   let version = file.base.version + file.journal.length;
   let editId = file.journal.length || !file.base.editId ? `offline-${version}` : file.base.editId;
   /** What the snapshot was taken over — the declarations the download ran. */
@@ -315,9 +435,13 @@ export function createFileBackend(initial: ArtifactFile, hooks: FileBackendHooks
     unavailable: (feature) => OFFLINE_REASONS[feature],
 
     // ── the document ──────────────────────────────────────────────────────
-    async load() { return head(); },
+    async load() {
+      if (unreadable) throw new BackendRequestError(unreadable, 422);
+      return head();
+    },
 
     async commitEdit({ document_update: update }) {
+      if (unreadable) return { ok: false, status: 422, body: { error: 'invalid_jsx', details: [{ message: unreadable }] } as unknown as FlushResponse };
       const nothing = !update.whole && !Object.keys(update.patch.updated).length && !Object.keys(update.patch.inserted).length
         && !update.patch.removed.length && !Object.keys(update.metadata ?? {}).length;
       if (nothing) return { ok: false, status: 400, body: { error: 'bad_diff', detail: 'identical' } as FlushResponse };
@@ -341,31 +465,13 @@ export function createFileBackend(initial: ArtifactFile, hooks: FileBackendHooks
         else if (key === 'theme' || key === 'template') metadata[key] = (value as string | null) ?? null;
         else if (key === 'colorMode') metadata.colorMode = (value as 'light' | 'dark' | null) ?? null;
       }
-      const parts = storyUpdateParts(source, isWebUrl);
-      const compiled = update.effects.css || !file.css.compiled ? await compileStoryCss(source, { force: true }) : file.css.compiled;
       const priorStyle = storyUpdateParts(file.source)?.authorCss ?? null;
-      const island: StoryIslandData = {
-        ...file.island,
-        ...(parts ? { nodes: withInlinedAssets(parts.nodes, assets) } : {}),
-        ...(metadata.colorMode ? { colorMode: metadata.colorMode } : {}),
-      };
-      if (parts) {
-        const flow = parts.flow;
-        if (flow.values.length || flow.queries.length || flow.mutations?.length) island.dataflow = { ...(file.island.dataflow ?? {}), flow };
-        else delete island.dataflow;
-      }
+      const derived = await derive(file, source, metadata, assets, { css: update.effects.css, priorStyle: (style) => style === priorStyle });
       const entry: ArtifactFileEdit = { at: now(), by: author(), summary: editSummary(graph, next, update, metadata.title) };
       graph = next;
       version += 1;
       editId = `offline-${version}-${globalThis.crypto.randomUUID().slice(0, 8)}`;
-      change({
-        ...file,
-        source,
-        metadata,
-        css: { ...file.css, compiled, author: parts?.authorCss === priorStyle ? file.css.author : parts?.authorCss ?? null },
-        island,
-        journal: [...file.journal, entry],
-      });
+      change({ ...file, source, metadata, ...derived, journal: [...file.journal, entry] });
       return {
         ok: true,
         status: 200,

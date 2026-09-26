@@ -54,6 +54,18 @@ export interface ArtifactFileCss {
   author: string | null;
 }
 
+/**
+ * Where the file's extras (Monaco and prettier, lib/offline/extras) are served
+ * on `origin`, and their SRI hash: fixed at download, so a saved copy keeps
+ * pointing at the same bytes.
+ */
+export interface ArtifactFileExtras {
+  /** `/offline/extras-<hash>.js`, on the file's `origin`. */
+  path: string;
+  /** `sha384-<base64>`, the `integrity` the file loads them with. */
+  integrity: string;
+}
+
 export interface ArtifactFile {
   format: typeof ARTIFACT_FILE_FORMAT;
   /** Where the file came from, e.g. https://app.artifactbin.dev. */
@@ -94,6 +106,35 @@ export interface ArtifactFile {
   localIds: string[];
   /** Which offline bundle this file carries. */
   bundle: 'core' | 'mermaid';
+  /** Code view's Monaco and prettier, loaded on demand; absent in a file that cannot load them. */
+  extras?: ArtifactFileExtras | null;
+  /**
+   * sourceDigest() of the `source` that `island`, `css.compiled` and
+   * `css.author` were built from. When `source` no longer matches it, the
+   * source was changed outside the file (by hand, or by an agent) and the file
+   * rebuilds the rest from it when it is opened (lib/offline/file-backend's
+   * rebuildArtifactFile). Absent: trusted as consistent.
+   */
+  derivedFrom?: string;
+}
+
+/**
+ * A short, stable fingerprint of a source text — FNV-1a over its UTF-16 code
+ * units, two independent 32-bit lanes. Not a security boundary (whoever can
+ * edit the file can edit this too): it only notices that `source` was changed
+ * by something that did not rebuild the rest. Synchronous and dependency-free,
+ * so the server, the file and a test compute it the same way.
+ */
+export function sourceDigest(source: string): string {
+  let a = 0x811c9dc5, b = 0x9e3779b9 ^ source.length;
+  for (let i = 0; i < source.length; i++) {
+    const c = source.charCodeAt(i);
+    a = Math.imul(a ^ c, 0x01000193);
+    b = Math.imul(b ^ c, 0x5bd1e995);
+    b ^= b >>> 15;
+  }
+  const hex = (n: number) => (n >>> 0).toString(16).padStart(8, '0');
+  return `fnv1a:${hex(a)}${hex(b)}`;
 }
 
 export class ArtifactFileError extends Error {}
@@ -117,6 +158,8 @@ const isRecordOf = (v: unknown, ok: (x: unknown) => boolean) => isObject(v) && O
 const isTable = (v: unknown) => isObject(v) && Array.isArray(v.rows) && Array.isArray(v.columns);
 const isState = (v: unknown) => isObject(v) && isObject(v.values) && isRecordOf(v.tables, isTable) && isRecordOf(v.errors, isString);
 const isVariant = (v: unknown) => isObject(v) && isObject(v.values) && isRecordOf(v.tables, isTable) && isRecordOf(v.errors, isString);
+const isExtras = (v: unknown) => v === undefined || v === null
+  || (isObject(v) && isString(v.path) && /^\/offline\/extras-[0-9a-f]+\.js$/.test(v.path) && isString(v.integrity) && /^sha384-[A-Za-z0-9+/]+={0,2}$/.test(v.integrity));
 const isEdit = (v: unknown) => isObject(v) && isString(v.at) && isString(v.by) && isString(v.summary);
 
 /**
@@ -141,7 +184,9 @@ function isWellFormed(v: Json): boolean {
     && Array.isArray(v.journal) && v.journal.every(isEdit)
     && Array.isArray(v.threads) && v.threads.every(isObject)
     && isStringList(v.localIds)
-    && (v.bundle === 'core' || v.bundle === 'mermaid');
+    && (v.bundle === 'core' || v.bundle === 'mermaid')
+    && isExtras(v.extras)
+    && (v.derivedFrom === undefined || isString(v.derivedFrom));
 }
 
 /**

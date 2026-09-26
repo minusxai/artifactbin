@@ -14,9 +14,8 @@
 import {readFileSync} from 'node:fs';
 import path from 'node:path';
 import {escapeHtml} from './story/reader-chrome';
-/** `url` is the help link (the one-pager); `instruction` is the afbin meta content, on the caller's base. */
-export interface AgentDiscovery {url:string;instruction:string}
-export const AGENT_HELP_TITLE='Agents: read this to create, edit, or operate artifacts on the CLI using afbin';
+import {AGENT_HELP_TITLE,agentDiscoveryHead,type AgentDiscovery} from './agent-discovery-tags';
+export {AGENT_HELP_TITLE,agentDiscovery,agentDiscoveryHead,type AgentDiscovery} from './agent-discovery-tags';
 const BASE_TAG='[[ base ]]';
 let source:string|null=null;
 function llmsSource():string{
@@ -27,13 +26,6 @@ const origin=(base:string)=>base.replace(/\/$/,'');
 export function agentBlurb():string{return llmsSource().split('\n')[0]!.trim();}
 /** The served one-pager, on the caller's base. */
 export function llmsText(base:string):string{return llmsSource().split(BASE_TAG).join(origin(base));}
-export function agentDiscovery(base:string):AgentDiscovery{
- const o=origin(base);
- return {url:`${o}/llms.txt`,instruction:`afbin: a CLI to operate artifacts. Install: curl -fsSL ${o}/chat/install.sh | sh; Windows: /chat/install.ps1 (PowerShell)`};
-}
-export function agentDiscoveryHead(help:AgentDiscovery):string{
- return `<link rel="help" href="${escapeHtml(help.url)}" title="${AGENT_HELP_TITLE}"><meta name="afbin" content="${escapeHtml(help.instruction)}">`;
-}
 /** The pointer again, as the page's last line: what a tail-keeping reader sees. */
 export function agentDiscoveryTail(help:AgentDiscovery):string{
  return `<!-- ${AGENT_HELP_TITLE}: ${escapeHtml(help.url)}. ${escapeHtml(help.instruction)} -->`;

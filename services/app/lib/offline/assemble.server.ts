@@ -39,7 +39,8 @@ import { displayTitle } from '@/lib/story/title';
 import { getUserById } from '@/lib/users';
 import { webAssetByHash, webAssetsForSource } from '@/lib/web-assets';
 import { webFontObjectKey } from '@/lib/webfonts';
-import { ARTIFACT_FILE_FORMAT, type ArtifactFile } from './file-format';
+import { offlineExtrasRef } from './bundle.server';
+import { ARTIFACT_FILE_FORMAT, sourceDigest, type ArtifactFile } from './file-format';
 import { precomputeVariants, valueDomains, type VariantCaps } from './variants';
 
 /** The largest offline file the server will assemble. */
@@ -313,6 +314,9 @@ export async function assembleArtifactFile(input: AssembleArtifactFileInput): Pr
     journal: [],
     localIds: [],
     bundle: /<Mermaid[\s/>]/.test(source) ? 'mermaid' : 'core',
+    extras: await offlineExtrasRef(),
+    // The island and stylesheets above were built from exactly this source.
+    derivedFrom: sourceDigest(source),
   };
   const bytes = Buffer.byteLength(JSON.stringify(file));
   return bytes > maxFileBytes ? tooLarge(bytes) : file;

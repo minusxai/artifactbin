@@ -6,10 +6,26 @@
  *
  * ONE entry, TWO bundles, because Mermaid alone is about as large as
  * everything else together and most documents draw no diagram:
- *  - `core`    everything but Mermaid and maps;
+ *  - `core`    everything but Mermaid, maps, Monaco and prettier;
  *  - `mermaid` core plus Mermaid.
  * Maps (deck.gl, MapLibre, h3-js) are stubbed in both: an offline file draws a
  * "Needs a connection" stand-in for them (components/offline/OfflineApp).
+ *
+ * And a THIRD artifact the file does not carry: `extras`
+ * (lib/offline/extras-entry) — Monaco for code view and prettier for "View
+ * formatted", ~1.2 MB a reader who never opens code view should not download.
+ * It is a classic IIFE with NO React that sets `globalThis.__afbinExtras`;
+ * in core and mermaid every monaco-editor and prettier import is stubbed to
+ * read that global back, and the modules that import them (SourceEditor,
+ * format-jsx-preview) are only reached through a dynamic import, which this
+ * non-splitting build evaluates lazily — after lib/offline/extras has loaded
+ * the script. It is written as `extras-<hash>.js` beside the bundles, served
+ * immutable at `/offline/extras-<hash>.js` (server/app.ts), and the manifest
+ * records its SRI hash (sha384) for the file's `<script integrity>`. Only the
+ * current build's extras are kept: an older hash is pruned here, and a file
+ * that still names it falls back to the plain editor.
+ * The build FAILS if Monaco or prettier reach core or mermaid, or React
+ * reaches extras.
  *
  * The shape is forced by file://, probed in Chromium, Firefox and WebKit:
  * modules, chunk loading, Blob-URL scripts and workers are refused there, so
@@ -44,6 +60,7 @@ const markerPath = path.join(outdir, '.build-cache.json');
 const manifestPath = path.join(outdir, 'manifest.json');
 const cache = process.argv.includes('--cache');
 const KINDS = /** @type {const} */ (['core', 'mermaid']);
+const EXTRAS_FILE = /^extras-[0-9a-f]{16}\.js$/;
 
 const sha = (buf) => crypto.createHash('sha256').update(buf).digest('hex');
 const fileSha = (file) => sha(fs.readFileSync(file));
@@ -110,6 +127,32 @@ async function build() {
     'node:fs/promises': 'export function readFile() { return Promise.reject(new Error("unavailable in an offline file")); }',
     'node:path': 'const basename = (p) => String(p).split("/").pop(); const dirname = (p) => String(p).split("/").slice(0, -1).join("/") || "/"; const join = (...p) => p.join("/").replace(/\\/+/g, "/"); export { basename, dirname, join }; export default { basename, dirname, join };',
   };
+  /*
+   * What core and mermaid read off `globalThis.__afbinExtras` instead of
+   * bundling (lib/offline/extras names the fields). Evaluated only when the
+   * module that imports them first runs, which is after the extras loaded; a
+   * missing global throws there, and the source pane keeps its plain editor.
+   */
+  const EXTRAS_MODULES = {
+    'monaco-editor/esm/vs/editor/editor.api': 'monaco',
+    'monaco-editor/min/vs/style.css?inline': 'monacoCss',
+    'prettier/standalone': 'prettier',
+    'prettier/plugins/babel': 'babel',
+    'prettier/plugins/estree': 'estree',
+  };
+  const fromExtras = (field) => `var x = globalThis.__afbinExtras; if (!x) throw new Error("The rich code editor is not loaded."); module.exports = x.${field};`;
+  const extrasStubs = {
+    name: 'offline-extras-stubs',
+    setup(b) {
+      b.onResolve({ filter: /^(monaco-editor|prettier)\// }, (args) => {
+        if (args.path in EXTRAS_MODULES) return { path: args.path, namespace: 'offline-extras' };
+        // The HTML tokenizer registers itself inside the extras; nothing else from either package belongs here.
+        if (args.path === 'monaco-editor/esm/vs/basic-languages/html/html.contribution') return { path: args.path, namespace: 'offline-empty-css' };
+        return undefined;
+      });
+      b.onLoad({ filter: /.*/, namespace: 'offline-extras' }, (args) => ({ loader: 'js', contents: fromExtras(EXTRAS_MODULES[args.path]) }));
+    },
+  };
   const stubs = (kind) => ({
     name: `offline-stubs-${kind}`,
     setup(b) {
@@ -145,8 +188,7 @@ async function build() {
       }));
     },
   });
-  const results = await Promise.all(KINDS.map((kind) => esbuild.build({
-    entryPoints: [path.join(root, 'lib/offline/entry.tsx')],
+  const common = {
     bundle: true,
     write: false,
     minify: true,
@@ -163,12 +205,31 @@ async function build() {
       ...tailwindDefine,
     },
     logOverride: { 'empty-import-meta': 'error' },
-    plugins: [stubs(kind)],
     metafile: true,
-    outfile: path.join(outdir, `${kind}.js`),
     absWorkingDir: root,
     logLevel: 'warning',
-  })));
+  };
+  const [extrasResult, ...results] = await Promise.all([
+    esbuild.build({
+      ...common,
+      entryPoints: [path.join(root, 'lib/offline/extras-entry.ts')],
+      plugins: [stubs('extras')],
+      outfile: path.join(outdir, 'extras.js'),
+    }),
+    ...KINDS.map((kind) => esbuild.build({
+      ...common,
+      entryPoints: [path.join(root, 'lib/offline/entry.tsx')],
+      plugins: [extrasStubs, stubs(kind)],
+      outfile: path.join(outdir, `${kind}.js`),
+    })),
+  ]);
+  const packagesIn = (result, re) => Object.keys(result.metafile.inputs).filter((key) => re.test(key));
+  results.forEach((result, i) => {
+    const leaked = packagesIn(result, /node_modules\/(monaco-editor|prettier)\//);
+    if (leaked.length) throw new Error(`build-offline: ${KINDS[i]} must not bundle Monaco or prettier (they load on demand from the extras): ${leaked.slice(0, 3).join(', ')}`);
+  });
+  const reactInExtras = packagesIn(extrasResult, /node_modules\/(react|react-dom|scheduler)\//);
+  if (reactInExtras.length) throw new Error(`build-offline: the extras must not bundle React: ${reactInExtras.slice(0, 3).join(', ')}`);
 
   fs.mkdirSync(outdir, { recursive: true });
   const manifest = { format: 1, bundles: {} };
@@ -188,11 +249,30 @@ async function build() {
       inputs[rel(abs)] ??= fileSha(abs);
     }
   });
+  const extrasCode = extrasResult.outputFiles[0].contents;
+  const extrasGz = zlib.gzipSync(extrasCode, { level: 9 });
+  const extrasFile = `extras-${sha(extrasCode).slice(0, 16)}.js`;
+  // Served as it is, SRI-checked by the browser: the file names exactly these bytes.
+  fs.writeFileSync(path.join(outdir, extrasFile), extrasCode);
+  for (const old of fs.readdirSync(outdir)) if (EXTRAS_FILE.test(old) && old !== extrasFile) fs.rmSync(path.join(outdir, old));
+  manifest.extras = {
+    file: extrasFile,
+    path: `/offline/${extrasFile}`,
+    integrity: `sha384-${crypto.createHash('sha384').update(extrasCode).digest('base64')}`,
+    sha256: sha(extrasCode), raw: extrasCode.length, gzip: extrasGz.length, base64: Math.ceil(extrasGz.length / 3) * 4,
+  };
+  for (const key of Object.keys(extrasResult.metafile.inputs)) {
+    if (/^(\(disabled\)|[\w-]+):/.test(key)) continue;
+    const abs = path.resolve(root, key);
+    if (abs.split(path.sep).includes('node_modules')) continue;
+    inputs[rel(abs)] ??= fileSha(abs);
+  }
   inputs['app/globals.css'] = fileSha(path.join(root, 'app/globals.css'));
   for (const file of scanned) inputs[file] ??= fileSha(path.join(root, file));
   fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2) + '\n');
-  const outputs = [rel(manifestPath), ...KINDS.map((kind) => rel(path.join(outdir, manifest.bundles[kind].file)))];
+  const outputs = [rel(manifestPath), ...KINDS.map((kind) => rel(path.join(outdir, manifest.bundles[kind].file))), rel(path.join(outdir, extrasFile))];
   fs.writeFileSync(markerPath, JSON.stringify({ toolHash, inputs, cssFiles: scanned, outputs }, null, 2) + '\n');
   const kb = (n) => `${(n / 1024).toFixed(0)} KB`;
-  console.log(`build-offline: ${KINDS.map((kind) => `${kind} ${kb(manifest.bundles[kind].raw)} raw / ${kb(manifest.bundles[kind].gzip)} gzip`).join(', ')} (${Date.now() - started} ms)`);
+  const sizes = (entry) => `${kb(entry.raw)} raw / ${kb(entry.gzip)} gzip / ${kb(entry.base64)} base64`;
+  console.log(`build-offline: ${KINDS.map((kind) => `${kind} ${sizes(manifest.bundles[kind])}`).join(', ')}, extras ${sizes(manifest.extras)} (${Date.now() - started} ms)`);
 }
