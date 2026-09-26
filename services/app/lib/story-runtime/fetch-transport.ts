@@ -14,6 +14,7 @@ import type { QueryTransport } from './store';
 import type { DataflowState, TableResult } from '@/lib/story/dataflow';
 import { localZone } from '@/lib/story/builtins';
 import type { ImportTables } from '@/lib/story/compiled-flow';
+import type { PersonCard } from '@artifactbin/contracts';
 
 export type FetchLike = (input: string, init?: RequestInit) => Promise<Response>;
 
@@ -39,6 +40,12 @@ export function createFetchTransport(queryUrl: string, fetchFn: FetchLike = (i, 
       const res = await fetchFn(`${queryUrl}${queryUrl.includes('?') ? '&' : '?'}${QUERY_REQUEST_PARAM}=${encodeURIComponent(JSON.stringify({ hold: name }))}`, { method: 'GET', credentials: 'omit' });
       if (!res.ok) throw new Error(`hold failed (${res.status})`);
       return ((await res.json()) as { tables: ImportTables[string] }).tables;
+    },
+    // A POST like a large local-table run: a batch of ids would outgrow a URL. `text/plain` keeps it a simple request.
+    people: async (ids) => {
+      const res = await fetchFn(queryUrl, { method: 'POST', credentials: 'omit', headers: { 'Content-Type': 'text/plain' }, body: JSON.stringify({ people: ids }) });
+      if (!res.ok) throw new Error(`people failed (${res.status})`);
+      return ((await res.json()) as { people: Record<string, PersonCard> }).people;
     },
     page: async (values, name, page, localTables): Promise<TableResult> => {
       const r = await ask({ values, only: [name], page: { name, ...page }, tz: localZone(), ...(localTables ? { localTables } : {}) });

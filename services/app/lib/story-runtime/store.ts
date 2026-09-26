@@ -34,10 +34,12 @@ import type { LocalMutationResult } from '@/lib/story/local-state';
 import { importRef, selectQueries, type ImportTables } from '@/lib/story/compiled-flow';
 import { localZone } from '@/lib/story/builtins';
 import { placeDataflow, type DataflowPlacement } from '@/lib/story/placement';
+import type { PersonCard } from '@artifactbin/contracts';
 import {
-  accessSettled, busyOf, createCore, localRows, partitionRun, pendingOf, step,
+  accessSettled, busyOf, createCore, localRows, partitionRun, pendingOf, step, unnamedPeople,
   type CoreEffect, type CoreEvent, type CoreState, type RunAnswer,
 } from './dataflow-core';
+import { MAX_PEOPLE_IDS } from './contract';
 import { graphOfCompiled, heldSource, NOW_SOURCE } from './runtime-graph';
 import type { Optimistic, PageEngine } from './page-engine';
 
@@ -70,6 +72,12 @@ export interface QueryTransport {
    * a capture): the page then runs nothing itself.
    */
   hold?(name: string): Promise<ImportTables[string]>;
+  /**
+   * The cards of the people these ids name, for results the page computed
+   * itself — no server run sent them. The door answers only whom it may name
+   * for its viewer; the rest are absent. Present beside `hold`.
+   */
+  people?(ids: string[]): Promise<Record<string, PersonCard>>;
   /**
    * Perform a declared `<Mutation>` (lib/story/mutation-request: its name, its
    * arguments, the row and value its control supplies). Resolves with the
@@ -302,15 +310,15 @@ export function createDataflowStore(
         // ONE scheduling step, two places: what the page holds, the page
         // answers; the rest (and every write check) goes to the server.
         const { local, remote } = partitionRun(effect, inPage(effect.only));
-        const answer = (at: typeof effect.at, run: () => Promise<RunAnswer>) => {
+        const answer = (at: typeof effect.at, run: () => Promise<RunAnswer>, landed?: (answered: RunAnswer) => void) => {
           let result: Promise<RunAnswer>;
           try { result = run(); } catch (error) { result = Promise.reject(error); }
           result.then(
-            (answered) => { dispatch({ type: 'answered', at, answer: answered }); },
+            (answered) => { dispatch({ type: 'answered', at, answer: answered }); landed?.(answered); },
             (error: unknown) => { dispatch({ type: 'failed', at, error }); },
           );
         };
-        if (local && page) answer(local.at, () => page.engine.run(flow, local.only, { ...context(), values: local.values, ...(local.localTables ? { localTables: local.localTables } : {}) }));
+        if (local && page) answer(local.at, () => page.engine.run(flow, local.only, { ...context(), values: local.values, ...(local.localTables ? { localTables: local.localTables } : {}) }), (answered) => namePeople(answered.tables));
         if (remote) {
           const t = transport;
           if (!t) { dispatch({ type: 'failed', at: remote.at, error: new Error('no query transport') }); return; }
@@ -333,6 +341,27 @@ export function createDataflowStore(
           (error: unknown) => { dispatch({ type: 'writeFailed', id, name, error }); flush(); },
         );
       }
+    }
+  };
+
+  /** Every id the page has asked the door to name, answered or not: each is asked about once per page. */
+  const asked = new Set<string>();
+  /**
+   * The people a result the page computed names, carded by nobody yet: no
+   * server run saw it. Asked in one batch per run, after its rows have landed;
+   * a lookup that fails is asked again by the next run that names them.
+   */
+  const namePeople = (tables: RunAnswer['tables']) => {
+    const t = transport;
+    if (!t?.people) return;
+    const ids = unnamedPeople(core.data, tables).filter((id) => !asked.has(id));
+    for (const id of ids) asked.add(id);
+    for (let i = 0; i < ids.length; i += MAX_PEOPLE_IDS) {
+      const batch = ids.slice(i, i + MAX_PEOPLE_IDS);
+      t.people(batch).then(
+        (people) => { dispatch({ type: 'people', people }); },
+        () => { for (const id of batch) asked.delete(id); },
+      );
     }
   };
 
@@ -536,7 +565,8 @@ export function createDataflowStore(
     fetchPage: (name, window) => {
       const rows = localRows(core);
       if (page && inPage([name]).has(name)) {
-        return page.engine.page(flow, name, window, { ...context(), values: { ...core.data.values }, ...(rows ? { localTables: rows } : {}) });
+        return page.engine.page(flow, name, window, { ...context(), values: { ...core.data.values }, ...(rows ? { localTables: rows } : {}) })
+          .then((table) => { namePeople({ [name]: table }); return table; });
       }
       if (!transport) return Promise.reject(new Error('no query transport'));
       return rows ? transport.page({ ...core.data.values }, name, window, rows) : transport.page({ ...core.data.values }, name, window);
