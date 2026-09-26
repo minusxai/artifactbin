@@ -94,6 +94,7 @@ export async function planPush(workspace:Workspace,paths?:string[],options:PushO
    if(!datasetFile&&paths?.length)throw new CliError('unsupported_access',`--access and --policy set a dataset's row writes; ${file.path} is not a dataset.`,'Push the CSV or JSON rows with the flag, or drop it.');
    if(datasetFile)accessible=true;
    if(resource?.type==='dataset'&&resource.access!==undefined&&options.access!==undefined&&resource.access!==options.access)throw new CliError('access_mismatch',`--access ${options.access} disagrees with ${file.path}, which declares access: ${resource.access}.`,'Name the same access in both, or drop the flag and let the file decide.');
+   if(resource?.type==='dataset'&&resource.access==='read'&&options.policy==='viewers-write')throw new CliError('access_mismatch',`--policy viewers-write needs a writable dataset, and ${file.path} declares access: read.`,`Change that line to access: readwrite in ${file.path}, then push it again with the flag.`);
   }
   const access=datasetFile?(resource?.type==='dataset'?resource.access??requestedAccess:requestedAccess):undefined;
   // `undefined` means the flag said nothing; `null` is the flag asking for no policy at all.
@@ -208,7 +209,9 @@ async function reconcileMixed(plan:PushPlan,client:HttpClient,workspace?:Workspa
   const desired={...metadataInput(merged.resource),...(merged.resource.type==='dataset'&&merged.resource.access!==undefined?{access:merged.resource.access}:{})};
   const observed={...metadataInput(remote),...(remote.type==='dataset'&&remote.access!==undefined?{access:remote.access}:{})};
   const delta:Record<string,unknown>=Object.fromEntries(Object.entries(desired).filter(([key,value])=>!isDeepStrictEqual(value,observed[key as keyof typeof observed])));
-  if(merged.resource.type==='dataset'&&remote.type==='dataset'&&!isDeepStrictEqual(merged.resource.policy,remote.policy)){delta.policy=merged.resource.policy;delta.expectedPolicyRevision=remote.policy_revision;}
+  // The policy this push writes: the YAML's, or the --policy flag's, which the YAML does not carry.
+  const policy=Object.hasOwn(plan.body,'policy')?plan.body.policy as DatasetPolicy|null:merged.resource.type==='dataset'?merged.resource.policy:undefined;
+  if(merged.resource.type==='dataset'&&remote.type==='dataset'&&!isDeepStrictEqual(policy,remote.policy)){delta.policy=policy;delta.expectedPolicyRevision=remote.policy_revision;}
   if(plan.mode==='metadata')return Object.keys(delta).length?{...plan,body:{...delta,expectedState:head.state}}:{...plan,confirmed:head};
   const content=Object.fromEntries(Object.entries(plan.body).filter(([key])=>!['expectedState','expectedVersion','access','policy','expectedPolicyRevision',...metadataFields.map(field=>fieldMap[field]??field)].includes(key)));
   return {...plan,body:{...content,...delta,expectedState:head.state,expectedVersion:head.version}};

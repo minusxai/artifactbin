@@ -793,6 +793,68 @@ test('push --policy viewers-write grants every table a multi-table dataset decla
  }finally{await rm(root,{recursive:true,force:true});}
 });
 
+/**
+ * A TRACKED dataset YAML takes the flag too, and the command never claims a grant it did not write.
+ * The flag's policy once rode the metadata request, which reconciliation rebuilds from the YAML alone:
+ * the PATCH went out without it, the server kept its default policy, and the output still said
+ * "policy": "viewers-write". A YAML that declares `access: read` contradicts the flag, as `--access
+ * read` does, and is refused before any request.
+ */
+test('push --policy viewers-write writes the grant on an already published dataset YAML',async()=>{
+ const root=await mkdtemp(join(tmpdir(),'afbin-policy-yaml-'));const home=join(root,'home');const cwd=join(root,'work');await mkdir(home);await mkdir(cwd);
+ const calls:Array<{method:string;path:string;body:any}>=[];
+ const defaultPolicy={version:2,allow:[{actions:['read'],from:{user:'*'}},{actions:['insert','update','delete'],from:{artifactOwner:'$owner'}}]};
+ let head:any;
+ const curated=({dataset_policy:_policy,policy_revision:_revision,...rest}:any)=>rest;
+ const request:typeof fetch=async(input,init)=>{
+  const path=new URL(String(input)).pathname;const method=init?.method??'GET';
+  const body=init?.body?JSON.parse(String(init.body)):{};
+  calls.push({method,path,body});
+  if(path==='/api/artifacts'&&method==='POST'){
+   head={id:'book01',version:1,edit_id:'e1',state:digest('book-1'),format:'dataset',access:body.access??'read',policy_revision:0,dataset_policy:defaultPolicy};
+   return Response.json(curated(head),{status:201,headers:{'X-Artifactbin-Account':'usr_one'}});
+  }
+  if(method==='PATCH'){
+   if('expectedPolicyRevision' in body&&body.expectedPolicyRevision!==head.policy_revision)return Response.json({error:'state_conflict',currentVersion:head.version,currentState:head.state},{status:409,headers:{'X-Artifactbin-Account':'usr_one'}});
+   const n=calls.filter(call=>call.method==='PATCH').length+1;
+   head={...head,edit_id:`e${n}`,state:digest(`book-${n}`),...(body.access?{access:body.access}:{}),...('policy' in body?{dataset_policy:body.policy,policy_revision:head.policy_revision+1}:{})};
+   return Response.json(head,{headers:{'X-Artifactbin-Account':'usr_one'}});
+  }
+  if(method==='GET')return Response.json(head,{headers:{'X-Artifactbin-Account':'usr_one'}});
+  throw new Error(`Unexpected ${method} ${path}`);
+ };
+ const invoke=async(args:string[])=>{const out:string[]=[];const code=await runCli([...args,'--json'],{cwd,home,interactive:false,fetch:request,stdout:x=>out.push(x),stderr:()=>{}});return{code,result:JSON.parse(out.join(''))};};
+ try{
+  await saveTestConnection({server:'https://example.com',token:'mx_test'},home);await seedIdentityPool(home,cwd,['book01']);
+  await writeFile(join(cwd,'bookings.jsx'),'<Dataset kind="stored">\n  <Table schema="public" name="rows" columns={["id","slot"]} rows={[]} />\n</Dataset>\n');
+  await writeFile(join(cwd,'bookings.yaml'),'type: dataset\nsource: bookings.jsx\n');
+  const created=await invoke(['push','bookings.yaml']);
+  assert.equal(created.code,0,JSON.stringify(created.result));
+  assert.equal(created.result.operations[0].policy,undefined);
+
+  // The reconciled YAML now says `access: read`: the flag contradicts it, and says which line to change.
+  assert.match(await readFile(join(cwd,'bookings.yaml'),'utf8'),/^access: read$/m);
+  const count=calls.length;
+  const clash=await invoke(['push','bookings.yaml','--policy','viewers-write']);
+  assert.notEqual(clash.code,0);
+  assert.equal(clash.result.error.code,'access_mismatch');
+  assert.match(clash.result.error.message,/access: read/);
+  assert.match(clash.result.error.fix,/access: readwrite/);
+  assert.equal(calls.length,count,'a contradiction must not reach the server');
+
+  const yaml=(await readFile(join(cwd,'bookings.yaml'),'utf8')).replace(/^access: read$/m,'access: readwrite');
+  await writeFile(join(cwd,'bookings.yaml'),yaml);
+  const granted=await invoke(['push','bookings.yaml','--policy','viewers-write']);
+  assert.equal(granted.code,0,JSON.stringify(granted.result));
+  const grant=calls.slice(count).filter(call=>call.method==='PATCH').find(call=>'policy' in call.body);
+  assert.ok(grant,'the grant is written, not only reported');
+  assert.deepEqual(grant!.body.policy.tables.map((table:any)=>table.table),[{schema:'public',name:'rows'}]);
+  assert.equal(head.access,'readwrite');
+  assert.equal(head.dataset_policy.enforcement,'enabled');
+  assert.equal(granted.result.operations[0].policy,'viewers-write');
+ }finally{await rm(root,{recursive:true,force:true});}
+});
+
 test('--policy viewers-write refuses an explicit --access read, before any request',async()=>{
  const root=await mkdtemp(join(tmpdir(),'afbin-policy-clash-'));
  try{
