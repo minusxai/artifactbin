@@ -5,7 +5,9 @@
  * nodes placed in the browser (lib/story/placement) and the server the rest.
  *
  * It answers what the server would, by running the SAME code: the dataflow
- * evaluator (lib/sql/dataflow-core) for reads, the write signature
+ * evaluator (lib/sql/dataflow-core) for reads — over ONE database the page
+ * keeps open (SqliteEngine.held), so a held dataset crosses into SQLite once,
+ * not on every run — the write signature
  * (lib/story/mutation-request bindMutationRequest) and the local-table write
  * (lib/story/local-state) for writes, the same display window for what a run
  * returns. The only thing it owns is what it HOLDS:
@@ -18,6 +20,9 @@
  *    has decided. Refused, it is withdrawn and the overlay replayed without
  *    it (a later write keeps its effect); confirmed, it stays until the first
  *    fetch started after the confirmation, whose rows already include it.
+ *    The rows here are the truth; the open database is loaded from them, and
+ *    again whenever a table's rows are a different array (a fetch, a write
+ *    applied or withdrawn), so it can never drift from them.
  *
  * Everything a run needs beside its rows — the viewer, the clock, the zone,
  * the reader's local tables — comes in with the call, so the engine can never
@@ -25,7 +30,7 @@
  */
 import type { MutationInput, Row, Scalar } from '@artifactbin/contracts';
 import { DISPLAY_ROWS, isQueryFailure } from '@artifactbin/contracts';
-import type { SqliteEngine } from '@artifactbin/sql/core';
+import type { HeldDatabase, SqliteEngine } from '@artifactbin/sql/core';
 import { evaluateDataflow } from '@/lib/sql/dataflow-core';
 import type { CompiledDataflow, CompiledMutation } from '@/lib/story/compiled-dataflow';
 import { importRef, mutationReads, type ImportTables } from '@/lib/story/compiled-flow';
@@ -53,10 +58,13 @@ export type PageWriteContext = Pick<PageRunContext, 'userId' | 'now' | 'tz'>;
 
 export interface PageEngineSource {
   /** The SQLite core, loaded on first use (a lazy chunk and its wasm, or the offline file's embedded bytes). */
-  load(): Promise<Pick<SqliteEngine, 'run' | 'mutate'>>;
+  load(): Promise<PageCore>;
   /** Every row of one held import, by its name in the document (QueryTransport.hold). */
   fetch(name: string): Promise<ImportTables[string]>;
 }
+
+/** What the page needs of the SQLite core. */
+export type PageCore = Pick<SqliteEngine, 'held' | 'mutate'>;
 
 /** A write applied to the held copy, until the server decides. */
 export interface Optimistic { settle(confirmed: boolean): void }
@@ -99,7 +107,9 @@ interface Held {
 }
 
 export function createPageEngine(source: PageEngineSource): PageEngine {
-  let core: Pick<SqliteEngine, 'run' | 'mutate'> | null = null;
+  let core: PageCore | null = null;
+  /** The open database, for the import names (in declaration order) it was attached with. */
+  let database: { schemas: string; db: HeldDatabase } | null = null;
   let loadingCore: Promise<unknown> | null = null;
   const held = new Map<string, Held>();
   let pending: Pending[] = [];
@@ -150,10 +160,20 @@ export function createPageEngine(source: PageEngineSource): PageEngine {
     if (!core) throw new Error('the page engine is not loaded');
     return core;
   };
+  /** The open database for this document; a rewrite that changes its imports starts a new one. */
+  const databaseFor = (flow: CompiledDataflow): HeldDatabase => {
+    const names = flow.imports.map((i) => i.name);
+    const schemas = JSON.stringify(names);
+    if (database?.schemas !== schemas) {
+      database?.db.close();
+      database = { schemas, db: engine().held(names) };
+    }
+    return database.db;
+  };
 
   const runDataflow = (flow: CompiledDataflow, ctx: PageRunContext, selection: { only?: readonly string[]; page?: { name: string; offset: number; limit: number; sort?: { col: string; dir: 'asc' | 'desc' } } }) =>
     evaluateDataflow({
-      run: async (input) => engine().run(input, {
+      run: async (input) => databaseFor(flow).run(input, {
         limit: input.limit ?? DISPLAY_ROWS,
         pageLimit: input.page?.limit ?? input.limit ?? DISPLAY_ROWS,
         timeoutMs: TIMEOUT_MS,
