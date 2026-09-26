@@ -66,10 +66,12 @@ import {newEditId} from './story/splice';
 import type {StringEdit} from './story/edit-batch';
 import { nodeIndex, stampNodeIds } from './story/node-ids';
 import { COMPILED_DATAFLOW, finalizeArtifactMetadata, readCompiledDataflow, storedCompiledDataflow } from './story/parsed-artifact-metadata';
-import { scalarMatches, type Row, type Scalar } from '@/lib/story/dataflow';
+import { isEmptyDataflow, scalarMatches, type Row, type Scalar } from '@/lib/story/dataflow';
+import { declarationsOf } from '@/lib/story/helmet';
+import { compileWithLoader } from '@/lib/story/compile-dataflow';
 import type { ColumnType } from '@artifactbin/contracts';
-import type { CompiledDataflow, CompiledMutation } from '@/lib/story/compiled-dataflow';
-import { bindParams, bindTypes, dataRefs, importRef, mutationParams, mutationReads, mutationTargetRef, selectQueries, type ImportTables } from '@/lib/story/compiled-flow';
+import { EMPTY_COMPILED_DATAFLOW, type CompiledDataflow, type CompiledMutation } from '@/lib/story/compiled-dataflow';
+import { bindParams, bindTypes, dataRefs, importRef, initialValues, mutationParams, mutationReads, mutationTargetRef, selectQueries, type ImportTables } from '@/lib/story/compiled-flow';
 import { platformValues, readerZone, rowField, VIEWER, VIEWER_ID } from '@/lib/story/builtins';
 import type { MutationRequest } from '@/lib/story/mutation-request';
 import { schemaLoaderFor } from '@/lib/story/data-checks';
@@ -2103,8 +2105,10 @@ export async function runDocumentMutation(
   const extra = Object.keys(request.args).filter((name) => !m.args.some((a) => a.name === name));
   if (extra.length) return { ok: false, reason: 'invalid_sql', detail: `${m.name} takes no argument ${extra.join(', ')}${m.args.length ? ` (it takes ${m.args.map((a) => a.name).join(', ')})` : ''}` };
   const logical: Record<string, Scalar> = {};
+  // An argument the caller left out is the page value of that name at its declared default, as a fresh page holds it.
+  const defaults = initialValues(flow);
   for (const a of m.args) {
-    const raw = Object.hasOwn(request.args, a.name) ? request.args[a.name]! : null;
+    const raw = Object.hasOwn(request.args, a.name) ? request.args[a.name]! : defaults[a.name] ?? null;
     const value = raw === '' && a.type && a.type !== 'string' ? null : raw;
     if (a.type && !scalarMatches(value, a.type)) return { ok: false, reason: 'invalid_sql', detail: `argument $${a.name} does not match its declared type` };
     logical[a.name] = value;
@@ -2507,9 +2511,22 @@ export async function runDocumentDataflow(
   resolve: DatasetResolver,
   opts: DataflowRunOptions = {},
 ): Promise<RanDataflow | null> {
-  const flow = await readCompiledDataflow(null, source, schemaLoaderFor(load));
-  if (!flow || isEmptyCompiled(flow)) return null;
-  return runDeclaredDataflow(flow, resolve, opts);
+  const declared = declarationsOf(source);
+  if (!declared || isEmptyDataflow(declared)) return null;
+  const compiled = await compileWithLoader(declared, schemaLoaderFor(load));
+  // A draft that does not compile runs nothing, and says why under each declaration's own name.
+  if (!compiled.ok) return { flow: EMPTY_COMPILED_DATAFLOW, state: { values: {}, tables: {}, errors: compileErrorsByName(compiled.errors) } };
+  return runDeclaredDataflow(compiled.compiled, resolve, opts);
+}
+
+/** Compile errors keyed by the declaration they name (`<Query name="q">…` → q); the rest under the empty name. */
+function compileErrorsByName(errors: ReadonlyArray<{ message: string }>): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const e of errors) {
+    const name = /^<(?:Query|Mutation|Import|Value) name="([^"]+)"/.exec(e.message)?.[1] ?? '';
+    out[name] = out[name] ? `${out[name]}\n${e.message}` : e.message;
+  }
+  return out;
 }
 
 async function runDeclaredDataflow(flow: CompiledDataflow, resolve: DatasetResolver, opts: DataflowRunOptions): Promise<RanDataflow> {

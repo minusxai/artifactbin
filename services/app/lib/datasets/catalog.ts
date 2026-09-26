@@ -120,9 +120,10 @@ export async function storedTables(catalog:DatasetCatalog,objects?:Pick<ContentO
  * Models and other schemas stay behind the dataset's own catalog queries.
  */
 export function importedTables(catalog:DatasetCatalog):DatasetTable[] {
- return catalog.kind==='stored'?catalog.tables.filter(t=>t.schema===catalog.defaultSchema&&t.objectKey&&!t.sql):[];
+ return catalog.kind==='stored'?catalog.tables.filter(t=>t.schema===catalog.defaultSchema&&!t.sql):[];
 }
 /** An imported dataset's rows, by the table names its import exposes. */
 export async function importedRows(catalog:DatasetCatalog):Promise<Record<string,{rows:Record<string,unknown>[];columns:DatasetTable['columns']}>> {
- return Object.fromEntries(await Promise.all(importedTables(catalog).map(async t=>[t.name,{rows:await loadDatasetRows({meta:{objectKey:t.objectKey}}),columns:t.columns}] as const)));
+ // A table defined but never written has no stored object yet: it is empty, not missing.
+ return Object.fromEntries(await Promise.all(importedTables(catalog).map(async t=>[t.name,{rows:t.objectKey?await loadDatasetRows({meta:{objectKey:t.objectKey}}):[],columns:t.columns}] as const)));
 }

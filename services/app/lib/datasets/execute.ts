@@ -2,7 +2,7 @@ import type {ContentObjects} from '@/lib/story/prepared-objects';
 import {createHash} from 'node:crypto';
 import {runQueries,isQueryFailure} from '@/lib/sql/engine';
 import type {Scalar,TableResult} from '@/lib/story/dataflow';
-import {compileDatasetSql} from './sql';
+import {compileDatasetSql,datasetSqlParams} from './sql';
 import {queryPostgres} from './postgres';
 import {DatasetError} from './errors';
 import {resolveDatasetConnection} from './secrets';
@@ -26,6 +26,9 @@ export async function executeCatalog(catalog:DatasetCatalog,sql:string,params:Re
   const compiled=compileDatasetSql(catalog,sql,params,opts.paramTypes);
   result=await queryPostgres(config,sorted(compiled.sql),compiled.values,{limit,offset});
  }else{
+  // Every $name the statement reads must be supplied: SQLite would bind a missing one as NULL and answer quietly.
+  const undeclared=datasetSqlParams(sql).find(name=>!Object.hasOwn(params,name));
+  if(undeclared)throw new Error(`Dataset SQL: undeclared parameter $${undeclared}`);
   const readCatalog={defaultSchema:catalog.defaultSchema,tables:catalog.tables.map((table,i)=>({schema:table.schema,name:table.name,columns:table.columns,...(table.sql?{sql:table.sql}:{source:`dataset_table_${i}`})})),paramTypes:opts.paramTypes};
   const out=await runQueries({tables:await storedTables(catalog,opts.objects),catalog:readCatalog,queries:[{name:'result',sql}],params,limit,page:{name:'result',limit,offset,...(opts.sort?{sort:opts.sort}:{})}});
   const table=out.result;if(!table||isQueryFailure(table))throw new DatasetError(table?.error??'Query failed');

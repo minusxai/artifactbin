@@ -39,7 +39,13 @@ it('uses Sign in for guest identity actions and rejects forged likes in a reques
  const id=await publish(a.token.token,{visibility:'public',markup:`<Helmet><Import name="add_data" src="ref:${ds}" /><Mutation name="add">{\`insert into add_data.rows values ($_me.id)\`}</Mutation></Helmet><Button run="$add">Add</Button>`});
  const state=(await dataflowForRow((await getArtifactById(id))!))!.state;
  expect(state.mutationAccess?.add).toBe('sign_in_required');
- const response=await mutate(request(`/a/${id}/mutate`,{method:'POST',json:{mutation:'add',likes:[a.user.id],args:{_me:a.user.id}}}),ctx(id));
+ // A request carries the mutation's arguments and nothing else: forged likes and a chosen viewer are refused by name.
+ const forged=await mutate(request(`/a/${id}/mutate`,{method:'POST',json:{mutation:'add',likes:[a.user.id],args:{_me:a.user.id}}}),ctx(id));
+ expect(forged.status).toBe(400);
+ expect(await forged.json()).toMatchObject({error:'unknown_mutation_fields'});
+ // The guest's own press is sent to sign in.
+ const response=await mutate(request(`/a/${id}/mutate`,{method:'POST',json:{mutation:'add',args:{}}}),ctx(id));
  expect(response.status).toBe(403);
+ expect(await response.json()).toMatchObject({code:'sign_in_required'});
  expect(await loadDatasetRows((await getArtifactById(ds))!)).toEqual([{who:null}]);
 });
