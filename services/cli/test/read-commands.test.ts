@@ -86,7 +86,7 @@ describe('exporting and opening a published artifact', () => {
     // A PUBLISHED id at a version renders that version's own served document.
     const html=Buffer.from('<!doctype html><p>Version two</p>');
     assert.equal(await h.invoke(['export','abc123@2','--format','html','--output','v2.html','--json'],()=>new Response(html,{headers:{'Content-Type':'text/html'}})),0,h.out.join(''));
-    assert.ok(h.paths.includes('/a/abc123/raw?version=2'),h.paths.join(','));
+    assert.ok(h.paths.includes('/a/abc123/download?version=2'),h.paths.join(','));
     assert.deepEqual(await readFile(join(h.root,'v2.html')),html);
     // …and an IMAGE of a version is photographed on the server, never from the
     // tracked local copy (which is the head, whatever number was asked for).
@@ -95,6 +95,27 @@ describe('exporting and opening a published artifact', () => {
     assert.ok(h.paths.some(c=>/^\/a\/abc123\/export\?.*format=png/.test(c)&&/version=1/.test(c)),h.paths.join(','));
     assert.deepEqual(await readFile(join(h.root,'v1.png')),png);
     assert.notEqual(await h.invoke(['export','abc123','--format','png','--output','-','--json']),0,'stdout bytes and a JSON envelope cannot share stdout');
+   }finally{await h.cleanup();}
+  });
+
+  /*
+   * HTML IS THE OFFLINE FILE. `/a/<id>/raw` is the served page, which needs this server for its
+   * runtime, data and comments; `/a/<id>/download` is one self-contained file that opens, edits
+   * and comments without a connection — which is what someone saving an .html means.
+   */
+  test('HTML export saves the offline file from the download route, and relays its refusal',async()=>{
+   const h=await harness('afbin-export-offline-');
+   try{
+    const file=Buffer.from('<!doctype html><script id="afbin-file" type="application/json">{}</script>');
+    assert.equal(await h.invoke(['export','abc123','--format','html','--output','report.html','--json'],()=>new Response(file,{headers:{'Content-Type':'text/html; charset=utf-8','Content-Disposition':'attachment; filename="Report.html"'}})),0,h.out.join(''));
+    assert.deepEqual(h.paths,['/a/abc123/download'],'the head carries no version and never asks for the served page');
+    assert.deepEqual(await readFile(join(h.root,'report.html')),file);
+    assert.equal(h.last().operations[0].format,'html');
+    // The route refuses a document too large for one file; the reason it gives is the one shown.
+    const message='This document is too large for one offline file (40 MB of its 25 MB limit).';
+    assert.notEqual(await h.invoke(['export','abc123','--format','html','--output','big.html','--json'],()=>Response.json({error:'too_large',message},{status:413})),0);
+    assert.equal(h.last().error.code,'too_large');assert.match(h.last().error.message,/too large for one offline file/);
+    assert.equal(await readFile(join(h.root,'big.html')).catch(()=>null),null,'a refusal writes nothing');
    }finally{await h.cleanup();}
   });
 
