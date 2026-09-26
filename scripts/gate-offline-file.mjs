@@ -34,10 +34,25 @@
  *    and the copy they saved reopens with the thread, the name and its status;
  *  - Chromium's save picker is written to when it exists (stubbed: Playwright
  *    cannot drive the native dialog);
- *  - still zero requests, CSP violations and page errors on every page.
+ *  - still zero requests, CSP violations and page errors on every page — but
+ *    one: code view asks for its extras (Monaco, prettier) from the file's
+ *    origin, which the gate refuses, so it keeps the plain editor and says so,
+ *    and "View formatted" is disabled with its reason.
+ *
+ * Code view ONLINE, per engine: the file's origin is served by the gate
+ * (Playwright routes; nothing real is contacted) with the built extras; the
+ * SRI-pinned script loads, Monaco mounts, "View formatted" formats, and the
+ * extras are the one request the file made. In Chromium, tampered bytes are
+ * refused by SRI and code view keeps the plain editor.
+ *
+ * And a file EDITED BY AN AGENT, per engine: the top-level "source" string
+ * changed inside the JSON with a JSON round-trip and nothing else. It opens
+ * rebuilt from the new source with "Changed outside the file" in Changes; an
+ * invalid source keeps the last good render under a banner naming the error.
  *
  * The base URL the gate runner passes is deliberately unused: this gate's
- * whole claim is that no server is needed.
+ * whole claim is that no server is needed. Every request to the file's origin
+ * is intercepted, so no run ever reaches a real server.
  */
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
@@ -65,14 +80,40 @@ await esbuild.build({
   bundle: true, format: 'esm', platform: 'node', outfile: shim, alias: { '@': APP }, logLevel: 'warning',
 });
 const {
-  renderArtifactFileHtml, parseArtifactFile, ARTIFACT_FILE_CSP, ARTIFACT_FILE_UNSUPPORTED,
+  renderArtifactFileHtml, parseArtifactFile, artifactFileCsp, ARTIFACT_FILE_UNSUPPORTED,
   OFFLINE_FILTER_REASON, OFFLINE_MUTATION_REASON, OFFLINE_ASSET_REASON, OFFLINE_QUERY_REASON,
 } = await import(pathToFileURL(shim).href);
+const RICH_EDITOR_OFFLINE = 'The rich code editor needs a connection the first time. Using the plain editor.';
+const FORMATTING_OFFLINE = 'Formatting needs a connection.';
+const CHANGED_OUTSIDE = 'Changed outside the file';
 const HISTORY_REASON = 'Version history lives on artifactbin. Open the live version.';
 const NOTHING_TO_SAVE = 'No changes to save';
 
-const file = parseArtifactFile(JSON.parse(readFileSync(path.join(ROOT, 'scripts/fixtures/offline-file/artifact-file.json'), 'utf8')));
 const manifest = JSON.parse(readFileSync(path.join(APP, 'lib/story-runtime/dist/offline/manifest.json'), 'utf8'));
+// The extras this build serves, as a download names them (their hash changes with every build, so the fixture carries none).
+const extrasCode = readFileSync(path.join(APP, 'lib/story-runtime/dist/offline', manifest.extras.file));
+const file = parseArtifactFile({
+  ...JSON.parse(readFileSync(path.join(ROOT, 'scripts/fixtures/offline-file/artifact-file.json'), 'utf8')),
+  extras: { path: manifest.extras.path, integrity: manifest.extras.integrity },
+});
+const extrasUrl = new URL(manifest.extras.path, file.origin).href;
+console.log(`extras: ${(manifest.extras.raw / 1024).toFixed(0)} KB raw at ${extrasUrl}`);
+
+/**
+ * The file's origin, as the gate serves it: refused (offline), or answering
+ * the extras with the headers the real route sends (server/app.ts). Nothing
+ * reaches a real server either way.
+ */
+async function serveOrigin(context, mode) {
+  await context.route(`${file.origin}/**`, (route) => {
+    if (mode === 'offline' || route.request().url() !== extrasUrl) return route.abort('internetdisconnected');
+    return route.fulfill({
+      status: 200,
+      headers: { 'content-type': 'text/javascript; charset=utf-8', 'access-control-allow-origin': '*', 'cache-control': 'public, max-age=31536000, immutable' },
+      body: mode === 'tampered' ? Buffer.concat([extrasCode, Buffer.from('\n;')]) : extrasCode,
+    });
+  });
+}
 /*
  * Both bundles open the same Mermaid-free fixture: core is what this file would
  * carry; mermaid proves the larger bundle also loads and runs under the CSP.
@@ -84,7 +125,7 @@ const files = Object.keys(manifest.bundles).map((kind) => {
   console.log(`${kind} file: ${(Buffer.byteLength(readFileSync(htmlPath)) / 1024).toFixed(0)} KB`);
   return { kind, url: pathToFileURL(htmlPath).href };
 });
-console.log(`CSP: ${ARTIFACT_FILE_CSP}`);
+console.log(`CSP: ${artifactFileCsp(file.origin)}`);
 
 const baseRows = file.snapshot.state.tables.sales.rows;
 const westRows = file.snapshot.variants.find((v) => v.values.region === 'west').tables.sales.rows;
@@ -96,6 +137,7 @@ for (const { kind, url } of files) for (const [engine_, engine] of [['chromium',
   const started = Date.now();
   try {
     const context = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+    await serveOrigin(context, 'offline');
     const page = await context.newPage();
     const requests = [];
     const pageErrors = [];
@@ -194,8 +236,9 @@ async function watchedPage(context, sink) {
   page.on('pageerror', (error) => sink.pageErrors.push(String(error)));
   return page;
 }
-async function newContext(browser, { picker = false } = {}) {
+async function newContext(browser, { picker = false, origin = 'offline' } = {}) {
   const context = await browser.newContext({ viewport: { width: 1280, height: 900 }, acceptDownloads: true });
+  await serveOrigin(context, origin);
   await context.addInitScript(({ picker }) => {
     window.__cspViolations = [];
     document.addEventListener('securitypolicyviolation', (event) => { window.__cspViolations.push(`${event.violatedDirective} ${event.blockedURI}`); });
@@ -309,14 +352,20 @@ for (const [engineName, engine] of ENGINES) {
     // Invalid markup in code view: the validator's reason, and nothing applied.
     await reopened.getByRole('button', { name: 'Edit', exact: true }).click(); // the name is remembered: no prompt
     await expect(reopened.getByRole('dialog', { name: 'What should we call you?' })).toHaveCount(0);
+    assert.deepEqual(sink.requests, [], `${name}: requests before code view`);
     await reopened.getByRole('button', { name: 'Edit the source' }).click();
-    await reopened.locator('.monaco-editor').waitFor({ timeout: 20_000 });
-    await reopened.locator('.monaco-editor .view-lines').click();
-    await reopened.keyboard.press(process.platform === 'darwin' ? 'Meta+ArrowDown' : 'Control+End');
-    await reopened.keyboard.press('Enter');
-    // One insertion, not keystrokes: Monaco auto-closes tags as they are typed,
-    // and WebKit on Linux lost part of the typed text in CI.
-    await reopened.keyboard.insertText('<p>{$missing}</p>');
+    // Offline, code view is the plain editor, and says so in place; the one request was its extras.
+    const plain = reopened.getByRole('textbox', { name: 'Markup source' });
+    await expect(plain).toHaveAccessibleDescription(RICH_EDITOR_OFFLINE, { timeout: 20_000 });
+    await expect(reopened.getByText(RICH_EDITOR_OFFLINE, { exact: true })).toBeVisible();
+    await expect(reopened.locator('.monaco-editor')).toHaveCount(0);
+    const viewFormatted = reopened.getByRole('button', { name: 'View formatted' });
+    await expect(viewFormatted).toBeDisabled();
+    await expect(viewFormatted).toHaveAccessibleDescription(FORMATTING_OFFLINE);
+    assert.deepEqual(sink.requests, [extrasUrl], `${name}: code view asked for its extras, once`);
+    sink.requests.length = 0;
+    seen.push('offline code view: plain editor with its reason, View formatted disabled');
+    await plain.fill(`${await plain.inputValue()}\n<p>{$missing}</p>`);
     await expect(reopened.getByRole('status').filter({ hasText: /not saved — .*\$missing.* refers to nothing declared/ })).toBeVisible({ timeout: 10_000 });
     await expect(saveButton(reopened)).toBeDisabled();
     await expect(reopened.getByRole('button', { name: /^Changes/ })).toHaveText('Changes (1)');
@@ -398,7 +447,124 @@ for (const [engineName, engine] of ENGINES) {
     await browser.close();
   }
 }
+// ── code view online: the extras from the file's origin ──────────────────────
+
+for (const [engineName, engine] of ENGINES) {
+  const name = `${engineName} (core, code view online)`;
+  const browser = await engine.launch();
+  const started = Date.now();
+  const sink = { requests: [], pageErrors: [] };
+  const seen = [];
+  try {
+    const context = await newContext(browser, { origin: 'online' });
+    const page = await watchedPage(context, sink);
+    await page.goto(core.url);
+    await expect(page.getByRole('heading', { name: 'Regional sales' })).toBeVisible({ timeout: 20_000 });
+    await page.getByRole('button', { name: 'Edit', exact: true }).click();
+    await answerName(page, 'Lin');
+    await expect(page.getByRole('button', { name: 'Edit the source' })).toBeVisible({ timeout: 20_000 });
+    assert.deepEqual(sink.requests, [], `${name}: nothing requested before code view`);
+    await page.getByRole('button', { name: 'Edit the source' }).click();
+    await page.locator('.monaco-editor').first().waitFor({ timeout: 30_000 });
+    const tag = page.locator('script[data-afbin-extras]');
+    await expect(tag).toHaveCount(1);
+    assert.equal(await tag.getAttribute('src'), extrasUrl);
+    assert.equal(await tag.getAttribute('integrity'), manifest.extras.integrity);
+    assert.equal(await tag.getAttribute('crossorigin'), 'anonymous');
+    await expect(page.getByText(RICH_EDITOR_OFFLINE)).toHaveCount(0);
+    seen.push('SRI script loaded, Monaco mounted');
+    await page.getByRole('button', { name: 'View formatted' }).click();
+    await expect(page.getByText('Formatted preview · read-only')).toBeVisible({ timeout: 20_000 });
+    await expect(page.locator('.monaco-editor')).toHaveCount(2, { timeout: 20_000 });
+    await expect(page.getByRole('alert').filter({ hasText: 'Couldn’t format' })).toHaveCount(0);
+    seen.push('View formatted');
+    assert.deepEqual(sink.requests, [extrasUrl], `${name}: the extras were the one request`);
+    assert.deepEqual(await violations(page), [], `${name}: CSP violations`);
+
+    if (engineName === 'chromium') {
+      // Bytes that do not match the file's hash: refused by SRI, and code view keeps the plain editor.
+      const tampered = await newContext(browser, { origin: 'tampered' });
+      const other = await watchedPage(tampered, { requests: [], pageErrors: sink.pageErrors });
+      await other.goto(core.url);
+      await other.getByRole('button', { name: 'Edit', exact: true }).click();
+      await answerName(other, 'Lin');
+      await other.getByRole('button', { name: 'Edit the source' }).click();
+      await expect(other.getByRole('textbox', { name: 'Markup source' })).toHaveAccessibleDescription(RICH_EDITOR_OFFLINE, { timeout: 20_000 });
+      await expect(other.locator('.monaco-editor')).toHaveCount(0);
+      assert.equal(await other.evaluate(() => typeof globalThis.__afbinExtras), 'undefined', `${name}: tampered extras never ran`);
+      seen.push('tampered extras refused by SRI');
+    }
+    assert.deepEqual(sink.pageErrors, [], `${name}: page errors`);
+    console.log(`${name}: ${seen.join(', ')}, 0 CSP violations, 0 page errors — passed in ${((Date.now() - started) / 1000).toFixed(1)}s`);
+  } catch (error) {
+    failures.push(new Error(`${name}: ${error.message}`));
+    console.log(`${name}: FAILED after [${seen.join(', ')}] — ${error.message}`);
+  } finally {
+    await browser.close();
+  }
+}
+
+// ── a file edited by an agent: only the top-level "source" changed ────────────
+
+/** What a coding agent does: a JSON round-trip of the `#afbin-file` block, changing `source` and nothing else. */
+const agentEdited = (html, edit) => html.replace(
+  /(<script type="application\/json" id="afbin-file">)([\s\S]*?)(<\/script>)/,
+  (_all, open, json, close) => { const value = JSON.parse(json); value.source = edit(value.source); return `${open}${JSON.stringify(value)}${close}`; },
+);
+const coreHtml = readFileSync(new URL(core.url), 'utf8');
+const agentFiles = {
+  valid: path.join(work, 'agent-valid.html'),
+  invalid: path.join(work, 'agent-invalid.html'),
+};
+writeFileSync(agentFiles.valid, agentEdited(coreHtml, (source) => source.replace('Regional sales</h1>', 'Sales, edited by an agent</h1>')));
+writeFileSync(agentFiles.invalid, agentEdited(coreHtml, (source) => source.replace('<Button run', '<p>{$missing}</p>\n  <Button run')));
+
+for (const [engineName, engine] of ENGINES) {
+  const name = `${engineName} (core, edited by an agent)`;
+  const browser = await engine.launch();
+  const started = Date.now();
+  const sink = { requests: [], pageErrors: [] };
+  const seen = [];
+  try {
+    const context = await newContext(browser);
+    const page = await watchedPage(context, sink);
+    await page.goto(pathToFileURL(agentFiles.valid).href);
+    await expect(page.getByRole('heading', { name: 'Sales, edited by an agent' })).toBeVisible({ timeout: 20_000 });
+    await expect(page.getByRole('heading', { name: 'Regional sales', exact: true })).toHaveCount(0);
+    await expect(page.getByRole('status').filter({ hasText: 'Unsaved changes' })).toBeVisible();
+    await page.getByRole('button', { name: /^Changes/ }).click();
+    await expect(page.getByRole('region', { name: 'Changes in this file' })).toContainText(CHANGED_OUTSIDE);
+    await page.getByRole('button', { name: /^Changes/ }).click();
+    await expect(saveButton(page)).toBeEnabled();
+    const saved = await saveByDownload(page, path.join(work, `agent-saved-${engineName}.html`));
+    const written = savedFile(saved.html);
+    assert.ok(written.source.includes('>Sales, edited by an agent</h1>'), `${name}: the saved file keeps the agent's text`);
+    assert.ok(JSON.stringify(written.island.nodes).includes('Sales, edited by an agent'), `${name}: and the rebuilt render`);
+    assert.deepEqual(written.journal.map((e) => e.summary), [CHANGED_OUTSIDE]);
+    assert.deepEqual(await violations(page), [], `${name}: CSP violations`);
+    seen.push('rebuilt from the new source, journal line, Save writes it');
+
+    const invalid = await watchedPage(context, sink);
+    await invalid.goto(pathToFileURL(agentFiles.invalid).href);
+    await expect(invalid.getByRole('heading', { name: 'Regional sales' })).toBeVisible({ timeout: 20_000 });
+    const banner = invalid.getByRole('alert').filter({ hasText: 'changed outside this file' });
+    await expect(banner).toContainText(/\$missing.* refers to nothing declared/);
+    await expect(invalid.getByRole('button', { name: 'Edit', exact: true })).toBeDisabled();
+    await expect(invalid.getByRole('table').first()).toBeVisible();
+    assert.deepEqual(await violations(invalid), [], `${name}: CSP violations with an invalid source`);
+    seen.push('invalid source: banner with the error over the last good render');
+
+    assert.deepEqual(sink.requests, [], `${name}: network requests`);
+    assert.deepEqual(sink.pageErrors, [], `${name}: page errors`);
+    console.log(`${name}: ${seen.join(', ')}, 0 requests, 0 CSP violations, 0 page errors — passed in ${((Date.now() - started) / 1000).toFixed(1)}s`);
+  } catch (error) {
+    failures.push(new Error(`${name}: ${error.message}`));
+    console.log(`${name}: FAILED after [${seen.join(', ')}] — ${error.message}`);
+  } finally {
+    await browser.close();
+  }
+}
 console.log(`downloads: ${Object.entries(downloads).map(([engineName, scheme]) => `${engineName} ${scheme}:`).join(', ')}`);
 
 if (failures.length) throw new AggregateError(failures, 'Offline file checks failed');
-console.log(`offline file gate passed in chromium, firefox and webkit with the ${files.map((f) => f.kind).join(' and ')} bundles, and editing, comments and Save with the core bundle`);
+console.log(`offline file gate passed in chromium, firefox and webkit with the ${files.map((f) => f.kind).join(' and ')} bundles; editing, comments, Save, code view offline and online, and agent-edited files with the core bundle`);
