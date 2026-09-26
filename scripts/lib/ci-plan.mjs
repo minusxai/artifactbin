@@ -138,7 +138,7 @@ export function planCi(paths, { full = false, cliRelease = false, versionOnly = 
   jobs.cli = cliRelease;
   jobs['cli-preview'] = cliRelease;
   jobs['reference-compatibility'] = cliRelease;
-  // The CLI source suite (node job, shard 1) still guards every CLI change.
+  // The CLI source suite (node job, shard 3) still guards every CLI change.
   const cliTests = full || affected.has('cli');
   const nodeRoots = full ? [] : [
     ...(affected.size ? ['scripts/'] : []),
