@@ -162,3 +162,11 @@ export const SQL_ROUTES = { run: '/run', mutate: '/mutate', dryRun: '/dry-run', 
 
 /** End-to-end mutation response budget, including persistence and downstream execution. */
 export const MUTATION_REPLY_TIMEOUT_MS = 200_000;
+
+/**
+ * The rows of one query that TRAVEL — to the island, through the query route,
+ * from a browser run: the display window, with `totalRows` and paging for the
+ * rest. Only what is shipped is windowed; a query reading another inside one
+ * engine run reads its whole result.
+ */
+export const DISPLAY_ROWS = 1_000;
