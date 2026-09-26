@@ -10,7 +10,9 @@
  * From the repository root. The map is run-migration.ts's report: it says what the migration did to each
  * document, and marks queries whose conversion notes say they read the clock
  * (`$_now`), whose results may differ between two runs for that reason alone.
- * Exits 1 when any query differs or newly fails.
+ * Exits 1 when any query differs, newly fails, or ran before and not after —
+ * the compiled engine records nothing for a document it cannot compile, so a
+ * query missing after the migration is a failure, not an absence.
  */
 import { readFileSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
@@ -129,7 +131,7 @@ function main() {
   if (!before || !after || !values.map) throw new Error('usage: compare-results.ts <before.jsonl> <after.jsonl> --map <migration-report.jsonl>');
   const comparison = compareResults(jsonl(before), jsonl(after), jsonl(values.map));
   console.log(formatComparison(comparison));
-  if (comparison.totals.differs || comparison.totals['failed after']) process.exitCode = 1;
+  if (comparison.totals.differs || comparison.totals['failed after'] || comparison.totals['only before']) process.exitCode = 1;
 }
 
 if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) main();

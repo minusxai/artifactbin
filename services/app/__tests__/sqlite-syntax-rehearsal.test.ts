@@ -29,7 +29,7 @@ describe('recordResults', () => {
     } }));
     expect(res.status).toBe(201);
     const doc = ((await res.json()) as { id: string }).id;
-    await legacy('zzbrok', '<Helmet><Query name="broken">{`select * from nowhere_at_all`}</Query></Helmet><DataTable data="$broken" />');
+    await legacy('zzbrok', `<Helmet><Query name="broken">{\`select json_extract('{', '$.a') as v\`}</Query></Helmet><DataTable data="$broken" />`);
     await legacy('zztrsh', '<Helmet><Query name="gone">{`select 1 as n`}</Query></Helmet><DataTable data="$gone" />');
     await legacy('zzplan', '<p>No data</p>');
     const db = await harness.db();
@@ -38,7 +38,7 @@ describe('recordResults', () => {
     const summary = await recordResults({ db, getArtifactById, dataflowForRow }, (line) => lines.push(line));
     expect(summary).toEqual({ documents: 3, results: 2 });
     expect(lines.find((line) => line.document === doc)).toEqual({ document: doc, query: 'nums', columns: ['n'], rows: [[1], [2]] });
-    expect(lines.find((line) => line.document === 'zzbrok')).toMatchObject({ query: 'broken', error: expect.stringMatching(/nowhere_at_all/) });
+    expect(lines.find((line) => line.document === 'zzbrok')).toMatchObject({ query: 'broken', error: expect.stringMatching(/json/i) });
   });
 });
 
