@@ -82,6 +82,8 @@ export interface PageEngine {
   write(flow: CompiledDataflow, m: CompiledMutation, request: MutationRequest, ctx: PageWriteContext): Promise<LocalMutationResult>;
   /** Apply a dataset write to the held copy; null when it cannot be judged here (the server alone answers it). */
   apply(flow: CompiledDataflow, m: CompiledMutation, request: MutationRequest, ctx: PageWriteContext): Optimistic | null;
+  /** The document is gone: close its open database, whose memory the wasm heap never gives back otherwise. */
+  close(): void;
 }
 
 interface Pending {
@@ -156,7 +158,9 @@ export function createPageEngine(source: PageEngineSource): PageEngine {
   };
   const current = (flow: CompiledDataflow): ImportTables => importsOf(flow, views());
 
+  let closed = false;
   const engine = () => {
+    if (closed) throw new Error('the page engine is closed');
     if (!core) throw new Error('the page engine is not loaded');
     return core;
   };
@@ -192,7 +196,13 @@ export function createPageEngine(source: PageEngineSource): PageEngine {
   };
 
   return {
+    close() {
+      closed = true;
+      database?.db.close();
+      database = null;
+    },
     prepare(flow, imports) {
+      if (closed) return;
       // A core that will not load is final for this document: its queries run on the server.
       loadingCore ??= source.load().then((loaded) => { core = loaded; view = null; }, () => {});
       for (const name of imports) {
@@ -204,7 +214,7 @@ export function createPageEngine(source: PageEngineSource): PageEngine {
       }
     },
     ready(flow, imports) {
-      return !!core && imports.every((name) => {
+      return !closed && !!core && imports.every((name) => {
         const ref = importRef(flow, name);
         return !!ref && !!held.get(ref)?.base;
       });
@@ -238,7 +248,7 @@ export function createPageEngine(source: PageEngineSource): PageEngine {
     },
     apply(flow, m, request, ctx) {
       const ref = 'import' in m.target ? importRef(flow, m.target.import) : undefined;
-      if (!core || !ref) return null;
+      if (closed || !core || !ref) return null;
       const bound = bindMutationRequest(flow, m, request, ctx);
       if (!bound.ok) return null;
       const entry: Pending = {
