@@ -376,7 +376,9 @@ function replace(state: CoreState, graph: RuntimeGraph, next: DataflowState | un
   const clock = state.clock + 1;
   const versions = Object.fromEntries([...Object.keys(state.versions), ...indexOf(graph).nodes].map((k) => [k, clock]));
   const bumped: CoreState = { ...state, graph, clock, versions };
-  const diverged = Object.keys(kept).filter((n) => !Object.is(kept[n], incoming[n])).map(valueKey);
+  // The server ran with the defaults and the AUTHORED rows: a retained choice
+  // that differs, and every surviving local draft, make their readers stale.
+  const diverged = [...Object.keys(kept).filter((n) => !Object.is(kept[n], incoming[n])), ...Object.keys(local)].map(valueKey);
   const answeredAt: Record<NodeKey, number> = {};
   for (const k of indexOf(graph).computed) {
     const leaves = indexOf(graph).leaves.get(k) ?? [];

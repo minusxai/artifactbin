@@ -100,6 +100,15 @@ describe('local SQL mutations in the document store', () => {
     await rejected;
     expect(store.getValue('count')).toBe(0);
   });
+  it('re-runs the readers of a surviving local draft when a new version arrives with rows computed from the authored ones', async () => {
+    const t = transport(), store = make(t);
+    await store.mutate('add');
+    await vi.waitFor(() => expect(t.run).toHaveBeenCalledTimes(1));
+    store.replaceFlow({flow, state: {values: initialValues(flow), tables: {...initialTables(flow), derived: {columns: [], rows: [{id: 1}]}}, errors: {}, mutationAccess: {}}});
+    expect(store.getTable('drafts')?.rows).toEqual([{id: 1}, {id: 2}]);
+    expect(t.run).toHaveBeenCalledTimes(2);
+    expect(t.run).toHaveBeenLastCalledWith({count: 0}, ['derived'], {drafts: [{id: 1}, {id: 2}]});
+  });
   it('does not commit an invalid result and clears busy state after failure', async () => {
     const t = transport();
     t.mutate = async () => ({dataset: '', local: {target: '_signals', affected: 1, table: {columns: [{name: 'count', type: 'string'}], rows: [{count: 'bad'}]}}});
