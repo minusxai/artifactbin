@@ -34,9 +34,7 @@ interface Referenced {
   visibility: string;
 }
 
-type RefKind = 'dataset' | 'postgres' | 'folder';
-
-const kindOf = (row: Referenced | undefined): RefKind =>
+const kindOf = (row: Referenced | undefined): ReturnType<ConvertLookups['kind']> =>
   row?.format === 'folder' ? 'folder' : row && catalogOf(row)?.kind === 'postgres' ? 'postgres' : 'dataset';
 
 /**
@@ -53,17 +51,17 @@ function importTitle(row: Referenced | undefined, doc: StoredDocument): string |
 export async function convertStoredDocument(db: Queryable, doc: StoredDocument): Promise<StoredConversion> {
   if (hasCurrentDataSyntax(doc.meta)) return { status: 'current' };
   // The converter asks about the datasets it meets synchronously. A first pass
-  // records every one it could ask about (answering "not Postgres" asks the
-  // most), one query answers them all, and the second pass is the conversion.
+  // records every one it could ask about (answering "a stored dataset" asks
+  // the most), one query answers them all, and the second pass is the conversion.
   const asked = new Set<string>();
-  convertDocument(doc.source, { importName: (ref) => void asked.add(ref), isPostgres: (ref) => (asked.add(ref), false) });
+  convertDocument(doc.source, { importName: (ref) => void asked.add(ref), kind: (ref) => (asked.add(ref), 'dataset') });
   const rows = asked.size
     ? (await db.query<Referenced>('SELECT id,format,title,meta,user_id,token_id,visibility FROM artifacts WHERE id=ANY($1::text[])', [[...asked]])).rows
     : [];
   const byId = new Map(rows.map((row) => [row.id, row]));
   const lookups: ConvertLookups = {
     importName: (ref) => importTitle(byId.get(ref), doc),
-    isPostgres: (ref) => kindOf(byId.get(ref)) === 'postgres',
+    kind: (ref) => kindOf(byId.get(ref)),
   };
   const result = convertDocument(doc.source, lookups);
   return { status: result.manual.length ? 'manual' : result.source === doc.source ? 'unchanged' : 'converted', ...result };
