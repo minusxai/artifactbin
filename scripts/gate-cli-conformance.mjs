@@ -111,7 +111,7 @@ try {
   });
   await writeFile(join(workspace, 'sales.csv'), 'region,amount\nEU,2\nNA,3\n');
   const registered=await invoke(['add','sales.csv']);
-  await writeFile(join(workspace, 'report.jsx'), '---\ntitle: mxmx_test_conformance_report\nvisibility: private\n---\n<Helmet><Value name="region" type="string" /><Query name="sales" source="ref:'+registered['sales.csv']+'">{`select sum(amount) total from public.rows where $region is null or region=$region`}</Query></Helmet><h1>Baseline report</h1><Number data="$sales" col="total" />');
+  await writeFile(join(workspace, 'report.jsx'), '---\ntitle: mxmx_test_conformance_report\nvisibility: private\n---\n<Helmet><Value name="region" type="string" /><Import name="sales_data" src="ref:'+registered['sales.csv']+'" /><Query name="sales">{`select sum(amount) total from sales_data.rows where $region is null or region=$region`}</Query></Helmet><h1>Baseline report</h1><Number data="$sales" col="total" />');
   const pushed = await invoke(['push', 'report.jsx']);
   publishedIds.push(...pushed.operations.filter(item => item.id).map(item => item.id));
   const published = pushed.operations.find(item => item.path.endsWith('report.jsx'));
@@ -124,7 +124,7 @@ try {
   const read = await api(`/api/artifacts/${id}`);
   assert.equal(read.status, 200);
   const head = await read.json();
-  assert.match(head.markup, /source="ref:/);
+  assert.match(head.markup, /<Import name="sales_data" src="ref:/);
   record('CLI registration and publication preserve dataset identities');
   await scenario(async () => {
   const other = (await connectAgent(base)).token;
@@ -139,7 +139,7 @@ try {
   await scenario(async () => {
   const query = await invoke(['query', id, '--name', 'sales', '--param', 'region=EU']);
   assert.equal(Number(query.results?.[0]?.rows?.[0]?.total), 2, JSON.stringify(query));
-  record('CLI query executes host DuckDB with bound parameters');
+  record('CLI query executes on the host with bound parameters');
   });
   await scenario(async () => {
   const second = join(root, 'second');
