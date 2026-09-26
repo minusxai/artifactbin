@@ -39,7 +39,7 @@ describe('conditional JSX as structural data', () => {
     const {content, body} = splitHelmet(nodes('<Helmet><Value name="show" type="boolean" /></Helmet>{$show && <p>{$missing}</p>}'));
     const uses = collectRefNameUses(body);
     expect(uses.map(u => u.name)).toEqual(['show', 'missing']);
-    expect(validateDataflow({values: content.values, queries: []}, uses)).toHaveLength(1);
+    expect(validateDataflow({imports: [], values: content.values, queries: [], mutations: []}, uses)).toHaveLength(1);
   });
   it.each(['{window.ready && <p>Bad</p>}', '{fetch("x") ? <p>A</p> : <p>B</p>}', '{false && <script>{`alert(1)`}</script>}', '{false && <img onError="bad" />}', '<__mx_condition />'])('rejects unsafe hidden markup or predicates: %s', source => {
     expect(validate(source).length).toBeGreaterThan(0);

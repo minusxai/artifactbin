@@ -240,8 +240,8 @@ describe('splitHelmet — data declarations', () => {
     const { content } = splitHelmet(nodes('<Helmet>' + QUERY + VALUE + '</Helmet><p>x</p>'));
     expect(content.values.map((v) => v.name)).toEqual(['region']);
     expect(content.queries.map((q) => q.name)).toEqual(['sales']);
-    expect(content.queries[0].params).toEqual(['region']);
-    expect(content.queries[0].refs).toEqual(['abc123']);
+    // Parse only: what a statement binds and reads is the compiler's (lib/story/compile-dataflow).
+    expect(Object.keys(content.queries[0]!).sort()).toEqual(['end', 'name', 'sql', 'start']);
   });
 
   it('yields empty declaration lists with no Helmet', () => {

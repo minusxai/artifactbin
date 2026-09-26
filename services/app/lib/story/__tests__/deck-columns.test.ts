@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
 import { checkDocumentData } from '../data-checks';
-import { queryRows } from '@/lib/datasets/query-rows';
 import type { DatasetColumn } from '../dataset-shape';
 import type { RefLoader } from '../refs';
 
@@ -10,7 +9,7 @@ const columns: DatasetColumn[] = [
   { name: 'lat', type: 'number' },
   { name: 'lng', type: 'number' },
 ];
-const load: RefLoader = async (id) => (id === DS ? { id: DS, format: 'dataset', columns, query: (sql, params) => queryRows({ columns, rows: [] }, sql, params) } : null);
+const load: RefLoader = async (id) => (id === DS ? { id: DS, format: 'dataset', columns } : null);
 const doc = (layers: string) =>
   '<Helmet>' +
   `<Import name="points_data" src="ref:${DS}" /><Query name="points">{\`select city, lat, lng from points_data.rows\`}</Query>` +

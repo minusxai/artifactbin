@@ -138,7 +138,7 @@ describe('the chart walk, at its edges', () => {
      */
     const src = '<Helmet><Value name="n" type="number" default={1} /></Helmet><input value="$n" />';
     const dataflow = {
-      flow: { values: [{ kind: 'scalar' as const, name: 'n', type: 'number' as const, default: 1, start: 0, end: 0 }], queries: [] },
+      flow: { imports: [], values: [{ kind: 'scalar' as const, name: 'n', type: 'number' as const, default: 1 }], queries: [], mutations: [] },
       state: { values: { n: 1 }, tables: {}, errors: {} },
     };
     expect(preloads(await doc({ source: src, dataflow }))).toEqual([RUNTIME]);

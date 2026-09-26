@@ -67,9 +67,11 @@ export type CompileResult = { ok: true; compiled: CompiledDataflow } | { ok: fal
  * Also answers whether the statement holds the literal `'now'`, the one clock
  * read SQLite's authorizer cannot report (a function argument is not an event).
  */
-export function rewriteBuiltinFields(sql: string): { sql: string; fields: Map<string, string>; now: boolean } {
+export function rewriteBuiltinFields(sql: string): { sql: string; fields: Map<string, string>; now: boolean; branches: string[] | null } {
   const fields = new Map<string, string>();
-  let out = '', i = 0, now = false;
+  let out = '', i = 0, now = false, depth = 0, body = -1;
+  /** Top-level UNION/INTERSECT/EXCEPT, as [start, end) in the rewritten text. */
+  const compounds: Array<[number, number]> = [];
   const skipTo = (end: number) => { out += sql.slice(i, end); i = end; };
   while (i < sql.length) {
     const c = sql[i]!;
@@ -100,9 +102,26 @@ export function rewriteBuiltinFields(sql: string): { sql: string; fields: Map<st
         out += `$${paramSqlName(logical)}`;
         i += param[0].length;
       } else { out += c; i++; }
-    } else { out += c; i++; }
+    } else if (/[A-Za-z_]/.test(c) && !/\w/.test(sql[i - 1] ?? '')) {
+      const w = /^[A-Za-z_]\w*/.exec(sql.slice(i))![0];
+      const lower = w.toLowerCase();
+      if (depth === 0 && body < 0 && (lower === 'select' || lower === 'values')) body = out.length;
+      if (depth === 0 && (lower === 'union' || lower === 'intersect' || lower === 'except')) {
+        const all = /^\s+all\b/i.exec(sql.slice(i + w.length))?.[0] ?? '';
+        compounds.push([out.length, out.length + w.length + all.length]);
+        out += w + all; i += w.length + all.length;
+      } else { out += w; i += w.length; }
+    } else {
+      if (c === '(') depth++;
+      else if (c === ')') depth--;
+      out += c; i++;
+    }
   }
-  return { sql: out, fields, now };
+  // A compound's branches, each a statement of its own (the WITH clause before the first branch is every branch's).
+  const branches = compounds.length && body >= 0
+    ? [body, ...compounds.map(([, end]) => end)].map((from, n) => out.slice(0, body) + out.slice(from, compounds[n]?.[0] ?? out.length))
+    : null;
+  return { sql: out, fields, now, branches };
 }
 
 /** The clock functions a statement may not call: the current time is `$_now`, identical on server and browser. */
@@ -254,7 +273,7 @@ export function compileDataflow(flow: Dataflow, ctx: CompileContext, body?: JsxN
     const key = q.name.toLowerCase();
     if (compiledQueries.has(key) || failed.has(key)) return;
     const fail = (message: string) => { failed.add(key); errors.push(at(q, QUERY_TAG, `<Query name="${q.name}"> ${message}`)); };
-    const { sql, fields, now } = rewriteBuiltinFields(q.sql);
+    const { sql, fields, now, branches } = rewriteBuiltinFields(q.sql);
     if (q.source) return compilePostgres(q, sql, fields);
     for (;;) {
       let analysis: StatementAnalysis;
@@ -282,11 +301,32 @@ export function compileDataflow(flow: Dataflow, ctx: CompileContext, body?: JsxN
       analyses.set(key, analysis);
       compiledQueries.set(key, {
         name: q.name, engine: 'sqlite', sql, params, reads,
-        columns: analysis.columns.map((c) => ({ name: c.name, type: originType(c) })),
+        columns: compoundTypes(analysis.columns.map((c) => ({ name: c.name, type: originType(c) })), branches),
         start: q.start, end: q.end,
       });
       return;
     }
+  };
+
+  /**
+   * A compound (UNION, INTERSECT, EXCEPT) answers its LEFT branch's origin for
+   * every column, so a `user` column can leak in from one branch while another
+   * projects plain text. A column keeps its type only where every branch
+   * projects that type; where a branch says `user` and another does not, the
+   * column is text; any other disagreement is left to the dry run.
+   */
+  const compoundTypes = (columns: CompiledQuery['columns'], branches: string[] | null): CompiledQuery['columns'] => {
+    if (!branches || columns.every((c) => c.type === null)) return columns;
+    const each: Array<Array<ColumnType | null>> = [];
+    for (const branch of branches) {
+      try { each.push(ctx.engine.analyze(branch, [...base, ...queryRelations()]).columns.map(originType)); }
+      catch { each.push([]); }
+    }
+    return columns.map((c, n) => {
+      const types = each.map((b) => b[n] ?? null);
+      if (types.every((t) => t === c.type)) return c;
+      return { ...c, type: types.includes('user') || c.type === 'user' ? 'string' : null };
+    });
   };
 
   /** A projection's type: its origin's declared type, through an earlier query by that query's compiled type. */
