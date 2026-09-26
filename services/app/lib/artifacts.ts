@@ -66,13 +66,13 @@ import {newEditId} from './story/splice';
 import type {StringEdit} from './story/edit-batch';
 import { nodeIndex, stampNodeIds } from './story/node-ids';
 import { COMPILED_DATAFLOW, finalizeArtifactMetadata, readCompiledDataflow, storedCompiledDataflow } from './story/parsed-artifact-metadata';
-import { DATA_SYNTAX_META } from './story/data-syntax';
-import { isEmptyDataflow, scalarMatches, type Row, type Scalar } from '@/lib/story/dataflow';
-import { declarationsOf } from '@/lib/story/helmet';
-import { compileWithLoader } from '@/lib/story/compile-dataflow';
+import { DATA_SYNTAX_META, PREVIOUS_ENGINE } from './story/data-syntax';
+import { EMPTY_DATAFLOW, isEmptyDataflow, scalarMatches, type Row, type Scalar } from '@/lib/story/dataflow';
 import type { ColumnType } from '@artifactbin/contracts';
 import { EMPTY_COMPILED_DATAFLOW, type CompiledDataflow, type CompiledMutation } from '@/lib/story/compiled-dataflow';
-import { bindParams, bindTypes, dataRefs, importRef, initialValues, mutationParams, mutationReads, mutationTargetRef, selectQueries, type ImportTables } from '@/lib/story/compiled-flow';
+import { compileWithLoader } from '@/lib/story/compile-dataflow';
+import { declarationsOf } from '@/lib/story/helmet';
+import { bindParams, bindTypes, dataRefs, importRef, initialTables, initialValues, mutationParams, mutationReads, mutationTargetRef, selectQueries, type ImportTables } from '@/lib/story/compiled-flow';
 import { platformValues, readerZone, rowField, VIEWER, VIEWER_ID } from '@/lib/story/builtins';
 import type { MutationRequest } from '@/lib/story/mutation-request';
 import { schemaLoaderFor } from '@/lib/story/data-checks';
@@ -127,6 +127,12 @@ export { SHARE_ROLES, type ArtifactRole, type ShareEntry, type ShareRole } from 
 export interface ArtifactRow {
   document?:StoredDocument|null;
   open_annotations?:number;
+  /**
+   * Not a column: set only on an archived version's row (lib/archived-version
+   * rowAtVersion) written for the previous query engine and not convertible
+   * without a person. Its dataflow is {@link previousEngineDataflow}.
+   */
+  previousEngine?: true;
   id: string;
   token_id: string;
   /** Owner account; NULL until the creating token is claimed. */
@@ -2281,6 +2287,7 @@ export async function dataflowForRow(
   opts: DataflowRunOptions = {},
 ): Promise<RanDataflow | null> {
   if (!row.source) return null;
+  if (row.previousEngine) return previousEngineDataflow(row);
   // `viewer` absent is ANONYMOUS, deliberately — that is what the document's own
   // GET transport is, and it is the safe default for every caller that has no
   // session to hand over.
@@ -2380,7 +2387,24 @@ async function mutationAccessFor(doc: ArtifactRow, flow: CompiledDataflow, state
  * names. On a production dashboard this was the difference between a ~100ms
  * render and an ~8ms one, and 231 KB of a 365 KB page.
  */
-export async function declarationsForRow(row: Pick<ArtifactRow, 'source' | 'meta' | 'token_id' | 'user_id'>): Promise<StoryIslandDataflow | null> {
+/**
+ * AN ARCHIVED VERSION WRITTEN FOR THE PREVIOUS QUERY ENGINE that the
+ * migration's converter could not carry over (lib/archived-version): its
+ * Values at their defaults and every query answering PREVIOUS_ENGINE, as state
+ * that has already run — so nothing runs, and the reader never fetches the
+ * head's rows under the same names. Declarations come from the Helmet; only
+ * the Values are compiled, as nothing else in the old syntax would.
+ */
+async function previousEngineDataflow(row: Pick<ArtifactRow, 'source' | 'token_id' | 'user_id'>): Promise<RanDataflow | null> {
+  const declared = declarationsOf(row.source ?? '');
+  if (!declared || isEmptyDataflow(declared)) return null;
+  const compiled = await compileWithLoader({ ...EMPTY_DATAFLOW, values: declared.values }, schemaLoaderFor(refLoaderForActor(writerFor(row))));
+  const flow = compiled.ok ? compiled.compiled : EMPTY_COMPILED_DATAFLOW;
+  return { flow, state: { values: initialValues(flow), tables: initialTables(flow), errors: Object.fromEntries(declared.queries.map((q) => [q.name, PREVIOUS_ENGINE])) } };
+}
+
+export async function declarationsForRow(row: Pick<ArtifactRow, 'source' | 'meta' | 'token_id' | 'user_id' | 'previousEngine'>): Promise<StoryIslandDataflow | null> {
+  if (row.previousEngine) return previousEngineDataflow(row);
   try {
     const flow = await compiledForRow(row);
     return flow && !isEmptyCompiled(flow) ? { flow } : null;

@@ -18,3 +18,10 @@ export const DATA_SYNTAX_META = { dataSyntax: DATA_SYNTAX } as const;
 
 export const hasCurrentDataSyntax = (meta: unknown): boolean =>
   !!meta && typeof meta === 'object' && (meta as { dataSyntax?: unknown }).dataSyntax === DATA_SYNTAX;
+
+/**
+ * What each query of an archived version says when it was written for the
+ * previous engine and the migration's converter cannot carry it over without a
+ * person (lib/archived-version) — in place of failing on syntax this engine refuses.
+ */
+export const PREVIOUS_ENGINE = 'This version was written for the previous query engine and cannot run on the current one';
