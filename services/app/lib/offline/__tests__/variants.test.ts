@@ -78,3 +78,19 @@ describe('precomputeVariants', () => {
     expect(run).not.toHaveBeenCalled();
   });
 });
+
+describe('variant values', () => {
+  it('carry every relevant Value, frozen ones at their base, so the transport can match on a query\'s params', async () => {
+    const run = async (_values: Record<string, Scalar>, only: string[]) => ({ tables: Object.fromEntries(only.map((q) => [q, { rows: [], columns: [] }])), errors: {} });
+    const domains = new Map<string, Scalar[] | null>([['region', [null, 'west']], ['paid', null], ['note', null]]);
+    const out = await precomputeVariants({ flow: twoFilters, base: { ...base, values: { region: null, paid: true, note: 'x' } }, domains, run });
+    expect(out.variants).toEqual([{ values: { region: 'west', paid: true, note: 'x' }, tables: { sales: { rows: [], columns: [] } }, errors: {} }]);
+  });
+
+  it('never offers the viewer ($_me) as a filter', () => {
+    const withMe: Dataflow = { values: twoFilters.values, queries: [{ name: 'mine', sql: 'x', params: ['_me', 'region'], refs: [], start: 0, end: 0 }] };
+    const d = valueDomains(nodes('<Select value="$region" options={["west"]} />'), withMe, base);
+    expect([...d.keys()]).toEqual(['region']);
+    expect(d.get('region')).toEqual([null, 'west']);
+  });
+});
