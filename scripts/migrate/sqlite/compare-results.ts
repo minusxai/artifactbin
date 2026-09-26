@@ -10,9 +10,11 @@
  * From the repository root. The map is run-migration.ts's report: it says what the migration did to each
  * document, and marks queries whose conversion notes say they read the clock
  * (`$_now`), whose results may differ between two runs for that reason alone.
- * Exits 1 when any query differs, newly fails, or ran before and not after —
- * the compiled engine records nothing for a document it cannot compile, so a
- * query missing after the migration is a failure, not an absence.
+ * Exits 1 when a document the migration did not leave as a conflict has a
+ * query that differs, newly fails, or ran before and not after — the compiled
+ * engine records nothing for a document it cannot compile, so a query missing
+ * after the migration is a failure, not an absence. Conflicts are listed too,
+ * but they are the migration report's to account for.
  */
 import { readFileSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
@@ -107,6 +109,13 @@ export function compareResults(before: RecordedResult[], after: RecordedResult[]
   return { documents, totals };
 }
 
+const REGRESSIONS: QueryStatus[] = ['differs', 'failed after', 'only before'];
+
+/** The documents whose results the migration changed: every one it did not leave for a person. */
+export function regressions(comparison: Comparison): DocumentComparison[] {
+  return comparison.documents.filter((doc) => doc.outcome !== 'conflict' && (doc.failed?.after || doc.queries.some((q) => REGRESSIONS.includes(q.status))));
+}
+
 /** The operator's report: documents with anything but identical results, then totals. */
 export function formatComparison(comparison: Comparison): string {
   const lines: string[] = [];
@@ -131,7 +140,9 @@ function main() {
   if (!before || !after || !values.map) throw new Error('usage: compare-results.ts <before.jsonl> <after.jsonl> --map <migration-report.jsonl>');
   const comparison = compareResults(jsonl(before), jsonl(after), jsonl(values.map));
   console.log(formatComparison(comparison));
-  if (comparison.totals.differs || comparison.totals['failed after'] || comparison.totals['only before']) process.exitCode = 1;
+  const changed = regressions(comparison);
+  console.log(changed.length ? `changed by the migration: ${changed.map((doc) => doc.document).join(', ')}` : 'no migrated document changed its results');
+  if (changed.length) process.exitCode = 1;
 }
 
 if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) main();
