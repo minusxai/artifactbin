@@ -212,7 +212,8 @@ async function commitArtifact(tx: Queryable, locked: ArtifactRow, prepared: Prep
 
 async function refusal(response: Response): Promise<string[]> {
   const body = await response.json().catch(() => null) as { error?: string; details?: unknown } | null;
-  const details = Array.isArray(body?.details) ? body.details.map(String) : [];
+  // A markup refusal details each fault as {message, tag, start, end}; the rest are text.
+  const details = Array.isArray(body?.details) ? body.details.map((d) => (d && typeof d === 'object' && 'message' in d ? String(d.message) : String(d))) : [];
   return [`${response.status} ${body?.error ?? 'refused'}`, ...details];
 }
 
