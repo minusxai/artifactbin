@@ -105,7 +105,7 @@ jobs:
             test -s "downloads/$runner/$binary"
             cp "downloads/$runner/$binary" "bundle/$binary"
             cp "downloads/$runner/$binary.manifest.json" "bundle/$binary.manifest.json"
-            for asset in "$binary.gz" "$binary.sizes.json" "afbin-sql-${mapping#*:}.gz" "afbin-sql-${mapping#*:}.manifest.json" "afbin-runtime-${mapping#*:}.gz" "afbin-chromium-${mapping#*:}.gz"; do
+            for asset in "$binary.gz" "$binary.sizes.json" "afbin-runtime-${mapping#*:}.gz" "afbin-chromium-${mapping#*:}.gz"; do
               test -f "downloads/$runner/$asset"
               test ! -L "downloads/$runner/$asset"
               test -s "downloads/$runner/$asset"

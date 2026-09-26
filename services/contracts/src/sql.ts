@@ -102,8 +102,6 @@ export interface MutationInput {
   params: Record<string, Scalar>;
   /** Declared types of scalar params. Policy analysis and binding use these instead of guessing from the JS value. */
   paramTypes?: Record<string, ColumnType>;
-  /** Original row values, exposed to SQL as the native typed STRUCT `$_row`. */
-  row?: { columns: DatasetColumn[]; values: Record<string, Scalar> };
   /** Required changed-row count for server-controlled writes such as cell edits. */
   expectedAffected?: number;
   /** The most rows the table may hold AFTER the write. */

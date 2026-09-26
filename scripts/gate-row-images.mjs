@@ -24,8 +24,8 @@ const rows=Array.from({length:1000},(_,i)=>({id:String(i),title:i%2?'Blue book':
 const dataset=await create({dataset:rows});
 const markup=`<Helmet>
  <Value name="take" type="number" default={2}/><Value name="reverse" type="boolean" default={false}/><Value name="selected" type="string" default="0"/>
- <Query name="books" source="ref:${dataset.id}">{\`select * from public.rows order by case when $reverse then -position else position end limit $take\`}</Query>
- <Query name="detail" source="ref:${dataset.id}">{\`select * from public.rows where id=$selected\`}</Query>
+ <Import name="books_data" src="ref:${dataset.id}" /><Query name="books">{\`select * from books_data.rows order by case when $reverse then -position else position end limit $take\`}</Query>
+ <Import name="detail_data" src="ref:${dataset.id}" /><Query name="detail">{\`select * from detail_data.rows where id=$selected\`}</Query>
 </Helmet><main className="p-8">
 <Input label="Rows" type="number" value="$take"/><Switch label="Reverse" checked="$reverse"/><Input label="Selected book" value="$selected"/>
 <section aria-label="Selected"><For each={$detail} keyBy="id"><img src="$_row.cover_ref" alt="$_row.title" loading="lazy" width={48} height={64}/><p>{$_row.title}</p></For></section>
@@ -91,7 +91,7 @@ try {
   distinct.push({id:String(i),title:`Cover ${i}`,cover_ref:`ref:${image.id}`});
  }
  const lazyData=await create({dataset:distinct});
- const lazy=await create({markup:`<Helmet><Query name="covers" source="ref:${lazyData.id}">{\`select * from public.rows\`}</Query></Helmet><For each={$covers} keyBy="id"><article className="h-96"><img src="$_row.cover_ref" alt="$_row.title" loading="lazy" width={180} height={240}/></article></For>`});
+ const lazy=await create({markup:`<Helmet><Import name="covers_data" src="ref:${lazyData.id}" /><Query name="covers">{\`select * from covers_data.rows\`}</Query></Helmet><For each={$covers} keyBy="id"><article className="h-96"><img src="$_row.cover_ref" alt="$_row.title" loading="lazy" width={180} height={240}/></article></For>`});
  const probe=await browser.newPage({viewport:{width:1000,height:700}});const fetched=new Set();let metadata=0;
  probe.on('request',r=>{const u=new URL(r.url());if(r.resourceType()==='image'&&/^\/a\/[^/]+\/raw$/.test(u.pathname))fetched.add(u.pathname);if(u.pathname.endsWith('/assets')&&r.resourceType()!=='image')metadata++;});
  await probe.goto(`${base}/a/${lazy.id}`);await artifactDocument(probe);

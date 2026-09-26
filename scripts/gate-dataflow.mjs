@@ -25,8 +25,8 @@ const api = (path, body) => fetch(`${B}${path}`, { method: 'POST', headers: H, b
 const ds = await j(await api('/api/artifacts', { dataset: [{ region: 'EU', revenue: 837 }, { region: 'NA', revenue: 1200 }, { region: 'EU', revenue: 3 }] }));
 check(!!ds.id, 'the dataset published');
 const doc1 = (ds_) => `<Helmet><title>Dataflow gate</title><Value name="region" type="string" />
-<Query name="regions" source="ref:${ds_}">{\`select distinct region from public.rows order by 1\`}</Query>
-<Query name="sales" source="ref:${ds_}">{\`select region, sum(revenue) revenue from public.rows where $region is null or region = $region group by 1 order by 1\`}</Query>
+<Import name="regions_data" src="ref:${ds_}" /><Query name="regions">{\`select distinct region from regions_data.rows order by 1\`}</Query>
+<Import name="sales_data" src="ref:${ds_}" /><Query name="sales">{\`select region, sum(revenue) revenue from sales_data.rows where $region is null or region = $region group by 1 order by 1\`}</Query>
 </Helmet><div data-design="tw" className="@container p-8"><h1 className="text-3xl font-bold">Sales</h1>
 <select aria-label="Region" value="$region" options="$regions" />
 <Iframe title="Dataflow script" height={100}><p id="out">pending</p><script>{\`const out=document.getElementById('out');let initial;mx.subscribe(['sales','region'],snapshot=>{const region=snapshot.signals.region.value;if(initial===undefined)initial=region;if(region!==initial){out.textContent='changed:'+region;return;}const table=snapshot.signals.sales.value;out.textContent='mx:'+typeof mx+' rows='+(table?table.rows.length:0);});\`}</script></Iframe>
@@ -137,7 +137,7 @@ check(reach.violations.length >= reach.targetCount && blockedOrigins.has(new URL
 const rows = Array.from({ length: 200 }, (_, i) => ({ id: i, region: ['EU', 'NA', 'APAC'][i % 3], revenue: (i * 7919) % 10007 }));
 const big = await j(await api('/api/artifacts', { dataset: rows }));
 const expectedMax = Math.max(...rows.flatMap((a) => rows.map((b_) => (a.revenue + b_.revenue) % 10007)));
-const tdoc = await j(await api('/api/artifacts', { markup: `<Helmet><Query name="all" source="ref:${big.id}">{\`select a.id * 200 + b.id as id, a.region, (a.revenue + b.revenue) % 10007 as revenue from public.rows a cross join public.rows b order by 1\`}</Query></Helmet>
+const tdoc = await j(await api('/api/artifacts', { markup: `<Helmet><Import name="all_data" src="ref:${big.id}" /><Query name="all">{\`select a.id * 200 + b.id as id, a.region, (a.revenue + b.revenue) % 10007 as revenue from all_data.rows a cross join all_data.rows b order by 1\`}</Query></Helmet>
 <div data-design="tw" className="@container p-8"><h1 className="text-3xl font-bold">Big table</h1>
 <DataTable data="$all" height="360px" columns={[{"col":"id","title":"ID"},{"col":"region","title":"Region"},{"col":"revenue","title":"Revenue","fmt":"$,.0f","bar":true}]} /></div>` }));
 check(!!tdoc.id, 'the DataTable document published');
@@ -213,8 +213,8 @@ check(readerRelay.length >= 1 && readerDirect.length === 0, `…as the relay POS
 // the reader through the runtime's URL state synchronization.
 const uds = await j(await fetch(`${B}/api/artifacts`, { method: 'POST', headers: OH, body: JSON.stringify({ dataset: [{ region: 'west', revenue: 10 }, { region: 'east', revenue: 25 }] }) }));
 const udocSrc = `<Helmet><title>URL values gate</title><Value name="region" type="string" />
-<Query name="regions" source="ref:${uds.id}">{\`select distinct region from public.rows order by 1\`}</Query>
-<Query name="sales" source="ref:${uds.id}">{\`select region, sum(revenue) revenue from public.rows where $region is null or region = $region group by 1 order by 1\`}</Query>
+<Import name="regions_data" src="ref:${uds.id}" /><Query name="regions">{\`select distinct region from regions_data.rows order by 1\`}</Query>
+<Import name="sales_data" src="ref:${uds.id}" /><Query name="sales">{\`select region, sum(revenue) revenue from sales_data.rows where $region is null or region = $region group by 1 order by 1\`}</Query>
 </Helmet><div data-design="tw" className="@container p-8"><h1 className="text-3xl font-bold">Regions</h1>
 <select aria-label="Region" value="$region" options="$regions" />
 <p>Total <Number data="$sales" col="revenue" agg="sum" prefix="$" /></p></div>`;

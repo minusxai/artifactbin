@@ -352,16 +352,16 @@ describe('a declared write that names the viewer', () => {
    const root=await mkdtemp(join(tmpdir(),'afbin-me-write-'));
    try{
     await saveTestConnection({server:'https://example.com',token:'test'},root);
-    const joined=await run(root,['--name','join'],[{name:'join',params:[{name:'_me',type:'user'}]}]);
+    const joined=await run(root,['--name','join'],[{name:'join',args:[]}]);
     assert.equal(joined.code,0,JSON.stringify(joined.result));
-    assert.deepEqual(joined.bodies,[{name:'join',values:{}}]);
+    assert.deepEqual(joined.bodies,[{name:'join',args:{}}]);
    }finally{await rm(root,{recursive:true,force:true});}
   });
   test('refuses a supplied $_me by saying whose it is, and sends nothing',async()=>{
    const root=await mkdtemp(join(tmpdir(),'afbin-me-write-'));
    try{
     await saveTestConnection({server:'https://example.com',token:'test'},root);
-    const forged=await run(root,['--name','join','--param','_me=usr_someone'],[{name:'join',params:[{name:'_me',type:'user'}]}]);
+    const forged=await run(root,['--name','join','--param','_me=usr_someone'],[{name:'join',args:[]}]);
     assert.notEqual(forged.code,0);
     assert.equal(forged.result.error.code,'invalid_parameter');
     assert.match(forged.result.error.message,/_me/);
@@ -373,7 +373,7 @@ describe('a declared write that names the viewer', () => {
    const root=await mkdtemp(join(tmpdir(),'afbin-me-write-'));
    try{
     await saveTestConnection({server:'https://example.com',token:'test'},root);
-    const row=await run(root,['--name','remove'],[{name:'remove',target:'ds9Kq2',params:[{name:'_row'},{name:'_me',type:'user'}]}]);
+    const row=await run(root,['--name','remove'],[{name:'remove',target:'ds9Kq2',args:[],row:['id']}]);
     assert.notEqual(row.code,0);
     assert.equal(row.result.error.code,'row_mutation');
     assert.match(row.result.error.fix,/afbin query ds9Kq2 --write --input/);
@@ -385,7 +385,7 @@ describe('a declared write that names the viewer', () => {
    const root=await mkdtemp(join(tmpdir(),'afbin-me-write-'));
    try{
     await saveTestConnection({server:'https://example.com',token:'test'},root);
-    const row=await run(root,['--name','pick'],[{name:'pick',params:[{name:'_row'}]}]);
+    const row=await run(root,['--name','pick'],[{name:'pick',args:[],row:['id']}]);
     assert.equal(row.result.error.code,'row_mutation');
     assert.doesNotMatch(row.result.error.fix,/afbin query/);
     assert.match(row.result.error.fix,/live-sessions/);
@@ -552,7 +552,7 @@ test('pulling a starter names the next call — pick the kind, afbin help <templ
 });
 
 /**
- * A document's <Mutation source="ref:<id>"> needs its dataset published `access: readwrite`,
+ * A document's <Mutation> writing an <Import src="ref:<id>"> needs its dataset published `access: readwrite`,
  * and the CLI is the only door an agent drives: `--access` is that door, on the same push.
  */
 test('push --type dataset --access publishes a writable dataset, changes access later, and stays silent without the flag',async()=>{

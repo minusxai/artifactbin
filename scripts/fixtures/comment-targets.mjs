@@ -37,10 +37,10 @@ render();
 
 export const commentTargetsMarkup = `<Helmet>
   <title>Comments across dynamic content</title>
-  <Value name="reverse" type="boolean" default={false}/>
+  <Value name="flags" type="table" value={[{"reverse":false}]}/>
   <Value name="orders" type="table" value={[{"order_id":"order-101","customer":"Alice Chen","status":"Ready"},{"order_id":"order-102","customer":"Bob Singh","status":"Review"},{"order_id":"order-103","customer":"Carla Diaz","status":"Ready"}]}/>
-  <Query name="ordered">{\`select * from orders order by case when $reverse then customer end desc, customer asc\`}</Query>
-  <Mutation name="reverseRows">{\`update _signals set reverse=not reverse\`}</Mutation>
+  <Query name="ordered">{\`select o.* from orders o, flags f order by case when f.reverse then o.customer end desc, o.customer asc\`}</Query>
+  <Mutation name="reverseRows">{\`update flags set reverse = not reverse\`}</Mutation>
   <Mutation name="renameAlice">{\`update orders set customer='Alice Chen — updated' where order_id='order-101'\`}</Mutation>
   <Mutation name="removeAlice">{\`delete from orders where order_id='order-101'\`}</Mutation>
   <Mutation name="restoreAlice">{\`insert into orders select 'order-101', 'Alice Chen', 'Ready' where not exists (select 1 from orders where order_id='order-101')\`}</Mutation>

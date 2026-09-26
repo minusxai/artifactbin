@@ -195,16 +195,12 @@ describe.each<[string, SqlService]>([
       delete_permissions: [{ role: 'viewer', permission: { filter: {} } }],
     },
   };
-  const row = {
-    columns: table.columns,
-    values: { id: 1, body: 'one', status: 'open' },
-  };
   const runRow = (
     sql: string,
     p = open,
     params: Record<string, string> = {},
-  ) => svc.mutate({ table, sql, params: { ...ROW.params, ...params }, row, policy: p });
-  it('analyzes a row action bound to the $_row struct', async () => {
+  ) => svc.mutate({ table, sql, params: { ...ROW.params, ...params }, policy: p });
+  it('analyzes a row action bound to the row\'s fields', async () => {
     expect(
       await runRow(`update rows set status='done' where id=${ROW.id}`),
     ).toMatchObject({
@@ -319,7 +315,6 @@ describe.each<[string, SqlService]>([
         table,
         sql: `update rows set status = $_value where id = ${ROW.id} and status is distinct from ${ROW.status}`,
         params: { ...ROW.params, _value: 'done' },
-        row: { columns: table.columns, values: { id: 1, body: 'one', status: 'open' } },
         policy: open,
       }),
     ).toMatchObject({ affected: 0, rows: table.rows });

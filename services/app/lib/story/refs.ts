@@ -27,7 +27,7 @@ import {parseRowRef} from './row-scope';
 interface RefUse {
   id: string;
   kind: 'dataset' | 'viz' | 'image' | 'pdf' | 'file' | 'asset';
-  /** A `<Query>`/`<Mutation>` reaching its dataset through `source="ref:<id>"`, not a rendered position. */
+  /** A dataset reached through SQL — an `<Import src="ref:<id>">` or a connected database's `<Query source="ref:<id>">` — not a rendered position. */
   via?: 'sql';
   /** For recipe binding validation: the viz envelope + `data` ref carried by the same element. */
   element?: { viz?: Record<string, unknown> | null; dataRef?: string | null };
@@ -389,7 +389,7 @@ const EMBED_DATA_PROP: Record<string, { required: string; usage: string; table?:
   Question: { required: 'data', usage: 'Use data="$name" — a <Query> or table <Value> declared in <Helmet> — plus viz={{"kind":"vega-lite","spec":{…}}}', table: true },
   Number: { required: 'data', usage: 'Use data="$name" — a <Query> or table <Value> declared in <Helmet>', table: true },
   DataTable: { required: 'data', usage: 'Use data="$name" — a <Query> or table <Value> declared in <Helmet>', table: true },
-  Files: { required: 'data', usage: 'Use data="$name" — a <Query> over a folder\'s children (source="ref:<folderId>", select * from public.rows)', table: true },
+  Files: { required: 'data', usage: 'Use data="$name" — a <Query> over a folder\'s children (<Import name="files" src="ref:<folderId>" />, select * from files.rows)', table: true },
   Video: { required: 'src', usage: 'Use src="<YouTube/Vimeo/Loom link>" (+ optionally poster="ref:<image id>" for the thumbnail)' },
   File: { required: 'src', usage: 'Use src="ref:<pdf id>" — the id create_artifact returned for a pdf — or src="<public https link to a .pdf>" (+ optionally title="…")' },
 };
@@ -489,7 +489,7 @@ export function findBrokenEmbeds(source: string): ValidationError[] {
       errors.push({
         message: `<${el.tag} data=${got.length > 40 ? got.slice(0, 40) + '…' : got}> does not name a declared table. ${rule.usage}` +
           (typeof json === 'string' && json.startsWith('ref:')
-            ? ` — a dataset is read through SQL: <Query name="rows" source="${json}">{\`select * from public.rows\`}</Query>, then data="$rows".`
+            ? ` — a dataset is read through SQL: <Import name="data" src="${json}" /><Query name="rows">{\`select * from data.rows\`}</Query>, then data="$rows".`
             : '.'),
         tag: el.tag, attr: attr.name, start: attr.start, end: attr.end,
       });

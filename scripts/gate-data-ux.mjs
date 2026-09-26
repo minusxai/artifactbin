@@ -96,7 +96,7 @@ check((await p.getByLabel('Dataset table', { exact: true }).inputValue()) === 'r
   const ingested = await (await fetch(`${B}/api/artifacts`, { method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${st.token}` },
     body: JSON.stringify({ title: 'sales', dataset: 'month,revenue,zip\n2026-01,120,01234\n2026-02,150,09876\n2026-03,190,01234' }) })).json();
-  const markup = `<Helmet><Query name="rows" source="ref:${ingested.id}">{\`select * from public.rows\`}</Query></Helmet>`
+  const markup = `<Helmet><Import name="rows_data" src="ref:${ingested.id}" /><Query name="rows">{\`select * from rows_data.rows\`}</Query></Helmet>`
     + '<div data-design="tw" className="@container p-10"><h1 className="text-4xl font-bold">Sales</h1>'
     + '<Question title="Revenue by month" data="$rows" '
     + 'viz={{"kind":"vega-lite","spec":{"mark":"bar","encoding":{"x":{"field":"month","type":"nominal"},"y":{"field":"revenue","type":"quantitative"}}}}} '
@@ -126,7 +126,7 @@ check((await p.getByLabel('Dataset table', { exact: true }).inputValue()) === 'r
   const ds = await fetch(`${B}/api/artifacts`, { method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${st.token}` },
     body: JSON.stringify({ title: 'edit-mode data', dataset: 'region,revenue\nNorth,4200\nSouth,3100' }) }).then((r) => r.json());
-  const mk = `<Helmet><Query name="rows" source="ref:${ds.id}">{\`select * from public.rows\`}</Query></Helmet><div data-design="tw" className="@container p-8"><h1 className="text-3xl font-bold">Rev</h1><Question title="Revenue" data="$rows" viz={{"kind":"vega-lite","spec":{"mark":"bar","encoding":{"x":{"field":"region","type":"nominal"},"y":{"field":"revenue","type":"quantitative"}}}}} height="430px" /></div>`;
+  const mk = `<Helmet><Import name="rows_data" src="ref:${ds.id}" /><Query name="rows">{\`select * from rows_data.rows\`}</Query></Helmet><div data-design="tw" className="@container p-8"><h1 className="text-3xl font-bold">Rev</h1><Question title="Revenue" data="$rows" viz={{"kind":"vega-lite","spec":{"mark":"bar","encoding":{"x":{"field":"region","type":"nominal"},"y":{"field":"revenue","type":"quantitative"}}}}} height="430px" /></div>`;
   await fetch(`${B}/api/artifacts/${st.id}`, { method: 'PUT',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${st.token}` },
     body: JSON.stringify({ title: 'Rev', markup: mk, theme: 'manuscript' }) });

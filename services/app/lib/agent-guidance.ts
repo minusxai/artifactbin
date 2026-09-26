@@ -82,7 +82,7 @@ export const MARKUP_FIELD_GUIDANCE = [
   'Start with <div data-design="tw" className="@container …">. Use theme tokens, e.g. bg-muted.',
   'Inline style=/onClick= rejected. ONE <Helmet> holds <style>; its <script> runs without parent DOM access.',
   'Read `afbin help markup` or the installed references/markup.md first.',
-  'Data: <Query name="q" source="ref:<id>">{`select … from public.rows`}</Query> in Helmet, then <Question data="$q" viz={{kind:"vega-lite",spec:{…}}} />.',
+  'Data: <Import name="d" src="ref:<id>" /><Query name="q">{`select … from d.rows`}</Query> in Helmet, then <Question data="$q" viz={{kind:"vega-lite",spec:{…}}} />.',
   'Filters: <Value name="x" /> in Helmet, <select value="$x" options="$q" /> in the body; $x in SQL.',
   COMPUTED_FIGURE_RULE,
 ].join(' ');
