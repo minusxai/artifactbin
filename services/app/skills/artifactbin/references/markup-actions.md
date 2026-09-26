@@ -10,8 +10,8 @@ portaled controls such as Select retain their row context too. A button-only
 Column still needs a column in the query result: `'' as action` supplies it.
 
 This runnable example uses temporary local rows. Reload resets them. For saved
-tasks, use `source="ref:<datasetId>"` on the Query and Mutation, read/write
-`public.rows`, and keep the same row guard and `expectedAffected={1}`.
+tasks, `<Import name="tasks_data" src="ref:<datasetId>" />`, read and write
+`tasks_data.rows`, and keep the same row guard and `expectedAffected={1}`.
 
 ```jsx
 <Helmet>

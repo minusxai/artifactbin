@@ -58,21 +58,21 @@ directions — not written there, not read back from a shared or stale one.
 defaults once the write is COMMITTED, which is how the box empties itself for
 the next entry; a refused write changes nothing the person typed.
 
-For scalar-only state, update the implicit one-row `_signals` table:
+For scalar-only state, `set=` on a Button changes page values on click, with
+no SQL: a literal, another value (`"$other"`) or, in a row, `"$_row.<column>"`.
 
 ```jsx
 <Helmet>
-  <Value name="step" type="number" default={0} />
-  <Mutation name="next">{`update _signals set step=step+1`}</Mutation>
+  <Value name="step" type="number" default={1} url={false} />
 </Helmet>
-<Button run="$next">Next</Button>
-{$step > 0 ? <p>Step {$step}</p> : <p>Not started</p>}
+<Button set={{"step": 2}}>Next</Button>
+{$step > 1 ? <p>Step {$step}</p> : <p>Not started</p>}
 ```
 
 Local SQL is intentionally ephemeral and per loaded document. It does not
 create a source version, alter stored dataset rows, or change permissions.
-Reload resets `_signals` and inline table rows to their declared defaults;
+Reload resets inline table rows to their declared rows;
 non-default scalar choices written into the URL persist, and a `url={false}`
-scalar comes back at its default because it was never in the address. A Query or Mutation
-with `source="ref:abc123"` remains a stored-dataset operation with its normal
-read and write permissions; local state does not weaken that boundary.
+scalar comes back at its default because it was never in the address. A Query
+or Mutation over an `<Import>` remains a stored-dataset operation with its
+normal read and write permissions; local state does not weaken that boundary.
