@@ -75,7 +75,7 @@ await build({
   format: "cjs",
   target: "node22",
   // A CommonJS bundle has no import.meta; the modules that read their own URL get the executable's.
-  inject: [resolve("scripts/sea-import-meta.cjs")],
+  inject: [resolve("scripts/sea-import-meta.mjs")],
   define: { "import.meta.url": "__afbinImportMetaUrl" },
   plugins: [
     {
