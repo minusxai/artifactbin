@@ -174,7 +174,14 @@ describe('convertDocument', () => {
     );
   });
 
-  it('a _signals mutation computing from its own columns needs a person', () => {
+  it('a _signals mutation reading another value by its column name sets that value', () => {
+    golden(
+      `<Helmet><Value name="draft" type="string" /><Value name="sent" type="string" /><Mutation name="send">{\`update _signals set sent = draft, draft = ''\`}</Mutation></Helmet><Button run="$send">Send</Button>`,
+      `<Helmet><Value name="draft" type="string" /><Value name="sent" type="string" /></Helmet><Button set={{"sent":"$draft","draft":""}}>Send</Button>`,
+    );
+  });
+
+  it('a _signals mutation computing from its own columns needs a person, told where a computed value lives', () => {
     const doc = `<Helmet>
   <Value name="step" type="number" default={0} />
   <Mutation name="next">{\`update _signals set step = step + 1\`}</Mutation>
@@ -182,20 +189,20 @@ describe('convertDocument', () => {
 <Button run="$next">Next</Button>`;
     const result = convertDocument(doc, lookups);
     expect(result.source).toBe(doc);
-    expect(result.manual).toEqual([expect.objectContaining({ declaration: 'next', reason: expect.stringMatching(/expression/) })]);
+    expect(result.manual).toEqual([expect.objectContaining({ declaration: 'next', reason: expect.stringMatching(/computes step from page values \(step \+ 1\): keep step in a one-row <Value type="table"> updated by a local <Mutation>/) })]);
   });
 
   it('all or nothing: one manual statement returns the document unchanged, pointing at the construct', () => {
     const doc = `<Helmet>
   <Query name="ok" source="ref:abc123">{\`select id from public.rows where owner = $_me\`}</Query>
-  <Query name="tags" source="ref:abc123">{\`select distinct unnest(tags::varchar[]) as tag from public.rows\`}</Query>
+  <Query name="tags" source="ref:abc123">{\`select distinct unnest(tags::int[]) as tag from public.rows\`}</Query>
 </Helmet>
 <User userId="$_me" />`;
     const result = convertDocument(doc, lookups);
     expect(result.source).toBe(doc);
     expect(result.manual).toHaveLength(1);
     expect(result.manual[0]).toMatchObject({ declaration: 'tags', reason: expect.stringMatching(/list/) });
-    expect(doc.slice(result.manual[0].start, result.manual[0].end)).toBe('tags::varchar[]');
+    expect(doc.slice(result.manual[0].start, result.manual[0].end)).toBe('tags::int[]');
     expect(result.changes.map((c) => c.rule)).toEqual(expect.arrayContaining(['source', 'sql', 'import', 'viewer']));
   });
 
