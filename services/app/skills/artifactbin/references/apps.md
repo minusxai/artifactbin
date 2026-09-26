@@ -138,7 +138,8 @@ afbin testuser delete tu_example --json
 
 A test user verifies a COPY, never that `abc123` works; nothing a test user does reaches
 the original. An action outside its sandbox returns `sandbox_only`.
-Run each write on the test-user fork. On the original, `$_me.id` writes must stay disabled and change no
-data when checked as a guest. A Mutation may read other imports and `_members`
+Run each write on the test-user fork. On the original,
+`$_me.id` writes must stay disabled and change no data when checked as a guest.
+A Mutation may read other imports and `_members`
 (`where exists (select 1 from _members where user_id = $_me.id)`), never a
 query: pass a query's value in as an argument.

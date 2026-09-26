@@ -2,24 +2,16 @@
 
 ## Scope and contracts
 
-Migration covers legacy stored-dataset read queries, missing catalog metadata and explicitly
-reported historical exceptions (`services/app/lib/datasets/migrate.ts`).
+This migration gives legacy stored datasets their catalog metadata, in the head and in
+retained versions (`services/app/lib/datasets/migrate.ts`). It changes dataset metadata
+only. Every document version stays byte-identical: document SQL moves to the `<Import>`
+syntax and SQLite through the separate SQLite syntax migration (`services/app/lib/migrate/`),
+which reads the legacy `ref_<id>` tables itself. Query names, node IDs, retained-version
+transactions and fingerprints are preserved.
 
-The planner owns token-preserving SQL rewrites and collision-safe upstream names.
-Legacy read computations remain in the document SQL engine over explicitly named
-source inputs. Mutations retain the dataset compiler and authorized write path.
-Existing canonical source queries are unchanged by migration. Query names,
-surrounding node IDs, retained-version transactions and fingerprints are preserved.
-
-The shared dataflow evaluator distinguishes displayed query results from complete
-inputs to dependent computations. For exactly `select * from public.rows`, it
-can bind the complete authorized stored table internally (`lib/sql/dataflow-core.ts`).
-The server composition supplies that table only for a physical stored relation (or an
-already resolved computed source such as a folder). Models, remote catalogs and filtered
-queries do not use this path. Source authorization and final access/snapshot checks remain
-mandatory. Display pagination and output limits remain in effect.
-
-The CLI uses the same evaluator with complete local input files.
+A migrated dataset is read the one way every dataset is: a document imports it
+(`<Import name="d" src="ref:<id>" />`) and its compiled queries read `d.rows` on the SQLite
+engine, with source authorization and access checks on every read.
 
 ## Metadata and diagnostics
 
@@ -44,8 +36,8 @@ preserved and explicitly reported.
 
 ## Historical exceptions
 
-Historical records that cannot be transformed, or whose transformed markup fails data
-validation, are preserved byte-for-byte, including their metadata and content. Valid
+Historical records that cannot be migrated are preserved byte-for-byte, including their
+metadata and content. Valid
 historical records still migrate. Current-head failures and the history resource limit
 remain blocking. A thrown validator failure aborts the operation; it is not converted to a
 successful exception.
@@ -68,7 +60,6 @@ changing the head.
 
 ## Cost
 
-Complete materialization uses memory proportional to the stored inputs, as legacy
-document execution did. Source result execution adds work and the server may
-decode the cached object again for the full input; this path is not a streaming
-or memory optimization. Existing engine input and timeout limits still apply.
+Migration writes metadata only; an object upload is the original bytes, content-addressed.
+A batch holds at most 100 artifacts, and an artifact with more retained versions than the
+history limit is a blocking conflict rather than a partial migration.
