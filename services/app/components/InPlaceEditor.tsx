@@ -658,7 +658,8 @@ export default function InPlaceEditor({
   /** Which embed inspector the right rail shows, if any. */
   const inspector = chart ? 'chart' : numberEmbed ? 'number' : mermaidEmbed ? 'diagram' : null;
   const tables = useMemo(() => tableChoices(source, dataflowState), [source, dataflowState]);
-  const queryNotebook = useMemo(() => queryCells(source, dataflowState, dataflowPending), [source, dataflowState, dataflowPending]);
+  // The compiled record arrives with the state it ran (compiledRef is set beside setDataflowState).
+  const queryNotebook = useMemo(() => queryCells(source, dataflowState, dataflowPending, compiledRef.current), [source, dataflowState, dataflowPending]);
 
   const onChartChange = useCallback(
     (next: { viz: unknown; table: string | null }) => {
