@@ -8,7 +8,8 @@
  * engine gets its own SQL for the same rule.
  */
 import { afterAll, describe, it, expect } from 'vitest';
-import { createSql, createSqliteSql } from '@artifactbin/sql/local';
+import { createSql } from '@artifactbin/sql/local';
+import { createSqliteSql } from '@artifactbin/sql/sqlite';
 import { serveSql, sqlClient } from '@artifactbin/sql';
 import type { DatasetMutationPolicy, Scalar, SqlService } from '@artifactbin/contracts';
 const local = createSql(),

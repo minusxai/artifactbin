@@ -6,7 +6,8 @@
  * values, bound never spliced, exactly one row changed.
  */
 import { afterAll, describe, expect, it } from 'vitest';
-import { createSql, createSqliteSql } from '@artifactbin/sql/local';
+import { createSql } from '@artifactbin/sql/local';
+import { createSqliteSql } from '@artifactbin/sql/sqlite';
 import { serveSql, sqlClient } from '@artifactbin/sql';
 const local = createSql({ maxRows: 100, timeoutMs: 2000 });
 const server = serveSql(local);

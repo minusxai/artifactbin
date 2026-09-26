@@ -9,7 +9,8 @@ import { afterAll, describe, expect, it, vi } from 'vitest';
 import type { SqlService } from '@artifactbin/contracts';
 import { isQueryFailure } from '@artifactbin/contracts';
 import { SQL_ROUTES, serveSql, sqlClient } from '@artifactbin/sql';
-import { createSql, createSqliteSql } from '@artifactbin/sql/local';
+import { createSql } from '@artifactbin/sql/local';
+import { createSqliteSql } from '@artifactbin/sql/sqlite';
 
 type Engine = 'duckdb' | 'sqlite';
 const ENGINES = { duckdb: createSql({ maxRows: 3, timeoutMs: 2000 }), sqlite: createSqliteSql({ maxRows: 3, timeoutMs: 2000 }) };

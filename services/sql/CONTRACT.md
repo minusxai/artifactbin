@@ -31,7 +31,8 @@ deadline — including the DRY RUNS, where an empty `errors` array would admit a
 author's error from publish time to render time, which is the whole reason the dry runs exist.
 
 Entry points: `@artifactbin/sql` is the contract, the client and the server shell (no native module); `./local` is
-the engine and the ONLY entry that loads DuckDB; `./shape` is the pure column inference, safe in a browser bundle.
+the engine and the ONLY entry that loads DuckDB; `./shape` is the pure column inference, safe in a browser bundle;
+`./core` is the browser-safe SQLite engine and `./sqlite` its `SqlService`.
 
 Conformance: `__tests__/contract.test.ts` runs one suite over both engines (`createSql()`, `createSqliteSql()`), each in
 process and through `sqlClient(serveSql(…))`; the policy, editable-row and typed-parameter suites do the same.
@@ -65,8 +66,8 @@ PostgreSQL catalogs continue to use the app's PostgreSQL compiler before the Pos
 no Node imports, so the server, the runtime bundle and the offline file run the same wasm and the same functions.
 `loadSqlite(wasmBytes?)` answers an engine whose `run`/`mutate`/`dryRun`/`dryRunMutations` take already-clamped
 bounds, `analyze(sql, relations)` answers a `StatementAnalysis`, and `open()` a guarded database for callers that
-orchestrate their own statements. `createSqliteSql(caps)` in `./local` is the `SqlService` over it, with the same caps
-rule as DuckDB. It is not wired into the app yet.
+orchestrate their own statements. `createSqliteSql(caps)` in `./sqlite` is the `SqlService` over it, with the same
+caps rule as DuckDB (its own entry, so `./local` consumers do not bundle the wasm engine). It is not wired into the app yet.
 
 - **Tables** load by `{schema, table, columns, rows}`: `main` for document tables and query results, an attached
   in-memory schema per import (`bookings.rows`). Columns are STRICT (`string`/`date`/`timestamp`/`user` TEXT,
