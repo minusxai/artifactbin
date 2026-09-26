@@ -237,6 +237,7 @@ const GRAPH_FLOW = await compiledOf(''
   + '<Query name="mine">{`select $choice as c`}</Query>'
   + '<Query name="stock">{`select * from stock_data.rows`}</Query>'
   + '<Query name="both">{`select * from top join stock on true`}</Query>'
+  + '<Query name="clock">{`select $_now as now`}</Query>'
   + '<Mutation name="vote">{`insert into sales_data.rows (region) values ($choice)`}</Mutation>', {
   abc123: [{ name: 'region', type: 'string' }, { name: 'revenue', type: 'number' }],
   zzzzzz: [{ name: 'item', type: 'string' }],
@@ -278,5 +279,47 @@ describe('graphOfCompiled', () => {
     const { state } = step(rest(), { type: 'sources', ids: ['_members'] });
     expect([...pendingOf(state)].sort()).toEqual(GRAPH_FLOW.queries.map((q) => q.name).sort());
     expect(accessSettled(state)).toBe(false);
+  });
+
+  it('the minute ticking makes stale only the queries that read $_now', () => {
+    const { state } = step(rest(), { type: 'sources', ids: ['_now'] });
+    expect([...pendingOf(state)]).toEqual(['clock']);
+    expect(accessSettled(state)).toBe(true);
+  });
+});
+
+/*
+ * A run now answers PART of the graph — the browser's nodes or the server's —
+ * so what one answer carries beside its rows (the user pickers' options and
+ * the people it names) is merged per node, never replaced wholesale: a browser
+ * answer carrying neither must not wipe what the server said.
+ */
+describe('partial answers', () => {
+  const PICKERS = { 'sales.owner': [{ id: 'u1', label: 'Ada' }], 'stock.owner': [{ id: 'u2', label: 'Bo' }], who: [{ id: 'u3', label: 'Cy' }] };
+  const ask = (core: CoreState, names: string[]) => {
+    const { state, effects } = step(step(core, { type: 'refresh', queries: names }).state, { type: 'flush' });
+    const run = effects.find((e): e is Extract<CoreEffect, { type: 'run' }> => e.type === 'run')!;
+    return { state, at: run.at };
+  };
+  const answer = (tables: string[], extra: Partial<RunAnswer> = {}): RunAnswer =>
+    ({ tables: Object.fromEntries(tables.map((t) => [t, { rows: [], columns: [] }])), errors: {}, ...extra });
+
+  it('an answer without options or people leaves them as they were', () => {
+    const core = createCore(graphOfCompiled(GRAPH_FLOW), { state: { values: {}, tables: {}, errors: {}, userOptions: PICKERS as never, people: { u1: { name: 'Ada' } as never } } });
+    const { state, at } = ask(core, ['mine']);
+    const next = step(state, { type: 'answered', at, answer: answer(['mine']) }).state;
+    expect(next.data.userOptions).toEqual(PICKERS);
+    expect(next.data.people).toEqual({ u1: { name: 'Ada' } });
+  });
+
+  it('an answer replaces the options of the queries it answered, keeps the others, and adds the people it names', () => {
+    const core = createCore(graphOfCompiled(GRAPH_FLOW), { state: { values: {}, tables: {}, errors: {}, userOptions: PICKERS as never, people: { u1: { name: 'Ada' } as never } } });
+    const { state, at } = ask(core, ['sales']);
+    const next = step(state, { type: 'answered', at, answer: answer(['sales'], {
+      userOptions: { 'sales.owner': [{ id: 'u9', label: 'Di' }], who: [{ id: 'u3', label: 'Cy' }] } as never,
+      people: { u9: { name: 'Di' } as never },
+    }) }).state;
+    expect(next.data.userOptions).toEqual({ 'sales.owner': [{ id: 'u9', label: 'Di' }], 'stock.owner': PICKERS['stock.owner'], who: PICKERS.who });
+    expect(next.data.people).toEqual({ u1: { name: 'Ada' }, u9: { name: 'Di' } });
   });
 });
