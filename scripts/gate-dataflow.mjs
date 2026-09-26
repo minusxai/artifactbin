@@ -20,6 +20,9 @@ import { startMailSink, loginViaEmail } from './lib/mail-login.mjs';
 import { connectAgent } from './lib/cli-connection.mjs';
 const B = process.argv[2] ?? 'http://localhost:3030';
 const check = createChecker('dataflow');
+/** Armed BEFORE a navigation: resolves once that page has loaded its SQLite engine's wasm (false after 20 s). */
+const engineLoads = (page) => page.waitForResponse((r) => r.url().endsWith('.wasm') && r.ok(), { timeout: 20000 }).then(() => true, () => false);
+
 const j = async (r) => { const t = await r.text(); try { return JSON.parse(t); } catch { return { raw: t, status: r.status }; } };
 const tok = (await connectAgent(B)).token;
 const H = { Authorization: `Bearer ${tok}`, 'Content-Type': 'application/json' };
@@ -61,6 +64,7 @@ p.on('request', (r) => {
   if (r.method() === 'POST') relayCalls.push({ url: r.url(), body: r.postDataJSON() });
   if (r.method() === 'GET' && /[?&]q=/.test(r.url())) directCalls.push(r.url());
 });
+const docEngine = engineLoads(p);
 const resp = await p.goto(`${B}/a/${doc.id}`, { waitUntil: 'load' });
 const csp = resp.headers()['content-security-policy'] ?? '';
 check(csp.includes("default-src 'none'") && csp.includes("connect-src 'self'") && !/(?:^|;)\s*sandbox(?:\s|;|$)/.test(csp), 'the reader uses the strict navigable app CSP; author execution is isolated in its child frame');
@@ -99,8 +103,8 @@ check((await frame.textContent('[aria-label="Live number"]')) === '$2,040', 'the
  * server answers, through the scoped POST) the page fetches it once and runs
  * every later change itself: the select below must make NO request at all.
  */
-await p.waitForFunction(() => performance.getEntriesByType('resource').some((e) => e.name.endsWith('.wasm')), null, { timeout: 20000 }).catch(() => {});
-await p.waitForTimeout(1500);
+check(await docEngine, 'the page loaded its SQLite engine behind the first paint');
+await p.waitForTimeout(500);
 const callsBeforeChange = relayCalls.length + directCalls.length;
 await frame.evaluate(() => {
   const el = document.querySelector('[aria-label="Question embed"]');
@@ -160,6 +164,7 @@ const tdoc = await j(await api('/api/artifacts', { markup: `<Helmet><Import name
 check(!!tdoc.id, 'the DataTable document published');
 const pageCalls = [];
 p.on('request', (r) => { if (r.url().includes(`/a/${tdoc.id}/query`)) pageCalls.push({ method: r.method(), body: r.method() === 'POST' ? r.postDataJSON() : null }); });
+const tableEngine = engineLoads(p);
 await p.goto(`${B}/a/${tdoc.id}`, { waitUntil: 'load' });
 check(await servedTopLevel(p), 'the table document is top-level too');
 const f2 = p.mainFrame();
@@ -168,8 +173,8 @@ await f2.waitForTimeout(600);
 const domRows = await f2.$$eval('[aria-label="Data grid"] tbody tr', (trs) => trs.length);
 check(domRows > 0 && domRows < 200, `the table is virtualised (${domRows} DOM rows for 1,000 loaded)`);
 check(/1,000 of 40,000/.test(await f2.textContent('[aria-label="Row count"]')), `and honest about holding the display window of the result (${await f2.textContent('[aria-label="Row count"]')})`);
-await p.waitForFunction(() => performance.getEntriesByType('resource').some((e) => e.name.endsWith('.wasm')), null, { timeout: 20000 }).catch(() => {});
-await f2.waitForTimeout(1500);
+check(await tableEngine, 'the table page loaded its SQLite engine');
+await f2.waitForTimeout(500);
 const tableCallsBefore = pageCalls.length;
 await f2.click('[aria-label="Sort by Revenue"]');
 await f2.click('[aria-label="Sort by Revenue"]');
@@ -310,10 +315,11 @@ check(!!booking.id, `the booking document published (${booking.url ?? JSON.strin
 const bp = await b.newPage({ viewport: { width: 1200, height: 900 } });
 const bookingRequests = [];
 bp.on('request', (r) => bookingRequests.push(r.url()));
+const bookingEngine = engineLoads(bp);
 await bp.goto(`${B}/a/${booking.id}`, { waitUntil: 'load' });
 await bp.locator('main h2').first().waitFor({ timeout: 20000 });
-await bp.waitForFunction(() => performance.getEntriesByType('resource').some((e) => e.name.endsWith('.wasm')), null, { timeout: 20000 }).catch(() => {});
-await bp.waitForTimeout(1500);
+check(await bookingEngine, 'the booking page loaded its SQLite engine');
+await bp.waitForTimeout(500);
 /** Click the i-th day and time, in the page, from the click to the heading showing a different day. */
 const clickDay = (i) => bp.evaluate((i) => new Promise((resolve) => {
   const days = [...document.querySelectorAll('main button')].filter((el) => /\d/.test(el.textContent ?? '') && !/Cancel|:/.test(el.textContent ?? ''));
