@@ -72,6 +72,20 @@ describe('local SQL mutations in the document store', () => {
     expect(store.getValue('count')).toBe(10);
     expect(store.mutating().size).toBe(0);
   });
+  it('commits a result whose own inputs held, although an unrelated value changed meanwhile', async () => {
+    const t = transport();
+    const original = t.mutate!;
+    let release = () => {};
+    t.mutate = vi.fn<NonNullable<QueryTransport['mutate']>>(async (...args) => { await new Promise<void>(resolve => {release = resolve;}); return original(...args); });
+    const store = make(t);
+    const pending = store.mutate('add'); // reads `drafts`, not `count`
+    await vi.waitFor(() => expect(t.mutate).toHaveBeenCalled());
+    store.setValue('count', 10);
+    release();
+    await pending;
+    expect(store.getTable('drafts')?.rows).toEqual([{id: 1}, {id: 2}]);
+    expect(store.getValue('count')).toBe(10);
+  });
   it('rejects old results after document replacement', async () => {
     const t = transport();
     const original = t.mutate!;
