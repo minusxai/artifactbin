@@ -133,6 +133,9 @@ function strftime(fn: string, i: Instant, pattern: string, tz?: string): string 
   });
 }
 
+/** DuckDB's string_split: '' splits into characters. */
+const parts = (text: string, sep: string): string[] => (sep === '' ? [...text] : text.split(sep));
+
 const escapeRegExp = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 const monthIndex = (name: string) => MONTHS.findIndex((m) => m.toLowerCase().startsWith(name.toLowerCase()) && (name.length === 3 || m.toLowerCase() === name.toLowerCase()));
 
@@ -196,10 +199,43 @@ function list(fn: string, value: SqlValue): unknown[] {
 const bool = (b: boolean) => (b ? 1 : 0);
 
 interface Scalar { kind: 'scalar'; call: (args: SqlValue[]) => SqlValue; nullable?: false }
-interface Aggregate { kind: 'aggregate'; final: (values: number[], args: SqlValue[]) => SqlValue }
+/** An aggregate answers from every row's arguments in the group (or the window frame), in order. */
+interface Aggregate { kind: 'aggregate'; final: (rows: SqlValue[][]) => SqlValue }
 
-/** Numbers an aggregate collects; nulls and non-numbers are skipped, as SQL aggregates skip nulls. */
+/** An argument as a number, or NaN when it is null or not one. */
+const numeric = (x: SqlValue | undefined): number =>
+  typeof x === 'bigint' ? Number(x) : typeof x === 'number' ? x : typeof x === 'string' && x.trim() !== '' ? Number(x) : NaN;
+/** Column `i` of the rows as numbers; nulls and non-numbers are skipped, as SQL aggregates skip nulls. */
+const column = (rows: SqlValue[][], i = 0): number[] => rows.map((r) => numeric(r[i])).filter(Number.isFinite);
+/** Rows whose first `n` arguments are all numbers: a two-argument aggregate reads only complete pairs. */
+const complete = (rows: SqlValue[][], n: number): number[][] =>
+  rows.map((r) => r.slice(0, n).map(numeric)).filter((r) => r.every(Number.isFinite));
 function numbers(values: number[]): number[] { return [...values].sort((a, b) => a - b); }
+function deviation(values: number[], sample: boolean): number | null {
+  if (values.length < (sample ? 2 : 1)) return null;
+  const mean = values.reduce((a, b) => a + b, 0) / values.length;
+  return Math.sqrt(values.reduce((a, b) => a + (b - mean) ** 2, 0) / (values.length - (sample ? 1 : 0)));
+}
+/** SQLite's order for two non-null values: numbers before text, numbers by value, text by code unit. */
+function compare(a: SqlValue, b: SqlValue): number {
+  const x = numeric(a), y = numeric(b), xn = typeof a !== 'string', yn = typeof b !== 'string';
+  if (xn && yn) return x - y;
+  if (xn !== yn) return xn ? -1 : 1;
+  return a! < b! ? -1 : a! > b! ? 1 : 0;
+}
+/** arg_min / arg_max: the first argument of the first row holding the extreme second; rows with a null in either are skipped. */
+const argExtreme = (sign: 1 | -1) => (rows: SqlValue[][]): SqlValue => {
+  let best: SqlValue[] | null = null;
+  for (const r of rows) if (r[0] !== null && r[1] !== null && (!best || sign * compare(r[1]!, best[1]!) < 0)) best = r;
+  return best ? best[0]! : null;
+};
+const whole = (fn: string, value: SqlValue): number => {
+  const n = numeric(value);
+  if (!Number.isInteger(n)) fail(fn, 'expected whole numbers');
+  return n;
+};
+/** A date written as DuckDB's cast reads one: year, month, day with - or /, optionally a time after it. */
+const DATE_WRITTEN = /^\s*(\d{1,4})([-/])(\d{1,2})\2(\d{1,2})(?:[T ].*)?\s*$/s;
 function quantile(sorted: number[], q: number): number | null {
   if (!sorted.length) return null;
   const pos = q * (sorted.length - 1), lo = Math.floor(pos), hi = Math.ceil(pos);
@@ -303,21 +339,67 @@ const IMPLEMENTATIONS: Record<string, Scalar | Aggregate> = {
       return `${pad(f.year, 4)}-${pad(f.month)}-${pad(f.day)}T${pad(f.hour)}:${pad(f.minute)}:${pad(f.second)}.${pad(f.ms, 3)}`;
     },
   },
-  median: { kind: 'aggregate', final: (values) => quantile(numbers(values), 0.5) },
-  quantile: {
-    kind: 'aggregate',
-    final: (values, [q]) => {
-      const n = Number(q);
-      if (q !== null && q !== undefined && !(n >= 0 && n <= 1)) fail('quantile', 'q must be between 0 and 1');
-      return q === null || q === undefined ? null : quantile(numbers(values), n);
+  make_date: {
+    kind: 'scalar',
+    call: ([y, m, d]) => {
+      const text = `${pad(whole('make_date', y!), 4)}-${pad(whole('make_date', m!))}-${pad(whole('make_date', d!))}`;
+      if (calendarDate(text) === null) fail('make_date', `${text} is not a calendar date`);
+      return text;
     },
   },
-  stddev: {
+  to_date: {
+    kind: 'scalar',
+    call: ([value]) => {
+      const m = typeof value === 'string' ? DATE_WRITTEN.exec(value) : null;
+      const text = m ? `${pad(Number(m[1]), 4)}-${pad(Number(m[3]))}-${pad(Number(m[4]))}` : '';
+      if (!m || calendarDate(text) === null) fail('to_date', `${String(value).trim()} is not a date`);
+      return text;
+    },
+  },
+  median: { kind: 'aggregate', final: (rows) => quantile(numbers(column(rows)), 0.5) },
+  quantile: {
     kind: 'aggregate',
-    final: (values) => {
-      if (values.length < 2) return null;
-      const mean = values.reduce((a, b) => a + b, 0) / values.length;
-      return Math.sqrt(values.reduce((a, b) => a + (b - mean) ** 2, 0) / (values.length - 1));
+    final: (rows) => {
+      // q is the same on every row; the first row's is the one read.
+      const q = rows[0]?.[1];
+      const n = Number(q);
+      if (q !== null && q !== undefined && !(n >= 0 && n <= 1)) fail('quantile', 'q must be between 0 and 1');
+      return q === null || q === undefined ? null : quantile(numbers(column(rows)), n);
+    },
+  },
+  stddev: { kind: 'aggregate', final: (rows) => deviation(column(rows), true) },
+  stddev_pop: { kind: 'aggregate', final: (rows) => deviation(column(rows), false) },
+  regr_slope: {
+    kind: 'aggregate',
+    final: (rows) => {
+      const pairs = complete(rows, 2);
+      if (!pairs.length) return null;
+      const my = pairs.reduce((a, [y]) => a + y!, 0) / pairs.length, mx = pairs.reduce((a, [, x]) => a + x!, 0) / pairs.length;
+      const sxx = pairs.reduce((a, [, x]) => a + (x! - mx) ** 2, 0);
+      return sxx === 0 ? null : pairs.reduce((a, [y, x]) => a + (x! - mx) * (y! - my), 0) / sxx;
+    },
+  },
+  arg_min: { kind: 'aggregate', final: argExtreme(1) },
+  arg_max: { kind: 'aggregate', final: argExtreme(-1) },
+  round: {
+    kind: 'scalar',
+    call: ([x, d]) => {
+      const n = numeric(x);
+      if (Number.isNaN(n)) fail('round', 'expected a number');
+      const digits = d === undefined ? 0 : integer('round', d);
+      if (Number.isInteger(n) && digits >= 0) return n;
+      // DuckDB's rule: round the scaled value half away from zero, so 13.975 (1397.5 scaled) is 13.98.
+      const scale = 10 ** Math.abs(digits);
+      const r = Math.sign(n) * (digits >= 0 ? Math.round(Math.abs(n) * scale) / scale : Math.round(Math.abs(n) / scale) * scale);
+      return Number.isFinite(r) ? r : n;
+    },
+  },
+  string_split: { kind: 'scalar', call: ([text, sep]) => JSON.stringify(parts(String(text), String(sep))) },
+  split_part: {
+    kind: 'scalar',
+    call: ([text, sep, n]) => {
+      const all = parts(String(text), String(sep)), k = integer('split_part', n!);
+      return (k > 0 ? all[k - 1] : k < 0 ? all[all.length + k] : undefined) ?? '';
     },
   },
   regexp_matches: { kind: 'scalar', call: ([text, p]) => bool(regex('regexp_matches', p!).test(String(text))) },
@@ -373,22 +455,26 @@ export function registerLibrary(db: FunctionHost, aggregateContext: AggregateCon
       });
       continue;
     }
-    // One state per aggregate instance, keyed by SQLite's own per-instance pointer.
-    const states = new Map<number, { values: number[]; args: SqlValue[] }>();
+    // One state per aggregate instance, keyed by SQLite's own per-instance pointer: every row's
+    // arguments, in order. As a window function SQLite asks for the value of the frame so far
+    // (xValue) and takes rows back out of it oldest first (xInverse).
+    const states = new Map<number, SqlValue[][]>();
+    const rowsOf = (ctx: number): SqlValue[][] | undefined => { const key = aggregateContext(ctx, 0); return key ? states.get(key) : undefined; };
     db.createFunction({
       name, arity, deterministic, innocuous: true,
-      xStep: (ctx: number, x: SqlValue, ...rest: SqlValue[]) => {
+      xStep: (ctx: number, ...args: SqlValue[]) => {
         const key = aggregateContext(ctx, 8);
-        let state = states.get(key);
-        if (!state) states.set(key, (state = { values: [], args: rest }));
-        const n = typeof x === 'bigint' ? Number(x) : typeof x === 'number' ? x : typeof x === 'string' && x.trim() !== '' ? Number(x) : NaN;
-        if (Number.isFinite(n)) state.values.push(n);
+        const rows = states.get(key);
+        if (rows) rows.push(args);
+        else states.set(key, [args]);
       },
+      xInverse: (ctx: number) => { rowsOf(ctx)?.shift(); },
+      xValue: (ctx: number) => impl.final(rowsOf(ctx) ?? []),
       xFinal: (ctx: number) => {
         const key = aggregateContext(ctx, 0);
-        const state = key ? states.get(key) : undefined;
+        const rows = key ? states.get(key) : undefined;
         if (key) states.delete(key);
-        return state ? impl.final(state.values, state.args) : null;
+        return impl.final(rows ?? []);
       },
     });
   }

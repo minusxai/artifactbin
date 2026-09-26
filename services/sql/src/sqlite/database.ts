@@ -96,6 +96,14 @@ export function sqlValue(type: ColumnType | undefined, value: unknown, field: st
   return JSON.stringify(value);
 }
 
+/**
+ * A stored cell as its column's type reads it. Datasets typed before this
+ * engine hold timestamps in date columns, which the previous engine read as the
+ * calendar day they name; a parameter is bound as given (sqlValue).
+ */
+const storedCell = (type: ColumnType | undefined, value: unknown): unknown =>
+  type === 'date' && typeof value === 'string' && /^\d{4}-\d{2}-\d{2}[T ]/.test(value) ? value.slice(0, 10) : value;
+
 /** An engine value as JSON for a column of this type. */
 function jsonValue(value: unknown, type: ColumnType): unknown {
   if (value === null || value === undefined) return null;
@@ -252,7 +260,7 @@ export class SqliteDatabase {
    */
   insertRows(spec: Relation, rows: Row[]): void {
     if (!rows.length || !spec.columns.length) return;
-    const data = JSON.stringify(rows.map((row, r) => spec.columns.map((c) => sqlValue(c.type, row[c.name], `${spec.table}.${c.name} (row ${r + 1})`))));
+    const data = JSON.stringify(rows.map((row, r) => spec.columns.map((c) => sqlValue(c.type, storedCell(c.type, row[c.name]), `${spec.table}.${c.name} (row ${r + 1})`))));
     const names = spec.columns.map((c) => quote(c.name)).join(', ');
     try {
       this.exec(`INSERT INTO ${quote(spec.schema)}.${quote(spec.table)} (${names}) SELECT ${spec.columns.map((_, i) => `value ->> ${i}`).join(', ')} FROM json_each(?) ORDER BY key`, [data]);
