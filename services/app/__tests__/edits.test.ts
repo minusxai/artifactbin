@@ -121,7 +121,7 @@ describe('edit_id on the wire', () => {
     // Non-canonical JSON in an expression attr canonicalizes at the door…
     const doc2 = await createMarkup(
       t.token,
-      `<Helmet><Query name="rows" source="ref:${ds.id}">{\`select * from public.rows\`}</Query></Helmet><div data-design="tw"><Question data="$rows" viz={{kind:"table"}} height="200px" /></div>`,
+      `<Helmet><Import name="rows_data" src="ref:${ds.id}" /><Query name="rows">{\`select * from rows_data.rows\`}</Query></Helmet><div data-design="tw"><Question data="$rows" viz={{kind:"table"}} height="200px" /></div>`,
     );
     expect(doc2.markup).toContain('viz={{"kind":"table"}}');
     // …and canonical form is a fixpoint: an edit that re-submits it verbatim is `identical`.
@@ -400,7 +400,7 @@ describe('stale bases — E-anchored matching and log fidelity', () => {
     );
     const ds = (await dsRes.json()) as Wire;
     // The document declares the table the inserted chart will bind.
-    const doc = await createMarkup(t.token, `<Helmet><Query name="rows" source="ref:${ds.id}">{\`select * from public.rows\`}</Query></Helmet>` + MARKUP);
+    const doc = await createMarkup(t.token, `<Helmet><Import name="rows_data" src="ref:${ds.id}" /><Query name="rows">{\`select * from rows_data.rows\`}</Query></Helmet>` + MARKUP);
 
     // Canonicalization rewrites the inserted text on the way in, so the stored
     // delta is NOT the caller's literal new_string.

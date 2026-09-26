@@ -5,16 +5,16 @@ import { parseQueryDecl, parseMutationDecl } from '../dataflow';
 import {collectRefUses} from '../refs';
 const read=(source:string)=>{const p=parseJsx(source);if(!p.ok)throw Error('parse failed');return splitHelmet(p.nodes);};
 it('declares a query source independently of SQL table names',()=>{
- const s='<Helmet><Query name="q" source="ref:abc123">{`select * from analytics.events`}</Query></Helmet>';
+ const s='<Helmet><Import name="q_data" src="ref:abc123" /><Query name="q">{`select * from analytics.events`}</Query></Helmet>';
  const q=read(s).content.queries[0];expect(q).toMatchObject({source:'abc123',refs:['abc123'],sql:'select * from analytics.events'});
  expect(collectRefUses(s)).toEqual([{id:'abc123',kind:'dataset',via:'sql'}]);
 });
 it('declares a mutation source without inspecting table count',()=>{
- const m=read('<Helmet><Mutation name="edit" source="ref:abc123">{`update public.rows set n=2`}</Mutation></Helmet>').content.mutations[0];
+ const m=read('<Helmet><Import name="edit_data" src="ref:abc123" /><Mutation name="edit">{`update edit_data.rows set n=2`}</Mutation></Helmet>').content.mutations[0];
  expect(m).toMatchObject({source:'abc123',target:'abc123',refs:['abc123']});
 });
 it('refuses mixed legacy refs and explicit sources',()=>{
- const q=read('<Helmet><Query name="q" source="ref:abc123">{`select * from ref_def456`}</Query></Helmet>');
+ const q=read('<Helmet><Import name="q_data" src="ref:abc123" /><Import name="q_data" src="ref:def456" /><Query name="q">{`select * from q_data.rows`}</Query></Helmet>');
  expect(q.content.queries).toHaveLength(0);
 });
 
@@ -39,8 +39,8 @@ it('rejects bare source IDs with the canonical replacement in the diagnostic', (
 });
 
 it('rejects implicit SQL artifact references but leaves quoted text and comments inert', () => {
- const invalid = read('<Helmet><Query name="q">{`select * from ref_abc123`}</Query></Helmet>');
+ const invalid = read('<Helmet><Import name="q_data" src="ref:abc123" /><Query name="q">{`select * from q_data.rows`}</Query></Helmet>');
  expect(invalid.content.queries).toHaveLength(0);
- const valid = read('<Helmet><Query name="q" source="ref:abc123">{`select \'ref_def456\' as label from public.rows /* ref_def456 */`}</Query></Helmet>');
+ const valid = read('<Helmet><Import name="q_data" src="ref:abc123" /><Import name="q_data" src="ref:def456" /><Query name="q">{`select \'ref_def456\' as label from q_data.rows /* ref_def456 */`}</Query></Helmet>');
  expect(valid.content.queries).toHaveLength(1);
 });

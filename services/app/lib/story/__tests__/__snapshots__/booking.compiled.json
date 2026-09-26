@@ -254,7 +254,12 @@
         "note"
       ],
       "start": 1507,
-      "end": 1831
+      "end": 1831,
+      "rowTypes": {
+        "id": "string",
+        "day": "date",
+        "slot": "string"
+      }
     },
     {
       "name": "cancel",
@@ -277,7 +282,10 @@
       },
       "expectedAffected": 1,
       "start": 1835,
-      "end": 1972
+      "end": 1972,
+      "rowTypes": {
+        "id": "string"
+      }
     }
   ]
 }

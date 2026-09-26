@@ -28,7 +28,7 @@ describe('deleted-ref serving', () => {
 
     const doc = await (
       await createArtifactRoute(
-        request('/api/artifacts', { method: 'POST', token: t.token, json: { markup: `<Helmet><Query name="rows" source="ref:${ds.id}">{\`select * from public.rows\`}</Query></Helmet><div data-design="tw" className="p-8"><Question data="$rows" title="Revenue" /></div>` } }),
+        request('/api/artifacts', { method: 'POST', token: t.token, json: { markup: `<Helmet><Import name="rows_data" src="ref:${ds.id}" /><Query name="rows">{\`select * from rows_data.rows\`}</Query></Helmet><div data-design="tw" className="p-8"><Question data="$rows" title="Revenue" /></div>` } }),
       )
     ).json();
     expect(doc.format).toBe('markup');

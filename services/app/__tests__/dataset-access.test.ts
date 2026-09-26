@@ -96,7 +96,7 @@ describe('access on the browser surfaces', () => {
     const ds = ((await (await create(t.token, { dataset: ROWS, access: 'readwrite' })).json()) as { id: string }).id;
     const doc = await create(t.token, {
       title: 'Lunch poll',
-      markup: `<Helmet><Value name="c" /><Mutation name="vote" source="ref:${ds}">{\`insert into public.rows (choice, who) values ($c, 'x')\`}</Mutation></Helmet><div><Button run="$vote">Vote</Button></div>`,
+      markup: `<Helmet><Value name="c" /><Import name="vote_data" src="ref:${ds}" /><Mutation name="vote">{\`insert into vote_data.rows (choice, who) values ($c, 'x')\`}</Mutation></Helmet><div><Button run="$vote">Vote</Button></div>`,
     });
     expect(doc.status).toBe(201);
 

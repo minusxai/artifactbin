@@ -27,7 +27,7 @@ describe('document-local SQL HTTP boundary', () => {
   it('runs a public reader mutation without dataset write permission or persistence', async () => {
     const {id} = await fixture();
     const before = await getArtifactById(id);
-    const response = await mutate(request(`/a/${id}/mutate`, {method: 'POST', json: {mutation: 'inc', values: {count: 4}, sql: 'delete from _signals'}}), context(id));
+    const response = await mutate(request(`/a/${id}/mutate`, {method: 'POST', json: {mutation: 'inc', args: {count: 4}, sql: 'delete from _signals'}}), context(id));
     expect(response.status, await response.clone().text()).toBe(200);
     expect(await response.json()).toMatchObject({ok: true, local: {target: '_signals', table: {rows: [{count: 5}]}}});
     expect(await getArtifactById(id)).toEqual(before);

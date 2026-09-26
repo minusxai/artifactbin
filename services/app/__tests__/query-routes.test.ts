@@ -27,8 +27,8 @@ const create = async (token: string, body: Record<string, unknown>) =>
 const ROWS = [{ region: 'EU', revenue: 837 }, { region: 'NA', revenue: 1200 }, { region: 'EU', revenue: 3 }];
 const DOC = (ds: string) =>
   '<Helmet><Value name="region" type="string" /><Value name="min" type="number" default={0} />' +
-  `<Query name="sales" source="ref:${ds}">{\`select region, sum(revenue) revenue from public.rows where ($region is null or region = $region) and revenue >= $min group by 1 order by 1\`}</Query>` +
-  `<Query name="regions" source="ref:${ds}">{\`select distinct region from public.rows order by 1\`}</Query>` +
+  `<Import name="sales_data" src="ref:${ds}" /><Query name="sales">{\`select region, sum(revenue) revenue from sales_data.rows where ($region is null or region = $region) and revenue >= $min group by 1 order by 1\`}</Query>` +
+  `<Import name="regions_data" src="ref:${ds}" /><Query name="regions">{\`select distinct region from regions_data.rows order by 1\`}</Query>` +
   '</Helmet><div><select value="$region" options="$regions" /><Question data="$sales" viz={{"kind":"table"}} /></div>';
 
 describe('POST /a/<id>/query (reader path)', () => {

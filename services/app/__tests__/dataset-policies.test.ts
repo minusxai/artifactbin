@@ -34,7 +34,7 @@ async function fixture() {
   };
   const ds = await publish({ dataset: [{ n: 1 }], access: 'readwrite' });
   const doc = await publish({
-    markup: `<Helmet><Query name="rows" source="ref:${ds}">{\`select * from public.rows\`}</Query><Mutation name="add" source="ref:${ds}">{\`insert into public.rows values ($n)\`}</Mutation><Mutation name="remove" source="ref:${ds}">{\`delete from public.rows\`}</Mutation><Value name="n" type="number" default={2} /></Helmet><Button run="$add">Add</Button><DataTable data="$rows" />`,
+    markup: `<Helmet><Import name="rows_data" src="ref:${ds}" /><Query name="rows">{\`select * from rows_data.rows\`}</Query><Import name="add_data" src="ref:${ds}" /><Mutation name="add">{\`insert into add_data.rows values ($n)\`}</Mutation><Import name="remove_data" src="ref:${ds}" /><Mutation name="remove">{\`delete from remove_data.rows\`}</Mutation><Value name="n" type="number" default={2} /></Helmet><Button run="$add">Add</Button><DataTable data="$rows" />`,
   });
   const policy = {
     version: 1,
@@ -194,7 +194,7 @@ async function sharedFixture(
       request(`/a/${f.doc}/mutate`, {
         method: 'POST',
         cookie,
-        json: { mutation: 'add', values: { n: 3 } },
+        json: { mutation: 'add', args: { n: 3 } },
       }),
       { params: Promise.resolve({ id: f.doc }) },
     );
@@ -225,7 +225,7 @@ it('requires dataset view access even when its declared app is public', async ()
   const response = await mutate(
     request(`/a/${f.doc}/mutate`, {
       method: 'POST',
-      json: { mutation: 'add', values: { n: 3 } },
+      json: { mutation: 'add', args: { n: 3 } },
     }),
     { params: Promise.resolve({ id: f.doc }) },
   );

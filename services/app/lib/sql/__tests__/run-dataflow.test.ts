@@ -27,13 +27,13 @@ const FLOW = flowOf(
   '<Value name="min_rev" type="number" default={0} />' +
   '<Value name="tiny" type="table" value={[{"k":"a"},{"k":"b"}]} />' +
   '<Query name="top">{`select region from sales order by revenue desc limit 1`}</Query>' +
-  '<Query name="sales" source="ref:abc123">{`select region, sum(revenue) revenue from public.rows where ($region is null or region = $region) and revenue >= $min_rev group by 1 order by 1`}</Query>' +
+  '<Import name="sales_data" src="ref:abc123" /><Query name="sales">{`select region, sum(revenue) revenue from sales_data.rows where ($region is null or region = $region) and revenue >= $min_rev group by 1 order by 1`}</Query>' +
   '<Query name="k">{`select count(*) n from tiny`}</Query>',
 );
 
 describe('runDataflow', () => {
   it('uses complete local source inputs for joins and aggregates, including empty and null rows', async () => {
-    const flow=flowOf('<Query name="left_rows" source="ref:abc123">{`select * from public.rows`}</Query><Query name="right_rows" source="ref:def456">{`select * from public.rows`}</Query><Query name="stats">{`select count(*) as n, median(a.n) as middle from left_rows a join right_rows b on true`}</Query>');
+    const flow=flowOf('<Import name="left_rows_data" src="ref:abc123" /><Query name="left_rows">{`select * from left_rows_data.rows`}</Query><Import name="right_rows_data" src="ref:def456" /><Query name="right_rows">{`select * from right_rows_data.rows`}</Query><Query name="stats">{`select count(*) as n, median(a.n) as middle from left_rows a join right_rows b on true`}</Query>');
     const columns=[{name:'n',type:'number' as const}];
     for(const rows of [Array.from({length:10005},(_,n)=>({n:n+1})),[{n:null}],[]]) {
       const state=await runDataflow(flow,{abc123:{rows,columns},def456:{rows:[{n:1}],columns}},{only:['stats']});
@@ -70,7 +70,7 @@ describe('runDataflow', () => {
 
   it('reports a failing query and lets the rest run; a dependent of a failure fails too', async () => {
     const flow = flowOf(
-      '<Query name="bad" source="ref:abc123">{`select nope from public.rows`}</Query>' +
+      '<Import name="bad_data" src="ref:abc123" /><Query name="bad">{`select nope from bad_data.rows`}</Query>' +
       '<Query name="dep">{`select * from bad`}</Query>' +
       '<Query name="ok">{`select 1 one`}</Query>',
     );
@@ -82,7 +82,7 @@ describe('runDataflow', () => {
   });
 
   it('a dataset the caller could not resolve reads as a missing table, named', async () => {
-    const flow = flowOf('<Query name="q" source="ref:gone12">{`select * from public.rows`}</Query>');
+    const flow = flowOf('<Import name="q_data" src="ref:gone12" /><Query name="q">{`select * from q_data.rows`}</Query>');
     const state = await runDataflow(flow, {});
     expect(state.errors.q).toMatch(/ref:gone12/);
   });

@@ -125,7 +125,7 @@ it('is invisible to everything that lists people or their public work', async ()
 it('draws a test user by its label, so two people on a page are tellable apart', async () => {
   const owner = await account('labeller');
   const testuser = await testUserOf(owner);
-  const page = await publish(owner.token, { markup: '<p>who is here: <User userId="$_me" /></p>', visibility: 'unlisted' });
+  const page = await publish(owner.token, { markup: '<p>who is here: <User userId="$_me.id" /></p>', visibility: 'unlisted' });
   const identity = await viewerIdentityFor((await getArtifactById(page.id))!, testuser.id);
   expect(identity).toMatchObject({ id: testuser.id, card: { name: testuser.label } });
   expect(String(identity!.card!.name)).toMatch(/^Test user /);

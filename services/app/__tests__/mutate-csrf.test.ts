@@ -51,7 +51,7 @@ const create = async (token: string, body: Record<string, unknown>) => {
 const ROWS = [{ choice: 'ramen' }];
 const DOC = (ds: string) =>
   '<Helmet><Value name="choice" type="string" default="ramen" />'
-  + `<Mutation name="vote" source="ref:${ds}">{\`insert into public.rows (choice) values ($choice)\`}</Mutation></Helmet>`
+  + `<Import name="vote_data" src="ref:${ds}" /><Mutation name="vote">{\`insert into vote_data.rows (choice) values ($choice)\`}</Mutation></Helmet>`
   + '<div><Button run="$vote">Vote</Button></div>';
 
 beforeEach(async () => {
@@ -69,7 +69,7 @@ async function setup() {
   return { t, user, ds, doc };
 }
 const write = (doc: string, init: Parameters<typeof mutationRequest>[1]) =>
-  mutateDocRoute(mutationRequest(`/a/${doc}/mutate`, { ...init, body: { mutation: 'vote', values: { choice: 'tacos' } } }), params({ id: doc }));
+  mutateDocRoute(mutationRequest(`/a/${doc}/mutate`, { ...init, body: { mutation: 'vote', args: { choice: 'tacos' } } }), params({ id: doc }));
 
 describe('cross-site writes', () => {
   it('refuses one riding an ACCOUNT session, and writes nothing', async () => {

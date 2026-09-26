@@ -116,7 +116,7 @@ describe('account-wide bearer scope', () => {
 
     // The second token can bind the first token's dataset...
     const doc = await createArtifactRoute(
-      request('/api/artifacts', { method: 'POST', token: second.token, json: { title: 'The doc', markup: `<Helmet><Query name="rows" source="ref:${ds.id}">{\`select * from public.rows\`}</Query></Helmet><div data-design="tw" className="p-4"><Question data="$rows" title="Rev" /></div>` } }),
+      request('/api/artifacts', { method: 'POST', token: second.token, json: { title: 'The doc', markup: `<Helmet><Import name="rows_data" src="ref:${ds.id}" /><Query name="rows">{\`select * from rows_data.rows\`}</Query></Helmet><div data-design="tw" className="p-4"><Question data="$rows" title="Rev" /></div>` } }),
     );
     expect(doc.status).toBe(201);
     const docRow = (await doc.json()) as Wire;

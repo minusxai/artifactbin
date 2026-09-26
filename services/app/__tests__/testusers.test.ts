@@ -83,7 +83,7 @@ describe('guests at the doors', () => {
     const a = await account('host');
     const ds = await createArtifactRoute(jreq('/api/artifacts', 'POST', { dataset: [{ who: null }], columns: [{ name: 'who', type: 'user' }], access: 'readwrite', visibility: 'unlisted' }, a.token));
     const dsId = ((await ds.json()) as { id: string }).id;
-    const page = await createArtifactRoute(jreq('/api/artifacts', 'POST', { markup: `<Helmet><Mutation name="join" source="ref:${dsId}">{\`insert into public.rows (who) select $_me\`}</Mutation></Helmet><Button run="$join">Join</Button>`, visibility: 'unlisted' }, a.token));
+    const page = await createArtifactRoute(jreq('/api/artifacts', 'POST', { markup: `<Helmet><Import name="join_data" src="ref:${dsId}" /><Mutation name="join">{\`insert into join_data.rows (who) select $_me.id\`}</Mutation></Helmet><Button run="$join">Join</Button>`, visibility: 'unlisted' }, a.token));
     const pageId = ((await page.json()) as { id: string }).id;
     const { createGuestOwner } = await import('@/lib/guest-owner');
     const g = await createGuestOwner();

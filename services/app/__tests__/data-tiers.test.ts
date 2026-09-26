@@ -209,7 +209,7 @@ describe('image tier', () => {
 
 describe('markup tier references', () => {
   /** A dataset read through a <Query> (the only way a document reaches one), bound as `$rows`. */
-  const declared = (dsId: string) => `<Helmet><Query name="rows" source="ref:${dsId}">{\`select * from public.rows\`}</Query></Helmet>`;
+  const declared = (dsId: string) => `<Helmet><Import name="rows_data" src="ref:${dsId}" /><Query name="rows">{\`select * from rows_data.rows\`}</Query></Helmet>`;
   const chart = (dsId: string, extra = '') => declared(dsId) + `<div data-design="tw" className="@container w-full">
   <Question data="$rows" viz={{ kind: "vega-lite", spec: { mark: "bar",
     encoding: { x: {field: "month"}, y: {field: "mrr", type: "quantitative"} } } }} height="400px" />${extra}

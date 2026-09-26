@@ -141,7 +141,7 @@ describe('VersionHistory', () => {
  */
 describe('the query notebook', () => {
   const QUERY_SOURCE =
-    '<Helmet><Query name="sales" source="ref:ds1234">{`select 1 as x`}</Query></Helmet>'
+    '<Helmet><Import name="sales_data" src="ref:ds1234" /><Query name="sales">{`select 1 as x`}</Query></Helmet>'
     + '<div data-design="tw" className="p-4"><Question data="$sales" /></div>';
   const withQuery = () => mount({ art: { ...art, markup: QUERY_SOURCE } as EditorArt });
 
@@ -169,7 +169,7 @@ describe('the query notebook', () => {
     const field = screen.getByLabelText('Query $sales SQL');
     fireEvent.change(field, { target: { value: 'select 2 as x' } });
     fireEvent.blur(field);
-    expect(lastQueued()?.source).toContain('<Query name="sales" source="ref:ds1234">{`select 2 as x`}</Query>');
+    expect(lastQueued()?.source).toContain('<Import name="sales_data" src="ref:ds1234" /><Query name="sales">{`select 2 as x`}</Query>');
     expect(lastQueued()!.source).toContain('<Question data="$sales" />');
   });
 

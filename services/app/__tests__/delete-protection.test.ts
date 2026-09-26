@@ -26,7 +26,7 @@ async function seedDatasetWithDependent(token: string) {
   ).json();
   const doc = await (
     await createArtifactRoute(
-      request('/api/artifacts', { method: 'POST', token: token, json: { title: 'The doc', markup: `<Helmet><Query name="rows" source="ref:${ds.id}">{\`select * from public.rows\`}</Query></Helmet><div data-design="tw" className="p-4"><Question data="$rows" title="Rev" /></div>` } }),
+      request('/api/artifacts', { method: 'POST', token: token, json: { title: 'The doc', markup: `<Helmet><Import name="rows_data" src="ref:${ds.id}" /><Query name="rows">{\`select * from rows_data.rows\`}</Query></Helmet><div data-design="tw" className="p-4"><Question data="$rows" title="Rev" /></div>` } }),
     )
   ).json();
   return { ds, doc };

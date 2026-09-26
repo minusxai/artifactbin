@@ -147,7 +147,7 @@ it('commits saved mentions with the document and refuses ineligible recipients w
 it('binds newly attached dataset scopes and archives them in the document commit, rejecting stale preparation',async()=>{
  const {db,actor,id,base}=await setup();
  const dataset=await db.query<{id:string}>(`INSERT INTO artifacts(id,token_id,title,format,source,meta) VALUES('ScpDat',$1,'Tasks','dataset','<Dataset kind="stored"><Table schema="public" name="rows" columns={[{"name":"assignee","type":"user","constraints":{"memberOf":["current"]}}]} /></Dataset>',$2) RETURNING id`,[actor.tokenId,JSON.stringify({catalog:{kind:'stored',defaultSchema:'public',tables:[{schema:'public',name:'rows',columns:[{name:'assignee',type:'user',constraints:{memberOf:['current']}}]}]},columns:[{name:'assignee',type:'user',constraints:{memberOf:['current']}}]})]);
- const source=`<main id="root"><p id="a">Alpha</p><p id="b">Beta</p><Helmet><Query name="tasks" source="ref:${dataset.rows[0]!.id}">{\`select * from public.rows\`}</Query></Helmet><DataTable data="$tasks" /></main>`;
+ const source=`<main id="root"><p id="a">Alpha</p><p id="b">Beta</p><Helmet><Import name="tasks_data" src="ref:${dataset.rows[0]!.id}" /><Query name="tasks">{\`select * from tasks_data.rows\`}</Query></Helmet><DataTable data="$tasks" /></main>`;
  const prepared=await prepareDocumentAuthoringContext(actor,id,{source,dryRun:true});expect(prepared.status,await prepared.clone().text()).toBe(200);
  const {datasetBindings}=await prepared.json();expect(datasetBindings).toHaveLength(1);
  const update={...prepareClientDocumentUpdate(base,{source}),datasetBindings};
