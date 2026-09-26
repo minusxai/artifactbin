@@ -955,6 +955,13 @@ const duckFunctions: Rule = (v) => {
         if (call.name === 'len') return v.manual('len() of a value that may be a list: DuckDB counts a list\'s items and a text\'s characters', call.at, call.close);
         continue;
       }
+      case 'to_json': {
+        if (args.length !== 1 || v.sig[call.args[0]!.from]!.text === '[') continue; // a list literal becomes json_array first
+        // A list is JSON text already, written compactly as DuckDB wrote it; anything else would need its type.
+        const list = v.call(call.args[0]!.from);
+        if (list && list.close === call.args[0]!.to && LIST_CALLS.has(list.name)) return to(args[0]!);
+        return v.manual('to_json of a value not known to be a list', call.at, call.close);
+      }
       case 'lpad': case 'rpad': {
         if (args.length !== 3) continue;
         // DuckDB pads to the length, or cuts longer text to it; a literal length and fill spell the padding out.
