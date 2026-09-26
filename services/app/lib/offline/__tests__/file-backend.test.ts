@@ -245,6 +245,16 @@ describe('drafts: CSS and queries', () => {
     expect(changed!.tables.regions).toEqual(file.snapshot.state.tables.regions);
   });
 
+  it('hands the page engine the rows the file holds, and nothing it does not', async () => {
+    const orders = { rows: { rows: [{ region: 'west', revenue: 100 }], columns: [{ name: 'region', type: 'string' as const }, { name: 'revenue', type: 'number' as const }] } };
+    const file = fixture();
+    const { backend } = open({ ...file, snapshot: { ...file.snapshot, held: { orders } } });
+    const transport = backend.queryTransport();
+    await expect(transport.hold!('orders')).resolves.toEqual(orders);
+    await expect(transport.hold!('elsewhere')).rejects.toThrow(OFFLINE_QUERY_REASON);
+    transport.dispose();
+  });
+
   it('serves the runtime from the snapshot over the CURRENT declarations', async () => {
     const file = fixture();
     const { backend } = open(file);

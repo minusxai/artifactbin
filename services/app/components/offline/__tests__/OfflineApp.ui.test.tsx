@@ -5,6 +5,7 @@
  * a real browser.
  */
 import { readFileSync } from 'node:fs';
+import { createRequire } from 'node:module';
 import path from 'node:path';
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -37,14 +38,22 @@ describe('OfflineApp', () => {
     expect(live).toHaveAttribute('rel', 'noreferrer');
   });
 
-  it('renders the snapshot rows and swaps to a precomputed variant when the filter changes', async () => {
-    render(<OfflineApp file={fixture()} />);
-    expect(await screen.findByRole('heading', { name: 'Regional sales' })).toBeInTheDocument();
-    await waitFor(() => expect(rowTexts()).toHaveLength(6));
-    fireEvent.click(screen.getByRole('button', { name: 'Region' }));
-    fireEvent.click(await screen.findByRole('option', { name: 'west' }));
-    await waitFor(() => expect(rowTexts()).toHaveLength(2));
-    expect(rowTexts().every((text) => text?.includes('west'))).toBe(true);
+  it('renders the snapshot rows, then runs the filter live on the file\'s own engine over the rows it holds', async () => {
+    // The offline bundle carries the wasm as this constant (scripts/build-offline); here the test hands it in.
+    const wasm = createRequire(path.resolve(process.cwd(), '../sql/package.json')).resolve('@sqlite.org/sqlite-wasm/sqlite3.wasm');
+    Object.assign(globalThis, { __AFBIN_SQLITE_WASM__: readFileSync(wasm).toString('base64') });
+    try {
+      const file = fixture();
+      expect(file.snapshot.variants).toEqual([]);
+      render(<OfflineApp file={file} />);
+      expect(await screen.findByRole('heading', { name: 'Regional sales' })).toBeInTheDocument();
+      await waitFor(() => expect(rowTexts()).toHaveLength(6));
+      await act(async () => { await new Promise((resolve) => setTimeout(resolve, 1500)); });
+      fireEvent.click(screen.getByRole('button', { name: 'Region' }));
+      fireEvent.click(await screen.findByRole('option', { name: 'west' }));
+      await waitFor(() => expect(rowTexts()).toHaveLength(2));
+      expect(rowTexts().every((text) => text?.includes('west'))).toBe(true);
+    } finally { delete (globalThis as { __AFBIN_SQLITE_WASM__?: string }).__AFBIN_SQLITE_WASM__; }
   });
 
   it('disables a frozen Value’s control with the offline reason', async () => {
