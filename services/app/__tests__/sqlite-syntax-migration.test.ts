@@ -138,6 +138,25 @@ describe('runSqliteSyntaxMigrationBatch', () => {
     expect(plain).toEqual({ artifactId: 'bbbbbb', outcome: 'unchanged' });
   });
 
+  it('passes over a trashed document: it is served converted, and an edit after a restore converts it', async () => {
+    const { tokenId } = await owner();
+    await legacy('aaaaaa', tokenId, HALF);
+    await legacy('bbbbbb', tokenId, '<p>B</p>');
+    const db = await harness.db();
+    await db.query("UPDATE artifacts SET deleted_at=now() WHERE id='aaaaaa'");
+    const report = await runSqliteSyntaxMigrationBatch(db, { batchSize: 10 });
+    expect(report).toMatchObject({ done: true, documents: [{ artifactId: 'bbbbbb', outcome: 'unchanged' }] });
+    expect((await db.query<{ source: string; version: number }>("SELECT source,version FROM artifacts WHERE id='aaaaaa'")).rows).toEqual([{ source: HALF, version: 1 }]);
+  });
+
+  it('writes a retired theme as the theme readers already show in its place', async () => {
+    const { tokenId } = await owner();
+    await legacy('aaaaaa', tokenId, HALF, { theme: 'nocturne' });
+    const report = await runSqliteSyntaxMigrationBatch(await harness.db(), { batchSize: 10 });
+    expect(report.documents).toEqual([expect.objectContaining({ artifactId: 'aaaaaa', outcome: 'converted' })]);
+    expect((await head('aaaaaa')).meta).toMatchObject({ theme: 'modernist', colorMode: 'dark', dataSyntax: 2 });
+  });
+
   it('marks a document with nothing to convert in place, without a new version', async () => {
     const { tokenId } = await owner();
     await legacy('aaaaaa', tokenId, '<p>Plain</p>', { theme: 'paper' });

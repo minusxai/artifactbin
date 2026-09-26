@@ -8,6 +8,10 @@ import { artifactQuery } from '@/lib/artifact-document';
  * writes does). One invocation owns one bounded batch; the operator repeats it
  * until `done` (scripts/migrate/sqlite/run-migration).
  *
+ * A trashed document is passed over: it is served converted like any other
+ * (lib/migrate/sqlite/stored inCurrentSyntax) and cannot be written through
+ * the publish door, and the edit that follows a restore converts it first.
+ *
  * Unlike the identity backfill, a document that needs a person does not hold
  * the cursor: it is reported with its reasons, left untouched and unmarked,
  * and the job moves on — a production archive has too many of those for the
@@ -19,9 +23,12 @@ import type { Db, Queryable } from './db';
 import { convertStoredDocument } from './migrate/sqlite/stored';
 import type { ConversionChange, ConversionManual } from './migrate/sqlite/convert';
 import { DATA_SYNTAX_META } from './story/data-syntax';
+import { resolveStoredStoryDesign } from './data/story/story-themes';
 
 const SQLITE_SYNTAX_MIGRATION = 'sqlite-data-syntax';
 const SQLITE_SYNTAX_MIGRATION_VERSION = 1;
+/** The documents the job passes: every live markup row. */
+const MIGRATED = "format='markup' AND deleted_at IS NULL";
 
 interface SqliteSyntaxMigrationOptions {
   /** Integer in [1, 100]. */
@@ -90,7 +97,7 @@ export async function runSqliteSyntaxMigrationBatch(db: Db, options: SqliteSynta
 
   while (documents.length < options.batchSize) {
     const current = (await artifactQuery<ArtifactRow>(db,
-      "SELECT * FROM artifacts WHERE format='markup' AND id > COALESCE($1,'') ORDER BY id LIMIT 1", [cursor],
+      `SELECT * FROM artifacts WHERE ${MIGRATED} AND id > COALESCE($1,'') ORDER BY id LIMIT 1`, [cursor],
     )).rows[0];
     if (!current) break;
     const prepared = await prepareArtifact(db, current, dryRun);
@@ -110,7 +117,7 @@ export async function runSqliteSyntaxMigrationBatch(db: Db, options: SqliteSynta
       if (!locked || locked.edit_id !== current.edit_id || locked.source !== current.source) return false;
       const outcome = await commitArtifact(tx, locked, prepared);
       options.failBeforeCommit?.();
-      const more = (await tx.query("SELECT 1 FROM artifacts WHERE format='markup' AND id>$1 LIMIT 1", [current.id])).rows.length > 0;
+      const more = (await tx.query(`SELECT 1 FROM artifacts WHERE ${MIGRATED} AND id>$1 LIMIT 1`, [current.id])).rows.length > 0;
       await tx.query(
         `UPDATE node_identity_migration_jobs SET cursor=$2,completed_at=${more ? 'NULL' : 'now()'},updated_at=now() WHERE name=$1`,
         [SQLITE_SYNTAX_MIGRATION, current.id],
@@ -129,7 +136,7 @@ export async function runSqliteSyntaxMigrationBatch(db: Db, options: SqliteSynta
     cursor = current.id;
     if (committed.done) return report(cursor, documents, true, false);
   }
-  const more = (await db.query("SELECT 1 FROM artifacts WHERE format='markup' AND id>COALESCE($1,'') LIMIT 1", [cursor])).rows.length > 0;
+  const more = (await db.query(`SELECT 1 FROM artifacts WHERE ${MIGRATED} AND id>COALESCE($1,'') LIMIT 1`, [cursor])).rows.length > 0;
   if (!more && !dryRun && documents.length === 0) {
     await db.transaction(async (tx) => {
       await tx.query('INSERT INTO node_identity_migration_jobs (name,version,cursor) VALUES ($1,$2,$3) ON CONFLICT (name) DO NOTHING',
@@ -173,9 +180,21 @@ async function prepareArtifact(db: Queryable, current: ArtifactRow, dryRun: bool
   if (conversion.status === 'manual') return { outcome: { artifactId, outcome: 'conflict', changes, manual } };
   if (conversion.status === 'unchanged') return { outcome: { artifactId, outcome: 'unchanged' } };
   if (dryRun) return { outcome: { artifactId, outcome: 'converted', changes } };
-  const published = await publishMarkupForArtifact(current, conversion.source);
+  const published = await publishMarkupForArtifact(current, conversion.source, servedDesign(current.meta));
   if (published instanceof Response) return { outcome: { artifactId, outcome: 'conflict', changes, refused: await refusal(published) } };
   return { outcome: { artifactId, outcome: 'converted', changes }, published };
+}
+
+/**
+ * The meta a whole write may carry: a retired theme becomes the one readers
+ * already show in its place (lib/data/story/story-themes resolveStoredStoryDesign),
+ * so the new version looks as the old one did and the publish door admits it.
+ */
+function servedDesign(meta: ArtifactRow['meta']): ArtifactRow['meta'] {
+  const { theme, colorMode } = meta as { theme?: string | null; colorMode?: 'light' | 'dark' | null };
+  if (theme == null) return meta;
+  const served = resolveStoredStoryDesign(theme, colorMode);
+  return served.theme === theme ? meta : { ...meta, theme: served.theme, colorMode: served.colorMode };
 }
 
 async function commitArtifact(tx: Queryable, locked: ArtifactRow, prepared: Prepared): Promise<SqliteSyntaxMigrationOutcome> {

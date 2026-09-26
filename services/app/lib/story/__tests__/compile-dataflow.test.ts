@@ -113,6 +113,13 @@ describe('queries', () => {
     expect(values.ok && values.compiled.queries[0]!.columns).toEqual([{ name: 'two', type: 'number' }, { name: 'word', type: 'string' }, { name: 'day', type: 'date' }]);
   });
 
+  it('a query the sample row makes fail is typed over a sample without text, not left untyped', async () => {
+    // 'text' is no date, so to_date fails on the sample; the real rows are what the reader sees.
+    const result = await compile(doc(`${IMPORT}<Query name="per_day">{\`select to_date(slot || '-01') as period, count(*) * 1.5 as load from bookings.rows group by 1\`}</Query>`));
+    if (!result.ok) throw new Error(result.errors.map((e) => e.message).join('\n'));
+    expect(result.compiled.queries[0]!.columns).toEqual([{ name: 'period', type: null }, { name: 'load', type: 'number' }]);
+  });
+
   it('type a compound column user only when every branch projects a user', async () => {
     const result = await compile(doc(`${IMPORT}<Value name="t" type="table" value={[{"who":"x"}]} />
       <Query name="leak">{\`select booked_by, day from bookings.rows union select who, day from bookings.rows, t\`}</Query>
