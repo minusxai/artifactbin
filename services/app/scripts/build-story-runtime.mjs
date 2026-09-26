@@ -48,6 +48,11 @@ const toolHash = sha(Buffer.concat([
   fs.readFileSync(path.join(root, '../../package-lock.json')),
 ]));
 
+// The offline file's bundles (scripts/build-offline.mjs), which reuse most of
+// this graph. First, because a cache hit below exits the process; it keeps its
+// own cache and reads the same `--cache` flag.
+await import('./build-offline.mjs');
+
 if (cache && fs.existsSync(markerPath)) {
   try {
     const marker = JSON.parse(fs.readFileSync(markerPath, 'utf8'));
