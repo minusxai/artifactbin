@@ -9,6 +9,7 @@ import {mutationPolicy,recheckMutation,canUseDataPolicy,policyReaderSql,type Mut
 import {catalogOf,importedTables} from '@/lib/datasets/catalog';
 import {SIGN_IN_REQUIRED} from './sign-in-required';
 import {loadSqlite} from '@artifactbin/sql/core';
+import {sqlExtensions} from '@/lib/sql/extensions';
 import {paramSqlName} from '@artifactbin/contracts';
 /**
  * WRITING a dataset — the other half of lib/story/dataset-store.
@@ -258,7 +259,7 @@ export async function mutateDataset(
 /** The one stored table a direct write names, by SQLite's own analysis of it over the dataset's catalog. */
 async function writtenTable(catalog:import('@/lib/datasets/types').DatasetCatalog,sql:string):Promise<{schema:string;table:string}> {
   const relations=catalog.tables.filter(t=>t.objectKey&&t.sql===undefined).map(t=>({schema:t.schema,table:t.name,columns:t.columns}));
-  const writes=(await loadSqlite()).analyze(sql,relations).writes;
+  const writes=(await loadSqlite()).analyze(sql,relations,{mode:'write',extensions:sqlExtensions()}).writes;
   const [write]=writes;
   if(!write||new Set(writes.map(w=>`${w.schema}\0${w.table}`)).size!==1)throw new Error('exactly one INSERT, UPDATE or DELETE of one catalog table is required');
   return {schema:write.schema,table:write.table};
