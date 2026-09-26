@@ -69,13 +69,13 @@ import { COMPILED_DATAFLOW, finalizeArtifactMetadata, readCompiledDataflow, stor
 import { DATA_SYNTAX_META, hasCurrentDataSyntax, PREVIOUS_ENGINE, previousEngineRestore } from './story/data-syntax';
 import { inCurrentSyntax } from './migrate/sqlite/stored';
 import { convertArtifactNow } from './sqlite-syntax-migration';
-import { EMPTY_DATAFLOW, isEmptyDataflow, scalarMatches, type Row, type Scalar } from '@/lib/story/dataflow';
-import type { ColumnType } from '@artifactbin/contracts';
+import { EMPTY_DATAFLOW, isEmptyDataflow, type Row, type Scalar } from '@/lib/story/dataflow';
 import { EMPTY_COMPILED_DATAFLOW, type CompiledDataflow, type CompiledMutation } from '@/lib/story/compiled-dataflow';
 import { compileWithLoader } from '@/lib/story/compile-dataflow';
 import { declarationsOf } from '@/lib/story/helmet';
 import { bindParams, bindTypes, dataRefs, importRef, initialTables, initialValues, mutationParams, mutationReads, mutationTargetRef, selectQueries, type ImportTables } from '@/lib/story/compiled-flow';
-import { platformValues, readerZone, rowField, VIEWER, VIEWER_ID } from '@/lib/story/builtins';
+import { bindMutationRequest } from '@/lib/story/mutation-request';
+import { readerZone, VIEWER, VIEWER_ID } from '@/lib/story/builtins';
 import type { MutationRequest } from '@/lib/story/mutation-request';
 import { schemaLoaderFor } from '@/lib/story/data-checks';
 import { canUseDataPolicy, mutationPolicy } from '@/lib/datasets/policy';
@@ -2154,61 +2154,10 @@ export async function runDocumentMutation(
     if (request.localTables !== undefined) return {ok: false, reason: 'invalid_sql', detail: 'Persistent mutations do not accept local table overrides'};
   }
 
-  /*
-   * THE SIGNATURE AT THE DOOR. Every argument is typed by the declaration it
-   * is filled from, so a value of another JS type is a caller error named
-   * here, never a statement for the engine to make sense of. An EMPTY string
-   * for anything but text is "no value" — what a cleared input sends, and what
-   * `--arg due=` means on a command line; `null` always clears. An argument
-   * the mutation does not take is refused by name: nothing a caller sends
-   * reaches the statement unless the author's signature asked for it.
-   */
-  const extra = Object.keys(request.args).filter((name) => !m.args.some((a) => a.name === name));
-  if (extra.length) return { ok: false, reason: 'invalid_sql', detail: `${m.name} takes no argument ${extra.join(', ')}${m.args.length ? ` (it takes ${m.args.map((a) => a.name).join(', ')})` : ''}` };
-  const logical: Record<string, Scalar> = {};
-  // An argument the caller left out is the page value of that name at its declared default, as a fresh page holds it.
-  const defaults = initialValues(flow);
-  for (const a of m.args) {
-    const raw = Object.hasOwn(request.args, a.name) ? request.args[a.name]! : defaults[a.name] ?? null;
-    const value = raw === '' && a.type && a.type !== 'string' ? null : raw;
-    if (a.type && !scalarMatches(value, a.type)) return { ok: false, reason: 'invalid_sql', detail: `argument $${a.name} does not match its declared type` };
-    logical[a.name] = value;
-  }
-  /*
-   * The control's context: the fields of its row and the value its cell holds
-   * — only what the statement reads, each typed by where the control sits
-   * (the row's table, the edited column; CompiledMutation.rowTypes/valueType).
-   * A row the table could not have produced is refused by name, as is a cell
-   * value the column cannot hold; an empty string for anything but text is
-   * "no value", as a cleared editor sends it.
-   */
-  const fields = m.reads.builtins.flatMap((b) => rowField(b) ?? []);
-  const types: Record<string, ColumnType | null> = Object.fromEntries(m.args.map((a) => [a.name, a.type]));
-  if (fields.length) {
-    const missing = fields.filter((f) => !request.row || !Object.hasOwn(request.row, f));
-    if (missing.length) return { ok: false, reason: 'invalid_row', detail: `this row mutation reads $_row.${missing.join(', $_row.')} — send the row its control sits in` };
-    const extra = Object.keys(request.row!).filter((k) => !fields.includes(k));
-    if (extra.length) return { ok: false, reason: 'invalid_row', detail: `the row carries ${extra.join(', ')}, which ${m.name} does not read — send only $_row.${fields.join(', $_row.')}` };
-    for (const f of fields) {
-      const type = m.rowTypes?.[f] ?? null;
-      const value = request.row![f]!;
-      if (type && !scalarMatches(value, type)) return { ok: false, reason: 'invalid_row', detail: 'row fields and scalar types must match the declared table result' };
-      logical[`_row.${f}`] = value;
-      types[`_row.${f}`] = type;
-    }
-  } else if (request.row !== undefined) return { ok: false, reason: 'invalid_row', detail: 'this mutation does not read a row' };
-  if (m.reads.builtins.includes('_value')) {
-    if (request.value === undefined) return { ok: false, reason: 'invalid_row', detail: 'cell mutations require value' };
-    const type = m.valueType ?? null;
-    const value = type && type !== 'string' && request.value === '' ? null : request.value;
-    if (type && !scalarMatches(value, type)) return { ok: false, reason: 'invalid_row', detail: 'parameter $_value does not match the edited column\'s type' };
-    logical._value = value;
-    types._value = type;
-  } else if (request.value !== undefined) return { ok: false, reason: 'invalid_row', detail: 'this mutation does not accept a value' };
-  Object.assign(logical, platformValues({ userId: actor.userId ?? null, now: new Date().toISOString(), tz: readerZone(request.tz) }));
-  const names = mutationParams(m);
-  const params = bindParams(names, logical);
-  const paramTypes = bindTypes(names, types);
+  // The signature at the door: the same binding the reader's page applies to a write it computes itself.
+  const bound = bindMutationRequest(flow, m, request, { userId: actor.userId ?? null, now: new Date().toISOString(), tz: readerZone(request.tz) });
+  if (!bound.ok) return bound;
+  const { params, paramTypes } = bound;
   const members = m.reads.builtins.includes('_members') ? await acceptedMembers(doc.id) : [];
   const imports = await importsFor(flow, m.reads.imports, datasetResolverForRow(doc, actor));
 
