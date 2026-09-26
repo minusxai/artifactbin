@@ -5,11 +5,12 @@
  * differential check compares them (lib/migrate/sqlite/diff compareTables):
  * column names in order, rows as a multiset of engine-neutral values.
  *
- *   npx tsx scripts/migrate/sqlite/compare-results.ts <before.jsonl> <after.jsonl> --map <migration-report.jsonl> [--rerun <before-again.jsonl>]
+ *   npx tsx scripts/migrate/sqlite/compare-results.ts <before.jsonl> <after.jsonl> --map <migration-report.jsonl> [--rerun <before-again.jsonl> …]
  *
- * `--rerun` is a second recording at the before commit: a query the previous
- * engine answered differently on the two runs (ties at a LIMIT, rows cut
- * without an order) is `unstable before`, not a difference the migration made.
+ * `--rerun` (repeatable) is another recording at the before commit: a query
+ * the previous engine answered differently on any of them (ties at a LIMIT,
+ * rows cut without an order) is `unstable before`, not a difference the
+ * migration made.
  * From the repository root. The map is run-migration.ts's report: it says what the migration did to each
  * document, and marks queries whose conversion notes say they read the clock
  * (`$_now`), whose results may differ between two runs for that reason alone.
@@ -88,8 +89,8 @@ function outcomes(report: SqliteSyntaxMigrationOutcome[]): Map<string, SqliteSyn
   return new Map(report.map((outcome) => [outcome.artifactId, outcome]));
 }
 
-export function compareResults(before: RecordedResult[], after: RecordedResult[], report: SqliteSyntaxMigrationOutcome[], rerun?: RecordedResult[]): Comparison {
-  const a = bySide(before), b = bySide(after), again = rerun ? bySide(rerun) : null, map = outcomes(report);
+export function compareResults(before: RecordedResult[], after: RecordedResult[], report: SqliteSyntaxMigrationOutcome[], reruns: RecordedResult[][] = []): Comparison {
+  const a = bySide(before), b = bySide(after), again = reruns.map(bySide), map = outcomes(report);
   const totals: Comparison['totals'] = { documents: 0, clock: 0, identical: 0, differs: 0, 'cut before': 0, 'unstable before': 0, 'failed before': 0, 'failed after': 0, 'failed both': 0, 'only before': 0, 'only after': 0 };
   const documents: DocumentComparison[] = [];
   for (const document of [...new Set([...a.keys(), ...b.keys()])].sort()) {
@@ -106,8 +107,10 @@ export function compareResults(before: RecordedResult[], after: RecordedResult[]
       else {
         const difference = compareTables(table(x), table(y));
         const cut = difference && x.truncated && !difference.columns && !difference.rows!.missing.length;
-        const second = again?.get(document)?.queries.get(query);
-        const unstable = difference && second && ('error' in second || compareTables(table(x), table(second)));
+        const unstable = difference && again.some((side) => {
+          const second = side.get(document)?.queries.get(query);
+          return second && ('error' in second || compareTables(table(x), table(second)));
+        });
         result = cut ? { query, status: 'cut before', detail: `the previous engine returned ${x.rows.length} rows of it; ${y.rows.length} now` }
           : unstable ? { query, status: 'unstable before', detail: `the previous engine answered differently on a second run; ${firstDifference(difference)}` }
           : difference ? { query, status: 'differs', detail: firstDifference(difference) } : { query, status: 'identical' };
@@ -149,10 +152,10 @@ export function formatComparison(comparison: Comparison): string {
 const jsonl = <T>(path: string): T[] => readFileSync(path, 'utf8').split('\n').filter((line) => line.trim()).map((line) => JSON.parse(line) as T);
 
 function main() {
-  const { values, positionals } = parseArgs({ allowPositionals: true, options: { map: { type: 'string' }, rerun: { type: 'string' } } });
+  const { values, positionals } = parseArgs({ allowPositionals: true, options: { map: { type: 'string' }, rerun: { type: 'string', multiple: true } } });
   const [before, after] = positionals;
-  if (!before || !after || !values.map) throw new Error('usage: compare-results.ts <before.jsonl> <after.jsonl> --map <migration-report.jsonl> [--rerun <before-again.jsonl>]');
-  const comparison = compareResults(jsonl(before), jsonl(after), jsonl(values.map), values.rerun ? jsonl(values.rerun) : undefined);
+  if (!before || !after || !values.map) throw new Error('usage: compare-results.ts <before.jsonl> <after.jsonl> --map <migration-report.jsonl> [--rerun <before-again.jsonl> …]');
+  const comparison = compareResults(jsonl(before), jsonl(after), jsonl(values.map), (values.rerun ?? []).map((path) => jsonl<RecordedResult>(path)));
   console.log(formatComparison(comparison));
   const changed = regressions(comparison);
   console.log(changed.length ? `changed by the migration: ${changed.map((doc) => doc.document).join(', ')}` : 'no migrated document changed its results');

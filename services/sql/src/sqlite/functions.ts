@@ -198,7 +198,8 @@ function list(fn: string, value: SqlValue): unknown[] {
 }
 const bool = (b: boolean) => (b ? 1 : 0);
 
-interface Scalar { kind: 'scalar'; call: (args: SqlValue[]) => SqlValue; nullable?: false }
+/** `real`: the answer is a REAL even when it is whole, as SQLite's own numeric functions answer (so text shows `11.0`). */
+interface Scalar { kind: 'scalar'; call: (args: SqlValue[]) => SqlValue; nullable?: false; real?: true }
 /** An aggregate answers from every row's arguments in the group (or the window frame), in order. */
 interface Aggregate { kind: 'aggregate'; final: (rows: SqlValue[][]) => SqlValue }
 
@@ -388,6 +389,7 @@ const IMPLEMENTATIONS: Record<string, Scalar | Aggregate> = {
   arg_max: { kind: 'aggregate', final: argExtreme(-1) },
   round: {
     kind: 'scalar',
+    real: true,
     call: ([x, d]) => {
       const n = numeric(x);
       if (Number.isNaN(n)) fail('round', 'expected a number');
@@ -454,9 +456,11 @@ interface FunctionHost {
   createFunction(options: Record<string, unknown>): unknown;
 }
 type AggregateContext = (ctx: number, bytes: number) => number;
+/** Set a function's result to a REAL (sqlite3_result_double): a whole JS number would otherwise go back as an INTEGER. */
+type ResultDouble = (ctx: number, value: number) => void;
 
 /** Register the whole library on one database. */
-export function registerLibrary(db: FunctionHost, aggregateContext: AggregateContext): void {
+export function registerLibrary(db: FunctionHost, aggregateContext: AggregateContext, resultDouble: ResultDouble): void {
   for (const { name, arity, kind } of LIBRARY) {
     const impl = IMPLEMENTATIONS[name];
     if (!impl || impl.kind !== kind) throw new Error(`sql library: ${name} is not implemented as a ${kind}`);
@@ -464,7 +468,12 @@ export function registerLibrary(db: FunctionHost, aggregateContext: AggregateCon
     if (impl.kind === 'scalar') {
       db.createFunction({
         name, arity, deterministic, innocuous: deterministic,
-        xFunc: (_ctx: number, ...args: SqlValue[]) => (impl.nullable !== false && args.some((a) => a === null) ? null : impl.call(args)),
+        xFunc: (ctx: number, ...args: SqlValue[]) => {
+          const value = impl.nullable !== false && args.some((a) => a === null) ? null : impl.call(args);
+          if (!impl.real || typeof value !== 'number') return value;
+          resultDouble(ctx, value);
+          return undefined;
+        },
       });
       continue;
     }
