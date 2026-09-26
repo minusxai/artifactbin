@@ -43,6 +43,17 @@ omit the range for the default theme palette. Use a stored dataset for shared da
 the inline table here only makes the example self-contained.
 <!--/bundle:skip-->
 
+<!--bundle:skip-->
+## Recipe slots
+
+Slots are validated at publish: funnel `stage`, `value`; waterfall `category`,
+`value`; radar `metric`, `value`, optional `series`; combo `x`, `bar`, `line`,
+optional `series`; single-value `value` (the FIRST row's cell) with `params`
+`label`, `caption`, `align`, `valueColor`. Trend `params`: `compareMode:
+"last"|"previous"` — `previous` skips a partial current period — and
+`trendColor`/`valueColor`, best as a token like `"var(--chart-2)"`.
+<!--/bundle:skip-->
+
 ## Build chart attributes without counting braces
 
 Construct the viz object as JSON, then serialize it inside ONE JSX expression.

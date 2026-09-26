@@ -53,7 +53,9 @@ SQLite rules and every function: [SQL](markup-sql.md). Editable cells: [editing]
   `$name` is a page value, bound, never spliced. A query reads imports, table
   values and other queries by name, in any order (cycles are refused). Checked
   at publish against the real columns; a mistake names the column and what to
-  write instead. Results stop at 10,000 rows and 5 s.
+  write instead. Results stop at 10,000 rows and 5 s. Dates are ISO text; the
+  library adds `date_add`, `date_part`, `date_format`, `date_series`,
+  `to_timezone`, `dayname` and more ([SQL](markup-sql.md)).
 - `<Query name source="ref:<id>">` — ONLY for a connected Postgres dataset:
   Postgres SQL, run inside that database. [Catalogs](databases.md).
 - `<Mutation name expectedAffected={1} reset="note">{`insert into sales.rows …`}</Mutation>`
@@ -93,20 +95,20 @@ First read [chart authoring](markup-data-authoring.md).
   prefer**: value, delta and sparkline over `select <period>, <measure> … group by 1 order by 1`.
   Shipped recipes: `minusx/trend@1`, `minusx/funnel@1`, `minusx/waterfall@1`,
   `minusx/radar@1`, `minusx/combo@1`, `minusx/single-value@1`, and the deprecated
-  `minusx/choropleth@1` and `minusx/point-map@1` ([maps](markup-maps.md)).<!--bundle:skip-->
-  Slots are validated at publish: funnel `stage`, `value`; waterfall `category`,
-  `value`; radar `metric`, `value`, optional `series`; combo `x`, `bar`, `line`,
-  optional `series`. Trend `params`: `compareMode: "last"|"previous"`, and colors
-  as tokens like `"var(--chart-2)"`.<!--/bundle:skip-->
+  `minusx/choropleth@1` and `minusx/point-map@1` ([maps](markup-maps.md)); slots
+  in [chart authoring](markup-data-authoring.md).
 - `<Number data="$q" col="revenue" agg="sum" prefix="$" suffix=" M" format=",.0f" />`
   — one live figure inline. `agg` defaults to `first` (the first row's cell), so
   a total needs `agg="sum"`; `avg`, `min`, `max`, `count` are the rest. [[ computedFigureRule ]]
 - `<DataTable data="$q" rowKey="id" columns={[…]} height="420px" />` — sortable,
-  virtualised; `columns` picks `{col, title, fmt, align, bar, colorScale, width, kind: "image"}`.
+  virtualised; `columns` picks `{col, title, fmt, align, bar, colorScale, width, kind: "image"}`,
+  or `<Column col title>` children hold a control per row ([editing](markup-editing.md)).
   `fmt` and `format` are d3-format specs (`",.0f"`, `".1%"`).<!--bundle:skip-->
   `kind: "image"` draws each cell's URL as a picture from our own copy, fetched
   on first view.<!--/bundle:skip-->
 - `<For each={$q} keyBy="id">…{$_row.name}…</For>` — a template per row. [Keyed repeats](markup-repeat.md).
+- `{($_row.is_open) && (<Button …/>)}` shows markup only while a value or row
+  field is true. [Conditions](markup-state.md).
 - `<User userId="$_me.id" />`, `<User userId="$_row.booked_by" />` — a person by account id.
 
 ## Bindings: controls (body)
