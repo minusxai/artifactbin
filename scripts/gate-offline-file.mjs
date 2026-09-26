@@ -7,12 +7,15 @@
  * core and mermaid offline bundles, writes them to a temp dir and asserts, per
  * bundle and engine:
  *  - the title and body render, from inside the file;
- *  - the table shows the snapshot's rows, and changing the Select swaps to
- *    the precomputed variant's rows;
- *  - the frozen text input is disabled with OFFLINE_FILTER_REASON (and its
- *    hint says so on focus);
+ *  - the table shows the snapshot's rows, and changing the Select runs the
+ *    query LIVE on the file's own SQLite engine over the rows it holds (the
+ *    fixture precomputes nothing for it), under a CSP that admits only
+ *    'wasm-unsafe-eval' beyond the inline scripts;
+ *  - the text input feeding a query over data the file does NOT hold is
+ *    frozen: disabled with OFFLINE_FILTER_REASON (and its hint says so on
+ *    focus);
  *  - the <Mutation> button says OFFLINE_MUTATION_REASON, never an access check;
- *  - the Vega chart draws its bars from the snapshot, then from the variant;
+ *  - the Vega chart draws its bars from the snapshot, then from the live run;
  *  - a browser without DecompressionStream gets the plain "needs a current
  *    browser" message instead of a broken page;
  *  - nothing but file:/data: is requested, no Content-Security-Policy
@@ -128,7 +131,9 @@ const files = Object.keys(manifest.bundles).map((kind) => {
 console.log(`CSP: ${artifactFileCsp(file.origin)}`);
 
 const baseRows = file.snapshot.state.tables.sales.rows;
-const westRows = file.snapshot.variants.find((v) => v.values.region === 'west').tables.sales.rows;
+// What the live query must answer: the held rows, filtered — nothing precomputed says so.
+assert.deepEqual(file.snapshot.variants, [], 'the fixture precomputes nothing for the region: the file runs it');
+const westRows = file.snapshot.held.sales_data.rows.rows.filter((row) => row.region === 'west');
 const failures = [];
 
 for (const { kind, url } of files) for (const [engine_, engine] of [['chromium', chromium], ['firefox', firefox], ['webkit', webkit]]) {
@@ -174,11 +179,12 @@ for (const { kind, url } of files) for (const [engine_, engine] of [['chromium',
     };
     await expectBars(baseRows);
 
-    // The snapshot's rows, then the precomputed variant's.
+    // The snapshot's rows, then a LIVE query's: the engine loads from the file's own bytes behind the first paint.
     const table = page.getByRole('table').first();
     const bodyRows = table.getByRole('row').filter({ hasNot: page.getByRole('columnheader') });
     await expect(bodyRows).toHaveCount(baseRows.length);
     for (const row of baseRows) await expect(table).toContainText(String(row.month));
+    await page.waitForTimeout(1000);
     await page.getByRole('button', { name: 'Region', exact: true }).click();
     await page.getByRole('option', { name: 'west', exact: true }).click();
     await expect(bodyRows).toHaveCount(westRows.length);
@@ -214,7 +220,7 @@ for (const { kind, url } of files) for (const [engine_, engine] of [['chromium',
     await expect(old.getByRole('heading', { name: 'Regional sales' })).toHaveCount(0);
     assert.deepEqual(oldErrors, [], `${name}: page errors without DecompressionStream`);
 
-    console.log(`${name}: title, body, top bar, snapshot rows (${baseRows.length}) → west variant (${westRows.length}), frozen input, mutation reason, chart, 0 requests, 0 CSP violations, 0 page errors, unsupported-browser message — passed in ${((Date.now() - started) / 1000).toFixed(1)}s${consoleErrors.length ? ` (console errors: ${consoleErrors.join(' | ')})` : ''}`);
+    console.log(`${name}: title, body, top bar, snapshot rows (${baseRows.length}) → live west query (${westRows.length}), frozen input, mutation reason, chart, 0 requests, 0 CSP violations, 0 page errors, unsupported-browser message — passed in ${((Date.now() - started) / 1000).toFixed(1)}s${consoleErrors.length ? ` (console errors: ${consoleErrors.join(' | ')})` : ''}`);
   } catch (error) {
     failures.push(new Error(`${name}: ${error.message}`));
     console.log(`${name}: FAILED — ${error.message}`);

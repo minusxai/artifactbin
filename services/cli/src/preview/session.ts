@@ -22,16 +22,16 @@ import {digest,atomicWrite} from '../files';
 import {parseJsx} from '../../../app/lib/jsx';
 import {splitHelmet} from '../../../app/lib/story/helmet';
 import {stampNodeIds} from '../../../app/lib/story/node-ids';
-import {localInputPath,readLocalDataset} from './local-inputs';
+import {localInputPath,readLocalDataset,type LocalDataset} from './local-inputs';
 import {CliError} from '../errors';
-import {evaluateDataflow,type DatasetTables} from '../../../app/lib/sql/dataflow-core';
-import {createSql} from '../../../sql/src/local';
-import {tableQueryInput} from '../../../utils/src/index';
-import {isQueryFailure,type Scalar} from '../../../contracts/src/index';
+import type {Scalar} from '../../../contracts/src/index';
 import {validateQueryValues} from '../../../app/lib/story/query-values';
+import {dataflowOf} from '../../../app/lib/story/helmet';
+import type {CompiledDataflow} from '../../../app/lib/story/compiled-dataflow';
+import {compileLocal,declaredRefs,runLocal} from '../local-dataflow';
 
 class Refusal extends Error {constructor(readonly status:number,message:string){super(message);}}
-export async function startPreview(options:{root:string;files:string[];home:string;localFiles?:Record<string,string>;assets?:string;publicAssets?:string;port?:number;share?:boolean;capture?:boolean;origin?:string;asset?:(id:string)=>Promise<{bytes:Buffer;contentType:string}>;dataset?:(id:string)=>Promise<DatasetTables[string]>}){
+export async function startPreview(options:{root:string;files:string[];home:string;localFiles?:Record<string,string>;assets?:string;publicAssets?:string;port?:number;share?:boolean;capture?:boolean;origin?:string;asset?:(id:string)=>Promise<{bytes:Buffer;contentType:string}>;dataset?:(id:string)=>Promise<LocalDataset>}){
  let failure:string|undefined;
  const root=await realpath(options.root),{home}=options;
  const allowed=new Set(options.files),resources=new Set<string>();
@@ -42,6 +42,16 @@ export async function startPreview(options:{root:string;files:string[];home:stri
  const serial=<T,>(run:()=>Promise<T>):Promise<T>=>{const next=queue.then(run);queue=next.catch(()=>{});return next;};
  const pathFor=async(file:string)=>{if(!allowed.has(file))throw new Refusal(403,'File is not selected');return confinedPath(root,join(root,file));};
  const preparedCache=new Map<string,{revision:string;value:PreparedStoryRuntime}>();
+ const compiledCache=new Map<string,{revision:string;value:CompiledDataflow}>();
+ /** A file's compiled declarations, once per revision: compiling reads the shapes of what it imports. */
+ const compiledFor=async(file:string,revision:string,declared:ReturnType<typeof dataflowOf>):Promise<CompiledDataflow>=>{
+  const cached=compiledCache.get(file);
+  if(cached?.revision===revision)return cached.value;
+  // A reference preview may not read (403) or a local file it cannot read (422) is that refusal, not a compile error.
+  let refused:Refusal|undefined;
+  const value=await compileLocal(declared,async id=>tableFor(id).catch(error=>{if(error instanceof Refusal)refused??=error;return undefined;})).catch(error=>{throw refused??(error instanceof Refusal?error:new Refusal(400,error instanceof Error?error.message:String(error)));});
+  compiledCache.set(file,{revision,value});return value;
+ };
  // Only refs in selected dataset inputs extend preview's asset scope. Query SQL
  // can synthesize arbitrary strings, so its results cannot grant this authority.
  const datasetImages=new Map<string,Set<string>>();
@@ -55,16 +65,29 @@ export async function startPreview(options:{root:string;files:string[];home:stri
   for(const ref of collectRefUses(doc.body)??[])if(ref.kind==='image'||ref.kind==='file')refData[ref.id]={kind:ref.kind,url:'/remote/'+ref.id};
   if(override&&(collectRefUses(doc.body)??[]).some(ref=>!remoteIds.has(ref.id)))throw new Refusal(403,'Restart preview to include this reference.');
   const authored=parseJsx(doc.body);if(!authored.ok)throw new Refusal(400,'Invalid JSX');
-  const split=splitHelmet(parsed.nodes),flow={values:split.content.values,queries:split.content.queries,mutations:split.content.mutations};
+  const split=splitHelmet(parsed.nodes),declared=dataflowOf(split.content);
   const revision=digest(source);
+  const flow=await compiledFor(file,revision,declared);
   const assetsUrl='/image?file='+encodeURIComponent(file);
   const cached=preparedCache.get(file);
   const prepared=options.assets?(cached?.revision===revision?cached.value:await prepareStoryRuntime({source:doc.body,compiledCss:await compileStoryCss(doc.body,{force:true}),theme:STORY_THEME_NAMES.includes(doc.metadata.theme as StoryThemeName)?doc.metadata.theme as StoryThemeName:null,template:doc.metadata.template??null,colorMode:doc.metadata.colorMode??null,refData,assetsUrl,title:doc.metadata.title??file,chrome:!options.capture,dataflow:{flow}})):undefined;
   if(prepared)preparedCache.set(file,{revision,value:prepared});
-  return {prepared,source,body:doc.body,metadata:doc.metadata,revision:digest(source),flow,data:{...prepared?.data,nodes:splitHelmet(authored.nodes).body,refData,assetsUrl,colorMode:prepared?.data.colorMode??'light' as const,chrome:!options.capture,dataflow:{flow}}};
+  return {prepared,source,body:doc.body,metadata:doc.metadata,revision:digest(source),declared,flow,data:{...prepared?.data,nodes:splitHelmet(authored.nodes).body,refData,assetsUrl,colorMode:prepared?.data.colorMode??'light' as const,chrome:!options.capture,dataflow:{flow}}};
  };
  const remoteIds=new Set<string>();
- for(const file of allowed){const current=await read(file);for(const ref of collectRefUses(current.body)??[])remoteIds.add(ref.id);for(const query of current.flow.queries)for(const id of query.source?[query.source]:query.refs)remoteIds.add(id);}
+ // The selected files' references, declarations included, are the whole scope a session may reach.
+ for(const file of allowed){const body=parseDocument(await readFile(await pathFor(file),'utf8')).body;for(const ref of collectRefUses(body)??[])remoteIds.add(ref.id);}
+ /** A referenced dataset's rows: its local copy when the workspace has one, else the host's. */
+ const tableFor=async(id:string):Promise<LocalDataset>=>{
+  if(!remoteIds.has(id))throw new Refusal(403,'Remote reference is not selected');
+  const local=options.localFiles?.[id];
+  if(local&&resources.has(local)){
+   const table=await readLocalDataset(root,local,id).catch(error=>{throw error instanceof CliError?new Refusal(422,error.message):error;});
+   if(table)return table;
+  }
+  if(!options.dataset)throw new Refusal(422,`Remote dataset ${id} requires its host connection`);
+  return options.dataset(id);
+ };
  const comments=await State.open(home);
  let url='';
  const server=createServer((req,res)=>{void (async()=>{
@@ -79,7 +102,7 @@ export async function startPreview(options:{root:string;files:string[];home:stri
   const workspaceFile=target.pathname.startsWith('/workspace/')?decodeURIComponent(target.pathname.slice('/workspace/'.length)):null;
   const file=workspaceFile??target.searchParams.get('file')??options.files[0]!;
   if(req.method==='GET'&&target.pathname==='/'){res.writeHead(302,{Location:'/workspace/'+file.split('/').map(encodeURIComponent).join('/')+(options.capture?'?capture=1':'')});return res.end();}
-  if(req.method==='GET'&&target.pathname==='/document'){const {flow:_flow,...document}=await read(file);return json(document);}
+  if(req.method==='GET'&&target.pathname==='/document'){const {flow:_flow,declared:_declared,...document}=await read(file);return json(document);}
   if(req.method==='GET'&&target.pathname==='/comments'){await pathFor(file);return json(comments.list<Comment>(root,'preview-comment').map(row=>row.value).filter(comment=>comment.file===file));}
   if(req.method==='GET'&&(target.pathname==='/resource'||workspaceFile&&resources.has(file))){if(!resources.has(file))throw new Refusal(403,'Resource not selected');res.setHeader('Content-Type',fileContentType(file)??'application/octet-stream');return res.end(await readFile(await confinedPath(root,join(root,file))));}
   if(req.method==='GET'&&/^\/a\/[A-Za-z0-9]{6,12}$/.test(target.pathname)){
@@ -92,7 +115,7 @@ export async function startPreview(options:{root:string;files:string[];home:stri
   if(req.method==='GET'&&target.pathname==='/files')return json([...allowed]);
   if(req.method==='GET'&&target.pathname==='/image'){
    const current=await read(file),id=imageReferenceId(target.searchParams.get('u')??'');
-   const sources=current.flow.queries.flatMap(query=>query.source?[query.source]:query.refs);
+   const sources=declaredRefs(current.declared);
    if(!id||!sources.some(source=>datasetImages.get(source)?.has(id)))throw new Refusal(403,'Image reference is not selected');
    const mapped=options.localFiles?.[id],local=mapped?await localInputPath(root,mapped):undefined;
    const asset=local?{bytes:await readFile(await confinedPath(root,join(root,local))),contentType:fileContentType(local)??'application/octet-stream'}:await options.asset?.(id);
@@ -118,25 +141,12 @@ export async function startPreview(options:{root:string;files:string[];home:stri
     return read(input.file);
    })));
    if(target.pathname==='/query'){
-    const current=await read(input.file),datasets:DatasetTables={};
+    // A document that does not compile fails the capture as a query error would: the export names it.
+    const current=await read(input.file).catch((error:unknown)=>{if(options.capture&&error instanceof Refusal)failure=error.message;throw error;}),datasets:Record<string,LocalDataset>={};
     const invalid=validateQueryValues(current.flow,input.values??{});if(invalid)throw new Refusal(400,invalid.code);
-    const refs=new Set(current.flow.queries.flatMap(query=>query.source?[query.source]:query.refs));
-    for(const id of refs)if(!datasets[id]){
-     if(!remoteIds.has(id))throw new Refusal(403,'Remote reference is not selected');
-     const local=options.localFiles?.[id];
-     if(local&&resources.has(local)){
-      const table=await readLocalDataset(root,local,id).catch(error=>{throw error instanceof CliError?new Refusal(422,error.message):error;});
-      if(table){datasets[id]=table;continue;}
-     }
-     if(!options.dataset)throw new Refusal(422,`Remote dataset ${id} requires its host connection`);
-     datasets[id]=await options.dataset(id);
-    }
+    for(const id of declaredRefs(current.declared))datasets[id]??=await tableFor(id);
     for(const [id,table] of Object.entries(datasets))datasetImages.set(id,new Set(table.rows.flatMap(row=>Object.values(row).flatMap(value=>{const ref=typeof value==='string'?imageReferenceId(value):null;return ref?[ref]:[];}))));
-    const sql=createSql();
-    const result=await evaluateDataflow({run:args=>sql.run(args),queryRows:async(table,query,params,page)=>{
-     const result=(await sql.run(tableQueryInput(table,query,params,page))).result;
-     if(!result||isQueryFailure(result))throw Error(result?.error??'No result');return result;
-    }},current.flow,datasets,{values:input.values as Record<string,Scalar>,only:input.only,page:input.page});
+    const result=await runLocal(current.flow,async id=>datasets[id],{values:input.values as Record<string,Scalar>,only:input.only,page:input.page,tz:typeof input.tz==='string'?input.tz:undefined});
     if(options.capture&&Object.keys(result.errors).length)failure=Object.values(result.errors).join("; ");
     return json(result);
    }

@@ -129,7 +129,10 @@ export async function pull(workspace:Workspace,args:string[],client:HttpClient,o
    let selected:Snapshot|undefined;
    if(target.version&&target.version!==head.version){
     selected=previous?.versions?.[String(target.version)];
-    if(!selected){const history=await client.request<Record<string,unknown>>(`/artifacts/${target.id}/versions/${target.version}`);const meta=history.meta as Record<string,unknown>|undefined;selected={...head,...history,id:head.id,version:target.version,edit_id:head.edit_id,state:head.state,theme:meta?.theme as string|null??head.theme,template:meta?.template as string|null??head.template} as Snapshot;}
+    if(!selected){const history=await client.request<Record<string,unknown>>(`/artifacts/${target.id}/versions/${target.version}`);const meta=history.meta as Record<string,unknown>|undefined;
+     // Pulling a version into a file is how it is restored: one the server says cannot run on the current engine is refused here (reading it to stdout still works).
+     if(typeof history.previous_engine==='string')throw new CliError('previous_engine_version',history.previous_engine);
+     selected={...head,...history,id:head.id,version:target.version,edit_id:head.edit_id,state:head.state,theme:meta?.theme as string|null??head.theme,template:meta?.template as string|null??head.template} as Snapshot;}
    }
    const snapshot=selected??head;
    if(options.format==='jsx'&&snapshot.format!=='markup'||['csv','json'].includes(options.format??'')&&snapshot.format!=='dataset')throw new CliError('unsupported_format',`${snapshot.format} cannot be pulled as ${options.format}.`);

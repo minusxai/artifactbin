@@ -36,7 +36,7 @@ async function dataset(token: string, extra: Record<string, unknown> = {}): Prom
 const helmet = (ds: string, extra = '') =>
   '<Helmet><title>Sales</title>' +
   '<Value name="region" type="string" />' +
-  `<Query name="sales" source="ref:${ds}">{\`select region, sum(revenue) revenue from public.rows where $region is null or region = $region group by 1\`}</Query>` +
+  `<Import name="sales_data" src="ref:${ds}" /><Query name="sales">{\`select region, sum(revenue) revenue from sales_data.rows where $region is null or region = $region group by 1\`}</Query>` +
   extra + '</Helmet>';
 const BODY = '<div><select value="$region" options="$sales" /><Question data="$sales" viz={{"kind":"table"}} /></div>';
 
@@ -73,7 +73,7 @@ describe('dataflow at the publish door', () => {
     const t = await mintToken('t');
     const ds = await dataset(t.token);
     const res = await create(t.token, {
-      markup: '<Helmet>' + `<Query name="q" source="ref:${ds}">{\`select * from public.rows where region = $nowhere\`}</Query>` + '</Helmet><Question data="$q" />',
+      markup: '<Helmet>' + `<Import name="q_data" src="ref:${ds}" /><Query name="q">{\`select * from q_data.rows where region = $nowhere\`}</Query>` + '</Helmet><Question data="$q" />',
     });
     expect(res.status).toBe(400);
     expect(await details(res)).toMatch(/\$nowhere/);
@@ -121,13 +121,13 @@ describe('dataflow at the publish door', () => {
     const theirs = await mintToken('theirs');
     await claimToken(owner.id, theirs.token);
     const foreign = await dataset(theirs.token, { visibility: 'private' });
-    const res = await create(mine.token, { markup: `<Helmet><Query name="q" source="ref:${foreign}">{\`select * from public.rows\`}</Query></Helmet><Question data="$q" />` });
+    const res = await create(mine.token, { markup: `<Helmet><Import name="q_data" src="ref:${foreign}" /><Query name="q">{\`select * from q_data.rows\`}</Query></Helmet><Question data="$q" />` });
     expect(res.status).toBe(400);
     expect(await details(res)).toMatch(new RegExp(`invalid_refs.*ref:${foreign}`));
 
     const doc = await create(mine.token, { markup: '<p>not data</p>' });
     const docId = ((await doc.json()) as { id: string }).id;
-    const res2 = await create(mine.token, { markup: `<Helmet><Query name="q" source="ref:${docId}">{\`select * from public.rows\`}</Query></Helmet><Question data="$q" />` });
+    const res2 = await create(mine.token, { markup: `<Helmet><Import name="q_data" src="ref:${docId}" /><Query name="q">{\`select * from q_data.rows\`}</Query></Helmet><Question data="$q" />` });
     expect(res2.status).toBe(400);
     expect(await details(res2)).toMatch(/is a markup artifact.*needs a dataset/);
   });
@@ -199,7 +199,7 @@ describe('dataflow at the publish door', () => {
     const ds = await dataset(t.token);
     const res = await create(t.token, {
       markup: '<Helmet><Value name="title" type="string" />'
-        + `<Mutation name="add" source="ref:${ds}" reset="title nope">{\`insert into public.rows (region) values ($title)\`}</Mutation></Helmet>`
+        + `<Import name="add_data" src="ref:${ds}" /><Mutation name="add" reset="title nope">{\`insert into add_data.rows (region) values ($title)\`}</Mutation></Helmet>`
         + '<Button run="$add">Add</Button>',
     });
     expect(res.status).toBe(400);
@@ -224,7 +224,7 @@ describe('dataflow at publish: the SQL dry run', () => {
     const t = await mintToken('t');
     const ds = await dataset(t.token);
     const res = await create(t.token, {
-      markup: `<Helmet><Query name="q" source="ref:${ds}">{\`select revenu from public.rows\`}</Query></Helmet><Question data="$q" />`,
+      markup: `<Helmet><Import name="q_data" src="ref:${ds}" /><Query name="q">{\`select revenu from q_data.rows\`}</Query></Helmet><Question data="$q" />`,
     });
     expect(res.status).toBe(400);
     const msg = await details(res);
@@ -238,7 +238,7 @@ describe('dataflow at publish: the SQL dry run', () => {
     const t = await mintToken('t');
     const ds = await dataset(t.token);
     const res = await create(t.token, {
-      markup: `<Helmet><Query name="q" source="ref:${ds}">{\`drop table public.rows\`}</Query></Helmet><Question data="$q" />`,
+      markup: `<Helmet><Import name="q_data" src="ref:${ds}" /><Query name="q">{\`drop table q_data.rows\`}</Query></Helmet><Question data="$q" />`,
     });
     expect(res.status).toBe(400);
     expect(await details(res)).toMatch(/only read statements/);

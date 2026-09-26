@@ -36,7 +36,9 @@
  *    the build rather than shipping an empty object;
  *  - the app's stylesheet cannot come from Vite (`?inline`), so it is compiled
  *    here from app/globals.css with the same Tailwind sources and handed to the
- *    entry as `__AFBIN_APP_CSS__`.
+ *    entry as `__AFBIN_APP_CSS__`;
+ *  - the SQLite wasm cannot be fetched, so its bytes are handed in as
+ *    `__AFBIN_SQLITE_WASM__` (base64; gzip takes most of that back).
  *
  * Always minified production code: it is a download, never a dev asset.
  *
@@ -183,6 +185,8 @@ async function build() {
       'import.meta.url': 'globalThis.__AFBIN_MODULE_URL__',
       'import.meta.hot': 'undefined',
       __AFBIN_APP_CSS__: JSON.stringify(css),
+      // The file's SQLite engine (lib/offline/sqlite-wasm): file:// fetches nothing, so the wasm rides inside.
+      __AFBIN_SQLITE_WASM__: JSON.stringify(fs.readFileSync(createRequire(path.join(root, '../sql/package.json')).resolve('@sqlite.org/sqlite-wasm/sqlite3.wasm')).toString('base64')),
       ...tailwindDefine,
     },
     logOverride: { 'empty-import-meta': 'error' },

@@ -41,7 +41,7 @@ describe('native user fields',()=>{
   const bad=await mutate(a.token,dataset.id,`update public.rows set done_by='${b.user.id}'`);
   expect(bad.status).toBe(403);
   expect((await loadDatasetRows((await getArtifactById(dataset.id))!))[0].done_by).toBeNull();
-  const good=await mutate(a.token,dataset.id,'update public.rows set done_by=$_me',{_me:b.user.id});
+  const good=await mutate(a.token,dataset.id,'update public.rows set done_by=$_me.id',{'_me.id':b.user.id,_me__id:b.user.id});
   expect(good.status,await good.clone().text()).toBe(200);
   expect((await loadDatasetRows((await getArtifactById(dataset.id))!))[0].done_by).toBe(a.user.id);
   expect((await getArtifactById(dataset.id))!.meta.columns).toContainEqual({name:'done_by',type:'user',constraints:{self:true}});
@@ -57,7 +57,7 @@ describe('native user fields',()=>{
  it('freezes current on first report attachment and supplies typed member choices',async()=>{
   const a=await account('owner'), b=await account('member');
   const dataset=await create(a.token,{dataset:{kind:'stored',tables:[{schema:'public',name:'rows',columns:[{name:'id',type:'number'},{name:'assignee',type:'user',constraints:{memberOf:['current']}}],rows:[{id:1,assignee:null}]}]},access:'readwrite'});
-  const markup=`<Helmet><Value name="person" source="ref:${dataset.id}" column="assignee" /><Query name="tasks" source="ref:${dataset.id}">{\`select id,assignee as assigned,upper(assignee) as text_only from public.rows where $person is null or assignee=$person order by id\`}</Query></Helmet><Select value="$person" label="Person" /><DataTable data="$tasks" />`;
+  const markup=`<Helmet><Value name="person" source="ref:${dataset.id}" column="assignee" /><Import name="tasks_data" src="ref:${dataset.id}" /><Query name="tasks">{\`select id,assignee as assigned,upper(assignee) as text_only from tasks_data.rows where $person is null or assignee=$person order by id\`}</Query></Helmet><Select value="$person" label="Person" /><DataTable data="$tasks" />`;
   const report=await create(a.token,{markup,shares:[{email:b.user.email,role:'viewer'}]});
   const column=(await getArtifactById(dataset.id))!.meta.columns as Array<{constraints?:{memberOf:string[]}}>;
   expect(column[1].constraints?.memberOf).toEqual([`ref:${report.id}`]);
@@ -79,7 +79,7 @@ describe('native user fields',()=>{
   const dataset=await create(a.token,{dataset:[{id:1,assignee:null}],columns:[{name:'assignee',type:'user',constraints:{memberOf:['current']}}]});
   const report=await create(a.token,{markup:'<h1>Project</h1>'});
   const current=(await getArtifactById(report.id))!;
-  const prepared=await publishMarkupForArtifact(current,`<Helmet><Query name="tasks" source="ref:${dataset.id}">{\`select * from public.rows\`}</Query></Helmet><DataTable data="$tasks" />`);
+  const prepared=await publishMarkupForArtifact(current,`<Helmet><Import name="tasks_data" src="ref:${dataset.id}" /><Query name="tasks">{\`select * from tasks_data.rows\`}</Query></Helmet><DataTable data="$tasks" />`);
   if(prepared instanceof Response)throw new Error(await prepared.text());
   if(kind==='normalized')await (await getDb()).transaction(tx=>commitNormalizedMarkup(tx,null,current,prepared));
   else {
@@ -109,14 +109,14 @@ describe('native user fields',()=>{
  it('executes a row button as its caller and rejects an anonymous $_me',async()=>{
   const a=await account('owner'), b=await account('editor');
   const dataset=await create(a.token,{dataset:[{id:1,who:null}],columns:[{name:'who',type:'user',constraints:{self:true}}],access:'readwrite',shares:[{email:b.user.email,role:'editor'}]});
-  const markup=`<Helmet><Query name="tasks" source="ref:${dataset.id}">{\`select *, '' as action from public.rows\`}</Query><Mutation name="done" source="ref:${dataset.id}" expectedAffected={1}>{\`update public.rows set who=$_me where id=$_row.id\`}</Mutation></Helmet><DataTable data="$tasks" rowKey="id"><Column col="id"/><Column col="who"/><Column col="action"><Button run="$done">Complete</Button></Column></DataTable>`;
+  const markup=`<Helmet><Import name="tasks_data" src="ref:${dataset.id}" /><Query name="tasks">{\`select *, '' as action from tasks_data.rows\`}</Query><Import name="done_data" src="ref:${dataset.id}" /><Mutation name="done" expectedAffected={1}>{\`update done_data.rows set who=$_me.id where id=$_row.id\`}</Mutation></Helmet><DataTable data="$tasks" rowKey="id"><Column col="id"/><Column col="who"/><Column col="action"><Button run="$done">Complete</Button></Column></DataTable>`;
   const report=await create(a.token,{markup,shares:[{email:b.user.email,role:'editor'}]});
-  const response=await documentMutation(request(`/a/${report.id}/mutate`,{method:'POST',token:b.token,json:{mutation:'done',values:{_me:a.user.id},row:{id:1,who:null,action:''}}}),ctx(report.id));
+  const response=await documentMutation(request(`/a/${report.id}/mutate`,{method:'POST',token:b.token,json:{mutation:'done',args:{},row:{id:1}}}),ctx(report.id));
   expect(response.status,await response.clone().text()).toBe(200);
   expect((await loadDatasetRows((await getArtifactById(dataset.id))!))[0].who).toBe(b.user.id);
   const anonymous=await mintToken('anonymous');
   const own=await create(anonymous.token,{dataset:[{id:1,who:null}],columns:[{name:'who',type:'user',constraints:{self:true}}],access:'readwrite'});
-  const denied=await mutate(anonymous.token,own.id,'update public.rows set who=$_me');
+  const denied=await mutate(anonymous.token,own.id,'update public.rows set who=$_me.id');
   expect(denied.status).toBe(403);
  });
  /*
@@ -127,7 +127,7 @@ describe('native user fields',()=>{
   */
  it('names the viewer to themselves and nobody to a guest',async()=>{
   const reader=await account('reader'), owner=await account('host');
-  const markup='<Helmet><Value name="rows" type="table" value={[{"n":1}]} /></Helmet><p>Paid by <User userId="$_me" /></p>';
+  const markup='<Helmet><Value name="rows" type="table" value={[{"n":1}]} /></Helmet><p>Paid by <User userId="$_me.id" /></p>';
   const report=await create(owner.token,{markup,visibility:'public'});
   const row=(await getArtifactById(report.id))!;
   const mine=await dataflowForRow(row,{viewer:{userId:reader.user.id,tokenId:null,email:reader.user.email}});
@@ -140,7 +140,7 @@ describe('native user fields',()=>{
   expect(await viewerIdentityFor({source:'<p>nobody here</p>'},reader.user.id)).toEqual({id:reader.user.id});
   expect(await viewerIdentityFor({source:markup},null)).toBeNull();
   // A face and a handle are the same person as a <User>, so they buy the card too.
-  for(const tag of ['<UserImage userId="$_me" />','<UserHandle userId="$_me" />'])
+  for(const tag of ['<UserImage userId="$_me.id" />','<UserHandle userId="$_me.id" />'])
    expect(await viewerIdentityFor({source:`<p>${tag}</p>`},reader.user.id)).toEqual({id:reader.user.id,card:{name:'reader',handle:null,image:null}});
  });
  /*
@@ -152,15 +152,15 @@ describe('native user fields',()=>{
  it('resolves every person tag naming the viewer, however many, in the served page',async()=>{
   const reader=await account('twice'), owner=await account('host');
   const cases=[
-   '<p><User userId="$_me" /> <UserImage userId="$_me" size="lg" /></p>',
-   '<p><UserImage userId="$_me" /> <UserImage userId="$_me" size="lg" /></p>',
-   '<p><UserHandle userId="$_me" /> <UserImage userId="$_me" size="lg" /></p>',
-   '<Helmet><Value name="rows" type="table" value={[{"n":1},{"n":2}]} /></Helmet><p><User userId="$_me" /></p><For each={$rows}><span><UserImage userId="$_me" /></span></For>',
+   '<p><User userId="$_me.id" /> <UserImage userId="$_me.id" size="lg" /></p>',
+   '<p><UserImage userId="$_me.id" /> <UserImage userId="$_me.id" size="lg" /></p>',
+   '<p><UserHandle userId="$_me.id" /> <UserImage userId="$_me.id" size="lg" /></p>',
+   '<Helmet><Value name="rows" type="table" value={[{"n":1},{"n":2}]} /></Helmet><p><User userId="$_me.id" /></p><For each={$rows}><span><UserImage userId="$_me.id" /></span></For>',
   ];
   for(const markup of cases){
    const report=await create(owner.token,{markup,visibility:'public'});
    const stored=(await getArtifactById(report.id))!.source ?? '';
-   expect(stored.match(/userId="\$_me"/g),stored).toHaveLength(2);
+   expect(stored.match(/userId="\$_me\.id"/g),stored).toHaveLength(2);
    const html=await (await rawRoute(request(`/a/${report.id}/raw`,{token:reader.token}),ctx(report.id))).text();
    const body=html.slice(html.indexOf('class="mx-doc"'));
    expect(body,markup).not.toContain('data-unknown');

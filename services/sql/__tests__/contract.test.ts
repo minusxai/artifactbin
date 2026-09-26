@@ -1,19 +1,28 @@
 /**
- * THE SQL CONTRACT, run over BOTH transports: the engine in this process, and
- * the same engine behind `serveSql` reached through `sqlClient`. One suite,
- * two shapes — the proof that in-process and remote can never disagree.
+ * THE SQL CONTRACT, run over BOTH compositions of the SQLite engine (this
+ * thread, `./sqlite`; the server's worker threads, `./local`) and BOTH
+ * transports: the engine in this process, and the same engine behind
+ * `serveSql` reached through `sqlClient`. One suite, four shapes — the proof
+ * that the compositions, and in-process and remote, can never disagree.
  */
 import { afterAll, describe, expect, it, vi } from 'vitest';
 import type { SqlService } from '@artifactbin/contracts';
 import { isQueryFailure } from '@artifactbin/contracts';
 import { SQL_ROUTES, serveSql, sqlClient } from '@artifactbin/sql';
 import { createSql } from '@artifactbin/sql/local';
+import { createSqliteSql } from '@artifactbin/sql/sqlite';
+import { loadSqlite, type SqliteDatabase, type SqlExtensions } from '@artifactbin/sql/core';
 
-const local = createSql({ maxRows: 3, timeoutMs: 2000 });
-const server = serveSql(local);
-const listening = server.listen(0);
+type Engine = 'sqlite';
+const pool = createSql({ maxRows: 3, timeoutMs: 2000 }, { workers: 2 });
+const ENGINES = { thread: createSqliteSql({ maxRows: 3, timeoutMs: 2000 }), pool };
+const local = ENGINES.thread;
+const servers = Object.values(ENGINES).map((svc) => serveSql(svc));
+const listening = servers[0]!.listen(0);
 const remote = sqlClient(listening.url, { deadlineMs: 5000 });
-afterAll(() => server.close());
+const poolRemote = sqlClient(servers[1]!.listen(0).url, { deadlineMs: 5000 });
+afterAll(async () => { await Promise.all(servers.map((s) => s.close())); await pool.close(); });
+const SHAPES: Array<[string, Engine, SqlService]> = [['in this thread', 'sqlite', local], ['in this thread over HTTP', 'sqlite', remote], ['worker threads', 'sqlite', pool], ['worker threads over HTTP', 'sqlite', poolRemote]];
 
 const TABLE = { rows: [{ a: 1 }, { a: 2 }, { a: 3 }, { a: 4 }], columns: [{ name: 'a', type: 'number' as const }] };
 const input = {
@@ -22,14 +31,14 @@ const input = {
   params: {},
 };
 
-describe.each<[string, SqlService]>([['in-process', local], ['over HTTP', remote]])('%s', (_name, svc) => {
-  it('runs a dependency chain in ONE request, with the row cap and the true count travelling', async () => {
+describe.each(SHAPES)('%s', (_name, _engine, svc) => {
+  it('runs a dependency chain in ONE request: what travels is the window, what a downstream query reads is the whole result', async () => {
     const r = await svc.run(input);
     if (isQueryFailure(r.q) || isQueryFailure(r.q2)) throw new Error(JSON.stringify(r));
     expect(r.q.rows).toHaveLength(3);
     expect(r.q.truncated).toBe(true);
     expect(r.q.totalRows).toBe(4);
-    expect(r.q2.rows[0]).toEqual({ n: 3 });
+    expect(r.q2.rows[0]).toEqual({ n: 4 });
   });
   it('refuses a write on the read path, as a per-query failure', async () => {
     const r = await svc.run({ ...input, queries: [{ name: 'x', sql: 'drop table t' }] });
@@ -158,20 +167,30 @@ describe('serveSql service authentication', () => {
   });
 });
 
+/** The engine-specific halves of the catalog assertions. */
+const DIALECT = {
+  sqlite: {
+    functions: "select median(a) as median, date_format(date_parse('2026-01', '%Y-%m'), '%Y-%m') as month from public.rows",
+    idioms: "with q as (select * from rows) select a, exact from (select a, cast(9007199254740993 as text) as exact, row_number() over (order by a desc) as rn from (select * from q)) where rn = 1",
+    // SQLite has no boolean: a comparison is 1 or 0.
+    missing: 1,
+  },
+} as const;
+
 // The same native dialect and isolation must survive the HTTP boundary.
-describe.each<[string, SqlService]>([['in-process', local], ['over HTTP', remote]])('%s catalog reads', (_name, svc) => {
+describe.each(SHAPES)('%s catalog reads', (_name, engine, svc) => {
   const base = {
     tables: { payload: { ...TABLE, rows: TABLE.rows.map(row => ({...row, secret: 'hidden'})) } },
     catalog: { defaultSchema: 'public', tables: [{schema:'public',name:'rows',source:'payload',columns:TABLE.columns}] },
     params: {},
   };
   const run = (sql: string) => svc.run({...base,queries:[{name:'q',sql}]});
-  it('uses DuckDB syntax, functions and casts and returns the correct aggregate', async () => {
-    const r=await run("select median(a::double) as median, strftime(strptime('2026-01', '%Y-%m'), '%Y-%m') as month from public.rows");
+  it('uses the engine\'s syntax, functions and casts and returns the correct aggregate', async () => {
+    const r=await run(DIALECT[engine].functions);
     expect(r.q).toMatchObject({rows:[{median:2.5,month:'2026-01'}]});
   });
-  it('supports native QUALIFY, CTEs, exact literals and unaliased subqueries', async () => {
-    const r=await run("with q as (select * from rows) select a, cast(9007199254740993 as varchar) as exact from (select * from q) qualify row_number() over(order by a desc)=1");
+  it('supports native window filtering, CTEs, exact literals and unaliased subqueries', async () => {
+    const r=await run(DIALECT[engine].idioms);
     expect(r.q).toMatchObject({rows:[{a:4,exact:'9007199254740993'}]});
   });
   it('retains pagination and reports the full count', async () => {
@@ -183,7 +202,7 @@ describe.each<[string, SqlService]>([['in-process', local], ['over HTTP', remote
   });
   it('binds typed date and nullable parameters without touching quoted text', async () => {
     const r=await svc.run({...base,catalog:{...base.catalog,paramTypes:{day:'date',empty:'string'}},params:{day:'2026-09-15',empty:null},queries:[{name:'q',sql:"select date_part('year', $day) as year, $empty is null as missing, '$day' as literal"}]});
-    expect(r.q).toMatchObject({rows:[{year:2026,missing:true,literal:'$day'}]});
+    expect(r.q).toMatchObject({rows:[{year:2026,missing:DIALECT[engine].missing,literal:'$day'}]});
   });
   it('resolves model dependencies without exposing unselected model columns or truncating intermediate rows', async () => {
     const catalog={...base.catalog,tables:[...base.catalog.tables,{schema:'public',name:'model',sql:'select a, a*10 as hidden from rows',columns:TABLE.columns},{schema:'public',name:'unused',sql:'INVALID UNUSED DRAFT',columns:[]}]};
@@ -194,7 +213,7 @@ describe.each<[string, SqlService]>([['in-process', local], ['over HTTP', remote
   });
 });
 
-it('catalog reads keep schema bindings, quoted names, model isolation and native parameters', async () => {
+it.each(Object.entries(ENGINES))('%s catalog reads keep schema bindings, quoted names, model isolation and native parameters', async (_engine, local) => {
  const catalog={defaultSchema:'sales',tables:[
    {schema:'sales',name:'Odd " Rows',source:'a',columns:TABLE.columns},
    {schema:'support',name:'Odd " Rows',source:'b',columns:TABLE.columns},
@@ -210,18 +229,13 @@ describe('trusted mutation extensions',()=>{
  it('OSS has no model function on mutation or publication paths',async()=>{
   const sql="insert into ref_x values (llm('text','system','{}'))";
   const result=await local.mutate({table:{name:'ref_x',rows:[],columns:[{name:'a',type:'string'}]},sql,params:{}});
-  expect(result).toHaveProperty('error',expect.stringMatching(/does not exist/i));
+  expect(result).toHaveProperty('error',expect.stringMatching(/no such function: llm/i));
   const dry=await local.dryRunMutations({tables:{ref_x:{columns:[{name:'a',type:'string'}]}},mutations:[{name:'x',target:'x',sql}],paramNames:[]});
-  expect(dry.errors[0]?.error).toMatch(/does not exist/i);
+  expect(dry.errors[0]?.error).toMatch(/no such function: llm/i);
  });
  it('installs a trusted scalar only for its own writes and dry runs, across HTTP',async()=>{
-  const setup=vi.fn((connection:import('@duckdb/node-api').DuckDBConnection,native:typeof import('@duckdb/node-api'))=>{
-   connection.registerScalarFunction(native.DuckDBScalarFunction.create({name:'fixture_value',parameterTypes:[],returnType:native.VARCHAR,mainFunction(_info,chunk,output){
-    if(!(output instanceof native.DuckDBVarCharVector))throw new Error('Unexpected fixture vector');
-    for(let i=0;i<chunk.rowCount;i++)output.setItem(i,'fixture');output.flush();
-   }}));
-  });
-  const extended=createSql({}, {setupMutation:setup}),http=serveSql(extended),address=http.listen(0),client=sqlClient(address.url);
+  const setup=vi.fn((database:SqliteDatabase)=>{database.extensionFunction('fixture_value',()=>'fixture',0);});
+  const extended=createSqliteSql({}, {setupMutation:setup}),http=serveSql(extended),address=http.listen(0),client=sqlClient(address.url);
   try{
    const sql='insert into ref_x values (fixture_value())',columns=[{name:'a',type:'string' as const}];
    expect(await client.mutate({table:{name:'ref_x',rows:[],columns},sql,params:{}})).toMatchObject({rows:[{a:'fixture'}],affected:1});
@@ -231,10 +245,36 @@ describe('trusted mutation extensions',()=>{
   }finally{await http.close();}
  });
  it('returns an opaque continuation without committing failed rows over HTTP',async()=>{
-  const extended=createSql({}, {setupMutation:(_connection,_native,{input})=>()=>({kind:'fixture',payload:input?.extensions})});
+  const extended=createSqliteSql({}, {setupMutation:(_database,{input})=>()=>({kind:'fixture',payload:input?.extensions})});
   const http=serveSql(extended),address=http.listen(0),client=sqlClient(address.url);
   try{
-   expect(await client.mutate({table:{name:'ref_x',rows:[{a:1}],columns:TABLE.columns},sql:"insert into ref_x values (cast('bad' as int))",params:{},extensions:{fixture:3}})).toEqual({error:'Execution requires continuation',continuation:{kind:'fixture',payload:{fixture:3}}});
+   expect(await client.mutate({table:{name:'ref_x',rows:[{a:1}],columns:TABLE.columns},sql:'insert into ref_x values (2)',params:{},extensions:{fixture:3}})).toEqual({error:'Execution requires continuation',continuation:{kind:'fixture',payload:{fixture:3}}});
   }finally{await http.close();}
+ });
+ it('the worker threads load the composition root\'s extensions module',async()=>{
+  const threads=createSql({}, {workers:1,extensions:new URL('./fixtures/fixture-extension.ts',import.meta.url).href});
+  try{
+   const columns=[{name:'a',type:'string' as const}];
+   expect(await threads.mutate({table:{name:'ref_x',rows:[],columns},sql:'insert into ref_x values (fixture_value())',params:{}})).toMatchObject({rows:[{a:'fixture'}]});
+  }finally{await threads.close();}
+ });
+ const FIXTURE=new URL('./fixtures/fixture-extension.ts',import.meta.url).href;
+ it.each([['in this thread',async()=>{const svc=createSqliteSql({}, (await import(FIXTURE)).default);return {svc,close:async()=>{}};}],['worker threads',async()=>{const svc=createSql({}, {workers:1,extensions:FIXTURE});return {svc,close:()=>svc.close()};}]] as const)('a mutation that aborts to demand a result returns its continuation and writes nothing (%s)',async(_shape,make)=>{
+  const {svc,close}=await make();
+  try{
+   const columns=[{name:'a',type:'string' as const}],sql="insert into ref_x values (fixture_generate('hello'))";
+   expect(await svc.mutate({table:{name:'ref_x',rows:[{a:'kept'}],columns},sql,params:{}})).toEqual({error:'Execution requires continuation',continuation:{kind:'fixture_generate',payload:{text:'hello'}}});
+   // The dry run is the NULL stub: the statement runs, nothing is demanded.
+   expect(await svc.dryRunMutations({tables:{ref_x:{columns}},mutations:[{name:'x',target:'x',sql}],paramNames:[]})).toEqual({errors:[]});
+   expect((await svc.run({tables:{},queries:[{name:'x',sql:"select fixture_generate('hello')"}],params:{}})).x).toHaveProperty('error',expect.stringMatching(/fixture_generate/));
+  }finally{await close();}
+ });
+ it('analysis installs the extensions only for a write',async()=>{
+  const engine=await loadSqlite(),extensions=(await import(FIXTURE)).default as SqlExtensions;
+  const schema=[{schema:'main',table:'nodes',columns:[{name:'a',type:'string' as const}]}];
+  const write=engine.analyze("insert into nodes select fixture_generate($t)",schema,{mode:'write',extensions});
+  expect(write).toMatchObject({kind:'insert',functions:expect.arrayContaining(['fixture_generate'])});
+  expect(()=>engine.analyze("insert into nodes select fixture_generate($t)",schema)).toThrow(/fixture_generate/);
+  expect(()=>engine.analyze("select fixture_generate($t)",schema)).toThrow(/fixture_generate/);
  });
 });

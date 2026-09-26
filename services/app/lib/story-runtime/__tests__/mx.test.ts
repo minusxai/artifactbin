@@ -1,15 +1,18 @@
 import { describe, expect, it, vi } from 'vitest';
 import { createMx } from '../mx';
 import { createDataflowStore } from '../store';
-import type { Dataflow } from '@/lib/story/dataflow';
+import { compiledOf } from '@/test/helpers/compiled';
 
-const flow: Dataflow = {
-  values: [
-    { kind: 'scalar', name: 'count', type: 'number', default: 0, start: 0, end: 0 },
-    { kind: 'scalar', name: 'other', type: 'string', default: '', start: 0, end: 0 },
-    { kind: 'table', name: 'rows', rows: [{ n: 1 }], columns: [{ name: 'n', type: 'number' }], start: 0, end: 0 },
-  ], queries: [],
-};
+const VALUES = '<Value name="count" type="number" default={0} /><Value name="other" default="" /><Value name="rows" type="table" value={[{"n":1}]} />';
+const OWNED = { owned1: [{ name: 'id', type: 'number' as const }, { name: 'n', type: 'number' as const }, { name: 'd', type: 'string' as const }] };
+const flow = await compiledOf(VALUES);
+const withMutations = (mutations: string) => compiledOf(`<Import name="owned" src="ref:owned1" />${VALUES}${mutations}`, OWNED);
+const RESULT_FLOW = await compiledOf(`${VALUES}<Query name="result">{\`select $count as n\`}</Query>`);
+const SAVE_FLOW = await withMutations('<Mutation name="save">{`update owned.rows set n=$count`}</Mutation>');
+const EDIT_FLOW = await withMutations('<Mutation name="edit">{`update owned.rows set n=$_value where id=$_row.id`}</Mutation>');
+const RESET_FLOW = await compiledOf('<Import name="owned" src="ref:owned1" /><Value name="count" type="number" default={0} /><Value name="draft" url={false} />'
+  + '<Mutation name="save" reset="draft">{`insert into owned.rows (d) values ($draft)`}</Mutation><Mutation name="plain">{`update owned.rows set n=$count`}</Mutation>', OWNED);
+const JOIN_FLOW = await compiledOf('<Import name="people" src="ref:abc123" /><Value name="item" default="" /><Mutation name="join">{`insert into people.rows (who) select $_me.id`}</Mutation>', { abc123: [{ name: 'who', type: 'user' }] });
 const setup = () => { const store = createDataflowStore({ flow }); return { store, mx: createMx(store) }; };
 const tick = () => new Promise(resolve => setTimeout(resolve, 5));
 
@@ -71,7 +74,7 @@ describe('shared mx signal contract', () => {
   });
   it('revokes a handle when declarations are replaced or the store is disposed', async () => {
     const { mx, store } = setup();
-    store.replaceFlow({ flow: { ...flow, values: [...flow.values, {kind:'scalar',name:'newValue',type:'number',default:0,start:0,end:0}] } });
+    store.replaceFlow({ flow: { ...flow, values: [...flow.values, {kind:'scalar',name:'newValue',type:'number',default:0}] } });
     await expect(mx.read(['count'])).rejects.toMatchObject({ code: 'STALE_INSTANCE' });
     const next = createMx(store);
     await expect(next.read(['count'])).resolves.toBeDefined();
@@ -89,7 +92,7 @@ describe('shared mx signal contract', () => {
 
 it('waits for selected queries, exposes errors, and includes the latest snapshot on timeout', async () => {
   let resolve: (result: { tables: {}; errors: Record<string, string> }) => void = () => {};
-  const store = createDataflowStore({ flow: { ...flow, queries: [{ name: 'result', sql: 'select $count', params: ['count'], refs: [], start: 0, end: 0 }] } }, {
+  const store = createDataflowStore({ flow: RESULT_FLOW }, {
     transport: { run: () => new Promise(done => { resolve = done; }), page: async () => ({ rows: [], columns: [] }) },
   });
   const mx = createMx(store);
@@ -105,7 +108,7 @@ it('waits for selected queries, exposes errors, and includes the latest snapshot
 it('rejects a concurrent mutation before transport and acknowledges a commit independently of query refresh', async () => {
   let complete: (value: { dataset: string }) => void = () => {};
   const mutate = vi.fn(() => new Promise<{ dataset: string }>(resolve => { complete = resolve; }));
-  const store = createDataflowStore({ flow: { ...flow, mutations: [{ name: 'save', target: 'owned', sql: 'update ref_owned set n=$count', params: ['count'], refs: ['owned'], start: 0, end: 0 }] },
+  const store = createDataflowStore({ flow: SAVE_FLOW,
     state: { values: { count: 0, other: '' }, tables: {}, errors: {}, mutationAccess: { save: null } } }, {
     transport: { mutate, run: async () => ({ tables: {}, errors: {} }), page: async () => ({ rows: [], columns: [] }) },
   });
@@ -128,17 +131,7 @@ it('rejects a concurrent mutation before transport and acknowledges a commit ind
  */
 it('reports url={false} on the signal and reset on the mutation, and nothing extra otherwise', async () => {
   const store = createDataflowStore({
-    flow: {
-      values: [
-        { kind: 'scalar', name: 'count', type: 'number', default: 0, start: 0, end: 0 },
-        { kind: 'scalar', name: 'draft', type: 'string', default: null, url: false, start: 0, end: 0 },
-      ],
-      queries: [],
-      mutations: [
-        { name: 'save', target: 'owned', sql: 'insert into ref_owned (d) values ($draft)', params: ['draft'], refs: ['owned'], reset: ['draft'], start: 0, end: 0 },
-        { name: 'plain', target: 'owned', sql: 'update ref_owned set n=$count', params: ['count'], refs: ['owned'], start: 0, end: 0 },
-      ],
-    },
+    flow: RESET_FLOW,
     state: { values: { count: 0, draft: null }, tables: {}, errors: {}, mutationAccess: { save: null, plain: null } },
   }, { transport: { mutate: async () => ({ dataset: 'owned' }), run: async () => ({ tables: {}, errors: {} }), page: async () => ({ rows: [], columns: [] }) } });
   const described = await createMx(store).describe();
@@ -151,11 +144,11 @@ it('reports url={false} on the signal and reset on the mutation, and nothing ext
 
 it('passes declared row and cell arguments without creating scalar signals', async () => {
   const mutate = vi.fn(async () => ({dataset:'owned'}));
-  const store = createDataflowStore({ flow: { ...flow, mutations: [{ name:'edit', target:'owned', sql:'update ref_owned set n=$_value where id=$_row.id', params:['_row','_value'], refs:['owned'], start:0,end:0 }] }, state:{values:{count:0,other:''},tables:{},errors:{},mutationAccess:{edit:null}} }, {
+  const store = createDataflowStore({ flow: EDIT_FLOW, state:{values:{count:0,other:''},tables:{},errors:{},mutationAccess:{edit:null}} }, {
     transport:{mutate,run:async()=>({tables:{},errors:{}}),page:async()=>({rows:[],columns:[]})},
   });
   await createMx(store).mutate('edit', {_row: {id:1}, _value:3});
-  expect(mutate).toHaveBeenCalledWith({count:0,other:'',_value:3},'edit',{id:1});
+  expect(mutate).toHaveBeenCalledWith({mutation:'edit',args:{},row:{id:1},value:3});
   expect(store.getState().values).toEqual({count:0,other:''});
   store.dispose();
 });
@@ -163,7 +156,7 @@ it('passes declared row and cell arguments without creating scalar signals', asy
 it('initializes and mutates over internal HTTP without crypto.randomUUID', async () => {
   const getRandomValues = globalThis.crypto.getRandomValues.bind(globalThis.crypto);
   vi.stubGlobal('crypto', { getRandomValues });
-  const store = createDataflowStore({ flow: { ...flow, mutations: [{ name: 'save', target: 'owned', sql: 'update ref_owned set n=$count', params: ['count'], refs: ['owned'], start: 0, end: 0 }] },
+  const store = createDataflowStore({ flow: SAVE_FLOW,
     state: { values: { count: 0, other: '' }, tables: {}, errors: {}, mutationAccess: { save: null } } }, {
     transport: { mutate: async () => ({ dataset: 'owned' }), run: async () => ({ tables: {}, errors: {}, mutationAccess: { save: null } }), page: async () => ({ rows: [], columns: [] }) },
   });
@@ -179,8 +172,7 @@ it('initializes and mutates over internal HTTP without crypto.randomUUID', async
 });
 
 describe('mutate waits for the permission answer', () => {
-  const writes: Dataflow = { values: [{ kind: 'scalar', name: 'item', type: 'string', default: '', start: 0, end: 0 }], queries: [],
-    mutations: [{ name: 'join', sql: 'insert into ref_abc123 (who) select $_me', target: 'abc123', params: ['_me'], scope: 'dataset', start: 0, end: 0 } as never] };
+  const writes = JOIN_FLOW;
   it('a mutate issued before the first query lands waits, then runs with the real answer', async () => {
     let answer!: (r: unknown) => void;
     const run = vi.fn().mockImplementation(() => new Promise(resolve => { answer = resolve; }));
@@ -206,6 +198,24 @@ describe('mutate waits for the permission answer', () => {
     await tick();
     answer({ tables: {}, errors: {}, mutationAccess: { join: 'a test user acts only inside its sandbox' } });
     await expect(call).rejects.toThrow('a test user acts only inside its sandbox');
+    store.dispose();
+  });
+});
+
+describe('a script setting values on every pointer move', () => {
+  it('sets each value at once but runs what depends on them once per frame, with the last values', async () => {
+    const run = vi.fn().mockResolvedValue({ tables: {}, errors: {} });
+    const store = createDataflowStore({ flow: RESULT_FLOW }, { transport: { run, page: vi.fn() } });
+    store.start();
+    await tick();
+    run.mockClear();
+    const mx = createMx(store);
+    const calls = Array.from({ length: 20 }, (_, i) => mx.set({ count: i + 1 }));
+    expect(store.getValue('count')).toBe(20);
+    await Promise.all(calls);
+    await new Promise(resolve => setTimeout(resolve, 150));
+    expect(run).toHaveBeenCalledTimes(1);
+    expect(run.mock.calls[0]![0]).toMatchObject({ count: 20 });
     store.dispose();
   });
 });

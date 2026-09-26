@@ -21,7 +21,7 @@ Invalid JSX returns `400 {"error":"invalid_jsx","details":[…]}` with exact spa
 - **Style with Tailwind classes via `className`**, starting from a
   `<div data-design="tw" className="@container …">` wrapper with `@2xl:`
   container variants for responsive layout.
-- Data (`<Query source="ref:abc123">`, `<Value>`, `<Mutation>`, embeds, controls): [data](markup-data.md).
+- Data (`<Import>`, `<Value>`, `<Query>`, `<Mutation>`, embeds, controls): [data](markup-data.md).
   Editable dataset cells: [editing](markup-editing.md).
   <!--bundle:skip-->[maps](markup-maps.md) · <!--/bundle:skip-->[motion](markup-motion.md) · [video](markup-video.md) · [svg](markup-svg.md).
 
@@ -35,7 +35,7 @@ Skeleton · Vocabulary · Helmet · Images · Layout.
 ## Skeleton (editorial)
 
 ```jsx
-<Helmet><Query name="monthly">{`select month, sum(revenue) revenue from public.rows group by 1 order by 1`}</Query></Helmet>
+<Helmet><Import name="s" src="ref:abc123" /><Query name="monthly">{`select month, sum(revenue) revenue from s.rows group by 1 order by 1`}</Query></Helmet>
 <div data-design="tw" className="@container px-6 py-12 @2xl:px-12 @2xl:py-16">
   <header className="max-w-4xl">
     <p className="animate-fade-in text-xs uppercase tracking-widest text-muted-foreground">Eyebrow</p>
@@ -55,8 +55,8 @@ Skeleton · Vocabulary · Helmet · Images · Layout.
 Kit components ([[ components | length ]]):
 `[[ components | join(' ') ]]`
 
-Plus the embeds `Question` `Number` and the Helmet declarations `Value`
-`Query` `Mutation`; a name outside it is rejected with the registry echoed
+Plus the embeds `Question` `Number` and Helmet's `Import` `Value` `Query`
+`Mutation`; a name outside it is rejected with the registry echoed
 back. Unknown props are ignored; bindings and Column contracts are checked at
 publish.
 
@@ -72,7 +72,7 @@ outright, no list: [% for t in refusedTags %]`[[ t ]]` [% endfor %].
 
 At most ONE per document, holding at most one each of `<title>`, `<style>`
 and `<script>`, plus `<meta name content />` pairs, plus any number of the
-DATA declarations `<Value>`, `<Query>`, `<Mutation>` ([data](markup-data.md)).
+DATA declarations `<Import>`, `<Value>`, `<Query>`, `<Mutation>` ([data](markup-data.md)).
 Write it anywhere outside Iframe; it is hoisted to the top when stored.
 Parent CSS and data declarations belong here. Iframe owns its own CSS/JS.
 
@@ -89,7 +89,7 @@ no parent DOM, cookies, storage or direct API requests. Use conditions and
 Dialog for parent UI; move DOM scripts into Iframe. See [script APIs](markup-scripts.md).
 `</script` cannot appear in the text (split it: `'</scr' + 'ipt'`).
 Inside Iframe, attach DOM handlers with `addEventListener`; the `mx` bridge
-(signals, mutations, late rows) is in that same reference.
+is in that reference.
 
 <!--/bundle:skip-->
 - **Custom CSS lives in that `<style>` block, never inline** (`style=` is rejected).

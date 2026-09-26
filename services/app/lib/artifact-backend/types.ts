@@ -111,6 +111,8 @@ export interface ArtifactVersionSnapshot {
   html: string;
   title?: string | null; description?: string | null;
   markup: string | null;
+  /** Present when the version was written for the previous query engine and cannot be restored as it stands: why. */
+  previous_engine?: string;
   meta: {
     template?: string | null;
     theme?: string | null;
@@ -128,7 +130,8 @@ export interface ChosenImage {
 export type ImageChoice = { ok: true; image: ChosenImage } | { ok: false; error: string };
 
 /** A draft's query results (POST /api/query). */
-export type DraftQueryResult = Pick<DataflowState, 'tables' | 'errors'>;
+/** A draft's rows, and its compiled declarations (null when the draft does not compile yet). */
+export type DraftQueryResult = Pick<DataflowState, 'tables' | 'errors'> & { flow?: import('@/lib/story/compiled-dataflow').CompiledDataflow | null };
 
 /** One window of a dataset's rows (POST /a/<ref>/tables), as the notebook reads it. */
 export interface DatasetTableRead {

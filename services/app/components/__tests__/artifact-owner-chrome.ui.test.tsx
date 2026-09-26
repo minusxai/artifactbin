@@ -356,7 +356,7 @@ describe('the surface header buttons are owner chrome', () => {
     } })} /></ArtifactShell>);
     openDocumentControls();
     fireEvent.click(screen.getByLabelText('Copy dataset reference'));
-    expect(writeText).toHaveBeenCalledWith('<Query name="data" source="ref:story1">{`SELECT * FROM "sales"."orders"`}</Query>');
+    expect(writeText).toHaveBeenCalledWith('<Query name="rows" source="ref:story1">{`SELECT * FROM "sales"."orders"`}</Query>');
     fireEvent.click(screen.getByLabelText('Share'));
     await screen.findByLabelText('PostgreSQL read-only access');
     expect(screen.queryByLabelText('Make read & write')).not.toBeInTheDocument();

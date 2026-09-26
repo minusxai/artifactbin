@@ -12,6 +12,9 @@
 import { QUERY_REQUEST_PARAM } from './contract';
 import type { QueryTransport } from './store';
 import type { DataflowState, TableResult } from '@/lib/story/dataflow';
+import { localZone } from '@/lib/story/builtins';
+import type { ImportTables } from '@/lib/story/compiled-flow';
+import type { PersonCard } from '@artifactbin/contracts';
 
 export type FetchLike = (input: string, init?: RequestInit) => Promise<Response>;
 
@@ -32,16 +35,27 @@ export function createFetchTransport(queryUrl: string, fetchFn: FetchLike = (i, 
     return {userOptions:body.userOptions,people:body.people, tables: body.tables ?? {}, errors: body.errors ?? {}, ...(body.mutationAccess ? {mutationAccess:body.mutationAccess} : {}) };
   };
   return {
-    run: (values, only, localTables) => ask({ values, only, ...(localTables ? { localTables } : {}) }),
+    run: (values, only, localTables) => ask({ values, only, tz: localZone(), ...(localTables ? { localTables } : {}) }),
+    hold: async (name) => {
+      const res = await fetchFn(`${queryUrl}${queryUrl.includes('?') ? '&' : '?'}${QUERY_REQUEST_PARAM}=${encodeURIComponent(JSON.stringify({ hold: name }))}`, { method: 'GET', credentials: 'omit' });
+      if (!res.ok) throw new Error(`hold failed (${res.status})`);
+      return ((await res.json()) as { tables: ImportTables[string] }).tables;
+    },
+    // A POST like a large local-table run: a batch of ids would outgrow a URL. `text/plain` keeps it a simple request.
+    people: async (ids) => {
+      const res = await fetchFn(queryUrl, { method: 'POST', credentials: 'omit', headers: { 'Content-Type': 'text/plain' }, body: JSON.stringify({ people: ids }) });
+      if (!res.ok) throw new Error(`people failed (${res.status})`);
+      return ((await res.json()) as { people: Record<string, PersonCard> }).people;
+    },
     page: async (values, name, page, localTables): Promise<TableResult> => {
-      const r = await ask({ values, only: [name], page: { name, ...page }, ...(localTables ? { localTables } : {}) });
+      const r = await ask({ values, only: [name], page: { name, ...page }, tz: localZone(), ...(localTables ? { localTables } : {}) });
       const table = r.tables[name];
       if (!table) throw new Error(r.errors[name] ?? `no rows for "${name}"`);
       return table;
     },
     /*
-     * The WRITE, when this document is the page: a POST of the mutation's NAME
-     * and the reader's current values to the one write URL its CSP admits.
+     * The WRITE, when this document is the page: a POST of the mutation request
+     * (lib/story/mutation-request) to the one write URL its CSP admits.
      *
      * `text/plain` deliberately — that keeps it a SIMPLE request, so an opaque
      * origin needs no preflight (the route parses the body as JSON either
@@ -51,12 +65,12 @@ export function createFetchTransport(queryUrl: string, fetchFn: FetchLike = (i, 
      */
     ...(mutateUrl
       ? {
-        mutate: async (values: Record<string, unknown>, name: string, row?: Record<string, unknown>, localTables?: Record<string, import('@/lib/story/dataflow').Row[]>) => {
+        mutate: async (request: import('@/lib/story/mutation-request').MutationRequest) => {
           const res = await fetchFn(mutateUrl, {
             method: 'POST',
             credentials: 'omit',
             headers: { 'Content-Type': 'text/plain' },
-            body: JSON.stringify({ mutation: name, values, ...(row ? { row } : {}), ...(localTables ? { localTables } : {}) }),
+            body: JSON.stringify({ tz: localZone(), ...request }),
           });
           const body = (await res.json().catch(() => ({}))) as { ok?: boolean; dataset?: string; local?: import('@/lib/story/local-state').LocalMutationResult; error?: string; detail?: string };
           if (!res.ok || !body.ok) throw new Error(body.detail ?? body.error ?? `write failed (${res.status})`);

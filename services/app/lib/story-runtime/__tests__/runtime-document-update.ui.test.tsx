@@ -21,12 +21,15 @@ import { createDataflowStore, type DataflowStore } from '../store';
 import type { StoryIslandDataflow } from '../contract';
 import type { DataflowState } from '@/lib/story/dataflow';
 import { parseJsxOrThrow } from '@/test/helpers/jsx';
+import { compiledSource } from '@/test/helpers/compiled';
 
 const HELMET =
   '<Helmet>'
   + '<Value name="region" type="string" />'
-  + '<Query name="sales">{`select region, sum(revenue) revenue from ref_abc123 group by 1`}</Query>'
+  + '<Import name="orders" src="ref:abc123" />'
+  + '<Query name="sales">{`select region, sum(revenue) revenue from orders.rows group by 1`}</Query>'
   + '</Helmet>';
+const FLOW = await compiledSource(HELMET, { abc123: [{ name: 'region', type: 'string' }, { name: 'revenue', type: 'number' }] });
 
 const STATE: DataflowState = {
   values: { region: null },
@@ -41,8 +44,8 @@ const STATE: DataflowState = {
 
 function build(body: string) {
   const parsed = parseJsxOrThrow(HELMET + body);
-  const { content, body: nodes } = splitHelmet(parsed.nodes as JsxNode[]);
-  const dataflow: StoryIslandDataflow = { flow: { values: content.values, queries: content.queries }, state: STATE };
+  const { body: nodes } = splitHelmet(parsed.nodes as JsxNode[]);
+  const dataflow: StoryIslandDataflow = { flow: FLOW, state: STATE };
   return { nodes, dataflow };
 }
 

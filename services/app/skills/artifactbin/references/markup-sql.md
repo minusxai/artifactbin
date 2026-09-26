@@ -1,71 +1,83 @@
 ---
 name: markup-sql
-description: SQL functions, query engines and current parser limitations.
+description: The SQLite a document writes and how it differs from DuckDB and Postgres.
 ---
-## Choose the query engine
+## Read first
 
-| Query | Function surface |
-|---|---|
-| No `source` | DuckDB over inline table Values and other query results, named as bare tables. |
-| Stored/file dataset `source="ref:…"` | DuckDB over the dataset's exposed catalog tables, usually `public.rows`, with additional catalog checks. |
-| PostgreSQL dataset | The PostgreSQL compiler and read-only connection described in [catalogs](databases.md); do not assume DuckDB syntax. |
-
-Local and DuckDB dataset reads accept one SELECT (including WITH), bound `$name`
-parameters, casts, CASE, aggregates, windows and built-in scalar functions. There
-is no separate short allowlist of scalar-function names. Useful families include
-`coalesce`/`nullif`, `lower`/`upper`/`replace`/`regexp_replace`,
-`round`/`abs`, `sum`/`count`/`avg`/`median`, `row_number`,
-`date_trunc`/`date_diff`/`date_part`/`strftime`/`strptime`, and
-`list_contains`/`list_has_any`/`unnest`. Normal engine signatures still apply.
-
-The engine disables external file/network access and extension autoloading.
-Authored queries cannot INSTALL, LOAD, SET, COPY or execute multiple statements.
-Dataset reads additionally reject system/cross-catalog relations, qualified
-function calls, and table functions in FROM. Query only exposed tables; a function
-that exists in DuckDB may still be refused by one of these boundaries.
-
-## Keyword-function limitations in dataset reads
-
-The current catalog validator rejects some unqualified SQL keyword forms because
-DuckDB's parser expands them into qualified functions. The message is
-`qualified functions are not allowed`; it does not mean you wrote a schema prefix.
-These forms work in local queries. For dataset queries use the alternatives below:
-
-| Refused keyword form | Working alternative |
-|---|---|
-| `trim(text)` | `ltrim(rtrim(text))` for trimming whitespace from both ends |
-| `substring(text from start for length)` | `substr(text, start, length)` |
-| `extract(year from day)` | `date_part('year', day)` |
+A document's SQL is SQLite. A `<Query>` is one SELECT; a `<Mutation>` is one
+INSERT, UPDATE or DELETE. It reads `<import>.rows` (`sales.rows`), declared
+queries and table values by name, and the built-in tables `_me` and `_members`.
+`$name` binds a value; it is never spliced into the text. Dates are ISO text
+(`2026-09-30`), timestamps ISO text in UTC (`2026-09-30T10:30:00.000Z`), lists
+JSON arrays.
 
 ```sql
-select ltrim(rtrim('  text  ')) as clean,
-       substr('hello', 2, 3) as middle,
-       date_part('year', date '2026-09-24') as year
+select date('2026-09-30T10:15:00Z') as day,
+       date_add('2026-09-30', 1, 'day') as tomorrow,
+       date_part('year', '2026-09-30') as year,
+       date_format('2026-09-30', '%a %d %b') as label,
+       7 / 2 as whole, 7 * 1.0 / 2 as exact,
+       'Apple' like 'a%' as matched
 ```
 
-These are workarounds for the current parser boundary, not a promise that all
-overloads are interchangeable. Preserve the intended statistic and string/date
-semantics when changing a function.
+## Write this, not that
 
-## Series and JSON-array filters
+| Write | Not | Why |
+|---|---|---|
+| `date(x)` | `cast(x as date)`, `x::date` | SQLite has no date type: the cast reads '2026-09-30' as 2026, so it is refused, and `::` does not parse |
+| `strftime('%Y-%m-%dT%H:%M:%fZ', x)` | `cast(x as timestamp)` | the same, for a timestamp |
+| `$_now`, `date(to_timezone($_now, $_tz))` | `now()`, `current_date`, `date('now')` | the time is an input, identical in the browser and on the server |
+| `date_add(d, 1, 'day')` | `d + interval '1 day'` | SQLite has no intervals |
+| `date_part('year', d)` | `extract(year from d)` | |
+| `count(*) * 1.0 / n` | `count(*) / n` | `/` between two integers drops the fraction |
+| `x like 'a%'` | `x ilike 'a%'` | LIKE already ignores case (for ASCII) |
+| `'2026-01-01'` | `date '2026-01-01'` | a date is its text |
+| `select value from json_each(list)` | `unnest(list)` | a list is JSON |
+| `list_contains(list, x)`, `json_group_array(x)` | `x = any(list)`, `array_agg(x)` | |
+| `date_parse(text, '%d/%m/%Y')` | `strptime(text, …)` | |
 
-`generate_series` works as a scalar list combined with `unnest` in both local
-and DuckDB dataset queries:
+Number columns and number values are REAL, so `revenue / 2` keeps its
+fraction. Integers come from literals, `count(*)`, `length()`, `date_diff`,
+`date_part` and a recursive CTE's counter: divide those with `* 1.0 /`. The
+other habits in the table are refused at publish, with the SQLite to write
+instead; integer division is valid SQL, so only you can catch it.
+
+## Dates, series and lists
+
+Compare dates as text (`day >= '2026-09-01'`). A series is a JSON list read as
+a table with `json_each` (with `json_tree`, the only table functions a document may use):
 
 ```sql
-select unnest(generate_series(1, 3)) as n
+select value as day, dayname(value) as weekday
+from json_each(date_series('2026-09-28', '2026-10-02'))
+where dayofweek(value) not in (0, 6)
 ```
 
-The FROM form, `select * from generate_series(1, 3)`, works locally but is refused
-as a table function in a dataset query. For JSON-array string selections, cast
-to a DuckDB list before checking membership:
+A reader's local day is `date(to_timezone($_now, $_tz))`. A multi-select stores
+a JSON list; test membership with `list_contains`:
 
 ```sql
-select list_contains(cast('["EU","NA"]' as varchar[]), 'EU') as selected
+select list_contains('["EU","NA"]', 'EU') as selected
 ```
 
-The [standalone multi-select example](markup-select.md) binds this pattern to a
-reader control. Dataset write grants can further restrict functions in Mutations;
-read-query support does not grant write access. Check a real query through
-`afbin query`, or use `afbin push --dry-run` to validate the document's queries
-against the target dataset before publishing.
+## The library
+
+The engine adds date, list, text and statistics functions to SQLite, the same in
+the browser, on the server and in the CLI: `date_add`, `date_part`,
+`date_format`, `date_series`, `to_timezone`, `median`, `list_contains`,
+`split_part`, `round` and more. Every one, with SQLite's own:
+[functions](markup-sql-functions.md). Any other function is refused by name.
+
+## Connected Postgres
+
+`<Query name source="ref:<id>">` runs inside a connected Postgres database, on
+the server, in Postgres SQL: `::`, `interval` and `now()` are Postgres's there.
+It reads the tables the dataset exposes; its result is rows like any query's,
+which SQLite queries then read by name. [Catalogs](databases.md).
+
+## Check before publishing
+
+`afbin push report.jsx --dry-run` compiles every query against the real columns
+without publishing. `afbin query report.jsx --name slots` runs one query and
+what it reads. A dataset's own SQL (`afbin query <dataset-id> --input q.sql`)
+names its table `rows`; a document names it through its import, `sales.rows`.

@@ -47,8 +47,9 @@ describe('the design skill leads with the rules an agent can act on', () => {
 
 describe('the brief — the one text every agent reads', () => {
   const sheet = buildQuickSheet(BASE);
-  it('carries the data vocabulary a dashboard needs (sourced Query, bound by $name)', () => {
-    for (const needle of ['<Query', 'source="ref:abc123"', 'ref:<id>', 'public.rows', 'data="$']) expect(sheet).toContain(needle);
+  it('carries the data vocabulary a dashboard needs (an Import, a Query over it, bound by $name)', () => {
+    for (const needle of ['<Import name="sales" src="ref:abc123" />', '<Query', 'sales.rows', 'data="$']) expect(sheet).toContain(needle);
+    for (const retired of ['source="ref:abc123"', 'public.rows']) expect(sheet).not.toContain(retired);
   });
   it('does not forbid h-screen / vh — the platform rewrites both on every path', () => {
     expect(sheet).not.toMatch(/never vh/i);

@@ -42,9 +42,9 @@ const create = async (token: string, body: Record<string, unknown>) => {
 const ROWS = [{ choice: 'ramen', who: 'seed' }, { choice: 'tacos', who: 'seed' }];
 const POLL = (ds: string) =>
   '<Helmet><Value name="choice" type="string" /><Value name="who" type="string" default="anon" />'
-  + `<Query name="tally" source="ref:${ds}">{\`select choice, count(*)::int votes from public.rows group by 1 order by 1\`}</Query>`
-  + `<Mutation name="vote" source="ref:${ds}">{\`insert into public.rows (choice, who) values ($choice, $who)\`}</Mutation>`
-  + `<Mutation name="clear" source="ref:${ds}">{\`delete from public.rows where who = $who\`}</Mutation></Helmet>`
+  + `<Import name="tally_data" src="ref:${ds}" /><Query name="tally">{\`select choice, cast(count(*) as integer) votes from tally_data.rows group by 1 order by 1\`}</Query>`
+  + `<Import name="vote_data" src="ref:${ds}" /><Mutation name="vote">{\`insert into vote_data.rows (choice, who) values ($choice, $who)\`}</Mutation>`
+  + `<Import name="clear_data" src="ref:${ds}" /><Mutation name="clear">{\`delete from clear_data.rows where who = $who\`}</Mutation></Helmet>`
   + '<div><input value="$who" /><Button run="$vote">Vote</Button><Question data="$tally" viz={{"kind":"table"}} /></div>';
 const credentials = new Map<string,string>();
 const mutate = (doc: string, body: unknown, init: RequestOptions = {}) =>
@@ -66,7 +66,7 @@ describe('POST /a/<id>/mutate — the document\'s door', () => {
   it('an authenticated owner of a public document runs a declared mutation; the dataset gains a version and its queries see the row', async () => {
     const { ds, doc } = await poll();
     const before = (await getArtifactById(ds))!;
-    const res = await mutate(doc, { mutation: 'vote', values: { choice: 'ramen', who: 'jun' } });
+    const res = await mutate(doc, { mutation: 'vote', args: { choice: 'ramen', who: 'jun' } });
     expect(res.status, await res.clone().text()).toBe(200);
     expect(res.headers.get('access-control-allow-origin')).toBe('*');
     const body = (await res.json()) as { ok: boolean; dataset: string; version: number; affected: number };
@@ -85,10 +85,10 @@ describe('POST /a/<id>/mutate — the document\'s door', () => {
 
   it('values fall back to the declared defaults; a plain-text body (no preflight) is accepted; unknown names are 400', async () => {
     const { ds, doc } = await poll();
-    const res = await mutate(doc, { mutation: 'vote', values: { choice: 'tacos' } }, { headers: { 'Content-Type': 'text/plain' } });
+    const res = await mutate(doc, { mutation: 'vote', args: { choice: 'tacos' } }, { headers: { 'Content-Type': 'text/plain' } });
     expect(res.status).toBe(200);
     expect((await loadDatasetRows((await getArtifactById(ds))!)).at(-1)).toEqual({ choice: 'tacos', who: 'anon' });
-    const unknown = await mutate(doc, { mutation: 'nope', values: {} });
+    const unknown = await mutate(doc, { mutation: 'nope', args: {} });
     expect(unknown.status).toBe(400);
     expect(((await unknown.json()) as { error: string }).error).toBe('unknown_mutation');
     const malformed = await mutate(doc, { values: {} });
@@ -97,8 +97,8 @@ describe('POST /a/<id>/mutate — the document\'s door', () => {
 
   it('UPDATE/DELETE mutations apply to the current rows, and each write is one archived version', async () => {
     const { ds, t, doc } = await poll();
-    await mutate(doc, { mutation: 'vote', values: { choice: 'ramen', who: 'jun' } });
-    const res = await mutate(doc, { mutation: 'clear', values: { who: 'seed' } });
+    await mutate(doc, { mutation: 'vote', args: { choice: 'ramen', who: 'jun' } });
+    const res = await mutate(doc, { mutation: 'clear', args: { who: 'seed' } });
     expect(res.status).toBe(200);
     expect(((await res.json()) as { affected: number }).affected).toBe(2);
     expect(await loadDatasetRows((await getArtifactById(ds))!)).toEqual([{ choice: 'ramen', who: 'jun' }]);
@@ -111,7 +111,7 @@ describe('POST /a/<id>/mutate — the document\'s door', () => {
   it('is re-checked on EVERY call: a dataset flipped to read-only refuses with dataset_read_only', async () => {
     const { ds, t, doc } = await poll();
     await putArtifactRoute(await observedRequest(`/api/artifacts/${ds}`, { method: 'PUT', token: t.token, json: { dataset: ROWS, access: 'read' } }), params({ id: ds }));
-    const res = await mutate(doc, { mutation: 'vote', values: { choice: 'ramen' } });
+    const res = await mutate(doc, { mutation: 'vote', args: { choice: 'ramen' } });
     expect(res.status).toBe(403);
     expect(((await res.json()) as { error: string }).error).toBe('dataset_read_only');
   });
@@ -119,8 +119,8 @@ describe('POST /a/<id>/mutate — the document\'s door', () => {
   it('the row cap answers 409 dataset_full and writes nothing', async () => {
     const { ds, doc } = await poll();
     setDatasetRowCap(3);
-    expect((await mutate(doc, { mutation: 'vote', values: { choice: 'a' } })).status).toBe(200);
-    const full = await mutate(doc, { mutation: 'vote', values: { choice: 'b' } });
+    expect((await mutate(doc, { mutation: 'vote', args: { choice: 'a' } })).status).toBe(200);
+    const full = await mutate(doc, { mutation: 'vote', args: { choice: 'b' } });
     expect(full.status).toBe(409);
     expect(((await full.json()) as { error: string }).error).toBe('dataset_full');
     expect((await getArtifactById(ds))!.version).toBe(2);
@@ -129,7 +129,7 @@ describe('POST /a/<id>/mutate — the document\'s door', () => {
   it('CONCURRENT writers all land: a lost compare-and-swap re-reads and re-runs the DML (the rebase is free)', async () => {
     const { ds, doc } = await poll();
     const results = await Promise.all(
-      Array.from({ length: 6 }, (_, i) => mutate(doc, { mutation: 'vote', values: { choice: 'ramen', who: `w${i}` } })),
+      Array.from({ length: 6 }, (_, i) => mutate(doc, { mutation: 'vote', args: { choice: 'ramen', who: `w${i}` } })),
     );
     expect(results.map((r) => r.status)).toEqual([200, 200, 200, 200, 200, 200]);
     const row = (await getArtifactById(ds))!;
@@ -145,11 +145,11 @@ describe('POST /a/<id>/mutate — the document\'s door', () => {
     await claimToken(user.id, t.token);
     const ds = (await create(t.token, { dataset: ROWS, access: 'readwrite' })).id;
     const doc = (await create(t.token, { markup: POLL(ds), visibility: 'private' })).id;
-    expect((await mutate(doc, { mutation: 'vote', values: { choice: 'ramen' } })).status).toBe(404);
+    expect((await mutate(doc, { mutation: 'vote', args: { choice: 'ramen' } })).status).toBe(404);
     const cookie = await agentCookie([t.id]);
-    const ok = await mutate(doc, { mutation: 'vote', values: { choice: 'ramen' } }, { cookie, origin: BASE });
+    const ok = await mutate(doc, { mutation: 'vote', args: { choice: 'ramen' } }, { cookie, origin: BASE });
     expect(ok.status, await ok.clone().text()).toBe(200);
-    const csrf = await mutate(doc, { mutation: 'vote', values: { choice: 'ramen' } }, { cookie, origin: 'https://evil.example' });
+    const csrf = await mutate(doc, { mutation: 'vote', args: { choice: 'ramen' } }, { cookie, origin: 'https://evil.example' });
     expect(csrf.status).toBe(403);
     expect((await getArtifactById(ds))!.version).toBe(2);
   });
@@ -163,7 +163,7 @@ describe('POST /a/<id>/mutate — the document\'s door', () => {
     // the old cap is the proof the handler refuses on no budget of its own.
     const WRITES = 65;
     for (let i = 0; i < WRITES; i++) {
-      const res = await mutate(doc, { mutation: 'vote', values: { choice: 'a' } }, { headers: { 'x-forwarded-for': '9.9.9.9' } });
+      const res = await mutate(doc, { mutation: 'vote', args: { choice: 'a' } }, { headers: { 'x-forwarded-for': '9.9.9.9' } });
       expect(res.status, `write ${i + 1} of ${WRITES}`).toBe(200);
     }
   });

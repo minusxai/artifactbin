@@ -35,6 +35,10 @@ import { hasAmbiguousLegacyAliases, normalizeNodeIds } from '@/lib/story/node-id
 import { isMutationRefused, mutateDataset } from '@/lib/story/dataset-mutate';
 import type { SourceRepair } from '@/lib/jsx/repair';
 import type { Scalar } from '@/lib/story/dataflow';
+import { parseMutationRequest } from '@/lib/story/mutation-request';
+import { bindParams, bindTypes, mutationTargetRef } from '@/lib/story/compiled-flow';
+import { platformValues, rowField } from '@/lib/story/builtins';
+import { rewriteBuiltinFields } from '@/lib/story/compile-dataflow';
 import { datasetCreateFields } from '@/lib/story/dataset-usage';
 import { imageRawUrl, pdfRawUrl } from '@/lib/story/ref-data';
 import { ALLOW_PUBLIC_VISIBILITY } from '@/lib/config';
@@ -205,7 +209,7 @@ export async function artifactToWire(row: ArtifactRow, base: string) {
           // Declared mutations by name, parameter and the dataset each writes, so a CLI can
           // validate a `--name --write` call before it sends anything and name that dataset
           // when a row action cannot run from a command line.
-          mutations: (declarationsForRow(row)?.flow.mutations ?? []).filter((decl) => decl.scope !== 'local').map((decl) => ({ name: decl.name, params: decl.params.map((name) => ({ name })), target: decl.target })),
+          mutations: await declaredDatasetMutations(row),
         }
       : {}),
     theme: design.theme,
@@ -756,19 +760,29 @@ export async function respondToAnnotationAction(
 const isScalar = (v: unknown): v is Scalar =>
   v === null || typeof v === 'string' || typeof v === 'boolean' || (typeof v === 'number' && Number.isFinite(v));
 
-/** A document's declared mutation, run by name with bound values — the bearer twin of the page door. */
+/**
+ * A document's DATASET mutations for a CLI: name, arguments, the row fields
+ * and edited value its control supplies, and the dataset it writes — so a
+ * `--name --arg` call is checked before it is sent, and a row action that
+ * cannot run from a command line names its dataset.
+ */
+async function declaredDatasetMutations(row: ArtifactRow): Promise<Array<{ name: string; args: Array<{ name: string; type: string | null }>; row: string[]; value: boolean; target: string }>> {
+  const flow = (await declarationsForRow(row))?.flow;
+  if (!flow) return [];
+  return flow.mutations.flatMap((m) => {
+    const target = mutationTargetRef(flow, m);
+    return target ? [{ name: m.name, args: m.args, row: m.reads.builtins.flatMap((b) => rowField(b) ?? []), value: m.reads.builtins.includes('_value'), target }] : [];
+  });
+}
+
+/** A document's declared mutation, run by name with its arguments — the bearer twin of the page door. */
 async function respondToDeclaredMutation(actor: TokenActor, id: string, body: Record<string, unknown>, receipt?: MutationReceipt): Promise<Response> {
   const row = await getArtifactById(id);
   if (!row || row.deleted_at || !(row.token_id === actor.tokenId || (await canReadArtifact(row, actor.userId ? { userId: actor.userId, email: null } : null)))) return json({ error: 'not_found' }, 404);
-  const values: Record<string, Scalar> = {};
-  if (body.values !== undefined) {
-    if (!body.values || typeof body.values !== 'object' || Array.isArray(body.values)) return json({ error: 'invalid_values', details: ['values must be an object of scalars'] }, 400);
-    for (const [k, v] of Object.entries(body.values as Record<string, unknown>)) {
-      if (!isScalar(v)) return json({ error: 'invalid_values', details: [`value "${k}" must be a string, number, boolean or null`] }, 400);
-      values[k] = v;
-    }
-  }
-  const result = await runDocumentMutation(row, String(body.name), values, undefined, { userId: actor.userId, tokenId: actor.tokenId }, undefined, receipt);
+  const { name, id: _id, ...rest } = body;
+  const parsed = parseMutationRequest({ ...rest, mutation: name });
+  if (parsed instanceof Response) return json(await parsed.json(), 400);
+  const result = await runDocumentMutation(row, parsed, { userId: actor.userId, tokenId: actor.tokenId }, receipt);
   if (!result.ok) {
     switch (result.reason) {
       case 'unknown_mutation': return json({ error: 'unknown_mutation', details: [`this document declares no <Mutation name="${String(body.name)}">`] }, 400);
@@ -834,7 +848,10 @@ export async function respondToMutate(
     }
   }
 
-  const result = await mutateDataset(dataset, actor, body.sql, values,{receipt,expectedState:expected?.expectedState});
+  // The built-ins read as they do in a document: `$_me.id` is the caller, `$_now` the moment, `$_tz` UTC.
+  const { sql, fields } = rewriteBuiltinFields(body.sql);
+  const builtins = bindParams([...fields.values(), '_now', '_tz'], platformValues({ userId: actor.userId ?? null, now: new Date().toISOString(), tz: 'UTC' }));
+  const result = await mutateDataset(dataset, actor, sql, { ...values, ...builtins }, { receipt, expectedState: expected?.expectedState, paramTypes: bindTypes([...fields.values(), '_now', '_tz'], {}) });
   if (isMutationRefused(result)) {
     if(result.reason==='row_changed')return json({error:'row_changed',details:[result.detail]},409);
     if (result.reason === 'dataset_read_only' || result.reason === 'policy_denied') return json({error:result.reason,details:[result.detail]},403);

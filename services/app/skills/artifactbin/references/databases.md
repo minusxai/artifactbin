@@ -54,25 +54,27 @@ Cells query qualified raw tables such as `public.events` and reference **earlier
 
 The final whitelist selects physical columns or model output columns independently of notebook inputs. The example exposes only `models.activity`; its `raw_events` helper and `public.events` source remain unavailable to readers. To expose physical columns directly, add a table such as `<Table schema="public" name="events" sourceSchema="public" sourceTable="events" columns={["user_id"]} />`. In the UI, a cell's Expose checkbox and whitelist tree entry are one selection.
 
-Structured `CatalogInput` objects remain accepted in `dataset`, including `kind:"stored"` tables with `rows`. Omit rows to keep data; new columns start null. Restate rows to drop/retype one. Arrays/CSV remain the single-table `public.rows` case.
+Structured `CatalogInput` objects remain accepted in `dataset`, including `kind:"stored"` tables with `rows`. Omit rows to keep data; new columns start null. Restate rows to drop/retype one. Arrays/CSV remain the single-table `rows` case.
 
 The default schema is fixed: bare `events` always resolves there. Updates keep optimistic concurrency and history.
 
 ## Queries and mutations
 
+A connected Postgres dataset is never imported; a query runs inside it, in Postgres SQL:
+
 ```jsx
 <Helmet>
   <Value name="user" type="number" />
-  <Query name="activity" source="ref:abc123">
+  <Query name="activity" source="ref:pgs123">
     {`select * from models.activity where $user is null or user_id=$user`}
   </Query>
 </Helmet>
 <DataTable data="$activity" />
 ```
 
-`source` is a literal dataset ID. Runtime SQL names only final-whitelist schema/table identifiers. Parameters come from declared scalar Values, with explicit Postgres type binding.
+`source` is a literal dataset ID. Its SQL names only final-whitelist tables; `$params` bind with Postgres types. Other queries read its result by name ([SQL](markup-sql.md)).
 
-Stored writes use `<Mutation name="edit" source="ref:abc123">{`update public.items set status=$_value where id=$_row.id`}</Mutation>`. New stored datasets default to public reads and writes through their owner’s artefacts. Accepted members can run saved actions; use `afbin invite <ref> @username` or People → Add people. [Apps](apps.md) explains version 2 grants, joining and mentions. Existing version 1 datasets keep their policies; their legacy writable setting is `--access readwrite --policy viewers-write`. To inspect or change policies, `afbin pull <id> --type dataset --output tasks.yaml` writes tracked settings beside the rows. Optional table/column/row restrictions narrow grants. Postgres writes are unavailable.
+A stored multi-table dataset is imported once and read by table: `<Import name="shop" src="ref:<id>" />`, then `shop.items`; a `<Mutation>` writes `update shop.items set …`. New stored datasets default to public reads and writes through their owner’s artefacts. Accepted members can run saved actions; use `afbin invite <ref> @username` or People → Add people. [Apps](apps.md) explains version 2 grants, joining and mentions. Existing version 1 datasets keep their policies; their legacy writable setting is `--access readwrite --policy viewers-write`. To inspect or change policies, `afbin pull <id> --type dataset --output tasks.yaml` writes tracked settings beside the rows. Optional table/column/row restrictions narrow grants. Postgres writes are unavailable.
 
 ## Preview and freshness
 
@@ -82,9 +84,9 @@ Push datasets with `afbin push` ([datasets](publishing-datasets.md)). Run notebo
 
 ## Migration
 
-Use `source="ref:<id>"` to choose the dataset and its exposed table names in SQL. Flat uploads expose `public.rows`.
+A document reads an imported dataset's tables as `d.<table>`; a flat upload has one, `d.rows`.
 
-Manual data migrations require server shell access (SSH or equivalent infrastructure access). Migration HTTP endpoints and remote clients are not available. No standalone migration command is shipped. Operators must back up and preview changes before using the retained database-level migration functions, validate document data, and pass reviewed snapshot fingerprints when applying dataset changes. Stop the app before opening its PGLite directory from a maintenance process. Automatic schema updates on startup remain separate from manual data migrations.
+Manual data migrations are an operator's job, with server shell access; there is no HTTP endpoint or CLI command. Back up and preview first, validate document data, and apply with reviewed snapshot fingerprints. Stop the app before opening its PGLite directory. Startup schema updates are separate.
 
 Stored `Table.columns` accepts `{name,type,choices?,constraints?}` declarations, including native `user` fields. See [user fields](databases-users.md) for membership arrays, `self`, automatic pickers and server validation. `choices`: 1–100 distinct typed suggestions for policy pickers, e.g. `{name:"status",type:"string",choices:["todo","doing","done"]}`. Enforce allowed writes with policy checks. Postgres whitelist columns remain strings.
 
@@ -94,6 +96,6 @@ Stored `Table.columns` accepts `{name,type,choices?,constraints?}` declarations,
 stored and returned as UTC ISO 8601 with `Z`, at millisecond precision. Accept
 ISO dates/datetimes with or without an offset, or epoch milliseconds; a missing
 timezone means UTC and a date means midnight UTC. Invalid values name the column.
-Use SQL `now()` for the current instant. DataTable shows timestamps in the reader's
+The current instant in SQL is `$_now`. DataTable shows timestamps in the reader's
 timezone. A DatePicker bound to a timestamp selects a date and writes midnight
 UTC; selecting a new date discards the previous time of day.

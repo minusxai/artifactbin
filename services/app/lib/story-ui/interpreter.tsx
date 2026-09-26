@@ -24,7 +24,7 @@ import { hasDangerousScheme, listHasDangerousScheme } from '@/lib/jsx/validate';
 // for why these must not be maintained separately.
 import { URL_ATTRS as URL_PROPS, URL_LIST_ATTRS as URL_LIST_PROPS, SVG_PAINT_ATTRS, paintHasExternalUrl } from '@/lib/jsx/url-attrs';
 import { STORY_SVG_TAGS } from './component-names';
-import { carriesRef, REF_ATTRS, refName } from '@/lib/story/dataflow';
+import { ARGS_ATTR, bindingMap, carriesRef, REF_ATTRS, refName, rowBound, SET_ATTR } from '@/lib/story/dataflow';
 import type { JsxAttribute } from '@/lib/jsx';
 import { substituteRow, parseRowRef } from '@/lib/story/row-scope';
 import type { ColumnTemplate } from '@/components/kit/data-table';
@@ -423,6 +423,12 @@ function rawBuildProps(
       continue;
     }
 
+    // `set=` / `args=`: a component receives its binding map, with any row field already read.
+    if (isComponent && (a.name === SET_ATTR || a.name === ARGS_ATTR)) {
+      const map = bindingMap(a.value.json);
+      if (map) props[a.name] = row ? rowBound(map, row) : map;
+      continue;
+    }
     let name = HTML_ATTR_TO_REACT[a.name] ?? SVG_ATTR_CASE[lower] ?? a.name;
     let value = row && lower !== 'id' ? substituteRow(a.value.json, row) : a.value.json;
 

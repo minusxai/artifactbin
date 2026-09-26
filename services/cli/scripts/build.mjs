@@ -11,7 +11,8 @@ await build({
   platform: "node",
   format: "esm",
   target: "node22",
-  external: ["node-pty", "@duckdb/node-api"],
+  // The SQLite engine reads its sqlite3.wasm beside its own module: it stays a real dependency.
+  external: ["node-pty", "@sqlite.org/sqlite-wasm"],
   banner: { js: "#!/usr/bin/env node\nimport {createRequire as __afbinCreateRequire} from 'node:module'; const require=__afbinCreateRequire(import.meta.url);" },
 });
 await chmod("dist/afbin.mjs", 0o755);

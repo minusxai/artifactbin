@@ -78,8 +78,10 @@ describe('references/apps.md', () => {
 it('keeps successful test writes on the test-user fork and explains the mutation read boundary',()=>{
  const text=reference();
  expect(text).toContain('Run each write on the test-user fork');
- expect(text).toContain('$_me writes must stay disabled and change no data');
- expect(text).toContain('A Mutation can read only the stored table it writes');
+ expect(text).toContain('`$_me.id` writes must stay disabled and change no data');
+ // The compiler and the write door load a mutation's other imports and `_members`; a query result is an argument.
+ expect(text).toContain('A Mutation may read other imports and `_members`');
+ expect(text).toContain('never a\nquery: pass a query\'s value in as an argument');
 });
 
 it('teaches accepted platform membership without custom join tables',()=>{

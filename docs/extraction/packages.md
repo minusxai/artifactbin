@@ -8,7 +8,7 @@ Production pins this toolkit as a Git submodule. Its build imports shared TypeSc
 | `services/utils` | Signed HTTP transport, audited config and service clients | Communication between separately deployed services |
 | `services/app` | Reader/editor, publication, revisions, references, comments, sharing, permissions, storage and query orchestration | App with Postgres, object storage and remote SQL/browser/events |
 | `services/auth` | Login/OAuth, sessions and identity resolution | Authentication composed into the private proxy |
-| `services/sql` | DuckDB queries and HTTP shell | SQL service with DuckDB installed |
+| `services/sql` | SQLite (wasm) queries, worker-thread pool and HTTP shell | SQL service; no native engine |
 | `services/browser` | Chromium rendering and HTTP shell | Browser service with Playwright and Chromium installed |
 | `services/events` | Event schema, writer and HTTP shell | Events service with its own database and private integration sinks |
 
@@ -22,4 +22,4 @@ For a coordinated change, commit the toolkit change, update production's submodu
 
 ## Verification
 
-The packaged npm and standalone CLI forms run the same conformance scenarios against a host. Production independently builds each source-based service image, checks that the app dependency closure excludes DuckDB/Playwright, and runs its real Postgres/container conformance checks.
+The packaged npm and standalone CLI forms run the same conformance scenarios against a host. Production independently builds each source-based service image, checks that the app dependency closure excludes Playwright and any native SQL engine, and runs its real Postgres/container conformance checks.

@@ -49,8 +49,8 @@ const buttonVariants = cva(
  * overrides this with an adapter wired to the store
  * (lib/story-runtime/StoryRuntimeApp).
  *
- * `run` never reaches the `<button>`: it is not an HTML attribute, and React
- * would pass it through to the DOM.
+ * `run`, `set` and `args` never reach the `<button>`: they are not HTML
+ * attributes, and React would pass them through to the DOM.
  */
 // Deviation from shadcn source: the `asChild`/Slot mechanism is removed because
 // @radix-ui/react-slot is not a declared dependency of this repo.
@@ -59,15 +59,19 @@ function Button({
   variant = "default",
   size = "default",
   run,
+  set,
+  args: _args,
   ...props
-}: React.ComponentProps<"button"> & VariantProps<typeof buttonVariants> & { run?: unknown }) {
-  const bound = typeof run === "string" && refName(run) ? run : undefined
+}: React.ComponentProps<"button"> & VariantProps<typeof buttonVariants> & { run?: unknown; set?: unknown; args?: unknown }) {
+  const bound = typeof run === "string" && refName(run) ? `run:${run}` : ""
+  const sets = set && typeof set === "object" ? `set:${Object.keys(set).join(",")}` : ""
+  const stamp = [bound, sets].filter(Boolean).join(" ")
   return (
     <button
       data-slot="button"
       data-variant={variant}
       data-size={size}
-      {...(bound ? { "data-mx-bound": `run:${bound}`, disabled: true } : {})}
+      {...(stamp ? { "data-mx-bound": stamp, disabled: true } : {})}
       className={cn(buttonVariants({ variant, size, className }))}
       {...props}
     />

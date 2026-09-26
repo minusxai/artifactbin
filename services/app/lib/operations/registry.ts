@@ -20,7 +20,7 @@ import { TESTUSER_ERRORS } from '@artifactbin/contracts';
 import { z } from 'zod';
 import { STORY_TEMPLATE_NAMES } from '@/lib/validation/atlas-schemas';
 import {
-  applyEditFor, canReadArtifact, findDependentsFor, forkArtifact, forkDatasetPreview, forkRefusal, getArtifactById, getVersionFor, listArtifactPageFor, listVersionPageFor,
+  applyEditFor, versionToWire, canReadArtifact, findDependentsFor, forkArtifact, forkDatasetPreview, forkRefusal, getArtifactById, getVersionFor, listArtifactPageFor, listVersionPageFor,
   revertArtifactFor, isVersionNotArchived, type ForkOverrides, type TokenActor
 } from '@/lib/artifacts';
 import { isParentRefusal, resolveParent } from '@/lib/folders';
@@ -201,7 +201,7 @@ const createArtifactOp: Operation = {
   name: 'create_artifact',
   title: 'Create an artifact',
   http: { method: 'POST', path: '/api/artifacts' },
-  description: 'Create an artifact (exactly one of markup | dataset | viz | image | pdf | file). Returns the public URL. markup is THE document format: story JSX over the component kit, HTML tags for everything else (prose is ordinary <p>/<h1>/<ul> — there is no markdown), and one top-level <Helmet> for <title>/<style>/<script> and the document\'s DATA: <Value name type default /> scalars and <Query name source="ref:<id>">{`select … from public.rows`}</Query> (SQL over named tables in one dataset; PostgreSQL datasets are read-only), bound in the body by name — <Question data="$q">, <DataTable data="$q">, <select value="$x" options="$q">. Recipes/images bind as ref:<id>, and a pdf as <File src="ref:<id>" />. No upload is needed for something already on the web: write <img src="https://…"> (or <Video poster>, <File src>) and publish stores a copy while your URL stays in the document. Dataset creation echoes the inferred columns and a ready-to-paste Query+Question. To ORGANISE: {"format":"folder","title":"Reports"} makes a folder — a folder HAS no content, its page is the listing we render for whoever opens it — and parent_id: "<folderId>" on any create files it there.',
+  description: 'Create an artifact (exactly one of markup | dataset | viz | image | pdf | file). Returns the public URL. markup is THE document format: story JSX over the component kit, HTML tags for everything else (prose is ordinary <p>/<h1>/<ul> — there is no markdown), and one top-level <Helmet> for <title>/<style>/<script> and the document\'s DATA: <Import name="d" src="ref:<id>" />, <Value> page values, <Query name>{`select … from d.rows`}</Query> in SQLite and <Mutation> writes (connected PostgreSQL is read-only, via <Query source="ref:<id>">), bound in the body by name — <Question data="$q">, <select value="$x" options="$q">, <Button run="$m">. Recipes/images bind as ref:<id>, and a pdf as <File src="ref:<id>" />. No upload is needed for something already on the web: write <img src="https://…"> (or <Video poster>, <File src>) and publish stores a copy while your URL stays in the document. Dataset creation echoes the inferred columns and a ready-to-paste Query+Question. To ORGANISE: {"format":"folder","title":"Reports"} makes a folder — a folder HAS no content, its page is the listing we render for whoever opens it — and parent_id: "<folderId>" on any create files it there.',
   input: { ...CONTENT_FIELDS, forked_from: z.string().optional().describe("the id of the artifact this one was copied from, when you built the copy yourself instead of calling fork_artifact — it must be an artifact you can READ, and it is recorded once here and never editable afterwards") },
   annotations: {},
   example: {
@@ -347,7 +347,7 @@ const getVersionOp: Operation = {
   name: 'get_version',
   title: 'Read one archived version',
   http: { method: 'GET', path: '/api/artifacts/{id}/versions/{version}' },
-  description: 'Read one archived version of an artifact, content included (`markup` carries the source).',
+  description: 'Read one archived version of an artifact, content included (`markup` carries the source). A document version reads in the current data syntax; `previous_engine` says one written for the previous query engine needs converting by hand and cannot be restored as it stands.',
   input: { id: z.string(), version: z.number() },
   annotations: { readOnly: true },
   example: { input: { id: 'aB3xK9', version: 2 } },
@@ -357,8 +357,7 @@ const getVersionOp: Operation = {
     if (!Number.isInteger(v) || v < 1) return reply({ error: 'not_found' }, 404);
     const row = await getVersionFor(ctx.actor, String(input.id), v);
     if (!row) return reply({ error: 'not_found' }, 404);
-    // `markup` carries the source; the raw `source` field stays off the wire.
-    return reply({ ...row, markup: row.source, source: undefined } as unknown as Record<string, unknown>);
+    return reply(versionToWire(row));
   },
 };
 
@@ -483,8 +482,9 @@ const mutateDatasetOp: Operation = {
   input: {
     id: z.string(),
     sql: z.string().optional().describe('one INSERT/UPDATE/DELETE naming a catalog table such as public.rows; bind scalars as $name, never interpolate'),
-    name: z.string().optional().describe('instead of sql: a mutation the document declares by name; the id is then the document, and values bind its $params'),
-    values: z.record(z.string(), z.union([z.string(), z.number(), z.boolean(), z.null()])).optional(),
+    name: z.string().optional().describe('instead of sql: a mutation the document declares by name; the id is then the document, and args fill its signature'),
+    values: z.record(z.string(), z.union([z.string(), z.number(), z.boolean(), z.null()])).optional().describe('with sql: the $params it binds'),
+    args: z.record(z.string(), z.union([z.string(), z.number(), z.boolean(), z.null()])).optional().describe('with name: the declared mutation\'s arguments'),
   },
   annotations: {},
   example: { input: { id: 'aB3xK9', sql: 'insert into public.rows (m, v) values ($m, $v)', values: { m: 'Sep', v: 12 } } },

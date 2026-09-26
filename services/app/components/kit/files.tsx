@@ -5,7 +5,7 @@
  *
  * A folder's own page is app chrome (web/pages/Folder) and does not come
  * through here. What this component is for is the power feature underneath it:
- * a document may declare `<Query name="q">{`select * from ref_<folderId>`}</Query>`
+ * a document may declare `<Import name="f" src="ref:<folderId>" /><Query name="q">{`select * from f.rows`}</Query>`
  * over any folder it may read and bind the rows with `<Files data="$q" />`, so
  * an author can list a folder's contents inside a report, a deck or a
  * dashboard, filtered and ordered however they like.

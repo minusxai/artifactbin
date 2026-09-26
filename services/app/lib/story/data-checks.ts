@@ -1,174 +1,105 @@
-import {MEMBER_COLUMNS} from '@artifactbin/contracts';
 import { deckColumns, GEOMETRY_COLUMN } from '@/lib/viz/deck-spec';
-import {resolveUserValues} from './user-values';
-import {compileStoredMutation} from '@/lib/datasets/stored-mutation';
 /**
  * The document's DATA checks — everything about a markup document's data that
  * can only be judged with the caller's artifacts in hand: refs resolve and are
- * the right kind (lib/story/refs.ts), every <Query> prepares against the real
- * dataset shapes (the engine dry run), and every chart bound to a query is
- * checked against that query's RESULT columns — vega encodings and recipe
- * slots alike. ONE function, so the publish door (jsx-tier) and the refresh path
- * (a dataset changed → which dependents broke?) cannot drift apart.
+ * the right kind (lib/story/refs.ts), the declarations COMPILE against the
+ * real shapes of what they import (lib/story/compile-dataflow — which also
+ * checks the markup that binds them), every written dataset is the
+ * publisher's to write and admits the write under its data policy, and every
+ * chart bound to a query is checked against that query's RESULT columns —
+ * vega encodings and recipe slots alike. ONE function, so the publish door
+ * (jsx-tier) and the refresh path (a dataset changed → which dependents
+ * broke?) cannot drift apart.
  */
-import { analyzeRowScopes, mutationUsesRow, mutationUsesValue } from './row-scope';
 import { parseJsx, type JsxNode } from '@/lib/jsx';
-import { dryRunMutations, dryRunQueries, isQueryFailure, runMutation } from '@/lib/sql/engine';
+import { isQueryFailure, runMutation } from '@/lib/sql/engine';
 import { placeholderSession, viewerMutationPolicy } from '@/lib/datasets/policy/viewer-policy';
-import type { DatasetMutationPolicy } from '@artifactbin/contracts';
-import { mutationsOf, queryOrder, refName, scalarParamTypes, type Dataflow } from './dataflow';
-import { SIGNALS_TABLE } from './local-target';
-import type { DatasetColumn } from './dataset-shape';
-import { splitHelmet } from './helmet';
-import { refId, validateRecipeUse, validateRefs, validateVizAgainstColumns, type RefLoader } from './refs';
+import { datasetSqlParams } from '@/lib/datasets/sql';
+import { importedTables } from '@/lib/datasets/catalog';
+import { refName, isEmptyDataflow } from './dataflow';
+import { dataflowOf, splitHelmet } from './helmet';
+import { refId, validateRecipeUse, validateRefs, validateVizAgainstColumns, writeRefusal, type BoundColumn, type RefLoader, type ResolvedRef } from './refs';
+import { compileDataflow, prepareCompile, type ImportSource, type SchemaLoader } from './compile-dataflow';
+import type { CompiledDataflow } from './compiled-dataflow';
+import { bindParams, bindTypes, importRef, mutationParams, mutationReads, valueTypes } from './compiled-flow';
 import { getTemplate, VIZ_TEMPLATES } from '@/lib/viz/viz-templates';
 import { normalize, type TopLevelSpec } from 'vega-lite';
 
 type DataCheckResult =
-  | { ok: true; refs: Array<{ id: string; kind: string }> }
+  | { ok: true; refs: Array<{ id: string; kind: string }>; compiled: CompiledDataflow | null }
   | { ok: false; error: 'invalid_refs' | 'invalid_sql'; details: string[] };
+
+/** What an artifact is to the compiler: a dataset's tables, a folder's listing, or a database to run inside. */
+export function schemaSourceOf(r: ResolvedRef | null): ImportSource | null {
+  if (!r) return null;
+  if (r.format === 'folder') return { kind: 'folder', tables: [{ name: 'rows', columns: r.columns ?? [] }] };
+  if (r.format !== 'dataset') return null;
+  if (r.catalog?.kind === 'postgres') {
+    const query = r.query;
+    return { kind: 'postgres', tables: [], ...(query ? { probe: async (sql, params, types) => ({ columns: (await query(sql, params, types)).columns, params: datasetSqlParams(sql) }) } : {}) };
+  }
+  return { kind: 'dataset', tables: r.catalog ? importedTables(r.catalog).map((t) => ({ name: t.name, columns: t.columns })) : [{ name: 'rows', columns: r.columns ?? [] }] };
+}
+
+/** The compiler's loader over a ref loader. */
+export const schemaLoaderFor = (load: RefLoader): SchemaLoader => async (ref) => schemaSourceOf(await load(ref));
 
 export async function checkDocumentData(source: string, load: RefLoader): Promise<DataCheckResult> {
   const checked = await validateRefs(source, load);
   if (!checked.ok) return { ok: false, error: 'invalid_refs', details: checked.details };
 
   const parsed = parseJsx(source);
-  if (!parsed.ok) return { ok: true, refs: checked.refs };
+  if (!parsed.ok) return { ok: true, refs: checked.refs, compiled: null };
   const split = splitHelmet(parsed.nodes);
-  const flow: Dataflow = { values: split.content.values, queries: split.content.queries, mutations: split.content.mutations };
-  if (flow.queries.length === 0 && mutationsOf(flow).length === 0 && !flow.values.some(v=>v.kind==='scalar'&&v.source)) return { ok: true, refs: checked.refs };
+  const flow = dataflowOf(split.content);
+  if (isEmptyDataflow(flow)) return { ok: true, refs: checked.refs, compiled: null };
 
-  const dry = await dryRunDataflow(flow, load, split.body);
-  if (dry.kind === 'sql') return { ok: false, error: 'invalid_sql', details: dry.details };
-  const bindings = await validateQueryBindings(split.body, dry.columns, load);
+  const compiled = compileDataflow(flow, await prepareCompile(flow, schemaLoaderFor(load)), split.body);
+  if (!compiled.ok) return { ok: false, error: 'invalid_sql', details: compiled.errors.map((e) => e.message) };
+  const writes = await admitWrites(compiled.compiled, load);
+  // Who may write the dataset at all is a reference's question; what the policy admits is the statement's.
+  if (writes.refs.length) return { ok: false, error: 'invalid_refs', details: writes.refs };
+  if (writes.sql.length) return { ok: false, error: 'invalid_sql', details: writes.sql };
+  // A type the compiler could not tell stays unknown: the reader's rows decide how that column draws.
+  const columns = Object.fromEntries(compiled.compiled.queries.map((q) => [q.name, q.columns.map((c): BoundColumn => ({ name: c.name, type: c.type }))]));
+  const bindings = await validateQueryBindings(split.body, columns, load);
   if (bindings.length) return { ok: false, error: 'invalid_refs', details: bindings };
-  return { ok: true, refs: checked.refs };
-}
-
-/** Prepare every query against the shapes its refs resolve to. */
-export async function dryRunDataflow(flow: Dataflow, load: RefLoader, body: JsxNode[] = []): Promise<
-  | { kind: 'sql'; details: string[] }
-  | { kind: 'ok'; columns: Record<string, DatasetColumn[]>; rowSchemas: Record<string, DatasetColumn[]>; /** `$_value`'s declared type per cell-editing mutation: the type of the column its editor sits in. */ valueTypes: Record<string, DatasetColumn['type']> }
-> {
-  try {flow=await resolveUserValues(flow,load);}catch(error){return {kind:'sql',details:[error instanceof Error?error.message:'Invalid user binding']};}
-  const tables: Record<string, { columns: DatasetColumn[] }> = {_members:{columns:MEMBER_COLUMNS}};
-  for (const v of flow.values) if (v.kind === 'table') tables[v.name] = { columns: v.columns };
-  const signalColumns = flow.values.filter(v => v.kind === 'scalar').map(v => ({name: v.name, type: v.type}));
-  if (signalColumns.length) tables[SIGNALS_TABLE] = {columns: signalColumns};
-  const mutations = mutationsOf(flow);
-  const paramNames = [...flow.values.filter((v) => v.kind === 'scalar').map((v) => v.name),'_me'];
-  const paramTypes = scalarParamTypes(flow);
-  const order = queryOrder(flow) ?? [];
-  const queries = order.map((n) => flow.queries.find((q) => q.name === n)!);
-  const sourceErrors:string[]=[];
-  for(const query of queries.filter(q=>q.source)){
-    try{
-      const ref=await load(query.source!);if(!ref?.query)throw new Error('Dataset source is unavailable');
-      const params={...Object.fromEntries(flow.values.filter(v=>v.kind==='scalar').map(v=>[v.name,v.default])),_me:null};
-      tables[query.name]={columns:(await ref.query(query.sql,params,paramTypes)).columns};
-    }catch(error){sourceErrors.push(`<Query name="${query.name}">: ${error instanceof Error?error.message:'Dataset query failed'}`);}
-  }
-  const dry = await dryRunQueries({ tables, queries:queries.filter(q=>!q.source), paramNames,paramTypes });
-  const details = [...sourceErrors,...dry.errors.map((e) => `<Query name="${e.name}">: ${e.error}`)];
-  const columns = { ...Object.fromEntries(Object.entries(tables).map(([n, t]) => [n, t.columns])), ...dry.columns };
-  const scoped = analyzeRowScopes(body, columns);
-  details.push(...scoped.errors);
-  const rowSchemas: Record<string, DatasetColumn[]> = {};
-  for (const name of Object.keys(scoped.mutationTables)) {
-    const mutation = mutations.find((m) => m.name === name);
-    if (mutation && !mutationUsesRow(mutation.sql)) details.push(`Row run="$${name}" requires a row mutation using $_row or $_value`);
-  }
-  for (const mutation of mutations) {
-    if (scoped.actionMutations.has(mutation.name) && mutationUsesValue(mutation.sql)) details.push(`row action "${mutation.name}" cannot use $_value; use $_row fields or declared Values`);
-    if (!mutationUsesRow(mutation.sql)) continue;
-    const names = scoped.mutationTables[mutation.name] ?? [];
-    const shapes = names.map((n) => columns[n]).filter((c): c is DatasetColumn[] => !!c);
-    if (!shapes.length) details.push(`row mutation "${mutation.name}" must be invoked inside a DataTable Column or keyed For`);
-    else if (shapes.some((s) => JSON.stringify(s) !== JSON.stringify(shapes[0]))) details.push(`row mutation "${mutation.name}" has incompatible table scopes`);
-    else rowSchemas[mutation.name] = shapes[0];
-  }
-  // A cell editor's `$_value` is typed by the column it sits in — the one parameter whose type is
-  // not a declared Value's. Typed here it is planned as that column, at publish and at the click.
-  const valueTypes: Record<string, DatasetColumn['type']> = {};
-  for (const [name, col] of Object.entries(scoped.cellColumns)) {
-    const type = rowSchemas[name]?.find((c) => c.name === col)?.type;
-    if (type) valueTypes[name] = type;
-  }
-  const typesFor = (name: string) => valueTypes[name] ? { ...paramTypes, _value: valueTypes[name] } : paramTypes;
-  // Every <Mutation> prepares and executes against its (empty) target too —
-  // a non-DML statement or an unknown column is a publish error, never a
-  // button that fails on its first click.
-  if (mutations.length) {
-    const groups=mutations.some(m=>m.source)?mutations.map(m=>[m]):[mutations];
-    const policed:PolicedMutation[]=[];
-    for(const group of groups){
-      const inputTables={...tables};const prepared=[];
-      for(const m of group){
-        let sql=m.sql;
-        if(m.source){try{const ref=await load(m.source);if(!ref?.catalog)throw new Error('Dataset source is unavailable');const compiled=compileStoredMutation(ref.catalog,sql,'dataset_rows');sql=compiled.sql;inputTables.dataset_rows={columns:compiled.table.columns};
-          if(ref.datasetPolicy){
-            const policy=viewerMutationPolicy(ref.datasetPolicy,compiled.table,placeholderSession(ref.datasetPolicy));
-            if(!policy)throw new Error(`Dataset policy: no policy permits writes to ${compiled.table.schema}.${compiled.table.name}`);
-            // A row action with no row to bind has ALREADY been named above ("must be invoked inside…").
-            // Planning `$_row.id` with no struct behind it only adds the engine's own crash text to that answer.
-            if(!mutationUsesRow(m.sql)||rowSchemas[m.name])policed.push({name:m.name,sql,columns:compiled.table.columns,policy,paramTypes:typesFor(m.name),...(rowSchemas[m.name]?{row:rowSchemas[m.name]}:{})});
-          }
-        }catch(error){details.push(`<Mutation name="${m.name}">: ${error instanceof Error?error.message:'Invalid mutation'}`);continue;}}
-        prepared.push({...m,sql,tableName: m.scope === 'local' ? m.target : 'dataset_rows',...(valueTypes[m.name]?{paramTypes:{_value:valueTypes[m.name]}}:{}),...(rowSchemas[m.name]?{row:{columns:rowSchemas[m.name]}}:{})});
-      }
-      if(prepared.length){const wet=await dryRunMutations({tables:inputTables,mutations:prepared,paramNames:[...paramNames,'_value','_me'],paramTypes});details.push(...wet.errors.map(e=>`<Mutation name="${e.name}">: ${e.error}`));}
-    }
-    details.push(...await policyRefusals(policed,[...paramNames,'_value']));
-  }
-  if (details.length) return { kind: 'sql', details };
-  return { kind: 'ok', columns, rowSchemas, valueTypes };
-}
-
-interface PolicedMutation {
-  name: string;
-  sql: string;
-  columns: DatasetColumn[];
-  policy: DatasetMutationPolicy;
-  /** The shape of `$_row` where the button sits inside a row scope. */
-  row?: DatasetColumn[];
-  /** Declared types, with `_value` typed by the edited column where there is one. */
-  paramTypes: Record<string, DatasetColumn['type']>;
+  return { ok: true, refs: checked.refs, compiled: compiled.compiled };
 }
 
 /**
- * THE CLICK'S OWN ANALYSIS, AT THE DOOR. A `<Mutation>` against a dataset that
- * carries a data policy is analyzed here with the same engine and the same
- * policy a click uses, and — this is what makes it predictive — under the same
- * TYPING: each scalar is a NULL placeholder of its DECLARED type, `$_row` a
- * typed struct of the row scope's columns. The bindings are still empty, so
- * this is not "exactly the write door" (a value-dependent refusal cannot be
- * seen from here), but a type clash is, because the plan no longer depends on
- * what a reader happens to have typed. `coalesce($due, current_date)` on a
- * `date` Value analyzed as VARCHAR is the publisher's 400 naming the mutation,
- * not a 403 for every viewer who picks a date.
- *
- * `_value` has no declared type here (the edited cell's column is not tracked
- * per mutation), so it keeps the engine's value-based inference.
- *
- * Analysis ONLY (`policyPreview`): nothing is written, and the target table is
- * empty, so this costs one throwaway instance per policed mutation.
+ * Every mutation that writes a dataset: the publisher may write it (refs
+ * `writeRefusal`), and — where it carries a data policy — the policy admits
+ * the statement. That second half is THE CLICK'S OWN ANALYSIS, AT THE DOOR:
+ * the same engine and policy a click uses, under the same declared typing
+ * (each argument and built-in a NULL of its type), analysis only
+ * (`policyPreview`) against the empty table. A value-dependent refusal cannot
+ * be seen from here; a statement the policy never admits is the publisher's
+ * 400, not every viewer's 403.
  */
-async function policyRefusals(mutations: PolicedMutation[], paramNames: string[]): Promise<string[]> {
+async function admitWrites(flow: CompiledDataflow, load: RefLoader): Promise<{ refs: string[]; sql: string[] }> {
+  const refs: string[] = [];
   const out: string[] = [];
-  const params = Object.fromEntries(paramNames.map((n) => [n, null]));
-  for (const m of mutations) {
+  const types = valueTypes(flow);
+  for (const m of flow.mutations) {
+    if (!('import' in m.target)) continue;
+    const r = await load(importRef(flow, m.target.import) ?? '');
+    const refusal = r ? writeRefusal(r) : 'the dataset does not resolve';
+    if (refusal) { refs.push(`<Mutation name="${m.name}">: ${refusal}`); continue; }
+    if (!r?.datasetPolicy || !r.catalog) continue;
+    const table = importedTables(r.catalog).find((t) => t.name === (m.target as { table: string }).table);
+    if (!table) { out.push(`<Mutation name="${m.name}">: the dataset has no stored table ${m.target.table}`); continue; }
+    const policy = viewerMutationPolicy(r.datasetPolicy, table, placeholderSession(r.datasetPolicy));
+    if (!policy) { out.push(`<Mutation name="${m.name}">: Dataset policy: no policy permits writes to ${table.schema}.${table.name}`); continue; }
+    const params = mutationParams(m);
     const result = await runMutation({
-      table: { name: 'dataset_rows', rows: [], columns: m.columns },
-      sql: m.sql,
-      params,
-      paramTypes: m.paramTypes,
-      policy: m.policy,
-      policyPreview: true,
-      ...(m.row ? { row: { columns: m.row, values: {} } } : {}),
+      table: { schema: m.target.import, name: table.name, rows: [], columns: table.columns }, sql: m.sql, reads: mutationReads(flow, m, {}),
+      params: bindParams(params, {}), paramTypes: bindTypes(params, { ...types, ...Object.fromEntries(m.args.map((a) => [a.name, a.type])) }),
+      policy, policyPreview: true,
     });
     if (isQueryFailure(result)) out.push(`<Mutation name="${m.name}">: ${result.error}`);
   }
-  return out;
+  return { refs, sql: out };
 }
 
 /** The message Vega-Lite's normaliser throws for a spec it cannot read, or null for one it can read. */
@@ -181,7 +112,7 @@ export function vegaLiteStructureError(spec: Record<string, unknown>): string | 
 }
 
 /** Every `<Question data="$q" viz>` checked against q's result columns (encodings, or recipe slots). */
-async function validateQueryBindings(body: JsxNode[], columns: Record<string, DatasetColumn[]>, load: RefLoader): Promise<string[]> {
+async function validateQueryBindings(body: JsxNode[], columns: Record<string, BoundColumn[]>, load: RefLoader): Promise<string[]> {
   const out: string[] = [];
   const questions: Array<{ name: string; viz: Record<string, unknown> }> = [];
   const visit = (nodes: JsxNode[]) => {

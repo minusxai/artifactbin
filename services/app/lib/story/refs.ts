@@ -16,7 +16,7 @@ import {REFERENCE_POSITIONS} from './reference-positions';
 import { urlListUrls } from '@/lib/jsx/url-attrs';
 import { videoEmbedUrl } from '@/lib/story-ui/video-embed';
 import { collectFieldRefs, collectDerivedFieldNames, hasUnverifiableTransform } from '@/lib/viz/field-refs';
-import { MUTATION_TAG, QUERY_TAG, carriesRef, parseMutationDecl, parseQueryDecl, refName } from './dataflow';
+import { IMPORT_TAG, QUERY_TAG, carriesRef, parseImportDecl, parseQueryDecl, refName } from './dataflow';
 import type { DatasetColumn } from './data-tiers';
 import type { VizRecipeBinding, VizRecipeContent } from '@/lib/validation/atlas-schemas';
 import { isNumberFormat, NUMBER_FORMAT_HINT } from './number-format';
@@ -27,13 +27,8 @@ import {parseRowRef} from './row-scope';
 interface RefUse {
   id: string;
   kind: 'dataset' | 'viz' | 'image' | 'pdf' | 'file' | 'asset';
-  /** A `<Query>`/`<Mutation>` reaching its dataset through `source="ref:<id>"`, not a rendered position. */
+  /** A dataset reached through SQL — an `<Import src="ref:<id>">` or a connected database's `<Query source="ref:<id>">` — not a rendered position. */
   via?: 'sql';
-  /**
-   * The use WRITES the dataset (a `<Mutation>` target). Reads resolve by the
-   * link-readable rule; a write needs the target OWNED and `readwrite`.
-   */
-  write?: boolean;
   /** For recipe binding validation: the viz envelope + `data` ref carried by the same element. */
   element?: { viz?: Record<string, unknown> | null; dataRef?: string | null };
 }
@@ -97,20 +92,20 @@ export function collectRefUses(source: string): RefUse[] | null {
   const uses: RefUse[] = [];
   walk(parsed.nodes, (el) => {
     const tag = el.tag;
-    // A <Query> names its dataset with `source="ref:<id>"`
+    // An <Import> names the dataset (or folder) its tables are read from, and
+    // a <Query source=…> the connected database it runs inside
     // (lib/story/dataflow.ts). Real refs: they resolve through the loader like
     // any other and land in meta.refs (dependents warnings), but their rows go
-    // through the engine, never onto the page.
-    if (el.isComponent && tag === QUERY_TAG) {
-      const q = parseQueryDecl(el);
-      if (q.ok) for (const id of q.decl.refs) uses.push({ id, kind: 'dataset', via: 'sql' });
+    // through the engine, never onto the page. Which of them a <Mutation>
+    // WRITES is the compiler's to say (lib/story/data-checks `writeRefusal`).
+    if (el.isComponent && tag === IMPORT_TAG) {
+      const i = parseImportDecl(el);
+      if (i.ok) uses.push({ id: i.decl.ref, kind: 'dataset', via: 'sql' });
       return;
     }
-    // A <Mutation> WRITES its one dataset: the same ref (ownership, dependents,
-    // meta.refs) with the stricter admission below.
-    if (el.isComponent && tag === MUTATION_TAG) {
-      const m = parseMutationDecl(el);
-      if (m.ok && m.decl.scope !== 'local') uses.push({ id: m.decl.target, kind: 'dataset', via: 'sql', write: true });
+    if (el.isComponent && tag === QUERY_TAG) {
+      const q = parseQueryDecl(el);
+      if (q.ok && q.decl.source) uses.push({ id: q.decl.source, kind: 'dataset', via: 'sql' });
       return;
     }
     if (!el.isComponent && tag.toLowerCase() === 'meta' && attrValue(el, 'name') === 'artifactbin:og-image') {
@@ -234,16 +229,30 @@ export function findExternalSubresources(source: string): ValidationError[] {
 }
 
 /**
- * A FOLDER READS AS A DATASET, and only in a read position. Its children are a
- * table the dataflow registers under the same `ref_<id>` name, so a <Query>
- * naming one is admitted exactly as a dataset is; the WRITE branch below
- * refuses it separately, because a listing is computed and there is nothing
- * there to write.
+ * A FOLDER READS AS A DATASET, and only in a read position: an `<Import>` of
+ * one reads its children as `<name>.rows`, and a <Mutation> that writes it is
+ * refused (a listing is computed; there is nothing there to write).
  */
 const KIND_FOR_FORMAT: Record<string, RefUse['kind']> = { dataset: 'dataset', viz: 'viz', image: 'image', pdf: 'pdf', file:'file', folder: 'dataset' };
 
 const colKind = (t: DatasetColumn['type']): 'quantitative' | 'temporal' | 'nominal' =>
   t === 'number' ? 'quantitative' : (t === 'date' || t === 'timestamp') ? 'temporal' : 'nominal';
+
+/**
+ * A WRITE is admitted narrower than a read, twice over. The dataset must be
+ * the publisher's OWN — the link-readable fallback exists so a document can
+ * chart any public dataset, and nothing about "public" says "anyone may append
+ * rows to it" — and its owner must have opened it for writes (or its data
+ * policy admits the writer). Both refusals name the fix; neither is an
+ * existence oracle (the row was already admitted for reading).
+ */
+export function writeRefusal(r: ResolvedRef): string | null {
+  const notYours = `ref:${r.id} is not yours to write — a <Mutation> may only write a dataset you own (read it with a <Query> instead, or publish your own copy)`;
+  if (r.format === 'folder') return notYours;
+  if (!r.owned && r.datasetPolicy?.version !== 2) return notYours;
+  if (r.access !== 'readwrite' && r.datasetPolicy?.version !== 2) return `ref:${r.id} is read-only — a <Mutation> needs a writable dataset: publish it with afbin push <file> --type dataset --access readwrite (API: set access on create or PUT, PATCH /api/my/artifacts/${r.id} { "access": "readwrite" }, or use the dataset's share menu)`;
+  return null;
+}
 
 /**
  * Resolve + validate every ref. Returns the deduped ref list for meta.refs, or
@@ -268,30 +277,6 @@ export async function validateRefs(source: string, load: RefLoader): Promise<
     if (use.kind==='asset'?!['file','image','pdf'].includes(r.format):kind!==use.kind) {
       details.push(`ref:${use.id} is a ${r.format ?? 'unknown'} artifact — this position needs a ${use.kind}`);
       continue;
-    }
-    // A WRITE is admitted narrower than a read, twice over. The dataset must
-    // be the publisher's OWN — the link-readable fallback exists so a document
-    // can chart any public dataset, and nothing about "public" says "anyone
-    // may append rows to it" — and its owner must have opened it for writes.
-    // Both refusals name the fix; neither is an existence oracle (the row was
-    // already admitted for reading by the rule above).
-    if (use.write) {
-      // A folder's children are COMPUTED, per viewer, from the artifacts table
-      // — there is no stored table under it for a statement to change. Same
-      // message as a foreign dataset on purpose: the fix is the same one, a
-      // dataset of your own.
-      if (r.format === 'folder') {
-        details.push(`ref:${use.id} is not yours to write — a <Mutation> may only write a dataset you own (read it with a <Query> instead, or publish your own copy)`);
-        continue;
-      }
-      if (!r.owned && r.datasetPolicy?.version!==2) {
-        details.push(`ref:${use.id} is not yours to write — a <Mutation> may only write a dataset you own (read it with a <Query> instead, or publish your own copy)`);
-        continue;
-      }
-      if (r.access !== 'readwrite' && r.datasetPolicy?.version!==2) {
-        details.push(`ref:${use.id} is read-only — a <Mutation> needs a writable dataset: publish it with afbin push <file> --type dataset --access readwrite (API: set access on create or PUT, PATCH /api/my/artifacts/${use.id} { "access": "readwrite" }, or use the dataset's share menu)`);
-        continue;
-      }
     }
   }
   // Recipe slot checks: every declared slot bound. Column checks against the
@@ -320,7 +305,7 @@ export async function validateRefs(source: string, load: RefLoader): Promise<
  * chart bound to `data="$sales"` is checked against what `sales` really
  * yields).
  */
-export function validateVizAgainstColumns(viz: Record<string, unknown>, columns: DatasetColumn[], label: string): string[] {
+export function validateVizAgainstColumns(viz: Record<string, unknown>, columns: ReadonlyArray<Pick<DatasetColumn, 'name'>>, label: string): string[] {
   const kind = viz.kind;
   if (kind !== 'vega-lite' && kind !== 'vega') return [];
   const spec = viz.spec as Record<string, unknown> | undefined;
@@ -336,15 +321,19 @@ export function validateVizAgainstColumns(viz: Record<string, unknown>, columns:
   return out;
 }
 
+/** A result column as a binding check reads it: its type null when the compiler cannot tell it. */
+export type BoundColumn = Pick<DatasetColumn, 'name'> & { type: DatasetColumn['type'] | null };
+
 /**
- * recipe use: every declared slot bound; bound columns exist + match accepts.
+ * recipe use: every declared slot bound; bound columns exist + match accepts
+ * (a column of unknown type — no sample row reached it — is not judged by type).
  * `recipeLabel` names the recipe in diagnostics — `ref:<id>` for a viz
  * artifact, the registry id (`minusx/trend@1`) for a shipped recipe.
  */
 export function validateRecipeUse(
   viz: Record<string, unknown>,
   recipe: Pick<VizRecipeContent, 'bindings'>,
-  columns: DatasetColumn[] | null,
+  columns: readonly BoundColumn[] | null,
   recipeLabel: string,
 ): string[] {
   const out: string[] = [];
@@ -371,7 +360,7 @@ export function validateRecipeUse(
       const col = columns.find((x) => x.name === c);
       if (!col) {
         out.push(`recipe ${recipeLabel} slot "${slot.name}" binds "${c}" — not a dataset column (columns: ${columns.map((x) => x.name).join(', ')})`);
-      } else if (!slot.accepts.includes(colKind(col.type))) {
+      } else if (col.type !== null && !slot.accepts.includes(colKind(col.type))) {
         out.push(`recipe ${recipeLabel} slot "${slot.name}" accepts ${slot.accepts.join('|')} but "${c}" is ${colKind(col.type)} — change the query so "${c}" is ${slot.accepts.join(' or ')} (a cast such as cast("${c}" as text), or an aggregate), or bind another column`);
       }
     }
@@ -404,7 +393,7 @@ const EMBED_DATA_PROP: Record<string, { required: string; usage: string; table?:
   Question: { required: 'data', usage: 'Use data="$name" — a <Query> or table <Value> declared in <Helmet> — plus viz={{"kind":"vega-lite","spec":{…}}}', table: true },
   Number: { required: 'data', usage: 'Use data="$name" — a <Query> or table <Value> declared in <Helmet>', table: true },
   DataTable: { required: 'data', usage: 'Use data="$name" — a <Query> or table <Value> declared in <Helmet>', table: true },
-  Files: { required: 'data', usage: 'Use data="$name" — a <Query> over a folder\'s children (source="ref:<folderId>", select * from public.rows)', table: true },
+  Files: { required: 'data', usage: 'Use data="$name" — a <Query> over a folder\'s children (<Import name="files" src="ref:<folderId>" />, select * from files.rows)', table: true },
   Video: { required: 'src', usage: 'Use src="<YouTube/Vimeo/Loom link>" (+ optionally poster="ref:<image id>" for the thumbnail)' },
   File: { required: 'src', usage: 'Use src="ref:<pdf id>" — the id create_artifact returned for a pdf — or src="<public https link to a .pdf>" (+ optionally title="…")' },
 };
@@ -504,7 +493,7 @@ export function findBrokenEmbeds(source: string): ValidationError[] {
       errors.push({
         message: `<${el.tag} data=${got.length > 40 ? got.slice(0, 40) + '…' : got}> does not name a declared table. ${rule.usage}` +
           (typeof json === 'string' && json.startsWith('ref:')
-            ? ` — a dataset is read through SQL: <Query name="rows" source="${json}">{\`select * from public.rows\`}</Query>, then data="$rows".`
+            ? ` — a dataset is read through SQL: <Import name="data" src="${json}" /><Query name="rows">{\`select * from data.rows\`}</Query>, then data="$rows".`
             : '.'),
         tag: el.tag, attr: attr.name, start: attr.start, end: attr.end,
       });

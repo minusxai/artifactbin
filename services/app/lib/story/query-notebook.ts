@@ -14,6 +14,7 @@ import { parseJsx, serializeJsx, type JsxElement, type JsxNode } from '@/lib/jsx
 import { HELMET_TAG, splitHelmet } from './helmet';
 import { helmetOffset } from './edit-compose';
 import { QUERY_TAG, refName, type DataflowState, type QueryDecl, type TableResult } from './dataflow';
+import type { CompiledDataflow } from './compiled-dataflow';
 
 /** A body element that reads a declared table: `data="$name"` on an embed, `options="$name"` on a control. */
 export interface BoundEmbed {
@@ -28,10 +29,8 @@ export interface QueryCell {
   /** The declared name (`data="$name"` binds it). */
   name: string;
   sql: string;
-  /** The dataset artifact id the declaration's `source="ref:<id>"` names, if any. */
+  /** The artifact the query reads: its connected database (`source="ref:<id>"`) or the import it reads, if known. */
   source: string | null;
-  /** `$name` parameters the SQL mentions. */
-  params: string[];
   /** The last run's rows — null until a run has answered, or when it refused. */
   result: TableResult | null;
   /** The engine's message when the last run refused this query. */
@@ -74,11 +73,21 @@ function boundByName(nodes: JsxNode[]): Map<string, BoundEmbed[]> {
   return out;
 }
 
-const cellOf = (q: QueryDecl, state: DataflowState | null | undefined, pending: boolean, bound: BoundEmbed[]): QueryCell => ({
+/**
+ * The artifact a query reads from: the connected database it runs inside, or
+ * the first import its compiled record says it reads (what it reads is the
+ * compiler's answer — the notebook never reads SQL). Null before a compile.
+ */
+const sourceOf = (q: QueryDecl, compiled: CompiledDataflow | null | undefined): string | null => {
+  if (q.source) return q.source;
+  const first = compiled?.queries.find((c) => c.name === q.name)?.reads.imports[0];
+  return first ? compiled!.imports.find((i) => i.name === first)?.ref ?? null : null;
+};
+
+const cellOf = (q: QueryDecl, state: DataflowState | null | undefined, pending: boolean, bound: BoundEmbed[], compiled: CompiledDataflow | null | undefined): QueryCell => ({
   name: q.name,
   sql: q.sql,
-  source: q.source ?? null,
-  params: q.params,
+  source: sourceOf(q, compiled),
   result: state?.tables[q.name] ?? null,
   error: state?.errors?.[q.name] ?? null,
   pending,
@@ -86,11 +95,11 @@ const cellOf = (q: QueryDecl, state: DataflowState | null | undefined, pending: 
 });
 
 /** The document's `<Query>` declarations in authored order, each with its last-run state and what reads it. */
-export function queryCells(source: string, state: DataflowState | null | undefined, pending = false): QueryCell[] {
+export function queryCells(source: string, state: DataflowState | null | undefined, pending = false, compiled?: CompiledDataflow | null): QueryCell[] {
   const parsed = parseJsx(source);
   if (!parsed.ok) return [];
   const bound = boundByName(parsed.nodes);
-  return splitHelmet(parsed.nodes).content.queries.map((q) => cellOf(q, state, pending, bound.get(q.name) ?? []));
+  return splitHelmet(parsed.nodes).content.queries.map((q) => cellOf(q, state, pending, bound.get(q.name) ?? [], compiled));
 }
 
 /** The `<Query name>` element among the Helmet's children, where declarations live. */

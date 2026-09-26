@@ -61,7 +61,7 @@ describe('<Value url={false}>', () => {
 });
 
 describe('<Mutation reset="…">', () => {
-  const mutation = (attrs: string) => parseMutationDecl(el(`<Mutation name="add" source="ref:abc123" ${attrs}>{\`insert into public.rows (d) values ($draft)\`}</Mutation>`));
+  const mutation = (attrs: string) => parseMutationDecl(el(`<Mutation name="add" ${attrs}>{\`insert into add_data.rows (d) values ($draft)\`}</Mutation>`));
 
   it('parses the names to clear after a successful write', () => {
     const r = mutation('reset="draft amount"');
@@ -86,6 +86,7 @@ describe('<Mutation reset="…">', () => {
       return parsed.decl;
     };
     const flow = (reset: string): Dataflow => ({
+      imports: [],
       values: [
         { kind: 'scalar', name: 'draft', type: 'string', default: null, start: 0, end: 0 },
         { kind: 'table', name: 'rows', rows: [{ a: 1 }], columns: [{ name: 'a', type: 'number' }], start: 0, end: 0 },

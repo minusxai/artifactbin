@@ -11,7 +11,7 @@ import type { QueryCell } from '@/lib/story/query-notebook';
 import { httpBackendWrapper } from '@/test/helpers/artifact-backend';
 
 const cell = (over: Partial<QueryCell> = {}): QueryCell => ({
-  name: 'sales', sql: 'select region, revenue from "public"."rows"', source: 'ds1234', params: [],
+  name: 'sales', sql: 'select region, revenue from sales_data.rows', source: null,
   result: null, error: null, pending: false, bound: [], ...over,
 });
 const ROWS = Array.from({ length: 12 }, (_, i) => ({ region: `r${i}`, revenue: i * 10 }));
@@ -26,7 +26,7 @@ const sqlField = (name: string) => screen.getByLabelText(`Query $${name} SQL`) a
 describe('reading the cells', () => {
   it('shows each query by name with its SQL and source', () => {
     panel([cell(), cell({ name: 'costs', sql: 'select 1 as spend', source: null })]);
-    expect(sqlField('sales').value).toBe('select region, revenue from "public"."rows"');
+    expect(sqlField('sales').value).toBe('select region, revenue from sales_data.rows');
     expect(sqlField('costs').value).toBe('select 1 as spend');
     const sales = screen.getByLabelText('Query $sales');
     // The source is no longer repeated on every cell: the index groups each

@@ -6,7 +6,8 @@ An agent sends `markup` — there is no second document tier:
 |---|---|
 | Components | The kit — `<Card>`, `<Slide>`, `<Question>`, `<Grid>`, … + Tailwind classes |
 | HTML | Ordinary tags for everything else, prose included (`<h1>`, `<p>`, `<table>`, inline SVG) |
-| `<Helmet>` | At most one per document: `<title>`, one `<style>`, one `<script>`, `<meta name content>` |
+| `<Helmet>` | At most one per document: `<title>`, one `<style>`, one `<script>`, `<meta name content>`, and the data |
+| Data | In `<Helmet>`: `<Import>` a dataset, `<Value>` page values, `<Query>` in SQLite, `<Mutation>` writes. The body binds them by name: `data="$q"`, `value="$v"`, `run="$m"`, `set={{…}}` |
 | Files | `<img src>` and `<Video poster>` take an upload (`ref:<id>`) or any `https` URL; `<File src>` links a PDF as a card |
 
 A document is SERVED as its own page at `/a/<id>/raw` — server-rendered,

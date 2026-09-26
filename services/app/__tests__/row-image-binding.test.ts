@@ -17,7 +17,7 @@ const create=async(token:string,body:Record<string,unknown>)=>{
  const response=await publish(request('/api/artifacts',{method:'POST',token,json:body}));
  const result=await response.json();expect(response.status,JSON.stringify(result)).toBe(201);return result as {id:string};
 };
-const markup=(dataset:string)=>`<Helmet><Query name="books" source="ref:${dataset}">{\`select * from public.rows order by position\`}</Query></Helmet><For each={$books} keyBy="id"><article><img src="$_row.cover_ref" alt="$_row.title" loading="lazy" width={180} height={240}/><h2>{$_row.title}</h2></article></For>`;
+const markup=(dataset:string)=>`<Helmet><Import name="books_data" src="ref:${dataset}" /><Query name="books">{\`select * from books_data.rows order by position\`}</Query></Helmet><For each={$books} keyBy="id"><article><img src="$_row.cover_ref" alt="$_row.title" loading="lazy" width={180} height={240}/><h2>{$_row.title}</h2></article></For>`;
 async function fixture(){
  const token=await mintToken('row-images');
  const images=[];
@@ -52,7 +52,7 @@ describe('dataset image references',()=>{
  it('finds stored dataset and transitive document dependents without requiring a new column type',async()=>{
   const {token,images,dataset}=await fixture();
   // A literal-image control also reads the dataset, before row bindings are implemented.
-  const doc=await create(token.token,{markup:`<Helmet><Query name="books" source="ref:${dataset.id}">{\`select * from public.rows\`}</Query></Helmet><img src="ref:${images[0]!.id}"/>`});
+  const doc=await create(token.token,{markup:`<Helmet><Import name="books_data" src="ref:${dataset.id}" /><Query name="books">{\`select * from books_data.rows\`}</Query></Helmet><img src="ref:${images[0]!.id}"/>`});
   const deps=await findDependentsFor({tokenId:token.id,userId:null},images[1]!.id);
   expect(deps.map(row=>row.id).sort()).toEqual([dataset.id,doc.id].sort());
  });

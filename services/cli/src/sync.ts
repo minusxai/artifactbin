@@ -34,6 +34,11 @@ import {parseResourceFile,readResourceSource,reconcileResource,resourceContent,s
  * page's buttons make. The server refuses a policy on a content write, so a policy a create needs
  * rides a second request inside the same command (`plan.policy`), never a second command.
  */
+/**
+ * A dataset pushed without --access or --policy carries the default version 2 policy, and the server
+ * never replaces a version 2 policy with a version 1 grant such as viewers-write.
+ */
+const VERSION_2_FIX='A dataset pushed without --access or --policy keeps its default version 2 policy, which this flag cannot replace: put --policy viewers-write on the first push of a new dataset, or grant writes in this dataset\'s YAML policy (afbin help apps).';
 interface PushOptions {force?:boolean;dryRun?:boolean;access?:'read'|'readwrite';policy?:'viewers-write'|'none'}
 interface PushPlan {warnings?:DocumentAssetWarning[];authoringBase?:Snapshot;confirmed?:Snapshot;source?:ResourceSource;reconcile?:boolean;file:LocalFile;body:Record<string,unknown>;mode:'create'|'edit'|'metadata'|'replace'|'none'|'missing';id?:string;policy?:DatasetPolicy|null;policyName?:string}
 const fieldMap:Record<string,string>={link:'linkRole',folder:'parent_id'};
@@ -94,6 +99,7 @@ export async function planPush(workspace:Workspace,paths?:string[],options:PushO
    if(!datasetFile&&paths?.length)throw new CliError('unsupported_access',`--access and --policy set a dataset's row writes; ${file.path} is not a dataset.`,'Push the CSV or JSON rows with the flag, or drop it.');
    if(datasetFile)accessible=true;
    if(resource?.type==='dataset'&&resource.access!==undefined&&options.access!==undefined&&resource.access!==options.access)throw new CliError('access_mismatch',`--access ${options.access} disagrees with ${file.path}, which declares access: ${resource.access}.`,'Name the same access in both, or drop the flag and let the file decide.');
+   if(resource?.type==='dataset'&&resource.access==='read'&&options.policy==='viewers-write')throw new CliError('access_mismatch',`--policy viewers-write needs a writable dataset, and ${file.path} declares access: read.`,VERSION_2_FIX);
   }
   const access=datasetFile?(resource?.type==='dataset'?resource.access??requestedAccess:requestedAccess):undefined;
   // `undefined` means the flag said nothing; `null` is the flag asking for no policy at all.
@@ -208,7 +214,9 @@ async function reconcileMixed(plan:PushPlan,client:HttpClient,workspace?:Workspa
   const desired={...metadataInput(merged.resource),...(merged.resource.type==='dataset'&&merged.resource.access!==undefined?{access:merged.resource.access}:{})};
   const observed={...metadataInput(remote),...(remote.type==='dataset'&&remote.access!==undefined?{access:remote.access}:{})};
   const delta:Record<string,unknown>=Object.fromEntries(Object.entries(desired).filter(([key,value])=>!isDeepStrictEqual(value,observed[key as keyof typeof observed])));
-  if(merged.resource.type==='dataset'&&remote.type==='dataset'&&!isDeepStrictEqual(merged.resource.policy,remote.policy)){delta.policy=merged.resource.policy;delta.expectedPolicyRevision=remote.policy_revision;}
+  // The policy this push writes: the YAML's, or the --policy flag's, which the YAML does not carry.
+  const policy=Object.hasOwn(plan.body,'policy')?plan.body.policy as DatasetPolicy|null:merged.resource.type==='dataset'?merged.resource.policy:undefined;
+  if(merged.resource.type==='dataset'&&remote.type==='dataset'&&!isDeepStrictEqual(policy,remote.policy)){delta.policy=policy;delta.expectedPolicyRevision=remote.policy_revision;}
   if(plan.mode==='metadata')return Object.keys(delta).length?{...plan,body:{...delta,expectedState:head.state}}:{...plan,confirmed:head};
   const content=Object.fromEntries(Object.entries(plan.body).filter(([key])=>!['expectedState','expectedVersion','access','policy','expectedPolicyRevision',...metadataFields.map(field=>fieldMap[field]??field)].includes(key)));
   return {...plan,body:{...content,...delta,expectedState:head.state,expectedVersion:head.version}};
@@ -265,7 +273,10 @@ export async function push(workspace:Workspace,paths:string[],client:HttpClient,
    if(plan.policyName)operation.policy=plan.policyName;
   }
   return{operations};
-  }catch(error){
+  }catch(caught){
+   let error=caught;
+   if(error instanceof CliError&&error.code==='invalid_policy'&&options.policy==='viewers-write'&&/version 2/i.test(String((error.details as {detail?:unknown})?.detail??'')))
+    error=new CliError('invalid_policy','invalid_policy: this dataset has a version 2 policy, which --policy viewers-write cannot replace.',VERSION_2_FIX,error.details,error.exitCode);
    if(error instanceof CliError&&operations.length)throw new CliError(error.code,error.message,error.fix,{...(error.details&&typeof error.details==='object'&&!Array.isArray(error.details)?error.details:{}),completed_operations:operations},error.exitCode);
    throw error;
   }

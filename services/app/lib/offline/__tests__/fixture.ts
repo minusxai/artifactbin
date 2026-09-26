@@ -1,15 +1,14 @@
-import type { Dataflow } from '@/lib/story/dataflow';
+import { compiledOf } from '@/test/helpers/compiled';
 import { ARTIFACT_FILE_FORMAT, type ArtifactFile } from '../file-format';
 
 /** A dashboard with one filter (`region`, three options) feeding `sales`, and `regions` which reads no Value. */
-export const flow: Dataflow = {
-  values: [{ kind: 'scalar', name: 'region', type: 'string', default: null, start: 0, end: 0 }],
-  queries: [
-    { name: 'regions', sql: 'select distinct region from public.rows', params: [], refs: [], start: 0, end: 0 },
-    { name: 'sales', sql: 'select sum(revenue) as revenue from public.rows where $region is null or region = $region', params: ['region'], refs: [], start: 0, end: 0 },
-    { name: 'share', sql: 'select revenue / 10 as share from sales', params: [], refs: ['sales'], start: 0, end: 0 },
-  ],
-};
+export const flow = await compiledOf(''
+  + '<Import name="orders" src="ref:Ds1a2b" /><Value name="region" />'
+  + '<Query name="regions">{`select distinct region from orders.rows`}</Query>'
+  + '<Query name="sales">{`select sum(revenue) as revenue from orders.rows where $region is null or region = $region`}</Query>'
+  + '<Query name="share">{`select revenue / 10 as share from sales`}</Query>', {
+  Ds1a2b: [{ name: 'region', type: 'string' }, { name: 'revenue', type: 'number' }],
+});
 
 const t = (revenue: number) => ({ rows: [{ revenue }], columns: [{ name: 'revenue', type: 'number' as const }] });
 

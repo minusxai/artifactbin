@@ -3,9 +3,9 @@ import {fireEvent,screen,waitFor,act} from '@testing-library/react';
 import {render} from '@/test/helpers/surface-ui';
 import {setupSurface,surfaceProps} from '@/test/helpers/inline-surface';
 import ArtifactSurface from '../ArtifactSurface';
-import {declarationsOf} from '@/lib/artifacts';
+import {compiledSource} from '@/test/helpers/compiled';
 const source='<Helmet><Value name="region" type="string" default="north" /></Helmet><select aria-label="Region" value="$region"><option value="north">North</option><option value="west">West</option></select>';
-const flow=declarationsOf(source)!;
+const flow=await compiledSource(source);
 beforeEach(setupSurface);afterEach(()=>vi.unstubAllGlobals());
 const props=()=>surfaceProps({source,dataflow:{flow},search:window.location.search});
 it('seeds declared typed selections from the URL without exposing unrelated route params',async()=>{

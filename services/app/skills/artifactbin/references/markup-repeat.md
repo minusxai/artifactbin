@@ -57,8 +57,9 @@ string binding `src="$_row.cover_ref"` on a native `<img>`:
 
 ```jsx
 <Helmet>
-  <Query name="books" source="ref:DATASET_ID">{`
-    select id, title, cover_ref, has_photo from public.rows order by position
+  <Import name="shelf" src="ref:bks123" />
+  <Query name="books">{`
+    select id, title, cover_ref, has_photo from shelf.rows order by position
   `}</Query>
 </Helmet>
 <For each={$books} keyBy="id">
@@ -73,7 +74,7 @@ string binding `src="$_row.cover_ref"` on a native `<img>`:
 </For>
 ```
 
-Replace DATASET_ID with the uploaded dataset ID. A selected-book detail query
+Replace `bks123` with the uploaded dataset ID. A selected-book detail query
 can return one row and feed another `<For>` with the same image template.
 Filtering, sorting and refreshed rows update the image with the row. Keep
 `keyBy="id"` so the item retains its identity. Literal `src="ref:abc123"` still
@@ -146,7 +147,8 @@ reordering and temporary unmounting. The pending button is disabled; other
 rows remain usable. Failures appear beside the button; retry captures the
 current row. Existing mutation access checks and query refresh behavior apply.
 Captures and static previews disable actions. This example changes local
-reader state; declare a dataset-backed Mutation to persist shared changes.
+reader state; a Mutation that writes an imported table (`update tasks.rows …`)
+persists shared changes.
 
 The CLI cannot run a mutation that binds `$_row` or `$_value`; press it in a
 live session. `afbin query <dataset> --write --input change.sql` works only

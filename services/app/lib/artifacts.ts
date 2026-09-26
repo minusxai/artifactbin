@@ -14,8 +14,7 @@ import {storedMediaReferences} from './datasets/media-references';
 import {claimArtifactId,reserveArtifactIds} from './artifact-identities';
 import {collectRefUses} from '@/lib/story/refs';
 import {hasDocumentEditorAccess,type VerifiedAccount} from './document-policy';
-import {isQueryFailure} from '@artifactbin/contracts';
-import {resolveUserValues} from '@/lib/story/user-values';
+import {isQueryFailure, type PersonCard} from '@artifactbin/contracts';
 import type {DataflowState} from '@/lib/story/dataflow';
 import {parseDatasetDefinition,serializeDatasetDefinition} from '@/lib/datasets/definition';
 import {validateUserContent,validateUserWrites,userOptions,people,retainUserScope,resolveUserColumnScope} from '@/lib/datasets/user-fields';
@@ -49,7 +48,7 @@ import { trackEvent } from './analytics';
 import { sourceWithoutAnchors } from './annotation-anchors';
 import { ALLOW_PUBLIC_VISIBILITY, ARTIFACT_QUOTA_PER_TOKEN } from './config';
 import { assetByteQuotaExceeded } from './asset-quota';
-import { getDb, type Queryable } from './db';
+import { getDb, type Db, type Queryable } from './db';
 import type {DatasetAccessPolicy as DatasetPolicy} from '@artifactbin/contracts';
 import {defaultDatasetGrants,remapDatasetGrants,parseDatasetAccessPolicy} from '@artifactbin/utils';
 import {validateDatasetPolicyForRow} from './datasets/policy/validation';
@@ -66,20 +65,29 @@ import { loadDatasetRows } from './story/dataset-store';
 import {newEditId} from './story/splice';
 import type {StringEdit} from './story/edit-batch';
 import { nodeIndex, stampNodeIds } from './story/node-ids';
-import { finalizeArtifactMetadata, readParsedArtifactMetadata } from './story/parsed-artifact-metadata';
-import { parseJsx } from '@/lib/jsx';
-import { splitHelmet } from '@/lib/story/helmet';
-import { datasetRefsInDataflow, initialValues, isEmptyDataflow, mutationTargets, scalarMatches, scalarParamTypes, selectedQueries, type Dataflow, type Row, type Scalar } from '@/lib/story/dataflow';
-import { dryRunDataflow } from '@/lib/story/data-checks';
-import { analyzeRowScopes, mutationUsesRow, mutationUsesValue } from '@/lib/story/row-scope';
-import { compileStoredMutation } from '@/lib/datasets/stored-mutation';
+import { COMPILED_DATAFLOW, finalizeArtifactMetadata, readCompiledDataflow, storedCompiledDataflow } from './story/parsed-artifact-metadata';
+import { DATA_SYNTAX_META, hasCurrentDataSyntax, PREVIOUS_ENGINE, previousEngineRestore } from './story/data-syntax';
+import { inCurrentSyntax } from './migrate/sqlite/stored';
+import { convertArtifactNow } from './sqlite-syntax-migration';
+import { EMPTY_DATAFLOW, isEmptyDataflow, type QueryDecl, type Row, type Scalar } from '@/lib/story/dataflow';
+import { EMPTY_COMPILED_DATAFLOW, type CompiledDataflow, type CompiledMutation } from '@/lib/story/compiled-dataflow';
+import { compileWithLoader, type CompileResult } from '@/lib/story/compile-dataflow';
+import { declarationsOf } from '@/lib/story/helmet';
+import type { ValidationError } from '@/lib/jsx';
+import { bindParams, bindTypes, dataRefs, importRef, initialTables, initialValues, mutationParams, mutationReads, mutationTargetRef, selectQueries, type ImportTables } from '@/lib/story/compiled-flow';
+import { bindMutationRequest } from '@/lib/story/mutation-request';
+import { HOLD_MAX_BYTES, HOLD_MAX_ROWS } from '@/lib/story/placement';
+import { readerZone, VIEWER, VIEWER_ID } from '@/lib/story/builtins';
+import type { MutationRequest } from '@/lib/story/mutation-request';
+import { schemaLoaderFor } from '@/lib/story/data-checks';
 import { canUseDataPolicy, mutationPolicy } from '@/lib/datasets/policy';
 import { isMutationRefused, mutateDataset } from '@/lib/story/dataset-mutate';
-import { runDataflow, type DatasetTables } from '@/lib/sql/run-dataflow';
-import { queryRows } from '@/lib/datasets/query-rows';
+import { runDataflow } from '@/lib/sql/run-dataflow';
 import { runMutation } from '@/lib/sql/engine';
 import { runLocalStateMutation, type LocalMutationResult } from '@/lib/story/local-state';
 import { localTableOverrides } from '@/lib/story/local-tables';
+import { importedRows, importedTables } from '@/lib/datasets/catalog';
+import { storedRowStats } from '@/lib/story/dataset-store';
 import { ancestorsForMove, childrenTableFor, CHILDREN_COLUMNS, notifyParent, parentOf } from '@/lib/folders';
 import type { RanDataflow, StoryIslandDataflow, StoryViewer } from '@/lib/story-runtime/contract';
 import type { RefLoader, ResolvedRef } from '@/lib/story/refs';
@@ -124,6 +132,12 @@ export { SHARE_ROLES, type ArtifactRole, type ShareEntry, type ShareRole } from 
 export interface ArtifactRow {
   document?:StoredDocument|null;
   open_annotations?:number;
+  /**
+   * Not a column: set only on a SERVED row (lib/migrate/sqlite/stored
+   * inCurrentSyntax) written for the previous query engine and not
+   * convertible without a person. Its dataflow is {@link unrunnableDataflow}.
+   */
+  previousEngine?: true;
   id: string;
   token_id: string;
   /** Owner account; NULL until the creating token is claimed. */
@@ -448,7 +462,8 @@ export async function createArtifact(
   if (input.format === 'markup' && input.source) {
     input = { ...input, source: stampNodeIds(input.source, { retireLegacyAliases: true }).source };
   }
-  input = { ...input, meta: finalizeArtifactMetadata(input.format, input.source, input.meta) };
+  // A document is born in the current data syntax (lib/story/data-syntax).
+  input = { ...input, meta: { ...finalizeArtifactMetadata(input.format, input.source, input.meta), ...(input.format === 'markup' ? DATA_SYNTAX_META : {}) } };
   let sourceIds: string[] = [];
   if(input.format==='markup'&&input.source) {
     sourceIds=[...nodeIndex(input.source).keys()];
@@ -713,8 +728,9 @@ async function writtenDatasetForkPlan(actor: TokenActor, source: ArtifactRow, ow
   if (!uses) return [];
   const plan: ArtifactRow[] = [];
   const seen = new Set<string>();
-  const written=new Set(uses.filter(use=>use.write).map(use=>use.id));
-  for (const use of [...uses.filter(u=>u.write),...uses.filter(u=>!u.write)]) {
+  const compiled = await compiledForRow(source);
+  const written = new Set((compiled?.mutations ?? []).flatMap((m) => mutationTargetRef(compiled!, m) ?? []));
+  for (const use of [...uses.filter(u=>written.has(u.id)),...uses.filter(u=>!written.has(u.id))]) {
     if(seen.has(use.id))continue;
     seen.add(use.id);
     const candidate=await getArtifactById(use.id);
@@ -1149,19 +1165,48 @@ async function listVersionsScoped(scope: Scope, id: string): Promise<VersionSumm
 interface VersionContent extends VersionSummary {
   source: string | null;
   meta: Record<string, unknown>;
+  /** Written for the previous engine, and the converter cannot carry it over without a person (lib/migrate/sqlite/stored). */
+  previousEngine?: true;
 }
 
 /** One archived version WITH content (the editor's version viewer). */
 async function getVersionScoped(scope: Scope, id: string, version: number): Promise<VersionContent | null> {
   const db = await getDb();
-  const owned = await db.query(`SELECT 1 FROM artifacts WHERE id = $1 AND ${scope.where('$2')}`, [id, scope.val]);
-  if (owned.rows.length === 0) return null;
-  return loadArtifactDocument<VersionContent>(db,
+  const owner = (await db.query<{ user_id: string | null; token_id: string }>(`SELECT user_id, token_id FROM artifacts WHERE id = $1 AND ${scope.where('$2')}`, [id, scope.val])).rows[0];
+  if (!owner) return null;
+  const row = await loadArtifactDocument<VersionContent>(db,
     `SELECT v.artifact_id, v.document, v.version, v.title, v.description, v.format, v.source, v.meta, u.username AS by, v.created_at
      FROM artifact_versions v LEFT JOIN users u ON u.id = v.actor_user_id
      WHERE v.artifact_id = $1 AND v.version = $2`,
     [id, version],
   );
+  if (row?.format !== 'markup') return row;
+  // History stays as stored; it READS in the current data syntax, so whatever
+  // restores it (the browser and CLI restores submit these bytes whole) lands
+  // the converted document (lib/migrate/sqlite/stored).
+  const { id: _id, user_id: _user, token_id: _token, ...served } = await inCurrentSyntax({ ...row, id, user_id: owner.user_id, token_id: owner.token_id });
+  return served;
+}
+
+/** One archived version on the wire: `markup` carries the source; one written for the previous engine that needs a person says it cannot be restored as it stands. */
+export function versionToWire(row: VersionContent): Record<string, unknown> {
+  const { source, previousEngine, ...rest } = row;
+  return { ...rest, markup: source, ...(previousEngine ? { previous_engine: previousEngineRestore(row.version) } : {}) };
+}
+
+/**
+ * The head an EDITOR reads to edit (the CLI pull, the browser editor's load):
+ * a document the migration has not reached is converted for real first
+ * (lib/sqlite-syntax-migration convertArtifactNow), so its markup, graph,
+ * edit id and state all describe the converted document the next patch is
+ * prepared against, and an author never edits the previous syntax. One that
+ * needs a person is read as it stands.
+ */
+export async function getEditableArtifactFor(actor: TokenActor, id: string): Promise<ArtifactRow | null> {
+  const row = await getArtifactFor(actor, id);
+  if (row?.format !== 'markup' || hasCurrentDataSyntax(row.meta)) return row;
+  const outcome = await convertArtifactNow(await getDb(), id);
+  return outcome?.outcome === 'converted' || outcome?.outcome === 'unchanged' ? getArtifactFor(actor, id) : row;
 }
 
 /**
@@ -1502,7 +1547,39 @@ export type EditOutcome =
 /** How many times a lost CAS race is retried before we give up and report the conflict. */
 export const MAX_STALE_EDITS = 200;
 
+/**
+ * After a patch commit, whose final source only exists once the database has
+ * applied it: compile that source under its owner's reach and store the
+ * record beside it — unless the row has moved on, in which case the next read
+ * recompiles. A source that no longer compiles (an import changed shape)
+ * stores nothing, and its reads report it.
+ */
+async function storeCompiledRecord(db: Queryable, row: ArtifactRow): Promise<ArtifactRow> {
+  if (row.format !== 'markup' || !row.source || storedCompiledDataflow(row.meta, row.source)) return row;
+  const compiled = await compiledForRow(row).catch(() => null);
+  if (!compiled || isEmptyCompiled(compiled)) return row;
+  const meta = finalizeArtifactMetadata('markup', row.source, { ...row.meta, [COMPILED_DATAFLOW]: compiled } as Record<string, unknown>);
+  if (!meta.parsedArtifact) return row;
+  const stored = await db.query("UPDATE artifacts SET meta = jsonb_set(meta, '{parsedArtifact}', $3::jsonb) WHERE id = $1 AND version = $2 AND deleted_at IS NULL", [row.id, row.version, JSON.stringify(meta.parsedArtifact)]);
+  return stored.rowCount ? { ...row, meta } : row;
+}
+
 const headOf = (row: ArtifactRow) => ({ editId: row.edit_id, source: row.source ?? '', version: row.version });
+
+/**
+ * AN EDIT NEVER MIXES DATA SYNTAXES. A document the migration has not reached
+ * (lib/story/data-syntax) refuses the edit's commit, and is converted first,
+ * as its own version by no actor (lib/sqlite-syntax-migration
+ * convertArtifactNow); the edit then meets the ordinary stale head, and the
+ * client re-reads the converted document and prepares again. A document with
+ * nothing to convert is marked in place, and one that needs a person is left
+ * as it stands: for those the edit is committed after all. Null when the edit
+ * should commit.
+ */
+async function convertForEdit(db: Db, id: string): Promise<ArtifactRow | null> {
+  const outcome = await convertArtifactNow(db, id);
+  return outcome?.outcome === 'converted' ? getArtifactById(id) : null;
+}
 
 /** Clients own semantic validation and patch preparation. This boundary owns
  * authorization and the atomic operation/dependency/history commit. */
@@ -1513,8 +1590,15 @@ export async function applyEditScoped(actor: TokenActor, id: string, input: Edit
     const update=input.documentUpdate;
     if(!update.whole&&!Object.keys(update.patch.updated).length&&!Object.keys(update.patch.inserted).length&&!update.patch.removed.length&&!Object.keys(update.metadata??{}).length&&!Object.keys(update.settings??{}).length&&!update.annotationOps?.length&&!update.aliases?.length&&!update.datasetBindings?.length)return json({error:'bad_diff',detail:'identical'},400);
     if(input.documentUpdate.settings?.visibility==='public'&&!ALLOW_PUBLIC_VISIBILITY)return json({error:'public_not_enabled'},400);
-    const committed=await commitDocumentUpdate(db,actor,scope,id,input.documentUpdate,{dryRun:opts.dryRun});
+    let committed=await commitDocumentUpdate(db,actor,scope,id,input.documentUpdate,{dryRun:opts.dryRun,currentSyntax:!opts.dryRun});
     if(!committed)return null;
+    // Only an editor gets here with a head: the commit already applied the scope.
+    if(!committed.applied&&!opts.dryRun&&committed.head.format==='markup'&&!hasCurrentDataSyntax(committed.head.meta)){
+      const converted=await convertForEdit(db,id);
+      if(converted)return {applied:false,reason:'doc_changed',head:headOf(converted)};
+      committed=await commitDocumentUpdate(db,actor,scope,id,input.documentUpdate);
+      if(!committed)return null;
+    }
     if(!committed.applied&&committed.head.dataset_policy&&update.whole)return policyLocked('a dataset with a write policy cannot be replaced by a document');
     if(!committed.applied&&committed.head.format!=='markup')return {applied:false,reason:'not_editable'};
     if(!committed.applied&&committed.ownerOnly)return json({error:'owner_only'},403);
@@ -1522,7 +1606,7 @@ export async function applyEditScoped(actor: TokenActor, id: string, input: Edit
     if(!committed.applied&&committed.refusal)return json({error:'mention_refused',detail:committed.refusal},403);
     if(!committed.applied&&input.documentUpdate.settings?.visibility==='private'&&!committed.head.user_id)return json({error:'private_requires_account'},400);
     if(opts.dryRun)return committed.applied?json({valid:true,dry_run:true,commit_checks:['authorization','dependency_revisions','metadata','sharing','size']}):json({error:'doc_changed'},409);
-    return committed.applied?{applied:true,row:committed.row}:{applied:false,reason:'doc_changed',head:headOf(committed.head)};
+    return committed.applied?{applied:true,row:await storeCompiledRecord(db,committed.row)}:{applied:false,reason:'doc_changed',head:headOf(committed.head)};
   }
 
 
@@ -1968,9 +2052,9 @@ function rowToResolvedRef(row: ArtifactRow, owned = false): ResolvedRef {
       if(!catalog)throw new DatasetError(`Dataset source ref:${row.id} has no catalog or stored object key`);
       return executeCatalog(catalog,sql,params,{datasetId:row.id,limit:1,refresh:true,paramTypes});
     } } : {}),
-    // A folder's shape is FIXED and computed, never stored — the publish door
-    // and the dry run both need it to judge a <Query> over `ref_<folderId>`.
-    ...(row.format === 'folder' ? { columns: CHILDREN_COLUMNS, query: (sql: string, params: Record<string, Scalar>) => queryRows({columns: CHILDREN_COLUMNS, rows: []}, sql, params) } : {}),
+    // A folder's shape is FIXED and computed, never stored — the compiler needs
+    // it to judge a <Query> over an <Import> of the folder (`<name>.rows`).
+    ...(row.format === 'folder' ? { columns: CHILDREN_COLUMNS } : {}),
     ...(row.format === 'viz' ? { recipe: JSON.parse(row.source ?? '') } : {}),
   };
 }
@@ -1994,7 +2078,7 @@ export async function canWriteDataset(dataset: ArtifactRow, actor: RoleActor, de
 }
 
 /** The document author's identity resolves its declared data references, never a viewer's write authority. */
-export const writerFor = (doc: ArtifactRow): TokenActor => ({ tokenId: doc.token_id, userId: doc.user_id });
+export const writerFor = (doc: Pick<ArtifactRow, 'token_id' | 'user_id'>): TokenActor => ({ tokenId: doc.token_id, userId: doc.user_id });
 
 /**
  * Run one of a stored document's declared mutations. Everything a reader
@@ -2022,132 +2106,122 @@ type DocumentMutationOutcome =
 
 export async function runDocumentMutation(
   doc: ArtifactRow,
-  name: string,
-  values: Record<string, Scalar>,
-  row?: Record<string, Scalar>,
+  request: MutationRequest,
   actor: RoleActor = {userId:null,tokenId:null},
-  localTables?: Record<string, Row[]>,
   receipt?: MutationReceipt,
 ): Promise<DocumentMutationOutcome> {
   if (doc.format !== 'markup' || !doc.source) return { ok: false, reason: 'unknown_mutation' };
-  const parsed = parseJsx(doc.source);
-  if (!parsed.ok) return { ok: false, reason: 'unknown_mutation' };
-  const { content, body } = splitHelmet(parsed.nodes);
-  const decl = content.mutations.find((m) => m.name === name);
-  if (!decl) return { ok: false, reason: 'unknown_mutation' };
+  const compiled = await compileResultForRow(doc);
+  // A document whose data does not compile runs nothing, and says why.
+  if (compiled && !compiled.ok) return { ok: false, reason: 'invalid_sql', detail: compileErrorText(compiled.errors) };
+  const flow = compiled?.compiled ?? null;
+  const m = flow?.mutations.find((x) => x.name === request.mutation);
+  if (!flow || !m) return { ok: false, reason: 'unknown_mutation' };
 
   /*
    * THE GUEST IS ANSWERED FIRST — before the shape of the call is judged.
    *
-   * A statement that binds `$_me` has one honest answer for a signed-out
+   * A statement that reads the viewer has one honest answer for a signed-out
    * caller, and it is a door (lib/story/sign-in-required). A ROW action that
-   * binds it — a membership button a `<For>` draws for exactly the people who
-   * have not joined — used to be told "this row mutation requires its original
-   * row snapshot" instead: true, useless, and about the wrong problem, because
-   * the page never drew that button for a guest and so never gave them a row to
-   * send. Deciding sign-in here makes the refusal the same whatever shape the
-   * press arrives in: a stale tab, an agent posting at the door directly, a row
-   * snapshot or none.
+   * reads it — a membership button a `<For>` draws for exactly the people who
+   * have not joined — used to be told its row was missing instead: true,
+   * useless, and about the wrong problem. Deciding sign-in here makes the
+   * refusal the same whatever shape the press arrives in: a stale tab, an
+   * agent posting at the door directly, a row or none.
    *
    * It is the same judgement `mutateDataset` makes for the calls that never
    * come through here, and the same one `mutationAccessFor` previews for the
    * button; this is only about the ORDER the three checks run in.
    */
   const me: CapabilityActor = { userId: actor.userId ?? null, tokenId: actor.tokenId ?? null };
-  if (decl.params.includes('_me') && !(await can(me, 'write_as_me', doc))) {
+  if (readsViewer(m) && !(await can(me, 'write_as_me', doc))) {
     // ANONYMOUS keeps the answer it always had: there is no identity to refuse,
     // only a statement that needs a person, and the code is what draws the
     // door. A guest or a test user HAS an identity, and the honest answer names
     // it — the sign-in door for one, the sandbox for the other.
     return me.userId
-      ? { ok: false, reason: 'policy_denied', detail: '$_me writes belong to the person signed in; this credential may not make them here', code: SIGN_IN_REQUIRED, capability: await refusalFor(me, doc.id) }
-      : { ok: false, reason: 'policy_denied', detail: '$_me requires a logged-in user', code: SIGN_IN_REQUIRED };
+      ? { ok: false, reason: 'policy_denied', detail: '$_me.id writes belong to the person signed in; this credential may not make them here', code: SIGN_IN_REQUIRED, capability: await refusalFor(me, doc.id) }
+      : { ok: false, reason: 'policy_denied', detail: '$_me.id requires a logged-in user', code: SIGN_IN_REQUIRED };
   }
 
   // Resolved by the DOCUMENT's own scope — never the link-readable fallback,
   // which exists for reads. An unresolvable target reads as read-only, which
   // is what it is from here.
   const writer = writerFor(doc);
-  const candidate = decl.scope === 'local' ? null : await getArtifactById(decl.target);
-  const dataset = candidate && grantsOf(candidate) ? candidate : decl.scope === 'local' ? null : await getArtifactFor(writer, decl.target);
-  if (decl.scope !== 'local') {
+  const ref = mutationTargetRef(flow, m);
+  let dataset: ArtifactRow | null = null;
+  if (ref) {
+    const candidate = await getArtifactById(ref);
+    dataset = candidate && grantsOf(candidate) ? candidate : await getArtifactFor(writer, ref);
     if (!dataset) return { ok: false, reason: 'dataset_read_only' };
     if(grantsOf(dataset)){try{await grantContext(dataset,actor,{id:doc.id,editId:doc.edit_id});}catch(error){return {ok:false,reason:'policy_denied',detail:error instanceof Error?error.message:'Join this artifact to use its actions'};}}
     const refusal = await canWriteDataset(dataset, actor, {id:doc.id,editId:doc.edit_id});
     if (refusal) return { ok: false, reason: refusal };
-    if (localTables !== undefined) return {ok: false, reason: 'invalid_sql', detail: 'Persistent mutations do not accept local table overrides'};
+    if (request.localTables !== undefined) return {ok: false, reason: 'invalid_sql', detail: 'Persistent mutations do not accept local table overrides'};
   }
 
-  // Declared defaults ⊕ what the caller sent, restricted to declared scalars:
-  // the same rule a query run follows, so a value the document never declared
-  // cannot reach the statement.
-  let flow: Dataflow = { values: content.values, queries: content.queries, mutations: content.mutations };
-  try {flow=await resolveUserValues(flow,refLoaderForActor(writer));}catch(error){return {ok:false,reason:'invalid_sql',detail:error instanceof Error?error.message:'Invalid user binding'};}
-  const bound = initialValues(flow);
-  const paramTypes = scalarParamTypes(flow);
-  for (const [k, v] of Object.entries(values)) {
-    if (!(k in bound)) continue;
-    // TYPE AT THE DOOR, as the read catalog already does. The statement is
-    // planned and bound under the DECLARED type, so a value of another JS type
-    // is not a statement the engine should be asked to make sense of — it is a
-    // caller error, and the message names the parameter. `null` always clears.
-    // An EMPTY string for a number, date, boolean or user Value is "no value" — what a cleared
-    // input sends, and what `--param due=` means on a command line (coerceScalarInput reads it
-    // the same way). A string Value keeps its empty string: '' is a string.
-    const value = v === '' && paramTypes[k] !== 'string' ? null : v;
-    if (!scalarMatches(value, paramTypes[k]!)) return { ok: false, reason: 'invalid_sql', detail: `parameter $${k} does not match its declared type` };
-    bound[k] = value;
-  }
+  // The signature at the door: the same binding the reader's page applies to a write it computes itself.
+  const bound = bindMutationRequest(flow, m, request, { userId: actor.userId ?? null, now: new Date().toISOString(), tz: readerZone(request.tz) });
+  if (!bound.ok) return bound;
+  const { params, paramTypes } = bound;
+  const members = m.reads.builtins.includes('_members') ? await acceptedMembers(doc.id) : [];
+  const imports = await importsFor(flow, m.reads.imports, datasetResolverForRow(doc, actor));
 
-  bound._me=actor.userId;
-  let rowBinding: { columns: DatasetColumn[]; values: Record<string, Scalar> } | undefined;
-  if (mutationUsesRow(decl.sql)) {
-    if (!row) return { ok: false, reason: 'invalid_row', detail: 'this row mutation requires its original row snapshot' };
-    const checked = await dryRunDataflow(flow, refLoaderForActor(writer), body);
-    if (checked.kind === 'sql') return { ok: false, reason: 'invalid_row', detail: checked.details.join('; ') };
-    const columns = checked.rowSchemas[name];
-    if (!columns || Object.keys(row).length !== columns.length || columns.some((c) => {
-      if (!Object.hasOwn(row, c.name)) return true;
-      const value = row[c.name];
-      return value !== null && (c.type === 'date' || c.type === 'timestamp' || c.type === 'user' ? typeof value !== 'string' : typeof value !== c.type);
-    })) return { ok: false, reason: 'invalid_row', detail: 'row fields and scalar types must match the declared table result' };
-    if (mutationUsesValue(decl.sql)) {
-      if (!Object.hasOwn(values, '_value')) return { ok: false, reason: 'invalid_row', detail: 'cell mutations require _value' };
-      // `$_value` is typed by the column its editor sits in, like a declared Value: an empty
-      // string is "no value" for anything but text, and a value the column cannot hold is a
-      // caller error named here, never a statement for the engine to make sense of.
-      const valueType = checked.valueTypes[name];
-      const cell = valueType && values._value === '' && valueType !== 'string' ? null : values._value;
-      if (valueType && !scalarMatches(cell as Scalar, valueType)) return { ok: false, reason: 'invalid_row', detail: 'parameter $_value does not match the edited column\'s type' };
-      bound._value = cell;
-      if (valueType) paramTypes._value = valueType;
-    } else if (Object.hasOwn(values, '_value')) {
-      return { ok: false, reason: 'invalid_row', detail: 'this row action does not accept _value' };
-    }
-    rowBinding = { columns, values: row };
-  } else if (row !== undefined || Object.hasOwn(values, '_value')) {
-    return { ok: false, reason: 'invalid_row', detail: 'this mutation does not accept a row or _value' };
-  }
-  if (decl.scope === 'local') {
+  if (!dataset) {
     try {
-      // (The guest refusal that used to sit here now runs above, for every
-      // scope and before the row snapshot is judged.)
-      const tables = localTableOverrides(flow, localTables);
-      const local = await runLocalStateMutation(flow, decl, {values: bound, tables}, {mutate:async input=>{
+      const tables = localTableOverrides(flow, request.localTables);
+      const local = await runLocalStateMutation(flow, m, {tables}, {mutate:async input=>{
         const columns=input.table.columns.map(c=>c.constraints?.memberOf?{...c,constraints:{...c.constraints,memberOf:c.constraints.memberOf.map(ref=>ref==='current'?`ref:${doc.id}`:ref)}}:c);
-        const out=await runMutation({...input,table:{...input.table,columns},params:{...input.params,_me:actor.userId}});
+        const out=await runMutation({...input,table:{...input.table,columns}});
         if(!isQueryFailure(out))await validateUserWrites(await getDb(),columns,out.userWrites??[],actor.userId);
         return out;
-      }}, rowBinding);
+      }}, { params, paramTypes, reads: mutationReads(flow, m, { imports, tables, userId: actor.userId ?? null, members }) });
       return {ok: true, local};
     } catch (error) {
       return {ok: false, reason: 'invalid_sql', detail: error instanceof Error ? error.message : 'Local mutation failed'};
     }
   }
-  const result = await mutateDataset(dataset!, actor, decl.sql, bound, { row: rowBinding, paramTypes, expectedAffected: decl.expectedAffected, source:!!decl.source, document:{id:doc.id,editId:doc.edit_id}, ...(receipt ? { receipt } : {}) });
+  const target = m.target as { import: string; table: string };
+  const result = await mutateDataset(dataset, actor, m.sql, params, {
+    target: { schema: target.import, table: target.table }, paramTypes, reads: mutationReads(flow, m, { imports, userId: actor.userId ?? null, members }),
+    expectedAffected: m.expectedAffected, document:{id:doc.id,editId:doc.edit_id}, ...(receipt ? { receipt } : {}),
+  });
   if (isMutationRefused(result)) return { ok: false, reason: result.reason, detail: result.detail, ...(result.code ? { code: result.code } : {}) };
   return { ok: true, dataset: result.row, affected: result.affected, rowCount: result.rowCount };
 }
+
+/** Whether a statement reads the viewer: `$_me.id`, or the one-row `_me` table. */
+const readsViewer = (m: { reads: { builtins: string[] } }): boolean => m.reads.builtins.some((b) => b === VIEWER || b === VIEWER_ID);
+
+/** The artifact's accepted members, oldest first — the `_members` table. */
+async function acceptedMembers(artifactId: string): Promise<Row[]> {
+  return (await (await getDb()).query<Row>(`SELECT user_id,joined_at::text FROM ${JOIN_RELATIONS} WHERE artifact_id=$1 AND status='accepted' ORDER BY joined_at,user_id`,[artifactId])).rows;
+}
+
+/**
+ * A document's compiled dataflow as the compiler answers it: the record its
+ * publish stored, or — stale, missing, compiled by an older compiler — a fresh
+ * compile under the document's own reach (the author's scope, as every read
+ * resolves), with the compiler's errors when the source no longer compiles.
+ * Null when there is nothing to compile: no source, a version written for the
+ * previous engine, or a source that does not parse.
+ */
+async function compileResultForRow(stored: CompilableRow): Promise<CompileResult | null> {
+  // What runs is the document in the current data syntax (lib/migrate/sqlite/stored).
+  const row = await inCurrentSyntax(stored);
+  if (!row.source || row.previousEngine) return null;
+  return readCompiledDataflow(row.meta, row.source, schemaLoaderFor(refLoaderForActor(writerFor(row))));
+}
+type CompilableRow = Pick<ArtifactRow, 'id' | 'version' | 'source' | 'meta' | 'token_id' | 'user_id' | 'previousEngine'>;
+
+/** {@link compileResultForRow} for callers that only act on a document that compiles: null otherwise. */
+export async function compiledForRow(stored: CompilableRow): Promise<CompiledDataflow | null> {
+  const result = await compileResultForRow(stored);
+  return result?.ok ? result.compiled : null;
+}
+
+/** Compile errors as publish reports them, one per line: each names its declaration. */
+const compileErrorText = (errors: ValidationError[]): string => errors.map((e) => e.message).join('\n');
 
 /**
  * The documents in the owner's scope that WRITE this dataset, with the
@@ -2160,7 +2234,8 @@ async function findWritersFor(actor: TokenActor, datasetId: string): Promise<Arr
   const out: Array<{ id: string; title: string | null; mutations: string[] }> = [];
   for (const dep of dependents) {
     if (!dep.source) continue;
-    const names = (declarationsForRow(dep)?.flow.mutations ?? []).filter((m) => m.target === datasetId).map((m) => m.name);
+    const flow = await compiledForRow(dep);
+    const names = (flow?.mutations ?? []).filter((m) => mutationTargetRef(flow!, m) === datasetId).map((m) => m.name);
     if (names.length) out.push({ id: dep.id, title: dep.title, mutations: names });
   }
   return out;
@@ -2230,20 +2305,26 @@ export async function refreshWarningsFor(actor: TokenActor, updated: ArtifactRow
  * `only` restricts the run to those queries (the re-query path).
  */
 export async function dataflowForRow(
-  row: ArtifactRow,
+  stored: ArtifactRow,
   opts: DataflowRunOptions = {},
 ): Promise<RanDataflow | null> {
-  if (!row.source) return null;
+  if (!stored.source) return null;
+  const row = await inCurrentSyntax(stored);
+  const declared = await declarationsForRow(row);
+  // A document that cannot run arrives already answered (unrunnableDataflow).
+  if (declared?.state) return { ...declared, state: declared.state };
   // `viewer` absent is ANONYMOUS, deliberately — that is what the document's own
   // GET transport is, and it is the safe default for every caller that has no
   // session to hand over.
-  const flow = declarationsForRow(row)?.flow;
-  const members=(await (await getDb()).query<Row>(`SELECT user_id,joined_at::text FROM ${JOIN_RELATIONS} WHERE artifact_id=$1 AND status='accepted' ORDER BY joined_at,user_id`,[row.id])).rows;
+  const flow = declared?.flow;
+  const members = await acceptedMembers(row.id);
   const result = flow ? await runDeclaredDataflow(flow, datasetResolverForRow(row, opts.viewer ?? null), {...opts,members}) : null;
   // A document NAMES people when a user-typed value or column reaches it, and
   // now also when it draws a <User> — which a document with no user data at all
-  // may do (`<User userId="$_me" />`). The viewer's own id is added for both,
-  // because the one person a page can always name is the one reading it.
+  // may do (`<User userId="$_me.id" />`). The viewer's own id is added for both,
+  // because the one person a page can always name is the one reading it. A
+  // column is a person's when the compiler typed it `user` (a projection of a
+  // user column, renamed, joined or grouped, keeps that type).
   if(result&&(drawsPeople(row.source)||result.flow.values.some(v=>v.kind==='scalar'&&v.type==='user')||Object.values(result.state.tables).some(t=>t.columns.some(c=>c.type==='user')))) {
     const db=await getDb(), options:NonNullable<DataflowState['userOptions']>={}, ids=new Set<string>();
     const viewer=opts.viewer??null;
@@ -2258,10 +2339,9 @@ export async function dataflowForRow(
       }
       return {...column,constraints:{...column.constraints,memberOf:allowed}};
     };
-    const drawn=personColumnsDrawn(row.source);
     for(const [name,table] of Object.entries(result.state.tables))for(const column of table.columns) {
-      if(column.type!=='user'&&!drawn.has(column.name))continue;
-      if(column.type==='user')options[`${name}.${column.name}`]=await userOptions(db,await permitted(column),viewer?.userId??null);
+      if(column.type!=='user')continue;
+      options[`${name}.${column.name}`]=await userOptions(db,await permitted(column),viewer?.userId??null);
       for(const item of table.rows)if(typeof item[column.name]==='string')ids.add(item[column.name] as string);
     }
     for(const value of result.flow.values)if(value.kind==='scalar'&&value.type==='user') {
@@ -2271,44 +2351,38 @@ export async function dataflowForRow(
     result.state.userOptions=options;
     result.state.people=await people(db,[...ids]);
   }
-  if (result?.flow.mutations?.length) result.state.mutationAccess = await mutationAccessFor(row, result.flow, result.state, opts.viewer ?? null);
+  if (result?.flow.mutations.length) result.state.mutationAccess = await mutationAccessFor(row, result.flow, result.state, opts.viewer ?? null);
   return result;
 }
 
 /** Viewer capabilities use the same dataset ACL as execution; no authored permission expressions.
- * The preview analyzes the statement under the DECLARED param types too, so the button the page
+ * The preview analyzes the statement under the DECLARED argument types too, so the button the page
  * draws and the write the click attempts are judged on one plan.
  *
- * A statement binding `$_me` additionally needs a PERSON, and a guest pressing
- * it would otherwise learn that from the raw refusal ("$_me requires a
- * logged-in user") after the click. That answer is decided last, on a
- * capability that is otherwise PERMITTED — "unavailable only because the viewer
- * is a guest" — so a dataset that refuses this actor for its own reasons keeps
- * saying so, and only the reader who could proceed by signing in is asked to.
+ * A statement reading the viewer additionally needs a PERSON, and a guest
+ * pressing it would otherwise learn that from the raw refusal ("$_me.id
+ * requires a logged-in user") after the click. That answer is decided last, on
+ * a capability that is otherwise PERMITTED — "unavailable only because the
+ * viewer is a guest" — so a dataset that refuses this actor for its own
+ * reasons keeps saying so, and only the reader who could proceed by signing in
+ * is asked to.
  */
-async function mutationAccessFor(doc: ArtifactRow, flow: Dataflow, state: DataflowState, viewer: RoleActor | null): Promise<Record<string,string|null>> {
+async function mutationAccessFor(doc: ArtifactRow, flow: CompiledDataflow, state: DataflowState, viewer: RoleActor | null): Promise<Record<string,string|null>> {
   // ONE capability question for the whole document, asked once: may this
   // reader write as themselves here at all? A guest is answered exactly as an
   // anonymous reader is — with the code the page turns into `<SignIn>` — so the
   // button a guest sees is the door rather than a control that will refuse.
   const me: CapabilityActor = { userId: viewer?.userId ?? null, tokenId: viewer?.tokenId ?? null };
   const meRefusal = await can(me, 'write_as_me', doc) ? null : (await refusalFor(me, doc.id)).body.hint ?? SIGN_IN_REQUIRED;
-  const guestOf = (m: {params: string[]}, answer: string|null): string|null =>
-    answer === null && m.params.includes('_me') && meRefusal ? meRefusal : answer;
-  const parsed = parseJsx(doc.source ?? '');
-  const scopes = analyzeRowScopes(parsed.ok ? splitHelmet(parsed.nodes).body : []);
-  const rowSchemaFor = (name: string): DatasetColumn[] | undefined => {
-    const names = scopes.mutationTables[name] ?? [];
-    const shapes = names.map(table => state.errors[table] ? undefined : state.tables[table]?.columns);
-    const first = shapes[0];
-    return first && shapes.every(shape => JSON.stringify(shape) === JSON.stringify(first)) ? first : undefined;
-  };
-  return Object.fromEntries(await Promise.all((flow.mutations??[]).map(async m=>{
-    if(m.params.includes('_me') && meRefusal)return [m.name,meRefusal];
-    if(m.scope==='local')return [m.name,guestOf(m,null)];
+  const guestOf = (m: CompiledMutation, answer: string|null): string|null =>
+    answer === null && readsViewer(m) && meRefusal ? meRefusal : answer;
+  return Object.fromEntries(await Promise.all(flow.mutations.map(async m=>{
+    if(readsViewer(m) && meRefusal)return [m.name,meRefusal];
+    const ref=mutationTargetRef(flow,m);
+    if(!ref)return [m.name,guestOf(m,null)];
     const actor=viewer??{userId:null,tokenId:null};
-    const candidate=await getArtifactById(m.target);
-    const dataset=candidate&&grantsOf(candidate)?candidate:await getArtifactFor(writerFor(doc),m.target);
+    const candidate=await getArtifactById(ref);
+    const dataset=candidate&&grantsOf(candidate)?candidate:await getArtifactFor(writerFor(doc),ref);
     if(dataset&&grantsOf(dataset)){
       try{await grantContext(dataset,actor,{id:doc.id,editId:doc.edit_id});}
       catch(error){return [m.name,!actor.userId?SIGN_IN_REQUIRED:error instanceof Error?error.message:'Join this artefact to use its actions'];}
@@ -2316,22 +2390,21 @@ async function mutationAccessFor(doc: ArtifactRow, flow: Dataflow, state: Datafl
     if(!dataset||await canWriteDataset(dataset,actor,{id:doc.id,editId:doc.edit_id}))return [m.name,'This action requires dataset view access and a writable dataset with a matching data policy.'];
     if(!dataset.dataset_policy)return [m.name,guestOf(m,null)];
     try {
-      const name=`ref_${dataset.id}`,catalog=catalogOf(dataset);
-      const compiled=m.source&&catalog?compileStoredMutation(catalog,m.sql,name):null;
-      const columns=compiled?.table.columns??dataset.meta.columns as DatasetColumn[];
-      const policy=await mutationPolicy(dataset,actor,compiled?.table??{schema:'public',name:'rows'},{id:doc.id,editId:doc.edit_id});
-      const rowColumns = mutationUsesRow(m.sql) ? rowSchemaFor(m.name) : undefined;
-      if (mutationUsesRow(m.sql) && !rowColumns) return [m.name,'This action requires an available query result with a matching row schema.'];
-      const valueType = rowColumns?.find(c => c.name === scopes.cellColumns[m.name])?.type;
-      const out=await runMutation({table:{name,rows:[],columns},sql:compiled?.sql??m.sql,params:state.values,paramTypes:{...scalarParamTypes(flow),...(valueType?{_value:valueType}:{})},policy,policyPreview:true,
-        ...(rowColumns?{row:{columns:rowColumns,values:Object.fromEntries(rowColumns.map(c=>[c.name,null]))}}:{})});
+      const target=m.target as {import:string;table:string};
+      const catalog=catalogOf(dataset);
+      const table=catalog?importedTables(catalog).find(t=>t.name===target.table):undefined;
+      if(!table)return [m.name,'This action writes a table the dataset no longer has.'];
+      const policy=await mutationPolicy(dataset,actor,table,{id:doc.id,editId:doc.edit_id});
+      const names=mutationParams(m);
+      const out=await runMutation({table:{schema:target.import,name:table.name,rows:[],columns:table.columns},sql:m.sql,params:bindParams(names,state.values),
+        paramTypes:bindTypes(names,Object.fromEntries(m.args.map(a=>[a.name,a.type]))),reads:mutationReads(flow,m,{userId:actor.userId??null}),policy,policyPreview:true});
       return [m.name,guestOf(m,'error' in out?out.error:null)];
     }catch(error){return [m.name,error instanceof Error?error.message:'Dataset policy does not permit this action.'];}
   })));
 }
 
 /**
- * The document's declarations, WITHOUT running anything — the reader's path.
+ * The document's compiled declarations, WITHOUT running anything — the reader's path.
  *
  * Same answer as dataflowForRow minus the expensive half: no dataset is
  * loaded, no SQL is executed, nothing is inlined. The document is served at
@@ -2339,12 +2412,44 @@ async function mutationAccessFor(doc: ArtifactRow, flow: Dataflow, state: Datafl
  * names. On a production dashboard this was the difference between a ~100ms
  * render and an ~8ms one, and 231 KB of a 365 KB page.
  */
-export function declarationsForRow(row: Pick<ArtifactRow, 'source'> & Partial<Pick<ArtifactRow, 'meta'>>): StoryIslandDataflow | null {
-  if (!row.source) return null;
-  try {
-    const { flow } = readParsedArtifactMetadata(row.meta, row.source);
-    return isEmptyDataflow(flow) ? null : { flow };
-  } catch { return null; }
+/**
+ * A DOCUMENT THAT CANNOT RUN, as state that has already run: its Values at
+ * their defaults and every query answering why — so nothing runs, the reader
+ * never fetches, and no query is ever silent. Declarations come from the
+ * Helmet; only the Values are compiled. Two causes:
+ *  - an archived version written for the previous query engine that the
+ *    migration's converter could not carry over (lib/archived-version): every
+ *    query answers PREVIOUS_ENGINE, and the reader never fetches the head's
+ *    rows under the same names;
+ *  - a document whose data half does not compile (what it imports changed
+ *    shape since publish, or a conversion the compiler refuses): each query
+ *    answers with its own compile errors, or the document's when it has none —
+ *    by declaration name, as publish would have refused it.
+ */
+async function unrunnableDataflow(row: Pick<ArtifactRow, 'source' | 'token_id' | 'user_id'>, answer: (query: QueryDecl) => string): Promise<RanDataflow | null> {
+  const declared = declarationsOf(row.source ?? '');
+  if (!declared || isEmptyDataflow(declared)) return null;
+  const compiled = await compileWithLoader({ ...EMPTY_DATAFLOW, values: declared.values }, schemaLoaderFor(refLoaderForActor(writerFor(row))));
+  const flow = compiled.ok ? compiled.compiled : EMPTY_COMPILED_DATAFLOW;
+  return { flow, state: { values: initialValues(flow), tables: initialTables(flow), errors: Object.fromEntries(declared.queries.map((q) => [q.name, answer(q)])) } };
+}
+
+/** A declaration's own compile errors (by source span), else the document's. */
+const errorsOf = (errors: ValidationError[]) => (declaration: { start: number; end: number }): string => {
+  const own = errors.filter((e) => e.start !== undefined && e.start >= declaration.start && (e.end ?? e.start) <= declaration.end);
+  return compileErrorText(own.length ? own : errors);
+};
+
+export async function declarationsForRow(stored: CompilableRow): Promise<StoryIslandDataflow | null> {
+  const row = await inCurrentSyntax(stored);
+  if (row.previousEngine) return unrunnableDataflow(row, () => PREVIOUS_ENGINE);
+  let result: CompileResult | null;
+  // Loading what the document imports can fail too (the store is unreachable): that is said, not swallowed.
+  try { result = await compileResultForRow(row); }
+  catch (error) { return unrunnableDataflow(row, () => `The document's data could not be compiled: ${error instanceof Error ? error.message : String(error)}`); }
+  if (!result) return null;
+  if (!result.ok) return unrunnableDataflow(row, errorsOf(result.errors));
+  return isEmptyCompiled(result.compiled) ? null : { flow: result.compiled };
 }
 
 /**
@@ -2358,16 +2463,6 @@ export function declarationsForRow(row: Pick<ArtifactRow, 'source'> & Partial<Pi
  * never to decide what a viewer may see.
  */
 const drawsPeople = (source: string | null | undefined): boolean => /<User(?:Image|Handle)?[\s/>]/.test(source ?? '');
-/**
- * The row columns a document draws a person FROM — `<User userId="$_row.person">`,
- * `<UserImage …>` or `<UserHandle …>` — whatever the query typed them as. A
- * computed column (a join's `person`, a group-by's `who`) reaches DuckDB as
- * text, so it is not a `user` column, yet every id in it is a person the page
- * will name; without this, anyone who appears only there renders "Unknown person".
- */
-const personColumnsDrawn = (source: string | null | undefined): Set<string> =>
-  new Set([...(source ?? '').matchAll(/<User(?:Image|Handle)?\b[^>]*\buserId=["']\$_row\.([A-Za-z_][A-Za-z0-9_]*)["']/g)].map((m) => m[1]!));
-
 /**
  * WHO IS READING, as the document may show them (lib/story-runtime/contract
  * StoryViewer): the viewer's own account id — `$_me` — and, only for a document
@@ -2403,6 +2498,8 @@ interface DataflowRunOptions {
    * viewer's. Absent = anonymous.
    */
   viewer?: RoleActor | null;
+  /** The reader's zone (`$_tz`); UTC when absent. */
+  tz?: string;
   values?: Record<string, Scalar>;
   only?: Iterable<string>;
   /** A window of one query (a table reading past the cap). */
@@ -2410,34 +2507,35 @@ interface DataflowRunOptions {
 }
 
 /**
- * Resolve a `ref_<id>` to the TABLE the dataflow registers, or null.
+ * Resolve an imported (or queried) artifact to what the dataflow reads, or null.
  *
- * It answers a table rather than a row because there are two kinds of table
- * now and they are reached differently: a DATASET's rows come out of the
- * object store, and a FOLDER's children are computed per VIEWER. Keeping the
- * viewer in the resolver's closure is what stops the two questions collapsing
- * — REACH (may this document read that id at all) is the document owner's,
+ * It answers TABLES rather than a row because there are two kinds of import
+ * and they are reached differently: a DATASET's rows come out of the object
+ * store, and a FOLDER's children are computed per VIEWER. Keeping the viewer
+ * in the resolver's closure is what stops the two questions collapsing —
+ * REACH (may this document read that id at all) is the document owner's,
  * while WHICH ROWS is the person reading it, and answering both with one
- * identity would hand a stranger the owner's private children.
+ * identity would hand a stranger the owner's private children. A connected
+ * database resolves to its catalog, which its queries run inside.
  */
-type DatasetResolver = (id: string) => Promise<RefTable | null>;
+type DatasetResolver = (id: string) => Promise<RefData | null>;
 
-/** What a resolved ref contributes to the run: rows and their shape. */
-type RefTable = { rows: Row[]; columns: DatasetColumn[]; catalog?:import('@/lib/datasets/types').DatasetCatalog };
+/** What a resolved ref contributes to the run: its tables by import name, or the catalog a query runs inside. */
+type RefData = { tables: ImportTables[string]; catalog?: import('@/lib/datasets/types').DatasetCatalog };
 
-/** A resolved ref row → its table, under the viewer whose run this is. */
-async function tableForRef(r: ArtifactRow | null, viewer: RoleActor | null, document?:ArtifactRow): Promise<RefTable | null> {
+/** A resolved ref row → its data, under the viewer whose run this is. */
+async function tableForRef(r: ArtifactRow | null, viewer: RoleActor | null, document?:ArtifactRow): Promise<RefData | null> {
   if (!r) return null;
   if (r.format === 'folder') {
-    return childrenTableFor(r, { userId: viewer?.userId ?? null, email: viewer?.email ?? null, tokenId: viewer?.tokenId ?? null });
+    return { tables: { rows: await childrenTableFor(r, { userId: viewer?.userId ?? null, email: viewer?.email ?? null, tokenId: viewer?.tokenId ?? null }) } };
   }
   if (r.format !== 'dataset') return null; // wrong kind → the query reports the missing table
   if(grantsOf(r)&&!(await grantsPermitRead(r,viewer??{userId:null,tokenId:null},document)))return null;
   const catalog=catalogOf(r);
   if(!catalog)return null; // missing storage is unavailable data, never an empty computed source
-  const m = (r.meta ?? {}) as { columns?: DatasetColumn[] };
+  if(catalog.kind==='postgres')return { tables: {}, catalog };
   try {
-    return { rows: await loadDatasetRows(r), columns: m.columns ?? [], catalog };
+    return { tables: await importedRows(catalog), catalog };
   } catch { return null; } // the query reports the missing table
 }
 
@@ -2446,115 +2544,204 @@ async function tableForRef(r: ArtifactRow | null, viewer: RoleActor | null, docu
  * admitted (getLinkReadableArtifact), or an accepted ref serves broken. The
  * VIEWER is separate and rides through: reach is the document's, rows are theirs. */
 const datasetResolverForRow = (row: ArtifactRow, viewer: RoleActor | null): DatasetResolver => async (id) =>
-  tableForRef(
-    await getArtifactById(id).then(async dataset=>dataset&&grantsOf(dataset)?dataset:(await getArtifactFor(writerFor(row),id))??(await getLinkReadableArtifact(id))),
-    viewer, row,
-  );
+  tableForRef(await importedArtifactFor(row, id), viewer, row);
+
+/** The artifact a document's import names, by the document's own reach. */
+const importedArtifactFor = async (row: ArtifactRow, id: string): Promise<ArtifactRow | null> =>
+  getArtifactById(id).then(async dataset=>dataset&&grantsOf(dataset)?dataset:(await getArtifactFor(writerFor(row),id))??(await getLinkReadableArtifact(id)));
+
+/**
+ * WHAT A READER MAY HOLD: every row of one import, for a page that runs the
+ * queries over it itself (lib/story/placement) — or null.
+ *
+ * Two readers are asked about, and both must agree. The DOCUMENT must read the
+ * import (the same resolver its runs use), and the VIEWER must be allowed the
+ * dataset's own rows: a public document's results over a private dataset are
+ * public, its rows are not. Only a stored dataset qualifies — a connected
+ * database runs inside itself, a folder listing is computed per viewer — and
+ * only under the hold cap, past which its queries stay on the server. Reads
+ * carry no row-level rules today (a read grant is the whole dataset), so the
+ * dataset's rows are exactly what the viewer may read.
+ */
+async function holdableDataset(row: ArtifactRow, ref: string, viewer: RoleActor | null): Promise<import('@/lib/datasets/types').DatasetCatalog | null> {
+  const dataset = await importedArtifactFor(row, ref);
+  if (!dataset || dataset.format !== 'dataset') return null;
+  const reader: RoleActor = viewer ?? { userId: null, tokenId: null };
+  if (!ownsArtifact(dataset, reader) && !(await canReadArtifact(dataset, reader.userId ? { userId: reader.userId, email: reader.email ?? null } : null))) return null;
+  // The document-scoped read grant a run applies (tableForRef), for this reader.
+  if (grantsOf(dataset) && !(await grantsPermitRead(dataset, reader, row))) return null;
+  const catalog = catalogOf(dataset);
+  if (catalog?.kind !== 'stored') return null;
+  let rows = 0, bytes = 0;
+  for (const table of importedTables(catalog)) {
+    if (!table.objectKey) continue;
+    const stats = await storedRowStats(table.objectKey, HOLD_MAX_BYTES);
+    rows += stats.rows; bytes += stats.bytes;
+    if (rows > HOLD_MAX_ROWS || bytes > HOLD_MAX_BYTES) return null;
+  }
+  return catalog;
+}
+
+async function heldImportFor(row: ArtifactRow, flow: CompiledDataflow, name: string, viewer: RoleActor | null): Promise<ImportTables[string] | null> {
+  const ref = importRef(flow, name);
+  const catalog = ref ? await holdableDataset(row, ref, viewer) : null;
+  return catalog ? importedRows(catalog) : null;
+}
+
+/**
+ * The imports this reader may hold, by name, in declaration order — the
+ * island's `dataflow.hold`. Asked on every page render, so it never reads a
+ * dataset's rows: sizes come from storedRowStats, and a dataset imported
+ * under several names is decided once.
+ */
+export async function holdableImports(row: ArtifactRow, flow: CompiledDataflow, viewer: RoleActor | null): Promise<string[]> {
+  const byRef = new Map<string, Promise<unknown>>();
+  const held = await Promise.all(flow.imports.map(async (i) => {
+    if (!byRef.has(i.ref)) byRef.set(i.ref, holdableDataset(row, i.ref, viewer));
+    return (await byRef.get(i.ref)) ? i.name : null;
+  }));
+  return held.filter((name): name is string => name !== null);
+}
+
+/** One import's rows for this reader, or null when they may not hold it (the query route's `hold`). */
+export async function holdImport(row: ArtifactRow, name: string, viewer: RoleActor | null): Promise<ImportTables[string] | null> {
+  const flow = (await declarationsForRow(row))?.flow;
+  return flow ? heldImportFor(row, flow, name, viewer) : null;
+}
+
+/**
+ * THE PEOPLE A READER'S PAGE MAY NAME, for results it computed itself (the
+ * query route's `people`): a query the server never ran sent no cards.
+ *
+ * Only whom the server-side run could have named for this viewer: the viewer
+ * themselves, and the people in a user column of an import this viewer may
+ * hold whole, when one of the document's queries shows a person from it — the
+ * rows that page computes from. The ids asked for only narrow that set; anyone
+ * outside it is absent, as an id nobody has is (lib/datasets/user-fields people).
+ * Without `ids`, everyone in that set: the offline file, which can ask nobody
+ * later, carries them all (lib/offline/assemble.server).
+ */
+export async function nameablePeople(row: ArtifactRow, viewer: RoleActor | null, ids?: string[]): Promise<Record<string, PersonCard>> {
+  const wanted = ids ? new Set(ids) : null, allowed = new Set<string>();
+  if (viewer?.userId && (!wanted || wanted.has(viewer.userId))) allowed.add(viewer.userId);
+  const flow = row.format === 'markup' ? (await declarationsForRow(row))?.flow : undefined;
+  if (flow) {
+    const shown = new Set(flow.queries.filter((q) => q.columns.some((c) => c.type === 'user')).flatMap((q) => selectQueries(flow, { only: [q.name] }).flatMap((u) => u.reads.imports)));
+    const refs = new Set<string>();
+    for (const i of flow.imports) {
+      if (!shown.has(i.name) || refs.has(i.ref) || !i.tables.some((t) => t.columns.some((c) => c.type === 'user'))) continue;
+      refs.add(i.ref);
+      for (const table of Object.values((await heldImportFor(row, flow, i.name, viewer)) ?? {})) {
+        for (const column of table.columns) if (column.type === 'user') for (const r of table.rows) {
+          const id = r[column.name];
+          if (typeof id === 'string' && (!wanted || wanted.has(id))) allowed.add(id);
+        }
+      }
+    }
+  }
+  return allowed.size ? people(await getDb(), [...allowed]) : {};
+}
 
 /** A bearer/session actor's scope — the editor running a DRAFT's queries. Reach and viewer are the same person here. */
 export const datasetResolverForActor = (actor: TokenActor): DatasetResolver => async (id) =>
   tableForRef((await getArtifactFor(actor, id)) ?? (await getLinkReadableArtifact(id)), { userId: actor.userId, tokenId: actor.tokenId });
 
-/**
- * What a document DECLARES: its `<Value>`s, `<Query>`s and `<Mutation>`s, from
- * the source alone. Null when it declares nothing.
- *
- * Mutations ride along so the runtime can offer them (a `<Button run>` needs
- * the name and its params); they are never RUN here — a write happens on
- * demand, through /a/<id>/mutate, never at render.
- */
-export function declarationsOf(source: string): Dataflow | null {
-  const parsed = parseJsx(source);
-  if (!parsed.ok) return null;
-  const { content } = splitHelmet(parsed.nodes);
-  const flow: Dataflow = { values: content.values, queries: content.queries, ...(content.mutations.length ? { mutations: content.mutations } : {}) };
-  return isEmptyDataflow(flow) ? null : flow;
+/** The rows of the named imports, resolved; an import that does not resolve is left out, and its readers report the missing table. */
+async function importsFor(flow: CompiledDataflow, names: Iterable<string>, resolve: DatasetResolver): Promise<ImportTables> {
+  const out: ImportTables = {};
+  for (const name of new Set(names)) {
+    const ref = importRef(flow, name);
+    const data = ref ? await resolve(ref) : null;
+    if (data) out[name] = data.tables;
+  }
+  return out;
 }
 
+const isEmptyCompiled = (flow: CompiledDataflow): boolean =>
+  !flow.imports.length && !flow.values.length && !flow.queries.length && !flow.mutations.length;
+
 /**
- * Run the `<Value>`/`<Query>` declarations of any markup SOURCE (stored or a
- * draft) over the datasets `resolve` admits. Null when it declares nothing;
- * a dataset that does not resolve reads as a missing table in that query.
+ * Compile and run the declarations of any markup SOURCE (a draft) over what
+ * `resolve` admits, compiled under `load` (the same caller's reach). Null when
+ * it declares nothing or does not compile.
  */
 export async function runDocumentDataflow(
   source: string,
+  load: RefLoader,
   resolve: DatasetResolver,
   opts: DataflowRunOptions = {},
 ): Promise<RanDataflow | null> {
-  const flow = declarationsOf(source);
-  if (!flow) return null;
-  return runDeclaredDataflow(flow, resolve, opts);
+  const declared = declarationsOf(source);
+  if (!declared || isEmptyDataflow(declared)) return null;
+  const compiled = await compileWithLoader(declared, schemaLoaderFor(load));
+  // A draft that does not compile runs nothing, and says why under each declaration's own name.
+  if (!compiled.ok) return { flow: EMPTY_COMPILED_DATAFLOW, state: { values: {}, tables: {}, errors: compileErrorsByName(compiled.errors) } };
+  return runDeclaredDataflow(compiled.compiled, resolve, opts);
 }
 
-async function runDeclaredDataflow(flow: Dataflow, resolve: DatasetResolver, opts: DataflowRunOptions): Promise<RanDataflow> {
+/** Compile errors keyed by the declaration they name (`<Query name="q">…` → q); the rest under the empty name. */
+function compileErrorsByName(errors: ReadonlyArray<{ message: string }>): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const e of errors) {
+    const name = /^<(?:Query|Mutation|Import|Value) name="([^"]+)"/.exec(e.message)?.[1] ?? '';
+    out[name] = out[name] ? `${out[name]}\n${e.message}` : e.message;
+  }
+  return out;
+}
+
+async function runDeclaredDataflow(flow: CompiledDataflow, resolve: DatasetResolver, opts: DataflowRunOptions): Promise<RanDataflow> {
   // Materialize a one-shot iterable once; selection and execution share it.
   opts = { ...opts, ...(opts.only ? { only: [...opts.only] } : {}) };
-
-  const datasets: DatasetTables = {};
-  for (const id of datasetRefsInDataflow({ ...flow, queries: selectedQueries(flow, opts) ?? [] })) {
-    // Unresolvable, or a kind that is not a table → the query reports the
-    // missing table, which is a query error rather than a render failure.
-    const table = await resolve(id);
-    if (table) datasets[id] = table;
-  }
-  flow=await resolveUserValues(flow,async id=>datasets[id]);
+  const selected = selectQueries(flow, opts);
+  const resolved = new Map<string, RefData | null>();
+  const data = async (ref: string) => { if (!resolved.has(ref)) resolved.set(ref, await resolve(ref)); return resolved.get(ref) ?? null; };
+  const imports: ImportTables = {};
+  // Every artifact whose rows or database this run touched, with what it was: rechecked before anything is returned.
   const usedSources = new Map<string, string>();
-  const state = await runDataflow(flow, datasets, {members:opts.members,userId:opts.viewer?.userId??null, values: opts.values, only: opts.only, page: opts.page, localTables: opts.localTables,
-    sourceInput:async id=>{
-      // sourceQuery authorizes first and records this same snapshot for the
-      // final access check. Only a physical stored public.rows table qualifies;
-      // remote catalogs and model SQL retain their query execution boundary.
-      const table=datasets[id] as RefTable | undefined;
-      if(!table)return undefined;
-      if(!table.catalog)return table;
-      if(table.catalog.kind!=='stored')return undefined;
-      const stored=table.catalog.tables.find(t=>t.schema==='public'&&t.name==='rows');
-      if(!stored?.objectKey||stored.sql||stored.source||stored.modelCellId)return undefined;
-      return {rows:await loadDatasetRows({meta:{objectKey:stored.objectKey}}),columns:stored.columns};
-    },
-    sourceQuery:async(q,values,page)=>{
-      const table = datasets[q.source!] as RefTable | undefined;
-      if (!table) throw new Error(`Source ref:${q.source} is unavailable`);
-      const catalog = table.catalog;
-      if (!catalog) {
-        usedSources.set(q.source!, JSON.stringify(table));
-        return queryRows(table, q.sql, values, page);
-      }
+  for (const name of new Set(selected.flatMap((q) => q.reads.imports))) {
+    const ref = importRef(flow, name);
+    const found = ref ? await data(ref) : null;
+    if (!found) continue;
+    imports[name] = found.tables;
+    usedSources.set(ref!, JSON.stringify(found.catalog ?? null));
+  }
+  const state = await runDataflow(flow, imports, {members:opts.members,userId:opts.viewer?.userId??null, tz: readerZone(opts.tz), values: opts.values, only: opts.only, page: opts.page, localTables: opts.localTables,
+    sourceQuery:async(q,params,paramTypes,page)=>{
+      const catalog = (await data(q.source!))?.catalog;
+      if (!catalog) throw new Error(`Source ref:${q.source} is unavailable`);
       usedSources.set(q.source!, JSON.stringify(catalog));
-      return executeCatalog(catalog,q.sql,values,{datasetId:q.source!,limit:page?.limit,offset:page?.offset,sort:page?.sort,signal:opts.signal,paramTypes:scalarParamTypes(flow),authorize:async()=>{
+      return executeCatalog(catalog,q.sql,params,{datasetId:q.source!,limit:page?.limit,offset:page?.offset,sort:page?.sort,signal:opts.signal,paramTypes,authorize:async()=>{
         await opts.authorize?.();
         const current=await resolve(q.source!);
-        if(!current || JSON.stringify((current as RefTable).catalog)!==JSON.stringify(catalog))throw new DatasetError('Dataset source is unavailable',404);
+        if(!current || JSON.stringify(current.catalog)!==JSON.stringify(catalog))throw new DatasetError('Dataset source is unavailable',404);
       }});
     },
   });
   // Per-query failures are deliberately isolated by runDataflow. Admission is
   // not a query error: q1's rows must not escape if access changes while q2
-  // waits. Recheck every used source, not merely the last query to finish.
+  // waits. Recheck every import read and every connected source a query ran inside.
   for (const [id, snapshot] of usedSources) {
     const current = await resolve(id);
-    if (!current || JSON.stringify(current.catalog ?? current) !== snapshot) throw new DatasetError('Dataset source is unavailable',404);
+    if (!current || JSON.stringify(current.catalog ?? null) !== snapshot) throw new DatasetError('Dataset source is unavailable',404);
   }
   await opts.authorize?.();
   return { flow, state };
 }
 
 /**
- * The dataset ids a document's DATA depends on — everything its queries read
- * plus everything its mutations write. What the live stream subscribes to, so
- * a write anywhere in that set wakes this document's readers
- * (app/a/[id]/events). Validated against the current source on every read,
- * because an edit can change what a document reads. Selection never narrows
- * these subscriptions, and mutation targets remain included.
+ * The artifact ids a document's DATA depends on — what it imports, the
+ * databases its queries run inside, and the datasets its user pickers draw
+ * from. What the live stream subscribes to, so a write anywhere in that set
+ * wakes this document's readers (app/a/[id]/events). Validated against the
+ * current source on every read, because an edit can change what a document
+ * reads. Mutation targets are imports, so they are included.
  */
-export function datasetsForDocument(document: string | (Pick<ArtifactRow, 'source'> & Partial<Pick<ArtifactRow, 'meta'>>) | null | undefined): string[] {
-  const source = typeof document === 'string' ? document : document?.source;
-  if (!source) return [];
-  let flow: Dataflow | null;
-  try { flow = typeof document === 'string' ? declarationsOf(source) : readParsedArtifactMetadata(document!.meta, source).flow; }
-  catch { return []; }
-  if (!flow) return [];
-  return [...new Set([...datasetRefsInDataflow(flow), ...mutationTargets(flow)])];
+export async function datasetsForDocument(document: (Pick<ArtifactRow, 'id' | 'version' | 'source' | 'meta' | 'token_id' | 'user_id'>) | null | undefined): Promise<string[]> {
+  if (!document?.source) return [];
+  try {
+    const flow = await compiledForRow(document);
+    return flow ? dataRefs(flow, flow.values.flatMap((v) => (v.source ? [v.source] : []))) : [];
+  } catch { return []; }
 }
 
 

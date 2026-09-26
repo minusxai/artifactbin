@@ -27,7 +27,9 @@ import type { StoryIslandData } from '@/lib/story-runtime/contract';
 import type { QueryTransport } from '@/lib/story-runtime/store';
 import { canonicalQuote, canonicalText } from '@/lib/story/annotation-range';
 import { isWebUrl } from '@/lib/story/asset-url';
-import type { Dataflow, DataflowState, QueryDecl } from '@/lib/story/dataflow';
+import { EMPTY_DATAFLOW, isEmptyDataflow, type Dataflow, type DataflowState, type QueryDecl } from '@/lib/story/dataflow';
+import { EMPTY_COMPILED_DATAFLOW, type CompiledDataflow } from '@/lib/story/compiled-dataflow';
+import { declarationsOf } from '@/lib/story/helmet';
 import { createDocumentGraph, graphNodes, graphSource, type GraphAstNode } from '@/lib/story/document-graph';
 import { applyGraphPatch } from '@/lib/story/document-graph-patch';
 import { needsAuthoringContext, prepareClientDocumentReplacement } from '@/lib/story/document-update-client';
@@ -303,11 +305,11 @@ async function derive(
     ...(parts ? { nodes: withInlinedAssets(parts.nodes, assets) } : {}),
     ...(metadata.colorMode ? { colorMode: metadata.colorMode } : {}),
   };
-  if (parts) {
-    const flow = parts.flow;
-    if (flow.values.length || flow.queries.length || flow.mutations?.length) island.dataflow = { ...(file.island.dataflow ?? {}), flow };
-    else delete island.dataflow;
-  }
+  // The file has no compiler: the island keeps the declarations the download
+  // compiled, and a query edited since answers OFFLINE_QUERY_REASON
+  // (snapshotStateFor). A source that now declares nothing has no dataflow.
+  const declared = declarationsOf(source);
+  if (parts && declared && isEmptyDataflow(declared)) delete island.dataflow;
   const style = parts?.authorCss ?? null;
   return {
     css: { ...file.css, compiled, author: priorStyle(style) ? file.css.author : style },
@@ -377,7 +379,7 @@ export async function rebuildArtifactFile(file: ArtifactFile, author: string | n
  * otherwise be answered with the rows the old SQL returned.
  */
 function ranFlowOf(file: ArtifactFile): Dataflow {
-  return storyUpdateParts(file.base.source)?.flow ?? file.island.dataflow?.flow ?? { values: [], queries: [] };
+  return declarationsOf(file.base.source) ?? EMPTY_DATAFLOW;
 }
 
 /**
@@ -386,10 +388,9 @@ function ranFlowOf(file: ArtifactFile): Dataflow {
  * say OFFLINE_QUERY_REASON, as the transport answers them.
  */
 export function snapshotStateFor(file: ArtifactFile): DataflowState {
-  const flow = file.island.dataflow?.flow;
   const state = file.snapshot.state;
-  if (!flow) return state;
-  const unran = unranQueries(flow, ranFlowOf(file));
+  if (!file.island.dataflow?.flow) return state;
+  const unran = unranQueries(declarationsOf(file.source) ?? EMPTY_DATAFLOW, ranFlowOf(file));
   if (!unran.size) return state;
   const tables = Object.fromEntries(Object.entries(state.tables).filter(([name]) => !unran.has(name)));
   const errors = { ...state.errors };
@@ -425,7 +426,7 @@ export function createFileBackend(initial: ArtifactFile, hooks: FileBackendHooks
   const localId = () => `local-${globalThis.crypto.randomUUID()}`;
 
   const change = (next: ArtifactFile) => { file = next; hooks.onChange(file); };
-  const currentFlow = (): Dataflow => file.island.dataflow?.flow ?? { values: [], queries: [] };
+  const currentFlow = (): CompiledDataflow => file.island.dataflow?.flow ?? EMPTY_COMPILED_DATAFLOW;
 
   const head = (): LoadedArtifact => ({
     id: file.artifactId,
@@ -524,7 +525,7 @@ export function createFileBackend(initial: ArtifactFile, hooks: FileBackendHooks
     },
 
     async previewQueries(markup) {
-      const flow = storyUpdateParts(markup)?.flow;
+      const flow = declarationsOf(markup);
       if (!flow) return null;
       const unran = unranQueries(flow, ranFlow);
       const out: Pick<DataflowState, 'tables' | 'errors'> = { tables: {}, errors: {} };
@@ -535,7 +536,7 @@ export function createFileBackend(initial: ArtifactFile, hooks: FileBackendHooks
         else if (table) out.tables[query.name] = table;
         else if (error !== undefined) out.errors[query.name] = error;
       }
-      return out;
+      return { ...out, flow: file.island.dataflow?.flow ?? null };
     },
 
     queryTable: () => refuse('runQueries'),
@@ -550,7 +551,7 @@ export function createFileBackend(initial: ArtifactFile, hooks: FileBackendHooks
     queryTransport() {
       const current = (): { transport: QueryTransport; unran: Set<string> } => {
         const flow = currentFlow();
-        return { transport: createSnapshotTransport(flow, file.snapshot), unran: unranQueries(flow, ranFlow) };
+        return { transport: createSnapshotTransport(flow, file.snapshot), unran: unranQueries(declarationsOf(file.source) ?? EMPTY_DATAFLOW, ranFlow) };
       };
       return {
         async run(values, only) {
@@ -563,6 +564,12 @@ export function createFileBackend(initial: ArtifactFile, hooks: FileBackendHooks
           const { transport, unran } = current();
           if (unran.has(name)) throw new Error(OFFLINE_QUERY_REASON);
           return transport.page!(values, name, page);
+        },
+        /** What the file's own engine runs over: every row of each import the downloader could hold. */
+        async hold(name) {
+          const tables = file.snapshot.held?.[name];
+          if (!tables) throw new Error(OFFLINE_QUERY_REASON);
+          return tables;
         },
         dispose() {},
       };

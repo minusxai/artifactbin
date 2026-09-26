@@ -97,11 +97,12 @@ describe('cli-declared-mutations', () => {
    const owner=await mintToken('mxmx_test_declared');
    const publish=async(body:object)=>{const r=await create(request('/api/artifacts',{method:'POST',token:owner.token,json:body}));expect(r.status,await r.clone().text()).toBe(201);return (await r.json()).id as string;};
    const ds=await publish({dataset:[{n:1}],access:'readwrite'});
-   const doc=await publish({markup:`<Helmet><Value name="n" type="number" default={5} /><Query name="rows" source="ref:${ds}">{\`select * from public.rows\`}</Query><Mutation name="add" source="ref:${ds}">{\`insert into public.rows values ($n)\`}</Mutation></Helmet><Button run="$add">Add</Button>`});
+   const doc=await publish({markup:`<Helmet><Value name="n" type="number" default={5} /><Import name="rows_data" src="ref:${ds}" /><Query name="rows">{\`select * from rows_data.rows\`}</Query><Import name="add_data" src="ref:${ds}" /><Mutation name="add">{\`insert into add_data.rows values ($n)\`}</Mutation></Helmet><Button run="$add">Add</Button>`});
    const head=await read(request(`/api/artifacts/${doc}`,{token:owner.token}),ctx(doc));expect(head.status).toBe(200);
-   expect((await head.json()).mutations).toEqual([{name:'add',params:[{name:'n'}],target:ds}]);
+   // The signature a caller fills: its arguments, typed, and the dataset it writes.
+   expect((await head.json()).mutations).toMatchObject([{name:'add',args:[{name:'n',type:'number'}],target:ds}]);
    const key='declared-mutation-key-0001';
-   const run=()=>mutate(request(`/api/artifacts/${doc}/mutate`,{method:'POST',token:owner.token,json:{name:'add',values:{n:7}},headers:{'Idempotency-Key':key}}),ctx(doc));
+   const run=()=>mutate(request(`/api/artifacts/${doc}/mutate`,{method:'POST',token:owner.token,json:{name:'add',args:{n:7}},headers:{'Idempotency-Key':key}}),ctx(doc));
    const first=await run();expect(first.status,await first.clone().text()).toBe(200);const body=await first.json();expect(body.affected).toBe(1);
    const replay=await run();expect(replay.status).toBe(200);expect(await replay.json()).toEqual(body);
    const rows=await loadDatasetRows((await getArtifactById(ds))!);expect(rows.map(r=>r.n).sort()).toEqual([1,7]);

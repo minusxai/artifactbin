@@ -52,7 +52,7 @@ it('rechecks private dataset access before serving a previously cached Postgres 
 it('reports Postgres mutations as inactive and refuses execution after a writable source changes kind',async()=>{
  const f=await pgFixture();
  const made=await create(request('/api/artifacts',{method:'POST',token:f.ownerToken.token,json:{dataset:[{id:1}],visibility:'public',access:'readwrite'}}));expect(made.status).toBe(201);const id=(await made.json()).id as string;
- const doc=await create(request('/api/artifacts',{method:'POST',token:f.ownerToken.token,json:{markup:`<Helmet><Mutation name="edit" source="ref:${id}">{\`update rows set id=2\`}</Mutation></Helmet><Button run="$edit">Edit</Button>`}}));expect(doc.status,await doc.clone().text()).toBe(201);const documentId=(await doc.json()).id as string;
+ const doc=await create(request('/api/artifacts',{method:'POST',token:f.ownerToken.token,json:{markup:`<Helmet><Import name="edit_data" src="ref:${id}" /><Mutation name="edit">{\`update edit_data.rows set id=2\`}</Mutation></Helmet><Button run="$edit">Edit</Button>`}}));expect(doc.status,await doc.clone().text()).toBe(201);const documentId=(await doc.json()).id as string;
  const document=(await getArtifactById(documentId))!;
  expect((await dataflowForRow(document,{viewer:{userId:f.owner.id,tokenId:f.ownerToken.id}}))?.state.mutationAccess).toEqual({edit:null});
  // Simulate an already-published source changing kind; stale access=readwrite

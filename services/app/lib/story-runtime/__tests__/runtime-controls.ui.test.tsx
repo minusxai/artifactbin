@@ -17,21 +17,23 @@ import { splitHelmet } from '@/lib/story/helmet';
 import { StoryRuntimeApp } from '../StoryRuntimeApp';
 import { createDataflowStore } from '../store';
 import type { StoryIslandDataflow } from '../contract';
-import { initialValues, initialTables } from '@/lib/story/dataflow';
+import { initialValues, initialTables } from '@/lib/story/compiled-flow';
+import { compiledOf, compiledSource } from '@/test/helpers/compiled';
 import type { DataflowState } from '@/lib/story/dataflow';
 import type { PersonCard } from '@artifactbin/contracts';
 import { parseJsxOrThrow } from '@/test/helpers/jsx';
 import { personFaceBackground, personInitial } from '@/lib/person-face';
 
-const HELMET =
-  '<Helmet>' +
+const HELMET_CHILDREN =
+  '<Import name="sales" src="ref:abc123" />' +
   '<Value name="region" type="string" />' +
   '<Value name="min_rev" type="number" default={100} />' +
   '<Value name="flag" type="boolean" default={false} />' +
   '<Value name="since" type="date" default="2026-03-01" />' +
   '<Value name="until" type="date" />' +
-  '<Query name="regions">{`select distinct region, region || \'!\' label from ref_abc123`}</Query>' +
-  '</Helmet>';
+  '<Query name="regions">{`select distinct region, region || \'!\' label from sales.rows`}</Query>';
+const HELMET = `<Helmet>${HELMET_CHILDREN}</Helmet>`;
+const FLOW = await compiledOf(HELMET_CHILDREN, { abc123: [{ name: 'region', type: 'string' }] });
 
 const STATE: DataflowState = {
   values: { region: null, min_rev: 100, flag: false, since: '2026-03-01', until: null },
@@ -43,8 +45,8 @@ const STATE: DataflowState = {
 
 function build(body: string) {
   const parsed = parseJsxOrThrow(HELMET + body);
-  const { content, body: nodes } = splitHelmet(parsed.nodes as JsxNode[]);
-  const dataflow: StoryIslandDataflow = { flow: { values: content.values, queries: content.queries }, state: STATE };
+  const { body: nodes } = splitHelmet(parsed.nodes as JsxNode[]);
+  const dataflow: StoryIslandDataflow = { flow: FLOW, state: STATE };
   return { nodes, dataflow };
 }
 
@@ -252,6 +254,13 @@ describe('StoryRuntimeApp — kit control components', () => {
 });
 
 /** <Dialog> is a control too: open state is a signal, and submit runs a mutation. */
+const GUEST_FLOW = await compiledOf('<Import name="notes" src="ref:abc123" /><Mutation name="save">{`insert into notes.rows values ($_me.id)`}</Mutation>', { abc123: [{ name: 'author', type: 'user' }] });
+const DIALOG_CHILDREN = '<Import name="notes" src="ref:abc123" /><Value name="editing" type="boolean" default={false} /><Value name="title" type="string" default="First" /><Mutation name="save">{`insert into notes.rows (title) values ($title)`}</Mutation>';
+const DIALOG_FLOW = await compiledOf(DIALOG_CHILDREN, { abc123: [{ name: 'title', type: 'string' }] });
+const ADDING_FLOW = await compiledOf('<Value name="adding" type="boolean" default={false} />');
+const MEMBERS_FLOW = await compiledOf('<Value name="person" type="user" /><Query name="members">{`select user_id as person from _members`}</Query>');
+const PERSON_FLOW = await compiledOf('<Value name="person" type="user" />');
+
 describe('<Dialog> bound to the store', () => {
   beforeEach(() => {
     HTMLDialogElement.prototype.showModal = function () {this.open = true;};
@@ -259,8 +268,8 @@ describe('<Dialog> bound to the store', () => {
   });
   
   it('keeps a guest mutation form disabled without inserting a sign-in link',()=>{
-    const {content,body}=splitHelmet(parseJsxOrThrow('<Helmet><Mutation name="save" source="ref:abc123">{`insert into public.rows values ($_me)`}</Mutation></Helmet><Dialog open={true}><DialogContent run="$save" aria-label="Editor"><input aria-label="Title" defaultValue="First"/><button type="submit">Save</button></DialogContent></Dialog>').nodes);
-    const flow={values:content.values,queries:content.queries,mutations:content.mutations};
+    const {body}=splitHelmet(parseJsxOrThrow('<Helmet><Import name="notes" src="ref:abc123" /><Mutation name="save">{`insert into notes.rows values ($_me.id)`}</Mutation></Helmet><Dialog open={true}><DialogContent run="$save" aria-label="Editor"><input aria-label="Title" defaultValue="First"/><button type="submit">Save</button></DialogContent></Dialog>').nodes);
+    const flow=GUEST_FLOW;
     const state={values:{},tables:{},errors:{},mutationAccess:{save:'sign_in_required'}};
     const mutate=vi.fn();
     const store=createDataflowStore({flow,state},{transport:{run:vi.fn(),page:vi.fn(),mutate}});
@@ -274,9 +283,9 @@ describe('<Dialog> bound to the store', () => {
   });
 
   it('binds dialog state two ways and submits with current signals through the existing mutation transport', async () => {
-    const parsed = parseJsxOrThrow('<Helmet><Value name="editing" type="boolean" default={false} /><Value name="title" type="string" default="First" /><Mutation name="save" source="ref:abc123">{`insert into public.rows (title) values ($title)`}</Mutation></Helmet><Dialog open="$editing"><DialogTrigger>Open</DialogTrigger><DialogContent run="$save" aria-label="Editor"><input aria-label="Title" value="$title" required /><button type="submit">Save</button><DialogClose>Cancel</DialogClose></DialogContent></Dialog>{$editing && <p>Editing</p>}');
-    const {content, body: nodes} = splitHelmet(parsed.nodes);
-    const flow = {values: content.values, queries: content.queries, mutations: content.mutations};
+    const parsed = parseJsxOrThrow('<Helmet>' + DIALOG_CHILDREN + '</Helmet><Dialog open="$editing"><DialogTrigger>Open</DialogTrigger><DialogContent run="$save" aria-label="Editor"><input aria-label="Title" value="$title" required /><button type="submit">Save</button><DialogClose>Cancel</DialogClose></DialogContent></Dialog>{$editing && <p>Editing</p>}');
+    const {body: nodes} = splitHelmet(parsed.nodes);
+    const flow = DIALOG_FLOW;
     const state = {values: initialValues(flow), tables: initialTables(flow), errors: {}, mutationAccess: {save: null}};
     const mutate = vi.fn(async () => ({dataset: 'abc123'}));
     const store = createDataflowStore({flow, state}, {transport: {run: async () => ({tables: {}, errors: {}, mutationAccess: {save:null}}), page: async () => ({rows:[],columns:[]}), mutate}, debounceMs: 0});
@@ -291,7 +300,7 @@ describe('<Dialog> bound to the store', () => {
     expect(view.getByRole('dialog').querySelector('form')!.checkValidity()).toBe(true);
     fireEvent.click(view.getByText('Save'));
     await waitFor(() => expect(store.getValue('editing')).toBe(false));
-    expect(mutate).toHaveBeenCalledWith(expect.objectContaining({title:'Updated'}), 'save');
+    expect(mutate).toHaveBeenCalledWith({mutation: 'save', args: {title: 'Updated'}});
     expect(view.queryByText('Editing')).toBeNull();
   });
 
@@ -305,8 +314,8 @@ describe('<Dialog> bound to the store', () => {
    */
   it('hydrates a DialogTrigger wrapped around a Button without a mismatch, and it still opens the dialog', () => {
     const parsed = parseJsxOrThrow('<Helmet><Value name="adding" type="boolean" default={false} /></Helmet><Dialog open="$adding"><DialogTrigger><Button>Add task</Button></DialogTrigger><DialogContent aria-label="Add a task"><DialogClose>Cancel</DialogClose></DialogContent></Dialog>');
-    const {content, body: nodes} = splitHelmet(parsed.nodes);
-    const flow = {values: content.values, queries: content.queries, mutations: content.mutations};
+    const {body: nodes} = splitHelmet(parsed.nodes);
+    const flow = ADDING_FLOW;
     const state = {values: initialValues(flow), tables: initialTables(flow), errors: {}};
     const props = {nodes, refData: {}, dataflow: {flow, state}, colorMode: 'light' as const, chrome: true};
     const html = renderToString(<StoryRuntimeApp {...props} />);
@@ -331,8 +340,8 @@ const card=(name:string,extra:Partial<PersonCard>={}):PersonCard=>({name,handle:
 
 describe('native user controls',()=>{
  it('uses explicit participant query choices and visible names for a user dropdown',()=>{
-  const {content,body}=splitHelmet(parseJsxOrThrow('<Helmet><Value name="person" type="user" /><Query name="members">{`select person from participants`}</Query></Helmet><Select label="Participant" value="$person" options="$members" />').nodes);
-  const flow={values:content.values,queries:content.queries};
+  const {body}=splitHelmet(parseJsxOrThrow('<Helmet><Value name="person" type="user" /><Query name="members">{`select user_id as person from _members`}</Query></Helmet><Select label="Participant" value="$person" options="$members" />').nodes);
+  const flow=MEMBERS_FLOW;
   const state:DataflowState={values:{person:null},errors:{},tables:{members:{columns:[{name:'person',type:'user'}],rows:[{person:'usr_ada'}]}},userOptions:{person:[]},people:{usr_ada:card('Ada'),usr_grace:card('Grace')}};
   const view=render(<StoryRuntimeApp nodes={body} refData={{}} dataflow={{flow,state}} colorMode="light" />);
   fireEvent.click(view.getByLabelText('Participant'));
@@ -340,8 +349,8 @@ describe('native user controls',()=>{
   expect(view.queryByRole('option',{name:'Grace'})).toBeNull();
  });
  it('uses server-scoped choices and renders user labels without authored options',()=>{
-  const {content,body}=splitHelmet(parseJsxOrThrow('<Helmet><Value name="person" type="user" /></Helmet><Select label="Assignee" value="$person" /><DataTable data="$tasks" />').nodes);
-  const flow={values:content.values,queries:[]};
+  const {body}=splitHelmet(parseJsxOrThrow('<Helmet><Value name="person" type="user" /></Helmet><Select label="Assignee" value="$person" /><DataTable data="$tasks" />').nodes);
+  const flow=PERSON_FLOW;
   const state:DataflowState={values:{person:null},errors:{},tables:{tasks:{columns:[{name:'assigned_to',type:'user'}],rows:[{assigned_to:'usr_ada'}]}},userOptions:{person:[{value:'usr_ada',label:'Ada'},{value:'usr_grace',label:'Grace'}]},people:{usr_ada:card('Ada')}};
   const dataflow={flow,state};
   const store=createDataflowStore(dataflow,{transport:{run:vi.fn().mockResolvedValue({tables:{},errors:{}}),page:vi.fn()},debounceMs:0});
@@ -364,7 +373,7 @@ describe('native user controls',()=>{
  */
 describe('the viewer in markup', () => {
   const bodyOf = (source: string): JsxNode[] => splitHelmet(parseJsxOrThrow(source).nodes as JsxNode[]).body;
-  const BRANCH = '<div>{$_me ? <p>in</p> : <SignIn>Join</SignIn>}</div>';
+  const BRANCH = '<div>{$_me.id ? <p>in</p> : <SignIn>Join</SignIn>}</div>';
   const MEL = { id: 'usr_mel', card: card('Mel') };
 
   it('gives a guest the sign-in door, returning to the address they are on', () => {
@@ -401,15 +410,15 @@ describe('the viewer in markup', () => {
     document.body.removeChild(host);
   });
 
-  it('names a person by literal id, by $_me, and inside a For; nothing for a null id', () => {
+  it('names a person by literal id, by $_me.id, and inside a For; nothing for a null id', async () => {
     const source = '<Helmet><Value name="payer" type="user" default="usr_ada" />'
       + '<Value name="rows" type="table" value={[{"paid_by":"usr_grace"},{"paid_by":"usr_nobody"},{"paid_by":null}]} /></Helmet>'
       + '<p id="literal"><User userId="usr_ada" /></p>'
-      + '<p id="mine"><User userId="$_me" /></p>'
+      + '<p id="mine"><User userId="$_me.id" /></p>'
       + '<p id="bound"><User userId="$payer" /></p>'
       + '<For each={$rows}><span><User userId="$_row.paid_by" fallback="nobody" /></span></For>';
-    const { content, body } = splitHelmet(parseJsxOrThrow(source).nodes as JsxNode[]);
-    const flow = { values: content.values, queries: [] };
+    const { body } = splitHelmet(parseJsxOrThrow(source).nodes as JsxNode[]);
+    const flow = await compiledSource(source);
     const state: DataflowState = {
       values: { payer: 'usr_ada' }, errors: {}, tables: initialTables(flow),
       people: { usr_ada: card('Ada'), usr_grace: card('Grace') },
@@ -435,11 +444,11 @@ describe('the viewer in markup', () => {
    * which one it is. The <User> seam takes `id` out before either sees it, so
    * both must resolve a row field the same way.
    */
-  it('names a row field inside a Column, and still names the user cells beside it', () => {
+  it('names a row field inside a Column, and still names the user cells beside it', async () => {
     const source = '<Helmet><Value name="tasks" type="table" value={[{"id":1,"paid_by":"usr_grace","who":"usr_ada"}]} /></Helmet>'
       + '<DataTable data="$tasks" rowKey="id"><Column col="who" /><Column col="paid_by"><User userId="$_row.paid_by" /></Column></DataTable>';
-    const { content, body } = splitHelmet(parseJsxOrThrow(source).nodes as JsxNode[]);
-    const flow = { values: content.values, queries: [] };
+    const { body } = splitHelmet(parseJsxOrThrow(source).nodes as JsxNode[]);
+    const flow = await compiledSource(source);
     const tables = { tasks: { columns: [{ name: 'id', type: 'number' as const }, { name: 'paid_by', type: 'string' as const }, { name: 'who', type: 'user' as const }], rows: [{ id: 1, paid_by: 'usr_grace', who: 'usr_ada' }] } };
     const state: DataflowState = { values: {}, errors: {}, tables, people: { usr_ada: card('Ada'), usr_grace: card('Grace') } };
     const store = createDataflowStore({ flow, state }, { transport: { run: vi.fn().mockResolvedValue({ tables: {}, errors: {} }), page: vi.fn() }, debounceMs: 0 });
@@ -456,10 +465,10 @@ describe('the viewer in markup', () => {
    * them must resolve, on the server string itself (not only after hydration).
    */
   it.each([
-    ['a User and a UserImage', '<p><User userId="$_me" /> <UserImage userId="$_me" size="lg" /></p>'],
-    ['two UserImages', '<p><UserImage userId="$_me" /> <UserImage userId="$_me" size="lg" /></p>'],
-    ['a UserHandle and a UserImage', '<p><UserHandle userId="$_me" /> <UserImage userId="$_me" size="lg" /></p>'],
-  ])('resolves every $_me tag in one document to the viewer, on the server: %s', (_label, markup) => {
+    ['a User and a UserImage', '<p><User userId="$_me.id" /> <UserImage userId="$_me.id" size="lg" /></p>'],
+    ['two UserImages', '<p><UserImage userId="$_me.id" /> <UserImage userId="$_me.id" size="lg" /></p>'],
+    ['a UserHandle and a UserImage', '<p><UserHandle userId="$_me.id" /> <UserImage userId="$_me.id" size="lg" /></p>'],
+  ])('resolves every $_me.id tag in one document to the viewer, on the server: %s', (_label, markup) => {
     const html = renderToString(<StoryRuntimeApp nodes={bodyOf(markup)} refData={{}} viewer={MEL} colorMode="light" />);
     const host = document.createElement('div');
     host.innerHTML = html;
@@ -478,7 +487,7 @@ describe('the viewer in markup', () => {
   });
 
   it('shows the viewer their own name even before any query has answered', () => {
-    const view = render(<StoryRuntimeApp nodes={bodyOf('<p id="mine"><User userId="$_me" avatar /></p>')} refData={{}} viewer={MEL} colorMode="light" />);
+    const view = render(<StoryRuntimeApp nodes={bodyOf('<p id="mine"><User userId="$_me.id" avatar /></p>')} refData={{}} viewer={MEL} colorMode="light" />);
     expect(view.container.querySelector('#mine')!.textContent).toContain('Mel');
     expect(view.container.querySelector('#mine')!.textContent).toContain('M');
   });
@@ -489,16 +498,16 @@ describe('the viewer in markup', () => {
    * handle, must not have to take the other, and neither may resolve an id the
    * server did not already put in front of this viewer.
    */
-  it('draws a face and a handle from the same card, and asks nobody about an id it was not given', () => {
+  it('draws a face and a handle from the same card, and asks nobody about an id it was not given', async () => {
     const ADA = { name: 'Ada', handle: 'ada', image: '/api/users/usr_ada/avatar?v=abc' };
     const source = '<Helmet><Value name="payer" type="user" default="usr_ada" /></Helmet>'
       + '<p id="face"><UserImage userId="$payer" size="lg" /></p>'
       + '<p id="handle"><UserHandle userId="$payer" /></p>'
-      + '<p id="mine"><UserHandle userId="$_me" /></p>'
+      + '<p id="mine"><UserHandle userId="$_me.id" /></p>'
       + '<p id="stranger"><UserImage userId="usr_nobody" /><UserHandle userId="usr_nobody" /></p>'
       + '<p id="plain"><User userId="$payer" avatar={false} /></p>';
-    const { content, body } = splitHelmet(parseJsxOrThrow(source).nodes as JsxNode[]);
-    const flow = { values: content.values, queries: [] };
+    const { body } = splitHelmet(parseJsxOrThrow(source).nodes as JsxNode[]);
+    const flow = await compiledSource(source);
     const state: DataflowState = { values: { payer: 'usr_ada' }, errors: {}, tables: initialTables(flow), people: { usr_ada: ADA } };
     const view = render(<StoryRuntimeApp nodes={body} refData={{}} dataflow={{ flow, state }} viewer={MEL} colorMode="light" />);
     expect(view.container.querySelector('#face img')!.getAttribute('src')).toBe(ADA.image);
@@ -517,9 +526,10 @@ describe('the viewer in markup', () => {
   });
 });
 
-it('keeps a guest mutation button disabled with its authored label',()=>{
- const {content,body}=splitHelmet(parseJsxOrThrow('<Helmet><Mutation name="add" source="ref:abc123">{`insert into public.rows values ($_me)`}</Mutation></Helmet><Button id="add1" run="$add">Add expense</Button>').nodes);
- const flow={values:content.values,queries:content.queries,mutations:content.mutations};
+it('keeps a guest mutation button disabled with its authored label',async()=>{
+ const source='<Helmet><Import name="bills" src="ref:abc123" /><Mutation name="add">{`insert into bills.rows values ($_me.id)`}</Mutation></Helmet><Button id="add1" run="$add">Add expense</Button>';
+ const {body}=splitHelmet(parseJsxOrThrow(source).nodes);
+ const flow=await compiledSource(source,{abc123:[{name:'payer',type:'user'}]});
  const state={values:{},tables:{},errors:{},mutationAccess:{add:'sign_in_required'}};
  const mutate=vi.fn();
  const store=createDataflowStore({flow,state},{transport:{run:vi.fn(),page:vi.fn(),mutate}});

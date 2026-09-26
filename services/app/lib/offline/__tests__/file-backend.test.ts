@@ -220,7 +220,7 @@ describe('prepare — what an edit needs from artifactbin', () => {
   it.each([
     ['a new web image', '<img src="https://example.com/new.png" alt="new" />'],
     ['a new icon', '<Icon name="calendar" />'],
-    ['a new query source binding', '<Helmet><Query name="more" source="ref:Zz9Zz9">{`select 1`}</Query></Helmet>'],
+    ['a new query source binding', '<Helmet><Import name="more_data" src="ref:Zz9Zz9" /><Query name="more">{`select 1`}</Query></Helmet>'],
     ['a ref: target that is not in the file', '<Image src="ref:Qq1Qq1" alt="x" />'],
   ])('refuses %s with the asset reason', async (_label, source) => {
     const { backend } = open();
@@ -243,6 +243,16 @@ describe('drafts: CSS and queries', () => {
     expect(changed!.tables.sales).toBeUndefined();
     expect(changed!.errors.sales).toBe(OFFLINE_QUERY_REASON);
     expect(changed!.tables.regions).toEqual(file.snapshot.state.tables.regions);
+  });
+
+  it('hands the page engine the rows the file holds, and nothing it does not', async () => {
+    const orders = { rows: { rows: [{ region: 'west', revenue: 100 }], columns: [{ name: 'region', type: 'string' as const }, { name: 'revenue', type: 'number' as const }] } };
+    const file = fixture();
+    const { backend } = open({ ...file, snapshot: { ...file.snapshot, held: { orders } } });
+    const transport = backend.queryTransport();
+    await expect(transport.hold!('orders')).resolves.toEqual(orders);
+    await expect(transport.hold!('elsewhere')).rejects.toThrow(OFFLINE_QUERY_REASON);
+    transport.dispose();
   });
 
   it('serves the runtime from the snapshot over the CURRENT declarations', async () => {
@@ -421,7 +431,7 @@ describe('a source changed outside the file', () => {
   });
 
   it('never answers a query the agent changed with the rows the download ran for the old SQL', async () => {
-    const file = changed((s) => s.replace('select region, month, revenue from public.rows where', 'select region, month, revenue * 2 as revenue from public.rows where'));
+    const file = changed((s) => s.replace('select region, month, revenue from sales_data.rows where', 'select region, month, revenue * 2 as revenue from sales_data.rows where'));
     const { file: after, error } = await rebuildArtifactFile(file);
     expect(error).toBeNull();
     const { backend } = open(after);

@@ -44,3 +44,13 @@ it('keeps native-format history on its conditional restore endpoint',async()=>{
  await restoreBrowserArtifact(createHttpBackend('abc123'),1);
  expect(calls.at(-1)).toEqual({url:'/api/my/artifacts/abc123/revert',body:{version:1,expectedVersion:3,expectedState:'a'.repeat(64)}});
 });
+it('refuses, with the server’s reason, to restore a version written for the previous query engine that needs converting by hand',async()=>{
+ const calls:string[]=[];
+ vi.stubGlobal('fetch',vi.fn(async(url:string)=>{
+  calls.push(url);
+  if(url.endsWith('/versions/1'))return Response.json({format:'markup',markup:'<p>old</p>',meta:{},previous_engine:'Version 1 was written for the previous query engine and needs converting by hand, so it cannot be restored as it stands.'});
+  return Response.json({format:'markup',version:3,state:'a'.repeat(64),edit_id:'head',document:createDocumentGraph('<p>now</p>',3)});
+ }));
+ await expect(restoreBrowserArtifact(createHttpBackend('abc123'),1)).rejects.toThrow(/previous query engine.*cannot be restored as it stands/);
+ expect(calls.some(url=>url.endsWith('/edits'))).toBe(false);
+});

@@ -13,14 +13,15 @@ import type { AnnotationRange } from '@/lib/story/annotation-range';
 import type { JsxNode } from '@/lib/jsx';
 import type { GlyphMap } from '@/lib/story-ui/icon-contract';
 import type { ImageRefData, RefDataMap } from '@/lib/story/ref-data';
-import type { Dataflow, DataflowState, Row, Scalar } from '@/lib/story/dataflow';
+import type { DataflowState, Row, Scalar } from '@/lib/story/dataflow';
 import type { PersonCard } from '@artifactbin/contracts';
 import type { LocalMutationResult } from '@/lib/story/local-state';
 import type { ManagedAssetsConfig, ManagedAssetKind } from './managed-assets';
 
 /** The document's data as the island carries it: what is declared, and its state at render. */
 export interface StoryIslandDataflow {
-  flow: Dataflow;
+  /** The compiled declarations (lib/story/compiled-dataflow): what every query reads, every mutation's signature. */
+  flow: import('@/lib/story/compiled-dataflow').CompiledDataflow;
   /**
    * The rows, when somebody has already run them. ABSENT is the reader's
    * normal case — paint first: the document arrives with its declarations and
@@ -39,6 +40,15 @@ export interface StoryIslandDataflow {
    * paint-first run happens WITH them.
    */
   values?: Record<string, Scalar>;
+  /**
+   * The imports THIS reader may hold in full — read access to the dataset's
+   * own rows, stored rather than connected, under the hold cap — decided for
+   * the door this render's page queries through (lib/artifacts
+   * holdableImports). The runtime places every query over them in the page
+   * (lib/story/placement); absent, everything runs on the server. A hint: the
+   * door that answers the rows decides again.
+   */
+  hold?: string[];
 }
 
 /**
@@ -53,7 +63,7 @@ export interface RanDataflow extends StoryIslandDataflow {
 /**
  * WHO IS READING — the one fact about the reader a document is told.
  *
- * `id` is `$_me` (lib/story/dataflow VIEWER_REF), and `card` is the person the
+ * `id` is `$_me.id` (lib/story/builtins), and `card` is the person the
  * SAME visibility rules already let a DataTable cell show
  * (lib/datasets/user-fields people): a display name, the public handle they
  * chose, and the address of their picture — never an email, never any other
@@ -65,8 +75,8 @@ export interface RanDataflow extends StoryIslandDataflow {
  * document that declares nothing has no dataflow at all (and
  * `{$_me ? … : <SignIn/>}` is exactly such a document), and the viewer is not
  * the document's data — it is never declared, never carried in a link, never
- * written, and never sent into the author-script realm's state deltas
- * (lib/story-runtime/author-state).
+ * written, and never among the signals the author script reads through
+ * `window.mx` (lib/story-runtime/mx).
  */
 export interface StoryViewer {
   id: string;
@@ -116,8 +126,15 @@ export interface StoryIslandData {
    */
   queryUrl?: string;
   /**
+   * The SQLite engine's wasm, at the content-addressed URL the runtime build
+   * records (public/story/manifest.json), for a page that runs the queries
+   * over what its reader holds (dataflow.hold, lib/story-runtime/page-sqlite).
+   * Absent where nothing runs in the page.
+   */
+  sqliteWasm?: string;
+  /**
    * Where this document's WRITES go when it is the TOP-LEVEL page:
-   * `POST <mutateUrl> { mutation, values }` (app/a/[id]/mutate), the one other
+   * `POST <mutateUrl> { mutation, args, row?, value? }` (app/a/[id]/mutate), the one other
    * URL its CSP admits. Present only for a document that declares a
    * `<Mutation>`; inside a parent the relay is used instead, for the same
    * reason queries relay there — the page holds the session.
@@ -156,6 +173,8 @@ export interface StoryIslandData {
 
 /** The GET query endpoint's one parameter: the JSON of a QueryRequest (lib/story/query-request). */
 export const QUERY_REQUEST_PARAM = 'q';
+/** The most ids one `{people}` request may name (lib/story/query-request); a page asks in batches of this. */
+export const MAX_PEOPLE_IDS = 1000;
 
 /** DOM contract between the builder and the entry. */
 export const STORY_ROOT_ID = 'mx-story-root';
@@ -376,6 +395,8 @@ export interface StoryQueryRequest {
   id: number;
   values: Record<string, Scalar>;
   only: string[];
+  /** The reader's IANA zone, bound as `$_tz`. */
+  tz?: string;
   localTables?: Record<string, Row[]>;
   /** A window of one query (a table reading past the cap) — see lib/sql/engine QueryPage. */
   page?: { name: string; offset: number; limit: number; sort?: { col: string; dir: 'asc' | 'desc' } };
@@ -424,8 +445,9 @@ export type StoryAssetResult =
 /**
  * THE WRITE RELAY — the same shape as the query relay, for the same reason: a
  * document inside a parent page cannot present a session, and a PRIVATE
- * document's writes must. The frame posts a mutation NAME and its values, the
- * page POSTs /a/<id>/mutate and posts the answer back.
+ * document's writes must. The frame posts the mutation request
+ * (lib/story/mutation-request), the page POSTs /a/<id>/mutate and posts the
+ * answer back.
  */
 export const STORY_MUTATE_MESSAGE = 'mx:mutate';
 export const STORY_MUTATE_RESULT_MESSAGE = 'mx:mutate-result';
@@ -433,10 +455,7 @@ export const STORY_MUTATE_RESULT_MESSAGE = 'mx:mutate-result';
 export interface StoryMutateRequest {
   type: typeof STORY_MUTATE_MESSAGE;
   id: number;
-  mutation: string;
-  values: Record<string, Scalar>;
-  row?: Record<string, Scalar>;
-  localTables?: Record<string, Row[]>;
+  request: import('@/lib/story/mutation-request').MutationRequest;
 }
 
 export type StoryMutateResult =

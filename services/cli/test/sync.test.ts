@@ -70,6 +70,22 @@ test('pull preserves local edits against an unchanged head and keeps explicit hi
   assert.equal(calls.filter(path=>path.endsWith('/versions/1')).length,1,'immutable history is reused');
  }finally{await rm(root,{recursive:true,force:true});}
 });
+test('pull refuses to restore a version written for the previous query engine that needs converting by hand, and still reads it to stdout',async()=>{
+ const root=await mkdtemp(join(tmpdir(),'afbin-previous-engine-'));const home=join(root,'home');const cwd=join(root,'work');await mkdir(home);await mkdir(cwd);
+ const head={id:'abc123',version:3,edit_id:'edit3',state:digest('head3'),markup:'<p id="p001">Head</p>',format:'markup',title:'Title',theme:null,template:null,visibility:'unlisted',link_role:'viewer',parent_id:null};
+ const refusal='Version 1 was written for the previous query engine and needs converting by hand, so it cannot be restored as it stands.';
+ const request:typeof fetch=async(input)=>{const path=new URL(String(input)).pathname;if(path==='/api/artifacts/abc123')return Response.json(head,{headers:{'X-Artifactbin-Account':'usr_one'}});if(path==='/api/artifacts/abc123/versions/1')return Response.json({version:1,markup:'<p id="p001">Old</p>',title:'Old',meta:{},format:'markup',previous_engine:refusal},{headers:{'X-Artifactbin-Account':'usr_one'}});throw new Error(`Unexpected ${path}`);};
+ const invoke=async(args:string[])=>{const out:string[]=[];const code=await runCli(args,{cwd,home,interactive:false,fetch:request,stdout:x=>out.push(x),stderr:()=>{}});return{code,out:out.join('')};};
+ try{
+  await saveTestConnection({server:'https://example.com',token:'mx_test'},home);
+  const refused=await invoke(['pull','abc123@1','--output','doc.jsx','--json']);
+  assert.notEqual(refused.code,0);
+  const error=JSON.parse(refused.out).error;assert.equal(error.code,'previous_engine_version');assert.equal(error.message,refusal);
+  await assert.rejects(stat(join(cwd,'doc.jsx')),'nothing is written');
+  const read=await invoke(['pull','abc123@1','--output','-']);
+  assert.equal(read.code,0);assert.match(read.out,/Old/);
+ }finally{await rm(root,{recursive:true,force:true});}
+});
 test('an unconfirmed binary replacement is retried when the head is unchanged, never falsely acknowledged',async()=>{
  const root=await mkdtemp(join(tmpdir(),'afbin-binary-recovery-'));
  let head:any={id:'abc123',version:1,edit_id:'one',state:digest('one'),format:'file'};let writes=0;
@@ -352,16 +368,16 @@ describe('a declared write that names the viewer', () => {
    const root=await mkdtemp(join(tmpdir(),'afbin-me-write-'));
    try{
     await saveTestConnection({server:'https://example.com',token:'test'},root);
-    const joined=await run(root,['--name','join'],[{name:'join',params:[{name:'_me',type:'user'}]}]);
+    const joined=await run(root,['--name','join'],[{name:'join',args:[]}]);
     assert.equal(joined.code,0,JSON.stringify(joined.result));
-    assert.deepEqual(joined.bodies,[{name:'join',values:{}}]);
+    assert.deepEqual(joined.bodies,[{name:'join',args:{}}]);
    }finally{await rm(root,{recursive:true,force:true});}
   });
   test('refuses a supplied $_me by saying whose it is, and sends nothing',async()=>{
    const root=await mkdtemp(join(tmpdir(),'afbin-me-write-'));
    try{
     await saveTestConnection({server:'https://example.com',token:'test'},root);
-    const forged=await run(root,['--name','join','--param','_me=usr_someone'],[{name:'join',params:[{name:'_me',type:'user'}]}]);
+    const forged=await run(root,['--name','join','--param','_me=usr_someone'],[{name:'join',args:[]}]);
     assert.notEqual(forged.code,0);
     assert.equal(forged.result.error.code,'invalid_parameter');
     assert.match(forged.result.error.message,/_me/);
@@ -373,7 +389,7 @@ describe('a declared write that names the viewer', () => {
    const root=await mkdtemp(join(tmpdir(),'afbin-me-write-'));
    try{
     await saveTestConnection({server:'https://example.com',token:'test'},root);
-    const row=await run(root,['--name','remove'],[{name:'remove',target:'ds9Kq2',params:[{name:'_row'},{name:'_me',type:'user'}]}]);
+    const row=await run(root,['--name','remove'],[{name:'remove',target:'ds9Kq2',args:[],row:['id']}]);
     assert.notEqual(row.code,0);
     assert.equal(row.result.error.code,'row_mutation');
     assert.match(row.result.error.fix,/afbin query ds9Kq2 --write --input/);
@@ -385,7 +401,7 @@ describe('a declared write that names the viewer', () => {
    const root=await mkdtemp(join(tmpdir(),'afbin-me-write-'));
    try{
     await saveTestConnection({server:'https://example.com',token:'test'},root);
-    const row=await run(root,['--name','pick'],[{name:'pick',params:[{name:'_row'}]}]);
+    const row=await run(root,['--name','pick'],[{name:'pick',args:[],row:['id']}]);
     assert.equal(row.result.error.code,'row_mutation');
     assert.doesNotMatch(row.result.error.fix,/afbin query/);
     assert.match(row.result.error.fix,/live-sessions/);
@@ -552,7 +568,7 @@ test('pulling a starter names the next call — pick the kind, afbin help <templ
 });
 
 /**
- * A document's <Mutation source="ref:<id>"> needs its dataset published `access: readwrite`,
+ * A document's <Mutation> writing an <Import src="ref:<id>"> needs its dataset published `access: readwrite`,
  * and the CLI is the only door an agent drives: `--access` is that door, on the same push.
  */
 test('push --type dataset --access publishes a writable dataset, changes access later, and stays silent without the flag',async()=>{
@@ -774,6 +790,83 @@ test('push --policy viewers-write grants every table a multi-table dataset decla
   // The shape the server will parse, proven against the shared parser rather than by hand.
   assert.deepEqual(parseDatasetPolicy(patch.body.policy),patch.body.policy);
   assert.equal(result.operations[0].policy,'viewers-write');
+ }finally{await rm(root,{recursive:true,force:true});}
+});
+
+/**
+ * A TRACKED dataset YAML takes the flag too, and the command never claims a grant it did not write.
+ * The flag's policy once rode the metadata request, which reconciliation rebuilds from the YAML alone:
+ * the PATCH went out without it, the server kept its policy, and the output still said
+ * "policy": "viewers-write". The mock keeps the server's two rules: a dataset created with an explicit
+ * access starts with no policy (version 1), one created without it gets the default version 2 policy,
+ * and a version 2 policy is never replaced by a version 1 grant.
+ */
+test('push --policy viewers-write writes the grant on an already published dataset YAML, and explains a version 2 refusal',async()=>{
+ const root=await mkdtemp(join(tmpdir(),'afbin-policy-yaml-'));const home=join(root,'home');const cwd=join(root,'work');await mkdir(home);await mkdir(cwd);
+ const calls:Array<{method:string;path:string;body:any}>=[];
+ const defaultPolicy={version:2,allow:[{actions:['read'],from:{user:'*'}},{actions:['insert','update','delete'],from:{artifactOwner:'$owner'}}]};
+ const heads:Record<string,any>={};let created=0;
+ const curated=({dataset_policy:_policy,policy_revision:_revision,...rest}:any)=>rest;
+ const request:typeof fetch=async(input,init)=>{
+  const path=new URL(String(input)).pathname;const method=init?.method??'GET';
+  const body=init?.body?JSON.parse(String(init.body)):{};
+  calls.push({method,path,body});
+  const headers={'X-Artifactbin-Account':'usr_one'};
+  if(path==='/api/artifacts'&&method==='POST'){
+   const id=`book0${++created}`;
+   heads[id]={id,version:1,edit_id:'e1',state:digest(`${id}-1`),format:'dataset',access:body.access??'read',policy_revision:0,dataset_policy:body.access?null:defaultPolicy};
+   return Response.json(curated(heads[id]),{status:201,headers});
+  }
+  const head=heads[path.split('/').pop()!];
+  if(method==='PATCH'){
+   if('expectedPolicyRevision' in body&&body.expectedPolicyRevision!==head.policy_revision)return Response.json({error:'state_conflict',currentVersion:head.version,currentState:head.state},{status:409,headers});
+   if('policy' in body&&head.dataset_policy?.version===2&&body.policy?.version!==2)return Response.json({error:'invalid_policy',detail:'Keep version 2 policies; use an empty allow list to lock the dataset'},{status:400,headers});
+   const n=calls.filter(call=>call.method==='PATCH').length+1;
+   Object.assign(head,{edit_id:`e${n}`,state:digest(`${head.id}-${n}`),...(body.access?{access:body.access}:{}),...('policy' in body?{dataset_policy:body.policy,policy_revision:head.policy_revision+1}:{})});
+   return Response.json(head,{headers});
+  }
+  if(method==='GET')return Response.json(head,{headers});
+  throw new Error(`Unexpected ${method} ${path}`);
+ };
+ const invoke=async(args:string[])=>{const out:string[]=[];const code=await runCli([...args,'--json'],{cwd,home,interactive:false,fetch:request,stdout:x=>out.push(x),stderr:()=>{}});return{code,result:JSON.parse(out.join(''))};};
+ try{
+  await saveTestConnection({server:'https://example.com',token:'mx_test'},home);await seedIdentityPool(home,cwd,['book01','book02']);
+  const definition='<Dataset kind="stored">\n  <Table schema="public" name="rows" columns={["id","slot"]} rows={[]} />\n</Dataset>\n';
+  await writeFile(join(cwd,'bookings.jsx'),definition);await writeFile(join(cwd,'shifts.jsx'),definition);
+
+  // Created with access: readwrite, the dataset has no policy yet: the flag's grant is written and stored.
+  await writeFile(join(cwd,'bookings.yaml'),'type: dataset\nsource: bookings.jsx\naccess: readwrite\n');
+  assert.equal((await invoke(['push','bookings.yaml'])).code,0);
+  const count=calls.length;
+  const granted=await invoke(['push','bookings.yaml','--policy','viewers-write']);
+  assert.equal(granted.code,0,JSON.stringify(granted.result));
+  const grant=calls.slice(count).find(call=>call.method==='PATCH'&&'policy' in call.body);
+  assert.ok(grant,'the grant is written, not only reported');
+  assert.deepEqual(grant!.body.policy.tables.map((table:any)=>table.table),[{schema:'public',name:'rows'}]);
+  assert.equal(heads.book01.dataset_policy.enforcement,'enabled');
+  assert.equal(heads.book01.policy_revision,1);
+  assert.equal(granted.result.operations[0].policy,'viewers-write');
+
+  // Created without flags, it carries the default version 2 policy; its reconciled YAML says access: read.
+  await writeFile(join(cwd,'shifts.yaml'),'type: dataset\nsource: shifts.jsx\n');
+  assert.equal((await invoke(['push','shifts.yaml'])).code,0);
+  assert.match(await readFile(join(cwd,'shifts.yaml'),'utf8'),/^access: read$/m);
+  const before=calls.length;
+  const clash=await invoke(['push','shifts.yaml','--policy','viewers-write']);
+  assert.notEqual(clash.code,0);
+  assert.equal(clash.result.error.code,'access_mismatch');
+  assert.match(clash.result.error.message,/access: read/);
+  assert.match(clash.result.error.fix,/first push/);
+  assert.equal(calls.length,before,'a contradiction must not reach the server');
+
+  // Editing the access line does not help: the server keeps version 2, and the refusal says what does.
+  await writeFile(join(cwd,'shifts.yaml'),(await readFile(join(cwd,'shifts.yaml'),'utf8')).replace(/^access: read$/m,'access: readwrite'));
+  const refused=await invoke(['push','shifts.yaml','--policy','viewers-write']);
+  assert.notEqual(refused.code,0);
+  assert.equal(refused.result.error.code,'invalid_policy');
+  assert.match(refused.result.error.message,/version 2/);
+  assert.match(refused.result.error.fix,/first push/);
+  assert.equal(heads.book02.dataset_policy.version,2);
  }finally{await rm(root,{recursive:true,force:true});}
 });
 

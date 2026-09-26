@@ -41,7 +41,7 @@ describe('persisted source node identity', () => {
     expect(result.repairs).toEqual([{path:'1',from:'same',to:'a001',reason:'duplicate'}]);
   });
   it('gives every person tag a node id independent of repeated account ids', () => {
-    const source='<p><User userId="$_me" /><UserImage userId="$_me" /><UserHandle userId="$_me" /><User userId="usr_ada" /><User userId="usr_ada" /></p>';
+    const source='<p><User userId="$_me.id" /><UserImage userId="$_me.id" /><UserHandle userId="$_me.id" /><User userId="usr_ada" /><User userId="usr_ada" /></p>';
     const result=stampNodeIds(source);
     expect(result.repairs).toEqual([]);
     expect(new Set(result.ids).size).toBe(6);

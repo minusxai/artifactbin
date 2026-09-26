@@ -11,8 +11,9 @@
  *    query/mutate/asset endpoints and no live settings, the downloader as
  *    `viewer`;
  *  - the snapshot is dataflowForRow as the downloader (row scoping and `$_me`
- *    included), and the variants run the same engine the same way
- *    (lib/offline/variants);
+ *    included); the imports the downloader may hold travel whole, by the same
+ *    rule a reader's page holds them; the variants, for the queries that need
+ *    the server, run the same engine the same way (lib/offline/variants);
  *  - threads are the annotation listing's, under its own role rule.
  *
  * Then every server address the file would need is folded in as a `data:`
@@ -22,8 +23,10 @@
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { listAnnotationsFor, type AnnotationWire } from '@/lib/annotations';
-import { archivedReadOnly, archivedVersionForActor, rowAtVersion } from '@/lib/archived-version';
-import { canReadArtifact, dataflowForRow, getArtifactById, refDataForRow, viewerIdentityFor, type ArtifactRow, type RoleActor, type TokenActor } from '@/lib/artifacts';
+import { archivedReadOnly, archivedVersionForActor, servedRow } from '@/lib/archived-version';
+import { canReadArtifact, dataflowForRow, getArtifactById, holdableImports, holdImport, nameablePeople, refDataForRow, viewerIdentityFor, type ArtifactRow, type RoleActor, type TokenActor } from '@/lib/artifacts';
+import type { ImportTables } from '@/lib/story/compiled-flow';
+import { placeDataflow } from '@/lib/story/placement';
 import { resolveStoredStoryDesign } from '@/lib/data/story/story-themes';
 import { currentStoryCss } from '@/lib/data/story/story-css.server';
 import { getDb } from '@/lib/db';
@@ -224,7 +227,7 @@ export async function assembleArtifactFile(input: AssembleArtifactFileInput): Pr
   const history = tokenActorOf(actor);
   const at = input.version === undefined ? null : await archivedVersionForActor(history, artifact, input.version);
   if (at === 'not_found') return refuse('not_found', `Version ${input.version} of this document is not available to you.`);
-  const row: ArtifactRow = at ? rowAtVersion(artifact, at) : artifact;
+  const row: ArtifactRow = await servedRow(artifact, at);
   const source = row.source ?? '';
 
   const meta = row.meta as { theme?: string | null; template?: string | null; colorMode?: 'light' | 'dark' | null; compiledCss?: string | null; cssCompileVersion?: string | null };
@@ -237,6 +240,19 @@ export async function assembleArtifactFile(input: AssembleArtifactFileInput): Pr
     viewerIdentityFor(artifact, actor.userId),
     savedMentionStates(artifact),
   ]);
+  /*
+   * WHAT THE FILE CAN RUN ITSELF: every import the downloader may hold travels
+   * whole, decided by the same rule and the same door check as a reader's page
+   * (lib/artifacts holdableImports), and the file's own SQLite engine runs
+   * every query over them live. Only the rest — a connected database, data
+   * the downloader may not hold — is precomputed below.
+   */
+  const hold = ran ? await holdableImports(row, ran.flow, actor) : [];
+  const held: Record<string, ImportTables[string]> = {};
+  for (const name of hold) {
+    const tables = await holdImport(row, name, actor);
+    if (tables) held[name] = tables;
+  }
   const parts = await prepareStoryParts({
     source,
     compiledCss,
@@ -245,8 +261,8 @@ export async function assembleArtifactFile(input: AssembleArtifactFileInput): Pr
     colorMode: design.colorMode,
     refData,
     assetUrls: await webAssetsForSource(row.source),
-    // Declarations only: the rows travel once, in the snapshot, and the file's transport answers from it.
-    dataflow: ran ? { flow: ran.flow } : null,
+    // Declarations only: the rows travel once, in the snapshot, and the file answers from it.
+    dataflow: ran ? { flow: ran.flow, hold: Object.keys(held) } : null,
     viewer: readerIdentity,
     title: row.title,
     mentionStatuses,
@@ -255,13 +271,25 @@ export async function assembleArtifactFile(input: AssembleArtifactFileInput): Pr
   const island: StoryIslandData = { ...parts.runtime.data, nodes: withoutSrcSets(parts.runtime.data.nodes) };
   // Never a door back to the server: prepareStoryParts was given none, and these are dropped by name besides.
   delete island.queryUrl; delete island.mutateUrl; delete island.assetsUrl; delete island.managedAssets;
+  // The file carries its engine's wasm inside its code (lib/offline/sqlite-wasm), never a server address.
+  delete island.sqliteWasm;
 
-  const state = ran?.state ?? EMPTY_STATE;
+  /*
+   * WHO THE FILE MAY NAME. Its own runs show people no server run named, and
+   * it can ask no door later, so it carries every card a reader's page could
+   * ask its door for (lib/artifacts nameablePeople, for the downloader); the
+   * run's own cards stand beside them.
+   */
+  const named = Object.keys(held).length ? await nameablePeople(row, actor) : {};
+  const state = ran ? { ...ran.state, ...(Object.keys(named).length ? { people: { ...named, ...ran.state.people } } : {}) } : EMPTY_STATE;
+  const placement = ran ? placeDataflow(ran.flow, Object.keys(held)) : null;
+  const serverQueries = new Set(Object.entries(placement?.queries ?? {}).filter(([, where]) => where === 'server').map(([name]) => name));
   const { variants, frozen } = ran
     ? await precomputeVariants({
       flow: ran.flow,
       base: state,
-      domains: valueDomains(island.nodes, ran.flow, state),
+      domains: valueDomains(island.nodes, ran.flow, state, serverQueries),
+      queries: serverQueries,
       caps: input.caps,
       run: async (values, only) => {
         const result = await dataflowForRow(row, { viewer: actor, values, only });
@@ -275,7 +303,7 @@ export async function assembleArtifactFile(input: AssembleArtifactFileInput): Pr
 
   const imageRefs = new Set(Object.entries(refData).filter(([, r]) => r.kind === 'image').map(([id]) => id));
   const inliner = new Inliner(origin, imageRefs, maxFileBytes);
-  const snapshot = { at: new Date().toISOString(), state, variants, frozen };
+  const snapshot = { at: new Date().toISOString(), state, held, variants, frozen };
   let inlined: { css: ArtifactFile['css']; island: StoryIslandData; snapshot: ArtifactFile['snapshot']; threads: AnnotationWire[] };
   try {
     inlined = {

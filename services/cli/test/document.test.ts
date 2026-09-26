@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {parseDocument,writeDocument} from '../src/document';
 
 test('fence parsing preserves authored bytes and distinguishes omission from null',()=>{
- const body='<Helmet><Query name="rows" source="ref:abc123">{`select * from public.rows`}</Query></Helmet>\n{/* keep */}<p> Text  </p>\n';
+ const body='<Helmet><Import name="rows_data" src="ref:abc123" /><Query name="rows">{`select * from rows_data.rows`}</Query></Helmet>\n{/* keep */}<p> Text  </p>\n';
  const doc=parseDocument(`---\nid: abc123\ntitle: null\nhead_version: 4\nstate: ${'a'.repeat(64)}\n---\n${body}`);
  assert.equal(doc.body,body);assert.equal(doc.metadata.title,null);assert.ok(!('theme' in doc.metadata));
  const roundtrip=parseDocument(writeDocument(doc));assert.deepEqual(roundtrip,doc);

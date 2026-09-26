@@ -12,18 +12,20 @@
  *    its existing cannot-save state) and no `importImage`.
  */
 import type { QueryTransport } from '@/lib/story-runtime/store';
-import { queriesDependingOn, type Dataflow, type DataflowState, type Scalar, type TableResult } from '@/lib/story/dataflow';
+import type { DataflowState, Scalar, TableResult } from '@/lib/story/dataflow';
+import type { CompiledDataflow } from '@/lib/story/compiled-dataflow';
+import { queriesReadingValues } from '@/lib/story/compiled-flow';
 import { OFFLINE_FILTER_REASON, type ArtifactFileSnapshot } from './file-format';
 
 type Answer = { table: TableResult } | { error: string };
 
-export function createSnapshotTransport(flow: Dataflow, snapshot: ArtifactFileSnapshot): QueryTransport {
+export function createSnapshotTransport(flow: CompiledDataflow, snapshot: ArtifactFileSnapshot): QueryTransport {
   const base = snapshot.state;
   const scalars = flow.values.filter((v) => v.kind === 'scalar').map((v) => v.name);
   /** For each query, the Values that reach it — directly or through the queries it reads. */
   const reads = new Map<string, string[]>();
   for (const value of scalars) {
-    for (const query of queriesDependingOn(flow, [value])) reads.set(query, [...(reads.get(query) ?? []), value]);
+    for (const query of queriesReadingValues(flow, [value])) reads.set(query, [...(reads.get(query) ?? []), value]);
   }
   const same = (a: Scalar | undefined, b: Scalar | undefined) => Object.is(a ?? null, b ?? null);
   const fromBase = (name: string): Answer | null => {

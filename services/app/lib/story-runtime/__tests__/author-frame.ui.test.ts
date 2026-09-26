@@ -1,4 +1,5 @@
 import {describe,it,expect,vi} from 'vitest';
+import { EMPTY_COMPILED_DATAFLOW } from '@/lib/story/compiled-dataflow';
 import {AUTHOR_FRAME_DOCUMENT} from '../author-frame';
 import {startAuthorScript} from '../author-script';
 import {createDataflowStore} from '../store';
@@ -25,7 +26,7 @@ describe('fixed HTTP author wrapper',()=>{
   const port={postMessage:vi.fn(),start:vi.fn(),close:vi.fn(),onmessage:null};
   vi.stubGlobal('MessageChannel',class {port1=port;port2={};});
   const host=document.createElement('div');document.body.append(host);
-  const store=createDataflowStore({flow:{values:[],queries:[]}});
+  const store=createDataflowStore({flow:EMPTY_COMPILED_DATAFLOW});
   const stop=startAuthorScript('',store,document,{host,title:'Visible',html:'<p>inside</p>',document:'<script>inner only</script>'});
   const frame=host.querySelector('iframe')!,post=vi.spyOn(frame.contentWindow!,'postMessage');
   expect(new URL(frame.src).pathname).toBe('/story/author-frame');expect(frame.srcdoc).toBe('');
@@ -36,7 +37,7 @@ describe('fixed HTTP author wrapper',()=>{
  });
  it('shows a visible startup timeout and removes the failed frame',()=>{
   vi.useFakeTimers();const host=document.createElement('div');document.body.append(host);
-  const store=createDataflowStore({flow:{values:[],queries:[]}});
+  const store=createDataflowStore({flow:EMPTY_COMPILED_DATAFLOW});
   const stop=startAuthorScript('',store,document,{host,title:'Slow',html:'',document:'<p>never booted</p>'});
   vi.advanceTimersByTime(15000);expect(host.querySelector('iframe')).toBeNull();expect(host.querySelector('[role="alert"]')?.textContent).toContain('did not start');
   stop();host.remove();vi.useRealTimers();

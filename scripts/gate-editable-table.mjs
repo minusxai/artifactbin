@@ -29,8 +29,8 @@ try {
   {
     const dataset = await fixture.api('/api/artifacts', {title:'Row action gate data', dataset:[{id:1,status:'backlog'},{id:2,status:'backlog'}], access:'readwrite', visibility:'unlisted'});
     const doc = await fixture.api('/api/artifacts', {title:'Row action gate', visibility:'unlisted', markup:
-      `<Helmet><Query name="tasks" source="ref:${dataset.id}">{\`select * from public.rows order by id\`}</Query>
-      <Mutation name="complete" source="ref:${dataset.id}" expectedAffected={1}>{\`update public.rows set status='done' where id=$_row.id\`}</Mutation></Helmet>
+      `<Helmet><Import name="tasks_data" src="ref:${dataset.id}" /><Query name="tasks">{\`select * from tasks_data.rows order by id\`}</Query>
+      <Import name="complete_data" src="ref:${dataset.id}" /><Mutation name="complete" expectedAffected={1}>{\`update complete_data.rows set status='done' where id=$_row.id\`}</Mutation></Helmet>
       <For each={$tasks} keyBy="id"><p aria-label="Repeated status {$_row.id}">{$_row.status}</p><Button run="$complete" aria-label="Repeat complete {$_row.id}">Complete</Button></For>
       <DataTable data="$tasks" rowKey="id"><Column col="id"/><Column col="status"><Button run="$complete" aria-label="Table complete {$_row.id}">Complete</Button></Column></DataTable>`});
     await aPage.goto(`${base}/a/${doc.id}`);
@@ -55,9 +55,9 @@ try {
     const dataset=await account.publish({title:'Native users gate',dataset:[{id:1,assignee:null,completed_by:null}],columns:[{name:'assignee',type:'user',constraints:{memberOf:['current']}},{name:'completed_by',type:'user',constraints:{self:true}}],access:'readwrite',visibility:'unlisted'});
     const doc=await account.publish({title:'User field project',visibility:'unlisted',markup:
       `<Helmet><Value name="person" source="ref:${dataset.id}" column="assignee" />
-      <Query name="tasks" source="ref:${dataset.id}">{\`select *, '' as action from public.rows where $person is null or assignee=$person\`}</Query>
-      <Mutation name="assign" source="ref:${dataset.id}" expectedAffected={1}>{\`update public.rows set assignee=$_value where id=$_row.id\`}</Mutation>
-      <Mutation name="complete" source="ref:${dataset.id}" expectedAffected={1}>{\`update public.rows set completed_by=$_me where id=$_row.id\`}</Mutation></Helmet>
+      <Import name="tasks_data" src="ref:${dataset.id}" /><Query name="tasks">{\`select *, '' as action from tasks_data.rows where $person is null or assignee=$person\`}</Query>
+      <Import name="assign_data" src="ref:${dataset.id}" /><Mutation name="assign" expectedAffected={1}>{\`update assign_data.rows set assignee=$_value where id=$_row.id\`}</Mutation>
+      <Import name="complete_data" src="ref:${dataset.id}" /><Mutation name="complete" expectedAffected={1}>{\`update complete_data.rows set completed_by=$_me.id where id=$_row.id\`}</Mutation></Helmet>
       <Select label="Team filter" value="$person" />
       <DataTable data="$tasks" rowKey="id"><Column col="id"/><Column col="assignee"><Select label="Assign member" value="$_row.assignee" run="$assign"/></Column><Column col="completed_by"/><Column col="action"><Button run="$complete">Finish user task</Button></Column></DataTable>`});
     await userPage.goto(`${base}/a/${doc.id}`);
@@ -279,7 +279,8 @@ try {
   assert.equal(await guest.getByLabel('Item 1', { exact: true }).isDisabled(), true);
   const forged = await guest.request.post(`${shared.url}/mutate`, { data: {
     mutation: 'set_item',
-    values: { _value: 'forged' },
+    args: {},
+    value: 'forged',
     row: { id: 1, item: 'Task 1', owner: 'TBD', hours: 2, depends_on: '[]', tags: '[]', status: 'backlog', sprint: '' },
   } });
   assert.equal(forged.status(), 403);

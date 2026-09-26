@@ -1,6 +1,6 @@
 {
   "name": "@artifactbin/cli",
-  "version": "0.2.6",
+  "version": "0.3.2",
   "type": "module",
   "license": "Apache-2.0",
   "description": "Local files, published artifacts and agent authoring",
@@ -49,7 +49,8 @@
     "vega-lite": "6.4.3",
     "vega-interpreter": "2.3.1",
     "nunjucks": "3.2.4",
-    "sharp": "0.35.4"
+    "sharp": "0.35.4",
+    "@sqlite.org/sqlite-wasm": "3.53.4-build1"
   },
   "devDependencies": {
     "postject": "1.0.0-alpha.6"

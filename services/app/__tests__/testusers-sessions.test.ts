@@ -181,8 +181,8 @@ it('joins a viewers-write page as a genuinely second person — in its own copy,
   };
   const dataset = await publish({ dataset: [{ id: 1, who: 'seed' }], access: 'readwrite', visibility: 'unlisted' });
   const doc = await publish({ visibility: 'unlisted', markup:
-    `<Helmet><Query name="rows" source="ref:${dataset}">{\`select * from public.rows order by id\`}</Query>`
-    + `<Mutation name="join" source="ref:${dataset}">{\`insert into public.rows (id, who) select (select max(id) + 1 from public.rows), $_me\`}</Mutation></Helmet>`
+    `<Helmet><Import name="rows_data" src="ref:${dataset}" /><Query name="rows">{\`select * from rows_data.rows order by id\`}</Query>`
+    + `<Import name="join_data" src="ref:${dataset}" /><Mutation name="join">{\`insert into join_data.rows (id, who) select (select max(id) + 1 from join_data.rows), $_me.id\`}</Mutation></Helmet>`
     + '<DataTable data="$rows" />' });
   const head = await getArtifactById(dataset);
   const granted = await patchArtifact(await observedRequest(`/api/artifacts/${dataset}`, { method: 'PATCH', token: owner.token, json: { policy: viewersWritePolicy(), expectedPolicyRevision: head!.policy_revision ?? 0 } }), ctx(dataset));

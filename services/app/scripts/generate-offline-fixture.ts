@@ -3,9 +3,11 @@
  * (scripts/fixtures/offline-file/artifact-file.json) from its markup
  * (dashboard.jsx), through the SAME parse, prepare and CSS compile the app
  * serves a document with — so the fixture's nodes, dataflow and stylesheet
- * cannot drift from what a real download would carry. The query results are
- * written here by hand: the fixture has no dataset, and the point of the gate
- * is the file, not the engine.
+ * cannot drift from what a real download would carry. The rows are written
+ * here by hand: the fixture has no dataset. The downloader holds `sales_data`,
+ * so the file's own engine runs `regions` and `sales` live and nothing is
+ * precomputed for them; `targets_data` is not held, so `matches` answers from
+ * the snapshot and its free-text filter is frozen.
  *
  *   cd services/app && npx tsx scripts/generate-offline-fixture.ts
  *
@@ -14,12 +16,12 @@
 import { readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { parseJsx } from '@/lib/jsx';
-import { splitHelmet } from '@/lib/story/helmet';
+import { declarationsOf } from '@/lib/story/helmet';
+import { compileWithLoader } from '@/lib/story/compile-dataflow';
 import { compileStoryCss } from '@/lib/data/story/story-css.server';
 import { stampNodeIds } from '@/lib/story/node-ids';
 import { prepareStoryParts } from '@/lib/story/prepare-runtime.server';
-import type { Dataflow, DataflowState, TableResult } from '@/lib/story/dataflow';
+import type { DataflowState, TableResult } from '@/lib/story/dataflow';
 import { ARTIFACT_FILE_FORMAT, parseArtifactFile, sourceDigest, type ArtifactFile } from '@/lib/offline/file-format';
 
 const APP = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -30,10 +32,14 @@ const FIXTURE = path.resolve(APP, '../../scripts/fixtures/offline-file');
  */
 const source = stampNodeIds(readFileSync(path.join(FIXTURE, 'dashboard.jsx'), 'utf8').trim(), { retireLegacyAliases: true }).source;
 
-const parsed = parseJsx(source);
-if (!parsed.ok) throw new Error('dashboard.jsx does not parse');
-const { content } = splitHelmet(parsed.nodes);
-const flow: Dataflow = { values: content.values, queries: content.queries, ...(content.mutations.length ? { mutations: content.mutations } : {}) };
+const declared = declarationsOf(source);
+if (!declared) throw new Error('dashboard.jsx does not parse');
+// The dataset it imports, by shape: the compiler needs nothing else.
+const compiledFlow = await compileWithLoader(declared, async () => ({
+  kind: 'dataset', tables: [{ name: 'rows', columns: [{ name: 'region', type: 'string' }, { name: 'month', type: 'string' }, { name: 'revenue', type: 'number' }] }],
+}));
+if (!compiledFlow.ok) throw new Error(compiledFlow.errors.map((e) => e.message).join('\n'));
+const flow = compiledFlow.compiled;
 
 const salesRows = [
   { region: 'east', month: '2026-07', revenue: 120 }, { region: 'east', month: '2026-08', revenue: 180 },
@@ -54,10 +60,13 @@ const state: DataflowState = {
 };
 
 const compiledCss = await compileStoryCss(source, { force: true });
+const hold = ['sales_data'];
 const { runtime } = await prepareStoryParts({
   source, compiledCss, theme: null, colorMode: null, template: 'dashboard', refData: {}, title: 'Regional sales',
-  dataflow: { flow, state },
+  dataflow: { flow, state, hold },
 });
+// A file carries its engine inside itself: no server address for the wasm.
+delete runtime.data.sqliteWasm;
 
 /*
  * The download inlines every font as a data: URI. The fixture keeps it small:
@@ -88,16 +97,14 @@ const file: ArtifactFile = {
   source,
   metadata: { title: runtime.title, description: null, theme: null, template: 'dashboard', colorMode: null },
   css,
-  island: { ...runtime.data, dataflow: { flow, state } },
+  island: { ...runtime.data, dataflow: { flow, state, hold } },
   snapshot: {
     at,
     state,
-    variants: ['east', 'north', 'west'].map((region) => ({
-      values: { region },
-      tables: { sales: sales(salesRows.filter((r) => r.region === region)) },
-      errors: {},
-    })),
-    // Free text has no finite domain: its control is disabled offline.
+    held: { sales_data: { rows: sales(salesRows) } },
+    // `region` feeds only queries the file runs itself: nothing to precompute.
+    variants: [],
+    // `note` feeds `matches`, over data the file does not hold, and free text has no finite domain: disabled offline.
     frozen: ['note'],
   },
   journal: [],

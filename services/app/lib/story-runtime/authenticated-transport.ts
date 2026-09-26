@@ -1,5 +1,8 @@
 import type { QueryTransport } from './store';
 import type { DataflowState } from '@/lib/story/dataflow';
+import { localZone } from '@/lib/story/builtins';
+import type { ImportTables } from '@/lib/story/compiled-flow';
+import type { PersonCard } from '@artifactbin/contracts';
 
 /** The authenticated page's existing query/mutation/assets doors, scoped to one document lifetime. */
 export function createAuthenticatedTransport(id: string, fetcher: typeof fetch = fetch): QueryTransport & {dispose():void} {
@@ -18,14 +21,16 @@ export function createAuthenticatedTransport(id: string, fetcher: typeof fetch =
   const query = (body: unknown): Promise<Pick<DataflowState,'tables'|'errors'|'mutationAccess'>> => post(`${base}/query`, body);
   return {
     dispose: () => controller.abort(),
-    run: (values, only, localTables) => query({values,only,...(localTables ? {localTables} : {})}),
+    run: (values, only, localTables) => query({values,only,tz:localZone(),...(localTables ? {localTables} : {})}),
+    hold: async (name) => ((await post(`${base}/query`, {hold:name})) as {tables:ImportTables[string]}).tables,
+    people: async (ids) => ((await post(`${base}/query`, {people:ids})) as {people:Record<string,PersonCard>}).people,
     page: async (values, name, page, localTables) => {
-      const result = await query({values,only:[name],page:{name,...page},...(localTables ? {localTables} : {})});
+      const result = await query({values,only:[name],page:{name,...page},tz:localZone(),...(localTables ? {localTables} : {})});
       if (!result.tables[name]) throw new Error(result.errors[name] ?? `no rows for ${name}`);
       return result.tables[name];
     },
-    mutate: async (values, mutation, row, localTables) => {
-      const result = await post(`${base}/mutate`, {values,mutation,...(row ? {row} : {}),...(localTables ? {localTables} : {})});
+    mutate: async (request) => {
+      const result = await post(`${base}/mutate`, {tz:localZone(),...request});
       if (!result.ok) throw new Error(result.detail ?? result.error ?? 'write failed');
       return {dataset:result.dataset ?? '',...(result.local ? {local:result.local} : {})};
     },

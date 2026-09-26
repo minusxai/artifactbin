@@ -6,9 +6,10 @@ order: 2
 ---
 ## Read first
 
-Use `<DataTable>` with `<Column>` for row templates.
-A control's `run="$mutation"` saves its cell. See [apps](apps.md) for grants/membership,
-[data](markup-data.md) for queries and controls, and [datasets](databases.md) for legacy `--access readwrite`.
+Use `<DataTable>` with `<Column>` for row templates. An editor in a Column with
+`run="$mutation"` saves its cell: the mutation reads the new value as `$_value`
+and the row as `$_row.<column>`. See [data](markup-data.md) for queries and
+controls, and [apps](apps.md) for who may write.
 
 [User fields](databases-users.md).
 
@@ -18,7 +19,7 @@ Example · Scope and identity · Committing · References and authorization.
 
 ## Seven roadmap editors
 
-Replace `abc123` / `def456` with task/sprint dataset IDs. Tasks have
+Replace `rdm123` / `def456` with task/sprint dataset IDs. Tasks have
 `id` (integer), `item`, `owner`, `hours` (nullable number), `depends_on`,
 `tags`, `status`, and `sprint`; the sprints dataset has `name`.
 Store tags/dependencies as **JSON-array strings**: `["design,ux","feature"]`,
@@ -28,19 +29,21 @@ Do not split comma-separated data blindly: embedded commas are ambiguous.
 ```jsx
 <Helmet>
   <title>Editable roadmap</title>
-  <Query name="roadmap" source="ref:abc123">{`select * from public.rows order by id`}</Query>
-  <Query name="task_options" source="ref:abc123">{`select cast(cast(id as bigint) as varchar) as value, cast(cast(id as bigint) as varchar) || ' · ' || item as label from public.rows order by id`}</Query>
-  <Query name="sprint_options" source="ref:def456">{`select '' as value, 'Unscheduled' as label union all select name as value, name as label from public.rows`}</Query>
-  <Query name="all_tags" source="ref:abc123">{`select distinct unnest(cast(tags as varchar[])) as tag from public.rows order by tag`}</Query>
-  <Mutation name="set_item" expectedAffected={1} source="ref:abc123">{`update public.rows set item = $_value where id = $_row.id and item is not distinct from $_row.item`}</Mutation>
-  <Mutation name="set_owner" expectedAffected={1} source="ref:abc123">{`update public.rows set owner = $_value where id = $_row.id and owner is not distinct from $_row.owner`}</Mutation>
-  <Mutation name="set_hours" expectedAffected={1} source="ref:abc123">{`update public.rows set hours = $_value where id = $_row.id and hours is not distinct from $_row.hours`}</Mutation>
-  <Mutation name="set_depends_on" expectedAffected={1} source="ref:abc123">{`update public.rows set depends_on = $_value where id = $_row.id and depends_on is not distinct from $_row.depends_on and not list_contains(cast($_value as varchar[]), cast(cast($_row.id as bigint) as varchar))`}</Mutation>
-  <Mutation name="set_tags" expectedAffected={1} source="ref:abc123">{`update public.rows set tags = $_value where id = $_row.id and tags is not distinct from $_row.tags`}</Mutation>
-  <Mutation name="set_status" expectedAffected={1} source="ref:abc123">{`update public.rows set status = $_value where id = $_row.id and status is not distinct from $_row.status`}</Mutation>
-  <Mutation name="set_sprint" expectedAffected={1} source="ref:abc123">{`update public.rows set sprint = $_value where id = $_row.id and sprint is not distinct from $_row.sprint`}</Mutation>
+  <Import name="roadmap" src="ref:rdm123" />
+  <Import name="sprints" src="ref:def456" />
+  <Query name="tasks">{`select * from roadmap.rows order by id`}</Query>
+  <Query name="task_options">{`select cast(cast(id as integer) as text) as value, cast(cast(id as integer) as text) || ' · ' || item as label from roadmap.rows order by id`}</Query>
+  <Query name="sprint_options">{`select '' as value, 'Unscheduled' as label union all select name as value, name as label from sprints.rows`}</Query>
+  <Query name="all_tags">{`select distinct t.value as tag from roadmap.rows, json_each(roadmap.rows.tags) as t order by tag`}</Query>
+  <Mutation name="set_item" expectedAffected={1}>{`update roadmap.rows set item = $_value where id = $_row.id and item is not distinct from $_row.item`}</Mutation>
+  <Mutation name="set_owner" expectedAffected={1}>{`update roadmap.rows set owner = $_value where id = $_row.id and owner is not distinct from $_row.owner`}</Mutation>
+  <Mutation name="set_hours" expectedAffected={1}>{`update roadmap.rows set hours = $_value where id = $_row.id and hours is not distinct from $_row.hours`}</Mutation>
+  <Mutation name="set_depends_on" expectedAffected={1}>{`update roadmap.rows set depends_on = $_value where id = $_row.id and depends_on is not distinct from $_row.depends_on and not list_contains($_value, cast(cast($_row.id as integer) as text))`}</Mutation>
+  <Mutation name="set_tags" expectedAffected={1}>{`update roadmap.rows set tags = $_value where id = $_row.id and tags is not distinct from $_row.tags`}</Mutation>
+  <Mutation name="set_status" expectedAffected={1}>{`update roadmap.rows set status = $_value where id = $_row.id and status is not distinct from $_row.status`}</Mutation>
+  <Mutation name="set_sprint" expectedAffected={1}>{`update roadmap.rows set sprint = $_value where id = $_row.id and sprint is not distinct from $_row.sprint and ($_value = '' or $_value in (select name from sprints.rows))`}</Mutation>
 </Helmet>
-<DataTable data="$roadmap" rowKey="id">
+<DataTable data="$tasks" rowKey="id">
   <Column col="id" title="ID" />
   <Column col="item" title="Item">
     <input aria-label="Item {$_row.id}" type="text" value="$_row.item" run="$set_item" />
@@ -75,7 +78,7 @@ Do not split comma-separated data blindly: embedded commas are ambiguous.
 - `$_row.field` works in control bindings, `{$_row.field}` text, and string
   templates such as `label="Status {$_row.id}"` inside a Column. One member
   level only; extract nested JSON with SQL. `_`-prefixed declaration names
-  are reserved. `$_value` is the committed scalar in mutation SQL.
+  are reserved. `$_value` is the committed value in mutation SQL.
 - `run` editors: `<Select>`, `<DatePicker>`, `<input type="text">`,
   `<input type="number">`, `<textarea>`, `<select>` — native tags, not
   `<Input>`; others rejected.
@@ -122,13 +125,12 @@ value-based conflict detection: an A→B→A history is not detected.
 ## References and authorization
 
 Options queries use value/label columns beyond the current filter.
-Integer dependency IDs cast through BIGINT before VARCHAR to match JSON strings.
+Integer dependency IDs cast through integer to text to match JSON strings.
 `exclude="$_row.id"` hides self-options; the server predicate rejects self-writes.
 Unscheduled writes the existing `''` sprint sentinel.
 
 A query filter is **not authorization**: client-supplied row values do not
 prove query membership. Put any permitted-subset restriction in the
-mutation SQL. Writes require dataset edit permission; denied controls disable. Cycle checks
-and cross-dataset foreign-key enforcement are deferred; the mutation engine
-registers only its target dataset, so the dropdown alone does not enforce
-sprint membership or dependency existence.
+mutation SQL, as `set_sprint` does: a mutation may read other imports (not
+queries), so it checks the sprint exists. Denied controls disable. Cycle checks
+are yours to write; the dropdown alone enforces nothing.

@@ -15,6 +15,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { JsxNode } from '@/lib/jsx';
 import { splitHelmet } from '@/lib/story/helmet';
 import { parseJsxOrThrow } from '@/test/helpers/jsx';
+import { compiledSource } from '@/test/helpers/compiled';
 import { InlineStoryRuntime } from '../InlineStoryRuntime';
 import { StoryRuntimeApp } from '../StoryRuntimeApp';
 import { ACCESS_PENDING, createDataflowStore } from '../store';
@@ -28,10 +29,12 @@ const HELMET = '<Helmet>'
   + '<Value name="region" type="string" />'
   + '<Value name="note" type="string" />'
   + '<Value name="flag" type="boolean" default={false} />'
-  + '<Query name="regions">{`select distinct region from ref_abc123`}</Query>'
-  + '<Query name="sales">{`select * from ref_abc123 where $region is null or region = $region or $note = region`}</Query>'
-  + '<Mutation name="add" source="ref:abc123">{`insert into public.rows (region) values (\'x\')`}</Mutation>'
+  + '<Import name="orders" src="ref:abc123" />'
+  + '<Query name="regions">{`select distinct region from orders.rows`}</Query>'
+  + '<Query name="sales">{`select * from orders.rows where $region is null or region = $region or $note = region`}</Query>'
+  + '<Mutation name="add">{`insert into orders.rows (region) values (\'x\')`}</Mutation>'
   + '</Helmet>';
+const FLOW = await compiledSource(HELMET, { abc123: [{ name: 'region', type: 'string' }] });
 const STATE: DataflowState = {
   values: { region: null, note: null, flag: false },
   tables: { regions: { rows: [{ region: 'EU' }, { region: 'NA' }], columns: [{ name: 'region', type: 'string' }] } },
@@ -39,10 +42,10 @@ const STATE: DataflowState = {
 };
 
 function island(body: string): StoryIslandData {
-  const { content, body: nodes } = splitHelmet(parseJsxOrThrow(HELMET + body).nodes as JsxNode[]);
+  const { body: nodes } = splitHelmet(parseJsxOrThrow(HELMET + body).nodes as JsxNode[]);
   return {
     nodes, refData: {}, colorMode: 'light', chrome: true,
-    dataflow: { flow: { values: content.values, queries: content.queries, mutations: content.mutations }, state: STATE },
+    dataflow: { flow: FLOW, state: STATE },
   };
 }
 

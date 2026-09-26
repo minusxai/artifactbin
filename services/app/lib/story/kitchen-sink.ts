@@ -34,8 +34,9 @@ export function kitchenSinkMarkup(refs: KitchenSinkRefs): string {
   <Value name="compare" type="boolean" default={false} />
   <Value name="note" type="string" default="" url={false} />
   <Value name="title" type="string" default="" url={false} />
-  <Query name="regions" source="${ds}">{\`select distinct region from public.rows order by 1\`}</Query>
-  <Query name="sales" source="${ds}">{\`select * from public.rows where $region is null or region = $region\`}</Query>
+  <Import name="sales_data" src="${ds}" />
+  <Query name="regions">{\`select distinct region from sales_data.rows order by 1\`}</Query>
+  <Query name="sales">{\`select * from sales_data.rows where $region is null or region = $region\`}</Query>
 </Helmet>
 <div data-design="tw" className="@container px-6 py-12 @2xl:px-12">
 <header className="max-w-4xl">
@@ -74,8 +75,8 @@ export function kitchenSinkMarkup(refs: KitchenSinkRefs): string {
       <CardContent className="flex flex-col gap-4">
         <div className="flex gap-2"><Badge>default</Badge><Badge variant="secondary">secondary</Badge><Badge variant="outline">outline</Badge><Badge variant="destructive">destructive</Badge></div>
         <div className="flex items-center gap-2 text-sm"><Icon name="circle-check" /><Icon name="ChartBar" />icons by lucide name</div>
-        <div className="flex items-center gap-2 text-sm">reading as <User userId="$_me" fallback="a guest" /><SignIn>Sign in to take part</SignIn></div>
-        <div className="flex items-center gap-2 text-sm"><UserImage userId="$_me" size="lg" fallback="no picture" /><UserHandle userId="$_me" fallback="no handle" /></div>
+        <div className="flex items-center gap-2 text-sm">reading as <User userId="$_me.id" fallback="a guest" /><SignIn>Sign in to take part</SignIn></div>
+        <div className="flex items-center gap-2 text-sm"><UserImage userId="$_me.id" size="lg" fallback="no picture" /><UserHandle userId="$_me.id" fallback="no handle" /></div>
         <Progress value={62} />
         <Skeleton className="h-6 w-2/3" />
       </CardContent>
@@ -147,7 +148,7 @@ export function kitchenSinkMarkup(refs: KitchenSinkRefs): string {
 
 <section>
   <h2 className="text-2xl font-semibold tracking-tight">03 · Data — declared in Helmet, bound by $name</h2>
-  <p className="mt-2 max-w-prose text-muted-foreground">A <code className="rounded bg-muted px-1 py-0.5 font-mono text-[0.9em]">&lt;Query&gt;</code> over a dataset (SQL, <code className="rounded bg-muted px-1 py-0.5 font-mono text-[0.9em]">source=&quot;ref:&lt;id&gt;&quot;</code>), a <code className="rounded bg-muted px-1 py-0.5 font-mono text-[0.9em]">&lt;Value&gt;</code> bound to a native select, a recipe and an image artifact by <code className="rounded bg-muted px-1 py-0.5 font-mono text-[0.9em]">ref:</code>.</p>
+  <p className="mt-2 max-w-prose text-muted-foreground">A <code className="rounded bg-muted px-1 py-0.5 font-mono text-[0.9em]">&lt;Query&gt;</code> over an imported dataset (SQL over <code className="rounded bg-muted px-1 py-0.5 font-mono text-[0.9em]">&lt;Import src=&quot;ref:&lt;id&gt;&quot;&gt;</code>), a <code className="rounded bg-muted px-1 py-0.5 font-mono text-[0.9em]">&lt;Value&gt;</code> bound to a native select, a recipe and an image artifact by <code className="rounded bg-muted px-1 py-0.5 font-mono text-[0.9em]">ref:</code>.</p>
   <div className="mt-4"><label className="text-sm text-muted-foreground">Region <select aria-label="Region" className="ml-2 rounded-md border border-border bg-background px-2 py-1 text-sm" value="$region" options="$regions" /></label></div>
   <div className="mt-6 flex flex-wrap items-end gap-5">
     <Input label="Title" value="$title" placeholder="A short title" />
@@ -177,7 +178,7 @@ export function kitchenSinkMarkup(refs: KitchenSinkRefs): string {
     </CardContent></Card>
     <Card><CardHeader><CardTitle>Files</CardTitle></CardHeader><CardContent>
       {/* A folder's listing. Bound like any other table — a real folder's own
-          scaffold binds it to a <Query> with source=&quot;ref:&lt;folderId&gt;&quot;. */}
+          scaffold imports it with <Import src=&quot;ref:&lt;folderId&gt;&quot;> and reads its rows. */}
       <Files data="$sales" variant="icons" />
     </CardContent></Card>
     <figure>

@@ -13,7 +13,7 @@
  * build per version, not one per connection.
  */
 import type { ArtifactRow } from '@/lib/artifacts';
-import { datasetsForDocument } from '@/lib/artifacts';
+import { datasetsForDocument, declarationsForRow } from '@/lib/artifacts';
 import { currentStoryCss } from '@/lib/data/story/story-css.server';
 import { resolveStoredStoryDesign } from '@/lib/data/story/story-themes';
 import { authorHandle } from '@/lib/users';
@@ -23,6 +23,7 @@ import type { ArtifactLiveEvent } from './live';
 import { storyUpdateParts } from './update-parts';
 import { assetLookupFrom } from './asset-url';
 import { webAssetsForSource } from '@/lib/web-assets';
+import { inCurrentSyntax } from '@/lib/migrate/sqlite/stored';
 
 export interface LiveFrame extends Omit<ArtifactLiveEvent, 'compiledCss' | 'authorCss' | 'dataflow'> {
   compiledCss: string | null;
@@ -30,8 +31,11 @@ export interface LiveFrame extends Omit<ArtifactLiveEvent, 'compiledCss' | 'auth
   authorScript: string | null;
   /** A stable signature of the data declarations; the client rebinds when it moves. */
   declarations: string | null;
-  /** The declarations as a flow, rows deliberately absent (the client re-runs). */
-  dataflow?: { flow: NonNullable<ReturnType<typeof storyUpdateParts>>['flow'] };
+  /**
+   * The declarations as a flow, rows deliberately absent (the client re-runs) —
+   * except for a version that cannot run, whose queries' answers are its state.
+   */
+  dataflow?: { flow: import('@/lib/story/compiled-dataflow').CompiledDataflow; state?: import('@/lib/story/dataflow').DataflowState };
   /** The datasets this version reads or writes — what a relay must also follow. */
   datasets: string[];
 }
@@ -44,8 +48,10 @@ let builds = 0;
 export function resetFrameCache(): void { cache.clear(); }
 export function frameBuilds(): number { return builds; }
 
-async function build(row: ArtifactRow): Promise<LiveFrame> {
+async function build(stored: ArtifactRow): Promise<LiveFrame> {
   builds++;
+  // The frame is the document as it is served: in the current data syntax (lib/migrate/sqlite/stored).
+  const row = stored.format === 'markup' ? await inCurrentSyntax(stored) : stored;
   const meta = row.meta as {
     compiledCss?: string | null; theme?: StoryThemeName | null; colorMode?: 'light' | 'dark' | null;
     template?: string | null; cssCompileVersion?: string | null;
@@ -62,6 +68,9 @@ async function build(row: ArtifactRow): Promise<LiveFrame> {
   const parts = row.format === 'markup' && row.source
     ? storyUpdateParts(row.source, assetLookupFrom(assets))
     : null;
+  // The compiled declarations the runtime re-runs this version with (a reader's frame has no compiler),
+  // or, for a version that cannot run, the answers its queries already have.
+  const declared = parts ? await declarationsForRow(row) : null;
   return {
     ...(row.document?.kind==='graph'?{document:row.document}:{}),
     editId: row.edit_id,
@@ -79,8 +88,9 @@ async function build(row: ArtifactRow): Promise<LiveFrame> {
     authorScript: parts?.authorScript ?? null,
     ...(parts ? { nodes: parts.nodes } : {}),
     declarations: parts?.declarations ?? null,
-    ...(parts && parts.flow.queries.length + parts.flow.values.length > 0 ? { dataflow: { flow: parts.flow } } : {}),
-    datasets: row.format === 'markup' ? datasetsForDocument(row) : [],
+    ...(declared?.state ? { dataflow: { flow: declared.flow, state: declared.state } }
+      : declared && declared.flow.queries.length + declared.flow.values.length > 0 ? { dataflow: { flow: declared.flow } } : {}),
+    datasets: row.format === 'markup' ? await datasetsForDocument(row) : [],
     theme: design.theme,
     colorMode: design.colorMode,
     template: meta.template ?? null,

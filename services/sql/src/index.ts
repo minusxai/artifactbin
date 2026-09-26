@@ -1,8 +1,9 @@
 /**
  * THE SQL SERVICE, from the outside: the contract (re-exported from
  * @artifactbin/contracts), an HTTP client that speaks it, and the server
- * shell that serves ANY SqlService over the same wire. No DuckDB here — the
- * engine is `@artifactbin/sql/local`, and only a composition root loads it.
+ * shell that serves ANY SqlService over the same wire. No engine here — the
+ * engine is `@artifactbin/sql/local` (worker threads) or `./sqlite` (this
+ * thread), and only a composition root loads one.
  */
 import http from 'node:http';
 import type { SqlService } from '@artifactbin/contracts';

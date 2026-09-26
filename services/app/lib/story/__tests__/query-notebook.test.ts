@@ -6,10 +6,12 @@
 import { describe, expect, it } from 'vitest';
 import { queryCells, updateQuerySqlInJsx } from '@/lib/story/query-notebook';
 import type { DataflowState } from '@/lib/story/dataflow';
+import { compiledSource } from '@/test/helpers/compiled';
 
 const SALES_SQL = 'select region, sum(revenue) as revenue from "public"."rows" where region = $region group by 1';
 const SOURCE =
   '<Helmet><title>Doc</title><Value name="region" type="string" default="west" />'
+  // A connected Postgres query keeps its source= (and its Postgres SQL); the notebook shows where it runs.
   + `<Query name="sales" source="ref:ds1234">{\`${SALES_SQL}\`}</Query>`
   + '<Query name="costs">{`select 1 as spend`}</Query></Helmet>'
   + '<div className="p-4"><h1>Title</h1><Question data="$sales" /></div>';
@@ -23,11 +25,18 @@ const STATE: DataflowState = {
 };
 
 describe('queryCells', () => {
-  it('lists every <Query> in authored order with its SQL, source and params', () => {
+  it('lists every <Query> in authored order with its SQL and source', () => {
     const cells = queryCells(SOURCE, null);
     expect(cells.map((c) => c.name)).toEqual(['sales', 'costs']);
-    expect(cells[0]).toMatchObject({ sql: SALES_SQL, source: 'ds1234', params: ['region'] });
-    expect(cells[1]).toMatchObject({ sql: 'select 1 as spend', source: null, params: [] });
+    expect(cells[0]).toMatchObject({ sql: SALES_SQL, source: 'ds1234' });
+    expect(cells[1]).toMatchObject({ sql: 'select 1 as spend', source: null });
+  });
+
+  it('files a query under the import its compiled record reads, once the compiler has answered', async () => {
+    const doc = '<Helmet><Import name="orders" src="ref:ds9999" /><Query name="big">{`select * from orders.rows where n > 1`}</Query><Query name="none">{`select 1 as x`}</Query></Helmet>';
+    const compiled = await compiledSource(doc, { ds9999: [{ name: 'n', type: 'number' }] });
+    expect(queryCells(doc, null).map((c) => c.source)).toEqual([null, null]);
+    expect(queryCells(doc, null, false, compiled).map((c) => c.source)).toEqual(['ds9999', null]);
   });
 
   it('pairs each cell with the last run: rows, an error, or nothing yet', () => {

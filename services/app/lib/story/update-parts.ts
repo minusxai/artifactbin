@@ -17,7 +17,6 @@
  * Pure: source in, parts out, no DOM, no I/O.
  */
 import type { JsxNode } from '@/lib/jsx';
-import type { Dataflow } from '@/lib/story/dataflow';
 import { storyBodyFor } from '@/lib/story/body';
 import type { AssetLookup } from '@/lib/story/asset-url';
 
@@ -29,16 +28,10 @@ interface StoryUpdateParts {
   /** Legacy Helmet script, executed only in an isolated author realm. */
   authorScript: string | null;
   /**
-   * The `<Value>`/`<Query>` declarations themselves. The runtime needs these to
-   * re-run a query at all, so a sender pushing a version whose data changed has
-   * to carry them — the frame has no parser to recover them from source.
-   */
-  flow: Dataflow;
-  /**
    * A signature of the `<Value>`/`<Query>` declarations, stable over a prose
    * edit and changed by any change to a declaration. It decides whether the
    * sender has to run the document's SQL again: too sensitive and every
-   * sentence costs a DuckDB run; not sensitive enough and a reader keeps
+   * sentence costs a query run; not sensitive enough and a reader keeps
    * querying a document that no longer exists. Source offsets are zeroed so
    * text moving ABOVE the Helmet does not count as a change.
    */
@@ -61,8 +54,8 @@ export function storyUpdateParts(source: string, assets?: AssetLookup): StoryUpd
     nodes: body,
     authorCss: content.style ?? null,
     authorScript: content.script ?? null,
-    flow: { values: content.values, queries: content.queries, ...(content.mutations.length ? { mutations: content.mutations } : {}) },
     declarations: JSON.stringify({
+      imports: content.imports.map((i) => ({ ...i, start: 0, end: 0 })),
       values: content.values.map((v) => ({ ...v, start: 0, end: 0 })),
       queries: content.queries.map((q) => ({ ...q, start: 0, end: 0 })),
       mutations: content.mutations.map((m) => ({ ...m, start: 0, end: 0 })),

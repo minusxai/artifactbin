@@ -1,0 +1,325 @@
+/**
+ * The runtime core as a MODEL: random interleavings of value changes, runs
+ * answering late and out of order (or not at all), dataset writes elsewhere,
+ * document replacements and local writes — driven through the pure reducer
+ * with a seeded PRNG, against a fake server whose answers are a pure function
+ * of what it was asked. Whatever happened on the way, once every effect has
+ * resolved the document must show exactly what the server would answer now.
+ *
+ * The checker is itself checked: the rule this core replaced — apply a result
+ * only if it came from the newest run — is replayed as a wrapper, and the
+ * checker must find the documents it strands.
+ */
+import { describe, expect, it } from 'vitest';
+import type { DataflowState, Row, Scalar } from '@/lib/story/dataflow';
+import { queriesReadingValues } from '@/lib/story/compiled-flow';
+import { compiledOf } from '@/test/helpers/compiled';
+import {
+  accessSettled, createCore, pendingOf, step,
+  type CoreEffect, type CoreEvent, type CoreState, type RunAnswer, type Versions,
+} from '../dataflow-core';
+import { graphOfCompiled, type RuntimeGraph } from '../runtime-graph';
+
+/** mulberry32: small, seedable, good enough to shuffle a schedule. */
+function prng(seed: number) {
+  let a = seed >>> 0;
+  return () => {
+    a = (a + 0x6D2B79F5) >>> 0;
+    let t = a;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+const T_COLUMNS = [{ name: 'n', type: 'number' as const }];
+const T_ROWS: Row[] = [{ n: 0 }];
+const SCALARS = ['a', 'b', 'c'] as const;
+
+/** A fresh graph object every call, as a replaced document arrives. */
+const graph = (): RuntimeGraph => ({
+  values: [
+    ...SCALARS.map((name) => ({ kind: 'scalar' as const, name, type: 'number' as const, default: 0 })),
+    { kind: 'table', name: 't', rows: T_ROWS, columns: T_COLUMNS },
+  ],
+  queries: [
+    { name: 'qa', reads: { values: ['a'], sources: ['s1', '_members'], queries: [] } },
+    { name: 'qb', reads: { values: ['b'], sources: ['_members'], queries: [] } },
+    { name: 'qac', reads: { values: ['c'], sources: ['_members'], queries: ['qa'] } },
+    { name: 'qt', reads: { values: ['t'], sources: ['_members'], queries: [] } },
+  ],
+  mutations: [
+    { name: 'm1', reads: { values: [], sources: ['s1', '_members'], queries: [] }, target: { source: 's1' } },
+    { name: 'add', reads: { values: ['t'], sources: [], queries: [] }, target: { local: 't' } },
+    { name: 'inc', reads: { values: [...SCALARS], sources: [], queries: [] }, target: { local: '_signals' }, reset: ['c'] },
+  ],
+});
+
+/** The fake server: every answer is a pure function of the values, the local rows and the world it ran against. */
+function rowsFor(query: string, values: Record<string, Scalar>, s1: number, t: Row[]): Row[] {
+  switch (query) {
+    case 'qa': return [{ v: `${values.a}|${s1}` }];
+    case 'qb': return [{ v: `${values.b}` }];
+    case 'qac': return [{ v: `${values.c}|${values.a}|${s1}` }];
+    default: return [{ v: t.length }];
+  }
+}
+const accessFor = (s1: number): string | null => (s1 % 2 ? 'Read-only' : null);
+
+type Rule = 'versions' | 'newest-run';
+
+/** Run one seeded schedule; the first invariant it breaks, or null. */
+function scenario(seed: number, rule: Rule): string | null {
+  const rand = prng(seed);
+  const pick = <T,>(xs: readonly T[]): T => xs[Math.floor(rand() * xs.length)]!;
+  const world = { s1: 0 };
+  const serverState = (values: Record<string, Scalar>): DataflowState => ({
+    values,
+    tables: Object.fromEntries(graph().queries.map((q) => [q.name, { rows: rowsFor(q.name, values, world.s1, T_ROWS), columns: [] }])),
+    errors: {},
+    ...(rand() < 0.5 ? { mutationAccess: { m1: accessFor(world.s1) } } : {}),
+  });
+  const defaults = { a: 0, b: 0, c: 0 };
+  let state: CoreState = createCore(graph(), rand() < 0.5 ? { state: serverState(defaults) } : {});
+
+  const runs: Array<{ seq: number; at: Versions; answer: RunAnswer }> = [];
+  const writes: Array<Extract<CoreEffect, { type: 'write' }>> = [];
+  const settled = new Map<number, number>();
+  const addIds = new Set<number>();
+  let seq = 0, newest = 0, writeIds = 0, adds = 0, failures = true;
+  let violation: string | null = null;
+  const fail = (why: string) => { violation ??= `seed ${seed}: ${why}`; };
+
+  const apply = (event: CoreEvent) => {
+    const prev = state;
+    const { state: next, effects } = step(prev, event);
+    const notified = effects.some((e) => e.type === 'notify');
+    // Snapshot identity: a new data object exactly when readers are told, and nothing else moves it.
+    if (notified !== (next.data !== prev.data)) fail(`${event.type}: notify ${notified} but data identity ${next.data !== prev.data ? 'changed' : 'kept'}`);
+    if (next === prev && pendingOf(next) !== pendingOf(prev)) fail(`${event.type}: pending identity moved without a change`);
+    if (pendingOf(next) !== pendingOf(next)) fail('pending is not memoised');
+    // Monotonic: an applied answer never comes from older versions than the one it replaces.
+    for (const [k, v] of Object.entries(next.answered)) {
+      const before = prev.answered[k];
+      if (before !== undefined && v < before) fail(`${k} answered at ${v} after ${before}`);
+    }
+    state = next;
+    for (const effect of effects) {
+      if (effect.type === 'run') {
+        const t = effect.localTables?.t ?? T_ROWS;
+        runs.push({
+          seq: ++seq, at: effect.at,
+          answer: {
+            tables: Object.fromEntries(effect.only.map((q) => [q, { rows: rowsFor(q, effect.values, world.s1, t), columns: [] }])),
+            errors: {},
+            mutationAccess: { m1: accessFor(world.s1) },
+          },
+        });
+        newest = seq;
+      } else if (effect.type === 'write') writes.push(effect);
+      else if (effect.type === 'settle') {
+        settled.set(effect.id, (settled.get(effect.id) ?? 0) + 1);
+        if (effect.outcome.ok && addIds.has(effect.id)) adds++;
+      }
+    }
+  };
+
+  const resolveRun = () => {
+    const run = runs.splice(Math.floor(rand() * runs.length), 1)[0]!;
+    // The replaced rule: a result that is not from the newest run is dropped whole.
+    if (rule === 'newest-run' && run.seq !== newest) return;
+    if (failures && rand() < 0.2) apply({ type: 'failed', at: run.at, error: new Error('offline') });
+    else apply({ type: 'answered', at: run.at, answer: run.answer });
+  };
+  const resolveWrite = () => {
+    const w = writes.splice(Math.floor(rand() * writes.length), 1)[0]!;
+    if (failures && rand() < 0.15) apply({ type: 'writeFailed', id: w.id, name: w.name, error: new Error('refused') });
+    else if (w.name === 'm1') {
+      world.s1++; // the server wrote, and says which dataset
+      apply({ type: 'written', id: w.id, name: w.name, answer: { dataset: 's1' } });
+    } else if (w.name === 'add') {
+      const rows = w.localTables?.t ?? T_ROWS;
+      apply({ type: 'written', id: w.id, name: w.name, answer: { dataset: '', local: { target: 't', affected: 1, table: { columns: T_COLUMNS, rows: [...rows, { n: rows.length }] } } } });
+    } else {
+      const values = w.values as Record<string, number>;
+      apply({ type: 'written', id: w.id, name: w.name, answer: { dataset: '', local: { target: '_signals', affected: 1, table: { columns: [], rows: [{ a: values.a! + 1, b: values.b!, c: values.c! }] } } } });
+    }
+    apply({ type: 'flush' }); // the shell re-reads after every settled write
+  };
+
+  for (let i = 0; i < 80 && !violation; i++) {
+    const r = rand();
+    if (r < 0.22) {
+      apply({ type: 'set', values: { [pick(SCALARS)]: Math.floor(rand() * 4) } });
+      if (rand() < 0.6) apply({ type: 'flush' }); // a discrete change runs now; a continuous one waits for the timer
+    } else if (r < 0.32) apply({ type: 'flush' });
+    else if (r < 0.58) { if (runs.length) resolveRun(); }
+    else if (r < 0.64) {
+      if (rand() < 0.7) world.s1++; // written elsewhere; `_members` alone changes nothing we model
+      apply({ type: 'sources', ids: [rand() < 0.7 ? 's1' : '_members'] });
+      apply({ type: 'flush' });
+    } else if (r < 0.68) {
+      apply(rand() < 0.5 ? { type: 'replace', graph: graph(), state: serverState(defaults) } : { type: 'replace', graph: graph() });
+      apply({ type: 'flush' });
+    } else if (r < 0.78) {
+      const name = pick(['m1', 'add', 'inc'] as const);
+      const id = ++writeIds;
+      if (name === 'add') addIds.add(id);
+      apply({ type: 'write', id, name });
+    } else if (r < 0.9) { if (writes.length) resolveWrite(); }
+    else if (r < 0.95) {
+      apply({ type: 'refresh', ...(rand() < 0.5 ? { queries: [pick(['qa', 'qb', 'qac', 'qt'])] } : {}) });
+      apply({ type: 'flush' });
+    } else apply({ type: 'touch' });
+  }
+
+  // Quiescence: no more failures; everything outstanding answers, the timer fires, and again until nothing is asked.
+  failures = false;
+  for (let i = 0; i < 1000 && !violation; i++) {
+    if (writes.length && (!runs.length || rand() < 0.5)) resolveWrite();
+    else if (runs.length) resolveRun();
+    else {
+      const before = runs.length;
+      apply({ type: 'flush' });
+      if (runs.length === before) break;
+    }
+  }
+  if (violation) return violation;
+
+  const pending = [...pendingOf(state)];
+  if (pending.length) return `seed ${seed}: still pending at rest: ${pending.join(', ')}`;
+  if (!accessSettled(state) || state.data.mutationAccess?.m1 !== accessFor(world.s1)) {
+    return `seed ${seed}: write check ${JSON.stringify(state.data.mutationAccess)} at rest, expected ${accessFor(world.s1)}`;
+  }
+  const t = state.data.tables.t?.rows ?? [];
+  if (t.length !== T_ROWS.length + adds) return `seed ${seed}: ${t.length} local rows after ${adds} committed adds`;
+  for (const q of ['qa', 'qb', 'qac', 'qt']) {
+    if (state.data.errors[q]) continue; // answered with the run's failure, and nothing it reads has moved since
+    const expected = rowsFor(q, state.data.values, world.s1, t);
+    if (JSON.stringify(state.data.tables[q]?.rows) !== JSON.stringify(expected)) {
+      return `seed ${seed}: ${q} shows ${JSON.stringify(state.data.tables[q]?.rows)} at rest, the server answers ${JSON.stringify(expected)}`;
+    }
+  }
+  for (let id = 1; id <= writeIds; id++) if (settled.get(id) !== 1) return `seed ${seed}: write ${id} settled ${settled.get(id) ?? 0} times`;
+  return null;
+}
+
+const SEEDS = Array.from({ length: 300 }, (_, i) => i + 1);
+
+describe('the runtime core under random interleavings', () => {
+  it('comes to rest current, matching the server, with every write settled once', () => {
+    const violations = SEEDS.map((seed) => scenario(seed, 'versions')).filter(Boolean);
+    expect(violations).toEqual([]);
+  });
+
+  it('the checker catches the rule it replaced: results applied only from the newest run', () => {
+    const violations = SEEDS.map((seed) => scenario(seed, 'newest-run')).filter(Boolean);
+    expect(violations.length).toBeGreaterThan(0);
+    expect(violations.some((v) => /still pending at rest/.test(v!))).toBe(true);
+  });
+});
+
+/*
+ * The graph a COMPILED document becomes (SQLite's own report of what every
+ * statement reads) makes stale exactly what a change can affect: the queries
+ * a value feeds, the readers of an imported dataset — transitively, through
+ * upstream queries — the readers of the viewer, and on a membership change
+ * everything.
+ */
+const GRAPH_FLOW = await compiledOf(''
+  + '<Import name="sales_data" src="ref:abc123" /><Import name="stock_data" src="ref:zzzzzz" />'
+  + '<Value name="region" type="string" />'
+  + '<Value name="min_rev" type="number" default={0} />'
+  + '<Value name="choice" type="string" default="a" />'
+  + '<Query name="sales">{`select * from sales_data.rows where region = $region and revenue >= $min_rev`}</Query>'
+  + '<Query name="top">{`select * from sales limit 1`}</Query>'
+  + '<Query name="viewer">{`select $_me.id as me`}</Query>'
+  + '<Query name="mine">{`select $choice as c`}</Query>'
+  + '<Query name="stock">{`select * from stock_data.rows`}</Query>'
+  + '<Query name="both">{`select * from top join stock on true`}</Query>'
+  + '<Query name="clock">{`select $_now as now`}</Query>'
+  + '<Mutation name="vote">{`insert into sales_data.rows (region) values ($choice)`}</Mutation>', {
+  abc123: [{ name: 'region', type: 'string' }, { name: 'revenue', type: 'number' }],
+  zzzzzz: [{ name: 'item', type: 'string' }],
+});
+
+describe('graphOfCompiled', () => {
+  const rest = () => createCore(graphOfCompiled(GRAPH_FLOW), { state: { values: {}, tables: {}, errors: {}, mutationAccess: { vote: null } } });
+  const staleAfter = (event: CoreEvent) => [...pendingOf(step(rest(), event).state)].sort();
+
+  it.each([
+    ['region', ['both', 'sales', 'top']],
+    ['min_rev', ['both', 'sales', 'top']],
+    ['choice', ['mine']],
+  ])('setting %s makes stale the queries that read it, transitively', (name, stale) => {
+    expect(staleAfter({ type: 'set', values: { [name]: 'x' } })).toEqual(stale);
+    // …which is the offline file's own answer for the same value (lib/story/compiled-flow).
+    expect(queriesReadingValues(GRAPH_FLOW, [name]).sort()).toEqual(stale);
+  });
+
+  it('a write to an imported dataset makes stale its readers and the write check on it', () => {
+    const { state } = step(rest(), { type: 'sources', ids: ['abc123'] });
+    expect([...pendingOf(state)].sort()).toEqual(['both', 'sales', 'top']);
+    expect(accessSettled(state)).toBe(false);
+  });
+
+  it('a write to another import leaves the write check alone', () => {
+    const { state } = step(rest(), { type: 'sources', ids: ['zzzzzz'] });
+    expect([...pendingOf(state)].sort()).toEqual(['both', 'stock']);
+    expect(accessSettled(state)).toBe(true);
+  });
+
+  it('a new viewer makes stale the queries that read $_me.id, and the write checks', () => {
+    const { state } = step(rest(), { type: 'sources', ids: ['_me'] });
+    expect([...pendingOf(state)].sort()).toEqual(['viewer']);
+    expect(accessSettled(state)).toBe(false);
+  });
+
+  it('a membership change makes every query and every write check stale', () => {
+    const { state } = step(rest(), { type: 'sources', ids: ['_members'] });
+    expect([...pendingOf(state)].sort()).toEqual(GRAPH_FLOW.queries.map((q) => q.name).sort());
+    expect(accessSettled(state)).toBe(false);
+  });
+
+  it('the minute ticking makes stale only the queries that read $_now', () => {
+    const { state } = step(rest(), { type: 'sources', ids: ['_now'] });
+    expect([...pendingOf(state)]).toEqual(['clock']);
+    expect(accessSettled(state)).toBe(true);
+  });
+});
+
+/*
+ * A run now answers PART of the graph — the browser's nodes or the server's —
+ * so what one answer carries beside its rows (the user pickers' options and
+ * the people it names) is merged per node, never replaced wholesale: a browser
+ * answer carrying neither must not wipe what the server said.
+ */
+describe('partial answers', () => {
+  const PICKERS = { 'sales.owner': [{ id: 'u1', label: 'Ada' }], 'stock.owner': [{ id: 'u2', label: 'Bo' }], who: [{ id: 'u3', label: 'Cy' }] };
+  const ask = (core: CoreState, names: string[]) => {
+    const { state, effects } = step(step(core, { type: 'refresh', queries: names }).state, { type: 'flush' });
+    const run = effects.find((e): e is Extract<CoreEffect, { type: 'run' }> => e.type === 'run')!;
+    return { state, at: run.at };
+  };
+  const answer = (tables: string[], extra: Partial<RunAnswer> = {}): RunAnswer =>
+    ({ tables: Object.fromEntries(tables.map((t) => [t, { rows: [], columns: [] }])), errors: {}, ...extra });
+
+  it('an answer without options or people leaves them as they were', () => {
+    const core = createCore(graphOfCompiled(GRAPH_FLOW), { state: { values: {}, tables: {}, errors: {}, userOptions: PICKERS as never, people: { u1: { name: 'Ada' } as never } } });
+    const { state, at } = ask(core, ['mine']);
+    const next = step(state, { type: 'answered', at, answer: answer(['mine']) }).state;
+    expect(next.data.userOptions).toEqual(PICKERS);
+    expect(next.data.people).toEqual({ u1: { name: 'Ada' } });
+  });
+
+  it('an answer replaces the options of the queries it answered, keeps the others, and adds the people it names', () => {
+    const core = createCore(graphOfCompiled(GRAPH_FLOW), { state: { values: {}, tables: {}, errors: {}, userOptions: PICKERS as never, people: { u1: { name: 'Ada' } as never } } });
+    const { state, at } = ask(core, ['sales']);
+    const next = step(state, { type: 'answered', at, answer: answer(['sales'], {
+      userOptions: { 'sales.owner': [{ id: 'u9', label: 'Di' }], who: [{ id: 'u3', label: 'Cy' }] } as never,
+      people: { u9: { name: 'Di' } as never },
+    }) }).state;
+    expect(next.data.userOptions).toEqual({ 'sales.owner': [{ id: 'u9', label: 'Di' }], 'stock.owner': PICKERS['stock.owner'], who: PICKERS.who });
+    expect(next.data.people).toEqual({ u1: { name: 'Ada' }, u9: { name: 'Di' } });
+  });
+});

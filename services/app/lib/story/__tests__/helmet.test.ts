@@ -139,14 +139,14 @@ describe('splitHelmet', () => {
     const tree = nodes('<div><p>plain</p></div>');
     const split = splitHelmet(tree);
     expect(split.helmet).toBeNull();
-    expect(split.content).toEqual({ title: null, style: null, script: null, meta: [], values: [], queries: [], mutations: [] });
+    expect(split.content).toEqual({ title: null, style: null, script: null, meta: [], imports: [], values: [], queries: [], mutations: [] });
     expect(split.body).toEqual(tree);
   });
 
   it('extracts title/style/script losslessly and removes the Helmet from the body', () => {
     const split = splitHelmet(nodes(FULL_HELMET + '<div>body</div>'));
     expect(split.helmet?.tag).toBe('Helmet');
-    expect(split.content).toEqual({ title: 'My doc', style: CSS, script: JS, meta: [], values: [], queries: [], mutations: [] });
+    expect(split.content).toEqual({ title: 'My doc', style: CSS, script: JS, meta: [], imports: [], values: [], queries: [], mutations: [] });
     expect(split.body).toHaveLength(1);
     expect((split.body[0] as JsxElement).tag).toBe('div');
   });
@@ -201,7 +201,7 @@ describe('hoistHelmet', () => {
 // ── data declarations: <Value> and <Query> (lib/story/dataflow.ts) ──────────
 
 const VALUE = '<Value name="region" type="string" />';
-const QUERY = '<Query name="sales" source="ref:abc123">{`select * from public.rows where region = $region`}</Query>';
+const QUERY = '<Import name="sales_data" src="ref:abc123" /><Query name="sales">{`select * from sales_data.rows where region = $region`}</Query>';
 
 describe('validateHelmet — data declarations', () => {
   it('accepts <Value> and <Query> children, any number, with their attributes', () => {
@@ -240,8 +240,8 @@ describe('splitHelmet — data declarations', () => {
     const { content } = splitHelmet(nodes('<Helmet>' + QUERY + VALUE + '</Helmet><p>x</p>'));
     expect(content.values.map((v) => v.name)).toEqual(['region']);
     expect(content.queries.map((q) => q.name)).toEqual(['sales']);
-    expect(content.queries[0].params).toEqual(['region']);
-    expect(content.queries[0].refs).toEqual(['abc123']);
+    // Parse only: what a statement binds and reads is the compiler's (lib/story/compile-dataflow).
+    expect(Object.keys(content.queries[0]!).sort()).toEqual(['end', 'name', 'sql', 'start']);
   });
 
   it('yields empty declaration lists with no Helmet', () => {
@@ -258,6 +258,7 @@ describe('hoistHelmet — data declarations', () => {
     expect((hoisted[0] as JsxElement).tag).toBe('Helmet');
     const again = hoistHelmet(hoisted);
     expect(again).toEqual(hoisted);
-    expect(splitHelmet(hoisted).content.queries[0].sql).toContain('public.rows');
+    expect(splitHelmet(hoisted).content.queries[0]!.sql).toContain('sales_data.rows');
+    expect(splitHelmet(hoisted).content.imports.map((i) => i.name)).toEqual(['sales_data']);
   });
 });

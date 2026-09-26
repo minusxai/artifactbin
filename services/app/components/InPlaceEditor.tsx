@@ -266,6 +266,8 @@ export default function InPlaceEditor({
   cssRef.current = css;
   const dataflowRef = useRef(dataflowState);
   dataflowRef.current = dataflowState;
+  /** The compiled declarations the document runs on: the served island's, then each compiled draft's. */
+  const compiledRef = useRef(art.dataflow?.flow ?? null);
   // Same resolution as the served document (lib/story/document.ts): the author's
   // colorMode decides, the theme's declared default is the fallback. Editing a
   // document must not show it in a mode it will never be read in.
@@ -319,8 +321,8 @@ export default function InPlaceEditor({
            * describes, and the chart is rebuilt to draw the answer. A prose edit
            * must cost neither.
            */
-          ...(dataflowRef.current && declarationsChanged
-            ? { dataflow: { flow: parts.flow, state: dataflowRef.current } satisfies StoryIslandDataflow }
+          ...(dataflowRef.current && compiledRef.current && declarationsChanged
+            ? { dataflow: { flow: compiledRef.current, state: dataflowRef.current } satisfies StoryIslandDataflow }
             : {}),
         },
       );
@@ -582,6 +584,8 @@ export default function InPlaceEditor({
           const next = { values: {}, tables: body.tables, errors: body.errors };
           setDataflowState(next);
           dataflowRef.current = next;
+          // The browser has no compiler: the draft's compiled declarations come back with its rows.
+          compiledRef.current = body.flow ?? null;
           showInDocument(sourceRef.current);
         })
         .catch(() => { if (alive) setDataflowPending(false); });
@@ -654,7 +658,8 @@ export default function InPlaceEditor({
   /** Which embed inspector the right rail shows, if any. */
   const inspector = chart ? 'chart' : numberEmbed ? 'number' : mermaidEmbed ? 'diagram' : null;
   const tables = useMemo(() => tableChoices(source, dataflowState), [source, dataflowState]);
-  const queryNotebook = useMemo(() => queryCells(source, dataflowState, dataflowPending), [source, dataflowState, dataflowPending]);
+  // The compiled record arrives with the state it ran (compiledRef is set beside setDataflowState).
+  const queryNotebook = useMemo(() => queryCells(source, dataflowState, dataflowPending, compiledRef.current), [source, dataflowState, dataflowPending]);
 
   const onChartChange = useCallback(
     (next: { viz: unknown; table: string | null }) => {
@@ -1038,7 +1043,9 @@ export default function InPlaceEditor({
 
   const restoreVersion = useCallback(
     async (v: number) => {
-      const next = await history.restore(v);
+      let next: number | null;
+      // A refusal the server explained (a version the current engine cannot restore) is shown, not swallowed.
+      try { next = await history.restore(v); } catch (error) { setHistoryError(error instanceof Error ? error.message : 'Could not restore that version.'); return; }
       if (next === null) return;
       // The restored state IS the document now; the live stream delivers it on
       // the same path an agent's edit arrives on.

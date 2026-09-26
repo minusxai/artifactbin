@@ -67,13 +67,13 @@ describe('validating local files', () => {
    globalThis.fetch=async()=>assert.fail('local validation made a network request');
    try{
     await writeFile(join(root,'data.csv'),'n\n1\n');
-    const body='<Helmet><Query  name = "q" source = "ref:abc123">{`select n from public.rows`}</Query></Helmet><Table data="$q" />';
+    const body='<Helmet><Import  name = "d" src = "ref:abc123" /><Query name="q">{`select n from d.rows`}</Query></Helmet><Table data="$q" />';
     await writeFile(join(root,'doc.jsx'),body);
     const workspace=await loadWorkspace(root,home);
     assert.equal((await validateFiles(workspace,['doc.jsx'])).valid,true);
     assert.equal(await readFile(join(root,'doc.jsx'),'utf8'),body);
     const fixed=await validateFiles(workspace,['doc.jsx'],true);assert.equal(fixed.valid,true);assert.equal(fixed.files[0].fixed,true);
-    assert.ok((await readFile(join(root,'doc.jsx'),'utf8')).includes('source="ref:abc123"'));
+    assert.ok((await readFile(join(root,'doc.jsx'),'utf8')).includes('src="ref:abc123"'));
     assert.deepEqual((await readdir(root)).sort(),['data.csv','doc.jsx'],'validation writes nothing into the workspace');
     await writeFile(join(root,'bad.jsx'),'<Bogus />');assert.equal((await validateFiles(workspace,['bad.jsx'])).valid,false);
     await writeFile(join(root,'missing.jsx'),'<img src="./missing.png" />');assert.equal((await validateFiles(workspace,['missing.jsx'])).valid,false);

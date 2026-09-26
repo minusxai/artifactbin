@@ -429,7 +429,7 @@ test('afbin help --for <template> prints every reference a document of that kind
   const order=['## design','## markup','## markup-data','## markup-data-authoring','## templates-deck','## themes','## publishing-datasets'];  let at=-1;for(const h of order){const i=text.indexOf(`\n# ${h.slice(3)}\n`);assert.ok(i>at,`${h} missing or out of order`);at=i;}
   // Every reference is still there — condensed, never dropped. One load-bearing rule from each of the
   // three biggest parts stands in for its file, since the bundled copy is no longer the file verbatim.
-  for(const rule of ['<SlideDeck>','font-display','Helmet','public.rows'])assert.ok(text.includes(rule),rule);
+  for(const rule of ['<SlideDeck>','font-display','Helmet','<Import name="sales" src="ref:abc123" />','sales.rows'])assert.ok(text.includes(rule),rule);
   assert.ok(text.includes('Available themes:'),'the themes overview names the choices');
   assert.ok(!text.includes('templates-editorial'),'only the chosen template');
   // THE SHELL'S INLINE LIMIT. At 40 KB Claude Code spilled every bundle to a file and read it back in
@@ -450,13 +450,15 @@ test('afbin help --for <template> prints every reference a document of that kind
 });
 
 /**
- * The dataset a document WRITES to is the one thing the datasets topic never said how to make:
- * `access: readwrite` was only reachable through a resource YAML file no reference documents.
+ * The dataset a document WRITES to: the default policy already lets its owner's pages write it for
+ * their members, and the one flag that opens it to everyone with the link belongs on the push that
+ * CREATES it — a default policy is never replaced by the flag afterwards.
  */
-test('the datasets topic names the push flag that publishes a writable dataset',()=>{
+test('the datasets topic says who may write a dataset and when the viewers-write flag applies',()=>{
  const datasets=helpTopics['publishing-datasets']!;
- assert.match(datasets,/--type dataset --access readwrite/);
- assert.match(datasets,/--policy viewers-write/,'and the grant that lets the link audience write it');
+ assert.match(datasets,/owner's pages write it for their accepted members/);
+ assert.match(datasets,/Add `--policy viewers-write` to the push that CREATES it/,'and the grant that lets the link audience write it');
+ assert.doesNotMatch(datasets,/read-only and a <Mutation> against it is refused/,'a default dataset is writable by its owner\'s pages');
  assert.match(datasets,/--access <ACCESS>/,'the push help block in the same topic lists the flag');
  assert.match(datasets,/--policy <POLICY>/);
  assert.match(commandHelp('push'),/--access <ACCESS>/);
@@ -526,8 +528,9 @@ test('user authoring help includes the actual typed-resource publish path',()=>{
  assert.match(users,/source: people\.jsx/);
  assert.match(users,/afbin push people\.yaml/);
  assert.match(users,/Every `Column col` must name a query result column/);
- assert.match(users,/select \*, '' as action from public\.rows/);
- assert.match(users,/where \$person is null or assigned_to=\$person/);
+ assert.match(users,/<Import name="team" src="ref:tsk123" \/>/);
+ assert.match(users,/select \*, '' as action from team\.rows/);
+ assert.match(users,/where \$person is null or assigned_to = \$person/);
  assert.match(helpDocument('dataset'),/publishing|Datasets/i);
  assert.match(localSkillFiles['references/markup-editing.md'],/databases-users\.md/);
 });

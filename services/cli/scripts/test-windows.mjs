@@ -93,7 +93,7 @@ try{
  stage='read';const opened=await cli(['open',id]);assert.equal(opened.operations?.[0]?.url,base+'/a/'+id);const page=await fetch(base+'/a/'+id);assert.equal(page.status,200);assert.match(await page.text(),/Windows candidate edited version/);record('Open command returns published URL; real viewer serves edited artifact');
  await cli(['delete',id,'--force']);record('Disposable artifact cleaned up');
  stage='native services';await writeFile(join(workspace,'rows.csv'),'amount\n42\n');
- const queried=await cli(['query','rows.csv']);assert.equal(queried.results[0].rows[0].amount,42);record('Packaged DuckDB downloads, verifies and queries local data');
+ const queried=await cli(['query','rows.csv']);assert.equal(queried.results[0].rows[0].amount,42);record('Packaged built-in SQL queries local data');
  await cli(['export','report.jsx','--output','image.png']);assert.equal((await readFile(join(workspace,'image.png'))).subarray(1,4).toString(),'PNG');record('Packaged preview runtime and Chromium render a local artifact');
  clientEnv.CLI__SERVICE_BASE_URL='http://127.0.0.1:1';await cli(['query','rows.csv']);await cli(['export','report.jsx','--output','offline.png']);record('SQL, runtime and Chromium caches work offline in later processes');
 

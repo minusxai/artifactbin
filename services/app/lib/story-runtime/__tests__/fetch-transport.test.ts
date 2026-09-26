@@ -15,6 +15,8 @@ const requestOf = (f: ReturnType<typeof vi.fn>) => {
   return { u, init, q: JSON.parse(u.searchParams.get(QUERY_REQUEST_PARAM) ?? 'null') as unknown };
 };
 
+const ZONE = Intl.DateTimeFormat().resolvedOptions().timeZone;
+
 describe('createFetchTransport', () => {
   it('run(): GETs <queryUrl>?q=<{values, only}> and resolves with tables + errors', async () => {
     const f = vi.fn(async () => ok({ tables: { sales: { rows: [{ a: 1 }], columns: [] } }, errors: {} }));
@@ -23,7 +25,8 @@ describe('createFetchTransport', () => {
     expect(r).toEqual({ tables: { sales: { rows: [{ a: 1 }], columns: [] } }, errors: {} });
     const { u, init, q } = requestOf(f);
     expect(u.pathname).toBe('/a/abc123/query');
-    expect(q).toEqual({ values: { region: 'EU' }, only: ['sales'] });
+    // The reader's zone travels with every run: it is $_tz.
+    expect(q).toEqual({ values: { region: 'EU' }, only: ['sales'], tz: ZONE });
     // A simple GET: no custom headers (no preflight), and explicitly no credentials.
     expect(init?.method ?? 'GET').toBe('GET');
     expect(init?.credentials).toBe('omit');
@@ -36,7 +39,7 @@ describe('createFetchTransport', () => {
     const [url, init] = f.mock.calls[0] as unknown as [string, RequestInit];
     expect(url).toBe('/a/abc123/query');
     expect(init).toMatchObject({method: 'POST', credentials: 'omit', headers: {'Content-Type': 'text/plain'}});
-    expect(JSON.parse(String(init.body))).toEqual({ values: {}, only: ['total'], localTables: { cart: [{ id: 1 }] } });
+    expect(JSON.parse(String(init.body))).toEqual({ values: {}, only: ['total'], tz: ZONE, localTables: { cart: [{ id: 1 }] } });
   });
 
   it('page(): sends {values, only:[name], page} and resolves with that table', async () => {
@@ -44,7 +47,7 @@ describe('createFetchTransport', () => {
     const t = createFetchTransport('/a/abc123/query', f);
     const table = await t.page({ region: 'EU' }, 'sales', { offset: 50, limit: 25, sort: { col: 'a', dir: 'asc' } });
     expect(table.rows).toEqual([{ a: 2 }]);
-    expect(requestOf(f).q).toEqual({ values: { region: 'EU' }, only: ['sales'], page: { name: 'sales', offset: 50, limit: 25, sort: { col: 'a', dir: 'asc' } } });
+    expect(requestOf(f).q).toEqual({ values: { region: 'EU' }, only: ['sales'], page: { name: 'sales', offset: 50, limit: 25, sort: { col: 'a', dir: 'asc' } }, tz: ZONE });
   });
 
   it('page() rejects with the query\'s own error when the table is missing', async () => {
@@ -65,8 +68,34 @@ describe('createFetchTransport', () => {
   it('mutate(): carries the current local table snapshot to the document endpoint', async () => {
     const f = vi.fn(async () => ok({ ok: true, dataset: '', local: { target: 'cart', table: { columns: [], rows: [] } } }));
     const t = createFetchTransport('/a/x/query', f, '/a/x/mutate');
-    await expect(t.mutate!({}, 'add', undefined, { cart: [{ id: 1 }] })).resolves.toMatchObject({ local: { target: 'cart' } });
+    await expect(t.mutate!({ mutation: 'add', args: {}, localTables: { cart: [{ id: 1 }] } })).resolves.toMatchObject({ local: { target: 'cart' } });
     const [, init] = f.mock.calls[0] as unknown as [string, RequestInit];
-    expect(JSON.parse(String(init.body))).toEqual({ mutation: 'add', values: {}, localTables: { cart: [{ id: 1 }] } });
+    expect(JSON.parse(String(init.body))).toEqual({ tz: ZONE, mutation: 'add', args: {}, localTables: { cart: [{ id: 1 }] } });
+  });
+
+  it('people(): POSTs the ids credential-free, as a simple request, and answers the cards the door named', async () => {
+    const cards = { usr_a: { name: 'A', handle: null, image: null } };
+    const f = vi.fn(async () => ok({ people: cards }));
+    const t = createFetchTransport('/a/abc123/query', f);
+    await expect(t.people!(['usr_a', 'usr_b'])).resolves.toEqual(cards);
+    const [url, init] = f.mock.calls[0] as unknown as [string, RequestInit];
+    expect(url).toBe('/a/abc123/query');
+    expect(init).toMatchObject({ method: 'POST', credentials: 'omit', headers: { 'Content-Type': 'text/plain' } });
+    expect(JSON.parse(String(init.body))).toEqual({ people: ['usr_a', 'usr_b'] });
+    await expect(createFetchTransport('/a/x/query', vi.fn(async () => new Response('{}', { status: 404 }))).people!(['usr_a'])).rejects.toThrow('404');
+  });
+
+  it('hold(): GETs one import\'s rows by its name, credential-free, and refuses what the door refuses', async () => {
+    const rows = { rows: { rows: [{ a: 1 }], columns: [{ name: 'a', type: 'number' }] } };
+    const f = vi.fn(async () => ok({ tables: rows }));
+    const t = createFetchTransport('/a/abc123/query', f);
+    await expect(t.hold!('sales')).resolves.toEqual(rows);
+    const { u, init, q } = requestOf(f);
+    expect(u.pathname).toBe('/a/abc123/query');
+    expect(q).toEqual({ hold: 'sales' });
+    expect(init?.credentials).toBe('omit');
+    const refused = createFetchTransport('/a/abc123/query', vi.fn(async () => new Response('{"error":"not_holdable"}', { status: 404 })));
+    await expect(refused.hold!('sales')).rejects.toThrow('404');
   });
 });
+

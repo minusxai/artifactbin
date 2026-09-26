@@ -50,10 +50,49 @@ self-contained — but you don't have to make them so by hand.
 
 Author scripts run in a second opaque child reached through the fixed
 `/story/author-frame` wrapper, never in the visible renderer. A bounded
-MessagePort exposes only declared signals, query refreshes and permitted
+MessagePort exposes only declared values, query refreshes and permitted
 dataset mutations. Managed `<Iframe>` assets are imported through the
 document-scoped resolver and served anonymously from `APP__ASSETS_ORIGIN`;
 arbitrary network, navigation, account APIs and parent DOM access remain denied.
+
+**Data.** A document's `<Import>`s, `<Query>`s and `<Mutation>`s are compiled
+at publish — against the artifacts it may read, by the SQLite engine the
+server runs them on — and a statement that reads something it may not, or
+writes anything but one imported table or local table Value, is refused
+there. On the server every statement runs in a throwaway SQLite database,
+inside a small pool of worker threads (so a slow query never holds up another
+request), with a row cap and a deadline; each import is only the rows its
+reader may see. A write runs only as a declared `<Mutation>` of a document the
+reader can open, against a dataset opened for writes, under that dataset's
+data policy; `$_me.id` is the signed-in reader's id, bound by the server, and
+a guest is asked to sign in before a write that reads it. A connected Postgres database
+is queried inside itself (`<Query source="ref:…">`), read-only, through its
+exposure whitelist.
+
+**Queries where the data is.** A reader's interaction re-runs only what depends
+on it, and a query runs in the reader's own browser — on the same SQLite wasm and
+functions, with no network — when the reader may hold everything it reads. The
+server decides that per reader when it serves the page (`dataflow.hold` on the
+island): an import is holdable when the reader may read the dataset's own rows
+(not merely the document's results over them), it is a stored dataset rather
+than a connected database, and it is under 50,000 rows and 5 MB. Its rows are
+fetched once, by import name, through the same query door and read check as a
+run (`{"hold":"<import>"}`), which decides again on every request. Everything
+else — Postgres, anything downstream of it, the membership, data past the cap or
+out of the reader's reach — runs on the server as before. A write to a held
+dataset shows at once and the server decides; a refusal is rolled back. The
+people an in-page result names get their cards through the same door
+(`{"people":[ids]}`), which names only whom a server run could have named for
+that reader: themselves, and the people in a user column of an import they may
+hold, when one of the document's queries shows a person from it.
+
+Running the engine needs one more CSP source, `'wasm-unsafe-eval'`, on the app
+page, the standalone `/raw` document and the offline file. It admits compiling
+WebAssembly and nothing else — `eval`, `new Function` and string timers stay
+refused — and it is never added to the author-script frames, where author code
+runs. The wasm is fetched from this origin at a content-addressed `/story/`
+URL (the `/raw` document's `connect-src` names that directory), cached
+`immutable`; the offline file carries it inside itself.
 
 **Import from the web.** Point at an image, a PDF, a font or a CSV and the
 server fetches it once, stores a copy, and serves it from this origin:

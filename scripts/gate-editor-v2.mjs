@@ -446,7 +446,7 @@ try {
     })).json();
     const humanMarkup = `<Helmet>
 <Value name="region" type="string" />
-<Query name="sales" source="ref:${dataset.id}">{\`select * from public.rows where $region is null or region = $region\`}</Query>
+<Import name="sales_data" src="ref:${dataset.id}" /><Query name="sales">{\`select * from sales_data.rows where $region is null or region = $region\`}</Query>
 </Helmet><div data-design="tw" className="@container p-10">
 <h1 className="text-4xl font-bold tracking-tight">Editor gate</h1>
 <p className="mt-4">Total: <Number data="$sales" col="revenue" agg="sum" prefix="$" /></p>

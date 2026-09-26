@@ -28,6 +28,7 @@
  * one at every call site.
  */
 import { getVersionFor, listVersionsFor, versionForCapture, type ArtifactRow, type TokenActor } from '@/lib/artifacts';
+import { inCurrentSyntax } from '@/lib/migrate/sqlite/stored';
 import { actorForArtifacts, requestOrSessionActor } from '@/lib/viewer';
 
 /** The parameter's name, in one place: the three doors and the export URL. */
@@ -59,6 +60,12 @@ export interface ArchivedRender {
   meta: Record<string, unknown>;
   title: string | null;
   description: string | null;
+  /**
+   * Written for the previous query engine, in a way the migration's converter
+   * cannot carry over without a person: its queries answer PREVIOUS_ENGINE
+   * (lib/story/data-syntax) rather than failing on syntax this engine refuses.
+   */
+  previousEngine?: true;
 }
 
 /**
@@ -84,8 +91,16 @@ const headRender = (row: ArtifactRow): Omit<ArchivedRender, 'version' | 'head'> 
   description: row.description,
 });
 
-const archived = (version: number, head: number, body: Omit<ArchivedRender, 'version' | 'head'>): ArchivedRender =>
-  ({ version, head, ...body });
+type RenderBody = Omit<ArchivedRender, 'version' | 'head'>;
+
+/**
+ * HISTORY STAYS AS STORED; its render speaks the current syntax: a version
+ * without the data-syntax marker is served converted (lib/migrate/sqlite/stored).
+ */
+async function archived(row: ArtifactRow, version: number, head: number, body: RenderBody): Promise<ArchivedRender> {
+  const { source, meta, previousEngine } = await inCurrentSyntax({ id: row.id, version, user_id: row.user_id, token_id: row.token_id, ...body });
+  return { version, head, ...body, source: source ?? '', meta, ...(previousEngine ? { previousEngine } : {}) };
+}
 
 /**
  * THE DECISION. `null` = no version asked; `'not_found'` = the uniform 404;
@@ -108,9 +123,9 @@ export async function archivedVersionFor(
   if (asked === 'invalid' || row.format !== 'markup') return 'not_found';
   const head = row.version;
   if (opts.capture) {
-    if (asked === head) return archived(asked, head, headRender(row));
+    if (asked === head) return archived(row, asked, head, headRender(row));
     const shot = await versionForCapture(row, asked);
-    return shot ? archived(asked, head, { source: shot.source ?? '', meta: shot.meta, title: shot.title, description: shot.description }) : 'not_found';
+    return shot ? archived(row, asked, head, { source: shot.source ?? '', meta: shot.meta, title: shot.title, description: shot.description }) : 'not_found';
   }
   return archivedVersionForActor(actorForArtifacts(await requestOrSessionActor(request)), row, asked);
 }
@@ -136,12 +151,18 @@ export async function archivedVersionForActor(
    * scope, asked of the history listing rather than of a snapshot that may not
    * exist, so nothing about who may read history changes.
    */
-  if (asked === head) return (await listVersionsFor(actor, row.id)) ? archived(asked, head, headRender(row)) : 'not_found';
+  if (asked === head) return (await listVersionsFor(actor, row.id)) ? archived(row, asked, head, headRender(row)) : 'not_found';
   const found = await getVersionFor(actor, row.id, asked);
-  return found ? archived(asked, head, { source: found.source ?? '', meta: found.meta, title: found.title, description: found.description }) : 'not_found';
+  return found ? archived(row, asked, head, { source: found.source ?? '', meta: found.meta, title: found.title, description: found.description }) : 'not_found';
 }
 
-/** The row an archived render renders FROM: this artifact, wearing that version's bytes. */
-export function rowAtVersion(row: ArtifactRow, at: ArchivedRender): ArtifactRow {
-  return { ...row, source: at.source, meta: at.meta as ArtifactRow['meta'], title: at.title, description: at.description };
+/**
+ * The row a render renders FROM: this artifact wearing that version's bytes
+ * when one was asked for, the head otherwise — either one in the current data
+ * syntax (lib/migrate/sqlite/stored inCurrentSyntax), so every door serves an
+ * unmigrated document the same way.
+ */
+export async function servedRow(row: ArtifactRow, at: ArchivedRender | null): Promise<ArtifactRow> {
+  if (!at) return row.format === 'markup' ? inCurrentSyntax(row) : row;
+  return { ...row, source: at.source, meta: at.meta as ArtifactRow['meta'], title: at.title, description: at.description, ...(at.previousEngine ? { previousEngine: true as const } : {}) };
 }

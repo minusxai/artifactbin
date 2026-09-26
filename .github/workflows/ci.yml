@@ -200,8 +200,10 @@ jobs:
       # instead of passing vacuously.
       - if: matrix.shard == 1
         run: npm run test:integration
+      # The lightest shard: shard 1 already carries the browser, Docker and integration steps,
+      # and together they overran its time budget.
       - name: CLI source suite on the release runtime
-        if: matrix.shard == 1 && needs.plan.outputs.cli-tests == 'true'
+        if: matrix.shard == 3 && needs.plan.outputs.cli-tests == 'true'
         run: |
           node services/cli/scripts/fetch-runtime.mjs
           PATH="$GITHUB_WORKSPACE/node_modules/.cache/cli-prebuilt-node:$PATH" npm test -w services/cli

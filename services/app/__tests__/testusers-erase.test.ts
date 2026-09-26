@@ -58,7 +58,7 @@ it('takes everything the person owned, held and said — and nothing of the acco
   // its dataset belong to the test user, the originals do not.
   const dataset = await publish(owner.token, { dataset: [{ id: 1, who: 'seed' }], access: 'readwrite', visibility: 'unlisted' });
   const page = await publish(owner.token, { visibility: 'unlisted', markup:
-    `<Helmet><Mutation name="join" source="ref:${dataset.id}">{\`insert into public.rows (id, who) select 2, $_me\`}</Mutation></Helmet><Button run="$join">Join</Button>` });
+    `<Helmet><Import name="join_data" src="ref:${dataset.id}" /><Mutation name="join">{\`insert into join_data.rows (id, who) select 2, $_me.id\`}</Mutation></Helmet><Button run="$join">Join</Button>` });
   const forked = await forkOperation(request(`/api/artifacts/${page.id}/fork`, { method: 'POST', token: owner.token, json: { as: { testuser: testuser.id } } }), params(page.id));
   expect(forked.status, await forked.clone().text()).toBe(201);
   const copy = (await forked.json()) as { id: string; datasets: Array<{ id: string }> };
@@ -114,7 +114,7 @@ it('gives the parent its artifact quota back, because the rows are really gone',
     setArtifactQuotaForTests(4);
     const dataset = await publish(owner.token, { dataset: [{ id: 1, who: 'seed' }], access: 'readwrite', visibility: 'unlisted' });
     const page = await publish(owner.token, { visibility: 'unlisted', markup:
-      `<Helmet><Mutation name="join" source="ref:${dataset.id}">{\`insert into public.rows (id, who) select 2, $_me\`}</Mutation></Helmet><Button run="$join">Join</Button>` });
+      `<Helmet><Import name="join_data" src="ref:${dataset.id}" /><Mutation name="join">{\`insert into join_data.rows (id, who) select 2, $_me.id\`}</Mutation></Helmet><Button run="$join">Join</Button>` });
     const testuser = await testUserOf(owner);
     expect(await artifactQuotaExceeded(owner.tokenId), 'two of four used').toBe(false);
 

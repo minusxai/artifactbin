@@ -8,7 +8,7 @@
 import { describe, expect, it } from 'vitest';
 import { kitchenSinkMarkup } from '../kitchen-sink';
 import { parseJsx, validateJsx } from '@/lib/jsx';
-import { splitHelmet, validateHelmet } from '@/lib/story/helmet';
+import { dataflowOf, splitHelmet, validateHelmet } from '@/lib/story/helmet';
 import { collectRefNameUses, validateDataflow } from '@/lib/story/dataflow';
 import { JSX_STORY_COMPONENT_NAMES } from '@/lib/jsx/components';
 import { STORY_UI_COMPONENT_NAME_LIST, STORY_HTML_TAGS } from '@/lib/story-ui/component-names';
@@ -24,7 +24,7 @@ describe('kitchen-sink doc', () => {
     expect(validateHelmet(parsed.nodes)).toEqual([]);
     const split = splitHelmet(parsed.nodes);
     expect(validateJsx(split.body, { components: JSX_STORY_COMPONENT_NAMES, allowedHtmlTags: STORY_HTML_TAGS, stylePolicy: 'no-inline-style' })).toEqual([]);
-    expect(validateDataflow({ values: split.content.values, queries: split.content.queries }, collectRefNameUses(split.body))).toEqual([]);
+    expect(validateDataflow(dataflowOf(split.content), collectRefNameUses(split.body))).toEqual([]);
   });
 
   it('instantiates every registry component (drift gate)', () => {

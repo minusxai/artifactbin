@@ -180,6 +180,13 @@ function notebookStatement(sources: DatasetCatalog, notebook: DatasetNotebook, c
   return compileStatement(sources, composed, {}, undefined, budget).statement;
 }
 
+/** The `$name` parameters a dataset query binds, deduplicated in first-appearance order — read by the lexer that binds them. */
+export function datasetSqlParams(sql: string): string[] {
+  const names: string[] = [];
+  bindParameters(sql, (name) => { if (!names.includes(name)) names.push(name); return 'NULL'; });
+  return names;
+}
+
 /** Kept in this module so notebook composition shares the same AST validator;
  * generated ASTs never pass back through the authored SQL parameter lexer. */
 export function compileNotebookSql(sources: DatasetCatalog, notebook: DatasetNotebook, cellId: string): { sql: string; values: Scalar[] } {

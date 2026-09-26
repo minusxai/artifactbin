@@ -5,8 +5,10 @@ import {fixtureFetch as fetch} from './lib/fixture-http.mjs';
 import { artifactDocument } from './lib/artifact-document.mjs';
 /**
  * Gate: reactive JSX, document-local SQL, and Dialog over both document
- * transports. Local state belongs to one loaded document: it may travel to the
- * query/mutation routes, but it never becomes an artifact or dataset write.
+ * transports. Local state belongs to one loaded document: once the page's
+ * engine is loaded, a local-table write and the queries over it run in the
+ * page and never reach a route, and it never becomes an artifact or dataset
+ * write.
  *
  * usage: node scripts/gate-local-sql-state.mjs [base]
  */
@@ -30,7 +32,6 @@ const source = `<Helmet>
   <Value name="drafts" type="table" value={[{"id":1,"label":"first"}]} />
   <Query name="draft_count">{\`select count(*) n from drafts\`}</Query>
   <Mutation name="add_draft">{\`insert into drafts values ((select coalesce(max(id),0)+1 from drafts), $note)\`}</Mutation>
-  <Mutation name="increment">{\`update _signals set count=count+1\`}</Mutation>
 </Helmet>
 <main data-design="tw" className="@container p-8">
   <select aria-label="Choice" value="$choice" options={["a","b"]} />
@@ -41,15 +42,15 @@ const source = `<Helmet>
   <Button aria-label="Add draft" run="$add_draft">Add draft</Button>
   <Dialog open="$open">
     <DialogTrigger aria-label="Open dialog">Open dialog</DialogTrigger>
-    <DialogContent aria-label="Draft dialog" run="$increment">
+    <DialogContent aria-label="Draft dialog" run="$add_draft">
       <input aria-label="Note" value="$note" required autoFocus />
-      <button aria-label="Save dialog" type="submit">Save</button>
+      <Button aria-label="Save dialog" type="submit" set={{"count": 1}}>Save</Button>
       <DialogClose aria-label="Close dialog">Cancel</DialogClose>
     </DialogContent>
   </Dialog>
 </main>`;
 const doc = await json(await api('/api/artifacts', {markup:source, visibility:'unlisted'}));
-const aclDoc = await json(await api('/api/artifacts', {markup:`<Helmet><Mutation name="stored_write" source="ref:${dataset.id}">{\`insert into public.rows (id, label) values (2, 'forbidden')\`}</Mutation></Helmet><Button run="$stored_write">Write</Button>`, visibility:'unlisted'}));
+const aclDoc = await json(await api('/api/artifacts', {markup:`<Helmet><Import name="stored_write_data" src="ref:${dataset.id}" /><Mutation name="stored_write">{\`insert into stored_write_data.rows (id, label) values (2, 'forbidden')\`}</Mutation></Helmet><Button run="$stored_write">Write</Button>`, visibility:'unlisted'}));
 check(!!dataset.id && !!doc.id && !!aclDoc.id, `fixtures published (${dataset.id}, ${doc.id})`);
 if (!dataset.id || !doc.id || !aclDoc.id) throw new Error(`fixture publish failed: ${JSON.stringify({dataset, doc, aclDoc})}`);
 
@@ -63,12 +64,16 @@ const exercise = async (page, framed, documentId) => {
       try { routeBodies.push({url:request.url(), body:request.postDataJSON()}); } catch {}
     }
   });
+  const engine = page.waitForResponse((r) => r.url().endsWith('.wasm') && r.ok(), {timeout:20_000}).then(() => true, () => false);
   await page.goto(`${B}/a/${documentId}?$choice=b`, {waitUntil:'load'});
   const frame = framed ? await artifactDocument(page) : page.mainFrame();
   await frame.waitForFunction(() => document.querySelector('[aria-label="Rows"]')?.textContent?.trim() === '1', null, {timeout:20_000}).catch(async error => {
     throw new Error(`${error.message}; page=${(await frame.locator('body').innerText()).slice(0, 1000)}`);
   });
   check((await frame.textContent('[aria-label="Branch"]')) === 'bee', `${framed ? 'framed' : 'top-level'} URL scalar seeds the ternary`);
+  // The first paint is the server's; the page's engine loads behind it.
+  check(await engine, `${framed ? 'framed' : 'top-level'} page loaded its SQLite engine`);
+  await page.waitForTimeout(500);
   await frame.click('[aria-label="Add draft"]');
   await frame.waitForFunction(() => document.querySelector('[aria-label="Rows"]')?.textContent?.trim() === '2');
   await frame.click('[aria-label="Add draft"]');
@@ -86,15 +91,16 @@ const exercise = async (page, framed, documentId) => {
   check(validity.value === 'changed' && !validity.disabled && validity.valid && validity.formValid && !validity.submitDisabled,
     `Dialog field is filled, enabled, and valid before submit (${JSON.stringify(validity)})`);
   await frame.click('[aria-label="Save dialog"]');
-  await frame.waitForFunction(() => document.querySelector('[aria-label="Count"]')?.textContent === '1', null, {timeout:15_000});
-  check((await frame.locator('[aria-label="Draft dialog"]').evaluate(el => el.open)) === false && (await frame.textContent('[aria-label="Positive"]')) === 'positive', 'submit closes Dialog and _signals drives && rendering');
+  // set= changes Count on the click; the Dialog closes once its run= write has committed.
+  await frame.waitForFunction(() => document.querySelector('[aria-label="Count"]')?.textContent === '1' && document.querySelector('[aria-label="Draft dialog"]')?.open === false, null, {timeout:15_000});
+  check((await frame.locator('[aria-label="Draft dialog"]').evaluate(el => el.open)) === false && (await frame.textContent('[aria-label="Positive"]')) === 'positive', 'submit closes Dialog and set= drives && rendering');
   check(await frame.locator('[aria-label="Open dialog"]').evaluate(el => el === document.activeElement), 'successful submit restores focus to the trigger');
   await frame.click('[aria-label="Open dialog"]');
   await frame.press('[aria-label="Note"]', 'Escape');
   await frame.waitForFunction(() => !document.querySelector('[aria-label="Draft dialog"]')?.open);
   check(await frame.locator('[aria-label="Open dialog"]').evaluate(el => el === document.activeElement), 'Escape closes Dialog and restores focus');
   const snapshots = routeBodies.filter(call => call.body?.localTables && Object.keys(call.body.localTables).length);
-  check(snapshots.some(call => call.url.endsWith('/mutate')) && snapshots.some(call => call.url.endsWith('/query')), `${framed ? 'relayed' : 'direct'} mutation and query snapshots reached their routes`);
+  check(snapshots.length === 0 && !routeBodies.some(call => call.url.endsWith('/mutate')), `${framed ? 'framed' : 'top-level'} local writes and the queries over them ran in the page: no local snapshot reached a route (${routeBodies.map(call => call.url.split('/').pop()).join(', ')})`);
   await page.waitForFunction(() => new URLSearchParams(location.search).get('$count') === '1', null, {timeout:5_000});
   await page.reload({waitUntil:'load'});
   const reloaded = framed ? await artifactDocument(page) : page.mainFrame();
@@ -119,7 +125,7 @@ const afterDoc = await json(await fetch(`${B}/api/artifacts/${doc.id}`, {headers
 const afterDataset = await json(await fetch(`${B}/api/artifacts/${dataset.id}`, {headers}));
 check(afterDoc.version === doc.version, `local edits did not bump the source version (${afterDoc.version})`);
 check(afterDataset.access === 'read' && afterDataset.rowCount === 1, 'local edits did not change stored dataset rows or permissions');
-const forbidden = await api(`/a/${aclDoc.id}/mutate`, {mutation:'stored_write', values:{}});
+const forbidden = await api(`/a/${aclDoc.id}/mutate`, {mutation:'stored_write', args:{}});
 check(forbidden.status === 403, `persistent dataset mutation remains ACL-protected (${forbidden.status})`);
 
 check((await fetch(`${B}/a/${privateDoc.id}`)).status === 404 && (await fetch(`${B}/a/${privateDoc.id}/query`, {method:'POST', headers:{'Content-Type':'text/plain'}, body:'{}'})).status === 404, 'private document and its data route cannot be fetched anonymously');

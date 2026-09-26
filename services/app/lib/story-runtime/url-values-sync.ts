@@ -22,7 +22,8 @@
  * a query going busy), and an address rewritten on each of those is churn a
  * reader can see in their own back button.
  */
-import type { Dataflow, Scalar } from '@/lib/story/dataflow';
+import type { Scalar } from '@/lib/story/dataflow';
+import type { CompiledDataflow } from '@/lib/story/compiled-dataflow';
 import { urlValueParams } from '@/lib/story/url-values';
 import type { DataflowStore } from './store';
 
@@ -51,7 +52,7 @@ const VALUES_URL_DEBOUNCE_MS = 150;
  * written, so a form draft included here is the draft in the owner's address —
  * the leak the opt-out exists to close. The two sinks must agree on the set.
  */
-function scalarsAt(flow: Dataflow, values: Record<string, Scalar>): Record<string, Scalar> {
+function scalarsAt(flow: CompiledDataflow, values: Record<string, Scalar>): Record<string, Scalar> {
   const out: Record<string, Scalar> = {};
   for (const v of flow.values) if (v.kind === 'scalar' && v.url !== false && v.name in values) out[v.name] = values[v.name];
   return out;
@@ -71,7 +72,7 @@ export function syncValuesToUrl(
    * a document that is still open (`store.replaceFlow`), and a Value that
    * version no longer declares must stop appearing in the link.
    */
-  flowOf: () => Dataflow,
+  flowOf: () => CompiledDataflow,
   sink: ValuesUrlSink,
   debounceMs: number = VALUES_URL_DEBOUNCE_MS,
 ): () => void {

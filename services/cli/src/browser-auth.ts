@@ -87,6 +87,8 @@ export async function deviceAuthenticate(origin: string, options: AuthOptions): 
     const value = JSON.parse(raw.toString()) as Pending;
     if (validPending(value, server, [server, ...(options.aliases ?? [])]) && value.expiresAt > clock() && value.connectionKey === (connection ? digest(connection.token) : undefined)) pending = value;
   }
+  /** A kept pairing may have been approved on another device while no command was waiting. */
+  const resumed = !!pending;
   // Where an approval page may live: the selected origin, and the verified other addresses of
   // the SAME server. Nothing else, and never an origin the pairing response itself named.
   const approvalOrigins = [server, ...(options.aliases ?? []).map(alias => {try{return normalizeServer(alias);}catch{return '';}}).filter(Boolean)];
@@ -119,18 +121,10 @@ export async function deviceAuthenticate(origin: string, options: AuthOptions): 
     await privateDirectory(configDir(home,options.env));
     await atomicWrite(file,JSON.stringify(pending));
   }
-  const approval = new ApprovalRequired(pending.verificationUrl,pending.userCode,pending.expiresAt);
-  {
-    (options.notify ?? (message=>process.stderr.write(`${message}\n`)))(approval.message);
-    try { await (options.open ?? openBrowser)(pending.verificationUrl); }
-    catch (error) {
-      if(error instanceof CliError)throw error;
-      throw new CliError('browser_unavailable','Could not open the browser.',EMAIL_AUTH_HINT);
-    }
-  }
-  const deadline = options.interactive ? pending.expiresAt : Math.min(pending.expiresAt, clock() + AGENT_APPROVAL_WAIT_MS);
-  while (clock() < deadline) {
-    const {response,data} = await post(`${endpoint}/token`, {device_code:pending.deviceCode});
+  const paired = pending;
+  /** One approval check: the saved connection once approved, null while approval is pending. */
+  const check = async (): Promise<Connection | null> => {
+    const {response,data} = await post(`${endpoint}/token`, {device_code:paired.deviceCode});
     if (response.ok) {
       if (typeof data.access_token !== 'string' || typeof data.refresh_token !== 'string' || typeof data.client_id !== 'string'
         || !Number.isFinite(data.expires_in) || data.expires_in <= 0) throw new CliError('invalid_response','Authentication server returned invalid credentials.');
@@ -144,6 +138,25 @@ export async function deviceAuthenticate(origin: string, options: AuthOptions): 
       const code=data.error==='access_denied'?'access_denied':data.error==='expired_token'?'approval_expired':'auth_failed';
       throw new CliError(code,code==='access_denied'?'Browser approval was denied.':code==='approval_expired'?'Browser approval expired.':'Browser authentication failed.',code==='approval_expired'?EMAIL_AUTH_HINT:'Run afbin auth again.');
     }
+    return null;
+  };
+  // Check a kept pairing BEFORE the browser: on a machine without one, this is how an approval
+  // given on another device is ever collected.
+  if (resumed) { const approved = await check(); if (approved) return approved; }
+  const approval = new ApprovalRequired(pending.verificationUrl,pending.userCode,pending.expiresAt);
+  {
+    (options.notify ?? (message=>process.stderr.write(`${message}\n`)))(approval.message);
+    try { await (options.open ?? openBrowser)(pending.verificationUrl); }
+    catch (error) {
+      if(error instanceof CliError)throw error;
+      // The pairing stays on disk, so the promise printed above holds: a rerun collects the approval.
+      throw new CliError('browser_unavailable','Could not open the browser.',`Approve code ${pending.userCode} at ${pending.verificationUrl} on any device, then rerun the command: it continues with that approval. ${EMAIL_AUTH_HINT}`);
+    }
+  }
+  const deadline = options.interactive ? pending.expiresAt : Math.min(pending.expiresAt, clock() + AGENT_APPROVAL_WAIT_MS);
+  while (clock() < deadline) {
+    const approved = await check();
+    if (approved) return approved;
     await (options.sleep ?? sleep)(Math.min(pending.interval,Math.max(0,deadline-clock())));
   }
   if (!options.interactive && clock() < pending.expiresAt) {

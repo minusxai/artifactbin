@@ -9,20 +9,34 @@ import { json } from '@/lib/http';
 import { MAX_QUERY_ROWS } from '@/lib/config';
 import type { Scalar, Row } from './dataflow';
 import { parseLocalTables } from './local-tables';
+import { MAX_PEOPLE_IDS } from '@/lib/story-runtime/contract';
 
 export interface QueryRequest {
   localTables?: Record<string, Row[]>;
+  /** The reader's IANA zone, bound as `$_tz`. */
+  tz?: string;
   values?: Record<string, Scalar>;
   only?: string[];
   /** A window of one query's result (lib/sql/engine QueryPage). */
   page?: { name: string; offset: number; limit: number; sort?: { col: string; dir: 'asc' | 'desc' } };
+  /**
+   * Instead of a run: every row of one IMPORT the document declares, by its
+   * name, for a reader's page that runs its queries itself
+   * (lib/story/placement). Answered only when this door's viewer may hold it.
+   */
+  hold?: string;
+  /**
+   * Instead of a run: the cards of the people these ids name, for results the
+   * reader's page computed itself (lib/artifacts nameablePeople decides who).
+   */
+  people?: string[];
 }
 
 const isScalar = (v: unknown): v is Scalar =>
   v === null || typeof v === 'string' || typeof v === 'boolean' || (typeof v === 'number' && Number.isFinite(v));
 
 export function parseQueryRequest(body: Record<string, unknown>): QueryRequest | Response {
-  const allowed = ['values', 'only', 'page', 'localTables'];
+  const allowed = ['values', 'only', 'page', 'localTables', 'tz', 'hold', 'people'];
   const unknown = Object.keys(body).filter((key) => !allowed.includes(key));
   if (unknown.length) {
     return json({
@@ -31,9 +45,26 @@ export function parseQueryRequest(body: Record<string, unknown>): QueryRequest |
     }, 400);
   }
   const out: QueryRequest = {};
+  if (body.hold !== undefined) {
+    if (typeof body.hold !== 'string' || Object.keys(body).length !== 1) {
+      return json({ error: 'invalid_hold', details: ['hold names one import the document declares, and travels alone: {"hold":"<import name>"}'] }, 400);
+    }
+    return { hold: body.hold };
+  }
+  if (body.people !== undefined) {
+    const ids = body.people;
+    if (!Array.isArray(ids) || ids.length > MAX_PEOPLE_IDS || ids.some((id) => typeof id !== 'string' || id.length > 200) || Object.keys(body).length !== 1) {
+      return json({ error: 'invalid_people', details: [`people names at most ${MAX_PEOPLE_IDS} user ids, and travels alone: {"people":["<user id>", …]}`] }, 400);
+    }
+    return { people: ids as string[] };
+  }
   if (body.localTables !== undefined) {
     try { out.localTables = parseLocalTables(body.localTables); }
     catch { return json({error: 'invalid_local_state'}, 400); }
+  }
+  if (body.tz !== undefined) {
+    if (typeof body.tz !== 'string') return json({ error: 'invalid_tz', details: ['tz must be an IANA time zone name'] }, 400);
+    out.tz = body.tz;
   }
   if (body.values !== undefined) {
     if (!body.values || typeof body.values !== 'object' || Array.isArray(body.values)) {

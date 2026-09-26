@@ -14,7 +14,7 @@ afbin push report.jsx
 
 `app.artifactbin.dev` is the default host. `add` assigns stable, server/account-scoped IDs without uploading. Reference datasets and media with `ref:ID`; use `/a/ID` for navigation links. Local paths inside artifact references are rejected. Preview reads registered local files and saves browser edits back to them; push publishes registered unpublished dependencies first. It does not rewrite paths or silently publish changes to an already-published dependency.
 
-The installer supports macOS and Linux, ARM64 and x64, without Node or sudo. The CLI downloads its host runtime, DuckDB and Chromium when needed and caches them. `afbin help` works offline. `afbin update` updates the verified executable and agent skills.
+The installer supports macOS and Linux, ARM64 and x64, without Node or sudo. The CLI carries its SQL engine (SQLite) and downloads its host runtime and Chromium when needed, caching them. `afbin help` works offline. `afbin update` updates the verified executable and agent skills.
 
 ## Run your own server
 
@@ -30,7 +30,7 @@ afbin push report.jsx
 
 Use the origin the server prints. It advertises `http://127.0.0.1:7445`, and approval and login must happen at that exact origin — `http://localhost:7445` is a different origin and `afbin auth` refuses it with `approval_origin_mismatch`.
 
-`serve` stays in the foreground. Its directory contains server settings, uploaded objects and a PGLite database; restart with the same directory to retain them. On startup it prints the host teammates set, the installer to run, and where login codes appear. Optional `--db-url postgres://…` or `--db-url pglite://…` selects the application database; DuckDB still handles queries.
+`serve` stays in the foreground. Its directory contains server settings, uploaded objects and a PGLite database; restart with the same directory to retain them. On startup it prints the host teammates set, the installer to run, and where login codes appear. Optional `--db-url postgres://…` or `--db-url pglite://…` selects the application database; SQLite still handles document queries.
 
 Use `--server URL` for one command without changing defaults. `afbin config set host https://app.artifactbin.dev` restores the cloud default. Client host credentials and defaults live under `~/.artifactbin`, separately from server data. IDs belong to the host/account that reserved them.
 

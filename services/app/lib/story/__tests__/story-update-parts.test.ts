@@ -64,11 +64,12 @@ describe('storyUpdateParts', () => {
     expect(storyUpdateParts('<div><p>unclosed')).toBeNull();
   });
 
-  it('carries the declarations themselves — the runtime has no parser to recover them', () => {
+  it('signs the declarations themselves — the compiled flow travels from the server, not from these parts', () => {
     const parts = storyUpdateParts(doc(VALUE + QUERY, '<p>x</p>'))!;
-    expect(parts.flow.values.map((v) => v.name)).toEqual(['region']);
-    expect(parts.flow.queries.map((q) => q.name)).toEqual(['sales']);
-    expect(storyUpdateParts('<p>no helmet</p>')!.flow).toEqual({ values: [], queries: [] });
+    const signed = JSON.parse(parts.declarations) as { values: Array<{ name: string }>; queries: Array<{ name: string }> };
+    expect(signed.values.map((v) => v.name)).toEqual(['region']);
+    expect(signed.queries.map((q) => q.name)).toEqual(['sales']);
+    expect(JSON.parse(storyUpdateParts('<p>no helmet</p>')!.declarations)).toEqual({ imports: [], values: [], queries: [], mutations: [] });
   });
 
   it('handles a document with no Helmet at all', () => {

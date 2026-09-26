@@ -6,34 +6,33 @@ import {recoverableOperation} from './recoverable-operation';
 import type {Workspace,Snapshot} from './workspace';
 import type {HttpClient} from './http';
 
-interface MutationParameter {name:string;type?:string;required?:boolean;default?:Scalar}
-interface MutationDeclaration {name:string;params?:MutationParameter[];target?:string}
+interface MutationArgument {name:string;type?:string|null}
+/** A document's dataset mutation as the server describes it: its signature, and what its control supplies. */
+interface MutationDeclaration {name:string;args?:MutationArgument[];row?:string[];value?:boolean;target?:string}
 
-/** A declared mutation is the document's own statement; the caller supplies bound values, never SQL. */
+/** A declared mutation is the document's own statement; the caller supplies its arguments, never SQL. */
 function declaredMutation(head:Snapshot,name:string,values:Record<string,Scalar>):Record<string,unknown>{
  const declared=(Array.isArray(head.mutations)?head.mutations:[]) as MutationDeclaration[];
  const selected=declared.find(item=>item&&item.name===name);
  if(!selected)throw new CliError('unknown_mutation',`${head.id} does not declare the mutation ${name}.`,declared.length?`Declared mutations: ${declared.map(item=>item.name).join(', ')}.`:'This resource declares no mutations; write dataset rows with --input SQL.');
  /*
-  * What the SERVER binds is never the caller's to supply. `$_me` is whoever is signed in; `$_row`
+  * What the SERVER binds is never the caller's to supply. `$_me.id` is whoever is signed in; `$_row`
   * and `$_value` exist only where a page draws a row. Asking for `_me` made an agent look up its
   * own account id and pass it; the server ignores it, but the question was wrong to ask. Naming the
   * dataset tells an agent with a direct write grant that it need not script clicks on the page.
   */
- if(Object.hasOwn(values,'_me'))throw new CliError('invalid_parameter',`${name} binds $_me from your sign-in; it cannot be supplied.`,'Remove --param _me: the server signs the write as you.');
- if((selected.params??[]).some(param=>param.name==='_row'||param.name==='_value')){
+ if(Object.keys(values).some(key=>key.startsWith('_me')))throw new CliError('invalid_parameter',`${name} binds $_me.id from your sign-in; it cannot be supplied.`,'Remove --param _me: the server signs the write as you.');
+ if(selected.row?.length||selected.value){
   const dataset=selected.target&&selected.target!==head.id?selected.target:undefined;
   throw new CliError('row_mutation',`${name} is a row action: it runs on the row a page draws it beside.`,dataset?`Press it on the page in a live session (afbin help live-sessions). Direct SQL on ${dataset} (afbin query ${dataset} --write --input change.sql) works only where its policy grants you direct writes (afbin help apps).`:'Press it in a live session instead (afbin help live-sessions).');
  }
- const params=(selected.params??[]).filter(param=>param.name!=='_me');
- for(const key of Object.keys(values))if(!params.some(param=>param.name===key))throw new CliError('unknown_parameter',`${name} does not declare the parameter ${key}.`,`Declared parameters: ${params.map(param=>param.name).join(', ')||'none'}.`);
- const missing=params.filter(param=>param.required!==false&&param.default===undefined&&!Object.hasOwn(values,param.name)).map(param=>param.name);
- if(missing.length)throw new CliError('missing_parameter',`${name} requires ${missing.join(', ')}.`,'Supply each value with --param name=value.');
+ const params=selected.args??[];
+ for(const key of Object.keys(values))if(!params.some(param=>param.name===key))throw new CliError('unknown_parameter',`${name} takes no argument ${key}.`,`Its arguments: ${params.map(param=>param.name).join(', ')||'none'}.`);
  for(const param of params){
-  if(!Object.hasOwn(values,param.name)||param.type===undefined)continue;
+  if(!Object.hasOwn(values,param.name)||param.type==null)continue;
   const value=values[param.name];
-  const valid=param.type==='number'?typeof value==='number':param.type==='boolean'?typeof value==='boolean':['string','date'].includes(param.type)?typeof value==='string':true;
-  if(!valid)throw new CliError('invalid_parameter',`Parameter ${param.name} must be a ${param.type}.`,'Values are bound by declared type, never interpolated.');
+  const valid=value===null||(param.type==='number'?typeof value==='number':param.type==='boolean'?typeof value==='boolean':typeof value==='string');
+  if(!valid)throw new CliError('invalid_parameter',`Argument ${param.name} must be a ${param.type}.`,'Arguments are bound by declared type, never interpolated.');
  }
  return{mutation:name,target:selected.target??head.id,parameters:params.map(param=>param.name)};
 }
@@ -61,12 +60,12 @@ export async function queryMutation(workspace:Workspace,parsed:ParsedCommand,sql
  return recoverableOperation(workspace,client,{
   path:`/artifacts/${ref.id}/mutate`,method:'POST',
   identity:{id:ref.id,...(name?{name}:{sql}),values},
-  body:{...(name?{name}:{sql}),values},
+  body:name?{name,args:values}:{sql,values},
   prepare:async()=>{
    const head=await client.request<Snapshot>(`/artifacts/${ref.id}`);
    plan(head);
    if(!(head.capabilities as {mutation_receipts?:boolean}|undefined)?.mutation_receipts)throw new CliError('unsupported_server','This server does not support recoverable mutations.');
-   return{body:name?{name,values}:{sql,values,expectedState:head.state}};
+   return{body:name?{name,args:values}:{sql,values,expectedState:head.state}};
   },
  });
 }

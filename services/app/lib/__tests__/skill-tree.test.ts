@@ -207,9 +207,12 @@ describe('each topic is taught by exactly its owner', () => {
   const owners = (needle: string | RegExp) => Object.keys(rendered).filter((p) => (typeof needle === 'string' ? rendered[p].includes(needle) : needle.test(rendered[p])));
   const R = 'artifactbin/references';
   const cases: Array<[string, string | RegExp, string[]]> = [
-    ['the generic <Mutation> grammar', '<Mutation name source="ref:abc123">{`insert', [`${R}/markup-data.md`]],
+    ['the generic <Mutation> grammar', '<Mutation name expectedAffected={1} reset="note">{`insert', [`${R}/markup-data.md`]],
+    ['the built-in $ values table', '| `$_row.<column>` |', [`${R}/markup-data.md`]],
+    ['the SQLite library table', '| `date_series(start, end', [`${R}/markup-sql-functions.md`]],
+    ['the booking worked example', '<title>Book a time</title>', [`${R}/markup-data-example.md`]],
     ['the Helmet cardinality rule', /at most ONE per document/i, [`${R}/markup.md`]],
-    ['editable table grammar and seven-editor example', '<DataTable data="$roadmap" rowKey="id">', [`${R}/markup-editing.md`]],
+    ['editable table grammar and seven-editor example', '<Import name="roadmap" src="ref:rdm123" />', [`${R}/markup-editing.md`]],
     ['the reader-control roster', '## Bindings: controls', [`${R}/markup-data.md`]],
     ['the <Helmet> :root override example', /:root \{ --background/, [`${R}/markup.md`]],
     ['the scroll-reveal observer', 'data-mx-seen', [`${R}/markup-motion.md`]],

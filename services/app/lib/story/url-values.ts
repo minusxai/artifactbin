@@ -26,7 +26,12 @@
  *    document at rest, so sharing the defaults produces the plain address —
  *    and every param that is not ours survives the round trip untouched.
  */
-import { coerceScalarInput, scalarMatches, type Dataflow, type Scalar, type ScalarValueDecl } from './dataflow';
+import { coerceScalarInput, scalarMatches, type Scalar } from './dataflow';
+import type { ColumnType } from './dataset-shape';
+
+/** What the link rules read of a document: its declared values (parsed or compiled). */
+type Declared = { values: ReadonlyArray<{ kind: 'scalar' | 'table'; name: string; type?: ColumnType | 'table'; default?: Scalar; url?: false }> };
+type ScalarDecl = { name: string; type: ColumnType; default: Scalar };
 
 /**
  * A `$` param, judged from the RAW key so a value that will not decode cannot
@@ -91,15 +96,15 @@ function pairsOf(search: string): RawPair[] {
  * nothing writes one to it, and `urlSelection` — export and cache keying —
  * sees the same document at rest.
  */
-const scalarsOf = (flow: Dataflow): Map<string, ScalarValueDecl> =>
-  new Map(flow.values.filter((v): v is ScalarValueDecl => v.kind === 'scalar' && v.url !== false).map((v) => [v.name, v]));
+const scalarsOf = (flow: Declared): Map<string, ScalarDecl> =>
+  new Map(flow.values.flatMap((v) => (v.kind === 'scalar' && v.type && v.type !== 'table' && v.url !== false ? [[v.name, { name: v.name, type: v.type, default: v.default ?? null }] as const] : [])));
 
 /**
  * One URL string against one declaration. `null` means "the link said nothing
  * usable about this value" — the caller then leaves the declared default
  * alone, which is the fallback the whole module is built around.
  */
-function scalarFromUrl(decl: ScalarValueDecl, raw: string): { value: Scalar } | null {
+function scalarFromUrl(decl: ScalarDecl, raw: string): { value: Scalar } | null {
   // The empty value is the reader's "All", not a missing one.
   if (raw === '') return { value: null };
   // A boolean is the one type whose coercion cannot fail by itself
@@ -117,7 +122,7 @@ function scalarFromUrl(decl: ScalarValueDecl, raw: string): { value: Scalar } | 
  * coerced and validated per declaration, everything else dropped in silence.
  * Names the link does not mention are absent, so the caller's own defaults win.
  */
-export function readUrlValues(search: string, flow: Dataflow): Record<string, Scalar> {
+export function readUrlValues(search: string, flow: Declared): Record<string, Scalar> {
   const scalars = scalarsOf(flow);
   const out: Record<string, Scalar> = {};
   for (const pair of pairsOf(search)) {
@@ -142,7 +147,7 @@ export function readUrlValues(search: string, flow: Dataflow): Record<string, Sc
  * not a deletion — deleting it would restore a non-null default on the next
  * read, which is the opposite of what they picked.
  */
-export function urlValueParams(flow: Dataflow, values: Record<string, Scalar>): Record<string, string | null> {
+export function urlValueParams(flow: Declared, values: Record<string, Scalar>): Record<string, string | null> {
   const out: Record<string, string | null> = {};
   for (const decl of scalarsOf(flow).values()) {
     if (!Object.prototype.hasOwnProperty.call(values, decl.name)) { out[decl.name] = null; continue; }
@@ -173,7 +178,7 @@ const enc = (s: string): string => encodeURIComponent(s).replace(/%24/g, '$');
  * map happens to enumerate: the string has to be stable, or every re-render
  * looks like a change and the address bar thrashes.
  */
-export function writeUrlValues(search: string, flow: Dataflow, values: Record<string, Scalar>): string {
+export function writeUrlValues(search: string, flow: Declared, values: Record<string, Scalar>): string {
   const kept = pairsOf(search).filter((p) => !p.ours).map((p) => p.raw);
   const params = urlValueParams(flow, values);
   const mine: string[] = [];
@@ -217,7 +222,7 @@ interface UrlSelection {
  * bounds the RATE (30/min per actor) and not the TOTAL, so that is a cache-fill
  * anyone who can read a public document can pull.
  */
-export function urlSelection(search: string, flow: Dataflow | null): UrlSelection {
+export function urlSelection(search: string, flow: Declared | null): UrlSelection {
   if (!flow) return { search: '', token: '' };
   const values = readUrlValues(search, flow);
   const params = urlValueParams(flow, values);

@@ -358,7 +358,7 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
    */
   const backend = useMemo(() => createHttpBackend(id), [id]);
   const live = useLiveArtifact(backend, id, editId, version, !editing, undefined, onLiveData, setLiveAnnotations);
-  const hasDataMutations = format === 'markup' && !archived && (live?.dataflow?.flow ?? dataflow?.flow)?.mutations?.some(m => m.scope !== 'local') === true;
+  const hasDataMutations = format === 'markup' && !archived && (live?.dataflow?.flow ?? dataflow?.flow)?.mutations.some(m => 'import' in m.target) === true;
   const membershipChanged=useCallback(()=>onLiveData({datasets:['_members']}),[onLiveData]);
   const membership=useArtifactMembership(id,hasDataMutations,membershipRevision,membershipChanged);
   const joinArtifact=()=>{
@@ -812,7 +812,7 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
             <button
               type="button"
               aria-label="Copy dataset reference"
-              onClick={() => { void navigator.clipboard?.writeText(shownCatalog ? datasetQuerySnippet(id, shownCatalog, 'data') : `ref:${id}`); setCopiedRef(true); }}
+              onClick={() => { void navigator.clipboard?.writeText(shownCatalog ? datasetQuerySnippet(id, shownCatalog) : `ref:${id}`); setCopiedRef(true); }}
               className={`${CONTROL_ROW} text-accent`}
             >
               {copiedRef ? 'copied dataset reference' : shownCatalog ? `copy query · source="${id}"` : `copy ref:${id}`}

@@ -175,8 +175,19 @@ const dynamicChunks = (browser.metafile.outputs[entryOut[0]].imports ?? [])
  * These need no preload entry: the runtime resolves them from their own URLs.
  */
 const lazy = dynamicChunks
-  .filter((c) => !c.from.some((f) => f.includes('lib/story-runtime/edit/') || f.endsWith('components/kit/mermaid-render.ts') || f.endsWith('components/kit/deck-gl-engine.tsx')))
+  .filter((c) => !c.from.some((f) => f.includes('lib/story-runtime/edit/') || f.endsWith('components/kit/mermaid-render.ts') || f.endsWith('components/kit/deck-gl-engine.tsx') || f.includes('/sql/src/') || f.includes('@sqlite.org/')))
   .map((c) => c.url);
+
+/*
+ * The page's SQLite engine (lib/story-runtime/page-sqlite): the official wasm,
+ * beside the runtime at a content-addressed name so it can be cached
+ * `immutable` and fetched once. Not a preload hint: only a document whose
+ * reader holds data runs anything in the page, and the core's own chunk is
+ * excluded from `lazy` above for the same reason.
+ */
+const sqliteWasm = fs.readFileSync(createRequire(path.join(root, '../sql/package.json')).resolve('@sqlite.org/sqlite-wasm/sqlite3.wasm'));
+const sqliteName = `sqlite3-${sha(sqliteWasm).slice(0, 16)}.wasm`;
+fs.writeFileSync(path.join(outdir, sqliteName), sqliteWasm);
 
 /*
  * The reading position ships SEPARATELY, and every document loads it — a
@@ -222,6 +233,7 @@ const manifest = {
   anchor: `/story/${path.basename(anchorOut[0])}`,
   comment: `/story/${path.basename(commentOut[0])}`,
   lazy,
+  sqlite: `/story/${sqliteName}`,
 };
 
 /*
@@ -230,7 +242,7 @@ const manifest = {
  * so this is where it has to be loud. The serving accessor re-checks the same
  * thing (lib/story/runtime-asset.ts).
  */
-for (const url of [manifest.entry, manifest.anchor, manifest.comment, ...manifest.lazy]) {
+for (const url of [manifest.entry, manifest.anchor, manifest.comment, manifest.sqlite, ...manifest.lazy]) {
   const file = path.join(root, 'public', url.replace(/^\//, ''));
   if (!fs.existsSync(file)) throw new Error(`build-story-runtime: manifest names ${url}, which is not at ${file}`);
 }
@@ -311,7 +323,7 @@ if (cache) {
     'lib/story-runtime/dist/story-ssr.cjs',
     'lib/story-runtime/dist/maplibre-gl-csp-worker.js',
     'public/story/manifest.json',
-    ...[manifest.entry, manifest.anchor, manifest.comment, ...manifest.lazy].map((url) => `public${url}`),
+    ...[manifest.entry, manifest.anchor, manifest.comment, manifest.sqlite, ...manifest.lazy].map((url) => `public${url}`),
     ...listFiles(path.join(root, 'public/libraries')).map((file) => path.relative(root, file)),
   ];
   fs.mkdirSync(distDir, { recursive: true });

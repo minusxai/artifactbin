@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { parseJsx } from '@/lib/jsx';
-import type { Dataflow, Scalar } from '@/lib/story/dataflow';
+import type { Scalar } from '@/lib/story/dataflow';
+import { compiledOf } from '@/test/helpers/compiled';
 import { precomputeVariants, valueDomains } from '../variants';
 import { artifactFile, flow } from './fixture';
 
@@ -11,15 +12,9 @@ const nodes = (src: string) => {
   return parsed.nodes;
 };
 
-const twoFilters: Dataflow = {
-  values: [
-    { kind: 'scalar', name: 'region', type: 'string', default: null, start: 0, end: 0 },
-    { kind: 'scalar', name: 'paid', type: 'boolean', default: null, start: 0, end: 0 },
-    { kind: 'scalar', name: 'note', type: 'string', default: null, start: 0, end: 0 },
-    { kind: 'scalar', name: 'unused', type: 'string', default: null, start: 0, end: 0 },
-  ],
-  queries: [{ name: 'sales', sql: 'x', params: ['region', 'paid', 'note'], refs: [], start: 0, end: 0 }],
-};
+const FILTERS = '<Value name="region" /><Value name="paid" type="boolean" /><Value name="note" /><Value name="unused" />';
+const twoFilters = await compiledOf(`${FILTERS}<Query name="sales">{\`select $region as r, $paid as p, $note as n\`}</Query>`);
+const withMe = await compiledOf(`${FILTERS}<Query name="mine">{\`select $_me.id as me, $region as r\`}</Query>`);
 
 describe('valueDomains', () => {
   it('reads a Select bound to a $query, a literal Segmented and a Switch; text inputs have no domain', () => {
@@ -73,7 +68,7 @@ describe('precomputeVariants', () => {
 
   it('does nothing for a document whose queries read no Value', async () => {
     run.mockClear();
-    const out = await precomputeVariants({ flow: { values: [], queries: flow.queries.slice(0, 1) }, base, domains: new Map(), run });
+    const out = await precomputeVariants({ flow: { ...flow, values: [], queries: flow.queries.slice(0, 1) }, base, domains: new Map(), run });
     expect(out).toEqual({ variants: [], frozen: [] });
     expect(run).not.toHaveBeenCalled();
   });
@@ -87,8 +82,7 @@ describe('variant values', () => {
     expect(out.variants).toEqual([{ values: { region: 'west', paid: true, note: 'x' }, tables: { sales: { rows: [], columns: [] } }, errors: {} }]);
   });
 
-  it('never offers the viewer ($_me) as a filter', () => {
-    const withMe: Dataflow = { values: twoFilters.values, queries: [{ name: 'mine', sql: 'x', params: ['_me', 'region'], refs: [], start: 0, end: 0 }] };
+  it('never offers the viewer ($_me.id) as a filter', () => {
     const d = valueDomains(nodes('<Select value="$region" options={["west"]} />'), withMe, base);
     expect([...d.keys()]).toEqual(['region']);
     expect(d.get('region')).toEqual([null, 'west']);

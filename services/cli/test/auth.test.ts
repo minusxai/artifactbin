@@ -377,3 +377,29 @@ test('email login starts a fresh approval instead of reusing a stale browser pai
   assert.equal(code,0,output.join(''));assert.equal((await loadConnection(origin,home,{}))?.token,'new_access');
  }finally{await rm(home,{recursive:true,force:true});}
 });
+
+/**
+ * A browserless machine: the command cannot open the approval page, keeps the pairing and says a rerun
+ * continues once the code is approved elsewhere. The rerun must CHECK the kept pairing before it tries
+ * the browser again, or the approval on another device is never collected.
+ */
+test('a rerun on a browserless machine collects a pairing approved on another device',async()=>{
+ const home=await mkdtemp(join(tmpdir(),'afbin-headless-resume-'));let started=0,checks=0;
+ const fetch=async(input:string|URL|Request)=>{
+  const path=new URL(String(input)).pathname;
+  if(path==='/oauth/device'){started++;return pairing();}
+  if(path==='/oauth/device/token'){checks++;return credentials();}
+  assert.fail('unexpected '+path);
+ };
+ const options={home,interactive:false,notify:()=>{},open:async()=>{throw new Error('no browser');},fetch:fetch as typeof globalThis.fetch};
+ try{
+  await assert.rejects(deviceAuthenticate(origin,options),e=>e instanceof CliError&&e.code==='browser_unavailable'&&/rerun/.test(e.fix??'')&&/--email/.test(e.fix??''));
+  assert.equal(started,1);
+  // Approved on a phone meanwhile: the rerun asks about the SAME pairing first and never needs the browser.
+  const connection=await deviceAuthenticate(origin,options);
+  assert.equal(connection.token,'new_access');
+  assert.equal(started,1,'the kept pairing is reused, not replaced');
+  assert.equal(checks,1);
+  assert.equal((await loadConnection(origin,home,{}))?.token,'new_access');
+ }finally{await rm(home,{recursive:true,force:true});}
+});

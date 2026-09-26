@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { mergeGuestIntoAccount } from './lib/start-doc.mjs';
 import { servedTopLevel } from './lib/page-facts.mjs';
 import { createChecker } from './lib/assert.mjs';
@@ -5,8 +6,11 @@ import {fixtureFetch as fetch} from './lib/fixture-http.mjs';
 import { artifactDocument } from './lib/artifact-document.mjs';
 /**
  * Dataflow browser gate: publish diagnostics; signal/query subscriptions;
- * authenticated document-scoped POST transport; virtualized engine windows;
- * private-reader ACL; URL selection round trips and selected exports.
+ * authenticated document-scoped POST transport for the first paint and for
+ * data the reader may not hold; queries over held data run IN THE PAGE (no
+ * request per change, engine windows included); private-reader ACL; URL
+ * selection round trips and selected exports; the booking document's day
+ * click under 50 ms with no request.
  * Artifact markup renders inline in the trusted app. Author code remains in
  * managed sandboxed child frames, whose direct network CSP is tested there.
  * Usage: node scripts/gate-dataflow.mjs [base]
@@ -16,6 +20,9 @@ import { startMailSink, loginViaEmail } from './lib/mail-login.mjs';
 import { connectAgent } from './lib/cli-connection.mjs';
 const B = process.argv[2] ?? 'http://localhost:3030';
 const check = createChecker('dataflow');
+/** Armed BEFORE a navigation: resolves once that page has loaded its SQLite engine's wasm (false after 20 s). */
+const engineLoads = (page) => page.waitForResponse((r) => r.url().endsWith('.wasm') && r.ok(), { timeout: 20000 }).then(() => true, () => false);
+
 const j = async (r) => { const t = await r.text(); try { return JSON.parse(t); } catch { return { raw: t, status: r.status }; } };
 const tok = (await connectAgent(B)).token;
 const H = { Authorization: `Bearer ${tok}`, 'Content-Type': 'application/json' };
@@ -25,8 +32,8 @@ const api = (path, body) => fetch(`${B}${path}`, { method: 'POST', headers: H, b
 const ds = await j(await api('/api/artifacts', { dataset: [{ region: 'EU', revenue: 837 }, { region: 'NA', revenue: 1200 }, { region: 'EU', revenue: 3 }] }));
 check(!!ds.id, 'the dataset published');
 const doc1 = (ds_) => `<Helmet><title>Dataflow gate</title><Value name="region" type="string" />
-<Query name="regions" source="ref:${ds_}">{\`select distinct region from public.rows order by 1\`}</Query>
-<Query name="sales" source="ref:${ds_}">{\`select region, sum(revenue) revenue from public.rows where $region is null or region = $region group by 1 order by 1\`}</Query>
+<Import name="regions_data" src="ref:${ds_}" /><Query name="regions">{\`select distinct region from regions_data.rows order by 1\`}</Query>
+<Import name="sales_data" src="ref:${ds_}" /><Query name="sales">{\`select region, sum(revenue) revenue from sales_data.rows where $region is null or region = $region group by 1 order by 1\`}</Query>
 </Helmet><div data-design="tw" className="@container p-8"><h1 className="text-3xl font-bold">Sales</h1>
 <select aria-label="Region" value="$region" options="$regions" />
 <Iframe title="Dataflow script" height={100}><p id="out">pending</p><script>{\`const out=document.getElementById('out');let initial;mx.subscribe(['sales','region'],snapshot=>{const region=snapshot.signals.region.value;if(initial===undefined)initial=region;if(region!==initial){out.textContent='changed:'+region;return;}const table=snapshot.signals.sales.value;out.textContent='mx:'+typeof mx+' rows='+(table?table.rows.length:0);});\`}</script></Iframe>
@@ -36,11 +43,11 @@ const doc = await j(await api('/api/artifacts', { markup: doc1(ds.id) }));
 check(!!doc.id, `the dataflow document published (${doc.url ?? doc.error})`);
 const bad = await api('/api/artifacts', { markup: doc1(ds.id).replace('sum(revenue)', 'sum(revenu)') });
 const badBody = await j(bad);
-check(bad.status === 400 && badBody.error === 'invalid_sql' && /revenu.*Candidate.*revenue/s.test(JSON.stringify(badBody.details)),
-  'a bad column is refused at publish with the engine diagnostic naming candidates');
+check(bad.status === 400 && badBody.error === 'invalid_sql' && /<Query name=\\"sales\\"> reads revenu — no such column/.test(JSON.stringify(badBody.details)),
+  'a bad column is refused at publish, the compiler naming the query and the column');
 const retired = await api('/api/artifacts', { markup: `<Question data="ref:${ds.id}" />` });
 const retiredBody = await j(retired);
-check(retired.status === 400 && /<Query name="rows"[^>]*source="ref:/.test(retiredBody.details?.[0]?.message ?? ''), 'data="ref:" is retired and the 400 names the <Query> replacement');
+check(retired.status === 400 && /<Import name="data" src="ref:[^"]+" \/><Query name="rows">/.test(retiredBody.details?.[0]?.message ?? ''), 'data="ref:" is retired and the 400 names the <Import> + <Query> replacement');
 
 // ── 2 + 3. inline document and scoped authenticated transport ──────────────
 const b = await chromium.launch();
@@ -57,6 +64,7 @@ p.on('request', (r) => {
   if (r.method() === 'POST') relayCalls.push({ url: r.url(), body: r.postDataJSON() });
   if (r.method() === 'GET' && /[?&]q=/.test(r.url())) directCalls.push(r.url());
 });
+const docEngine = engineLoads(p);
 const resp = await p.goto(`${B}/a/${doc.id}`, { waitUntil: 'load' });
 const csp = resp.headers()['content-security-policy'] ?? '';
 check(csp.includes("default-src 'none'") && csp.includes("connect-src 'self'") && !/(?:^|;)\s*sandbox(?:\s|;|$)/.test(csp), 'the reader uses the strict navigable app CSP; author execution is isolated in its child frame');
@@ -90,6 +98,14 @@ check((await frame.textContent('[aria-label="Live number"]')) === '$2,040', 'the
 // Watch the embed for the transient busy state: it must go busy (dimmed,
 // "updating…") while the re-run is in flight and come back — with its old
 // rows on screen the whole time, never a flash to "loading".
+/*
+ * The reader may hold this public dataset, so after the first paint (which the
+ * server answers, through the scoped POST) the page fetches it once and runs
+ * every later change itself: the select below must make NO request at all.
+ */
+check(await docEngine, 'the page loaded its SQLite engine behind the first paint');
+await p.waitForTimeout(500);
+const callsBeforeChange = relayCalls.length + directCalls.length;
 await frame.evaluate(() => {
   const el = document.querySelector('[aria-label="Question embed"]');
   window.__busySeen = false; window.__flashSeen = false;
@@ -102,10 +118,15 @@ await frame.selectOption('select[aria-label="Region"]', 'NA');
 await frame.waitForFunction(() => document.querySelector('[aria-label="Live number"]')?.textContent === '$1,200', null, { timeout: 15000 }).catch(() => {});
 check((await frame.textContent('[aria-label="Live number"]')) === '$1,200', 'changing the select re-runs the query and the Number follows');
 const busy = await frame.evaluate(() => ({ seen: window.__busySeen, flash: window.__flashSeen, now: document.querySelector('[aria-label="Question embed"]').getAttribute('aria-busy') }));
-check(busy.seen && !busy.flash && busy.now === 'false', `the embed showed the busy state during the re-run and cleared it (busy=${busy.seen}, flash=${busy.flash})`);
+check(!busy.flash && busy.now === 'false', `the embed never flashed "loading" during the re-run and is not busy after it (busy seen=${busy.seen}, flash=${busy.flash})`);
 check(!/EU/.test(await frame.textContent('[aria-label="Data table"]')), 'and the table shows only the selected region');
-check((await scriptRealm.textContent('#out')) === 'changed:NA', 'the managed author script saw the change through mx.subscribe');
-check(directCalls.length === 0 && relayCalls.some(call => call.body.values?.region === 'NA'), `the scoped query POST carries the selected value (${directCalls.length} GET, ${relayCalls.length} POST)`);
+// The author realm hears of the change over its own port, a hop after the page has painted it.
+await scriptRealm.waitForFunction(() => document.getElementById('out')?.textContent === 'changed:NA', null, { timeout: 10000 }).catch(() => {});
+check((await scriptRealm.textContent('#out')) === 'changed:NA', `the managed author script saw the change through mx.subscribe (${await scriptRealm.textContent('#out')})`);
+const holds = relayCalls.filter((call) => call.body.hold !== undefined);
+check(directCalls.length === 0 && relayCalls.some((call) => call.body.only && call.body.hold === undefined) && holds.length === 1 && holds[0].body.hold === 'regions_data',
+  `the first paint ran through the scoped POST, and the page fetched the dataset it may hold ONCE through the same door (${relayCalls.length} POST: ${JSON.stringify(relayCalls.map((c) => c.body.hold ?? c.body.only))}, ${directCalls.length} GET)`);
+check(relayCalls.length + directCalls.length === callsBeforeChange, `the select change ran in the page: no request (${relayCalls.length + directCalls.length - callsBeforeChange} made)`);
 await frame.selectOption('select[aria-label="Region"]', '');
 await frame.waitForFunction(() => document.querySelector('[aria-label="Live number"]')?.textContent === '$2,040', null, { timeout: 15000 }).catch(() => {});
 check((await frame.textContent('[aria-label="Live number"]')) === '$2,040', 'back to All restores the whole result');
@@ -129,20 +150,21 @@ const reach = await scriptRealm.evaluate(async ({ id, base }) => {
 const blockedOrigins = new Set(reach.violations.flatMap(uri => { try { return [new URL(uri).origin]; } catch { return []; } }));
 check(reach.violations.length >= reach.targetCount && blockedOrigins.has(new URL(B).origin) && blockedOrigins.has('https://untrusted.invalid'), `author child direct network is denied by browser connect-src (${JSON.stringify(reach.violations)})`);
 
-// ── 4. <DataTable> past the cap, through scoped POST windows ───────────────
-// A dataset can never exceed the ingest cap (MAX_ROWS_LIMIT), and the query cap
-// defaults to the same number — so a result past the cap comes from the QUERY:
-// a cross join of a 200-row dataset is 40,000 rows, 1,000 of which the island
-// carries, and the rest are read as engine windows.
+// ── 4. <DataTable> past the display window, read as engine windows ────────
+// A cross join of a 200-row dataset is 40,000 rows; a run ships the first
+// 1,000 (the display window) with the total, and the rest are read as engine
+// windows. The reader holds the 200 rows, so after the first paint those
+// windows are read IN THE PAGE: sorting and paging make no request.
 const rows = Array.from({ length: 200 }, (_, i) => ({ id: i, region: ['EU', 'NA', 'APAC'][i % 3], revenue: (i * 7919) % 10007 }));
 const big = await j(await api('/api/artifacts', { dataset: rows }));
 const expectedMax = Math.max(...rows.flatMap((a) => rows.map((b_) => (a.revenue + b_.revenue) % 10007)));
-const tdoc = await j(await api('/api/artifacts', { markup: `<Helmet><Query name="all" source="ref:${big.id}">{\`select a.id * 200 + b.id as id, a.region, (a.revenue + b.revenue) % 10007 as revenue from public.rows a cross join public.rows b order by 1\`}</Query></Helmet>
+const tdoc = await j(await api('/api/artifacts', { markup: `<Helmet><Import name="all_data" src="ref:${big.id}" /><Query name="all">{\`select a.id * 200 + b.id as id, a.region, (a.revenue + b.revenue) % 10007 as revenue from all_data.rows a cross join all_data.rows b order by 1\`}</Query></Helmet>
 <div data-design="tw" className="@container p-8"><h1 className="text-3xl font-bold">Big table</h1>
 <DataTable data="$all" height="360px" columns={[{"col":"id","title":"ID"},{"col":"region","title":"Region"},{"col":"revenue","title":"Revenue","fmt":"$,.0f","bar":true}]} /></div>` }));
 check(!!tdoc.id, 'the DataTable document published');
 const pageCalls = [];
 p.on('request', (r) => { if (r.url().includes(`/a/${tdoc.id}/query`)) pageCalls.push({ method: r.method(), body: r.method() === 'POST' ? r.postDataJSON() : null }); });
+const tableEngine = engineLoads(p);
 await p.goto(`${B}/a/${tdoc.id}`, { waitUntil: 'load' });
 check(await servedTopLevel(p), 'the table document is top-level too');
 const f2 = p.mainFrame();
@@ -150,7 +172,10 @@ await f2.locator('[aria-label="Data grid"] tbody tr').first().waitFor({ timeout:
 await f2.waitForTimeout(600);
 const domRows = await f2.$$eval('[aria-label="Data grid"] tbody tr', (trs) => trs.length);
 check(domRows > 0 && domRows < 200, `the table is virtualised (${domRows} DOM rows for 1,000 loaded)`);
-check(/1,000 of 40,000/.test(await f2.textContent('[aria-label="Row count"]')), `and honest about holding a sample of the result (${await f2.textContent('[aria-label="Row count"]')})`);
+check(/1,000 of 40,000/.test(await f2.textContent('[aria-label="Row count"]')), `and honest about holding the display window of the result (${await f2.textContent('[aria-label="Row count"]')})`);
+check(await tableEngine, 'the table page loaded its SQLite engine');
+await f2.waitForTimeout(500);
+const tableCallsBefore = pageCalls.length;
 await f2.click('[aria-label="Sort by Revenue"]');
 await f2.click('[aria-label="Sort by Revenue"]');
 await f2.waitForFunction(() => document.querySelector('[aria-label="Row count"]')?.textContent?.startsWith('500 of'), null, { timeout: 20000 }).catch(() => {});
@@ -159,7 +184,7 @@ check(topCell === `$${expectedMax.toLocaleString('en-US')}`, `a header click sor
 await f2.click('[aria-label="Load more rows"]');
 await f2.waitForFunction(() => document.querySelector('[aria-label="Row count"]')?.textContent?.startsWith('1,000 of'), null, { timeout: 20000 }).catch(() => {});
 check(/1,000 of 40,000/.test(await f2.textContent('[aria-label="Row count"]')), 'load more reads the next window');
-check(pageCalls.filter(call => call.method === 'POST' && call.body.page?.name === 'all').length >= 2 && pageCalls.every(call => call.method === 'POST'), `sort and paging use the scoped POST with engine windows (${pageCalls.length} calls)`);
+check(pageCalls.length === tableCallsBefore && pageCalls.every((call) => call.method === 'POST'), `sort and paging read their engine windows in the page (${pageCalls.length - tableCallsBefore} requests after the first paint)`);
 check(pageErrors.length === 0, `no page errors (${pageErrors.length})`);
 
 // ── 5. private document reader ACL with the same inline runtime ────────────
@@ -213,8 +238,8 @@ check(readerRelay.length >= 1 && readerDirect.length === 0, `…as the relay POS
 // the reader through the runtime's URL state synchronization.
 const uds = await j(await fetch(`${B}/api/artifacts`, { method: 'POST', headers: OH, body: JSON.stringify({ dataset: [{ region: 'west', revenue: 10 }, { region: 'east', revenue: 25 }] }) }));
 const udocSrc = `<Helmet><title>URL values gate</title><Value name="region" type="string" />
-<Query name="regions" source="ref:${uds.id}">{\`select distinct region from public.rows order by 1\`}</Query>
-<Query name="sales" source="ref:${uds.id}">{\`select region, sum(revenue) revenue from public.rows where $region is null or region = $region group by 1 order by 1\`}</Query>
+<Import name="regions_data" src="ref:${uds.id}" /><Query name="regions">{\`select distinct region from regions_data.rows order by 1\`}</Query>
+<Import name="sales_data" src="ref:${uds.id}" /><Query name="sales">{\`select region, sum(revenue) revenue from sales_data.rows where $region is null or region = $region group by 1 order by 1\`}</Query>
 </Helmet><div data-design="tw" className="@container p-8"><h1 className="text-3xl font-bold">Regions</h1>
 <select aria-label="Region" value="$region" options="$regions" />
 <p>Total <Number data="$sales" col="revenue" agg="sum" prefix="$" /></p></div>`;
@@ -232,8 +257,9 @@ const uf = up.mainFrame();
 await uf.waitForFunction(() => document.querySelector('[aria-label="Live number"]')?.textContent?.startsWith('$'), null, { timeout: 20000 }).catch(() => {});
 check((await uf.$eval('select[aria-label="Region"]', (el) => el.value)) === 'west', `the link's selection is what the control shows at first paint (${await uf.$eval('select[aria-label="Region"]', (el) => el.value)})`);
 check((await uf.textContent('[aria-label="Live number"]')) === '$10', 'and the numbers are the SELECTED ones, not the defaults corrected a moment later');
-check(upQueries.length === 1, `the document ran its queries ONCE, with the selection (${upQueries.length} query request(s))`);
-check(upQueries[0]?.method === 'POST' && upQueries[0]?.body.values?.region === 'west', 'and that one scoped POST carried the selection in its body');
+const upRuns = upQueries.filter((q) => q.body?.hold === undefined);
+check(upRuns.length === 1, `the document ran its queries ONCE, with the selection (${upRuns.length} run request(s))`);
+check(upRuns[0]?.method === 'POST' && upRuns[0]?.body.values?.region === 'west', 'and that one scoped POST carried the selection in its body');
 check(!upErrors.some((e) => /hydrat/i.test(e)), 'no hydration error: the SSR control and the hydrated store agree by construction');
 // (b) the address follows the reader
 await uf.selectOption('select[aria-label="Region"]', 'east');
@@ -270,6 +296,49 @@ const shotDefault = await shot('');
 const shotWest = await shot('?$region=west');
 check(shotDefault.length > 1000 && shotWest.length > 1000, `both exports rendered (${shotDefault.length} B, ${shotWest.length} B)`);
 check(!shotDefault.equals(shotWest), 'the selected export is a different picture from the default one');
+
+// ── 5c. THE BOOKING DOCUMENT'S DAY CLICK, WHERE THE DATA IS ────────────────
+// The golden document (lib/story/__tests__/fixtures/booking.jsx) over a
+// public bookings dataset its reader may hold: after the first paint and a
+// warm-up, a day click re-runs `picked` and `slots` IN THE PAGE — the first
+// visible change (the day's heading) lands in under 50 ms, and nothing is
+// requested for it.
+const bookingDay = (n) => new Date(Date.now() + n * 86_400_000).toISOString().slice(0, 10);
+const bookingRows = Array.from({ length: 40 }, (_, i) => {
+  const day = bookingDay(i % 20), slot = `${String(9 + (i % 8)).padStart(2, '0')}:00`;
+  return { id: `${day}_${slot}`, day, slot, booked_by: 'usr_elsewhere', note: '', created_at: new Date().toISOString() };
+});
+const bookings = await j(await api('/api/artifacts', { dataset: bookingRows, visibility: 'public' }));
+const bookingSource = readFileSync(new URL('../services/app/lib/story/__tests__/fixtures/booking.jsx', import.meta.url), 'utf8').replace('ref:BookRows1', `ref:${bookings.id}`);
+const booking = await j(await api('/api/artifacts', { markup: bookingSource, visibility: 'public' }));
+check(!!booking.id, `the booking document published (${booking.url ?? JSON.stringify(booking.details ?? booking.error)})`);
+const bp = await b.newPage({ viewport: { width: 1200, height: 900 } });
+const bookingRequests = [];
+bp.on('request', (r) => bookingRequests.push(r.url()));
+const bookingEngine = engineLoads(bp);
+await bp.goto(`${B}/a/${booking.id}`, { waitUntil: 'load' });
+await bp.locator('main h2').first().waitFor({ timeout: 20000 });
+check(await bookingEngine, 'the booking page loaded its SQLite engine');
+await bp.waitForTimeout(500);
+/** Click the i-th day and time, in the page, from the click to the heading showing a different day. */
+const clickDay = (i) => bp.evaluate((i) => new Promise((resolve) => {
+  const days = [...document.querySelectorAll('main button')].filter((el) => /\d/.test(el.textContent ?? '') && !/Cancel|:/.test(el.textContent ?? ''));
+  const heading = () => document.querySelector('main h2')?.textContent;
+  const before = heading();
+  const t0 = performance.now();
+  const seen = new MutationObserver(() => { if (heading() !== before) { seen.disconnect(); resolve({ ms: performance.now() - t0, days: days.length }); } });
+  seen.observe(document.querySelector('main'), { subtree: true, childList: true, characterData: true });
+  days[i % days.length].click();
+  setTimeout(() => { seen.disconnect(); resolve({ ms: Infinity, days: days.length }); }, 5000);
+}), i);
+for (let i = 1; i <= 3; i++) await clickDay(i); // warm-up: the engine's first runs compile their statements
+bookingRequests.length = 0;
+const clicks = [];
+for (let i = 4; i < 10; i++) clicks.push(await clickDay(i));
+const worst = Math.max(...clicks.map((c) => c.ms));
+check(clicks[0].days >= 10 && worst < 50, `a day click shows its first change in under 50 ms after warm-up (${clicks.map((c) => Math.round(c.ms)).join(', ')} ms over ${clicks[0].days} days)`);
+check(bookingRequests.length === 0, `and makes no request at all (${bookingRequests.length}: ${bookingRequests.slice(0, 3).join(' ')})`);
+await bp.close();
 
 await ownerCtx.close(); await readerCtx.close();
 sink.close();

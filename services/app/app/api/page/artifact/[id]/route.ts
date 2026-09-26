@@ -8,9 +8,9 @@ import { compactSurface } from '@/lib/story/page-transport';
  * session kind, and ArtifactSurface's props (compiled CSS, design, the
  * server-run dataflow, the open-annotation count).
  */
-import { archivedReadOnly, archivedVersionFor, rowAtVersion } from '@/lib/archived-version';
+import { archivedReadOnly, archivedVersionFor, servedRow } from '@/lib/archived-version';
 import { countOpenAnnotations } from '@/lib/annotations';
-import { canReadArtifact, getArtifactFor, declarationsForRow, getArtifactById, refDataForRow, viewerIdentityFor } from '@/lib/artifacts';
+import { canReadArtifact, getArtifactFor, declarationsForRow, getArtifactById, holdableImports, refDataForRow, viewerIdentityFor } from '@/lib/artifacts';
 import { folderPageFor } from '@/lib/folders';
 import { currentStoryCss } from '@/lib/data/story/story-css.server';
 import { resolveStoredStoryDesign } from '@/lib/data/story/story-themes';
@@ -99,7 +99,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
   if (at === 'not_found') return notFound();
   // Everything below reads THIS row: the artifact wearing that version's bytes
   // when one was asked for, the artifact itself otherwise.
-  const row = at ? rowAtVersion(artifact, at) : artifact;
+  const row = await servedRow(artifact, at);
 
   const meta = (row.meta ?? {}) as {
     theme?: StoryThemeName | null; colorMode?: 'light' | 'dark' | null; compiledCss?: string | null;
@@ -129,8 +129,13 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
     artifact.format === 'dataset' ? loadDatasetRows(artifact).then(rows => JSON.stringify(rows)) : Promise.resolve(isDoc ? '' : (artifact.format === 'viz' ? artifact.source ?? '' : '')),
   ]);
   const authorUsername = author?.username ?? null;
-  const declared = isDoc && row.source ? declarationsForRow(row) : null;
-  const dataflow = declared ? { ...declared, values: readUrlValues(new URL(request.url).search, declared.flow) } : null;
+  const declared = isDoc && row.source ? await declarationsForRow(row) : null;
+  // What this reader may hold is decided for the door the page queries through
+  // (the session's POST, lib/story-runtime/authenticated-transport).
+  const dataflow = declared ? {
+    ...declared, values: readUrlValues(new URL(request.url).search, declared.flow),
+    hold: await holdableImports(row, declared.flow, { userId: actor.viewer?.userId ?? null, tokenId: actor.tokenId ?? null, email: actor.viewer?.email ?? null }),
+  } : null;
   const runtime = isDoc ? await prepareStoryRuntime({
     source: row.source ?? '', compiledCss, theme: design.theme,
     colorMode: design.colorMode, title: row.title, template: meta.template ?? null,

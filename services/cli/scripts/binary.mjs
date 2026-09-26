@@ -1,6 +1,5 @@
 import {chromiumNative} from './chromium-native.mjs';
 import {provisionRuntime} from './runtime.mjs';
-import {duckdbNative} from './duckdb-native.mjs';
 import {injectNative} from './inject-native.mjs';
 // Node SEA plus node-pty's platform-native files, built on the target OS/architecture.
 import { createHash } from "node:crypto";
@@ -65,8 +64,9 @@ for(const [file,data] of Object.entries(files)) {
 }
 export const pty=createRequire(join(root,'package.json'))(root);
 `;
-const duckdb=await duckdbNative();
 const chromium=await chromiumNative();
+// The SQLite engine's wasm travels inside the executable; the entry supplies it before the first query (src/sqlite-wasm.ts).
+const sqliteWasm=require.resolve('@sqlite.org/sqlite-wasm/sqlite3.wasm');
 await build({
   entryPoints: ["src/main.ts"],
   outfile: "dist/sea.cjs",
@@ -74,9 +74,10 @@ await build({
   platform: "node",
   format: "cjs",
   target: "node22",
-  // The non-SEA fallback is unreachable here; native JS and bindings have their own pinned assets.
-  external: ["@duckdb/node-api"],
-  plugins: [duckdb.plugin,
+  // A CommonJS bundle has no import.meta; the modules that read their own URL get the executable's.
+  inject: [resolve("scripts/sea-import-meta.mjs")],
+  define: { "import.meta.url": "__afbinImportMetaUrl" },
+  plugins: [
     {
       name: "native-asset",
       setup(b) {
@@ -96,7 +97,7 @@ await writeFile(
     disableExperimentalSEAWarning: true,
     useCodeCache: false,
     useSnapshot: false,
-    assets: { "chromium-manifest":chromium.asset, pty: resolve("dist/pty.json.gz"), "sql-manifest":duckdb.asset, "sql-driver":duckdb.driver, "host-runtime-manifest":resolve("dist/runtime.manifest.json") },
+    assets: { "chromium-manifest":chromium.asset, pty: resolve("dist/pty.json.gz"), "sqlite-wasm":sqliteWasm, "host-runtime-manifest":resolve("dist/runtime.manifest.json") },
   }),
 );
 execFileSync(
@@ -134,9 +135,9 @@ await writeFile(`${binary}.gz`,compressed);
 await writeFile(`${binary}.manifest.json`,JSON.stringify({version:teaching.version,protocol:teaching.protocol,platform:process.platform,arch:process.arch,binary:{file:basename(binary),sha256:sha256(rawBytes),gzip:{file:`${basename(binary)}.gz`,sha256:sha256(compressed)}},skills:{file:'afbin-skills.json',sha256:sha256(skills)}},null,2)+'\n');
 // The checksum list a release carries, so a local artifactbin can serve this build to its own installer.
 const hostArchive=`afbin-runtime-${process.platform}-${process.arch}.gz`;
-const released=[hostArchive,basename(binary),`${basename(binary)}.manifest.json`,'afbin-skills.json','afbin.1',`${basename(binary)}.gz`,duckdb.file,basename(duckdb.asset),chromium.file,basename(chromium.asset)];
+const released=[hostArchive,basename(binary),`${basename(binary)}.manifest.json`,'afbin-skills.json','afbin.1',`${basename(binary)}.gz`,chromium.file,basename(chromium.asset)];
 await writeFile('dist/SHA256SUMS',(await Promise.all(released.map(async file=>`${sha256(await readFile(join('dist',file)))}  ${file}`))).join('\n')+'\n');
 console.log(`Built ${binary} with matching local skills, release manifest and SHA256SUMS.`);
 
-const javascriptBytes=(await readFile('dist/sea.cjs')).length,terminalArchiveBytes=(await readFile('dist/pty.json.gz')).length,sqlManifestBytes=(await readFile(duckdb.asset)).length;
-await writeFile(`${binary}.sizes.json`,JSON.stringify({platform:process.platform,arch:process.arch,node:execFileSync(runtime,['--version'],{encoding:'utf8'}).trim(),smallIcu:execFileSync(runtime,['-p','String(process.config.variables.icu_small)'],{encoding:'utf8'}).trim(),coreInstalled:rawBytes.length,coreDownload:compressed.length,components:{nodeAndContainer:rawBytes.length-javascriptBytes-terminalArchiveBytes-sqlManifestBytes-(await readFile('dist/runtime.manifest.json')).length,hostManifest:(await readFile('dist/runtime.manifest.json')).length,javascript:javascriptBytes,terminalArchive:terminalArchiveBytes,sqlManifest:sqlManifestBytes},runtimeDownload:(await stat(join('dist',hostArchive))).size,runtimeInstalled:JSON.parse(await readFile('dist/runtime.manifest.json','utf8')).files.reduce((sum,file)=>sum+file.size,0),sqlInstalled:duckdb.manifest.files.reduce((sum,file)=>sum+file.size,0),sqlDownload:(await readFile(join('dist',duckdb.file))).length},null,2)+'\n');
+const javascriptBytes=(await readFile('dist/sea.cjs')).length,terminalArchiveBytes=(await readFile('dist/pty.json.gz')).length,sqliteWasmBytes=(await readFile(sqliteWasm)).length;
+await writeFile(`${binary}.sizes.json`,JSON.stringify({platform:process.platform,arch:process.arch,node:execFileSync(runtime,['--version'],{encoding:'utf8'}).trim(),smallIcu:execFileSync(runtime,['-p','String(process.config.variables.icu_small)'],{encoding:'utf8'}).trim(),coreInstalled:rawBytes.length,coreDownload:compressed.length,components:{nodeAndContainer:rawBytes.length-javascriptBytes-terminalArchiveBytes-sqliteWasmBytes-(await readFile('dist/runtime.manifest.json')).length,hostManifest:(await readFile('dist/runtime.manifest.json')).length,javascript:javascriptBytes,terminalArchive:terminalArchiveBytes,sqliteWasm:sqliteWasmBytes},runtimeDownload:(await stat(join('dist',hostArchive))).size,runtimeInstalled:JSON.parse(await readFile('dist/runtime.manifest.json','utf8')).files.reduce((sum,file)=>sum+file.size,0)},null,2)+'\n');

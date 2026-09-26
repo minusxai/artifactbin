@@ -88,9 +88,9 @@ describe('the installed short skill',()=>{
  });
  it('teaches canonical refs and bindings without retired forms',()=>{
   expect(sheet).toContain('ref:<id>');
-  expect(sheet).toContain('public.rows');
-  expect(sheet).toContain('$sales');
-  for(const dead of ['<Param','data="ref:','ref_<id>','"markdown"','"html"'])expect(sheet).not.toContain(dead);
+  expect(sheet).toContain('sales.rows');
+  expect(sheet).toContain('$monthly');
+  for(const dead of ['<Param','data="ref:','ref_<id>','"markdown"','"html"','public.rows','source="ref:abc123"'])expect(sheet).not.toContain(dead);
  });
  /**
   * ONE SOURCE, TWO LENGTHS. A reference marks the prose its bundled copy can do without; the full
