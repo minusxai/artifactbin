@@ -13,14 +13,15 @@ import type { AnnotationRange } from '@/lib/story/annotation-range';
 import type { JsxNode } from '@/lib/jsx';
 import type { GlyphMap } from '@/lib/story-ui/icon-contract';
 import type { ImageRefData, RefDataMap } from '@/lib/story/ref-data';
-import type { Dataflow, DataflowState, Row, Scalar } from '@/lib/story/dataflow';
+import type { DataflowState, Row, Scalar } from '@/lib/story/dataflow';
 import type { PersonCard } from '@artifactbin/contracts';
 import type { LocalMutationResult } from '@/lib/story/local-state';
 import type { ManagedAssetsConfig, ManagedAssetKind } from './managed-assets';
 
 /** The document's data as the island carries it: what is declared, and its state at render. */
 export interface StoryIslandDataflow {
-  flow: Dataflow;
+  /** The compiled declarations (lib/story/compiled-dataflow): what every query reads, every mutation's signature. */
+  flow: import('@/lib/story/compiled-dataflow').CompiledDataflow;
   /**
    * The rows, when somebody has already run them. ABSENT is the reader's
    * normal case — paint first: the document arrives with its declarations and
@@ -53,7 +54,7 @@ export interface RanDataflow extends StoryIslandDataflow {
 /**
  * WHO IS READING — the one fact about the reader a document is told.
  *
- * `id` is `$_me` (lib/story/dataflow VIEWER_REF), and `card` is the person the
+ * `id` is `$_me.id` (lib/story/builtins), and `card` is the person the
  * SAME visibility rules already let a DataTable cell show
  * (lib/datasets/user-fields people): a display name, the public handle they
  * chose, and the address of their picture — never an email, never any other
@@ -376,6 +377,8 @@ export interface StoryQueryRequest {
   id: number;
   values: Record<string, Scalar>;
   only: string[];
+  /** The reader's IANA zone, bound as `$_tz`. */
+  tz?: string;
   localTables?: Record<string, Row[]>;
   /** A window of one query (a table reading past the cap) — see lib/sql/engine QueryPage. */
   page?: { name: string; offset: number; limit: number; sort?: { col: string; dir: 'asc' | 'desc' } };
@@ -424,8 +427,9 @@ export type StoryAssetResult =
 /**
  * THE WRITE RELAY — the same shape as the query relay, for the same reason: a
  * document inside a parent page cannot present a session, and a PRIVATE
- * document's writes must. The frame posts a mutation NAME and its values, the
- * page POSTs /a/<id>/mutate and posts the answer back.
+ * document's writes must. The frame posts the mutation request
+ * (lib/story/mutation-request), the page POSTs /a/<id>/mutate and posts the
+ * answer back.
  */
 export const STORY_MUTATE_MESSAGE = 'mx:mutate';
 export const STORY_MUTATE_RESULT_MESSAGE = 'mx:mutate-result';
@@ -433,10 +437,7 @@ export const STORY_MUTATE_RESULT_MESSAGE = 'mx:mutate-result';
 export interface StoryMutateRequest {
   type: typeof STORY_MUTATE_MESSAGE;
   id: number;
-  mutation: string;
-  values: Record<string, Scalar>;
-  row?: Record<string, Scalar>;
-  localTables?: Record<string, Row[]>;
+  request: import('@/lib/story/mutation-request').MutationRequest;
 }
 
 export type StoryMutateResult =

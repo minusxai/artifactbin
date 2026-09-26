@@ -114,3 +114,15 @@ export async function prepareCatalog(input:unknown,actor:TokenActor,previous?:Ar
 export async function storedTables(catalog:DatasetCatalog,objects?:Pick<ContentObjects,'get'>):Promise<Record<string,{rows:Record<string,unknown>[];columns:DatasetTable['columns']}>> {
  return Object.fromEntries(await Promise.all(catalog.tables.map(async(t,i)=>[ `dataset_table_${i}`,{rows:t.objectKey?(objects?JSON.parse((await objects.get(t.objectKey)).toString('utf8')):await loadDatasetRows({meta:{objectKey:t.objectKey}})):[],columns:t.columns}] as const)));
 }
+/**
+ * The tables an `<Import>` of this dataset exposes under its name: the stored
+ * tables of its default schema (`public.rows` reads as `<import>.rows`).
+ * Models and other schemas stay behind the dataset's own catalog queries.
+ */
+export function importedTables(catalog:DatasetCatalog):DatasetTable[] {
+ return catalog.kind==='stored'?catalog.tables.filter(t=>t.schema===catalog.defaultSchema&&t.objectKey&&!t.sql):[];
+}
+/** An imported dataset's rows, by the table names its import exposes. */
+export async function importedRows(catalog:DatasetCatalog):Promise<Record<string,{rows:Record<string,unknown>[];columns:DatasetTable['columns']}>> {
+ return Object.fromEntries(await Promise.all(importedTables(catalog).map(async t=>[t.name,{rows:await loadDatasetRows({meta:{objectKey:t.objectKey}}),columns:t.columns}] as const)));
+}

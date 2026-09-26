@@ -19,15 +19,16 @@ process.env.OBJECT_STORE__LOCAL_DIR ??= path.join(os.tmpdir(), `artifact-objects
 
 /**
  * THE SUITE IS A COMPOSITION ROOT TOO. The app receives its services by
- * injection (`lib/services`) and never decides for itself where DuckDB or
- * Chromium run — so if nothing registers them here, every test that touches
- * SQL gets `service_unavailable` and every export a 503. `server.mts` does
+ * injection (`lib/services`) and never decides for itself where the SQL engine
+ * or Chromium run — so if nothing registers them here, every test that touches
+ * SQL gets `service_unavailable` and every export a 503. `server.ts` does
  * this for the running server; this does it for the suite.
  *
- * SQL is registered EAGERLY and costs nothing: the engine imports
- * `@duckdb/node-api` lazily, on the first query, so a test file that never
- * runs SQL never loads the native module. It is given the app's own caps, so
- * the suite is bounded exactly as the server is.
+ * SQL is the SAME engine the server runs, in this thread (`./sqlite`) rather
+ * than the server's worker threads (`./local`): each test file is its own
+ * process already, and a pool per file would only add thread start-up. The
+ * pool itself has its own tests (services/sql). It is given the app's own
+ * caps, so the suite is bounded exactly as the server is.
  *
  * The BROWSER is registered LAZILY, and that is deliberate. Its `./local`
  * entry imports Playwright at module scope, this file runs for EVERY test file
@@ -39,7 +40,7 @@ process.env.OBJECT_STORE__LOCAL_DIR ??= path.join(os.tmpdir(), `artifact-objects
  */
 const { setServices } = await import('@/lib/services');
 const { EVENTS_SCHEMA, MAX_QUERY_ROWS, QUERY_TIMEOUT_MS } = await import('@/lib/config');
-const { createSql } = await import('@artifactbin/sql/local');
+const { createSqliteSql } = await import('@artifactbin/sql/sqlite');
 const { createEvents } = await import('@artifactbin/events/local');
 const { getDb } = await import('@/lib/db');
 
@@ -47,7 +48,7 @@ let localBrowser: import('@artifactbin/contracts').BrowserService | undefined;
 const browser = async () => (localBrowser ??= (await import('@artifactbin/browser/local')).createBrowser());
 
 setServices({
-  sql: createSql({ maxRows: MAX_QUERY_ROWS, timeoutMs: QUERY_TIMEOUT_MS }),
+  sql: createSqliteSql({ maxRows: MAX_QUERY_ROWS, timeoutMs: QUERY_TIMEOUT_MS }),
   // THE REAL WRITER, on the file's own database — so `trackEvent` lands rows in
   // the events schema in the suite exactly as it does in the single image, and
   // the reads in lib/workspace-analytics see what production sees. The handle is resolved PER

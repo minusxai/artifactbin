@@ -21,16 +21,19 @@
 import { ARTIFACT_REFERENCE_PATTERN } from '@artifactbin/contracts';
 import { parseJsx, serializeJsx, type JsonValue, type JsxAttribute, type JsxElement, type JsxNode } from '@/lib/jsx';
 import { splitHelmet } from '@/lib/story/helmet';
-import { localWriteTarget, SIGNALS_TABLE } from '@/lib/story/local-target';
-import { removedSqlReferenceTokens } from '@/lib/story/sql-reference-tokens';
+import { removedSqlReferenceTokens } from '@/lib/migrate/sqlite/legacy-tokens';
 import { significant, tokenizeSql, word } from './tokens';
 import { translateSql, type ManualItem } from './translate';
 
 export interface ConvertLookups {
   /** The Import name for a stored dataset — the migration passes a slug of its title. Invalid or absent: `data_<id>`. */
   importName(ref: string): string | null | undefined;
-  /** A connected Postgres dataset keeps `source=` and its SQL. */
-  isPostgres(ref: string): boolean;
+  /**
+   * What the artifact is: a stored dataset or a folder becomes an `<Import>`
+   * (a folder's listing reads as `<name>.rows`); a connected Postgres dataset
+   * keeps `source=` and its SQL.
+   */
+  kind(ref: string): 'dataset' | 'postgres' | 'folder';
 }
 
 export interface ConversionChange {
@@ -139,6 +142,18 @@ function signalAssignments(sql: string): Record<string, JsonValue> | string {
   }
 }
 
+/** The removed single-row table of page values. */
+const SIGNALS_TABLE = '_signals';
+
+/** Whether a statement writes `_signals`: its table after UPDATE, INSERT INTO or DELETE FROM. */
+function writesSignals(sql: string): boolean {
+  let t;
+  try { t = significant(tokenizeSql(sql)); } catch { return false; }
+  const op = word(t[0]);
+  const at = op === 'update' ? 1 : (op === 'insert' && word(t[1]) === 'into') || (op === 'delete' && word(t[1]) === 'from') ? 2 : -1;
+  return at > 0 && word(t[at]) === SIGNALS_TABLE;
+}
+
 /** Slug a lookup result into an Import name, or null when it cannot be one. */
 function slug(name: string | null | undefined): string | null {
   const s = (name ?? '').toLowerCase().replace(/[^a-z0-9_]+/g, '_').replace(/_+/g, '_').replace(/^_+|_+$/g, '');
@@ -186,7 +201,7 @@ export function convertDocument(source: string, lookups: ConvertLookups): Docume
       ? { declaration: name, reason: item.reason, start: child.node.start + 2 + item.start, end: child.node.start + 2 + item.end }
       : { declaration: name, reason: item.reason, start: child.node.start, end: child.node.end };
 
-    if (el.tag === 'Mutation' && !ref && localWriteTarget(child.sql)?.name === SIGNALS_TABLE) {
+    if (el.tag === 'Mutation' && !ref && writesSignals(child.sql)) {
       const set = signalAssignments(child.sql);
       const refuse = (reason: string) => manual.push({ declaration: name, reason: `the _signals mutation ${reason}; set= takes literals and $values only`, start: el.start, end: el.end });
       if (typeof set === 'string') { refuse(set); continue; }
@@ -207,9 +222,9 @@ export function convertDocument(source: string, lookups: ConvertLookups): Docume
       continue;
     }
 
-    const postgres = !!ref && lookups.isPostgres(ref);
+    const postgres = !!ref && lookups.kind(ref) === 'postgres';
     const legacy = postgres ? [] : [...new Set(removedSqlReferenceTokens(child.sql).tokens.map((token) => token.id))];
-    const pgLegacy = legacy.find((id) => lookups.isPostgres(id));
+    const pgLegacy = legacy.find((id) => lookups.kind(id) === 'postgres');
     if (pgLegacy) { manual.push({ declaration: name, reason: `reads the connected Postgres dataset ${pgLegacy} as ref_${pgLegacy}`, start: child.node.start, end: child.node.end }); continue; }
     const dataset = ref && !postgres ? importFor(ref) : undefined;
     const tables = Object.fromEntries(legacy.map((id) => [`ref_${id}`.toLowerCase(), `${importFor(id)}.rows`]));

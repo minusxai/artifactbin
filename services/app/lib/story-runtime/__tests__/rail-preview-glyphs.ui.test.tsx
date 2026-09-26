@@ -12,12 +12,12 @@
  * lives in vitest rather than a browser gate because that is what CI runs.
  */
 import React from 'react';
+import { compiledSource } from '@/test/helpers/compiled';
 import { describe, expect, it } from 'vitest';
 import { renderWithProviders } from '@/test/helpers/render-with-providers';
 
 import { StoryRuntimeApp } from '../StoryRuntimeApp';
 import { glyphsForNodes } from '@/lib/story/icon-glyphs';
-import type { Dataflow } from '@/lib/story/dataflow';
 import { parseJsxOrThrow } from '@/test/helpers/jsx';
 
 const DECK = `<SlideDeck>
@@ -89,14 +89,14 @@ describe('the deck rail renders the slide’s icons, not a hole', () => {
  * Both live here rather than in components/__tests__/files.ui.test.tsx because
  * both are about the wiring, and both were invisible to it.
  */
-const DOC = '<Helmet><Query name="children">{`select * from ref_abc123`}</Query></Helmet>\n<h1>Field Notes</h1>\n<Files data="$children" variant="icons" />';
+const DOC = '<Helmet><Import name="notes" src="ref:abc123" /><Query name="children">{`select * from notes.rows`}</Query></Helmet>\n<h1>Field Notes</h1>\n<Files data="$children" variant="icons" />';
 
 const ROWS = [
   { id: 'doc001', title: 'Board update', format: 'markup', level: 1, visibility: 'public', updated_at: '2026-09-05T10:00:00Z', url: '/a/doc001', thumbnail: '/a/doc001/export?mode=card&v=3', views: 41, sparkline: null },
   { id: 'sub001', title: 'Q3', format: 'folder', level: 1, visibility: 'public', updated_at: '2026-09-04T10:00:00Z', url: '/a/sub001', thumbnail: null, views: null, sparkline: null },
 ];
 
-const FLOW: Dataflow = { values: [], queries: [{ name: 'children', sql: 'select * from ref_abc123', params: [], refs: ['abc123'], start: 0, end: 0 }] };
+const FLOW = await compiledSource(DOC, { abc123: { kind: 'folder', tables: [{ name: 'rows', columns: [{ name: 'id', type: 'string' }, { name: 'title', type: 'string' }] }] } });
 
 function renderFolder(chrome: boolean, over: Partial<React.ComponentProps<typeof StoryRuntimeApp>> = {}) {
   const parsed = parseJsxOrThrow(DOC);

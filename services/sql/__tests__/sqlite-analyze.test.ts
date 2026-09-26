@@ -85,16 +85,17 @@ describe('output columns', () => {
     { name: 's', type: 'string' }, { name: 'n', type: 'number' }, { name: 'b', type: 'boolean' },
     { name: 'd', type: 'date' }, { name: 'ts', type: 'timestamp' }, { name: 'u', type: 'user' },
   ] }];
-  it('maps each direct column back to its declared type, and an expression to null', () => {
+  it('maps each direct column back to its declared type and where it lives, and an expression to null', () => {
+    const at = (column: string) => ({ schema: 'main', table: 'all_types', column });
     expect(analyze('select s, n, b, d, ts, u, upper(s) as up, n + 1 as next from all_types', typed).columns).toEqual([
-      { name: 's', declaredType: 'string' }, { name: 'n', declaredType: 'number' }, { name: 'b', declaredType: 'boolean' },
-      { name: 'd', declaredType: 'date' }, { name: 'ts', declaredType: 'timestamp' }, { name: 'u', declaredType: 'user' },
+      { name: 's', declaredType: 'string', origin: at('s') }, { name: 'n', declaredType: 'number', origin: at('n') }, { name: 'b', declaredType: 'boolean', origin: at('b') },
+      { name: 'd', declaredType: 'date', origin: at('d') }, { name: 'ts', declaredType: 'timestamp', origin: at('ts') }, { name: 'u', declaredType: 'user', origin: at('u') },
       { name: 'up', declaredType: null }, { name: 'next', declaredType: null },
     ]);
   });
   it('keeps user only through direct projections — renamed, through a CTE or a join — never through a function', () => {
     expect(analyze('with x as (select u from all_types) select u as who, lower(u) as low, coalesce(u, s) as c from x join all_types using (u)', typed).columns).toEqual([
-      { name: 'who', declaredType: 'user' }, { name: 'low', declaredType: null }, { name: 'c', declaredType: null },
+      { name: 'who', declaredType: 'user', origin: { schema: 'main', table: 'all_types', column: 'u' } }, { name: 'low', declaredType: null }, { name: 'c', declaredType: null },
     ]);
   });
 });
@@ -120,8 +121,8 @@ describe('the booking example', () => {
     expect(a.params).toEqual(['_me__id', '_now', '_tz']);
     expect(a.functions).toEqual(['printf', 'to_timezone']);
     expect(a.columns).toEqual([
-      { name: 'id', declaredType: null }, { name: 'day', declaredType: 'date' }, { name: 'slot', declaredType: null },
-      { name: 'booked_by', declaredType: 'user' }, { name: 'note', declaredType: 'string' },
+      { name: 'id', declaredType: null }, { name: 'day', declaredType: 'date', origin: { schema: 'main', table: 'picked', column: 'day' } }, { name: 'slot', declaredType: null },
+      { name: 'booked_by', declaredType: 'user', origin: { schema: 'bookings', table: 'rows', column: 'booked_by' } }, { name: 'note', declaredType: 'string', origin: { schema: 'bookings', table: 'rows', column: 'note' } },
       { name: 'is_mine', declaredType: null }, { name: 'is_open', declaredType: null },
     ]);
   });

@@ -37,7 +37,9 @@ import { createRowActions } from './row-actions';
 import { createCellSessions, type CellSessions } from './cell-sessions';
 import type { ColumnTemplate } from '@/components/kit/data-table';
 import { createDataflowStore, EMPTY_STATE, type DataflowStore } from './store';
-import { EMPTY_DATAFLOW, VIEWER_REF, coerceScalarInput, refName, type Dataflow, type DataflowState, type Row, type Scalar, type ScalarValueDecl, type TableResult } from '@/lib/story/dataflow';
+import { coerceScalarInput, refName, resolveBindings, type BindingSource, type DataflowState, type Row, type Scalar, type TableResult } from '@/lib/story/dataflow';
+import { EMPTY_COMPILED_DATAFLOW, type CompiledDataflow, type CompiledValue } from '@/lib/story/compiled-dataflow';
+import { VIEWER_ID } from '@/lib/story/builtins';
 import { User } from '@/components/kit/user';
 import { UserImage } from '@/components/kit/user-image';
 import { UserHandle } from '@/components/kit/user-handle';
@@ -95,6 +97,19 @@ function FrozenHint({reason,children}:{reason:string|null;children:ReactElement}
 }
 
 const CellSessionsContext = createContext<CellSessions | null>(null);
+
+/**
+ * A control's `set=` / `args=` map, read NOW: literals as written (a row
+ * field was already read into one by the interpreter), page values from the
+ * store, `$_me.id` from the viewer. Read at the click, never at render, so a
+ * press uses the values the reader is looking at.
+ */
+function useBindingReader(): (map: unknown) => Record<string, Scalar> | undefined {
+  const { store, viewer } = useContext(RuntimeEmbedContext);
+  return (map) => map && typeof map === 'object'
+    ? resolveBindings(map as Record<string, BindingSource>, (ref) => (ref === VIEWER_ID ? viewer?.id ?? null : store?.getValue(ref)))
+    : undefined;
+}
 const scalarRow = (row: Row): Record<string, Scalar> => Object.fromEntries(Object.entries(row).filter((entry): entry is [string, Scalar] => {
   const v = entry[1]; return v === null || typeof v === 'string' || typeof v === 'boolean' || (typeof v === 'number' && Number.isFinite(v));
 }));
@@ -104,17 +119,20 @@ const RowActionsContext = createContext<ReturnType<typeof createRowActions> | nu
 function RuntimeRowAction({props, row, identity, children}: RowActionProps) {
   const {store, chrome} = useContext(RuntimeEmbedContext);
   const actions = useContext(RowActionsContext);
+  const read = useBindingReader();
   const name = refName(props.run);
   const state = useSyncExternalStore(actions?.subscribe ?? NO_SUBSCRIBE, () => actions?.get(identity), () => undefined);
   const unavailable = useSyncExternalStore(store?.subscribe ?? NO_SUBSCRIBE, () => name && store ? store.mutationUnavailable(name) : 'Checking edit access…', () => 'Checking edit access…');
-  const {run: _run, ...rest} = props;
+  const {run: _run, set, args, ...rest} = props;
   return <>
     <Button {...rest} type="button" disabled={!chrome || !actions || unavailable !== null || state?.pending || props.disabled === true}
       aria-busy={state?.pending || undefined} aria-description={refusalText(unavailable) ?? undefined}
       onClick={() => {
         if (!chrome || !actions || !store || !name || unavailable !== null || props.disabled === true) return;
         const snapshot = scalarRow(row);
-        void actions.run(identity, () => store.mutate(name, {}, snapshot));
+        const values = read(set);
+        if (values) store.setValues(values);
+        void actions.run(identity, () => store.mutate(name, read(args) ?? {}, snapshot));
       }}>{children}</Button>
     {state?.error ? <span role="alert" className="mx-write-error">{state.error}</span> : null}
   </>;
@@ -123,6 +141,7 @@ function RuntimeRowAction({props, row, identity, children}: RowActionProps) {
 function RuntimeCellControl({ tag, component: Component, props, row, identity, column, rowKey, tableName, valueField, children }: CellControlProps) {
   const ctx = useContext(RuntimeEmbedContext);
   const sessions = useContext(CellSessionsContext);
+  const read = useBindingReader();
   const name = typeof props.run === 'string' ? refName(props.run) : null;
   const unavailable = useSyncExternalStore(ctx.store?.subscribe ?? NO_SUBSCRIBE, () => name ? ctx.store ? ctx.store.mutationUnavailable(name) : 'Checking edit access…' : 'This cell has no mutation.', () => 'Checking edit access…');
   const writable = unavailable === null;
@@ -134,7 +153,7 @@ function RuntimeCellControl({ tag, component: Component, props, row, identity, c
   const change = (value: Scalar) => { begin(); sessions?.change(identity, value); };
   const commit = () => {
     if (!ctx.chrome || !writable || !name || !ctx.store) return;
-    void sessions?.commit(identity, (draft, _original, snapshot) => ctx.store!.mutate(name, { _value: draft }, { ...snapshot }));
+    void sessions?.commit(identity, (draft, _original, snapshot) => ctx.store!.mutate(name, { ...read(props.args), _value: draft }, { ...snapshot }));
   };
   const value = session ? session.draft : initial;
   const busy = session?.phase === 'pending' || session?.phase === 'saved';
@@ -208,7 +227,7 @@ interface RuntimeEmbedContextValue {
    * other consumer reads the fields below, which are already snapshot-stable.
    */
   store: DataflowStore | null;
-  flow: Dataflow;
+  flow: CompiledDataflow;
   state: DataflowState;
   pending: ReadonlySet<string>;
   /** `debounce` for a continuous input (typing, a slider); a discrete change runs at once. */
@@ -240,7 +259,7 @@ interface RuntimeEmbedContextValue {
 
 const RuntimeEmbedContext = createContext<RuntimeEmbedContextValue>({
   store: null,
-  flow: EMPTY_DATAFLOW,
+  flow: EMPTY_COMPILED_DATAFLOW,
   state: EMPTY_STATE,
   pending: new Set(),
   setValue: () => {},
@@ -443,8 +462,8 @@ const CONTINUOUS_INPUT_TYPES = new Set(['text', 'search', 'email', 'url', 'tel',
 
 function NativeBoundControl({ tag, props, bind, children }: BoundControlProps) {
   const { flow, state, setValue } = useContext(RuntimeEmbedContext);
-  const declOf = (name: string): ScalarValueDecl | undefined =>
-    flow.values.find((v): v is ScalarValueDecl => v.kind === 'scalar' && v.name === name);
+  const declOf = (name: string): CompiledValue | undefined =>
+    flow.values.find((v) => v.kind === 'scalar' && v.name === name);
   const coerce = (name: string, raw: string): Scalar => coerceScalarInput(declOf(name)?.type, raw);
   const current = (name: string | undefined): string =>
     name === undefined || state.values[name] === null || state.values[name] === undefined ? '' : String(state.values[name]);
@@ -509,7 +528,7 @@ function NativeBoundControl({ tag, props, bind, children }: BoundControlProps) {
  */
 function useScalarControl(name: string | null, continuous = false) {
   const { flow, state, setValue, store } = useContext(RuntimeEmbedContext);
-  const decl = name ? flow.values.find((v): v is ScalarValueDecl => v.kind === 'scalar' && v.name === name) : undefined;
+  const decl = name ? flow.values.find((v) => v.kind === 'scalar' && v.name === name) : undefined;
   return {
     state,
     /** Why this Value's control must not move on this render (an offline file), or null. */
@@ -634,20 +653,25 @@ function DialogAdapter(props: Record<string, unknown>) {
 
 function DialogContentAdapter(props: Record<string, unknown>) {
   const {store, chrome} = useContext(RuntimeEmbedContext);
+  const read = useBindingReader();
   const name = typeof props.run === 'string' ? refName(props.run) : null;
   const unavailable = useSyncExternalStore(store?.subscribe ?? NO_SUBSCRIBE,
     () => name ? store?.mutationUnavailable(name) ?? (store ? null : 'Checking edit access…') : null,
     () => name ? 'Checking edit access…' : null);
   const reason = !chrome && name ? 'Read-only preview' : unavailable;
-  return <DialogContent {...props} unavailable={refusalText(reason)}
-    onSubmitMutation={name && store ? () => store.mutate(name) : undefined} />;
+  const {args, ...rest} = props;
+  return <DialogContent {...rest} unavailable={refusalText(reason)}
+    onSubmitMutation={name && store ? () => store.mutate(name, read(args)) : undefined} />;
 }
 
 /**
- * The LIVE `<Button run="$add">`: a click performs the named `<Mutation>` with
- * the document's current values (lib/story-runtime/store mutate), and the
- * queries reading the dataset it wrote re-run on their own — so the click that
- * adds a row is the click that redraws the chart.
+ * The LIVE `<Button run="$add" set={{…}} args={{…}}>`: a click first sets
+ * the page values `set=` names — all of them in ONE step, no SQL and no
+ * server — then performs the named `<Mutation>` with its arguments (`args=`,
+ * else the page values of the same names; lib/story-runtime/store mutate), and
+ * the queries reading the dataset it wrote re-run on their own — so the click
+ * that adds a row is the click that redraws the chart. A button with only
+ * `set=` is the page's own state machine: it never writes anything.
  *
  * Three things it owes the reader while that happens: it is `aria-busy` and
  * disabled for the duration (a double click is one write, enforced in the
@@ -658,6 +682,7 @@ function DialogContentAdapter(props: Record<string, unknown>) {
  */
 function ButtonAdapter(props: Record<string, unknown>) {
   const { store, chrome } = useContext(RuntimeEmbedContext);
+  const read = useBindingReader();
   const name = typeof props.run === 'string' ? refName(props.run) : null;
   const [error, setError] = useState<string | null>(null);
   const unavailable = useSyncExternalStore(store?.subscribe ?? NO_SUBSCRIBE, () => name ? store ? store.mutationUnavailable(name) : 'Checking edit access…' : null, () => name ? 'Checking edit access…' : null);
@@ -668,8 +693,8 @@ function ButtonAdapter(props: Record<string, unknown>) {
     () => (store && name ? store.mutating().has(name) : false),
     () => false,
   );
-  const { run: _run, children, ...rest } = props;
-  if (!name || !store) return <Button {...(rest as Record<string, unknown>)} run={props.run}>{children as ReactNode}</Button>;
+  const { run: _run, set, args, children, ...rest } = props;
+  if (!store || (!name && !set)) return <Button {...(rest as Record<string, unknown>)} run={props.run} set={set}>{children as ReactNode}</Button>;
   return (
     <>
       <Button
@@ -679,7 +704,9 @@ function ButtonAdapter(props: Record<string, unknown>) {
         aria-description={refusalText(unavailable) ?? undefined}
         onClick={() => {
           setError(null);
-          store.mutate(name).catch((e: unknown) => setError(e instanceof Error ? e.message : 'that did not save'));
+          const values = read(set);
+          if (values) store.setValues(values);
+          if (name) store.mutate(name, read(args)).catch((e: unknown) => setError(e instanceof Error ? e.message : 'that did not save'));
         }}
       >
         {children as ReactNode}
@@ -904,7 +931,7 @@ function FilesAdapter(props: Record<string, unknown>) {
 function usePerson(idProp: unknown): { id: string | null; card: PersonCard | null } {
   const ctx = useContext(RuntimeEmbedContext);
   const reference = typeof idProp === 'string' ? refName(idProp) : null;
-  const resolved = reference === VIEWER_REF ? ctx.viewer?.id ?? null
+  const resolved = reference === VIEWER_ID ? ctx.viewer?.id ?? null
     : reference !== null ? ctx.state.values[reference] ?? null
     : idProp ?? null;
   const id = typeof resolved === 'string' ? resolved : null;
@@ -1300,7 +1327,7 @@ const EMPTY_GLYPHS: GlyphMap = {};
 const NO_SUBSCRIBE = () => () => {};
 
 export function StoryRuntimeApp({ mentionStatuses, nodes, refData, glyphs, dataflow, viewer = null, colorMode, template = null, chrome = true, assetsUrl = null, managedAssets, importAsset, store: givenStore, onMounted, editDecorate, editChildren, onSlideRename, components }: StoryRuntimeAppProps) {
-  const [localStore] = useState<DataflowStore>(() => givenStore ?? createDataflowStore(dataflow ?? { flow: EMPTY_DATAFLOW }));
+  const [localStore] = useState<DataflowStore>(() => givenStore ?? createDataflowStore(dataflow ?? { flow: EMPTY_COMPILED_DATAFLOW }));
   const store = givenStore ?? localStore;
   const actions = useMemo(() => createRowActions(), [store]);
   const registry = useMemo(() => (components ? { ...RUNTIME_REGISTRY, ...components } : RUNTIME_REGISTRY), [components]);
@@ -1312,14 +1339,14 @@ export function StoryRuntimeApp({ mentionStatuses, nodes, refData, glyphs, dataf
   const state = useSyncExternalStore(store.subscribe, store.getState, store.getState);
   const pending = store.pending();
   /*
-   * WHAT A REACTIVE EXPRESSION READS: the declared values, plus the one name
-   * nobody declares. `$_me` is folded in HERE rather than kept in the store,
+   * WHAT A REACTIVE EXPRESSION READS: the declared values, plus the built-in
+   * markup reads. `$_me.id` is folded in HERE rather than kept in the store,
    * because it is not the document's data: the store's values are written by
    * controls, carried in the link, replaced by a new version of the document
    * and handed to the author script, and the viewer's account id is none of
-   * those things (lib/story/dataflow VIEWER_REF).
+   * those things (lib/story/builtins).
    */
-  const signals = useMemo(() => ({ ...state.values, [VIEWER_REF]: viewer?.id ?? null }), [state.values, viewer?.id]);
+  const signals = useMemo(() => ({ ...state.values, [VIEWER_ID]: viewer?.id ?? null }), [state.values, viewer?.id]);
   const setValue = useMemo(() => (name: string, value: Scalar, options?: { debounce?: boolean }) => store.setValue(name, value, options), [store]);
 
   // Discovery is a pure walk of the nodes we already hold, so the rail is

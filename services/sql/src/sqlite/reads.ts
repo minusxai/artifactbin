@@ -22,7 +22,10 @@ export function runQueries(sqlite3: Sqlite3, input: RunInput, bounds: ReadBounds
   const types = input.paramTypes ?? input.catalog?.paramTypes ?? {};
   try {
     if (input.catalog) mountCatalog(db, input);
-    else for (const [table, t] of Object.entries(input.tables)) db.load({ schema: 'main', table, ...t });
+    else {
+      for (const [table, t] of Object.entries(input.tables)) db.load({ schema: 'main', table, ...t });
+      for (const [schema, tables] of Object.entries(input.imports ?? {})) for (const [table, t] of Object.entries(tables)) db.load({ schema, table, ...t });
+    }
     for (const query of input.queries) {
       const page = input.page?.name === query.name ? input.page : null;
       const result = out[query.name] = readOne(db, query.name, query.sql, input.params, types, page, page ? bounds.pageLimit : bounds.limit, bounds.timeoutMs);
@@ -124,6 +127,7 @@ export function dryRunQueries(sqlite3: Sqlite3, input: DryRunInput): DryRunResul
   const params = Object.fromEntries(input.paramNames.map((p) => [p, null]));
   try {
     for (const [table, t] of Object.entries(input.tables)) db.load({ schema: 'main', table, columns: t.columns, rows: [] });
+    for (const [schema, tables] of Object.entries(input.imports ?? {})) for (const [table, t] of Object.entries(tables)) db.load({ schema, table, columns: t.columns, rows: [] });
     for (const query of input.queries) {
       let prepared: Prepared | null = null;
       try {

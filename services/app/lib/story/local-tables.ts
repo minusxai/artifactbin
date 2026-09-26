@@ -1,4 +1,5 @@
-import { scalarMatches, type Dataflow, type Row, type TableResult } from './dataflow';
+import { scalarMatches, type Row, type TableResult } from './dataflow';
+import type { CompiledDataflow } from './compiled-dataflow';
 import type { DatasetColumn } from './dataset-shape';
 
 export class LocalStateInputError extends Error {}
@@ -28,10 +29,11 @@ export function checkedLocalRows(rows: unknown, columns: DatasetColumn[]): Row[]
 }
 
 /** Reader overrides may replace only declared inline rows, never schemas or dataset tables. */
-export function localTableOverrides(flow: Dataflow, overrides: Record<string, Row[]> = {}): Record<string, TableResult> {
+export function localTableOverrides(flow: CompiledDataflow, overrides: Record<string, Row[]> = {}): Record<string, TableResult> {
   return Object.fromEntries(Object.entries(overrides).map(([name, rows]) => {
     const declaration = flow.values.find(v => v.kind === 'table' && v.name === name);
     if (!declaration || declaration.kind !== 'table') throw new LocalStateInputError(`"${name}" is not a declared inline table`);
-    return [name, {columns: declaration.columns, rows: checkedLocalRows(rows, declaration.columns)}];
+    const columns = declaration.columns ?? [];
+    return [name, {columns, rows: checkedLocalRows(rows, columns)}];
   }));
 }

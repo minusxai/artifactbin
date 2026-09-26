@@ -12,6 +12,8 @@ import { parseLocalTables } from './local-tables';
 
 export interface QueryRequest {
   localTables?: Record<string, Row[]>;
+  /** The reader's IANA zone, bound as `$_tz`. */
+  tz?: string;
   values?: Record<string, Scalar>;
   only?: string[];
   /** A window of one query's result (lib/sql/engine QueryPage). */
@@ -22,7 +24,7 @@ const isScalar = (v: unknown): v is Scalar =>
   v === null || typeof v === 'string' || typeof v === 'boolean' || (typeof v === 'number' && Number.isFinite(v));
 
 export function parseQueryRequest(body: Record<string, unknown>): QueryRequest | Response {
-  const allowed = ['values', 'only', 'page', 'localTables'];
+  const allowed = ['values', 'only', 'page', 'localTables', 'tz'];
   const unknown = Object.keys(body).filter((key) => !allowed.includes(key));
   if (unknown.length) {
     return json({
@@ -34,6 +36,10 @@ export function parseQueryRequest(body: Record<string, unknown>): QueryRequest |
   if (body.localTables !== undefined) {
     try { out.localTables = parseLocalTables(body.localTables); }
     catch { return json({error: 'invalid_local_state'}, 400); }
+  }
+  if (body.tz !== undefined) {
+    if (typeof body.tz !== 'string') return json({ error: 'invalid_tz', details: ['tz must be an IANA time zone name'] }, 400);
+    out.tz = body.tz;
   }
   if (body.values !== undefined) {
     if (!body.values || typeof body.values !== 'object' || Array.isArray(body.values)) {

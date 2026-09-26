@@ -12,7 +12,8 @@ import { loadImage } from './story/image-store';
 import { createHash } from 'node:crypto';
 import { ASSETS_ORIGIN, EXPORT_INTERNAL_ORIGIN } from '@/lib/config';
 import { services } from '@/lib/services';
-import { ArtifactRow, declarationsForRow, getArtifactById, referencedArtifactForRow } from './artifacts';
+import { ArtifactRow, getArtifactById, referencedArtifactForRow } from './artifacts';
+import { declarationsOf } from './story/helmet';
 import { CARD_HEIGHT, CARD_RENDER_GENERATION, CARD_WIDTH } from './export-card';
 import { VERSION_PARAM } from './archived-version';
 import { mintExportKey } from './export-key';
@@ -339,7 +340,7 @@ export async function exportImageResponse(
 
   // Full captures honor canonical reader selections; social cards use saved defaults.
   const isDocument = artifact.format === 'markup';
-  const flow = isDocument ? declarationsForRow(artifact)?.flow ?? null : null;
+  const flow = isDocument && artifact.source ? declarationsOf(artifact.source) : null;
   const imageOverview = capture === 'preview' && q.image === '1';
   const imageId = isDocument && (capture === 'card' || imageOverview) ? socialPreviewImage(artifact.source ?? '') : null;
   if (imageId) {

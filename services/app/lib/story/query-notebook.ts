@@ -30,8 +30,6 @@ export interface QueryCell {
   sql: string;
   /** The dataset artifact id the declaration's `source="ref:<id>"` names, if any. */
   source: string | null;
-  /** `$name` parameters the SQL mentions. */
-  params: string[];
   /** The last run's rows — null until a run has answered, or when it refused. */
   result: TableResult | null;
   /** The engine's message when the last run refused this query. */
@@ -78,7 +76,6 @@ const cellOf = (q: QueryDecl, state: DataflowState | null | undefined, pending: 
   name: q.name,
   sql: q.sql,
   source: q.source ?? null,
-  params: q.params,
   result: state?.tables[q.name] ?? null,
   error: state?.errors?.[q.name] ?? null,
   pending,

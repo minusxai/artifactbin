@@ -15,26 +15,31 @@ import { describe, expect, it, vi } from 'vitest';
 import { act, fireEvent, render, waitFor } from '@testing-library/react';
 import { type JsxNode } from '@/lib/jsx';
 import { renderStoryNodes } from '@/lib/story-ui/interpreter';
+import { compiledSource } from '@/test/helpers/compiled';
 import { STORY_UI_COMPONENTS } from '@/lib/story-ui/registry';
 import { splitHelmet } from '@/lib/story/helmet';
 import { StoryRuntimeApp } from '../StoryRuntimeApp';
 import { createDataflowStore, type QueryTransport } from '../store';
 import { createMx } from '../mx';
 import type { DataflowState } from '@/lib/story/dataflow';
+import type { MutationRequest } from '@/lib/story/mutation-request';
 import { parseJsxOrThrow } from '@/test/helpers/jsx';
 
+const SOURCES = { abc123: [{ name: 'id', type: 'number' as const }, { name: 'choice', type: 'string' as const }, { name: 'done', type: 'boolean' as const }] };
 const HELMET =
-  '<Helmet><Value name="choice" type="string" default="ramen" />'
-  + '<Query name="tally" source="ref:abc123">{`select choice, count(*) votes from public.rows group by 1`}</Query>'
-  + '<Mutation name="vote" source="ref:abc123">{`insert into public.rows (choice) values ($choice)`}</Mutation></Helmet>';
+  '<Helmet><Import name="votes" src="ref:abc123" /><Value name="choice" type="string" default="ramen" />'
+  + '<Value name="picked" type="number" /><Value name="other" type="string" />'
+  + '<Query name="tally">{`select choice, count(*) votes from votes.rows group by 1`}</Query>'
+  + '<Mutation name="vote">{`insert into votes.rows (choice) values ($choice)`}</Mutation>'
+  + '<Mutation name="rename">{`update votes.rows set choice = $label`}</Mutation></Helmet>';
 const BODY = '<div><Button run="$vote">Vote</Button></div>';
-const STATE: DataflowState = { values: { choice: 'ramen' }, tables: { tally: { rows: [], columns: [] } }, errors: {}, mutationAccess:{vote:null} };
+const FLOW = await compiledSource(HELMET + BODY, SOURCES);
+const STATE: DataflowState = { values: { choice: 'ramen', picked: null, other: null }, tables: { tally: { rows: [], columns: [] } }, errors: {}, mutationAccess:{vote:null,rename:null} };
 
 function build(body = BODY) {
   const parsed = parseJsxOrThrow(HELMET + body);
-  const { content, body: nodes } = splitHelmet(parsed.nodes as JsxNode[]);
-  const flow = { values: content.values, queries: content.queries, mutations: content.mutations };
-  return { nodes, dataflow: { flow, state: STATE } };
+  const { body: nodes } = splitHelmet(parsed.nodes as JsxNode[]);
+  return { nodes, dataflow: { flow: FLOW, state: STATE } };
 }
 
 function storeWith(mutate?: QueryTransport['mutate']) {
@@ -68,13 +73,13 @@ describe('the STATIC face (bare registry)', () => {
 });
 
 describe('the LIVE face (runtime registry)', () => {
-  it('performs the named mutation with the document\'s current values', async () => {
-    const writes: Array<{ name: string; values: Record<string, unknown> }> = [];
-    const store = storeWith(async (values, name) => { writes.push({ name, values }); return { dataset: 'abc123' }; });
+  it('performs the named mutation with its arguments from the document\'s current values', async () => {
+    const writes: MutationRequest[] = [];
+    const store = storeWith(async (request) => { writes.push(request); return { dataset: 'abc123' }; });
     const { nodes, dataflow } = build();
     const { getByRole } = render(<StoryRuntimeApp nodes={nodes} refData={{}} dataflow={dataflow} colorMode="light" chrome={true} store={store} />);
     fireEvent.click(getByRole('button', { name: 'Vote' }));
-    await waitFor(() => expect(writes).toEqual([{ name: 'vote', values: { choice: 'ramen' } }]));
+    await waitFor(() => expect(writes).toEqual([{ mutation: 'vote', args: { choice: 'ramen' } }]));
   });
 
   it('is busy — aria-busy and disabled — while the write is in flight, and recovers after', async () => {
@@ -117,11 +122,11 @@ describe('the LIVE face (runtime registry)', () => {
 
 describe('mx.mutate — the author script\'s handle on a write', () => {
   it('performs the mutation with per-call arguments without changing scalar signals', async () => {
-    const writes: Array<Record<string, unknown>> = [];
-    const store = storeWith(async (values) => { writes.push(values); return { dataset: 'abc123' }; });
+    const writes: MutationRequest[] = [];
+    const store = storeWith(async (request) => { writes.push(request); return { dataset: 'abc123' }; });
     const mx = createMx(store);
     await mx.mutate('vote', { choice: 'salad' });
-    expect(writes).toEqual([{ choice: 'salad' }]);
+    expect(writes).toEqual([{ mutation: 'vote', args: { choice: 'salad' } }]);
     expect((await mx.read(['choice'])).signals.choice.value).toBe('ramen');
   });
 
@@ -129,6 +134,19 @@ describe('mx.mutate — the author script\'s handle on a write', () => {
   // is a pass-through, and that test also pins the busy flag and the capability refresh.
 });
 
+
+const FORM_FLOW = await compiledSource(
+  '<Helmet><Import name="bills" src="ref:bills1" /><Value name="desc" type="string" /><Value name="amount" type="number" default={0} />'
+  + '<Value name="payer" type="string" default="me" />'
+  + '<Mutation name="add" reset="desc amount">{`insert into bills.rows (d, a) values ($desc, $amount)`}</Mutation></Helmet>',
+  { bills1: [{ name: 'd', type: 'string' }, { name: 'a', type: 'number' }] },
+);
+const ROW_HELMET = '<Helmet><Import name="tasks_data" src="ref:abc123" /><Query name="tasks">{`select * from tasks_data.rows`}</Query><Mutation name="complete">{`update tasks_data.rows set done=1 where id=$_row.id`}</Mutation></Helmet>';
+const ROW_BUTTON = '<Button run="$complete" aria-label="Complete {$_row.id}">Complete</Button>';
+const ROW_FLOWS = {
+  For: await compiledSource(ROW_HELMET + '<For id="tasks" each={$tasks} keyBy="id">' + ROW_BUTTON + '</For>', SOURCES),
+  DataTable: await compiledSource(ROW_HELMET + '<DataTable id="tasks" data="$tasks" rowKey="id"><Column col="id">' + ROW_BUTTON + '</Column></DataTable>', SOURCES),
+};
 
 /**
  * `<Mutation reset="desc amount">` seen from the FORM: the click that saves is
@@ -140,10 +158,10 @@ describe('mx.mutate — the author script\'s handle on a write', () => {
  */
 describe('a Button whose Mutation carries reset=', () => {
   const FORM_HELMET =
-    '<Helmet><Value name="desc" type="string" />'
+    '<Helmet><Import name="bills" src="ref:bills1" /><Value name="desc" type="string" />'
     + '<Value name="amount" type="number" default={0} />'
     + '<Value name="payer" type="string" default="me" />'
-    + '<Mutation name="add" source="ref:abc123" reset="desc amount">{`insert into public.rows (d, a) values ($desc, $amount)`}</Mutation></Helmet>';
+    + '<Mutation name="add" reset="desc amount">{`insert into bills.rows (d, a) values ($desc, $amount)`}</Mutation></Helmet>';
   const FORM_BODY =
     '<div><input aria-label="Description" value="$desc" />'
     + '<input aria-label="Amount" type="number" value="$amount" />'
@@ -152,9 +170,9 @@ describe('a Button whose Mutation carries reset=', () => {
 
   function setup(mutate: QueryTransport['mutate']) {
     const parsed = parseJsxOrThrow(FORM_HELMET + FORM_BODY);
-    const { content, body: nodes } = splitHelmet(parsed.nodes as JsxNode[]);
+    const { body: nodes } = splitHelmet(parsed.nodes as JsxNode[]);
     const state: DataflowState = { values: { desc: null, amount: 0, payer: 'me' }, tables: {}, errors: {}, mutationAccess: { add: null } };
-    const dataflow = { flow: { values: content.values, queries: content.queries, mutations: content.mutations }, state };
+    const dataflow = { flow: FORM_FLOW, state };
     const store = createDataflowStore(dataflow, {
       transport: { run: async () => ({ tables: {}, errors: {}, mutationAccess: { add: null } }), page: () => Promise.reject(new Error('unused')), mutate },
       debounceMs: 0,
@@ -193,12 +211,11 @@ describe('a Button whose Mutation carries reset=', () => {
 
 describe.each(['For', 'DataTable'])('%s row actions', (kind) => {
   function setup() {
-    const button = '<Button run="$complete" aria-label="Complete {$_row.id}">Complete</Button>';
-    const body = kind === 'For' ? '<For id="tasks" each={$tasks} keyBy="id">'+button+'</For>'
-      : '<DataTable id="tasks" data="$tasks" rowKey="id"><Column col="id">'+button+'</Column></DataTable>';
-    const {content, body:nodes} = splitHelmet(parseJsxOrThrow('<Helmet><Query name="tasks" source="ref:abc123">{`select * from public.rows`}</Query><Mutation name="complete" source="ref:abc123">{`update public.rows set done=true where id=$_row.id`}</Mutation></Helmet>'+body).nodes);
+    const body = kind === 'For' ? '<For id="tasks" each={$tasks} keyBy="id">'+ROW_BUTTON+'</For>'
+      : '<DataTable id="tasks" data="$tasks" rowKey="id"><Column col="id">'+ROW_BUTTON+'</Column></DataTable>';
+    const {body:nodes} = splitHelmet(parseJsxOrThrow(ROW_HELMET+body).nodes);
     const state: DataflowState = {values:{}, tables:{tasks:{columns:[{name:'id',type:'number'}],rows:[{id:1},{id:2}]}},errors:{},mutationAccess:{complete:null}};
-    const dataflow = {flow:{values:content.values, queries:content.queries, mutations:content.mutations},state};
+    const dataflow = {flow:kind === 'For' ? ROW_FLOWS.For : ROW_FLOWS.DataTable,state};
     const mutate = vi.fn().mockResolvedValue({dataset:'abc123'});
     const transport: QueryTransport = {mutate,run:async()=>({tables:state.tables,errors:{},mutationAccess:{complete:null}}),page:vi.fn()};
     const store = createDataflowStore(dataflow,{transport,debounceMs:0});
@@ -221,7 +238,7 @@ describe.each(['For', 'DataTable'])('%s row actions', (kind) => {
     fireEvent.click(v.getByRole('button',{name:'Complete 1'}));
     fireEvent.click(v.getByRole('button',{name:'Complete 1'}));
     expect(v.mutate).toHaveBeenCalledTimes(1);
-    expect(v.mutate).toHaveBeenCalledWith({},'complete',{id:1});
+    expect(v.mutate).toHaveBeenCalledWith({mutation:'complete',args:{},row:{id:1}});
     await act(async()=>v.store.replaceFlow({...v.dataflow,state:{...v.dataflow.state,tables:{tasks:{...v.dataflow.state.tables.tasks,rows:[{id:2},{id:1}]}}}}));
     expect((v.getByRole('button',{name:'Complete 1'}) as HTMLButtonElement).disabled).toBe(true);
     expect((v.getByRole('button',{name:'Complete 2'}) as HTMLButtonElement).disabled).toBe(false);
@@ -303,5 +320,64 @@ describe('a Button on an archived render', () => {
     const button = getByRole('button', { name: 'Vote' }) as HTMLButtonElement;
     expect(button.disabled).toBe(true);
     expect(button.getAttribute('aria-description')).toBe('This view cannot save changes.');
+  });
+});
+
+/**
+ * `set=` — the page's own state, changed by a click: no SQL and no server. Every
+ * key changes in ONE step (one notification, one run of what reads them), and
+ * with `run=` beside it the values are set before the write reads them.
+ * `args=` fills a mutation's arguments from other page values or a row.
+ */
+describe('set= and args= on a Button', () => {
+  function live(body: string, mutate?: QueryTransport['mutate']) {
+    const { nodes, dataflow } = build(body);
+    const store = storeWith(mutate);
+    const view = render(<StoryRuntimeApp nodes={nodes} refData={{}} dataflow={dataflow} colorMode="light" chrome={true} store={store} />);
+    return { ...view, store };
+  }
+
+  it('sets every named value in one step, and writes nothing', async () => {
+    const mutate = vi.fn();
+    const v = live('<div><Button set={{"choice": "tacos", "other": "x"}}>Pick</Button></div>', mutate);
+    const seen = vi.fn();
+    v.store.subscribe(seen);
+    fireEvent.click(v.getByRole('button', { name: 'Pick' }));
+    expect(v.store.getState().values).toMatchObject({ choice: 'tacos', other: 'x' });
+    expect(seen).toHaveBeenCalledTimes(1);
+    expect(mutate).not.toHaveBeenCalled();
+  });
+
+  it('sets first, then runs the write with the values it just set', async () => {
+    const writes: MutationRequest[] = [];
+    const v = live('<div><Button set={{"choice": "salad"}} run="$vote">Both</Button></div>', async (request) => { writes.push(request); return { dataset: 'abc123' }; });
+    fireEvent.click(v.getByRole('button', { name: 'Both' }));
+    await waitFor(() => expect(writes).toEqual([{ mutation: 'vote', args: { choice: 'salad' } }]));
+    expect(v.store.getValue('choice')).toBe('salad');
+  });
+
+  it('reads a row field into a value from inside a For', () => {
+    const { nodes } = build('<For each={$tally} keyBy="choice"><Button set={{"other": "$_row.choice"}}>Pick {$_row.choice}</Button></For>');
+    const store = storeWith();
+    act(() => { store.replaceFlow({ flow: FLOW, state: { ...STATE, tables: { tally: { rows: [{ choice: 'ramen' }, { choice: 'pho' }], columns: [{ name: 'choice', type: 'string' }] } } } }); });
+    const { getByRole } = render(<StoryRuntimeApp nodes={nodes} refData={{}} dataflow={{ flow: FLOW, state: store.getState() }} colorMode="light" chrome={true} store={store} />);
+    fireEvent.click(getByRole('button', { name: 'Pick pho' }));
+    expect(store.getValue('other')).toBe('pho');
+  });
+
+  it('fills a mutation argument from another value with args=', async () => {
+    const writes: MutationRequest[] = [];
+    const v = live('<div><Button run="$rename" args={{"label": "$choice"}}>Rename</Button></div>', async (request) => { writes.push(request); return { dataset: 'abc123' }; });
+    fireEvent.click(v.getByRole('button', { name: 'Rename' }));
+    await waitFor(() => expect(writes).toEqual([{ mutation: 'rename', args: { label: 'ramen' } }]));
+  });
+
+  it('stamps its static face and never lets set= reach the DOM', () => {
+    const { nodes } = build('<div><Button set={{"choice": "tacos"}}>Pick</Button></div>');
+    const { container } = render(<>{renderStoryNodes(nodes, { components: STORY_UI_COMPONENTS })}</>);
+    const button = container.querySelector('button')!;
+    expect(button.getAttribute('set')).toBeNull();
+    expect(button.getAttribute('data-mx-bound')).toBe('set:choice');
+    expect(button.disabled).toBe(true);
   });
 });

@@ -4,13 +4,15 @@
  * runtime bundle and the offline file call it directly, on the main thread,
  * with in-memory databases. Every method is synchronous once the module is
  * loaded, and every call opens its own throwaway database — isolation is
- * structural, exactly as with the DuckDB engine it replaces.
+ * structural.
  */
 import type { DryRunInput, DryRunMutationsInput, DryRunMutationsResult, DryRunResult, MutationInput, MutationOutcome, QueryOutcome, RunInput, StatementAnalysis } from '@artifactbin/contracts';
 import { SqliteDatabase, type Relation } from './database';
 import { dryRunQueries, runQueries, type ReadBounds } from './reads';
 import { dryRunMutations, runMutation, type WriteBounds } from './writes';
 import { loadSqliteModule, type Sqlite3 } from './wasm';
+import type { SqlExtensions } from '../extensions';
+export { provideSqliteWasm } from './wasm';
 
 export { SqliteDatabase, Refused, TimedOut, type Prepared, type Relation, type StatementMode, type TableData } from './database';
 export type { ReadBounds } from './reads';
@@ -21,9 +23,9 @@ export interface SqliteEngine {
   /** What `sql` touches over these relations (views carry `sql`); throws the guard's reason when it is refused. */
   analyze(sql: string, schema: Relation[]): StatementAnalysis;
   run(input: RunInput, bounds: ReadBounds): Record<string, QueryOutcome>;
-  mutate(input: MutationInput, bounds: WriteBounds): MutationOutcome;
+  mutate(input: MutationInput, bounds: WriteBounds, extensions?: SqlExtensions): MutationOutcome;
   dryRun(input: DryRunInput): DryRunResult;
-  dryRunMutations(input: DryRunMutationsInput): DryRunMutationsResult;
+  dryRunMutations(input: DryRunMutationsInput, extensions?: SqlExtensions): DryRunMutationsResult;
   /** A fresh guarded database with the function library, for callers that orchestrate their own statements. */
   open(): SqliteDatabase;
   /** The functions registered beyond SQLite's built-ins, as SQLite lists them. */
@@ -44,9 +46,9 @@ function engine(sqlite3: Sqlite3): SqliteEngine {
       return prepared.analysis;
     }),
     run: (input, bounds) => runQueries(sqlite3, input, bounds),
-    mutate: (input, bounds) => runMutation(sqlite3, input, bounds),
+    mutate: (input, bounds, extensions) => runMutation(sqlite3, input, bounds, extensions),
     dryRun: (input) => dryRunQueries(sqlite3, input),
-    dryRunMutations: (input) => dryRunMutations(sqlite3, input),
+    dryRunMutations: (input, extensions) => dryRunMutations(sqlite3, input, extensions),
     open: () => new SqliteDatabase(sqlite3),
     libraryFunctions: () => withDatabase((db) => db.registeredFunctions()),
   };

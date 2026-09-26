@@ -1,9 +1,9 @@
 /**
- * THE SQL CONTRACT, run over BOTH engines (DuckDB and SQLite) and BOTH
+ * THE SQL CONTRACT, run over BOTH compositions of the SQLite engine (this
+ * thread, `./sqlite`; the server's worker threads, `./local`) and BOTH
  * transports: the engine in this process, and the same engine behind
  * `serveSql` reached through `sqlClient`. One suite, four shapes — the proof
- * that the engines, and in-process and remote, can never disagree. Where the
- * dialects differ, each engine gets its own SQL for the same assertion.
+ * that the compositions, and in-process and remote, can never disagree.
  */
 import { afterAll, describe, expect, it, vi } from 'vitest';
 import type { SqlService } from '@artifactbin/contracts';
@@ -11,16 +11,18 @@ import { isQueryFailure } from '@artifactbin/contracts';
 import { SQL_ROUTES, serveSql, sqlClient } from '@artifactbin/sql';
 import { createSql } from '@artifactbin/sql/local';
 import { createSqliteSql } from '@artifactbin/sql/sqlite';
+import type { SqliteDatabase } from '@artifactbin/sql/core';
 
-type Engine = 'duckdb' | 'sqlite';
-const ENGINES = { duckdb: createSql({ maxRows: 3, timeoutMs: 2000 }), sqlite: createSqliteSql({ maxRows: 3, timeoutMs: 2000 }) };
-const local = ENGINES.duckdb;
+type Engine = 'sqlite';
+const pool = createSql({ maxRows: 3, timeoutMs: 2000 }, { workers: 2 });
+const ENGINES = { thread: createSqliteSql({ maxRows: 3, timeoutMs: 2000 }), pool };
+const local = ENGINES.thread;
 const servers = Object.values(ENGINES).map((svc) => serveSql(svc));
 const listening = servers[0]!.listen(0);
 const remote = sqlClient(listening.url, { deadlineMs: 5000 });
-const sqliteRemote = sqlClient(servers[1]!.listen(0).url, { deadlineMs: 5000 });
-afterAll(() => Promise.all(servers.map((s) => s.close())));
-const SHAPES: Array<[string, Engine, SqlService]> = [['duckdb in-process', 'duckdb', local], ['duckdb over HTTP', 'duckdb', remote], ['sqlite in-process', 'sqlite', ENGINES.sqlite], ['sqlite over HTTP', 'sqlite', sqliteRemote]];
+const poolRemote = sqlClient(servers[1]!.listen(0).url, { deadlineMs: 5000 });
+afterAll(async () => { await Promise.all(servers.map((s) => s.close())); await pool.close(); });
+const SHAPES: Array<[string, Engine, SqlService]> = [['in this thread', 'sqlite', local], ['in this thread over HTTP', 'sqlite', remote], ['worker threads', 'sqlite', pool], ['worker threads over HTTP', 'sqlite', poolRemote]];
 
 const TABLE = { rows: [{ a: 1 }, { a: 2 }, { a: 3 }, { a: 4 }], columns: [{ name: 'a', type: 'number' as const }] };
 const input = {
@@ -165,13 +167,8 @@ describe('serveSql service authentication', () => {
   });
 });
 
-/** The dialect-specific halves of the catalog assertions: the same checks, each engine's own SQL. */
+/** The engine-specific halves of the catalog assertions. */
 const DIALECT = {
-  duckdb: {
-    functions: "select median(a::double) as median, strftime(strptime('2026-01', '%Y-%m'), '%Y-%m') as month from public.rows",
-    idioms: "with q as (select * from rows) select a, cast(9007199254740993 as varchar) as exact from (select * from q) qualify row_number() over(order by a desc)=1",
-    missing: true,
-  },
   sqlite: {
     functions: "select median(a) as median, date_format(date_parse('2026-01', '%Y-%m'), '%Y-%m') as month from public.rows",
     idioms: "with q as (select * from rows) select a, exact from (select a, cast(9007199254740993 as text) as exact, row_number() over (order by a desc) as rn from (select * from q)) where rn = 1",
@@ -232,18 +229,13 @@ describe('trusted mutation extensions',()=>{
  it('OSS has no model function on mutation or publication paths',async()=>{
   const sql="insert into ref_x values (llm('text','system','{}'))";
   const result=await local.mutate({table:{name:'ref_x',rows:[],columns:[{name:'a',type:'string'}]},sql,params:{}});
-  expect(result).toHaveProperty('error',expect.stringMatching(/does not exist/i));
+  expect(result).toHaveProperty('error',expect.stringMatching(/no such function: llm/i));
   const dry=await local.dryRunMutations({tables:{ref_x:{columns:[{name:'a',type:'string'}]}},mutations:[{name:'x',target:'x',sql}],paramNames:[]});
-  expect(dry.errors[0]?.error).toMatch(/does not exist/i);
+  expect(dry.errors[0]?.error).toMatch(/no such function: llm/i);
  });
  it('installs a trusted scalar only for its own writes and dry runs, across HTTP',async()=>{
-  const setup=vi.fn((connection:import('@duckdb/node-api').DuckDBConnection,native:typeof import('@duckdb/node-api'))=>{
-   connection.registerScalarFunction(native.DuckDBScalarFunction.create({name:'fixture_value',parameterTypes:[],returnType:native.VARCHAR,mainFunction(_info,chunk,output){
-    if(!(output instanceof native.DuckDBVarCharVector))throw new Error('Unexpected fixture vector');
-    for(let i=0;i<chunk.rowCount;i++)output.setItem(i,'fixture');output.flush();
-   }}));
-  });
-  const extended=createSql({}, {setupMutation:setup}),http=serveSql(extended),address=http.listen(0),client=sqlClient(address.url);
+  const setup=vi.fn((database:SqliteDatabase)=>{database.extensionFunction('fixture_value',()=>'fixture',0);});
+  const extended=createSqliteSql({}, {setupMutation:setup}),http=serveSql(extended),address=http.listen(0),client=sqlClient(address.url);
   try{
    const sql='insert into ref_x values (fixture_value())',columns=[{name:'a',type:'string' as const}];
    expect(await client.mutate({table:{name:'ref_x',rows:[],columns},sql,params:{}})).toMatchObject({rows:[{a:'fixture'}],affected:1});
@@ -253,10 +245,17 @@ describe('trusted mutation extensions',()=>{
   }finally{await http.close();}
  });
  it('returns an opaque continuation without committing failed rows over HTTP',async()=>{
-  const extended=createSql({}, {setupMutation:(_connection,_native,{input})=>()=>({kind:'fixture',payload:input?.extensions})});
+  const extended=createSqliteSql({}, {setupMutation:(_database,{input})=>()=>({kind:'fixture',payload:input?.extensions})});
   const http=serveSql(extended),address=http.listen(0),client=sqlClient(address.url);
   try{
-   expect(await client.mutate({table:{name:'ref_x',rows:[{a:1}],columns:TABLE.columns},sql:"insert into ref_x values (cast('bad' as int))",params:{},extensions:{fixture:3}})).toEqual({error:'Execution requires continuation',continuation:{kind:'fixture',payload:{fixture:3}}});
+   expect(await client.mutate({table:{name:'ref_x',rows:[{a:1}],columns:TABLE.columns},sql:'insert into ref_x values (2)',params:{},extensions:{fixture:3}})).toEqual({error:'Execution requires continuation',continuation:{kind:'fixture',payload:{fixture:3}}});
   }finally{await http.close();}
+ });
+ it('the worker threads load the composition root\'s extensions module',async()=>{
+  const threads=createSql({}, {workers:1,extensions:new URL('./fixtures/fixture-extension.ts',import.meta.url).href});
+  try{
+   const columns=[{name:'a',type:'string' as const}];
+   expect(await threads.mutate({table:{name:'ref_x',rows:[],columns},sql:'insert into ref_x values (fixture_value())',params:{}})).toMatchObject({rows:[{a:'fixture'}]});
+  }finally{await threads.close();}
  });
 });

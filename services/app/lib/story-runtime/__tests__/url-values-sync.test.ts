@@ -18,15 +18,12 @@
 import { describe, expect, it, vi } from 'vitest';
 import { createDataflowStore } from '@/lib/story-runtime/store';
 import { syncValuesToUrl } from '@/lib/story-runtime/url-values-sync';
-import type { Dataflow, Scalar } from '@/lib/story/dataflow';
+import type { Scalar } from '@/lib/story/dataflow';
+import { compiledOf } from '@/test/helpers/compiled';
 
-const FLOW: Dataflow = {
-  values: [
-    { kind: 'scalar', name: 'region', type: 'string', default: 'north', start: 0, end: 0 },
-    { kind: 'scalar', name: 'zoom', type: 'number', default: 2, start: 0, end: 0 },
-  ],
-  queries: [],
-};
+const FLOW = await compiledOf('<Value name="region" default="north" /><Value name="zoom" type="number" default={2} />');
+const PRIVATE_FLOW = await compiledOf('<Value name="region" default="north" /><Value name="zoom" type="number" default={2} />'
+  + '<Value name="draft" url={false} /><Value name="guest" type="boolean" default={false} url={false} />');
 
 const tick = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
@@ -107,14 +104,7 @@ describe('syncValuesToUrl, framed', () => {
  * is the leak that would put the draft in the owner's address instead.
  */
 describe('a url={false} Value', () => {
-  const PRIVATE: Dataflow = {
-    values: [
-      ...FLOW.values,
-      { kind: 'scalar', name: 'draft', type: 'string', default: null, url: false, start: 0, end: 0 },
-      { kind: 'scalar', name: 'guest', type: 'boolean', default: false, url: false, start: 0, end: 0 },
-    ],
-    queries: [],
-  };
+  const PRIVATE = PRIVATE_FLOW;
   const privateHarness = () => {
     const store = createDataflowStore({ flow: PRIVATE }, { debounceMs: 0 });
     return { store, hook: vi.fn(), post: vi.fn() };

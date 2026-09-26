@@ -42,38 +42,6 @@ function rowRefsIn(nodes: JsxNode[]): string[] {
   return found;
 }
 
-/** Replace SQL literals/comments with whitespace, preserving real parameter tokens. */
-export function sqlCode(sql: string): string {
-  let out = '', i = 0;
-  while (i < sql.length) {
-    const start = i;
-    if (sql.startsWith('--', i)) { while (i < sql.length && sql[i] !== '\n') i++; }
-    else if (sql.startsWith('/*', i)) {
-      i += 2; let depth = 1;
-      while (i < sql.length && depth) {
-        if (sql.startsWith('/*', i)) { depth++; i += 2; }
-        else if (sql.startsWith('*/', i)) { depth--; i += 2; }
-        else i++;
-      }
-    } else if (sql[i] === "'" || sql[i] === '"') {
-      const quote = sql[i++];
-      while (i < sql.length) { if (sql[i++] === quote) { if (sql[i] === quote) i++; else break; } }
-    } else {
-      const dollar = sql[i] === '$' ? /^(?:\$\$|\$[A-Za-z_]\w*\$)/.exec(sql.slice(i))?.[0] : null;
-      if (dollar) { const end = sql.indexOf(dollar, i + dollar.length); i = end < 0 ? sql.length : end + dollar.length; }
-      else { out += sql[i++]; continue; }
-    }
-    out += ' '.repeat(i - start);
-  }
-  return out;
-}
-
-export function rowFieldsInSql(sql: string): string[] {
-  return [...new Set([...sqlCode(sql).matchAll(/(?<![\w$])\$_row\.([A-Za-z_]\w*)/g)].map((m) => m[1]))];
-}
-export const mutationUsesValue = (sql: string): boolean => /(?<![\w$])\$_value\b/.test(sqlCode(sql));
-export const mutationUsesRow = (sql: string): boolean => /(?<![\w$])\$_(?:row|value)\b/.test(sqlCode(sql));
-
 /** Each editable invocation belongs to a declared table; no SQL authorization is inferred. */
 export function analyzeRowScopes(nodes: JsxNode[], columns?: Record<string, import('@artifactbin/contracts').DatasetColumn[]>) {
   const errors: string[] = [];

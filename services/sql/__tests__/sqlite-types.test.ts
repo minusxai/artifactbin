@@ -2,8 +2,8 @@
  * TYPES THROUGH THE SQLITE ENGINE: what a column may hold on load, on bind
  * and on every write, and what comes back. SQLite stores TEXT/REAL/INTEGER;
  * the engine keeps a date a calendar day, a timestamp a UTC instant with `Z`
- * and a boolean true/false, whoever writes them. Plus the paging fallbacks the
- * DuckDB engine has, and schema names that merely look reserved.
+ * and a boolean true/false, whoever writes them. Plus the paging fallbacks,
+ * and schema names that merely look reserved.
  */
 import { describe, expect, it } from 'vitest';
 import { isQueryFailure, type DatasetColumn, type Row } from '@artifactbin/contracts';

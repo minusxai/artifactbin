@@ -18,7 +18,7 @@ export function isReactiveExpression(value: unknown, depth = 0): value is Reacti
   if (depth > 32 || !object(value)) return false;
   switch (value.kind) {
     case 'literal': return scalar(value.value);
-    case 'signal': return typeof value.name === 'string' && /^[A-Za-z_]\w*$/.test(value.name);
+    case 'signal': return typeof value.name === 'string' && /^[A-Za-z_]\w*(?:\.[A-Za-z_]\w*)?$/.test(value.name);
     case 'row': return typeof value.field === 'string' && /^[A-Za-z_]\w*$/.test(value.field);
     case 'not': return isReactiveExpression(value.value, depth + 1);
     case 'binary': return typeof value.op === 'string' && OPS.has(value.op) && isReactiveExpression(value.left, depth + 1) && isReactiveExpression(value.right, depth + 1);
@@ -33,6 +33,10 @@ export function reactiveExpression(node: unknown, depth = 0): ReactiveExpression
   if (node.type === 'MemberExpression' && !node.computed && object(node.object) && object(node.property)
     && node.object.type === 'Identifier' && node.object.name === '$_row' && node.property.type === 'Identifier'
     && typeof node.property.name === 'string') return {kind: 'row', field: node.property.name};
+  // A built-in's field (`$_me.id`) reads like any value; which fields exist is the validator's to say.
+  if (node.type === 'MemberExpression' && !node.computed && object(node.object) && object(node.property)
+    && node.object.type === 'Identifier' && typeof node.object.name === 'string' && /^\$_[A-Za-z]\w*$/.test(node.object.name)
+    && node.property.type === 'Identifier' && typeof node.property.name === 'string' && /^[A-Za-z_]\w*$/.test(node.property.name)) return {kind: 'signal', name: `${node.object.name.slice(1)}.${node.property.name}`};
   if (node.type === 'UnaryExpression') {
     const value = reactiveExpression(node.argument, depth + 1);
     if (!value) return null;

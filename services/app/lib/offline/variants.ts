@@ -15,7 +15,9 @@
  */
 import { normalizeControlOptions } from '@/components/kit/controls';
 import type { JsxElement, JsxNode } from '@/lib/jsx';
-import { coerceScalarInput, queriesDependingOn, refName, REF_ATTRS, type Dataflow, type DataflowState, type Scalar, type ScalarValueDecl } from '@/lib/story/dataflow';
+import { coerceScalarInput, refName, REF_ATTRS, type DataflowState, type Scalar } from '@/lib/story/dataflow';
+import type { CompiledDataflow, CompiledValue } from '@/lib/story/compiled-dataflow';
+import { queriesReadingValues } from '@/lib/story/compiled-flow';
 import type { ArtifactFileVariant } from './file-format';
 
 export interface VariantCaps {
@@ -69,7 +71,7 @@ const scalarKey = (v: Scalar): string => JSON.stringify(v);
 const dedupe = (xs: Scalar[]): Scalar[] => [...new Map(xs.map((x) => [scalarKey(x), x])).values()];
 
 /** The finite values one control offers, in the Value's own type; null when it can write anything. */
-function controlValues(domain: ControlDomain, decl: ScalarValueDecl, base: DataflowState): Scalar[] | null {
+function controlValues(domain: ControlDomain, decl: Pick<CompiledValue, "name" | "default"> & { type: import("@/lib/story/dataset-shape").ColumnType }, base: DataflowState): Scalar[] | null {
   if (domain.kind === 'open') return null;
   const nullable = decl.default === null;
   if (domain.kind === 'boolean') return nullable ? [true, false, null] : [true, false];
@@ -94,9 +96,9 @@ function controlValues(domain: ControlDomain, decl: ScalarValueDecl, base: Dataf
  * clear ("All"). `null` for a Value no control makes finite (text, number,
  * date, slider inputs, or no control at all).
  */
-export function valueDomains(nodes: JsxNode[], flow: Dataflow, base: DataflowState): Map<string, Scalar[] | null> {
-  const scalars = new Map(flow.values.filter((v): v is ScalarValueDecl => v.kind === 'scalar').map((v) => [v.name, v]));
-  const read = new Set(flow.queries.flatMap((q) => q.params).filter((p) => scalars.has(p)));
+export function valueDomains(nodes: JsxNode[], flow: CompiledDataflow, base: DataflowState): Map<string, Scalar[] | null> {
+  const scalars = new Map(flow.values.filter((v): v is CompiledValue & { type: Exclude<CompiledValue['type'], 'table'> } => v.kind === 'scalar' && v.type !== 'table').map((v) => [v.name, v]));
+  const read = new Set(flow.queries.flatMap((q) => q.reads.values).filter((p) => scalars.has(p)));
   const bound = new Map<string, ControlDomain[]>();
   const visit = (list: JsxNode[]) => {
     for (const n of list) {
@@ -117,7 +119,7 @@ export function valueDomains(nodes: JsxNode[], flow: Dataflow, base: DataflowSta
 }
 
 export interface PrecomputeInput {
-  flow: Dataflow;
+  flow: CompiledDataflow;
   base: DataflowState;
   domains: Map<string, Scalar[] | null>;
   /** Runs the named queries (dependency-closed) with these values, as the downloader. */
@@ -180,7 +182,7 @@ export async function precomputeVariants(input: PrecomputeInput): Promise<{ vari
   for (let i = 0; i < plan.length; i++) {
     const move = plan[i];
     const values = { ...input.base.values, ...baseValues, ...move };
-    const only = queriesDependingOn(input.flow, Object.keys(move));
+    const only = queriesReadingValues(input.flow, Object.keys(move));
     const result = await input.run(values, only);
     const variant: ArtifactFileVariant = {
       values: { ...baseValues, ...move },

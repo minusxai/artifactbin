@@ -1,6 +1,7 @@
 import {localDocumentQuery} from './local-document-query';
 import {join} from 'node:path';
-import {createSql} from '@artifactbin/sql/local';
+import './sqlite-wasm';
+import {createSqliteSql} from '@artifactbin/sql/sqlite';
 import {inferColumns} from '@artifactbin/utils/shape';
 import {isQueryFailure,type Scalar} from '@artifactbin/contracts';
 import {tableQueryInput} from '@artifactbin/utils';
@@ -59,7 +60,7 @@ export async function localQuery(workspace:Workspace,parsed:ParsedCommand,sql:st
    if(!page||page.fingerprint!==fingerprint||!Number.isSafeInteger(page.offset)||Number(page.offset)<0)throw new CliError('invalid_cursor','The cursor does not match these inputs.','Run the query without --cursor to start again.');
    offset=Number(page.offset);
   }
-  const outcome=(await createSql().run({...tableQueryInput({rows:source.rows,columns},query,params,{offset,limit:limit+1}),limit:limit+1})).result;
+  const outcome=(await createSqliteSql().run({...tableQueryInput({rows:source.rows,columns},query,params,{offset,limit:limit+1}),limit:limit+1})).result;
   if(!outcome||isQueryFailure(outcome))throw new CliError('query_failed',outcome?.error??'The local query produced no result.','Run afbin query -h for supported inputs.');
   const more=outcome.rows.length>limit;
   results.push({path:source.path,execution:'local',columns:outcome.columns,rows:outcome.rows.slice(0,limit),next_cursor:more?Buffer.from(JSON.stringify({fingerprint,offset:offset+limit})).toString('base64url'):null});

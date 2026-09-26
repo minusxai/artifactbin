@@ -21,7 +21,6 @@
  * survives a later run for `trend`: nothing either one reads moved the other.
  */
 import type { DataflowState, Row, Scalar, TableResult } from '@/lib/story/dataflow';
-import { SIGNALS_TABLE } from '@/lib/story/local-target';
 import { checkedLocalRows } from '@/lib/story/local-tables';
 import { graphDefaults, graphInlineTables, type GraphReads, type RuntimeGraph } from './runtime-graph';
 import type { MutationAnswer } from './store';
@@ -476,11 +475,6 @@ function resetValues(state: CoreState, names: readonly string[] | undefined): Re
 function commitLocal(state: CoreState, target: string, answer: MutationAnswer): CoreState {
   const result = answer.local;
   if (!result || result.target !== target) throw new Error('Invalid local mutation result');
-  if (target === SIGNALS_TABLE) {
-    const columns = state.graph.values.flatMap((v) => v.kind === 'scalar' ? [{ name: v.name, type: v.type }] : []);
-    if (result.table.rows.length !== 1) throw new Error('_signals must remain a single row');
-    return setValues(state, checkedLocalRows(result.table.rows, columns)[0] as Record<string, Scalar>);
-  }
   const table = state.graph.values.find((v) => v.kind === 'table' && v.name === target);
   if (!table || table.kind !== 'table') throw new Error('Local table declaration changed');
   const committed: TableResult = { columns: table.columns, rows: checkedLocalRows(result.table.rows, table.columns) };

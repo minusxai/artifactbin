@@ -6,16 +6,17 @@ import {artifactState} from '@/lib/artifact-state';
 import {completeMutationReceipt,type MutationReceipt} from '@/lib/mutation-receipt';
 import {throttlePublicMutation} from '@/lib/datasets/policy/usage';
 import {mutationPolicy,recheckMutation,canUseDataPolicy,policyReaderSql,type MutationDocument} from '@/lib/datasets/policy';
-import {catalogOf} from '@/lib/datasets/catalog';
+import {catalogOf,importedTables} from '@/lib/datasets/catalog';
 import {SIGN_IN_REQUIRED} from './sign-in-required';
-import {compileStoredMutation} from '@/lib/datasets/stored-mutation';
+import {loadSqlite} from '@artifactbin/sql/core';
+import {paramSqlName} from '@artifactbin/contracts';
 /**
  * WRITING a dataset — the other half of lib/story/dataset-store.
  *
- * A dataset's rows are ONE content-addressed blob and one row pointing at it,
- * so a write is: read the blob, run the author's DML over it in a throwaway
- * DuckDB (lib/sql/engine runMutation), store what the table became, and swap
- * the pointer. The interesting part is the swap.
+ * A dataset's rows are ONE content-addressed blob per table and one row
+ * pointing at them, so a write is: read the blob, run the author's DML over it
+ * in a throwaway SQLite database (lib/sql/engine runMutation), store what the
+ * table became, and swap the pointer. The interesting part is the swap.
  *
  * COMPARE-AND-SWAP, AND WHY THAT IS ENOUGH. The update is guarded on the
  * `edit_id` the rows were read at, so two writers cannot interleave a
@@ -41,9 +42,8 @@ import { MAX_QUERY_ROWS } from '@/lib/config';
 import { getDb } from '@/lib/db';
 import { isQueryFailure, runMutation, type MutationInput } from '@/lib/sql/engine';
 import { LIVE_ARTIFACT_SQL, canWriteDataset, editorScope, type ArtifactRow, type RoleActor } from '@/lib/artifacts';
-import type { DatasetColumn } from './dataset-shape';
 import { loadDatasetRows, storeDatasetRows } from './dataset-store';
-import {sqlParams,type Scalar} from './dataflow';
+import type {Scalar} from './dataflow';
 import { newEditId } from './splice';
 import {mutationInvocation} from '@/lib/mutation-invocation';
 import type {MutationOutcome,DatasetMutationPolicy,Queryable} from '@artifactbin/contracts';
@@ -82,7 +82,7 @@ interface MutationRefused {
 
 interface MutationApplied {
   row: ArtifactRow;
-  /** Rows the statement changed (DuckDB's own count). */
+  /** Rows the statement changed (the engine's own count). */
   affected: number;
   /** Rows the dataset holds afterwards. */
   rowCount: number;
@@ -95,9 +95,12 @@ export const isMutationRefused = (r: MutationApplied | MutationRefused): r is Mu
  * on every retry and in the final UPDATE itself, so revoking a share while
  * SQL is executing prevents that write from landing.
  *
- * `sql` names the dataset as `ref_<id>`, exactly as it is written in the
- * document; `params` are bound by name and never interpolated, under the
- * DECLARED types the caller passes as `guard.paramTypes` — the same typing the
+ * `guard.target` names the table as the statement names it — a document's
+ * `<Import>` schema and the table (`bookings.rows`), which the compiler
+ * established; absent (the owner's direct write door), SQLite's own analysis
+ * of the statement over the dataset's stored tables, under their catalog
+ * schemas, says which one it writes. `params` are bound by SQL name and never
+ * interpolated, under the declared types the caller passes — the typing the
  * publish-time analysis used, so the two cannot plan the statement differently.
  */
 export async function mutateDataset(
@@ -105,11 +108,10 @@ export async function mutateDataset(
   actor: RoleActor,
   sql: string,
   params: Record<string, Scalar> = {},
-  guard: Pick<MutationInput, 'row' | 'expectedAffected' | 'paramTypes'> & {source?:boolean;document?:MutationDocument;receipt?:MutationReceipt;expectedState?:string} = {},
+  guard: Pick<MutationInput, 'expectedAffected' | 'paramTypes' | 'reads'> & {target?:{schema:string;table:string};document?:MutationDocument;receipt?:MutationReceipt;expectedState?:string} = {},
 ): Promise<MutationApplied | MutationRefused> {
-  if(sqlParams(sql).includes('_me')&&!actor.userId)return {reason:'policy_denied',detail:'$_me requires a logged-in user',code:SIGN_IN_REQUIRED};
+  if(Object.hasOwn(params,paramSqlName('_me.id'))&&!actor.userId)return {reason:'policy_denied',detail:'$_me.id requires a logged-in user',code:SIGN_IN_REQUIRED};
   const db = await getDb();
-  const table = 'dataset_rows';
   const scope = editorScope({userId:actor.userId,tokenId:actor.tokenId ?? ''});
   const invocation=mutationInvocation({dataset,actor,document:guard.document,db,recheckAccess:async()=>{await recheckMutation(dataset,actor,guard.document);}});
   if(guard.document && await canUseDataPolicy(dataset,actor) && await canWriteDataset(dataset,actor)){
@@ -130,20 +132,23 @@ export async function mutateDataset(
 
     if(guard.document){try{await recheckMutation(current,actor,guard.document);}catch(error){return {reason:'dataset_read_only',detail:error instanceof Error?error.message:'Mutation access changed'};}}
     const catalog=catalogOf(current);
-    let selected:import('@/lib/datasets/types').DatasetTable|undefined;
-    let executedSql=sql;
-    {
-      try{if(!catalog)throw new Error('Dataset catalog unavailable');const compiled=compileStoredMutation(catalog,sql,table);selected=compiled.table;executedSql=compiled.sql;}
-      catch(error){return {reason:'invalid_sql',detail:error instanceof Error?error.message:'Invalid stored mutation'};}
-    }
-    const columns = selected?.columns ?? ((current.meta as { columns?: DatasetColumn[] }).columns) ?? [];
-    const rows = await loadDatasetRows(selected?{meta:{objectKey:selected.objectKey}}:current);
-    const {source:_,document:__,...mutationGuard}=guard;
+    let selected:import('@/lib/datasets/types').DatasetTable;
+    let schema:string;
+    try{
+      if(!catalog||catalog.kind!=='stored')throw new Error('only stored datasets are writable');
+      const target=guard.target??await writtenTable(catalog,sql);
+      const table=(guard.target?importedTables(catalog):catalog.tables.filter(t=>t.schema===target.schema)).find(t=>t.name===target.table);
+      if(!table||table.sql!==undefined||!table.objectKey)throw new Error(`${target.schema}.${target.table} is not a stored table of this dataset`);
+      selected=table;schema=target.schema;
+    }catch(error){return {reason:'invalid_sql',detail:`Stored mutation: ${error instanceof Error?error.message:'invalid target'}`};}
+    const columns = selected.columns;
+    const rows = await loadDatasetRows({meta:{objectKey:selected.objectKey}});
     let out:MutationOutcome;
     let policy:DatasetMutationPolicy|undefined;
     try{
-      policy=await mutationPolicy(current,actor,selected??{schema:'public',name:'rows'},guard.document??false);
-      out = await invocation.run({ policy, table: { name: table, rows, columns }, sql:executedSql, params:{...params,_me:actor.userId}, ...mutationGuard, limit: datasetRowCap() },{mutate:runMutation});
+      policy=await mutationPolicy(current,actor,selected,guard.document??false);
+      out = await invocation.run({ policy, table: { schema, name: selected.name, rows, columns }, sql, params,
+        ...(guard.paramTypes?{paramTypes:guard.paramTypes}:{}), ...(guard.reads?.length?{reads:guard.reads}:{}), ...(guard.expectedAffected===undefined?{}:{expectedAffected:guard.expectedAffected}), limit: datasetRowCap() },{mutate:runMutation});
     }catch(error){return {reason:current.dataset_policy?'policy_denied':'invalid_sql',detail:error instanceof Error?error.message:'Dataset mutation failed'};}
     if (isQueryFailure(out)) {
       return { reason: out.code ?? (out.full ? 'dataset_full' : 'invalid_sql'), detail: out.error };
@@ -157,16 +162,16 @@ export async function mutateDataset(
       ...(current.meta as Record<string, unknown>),
       // The engine reports the table's real shape back; a write may not change
       // it (the columns are the dataset's contract), but recording what came
-      // back keeps the two from drifting if DuckDB widens a type.
+      // back keeps the two from drifting if the engine widens a type.
       columns: out.columns.length ? out.columns : columns,
       rowCount: out.rows.length,
       objectKey: located.objectKey,
-      ...(catalog?{catalog:{...catalog,tables:catalog.tables.map(t=>t===(selected??catalog.tables.find(t=>t.schema==='public'&&t.name==='rows'))?{...t,objectKey:located.objectKey,columns:out.columns.length?out.columns:columns}:t)}}:{}),
+      ...(catalog?{catalog:{...catalog,tables:catalog.tables.map(t=>t===selected?{...t,objectKey:located.objectKey,columns:out.columns.length?out.columns:columns}:t)}}:{}),
       // A written dataset is no longer "the first N rows of a bigger source".
       totalRows: undefined,
       truncated: undefined,
     };
-    if(selected && (selected.schema!=='public'||selected.name!=='rows')){
+    if(selected.schema!=='public'||selected.name!=='rows'){
       const old=current.meta as typeof meta;
       meta.columns=old.columns;meta.objectKey=old.objectKey;meta.rowCount=old.rowCount;
     }
@@ -248,4 +253,13 @@ export async function mutateDataset(
       return { reason: 'contended', detail: 'the dataset is being written too quickly to apply this change — try again' };
     }
   }
+}
+
+/** The one stored table a direct write names, by SQLite's own analysis of it over the dataset's catalog. */
+async function writtenTable(catalog:import('@/lib/datasets/types').DatasetCatalog,sql:string):Promise<{schema:string;table:string}> {
+  const relations=catalog.tables.filter(t=>t.objectKey&&t.sql===undefined).map(t=>({schema:t.schema,table:t.name,columns:t.columns}));
+  const writes=(await loadSqlite()).analyze(sql,relations).writes;
+  const [write]=writes;
+  if(!write||new Set(writes.map(w=>`${w.schema}\0${w.table}`)).size!==1)throw new Error('exactly one INSERT, UPDATE or DELETE of one catalog table is required');
+  return {schema:write.schema,table:write.table};
 }

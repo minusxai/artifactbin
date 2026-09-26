@@ -1,14 +1,14 @@
 /**
- * The dataflow contract (lib/story/dataflow.ts): how `<Value>` / `<Query>`
- * are parsed, how `$name` references are collected, and every publish-time
- * rule over the graph. Pure — no engine, no DB.
+ * The declarations contract (lib/story/dataflow.ts): how `<Import>` /
+ * `<Value>` / `<Query>` are parsed, how `$name` references (and `set=` /
+ * `args=` maps) are collected, and the publish-time rules over the MARKUP.
+ * What the SQL reads is the compiler's (compile-dataflow.test.ts). Pure.
  */
 import { describe, expect, it } from 'vitest';
 import { type JsxElement, type JsxNode } from '@/lib/jsx';
 import {
-  coerceScalarInput, collectRefNameUses, datasetRefsInDataflow, initialValues, parseQueryDecl, parseValueDecl,
-  queriesDependingOn, queryDeps, queryOrder, refName, sqlParams, validateDataflow,
-  type Dataflow, type QueryDecl, type ValueDecl,
+  bindingMap, coerceScalarInput, collectRefNameUses, parseImportDecl, parseQueryDecl, parseValueDecl, refName, resolveBindings, rowBound, validateDataflow,
+  type Dataflow, type ImportDecl, type QueryDecl, type ValueDecl,
 } from '@/lib/story/dataflow';
 import { parseJsxOrThrow } from '@/test/helpers/jsx';
 
@@ -37,9 +37,15 @@ const queryErrors = (source: string): string[] => {
   return r.ok ? [] : r.errors.map((e) => e.message);
 };
 
-const flow = (values: ValueDecl[], queries: QueryDecl[]): Dataflow => ({ values, queries });
+const flow = (values: ValueDecl[], queries: QueryDecl[], imports: ImportDecl[] = []): Dataflow => ({ imports, values, queries, mutations: [] });
 
 describe('refName', () => {
+  it('reads $_me.id, and leaves a row field to the row scope', () => {
+    expect(refName('$_me.id')).toBe('_me.id');
+    expect(refName('$_row.day')).toBeNull();
+    expect(refName('$sales.rows')).toBeNull();
+  });
+
   it('matches a whole-attribute reference only', () => {
     expect(refName('$sales')).toBe('sales');
     expect(refName('$_x1')).toBe('_x1');
@@ -140,19 +146,21 @@ describe('parseValueDecl', () => {
 });
 
 describe('parseQueryDecl', () => {
-  it('parses name, sql, params and dataset refs', () => {
-    const q = query('<Query name="sales" source="ref:abc123">{`select region, sum(revenue) r from public.rows where ($region is null or region = $region) and revenue >= $min_rev group by 1`}</Query>');
+  it('parses name, sql and the connected database it runs inside', () => {
+    const q = query('<Query name="sales" source="ref:abc123">{`select region, sum(revenue) r from orders where $region is null or region = $region group by 1`}</Query>');
     expect(q.name).toBe('sales');
     expect(q.sql).toContain('sum(revenue)');
-    expect(q.params).toEqual(['region', 'min_rev']);
-    expect(q.refs).toEqual(['abc123']);
+    expect(q.source).toBe('abc123');
+    expect(query('<Query name="q">{`select 1`}</Query>').source).toBeUndefined();
   });
 
-  it('requires name as the only attribute', () => {
+  it('requires name as the only attribute besides source', () => {
     expect(queryErrors('<Query>{`select 1`}</Query>').join()).toMatch(/name/);
     expect(queryErrors('<Query name="q" sql="select 1" />').join()).toMatch(/sql/);
     expect(queryErrors('<Query name="bad name">{`select 1`}</Query>').join()).toMatch(/identifier/i);
     expect(queryErrors('<Query name="ref_abcdef">{`select 1`}</Query>').join()).toMatch(/ref_/);
+    expect(queryErrors('<Query name="a__b">{`select 1`}</Query>').join()).toMatch(/double underscore/);
+    expect(queryErrors('<Query name="q" source="abc123">{`select 1`}</Query>').join()).toMatch(/source="ref:abc123"/);
   });
 
   it('requires a single template-literal child with SQL in it', () => {
@@ -163,26 +171,43 @@ describe('parseQueryDecl', () => {
   });
 });
 
-describe('sql text helpers', () => {
-  it('sqlParams finds $names once each, skipping $$ quoting, positional $1 and a $ glued to a word', () => {
-    expect(sqlParams("select $a, $b, $a, $$lit$$, $1, 'x$c' from t")).toEqual(['a', 'b']);
-    // Text-level on purpose: a `$name` inside a string literal still counts (the
-    // engine binder is the authority; this only over-reports, never under).
-    expect(sqlParams("select 'hello $who'")).toEqual(['who']);
+describe('parseImportDecl', () => {
+  const imported = (source: string) => parseImportDecl(el(source));
+  it('parses a name and a literal ref', () => {
+    const r = imported('<Import name="bookings" src="ref:BookRows1" />');
+    expect(r.ok && r.decl).toMatchObject({ name: 'bookings', ref: 'BookRows1' });
   });
+  it('refuses anything but name and src, children, a missing src, and a reserved name', () => {
+    const messages = (source: string) => { const r = imported(source); return r.ok ? [] : r.errors.map((e) => e.message); };
+    expect(messages('<Import name="b" src="ref:abc123" as="x" />').join()).toMatch(/only name= and src=/);
+    expect(messages('<Import name="b" />').join()).toMatch(/needs src="ref:<id>"/);
+    expect(messages('<Import name="b" src="abc123" />').join()).toMatch(/src="ref:abc123"/);
+    expect(messages('<Import name="_me" src="ref:abc123" />').join()).toMatch(/reserved/);
+    expect(messages('<Import name="b" src="ref:abc123">x</Import>').join()).toMatch(/no children/);
+  });
+});
 
-  it('queryDeps finds declared table names used as bare identifiers', () => {
-    expect(queryDeps('select * from sales s join regions r on s.region = r.region', ['sales', 'regions', 'other'])).toEqual(['sales', 'regions']);
-    expect(queryDeps('select $sales from t', ['sales'])).toEqual([]);      // a param, not a table
-    expect(queryDeps('select * from sales_2024', ['sales'])).toEqual([]);   // longer identifier
-    expect(queryDeps('select * from x.sales', ['sales'])).toEqual([]);      // schema-qualified
+describe('set= and args= maps', () => {
+  it('reads references, row fields and literals, and refuses anything else', () => {
+    expect(bindingMap({ day: '$_row.day', note: '$note', n: 3, flag: true, none: null, price: '$5' })).toEqual({
+      day: { ref: '_row.day' }, note: { ref: 'note' }, n: { literal: 3 }, flag: { literal: true }, none: { literal: null }, price: { literal: '$5' },
+    });
+    expect(bindingMap({ day: { nested: 1 } })).toBeNull();
+    expect(bindingMap({ 'bad key': 1 })).toBeNull();
+    expect(bindingMap(['$a'])).toBeNull();
+  });
+  it('reads row fields into literals inside a row, and resolves the rest now', () => {
+    const map = rowBound(bindingMap({ day: '$_row.day', note: '$note' })!, { day: '$not-a-ref' });
+    expect(map).toEqual({ day: { literal: '$not-a-ref' }, note: { ref: 'note' } });
+    expect(resolveBindings(map, (ref) => (ref === 'note' ? 'hi' : undefined))).toEqual({ day: '$not-a-ref', note: 'hi' });
   });
 });
 
 const REGION = value('<Value name="region" type="string" />');
 const MIN = value('<Value name="min_rev" type="number" default={0} />');
 const TINY = value('<Value name="tiny" type="table" value={[{"a":1}]} />');
-const SALES = query('<Query name="sales" source="ref:abc123">{`select * from public.rows where region = $region and revenue >= $min_rev`}</Query>');
+const SALES = query('<Query name="sales">{`select * from orders.rows where region = $region and revenue >= $min_rev`}</Query>');
+const ORDERS = (() => { const r = parseImportDecl(el('<Import name="orders" src="ref:abc123" />')); if (!r.ok) throw new Error('import'); return r.decl; })();
 const TOP = query('<Query name="top">{`select * from sales order by revenue desc limit 5`}</Query>');
 
 describe('collectRefNameUses', () => {
@@ -225,6 +250,12 @@ describe('collectRefNameUses', () => {
     ]);
   });
 
+  it('collects set= keys as writes, and set= / args= sources as reads', () => {
+    const uses = collectRefNameUses(nodes('<div><Button set={{"day": "$picked", "n": 2, "x": "$_row.id"}} run="$save" args={{"who": "$_me.id"}}>Go</Button></div>'))
+      .map((u) => `${u.attr}=${u.name}:${u.expects}${u.readOnly ? ':read' : ''}`);
+    expect(uses).toEqual(['set=day:scalar', 'set=picked:scalar:read', 'set=n:scalar', 'set=x:scalar', 'args=_me.id:scalar:read', 'run=save:mutation']);
+  });
+
   it('records the attribute span for diagnostics', () => {
     const src = '<Question data="$sales" />';
     const [use] = collectRefNameUses(nodes(src));
@@ -264,56 +295,24 @@ describe('validateDataflow', () => {
     expect(e2[0].message).toMatch(/scalar|value/i);
   });
 
-  it('rejects a SQL $param that names a table or nothing', () => {
-    const q = query('<Query name="q" source="ref:abc123">{`select * from public.rows where a = $sales and b = $nope`}</Query>');
-    const errors = validateDataflow(flow([REGION, MIN], [SALES, q]), []);
-    const msgs = errors.map((e) => e.message).join('\n');
-    expect(msgs).toMatch(/\$sales.*table/);
-    expect(msgs).toMatch(/\$nope/);
-    expect(errors.every((e) => e.start === q.start)).toBe(true);
+  it('rejects binding an Import in markup, pointing at a query over it', () => {
+    const errors = validateDataflow(flow([REGION], [SALES], [ORDERS]), uses('<DataTable data="$orders" />'));
+    expect(errors[0]?.message).toMatch(/an <Import> \(read it in a <Query>: select … from <name>\.rows\)/);
   });
 
-  it('rejects a dependency cycle, naming the queries', () => {
-    const a = query('<Query name="a">{`select * from b`}</Query>');
-    const b = query('<Query name="b">{`select * from a`}</Query>');
-    const errors = validateDataflow(flow([], [a, b]), []);
-    expect(errors).toHaveLength(1);
-    expect(errors[0].message).toMatch(/cycle/i);
-    expect(errors[0].message).toContain('a');
-    expect(errors[0].message).toContain('b');
+  it('admits $_me.id where a reference is only read, and refuses it anywhere it would be written', () => {
+    expect(validateDataflow(flow([], []), uses('<User userId="$_me.id" /><p>{$_me.id ? "in" : "out"}</p>'))).toEqual([]);
+    expect(validateDataflow(flow([], []), uses('<input value="$_me.id" />'))[0]?.message).toMatch(/built-ins are read-only/);
+    expect(validateDataflow(flow([], []), uses('<Button set={{"_now": "x"}}>x</Button>'))[0]?.message).toMatch(/\$_now is not readable in markup/);
   });
 
-  it('rejects a query that reads itself', () => {
-    const a = query('<Query name="a">{`select * from a`}</Query>');
-    expect(validateDataflow(flow([], [a]), [])[0].message).toMatch(/itself|cycle/i);
-  });
-});
-
-describe('queryOrder', () => {
-  it('orders dependencies first, keeping authored order among ties', () => {
-    const c = query('<Query name="c" source="ref:abc123">{`select * from public.rows`}</Query>');
-    expect(queryOrder(flow([TINY], [TOP, SALES, c]))).toEqual(['sales', 'top', 'c']);
+  it('refuses the bare $_me, saying to read its id', () => {
+    expect(validateDataflow(flow([], []), uses('<p>{$_me ? "in" : "out"}</p>'))[0]?.message).toMatch(/\$_me is the reader as a row; read its id: \$_me\.id/);
   });
 
-  it('returns null on a cycle', () => {
-    const a = query('<Query name="a">{`select * from b`}</Query>');
-    const b = query('<Query name="b">{`select * from a`}</Query>');
-    expect(queryOrder(flow([], [a, b]))).toBeNull();
-  });
-});
-
-describe('derived views', () => {
-  it('datasetRefsInDataflow dedupes across queries', () => {
-    const q2 = query('<Query name="q2" source="ref:def456">{`select * from public.rows`}</Query>');
-    expect(datasetRefsInDataflow(flow([], [SALES, q2]))).toEqual(['abc123', 'def456']);
-  });
-
-  it('initialValues seeds every scalar at its default', () => {
-    expect(initialValues(flow([REGION, MIN, TINY], []))).toEqual({ region: null, min_rev: 0 });
-  });
-
-  it('queriesDependingOn names the queries a value change re-runs, transitively', () => {
-    expect(queriesDependingOn(flow([REGION, MIN], [SALES, TOP]), ['region'])).toEqual(['sales', 'top']);
-    expect(queriesDependingOn(flow([REGION, MIN], [SALES, TOP]), ['nothing'])).toEqual([]);
+  it('refuses a set= key that is not a declared scalar', () => {
+    const errors = validateDataflow(flow([REGION], [SALES], [ORDERS]), uses('<Button set={{"sales": 1, "nope": 2}}>x</Button>'));
+    expect(errors.map((e) => e.message).join('\n')).toMatch(/set="\$sales"> binds a scalar value, but "sales" is a table/);
+    expect(errors.map((e) => e.message).join('\n')).toMatch(/set="\$nope"> refers to nothing declared/);
   });
 });
