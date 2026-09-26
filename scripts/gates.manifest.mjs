@@ -27,6 +27,8 @@
 /** @type {readonly GateSpec[]} */
 export const GATE_SPECS = Object.freeze([
   { name: 'screenshot-comments', browsers: ['chromium', 'firefox', 'webkit'], needsMail: false, timeoutMs: 150_000 },
+  // Needs no server: opens a rendered offline file from file:// in all three engines. Measured 4s locally.
+  { name: 'offline-file', browsers: ['chromium', 'firefox', 'webkit'], needsMail: false, timeoutMs: 60_000 },
   { name: 'cli-conformance', needsMail: true, timeoutMs: 180_000 },
   { name: 'browser-sessions', needsMail: false, timeoutMs: 150_000 },
   { name: 'testusers', needsMail: true, timeoutMs: 60_000 },

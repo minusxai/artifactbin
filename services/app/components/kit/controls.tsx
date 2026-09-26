@@ -415,7 +415,9 @@ export function SelectControl({ appearance = 'field', children, multiple = false
                 className="h-8 w-full min-w-36 rounded-sm border border-input bg-background px-2 text-sm text-foreground outline-none placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring/50"
               />
             </div>
-            <div role="listbox" aria-multiselectable={multiple || undefined} aria-label={label} className="max-h-56 overflow-y-auto p-1">
+            {/* Mouse down keeps focus in the search box: WebKit does not focus a pressed
+                button, so the blur below would close the list before the click chooses. */}
+            <div role="listbox" aria-multiselectable={multiple || undefined} aria-label={label} className="max-h-56 overflow-y-auto p-1" onMouseDown={(e) => e.preventDefault()}>
               {filteredEntries.map((entry, i) => {
                 const selected = multiple ? entry.value !== null && draft.includes(entry.value) : entry.value === value;
                 return (
@@ -443,7 +445,7 @@ export function SelectControl({ appearance = 'field', children, multiple = false
               ) : filteredEntries.length === 0 ? <div role="status" className="px-2 py-3 text-center text-sm text-muted-foreground">No matches</div> : null}
             </div>
             {children ? <div className="border-t border-border p-1.5" onClick={cancelDraft}>{children}</div> : null}
-            {multiple ? <div className="flex justify-end border-t border-border p-1.5"><button type="button" aria-label="Done" onClick={() => commitDraft()} className="rounded-sm px-2 py-1 text-sm font-medium hover:bg-accent">Done</button></div> : null}
+            {multiple ? <div className="flex justify-end border-t border-border p-1.5"><button type="button" aria-label="Done" onMouseDown={(e) => e.preventDefault()} onClick={() => commitDraft()} className="rounded-sm px-2 py-1 text-sm font-medium hover:bg-accent">Done</button></div> : null}
           </div>;
         })(), popupHost(rootRef.current)) : null}
       </div>

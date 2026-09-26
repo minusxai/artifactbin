@@ -16,8 +16,14 @@
  */
 import { ArtifactFileError, parseArtifactFile, type ArtifactFile } from './file-format';
 
+/**
+ * No `'unsafe-eval'`: charts evaluate Vega expressions with vega-interpreter,
+ * and no served app page allows eval either. Measured by
+ * scripts/gate-offline-file.mjs, which counts `securitypolicyviolation`
+ * events in Chromium, Firefox and WebKit (zero with this policy).
+ */
 export const ARTIFACT_FILE_CSP =
-  "default-src 'none'; script-src 'unsafe-inline' 'unsafe-eval'; style-src 'unsafe-inline'; img-src data:; font-src data:; media-src data:";
+  "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:; font-src data:; media-src data:";
 
 export interface ArtifactFileParts {
   file: ArtifactFile;
