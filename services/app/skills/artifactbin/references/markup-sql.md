@@ -1,6 +1,6 @@
 ---
 name: markup-sql
-description: The SQLite a document writes, how it differs from DuckDB and Postgres, and every function it may call.
+description: The SQLite a document writes and how it differs from DuckDB and Postgres.
 ---
 ## Read first
 
@@ -62,16 +62,11 @@ select list_contains('["EU","NA"]', 'EU') as selected
 
 ## The library
 
-The functions the engine adds to SQLite, the same in the browser, on the server
-and in the CLI:
-
-[[ sqlFunctionTable ]]
-
-`uuid()` gives a new row its id; like `random()`, it is allowed only in a
-`<Mutation>`, because a query must give the same rows every time it runs.
-
-SQLite's own functions a statement may call: [[ sqliteFunctions ]].
-Any other function is refused by name.
+The engine adds date, list, text and statistics functions to SQLite, the same in
+the browser, on the server and in the CLI: `date_add`, `date_part`,
+`date_format`, `date_series`, `to_timezone`, `median`, `list_contains`,
+`split_part`, `round` and more. Every one, with SQLite's own:
+[functions](markup-sql-functions.md). Any other function is refused by name.
 
 ## Connected Postgres
 
