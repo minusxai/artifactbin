@@ -73,6 +73,18 @@ describe('createFetchTransport', () => {
     expect(JSON.parse(String(init.body))).toEqual({ tz: ZONE, mutation: 'add', args: {}, localTables: { cart: [{ id: 1 }] } });
   });
 
+  it('people(): POSTs the ids credential-free, as a simple request, and answers the cards the door named', async () => {
+    const cards = { usr_a: { name: 'A', handle: null, image: null } };
+    const f = vi.fn(async () => ok({ people: cards }));
+    const t = createFetchTransport('/a/abc123/query', f);
+    await expect(t.people!(['usr_a', 'usr_b'])).resolves.toEqual(cards);
+    const [url, init] = f.mock.calls[0] as unknown as [string, RequestInit];
+    expect(url).toBe('/a/abc123/query');
+    expect(init).toMatchObject({ method: 'POST', credentials: 'omit', headers: { 'Content-Type': 'text/plain' } });
+    expect(JSON.parse(String(init.body))).toEqual({ people: ['usr_a', 'usr_b'] });
+    await expect(createFetchTransport('/a/x/query', vi.fn(async () => new Response('{}', { status: 404 }))).people!(['usr_a'])).rejects.toThrow('404');
+  });
+
   it('hold(): GETs one import\'s rows by its name, credential-free, and refuses what the door refuses', async () => {
     const rows = { rows: { rows: [{ a: 1 }], columns: [{ name: 'a', type: 'number' }] } };
     const f = vi.fn(async () => ok({ tables: rows }));

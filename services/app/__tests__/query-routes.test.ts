@@ -272,6 +272,71 @@ it('draft validation gives the same actionable JSX diagnostics as publishing', a
  * the private rows. The island names what may be held; the door re-decides
  * every time and never names a ref, only an import the document declares.
  */
+/*
+ * NAMING WHO THE PAGE'S OWN RESULTS SHOW. A query the page runs itself was
+ * never run by the server, so nobody sent the cards for the people its rows
+ * name. The page asks for them — `{people:[ids]}` — through the same two doors,
+ * and the door names only whom the server-side run could have named for THIS
+ * viewer: the viewer themselves (the session door), and the people in a user
+ * column of an import this viewer may hold whole, projected as a person by one
+ * of the document's queries. Anyone else is simply absent, however they were
+ * asked for.
+ */
+describe('naming the people a page computed', () => {
+  const session = (user: { id: string; email: string | null }) => ({ credential: 'session' as const, userId: user.id, email: user.email ?? '', emailVerified: true });
+  const named = async (doc: string, ids: string[], init: { actor?: ReturnType<typeof session> } = {}) => {
+    const [get, post] = await Promise.all([
+      queryGet(request(`/a/${doc}/query?q=${encodeURIComponent(JSON.stringify({ people: ids }))}`, init), params({ id: doc })),
+      queryRoute(request(`/a/${doc}/query`, { method: 'POST', ...init, json: { people: ids } }), params({ id: doc })),
+    ]);
+    const read = async (res: Response) => {
+      expect(res.status).toBe(200);
+      expect(res.headers.get('cache-control')).toBe('no-store');
+      return Object.keys(((await res.json()) as { people: Record<string, unknown> }).people).sort();
+    };
+    return { get: await read(get), post: await read(post) };
+  };
+  const users = async (...names: string[]) => Promise.all(names.map((name) => createUser({ email: `mxmx_test_people_${name}@example.com`, name })));
+
+  it('names the people in a held import a query projects, to anyone who may hold it, and nobody else', async () => {
+    const t = await mintToken('t');
+    const [alice, bob, carol, dave] = await users('alice', 'bob', 'carol', 'dave');
+    const who = { dataset: [{ id: 1, who: alice!.id }, { id: 2, who: bob!.id }], columns: [{ name: 'who', type: 'user' }] };
+    const ds = (await create(t.token, who)).id;
+    // Dave is in a user column no query shows as a person: the server would never have named him.
+    const hidden = (await create(t.token, { dataset: [{ id: 1, who: dave!.id }], columns: [{ name: 'who', type: 'user' }] })).id;
+    const doc = (await create(t.token, { visibility: 'public', markup:
+      `<Helmet><Import name="tasks" src="ref:${ds}" /><Query name="owners">{\`select who from tasks.rows\`}</Query>` +
+      `<Import name="other" src="ref:${hidden}" /><Query name="counted">{\`select count(who) as n from other.rows\`}</Query></Helmet><DataTable data="$owners" />` })).id;
+    const answer = await named(doc, [alice!.id, bob!.id, carol!.id, dave!.id, 'usr_missing']);
+    expect(answer).toEqual({ get: [alice!.id, bob!.id].sort(), post: [alice!.id, bob!.id].sort() });
+    const res = await queryRoute(request(`/a/${doc}/query`, { method: 'POST', json: { people: [alice!.id] } }), params({ id: doc }));
+    expect(await res.json()).toEqual({ people: { [alice!.id]: { name: 'alice', handle: null, image: null } } });
+  });
+
+  it('never names the people in a dataset the reader may not hold, though the document reads it for them', async () => {
+    const t = await mintToken('owner');
+    const owner = await createUser({ email: 'mxmx_test_people_owner@example.com', name: 'owner' });
+    await claimToken(owner.id, t.token);
+    const [erin] = await users('erin');
+    const ds = (await create(t.token, { dataset: [{ id: 1, who: erin!.id }], columns: [{ name: 'who', type: 'user' }], visibility: 'private', access: 'read' })).id;
+    const doc = (await create(t.token, { visibility: 'public', markup: `<Helmet><Import name="tasks" src="ref:${ds}" /><Query name="owners">{\`select who from tasks.rows\`}</Query></Helmet><DataTable data="$owners" />` })).id;
+    expect(await named(doc, [erin!.id])).toEqual({ get: [], post: [] });
+    // The owner may hold the rows, so the session door names Erin — and the owner themselves; the GET door reads no credential.
+    expect(await named(doc, [erin!.id, owner.id], { actor: session(owner) })).toEqual({ get: [], post: [erin!.id, owner.id].sort() });
+  });
+
+  it('takes a bounded list of ids that travels alone', async () => {
+    const t = await mintToken('t');
+    const ds = (await create(t.token, { dataset: ROWS })).id;
+    const doc = (await create(t.token, { markup: DOC(ds) })).id;
+    for (const bad of [{ people: 'usr_1' }, { people: [3] }, { people: ['usr_1'], only: ['sales'] }, { people: Array.from({ length: 1001 }, (_, i) => `usr_${i}`) }]) {
+      const res = await queryRoute(request(`/a/${doc}/query`, { method: 'POST', json: bad }), params({ id: doc }));
+      expect(res.status).toBe(400);
+    }
+  });
+});
+
 describe('holding an import', () => {
   const hold = (doc: string, name: string, init: { cookie?: string } = {}) => Promise.all([
     queryGet(request(`/a/${doc}/query?q=${encodeURIComponent(JSON.stringify({ hold: name }))}`), params({ id: doc })),

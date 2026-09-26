@@ -20,6 +20,7 @@
  * asked (or scheduled a flush to ask) again. A run for `sales` therefore
  * survives a later run for `trend`: nothing either one reads moved the other.
  */
+import type { PersonCard } from '@artifactbin/contracts';
 import type { DataflowState, Row, Scalar, TableResult } from '@/lib/story/dataflow';
 import { checkedLocalRows } from '@/lib/story/local-tables';
 import { graphDefaults, graphInlineTables, type GraphReads, type RuntimeGraph } from './runtime-graph';
@@ -78,6 +79,8 @@ export type CoreEvent =
   | { type: 'writeFailed'; id: number; name: string; error: unknown }
   /** Something the shell owns changed (the transport): readers must look again. */
   | { type: 'touch' }
+  /** Cards for people the page's own results name (lib/story-runtime/store asks the door). */
+  | { type: 'people'; people: Record<string, PersonCard> }
   | { type: 'dispose' };
 
 export type CoreEffect =
@@ -256,6 +259,10 @@ function reduce(state: CoreState, event: CoreEvent, effects: CoreEffect[]): Core
     case 'write': return write(state, event, effects);
     case 'written': case 'writeFailed': return written(state, event, effects);
     case 'touch': return { ...state, data: { ...state.data } };
+    case 'people': {
+      const fresh = Object.entries(event.people).filter(([id]) => !state.data.people?.[id]);
+      return fresh.length ? { ...state, data: { ...state.data, people: { ...state.data.people, ...Object.fromEntries(fresh) } } } : state;
+    }
     case 'dispose': {
       for (const w of state.localQueue) effects.push({ type: 'settle', id: w.id, outcome: { ok: false, error: new Error(DOCUMENT_CHANGED) } });
       return { ...state, disposed: true, localQueue: [] };
@@ -342,6 +349,19 @@ function answered(state: CoreState, at: Versions, answer: RunAnswer): CoreState 
     ...state, requested, answered: answeredAt, failed: failedAt,
     data: { ...state.data, tables, errors, mutationAccess, ...mergedPeople(state.data, current, answer) },
   };
+}
+
+/** The people these tables name (their `user` columns) that no answer has carried a card for. */
+export function unnamedPeople(data: DataflowState, tables: DataflowState['tables']): string[] {
+  const ids = new Set<string>();
+  for (const table of Object.values(tables)) for (const column of table.columns) {
+    if (column.type !== 'user') continue;
+    for (const row of table.rows) {
+      const id = row[column.name];
+      if (typeof id === 'string' && !data.people?.[id]) ids.add(id);
+    }
+  }
+  return [...ids];
 }
 
 /**

@@ -80,7 +80,11 @@ fetched once, by import name, through the same query door and read check as a
 run (`{"hold":"<import>"}`), which decides again on every request. Everything
 else — Postgres, anything downstream of it, the membership, data past the cap or
 out of the reader's reach — runs on the server as before. A write to a held
-dataset shows at once and the server decides; a refusal is rolled back.
+dataset shows at once and the server decides; a refusal is rolled back. The
+people an in-page result names get their cards through the same door
+(`{"people":[ids]}`), which names only whom a server run could have named for
+that reader: themselves, and the people in a user column of an import they may
+hold, when one of the document's queries shows a person from it.
 
 Running the engine needs one more CSP source, `'wasm-unsafe-eval'`, on the app
 page, the standalone `/raw` document and the offline file. It admits compiling

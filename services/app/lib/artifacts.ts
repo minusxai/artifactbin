@@ -14,7 +14,7 @@ import {storedMediaReferences} from './datasets/media-references';
 import {claimArtifactId,reserveArtifactIds} from './artifact-identities';
 import {collectRefUses} from '@/lib/story/refs';
 import {hasDocumentEditorAccess,type VerifiedAccount} from './document-policy';
-import {isQueryFailure} from '@artifactbin/contracts';
+import {isQueryFailure, type PersonCard} from '@artifactbin/contracts';
 import type {DataflowState} from '@/lib/story/dataflow';
 import {parseDatasetDefinition,serializeDatasetDefinition} from '@/lib/datasets/definition';
 import {validateUserContent,validateUserWrites,userOptions,people,retainUserScope,resolveUserColumnScope} from '@/lib/datasets/user-fields';
@@ -2574,6 +2574,37 @@ export async function holdableImports(row: ArtifactRow, flow: CompiledDataflow, 
 export async function holdImport(row: ArtifactRow, name: string, viewer: RoleActor | null): Promise<ImportTables[string] | null> {
   const flow = (await declarationsForRow(row))?.flow;
   return flow ? heldImportFor(row, flow, name, viewer) : null;
+}
+
+/**
+ * THE PEOPLE A READER'S PAGE MAY NAME, for results it computed itself (the
+ * query route's `people`): a query the server never ran sent no cards.
+ *
+ * Only whom the server-side run could have named for this viewer: the viewer
+ * themselves, and the people in a user column of an import this viewer may
+ * hold whole, when one of the document's queries shows a person from it — the
+ * rows that page computes from. The ids asked for only narrow that set; anyone
+ * outside it is absent, as an id nobody has is (lib/datasets/user-fields people).
+ */
+export async function nameablePeople(row: ArtifactRow, ids: string[], viewer: RoleActor | null): Promise<Record<string, PersonCard>> {
+  const wanted = new Set(ids), allowed = new Set<string>();
+  if (viewer?.userId && wanted.has(viewer.userId)) allowed.add(viewer.userId);
+  const flow = row.format === 'markup' ? (await declarationsForRow(row))?.flow : undefined;
+  if (flow) {
+    const shown = new Set(flow.queries.filter((q) => q.columns.some((c) => c.type === 'user')).flatMap((q) => selectQueries(flow, { only: [q.name] }).flatMap((u) => u.reads.imports)));
+    const refs = new Set<string>();
+    for (const i of flow.imports) {
+      if (!shown.has(i.name) || refs.has(i.ref) || !i.tables.some((t) => t.columns.some((c) => c.type === 'user'))) continue;
+      refs.add(i.ref);
+      for (const table of Object.values((await heldImportFor(row, flow, i.name, viewer)) ?? {})) {
+        for (const column of table.columns) if (column.type === 'user') for (const r of table.rows) {
+          const id = r[column.name];
+          if (typeof id === 'string' && wanted.has(id)) allowed.add(id);
+        }
+      }
+    }
+  }
+  return allowed.size ? people(await getDb(), [...allowed]) : {};
 }
 
 /** A bearer/session actor's scope — the editor running a DRAFT's queries. Reach and viewer are the same person here. */
