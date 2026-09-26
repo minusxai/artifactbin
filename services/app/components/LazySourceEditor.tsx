@@ -57,8 +57,8 @@ export default function LazySourceEditor(props: SourceEditorProps) {
         spellCheck={false} autoCapitalize="off" autoCorrect="off"
         value={props.value} onChange={event => props.onChange(event.target.value)} />
     </div>
-    <div className="flex items-center gap-3 px-3 py-2 text-xs" style={{ color: '#a0a0a0', borderTop: '1px solid #333' }} role="status" id={statusId}>
-      {failed && editorFailure ? editorFailure
+    <div className="flex items-center gap-3 px-3 py-2 text-xs" style={{ color: '#a0a0a0', borderTop: '1px solid #333' }} role="status">
+      {failed && editorFailure ? <span id={statusId}>{editorFailure}</span>
         : <>{failed ? 'Rich editor unavailable.' : 'Loading rich editor…'} {!props.readOnly && 'You can keep editing.'}</>}
       {failed && <button type="button" aria-label="Retry loading rich editor" className="underline cursor-pointer" onClick={() => setAttempt(n => n + 1)}>Retry</button>}
     </div>

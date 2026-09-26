@@ -19,9 +19,11 @@ import { isWebUrl } from '@/lib/story/asset-url';
 import { BackendRequestError } from '@/lib/artifact-backend/errors';
 import type { ArtifactBackend, BackendFeature } from '@/lib/artifact-backend/types';
 import {
-  OFFLINE_ASSET_REASON, OFFLINE_QUERY_REASON, parseArtifactFile, type ArtifactFile,
+  OFFLINE_ASSET_REASON, OFFLINE_QUERY_REASON, parseArtifactFile, sourceDigest, type ArtifactFile,
 } from '../file-format';
-import { createFileBackend, fileAssetInliner, LOCAL_DELETE_ONLY, OFFLINE_REASONS } from '../file-backend';
+import {
+  CHANGED_OUTSIDE, createFileBackend, fileAssetInliner, LOCAL_DELETE_ONLY, OFFLINE_REASONS, rebuildArtifactFile, sourceChangedOutside,
+} from '../file-backend';
 
 const FIXTURE = path.resolve(process.cwd(), '../../scripts/fixtures/offline-file/artifact-file.json');
 const fixture = (): ArtifactFile => parseArtifactFile(JSON.parse(readFileSync(FIXTURE, 'utf8')));
@@ -334,5 +336,92 @@ describe('comments in the file', () => {
     expect(latest().threads.map((t) => t.id)).toEqual(['ann_server']);
     expect(latest().localIds).toEqual([]);
     expect(LOCAL_DELETE_ONLY).toBe('Only comments made in this file can be deleted here.');
+  });
+});
+
+describe('a source changed outside the file', () => {
+  const headingId = (file: ArtifactFile) => /<h1 [^>]*id="([^"]+)"/.exec(file.source)![1]!;
+  const HEADING_PATH = '1.1';
+  /** What an agent does: change the top-level source and nothing else. */
+  const changed = (edit: (source: string) => string, file = fixture()): ArtifactFile => ({ ...file, source: edit(file.source) });
+  const texts = (file: ArtifactFile) => JSON.stringify(file.island.nodes);
+
+  it('is noticed by the digest of the source the rest was built from', () => {
+    const file = fixture();
+    expect(file.derivedFrom).toBe(sourceDigest(file.source));
+    expect(sourceChangedOutside(file)).toBe(false);
+    expect(sourceChangedOutside(changed((s) => s.replace('Regional sales</h1>', 'Quarterly sales</h1>')))).toBe(true);
+    // A file that records no digest is trusted as it is.
+    expect(sourceChangedOutside({ ...changed((s) => `${s} `), derivedFrom: undefined })).toBe(false);
+    expect(sourceDigest('a')).not.toBe(sourceDigest('b'));
+    expect(sourceDigest('<p>é</p>')).toBe(sourceDigest('<p>é</p>'));
+  });
+
+  it('leaves an unchanged file alone', async () => {
+    const file = fixture();
+    expect(await rebuildArtifactFile(file)).toEqual({ file, rebuilt: false, error: null });
+  });
+
+  it('is rebuilt as a commit rebuilds it: island, stylesheet, digest, and a journal line', async () => {
+    const before = fixture();
+    const file = changed((s) => s.replace('Regional sales</h1>', 'Quarterly sales</h1>').replace('<Button run', '<p className="text-pink-700">Added by an agent</p>\n  <Button run'), before);
+    const { file: after, rebuilt, error } = await rebuildArtifactFile(file, 'Asha');
+    expect(error).toBeNull();
+    expect(rebuilt).toBe(true);
+    expect(texts(after)).toContain('Quarterly sales');
+    expect(texts(after)).toContain('Added by an agent');
+    expect(texts(after)).not.toContain('Regional sales</h1>');
+    // The new paragraph got a node id, as publish stamps one; the heading kept its own.
+    expect(after.source).toMatch(/<p className="text-pink-700" id="[A-Za-z][A-Za-z0-9]{3}">Added by an agent<\/p>/);
+    expect(after.source).toContain(`id="${headingId(before)}">Quarterly sales</h1>`);
+    expect(after.css.compiled).toContain('text-pink-700');
+    expect(after.derivedFrom).toBe(sourceDigest(after.source));
+    expect(sourceChangedOutside(after)).toBe(false);
+    expect(after.journal).toEqual([{ at: expect.any(String), by: 'Asha', summary: CHANGED_OUTSIDE }]);
+    expect(CHANGED_OUTSIDE).toBe('Changed outside the file');
+    // What the download ran is untouched.
+    expect(after.snapshot).toEqual(before.snapshot);
+    expect(after.base).toEqual(before.base);
+  });
+
+  it('keeps a thread anchored to a node the outside edit kept', async () => {
+    const file = fixture();
+    const { backend, latest } = open(file);
+    const wire = await backend.createAnnotation({ path: HEADING_PATH, node_id: headingId(file), body: 'Title?' }, 'k');
+    const { file: after } = await rebuildArtifactFile(changed((s) => s.replace('Regional sales</h1>', 'Quarterly sales</h1>'), latest()));
+    const [thread] = await open(after).backend.listAnnotations();
+    expect(thread).toMatchObject({ id: wire.id, orphaned: false, snippet: 'Quarterly sales' });
+  });
+
+  it('is then edited and saved like any other file', async () => {
+    const { file: after } = await rebuildArtifactFile(changed((s) => s.replace('Regional sales</h1>', 'Quarterly sales</h1>')));
+    const { backend, latest } = open(after);
+    const { answer } = await edit(backend, (s) => s.replace('Quarterly sales</h1>', 'Yearly sales</h1>'));
+    expect(answer.ok).toBe(true);
+    expect(latest().journal.map((e) => e.summary)).toEqual([CHANGED_OUTSIDE, "Edited text in 'Yearly sales'"]);
+    expect(latest().derivedFrom).toBe(sourceDigest(latest().source));
+  });
+
+  it('keeps the last good file and names the validator\'s reason for invalid markup', async () => {
+    const file = changed((s) => s.replace('<Button run', '<p>{$missing}</p>\n  <Button run'));
+    const result = await rebuildArtifactFile(file);
+    expect(result.rebuilt).toBe(false);
+    expect(result.file).toBe(file);
+    expect(result.error).toMatch(/\$missing.* refers to nothing declared/);
+  });
+
+  it('survives markup that does not parse: the reason, and a backend that says it cannot edit', async () => {
+    const file = changed((s) => s.replace('<h1 ', '<h1 <<'));
+    const result = await rebuildArtifactFile(file);
+    expect(result.rebuilt).toBe(false);
+    expect(result.error).toBeTruthy();
+    const { backend } = open(file);
+    await expect(backend.load()).rejects.toBeInstanceOf(BackendRequestError);
+    expect(await backend.listAnnotations()).toEqual([]);
+  });
+
+  it('refuses what needs artifactbin, as a commit in the file does', async () => {
+    const result = await rebuildArtifactFile(changed((s) => s.replace('<Button run', '<img src="https://example.com/new.png" alt="" />\n  <Button run')));
+    expect(result).toMatchObject({ rebuilt: false, error: OFFLINE_ASSET_REASON });
   });
 });

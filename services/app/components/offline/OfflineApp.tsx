@@ -23,8 +23,19 @@
  *
  * The runtime is fed from the file as it was OPENED and never re-fed: the
  * editor updates the document in place, exactly as it does on the site.
+ *
+ * A file whose `source` was changed outside it (by hand, or by a coding agent
+ * following the note at the top of the file) is rebuilt from that source
+ * before it renders (lib/offline/file-backend's rebuildArtifactFile) and opens
+ * with unsaved changes; a source that does not validate keeps the last good
+ * render under a banner naming the error, and offers no editing.
+ *
+ * Code view's Monaco and "View formatted"'s prettier are not in the file: they
+ * load from the file's origin the first time code view opens
+ * (lib/offline/extras), and without a connection code view keeps the plain
+ * editor (components/SourceEditorTools).
  */
-import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ComponentType, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ComponentType, type ReactNode } from 'react';
 import { InlineStoryRuntime, type InlineStoryController } from '@/lib/story-runtime/InlineStoryRuntime';
 import {
   STORY_SELECTION_ACTION_MESSAGE, STORY_SELECTION_ACTIONS_MESSAGE, isEditFrameMessage,
@@ -41,12 +52,14 @@ import ArtifactEditor from '@/components/ArtifactEditor';
 import { FeatureGate } from '@/components/FeatureUnavailable';
 import { useIsPhoneViewport } from '@/components/MobileSheet';
 import { NameDialog } from '@/components/offline/NameDialog';
+import { SourceEditorToolsProvider, type SourceEditorTools } from '@/components/SourceEditorTools';
 import { ArtifactBackendProvider } from '@/lib/artifact-backend/context';
 import type { ArtifactBackend } from '@/lib/artifact-backend/types';
 import { APP_BAR_H, EDIT_BAR_H, RIGHT_RAIL_W } from '@/lib/story/edit-bar';
 import { useWideEditViewport } from '@/lib/story/use-edit-panel';
 import type { EditorFlushRef } from '@/lib/story/use-live-edits';
-import { createFileBackend, fileAssetInliner } from '@/lib/offline/file-backend';
+import { createFileBackend, fileAssetInliner, rebuildArtifactFile, sourceChangedOutside } from '@/lib/offline/file-backend';
+import { createExtrasLoader, extrasScriptUrl, FORMATTING_OFFLINE, RICH_EDITOR_OFFLINE } from '@/lib/offline/extras';
 import { OFFLINE_FILTER_REASON, OFFLINE_MUTATION_REASON, type ArtifactFile, type ArtifactFileEdit } from '@/lib/offline/file-format';
 import { clearDraft, readDraft, readName, writeDraft, writeName, type Draft } from '@/lib/offline/local-state';
 import { saveArtifactFile, suggestedFileName, type SaveHandle } from '@/lib/offline/save-file';
@@ -103,6 +116,8 @@ const DOCUMENT_GROUND = { light: '#ffffff', dark: '#0b0b0c' } as const;
 /** The Save button's reason when there is nothing to write. */
 export const NOTHING_TO_SAVE = 'No changes to save';
 export const UNSAVED = 'Unsaved changes';
+/** Edit's reason when the source was changed outside the file and does not validate. */
+export const INVALID_SOURCE_EDIT = 'Editing needs a valid source. Fix the markup in the file, then open it again.';
 /** How long typing and commenting settle before the crash buffer is written. */
 const DRAFT_DEBOUNCE_MS = 800;
 
@@ -173,23 +188,57 @@ const selectionActions = (viewing: boolean) => ({ edit: viewing, annotate: viewi
  * unchanged by Save; `fileName` is what Save suggests.
  */
 export function OfflineApp({ file, code = '', fileName }: { file: ArtifactFile; code?: string; fileName?: string }) {
-  const [opened, setOpened] = useState<{ file: ArtifactFile; generation: number; restored: boolean }>({ file, generation: 0, restored: false });
+  /*
+   * A source changed outside the file is rebuilt before anything renders: the
+   * runtime is fed once, so it must be fed the rebuilt file. The usual file
+   * needs no rebuild and renders at once.
+   */
+  const [opened, setOpened] = useState<{ file: ArtifactFile; generation: number; restored: boolean; invalid: string | null } | null>(
+    () => (sourceChangedOutside(file) ? null : { file, generation: 0, restored: false, invalid: null }),
+  );
+  useEffect(() => {
+    if (opened) return;
+    let live = true;
+    void rebuildArtifactFile(file, readName()).then(({ file: next, rebuilt, error }) => {
+      if (live) setOpened({ file: next, generation: 0, restored: rebuilt, invalid: error });
+    });
+    return () => { live = false; };
+  }, [file, opened]);
   const [draft, setDraft] = useState<Draft | null>(() => readDraft(file));
+  const tools = useOfflineSourceTools(file);
+  if (!opened) return <p role="status" style={{ font: '14px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif', padding: '48px 16px', textAlign: 'center', margin: 0 }}>Rebuilding {file.metadata.title} from its changed source…</p>;
   return (
-    <>
-      <OfflineSurface key={opened.generation} file={opened.file} restored={opened.restored} code={code} fileName={fileName ?? suggestedFileName(file.metadata.title)} />
+    <SourceEditorToolsProvider value={tools}>
+      <OfflineSurface key={opened.generation} file={opened.file} restored={opened.restored} invalid={opened.invalid} code={code} fileName={fileName ?? suggestedFileName(file.metadata.title)} />
       {draft && (
         <RestoreDraft
           draft={draft}
-          onRestore={() => { setOpened((o) => ({ file: draft.file, generation: o.generation + 1, restored: true })); setDraft(null); }}
+          onRestore={() => { setOpened((o) => ({ file: draft.file, generation: (o?.generation ?? 0) + 1, restored: true, invalid: null })); setDraft(null); }}
           onDiscard={() => { clearDraft(file); setDraft(null); }}
         />
       )}
-    </>
+    </SourceEditorToolsProvider>
   );
 }
 
-function OfflineSurface({ file, restored, code, fileName }: { file: ArtifactFile; restored: boolean; code: string; fileName: string }) {
+/**
+ * Code view's tools in a file: Monaco and prettier from the file's origin,
+ * loaded the first time code view asks (never on open), and the plain editor
+ * with a reason when they cannot be had.
+ */
+function useOfflineSourceTools(file: ArtifactFile): SourceEditorTools {
+  const loader = useMemo(() => createExtrasLoader(extrasScriptUrl(file.origin, file.extras), file.extras?.integrity ?? null), [file]);
+  const state = useSyncExternalStore(loader.subscribe, loader.state);
+  const editor = useCallback(() => loader.load().then(() => import('@/components/SourceEditor')), [loader]);
+  const formatter = useCallback(() => loader.load().then(() => import('@/lib/format-jsx-preview')), [loader]);
+  return useMemo(() => ({
+    editor, formatter,
+    editorFailure: RICH_EDITOR_OFFLINE,
+    formatterUnavailable: state === 'failed' ? FORMATTING_OFFLINE : null,
+  }), [editor, formatter, state]);
+}
+
+function OfflineSurface({ file, restored, invalid, code, fileName }: { file: ArtifactFile; restored: boolean; invalid: string | null; code: string; fileName: string }) {
   const runtimeRef = useRef<InlineStoryController | null>(null);
   const [sessionNonce, setSessionNonce] = useState<string | null>(null);
 
@@ -356,9 +405,13 @@ function OfflineSurface({ file, restored, code, fileName }: { file: ArtifactFile
             <button type="button" className={BAR_BUTTON} aria-pressed={railOpen} onClick={() => setRailOpen((open) => !open)}>
               Comments{openCount ? ` (${openCount})` : ''}
             </button>
-            <button type="button" className={BAR_BUTTON} aria-pressed={editing} onClick={() => { if (editing) void finishEdit(); else void beginEdit(null); }}>
-              {editing ? 'Done editing' : 'Edit'}
-            </button>
+            <FeatureGate reason={invalid ? INVALID_SOURCE_EDIT : null}>
+              {(unavailable) => (
+                <button type="button" className={BAR_BUTTON} aria-pressed={editing} disabled={unavailable.disabled} aria-describedby={unavailable['aria-describedby']} onClick={() => { if (editing) void finishEdit(); else void beginEdit(null); }}>
+                  {editing ? 'Done editing' : 'Edit'}
+                </button>
+              )}
+            </FeatureGate>
             <FeatureGate reason={dirty ? null : NOTHING_TO_SAVE}>
               {(unavailable) => (
                 <button type="button" className={`${BAR_BUTTON} border-accent/50 text-accent`} disabled={saving || !!unavailable.disabled} aria-describedby={unavailable['aria-describedby']} onClick={() => void save()}>
@@ -369,6 +422,7 @@ function OfflineSurface({ file, restored, code, fileName }: { file: ArtifactFile
           </span>
         </OfflineTopBar>
         <main aria-label={file.metadata.title} style={{ background: DOCUMENT_GROUND[data.colorMode === 'dark' ? 'dark' : 'light'], minHeight: '100vh', paddingTop: topOffset, paddingRight: rightInset, paddingBottom: editing && !wideEdit ? '50vh' : 0 }}>
+          {invalid && <InvalidSourceBanner error={invalid} />}
           <InlineStoryRuntime
             data={data}
             prepared={prepared}
@@ -423,6 +477,23 @@ function OfflineSurface({ file, restored, code, fileName }: { file: ArtifactFile
         )}
       </LiveUrl.Provider>
     </ArtifactBackendProvider>
+  );
+}
+
+/**
+ * The source was changed outside the file and does not validate: what is
+ * wrong, in the validator's words (the first of them, the rest counted), above
+ * the last render that worked.
+ */
+function InvalidSourceBanner({ error }: { error: string }) {
+  const [first, ...rest] = error.split('\n').filter((line) => line.trim());
+  return (
+    <TrustedUi>
+      <div role="alert" className="border-b border-danger/40 bg-danger/10 px-4 py-2 font-sans text-sm text-fg">
+        <strong className="font-medium">The source was changed outside this file and is not valid, so this is the last version that worked.</strong>{' '}
+        <span>{first}{rest.length ? ` (+${rest.length} more)` : ''}</span>
+      </div>
+    </TrustedUi>
   );
 }
 

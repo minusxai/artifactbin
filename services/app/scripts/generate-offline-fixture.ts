@@ -20,7 +20,7 @@ import { compileStoryCss } from '@/lib/data/story/story-css.server';
 import { stampNodeIds } from '@/lib/story/node-ids';
 import { prepareStoryParts } from '@/lib/story/prepare-runtime.server';
 import type { Dataflow, DataflowState, TableResult } from '@/lib/story/dataflow';
-import { ARTIFACT_FILE_FORMAT, parseArtifactFile, type ArtifactFile } from '@/lib/offline/file-format';
+import { ARTIFACT_FILE_FORMAT, parseArtifactFile, sourceDigest, type ArtifactFile } from '@/lib/offline/file-format';
 
 const APP = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const FIXTURE = path.resolve(APP, '../../scripts/fixtures/offline-file');
@@ -104,6 +104,8 @@ const file: ArtifactFile = {
   threads: [],
   localIds: [],
   bundle: 'core',
+  // No `extras`: their hash changes with every build, so the gate adds the current one when it renders the file.
+  derivedFrom: sourceDigest(source),
 };
 parseArtifactFile(JSON.parse(JSON.stringify(file)));
 writeFileSync(path.join(FIXTURE, 'artifact-file.json'), JSON.stringify(file, null, 1) + '\n');

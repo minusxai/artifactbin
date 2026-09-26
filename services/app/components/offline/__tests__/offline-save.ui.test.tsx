@@ -11,7 +11,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { parseArtifactFile, type ArtifactFile } from '@/lib/offline/file-format';
 import { NAME_KEY, draftKey, readDraft, writeDraft } from '@/lib/offline/local-state';
 import { suggestedFileName } from '@/lib/offline/save-file';
-import { NOTHING_TO_SAVE, OfflineApp, UNSAVED } from '../OfflineApp';
+import { CHANGED_OUTSIDE } from '@/lib/offline/file-backend';
+import { INVALID_SOURCE_EDIT, NOTHING_TO_SAVE, OfflineApp, UNSAVED } from '../OfflineApp';
 import { NAME_QUESTION } from '../NameDialog';
 
 const FIXTURE = path.resolve(process.cwd(), '../../scripts/fixtures/offline-file/artifact-file.json');
@@ -127,6 +128,39 @@ describe('Save', () => {
     await waitFor(() => expect(chrome().text()).not.toContain('Restore unsaved changes from'));
     expect(localStorage.getItem(draftKey(file))).toBeNull();
     expect(chrome().button('Save')).toBeDisabled();
+  });
+});
+
+describe('a source changed outside the file', () => {
+  const changed = (edit: (source: string) => string): ArtifactFile => { const file = fixture(); return { ...file, source: edit(file.source) }; };
+
+  it('opens rebuilt from the new source, lists it in Changes and offers to save it', async () => {
+    const written: string[] = [];
+    vi.stubGlobal('showSaveFilePicker', vi.fn(async () => ({ createWritable: async () => ({ write: async (blob: Blob) => { written.push(await blob.text()); }, close: async () => {} }) })));
+    render(<OfflineApp file={changed((s) => s.replace('Regional sales</h1>', 'Quarterly sales</h1>'))} code={CODE} />);
+    expect(await screen.findByRole('heading', { name: 'Quarterly sales' })).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Regional sales' })).toBeNull();
+    await waitFor(() => expect(chrome().text()).toContain(UNSAVED));
+    expect(chrome().button(/^Changes/)).toHaveTextContent('Changes (1)');
+    fireEvent.click(chrome().button('Save'));
+    await waitFor(() => expect(written).toHaveLength(1));
+    const saved = parseArtifactFile(JSON.parse(/id="afbin-file">([^<]*)<\/script>/.exec(written[0]!)![1]!));
+    expect(saved.derivedFrom).not.toBe(fixture().derivedFrom);
+    expect(JSON.stringify(saved.island.nodes)).toContain('Quarterly sales');
+    expect(saved.journal.map((entry) => entry.summary)).toEqual([CHANGED_OUTSIDE]);
+  });
+
+  it('keeps the last good render under a banner that names the error, and does not offer editing', async () => {
+    render(<OfflineApp file={changed((s) => s.replace('<Button run', '<p>{$missing}</p>\n  <Button run'))} code={CODE} />);
+    expect(await screen.findByRole('heading', { name: 'Regional sales' })).toBeInTheDocument();
+    await waitFor(() => expect(chrome().text()).toMatch(/source was changed outside this file.*\$missing.* refers to nothing declared/s));
+    const alert = [...document.querySelectorAll('[data-trusted-ui]')].map((h) => h.shadowRoot!).flatMap((r) => [...r.querySelectorAll('[role="alert"]')]);
+    expect(alert).toHaveLength(1);
+    const edit = chrome().button('Edit');
+    expect(edit).toBeDisabled();
+    expect(edit).toHaveAccessibleDescription(INVALID_SOURCE_EDIT);
+    expect(chrome().button('Save')).toBeDisabled();
+    expect(chrome().text()).not.toContain(UNSAVED);
   });
 });
 
