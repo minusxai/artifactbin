@@ -92,6 +92,16 @@ describe('the reading-position script', () => {
     expect(readStoryRuntimeManifest(fixture('{"entry":"/story/entry-A.js","anchor":"https://evil.example/a.js"}')).anchor)
       .toBeNull();
   });
+
+  it('names the page\'s SQLite wasm beside the entry, on disk; none for an older manifest or one off our origin', () => {
+    const { sqlite } = storyRuntimeAssets();
+    expect(sqlite).toMatch(/^\/story\/sqlite3-[0-9a-f]{16}\.wasm$/);
+    expect(existsSync(path.join(process.cwd(), 'public', sqlite!.replace(/^\//, '')))).toBe(true);
+    resetStoryRuntimeManifest();
+    expect(readStoryRuntimeManifest(fixture('{"entry":"/story/entry-A.js"}')).sqlite).toBeNull();
+    resetStoryRuntimeManifest();
+    expect(readStoryRuntimeManifest(fixture('{"entry":"/story/entry-A.js","sqlite":"https://evil.example/x.wasm"}')).sqlite).toBeNull();
+  });
 });
 
 describe('the serving path degrades instead of failing', () => {
@@ -109,7 +119,7 @@ describe('the serving path degrades instead of failing', () => {
     resetStoryRuntimeManifest();
     const missing = path.join(tmpdir(), 'mx-absent', 'manifest.json');
     expect(() => storyRuntimeAssets(missing)).not.toThrow();
-    expect(storyRuntimeAssets(missing)).toEqual({ entry: null, anchor: null, comment: null, lazy: [] });
+    expect(storyRuntimeAssets(missing)).toEqual({ entry: null, anchor: null, comment: null, lazy: [], sqlite: null });
   });
 
   it('still reports the real assets when the build IS there', () => {
