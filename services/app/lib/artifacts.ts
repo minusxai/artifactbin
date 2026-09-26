@@ -2585,10 +2585,12 @@ export async function holdImport(row: ArtifactRow, name: string, viewer: RoleAct
  * hold whole, when one of the document's queries shows a person from it — the
  * rows that page computes from. The ids asked for only narrow that set; anyone
  * outside it is absent, as an id nobody has is (lib/datasets/user-fields people).
+ * Without `ids`, everyone in that set: the offline file, which can ask nobody
+ * later, carries them all (lib/offline/assemble.server).
  */
-export async function nameablePeople(row: ArtifactRow, ids: string[], viewer: RoleActor | null): Promise<Record<string, PersonCard>> {
-  const wanted = new Set(ids), allowed = new Set<string>();
-  if (viewer?.userId && wanted.has(viewer.userId)) allowed.add(viewer.userId);
+export async function nameablePeople(row: ArtifactRow, viewer: RoleActor | null, ids?: string[]): Promise<Record<string, PersonCard>> {
+  const wanted = ids ? new Set(ids) : null, allowed = new Set<string>();
+  if (viewer?.userId && (!wanted || wanted.has(viewer.userId))) allowed.add(viewer.userId);
   const flow = row.format === 'markup' ? (await declarationsForRow(row))?.flow : undefined;
   if (flow) {
     const shown = new Set(flow.queries.filter((q) => q.columns.some((c) => c.type === 'user')).flatMap((q) => selectQueries(flow, { only: [q.name] }).flatMap((u) => u.reads.imports)));
@@ -2599,7 +2601,7 @@ export async function nameablePeople(row: ArtifactRow, ids: string[], viewer: Ro
       for (const table of Object.values((await heldImportFor(row, flow, i.name, viewer)) ?? {})) {
         for (const column of table.columns) if (column.type === 'user') for (const r of table.rows) {
           const id = r[column.name];
-          if (typeof id === 'string' && wanted.has(id)) allowed.add(id);
+          if (typeof id === 'string' && (!wanted || wanted.has(id))) allowed.add(id);
         }
       }
     }

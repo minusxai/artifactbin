@@ -137,7 +137,7 @@ async function held(artifact: ArtifactRow, name: string, viewer: RoleActor | nul
  * (lib/artifacts nameablePeople): an id it may not name is simply absent.
  */
 async function named(artifact: ArtifactRow, ids: string[], viewer: RoleActor | null, extra: Record<string, string>, authorize?: () => Promise<void>): Promise<Response> {
-  const people = await nameablePeople(artifact, ids, viewer);
+  const people = await nameablePeople(artifact, viewer, ids);
   try { await authorize?.(); } catch (error) { if (error instanceof DatasetError) return json({ error: 'not_found' }, 404, { ...extra, 'Cache-Control': 'no-store' }); throw error; }
   return json({ people }, 200, { ...extra, 'Cache-Control': 'no-store', [REVALIDATE_ACTOR_HEADER]: '1' });
 }
