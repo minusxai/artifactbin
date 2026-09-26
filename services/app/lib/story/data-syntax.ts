@@ -1,0 +1,20 @@
+/**
+ * WHICH SQL A DOCUMENT'S DATA HALF IS WRITTEN IN. `meta.dataSyntax: 2` is the
+ * SQLite syntax (`<Import>`, `set=`, `$_me.id`); a document without it was
+ * written for the previous query engine (DuckDB: `source=` + `public.rows`,
+ * `_signals`, bare `$_me`).
+ *
+ * The text alone cannot tell the two apart — `a / b` parses in both and divides
+ * integers differently — so the answer is a durable marker, set by the writes
+ * that validate a whole document under the current rules: every creation and
+ * every whole-document write. A partial edit keeps what the document had. The
+ * one-off migration (lib/sqlite-syntax-migration) converts each unmarked
+ * document once; nothing converts a marked one.
+ */
+export const DATA_SYNTAX = 2;
+
+/** The marker as the metadata patch a write merges in. */
+export const DATA_SYNTAX_META = { dataSyntax: DATA_SYNTAX } as const;
+
+export const hasCurrentDataSyntax = (meta: unknown): boolean =>
+  !!meta && typeof meta === 'object' && (meta as { dataSyntax?: unknown }).dataSyntax === DATA_SYNTAX;

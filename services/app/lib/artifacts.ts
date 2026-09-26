@@ -66,6 +66,7 @@ import {newEditId} from './story/splice';
 import type {StringEdit} from './story/edit-batch';
 import { nodeIndex, stampNodeIds } from './story/node-ids';
 import { COMPILED_DATAFLOW, finalizeArtifactMetadata, readCompiledDataflow, storedCompiledDataflow } from './story/parsed-artifact-metadata';
+import { DATA_SYNTAX_META } from './story/data-syntax';
 import { isEmptyDataflow, scalarMatches, type Row, type Scalar } from '@/lib/story/dataflow';
 import { declarationsOf } from '@/lib/story/helmet';
 import { compileWithLoader } from '@/lib/story/compile-dataflow';
@@ -450,7 +451,8 @@ export async function createArtifact(
   if (input.format === 'markup' && input.source) {
     input = { ...input, source: stampNodeIds(input.source, { retireLegacyAliases: true }).source };
   }
-  input = { ...input, meta: finalizeArtifactMetadata(input.format, input.source, input.meta) };
+  // A document is born in the current data syntax (lib/story/data-syntax).
+  input = { ...input, meta: { ...finalizeArtifactMetadata(input.format, input.source, input.meta), ...(input.format === 'markup' ? DATA_SYNTAX_META : {}) } };
   let sourceIds: string[] = [];
   if(input.format==='markup'&&input.source) {
     sourceIds=[...nodeIndex(input.source).keys()];
