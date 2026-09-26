@@ -45,8 +45,7 @@ const staticJson = (el: JsxElement, name: string): unknown => {
 
 /**
  * The Value a control WRITES and what it can write, from the REF_ATTRS scalar
- * positions — plus `<Switch value="$x">`, which the seeded contract binds
- * although REF_ATTRS names only `checked` for it (see the workstream report).
+ * positions.
  */
 function controlBindings(el: JsxElement): Array<{ name: string; domain: ControlDomain }> {
   const table = el.isComponent ? REF_ATTRS.components[el.tag] : REF_ATTRS.html[el.tag.toLowerCase()];
@@ -55,12 +54,12 @@ function controlBindings(el: JsxElement): Array<{ name: string; domain: ControlD
   for (const a of el.attributes) {
     if (!a.value.static) continue;
     const attr = el.isComponent ? a.name : a.name.toLowerCase();
-    const expects = table?.[attr] ?? (el.isComponent && el.tag === 'Switch' && attr === 'value' ? 'scalar' : undefined);
+    const expects = table?.[attr];
     if (expects !== 'scalar' || READ_ONLY_POSITIONS[tag]?.has(attr)) continue;
     const name = refName(a.value.json);
     if (!name) continue;
     const choosesFromOptions = attr === 'value' && (tag === 'Select' || tag === 'Segmented' || tag === 'select');
-    const toggles = (tag === 'Switch' && (attr === 'checked' || attr === 'value')) || (tag === 'input' && attr === 'checked') || (tag === 'Dialog' && attr === 'open');
+    const toggles = (tag === 'Switch' && attr === 'checked') || (tag === 'input' && attr === 'checked') || (tag === 'Dialog' && attr === 'open');
     out.push({ name, domain: choosesFromOptions ? { kind: 'options', el } : toggles ? { kind: 'boolean' } : { kind: 'open' } });
   }
   return out;

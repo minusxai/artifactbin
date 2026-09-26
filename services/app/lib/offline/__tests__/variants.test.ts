@@ -25,7 +25,7 @@ describe('valueDomains', () => {
   it('reads a Select bound to a $query, a literal Segmented and a Switch; text inputs have no domain', () => {
     const d = valueDomains(nodes(`<div>
       <Select label="Region" value="$region" options="$regions" placeholder="All regions" />
-      <Switch label="Paid" value="$paid" />
+      <Switch label="Paid" checked="$paid" />
       <Input label="Note" value="$note" />
       <Segmented label="Unused" value="$unused" options={["a","b"]} />
     </div>`), twoFilters, base);
