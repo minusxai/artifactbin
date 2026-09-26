@@ -8,7 +8,7 @@
  */
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import MobileSheet, { isPhoneViewport } from '@/components/MobileSheet';
+import MobileSheet, { isPhoneViewport, subscribeSheets } from '@/components/MobileSheet';
 import ShareLink from '@/components/ShareLink';
 import ThemePicker, { ModeChip } from '@/components/ThemePicker';
 import VersionHistory from '@/components/VersionHistory';
@@ -30,6 +30,18 @@ describe('MobileSheet', () => {
     expect(panel.textContent).toContain('hello');
     fireEvent.click(screen.getByLabelText('Close sheet'));
     expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it('announces while any sheet is open, so the reader rail can step aside', () => {
+    const seen: boolean[] = [];
+    const stop = subscribeSheets((open) => seen.push(open));
+    const one = render(<MobileSheet label="Comments" onClose={() => {}} size="half">a</MobileSheet>);
+    const two = render(<MobileSheet label="Sharing" onClose={() => {}}>b</MobileSheet>);
+    one.unmount();
+    expect(seen.at(-1)).toBe(true);
+    two.unmount();
+    stop();
+    expect(seen).toEqual([false, true, true, true, false]);
   });
 
   it('size="half" caps the sheet at half the screen and puts NO scrim over the subject — it stays readable and scrollable', () => {

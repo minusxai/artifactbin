@@ -177,6 +177,24 @@ describe('renderReaderChrome', () => {
     expect(chrome()).not.toContain('data-mx-forked-from');
   });
 
+  it("stamps the document's own ground, so the chrome drawn over it takes that palette", () => {
+    expect(chrome({ ground: 'dark' })).toContain('data-mx-reader-state="shown" data-mx-ground="dark"');
+    expect(chrome({ ground: 'light' })).toContain('data-mx-ground="light"');
+    expect(chrome()).not.toContain('data-mx-ground');
+  });
+
+  it('while editing, keeps only the tools: no star, like, comment or fork', () => {
+    const html = chrome({ edit: true, editing: true, fork: { href: '/fork' } });
+    expect(html).toContain('data-mx-reader-state="shown" data-mx-editing');
+    for (const gone of ['data-mx-github-star', 'data-mx-reader-action="like"', 'data-mx-reader-action="comment"', 'data-mx-fork']) {
+      expect(html).not.toContain(gone);
+    }
+    for (const kept of ['data-mx-reader-action="edit"', 'data-mx-reader-action="share"', 'data-mx-reader-trigger="controls"', 'data-mx-reader-trigger="menu"']) {
+      expect(html).toContain(kept);
+    }
+    expect(chrome({ edit: true, editing: true, panels: false })).not.toContain('data-mx-reader-action="fork"');
+  });
+
   it('offers Edit only to a writer, before sharing and settings', () => {
     const html = chrome({ edit: true });
     expect(html).toContain('data-mx-reader-action="edit" aria-label="Edit" data-mx-tip="Edit"');

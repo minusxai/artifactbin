@@ -122,6 +122,8 @@ input.mx-rail-title { min-width: 0; width: 100%; background: transparent; border
 }
 .mx-present button:hover { background: color-mix(in srgb, var(--foreground, gray) 14%, transparent); }
 .mx-present-count { font-variant-numeric: tabular-nums; color: var(--muted-foreground, gray); padding: 0 2px; }
+/* A phone's reader byline and rail own the bottom edge; the slide controls take the top. */
+@media (max-width: 639px) { .mx-present { top: max(16px, env(safe-area-inset-top)); bottom: auto; } }
 /* Presenting is the document alone: the rail would be in the projected frame. */
 :fullscreen .mx-rail { display: none; }
 @media (max-width: 720px) { .mx-rail { display: none; } }
@@ -506,13 +508,27 @@ body[data-mx-story-root] { padding-top: var(--mx-chrome-inset, 0px) !important; 
 /* PHONE — logo top-left, action rail on the right edge, byline along the bottom. */
 @media (max-width: 639px) {
   .mx-reader-chrome { inset: 0 !important; pointer-events: none !important; }
+  /* The star is a desktop nicety: on a phone it only covered the document's
+     first lines. The menu still links the repository. */
+  .mx-reader-github { display: none !important; }
+  /* The rail, byline and their fade sit straight ON the document, so they take
+     the document's ground (a dark theme in a light app), not the app's. */
+  .mx-reader-chrome.mx-reader-chrome[data-mx-ground="light"] {
+    --mx-reader-bg: #ffffff; --mx-reader-fg: #1a2129; --mx-reader-muted: #5a6572;
+    --mx-reader-border: #e1e6ea; --mx-reader-accent: #0e9d4f; --mx-reader-on-accent: #ffffff; --mx-reader-scheme: light;
+  }
+  .mx-reader-chrome.mx-reader-chrome[data-mx-ground="dark"] {
+    --mx-reader-bg: #10151b; --mx-reader-fg: #e6edf3; --mx-reader-muted: #7d8590;
+    --mx-reader-border: #202832; --mx-reader-accent: #3fe77b; --mx-reader-on-accent: #10151b; --mx-reader-scheme: dark;
+  }
+  /* A sheet (comments, settings, sharing, the menu) owns the screen: the rail
+     and byline step aside, even pinned, and come back when it closes by its X. */
+  .mx-reader-chrome.mx-reader-chrome--covered {
+    opacity: 0 !important; visibility: hidden !important; pointer-events: none !important;
+  }
   /* While editing, the rail and byline would sit over the document (and the
      selected block's handles); the editor's own bar carries Done. */
   .mx-reader-chrome--editing { display: none !important; }
-  .mx-reader-github {
-    position: fixed !important; top: max(10px, env(safe-area-inset-top)) !important;
-    right: max(10px, env(safe-area-inset-right)) !important;
-  }
   .mx-reader-chrome > * { pointer-events: auto !important; }
   .mx-reader-home {
     position: absolute !important; top: max(10px, env(safe-area-inset-top)) !important;
@@ -562,11 +578,6 @@ body[data-mx-story-root] { padding-top: var(--mx-chrome-inset, 0px) !important; 
   .mx-reader-home img { width: ${CHROME_IDENTITY.logoSize}px !important; height: ${CHROME_IDENTITY.logoSize}px !important; filter: none !important; }
   /* Editing on a phone: the page's toolbar takes the top, and the tile would sit under it. */
   .mx-reader-chrome--pinned .mx-reader-home { display: none !important; }
-  /* The editor owns the top edge, including Done at the right. Keep GitHub
-     available in the action rail instead of covering that toolbar. */
-  .mx-reader-chrome--pinned .mx-reader-github {
-    position: static !important; order: -1 !important;
-  }
   /* Keep each action with its subject; the title wraps instead of disappearing. */
   .mx-reader-byline { font-size: 14px !important; flex-direction: column !important; align-items: stretch !important; gap: 10px !important; }
   .mx-reader-byline > .mx-reader-brand-crumb, .mx-reader-byline > .mx-reader-chevron { display: none !important; }

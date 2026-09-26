@@ -42,6 +42,32 @@ export function useIsPhoneViewport() {
   return phone;
 }
 
+/*
+ * A sheet OWNS the phone's screen while it is open. The reader chrome lives in
+ * a higher top layer (TrustedUi's navigation layer) than a sheet can reach, so
+ * instead of stacking under it the chrome listens here and steps its rail and
+ * byline aside; closing the sheet brings them back. Counted, because a sheet
+ * can open over another.
+ */
+let openSheets = 0;
+const sheetListeners = new Set<(open: boolean) => void>();
+const announceSheets = () => { for (const listener of sheetListeners) listener(openSheets > 0); };
+const markSheetOpen = () => {
+  openSheets += 1;
+  announceSheets();
+  return () => {
+    openSheets -= 1;
+    announceSheets();
+  };
+};
+
+/** Follow whether any sheet is open; called at once with the current answer. */
+export function subscribeSheets(listener: (open: boolean) => void): () => void {
+  sheetListeners.add(listener);
+  listener(openSheets > 0);
+  return () => { sheetListeners.delete(listener); };
+}
+
 /** How far the handle must be dragged down before letting go closes the sheet. */
 const SWIPE_CLOSE_PX = 64;
 
@@ -61,6 +87,7 @@ export default function MobileSheet({ label, onClose, size = 'tall', header, swi
   children: React.ReactNode;
 }) {
   const portalContainer = useTrustedPortalContainer();
+  useEffect(markSheetOpen, []);
   // Only the handle and header drag: the body is a scroller, and a downward
   // swipe there means "scroll up", not "go away".
   const dragFrom = useRef<number | null>(null);

@@ -138,6 +138,18 @@ export interface ReaderChromeInput {
    * paragraph nobody else can see.
    */
   archived?: { version: number; head: number } | null;
+  /**
+   * The DOCUMENT's own mode, which can differ from the app's: a dark theme read
+   * in a light app. On a phone the rail, byline and their fade sit straight on
+   * the document, so they take this palette (`data-mx-ground`). Absent: the app's.
+   */
+  ground?: 'light' | 'dark';
+  /**
+   * The writer is editing: the rail keeps only its tools (edit, share,
+   * notifications, settings, profile). The star and the reader's own actions
+   * (like, comment, fork) act on the published document, not the draft.
+   */
+  editing?: boolean;
 }
 
 /**
@@ -273,6 +285,8 @@ export function renderReaderChrome(input: ReaderChromeInput): string {
   // An archived render has no doors at all — see ReaderChromeInput.archived.
   const fork = archived ? null : input.fork ?? null;
   const edit = !archived && (input.edit ?? false);
+  const editing = input.editing ?? false;
+  const reading = !archived && !editing;
   const sharingIcon = sharingIconFor({ visibility: input.visibility ?? 'private', hasInvitedUsers: input.hasInvitedUsers ?? false });
   const username = author?.username ?? null;
   const viewer = input.viewer ?? null;
@@ -315,12 +329,14 @@ export function renderReaderChrome(input: ReaderChromeInput): string {
   const aboutThis = signIn || fork || forkedFrom;
 
   return `<div class="mx-reader-chrome" data-mx-reader-chrome data-mx-reader-state="shown"`
+    + (input.ground ? ` data-mx-ground="${input.ground}"` : '')
+    + (editing ? ' data-mx-editing' : '')
     + `${artifactId ? ` data-mx-artifact-id="${escapeHtml(artifactId)}"` : ''}>`
     + '<a class="mx-reader-home" href="/" target="_top" aria-label="Home" data-mx-reader-logo data-mx-tip="Home">'
     + '<img src="/logo-128.png" alt=""></a>'
     + '<div class="mx-reader-rail" data-mx-reader-rail>'
-    + `<span data-mx-github-star class="mx-reader-github">${githubStarMarkup()}</span>`
-    + (archived ? '' : action(
+    + (editing ? '' : `<span data-mx-github-star class="mx-reader-github">${githubStarMarkup()}</span>`)
+    + (!reading ? '' : action(
       'like',
       reactions?.like.liked ? 'Unlike' : 'Like',
       ICON_HEART,
@@ -329,14 +345,14 @@ export function renderReaderChrome(input: ReaderChromeInput): string {
       // rewrites it when the page answers a press.
       `<span class="mx-reader-count" data-mx-reader-count="like">${reactions && reactions.like.count > 0 ? reactions.like.count : ''}</span>`,
     ))
-    + (archived ? '' : action(
+    + (!reading ? '' : action(
       'comment',
       'Comment',
       ICON_COMMENT,
       reactions ? ` data-mx-href="${escapeHtml(reactions.comment.href)}"` : '',
       `<span class="mx-reader-count" data-mx-reader-count="comment">${reactions && reactions.comment.count > 0 ? reactions.comment.count : ''}</span>`,
     ))
-    + (archived ? '' : input.panels === false ? action('fork', 'Fork artifact', ICON_FORK, input.forkBusy ? ' disabled aria-busy="true"' : '') : fork ? renderFork(fork) : '')
+    + (!reading ? '' : input.panels === false ? action('fork', 'Fork artifact', ICON_FORK, input.forkBusy ? ' disabled aria-busy="true"' : '') : fork ? renderFork(fork) : '')
     + (edit ? action('edit', 'Edit', ICON_PENCIL) : '')
     + (input.share ? action('share', 'Share', `<span data-mx-visibility="${input.visibility ?? 'private'}" data-mx-sharing-icon="${sharingIcon}">${ICON(visibilityIconPaths(sharingIcon))}</span>`, '', '<span class="mx-reader-share-text">Share</span>') : '')
     + (viewer && input.notifications ? action('notifications','Notifications',ICON('<path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9"/><path d="M10 21h4"/>'),'',input.notifications.unread?'<span aria-label="Unread notifications" style="position:absolute;right:4px;top:4px;width:7px;height:7px;border-radius:50%;background:#dc2626"></span>':''):'')
