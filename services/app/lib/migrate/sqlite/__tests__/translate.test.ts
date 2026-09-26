@@ -70,6 +70,12 @@ describe('translateSql rules', () => {
     manual(`select strptime(d, ['%Y', '%d']) from x`, /list of formats/);
   });
 
+  it('chr(n) → char(n)', () => {
+    ok(`select chr(65) as a, chr(code + 1) as b from x`, `select char(65) as a, char(code + 1) as b from x`);
+    ok(inert('chr(65)'), inert('chr(65)'));
+    ok('select t.chr(65) from x', 'select t.chr(65) from x');
+  });
+
   it(':: casts bind to the preceding primary expression', () => {
     ok('select a::date from t', 'select date(a) from t');
     ok('select a::timestamp, b::timestamptz from t', "select strftime('%Y-%m-%dT%H:%M:%fZ', a), strftime('%Y-%m-%dT%H:%M:%fZ', b) from t");
