@@ -58,7 +58,9 @@ export async function checkDocumentData(source: string, load: RefLoader): Promis
   const compiled = compileDataflow(flow, await prepareCompile(flow, schemaLoaderFor(load)), split.body);
   if (!compiled.ok) return { ok: false, error: 'invalid_sql', details: compiled.errors.map((e) => e.message) };
   const writes = await admitWrites(compiled.compiled, load);
-  if (writes.length) return { ok: false, error: 'invalid_sql', details: writes };
+  // Who may write the dataset at all is a reference's question; what the policy admits is the statement's.
+  if (writes.refs.length) return { ok: false, error: 'invalid_refs', details: writes.refs };
+  if (writes.sql.length) return { ok: false, error: 'invalid_sql', details: writes.sql };
   const columns = Object.fromEntries(compiled.compiled.queries.map((q) => [q.name, q.columns.map((c) => ({ name: c.name, type: c.type ?? 'string' }) as DatasetColumn)]));
   const bindings = await validateQueryBindings(split.body, columns, load);
   if (bindings.length) return { ok: false, error: 'invalid_refs', details: bindings };
@@ -75,14 +77,15 @@ export async function checkDocumentData(source: string, load: RefLoader): Promis
  * be seen from here; a statement the policy never admits is the publisher's
  * 400, not every viewer's 403.
  */
-async function admitWrites(flow: CompiledDataflow, load: RefLoader): Promise<string[]> {
+async function admitWrites(flow: CompiledDataflow, load: RefLoader): Promise<{ refs: string[]; sql: string[] }> {
+  const refs: string[] = [];
   const out: string[] = [];
   const types = valueTypes(flow);
   for (const m of flow.mutations) {
     if (!('import' in m.target)) continue;
     const r = await load(importRef(flow, m.target.import) ?? '');
     const refusal = r ? writeRefusal(r) : 'the dataset does not resolve';
-    if (refusal) { out.push(`<Mutation name="${m.name}">: ${refusal}`); continue; }
+    if (refusal) { refs.push(`<Mutation name="${m.name}">: ${refusal}`); continue; }
     if (!r?.datasetPolicy || !r.catalog) continue;
     const table = importedTables(r.catalog).find((t) => t.name === (m.target as { table: string }).table);
     if (!table) { out.push(`<Mutation name="${m.name}">: the dataset has no stored table ${m.target.table}`); continue; }
@@ -96,7 +99,7 @@ async function admitWrites(flow: CompiledDataflow, load: RefLoader): Promise<str
     });
     if (isQueryFailure(result)) out.push(`<Mutation name="${m.name}">: ${result.error}`);
   }
-  return out;
+  return { refs, sql: out };
 }
 
 /** The message Vega-Lite's normaliser throws for a spec it cannot read, or null for one it can read. */

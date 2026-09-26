@@ -98,13 +98,17 @@ describe('queries', () => {
     expect(ok.ok && ok.compiled.queries[0]).toMatchObject({ sql: expect.stringContaining('$_me__id'), params: ['day', '_me.id', '_now', '_tz'], reads: { values: ['day'], builtins: ['_me', '_members', '_me.id', '_now', '_tz'] } });
   });
 
-  it('type columns by origin, through an earlier query, by the dry run, or not at all', async () => {
+  it('type columns by origin, through an earlier query, by the dry run over sample rows, or not at all', async () => {
     const result = await compile(doc(`${IMPORT}<Value name="t" type="table" value={[{"n":1}]} />
       <Query name="a">{\`select booked_by, day, 1 + 1 as two, (select max(slot) from bookings.rows) as last from bookings.rows\`}</Query>
       <Query name="b">{\`select booked_by as who, n * 2 as twice from a, t\`}</Query>`));
     if (!result.ok) throw new Error(result.errors.map((e) => e.message).join('\n'));
-    expect(result.compiled.queries.find((q) => q.name === 'a')!.columns).toEqual([{ name: 'booked_by', type: 'user' }, { name: 'day', type: 'date' }, { name: 'two', type: null }, { name: 'last', type: null }]);
-    expect(result.compiled.queries.find((q) => q.name === 'b')!.columns).toEqual([{ name: 'who', type: 'user' }, { name: 'twice', type: null }]);
+    // Expressions take the type their values show over one typed sample row of each import.
+    expect(result.compiled.queries.find((q) => q.name === 'a')!.columns).toEqual([{ name: 'booked_by', type: 'user' }, { name: 'day', type: 'date' }, { name: 'two', type: 'number' }, { name: 'last', type: 'string' }]);
+    expect(result.compiled.queries.find((q) => q.name === 'b')!.columns).toEqual([{ name: 'who', type: 'user' }, { name: 'twice', type: 'number' }]);
+    // …and nothing is claimed for a column no row can show.
+    const filtered = await compile(doc(`${IMPORT}<Query name="none">{\`select slot || '!' as s from bookings.rows where false\`}</Query>`));
+    expect(filtered.ok && filtered.compiled.queries[0]!.columns).toEqual([{ name: 's', type: null }]);
     const values = await compile(doc(`<Query name="c">{\`select 1 + 1 as two, 'x' as word, date('2026-01-02') as day\`}</Query>`));
     expect(values.ok && values.compiled.queries[0]!.columns).toEqual([{ name: 'two', type: 'number' }, { name: 'word', type: 'string' }, { name: 'day', type: 'date' }]);
   });
@@ -132,7 +136,8 @@ describe('mutations', () => {
   it('write exactly one imported table or local table Value, with plain params as arguments', async () => {
     const result = await compile(doc(`${IMPORT}<Value name="draft" type="table" value={[]} columns={[{"name":"text","type":"string"}]} /><Value name="text" />
       <Mutation name="add">{\`insert into draft (text) values ($text)\`}</Mutation>
-      <Mutation name="note">{\`update bookings.rows set note = $text where id = $_row.id\`}</Mutation>`));
+      <Mutation name="note">{\`update bookings.rows set note = $text where id = $_row.id\`}</Mutation>
+      <Query name="rows">{\`select id from bookings.rows\`}</Query>`, '<For each={$rows} keyBy="id"><Button run="$note">Note</Button></For>'));
     if (!result.ok) throw new Error(result.errors.map((e) => e.message).join('\n'));
     expect(result.compiled.mutations).toMatchObject([
       { name: 'add', target: { local: 'draft' }, args: [{ name: 'text', type: 'string' }] },
@@ -159,7 +164,9 @@ describe('the markup that binds the compiled record', () => {
     <Query name="slots">{\`select id, day, slot from bookings.rows\`}</Query>
     <Mutation name="book">{\`insert into bookings.rows (id, note) values ($_row.id, $note)\`}</Mutation>
     <Mutation name="rename">{\`update bookings.rows set note = $label where id = $_row.id\`}</Mutation>
-    <Mutation name="edit">{\`update bookings.rows set note = $_value where id = $_row.id\`}</Mutation>`, body);
+    <Mutation name="edit">{\`update bookings.rows set note = $_value where id = $_row.id\`}</Mutation>`, body + PLACED);
+  /** Every row action placed where it can run, so each case speaks only of its own control. */
+  const PLACED = '<DataTable data="$slots" rowKey="id"><Column col="slot"><input aria-label="Slot" value="$_row.slot" run="$edit" /></Column><Column col="id"><Button run="$book">B</Button><Button run="$rename" args={{"label": "x"}}>R</Button></Column></DataTable>';
 
   it('fills arguments from same-named values or args=, and says so at the control', async () => {
     expect((await compile(booking('<For each={$slots} keyBy="id"><Button run="$book">Book</Button></For>'))).ok).toBe(true);
@@ -172,6 +179,9 @@ describe('the markup that binds the compiled record', () => {
   it('puts row and cell built-ins where a control supplies them', async () => {
     expect((await errorsOf(booking('<Button run="$book">Book</Button>')))[0]).toMatch(/reads \$_row\.id, the row its control sits in: put the control inside a <For>/);
     expect((await errorsOf(booking('<For each={$slots} keyBy="id"><Button run="$edit">Edit</Button></For>')))[0]).toMatch(/reads \$_value, the value an editing cell holds/);
+     // A row action no control runs has no row to read; a cell editor must write the value it holds.
+    expect(await errorsOf(doc(`${IMPORT}<Mutation name="unpay">{\`delete from bookings.rows where id = $_row.id\`}</Mutation>`))).toEqual(['<Mutation name="unpay"> reads $_row.id — it must be invoked inside a DataTable Column or keyed For: put a control with run="$unpay" there']);
+    expect(await errorsOf(booking('<DataTable data="$slots" rowKey="id"><Column col="slot"><input aria-label="S" value="$_row.slot" run="$book" /></Column></DataTable>'))).toEqual(['<input run="$book"> edits a cell, so book writes the value it holds: read $_value in its statement, or run it from a <Button>']);
   });
 
   it('checks set= keys and types', async () => {
