@@ -65,13 +65,13 @@ describe('a Question that cannot resolve is refused', () => {
     expect((await create({ title: 'n', markup: wrap('<Number col="revenue" agg="sum" />') })).status).toBe(400);
   });
 
-  it('rejects the RETIRED direct binding data="ref:<id>", pointing at a <Query>', async () => {
+  it('rejects the RETIRED direct binding data="ref:<id>", pointing at an <Import> and a <Query>', async () => {
     const { status, body } = await create({ title: 'ref', markup: wrap(`<Question data="ref:${datasetId}" />`) });
     expect(status).toBe(400);
     const message = body.details[0].message as string;
     expect(message).toMatch(/does not name a declared table/);
     expect(message).toContain(`ref:${datasetId}`);
-    expect(message).toMatch(/<Query name="rows" source="ref:/);
+    expect(message).toContain(`<Import name="data" src="ref:${datasetId}" /><Query name="rows">`);
   });
 
   it('names the single_value shape when singleValueConfig is written without kind: "single_value"', async () => {

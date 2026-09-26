@@ -70,7 +70,7 @@ describe('queries', () => {
   });
 
   it('say which column does not exist', async () => {
-    expect(await errorsOf(doc(`${IMPORT}<Query name="slots">{\`select b.slott from bookings.rows b\`}</Query>`))).toEqual(['<Query name="slots"> reads b.slott — no such column']);
+    expect(await errorsOf(doc(`${IMPORT}<Query name="slots">{\`select b.slott from bookings.rows b\`}</Query>`))).toEqual(['<Query name="slots"> reads b.slott — no such column (did you mean slot?)']);
   });
 
   it('refuse the removed syntax by name', async () => {

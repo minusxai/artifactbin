@@ -41,7 +41,7 @@ it('rejects foreign reservations and racing creates; invalid content does not co
 });
 it('keeps dataset reference ids unchanged and refuses unuploaded data dependencies',async()=>{
  const token=await mintToken('mxmx_test_reserved_graph');const ids=await reserveIds({tokenId:token.id,userId:null},'batch_000000000003');
- const markup=`<Helmet><Query name="sales" source="ref:${ids[0]}">{\`select * from public.rows\`}</Query></Helmet><p>Sales</p>`;
+ const markup=`<Helmet><Import name="sales_data" src="ref:${ids[0]}" /><Query name="sales">{\`select * from sales_data.rows\`}</Query></Helmet><p>Sales</p>`;
  const post=(body:Record<string,unknown>)=>create(request('/api/artifacts',{method:'POST',token:token.token,json:body}));
  expect((await post({reserved_id:ids[1],markup})).status).not.toBe(201);
  const data=await post({reserved_id:ids[0],dataset:[{amount:42}]});expect(data.status).toBe(201);expect((await data.json()).id).toBe(ids[0]);
@@ -70,7 +70,7 @@ it('previews unpublished document and dataset IDs locally with no server reads',
  try{
   const token=await cli.connect('mxmx_test_reserved_preview');const [report,data,appendix,picture]=await reserveIds({tokenId:token.id,userId:null},'batch_000000000005');
   await writeFile(join(cli.root,'sales.csv'),'amount\n42\n');await writeFile(join(cli.root,'picture.png'),Buffer.from([1,2,3]));
-  const source=`---\nid: ${report}\n---\n<Helmet><Query name="sales" source="ref:${data}">{\`select sum(amount) as total from public.rows\`}</Query></Helmet><a href="/a/${appendix}">Appendix</a><img src="ref:${picture}" alt="Picture" />`;
+  const source=`---\nid: ${report}\n---\n<Helmet><Import name="sales_data" src="ref:${data}" /><Query name="sales">{\`select sum(amount) as total from sales_data.rows\`}</Query></Helmet><a href="/a/${appendix}">Appendix</a><img src="ref:${picture}" alt="Picture" />`;
   await writeFile(join(cli.root,'report.jsx'),source);await writeFile(join(cli.root,'appendix.jsx'),`---\nid: ${appendix}\n---\n<p>Appendix</p>`);
   session=await startPreview({root:cli.root,home:cli.home,files:['report.jsx'],localFiles:{[report]:'report.jsx',[data]:'sales.csv',[appendix]:'appendix.jsx',[picture]:'picture.png'},dataset:async()=>{throw Error('Unexpected server read');}});
   const result=await fetch(session.url+'/query',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({file:'report.jsx',values:{}})});
@@ -137,7 +137,7 @@ it('CLI add, preview mapping and push preserve a registered dependency graph thr
   await writeFile(join(cli.root,'sales.csv'),'amount\n42\n');await writeFile(join(cli.root,'report.jsx'),'<p>Draft</p>');
   const ids=await cli.invoke(['add','sales.csv','report.jsx']);
   expect(ids['sales.csv']).toMatch(/^[A-Za-z0-9]{6}$/);expect(await cli.invoke(['add','sales.csv','report.jsx'])).toEqual(ids);
-  const source=(await readFile(join(cli.root,'report.jsx'),'utf8')).replace('<p>Draft</p>',`<Helmet><Query name="sales" source="ref:${ids['sales.csv']}">{\`select * from public.rows\`}</Query></Helmet><p>Sales</p>`);
+  const source=(await readFile(join(cli.root,'report.jsx'),'utf8')).replace('<p>Draft</p>',`<Helmet><Import name="sales_data" src="ref:${ids['sales.csv']}" /><Query name="sales">{\`select * from sales_data.rows\`}</Query></Helmet><p>Sales</p>`);
   await writeFile(join(cli.root,'report.jsx'),source);
   await cli.invoke(['push','report.jsx']);
   expect((await(await getDb()).query('SELECT id FROM artifacts ORDER BY id')).rows.map(row=>row.id)).toEqual(Object.values(ids).sort());

@@ -180,7 +180,7 @@ describe('POST /api/query (owner path — a draft)', () => {
   it('a draft that declares nothing answers empty; a draft whose Helmet is malformed answers 400 with the grammar errors', async () => {
     const t = await mintToken('t');
     const empty = await draftQueryRoute(request('/api/query', { method: 'POST', token: t.token, json: { markup: '<p>x</p>' } }));
-    expect(await empty.json()).toEqual({ tables: {}, errors: {} });
+    expect(await empty.json()).toEqual({ tables: {}, errors: {}, flow: null });
     const bad = await draftQueryRoute(request('/api/query', { method: 'POST', token: t.token, json: { markup: '<Helmet><Value name="n" type="number" default="lots" /></Helmet><p>x</p>' } }));
     expect(bad.status).toBe(400);
     expect(JSON.stringify(await bad.json())).toMatch(/default/);

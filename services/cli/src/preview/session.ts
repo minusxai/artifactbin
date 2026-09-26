@@ -47,9 +47,9 @@ export async function startPreview(options:{root:string;files:string[];home:stri
  const compiledFor=async(file:string,revision:string,declared:ReturnType<typeof dataflowOf>):Promise<CompiledDataflow>=>{
   const cached=compiledCache.get(file);
   if(cached?.revision===revision)return cached.value;
-  // An import that is not selected compiles as missing; one whose local file cannot be read says so (422).
-  let unreadable:Refusal|undefined;
-  const value=await compileLocal(declared,async id=>tableFor(id).catch(error=>{if(error instanceof Refusal&&error.status===422)unreadable??=error;return undefined;})).catch(error=>{throw unreadable??(error instanceof Refusal?error:new Refusal(400,error instanceof Error?error.message:String(error)));});
+  // A reference preview may not read (403) or a local file it cannot read (422) is that refusal, not a compile error.
+  let refused:Refusal|undefined;
+  const value=await compileLocal(declared,async id=>tableFor(id).catch(error=>{if(error instanceof Refusal)refused??=error;return undefined;})).catch(error=>{throw refused??(error instanceof Refusal?error:new Refusal(400,error instanceof Error?error.message:String(error)));});
   compiledCache.set(file,{revision,value});return value;
  };
  // Only refs in selected dataset inputs extend preview's asset scope. Query SQL

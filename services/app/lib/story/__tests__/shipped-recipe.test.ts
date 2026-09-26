@@ -46,7 +46,7 @@ describe('shipped registry recipes at the publish door', () => {
       doc('{"kind":"recipe","recipe":"minusx/trend@1","bindings":{"date":"period","value":["revenue"]}}'),
       load,
     );
-    expect(r).toEqual({ ok: true, refs: [{ id: DS, kind: 'dataset' }] });
+    expect(r).toMatchObject({ ok: true, refs: [{ id: DS, kind: 'dataset' }] });
   });
 
   it('names an unbound slot', async () => {

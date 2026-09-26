@@ -83,7 +83,14 @@ export async function evaluateDataflow(engine: DataflowEngine, flow: CompiledDat
     } catch (error) { errors[q.name] = error instanceof Error ? error.message : 'Dataset query failed'; }
   }));
 
-  const local_ = queries.filter((q) => q.engine === 'sqlite');
+  // An import the caller could not resolve (deleted, or no longer readable) is named, not run into.
+  const unavailable = new Map(flow.imports.filter((i) => !Object.hasOwn(imports, i.name)).map((i) => [i.name, i.ref]));
+  const local_ = queries.filter((q) => {
+    if (q.engine !== 'sqlite') return false;
+    const missing = q.reads.imports.find((name) => unavailable.has(name));
+    if (missing) errors[q.name] = `<Query name="${q.name}"> reads ${missing} (ref:${unavailable.get(missing)}), which is unavailable — deleted, or no longer readable here`;
+    return !missing;
+  });
   if (!local_.length) return { values, tables, errors };
   const read = new Set(local_.flatMap((q) => q.reads.imports));
   const params = Object.assign({}, ...local_.map((q) => bindParams(q.params, logical))) as Record<string, Scalar>;

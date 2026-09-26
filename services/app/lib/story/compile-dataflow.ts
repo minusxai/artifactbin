@@ -124,6 +124,21 @@ export function rewriteBuiltinFields(sql: string): { sql: string; fields: Map<st
   return { sql: out, fields, now, branches };
 }
 
+/** A statement that touches SQLite's own schema table is DDL, whatever the engine says first. */
+const SCHEMA_TABLE = /\bsqlite_(master|schema|temp_master|temp_schema)\b/i;
+const QUERY_WRITES = 'writes — a <Query> runs only read statements (one SELECT); a write is a <Mutation>';
+
+/** Levenshtein distance, for "did you mean". */
+function editDistance(a: string, b: string): number {
+  let row = Array.from({ length: b.length + 1 }, (_, j) => j);
+  for (let i = 1; i <= a.length; i++) {
+    const next = [i];
+    for (let j = 1; j <= b.length; j++) next[j] = Math.min(row[j]! + 1, next[j - 1]! + 1, row[j - 1]! + (a[i - 1] === b[j - 1] ? 0 : 1));
+    row = next;
+  }
+  return row[b.length]!;
+}
+
 /** The clock functions a statement may not call: the current time is `$_now`, identical on server and browser. */
 const CLOCK_FUNCTIONS = new Set(['current_date', 'current_time', 'current_timestamp']);
 /** Functions that read `'now'` when handed it. */
@@ -215,6 +230,8 @@ export function compileDataflow(flow: Dataflow, ctx: CompileContext, body?: JsxN
     const kind = kinds.get((schema ?? table).toLowerCase());
     if (schema && kind === 'import') {
       const i = imports.find((x) => x.name.toLowerCase() === schema.toLowerCase());
+      const declared = flow.imports.find((x) => x.name.toLowerCase() === schema.toLowerCase());
+      if (!i && declared) return `reads ${name} — ${declared.name} (ref:${declared.ref}) is not a dataset or folder you can read`;
       return `reads ${name} — ${schema} has no table ${table}${i ? ` (it has ${i.tables.map((t) => t.name).join(', ') || 'no tables'})` : ''}`;
     }
     if (schema?.toLowerCase() === 'public') return `reads ${name} — source= with public.rows is removed: <Import name="…" src="ref:<id>" /> the dataset and read <name>.${table}`;
@@ -267,6 +284,13 @@ export function compileDataflow(flow: Dataflow, ctx: CompileContext, body?: JsxN
   const analyses = new Map<string, StatementAnalysis>();
   const failed = new Set<string>();
   const byName = new Map(flow.queries.map((q) => [q.name.toLowerCase(), q]));
+  /** "no such column", with the names in reach that are one or two edits away. */
+  const noSuchColumn = (column: string): string => {
+    const wanted = column.split('.').pop()!.toLowerCase();
+    const names = new Set([...base, ...queryRelations()].flatMap((r) => r.columns.map((c) => c.name)));
+    const near = [...names].filter((n) => n.toLowerCase() !== wanted && editDistance(n.toLowerCase(), wanted) <= 2).slice(0, 3);
+    return `reads ${column} — no such column${near.length ? ` (did you mean ${near.join(', ')}?)` : ''}`;
+  };
   const queryRelations = (): Relation[] => [...compiledQueries.values()].map((q) => ({ schema: 'main', table: q.name, columns: q.columns.map((c) => ({ name: c.name, type: c.type ?? 'string' })) }));
 
   const compileQuery = (q: QueryDecl, path: QueryDecl[]): void => {
@@ -285,7 +309,7 @@ export function compileDataflow(flow: Dataflow, ctx: CompileContext, body?: JsxN
         if (upstream && !failed.has(upstream.name.toLowerCase())) {
           if (upstream === q) return fail('reads itself — a query cannot depend on its own result');
           const cycle = path.indexOf(upstream);
-          if (cycle >= 0) return fail(`reads ${upstream.name}, which reads ${q.name} back — a query cannot depend on its own result (${[...path.slice(cycle), q, upstream].map((p) => p.name).join(' → ')})`);
+          if (cycle >= 0) return fail(`reads ${upstream.name}, which reads ${q.name} back — a cycle: a query cannot depend on its own result (${[...path.slice(cycle), q, upstream].map((p) => p.name).join(' → ')})`);
           compileQuery(upstream, [...path, q]);
           if (compiledQueries.has(upstream.name.toLowerCase())) continue;
           return fail(`reads ${upstream.name}, which does not compile`);
@@ -293,9 +317,11 @@ export function compileDataflow(flow: Dataflow, ctx: CompileContext, body?: JsxN
         if (upstream) return fail(`reads ${upstream.name}, which does not compile`);
         if (missing) return fail(missingTable(missing));
         const column = /^no such column: (.+)$/.exec(message)?.[1];
-        return fail(column ? `reads ${column} — no such column` : message.replace(/^a <Query>/, '—'));
+        if (column) return fail(noSuchColumn(column));
+        if (SCHEMA_TABLE.test(message)) return fail(QUERY_WRITES);
+        return fail(message.replace(/^a <Query>/, '—'));
       }
-      if (analysis.kind !== 'select') return fail('writes — a <Query> is one SELECT; a write is a <Mutation>');
+      if (analysis.kind !== 'select') return fail(QUERY_WRITES);
       const { reads, params } = readsOf(analysis, fields, 'query', q, QUERY_TAG, q.name);
       if (now && analysis.functions.some((f) => DATE_FUNCTIONS.has(f))) return fail("reads the clock with 'now' — the current time is the built-in $_now (UTC; the reader's zone is $_tz)");
       analyses.set(key, analysis);
@@ -385,7 +411,9 @@ export function compileDataflow(flow: Dataflow, ctx: CompileContext, body?: JsxN
       const missing = /^no such table: (.+)$/.exec(message)?.[1];
       if (missing) return fail(missingTable(missing));
       const column = /^no such column: (.+)$/.exec(message)?.[1];
-      return fail(column ? `reads ${column} — no such column` : message.replace(/^a <Mutation>/, '—'));
+      if (column) return fail(noSuchColumn(column));
+      if (SCHEMA_TABLE.test(message)) return fail('changes the schema — a <Mutation> is one INSERT, UPDATE or DELETE on an imported table or a table Value');
+      return fail(message.replace(/^a <Mutation>/, '—'));
     }
     if (analysis.kind === 'select') return fail('only reads — a <Mutation> is one INSERT, UPDATE or DELETE; a read is a <Query>');
     const written = [...new Map(analysis.writes.map((w) => [`${w.schema.toLowerCase()}\0${w.table.toLowerCase()}`, w])).values()];
