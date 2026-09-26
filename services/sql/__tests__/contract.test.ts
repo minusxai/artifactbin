@@ -11,7 +11,7 @@ import { isQueryFailure } from '@artifactbin/contracts';
 import { SQL_ROUTES, serveSql, sqlClient } from '@artifactbin/sql';
 import { createSql } from '@artifactbin/sql/local';
 import { createSqliteSql } from '@artifactbin/sql/sqlite';
-import type { SqliteDatabase } from '@artifactbin/sql/core';
+import { loadSqlite, type SqliteDatabase, type SqlExtensions } from '@artifactbin/sql/core';
 
 type Engine = 'sqlite';
 const pool = createSql({ maxRows: 3, timeoutMs: 2000 }, { workers: 2 });
@@ -257,5 +257,24 @@ describe('trusted mutation extensions',()=>{
    const columns=[{name:'a',type:'string' as const}];
    expect(await threads.mutate({table:{name:'ref_x',rows:[],columns},sql:'insert into ref_x values (fixture_value())',params:{}})).toMatchObject({rows:[{a:'fixture'}]});
   }finally{await threads.close();}
+ });
+ const FIXTURE=new URL('./fixtures/fixture-extension.ts',import.meta.url).href;
+ it.each([['in this thread',async()=>{const svc=createSqliteSql({}, (await import(FIXTURE)).default);return {svc,close:async()=>{}};}],['worker threads',async()=>{const svc=createSql({}, {workers:1,extensions:FIXTURE});return {svc,close:()=>svc.close()};}]] as const)('a mutation that aborts to demand a result returns its continuation and writes nothing (%s)',async(_shape,make)=>{
+  const {svc,close}=await make();
+  try{
+   const columns=[{name:'a',type:'string' as const}],sql="insert into ref_x values (fixture_generate('hello'))";
+   expect(await svc.mutate({table:{name:'ref_x',rows:[{a:'kept'}],columns},sql,params:{}})).toEqual({error:'Execution requires continuation',continuation:{kind:'fixture_generate',payload:{text:'hello'}}});
+   // The dry run is the NULL stub: the statement runs, nothing is demanded.
+   expect(await svc.dryRunMutations({tables:{ref_x:{columns}},mutations:[{name:'x',target:'x',sql}],paramNames:[]})).toEqual({errors:[]});
+   expect((await svc.run({tables:{},queries:[{name:'x',sql:"select fixture_generate('hello')"}],params:{}})).x).toHaveProperty('error',expect.stringMatching(/fixture_generate/));
+  }finally{await close();}
+ });
+ it('analysis installs the extensions only for a write',async()=>{
+  const engine=await loadSqlite(),extensions=(await import(FIXTURE)).default as SqlExtensions;
+  const schema=[{schema:'main',table:'nodes',columns:[{name:'a',type:'string' as const}]}];
+  const write=engine.analyze("insert into nodes select fixture_generate($t)",schema,{mode:'write',extensions});
+  expect(write).toMatchObject({kind:'insert',functions:expect.arrayContaining(['fixture_generate'])});
+  expect(()=>engine.analyze("insert into nodes select fixture_generate($t)",schema)).toThrow(/fixture_generate/);
+  expect(()=>engine.analyze("select fixture_generate($t)",schema)).toThrow(/fixture_generate/);
  });
 });

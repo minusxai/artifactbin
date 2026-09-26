@@ -18,10 +18,18 @@ export { SqliteDatabase, Refused, TimedOut, type Prepared, type Relation, type S
 export type { ReadBounds } from './reads';
 export type { WriteBounds } from './writes';
 export type { Sqlite3 } from './wasm';
+export type { SqlExtensions } from '../extensions';
 
 export interface SqliteEngine {
-  /** What `sql` touches over these relations (views carry `sql`); throws the guard's reason when it is refused. */
-  analyze(sql: string, schema: Relation[]): StatementAnalysis;
+  /**
+   * What `sql` touches over these relations (views carry `sql`); throws the
+   * guard's reason when it is refused. `mode: 'write'` analyzes it as the
+   * <Mutation> it will run as: the composition's extension functions are
+   * installed first (`setupMutation`, as a dry run), so a statement the engine
+   * would run is not refused for calling one. Only which functions exist
+   * changes — whether the statement is a read or a write is the caller's to judge.
+   */
+  analyze(sql: string, schema: Relation[], options?: { mode: 'write'; extensions?: SqlExtensions }): StatementAnalysis;
   run(input: RunInput, bounds: ReadBounds): Record<string, QueryOutcome>;
   mutate(input: MutationInput, bounds: WriteBounds, extensions?: SqlExtensions): MutationOutcome;
   dryRun(input: DryRunInput): DryRunResult;
@@ -38,7 +46,8 @@ function engine(sqlite3: Sqlite3): SqliteEngine {
     try { return fn(db); } finally { db.close(); }
   };
   return {
-    analyze: (sql, schema) => withDatabase((db) => {
+    analyze: (sql, schema, options) => withDatabase((db) => {
+      if (options?.mode === 'write') options.extensions?.setupMutation?.(db, { dryRun: true });
       for (const relation of schema) if (relation.sql === undefined) db.createTable(relation);
       db.createViews(schema.flatMap((r) => (r.sql === undefined ? [] : [{ ...r, sql: r.sql }])));
       const prepared = db.prepare(sql, 'any');

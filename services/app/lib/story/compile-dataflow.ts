@@ -23,9 +23,10 @@
  * the values a dry run over the document's own data produces, else null.
  */
 import { paramSqlName, type ColumnType, type DatasetColumn, type Scalar, type StatementAnalysis } from '@artifactbin/contracts';
-import { loadSqlite, type Relation, type SqliteEngine } from '@artifactbin/sql/core';
+import { loadSqlite, type Relation, type SqlExtensions, type SqliteEngine } from '@artifactbin/sql/core';
 import { isQueryFailure } from '@artifactbin/contracts';
 import type { JsxNode, ValidationError } from '@/lib/jsx';
+import { sqlExtensions } from '@/lib/sql/extensions';
 import { BUILTIN_TABLES, builtinInput, isBuiltinTable, rowField, VIEWER, VIEWER_ID } from './builtins';
 import type { BuiltinInput, BuiltinTable, CompiledDataflow, CompiledImport, CompiledMutation, CompiledQuery, CompiledReads, CompiledValue } from './compiled-dataflow';
 import { ARGS_ATTR, bindingMap, MUTATION_TAG, QUERY_TAG, refName, scalarMatches, SET_ATTR, type Dataflow, type MutationDecl, type QueryDecl } from './dataflow';
@@ -49,6 +50,8 @@ type PostgresShape = { columns: DatasetColumn[]; params: string[] } | { error: s
 
 export interface CompileContext {
   engine: SqliteEngine;
+  /** The composition's functions a <Mutation> may call (lib/sql/extensions); a <Query> never sees them. */
+  extensions: SqlExtensions;
   /** Every ref the declarations name → what it is, or null when it does not resolve. */
   sources: Record<string, ImportSource | null>;
   postgres: Record<string, PostgresShape>;
@@ -167,7 +170,7 @@ export async function prepareCompile(flow: Dataflow, load: SchemaLoader): Promis
     try { postgres[postgresKey(q)] = await source.probe(sql, defaults, bindTypes); }
     catch (error) { postgres[postgresKey(q)] = { error: error instanceof Error ? error.message : 'the query could not run' }; }
   }
-  return { engine, sources, postgres };
+  return { engine, extensions: sqlExtensions(), sources, postgres };
 }
 
 const scalarTypes = (flow: Dataflow): Record<string, ColumnType> =>
@@ -405,7 +408,7 @@ export function compileDataflow(flow: Dataflow, ctx: CompileContext, body?: JsxN
     const fail = (message: string) => { errors.push(at(m, MUTATION_TAG, `<Mutation name="${m.name}"> ${message}`)); return null; };
     const { sql, fields, now } = rewriteBuiltinFields(m.sql);
     let analysis: StatementAnalysis;
-    try { analysis = ctx.engine.analyze(sql, [...base, ...queryRelations()]); }
+    try { analysis = ctx.engine.analyze(sql, [...base, ...queryRelations()], { mode: 'write', extensions: ctx.extensions }); }
     catch (e) {
       const message = errorText(e);
       const missing = /^no such table: (.+)$/.exec(message)?.[1];

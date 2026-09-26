@@ -4,6 +4,7 @@ import {startEventPublisher} from '@/lib/event-outbox';
 import {startDomainRecheck} from '@/lib/custom-domains';
 import {setDocumentEditorPolicy,type DocumentEditorPolicy} from '@/lib/document-policy';
 import {setMutationInvocation,type MutationInvocationFactory} from '@/lib/mutation-invocation';
+import {useSqlExtensions} from '@/lib/sql/extensions';
 import type {Actor,Upstream} from '@artifactbin/contracts';
 import {getDb,type Db} from '@/lib/db';
 import {inProcess} from '@artifactbin/utils';
@@ -17,6 +18,12 @@ export interface AppHostOptions extends AppServerOptions {
  shutdown?:()=>Promise<void>;
  initialize?:(db:Db)=>Promise<void>;
  identity?:(upstream:Upstream)=>{fetch:(request:Request)=>Promise<Response>};
+ /**
+  * The composition's SQL extensions module: the SAME specifier its SQL pool receives
+  * (`createSql(caps, { extensions })`), absolute (a file URL or a package name) so both
+  * resolve one file. The app's own analysis of a <Mutation> installs it too (lib/sql/extensions).
+  */
+ sqlExtensions?:string;
 }
 export interface AppHost {
  fetch:(request:Request)=>Promise<Response>;
@@ -29,6 +36,7 @@ export async function createAppHost(options:AppHostOptions={}):Promise<AppHost>{
  setNotificationDelivery(options.notificationDelivery);
  const db=await getDb();
  setMutationInvocation(options.mutationInvocation);
+ await useSqlExtensions(options.sqlExtensions);
  if(options.services)setServices(options.services);
  await options.initialize?.(db);
  const stopPublisher=startEventPublisher(db);

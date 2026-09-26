@@ -22,10 +22,13 @@ A complete result (including an empty result) omits the flag, just like an unpag
 
 Trusted composition roots may supply `SqlExtensions.setupMutation(database, { input, dryRun })`, an engine-neutral
 hook: it receives the mutation's own guarded, throwaway database before the statement is prepared, may register
-functions under names only it knows, and may return a continuation the engine calls after the statement ran (a
-continuation it answers makes the write a `QueryFailure` carrying it; nothing is persisted). Reads are unaffected.
-In a server the hook is a MODULE (`createSql(caps, { extensions: <module URL> })`) whose default export every engine
-thread imports. Opaque `extensions` input and `continuation` failures cross the same local/HTTP contract.
+functions under names only it knows, and may return a continuation the engine calls after the statement ran —
+or after a function aborted it, so a function may throw to demand an external result (a continuation it answers
+makes the write a `QueryFailure` carrying it; nothing is persisted). A dry run (`dryRun: true`) should stub such a
+function (return NULL). Reads are unaffected. `analyze(sql, schema, { mode: 'write', extensions })` installs the
+hook as a dry run before preparing, so a mutation's analysis sees the functions its run will. In a server the hook
+is a MODULE (`createSql(caps, { extensions: <module URL> })`) whose default export every engine thread imports; the
+app host takes the same absolute specifier (`AppHostOptions.sqlExtensions`) for its own analysis. Opaque `extensions` input and `continuation` failures cross the same local/HTTP contract.
 Downstream code owns extension authorization and validation. The OSS engine installs no external-effect functions.
 
 Errors: a query that cannot run is a `QueryFailure` for that query; a malformed body is `400 {"error":"bad_request"}`

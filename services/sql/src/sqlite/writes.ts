@@ -117,10 +117,11 @@ export function runMutation(sqlite3: Sqlite3, input: MutationInput, bounds: Writ
   const target = `${quote(spec.schema)}.${quote(spec.table)}`;
   const db = new SqliteDatabase(sqlite3);
   const open: Prepared[] = [];
+  let continuation: ReturnType<NonNullable<SqlExtensions['setupMutation']>> = undefined;
   try {
     // The effect is keyed by rowid, so a column may not shadow it.
     if (names.some((n) => /^(rowid|oid|_rowid_)$/i.test(n))) throw new Error(`a column named ${names.find((n) => /^(rowid|oid|_rowid_)$/i.test(n))} cannot be written by a <Mutation>`);
-    const continuation = extensions.setupMutation?.(db, { input, dryRun: false });
+    continuation = extensions.setupMutation?.(db, { input, dryRun: false });
     const effect = new Effect(db, target, columns.length);
     db.createTable(spec, (i) => `${effect.unset}(${i})`);
     db.insertRows(spec, input.table.rows);
@@ -191,6 +192,9 @@ export function runMutation(sqlite3: Sqlite3, input: MutationInput, bounds: Writ
   } catch (e) {
     if (e instanceof TimedOut) return { error: `the mutation ran too long and was stopped (limit ${bounds.timeoutMs}ms)`, timedOut: true };
     if (e instanceof PolicyDenied) return { error: e.message, code: 'policy_denied' };
+    // An extension may abort the statement to demand an external result: the demand, not the abort, is the answer.
+    const pending = continuation?.();
+    if (pending) return { error: 'Execution requires continuation', continuation: pending };
     return { error: message(e) };
   } finally {
     for (const p of open) p.finalize();
