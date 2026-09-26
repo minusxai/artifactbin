@@ -29,3 +29,13 @@ it('uses scoped authenticated doors and cancels requests at document disposal', 
   await expect(transport.run({}, [])).rejects.toThrow();
   expect(fetcher).toHaveBeenCalledTimes(3);
 });
+
+it('holds one import through the session door, by its name', async () => {
+  const rows = { rows: { rows: [{ a: 1 }], columns: [] } };
+  const fetcher = vi.fn(async (_url: RequestInfo | URL, _init?: RequestInit) => new Response(JSON.stringify({ tables: rows })));
+  const transport = createAuthenticatedTransport('AbC123', fetcher);
+  await expect(transport.hold!('sales')).resolves.toEqual(rows);
+  expect(fetcher.mock.calls[0]![0]).toBe('/a/AbC123/query');
+  expect(JSON.parse(String(fetcher.mock.calls[0]![1]!.body))).toEqual({ hold: 'sales' });
+  transport.dispose();
+});

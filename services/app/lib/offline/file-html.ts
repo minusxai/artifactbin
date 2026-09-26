@@ -40,12 +40,15 @@ function cspOrigin(origin: string): string | null {
  * lib/offline/extras inserts when code view is first opened).
  *
  * No `'unsafe-eval'`: charts evaluate Vega expressions with vega-interpreter,
- * and no served app page allows eval either. Measured by
+ * and no served app page allows eval either. `'wasm-unsafe-eval'` admits
+ * exactly one thing more — compiling WebAssembly — because the file runs its
+ * queries on the embedded SQLite engine; Chromium, Firefox and WebKit all
+ * refuse `WebAssembly.instantiate` from file:// without it (probed 2026-09-26). Measured by
  * scripts/gate-offline-file.mjs, which counts `securitypolicyviolation`
  * events in Chromium, Firefox and WebKit (zero with this policy).
  */
 export function artifactFileCsp(origin: string): string {
-  const scripts = ["'unsafe-inline'", cspOrigin(origin)].filter(Boolean).join(' ');
+  const scripts = ["'unsafe-inline'", "'wasm-unsafe-eval'", cspOrigin(origin)].filter(Boolean).join(' ');
   return `default-src 'none'; script-src ${scripts}; style-src 'unsafe-inline'; img-src data:; font-src data:; media-src data:`;
 }
 

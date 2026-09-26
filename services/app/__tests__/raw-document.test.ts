@@ -31,13 +31,13 @@ const HELMET =
  */
 const markupCspFor = (id: string) => [
   "default-src 'none'",
-  `script-src 'unsafe-inline' 'self' ${BASE}/libraries/`,
+  `script-src 'unsafe-inline' 'self' 'wasm-unsafe-eval' ${BASE}/libraries/`,
   "style-src 'unsafe-inline'",
   "img-src 'self' data: blob:",
   "font-src 'self' data:",
   "media-src 'self' data: blob:",
   "frame-src 'self'",
-  `connect-src ${BASE}/a/${id}/query ${BASE}/a/${id}/events ${BASE}/a/${id}/events/frame ${BASE}/a/${id}/mutate ${BASE}/a/${id}/resolve ${BASE}/geojson/ ${BASE}/basemap/ blob: data:`,
+  `connect-src ${BASE}/a/${id}/query ${BASE}/a/${id}/events ${BASE}/a/${id}/events/frame ${BASE}/a/${id}/mutate ${BASE}/a/${id}/resolve ${BASE}/geojson/ ${BASE}/basemap/ ${BASE}/story/ blob: data:`,
   "form-action 'none'",
   "base-uri 'none'",
   // Only this origin's own pages may FRAME a document. A third-party framer
@@ -84,10 +84,11 @@ describe('/a/<id>/raw for markup rows', () => {
     // The connect-src is this document's own two endpoints plus the static
     // boundary-geometry directory, and nothing else: nothing under /api, no
     // other document, no /a/<id>/start — the author's script can reach exactly
-    // what the runtime reaches: its own data, its own live stream, and the
-    // public /geojson/ files the geo charts draw their basemaps from.
+    // what the runtime reaches: its own data, its own live stream, the
+    // public /geojson/ files the geo charts draw their basemaps from, and the
+    // runtime's own build (/story/), where the page's SQLite wasm lives.
     const csp = res.headers.get('Content-Security-Policy')!;
-    expect(csp.match(/connect-src [^;]*/g)).toEqual([`connect-src ${BASE}/a/${id}/query ${BASE}/a/${id}/events ${BASE}/a/${id}/events/frame ${BASE}/a/${id}/mutate ${BASE}/a/${id}/resolve ${BASE}/geojson/ ${BASE}/basemap/ blob: data:`]);
+    expect(csp.match(/connect-src [^;]*/g)).toEqual([`connect-src ${BASE}/a/${id}/query ${BASE}/a/${id}/events ${BASE}/a/${id}/events/frame ${BASE}/a/${id}/mutate ${BASE}/a/${id}/resolve ${BASE}/geojson/ ${BASE}/basemap/ ${BASE}/story/ blob: data:`]);
     expect(csp).not.toMatch(/connect-src[^;]*'self'/);
     // Behind the proxy the origin is the PUBLIC one (forwarding headers), so
     // the policy names the host the browser actually fetches from.
