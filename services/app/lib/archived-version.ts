@@ -28,6 +28,9 @@
  * one at every call site.
  */
 import { getVersionFor, listVersionsFor, versionForCapture, type ArtifactRow, type TokenActor } from '@/lib/artifacts';
+import { getDb } from '@/lib/db';
+import { convertStoredDocument } from '@/lib/migrate/sqlite/stored';
+import { DATA_SYNTAX_META, hasCurrentDataSyntax } from '@/lib/story/data-syntax';
 import { actorForArtifacts, requestOrSessionActor } from '@/lib/viewer';
 
 /** The parameter's name, in one place: the three doors and the export URL. */
@@ -59,7 +62,16 @@ export interface ArchivedRender {
   meta: Record<string, unknown>;
   title: string | null;
   description: string | null;
+  /**
+   * Written for the previous query engine, in a way the migration's converter
+   * cannot carry over without a person: its queries answer
+   * {@link PREVIOUS_ENGINE} rather than failing on syntax this engine refuses.
+   */
+  previousEngine?: true;
 }
+
+/** What each query of an unconvertible old version says instead of running. */
+export const PREVIOUS_ENGINE = 'This version was written for the previous query engine and cannot run on the current one';
 
 /**
  * What this address asks for: a version number, `'none'` (no `version` key at
@@ -84,8 +96,38 @@ const headRender = (row: ArtifactRow): Omit<ArchivedRender, 'version' | 'head'> 
   description: row.description,
 });
 
-const archived = (version: number, head: number, body: Omit<ArchivedRender, 'version' | 'head'>): ArchivedRender =>
-  ({ version, head, ...body });
+type RenderBody = Omit<ArchivedRender, 'version' | 'head'>;
+
+/**
+ * HISTORY STAYS AS STORED; its render speaks the current syntax. A version
+ * without the data-syntax marker (lib/story/data-syntax) predates the
+ * migration and is converted here by the migration's own converter, once per
+ * version and bytes: the conversion is deterministic, and a version's bytes
+ * never change. A marked version is never converted a second time.
+ */
+const CONVERTED_VERSIONS = 256;
+const convertedVersions = new Map<string, { source: string; body: Promise<RenderBody> }>();
+
+function inCurrentSyntax(row: ArtifactRow, version: number, body: RenderBody): Promise<RenderBody> {
+  if (hasCurrentDataSyntax(body.meta)) return Promise.resolve(body);
+  const key = `${row.id}@${version}`;
+  const cached = convertedVersions.get(key);
+  if (cached?.source === body.source) return cached.body;
+  const converted = (async (): Promise<RenderBody> => {
+    const conversion = await convertStoredDocument(await getDb(), { source: body.source, meta: body.meta, user_id: row.user_id, token_id: row.token_id });
+    if (conversion.status === 'current') return body;
+    if (conversion.status === 'manual') return { ...body, previousEngine: true };
+    return { ...body, source: conversion.source, meta: { ...body.meta, ...DATA_SYNTAX_META } };
+  })();
+  convertedVersions.delete(key);
+  convertedVersions.set(key, { source: body.source, body: converted });
+  if (convertedVersions.size > CONVERTED_VERSIONS) convertedVersions.delete(convertedVersions.keys().next().value!);
+  converted.catch(() => convertedVersions.delete(key));
+  return converted;
+}
+
+const archived = async (row: ArtifactRow, version: number, head: number, body: RenderBody): Promise<ArchivedRender> =>
+  ({ version, head, ...(await inCurrentSyntax(row, version, body)) });
 
 /**
  * THE DECISION. `null` = no version asked; `'not_found'` = the uniform 404;
@@ -108,9 +150,9 @@ export async function archivedVersionFor(
   if (asked === 'invalid' || row.format !== 'markup') return 'not_found';
   const head = row.version;
   if (opts.capture) {
-    if (asked === head) return archived(asked, head, headRender(row));
+    if (asked === head) return archived(row, asked, head, headRender(row));
     const shot = await versionForCapture(row, asked);
-    return shot ? archived(asked, head, { source: shot.source ?? '', meta: shot.meta, title: shot.title, description: shot.description }) : 'not_found';
+    return shot ? archived(row, asked, head, { source: shot.source ?? '', meta: shot.meta, title: shot.title, description: shot.description }) : 'not_found';
   }
   return archivedVersionForActor(actorForArtifacts(await requestOrSessionActor(request)), row, asked);
 }
@@ -136,9 +178,9 @@ export async function archivedVersionForActor(
    * scope, asked of the history listing rather than of a snapshot that may not
    * exist, so nothing about who may read history changes.
    */
-  if (asked === head) return (await listVersionsFor(actor, row.id)) ? archived(asked, head, headRender(row)) : 'not_found';
+  if (asked === head) return (await listVersionsFor(actor, row.id)) ? archived(row, asked, head, headRender(row)) : 'not_found';
   const found = await getVersionFor(actor, row.id, asked);
-  return found ? archived(asked, head, { source: found.source ?? '', meta: found.meta, title: found.title, description: found.description }) : 'not_found';
+  return found ? archived(row, asked, head, { source: found.source ?? '', meta: found.meta, title: found.title, description: found.description }) : 'not_found';
 }
 
 /** The row an archived render renders FROM: this artifact, wearing that version's bytes. */
