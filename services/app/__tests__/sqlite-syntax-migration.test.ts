@@ -157,6 +157,13 @@ describe('runSqliteSyntaxMigrationBatch', () => {
     expect((await head('aaaaaa')).meta).toMatchObject({ theme: 'modernist', colorMode: 'dark', dataSyntax: 2 });
   });
 
+  it('reports what the publish door refused in words, when its markup no longer validates', async () => {
+    const { tokenId } = await owner();
+    await legacy('aaaaaa', tokenId, `${HALF}<Icon name="no-such-glyph" />`);
+    const report = await runSqliteSyntaxMigrationBatch(await harness.db(), { batchSize: 10 });
+    expect(report.documents).toEqual([expect.objectContaining({ artifactId: 'aaaaaa', outcome: 'conflict', refused: ['400 invalid_jsx', expect.stringMatching(/Unknown Icon name "no-such-glyph"/)] })]);
+  });
+
   it('marks a document with nothing to convert in place, without a new version', async () => {
     const { tokenId } = await owner();
     await legacy('aaaaaa', tokenId, '<p>Plain</p>', { theme: 'paper' });
