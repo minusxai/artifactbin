@@ -332,7 +332,8 @@ describe('translateSql: DuckDB lists', () => {
     ok('select * from t where list_contains(cast($picked as varchar[]), cast(id as varchar)) and len(cast(tags as varchar[])) > 1',
       'select * from t where list_contains(to_list($picked), cast(id as varchar)) and json_array_length(to_list(tags)) > 1');
     ok('select unnest(cast(tags as varchar[])) as tag from t', 'select unnested.value as tag from t, json_each(to_list(tags)) as unnested');
-    ok('select l.id, p from l, unnest(cast(l.tags as varchar[])) as u(p)', 'select l.id, u.value from l, json_each(to_list(l.tags)) as u');
+    ok('select l.id, p from l, unnest(cast(l.tags as varchar[])) as u(p)', 'select l.id, u.value as p from l, json_each(to_list(l.tags)) as u');
+    ok("select distinct u.tag from l, unnest(cast(l.tags as varchar[])) u(tag) union select 'x' order by 1", "select distinct u.value as tag from l, json_each(to_list(l.tags)) as u union select 'x' order by 1");
   });
   it('a cast to a list of anything but text, or of a value already a list, is manual', () => {
     manual('select cast(tags as integer[]) from t', /a cast to a list of integer/, 'cast(tags as integer[])');
