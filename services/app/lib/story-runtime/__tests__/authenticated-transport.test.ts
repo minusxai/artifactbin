@@ -39,3 +39,13 @@ it('holds one import through the session door, by its name', async () => {
   expect(JSON.parse(String(fetcher.mock.calls[0]![1]!.body))).toEqual({ hold: 'sales' });
   transport.dispose();
 });
+
+it('asks the session door for the cards of the people a page computed', async () => {
+  const cards = { usr_a: { name: 'A', handle: null, image: null } };
+  const fetcher = vi.fn(async (_url: RequestInfo | URL, _init?: RequestInit) => new Response(JSON.stringify({ people: cards })));
+  const transport = createAuthenticatedTransport('AbC123', fetcher);
+  await expect(transport.people!(['usr_a'])).resolves.toEqual(cards);
+  expect(fetcher.mock.calls[0]![0]).toBe('/a/AbC123/query');
+  expect(JSON.parse(String(fetcher.mock.calls[0]![1]!.body))).toEqual({ people: ['usr_a'] });
+  transport.dispose();
+});

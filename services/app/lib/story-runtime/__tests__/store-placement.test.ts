@@ -5,7 +5,8 @@
  * else through the existing transport — and until the page holds its imports,
  * everything goes to the server, so the first paint never waits on the engine.
  * Writes: a held dataset write shows at once and the server decides; a
- * local-table write never leaves the page. Real SQLite core, fake server.
+ * local-table write never leaves the page. The people the page's own results
+ * name are asked for once. Real SQLite core, fake server.
  */
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { loadSqlite } from '@artifactbin/sql/core';
@@ -174,5 +175,78 @@ describe('$_now in the page', () => {
     expect(Date.parse(ticked)).toBeLessThan(Date.parse('2026-09-30T10:02:00.000Z'));
     // Nothing else re-ran: what does not read the clock still shows its first answer.
     expect(store.getTable('mine')!.rows).toEqual([{ server: 'mine' }]);
+  });
+});
+
+/*
+ * A <User> over a result the PAGE computed: no server run named that person,
+ * so the store asks the door for the cards its results are missing — once per
+ * run, in one batch, and never again for an id it already asked about.
+ */
+const TASKS = [{ name: 'id', type: 'number' as const }, { name: 'who', type: 'user' as const }];
+const PEOPLE_FLOW = await compiledOf(
+  '<Import name="tasks" src="ref:Tasks0001" /><Value name="after" type="number" default={0} />' +
+  '<Query name="owners">{`select id, who from tasks.rows where id > $after order by id`}</Query>',
+  { Tasks0001: TASKS },
+);
+
+describe('the people the page\'s results name', () => {
+  const card = (name: string) => ({ name, handle: null, image: null });
+
+  const peopleSetup = () => {
+    const asked: string[][] = [];
+    let answer: (ids: string[]) => Promise<Record<string, ReturnType<typeof card>>> = async (ids) => Object.fromEntries(ids.filter((id) => id !== 'usr_c').map((id) => [id, card(id)]));
+    const transport: QueryTransport = {
+      run: async () => ({ tables: { owners: { rows: [{ id: 1, who: 'usr_a' }], columns: [{ name: 'id', type: 'number' }, { name: 'who', type: 'user' }] } }, errors: {}, people: { usr_a: card('usr_a') } }),
+      page: vi.fn(),
+      people: (ids) => { asked.push(ids); return answer(ids); },
+    };
+    const engine = createPageEngine({
+      load: () => loadSqlite(),
+      fetch: async () => ({ rows: { rows: [{ id: 1, who: 'usr_a' }, { id: 2, who: 'usr_b' }, { id: 3, who: 'usr_c' }, { id: 4, who: 'usr_b' }], columns: TASKS } }),
+    });
+    const store = createDataflowStore({ flow: PEOPLE_FLOW, hold: ['tasks'] }, { transport, debounceMs: 0, page: { engine, userId: null } });
+    open.push(store);
+    return { store, engine, asked, answerWith: (next: typeof answer) => { answer = next; } };
+  };
+  const whoIn = (store: DataflowStore) => store.getTable('owners')?.rows.map((r) => r.who);
+
+  it('asks once per run for the ids it has no card for, shows the rows first, and never asks about an id twice', async () => {
+    const { store, engine, asked, answerWith } = peopleSetup();
+    store.start();
+    await settled(store);
+    await vi.waitFor(() => expect(engine.ready(PEOPLE_FLOW, ['tasks'])).toBe(true));
+    // The server's run named usr_a; nothing is asked for it.
+    expect(asked).toEqual([]);
+    let release!: () => void;
+    answerWith((ids) => new Promise((resolve) => { release = () => resolve(Object.fromEntries(ids.filter((id) => id !== 'usr_c').map((id) => [id, card(id)]))); }));
+    store.setValue('after', 1);
+    await settled(store);
+    expect(whoIn(store)).toEqual(['usr_b', 'usr_c', 'usr_b']);
+    expect(asked).toEqual([['usr_b', 'usr_c']]);
+    expect(store.getState().people).toEqual({ usr_a: card('usr_a') });
+    release();
+    await vi.waitFor(() => expect(store.getState().people).toEqual({ usr_a: card('usr_a'), usr_b: card('usr_b') }));
+    // usr_c has no card to give: asked about once, not on every run.
+    store.setValue('after', 0);
+    await settled(store);
+    expect(whoIn(store)).toEqual(['usr_a', 'usr_b', 'usr_c', 'usr_b']);
+    expect(asked).toHaveLength(1);
+  });
+
+  it('asks again after a lookup that failed', async () => {
+    const { store, engine, asked, answerWith } = peopleSetup();
+    store.start();
+    await settled(store);
+    await vi.waitFor(() => expect(engine.ready(PEOPLE_FLOW, ['tasks'])).toBe(true));
+    answerWith(async () => { throw new Error('offline'); });
+    store.setValue('after', 1);
+    await settled(store);
+    await vi.waitFor(() => expect(asked).toHaveLength(1));
+    answerWith(async (ids) => Object.fromEntries(ids.map((id) => [id, card(id)])));
+    store.setValue('after', 2);
+    await settled(store);
+    await vi.waitFor(() => expect(store.getState().people).toMatchObject({ usr_b: card('usr_b'), usr_c: card('usr_c') }));
+    expect(asked).toEqual([['usr_b', 'usr_c'], ['usr_c', 'usr_b']]);
   });
 });

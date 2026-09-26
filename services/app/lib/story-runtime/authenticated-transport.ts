@@ -2,6 +2,7 @@ import type { QueryTransport } from './store';
 import type { DataflowState } from '@/lib/story/dataflow';
 import { localZone } from '@/lib/story/builtins';
 import type { ImportTables } from '@/lib/story/compiled-flow';
+import type { PersonCard } from '@artifactbin/contracts';
 
 /** The authenticated page's existing query/mutation/assets doors, scoped to one document lifetime. */
 export function createAuthenticatedTransport(id: string, fetcher: typeof fetch = fetch): QueryTransport & {dispose():void} {
@@ -22,6 +23,7 @@ export function createAuthenticatedTransport(id: string, fetcher: typeof fetch =
     dispose: () => controller.abort(),
     run: (values, only, localTables) => query({values,only,tz:localZone(),...(localTables ? {localTables} : {})}),
     hold: async (name) => ((await post(`${base}/query`, {hold:name})) as {tables:ImportTables[string]}).tables,
+    people: async (ids) => ((await post(`${base}/query`, {people:ids})) as {people:Record<string,PersonCard>}).people,
     page: async (values, name, page, localTables) => {
       const result = await query({values,only:[name],page:{name,...page},tz:localZone(),...(localTables ? {localTables} : {})});
       if (!result.tables[name]) throw new Error(result.errors[name] ?? `no rows for ${name}`);

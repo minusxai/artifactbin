@@ -1,4 +1,4 @@
-import { canReadArtifact, dataflowForRow, getArtifactById, holdImport, type ArtifactRow, type RoleActor } from '@/lib/artifacts';
+import { canReadArtifact, dataflowForRow, getArtifactById, holdImport, nameablePeople, type ArtifactRow, type RoleActor } from '@/lib/artifacts';
 import { ID_RE } from '@/lib/ids';
 import { json, readJson } from '@/lib/http';
 import { sessionActor } from '@/lib/viewer';
@@ -11,6 +11,7 @@ import {REVALIDATE_ACTOR_HEADER} from '@artifactbin/contracts';
 /**
  * GET  /a/<id>/query?q=<JSON {values?, only?, page?}> → { tables, errors }
  * POST /a/<id>/query     { values?, only?, page? }    → { tables, errors }
+ * (or, alone: `{hold}` → one import's rows, `{people}` → person cards)
  *
  * Two doors to one run. Values are the reader's current selections; `only`
  * the queries the change touched (the run closes over their dependencies);
@@ -99,6 +100,7 @@ export async function POST(request: Request, ctx: { params: Promise<{ id: string
  */
 async function answer(artifact: ArtifactRow, parsed: QueryRequest, viewer: RoleActor | null, extra: Record<string, string> = {}, authorize?:()=>Promise<void>,signal?:AbortSignal): Promise<Response> {
   if (parsed.hold !== undefined) return held(artifact, parsed.hold, viewer, extra, authorize);
+  if (parsed.people !== undefined) return named(artifact, parsed.people, viewer, extra, authorize);
   if (artifact.format !== 'markup' && artifact.format !== 'folder') return json({ tables: {}, errors: {} }, 200, extra);
   let flow;
   try {
@@ -127,4 +129,15 @@ async function held(artifact: ArtifactRow, name: string, viewer: RoleActor | nul
   const tables = await holdImport(artifact, name, viewer);
   try { await authorize?.(); } catch (error) { if (error instanceof DatasetError) return refused(); throw error; }
   return tables ? json({ tables }, 200, { ...extra, 'Cache-Control': 'no-store', [REVALIDATE_ACTOR_HEADER]: '1' }) : refused();
+}
+
+/**
+ * `{people}` — the cards of the people a reader's page computed results name
+ * (lib/story-runtime/store asks once per id). Decided for THIS door's viewer
+ * (lib/artifacts nameablePeople): an id it may not name is simply absent.
+ */
+async function named(artifact: ArtifactRow, ids: string[], viewer: RoleActor | null, extra: Record<string, string>, authorize?: () => Promise<void>): Promise<Response> {
+  const people = await nameablePeople(artifact, ids, viewer);
+  try { await authorize?.(); } catch (error) { if (error instanceof DatasetError) return json({ error: 'not_found' }, 404, { ...extra, 'Cache-Control': 'no-store' }); throw error; }
+  return json({ people }, 200, { ...extra, 'Cache-Control': 'no-store', [REVALIDATE_ACTOR_HEADER]: '1' });
 }
