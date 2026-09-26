@@ -175,7 +175,7 @@ const dynamicChunks = (browser.metafile.outputs[entryOut[0]].imports ?? [])
  * These need no preload entry: the runtime resolves them from their own URLs.
  */
 const lazy = dynamicChunks
-  .filter((c) => !c.from.some((f) => f.includes('lib/story-runtime/edit/') || f.endsWith('components/kit/mermaid-render.ts') || f.endsWith('components/kit/deck-gl-engine.tsx') || f.includes('services/sql/')))
+  .filter((c) => !c.from.some((f) => f.includes('lib/story-runtime/edit/') || f.endsWith('components/kit/mermaid-render.ts') || f.endsWith('components/kit/deck-gl-engine.tsx') || f.includes('/sql/src/') || f.includes('@sqlite.org/')))
   .map((c) => c.url);
 
 /*

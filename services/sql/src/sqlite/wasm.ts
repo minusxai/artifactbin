@@ -24,12 +24,30 @@ export function provideSqliteWasm(wasm: ArrayBuffer | Uint8Array): void {
   supplied = wasm;
 }
 
+/**
+ * A SANDBOXED document (an opaque origin: the served `/raw` page) throws on
+ * merely reading `localStorage`/`sessionStorage`, and the library's optional
+ * key-value VFS probes both while it initialises — which aborts the whole
+ * load. The engine keeps nothing in browser storage, so for the length of the
+ * load such a document is shown none, and its own accessors come back after.
+ */
+async function withoutThrowingStorage<T>(load: () => Promise<T>): Promise<T> {
+  const shadowed = (['localStorage', 'sessionStorage'] as const).filter((name) => {
+    try { void (globalThis as Record<string, unknown>)[name]; return false; } catch { /* refused: shadow it */ }
+    Object.defineProperty(globalThis, name, { value: undefined, configurable: true });
+    return true;
+  });
+  try { return await load(); } finally {
+    for (const name of shadowed) delete (globalThis as Record<string, unknown>)[name];
+  }
+}
+
 async function start(wasmBinary?: ArrayBuffer | Uint8Array): Promise<Sqlite3> {
   // Supplied bytes are never fetched, but the module still names its wasm by
   // resolving against `import.meta.url` — which a classic script (the offline
   // file's inline bundle) does not have, and `new URL(…, undefined)` throws.
   // Naming the file ourselves skips that resolution.
-  const sqlite3 = await init(wasmBinary ? { wasmBinary, locateFile: (path) => path } : undefined);
+  const sqlite3 = await withoutThrowingStorage(() => init(wasmBinary ? { wasmBinary, locateFile: (path) => path } : undefined));
   // Failures reach the caller as errors; the library's own console warnings would only duplicate them.
   sqlite3.config.warn = () => {};
   return sqlite3;
