@@ -11,6 +11,7 @@
 import type { ColumnType, DatasetColumn } from '@/lib/story/dataset-shape';
 import type { CompiledDataflow, CompiledReads } from '@/lib/story/compiled-dataflow';
 import { importRef, selectQueries } from '@/lib/story/compiled-flow';
+import type { DataflowPlacement } from '@/lib/story/placement';
 import { VIEWER } from '@/lib/story/builtins';
 import type { DataflowState, Row, Scalar } from '@/lib/story/dataflow';
 
@@ -20,6 +21,12 @@ export const MEMBERS_SOURCE = '_members';
 export const VIEWER_SOURCE = VIEWER;
 /** The source the clock is: advanced once a minute, so only the readers of `$_now` re-run. */
 export const NOW_SOURCE = '_now';
+/**
+ * The page's own copy of a dataset (lib/story-runtime/page-engine): a write
+ * applied to it optimistically re-runs the queries the page answers from it,
+ * and nothing that asks the server, which has not heard of the write yet.
+ */
+export const heldSource = (ref: string): string => `held:${ref}`;
 
 export type GraphValue =
   | { kind: 'scalar'; name: string; type: ColumnType; default: Scalar }
@@ -60,10 +67,13 @@ const dedupe = (xs: string[]): string[] => [...new Set(xs)];
  * the inline tables it joins, the datasets it imports (or the connected
  * database it runs inside), the viewer when it reads `$_me.id` or `_me`, the
  * clock when it reads `$_now`, the membership (every read is admitted per member), and every query upstream of
- * it. A dataset mutation's write check reads its dataset, the membership and
+ * it — and, when the page answers it (`placement`), the page's own copy of each
+ * dataset it imports. A dataset mutation's write check reads its dataset, the membership and
  * the viewer; a local one reads what its statement binds and joins.
  */
-export function graphOfCompiled(flow: CompiledDataflow): RuntimeGraph {
+export function graphOfCompiled(flow: CompiledDataflow, placement?: DataflowPlacement): RuntimeGraph {
+  const held = (name: string, reads: CompiledReads): string[] =>
+    placement?.queries[name] === 'browser' ? reads.imports.flatMap((i) => { const ref = importRef(flow, i); return ref ? [heldSource(ref)] : []; }) : [];
   const sourcesOf = (reads: CompiledReads, extra: string[] = []): string[] => dedupe([
     ...reads.imports.flatMap((name) => importRef(flow, name) ?? []),
     ...extra,
@@ -80,7 +90,7 @@ export function graphOfCompiled(flow: CompiledDataflow): RuntimeGraph {
       name: q.name,
       reads: {
         values: q.reads.values,
-        sources: sourcesOf(q.reads, [...(q.source ? [q.source] : []), MEMBERS_SOURCE]),
+        sources: sourcesOf(q.reads, [...(q.source ? [q.source] : []), MEMBERS_SOURCE, ...held(q.name, q.reads)]),
         queries: selectQueries(flow, { only: [q.name] }).map((u) => u.name).filter((u) => u !== q.name),
       },
     })),
