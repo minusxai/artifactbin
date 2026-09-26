@@ -74,7 +74,7 @@ for (const k of ['markup', 'prose', 'dataset', 'viz', 'image']) {
 // Raw formats, export renders, versions and permission/error matrices live in
 // artifact-urls, export, manage, version-conflict and delete-protection tests.
 // Keep the assembled server's top-level tier pages and missing-reference read.
-const doc = (await J('/api/artifacts', { method: 'POST', body: JSON.stringify({ title: 'refdoc', markup: `<Helmet><Query name="rows" source="ref:${made.dataset.id}">{\`select * from public.rows\`}</Query></Helmet><div data-design="tw" className="p-8"><Question data="$rows" viz={{kind:"table"}} /></div>` }) }, T)).body;
+const doc = (await J('/api/artifacts', { method: 'POST', body: JSON.stringify({ title: 'refdoc', markup: `<Helmet><Import name="rows_data" src="ref:${made.dataset.id}" /><Query name="rows">{\`select * from rows_data.rows\`}</Query></Helmet><div data-design="tw" className="p-8"><Question data="$rows" viz={{kind:"table"}} /></div>` }) }, T)).body;
 check((await J(`/api/artifacts/${made.dataset.id}`, { method: 'DELETE' }, T)).status === 409, 'referenced dataset delete → 409');
 check((await J(`/api/artifacts/${made.dataset.id}?force=true`, { method: 'DELETE' }, T)).status === 200, 'force delete breaks the link knowingly');
 check((await fetch(`${B}/a/${doc.id}`)).status === 200, 'a document whose ref died still serves');
@@ -88,8 +88,8 @@ check((await fetch(`${B}/mcp`,{method:'POST'})).status===404,'retired transport 
 const ds = (await J('/api/artifacts', { method: 'POST', body: JSON.stringify({ title: 'Gate data', dataset: tiers.dataset.dataset }) }, T)).body;
 const dataDoc = (await J('/api/artifacts', { method: 'POST', body: JSON.stringify({ title: 'Gate doc', theme: 'modernist', markup: `<Helmet>
 <Value name="region" type="string" />
-<Query name="regions" source="ref:${ds.id}">{\`select distinct region from public.rows order by 1\`}</Query>
-<Query name="sales" source="ref:${ds.id}">{\`select * from public.rows where $region is null or region = $region\`}</Query>
+<Import name="regions_data" src="ref:${ds.id}" /><Query name="regions">{\`select distinct region from regions_data.rows order by 1\`}</Query>
+<Import name="sales_data" src="ref:${ds.id}" /><Query name="sales">{\`select * from sales_data.rows where $region is null or region = $region\`}</Query>
 </Helmet><div data-design="tw" className="@container p-10">
 <h1 className="text-4xl font-bold tracking-tight">Gate doc</h1>
 <div className="mt-4"><select aria-label="Region" value="$region" options="$regions" /></div>

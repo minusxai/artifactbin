@@ -17,14 +17,16 @@ describe('canonical dataset authoring hints', () => {
     expect(result.usage).toContain('"field":"revenue"');
     expect(result.usage).not.toContain('ref_abc123');
   });
-  it('teaches the normalized public.rows source syntax for legacy row uploads', () => {
+  it('teaches the Import of a stored upload, read as <import>.rows', () => {
     const result = datasetCreateFields('abc123', [{ name: 'id', type: 'number' }], 2);
-    expect(result.usage).toContain('<Query name="rows" source="ref:abc123">{`SELECT * FROM "public"."rows"`}</Query>');
+    expect(result.usage).toContain('<Import name="data" src="ref:abc123" /><Query name="rows">{`SELECT * FROM data."rows"`}</Query>');
+    expect(result.usage).not.toMatch(/source=|public\.rows/);
     expect(result.ref).toBe('ref:abc123');
   });
-  it('teaches sourced mutations for writable stored catalogs', () => {
+  it('teaches mutations over the imported default table for writable stored catalogs', () => {
     const result = datasetCreateFields('abc123', [], 2, { catalog: { ...catalog, kind: 'stored' } }, 'readwrite');
-    expect(result.usage).toContain('<Mutation name="add" source="ref:abc123">{`insert into "sales"."orders"');
+    expect(result.usage).toContain('<Import name="data" src="ref:abc123" /><Value name="region" type="string" /><Value name="revenue" type="number" /><Mutation name="add">{`insert into data."orders" ("region", "revenue") values ($region, $revenue)`}</Mutation>');
+    expect(result.usage).not.toContain('source=');
     expect(result.usage).not.toContain('ref_abc123');
   });
   it('names the push flag, and the metadata-only PATCH, for opening stored writes', () => {

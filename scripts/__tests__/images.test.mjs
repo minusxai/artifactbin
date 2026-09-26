@@ -148,15 +148,30 @@ describe('lean-imports', () => {
   });
 
   describe('the service packages', () => {
-    it('are not imported by the app tree at all — the clients live in utils', () => {
+    // The one exception is the SQLite core (the official wasm build, no native code, no threads):
+    // the publish compiler analyses statements with it (lib/story/compile-dataflow). Running SQL
+    // still goes through the SqlService registry — never `./local`, `./sqlite` or the HTTP shell.
+    const ALLOWED = new Set(['@artifactbin/sql/core']);
+    it('are not imported by the app tree, apart from the SQLite core — the clients live in utils', () => {
       const offenders = [];
       for (const tree of TREES) for (const f of files(path.join(ROOT, tree))) {
         const src = readFileSync(f, 'utf8');
         for (const m of src.matchAll(/^\s*(?:import|export)[^'"]*from\s+['"]([^'"]+)['"]/gm)) {
+          if (ALLOWED.has(m[1])) continue;
           if (m[1] === '@artifactbin/sql' || m[1] === '@artifactbin/browser' || m[1].startsWith('@artifactbin/sql/') || m[1].startsWith('@artifactbin/browser/')) offenders.push(`${path.relative(ROOT, f)} → ${m[1]}`);
         }
       }
       expect(offenders).toEqual([]);
+    });
+  });
+
+  describe('DuckDB', () => {
+    it('is no dependency of any workspace, and not in the lockfile', () => {
+      const lock = JSON.parse(readFileSync(path.join(REPO_ROOT, 'package-lock.json'), 'utf8'));
+      const packages = Object.entries(lock.packages ?? {});
+      expect(packages.filter(([name]) => /(^|\/)node_modules\/@duckdb\//.test(name)).map(([name]) => name)).toEqual([]);
+      const declared = packages.filter(([, p]) => Object.keys({ ...p.dependencies, ...p.optionalDependencies, ...p.devDependencies }).some((d) => d.startsWith('@duckdb/')));
+      expect(declared.map(([name]) => name || '(root)')).toEqual([]);
     });
   });
 

@@ -43,8 +43,8 @@ const poll = (ds) =>
   '<Helmet>'
   + '<Value name="choice" type="string" default="ramen" />'
   + '<Value name="who" type="string" default="anon" />'
-  + `<Query name="tally" source="ref:${ds}">{\`select choice, count(*)::int votes from public.rows group by 1 order by 1\`}</Query>`
-  + `<Mutation name="vote" source="ref:${ds}">{\`insert into public.rows (choice, who) values ($choice, $who)\`}</Mutation>`
+  + `<Import name="tally_data" src="ref:${ds}" /><Query name="tally">{\`select choice, cast(count(*) as integer) votes from tally_data.rows group by 1 order by 1\`}</Query>`
+  + `<Import name="vote_data" src="ref:${ds}" /><Mutation name="vote">{\`insert into vote_data.rows (choice, who) values ($choice, $who)\`}</Mutation>`
   + '</Helmet>'
   + '<div data-design="tw" className="p-10">'
   + '<h1 id="h">Lunch</h1>'
@@ -56,7 +56,7 @@ const poll = (ds) =>
 
 /** A second, READ-ONLY document over the same dataset — the owner's dashboard. */
 const dashboard = (ds) =>
-  `<Helmet><Query name="all" source="ref:${ds}">{\`select count(*)::int n from public.rows\`}</Query></Helmet>`
+  `<Helmet><Import name="all_data" src="ref:${ds}" /><Query name="all">{\`select cast(count(*) as integer) n from all_data.rows\`}</Query></Helmet>`
   + '<div data-design="tw" className="p-10"><h1>Total</h1>'
   + '<p>rows: <Number data="$all" col="n" agg="sum" /></p></div>';
 
@@ -172,7 +172,7 @@ check(shut.ok, 'the dataset can be closed again');
 const refused = await voter.evaluate(async (id) => {
   const res = await fetch(`/a/${id}/mutate`, {
     method: 'POST', headers: { 'Content-Type': 'text/plain' },
-    body: JSON.stringify({ mutation: 'vote', values: { choice: 'ramen' } }),
+    body: JSON.stringify({ mutation: 'vote', args: { choice: 'ramen' } }),
   }).catch(() => null);
   return res ? res.status : 0;
 }, seed.id).catch(() => 0);

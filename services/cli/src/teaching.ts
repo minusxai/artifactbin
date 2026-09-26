@@ -19,7 +19,7 @@ export const localSkillFiles:Readonly<Record<string,string>>=teaching.files;
 export function skillFilesFor(origin:string=DEFAULT_SERVER):Record<string,string>{return teachingFilesFor(localSkillFiles,origin);}
 export const examples:Record<string,string>={
  editorial:'<article className="mx-auto max-w-3xl p-8"><h1>Report</h1><p>Explain the finding.</p></article>',
- dashboard:'<Helmet><Query name="sales" source="ref:abc123">{`select * from public.rows`}</Query></Helmet>\n<main className="p-8"><h1>Sales</h1><Table data="$sales" /></main>',
+ dashboard:'<Helmet><Import name="sales_data" src="ref:abc123" /><Query name="sales">{`select * from sales_data.rows`}</Query></Helmet>\n<main className="p-8"><h1>Sales</h1><Table data="$sales" /></main>',
  deck:'<SlideDeck><Slide><h1>Presentation</h1><p>One clear point.</p></Slide></SlideDeck>',
  scrolly:'<main><section className="min-h-screen p-8"><h1>Story</h1><p>Begin here.</p></section></main>',
 };
@@ -61,7 +61,7 @@ function closestTopics(topic:string):string[]{
 }
 /** The top-level skill doc, without its YAML frontmatter: the brief printed by bare `afbin help`. */
 export function briefDocument(origin:string=DEFAULT_SERVER):string{return withTeachingOrigin(localSkillFiles['SKILL.md'],origin).replace(/^---\n[\s\S]*?\n---\n/,'');}
-const commandsMarkdown=()=>`# afbin\n\nLocal files and published artifacts. Help and validation need no network; standalone background updates are independent (CLI__AUTO_UPDATE=0 disables them). Local SQL may download its engine once; prepare it with afbin setup --service sql before disconnecting.\n\n`
+const commandsMarkdown=()=>`# afbin\n\nLocal files and published artifacts. Help and validation need no network; standalone background updates are independent (CLI__AUTO_UPDATE=0 disables them). Local SQL runs in the CLI itself (SQLite, built in); nothing to download.\n\n`
  +commands.map(command=>`## ${command.name}\n\n\`\`\`text\n${commandHelp(command.name)}\`\`\`\n`).join('\n');
 /** One bundled documentation set: help, the manual and the installed skills render the same registry. */
 /**

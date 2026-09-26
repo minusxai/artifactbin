@@ -1,12 +1,12 @@
 # The SQL service contract
 
-DuckDB or SQLite, stateless, rows by value. `@artifactbin/contracts` `SqlService` is the interface; this file is the wire.
+SQLite (the official wasm build), stateless, rows by value. `@artifactbin/contracts` `SqlService` is the interface; this file is the wire.
 Every method is one `POST` with a JSON body; a `Set` anywhere in a body is sent as an array.
 
 | Method | Route | Body | Answer |
 |---|---|---|---|
-| `run` | `POST /run` | `RunInput` — `tables` (rows travel here), `queries` in dependency order, `params`, `limit?`, `timeoutMs?`, `page?` | `{ results: { [name]: TableResult \| QueryFailure } }` |
-| `mutate` | `POST /mutate` | `MutationInput` — one table, one writing statement | `{ result: MutationResult \| QueryFailure }` |
+| `run` | `POST /run` | `RunInput` — `tables` (rows travel here, in `main`), `imports` (a schema per imported artifact: `bookings.rows`), `queries` in dependency order, `params`, `paramTypes?`, `limit?`, `timeoutMs?`, `page?` | `{ results: { [name]: TableResult \| QueryFailure } }` |
+| `mutate` | `POST /mutate` | `MutationInput` — the one table it writes (`table.schema` names its import), what else it `reads`, one writing statement | `{ result: MutationResult \| QueryFailure }` |
 | `dryRun` | `POST /dry-run` | `DryRunInput` — column shapes only, `paramNames: string[]` | `DryRunResult` |
 | `dryRunMutations` | `POST /dry-run-mutations` | `DryRunMutationsInput` | `{ errors }` |
 | — | `GET /health` | — | `200 {"ok":true}` — the liveness/readiness probe for whatever orchestrates the service; the one GET, every other route POST-only |
@@ -20,9 +20,12 @@ Paged reads retain `totalRows`, the count before the page window. `truncated` is
 the returned rows omit part of that result; requesting a page does not itself mean truncation.
 A complete result (including an empty result) omits the flag, just like an unpaged read.
 
-Trusted composition roots may supply `createSql(caps, extensions)` with a mutation connection hook.
-The hook runs before preparation on mutation and dry-run connections; reads remain unaffected.
-Opaque `extensions` input and `continuation` failures cross the same local/HTTP contract.
+Trusted composition roots may supply `SqlExtensions.setupMutation(database, { input, dryRun })`, an engine-neutral
+hook: it receives the mutation's own guarded, throwaway database before the statement is prepared, may register
+functions under names only it knows, and may return a continuation the engine calls after the statement ran (a
+continuation it answers makes the write a `QueryFailure` carrying it; nothing is persisted). Reads are unaffected.
+In a server the hook is a MODULE (`createSql(caps, { extensions: <module URL> })`) whose default export every engine
+thread imports. Opaque `extensions` input and `continuation` failures cross the same local/HTTP contract.
 Downstream code owns extension authorization and validation. The OSS engine installs no external-effect functions.
 
 Errors: a query that cannot run is a `QueryFailure` for that query; a malformed body is `400 {"error":"bad_request"}`
@@ -30,18 +33,19 @@ with the detail in the operator log only; an unreachable service is a `QueryFail
 deadline — including the DRY RUNS, where an empty `errors` array would admit an unchecked document and move the
 author's error from publish time to render time, which is the whole reason the dry runs exist.
 
-Entry points: `@artifactbin/sql` is the contract, the client and the server shell (no native module); `./local` is
-the engine and the ONLY entry that loads DuckDB; `./shape` is the pure column inference, safe in a browser bundle;
-`./core` is the browser-safe SQLite engine and `./sqlite` its `SqlService`.
+Entry points: `@artifactbin/sql` is the contract, the client and the server shell; `./core` is the browser-safe
+SQLite engine (what the publish compiler analyses with); `./sqlite` is that engine as a `SqlService` in the calling
+thread (a CLI, a test); `./local` is the same engine in a small pool of `worker_threads` for a server — no statement
+runs on the process's event loop, a deadline is enforced inside the thread, and a thread that stays silent past its
+call's deadline is terminated and replaced (`__tests__/pool.test.ts`, including `/health` answering under load);
+`./shape` is the pure column inference, safe in a browser bundle.
 
-Conformance: `__tests__/contract.test.ts` runs one suite over both engines (`createSql()`, `createSqliteSql()`), each in
-process and through `sqlClient(serveSql(…))`; the policy, editable-row and typed-parameter suites do the same.
+Conformance: `__tests__/contract.test.ts` runs one suite in this thread and in worker threads, each in process and
+through `sqlClient(serveSql(…))`; the policy, editable-row and typed-parameter suites do the same.
 
-Editable mutations optionally carry `row: { columns, values }`. The engine binds it as the native `$_row`
-STRUCT, with number, boolean, string and date fields matching the supplied columns. Date values travel as
-strings and use DuckDB's DATE conversion; absent values bind typed NULL. Dry-run mutations accept the same
-`row: { columns }` shape with every field NULL, so unknown fields and invalid typed expressions fail before
-publication. The caller owns the row schema and authorization; this binding does not establish row identity.
+A row action's fields are ordinary named parameters: the app binds `$_row.<column>` as `$_row__<column>` (and the
+other dotted built-ins the same way, `paramSqlName`), typed by `paramTypes`. The caller owns the row schema and
+authorization; binding a row's values does not establish row identity.
 
 `expectedAffected` optionally guards the exact changed-row count. A mismatch returns a failure with no new
 rows: `row_changed` when fewer rows changed, `row_not_unique` when more changed. The throwaway database is
@@ -52,7 +56,7 @@ then discarded, so the caller has nothing to persist. Omitting this field preser
 Catalog reads optionally carry `RunInput.catalog`: a default schema, logical table names,
 permitted columns, table-data keys or stored model SQL, and optional scalar parameter types.
 They contain exactly one result query. The service mounts only those columns under the logical
-schema/table names; transport keys never become readable relations. DuckDB's native parser
+schema/table names; transport keys never become readable relations. SQLite's authorizer
 checks the original SQL and catalog references. System/cross-catalog relations and dynamic table
 functions are rejected. Models resolve lazily as views, retaining full intermediate data and
 rejecting dependency cycles. Typed parameters remain bound values; query literal bytes are preserved.
@@ -67,7 +71,7 @@ no Node imports, so the server, the runtime bundle and the offline file run the 
 `loadSqlite(wasmBytes?)` answers an engine whose `run`/`mutate`/`dryRun`/`dryRunMutations` take already-clamped
 bounds, `analyze(sql, relations)` answers a `StatementAnalysis`, and `open()` a guarded database for callers that
 orchestrate their own statements. `createSqliteSql(caps)` in `./sqlite` is the `SqlService` over it, with the same
-caps rule as DuckDB (its own entry, so `./local` consumers do not bundle the wasm engine). It is not wired into the app yet.
+caps rule as the server pool. It is the only engine: the app, the CLI and the offline file all run it.
 
 - **Tables** load by `{schema, table, columns, rows}`: `main` for document tables and query results, an attached
   in-memory schema per import (`bookings.rows`). Columns are STRICT (`string`/`date`/`timestamp`/`user` TEXT,
@@ -88,4 +92,4 @@ caps rule as DuckDB (its own entry, so `./local` consumers do not bundle the was
   skipped, reads inside the statement still see it); presets and `check` apply to the written rows; an INSERT's
   columns are the ones whose DEFAULT it did not take; an effect outside the operation (REPLACE, a moved rowid) is
   refused. `policyPreview` runs the statement on the (empty) table and stops after admission and column checks.
-  Row values arrive as ordinary named parameters: `row`/`$_row` is DuckDB-only, and so are `SqlExtensions`.
+  Row values arrive as ordinary named parameters.

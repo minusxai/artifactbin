@@ -39,7 +39,7 @@ const MAX_FOLDER_DEPTH = 6;
 /** How many days of history the children table's sparkline covers. */
 const SPARKLINE_DAYS = 14;
 
-/** The fixed shape of a folder's children table, registered as `ref_<folderId>` in a <Query>. */
+/** The fixed shape of a folder's children table: `<import>.rows` of an `<Import src="ref:<folderId>">`. */
 export const CHILDREN_COLUMNS: DatasetColumn[] = [
   { name: 'id', type: 'string' }, { name: 'title', type: 'string' }, { name: 'format', type: 'string' },
   { name: 'level', type: 'number' }, { name: 'visibility', type: 'string' }, { name: 'updated_at', type: 'string' },
@@ -144,7 +144,7 @@ export async function folderPageFor(
 
 /**
  * WHICH CHILDREN THIS VIEWER GETS, and whether they get the numbers — asked
- * ONCE, by the folder page and by the `ref_<folderId>` virtual table alike.
+ * ONCE, by the folder page and by an imported folder's `rows` table alike.
  *
  * The two callers PROJECT differently and deliberately: the table answers a
  * document's SQL, so it emits `CHILDREN_COLUMNS` and nulls a private child's
@@ -340,7 +340,7 @@ interface ChildRow {
 }
 
 /**
- * The children VIRTUAL TABLE for a folder (`ref_<folderId>` in a `<Query>`),
+ * The children VIRTUAL TABLE for a folder (`<name>.rows` of an `<Import src="ref:<folderId>">`),
  * computed for ONE viewer on the server and never filtered on the client.
  *
  * A PROJECTION over `selectChildren`, which owns who is listed and who is told
@@ -449,8 +449,8 @@ async function viewSeries(ids: string[], days = SPARKLINE_DAYS): Promise<Map<str
  * The one place that names the channel a child write wakes: the parent
  * folder's OWN.
  *
- * A folder's source names its own id as a table (`ref_<self>`), so the folder
- * is a data dependency of ITSELF and the live stream already subscribes it —
+ * An open folder's live stream subscribes the folder's own channel, and a
+ * document that imports the folder subscribes it as a data dependency —
  * a child created, moved, renamed or deleted arrives at an open folder as the
  * existing `data` ping, with no route change anywhere.
  *

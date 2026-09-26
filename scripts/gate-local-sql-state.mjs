@@ -30,7 +30,6 @@ const source = `<Helmet>
   <Value name="drafts" type="table" value={[{"id":1,"label":"first"}]} />
   <Query name="draft_count">{\`select count(*) n from drafts\`}</Query>
   <Mutation name="add_draft">{\`insert into drafts values ((select coalesce(max(id),0)+1 from drafts), $note)\`}</Mutation>
-  <Mutation name="increment">{\`update _signals set count=count+1\`}</Mutation>
 </Helmet>
 <main data-design="tw" className="@container p-8">
   <select aria-label="Choice" value="$choice" options={["a","b"]} />
@@ -41,15 +40,15 @@ const source = `<Helmet>
   <Button aria-label="Add draft" run="$add_draft">Add draft</Button>
   <Dialog open="$open">
     <DialogTrigger aria-label="Open dialog">Open dialog</DialogTrigger>
-    <DialogContent aria-label="Draft dialog" run="$increment">
+    <DialogContent aria-label="Draft dialog" run="$add_draft">
       <input aria-label="Note" value="$note" required autoFocus />
-      <button aria-label="Save dialog" type="submit">Save</button>
+      <Button aria-label="Save dialog" type="submit" set={{"count": 1}}>Save</Button>
       <DialogClose aria-label="Close dialog">Cancel</DialogClose>
     </DialogContent>
   </Dialog>
 </main>`;
 const doc = await json(await api('/api/artifacts', {markup:source, visibility:'unlisted'}));
-const aclDoc = await json(await api('/api/artifacts', {markup:`<Helmet><Mutation name="stored_write" source="ref:${dataset.id}">{\`insert into public.rows (id, label) values (2, 'forbidden')\`}</Mutation></Helmet><Button run="$stored_write">Write</Button>`, visibility:'unlisted'}));
+const aclDoc = await json(await api('/api/artifacts', {markup:`<Helmet><Import name="stored_write_data" src="ref:${dataset.id}" /><Mutation name="stored_write">{\`insert into stored_write_data.rows (id, label) values (2, 'forbidden')\`}</Mutation></Helmet><Button run="$stored_write">Write</Button>`, visibility:'unlisted'}));
 check(!!dataset.id && !!doc.id && !!aclDoc.id, `fixtures published (${dataset.id}, ${doc.id})`);
 if (!dataset.id || !doc.id || !aclDoc.id) throw new Error(`fixture publish failed: ${JSON.stringify({dataset, doc, aclDoc})}`);
 
@@ -87,7 +86,7 @@ const exercise = async (page, framed, documentId) => {
     `Dialog field is filled, enabled, and valid before submit (${JSON.stringify(validity)})`);
   await frame.click('[aria-label="Save dialog"]');
   await frame.waitForFunction(() => document.querySelector('[aria-label="Count"]')?.textContent === '1', null, {timeout:15_000});
-  check((await frame.locator('[aria-label="Draft dialog"]').evaluate(el => el.open)) === false && (await frame.textContent('[aria-label="Positive"]')) === 'positive', 'submit closes Dialog and _signals drives && rendering');
+  check((await frame.locator('[aria-label="Draft dialog"]').evaluate(el => el.open)) === false && (await frame.textContent('[aria-label="Positive"]')) === 'positive', 'submit closes Dialog and set= drives && rendering');
   check(await frame.locator('[aria-label="Open dialog"]').evaluate(el => el === document.activeElement), 'successful submit restores focus to the trigger');
   await frame.click('[aria-label="Open dialog"]');
   await frame.press('[aria-label="Note"]', 'Escape');
@@ -119,7 +118,7 @@ const afterDoc = await json(await fetch(`${B}/api/artifacts/${doc.id}`, {headers
 const afterDataset = await json(await fetch(`${B}/api/artifacts/${dataset.id}`, {headers}));
 check(afterDoc.version === doc.version, `local edits did not bump the source version (${afterDoc.version})`);
 check(afterDataset.access === 'read' && afterDataset.rowCount === 1, 'local edits did not change stored dataset rows or permissions');
-const forbidden = await api(`/a/${aclDoc.id}/mutate`, {mutation:'stored_write', values:{}});
+const forbidden = await api(`/a/${aclDoc.id}/mutate`, {mutation:'stored_write', args:{}});
 check(forbidden.status === 403, `persistent dataset mutation remains ACL-protected (${forbidden.status})`);
 
 check((await fetch(`${B}/a/${privateDoc.id}`)).status === 404 && (await fetch(`${B}/a/${privateDoc.id}/query`, {method:'POST', headers:{'Content-Type':'text/plain'}, body:'{}'})).status === 404, 'private document and its data route cannot be fetched anonymously');

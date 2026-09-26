@@ -4,7 +4,7 @@ import {assetInput} from '../src/upload-input';
 import {assetFormatOf} from '../../app/lib/story/file-types';
 import {validateMarkupStructure} from '../../app/lib/story/local-validation';
 test('artifact source rejects local paths instead of discovering files or rewriting references',()=>{
- for(const source of ['<a href="./appendix.jsx">Appendix</a>','<img src="./photo.png" />','<img srcSet="./photo.png 1x, ./large.png 2x" />','<Helmet><Query name="q" source="./sales.csv">{`select * from public.rows`}</Query></Helmet><p>Sales</p>'])assert.ok(validateMarkupStructure(source).errors.some(error=>error.message.includes('Local file references')));
+ for(const source of ['<a href="./appendix.jsx">Appendix</a>','<img src="./photo.png" />','<img srcSet="./photo.png 1x, ./large.png 2x" />','<Helmet><Import name="sales" src="./sales.csv" /><Query name="q">{`select * from sales.rows`}</Query></Helmet><p>Sales</p>'])assert.ok(validateMarkupStructure(source).errors.some(error=>error.message.includes('Local file references')));
  assert.deepEqual(validateMarkupStructure('<a href="/a/abc123">Appendix</a><img src="ref:def456" />').errors,[]);
 });
 test('standalone files still choose the correct upload format',()=>{

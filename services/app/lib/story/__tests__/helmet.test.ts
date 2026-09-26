@@ -139,14 +139,14 @@ describe('splitHelmet', () => {
     const tree = nodes('<div><p>plain</p></div>');
     const split = splitHelmet(tree);
     expect(split.helmet).toBeNull();
-    expect(split.content).toEqual({ title: null, style: null, script: null, meta: [], values: [], queries: [], mutations: [] });
+    expect(split.content).toEqual({ title: null, style: null, script: null, meta: [], imports: [], values: [], queries: [], mutations: [] });
     expect(split.body).toEqual(tree);
   });
 
   it('extracts title/style/script losslessly and removes the Helmet from the body', () => {
     const split = splitHelmet(nodes(FULL_HELMET + '<div>body</div>'));
     expect(split.helmet?.tag).toBe('Helmet');
-    expect(split.content).toEqual({ title: 'My doc', style: CSS, script: JS, meta: [], values: [], queries: [], mutations: [] });
+    expect(split.content).toEqual({ title: 'My doc', style: CSS, script: JS, meta: [], imports: [], values: [], queries: [], mutations: [] });
     expect(split.body).toHaveLength(1);
     expect((split.body[0] as JsxElement).tag).toBe('div');
   });
@@ -258,6 +258,7 @@ describe('hoistHelmet — data declarations', () => {
     expect((hoisted[0] as JsxElement).tag).toBe('Helmet');
     const again = hoistHelmet(hoisted);
     expect(again).toEqual(hoisted);
-    expect(splitHelmet(hoisted).content.queries[0].sql).toContain('public.rows');
+    expect(splitHelmet(hoisted).content.queries[0]!.sql).toContain('sales_data.rows');
+    expect(splitHelmet(hoisted).content.imports.map((i) => i.name)).toEqual(['sales_data']);
   });
 });

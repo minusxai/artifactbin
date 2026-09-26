@@ -57,19 +57,19 @@ describe('declared mutations', () => {
    const h=await harness('afbin-seed-declared-mutation-');
    try{
     await writeFile(join(h.root,'doc.yaml'),'type: artifact\nid: abc123\n');
-    assert.equal(await h.invoke(['query','doc.yaml','--write','--name','add_row','--param','name=x','--dry-run','--json'],({method,path})=>method==='GET'?Response.json(head('abc123',{mutations:[{name:'add_row',params:[{name:'name',type:'string'}]}]})):Response.json({error:`unexpected ${method} ${path}`},{status:500})),0,h.out.join(''));
+    assert.equal(await h.invoke(['query','doc.yaml','--write','--name','add_row','--param','name=x','--dry-run','--json'],({method,path})=>method==='GET'?Response.json(head('abc123',{mutations:[{name:'add_row',args:[{name:'name',type:'string'}]}]})):Response.json({error:`unexpected ${method} ${path}`},{status:500})),0,h.out.join(''));
     assert.equal(h.last().dry_run,true);assert.ok(h.calls.every(c=>c.method==='GET'),'dry-run never mutates');
-    assert.equal(await h.invoke(['query','doc.yaml','--write','--name','add_row','--param','name=x','--json'],({method,path})=>method==='POST'&&path==='/api/artifacts/abc123/mutate'?Response.json({id:'abc123',version:3,affected:1,rowCount:1}):Response.json(head('abc123',{mutations:[{name:'add_row',params:[{name:'name',type:'string'}]}]}))),0,h.out.join(''));
-    const mutate=h.calls.find(c=>c.method==='POST');assert.ok(mutate?.key,'declared mutations use a durable operation');assert.deepEqual((mutate?.body as {name:string;values:unknown}).values,{name:'x'});
+    assert.equal(await h.invoke(['query','doc.yaml','--write','--name','add_row','--param','name=x','--json'],({method,path})=>method==='POST'&&path==='/api/artifacts/abc123/mutate'?Response.json({id:'abc123',version:3,affected:1,rowCount:1}):Response.json(head('abc123',{mutations:[{name:'add_row',args:[{name:'name',type:'string'}]}]}))),0,h.out.join(''));
+    const mutate=h.calls.find(c=>c.method==='POST');assert.ok(mutate?.key,'declared mutations use a durable operation');assert.deepEqual((mutate?.body as {name:string;args:unknown}).args,{name:'x'});
    }finally{await h.cleanup();}
   });
 });
 
-test('local dataset queries execute DuckDB functions and syntax without PostgreSQL translation',async()=>{
+test('local dataset queries run the SQLite engine and its library functions offline',async()=>{
  const root=await mkdtemp(join(tmpdir(),'afbin-native-sql-'));
  try{
   await writeFile(join(root,'rows.json'),'[{"hours":1},{"hours":2},{"hours":3},{"hours":10}]');
-  await writeFile(join(root,'read.sql'),"select median(hours::double) as median, strftime(strptime('2026-01','%Y-%m'),'%Y-%m') as month from (select * from public.rows)");
+  await writeFile(join(root,'read.sql'),"select median(cast(hours as real)) as median, date_format(date_trunc('month', '2026-01-17'), '%Y-%m') as month from (select * from public.rows)");
   const out:string[]=[];const code=await runCli(['query','rows.json','--input','read.sql','--json'],{cwd:root,home:root,env:{},interactive:false,fetch:async()=>{throw Error('must stay offline');},stdout:s=>out.push(s),stderr:()=>{}});
   assert.equal(code,0,out.join(''));assert.deepEqual(JSON.parse(out.join('')).results[0].rows,[{median:2.5,month:'2026-01'}]);
  }finally{await rm(root,{recursive:true,force:true});}

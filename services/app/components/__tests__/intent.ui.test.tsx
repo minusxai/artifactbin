@@ -155,6 +155,7 @@ describe('the instruction is consumed, and only it', () => {
 });
 
 const mutationFlow: NonNullable<ArtifactSurfaceProps['dataflow']> = {flow:await compiledOf('<Import name="data" src="ref:data01" /><Mutation name="save">{`delete from data.rows`}</Mutation>',{data01:[{name:'id',type:'string'}]})};
+const localFlow=await compiledOf('<Value name="cart" type="table" value={[{"id":"a"}]} /><Mutation name="clear">{`delete from cart`}</Mutation>');
 describe('membership in the reader breadcrumb',()=>{
  it('sends signed-out Join through login with the return intent',async()=>{
   at('/a/story1', {dataflow:mutationFlow,accountSession:false});
@@ -172,7 +173,7 @@ describe('membership in the reader breadcrumb',()=>{
   expect(await screen.findByRole('button',{name:'Joined — view people'})).toBeInTheDocument();
  });
  it('does not offer membership for a document with only local mutations',()=>{
-  at('/a/story1',{dataflow:{flow:{...mutationFlow.flow,mutations:mutationFlow.flow.mutations!.map(m=>({...m,scope:'local'}))}}});
+  at('/a/story1',{dataflow:{flow:localFlow}});
   expect(screen.queryByRole('button',{name:'Join artefact'})).toBeNull();
  });
 });
