@@ -2,7 +2,10 @@
  * RUN THE SQLITE DATA-SYNTAX MIGRATION to the end (lib/sqlite-syntax-migration),
  * one bounded batch after another, and report every document it passed:
  *
- *   npx tsx scripts/migrate/sqlite/run-migration.ts --db <database url> [--objects <object dir>] [--dry-run] [--batch 100] [--out <report.jsonl>]
+ *   npx tsx scripts/migrate/sqlite/run-migration.ts --db <database url> [--objects <object dir> | --live-objects] [--dry-run] [--batch 100] [--out <report.jsonl>]
+ *
+ * `--live-objects` is the production run: datasets are read from the object
+ * store the environment's S3_URL names. Without it nothing leaves this machine.
  *
  * From the repository root. The report is JSON lines, one outcome per
  * document, appended as each batch commits — so an interrupted run resumes
@@ -57,12 +60,12 @@ export function conflictReport(outcomes: SqliteSyntaxMigrationOutcome[]): string
 
 async function main() {
   const { values } = parseArgs({ options: {
-    db: { type: 'string' }, objects: { type: 'string' }, 'dry-run': { type: 'boolean' }, batch: { type: 'string' }, out: { type: 'string' },
+    db: { type: 'string' }, objects: { type: 'string' }, 'live-objects': { type: 'boolean' }, 'dry-run': { type: 'boolean' }, batch: { type: 'string' }, out: { type: 'string' },
   } });
   if (!values.db) throw new Error('usage: run-migration.ts --db <url> [--objects <dir>] [--dry-run] [--batch 100] [--out <report.jsonl>]');
   const dryRun = !!values['dry-run'];
   const out = values.out ?? (dryRun ? 'sqlite-syntax-migration.dry-run.jsonl' : 'sqlite-syntax-migration.jsonl');
-  await useLocalServices({ db: values.db, objects: values.objects });
+  await useLocalServices({ db: values.db, objects: values.objects, liveObjects: !!values['live-objects'] });
   // After the environment is set: lib/config reads it on first import.
   const [{ getDb }, { runSqliteSyntaxMigrationBatch }] = await Promise.all([import('@/lib/db'), import('@/lib/sqlite-syntax-migration')]);
   const db = await getDb();

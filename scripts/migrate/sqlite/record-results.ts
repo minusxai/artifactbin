@@ -68,9 +68,9 @@ export async function recordResults(
 }
 
 async function main() {
-  const { values } = parseArgs({ options: { db: { type: 'string' }, objects: { type: 'string' }, out: { type: 'string' } } });
-  if (!values.db || !values.objects || !values.out) throw new Error('usage: record-results.ts --db <url> --objects <dir> --out <file.jsonl>');
-  await useLocalServices({ db: values.db, objects: values.objects });
+  const { values } = parseArgs({ options: { db: { type: 'string' }, objects: { type: 'string' }, 'live-objects': { type: 'boolean' }, out: { type: 'string' } } });
+  if (!values.db || !(values.objects || values['live-objects']) || !values.out) throw new Error('usage: record-results.ts --db <url> (--objects <dir> | --live-objects) --out <file.jsonl>');
+  await useLocalServices({ db: values.db, objects: values.objects, liveObjects: !!values['live-objects'] });
   // After the environment is set: lib/config reads it on first import.
   const [{ getDb }, artifacts] = await Promise.all([import('@/lib/db'), import('@/lib/artifacts')]);
   const db = await getDb();

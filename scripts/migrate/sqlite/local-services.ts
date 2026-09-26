@@ -9,10 +9,14 @@
  * The engine is registered the way the server's composition root does it
  * (server.ts), from the same local entry.
  */
-export async function useLocalServices(options: { db: string; objects?: string }): Promise<void> {
+export async function useLocalServices(options: { db: string; objects?: string; liveObjects?: boolean }): Promise<void> {
   process.env.DATABASE_URL = options.db;
   if (options.objects) process.env.OBJECT_STORE__LOCAL_DIR = options.objects;
-  for (const remote of ['S3_URL', 'SQL__SERVICE_URL', 'BROWSER__SERVICE_URL', 'EVENTS__SERVICE_URL']) delete process.env[remote];
+  // The production run reads datasets from the deployment's own object store
+  // (`--live-objects`, S3_URL from its environment); a rehearsal never does.
+  const remote = ['SQL__SERVICE_URL', 'BROWSER__SERVICE_URL', 'EVENTS__SERVICE_URL', ...(options.liveObjects ? [] : ['S3_URL'])];
+  if (options.liveObjects && !process.env.S3_URL) throw new Error('--live-objects needs S3_URL in the environment');
+  for (const name of remote) delete process.env[name];
   const [{ setServices }, { MAX_QUERY_ROWS, QUERY_TIMEOUT_MS }, { createSql }] = await Promise.all([
     import('@/lib/services'), import('@/lib/config'), import('@artifactbin/sql/local'),
   ]);
