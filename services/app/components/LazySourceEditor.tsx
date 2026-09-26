@@ -27,8 +27,8 @@ export default function LazySourceEditor(props: SourceEditorProps) {
         ? { start: previous.selectionStart, end: previous.selectionEnd } : null;
     }
     plainEditor.current = input;
-    // The module download can render this fallback more than once. Carry
-    // focus through that intermediate textarea too.
+    // Suspense can remount this fallback while the download is in flight.
+    // Carry focus through that intermediate textarea too.
     if (input && handoff.current) {
       input.focus();
       input.setSelectionRange(handoff.current.start, handoff.current.end);
