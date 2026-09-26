@@ -244,6 +244,11 @@ describe('translateSql rules', () => {
     ok('update rows set n = 1 where id in (select id from "rows")', 'update bookings.rows set n = 1 where id in (select id from bookings."rows")', { ...sourced, statement: 'mutation' });
     ok('insert into rows (id) values (1)', 'insert into bookings.rows (id) values (1)', { ...sourced, statement: 'mutation' });
     manual('select * from models.activity', /models\.activity/, 'models.activity', sourced);
+    // A FROM that names no table: IS DISTINCT FROM, and FROM inside a call's parentheses.
+    ok('select * from rows where a is not distinct from b and c is distinct from d', 'select * from bookings.rows where a is b and c is not d', sourced);
+    ok('select extract(year from created) from rows', "select date_part('year', created) from bookings.rows", sourced);
+    ok("select trim(both ' ' from name), substring(name from 2) from rows where id in (select id from rows)", "select trim(both ' ' from name), substring(name from 2) from bookings.rows where id in (select id from bookings.rows)", sourced);
+    ok('delete from rows where id = $_row.id', 'delete from bookings.rows where id = $_row.id', { ...sourced, statement: 'mutation' });
   });
 
   it('Postgres SQL is left alone apart from $_me', () => {
