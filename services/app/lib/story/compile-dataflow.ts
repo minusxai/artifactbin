@@ -465,7 +465,14 @@ export function compileDataflow(flow: Dataflow, ctx: CompileContext, body?: JsxN
  * values to show (filtered out, all NULL) stays null.
  */
 const SAMPLE: Record<ColumnType, Scalar> = { string: 'text', number: 1, boolean: true, date: '2026-01-01', timestamp: '2026-01-01T00:00:00.000Z', user: null };
-const sampleRow = (columns: DatasetColumn[]): Record<string, Scalar> => Object.fromEntries(columns.map((c) => [c.name, SAMPLE[c.type]]));
+const sampleRow = (columns: DatasetColumn[], sample: Record<ColumnType, Scalar>): Record<string, Scalar> => Object.fromEntries(columns.map((c) => [c.name, sample[c.type]]));
+/**
+ * The second sample, for a query the first made fail: the sample text is no
+ * date, number or pattern the statement parses (`to_date(month || '-01')`), and
+ * a synthetic value's failure says nothing about the document — so text is
+ * NULL, and the rest of the row still shows its types.
+ */
+const NO_TEXT: Record<ColumnType, Scalar> = { ...SAMPLE, string: null };
 
 function typeFromDryRun(ctx: CompileContext, queries: CompiledQuery[], imports: CompiledImport[], flow: Dataflow, types: Record<string, ColumnType>): void {
   const local = queries.filter((q) => q.engine === 'sqlite');
@@ -479,10 +486,12 @@ function typeFromDryRun(ctx: CompileContext, queries: CompiledQuery[], imports: 
   const params: Record<string, Scalar> = { [paramSqlName('_me.id')]: null, _now: ctx.now ?? new Date().toISOString(), _tz: 'UTC' };
   for (const v of flow.values) if (v.kind === 'scalar') params[v.name] = v.default;
   const paramTypes: Record<string, ColumnType> = { ...types, [paramSqlName('_me.id')]: 'user', _now: 'timestamp', _tz: 'string' };
-  const results = ctx.engine.run({
-    tables, imports: Object.fromEntries(imports.map((i) => [i.name, Object.fromEntries(i.tables.map((t) => [t.name, { rows: [sampleRow(t.columns)], columns: t.columns }]))])),
+  const run = (sample: Record<ColumnType, Scalar>) => ctx.engine.run({
+    tables, imports: Object.fromEntries(imports.map((i) => [i.name, Object.fromEntries(i.tables.map((t) => [t.name, { rows: [sampleRow(t.columns, sample)], columns: t.columns }]))])),
     queries: local.map((q) => ({ name: q.name, sql: q.sql })), params, paramTypes,
   }, { limit: 1000, pageLimit: 1000, timeoutMs: 2000 });
+  const first = run(SAMPLE);
+  const results = local.some((q) => isQueryFailure(first[q.name] ?? { error: '' })) ? { ...run(NO_TEXT), ...Object.fromEntries(Object.entries(first).filter(([, r]) => !isQueryFailure(r))) } : first;
   for (const q of local) {
     const result = results[q.name];
     if (!result || isQueryFailure(result)) continue;
