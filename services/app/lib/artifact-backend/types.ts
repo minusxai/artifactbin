@@ -195,7 +195,7 @@ export interface ArtifactBackend {
   queryTransport(): QueryTransport & { dispose(): void };
 
   // ── comments ──────────────────────────────────────────────────────────────
-  /** Every page of annotations; all statuses when `status` is omitted. */
+  /** Every page of annotations with this status; OPEN when `status` is omitted (the server's default). */
   listAnnotations(status?: 'open' | 'resolved', options?: RequestOptions): Promise<AnnotationWire[]>;
   /** Rejects with a BackendRequestError (`signInRequired` for a guest). */
   createAnnotation(body: Record<string, unknown>, idempotencyKey: string): Promise<AnnotationWire>;

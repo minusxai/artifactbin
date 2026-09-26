@@ -28,6 +28,7 @@ import MarkdownLite from '@/components/MarkdownLite';
 import { Tooltip } from '@/components/Tooltip';
 import { wrapSelection, type MdMarker } from '@/lib/markdown-lite';
 import { mentionDraft } from '@/lib/mention-draft';
+import { useOptionalArtifactBackend } from '@/lib/artifact-backend/context';
 
 interface MarkdownFieldProps {
   artifactId?:string;
@@ -77,6 +78,9 @@ export default function MarkdownField({
   const pickerRef = useRef<MentionPickerHandle>(null);
   const restore = useRef<{ start: number; end: number } | null>(null);
   const draft = mentionDraft(value);
+  // Where no one can be mentioned (an offline file), "@" is just a character.
+  const backend = useOptionalArtifactBackend();
+  const canMention = !backend || !(backend.unavailable('remoteSessions') && backend.unavailable('mentions'));
 
   // After the commit, never during it: the value has to be on the element
   // before a range into it means anything.
@@ -168,7 +172,7 @@ export default function MarkdownField({
             const raw = draft.edit(text, end);
             const next = mentionDraft(raw);
             const match=text.slice(0,end).match(/(?:^|\s)@([^\s@\[\]]*)$/);
-            setMention(match?{start:next.toRaw(end-match[1].length-1),end:next.toRaw(end, 'end'),query:match[1]}:null);
+            setMention(canMention&&match?{start:next.toRaw(end-match[1].length-1),end:next.toRaw(end, 'end'),query:match[1]}:null);
             onChange(raw);
           }}
           onClick={() => setMention(null)}
@@ -183,7 +187,7 @@ export default function MarkdownField({
         const caret=mention.start+text.length;restore.current={start:caret,end:caret};
         onChange(value.slice(0,mention.start)+text+value.slice(mention.end));setMention(null);
       }}/>}
-      {!previewing && !mention && <p className="mb-2 text-[10px] text-muted">Type @ to mention an agent · Ctrl/⌘ + Enter to send</p>}
+      {!previewing && !mention && <p className="mb-2 text-[10px] text-muted">{canMention ? 'Type @ to mention an agent · ' : ''}Ctrl/⌘ + Enter to send</p>}
     </div>
   );
 }

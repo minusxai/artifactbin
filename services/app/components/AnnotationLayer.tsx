@@ -50,7 +50,7 @@ import CommentScreenshot from './CommentScreenshot';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Check, ChevronDown, ChevronRight, EllipsisVertical, MessageSquare, LoaderCircle, SquareDashedMousePointer, Trash2, X } from 'lucide-react';
-import { useArtifactBackend } from '@/lib/artifact-backend/context';
+import { useArtifactBackend, useOptionalArtifactBackend } from '@/lib/artifact-backend/context';
 import { BackendRequestError } from '@/lib/artifact-backend/errors';
 import { FeatureGate } from '@/components/FeatureUnavailable';
 import type { AnnotationCommentWire, AnnotationWire } from '@/lib/annotations';
@@ -289,6 +289,8 @@ function AgentMark({ label, compact = false, decorative = false, borderless = fa
 /** Google-Docs-shaped attribution: a profile avatar for people, a product mark for agents. */
 function AuthorIdentity({ author }: { author: AnnotationCommentWire['author'] }) {
   const label = authorLabel(author);
+  // Offline, a name is a label someone typed, not a profile to visit.
+  const offline = useOptionalArtifactBackend()?.mode === 'offline';
   return (
     <span className="flex min-w-0 items-center gap-2">
       {author.kind === 'human' ? (
@@ -298,7 +300,7 @@ function AuthorIdentity({ author }: { author: AnnotationCommentWire['author'] })
       ) : (
         <AgentMark label={label} />
       )}
-      {author.sessionId ? <a href={`/chat?session=${author.sessionId}`} target="_blank" rel="noopener noreferrer" className="truncate text-[11px] font-semibold" style={{color:REMOTE_COLOR_CSS[author.color??remoteColor(author.sessionId)]}}>@{label}</a> : author.kind === 'human' && author.label ? (
+      {author.sessionId ? <a href={`/chat?session=${author.sessionId}`} target="_blank" rel="noopener noreferrer" className="truncate text-[11px] font-semibold" style={{color:REMOTE_COLOR_CSS[author.color??remoteColor(author.sessionId)]}}>@{label}</a> : author.kind === 'human' && author.label && !offline ? (
         <a
           href={`/@${encodeURIComponent(author.label)}`}
           aria-label={`View @${author.label} profile`}

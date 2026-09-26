@@ -4,7 +4,8 @@ import RemoteMentionPicker from "../RemoteMentionPicker";
 import MarkdownLite from '../MarkdownLite';
 import MarkdownField from '../MarkdownField';
 import { useState } from 'react';
-import { httpBackendWrapper } from '@/test/helpers/artifact-backend';
+import { fakeBackend, httpBackendWrapper } from '@/test/helpers/artifact-backend';
+import { ArtifactBackendProvider } from '@/lib/artifact-backend/context';
 afterEach(() => vi.unstubAllGlobals());
 it("lets the user select an online session with a stable mention ID", async () => {
   vi.stubGlobal(
@@ -120,4 +121,20 @@ it('removes an offline agent without selecting it and keeps failures retryable',
  await waitFor(()=>expect(screen.queryByLabelText('Mention review (codex)')).toBeNull());
  expect(select).not.toHaveBeenCalled();
  expect(screen.getByRole('button',{name:'Copy connection request'})).toBeTruthy();
+});
+
+it('treats @ as a plain character where no one can be mentioned (an offline file)', () => {
+  function Composer() {
+    const [value, change] = useState('');
+    const [previewing, preview] = useState(false);
+    return <MarkdownField label="Draft" previewLabel="Draft preview" previewToggleLabel="Toggle preview"
+      value={value} onChange={change} previewing={previewing} onPreviewingChange={preview} onSubmit={() => {}} />;
+  }
+  const offline = fakeBackend({ mentions: 'Mentions need a connection.', remoteSessions: 'Agents need a connection.' });
+  render(<ArtifactBackendProvider backend={offline}><Composer /></ArtifactBackendProvider>);
+  expect(screen.queryByText(/Type @ to mention/)).toBeNull();
+  expect(screen.getByText(/Ctrl\/⌘ \+ Enter to send/)).toBeTruthy();
+  fireEvent.change(screen.getByLabelText('Draft'), { target: { value: 'thanks @Asha', selectionStart: 12 } });
+  expect(screen.queryByLabelText('Agent sessions')).toBeNull();
+  expect(offline.remoteSessions).not.toHaveBeenCalled();
 });
