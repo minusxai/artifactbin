@@ -11,7 +11,7 @@ import { createContext, useContext, type ComponentType } from 'react';
 import type { SourceEditorProps } from './SourceEditor';
 
 export interface SourceEditorTools {
-  /** The rich (Monaco) editor module. A rejection keeps the plain editor. */
+  /** The rich (CodeMirror) editor module. A rejection keeps the plain editor. */
   editor(): Promise<{ default: ComponentType<SourceEditorProps> }>;
   /** The "View formatted" formatter module. */
   formatter(): Promise<{ formatJsxPreview(source: string): Promise<string> }>;

@@ -18,7 +18,7 @@ export type OfflineBundleKind = 'core' | 'mermaid';
 
 interface OfflineBundleManifest {
   bundles: Record<OfflineBundleKind, { file: string; sha256: string; raw: number; gzip: number }>;
-  /** Code view's Monaco and prettier, which the file loads on demand (lib/offline/extras). */
+  /** Code view's source editor and prettier, which the file loads on demand (lib/offline/extras). */
   extras?: { file: string; path: string; integrity: string; sha256: string };
 }
 

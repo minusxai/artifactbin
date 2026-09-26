@@ -5,7 +5,7 @@
  * React answers that by discarding the tree and re-rendering the root (#419;
  * seen as "no page errors" failing in the full-kit gate, with the chart
  * drawing anyway because the recovery worked). Everything reached through this
- * shim is a client-only pane: the editor, Monaco, the chart chunk.
+ * shim is a client-only pane: the editor, the source editor, the chart chunk.
  */
 'use client';
 import { createElement, lazy, Suspense, useEffect, useState, type ComponentType, type ReactNode } from 'react';

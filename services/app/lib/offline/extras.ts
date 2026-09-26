@@ -1,5 +1,5 @@
 /**
- * THE OFFLINE FILE'S EXTRAS, LOADED ON DEMAND — Monaco and prettier, which a
+ * THE OFFLINE FILE'S EXTRAS, LOADED ON DEMAND — the source editor and prettier, which a
  * downloaded file does not carry (scripts/build-offline.mjs builds them apart,
  * lib/offline/extras-entry is their bundle).
  *
@@ -22,10 +22,8 @@ export const FORMATTING_OFFLINE = 'Formatting needs a connection.';
 
 /** What the extras bundle leaves on `globalThis.__afbinExtras`: each module the file's bundle stubs, by name. */
 export interface OfflineExtras {
-  /** `monaco-editor/esm/vs/editor/editor.api`, with the HTML tokenizer registered. */
-  monaco: unknown;
-  /** `monaco-editor/min/vs/style.css`, as text. */
-  monacoCss: string;
+  /** `lib/source-editor/codemirror`: CodeMirror, with its styles. */
+  sourceEditor: unknown;
   /** `prettier/standalone`. */
   prettier: unknown;
   /** `prettier/plugins/babel` and `prettier/plugins/estree`. */

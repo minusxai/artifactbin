@@ -45,19 +45,19 @@ describe('offlineBundle', () => {
   });
 });
 
-describe('the extras (Monaco and prettier), loaded on demand', () => {
+describe('the extras (the source editor and prettier), loaded on demand', () => {
   const code = async (kind: 'core' | 'mermaid') => gunzipSync(Buffer.from(await offlineBundle(kind), 'base64')).toString('utf8');
 
   it('are not in either bundle a file carries: those read them off the global the extras set', async () => {
     for (const kind of ['core', 'mermaid'] as const) {
       const text = await code(kind);
-      // Monaco's editor core and prettier's printer, by strings only they contain.
-      for (const marker of ['monaco-editor-background', 'prettier-ignore']) expect(text, `${kind}: ${marker}`).not.toContain(marker);
+      // CodeMirror's editor core and prettier's printer, by strings only they contain.
+      for (const marker of ['cm-scroller', 'prettier-ignore']) expect(text, `${kind}: ${marker}`).not.toContain(marker);
       expect(text).toContain('globalThis.__afbinExtras');
     }
     const extras = readFileSync(path.join(process.cwd(), 'lib/story-runtime/dist/offline', manifest.extras.file), 'utf8');
-    for (const marker of ['monaco-editor-background', 'prettier-ignore', '__afbinExtras']) expect(extras).toContain(marker);
-    // No React of its own: the file's bundle keeps @monaco-editor/react and points it at this Monaco.
+    for (const marker of ['cm-scroller', 'prettier-ignore', '__afbinExtras']) expect(extras).toContain(marker);
+    // No React of its own: the file's bundle keeps components/SourceEditor, which mounts this engine.
     expect(extras).not.toContain('react.transitional.element');
     expect(() => new Script(extras)).not.toThrow();
   });

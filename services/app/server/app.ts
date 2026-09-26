@@ -138,15 +138,12 @@ export const APP_CSP = [
   "media-src 'self' blob:",
   "connect-src 'self' blob:",
   "manifest-src 'self'", "frame-src 'self'", "frame-ancestors 'self'",
-  // The source editor wires a Monaco worker (components/SourceEditor). It is
-  // LAZY — measured: with only the HTML tokenizer loaded, nothing has yet asked
-  // for it — so this is not what broke `code` mode (that was the CDN script,
-  // refused by `script-src`). It is here because the failure would be silent
-  // and remote: `worker-src` has no default of its own, falling back through
-  // `child-src` to `default-src 'none'`, so the first Monaco feature that wants
-  // a worker would be refused by a directive nobody wrote. Vite emits it as a
-  // same-origin asset (measured: `new Worker('/assets/editor.worker-<hash>.js')`),
-  // so `'self'` is the whole permission — NOT `blob:`, which would reopen
+  // No feature starts a worker today (the source editor runs none). This is
+  // here because the failure would be silent and remote: `worker-src` has no
+  // default of its own, falling back through `child-src` to `default-src
+  // 'none'`, so the first feature that wants a worker would be refused by a
+  // directive nobody wrote. Vite emits workers as same-origin assets, so
+  // `'self'` is the whole permission — NOT `blob:`, which would reopen
   // script-from-a-string.
   "worker-src 'self'",
   "form-action 'self'", "object-src 'none'", "base-uri 'self'",
@@ -381,7 +378,7 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
   // Static: content-addressed trees are immutable; everything else is served plainly.
   app.use('/story/*', async (c, next) => { await next(); c.header('cache-control', IMMUTABLE); c.header('access-control-allow-origin', '*'); });
   /*
-   * The offline file's code-view extras (lib/offline/extras): Monaco and prettier,
+   * The offline file's code-view extras (lib/offline/extras): the source editor and prettier,
    * content-addressed like /story/*, and loaded from a file:// page (a `null`
    * origin) by an SRI-pinned script — which is a CORS request, hence the open ACAO.
    */

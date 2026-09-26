@@ -20,7 +20,7 @@ import { datasetQuerySnippet } from '@/lib/story/dataset-usage';
  * deep-link into the same mode.
  *
  * The editor is loaded ON DEMAND: it pulls in the WYSIWYG, the AST write-back
- * and Monaco, and a reader of a shared document must never pay for that.
+ * and the source editor, and a reader of a shared document must never pay for that.
  */
 import dynamic from '@/lib/dynamic';
 import { MessageSquare, Pencil } from 'lucide-react';
@@ -504,7 +504,7 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
 
   /*
    * Fetch the editor bundle for permitted document editors while they read, so pressing edit
-   * swaps in rather than downloading Monaco first.
+   * swaps in rather than downloading it first.
    *
    * A prefetch owes the page two things. It must be CANCELLED with the component:
    * an uncancelled timer fires into a page that is gone, which in the ui suite is

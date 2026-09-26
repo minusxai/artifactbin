@@ -4,7 +4,7 @@
  * then an 8px gap before the document.
  *
  * Its own module because the page needs the number in view mode too — and
- * importing it from the editor would pull the editor (Monaco, the panels, the
+ * importing it from the editor would pull the editor (the source editor, the panels, the
  * whole chart inspector) into the graph of every reader who will never open it.
  */
 export const EDIT_BAR_H = 88;

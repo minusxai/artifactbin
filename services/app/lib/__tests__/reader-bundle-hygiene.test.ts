@@ -6,7 +6,7 @@
  * The vega stack (vega + vega-lite + vega-interpreter + vega-tooltip) is
  * ~500 KB gzipped — two thirds of the whole route — and a plain-text story
  * must never download it. It may only enter through a dynamic import
- * (lib/dynamic), the same boundary that already keeps Monaco out.
+ * (lib/dynamic), the same boundary that already keeps the source editor out.
  *
  * This walks the import graph the way the bundler does: follow value imports,
  * skip `import type` (erased at compile time) and dynamic `import()` (its own
@@ -28,12 +28,10 @@ const READER_ENTRIES = [
 /**
  * Heavy packages that must stay behind a dynamic-import boundary.
  *
- * `monaco-editor` sits beside its React wrapper because it is now the thing
- * with the weight: the wrapper used to fetch Monaco off a CDN at runtime (which
- * the app CSP refused, so `code` mode never opened), and components/SourceEditor
- * bundles it instead — ~2.5 MB that only an owner who presses `code` may pay.
+ * The CodeMirror packages are the source editor (components/SourceEditor,
+ * through lib/source-editor/codemirror): only an owner who presses `code` pays.
  */
-const FORBIDDEN = ['vega', 'vega-lite', 'vega-interpreter', 'vega-tooltip', '@monaco-editor/react', 'monaco-editor'];
+const FORBIDDEN = ['vega', 'vega-lite', 'vega-interpreter', 'vega-tooltip', '@codemirror/view', '@codemirror/state', '@codemirror/language', '@codemirror/lang-javascript'];
 
 /**
  * The SERVED document's own runtime (scripts/build-story-runtime → /story/),
