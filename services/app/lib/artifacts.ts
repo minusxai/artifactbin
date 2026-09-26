@@ -66,7 +66,7 @@ import {newEditId} from './story/splice';
 import type {StringEdit} from './story/edit-batch';
 import { nodeIndex, stampNodeIds } from './story/node-ids';
 import { COMPILED_DATAFLOW, finalizeArtifactMetadata, readCompiledDataflow, storedCompiledDataflow } from './story/parsed-artifact-metadata';
-import { DATA_SYNTAX_META, hasCurrentDataSyntax, PREVIOUS_ENGINE } from './story/data-syntax';
+import { DATA_SYNTAX_META, hasCurrentDataSyntax, PREVIOUS_ENGINE, previousEngineRestore } from './story/data-syntax';
 import { inCurrentSyntax } from './migrate/sqlite/stored';
 import { convertArtifactNow } from './sqlite-syntax-migration';
 import { EMPTY_DATAFLOW, isEmptyDataflow, scalarMatches, type Row, type Scalar } from '@/lib/story/dataflow';
@@ -1162,19 +1162,48 @@ async function listVersionsScoped(scope: Scope, id: string): Promise<VersionSumm
 interface VersionContent extends VersionSummary {
   source: string | null;
   meta: Record<string, unknown>;
+  /** Written for the previous engine, and the converter cannot carry it over without a person (lib/migrate/sqlite/stored). */
+  previousEngine?: true;
 }
 
 /** One archived version WITH content (the editor's version viewer). */
 async function getVersionScoped(scope: Scope, id: string, version: number): Promise<VersionContent | null> {
   const db = await getDb();
-  const owned = await db.query(`SELECT 1 FROM artifacts WHERE id = $1 AND ${scope.where('$2')}`, [id, scope.val]);
-  if (owned.rows.length === 0) return null;
-  return loadArtifactDocument<VersionContent>(db,
+  const owner = (await db.query<{ user_id: string | null; token_id: string }>(`SELECT user_id, token_id FROM artifacts WHERE id = $1 AND ${scope.where('$2')}`, [id, scope.val])).rows[0];
+  if (!owner) return null;
+  const row = await loadArtifactDocument<VersionContent>(db,
     `SELECT v.artifact_id, v.document, v.version, v.title, v.description, v.format, v.source, v.meta, u.username AS by, v.created_at
      FROM artifact_versions v LEFT JOIN users u ON u.id = v.actor_user_id
      WHERE v.artifact_id = $1 AND v.version = $2`,
     [id, version],
   );
+  if (row?.format !== 'markup') return row;
+  // History stays as stored; it READS in the current data syntax, so whatever
+  // restores it (the browser and CLI restores submit these bytes whole) lands
+  // the converted document (lib/migrate/sqlite/stored).
+  const { id: _id, user_id: _user, token_id: _token, ...served } = await inCurrentSyntax({ ...row, id, user_id: owner.user_id, token_id: owner.token_id });
+  return served;
+}
+
+/** One archived version on the wire: `markup` carries the source; one written for the previous engine that needs a person says it cannot be restored as it stands. */
+export function versionToWire(row: VersionContent): Record<string, unknown> {
+  const { source, previousEngine, ...rest } = row;
+  return { ...rest, markup: source, ...(previousEngine ? { previous_engine: previousEngineRestore(row.version) } : {}) };
+}
+
+/**
+ * The head an EDITOR reads to edit (the CLI pull, the browser editor's load):
+ * a document the migration has not reached is converted for real first
+ * (lib/sqlite-syntax-migration convertArtifactNow), so its markup, graph,
+ * edit id and state all describe the converted document the next patch is
+ * prepared against, and an author never edits the previous syntax. One that
+ * needs a person is read as it stands.
+ */
+export async function getEditableArtifactFor(actor: TokenActor, id: string): Promise<ArtifactRow | null> {
+  const row = await getArtifactFor(actor, id);
+  if (row?.format !== 'markup' || hasCurrentDataSyntax(row.meta)) return row;
+  const outcome = await convertArtifactNow(await getDb(), id);
+  return outcome?.outcome === 'converted' || outcome?.outcome === 'unchanged' ? getArtifactFor(actor, id) : row;
 }
 
 /**

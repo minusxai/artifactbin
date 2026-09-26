@@ -25,3 +25,13 @@ export const hasCurrentDataSyntax = (meta: unknown): boolean =>
  * person (lib/archived-version) — in place of failing on syntax this engine refuses.
  */
 export const PREVIOUS_ENGINE = 'This version was written for the previous query engine and cannot run on the current one';
+
+/**
+ * Why an archived version written for the previous engine, which the
+ * converter cannot carry over without a person, is not restored as it stands:
+ * restoring it would publish syntax the current engine refuses or reads
+ * differently. Said by the version read-back (`previous_engine`), for the
+ * browser and CLI restores to refuse with.
+ */
+export const previousEngineRestore = (version: number): string =>
+  `Version ${version} was written for the previous query engine and needs converting by hand, so it cannot be restored as it stands. Read it, and carry what you need into the current document.`;
