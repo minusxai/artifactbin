@@ -31,7 +31,7 @@ import type { DataflowState, Row, Scalar, TableResult } from '@/lib/story/datafl
 import type { CompiledDataflow } from '@/lib/story/compiled-dataflow';
 import { mutationRequestFor, type MutationRequest } from '@/lib/story/mutation-request';
 import type { LocalMutationResult } from '@/lib/story/local-state';
-import { importRef, selectQueries } from '@/lib/story/compiled-flow';
+import { importRef, selectQueries, type ImportTables } from '@/lib/story/compiled-flow';
 import { localZone } from '@/lib/story/builtins';
 import { placeDataflow, type DataflowPlacement } from '@/lib/story/placement';
 import {
@@ -63,6 +63,13 @@ export interface QueryTransport {
   run(values: Record<string, Scalar>, only: string[], localTables?: Record<string, Row[]>): Promise<RunAnswer>;
   /** Read a window of one query with these values; resolves with that query's rows for the window. */
   page(values: Record<string, Scalar>, name: string, page: TablePage, localTables?: Record<string, Row[]>): Promise<TableResult>;
+  /**
+   * Every row of one import the document declares, by its name, for the
+   * page's own engine (lib/story-runtime/page-engine); rejects when this door's
+   * viewer may not hold it. Absent on a transport that cannot ask (the relay,
+   * a capture): the page then runs nothing itself.
+   */
+  hold?(name: string): Promise<ImportTables[string]>;
   /**
    * Perform a declared `<Mutation>` (lib/story/mutation-request: its name, its
    * arguments, the row and value its control supplies). Resolves with the
@@ -191,7 +198,7 @@ export interface DataflowStore {
   replaceFlow(next: { flow: CompiledDataflow; state?: DataflowState; hold?: string[] }): void;
 }
 
-interface CreateStoreOptions {
+export interface CreateStoreOptions {
   /** Debounce before a CONTINUOUS change re-runs (default 150 ms) — a slider must not fire per pixel. */
   debounceMs?: number;
   transport?: QueryTransport | null;

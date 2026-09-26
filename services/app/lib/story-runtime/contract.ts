@@ -126,6 +126,13 @@ export interface StoryIslandData {
    */
   queryUrl?: string;
   /**
+   * The SQLite engine's wasm, at the content-addressed URL the runtime build
+   * records (public/story/manifest.json), for a page that runs the queries
+   * over what its reader holds (dataflow.hold, lib/story-runtime/page-sqlite).
+   * Absent where nothing runs in the page.
+   */
+  sqliteWasm?: string;
+  /**
    * Where this document's WRITES go when it is the TOP-LEVEL page:
    * `POST <mutateUrl> { mutation, args, row?, value? }` (app/a/[id]/mutate), the one other
    * URL its CSP admits. Present only for a document that declares a

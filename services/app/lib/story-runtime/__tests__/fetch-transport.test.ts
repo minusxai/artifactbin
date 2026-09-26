@@ -72,4 +72,18 @@ describe('createFetchTransport', () => {
     const [, init] = f.mock.calls[0] as unknown as [string, RequestInit];
     expect(JSON.parse(String(init.body))).toEqual({ tz: ZONE, mutation: 'add', args: {}, localTables: { cart: [{ id: 1 }] } });
   });
+
+  it('hold(): GETs one import\'s rows by its name, credential-free, and refuses what the door refuses', async () => {
+    const rows = { rows: { rows: [{ a: 1 }], columns: [{ name: 'a', type: 'number' }] } };
+    const f = vi.fn(async () => ok({ tables: rows }));
+    const t = createFetchTransport('/a/abc123/query', f);
+    await expect(t.hold!('sales')).resolves.toEqual(rows);
+    const { u, init, q } = requestOf(f);
+    expect(u.pathname).toBe('/a/abc123/query');
+    expect(q).toEqual({ hold: 'sales' });
+    expect(init?.credentials).toBe('omit');
+    const refused = createFetchTransport('/a/abc123/query', vi.fn(async () => new Response('{"error":"not_holdable"}', { status: 404 })));
+    await expect(refused.hold!('sales')).rejects.toThrow('404');
+  });
 });
+

@@ -48,6 +48,8 @@ interface StoryRuntimeManifest {
   comment: string | null;
   /** Chunks the entry reaches only through `import()` — today, the chart bundle. */
   lazy: string[];
+  /** The page's SQLite engine wasm (StoryIslandData.sqliteWasm). Null for a manifest written before it existed. */
+  sqlite: string | null;
 }
 
 let cached: StoryRuntimeManifest | null = null;
@@ -88,6 +90,8 @@ export function readStoryRuntimeManifest(file: string = storyRuntimeManifest()):
     // full runtime (lib/story/document), which is what they got before.
     comment: local(parsed.comment) ? parsed.comment : null,
     lazy,
+    // ADDITIVE too: without it a page runs nothing itself, as before.
+    sqlite: local(parsed.sqlite) ? parsed.sqlite : null,
   };
   return cached;
 }
@@ -115,16 +119,16 @@ let warned = false;
  * (scripts/build-story-runtime.mjs), mirroring the `test -f libduckdb.so` guard
  * that exists because a partial trace took every route down once already.
  */
-export function storyRuntimeAssets(file?: string): { entry: string | null; anchor: string | null; comment: string | null; lazy: string[] } {
+export function storyRuntimeAssets(file?: string): { entry: string | null; anchor: string | null; comment: string | null; lazy: string[]; sqlite: string | null } {
   try {
-    const { entry, anchor, comment, lazy } = readStoryRuntimeManifest(file);
-    return { entry, anchor, comment, lazy };
+    const { entry, anchor, comment, lazy, sqlite } = readStoryRuntimeManifest(file);
+    return { entry, anchor, comment, lazy, sqlite };
   } catch (err) {
     if (!warned) {
       warned = true;
       console.error('[story] serving documents WITHOUT the hydration runtime:', err);
     }
-    return { entry: null, anchor: null, comment: null, lazy: [] };
+    return { entry: null, anchor: null, comment: null, lazy: [], sqlite: null };
   }
 }
 

@@ -13,6 +13,7 @@ import { QUERY_REQUEST_PARAM } from './contract';
 import type { QueryTransport } from './store';
 import type { DataflowState, TableResult } from '@/lib/story/dataflow';
 import { localZone } from '@/lib/story/builtins';
+import type { ImportTables } from '@/lib/story/compiled-flow';
 
 export type FetchLike = (input: string, init?: RequestInit) => Promise<Response>;
 
@@ -34,6 +35,11 @@ export function createFetchTransport(queryUrl: string, fetchFn: FetchLike = (i, 
   };
   return {
     run: (values, only, localTables) => ask({ values, only, tz: localZone(), ...(localTables ? { localTables } : {}) }),
+    hold: async (name) => {
+      const res = await fetchFn(`${queryUrl}${queryUrl.includes('?') ? '&' : '?'}${QUERY_REQUEST_PARAM}=${encodeURIComponent(JSON.stringify({ hold: name }))}`, { method: 'GET', credentials: 'omit' });
+      if (!res.ok) throw new Error(`hold failed (${res.status})`);
+      return ((await res.json()) as { tables: ImportTables[string] }).tables;
+    },
     page: async (values, name, page, localTables): Promise<TableResult> => {
       const r = await ask({ values, only: [name], page: { name, ...page }, tz: localZone(), ...(localTables ? { localTables } : {}) });
       const table = r.tables[name];

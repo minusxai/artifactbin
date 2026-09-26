@@ -76,6 +76,12 @@ describe('the app CSP', () => {
     expect((await app.request('/login')).headers.get('content-security-policy')).not.toMatch(/wss?:/);
   });
 
+  it('compiles WebAssembly (the page\'s SQLite engine) and evaluates no other code', () => {
+    const script = APP_CSP.split('; ').find((directive) => directive.startsWith('script-src'))!.split(' ');
+    expect(script).toContain("'wasm-unsafe-eval'");
+    expect(script).not.toContain("'unsafe-eval'");
+  });
+
   it('allows only the known app and development bootstrap scripts inline', () => {
     expect(APP_INLINE_SCRIPT_HASHES.split(' ')).toHaveLength(2);
     expect(APP_CSP.split('; ').find((directive) => directive.startsWith('script-src'))).not.toContain("'unsafe-inline'");
