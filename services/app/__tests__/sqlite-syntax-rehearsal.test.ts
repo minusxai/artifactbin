@@ -107,11 +107,14 @@ describe('compareResults', () => {
 
   it('says a result the previous engine gave differently on a second run was unstable, not changed', () => {
     const run = (rows: unknown[][]): RecordedResult => ({ document: 'eeeeee', query: 'top', columns: ['n'], rows });
-    const unstable = compareResults([run([[1], [2]])], [run([[1], [4]])], [{ artifactId: 'eeeeee', outcome: 'converted' }], [run([[1], [3]])]);
+    const unstable = compareResults([run([[1], [2]])], [run([[1], [4]])], [{ artifactId: 'eeeeee', outcome: 'converted' }], [[run([[1], [3]])]]);
     expect(unstable.documents[0]!.queries).toEqual([{ query: 'top', status: 'unstable before', detail: 'the previous engine answered differently on a second run; before only [2]; after only [4]' }]);
     expect(regressions(unstable)).toEqual([]);
-    const stable = compareResults([run([[1], [2]])], [run([[1], [4]])], [{ artifactId: 'eeeeee', outcome: 'converted' }], [run([[2], [1]])]);
+    const stable = compareResults([run([[1], [2]])], [run([[1], [4]])], [{ artifactId: 'eeeeee', outcome: 'converted' }], [[run([[2], [1]])]]);
     expect(stable.documents[0]!.queries[0]).toMatchObject({ status: 'differs' });
+    // Any of several reruns disagreeing is enough: ties at a cut come up only on some runs.
+    const third = compareResults([run([[1], [2]])], [run([[1], [4]])], [{ artifactId: 'eeeeee', outcome: 'converted' }], [[run([[2], [1]])], [run([[1], [5]])]]);
+    expect(third.documents[0]!.queries[0]).toMatchObject({ status: 'unstable before' });
   });
 
   it('prints only what is not identical, then totals', () => {

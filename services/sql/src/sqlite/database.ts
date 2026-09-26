@@ -184,7 +184,7 @@ export class SqliteDatabase {
     const { capi } = sqlite3;
     this.#db = new sqlite3.oo1.DB(':memory:');
     try {
-      registerLibrary(this.#db as never, (ctx, bytes) => capi.sqlite3_js_aggregate_context(ctx, bytes));
+      registerLibrary(this.#db as never, (ctx, bytes) => capi.sqlite3_js_aggregate_context(ctx, bytes), (ctx, value) => capi.sqlite3_result_double(ctx, value));
       this.#virtual = new Set(this.trusted(() => this.#db.exec({ sql: 'SELECT name FROM pragma_module_list', returnValue: 'resultRows' }).map((r) => String(r[0]).toLowerCase())));
       // A write's effect is read from triggers; REPLACE must fire them too.
       this.trusted(() => this.#db.exec('PRAGMA recursive_triggers = ON'));
