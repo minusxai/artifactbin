@@ -26,8 +26,12 @@ import { useLocalServices } from './local-services';
 type Artifacts = typeof import('@/lib/artifacts');
 
 export type RecordedResult =
-  /** `truncated`: the engine cut the result short (a cap, or the previous engine's first page of a `source=` query). */
-  | { document: string; query: string; columns: string[]; rows: unknown[][]; truncated?: true }
+  /**
+   * `truncated`: the engine shipped only a window of the result — the previous
+   * engine's first page of a `source=` query, or the display window — of
+   * `totalRows` rows.
+   */
+  | { document: string; query: string; columns: string[]; rows: unknown[][]; truncated?: true; totalRows?: number }
   | { document: string; query: string; error: string }
   | { document: string; error: string };
 
@@ -53,7 +57,7 @@ export async function recordResults(
       if (!ran) continue;
       for (const [query, table] of Object.entries(ran.state.tables)) {
         const columns = table.columns.map((column) => column.name);
-        emit({ document: id, query, columns, rows: table.rows.map((r) => columns.map((name) => plain(r[name]))), ...(table.truncated ? { truncated: true as const } : {}) });
+        emit({ document: id, query, columns, rows: table.rows.map((r) => columns.map((name) => plain(r[name]))), ...(table.truncated ? { truncated: true as const, ...(table.totalRows !== undefined ? { totalRows: table.totalRows } : {}) } : {}) });
       }
       for (const [query, error] of Object.entries(ran.state.errors)) emit({ document: id, query, error });
     } catch (error) {
