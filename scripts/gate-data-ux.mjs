@@ -45,10 +45,10 @@ check(!!made.id, `the dataset lands with a usable reference (${made.ref})`);
  * data-ingest-routes.test.ts's; what is checked here is the handshake.)
  */
 check(made.ref === `ref:${made.id}`, `the create response carries the ref form (${made.ref})`);
-check((made.usage ?? '').includes(`<Query name="rows" source="ref:${made.id}">`)
-  && /from\s+"public"\."rows"/i.test(made.usage ?? '')
+check((made.usage ?? '').includes(`<Import name="data" src="ref:${made.id}" /><Query name="rows">`)
+  && /from\s+data\."rows"/i.test(made.usage ?? '')
   && /data="\$rows"/.test(made.usage ?? ''),
-'and a canonical source query over public.rows + embed bound as data="$rows"');
+'and an Import with a query over its rows + embed bound as data="$rows"');
 check(/vega-lite/.test(made.usage ?? ''), 'with a viz spec bound to the real columns');
 
 // ── the dataset PAGE: the bug from the screenshot ───────────────────────────
