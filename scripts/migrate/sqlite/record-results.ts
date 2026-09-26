@@ -26,7 +26,8 @@ import { useLocalServices } from './local-services';
 type Artifacts = typeof import('@/lib/artifacts');
 
 export type RecordedResult =
-  | { document: string; query: string; columns: string[]; rows: unknown[][] }
+  /** `truncated`: the engine cut the result short (a cap, or the previous engine's first page of a `source=` query). */
+  | { document: string; query: string; columns: string[]; rows: unknown[][]; truncated?: true }
   | { document: string; query: string; error: string }
   | { document: string; error: string };
 
@@ -52,7 +53,7 @@ export async function recordResults(
       if (!ran) continue;
       for (const [query, table] of Object.entries(ran.state.tables)) {
         const columns = table.columns.map((column) => column.name);
-        emit({ document: id, query, columns, rows: table.rows.map((r) => columns.map((name) => plain(r[name]))) });
+        emit({ document: id, query, columns, rows: table.rows.map((r) => columns.map((name) => plain(r[name]))), ...(table.truncated ? { truncated: true as const } : {}) });
       }
       for (const [query, error] of Object.entries(ran.state.errors)) emit({ document: id, query, error });
     } catch (error) {

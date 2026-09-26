@@ -40,6 +40,15 @@ describe('recordResults', () => {
     expect(lines.find((line) => line.document === doc)).toEqual({ document: doc, query: 'nums', columns: ['n'], rows: [[1], [2]] });
     expect(lines.find((line) => line.document === 'zzbrok')).toMatchObject({ query: 'broken', error: expect.stringMatching(/json/i) });
   });
+
+  it('marks a result the engine cut short', async () => {
+    const db = await harness.db();
+    await legacy('zzpage', '<Helmet><Query name="page">{`select 1 as n`}</Query></Helmet><DataTable data="$page" />');
+    const cut = async () => ({ flow: { imports: [], values: [], queries: [], mutations: [] }, state: { values: {}, errors: {}, tables: { page: { columns: [{ name: 'n', type: 'number' as const }], rows: [{ n: 1 }], truncated: true } } } });
+    const lines: RecordedResult[] = [];
+    await recordResults({ db, getArtifactById, dataflowForRow: cut }, (line) => lines.push(line));
+    expect(lines).toEqual([{ document: 'zzpage', query: 'page', columns: ['n'], rows: [[1]], truncated: true }]);
+  });
 });
 
 describe('compareResults', () => {
@@ -74,7 +83,7 @@ describe('compareResults', () => {
     expect(documents[0].queries.find((q) => q.query === 'drift')!.detail).toBe('before only [2]; after only [3]');
     expect(documents[0].queries.find((q) => q.query === 'today')!.clock).toBe(true);
     expect(documents[1].queries.map((q) => [q.query, q.status, q.detail])).toEqual([['added', 'only after', undefined], ['renamed', 'differs', 'columns ["a"] → ["b"]']]);
-    expect(totals).toEqual({ documents: 3, clock: 1, identical: 1, differs: 3, 'failed before': 1, 'failed after': 1, 'failed both': 0, 'only before': 0, 'only after': 1 });
+    expect(totals).toEqual({ documents: 3, clock: 1, identical: 1, differs: 3, 'cut before': 0, 'failed before': 1, 'failed after': 1, 'failed both': 0, 'only before': 0, 'only after': 1 });
   });
 
   it('counts as changed by the migration every document it did not leave as a conflict', () => {
@@ -85,12 +94,23 @@ describe('compareResults', () => {
     expect(regressions(cleared)).toEqual([]);
   });
 
+  it('says a result the previous engine cut short, whose rows are all still there, was cut — not changed', () => {
+    const page: RecordedResult = { document: 'dddddd', query: 'page', columns: ['n'], rows: [[1], [2]], truncated: true };
+    const whole: RecordedResult = { document: 'dddddd', query: 'page', columns: ['n'], rows: [[3], [2], [1]] };
+    const cut = compareResults([page], [whole], [{ artifactId: 'dddddd', outcome: 'converted' }]);
+    expect(cut.documents[0]!.queries).toEqual([{ query: 'page', status: 'cut before', detail: 'the previous engine returned 2 rows of it; 3 now' }]);
+    expect(cut.totals['cut before']).toBe(1);
+    expect(regressions(cut)).toEqual([]);
+    const lost = compareResults([page], [{ ...whole, rows: [[3], [2]] }], [{ artifactId: 'dddddd', outcome: 'converted' }]);
+    expect(lost.documents[0]!.queries[0]).toMatchObject({ status: 'differs', detail: 'before only [1]; after only [3]' });
+  });
+
   it('prints only what is not identical, then totals', () => {
     const text = formatComparison(compareResults(before, after, report));
     expect(text).not.toMatch(/\bsame\b/);
     expect(text).toContain('today (reads the clock)');
     expect(text).toContain('cccccc  not in the migration report\n  document failed before: timeout');
-    expect(text.split('\n').at(-1)).toBe('documents 3; queries: identical 1, differs 3, failed before 1, failed after 1, failed both 0, only before 0, only after 1; reading the clock 1');
+    expect(text.split('\n').at(-1)).toBe('documents 3; queries: identical 1, differs 3, cut before 0, failed before 1, failed after 1, failed both 0, only before 0, only after 1; reading the clock 1');
   });
 });
 
