@@ -335,11 +335,25 @@ const viewer: Rule = (v) => {
   return i < 0 ? null : { edits: [v.replace(i, i, '$_me.id')] };
 };
 
-/** Where a statement names a table: after FROM, JOIN, UPDATE, INTO, or a comma in a FROM list. */
-const tablePosition = (v: View, i: number): boolean => {
+/**
+ * Where a statement names a table: after FROM, JOIN, UPDATE, INTO, or a comma
+ * in a FROM list. Not the FROM of `IS DISTINCT FROM`, nor one inside a call's
+ * own parentheses (`extract(year from d)`, `trim(both ' ' from s)`).
+ */
+function tablePosition(v: View, i: number): boolean {
   const before = v.sig[i - 1];
-  return ['from', 'join', 'update', 'into'].includes(word(before)) || (before?.text === ',' && v.clauseOf(i) === 'from');
-};
+  if (before?.text === ',') return v.clauseOf(i) === 'from';
+  if (!['from', 'join', 'update', 'into'].includes(word(before))) return false;
+  if (word(before) !== 'from') return true;
+  if (word(v.sig[i - 2]) === 'distinct') return false;
+  for (let j = i - 2; j >= 0; j--) {
+    const t = v.sig[j];
+    if (t.text === ')' || t.text === ']') { j = v.pairs.get(j)!; continue; }
+    if (t.text !== '(') continue;
+    return !(v.sig[j - 1]?.kind === 'word' && !['select', 'with'].includes(word(v.sig[j + 1])));
+  }
+  return true;
+}
 
 /** Names the statement defines for itself: `with name[(cols)] as (…)`. */
 function cteNames(v: View): Set<string> {
