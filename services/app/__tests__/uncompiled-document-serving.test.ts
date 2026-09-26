@@ -42,7 +42,7 @@ const query = async (doc: string, who: Owner) => {
   return (await res.json()) as { tables: Record<string, unknown>; errors: Record<string, string> };
 };
 
-const BROKEN = '<Query name="broken"> no such function: no_such_function';
+const BROKEN = '<Query name="broken"> no such function: no_such_function — every function a statement may call is in afbin help markup-sql-functions';
 /** One query that cannot compile, one that could on its own, a Value, and a write. */
 const SOURCE = [
   '<Helmet>',
