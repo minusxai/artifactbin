@@ -16,7 +16,7 @@
  * JSON text, dates and timestamps as instants (so a DuckDB midnight timestamp
  * equals the date the library returns), numbers to 12 significant digits.
  */
-import { isQueryFailure, type Row, type RunInput, type Scalar, type SqlService, type TableResult } from '@artifactbin/contracts';
+import { isQueryFailure, type RunInput, type Scalar, type SqlService, type TableResult } from '@artifactbin/contracts';
 import { normalizeTimestamp } from '@artifactbin/utils/shape';
 
 export interface DiffSide {
@@ -43,15 +43,14 @@ export interface DiffInput {
 
 export type DiffVerdict =
   | { name: string; status: 'same' }
-  | {
-      name: string;
-      status: 'different';
-      /** Present when the output column names differ (in order). */
-      columns?: { original: string[]; translated: string[] };
-      /** Present when the rows differ; at most a few of each. */
-      rows?: { missing: unknown[][]; extra: unknown[][] };
-    }
+  | ({ name: string; status: 'different' } & TableDifference)
   | { name: string; status: 'failed'; original?: string; translated?: string };
+
+/** How two results of one query differ: column names (in order), or rows (at most a few of each). */
+export interface TableDifference {
+  columns?: { original: string[]; translated: string[] };
+  rows?: { missing: unknown[][]; extra: unknown[][] };
+}
 
 const SAMPLE = 5;
 const DATE_LIKE = /^\d{4}-\d{2}-\d{2}(?:[T ]\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:Z|[+-]\d{2}(?::?\d{2})?)?)?$/i;
@@ -74,9 +73,12 @@ export function comparable(value: unknown): unknown {
   return JSON.stringify(value);
 }
 
-const rowsOf = (result: TableResult): unknown[][] => {
+/** A result as far as the comparison reads it: column names and rows by name. */
+type Table = { columns: ReadonlyArray<{ name: string }>; rows: ReadonlyArray<Record<string, unknown>> };
+
+const rowsOf = (result: Table): unknown[][] => {
   const names = result.columns.map((c) => c.name);
-  return result.rows.map((row: Row) => names.map((name) => comparable(row[name])));
+  return result.rows.map((row) => names.map((name) => comparable(row[name])));
 };
 
 /** Rows present in `a` more often than in `b`, by value. */
@@ -122,20 +124,29 @@ export async function diffStatements(input: DiffInput, sides: { original: DiffSi
       verdicts.push({ name: c.name, status: 'failed', ...(typeof original === 'string' ? { original } : {}), ...(typeof translated === 'string' ? { translated } : {}) });
       continue;
     }
-    const names = { original: original.columns.map((col) => col.name), translated: translated.columns.map((col) => col.name) };
-    const columnsDiffer = JSON.stringify(names.original) !== JSON.stringify(names.translated);
-    const a = rowsOf(original);
-    const b = rowsOf(translated);
-    const missing = surplus(a, b);
-    const extra = surplus(b, a);
-    const rowsDiffer = missing.length > 0 || extra.length > 0;
-    if (!columnsDiffer && !rowsDiffer) { verdicts.push({ name: c.name, status: 'same' }); continue; }
-    verdicts.push({
-      name: c.name,
-      status: 'different',
-      ...(columnsDiffer ? { columns: names } : {}),
-      ...(rowsDiffer ? { rows: { missing: missing.slice(0, SAMPLE), extra: extra.slice(0, SAMPLE) } } : {}),
-    });
+    const difference = compareTables(original, translated);
+    verdicts.push(difference ? { name: c.name, status: 'different', ...difference } : { name: c.name, status: 'same' });
   }
   return verdicts;
+}
+
+/**
+ * One query's two results as meaning: column names in order, rows as a
+ * multiset of {@link comparable} values. Null when they agree. Also the
+ * comparison of recorded results before and after the document migration
+ * (scripts/migrate/sqlite/compare-results).
+ */
+export function compareTables(original: Table, translated: Table): TableDifference | null {
+  const names = { original: original.columns.map((col) => col.name), translated: translated.columns.map((col) => col.name) };
+  const columnsDiffer = JSON.stringify(names.original) !== JSON.stringify(names.translated);
+  const a = rowsOf(original);
+  const b = rowsOf(translated);
+  const missing = surplus(a, b);
+  const extra = surplus(b, a);
+  const rowsDiffer = missing.length > 0 || extra.length > 0;
+  if (!columnsDiffer && !rowsDiffer) return null;
+  return {
+    ...(columnsDiffer ? { columns: names } : {}),
+    ...(rowsDiffer ? { rows: { missing: missing.slice(0, SAMPLE), extra: extra.slice(0, SAMPLE) } } : {}),
+  };
 }
