@@ -30,7 +30,7 @@ it, and it counts against your limit. Only the pages are anonymous. A write a
 signed-out reader could not make is refused exactly as it would be for a real
 guest; that refusal is the answer you came for, not a broken session.
 `--as <testuser-id>` browses as a test user — a throwaway PERSON you minted with
-`afbin testuser new` — so `$_me` is somebody else. A session is a BROWSER and a
+`afbin testuser new` — so `$_me.id` is somebody else. A session is a BROWSER and a
 test user is a person: several sessions may share one, and a session never mints
 one. A test user is a guest on an account's page, so give it its own copy first:
 `afbin fork <id> --as <testuser-id>` ([apps](apps.md)).
@@ -167,6 +167,6 @@ if (!after.signals.tab.value.length) await output.image(await page.screenshot())
 return after;
 ```
 
-Screenshot only on a wrong read back. Run it again `--as guest`: every `$_me`
+Screenshot only on a wrong read back. Run it again `--as guest`: every `$_me.id`
 write must be refused with a sign-in offer, the reads still work. Fix and push
 until both passes are clean.
