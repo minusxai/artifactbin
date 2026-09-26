@@ -23,7 +23,12 @@ import { compareTables, type TableDifference } from '@/lib/migrate/sqlite/diff';
 import type { SqliteSyntaxMigrationOutcome } from '@/lib/sqlite-syntax-migration';
 import type { RecordedResult } from './record-results';
 
-type QueryStatus = 'identical' | 'differs' | 'failed before' | 'failed after' | 'failed both' | 'only before' | 'only after';
+/**
+ * `cut before`: the previous engine returned only part of the result (its
+ * first page of a `source=` query, or a cap) and every row it returned is
+ * still there — the difference is the cut, not the migration.
+ */
+type QueryStatus = 'identical' | 'differs' | 'cut before' | 'failed before' | 'failed after' | 'failed both' | 'only before' | 'only after';
 
 export interface QueryComparison {
   query: string;
@@ -48,7 +53,7 @@ export interface Comparison {
   totals: Record<QueryStatus, number> & { documents: number; clock: number };
 }
 
-type Side = Map<string, { error?: string; queries: Map<string, { columns: string[]; rows: unknown[][] } | { error: string }> }>;
+type Side = Map<string, { error?: string; queries: Map<string, { columns: string[]; rows: unknown[][]; truncated?: true } | { error: string }> }>;
 
 function bySide(records: RecordedResult[]): Side {
   const side: Side = new Map();
@@ -56,7 +61,7 @@ function bySide(records: RecordedResult[]): Side {
     const doc: NonNullable<ReturnType<Side['get']>> = side.get(record.document) ?? { queries: new Map() };
     side.set(record.document, doc);
     if (!('query' in record)) doc.error = record.error;
-    else doc.queries.set(record.query, 'error' in record ? { error: record.error } : { columns: record.columns, rows: record.rows });
+    else doc.queries.set(record.query, 'error' in record ? { error: record.error } : record);
   }
   return side;
 }
@@ -81,7 +86,7 @@ function outcomes(report: SqliteSyntaxMigrationOutcome[]): Map<string, SqliteSyn
 
 export function compareResults(before: RecordedResult[], after: RecordedResult[], report: SqliteSyntaxMigrationOutcome[]): Comparison {
   const a = bySide(before), b = bySide(after), map = outcomes(report);
-  const totals: Comparison['totals'] = { documents: 0, clock: 0, identical: 0, differs: 0, 'failed before': 0, 'failed after': 0, 'failed both': 0, 'only before': 0, 'only after': 0 };
+  const totals: Comparison['totals'] = { documents: 0, clock: 0, identical: 0, differs: 0, 'cut before': 0, 'failed before': 0, 'failed after': 0, 'failed both': 0, 'only before': 0, 'only after': 0 };
   const documents: DocumentComparison[] = [];
   for (const document of [...new Set([...a.keys(), ...b.keys()])].sort()) {
     const was = a.get(document), now = b.get(document), outcome = map.get(document);
@@ -96,7 +101,9 @@ export function compareResults(before: RecordedResult[], after: RecordedResult[]
       else if ('error' in y) result = { query, status: 'failed after', detail: y.error };
       else {
         const difference = compareTables(table(x), table(y));
-        result = difference ? { query, status: 'differs', detail: firstDifference(difference) } : { query, status: 'identical' };
+        const cut = difference && x.truncated && !difference.columns && !difference.rows!.missing.length;
+        result = cut ? { query, status: 'cut before', detail: `the previous engine returned ${x.rows.length} rows of it; ${y.rows.length} now` }
+          : difference ? { query, status: 'differs', detail: firstDifference(difference) } : { query, status: 'identical' };
       }
       if (clock.has(query)) { result.clock = true; totals.clock++; }
       totals[result.status]++;
@@ -128,7 +135,7 @@ export function formatComparison(comparison: Comparison): string {
     for (const q of notable) lines.push(`  ${q.status.padEnd(13)} ${q.query}${q.clock ? ' (reads the clock)' : ''}${q.detail ? `: ${q.detail}` : ''}`);
   }
   const t = comparison.totals;
-  lines.push(`documents ${t.documents}; queries: identical ${t.identical}, differs ${t.differs}, failed before ${t['failed before']}, failed after ${t['failed after']}, failed both ${t['failed both']}, only before ${t['only before']}, only after ${t['only after']}; reading the clock ${t.clock}`);
+  lines.push(`documents ${t.documents}; queries: identical ${t.identical}, differs ${t.differs}, cut before ${t['cut before']}, failed before ${t['failed before']}, failed after ${t['failed after']}, failed both ${t['failed both']}, only before ${t['only before']}, only after ${t['only after']}; reading the clock ${t.clock}`);
   return lines.join('\n');
 }
 
