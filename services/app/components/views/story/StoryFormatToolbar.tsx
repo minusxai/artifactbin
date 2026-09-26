@@ -15,6 +15,8 @@
  */
 import type { DocumentRuntimeRef } from '@/lib/story-runtime/document-endpoint';
 import { useEffect, useRef, useState, type MouseEvent, type ReactNode, Fragment } from 'react';
+import { useArtifactBackend } from '@/lib/artifact-backend/context';
+import { FeatureGate } from '@/components/FeatureUnavailable';
 import {
   AArrowDown,
   AArrowUp,
@@ -119,7 +121,10 @@ export default function StoryFormatToolbar({
 }: StoryFormatToolbarProps) {
   const [people,setPeople]=useState<Array<{user_id:string;username:string}>>([]);
   const [linkDraft, setLinkDraft] = useState<string | null>(null);
-  useEffect(()=>{if(!artifactId||!linkDraft?.startsWith('@')){setPeople([]);return;}const abort=new AbortController();void fetch(`/api/my/artifacts/${encodeURIComponent(artifactId)}/members?query=${encodeURIComponent(linkDraft.slice(1))}`,{signal:abort.signal}).then(r=>r.ok?r.json():{people:[]}).then(r=>setPeople(r.people??[])).catch(()=>{});return()=>abort.abort();},[artifactId,linkDraft]);
+  const backend = useArtifactBackend();
+  /** @mentions look people up on the server; without that the chip stays, disabled, saying why. */
+  const mentionsUnavailable = backend.unavailable('mentions');
+  useEffect(()=>{if(!artifactId||mentionsUnavailable||!linkDraft?.startsWith('@')){setPeople([]);return;}const abort=new AbortController();void backend.members(linkDraft.slice(1),{signal:abort.signal}).then(r=>r??{people:[]}).then(r=>setPeople(r.people??[])).catch(()=>{});return()=>abort.abort();},[artifactId,linkDraft,backend,mentionsUnavailable]);
   const [alignmentOpen, setAlignmentOpen] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
   const [altDraft, setAltDraft] = useState<string | null>(null);
@@ -395,7 +400,9 @@ export default function StoryFormatToolbar({
                 <Chip label="Insert link" onClick={() => setLinkDraft('')}>
                   <Link2 size={14} />
                 </Chip>
-                {artifactId&&<Chip label="Mention person" onClick={()=>setLinkDraft('@')}>@</Chip>}
+                {artifactId&&(mentionsUnavailable
+                  ? <FeatureGate reason={mentionsUnavailable}>{(gate)=><button type="button" aria-label="Mention person" className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-[3px] text-fg opacity-50" {...gate}>@</button>}</FeatureGate>
+                  : <Chip label="Mention person" onClick={()=>setLinkDraft('@')}>@</Chip>)}
                 <Chip label="Remove link" onClick={() => onApplyLink(selection.path, null)}>
                   <Link2Off size={14} />
                 </Chip>

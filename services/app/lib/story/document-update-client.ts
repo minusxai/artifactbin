@@ -73,7 +73,7 @@ export async function prepareClientDocumentPublication(base:ClientDocumentSnapsh
  if(prepared.context){const resources=await prepareContext(prepared.context);if(resources?.warnings?.length)onWarnings?.(resources.warnings);if(resources?.datasetBindings?.length)prepared.update.datasetBindings=resources.datasetBindings;}
  return prepared.update;
 }
-function needsAuthoringContext(source:string):boolean {
+export function needsAuthoringContext(source:string):boolean {
  const assets=collectExternalAssetUrls(source);
  if(assets.images.length||assets.fonts.length||assets.pdfs.length)return true;
  const parsed=parseJsx(source);if(!parsed.ok)return false;

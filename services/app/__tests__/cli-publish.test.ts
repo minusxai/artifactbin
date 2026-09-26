@@ -26,6 +26,7 @@ import {exportAssetResponse} from '@/lib/export/assets';
 import { resetExportRenderer } from '@/lib/export';
 import { GET as exportImage } from '@/app/a/[id]/export/route';
 import { GET as serveRaw } from '@/app/a/[id]/raw/route';
+import { GET as downloadOffline } from '@/app/a/[id]/download/route';
 
 useAppHarness();
 
@@ -146,8 +147,8 @@ describe('cli-export', () => {
   /** The viewer routes the CLI renders through; the bearer API half is the shared transport's. */
   const viewerRoutes=(request:Request,url:URL)=>{
    if(url.pathname.startsWith('/assets/export/')){expect(request.headers.get('authorization')).toBeNull();return exportAssetResponse(request,url.pathname.split('/').at(-1)!);}
-   const view=/^\/a\/([^/]+)\/(export|raw)$/.exec(url.pathname);
-   return view?(view[2]==='export'?exportImage:serveRaw)(request,{params:Promise.resolve({id:view[1]!})}):undefined;
+   const view=/^\/a\/([^/]+)\/(export|raw|download)$/.exec(url.pathname);
+   return view?({export:exportImage,raw:serveRaw,download:downloadOffline}[view[2] as 'export'|'raw'|'download'])(request,{params:Promise.resolve({id:view[1]!})}):undefined;
   };
   const transportFor=(calls:CliCall[]):typeof fetch=>artifactTransport(calls,viewerRoutes);
 
@@ -175,12 +176,14 @@ describe('cli-export', () => {
     // The render request the route actually built names this document's own slide.
     expect((browser.calls.at(-1) as RenderRequest).url).toContain(`/a/${id}/raw`);
 
-    // HTML export is the standalone page, served by the raw route.
+    // HTML export is the offline file: one self-contained page from the download route.
     calls.length=0;
     const page=await run(['export',id,'--format','html','--output','deck.html']);
     expect(page.code,JSON.stringify(page.result)).toBe(0);
-    expect(addressesCalled(calls)).toEqual([`GET /a/${id}/raw`]);
-    expect(await readFile(join(root,'deck.html'),'utf8')).toContain('<html');
+    expect(addressesCalled(calls)).toEqual([`GET /a/${id}/download`]);
+    const offline=await readFile(join(root,'deck.html'),'utf8');
+    expect(offline).toContain('<html');
+    expect(offline).toContain('id="afbin-file"');
 
     // A modified draft is refused locally, offline, and nothing is uploaded to render it.
     const tracked=parseDocument(await readFile(join(root,'deck.jsx'),'utf8'));

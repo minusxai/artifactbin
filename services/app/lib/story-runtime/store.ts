@@ -105,6 +105,11 @@ export interface DataflowStore {
   canMutate(name?: string): boolean;
   mutationUnavailable(name: string): string | null;
   /**
+   * Why this Value's controls must not move on this render
+   * (CreateStoreOptions.frozenValues), or null when they work as usual.
+   */
+  frozenReason(name: string): string | null;
+  /**
    * Resolves once the permission check has landed: no queries in flight, none
    * scheduled, and `mutationAccess` answered (or nothing to answer). A caller
    * that would otherwise refuse with ACCESS_PENDING waits for the real answer.
@@ -158,6 +163,14 @@ interface CreateStoreOptions {
    * is a fact about the RENDER rather than about the data.
    */
   writesUnavailable?: string | null;
+  /**
+   * Values whose bound controls render DISABLED on this render, each with the
+   * reason shown in their place — an offline file cannot re-run a query for a
+   * value nobody precomputed (lib/offline/file-format ArtifactFileSnapshot
+   * `frozen`). A fact about the render, like `writesUnavailable`; absent (every
+   * served document) no control is frozen.
+   */
+  frozenValues?: Readonly<Record<string, string>> | null;
 }
 
 /** Empty declarations + state, for a document that declares nothing. */
@@ -519,6 +532,7 @@ export function createDataflowStore(
     mutating: () => writing,
     canMutate: (name) => name ? mutationUnavailable(name) === null : !!transport?.mutate,
     mutationUnavailable,
+    frozenReason: (name) => (options.frozenValues && Object.hasOwn(options.frozenValues, name) ? options.frozenValues[name] ?? null : null),
     accessSettled,
     invalidateDatasets,
     getState: () => state,

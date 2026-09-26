@@ -67,6 +67,8 @@ import {
   type JsxInsertAnchor,
 } from '@/lib/data/story/jsx-edit';
 import ImageDialog, { IMAGE_ACCEPT, type ChosenImage, type ImageChoice } from '@/components/views/story/ImageDialog';
+import { useArtifactBackend } from '@/lib/artifact-backend/context';
+import { FeatureGate } from '@/components/FeatureUnavailable';
 import type { ImageDropPlacement } from '@/lib/story/use-in-place-edit';
 import {
   readQuestionChart,
@@ -199,6 +201,8 @@ export default function InPlaceEditor({
     art.colorMode === 'dark' ? 'dark' : art.colorMode === 'light' ? 'light' : null,
   );
   const [source, setSource] = useState(art.markup ?? '');
+  /** Every request this editor makes (lib/artifact-backend), from the page's provider. */
+  const backend = useArtifactBackend();
   const [css, setCss] = useState<string | null>(art.compiledCss ?? null);
   const [mode, setMode] = useState<'design' | 'code'>('design');
   const [dataflowState, setDataflowState] = useState<DataflowState | null>(art.dataflow?.state ?? null);
@@ -368,7 +372,7 @@ export default function InPlaceEditor({
     adoptRemote,
     isOwnEdit,
   } = useLiveEdits({
-    id: art.id,
+    backend,
     initialEditId: art.edit_id,
     initialVersion: art.version,
     initialDocument:art.document,
@@ -498,7 +502,7 @@ export default function InPlaceEditor({
   }, [edit.ready, edit.select, initialSelectionPath]);
 
   // Changes from elsewhere (an agent, another person) while we are editing.
-  const remote = useLiveArtifact(art.id, art.edit_id, art.version, true, isOwnEdit);
+  const remote = useLiveArtifact(backend, art.id, art.edit_id, art.version, true, isOwnEdit);
   useEffect(() => {
     if (!remote || remote.format !== 'markup' || typeof remote.source !== 'string') return;
     if (!adoptRemote(remote.editId, remote.source, remote.by,remote.document,remote.version,{title:remote.title,theme:remote.theme,template:remote.template,colorMode:remote.colorMode})) return;
@@ -529,14 +533,9 @@ export default function InPlaceEditor({
       return;
     }
     const run = async () => {
-      const res = await fetch('/api/preview', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ markup: key }),
-      }).catch(() => null);
-      if (!res?.ok) return;
-      const body = (await res.json()) as { css?: string | null };
-      if (typeof body.css !== 'string') return;
+      // Refused, unreachable or sheetless: the document keeps the sheet it has.
+      const body = await backend.previewCss(key).catch(() => null);
+      if (!body) return;
       lastCompiled.current = key;
       cssCache.current.set(key, body.css);
       if (cssCache.current.size > 20) {
@@ -552,7 +551,7 @@ export default function InPlaceEditor({
       void run();
     }, 300);
     return () => window.clearTimeout(compileTimer.current);
-  }, [source, showInDocument]);
+  }, [source, showInDocument, backend]);
 
   // ── draft data ────────────────────────────────────────────────────────────
   /** Keyed on the DECLARATIONS: a prose edit re-runs nothing. */
@@ -565,19 +564,17 @@ export default function InPlaceEditor({
    * chart panel offering columns nobody had fetched.
    */
   const ranSignature = useRef<string | null>(art.dataflow?.state ? flowSignature : null);
+  const queriesUnavailable = backend.unavailable('runQueries');
   useEffect(() => {
     if (flowSignature === null || flowSignature === ranSignature.current) return;
+    // A backend that cannot run queries (the offline file) keeps the results the document shipped with.
+    if (queriesUnavailable) return;
     let alive = true;
     const timer = window.setTimeout(() => {
       ranSignature.current = flowSignature;
       setDataflowPending(true);
-      void fetch('/api/query', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ markup: sourceRef.current }),
-      })
-        .then((r) => (r.ok ? r.json() : null))
-        .then((body: { tables: DataflowState['tables']; errors: DataflowState['errors'] } | null) => {
+      void backend.previewQueries(sourceRef.current)
+        .then((body) => {
           if (!alive) return;
           setDataflowPending(false);
           if (!body) return;
@@ -592,7 +589,7 @@ export default function InPlaceEditor({
       alive = false;
       window.clearTimeout(timer);
     };
-  }, [flowSignature, showInDocument]);
+  }, [flowSignature, showInDocument, backend, queriesUnavailable]);
 
   // ── leaving ───────────────────────────────────────────────────────────────
   /**
@@ -883,55 +880,11 @@ export default function InPlaceEditor({
   >(null);
 
   /**
-   * The URL door: the browser ingests-and-owns it (POST {imageUrl} — the same
-   * lib/web-ingest path the agent door runs), and the source gets `ref:<id>`
-   * exactly like an upload. The door's refusal names the URL and the reason,
-   * which is the point, so it is handed back as the sentence to show.
+   * The URL door and the upload door (lib/artifact-backend): the source gets
+   * `ref:<id>` either way, and a refusal comes back as the sentence to show.
    */
-  const importImageUrl = useCallback(async (url: string): Promise<ImageChoice> => {
-    const res = await fetch('/api/my/artifacts?visibility=unlisted', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ imageUrl: url }),
-    }).catch(() => null);
-    if (!res) return { ok: false, error: 'Import failed — check your connection and try again.' };
-    if (!res.ok) {
-      const body = (await res.json().catch(() => null)) as { error?: string; details?: string[] } | null;
-      return {
-        ok: false,
-        error: body?.details?.[0] ?? (res.status === 403 ? 'You have reached your artifact limit.' : 'Could not import that image.'),
-      };
-    }
-    return { ok: true, image: (await res.json()) as ChosenImage };
-  }, []);
-
-  /** The upload door — one type list, one size cap — for every insert and every replace. */
-  const uploadImage = useCallback(async (file: File): Promise<ImageChoice> => {
-    const res = await fetch('/api/my/artifacts?visibility=unlisted', {
-      method: 'POST',
-      headers: { 'Content-Type': file.type },
-      body: file,
-    }).catch(() => null);
-    if (!res) return { ok: false, error: 'Upload failed — check your connection and try again.' };
-    if (!res.ok) {
-      const code = await res
-        .json()
-        .then((b) => b?.error)
-        .catch(() => null);
-      return {
-        ok: false,
-        error:
-          res.status === 413
-            ? 'That image is too large to upload.'
-            : res.status === 403
-              ? 'You have reached your artifact limit.'
-              : code === 'invalid_image'
-                ? 'That image type is not supported (png, jpeg, webp, gif, svg).'
-                : 'Could not upload that image.',
-      };
-    }
-    return { ok: true, image: (await res.json()) as ChosenImage };
-  }, []);
+  const importImageUrl = useCallback((url: string): Promise<ImageChoice> => backend.importImage({ imageUrl: url }), [backend]);
+  const uploadImage = useCallback((file: File): Promise<ImageChoice> => backend.importImage({ file, name: file.name }), [backend]);
 
   /** Typing the document has not committed yet must be in the source an image edit composes against. */
   const drainTyping = useCallback(async (): Promise<boolean> => {
@@ -1053,7 +1006,9 @@ export default function InPlaceEditor({
     : undefined;
 
   // ── version history ───────────────────────────────────────────────────────
-  const history = useArtifactVersions({ id: art.id, currentVersion: live.version });
+  const history = useArtifactVersions({ backend, currentVersion: live.version });
+  /** History is a server capability: without it the entry points stay, disabled, saying why. */
+  const historyUnavailable = backend.unavailable('versions');
 
   /**
    * Looking at an older version shows it IN the document — same runtime, same
@@ -1467,17 +1422,23 @@ export default function InPlaceEditor({
                   {inspectable && InspectIcon ? <InspectIcon size={12} className="shrink-0" /> : <SlidersHorizontal size={12} className="shrink-0" />}
                 </button>
               </Tooltip>
-              <Tooltip content="version history">
-                <button
-                  type="button"
-                  aria-label="Open version history"
-                  aria-expanded={sheet === 'history'}
-                  onClick={() => openSheet(sheet === 'history' ? null : 'history')}
-                  className={narrowTabClass(sheet === 'history')}
-                >
-                  <History size={12} className="shrink-0" />
-                </button>
-              </Tooltip>
+              <FeatureGate reason={historyUnavailable}>
+                {(gate) => {
+                  const button = (
+                    <button
+                      type="button"
+                      aria-label="Open version history"
+                      aria-expanded={sheet === 'history'}
+                      onClick={() => openSheet(sheet === 'history' ? null : 'history')}
+                      className={`${narrowTabClass(sheet === 'history')} disabled:cursor-default disabled:opacity-50`}
+                      {...gate}
+                    >
+                      <History size={12} className="shrink-0" />
+                    </button>
+                  );
+                  return gate.disabled ? button : <Tooltip content="version history">{button}</Tooltip>;
+                }}
+              </FeatureGate>
               {commentsTab && (
                 <Tooltip content="comments">
                   <button

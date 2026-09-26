@@ -4,6 +4,8 @@ import { forwardRef, useEffect, useImperativeHandle, useState } from "react";
 import { Check, ChevronDown, Copy, Plus, X } from "lucide-react";
 import { Tooltip } from "./Tooltip";
 import {REMOTE_COLOR_CSS,remoteColor,type RemoteSessionInfo } from "../../contracts/src/remote";
+import { useArtifactBackend } from "@/lib/artifact-backend/context";
+import type { MemberPerson } from "@/lib/artifact-backend/types";
 const connectionRequest = "Connect to afbin remote so I can @mention you in artifact comments.";
 export interface MentionPickerHandle { keyDown: (key: string) => boolean }
 const agentLabel = (name: string) => (({ claude: "Claude Code", codex: "Codex", pi: "Pi", opencode: "OpenCode" } as Record<string, string>)[name] ?? name);
@@ -15,8 +17,12 @@ export default forwardRef<MentionPickerHandle, { query: string; artifactId?:stri
   artifactId?:string;
   onSelect: (text: string) => void;
 }, ref) {
-  const [people,setPeople]=useState<Array<{user_id:string;username:string;name:string|null}>>([]);
-  useEffect(()=>{if(!artifactId)return;const abort=new AbortController();void fetch(`/api/my/artifacts/${encodeURIComponent(artifactId)}/members?query=${encodeURIComponent(query)}`,{signal:abort.signal}).then(r=>r.ok?r.json():{people:[]}).then(r=>setPeople(r.people??[])).catch(()=>{});return()=>abort.abort();},[artifactId,query]);
+  const backend = useArtifactBackend();
+  /** People and agents are both looked up on the server; without either, its section says why. */
+  const peopleUnavailable = backend.unavailable('mentions');
+  const sessionsUnavailable = backend.unavailable('remoteSessions');
+  const [people,setPeople]=useState<MemberPerson[]>([]);
+  useEffect(()=>{if(!artifactId||peopleUnavailable)return;const abort=new AbortController();void backend.members(query,{signal:abort.signal}).then(r=>r??{people:[]}).then(r=>setPeople(r.people??[])).catch(()=>{});return()=>abort.abort();},[artifactId,query,backend,peopleUnavailable]);
   const [sessions, setSessions] = useState<RemoteSessionInfo[]>([]);
   const [active, setActive] = useState(0);
   useEffect(() => setActive(0), [query]);
@@ -26,11 +32,7 @@ export default forwardRef<MentionPickerHandle, { query: string; artifactId?:stri
   const remove = async (id: string) => {
     setRemoving(id); setError('');
     try {
-      const response = await fetch(`/api/remote/sessions/${id}`, { method: 'DELETE', credentials: 'same-origin' });
-      if (!response.ok) {
-        const data = await response.json().catch(() => null);
-        throw new Error(data?.error ?? 'Could not remove agent. Try again.');
-      }
+      await backend.deleteRemoteSession(id);
       setSessions(items => items.filter(item => item.id !== id));
       setActive(0);
     } catch (error) { setError(error instanceof Error ? error.message : 'Could not remove agent. Try again.'); }
@@ -47,19 +49,16 @@ export default forwardRef<MentionPickerHandle, { query: string; artifactId?:stri
     }
   };
   useEffect(() => {
+    if (sessionsUnavailable) return;
     const abort = new AbortController();
-    void fetch("/api/remote/sessions", {
-      signal: abort.signal,
-      credentials: "same-origin",
-    })
-      .then((r) => (r.ok ? r.json() : { sessions: [] }))
+    void backend.remoteSessions({ signal: abort.signal })
       .then((data) => {
-        setSessions(data.sessions);
+        setSessions(data.sessions as RemoteSessionInfo[]);
         setLoaded(true);
       })
       .catch(() => setLoaded(true));
     return () => abort.abort();
-  }, []);
+  }, [backend, sessionsUnavailable]);
   const matches = sessions.filter(
     (s) =>
       (s.managed?s.exitCode===null&&s.activity!=='stopped':s.online) &&
@@ -81,7 +80,7 @@ export default forwardRef<MentionPickerHandle, { query: string; artifactId?:stri
       aria-label="Agent sessions"
       className="mb-2 overflow-hidden rounded-lg border border-edge bg-surface p-1.5 text-sm shadow-lg"
     >
-      {artifactId&&<><p className="px-2 py-1.5 text-xs text-muted">Mention a person</p>{people.map((p,i)=><button key={p.user_id} type="button" aria-label={`Mention @${p.username}`} className={`block w-full rounded-md px-2 py-2 text-left ${i===active?'bg-accent-soft':'hover:bg-bg'}`} onMouseDown={e=>e.preventDefault()} onMouseEnter={()=>setActive(i)} onClick={()=>onSelect(personMention(p))}>@{p.username}<span className="ml-2 text-xs text-muted">{p.name}</span></button>)}{!people.length&&<p className="px-2 py-1 text-xs text-muted">No matching followers or members.</p>}</>}
+      {artifactId&&<><p className="px-2 py-1.5 text-xs text-muted">Mention a person</p>{people.map((p,i)=><button key={p.user_id} type="button" aria-label={`Mention @${p.username}`} className={`block w-full rounded-md px-2 py-2 text-left ${i===active?'bg-accent-soft':'hover:bg-bg'}`} onMouseDown={e=>e.preventDefault()} onMouseEnter={()=>setActive(i)} onClick={()=>onSelect(personMention(p))}>@{p.username}<span className="ml-2 text-xs text-muted">{p.name}</span></button>)}{peopleUnavailable?<p role="note" className="px-2 py-1 text-xs text-muted">{peopleUnavailable}</p>:!people.length&&<p className="px-2 py-1 text-xs text-muted">No matching followers or members.</p>}</>}
       <p className="px-2 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted">Mention an agent</p>
       {matches.map((s, index) => (
         <div key={s.id} className="flex items-center">
@@ -117,7 +116,8 @@ export default forwardRef<MentionPickerHandle, { query: string; artifactId?:stri
         Add another agent
         <ChevronDown size={14} aria-hidden="true" className={`ml-auto transition-transform ${setupExpanded ? "rotate-180" : ""}`} />
       </button>}
-      {(!matches.length || setupExpanded) && (
+      {sessionsUnavailable && <p role="note" className="px-2 py-1.5 text-xs text-muted">{sessionsUnavailable}</p>}
+      {!sessionsUnavailable && (!matches.length || setupExpanded) && (
         <div className="px-2 py-1.5 text-muted">
           {!matches.length && <p>{loaded ? "No matching agents." : "Loading sessions…"}</p>}
           {loaded && <>

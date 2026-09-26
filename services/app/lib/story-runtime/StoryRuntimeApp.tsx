@@ -80,6 +80,20 @@ function MutationCellHint({reason,children}:{reason:string|null;children:ReactNo
   </Tooltip>;
 }
 
+/**
+ * A control bound to a FROZEN Value (DataflowStore.frozenReason): the control
+ * itself is disabled and described by the reason, and — because a disabled
+ * control cannot take focus — this wrapper is what a keyboard reaches to hear
+ * it, and what shows the tooltip. Present only when a reason is.
+ */
+function FrozenHint({reason,children}:{reason:string|null;children:ReactElement}) {
+  const [open,setOpen]=useState(false);
+  if (!reason) return children;
+  return <Tooltip content={reason} open={open} onOpenChange={setOpen}>
+    <span className="inline-flex" tabIndex={0} aria-description={reason}>{children}</span>
+  </Tooltip>;
+}
+
 const CellSessionsContext = createContext<CellSessions | null>(null);
 const scalarRow = (row: Row): Record<string, Scalar> => Object.fromEntries(Object.entries(row).filter((entry): entry is [string, Scalar] => {
   const v = entry[1]; return v === null || typeof v === 'string' || typeof v === 'boolean' || (typeof v === 'number' && Number.isFinite(v));
@@ -415,7 +429,15 @@ const EMPTY_REFUSED: ReadonlySet<string> = new Set();
  * (when present) as labels; a scalar declared without a default gets an
  * "All" entry first, because null must be selectable to be meaningful.
  */
-function RuntimeBoundControl({ tag, props, bind, children }: BoundControlProps) {
+function RuntimeBoundControl(input: BoundControlProps) {
+  const { store } = useContext(RuntimeEmbedContext);
+  const name = input.bind.value ?? input.bind.checked;
+  const reason = name && store ? store.frozenReason(name) : null;
+  if (!reason) return <NativeBoundControl {...input} />;
+  return <FrozenHint reason={reason}><NativeBoundControl {...input} props={{ ...input.props, disabled: true, 'aria-description': reason }} /></FrozenHint>;
+}
+
+function NativeBoundControl({ tag, props, bind, children }: BoundControlProps) {
   const { flow, state, setValue } = useContext(RuntimeEmbedContext);
   const declOf = (name: string): ScalarValueDecl | undefined =>
     flow.values.find((v): v is ScalarValueDecl => v.kind === 'scalar' && v.name === name);
@@ -481,10 +503,12 @@ function RuntimeBoundControl({ tag, props, bind, children }: BoundControlProps) 
  * disabled, same as the static face.
  */
 function useScalarControl(name: string | null) {
-  const { flow, state, setValue } = useContext(RuntimeEmbedContext);
+  const { flow, state, setValue, store } = useContext(RuntimeEmbedContext);
   const decl = name ? flow.values.find((v): v is ScalarValueDecl => v.kind === 'scalar' && v.name === name) : undefined;
   return {
     state,
+    /** Why this Value's control must not move on this render (an offline file), or null. */
+    frozen: name !== null && store ? store.frozenReason(name) : null,
     type: decl?.type,
     nullable: name !== null && (decl?.default ?? null) === null,
     current: name !== null && state.values[name] !== null && state.values[name] !== undefined ? String(state.values[name]) : null,
@@ -503,28 +527,28 @@ function useScalarControl(name: string | null) {
 function InputAdapter(props: Record<string, unknown>) {
   const bind = useScalarControl(refName(props.value));
   return (
-    <TextControl
+    <FrozenHint reason={bind.frozen}><TextControl
       label={str(props.label)} ariaLabel={fieldLabel(props)} className={str(props.className)}
       type={inputType(props.type)} placeholder={str(props.placeholder)}
       min={attrScalar(props.min)} max={attrScalar(props.max)} step={attrScalar(props.step)}
       required={props.required === true} autoFocus={props.autoFocus === true}
-      value={bind.current} disabled={props.disabled === true}
+      value={bind.current} disabled={props.disabled === true || !!bind.frozen} description={bind.frozen ?? undefined}
       onChange={bind.write} rest={textRest(props)}
-    />
+    /></FrozenHint>
   );
 }
 
 function TextareaAdapter(props: Record<string, unknown>) {
   const bind = useScalarControl(refName(props.value));
   return (
-    <TextControl
+    <FrozenHint reason={bind.frozen}><TextControl
       label={str(props.label)} ariaLabel={fieldLabel(props)} className={str(props.className)}
       placeholder={str(props.placeholder)} multiline
       rows={typeof props.rows === 'number' ? props.rows : undefined}
       required={props.required === true} autoFocus={props.autoFocus === true}
-      value={bind.current} disabled={props.disabled === true}
+      value={bind.current} disabled={props.disabled === true || !!bind.frozen} description={bind.frozen ?? undefined}
       onChange={bind.write} rest={textRest(props)}
-    />
+    /></FrozenHint>
   );
 }
 
@@ -534,12 +558,13 @@ function SelectAdapter(props: Record<string, unknown>) {
   const userControl=Object.hasOwn(state.userOptions??{},refName(props.value)??'');
   const options = selectOptions(state, props.options, refName(props.value) ?? '', userControl);
   return (
-    <SelectControl
+    <FrozenHint reason={bind.frozen}><SelectControl
       label={str(props.label)} placeholder={str(props.placeholder)} className={str(props.className)}
       options={options} value={bind.current} nullable={bind.nullable}
       multiple={!userControl&&props.multiple === true} allowCreate={!userControl&&props.allowCreate === true} valueFormat={props.valueFormat === 'json' ? 'json' : undefined}
+      disabled={!!bind.frozen} description={bind.frozen ?? undefined}
       onChange={bind.write} rest={shellRest(props)}
-    >{props.children as ReactNode}</SelectControl>
+    >{props.children as ReactNode}</SelectControl></FrozenHint>
   );
 }
 
@@ -549,45 +574,49 @@ function SegmentedAdapter(props: Record<string, unknown>) {
   const optsName = refName(props.options);
   const options = normalizeControlOptions(props.options, optsName ? state.tables[optsName] : undefined);
   return (
-    <SegmentedControl
+    <FrozenHint reason={bind.frozen}><SegmentedControl
       label={str(props.label)} placeholder={str(props.placeholder)} className={str(props.className)}
       options={options} value={bind.current} nullable={bind.nullable}
+      disabled={!!bind.frozen} description={bind.frozen ?? undefined}
       onChange={bind.write} rest={shellRest(props)}
-    />
+    /></FrozenHint>
   );
 }
 
 function SliderAdapter(props: Record<string, unknown>) {
   const bind = useScalarControl(refName(props.value));
   return (
-    <SliderControl
+    <FrozenHint reason={bind.frozen}><SliderControl
       label={str(props.label)} className={str(props.className)}
       min={num(props.min, 0)} max={num(props.max, 100)}
       step={typeof props.step === 'number' ? props.step : undefined}
       format={str(props.format)} prefix={str(props.prefix)} suffix={str(props.suffix)}
+      disabled={!!bind.frozen} description={bind.frozen ?? undefined}
       value={bind.asNumber} onChange={bind.write} rest={shellRest(props)}
-    />
+    /></FrozenHint>
   );
 }
 
 function DatePickerAdapter(props: Record<string, unknown>) {
   const bind = useScalarControl(refName(props.value));
   return (
-    <DateControl
+    <FrozenHint reason={bind.frozen}><DateControl
       label={str(props.label)} className={str(props.className)}
       min={str(props.min)} max={str(props.max)}
+      disabled={!!bind.frozen} description={bind.frozen ?? undefined}
       value={bind.type==='timestamp'?bind.current?.slice(0,10)??null:bind.current} nullable={bind.nullable} onChange={bind.write} rest={shellRest(props)}
-    />
+    /></FrozenHint>
   );
 }
 
 function SwitchAdapter(props: Record<string, unknown>) {
   const bind = useScalarControl(typeof props.checked === 'string' ? refName(props.checked) : null);
   return (
-    <SwitchControl
+    <FrozenHint reason={bind.frozen}><SwitchControl
       label={str(props.label)} className={str(props.className)}
+      disabled={!!bind.frozen} description={bind.frozen ?? undefined}
       checked={bind.isTrue} onChange={bind.writeBool} rest={shellRest(props)}
-    />
+    /></FrozenHint>
   );
 }
 
@@ -1251,6 +1280,13 @@ type StoryRuntimeAppProps = StoryIslandData & {
    * the element loads the endpoint for itself.
    */
   importAsset?: ManagedAssetRelay;
+  /**
+   * Registry overrides, by component name, laid over the runtime's own — how a
+   * composition that cannot run an embed (an offline file: maps, managed
+   * frames) puts a same-size stand-in there instead. Pass a STABLE object: a
+   * new identity rebuilds the registry and remounts every embed.
+   */
+  components?: Readonly<Record<string, ComponentType<Record<string, unknown>>>>;
 };
 
 const EMPTY_GLYPHS: GlyphMap = {};
@@ -1258,10 +1294,11 @@ const EMPTY_GLYPHS: GlyphMap = {};
 /** A store-less subscribe (a Button rendered outside a document): nothing ever changes. */
 const NO_SUBSCRIBE = () => () => {};
 
-export function StoryRuntimeApp({ mentionStatuses, nodes, refData, glyphs, dataflow, viewer = null, colorMode, template = null, chrome = true, assetsUrl = null, managedAssets, importAsset, store: givenStore, onMounted, editDecorate, editChildren, onSlideRename }: StoryRuntimeAppProps) {
+export function StoryRuntimeApp({ mentionStatuses, nodes, refData, glyphs, dataflow, viewer = null, colorMode, template = null, chrome = true, assetsUrl = null, managedAssets, importAsset, store: givenStore, onMounted, editDecorate, editChildren, onSlideRename, components }: StoryRuntimeAppProps) {
   const [localStore] = useState<DataflowStore>(() => givenStore ?? createDataflowStore(dataflow ?? { flow: EMPTY_DATAFLOW }));
   const store = givenStore ?? localStore;
   const actions = useMemo(() => createRowActions(), [store]);
+  const registry = useMemo(() => (components ? { ...RUNTIME_REGISTRY, ...components } : RUNTIME_REGISTRY), [components]);
   const mountedRef = useRef(onMounted);
   mountedRef.current = onMounted;
   useEffect(() => { mountedRef.current?.(); }, []);
@@ -1318,7 +1355,7 @@ export function StoryRuntimeApp({ mentionStatuses, nodes, refData, glyphs, dataf
           // Identity across an adopted document: a live update re-renders this
           // tree, and positional keys would remount everything below the edit.
           keyFor: nodeKeys.keyFor,
-          components: RUNTIME_REGISTRY,
+          components: registry,
           boundControl: RuntimeBoundControl,
           boundSource: RuntimeBoundSource,
           cellControl: RuntimeCellControl,

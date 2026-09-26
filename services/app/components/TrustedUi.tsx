@@ -33,7 +33,8 @@ interface TrustedUiProps {
   children: ReactNode;
   /** Artifact chrome only: protects its paint order from author sibling overlays. */
   overlay?: boolean;
-  layer?: 'selection' | 'discussion' | 'navigation';
+  /** `modal`: a question that blocks everything else, above even a composer in the foreground. */
+  layer?: 'selection' | 'discussion' | 'navigation' | 'modal';
 }
 
 /** Register only the app's compiled CSS, imported explicitly by its entrypoint. */
@@ -83,7 +84,7 @@ export function TrustedUi({ children, overlay = false, layer = 'discussion' }: T
     style.textContent = trustedCss;
     if (overlay) {
       root.setAttribute('popover', 'manual');
-      openOverlay(root, { selection: 0, discussion: 1, navigation: 2 }[layer]);
+      openOverlay(root, { selection: 0, discussion: 1, navigation: 2, modal: 4 }[layer]);
     } else root.removeAttribute('popover');
     installedStyles.add(style);
     setMount(previous => previous?.root === content ? previous : { root: content, portal });

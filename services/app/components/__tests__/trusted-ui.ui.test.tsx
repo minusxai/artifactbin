@@ -9,6 +9,7 @@ import { SelectMenu } from '../SelectMenu';
 import { Tooltip } from '../Tooltip';
 import StoryFormatToolbar from '../views/story/StoryFormatToolbar';
 import ShareLink from '../ShareLink';
+import { httpBackendWrapper } from '@/test/helpers/artifact-backend';
 
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 
@@ -173,7 +174,7 @@ describe('trusted UI CSS boundary', () => {
  */
 describe('real overlays inside the trusted root', () => {
   it('keeps the actual format toolbar inside its trusted root', async () => {
-    const view = render(<TrustedUi overlay><StoryFormatToolbar selection={{kind:'element',path:'0',tag:'div',rect:{x:0,y:100,width:200,height:60},className:'',style:'',ancestors:[]}} onApply={vi.fn()} onApplyLink={vi.fn()} onSelect={vi.fn()} onDelete={vi.fn()} /></TrustedUi>);
+    const view = render(<TrustedUi overlay><StoryFormatToolbar selection={{kind:'element',path:'0',tag:'div',rect:{x:0,y:100,width:200,height:60},className:'',style:'',ancestors:[]}} onApply={vi.fn()} onApplyLink={vi.fn()} onSelect={vi.fn()} onDelete={vi.fn()} /></TrustedUi>, { wrapper: httpBackendWrapper('doc1') });
     const shadow = view.container.querySelector('[data-trusted-ui]')!.shadowRoot!;
     await waitFor(() => expect(shadow.querySelector('[aria-label="Typography toolbar"]')).not.toBeNull());
     expect(document.querySelector('[aria-label="Typography toolbar"]')).toBeNull();

@@ -14,31 +14,9 @@
  */
 import { useCallback, useEffect, useState } from 'react';
 import {restoreBrowserArtifact} from '../browser-artifact-write';
+import type { ArtifactBackend, ArtifactVersionSnapshot, ArtifactVersionSummary } from '@/lib/artifact-backend/types';
 
-/** A row of history: what changed and when, without the content. */
-export interface ArtifactVersionSummary {
-  version: number;
-  title: string | null;
-  description: string | null;
-  format: string;
-  /** The handle of who made this state, or null (a token, an unnamed account, an older row). */
-  by: string | null;
-  created_at: string;
-}
-
-/** One archived version, with everything needed to RENDER it. */
-export interface ArtifactVersionSnapshot {
-  version: number;
-  html: string;
-  title?:string|null;description?:string|null;
-  markup: string | null;
-  meta: {
-    template?:string|null;
-    theme?: string | null;
-    colorMode?: 'light' | 'dark' | null;
-    compiledCss?: string | null;
-  };
-}
+export type { ArtifactVersionSnapshot, ArtifactVersionSummary };
 
 interface UseArtifactVersions {
   versions: ArtifactVersionSummary[];
@@ -50,8 +28,8 @@ interface UseArtifactVersions {
   restore: (version: number) => Promise<number | null>;
 }
 
-export function useArtifactVersions({ id, currentVersion }: {
-  id: string;
+export function useArtifactVersions({ backend, currentVersion }: {
+  backend: ArtifactBackend;
   /**
    * The live version. History is re-read whenever it moves, so the list cannot
    * go stale behind a continuously-saving editor.
@@ -61,31 +39,26 @@ export function useArtifactVersions({ id, currentVersion }: {
   const [versions, setVersions] = useState<ArtifactVersionSummary[]>([]);
   const [busy, setBusy] = useState(false);
 
-  const base = `/api/my/artifacts/${id}`;
   const refresh = useCallback(async () => {
-    const res = await fetch(`${base}/versions`);
-    if (!res.ok) return; // not ours, or not yet authorized: keep what we have
-    setVersions(((await res.json()) as { versions: ArtifactVersionSummary[] }).versions);
-  }, [base]);
+    // A backend without history (the offline file) has nothing to list.
+    if (backend.unavailable('versions')) return;
+    const rows = await backend.versions();
+    if (!rows) return; // not ours, or not yet authorized: keep what we have
+    setVersions(rows);
+  }, [backend]);
 
   useEffect(() => { void refresh(); }, [refresh, currentVersion]);
 
-  const fetchVersion = useCallback(async (version: number) => {
-    const res = await fetch(`${base}/versions/${version}`);
-    if (!res.ok) return null;
-    return (await res.json()) as ArtifactVersionSnapshot;
-  }, [base]);
+  const fetchVersion = useCallback((version: number) => backend.version(version), [backend]);
 
   const restore = useCallback(async (version: number) => {
     setBusy(true);
     try {
-      const res=await restoreBrowserArtifact(id,version);
-      if (!res.ok) return null;
-      return ((await res.json()) as { version: number }).version;
+      return await restoreBrowserArtifact(backend, version);
     } finally {
       setBusy(false);
     }
-  }, [id]);
+  }, [backend]);
 
   return { versions, busy, refresh, fetchVersion, restore };
 }

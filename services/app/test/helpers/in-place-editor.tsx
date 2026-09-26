@@ -65,6 +65,8 @@ vi.mock('@/components/SourceEditor', async () => {
 });
 
 import InPlaceEditor from '@/components/InPlaceEditor';
+import { ArtifactBackendProvider } from '@/lib/artifact-backend/context';
+import { httpBackend } from '@/test/helpers/artifact-backend';
 import type { StoryEditSelection } from '@/lib/story-runtime/contract';
 
 /** The editor's own prop types, so a case can widen `art` without importing the component. */
@@ -114,12 +116,14 @@ export const lastQueued = () => queue.mock.calls.at(-1)?.[0] as { source?: strin
 /** The editor under the standard props, as an element — `mount()` renders it,
  *  and a case that needs to re-render the SAME tree passes it to `rerender`. */
 export const editorElement = (over: Partial<React.ComponentProps<typeof InPlaceEditor>> = {}) => (
-  <InPlaceEditor
-    art={art as React.ComponentProps<typeof InPlaceEditor>['art']}
-    frameRef={{ current: env.frameEl }}
-    sessionNonce={NONCE}
-    {...over}
-  />
+  <ArtifactBackendProvider backend={httpBackend((over.art ?? art).id)}>
+    <InPlaceEditor
+      art={art as React.ComponentProps<typeof InPlaceEditor>['art']}
+      frameRef={{ current: env.frameEl }}
+      sessionNonce={NONCE}
+      {...over}
+    />
+  </ArtifactBackendProvider>
 );
 
 export const mount = (over: Partial<React.ComponentProps<typeof InPlaceEditor>> = {}): RenderResult =>

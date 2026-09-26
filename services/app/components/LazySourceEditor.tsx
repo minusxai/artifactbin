@@ -1,5 +1,6 @@
-import { Component, Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { Component, Suspense, lazy, useCallback, useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react';
 import type { SourceEditorProps } from './SourceEditor';
+import { useSourceEditorTools } from './SourceEditorTools';
 
 const SOURCE_COLORS = { backgroundColor: '#1e1e1e', color: '#d4d4d4' };
 const SOURCE_FONT = { fontFamily: 'Menlo, Monaco, Consolas, monospace', fontSize: 12, lineHeight: '18px' };
@@ -33,7 +34,10 @@ export default function LazySourceEditor(props: SourceEditorProps) {
       input.setSelectionRange(handoff.current.start, handoff.current.end);
     }
   }, []);
-  const RichEditor = useMemo(() => lazy(() => import('@/components/SourceEditor')), [attempt]);
+  const { editor, editorFailure } = useSourceEditorTools();
+  const statusId = useId();
+  // `attempt` is the retry: a new lazy() asks again.
+  const RichEditor = useMemo(() => lazy(editor), [attempt, editor]);
   useEffect(() => { setMounted(true); }, []);
   const fallback = (failed: boolean) => <div className="h-full w-full flex flex-col" style={SOURCE_COLORS}>
     <div className="relative flex min-h-0 flex-1 overflow-hidden" style={SOURCE_FONT}>
@@ -43,6 +47,7 @@ export default function LazySourceEditor(props: SourceEditorProps) {
         </pre>
       </div>
       <textarea ref={attachPlainEditor} aria-label={props.ariaLabel ?? "Markup source"} readOnly={props.readOnly}
+        aria-describedby={failed && editorFailure ? statusId : undefined}
         className="min-h-0 min-w-0 flex-1 resize-none border-0 px-1 py-2 outline-none"
         style={{ ...SOURCE_COLORS, ...SOURCE_FONT, tabSize: 2 }} wrap="off"
         onScroll={event => {
@@ -53,7 +58,8 @@ export default function LazySourceEditor(props: SourceEditorProps) {
         value={props.value} onChange={event => props.onChange(event.target.value)} />
     </div>
     <div className="flex items-center gap-3 px-3 py-2 text-xs" style={{ color: '#a0a0a0', borderTop: '1px solid #333' }} role="status">
-      {failed ? 'Rich editor unavailable.' : 'Loading rich editor…'} {!props.readOnly && 'You can keep editing.'}
+      {failed && editorFailure ? <span id={statusId}>{editorFailure}</span>
+        : <>{failed ? 'Rich editor unavailable.' : 'Loading rich editor…'} {!props.readOnly && 'You can keep editing.'}</>}
       {failed && <button type="button" aria-label="Retry loading rich editor" className="underline cursor-pointer" onClick={() => setAttempt(n => n + 1)}>Retry</button>}
     </div>
   </div>;

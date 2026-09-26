@@ -26,7 +26,8 @@ import dynamic from '@/lib/dynamic';
 import { MessageSquare, Pencil } from 'lucide-react';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { InlineStoryController } from '@/lib/story-runtime/InlineStoryRuntime';
-import { createAuthenticatedTransport } from '@/lib/story-runtime/authenticated-transport';
+import { createHttpBackend } from '@/lib/artifact-backend/http';
+import { ArtifactBackendProvider } from '@/lib/artifact-backend/context';
 import { subscribeDocument } from '@/lib/story-runtime/document-endpoint';
 import type { PreparedStoryRuntime } from '@/lib/story/prepared-runtime';
 import type { ReaderForkedFrom } from '@/lib/story/reader-chrome';
@@ -39,6 +40,7 @@ import AnnotationLayer from '@/components/AnnotationLayer';
 import RefreshAssets from '@/components/RefreshAssets';
 import ForkArtifact, { ForkConfirm } from '@/components/ForkArtifact';
 import ShareLink from '@/components/ShareLink';
+import DownloadOffline from '@/components/DownloadOffline';
 import type { AnnotationWire } from '@/lib/annotations';
 import { readIntent, stripIntent } from '@/lib/intent';
 import { loginHref } from '@/lib/login-href';
@@ -348,7 +350,14 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
       { type: STORY_DATA_MESSAGE, datasets: event.datasets } satisfies StoryDataUpdate,
     );
   }, []);
-  const live = useLiveArtifact(id, editId, version, !editing, undefined, onLiveData, setLiveAnnotations);
+  /**
+   * Every request the document surface makes — the runtime's data doors, the
+   * comments, the editor — goes through ONE backend per artifact
+   * (lib/artifact-backend), provided to the tree below. Memoised per id: a
+   * new instance would re-open the live stream and re-read the comments.
+   */
+  const backend = useMemo(() => createHttpBackend(id), [id]);
+  const live = useLiveArtifact(backend, id, editId, version, !editing, undefined, onLiveData, setLiveAnnotations);
   const hasDataMutations = format === 'markup' && !archived && (live?.dataflow?.flow ?? dataflow?.flow)?.mutations?.some(m => m.scope !== 'local') === true;
   const membershipChanged=useCallback(()=>onLiveData({datasets:['_members']}),[onLiveData]);
   const membership=useArtifactMembership(id,hasDataMutations,membershipRevision,membershipChanged);
@@ -417,7 +426,7 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
   // so the browser refetches instead of showing a stale document.
   const rawKey = live?.editId ?? editId;
 
-  const transportFactory = useCallback(() => createAuthenticatedTransport(id), [id]);
+  const transportFactory = useCallback(() => backend.queryTransport(), [backend]);
   const [frameLoaded, setFrameLoaded] = useState(false);
   const onController = useCallback((controller: InlineStoryController | null) => {
     runtimeRef.current = controller;
@@ -745,7 +754,7 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
   const documentControls = (close: () => void) => (
     <div className="space-y-4">
       {format==='markup'&&<ArtifactPeople initialOpen={invitationLanding} hideJoin artifactId={id} revision={membershipRevision} onChange={()=>onLiveData({datasets:['_members']})}/>}
-      {(props.author?.forkedFrom || (canAnnotate && format === 'markup') || canEdit) && <section aria-label="Document actions">
+      {(props.author?.forkedFrom || format === 'markup' || canEdit) && <section aria-label="Document actions">
         <h2 className="mb-1 font-mono text-[10px] font-semibold uppercase tracking-[0.14em] text-faint">Artifact</h2>
         {props.author?.forkedFrom && <p data-mx-forked-from className="px-2 py-2 font-mono text-xs text-muted">
           forked from {props.author.forkedFrom.href
@@ -783,6 +792,9 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
 
           </>
         )}
+        {/* The offline file: anyone who can view the page may have it, for the
+            version the page shows (an archived render names its version). */}
+        {format === 'markup' && <DownloadOffline id={id} version={archived?.version} className={CONTROL_ROW} onSaved={close} />}
         {canEdit && !owner && (
           <ShareLink version={live?.version ?? version} onSharingChange={onSharingChange} artifactId={id} title={shownTitle} editable format={format} datasetKind={shownCatalog?.kind} variant="menu" className="" onSocialPreview={shownSource !== null && format === 'markup' ? () => { close(); setSocialPreviewOpen(true); } : undefined} />
         )}
@@ -817,7 +829,7 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
    * alternative below is the DATA-TIER view. */
   if (isDocumentFormat) {
     return (
-      <>
+      <ArtifactBackendProvider backend={backend}>
         <TrustedUi overlay layer="navigation">
         <InlineReaderChrome onShare={owner ? () => setSharingOpen(true) : undefined} pinned={editing || railOpen} editing={editing} input={{artifactId:id, ground:readerMode, editing, membership:hasDataMutations?membership.status:undefined, share:owner, archived, visibility:sharingVerdict?.id === id ? sharingVerdict.visibility : props.visibility, hasInvitedUsers:sharingVerdict?.id === id ? sharingVerdict.hasInvitedUsers : props.hasInvitedUsers, title:shownTitle, forkBusy:false, author:props.author ?? null, viewer:readerFace, edit:canEdit, ownerBreadcrumb:owner, reactions:{like:{...likeRef.current,href:'#'},follow:followRef.current ? {...followRef.current,href:'#'} : null,comment:{count:openAnnotationCount,href:'#'}}}} onAction={action => {
           if (action === 'like') void toggleLike();
@@ -951,7 +963,7 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
           />
         )}
         </TrustedUi>
-      </>
+      </ArtifactBackendProvider>
     );
   }
 

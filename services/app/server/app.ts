@@ -30,6 +30,7 @@ import { STORY_ROOT_ATTR } from '@/lib/story-surface';
 import { APP_BAR_H } from '@/lib/story/edit-bar';
 import { Hono } from 'hono';
 import { serveStatic } from '@hono/node-server/serve-static';
+import { offlineExtrasAsset } from '@/lib/offline/bundle.server';
 import { actorReceiver, isPublicAssetRequest, publicAssetResponse } from '@artifactbin/utils';
 import { canReadArtifact, getArtifactById } from '@/lib/artifacts';
 import { verifyExportKey } from '@/lib/export-key';
@@ -379,6 +380,20 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
 
   // Static: content-addressed trees are immutable; everything else is served plainly.
   app.use('/story/*', async (c, next) => { await next(); c.header('cache-control', IMMUTABLE); c.header('access-control-allow-origin', '*'); });
+  /*
+   * The offline file's code-view extras (lib/offline/extras): Monaco and prettier,
+   * content-addressed like /story/*, and loaded from a file:// page (a `null`
+   * origin) by an SRI-pinned script — which is a CORS request, hence the open ACAO.
+   */
+  app.on(['GET', 'HEAD'], '/offline/:name', async (c) => {
+    const code = await offlineExtrasAsset(c.req.param('name'));
+    if (!code) return c.notFound();
+    c.header('content-type', 'text/javascript; charset=utf-8');
+    c.header('cache-control', IMMUTABLE);
+    c.header('access-control-allow-origin', '*');
+    c.header('x-content-type-options', 'nosniff');
+    return c.body(new Uint8Array(code));
+  });
   app.use('/libraries/*', async (c, next) => { await next(); c.header('cache-control', 'public, max-age=3600'); c.header('access-control-allow-origin', '*'); });
   app.use('/fonts/*', async (c, next) => { await next(); c.header('cache-control', IMMUTABLE); c.header('access-control-allow-origin', '*'); });
   app.use('/geojson/*', async (c, next) => { await next(); c.header('cache-control', 'public, max-age=86400'); c.header('access-control-allow-origin', '*'); });

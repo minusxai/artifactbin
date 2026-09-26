@@ -26,29 +26,10 @@ import type { StoryEditSelection } from '@/lib/story-runtime/contract';
 import type { StoryIslandDataflow } from '@/lib/story-runtime/contract';
 import { LINK, PANEL } from '@/components/ui';
 import type { EditorFlushRef } from '@/lib/story/use-live-edits';
+import { useArtifactBackend } from '@/lib/artifact-backend/context';
+import type { LoadedArtifact } from '@/lib/artifact-backend/types';
 
-interface Loaded {
-  document?:DocumentGraph;
-  id: string;
-  title: string | null;
-  markup: string | null;
-  theme: string | null;
-  version: number;
-  /** Head pointer of the edit protocol — every edit this session sends carries it. */
-  edit_id: string;
-  template?: string | null;
-  colorMode?: string | null;
-  /**
-   * Present when the editor was SEEDED from the page (which holds it); the read
-   * API does not return it, so on the background-load path this is undefined and
-   * the draft compile supplies the sheet instead.
-   */
-  compiledCss?: string | null;
-  refs?: Array<{ id: string; kind: string; title?: string | null }>;
-  /** Present when SEEDED from the page: the document's server-run dataflow (InPlaceEditor's EditorArtifact). */
-  dataflow?: StoryIslandDataflow | null;
-}
-
+type Loaded = LoadedArtifact;
 
 /**
  * What the PAGE already rendered. Passing it in means entering edit mode shows
@@ -75,7 +56,8 @@ interface EditorSeed {
   dataflow?: StoryIslandDataflow | null;
 }
 
-export default function ArtifactEditor({ id, seed, onExit, flushRef, frameRef, runtimeRef, sessionNonce, initialSelectionPath = null, onComment, onRightInsetChange, rightInset = 0, commentsOpen, onCommentsOpenChange, onCommentsHost }: {
+export default function ArtifactEditor({ seed, onExit, flushRef, frameRef, runtimeRef, sessionNonce, initialSelectionPath = null, onComment, onRightInsetChange, rightInset = 0, commentsOpen, onCommentsOpenChange, onCommentsHost }: {
+  /** The artifact being edited; its requests go through the ArtifactBackendProvider above. */
   id: string;
   seed?: EditorSeed;
   onExit: () => void;
@@ -113,14 +95,15 @@ export default function ArtifactEditor({ id, seed, onExit, flushRef, frameRef, r
    * answers for an account session and for the agent-session cookie alike
    * (lib/agent-session), each in its own scope.
    */
+  const backend = useArtifactBackend();
   const load = useCallback(async () => {
     try {
-      const res = await fetch(`/api/my/artifacts/${id}`);
-      if (!res.ok) {
+      const head = await backend.load();
+      if (!head) {
         setLocked(true);
         return;
       }
-      setArt((await res.json()) as Loaded);
+      setArt(head);
       setLocked(false);
       seedRef.current = false;
     } catch {
@@ -128,7 +111,7 @@ export default function ArtifactEditor({ id, seed, onExit, flushRef, frameRef, r
       // never an unhandled rejection from the mount effect.
       setLocked(true);
     }
-  }, [id]);
+  }, [backend]);
 
   useEffect(() => {
     void load();

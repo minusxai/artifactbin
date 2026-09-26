@@ -83,7 +83,7 @@ closed with a removal/retry instruction. The npm/source CLI uses its installed D
 For development or a trusted mirror, `CLI__SERVICE_BASE_URL` accepts an HTTPS base URL with an optional path prefix (HTTP loopback
 also works); append `afbin-vVERSION/afbin-sql-OS-ARCH.gz` to that base. A locally built server
 uses `CLI__SERVICE_BASE_URL=http://localhost:3030/chat/releases`. Checksums stay pinned in the executable.
-Local JSX image export uses the cached preview runtime and lazily downloaded Chromium: `afbin export report.jsx --output report.png`. It renders current local bytes and registered ID dependencies without publishing or rewriting source. A locally registered ID also selects its local file; other IDs and explicit artifact URLs use their server. PNG/JPG support `--page` and `--og`. HTML still requires a published head.
+Local JSX image export uses the cached preview runtime and lazily downloaded Chromium: `afbin export report.jsx --output report.png`. It renders current local bytes and registered ID dependencies without publishing or rewriting source. A locally registered ID also selects its local file; other IDs and explicit artifact URLs use their server. PNG/JPG support `--page` and `--og`. `--format html` saves the offline file from the server's `/a/<id>/download`: one self-contained `.html` that opens, edits and comments without a connection (`<id>@N` saves that version's file). It still requires a published head, and the server refuses a document too large for one file with a message saying so.
 
 Remove it again with `curl -fsSL https://app.artifactbin.dev/chat/uninstall.sh | sh`. That deletes the
 executable, `~/.artifactbin`, cached downloads and the agent skills afbin manages, and never touches

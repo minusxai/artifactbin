@@ -10,6 +10,7 @@ import { describe, it, expect, vi } from 'vitest';
 
 import StoryFormatToolbar from '../StoryFormatToolbar';
 import type { StoryEditSelection } from '@/lib/story-runtime/contract';
+import { httpBackendWrapper } from '@/test/helpers/artifact-backend';
 
 function renderToolbar(className = '', rect = { x: 40, y: 300, width: 600, height: 80 }) {
   const selection: StoryEditSelection = {
@@ -30,7 +31,7 @@ function renderToolbar(className = '', rect = { x: 40, y: 300, width: 600, heigh
       onApplyLink={vi.fn()}
       onSelect={vi.fn()}
       onDelete={vi.fn()}
-    />,
+    />, { wrapper: httpBackendWrapper('doc1') }
   );
   return { onApply };
 }
@@ -116,7 +117,7 @@ describe('StoryFormatToolbar for a selected image', () => {
         onDelete={vi.fn()}
         onComment={vi.fn()}
         image={image}
-      />,
+      />, { wrapper: httpBackendWrapper('doc1') }
     );
     return image;
   }
@@ -172,7 +173,7 @@ describe('StoryFormatToolbar for a selected image', () => {
         onApplyLink={vi.fn()}
         onSelect={vi.fn()}
         onDelete={vi.fn()}
-      />,
+      />, { wrapper: httpBackendWrapper('doc1') }
     );
     for (const name of TEXT_ONLY) expect(screen.getByLabelText(name)).toBeTruthy();
     expect(screen.queryByLabelText('Replace image')).toBeNull();

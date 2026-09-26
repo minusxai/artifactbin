@@ -11,6 +11,10 @@ export type DeckGLMapProps = Omit<DeckEngineProps, 'height'> & { height?: number
 
 const DEFAULT_HEIGHT = 420;
 
+/** The map box's height in px for an authored `height` — shared with any stand-in that must hold the same space. */
+export const deckGlHeight = (height: unknown): number =>
+  typeof height === 'number' ? height : Number.parseInt(String(height ?? DEFAULT_HEIGHT), 10) || DEFAULT_HEIGHT;
+
 /**
  * The editor's node identity (`id`, `data-mx-ast`) lands on the map's own box,
  * so a map can be selected, commented on and moved like every other component.
@@ -22,7 +26,7 @@ export function DeckGLMap({ id, 'data-mx-ast': ast, className, ...props }: DeckG
     void import('./deck-gl-engine').then(m => { if (live) setEngine(() => m.DeckEngine); });
     return () => { live = false; };
   }, []);
-  const height = typeof props.height === 'number' ? props.height : Number.parseInt(String(props.height ?? DEFAULT_HEIGHT), 10) || DEFAULT_HEIGHT;
+  const height = deckGlHeight(props.height);
   return (
     <div id={id} data-mx-ast={ast} className={className}>
       {Engine
