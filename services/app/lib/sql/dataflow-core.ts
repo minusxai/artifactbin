@@ -10,7 +10,7 @@
  * document may read and hands their rows in, and runs a connected Postgres
  * query inside its database through `sourceQuery`.
  */
-import { isQueryFailure, MEMBER_COLUMNS, type ColumnType, type QueryPage, type SqlService, type TableResult } from '@artifactbin/contracts';
+import { DISPLAY_ROWS, isQueryFailure, MEMBER_COLUMNS, type ColumnType, type QueryPage, type SqlService, type TableResult } from '@artifactbin/contracts';
 import { BUILTIN_TABLES, platformValues } from '@/lib/story/builtins';
 import type { CompiledDataflow, CompiledQuery } from '@/lib/story/compiled-dataflow';
 import { bindParams, bindTypes, initialValues, selectQueries, typedResult, valueTypes, type ImportTables } from '@/lib/story/compiled-flow';
@@ -38,6 +38,7 @@ export interface RunDataflowOptions {
   values?: Record<string, Scalar>;
   /** Run only these queries (and what they read) — a re-run after a value change. */
   only?: Iterable<string>;
+  /** The rows each query ships (DISPLAY_ROWS by default); a downstream query still reads the whole result. */
   limit?: number;
   timeoutMs?: number;
   /** Read a WINDOW of one query (a table scrolling past the cap); implies `only: [page.name]`. */
@@ -99,7 +100,7 @@ export async function evaluateDataflow(engine: DataflowEngine, flow: CompiledDat
     tables: inputs,
     imports: Object.fromEntries(Object.entries(imports).filter(([name]) => read.has(name))),
     queries: local_.map((q) => ({ name: q.name, sql: q.sql })),
-    params, paramTypes, limit: opts.limit, timeoutMs: opts.timeoutMs, page: opts.page,
+    params, paramTypes, limit: opts.limit ?? DISPLAY_ROWS, timeoutMs: opts.timeoutMs, page: opts.page,
   });
   for (const q of local_) {
     const o = out[q.name];

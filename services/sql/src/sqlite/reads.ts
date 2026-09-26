@@ -1,11 +1,12 @@
 /**
  * READS: a document's queries, in dependency order, in ONE throwaway
- * database. Each result is loaded as a table under the query's name before
- * the next runs, so a later query reads an earlier one by name. A failing
+ * database. Each result is loaded WHOLE as a table under the query's name
+ * before the next runs, so a later query reads an earlier one by name and sees
+ * every row of it; the row cap (`limit`) bounds only what is returned. A failing
  * query is a `QueryFailure` for that query alone; its dependents then fail on
  * the missing table, which is the honest report.
  */
-import { isQueryFailure, type ColumnType, type DatasetColumn, type DryRunInput, type DryRunResult, type QueryOutcome, type QueryPage, type RunInput, type Scalar } from '@artifactbin/contracts';
+import { isQueryFailure, type ColumnType, type DatasetColumn, type DryRunInput, type DryRunResult, type QueryOutcome, type QueryPage, type Row, type RunInput, type Scalar } from '@artifactbin/contracts';
 import { DEFAULT_CAPS } from '../caps';
 import { pagedQuery } from '../paging';
 import { Refused, SqliteDatabase, TimedOut, type Prepared } from './database';
@@ -26,12 +27,18 @@ export function runQueries(sqlite3: Sqlite3, input: RunInput, bounds: ReadBounds
       for (const [table, t] of Object.entries(input.tables)) db.load({ schema: 'main', table, ...t });
       for (const [schema, tables] of Object.entries(input.imports ?? {})) for (const [table, t] of Object.entries(tables)) db.load({ schema, table, ...t });
     }
-    for (const query of input.queries) {
+    for (const [i, query] of input.queries.entries()) {
       const page = input.page?.name === query.name ? input.page : null;
-      const result = out[query.name] = readOne(db, query.name, query.sql, input.params, types, page, page ? bounds.pageLimit : bounds.limit, bounds.timeoutMs);
-      if (isQueryFailure(result) || input.catalog) continue;
+      // A query a later one may read is materialised WHOLE: the cap is what
+      // travels, never what a downstream query sees. The last cannot be read.
+      const whole = !page && !input.catalog && i < input.queries.length - 1;
+      const read = readOne(db, query.name, query.sql, input.params, types, page, page ? bounds.pageLimit : bounds.limit, bounds.timeoutMs, whole);
+      if (isQueryFailure(read)) { out[query.name] = read; continue; }
+      const { all, ...result } = read;
+      out[query.name] = result;
+      if (input.catalog) continue;
       try {
-        db.load({ schema: 'main', table: query.name, rows: result.rows, columns: result.columns });
+        db.load({ schema: 'main', table: query.name, rows: all ?? result.rows, columns: result.columns });
       } catch (e) {
         out[query.name] = { error: `result of <Query name="${query.name}"> could not be materialised: ${message(e)}` };
       }
@@ -44,7 +51,8 @@ export function runQueries(sqlite3: Sqlite3, input: RunInput, bounds: ReadBounds
   return out;
 }
 
-function readOne(db: SqliteDatabase, name: string, sql: string, params: Record<string, Scalar>, types: Record<string, ColumnType>, page: QueryPage | null, limit: number, timeoutMs: number): QueryOutcome {
+/** One query's outcome, and — when asked for WHOLE — every row it produced, for the queries after it. */
+function readOne(db: SqliteDatabase, name: string, sql: string, params: Record<string, Scalar>, types: Record<string, ColumnType>, page: QueryPage | null, limit: number, timeoutMs: number, whole = false): QueryOutcome & { all?: Row[] } {
   const started = performance.now();
   const remaining = () => Math.max(0, timeoutMs - (performance.now() - started));
   const open: Prepared[] = [];
@@ -64,6 +72,11 @@ function readOne(db: SqliteDatabase, name: string, sql: string, params: Record<s
         run = db.prepare(pagedQuery({ name, sql: text }, { ...page, sort: undefined }).sql, 'read');
       }
       open.push(run);
+    }
+    if (whole) {
+      const { rows: all, columns } = run.bind(params, types).rows(Number.POSITIVE_INFINITY, remaining());
+      if (all.length <= limit) return { rows: all, columns };
+      return { rows: all.slice(0, limit), columns, truncated: true, totalRows: all.length, all };
     }
     const { rows, columns, more } = run.bind(params, types).rows(limit, remaining());
     if (!more && !page) return { rows, columns };
