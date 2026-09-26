@@ -178,6 +178,9 @@ export class SqliteDatabase {
       this.#virtual = new Set(this.trusted(() => this.#db.exec({ sql: 'SELECT name FROM pragma_module_list', returnValue: 'resultRows' }).map((r) => String(r[0]).toLowerCase())));
       // A write's effect is read from triggers; REPLACE must fire them too.
       this.trusted(() => this.#db.exec('PRAGMA recursive_triggers = ON'));
+      // Bounds on what one statement may allocate: no value past 32 MiB, no statement past 1 MB of text.
+      capi.sqlite3_limit(this.#db, capi.SQLITE_LIMIT_LENGTH, 32 * 1024 * 1024);
+      capi.sqlite3_limit(this.#db, capi.SQLITE_LIMIT_SQL_LENGTH, 1_000_000);
       capi.sqlite3_set_authorizer(this.#db, (_p, code, a, b, c, d) => this.#authorize({ code, object: a || null, column: b === 0 ? null : b, db: c || null, source: d || null }), 0);
       capi.sqlite3_progress_handler(this.#db, 1000, () => {
         if (performance.now() <= this.#deadline) return 0;
