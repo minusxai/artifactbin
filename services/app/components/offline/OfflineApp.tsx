@@ -110,8 +110,7 @@ const BAR_BUTTON = 'inline-flex h-7 cursor-pointer items-center gap-1 rounded-[4
 
 export function OfflineTopBar({ file, children }: { file: ArtifactFile; children?: ReactNode }) {
   return (
-    // The navigation layer, as the site's reader bar: above the editor's toolbar and panels, so its menus are too.
-    <TrustedUi overlay layer="navigation">
+    <TrustedUi>
       <header aria-label="Offline copy" style={{ minHeight: APP_BAR_H }} className="fixed inset-x-0 top-0 z-40 flex flex-wrap items-center gap-x-2 gap-y-1 border-b border-edge bg-surface px-4 py-2 font-sans text-xs text-muted">
         <span>Offline copy of <strong className="font-medium text-fg">{file.metadata.title}</strong></span>
         <span aria-hidden="true">·</span>
@@ -132,7 +131,9 @@ function ChangesList({ journal, onClose }: { journal: ArtifactFileEdit[]; onClos
     return () => window.removeEventListener('keydown', onKey);
   }, [onClose]);
   return (
-    <section aria-label="Changes in this file" className="absolute right-4 top-full z-50 mt-1 max-h-[60vh] w-80 overflow-y-auto rounded-md border border-edge-bright bg-surface p-3 text-fg shadow-xl">
+    // The navigation layer, above the editor's toolbar and panels, which open below the bar.
+    <TrustedUi overlay layer="navigation">
+    <section aria-label="Changes in this file" style={{ top: APP_BAR_H + 4 }} className="fixed right-4 z-50 max-h-[60vh] w-80 overflow-y-auto rounded-md border border-edge-bright bg-surface p-3 font-sans text-xs text-fg shadow-xl">
       {journal.length === 0 ? (
         <p className="text-muted">No changes yet. Edits made in this file are listed here with who made them.</p>
       ) : (
@@ -147,6 +148,7 @@ function ChangesList({ journal, onClose }: { journal: ArtifactFileEdit[]; onClos
         </ol>
       )}
     </section>
+    </TrustedUi>
   );
 }
 

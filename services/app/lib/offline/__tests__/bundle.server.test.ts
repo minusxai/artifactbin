@@ -29,7 +29,16 @@ describe('offlineBundle', () => {
     expect(offlineBundle('core')).toBe(offlineBundle('core'));
   });
 
-  it('keeps Mermaid out of the core bundle', () => {
-    expect(manifest.bundles.core.raw).toBeLessThan(manifest.bundles.mermaid.raw / 2);
+  it('keeps Mermaid out of the core bundle', async () => {
+    // Checked on the code itself: once the editor joined both bundles, a size ratio no longer said this.
+    const code = async (kind: 'core' | 'mermaid') => gunzipSync(Buffer.from(await offlineBundle(kind), 'base64')).toString('utf8');
+    const [core, mermaid] = [await code('core'), await code('mermaid')];
+    for (const marker of ['mermaidAPI', 'flowchart-v2']) {
+      expect(mermaid).toContain(marker);
+      expect(core).not.toContain(marker);
+    }
+    expect(core).toContain('This file was saved without diagram support.');
+    // Mermaid is still megabytes a document without a diagram does not carry.
+    expect(manifest.bundles.mermaid.raw - manifest.bundles.core.raw).toBeGreaterThan(3 * 1024 * 1024);
   });
 });
