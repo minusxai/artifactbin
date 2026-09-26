@@ -12,6 +12,9 @@ and replies depend on sharing permissions, not membership. Existing version 1
 policies keep their previous behaviour until explicitly upgraded. Explicit legacy
 `--access` settings on creation retain version 1 behaviour; omit them for new grants.
 
+A complete page people use together, published and tested as two people:
+[worked example](markup-data-example.md).
+
 Use real account IDs in `user` columns and `$_me.id` for the current user. Never
 invent participant names or seed fake people. [User fields](databases-users.md)
 explains column constraints.
