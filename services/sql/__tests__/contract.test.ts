@@ -1,19 +1,25 @@
 /**
- * THE SQL CONTRACT, run over BOTH transports: the engine in this process, and
- * the same engine behind `serveSql` reached through `sqlClient`. One suite,
- * two shapes — the proof that in-process and remote can never disagree.
+ * THE SQL CONTRACT, run over BOTH engines (DuckDB and SQLite) and BOTH
+ * transports: the engine in this process, and the same engine behind
+ * `serveSql` reached through `sqlClient`. One suite, four shapes — the proof
+ * that the engines, and in-process and remote, can never disagree. Where the
+ * dialects differ, each engine gets its own SQL for the same assertion.
  */
 import { afterAll, describe, expect, it, vi } from 'vitest';
 import type { SqlService } from '@artifactbin/contracts';
 import { isQueryFailure } from '@artifactbin/contracts';
 import { SQL_ROUTES, serveSql, sqlClient } from '@artifactbin/sql';
-import { createSql } from '@artifactbin/sql/local';
+import { createSql, createSqliteSql } from '@artifactbin/sql/local';
 
-const local = createSql({ maxRows: 3, timeoutMs: 2000 });
-const server = serveSql(local);
-const listening = server.listen(0);
+type Engine = 'duckdb' | 'sqlite';
+const ENGINES = { duckdb: createSql({ maxRows: 3, timeoutMs: 2000 }), sqlite: createSqliteSql({ maxRows: 3, timeoutMs: 2000 }) };
+const local = ENGINES.duckdb;
+const servers = Object.values(ENGINES).map((svc) => serveSql(svc));
+const listening = servers[0]!.listen(0);
 const remote = sqlClient(listening.url, { deadlineMs: 5000 });
-afterAll(() => server.close());
+const sqliteRemote = sqlClient(servers[1]!.listen(0).url, { deadlineMs: 5000 });
+afterAll(() => Promise.all(servers.map((s) => s.close())));
+const SHAPES: Array<[string, Engine, SqlService]> = [['duckdb in-process', 'duckdb', local], ['duckdb over HTTP', 'duckdb', remote], ['sqlite in-process', 'sqlite', ENGINES.sqlite], ['sqlite over HTTP', 'sqlite', sqliteRemote]];
 
 const TABLE = { rows: [{ a: 1 }, { a: 2 }, { a: 3 }, { a: 4 }], columns: [{ name: 'a', type: 'number' as const }] };
 const input = {
@@ -22,7 +28,7 @@ const input = {
   params: {},
 };
 
-describe.each<[string, SqlService]>([['in-process', local], ['over HTTP', remote]])('%s', (_name, svc) => {
+describe.each(SHAPES)('%s', (_name, _engine, svc) => {
   it('runs a dependency chain in ONE request, with the row cap and the true count travelling', async () => {
     const r = await svc.run(input);
     if (isQueryFailure(r.q) || isQueryFailure(r.q2)) throw new Error(JSON.stringify(r));
@@ -158,20 +164,35 @@ describe('serveSql service authentication', () => {
   });
 });
 
+/** The dialect-specific halves of the catalog assertions: the same checks, each engine's own SQL. */
+const DIALECT = {
+  duckdb: {
+    functions: "select median(a::double) as median, strftime(strptime('2026-01', '%Y-%m'), '%Y-%m') as month from public.rows",
+    idioms: "with q as (select * from rows) select a, cast(9007199254740993 as varchar) as exact from (select * from q) qualify row_number() over(order by a desc)=1",
+    missing: true,
+  },
+  sqlite: {
+    functions: "select median(a) as median, date_format(date_parse('2026-01', '%Y-%m'), '%Y-%m') as month from public.rows",
+    idioms: "with q as (select * from rows) select a, exact from (select a, cast(9007199254740993 as text) as exact, row_number() over (order by a desc) as rn from (select * from q)) where rn = 1",
+    // SQLite has no boolean: a comparison is 1 or 0.
+    missing: 1,
+  },
+} as const;
+
 // The same native dialect and isolation must survive the HTTP boundary.
-describe.each<[string, SqlService]>([['in-process', local], ['over HTTP', remote]])('%s catalog reads', (_name, svc) => {
+describe.each(SHAPES)('%s catalog reads', (_name, engine, svc) => {
   const base = {
     tables: { payload: { ...TABLE, rows: TABLE.rows.map(row => ({...row, secret: 'hidden'})) } },
     catalog: { defaultSchema: 'public', tables: [{schema:'public',name:'rows',source:'payload',columns:TABLE.columns}] },
     params: {},
   };
   const run = (sql: string) => svc.run({...base,queries:[{name:'q',sql}]});
-  it('uses DuckDB syntax, functions and casts and returns the correct aggregate', async () => {
-    const r=await run("select median(a::double) as median, strftime(strptime('2026-01', '%Y-%m'), '%Y-%m') as month from public.rows");
+  it('uses the engine\'s syntax, functions and casts and returns the correct aggregate', async () => {
+    const r=await run(DIALECT[engine].functions);
     expect(r.q).toMatchObject({rows:[{median:2.5,month:'2026-01'}]});
   });
-  it('supports native QUALIFY, CTEs, exact literals and unaliased subqueries', async () => {
-    const r=await run("with q as (select * from rows) select a, cast(9007199254740993 as varchar) as exact from (select * from q) qualify row_number() over(order by a desc)=1");
+  it('supports native window filtering, CTEs, exact literals and unaliased subqueries', async () => {
+    const r=await run(DIALECT[engine].idioms);
     expect(r.q).toMatchObject({rows:[{a:4,exact:'9007199254740993'}]});
   });
   it('retains pagination and reports the full count', async () => {
@@ -183,7 +204,7 @@ describe.each<[string, SqlService]>([['in-process', local], ['over HTTP', remote
   });
   it('binds typed date and nullable parameters without touching quoted text', async () => {
     const r=await svc.run({...base,catalog:{...base.catalog,paramTypes:{day:'date',empty:'string'}},params:{day:'2026-09-15',empty:null},queries:[{name:'q',sql:"select date_part('year', $day) as year, $empty is null as missing, '$day' as literal"}]});
-    expect(r.q).toMatchObject({rows:[{year:2026,missing:true,literal:'$day'}]});
+    expect(r.q).toMatchObject({rows:[{year:2026,missing:DIALECT[engine].missing,literal:'$day'}]});
   });
   it('resolves model dependencies without exposing unselected model columns or truncating intermediate rows', async () => {
     const catalog={...base.catalog,tables:[...base.catalog.tables,{schema:'public',name:'model',sql:'select a, a*10 as hidden from rows',columns:TABLE.columns},{schema:'public',name:'unused',sql:'INVALID UNUSED DRAFT',columns:[]}]};
@@ -194,7 +215,7 @@ describe.each<[string, SqlService]>([['in-process', local], ['over HTTP', remote
   });
 });
 
-it('catalog reads keep schema bindings, quoted names, model isolation and native parameters', async () => {
+it.each(Object.entries(ENGINES))('%s catalog reads keep schema bindings, quoted names, model isolation and native parameters', async (_engine, local) => {
  const catalog={defaultSchema:'sales',tables:[
    {schema:'sales',name:'Odd " Rows',source:'a',columns:TABLE.columns},
    {schema:'support',name:'Odd " Rows',source:'b',columns:TABLE.columns},
