@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { declarationsOf } from './helmet';
 import { isEmptyDataflow, scalarMatches } from './dataflow';
 import { EMPTY_COMPILED_DATAFLOW, type CompiledDataflow } from './compiled-dataflow';
-import { compileWithLoader, type SchemaLoader } from './compile-dataflow';
+import { compileWithLoader, type CompileResult, type SchemaLoader } from './compile-dataflow';
 
 /**
  * A MARKUP DOCUMENT'S COMPILED DATAFLOW, stored in `meta.parsedArtifact` beside
@@ -98,17 +98,18 @@ export function storedCompiledDataflow(meta: unknown, source: string): CompiledD
 /**
  * A document's compiled dataflow: the stored record, or — missing, stale, or
  * from an older compiler — a fresh compile with `load` (the document owner's
- * reach). Null when the source does not compile (publish refused it, or what
- * it imports has changed shape since); EMPTY when it declares nothing.
+ * reach). A source that does not compile (publish refused it, or what it
+ * imports has changed shape since) answers with the compiler's errors, which
+ * every reader shows; EMPTY when it declares nothing; null when it does not
+ * parse.
  */
-export async function readCompiledDataflow(meta: unknown, source: string, load: SchemaLoader): Promise<CompiledDataflow | null> {
+export async function readCompiledDataflow(meta: unknown, source: string, load: SchemaLoader): Promise<CompileResult | null> {
   const stored = storedCompiledDataflow(meta, source);
-  if (stored) return stored;
+  if (stored) return { ok: true, compiled: stored };
   const flow = declarationsOf(source);
   if (!flow) return null;
-  if (isEmptyDataflow(flow)) return EMPTY_COMPILED_DATAFLOW;
-  const result = await compileWithLoader(flow, load);
-  return result.ok ? result.compiled : null;
+  if (isEmptyDataflow(flow)) return { ok: true, compiled: EMPTY_COMPILED_DATAFLOW };
+  return compileWithLoader(flow, load);
 }
 
 /**

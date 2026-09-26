@@ -31,8 +31,11 @@ export interface LiveFrame extends Omit<ArtifactLiveEvent, 'compiledCss' | 'auth
   authorScript: string | null;
   /** A stable signature of the data declarations; the client rebinds when it moves. */
   declarations: string | null;
-  /** The declarations as a flow, rows deliberately absent (the client re-runs). */
-  dataflow?: { flow: import('@/lib/story/compiled-dataflow').CompiledDataflow };
+  /**
+   * The declarations as a flow, rows deliberately absent (the client re-runs) —
+   * except for a version that cannot run, whose queries' answers are its state.
+   */
+  dataflow?: { flow: import('@/lib/story/compiled-dataflow').CompiledDataflow; state?: import('@/lib/story/dataflow').DataflowState };
   /** The datasets this version reads or writes — what a relay must also follow. */
   datasets: string[];
 }
@@ -65,8 +68,9 @@ async function build(stored: ArtifactRow): Promise<LiveFrame> {
   const parts = row.format === 'markup' && row.source
     ? storyUpdateParts(row.source, assetLookupFrom(assets))
     : null;
-  // The compiled declarations the runtime re-runs this version with (a reader's frame has no compiler).
-  const flow = parts ? (await declarationsForRow(row))?.flow ?? null : null;
+  // The compiled declarations the runtime re-runs this version with (a reader's frame has no compiler),
+  // or, for a version that cannot run, the answers its queries already have.
+  const declared = parts ? await declarationsForRow(row) : null;
   return {
     ...(row.document?.kind==='graph'?{document:row.document}:{}),
     editId: row.edit_id,
@@ -84,7 +88,8 @@ async function build(stored: ArtifactRow): Promise<LiveFrame> {
     authorScript: parts?.authorScript ?? null,
     ...(parts ? { nodes: parts.nodes } : {}),
     declarations: parts?.declarations ?? null,
-    ...(parts && flow && flow.queries.length + flow.values.length > 0 ? { dataflow: { flow } } : {}),
+    ...(declared?.state ? { dataflow: { flow: declared.flow, state: declared.state } }
+      : declared && declared.flow.queries.length + declared.flow.values.length > 0 ? { dataflow: { flow: declared.flow } } : {}),
     datasets: row.format === 'markup' ? await datasetsForDocument(row) : [],
     theme: design.theme,
     colorMode: design.colorMode,
