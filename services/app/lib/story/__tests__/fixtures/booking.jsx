@@ -36,12 +36,12 @@
 
   <Mutation name="book" expectedAffected={1} reset="note">{`
     insert into bookings.rows (id, day, slot, booked_by, note, created_at)
-    select $id, $day, $slot, $_me.id, coalesce($note, ''), $_now
-    where not exists (select 1 from bookings.rows where day = $day and slot = $slot)
+    select $_row.id, $_row.day, $_row.slot, $_me.id, coalesce($note, ''), $_now
+    where not exists (select 1 from bookings.rows where day = $_row.day and slot = $_row.slot)
   `}</Mutation>
 
   <Mutation name="cancel" expectedAffected={1}>{`
-    delete from bookings.rows where id = $id and booked_by = $_me.id
+    delete from bookings.rows where id = $_row.id and booked_by = $_me.id
   `}</Mutation>
 </Helmet>
 <main data-design="tw" className="@container mx-auto max-w-3xl px-4 py-8">

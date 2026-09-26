@@ -12,8 +12,13 @@
 import type { ColumnType, DatasetColumn } from '@artifactbin/contracts';
 import type { Scalar, Row } from './dataflow';
 
-/** Built-in inputs every document can read; names start with `_` so no author name can collide. */
-export type BuiltinInput = '_me.id' | '_me.role' | '_now' | '_tz';
+/**
+ * Built-in inputs; names start with `_` so no author name can collide. `_me`,
+ * `_now` and `_tz` come from the platform. `_row.<column>` and `_value` come
+ * from the control that runs a mutation: the row it sits in, and the new value
+ * an editing cell holds.
+ */
+export type BuiltinInput = '_me.id' | '_me.role' | '_now' | '_tz' | '_value' | `_row.${string}`;
 /** Built-in tables. `_me` is the reader as a one-row table; `_members` the artifact's accepted members. */
 export type BuiltinTable = '_me' | '_members';
 
@@ -71,9 +76,10 @@ export interface CompiledMutation {
   /** What it writes: an imported dataset table, or a local table value. */
   target: { import: string; table: string } | { local: string };
   /**
-   * The signature: every parameter that is not a built-in. A button fills
-   * each by name — the row's column, then the page value — unless `args=`
-   * names its source.
+   * The signature: every parameter that is not a built-in, filled from the
+   * page value of the same name unless the control's `args=` names another
+   * source. Row fields and the edited value are built-ins (`_row.id`, `_value`)
+   * in `reads.builtins`, supplied by the control.
    */
   args: Array<{ name: string; type: ColumnType | null }>;
   reads: CompiledReads;
