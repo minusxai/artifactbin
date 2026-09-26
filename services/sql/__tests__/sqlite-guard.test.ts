@@ -20,7 +20,7 @@ describe('one statement', () => {
   it.each(['select 1; select 2', 'select a from t; delete from t', 'select 1 /* ; */; drop table t', "select ';'; delete from t", 'select 1 --\n; delete from t'])('refuses a second statement: %s', async (query) => {
     expect(errorOf(await read(query))).toMatch(/exactly one statement/);
   });
-  it.each(['select 1 as n;', 'select 1 as n; -- trailing', 'select 1 as n /* c */ ;;', 'select 1 as n -- no newline'])('admits trailing terminators and comments: %s', async (query) => {
+  it.each(['select 1 as n;', 'select 1 as n; -- trailing', 'select 1 as n /* c */ ;;', 'select 1 as n -- no newline', '  -- leading\n select 1 as n', '/* c */ select 1 as n'])('admits terminators and comments around the statement: %s', async (query) => {
     expect(await read(query)).toMatchObject({ rows: [{ n: 1 }] });
   });
 });

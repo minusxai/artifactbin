@@ -1,7 +1,7 @@
 {
   "name": "@artifactbin/sql",
   "version": "0.1.0",
-  "description": "The SQL service: DuckDB, in this process or in one of its own. Rows in, rows out; nothing persists between calls. `.` is the contract, the HTTP client and the server shell; `./shape` is the pure column inference, importable from a browser bundle; `./local` is the engine and the only entry that loads the native module.",
+  "description": "The SQL service: DuckDB or SQLite, in this process or in one of its own. Rows in, rows out; nothing persists between calls. `.` is the contract, the HTTP client and the server shell; `./shape` is the pure column inference, importable from a browser bundle; `./core` is the browser-safe SQLite engine (official sqlite-wasm); `./local` builds either engine as a SqlService and is the only entry that loads the native DuckDB module.",
   "license": "Apache-2.0",
   "type": "module",
   "main": "./src/index.ts",
