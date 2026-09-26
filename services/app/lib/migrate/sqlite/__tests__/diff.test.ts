@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { createSql } from '@artifactbin/sql/local';
+import { createSqliteSql } from '@artifactbin/sql/sqlite';
 import type { QueryOutcome, RunInput, SqlService } from '@artifactbin/contracts';
 import { comparable, diffStatements, type DiffSide } from '../diff';
 import { translateSql } from '../translate';
 
-const duckdb = createSql({ maxRows: 1000, timeoutMs: 5000 });
+const sqlite = createSqliteSql({ maxRows: 1000, timeoutMs: 5000 });
 const tables: RunInput['tables'] = {
   ref_nums: {
     columns: [{ name: 'a', type: 'number' }, { name: 'b', type: 'number' }, { name: 'c', type: 'number' }, { name: 'name', type: 'string' }, { name: 'day', type: 'date' }],
@@ -26,27 +26,22 @@ function stub(answers: Record<string, QueryOutcome>, seen: RunInput[] = []): Sql
   };
 }
 
-describe('diffStatements on DuckDB against DuckDB', () => {
-  it('the division rewrite is exact: every translated division returns the same rows', async () => {
-    const statements = ['select a / b as q from ref_nums', 'select a + b / c as q from ref_nums', 'select a / b / c as q from ref_nums', 'select -a / b as q from ref_nums', 'select count(*) / 2 as q from ref_nums'];
-    const cases = statements.map((sql, i) => ({ name: `q${i}`, original: sql, translated: translateSql(sql, { statement: 'query' }).sql }));
-    expect(cases.every((c) => c.translated.includes('* 1.0 /'))).toBe(true);
-    const verdicts = await diffStatements({ cases }, { original: side(duckdb), translated: side(duckdb) });
-    expect(verdicts).toEqual(cases.map((c) => ({ name: c.name, status: 'same' })));
-  });
-
-  it('goes red when a translation changes meaning: DuckDB LIKE is case-sensitive, ILIKE is not', async () => {
+// DuckDB is gone from the product: the rehearsal records the BEFORE side at the pre-compiler
+// commit (scripts/migrate/sqlite). Here both sides are the one engine, so what is under test is
+// the diff itself running real statements — a same verdict, a changed meaning, a failure.
+describe('diffStatements on the SQLite engine', () => {
+  it('goes red when a translation changes meaning: SQLite LIKE ignores ASCII case, GLOB does not', async () => {
     const [verdict] = await diffStatements(
-      { cases: [{ name: 'alps', original: `select name from ref_nums where name ilike 'al%'`, translated: `select name from ref_nums where name like 'al%'` }] },
-      { original: side(duckdb), translated: side(duckdb) },
+      { cases: [{ name: 'alps', original: `select name from ref_nums where name like 'al%'`, translated: `select name from ref_nums where name glob 'al*'` }] },
+      { original: side(sqlite), translated: side(sqlite) },
     );
     expect(verdict).toEqual({ name: 'alps', status: 'different', rows: { missing: [['Alpha']], extra: [] } });
   });
 
-  it('a midnight timestamp equals the date: date_trunc returns a timestamp in DuckDB and a date in the library', async () => {
+  it('a midnight timestamp equals the date it starts', async () => {
     const [verdict] = await diffStatements(
-      { cases: [{ name: 'months', original: `select date_trunc('month', day) as m from ref_nums`, translated: `select cast(date_trunc('month', day) as date) as m from ref_nums` }] },
-      { original: side(duckdb), translated: side(duckdb) },
+      { cases: [{ name: 'months', original: `select date_trunc('month', day) || 'T00:00:00.000Z' as m from ref_nums`, translated: `select date_trunc('month', day) as m from ref_nums` }] },
+      { original: side(sqlite), translated: side(sqlite) },
     );
     expect(verdict).toEqual({ name: 'months', status: 'same' });
   });
@@ -55,15 +50,15 @@ describe('diffStatements on DuckDB against DuckDB', () => {
     const verdicts = await diffStatements({
       cases: [
         { name: 'big', original: 'select a, b from ref_nums where a > $min', translated: 'select a, b from ref_nums where a > $min' },
-        { name: 'ratio', original: 'select a / b as r from big', translated: translateSql('select a / b as r from big', { statement: 'query' }).sql },
+        { name: 'ratio', original: 'select a * 1.0 / b as r from big', translated: translateSql('select a / b as r from big', { statement: 'query' }).sql },
       ],
       params: { min: 0 },
-    }, { original: side(duckdb), translated: side(duckdb) });
+    }, { original: side(sqlite), translated: side(sqlite) });
     expect(verdicts).toEqual([{ name: 'big', status: 'same' }, { name: 'ratio', status: 'same' }]);
   });
 
   it('reports a statement that fails on one side with that side\'s message', async () => {
-    const [verdict] = await diffStatements({ cases: [{ name: 'bad', original: 'select a from ref_nums', translated: 'select missing from ref_nums' }] }, { original: side(duckdb), translated: side(duckdb) });
+    const [verdict] = await diffStatements({ cases: [{ name: 'bad', original: 'select a from ref_nums', translated: 'select missing from ref_nums' }] }, { original: side(sqlite), translated: side(sqlite) });
     expect(verdict).toMatchObject({ name: 'bad', status: 'failed', translated: expect.stringMatching(/missing/) });
     expect(verdict).not.toHaveProperty('original');
   });

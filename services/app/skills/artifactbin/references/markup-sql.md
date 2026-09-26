@@ -40,7 +40,7 @@ These forms work in local queries. For dataset queries use the alternatives belo
 ```sql
 select ltrim(rtrim('  text  ')) as clean,
        substr('hello', 2, 3) as middle,
-       date_part('year', date '2026-09-24') as year
+       date_part('year', '2026-09-24') as year
 ```
 
 These are workarounds for the current parser boundary, not a promise that all
@@ -49,19 +49,17 @@ semantics when changing a function.
 
 ## Series and JSON-array filters
 
-`generate_series` works as a scalar list combined with `unnest` in both local
-and DuckDB dataset queries:
+A series is a JSON array read with `json_each`, the one table function both
+local and dataset queries admit:
 
 ```sql
-select unnest(generate_series(1, 3)) as n
+select value as n from json_each(json_array(1, 2, 3))
 ```
 
-The FROM form, `select * from generate_series(1, 3)`, works locally but is refused
-as a table function in a dataset query. For JSON-array string selections, cast
-to a DuckDB list before checking membership:
+For JSON-array string selections, check membership the same way:
 
 ```sql
-select list_contains(cast('["EU","NA"]' as varchar[]), 'EU') as selected
+select exists (select 1 from json_each('["EU","NA"]') where value = 'EU') as selected
 ```
 
 The [standalone multi-select example](markup-select.md) binds this pattern to a
