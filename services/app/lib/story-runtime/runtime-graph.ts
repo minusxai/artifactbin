@@ -66,10 +66,11 @@ const dedupe = (xs: string[]): string[] => [...new Set(xs)];
  * The graph of a compiled document. A query reads the values it binds and
  * the inline tables it joins, the datasets it imports (or the connected
  * database it runs inside), the viewer when it reads `$_me.id` or `_me`, the
- * clock when it reads `$_now`, the membership (every read is admitted per member), and every query upstream of
- * it — and, when the page answers it (`placement`), the page's own copy of each
- * dataset it imports. A dataset mutation's write check reads its dataset, the membership and
- * the viewer; a local one reads what its statement binds and joins.
+ * clock when it reads `$_now`, the membership (every read is admitted per
+ * member), and every query upstream of it — and, when the page answers it
+ * (`placement`), the page's own copy of each dataset it imports. A dataset
+ * mutation's write check reads its dataset, the membership and the viewer; a
+ * local one reads what its statement binds and joins.
  */
 export function graphOfCompiled(flow: CompiledDataflow, placement?: DataflowPlacement): RuntimeGraph {
   const held = (name: string, reads: CompiledReads): string[] =>
