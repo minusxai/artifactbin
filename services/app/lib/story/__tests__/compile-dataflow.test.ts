@@ -109,6 +109,19 @@ describe('queries', () => {
     expect(values.ok && values.compiled.queries[0]!.columns).toEqual([{ name: 'two', type: 'number' }, { name: 'word', type: 'string' }, { name: 'day', type: 'date' }]);
   });
 
+  it('type a compound column user only when every branch projects a user', async () => {
+    const result = await compile(doc(`${IMPORT}<Value name="t" type="table" value={[{"who":"x"}]} />
+      <Query name="leak">{\`select booked_by, day from bookings.rows union select who, day from bookings.rows, t\`}</Query>
+      <Query name="both">{\`with b as (select * from bookings.rows) select booked_by from b union all select booked_by from bookings.rows where day > '2026-01-01' order by 1\`}</Query>
+      <Query name="nested">{\`select booked_by from (select booked_by from bookings.rows union select note from bookings.rows)\`}</Query>`));
+    if (!result.ok) throw new Error(result.errors.map((e) => e.message).join('\n'));
+    const columns = (name: string) => result.compiled.queries.find((q) => q.name === name)!.columns;
+    expect(columns('leak')).toEqual([{ name: 'booked_by', type: 'string' }, { name: 'day', type: 'date' }]);
+    expect(columns('both')).toEqual([{ name: 'booked_by', type: 'user' }]);
+    // A compound inside a subquery answers no origin at all, so nothing is claimed.
+    expect(columns('nested')[0]!.type).not.toBe('user');
+  });
+
   it('run a connected Postgres query inside its database, with its probed shape', async () => {
     const result = await compile(doc(`<Value name="region" /><Query name="sales" source="ref:PgConn001">{\`select region, sum(amount) as total from orders where $region is null or region = $region and owner = $_me.id group by region\`}</Query>`));
     expect(result.ok && result.compiled.queries[0]).toMatchObject({ engine: 'postgres', source: 'PgConn001', params: ['region', '_me.id'], reads: { values: ['region'], builtins: ['_me.id'] }, columns: [{ name: 'region', type: 'string' }, { name: 'total', type: 'number' }] });
@@ -174,5 +187,15 @@ describe('rewriteBuiltinFields', () => {
     const out = rewriteBuiltinFields(`select $_me.id, '$_me.id', "$_row.x" /* $_row.y */ -- $_now.x\n, $_row.day, $plain.x from t`);
     expect(out.sql).toBe(`select $_me__id, '$_me.id', "$_row.x" /* $_row.y */ -- $_now.x\n, $_row__day, $plain.x from t`);
     expect([...out.fields]).toEqual([['_me__id', '_me.id'], ['_row__day', '_row.day']]);
+    expect(out.branches).toBeNull();
+  });
+
+  it('splits a top-level compound into branches, each carrying the WITH clause', () => {
+    const { branches } = rewriteBuiltinFields(`with x as (select 1 union select 2) select a from x UNION ALL select 'union' from "except" except select $_me.id`);
+    expect(branches).toEqual([
+      'with x as (select 1 union select 2) select a from x ',
+      `with x as (select 1 union select 2)  select 'union' from "except" `,
+      'with x as (select 1 union select 2)  select $_me__id',
+    ]);
   });
 });

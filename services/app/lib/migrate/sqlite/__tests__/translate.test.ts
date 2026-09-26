@@ -251,6 +251,19 @@ describe('translateSql rules', () => {
     ok('delete from rows where id = $_row.id', 'delete from bookings.rows where id = $_row.id', { ...sourced, statement: 'mutation' });
   });
 
+  it('an alias-qualified column in a sourced statement is a column, never a schema-qualified table', () => {
+    // Regression: `b.booked_by` was read as table `booked_by` in schema `b` and refused as
+    // "only the dataset's public tables have an Import name".
+    const sourced: TranslateContext = { statement: 'query', dataset: 'bookings' };
+    // The reported case: the FROM of IS [NOT] DISTINCT FROM followed by an alias-qualified column.
+    ok('select s.slot from slots s left join public.rows b on b.day = s.day and s.slot is not distinct from b.booked_by', 'select s.slot from bookings.slots s left join bookings.rows b on b.day = s.day and s.slot is b.booked_by', sourced);
+    ok('select * from rows b where $_me.id is distinct from b.booked_by', 'select * from bookings.rows b where $_me.id is not b.booked_by', sourced);
+    ok('select b.booked_by, count(*) from public.rows b group by b.booked_by', 'select b.booked_by, count(*) from bookings.rows b group by b.booked_by', sourced);
+    ok('select s.id, b.booked_by from rows s left join rows as b on b.id = s.id where b.day > 1', 'select s.id, b.booked_by from bookings.rows s left join bookings.rows as b on b.id = s.id where b.day > 1', sourced);
+    ok('select b.booked_by from (select * from rows) b', 'select b.booked_by from (select * from bookings.rows) b', sourced);
+    ok('delete from rows where id in (select b.id from rows b where b.booked_by = $_me.id)', 'delete from bookings.rows where id in (select b.id from bookings.rows b where b.booked_by = $_me.id)', { ...sourced, statement: 'mutation' });
+  });
+
   it('Postgres SQL is left alone apart from $_me', () => {
     ok('select a::int, now() from public.t where owner = $_me', 'select a::int, now() from public.t where owner = $_me.id', { statement: 'query', dialect: 'postgres' });
   });

@@ -3,25 +3,28 @@ import {useAppHarness} from './harness';
 import {runDocumentDataflow} from '@/lib/artifacts';
 
 useAppHarness();
+/** The compile-time shape of every import (the owner's reach), separate from the reader's rows. */
+const load=async(id:string)=>({id,format:'dataset',columns:[{name:'n',type:'number' as const}]});
+const tables=(rows:Array<{n:number}>)=>({tables:{rows:{rows,columns:[{name:'n',type:'number' as const}]}}});
 const source='<Helmet><Value name="local" type="table" value={[{n:9}]}/><Import name="first_data" src="ref:ABC123" /><Query name="first">{`select * from first_data.rows`}</Query><Query name="top">{`select * from first`}</Query><Import name="unrelated_data" src="ref:DEF456" /><Query name="unrelated">{`select * from unrelated_data.rows`}</Query></Helmet><p>Selection</p>';
 
 it('partial query execution resolves only the transitive input closure',async()=>{
   const resolved:string[]=[];
-  const state=await runDocumentDataflow(source,async id=>{resolved.push(id);return {rows:[{n:5}],columns:[{name:'n',type:'number'}]};},{only:['top']});
+  const state=await runDocumentDataflow(source,load,async id=>{resolved.push(id);return tables([{n:5}]);},{only:['top']});
   expect(resolved).toEqual(['ABC123', 'ABC123']); // Resolve, then recheck access before returning rows.
-  expect(state!.state.tables.top.rows).toEqual([{n:5}]);
-  expect(state!.state.tables.local.rows).toEqual([{n:9}]);
+  expect(state!.state.tables.top!.rows).toEqual([{n:5}]);
+  expect(state!.state.tables.local!.rows).toEqual([{n:9}]);
 });
 
 it('empty selection performs no dataset reads while preserving local tables',async()=>{
   const resolved:string[]=[];
-  const state=await runDocumentDataflow(source,async id=>{resolved.push(id);return null;},{only:[]});
-  expect(resolved).toEqual([]);expect(state!.state.tables.local.rows).toEqual([{n:9}]);
+  const state=await runDocumentDataflow(source,load,async id=>{resolved.push(id);return null;},{only:[]});
+  expect(resolved).toEqual([]);expect(state!.state.tables.local!.rows).toEqual([{n:9}]);
 });
 
 it('paged query keeps upstream input but excludes unrelated dataset resolution',async()=>{
   const resolved:string[]=[];
-  const state=await runDocumentDataflow(source,async id=>{resolved.push(id);return {rows:[{n:5},{n:7}],columns:[{name:'n',type:'number'}]};},{page:{name:'top',offset:1,limit:1}});
+  const state=await runDocumentDataflow(source,load,async id=>{resolved.push(id);return tables([{n:5},{n:7}]);},{page:{name:'top',offset:1,limit:1}});
   expect(resolved).toEqual(['ABC123', 'ABC123']); // Resolve, then recheck access before returning rows.
-  expect(state!.state.tables.top.rows).toEqual([{n:7}]);
+  expect(state!.state.tables.top!.rows).toEqual([{n:7}]);
 });

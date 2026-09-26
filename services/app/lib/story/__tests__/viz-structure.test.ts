@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
 import { checkDocumentData, vegaLiteStructureError } from '../data-checks';
-import { queryRows } from '@/lib/datasets/query-rows';
 import type { DatasetColumn } from '../dataset-shape';
 import type { RefLoader } from '../refs';
 
@@ -10,7 +9,7 @@ const columns: DatasetColumn[] = [
   { name: 'channel', type: 'string' },
   { name: 'median_resolution_hours', type: 'number' },
 ];
-const load: RefLoader = async (id) => (id === DS ? { id: DS, format: 'dataset', columns, query: (sql, params) => queryRows({ columns, rows: [] }, sql, params) } : null);
+const load: RefLoader = async (id) => (id === DS ? { id: DS, format: 'dataset', columns } : null);
 const doc = (viz: string) =>
   '<Helmet>' +
   `<Import name="june_data" src="ref:${DS}" /><Query name="june">{\`select team, channel, median_resolution_hours from june_data.rows\`}</Query>` +

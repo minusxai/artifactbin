@@ -65,7 +65,7 @@ import { loadDatasetRows } from './story/dataset-store';
 import {newEditId} from './story/splice';
 import type {StringEdit} from './story/edit-batch';
 import { nodeIndex, stampNodeIds } from './story/node-ids';
-import { finalizeArtifactMetadata, readCompiledDataflow } from './story/parsed-artifact-metadata';
+import { COMPILED_DATAFLOW, finalizeArtifactMetadata, readCompiledDataflow, storedCompiledDataflow } from './story/parsed-artifact-metadata';
 import { scalarMatches, type Row, type Scalar } from '@/lib/story/dataflow';
 import type { ColumnType } from '@artifactbin/contracts';
 import type { CompiledDataflow, CompiledMutation } from '@/lib/story/compiled-dataflow';
@@ -1503,6 +1503,23 @@ export type EditOutcome =
 /** How many times a lost CAS race is retried before we give up and report the conflict. */
 export const MAX_STALE_EDITS = 200;
 
+/**
+ * After a patch commit, whose final source only exists once the database has
+ * applied it: compile that source under its owner's reach and store the
+ * record beside it — unless the row has moved on, in which case the next read
+ * recompiles. A source that no longer compiles (an import changed shape)
+ * stores nothing, and its reads report it.
+ */
+async function storeCompiledRecord(db: Queryable, row: ArtifactRow): Promise<ArtifactRow> {
+  if (row.format !== 'markup' || !row.source || storedCompiledDataflow(row.meta, row.source)) return row;
+  const compiled = await compiledForRow(row).catch(() => null);
+  if (!compiled || isEmptyCompiled(compiled)) return row;
+  const meta = finalizeArtifactMetadata('markup', row.source, { ...row.meta, [COMPILED_DATAFLOW]: compiled } as Record<string, unknown>);
+  if (!meta.parsedArtifact) return row;
+  const stored = await db.query("UPDATE artifacts SET meta = jsonb_set(meta, '{parsedArtifact}', $3::jsonb) WHERE id = $1 AND version = $2 AND deleted_at IS NULL", [row.id, row.version, JSON.stringify(meta.parsedArtifact)]);
+  return stored.rowCount ? { ...row, meta } : row;
+}
+
 const headOf = (row: ArtifactRow) => ({ editId: row.edit_id, source: row.source ?? '', version: row.version });
 
 /** Clients own semantic validation and patch preparation. This boundary owns
@@ -1523,7 +1540,7 @@ export async function applyEditScoped(actor: TokenActor, id: string, input: Edit
     if(!committed.applied&&committed.refusal)return json({error:'mention_refused',detail:committed.refusal},403);
     if(!committed.applied&&input.documentUpdate.settings?.visibility==='private'&&!committed.head.user_id)return json({error:'private_requires_account'},400);
     if(opts.dryRun)return committed.applied?json({valid:true,dry_run:true,commit_checks:['authorization','dependency_revisions','metadata','sharing','size']}):json({error:'doc_changed'},409);
-    return committed.applied?{applied:true,row:committed.row}:{applied:false,reason:'doc_changed',head:headOf(committed.head)};
+    return committed.applied?{applied:true,row:await storeCompiledRecord(db,committed.row)}:{applied:false,reason:'doc_changed',head:headOf(committed.head)};
   }
 
 
@@ -2500,12 +2517,15 @@ async function runDeclaredDataflow(flow: CompiledDataflow, resolve: DatasetResol
   const resolved = new Map<string, RefData | null>();
   const data = async (ref: string) => { if (!resolved.has(ref)) resolved.set(ref, await resolve(ref)); return resolved.get(ref) ?? null; };
   const imports: ImportTables = {};
+  // Every artifact whose rows or database this run touched, with what it was: rechecked before anything is returned.
+  const usedSources = new Map<string, string>();
   for (const name of new Set(selected.flatMap((q) => q.reads.imports))) {
     const ref = importRef(flow, name);
     const found = ref ? await data(ref) : null;
-    if (found) imports[name] = found.tables;
+    if (!found) continue;
+    imports[name] = found.tables;
+    usedSources.set(ref!, JSON.stringify(found.catalog ?? null));
   }
-  const usedSources = new Map<string, string>();
   const state = await runDataflow(flow, imports, {members:opts.members,userId:opts.viewer?.userId??null, tz: readerZone(opts.tz), values: opts.values, only: opts.only, page: opts.page, localTables: opts.localTables,
     sourceQuery:async(q,params,paramTypes,page)=>{
       const catalog = (await data(q.source!))?.catalog;
@@ -2520,10 +2540,10 @@ async function runDeclaredDataflow(flow: CompiledDataflow, resolve: DatasetResol
   });
   // Per-query failures are deliberately isolated by runDataflow. Admission is
   // not a query error: q1's rows must not escape if access changes while q2
-  // waits. Recheck every connected source a query ran inside.
+  // waits. Recheck every import read and every connected source a query ran inside.
   for (const [id, snapshot] of usedSources) {
     const current = await resolve(id);
-    if (!current || JSON.stringify(current.catalog) !== snapshot) throw new DatasetError('Dataset source is unavailable',404);
+    if (!current || JSON.stringify(current.catalog ?? null) !== snapshot) throw new DatasetError('Dataset source is unavailable',404);
   }
   await opts.authorize?.();
   return { flow, state };

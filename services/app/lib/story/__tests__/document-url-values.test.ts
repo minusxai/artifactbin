@@ -14,7 +14,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import { buildStoryDocument } from '@/lib/story/document';
-import { declarationsOf } from '@/lib/artifacts';
+import { compiledSource } from '@/test/helpers/compiled';
 import { STORY_ISLAND_ID } from '@/lib/story-runtime/contract';
 import type { StoryIslandData } from '@/lib/story-runtime/contract';
 import type { Scalar } from '@/lib/story/dataflow';
@@ -23,8 +23,9 @@ const SOURCE = `<Helmet><Value name="region" type="string" default="north" />
 <Value name="regions" type="table" value={[{"region":"north"},{"region":"west"}]} />
 </Helmet><div><select aria-label="Region" value="$region" options="$regions" /></div>`;
 
+const FLOW = await compiledSource(SOURCE);
 const build = (values?: Record<string, Scalar>): Promise<string> => {
-  const flow = declarationsOf(SOURCE)!;
+  const flow = FLOW;
   return buildStoryDocument({
     source: SOURCE,
     compiledCss: '',

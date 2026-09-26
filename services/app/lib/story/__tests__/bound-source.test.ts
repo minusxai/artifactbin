@@ -23,8 +23,10 @@ const nodes = (source: string): JsxNode[] => {
 };
 
 const flow = (names: string[]): Dataflow => ({
+  imports: [],
   values: names.map((name) => ({ kind: 'scalar', name, type: 'string', default: null, start: 0, end: 0 })),
   queries: [],
+  mutations: [],
 });
 
 const uses = (source: string) => collectRefNameUses(nodes(source));
@@ -48,7 +50,7 @@ describe('src is a bindable scalar position', () => {
   });
 
   it('a table bound to an image src is the wrong kind', () => {
-    const withTable: Dataflow = { values: [{ kind: 'table', name: 'rows', rows: [], columns: [], start: 0, end: 0 }], queries: [] };
+    const withTable: Dataflow = { imports: [], values: [{ kind: 'table', name: 'rows', rows: [], columns: [], start: 0, end: 0 }], queries: [], mutations: [] };
     const errors = validateDataflow(withTable, uses('<img src="$rows" />'));
     expect(errors).toHaveLength(1);
     expect(errors[0].message).toContain('rows');

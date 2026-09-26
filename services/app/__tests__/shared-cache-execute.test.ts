@@ -4,7 +4,7 @@ vi.mock('@/lib/datasets/postgres',()=>({queryPostgres:upstream.query}));
 import {useAppHarness,request} from './harness';
 import {getDb} from '@/lib/db';
 import {mintToken} from '@/lib/tokens';
-import {createArtifact,runDocumentDataflow,datasetResolverForActor} from '@/lib/artifacts';
+import {createArtifact,runDocumentDataflow,datasetResolverForActor,refLoaderForActor} from '@/lib/artifacts';
 import {createDatasetSecret} from '@/lib/datasets/secrets';
 import {executeCatalog} from '@/lib/datasets/execute';
 import type {DatasetCatalog} from '@/lib/datasets/types';
@@ -58,8 +58,10 @@ it('tables endpoint rechecks public visibility after a joined cache wait',async(
 it('public document queries still use the authorized owner-bound source',async()=>{
  const {row,actor}=await setup();
  const source=`<Helmet><Query name="rows" source="ref:${row.id}">{\`select * from rows\`}</Query></Helmet><p>Hello</p>`;
- for(let i=0;i<2;i++)expect((await runDocumentDataflow(source,datasetResolverForActor(actor)))?.state.tables.rows.rows).toEqual([{n:1}]);
- expect(upstream.query).toHaveBeenCalledTimes(1);
+ for(let i=0;i<2;i++)expect((await runDocumentDataflow(source,refLoaderForActor(actor),datasetResolverForActor(actor)))?.state.tables.rows!.rows).toEqual([{n:1}]);
+ // A connected Postgres query keeps source= and its own SQL. Each draft run compiles it by probing the
+ // database (one call per run); the query itself is filled once and then served from the shared cache.
+ expect(upstream.query).toHaveBeenCalledTimes(3);
 });
 
 it('draft queries recheck bearer revocation after SQL starts',async()=>{

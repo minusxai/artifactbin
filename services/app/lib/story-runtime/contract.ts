@@ -118,7 +118,7 @@ export interface StoryIslandData {
   queryUrl?: string;
   /**
    * Where this document's WRITES go when it is the TOP-LEVEL page:
-   * `POST <mutateUrl> { mutation, values }` (app/a/[id]/mutate), the one other
+   * `POST <mutateUrl> { mutation, args, row?, value? }` (app/a/[id]/mutate), the one other
    * URL its CSP admits. Present only for a document that declares a
    * `<Mutation>`; inside a parent the relay is used instead, for the same
    * reason queries relay there — the page holds the session.

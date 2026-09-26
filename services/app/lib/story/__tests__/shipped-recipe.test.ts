@@ -9,7 +9,6 @@
  */
 import { describe, expect, it } from 'vitest';
 import { checkDocumentData } from '../data-checks';
-import {queryRows} from '@/lib/datasets/query-rows';
 import type {DatasetColumn} from '../dataset-shape';
 import type { RefLoader } from '../refs';
 
@@ -25,7 +24,6 @@ const load: RefLoader = async (id) =>
       id: DS,
       format: 'dataset',
       columns,
-      query: (sql,params) => queryRows({columns,rows:[]},sql,params),
     }
     : null;
 

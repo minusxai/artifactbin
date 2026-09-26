@@ -16,6 +16,7 @@
  *  - stripping keeps the rest of the address exactly as it was: the reader's
  *    `$` values live in this same query string and are their own selection.
  */
+import {compiledOf} from '@/test/helpers/compiled';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { fireEvent, screen, waitFor } from '@testing-library/react';
 import { render } from '@/test/helpers/surface-ui';
@@ -153,7 +154,7 @@ describe('the instruction is consumed, and only it', () => {
   });
 });
 
-const mutationFlow: NonNullable<ArtifactSurfaceProps['dataflow']> = {flow:{values:[],queries:[],mutations:[{name:'save',sql:'delete from public.rows',target:'data01',refs:['data01'],params:[],start:0,end:0}]}};
+const mutationFlow: NonNullable<ArtifactSurfaceProps['dataflow']> = {flow:await compiledOf('<Import name="data" src="ref:data01" /><Mutation name="save">{`delete from data.rows`}</Mutation>',{data01:[{name:'id',type:'string'}]})};
 describe('membership in the reader breadcrumb',()=>{
  it('sends signed-out Join through login with the return intent',async()=>{
   at('/a/story1', {dataflow:mutationFlow,accountSession:false});
