@@ -24,6 +24,8 @@ import {
   teardownEditorFrame,
 } from '@/test/helpers/in-place-editor';
 
+const choosePanel = (value: string) => fireEvent.change(screen.getByRole('combobox', { name: 'Editor panel' }), { target: { value } });
+
 beforeEach(installEditorFrame);
 afterEach(teardownEditorFrame);
 
@@ -33,6 +35,7 @@ describe('the editor bar', () => {
     expect(screen.queryByText(/template/i)).toBeNull();
     unmount();
     mount({ art: { ...art, template: 'briefing' } as EditorArt });
+    choosePanel('settings');
     expect(screen.getByText(/briefing/i)).toBeTruthy();
   });
 
@@ -44,35 +47,25 @@ describe('the editor bar', () => {
 
   it('switches through sharing without a modal and reports visibility changes to the page', async () => {
     const onSharingChange = vi.fn();
-    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ visibility: 'private', shares: [], canPrivate: true }))));
+    const originalFetch = globalThis.fetch;
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => String(input).endsWith('/sharing')
+      ? new Response(JSON.stringify({ visibility: 'private', shares: [], canPrivate: true }))
+      : originalFetch(input, init)));
     mount({ onSharingChange });
-    fireEvent.click(screen.getByLabelText('Show sharing'));
+    choosePanel('sharing');
     await waitFor(() => expect(screen.getByLabelText('Make public')).toBeTruthy());
     expect(screen.queryByRole('dialog')).toBeNull();
     expect(onSharingChange).toHaveBeenCalledWith({ visibility: 'private', hasInvitedUsers: false });
     fireEvent.click(screen.getByLabelText('Edit the source'));
-    expect(screen.queryByLabelText('Sharing settings')).toBeNull();
+    expect(screen.getByLabelText('Sharing settings')).toBeTruthy();
     expect(screen.getByLabelText('Markup source')).toBeTruthy();
-  });
-
-  it('makes files and data reachable on a phone', () => {
-    const width = window.innerWidth;
-    Object.defineProperty(window, 'innerWidth', { configurable: true, value: 390 });
-    try {
-      mount();
-      fireEvent.click(screen.getByRole('button', { name: 'Show files' }));
-      expect(screen.getByLabelText('Files')).toBeTruthy();
-      fireEvent.click(screen.getByRole('button', { name: 'Show data' }));
-      expect(screen.getByLabelText('Data')).toBeTruthy();
-      expect(screen.queryByLabelText('Files')).toBeNull();
-    } finally {
-      Object.defineProperty(window, 'innerWidth', { configurable: true, value: width });
-    }
   });
 
   it('queues a colour-mode pick and tells the document; theme default queues null', () => {
     mount();
     env.posted.length = 0;
+    expect(within(screen.getByLabelText('Editor toolbar')).queryByLabelText('Color mode')).toBeNull();
+    choosePanel('settings');
     fireEvent.click(screen.getByLabelText('Color mode'));
     fireEvent.click(screen.getByLabelText('Color mode dark'));
     expect(lastQueued()).toMatchObject({ colorMode: 'dark' });
@@ -94,7 +87,7 @@ describe('the editor bar', () => {
     mount();
     // A wide window has the panel, so the narrow bar's drawer switch is absent.
     expect(screen.queryByLabelText('Open version history')).toBeNull();
-    fireEvent.click(screen.getByRole('tab', { name: 'History' }));
+    choosePanel('history');
     expect(within(screen.getByLabelText('Edit panel')).getByLabelText('Version history')).toBeTruthy();
   });
 });
@@ -177,16 +170,23 @@ describe('the query notebook', () => {
     mount();
     fireEvent.click(screen.getByLabelText('Show data'));
     expect(screen.getByLabelText('Data')).toBeTruthy();
+    expect(screen.getByText('No queries in this artifact.')).toBeTruthy();
+    choosePanel('datasets');
     expect(screen.getByText('No referenced datasets.')).toBeTruthy();
   });
 
-  it('opens Files and switches back to the app without opening a dialog', () => {
+  it('keeps Files open independently of the workspace without opening a dialog', () => {
     mount();
-    fireEvent.click(screen.getByLabelText('Show files'));
+    choosePanel('files');
     expect(screen.getByLabelText('Files')).toBeTruthy();
     expect(screen.getByText('No referenced files.')).toBeTruthy();
-    fireEvent.click(screen.getByLabelText('Edit on the page'));
-    expect(screen.queryByLabelText('Files')).toBeNull();
+    fireEvent.click(screen.getByLabelText('Edit the source'));
+    expect(screen.getByLabelText('Files')).toBeTruthy();
+    expect(screen.getByLabelText('Markup source')).toBeTruthy();
+    fireEvent.click(screen.getByLabelText('Show data'));
+    expect(screen.getByLabelText('Files')).toBeTruthy();
+    expect(screen.getByLabelText('Data')).toBeTruthy();
+    expect(within(screen.getByLabelText('Editor view')).getAllByRole('button')).toHaveLength(3);
   });
 
   it('opens data as a VIEW with each query as a cell, and the view switch leaves it', () => {

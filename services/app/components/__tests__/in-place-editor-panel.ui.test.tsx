@@ -22,7 +22,8 @@ import { installEditorFrame, teardownEditorFrame, mount, fromFrame, selection, e
 
 const chart = () => selection({ kind: 'embed', tag: 'Question', path: '0.2', rect: { x: 10, y: 400, width: 300, height: 200 } });
 const setWidth = (width: number) => Object.defineProperty(window, 'innerWidth', { value: width, configurable: true });
-const tab = (name: string) => screen.getByRole('tab', { name });
+const choosePanel = (value: string) => fireEvent.change(screen.getByRole('combobox', { name: 'Editor panel' }), { target: { value: value.toLowerCase() } });
+const activePanel = () => (screen.getByRole('combobox', { name: 'Editor panel' }) as HTMLSelectElement).value;
 
 beforeEach(() => {
   installEditorFrame();
@@ -47,15 +48,15 @@ describe('the edit panel on a wide window', () => {
     expect(within(screen.getByLabelText('Edit panel')).getByLabelText('Chart inspector')).toBeTruthy();
     fireEvent.click(screen.getByLabelText('Close chart inspector'));
     await fromFrame({ type: STORY_SELECTION_MESSAGE, selection: null });
-    fireEvent.click(tab('History'));
-    fireEvent.click(tab('Comments'));
+    choosePanel('History');
+    choosePanel('Comments');
     expect(onCommentsOpenChange).toHaveBeenLastCalledWith(true);
     view.rerender(editorElement({ onRightInsetChange: (px) => widths.push(px), onCommentsOpenChange, commentsOpen: true }));
     await fromFrame({ type: STORY_SELECTION_MESSAGE, selection: chart() });
     fireEvent.click(screen.getByLabelText('Edit the source'));
     fireEvent.click(screen.getByLabelText('Edit on the page'));
-    fireEvent.click(screen.getByLabelText('Show files'));
-    expect(screen.getByLabelText('Files')).toHaveStyle({ left: '0px', right: '320px' });
+    choosePanel('Files');
+    expect(screen.getByLabelText('Edit panel')).toContainElement(screen.getByLabelText('Files'));
     fireEvent.click(screen.getByLabelText('Show data'));
     expect(screen.getByLabelText('Data')).toHaveStyle({ left: '0px', right: '320px' });
     fireEvent.click(screen.getByLabelText('Edit on the page'));
@@ -67,18 +68,18 @@ describe('the edit panel on a wide window', () => {
 
   it('follows the selection on the Selection tab; elsewhere it only marks the tab', async () => {
     mount();
-    fireEvent.click(tab('History'));
+    choosePanel('History');
     expect(screen.getByLabelText('Version history')).toBeTruthy();
 
     await fromFrame({ type: STORY_SELECTION_MESSAGE, selection: chart() });
-    expect(tab('History').getAttribute('aria-selected')).toBe('true');
+    expect(activePanel()).toBe('history');
     expect(screen.queryByLabelText('Chart inspector')).toBeNull();
-    expect(tab('Selection').getAttribute('data-new-selection')).toBe('true');
+    expect(screen.getByLabelText('New selection available')).toBeTruthy();
 
     fireEvent.click(screen.getByRole('button', { name: 'Edit chart' }));
-    expect(tab('Selection').getAttribute('aria-selected')).toBe('true');
+    expect(activePanel()).toBe('selection');
     expect(screen.getByLabelText('Chart inspector')).toBeTruthy();
-    expect(tab('Selection').getAttribute('data-new-selection')).toBeNull();
+    expect(screen.queryByLabelText('New selection available')).toBeNull();
   });
 
   it('switches to Selection on a double-click inside the selected chart', async () => {
@@ -89,13 +90,13 @@ describe('the edit panel on a wide window', () => {
     document.body.appendChild(page);
     try {
       mount();
-      fireEvent.click(tab('History'));
+      choosePanel('History');
       await fromFrame({ type: STORY_SELECTION_MESSAGE, selection: chart() });
       // Outside the chart's rect: nothing.
       fireEvent.dblClick(figure, { clientX: 500, clientY: 100 });
-      expect(tab('History').getAttribute('aria-selected')).toBe('true');
+      expect(activePanel()).toBe('history');
       fireEvent.dblClick(figure, { clientX: 50, clientY: 450 });
-      expect(tab('Selection').getAttribute('aria-selected')).toBe('true');
+      expect(activePanel()).toBe('selection');
       expect(screen.getByLabelText('Chart inspector')).toBeTruthy();
     } finally {
       page.remove();
@@ -111,25 +112,25 @@ describe('the edit panel on a wide window', () => {
 
     // Opened from outside the panel (a pin, the reader bar): the tab follows.
     view.rerender(editorElement({ ...props, commentsOpen: true }));
-    expect(tab('Comments').getAttribute('aria-selected')).toBe('true');
-    expect(within(screen.getByLabelText('Edit panel')).getByRole('tabpanel')).toContainElement(hosts.at(-1)!);
+    expect(activePanel()).toBe('comments');
+    expect(within(screen.getByLabelText('Edit panel')).getByRole('region', { name: 'Comments' })).toContainElement(hosts.at(-1)!);
 
     // Leaving the tab closes the rail, and the panel stays where it was sent.
-    fireEvent.click(tab('History'));
+    choosePanel('History');
     expect(onCommentsOpenChange).toHaveBeenLastCalledWith(false);
     view.rerender(editorElement({ ...props, commentsOpen: false }));
-    expect(tab('History').getAttribute('aria-selected')).toBe('true');
+    expect(activePanel()).toBe('history');
 
     // The rail closed from its own header hands the panel back to Selection.
-    fireEvent.click(tab('Comments'));
+    choosePanel('Comments');
     view.rerender(editorElement({ ...props, commentsOpen: true }));
     view.rerender(editorElement({ ...props, commentsOpen: false }));
-    expect(tab('Selection').getAttribute('aria-selected')).toBe('true');
+    expect(activePanel()).toBe('selection');
   });
 
   it('offers no Comments tab to someone who may not comment', () => {
     mount();
-    expect(screen.queryByRole('tab', { name: 'Comments' })).toBeNull();
+    expect(screen.queryByRole('option', { name: 'Comments' })).toBeNull();
   });
 
   it('collapses from its button, remembers it, and a selection alone never expands it', async () => {
@@ -164,14 +165,14 @@ describe('the edit panel on a wide window', () => {
     };
     const expandedOn = (name: string, widths: number[]) => {
       expect(screen.queryByLabelText('Expand panel')).toBeNull();
-      expect(tab(name).getAttribute('aria-selected')).toBe('true');
+      expect(activePanel()).toBe(name.toLowerCase());
       expect(widths.at(-1)).toBe(320);
       expect(window.localStorage.getItem('mx:edit-panel-collapsed')).toBeNull();
     };
 
     it('a strip tab icon', () => {
       const { widths } = collapsedMount();
-      fireEvent.click(tab('History'));
+      fireEvent.click(screen.getByRole('tab', { name: 'History' }));
       expandedOn('History', widths);
       expect(screen.getByLabelText('Version history')).toBeTruthy();
     });
@@ -211,7 +212,7 @@ describe('the edit panel on a wide window', () => {
       window.localStorage.setItem('mx:edit-panel-collapsed', '1');
       mount({ onCommentsOpenChange: vi.fn(), commentsOpen: true });
       expect(screen.queryByLabelText('Expand panel')).toBeNull();
-      expect(tab('Comments').getAttribute('aria-selected')).toBe('true');
+      expect(activePanel()).toBe('comments');
     });
   });
 
@@ -304,12 +305,25 @@ describe('below the panel breakpoint', () => {
     }
   });
 
+  it('opens files and settings on a phone without replacing the workspace', () => {
+    setWidth(390);
+    mount();
+    fireEvent.click(screen.getByLabelText('Edit the source'));
+    choosePanel('Files');
+    expect(screen.getByRole('dialog', { name: 'Files' })).toBeTruthy();
+    expect(screen.getByLabelText('Markup source')).toBeTruthy();
+    fireEvent.click(screen.getByLabelText('Close Files'));
+    choosePanel('settings');
+    expect(screen.getByRole('dialog', { name: 'Artifact settings' })).toBeTruthy();
+    expect(screen.getByLabelText('Color mode')).toBeTruthy();
+  });
+
   it('opens history and comments from the bar, one sheet at a time', () => {
     const onCommentsOpenChange = vi.fn();
     mount({ onCommentsOpenChange });
-    fireEvent.click(screen.getByRole('button', { name: 'Open version history' }));
+    choosePanel('History');
     expect(screen.getByRole('dialog', { name: 'Version history' })).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: 'Show comments' }));
+    choosePanel('Comments');
     expect(onCommentsOpenChange).toHaveBeenLastCalledWith(true);
     expect(screen.queryByRole('dialog', { name: 'Version history' })).toBeNull();
   });

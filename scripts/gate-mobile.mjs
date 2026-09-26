@@ -168,7 +168,8 @@ await view.close();
 const edit = await open(PHONE, '#edit');
 await edit.waitForSelector('[aria-label="Exit edit mode"]', { timeout: 90_000 });
 await edit.waitForTimeout(2000);
-// The theme picker lives in the EDITOR bar now.
+// Appearance lives in the editor's Artifact settings panel.
+await edit.getByRole('combobox', { name: 'Editor panel' }).selectOption('settings');
 await edit.locator('[aria-label="Theme"]').click({ timeout: 30_000 });
 await edit.waitForSelector('[aria-label="Themes"]', { timeout: 10_000 });
 await edit.waitForTimeout(300);
@@ -197,6 +198,7 @@ await edit.close();
 const wide = await open({ width: 1600, height: 1000 }, '#edit');
 await wide.waitForSelector('[aria-label="Exit edit mode"]', { timeout: 90_000 });
 await wide.waitForTimeout(2000);
+await wide.getByRole('combobox', { name: 'Editor panel' }).selectOption('settings');
 await wide.locator('[aria-label="Theme"]').click({ timeout: 30_000 });
 await wide.waitForSelector('[aria-label="Themes"]', { timeout: 10_000 });
 const cols = await wide.locator('[aria-label="Themes"]').evaluate(el => {
