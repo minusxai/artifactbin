@@ -86,6 +86,7 @@ import { runMutation } from '@/lib/sql/engine';
 import { runLocalStateMutation, type LocalMutationResult } from '@/lib/story/local-state';
 import { localTableOverrides } from '@/lib/story/local-tables';
 import { importedRows, importedTables } from '@/lib/datasets/catalog';
+import { storedRowStats } from '@/lib/story/dataset-store';
 import { ancestorsForMove, childrenTableFor, CHILDREN_COLUMNS, notifyParent, parentOf } from '@/lib/folders';
 import type { RanDataflow, StoryIslandDataflow, StoryViewer } from '@/lib/story-runtime/contract';
 import type { RefLoader, ResolvedRef } from '@/lib/story/refs';
@@ -2529,23 +2530,43 @@ const importedArtifactFor = async (row: ArtifactRow, id: string): Promise<Artifa
  * carry no row-level rules today (a read grant is the whole dataset), so the
  * dataset's rows are exactly what the viewer may read.
  */
-async function heldImportFor(row: ArtifactRow, flow: CompiledDataflow, name: string, viewer: RoleActor | null): Promise<ImportTables[string] | null> {
-  const ref = importRef(flow, name);
-  const dataset = ref ? await importedArtifactFor(row, ref) : null;
+async function holdableDataset(row: ArtifactRow, ref: string, viewer: RoleActor | null): Promise<import('@/lib/datasets/types').DatasetCatalog | null> {
+  const dataset = await importedArtifactFor(row, ref);
   if (!dataset || dataset.format !== 'dataset') return null;
   const reader: RoleActor = viewer ?? { userId: null, tokenId: null };
   if (!ownsArtifact(dataset, reader) && !(await canReadArtifact(dataset, reader.userId ? { userId: reader.userId, email: reader.email ?? null } : null))) return null;
-  const data = await tableForRef(dataset, viewer, row);
-  if (!data || data.catalog?.kind !== 'stored') return null;
-  const tables = Object.values(data.tables);
-  if (tables.reduce((n, t) => n + t.rows.length, 0) > HOLD_MAX_ROWS) return null;
-  if (JSON.stringify(data.tables).length > HOLD_MAX_BYTES) return null;
-  return data.tables;
+  // The document-scoped read grant a run applies (tableForRef), for this reader.
+  if (grantsOf(dataset) && !(await grantsPermitRead(dataset, reader, row))) return null;
+  const catalog = catalogOf(dataset);
+  if (catalog?.kind !== 'stored') return null;
+  let rows = 0, bytes = 0;
+  for (const table of importedTables(catalog)) {
+    if (!table.objectKey) continue;
+    const stats = await storedRowStats(table.objectKey, HOLD_MAX_BYTES);
+    rows += stats.rows; bytes += stats.bytes;
+    if (rows > HOLD_MAX_ROWS || bytes > HOLD_MAX_BYTES) return null;
+  }
+  return catalog;
 }
 
-/** The imports this reader may hold, by name, in declaration order — the island's `dataflow.hold`. */
+async function heldImportFor(row: ArtifactRow, flow: CompiledDataflow, name: string, viewer: RoleActor | null): Promise<ImportTables[string] | null> {
+  const ref = importRef(flow, name);
+  const catalog = ref ? await holdableDataset(row, ref, viewer) : null;
+  return catalog ? importedRows(catalog) : null;
+}
+
+/**
+ * The imports this reader may hold, by name, in declaration order — the
+ * island's `dataflow.hold`. Asked on every page render, so it never reads a
+ * dataset's rows: sizes come from storedRowStats, and a dataset imported
+ * under several names is decided once.
+ */
 export async function holdableImports(row: ArtifactRow, flow: CompiledDataflow, viewer: RoleActor | null): Promise<string[]> {
-  const held = await Promise.all(flow.imports.map(async (i) => ((await heldImportFor(row, flow, i.name, viewer)) ? i.name : null)));
+  const byRef = new Map<string, Promise<unknown>>();
+  const held = await Promise.all(flow.imports.map(async (i) => {
+    if (!byRef.has(i.ref)) byRef.set(i.ref, holdableDataset(row, i.ref, viewer));
+    return (await byRef.get(i.ref)) ? i.name : null;
+  }));
   return held.filter((name): name is string => name !== null);
 }
 

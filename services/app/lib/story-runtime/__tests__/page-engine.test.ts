@@ -12,6 +12,7 @@ import { compiledOf } from '@/test/helpers/compiled';
 import { runDataflow } from '@/lib/sql/run-dataflow';
 import { mutationRequestFor } from '@/lib/story/mutation-request';
 import { createPageEngine } from '../page-engine';
+import { pageEngineFor } from '../page-sqlite';
 
 const COLUMNS = [{ name: 'id', type: 'string' as const }, { name: 'region', type: 'string' as const }, { name: 'revenue', type: 'number' as const }];
 const ROWS = [{ id: 'a', region: 'EU', revenue: 837 }, { id: 'b', region: 'NA', revenue: 1200 }, { id: 'c', region: 'EU', revenue: 3 }];
@@ -143,6 +144,17 @@ describe('createPageEngine', () => {
     expect(engine.apply(twice, add, mutationRequestFor(add, { values: {}, row: { id: 'z' } }), CTX)).not.toBeNull();
     const counts = await engine.run(twice, ['from_a', 'from_b'], { values: {}, ...CTX });
     expect([counts.tables.from_a!.rows, counts.tables.from_b!.rows]).toEqual([[{ n: 4 }], [{ n: 4 }]]);
+  });
+
+  it('the page runs nothing itself without hold facts, a door that can hold, or the wasm; and binds $_me.id as its door does', () => {
+    const transport = { run: vi.fn(), page: vi.fn(), hold: vi.fn() };
+    const island = { dataflow: { flow: FLOW, hold: ['sales'] }, sqliteWasm: '/story/sqlite3-x.wasm' };
+    expect(pageEngineFor({ dataflow: { flow: FLOW } }, transport, 'usr_1')).toBeNull();
+    expect(pageEngineFor(island, { run: vi.fn(), page: vi.fn() }, 'usr_1')).toBeNull();
+    expect(pageEngineFor({ dataflow: island.dataflow }, transport, 'usr_1')).toBeNull();
+    // The credential-free document at /raw binds nobody, whoever its island says is looking.
+    expect(pageEngineFor(island, transport, null)?.userId).toBeNull();
+    expect(pageEngineFor(island, transport, 'usr_1')?.userId).toBe('usr_1');
   });
 });
 

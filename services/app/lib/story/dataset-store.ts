@@ -39,3 +39,24 @@ export async function loadDatasetRows(row: { meta: unknown }): Promise<Record<st
   // deliberately not here, so there is one cache and not one per caller.
   return JSON.parse((await objectStore().get(key)).toString('utf8'));
 }
+
+/**
+ * How many rows a stored object holds and how many bytes it serializes to —
+ * the two things the hold cap is judged by (lib/story/placement). Remembered
+ * by key: objects are content-addressed, so a key's answer never changes, and
+ * a page render asking whether its reader may hold a dataset pays one parse
+ * per dataset version per process, not one per render. An object past
+ * `maxBytes` is not parsed at all: it is too big whatever it holds.
+ */
+const statsByKey = new Map<string, { rows: number; bytes: number }>();
+const STATS_KEPT = 2_000;
+
+export async function storedRowStats(key: string, maxBytes: number): Promise<{ rows: number; bytes: number }> {
+  const known = statsByKey.get(key);
+  if (known) return known;
+  const bytes = await objectStore().get(key);
+  const stats = { bytes: bytes.length, rows: bytes.length > maxBytes ? Number.POSITIVE_INFINITY : (JSON.parse(bytes.toString('utf8')) as unknown[]).length };
+  if (statsByKey.size >= STATS_KEPT) statsByKey.delete(statsByKey.keys().next().value!);
+  statsByKey.set(key, stats);
+  return stats;
+}
