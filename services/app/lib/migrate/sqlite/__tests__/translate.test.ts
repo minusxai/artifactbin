@@ -376,6 +376,21 @@ describe('translateSql: DuckDB lists', () => {
   });
 });
 
+describe('translateSql: text padding and derived-table column names', () => {
+  it('lpad/rpad with a literal length and fill → substr of the fill repeated, cutting text longer than the length as DuckDB did', () => {
+    ok("select lpad(cast(h as varchar), 2, '0') as hh, rpad(s, 4, 'xy') as r from t",
+      "select substr('00', 1, max(2 - length(cast(h as varchar)), 0)) || substr(cast(h as varchar), 1, 2) as hh, substr(s, 1, 4) || substr('xyxyxyxy', 1, max(4 - length(s), 0)) as r from t");
+    manual('select lpad(s, n, \'0\') from t', /lpad\(\) with a computed length or fill/);
+    manual("select lpad(s, 3, '') from t", /lpad\(\) with a computed length or fill/);
+  });
+  it('a derived table naming its columns at the alias → a CTE, which takes a column list', () => {
+    ok("select * from (values ('a', 1), ('b', 2)) t(value, label)", "select * from (with t(value, label) as (values ('a', 1), ('b', 2)) select * from t) as t");
+    ok('select s.x from (select a, b from u) as s(x, y) where s.y > 1', 'select s.x from (with s(x, y) as (select a, b from u) select * from s) as s where s.y > 1');
+    manual('select * from (select 1 as a, 2 as b) s(x)', /names 1 of its 2 columns/);
+    manual('select * from (select * from u) s(x)', /columns/);
+  });
+});
+
 describe('translateSql: date arithmetic', () => {
   it('date ± n adds days, and date − date counts them, where the operand is a date by construction', () => {
     ok('select cast(d as date) + 1, 2 + d::date, date_trunc(\'month\', d) - n from t',

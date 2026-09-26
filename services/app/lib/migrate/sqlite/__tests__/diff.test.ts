@@ -105,6 +105,10 @@ describe('translations answer as DuckDB did', () => {
     'select n, generate_series(2, 5, 2) as a, range(3) as b, range(n) as c from (select 2 as n union all select null) s': table(['n', 'a', 'b', 'c'], [[2, [2, 4], [0, 1, 2], [0, 1]], [null, [2, 4], [0, 1, 2], null]]),
     "select s, list_filter(list_transform(string_split(coalesce(s, ''), ','), x -> trim(x)), x -> x <> '') as l from (select ' a, b ,,c' as s union all select null) t": table(['s', 'l'], [[' a, b ,,c', ['a', 'b', 'c']], [null, []]]),
     "select v, list_transform(cast(v as varchar[]), x -> upper(x)) as u from (select '[a, b]' as v union all select null) t": table(['v', 'u'], [['[a, b]', ['A', 'B']], [null, null]]),
+    "select s, lpad(s, 3, 'xy') as l, rpad(s, 3, '0') as r from (select 'abcd' as s union all select '7' union all select '' union all select null union all select 'é') t":
+      table(['s', 'l', 'r'], [['abcd', 'abc', 'abc'], ['7', 'xy7', '700'], ['', 'xyx', '000'], [null, null, null], ['é', 'xyé', 'é00']]),
+    "select * from (values ('a', 1), ('b', 2)) t(value, label)": table(['value', 'label'], [['a', 1], ['b', 2]]),
+    'select s.x from (select a, b from (select 1 as a, 2 as b union all select 3, 0) u) as s(x, y) where s.y > 1': table(['x'], [[1]]),
   };
   it.each(Object.keys(duckdb))('%s', async (original) => {
     const translation = translateSql(original, { statement: 'query' });
