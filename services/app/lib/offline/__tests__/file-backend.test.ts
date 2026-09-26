@@ -220,7 +220,7 @@ describe('prepare — what an edit needs from artifactbin', () => {
   it.each([
     ['a new web image', '<img src="https://example.com/new.png" alt="new" />'],
     ['a new icon', '<Icon name="calendar" />'],
-    ['a new query source binding', '<Helmet><Query name="more" source="ref:Zz9Zz9">{`select 1`}</Query></Helmet>'],
+    ['a new query source binding', '<Helmet><Import name="more_data" src="ref:Zz9Zz9" /><Query name="more">{`select 1`}</Query></Helmet>'],
     ['a ref: target that is not in the file', '<Image src="ref:Qq1Qq1" alt="x" />'],
   ])('refuses %s with the asset reason', async (_label, source) => {
     const { backend } = open();

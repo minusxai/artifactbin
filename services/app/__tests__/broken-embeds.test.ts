@@ -40,7 +40,7 @@ async function create(body: Record<string, unknown>) {
 
 const wrap = (inner: string) => `<div data-design="tw" className="@container p-6">${inner}</div>`;
 /** The document declares its table: a <Query> over the dataset, bound as `$rows`. */
-const declared = (inner: string) => `<Helmet><Query name="rows" source="ref:${datasetId}">{\`select * from public.rows\`}</Query></Helmet>` + wrap(inner);
+const declared = (inner: string) => `<Helmet><Import name="rows_data" src="ref:${datasetId}" /><Query name="rows">{\`select * from rows_data.rows\`}</Query></Helmet>` + wrap(inner);
 
 describe('a Question that cannot resolve is refused', () => {
   it('rejects the exact shape ChatGPT published', async () => {
@@ -221,7 +221,7 @@ describe('a JSX syntax error points at the character', () => {
  */
 describe('a viz that is a bare spec instead of an envelope', () => {
   const q = (viz: string) =>
-    `<Helmet><Query name="q" source="ref:abc123">{\`select a from public.rows\`}</Query></Helmet>
+    `<Helmet><Import name="q_data" src="ref:abc123" /><Query name="q">{\`select a from q_data.rows\`}</Query></Helmet>
 <Question data="$q" viz={${viz}} />`;
 
   it('is refused, and the message shows the wrapper', () => {
@@ -237,6 +237,6 @@ describe('a viz that is a bare spec instead of an envelope', () => {
 
   /** A `<Question>` with no viz at all is the themed TABLE, and stays legal. */
   it('leaves a viz-less Question alone', () => {
-    expect(findBrokenEmbeds('<Helmet><Query name="q" source="ref:abc123">{`select a from public.rows`}</Query></Helmet>\n<Question data="$q" />')).toEqual([]);
+    expect(findBrokenEmbeds('<Helmet><Import name="q_data" src="ref:abc123" /><Query name="q">{`select a from q_data.rows`}</Query></Helmet>\n<Question data="$q" />')).toEqual([]);
   });
 });

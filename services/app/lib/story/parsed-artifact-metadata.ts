@@ -48,6 +48,7 @@ const compiledSchema = z.object({
     ...span, name, sql: z.string(),
     target: z.union([z.object({ import: z.string(), table: z.string() }).strict(), z.object({ local: z.string() }).strict()]),
     args: z.array(z.object({ name: z.string(), type: columnType.nullable() }).strict()), reads,
+    rowTypes: z.record(z.string(), columnType.nullable()).optional(), valueType: columnType.nullable().optional(),
     expectedAffected: z.number().int().nonnegative().optional(), reset: z.array(z.string()).optional(),
   }).strict()),
 }).strict() as unknown as z.ZodType<CompiledDataflow>;

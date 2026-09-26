@@ -218,7 +218,7 @@ describe('the chrome the selection drives', () => {
  */
 describe('the bound query in an inspector', () => {
   const QUERY_SOURCE =
-    '<Helmet><Query name="sales" source="ref:ds1234">{`select 1 as x`}</Query></Helmet>'
+    '<Helmet><Import name="sales_data" src="ref:ds1234" /><Query name="sales">{`select 1 as x`}</Query></Helmet>'
     + '<div data-design="tw" className="p-4"><Question data="$sales" /></div>';
 
   it('shows the bound query in the chart inspector and jumps to its cell in the notebook', async () => {

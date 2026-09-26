@@ -14,7 +14,7 @@ describe('advanced HTTP parity',()=>{
 
     const story = await operationHttp(t.token, 'create_artifact', {
       title: 'story',
-      markup: `<Helmet><Query name="rows" source="ref:${ds.data.id}">{\`select * from public.rows\`}</Query></Helmet><div data-design="tw"><Question data="$rows" viz={{kind:"table"}} height="200px" /></div>`,
+      markup: `<Helmet><Import name="rows_data" src="ref:${ds.data.id}" /><Query name="rows">{\`select * from rows_data.rows\`}</Query></Helmet><div data-design="tw"><Question data="$rows" viz={{kind:"table"}} height="200px" /></div>`,
     });
     expect(story.isError).toBe(false);
     // One URL per artifact, addressed by the one identifier: /a/<id> is the
@@ -28,7 +28,7 @@ describe('advanced HTTP parity',()=>{
 
     const updated = await operationHttp(t.token, 'update_artifact', {
       id: story.data.id as string,
-      markup: `<Helmet><Query name="rows" source="ref:${ds.data.id}">{\`select * from public.rows\`}</Query></Helmet><div data-design="tw"><h1 className="text-2xl">v2</h1><Question data="$rows" viz={{kind:"table"}} height="200px" /></div>`,
+      markup: `<Helmet><Import name="rows_data" src="ref:${ds.data.id}" /><Query name="rows">{\`select * from rows_data.rows\`}</Query></Helmet><div data-design="tw"><h1 className="text-2xl">v2</h1><Question data="$rows" viz={{kind:"table"}} height="200px" /></div>`,
       theme: 'terminal',
     });
     expect(updated.isError).toBe(false);
@@ -141,7 +141,7 @@ describe('advanced HTTP parity',()=>{
     const ds = await operationHttp(t.token, 'create_artifact', { title: 'sales', dataset: [{ m: 'Jan', v: 1 }] });
     const story = await operationHttp(t.token, 'create_artifact', {
       title: 'story',
-      markup: `<Helmet><Query name="rows" source="ref:${ds.data.id}">{\`select * from public.rows\`}</Query></Helmet><div data-design="tw"><Question data="$rows" viz={{kind:"vega-lite", spec:{mark:"bar", encoding:{y:{field:"v", type:"quantitative"}}}}} height="200px" /></div>`,
+      markup: `<Helmet><Import name="rows_data" src="ref:${ds.data.id}" /><Query name="rows">{\`select * from rows_data.rows\`}</Query></Helmet><div data-design="tw"><Question data="$rows" viz={{kind:"vega-lite", spec:{mark:"bar", encoding:{y:{field:"v", type:"quantitative"}}}}} height="200px" /></div>`,
     });
     const refreshed = await operationHttp(t.token, 'update_artifact', { id: ds.data.id as string, dataset: [{ m: 'Jan', other: 9 }] });
     expect(refreshed.isError).toBe(false);

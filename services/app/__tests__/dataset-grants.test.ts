@@ -18,9 +18,9 @@ it('allows a recipient through a saved owner artifact only after approval',async
  const dsResponse=await create(request('/api/artifacts',{method:'POST',token:token.token,json:{dataset:[{n:1}],access:'readwrite'}}));
  expect(dsResponse.status).toBe(201);const ds=(await dsResponse.json()).id;
  expect(await setDatasetPolicy(actor,ds,defaultDatasetGrants(),0)).toMatchObject({revision:1});
- const docResponse=await create(request('/api/artifacts',{method:'POST',token:token.token,json:{visibility:'public',markup:`<Helmet><Mutation name="add" source="ref:${ds}">{\`insert into public.rows values (2)\`}</Mutation></Helmet><Button run="$add">Add</Button>`}}));
+ const docResponse=await create(request('/api/artifacts',{method:'POST',token:token.token,json:{visibility:'public',markup:`<Helmet><Import name="add_data" src="ref:${ds}" /><Mutation name="add">{\`insert into add_data.rows values (2)\`}</Mutation></Helmet><Button run="$add">Add</Button>`}}));
  expect(docResponse.status,await docResponse.clone().text()).toBe(201);const doc=(await docResponse.json()).id;
- const click=()=>mutate(request(`/a/${doc}/mutate`,{method:'POST',origin:'same',actor:{credential:'session',userId:bob.id,email:bob.email!,emailVerified:true},json:{mutation:'add',values:{}}}),{params:Promise.resolve({id:doc})});
+ const click=()=>mutate(request(`/a/${doc}/mutate`,{method:'POST',origin:'same',actor:{credential:'session',userId:bob.id,email:bob.email!,emailVerified:true},json:{mutation:'add',args:{}}}),{params:Promise.resolve({id:doc})});
  const refused=await click();expect(refused.status).toBe(403);expect((await refused.json()).detail).toMatch(/join/i);
  await changeMembership({userId:bob.id,tokenId:null},doc,{action:'join'});
  expect((await click()).status).toBe(403);
@@ -59,7 +59,7 @@ it('forks even an owners written dataset independently and resets memberships',a
  const actor={userId:owner.id,tokenId:token.id};
  const make=async(json:object)=>{const res=await create(request('/api/artifacts',{method:'POST',token:token.token,json}));expect(res.status,await res.clone().text()).toBe(201);return (await res.json()).id;};
  const ds=await make({dataset:[{n:1}]});
- const doc=await make({visibility:'public',markup:`<Helmet><Query name="rows" source="ref:${ds}">{\`select * from public.rows\`}</Query><Mutation name="add" source="ref:${ds}">{\`insert into public.rows values (2)\`}</Mutation></Helmet><Button run="$add">Add</Button>`});
+ const doc=await make({visibility:'public',markup:`<Helmet><Import name="rows_data" src="ref:${ds}" /><Query name="rows">{\`select * from rows_data.rows\`}</Query><Import name="add_data" src="ref:${ds}" /><Mutation name="add">{\`insert into add_data.rows values (2)\`}</Mutation></Helmet><Button run="$add">Add</Button>`});
  await setDatasetPolicy(actor,ds,{version:2,allow:[{actions:['read'],from:{user:'*'}},{actions:['insert'],from:{artifact:doc}}]},0);
  const fork=await forkArtifact(actor,(await getArtifactById(doc))!);expect(fork).not.toBeInstanceOf(Response);if(fork instanceof Response)return;
  expect(fork.datasets).toHaveLength(1);expect(fork.datasets[0].id).not.toBe(ds);
@@ -88,7 +88,7 @@ it('preserves private dataset visibility in a public fork',async()=>{
  const actor={userId:owner.id,tokenId:token.id};
  const make=async(json:object)=>{const res=await create(request('/api/artifacts',{method:'POST',token:token.token,json}));expect(res.status,await res.clone().text()).toBe(201);return (await res.json()).id;};
  const ds=await make({dataset:[{n:1}],visibility:'private'});
- const doc=await make({visibility:'private',markup:`<Helmet><Query name="rows" source="ref:${ds}">{\`select * from public.rows\`}</Query><Mutation name="add" source="ref:${ds}">{\`insert into public.rows values (2)\`}</Mutation></Helmet><Button run="$add">Add</Button>`});
+ const doc=await make({visibility:'private',markup:`<Helmet><Import name="rows_data" src="ref:${ds}" /><Query name="rows">{\`select * from rows_data.rows\`}</Query><Import name="add_data" src="ref:${ds}" /><Mutation name="add">{\`insert into add_data.rows values (2)\`}</Mutation></Helmet><Button run="$add">Add</Button>`});
  const fork=await forkArtifact(actor,(await getArtifactById(doc))!,{visibility:'public'});expect(fork).not.toBeInstanceOf(Response);if(fork instanceof Response)return;
  expect((await getArtifactById(fork.datasets[0].id))?.visibility).toBe('private');
  expect(await readableArtifact({userId:null,tokenId:''},fork.datasets[0].id)).toBeNull();

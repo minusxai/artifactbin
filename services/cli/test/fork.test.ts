@@ -28,8 +28,8 @@ const ORIGINAL='ds0001';
 const COPY='ds0009';
 const PAGE='abc123';
 const SERVER_COPY='cpy001';
-const APP=(dataset:string)=>`<Helmet><Query name="rows" source="ref:${dataset}">{\`select * from public.rows\`}</Query>`
- +`<Mutation name="join" source="ref:${dataset}">{\`insert into public.rows (who) select $_me\`}</Mutation></Helmet>`
+const APP=(dataset:string)=>`<Helmet><Import name="rows_data" src="ref:${dataset}" /><Query name="rows">{\`select * from rows_data.rows\`}</Query>`
+ +`<Import name="join_data" src="ref:${dataset}" /><Mutation name="join">{\`insert into join_data.rows (who) select $_me.id\`}</Mutation></Helmet>`
  +'<div><Button run="$join">Join</Button><DataTable data="$rows" /></div>';
 const snapshot=(id:string,markup:string)=>({id,document:createDocumentGraph(markup,1),version:1,edit_id:'e1',state:'a'.repeat(64),format:'markup',markup,title:'Splitwise tracker',visibility:'unlisted'});
 

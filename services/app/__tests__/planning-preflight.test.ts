@@ -9,7 +9,7 @@ useAppHarness();
 it('real markup preparation validates proposed dataset columns without persistence or fetching', async () => {
   const put = vi.spyOn(objectStore(), 'put').mockImplementation(async () => { throw Error('unexpected persistence'); });
   const network = vi.spyOn(globalThis, 'fetch').mockImplementation(async () => { throw Error('unexpected network'); });
-  const source = '<Helmet><Query name="q" source="ref:abc123">{`select amount from public.rows`}</Query></Helmet><DataTable data="$q" /><img src="https://example.com/proposed.png" />';
+  const source = '<Helmet><Import name="q_data" src="ref:abc123" /><Query name="q">{`select amount from q_data.rows`}</Query></Helmet><DataTable data="$q" /><img src="https://example.com/proposed.png" />';
   try {
     const rows = [{ amount: 7 }];
     const loadRef = async (id: string) => id === 'abc123' ? { id, format: 'dataset', columns: inferColumns(rows), query: (sql:string,params:Record<string,import('@artifactbin/contracts').Scalar>) => queryRows({rows,columns:inferColumns(rows)},sql,params) } : null;

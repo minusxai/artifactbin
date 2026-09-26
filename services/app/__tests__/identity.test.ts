@@ -92,7 +92,7 @@ describe('the one identifier', () => {
       dataset: [{ region: 'east', total: 1 }, { region: 'west', total: 2 }],
     });
     const chart = (dsId: string) =>
-      `<Helmet><Query name="rows" source="ref:${dsId}">{\`select * from public.rows\`}</Query></Helmet>` +
+      `<Helmet><Import name="rows_data" src="ref:${dsId}" /><Query name="rows">{\`select * from rows_data.rows\`}</Query></Helmet>` +
       `<section><Question title="t" data="$rows" viz={{"kind":"vega-lite","spec":{"mark":"bar","encoding":{"x":{"field":"region","type":"nominal"},"y":{"field":"total","type":"quantitative"}}}}} height="200px" /></section>`;
 
     const ok = await create(token, { title: 'doc', markup: chart(ds.id) });

@@ -83,7 +83,7 @@ const LOCAL_DOC = `<Helmet>
 <Mutation name="inc">{\`update _signals set count=count+1\`}</Mutation>
 </Helmet><h1>Counter post</h1><Button run="$inc">Increment</Button><DataTable data="$current" />`;
 const pollDoc = (ds: string) => `<Helmet><Value name="choice" type="string" default="ramen" />`
-  + `<Mutation name="vote" source="ref:${ds}">{\`insert into public.rows (choice) values ($choice)\`}</Mutation></Helmet>`
+  + `<Import name="vote_data" src="ref:${ds}" /><Mutation name="vote">{\`insert into vote_data.rows (choice) values ($choice)\`}</Mutation></Helmet>`
   + '<h1>Poll post</h1><Button run="$vote">Vote</Button>';
 
 async function world() {
@@ -389,11 +389,11 @@ describe('everything else on a verified host is 404', () => {
   it('runs a local mutation, and refuses every dataset-writing one without touching the dataset', async () => {
     const w = await world();
     const mutate = (id: string, body: unknown) => app().request(`${HOST}/a/${id}/mutate`, { method: 'POST', headers: { 'content-type': 'text/plain' }, body: JSON.stringify(body) });
-    const local = await mutate(w.local.id, { mutation: 'inc', values: { count: 1 } });
+    const local = await mutate(w.local.id, { mutation: 'inc', args: { count: 1 } });
     expect(local.status, await local.clone().text()).toBe(200);
     expect(await local.json()).toMatchObject({ ok: true, local: { target: '_signals' } });
     const before = (await getArtifactById(w.ds.id))!.version;
-    const write = await mutate(w.poll.id, { mutation: 'vote', values: { choice: 'ramen' } });
+    const write = await mutate(w.poll.id, { mutation: 'vote', args: { choice: 'ramen' } });
     expect(write.status).toBe(403);
     expect(await write.json()).toMatchObject({ error: 'dataset_read_only' });
     expect((await getArtifactById(w.ds.id))!.version).toBe(before);

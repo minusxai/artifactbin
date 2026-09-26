@@ -67,6 +67,7 @@ import type {StringEdit} from './story/edit-batch';
 import { nodeIndex, stampNodeIds } from './story/node-ids';
 import { finalizeArtifactMetadata, readCompiledDataflow } from './story/parsed-artifact-metadata';
 import { scalarMatches, type Row, type Scalar } from '@/lib/story/dataflow';
+import type { ColumnType } from '@artifactbin/contracts';
 import type { CompiledDataflow, CompiledMutation } from '@/lib/story/compiled-dataflow';
 import { bindParams, bindTypes, dataRefs, importRef, mutationParams, mutationReads, mutationTargetRef, selectQueries, type ImportTables } from '@/lib/story/compiled-flow';
 import { platformValues, readerZone, rowField, VIEWER, VIEWER_ID } from '@/lib/story/builtins';
@@ -2091,21 +2092,39 @@ export async function runDocumentMutation(
     if (a.type && !scalarMatches(value, a.type)) return { ok: false, reason: 'invalid_sql', detail: `argument $${a.name} does not match its declared type` };
     logical[a.name] = value;
   }
-  // The control's context: the fields of its row and the value its cell holds — only what the statement reads.
+  /*
+   * The control's context: the fields of its row and the value its cell holds
+   * — only what the statement reads, each typed by where the control sits
+   * (the row's table, the edited column; CompiledMutation.rowTypes/valueType).
+   * A row the table could not have produced is refused by name, as is a cell
+   * value the column cannot hold; an empty string for anything but text is
+   * "no value", as a cleared editor sends it.
+   */
   const fields = m.reads.builtins.flatMap((b) => rowField(b) ?? []);
+  const types: Record<string, ColumnType | null> = Object.fromEntries(m.args.map((a) => [a.name, a.type]));
   if (fields.length) {
     const missing = fields.filter((f) => !request.row || !Object.hasOwn(request.row, f));
     if (missing.length) return { ok: false, reason: 'invalid_row', detail: `this row mutation reads $_row.${missing.join(', $_row.')} — send the row its control sits in` };
-    for (const f of fields) logical[`_row.${f}`] = request.row![f]!;
+    for (const f of fields) {
+      const type = m.rowTypes?.[f] ?? null;
+      const value = request.row![f]!;
+      if (type && !scalarMatches(value, type)) return { ok: false, reason: 'invalid_row', detail: 'row fields and scalar types must match the declared table result' };
+      logical[`_row.${f}`] = value;
+      types[`_row.${f}`] = type;
+    }
   } else if (request.row !== undefined) return { ok: false, reason: 'invalid_row', detail: 'this mutation does not read a row' };
   if (m.reads.builtins.includes('_value')) {
     if (request.value === undefined) return { ok: false, reason: 'invalid_row', detail: 'cell mutations require value' };
-    logical._value = request.value;
+    const type = m.valueType ?? null;
+    const value = type && type !== 'string' && request.value === '' ? null : request.value;
+    if (type && !scalarMatches(value, type)) return { ok: false, reason: 'invalid_row', detail: 'parameter $_value does not match the edited column\'s type' };
+    logical._value = value;
+    types._value = type;
   } else if (request.value !== undefined) return { ok: false, reason: 'invalid_row', detail: 'this mutation does not accept a value' };
   Object.assign(logical, platformValues({ userId: actor.userId ?? null, now: new Date().toISOString(), tz: readerZone(request.tz) }));
   const names = mutationParams(m);
   const params = bindParams(names, logical);
-  const paramTypes = bindTypes(names, Object.fromEntries(m.args.map((a) => [a.name, a.type])));
+  const paramTypes = bindTypes(names, types);
   const members = m.reads.builtins.includes('_members') ? await acceptedMembers(doc.id) : [];
   const imports = await importsFor(flow, m.reads.imports, datasetResolverForRow(doc, actor));
 

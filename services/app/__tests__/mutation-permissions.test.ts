@@ -19,7 +19,7 @@ async function fixture(){
  const user=await createUser({email:'mxmx_test_dataset_friend@example.com'});await claimToken(user.id,friend.token);
  const publish=async(body:object)=>{const r=await create(request('/api/artifacts',{method:'POST',token:owner.token,json:body}));expect(r.status,await r.clone().text()).toBe(201);return (await r.json()).id as string;};
  const ds=await publish({dataset:[{n:1}],access:'readwrite'});
- const doc=await publish({markup:`<Helmet><Query name="rows" source="ref:${ds}">{\`select * from public.rows\`}</Query><Mutation name="add" source="ref:${ds}">{\`insert into public.rows values (2)\`}</Mutation></Helmet><Button run="$add">Add</Button><DataTable data="$rows" />`});
+ const doc=await publish({markup:`<Helmet><Import name="rows_data" src="ref:${ds}" /><Query name="rows">{\`select * from rows_data.rows\`}</Query><Import name="add_data" src="ref:${ds}" /><Mutation name="add">{\`insert into add_data.rows values (2)\`}</Mutation></Helmet><Button run="$add">Add</Button><DataTable data="$rows" />`});
  const cookie=await agentCookie([friend.id]);
  const write=(auth?:string)=>mutate(request(`/a/${doc}/mutate`,{method:'POST',cookie:auth,json:{mutation:'add'}}),ctx(doc));
  const permissions=async(auth?:string)=>{const r=auth?await query(request(`/a/${doc}/query`,{method:'POST',cookie:auth,json:{}}),ctx(doc)):await anonymousQuery(request(`/a/${doc}/query?q=%7B%7D`),ctx(doc));expect(r.status).toBe(200);return r.json();};
@@ -92,7 +92,7 @@ it('the viewers-write shorthand is what lets a viewer, and the link audience, wr
 it('a viewer completes their own row through a $_row row action',async()=>{
  const f=await fixture();
  const ds=await f.publish({dataset:[{id:1,status:'open'},{id:2,status:'open'}],access:'readwrite'});
- const doc=await f.publish({markup:`<Helmet><Query name="tasks" source="ref:${ds}">{\`select * from public.rows\`}</Query><Mutation name="complete" source="ref:${ds}">{\`update public.rows set status = 'done' where id = $_row.id\`}</Mutation></Helmet><For each={$tasks} keyBy="id"><Button run="$complete">Complete</Button></For>`});
+ const doc=await f.publish({markup:`<Helmet><Import name="tasks_data" src="ref:${ds}" /><Query name="tasks">{\`select * from tasks_data.rows\`}</Query><Import name="complete_data" src="ref:${ds}" /><Mutation name="complete">{\`update complete_data.rows set status = 'done' where id = $_row.id\`}</Mutation></Helmet><For each={$tasks} keyBy="id"><Button run="$complete">Complete</Button></For>`});
  const click=(auth?:string,row:Record<string,unknown>={id:1,status:'open'})=>mutate(request(`/a/${doc}/mutate`,{method:'POST',cookie:auth,json:{mutation:'complete',row}}),ctx(doc));
  const tasks=async()=>{const r=await anonymousQuery(request(`/a/${doc}/query?q=%7B%7D`),ctx(doc));expect(r.status).toBe(200);return (await r.json()).tables.tasks.rows;};
  await f.share(ds,'viewer');
@@ -118,10 +118,10 @@ it('a viewer completes their own row through a $_row row action',async()=>{
 it('a declared date Value is planned as a date, so a viewer writes one through a policed insert',async()=>{
  const f=await fixture();
  const ds=await f.publish({dataset:[{id:1,due:'2026-01-01'}],access:'readwrite'});
- const doc=await f.publish({markup:`<Helmet><Value name="d" type="date" /><Query name="rows" source="ref:${ds}">{\`select * from public.rows order by id\`}</Query><Mutation name="add" source="ref:${ds}">{\`insert into public.rows (id, due) select 2, coalesce($d, current_date)\`}</Mutation></Helmet><Button run="$add">Add</Button><DataTable data="$rows" />`});
+ const doc=await f.publish({markup:`<Helmet><Value name="d" type="date" /><Import name="rows_data" src="ref:${ds}" /><Query name="rows">{\`select * from rows_data.rows order by id\`}</Query><Import name="add_data" src="ref:${ds}" /><Mutation name="add">{\`insert into add_data.rows (id, due) select 2, coalesce($d, date($_now))\`}</Mutation></Helmet><Button run="$add">Add</Button><DataTable data="$rows" />`});
  await f.share(ds,'viewer');
  await f.grantFor(ds);
- const r=await mutate(request(`/a/${doc}/mutate`,{method:'POST',cookie:f.cookie,json:{mutation:'add',values:{d:'2026-09-01'}}}),ctx(doc));
+ const r=await mutate(request(`/a/${doc}/mutate`,{method:'POST',cookie:f.cookie,json:{mutation:'add',args:{d:'2026-09-01'}}}),ctx(doc));
  expect(r.status,await r.clone().text()).toBe(200);
  const rows=await anonymousQuery(request(`/a/${doc}/query?q=%7B%7D`),ctx(doc));
  expect((await rows.json()).tables.rows.rows).toEqual([{id:1,due:'2026-01-01'},{id:2,due:'2026-09-01'}]);
@@ -131,7 +131,7 @@ it('a string Value used where a date is required fails the push, naming the muta
  const f=await fixture();
  const ds=await f.publish({dataset:[{id:1,due:'2026-01-01'}],access:'readwrite'});
  await f.grantFor(ds);
- const r=await create(request('/api/artifacts',{method:'POST',token:f.owner.token,json:{markup:`<Helmet><Value name="d" type="string" /><Mutation name="add" source="ref:${ds}">{\`insert into public.rows (id, due) select 2, coalesce($d, current_date)\`}</Mutation></Helmet><Button run="$add">Add</Button>`}}));
+ const r=await create(request('/api/artifacts',{method:'POST',token:f.owner.token,json:{markup:`<Helmet><Value name="d" type="string" /><Import name="add_data" src="ref:${ds}" /><Mutation name="add">{\`insert into add_data.rows (id, due) select 2, coalesce($d, date($_now))\`}</Mutation></Helmet><Button run="$add">Add</Button>`}}));
  expect(r.status,await r.clone().text()).toBe(400);
  const body=await r.json();
  expect(body.error).toBe('invalid_sql');
@@ -141,10 +141,10 @@ it('a string Value used where a date is required fails the push, naming the muta
 it('refuses a value whose type is not the one it was declared with, naming the parameter',async()=>{
  const f=await fixture();
  const ds=await f.publish({dataset:[{id:1,amount:1.5}],access:'readwrite'});
- const doc=await f.publish({markup:`<Helmet><Value name="n" type="number" default={0} /><Query name="rows" source="ref:${ds}">{\`select * from public.rows order by id\`}</Query><Mutation name="add" source="ref:${ds}">{\`insert into public.rows (id, amount) select 2, $n\`}</Mutation></Helmet><Button run="$add">Add</Button><DataTable data="$rows" />`});
+ const doc=await f.publish({markup:`<Helmet><Value name="n" type="number" default={0} /><Import name="rows_data" src="ref:${ds}" /><Query name="rows">{\`select * from rows_data.rows order by id\`}</Query><Import name="add_data" src="ref:${ds}" /><Mutation name="add">{\`insert into add_data.rows (id, amount) select 2, $n\`}</Mutation></Helmet><Button run="$add">Add</Button><DataTable data="$rows" />`});
  await f.share(ds,'viewer');
  await f.grantFor(ds);
- const send=(n:unknown)=>mutate(request(`/a/${doc}/mutate`,{method:'POST',cookie:f.cookie,json:{mutation:'add',values:{n}}}),ctx(doc));
+ const send=(n:unknown)=>mutate(request(`/a/${doc}/mutate`,{method:'POST',cookie:f.cookie,json:{mutation:'add',args:{n}}}),ctx(doc));
  const bad=await send('12.5');
  expect(bad.status).toBe(400);
  expect((await bad.json()).detail).toMatch(/\$n/);
@@ -159,10 +159,10 @@ it('refuses a value whose type is not the one it was declared with, naming the p
 it('reads an empty string for a number, date or boolean Value as no value, and keeps it for a string',async()=>{
  const f=await fixture();
  const ds=await f.publish({dataset:[{id:1,due:'2026-01-01',note:'x'}],access:'readwrite'});
- const doc=await f.publish({markup:`<Helmet><Value name="d" type="date" /><Value name="note" type="string" /><Query name="rows" source="ref:${ds}">{\`select * from public.rows order by id\`}</Query><Mutation name="add" source="ref:${ds}">{\`insert into public.rows (id, due, note) select 2, coalesce($d, date '2026-02-02'), $note\`}</Mutation></Helmet><DataTable data="$rows" />`});
+ const doc=await f.publish({markup:`<Helmet><Value name="d" type="date" /><Value name="note" type="string" /><Import name="rows_data" src="ref:${ds}" /><Query name="rows">{\`select * from rows_data.rows order by id\`}</Query><Import name="add_data" src="ref:${ds}" /><Mutation name="add">{\`insert into add_data.rows (id, due, note) select 2, coalesce($d, '2026-02-02'), $note\`}</Mutation></Helmet><DataTable data="$rows" />`});
  await f.share(ds,'viewer');
  await f.grantFor(ds);
- const res=await mutate(request(`/a/${doc}/mutate`,{method:'POST',cookie:f.cookie,json:{mutation:'add',values:{d:'',note:''}}}),ctx(doc));
+ const res=await mutate(request(`/a/${doc}/mutate`,{method:'POST',cookie:f.cookie,json:{mutation:'add',args:{d:'',note:''}}}),ctx(doc));
  expect(res.status,await res.clone().text()).toBe(200);
  const rows=(await loadDatasetRows((await getArtifactById(ds))!)) as Array<Record<string,unknown>>;
  expect(rows.find(r=>r.id===2)).toMatchObject({due:'2026-02-02',note:''});
@@ -177,7 +177,7 @@ it('names an unplaced row action once, without the engine\'s internal error besi
  const f=await fixture();
  const ds=await f.publish({dataset:[{id:1,note:'x'}],access:'readwrite'});
  await f.grantFor(ds);
- const res=await create(request('/api/artifacts',{method:'POST',token:f.owner.token,json:{markup:`<Helmet><Query name="rows" source="ref:${ds}">{\`select * from public.rows order by id\`}</Query><Mutation name="unpay" source="ref:${ds}" expectedAffected={1}>{\`delete from public.rows where id = $_row.id\`}</Mutation></Helmet><DataTable data="$rows" />`}}));
+ const res=await create(request('/api/artifacts',{method:'POST',token:f.owner.token,json:{markup:`<Helmet><Import name="rows_data" src="ref:${ds}" /><Query name="rows">{\`select * from rows_data.rows order by id\`}</Query><Import name="unpay_data" src="ref:${ds}" /><Mutation name="unpay" expectedAffected={1}>{\`delete from unpay_data.rows where id = $_row.id\`}</Mutation></Helmet><DataTable data="$rows" />`}}));
  expect(res.status).toBe(400);
  const text=JSON.stringify(await res.json());
  expect(text).toMatch(/must be invoked inside a DataTable Column or keyed For/);
@@ -193,11 +193,11 @@ it('names an unplaced row action once, without the engine\'s internal error besi
 it('types $_value from the column its editor sits in, at publish and at the click',async()=>{
  const f=await fixture();
  const ds=await f.publish({dataset:[{id:1,due:'2026-01-01'}],access:'readwrite'});
- const page=(sql:string)=>`<Helmet><Query name="rows" source="ref:${ds}">{\`select * from public.rows order by id\`}</Query><Mutation name="set_due" source="ref:${ds}" expectedAffected={1}>{\`${sql}\`}</Mutation></Helmet><DataTable data="$rows" rowKey="id"><Column col="id" /><Column col="due"><input type="text" value="$_row.due" run="$set_due" /></Column></DataTable>`;
+ const page=(sql:string)=>`<Helmet><Import name="rows_data" src="ref:${ds}" /><Query name="rows">{\`select * from rows_data.rows order by id\`}</Query><Import name="set_due_data" src="ref:${ds}" /><Mutation name="set_due" expectedAffected={1}>{\`${sql}\`}</Mutation></Helmet><DataTable data="$rows" rowKey="id"><Column col="id" /><Column col="due"><input type="text" value="$_row.due" run="$set_due" /></Column></DataTable>`;
  const doc=await f.publish({markup:page('update public.rows set due = greatest($_value, due) where id = $_row.id')});
  await f.share(ds,'viewer');
  await f.grantFor(ds);
- const edit=(value:unknown)=>mutate(request(`/a/${doc}/mutate`,{method:'POST',cookie:f.cookie,json:{mutation:'set_due',values:{_value:value},row:{id:1,due:'2026-01-01'}}}),ctx(doc));
+ const edit=(value:unknown)=>mutate(request(`/a/${doc}/mutate`,{method:'POST',cookie:f.cookie,json:{mutation:'set_due',args:{_value:value},row:{id:1,due:'2026-01-01'}}}),ctx(doc));
  const later=await edit('2026-03-03');
  expect(later.status,await later.clone().text()).toBe(200);
  expect((await loadDatasetRows((await getArtifactById(ds))!))[0]).toMatchObject({due:'2026-03-03'});
@@ -215,10 +215,10 @@ it('types $_value from the column its editor sits in, at publish and at the clic
 it('never lets a caller choose who $_me is',async()=>{
  const f=await fixture();
  const ds=await f.publish({dataset:[{id:1,who:'seed'}],access:'readwrite'});
- const doc=await f.publish({markup:`<Helmet><Query name="rows" source="ref:${ds}">{\`select * from public.rows order by id\`}</Query><Mutation name="sign" source="ref:${ds}">{\`insert into public.rows (id, who) select 2, $_me\`}</Mutation></Helmet><DataTable data="$rows" />`});
+ const doc=await f.publish({markup:`<Helmet><Import name="rows_data" src="ref:${ds}" /><Query name="rows">{\`select * from rows_data.rows order by id\`}</Query><Import name="sign_data" src="ref:${ds}" /><Mutation name="sign">{\`insert into sign_data.rows (id, who) select 2, $_me.id\`}</Mutation></Helmet><DataTable data="$rows" />`});
  await f.share(ds,'viewer');
  await f.grantFor(ds);
- const res=await mutate(request(`/a/${doc}/mutate`,{method:'POST',cookie:f.cookie,json:{mutation:'sign',values:{_me:'usr_someone_else'}}}),ctx(doc));
+ const res=await mutate(request(`/a/${doc}/mutate`,{method:'POST',cookie:f.cookie,json:{mutation:'sign',args:{_me:'usr_someone_else'}}}),ctx(doc));
  expect(res.status,await res.clone().text()).toBe(200);
  const rows=(await loadDatasetRows((await getArtifactById(ds))!)) as Array<Record<string,unknown>>;
  expect(rows.find(r=>r.id===2)!.who).not.toBe('usr_someone_else');
@@ -239,7 +239,7 @@ it('answers a guest with sign_in_required for a $_me write, in the capability an
  const markup='<Helmet>'
   +'<Value name="rows" type="table" value={[{"id":1,"who":"nobody"}]} />'
   +'<Query name="current">{`select * from rows`}</Query>'
-  +'<Mutation name="claim">{`update rows set who=$_me where id=1`}</Mutation>'
+  +'<Mutation name="claim">{`update rows set who=$_me.id where id=1`}</Mutation>'
   +'</Helmet><Button run="$claim">Claim it</Button><DataTable data="$current" />';
  const doc=await f.publish({markup});
  const capability=await anonymousQuery(request(`/a/${doc}/query?q=%7B%7D`),ctx(doc));
@@ -261,7 +261,7 @@ it.each([false,true])('previews computed row fields from the query schema (empty
  const f=await fixture();
  const ds=await f.publish({dataset:[{id:1,amount:3}],access:'readwrite'});
  await f.grantFor(ds);
- const doc=await f.publish({markup:`<Helmet><Query name="balances" source="ref:${ds}">{\`select id, amount * 2 as net from public.rows ${empty?'where false':''}\`}</Query><Mutation name="settle" source="ref:${ds}">{\`update public.rows set amount = $_row.net where id = $_row.id\`}</Mutation></Helmet><For each={$balances} keyBy="id"><Button run="$settle">Settle</Button></For>`});
+ const doc=await f.publish({markup:`<Helmet><Import name="balances_data" src="ref:${ds}" /><Query name="balances">{\`select id, amount * 2 as net from balances_data.rows ${empty?'where false':''}\`}</Query><Import name="settle_data" src="ref:${ds}" /><Mutation name="settle">{\`update settle_data.rows set amount = $_row.net where id = $_row.id\`}</Mutation></Helmet><For each={$balances} keyBy="id"><Button run="$settle">Settle</Button></For>`});
  const result=await query(request(`/a/${doc}/query`,{method:'POST',cookie:f.cookie,json:{}}),ctx(doc));
  expect(result.status).toBe(200);
  const body=await result.json();
@@ -279,9 +279,9 @@ it('stores forgiving timestamps as UTC instants and binds typed mutation paramet
  const f=await fixture();
  const ds=await f.publish({dataset:[{happened:'2026-09-18 15:30:00+05:30'},{happened:0}],columns:[{name:'happened',type:'timestamp'}],access:'readwrite'});
  expect(await loadDatasetRows((await getArtifactById(ds))!)).toEqual([{happened:'2026-09-18T10:00:00.000Z'},{happened:'1970-01-01T00:00:00.000Z'}]);
- const doc=await f.publish({markup:`<Helmet><Value name="when" type="timestamp" default="2026-09-18" /><Mutation name="add" source="ref:${ds}">{\`insert into public.rows values ($when)\`}</Mutation></Helmet><Button run="$add">Add</Button>`});
+ const doc=await f.publish({markup:`<Helmet><Value name="when" type="timestamp" default="2026-09-18" /><Import name="add_data" src="ref:${ds}" /><Mutation name="add">{\`insert into add_data.rows values ($when)\`}</Mutation></Helmet><Button run="$add">Add</Button>`});
  await f.grantFor(ds);
- const r=await mutate(request(`/a/${doc}/mutate`,{method:'POST',cookie:f.cookie,json:{mutation:'add',values:{when:'2026-09-18T12:30:00'}}}),ctx(doc));
+ const r=await mutate(request(`/a/${doc}/mutate`,{method:'POST',cookie:f.cookie,json:{mutation:'add',args:{when:'2026-09-18T12:30:00'}}}),ctx(doc));
  expect(r.status,await r.clone().text()).toBe(200);
  expect((await loadDatasetRows((await getArtifactById(ds))!)).at(-1)).toEqual({happened:'2026-09-18T12:30:00.000Z'});
  const invalid=await create(request('/api/artifacts',{method:'POST',token:f.owner.token,json:{dataset:[{happened:'2026-02-30'}],columns:[{name:'happened',type:'timestamp'}]}}));

@@ -31,7 +31,7 @@ const load: RefLoader = async (id) =>
 
 const doc = (viz: string) =>
   '<Helmet>' +
-  `<Query name="trend" source="ref:${DS}">{\`select day as period, sum(revenue) as revenue from public.rows group by 1 order by 1\`}</Query>` +
+  `<Import name="trend_data" src="ref:${DS}" /><Query name="trend">{\`select day as period, sum(revenue) as revenue from trend_data.rows group by 1 order by 1\`}</Query>` +
   '</Helmet>' +
   `<Question data="$trend" viz={${viz}} height="300px" />`;
 

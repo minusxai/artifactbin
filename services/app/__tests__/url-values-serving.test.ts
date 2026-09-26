@@ -38,7 +38,7 @@ const ROWS = [{ region: 'EU', revenue: 800 }, { region: 'NA', revenue: 1200 }, {
 
 const DOC = (ds: string) =>
   '<Helmet><Value name="region" type="string" default="EU" /><Value name="top" type="number" default={10} />' +
-  `<Query name="sales" source="ref:${ds}">{\`select region, sum(revenue) revenue from public.rows where $region is null or region = $region group by 1 order by 1\`}</Query>` +
+  `<Import name="sales_data" src="ref:${ds}" /><Query name="sales">{\`select region, sum(revenue) revenue from sales_data.rows where $region is null or region = $region group by 1 order by 1\`}</Query>` +
   '</Helmet><div><select aria-label="Region" value="$region" options="$sales" /><Question data="$sales" viz={{"kind":"table"}} /></div>';
 
 const island = (html: string): StoryIslandData => {
@@ -96,7 +96,7 @@ describe('a Value the author kept out of the link', () => {
     '<Helmet><Value name="region" type="string" default="EU" />' +
     '<Value name="draft" type="string" url={false} />' +
     '<Value name="guest" type="boolean" default={false} url={false} />' +
-    `<Query name="sales" source="ref:${ds}">{\`select region, sum(revenue) revenue from public.rows where $region is null or region = $region group by 1 order by 1\`}</Query>` +
+    `<Import name="sales_data" src="ref:${ds}" /><Query name="sales">{\`select region, sum(revenue) revenue from sales_data.rows where $region is null or region = $region group by 1 order by 1\`}</Query>` +
     '</Helmet><div><input aria-label="Draft" value="$draft" /><Question data="$sales" viz={{"kind":"table"}} /></div>';
 
   async function publishedWithDraft(): Promise<{ id: string; token: string }> {

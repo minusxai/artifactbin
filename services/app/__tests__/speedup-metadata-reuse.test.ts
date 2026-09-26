@@ -19,7 +19,7 @@ it('executes persisted declarations without reparsing source, falling back for s
 });
 
 it('live dependency reads include every query and persistent mutation target without parsing again', () => {
-  const source = '<Helmet><Query name="a" source="ref:ABC123">{`select * from public.rows`}</Query><Query name="b" source="ref:DEF456">{`select * from public.rows`}</Query><Mutation name="write" source="ref:GHI789">{`insert into public.rows values (1)`}</Mutation></Helmet><p>Live</p>';
+  const source = '<Helmet><Import name="a_data" src="ref:ABC123" /><Query name="a">{`select * from a_data.rows`}</Query><Import name="b_data" src="ref:DEF456" /><Query name="b">{`select * from b_data.rows`}</Query><Import name="write_data" src="ref:GHI789" /><Mutation name="write">{`insert into write_data.rows values (1)`}</Mutation></Helmet><p>Live</p>';
   const row = { source, meta: { parsedArtifact: compileParsedArtifactMetadata(source) } };
   const parse = vi.spyOn(jsx, 'parseJsx');
   try {

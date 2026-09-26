@@ -78,7 +78,7 @@ test('validate repairs a brace count it can prove, rewrites the file, and report
   const fence='---\ntitle: Braces\n---\n';
   await writeFile(join(root,'rows.csv'),'m,v\na,1\n');
   // The shape observed in the wild: the object closed, then two stray `}` before ` />`.
-  await writeFile(join(root,'doc.jsx'),fence+'<Helmet><Query name="q" source="ref:abc123">{`select m, v from public.rows`}</Query></Helmet><article><Question data="$q" viz={{"kind":"vega-lite","spec":{"mark":"line","encoding":{"x":{"field":"m","type":"nominal"}}}}}}} /></article>\n');
+  await writeFile(join(root,'doc.jsx'),fence+'<Helmet><Import name="q_data" src="ref:abc123" /><Query name="q">{`select m, v from q_data.rows`}</Query></Helmet><article><Question data="$q" viz={{"kind":"vega-lite","spec":{"mark":"line","encoding":{"x":{"field":"m","type":"nominal"}}}}}}} /></article>\n');
   const output:string[]=[];
   const code=await runCli(['validate','doc.jsx','--json'],{cwd:root,home:root,env:{},interactive:false,stdout:s=>output.push(s),stderr:()=>{},fetch:async()=>assert.fail('local validation must stay offline')});
   const result=JSON.parse(output.join(''));

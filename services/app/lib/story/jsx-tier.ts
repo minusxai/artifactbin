@@ -35,6 +35,7 @@ import type { AssetWarning, WebAssetKind } from '@/lib/web-assets';
 import { documentFonts, invalidFontFamilies } from './document-fonts';
 import { MAX_EXTERNAL_ASSETS_PER_PUBLISH, MAX_EXTERNAL_IMAGES_PER_PUBLISH } from '@/lib/config';
 import { checkDocumentData } from './data-checks';
+import { COMPILED_DATAFLOW } from './parsed-artifact-metadata';
 import { validateIconNames } from './icon-validation.server';
 
 /** The full story vocabulary: kit registry + the data embeds (minusx JSX_STORY_COMPONENT_NAMES verbatim). */
@@ -188,10 +189,12 @@ export async function prepareJsx(body: Record<string, unknown>, sourceIn: string
   // bound to a query checked against that query's result columns. ONE module
   // (lib/story/data-checks) shared with the dataset-refresh warnings path.
   let refs: Array<{ id: string; kind: string }> = [];
+  let compiled: import('./compiled-dataflow').CompiledDataflow | null = null;
   if (ctx.loadRef) {
     const checked = await checkDocumentData(sanitized, ctx.loadRef);
     if (!checked.ok) return json({ error: checked.error, details: checked.details }, 400);
     refs = checked.refs;
+    compiled = checked.compiled;
   }
 
   const compiledCss = await compileStoryCss(sanitized, { force: true });
@@ -212,6 +215,8 @@ export async function prepareJsx(body: Record<string, unknown>, sourceIn: string
       compiledCss,
       cssCompileVersion: storyCssCompileVersion(),
       refs,
+      // The compiled dataflow, for the commit to bind to the final source (lib/story/parsed-artifact-metadata).
+      ...(compiled ? { [COMPILED_DATAFLOW]: compiled } : {}),
     },
     derivedTitle: helmetTitle?.trim() || null,
     ...(warnings.length ? { warnings } : {}),

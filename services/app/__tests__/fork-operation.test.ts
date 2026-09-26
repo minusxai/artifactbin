@@ -46,7 +46,7 @@ const head = async (id: string) => (await getArtifactById(id))!;
 const PROSE = '<div><h1>Payroll</h1><p data-annotation-anchor="a1b2c3d4e">hello</p></div>';
 const MUTATING = (ds: string) =>
   '<Helmet><Value name="choice" type="string" default="ramen" />'
-  + `<Mutation name="vote" source="ref:${ds}">{\`insert into public.rows (choice) values ($choice)\`}</Mutation></Helmet>`
+  + `<Import name="vote_data" src="ref:${ds}" /><Mutation name="vote">{\`insert into vote_data.rows (choice) values ($choice)\`}</Mutation></Helmet>`
   + '<div><Button run="$vote">Vote</Button></div>';
 
 beforeEach(() => { sessionUser.id = ''; sessionUser.email = ''; });

@@ -3,7 +3,7 @@ import {useAppHarness} from './harness';
 import {runDocumentDataflow} from '@/lib/artifacts';
 
 useAppHarness();
-const source='<Helmet><Value name="local" type="table" value={[{n:9}]}/><Query name="first" source="ref:ABC123">{`select * from public.rows`}</Query><Query name="top">{`select * from first`}</Query><Query name="unrelated" source="ref:DEF456">{`select * from public.rows`}</Query></Helmet><p>Selection</p>';
+const source='<Helmet><Value name="local" type="table" value={[{n:9}]}/><Import name="first_data" src="ref:ABC123" /><Query name="first">{`select * from first_data.rows`}</Query><Query name="top">{`select * from first`}</Query><Import name="unrelated_data" src="ref:DEF456" /><Query name="unrelated">{`select * from unrelated_data.rows`}</Query></Helmet><p>Selection</p>';
 
 it('partial query execution resolves only the transitive input closure',async()=>{
   const resolved:string[]=[];
