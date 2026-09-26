@@ -383,6 +383,10 @@ describe('translateSql: text padding and derived-table column names', () => {
     manual('select lpad(s, n, \'0\') from t', /lpad\(\) with a computed length or fill/);
     manual("select lpad(s, 3, '') from t", /lpad\(\) with a computed length or fill/);
   });
+  it('to_json of a list is the list, which is JSON text already; of anything else it is manual', () => {
+    ok("select cast(to_json([cast(v as varchar)]) as varchar) as j, to_json(string_split(v, ',')) as s from t", "select cast(json_array(cast(v as varchar)) as varchar) as j, string_split(v, ',') as s from t");
+    manual('select to_json(v) from t', /to_json of a value not known to be a list/, 'to_json(v)');
+  });
   it('a derived table naming its columns at the alias → a CTE, which takes a column list', () => {
     ok("select * from (values ('a', 1), ('b', 2)) t(value, label)", "select * from (with t(value, label) as (values ('a', 1), ('b', 2)) select * from t) as t");
     ok('select s.x from (select a, b from u) as s(x, y) where s.y > 1', 'select s.x from (with s(x, y) as (select a, b from u) select * from s) as s where s.y > 1');
