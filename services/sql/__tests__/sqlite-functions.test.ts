@@ -7,7 +7,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import { SQL_FUNCTIONS, isQueryFailure, type Row, type Scalar } from '@artifactbin/contracts';
-import { createSqliteSql } from '@artifactbin/sql/local';
+import { createSqliteSql } from '@artifactbin/sql/sqlite';
 import { loadSqlite } from '@artifactbin/sql/core';
 
 const sql = createSqliteSql({ maxRows: 1000, timeoutMs: 2000 });
