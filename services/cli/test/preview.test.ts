@@ -56,14 +56,15 @@ test('preview dispatch selects a foreground file session without a server connec
 test('capture sessions run local queries but refuse file saves and comments',async()=>{
  const root=await mkdtemp(join(tmpdir(),'capture-http-'));let session:Awaited<ReturnType<typeof startPreview>>|undefined;
  try{
-  const source='<Helmet><Import name="bad_data" src="ref:data01" /><Query name="bad">{`select missing from bad_data.rows`}</Query></Helmet><p>Capture</p>';
+  // Compiles (the dry run has no rows to evaluate), fails when it runs over the file's rows.
+  const source='<Helmet><Import name="bad_data" src="ref:data01" /><Query name="bad">{`select json_extract(\'not json\', \'$.a\') as v from bad_data.rows`}</Query></Helmet><p>Capture</p>';
   await writeFile(join(root,'report.jsx'),source);await writeFile(join(root,'rows.csv'),'amount\n10\n');
   session=await startPreview({root,home:root,files:['report.jsx'],localFiles:{data01:'rows.csv'},capture:true});
   const post=(path:string,body:unknown)=>fetch(session!.url+path,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)});
   assert.equal((await post('/save',{file:'report.jsx',body:'<p>Overwrite</p>'})).status,403);
   assert.equal((await post('/comments',{file:'report.jsx',name:'Writer',text:'Write',node:'x'})).status,403);
   const result=await(await post('/query',{file:'report.jsx',values:{}})).json();
-  assert.ok(result.errors.bad);assert.match(session.failure()!,/missing/);
+  assert.ok(result.errors.bad);assert.match(session.failure()!,/malformed JSON/i);
   assert.equal(await readFile(join(root,'report.jsx'),'utf8'),source);
   const doc=await(await fetch(session.url+'/document')).json();assert.equal(doc.data.chrome,false);
  }finally{await session?.close();await rm(root,{recursive:true,force:true});}
@@ -89,7 +90,7 @@ test('preview resolves image refs only from selected dataset inputs and refreshe
   cover='ref:blue12';await query();assert.equal((await image('ref:red123')).status,403);assert.equal((await image(cover)).status,200);
   cover='ref:wrong1';await query();assert.equal((await image(cover)).status,404);
   const source=await readFile(join(root,'report.jsx'),'utf8');
-  await writeFile(join(root,'report.jsx'),source.replace('select * from public.rows',"select id, title, 'ref:hidden' as cover_ref from public.rows"));
+  await writeFile(join(root,'report.jsx'),source.replace('select * from books_data.rows',"select id, title, 'ref:hidden' as cover_ref from books_data.rows"));
   const computed=await(await query()).json();assert.equal(computed.tables.books.rows[0].cover_ref,'ref:hidden');
   assert.equal((await image('ref:hidden')).status,403,'SQL cannot grant access to another reference');
  }finally{await session?.close();await rm(root,{recursive:true,force:true});}
@@ -110,7 +111,8 @@ test('a dataset tracked as typed YAML resolves through its source file, not the 
   assert.equal(session.failure(),undefined,JSON.stringify(result));
   assert.deepEqual(result.tables.stored.rows,[{total:42}]);
   assert.deepEqual(result.tables.connected.rows,[{n:2}]);
-  assert.deepEqual(remote,['conn01'],'a definition-backed dataset has no local rows and reads the host');
+  // Compiling reads its shape (once per revision), the query its rows: both from the host.
+  assert.deepEqual(remote,['conn01','conn01'],'a definition-backed dataset has no local rows and reads the host');
  }finally{await session?.close();await rm(root,{recursive:true,force:true});}
 });
 
