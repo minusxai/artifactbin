@@ -83,7 +83,7 @@ describe('compareResults', () => {
     expect(documents[0].queries.find((q) => q.query === 'drift')!.detail).toBe('before only [2]; after only [3]');
     expect(documents[0].queries.find((q) => q.query === 'today')!.clock).toBe(true);
     expect(documents[1].queries.map((q) => [q.query, q.status, q.detail])).toEqual([['added', 'only after', undefined], ['renamed', 'differs', 'columns ["a"] → ["b"]']]);
-    expect(totals).toEqual({ documents: 3, clock: 1, identical: 1, differs: 3, 'cut before': 0, 'failed before': 1, 'failed after': 1, 'failed both': 0, 'only before': 0, 'only after': 1 });
+    expect(totals).toEqual({ documents: 3, clock: 1, identical: 1, differs: 3, 'cut before': 0, 'unstable before': 0, 'failed before': 1, 'failed after': 1, 'failed both': 0, 'only before': 0, 'only after': 1 });
   });
 
   it('counts as changed by the migration every document it did not leave as a conflict', () => {
@@ -105,12 +105,21 @@ describe('compareResults', () => {
     expect(lost.documents[0]!.queries[0]).toMatchObject({ status: 'differs', detail: 'before only [1]; after only [3]' });
   });
 
+  it('says a result the previous engine gave differently on a second run was unstable, not changed', () => {
+    const run = (rows: unknown[][]): RecordedResult => ({ document: 'eeeeee', query: 'top', columns: ['n'], rows });
+    const unstable = compareResults([run([[1], [2]])], [run([[1], [4]])], [{ artifactId: 'eeeeee', outcome: 'converted' }], [run([[1], [3]])]);
+    expect(unstable.documents[0]!.queries).toEqual([{ query: 'top', status: 'unstable before', detail: 'the previous engine answered differently on a second run; before only [2]; after only [4]' }]);
+    expect(regressions(unstable)).toEqual([]);
+    const stable = compareResults([run([[1], [2]])], [run([[1], [4]])], [{ artifactId: 'eeeeee', outcome: 'converted' }], [run([[2], [1]])]);
+    expect(stable.documents[0]!.queries[0]).toMatchObject({ status: 'differs' });
+  });
+
   it('prints only what is not identical, then totals', () => {
     const text = formatComparison(compareResults(before, after, report));
     expect(text).not.toMatch(/\bsame\b/);
     expect(text).toContain('today (reads the clock)');
     expect(text).toContain('cccccc  not in the migration report\n  document failed before: timeout');
-    expect(text.split('\n').at(-1)).toBe('documents 3; queries: identical 1, differs 3, cut before 0, failed before 1, failed after 1, failed both 0, only before 0, only after 1; reading the clock 1');
+    expect(text.split('\n').at(-1)).toBe('documents 3; queries: identical 1, differs 3, cut before 0, unstable before 0, failed before 1, failed after 1, failed both 0, only before 0, only after 1; reading the clock 1');
   });
 });
 
