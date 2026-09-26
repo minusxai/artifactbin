@@ -15,6 +15,7 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import type { DatasetColumn } from '@artifactbin/contracts';
 import { POST as create } from '@/app/api/artifacts/route';
+import { parseDatasetDefinition } from '@/lib/datasets/definition';
 import { renderTree, skillTree } from '@/lib/skills';
 import { mintToken } from '@/lib/tokens';
 import { claimToken, createUser } from '@/lib/users';
@@ -125,6 +126,17 @@ describe('the skill\'s data examples', () => {
     }
     const doc = await publish(token, { markup, visibility: 'unlisted' });
     expect(doc.status, doc.text).toBe(201);
+  });
+});
+
+/** The stored `<Dataset>` definitions a reference tells an agent to save and push (a Postgres one needs a live database and its secret). */
+const definitions = docs.flatMap(({ file, text }) => jsxBlocks(text).filter((b) => b.startsWith('<Dataset kind="stored"')).map((block, n) => [`${file.path} #${n + 1}`, block] as const));
+
+describe('the skill\'s dataset definitions', () => {
+  it('finds them', () => expect(definitions.length).toBeGreaterThanOrEqual(2));
+  it.each(definitions)('creates %s through the publish door', async (_at, block) => {
+    const made = await publish(await owner(), { dataset: parseDatasetDefinition(block) });
+    expect(made.status, made.text).toBe(201);
   });
 });
 
