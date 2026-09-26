@@ -5,11 +5,17 @@ import { translateSql, type TranslateContext } from '../translate';
 const QUERY: TranslateContext = { statement: 'query' };
 const MUTATION: TranslateContext = { statement: 'mutation' };
 
-/** Translates cleanly to exactly `expected`; returns the notes. */
+/**
+ * Translates cleanly to exactly `expected` — and translating `expected` again
+ * changes nothing, so every fixture is also an idempotence check. Returns the notes.
+ */
 function ok(sql: string, expected: string, context: TranslateContext = QUERY): string[] {
   const result = translateSql(sql, context);
   expect(result.manual).toEqual([]);
   expect(result.sql).toBe(expected);
+  const again = translateSql(expected, context);
+  expect(again.manual).toEqual([]);
+  expect(again.sql).toBe(expected);
   return result.notes;
 }
 
@@ -50,6 +56,14 @@ describe('tokenizeSql', () => {
 });
 
 describe('translateSql rules', () => {
+  it.each([
+    'a ilike b', 'a // b', 'd + interval 1 day', 'unnest(tags)', 'generate_series(1, 3)', 'range(3)', "['a', 'b']", 'tags[1]',
+    'gen_random_uuid()', 'uuid()', '$_me', 'qualify', 'pivot', 'current_date', 'extract(year from d)', 'quantile(x, 0.5)',
+    'try_cast(a as int)', 'x::varchar[]', "date '2026-01-01'", '$$dollar$$',
+  ])('a pattern only mentioned in strings, quoted names and comments stays: %s', (pattern) => {
+    ok(inert(pattern), inert(pattern));
+  });
+
   it('strptime → date_parse', () => {
     ok(`select strptime(d, '%d/%m/%Y') as t from x`, `select date_parse(d, '%d/%m/%Y') as t from x`);
     ok(inert('strptime(d, fmt)'), inert('strptime(d, fmt)'));
@@ -90,7 +104,9 @@ describe('translateSql rules', () => {
   });
 
   it('median and quantile_cont map to the library; DuckDB quantile is discrete and manual', () => {
-    ok('select median(x), quantile_cont(x, 0.9) from t', 'select median(x), quantile(x, 0.9) from t');
+    // The one name that means different things in the two dialects, so this output is the one that cannot be fed
+    // back in: a second pass refuses it (discrete) rather than changing it.
+    expect(translateSql('select median(x), quantile_cont(x, 0.9) from t', QUERY)).toEqual({ sql: 'select median(x), quantile(x, 0.9) from t', notes: [], manual: [] });
     manual('select quantile(x, 0.25) from t', /discrete/, 'quantile(x, 0.25)');
     manual('select quantile_disc(x, 0.25) from t', /discrete/);
     manual('select quantile_cont(x, [0.25, 0.75]) from t', /list of quantiles/);
@@ -217,11 +233,17 @@ describe('translateSql rules', () => {
     ok('select * from t where owner = $_me or other = $_me.id or $_meh', 'select * from t where owner = $_me.id or other = $_me.id or $_meh');
   });
 
-  it('renames legacy tables and schemas to Import names', () => {
-    const context: TranslateContext = { statement: 'query', schemas: { public: 'bookings' }, tables: { ref_abc123: 'bookings.rows' } };
-    ok('select public.rows.id, r.x from public.rows r join "public"."items" i on true', 'select bookings.rows.id, r.x from bookings.rows r join bookings."items" i on true', context);
-    ok(`select ref_abc123.id from ref_abc123 where name = 'ref_abc123'`, `select bookings.rows.id from bookings.rows where name = 'ref_abc123'`, context);
-    ok('select x.public from t x', 'select x.public from t x', context);
+  it('renames legacy tables and a sourced dataset\'s tables to the Import', () => {
+    const legacy: TranslateContext = { statement: 'query', tables: { ref_abc123: 'bookings.rows' } };
+    ok(`select ref_abc123.id from ref_abc123 where name = 'ref_abc123'`, `select bookings.rows.id from bookings.rows where name = 'ref_abc123'`, legacy);
+    const sourced: TranslateContext = { statement: 'query', dataset: 'bookings' };
+    ok('select public.rows.id, r.x from public.rows r join "public"."items" i on true', 'select bookings.rows.id, r.x from bookings.rows r join bookings."items" i on true', sourced);
+    ok('select x.public from t x', 'select x.public from bookings.t x', sourced);
+    // A bare table name read the dataset's default schema.
+    ok('with recent as (select * from rows where d > 1) select r.id, u.n from recent r, users u join json_each(r.tags) on true', 'with recent as (select * from bookings.rows where d > 1) select r.id, u.n from recent r, bookings.users u join json_each(r.tags) on true', sourced);
+    ok('update rows set n = 1 where id in (select id from "rows")', 'update bookings.rows set n = 1 where id in (select id from bookings."rows")', { ...sourced, statement: 'mutation' });
+    ok('insert into rows (id) values (1)', 'insert into bookings.rows (id) values (1)', { ...sourced, statement: 'mutation' });
+    manual('select * from models.activity', /models\.activity/, 'models.activity', sourced);
   });
 
   it('Postgres SQL is left alone apart from $_me', () => {

@@ -31,13 +31,13 @@ describe('diffStatements on DuckDB against DuckDB', () => {
     const statements = ['select a / b as q from ref_nums', 'select a + b / c as q from ref_nums', 'select a / b / c as q from ref_nums', 'select -a / b as q from ref_nums', 'select count(*) / 2 as q from ref_nums'];
     const cases = statements.map((sql, i) => ({ name: `q${i}`, original: sql, translated: translateSql(sql, { statement: 'query' }).sql }));
     expect(cases.every((c) => c.translated.includes('* 1.0 /'))).toBe(true);
-    const verdicts = await diffStatements(cases, { original: side(duckdb), translated: side(duckdb) });
+    const verdicts = await diffStatements({ cases }, { original: side(duckdb), translated: side(duckdb) });
     expect(verdicts).toEqual(cases.map((c) => ({ name: c.name, status: 'same' })));
   });
 
   it('goes red when a translation changes meaning: DuckDB LIKE is case-sensitive, ILIKE is not', async () => {
     const [verdict] = await diffStatements(
-      [{ name: 'alps', original: `select name from ref_nums where name ilike 'al%'`, translated: `select name from ref_nums where name like 'al%'` }],
+      { cases: [{ name: 'alps', original: `select name from ref_nums where name ilike 'al%'`, translated: `select name from ref_nums where name like 'al%'` }] },
       { original: side(duckdb), translated: side(duckdb) },
     );
     expect(verdict).toEqual({ name: 'alps', status: 'different', rows: { missing: [['Alpha']], extra: [] } });
@@ -45,14 +45,25 @@ describe('diffStatements on DuckDB against DuckDB', () => {
 
   it('a midnight timestamp equals the date: date_trunc returns a timestamp in DuckDB and a date in the library', async () => {
     const [verdict] = await diffStatements(
-      [{ name: 'months', original: `select date_trunc('month', day) as m from ref_nums`, translated: `select cast(date_trunc('month', day) as date) as m from ref_nums` }],
+      { cases: [{ name: 'months', original: `select date_trunc('month', day) as m from ref_nums`, translated: `select cast(date_trunc('month', day) as date) as m from ref_nums` }] },
       { original: side(duckdb), translated: side(duckdb) },
     );
     expect(verdict).toEqual({ name: 'months', status: 'same' });
   });
 
+  it('runs a document\'s cases as one run, so a query reads an earlier one by name', async () => {
+    const verdicts = await diffStatements({
+      cases: [
+        { name: 'big', original: 'select a, b from ref_nums where a > $min', translated: 'select a, b from ref_nums where a > $min' },
+        { name: 'ratio', original: 'select a / b as r from big', translated: translateSql('select a / b as r from big', { statement: 'query' }).sql },
+      ],
+      params: { min: 0 },
+    }, { original: side(duckdb), translated: side(duckdb) });
+    expect(verdicts).toEqual([{ name: 'big', status: 'same' }, { name: 'ratio', status: 'same' }]);
+  });
+
   it('reports a statement that fails on one side with that side\'s message', async () => {
-    const [verdict] = await diffStatements([{ name: 'bad', original: 'select a from ref_nums', translated: 'select missing from ref_nums' }], { original: side(duckdb), translated: side(duckdb) });
+    const [verdict] = await diffStatements({ cases: [{ name: 'bad', original: 'select a from ref_nums', translated: 'select missing from ref_nums' }] }, { original: side(duckdb), translated: side(duckdb) });
     expect(verdict).toMatchObject({ name: 'bad', status: 'failed', translated: expect.stringMatching(/missing/) });
     expect(verdict).not.toHaveProperty('original');
   });
@@ -65,7 +76,7 @@ describe('diffStatements seam and comparison', () => {
     const target = stub({ 'select a from nums.rows where x = $x': { rows: [{ a: 7 }], columns: [{ name: 'a', type: 'number' }] } }, seen);
     const original = stub({ 'select a from ref_nums where x = $x': { rows: [{ a: 7 }], columns: [{ name: 'a', type: 'number' }] } });
     const verdicts = await diffStatements(
-      [{ name: 'q', original: 'select a from ref_nums where x = $x', translated: 'select a from nums.rows where x = $x', params: { x: 1 } }],
+      { cases: [{ name: 'q', original: 'select a from ref_nums where x = $x', translated: 'select a from nums.rows where x = $x' }], params: { x: 1 } },
       { original: side(original), translated: { service: target, tables: sqliteTables, params: { _now: '2026-09-26T00:00:00.000Z' } } },
     );
     expect(verdicts).toEqual([{ name: 'q', status: 'same' }]);
@@ -86,7 +97,7 @@ describe('diffStatements seam and comparison', () => {
       c: { rows: [{ x: 1 }], columns: cols('x') },
     });
     const verdicts = await diffStatements(
-      [{ name: 'order', original: 'a', translated: 'a' }, { name: 'names', original: 'b', translated: 'b' }, { name: 'dupes', original: 'c', translated: 'c' }],
+      { cases: [{ name: 'order', original: 'a', translated: 'a' }, { name: 'names', original: 'b', translated: 'b' }, { name: 'dupes', original: 'c', translated: 'c' }] },
       { original: side(original), translated: side(translated) },
     );
     expect(verdicts).toEqual([

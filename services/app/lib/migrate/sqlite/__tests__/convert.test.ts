@@ -80,6 +80,17 @@ describe('convertDocument', () => {
     );
   });
 
+  it('a sourced statement\'s bare tables read the Import; another schema needs a person', () => {
+    golden(
+      `<Helmet><Mutation name="add" source="ref:abc123">{\`insert into rows (id, owner) select coalesce(max(id), 0) + 1, $_me from rows\`}</Mutation></Helmet><Button run="$add">Add</Button>`,
+      `<Helmet><Import name="team_tasks" src="ref:abc123" /><Mutation name="add">{\`insert into team_tasks.rows (id, owner) select coalesce(max(id), 0) + 1, $_me.id from team_tasks.rows\`}</Mutation></Helmet><Button run="$add">Add</Button>`,
+    );
+    const doc = `<Helmet><Query name="m" source="ref:abc123">{\`select * from models.activity\`}</Query></Helmet>`;
+    const result = convertDocument(doc, lookups);
+    expect(result.source).toBe(doc);
+    expect(doc.slice(result.manual[0].start, result.manual[0].end)).toBe('models.activity');
+  });
+
   it('keeps a connected Postgres source and its SQL, apart from $_me', () => {
     const doc = (owner: string) => `<Helmet>
   <Query name="activity" source="ref:pg0001">{\`select user_id::int as id from models.activity where owner = ${owner}\`}</Query>
@@ -116,6 +127,18 @@ describe('convertDocument', () => {
 </Helmet>
 <For each={$rows} keyBy="id"><Button set={{"view":"chart","picked":"$_row.id"}}>Chart {$_row.id}</Button></For>
 <Button variant="outline" set={{"view":"table","picked":null}}>Back</Button>`);
+  });
+
+  it('a _signals mutation a script may run stays for a person', () => {
+    const doc = `<Helmet>
+  <Value name="open" type="boolean" default={false} />
+  <Mutation name="toggle">{\`update _signals set open = true\`}</Mutation>
+  <script>{\`const which = 'toggle'; document.querySelector('b').onclick = () => mx.mutate(which);\`}</script>
+</Helmet>
+<Button run="$toggle">Open</Button><b>also</b>`;
+    const result = convertDocument(doc, lookups);
+    expect(result.source).toBe(doc);
+    expect(result.manual[0].reason).toMatch(/script/);
   });
 
   it('a _signals mutation computing from its own columns needs a person', () => {

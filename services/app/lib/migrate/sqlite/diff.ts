@@ -2,6 +2,8 @@
  * THE DIFFERENTIAL CHECK for translated statements: run the original on
  * DuckDB and the translation on the target engine over the same data, and
  * compare what comes back — column names, and rows as a multiset of values.
+ * A document's queries read each other by name, so the cases go to each
+ * engine as ONE run, in dependency order, the way the document runs them.
  *
  * Coded against `SqlService`, not an engine. Each side brings its own tables
  * and parameters: that is the seam for the SQLite engine, which registers a
@@ -30,6 +32,11 @@ export interface DiffCase {
   name: string;
   original: string;
   translated: string;
+}
+
+export interface DiffInput {
+  /** In dependency order: a case may read an earlier one by name. */
+  cases: DiffCase[];
   /** Page values both sides bind. */
   params?: Record<string, Scalar>;
 }
@@ -86,25 +93,31 @@ function surplus(a: unknown[][], b: unknown[][]): unknown[][] {
   return out;
 }
 
-async function runOne(side: DiffSide, name: string, sql: string, params: Record<string, Scalar> | undefined): Promise<TableResult | string> {
+/** Each case's result on one side, or its error. */
+async function runAll(side: DiffSide, queries: Array<{ name: string; sql: string }>, params: Record<string, Scalar> | undefined): Promise<Record<string, TableResult | string>> {
+  let results: Awaited<ReturnType<SqlService['run']>>;
   try {
-    const results = await side.service.run({ tables: side.tables, queries: [{ name, sql }], params: { ...side.params, ...params }, ...(side.paramTypes ? { paramTypes: side.paramTypes } : {}) });
-    const outcome = results[name];
-    if (!outcome) return 'no result';
-    return isQueryFailure(outcome) ? outcome.error : outcome;
+    results = await side.service.run({ tables: side.tables, queries, params: { ...side.params, ...params }, ...(side.paramTypes ? { paramTypes: side.paramTypes } : {}) });
   } catch (error) {
-    return error instanceof Error ? error.message : String(error);
+    const message = error instanceof Error ? error.message : String(error);
+    return Object.fromEntries(queries.map((q) => [q.name, message]));
   }
+  return Object.fromEntries(queries.map((q) => {
+    const outcome = results[q.name];
+    return [q.name, !outcome ? 'no result' : isQueryFailure(outcome) ? outcome.error : outcome];
+  }));
 }
 
 /** Run every case on both sides and say, per case, whether the translation gives the same answer. */
-export async function diffStatements(cases: DiffCase[], sides: { original: DiffSide; translated: DiffSide }): Promise<DiffVerdict[]> {
+export async function diffStatements(input: DiffInput, sides: { original: DiffSide; translated: DiffSide }): Promise<DiffVerdict[]> {
+  const [originals, translations] = await Promise.all([
+    runAll(sides.original, input.cases.map((c) => ({ name: c.name, sql: c.original })), input.params),
+    runAll(sides.translated, input.cases.map((c) => ({ name: c.name, sql: c.translated })), input.params),
+  ]);
   const verdicts: DiffVerdict[] = [];
-  for (const c of cases) {
-    const [original, translated] = await Promise.all([
-      runOne(sides.original, c.name, c.original, c.params),
-      runOne(sides.translated, c.name, c.translated, c.params),
-    ]);
+  for (const c of input.cases) {
+    const original = originals[c.name];
+    const translated = translations[c.name];
     if (typeof original === 'string' || typeof translated === 'string') {
       verdicts.push({ name: c.name, status: 'failed', ...(typeof original === 'string' ? { original } : {}), ...(typeof translated === 'string' ? { translated } : {}) });
       continue;
