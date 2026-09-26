@@ -90,6 +90,46 @@ export const OFFLINE_MUTATION_REASON = 'Saving data needs artifactbin. Open the 
 export const OFFLINE_QUERY_REASON = 'Running queries needs a connection.';
 export const OFFLINE_ASSET_REASON = 'Adding web images, fonts, files or icons needs a connection.';
 
+/** What a reader sees for a file this build cannot read. */
+const NEWER_MESSAGE = 'This file was saved by a newer artifactbin. Open it in a current version of artifactbin, or open the live version.';
+const DAMAGED_MESSAGE = 'This file is damaged and cannot be opened. Download it again from artifactbin.';
+
+type Json = Record<string, unknown>;
+const isObject = (v: unknown): v is Json => typeof v === 'object' && v !== null && !Array.isArray(v);
+const isString = (v: unknown): v is string => typeof v === 'string';
+const isStringOrNull = (v: unknown) => v === null || isString(v);
+const isStringList = (v: unknown) => Array.isArray(v) && v.every(isString);
+const isRecordOf = (v: unknown, ok: (x: unknown) => boolean) => isObject(v) && Object.values(v).every(ok);
+const isTable = (v: unknown) => isObject(v) && Array.isArray(v.rows) && Array.isArray(v.columns);
+const isState = (v: unknown) => isObject(v) && isObject(v.values) && isRecordOf(v.tables, isTable) && isRecordOf(v.errors, isString);
+const isVariant = (v: unknown) => isObject(v) && isObject(v.values) && isRecordOf(v.tables, isTable) && isRecordOf(v.errors, isString);
+const isEdit = (v: unknown) => isObject(v) && isString(v.at) && isString(v.by) && isString(v.summary);
+
+/**
+ * The shape checks, top-level first. Deliberately structural rather than a
+ * full schema of every node and table: the file's own code only needs these
+ * fields to be the right KIND to render without throwing, and the server
+ * re-validates everything a sync sends it.
+ */
+function isWellFormed(v: Json): boolean {
+  const { base, metadata, island, snapshot } = v;
+  return isString(v.origin) && isString(v.artifactId) && isString(v.liveUrl)
+    && isString(v.downloadedBy) && isString(v.downloadedAt)
+    && isObject(base) && typeof base.version === 'number' && Number.isInteger(base.version) && isString(base.editId) && isString(base.source)
+    && isString(v.source)
+    && isObject(metadata) && isString(metadata.title) && isStringOrNull(metadata.description)
+      && isStringOrNull(metadata.theme) && isStringOrNull(metadata.template)
+      && (metadata.colorMode === null || metadata.colorMode === 'light' || metadata.colorMode === 'dark')
+    && isString(v.css)
+    && isObject(island) && Array.isArray(island.nodes) && isObject(island.refData)
+    && isObject(snapshot) && isString(snapshot.at) && isState(snapshot.state)
+      && Array.isArray(snapshot.variants) && snapshot.variants.every(isVariant) && isStringList(snapshot.frozen)
+    && Array.isArray(v.journal) && v.journal.every(isEdit)
+    && Array.isArray(v.threads) && v.threads.every(isObject)
+    && isStringList(v.localIds)
+    && (v.bundle === 'core' || v.bundle === 'mermaid');
+}
+
 /**
  * Validates an untrusted value as an ArtifactFile. Throws ArtifactFileError with
  * a reader-facing message: a newer `format` says the file needs a newer
@@ -97,6 +137,11 @@ export const OFFLINE_ASSET_REASON = 'Adding web images, fonts, files or icons ne
  * unchanged when it is valid.
  */
 export function parseArtifactFile(value: unknown): ArtifactFile {
-  void value;
-  throw new Error('not implemented: parseArtifactFile');
+  if (!isObject(value)) throw new ArtifactFileError(DAMAGED_MESSAGE);
+  // The format is checked BEFORE the shape: a newer file is allowed to look
+  // different, and saying "damaged" about it would send the reader the wrong way.
+  const format = value.format;
+  if (typeof format === 'number' && Number.isInteger(format) && format > ARTIFACT_FILE_FORMAT) throw new ArtifactFileError(NEWER_MESSAGE);
+  if (format !== ARTIFACT_FILE_FORMAT || !isWellFormed(value)) throw new ArtifactFileError(DAMAGED_MESSAGE);
+  return value as unknown as ArtifactFile;
 }
