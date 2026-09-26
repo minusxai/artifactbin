@@ -21,8 +21,8 @@ describe('on load', () => {
     expect(errorOf(await read([{ d: '2026-01-01' }, { d: '2026-02-30' }], [{ name: 'd', type: 'date' }]))).toMatch(/t\.d \(row 2\) is not a date/);
   });
   it('reads a timestamp stored in a date column as the calendar day it names, as the previous engine read it', async () => {
-    expect(await read([{ d: '2026-08-12T06:00:00Z' }, { d: '2026-08-12 23:45' }, { d: '2026-08-13' }], [{ name: 'd', type: 'date' }])).toEqual({
-      rows: [{ d: '2026-08-12' }, { d: '2026-08-12' }, { d: '2026-08-13' }],
+    expect(await read([{ d: '2031-04-07T18:20:00Z' }, { d: '2031-04-07 23:45' }, { d: '2031-04-08' }], [{ name: 'd', type: 'date' }])).toEqual({
+      rows: [{ d: '2031-04-07' }, { d: '2031-04-07' }, { d: '2031-04-08' }],
       columns: [{ name: 'd', type: 'date' }],
     });
     expect(errorOf(await read([{ d: '2026-02-30T06:00:00Z' }], [{ name: 'd', type: 'date' }]))).toMatch(/t\.d \(row 1\) is not a date/);
