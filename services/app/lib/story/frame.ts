@@ -23,6 +23,7 @@ import type { ArtifactLiveEvent } from './live';
 import { storyUpdateParts } from './update-parts';
 import { assetLookupFrom } from './asset-url';
 import { webAssetsForSource } from '@/lib/web-assets';
+import { inCurrentSyntax } from '@/lib/migrate/sqlite/stored';
 
 export interface LiveFrame extends Omit<ArtifactLiveEvent, 'compiledCss' | 'authorCss' | 'dataflow'> {
   compiledCss: string | null;
@@ -44,8 +45,10 @@ let builds = 0;
 export function resetFrameCache(): void { cache.clear(); }
 export function frameBuilds(): number { return builds; }
 
-async function build(row: ArtifactRow): Promise<LiveFrame> {
+async function build(stored: ArtifactRow): Promise<LiveFrame> {
   builds++;
+  // The frame is the document as it is served: in the current data syntax (lib/migrate/sqlite/stored).
+  const row = stored.format === 'markup' ? await inCurrentSyntax(stored) : stored;
   const meta = row.meta as {
     compiledCss?: string | null; theme?: StoryThemeName | null; colorMode?: 'light' | 'dark' | null;
     template?: string | null; cssCompileVersion?: string | null;

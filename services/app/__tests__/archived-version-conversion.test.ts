@@ -12,7 +12,7 @@ import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 import { PUT as replaceRoute } from '@/app/api/artifacts/[id]/route';
 import { documentEditBody } from './prepared-document';
 import { dataflowForRow, getArtifactById } from '@/lib/artifacts';
-import { archivedVersionForActor, rowAtVersion } from '@/lib/archived-version';
+import { archivedVersionForActor, servedRow } from '@/lib/archived-version';
 import { PREVIOUS_ENGINE } from '@/lib/story/data-syntax';
 import { mintToken } from '@/lib/tokens';
 
@@ -83,7 +83,7 @@ describe('?version=N of a version the converter cannot carry over', () => {
     const at = await archivedVersionForActor({ tokenId: owner.id, userId: null }, head, 1);
     if (at === 'not_found') throw new Error('version 1 should be readable');
     expect(at.previousEngine).toBe(true);
-    const ran = await dataflowForRow(rowAtVersion(head, at));
+    const ran = await dataflowForRow(await servedRow(head, at));
     expect(ran?.state).toMatchObject({ values: { step: 0 }, tables: {}, errors: { steps: PREVIOUS_ENGINE } });
     expect(JSON.stringify(ran)).not.toContain('42424');
   });

@@ -1,15 +1,15 @@
 /**
  * A STORED DOCUMENT, CONVERTED: {@link convertDocument} with its lookups
- * answered from the database, for the one-off migration
- * (lib/sqlite-syntax-migration) and for rendering an archived version written
- * for the previous engine (lib/archived-version).
+ * answered from the database — for the one-off migration
+ * (lib/sqlite-syntax-migration), and for serving every document the migration
+ * has not reached yet ({@link inCurrentSyntax}).
  *
  * A document already in the current data syntax is refused, never converted:
  * the `/` rewrite changes meaning on a second pass (lib/story/data-syntax).
  */
 import { catalogOf } from '@/lib/datasets/catalog';
-import type { Queryable } from '@/lib/db';
-import { hasCurrentDataSyntax } from '@/lib/story/data-syntax';
+import { getDb, type Queryable } from '@/lib/db';
+import { DATA_SYNTAX_META, hasCurrentDataSyntax } from '@/lib/story/data-syntax';
 import { convertDocument, type ConvertLookups, type DocumentConversion } from './convert';
 
 export interface StoredDocument {
@@ -65,4 +65,52 @@ export async function convertStoredDocument(db: Queryable, doc: StoredDocument):
   };
   const result = convertDocument(doc.source, lookups);
   return { status: result.manual.length ? 'manual' : result.source === doc.source ? 'unchanged' : 'converted', ...result };
+}
+
+/** What serving a document at one version reads. */
+export interface ServedDocument extends Omit<StoredDocument, 'source'> {
+  source: string | null;
+  id: string;
+  version: number;
+  /** The stored graph, which is the stored bytes': a converted document is served without it. */
+  document?: unknown;
+  /** Set on a document the converter cannot carry over without a person. */
+  previousEngine?: true;
+}
+
+const CONVERTED = 512;
+const converted = new Map<string, { source: string; served: Promise<Partial<ServedDocument>> }>();
+
+/**
+ * A DOCUMENT AS THE CURRENT ENGINE SERVES IT — a head or an archived version.
+ * Deploys come before the migration runs, so a document without the marker is
+ * converted here, on the fly, by the migration's own converter; its stored
+ * bytes change only when the migration, or an edit
+ * (lib/sqlite-syntax-migration convertArtifactNow), commits the conversion. A
+ * conversion that needs a person comes back flagged `previousEngine`, its
+ * source as stored. Marked documents pass through untouched, so calling this
+ * twice converts once.
+ *
+ * Cached by artifact and version: conversion is deterministic and a version's
+ * bytes do not change (the source is compared all the same).
+ */
+export async function inCurrentSyntax<T extends ServedDocument>(doc: T): Promise<T> {
+  if (doc.previousEngine || hasCurrentDataSyntax(doc.meta)) return doc;
+  const source = doc.source ?? '';
+  const key = `${doc.id}@${doc.version}`;
+  let hit = converted.get(key);
+  if (hit?.source !== source) {
+    const served = (async (): Promise<Partial<ServedDocument>> => {
+      const conversion = await convertStoredDocument(await getDb(), { ...doc, source });
+      if (conversion.status === 'current') return {};
+      if (conversion.status === 'manual') return { previousEngine: true };
+      return { source: conversion.source, meta: { ...doc.meta, ...DATA_SYNTAX_META }, document: null };
+    })();
+    hit = { source, served };
+    converted.delete(key);
+    converted.set(key, hit);
+    if (converted.size > CONVERTED) converted.delete(converted.keys().next().value!);
+    served.catch(() => converted.delete(key));
+  }
+  return { ...doc, ...(await hit.served) };
 }

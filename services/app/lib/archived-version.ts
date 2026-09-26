@@ -28,9 +28,7 @@
  * one at every call site.
  */
 import { getVersionFor, listVersionsFor, versionForCapture, type ArtifactRow, type TokenActor } from '@/lib/artifacts';
-import { getDb } from '@/lib/db';
-import { convertStoredDocument } from '@/lib/migrate/sqlite/stored';
-import { DATA_SYNTAX_META, hasCurrentDataSyntax } from '@/lib/story/data-syntax';
+import { inCurrentSyntax } from '@/lib/migrate/sqlite/stored';
 import { actorForArtifacts, requestOrSessionActor } from '@/lib/viewer';
 
 /** The parameter's name, in one place: the three doors and the export URL. */
@@ -96,35 +94,13 @@ const headRender = (row: ArtifactRow): Omit<ArchivedRender, 'version' | 'head'> 
 type RenderBody = Omit<ArchivedRender, 'version' | 'head'>;
 
 /**
- * HISTORY STAYS AS STORED; its render speaks the current syntax. A version
- * without the data-syntax marker (lib/story/data-syntax) predates the
- * migration and is converted here by the migration's own converter, once per
- * version and bytes: the conversion is deterministic, and a version's bytes
- * never change. A marked version is never converted a second time.
+ * HISTORY STAYS AS STORED; its render speaks the current syntax: a version
+ * without the data-syntax marker is served converted (lib/migrate/sqlite/stored).
  */
-const CONVERTED_VERSIONS = 256;
-const convertedVersions = new Map<string, { source: string; body: Promise<RenderBody> }>();
-
-function inCurrentSyntax(row: ArtifactRow, version: number, body: RenderBody): Promise<RenderBody> {
-  if (hasCurrentDataSyntax(body.meta)) return Promise.resolve(body);
-  const key = `${row.id}@${version}`;
-  const cached = convertedVersions.get(key);
-  if (cached?.source === body.source) return cached.body;
-  const converted = (async (): Promise<RenderBody> => {
-    const conversion = await convertStoredDocument(await getDb(), { source: body.source, meta: body.meta, user_id: row.user_id, token_id: row.token_id });
-    if (conversion.status === 'current') return body;
-    if (conversion.status === 'manual') return { ...body, previousEngine: true };
-    return { ...body, source: conversion.source, meta: { ...body.meta, ...DATA_SYNTAX_META } };
-  })();
-  convertedVersions.delete(key);
-  convertedVersions.set(key, { source: body.source, body: converted });
-  if (convertedVersions.size > CONVERTED_VERSIONS) convertedVersions.delete(convertedVersions.keys().next().value!);
-  converted.catch(() => convertedVersions.delete(key));
-  return converted;
+async function archived(row: ArtifactRow, version: number, head: number, body: RenderBody): Promise<ArchivedRender> {
+  const { source, meta, previousEngine } = await inCurrentSyntax({ id: row.id, version, user_id: row.user_id, token_id: row.token_id, ...body });
+  return { version, head, ...body, source: source ?? '', meta, ...(previousEngine ? { previousEngine } : {}) };
 }
-
-const archived = async (row: ArtifactRow, version: number, head: number, body: RenderBody): Promise<ArchivedRender> =>
-  ({ version, head, ...(await inCurrentSyntax(row, version, body)) });
 
 /**
  * THE DECISION. `null` = no version asked; `'not_found'` = the uniform 404;
@@ -180,7 +156,13 @@ export async function archivedVersionForActor(
   return found ? archived(row, asked, head, { source: found.source ?? '', meta: found.meta, title: found.title, description: found.description }) : 'not_found';
 }
 
-/** The row an archived render renders FROM: this artifact, wearing that version's bytes. */
-export function rowAtVersion(row: ArtifactRow, at: ArchivedRender): ArtifactRow {
+/**
+ * The row a render renders FROM: this artifact wearing that version's bytes
+ * when one was asked for, the head otherwise — either one in the current data
+ * syntax (lib/migrate/sqlite/stored inCurrentSyntax), so every door serves an
+ * unmigrated document the same way.
+ */
+export async function servedRow(row: ArtifactRow, at: ArchivedRender | null): Promise<ArtifactRow> {
+  if (!at) return row.format === 'markup' ? inCurrentSyntax(row) : row;
   return { ...row, source: at.source, meta: at.meta as ArtifactRow['meta'], title: at.title, description: at.description, ...(at.previousEngine ? { previousEngine: true as const } : {}) };
 }

@@ -1,7 +1,7 @@
 /** Authorize and resolve an image, then redirect to a scoped persistent asset.
  * Editor previews return ephemeral bytes. The operations API keeps its binary adapter. */
 import { trackEvent } from '@/lib/analytics';
-import { archivedVersionFor, rowAtVersion } from '@/lib/archived-version';
+import { archivedVersionFor, servedRow } from '@/lib/archived-version';
 import { canReadArtifact, getArtifactById } from '@/lib/artifacts';
 import { requestOrSessionActor, roleFor } from '@/lib/viewer';
 import { exportImageResponse } from '@/lib/export';
@@ -57,7 +57,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
   const delivery=ctx.delivery??(request.headers.has('X-Artifactbin-Protocol')&&request.headers.get('X-Artifactbin-Export-Delivery')!=='redirect'?'bytes':'redirect');
   // The ARCHIVED shot photographs that version's own source — the selection and
   // the social crop are read from the markup being shot, not from the head's.
-  return exportImageResponse(at ? rowAtVersion(artifact, at) : artifact, {
+  return exportImageResponse(await servedRow(artifact, at), {
     ...(at ? { version: at.version } : {}),
     refresh: q.get('refresh'),
     format: q.get('format'),
