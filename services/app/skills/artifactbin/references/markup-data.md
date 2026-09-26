@@ -35,14 +35,16 @@ SQLite rules and every function: [SQL](markup-sql.md). Editable cells: [editing]
 
 - `<Import name="sales" src="ref:<id>" />` — a stored dataset or folder. SQL reads
   it as `sales.rows` (a multi-table dataset: `sales.<table>`). Get the id from
-  `afbin add --json` or `afbin push`.<!--bundle:skip--> A FOLDER import lists its
-  children: `select * from kids.rows`, shown with `<Files data="$children" variant="icons|tiles" />`.
+  `afbin add --json` or `afbin push`.<!--bundle:skip--> A FOLDER import
+  (`<Import name="kids" src="ref:<folderId>" />`) reads its children as `kids.rows`,
+  which a document can list with `<Files data="$children" variant="icons|tiles" />`.
   Columns `id title format level visibility updated_at url thumbnail views sparkline`,
   computed per VIEWER: a stranger gets the `public` children.<!--/bundle:skip-->
 - `<Value name type default />` — a page value the reader changes. `type`:
   `string | number | boolean | date | user`; no default = `null`, so
   `$region is null` means "all".<!--bundle:skip--> A value TRAVELS IN THE LINK:
-  `?$region=EU` seeds it and a reader's pick rewrites it. `url={false}` keeps a
+  `?$region=EU` seeds it and a reader's pick rewrites it, so a pre-filtered link
+  is yours to hand over. `url={false}` keeps a
   form field or flag out of the address both ways.<!--/bundle:skip-->
 - `<Value name="tiny" type="table" value={[{…}]} />` — inline rows; SQL reads
   `tiny`, the view binds `$tiny`. Local mutations may change them until reload.
@@ -61,9 +63,13 @@ SQLite rules and every function: [SQL](markup-sql.md). Editable cells: [editing]
   come from context. `expectedAffected` refuses a write that changed another
   number of rows; `reset` returns those values to their defaults after it commits.
 
-Built-ins (never declared, never written):
+Built-ins are never declared and never written: `$_me.id`, `$_now` and `$_tz`
+come from the platform; `$_row.<column>` and `$_value` from the control that
+runs a mutation.
+<!--bundle:skip-->
 
 [[ builtinTable ]]
+<!--/bundle:skip-->
 
 Markup reads `$_me.id` too, and `$_row.<column>` inside a `<For>` or `<Column>`.
 A guest's `$_me.id` is null, so a mutation that binds it needs a signed-in
@@ -86,17 +92,20 @@ First read [chart authoring](markup-data-authoring.md).
   "bindings":{"date":"period","value":["revenue"]}}` — **the KPI tile to
   prefer**: value, delta and sparkline over `select <period>, <measure> … group by 1 order by 1`.
   Shipped recipes: `minusx/trend@1`, `minusx/funnel@1`, `minusx/waterfall@1`,
-  `minusx/radar@1`, `minusx/combo@1`, `minusx/single-value@1`; maps: [maps](markup-maps.md).<!--bundle:skip-->
+  `minusx/radar@1`, `minusx/combo@1`, `minusx/single-value@1`, and the deprecated
+  `minusx/choropleth@1` and `minusx/point-map@1` ([maps](markup-maps.md)).<!--bundle:skip-->
   Slots are validated at publish: funnel `stage`, `value`; waterfall `category`,
   `value`; radar `metric`, `value`, optional `series`; combo `x`, `bar`, `line`,
   optional `series`. Trend `params`: `compareMode: "last"|"previous"`, and colors
   as tokens like `"var(--chart-2)"`.<!--/bundle:skip-->
-- `<Number data="$q" col="revenue" agg="sum" prefix="$" format=",.0f" />` — one
-  live figure inline; `agg` is `first` unless you write `sum`, `avg`, `min`,
-  `max` or `count`. [[ computedFigureRule ]]
+- `<Number data="$q" col="revenue" agg="sum" prefix="$" suffix=" M" format=",.0f" />`
+  — one live figure inline. `agg` defaults to `first` (the first row's cell), so
+  a total needs `agg="sum"`; `avg`, `min`, `max`, `count` are the rest. [[ computedFigureRule ]]
 - `<DataTable data="$q" rowKey="id" columns={[…]} height="420px" />` — sortable,
   virtualised; `columns` picks `{col, title, fmt, align, bar, colorScale, width, kind: "image"}`.
-  `fmt` and `format` are d3-format specs (`",.0f"`, `".1%"`).
+  `fmt` and `format` are d3-format specs (`",.0f"`, `".1%"`).<!--bundle:skip-->
+  `kind: "image"` draws each cell's URL as a picture from our own copy, fetched
+  on first view.<!--/bundle:skip-->
 - `<For each={$q} keyBy="id">…{$_row.name}…</For>` — a template per row. [Keyed repeats](markup-repeat.md).
 - `<User userId="$_me.id" />`, `<User userId="$_row.booked_by" />` — a person by account id.
 

@@ -10,7 +10,7 @@ visibility: unlisted  # private | unlisted | public
   {/* One Helmet per document: title, one style, one script, data declarations. */}
   <title>Q3 sales review</title>
   <style>{`.kpi { letter-spacing: -0.02em } /* custom CSS lives here, never inline */`}</style>
-  {/* afbin add sales.csv --json gives the id (replace abc123); SQL reads sales.rows. */}
+  {/* afbin add sales.csv --json gives its ref:<id> (abc123 here); SQL reads sales.rows. */}
   <Import name="sales" src="ref:abc123" />
   {/* A page value the reader changes; SQL reads it as $region (null = all). */}
   <Value name="region" type="string" />
