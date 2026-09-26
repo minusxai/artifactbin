@@ -62,6 +62,10 @@ export async function convertStoredDocument(db: Queryable, doc: StoredDocument):
   const lookups: ConvertLookups = {
     importName: (ref) => importTitle(byId.get(ref), doc),
     kind: (ref) => kindOf(byId.get(ref)),
+    columns: (ref, table) => {
+      const row = byId.get(ref);
+      return (row && catalogOf(row)?.tables.find((t) => t.name === table)?.columns.map((c) => c.name)) ?? null;
+    },
   };
   const result = convertDocument(doc.source, lookups);
   return { status: result.manual.length ? 'manual' : result.source === doc.source ? 'unchanged' : 'converted', ...result };

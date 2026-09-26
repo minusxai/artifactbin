@@ -34,6 +34,8 @@ export interface ConvertLookups {
    * keeps `source=` and its SQL.
    */
   kind(ref: string): 'dataset' | 'postgres' | 'folder';
+  /** A stored dataset table's column names, for `* EXCLUDE (…)`; null when unknown. */
+  columns?(ref: string, table: string): readonly string[] | null;
 }
 
 export interface ConversionChange {
@@ -133,6 +135,16 @@ function signalAssignments(sql: string): Record<string, JsonValue> | string {
     } else if (['true', 'false', 'null'].includes(word(v))) value = JSON.parse(word(v));
     else if (v.kind === 'param' && v.text === '$_value') return '$_value has no control to come from in set=';
     else if (v.kind === 'param' && t[j + 1]?.text === '.' && t[j + 1].start === v.end && t[j + 2]?.kind === 'word') { value = `${v.text}.${t[j + 2].text}`; j += 2; }
+    else if (word(v) === 'cast' && t[j + 1]?.text === '(' && t[j + 2]?.kind === 'param') {
+      // `cast($x as T)` sets $x: the compiler checks that its type is the Value's.
+      const ref = t[j + 2];
+      const dotted = t[j + 3]?.text === '.' && t[j + 3].start === ref.end && t[j + 4]?.kind === 'word';
+      const as = j + (dotted ? 5 : 3);
+      const close = t.findIndex((token, k) => k > as && token.text === ')');
+      if (word(t[as]) !== 'as' || close < 0 || t.slice(as + 1, close).some((token) => token.text === '(') || ref.text === '$_value' || (ref.text === '$_row' && !dotted)) return `${name} is set to an expression`;
+      value = dotted ? `${ref.text}.${t[j + 4].text}` : ref.text === '$_me' ? '$_me.id' : ref.text;
+      j = close;
+    }
     else if (v.kind === 'param' && v.text.length > 1 && v.text !== '$_row') value = v.text === '$_me' ? '$_me.id' : v.text;
     else return `${name} is set to an expression`;
     set[name] = value;
@@ -184,6 +196,13 @@ export function convertDocument(source: string, lookups: ConvertLookups): Docume
     return name;
   };
 
+  /** `<import>.<table>` as a translated statement names it → that dataset table's columns. */
+  const importColumns = (name: string): readonly string[] | null => {
+    const [schema, table, ...rest] = name.split('.').map((part) => part.trim().replace(/^"(.*)"$/s, (_, inner: string) => inner.replaceAll('""', '"')));
+    const ref = [...imports].find(([, as]) => as.toLowerCase() === schema?.toLowerCase())?.[0];
+    return ref && table && !rest.length ? lookups.columns?.(ref, table) ?? null : null;
+  };
+
   // ── statements ─────────────────────────────────────────────────────────
   const scriptText = declarations.filter((el) => el.tag === 'script').map((el) => sqlChild(el)?.sql ?? '').join('\n');
   const excluded: Array<{ start: number; end: number }> = [];
@@ -228,7 +247,7 @@ export function convertDocument(source: string, lookups: ConvertLookups): Docume
     if (pgLegacy) { manual.push({ declaration: name, reason: `reads the connected Postgres dataset ${pgLegacy} as ref_${pgLegacy}`, start: child.node.start, end: child.node.end }); continue; }
     const dataset = ref && !postgres ? importFor(ref) : undefined;
     const tables = Object.fromEntries(legacy.map((id) => [`ref_${id}`.toLowerCase(), `${importFor(id)}.rows`]));
-    const result = translateSql(child.sql, { statement, ...(postgres ? { dialect: 'postgres' as const } : {}), ...(dataset ? { dataset } : {}), tables });
+    const result = translateSql(child.sql, { statement, ...(postgres ? { dialect: 'postgres' as const } : {}), ...(dataset ? { dataset } : {}), tables, columns: importColumns });
     if (result.manual.length) { manual.push(...result.manual.map(at)); continue; }
     if (ref && !postgres) {
       edits.push(removal(source, sourceAttr!));

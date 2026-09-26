@@ -91,6 +91,21 @@ describe('convertDocument', () => {
     expect(doc.slice(result.manual[0].start, result.manual[0].end)).toBe('models.activity');
   });
 
+  it('* EXCLUDE lists the other columns of the dataset the statement reads', () => {
+    const columns: ConvertLookups = { ...lookups, columns: (ref, table) => (ref === 'abc123' && table === 'rows' ? ['id', 'due', 'status'] : null) };
+    golden(
+      `<Helmet><Query name="open" source="ref:abc123">{\`select to_date(due) as due, * exclude (due) from public.rows\`}</Query></Helmet>`,
+      `<Helmet><Import name="team_tasks" src="ref:abc123" /><Query name="open">{\`select to_date(due) as due, "id", "status" from team_tasks.rows\`}</Query></Helmet>`,
+      columns,
+    );
+    expect(convertDocument(`<Helmet><Query name="open" source="ref:abc123">{\`select * exclude (due) from public.rows\`}</Query></Helmet>`, lookups).manual[0]!.reason).toMatch(/EXCLUDE/);
+  });
+
+  it('keeps Postgres interval syntax in a connected Postgres statement', () => {
+    const doc = `<Helmet><Query name="recent" source="ref:pg0001">{\`select * from models.activity where at > now() - interval '1 day'\`}</Query></Helmet>`;
+    golden(doc, doc);
+  });
+
   it('keeps a connected Postgres source and its SQL, apart from $_me', () => {
     const doc = (owner: string) => `<Helmet>
   <Query name="activity" source="ref:pg0001">{\`select user_id::int as id from models.activity where owner = ${owner}\`}</Query>
@@ -139,6 +154,13 @@ describe('convertDocument', () => {
     const result = convertDocument(doc, lookups);
     expect(result.source).toBe(doc);
     expect(result.manual[0].reason).toMatch(/script/);
+  });
+
+  it('a _signals mutation casting a value sets the value, for the compiler to check its type', () => {
+    golden(
+      `<Helmet><Value name="picked" type="date" /><Mutation name="pick">{\`update _signals set picked = cast($_row.day as date)\`}</Mutation></Helmet><For each={$days}><Button run="$pick">Pick</Button></For>`,
+      `<Helmet><Value name="picked" type="date" /></Helmet><For each={$days}><Button set={{"picked":"$_row.day"}}>Pick</Button></For>`,
+    );
   });
 
   it('a _signals mutation computing from its own columns needs a person', () => {
