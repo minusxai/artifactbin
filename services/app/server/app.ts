@@ -125,7 +125,11 @@ export const APP_INLINE_SCRIPT_HASHES = [
 ].join(' ');
 
 export const APP_CSP = [
-  "default-src 'none'", `script-src 'self' ${APP_INLINE_SCRIPT_HASHES}`, "style-src 'self' 'unsafe-inline'",
+  // 'wasm-unsafe-eval' lets the page COMPILE WebAssembly — the SQLite engine a
+  // reader's document runs its queries on (lib/story-runtime/page-sqlite) —
+  // and nothing else: no eval, no Function, no string timers. Author code
+  // never runs here; it runs in its own frame, whose policy does not admit it.
+  "default-src 'none'", `script-src 'self' 'wasm-unsafe-eval' ${APP_INLINE_SCRIPT_HASHES}`, "style-src 'self' 'unsafe-inline'",
   // Listing thumbnails redirect from /a/:id/export to the configured asset
   // origin. Admit that destination for images; local posters remain same-origin.
   `img-src 'self' data: blob:${ASSETS_ORIGIN ? ` ${ASSETS_ORIGIN}` : ''}`, "font-src 'self' data:",

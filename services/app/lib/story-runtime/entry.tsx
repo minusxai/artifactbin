@@ -31,6 +31,7 @@ import { createDataflowStore, type DataflowStore } from './store';
 import { installMx } from './mx';
 import { createAuthorScriptSession } from './author-script';
 import { createDocumentTransport } from './document-transport';
+import { pageEngineFor } from './page-sqlite';
 import { syncValuesToUrl } from './url-values-sync';
 import { EMPTY_COMPILED_DATAFLOW } from '@/lib/story/compiled-dataflow';
 
@@ -80,7 +81,8 @@ if (island?.textContent && root) {
     const transport = createDocumentTransport(window, data.queryUrl, appOrigin, undefined, data.mutateUrl);
     // `readOnly` is a SNAPSHOT render's refusal, carried on the island so every
     // button says which version cannot be written rather than "this view".
-    const store: DataflowStore = createDataflowStore(data.dataflow ?? { flow: EMPTY_COMPILED_DATAFLOW }, { transport, writesUnavailable: data.readOnly ?? null });
+    // What the reader may hold runs in this page (lib/story-runtime/page-sqlite); the rest through the transport.
+    const store: DataflowStore = createDataflowStore(data.dataflow ?? { flow: EMPTY_COMPILED_DATAFLOW }, { transport, writesUnavailable: data.readOnly ?? null, page: pageEngineFor(data, transport) });
     authorSession = createAuthorScriptSession(store);
     window.addEventListener('pagehide', event => { if (!event.persisted) authorSession?.dispose(); });
     /*

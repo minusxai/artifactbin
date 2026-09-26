@@ -12,6 +12,7 @@ import { STORY_BARE_TYPOGRAPHY_CSS } from '@/lib/story-surface/bare-typography';
 import { STORY_BARE_CONTROLS_CSS } from '@/lib/story-surface/bare-controls';
 import { STORY_CHROME_CSS, STORY_COLUMN_CSS, STORY_EMBED_CSS, STORY_TABLE_CSS } from '@/lib/story-runtime/chrome-css';
 import type { StoryIslandData } from '@/lib/story-runtime/contract';
+import { storyRuntimeAssets } from './runtime-asset';
 
 /** Shared preparation for inline app rendering and standalone raw/export rendering. */
 export async function prepareStoryRuntime(input: StoryDocumentInput): Promise<PreparedStoryRuntime> {
@@ -36,6 +37,8 @@ export async function prepareStoryParts(input: StoryDocumentInput) {
     // `{$_me ? … : <SignIn/>}` is exactly such a document.
     ...(input.viewer ? { viewer: input.viewer } : {}),
     ...(input.queryUrl ? { queryUrl: input.queryUrl } : {}),
+    // A reader who may hold data runs queries in their page, on this wasm.
+    ...(input.dataflow?.hold && storyRuntimeAssets().sqlite ? { sqliteWasm: storyRuntimeAssets().sqlite! } : {}),
     ...(input.mutateUrl ? { mutateUrl: input.mutateUrl } : {}),
     ...(input.mentionStatuses?{mentionStatuses:input.mentionStatuses}:{}),
     ...(input.assetsUrl ? { assetsUrl: input.assetsUrl } : {}),

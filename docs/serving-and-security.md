@@ -69,6 +69,27 @@ a guest is asked to sign in before a write that reads it. A connected Postgres d
 is queried inside itself (`<Query source="ref:…">`), read-only, through its
 exposure whitelist.
 
+**Queries where the data is.** A reader's interaction re-runs only what depends
+on it, and a query runs in the reader's own browser — on the same SQLite wasm and
+functions, with no network — when the reader may hold everything it reads. The
+server decides that per reader when it serves the page (`dataflow.hold` on the
+island): an import is holdable when the reader may read the dataset's own rows
+(not merely the document's results over them), it is a stored dataset rather
+than a connected database, and it is under 50,000 rows and 5 MB. Its rows are
+fetched once, by import name, through the same query door and read check as a
+run (`{"hold":"<import>"}`), which decides again on every request. Everything
+else — Postgres, anything downstream of it, the membership, data past the cap or
+out of the reader's reach — runs on the server as before. A write to a held
+dataset shows at once and the server decides; a refusal is rolled back.
+
+Running the engine needs one more CSP source, `'wasm-unsafe-eval'`, on the app
+page, the standalone `/raw` document and the offline file. It admits compiling
+WebAssembly and nothing else — `eval`, `new Function` and string timers stay
+refused — and it is never added to the author-script frames, where author code
+runs. The wasm is fetched from this origin at a content-addressed `/story/`
+URL (the `/raw` document's `connect-src` names that directory), cached
+`immutable`; the offline file carries it inside itself.
+
 **Import from the web.** Point at an image, a PDF, a font or a CSV and the
 server fetches it once, stores a copy, and serves it from this origin:
 

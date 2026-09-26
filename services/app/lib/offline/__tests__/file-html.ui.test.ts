@@ -26,16 +26,17 @@ describe('renderArtifactFileHtml', () => {
     expect(csp).toBe(artifactFileCsp(file.origin));
     expect(csp).toMatch(/default-src 'none'/);
     // One script source beyond the file itself — code view's extras, from the origin the file came from — and no fetches.
-    expect(csp).toContain("script-src 'unsafe-inline' https://app.artifactbin.dev;");
-    expect(csp).not.toMatch(/connect-src|unsafe-eval|\*/);
+    // WebAssembly compiles (the file's SQLite engine) and nothing else does: exactly 'wasm-unsafe-eval', never 'unsafe-eval'.
+    expect(csp).toContain("script-src 'unsafe-inline' 'wasm-unsafe-eval' https://app.artifactbin.dev;");
+    expect(csp).not.toMatch(/connect-src|'unsafe-eval'|\*/);
     expect(doc.title).toBe(file.metadata.title);
   });
 
   it('admits only an http(s) origin, as scheme://host[:port], into script-src', () => {
-    expect(artifactFileCsp('http://localhost:6001/')).toContain("script-src 'unsafe-inline' http://localhost:6001;");
-    expect(artifactFileCsp('https://app.artifactbin.dev/a/x?y')).toContain("script-src 'unsafe-inline' https://app.artifactbin.dev;");
+    expect(artifactFileCsp('http://localhost:6001/')).toContain("script-src 'unsafe-inline' 'wasm-unsafe-eval' http://localhost:6001;");
+    expect(artifactFileCsp('https://app.artifactbin.dev/a/x?y')).toContain("script-src 'unsafe-inline' 'wasm-unsafe-eval' https://app.artifactbin.dev;");
     for (const bad of ['javascript:alert(1)', 'data:text/html,x', "https://x.dev; script-src *", 'not a url']) {
-      expect(artifactFileCsp(bad), bad).toMatch(/script-src 'unsafe-inline'(?: https:\/\/x\.dev)?;/);
+      expect(artifactFileCsp(bad), bad).toMatch(/script-src 'unsafe-inline' 'wasm-unsafe-eval'(?: https:\/\/x\.dev)?;/);
       expect(artifactFileCsp(bad), bad).not.toMatch(/script-src[^;]*\*/);
     }
   });

@@ -26,6 +26,13 @@ const READER_ENTRIES = [
 ];
 
 /**
+ * The page's SQLite engine (lib/story-runtime/page-sqlite): the core and the
+ * official wasm package behind it. Only a reader who holds data runs anything
+ * in the page, so it is a lazy chunk on BOTH reader paths — never first paint.
+ */
+const SQLITE = ['@artifactbin/sql', '@sqlite.org/sqlite-wasm'];
+
+/**
  * Heavy packages that must stay behind a dynamic-import boundary.
  *
  * `monaco-editor` sits beside its React wrapper because it is now the thing
@@ -33,7 +40,7 @@ const READER_ENTRIES = [
  * the app CSP refused, so `code` mode never opened), and components/SourceEditor
  * bundles it instead — ~2.5 MB that only an owner who presses `code` may pay.
  */
-const FORBIDDEN = ['vega', 'vega-lite', 'vega-interpreter', 'vega-tooltip', '@monaco-editor/react', 'monaco-editor'];
+const FORBIDDEN = ['vega', 'vega-lite', 'vega-interpreter', 'vega-tooltip', '@monaco-editor/react', 'monaco-editor', ...SQLITE];
 
 /**
  * The SERVED document's own runtime (scripts/build-story-runtime → /story/),
@@ -61,7 +68,7 @@ const RUNTIME_ENTRY = ['lib/story-runtime/entry.tsx'];
  * `refData` (lib/story/icon-glyphs.ts); the full map stays in the editor's
  * on-demand chunk, where an owner picking an arbitrary icon still needs it.
  */
-const RUNTIME_FORBIDDEN = ['acorn', 'acorn-jsx', 'lucide-react'];
+const RUNTIME_FORBIDDEN = ['acorn', 'acorn-jsx', 'lucide-react', ...SQLITE];
 
 const stripComments = (src: string): string =>
   src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/[^\n]*/g, '$1');
