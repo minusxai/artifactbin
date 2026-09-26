@@ -8,7 +8,7 @@ import { compactSurface } from '@/lib/story/page-transport';
  * session kind, and ArtifactSurface's props (compiled CSS, design, the
  * server-run dataflow, the open-annotation count).
  */
-import { archivedReadOnly, archivedVersionFor, rowAtVersion } from '@/lib/archived-version';
+import { archivedReadOnly, archivedVersionFor, servedRow } from '@/lib/archived-version';
 import { countOpenAnnotations } from '@/lib/annotations';
 import { canReadArtifact, getArtifactFor, declarationsForRow, getArtifactById, refDataForRow, viewerIdentityFor } from '@/lib/artifacts';
 import { folderPageFor } from '@/lib/folders';
@@ -99,7 +99,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
   if (at === 'not_found') return notFound();
   // Everything below reads THIS row: the artifact wearing that version's bytes
   // when one was asked for, the artifact itself otherwise.
-  const row = at ? rowAtVersion(artifact, at) : artifact;
+  const row = await servedRow(artifact, at);
 
   const meta = (row.meta ?? {}) as {
     theme?: StoryThemeName | null; colorMode?: 'light' | 'dark' | null; compiledCss?: string | null;

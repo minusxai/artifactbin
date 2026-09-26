@@ -22,7 +22,7 @@
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { listAnnotationsFor, type AnnotationWire } from '@/lib/annotations';
-import { archivedReadOnly, archivedVersionForActor, rowAtVersion } from '@/lib/archived-version';
+import { archivedReadOnly, archivedVersionForActor, servedRow } from '@/lib/archived-version';
 import { canReadArtifact, dataflowForRow, getArtifactById, refDataForRow, viewerIdentityFor, type ArtifactRow, type RoleActor, type TokenActor } from '@/lib/artifacts';
 import { resolveStoredStoryDesign } from '@/lib/data/story/story-themes';
 import { currentStoryCss } from '@/lib/data/story/story-css.server';
@@ -224,7 +224,7 @@ export async function assembleArtifactFile(input: AssembleArtifactFileInput): Pr
   const history = tokenActorOf(actor);
   const at = input.version === undefined ? null : await archivedVersionForActor(history, artifact, input.version);
   if (at === 'not_found') return refuse('not_found', `Version ${input.version} of this document is not available to you.`);
-  const row: ArtifactRow = at ? rowAtVersion(artifact, at) : artifact;
+  const row: ArtifactRow = await servedRow(artifact, at);
   const source = row.source ?? '';
 
   const meta = row.meta as { theme?: string | null; template?: string | null; colorMode?: 'light' | 'dark' | null; compiledCss?: string | null; cssCompileVersion?: string | null };

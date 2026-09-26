@@ -48,7 +48,7 @@ import { trackEvent } from './analytics';
 import { sourceWithoutAnchors } from './annotation-anchors';
 import { ALLOW_PUBLIC_VISIBILITY, ARTIFACT_QUOTA_PER_TOKEN } from './config';
 import { assetByteQuotaExceeded } from './asset-quota';
-import { getDb, type Queryable } from './db';
+import { getDb, type Db, type Queryable } from './db';
 import type {DatasetAccessPolicy as DatasetPolicy} from '@artifactbin/contracts';
 import {defaultDatasetGrants,remapDatasetGrants,parseDatasetAccessPolicy} from '@artifactbin/utils';
 import {validateDatasetPolicyForRow} from './datasets/policy/validation';
@@ -66,7 +66,9 @@ import {newEditId} from './story/splice';
 import type {StringEdit} from './story/edit-batch';
 import { nodeIndex, stampNodeIds } from './story/node-ids';
 import { COMPILED_DATAFLOW, finalizeArtifactMetadata, readCompiledDataflow, storedCompiledDataflow } from './story/parsed-artifact-metadata';
-import { DATA_SYNTAX_META, PREVIOUS_ENGINE } from './story/data-syntax';
+import { DATA_SYNTAX_META, hasCurrentDataSyntax, PREVIOUS_ENGINE } from './story/data-syntax';
+import { inCurrentSyntax } from './migrate/sqlite/stored';
+import { convertArtifactNow } from './sqlite-syntax-migration';
 import { EMPTY_DATAFLOW, isEmptyDataflow, scalarMatches, type Row, type Scalar } from '@/lib/story/dataflow';
 import type { ColumnType } from '@artifactbin/contracts';
 import { EMPTY_COMPILED_DATAFLOW, type CompiledDataflow, type CompiledMutation } from '@/lib/story/compiled-dataflow';
@@ -128,9 +130,9 @@ export interface ArtifactRow {
   document?:StoredDocument|null;
   open_annotations?:number;
   /**
-   * Not a column: set only on an archived version's row (lib/archived-version
-   * rowAtVersion) written for the previous query engine and not convertible
-   * without a person. Its dataflow is {@link previousEngineDataflow}.
+   * Not a column: set only on a SERVED row (lib/migrate/sqlite/stored
+   * inCurrentSyntax) written for the previous query engine and not
+   * convertible without a person. Its dataflow is {@link previousEngineDataflow}.
    */
   previousEngine?: true;
   id: string;
@@ -1532,6 +1534,21 @@ async function storeCompiledRecord(db: Queryable, row: ArtifactRow): Promise<Art
 
 const headOf = (row: ArtifactRow) => ({ editId: row.edit_id, source: row.source ?? '', version: row.version });
 
+/**
+ * AN EDIT NEVER MIXES DATA SYNTAXES. A document the migration has not reached
+ * (lib/story/data-syntax) refuses the edit's commit, and is converted first,
+ * as its own version by no actor (lib/sqlite-syntax-migration
+ * convertArtifactNow); the edit then meets the ordinary stale head, and the
+ * client re-reads the converted document and prepares again. A document with
+ * nothing to convert is marked in place, and one that needs a person is left
+ * as it stands: for those the edit is committed after all. Null when the edit
+ * should commit.
+ */
+async function convertForEdit(db: Db, id: string): Promise<ArtifactRow | null> {
+  const outcome = await convertArtifactNow(db, id);
+  return outcome?.outcome === 'converted' ? getArtifactById(id) : null;
+}
+
 /** Clients own semantic validation and patch preparation. This boundary owns
  * authorization and the atomic operation/dependency/history commit. */
 export async function applyEditScoped(actor: TokenActor, id: string, input: EditInput, opts: { scope?: Scope; dryRun?:boolean } = {}): Promise<EditOutcome | Response | null> {
@@ -1541,8 +1558,15 @@ export async function applyEditScoped(actor: TokenActor, id: string, input: Edit
     const update=input.documentUpdate;
     if(!update.whole&&!Object.keys(update.patch.updated).length&&!Object.keys(update.patch.inserted).length&&!update.patch.removed.length&&!Object.keys(update.metadata??{}).length&&!Object.keys(update.settings??{}).length&&!update.annotationOps?.length&&!update.aliases?.length&&!update.datasetBindings?.length)return json({error:'bad_diff',detail:'identical'},400);
     if(input.documentUpdate.settings?.visibility==='public'&&!ALLOW_PUBLIC_VISIBILITY)return json({error:'public_not_enabled'},400);
-    const committed=await commitDocumentUpdate(db,actor,scope,id,input.documentUpdate,{dryRun:opts.dryRun});
+    let committed=await commitDocumentUpdate(db,actor,scope,id,input.documentUpdate,{dryRun:opts.dryRun,currentSyntax:!opts.dryRun});
     if(!committed)return null;
+    // Only an editor gets here with a head: the commit already applied the scope.
+    if(!committed.applied&&!opts.dryRun&&committed.head.format==='markup'&&!hasCurrentDataSyntax(committed.head.meta)){
+      const converted=await convertForEdit(db,id);
+      if(converted)return {applied:false,reason:'doc_changed',head:headOf(converted)};
+      committed=await commitDocumentUpdate(db,actor,scope,id,input.documentUpdate);
+      if(!committed)return null;
+    }
     if(!committed.applied&&committed.head.dataset_policy&&update.whole)return policyLocked('a dataset with a write policy cannot be replaced by a document');
     if(!committed.applied&&committed.head.format!=='markup')return {applied:false,reason:'not_editable'};
     if(!committed.applied&&committed.ownerOnly)return json({error:'owner_only'},403);
@@ -2196,8 +2220,10 @@ async function acceptedMembers(artifactId: string): Promise<Row[]> {
  * document's own reach (the author's scope, as every read resolves). Null when
  * the source no longer compiles.
  */
-export async function compiledForRow(row: Pick<ArtifactRow, 'source' | 'meta' | 'token_id' | 'user_id'>): Promise<CompiledDataflow | null> {
-  if (!row.source) return null;
+export async function compiledForRow(stored: Pick<ArtifactRow, 'id' | 'version' | 'source' | 'meta' | 'token_id' | 'user_id' | 'previousEngine'>): Promise<CompiledDataflow | null> {
+  // What runs is the document in the current data syntax (lib/migrate/sqlite/stored).
+  const row = await inCurrentSyntax(stored);
+  if (!row.source || row.previousEngine) return null;
   return readCompiledDataflow(row.meta, row.source, schemaLoaderFor(refLoaderForActor(writerFor(row))));
 }
 
@@ -2283,10 +2309,11 @@ export async function refreshWarningsFor(actor: TokenActor, updated: ArtifactRow
  * `only` restricts the run to those queries (the re-query path).
  */
 export async function dataflowForRow(
-  row: ArtifactRow,
+  stored: ArtifactRow,
   opts: DataflowRunOptions = {},
 ): Promise<RanDataflow | null> {
-  if (!row.source) return null;
+  if (!stored.source) return null;
+  const row = await inCurrentSyntax(stored);
   if (row.previousEngine) return previousEngineDataflow(row);
   // `viewer` absent is ANONYMOUS, deliberately — that is what the document's own
   // GET transport is, and it is the safe default for every caller that has no
@@ -2403,7 +2430,8 @@ async function previousEngineDataflow(row: Pick<ArtifactRow, 'source' | 'token_i
   return { flow, state: { values: initialValues(flow), tables: initialTables(flow), errors: Object.fromEntries(declared.queries.map((q) => [q.name, PREVIOUS_ENGINE])) } };
 }
 
-export async function declarationsForRow(row: Pick<ArtifactRow, 'source' | 'meta' | 'token_id' | 'user_id' | 'previousEngine'>): Promise<StoryIslandDataflow | null> {
+export async function declarationsForRow(stored: Pick<ArtifactRow, 'id' | 'version' | 'source' | 'meta' | 'token_id' | 'user_id' | 'previousEngine'>): Promise<StoryIslandDataflow | null> {
+  const row = await inCurrentSyntax(stored);
   if (row.previousEngine) return previousEngineDataflow(row);
   try {
     const flow = await compiledForRow(row);
@@ -2602,7 +2630,7 @@ async function runDeclaredDataflow(flow: CompiledDataflow, resolve: DatasetResol
  * current source on every read, because an edit can change what a document
  * reads. Mutation targets are imports, so they are included.
  */
-export async function datasetsForDocument(document: (Pick<ArtifactRow, 'source' | 'meta' | 'token_id' | 'user_id'>) | null | undefined): Promise<string[]> {
+export async function datasetsForDocument(document: (Pick<ArtifactRow, 'id' | 'version' | 'source' | 'meta' | 'token_id' | 'user_id'>) | null | undefined): Promise<string[]> {
   if (!document?.source) return [];
   try {
     const flow = await compiledForRow(document);
