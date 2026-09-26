@@ -10,7 +10,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { type JsxNode } from '@/lib/jsx';
 import { splitHelmet } from '@/lib/story/helmet';
-import { createDataflowStore, type QueryTransport } from '@/lib/story-runtime/store';
+import { ACCESS_PENDING, createDataflowStore, type QueryTransport } from '@/lib/story-runtime/store';
 import type { Dataflow, DataflowState, Scalar } from '@/lib/story/dataflow';
 import { parseJsxOrThrow } from '@/test/helpers/jsx';
 
@@ -254,5 +254,71 @@ describe('store.invalidateDatasets', () => {
     runs.length = 0;
     store.invalidateDatasets(['abc123']);
     expect(runs[0].values).toEqual({ choice: 'salad' });
+  });
+});
+
+/*
+ * WRITE CHECKS ("may this viewer run it now") are nodes of their own: they
+ * read the dataset they write and the membership, not the reader's values, so
+ * a slider never re-asks them — and a run that did not ask cannot change them.
+ * One failed run keeps the last answer instead of greying out every button.
+ */
+describe('write checks', () => {
+  const CHECK_FLOW = flowOf(
+    '<Value name="choice" type="string" default="ramen" />'
+    + '<Query name="mine">{`select $choice as choice`}</Query>'
+    + '<Query name="tally" source="ref:abc123">{`select * from public.rows`}</Query>'
+    + '<Mutation name="vote" source="ref:abc123">{`insert into public.rows (choice) values ($choice)`}</Mutation>',
+  );
+  const settle = async () => { for (let i = 0; i < 5; i++) await Promise.resolve(); };
+
+  function checks(state: Partial<DataflowState> = { mutationAccess: { vote: null } }) {
+    const runs: Array<{ values: Record<string, Scalar>; only: string[] }> = [];
+    const answers: Array<() => Promise<Awaited<ReturnType<QueryTransport['run']>>>> = [];
+    const transport: QueryTransport = {
+      run: (values, only) => { runs.push({ values, only }); return (answers.shift() ?? (() => Promise.resolve({ tables: {}, errors: {} })))(); },
+      page: () => Promise.reject(new Error('unused')),
+      mutate: () => Promise.resolve({ dataset: 'abc123' }),
+    };
+    const store = createDataflowStore({ flow: CHECK_FLOW, state: { values: { choice: 'ramen' }, tables: {}, errors: {}, ...state } }, { transport, debounceMs: 0 });
+    return { store, runs, answers };
+  }
+
+  it('a run a value change started does not re-ask, and its answer does not overwrite them', async () => {
+    const { store, runs, answers } = checks();
+    answers.push(() => Promise.resolve({ tables: {}, errors: {}, mutationAccess: { vote: 'Read-only' } }));
+    store.setValue('choice', 'tacos');
+    expect(runs.map((r) => r.only)).toEqual([['mine']]);
+    await settle();
+    expect(store.mutationUnavailable('vote')).toBeNull();
+  });
+
+  it('a failed run keeps the last answer, and the next run asks again', async () => {
+    const { store, runs, answers } = checks();
+    answers.push(() => Promise.reject(new Error('offline')));
+    store.invalidateDatasets(['abc123']);
+    expect(runs.map((r) => r.only)).toEqual([['tally']]);
+    await settle();
+    expect(store.getState().errors.tally).toBe('offline');
+    expect(store.mutationUnavailable('vote')).toBeNull(); // not "Checking edit access…"
+    await store.accessSettled();
+    answers.push(() => Promise.resolve({ tables: {}, errors: {}, mutationAccess: { vote: 'Read-only' } }));
+    store.setValue('choice', 'tacos');
+    expect(runs.map((r) => r.only)).toEqual([['tally'], ['mine']]); // the check rides along with the next run
+    await settle();
+    expect(store.mutationUnavailable('vote')).toBe('Read-only');
+  });
+
+  it('accessSettled waits for the first check, and releases a caller when that check fails', async () => {
+    const { store, answers } = checks({});
+    let settled = false;
+    void store.accessSettled().then(() => { settled = true; });
+    await settle();
+    expect(settled).toBe(false); // never asked yet: nothing to wait out
+    answers.push(() => Promise.reject(new Error('offline')));
+    store.start();
+    await settle();
+    expect(settled).toBe(true);
+    expect(store.mutationUnavailable('vote')).toBe(ACCESS_PENDING);
   });
 });
