@@ -503,6 +503,7 @@ export function createDataflowStore(
       clock = null;
       frame?.();
       transport = null;
+      page?.engine.close();
       listeners.clear();
       const waiting = accessWaiters; accessWaiters = []; for (const w of waiting) w();
     },

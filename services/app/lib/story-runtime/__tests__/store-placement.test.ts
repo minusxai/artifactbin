@@ -9,7 +9,7 @@
  * name are asked for once. Real SQLite core, fake server.
  */
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { loadSqlite } from '@artifactbin/sql/core';
+import { loadSqlite, SqliteDatabase } from '@artifactbin/sql/core';
 import { compiledOf } from '@/test/helpers/compiled';
 import type { Row, Scalar } from '@/lib/story/dataflow';
 import type { MutationRequest } from '@/lib/story/mutation-request';
@@ -95,6 +95,18 @@ describe('the store places each run', () => {
     await settled(store);
     expect(runs).toEqual([]);
     expect(regions(store)).toEqual(['NA']);
+  });
+
+  it('a disposed document closes the database its page kept open', async () => {
+    const { store, engine } = await started();
+    store.setValue('min', 1000);
+    await settled(store);
+    const close = vi.spyOn(SqliteDatabase.prototype, 'close');
+    store.dispose();
+    expect(close).toHaveBeenCalledTimes(1);
+    expect(engine.ready(FLOW, ['sales'])).toBe(false);
+    await expect(engine.run(FLOW, ['mine'], { values: {}, userId: null, now: '2026-09-30T10:00:00.000Z', tz: 'UTC' })).rejects.toThrow('closed');
+    close.mockRestore();
   });
 
   it('a window of a page query is read in the page', async () => {
