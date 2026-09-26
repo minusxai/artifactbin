@@ -64,7 +64,8 @@ type Rule = (v: View, context: TranslateContext) => Hit | null;
 const ISO_TIMESTAMP = "'%Y-%m-%dT%H:%M:%fZ'";
 const TRUNC_PARTS = new Set(['day', 'week', 'month', 'quarter', 'year']);
 const PART_NAMES = new Set(['year', 'quarter', 'month', 'week', 'day', 'hour', 'minute']);
-const DIFF_PARTS = new Set(['day', 'week', 'month', 'year', 'hour', 'minute']);
+/** The units date_add and date_diff take. */
+const UNITS = new Set(['day', 'week', 'month', 'year', 'hour', 'minute']);
 const DAY_OF_WEEK = new Set(['dow', 'dayofweek']);
 /** DuckDB one-argument date part functions → the date_part part they read. */
 const PART_FUNCTIONS: Record<string, string> = { year: 'year', quarter: 'quarter', month: 'month', week: 'week', day: 'day', dayofmonth: 'day', hour: 'hour', minute: 'minute' };
@@ -240,12 +241,13 @@ function intervalSpec(v: View, node: ExprNode): IntervalSpec | { manual: string 
     unit = word(v.sig[node.to]);
   }
   const number = /^[+-]?\d+(?:\.\d+)?$/.test(amount) ? Number(amount) : null;
+  if (number !== null && !Number.isInteger(number)) return { manual: `a fractional interval (${amount}) has no library equivalent` };
   unit = unit.replace(/s$/, '');
   if (unit === 'quarter') {
     if (number === null) return { manual: 'an interval of a computed number of quarters' };
     return { amount: String(number * 3), number: number * 3, unit: 'month' };
   }
-  if (!PART_NAMES.has(unit) || unit === 'quarter') return { manual: `interval unit ${unit} has no library equivalent (day, week, month, year, hour, minute)` };
+  if (!UNITS.has(unit)) return { manual: `interval unit ${unit} has no library equivalent (${[...UNITS].join(', ')})` };
   return { amount: number === null ? amount : String(number), number, unit };
 }
 
@@ -283,9 +285,10 @@ function precheck(v: View, context: TranslateContext): { hit: Hit | null; notes:
     if (!call) continue;
     const whole = (reason: string): { hit: Hit; notes: string[] } => ({ hit: v.manual(reason, call.at, call.close), notes });
     const part = (arg: { from: number; to: number } | undefined, allowed: Set<string>, fn: string): { hit: Hit; notes: string[] } | null => {
-      if (!arg) return whole(`${fn} needs a literal part`);
+      if (!arg) return whole(`${fn} needs a part`);
       const value = v.literal(arg) ?? (fn === 'extract' && t[arg.from].kind === 'word' ? word(t[arg.from]) : null);
-      if (value === null) return whole(`${fn} needs a literal part`);
+      // A computed part (`date_trunc($grain, day)`) is checked when it runs.
+      if (value === null) { notes.push(`${fn}'s part ${v.slice(arg.from, arg.to)} is computed: the library accepts ${[...allowed].filter((p) => !DAY_OF_WEEK.has(p)).join(', ')}`); return null; }
       if (!allowed.has(value.toLowerCase())) return { hit: v.manual(`${fn}('${value}') has no library equivalent (parts: ${[...allowed].filter((p) => !DAY_OF_WEEK.has(p)).join(', ')})`, arg.from), notes };
       return null;
     };
@@ -297,7 +300,7 @@ function precheck(v: View, context: TranslateContext): { hit: Hit | null; notes:
       case 'strptime': if (t[call.args[1]?.from]?.text === '[') refusal = whole('strptime with a list of formats has no library equivalent'); break;
       case 'date_trunc': refusal = part(call.args[0], TRUNC_PARTS, 'date_trunc'); notes.push(NOTES.dateTrunc); break;
       case 'date_part': refusal = part(call.args[0], new Set([...PART_NAMES, ...DAY_OF_WEEK]), 'date_part'); break;
-      case 'date_diff': case 'datediff': refusal = part(call.args[0], DIFF_PARTS, 'date_diff'); notes.push(NOTES.dateDiff); break;
+      case 'date_diff': case 'datediff': refusal = part(call.args[0], UNITS, 'date_diff'); notes.push(NOTES.dateDiff); break;
       case 'date_add': if (call.args.length === 2 && word(t[call.args[1].from]) !== 'interval') refusal = whole('date_add without an interval has no library equivalent'); break;
       case 'extract': {
         const from = call.args.length === 1 ? t.findIndex((x, k) => k > call.open && k < call.close && word(x) === 'from') : -1;
@@ -655,5 +658,19 @@ export function translateSql(sql: string, context: TranslateContext): SqlTransla
     if (hit.note) notes.add(hit.note);
     view = new View(text);
   }
+  const leftover = residue(view);
+  if (leftover) return refuse(leftover.manual, original(leftover.start, false), original(leftover.end, true));
   return { sql: view.text, notes: [...notes], manual: [] };
+}
+
+/** DuckDB syntax no rule recognised — an interval or typed literal in a form the rules do not know. */
+function residue(v: View): { manual: string; start: number; end: number } | null {
+  for (let i = 0; i < v.sig.length - 1; i++) {
+    const w = word(v.sig[i]);
+    const next = v.sig[i + 1];
+    if (v.sig[i - 1]?.text === '.') continue;
+    if (w === 'interval' && (['string', 'number', 'param'].includes(next.kind) || next.text === '(')) return { manual: 'an interval in a form with no library equivalent', start: v.sig[i].start, end: next.end };
+    if (w === 'time' && next.kind === 'string') return { manual: 'a time literal has no SQLite form', start: v.sig[i].start, end: next.end };
+  }
+  return null;
 }
