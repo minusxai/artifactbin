@@ -992,6 +992,7 @@ export const STORY_UI_RECIPE_CLASSES: readonly string[] = [
   "tailwind-merge",
   "tbody",
   "td",
+  "tel",
   "text",
   "text-4xl",
   "text-[10px]",
