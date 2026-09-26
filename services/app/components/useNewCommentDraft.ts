@@ -1,9 +1,9 @@
 import {useCallback, useEffect, useRef, useState} from 'react';
-import type {RemoteSessionInfo} from '../../contracts/src/remote';
+import type {ArtifactBackend} from '@/lib/artifact-backend/types';
 import {remoteMention} from '../lib/remote-reply';
 
 /** Defaults are selected once per composer opening; any user edit wins over late discovery. */
-export function useNewCommentDraft(open: boolean) {
+export function useNewCommentDraft(backend: ArtifactBackend, open: boolean) {
   const [draft, setDraft] = useState('');
   const touched = useRef(false);
   const changeDraft = useCallback((value: string) => {
@@ -12,16 +12,16 @@ export function useNewCommentDraft(open: boolean) {
   }, []);
   useEffect(() => {
     if (!open) { touched.current = false; return; }
+    if (backend.unavailable('remoteSessions')) return;
     const abort = new AbortController();
-    void fetch('/api/remote/sessions', {credentials: 'same-origin', signal: abort.signal})
-      .then(response => response.ok ? response.json() : {sessions: []})
-      .then((data: {sessions?: RemoteSessionInfo[]}) => {
+    void backend.remoteSessions({signal: abort.signal})
+      .then((data) => {
         if (abort.signal.aborted || touched.current) return;
         const online = (data.sessions ?? []).filter(session => session.online && session.activity !== 'stopped' && session.exitCode === null);
         if (online.length === 1) setDraft(remoteMention(online[0]!));
       })
       .catch(() => { /* Discovery is optional: a comment can always be written manually. */ });
     return () => abort.abort();
-  }, [open]);
+  }, [backend, open]);
   return [draft, changeDraft] as const;
 }

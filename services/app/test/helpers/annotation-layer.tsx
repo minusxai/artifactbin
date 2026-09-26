@@ -14,6 +14,9 @@ import { vi } from 'vitest';
 import { act } from '@testing-library/react';
 import AnnotationLayer from '@/components/AnnotationLayer';
 import type { AnnotationWire } from '@/lib/annotations';
+import { ArtifactBackendProvider } from '@/lib/artifact-backend/context';
+import type { ArtifactBackend } from '@/lib/artifact-backend/types';
+import { httpBackend } from '@/test/helpers/artifact-backend';
 
 export const NONCE = 'n'.repeat(32);
 
@@ -138,11 +141,11 @@ export function installAnnotationFetch() {
 
 export const flush = () => act(async () => { await Promise.resolve(); });
 
-export const layer = (frame: HTMLIFrameElement, over: Partial<Parameters<typeof AnnotationLayer>[0]> = {}) => {
+export const layer = (frame: HTMLIFrameElement, over: Partial<Parameters<typeof AnnotationLayer>[0]> = {}, backend: ArtifactBackend = httpBackend(over.id ?? 'doc1')) => {
   const initialSelection = over.initialSelection && !Object.prototype.hasOwnProperty.call(over.initialSelection, 'nodeId')
     ? { ...over.initialSelection, nodeId: `node-${over.initialSelection.path.replaceAll('.', '-')}` }
     : over.initialSelection;
-  return <AnnotationLayer
+  return <ArtifactBackendProvider backend={backend}><AnnotationLayer
     id="doc1"
     frameRef={{ current: frame }}
     sessionNonce={NONCE}
@@ -153,5 +156,5 @@ export const layer = (frame: HTMLIFrameElement, over: Partial<Parameters<typeof 
     onRailOpenChange={() => {}}
     {...over}
     initialSelection={initialSelection}
-  />;
+  /></ArtifactBackendProvider>;
 };

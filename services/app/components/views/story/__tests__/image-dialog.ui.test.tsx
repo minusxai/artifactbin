@@ -7,6 +7,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, fireEvent, render, screen } from '@testing-library/react';
 import ImageDialog, { type ImageChoice } from '../ImageDialog';
+import { withHttpBackend } from '@/test/helpers/artifact-backend';
 
 const png = (name = 'a.png', type = 'image/png', size = 10) => {
   const file = new File(['x'], name, { type });
@@ -29,7 +30,7 @@ function mount(mode: 'insert' | 'replace' = 'insert', answer: ImageChoice = { ok
     onConfirm: vi.fn(),
     onClose: vi.fn(),
   };
-  render(<ImageDialog mode={mode} {...props} />);
+  render(withHttpBackend('Doc111', <ImageDialog mode={mode} {...props} />));
   return { ...props, finishUpload: async (v: ImageChoice = answer) => { await act(async () => { resolve(v); await pending; }); } };
 }
 

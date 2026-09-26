@@ -29,6 +29,7 @@ import { CommentTimestamp } from '../CommentTimestamp';
 import { FOLD_STORAGE_KEY } from '@/lib/comment-folds';
 import { STORY_ANNOTATION_PIN_MESSAGE } from '@/lib/story-runtime/contract';
 import type { AnnotationWire } from '@/lib/annotations';
+import { withHttpBackend } from '@/test/helpers/artifact-backend';
 
 const NONCE = 'n'.repeat(32);
 
@@ -142,7 +143,7 @@ afterEach(() => {
 
 const flush = () => act(async () => { await Promise.resolve(); });
 
-const layer = (frame: HTMLIFrameElement, over: Partial<Parameters<typeof AnnotationLayer>[0]> = {}) => (
+const layer = (frame: HTMLIFrameElement, over: Partial<Parameters<typeof AnnotationLayer>[0]> = {}) => withHttpBackend('doc1',
   <AnnotationLayer
     id="doc1"
     frameRef={{ current: frame }}
@@ -153,7 +154,7 @@ const layer = (frame: HTMLIFrameElement, over: Partial<Parameters<typeof Annotat
     topOffset={100}
     onRailOpenChange={() => {}}
     {...over}
-  />
+  />,
 );
 
 /** Open the rail's one thread the way a viewer does, and answer its element. */

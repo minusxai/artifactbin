@@ -8,6 +8,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { fireEvent, render, screen, within } from '@testing-library/react';
 import QueryNotebookPanel from '../QueryNotebookPanel';
 import type { QueryCell } from '@/lib/story/query-notebook';
+import { httpBackendWrapper } from '@/test/helpers/artifact-backend';
 
 const cell = (over: Partial<QueryCell> = {}): QueryCell => ({
   name: 'sales', sql: 'select region, revenue from "public"."rows"', source: 'ds1234', params: [],
@@ -19,7 +20,7 @@ const COLUMNS = [{ name: 'region', type: 'string' as const }, { name: 'revenue',
 let onSqlChange: ReturnType<typeof vi.fn<(name: string, sql: string) => void>>;
 beforeEach(() => { onSqlChange = vi.fn<(name: string, sql: string) => void>(); });
 
-const panel = (cells: QueryCell[]) => render(<QueryNotebookPanel cells={cells} onSqlChange={onSqlChange} />);
+const panel = (cells: QueryCell[]) => render(<QueryNotebookPanel cells={cells} onSqlChange={onSqlChange} />, { wrapper: httpBackendWrapper('doc1') });
 const sqlField = (name: string) => screen.getByLabelText(`Query $${name} SQL`) as HTMLTextAreaElement;
 
 describe('reading the cells', () => {
@@ -70,7 +71,7 @@ describe('what a cell powers', () => {
   ];
   const spotlit = (cells: QueryCell[]) => {
     const onSpotlight = vi.fn<(paths: string[]) => void>();
-    render(<QueryNotebookPanel cells={cells} onSqlChange={onSqlChange} onSpotlight={onSpotlight} />);
+    render(<QueryNotebookPanel cells={cells} onSqlChange={onSqlChange} onSpotlight={onSpotlight} />, { wrapper: httpBackendWrapper('doc1') });
     return onSpotlight;
   };
 
@@ -109,7 +110,7 @@ describe('arriving from an embed', () => {
         onSqlChange={onSqlChange}
         onSpotlight={onSpotlight}
         focus="costs"
-      />,
+      />, { wrapper: httpBackendWrapper('doc1') }
     );
     expect(document.activeElement).toBe(sqlField('costs'));
     expect(onSpotlight).toHaveBeenLastCalledWith(['0.2']);

@@ -15,17 +15,16 @@ import { ImagePlus, Link2, X } from 'lucide-react';
 import { DEFAULT_UPLOAD_MAX_BYTES } from '@artifactbin/contracts';
 import { useDialogKeyboard } from '@/components/use-dialog-keyboard';
 import { imageRawUrl } from '@/lib/story/ref-data';
+import { useArtifactBackend } from '@/lib/artifact-backend/context';
+import type { ChosenImage, ImageChoice } from '@/lib/artifact-backend/types';
+import { FeatureGate } from '@/components/FeatureUnavailable';
+
+export type { ChosenImage, ImageChoice };
 
 /** What the upload door takes (lib/story/data-tiers). */
 export const IMAGE_ACCEPT = 'image/png,image/jpeg,image/webp,image/gif,image/svg+xml';
 const LIMIT_MB = Math.round(DEFAULT_UPLOAD_MAX_BYTES / 1_000_000);
 export const IMAGE_HINT = `PNG, JPEG, WebP, GIF or SVG · up to ${LIMIT_MB} MB`;
-
-export interface ChosenImage {
-  id: string;
-  rawUrl?: string;
-}
-export type ImageChoice = { ok: true; image: ChosenImage } | { ok: false; error: string };
 
 /** An artifact id as the upload door mints it — the only thing a preview is built from. */
 const IMAGE_ID = /^[A-Za-z0-9]{6,12}$/;
@@ -50,6 +49,7 @@ export default function ImageDialog({
   const title = mode === 'insert' ? 'Insert image' : 'Replace image';
   const action = mode === 'insert' ? 'Insert' : 'Replace';
   const titleId = useId();
+  const urlReason = useId();
   const panel = useRef<HTMLDivElement>(null);
   const fileInput = useRef<HTMLInputElement>(null);
   const [url, setUrl] = useState('');
@@ -57,6 +57,8 @@ export default function ImageDialog({
   const [error, setError] = useState<string | null>(null);
   const [chosen, setChosen] = useState<ChosenImage | null>(null);
   const [dragging, setDragging] = useState(false);
+  /** Both doors bring bytes in from outside: a backend without web assets (the offline file) says why here. */
+  const unavailable = useArtifactBackend().unavailable('webAssets');
   /** Answers arriving after a newer choice (or after closing) are dropped. */
   const attempt = useRef(0);
   useDialogKeyboard(panel, onClose, FOCUSABLE);
@@ -77,6 +79,11 @@ export default function ImageDialog({
 
   const chooseFile = (file: File | undefined) => {
     if (!file) return;
+    if (unavailable) {
+      setChosen(null);
+      setError(unavailable);
+      return;
+    }
     if (!IMAGE_ACCEPT.split(',').includes(file.type)) {
       setChosen(null);
       setError(`That file is not an image this can use. ${IMAGE_HINT}.`);
@@ -138,14 +145,19 @@ export default function ImageDialog({
             <ImagePlus size={18} className="text-muted" />
             <p className="text-sm">
               Drop an image here or{' '}
-              <button
-                type="button"
-                autoFocus
-                onClick={() => fileInput.current?.click()}
-                className="cursor-pointer font-medium text-accent underline underline-offset-2"
-              >
-                choose a file
-              </button>
+              <FeatureGate reason={unavailable}>
+                {(gate) => (
+                  <button
+                    type="button"
+                    autoFocus
+                    onClick={() => fileInput.current?.click()}
+                    className="cursor-pointer font-medium text-accent underline underline-offset-2 disabled:cursor-default disabled:opacity-50"
+                    {...gate}
+                  >
+                    choose a file
+                  </button>
+                )}
+              </FeatureGate>
             </p>
             <p className="text-[11px] text-muted">{IMAGE_HINT}</p>
             <input
@@ -169,6 +181,8 @@ export default function ImageDialog({
               <Link2 size={12} className="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 text-muted" />
               <input
                 aria-label="Image URL"
+                disabled={!!unavailable}
+                aria-describedby={unavailable ? urlReason : undefined}
                 value={url}
                 placeholder="https://…/picture.png"
                 onChange={(e) => setUrl(e.target.value)}
@@ -181,16 +195,22 @@ export default function ImageDialog({
                 className="w-full rounded-md border border-edge bg-transparent py-1.5 pl-6 pr-2 text-sm focus:border-edge-bright focus:outline-none"
               />
             </div>
-            <button
-              type="button"
-              aria-label="Import image from URL"
-              onClick={chooseUrl}
-              disabled={busy !== null}
-              className="rounded-md border border-edge px-3 text-sm hover:bg-raised disabled:opacity-50"
-            >
-              Import
-            </button>
+            <FeatureGate reason={unavailable}>
+              {(gate) => (
+                <button
+                  type="button"
+                  aria-label="Import image from URL"
+                  onClick={chooseUrl}
+                  aria-describedby={gate['aria-describedby']}
+                  disabled={gate.disabled || busy !== null}
+                  className="rounded-md border border-edge px-3 text-sm hover:bg-raised disabled:opacity-50"
+                >
+                  Import
+                </button>
+              )}
+            </FeatureGate>
           </div>
+          {unavailable && <p id={urlReason} className="mt-1.5 text-[11px] text-muted">{unavailable}</p>}
         </section>
 
         <div aria-live="polite" className="mt-4 min-h-[1.25rem]">

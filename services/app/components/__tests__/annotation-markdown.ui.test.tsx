@@ -19,6 +19,7 @@ import { act, render, screen, fireEvent, within } from '@testing-library/react';
 import AnnotationLayer from '../AnnotationLayer';
 import { STORY_ANNOTATION_LAYOUT_MESSAGE } from '@/lib/story-runtime/contract';
 import type { AnnotationWire } from '@/lib/annotations';
+import { withHttpBackend } from '@/test/helpers/artifact-backend';
 
 const NONCE = 'n'.repeat(32);
 
@@ -93,7 +94,7 @@ afterEach(() => vi.unstubAllGlobals());
 
 const flush = () => act(async () => { await Promise.resolve(); });
 
-const layer = (frame: HTMLIFrameElement, over: Partial<Parameters<typeof AnnotationLayer>[0]> = {}) => (
+const layer = (frame: HTMLIFrameElement, over: Partial<Parameters<typeof AnnotationLayer>[0]> = {}) => withHttpBackend('doc1',
   <AnnotationLayer
     id="doc1"
     frameRef={{ current: frame }}
@@ -104,7 +105,7 @@ const layer = (frame: HTMLIFrameElement, over: Partial<Parameters<typeof Annotat
     topOffset={100}
     onRailOpenChange={() => {}}
     {...over}
-  />
+  />,
 );
 
 const SELECTION = {

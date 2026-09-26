@@ -20,6 +20,7 @@ vi.mock('@/lib/story/use-live-edits', () => ({
 vi.mock('@/lib/story/use-live-artifact', () => ({ useLiveArtifact: () => null }));
 
 import InPlaceEditor from '../InPlaceEditor';
+import { httpBackendWrapper } from '@/test/helpers/artifact-backend';
 
 const NONCE = 'a'.repeat(32);
 const SOURCE = '<div data-design="tw" className="p-4"><h1 id="h">Title</h1></div>';
@@ -104,7 +105,7 @@ describe('inserting an image', () => {
       art={{ ...art, markup: DOC } as React.ComponentProps<typeof InPlaceEditor>['art']}
       frameRef={{ current: frameEl }}
       sessionNonce={NONCE}
-    />,
+    />, { wrapper: httpBackendWrapper('doc1') },
   );
   const openDialog = () => {
     fireEvent.click(screen.getByRole('button', { name: 'Insert' }));
@@ -214,7 +215,7 @@ describe('replacing an image', () => {
         art={imgArt as React.ComponentProps<typeof InPlaceEditor>['art']}
         frameRef={{ current: frameEl }}
         sessionNonce={NONCE}
-      />,
+      />, { wrapper: httpBackendWrapper('doc1') },
     );
     await fromFrame({ type: 'mx:selection', selection: IMG_SELECTION });
     return view;
@@ -261,7 +262,7 @@ describe('replacing an image', () => {
         art={imgArt as React.ComponentProps<typeof InPlaceEditor>['art']}
         frameRef={{ current: frameEl }}
         sessionNonce={NONCE}
-      />,
+      />, { wrapper: httpBackendWrapper('doc1') },
     );
     await fromFrame({ type: 'mx:image-replace', path: '0.1' });
     const input = screen.getByLabelText('Replacement image file') as HTMLInputElement;
@@ -306,7 +307,7 @@ describe('replacing an image', () => {
         art={{ ...imgArt, markup: HELMET } as React.ComponentProps<typeof InPlaceEditor>['art']}
         frameRef={{ current: frameEl }}
         sessionNonce={NONCE}
-      />,
+      />, { wrapper: httpBackendWrapper('doc1') },
     );
     await fromFrame({ type: 'mx:selection', selection: IMG_SELECTION }); // body path 0.1
     await fromFrame({ type: 'mx:image-drop', file: new File(['x'], 'h.png', { type: 'image/png' }), target: '0.1' });

@@ -50,13 +50,14 @@ import CommentScreenshot from './CommentScreenshot';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Check, ChevronDown, ChevronRight, EllipsisVertical, MessageSquare, LoaderCircle, SquareDashedMousePointer, Trash2, X } from 'lucide-react';
-import {readAnnotationPages} from '@/lib/annotation-pages';
+import { useArtifactBackend } from '@/lib/artifact-backend/context';
+import { BackendRequestError } from '@/lib/artifact-backend/errors';
+import { FeatureGate } from '@/components/FeatureUnavailable';
 import type { AnnotationCommentWire, AnnotationWire } from '@/lib/annotations';
 import Avatar from '@/components/Avatar';
 import { ChatGPTIcon, ClaudeAIIcon, ClaudeCodeIcon, CodexIcon } from '@/components/brand-icons';
 import { foldFromMeasure, isFolded, readFolds, toggleFold, unfold, type FoldKind, type Folds } from '@/lib/comment-folds';
 import { loginHref } from '@/lib/login-href';
-import { refusedForSignIn } from '@/lib/story/sign-in-required';
 import MarkdownField from '@/components/MarkdownField';
 import MarkdownLite from '@/components/MarkdownLite';
 import MobileSheet, { useIsPhoneViewport } from '@/components/MobileSheet';
@@ -164,22 +165,6 @@ function positionedComposer(
     + Math.min(selection.rect.height + COMPOSER_GAP, 56);
   const maxTop = Math.max(minTop, viewportHeight - (screenshot ? 720 : COMPOSER_ESTIMATED_H) - viewportInset);
   return { left, top: Math.max(minTop, Math.min(preferredTop, maxTop)), width };
-}
-
-async function annotationFailure(res: Response): Promise<string> {
-  const fallback = `Could not save comment (${res.status})`;
-  try {
-    const body = (await res.json()) as { error?: unknown; detail?: unknown; details?: unknown };
-    const named = typeof body.error === 'string' ? body.error : fallback;
-    const detail = typeof body.detail === 'string'
-      ? body.detail
-      : Array.isArray(body.details) && typeof body.details[0]?.message === 'string'
-        ? body.details[0].message
-        : null;
-    return detail ? `${named}: ${detail}` : named;
-  } catch {
-    return fallback;
-  }
 }
 
 /**
@@ -911,7 +896,11 @@ export default function AnnotationLayer({
   onRailOpenChange, initialSelection = null, topOffset, onAnnotationsChange, pickOnOpen = true, rightInset = 0,
   railHost, railSheet = false, panelWidth,
 }: AnnotationLayerProps) {
-  const capture=useCommentCapture(id,editId);
+  /** Every request the comments make (lib/artifact-backend), from the page's provider. */
+  const backend = useArtifactBackend();
+  /** Screenshots are stored by the backend; without that a comment carries none, and says why. */
+  const imagesUnavailable = backend.unavailable('commentImages');
+  const capture=useCommentCapture(backend,id,editId);
   const screenshotExport=useRef<(()=>Promise<ScreenshotDrawing>)|null>(null);
   const captureRef=useRef(capture);captureRef.current=capture;
   const startPickRef=useRef<()=>void>(()=>{});
@@ -959,7 +948,7 @@ export default function AnnotationLayer({
   /** On a phone the rail is a bottom sheet — a 320px rail over a 390px screen
       is the whole document covered, with a strip too narrow to read. */
   const phoneRail = useIsPhoneViewport();
-  const [draft, setDraft] = useNewCommentDraft(selection !== null);
+  const [draft, setDraft] = useNewCommentDraft(backend, selection !== null);
   /** Reading the draft as it will be read — a view of the same text, not a mode. */
   const [previewing, setPreviewing] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -978,9 +967,9 @@ export default function AnnotationLayer({
   useEffect(()=>{
     if(!hasRemoteWork||busy)return;
     const controller=new AbortController();
-    const timer=setInterval(()=>{void readAnnotationPages(`/api/my/artifacts/${id}/annotations`,{signal:controller.signal}).then(list=>{if(!controller.signal.aborted)setAnnotations(list);}).catch(()=>{});},15000);
+    const timer=setInterval(()=>{void backend.listAnnotations(undefined,{signal:controller.signal}).then(list=>{if(!controller.signal.aborted)setAnnotations(list);}).catch(()=>{});},15000);
     return ()=>{clearInterval(timer);controller.abort();};
-  },[id,railOpen,hasRemoteWork,busy]);
+  },[backend,railOpen,hasRemoteWork,busy]);
 
   /*
    * A selection report is only ours while a composer is already open — that is
@@ -1077,11 +1066,11 @@ export default function AnnotationLayer({
   // Seed from the session's own read; the live stream replaces it wholesale.
   useEffect(() => {
     let gone = false;const abort=new AbortController();
-    void readAnnotationPages(`/api/my/artifacts/${id}/annotations`,{signal:abort.signal})
+    void backend.listAnnotations(undefined,{signal:abort.signal})
       .then((list) => { if (!gone) setAnnotations(list); })
       .catch(() => {});
     return () => { gone = true;abort.abort(); };
-  }, [id]);
+  }, [backend]);
   useEffect(() => {
     if (liveAnnotations) setAnnotations(liveAnnotations);
   }, [liveAnnotations]);
@@ -1093,7 +1082,7 @@ export default function AnnotationLayer({
     const removed=[...before].filter(id=>!previousOpen.current.has(id));
     if(!railOpen&&!removed.length&&!Object.keys(recentResolved).length)return;
     const abort=new AbortController();
-    void readAnnotationPages(`/api/my/artifacts/${id}/annotations?status=resolved`,{signal:abort.signal}).then(list=>{
+    void backend.listAnnotations('resolved',{signal:abort.signal}).then(list=>{
       if(abort.signal.aborted)return;
       list=list.filter(row=>!annotations.some(open=>open.id===row.id));
       setResolvedList(list);
@@ -1107,7 +1096,7 @@ export default function AnnotationLayer({
       setOpenId(cur=>cur&&(removed.includes(cur)||recentResolved[cur])&&!list.some(a=>a.id===cur)&&!previousOpen.current.has(cur)?null:cur);
     }).catch(()=>{if(!abort.signal.aborted){setRecentResolved({});setResolvedList(null);setOpenId(null);}});
     return()=>abort.abort();
-  }, [id, railOpen, annotations]);
+  }, [backend, railOpen, annotations]);
 
   /*
    * OPENING THE RAIL OPENS A PICK. Someone who presses "comments" is about to
@@ -1276,11 +1265,7 @@ export default function AnnotationLayer({
   const act = useCallback(async (annId: string, body: { reply?: string; resolve?: boolean; reopen?: boolean }) => {
     setBusy(true);
     try {
-      const res = await fetch(`/api/my/artifacts/${id}/annotations/${annId}`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
-      });
-      if (!res.ok) return false;
-      const wire = (await res.json()) as AnnotationWire;
+      const wire = await backend.actOnAnnotation(annId, body);
       setAnnotations((prev) => {
         if (wire.status === 'resolved') return prev.filter((a) => a.id !== annId);
         return prev.some((a) => a.id === annId)
@@ -1303,18 +1288,17 @@ export default function AnnotationLayer({
       }
       return true;
     } catch {return false;} finally { setBusy(false); }
-  }, [id]);
+  }, [backend]);
 
   const remove = useCallback(async (annId: string) => {
     setBusy(true);
     try {
-      const res = await fetch(`/api/my/artifacts/${id}/annotations/${annId}`, { method: 'DELETE' });
-      if (!res.ok) throw new Error('Could not delete this comment. Try again.');
+      await backend.deleteAnnotation(annId);
       setAnnotations((prev) => prev.filter((a) => a.id !== annId));
       setResolvedList((prev) => (prev ? prev.filter((a) => a.id !== annId) : prev));
       setOpenId((cur) => (cur === annId ? null : cur));
     } finally { setBusy(false); }
-  }, [id]);
+  }, [backend]);
 
   const save = useCallback(async () => {
     if (!selection || !hasReplyText(draft) || capture.busy || (capture.required&&!capture.draft)) return;
@@ -1329,30 +1313,26 @@ export default function AnnotationLayer({
       const attachmentId=await capture.stage(capture.draft?await screenshotExport.current!():undefined);
       const signature=JSON.stringify([selection,draft,attachmentId]);
       if(mutationRef.current.signature!==signature)mutationRef.current={signature,key:crypto.randomUUID()};
-      const res = await fetch(`/api/my/artifacts/${id}/annotations`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json', 'Idempotency-Key':mutationRef.current.key },
-        // The exact words ride along when there are any: the frame captured
-        // them from the live Range, and the page is the only side that can
-        // store them. A caret comment simply carries neither key.
-        body: JSON.stringify({
+      let wire: AnnotationWire;
+      try {
+        wire = await backend.createAnnotation({
+          // The exact words ride along when there are any: the frame captured
+          // them from the live Range, and the page is the only side that can
+          // store them. A caret comment simply carries neither key.
           path: selection.path, node_id: selection.nodeId, body: draft,
           ...(attachmentId?{attachment_id:attachmentId,edit_id:capture.draft!.editId}:{}),
           ...(selection.quote ? { quote: selection.quote } : {}),
           ...(selection.range ? { range: selection.range } : {}),
-        }),
-      });
-      // A guest may READ a thread and may not start one, and the door says so
-      // by name: the login page, and back to this document with the ask — the
-      // same move the heart and the fork button make (lib/story/sign-in-required).
-      if (await refusedForSignIn(res)) {
-        window.location.assign(loginHref(window.location, 'comment'));
+        }, mutationRef.current.key);
+      } catch (error) {
+        if (!(error instanceof BackendRequestError)) throw error;
+        // A guest may READ a thread and may not start one, and the door says so
+        // by name: the login page, and back to this document with the ask — the
+        // same move the heart and the fork button make (lib/story/sign-in-required).
+        if (error.signInRequired) window.location.assign(loginHref(window.location, 'comment'));
+        else setFailure(error.message);
         return;
       }
-      if (!res.ok) {
-        setFailure(await annotationFailure(res));
-        return;
-      }
-      const wire = (await res.json()) as AnnotationWire;
       capture.reset();
       setAnnotations((prev) => [...prev.filter(item=>item.id!==wire.id), wire]);
       setSelection(null);
@@ -1362,7 +1342,7 @@ export default function AnnotationLayer({
       setJustOpenedId(wire.id);
       postToFrame({ type: STORY_SELECT_MESSAGE, path: null });
     } catch(error){setFailure(error instanceof Error?error.message:'Could not save the comment. Your draft is still here.');} finally { setBusy(false); }
-  }, [id, selection, draft, postToFrame,capture]);
+  }, [backend, selection, draft, postToFrame,capture]);
 
   const cancelCompose = useCallback(() => {
     captureRef.current.reset();
@@ -1429,7 +1409,7 @@ export default function AnnotationLayer({
    * closing it does not cancel a pick for the same reason.
    */
   const beginPick = async (mode: 'select') => {
-    if(editId){
+    if(editId&&!imagesUnavailable){
       const preparation=capture.start(); // Native permission still starts in this gesture.
       void loadScreenshotEditor().catch(()=>{}); // Overlap the lazy chunk with permission/selection.
       if(!await preparation)return;
@@ -1567,6 +1547,7 @@ export default function AnnotationLayer({
             {capture.busy&&<div role="status" className="mb-3 flex items-center gap-2 rounded-lg border border-edge bg-surface p-4 text-sm text-muted"><LoaderCircle size={16} className="animate-spin"/>Preparing screenshot…</div>}
             {capture.draft&&<ScreenshotEditor image={capture.draft.image} initialStrokes={capture.draft.strokes} exportRef={screenshotExport} busy={busy} onRetake={()=>void beginPick('select')}/>}
             {capture.required&&!capture.draft&&!capture.busy&&<div className="mb-3 space-y-3 rounded-lg border border-edge bg-surface p-3 text-xs"><p role="alert" className="leading-relaxed text-muted">{capture.error||'A screenshot is required for this selection.'}</p><button type="button" className="rounded-lg border border-edge bg-panel px-3 py-2 font-medium hover:border-accent" onClick={()=>void beginPick('select')}>Retry screenshot</button><label className="block space-y-2 font-medium">Upload screenshot<input className="block w-full text-xs text-muted file:mr-2 file:rounded-md file:border-0 file:bg-panel file:px-3 file:py-2 file:text-fg" type="file" accept="image/png,image/jpeg,image/webp" aria-label="Upload screenshot" onChange={event=>{const file=event.target.files?.[0];if(file)void capture.upload(file);event.target.value='';}}/></label><button type="button" className="text-muted underline underline-offset-4 hover:text-fg" onClick={capture.skip}>Continue without screenshot</button></div>}
+            {editId&&imagesUnavailable&&<div className="mb-3"><FeatureGate reason={imagesUnavailable}>{(gate)=><button type="button" className="rounded-lg border border-edge bg-panel px-3 py-2 text-xs font-medium disabled:opacity-50" {...gate}>Attach screenshot</button>}</FeatureGate></div>}
             <MarkdownField artifactId={id}
               label="Annotation comment"
               previewLabel="Comment preview"

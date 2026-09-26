@@ -20,7 +20,6 @@ function stubFetch(...responses: Array<Response | (() => Response) | Error>) {
   return calls;
 }
 const json = (body: unknown, status = 200) => Response.json(body, { status });
-const bodyOf = (call: Call) => JSON.parse(String(call.init?.body));
 
 afterEach(() => vi.unstubAllGlobals());
 
