@@ -275,10 +275,14 @@ export async function assembleArtifactFile(input: AssembleArtifactFileInput): Pr
   const imageRefs = new Set(Object.entries(refData).filter(([, r]) => r.kind === 'image').map(([id]) => id));
   const inliner = new Inliner(origin, imageRefs, maxFileBytes);
   const snapshot = { at: new Date().toISOString(), state, variants, frozen };
-  let inlined: { css: string; island: StoryIslandData; snapshot: ArtifactFile['snapshot']; threads: AnnotationWire[] };
+  let inlined: { css: ArtifactFile['css']; island: StoryIslandData; snapshot: ArtifactFile['snapshot']; threads: AnnotationWire[] };
   try {
     inlined = {
-      css: await inliner.css([compiledCss ?? '', parts.runtime.baseCss, parts.runtime.authorCss ?? ''].filter(Boolean).join('\n')),
+      css: {
+        base: await inliner.css(parts.runtime.baseCss),
+        compiled: compiledCss ? await inliner.css(compiledCss) : null,
+        author: parts.runtime.authorCss ? await inliner.css(parts.runtime.authorCss) : null,
+      },
       island: JSON.parse(await inliner.json(JSON.stringify(island))) as StoryIslandData,
       snapshot: JSON.parse(await inliner.json(JSON.stringify(snapshot))) as ArtifactFile['snapshot'],
       threads: JSON.parse(await inliner.json(JSON.stringify(threads))) as AnnotationWire[],

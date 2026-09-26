@@ -34,6 +34,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import zlib from 'node:zlib';
 import { fileURLToPath } from 'node:url';
+import { createRequire } from 'node:module';
 import { compile, optimize } from '@tailwindcss/node';
 import { Scanner } from '@tailwindcss/oxide';
 
@@ -91,9 +92,45 @@ async function build() {
   const { candidates, files: scanned } = scanAppSources(compiler);
   const css = optimize(compiler.build(candidates), { minify: true }).code;
   const MAP_PACKAGES = /^(@deck\.gl\/|@luma\.gl\/|@loaders\.gl\/|react-map-gl|maplibre-gl$|maplibre-gl\/|h3-js$)/;
+  /*
+   * The editor compiles a draft's stylesheet IN the file (lib/offline/file-backend
+   * → compileStoryCss) against the Tailwind sheets embedded here, exactly as the
+   * server bundle embeds them (scripts/build-server.mjs); the node builtins that
+   * module reaches only when the sheets are NOT embedded are stubbed.
+   */
+  const tailwindDir = path.dirname(createRequire(import.meta.url).resolve('tailwindcss/index.css'));
+  const tailwindDefine = Object.fromEntries([
+    ['__MX_TAILWIND_INDEX_CSS__', 'index.css'],
+    ['__MX_TAILWIND_THEME_CSS__', 'theme.css'],
+    ['__MX_TAILWIND_PREFLIGHT_CSS__', 'preflight.css'],
+    ['__MX_TAILWIND_UTILITIES_CSS__', 'utilities.css'],
+  ].map(([symbol, file]) => [symbol, JSON.stringify(fs.readFileSync(path.join(tailwindDir, file), 'utf8'))]));
+  const NODE_STUBS = {
+    'node:module': 'export function createRequire() { throw new Error("unavailable in an offline file"); }',
+    'node:fs/promises': 'export function readFile() { return Promise.reject(new Error("unavailable in an offline file")); }',
+    'node:path': 'const basename = (p) => String(p).split("/").pop(); const dirname = (p) => String(p).split("/").slice(0, -1).join("/") || "/"; const join = (...p) => p.join("/").replace(/\\/+/g, "/"); export { basename, dirname, join }; export default { basename, dirname, join };',
+  };
   const stubs = (kind) => ({
     name: `offline-stubs-${kind}`,
     setup(b) {
+      b.onResolve({ filter: /^node:(module|fs\/promises|path)$/ }, (args) => ({ path: args.path, namespace: 'offline-node' }));
+      b.onLoad({ filter: /.*/, namespace: 'offline-node' }, (args) => ({ loader: 'js', contents: NODE_STUBS[args.path] }));
+      /*
+       * Monaco (code view): a Worker cannot start from file://, so its worker
+       * import is a class that refuses (Monaco then runs its language work on
+       * the main thread); the sheet the editor mounts itself (`?inline`) is
+       * text, and the per-module sheets Monaco's ESM imports for their side
+       * effect are already in that sheet.
+       */
+      b.onResolve({ filter: /\?worker$/ }, (args) => ({ path: args.path, namespace: 'offline-worker' }));
+      b.onLoad({ filter: /.*/, namespace: 'offline-worker' }, () => ({ loader: 'js', contents: 'export default class OfflineWorker { constructor() { throw new Error("Workers are unavailable in an offline file."); } }' }));
+      b.onResolve({ filter: /\.css\?inline$/ }, (args) => ({
+        path: createRequire(path.join(args.resolveDir, 'index.js')).resolve(args.path.replace(/\?inline$/, '')),
+        namespace: 'offline-inline-css',
+      }));
+      b.onLoad({ filter: /.*/, namespace: 'offline-inline-css' }, (args) => ({ loader: 'text', contents: fs.readFileSync(args.path, 'utf8') }));
+      b.onResolve({ filter: /\.css$/ }, (args) => (/monaco-editor/.test(args.resolveDir) || /monaco-editor/.test(args.path) ? { path: args.path, namespace: 'offline-empty-css' } : undefined));
+      b.onLoad({ filter: /.*/, namespace: 'offline-empty-css' }, () => ({ loader: 'js', contents: '' }));
       b.onResolve({ filter: /\/deck-gl-engine$/ }, () => ({ path: 'deck-gl-engine', namespace: 'offline-stub' }));
       b.onResolve({ filter: MAP_PACKAGES }, (args) => ({ path: args.path, namespace: 'offline-stub' }));
       if (kind === 'core') b.onResolve({ filter: /\/mermaid-render$/ }, () => ({ path: 'mermaid-render', namespace: 'offline-stub' }));
@@ -121,7 +158,9 @@ async function build() {
     define: {
       'process.env.NODE_ENV': '"production"',
       'import.meta.url': 'globalThis.__AFBIN_MODULE_URL__',
+      'import.meta.hot': 'undefined',
       __AFBIN_APP_CSS__: JSON.stringify(css),
+      ...tailwindDefine,
     },
     logOverride: { 'empty-import-meta': 'error' },
     plugins: [stubs(kind)],

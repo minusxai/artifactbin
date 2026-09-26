@@ -24,7 +24,7 @@ export function artifactFile(overrides: Partial<ArtifactFile> = {}): ArtifactFil
     base: { version: 3, editId: 'e3', source: '<p id="a1">Hi</p>' },
     source: '<p id="a1">Hi</p>',
     metadata: { title: 'Sales </script><script>alert(1)</script>', description: null, theme: null, template: 'dashboard', colorMode: null },
-    css: '.p-7{padding:1.75rem}',
+    css: { base: 'body{margin:0}', compiled: '.p-7{padding:1.75rem}', author: null },
     island: { nodes: [], refData: {}, colorMode: 'light' } as unknown as ArtifactFile['island'],
     snapshot: {
       at: '2026-09-26T10:00:00.000Z',

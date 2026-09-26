@@ -20,6 +20,8 @@ describe('parseArtifactFile', () => {
     ['threads not a list', { ...artifactFile(), threads: {} }],
     ['snapshot without state', { ...artifactFile(), snapshot: { at: 'x', variants: [], frozen: [] } }],
     ['base without version', { ...artifactFile(), base: { editId: 'e', source: '' } }],
+    ['css as one string (the shape before it was split)', { ...artifactFile(), css: '.p-7{padding:1.75rem}' }],
+    ['css without its base sheet', { ...artifactFile(), css: { compiled: null, author: null } }],
   ])('refuses a damaged file: %s', (_label, value) => {
     expect(() => parseArtifactFile(value)).toThrow(ArtifactFileError);
     expect(() => parseArtifactFile(value)).toThrow(/damaged/i);

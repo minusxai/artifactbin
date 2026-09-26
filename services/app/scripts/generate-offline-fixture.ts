@@ -17,13 +17,18 @@ import { fileURLToPath } from 'node:url';
 import { parseJsx } from '@/lib/jsx';
 import { splitHelmet } from '@/lib/story/helmet';
 import { compileStoryCss } from '@/lib/data/story/story-css.server';
+import { stampNodeIds } from '@/lib/story/node-ids';
 import { prepareStoryParts } from '@/lib/story/prepare-runtime.server';
 import type { Dataflow, DataflowState, TableResult } from '@/lib/story/dataflow';
 import { ARTIFACT_FILE_FORMAT, parseArtifactFile, type ArtifactFile } from '@/lib/offline/file-format';
 
 const APP = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const FIXTURE = path.resolve(APP, '../../scripts/fixtures/offline-file');
-const source = readFileSync(path.join(FIXTURE, 'dashboard.jsx'), 'utf8').trim();
+/*
+ * Stamped the way publish stamps every stored document (lib/artifacts), so the
+ * fixture's elements carry the node ids comments anchor to and edits keep.
+ */
+const source = stampNodeIds(readFileSync(path.join(FIXTURE, 'dashboard.jsx'), 'utf8').trim(), { retireLegacyAliases: true }).source;
 
 const parsed = parseJsx(source);
 if (!parsed.ok) throw new Error('dashboard.jsx does not parse');
@@ -60,7 +65,7 @@ const { runtime } = await prepareStoryParts({
  * the file references nothing outside itself either way.
  */
 const KEEP_FONT = 'inter-latin-standard-normal';
-const css = [runtime.baseCss, runtime.compiledCss, runtime.authorCss].filter(Boolean).join('\n')
+const base = runtime.baseCss
   .replace(/@font-face\s*{[^}]*}/g, (face) => {
     const url = face.match(/url\("?(\/fonts\/[^")]+)"?\)/)?.[1];
     if (!url) return face;
@@ -68,7 +73,8 @@ const css = [runtime.baseCss, runtime.compiledCss, runtime.authorCss].filter(Boo
     const data = readFileSync(path.join(APP, 'public', url)).toString('base64');
     return face.replace(/url\("?\/fonts\/[^")]+"?\)/, `url("data:font/woff2;base64,${data}")`);
   });
-if (/url\("?\//.test(css)) throw new Error('fixture css still references a server path');
+const css = { base, compiled: runtime.compiledCss ?? null, author: runtime.authorCss ?? null };
+if (/url\("?\//.test([css.base, css.compiled, css.author].join('\n'))) throw new Error('fixture css still references a server path');
 
 const at = '2026-09-26T10:00:00.000Z';
 const file: ArtifactFile = {
@@ -101,4 +107,4 @@ const file: ArtifactFile = {
 };
 parseArtifactFile(JSON.parse(JSON.stringify(file)));
 writeFileSync(path.join(FIXTURE, 'artifact-file.json'), JSON.stringify(file, null, 1) + '\n');
-console.log(`wrote ${path.relative(process.cwd(), path.join(FIXTURE, 'artifact-file.json'))} (${css.length} bytes of css)`);
+console.log(`wrote ${path.relative(process.cwd(), path.join(FIXTURE, 'artifact-file.json'))} (${JSON.stringify(css).length} bytes of css)`);

@@ -19,9 +19,9 @@ export function mountOfflineFile(doc: Document, onFile?: (file: ArtifactFile) =>
   if (!container) return null;
   const root = createRoot(container);
   try {
-    const { file } = readArtifactFileParts(doc);
+    const { file, code } = readArtifactFileParts(doc);
     onFile?.(file);
-    root.render(<OfflineApp file={file} />);
+    root.render(<OfflineApp file={file} code={code} />);
   } catch (error) {
     root.render(<OfflineFileError message={error instanceof ArtifactFileError ? error.message : UNREADABLE} />);
   }

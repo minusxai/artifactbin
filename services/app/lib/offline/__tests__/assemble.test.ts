@@ -173,8 +173,9 @@ describe('a self-contained file', () => {
   it('inlines every font and image, and names no server door', async () => {
     const w = await world();
     const file = await download(w.doc, w.owner.actor);
-    expect(file.css).toContain('data:font/woff2;base64,');
-    expect(file.css).not.toMatch(/url\(\s*['"]?\//);
+    const css = [file.css.base, file.css.compiled, file.css.author].join('\n');
+    expect(file.css.base).toContain('data:font/woff2;base64,');
+    expect(css).not.toMatch(/url\(\s*['"]?\//);
     const island = JSON.stringify(file.island);
     expect(island).toContain(`data:image/png;base64,${PNG_B64}`);
     expect(island).not.toContain('/assets/');

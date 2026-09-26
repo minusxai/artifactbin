@@ -7,6 +7,7 @@ import { describe, expect, it } from 'vitest';
 import { useAppHarness, request } from '@/__tests__/harness';
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 import { GET as download } from '@/app/a/[id]/download/route';
+import { offlineBundle } from '@/lib/offline/bundle.server';
 import { parseArtifactFile } from '@/lib/offline/file-format';
 import { mintToken } from '@/lib/tokens';
 import { claimToken, createUser } from '@/lib/users';
@@ -71,8 +72,11 @@ describe('GET /a/<id>/download', () => {
     expect(fileOf(html).bundle).toBe('mermaid');
     const plain = await publish(token, 'private');
     const plainHtml = await (await download(request(`/a/${plain}/download`, { token }), params(plain))).text();
-    const code = (h: string) => h.match(/id="afbin-code">([^<]*)</)![1]!.length;
-    // the diagram renderer roughly triples the bundle; the file must actually carry it
-    expect(code(html)).toBeGreaterThan(code(plainHtml) * 2);
+    const code = (h: string) => h.match(/id="afbin-code">([^<]*)</)![1]!;
+    // Each file carries exactly the bundle it names: the diagram renderer where there is a diagram, never elsewhere.
+    // (A size ratio stopped saying this once the editor made the core bundle large too.)
+    expect(code(html)).toBe(await offlineBundle('mermaid'));
+    expect(code(plainHtml)).toBe(await offlineBundle('core'));
+    expect(code(html).length).toBeGreaterThan(code(plainHtml).length + 1024 * 1024);
   });
 });
