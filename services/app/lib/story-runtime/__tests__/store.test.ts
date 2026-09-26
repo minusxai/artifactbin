@@ -1,7 +1,7 @@
 /**
  * The runtime dataflow store: seeding, identity-stable snapshots, value
- * changes → dirty dependents → a debounced transport run → merged results,
- * with superseded runs dropped. React-free.
+ * changes → dependents no longer current → a transport run (debounced for a
+ * continuous input) → merged results, with superseded answers dropped. React-free.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { type JsxNode } from '@/lib/jsx';
@@ -87,7 +87,7 @@ describe('createDataflowStore', () => {
   it('re-runs exactly the dependent queries (transitively) after the debounce, and merges results', async () => {
     const { transport, calls, resolve } = fakeTransport();
     const store = createDataflowStore({ flow: FLOW, state: STATE }, { transport, debounceMs: 100 });
-    store.setValue('region', 'EU');
+    store.setValue('region', 'EU', { debounce: true });
     expect(calls).toHaveLength(0);
     vi.advanceTimersByTime(99);
     expect(calls).toHaveLength(0);
@@ -105,9 +105,9 @@ describe('createDataflowStore', () => {
   it('coalesces rapid changes into one run with the latest values', () => {
     const { transport, calls } = fakeTransport();
     const store = createDataflowStore({ flow: FLOW, state: STATE }, { transport, debounceMs: 100 });
-    store.setValue('min_rev', 1);
+    store.setValue('min_rev', 1, { debounce: true });
     vi.advanceTimersByTime(50);
-    store.setValue('min_rev', 2);
+    store.setValue('min_rev', 2, { debounce: true });
     vi.advanceTimersByTime(50);
     expect(calls).toHaveLength(0);
     vi.advanceTimersByTime(50);
@@ -188,6 +188,62 @@ describe('createDataflowStore', () => {
     expect(calls[0].only).toEqual(['other']);
     store.refresh();
     expect(calls[1].only.sort()).toEqual(['other', 'sales', 'top']);
+  });
+});
+
+/*
+ * One run never strands another. A result is judged by the versions of what
+ * ITS queries read, not by whether it came from the newest run — so a run for
+ * `sales` survives a later run for `trend` that a different value started.
+ */
+describe('independent runs', () => {
+  const TWO = flowOf(
+    '<Value name="region" type="string" />' +
+    '<Value name="window" type="number" default={7} />' +
+    '<Query name="sales">{`select $region as region`}</Query>' +
+    '<Query name="trend">{`select $window as days`}</Query>',
+  );
+  const TWO_STATE: DataflowState = {
+    values: { region: null, window: 7 },
+    tables: { sales: { rows: [{ region: null }], columns: [] }, trend: { rows: [{ days: 7 }], columns: [] } },
+    errors: {},
+  };
+  const settle = async () => { for (let i = 0; i < 5; i++) await Promise.resolve(); };
+
+  it('a run for one value is applied although a run for another value started while it was in flight', async () => {
+    const { transport, calls, resolveNth } = fakeTransport();
+    const store = createDataflowStore({ flow: TWO, state: TWO_STATE }, { transport, debounceMs: 10 });
+    store.setValue('region', 'EU');
+    vi.advanceTimersByTime(10);
+    store.setValue('window', 30);
+    vi.advanceTimersByTime(10);
+    expect(calls.map((c) => c.only)).toEqual([['sales'], ['trend']]);
+    resolveNth(0, { tables: { sales: { rows: [{ region: 'EU' }], columns: [] } }, errors: {} });
+    resolveNth(1, { tables: { trend: { rows: [{ days: 30 }], columns: [] } }, errors: {} });
+    await settle();
+    expect(store.getTable('sales')?.rows).toEqual([{ region: 'EU' }]);
+    expect(store.getTable('trend')?.rows).toEqual([{ days: 30 }]);
+    expect(store.pending().size).toBe(0);
+  });
+
+  it('a dataset invalidation does not strand a reader run already in flight', async () => {
+    const flow = flowOf(
+      '<Value name="region" type="string" />' +
+      '<Query name="sales">{`select $region as region`}</Query>' +
+      '<Query name="stock" source="ref:abc123">{`select * from public.rows`}</Query>',
+    );
+    const { transport, calls, resolveNth } = fakeTransport();
+    const store = createDataflowStore({ flow, state: { values: { region: null }, tables: {}, errors: {} } }, { transport, debounceMs: 10 });
+    store.setValue('region', 'EU');
+    vi.advanceTimersByTime(10);
+    store.invalidateDatasets(['abc123']);
+    expect(calls.map((c) => c.only)).toEqual([['sales'], ['stock']]);
+    resolveNth(0, { tables: { sales: { rows: [{ region: 'EU' }], columns: [] } }, errors: {} });
+    resolveNth(1, { tables: { stock: { rows: [{ n: 1 }], columns: [] } }, errors: {} });
+    await settle();
+    expect(store.getTable('sales')?.rows).toEqual([{ region: 'EU' }]);
+    expect(store.getTable('stock')?.rows).toEqual([{ n: 1 }]);
+    expect(store.pending().size).toBe(0);
   });
 });
 
