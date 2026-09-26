@@ -247,8 +247,86 @@ const whole = (fn: string, value: SqlValue): number => {
 };
 /** A decimal number as DuckDB's cast to a double reads one: sign, digits with an optional point, exponent. */
 const NUMBER_TEXT = /^[+-]?(?:\d+\.?\d*|\.\d+)(?:e[+-]?\d+)?$/i;
-/** A date written as DuckDB's cast reads one: year, month, day with - or /, optionally a time after it. */
-const DATE_WRITTEN = /^\s*(\d{1,4})([-/])(\d{1,2})\2(\d{1,2})(?:[T ].*)?\s*$/s;
+/**
+ * A date written as DuckDB's cast reads one: year, month, day with - or /,
+ * then anything that is not another digit (a time, a zone, stray text).
+ */
+const DATE_WRITTEN = /^\s*(\d{1,4})([-/])(\d{1,2})\2(\d{1,2})(?!\d)(.*)$/s;
+/** The calendar day text names, as DuckDB's cast to DATE read it; null when it names none. A `(BC)` day has no ISO text here. */
+function writtenDate(value: SqlValue): string | null {
+  const m = typeof value === 'string' ? DATE_WRITTEN.exec(value) : null;
+  if (!m || /\(BC\)/i.test(m[5]!)) return null;
+  const text = `${pad(Number(m[1]), 4)}-${pad(Number(m[3]))}-${pad(Number(m[4]))}`;
+  return calendarDate(text) === null ? null : text;
+}
+
+/** The whitespace DuckDB trims around a list's items: ASCII only. */
+const LIST_SPACE = new Set([' ', '\t', '\n', '\v', '\f', '\r']);
+const QUOTES = new Set(['"', "'"]);
+const CLOSER: Record<string, string> = { '[': ']', '(': ')', '{': '}' };
+/** The index of the quote closing the one at `open` (a backslash escapes the next character), or -1. */
+function closingQuote(text: string, open: number): number {
+  for (let k = open + 1; k < text.length; k++) {
+    if (text[k] === '\\') k++;
+    else if (text[k] === text[open]) return k;
+  }
+  return -1;
+}
+/**
+ * Text read as a list of text, the way DuckDB's cast to VARCHAR[] read it — a
+ * JSON list of strings, `[a, b]` or `['a', 'b']`: items split at the commas
+ * outside quotes and nested brackets; quotes of either kind removed, with a
+ * backslash escaping inside them (and a quote outside them); the whitespace
+ * around an item trimmed; a nested bracket kept as its text; an unquoted
+ * `null`, in any case, a null. Null when the text is no such list.
+ */
+function listItems(text: string): Array<string | null> | null {
+  let i = 0;
+  const skipSpace = () => { while (i < text.length && LIST_SPACE.has(text[i]!)) i++; };
+  skipSpace();
+  if (text[i++] !== '[') return null;
+  skipSpace();
+  const items: Array<string | null> = [];
+  if (text[i] === ']') i++;
+  else for (;;) {
+    // One item's characters, each marked when a quote kept it from the trim.
+    const chars: Array<{ c: string; kept: boolean }> = [];
+    let quoted = false;
+    /** The closers the nested brackets open so far await, innermost last. */
+    const nested: string[] = [];
+    for (let c = text[i]; nested.length || (c !== ',' && c !== ']'); c = text[i]) {
+      if (c === undefined) return null;
+      if (QUOTES.has(c)) {
+        const close = closingQuote(text, i);
+        if (close < 0) return null;
+        if (nested.length) chars.push(...[...text.slice(i, close + 1)].map((ch) => ({ c: ch, kept: false })));
+        else {
+          quoted = true;
+          for (let k = i + 1; k < close; k++) chars.push({ c: text[text[k] === '\\' ? ++k : k]!, kept: true });
+        }
+        i = close + 1;
+        continue;
+      }
+      if (c === '\\' && !nested.length && QUOTES.has(text[i + 1] ?? '')) { chars.push({ c: text[i + 1]!, kept: true }); i += 2; continue; }
+      if (CLOSER[c]) nested.push(CLOSER[c]);
+      else if (nested.length && ')]}'.includes(c) && nested.pop() !== c) return null;
+      chars.push({ c, kept: false });
+      i++;
+    }
+    let from = 0, to = chars.length;
+    while (from < to && !chars[from]!.kept && LIST_SPACE.has(chars[from]!.c)) from++;
+    while (to > from && !chars[to - 1]!.kept && LIST_SPACE.has(chars[to - 1]!.c)) to--;
+    const item = chars.slice(from, to).map((x) => x.c).join('');
+    items.push(!quoted && item.toLowerCase() === 'null' ? null : item);
+    if (text[i++] === ']') break;
+  }
+  skipSpace();
+  return i === text.length ? items : null;
+}
+const readList = (value: SqlValue): string | null => {
+  const items = listItems(String(value));
+  return items && JSON.stringify(items);
+};
 function quantile(sorted: number[], q: number): number | null {
   if (!sorted.length) return null;
   const pos = q * (sorted.length - 1), lo = Math.floor(pos), hi = Math.ceil(pos);
@@ -360,15 +438,8 @@ const IMPLEMENTATIONS: Record<string, Scalar | Aggregate> = {
       return text;
     },
   },
-  to_date: {
-    kind: 'scalar',
-    call: ([value]) => {
-      const m = typeof value === 'string' ? DATE_WRITTEN.exec(value) : null;
-      const text = m ? `${pad(Number(m[1]), 4)}-${pad(Number(m[3]))}-${pad(Number(m[4]))}` : '';
-      if (!m || calendarDate(text) === null) fail('to_date', `${String(value).trim()} is not a date`);
-      return text;
-    },
-  },
+  to_date: { kind: 'scalar', call: ([value]) => writtenDate(value!) ?? fail('to_date', `${String(value).trim()} is not a date`) },
+  try_to_date: { kind: 'scalar', call: ([value]) => writtenDate(value!) },
   median: { kind: 'aggregate', final: (rows) => quantile(numbers(column(rows)), 0.5) },
   quantile: {
     kind: 'aggregate',
@@ -434,6 +505,8 @@ const IMPLEMENTATIONS: Record<string, Scalar | Aggregate> = {
     kind: 'scalar',
     call: ([a, b]) => { const left = list('list_has_any', a!); return bool(list('list_has_any', b!).some((v) => left.includes(v))); },
   },
+  to_list: { kind: 'scalar', call: ([value]) => readList(value!) ?? fail('to_list', `${String(value)} is not a list`) },
+  try_to_list: { kind: 'scalar', call: ([value]) => readList(value!) },
   list_value: {
     kind: 'scalar',
     nullable: false,

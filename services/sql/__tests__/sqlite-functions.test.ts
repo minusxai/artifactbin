@@ -112,6 +112,23 @@ describe('dates', () => {
     expect(await failure("select to_date('2026-09')")).toMatch(/to_date: 2026-09 is not a date/);
     expect(await failure("select to_date('2026-02-30')")).toMatch(/to_date: 2026-02-30 is not a date/);
   });
+  // What DuckDB 1.5's CAST(text AS DATE) and TRY_CAST answered for each text (null: it failed).
+  const DUCKDB_DATES: Array<[string, string | null]> = [
+    ['2026-09-30', '2026-09-30'], ['2026-9-3', '2026-09-03'], ['2026/09/30', '2026-09-30'], [' 2026-09-30 ', '2026-09-30'],
+    ['2026-09-30T23:30:00.000Z', '2026-09-30'], ['2026-09-30 10:00:00+05:30', '2026-09-30'], ['2026-09-30Z', '2026-09-30'],
+    ['2026-09-30x', '2026-09-30'], ['2026-09-30T25:99', '2026-09-30'], ['26-09-30', '0026-09-30'],
+    ['2026-02-30', null], ['2026-09', null], ['', null], ['garbage', null], ['20260930', null], ['30/09/2026', null],
+    ['2026.09.30', null], ['2026-13-01', null], ['+2026-09-30', null],
+  ];
+  it.each(DUCKDB_DATES)('to_date and try_to_date read %j as DuckDB did', async (text, day) => {
+    expect(await value('select try_to_date($t) as d', { t: text })).toBe(day);
+    if (day === null) expect(await failure(`select to_date('${text}')`)).toMatch(/to_date: .* is not a date/);
+    else expect(await value('select to_date($t) as d', { t: text })).toBe(day);
+  });
+  it('refuses a day before the common era rather than read it as one after', async () => {
+    expect(await failure("select to_date('2026-09-30 (BC)')")).toMatch(/to_date: 2026-09-30 \(BC\) is not a date/);
+    expect(await value("select try_to_date('2026-09-30 (BC)') as d")).toBeNull();
+  });
 });
 
 describe('text', () => {
@@ -189,6 +206,21 @@ describe('JSON lists', () => {
       list_has_any('[1,2]', '[3,2]') as any, list_has_any('["x"]', '[]') as none`))
       .toEqual({ l: '[1,"a",null]', empty: '[]', has: 1, hasnt: 0, any: 1, none: 0 });
     expect(await failure("select list_contains('not a list', 1)")).toMatch(/list/);
+  });
+  // What DuckDB 1.5's CAST(text AS VARCHAR[]) answered for each text (null: it failed).
+  const DUCKDB_LISTS: Array<[string, Array<string | null> | null]> = [
+    ['["a","b"]', ['a', 'b']], ['[a, b]', ['a', 'b']], ["['a', 'b c']", ['a', 'b c']], [' [a] ', ['a']], ['[ ]', []], ['[,]', ['', '']],
+    ['[1, 2.50]', ['1', '2.50']], ['[null, "null", NULL]', [null, 'null', null]], ['["a, b", "c"]', ['a, b', 'c']],
+    ['[[1,2],{"k":1}]', ['[1,2]', '{"k":1}']], ['[ [ 1 ] ]', ['[ 1 ]']], ['["a\\"b"]', ['a"b']], ['["a\\nb"]', ['anb']], ['[a\\,b]', ['a\\', 'b']],
+    ['[a)b,c]', ['a)b', 'c']], ['[{a,b}]', ['{a,b}']], ['[(a],b]', null],
+    ['[a b  c]', ['a b  c']], ['["x" y]', ['x y']], ['["  x  "]', ['  x  ']], ['[\t a \t]', ['a']], ['[n"u"ll]', ['null']], ['["it\'s"]', ["it's"]],
+    ['', null], ['a,b', null], ['[a]b', null], ['[a"b]', null], ['[a,b', null], ['[a]]', null], ["[it's]", null], ['x[a]', null],
+  ];
+  it.each(DUCKDB_LISTS)('to_list and try_to_list read %j as a list of text, as DuckDB did', async (text, items) => {
+    const list = items && JSON.stringify(items);
+    expect(await value('select try_to_list($t) as l', { t: text })).toBe(list);
+    if (list === null) expect(await failure(`select to_list('${text.replaceAll("'", "''")}')`)).toMatch(/to_list: .* is not a list/);
+    else expect(await value('select to_list($t) as l', { t: text })).toBe(list);
   });
 });
 

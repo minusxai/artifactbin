@@ -17,6 +17,12 @@ const tables: RunInput['tables'] = {
 };
 const side = (service: SqlService, extra: Partial<DiffSide> = {}): DiffSide => ({ service, tables, ...extra });
 
+/** A recorded answer: rows as values in column order (the comparison reads values, not the declared types). */
+const table = (names: string[], rows: unknown[][]): QueryOutcome => ({
+  rows: rows.map((row) => Object.fromEntries(names.map((name, k) => [name, row[k]]))),
+  columns: names.map((name) => ({ name, type: 'string' as const })),
+});
+
 /** A service that answers each query from a fixed table of outcomes, recording what it was asked. */
 function stub(answers: Record<string, QueryOutcome>, seen: RunInput[] = []): SqlService {
   const unused = () => Promise.reject(new Error('not used'));
@@ -88,6 +94,17 @@ describe('translations answer as DuckDB did', () => {
     'with c as (select cast(day as date) as d from ref_nums), i as (select d, d - cast(row_number() over (order by d) as integer) as run from c) select run, count(*) as n from i group by run':
       { rows: [{ run: '2026-01-14', n: 1 }, { run: '2026-01-30', n: 1 }, { run: '2026-02-25', n: 1 }], columns: [{ name: 'run', type: 'string' }, { name: 'n', type: 'number' }] },
     "select cast(v as date) as d from (select '2026-1' as v) t": { error: 'Conversion Error: invalid date field format: "2026-1"' },
+    // Lists stored as text, read with casts to VARCHAR[], series and lambdas the rehearsal left for a person.
+    "select tags, cast(tags as varchar[]) as l, try_cast(tags as varchar[]) as t, len(cast(tags as varchar[])) as n, list_contains(cast(tags as varchar[]), '2') as has from (select '[\"a\",\"b\"]' as tags union all select '[1, 2]' union all select '[x, null]' union all select null) s":
+      table(['tags', 'l', 't', 'n', 'has'], [['["a","b"]', ['a', 'b'], ['a', 'b'], 2, false], ['[1, 2]', ['1', '2'], ['1', '2'], 2, true], ['[x, null]', ['x', null], ['x', null], 2, false], [null, null, null, null, null]]),
+    "select v, try_cast(v as varchar[]) as t from (select 'a,b' as v union all select '[a]') s": table(['v', 't'], [['a,b', null], ['[a]', ['a']]]),
+    "select unnest(cast(tags as varchar[])) as tag from (select '[\"a\",\"b\"]' as tags union all select '[c]') s": table(['tag'], [['a'], ['b'], ['c']]),
+    "select v, try_cast(v as date) as d from (select '2026-9-3' as v union all select 'x' union all select '2026-02-30') s": table(['v', 'd'], [['2026-9-3', '2026-09-03'], ['x', null], ['2026-02-30', null]]),
+    "select cast(unnest(generate_series(cast('2026-01-30' as date), cast('2026-02-02' as date), interval 1 day)) as date) as d": table(['d'], [['2026-01-30'], ['2026-01-31'], ['2026-02-01'], ['2026-02-02']]),
+    'select unnest(generate_series(0, 3)) as i': table(['i'], [[0], [1], [2], [3]]),
+    'select n, generate_series(2, 5, 2) as a, range(3) as b, range(n) as c from (select 2 as n union all select null) s': table(['n', 'a', 'b', 'c'], [[2, [2, 4], [0, 1, 2], [0, 1]], [null, [2, 4], [0, 1, 2], null]]),
+    "select s, list_filter(list_transform(string_split(coalesce(s, ''), ','), x -> trim(x)), x -> x <> '') as l from (select ' a, b ,,c' as s union all select null) t": table(['s', 'l'], [[' a, b ,,c', ['a', 'b', 'c']], [null, []]]),
+    "select v, list_transform(cast(v as varchar[]), x -> upper(x)) as u from (select '[a, b]' as v union all select null) t": table(['v', 'u'], [['[a, b]', ['A', 'B']], [null, null]]),
   };
   it.each(Object.keys(duckdb))('%s', async (original) => {
     const translation = translateSql(original, { statement: 'query' });
