@@ -47,7 +47,9 @@ export async function startPreview(options:{root:string;files:string[];home:stri
  const compiledFor=async(file:string,revision:string,declared:ReturnType<typeof dataflowOf>):Promise<CompiledDataflow>=>{
   const cached=compiledCache.get(file);
   if(cached?.revision===revision)return cached.value;
-  const value=await compileLocal(declared,async id=>tableFor(id).catch(()=>undefined)).catch(error=>{throw new Refusal(400,error instanceof Error?error.message:String(error));});
+  // An import that is not selected compiles as missing; one whose local file cannot be read says so (422).
+  let unreadable:Refusal|undefined;
+  const value=await compileLocal(declared,async id=>tableFor(id).catch(error=>{if(error instanceof Refusal&&error.status===422)unreadable??=error;return undefined;})).catch(error=>{throw unreadable??(error instanceof Refusal?error:new Refusal(400,error instanceof Error?error.message:String(error)));});
   compiledCache.set(file,{revision,value});return value;
  };
  // Only refs in selected dataset inputs extend preview's asset scope. Query SQL
@@ -139,7 +141,8 @@ export async function startPreview(options:{root:string;files:string[];home:stri
     return read(input.file);
    })));
    if(target.pathname==='/query'){
-    const current=await read(input.file),datasets:Record<string,LocalDataset>={};
+    // A document that does not compile fails the capture as a query error would: the export names it.
+    const current=await read(input.file).catch((error:unknown)=>{if(options.capture&&error instanceof Refusal)failure=error.message;throw error;}),datasets:Record<string,LocalDataset>={};
     const invalid=validateQueryValues(current.flow,input.values??{});if(invalid)throw new Refusal(400,invalid.code);
     for(const id of declaredRefs(current.declared))datasets[id]??=await tableFor(id);
     for(const [id,table] of Object.entries(datasets))datasetImages.set(id,new Set(table.rows.flatMap(row=>Object.values(row).flatMap(value=>{const ref=typeof value==='string'?imageReferenceId(value):null;return ref?[ref]:[];}))));
