@@ -97,7 +97,12 @@ export interface DataflowStore {
    * the reader to pause.
    */
   setValue(name: string, value: Scalar, options?: { debounce?: boolean }): void;
-  setValues(values: Record<string, Scalar>): void;
+  /**
+   * Set several scalars at once. `frame` coalesces the run: the values are set
+   * now, and what reads them runs once, at the next frame — an author script
+   * setting a value on every pointer move must not run a query per event.
+   */
+  setValues(values: Record<string, Scalar>, options?: { frame?: boolean }): void;
   getTable(name: string): TableResult | undefined;
   /**
    * Queries whose rows are NOT CURRENT, asked for or not (an embed shows
@@ -300,7 +305,17 @@ export function createDataflowStore(
 
   const flush = () => {
     if (timer) { clearTimeout(timer); timer = null; }
+    frame?.();
     if (transport) dispatch({ type: 'flush' });
+  };
+  /** The pending frame's canceller: one flush per frame, whichever of the frame or its fallback comes first. */
+  let frame: (() => void) | null = null;
+  const nextFrame = () => {
+    if (frame || !transport) return;
+    // A hidden tab runs no animation frames; the timer keeps its writes moving.
+    const raf = typeof requestAnimationFrame === 'function' ? requestAnimationFrame(() => flush()) : null;
+    const fallback = setTimeout(flush, 100);
+    frame = () => { frame = null; if (raf !== null) cancelAnimationFrame(raf); clearTimeout(fallback); };
   };
   /** Only a continuous input (a slider, typing) waits: it must not fire per pixel or per keystroke. */
   const schedule = () => {
@@ -309,9 +324,9 @@ export function createDataflowStore(
     timer = setTimeout(flush, debounceMs);
   };
 
-  const setValues = (values: Record<string, Scalar>, debounce = false) => {
+  const setValues = (values: Record<string, Scalar>, when: 'now' | 'debounce' | 'frame' = 'now') => {
     if (!dispatch({ type: 'set', values })) return;
-    if (debounce) schedule(); else flush();
+    if (when === 'debounce') schedule(); else if (when === 'frame') nextFrame(); else flush();
   };
 
   const mutationUnavailable = (name: string): string | null => {
@@ -345,6 +360,7 @@ export function createDataflowStore(
       dispatch({ type: 'dispose' });
       if (timer) clearTimeout(timer);
       timer = null;
+      frame?.();
       transport = null;
       listeners.clear();
       const waiting = accessWaiters; accessWaiters = []; for (const w of waiting) w();
@@ -369,8 +385,8 @@ export function createDataflowStore(
     },
     getState: () => core.data,
     getValue: (name) => core.data.values[name] ?? null,
-    setValue: (name, value, opts) => setValues({ [name]: value }, opts?.debounce),
-    setValues: (values) => setValues(values),
+    setValue: (name, value, opts) => setValues({ [name]: value }, opts?.debounce ? 'debounce' : 'now'),
+    setValues: (values, opts) => setValues(values, opts?.frame ? 'frame' : 'now'),
     getTable: (name) => core.data.tables[name],
     pending: () => pendingOf(core),
     /*

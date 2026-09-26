@@ -115,7 +115,7 @@ export function createMx(store: DataflowStore): MxApi {
     },
     async set(values) {
       alive();
-      store.setValues(validatePatch(values));
+      store.setValues(validatePatch(values), { frame: true });
       return { instanceEpoch, revision };
     },
     async mutate(name, args = {}) {

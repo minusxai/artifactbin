@@ -319,8 +319,28 @@ function answered(state: CoreState, at: Versions, answer: RunAnswer): CoreState 
   }
   return {
     ...state, requested, answered: answeredAt, failed: failedAt,
-    data: { ...state.data, tables, errors, mutationAccess, userOptions: answer.userOptions ?? {}, people: answer.people ?? {} },
+    data: { ...state.data, tables, errors, mutationAccess, ...mergedPeople(state.data, current, answer) },
   };
+}
+
+/**
+ * What an answer says beside its rows, merged PER NODE: a run answers part of
+ * the graph (the browser's queries, or the server's), so the pickers' options
+ * of a query it answered (`<query>.<column>`) are replaced, every other
+ * query's are kept, a Value's picker takes the newest the server sent, and
+ * the people it names join those already known. An answer carrying neither —
+ * every browser run — changes neither.
+ */
+function mergedPeople(data: DataflowState, answeredKeys: readonly NodeKey[], answer: RunAnswer): Pick<DataflowState, 'userOptions' | 'people'> {
+  const people = answer.people ? { ...data.people, ...answer.people } : data.people ?? {};
+  if (!answer.userOptions) return { userOptions: data.userOptions ?? {}, people };
+  const replaced = new Set(answeredKeys.filter((k) => k.startsWith('query:')).map(nameOf));
+  const queryOf = (key: string) => key.slice(0, key.indexOf('.'));
+  // A stale query's options arrive with a newer run of it; until then its old ones stand.
+  const stale = (key: string) => key.includes('.') && Object.hasOwn(data.tables, queryOf(key)) && !replaced.has(queryOf(key));
+  const kept = Object.entries(data.userOptions ?? {}).filter(([key]) => !replaced.has(queryOf(key)));
+  const fresh = Object.entries(answer.userOptions).filter(([key]) => !stale(key));
+  return { userOptions: { ...Object.fromEntries(kept), ...Object.fromEntries(fresh) }, people };
 }
 
 /**

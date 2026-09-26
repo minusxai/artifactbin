@@ -18,6 +18,8 @@ import type { DataflowState, Row, Scalar } from '@/lib/story/dataflow';
 export const MEMBERS_SOURCE = '_members';
 /** The source the viewer is: a query that reads `$_me.id` or `_me` re-runs when they change. */
 export const VIEWER_SOURCE = VIEWER;
+/** The source the clock is: advanced once a minute, so only the readers of `$_now` re-run. */
+export const NOW_SOURCE = '_now';
 
 export type GraphValue =
   | { kind: 'scalar'; name: string; type: ColumnType; default: Scalar }
@@ -57,7 +59,7 @@ const dedupe = (xs: string[]): string[] => [...new Set(xs)];
  * The graph of a compiled document. A query reads the values it binds and
  * the inline tables it joins, the datasets it imports (or the connected
  * database it runs inside), the viewer when it reads `$_me.id` or `_me`, the
- * membership (every read is admitted per member), and every query upstream of
+ * clock when it reads `$_now`, the membership (every read is admitted per member), and every query upstream of
  * it. A dataset mutation's write check reads its dataset, the membership and
  * the viewer; a local one reads what its statement binds and joins.
  */
@@ -67,6 +69,7 @@ export function graphOfCompiled(flow: CompiledDataflow): RuntimeGraph {
     ...extra,
     ...(reads.builtins.some((b) => b === '_me' || b === '_me.id') ? [VIEWER_SOURCE] : []),
     ...(reads.builtins.includes('_members') ? [MEMBERS_SOURCE] : []),
+    ...(reads.builtins.includes('_now') ? [NOW_SOURCE] : []),
   ]);
   const scalars = new Set(flow.values.filter((v) => v.kind === 'scalar').map((v) => v.name));
   return {

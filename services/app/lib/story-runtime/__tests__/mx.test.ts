@@ -201,3 +201,21 @@ describe('mutate waits for the permission answer', () => {
     store.dispose();
   });
 });
+
+describe('a script setting values on every pointer move', () => {
+  it('sets each value at once but runs what depends on them once per frame, with the last values', async () => {
+    const run = vi.fn().mockResolvedValue({ tables: {}, errors: {} });
+    const store = createDataflowStore({ flow: RESULT_FLOW }, { transport: { run, page: vi.fn() } });
+    store.start();
+    await tick();
+    run.mockClear();
+    const mx = createMx(store);
+    const calls = Array.from({ length: 20 }, (_, i) => mx.set({ count: i + 1 }));
+    expect(store.getValue('count')).toBe(20);
+    await Promise.all(calls);
+    await new Promise(resolve => setTimeout(resolve, 150));
+    expect(run).toHaveBeenCalledTimes(1);
+    expect(run.mock.calls[0]![0]).toMatchObject({ count: 20 });
+    store.dispose();
+  });
+});
