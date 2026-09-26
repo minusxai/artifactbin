@@ -25,7 +25,7 @@ export function useCommentCapture(backend:ArtifactBackend,id:string,editId:strin
   return mine===generation.current;
  };
  const capture=async(rect:CaptureRect)=>{
-  if(!editId)return;setRequired(true);
+  if(!editId||backend.unavailable('commentImages'))return;setRequired(true);
   const current=session.current;session.current=null;
   if(!current){setError(value=>value||messages.unsupported);return;}
   const mine=generation.current,capturedEditId=revision.current!;setBusy(true);
@@ -37,7 +37,7 @@ export function useCommentCapture(backend:ArtifactBackend,id:string,editId:strin
   finally{performance.measure('comment-screenshot:capture',{start:started,end:performance.now()});current.dispose();document.documentElement.classList.remove('mx-taking-screenshot');if(mine===generation.current)setBusy(false);}
  };
  const upload=async(file:File)=>{
-  if(!editId)return;const mine=++generation.current;session.current?.dispose();session.current=null;setBusy(true);setError('');
+  if(!editId||backend.unavailable('commentImages'))return;const mine=++generation.current;session.current?.dispose();session.current=null;setBusy(true);setError('');
   try{
    if(file.size>8*1024*1024||!['image/png','image/jpeg','image/webp'].includes(file.type))throw new Error('Use a PNG, JPEG or WebP up to 8 MB.');
    const bitmap=await createImageBitmap(file);
