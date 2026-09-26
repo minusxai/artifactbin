@@ -119,7 +119,7 @@ describe('translateSql rules', () => {
   it('date_trunc/date_part/date_diff/date_add keep names with checked arguments', () => {
     expect(ok(`select date_trunc('month', d) from t`, `select date_trunc('month', d) from t`).join(' ')).toMatch(/date_trunc.*date/);
     manual(`select date_trunc('hour', ts) from t`, /date_trunc/, `'hour'`);
-    manual(`select date_trunc(p, ts) from t`, /literal/);
+    expect(ok(`select date_trunc($grain, day) from t`, `select date_trunc($grain, day) from t`).join(' ')).toMatch(/\$grain is computed/);
     ok(`select date_part('year', d), date_part('dow', d) from t`, `select date_part('year', d), dayofweek(d) from t`);
     ok(`select extract(year from d), extract('month' from d), extract(dow from d) from t`, `select date_part('year', d), date_part('month', d), dayofweek(d) from t`);
     ok(`select year(d), month(d) from t`, `select date_part('year', d), date_part('month', d) from t`);
@@ -161,6 +161,8 @@ describe('translateSql rules', () => {
     ok('select d - interval 1 day - interval 2 hours from t', `select date_add(date_add(d, -1, 'day'), -2, 'hour') from t`);
     manual('select current_date, 2 * interval 1 day from t', /interval/, 'interval 1 day');
     manual('select d + interval 1 second from t', /second/);
+    manual('select d + interval 1.5 day from t', /fractional/);
+    manual(`select d + interval 1 min, now() from t`, /interval/, 'interval 1');
   });
 
   it('unnest in a select list → a json_each join', () => {
