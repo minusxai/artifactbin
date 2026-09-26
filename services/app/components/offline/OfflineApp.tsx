@@ -78,12 +78,12 @@ const formatWhen = (iso: string) => {
 export function OfflineTopBar({ file, children }: { file: ArtifactFile; children?: ReactNode }) {
   return (
     <TrustedUi>
-      <header aria-label="Offline copy" className="flex flex-wrap items-center gap-x-2 gap-y-1 border-b border-border bg-background px-4 py-2 font-sans text-xs text-muted-foreground">
-        <span>Offline copy of <strong className="font-medium text-foreground">{file.metadata.title}</strong></span>
+      <header aria-label="Offline copy" className="flex flex-wrap items-center gap-x-2 gap-y-1 border-b border-edge bg-surface px-4 py-2 font-sans text-xs text-muted">
+        <span>Offline copy of <strong className="font-medium text-fg">{file.metadata.title}</strong></span>
         <span aria-hidden="true">·</span>
         <span>data as of <time dateTime={file.snapshot.at}>{formatWhen(file.snapshot.at)}</time></span>
         <span aria-hidden="true">·</span>
-        <a href={file.liveUrl} rel="noreferrer" className="text-foreground underline underline-offset-2">Open live version</a>
+        <a href={file.liveUrl} rel="noreferrer" className="text-fg underline underline-offset-2">Open live version</a>
         {children ? <span className="ml-auto flex items-center gap-2">{children}</span> : null}
       </header>
     </TrustedUi>
