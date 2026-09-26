@@ -22,7 +22,6 @@ import { ARTIFACT_REFERENCE_PATTERN } from '@artifactbin/contracts';
 import { parseJsx, serializeJsx, type JsonValue, type JsxAttribute, type JsxElement, type JsxNode } from '@/lib/jsx';
 import { splitHelmet } from '@/lib/story/helmet';
 import { removedSqlReferenceTokens } from '@/lib/migrate/sqlite/legacy-tokens';
-import { KEYWORDS } from './expression';
 import { significant, tokenizeSql, word, type SqlToken } from './tokens';
 import { translateSql, type ManualItem } from './translate';
 
@@ -112,9 +111,11 @@ function elementRemoval(source: string, el: JsxElement): Edit {
 
 /**
  * `update _signals set a = 'x', b = $v, c = $_row.id, d = e` → `{"a": "x", "b": "$v", "c": "$_row.id", "d": "$e"}`
- * (a bare column of _signals is that page value), or the reason it is not that simple.
+ * (a column of _signals — one of the document's `values`, by lower-cased name — is that page value),
+ * or the reason it is not that simple. The runtime reads every source before
+ * it sets any, as SQL reads the old row, so `a = b, b = a` swaps either way.
  */
-function signalAssignments(sql: string): Record<string, JsonValue> | string {
+function signalAssignments(sql: string, values: ReadonlyMap<string, string>): Record<string, JsonValue> | string {
   let t;
   try { t = significant(tokenizeSql(sql)); } catch (error) { return (error as Error).message; }
   if (t.at(-1)?.text === ';') t = t.slice(0, -1);
@@ -148,8 +149,8 @@ function signalAssignments(sql: string): Record<string, JsonValue> | string {
       j = close;
     }
     else if (v.kind === 'param' && v.text.length > 1 && v.text !== '$_row') value = v.text === '$_me' ? '$_me.id' : v.text;
-    else if (v.kind === 'word' && !KEYWORDS.has(word(v)) && (!t[j + 1] || t[j + 1].text === ',')) value = `$${v.text}`;
-    else return computed(t, j, name) ?? `${name} is set to an expression`;
+    else if (v.kind === 'word' && values.has(word(v)) && (!t[j + 1] || t[j + 1].text === ',')) value = `$${values.get(word(v))}`;
+    else return computed(t, j, name, values) ?? `${name} is set to an expression`;
     set[name] = value;
     if (!t[j + 1]) return set;
     if (t[j + 1].text !== ',') return word(t[j + 1]) === 'where' ? 'the update has a WHERE clause' : `${name} is set to an expression`;
@@ -161,10 +162,10 @@ function signalAssignments(sql: string): Record<string, JsonValue> | string {
  * Why assigning `name` the expression from token `j` on, which reads page
  * values (`step + 1`), needs a person: set= only copies. Null when it reads none.
  */
-function computed(t: SqlToken[], j: number, name: string): string | null {
+function computed(t: SqlToken[], j: number, name: string, values: ReadonlyMap<string, string>): string | null {
   let end = j;
   for (let depth = 0; end < t.length && (depth > 0 || t[end].text !== ','); end++) depth += t[end].text === '(' ? 1 : t[end].text === ')' ? -1 : 0;
-  const reads = t.slice(j, end).some((token, k) => token.kind === 'word' && !KEYWORDS.has(word(token)) && t[j + k + 1]?.text !== '(' && t[j + k - 1]?.text !== '.');
+  const reads = t.slice(j, end).some((token, k) => token.kind === 'word' && values.has(word(token)) && t[j + k + 1]?.text !== '(' && t[j + k - 1]?.text !== '.');
   if (!reads) return null;
   const text = t.slice(j, end).map((token) => token.text).join(' ');
   return `computes ${name} from page values (${text}): keep ${name} in a one-row <Value type="table"> updated by a local <Mutation>`;
@@ -197,6 +198,8 @@ export function convertDocument(source: string, lookups: ConvertLookups): Docume
   const manual: ConversionManual[] = [];
   const declarations = helmet ? elements(helmet.children) : [];
   const statements = declarations.filter((el) => el.tag === 'Query' || el.tag === 'Mutation');
+  /** The page values, the columns `_signals` had: lower-cased name → the name declared. */
+  const pageValues = new Map(declarations.filter((el) => el.tag === 'Value').flatMap((el) => { const n = staticString(el, 'name'); return n ? [[n.toLowerCase(), n] as const] : []; }));
   const taken = new Set(declarations.map((el) => staticString(el, 'name')?.toLowerCase()).filter((n): n is string => !!n));
 
   // ── imports, in first-appearance order ─────────────────────────────────
@@ -244,7 +247,7 @@ export function convertDocument(source: string, lookups: ConvertLookups): Docume
       : { declaration: name, reason: item.reason, start: child.node.start, end: child.node.end };
 
     if (el.tag === 'Mutation' && !ref && writesSignals(child.sql)) {
-      const set = signalAssignments(child.sql);
+      const set = signalAssignments(child.sql, pageValues);
       const refuse = (reason: string) => manual.push({ declaration: name, reason: `the _signals mutation ${reason}; set= takes literals and $values only`, start: el.start, end: el.end });
       if (typeof set === 'string') { refuse(set); continue; }
       if (el.attributes.some((a) => a.name === 'reset' || a.name === 'expectedAffected')) { refuse('has reset= or expectedAffected='); continue; }

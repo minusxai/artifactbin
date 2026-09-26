@@ -371,6 +371,8 @@ describe('translateSql: DuckDB lists', () => {
       'select case when tags is null then null else (select json_group_array(upper(element.value) || $suffix order by element.key) from json_each(tags) as element) end from t');
     manual('select list_transform(tags, x -> list_filter(x, x -> x > 1)) from t', /reuses/);
     manual('select list_transform(tags, (x, i) -> x || i) from t', /lambda/);
+    manual("select list_filter(tags, x -> x <> type) from t", /bare type, which would read json_each's columns/, 'type');
+    ok('select list_filter(tags, x -> x <> t.type) from t', 'select case when tags is null then null else (select json_group_array(element.value order by element.key) from json_each(tags) as element where element.value <> t.type) end from t');
   });
 });
 

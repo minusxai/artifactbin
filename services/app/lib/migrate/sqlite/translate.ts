@@ -595,11 +595,15 @@ const lambdas: Rule = (v) => {
     /** The body's reads of the item. */
     const uses: number[] = [];
     for (let j = fn.from + 2; j <= fn.to; j++) {
-      if (identifier(v.sig[j]) !== name || v.sig[j - 1]?.text === '.') continue;
+      const read = identifier(v.sig[j]);
+      if (read === null || v.sig[j - 1]?.text === '.' || v.sig[j + 1]?.text === '(') continue;
+      // Inside the subquery a bare `key`, `type`, … would read json_each's column, not the statement's.
+      if (read !== name && JSON_EACH_COLUMNS.has(read) && v.sig[j + 1]?.text !== '.') return v.manual(`${call.name}() beside a bare ${v.sig[j]!.text}, which would read json_each's columns`, j);
+      if (read !== name) continue;
       // A lambda inside that takes the same name would have its own item replaced too.
       if (v.sig[j + 1]?.text === '->') return v.manual(`a lambda inside ${call.name}() reuses its parameter ${param.text}`, call.at, call.close);
       if (v.sig[j + 1]?.text === '.') return v.manual(`${call.name}() reads a field of its item`, j, j + 2);
-      if (v.sig[j + 1]?.text !== '(') uses.push(j);
+      uses.push(j);
     }
     const start = v.sig[fn.from + 2]!.start;
     let body = v.text.slice(start, v.sig[fn.to]!.end);
