@@ -10,16 +10,16 @@ visibility: unlisted  # private | unlisted | public
   {/* One Helmet per document: title, one style, one script, data declarations. */}
   <title>Q3 sales review</title>
   <style>{`.kpi { letter-spacing: -0.02em } /* custom CSS lives here, never inline */`}</style>
-  {/* A Value is a reader-changeable scalar; SQL reads it as $region (null = all). */}
+  {/* afbin add sales.csv --json gives the id (replace abc123); SQL reads sales.rows. */}
+  <Import name="sales" src="ref:abc123" />
+  {/* A page value the reader changes; SQL reads it as $region (null = all). */}
   <Value name="region" type="string" />
-  {/* Run afbin add sales.csv --json, then use ref:<id> (replace abc123 below).
-      SQL names the table public.rows, never the file. */}
-  <Query name="regions" source="ref:abc123">{`select distinct region from public.rows order by 1`}</Query>
-  <Query name="sales" source="ref:abc123">{`
-    select month, sum(revenue) as revenue from public.rows
+  <Query name="regions">{`select distinct region from sales.rows order by 1`}</Query>
+  <Query name="monthly">{`
+    select month, sum(revenue) as revenue from sales.rows
     where $region is null or region = $region group by 1 order by 1
   `}</Query>
-  <Query name="by_region" source="ref:abc123">{`select region, sum(revenue) as revenue from public.rows group by 1 order by 2 desc`}</Query>
+  <Query name="by_region">{`select region, sum(revenue) as revenue from sales.rows group by 1 order by 2 desc`}</Query>
 </Helmet>
 {/* The body is static JSX: HTML prose plus kit components, styled with
     className (Tailwind), never style=. No CDN scripts, <script>, <iframe> or
@@ -36,15 +36,15 @@ visibility: unlisted  # private | unlisted | public
   {/* Grid mode="flow" makes columns; w is out of 12 and stacks on narrow screens. */}
   <Grid mode="flow" className="mt-6">
     <GridItem w={4}>
-      {/* $sales binds a query result. Figures are computed from data, never typed in. */}
+      {/* $monthly binds a query result. Figures are computed from data, never typed in. */}
       <Card><CardHeader><CardTitle>Total revenue</CardTitle></CardHeader>
         <CardContent className="kpi text-4xl font-semibold">
-          <Number data="$sales" col="revenue" agg="sum" prefix="$" format=",.0f" />
+          <Number data="$monthly" col="revenue" agg="sum" prefix="$" format=",.0f" />
         </CardContent></Card>
     </GridItem>
     <GridItem w={8}>
       {/* Charts are Vega-Lite specs or shipped recipes, never hand-rolled <svg>. */}
-      <Question title="Revenue by month" data="$sales" height="320px"
+      <Question title="Revenue by month" data="$monthly" height="320px"
         viz={{"kind":"vega-lite","spec":{"mark":"line","encoding":{"x":{"field":"month","type":"temporal"},"y":{"field":"revenue","type":"quantitative"}}}}} />
     </GridItem>
   </Grid>

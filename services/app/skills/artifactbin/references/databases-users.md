@@ -73,19 +73,20 @@ the query result; it needs no stored dataset field.
 
 ```jsx
 <Helmet>
+  <Import name="team" src="ref:tsk123" />
   <Value name="person" source="ref:tsk123" column="assigned_to" />
-  <Query name="tasks" source="ref:tsk123">{`
-    select *, '' as action from public.rows
-    where $person is null or assigned_to=$person order by id
+  <Query name="tasks">{`
+    select *, '' as action from team.rows
+    where $person is null or assigned_to = $person order by id
   `}</Query>
-  <Mutation name="rename" source="ref:tsk123" expectedAffected={1}>{`
-    update public.rows set task=$_value where id=$_row.id
+  <Mutation name="rename" expectedAffected={1}>{`
+    update team.rows set task = $_value where id = $_row.id
   `}</Mutation>
-  <Mutation name="assign" source="ref:tsk123" expectedAffected={1}>{`
-    update public.rows set assigned_to=$_value where id=$_row.id
+  <Mutation name="assign" expectedAffected={1}>{`
+    update team.rows set assigned_to = $_value where id = $_row.id
   `}</Mutation>
-  <Mutation name="complete" source="ref:tsk123" expectedAffected={1}>{`
-    update public.rows set completed_by=$_me where id=$_row.id
+  <Mutation name="complete" expectedAffected={1}>{`
+    update team.rows set completed_by = $_me.id where id = $_row.id
   `}</Mutation>
 </Helmet>
 <Select label="Person filter" value="$person" />
@@ -97,33 +98,33 @@ the query result; it needs no stored dataset field.
 </DataTable>
 ```
 
-The standalone Value inherits its user type and constraints from `public.rows`'s
-named column. Names such as `person` and `assign` are author-chosen. User Selects
+The picker Value (`source` and `column` name the dataset's user column) inherits
+that column's user type and constraints. Names such as `person` and `assign` are author-chosen. User Selects
 get searchable choices from field metadata when `options` is omitted.
 For app-defined participants, use `options="$members"` with a query whose first
 column contains user IDs. Explicit options determine the visible choices; server
 constraints still validate every write. See [apps](apps.md) for an ordinary Join
 button that populates that table.
 Direct SQL projections, aliases, filters and ordering preserve user metadata;
-computed text such as `upper(assigned_to)` is ordinary text. `$_me` is reserved
-and bound by the server to the actual caller, never a client-supplied Value or
-the report owner. Mutations using it require login. In queries it is null for
-anonymous readers. PostgreSQL catalogs remain read-only.
+computed text such as `upper(assigned_to)` is ordinary text. `$_me.id` is built
+in and bound by the server to the actual caller, never a client-supplied value
+or the report owner. Mutations using it require login. In queries it is null
+for anonymous readers. PostgreSQL catalogs remain read-only.
 
 ## Who is reading
 
-`$_me` is the reader's account ID and `null` for a guest. Read it in any
+`$_me.id` is the reader's account ID and `null` for a guest. Read it in any
 condition or reactive expression; it is never declared, never bindable
-(`value="$_me"`, `open="$_me"` and `<Value name="_me">` are rejected at publish)
-and never carried in the link.
+(`value="$_me.id"` and `<Value name="_me">` are rejected at publish) and never
+carried in the link. Bare `$_me` is the reader as a row: write `$_me.id`.
 
 ```jsx
-{$_me && <Button run="$claim">Claim this</Button>}
-{!$_me && <SignIn>Sign in to claim one</SignIn>}
+{$_me.id && <Button run="$claim">Claim this</Button>}
+{!$_me.id && <SignIn>Sign in to claim one</SignIn>}
 ```
 
 `<User userId=… />` shows a person: their picture, then the handle they chose,
-linked to their profile. `userId` takes a literal account ID, `$_me`, a scalar
+linked to their profile. `userId` takes a literal account ID, `$_me.id`, a scalar
 `user` Value, or a row field inside `<For>`/`<Column>`. `avatar={false}` drops
 the picture; `fallback` is what an unset field reads as. An ID this reader
 cannot see renders "Unknown person", never the raw ID.
@@ -136,7 +137,7 @@ Both take `fallback`. All three read the SAME card the server computed, so none
 of them can look anybody up.
 
 ```jsx
-<p>Signed in as <User userId="$_me" /></p>
+<p>Signed in as <User userId="$_me.id" /></p>
 <Column col="paid_by"><User userId="$_row.paid_by" avatar={false} fallback="nobody" /></Column>
 <UserImage userId="$_row.person" size="lg" /><UserHandle userId="$_row.person" />
 ```
@@ -152,12 +153,12 @@ renders nothing for a signed-in reader, so it needs no condition of its own.
 <SignIn className="w-full">Join to add an expense</SignIn>
 ```
 
-A `<Mutation>` binding `$_me` needs a signed-in reader. A guest's `<Button run>`
+A `<Mutation>` binding `$_me.id` needs a signed-in reader. A guest's `<Button run>`
 or `<DialogContent run>` stays disabled, preserving its authored content,
 and a direct POST answers `sign_in_required` (403 `policy_denied` for a signed-out
 reader; 401 for a guest browser that only saved a draft). Test users act on the
 copy they own, never here: [apps](apps.md).
 
-For a page people JOIN by themselves — an empty dataset, a `$_me` insert guarded
+For a page people JOIN by themselves — an empty dataset, a `$_me.id` insert guarded
 by `where not exists`, rows that record who added them and a guest branch, end to
 end — read [apps](apps.md).

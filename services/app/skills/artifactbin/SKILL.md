@@ -35,7 +35,7 @@ Before writing, read design, markup, template and theme; a template's frame keep
 ## Read next
 
 - [design](references/design.md) — for anything a person judges by eye.
-- [markup](references/markup.md) — the allowlist, Helmet, images, layout; then [data](references/markup-data.md) for queries, Values and charts.
+- [markup](references/markup.md) — the allowlist, Helmet, images, layout; then [data](references/markup-data.md) and its [worked example](references/markup-data-example.md).
 - `afbin help templates` and `afbin help themes` list them; then `references/templates-<name>.md` and `references/themes-<name>.md` for the one picked.
 - [sync and recovery](references/publishing.md) — status, diff, dry-run, force, uncertain writes.
 - [errors](references/errors.md) — every refusal code and its fix.

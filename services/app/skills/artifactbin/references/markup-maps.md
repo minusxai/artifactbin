@@ -92,7 +92,8 @@ Query it like any rows (filter, join metrics in SQL), then draw it with a
 `GeoJsonLayer` WITHOUT `data`:
 
 ```jsx
-<Query name="zones" source="ref:<geojsonId>">{`select zone, orders, geometry from public.rows`}</Query>
+<Import name="territories" src="ref:<geojsonId>" />
+<Query name="zones">{`select zone, orders, geometry from territories.rows`}</Query>
 …
 <DeckGL data="$zones" tooltip={["zone","orders"]}
   layers={[{"@@type":"GeoJsonLayer","getFillColor":"@@=ramp(orders)"}]} />

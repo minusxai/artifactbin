@@ -1,142 +1,118 @@
 ---
 name: markup-data
 description: >-
-  Data.
+  Data: SQL for the data in Helmet, JSX for the view, bound by $name.
 order: 1
 ---
 ## Read first
 
-Declare queries and values in `<Helmet>`; bind by name.
+A document has two halves. The DATA half is in `<Helmet>`: `<Import>` a dataset,
+declare page values (`<Value>`), read with `<Query>` (SQLite SQL) and write with
+`<Mutation>`. The VIEW half binds them by name: `data="$query"`,
+`value="$value"`, `run="$mutation"`. The view holds no SQL.
 
 ```jsx
 <Helmet>
+  <Import name="sales" src="ref:abc123" />
   <Value name="region" type="string" />
-  <Value name="min_rev" type="number" default={1000} />
-  <Query name="regions" source="ref:abc123">{`select distinct region from public.rows order by 1`}</Query>
-  <Query name="sales" source="ref:abc123">{`
+  <Query name="regions">{`select distinct region from sales.rows order by 1`}</Query>
+  <Query name="by_region">{`
     select region, sum(revenue) as revenue
-    from public.rows
-    where ($region is null or region = $region) and revenue >= $min_rev
+    from sales.rows
+    where $region is null or region = $region
     group by 1 order by 2 desc
   `}</Query>
 </Helmet>
 
-<select value="$region" options="$regions" />
-<Question title="Revenue by region" data="$sales" viz={{"kind":"vega-lite","spec":{"mark":"bar","encoding":{"x":{"field":"region","type":"nominal"},"y":{"field":"revenue","type":"quantitative"}}}}} height="430px" />
+<Select label="Region" value="$region" options="$regions" placeholder="All regions" />
+<Question title="Revenue by region" data="$by_region" viz={{"kind":"vega-lite","spec":{"mark":"bar","encoding":{"x":{"field":"region","type":"nominal"},"y":{"field":"revenue","type":"quantitative"}}}}} height="430px" />
 ```
 
-Published artifacts use `ref:<id>` in source, image and recipe attributes. SQL names tables.
-`data="ref:<id>"`, inline `data={[…]}` and Param are refused. [Catalogs](databases.md).
-
-Editable cells: [editing](markup-editing.md).
-SQL functions: [reference](markup-sql.md).
-
+A complete page with writes, explained part by part: [worked example](markup-data-example.md).
+SQLite rules and every function: [SQL](markup-sql.md). Editable cells: [editing](markup-editing.md).
 
 ## Declarations (Helmet only)
 
-- `<Value name type default />` — a scalar the reader can change.
-  `type`: `string | number | boolean | date | user` (default `string`); `default`
-  must match it (dates `YYYY-MM-DD`); no default = `null`, which is how
-  "$region is null" in SQL means "all".<!--bundle:skip--> A scalar TRAVELS IN THE LINK: `?$region=EU` seeds it (empty = "all"), a reader's picks rewrite it, so a pre-filtered link is yours. `url={false}` keeps one out both ways: a draft box or script flag.<!--/bundle:skip-->
-- `<Value name="tiny" type="table" value={[{…}, …]} />` — an inline table (flat
-  objects; `columns={[{name,type}]}` optional). Read it in SQL by its bare
-  name (`from tiny`) or bind it directly (`data="$tiny"`).
-  Local Mutations may edit its rows; dependent local Queries re-run. `_signals`
-  is the implicit one-row scalar table and accepts `UPDATE` only. [Examples and
-  reload semantics](markup-state.md).
-- `<Query name source="ref:abc123">{`select …`}</Query>` — SQL as a
-  template-literal child, exactly one SELECT over that dataset’s exposed tables.
-  Without `source`, SQL runs locally in DuckDB; another query
-  or table Value is a table by its bare name (any order; cycles refused); a
-  scalar Value is the bound parameter `$name`, never interpolated.<!--bundle:skip--> Dry-run
-  at publish against the real columns: a bad column is a
-  `400 {"error":"invalid_sql"}` carrying the engine's message with candidate
-  names. Results are cut at 10,000 rows; a query has 5 s.<!--/bundle:skip--><!--bundle:skip--> A FOLDER is a table
-  too — use `source="ref:<folderId>"` and query `public.rows` for its children, which a document can list with
-  `<Files data="$children" variant="icons|tiles" />`. Columns `id title format
-  level visibility updated_at url thumbnail views sparkline`, computed per
-  VIEWER: a stranger gets the `public` children; `thumbnail` is null for a
-  private child and for folders, `views`/`sparkline` unless you may edit it.<!--/bundle:skip-->
-- `<Mutation name source="ref:abc123">{`insert into public.rows (a) values ($a)`}</Mutation>`
-  — a `<Query>` that WRITES (new datasets allow owner-artefact actions; legacy datasets use `--access readwrite`,
-  [datasets](databases.md)). Exactly one INSERT | UPDATE | DELETE
-  naming one shared dataset. Runs on demand, never at render:
-  `<Button run="$name">` in the body, or `mx.mutate("name")` from your
-  `<script>`; SQL is checked at publish; grants are checked per caller.<!--bundle:skip--> `reset="desc amount"` clears those scalars on SUCCESS only. New grants require membership; v1 is unchanged. Supply VALUES only.
-  Bound write controls disable automatically; filters and live reads still work. DuckDB's `uuid()` and `now()` give a
-  row its own id and timestamp.<!--/bundle:skip-->
+- `<Import name="sales" src="ref:<id>" />` — a stored dataset or folder. SQL reads
+  it as `sales.rows` (a multi-table dataset: `sales.<table>`). Get the id from
+  `afbin add --json` or `afbin push`.<!--bundle:skip--> A FOLDER import lists its
+  children: `select * from kids.rows`, shown with `<Files data="$children" variant="icons|tiles" />`.
+  Columns `id title format level visibility updated_at url thumbnail views sparkline`,
+  computed per VIEWER: a stranger gets the `public` children.<!--/bundle:skip-->
+- `<Value name type default />` — a page value the reader changes. `type`:
+  `string | number | boolean | date | user`; no default = `null`, so
+  `$region is null` means "all".<!--bundle:skip--> A value TRAVELS IN THE LINK:
+  `?$region=EU` seeds it and a reader's pick rewrites it. `url={false}` keeps a
+  form field or flag out of the address both ways.<!--/bundle:skip-->
+- `<Value name="tiny" type="table" value={[{…}]} />` — inline rows; SQL reads
+  `tiny`, the view binds `$tiny`. Local mutations may change them until reload.
+  [Local state](markup-state.md).
+- `<Query name>{`select …`}</Query>` — a function `(params) → rows`: one SELECT.
+  `$name` is a page value, bound, never spliced. A query reads imports, table
+  values and other queries by name, in any order (cycles are refused). Checked
+  at publish against the real columns; a mistake names the column and what to
+  write instead. Results stop at 10,000 rows and 5 s.
+- `<Query name source="ref:<id>">` — ONLY for a connected Postgres dataset:
+  Postgres SQL, run inside that database. [Catalogs](databases.md).
+- `<Mutation name expectedAffected={1} reset="note">{`insert into sales.rows …`}</Mutation>`
+  — an action `(args) → result`: one INSERT, UPDATE or DELETE on one imported
+  table or table value. It runs only when a control runs it. A plain `$name` is
+  the page value of that name (a control's `args=` can pass another); built-ins
+  come from context. `expectedAffected` refuses a write that changed another
+  number of rows; `reset` returns those values to their defaults after it commits.
 
+Built-ins (never declared, never written):
+
+[[ builtinTable ]]
+
+Markup reads `$_me.id` too, and `$_row.<column>` inside a `<For>` or `<Column>`.
+A guest's `$_me.id` is null, so a mutation that binds it needs a signed-in
+reader. The current time is `$_now`, never `'now'`. A new row's id: `uuid()`.
 <!--bundle:skip-->
-A Mutation on `_signals` or an inline table is local: no dataset, no permission
-change. See [composable state](markup-state.md).
-
+Where a query runs is not yours to choose: in the reader's browser when the
+data it reads may be held there, otherwise on the server. Both run the same
+SQLite with the same functions and the same `$_now`, so results are the same.
 <!--/bundle:skip-->
+
 First read [chart authoring](markup-data-authoring.md).
 
 ## Bindings: embeds (body)
 
-- `<Button run="$add">Add</Button>` — runs the named `<Mutation>`; busy while
-  in flight, a refusal shown beside it.
-- `<Question data="$table" viz={…} height="430px" />` — a chart over a
-  declared table. The `viz` prop REQUIRES a `kind` discriminator:
-  `{"kind":"vega-lite","spec":{…}}` for an inline spec (encoding fields are
-  checked against the query's RESULT columns at publish),
-  `{"kind":"recipe","recipe":"ref:<vizId>","bindings":{…}}` for a recipe
-  artifact, `{"kind":"table"}` (the default when `viz` is absent) for a
-  small themed table, and `{"kind":"single_value","yCols":["revenue"],
-  "singleValueConfig":{"label":"Revenue","prefix":"$","format":",.0f"}}` for
-  a bare KPI TILE (the column is SUMMED, so point it at a one-row aggregate);
-  `singleValueConfig` anywhere else is refused with this shape named.
-  `recipe` also takes a SHIPPED registry id — **`"minusx/trend@1"` is the
-  KPI tile to prefer**: value + delta vs the previous period + sparkline, over
-  a time-series query (`select <period>, <measure> … group by 1 order by 1`,
-  ascending order is the contract):
-  `{"kind":"recipe","recipe":"minusx/trend@1","bindings":{"date":"period",
-  "value":["revenue"]},"columnFormats":{"revenue":{"format":"$,.0f",
-  "alias":"Revenue"}}}`<!--bundle:skip--> (several `value` columns = one card each; `params`:
-  `compareMode: "last"|"previous"` — `previous` skips a partial current
-  period; `trendColor`/`valueColor` — prefer a token like `"var(--chart-2)"`,
-  which follows theme switches)<!--/bundle:skip-->. All EIGHT shipped ids (slots validated at publish):
-  `minusx/trend@1`, `minusx/funnel@1`<!--bundle:skip--> (`stage`, `value`)<!--/bundle:skip-->, `minusx/waterfall@1`<!--bundle:skip-->
-  (`category`, `value`)<!--/bundle:skip-->, `minusx/radar@1`<!--bundle:skip--> (`metric`, `value` multi, optional
-  `series`)<!--/bundle:skip-->, `minusx/combo@1`<!--bundle:skip--> (`x`, `bar`, `line`, optional `series`)<!--/bundle:skip-->,
-  `minusx/single-value@1`<!--bundle:skip--> (`value` — the FIRST row's cell; `params`: `label`,
-  `caption`, `align`, `valueColor`)<!--/bundle:skip-->, `minusx/choropleth@1` and
-  `minusx/point-map@1` (deprecated: [maps](markup-maps.md)).
-- `<Number data="$table" col="revenue" agg="sum" prefix="$" suffix=" M" format=",.0f" />`
-  — one live aggregated figure, inline. `agg` defaults to `first` (the first
-  row's cell), so a total needs `agg="sum"` written out; `avg`, `min`, `max`,
-  `count` are the rest. [[ computedFigureRule ]]
-- `<DataTable data="$table" columns={[…]} sort={{"col":…,"dir":"desc"}} height="420px" />`
-  — virtualised, sortable, with more rows on scroll. `columns` picks and orders:
-  `{col, title, fmt, align, bar: true (a bar behind a number), colorScale:
-  "sequential" | "diverging", width, kind: "image"}`; absent = every column.<!--bundle:skip-->
-  `kind: "image"` draws each cell's URL as a picture from our own copy of it,
-  fetched on first view (declared, never sniffed).<!--/bundle:skip--> `fmt` and
-  `<Number format>` are d3-format specs (`",.0f"`, `"$,.2f"`, `".1%"`); one
-  that does not parse is refused at publish by name.
+- `<Question data="$q" viz={…} height="430px" />` — a chart. `viz` needs `kind`:
+  `{"kind":"vega-lite","spec":{…}}` (encoding fields checked against the result
+  at publish), `{"kind":"table"}` (the default), `{"kind":"single_value",
+  "yCols":["revenue"],"singleValueConfig":{"label":"Revenue","prefix":"$","format":",.0f"}}`
+  (a KPI of a one-row aggregate), or `{"kind":"recipe","recipe":"minusx/trend@1",
+  "bindings":{"date":"period","value":["revenue"]}}` — **the KPI tile to
+  prefer**: value, delta and sparkline over `select <period>, <measure> … group by 1 order by 1`.
+  Shipped recipes: `minusx/trend@1`, `minusx/funnel@1`, `minusx/waterfall@1`,
+  `minusx/radar@1`, `minusx/combo@1`, `minusx/single-value@1`; maps: [maps](markup-maps.md).<!--bundle:skip-->
+  Slots are validated at publish: funnel `stage`, `value`; waterfall `category`,
+  `value`; radar `metric`, `value`, optional `series`; combo `x`, `bar`, `line`,
+  optional `series`. Trend `params`: `compareMode: "last"|"previous"`, and colors
+  as tokens like `"var(--chart-2)"`.<!--/bundle:skip-->
+- `<Number data="$q" col="revenue" agg="sum" prefix="$" format=",.0f" />` — one
+  live figure inline; `agg` is `first` unless you write `sum`, `avg`, `min`,
+  `max` or `count`. [[ computedFigureRule ]]
+- `<DataTable data="$q" rowKey="id" columns={[…]} height="420px" />` — sortable,
+  virtualised; `columns` picks `{col, title, fmt, align, bar, colorScale, width, kind: "image"}`.
+  `fmt` and `format` are d3-format specs (`",.0f"`, `".1%"`).
+- `<For each={$q} keyBy="id">…{$_row.name}…</For>` — a template per row. [Keyed repeats](markup-repeat.md).
+- `<User userId="$_me.id" />`, `<User userId="$_row.booked_by" />` — a person by account id.
 
 ## Bindings: controls (body)
 
-- **Kit controls** — the themed way to bind scalars two-way. Each takes a
-  `label` and `value="$name"` (`checked="$name"` on `Switch`); a change writes
-  the bound Value, typed, and every query binding it re-runs:
-  - `<Select value="$region" options="$regions" placeholder="All regions" />`
-    — searchable. `options` is a table (column 1 the value, column 2 the label)
-    or an inline array (`["day","week"]`); a null-default scalar gets the "all"
-    choice.
-  - `<Segmented value="$grain" options={["day","week"]} />` — prefer over Select
-    when the options fit one row.
-  - `<Slider value="$min_rev" min={0} max={5000} prefix="$" format=",.0f" />`.
-  - `<DatePicker value="$since" min max />` (a `date` Value), `<Switch checked="$flag" />` (a boolean).
-  - `<Input value="$item" type="number" placeholder min max step />` and
-    `<Textarea value="$note" rows={3} />` — text fields.
-  Put dashboard filters in a control row; Select menus escape Grid clipping.
+- A kit control binds a page value two-way: `label` plus `value="$name"`
+  (`checked="$name"` on `Switch`). A change writes the value and every query
+  that reads it re-runs.
+  `<Select value="$region" options="$regions" />` (a query's first column is the
+  value, its second the label, or an inline `["day","week"]`), `<Segmented>`,
+  `<Slider min max format>`, `<DatePicker>`, `<Switch>`, `<Input type>`,
+  `<Textarea rows>`. [Multi-select](markup-select.md).
+- `<Button set={{"day": "$_row.day"}}>` sets page values on click, instantly,
+  with no SQL: from another value (`"$other"`), a row field or a literal.
+- `<Button run="$book">` runs a mutation: busy while it runs, a refusal shown
+  beside it. `args={{"note": "$draft"}}` fills an argument from another value.
+  Inside a `<For>` or a DataTable `<Column>` the row is `$_row`.
 
-Standalone [multi-select](markup-select.md): `multiple valueFormat="json"` binds a JSON-array string.
-
-
-
-[Keyed templates](markup-repeat.md).
-
-[User fields and automatic pickers](databases-users.md).
+[User fields](databases-users.md) · [shared apps](apps.md).

@@ -30,6 +30,9 @@ import { MAX_CONTENT_BYTES } from '@/lib/story/input';
 import { MAX_EXTERNAL_ASSETS_PER_PUBLISH, MAX_IMAGE_BYTES, MAX_PDF_BYTES } from '@/lib/config';
 import { COMPUTED_FIGURE_RULE } from '@/lib/agent-guidance';
 import { OPERATIONS } from '@/lib/operations/registry';
+import { BUILTIN_INPUTS, BUILTIN_TABLES } from '@/lib/story/builtins';
+import { SQL_FUNCTIONS } from '@artifactbin/contracts';
+import { CORE_FUNCTIONS } from '@artifactbin/sql/core';
 import type { SkillFile } from './tree';
 
 export interface RenderOptions {
@@ -87,6 +90,9 @@ const env = new nunjucks.Environment(null, {
   tags: { variableStart: '[[', variableEnd: ']]', blockStart: '[%', blockEnd: '%]', commentStart: '[[#', commentEnd: '#]]' },
 });
 
+/** A Markdown table cell: a literal pipe would end it. */
+const cell = (text: string): string => text.replaceAll('|', '\\|');
+
 const REGISTRY_GLOBALS = {
   /** The operations registry, projected for the docs: what exists, at which address, under which tool name. */
   operations: OPERATIONS.map((o) => ({ name: o.name, title: o.title, method: o.http.method, path: o.http.path, readOnly: !!o.annotations.readOnly })),
@@ -109,6 +115,16 @@ const REGISTRY_GLOBALS = {
   maxExternalAssets: MAX_EXTERNAL_ASSETS_PER_PUBLISH,
   /** One shared sentence for validation and authoring guidance — the rule that figures are computed, never typed. */
   computedFigureRule: COMPUTED_FIGURE_RULE,
+  /** The functions the engine adds to SQLite, as the engine registers them (@artifactbin/contracts SQL_FUNCTIONS). */
+  sqlFunctionTable: ['| Function | What it does |', '|---|---|', ...SQL_FUNCTIONS.map((f) => `| \`${cell(f.signature)}\` | ${cell(f.summary)} |`)].join('\n'),
+  /** SQLite's own functions an author may call, as the engine's guard admits them. */
+  sqliteFunctions: [...CORE_FUNCTIONS].filter((name) => /^[a-z]\w*$/.test(name)).map((name) => `\`${name}\``).join(', '),
+  /** The built-in `$` values and tables, as the compiler and the server supply them (lib/story/builtins). */
+  builtinTable: [
+    '| Name | What it is | Where it comes from | Read by |', '|---|---|---|---|',
+    ...BUILTIN_INPUTS.map((b) => `| \`$${b.name === '_row' ? '_row.<column>' : b.name}\` | ${b.summary} | ${b.source === 'platform' ? 'the platform, on every run' : 'the control that runs the mutation'} | ${b.query ? 'queries and mutations' : 'mutations only'} |`),
+    ...Object.entries(BUILTIN_TABLES).map(([name, t]) => `| \`${name}\` (a table) | ${t.summary} Columns: ${t.columns.map((c) => c.name).join(', ')}. | the platform | queries and mutations |`),
+  ].join('\n'),
 };
 
 export function renderSkill(file: SkillFile, opts: RenderOptions): string {
