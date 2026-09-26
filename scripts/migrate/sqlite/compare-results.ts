@@ -28,12 +28,13 @@ import type { SqliteSyntaxMigrationOutcome } from '@/lib/sqlite-syntax-migration
 import type { RecordedResult } from './record-results';
 
 /**
- * `cut before`: the previous engine returned only part of the result (its
- * first page of a `source=` query, or a cap) and every row it returned is
- * still there — the difference is the cut, not the migration. `unstable
- * before`: the previous engine itself answered differently on a second run.
+ * `cut`: an engine shipped only a window of the result (the previous engine's
+ * first page of a `source=` query, either one's display window) and the
+ * windows agree — every row of a window is in the other side's whole result,
+ * or both are windows of results of one size. `unstable before`: the previous
+ * engine itself answered differently on a second run.
  */
-type QueryStatus = 'identical' | 'differs' | 'cut before' | 'unstable before' | 'failed before' | 'failed after' | 'failed both' | 'only before' | 'only after';
+type QueryStatus = 'identical' | 'differs' | 'cut' | 'unstable before' | 'failed before' | 'failed after' | 'failed both' | 'only before' | 'only after';
 
 export interface QueryComparison {
   query: string;
@@ -58,7 +59,18 @@ export interface Comparison {
   totals: Record<QueryStatus, number> & { documents: number; clock: number };
 }
 
-type Side = Map<string, { error?: string; queries: Map<string, { columns: string[]; rows: unknown[][]; truncated?: true } | { error: string }> }>;
+type Recorded = { columns: string[]; rows: unknown[][]; truncated?: true; totalRows?: number };
+type Side = Map<string, { error?: string; queries: Map<string, Recorded | { error: string }> }>;
+
+/** Whether the difference is only which window of one result each side shipped. */
+function onlyTheCut(x: Recorded, y: Recorded, difference: TableDifference): boolean {
+  if (difference.columns || (!x.truncated && !y.truncated)) return false;
+  if (x.truncated && y.truncated) return x.totalRows !== undefined && x.totalRows === y.totalRows && x.rows.length === y.rows.length;
+  const [cut, whole] = x.truncated ? [x, y] : [y, x];
+  const within = x.truncated ? !difference.rows!.missing.length : !difference.rows!.extra.length;
+  return within && (cut.totalRows === undefined || cut.totalRows === whole.rows.length);
+}
+const shipped = (r: Recorded) => `${r.rows.length} of ${r.truncated ? r.totalRows ?? '?' : r.rows.length}`;
 
 function bySide(records: RecordedResult[]): Side {
   const side: Side = new Map();
@@ -91,7 +103,7 @@ function outcomes(report: SqliteSyntaxMigrationOutcome[]): Map<string, SqliteSyn
 
 export function compareResults(before: RecordedResult[], after: RecordedResult[], report: SqliteSyntaxMigrationOutcome[], reruns: RecordedResult[][] = []): Comparison {
   const a = bySide(before), b = bySide(after), again = reruns.map(bySide), map = outcomes(report);
-  const totals: Comparison['totals'] = { documents: 0, clock: 0, identical: 0, differs: 0, 'cut before': 0, 'unstable before': 0, 'failed before': 0, 'failed after': 0, 'failed both': 0, 'only before': 0, 'only after': 0 };
+  const totals: Comparison['totals'] = { documents: 0, clock: 0, identical: 0, differs: 0, cut: 0, 'unstable before': 0, 'failed before': 0, 'failed after': 0, 'failed both': 0, 'only before': 0, 'only after': 0 };
   const documents: DocumentComparison[] = [];
   for (const document of [...new Set([...a.keys(), ...b.keys()])].sort()) {
     const was = a.get(document), now = b.get(document), outcome = map.get(document);
@@ -106,12 +118,12 @@ export function compareResults(before: RecordedResult[], after: RecordedResult[]
       else if ('error' in y) result = { query, status: 'failed after', detail: y.error };
       else {
         const difference = compareTables(table(x), table(y));
-        const cut = difference && x.truncated && !difference.columns && !difference.rows!.missing.length;
+        const cut = difference && onlyTheCut(x, y, difference);
         const unstable = difference && again.some((side) => {
           const second = side.get(document)?.queries.get(query);
           return second && ('error' in second || compareTables(table(x), table(second)));
         });
-        result = cut ? { query, status: 'cut before', detail: `the previous engine returned ${x.rows.length} rows of it; ${y.rows.length} now` }
+        result = cut ? { query, status: 'cut', detail: `before shipped ${shipped(x)} rows; after ${shipped(y)}` }
           : unstable ? { query, status: 'unstable before', detail: `the previous engine answered differently on a second run; ${firstDifference(difference)}` }
           : difference ? { query, status: 'differs', detail: firstDifference(difference) } : { query, status: 'identical' };
       }
@@ -145,7 +157,7 @@ export function formatComparison(comparison: Comparison): string {
     for (const q of notable) lines.push(`  ${q.status.padEnd(13)} ${q.query}${q.clock ? ' (reads the clock)' : ''}${q.detail ? `: ${q.detail}` : ''}`);
   }
   const t = comparison.totals;
-  lines.push(`documents ${t.documents}; queries: identical ${t.identical}, differs ${t.differs}, cut before ${t['cut before']}, unstable before ${t['unstable before']}, failed before ${t['failed before']}, failed after ${t['failed after']}, failed both ${t['failed both']}, only before ${t['only before']}, only after ${t['only after']}; reading the clock ${t.clock}`);
+  lines.push(`documents ${t.documents}; queries: identical ${t.identical}, differs ${t.differs}, cut ${t.cut}, unstable before ${t['unstable before']}, failed before ${t['failed before']}, failed after ${t['failed after']}, failed both ${t['failed both']}, only before ${t['only before']}, only after ${t['only after']}; reading the clock ${t.clock}`);
   return lines.join('\n');
 }
 
