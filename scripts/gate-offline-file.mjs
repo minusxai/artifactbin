@@ -314,7 +314,9 @@ for (const [engineName, engine] of ENGINES) {
     await reopened.locator('.monaco-editor .view-lines').click();
     await reopened.keyboard.press(process.platform === 'darwin' ? 'Meta+ArrowDown' : 'Control+End');
     await reopened.keyboard.press('Enter');
-    await reopened.keyboard.type('<p>{$missing}</p>');
+    // One insertion, not keystrokes: Monaco auto-closes tags as they are typed,
+    // and WebKit on Linux lost part of the typed text in CI.
+    await reopened.keyboard.insertText('<p>{$missing}</p>');
     await expect(reopened.getByRole('status').filter({ hasText: /not saved — .*\$missing.* refers to nothing declared/ })).toBeVisible({ timeout: 10_000 });
     await expect(saveButton(reopened)).toBeDisabled();
     await expect(reopened.getByRole('button', { name: /^Changes/ })).toHaveText('Changes (1)');
