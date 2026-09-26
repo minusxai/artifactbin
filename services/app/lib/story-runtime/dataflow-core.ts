@@ -169,6 +169,27 @@ export function localRows(state: CoreState): Record<string, Row[]> | undefined {
   return names.length ? Object.fromEntries(names.map((n) => [n, state.local[n]!.rows])) : undefined;
 }
 
+type RunEffect = Extract<CoreEffect, { type: 'run' }>;
+
+/**
+ * One run, split by where its queries run: `local` names the queries the page
+ * answers; everything else — the other queries and every write check — stays
+ * in `remote`. Either half is absent when it would ask for nothing. Each half
+ * is answered on its own, and the core applies each to the nodes it names.
+ */
+export function partitionRun(run: RunEffect, local: ReadonlySet<string>): { local?: RunEffect; remote?: RunEffect } {
+  const mine = run.only.filter((name) => local.has(name));
+  if (!mine.length) return { remote: run };
+  const pick = (keep: (k: NodeKey) => boolean) => Object.fromEntries(Object.entries(run.at).filter(([k]) => keep(k)));
+  const isLocal = (k: NodeKey) => k.startsWith('query:') && local.has(nameOf(k));
+  const theirs = run.only.filter((name) => !local.has(name));
+  const remoteAt = pick((k) => !isLocal(k));
+  return {
+    local: { ...run, at: pick(isLocal), only: mine },
+    ...(Object.keys(remoteAt).length ? { remote: { ...run, at: remoteAt, only: theirs } } : {}),
+  };
+}
+
 // ── construction ────────────────────────────────────────────────────────────
 
 /**
