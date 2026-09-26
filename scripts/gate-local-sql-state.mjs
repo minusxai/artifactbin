@@ -5,8 +5,10 @@ import {fixtureFetch as fetch} from './lib/fixture-http.mjs';
 import { artifactDocument } from './lib/artifact-document.mjs';
 /**
  * Gate: reactive JSX, document-local SQL, and Dialog over both document
- * transports. Local state belongs to one loaded document: it may travel to the
- * query/mutation routes, but it never becomes an artifact or dataset write.
+ * transports. Local state belongs to one loaded document: once the page's
+ * engine is loaded, a local-table write and the queries over it run in the
+ * page and never reach a route, and it never becomes an artifact or dataset
+ * write.
  *
  * usage: node scripts/gate-local-sql-state.mjs [base]
  */
@@ -68,6 +70,9 @@ const exercise = async (page, framed, documentId) => {
     throw new Error(`${error.message}; page=${(await frame.locator('body').innerText()).slice(0, 1000)}`);
   });
   check((await frame.textContent('[aria-label="Branch"]')) === 'bee', `${framed ? 'framed' : 'top-level'} URL scalar seeds the ternary`);
+  // The first paint is the server's; the page's engine loads behind it.
+  await page.waitForFunction(() => performance.getEntriesByType('resource').some((e) => e.name.endsWith('.wasm')), null, {timeout:20_000}).catch(() => {});
+  await page.waitForTimeout(500);
   await frame.click('[aria-label="Add draft"]');
   await frame.waitForFunction(() => document.querySelector('[aria-label="Rows"]')?.textContent?.trim() === '2');
   await frame.click('[aria-label="Add draft"]');
@@ -94,7 +99,7 @@ const exercise = async (page, framed, documentId) => {
   await frame.waitForFunction(() => !document.querySelector('[aria-label="Draft dialog"]')?.open);
   check(await frame.locator('[aria-label="Open dialog"]').evaluate(el => el === document.activeElement), 'Escape closes Dialog and restores focus');
   const snapshots = routeBodies.filter(call => call.body?.localTables && Object.keys(call.body.localTables).length);
-  check(snapshots.some(call => call.url.endsWith('/mutate')) && snapshots.some(call => call.url.endsWith('/query')), `${framed ? 'relayed' : 'direct'} mutation and query snapshots reached their routes`);
+  check(snapshots.length === 0 && !routeBodies.some(call => call.url.endsWith('/mutate')), `${framed ? 'framed' : 'top-level'} local writes and the queries over them ran in the page: no local snapshot reached a route (${routeBodies.map(call => call.url.split('/').pop()).join(', ')})`);
   await page.waitForFunction(() => new URLSearchParams(location.search).get('$count') === '1', null, {timeout:5_000});
   await page.reload({waitUntil:'load'});
   const reloaded = framed ? await artifactDocument(page) : page.mainFrame();
