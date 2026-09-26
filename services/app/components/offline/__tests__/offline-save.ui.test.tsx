@@ -98,6 +98,10 @@ describe('Save', () => {
     fireEvent.click(chrome().button('Restore'));
     await waitFor(() => expect(chrome().text()).toContain(UNSAVED));
     expect(chrome().button(/^Changes/)).toHaveTextContent('Changes (1)');
+    // Unsaved work asks before the tab closes.
+    const leaving = new Event('beforeunload', { cancelable: true });
+    window.dispatchEvent(leaving);
+    expect(leaving.defaultPrevented).toBe(true);
     const save = chrome().button('Save');
     expect(save).toBeEnabled();
     fireEvent.click(save);
@@ -107,6 +111,9 @@ describe('Save', () => {
     expect(written[0]).toContain("Edited text in 'Quarterly sales'");
     await waitFor(() => expect(chrome().button('Save')).toBeDisabled());
     expect(chrome().text()).not.toContain(UNSAVED);
+    const after = new Event('beforeunload', { cancelable: true });
+    window.dispatchEvent(after);
+    expect(after.defaultPrevented).toBe(false);
     // Saved: the crash buffer is gone, so the copy does not offer it again.
     expect(localStorage.getItem(draftKey(file))).toBeNull();
   });
