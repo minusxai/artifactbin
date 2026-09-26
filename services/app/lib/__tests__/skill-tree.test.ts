@@ -209,7 +209,7 @@ describe('each topic is taught by exactly its owner', () => {
   const cases: Array<[string, string | RegExp, string[]]> = [
     ['the generic <Mutation> grammar', '<Mutation name expectedAffected={1} reset="note">{`insert', [`${R}/markup-data.md`]],
     ['the built-in $ values table', '| `$_row.<column>` |', [`${R}/markup-data.md`]],
-    ['the SQLite library table', '| `date_series(start, end', [`${R}/markup-sql.md`]],
+    ['the SQLite library table', '| `date_series(start, end', [`${R}/markup-sql-functions.md`]],
     ['the booking worked example', '<title>Book a time</title>', [`${R}/markup-data-example.md`]],
     ['the Helmet cardinality rule', /at most ONE per document/i, [`${R}/markup.md`]],
     ['editable table grammar and seven-editor example', '<Import name="roadmap" src="ref:rdm123" />', [`${R}/markup-editing.md`]],

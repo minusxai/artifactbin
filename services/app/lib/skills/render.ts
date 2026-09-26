@@ -31,7 +31,7 @@ import { MAX_EXTERNAL_ASSETS_PER_PUBLISH, MAX_IMAGE_BYTES, MAX_PDF_BYTES } from 
 import { COMPUTED_FIGURE_RULE } from '@/lib/agent-guidance';
 import { OPERATIONS } from '@/lib/operations/registry';
 import { BUILTIN_INPUTS, BUILTIN_TABLES } from '@/lib/story/builtins';
-import { SQL_FUNCTIONS } from '@artifactbin/contracts';
+import { DISPLAY_ROWS, SQL_FUNCTIONS } from '@artifactbin/contracts';
 import { CORE_FUNCTIONS } from '@artifactbin/sql/core';
 import type { SkillFile } from './tree';
 
@@ -117,8 +117,10 @@ const REGISTRY_GLOBALS = {
   computedFigureRule: COMPUTED_FIGURE_RULE,
   /** The functions the engine adds to SQLite, as the engine registers them (@artifactbin/contracts SQL_FUNCTIONS). */
   sqlFunctionTable: ['| Function | What it does |', '|---|---|', ...SQL_FUNCTIONS.map((f) => `| \`${cell(f.signature)}\` | ${cell(f.summary)} |`)].join('\n'),
-  /** SQLite's own functions an author may call, as the engine's guard admits them. */
-  sqliteFunctions: [...CORE_FUNCTIONS].filter((name) => /^[a-z]\w*$/.test(name)).map((name) => `\`${name}\``).join(', '),
+  /** The rows of one query result that travel to the page; the rest are paged (@artifactbin/contracts DISPLAY_ROWS). */
+  displayRows: DISPLAY_ROWS.toLocaleString('en-US'),
+  /** SQLite's own functions an author may call, as the engine's guard admits them, less those the library replaces. */
+  sqliteFunctions: [...CORE_FUNCTIONS].filter((name) => /^[a-z]\w*$/.test(name) && !SQL_FUNCTIONS.some((f) => f.name === name)).map((name) => `\`${name}\``).join(', '),
   /** The built-in `$` values and tables, as the compiler and the server supply them (lib/story/builtins). */
   builtinTable: [
     '| Name | What it is | Where it comes from | Read by |', '|---|---|---|---|',

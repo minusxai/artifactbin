@@ -20,7 +20,7 @@ describe('feedback authoring examples', () => {
   });
 
   it('the documented portable SQL examples run as both local and catalog reads', async () => {
-    const examples = blocks(doc('markup-sql'), 'sql');
+    const examples = [...blocks(doc('markup-sql'), 'sql'), ...blocks(doc('markup-sql-functions'), 'sql')];
     expect(examples.length).toBeGreaterThan(0);
     const service = createSql({ maxRows: 20, timeoutMs: 2000 });
     for (const sql of examples) {
