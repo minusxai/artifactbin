@@ -12,6 +12,7 @@ import {hydrateArtifactDocument} from '../artifact-document';
 import {GRAPH_POLICY} from './document-graph';
 import {graphPatchSql,graphReferencesSql} from './document-graph-sql';
 import {newEditId} from './splice';
+import {DATA_SYNTAX_META} from './data-syntax';
 export type DocumentCommitResult={applied:true;row:ArtifactRow}|{applied:false;head:ArtifactRow;refusal?:string;ownerOnly?:boolean;invalidParent?:boolean};
 export async function commitDocumentUpdate(db:Queryable,actor:TokenActor|null,scope:Scope,id:string,update:DocumentUpdate,options:{dryRun?:boolean}={}):Promise<DocumentCommitResult|null>{
  const initial=[id,scope.val,newEditId(),actor?.userId??null,actor?.tokenId||null];
@@ -21,7 +22,9 @@ export async function commitDocumentUpdate(db:Queryable,actor:TokenActor|null,sc
  const visibility=param(settings.visibility??null),linkRole=param(settings.linkRole??null),parent=param(settings.parentId??null),hasParent=param(settings.parentId!==undefined);
  const shares=param(settings.shares===undefined?null:JSON.stringify(settings.shares));
  const owner=actor?ownerPredicate(actor):{where:()=> 'FALSE',val:null};const ownerValue=param(owner.val);
- const {title,description,...metadata}=update.metadata??{};
+ // A whole write validated the entire document under the current rules: it is
+ // in the current data syntax (./data-syntax). A partial edit keeps the marker as it was.
+ const {title,description,...metadata}={...update.metadata,...(update.whole?DATA_SYNTAX_META:{})};
  const meta=param(JSON.stringify(metadata)),expected=param(JSON.stringify(update.expectedMetadata??{}));
  const titleValue=param(title??null),hasTitle=param(title!==undefined),descriptionValue=param(description??null),hasDescription=param(description!==undefined);
  const annotationOps=param(JSON.stringify(annotationSqlInput(update.annotationOps))),aliases=param(JSON.stringify(update.aliases??[]));
