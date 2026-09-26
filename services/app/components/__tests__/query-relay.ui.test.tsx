@@ -11,7 +11,10 @@ it('sends query values and local tables through the authenticated document door'
  const transport=createAuthenticatedTransport('story1',fetcher);
  const result=await transport.run({region:'EU'},['sales'],{cart:[{id:1}]});
  expect(result.tables.sales.rows).toEqual([{a:1}]);
- expect(fetcher).toHaveBeenCalledWith('/a/story1/query',expect.objectContaining({credentials:'same-origin',body:JSON.stringify({values:{region:'EU'},only:['sales'],localTables:{cart:[{id:1}]}})}));
+ const [url,init]=fetcher.mock.calls[0] as unknown as [string,RequestInit];
+ expect(url).toBe('/a/story1/query');expect(init.credentials).toBe('same-origin');
+ // The reader's zone travels with every run: it is `$_tz`.
+ expect(JSON.parse(String(init.body))).toEqual({values:{region:'EU'},only:['sales'],localTables:{cart:[{id:1}]},tz:expect.any(String)});
  transport.dispose();
 });
 it('surfaces query refusal and revokes requests when the document is disposed',async()=>{

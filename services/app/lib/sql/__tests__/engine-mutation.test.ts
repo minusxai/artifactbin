@@ -49,11 +49,12 @@ describe('runMutation', () => {
       'create table t (a int)',
       'drop table ref_abc123',
       'insert into ref_abc123 (choice, votes) values (\'a\', 1); delete from ref_abc123',
-      'set threads = 1',
+      'pragma user_version = 1',
     ]) {
       const out = await runMutation({ table, sql, params: {} });
       expect(isQueryFailure(out), sql).toBe(true);
-      if (isQueryFailure(out)) expect(out.error, sql).toMatch(/INSERT, UPDATE or DELETE|exactly one statement/);
+      // DDL is refused by what it would write (the schema table), the rest by statement type.
+      if (isQueryFailure(out)) expect(out.error, sql).toMatch(/INSERT, UPDATE or DELETE|exactly one statement|sqlite_master is not a table a <Mutation> may write/);
     }
   });
 
@@ -66,7 +67,7 @@ describe('runMutation', () => {
   it('the declared column types are enforced by the engine (a word in a number column fails, the table is untouched)', async () => {
     const out = await runMutation({ table, sql: 'insert into ref_abc123 (choice, votes) values ($c, $v)', params: { c: 'x', v: 'many' } });
     expect(isQueryFailure(out)).toBe(true);
-    if (isQueryFailure(out)) expect(out.error).toMatch(/Could not convert|Conversion|cast/i);
+    if (isQueryFailure(out)) expect(out.error).toMatch(/cannot store TEXT value in REAL column ref_abc123\.votes/);
   });
 
   it('a write past the row cap is refused as FULL, and reports the count it would have reached', async () => {
