@@ -22,7 +22,8 @@ import { ARTIFACT_REFERENCE_PATTERN } from '@artifactbin/contracts';
 import { parseJsx, serializeJsx, type JsonValue, type JsxAttribute, type JsxElement, type JsxNode } from '@/lib/jsx';
 import { splitHelmet } from '@/lib/story/helmet';
 import { removedSqlReferenceTokens } from '@/lib/migrate/sqlite/legacy-tokens';
-import { significant, tokenizeSql, word } from './tokens';
+import { KEYWORDS } from './expression';
+import { significant, tokenizeSql, word, type SqlToken } from './tokens';
 import { translateSql, type ManualItem } from './translate';
 
 export interface ConvertLookups {
@@ -110,7 +111,8 @@ function elementRemoval(source: string, el: JsxElement): Edit {
 }
 
 /**
- * `update _signals set a = 'x', b = $v, c = $_row.id` → `{"a": "x", "b": "$v", "c": "$_row.id"}`, or the reason it is not that simple.
+ * `update _signals set a = 'x', b = $v, c = $_row.id, d = e` → `{"a": "x", "b": "$v", "c": "$_row.id", "d": "$e"}`
+ * (a bare column of _signals is that page value), or the reason it is not that simple.
  */
 function signalAssignments(sql: string): Record<string, JsonValue> | string {
   let t;
@@ -146,12 +148,26 @@ function signalAssignments(sql: string): Record<string, JsonValue> | string {
       j = close;
     }
     else if (v.kind === 'param' && v.text.length > 1 && v.text !== '$_row') value = v.text === '$_me' ? '$_me.id' : v.text;
-    else return `${name} is set to an expression`;
+    else if (v.kind === 'word' && !KEYWORDS.has(word(v)) && (!t[j + 1] || t[j + 1].text === ',')) value = `$${v.text}`;
+    else return computed(t, j, name) ?? `${name} is set to an expression`;
     set[name] = value;
     if (!t[j + 1]) return set;
     if (t[j + 1].text !== ',') return word(t[j + 1]) === 'where' ? 'the update has a WHERE clause' : `${name} is set to an expression`;
     i = j + 2;
   }
+}
+
+/**
+ * Why assigning `name` the expression from token `j` on, which reads page
+ * values (`step + 1`), needs a person: set= only copies. Null when it reads none.
+ */
+function computed(t: SqlToken[], j: number, name: string): string | null {
+  let end = j;
+  for (let depth = 0; end < t.length && (depth > 0 || t[end].text !== ','); end++) depth += t[end].text === '(' ? 1 : t[end].text === ')' ? -1 : 0;
+  const reads = t.slice(j, end).some((token, k) => token.kind === 'word' && !KEYWORDS.has(word(token)) && t[j + k + 1]?.text !== '(' && t[j + k - 1]?.text !== '.');
+  if (!reads) return null;
+  const text = t.slice(j, end).map((token) => token.text).join(' ');
+  return `computes ${name} from page values (${text}): keep ${name} in a one-row <Value type="table"> updated by a local <Mutation>`;
 }
 
 /** The removed single-row table of page values. */
