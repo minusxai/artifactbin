@@ -5,8 +5,8 @@
  * display window — plus the optimistic overlay a held write rides on until
  * the server decides. Run on the real core, in Node.
  */
-import { describe, expect, it, vi } from 'vitest';
-import { loadSqlite } from '@artifactbin/sql/core';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { loadSqlite, SqliteDatabase } from '@artifactbin/sql/core';
 import { DISPLAY_ROWS } from '@artifactbin/contracts';
 import { compiledOf } from '@/test/helpers/compiled';
 import { runDataflow } from '@/lib/sql/run-dataflow';
@@ -24,6 +24,7 @@ const FLOW = await compiledOf(
   '<Query name="top">{`select * from by_region order by revenue desc limit 1`}</Query>' +
   '<Query name="me">{`select $_me.id as me, $_now as now, $_tz as tz`}</Query>' +
   '<Query name="todos">{`select count(*) as n from todo`}</Query>' +
+  '<Query name="everything">{`select * from sales.rows order by id`}</Query>' +
   '<Mutation name="add">{`insert into sales.rows (id, region, revenue) values ($_row.id, $region, 10)`}</Mutation>' +
   '<Mutation name="remember">{`insert into todo (t) values ($region)`}</Mutation>',
   { Sales0001: COLUMNS },
@@ -44,6 +45,11 @@ const settle = async (engine: ReturnType<typeof createPageEngine>, imports = ['s
   await vi.waitFor(() => expect(engine.ready(FLOW, imports)).toBe(true));
 };
 
+/** How often the held rows crossed into SQLite. */
+const loadsOfSales = (spy: { mock: { calls: unknown[][] } }) => spy.mock.calls.filter(([data]) => (data as { schema: string }).schema === 'sales').length;
+
+afterEach(() => { vi.restoreAllMocks(); });
+
 describe('createPageEngine', () => {
   it('is not ready until the core and every import asked for are loaded, and loads each once', async () => {
     const { engine, fetched } = engineOver();
@@ -63,6 +69,33 @@ describe('createPageEngine', () => {
     expect(Object.keys(page.tables).sort()).toEqual(['by_region', 'me', 'todo', 'todos', 'top']);
     expect(page.errors).toEqual({});
     expect(page.tables.me!.rows).toEqual([{ me: 'usr_1', now: CTX.now, tz: 'Europe/Paris' }]);
+  });
+
+  it('keeps its database open: the held rows load once for any number of runs, and again only after they changed', async () => {
+    const load = vi.spyOn(SqliteDatabase.prototype, 'load');
+    const { engine, setRows } = engineOver();
+    await settle(engine);
+    for (const region of [null, 'EU', 'NA', 'EU', null]) await engine.run(FLOW, ['top'], { values: { region }, ...CTX });
+    await engine.page(FLOW, 'by_region', { offset: 0, limit: 1 }, { values: {}, ...CTX });
+    expect(loadsOfSales(load)).toBe(1);
+    setRows([...ROWS, { id: 'd', region: 'NA', revenue: 1 }]);
+    engine.invalidate(['Sales0001']);
+    await settle(engine);
+    const after = await engine.run(FLOW, ['by_region'], { values: {}, ...CTX });
+    expect(after.tables.by_region!.rows).toEqual([{ region: 'EU', revenue: 840 }, { region: 'NA', revenue: 1201 }]);
+    expect(loadsOfSales(load)).toBe(2);
+  });
+
+  it('what one run loads beside the held rows is not the next run\'s: its values, local rows and results are its own', async () => {
+    const { engine } = engineOver();
+    await settle(engine);
+    const server = (values: Record<string, string | null>, localTables?: Record<string, Array<{ t: string }>>) =>
+      runDataflow(FLOW, { sales: { rows: { rows: ROWS, columns: COLUMNS } } }, { values, only: ['top', 'todos'], ...(localTables ? { localTables } : {}), ...CTX });
+    const runs: Array<[Record<string, string | null>, Record<string, Array<{ t: string }>> | undefined]> = [[{ region: 'EU' }, { todo: [{ t: 'x' }, { t: 'y' }] }], [{ region: 'NA' }, undefined], [{ region: null }, { todo: [] }]];
+    for (const [values, localTables] of runs) {
+      const page = await engine.run(FLOW, ['top', 'todos'], { values, ...(localTables ? { localTables } : {}), ...CTX });
+      expect(page.tables).toEqual((await server(values, localTables)).tables);
+    }
   });
 
   it('reads the reader\'s local rows when they have written any', async () => {
@@ -112,6 +145,18 @@ describe('createPageEngine', () => {
     expect(fetched).toEqual(['sales', 'sales']);
     // Not applied twice: the confirmed write is the fetched rows' now.
     expect((await count()).map((r) => r.region)).toEqual(['EU', 'NA', 'YY']);
+  });
+
+  it('a refused write leaves the held copy exactly as it was before the write', async () => {
+    const { engine } = engineOver();
+    await settle(engine);
+    const add = FLOW.mutations.find((x) => x.name === 'add')!;
+    const everything = async () => (await engine.run(FLOW, ['everything'], { values: {}, ...CTX })).tables.everything;
+    const before = await everything();
+    const refused = engine.apply(FLOW, add, mutationRequestFor(add, { values: { region: 'XX' }, row: { id: 'n1' } }), CTX)!;
+    expect((await everything())!.rows).toHaveLength(ROWS.length + 1);
+    refused.settle(false);
+    expect(await everything()).toEqual(before);
   });
 
   it('declines to apply a write it cannot judge, leaving the server to answer it', async () => {

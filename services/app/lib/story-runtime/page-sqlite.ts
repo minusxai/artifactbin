@@ -12,16 +12,13 @@
  * transport can fetch it. Otherwise the store keeps sending everything to the
  * server, exactly as before.
  */
-import type { SqliteEngine } from '@artifactbin/sql/core';
 import type { StoryIslandData } from './contract';
-import { createPageEngine, type PageEngine } from './page-engine';
+import { createPageEngine, type PageCore, type PageEngine } from './page-engine';
 import type { QueryTransport } from './store';
 
-type Core = Pick<SqliteEngine, 'run' | 'mutate'>;
-
 /** The core over wasm bytes: fetched from `wasm` (a URL) once, or given. */
-export function sqliteFrom(wasm: string | Uint8Array): () => Promise<Core> {
-  let loading: Promise<Core> | null = null;
+export function sqliteFrom(wasm: string | Uint8Array): () => Promise<PageCore> {
+  let loading: Promise<PageCore> | null = null;
   const bytes = async (): Promise<Uint8Array | ArrayBuffer> => {
     if (typeof wasm !== 'string') return wasm;
     const response = await fetch(wasm, { credentials: 'omit' });

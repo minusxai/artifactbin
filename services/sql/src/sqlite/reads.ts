@@ -1,6 +1,7 @@
 /**
- * READS: a document's queries, in dependency order, in ONE throwaway
- * database. Each result is loaded WHOLE as a table under the query's name
+ * READS: a document's queries, in dependency order, in ONE database —
+ * throwaway, or held open across runs for the page's engine (`heldDatabase`),
+ * which is the same run with its imports already in place. Each result is loaded WHOLE as a table under the query's name
  * before the next runs, so a later query reads an earlier one by name and sees
  * every row of it; the row cap (`limit`) bounds only what is returned. A failing
  * query is a `QueryFailure` for that query alone; its dependents then fail on
@@ -9,7 +10,7 @@
 import { isQueryFailure, type ColumnType, type DatasetColumn, type DryRunInput, type DryRunResult, type QueryOutcome, type QueryPage, type Row, type RunInput, type Scalar } from '@artifactbin/contracts';
 import { DEFAULT_CAPS } from '../caps';
 import { pagedQuery } from '../paging';
-import { Refused, SqliteDatabase, TimedOut, type Prepared } from './database';
+import { Refused, SqliteDatabase, TimedOut, type Prepared, type TableData } from './database';
 import type { Sqlite3 } from './wasm';
 
 /** The bounds of one call, already clamped by the caller to its caps. */
@@ -18,14 +19,70 @@ export interface ReadBounds { limit: number; pageLimit: number; timeoutMs: numbe
 const message = (e: unknown): string => (e instanceof Error ? e.message : String(e)).split('\n').slice(0, 3).join(' ').trim();
 
 export function runQueries(sqlite3: Sqlite3, input: RunInput, bounds: ReadBounds): Record<string, QueryOutcome> {
-  const out: Record<string, QueryOutcome> = {};
   const db = new SqliteDatabase(sqlite3);
+  try {
+    return readAll(db, input, bounds, () => {
+      for (const [schema, tables] of Object.entries(input.imports ?? {})) for (const [table, t] of Object.entries(tables)) db.load({ schema, table, ...t });
+    });
+  } finally {
+    db.close();
+  }
+}
+
+/** A database that outlives its runs (SqliteEngine.held). */
+export interface HeldDatabase {
+  /**
+   * `runQueries` over this database: each import table is loaded the first
+   * time it is given and again only when given a different rows array; the
+   * main tables and query results a run loads are gone when it returns.
+   */
+  run(input: RunInput, bounds: ReadBounds): Record<string, QueryOutcome>;
+  close(): void;
+}
+
+/**
+ * The imports' schemas are attached up front, in `schemas` order — the order
+ * a throwaway run attaches them in (the document's declaration order) — so an
+ * unqualified table name resolves here exactly as it does there, whichever
+ * import happened to be loaded first.
+ */
+export function heldDatabase(sqlite3: Sqlite3, schemas: readonly string[]): HeldDatabase {
+  const db = new SqliteDatabase(sqlite3);
+  /** The rows each held table was loaded from, by schema and table. */
+  const loaded = new Map<string, TableData['rows']>();
+  try { for (const schema of schemas) db.attach(schema); } catch (e) { db.close(); throw e; }
+  return {
+    run(input, bounds) {
+      // Outside the run's transaction: what is loaded here stays.
+      const hold = () => {
+        for (const [schema, tables] of Object.entries(input.imports ?? {})) for (const [table, t] of Object.entries(tables)) {
+          const at = JSON.stringify([schema, table]);
+          if (loaded.get(at) === t.rows) continue;
+          loaded.delete(at);
+          db.drop(schema, table);
+          db.load({ schema, table, ...t });
+          loaded.set(at, t.rows);
+        }
+      };
+      try { hold(); } catch (error) { return failedAll(input, error); }
+      return db.scratch(() => readAll(db, input, bounds, () => {}));
+    },
+    close: () => db.close(),
+  };
+}
+
+const failedAll = (input: RunInput, error: unknown): Record<string, QueryOutcome> =>
+  Object.fromEntries(input.queries.map((q) => [q.name, { error: message(error) }]));
+
+/** Every query of `input`, in order, over `db`; `loadImports` puts the imports in place. */
+function readAll(db: SqliteDatabase, input: RunInput, bounds: ReadBounds, loadImports: () => void): Record<string, QueryOutcome> {
+  const out: Record<string, QueryOutcome> = {};
   const types = input.paramTypes ?? input.catalog?.paramTypes ?? {};
   try {
     if (input.catalog) mountCatalog(db, input);
     else {
       for (const [table, t] of Object.entries(input.tables)) db.load({ schema: 'main', table, ...t });
-      for (const [schema, tables] of Object.entries(input.imports ?? {})) for (const [table, t] of Object.entries(tables)) db.load({ schema, table, ...t });
+      loadImports();
     }
     for (const [i, query] of input.queries.entries()) {
       const page = input.page?.name === query.name ? input.page : null;
@@ -45,8 +102,6 @@ export function runQueries(sqlite3: Sqlite3, input: RunInput, bounds: ReadBounds
     }
   } catch (error) {
     for (const query of input.queries) out[query.name] ??= { error: message(error) };
-  } finally {
-    db.close();
   }
   return out;
 }

@@ -265,6 +265,31 @@ export class SqliteDatabase {
     this.insertRows(spec, data.rows);
   }
 
+  /** Drop a loaded table, if it is there — a held import about to be loaded again. */
+  drop(schema: string, table: string): void {
+    this.exec(`DROP TABLE IF EXISTS ${quote(schema)}.${quote(table)}`);
+    this.#relations.delete(key(schema, table));
+  }
+
+  /**
+   * Run `fn` in a transaction that is always rolled back: every table and view
+   * it creates is gone afterwards, and the database is exactly as it was. A
+   * held database (reads.ts heldDatabase) keeps its imports across runs this
+   * way while each run's own tables stay its own. Nothing inside may ATTACH.
+   */
+  scratch<T>(fn: () => T): T {
+    const relations = new Map(this.#relations), views = new Set(this.#views);
+    this.exec('BEGIN');
+    try { return fn(); } finally {
+      // An error may already have rolled it back.
+      if (!this.sqlite3.capi.sqlite3_get_autocommit(this.#db.pointer!)) this.exec('ROLLBACK');
+      this.#relations.clear();
+      for (const [k, v] of relations) this.#relations.set(k, v);
+      this.#views.clear();
+      for (const v of views) this.#views.add(v);
+    }
+  }
+
   /**
    * A view over loaded relations, exposing only its declared columns. The
    * view's SQL is admitted as a read first, and the view is built from the
