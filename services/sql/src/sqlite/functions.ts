@@ -32,8 +32,11 @@ function fail(fn: string, reason: string): never {
 export function calendarDate(text: string): number | null {
   const m = DATE_TEXT.exec(text);
   if (!m) return null;
-  const ms = Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
-  return new Date(ms).toISOString().slice(0, 10) === text ? ms : null;
+  const year = Number(m[1]), month = Number(m[2]), day = Number(m[3]);
+  const leap = year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0);
+  const last = month === 2 ? (leap ? 29 : 28) : [4, 6, 9, 11].includes(month) ? 30 : 31;
+  // setUTCFullYear, not Date.UTC: the latter reads years 0–99 as 1900–1999.
+  return month >= 1 && month <= 12 && day >= 1 && day <= last ? new Date(0).setUTCFullYear(year, month - 1, day) : null;
 }
 
 function instant(fn: string, value: SqlValue): Instant {

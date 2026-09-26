@@ -10,7 +10,7 @@
 import { afterAll, describe, it, expect } from 'vitest';
 import { createSql, createSqliteSql } from '@artifactbin/sql/local';
 import { serveSql, sqlClient } from '@artifactbin/sql';
-import type { DatasetMutationPolicy, SqlService } from '@artifactbin/contracts';
+import type { DatasetMutationPolicy, Scalar, SqlService } from '@artifactbin/contracts';
 const local = createSql(),
   server = serveSql(local),
   remote = sqlClient(server.listen(0).url);
@@ -69,7 +69,7 @@ describe.each<[string, 'duckdb' | 'sqlite', SqlService]>([
   ['sqlite HTTP', 'sqlite', sqliteRemote],
 ])('dataset policy %s', (_, engine, svc) => {
   // The clicked row: a typed STRUCT in DuckDB, plain named parameters in SQLite.
-  const ROW = engine === 'duckdb'
+  const ROW: { id: string; body: string; status: string; params: Record<string, Scalar> } = engine === 'duckdb'
     ? { id: '$_row.id', body: '$_row.body', status: '$_row.status', params: {} }
     : { id: '$id', body: '$body', status: '$status', params: { id: 1, body: 'one', status: 'open' } };
   const run = (sql: string, p = policy) =>

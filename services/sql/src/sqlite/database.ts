@@ -232,29 +232,18 @@ export class SqliteDatabase {
     this.#register(spec.schema, spec.table, spec.columns);
   }
 
-  /** Load rows in one transaction; each value is checked against its column's type. */
+  /**
+   * Load rows: each value checked against its column's type in JS, then the
+   * whole table crosses into SQLite as ONE JSON text and one INSERT over
+   * `json_each` — a statement per row costs several times more at 20k rows.
+   */
   insertRows(spec: Relation, rows: Row[]): void {
     if (!rows.length || !spec.columns.length) return;
+    const data = JSON.stringify(rows.map((row, r) => spec.columns.map((c) => sqlValue(c.type, row[c.name], `${spec.table}.${c.name} (row ${r + 1})`))));
     const names = spec.columns.map((c) => quote(c.name)).join(', ');
-    this.trusted(() => {
-      const stmt = this.#db.prepare(`INSERT INTO ${quote(spec.schema)}.${quote(spec.table)} (${names}) VALUES (${spec.columns.map(() => '?').join(', ')})`);
-      this.#db.exec('BEGIN');
-      try {
-        rows.forEach((row, r) => {
-          spec.columns.forEach((c, i) => {
-            const value = sqlValue(c.type, row[c.name], `${spec.table}.${c.name} (row ${r + 1})`);
-            if (typeof value === 'number') this.sqlite3.capi.sqlite3_bind_double(stmt.pointer!, i + 1, value);
-            else stmt.bind(i + 1, value);
-          });
-          stmt.step();
-          stmt.reset(true);
-        });
-        this.#db.exec('COMMIT');
-      } catch (e) {
-        this.#db.exec('ROLLBACK');
-        throw new Error(clean(e));
-      } finally { stmt.finalize(); }
-    });
+    try {
+      this.exec(`INSERT INTO ${quote(spec.schema)}.${quote(spec.table)} (${names}) SELECT ${spec.columns.map((_, i) => `value ->> ${i}`).join(', ')} FROM json_each(?) ORDER BY key`, [data]);
+    } catch (e) { throw new Error(clean(e)); }
   }
 
   load(data: TableData): void {
