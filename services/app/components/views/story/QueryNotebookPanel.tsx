@@ -17,6 +17,9 @@
 import { useEffect, useRef, useState } from 'react';
 import type { BoundEmbed, QueryCell } from '@/lib/story/query-notebook';
 import type { TableResult } from '@/lib/story/dataflow';
+import { useArtifactBackend } from '@/lib/artifact-backend/context';
+import { BackendRequestError } from '@/lib/artifact-backend/errors';
+import type { ArtifactBackend } from '@/lib/artifact-backend/types';
 
 export interface QueryNotebookPanelProps {
   cells: QueryCell[];
@@ -244,26 +247,22 @@ interface DatasetShape {
   error: string | null;
 }
 
-function useDatasetShapes(ids: string[]): Record<string, DatasetShape> {
+function useDatasetShapes(backend: ArtifactBackend, ids: string[]): Record<string, DatasetShape> {
   const [shapes, setShapes] = useState<Record<string, DatasetShape>>({});
   const key = ids.join(',');
+  /** A backend that cannot read tables (the offline file) says why in each dataset's place. */
+  const unavailable = backend.unavailable('runQueries');
   useEffect(() => {
     let live = true;
     for (const id of key ? key.split(',') : []) {
+      if (unavailable) {
+        setShapes((prev) => ({ ...prev, [id]: { columns: [], rows: null, error: unavailable } }));
+        continue;
+      }
       void (async () => {
         try {
-          const response = await fetch(`/a/${encodeURIComponent(id)}/tables`, {
-            method: 'POST',
-            credentials: 'same-origin',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ sql: 'select * from public.rows', limit: 1, offset: 0 }),
-          });
-          const data = await response.json();
+          const data = await backend.queryTable(id, { sql: 'select * from public.rows', limit: 1, offset: 0 });
           if (!live) return;
-          if (!response.ok) {
-            setShapes((prev) => ({ ...prev, [id]: { columns: [], rows: null, error: data.details?.[0] ?? data.error ?? 'unavailable' } }));
-            return;
-          }
           setShapes((prev) => ({
             ...prev,
             [id]: {
@@ -272,13 +271,13 @@ function useDatasetShapes(ids: string[]): Record<string, DatasetShape> {
               error: null,
             },
           }));
-        } catch {
-          if (live) setShapes((prev) => ({ ...prev, [id]: { columns: [], rows: null, error: 'unavailable' } }));
+        } catch (error) {
+          if (live) setShapes((prev) => ({ ...prev, [id]: { columns: [], rows: null, error: error instanceof BackendRequestError ? error.message : 'unavailable' } }));
         }
       })();
     }
     return () => { live = false; };
-  }, [key]);
+  }, [key, backend, unavailable]);
   return shapes;
 }
 
@@ -296,7 +295,7 @@ export default function QueryNotebookPanel({ cells, onSqlChange, onSpotlight, fo
    * so a document-wide lookup finds nothing and the click silently did not scroll.
    */
   const cellEls = useRef<Record<string, HTMLDivElement | null>>({});
-  const shapes = useDatasetShapes(sourcesOf(cells).filter((k) => k !== LOCAL));
+  const shapes = useDatasetShapes(useArtifactBackend(), sourcesOf(cells).filter((k) => k !== LOCAL));
   const jump = (name: string) => {
     cellEls.current[name]?.scrollIntoView({ block: 'start', behavior: 'smooth' });
   };

@@ -16,13 +16,14 @@
  * other, and the floor must keep counting even for frames this hook decides not
  * to surface. See `isOwnFrame`.
  */
-import {readAnnotationPages} from '@/lib/annotation-pages';
 import { useEffect, useRef, useState } from 'react';
 import type { AnnotationWire } from '@/lib/annotations';
-import type { ArtifactDataEvent, ArtifactLiveEvent, ArtifactVersionPing } from '@/lib/story/live';
-import { STORY_ANNOTATIONS_EVENT, STORY_DATA_EVENT } from '@/lib/story-runtime/contract';
+import type { ArtifactBackend } from '@/lib/artifact-backend/types';
+import type { ArtifactDataEvent, ArtifactLiveEvent } from '@/lib/story/live';
 
 export function useLiveArtifact(
+  /** Where the stream comes from; a backend without `live` is simply never subscribed. */
+  backend: ArtifactBackend,
   id: string,
   initialEditId: string,
   initialVersion: number,
@@ -69,9 +70,8 @@ export function useLiveArtifact(
   const seenVersionRef = useRef(initialVersion);
 
   useEffect(() => {
-    if (!enabled) return;
+    if (!enabled || backend.unavailable('live')) return;
     seenVersionRef.current = initialVersion;
-    const source = new EventSource(`/a/${id}/events`);
     let alive = true;let annotationsRequest:AbortController|undefined;
     /*
      * The stream carries PINGS; the document is fetched. A ping names the head
@@ -80,39 +80,35 @@ export function useLiveArtifact(
      * ACL this page already passed. Ordering: a stale frame (an older
      * version arriving after a newer one) is dropped by version.
      */
-    source.onmessage = (event) => {
-      let ping: ArtifactVersionPing;
-      try { ping = JSON.parse(event.data) as ArtifactVersionPing; } catch { return; }
-      if (!Number.isInteger(ping.version)) return;
-      if (ping.version < Math.max(initialVersion, seenVersionRef.current)) return;
-      seenVersionRef.current = ping.version;
-      if (isOwnFrameRef.current?.(ping.editId)) return;
-      if (ping.version === initialVersion && ping.editId === initialEditId) return;
-      void fetch(`/a/${id}/events/frame`, { credentials: 'same-origin' })
-        .then((r) => (r.ok ? (r.json() as Promise<ArtifactLiveEvent>) : null))
-        .then((frame) => {
-          if (!alive || !frame || frame.version < seenVersionRef.current) return;
-          setLive({ id, frame: { ...frame, by: frame.by ?? ping.by } });
-        })
-        .catch(() => { /* a failed fetch is a dropped wakeup; the next ping retries */ });
-    };
-    source.addEventListener(STORY_DATA_EVENT, (event: MessageEvent) => {
-      try {
-        const frame = JSON.parse(event.data) as ArtifactDataEvent;
+    const unsubscribe = backend.live({
+      onPing: (ping) => {
+        if (!Number.isInteger(ping.version)) return;
+        if (ping.version < Math.max(initialVersion, seenVersionRef.current)) return;
+        seenVersionRef.current = ping.version;
+        if (isOwnFrameRef.current?.(ping.editId)) return;
+        if (ping.version === initialVersion && ping.editId === initialEditId) return;
+        void backend.liveFrame()
+          .then((frame) => {
+            if (!alive || !frame || frame.version < seenVersionRef.current) return;
+            setLive({ id, frame: { ...frame, by: frame.by ?? ping.by } });
+          })
+          .catch(() => { /* a failed fetch is a dropped wakeup; the next ping retries */ });
+      },
+      onData: (frame) => {
         if (!Array.isArray(frame.datasets) || frame.datasets.length === 0) return;
         onDataRef.current?.(frame);
-      } catch { /* a malformed frame is a dropped wakeup, nothing more */ }
+      },
+      // Annotations are a PING too: the owner's page refetches the list.
+      onAnnotations: () => {
+        if (!onAnnotationsRef.current) return;
+        annotationsRequest?.abort();annotationsRequest=new AbortController();
+        void backend.listAnnotations('open',{signal:annotationsRequest.signal})
+          .then((annotations) => { if (alive) onAnnotationsRef.current?.(annotations); })
+          .catch(() => { /* next ping */ });
+      },
     });
-    // Annotations are a PING too: the owner's page refetches the list.
-    source.addEventListener(STORY_ANNOTATIONS_EVENT, () => {
-      if (!onAnnotationsRef.current) return;
-      annotationsRequest?.abort();annotationsRequest=new AbortController();
-      void readAnnotationPages(`/api/my/artifacts/${id}/annotations?status=open`,{signal:annotationsRequest.signal})
-        .then((annotations) => { if (alive) onAnnotationsRef.current?.(annotations); })
-        .catch(() => { /* next ping */ });
-    });
-    return () => { alive = false; annotationsRequest?.abort();source.close(); };
-  }, [id, initialEditId, initialVersion, enabled]);
+    return () => { alive = false; annotationsRequest?.abort();unsubscribe(); };
+  }, [backend, id, initialEditId, initialVersion, enabled]);
 
   return live?.id === id && live.frame.version > initialVersion ? live.frame : null;
 }

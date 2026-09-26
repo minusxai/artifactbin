@@ -9,6 +9,7 @@
 import { act, renderHook, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useLiveArtifact } from '@/lib/story/use-live-artifact';
+import { httpBackend } from '@/test/helpers/artifact-backend';
 
 /** Minimal EventSource stand-in whose messages the test drives by hand. */
 class FakeEventSource {
@@ -54,28 +55,28 @@ const emit = (f: Record<string, unknown>) => act(async () => { FakeEventSource.l
 
 describe('useLiveArtifact', () => {
   it('subscribes to this artifact and closes the stream on unmount', () => {
-    const hook = renderHook(() => useLiveArtifact('story1', 'e1', 1));
+    const hook = renderHook(() => useLiveArtifact(httpBackend('story1'), 'story1', 'e1', 1));
     expect(FakeEventSource.last?.url).toBe('/a/story1/events');
     hook.unmount();
     expect(FakeEventSource.last?.closed).toBe(true);
   });
 
   it('ignores an opening ping that only echoes what the page already renders — and fetches nothing', async () => {
-    const hook = renderHook(() => useLiveArtifact('story1', 'e1', 1));
+    const hook = renderHook(() => useLiveArtifact(httpBackend('story1'), 'story1', 'e1', 1));
     await emit(frame({ editId: 'e1', version: 1 }));
     expect(hook.result.current).toBeNull();
     expect(fetches).toBe(0);
   });
 
   it('fetches and surfaces the frame a newer ping points at', async () => {
-    const hook = renderHook(() => useLiveArtifact('story1', 'e1', 1));
+    const hook = renderHook(() => useLiveArtifact(httpBackend('story1'), 'story1', 'e1', 1));
     await emit(frame({ source: '<p>new</p>', compiledCss: '.a{}' }));
     await waitFor(() => expect(hook.result.current).toMatchObject({ source: '<p>new</p>', compiledCss: '.a{}' }));
     expect(fetches).toBe(1);
   });
 
   it('uses the frame AS FETCHED — the stylesheet travels with every frame, nothing is sticky', async () => {
-    const hook = renderHook(() => useLiveArtifact('story1', 'e1', 1));
+    const hook = renderHook(() => useLiveArtifact(httpBackend('story1'), 'story1', 'e1', 1));
     await emit(frame({ editId: 'e2', compiledCss: '.new-class{color:red}' }));
     await waitFor(() => expect(hook.result.current?.compiledCss).toBe('.new-class{color:red}'));
     await emit(frame({ editId: 'e3', version: 3, source: '<p>edited</p>', compiledCss: '.new-class{color:red}' }));
@@ -84,13 +85,13 @@ describe('useLiveArtifact', () => {
   });
 
   it('a malformed ping is a dropped wakeup, not a crash', () => {
-    const hook = renderHook(() => useLiveArtifact('story1', 'e1', 1));
+    const hook = renderHook(() => useLiveArtifact(httpBackend('story1'), 'story1', 'e1', 1));
     act(() => { FakeEventSource.last!.onmessage?.({ data: 'not json' }); });
     expect(hook.result.current).toBeNull();
   });
 
   it('never rewinds when an older ping arrives after a newer one', async () => {
-    const hook = renderHook(() => useLiveArtifact('story1', 'e1', 1));
+    const hook = renderHook(() => useLiveArtifact(httpBackend('story1'), 'story1', 'e1', 1));
     await emit(frame({ editId: 'e3', version: 3, source: '<p>fresh</p>' }));
     await waitFor(() => expect(hook.result.current?.version).toBe(3));
     await emit(frame({ editId: 'e2', version: 2, source: '<p>old</p>' }));
@@ -98,7 +99,7 @@ describe('useLiveArtifact', () => {
   });
 
   it('drops a frame that arrives after a newer one was already shown (a slow fetch cannot rewind)', async () => {
-    const hook = renderHook(() => useLiveArtifact('story1', 'e1', 1));
+    const hook = renderHook(() => useLiveArtifact(httpBackend('story1'), 'story1', 'e1', 1));
     await emit(frame({ editId: 'e3', version: 3, source: '<p>fresh</p>' }));
     await waitFor(() => expect(hook.result.current?.version).toBe(3));
     served = frame({ editId: 'e2', version: 2, source: '<p>old</p>' });
@@ -109,7 +110,7 @@ describe('useLiveArtifact', () => {
 
   it('hands control back to refreshed server props when their version catches up', async () => {
     const hook = renderHook(
-      ({ version }) => useLiveArtifact('story1', version === 1 ? 'e1' : 'e2', version),
+      ({ version }) => useLiveArtifact(httpBackend('story1'), 'story1', version === 1 ? 'e1' : 'e2', version),
       { initialProps: { version: 1 } },
     );
     await emit(frame({ editId: 'e2', version: 2, source: '<p>live</p>' }));
@@ -119,7 +120,7 @@ describe('useLiveArtifact', () => {
   });
 
   it('does not subscribe at all when disabled', () => {
-    renderHook(() => useLiveArtifact('story1', 'e1', 1, false));
+    renderHook(() => useLiveArtifact(httpBackend('story1'), 'story1', 'e1', 1, false));
     expect(FakeEventSource.last).toBeNull();
   });
 });
@@ -136,7 +137,7 @@ describe('useLiveArtifact — the caller can disown its own frames', () => {
     let renders = 0;
     const hook = renderHook(() => {
       renders += 1;
-      return useLiveArtifact('story1', 'e1', 1, true, (editId) => editId === 'mine');
+      return useLiveArtifact(httpBackend('story1'), 'story1', 'e1', 1, true, (editId) => editId === 'mine');
     });
     const before = renders;
     await emit(frame({ editId: 'mine', version: 2, source: '<p>echo</p>' }));
@@ -146,14 +147,14 @@ describe('useLiveArtifact — the caller can disown its own frames', () => {
   });
 
   it('still surfaces a frame written by someone else', async () => {
-    const hook = renderHook(() => useLiveArtifact('story1', 'e1', 1, true, (editId) => editId === 'mine'));
+    const hook = renderHook(() => useLiveArtifact(httpBackend('story1'), 'story1', 'e1', 1, true, (editId) => editId === 'mine'));
     await emit(frame({ editId: 'mine', version: 2, source: '<p>echo</p>' }));
     await emit(frame({ editId: 'theirs', version: 3, source: '<p>theirs</p>' }));
     await waitFor(() => expect(hook.result.current).toMatchObject({ editId: 'theirs', source: '<p>theirs</p>' }));
   });
 
   it('a dropped ping still raises the version floor (a late older ping stays refused)', async () => {
-    const hook = renderHook(() => useLiveArtifact('story1', 'e1', 1, true, (editId) => editId === 'mine'));
+    const hook = renderHook(() => useLiveArtifact(httpBackend('story1'), 'story1', 'e1', 1, true, (editId) => editId === 'mine'));
     await emit(frame({ editId: 'mine', version: 5, source: '<p>echo</p>' }));
     await emit(frame({ editId: 'stale', version: 4, source: '<p>old</p>' }));
     expect(hook.result.current).toBeNull();

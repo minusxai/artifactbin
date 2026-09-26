@@ -10,6 +10,7 @@ import {createDocumentGraph,graphSource,type DocumentGraph} from '@/lib/story/do
 import {applyGraphPatch} from '@/lib/story/document-graph-patch';
 import type {DocumentUpdate} from '@artifactbin/contracts';
 import { useLiveEdits } from '@/lib/story/use-live-edits';
+import { httpBackend } from '@/test/helpers/artifact-backend';
 
 const ID = 'live01';
 const snapshots=new Map<string,{document:DocumentGraph;version:number;ids:boolean}>();
@@ -25,7 +26,7 @@ function setup(opts: { isUserEditing?: () => boolean; initialSource?:string } = 
   const document=snapshot('edit-1',opts.initialSource??'<p>Initial</p>',1);
   const hook = renderHook(() =>
     useLiveEdits({
-      id: ID,
+      backend: httpBackend(ID),
       initialEditId: 'edit-1',
       initialVersion: 1,
       initialDocument:document,

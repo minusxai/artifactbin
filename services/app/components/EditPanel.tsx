@@ -19,6 +19,8 @@
 import { History, MessageSquare, PanelRightClose, PanelRightOpen, SlidersHorizontal } from 'lucide-react';
 import { useId, type ReactNode } from 'react';
 import { Tooltip } from '@/components/Tooltip';
+import { FeatureGate } from '@/components/FeatureUnavailable';
+import { useArtifactBackend } from '@/lib/artifact-backend/context';
 import { EDIT_PANEL_STRIP_W, RIGHT_RAIL_W } from '@/lib/story/edit-bar';
 
 export type EditPanelTab = 'selection' | 'history' | 'comments';
@@ -57,6 +59,9 @@ export default function EditPanel({
 }) {
   const id = useId();
   const tabs = TABS.filter((t) => t.tab !== 'comments' || commentsAvailable);
+  /** History is a backend capability; without it the tab stays, disabled, saying why. */
+  const historyUnavailable = useArtifactBackend().unavailable('versions');
+  const unavailable = (t: EditPanelTab) => (t === 'history' ? historyUnavailable : null);
   const dot = (
     <span aria-hidden="true" className="absolute right-0.5 top-0.5 h-1.5 w-1.5 rounded-full bg-accent" />
   );
@@ -81,22 +86,28 @@ export default function EditPanel({
         </Tooltip>
         <div role="tablist" aria-label="Edit panel tabs" aria-orientation="vertical" className="flex flex-col gap-1 border-t border-edge pt-1">
           {tabs.map(({ tab: t, label, Icon }) => (
-            <Tooltip key={t} content={label} positioning={{ placement: 'left' }}>
-              <button
-                type="button"
-                role="tab"
-                aria-label={label}
-                aria-selected={tab === t}
-                data-new-selection={t === 'selection' && selectionDot ? 'true' : undefined}
-                onClick={() => onTab(t)}
-                className={`relative inline-flex h-8 w-8 cursor-pointer items-center justify-center rounded-[4px] ${
-                  tab === t ? 'bg-accent-soft text-accent' : 'text-muted hover:bg-raised hover:text-fg'
-                }`}
-              >
-                <Icon size={14} />
-                {t === 'selection' && selectionDot && dot}
-              </button>
-            </Tooltip>
+            <FeatureGate key={t} reason={unavailable(t)}>
+              {(gate) => {
+                const button = (
+                  <button
+                    type="button"
+                    role="tab"
+                    aria-label={label}
+                    aria-selected={tab === t}
+                    data-new-selection={t === 'selection' && selectionDot ? 'true' : undefined}
+                    onClick={() => onTab(t)}
+                    className={`relative inline-flex h-8 w-8 cursor-pointer items-center justify-center rounded-[4px] disabled:cursor-default disabled:opacity-50 ${
+                      tab === t ? 'bg-accent-soft text-accent' : 'text-muted hover:bg-raised hover:text-fg'
+                    }`}
+                    {...gate}
+                  >
+                    <Icon size={14} />
+                    {t === 'selection' && selectionDot && dot}
+                  </button>
+                );
+                return gate.disabled ? button : <Tooltip content={label} positioning={{ placement: 'left' }}>{button}</Tooltip>;
+              }}
+            </FeatureGate>
           ))}
         </div>
       </aside>
@@ -112,24 +123,28 @@ export default function EditPanel({
       <div className="flex h-10 shrink-0 items-center gap-1 border-b border-edge px-2">
         <div role="tablist" aria-label="Edit panel tabs" className="flex min-w-0 flex-1 items-center gap-0.5">
           {tabs.map(({ tab: t, label, Icon }) => (
-            <button
-              key={t}
-              type="button"
-              role="tab"
-              id={`${id}-${t}`}
-              aria-label={label}
-              aria-selected={tab === t}
-              aria-controls={`${id}-body`}
-              data-new-selection={t === 'selection' && selectionDot ? 'true' : undefined}
-              onClick={() => onTab(t)}
-              className={`relative inline-flex h-7 cursor-pointer items-center gap-1.5 rounded-[4px] px-2 font-mono text-[11px] ${
-                tab === t ? 'bg-accent-soft text-accent' : 'text-muted hover:bg-raised hover:text-fg'
-              }`}
-            >
-              <Icon size={13} className="shrink-0" />
-              <span>{label}</span>
-              {t === 'selection' && selectionDot && dot}
-            </button>
+            <FeatureGate key={t} reason={unavailable(t)}>
+              {(gate) => (
+                <button
+                  type="button"
+                  role="tab"
+                  id={`${id}-${t}`}
+                  aria-label={label}
+                  aria-selected={tab === t}
+                  aria-controls={`${id}-body`}
+                  data-new-selection={t === 'selection' && selectionDot ? 'true' : undefined}
+                  onClick={() => onTab(t)}
+                  className={`relative inline-flex h-7 cursor-pointer items-center gap-1.5 rounded-[4px] px-2 font-mono text-[11px] disabled:cursor-default disabled:opacity-50 ${
+                    tab === t ? 'bg-accent-soft text-accent' : 'text-muted hover:bg-raised hover:text-fg'
+                  }`}
+                  {...gate}
+                >
+                  <Icon size={13} className="shrink-0" />
+                  <span>{label}</span>
+                  {t === 'selection' && selectionDot && dot}
+                </button>
+              )}
+            </FeatureGate>
           ))}
         </div>
         <Tooltip content="Collapse panel" positioning={{ placement: 'bottom-end' }}>

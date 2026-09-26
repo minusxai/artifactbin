@@ -2,6 +2,7 @@ import {createDocumentGraph,graphSource} from '../story/document-graph';
 import {applyGraphPatch} from '../story/document-graph-patch';
 import {afterEach,expect,it,vi} from 'vitest';
 import {writeBrowserArtifact,restoreBrowserArtifact} from '../browser-artifact-write';
+import {createHttpBackend} from '../artifact-backend/http';
 afterEach(()=>vi.unstubAllGlobals());
 it('prepares metadata and mixed edits locally for the same atomic JSONB endpoint',async()=>{
  const document=createDocumentGraph('<p id="a">Original</p>',1);
@@ -28,7 +29,7 @@ it('restores document history over a native format through a validated whole JSO
   if(url.endsWith('/versions/1'))return Response.json({format:'markup',markup:'<h1 id="old">Archived</h1>',title:'Old title',meta:{theme:'organic'}});
   return Response.json({format:'dataset',version:3,state:'a'.repeat(64),edit_id:'head',title:'New title'});
  }));
- await restoreBrowserArtifact('abc123',1);
+ await restoreBrowserArtifact(createHttpBackend('abc123'),1);
  const commit=calls.at(-1)!;expect(commit.url).toBe('/api/my/artifacts/abc123/edits');
  expect(commit.body.document_update).toMatchObject({whole:true,patch:{baseVersion:3},metadata:{title:'Old title',theme:'organic'}});
  expect(graphSource(commit.body.document_update.replacement)).toContain('Archived');
@@ -40,6 +41,6 @@ it('keeps native-format history on its conditional restore endpoint',async()=>{
   if(url.endsWith('/versions/1'))return Response.json({format:'image',markup:null,meta:{}});
   return Response.json({format:'markup',version:3,state:'a'.repeat(64),edit_id:'head'});
  }));
- await restoreBrowserArtifact('abc123',1);
+ await restoreBrowserArtifact(createHttpBackend('abc123'),1);
  expect(calls.at(-1)).toEqual({url:'/api/my/artifacts/abc123/revert',body:{version:1,expectedVersion:3,expectedState:'a'.repeat(64)}});
 });

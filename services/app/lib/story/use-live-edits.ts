@@ -17,6 +17,7 @@
  */
 import type {DocumentGraph,DocumentAssetWarning} from '@artifactbin/contracts';
 import {prepareBrowserDocumentUpdate} from './document-authoring-client';
+import type {ArtifactBackend} from '@/lib/artifact-backend/types';
 import { combineAnnotationOperations, type AnnotationOperation } from '@/lib/editor-v2/annotation-map';
 import { rebaseEditBatch } from '@/lib/story/edit-batch';
 import { sourceChanges } from '@/lib/editor-v2/history';
@@ -67,21 +68,9 @@ function mergePending(first: PendingChange | null, second: PendingChange | null)
   };
 }
 
-interface FlushResponse {
-  document?:DocumentGraph;
-  title?:string|null;theme?:string|null;template?:string|null;colorMode?:string|null;
-  edit_id: string;
-  version: number;
-  markup: string | null;
-  error?: string;
-  /** The validator's own diagnostics — precise enough for the author to act on. */
-  details?: Array<{ message?: string }>;
-  source?: string;
-  detail?: string;
-}
-
 interface UseLiveEditsOptions {
-  id: string;
+  /** Where edits are committed and the head is re-read (lib/artifact-backend). */
+  backend: ArtifactBackend;
   initialEditId: string;
   initialVersion: number;
   initialDocument?:DocumentGraph;
@@ -101,7 +90,7 @@ interface UseLiveEditsOptions {
 }
 
 export function useLiveEdits({
-  id,
+  backend,
   initialEditId,
   initialVersion,
   initialSource,
@@ -129,7 +118,6 @@ export function useLiveEdits({
   const failedRef = useRef(false);
   const failedChangeRef = useRef<PendingChange | null>(null);
 
-  const endpoint = `/api/my/artifacts/${id}/edits`;
   const flush = useCallback(async () => {
     if (inFlightRef.current) return inFlightRef.current;
     const change = pendingRef.current;
@@ -159,13 +147,10 @@ export function useLiveEdits({
         if(!snapshot.document)throw new Error('Refresh the document before saving.');
         const {source,annotationOps,...metadata}=change;
         let warnings:DocumentAssetWarning[]=[];
-        const documentUpdate=await prepareBrowserDocumentUpdate(id,{...snapshot,document:snapshot.document,title:snapshot.meta.title as string|null,description:snapshot.meta.description as string|null},{source,annotationOps,metadata},received=>{warnings=received;});
+        const documentUpdate=await prepareBrowserDocumentUpdate(backend,{...snapshot,document:snapshot.document,title:snapshot.meta.title as string|null,description:snapshot.meta.description as string|null},{source,annotationOps,metadata},received=>{warnings=received;});
         prepared=true;
-        const res = await fetch(endpoint, {
-          method:'POST',headers:{'Content-Type':'application/json'},
-          body:JSON.stringify({edit_id:editIdRef.current,document_update:documentUpdate}),
-        });
-        const body = (await res.json().catch(() => ({}))) as FlushResponse;
+        const res = await backend.commitEdit({edit_id:editIdRef.current,document_update:documentUpdate});
+        const body = res.body;
 
         if (res.ok) {
           // Composition owns the DOM until commit. Keep this response in flight so
@@ -248,7 +233,7 @@ export function useLiveEdits({
     })();
     inFlightRef.current = run;
     return run;
-  }, [id, endpoint, onRemoteDocument, isUserEditing]);
+  }, [backend, onRemoteDocument, isUserEditing]);
 
   /** Queue a change; it persists on its own within one debounce window. */
   const queue = useCallback(
@@ -357,9 +342,8 @@ export function useLiveEdits({
       if (inFlightRef.current) await inFlightRef.current;
       const draft = mergePending(failedChangeRef.current, pendingRef.current);
       try {
-        const response = await fetch(`/api/my/artifacts/${id}`);
-        if (!response.ok) throw Error('Could not read the latest document.');
-        const remote = (await response.json()) as FlushResponse;
+        const remote = await backend.load();
+        if (!remote) throw Error('Could not read the latest document.');
         if (typeof remote.markup !== 'string' || !remote.edit_id) throw Error('The latest document is unavailable.');
         let next = remote.markup;
         if (mode === 'retry' && draft.source !== undefined && baseSourceRef.current !== undefined) {
@@ -397,7 +381,7 @@ export function useLiveEdits({
         }));
       }
     },
-    [id, flush, onRemoteDocument],
+    [backend, flush, onRemoteDocument],
   );
 
   useEffect(() => {

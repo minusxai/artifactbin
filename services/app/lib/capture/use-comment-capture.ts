@@ -2,10 +2,11 @@ import {useCallback,useEffect,useRef,useState} from 'react';
 import {beginCapture,CaptureError} from './screen';
 import type {CaptureSession,CapturedImage,CaptureRect} from './contract';
 import type {BrushStroke,CommentImageMetadata} from '../../../contracts/src/comment-image';
+import type {ArtifactBackend} from '../artifact-backend/types';
 export interface ScreenshotDraft {image:CapturedImage;preview:Blob;strokes:BrushStroke[];editId:string}
 const messages:Record<string,string>={unsupported:'This browser cannot verify capture of this tab. Upload a screenshot, or explicitly continue without one.',cancelled:'Screen sharing was cancelled. Retry, upload a screenshot, or continue without one.', 'wrong-source':'Choose this browser tab when sharing. The other source was stopped.',geometry:'The page moved during capture. Retake the screenshot.',ended:'Screen sharing ended. Retake the screenshot.',timeout:'Capture timed out. Please retry.'};
 /** Short-lived capture state belongs to one document, not to its live geometry echoes. */
-export function useCommentCapture(id:string,editId:string|undefined){
+export function useCommentCapture(backend:ArtifactBackend,id:string,editId:string|undefined){
  const session=useRef<CaptureSession|null>(null),generation=useRef(0),revision=useRef(editId);
  revision.current=editId;
  const staged=useRef<{draft:ScreenshotDraft;preview:Blob;id:string}|null>(null);
@@ -13,7 +14,8 @@ export function useCommentCapture(id:string,editId:string|undefined){
  const reset=useCallback(()=>{generation.current++;session.current?.dispose();session.current=null;setDraft(null);setBusy(false);setRequired(false);setError('');},[]);
  useEffect(()=>{reset();return ()=>{generation.current++;session.current?.dispose();};},[id,reset]);
  const start=async()=>{
-  reset();if(!editId)return true;
+  // No screenshot is required where the backend cannot store one (the offline file).
+  reset();if(!editId||backend.unavailable('commentImages'))return true;
   const mine=generation.current;setRequired(true);setBusy(true);
   // beginCapture enters the browser picker synchronously, before its first await.
   const pending=beginCapture();
@@ -23,7 +25,7 @@ export function useCommentCapture(id:string,editId:string|undefined){
   return mine===generation.current;
  };
  const capture=async(rect:CaptureRect)=>{
-  if(!editId)return;setRequired(true);
+  if(!editId||backend.unavailable('commentImages'))return;setRequired(true);
   const current=session.current;session.current=null;
   if(!current){setError(value=>value||messages.unsupported);return;}
   const mine=generation.current,capturedEditId=revision.current!;setBusy(true);
@@ -35,7 +37,7 @@ export function useCommentCapture(id:string,editId:string|undefined){
   finally{performance.measure('comment-screenshot:capture',{start:started,end:performance.now()});current.dispose();document.documentElement.classList.remove('mx-taking-screenshot');if(mine===generation.current)setBusy(false);}
  };
  const upload=async(file:File)=>{
-  if(!editId)return;const mine=++generation.current;session.current?.dispose();session.current=null;setBusy(true);setError('');
+  if(!editId||backend.unavailable('commentImages'))return;const mine=++generation.current;session.current?.dispose();session.current=null;setBusy(true);setError('');
   try{
    if(file.size>8*1024*1024||!['image/png','image/jpeg','image/webp'].includes(file.type))throw new Error('Use a PNG, JPEG or WebP up to 8 MB.');
    const bitmap=await createImageBitmap(file);
@@ -48,9 +50,7 @@ export function useCommentCapture(id:string,editId:string|undefined){
   if(staged.current?.draft===draft&&staged.current.preview===current.preview)return staged.current.id;
   const metadata:CommentImageMetadata={v:1,capturedEditId:draft.editId,capturedAt:draft.image.capturedAt,method:draft.image.method,width:draft.image.width,height:draft.image.height,rect:draft.image.rect,viewport:draft.image.viewport,strokes:current.strokes};
   const form=new FormData();form.set('original',draft.image.blob,'original.png');form.set('preview',current.preview,'preview.png');form.set('metadata',JSON.stringify(metadata));
-  const response=await fetch(`/api/my/artifacts/${id}/comment-images`,{method:'POST',body:form});
-  if(!response.ok){const result=await response.json();throw new Error(result.error==='stale'?'The document changed. Your draft is preserved; retake the screenshot.':result.error==='quota_exceeded'?'Image storage quota reached.':'Could not upload the screenshot. Please retry.');}
-  const result=await response.json() as {id:string};staged.current={draft,preview:current.preview,id:result.id};return result.id;
+  const result=await backend.uploadCommentImage(form);staged.current={draft,preview:current.preview,id:result.id};return result.id;
  };
  return {draft,busy,required,error,reset,start,capture,upload,stage,
   skip:()=>{reset();},

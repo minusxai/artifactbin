@@ -26,7 +26,8 @@ import dynamic from '@/lib/dynamic';
 import { MessageSquare, Pencil } from 'lucide-react';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { InlineStoryController } from '@/lib/story-runtime/InlineStoryRuntime';
-import { createAuthenticatedTransport } from '@/lib/story-runtime/authenticated-transport';
+import { createHttpBackend } from '@/lib/artifact-backend/http';
+import { ArtifactBackendProvider } from '@/lib/artifact-backend/context';
 import { subscribeDocument } from '@/lib/story-runtime/document-endpoint';
 import type { PreparedStoryRuntime } from '@/lib/story/prepared-runtime';
 import type { ReaderForkedFrom } from '@/lib/story/reader-chrome';
@@ -348,7 +349,14 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
       { type: STORY_DATA_MESSAGE, datasets: event.datasets } satisfies StoryDataUpdate,
     );
   }, []);
-  const live = useLiveArtifact(id, editId, version, !editing, undefined, onLiveData, setLiveAnnotations);
+  /**
+   * Every request the document surface makes — the runtime's data doors, the
+   * comments, the editor — goes through ONE backend per artifact
+   * (lib/artifact-backend), provided to the tree below. Memoised per id: a
+   * new instance would re-open the live stream and re-read the comments.
+   */
+  const backend = useMemo(() => createHttpBackend(id), [id]);
+  const live = useLiveArtifact(backend, id, editId, version, !editing, undefined, onLiveData, setLiveAnnotations);
   const hasDataMutations = format === 'markup' && !archived && (live?.dataflow?.flow ?? dataflow?.flow)?.mutations?.some(m => m.scope !== 'local') === true;
   const membershipChanged=useCallback(()=>onLiveData({datasets:['_members']}),[onLiveData]);
   const membership=useArtifactMembership(id,hasDataMutations,membershipRevision,membershipChanged);
@@ -417,7 +425,7 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
   // so the browser refetches instead of showing a stale document.
   const rawKey = live?.editId ?? editId;
 
-  const transportFactory = useCallback(() => createAuthenticatedTransport(id), [id]);
+  const transportFactory = useCallback(() => backend.queryTransport(), [backend]);
   const [frameLoaded, setFrameLoaded] = useState(false);
   const onController = useCallback((controller: InlineStoryController | null) => {
     runtimeRef.current = controller;
@@ -817,7 +825,7 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
    * alternative below is the DATA-TIER view. */
   if (isDocumentFormat) {
     return (
-      <>
+      <ArtifactBackendProvider backend={backend}>
         <TrustedUi overlay layer="navigation">
         <InlineReaderChrome onShare={owner ? () => setSharingOpen(true) : undefined} pinned={editing || railOpen} editing={editing} input={{artifactId:id, membership:hasDataMutations?membership.status:undefined, share:owner, archived, visibility:sharingVerdict?.id === id ? sharingVerdict.visibility : props.visibility, hasInvitedUsers:sharingVerdict?.id === id ? sharingVerdict.hasInvitedUsers : props.hasInvitedUsers, title:shownTitle, forkBusy:false, author:props.author ?? null, viewer:readerFace, edit:canEdit, ownerBreadcrumb:owner, reactions:{like:{...likeRef.current,href:'#'},follow:followRef.current ? {...followRef.current,href:'#'} : null,comment:{count:openAnnotationCount,href:'#'}}}} onAction={action => {
           if (action === 'like') void toggleLike();
@@ -951,7 +959,7 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
           />
         )}
         </TrustedUi>
-      </>
+      </ArtifactBackendProvider>
     );
   }
 

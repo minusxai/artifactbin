@@ -22,6 +22,7 @@ const CONE = [
   'lib/story/document-authoring-client.ts',
   'lib/browser-artifact-write.ts',
   'lib/capture/use-comment-capture.ts',
+  'components/RemoteMentionPicker.tsx',
 ];
 const SERVER_CALL = /\bfetch\s*\(|new\s+EventSource\s*\(|readAnnotationPages\s*\(/;
 

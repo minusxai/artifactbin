@@ -4,6 +4,7 @@ import RemoteMentionPicker from "../RemoteMentionPicker";
 import MarkdownLite from '../MarkdownLite';
 import MarkdownField from '../MarkdownField';
 import { useState } from 'react';
+import { httpBackendWrapper } from '@/test/helpers/artifact-backend';
 afterEach(() => vi.unstubAllGlobals());
 it("lets the user select an online session with a stable mention ID", async () => {
   vi.stubGlobal(
@@ -25,7 +26,7 @@ it("lets the user select an online session with a stable mention ID", async () =
     }),
   );
   const select = vi.fn();
-  render(<RemoteMentionPicker query="back" onSelect={select} />);
+  render(<RemoteMentionPicker query="back" onSelect={select} />, { wrapper: httpBackendWrapper('doc1') });
   await waitFor(() =>
     expect(screen.getByLabelText("Mention Backend (claude)")).toBeTruthy(),
   );
@@ -55,7 +56,7 @@ it.each(['7d545566-1a47-4aaf-be61-cffcb7b8e8f2', 'b'.repeat(64)])('selects sessi
     return <div onKeyDown={escape}><MarkdownField label="Draft" previewLabel="Draft preview" previewToggleLabel="Toggle preview"
       value={value} onChange={change} previewing={previewing} onPreviewingChange={preview} onSubmit={() => submit(value)} /></div>;
   }
-  render(<Composer />);
+  render(<Composer />, { wrapper: httpBackendWrapper('doc1') });
   const field = screen.getByLabelText('Draft');
   fireEvent.change(field, { target: { value: '@cl', selectionStart: 3 } });
   await screen.findByLabelText('Mention Claude (claude)');
@@ -78,7 +79,7 @@ it('offers a copyable connection request without selecting a mention or submitti
   vi.stubGlobal('navigator', { clipboard: { writeText } });
   const select = vi.fn();
   const submit = vi.fn(event => event.preventDefault());
-  render(<form onSubmit={submit}><RemoteMentionPicker query="" onSelect={select} /></form>);
+  render(<form onSubmit={submit}><RemoteMentionPicker query="" onSelect={select} /></form>, { wrapper: httpBackendWrapper('doc1') });
   expect(screen.queryByRole('button', { name: 'Copy connection request' })).toBeNull();
   const copy = await screen.findByRole('button', { name: 'Copy connection request' });
   expect(screen.getByText('Ask your agent to connect:')).toBeTruthy();
@@ -92,7 +93,7 @@ it('offers a copyable connection request without selecting a mention or submitti
 it('keeps the connection request available when clipboard access fails', async () => {
   vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: async () => ({ sessions: [] }) }));
   vi.stubGlobal('navigator', { clipboard: { writeText: vi.fn().mockRejectedValue(new Error('Denied')) } });
-  render(<RemoteMentionPicker query="" onSelect={vi.fn()} />);
+  render(<RemoteMentionPicker query="" onSelect={vi.fn()} />, { wrapper: httpBackendWrapper('doc1') });
   fireEvent.click(await screen.findByRole('button', { name: 'Copy connection request' }));
   expect(await screen.findByRole('status')).toHaveTextContent('Could not copy. Select and copy the request above.');
   expect(screen.getByText('Connect to afbin remote so I can @mention you in artifact comments.')).toBeTruthy();
@@ -100,7 +101,7 @@ it('keeps the connection request available when clipboard access fails', async (
 
 it.each([true, false])('offers setup alongside an existing agent (online=%s)', async (online) => {
  vi.stubGlobal('fetch',vi.fn().mockResolvedValue({ok:true,json:async()=>({sessions:[{id:'agent',name:'review',harness:'codex',managed:true,exitCode:null,online}]})}));
- render(<RemoteMentionPicker query="" onSelect={vi.fn()} />);
+ render(<RemoteMentionPicker query="" onSelect={vi.fn()} />, { wrapper: httpBackendWrapper('doc1') });
  await screen.findByLabelText('Mention review (codex)');
  fireEvent.click(screen.getByRole('button',{name:'Add another agent'}));
  expect(screen.getByRole('button',{name:'Copy connection request'})).toBeTruthy();
@@ -111,7 +112,7 @@ it('removes an offline agent without selecting it and keeps failures retryable',
   ? {ok:!fail,json:async()=>({error:'Try again'})}
   : {ok:true,json:async()=>({sessions:[{id:'agent',name:'review',harness:'codex',managed:true,exitCode:null,online:false}]})});
  vi.stubGlobal('fetch',fetch);const select=vi.fn();
- render(<RemoteMentionPicker query="" onSelect={select} />);
+ render(<RemoteMentionPicker query="" onSelect={select} />, { wrapper: httpBackendWrapper('doc1') });
  fireEvent.click(await screen.findByRole('button',{name:'Remove review'}));
  expect(await screen.findByRole('alert')).toHaveTextContent('Try again');
  expect(screen.getByLabelText('Mention review (codex)')).toBeTruthy();
