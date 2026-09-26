@@ -187,6 +187,35 @@ describe('the snapshot', () => {
   });
 });
 
+/*
+ * A <User> over a result the FILE computes: it can ask no server, so the cards
+ * of everyone it may show travel in the snapshot — by the rule a reader's page
+ * asks its door by (lib/artifacts nameablePeople), for the downloader.
+ */
+describe('the people the file may name', () => {
+  it('carries the cards of the people its held rows show, and of nobody no query shows', async () => {
+    const w = await world();
+    const carol = await account('carol');
+    const dave = await account('dave');
+    const tasks = await create(w.owner.token.token, {
+      dataset: [{ id: 1, who: w.owner.user.id }, { id: 2, who: w.bob.user.id }, { id: 3, who: carol.user.id }],
+      columns: [{ name: 'who', type: 'user' }],
+    });
+    const hidden = await create(w.owner.token.token, { dataset: [{ id: 1, who: dave.user.id }], columns: [{ name: 'who', type: 'user' }] });
+    const doc = await create(w.owner.token.token, { visibility: 'unlisted', markup:
+      `<Helmet><Import name="tasks" src="ref:${tasks}" /><Value name="after" type="number" default={2} />`
+      + '<Query name="owners">{`select id, who from tasks.rows where id > $after order by id`}</Query>'
+      + `<Import name="other" src="ref:${hidden}" /><Query name="counted">{\`select count(who) as n from other.rows\`}</Query>`
+      + '</Helmet><DataTable data="$owners" />' });
+    const file = await download(doc, reader(w.bob));
+    expect(file.island.dataflow?.hold).toEqual(['tasks', 'other']);
+    // The downloaded run shows only Carol; the file may show the owner and Bob too once its reader moves the filter.
+    expect(file.snapshot.state.tables.owners?.rows).toEqual([{ id: 3, who: carol.user.id }]);
+    expect(Object.keys(file.snapshot.state.people ?? {}).sort()).toEqual([w.owner.user.id, w.bob.user.id, carol.user.id].sort());
+    expect(file.snapshot.state.people).not.toHaveProperty(dave.user.id);
+  });
+});
+
 describe('a self-contained file', () => {
   it('inlines every font and image, and names no server door', async () => {
     const w = await world();
