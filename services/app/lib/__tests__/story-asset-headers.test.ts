@@ -19,6 +19,17 @@ describe('the story runtime assets', () => {
     }
   });
 
+  it('serve the page\'s SQLite engine as application/wasm, immutable — streaming compilation needs the type', async () => {
+    const { sqlite } = JSON.parse(readFileSync('public/story/manifest.json', 'utf8')) as { sqlite: string };
+    expect(sqlite).toMatch(/^\/story\/sqlite3-[0-9a-f]{16}\.wasm$/);
+    const res = await app.request(sqlite);
+    expect(res.status).toBe(200);
+    expect(res.headers.get('content-type')).toBe('application/wasm');
+    expect(res.headers.get('cache-control')).toBe('public, max-age=31536000, immutable');
+    expect(res.headers.get('access-control-allow-origin')).toBe('*');
+    expect(new Uint8Array(await res.arrayBuffer()).subarray(0, 4)).toEqual(new Uint8Array([0x00, 0x61, 0x73, 0x6d]));
+  });
+
   it('are served immutable AND CORS-open — an opaque document imports its chunks in CORS mode', async () => {
     const res = await app.request('/story/entry-ABCDEFGH.js');
     expect(res.headers.get('cache-control')).toContain('immutable');
