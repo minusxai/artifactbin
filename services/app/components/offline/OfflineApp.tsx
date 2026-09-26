@@ -413,7 +413,7 @@ function OfflineSurface({ file, restored, code, fileName }: { file: ArtifactFile
           )}
         </TrustedUi>
         {(asking || renaming) && (
-          <TrustedUi overlay layer="navigation">
+          <TrustedUi overlay layer="modal">
             <NameDialog
               initial={name}
               onSave={(picked) => { setRenaming(false); answer(picked); }}
