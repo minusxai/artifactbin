@@ -23,6 +23,7 @@ interface Renderer {
  viewUrl(id:string):string;
  /** `version` photographs that ARCHIVED version's page instead of the head; the server runs its own ACL on it. */
  image(id:string,options:{format:'png'|'jpg';page?:number;og?:boolean;refresh?:boolean;version?:number}):Promise<{bytes:Buffer;contentType:string}>;
+ /** The offline file: one self-contained `.html` that opens, edits and comments without a connection (never the served `/raw` page). */
  html(id:string,version?:number):Promise<{bytes:Buffer;contentType:string}>;
 }
 export function serverRenderer(server:string,client?:HttpClient):Renderer{
@@ -30,7 +31,7 @@ export function serverRenderer(server:string,client?:HttpClient):Renderer{
  return {
   viewUrl:id=>`${server}/a/${id}`,
   image:(id,options)=>rendering().view(`/a/${id}/export?format=${options.format}${options.version!==undefined?`&version=${options.version}`:''}${options.page!==undefined?`&slide=${options.page}`:''}${options.og?'&mode=card':''}${options.refresh?'&refresh=1':''}`),
-  html:(id,version)=>rendering().view(`/a/${id}/raw${version!==undefined?`?version=${version}`:''}`),
+  html:(id,version)=>rendering().view(`/a/${id}/download${version!==undefined?`?version=${version}`:''}`),
  };
 }
 
@@ -64,9 +65,10 @@ export async function exportResources(workspace:Workspace,refs:string[],options:
   if(rendered(format)){
    /*
     * `<id>@N` RENDERS. The document can be SERVED at an older version now
-    * (`/a/<id>/raw?version=N`), so the renderer photographs that page exactly
-    * as it photographs the head — which is what an agent checking the page it
-    * just changed was missing.
+    * (`/a/<id>/export?version=N`, `/a/<id>/download?version=N`), so the renderer
+    * photographs that page — or packs that version's offline file — exactly as it
+    * does the head, which is what an agent checking the page it just changed was
+    * missing.
     *
     * A LOCAL PATH still has no history: `report.jsx@2` names bytes nobody
     * stored, and the tracked file on disk IS the head. So a version pins the
