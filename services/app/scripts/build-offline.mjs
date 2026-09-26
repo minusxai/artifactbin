@@ -6,17 +6,17 @@
  *
  * ONE entry, TWO bundles, because Mermaid alone is about as large as
  * everything else together and most documents draw no diagram:
- *  - `core`    everything but Mermaid, maps, Monaco and prettier;
+ *  - `core`    everything but Mermaid, maps, the source editor and prettier;
  *  - `mermaid` core plus Mermaid.
  * Maps (deck.gl, MapLibre, h3-js) are stubbed in both: an offline file draws a
  * "Needs a connection" stand-in for them (components/offline/OfflineApp).
  *
  * And a THIRD artifact the file does not carry: `extras`
- * (lib/offline/extras-entry) — Monaco for code view and prettier for "View
- * formatted", ~1.2 MB a reader who never opens code view should not download.
+ * (lib/offline/extras-entry) — CodeMirror for code view and prettier for "View
+ * formatted", which a reader who never opens code view should not download.
  * It is a classic IIFE with NO React that sets `globalThis.__afbinExtras`;
- * in core and mermaid every monaco-editor and prettier import is stubbed to
- * read that global back, and the modules that import them (SourceEditor,
+ * in core and mermaid lib/source-editor/codemirror and every prettier import
+ * are stubbed to read that global back, and the modules that import them (SourceEditor,
  * format-jsx-preview) are only reached through a dynamic import, which this
  * non-splitting build evaluates lazily — after lib/offline/extras has loaded
  * the script. It is written as `extras-<hash>.js` beside the bundles, served
@@ -24,7 +24,7 @@
  * records its SRI hash (sha384) for the file's `<script integrity>`. Only the
  * current build's extras are kept: an older hash is pruned here, and a file
  * that still names it falls back to the plain editor.
- * The build FAILS if Monaco or prettier reach core or mermaid, or React
+ * The build FAILS if CodeMirror or prettier reach core or mermaid, or React
  * reaches extras.
  *
  * The shape is forced by file://, probed in Chromium, Firefox and WebKit:
@@ -134,8 +134,7 @@ async function build() {
    * missing global throws there, and the source pane keeps its plain editor.
    */
   const EXTRAS_MODULES = {
-    'monaco-editor/esm/vs/editor/editor.api': 'monaco',
-    'monaco-editor/min/vs/style.css?inline': 'monacoCss',
+    'source-editor/codemirror': 'sourceEditor',
     'prettier/standalone': 'prettier',
     'prettier/plugins/babel': 'babel',
     'prettier/plugins/estree': 'estree',
@@ -144,12 +143,10 @@ async function build() {
   const extrasStubs = {
     name: 'offline-extras-stubs',
     setup(b) {
-      b.onResolve({ filter: /^(monaco-editor|prettier)\// }, (args) => {
-        if (args.path in EXTRAS_MODULES) return { path: args.path, namespace: 'offline-extras' };
-        // The HTML tokenizer registers itself inside the extras; nothing else from either package belongs here.
-        if (args.path === 'monaco-editor/esm/vs/basic-languages/html/html.contribution') return { path: args.path, namespace: 'offline-empty-css' };
-        return undefined;
-      });
+      // CodeMirror's packages compare their own instances, so the file never
+      // imports them one by one: the engine module arrives whole from the extras.
+      b.onResolve({ filter: /\/source-editor\/codemirror$/ }, () => ({ path: 'source-editor/codemirror', namespace: 'offline-extras' }));
+      b.onResolve({ filter: /^prettier\// }, (args) => (args.path in EXTRAS_MODULES ? { path: args.path, namespace: 'offline-extras' } : undefined));
       b.onLoad({ filter: /.*/, namespace: 'offline-extras' }, (args) => ({ loader: 'js', contents: fromExtras(EXTRAS_MODULES[args.path]) }));
     },
   };
@@ -158,22 +155,6 @@ async function build() {
     setup(b) {
       b.onResolve({ filter: /^node:(module|fs\/promises|path)$/ }, (args) => ({ path: args.path, namespace: 'offline-node' }));
       b.onLoad({ filter: /.*/, namespace: 'offline-node' }, (args) => ({ loader: 'js', contents: NODE_STUBS[args.path] }));
-      /*
-       * Monaco (code view): a Worker cannot start from file://, so its worker
-       * import is a class that refuses (Monaco then runs its language work on
-       * the main thread); the sheet the editor mounts itself (`?inline`) is
-       * text, and the per-module sheets Monaco's ESM imports for their side
-       * effect are already in that sheet.
-       */
-      b.onResolve({ filter: /\?worker$/ }, (args) => ({ path: args.path, namespace: 'offline-worker' }));
-      b.onLoad({ filter: /.*/, namespace: 'offline-worker' }, () => ({ loader: 'js', contents: 'export default class OfflineWorker { constructor() { throw new Error("Workers are unavailable in an offline file."); } }' }));
-      b.onResolve({ filter: /\.css\?inline$/ }, (args) => ({
-        path: createRequire(path.join(args.resolveDir, 'index.js')).resolve(args.path.replace(/\?inline$/, '')),
-        namespace: 'offline-inline-css',
-      }));
-      b.onLoad({ filter: /.*/, namespace: 'offline-inline-css' }, (args) => ({ loader: 'text', contents: fs.readFileSync(args.path, 'utf8') }));
-      b.onResolve({ filter: /\.css$/ }, (args) => (/monaco-editor/.test(args.resolveDir) || /monaco-editor/.test(args.path) ? { path: args.path, namespace: 'offline-empty-css' } : undefined));
-      b.onLoad({ filter: /.*/, namespace: 'offline-empty-css' }, () => ({ loader: 'js', contents: '' }));
       b.onResolve({ filter: /\/deck-gl-engine$/ }, () => ({ path: 'deck-gl-engine', namespace: 'offline-stub' }));
       b.onResolve({ filter: MAP_PACKAGES }, (args) => ({ path: args.path, namespace: 'offline-stub' }));
       if (kind === 'core') b.onResolve({ filter: /\/mermaid-render$/ }, () => ({ path: 'mermaid-render', namespace: 'offline-stub' }));
@@ -225,8 +206,8 @@ async function build() {
   ]);
   const packagesIn = (result, re) => Object.keys(result.metafile.inputs).filter((key) => re.test(key));
   results.forEach((result, i) => {
-    const leaked = packagesIn(result, /node_modules\/(monaco-editor|prettier)\//);
-    if (leaked.length) throw new Error(`build-offline: ${KINDS[i]} must not bundle Monaco or prettier (they load on demand from the extras): ${leaked.slice(0, 3).join(', ')}`);
+    const leaked = packagesIn(result, /node_modules\/(@codemirror|@lezer|prettier)\//);
+    if (leaked.length) throw new Error(`build-offline: ${KINDS[i]} must not bundle CodeMirror or prettier (they load on demand from the extras): ${leaked.slice(0, 3).join(', ')}`);
   });
   const reactInExtras = packagesIn(extrasResult, /node_modules\/(react|react-dom|scheduler)\//);
   if (reactInExtras.length) throw new Error(`build-offline: the extras must not bundle React: ${reactInExtras.slice(0, 3).join(', ')}`);

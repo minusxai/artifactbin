@@ -417,7 +417,8 @@ export default function InPlaceEditor({
       if (event.defaultPrevented || !(event.ctrlKey || event.metaKey) || !['z', 'y'].includes(event.key.toLowerCase()))
         return;
       const target = (event.composedPath()[0] ?? event.target) as HTMLElement;
-      if (target.closest('input,textarea') && !target.closest('.monaco-editor')) return;
+      // The source editor is a contenteditable, so document undo reaches it; a real field keeps its own.
+      if (target.closest('input,textarea')) return;
       event.preventDefault();
       event.stopPropagation();
       void applyHistory(event.shiftKey || event.key.toLowerCase() === 'y' ? 'redo' : 'undo');

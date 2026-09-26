@@ -47,7 +47,7 @@ describe('createExtrasLoader', () => {
     const seen: string[] = [];
     loader.subscribe(() => seen.push(loader.state()));
     const loaded = loader.load();
-    globalThis.__afbinExtras = { monacoCss: '' } as OfflineExtras;
+    globalThis.__afbinExtras = { sourceEditor: {} } as OfflineExtras;
     scripts()[0]!.dispatchEvent(new Event('load'));
     await expect(loaded).resolves.toBeUndefined();
     expect(seen).toEqual(['loading', 'ready']);

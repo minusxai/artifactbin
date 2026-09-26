@@ -2,7 +2,7 @@
  * Warming the editor bundle is a PREFETCH, and a prefetch owes the page two things.
  *
  * `ArtifactSurface` fetches the editor while the reader is still reading, so pressing
- * edit swaps in rather than downloading Monaco first. That warm is scheduled on an
+ * edit swaps in rather than downloading it first. That warm is scheduled on an
  * idle callback (or a 1.5s timer), and forgetting about it would cost twice:
  *
  *  1. the timer must not OUTLIVE the component. Unmounting the surface — leaving the

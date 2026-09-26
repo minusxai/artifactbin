@@ -35,7 +35,7 @@ const waiting = (label: string) => (
 /**
  * The vega stack behind VegaChart (vega + vega-lite + vega-interpreter +
  * vega-tooltip) is ~500 KB gzipped — two thirds of the JS on the reader route —
- * so it loads through the same dynamic boundary that keeps Monaco away from
+ * so it loads through the same dynamic boundary that keeps the source editor away from
  * readers (guarded by lib/__tests__/reader-bundle-hygiene.test.ts). Table and
  * single_value embeds never trigger the fetch; a chart shows its placeholder
  * chrome for the beat the chunk is in flight.

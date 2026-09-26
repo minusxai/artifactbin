@@ -522,12 +522,12 @@ try {
     check((await (await humanApi()).json()).version === quiet, 'an idle editor writes nothing');
 
     /*
-     * THE SOURCE PANE. `@monaco-editor/react` does not bundle Monaco: left to
-     * itself it injects a <script> pointing at jsdelivr, and the app's own CSP
-     * (`script-src 'self'`) refuses it — so `code` mode showed "Loading…"
-     * forever, in development and on the deployment alike, and nothing in the
-     * unit suite could see it (the editor's UI test mocks the package, so the
-     * loader never runs there).
+     * THE SOURCE PANE. The previous editor's wrapper injected a <script>
+     * pointing at jsdelivr, and the app's own CSP (`script-src 'self'`)
+     * refused it — so `code` mode showed "Loading…" forever, in development
+     * and on the deployment alike, and nothing in the unit suite could see it
+     * (the editor's UI test stubs the editor). The real editor must mount here,
+     * from this origin.
      */
     const offOrigin = [];
     const cspErrors = [];
@@ -550,26 +550,24 @@ try {
     // one-shot evaluate can read the detached node; a locator assertion re-resolves it.
     await expect(plainSource).toHaveCSS('background-color', 'rgb(30, 30, 30)');
     await expect(plainSource).toHaveCSS('color', 'rgb(212, 212, 212)');
-    check(true, 'the immediately editable fallback uses Monaco’s dark palette');
+    check(true, 'the immediately editable fallback uses the editor’s dark palette');
     await plainSource.fill(initialSource.replace('Editor gate', 'Edited while rich editor loads'));
     releaseRichEditor();
-    check(await humanPage.waitForSelector('.monaco-editor [aria-label="Markup source"]', { timeout: 30_000 })
+    check(await humanPage.waitForSelector('.cm-editor [aria-label="Markup source"]', { timeout: 30_000 })
       .then(() => true, () => false), 'the source pane mounts a real editor, not a permanent "Loading…"');
-    const editorPaint = await humanPage.locator('.monaco-editor').evaluate((editor) => {
-      const input = editor.querySelector('textarea');
-      return {
-        background: getComputedStyle(editor).backgroundColor,
-        inputPosition: input && getComputedStyle(input).position,
-        localStyles: !!editor.getRootNode().querySelector('[data-source-editor-styles]'),
-        height: editor.getBoundingClientRect().height,
-      };
-    });
-    check(editorPaint.localStyles && editorPaint.background !== 'rgba(0, 0, 0, 0)'
-      && editorPaint.inputPosition === 'absolute' && editorPaint.height > 200,
-    'rich editor has shadow-local styles, opaque paint, clipped input and usable height');
-    check(await humanPage.locator('.monaco-editor').evaluate((editor) => new Promise((resolve) => {
-      // TrustedUi has its own focus scope, and modern Monaco uses EditContext's
-      // div rather than its compatibility textarea for keyboard input.
+    const editorPaint = await humanPage.locator('.cm-editor').evaluate((editor) => ({
+      background: getComputedStyle(editor).backgroundColor,
+      // CodeMirror's base theme lays the scroller out as flex; that it applies proves its
+      // styles reached TrustedUi's shadow root, which the app's head stylesheet cannot.
+      scrollerDisplay: getComputedStyle(editor.querySelector('.cm-scroller')).display,
+      editable: editor.querySelector('.cm-content')?.getAttribute('contenteditable'),
+      height: editor.getBoundingClientRect().height,
+    }));
+    check(editorPaint.scrollerDisplay === 'flex' && editorPaint.background === 'rgb(30, 30, 30)'
+      && editorPaint.editable === 'true' && editorPaint.height > 200,
+    'rich editor has shadow-local styles, opaque paint, an editable surface and usable height');
+    check(await humanPage.locator('.cm-editor').evaluate((editor) => new Promise((resolve) => {
+      // TrustedUi has its own focus scope: ask its root, not the document.
       if (editor.contains(editor.getRootNode().activeElement)) return resolve(true);
       const done = () => { clearTimeout(timer); editor.removeEventListener('focusin', done); resolve(true); };
       const timer = setTimeout(() => { editor.removeEventListener('focusin', done); resolve(false); }, 5000);
@@ -578,14 +576,13 @@ try {
     check((await humanPage.locator('[aria-label="Source pane"]').getByText('Loading...').count()) === 0,
       'and the loading placeholder is gone');
     /*
-     * The pane is the document's own markup, not an empty buffer. Two things
-     * make a naive substring check lie: Monaco paints U+00A0 for every space,
-     * and it renders only the LINES on screen (and only the visible span of a
-     * long one). What holds regardless: it is showing this document, from the
+     * The pane is the document's own markup, not an empty buffer. A naive
+     * substring check would lie: the editor renders only the LINES near the
+     * screen. What holds regardless: it is showing this document, from the
      * top.
      */
     const flat = (t) => t.replace(/ /g, ' ').replace(/\s+/g, ' ').trim();
-    const lines = await humanPage.locator('[aria-label="Source pane"] .view-line').allTextContents();
+    const lines = await humanPage.locator('[aria-label="Source pane"] .cm-line').allTextContents();
     const storedSource = flat((await (await humanApi()).json()).markup);
     check(lines.length >= 3 && storedSource.startsWith(flat(lines[0])) && flat(lines[0]).length > 0,
       `the pane carries the document source (${lines.length} lines from ${JSON.stringify(flat(lines[0] ?? '').slice(0, 30))})`);
@@ -595,7 +592,7 @@ try {
     /*
      * AND TYPING INTO IT MUST NOT LOSE CHARACTERS. A controlled <Editor value>
      * is a race: every keystroke sets React state, and a render one keystroke
-     * behind pushes that STALE string back into Monaco's model. Measured before
+     * behind pushes that STALE string back into the editor. Measured before
      * the fix, at full speed: "typed in code mode" reached the server as
      * "typemode", while the same words at 150ms a key arrived whole — which is
      * why no hand test would ever have found it. So: no delay, exact compare.
@@ -614,20 +611,20 @@ try {
       body: JSON.stringify({ edit_id: paneHead.edit_id, old_string: 'Total:', new_string: 'Agent wrote while code was open:' }),
     });
     await humanPage.waitForTimeout(6000);
-    const paneAfter = ((await humanPage.locator('[aria-label="Source pane"] .view-lines').textContent().catch(() => '')) ?? '')
+    const paneAfter = ((await humanPage.locator('[aria-label="Source pane"] .cm-content').textContent().catch(() => '')) ?? '')
       .replace(/ /g, ' ');
     check(paneAfter.includes('Agent wrote while code was open:'), 'and the open code pane still adopts an agent edit');
 
     // Formatting is a read-only projection, never a source edit or a model reset.
     const beforePreview = await (await humanApi()).json();
-    await humanPage.locator('.monaco-editor').evaluate((el) => { window.__originalSourceEditor = el; });
+    await humanPage.locator('.cm-editor').evaluate((el) => { window.__originalSourceEditor = el; });
     await humanPage.getByRole('button', { name: 'View formatted', exact: true }).click();
-    await humanPage.locator('.monaco-editor [aria-label="Formatted JSX"]').waitFor();
+    await humanPage.locator('.cm-editor [aria-label="Formatted JSX"]').waitFor();
     check(await humanPage.getByText('Formatted preview · read-only', { exact: true }).isVisible(),
       'formatted source is explicitly read-only');
-    check(await humanPage.locator('.monaco-editor:visible .view-line').count() > 1, 'the preview shows formatted JSX');
+    check(await humanPage.locator('.cm-editor:visible .cm-line').count() > 1, 'the preview shows formatted JSX');
     await humanPage.getByRole('button', { name: 'Edit source', exact: true }).click();
-    check(await humanPage.locator('.monaco-editor:visible').evaluate((el) => el === window.__originalSourceEditor),
+    check(await humanPage.locator('.cm-editor:visible').evaluate((el) => el === window.__originalSourceEditor),
       'returning to source preserves the original editor and undo model');
     const afterPreview = await (await humanApi()).json();
     check(afterPreview.markup === beforePreview.markup && afterPreview.edit_id === beforePreview.edit_id,

@@ -55,7 +55,7 @@ export interface ArtifactFileCss {
 }
 
 /**
- * Where the file's extras (Monaco and prettier, lib/offline/extras) are served
+ * Where the file's extras (the source editor and prettier, lib/offline/extras) are served
  * on `origin`, and their SRI hash: fixed at download, so a saved copy keeps
  * pointing at the same bytes.
  */
@@ -106,7 +106,7 @@ export interface ArtifactFile {
   localIds: string[];
   /** Which offline bundle this file carries. */
   bundle: 'core' | 'mermaid';
-  /** Code view's Monaco and prettier, loaded on demand; absent in a file that cannot load them. */
+  /** Code view's source editor and prettier, loaded on demand; absent in a file that cannot load them. */
   extras?: ArtifactFileExtras | null;
   /**
    * sourceDigest() of the `source` that `island`, `css.compiled` and

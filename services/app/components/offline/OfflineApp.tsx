@@ -30,7 +30,7 @@
  * with unsaved changes; a source that does not validate keeps the last good
  * render under a banner naming the error, and offers no editing.
  *
- * Code view's Monaco and "View formatted"'s prettier are not in the file: they
+ * Code view's source editor and "View formatted"'s prettier are not in the file: they
  * load from the file's origin the first time code view opens
  * (lib/offline/extras), and without a connection code view keeps the plain
  * editor (components/SourceEditorTools).
@@ -222,7 +222,7 @@ export function OfflineApp({ file, code = '', fileName }: { file: ArtifactFile; 
 }
 
 /**
- * Code view's tools in a file: Monaco and prettier from the file's origin,
+ * Code view's tools in a file: the source editor and prettier from the file's origin,
  * loaded the first time code view asks (never on open), and the plain editor
  * with a reason when they cannot be had.
  */

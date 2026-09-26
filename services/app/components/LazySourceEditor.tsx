@@ -27,8 +27,8 @@ export default function LazySourceEditor(props: SourceEditorProps) {
         ? { start: previous.selectionStart, end: previous.selectionEnd } : null;
     }
     plainEditor.current = input;
-    // The module download and Monaco initialization can each render this
-    // fallback. Carry focus through that intermediate textarea too.
+    // The module download can render this fallback more than once. Carry
+    // focus through that intermediate textarea too.
     if (input && handoff.current) {
       input.focus();
       input.setSelectionRange(handoff.current.start, handoff.current.end);
@@ -64,6 +64,6 @@ export default function LazySourceEditor(props: SourceEditorProps) {
     </div>
   </div>;
   return <EditorBoundary key={attempt} fallback={fallback(true)}>
-    {mounted ? <Suspense fallback={fallback(false)}><RichEditor {...props} loading={fallback(false)} initialSelection={() => handoff.current} /></Suspense> : fallback(false)}
+    {mounted ? <Suspense fallback={fallback(false)}><RichEditor {...props} initialSelection={() => handoff.current} /></Suspense> : fallback(false)}
   </EditorBoundary>;
 }

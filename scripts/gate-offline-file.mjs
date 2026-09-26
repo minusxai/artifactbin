@@ -35,13 +35,13 @@
  *  - Chromium's save picker is written to when it exists (stubbed: Playwright
  *    cannot drive the native dialog);
  *  - still zero requests, CSP violations and page errors on every page — but
- *    one: code view asks for its extras (Monaco, prettier) from the file's
+ *    one: code view asks for its extras (CodeMirror, prettier) from the file's
  *    origin, which the gate refuses, so it keeps the plain editor and says so,
  *    and "View formatted" is disabled with its reason.
  *
  * Code view ONLINE, per engine: the file's origin is served by the gate
  * (Playwright routes; nothing real is contacted) with the built extras; the
- * SRI-pinned script loads, Monaco mounts, "View formatted" formats, and the
+ * SRI-pinned script loads, CodeMirror mounts, "View formatted" formats, and the
  * extras are the one request the file made. In Chromium, tampered bytes are
  * refused by SRI and code view keeps the plain editor.
  *
@@ -358,7 +358,7 @@ for (const [engineName, engine] of ENGINES) {
     const plain = reopened.getByRole('textbox', { name: 'Markup source' });
     await expect(plain).toHaveAccessibleDescription(RICH_EDITOR_OFFLINE, { timeout: 20_000 });
     await expect(reopened.getByText(RICH_EDITOR_OFFLINE, { exact: true })).toBeVisible();
-    await expect(reopened.locator('.monaco-editor')).toHaveCount(0);
+    await expect(reopened.locator('.cm-editor')).toHaveCount(0);
     const viewFormatted = reopened.getByRole('button', { name: 'View formatted' });
     await expect(viewFormatted).toBeDisabled();
     await expect(viewFormatted).toHaveAccessibleDescription(FORMATTING_OFFLINE);
@@ -465,17 +465,17 @@ for (const [engineName, engine] of ENGINES) {
     await expect(page.getByRole('button', { name: 'Edit the source' })).toBeVisible({ timeout: 20_000 });
     assert.deepEqual(sink.requests, [], `${name}: nothing requested before code view`);
     await page.getByRole('button', { name: 'Edit the source' }).click();
-    await page.locator('.monaco-editor').first().waitFor({ timeout: 30_000 });
+    await page.locator('.cm-editor').first().waitFor({ timeout: 30_000 });
     const tag = page.locator('script[data-afbin-extras]');
     await expect(tag).toHaveCount(1);
     assert.equal(await tag.getAttribute('src'), extrasUrl);
     assert.equal(await tag.getAttribute('integrity'), manifest.extras.integrity);
     assert.equal(await tag.getAttribute('crossorigin'), 'anonymous');
     await expect(page.getByText(RICH_EDITOR_OFFLINE)).toHaveCount(0);
-    seen.push('SRI script loaded, Monaco mounted');
+    seen.push('SRI script loaded, CodeMirror mounted');
     await page.getByRole('button', { name: 'View formatted' }).click();
     await expect(page.getByText('Formatted preview · read-only')).toBeVisible({ timeout: 20_000 });
-    await expect(page.locator('.monaco-editor')).toHaveCount(2, { timeout: 20_000 });
+    await expect(page.locator('.cm-editor')).toHaveCount(2, { timeout: 20_000 });
     await expect(page.getByRole('alert').filter({ hasText: 'Couldn’t format' })).toHaveCount(0);
     seen.push('View formatted');
     assert.deepEqual(sink.requests, [extrasUrl], `${name}: the extras were the one request`);
@@ -490,7 +490,7 @@ for (const [engineName, engine] of ENGINES) {
       await answerName(other, 'Lin');
       await other.getByRole('button', { name: 'Edit the source' }).click();
       await expect(other.getByRole('textbox', { name: 'Markup source' })).toHaveAccessibleDescription(RICH_EDITOR_OFFLINE, { timeout: 20_000 });
-      await expect(other.locator('.monaco-editor')).toHaveCount(0);
+      await expect(other.locator('.cm-editor')).toHaveCount(0);
       assert.equal(await other.evaluate(() => typeof globalThis.__afbinExtras), 'undefined', `${name}: tampered extras never ran`);
       seen.push('tampered extras refused by SRI');
     }
