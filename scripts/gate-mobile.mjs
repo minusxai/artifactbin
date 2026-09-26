@@ -168,7 +168,8 @@ await view.close();
 const edit = await open(PHONE, '#edit');
 await edit.waitForSelector('[aria-label="Exit edit mode"]', { timeout: 90_000 });
 await edit.waitForTimeout(2000);
-// Appearance controls stay in the editor toolbar.
+// Appearance controls live in Inspector; narrow windows open it as a sheet.
+await edit.getByRole('combobox', { name: 'Editor panel' }).selectOption('selection');
 await edit.locator('[aria-label="Theme"]').click({ timeout: 30_000 });
 await edit.waitForSelector('[aria-label="Themes"]', { timeout: 10_000 });
 await edit.waitForTimeout(300);

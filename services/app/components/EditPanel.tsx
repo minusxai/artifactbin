@@ -16,19 +16,17 @@
  * each tab shows is the caller's: the selection's inspector, the version list,
  * and a host element the comments rail renders into.
  */
-import { History, MessageSquare, PanelRightClose, PanelRightOpen, SlidersHorizontal, Files, Users } from 'lucide-react';
-import { useEffect, useId, useRef, type ReactNode } from 'react';
+import { History, MessageSquare, PanelRightClose, PanelRightOpen, SlidersHorizontal } from 'lucide-react';
+import { useId, type ReactNode } from 'react';
 import { Tooltip } from '@/components/Tooltip';
 import { FeatureGate } from '@/components/FeatureUnavailable';
 import { useArtifactBackend } from '@/lib/artifact-backend/context';
 import { EDIT_PANEL_STRIP_W, RIGHT_RAIL_W } from '@/lib/story/edit-bar';
 
-export type EditPanelTab = 'selection' | 'files' | 'sharing' | 'history' | 'comments';
+export type EditPanelTab = 'selection' | 'history' | 'comments';
 
 const TABS = [
-  { tab: 'selection', label: 'Selection', Icon: SlidersHorizontal },
-  { tab: 'files', label: 'Files', Icon: Files },
-  { tab: 'sharing', label: 'Sharing', Icon: Users },
+  { tab: 'selection', label: 'Inspector', Icon: SlidersHorizontal },
   { tab: 'history', label: 'History', Icon: History },
   { tab: 'comments', label: 'Comments', Icon: MessageSquare },
 ] as const;
@@ -41,47 +39,48 @@ export function EditPanelPicker({ value, onChange, commentsAvailable, selectionD
   selectionDot?: boolean;
   compact?: boolean;
 }) {
+  const historyUnavailable = useArtifactBackend().unavailable('versions');
   return <div className={`flex min-w-0 flex-1 items-center gap-2 ${compact ? 'max-w-24' : ''}`}>
     <select aria-label="Editor panel" value={value}
       onChange={event => onChange(event.target.value as EditPanelTab)}
       className="h-7 min-w-0 max-w-full cursor-pointer rounded-[4px] border border-edge bg-surface px-2 font-mono text-[11px] text-fg">
       <option value="" disabled>Panel…</option>
       {TABS.filter(item => item.tab !== 'comments' || commentsAvailable).map(item =>
-        <option key={item.tab} value={item.tab}>{item.label}</option>)}
+        <option key={item.tab} value={item.tab} disabled={item.tab === 'history' && !!historyUnavailable}>{item.label}{item.tab === 'history' && historyUnavailable ? ` — ${historyUnavailable}` : ''}</option>)}
     </select>
     {selectionDot && <span aria-label="New selection available" className="h-1.5 w-1.5 shrink-0 rounded-full bg-accent" />}
   </div>;
 }
 
-type InspectorTab = Exclude<EditPanelTab, 'files' | 'sharing'>;
-const isInspectorTab = (tab: EditPanelTab): tab is InspectorTab => tab !== 'files' && tab !== 'sharing';
-
 /** Each row is a keyboard-navigable tab group; selection never changes the rail width. */
-function PanelTabs<T extends string>({ label, items, active, onPick, dotOn }: {
+function PanelTabs<T extends string>({ label, items, active, onPick, dotOn, unavailable }: {
   label: string;
   items: readonly { tab: T; label: string }[];
   active: T;
   onPick: (tab: T) => void;
   dotOn?: T;
+  unavailable: (tab: T) => string | null;
 }) {
   return <div role="tablist" aria-label={label} className="flex min-w-0 flex-1 items-center gap-0.5">
-    {items.map((item, index) => <button key={item.tab} type="button" role="tab"
-      aria-selected={active === item.tab} tabIndex={active === item.tab ? 0 : -1}
+    {items.map(item => <FeatureGate key={item.tab} reason={unavailable(item.tab)}>{gate => <button type="button" role="tab" {...gate}
+      aria-label={item.label} aria-selected={active === item.tab} tabIndex={active === item.tab ? 0 : -1}
       onClick={() => onPick(item.tab)}
       onKeyDown={event => {
+        const enabled = items.filter(candidate => !unavailable(candidate.tab));
+        const index = enabled.findIndex(candidate => candidate.tab === item.tab);
         const offset = event.key === 'ArrowRight' ? 1 : event.key === 'ArrowLeft' ? -1 : 0;
-        const next = event.key === 'Home' ? 0 : event.key === 'End' ? items.length - 1 : offset ? (index + offset + items.length) % items.length : null;
+        const next = event.key === 'Home' ? 0 : event.key === 'End' ? enabled.length - 1 : offset ? (index + offset + enabled.length) % enabled.length : null;
         if (next === null) return;
         event.preventDefault();
-        const target = items[next];
+        const target = enabled[next];
         if (!target) return;
-        (event.currentTarget.parentElement?.children[next] as HTMLElement | undefined)?.focus();
+        event.currentTarget.closest('[role="tablist"]')?.querySelectorAll<HTMLButtonElement>('[role="tab"]:not(:disabled)')[next]?.focus();
         onPick(target.tab);
       }}
       className={`relative inline-flex h-7 cursor-pointer items-center gap-1.5 rounded-[4px] px-2 font-mono text-[11px] ${active === item.tab ? 'bg-accent-soft text-accent' : 'text-muted hover:bg-raised hover:text-fg'}`}>
       {item.label}
       {dotOn === item.tab && <span aria-label="New selection available" className="h-1.5 w-1.5 rounded-full bg-accent" />}
-    </button>)}
+    </button>}</FeatureGate>)}
   </div>;
 }
 
@@ -112,12 +111,6 @@ export default function EditPanel({
   children: ReactNode;
 }) {
   const id = useId();
-  const lastInspectorTab = useRef<InspectorTab>('selection');
-  useEffect(() => {
-    if (isInspectorTab(tab)) lastInspectorTab.current = tab;
-  }, [tab]);
-  const inspector = isInspectorTab(tab);
-
   const tabs = TABS.filter((t) => t.tab !== 'comments' || commentsAvailable);
   /** History is a backend capability; without it the tab stays, disabled, saying why. */
   const historyUnavailable = useArtifactBackend().unavailable('versions');
@@ -181,11 +174,8 @@ export default function EditPanel({
       style={{ top, width: RIGHT_RAIL_W }}
     >
       <div className="flex h-10 shrink-0 items-center gap-1 border-b border-edge px-2">
-        <PanelTabs label="Editor panels"
-          items={[{ tab: 'inspector', label: 'Inspector' }, { tab: 'files', label: 'Files' }, { tab: 'sharing', label: 'Sharing' }] as const}
-          active={inspector ? 'inspector' : tab}
-          onPick={next => onTab(next === 'inspector' ? lastInspectorTab.current : next)}
-          dotOn={selectionDot && !inspector ? 'inspector' : undefined} />
+        <PanelTabs label="Editor panels" items={tabs} active={tab} onPick={onTab} unavailable={unavailable}
+          dotOn={selectionDot ? 'selection' : undefined} />
         <Tooltip content="Collapse panel" positioning={{ placement: 'bottom-end' }}>
           <button
             type="button"
@@ -198,10 +188,6 @@ export default function EditPanel({
           </button>
         </Tooltip>
       </div>
-      {inspector && <div className="flex h-10 shrink-0 items-center border-b border-edge px-2">
-        <PanelTabs label="Inspector tabs" items={tabs.filter(item => isInspectorTab(item.tab))}
-          active={tab} onPick={onTab} dotOn={selectionDot ? 'selection' : undefined} />
-      </div>}
       <div
         role="region"
         id={`${id}-body`}

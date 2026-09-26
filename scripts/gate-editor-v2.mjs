@@ -492,7 +492,7 @@ try {
       check(!!current && !!list && current.y >= list.y && current.y <= 950, 'the current version is in view at 1400px');
       check((await humanPage.getByRole('button', { name: 'Open version history' }).count()) === 0,
         'no drawer switch beside the panel at 1400px');
-      await panel.getByRole('tab', { name: 'Selection' }).click();
+      await panel.getByRole('tab', { name: 'Inspector' }).click();
     }
     // Below the panel breakpoint (960px) there is no side panel: the bar's
     // switch opens the versions as a bottom sheet, at a laptop-narrow width

@@ -24,7 +24,7 @@ import {
   teardownEditorFrame,
 } from '@/test/helpers/in-place-editor';
 
-const choosePanel = (value: string) => fireEvent.click(screen.getByRole('tab', { name: new RegExp(`^${value}$`, 'i') }));
+const choosePanel = (value: string) => fireEvent.click(value === 'files' || value === 'sharing' ? screen.getByLabelText(`Show ${value}`) : screen.getByRole('tab', { name: new RegExp(`^${value}$`, 'i') }));
 
 beforeEach(installEditorFrame);
 afterEach(teardownEditorFrame);
@@ -56,14 +56,15 @@ describe('the editor bar', () => {
     expect(screen.queryByRole('dialog')).toBeNull();
     expect(onSharingChange).toHaveBeenCalledWith({ visibility: 'private', hasInvitedUsers: false });
     fireEvent.click(screen.getByLabelText('Edit the source'));
-    expect(screen.getByLabelText('Sharing settings')).toBeTruthy();
+    expect(screen.queryByLabelText('Sharing settings')).toBeNull();
     expect(screen.getByLabelText('Markup source')).toBeTruthy();
   });
 
   it('queues a colour-mode pick and tells the document; theme default queues null', () => {
     mount();
     env.posted.length = 0;
-    expect(within(screen.getByLabelText('Editor toolbar')).getByLabelText('Color mode')).toBeTruthy();
+    expect(within(screen.getByLabelText('Editor toolbar')).queryByLabelText('Color mode')).toBeNull();
+    expect(within(screen.getByLabelText('Edit panel')).getByLabelText('Color mode')).toBeTruthy();
     fireEvent.click(screen.getByLabelText('Color mode'));
     fireEvent.click(screen.getByLabelText('Color mode dark'));
     expect(lastQueued()).toMatchObject({ colorMode: 'dark' });
@@ -173,18 +174,18 @@ describe('the query notebook', () => {
     expect(screen.getByText('No referenced files.')).toBeTruthy();
   });
 
-  it('keeps Files open independently of the workspace without opening a dialog', () => {
+  it('switches Files as a full workspace with five top tabs', () => {
     mount();
     choosePanel('files');
     expect(screen.getByLabelText('Files')).toBeTruthy();
     expect(screen.getByText('No referenced files.')).toBeTruthy();
     fireEvent.click(screen.getByLabelText('Edit the source'));
-    expect(screen.getByLabelText('Files')).toBeTruthy();
+    expect(screen.queryByLabelText('Files')).toBeNull();
     expect(screen.getByLabelText('Markup source')).toBeTruthy();
     fireEvent.click(screen.getByLabelText('Show data'));
-    expect(screen.getByLabelText('Files')).toBeTruthy();
+    expect(screen.queryByLabelText('Files')).toBeNull();
     expect(screen.getByLabelText('Data')).toBeTruthy();
-    expect(within(screen.getByLabelText('Editor view')).getAllByRole('button')).toHaveLength(3);
+    expect(within(screen.getByLabelText('Editor view')).getAllByRole('button')).toHaveLength(5);
   });
 
   it('opens data as a VIEW with each query as a cell, and the view switch leaves it', () => {

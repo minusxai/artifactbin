@@ -23,11 +23,12 @@ import { installEditorFrame, teardownEditorFrame, mount, fromFrame, selection, e
 const chart = () => selection({ kind: 'embed', tag: 'Question', path: '0.2', rect: { x: 10, y: 400, width: 300, height: 200 } });
 const setWidth = (width: number) => Object.defineProperty(window, 'innerWidth', { value: width, configurable: true });
 const choosePanel = (value: string) => {
+  if (value.toLowerCase() === 'files' || value.toLowerCase() === 'sharing') { fireEvent.click(screen.getByLabelText(`Show ${value.toLowerCase()}`)); return; }
   const picker = screen.queryByRole('combobox', { name: 'Editor panel' });
   if (picker) fireEvent.change(picker, { target: { value: value.toLowerCase() } });
-  else fireEvent.click(screen.getByRole('tab', { name: new RegExp(`^${value}$`, 'i') }));
+  else fireEvent.click(screen.getByRole('tab', { name: new RegExp(`^${value.toLowerCase() === 'selection' ? 'Inspector' : value}$`, 'i') }));
 };
-const activePanel = () => screen.getAllByRole('tab', { selected: true }).at(-1)!.textContent!.toLowerCase();
+const activePanel = () => screen.getAllByRole('tab', { selected: true }).at(-1)!.textContent!.toLowerCase().replace('inspector', 'selection');
 
 beforeEach(() => {
   installEditorFrame();
@@ -41,22 +42,19 @@ afterEach(() => {
 });
 
 describe('the edit panel on a wide window', () => {
-  it('groups inspector tools under a remembered Inspector tab and supports keyboard navigation', () => {
+  it('keeps only Inspector, History and Comments in the rail, independently of workspace tabs', () => {
     mount({ onCommentsOpenChange: vi.fn() });
     const groups = screen.getByRole('tablist', { name: 'Editor panels' });
-    expect(within(groups).getAllByRole('tab').map(tab => tab.textContent)).toEqual(['Inspector', 'Files', 'Sharing']);
-    expect(screen.queryByRole('combobox', { name: 'Editor panel' })).toBeNull();
+    expect(within(groups).getAllByRole('tab').map(tab => tab.textContent)).toEqual(['Inspector', 'History', 'Comments']);
     choosePanel('History');
     choosePanel('Files');
-    expect(screen.queryByRole('tablist', { name: 'Inspector tabs' })).toBeNull();
-    expect(screen.getByText('No referenced files.')).toBeTruthy();
-    choosePanel('Inspector');
     expect(screen.getByLabelText('Version history')).toBeTruthy();
-    expect(activePanel()).toBe('history');
-    const inspector = screen.getByRole('tab', { name: 'Inspector' });
-    fireEvent.keyDown(inspector, { key: 'ArrowRight' });
-    expect(screen.getByRole('tab', { name: 'Files' })).toHaveFocus();
-    expect(screen.getByText('No referenced files.')).toBeTruthy();
+    expect(screen.getByLabelText('Files')).toHaveStyle({ left: '0px', right: '320px' });
+    fireEvent.click(screen.getByLabelText('Edit on the page'));
+    choosePanel('Inspector');
+    expect(screen.getByLabelText('Edit panel')).toContainElement(screen.getByLabelText('Color mode'));
+    fireEvent.keyDown(screen.getByRole('tab', { name: 'Inspector' }), { key: 'ArrowRight' });
+    expect(screen.getByRole('tab', { name: 'History' })).toHaveFocus();
   });
 
   it('is open from entry, and nothing in the session changes the width it asks for', async () => {
@@ -78,7 +76,7 @@ describe('the edit panel on a wide window', () => {
     fireEvent.click(screen.getByLabelText('Edit the source'));
     fireEvent.click(screen.getByLabelText('Edit on the page'));
     choosePanel('Files');
-    expect(screen.getByLabelText('Edit panel')).toContainElement(screen.getByLabelText('Files'));
+    expect(screen.getByLabelText('Files')).toHaveStyle({ left: '0px', right: '320px' });
     fireEvent.click(screen.getByLabelText('Show data'));
     expect(screen.getByLabelText('Data')).toHaveStyle({ left: '0px', right: '320px' });
     fireEvent.click(screen.getByLabelText('Edit on the page'));
@@ -98,7 +96,7 @@ describe('the edit panel on a wide window', () => {
     expect(screen.queryByLabelText('Chart inspector')).toBeNull();
     expect(screen.getByLabelText('New selection available')).toBeTruthy();
 
-    fireEvent.click(screen.getByRole('button', { name: 'Edit chart' }));
+    fireEvent.click(screen.getByRole('tab', { name: 'Inspector' }));
     expect(activePanel()).toBe('selection');
     expect(screen.getByLabelText('Chart inspector')).toBeTruthy();
     expect(screen.queryByLabelText('New selection available')).toBeNull();
@@ -202,7 +200,7 @@ describe('the edit panel on a wide window', () => {
     it('Edit chart', async () => {
       const { widths } = collapsedMount();
       await fromFrame({ type: STORY_SELECTION_MESSAGE, selection: chart() });
-      fireEvent.click(screen.getByRole('button', { name: 'Edit chart' }));
+      fireEvent.click(screen.getByRole('tab', { name: 'Inspector' }));
       expandedOn('Selection', widths);
       expect(screen.getByLabelText('Chart inspector')).toBeTruthy();
     });
@@ -275,8 +273,8 @@ describe('below the panel breakpoint', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Edit chart' }));
     const sheet = screen.getByRole('dialog', { name: 'Selection settings' });
     expect(within(sheet).getByLabelText('Chart inspector')).toBeTruthy();
-    // The chart's top lands just under the bars (44 + 88 + 8).
-    expect(scrollBy).toHaveBeenCalledWith({ top: 400 - 140, behavior: 'smooth' });
+    // The chart's top lands just under the bars (44 + 44 + 8).
+    expect(scrollBy).toHaveBeenCalledWith({ top: 400 - 96, behavior: 'smooth' });
 
     fireEvent.click(within(sheet).getByLabelText('Close selection settings'));
     expect(screen.queryByRole('dialog', { name: 'Selection settings' })).toBeNull();
@@ -327,15 +325,14 @@ describe('below the panel breakpoint', () => {
     }
   });
 
-  it('opens files on a phone without replacing the workspace and keeps appearance in the toolbar', () => {
+  it('opens Files as a workspace on a phone and appearance in Inspector', () => {
     setWidth(390);
     mount();
-    fireEvent.click(screen.getByLabelText('Edit the source'));
     choosePanel('Files');
-    expect(screen.getByRole('dialog', { name: 'Files' })).toBeTruthy();
-    expect(screen.getByLabelText('Markup source')).toBeTruthy();
-    fireEvent.click(screen.getByLabelText('Close Files'));
-    expect(within(screen.getByLabelText('Editor toolbar')).getByLabelText('Color mode')).toBeTruthy();
+    expect(screen.getByLabelText('Files')).toBeTruthy();
+    expect(screen.queryByRole('dialog')).toBeNull();
+    choosePanel('selection');
+    expect(screen.getByRole('dialog', { name: 'Selection settings' })).toContainElement(screen.getByLabelText('Color mode'));
   });
 
   it('opens history and comments from the bar, one sheet at a time', () => {
