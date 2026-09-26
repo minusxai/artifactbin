@@ -181,6 +181,13 @@ describe('convertDocument', () => {
     );
   });
 
+  it('a bare word that names no page value is no page value: the assignment needs a person', () => {
+    const doc = `<Helmet><Value name="d" type="date" /><Mutation name="today">{\`update _signals set d = current_date\`}</Mutation></Helmet><Button run="$today">Today</Button>`;
+    const result = convertDocument(doc, lookups);
+    expect(result.source).toBe(doc);
+    expect(result.manual).toEqual([expect.objectContaining({ declaration: 'today', reason: expect.stringMatching(/d is set to an expression/) })]);
+  });
+
   it('a _signals mutation computing from its own columns needs a person, told where a computed value lives', () => {
     const doc = `<Helmet>
   <Value name="step" type="number" default={0} />
