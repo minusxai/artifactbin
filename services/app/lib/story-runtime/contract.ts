@@ -65,8 +65,8 @@ export interface RanDataflow extends StoryIslandDataflow {
  * document that declares nothing has no dataflow at all (and
  * `{$_me ? … : <SignIn/>}` is exactly such a document), and the viewer is not
  * the document's data — it is never declared, never carried in a link, never
- * written, and never sent into the author-script realm's state deltas
- * (lib/story-runtime/author-state).
+ * written, and never among the signals the author script reads through
+ * `window.mx` (lib/story-runtime/mx).
  */
 export interface StoryViewer {
   id: string;

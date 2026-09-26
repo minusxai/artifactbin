@@ -211,7 +211,8 @@ interface RuntimeEmbedContextValue {
   flow: Dataflow;
   state: DataflowState;
   pending: ReadonlySet<string>;
-  setValue: (name: string, value: Scalar) => void;
+  /** `debounce` for a continuous input (typing, a slider); a discrete change runs at once. */
+  setValue: (name: string, value: Scalar, options?: { debounce?: boolean }) => void;
   /** A window of one query's rows through the transport (a table reading past the cap). */
   fetchPage: DataflowStore['fetchPage'];
   refData: RefDataMap;
@@ -437,6 +438,9 @@ function RuntimeBoundControl(input: BoundControlProps) {
   return <FrozenHint reason={reason}><NativeBoundControl {...input} props={{ ...input.props, disabled: true, 'aria-description': reason }} /></FrozenHint>;
 }
 
+/** Native inputs a reader types or drags through: their bound queries wait for a pause. */
+const CONTINUOUS_INPUT_TYPES = new Set(['text', 'search', 'email', 'url', 'tel', 'password', 'number', 'range']);
+
 function NativeBoundControl({ tag, props, bind, children }: BoundControlProps) {
   const { flow, state, setValue } = useContext(RuntimeEmbedContext);
   const declOf = (name: string): ScalarValueDecl | undefined =>
@@ -472,7 +476,7 @@ function NativeBoundControl({ tag, props, bind, children }: BoundControlProps) {
       <textarea
         {...props}
         value={current(bind.value)}
-        onChange={(e) => { if (bind.value) setValue(bind.value, coerce(bind.value, e.target.value)); }}
+        onChange={(e) => { if (bind.value) setValue(bind.value, coerce(bind.value, e.target.value), { debounce: true }); }}
       />
     );
   }
@@ -490,7 +494,7 @@ function NativeBoundControl({ tag, props, bind, children }: BoundControlProps) {
     <input
       {...props}
       value={current(bind.value)}
-      onChange={(e) => { if (bind.value) setValue(bind.value, coerce(bind.value, e.target.value)); }}
+      onChange={(e) => { if (bind.value) setValue(bind.value, coerce(bind.value, e.target.value), { debounce: CONTINUOUS_INPUT_TYPES.has(type) }); }}
     />
   );
 }
@@ -500,9 +504,10 @@ function NativeBoundControl({ tag, props, bind, children }: BoundControlProps) {
  * declaration (for typed coercion and the "all" entry), its current value as
  * a control-facing string, and the typed writer. `name` null (an unbound
  * control in a live document) leaves `write` undefined — the control renders
- * disabled, same as the static face.
+ * disabled, same as the static face. A `continuous` control (typing, a
+ * slider) debounces the queries it feeds; every other one runs them at once.
  */
-function useScalarControl(name: string | null) {
+function useScalarControl(name: string | null, continuous = false) {
   const { flow, state, setValue, store } = useContext(RuntimeEmbedContext);
   const decl = name ? flow.values.find((v): v is ScalarValueDecl => v.kind === 'scalar' && v.name === name) : undefined;
   return {
@@ -512,7 +517,7 @@ function useScalarControl(name: string | null) {
     type: decl?.type,
     nullable: name !== null && (decl?.default ?? null) === null,
     current: name !== null && state.values[name] !== null && state.values[name] !== undefined ? String(state.values[name]) : null,
-    write: name === null ? undefined : (raw: string | null) => setValue(name, raw === null ? null : coerceScalarInput(decl?.type, raw)),
+    write: name === null ? undefined : (raw: string | null) => setValue(name, raw === null ? null : coerceScalarInput(decl?.type, raw), { debounce: continuous }),
     writeBool: name === null ? undefined : (next: boolean) => setValue(name, next),
     isTrue: name !== null && state.values[name] === true,
     asNumber: name !== null && typeof state.values[name] === 'number' ? (state.values[name] as number) : null,
@@ -525,7 +530,7 @@ function useScalarControl(name: string | null) {
  * `<Mutation reset>` able to empty it — the control holds nothing of its own.
  */
 function InputAdapter(props: Record<string, unknown>) {
-  const bind = useScalarControl(refName(props.value));
+  const bind = useScalarControl(refName(props.value), true);
   return (
     <FrozenHint reason={bind.frozen}><TextControl
       label={str(props.label)} ariaLabel={fieldLabel(props)} className={str(props.className)}
@@ -539,7 +544,7 @@ function InputAdapter(props: Record<string, unknown>) {
 }
 
 function TextareaAdapter(props: Record<string, unknown>) {
-  const bind = useScalarControl(refName(props.value));
+  const bind = useScalarControl(refName(props.value), true);
   return (
     <FrozenHint reason={bind.frozen}><TextControl
       label={str(props.label)} ariaLabel={fieldLabel(props)} className={str(props.className)}
@@ -584,7 +589,7 @@ function SegmentedAdapter(props: Record<string, unknown>) {
 }
 
 function SliderAdapter(props: Record<string, unknown>) {
-  const bind = useScalarControl(refName(props.value));
+  const bind = useScalarControl(refName(props.value), true);
   return (
     <FrozenHint reason={bind.frozen}><SliderControl
       label={str(props.label)} className={str(props.className)}
@@ -1315,7 +1320,7 @@ export function StoryRuntimeApp({ mentionStatuses, nodes, refData, glyphs, dataf
    * those things (lib/story/dataflow VIEWER_REF).
    */
   const signals = useMemo(() => ({ ...state.values, [VIEWER_REF]: viewer?.id ?? null }), [state.values, viewer?.id]);
-  const setValue = useMemo(() => (name: string, value: Scalar) => store.setValue(name, value), [store]);
+  const setValue = useMemo(() => (name: string, value: Scalar, options?: { debounce?: boolean }) => store.setValue(name, value, options), [store]);
 
   // Discovery is a pure walk of the nodes we already hold, so the rail is
   // SERVER-rendered at its final width — no reservation guess, no shift.
