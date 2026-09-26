@@ -10,7 +10,7 @@ import { compactSurface } from '@/lib/story/page-transport';
  */
 import { archivedReadOnly, archivedVersionFor, servedRow } from '@/lib/archived-version';
 import { countOpenAnnotations } from '@/lib/annotations';
-import { canReadArtifact, getArtifactFor, declarationsForRow, getArtifactById, refDataForRow, viewerIdentityFor } from '@/lib/artifacts';
+import { canReadArtifact, getArtifactFor, declarationsForRow, getArtifactById, holdableImports, refDataForRow, viewerIdentityFor } from '@/lib/artifacts';
 import { folderPageFor } from '@/lib/folders';
 import { currentStoryCss } from '@/lib/data/story/story-css.server';
 import { resolveStoredStoryDesign } from '@/lib/data/story/story-themes';
@@ -130,7 +130,12 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
   ]);
   const authorUsername = author?.username ?? null;
   const declared = isDoc && row.source ? await declarationsForRow(row) : null;
-  const dataflow = declared ? { ...declared, values: readUrlValues(new URL(request.url).search, declared.flow) } : null;
+  // What this reader may hold is decided for the door the page queries through
+  // (the session's POST, lib/story-runtime/authenticated-transport).
+  const dataflow = declared ? {
+    ...declared, values: readUrlValues(new URL(request.url).search, declared.flow),
+    hold: await holdableImports(row, declared.flow, { userId: actor.viewer?.userId ?? null, tokenId: actor.tokenId ?? null, email: actor.viewer?.email ?? null }),
+  } : null;
   const runtime = isDoc ? await prepareStoryRuntime({
     source: row.source ?? '', compiledCss, theme: design.theme,
     colorMode: design.colorMode, title: row.title, template: meta.template ?? null,
