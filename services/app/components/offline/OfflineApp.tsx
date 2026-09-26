@@ -104,7 +104,7 @@ export function OfflineApp({ file }: { file: ArtifactFile }) {
     return flow ? { ...file.island, dataflow: { flow, state: file.snapshot.state } } : file.island;
   }, [file]);
   const prepared = useMemo<PreparedStoryRuntime>(() => ({
-    data, baseCss: file.css, compiledCss: null, authorCss: null, authorScript: null,
+    data, baseCss: file.css.base, compiledCss: file.css.compiled, authorCss: file.css.author, authorScript: null,
     theme: file.metadata.theme as StoryThemeName | null, title: file.metadata.title,
   }), [data, file]);
   const transportFactory = useCallback(() => {

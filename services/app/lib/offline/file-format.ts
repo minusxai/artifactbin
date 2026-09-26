@@ -48,6 +48,12 @@ export interface ArtifactFileEdit {
   summary: string;
 }
 
+export interface ArtifactFileCss {
+  base: string;
+  compiled: string | null;
+  author: string | null;
+}
+
 export interface ArtifactFile {
   format: typeof ARTIFACT_FILE_FORMAT;
   /** Where the file came from, e.g. https://app.artifactbin.dev. */
@@ -68,8 +74,16 @@ export interface ArtifactFile {
     template: string | null;
     colorMode: 'light' | 'dark' | null;
   };
-  /** Compiled CSS for `source`; every font URL inlined as a data: URI. */
-  css: string;
+  /**
+   * The document's stylesheet, in the three parts the runtime takes them
+   * (PreparedStoryRuntime's baseCss / compiledCss / authorCss), every font and
+   * image URL inlined as a data: URI:
+   *  - `base`: the runtime's own sheet and the theme's fonts;
+   *  - `compiled`: the Tailwind sheet for `source` — the one part an edit in
+   *    the file recompiles (lib/offline/file-backend);
+   *  - `author`: the document's own `<Helmet>` `<style>`.
+   */
+  css: ArtifactFileCss;
   /** The runtime island for `source`, with no server URLs (queryUrl, mutateUrl, assetsUrl …) and images as data: URIs. */
   island: StoryIslandData;
   snapshot: ArtifactFileSnapshot;
@@ -120,7 +134,7 @@ function isWellFormed(v: Json): boolean {
     && isObject(metadata) && isString(metadata.title) && isStringOrNull(metadata.description)
       && isStringOrNull(metadata.theme) && isStringOrNull(metadata.template)
       && (metadata.colorMode === null || metadata.colorMode === 'light' || metadata.colorMode === 'dark')
-    && isString(v.css)
+    && isObject(v.css) && isString(v.css.base) && isStringOrNull(v.css.compiled) && isStringOrNull(v.css.author)
     && isObject(island) && Array.isArray(island.nodes) && isObject(island.refData)
     && isObject(snapshot) && isString(snapshot.at) && isState(snapshot.state)
       && Array.isArray(snapshot.variants) && snapshot.variants.every(isVariant) && isStringList(snapshot.frozen)
