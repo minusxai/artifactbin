@@ -217,7 +217,7 @@ export class SqliteDatabase {
   }
 
   attach(schema: string): void {
-    if (!schema || schema.length > 255 || schema.includes('\0') || /^(temp|sqlite_)/i.test(schema)) throw new Error(`invalid schema name ${schema}`);
+    if (!schema || schema.length > 255 || schema.includes('\0') || /^temp$|^sqlite_/i.test(schema)) throw new Error(`invalid schema name ${schema}`);
     if (this.#schemas.some((s) => s.toLowerCase() === schema.toLowerCase())) return;
     this.exec(`ATTACH ':memory:' AS ${quote(schema)}`);
     this.#schemas.push(schema);

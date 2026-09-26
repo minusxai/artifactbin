@@ -5,7 +5,8 @@
  * every viewer, while publish, which binds NULLs, stayed green.
  */
 import { afterAll, describe, expect, it } from 'vitest';
-import { createSql, createSqliteSql } from '@artifactbin/sql/local';
+import { createSql } from '@artifactbin/sql/local';
+import { createSqliteSql } from '@artifactbin/sql/sqlite';
 import { serveSql, sqlClient } from '@artifactbin/sql';
 import type { DatasetMutationPolicy, SqlService } from '@artifactbin/contracts';
 
