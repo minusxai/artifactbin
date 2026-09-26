@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { tokenizeSql, SqlTokenError } from '../tokens';
-import { translateSql, type TranslateContext } from '../translate';
+import { NOTES, translateSql, type TranslateContext } from '../translate';
 
 const QUERY: TranslateContext = { statement: 'query' };
 const MUTATION: TranslateContext = { statement: 'mutation' };
@@ -94,7 +94,8 @@ describe('translateSql rules', () => {
     ok('select count(*)::double / 2 from t', 'select cast(count(*) as real) * 1.0 / 2 from t');
     ok('select case when a then 1 else 2 end::text from t', 'select cast(case when a then 1 else 2 end as text) from t');
     ok('select sum(x) over (partition by g)::int from t', 'select cast(sum(x) over (partition by g) as integer) from t');
-    manual('select id, tags::varchar[] as tags from t', /list/, 'tags::varchar[]');
+    ok('select id, tags::varchar[] as tags from t', 'select id, to_list(tags) as tags from t');
+    manual('select id, tags::int[] as tags from t', /list of int/, 'tags::int[]');
     manual('select flag::boolean from t', /boolean/, 'flag::boolean');
     ok(inert('a::int'), inert('a::int'));
   });
@@ -105,7 +106,7 @@ describe('translateSql rules', () => {
     ok('select cast(a as decimal(8, 1)) from t', 'select round(cast(a as real), 1) from t');
     ok('select cast(a as varchar), cast(b as bigint), cast(c as double), cast(d as text) from t', 'select cast(a as varchar), cast(b as bigint), cast(c as double), cast(d as text) from t');
     ok('select cast(cast(id as bigint) as varchar) from t', 'select cast(cast(id as bigint) as varchar) from t');
-    manual('select cast(tags as varchar[]) from t', /list/, 'cast(tags as varchar[])');
+    ok('select cast(tags as varchar[]) from t', 'select to_list(tags) from t');
     manual('select try_cast(a as integer) from t', /try_cast/, 'try_cast(a as integer)');
   });
 
@@ -206,7 +207,6 @@ describe('translateSql rules', () => {
       `select d from (select value as d from json_each(date_series('2026-01-01', '2026-01-03', 'day')) where value < '2026-01-03') as t`);
     ok('select i from range(0, 3) t(i)', 'select i from (with recursive series(i) as (select 0 where 0 < 3 union all select i + 1 from series where i + 1 < 3) select i from series) as t');
     ok('select * from generate_series(1, 9, 2)', 'select * from (with recursive series(generate_series) as (select 1 where 1 <= 9 union all select generate_series + 2 from series where generate_series + 2 <= 9) select generate_series from series) as generate_series');
-    manual('select range(3)', /range/);
     manual(`select * from generate_series(date '2026-01-01', date '2026-02-01', interval 2 day)`, /step/);
   });
 
@@ -326,6 +326,54 @@ describe('translateSql: DuckDB functions with a SQLite form', () => {
   });
 });
 
+describe('translateSql: DuckDB lists', () => {
+  it('a cast of text to a list of text → to_list (try_cast → try_to_list), which the list rules read as a list', () => {
+    ok('select cast(tags as varchar[]) as a, tags::text[] as b, try_cast(tags as varchar[]) as c from t', 'select to_list(tags) as a, to_list(tags) as b, try_to_list(tags) as c from t');
+    ok('select * from t where list_contains(cast($picked as varchar[]), cast(id as varchar)) and len(cast(tags as varchar[])) > 1',
+      'select * from t where list_contains(to_list($picked), cast(id as varchar)) and json_array_length(to_list(tags)) > 1');
+    ok('select unnest(cast(tags as varchar[])) as tag from t', 'select unnested.value as tag from t, json_each(to_list(tags)) as unnested');
+    ok('select l.id, p from l, unnest(cast(l.tags as varchar[])) as u(p)', 'select l.id, u.value from l, json_each(to_list(l.tags)) as u');
+  });
+  it('a cast to a list of anything but text, or of a value already a list, is manual', () => {
+    manual('select cast(tags as integer[]) from t', /a cast to a list of integer/, 'cast(tags as integer[])');
+    manual('select tags::varchar[][] from t', /a cast to a list of lists/, 'tags::varchar[][]');
+    manual("select cast(string_split(s, ',') as varchar[]) from t", /already a list/, "cast(string_split(s, ',') as varchar[])");
+  });
+  it('try_cast to a date is null where the text names none', () => {
+    ok('update r set d = try_cast($_value as date) where try_cast($_value as date) is not null', 'update r set d = try_to_date($_value) where try_to_date($_value) is not null', MUTATION);
+    ok('select try_cast(d as date) + 1 from t', "select date_add(try_to_date(d), 1, 'day') from t");
+    manual('select try_cast(d as timestamp) from t', /try_cast/, 'try_cast(d as timestamp)');
+  });
+  it('generate_series/range outside FROM → a list: date_series for dates, a recursive CTE for integers', () => {
+    expect(ok("select unnest(generate_series(date '2026-01-01', date '2026-01-03', interval 1 day)) as d",
+      "select unnested.value as d from json_each(date_series('2026-01-01', '2026-01-03', 'day')) as unnested")).toContain(NOTES.series);
+    ok('select unnest(generate_series(0, 3)) as i',
+      'select unnested.value as i from json_each((with recursive series(n) as (select 0 where 0 <= 3 union all select n + 1 from series where n + 1 <= 3) select json_group_array(n order by n) from series)) as unnested');
+    // DuckDB answers null for a null bound, where the CTE would give an empty list.
+    ok('select range($n) as l, n from t',
+      'select (with recursive series(n_1) as (select 0 where 0 < $n union all select n_1 + 1 from series where n_1 + 1 < $n) select case when $n is null then null else json_group_array(n_1 order by n_1) end from series) as l, n from t');
+    manual("select range(date '2026-01-01', date '2026-01-03', interval 1 day) as l", /range\(\) of dates outside FROM/);
+    manual('select generate_series(1, 9, -1) as l', /step/);
+  });
+  it('unnest inside scalar calls of one select item → the json_each join; inside an aggregate or a window it stays manual', () => {
+    expect(ok("select cast(unnest(generate_series(date '2026-01-01', date '2026-01-03', interval 1 day)) as date) as d",
+      "select to_date(unnested.value) as d from json_each(date_series('2026-01-01', '2026-01-03', 'day')) as unnested")).toContain(NOTES.series);
+    ok("select id, lower(trim(unnest(string_split(s, ',')))) as p from t", "select t.id, lower(trim(unnested.value)) as p from t, json_each(string_split(s, ',')) as unnested");
+    manual('select count(unnest(tags)) from t', /unnest/);
+    manual('select first_value(trim(unnest(tags))) over () from t', /unnest/);
+  });
+  it('list_transform/list_apply/list_filter lambdas → a json_each subquery in list order, null for a null list', () => {
+    ok("select list_transform(string_split(s, ','), x -> trim(x)) as l from t",
+      "select case when string_split(s, ',') is null then null else (select json_group_array(trim(element.value) order by element.key) from json_each(string_split(s, ',')) as element) end as l from t");
+    ok("select list_filter(tags, x -> x <> '') as l from t",
+      "select case when tags is null then null else (select json_group_array(element.value order by element.key) from json_each(tags) as element where element.value <> '') end as l from t");
+    ok('select list_apply(tags, tag -> upper(tag) || $suffix) from t',
+      'select case when tags is null then null else (select json_group_array(upper(element.value) || $suffix order by element.key) from json_each(tags) as element) end from t');
+    manual('select list_transform(tags, x -> list_filter(x, x -> x > 1)) from t', /reuses/);
+    manual('select list_transform(tags, (x, i) -> x || i) from t', /lambda/);
+  });
+});
+
 describe('translateSql: date arithmetic', () => {
   it('date ± n adds days, and date − date counts them, where the operand is a date by construction', () => {
     ok('select cast(d as date) + 1, 2 + d::date, date_trunc(\'month\', d) - n from t',
@@ -367,8 +415,8 @@ describe('translateSql: clauses SQLite reads differently', () => {
 
 describe('translateSql contract', () => {
   it('a manual hit returns the whole input, with spans in the input even after earlier rewrites', () => {
-    const sql = 'select current_date, a / b, tags::varchar[] from t';
-    const result = manual(sql, /list/, 'tags::varchar[]');
+    const sql = 'select current_date, a / b, tags::int[] from t';
+    const result = manual(sql, /list/, 'tags::int[]');
     expect(result.notes).toEqual([]);
   });
 

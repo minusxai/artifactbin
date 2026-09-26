@@ -17,7 +17,7 @@
  * one construct that survives; its rule matches only a `/` not already
  * written `* 1.0 /`.)
  */
-import { MUTATION_ONLY_FUNCTIONS } from '@artifactbin/contracts';
+import { MUTATION_ONLY_FUNCTIONS, SQL_FUNCTIONS } from '@artifactbin/contracts';
 import { normalizeTimestamp } from '@artifactbin/utils/shape';
 import { ExpressionReader, KEYWORDS, bracketPairs, caseMatch, type ExprNode } from './expression';
 import { SqlTokenError, identifier, significant, tokenizeSql, word, type SqlToken } from './tokens';
@@ -64,7 +64,8 @@ export const NOTES = {
 } as const;
 
 type Edit = { start: number; end: number; text: string };
-type Hit = { edits: Edit[]; note?: string } | { manual: string; start: number; end: number };
+type ManualHit = { manual: string; start: number; end: number };
+type Hit = { edits: Edit[]; note?: string } | ManualHit;
 type Rule = (v: View, context: TranslateContext) => Hit | null;
 
 const ISO_TIMESTAMP = "'%Y-%m-%dT%H:%M:%fZ'";
@@ -83,9 +84,21 @@ const RENAMES: Record<string, string> = {
   stddev_samp: 'stddev',
 };
 /** Calls whose result is a list (JSON text): `contains` over one is list membership. */
-const LIST_CALLS = new Set(['string_split', 'json_array', 'list_value', 'date_series']);
+const LIST_CALLS = new Set(['string_split', 'json_array', 'list_value', 'date_series', 'to_list', 'try_to_list']);
+/** DuckDB lambda calls → what they do with the items: `list_transform(l, x -> f(x))`, `list_filter(l, x -> p(x))`. */
+const LAMBDA_CALLS: Record<string, 'transform' | 'filter'> = {
+  list_transform: 'transform', list_apply: 'transform', array_transform: 'transform', array_apply: 'transform', list_filter: 'filter', array_filter: 'filter',
+};
+/** DuckDB calls whose result is a real list, whose items a cast to a list type converts one by one. */
+const LIST_VALUES = new Set([...LIST_CALLS, ...Object.keys(LAMBDA_CALLS), 'generate_series', 'range']);
 /** Calls whose result is a date, whatever they are given. */
-const DATE_CALLS = new Set(['date', 'to_date', 'make_date', 'date_trunc', 'today']);
+const DATE_CALLS = new Set(['date', 'to_date', 'try_to_date', 'make_date', 'date_trunc', 'today']);
+/** Aggregates, which an unnest may not sit in: the library's, SQLite's and DuckDB's common ones. */
+const AGGREGATES = new Set([
+  ...SQL_FUNCTIONS.filter((f) => f.kind === 'aggregate').map((f) => f.name),
+  'count', 'sum', 'avg', 'min', 'max', 'total', 'list', 'array_agg', 'string_agg', 'group_concat', 'json_group_array', 'json_group_object',
+  'bool_or', 'bool_and', 'any_value', 'first', 'last', 'mode', 'quantile_cont', 'quantile_disc', 'stddev_samp',
+]);
 const NOW_CALLS: Record<string, string> = { now: '$_now', get_current_timestamp: '$_now', transaction_timestamp: '$_now', today: 'date($_now)' };
 const NOW_WORDS: Record<string, string> = { current_timestamp: '$_now', current_date: 'date($_now)' };
 const UNSUPPORTED_WORDS = new Set(['pivot', 'unpivot']);
@@ -119,7 +132,7 @@ class View {
     return { start: this.sig[from].start, end: this.sig[to].end, text };
   }
 
-  manual(reason: string, from: number, to = from): Hit {
+  manual(reason: string, from: number, to = from): ManualHit {
     return { manual: reason, start: this.sig[from].start, end: this.sig[to].end };
   }
 
@@ -226,7 +239,9 @@ class View {
 
 // ── types ───────────────────────────────────────────────────────────────────
 
-type Target = { kind: 'text' | 'integer' | 'real' | 'date' | 'timestamp' } | { kind: 'decimal'; scale: number };
+/** `list`: a list of text, which DuckDB read from text as `to_list` does. */
+type Target = { kind: 'text' | 'integer' | 'real' | 'date' | 'timestamp' | 'list' } | { kind: 'decimal'; scale: number };
+type Range = { from: number; to: number };
 
 const TYPE_KINDS: Array<[Target['kind'], RegExp]> = [
   ['text', /^(?:varchar|text|string|char|bpchar|character|character varying|nvarchar|uuid)$/],
@@ -240,7 +255,14 @@ const TYPE_KINDS: Array<[Target['kind'], RegExp]> = [
 /** The SQLite form of a DuckDB type written in tokens `from..to`, or why there is none. */
 function castTarget(v: View, from: number, to: number): { target: Target; name: string } | { manual: string } {
   const tokens = v.sig.slice(from, to + 1);
-  if (tokens.some((t) => t.text === '[')) return { manual: 'a cast to a list type: lists are JSON text in SQLite' };
+  const list = tokens.findIndex((t) => t.text === '[');
+  if (list >= 0) {
+    if (list + 2 !== tokens.length || tokens[list + 1]!.text !== ']') return { manual: `a cast to ${tokens.slice(list).some((t) => t.kind === 'number') ? 'a fixed-size array' : 'a list of lists'} has no SQLite form` };
+    const item = castTarget(v, from, from + list - 1);
+    if ('manual' in item) return item;
+    if (item.target.kind !== 'text') return { manual: `a cast to a list of ${item.name}: only a list of text reads as DuckDB read it (to_list)` };
+    return { target: { kind: 'list' }, name: `${item.name}[]` };
+  }
   const paren = tokens.findIndex((t) => t.text === '(');
   const name = (paren < 0 ? tokens : tokens.slice(0, paren)).map((t) => identifier(t) ?? t.text.toLowerCase()).join(' ');
   const kind = TYPE_KINDS.find(([, re]) => re.test(name))?.[0];
@@ -258,6 +280,7 @@ function castText(operand: string, target: Target): string {
     case 'date': return `to_date(${operand})`;
     case 'timestamp': return `strftime(${ISO_TIMESTAMP}, ${operand})`;
     case 'decimal': return `round(cast(${operand} as real), ${target.scale})`;
+    case 'list': return `to_list(${operand})`;
     default: return `cast(${operand} as ${target.kind})`;
   }
 }
@@ -266,8 +289,20 @@ function castText(operand: string, target: Target): string {
 const sqliteReadsAlike = (name: string, kind: Target['kind']): boolean =>
   (kind === 'text' && /char|clob|text/.test(name)) || (kind === 'integer' && name.includes('int')) || (kind === 'real' && /real|floa|doub/.test(name));
 
+/**
+ * The SQLite form of casting `operand` to the type in `type`, or why there is
+ * none. A value DuckDB held as a real list (`string_split`, a series) cast
+ * item by item, which to_list — a reading of text — does not repeat.
+ */
+function castTo(v: View, operand: Range, type: Range): { target: Target; name: string } | { manual: string } {
+  const target = castTarget(v, type.from, type.to);
+  const inner = 'target' in target && target.target.kind === 'list' ? v.call(operand.from) : null;
+  if (inner && inner.close === operand.to && LIST_VALUES.has(inner.name)) return { manual: `a cast of ${inner.name}(), already a list, to a list type: to_list reads text` };
+  return target;
+}
+
 /** The type tokens of `cast(x as T)`: the range after the top-level AS. */
-function castCallType(v: View, call: Call): { operand: { from: number; to: number }; type: { from: number; to: number } } | null {
+function castCallType(v: View, call: Call): { operand: Range; type: Range } | null {
   if (call.args.length !== 1) return null;
   for (let j = call.args[0].from; j <= call.args[0].to; j++) {
     if (['(', '['].includes(v.sig[j].text)) { j = v.pairs.get(j)!; continue; }
@@ -317,19 +352,23 @@ const negated = (spec: IntervalSpec): string =>
 function precheck(v: View, context: TranslateContext): { hit: Hit | null; notes: string[] } {
   const notes: string[] = [];
   const t = v.sig;
+  /** The tokens of the cast types seen so far: the `[` of `varchar[]` indexes nothing. */
+  const types = new Set<number>();
+  const typeAt = (range: Range) => { for (let j = range.from; j <= range.to; j++) types.add(j); };
   for (let i = 0; i < t.length; i++) {
     const w = word(t[i]);
     if (t[i].kind === 'dollar') return { hit: v.manual('a dollar-quoted string has no SQLite form', i), notes };
     if (UNSUPPORTED_WORDS.has(w) && t[i - 1]?.text !== '.') return { hit: v.manual(`${w.toUpperCase()} has no SQLite form`, i), notes };
     if (w === 'like' || w === 'ilike') notes.push(NOTES.like);
-    if (t[i].text === '[' && v.endsOperand(i - 1)) {
+    if (t[i].text === '[' && !types.has(i) && v.endsOperand(i - 1)) {
       const node = v.expr.nodeByOperator(i);
       return { hit: v.manual('a list index has no SQLite form (lists are JSON; use ->> with a 0-based path)', node?.from ?? i, node?.to ?? v.pairs.get(i)!), notes };
     }
     if (t[i].text === '::') {
       const node = v.expr.nodeByOperator(i);
-      if (!node?.type) return { hit: v.manual('cannot tell what this cast applies to', i), notes };
-      const target = castTarget(v, node.type.from, node.type.to);
+      if (!node?.type || !node.operand) return { hit: v.manual('cannot tell what this cast applies to', i), notes };
+      typeAt(node.type);
+      const target = castTo(v, node.operand, node.type);
       if ('manual' in target) return { hit: v.manual(target.manual, node.from, node.to), notes };
     }
     if (w === 'interval') {
@@ -354,8 +393,10 @@ function precheck(v: View, context: TranslateContext): { hit: Hit | null; notes:
     switch (call.name) {
       case 'try_cast': {
         const cast = castCallType(v, call);
-        const target = cast ? castTarget(v, cast.type.from, cast.type.to) : null;
-        if (!target || 'manual' in target || !['real', 'decimal'].includes(target.target.kind)) refusal = whole('try_cast has no SQLite form but to a number: SQLite casts never fail');
+        if (cast) typeAt(cast.type);
+        const target = cast ? castTo(v, cast.operand, cast.type) : null;
+        if (target && 'manual' in target) refusal = whole(target.manual);
+        else if (!target || !TRY_CASTS.has(target.target.kind)) refusal = whole('try_cast has no SQLite form but to a number, a date or a list of text: SQLite casts never fail');
         break;
       }
       case 'quantile': case 'quantile_disc': refusal = whole('DuckDB quantile is discrete (quantile_disc); the library quantile is continuous'); break;
@@ -374,7 +415,8 @@ function precheck(v: View, context: TranslateContext): { hit: Hit | null; notes:
       case 'cast': {
         const cast = castCallType(v, call);
         if (!cast) { refusal = whole('cannot read this cast'); break; }
-        const target = castTarget(v, cast.type.from, cast.type.to);
+        typeAt(cast.type);
+        const target = castTo(v, cast.operand, cast.type);
         if ('manual' in target) refusal = whole(target.manual);
         break;
       }
@@ -457,13 +499,56 @@ const typedLiterals: Rule = (v) => {
   return null;
 };
 
-/** `generate_series(a, b[, step])` / `range(…)` as a FROM item → date_series or a recursive CTE. */
+/** A series' step: one day, week or month between dates (date_series), or a positive whole number between integers. */
+function seriesStep(v: View, call: Call): { unit: string } | { by: string } | ManualHit {
+  if (call.args.length === 3 && word(v.sig[call.args[2]!.from]) === 'interval') {
+    const node = v.expr.nodeAt(call.args[2]!.from, 'interval');
+    const spec = node && node.to === call.args[2]!.to ? intervalSpec(v, node) : { manual: 'unreadable step' };
+    if ('manual' in spec) return v.manual(spec.manual, call.args[2]!.from, call.args[2]!.to);
+    if (spec.number !== 1 || !['day', 'week', 'month'].includes(spec.unit)) return v.manual('date_series steps by one day, week or month', call.args[2]!.from, call.args[2]!.to);
+    return { unit: spec.unit };
+  }
+  if (call.args.length < 1 || call.args.length > 3) return v.manual(`${call.name}() takes one to three arguments`, call.at, call.close);
+  const by = call.args.length === 3 ? v.slice(call.args[2]!.from, call.args[2]!.to) : '1';
+  if (!/^\d+$/.test(by) || by === '0') return v.manual(`${call.name}() with a step other than a positive integer`, call.at, call.close);
+  return { by };
+}
+
+/** An operand as text that binds as one term: parenthesised unless it is one token or one call. */
+function term(v: View, range: Range): string {
+  const call = v.call(range.from);
+  const text = v.slice(range.from, range.to);
+  return range.from === range.to || call?.close === range.to ? text : `(${text})`;
+}
+
+/**
+ * `generate_series(a, b[, step])` / `range(…)` (which stops before b): as a
+ * FROM item → date_series or a recursive CTE; anywhere else DuckDB built a
+ * list, so → date_series itself, or the CTE gathered into a JSON list, null
+ * where a bound is (the CTE alone would give an empty list).
+ */
 const series: Rule = (v) => {
   for (const call of v.calls()) {
     if (call.name !== 'generate_series' && call.name !== 'range') continue;
+    const step = seriesStep(v, call);
+    if ('manual' in step) return step;
     const before = v.sig[call.at - 1];
     const inFrom = ['from', 'join'].includes(word(before)) || (before?.text === ',' && ['from', 'join'].includes(v.clauseOf(call.at)));
-    if (!inFrom) return v.manual(`${call.name}() outside FROM builds a DuckDB list; there is no library equivalent`, call.at, call.close);
+    const exclusive = call.name === 'range';
+    const within = exclusive ? '<' : '<=';
+    const [a, b] = call.args.map((arg) => v.slice(arg.from, arg.to));
+    const [start, stop] = call.args.length === 1 ? ['0', a!] : [a!, b!];
+    if (!inFrom) {
+      if ('unit' in step) {
+        if (exclusive) return v.manual('range() of dates outside FROM: date_series includes its end', call.at, call.close);
+        return { edits: [v.replace(call.at, call.close, `date_series(${a}, ${b}, '${step.unit}')`)], note: NOTES.series };
+      }
+      const cte = v.freshName('series'), n = v.freshName('n');
+      const computed = call.args.slice(0, 2).filter((arg) => arg.from !== arg.to || v.sig[arg.from]!.kind !== 'number');
+      const list = `json_group_array(${n} order by ${n})`;
+      const gathered = computed.length ? `case when ${computed.map((arg) => `${term(v, arg)} is null`).join(' or ')} then null else ${list} end` : list;
+      return { edits: [v.replace(call.at, call.close, `(with recursive ${cte}(${n}) as (select ${start} where ${start} ${within} ${stop} union all select ${n} + ${step.by} from ${cte} where ${n} + ${step.by} ${within} ${stop}) select ${gathered} from ${cte})`)] };
+    }
     // Its alias: `[as] name[(column)]`.
     let end = call.close;
     let alias: string | null = null;
@@ -477,29 +562,54 @@ const series: Rule = (v) => {
       if (v.sig[k + 1]?.text === '(') {
         const close = v.pairs.get(k + 1)!;
         if (close !== k + 3) return v.manual(`${call.name}() yields one column`, call.at, close);
-        column = v.sig[k + 2].text;
+        column = v.sig[k + 2]!.text;
         end = close;
       }
     }
     column ??= call.name;
     alias ??= call.name;
-    const [a, b, step] = call.args.map((arg) => v.slice(arg.from, arg.to));
-    const exclusive = call.name === 'range';
-    if (call.args.length === 3 && word(v.sig[call.args[2].from]) === 'interval') {
-      const node = v.expr.nodeAt(call.args[2].from, 'interval');
-      const spec = node && node.to === call.args[2].to ? intervalSpec(v, node) : { manual: 'unreadable step' };
-      if ('manual' in spec) return v.manual(spec.manual, call.args[2].from, call.args[2].to);
-      if (spec.number !== 1 || !['day', 'week', 'month'].includes(spec.unit)) return v.manual('date_series steps by one day, week or month', call.args[2].from, call.args[2].to);
+    if ('unit' in step) {
       const filter = exclusive ? ` where value < ${b}` : '';
-      return { edits: [v.replace(call.at, end, `(select value as ${column} from json_each(date_series(${a}, ${b}, '${spec.unit}'))${filter}) as ${alias}`)], note: NOTES.series };
+      return { edits: [v.replace(call.at, end, `(select value as ${column} from json_each(date_series(${a}, ${b}, '${step.unit}'))${filter}) as ${alias}`)], note: NOTES.series };
     }
-    if (call.args.length < 1 || call.args.length > 3) return v.manual(`${call.name}() takes one to three arguments`, call.at, call.close);
-    const [start, stop] = call.args.length === 1 ? ['0', a] : [a, b];
-    const by = call.args.length === 3 ? step : '1';
-    if (!/^\d+$/.test(by) || by === '0') return v.manual(`${call.name}() with a step other than a positive integer`, call.at, call.close);
-    const within = exclusive ? '<' : '<=';
     const cte = v.freshName('series');
-    return { edits: [v.replace(call.at, end, `(with recursive ${cte}(${column}) as (select ${start} where ${start} ${within} ${stop} union all select ${column} + ${by} from ${cte} where ${column} + ${by} ${within} ${stop}) select ${column} from ${cte}) as ${alias}`)] };
+    return { edits: [v.replace(call.at, end, `(with recursive ${cte}(${column}) as (select ${start} where ${start} ${within} ${stop} union all select ${column} + ${step.by} from ${cte} where ${column} + ${step.by} ${within} ${stop}) select ${column} from ${cte}) as ${alias}`)] };
+  }
+  return null;
+};
+
+/**
+ * `list_transform(l, x -> f(x))` / `list_filter(l, x -> p(x))` → l's items,
+ * through f or kept where p holds, gathered back in list order; null for a
+ * null list, as DuckDB answered (json_each over null gives no items).
+ */
+const lambdas: Rule = (v) => {
+  for (const call of v.calls()) {
+    const kind = LAMBDA_CALLS[call.name];
+    if (!kind || call.args.length !== 2) continue;
+    const [list, fn] = call.args as [Range, Range];
+    const param = v.sig[fn.from]!;
+    if (param.kind !== 'word' || v.sig[fn.from + 1]?.text !== '->' || fn.from + 2 > fn.to) return v.manual(`${call.name}() takes a lambda of one item (x -> …)`, call.at, call.close);
+    const name = identifier(param);
+    const alias = v.freshName('element');
+    /** The body's reads of the item. */
+    const uses: number[] = [];
+    for (let j = fn.from + 2; j <= fn.to; j++) {
+      if (identifier(v.sig[j]) !== name || v.sig[j - 1]?.text === '.') continue;
+      // A lambda inside that takes the same name would have its own item replaced too.
+      if (v.sig[j + 1]?.text === '->') return v.manual(`a lambda inside ${call.name}() reuses its parameter ${param.text}`, call.at, call.close);
+      if (v.sig[j + 1]?.text === '.') return v.manual(`${call.name}() reads a field of its item`, j, j + 2);
+      if (v.sig[j + 1]?.text !== '(') uses.push(j);
+    }
+    const start = v.sig[fn.from + 2]!.start;
+    let body = v.text.slice(start, v.sig[fn.to]!.end);
+    for (const j of uses.reverse()) body = `${body.slice(0, v.sig[j]!.start - start)}${alias}.value${body.slice(v.sig[j]!.end - start)}`;
+    const items = v.slice(list.from, list.to);
+    const each = `from json_each(${items}) as ${alias}`;
+    const gathered = kind === 'transform'
+      ? `select json_group_array(${body} order by ${alias}.key) ${each}`
+      : `select json_group_array(${alias}.value order by ${alias}.key) ${each} where ${body}`;
+    return { edits: [v.replace(call.at, call.close, `case when ${term(v, list)} is null then null else (${gathered}) end`)] };
   }
   return null;
 };
@@ -542,7 +652,7 @@ const castOperator: Rule = (v) => {
   if (i < 0) return null;
   const node = v.expr.nodeByOperator(i);
   if (!node?.operand || !node.type) return v.manual('cannot tell what this cast applies to', i);
-  const target = castTarget(v, node.type.from, node.type.to);
+  const target = castTo(v, node.operand, node.type);
   if ('manual' in target) return v.manual(target.manual, node.from, node.to);
   return { edits: [v.replace(node.from, node.to, castText(v.slice(node.operand.from, node.operand.to), target.target))], note: target.target.kind === 'integer' ? NOTES.integer : undefined };
 };
@@ -553,7 +663,7 @@ const castFunction: Rule = (v) => {
     if (call.name !== 'cast') continue;
     const cast = castCallType(v, call);
     if (!cast) return v.manual('cannot read this cast', call.at, call.close);
-    const target = castTarget(v, cast.type.from, cast.type.to);
+    const target = castTo(v, cast.operand, cast.type);
     if ('manual' in target) return v.manual(target.manual, call.at, call.close);
     if (sqliteReadsAlike(target.name, target.target.kind)) continue;
     return { edits: [v.replace(call.at, call.close, castText(v.slice(cast.operand.from, cast.operand.to), target.target))], note: target.target.kind === 'integer' ? NOTES.integer : undefined };
@@ -614,7 +724,24 @@ const listLiterals: Rule = (v) => {
 const JSON_EACH_COLUMNS = new Set(['id', 'key', 'value', 'type', 'atom', 'parent', 'fullkey', 'path']);
 
 /**
- * `select …, unnest(list) [as] name, … from t` → `select …, unnested.value name, … from t, json_each(list) as unnested`.
+ * The select item an unnest is: itself, or the scalar calls it sits in
+ * (`to_date(unnest(l))`), each once per item as DuckDB ran it — never an
+ * aggregate's or a window's argument, where DuckDB refused an unnest.
+ */
+function unnestItem(v: View, call: Call): Range {
+  const item = { from: call.at, to: call.close };
+  for (let open = v.enclosing(item.from); open > 0 && v.clauseOf(item.from) === '' && v.sig[open]!.text === '('; open = v.enclosing(item.from)) {
+    const outer = v.call(open - 1);
+    if (!outer || outer.open !== open || AGGREGATES.has(outer.name) || ['over', 'filter'].includes(word(v.sig[outer.close + 1]))) break;
+    if (KEYWORDS.has(outer.name) && !['cast', 'left', 'right'].includes(outer.name)) break;
+    item.from = outer.at;
+    item.to = outer.close;
+  }
+  return item;
+}
+
+/**
+ * `select …, f(unnest(list)) [as] name, … from t` → `select …, f(unnested.value) name, … from t, json_each(list) as unnested`.
  * json_each brings columns of its own (`id`, `key`, `value`, …), so bare
  * references to those names are qualified with the one FROM table; beside
  * several tables that is a person's call.
@@ -625,21 +752,22 @@ const unnest: Rule = (v) => {
     if (call.name !== 'unnest') continue;
     const refuse = (why: string) => v.manual(`unnest ${why}; only one whole select item translates to a json_each join`, call.at, call.close);
     if (call.args.length !== 1) return refuse('with more than one argument');
-    const before = t[call.at - 1];
-    const itemStart = ['select', 'distinct', 'all'].includes(word(before)) || (before?.text === ',' && v.clauseOf(call.at) === 'select');
-    const after = t[call.close + 1];
+    const item = unnestItem(v, call);
+    const before = t[item.from - 1];
+    const itemStart = ['select', 'distinct', 'all'].includes(word(before)) || (before?.text === ',' && v.clauseOf(item.from) === 'select');
+    const after = t[item.to + 1];
     const itemEnd = !after || after.text === ',' || after.text === ')' || after.kind === 'quoted' || (after.kind === 'word' && (!KEYWORDS.has(word(after)) || ['as', 'from'].includes(word(after)) || FROM_END.has(word(after))));
-    if (!itemStart || !itemEnd || v.clauseOf(call.at) !== 'select') return refuse('inside an expression');
+    if (!itemStart || !itemEnd || v.clauseOf(item.from) !== 'select') return refuse('inside an expression');
     // This SELECT's extent: its list, its FROM list, and the clauses after.
     let listStart = 0;
-    for (let j = call.at - 1; j >= 0; j--) {
+    for (let j = item.from - 1; j >= 0; j--) {
       if (t[j].text === ')' || t[j].text === ']') { j = v.pairs.get(j)!; continue; }
       if (word(t[j]) === 'select') { listStart = j + 1; break; }
     }
     let from = -1;
     let fromEnd = -1;
     let end = t.length;
-    for (let j = call.close + 1; j < t.length; j++) {
+    for (let j = item.to + 1; j < t.length; j++) {
       if (t[j].text === '(' || t[j].text === '[') { j = v.pairs.get(j)!; continue; }
       const w = word(t[j]);
       if (t[j].text === ')' || t[j].text === ';' || ['union', 'intersect', 'except'].includes(w)) { end = j; break; }
@@ -744,15 +872,19 @@ const division: Rule = (v) => {
   return { edits: [{ start: v.sig[i].start, end: v.sig[i].start, text: `${spaced ? '' : ' '}* 1.0 ` }] };
 };
 
-/** `try_cast(x as <number>)` → the library's to_number, which is null where the text names no number. */
+/** The try_cast targets with a library reading that is null where DuckDB's cast failed. */
+const TRY_CASTS: ReadonlySet<Target['kind']> = new Set(['real', 'decimal', 'date', 'list']);
+
+/** `try_cast(x as T)` → the library's reading of T that is null where the text names none: to_number, try_to_date, try_to_list. */
 const tryCast: Rule = (v) => {
   for (const call of v.calls()) {
     if (call.name !== 'try_cast') continue;
     const cast = castCallType(v, call)!;
-    const target = castTarget(v, cast.type.from, cast.type.to);
+    const target = castTo(v, cast.operand, cast.type);
     if ('manual' in target) return v.manual(target.manual, call.at, call.close);
-    const number = `to_number(${v.slice(cast.operand.from, cast.operand.to)})`;
-    return { edits: [v.replace(call.at, call.close, target.target.kind === 'decimal' ? `round(${number}, ${target.target.scale})` : number)] };
+    const operand = v.slice(cast.operand.from, cast.operand.to);
+    const read = target.target.kind === 'date' ? `try_to_date(${operand})` : target.target.kind === 'list' ? `try_to_list(${operand})` : `to_number(${operand})`;
+    return { edits: [v.replace(call.at, call.close, target.target.kind === 'decimal' ? `round(${read}, ${target.target.scale})` : read)] };
   }
   return null;
 };
@@ -1033,7 +1165,7 @@ const exclude: Rule = (v, context) => {
   return null;
 };
 
-const DUCKDB_RULES: Rule[] = [viewer, renames, dateArithmetic, typedLiterals, series, dateAdd, intervals, castOperator, castFunction, tryCast, functions, duckFunctions, similarTo, distinctFrom, ilike, listLiterals, unnestFrom, unnest, qualify, compoundOrder, orderByOutput, exclude, integerDivision, division];
+const DUCKDB_RULES: Rule[] = [viewer, renames, dateArithmetic, typedLiterals, series, lambdas, dateAdd, intervals, castOperator, castFunction, tryCast, functions, duckFunctions, similarTo, distinctFrom, ilike, listLiterals, unnestFrom, unnest, qualify, compoundOrder, orderByOutput, exclude, integerDivision, division];
 const POSTGRES_RULES: Rule[] = [viewer];
 /** More rewrites than any real statement needs: a rule that failed to remove its match. */
 const MAX_REWRITES = 5000;
