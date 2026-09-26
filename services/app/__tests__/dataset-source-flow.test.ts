@@ -38,7 +38,7 @@ it('aggregates complete stored source inputs beyond both source page limits whil
  const rows=Array.from({length:10005},(_,i)=>({n:i+1}));
  const ds=await create(request('/api/artifacts',{method:'POST',token:token.token,json:{dataset:rows}}));
  expect(ds.status,await ds.clone().text()).toBe(201);const id=(await ds.json()).id;
- const markup=`<Helmet><Query name="upstream" source="ref:${id}">{\`select * from public.rows\`}</Query><Query name="filtered" source="ref:${id}">{\`select * from public.rows where n > 10000\`}</Query><Query name="stats">{\`select count(*) as n, median(n) as middle, sum(n) as total from upstream\`}</Query><Query name="tail">{\`select sum(n) as total from filtered\`}</Query></Helmet><DataTable data="$stats" />`;
+ const markup=`<Helmet><Import name="upstream_data" src="ref:${id}" /><Query name="upstream">{\`select * from upstream_data.rows\`}</Query><Import name="filtered_data" src="ref:${id}" /><Query name="filtered">{\`select * from filtered_data.rows where n > 10000\`}</Query><Query name="stats">{\`select count(*) as n, median(n) as middle, sum(n) as total from upstream\`}</Query><Query name="tail">{\`select sum(n) as total from filtered\`}</Query></Helmet><DataTable data="$stats" />`;
  const doc=await create(request('/api/artifacts',{method:'POST',token:token.token,json:{markup}}));
  expect(doc.status,await doc.clone().text()).toBe(201);const docId=(await doc.json()).id;
  const response=await query(request(`/a/${docId}/query`,{method:'POST',token:token.token,json:{}}),ctx(docId));
@@ -51,7 +51,7 @@ it('aggregates complete stored source inputs beyond both source page limits whil
 });
 
 it('does not return complete source inputs after document authorization is revoked', async () => {
- const source='<Helmet><Query name="upstream" source="ref:abc123">{`select * from public.rows`}</Query><Query name="stats">{`select median(n) as n from upstream`}</Query></Helmet>';
+ const source='<Helmet><Import name="upstream_data" src="ref:abc123" /><Query name="upstream">{`select * from upstream_data.rows`}</Query><Query name="stats">{`select median(n) as n from upstream`}</Query></Helmet>';
  const table={rows:[{n:1},{n:3}],columns:[{name:'n',type:'number' as const}]};
  await expect(runDocumentDataflow(source,async()=>table,{authorize:async()=>{throw new Error('revoked');}})).rejects.toThrow('revoked');
  let reads=0;
@@ -64,7 +64,7 @@ it('publishes a multi-schema dataset and queries it through source, including a 
  const token=await mintToken('owner');
  const ds=await create(request('/api/artifacts',{method:'POST',token:token.token,json:{dataset:{kind:'stored',defaultSchema:'sales',tables:[{schema:'sales',name:'orders',rows:[{id:1,total:12},{id:2,total:8}]},{schema:'support',name:'tickets',rows:[{order_id:1,subject:'Help'}]}]}}}));
  expect(ds.status,await ds.clone().text()).toBe(201);const id=(await ds.json()).id;
- const source=`<Helmet><Query name="orders" source="ref:${id}">{\`select * from orders\`}</Query><Query name="summary">{\`select sum(total) as total from orders\`}</Query></Helmet><DataTable data="$summary" />`;
+ const source=`<Helmet><Import name="orders_data" src="ref:${id}" /><Query name="orders">{\`select * from orders_data.orders\`}</Query><Query name="summary">{\`select sum(total) as total from orders\`}</Query></Helmet><DataTable data="$summary" />`;
  const doc=await create(request('/api/artifacts',{method:'POST',token:token.token,json:{markup:source}}));
  expect(doc.status,await doc.clone().text()).toBe(201);const docId=(await doc.json()).id;
  const result=await query(request(`/a/${docId}/query`,{method:'POST',token:token.token,json:{}}),ctx(docId));
@@ -79,7 +79,7 @@ it('mutates only the explicitly named stored table without changing public.rows'
  const token=await mintToken('owner');
  const ds=await create(request('/api/artifacts',{method:'POST',token:token.token,json:{access:'readwrite',dataset:{kind:'stored',tables:[{schema:'public',name:'rows',rows:[{n:1}]},{schema:'public',name:'other',rows:[{n:10}]}]}}}));
  expect(ds.status,await ds.clone().text()).toBe(201);const id=(await ds.json()).id;
- const doc=await create(request('/api/artifacts',{method:'POST',token:token.token,json:{markup:`<Helmet><Mutation name="edit" source="ref:${id}">{\`update public.other set n=11\`}</Mutation></Helmet><Button run="$edit">Edit</Button>`}}));
+ const doc=await create(request('/api/artifacts',{method:'POST',token:token.token,json:{markup:`<Helmet><Import name="edit_data" src="ref:${id}" /><Mutation name="edit">{\`update edit_data.other set n=11\`}</Mutation></Helmet><Button run="$edit">Edit</Button>`}}));
  expect(doc.status,await doc.clone().text()).toBe(201);const did=(await doc.json()).id;
  expect((await mutate(request(`/a/${did}/mutate`,{method:'POST',token:token.token,json:{mutation:'edit'}}),ctx(did))).status).toBe(200);
  const rows=await tableQuery(request(`/a/${id}/tables`,{method:'POST',json:{sql:'select * from public.rows'}}),ctx(id));expect((await rows.json()).rows).toEqual([{n:1}]);
@@ -96,7 +96,7 @@ it('queries a folder through the same source syntax, including pagination', asyn
  const folder = await publish({format:'folder', title:'Reports', visibility:'public'});
  await publish({markup:'<p>One</p>', title:'One', parent_id:folder, visibility:'public'});
  await publish({markup:'<p>Two</p>', title:'Two', parent_id:folder, visibility:'public'});
- const doc = await publish({markup:`<Helmet><Query name="children" source="ref:${folder}">{\`select title from public.rows\`}</Query></Helmet><DataTable data="$children" />`});
+ const doc = await publish({markup:`<Helmet><Import name="children_data" src="ref:${folder}" /><Query name="children">{\`select title from children_data.rows\`}</Query></Helmet><DataTable data="$children" />`});
  const response = await query(request(`/a/${doc}/query`, {method:'POST', token:token.token, json:{page:{name:'children',offset:1,limit:1,sort:{col:'title',dir:'asc'}}}}), ctx(doc));
  expect(response.status, await response.clone().text()).toBe(200);
  expect((await response.json()).tables.children.rows).toEqual([{title:'Two'}]);
@@ -120,7 +120,7 @@ it('publishes and reads native DuckDB source queries used by older artifacts',as
  const ds=await create(request('/api/artifacts',{method:'POST',token:token.token,json:{dataset:[{hours:1},{hours:2},{hours:3},{hours:10}]}}));
  expect(ds.status,await ds.clone().text()).toBe(201);const id=(await ds.json()).id;
  const sql="select median(hours::double) as median, strftime(strptime('2026-01','%Y-%m'),'%Y-%m') as month from (select * from public.rows)";
- const doc=await create(request('/api/artifacts',{method:'POST',token:token.token,json:{markup:`<Helmet><Query name="legacy" source="ref:${id}">{\`${sql}\`}</Query></Helmet><DataTable data="$legacy" />`}}));
+ const doc=await create(request('/api/artifacts',{method:'POST',token:token.token,json:{markup:`<Helmet><Import name="legacy_data" src="ref:${id}" /><Query name="legacy">{\`${sql}\`}</Query></Helmet><DataTable data="$legacy" />`}}));
  expect(doc.status,await doc.clone().text()).toBe(201);const did=(await doc.json()).id;
  const response=await query(request(`/a/${did}/query`,{method:'POST',token:token.token,json:{}}),ctx(did));
  expect(response.status,await response.clone().text()).toBe(200);

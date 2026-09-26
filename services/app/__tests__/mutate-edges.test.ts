@@ -33,8 +33,8 @@ const create = async (token: string, body: Record<string, unknown>) => {
 };
 const ROWS = [{ choice: 'ramen' }];
 const DOC = (ds: string) =>
-  `<Helmet><Query name="q" source="ref:${ds}">{\`select * from public.rows\`}</Query>`
-  + `<Mutation name="vote" source="ref:${ds}">{\`insert into public.rows (choice) values ('x')\`}</Mutation></Helmet>`
+  `<Helmet><Import name="q_data" src="ref:${ds}" /><Query name="q">{\`select * from q_data.rows\`}</Query>`
+  + `<Import name="vote_data" src="ref:${ds}" /><Mutation name="vote">{\`insert into vote_data.rows (choice) values ('x')\`}</Mutation></Helmet>`
   + '<div><Button run="$vote">Vote</Button><Question data="$q" viz={{"kind":"table"}} /></div>';
 
 beforeEach(async () => {

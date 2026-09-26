@@ -61,7 +61,7 @@ async function world() {
   const readOnly = await create(ta.token, { dataset: [{ code: 'USD', rate: 1 }], visibility: 'unlisted', title: 'rates' });
   const page = await create(ta.token, {
     visibility: 'unlisted', title: 'Splitwise tracker',
-    markup: `<Helmet><Query name="rows" source="ref:${written.id}">{\`select * from public.rows order by id\`}</Query><Query name="rates" source="ref:${readOnly.id}">{\`select * from public.rows\`}</Query><Mutation name="add" source="ref:${written.id}">{\`insert into public.rows (id, who, item, amount) select 2, $_me, 'Taxi', 12\`}</Mutation></Helmet><div>{$_me ? <Button run="$add">Add</Button> : <SignIn>Sign in</SignIn>}<DataTable data="$rows" /></div>`,
+    markup: `<Helmet><Import name="rows_data" src="ref:${written.id}" /><Query name="rows">{\`select * from rows_data.rows order by id\`}</Query><Import name="rates_data" src="ref:${readOnly.id}" /><Query name="rates">{\`select * from rates_data.rows\`}</Query><Import name="add_data" src="ref:${written.id}" /><Mutation name="add">{\`insert into add_data.rows (id, who, item, amount) select 2, $_me.id, 'Taxi', 12\`}</Mutation></Helmet><div>{$_me.id ? <Button run="$add">Add</Button> : <SignIn>Sign in</SignIn>}<DataTable data="$rows" /></div>`,
   });
   const cookie = await agentCookie([tb.id]);
   sessionUser.id = bob.id; sessionUser.email = bob.email;
@@ -102,7 +102,7 @@ describe('forking a page that writes a dataset', () => {
     expect(await setDatasetPolicy({ tokenId: w.ta.id, userId: w.owner.id }, tab.id, viewersWritePolicy(), 0)).toMatchObject({ revision: 1 });
     const page = await create(w.ta.token, {
       visibility: 'unlisted', title: 'People',
-      markup: `<Helmet><Query name="rows" source="ref:${tab.id}">{\`select * from public.rows\`}</Query><Mutation name="join" source="ref:${tab.id}">{\`insert into public.rows (id, person, item) select 2, $_me, 'Taxi'\`}</Mutation></Helmet><div><Button run="$join">Join</Button><DataTable data="$rows" /></div>`,
+      markup: `<Helmet><Import name="rows_data" src="ref:${tab.id}" /><Query name="rows">{\`select * from rows_data.rows\`}</Query><Import name="join_data" src="ref:${tab.id}" /><Mutation name="join">{\`insert into join_data.rows (id, person, item) select 2, $_me.id, 'Taxi'\`}</Mutation></Helmet><div><Button run="$join">Join</Button><DataTable data="$rows" /></div>`,
     });
     const res = await forkRoute(jreq(`/api/my/artifacts/${page.id}/fork`, 'POST', undefined, undefined, w.cookie), params(page.id));
     expect(res.status, await res.clone().text()).toBe(201);
@@ -142,10 +142,10 @@ async function twoWriters() {
   const rates = await create(ta.token, { dataset: [{ code: 'USD', rate: 1 }], visibility: 'unlisted', title: 'rates' });
   const page = await create(ta.token, {
     visibility: 'unlisted', title: 'Two writers',
-    markup: `<Helmet><Query name="rows" source="ref:${expenses.id}">{\`select * from public.rows\`}</Query>`
-      + `<Query name="rates" source="ref:${rates.id}">{\`select * from public.rows\`}</Query>`
-      + `<Mutation name="spend" source="ref:${expenses.id}">{\`insert into public.rows (id, item) select 2, 'Taxi'\`}</Mutation>`
-      + `<Mutation name="join" source="ref:${people.id}">{\`insert into public.rows (id, name) select 2, 'Grace'\`}</Mutation></Helmet>`
+    markup: `<Helmet><Import name="rows_data" src="ref:${expenses.id}" /><Query name="rows">{\`select * from rows_data.rows\`}</Query>`
+      + `<Import name="rates_data" src="ref:${rates.id}" /><Query name="rates">{\`select * from rates_data.rows\`}</Query>`
+      + `<Import name="spend_data" src="ref:${expenses.id}" /><Mutation name="spend">{\`insert into spend_data.rows (id, item) select 2, 'Taxi'\`}</Mutation>`
+      + `<Import name="join_data" src="ref:${people.id}" /><Mutation name="join">{\`insert into join_data.rows (id, name) select 2, 'Grace'\`}</Mutation></Helmet>`
       + '<div><Button run="$spend">Spend</Button><DataTable data="$rows" /></div>',
   });
   const cookie = await agentCookie([tb.id]);

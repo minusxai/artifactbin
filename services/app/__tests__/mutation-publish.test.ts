@@ -33,8 +33,8 @@ const dataset = async (token: string, extra: Record<string, unknown> = {}) => {
 };
 const POLL = (ds: string, sql = `insert into public.rows (choice, who) values ($choice, $who)`) =>
   '<Helmet><Value name="choice" type="string" /><Value name="who" type="string" />'
-  + `<Query name="tally" source="ref:${ds}">{\`select choice, count(*) votes from public.rows group by 1\`}</Query>`
-  + `<Mutation name="vote" source="ref:${ds}">{\`${sql}\`}</Mutation></Helmet>`
+  + `<Import name="tally_data" src="ref:${ds}" /><Query name="tally">{\`select choice, count(*) votes from tally_data.rows group by 1\`}</Query>`
+  + `<Import name="vote_data" src="ref:${ds}" /><Mutation name="vote">{\`${sql}\`}</Mutation></Helmet>`
   + '<div><input value="$who" /><Button run="$vote">Vote</Button><Question data="$tally" viz={{"kind":"table"}} /></div>';
 const details = async (res: Response) => {
   const body = (await res.json()) as { error: string; details: Array<string | { message: string }> };
@@ -71,7 +71,7 @@ describe('publishing a document with a <Mutation>', () => {
     const ds = await dataset(owner.token, { access: 'readwrite', visibility: 'public' });
     const other = await mintToken('other');
     // Reading it is fine (the link-readable rule) …
-    const reads = await create(other.token, { markup: `<Helmet><Query name="q" source="ref:${ds}">{\`select * from public.rows\`}</Query></Helmet><div><Question data="$q" viz={{"kind":"table"}} /></div>` });
+    const reads = await create(other.token, { markup: `<Helmet><Import name="q_data" src="ref:${ds}" /><Query name="q">{\`select * from q_data.rows\`}</Query></Helmet><div><Question data="$q" viz={{"kind":"table"}} /></div>` });
     expect(reads.status).toBe(201);
     // … writing it is not.
     const writes = await create(other.token, { markup: POLL(ds) });
@@ -124,8 +124,8 @@ describe('publishing a document with a <Mutation>', () => {
     tables: [{ table: { schema: 'public', name: 'rows' }, update_permissions: [{ role: 'viewer', permission: { columns: ['who'], filter: {}, check: {} } }] }],
   };
   const ROW_ACTION = (ds: string, sql: string) =>
-    `<Helmet><Query name="tasks" source="ref:${ds}">{\`select * from public.rows\`}</Query>`
-    + `<Mutation name="claim" source="ref:${ds}">{\`${sql}\`}</Mutation></Helmet>`
+    `<Helmet><Import name="tasks_data" src="ref:${ds}" /><Query name="tasks">{\`select * from tasks_data.rows\`}</Query>`
+    + `<Import name="claim_data" src="ref:${ds}" /><Mutation name="claim">{\`${sql}\`}</Mutation></Helmet>`
     + '<For each={$tasks} keyBy="choice"><Button run="$claim">Claim</Button></For>';
 
   it('refuses a mutation the dataset policy denies, naming the mutation and the reason', async () => {
@@ -163,8 +163,8 @@ describe('publishing a document with a <Mutation>', () => {
     const t = await mintToken('t');
     const ds = await dataset(t.token, { access: 'readwrite' });
     await setPolicy(t.token, ds, viewersWritePolicy());
-    const markup = `<Helmet><Query name="tasks" source="ref:${ds}">{\`select * from public.rows\`}</Query>`
-      + `<Mutation name="set_who" expectedAffected={1} source="ref:${ds}">{\`update public.rows set who = $_value where choice = $_row.choice and who is not distinct from $_row.who\`}</Mutation></Helmet>`
+    const markup = `<Helmet><Import name="tasks_data" src="ref:${ds}" /><Query name="tasks">{\`select * from tasks_data.rows\`}</Query>`
+      + `<Import name="set_who_data" src="ref:${ds}" /><Mutation name="set_who" expectedAffected={1}>{\`update set_who_data.rows set who = $_value where choice = $_row.choice and who is $_row.who\`}</Mutation></Helmet>`
       + '<DataTable data="$tasks" rowKey="choice"><Column col="choice"/><Column col="who"><Select value="$_row.who" options={["seed","alice"]} run="$set_who"/></Column></DataTable>';
     const res = await create(t.token, { markup });
     expect(res.status, await res.clone().text()).toBe(201);

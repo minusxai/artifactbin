@@ -375,8 +375,12 @@ export function compileDataflow(flow: Dataflow, ctx: CompileContext, body?: JsxN
     };
   }
 
-  const compiled: CompiledDataflow = { imports, values, queries: ordered, mutations };
-  if (body && !errors.length) errors.push(...checkBindings(compiled, body));
+  let compiled: CompiledDataflow = { imports, values, queries: ordered, mutations };
+  if (body && !errors.length) {
+    const bound = checkBindings(compiled, body);
+    errors.push(...bound.errors);
+    compiled = { ...compiled, mutations: compiled.mutations.map((m) => ({ ...m, ...bound.contexts[m.name] })) };
+  }
   return errors.length ? { ok: false, errors } : { ok: true, compiled };
 }
 
@@ -420,8 +424,17 @@ function typeFromDryRun(ctx: CompileContext, queries: CompiledQuery[], imports: 
  * `$_value`); every `args=` names real arguments; every `set=` sets declared
  * scalar Values to values of their type; row fields exist in their table.
  */
-export function checkBindings(flow: CompiledDataflow, body: JsxNode[]): ValidationError[] {
+export function checkBindings(flow: CompiledDataflow, body: JsxNode[]): { errors: ValidationError[]; contexts: Record<string, Pick<CompiledMutation, 'rowTypes' | 'valueType'>> } {
   const errors: ValidationError[] = [];
+  /** What each mutation's controls supply, typed where they sit; one mutation run from two places must agree. */
+  const contexts: Record<string, Pick<CompiledMutation, 'rowTypes' | 'valueType'>> = {};
+  const supply = (m: CompiledMutation, rowTypes: Record<string, ColumnType | null> | undefined, valueType: ColumnType | null | undefined, where: { tag: string; attr: string; start: number; end: number }) => {
+    const next = { ...(rowTypes ? { rowTypes } : {}), ...(valueType !== undefined ? { valueType } : {}) };
+    if (!Object.keys(next).length) return;
+    const prior = contexts[m.name];
+    if (prior && JSON.stringify(prior) !== JSON.stringify(next)) errors.push({ message: `<${where.tag} run="$${m.name}"> — ${m.name} runs from rows of different shapes; one mutation reads one kind of row`, ...where });
+    else contexts[m.name] = next;
+  };
   const columns: Record<string, DatasetColumn[]> = {};
   for (const q of flow.queries) columns[q.name] = q.columns.map((c) => ({ name: c.name, type: c.type ?? 'string' }));
   for (const v of flow.values) if (v.kind === 'table') columns[v.name] = v.columns ?? [];
@@ -434,14 +447,14 @@ export function checkBindings(flow: CompiledDataflow, body: JsxNode[]): Validati
     const q = flow.queries.find((x) => x.name === table);
     return q ? q.columns.find((c) => c.name === field)?.type ?? null : flow.values.find((v) => v.name === table)?.columns?.find((c) => c.name === field)?.type ?? null;
   };
-  const visit = (nodes: JsxNode[], row: string | undefined, cell: boolean) => {
+  const visit = (nodes: JsxNode[], row: string | undefined, cell: boolean, column: string | undefined) => {
     for (const n of nodes) {
       if (n.type !== 'element') continue;
-      let scope = row, editing = cell;
+      let scope = row, editing = cell, cellColumn = column;
       const attr = (name: string) => n.attributes.find((a) => a.name === name);
       if (n.tag === 'For') { const each = attr('each')?.value; scope = each && !each.static && each.reactive?.kind === 'signal' ? each.reactive.name : undefined; editing = false; }
       if (n.tag === 'DataTable') { const data = attr('data')?.value; scope = data?.static ? refName(data.json) ?? undefined : undefined; editing = false; }
-      if (n.tag === 'Column') editing = true;
+      if (n.tag === 'Column') { editing = true; const col = attr('col')?.value; cellColumn = col?.static && typeof col.json === 'string' ? col.json : undefined; }
       const set = attr(SET_ATTR), args = attr(ARGS_ATTR), run = attr('run');
       const runName = run?.value.static ? refName(run.value.json) : null;
       const where = (a: { start: number; end: number }, name: string) => ({ tag: n.tag, attr: name, start: a.start, end: a.end });
@@ -465,6 +478,9 @@ export function checkBindings(flow: CompiledDataflow, body: JsxNode[]): Validati
         if (m && map) {
           for (const key of Object.keys(map)) if (!m.args.some((a) => a.name === key)) errors.push({ message: `<${n.tag} run="$${m.name}" args={{"${key}": …}}> — ${m.name} takes no argument ${key}${m.args.length ? ` (it takes ${m.args.map((a) => a.name).join(', ')})` : ''}`, ...where(args!, ARGS_ATTR) });
           for (const a of m.args) if (!Object.hasOwn(map, a.name) && !scalars.has(a.name)) errors.push({ message: `<${n.tag} run="$${m.name}"> cannot fill $${a.name} — declare <Value name="${a.name}" …/> or pass it: args={{"${a.name}": …}}`, ...where(run!, 'run') });
+          const fields = m.reads.builtins.flatMap((b) => rowField(b) ?? []);
+          const edits = m.reads.builtins.includes('_value') && editing && n.tag !== 'Button';
+          supply(m, fields.length && scope ? Object.fromEntries(fields.map((f) => [f, typed(scope, f)])) : undefined, edits ? typed(scope, cellColumn ?? '') : undefined, { tag: n.tag, attr: 'run', start: run!.start, end: run!.end });
           for (const b of m.reads.builtins) {
             const field = typeof b === 'string' ? rowField(b) : null;
             if (field && !scope) errors.push({ message: `<${n.tag} run="$${m.name}"> — ${m.name} reads $${b}, the row its control sits in: put the control inside a <For> or a DataTable <Column>`, ...where(run!, 'run') });
@@ -474,11 +490,11 @@ export function checkBindings(flow: CompiledDataflow, body: JsxNode[]): Validati
           for (const source of Object.values(map)) if ('ref' in source && rowField(source.ref) && !scope) errors.push({ message: `<${n.tag} run="$${m.name}" args={…}> reads $${source.ref} outside a row — $_row.<column> belongs inside a <For> or a DataTable <Column>`, ...where(args!, ARGS_ATTR) });
         }
       } else if (args) errors.push({ message: `args= goes beside run="$mutation" — it fills that mutation's arguments`, ...where(args, ARGS_ATTR) });
-      visit(n.children, scope, editing);
+      visit(n.children, scope, editing, cellColumn);
     }
   };
-  visit(body, undefined, false);
-  return errors;
+  visit(body, undefined, false, undefined);
+  return { errors, contexts };
 }
 
 /** Compile a document with nothing but the loader in hand. */

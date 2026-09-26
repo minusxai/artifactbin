@@ -13,7 +13,7 @@ const columns: DatasetColumn[] = [
 const load: RefLoader = async (id) => (id === DS ? { id: DS, format: 'dataset', columns, query: (sql, params) => queryRows({ columns, rows: [] }, sql, params) } : null);
 const doc = (layers: string) =>
   '<Helmet>' +
-  `<Query name="points" source="ref:${DS}">{\`select city, lat, lng from public.rows\`}</Query>` +
+  `<Import name="points_data" src="ref:${DS}" /><Query name="points">{\`select city, lat, lng from points_data.rows\`}</Query>` +
   '</Helmet>' +
   `<DeckGL data="$points" layers={${layers}} />`;
 

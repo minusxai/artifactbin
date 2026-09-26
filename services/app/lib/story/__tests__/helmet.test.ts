@@ -201,7 +201,7 @@ describe('hoistHelmet', () => {
 // ── data declarations: <Value> and <Query> (lib/story/dataflow.ts) ──────────
 
 const VALUE = '<Value name="region" type="string" />';
-const QUERY = '<Query name="sales" source="ref:abc123">{`select * from public.rows where region = $region`}</Query>';
+const QUERY = '<Import name="sales_data" src="ref:abc123" /><Query name="sales">{`select * from sales_data.rows where region = $region`}</Query>';
 
 describe('validateHelmet — data declarations', () => {
   it('accepts <Value> and <Query> children, any number, with their attributes', () => {

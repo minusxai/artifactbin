@@ -10,7 +10,7 @@ import type { DataflowState } from '@/lib/story/dataflow';
 const SALES_SQL = 'select region, sum(revenue) as revenue from "public"."rows" where region = $region group by 1';
 const SOURCE =
   '<Helmet><title>Doc</title><Value name="region" type="string" default="west" />'
-  + `<Query name="sales" source="ref:ds1234">{\`${SALES_SQL}\`}</Query>`
+  + `<Import name="sales_data" src="ref:ds1234" /><Query name="sales">{\`${SALES_SQL}\`}</Query>`
   + '<Query name="costs">{`select 1 as spend`}</Query></Helmet>'
   + '<div className="p-4"><h1>Title</h1><Question data="$sales" /></div>';
 

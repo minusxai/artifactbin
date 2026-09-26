@@ -16,7 +16,7 @@ it('previews canonical published references, preserves them on save and respects
   const token=await cli.connect('mxmx_test_preview_references');
   await writeFile(join(cli.root,'sales.csv'),'amount\n42\n');
   const uploaded=await cli.invoke(['push','sales.csv']);const dataId=uploaded.operations[0].id;
-  await writeFile(join(cli.root,'report.jsx'),`<Helmet><Query name="sales" source="ref:${dataId}">{\`select sum(amount) as total from public.rows\`}</Query></Helmet><p id="text">Published</p>`);
+  await writeFile(join(cli.root,'report.jsx'),`<Helmet><Import name="sales_data" src="ref:${dataId}" /><Query name="sales">{\`select sum(amount) as total from sales_data.rows\`}</Query></Helmet><p id="text">Published</p>`);
   const pushed=await cli.invoke(['push','report.jsx']);
   const ids:Record<string,string>={...Object.fromEntries(pushed.operations.map((operation:{path:string;id:string})=>[operation.path,operation.id])),'sales.csv':dataId};
   expect(await readFile(join(cli.root,'report.jsx'),'utf8')).toContain(`ref:${ids['sales.csv']}`);

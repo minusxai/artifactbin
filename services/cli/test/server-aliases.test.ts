@@ -312,7 +312,7 @@ for(const args of [['query'],['log'],['comment'],['open'],['export','--format','
 test('forking an app at a verified alias asks the canonical origin for every step',async()=>{
  await withHome(async home=>{
   await saveConnection({server:CANONICAL,token:'test-token'},home,{});
-  const app=(dataset:string)=>`<Helmet><Mutation name="join" source="ref:${dataset}">{\`insert into public.rows (who) select $_me\`}</Mutation></Helmet><div><Button run="$join">Join</Button></div>`;
+  const app=(dataset:string)=>`<Helmet><Import name="join_data" src="ref:${dataset}" /><Mutation name="join">{\`insert into join_data.rows (who) select $_me.id\`}</Mutation></Helmet><div><Button run="$join">Join</Button></div>`;
   const page={id:'abc123',version:1,edit_id:'one',state:'a'.repeat(64),format:'markup',title:'Tracker',markup:app('ds0001')};
   const net=world({
    [`${CANONICAL}/api/server`]:{origin:CANONICAL,aliases:[ALIAS]},

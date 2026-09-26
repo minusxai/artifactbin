@@ -58,11 +58,11 @@ async function seedWebImage() {
 
 const DASHBOARD = (ds: string, secret: string, img: string) =>
   '<Helmet><Value name="region" type="string" /><Value name="note" type="string" />'
-  + `<Query name="regions" source="ref:${ds}">{\`select distinct region from public.rows order by 1\`}</Query>`
-  + `<Query name="sales" source="ref:${ds}">{\`select sum(revenue) as revenue from public.rows where $region is null or region = $region\`}</Query>`
-  + `<Query name="noted" source="ref:${ds}">{\`select count(*) as n from public.rows where $note is null or region = $note\`}</Query>`
-  + `<Query name="mine" source="ref:${ds}">{\`select sum(revenue) as revenue from public.rows where who = $_me and ($region is null or region = $region)\`}</Query>`
-  + `<Query name="secrets" source="ref:${secret}">{\`select * from public.rows\`}</Query>`
+  + `<Import name="regions_data" src="ref:${ds}" /><Query name="regions">{\`select distinct region from regions_data.rows order by 1\`}</Query>`
+  + `<Import name="sales_data" src="ref:${ds}" /><Query name="sales">{\`select sum(revenue) as revenue from sales_data.rows where $region is null or region = $region\`}</Query>`
+  + `<Import name="noted_data" src="ref:${ds}" /><Query name="noted">{\`select count(*) as n from noted_data.rows where $note is null or region = $note\`}</Query>`
+  + `<Import name="mine_data" src="ref:${ds}" /><Query name="mine">{\`select sum(revenue) as revenue from mine_data.rows where who = $_me.id and ($region is null or region = $region)\`}</Query>`
+  + `<Import name="secrets_data" src="ref:${secret}" /><Query name="secrets">{\`select * from secrets_data.rows\`}</Query>`
   + '</Helmet>'
   + '<h1>Sales</h1><p>Quarterly numbers.</p>'
   + '<Select label="Region" value="$region" options="$regions" placeholder="All regions" />'

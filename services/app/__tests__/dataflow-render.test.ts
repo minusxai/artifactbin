@@ -32,7 +32,7 @@ const island = (html: string): StoryIslandData => {
 
 const DOC = (ds: string) =>
   '<Helmet><Value name="region" type="string" />' +
-  `<Query name="sales" source="ref:${ds}">{\`select region, sum(revenue) revenue from public.rows where $region is null or region = $region group by 1 order by 1\`}</Query>` +
+  `<Import name="sales_data" src="ref:${ds}" /><Query name="sales">{\`select region, sum(revenue) revenue from sales_data.rows where $region is null or region = $region group by 1 order by 1\`}</Query>` +
   '</Helmet><div><select value="$region" options="$sales" /><Question data="$sales" viz={{"kind":"table"}} /></div>';
 
 describe('dataflowForRow', () => {
@@ -116,7 +116,7 @@ describe('the served document', () => {
     const user = await createUser({ email: 'mxmx_test_island_reader@example.com', name: 'Ada' });
     await claimToken(user.id, t.token);
     const cookie = await agentCookie([t.id]);
-    const doc = ((await (await create(t.token, { markup: '<p>Reading as <User userId="$_me" /></p>', visibility: 'public' })).json()) as { id: string }).id;
+    const doc = ((await (await create(t.token, { markup: '<p>Reading as <User userId="$_me.id" /></p>', visibility: 'public' })).json()) as { id: string }).id;
 
     const signedIn = island(await (await rawRoute(request(`/a/${doc}/raw`, { cookie }), params({ id: doc }))).text());
     expect(signedIn.viewer).toEqual({ id: user.id, card: { name: 'Ada', handle: null, image: null } });

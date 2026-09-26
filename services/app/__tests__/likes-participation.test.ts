@@ -36,10 +36,10 @@ it('does not provide an implicit likes query table or membership scope',async()=
 it('uses Sign in for guest identity actions and rejects forged likes in a request',async()=>{
  const a=await account('guest');
  const ds=await publish(a.token.token,{dataset:[{who:null}],columns:[{name:'who',type:'user'}],access:'readwrite'});
- const id=await publish(a.token.token,{visibility:'public',markup:`<Helmet><Mutation name="add" source="ref:${ds}">{\`insert into public.rows values ($_me)\`}</Mutation></Helmet><Button run="$add">Add</Button>`});
+ const id=await publish(a.token.token,{visibility:'public',markup:`<Helmet><Import name="add_data" src="ref:${ds}" /><Mutation name="add">{\`insert into add_data.rows values ($_me.id)\`}</Mutation></Helmet><Button run="$add">Add</Button>`});
  const state=(await dataflowForRow((await getArtifactById(id))!))!.state;
  expect(state.mutationAccess?.add).toBe('sign_in_required');
- const response=await mutate(request(`/a/${id}/mutate`,{method:'POST',json:{mutation:'add',likes:[a.user.id],values:{_me:a.user.id}}}),ctx(id));
+ const response=await mutate(request(`/a/${id}/mutate`,{method:'POST',json:{mutation:'add',likes:[a.user.id],args:{_me:a.user.id}}}),ctx(id));
  expect(response.status).toBe(403);
  expect(await loadDatasetRows((await getArtifactById(ds))!)).toEqual([{who:null}]);
 });

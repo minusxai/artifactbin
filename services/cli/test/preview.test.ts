@@ -12,7 +12,7 @@ test('file session HTTP saves reject stale revisions, preserve published metadat
  const root=await mkdtemp(join(tmpdir(),'preview-http-'));
  let session:Awaited<ReturnType<typeof startPreview>>|undefined;
  try{
-  const source='---\nid: abc123\nhead_version: 3\n---\n<Helmet><Value name="minimum" type="number" default={0} /><Query name="sales" source="ref:data01">{`select sum(amount) as total from public.rows where amount > $minimum`}</Query></Helmet><a href="/a/app001">Appendix</a><p id="text">Draft</p>';
+  const source='---\nid: abc123\nhead_version: 3\n---\n<Helmet><Value name="minimum" type="number" default={0} /><Import name="sales_data" src="ref:data01" /><Query name="sales">{`select sum(amount) as total from sales_data.rows where amount > $minimum`}</Query></Helmet><a href="/a/app001">Appendix</a><p id="text">Draft</p>';
   await writeFile(join(root,'appendix.jsx'),'<p>Appendix</p>');await writeFile(join(root,'report.jsx'),source); await writeFile(join(root,'sales.csv'),'amount\n10\n20\n');
   session=await startPreview({root,files:['report.jsx'],localFiles:{data01:'sales.csv',app001:'appendix.jsx'},home:join(root,'home')});
   const request=(path:string,body?:unknown)=>fetch(session!.url+path,{method:body?'POST':'GET',headers:{'content-type':'application/json',origin:session!.url},...(body?{body:JSON.stringify(body)}:{})});
@@ -56,7 +56,7 @@ test('preview dispatch selects a foreground file session without a server connec
 test('capture sessions run local queries but refuse file saves and comments',async()=>{
  const root=await mkdtemp(join(tmpdir(),'capture-http-'));let session:Awaited<ReturnType<typeof startPreview>>|undefined;
  try{
-  const source='<Helmet><Query name="bad" source="ref:data01">{`select missing from public.rows`}</Query></Helmet><p>Capture</p>';
+  const source='<Helmet><Import name="bad_data" src="ref:data01" /><Query name="bad">{`select missing from bad_data.rows`}</Query></Helmet><p>Capture</p>';
   await writeFile(join(root,'report.jsx'),source);await writeFile(join(root,'rows.csv'),'amount\n10\n');
   session=await startPreview({root,home:root,files:['report.jsx'],localFiles:{data01:'rows.csv'},capture:true});
   const post=(path:string,body:unknown)=>fetch(session!.url+path,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)});
@@ -73,7 +73,7 @@ test('preview resolves image refs only from selected dataset inputs and refreshe
  const root=await mkdtemp(join(tmpdir(),'preview-row-images-'));let session:Awaited<ReturnType<typeof startPreview>>|undefined;
  const fetched:string[]=[];let cover='ref:red123';
  try{
-  await writeFile(join(root,'report.jsx'),'<Helmet><Query name="books" source="ref:data01">{`select * from public.rows`}</Query></Helmet><For each={$books} keyBy="id"><img src="$_row.cover_ref" alt="$_row.title" loading="lazy"/></For>');
+  await writeFile(join(root,'report.jsx'),'<Helmet><Import name="books_data" src="ref:data01" /><Query name="books">{`select * from books_data.rows`}</Query></Helmet><For each={$books} keyBy="id"><img src="$_row.cover_ref" alt="$_row.title" loading="lazy"/></For>');
   session=await startPreview({root,home:root,files:['report.jsx'],capture:true,
    dataset:async()=>({columns:[{name:'id',type:'string'},{name:'title',type:'string'},{name:'cover_ref',type:'string'}],rows:[{id:'a',title:'Book',cover_ref:cover}]}),
    asset:async id=>{fetched.push(id);return {bytes:Buffer.from('image bytes'),contentType:id==='wrong1'?'application/json':'image/png'};}});
@@ -99,7 +99,7 @@ test('a dataset tracked as typed YAML resolves through its source file, not the 
  const root=await mkdtemp(join(tmpdir(),'preview-yaml-dataset-'));let session:Awaited<ReturnType<typeof startPreview>>|undefined;
  const remote:string[]=[];
  try{
-  await writeFile(join(root,'report.jsx'),'<Helmet><Query name="stored" source="ref:data01">{`select sum(amount) as total from public.rows`}</Query><Query name="connected" source="ref:conn01">{`select count(*) as n from public.rows`}</Query></Helmet><p>Report</p>');
+  await writeFile(join(root,'report.jsx'),'<Helmet><Import name="stored_data" src="ref:data01" /><Query name="stored">{`select sum(amount) as total from stored_data.rows`}</Query><Import name="connected_data" src="ref:conn01" /><Query name="connected">{`select count(*) as n from connected_data.rows`}</Query></Helmet><p>Report</p>');
   await writeFile(join(root,'feedback.yaml'),'shares:\n  - email: reviewer@example.com\n    role: editor\ntype: dataset\nid: data01\nhead_version: 1\nsource: feedback.json\n');
   await writeFile(join(root,'feedback.json'),JSON.stringify([{amount:10},{amount:32}]));
   await writeFile(join(root,'orders.yaml'),'type: dataset\nid: conn01\nhead_version: 1\nsource: orders.jsx\n');
@@ -117,7 +117,7 @@ test('a dataset tracked as typed YAML resolves through its source file, not the 
 test('an unreadable local dataset names its file instead of leaking a parser error',async()=>{
  const root=await mkdtemp(join(tmpdir(),'preview-bad-dataset-'));let session:Awaited<ReturnType<typeof startPreview>>|undefined;
  try{
-  await writeFile(join(root,'report.jsx'),'<Helmet><Query name="rows" source="ref:data01">{`select * from public.rows`}</Query></Helmet><p>Report</p>');
+  await writeFile(join(root,'report.jsx'),'<Helmet><Import name="rows_data" src="ref:data01" /><Query name="rows">{`select * from rows_data.rows`}</Query></Helmet><p>Report</p>');
   await writeFile(join(root,'rows.json'),'shares:\n  - not json\n');
   session=await startPreview({root,home:root,files:['report.jsx'],localFiles:{data01:'rows.json'},capture:true});
   const response=await fetch(session.url+'/query',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({file:'report.jsx',values:{}})});

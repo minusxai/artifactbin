@@ -87,6 +87,13 @@ export interface CompiledMutation {
    */
   args: Array<{ name: string; type: ColumnType | null }>;
   reads: CompiledReads;
+  /**
+   * What its controls supply, typed by where they sit: each `$_row.<column>`
+   * by the row's table, `$_value` by the column an editing cell edits.
+   * Absent when the statement reads neither.
+   */
+  rowTypes?: Record<string, ColumnType | null>;
+  valueType?: ColumnType | null;
   expectedAffected?: number;
   /** Page values put back to their defaults after a successful write. */
   reset?: string[];

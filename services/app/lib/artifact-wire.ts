@@ -36,8 +36,9 @@ import { isMutationRefused, mutateDataset } from '@/lib/story/dataset-mutate';
 import type { SourceRepair } from '@/lib/jsx/repair';
 import type { Scalar } from '@/lib/story/dataflow';
 import { parseMutationRequest } from '@/lib/story/mutation-request';
-import { mutationTargetRef } from '@/lib/story/compiled-flow';
-import { rowField } from '@/lib/story/builtins';
+import { bindParams, bindTypes, mutationTargetRef } from '@/lib/story/compiled-flow';
+import { platformValues, rowField } from '@/lib/story/builtins';
+import { rewriteBuiltinFields } from '@/lib/story/compile-dataflow';
 import { datasetCreateFields } from '@/lib/story/dataset-usage';
 import { imageRawUrl, pdfRawUrl } from '@/lib/story/ref-data';
 import { ALLOW_PUBLIC_VISIBILITY } from '@/lib/config';
@@ -778,7 +779,7 @@ async function declaredDatasetMutations(row: ArtifactRow): Promise<Array<{ name:
 async function respondToDeclaredMutation(actor: TokenActor, id: string, body: Record<string, unknown>, receipt?: MutationReceipt): Promise<Response> {
   const row = await getArtifactById(id);
   if (!row || row.deleted_at || !(row.token_id === actor.tokenId || (await canReadArtifact(row, actor.userId ? { userId: actor.userId, email: null } : null)))) return json({ error: 'not_found' }, 404);
-  const { name, ...rest } = body;
+  const { name, id: _id, ...rest } = body;
   const parsed = parseMutationRequest({ ...rest, mutation: name });
   if (parsed instanceof Response) return json(await parsed.json(), 400);
   const result = await runDocumentMutation(row, parsed, { userId: actor.userId, tokenId: actor.tokenId }, receipt);
@@ -847,7 +848,10 @@ export async function respondToMutate(
     }
   }
 
-  const result = await mutateDataset(dataset, actor, body.sql, values,{receipt,expectedState:expected?.expectedState});
+  // The built-ins read as they do in a document: `$_me.id` is the caller, `$_now` the moment, `$_tz` UTC.
+  const { sql, fields } = rewriteBuiltinFields(body.sql);
+  const builtins = bindParams([...fields.values(), '_now', '_tz'], platformValues({ userId: actor.userId ?? null, now: new Date().toISOString(), tz: 'UTC' }));
+  const result = await mutateDataset(dataset, actor, sql, { ...values, ...builtins }, { receipt, expectedState: expected?.expectedState, paramTypes: bindTypes([...fields.values(), '_now', '_tz'], {}) });
   if (isMutationRefused(result)) {
     if(result.reason==='row_changed')return json({error:'row_changed',details:[result.detail]},409);
     if (result.reason === 'dataset_read_only' || result.reason === 'policy_denied') return json({error:result.reason,details:[result.detail]},403);

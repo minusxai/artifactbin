@@ -152,7 +152,7 @@ describe('the children table', () => {
     const doc = await create(o.token, {
       title: 'Index',
       visibility: 'public',
-      markup: `<Helmet><Query name="kids" source="ref:${f.id}">{\`select id, title from public.rows order by title\`}</Query></Helmet>
+      markup: `<Helmet><Import name="kids_data" src="ref:${f.id}" /><Query name="kids">{\`select id, title from kids_data.rows order by title\`}</Query></Helmet>
 <Files data="$kids" />`,
     });
     const q = JSON.stringify({ values: {}, only: ['kids'] });

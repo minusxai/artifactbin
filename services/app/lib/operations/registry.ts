@@ -483,8 +483,9 @@ const mutateDatasetOp: Operation = {
   input: {
     id: z.string(),
     sql: z.string().optional().describe('one INSERT/UPDATE/DELETE naming a catalog table such as public.rows; bind scalars as $name, never interpolate'),
-    name: z.string().optional().describe('instead of sql: a mutation the document declares by name; the id is then the document, and values bind its $params'),
-    values: z.record(z.string(), z.union([z.string(), z.number(), z.boolean(), z.null()])).optional(),
+    name: z.string().optional().describe('instead of sql: a mutation the document declares by name; the id is then the document, and args fill its signature'),
+    values: z.record(z.string(), z.union([z.string(), z.number(), z.boolean(), z.null()])).optional().describe('with sql: the $params it binds'),
+    args: z.record(z.string(), z.union([z.string(), z.number(), z.boolean(), z.null()])).optional().describe('with name: the declared mutation\'s arguments'),
   },
   annotations: {},
   example: { input: { id: 'aB3xK9', sql: 'insert into public.rows (m, v) values ($m, $v)', values: { m: 'Sep', v: 12 } } },

@@ -126,7 +126,7 @@ describe('app-owned source identity migration contract',()=>{
   });
 
   it('prepublishes DB-backed refs outside the transaction instead of deadlocking PGLite',async()=>{
-    await artifact('aaaaaa','<Helmet><Query name="q">{`select * from ref_missing`}</Query></Helmet><Question data="$q" />');
+    await artifact('aaaaaa','<Helmet><Import name="q_data" src="ref:missing" /><Query name="q">{`select * from q_data.rows`}</Query></Helmet><Question data="$q" />');
     const db=await harness.db();
     const migration=runNodeIdentityMigrationBatch(db,{batchSize:1});
     await expect(Promise.race([
