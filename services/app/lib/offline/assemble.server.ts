@@ -24,7 +24,7 @@ import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { listAnnotationsFor, type AnnotationWire } from '@/lib/annotations';
 import { archivedReadOnly, archivedVersionForActor, servedRow } from '@/lib/archived-version';
-import { canReadArtifact, dataflowForRow, getArtifactById, holdableImports, holdImport, refDataForRow, viewerIdentityFor, type ArtifactRow, type RoleActor, type TokenActor } from '@/lib/artifacts';
+import { canReadArtifact, dataflowForRow, getArtifactById, holdableImports, holdImport, nameablePeople, refDataForRow, viewerIdentityFor, type ArtifactRow, type RoleActor, type TokenActor } from '@/lib/artifacts';
 import type { ImportTables } from '@/lib/story/compiled-flow';
 import { placeDataflow } from '@/lib/story/placement';
 import { resolveStoredStoryDesign } from '@/lib/data/story/story-themes';
@@ -274,7 +274,14 @@ export async function assembleArtifactFile(input: AssembleArtifactFileInput): Pr
   // The file carries its engine's wasm inside its code (lib/offline/sqlite-wasm), never a server address.
   delete island.sqliteWasm;
 
-  const state = ran?.state ?? EMPTY_STATE;
+  /*
+   * WHO THE FILE MAY NAME. Its own runs show people no server run named, and
+   * it can ask no door later, so it carries every card a reader's page could
+   * ask its door for (lib/artifacts nameablePeople, for the downloader); the
+   * run's own cards stand beside them.
+   */
+  const named = Object.keys(held).length ? await nameablePeople(row, actor) : {};
+  const state = ran ? { ...ran.state, ...(Object.keys(named).length ? { people: { ...named, ...ran.state.people } } : {}) } : EMPTY_STATE;
   const placement = ran ? placeDataflow(ran.flow, Object.keys(held)) : null;
   const serverQueries = new Set(Object.entries(placement?.queries ?? {}).filter(([, where]) => where === 'server').map(([name]) => name));
   const { variants, frozen } = ran
