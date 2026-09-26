@@ -21,8 +21,9 @@ function isPagedTail(sql: string, at: number): boolean {
 
 /**
  * The author's SQL back out of a pagedQuery wrapper (the count and the
- * sort-retry need it). Exported for its own regression test
- * (__tests__/unwrap-paged.test.ts) — nothing else calls it from outside.
+ * sort-retry need it); the DuckDB engine calls it, and its regression test
+ * is __tests__/unwrap-paged.test.ts. (The SQLite engine keeps the statement
+ * text SQLite admitted, so it never needs to take a wrapper apart.)
  *
  * A SCAN, NOT A PATTERN. This was one anchored regex whose `[\s\S]*` and
  * `[\s\S]*?` sat either side of a repeated literal, so a chain of near-misses

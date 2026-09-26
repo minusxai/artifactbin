@@ -12,6 +12,7 @@ export interface ColumnRead {
   /** The attached schema: an `<Import>` name, `main` for document tables, or `_` built-ins. */
   schema: string;
   table: string;
+  /** Empty when the statement uses the table without reading a column (`count(*)`, `exists (select 1 …)`). */
   column: string;
 }
 
