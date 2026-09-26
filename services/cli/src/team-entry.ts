@@ -36,8 +36,8 @@ async function listen(settings:TeamSettings,runtime:string,data:string,phase:{st
   try{
    await new Promise<void>((resolve,reject)=>{server.once('error',reject);server.listen(settings.port,settings.host,()=>{server.off('error',reject);resolve();});});
    phase.started=true;
-   process.stdout.write(`Team server listening on ${settings.host}:${settings.port}; public URL ${settings.origin}\n`);
-   for(const line of serverInstructions(settings))process.stdout.write(line+'\n');
+   // One write: a reader that sees the listening line sees what to hand teammates with it.
+   process.stdout.write([`Team server listening on ${settings.host}:${settings.port}; public URL ${settings.origin}`,...serverInstructions(settings)].join('\n')+'\n');
    await stopped;
   }finally{
    // Terminal signals can reach both supervisor and child; repeated delivery only resolves stop again.
