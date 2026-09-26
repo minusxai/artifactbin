@@ -27,7 +27,7 @@
  * first two would make a missing parameter indistinguishable from a refused
  * one at every call site.
  */
-import { getVersionFor, listVersionsFor, versionForCapture, type ArtifactRow } from '@/lib/artifacts';
+import { getVersionFor, listVersionsFor, versionForCapture, type ArtifactRow, type TokenActor } from '@/lib/artifacts';
 import { actorForArtifacts, requestOrSessionActor } from '@/lib/viewer';
 
 /** The parameter's name, in one place: the three doors and the export URL. */
@@ -112,7 +112,21 @@ export async function archivedVersionFor(
     const shot = await versionForCapture(row, asked);
     return shot ? archived(asked, head, { source: shot.source ?? '', meta: shot.meta, title: shot.title, description: shot.description }) : 'not_found';
   }
-  const actor = actorForArtifacts(await requestOrSessionActor(request));
+  return archivedVersionForActor(actorForArtifacts(await requestOrSessionActor(request)), row, asked);
+}
+
+/**
+ * The same decision for a caller that already holds the actor (the offline
+ * download, lib/offline/assemble.server): version `asked` of a markup row, for
+ * whoever may read its history, else `'not_found'`.
+ */
+export async function archivedVersionForActor(
+  actor: TokenActor | null,
+  row: ArtifactRow,
+  asked: number,
+): Promise<ArchivedRender | 'not_found'> {
+  if (row.format !== 'markup' || !Number.isInteger(asked) || asked < 1) return 'not_found';
+  const head = row.version;
   if (!actor) return 'not_found';
   /*
    * THE HEAD IS USUALLY NOT IN THE ARCHIVE. Save-less editing bumps `version`
