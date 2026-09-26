@@ -145,6 +145,21 @@ describe('writes the page can compute', () => {
 });
 
 describe('$_now in the page', () => {
+  it('never ticks in a store nobody started (a server render), nor in one with no page engine', async () => {
+    vi.useFakeTimers({ toFake: ['setInterval'] });
+    const run = vi.fn(async () => ({ tables: {}, errors: {} }));
+    const unstarted = setup();
+    open.push(unstarted.store);
+    const serverOnly = createDataflowStore({ flow: FLOW, hold: ['sales'] }, { transport: { run, page: vi.fn() }, debounceMs: 0 });
+    open.push(serverOnly);
+    serverOnly.start();
+    await vi.waitFor(() => expect(run).toHaveBeenCalledTimes(1));
+    vi.advanceTimersByTime(5 * 60_000);
+    expect(vi.getTimerCount()).toBe(0);
+    expect(unstarted.runs).toEqual([]);
+    expect(run).toHaveBeenCalledTimes(1);
+  });
+
   it('advances once a minute, re-running only what reads it', async () => {
     vi.useFakeTimers({ toFake: ['setInterval', 'Date'] });
     vi.setSystemTime(new Date('2026-09-30T10:00:00.000Z'));

@@ -83,7 +83,7 @@ export function InlineStoryRuntime(props: InlineStoryRuntimeProps): ReactNode {
     const transport = latest.current.transportFactory?.() ?? latest.current.transport;
     const { writesUnavailable, frozenValues } = latest.current;
     const data = latest.current.data;
-    return { transport, store:createDataflowStore(data.dataflow ?? {flow:EMPTY_COMPILED_DATAFLOW}, {transport, ...(writesUnavailable ? {writesUnavailable} : {}), ...(frozenValues ? {frozenValues} : {}), page: pageEngineFor(data, transport, latest.current.sqliteWasm ?? data.sqliteWasm)}) };
+    return { transport, store:createDataflowStore(data.dataflow ?? {flow:EMPTY_COMPILED_DATAFLOW}, {transport, ...(writesUnavailable ? {writesUnavailable} : {}), ...(frozenValues ? {frozenValues} : {}), page: pageEngineFor(data, transport, data.viewer?.id ?? null, latest.current.sqliteWasm ?? data.sqliteWasm)}) };
   };
   const [lifetime, setLifetime] = useState(createLifetime);
   const { store } = lifetime;

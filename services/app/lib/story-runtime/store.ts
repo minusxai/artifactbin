@@ -387,9 +387,14 @@ export function createDataflowStore(
     }, (error: unknown) => { optimistic?.settle(false); throw error; });
   };
 
-  /** Advance `$_now` once a minute, while anything reads it. */
+  let started = false;
+  /**
+   * Advance `$_now` once a minute while anything reads it — in a page that
+   * runs queries itself, once it has started. Never on a server render (which
+   * builds a store and never starts it) and never merely to poll the server.
+   */
   const tickWhileRead = () => {
-    const reads = core.graph.queries.some((q) => q.reads.sources.includes(NOW_SOURCE));
+    const reads = !!page && started && !core.disposed && core.graph.queries.some((q) => q.reads.sources.includes(NOW_SOURCE));
     if (reads && !clock) {
       clock = setInterval(() => {
         now = new Date().toISOString();
@@ -445,8 +450,6 @@ export function createDataflowStore(
     const access = core.data.mutationAccess ?? {};
     return Object.hasOwn(access, name) ? access[name]! : ACCESS_PENDING;
   };
-
-  tickWhileRead();
 
   const mutate: DataflowStore['mutate'] = async (name, overrides, row) => {
     if (!core.graph.mutations.some((m) => m.name === name)) throw new Error(`this document declares no <Mutation name="${name}">`);
@@ -519,7 +522,7 @@ export function createDataflowStore(
      * Not the debounce: that exists to batch a reader changing their mind, and
      * a first load has nothing to batch.
      */
-    start: () => { flush(); prepare(); },
+    start: () => { started = true; flush(); prepare(); tickWhileRead(); },
     subscribe: (listener) => { if (!core.disposed) listeners.add(listener); return () => { listeners.delete(listener); }; },
     setTransport: (t) => {
       if (core.disposed) return;
