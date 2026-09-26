@@ -124,10 +124,10 @@ async function build() {
        */
       b.onResolve({ filter: /\?worker$/ }, (args) => ({ path: args.path, namespace: 'offline-worker' }));
       b.onLoad({ filter: /.*/, namespace: 'offline-worker' }, () => ({ loader: 'js', contents: 'export default class OfflineWorker { constructor() { throw new Error("Workers are unavailable in an offline file."); } }' }));
-      b.onResolve({ filter: /\.css\?inline$/ }, async (args) => {
-        const resolved = await b.resolve(args.path.replace(/\?inline$/, ''), { resolveDir: args.resolveDir, kind: args.kind });
-        return { path: resolved.path, namespace: 'offline-inline-css' };
-      });
+      b.onResolve({ filter: /\.css\?inline$/ }, (args) => ({
+        path: createRequire(path.join(args.resolveDir, 'index.js')).resolve(args.path.replace(/\?inline$/, '')),
+        namespace: 'offline-inline-css',
+      }));
       b.onLoad({ filter: /.*/, namespace: 'offline-inline-css' }, (args) => ({ loader: 'text', contents: fs.readFileSync(args.path, 'utf8') }));
       b.onResolve({ filter: /\.css$/ }, (args) => (/monaco-editor/.test(args.resolveDir) || /monaco-editor/.test(args.path) ? { path: args.path, namespace: 'offline-empty-css' } : undefined));
       b.onLoad({ filter: /.*/, namespace: 'offline-empty-css' }, () => ({ loader: 'js', contents: '' }));
