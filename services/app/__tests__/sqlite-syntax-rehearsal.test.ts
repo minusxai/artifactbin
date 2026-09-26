@@ -11,7 +11,7 @@ import { dataflowForRow, getArtifactById } from '@/lib/artifacts';
 import { runSqliteSyntaxMigrationBatch, type SqliteSyntaxMigrationOutcome } from '@/lib/sqlite-syntax-migration';
 import { mintToken } from '@/lib/tokens';
 import { recordResults, type RecordedResult } from '../../../scripts/migrate/sqlite/record-results';
-import { compareResults, formatComparison } from '../../../scripts/migrate/sqlite/compare-results';
+import { compareResults, formatComparison, regressions } from '../../../scripts/migrate/sqlite/compare-results';
 import { conflictReport, runMigration } from '../../../scripts/migrate/sqlite/run-migration';
 
 const harness = useAppHarness();
@@ -75,6 +75,14 @@ describe('compareResults', () => {
     expect(documents[0].queries.find((q) => q.query === 'today')!.clock).toBe(true);
     expect(documents[1].queries.map((q) => [q.query, q.status, q.detail])).toEqual([['added', 'only after', undefined], ['renamed', 'differs', 'columns ["a"] → ["b"]']]);
     expect(totals).toEqual({ documents: 3, clock: 1, identical: 1, differs: 3, 'failed before': 1, 'failed after': 1, 'failed both': 0, 'only before': 0, 'only after': 1 });
+  });
+
+  it('counts as changed by the migration every document it did not leave as a conflict', () => {
+    const comparison = compareResults(before, after, report);
+    expect(regressions(comparison).map((d) => d.document)).toEqual(['aaaaaa', 'bbbbbb']);
+    expect(regressions(compareResults(before, after, [{ artifactId: 'aaaaaa', outcome: 'conflict' }, { artifactId: 'bbbbbb', outcome: 'conflict' }])).map((d) => d.document)).toEqual([]);
+    const cleared = compareResults(before.filter((r) => r.document === 'aaaaaa' && 'query' in r && r.query === 'same'), after.filter((r) => r.document === 'aaaaaa' && 'query' in r && r.query === 'same'), report);
+    expect(regressions(cleared)).toEqual([]);
   });
 
   it('prints only what is not identical, then totals', () => {
