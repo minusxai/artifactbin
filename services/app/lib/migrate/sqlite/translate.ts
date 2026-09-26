@@ -19,7 +19,7 @@
  */
 import { MUTATION_ONLY_FUNCTIONS } from '@artifactbin/contracts';
 import { normalizeTimestamp } from '@artifactbin/utils/shape';
-import { ExpressionReader, KEYWORDS, bracketPairs, type ExprNode } from './expression';
+import { ExpressionReader, KEYWORDS, bracketPairs, caseMatch, type ExprNode } from './expression';
 import { SqlTokenError, identifier, significant, tokenizeSql, word, type SqlToken } from './tokens';
 
 export interface TranslateContext {
@@ -35,6 +35,8 @@ export interface TranslateContext {
   dataset?: string;
   /** Legacy table → its new qualified name, by lower-cased name: `{ref_abc123: 'bookings.rows'}`. */
   tables?: Record<string, string>;
+  /** A table's columns, by its name as the statement now reads it (`bookings.rows`); null when unknown. */
+  columns?: (table: string) => readonly string[] | null;
 }
 
 /** A construct no rule translates, with its offsets in the input SQL. */
@@ -71,15 +73,22 @@ const PART_NAMES = new Set(['year', 'quarter', 'month', 'week', 'day', 'hour', '
 /** The units date_add and date_diff take. */
 const UNITS = new Set(['day', 'week', 'month', 'year', 'hour', 'minute']);
 const DAY_OF_WEEK = new Set(['dow', 'dayofweek']);
+/** ISO day of the week, Monday 1 … Sunday 7, from the library's Sunday-0 dayofweek. */
+const isoDayOfWeek = (value: string) => `((dayofweek(${value}) + 6) % 7 + 1)`;
 /** DuckDB one-argument date part functions → the date_part part they read. */
 const PART_FUNCTIONS: Record<string, string> = { year: 'year', quarter: 'quarter', month: 'month', week: 'week', day: 'day', dayofmonth: 'day', hour: 'hour', minute: 'minute' };
 const RENAMES: Record<string, string> = {
   strptime: 'date_parse', quantile_cont: 'quantile', datediff: 'date_diff', gen_random_uuid: 'uuid',
   array_contains: 'list_contains', list_has: 'list_contains', array_has: 'list_contains', array_has_any: 'list_has_any', chr: 'char',
+  stddev_samp: 'stddev',
 };
+/** Calls whose result is a list (JSON text): `contains` over one is list membership. */
+const LIST_CALLS = new Set(['string_split', 'json_array', 'list_value', 'date_series']);
+/** Calls whose result is a date, whatever they are given. */
+const DATE_CALLS = new Set(['date', 'to_date', 'make_date', 'date_trunc', 'today']);
 const NOW_CALLS: Record<string, string> = { now: '$_now', get_current_timestamp: '$_now', transaction_timestamp: '$_now', today: 'date($_now)' };
 const NOW_WORDS: Record<string, string> = { current_timestamp: '$_now', current_date: 'date($_now)' };
-const UNSUPPORTED_WORDS = new Set(['qualify', 'pivot', 'unpivot']);
+const UNSUPPORTED_WORDS = new Set(['pivot', 'unpivot']);
 /** Words after which a FROM list ends. */
 const FROM_END = new Set(['where', 'group', 'having', 'order', 'limit', 'offset', 'window', 'qualify', 'union', 'intersect', 'except', 'returning']);
 
@@ -159,9 +168,53 @@ class View {
       if (t.text === ')' || t.text === ']') { j = this.pairs.get(j)!; continue; }
       if (t.text === '(' || t.text === '[') return '';
       const w = word(t);
+      if (w === 'from' && word(this.sig[j - 1]) === 'distinct') continue;
       if (['select', 'from', 'join', 'where', 'group', 'having', 'order', 'limit', 'on', 'using', 'set', 'values', 'returning', 'window', 'qualify'].includes(w)) return w;
     }
     return '';
+  }
+
+  /** The whole expression spanning tokens `from..to`, or null when they are not one. */
+  exprAt(from: number, to: number): ExprNode | null {
+    return this.expr.nodesAround(from)?.find((n) => n.from === from && n.to === to) ?? null;
+  }
+
+  /** The index of the bracket that opens the group token `i` sits in, or -1 at the top level. */
+  enclosing(i: number): number {
+    for (let j = i - 1; j >= 0; j--) {
+      if (this.sig[j].text === ')' || this.sig[j].text === ']') { j = this.pairs.get(j)!; continue; }
+      if (this.sig[j].text === '(' || this.sig[j].text === '[') return j;
+    }
+    return -1;
+  }
+
+  /** The end of the level token `i` sits at: its closing bracket, or the end of the text (exclusive). */
+  levelEnd(i: number): number {
+    const open = this.enclosing(i);
+    return open < 0 ? this.sig.length : this.pairs.get(open)!;
+  }
+
+  /** Top-level items of tokens `from..to` (inclusive) split at commas, as inclusive ranges. */
+  items(from: number, to: number): Array<{ from: number; to: number }> {
+    const out: Array<{ from: number; to: number }> = [];
+    let start = from;
+    for (let j = from; j <= to; j++) {
+      if (['(', '['].includes(this.sig[j].text)) { j = this.pairs.get(j)!; continue; }
+      if (this.sig[j].text === ',') { out.push({ from: start, to: j - 1 }); start = j + 1; }
+    }
+    if (start <= to) out.push({ from: start, to });
+    return out;
+  }
+
+  /** The first token from `from` (to `end`, exclusive) at this level whose word is one of `words`, or -1. */
+  find(from: number, end: number, words: ReadonlySet<string> | readonly string[]): number {
+    const set = words instanceof Set ? words : new Set(words);
+    for (let j = from; j < end; j++) {
+      if (['(', '['].includes(this.sig[j].text)) { j = this.pairs.get(j)!; continue; }
+      if (word(this.sig[j]) === 'case') { const close = caseMatch(this.sig, j); if (close > 0) { j = close; continue; } }
+      if (set.has(word(this.sig[j]))) return j;
+    }
+    return -1;
   }
 
   /** A word no other token in the text spells, from `base`, `base_1`, … */
@@ -201,7 +254,8 @@ function castTarget(v: View, from: number, to: number): { target: Target; name: 
 
 function castText(operand: string, target: Target): string {
   switch (target.kind) {
-    case 'date': return `date(${operand})`;
+    // DuckDB's cast reads more spellings than date() and fails where date() answers null: to_date is that cast.
+    case 'date': return `to_date(${operand})`;
     case 'timestamp': return `strftime(${ISO_TIMESTAMP}, ${operand})`;
     case 'decimal': return `round(cast(${operand} as real), ${target.scale})`;
     default: return `cast(${operand} as ${target.kind})`;
@@ -298,18 +352,23 @@ function precheck(v: View, context: TranslateContext): { hit: Hit | null; notes:
     };
     let refusal: { hit: Hit; notes: string[] } | null = null;
     switch (call.name) {
-      case 'try_cast': refusal = whole('try_cast has no SQLite form: SQLite casts never fail'); break;
+      case 'try_cast': {
+        const cast = castCallType(v, call);
+        const target = cast ? castTarget(v, cast.type.from, cast.type.to) : null;
+        if (!target || 'manual' in target || !['real', 'decimal'].includes(target.target.kind)) refusal = whole('try_cast has no SQLite form but to a number: SQLite casts never fail');
+        break;
+      }
       case 'quantile': case 'quantile_disc': refusal = whole('DuckDB quantile is discrete (quantile_disc); the library quantile is continuous'); break;
       case 'quantile_cont': if (t[call.args[1]?.from]?.text === '[') refusal = whole('a list of quantiles has no library equivalent'); break;
       case 'strptime': if (t[call.args[1]?.from]?.text === '[') refusal = whole('strptime with a list of formats has no library equivalent'); break;
       case 'date_trunc': refusal = part(call.args[0], TRUNC_PARTS, 'date_trunc'); notes.push(NOTES.dateTrunc); break;
-      case 'date_part': refusal = part(call.args[0], new Set([...PART_NAMES, ...DAY_OF_WEEK]), 'date_part'); break;
+      case 'date_part': refusal = part(call.args[0], new Set([...PART_NAMES, ...DAY_OF_WEEK, 'isodow']), 'date_part'); break;
       case 'date_diff': case 'datediff': refusal = part(call.args[0], UNITS, 'date_diff'); notes.push(NOTES.dateDiff); break;
       case 'date_add': if (call.args.length === 2 && word(t[call.args[1].from]) !== 'interval') refusal = whole('date_add without an interval has no library equivalent'); break;
       case 'extract': {
         const from = call.args.length === 1 ? t.findIndex((x, k) => k > call.open && k < call.close && word(x) === 'from') : -1;
         if (from !== call.open + 2) refusal = whole('extract needs extract(part from value)');
-        else refusal = part({ from: call.open + 1, to: call.open + 1 }, new Set([...PART_NAMES, ...DAY_OF_WEEK]), 'extract');
+        else refusal = part({ from: call.open + 1, to: call.open + 1 }, new Set([...PART_NAMES, ...DAY_OF_WEEK, 'isodow']), 'extract');
         break;
       }
       case 'cast': {
@@ -513,11 +572,14 @@ const functions: Rule = (v) => {
     if (w === 'strftime' && v.literal(call.args[0]) === null) return { edits: [v.replace(i, i, 'date_format')] };
     if (NOW_CALLS[w] && call.args.length === 0) return { edits: [v.replace(i, call.close, NOW_CALLS[w])], note: NOTES.now };
     if (PART_FUNCTIONS[w] && call.args.length === 1) return { edits: [v.replace(i, call.close, `date_part('${PART_FUNCTIONS[w]}', ${v.slice(call.args[0].from, call.args[0].to)})`)] };
-    if (w === 'date_part' && DAY_OF_WEEK.has((v.literal(call.args[0]) ?? '').toLowerCase())) return { edits: [v.replace(i, call.close, `dayofweek(${v.slice(call.args[1].from, call.args[1].to)})`)] };
+    const datePart = w === 'date_part' ? (v.literal(call.args[0]) ?? '').toLowerCase() : '';
+    if (DAY_OF_WEEK.has(datePart)) return { edits: [v.replace(i, call.close, `dayofweek(${v.slice(call.args[1].from, call.args[1].to)})`)] };
+    if (datePart === 'isodow') return { edits: [v.replace(i, call.close, isoDayOfWeek(v.slice(call.args[1].from, call.args[1].to)))] };
+    if (w === 'isodow' && call.args.length === 1) return { edits: [v.replace(i, call.close, isoDayOfWeek(v.slice(call.args[0].from, call.args[0].to)))] };
     if (w === 'extract') {
       const part = (v.literal({ from: call.open + 1, to: call.open + 1 }) ?? word(v.sig[call.open + 1])).toLowerCase();
       const value = v.slice(call.open + 3, call.close - 1);
-      return { edits: [v.replace(i, call.close, DAY_OF_WEEK.has(part) ? `dayofweek(${value})` : `date_part('${part}', ${value})`)] };
+      return { edits: [v.replace(i, call.close, DAY_OF_WEEK.has(part) ? `dayofweek(${value})` : part === 'isodow' ? isoDayOfWeek(value) : `date_part('${part}', ${value})`)] };
     }
   }
   return null;
@@ -629,6 +691,38 @@ const unnest: Rule = (v) => {
   return null;
 };
 
+/**
+ * `from t, unnest(list) [as] u(col)` → `from t, json_each(list) as u`, and the
+ * select's `col` / `u.col` read `u.value`. json_each brings columns of its own
+ * (`id`, `key`, `value`, …): a bare one elsewhere in the select would change
+ * table, so that is a person's call.
+ */
+const unnestFrom: Rule = (v) => {
+  const t = v.sig;
+  for (const call of v.calls()) {
+    if (call.name !== 'unnest' || !tablePosition(v, call.at) || call.args.length !== 1) continue;
+    let k = call.close + 1;
+    if (word(t[k]) === 'as') k++;
+    const alias = t[k], open = k + 1;
+    if (!alias || !['word', 'quoted'].includes(alias.kind) || KEYWORDS.has(word(alias)) || t[open]?.text !== '(' || v.pairs.get(open) !== open + 2) {
+      return v.manual('unnest in FROM without an alias naming its column: u(col)', call.at, call.close);
+    }
+    const column = identifier(t[open + 1]!)!, table = identifier(alias)!;
+    const start = v.enclosing(call.at) + 1, end = v.levelEnd(call.at);
+    const edits: Edit[] = [v.replace(call.at, open + 2, `json_each(${v.slice(call.args[0]!.from, call.args[0]!.to)}) as ${alias.text}`)];
+    for (let j = start; j < end; j++) {
+      if (j === call.at) { j = open + 2; continue; }
+      const name = identifier(t[j]!);
+      if (name === null || t[j + 1]?.text === '(' || word(t[j - 1]) === 'as') continue;
+      const qualifier = t[j - 1]?.text === '.' ? identifier(t[j - 2]!) : null;
+      if (name === column && (qualifier === null || qualifier === table)) edits.push(qualifier === null ? v.replace(j, j, `${alias.text}.value`) : v.replace(j, j, 'value'));
+      else if (qualifier === null && JSON_EACH_COLUMNS.has(name) && t[j + 1]?.text !== '.') return v.manual(`unnest in FROM beside a bare ${t[j]!.text}, which would read json_each's columns`, j);
+    }
+    return { edits };
+  }
+  return null;
+};
+
 /** `a // b` → `cast(a / b as integer)`; the division rule then makes it exact. */
 const integerDivision: Rule = (v) => {
   const i = v.sig.findIndex((t) => t.text === '//');
@@ -650,7 +744,296 @@ const division: Rule = (v) => {
   return { edits: [{ start: v.sig[i].start, end: v.sig[i].start, text: `${spaced ? '' : ' '}* 1.0 ` }] };
 };
 
-const DUCKDB_RULES: Rule[] = [viewer, renames, typedLiterals, series, dateAdd, intervals, castOperator, castFunction, functions, distinctFrom, ilike, listLiterals, unnest, integerDivision, division];
+/** `try_cast(x as <number>)` → the library's to_number, which is null where the text names no number. */
+const tryCast: Rule = (v) => {
+  for (const call of v.calls()) {
+    if (call.name !== 'try_cast') continue;
+    const cast = castCallType(v, call)!;
+    const target = castTarget(v, cast.type.from, cast.type.to);
+    if ('manual' in target) return v.manual(target.manual, call.at, call.close);
+    const number = `to_number(${v.slice(cast.operand.from, cast.operand.to)})`;
+    return { edits: [v.replace(call.at, call.close, target.target.kind === 'decimal' ? `round(${number}, ${target.target.scale})` : number)] };
+  }
+  return null;
+};
+
+/** DuckDB functions with a SQLite form: the call's own text, rewritten. */
+const duckFunctions: Rule = (v) => {
+  for (const call of v.calls()) {
+    const arg = (k: number) => v.slice(call.args[k]!.from, call.args[k]!.to);
+    const args = call.args.map((_, k) => arg(k));
+    const to = (text: string): Hit => ({ edits: [v.replace(call.at, call.close, text)] });
+    switch (call.name) {
+      case 'greatest': case 'least': {
+        if (!args.length) continue;
+        // Each argument first, then the rest: null only when all are, which is DuckDB's rule; SQLite's max(a, b) is null when either is.
+        if (args.length === 1) return to(`(${args[0]})`);
+        return to(`${call.name === 'greatest' ? 'max' : 'min'}(${args.map((a, k) => `coalesce(${[a, ...args.filter((_, j) => j !== k)].join(', ')})`).join(', ')})`);
+      }
+      case 'contains': {
+        if (args.length !== 2) continue;
+        const list = v.call(call.args[0]!.from);
+        return to(list && list.close === call.args[0]!.to && LIST_CALLS.has(list.name) ? `list_contains(${args[0]}, ${args[1]})` : `(instr(${args[0]}, ${args[1]}) > 0)`);
+      }
+      case 'left': case 'right': {
+        if (args.length !== 2) continue;
+        const n = call.args[1]!.from === call.args[1]!.to && v.sig[call.args[1]!.from]!.kind === 'number' ? Number(args[1]) : NaN;
+        if (!Number.isInteger(n) || n < 0) return v.manual(`${call.name}() with a computed or negative length`, call.at, call.close);
+        return to(call.name === 'left' || n === 0 ? `substr(${args[0]}, 1, ${n})` : `substr(${args[0]}, -${n})`);
+      }
+      case 'len': case 'length': {
+        if (args.length !== 1) continue;
+        const list = v.call(call.args[0]!.from);
+        if (list && list.close === call.args[0]!.to && LIST_CALLS.has(list.name)) return to(`json_array_length(${args[0]})`);
+        if (call.name === 'len') return v.manual('len() of a value that may be a list: DuckDB counts a list\'s items and a text\'s characters', call.at, call.close);
+        continue;
+      }
+      case 'bool_or': case 'bool_and':
+        if (args.length !== 1) continue;
+        return to(`${call.name === 'bool_or' ? 'max' : 'min'}((${args[0]}) <> 0)`);
+      case 'epoch':
+        if (args.length !== 1) continue;
+        return to(`unixepoch(${args[0]}, 'subsec')`);
+      case 'to_timestamp':
+        if (args.length !== 1) continue;
+        return to(`strftime(${ISO_TIMESTAMP}, ${args[0]}, 'unixepoch')`);
+      case 'position': {
+        const inAt = call.args.length === 1 ? v.find(call.args[0]!.from, call.args[0]!.to + 1, ['in']) : -1;
+        if (inAt < 0) continue;
+        return to(`instr(${v.slice(inAt + 1, call.args[0]!.to)}, ${v.slice(call.args[0]!.from, inAt - 1)})`);
+      }
+      case 'epoch_ms':
+        // Milliseconds from a timestamp, or a timestamp from milliseconds: only the clock says which.
+        if (args.length !== 1 || args[0] !== '$_now') return v.manual('epoch_ms() of anything but the current time: cannot tell a timestamp from milliseconds', call.at, call.close);
+        return to("cast(round(unixepoch($_now, 'subsec') * 1000) as integer)");
+    }
+  }
+  return null;
+};
+
+/** `x [NOT] SIMILAR TO 'p'` → a whole-string regular expression match. */
+const similarTo: Rule = (v) => {
+  const i = v.sig.findIndex((t, k) => word(t) === 'similar' && word(v.sig[k + 1]) === 'to');
+  if (i < 0) return null;
+  const negated = word(v.sig[i - 1]) === 'not';
+  const node = v.expr.nodeByOperator(negated ? i - 1 : i);
+  if (!node?.left || !node.right) return v.manual('cannot tell what SIMILAR TO compares', i);
+  const pattern = node.right.from === node.right.to && v.sig[node.right.from]!.kind === 'string' ? v.sig[node.right.from]!.text.slice(1, -1) : null;
+  if (pattern === null || node.to !== node.right.to) return v.manual('SIMILAR TO a computed pattern, or with ESCAPE', node.from, node.to);
+  const match = `regexp_matches(${v.slice(node.left.from, node.left.to)}, '^(?:${pattern})$')`;
+  return { edits: [v.replace(node.from, node.to, negated ? `(not ${match})` : match)] };
+};
+
+// ── dates in arithmetic ─────────────────────────────────────────────────────
+
+/**
+ * Is this expression a date? Only by construction — a cast or literal, a call
+ * that returns one, min/max of one, a scalar subquery selecting one, or a
+ * name the statement itself gives to one — never by guessing at a column.
+ */
+function isDate(v: View, node: ExprNode, dates: ReadonlySet<string>): boolean {
+  const t = v.sig;
+  switch (node.kind) {
+    case 'typed': return word(t[node.from]) === 'date';
+    case 'cast': return !!node.type && word(t[node.type.from]) === 'date' && node.type.from === node.type.to;
+    case 'primary': {
+      if (node.from === node.to && v.bareWord(node.from, 'current_date')) return true;
+      const last = t[node.to]!;
+      return ['word', 'quoted'].includes(last.kind) && dates.has(identifier(last)!);
+    }
+    case 'group': {
+      if (word(t[node.from + 1]) === 'select') {
+        const items = v.items(node.from + 2, v.find(node.from + 2, node.to, ['from']) - 1);
+        const only = items.length === 1 ? v.exprAt(items[0]!.from, items[0]!.to) : null;
+        return !!only && isDate(v, only, dates);
+      }
+      const inner = v.exprAt(node.from + 1, node.to - 1);
+      return !!inner && isDate(v, inner, dates);
+    }
+    case 'call': {
+      const call = v.call(node.from);
+      if (!call) return false;
+      const first = call.args[0] ? v.exprAt(call.args[0].from, call.args[0].to) : null;
+      if (DATE_CALLS.has(call.name)) return call.name !== 'date' || call.args.length === 1;
+      if (call.name === 'cast') { const cast = castCallType(v, call); return !!cast && cast.type.from === cast.type.to && word(t[cast.type.from]) === 'date'; }
+      if (['min', 'max', 'any_value', 'first', 'last', 'date_add'].includes(call.name)) return !!first && (call.name === 'date_add' || call.args.length === 1) && isDate(v, first, dates);
+      return false;
+    }
+    default: return false;
+  }
+}
+
+/** The names a statement gives to dates (`cast(d as date) as day`), followed through each other; a name also given to anything else is none. */
+function dateNames(v: View): Set<string> {
+  const defs: Array<{ name: string; expr: ExprNode | null }> = [];
+  v.sig.forEach((token, i) => {
+    const alias = v.sig[i + 1];
+    if (word(token) !== 'as' || !alias || !['word', 'quoted'].includes(alias.kind) || v.sig[i + 2]?.text === '(') return;
+    const start = v.expr.regionStart(i);
+    if (v.sig[start - 1]?.text === '(' && ['cast', 'try_cast'].includes(word(v.sig[start - 2]))) return;
+    defs.push({ name: identifier(alias)!, expr: v.exprAt(start, i - 1) });
+  });
+  let dates = new Set<string>();
+  for (;;) {
+    const next = new Set(defs.filter((d) => d.expr && isDate(v, d.expr, dates)).map((d) => d.name));
+    for (const d of defs) if (!d.expr || !isDate(v, d.expr, next)) next.delete(d.name);
+    if (next.size === dates.size && [...next].every((n) => dates.has(n))) return next;
+    dates = next;
+  }
+}
+
+/** DuckDB `date ± n` adds days and `date - date` counts them; SQLite would do arithmetic on text. */
+const dateArithmetic: Rule = (v) => {
+  let dates: Set<string> | null = null;
+  for (let i = 0; i < v.sig.length; i++) {
+    if (v.sig[i]!.kind !== 'operator' || !['+', '-'].includes(v.sig[i]!.text)) continue;
+    const node = v.expr.nodeByOperator(i);
+    if (node?.kind !== 'binary' || !node.left || !node.right || node.left.kind === 'interval' || node.right.kind === 'interval') continue;
+    dates ??= dateNames(v);
+    const left = isDate(v, node.left, dates), right = isDate(v, node.right, dates);
+    const text = (n: ExprNode) => v.slice(n.from, n.to);
+    const negative = (n: ExprNode) => (n.from === n.to && v.sig[n.from]!.kind === 'number' ? `-${text(n)}` : `-(${text(n)})`);
+    const plus = v.sig[i]!.text === '+';
+    let rewritten: string | null = null;
+    if (left && right) rewritten = plus ? null : `date_diff('day', ${text(node.right)}, ${text(node.left)})`;
+    else if (left) rewritten = `date_add(${text(node.left)}, ${plus ? text(node.right) : negative(node.right)}, 'day')`;
+    else if (right && plus) rewritten = `date_add(${text(node.right)}, ${text(node.left)}, 'day')`;
+    if (rewritten) return { edits: [v.replace(node.from, node.to, rewritten)] };
+  }
+  return null;
+};
+
+// ── clauses ─────────────────────────────────────────────────────────────────
+
+const COMPOUND = new Set(['union', 'intersect', 'except']);
+const ORDER_TAIL = new Set(['order', 'limit', 'offset']);
+
+/** An output's name: `expr as name`, `expr name`, or a (qualified) column's own name; null when SQLite would make one up. */
+function outputName(v: View, item: { from: number; to: number }): string | null {
+  const last = v.sig[item.to]!;
+  if (!['word', 'quoted'].includes(last.kind)) return null;
+  if (word(v.sig[item.to - 1]) === 'as' || (item.to > item.from && v.sig[item.to - 1]!.text !== '.' && v.endsOperand(item.to - 1))) return last.text;
+  const whole = v.exprAt(item.from, item.to);
+  return whole?.kind === 'primary' && last.text !== '*' ? last.text : null;
+}
+
+/** An ORDER BY term that names an output or a position: `name`, `"name"`, `2`, with a direction. */
+function plainTerm(v: View, term: { from: number; to: number }): boolean {
+  let to = term.to;
+  if (word(v.sig[to - 1]) === 'nulls' && ['first', 'last'].includes(word(v.sig[to]))) to -= 2;
+  if (['asc', 'desc'].includes(word(v.sig[to]))) to--;
+  return to === term.from && ['word', 'quoted', 'number'].includes(v.sig[to]!.kind) && !KEYWORDS.has(word(v.sig[to]));
+}
+
+/**
+ * `select … qualify cond [order by …]` → the select as a subquery that also
+ * computes cond, filtered on it: QUALIFY runs after the window functions and
+ * before DISTINCT, ORDER BY and LIMIT, which stay outside.
+ */
+const qualify: Rule = (v) => {
+  const q = v.sig.findIndex((t, k) => word(t) === 'qualify' && v.sig[k - 1]?.text !== '.');
+  if (q < 0) return null;
+  const refuse = (why: string) => v.manual(`QUALIFY over ${why}`, q);
+  const levelStart = v.enclosing(q) + 1, end = v.levelEnd(q);
+  let select = -1;
+  for (let j = levelStart; j < q; j = (['(', '['].includes(v.sig[j]!.text) ? v.pairs.get(j)! : j) + 1) if (word(v.sig[j]) === 'select') select = j;
+  if (select < 0) return refuse('no select');
+  const stop = v.find(q + 1, end, new Set([...COMPOUND, ';']));
+  const last = (stop < 0 ? end : stop) - 1;
+  const tail = v.find(q + 1, last + 1, ORDER_TAIL);
+  const condEnd = (tail < 0 ? last + 1 : tail) - 1;
+  const distinct = ['distinct', 'all'].includes(word(v.sig[select + 1])) ? select + 1 : -1;
+  const from = v.find(select + 1, q, ['from']);
+  if (from < 0) return refuse('a select without FROM');
+  const names = v.items((distinct < 0 ? select : distinct) + 1, from - 1).map((item) => outputName(v, item));
+  if (names.some((n) => n === null)) return refuse('a select whose outputs are not all named');
+  const order = tail >= 0 && word(v.sig[tail]) === 'order' ? tail : -1;
+  if (order >= 0 && v.items(order + 2, v.find(order + 2, last + 1, ['limit', 'offset']) < 0 ? last : v.find(order + 2, last + 1, ['limit', 'offset']) - 1).some((term) => !plainTerm(v, term))) return refuse('an ORDER BY that is not by output name');
+  const flag = v.freshName('qualified'), alias = v.freshName('qualifying');
+  const inner = `${v.slice(select, distinct < 0 ? select : distinct - 1)}${distinct < 0 ? '' : ' '}${v.slice((distinct < 0 ? select : distinct) + 1, from - 1)}, ${v.slice(q + 1, condEnd)} as ${flag} ${v.slice(from, q - 1)}`;
+  const outer = `select ${distinct < 0 ? '' : `${v.sig[distinct]!.text} `}${names.join(', ')} from (${inner.replace(/^select\s*/i, 'select ')}) as ${alias} where ${flag}${tail < 0 ? '' : ` ${v.slice(tail, last)}`}`;
+  return { edits: [v.replace(select, last, outer)] };
+};
+
+/** The body of the statement level `order` sits at: its first select after any WITH list. */
+function levelBody(v: View, at: number): number {
+  let j = v.enclosing(at) + 1;
+  if (word(v.sig[j]) !== 'with') return j;
+  for (; j < at; j++) {
+    if (['(', '['].includes(v.sig[j]!.text)) { j = v.pairs.get(j)!; continue; }
+    if (word(v.sig[j]) === 'select') return j;
+  }
+  return -1;
+}
+
+/**
+ * An ORDER BY on a compound select may only name its outputs in SQLite; one
+ * that orders by an expression orders the compound as a subquery instead.
+ */
+const compoundOrder: Rule = (v) => {
+  for (let i = 0; i < v.sig.length - 1; i++) {
+    if (word(v.sig[i]) !== 'order' || word(v.sig[i + 1]) !== 'by') continue;
+    const body = levelBody(v, i);
+    if (body < 0 || v.find(body, i, COMPOUND) < 0) continue;
+    const end = v.levelEnd(i);
+    const limit = v.find(i + 2, end, ['limit', 'offset']);
+    if (v.items(i + 2, (limit < 0 ? end : limit) - 1).every((term) => plainTerm(v, term))) continue;
+    return { edits: [v.replace(body, i - 1, `select * from (${v.slice(body, i - 1)})`)] };
+  }
+  return null;
+};
+
+/**
+ * `select a.mode … order by mode`: DuckDB orders by the output `mode`, where
+ * SQLite reads a column `mode` of the FROM tables (ambiguous in a self-join,
+ * or another table's). Naming the output — `a.mode as mode` — keeps its name
+ * and makes SQLite read the output.
+ */
+const orderByOutput: Rule = (v) => {
+  for (let i = 0; i < v.sig.length - 1; i++) {
+    if (word(v.sig[i]) !== 'order' || word(v.sig[i + 1]) !== 'by') continue;
+    const body = levelBody(v, i);
+    if (body < 0 || word(v.sig[body]) !== 'select' || v.find(body, i, COMPOUND) >= 0) continue;
+    const from = v.find(body + 1, i, ['from']);
+    if (from < 0) continue;
+    const end = v.levelEnd(i);
+    const limit = v.find(i + 2, end, ['limit', 'offset']);
+    const terms = new Set(v.items(i + 2, (limit < 0 ? end : limit) - 1).filter((term) => plainTerm(v, term) && v.sig[term.from]!.kind !== 'number').map((term) => identifier(v.sig[term.from]!)));
+    const start = ['distinct', 'all'].includes(word(v.sig[body + 1])) ? body + 2 : body + 1;
+    for (const item of v.items(start, from - 1)) {
+      const last = v.sig[item.to]!;
+      if (item.to - item.from < 2 || v.sig[item.to - 1]!.text !== '.' || !['word', 'quoted'].includes(last.kind) || v.exprAt(item.from, item.to)?.kind !== 'primary') continue;
+      if (terms.has(identifier(last))) return { edits: [{ start: last.end, end: last.end, text: ` as ${last.text}` }] };
+    }
+  }
+  return null;
+};
+
+/** `* EXCLUDE (a, b)` → the other columns of the one table the select reads. */
+const exclude: Rule = (v, context) => {
+  for (let i = 1; i < v.sig.length; i++) {
+    if (word(v.sig[i]) !== 'exclude' || v.sig[i - 1]!.text !== '*') continue;
+    const star = v.sig[i - 2]?.text === '.' ? i - 3 : i - 1;
+    const refuse = (why: string) => v.manual(`* EXCLUDE ${why}`, star, v.sig[i + 1]?.text === '(' ? v.pairs.get(i + 1)! : i);
+    if (v.sig[i + 1]?.text !== '(') return refuse('without a parenthesised column list');
+    const close = v.pairs.get(i + 1)!;
+    const excluded = new Set(v.items(i + 2, close - 1).map((c) => identifier(v.sig[c.from]!)?.toLowerCase()));
+    const from = v.find(close + 1, v.levelEnd(i), ['from']);
+    const table = from < 0 ? -1 : from + 1;
+    let tableEnd = table;
+    while (v.sig[tableEnd + 1]?.text === '.') tableEnd += 2;
+    const after = v.sig[tableEnd + 1];
+    const alone = table > 0 && (!after || [')', ';'].includes(after.text) || FROM_END.has(word(after)) || (after.kind === 'word' && !KEYWORDS.has(word(after)) && (!v.sig[tableEnd + 2] || FROM_END.has(word(v.sig[tableEnd + 2])) || [')', ';'].includes(v.sig[tableEnd + 2]!.text))));
+    const columns = alone ? context.columns?.(v.slice(table, tableEnd)) ?? null : null;
+    if (!columns) return refuse('over a table whose columns are not known here');
+    const prefix = star === i - 1 ? '' : `${v.slice(star, star)}.`;
+    const kept = columns.filter((c) => !excluded.has(c.toLowerCase())).map((c) => `${prefix}"${c.replaceAll('"', '""')}"`);
+    return { edits: [v.replace(star, close, kept.join(', '))] };
+  }
+  return null;
+};
+
+const DUCKDB_RULES: Rule[] = [viewer, renames, dateArithmetic, typedLiterals, series, dateAdd, intervals, castOperator, castFunction, tryCast, functions, duckFunctions, similarTo, distinctFrom, ilike, listLiterals, unnestFrom, unnest, qualify, compoundOrder, orderByOutput, exclude, integerDivision, division];
 const POSTGRES_RULES: Rule[] = [viewer];
 /** More rewrites than any real statement needs: a rule that failed to remove its match. */
 const MAX_REWRITES = 5000;
@@ -700,7 +1083,7 @@ export function translateSql(sql: string, context: TranslateContext): SqlTransla
     if (hit.note) notes.add(hit.note);
     view = new View(text);
   }
-  const leftover = residue(view);
+  const leftover = postgres ? null : residue(view);
   if (leftover) return refuse(leftover.manual, original(leftover.start, false), original(leftover.end, true));
   return { sql: view.text, notes: [...notes], manual: [] };
 }
