@@ -64,6 +64,7 @@ const exercise = async (page, framed, documentId) => {
       try { routeBodies.push({url:request.url(), body:request.postDataJSON()}); } catch {}
     }
   });
+  const engine = page.waitForResponse((r) => r.url().endsWith('.wasm') && r.ok(), {timeout:20_000}).then(() => true, () => false);
   await page.goto(`${B}/a/${documentId}?$choice=b`, {waitUntil:'load'});
   const frame = framed ? await artifactDocument(page) : page.mainFrame();
   await frame.waitForFunction(() => document.querySelector('[aria-label="Rows"]')?.textContent?.trim() === '1', null, {timeout:20_000}).catch(async error => {
@@ -71,7 +72,7 @@ const exercise = async (page, framed, documentId) => {
   });
   check((await frame.textContent('[aria-label="Branch"]')) === 'bee', `${framed ? 'framed' : 'top-level'} URL scalar seeds the ternary`);
   // The first paint is the server's; the page's engine loads behind it.
-  await page.waitForFunction(() => performance.getEntriesByType('resource').some((e) => e.name.endsWith('.wasm')), null, {timeout:20_000}).catch(() => {});
+  check(await engine, `${framed ? 'framed' : 'top-level'} page loaded its SQLite engine`);
   await page.waitForTimeout(500);
   await frame.click('[aria-label="Add draft"]');
   await frame.waitForFunction(() => document.querySelector('[aria-label="Rows"]')?.textContent?.trim() === '2');
