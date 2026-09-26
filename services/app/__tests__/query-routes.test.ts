@@ -15,6 +15,8 @@ import { agentCookie, useAppHarness, request } from '@/__tests__/harness';
 import { GET as queryGet, POST as queryRoute } from '@/app/a/[id]/query/route';
 import { POST as draftQueryRoute } from '@/app/api/query/route';
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
+import { GET as pageRoute } from '@/app/api/page/artifact/[id]/route';
+import { HOLD_MAX_ROWS } from '@/lib/story/placement';
 import { mintToken } from '@/lib/tokens';
 import { claimToken, createUser } from '@/lib/users';
 
@@ -259,4 +261,83 @@ it('draft validation gives the same actionable JSX diagnostics as publishing', a
   expect(body.error).toBe('invalid_jsx');
   expect(body.details[0].message).toContain('missing its object opening brace');
   expect(body.details[0].snippet).toContain('▶');
+});
+
+/*
+ * HOLDING AN IMPORT: the reader's page runs a query itself when it holds every
+ * import the query reads, and it fetches each with one request through the
+ * same two doors. What it may hold is decided for the door's own viewer: the
+ * document must read the import, AND the reader must be allowed the dataset's
+ * rows themselves — a public document's RESULTS over a private dataset are not
+ * the private rows. The island names what may be held; the door re-decides
+ * every time and never names a ref, only an import the document declares.
+ */
+describe('holding an import', () => {
+  const hold = (doc: string, name: string, init: { cookie?: string } = {}) => Promise.all([
+    queryGet(request(`/a/${doc}/query?q=${encodeURIComponent(JSON.stringify({ hold: name }))}`), params({ id: doc })),
+    queryRoute(request(`/a/${doc}/query`, { method: 'POST', ...init, json: { hold: name } }), params({ id: doc })),
+  ]);
+  const island = async (doc: string, init: { token?: string; cookie?: string } = {}) =>
+    ((await (await pageRoute(request(`/api/page/artifact/${doc}`, init), params({ id: doc }))).json()) as { surface: { runtime: { data: { dataflow?: { hold?: string[] } } } } }).surface.runtime.data.dataflow;
+
+  it('answers every row of a readable import through both doors, past the display window, and names it on the island', async () => {
+    const t = await mintToken('t');
+    const rows = Array.from({ length: 1500 }, (_, i) => ({ region: i % 2 ? 'EU' : 'NA', revenue: i }));
+    const ds = (await create(t.token, { dataset: rows })).id;
+    const doc = (await create(t.token, { markup: DOC(ds) })).id;
+    for (const res of await hold(doc, 'sales_data')) {
+      expect(res.status).toBe(200);
+      expect(res.headers.get('cache-control')).toBe('no-store');
+      const body = (await res.json()) as { tables: Record<string, { rows: unknown[]; columns: unknown[] }> };
+      expect(body.tables.rows!.rows).toEqual(rows);
+      expect(body.tables.rows!.columns).toEqual([{ name: 'region', type: 'string' }, { name: 'revenue', type: 'number' }]);
+    }
+    expect((await island(doc))?.hold).toEqual(['sales_data', 'regions_data']);
+  });
+
+  it('never hands a reader the rows of a dataset they may not read, though the document reads it for them', async () => {
+    const t = await mintToken('owner');
+    const owner = await createUser({ email: 'hold-owner@example.com' });
+    await claimToken(owner.id, t.token);
+    // A dataset without read grants: the document reads it by its owner's reach, whoever is reading.
+    const ds = (await create(t.token, { dataset: ROWS, visibility: 'private', access: 'read' })).id;
+    const doc = (await create(t.token, { markup: DOC(ds), visibility: 'public' })).id;
+    // The document's results are public…
+    const run = await queryGet(request(`/a/${doc}/query?q=${encodeURIComponent(JSON.stringify({ only: ['sales'] }))}`), params({ id: doc }));
+    expect(((await run.json()) as { tables: Record<string, { rows: unknown[] }> }).tables.sales!.rows).toHaveLength(2);
+    // …the private rows are not: a reader who may not read the dataset holds nothing, through either door.
+    for (const res of await hold(doc, 'sales_data')) {
+      expect(res.status).toBe(404);
+      const text = await res.text();
+      expect(text).not.toContain('837');
+      expect(JSON.parse(text)).toEqual({ error: 'not_holdable' });
+    }
+    expect((await island(doc))?.hold).toEqual([]);
+    // Their owner may hold them: the session door answers the owner's own credential.
+    const cookie = await agentCookie([t.id]);
+    const [, owners] = await hold(doc, 'sales_data', { cookie });
+    expect(owners.status).toBe(200);
+    expect((await island(doc, { cookie }))?.hold).toEqual(['sales_data', 'regions_data']);
+  });
+
+  it('holds only what the document imports, by import name — never a ref, never an undeclared name', async () => {
+    const t = await mintToken('t');
+    const ds = (await create(t.token, { dataset: ROWS })).id;
+    const doc = (await create(t.token, { markup: DOC(ds) })).id;
+    for (const name of [ds, `ref:${ds}`, 'sales', 'nope']) {
+      for (const res of await hold(doc, name)) expect(res.status).toBe(404);
+    }
+    for (const bad of [{ hold: 3 }, { hold: 'sales_data', only: ['sales'] }]) {
+      const res = await queryRoute(request(`/a/${doc}/query`, { method: 'POST', json: bad }), params({ id: doc }));
+      expect(res.status).toBe(400);
+    }
+  });
+
+  it('refuses an import past the hold cap: its queries stay on the server', async () => {
+    const t = await mintToken('t');
+    const ds = (await create(t.token, { dataset: Array.from({ length: HOLD_MAX_ROWS + 1 }, (_, n) => ({ n })) })).id;
+    const doc = (await create(t.token, { markup: `<Helmet><Import name="big" src="ref:${ds}" /><Query name="total">{\`select count(*) as n from big.rows\`}</Query></Helmet><p>big</p>` })).id;
+    for (const res of await hold(doc, 'big')) expect(res.status).toBe(404);
+    expect((await island(doc))?.hold).toEqual([]);
+  });
 });

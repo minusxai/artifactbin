@@ -75,6 +75,7 @@ import { compileWithLoader } from '@/lib/story/compile-dataflow';
 import { declarationsOf } from '@/lib/story/helmet';
 import { bindParams, bindTypes, dataRefs, importRef, initialTables, initialValues, mutationParams, mutationReads, mutationTargetRef, selectQueries, type ImportTables } from '@/lib/story/compiled-flow';
 import { bindMutationRequest } from '@/lib/story/mutation-request';
+import { HOLD_MAX_BYTES, HOLD_MAX_ROWS } from '@/lib/story/placement';
 import { readerZone, VIEWER, VIEWER_ID } from '@/lib/story/builtins';
 import type { MutationRequest } from '@/lib/story/mutation-request';
 import { schemaLoaderFor } from '@/lib/story/data-checks';
@@ -2509,10 +2510,50 @@ async function tableForRef(r: ArtifactRow | null, viewer: RoleActor | null, docu
  * admitted (getLinkReadableArtifact), or an accepted ref serves broken. The
  * VIEWER is separate and rides through: reach is the document's, rows are theirs. */
 const datasetResolverForRow = (row: ArtifactRow, viewer: RoleActor | null): DatasetResolver => async (id) =>
-  tableForRef(
-    await getArtifactById(id).then(async dataset=>dataset&&grantsOf(dataset)?dataset:(await getArtifactFor(writerFor(row),id))??(await getLinkReadableArtifact(id))),
-    viewer, row,
-  );
+  tableForRef(await importedArtifactFor(row, id), viewer, row);
+
+/** The artifact a document's import names, by the document's own reach. */
+const importedArtifactFor = async (row: ArtifactRow, id: string): Promise<ArtifactRow | null> =>
+  getArtifactById(id).then(async dataset=>dataset&&grantsOf(dataset)?dataset:(await getArtifactFor(writerFor(row),id))??(await getLinkReadableArtifact(id)));
+
+/**
+ * WHAT A READER MAY HOLD: every row of one import, for a page that runs the
+ * queries over it itself (lib/story/placement) — or null.
+ *
+ * Two readers are asked about, and both must agree. The DOCUMENT must read the
+ * import (the same resolver its runs use), and the VIEWER must be allowed the
+ * dataset's own rows: a public document's results over a private dataset are
+ * public, its rows are not. Only a stored dataset qualifies — a connected
+ * database runs inside itself, a folder listing is computed per viewer — and
+ * only under the hold cap, past which its queries stay on the server. Reads
+ * carry no row-level rules today (a read grant is the whole dataset), so the
+ * dataset's rows are exactly what the viewer may read.
+ */
+async function heldImportFor(row: ArtifactRow, flow: CompiledDataflow, name: string, viewer: RoleActor | null): Promise<ImportTables[string] | null> {
+  const ref = importRef(flow, name);
+  const dataset = ref ? await importedArtifactFor(row, ref) : null;
+  if (!dataset || dataset.format !== 'dataset') return null;
+  const reader: RoleActor = viewer ?? { userId: null, tokenId: null };
+  if (!ownsArtifact(dataset, reader) && !(await canReadArtifact(dataset, reader.userId ? { userId: reader.userId, email: reader.email ?? null } : null))) return null;
+  const data = await tableForRef(dataset, viewer, row);
+  if (!data || data.catalog?.kind !== 'stored') return null;
+  const tables = Object.values(data.tables);
+  if (tables.reduce((n, t) => n + t.rows.length, 0) > HOLD_MAX_ROWS) return null;
+  if (JSON.stringify(data.tables).length > HOLD_MAX_BYTES) return null;
+  return data.tables;
+}
+
+/** The imports this reader may hold, by name, in declaration order — the island's `dataflow.hold`. */
+export async function holdableImports(row: ArtifactRow, flow: CompiledDataflow, viewer: RoleActor | null): Promise<string[]> {
+  const held = await Promise.all(flow.imports.map(async (i) => ((await heldImportFor(row, flow, i.name, viewer)) ? i.name : null)));
+  return held.filter((name): name is string => name !== null);
+}
+
+/** One import's rows for this reader, or null when they may not hold it (the query route's `hold`). */
+export async function holdImport(row: ArtifactRow, name: string, viewer: RoleActor | null): Promise<ImportTables[string] | null> {
+  const flow = (await declarationsForRow(row))?.flow;
+  return flow ? heldImportFor(row, flow, name, viewer) : null;
+}
 
 /** A bearer/session actor's scope — the editor running a DRAFT's queries. Reach and viewer are the same person here. */
 export const datasetResolverForActor = (actor: TokenActor): DatasetResolver => async (id) =>

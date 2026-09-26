@@ -40,6 +40,15 @@ export interface StoryIslandDataflow {
    * paint-first run happens WITH them.
    */
   values?: Record<string, Scalar>;
+  /**
+   * The imports THIS reader may hold in full — read access to the dataset's
+   * own rows, stored rather than connected, under the hold cap — decided for
+   * the door this render's page queries through (lib/artifacts
+   * holdableImports). The runtime places every query over them in the page
+   * (lib/story/placement); absent, everything runs on the server. A hint: the
+   * door that answers the rows decides again.
+   */
+  hold?: string[];
 }
 
 /**
