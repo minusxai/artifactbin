@@ -64,14 +64,11 @@ export interface ArchivedRender {
   description: string | null;
   /**
    * Written for the previous query engine, in a way the migration's converter
-   * cannot carry over without a person: its queries answer
-   * {@link PREVIOUS_ENGINE} rather than failing on syntax this engine refuses.
+   * cannot carry over without a person: its queries answer PREVIOUS_ENGINE
+   * (lib/story/data-syntax) rather than failing on syntax this engine refuses.
    */
   previousEngine?: true;
 }
-
-/** What each query of an unconvertible old version says instead of running. */
-export const PREVIOUS_ENGINE = 'This version was written for the previous query engine and cannot run on the current one';
 
 /**
  * What this address asks for: a version number, `'none'` (no `version` key at
@@ -185,5 +182,5 @@ export async function archivedVersionForActor(
 
 /** The row an archived render renders FROM: this artifact, wearing that version's bytes. */
 export function rowAtVersion(row: ArtifactRow, at: ArchivedRender): ArtifactRow {
-  return { ...row, source: at.source, meta: at.meta as ArtifactRow['meta'], title: at.title, description: at.description };
+  return { ...row, source: at.source, meta: at.meta as ArtifactRow['meta'], title: at.title, description: at.description, ...(at.previousEngine ? { previousEngine: true as const } : {}) };
 }

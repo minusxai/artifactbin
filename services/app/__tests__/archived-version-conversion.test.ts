@@ -11,7 +11,9 @@ import { GET as pageData } from '@/app/api/page/artifact/[id]/route';
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 import { PUT as replaceRoute } from '@/app/api/artifacts/[id]/route';
 import { documentEditBody } from './prepared-document';
-import { getArtifactById } from '@/lib/artifacts';
+import { dataflowForRow, getArtifactById } from '@/lib/artifacts';
+import { archivedVersionForActor, rowAtVersion } from '@/lib/archived-version';
+import { PREVIOUS_ENGINE } from '@/lib/story/data-syntax';
 import { mintToken } from '@/lib/tokens';
 
 const harness = useAppHarness();
@@ -51,5 +53,38 @@ describe('?version=N of a version written for the previous engine', () => {
     const html = await (await serveArtifact(request(`/a/${id}/raw?version=1`, { token: owner.token }), params({ id }))).text();
     expect(html).toContain('select 7 / 2 as h');
     expect(html).not.toContain('* 1.0');
+  });
+});
+
+describe('?version=N of a version the converter cannot carry over', () => {
+  /** Needs a person: the _signals mutation computes from its own column. */
+  const OLD = '<Helmet><Value name="step" type="number" default={0} /><Query name="steps">{`select $step as s`}</Query><Mutation name="next">{`update _signals set step = step + 1`}</Mutation></Helmet><DataTable data="$steps" /><Button run="$next">Next</Button>';
+  const HEAD = '<Helmet><Query name="steps">{`select 424242 as s`}</Query></Helmet><DataTable data="$steps" />';
+
+  async function manualHistory() {
+    const owner = await mintToken('mxmx_test_archived_manual');
+    const created = await createArtifactRoute(request('/api/artifacts', { method: 'POST', token: owner.token, json: { markup: HEAD } }));
+    expect(created.status, await created.clone().text()).toBe(201);
+    const id = (await created.json()).id as string;
+    const replaced = await replaceRoute(request(`/api/artifacts/${id}`, { method: 'PUT', token: owner.token, json: documentEditBody((await getArtifactById(id))!, { source: HEAD.replace('424242', '424243'), whole: true }) }), params({ id }));
+    expect(replaced.status, await replaced.clone().text()).toBe(200);
+    // Version 1 as the previous engine stored it: its source, no marker.
+    const db = await harness.db();
+    await db.query("UPDATE artifact_versions SET source=$2,document=NULL,meta='{}'::jsonb WHERE artifact_id=$1 AND version=1", [id, OLD]);
+    return { owner, id };
+  }
+
+  it('answers every query with the previous-engine message instead of running anything', async () => {
+    const { owner, id } = await manualHistory();
+    const html = await (await serveArtifact(request(`/a/${id}/raw?version=1`, { token: owner.token }), params({ id }))).text();
+    expect(html).toContain(PREVIOUS_ENGINE);
+    expect(html).not.toContain('42424');
+    const head = (await getArtifactById(id))!;
+    const at = await archivedVersionForActor({ tokenId: owner.id, userId: null }, head, 1);
+    if (at === 'not_found') throw new Error('version 1 should be readable');
+    expect(at.previousEngine).toBe(true);
+    const ran = await dataflowForRow(rowAtVersion(head, at));
+    expect(ran?.state).toMatchObject({ values: { step: 0 }, tables: {}, errors: { steps: PREVIOUS_ENGINE } });
+    expect(JSON.stringify(ran)).not.toContain('42424');
   });
 });
