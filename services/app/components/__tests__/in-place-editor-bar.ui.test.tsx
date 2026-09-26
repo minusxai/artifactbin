@@ -24,7 +24,7 @@ import {
   teardownEditorFrame,
 } from '@/test/helpers/in-place-editor';
 
-const choosePanel = (value: string) => fireEvent.change(screen.getByRole('combobox', { name: 'Editor panel' }), { target: { value } });
+const choosePanel = (value: string) => fireEvent.click(screen.getByRole('tab', { name: new RegExp(`^${value}$`, 'i') }));
 
 beforeEach(installEditorFrame);
 afterEach(teardownEditorFrame);
@@ -35,7 +35,6 @@ describe('the editor bar', () => {
     expect(screen.queryByText(/template/i)).toBeNull();
     unmount();
     mount({ art: { ...art, template: 'briefing' } as EditorArt });
-    choosePanel('settings');
     expect(screen.getByText(/briefing/i)).toBeTruthy();
   });
 
@@ -64,8 +63,7 @@ describe('the editor bar', () => {
   it('queues a colour-mode pick and tells the document; theme default queues null', () => {
     mount();
     env.posted.length = 0;
-    expect(within(screen.getByLabelText('Editor toolbar')).queryByLabelText('Color mode')).toBeNull();
-    choosePanel('settings');
+    expect(within(screen.getByLabelText('Editor toolbar')).getByLabelText('Color mode')).toBeTruthy();
     fireEvent.click(screen.getByLabelText('Color mode'));
     fireEvent.click(screen.getByLabelText('Color mode dark'));
     expect(lastQueued()).toMatchObject({ colorMode: 'dark' });
@@ -171,8 +169,8 @@ describe('the query notebook', () => {
     fireEvent.click(screen.getByLabelText('Show data'));
     expect(screen.getByLabelText('Data')).toBeTruthy();
     expect(screen.getByText('No queries in this artifact.')).toBeTruthy();
-    choosePanel('datasets');
-    expect(screen.getByText('No referenced datasets.')).toBeTruthy();
+    choosePanel('files');
+    expect(screen.getByText('No referenced files.')).toBeTruthy();
   });
 
   it('keeps Files open independently of the workspace without opening a dialog', () => {

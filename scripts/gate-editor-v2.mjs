@@ -482,7 +482,7 @@ try {
     // the toolbar and its current row is in view.
     {
       const panel = humanPage.getByRole('complementary', { name: 'Edit panel' });
-      await panel.getByRole('combobox', { name: 'Editor panel' }).selectOption('history');
+      await panel.getByRole('tab', { name: 'History' }).click();
       const history = panel.getByRole('region', { name: 'Version history' });
       const toolbar = await humanPage.getByRole('banner', { name: 'Editor toolbar' }).boundingBox();
       const list = await history.boundingBox();
@@ -491,7 +491,7 @@ try {
       check(!!current && !!list && current.y >= list.y && current.y <= 950, 'the current version is in view at 1400px');
       check((await humanPage.getByRole('button', { name: 'Open version history' }).count()) === 0,
         'no drawer switch beside the panel at 1400px');
-      await panel.getByRole('combobox', { name: 'Editor panel' }).selectOption('selection');
+      await panel.getByRole('tab', { name: 'Selection' }).click();
     }
     // Below the panel breakpoint (960px) there is no side panel: the bar's
     // switch opens the versions as a bottom sheet, at a laptop-narrow width

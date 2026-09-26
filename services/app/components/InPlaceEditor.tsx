@@ -1202,49 +1202,10 @@ export default function InPlaceEditor({
     <p className="px-1 py-2 font-sans text-xs text-muted">{SELECTION_HINT}</p>
   );
 
-  const settingsBody = (panel: EditPanelTab) => (
+  const settingsBody = (panel: 'files' | 'sharing') => (
     <div className="min-h-0 flex-1 overflow-auto p-4">
-      {panel === 'files' || panel === 'datasets' ? <ReferencedFiles source={source} references={art.refs ?? []} datasetsOnly={panel === 'datasets'} />
-        : panel === 'sharing' ? <ShareLink className="" artifactId={art.id} title={title} editable format="markup" variant="embedded" onSharingChange={onSharingChange} />
-        : <div className="flex flex-col items-start gap-4">
-          <h2 className="text-sm font-semibold">Artifact settings</h2>
-          <ThemePicker
-            value={theme}
-            colorMode={colorMode}
-            onPick={(t) => {
-              setTheme(t);
-              queue({ theme: t });
-              // The document carries its own design attributes; tell it directly
-              // rather than making it wait for the save to come back around. With
-              // no author pick the MODE follows the new theme's declared default.
-              sendDocument(
-                { frameRef, runtimeRef },
-                {
-                  type: 'mx:document',
-                  nodes: storyUpdateParts(sourceRef.current, HELD_ASSETS)?.nodes ?? [],
-                  theme: t,
-                  colorMode: colorMode ?? storyThemeDefaultMode(t) ?? 'light',
-                },
-              );
-            }}
-          />
-          <TemplateChip template={art.template} />
-          {/* The AUTHOR'S DEFAULT mode, beside the theme it composes with. Every
-            theme carries both palettes, so this is meaningful for every
-            document; "theme default" stores an explicit null so the mode
-            follows a later theme switch. Readers can still flip their own view. */}
-          <ModeChip
-            mode={colorMode}
-            themeDefault={storyThemeDefaultMode(theme) ?? 'light'}
-            onPick={(next) => {
-              setColorMode(next);
-              const effective = next ?? storyThemeDefaultMode(theme) ?? 'light';
-              colorModeRef.current = effective;
-              queue({ colorMode: next });
-              showInDocument(sourceRef.current, { colorMode: effective });
-            }}
-          />
-        </div>}
+      {panel === 'files' ? <ReferencedFiles source={source} references={art.refs ?? []} />
+        : <ShareLink className="" artifactId={art.id} title={title} editable format="markup" variant="embedded" onSharingChange={onSharingChange} />}
     </div>
   );
 
@@ -1446,6 +1407,42 @@ export default function InPlaceEditor({
               </Tooltip>
             )}
           </div>
+          <ThemePicker
+            value={theme}
+            colorMode={colorMode}
+            onPick={(t) => {
+              setTheme(t);
+              queue({ theme: t });
+              // The document carries its own design attributes; tell it directly
+              // rather than making it wait for the save to come back around. With
+              // no author pick the MODE follows the new theme's declared default.
+              sendDocument(
+                { frameRef, runtimeRef },
+                {
+                  type: 'mx:document',
+                  nodes: storyUpdateParts(sourceRef.current, HELD_ASSETS)?.nodes ?? [],
+                  theme: t,
+                  colorMode: colorMode ?? storyThemeDefaultMode(t) ?? 'light',
+                },
+              );
+            }}
+          />
+          <TemplateChip template={art.template} />
+          {/* The AUTHOR'S DEFAULT mode, beside the theme it composes with. Every
+            theme carries both palettes, so this is meaningful for every
+            document; "theme default" stores an explicit null so the mode
+            follows a later theme switch. Readers can still flip their own view. */}
+          <ModeChip
+            mode={colorMode}
+            themeDefault={storyThemeDefaultMode(theme) ?? 'light'}
+            onPick={(next) => {
+              setColorMode(next);
+              const effective = next ?? storyThemeDefaultMode(theme) ?? 'light';
+              colorModeRef.current = effective;
+              queue({ colorMode: next });
+              showInDocument(sourceRef.current, { colorMode: effective });
+            }}
+          />
 
         </div>
 
@@ -1666,9 +1663,9 @@ export default function InPlaceEditor({
 
       {!wide && sheet && sheet !== 'selection' && sheet !== 'history' && (
         <TrustedUi overlay layer="navigation">
-          <MobileSheet label={sheet === 'settings' ? 'Artifact settings' : sheet === 'datasets' ? 'Dataset settings' : sheet === 'files' ? 'Files' : 'Sharing'}
+          <MobileSheet label={sheet === 'files' ? 'Files' : 'Sharing'}
             size="half" swipeToClose onClose={() => setSheet(null)}
-            header={<div className="flex justify-end"><button type="button" aria-label={`Close ${sheet === 'files' ? 'Files' : sheet === 'sharing' ? 'Sharing' : 'settings'}`} onClick={() => setSheet(null)} className="rounded p-1 text-muted"><X size={13} /></button></div>}>
+            header={<div className="flex justify-end"><button type="button" aria-label={`Close ${sheet === 'files' ? 'Files' : 'Sharing'}`} onClick={() => setSheet(null)} className="rounded p-1 text-muted"><X size={13} /></button></div>}>
             {settingsBody(sheet)}
           </MobileSheet>
         </TrustedUi>

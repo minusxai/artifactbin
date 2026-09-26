@@ -22,8 +22,12 @@ import { installEditorFrame, teardownEditorFrame, mount, fromFrame, selection, e
 
 const chart = () => selection({ kind: 'embed', tag: 'Question', path: '0.2', rect: { x: 10, y: 400, width: 300, height: 200 } });
 const setWidth = (width: number) => Object.defineProperty(window, 'innerWidth', { value: width, configurable: true });
-const choosePanel = (value: string) => fireEvent.change(screen.getByRole('combobox', { name: 'Editor panel' }), { target: { value: value.toLowerCase() } });
-const activePanel = () => (screen.getByRole('combobox', { name: 'Editor panel' }) as HTMLSelectElement).value;
+const choosePanel = (value: string) => {
+  const picker = screen.queryByRole('combobox', { name: 'Editor panel' });
+  if (picker) fireEvent.change(picker, { target: { value: value.toLowerCase() } });
+  else fireEvent.click(screen.getByRole('tab', { name: new RegExp(`^${value}$`, 'i') }));
+};
+const activePanel = () => screen.getAllByRole('tab', { selected: true }).at(-1)!.textContent!.toLowerCase();
 
 beforeEach(() => {
   installEditorFrame();
@@ -37,6 +41,24 @@ afterEach(() => {
 });
 
 describe('the edit panel on a wide window', () => {
+  it('groups inspector tools under a remembered Inspector tab and supports keyboard navigation', () => {
+    mount({ onCommentsOpenChange: vi.fn() });
+    const groups = screen.getByRole('tablist', { name: 'Editor panels' });
+    expect(within(groups).getAllByRole('tab').map(tab => tab.textContent)).toEqual(['Inspector', 'Files', 'Sharing']);
+    expect(screen.queryByRole('combobox', { name: 'Editor panel' })).toBeNull();
+    choosePanel('History');
+    choosePanel('Files');
+    expect(screen.queryByRole('tablist', { name: 'Inspector tabs' })).toBeNull();
+    expect(screen.getByText('No referenced files.')).toBeTruthy();
+    choosePanel('Inspector');
+    expect(screen.getByLabelText('Version history')).toBeTruthy();
+    expect(activePanel()).toBe('history');
+    const inspector = screen.getByRole('tab', { name: 'Inspector' });
+    fireEvent.keyDown(inspector, { key: 'ArrowRight' });
+    expect(screen.getByRole('tab', { name: 'Files' })).toHaveFocus();
+    expect(screen.getByText('No referenced files.')).toBeTruthy();
+  });
+
   it('is open from entry, and nothing in the session changes the width it asks for', async () => {
     const widths: number[] = [];
     const onCommentsOpenChange = vi.fn();
@@ -130,7 +152,7 @@ describe('the edit panel on a wide window', () => {
 
   it('offers no Comments tab to someone who may not comment', () => {
     mount();
-    expect(screen.queryByRole('option', { name: 'Comments' })).toBeNull();
+    expect(screen.queryByRole('tab', { name: 'Comments' })).toBeNull();
   });
 
   it('collapses from its button, remembers it, and a selection alone never expands it', async () => {
@@ -305,7 +327,7 @@ describe('below the panel breakpoint', () => {
     }
   });
 
-  it('opens files and settings on a phone without replacing the workspace', () => {
+  it('opens files on a phone without replacing the workspace and keeps appearance in the toolbar', () => {
     setWidth(390);
     mount();
     fireEvent.click(screen.getByLabelText('Edit the source'));
@@ -313,9 +335,7 @@ describe('below the panel breakpoint', () => {
     expect(screen.getByRole('dialog', { name: 'Files' })).toBeTruthy();
     expect(screen.getByLabelText('Markup source')).toBeTruthy();
     fireEvent.click(screen.getByLabelText('Close Files'));
-    choosePanel('settings');
-    expect(screen.getByRole('dialog', { name: 'Artifact settings' })).toBeTruthy();
-    expect(screen.getByLabelText('Color mode')).toBeTruthy();
+    expect(within(screen.getByLabelText('Editor toolbar')).getByLabelText('Color mode')).toBeTruthy();
   });
 
   it('opens history and comments from the bar, one sheet at a time', () => {

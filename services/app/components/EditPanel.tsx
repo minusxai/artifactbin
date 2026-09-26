@@ -12,28 +12,26 @@
  * collapse button, or an explicit request to see a tab while collapsed (the
  * caller's call) — because only then did the person ask for it.
  *
- * The panel owns its frame — panel chooser, the dot, collapse — and nothing else. What
+ * The panel owns its frame — grouped tabs, the dot, collapse — and nothing else. What
  * each tab shows is the caller's: the selection's inspector, the version list,
  * and a host element the comments rail renders into.
  */
-import { History, MessageSquare, PanelRightClose, PanelRightOpen, SlidersHorizontal, Files, Users, Database, Settings } from 'lucide-react';
-import { useId, type ReactNode } from 'react';
+import { History, MessageSquare, PanelRightClose, PanelRightOpen, SlidersHorizontal, Files, Users } from 'lucide-react';
+import { useEffect, useId, useRef, type ReactNode } from 'react';
 import { Tooltip } from '@/components/Tooltip';
 import { EDIT_PANEL_STRIP_W, RIGHT_RAIL_W } from '@/lib/story/edit-bar';
 
-export type EditPanelTab = 'selection' | 'files' | 'datasets' | 'sharing' | 'settings' | 'history' | 'comments';
+export type EditPanelTab = 'selection' | 'files' | 'sharing' | 'history' | 'comments';
 
 const TABS = [
   { tab: 'selection', label: 'Selection', Icon: SlidersHorizontal },
   { tab: 'files', label: 'Files', Icon: Files },
-  { tab: 'datasets', label: 'Dataset settings', Icon: Database },
   { tab: 'sharing', label: 'Sharing', Icon: Users },
-  { tab: 'settings', label: 'Artifact settings', Icon: Settings },
   { tab: 'history', label: 'History', Icon: History },
   { tab: 'comments', label: 'Comments', Icon: MessageSquare },
 ] as const;
 
-/** Shared chooser: rail on desktop, sheet launcher on narrow windows. */
+/** Compact sheet launcher for narrow windows; desktop uses grouped tabs. */
 export function EditPanelPicker({ value, onChange, commentsAvailable, selectionDot = false, compact = false }: {
   value: EditPanelTab | '';
   onChange: (tab: EditPanelTab) => void;
@@ -50,6 +48,38 @@ export function EditPanelPicker({ value, onChange, commentsAvailable, selectionD
         <option key={item.tab} value={item.tab}>{item.label}</option>)}
     </select>
     {selectionDot && <span aria-label="New selection available" className="h-1.5 w-1.5 shrink-0 rounded-full bg-accent" />}
+  </div>;
+}
+
+type InspectorTab = Exclude<EditPanelTab, 'files' | 'sharing'>;
+const isInspectorTab = (tab: EditPanelTab): tab is InspectorTab => tab !== 'files' && tab !== 'sharing';
+
+/** Each row is a keyboard-navigable tab group; selection never changes the rail width. */
+function PanelTabs<T extends string>({ label, items, active, onPick, dotOn }: {
+  label: string;
+  items: readonly { tab: T; label: string }[];
+  active: T;
+  onPick: (tab: T) => void;
+  dotOn?: T;
+}) {
+  return <div role="tablist" aria-label={label} className="flex min-w-0 flex-1 items-center gap-0.5">
+    {items.map((item, index) => <button key={item.tab} type="button" role="tab"
+      aria-selected={active === item.tab} tabIndex={active === item.tab ? 0 : -1}
+      onClick={() => onPick(item.tab)}
+      onKeyDown={event => {
+        const offset = event.key === 'ArrowRight' ? 1 : event.key === 'ArrowLeft' ? -1 : 0;
+        const next = event.key === 'Home' ? 0 : event.key === 'End' ? items.length - 1 : offset ? (index + offset + items.length) % items.length : null;
+        if (next === null) return;
+        event.preventDefault();
+        const target = items[next];
+        if (!target) return;
+        (event.currentTarget.parentElement?.children[next] as HTMLElement | undefined)?.focus();
+        onPick(target.tab);
+      }}
+      className={`relative inline-flex h-7 cursor-pointer items-center gap-1.5 rounded-[4px] px-2 font-mono text-[11px] ${active === item.tab ? 'bg-accent-soft text-accent' : 'text-muted hover:bg-raised hover:text-fg'}`}>
+      {item.label}
+      {dotOn === item.tab && <span aria-label="New selection available" className="h-1.5 w-1.5 rounded-full bg-accent" />}
+    </button>)}
   </div>;
 }
 
@@ -80,6 +110,12 @@ export default function EditPanel({
   children: ReactNode;
 }) {
   const id = useId();
+  const lastInspectorTab = useRef<InspectorTab>('selection');
+  useEffect(() => {
+    if (isInspectorTab(tab)) lastInspectorTab.current = tab;
+  }, [tab]);
+  const inspector = isInspectorTab(tab);
+
   const tabs = TABS.filter((t) => t.tab !== 'comments' || commentsAvailable);
   const dot = (
     <span aria-hidden="true" className="absolute right-0.5 top-0.5 h-1.5 w-1.5 rounded-full bg-accent" />
@@ -134,7 +170,11 @@ export default function EditPanel({
       style={{ top, width: RIGHT_RAIL_W }}
     >
       <div className="flex h-10 shrink-0 items-center gap-1 border-b border-edge px-2">
-        <EditPanelPicker value={tab} onChange={onTab} commentsAvailable={commentsAvailable} selectionDot={selectionDot} />
+        <PanelTabs label="Editor panels"
+          items={[{ tab: 'inspector', label: 'Inspector' }, { tab: 'files', label: 'Files' }, { tab: 'sharing', label: 'Sharing' }] as const}
+          active={inspector ? 'inspector' : tab}
+          onPick={next => onTab(next === 'inspector' ? lastInspectorTab.current : next)}
+          dotOn={selectionDot && !inspector ? 'inspector' : undefined} />
         <Tooltip content="Collapse panel" positioning={{ placement: 'bottom-end' }}>
           <button
             type="button"
@@ -147,6 +187,10 @@ export default function EditPanel({
           </button>
         </Tooltip>
       </div>
+      {inspector && <div className="flex h-10 shrink-0 items-center border-b border-edge px-2">
+        <PanelTabs label="Inspector tabs" items={tabs.filter(item => isInspectorTab(item.tab))}
+          active={tab} onPick={onTab} dotOn={selectionDot ? 'selection' : undefined} />
+      </div>}
       <div
         role="region"
         id={`${id}-body`}
