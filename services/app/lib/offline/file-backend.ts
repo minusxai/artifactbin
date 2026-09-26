@@ -424,9 +424,9 @@ export function createFileBackend(initial: ArtifactFile, hooks: FileBackendHooks
     },
 
     // ── comments ──────────────────────────────────────────────────────────
-    async listAnnotations(status) {
-      const all = threadsNow();
-      return status ? all.filter((thread) => thread.status === status) : all;
+    /** Omitted status reads the OPEN threads, as GET /annotations does (the server's default). */
+    async listAnnotations(status = 'open') {
+      return threadsNow().filter((thread) => thread.status === status);
     },
 
     async createAnnotation(body, idempotencyKey) {

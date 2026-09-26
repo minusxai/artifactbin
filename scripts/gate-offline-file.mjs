@@ -19,6 +19,23 @@
  *    violation fires (a blocked fetch never reaches the request log, so this
  *    is the check that would catch one), and no page error is thrown.
  *
+ * And then, with the core bundle in each engine, what a reader DOES with the
+ * file (lib/offline/file-backend, components/offline/OfflineApp):
+ *  - Save starts disabled ("No changes to save"); Edit asks "What should we
+ *    call you?" the first time; a heading edited in place shows on the page,
+ *    marks the file unsaved, and Save downloads a file;
+ *  - what needs artifactbin says why in place: version history, an image by
+ *    URL, the query notebook's tables;
+ *  - THAT saved file, opened on its own, has the edit, and "Changes" lists it
+ *    under the name; invalid markup typed in code view shows the validator's
+ *    reason and is not applied;
+ *  - a second reader (a fresh browser profile) comments on a selection in the
+ *    saved copy — the name prompt comes first — replies and resolves, saves,
+ *    and the copy they saved reopens with the thread, the name and its status;
+ *  - Chromium's save picker is written to when it exists (stubbed: Playwright
+ *    cannot drive the native dialog);
+ *  - still zero requests, CSP violations and page errors on every page.
+ *
  * The base URL the gate runner passes is deliberately unused: this gate's
  * whole claim is that no server is needed.
  */
@@ -47,7 +64,12 @@ await esbuild.build({
   stdin: { contents: "export * from './lib/offline/file-html'; export * from './lib/offline/file-format';", resolveDir: APP, loader: 'ts' },
   bundle: true, format: 'esm', platform: 'node', outfile: shim, alias: { '@': APP }, logLevel: 'warning',
 });
-const { renderArtifactFileHtml, parseArtifactFile, ARTIFACT_FILE_CSP, ARTIFACT_FILE_UNSUPPORTED, OFFLINE_FILTER_REASON, OFFLINE_MUTATION_REASON } = await import(pathToFileURL(shim).href);
+const {
+  renderArtifactFileHtml, parseArtifactFile, ARTIFACT_FILE_CSP, ARTIFACT_FILE_UNSUPPORTED,
+  OFFLINE_FILTER_REASON, OFFLINE_MUTATION_REASON, OFFLINE_ASSET_REASON, OFFLINE_QUERY_REASON,
+} = await import(pathToFileURL(shim).href);
+const HISTORY_REASON = 'Version history lives on artifactbin. Open the live version.';
+const NOTHING_TO_SAVE = 'No changes to save';
 
 const file = parseArtifactFile(JSON.parse(readFileSync(path.join(ROOT, 'scripts/fixtures/offline-file/artifact-file.json'), 'utf8')));
 const manifest = JSON.parse(readFileSync(path.join(APP, 'lib/story-runtime/dist/offline/manifest.json'), 'utf8'));
@@ -158,5 +180,223 @@ for (const { kind, url } of files) for (const [engine_, engine] of [['chromium',
     await browser.close();
   }
 }
+// ── editing, commenting and saving, from file:// ──────────────────────────────
+
+const core = files.find((f) => f.kind === 'core');
+const headingId = /<h1 [^>]*id="([^"]+)"/.exec(file.source)[1];
+const ENGINES = [['chromium', chromium], ['firefox', firefox], ['webkit', webkit]];
+const downloads = {};
+
+/** A page that records what must stay empty: requests off the file, CSP violations, page errors. */
+async function watchedPage(context, sink) {
+  const page = await context.newPage();
+  page.on('request', (request) => { if (!/^(file|data|blob):/.test(request.url())) sink.requests.push(request.url()); });
+  page.on('pageerror', (error) => sink.pageErrors.push(String(error)));
+  return page;
+}
+async function newContext(browser, { picker = false } = {}) {
+  const context = await browser.newContext({ viewport: { width: 1280, height: 900 }, acceptDownloads: true });
+  await context.addInitScript(({ picker }) => {
+    window.__cspViolations = [];
+    document.addEventListener('securitypolicyviolation', (event) => { window.__cspViolations.push(`${event.violatedDirective} ${event.blockedURI}`); });
+    // The download path is what every engine has; the picker is checked on its own, stubbed.
+    if (!picker) { delete window.showSaveFilePicker; return; }
+    window.__written = null;
+    window.showSaveFilePicker = async (options) => {
+      window.__pickerName = options.suggestedName;
+      return { createWritable: async () => { const parts = []; return { write: async (data) => { parts.push(typeof data === 'string' ? data : await data.text()); }, close: async () => { window.__written = parts.join(''); } }; } };
+    };
+  }, { picker });
+  return context;
+}
+const violations = (page) => page.evaluate(() => window.__cspViolations);
+
+/** Select the first `length` characters of the heading's text, as a reader's drag does. */
+async function selectHeading(page, length) {
+  await page.evaluate(({ id, length }) => {
+    const heading = document.getElementById(id);
+    const text = document.createTreeWalker(heading, NodeFilter.SHOW_TEXT).nextNode();
+    (heading.closest('.ProseMirror') ?? heading).focus({ preventScroll: true });
+    const selection = getSelection();
+    selection.removeAllRanges();
+    selection.setBaseAndExtent(text, 0, text, length);
+  }, { id: headingId, length });
+}
+async function answerName(page, name) {
+  const dialog = page.getByRole('dialog', { name: 'What should we call you?' });
+  await expect(dialog).toBeVisible();
+  await dialog.getByRole('textbox', { name: 'Your name' }).fill(name);
+  await dialog.getByRole('button', { name: 'Save', exact: true }).click();
+  await expect(dialog).toHaveCount(0);
+}
+async function saveByDownload(page, to) {
+  const [download] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: 'Save', exact: true }).click()]);
+  await download.saveAs(to);
+  const scheme = download.url().split(':')[0];
+  // The saved copy is the same shell with the same code: it parses, and it is a complete file.
+  const html = readFileSync(to, 'utf8');
+  assert.match(html, /<script type="application\/octet-stream" id="afbin-code">/);
+  return { html, scheme, name: download.suggestedFilename() };
+}
+const savedFile = (html) => {
+  const json = /<script type="application\/json" id="afbin-file">([\s\S]*?)<\/script>/.exec(html)[1];
+  return parseArtifactFile(JSON.parse(json));
+};
+const saveButton = (page) => page.getByRole('button', { name: 'Save', exact: true });
+
+for (const [engineName, engine] of ENGINES) {
+  const name = `${engineName} (core, editing)`;
+  const browser = await engine.launch();
+  const started = Date.now();
+  const sink = { requests: [], pageErrors: [] };
+  const seen = [];
+  try {
+    // ── Asha edits the heading and saves ─────────────────────────────────────
+    const asha = await newContext(browser);
+    const page = await watchedPage(asha, sink);
+    await page.goto(core.url);
+    await expect(page.getByRole('heading', { name: 'Regional sales' })).toBeVisible({ timeout: 20_000 });
+    await expect(saveButton(page)).toBeDisabled();
+    await expect(saveButton(page)).toHaveAccessibleDescription(NOTHING_TO_SAVE);
+    await page.getByRole('button', { name: 'Edit', exact: true }).click();
+    await answerName(page, 'Asha');
+    await expect(page.getByRole('button', { name: 'Edit the source' })).toBeVisible({ timeout: 20_000 });
+    await selectHeading(page, 'Regional'.length);
+    await page.keyboard.type('Quarterly');
+    await expect(page.getByRole('heading', { name: 'Quarterly sales' })).toBeVisible();
+    await expect(page.getByRole('status').filter({ hasText: 'Unsaved changes' })).toBeVisible({ timeout: 10_000 });
+    await expect(saveButton(page)).toBeEnabled();
+    seen.push('edit in place');
+
+    // What needs artifactbin says so where its control is.
+    const history = page.getByRole('tab', { name: 'History' }).first();
+    await expect(history).toBeDisabled();
+    await expect(history).toHaveAccessibleDescription(HISTORY_REASON);
+    await page.getByRole('button', { name: 'Insert', exact: true }).click();
+    await page.getByRole('button', { name: 'Image…' }).click();
+    const imageUrl = page.getByRole('textbox', { name: 'Image URL' });
+    await expect(imageUrl).toBeDisabled();
+    await expect(imageUrl).toHaveAccessibleDescription(OFFLINE_ASSET_REASON);
+    await expect(page.getByRole('button', { name: 'Import image from URL' })).toBeDisabled();
+    await page.getByRole('button', { name: 'Close', exact: true }).click();
+    await page.getByRole('button', { name: 'Show data' }).click();
+    await expect(page.getByText(`shape unavailable — ${OFFLINE_QUERY_REASON}`).first()).toBeVisible();
+    await page.getByRole('button', { name: 'Show data' }).click();
+    seen.push('history, image URL and query notebook reasons');
+
+    await page.getByRole('button', { name: 'Done editing' }).click();
+    const first = await saveByDownload(page, path.join(work, `saved-${engineName}.html`));
+    downloads[engineName] = first.scheme;
+    assert.equal(first.name, path.basename(decodeURIComponent(new URL(core.url).pathname)), `${name}: Save suggests the name the file was opened as`);
+    await expect(saveButton(page)).toBeDisabled();
+    await expect(page.getByRole('status').filter({ hasText: 'Unsaved changes' })).toHaveCount(0);
+    assert.deepEqual(await violations(page), [], `${name}: CSP violations while editing`);
+    seen.push(`Save → ${first.scheme}: download`);
+
+    // ── that saved file, opened on its own ───────────────────────────────────
+    const reopened = await watchedPage(asha, sink);
+    await reopened.goto(pathToFileURL(path.join(work, `saved-${engineName}.html`)).href);
+    await expect(reopened.getByRole('heading', { name: 'Quarterly sales' })).toBeVisible({ timeout: 20_000 });
+    await expect(reopened.getByRole('heading', { name: 'Regional sales', exact: true })).toHaveCount(0);
+    await expect(reopened.getByRole('alertdialog')).toHaveCount(0); // no crash-buffer offer for a copy just saved
+    await reopened.getByRole('button', { name: /^Changes/ }).click();
+    const changes = reopened.getByRole('region', { name: 'Changes in this file' });
+    await expect(changes).toContainText('Asha');
+    await expect(changes).toContainText("Edited text in 'Quarterly sales'");
+    await reopened.getByRole('button', { name: /^Changes/ }).click();
+    seen.push('reopened: edit and Changes by name');
+
+    // Invalid markup in code view: the validator's reason, and nothing applied.
+    await reopened.getByRole('button', { name: 'Edit', exact: true }).click(); // the name is remembered: no prompt
+    await expect(reopened.getByRole('dialog', { name: 'What should we call you?' })).toHaveCount(0);
+    await reopened.getByRole('button', { name: 'Edit the source' }).click();
+    await reopened.locator('.monaco-editor').waitFor({ timeout: 20_000 });
+    await reopened.locator('.monaco-editor .view-lines').click();
+    await reopened.keyboard.press(process.platform === 'darwin' ? 'Meta+ArrowDown' : 'Control+End');
+    await reopened.keyboard.press('Enter');
+    await reopened.keyboard.type('<p>{$missing}</p>');
+    await expect(reopened.getByRole('status').filter({ hasText: /not saved — .*\$missing.* refers to nothing declared/ })).toBeVisible({ timeout: 10_000 });
+    await expect(saveButton(reopened)).toBeDisabled();
+    await expect(reopened.getByRole('button', { name: /^Changes/ })).toHaveText('Changes (1)');
+    assert.deepEqual(await violations(reopened), [], `${name}: CSP violations in the reopened copy`);
+    seen.push('invalid code refused, not applied');
+
+    // ── Ravi, somewhere else, comments on the copy he was sent ───────────────
+    const ravi = await newContext(browser);
+    const second = await watchedPage(ravi, sink);
+    await second.goto(pathToFileURL(path.join(work, `saved-${engineName}.html`)).href);
+    const doc = second.locator('[data-mx-inline-story]');
+    await doc.locator(`#${headingId}`).waitFor({ timeout: 20_000 });
+    const bubble = second.locator('[data-mx-selection-actions]');
+    for (let i = 0; i < 40 && !(await bubble.isVisible().catch(() => false)); i++) {
+      await doc.locator(`#${headingId}`).click({ clickCount: 3, timeout: 2000 }).catch(() => {});
+      await second.waitForTimeout(250);
+    }
+    await second.getByRole('button', { name: 'Comment on selected text' }).click();
+    await second.getByRole('textbox', { name: 'Annotation comment' }).fill('Is "Quarterly" right for a monthly table?');
+    await second.getByRole('button', { name: 'Save annotation' }).click();
+    await answerName(second, 'Ravi');
+    await expect(doc.locator(`#${headingId}[data-mx-annotated]`)).toHaveCount(1, { timeout: 10_000 });
+    await second.getByRole('button', { name: /^Comments/ }).click();
+    const thread = second.getByLabel('Annotation thread', { exact: true }).first();
+    await expect(thread).toContainText('Ravi');
+    await expect(thread).toContainText('monthly table');
+    await second.getByRole('textbox', { name: 'Reply to annotation' }).first().fill('Checked: it is the Q3 view.');
+    await second.getByRole('button', { name: 'Send reply' }).first().click();
+    await expect(thread).toContainText('Checked: it is the Q3 view.');
+    await second.getByRole('button', { name: 'Resolve annotation' }).first().click();
+    await expect(second.getByLabel('Resolved annotation thread')).toHaveCount(1, { timeout: 10_000 });
+    const withThread = await saveByDownload(second, path.join(work, `commented-${engineName}.html`));
+    assert.deepEqual(await violations(second), [], `${name}: CSP violations while commenting`);
+    const written = savedFile(withThread.html);
+    assert.equal(written.threads.length, 1, `${name}: the saved copy carries the thread`);
+    assert.equal(written.threads[0].status, 'resolved');
+    assert.deepEqual(written.threads[0].thread.map((c) => c.author.label), ['Ravi', 'Ravi']);
+    assert.deepEqual(written.journal.map((e) => e.by), ['Asha'], `${name}: Asha's edit travels with the file`);
+    seen.push('comment → name prompt → reply → resolve → Save');
+
+    const third = await watchedPage(ravi, sink);
+    await third.goto(pathToFileURL(path.join(work, `commented-${engineName}.html`)).href);
+    await expect(third.getByRole('heading', { name: 'Quarterly sales' })).toBeVisible({ timeout: 20_000 });
+    await third.getByRole('button', { name: /^Comments/ }).click();
+    const resolved = third.getByLabel('Resolved annotation thread');
+    await expect(resolved).toHaveCount(1, { timeout: 10_000 });
+    await expect(resolved).toContainText('Ravi');
+    await expect(third.getByLabel('Annotation thread', { exact: true })).toHaveCount(0);
+    assert.deepEqual(await violations(third), [], `${name}: CSP violations in the commented copy`);
+    seen.push('reopened: resolved thread with the name');
+
+    // ── the save picker, where the browser has one ───────────────────────────
+    if (engineName === 'chromium') {
+      const picked = await newContext(browser, { picker: true });
+      const pickerPage = await watchedPage(picked, sink);
+      await pickerPage.goto(core.url);
+      await pickerPage.getByRole('button', { name: 'Edit', exact: true }).click();
+      await answerName(pickerPage, 'Mei');
+      await expect(pickerPage.getByRole('button', { name: 'Edit the source' })).toBeVisible({ timeout: 20_000 });
+      await selectHeading(pickerPage, 'Regional'.length);
+      await pickerPage.keyboard.type('Picked');
+      await expect(saveButton(pickerPage)).toBeEnabled({ timeout: 10_000 });
+      await saveButton(pickerPage).click();
+      await expect(saveButton(pickerPage)).toBeDisabled({ timeout: 10_000 });
+      const { html, suggested } = await pickerPage.evaluate(() => ({ html: window.__written, suggested: window.__pickerName }));
+      assert.equal(suggested, path.basename(decodeURIComponent(new URL(core.url).pathname)));
+      assert.ok(savedFile(html).source.includes('>Picked sales</h1>'), `${name}: the picker received the edited file`);
+      assert.deepEqual(await violations(pickerPage), [], `${name}: CSP violations with the picker`);
+      seen.push('save picker written with the file name');
+    }
+
+    assert.deepEqual(sink.requests, [], `${name}: network requests`);
+    assert.deepEqual(sink.pageErrors, [], `${name}: page errors`);
+    console.log(`${name}: ${seen.join(', ')}, 0 requests, 0 CSP violations, 0 page errors — passed in ${((Date.now() - started) / 1000).toFixed(1)}s`);
+  } catch (error) {
+    failures.push(new Error(`${name}: ${error.message}`));
+    console.log(`${name}: FAILED after [${seen.join(', ')}] — ${error.message}`);
+  } finally {
+    await browser.close();
+  }
+}
+console.log(`downloads: ${Object.entries(downloads).map(([engineName, scheme]) => `${engineName} ${scheme}:`).join(', ')}`);
+
 if (failures.length) throw new AggregateError(failures, 'Offline file checks failed');
-console.log(`offline file gate passed in chromium, firefox and webkit with the ${files.map((f) => f.kind).join(' and ')} bundles`);
+console.log(`offline file gate passed in chromium, firefox and webkit with the ${files.map((f) => f.kind).join(' and ')} bundles, and editing, comments and Save with the core bundle`);

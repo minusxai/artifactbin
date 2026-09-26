@@ -288,6 +288,8 @@ describe('comments in the file', () => {
     expect(resolved.status).toBe('resolved');
     expect(resolved.resolved_at).toBeTruthy();
     expect(await backend.listAnnotations('open')).toEqual([]);
+    // No status is the open list, as GET /annotations answers it.
+    expect(await backend.listAnnotations()).toEqual([]);
     expect((await backend.listAnnotations('resolved')).map((t) => t.id)).toEqual([wire.id]);
     const reopened = await backend.actOnAnnotation(wire.id, { reopen: true });
     expect(reopened).toMatchObject({ status: 'open', resolved_at: null });
