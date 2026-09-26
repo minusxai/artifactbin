@@ -878,7 +878,13 @@ const unnestFrom: Rule = (v) => {
       const name = identifier(t[j]!);
       if (name === null || t[j + 1]?.text === '(' || word(t[j - 1]) === 'as') continue;
       const qualifier = t[j - 1]?.text === '.' ? identifier(t[j - 2]!) : null;
-      if (name === column && (qualifier === null || qualifier === table)) edits.push(qualifier === null ? v.replace(j, j, `${alias.text}.value`) : v.replace(j, j, 'value'));
+      if (name === column && (qualifier === null || qualifier === table)) {
+        // A select item that is just the column keeps its name: DuckDB named it `col`, and `u.value` would be `value`.
+        const from = qualifier === null ? j : j - 2;
+        const item = v.clauseOf(from) === 'select' && (['select', 'distinct', 'all'].includes(word(t[from - 1])) || t[from - 1]?.text === ',')
+          && (!t[j + 1] || t[j + 1]!.text === ',' || t[j + 1]!.text === ')' || word(t[j + 1]) === 'from');
+        edits.push(v.replace(from, j, `${alias.text}.value${item ? ` as ${t[j]!.text}` : ''}`));
+      }
       else if (qualifier === null && JSON_EACH_COLUMNS.has(name) && t[j + 1]?.text !== '.') return v.manual(`unnest in FROM beside a bare ${t[j]!.text}, which would read json_each's columns`, j);
     }
     return { edits };

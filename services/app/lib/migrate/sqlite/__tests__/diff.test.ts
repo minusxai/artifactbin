@@ -108,6 +108,7 @@ describe('translations answer as DuckDB did', () => {
     "select s, lpad(s, 3, 'xy') as l, rpad(s, 3, '0') as r from (select 'abcd' as s union all select '7' union all select '' union all select null union all select 'é') t":
       table(['s', 'l', 'r'], [['abcd', 'abc', 'abc'], ['7', 'xy7', '700'], ['', 'xyx', '000'], [null, null, null], ['é', 'xyé', 'é00']]),
     "select * from (values ('a', 1), ('b', 2)) t(value, label)": table(['value', 'label'], [['a', 1], ['b', 2]]),
+    "select distinct tag from (select '[\"b\",\"a\",\"b\"]' as tags) l, unnest(cast(l.tags as varchar[])) t(tag) union select 'x' order by 1": table(['tag'], [['a'], ['b'], ['x']]),
     "select cast(to_json([cast(v as varchar)]) as varchar) as j, to_json(string_split(v, ',')) as s from (select 'a,b' as v union all select null) t":
       table(['j', 's'], [['["a,b"]', '["a","b"]'], ['[null]', null]]),
     'select s.x from (select a, b from (select 1 as a, 2 as b union all select 3, 0) u) as s(x, y) where s.y > 1': table(['x'], [[1]]),
