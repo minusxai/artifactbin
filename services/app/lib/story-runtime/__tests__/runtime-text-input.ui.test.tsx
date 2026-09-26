@@ -129,6 +129,47 @@ describe('the live text controls', () => {
   });
 });
 
+/**
+ * A text box and a slider are CONTINUOUS: the reader is mid-gesture, and a
+ * query per keystroke is a query nobody reads. They wait for a pause. A
+ * select is one decision, and its queries run the moment it is made.
+ */
+describe('when a bound control re-runs what it feeds', () => {
+  const SEARCH =
+    '<Helmet>'
+    + '<Value name="q" type="string" url={false} />'
+    + '<Value name="size" type="string" default="s" url={false} />'
+    + '<Query name="hits">{`select $q as q, $size as size`}</Query>'
+    + '</Helmet>'
+    + '<div><Input label="Search" value="$q" />'
+    + '<select aria-label="Size" value="$size"><option value="s">S</option><option value="l">L</option></select></div>';
+
+  it('typing waits for the debounce; a select runs at once', () => {
+    vi.useFakeTimers();
+    try {
+      const parsed = parseJsxOrThrow(SEARCH);
+      const { content, body: nodes } = splitHelmet(parsed.nodes as JsxNode[]);
+      const dataflow = {
+        flow: { values: content.values, queries: content.queries },
+        state: { values: { q: null, size: 's' }, tables: { hits: { rows: [], columns: [] } }, errors: {} },
+      };
+      const run = vi.fn<QueryTransport['run']>(() => new Promise(() => {}));
+      const store = createDataflowStore(dataflow, { transport: { run, page: () => Promise.reject(new Error('unused')) }, debounceMs: 150 });
+      const { getByRole } = render(
+        <StoryRuntimeApp nodes={nodes} refData={{}} dataflow={dataflow} store={store} colorMode="light" chrome={true} />,
+      );
+      fireEvent.change(getByRole('textbox', { name: 'Search' }), { target: { value: 'ab' } });
+      expect(run).not.toHaveBeenCalled();
+      vi.advanceTimersByTime(150);
+      expect(run).toHaveBeenCalledTimes(1);
+      expect(run.mock.calls[0]![0]).toMatchObject({ q: 'ab' });
+      fireEvent.change(getByRole('combobox', { name: 'Size' }), { target: { value: 'l' } });
+      expect(run).toHaveBeenCalledTimes(2);
+      expect(run.mock.calls[1]![0]).toMatchObject({ size: 'l' });
+    } finally { vi.useRealTimers(); }
+  });
+});
+
 describe('inside a `run=` form', () => {
   beforeEach(() => {
     HTMLDialogElement.prototype.show = function () { this.open = true; };
