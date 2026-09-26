@@ -7,8 +7,8 @@ import { describe, expect, it } from 'vitest';
 import { useAppHarness, request } from '@/__tests__/harness';
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 import { GET as download } from '@/app/a/[id]/download/route';
-import { offlineBundle } from '@/lib/offline/bundle.server';
-import { parseArtifactFile } from '@/lib/offline/file-format';
+import { offlineBundle, offlineExtrasRef } from '@/lib/offline/bundle.server';
+import { parseArtifactFile, sourceDigest } from '@/lib/offline/file-format';
 import { mintToken } from '@/lib/tokens';
 import { claimToken, createUser } from '@/lib/users';
 
@@ -78,5 +78,18 @@ describe('GET /a/<id>/download', () => {
     expect(code(html)).toBe(await offlineBundle('mermaid'));
     expect(code(plainHtml)).toBe(await offlineBundle('core'));
     expect(code(html).length).toBeGreaterThan(code(plainHtml).length + 1024 * 1024);
+  });
+
+  it('names its code-view extras and the source its render was built from, and tells an agent how to edit it', async () => {
+    const token = await owner('e');
+    const id = await publish(token, 'private');
+    const html = await (await download(request(`/a/${id}/download`, { token }), params(id))).text();
+    const file = fileOf(html);
+    expect(file.extras).toEqual(await offlineExtrasRef());
+    expect(file.derivedFrom).toBe(sourceDigest(file.source));
+    expect(html).toMatch(new RegExp(`^<!doctype html>\\n<!-- artifactbin offline file for "Trip plan" \\(${file.liveUrl.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\)\\.`));
+    expect(html).toContain(`<link rel="help" href="${file.origin}/llms.txt"`);
+    expect(html).toContain(`script-src 'unsafe-inline' ${new URL(file.origin).origin};`);
+    expect(html.indexOf('id="afbin-file"')).toBeLessThan(html.indexOf('id="afbin-code"'));
   });
 });

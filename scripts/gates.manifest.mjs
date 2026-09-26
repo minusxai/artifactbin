@@ -27,8 +27,11 @@
 /** @type {readonly GateSpec[]} */
 export const GATE_SPECS = Object.freeze([
   { name: 'screenshot-comments', browsers: ['chromium', 'firefox', 'webkit'], needsMail: false, timeoutMs: 150_000 },
-  // Needs no server: opens a rendered offline file from file:// in all three engines. Measured 4s locally.
-  { name: 'offline-file', browsers: ['chromium', 'firefox', 'webkit'], needsMail: false, timeoutMs: 180_000 },
+  // Needs no server: opens rendered offline files from file:// in all three engines (reading, editing,
+  // comments, Save, code view offline and online, agent-edited files). Measured 42–44s in the
+  // playwright:v1.62.1-noble image on a laptop and 39s on macOS; CI runners are slower (an earlier,
+  // smaller version overran 60s there), so the budget is ~5x the measured run.
+  { name: 'offline-file', browsers: ['chromium', 'firefox', 'webkit'], needsMail: false, timeoutMs: 240_000 },
   { name: 'cli-conformance', needsMail: true, timeoutMs: 180_000 },
   { name: 'browser-sessions', needsMail: false, timeoutMs: 150_000 },
   { name: 'testusers', needsMail: true, timeoutMs: 60_000 },
