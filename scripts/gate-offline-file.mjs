@@ -4,7 +4,8 @@
  *
  * Renders the checked-in fixture (scripts/fixtures/offline-file, a small
  * dashboard) through the real lib/offline/file-html writer with the real
- * core offline bundle, writes it to a temp dir and asserts, per engine:
+ * core and mermaid offline bundles, writes them to a temp dir and asserts, per
+ * bundle and engine:
  *  - the title and body render, from inside the file;
  *  - the table shows the snapshot's rows, and changing the Select swaps to
  *    the precomputed variant's rows;
@@ -12,6 +13,8 @@
  *    hint says so on focus);
  *  - the <Mutation> button says OFFLINE_MUTATION_REASON, never an access check;
  *  - the Vega chart draws its bars from the snapshot, then from the variant;
+ *  - a browser without DecompressionStream gets the plain "needs a current
+ *    browser" message instead of a broken page;
  *  - nothing but file:/data: is requested, no Content-Security-Policy
  *    violation fires (a blocked fetch never reaches the request log, so this
  *    is the check that would catch one), and no page error is thrown.
@@ -44,21 +47,29 @@ await esbuild.build({
   stdin: { contents: "export * from './lib/offline/file-html'; export * from './lib/offline/file-format';", resolveDir: APP, loader: 'ts' },
   bundle: true, format: 'esm', platform: 'node', outfile: shim, alias: { '@': APP }, logLevel: 'warning',
 });
-const { renderArtifactFileHtml, parseArtifactFile, ARTIFACT_FILE_CSP, OFFLINE_FILTER_REASON, OFFLINE_MUTATION_REASON } = await import(pathToFileURL(shim).href);
+const { renderArtifactFileHtml, parseArtifactFile, ARTIFACT_FILE_CSP, ARTIFACT_FILE_UNSUPPORTED, OFFLINE_FILTER_REASON, OFFLINE_MUTATION_REASON } = await import(pathToFileURL(shim).href);
 
 const file = parseArtifactFile(JSON.parse(readFileSync(path.join(ROOT, 'scripts/fixtures/offline-file/artifact-file.json'), 'utf8')));
 const manifest = JSON.parse(readFileSync(path.join(APP, 'lib/story-runtime/dist/offline/manifest.json'), 'utf8'));
-const code = readFileSync(path.join(APP, 'lib/story-runtime/dist/offline', manifest.bundles[file.bundle].file)).toString('base64');
-const htmlPath = path.join(work, 'Regional sales.html');
-writeFileSync(htmlPath, renderArtifactFileHtml({ file, code }));
-const url = pathToFileURL(htmlPath).href;
-console.log(`file: ${(Buffer.byteLength(readFileSync(htmlPath)) / 1024).toFixed(0)} KB (${file.bundle} bundle), CSP: ${ARTIFACT_FILE_CSP}`);
+/*
+ * Both bundles open the same Mermaid-free fixture: core is what this file would
+ * carry; mermaid proves the larger bundle also loads and runs under the CSP.
+ */
+const files = Object.keys(manifest.bundles).map((kind) => {
+  const code = readFileSync(path.join(APP, 'lib/story-runtime/dist/offline', manifest.bundles[kind].file)).toString('base64');
+  const htmlPath = path.join(work, `Regional sales (${kind}).html`);
+  writeFileSync(htmlPath, renderArtifactFileHtml({ file: { ...file, bundle: kind }, code }));
+  console.log(`${kind} file: ${(Buffer.byteLength(readFileSync(htmlPath)) / 1024).toFixed(0)} KB`);
+  return { kind, url: pathToFileURL(htmlPath).href };
+});
+console.log(`CSP: ${ARTIFACT_FILE_CSP}`);
 
 const baseRows = file.snapshot.state.tables.sales.rows;
 const westRows = file.snapshot.variants.find((v) => v.values.region === 'west').tables.sales.rows;
 const failures = [];
 
-for (const [name, engine] of [['chromium', chromium], ['firefox', firefox], ['webkit', webkit]]) {
+for (const { kind, url } of files) for (const [engine_, engine] of [['chromium', chromium], ['firefox', firefox], ['webkit', webkit]]) {
+  const name = `${engine_} (${kind})`;
   const browser = await engine.launch();
   const started = Date.now();
   try {
@@ -129,7 +140,17 @@ for (const [name, engine] of [['chromium', chromium], ['firefox', firefox], ['we
     assert.deepEqual(requests, [], `${name}: network requests`);
     assert.deepEqual(violations, [], `${name}: CSP violations`);
     assert.deepEqual(pageErrors, [], `${name}: page errors`);
-    console.log(`${name}: title, body, top bar, snapshot rows (${baseRows.length}) → west variant (${westRows.length}), frozen input, mutation reason, chart, 0 requests, 0 CSP violations, 0 page errors — passed in ${((Date.now() - started) / 1000).toFixed(1)}s${consoleErrors.length ? ` (console errors: ${consoleErrors.join(' | ')})` : ''}`);
+    // A browser without DecompressionStream: the boot script's plain message, and nothing else runs.
+    const old = await context.newPage();
+    const oldErrors = [];
+    old.on('pageerror', (error) => oldErrors.push(String(error)));
+    await old.addInitScript(() => { delete globalThis.DecompressionStream; });
+    await old.goto(url);
+    await expect(old.getByRole('alert')).toHaveText(ARTIFACT_FILE_UNSUPPORTED);
+    await expect(old.getByRole('heading', { name: 'Regional sales' })).toHaveCount(0);
+    assert.deepEqual(oldErrors, [], `${name}: page errors without DecompressionStream`);
+
+    console.log(`${name}: title, body, top bar, snapshot rows (${baseRows.length}) → west variant (${westRows.length}), frozen input, mutation reason, chart, 0 requests, 0 CSP violations, 0 page errors, unsupported-browser message — passed in ${((Date.now() - started) / 1000).toFixed(1)}s${consoleErrors.length ? ` (console errors: ${consoleErrors.join(' | ')})` : ''}`);
   } catch (error) {
     failures.push(new Error(`${name}: ${error.message}`));
     console.log(`${name}: FAILED — ${error.message}`);
@@ -138,4 +159,4 @@ for (const [name, engine] of [['chromium', chromium], ['firefox', firefox], ['we
   }
 }
 if (failures.length) throw new AggregateError(failures, 'Offline file checks failed');
-console.log('offline file gate passed in chromium, firefox and webkit');
+console.log(`offline file gate passed in chromium, firefox and webkit with the ${files.map((f) => f.kind).join(' and ')} bundles`);
