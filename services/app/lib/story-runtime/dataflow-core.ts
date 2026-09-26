@@ -230,9 +230,7 @@ function reduce(state: CoreState, event: CoreEvent, effects: CoreEffect[]): Core
     case 'sources': return bumpSources(state, event.ids);
     case 'refresh': {
       const declared = new Set(state.graph.queries.map((q) => q.name));
-      const queries = (event.queries ?? [...declared]).filter((n) => declared.has(n)).map(queryKey);
-      // A refresh re-asks who may write too, as a first load does.
-      return bump(state, [...queries, ...indexOf(state.graph).computed.filter((k) => k.startsWith('access:'))]);
+      return bump(state, (event.queries ?? [...declared]).filter((n) => declared.has(n)).map(queryKey));
     }
     case 'replace': return replace(state, event.graph, event.state, effects);
     case 'write': return write(state, event, effects);
@@ -279,6 +277,9 @@ function flush(state: CoreState, effects: CoreEffect[]): CoreState {
     if (state.answered[k] !== v && state.requested[k] !== v) at[k] = v;
   }
   if (!Object.keys(at).length) return state;
+  // Asked again: a failed write check is in flight now, not settled.
+  const failedAt = { ...state.failed };
+  for (const k of Object.keys(at)) delete failedAt[k];
   const tables = localRows(state);
   effects.push({
     type: 'run', at,
@@ -286,7 +287,7 @@ function flush(state: CoreState, effects: CoreEffect[]): CoreState {
     values: { ...state.data.values },
     ...(tables ? { localTables: tables } : {}),
   });
-  return { ...state, requested: { ...state.requested, ...at } };
+  return { ...state, requested: { ...state.requested, ...at }, failed: failedAt };
 }
 
 /** The name inside a computed node's key. */
