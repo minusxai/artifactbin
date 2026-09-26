@@ -75,7 +75,7 @@ const DAY_OF_WEEK = new Set(['dow', 'dayofweek']);
 const PART_FUNCTIONS: Record<string, string> = { year: 'year', quarter: 'quarter', month: 'month', week: 'week', day: 'day', dayofmonth: 'day', hour: 'hour', minute: 'minute' };
 const RENAMES: Record<string, string> = {
   strptime: 'date_parse', quantile_cont: 'quantile', datediff: 'date_diff', gen_random_uuid: 'uuid',
-  array_contains: 'list_contains', list_has: 'list_contains', array_has: 'list_contains', array_has_any: 'list_has_any',
+  array_contains: 'list_contains', list_has: 'list_contains', array_has: 'list_contains', array_has_any: 'list_has_any', chr: 'char',
 };
 const NOW_CALLS: Record<string, string> = { now: '$_now', get_current_timestamp: '$_now', transaction_timestamp: '$_now', today: 'date($_now)' };
 const NOW_WORDS: Record<string, string> = { current_timestamp: '$_now', current_date: 'date($_now)' };
