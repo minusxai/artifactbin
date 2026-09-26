@@ -20,6 +20,13 @@ describe('on load', () => {
   it('refuses a value that is not a calendar date, naming table, column and row', async () => {
     expect(errorOf(await read([{ d: '2026-01-01' }, { d: '2026-02-30' }], [{ name: 'd', type: 'date' }]))).toMatch(/t\.d \(row 2\) is not a date/);
   });
+  it('reads a timestamp stored in a date column as the calendar day it names, as the previous engine read it', async () => {
+    expect(await read([{ d: '2026-08-12T06:00:00Z' }, { d: '2026-08-12 23:45' }, { d: '2026-08-13' }], [{ name: 'd', type: 'date' }])).toEqual({
+      rows: [{ d: '2026-08-12' }, { d: '2026-08-12' }, { d: '2026-08-13' }],
+      columns: [{ name: 'd', type: 'date' }],
+    });
+    expect(errorOf(await read([{ d: '2026-02-30T06:00:00Z' }], [{ name: 'd', type: 'date' }]))).toMatch(/t\.d \(row 1\) is not a date/);
+  });
   it('stores a timestamp given with an offset or as epoch ms as a canonical UTC instant', async () => {
     const epoch = Date.UTC(2026, 8, 30, 12);
     expect(await read([{ ts: '2026-09-30T12:00:00+05:30' }, { ts: epoch }, { ts: '2026-09-30 08:15' }], [{ name: 'ts', type: 'timestamp' }])).toEqual({
