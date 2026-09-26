@@ -127,4 +127,22 @@ describe('createPageEngine', () => {
     expect(engine.ready(FLOW, ['sales'])).toBe(false);
     expect(engine.ready(FLOW, [])).toBe(true);
   });
+
+  it('holds a dataset once however many imports read it, and a write through one shows through the other', async () => {
+    const twice = await compiledOf(
+      '<Import name="a" src="ref:Sales0001" /><Import name="b" src="ref:Sales0001" />' +
+      '<Query name="from_a">{`select count(*) as n from a.rows`}</Query><Query name="from_b">{`select count(*) as n from b.rows`}</Query>' +
+      '<Mutation name="add">{`insert into a.rows (id, region, revenue) values ($_row.id, \'EU\', 1)`}</Mutation>',
+      { Sales0001: COLUMNS },
+    );
+    const { engine, fetched } = engineOver();
+    engine.prepare(twice, ['a', 'b']);
+    await vi.waitFor(() => expect(engine.ready(twice, ['a', 'b'])).toBe(true));
+    expect(fetched).toEqual(['a']);
+    const add = twice.mutations[0]!;
+    expect(engine.apply(twice, add, mutationRequestFor(add, { values: {}, row: { id: 'z' } }), CTX)).not.toBeNull();
+    const counts = await engine.run(twice, ['from_a', 'from_b'], { values: {}, ...CTX });
+    expect([counts.tables.from_a!.rows, counts.tables.from_b!.rows]).toEqual([[{ n: 4 }], [{ n: 4 }]]);
+  });
 });
+

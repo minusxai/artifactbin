@@ -10,9 +10,9 @@
  * (lib/story/local-state) for writes, the same display window for what a run
  * returns. The only thing it owns is what it HOLDS:
  *
- *  - each held import, fetched once (QueryTransport.hold) and again only after
- *    the dataset changed (`invalidate`); until the fetch lands, its queries
- *    are not ready here and run on the server;
+ *  - each held DATASET, fetched once (QueryTransport.hold, by the first import
+ *    that reads it) and again only after it changed (`invalidate`); until the
+ *    fetch lands, its queries are not ready here and run on the server;
  *  - the OPTIMISTIC OVERLAY: a dataset write applied to the held copy the
  *    moment it is made, and replayed over every fresh fetch until the server
  *    has decided. Refused, it is withdrawn and the overlay replayed without
@@ -79,14 +79,18 @@ export interface PageEngine {
 interface Pending {
   flow: CompiledDataflow;
   m: CompiledMutation;
+  /** The dataset it writes. */
+  ref: string;
   input: Pick<MutationInput, 'sql' | 'params' | 'paramTypes' | 'expectedAffected'>;
   userId: string | null;
   /** The fetch generation current when the server confirmed it; absent while undecided. */
   confirmedAt?: number;
 }
 
+/** One dataset the page holds — by ref, however many imports read it. */
 interface Held {
-  ref: string;
+  /** The import it is fetched by: the door answers import names, never refs. */
+  name: string;
   /** The server's rows, as last fetched. */
   base?: ImportTables[string];
   /** Bumped by every invalidation; a fetch that started under an older one is stale when it lands. */
@@ -99,13 +103,13 @@ export function createPageEngine(source: PageEngineSource): PageEngine {
   let loadingCore: Promise<unknown> | null = null;
   const held = new Map<string, Held>();
   let pending: Pending[] = [];
-  /** The held rows with every pending write replayed over them; rebuilt when either changes. */
-  let view: ImportTables | null = null;
+  /** Each held dataset with every pending write replayed over it; rebuilt when either changes. */
+  let view: Map<string, ImportTables[string]> | null = null;
 
-  const fetch = (name: string, entry: Held) => {
+  const fetch = (entry: Held) => {
     const generation = entry.generation;
     entry.loading = generation;
-    source.fetch(name).then((tables) => {
+    source.fetch(entry.name).then((tables) => {
       if (entry.generation !== generation) return;
       entry.base = tables;
       // Confirmed before this fetch began: its rows are these rows now.
@@ -116,26 +120,31 @@ export function createPageEngine(source: PageEngineSource): PageEngine {
     });
   };
 
-  const current = (): ImportTables => {
+  /** A document's imports, by its own names, over the held datasets. */
+  const importsOf = (flow: CompiledDataflow, byRef: Map<string, ImportTables[string]>): ImportTables =>
+    Object.fromEntries(flow.imports.flatMap((i) => (byRef.has(i.ref) ? [[i.name, byRef.get(i.ref)!]] : [])));
+
+  const views = (): Map<string, ImportTables[string]> => {
     if (view) return view;
-    const out: ImportTables = {};
-    for (const [name, entry] of held) if (entry.base) out[name] = entry.base;
+    const out = new Map<string, ImportTables[string]>();
+    for (const [ref, entry] of held) if (entry.base) out.set(ref, entry.base);
     for (const p of pending) {
       const target = p.m.target as { import: string; table: string };
-      const table = out[target.import]?.[target.table];
+      const table = out.get(p.ref)?.[target.table];
       const decl = p.flow.imports.find((i) => i.name === target.import)?.tables.find((t) => t.name === target.table);
       if (!core || !table || !decl) continue;
       const result = core.mutate({
         ...p.input,
         table: { schema: target.import, name: target.table, rows: table.rows, columns: decl.columns },
-        reads: mutationReads(p.flow, p.m, { imports: out, userId: p.userId }),
+        reads: mutationReads(p.flow, p.m, { imports: importsOf(p.flow, out), userId: p.userId }),
       }, { limit: WRITE_ROWS, timeoutMs: TIMEOUT_MS });
       // A write that no longer applies to these rows is the server's to answer.
       if (isQueryFailure(result)) continue;
-      out[target.import] = { ...out[target.import], [target.table]: { rows: result.rows, columns: decl.columns } };
+      out.set(p.ref, { ...out.get(p.ref), [target.table]: { rows: result.rows, columns: decl.columns } });
     }
     return (view = out);
   };
+  const current = (flow: CompiledDataflow): ImportTables => importsOf(flow, views());
 
   const engine = () => {
     if (!core) throw new Error('the page engine is not loaded');
@@ -149,7 +158,7 @@ export function createPageEngine(source: PageEngineSource): PageEngine {
         pageLimit: input.page?.limit ?? input.limit ?? DISPLAY_ROWS,
         timeoutMs: TIMEOUT_MS,
       }),
-    }, flow, current(), {
+    }, flow, current(flow), {
       userId: ctx.userId, now: ctx.now, tz: ctx.tz, values: ctx.values,
       ...(selection.only ? { only: selection.only } : {}),
       ...(selection.page ? { page: selection.page } : {}),
@@ -169,29 +178,25 @@ export function createPageEngine(source: PageEngineSource): PageEngine {
       for (const name of imports) {
         const ref = importRef(flow, name);
         if (!ref) continue;
-        let entry = held.get(name);
-        if (!entry || entry.ref !== ref) {
-          entry = { ref, generation: (entry?.generation ?? 0) + 1 };
-          held.set(name, entry);
-          view = null;
-        }
-        if (!entry.base && entry.loading === undefined) fetch(name, entry);
+        let entry = held.get(ref);
+        if (!entry) held.set(ref, entry = { name, generation: 1 });
+        if (!entry.base && entry.loading === undefined) fetch(entry);
       }
     },
     ready(flow, imports) {
       return !!core && imports.every((name) => {
-        const entry = held.get(name);
-        return !!entry?.base && entry.ref === importRef(flow, name);
+        const ref = importRef(flow, name);
+        return !!ref && !!held.get(ref)?.base;
       });
     },
     invalidate(refs) {
-      const changed = new Set(refs);
-      for (const [name, entry] of held) {
-        if (!changed.has(entry.ref)) continue;
+      for (const ref of new Set(refs)) {
+        const entry = held.get(ref);
+        if (!entry) continue;
         entry.generation++;
         delete entry.base;
         view = null;
-        fetch(name, entry);
+        fetch(entry);
       }
     },
     async run(flow, only, ctx) {
@@ -209,21 +214,21 @@ export function createPageEngine(source: PageEngineSource): PageEngine {
       const tables = localTableOverrides(flow, request.localTables);
       return runLocalStateMutation(flow, m, { tables }, {
         mutate: async (input) => engine().mutate(input, { limit: WRITE_ROWS, timeoutMs: TIMEOUT_MS }),
-      }, { params, paramTypes, reads: mutationReads(flow, m, { imports: current(), tables, userId: ctx.userId }) });
+      }, { params, paramTypes, reads: mutationReads(flow, m, { imports: current(flow), tables, userId: ctx.userId }) });
     },
     apply(flow, m, request, ctx) {
-      if (!core || !('import' in m.target)) return null;
+      const ref = 'import' in m.target ? importRef(flow, m.target.import) : undefined;
+      if (!core || !ref) return null;
       const bound = bindMutationRequest(flow, m, request, ctx);
       if (!bound.ok) return null;
       const entry: Pending = {
-        flow, m, userId: ctx.userId,
+        flow, m, ref, userId: ctx.userId,
         input: { sql: m.sql, params: bound.params, paramTypes: bound.paramTypes, ...(m.expectedAffected === undefined ? {} : { expectedAffected: m.expectedAffected }) },
       };
-      const target = m.target.import;
-      const before = current()[target];
+      const before = views().get(ref);
       pending = [...pending, entry];
       view = null;
-      if (current()[target] === before) {
+      if (views().get(ref) === before) {
         // It changed nothing here (refused by its own guard): not ours to show.
         pending = pending.filter((p) => p !== entry);
         view = null;
@@ -232,7 +237,7 @@ export function createPageEngine(source: PageEngineSource): PageEngine {
       return {
         settle(confirmed) {
           if (!pending.includes(entry)) return;
-          if (confirmed) entry.confirmedAt = held.get(target)?.generation ?? 0;
+          if (confirmed) entry.confirmedAt = held.get(ref)?.generation ?? 0;
           else { pending = pending.filter((p) => p !== entry); view = null; }
         },
       };
