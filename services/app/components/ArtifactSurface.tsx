@@ -812,7 +812,7 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
             <button
               type="button"
               aria-label="Copy dataset reference"
-              onClick={() => { void navigator.clipboard?.writeText(shownCatalog ? datasetQuerySnippet(id, shownCatalog, 'data') : `ref:${id}`); setCopiedRef(true); }}
+              onClick={() => { void navigator.clipboard?.writeText(shownCatalog ? datasetQuerySnippet(id, shownCatalog) : `ref:${id}`); setCopiedRef(true); }}
               className={`${CONTROL_ROW} text-accent`}
             >
               {copiedRef ? 'copied dataset reference' : shownCatalog ? `copy query · source="${id}"` : `copy ref:${id}`}

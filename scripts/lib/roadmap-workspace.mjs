@@ -21,10 +21,10 @@ ${declarations}
 <Value name="view_mode" type="string" default="table" />
 <Value name="sprint_open" type="boolean" default={false} /><Value name="new_sprint" type="string" /><Value name="new_deadline" type="string" /><Value name="new_members" type="string" default="all" />
 <Query name="roadmap_totals">{\`select count(*) as tasks, coalesce(sum(hours),0) as hours from tasks\`}</Query>
-<Query name="sprint_rows" source="ref:${sprintsId}">{\`select * from public.rows\`}</Query>
+<Import name="sprint_rows_data" src="ref:${sprintsId}" /><Query name="sprint_rows">{\`select * from sprint_rows_data.rows\`}</Query>
 <Query name="sprint_summary">{\`select s.name as sprint, s.deadline, s.members, count(t.id) as tasks, coalesce(sum(t.hours),0) as hours, count(t.id) filter (where t.status='done') as completed from sprint_rows s left join tasks t on t.sprint=s.name group by s.name,s.deadline,s.members order by s.deadline nulls last,s.name\`}</Query>
 <Query name="dag_view">{${JSON.stringify(dagSql)}}</Query>
-<Mutation name="create_sprint" expectedAffected={1} source="ref:${sprintsId}">{\`insert into public.rows (name,deadline,members) select trim($new_sprint),nullif($new_deadline,''),coalesce(nullif($new_members,''),'all') where trim(coalesce($new_sprint,'')) != '' and not exists (select 1 from public.rows where lower(name)=lower(trim($new_sprint)))\`}</Mutation>
+<Import name="create_sprint_data" src="ref:${sprintsId}" /><Mutation name="create_sprint" expectedAffected={1}>{\`insert into create_sprint_data.rows (name,deadline,members) select trim($new_sprint),nullif($new_deadline,''),coalesce(nullif($new_members,''),'all') where trim(coalesce($new_sprint,'')) != '' and not exists (select 1 from create_sprint_data.rows where lower(name)=lower(trim($new_sprint)))\`}</Mutation>
 </Helmet>
 <Dialog open="$sprint_open"><main data-design="tw" className="mx-auto max-w-[1480px] px-4 pb-12 pt-20 @md:px-8">
   <header className="mb-7"><p className="mb-2 text-xs font-semibold uppercase tracking-widest text-muted-foreground">MinusX / Planning</p><h1 className="text-3xl font-semibold tracking-tight">Roadmap</h1><p className="mt-2 text-sm text-muted-foreground"><Number data="$roadmap_totals" col="tasks" /> tasks · <Number data="$roadmap_totals" col="hours" /> planned hours</p></header>

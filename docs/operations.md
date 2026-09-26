@@ -12,7 +12,7 @@ for each instance. `--db-url postgresql://…` selects external PostgreSQL;
 `--dir` still owns local objects and server settings. Back up both the database
 and objects before upgrading. Schema additions apply at startup.
 
-The CLI downloads its versioned host runtime, DuckDB and Chromium when needed.
+The CLI downloads its versioned host runtime and Chromium when needed; its SQL engine is built in.
 For source development, follow [CONTRIBUTING.md](../CONTRIBUTING.md).
 To self-host, `afbin serve` is the whole distribution: it owns its data
 directory and plans its settings from the same questions `npm run setup` asks

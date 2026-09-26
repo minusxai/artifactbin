@@ -17,7 +17,6 @@ The client defaults to app.artifactbin.dev. `afbin config set host <url>` saves 
   config.json                       client defaults
   state.sqlite                      workspace tracking, recovery and local comments
   hosts/<origin-id>/                profile.json and credentials.env
-  services/sql/<version>/           verified DuckDB downloads
   services/chromium/<version>/      verified Chromium downloads
   services/runtime/<cli-version>/  extracted host runtime
   server/server.env                default persistent server settings
@@ -27,9 +26,9 @@ The client defaults to app.artifactbin.dev. `afbin config set host <url>` saves 
 
 `--dir` relocates server settings and data; `--db-url` changes only the application database.
 Client credentials and defaults are never server configuration. PGLite is the embedded default,
-Postgres is optional, and DuckDB runs queries in either case. Browser controls use host SQL.
+Postgres is optional, and SQLite (the official wasm build) runs queries in either case. Browser controls use host SQL.
 Production can run SQL and browser modules in separate services.
 
-The executable embeds checksum manifests. The shared reader/editor and host runtime downloads
-on first preview/serve, separately from the native DuckDB and Chromium packages. `afbin setup --service sql` or
-`--service chromium` prepares offline use. No separate SQL executable or installed Node is needed.
+The executable embeds checksum manifests and the SQLite engine. The shared reader/editor and host runtime downloads
+on first preview/serve, separately from the Chromium package. `afbin setup --service chromium` prepares offline
+use; `afbin setup --service sql` only checks the built-in engine. No separate SQL executable or installed Node is needed.

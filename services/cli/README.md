@@ -64,7 +64,7 @@ unchecking a previously installed skill leaves its files in place and opts out o
 For an unattended install, use `sh install.sh --yes`; without a terminal the defaults are accepted
 automatically, with no sign-in or waiting for browser approval. The interactive installer runs
 `afbin auth` after successful skill setup; if sign-in is cancelled, run `afbin auth` later.
-Skill setup stays offline. `afbin setup --service sql` explicitly downloads and checks the optional SQL engine. A server with a CLI built beside it
+Skill setup stays offline. `afbin setup --service sql` checks the built-in SQL engine. A server with a CLI built beside it
 (`npm run build:binary -w services/cli`) serves that build
 itself, so `curl http://localhost:3030/chat/install.sh | sh` downloads the binary from that server.
 On a terminal the installer colours its output and shows a download progress bar;
@@ -74,12 +74,9 @@ same script, pinned to the release they were built with;
 
 macOS/Linux standalone releases use Node's small-ICU build: English locale formatting is included; other locale
 formatting may fall back to English. Unicode normalization, IDN URLs and the Intl APIs remain.
-Core downloads exclude DuckDB. The first local CSV/JSON/document query downloads the matching,
-checksummed SQL package, then runs it locally in the CLI's Node runtime. No local rows are uploaded.
-Prepare it before disconnecting with `afbin setup --service sql`; later queries reuse the verified
-cache under `~/.artifactbin/services/sql` (`ARTIFACTBIN_HOME` relocates it). Each executable pins the
-package identity, so a CLI upgrade may need another first-use download. Corrupt cache entries fail
-closed with a removal/retry instruction. The npm/source CLI uses its installed DuckDB dependency.
+Local CSV/JSON/document queries run on SQLite (the official wasm build), which every executable carries:
+there is nothing to download, and no local rows are uploaded. The npm/source CLI uses its installed
+`@sqlite.org/sqlite-wasm` dependency, the same engine the server runs.
 For development or a trusted mirror, `CLI__SERVICE_BASE_URL` accepts an HTTPS base URL with an optional path prefix (HTTP loopback
 also works); append `afbin-vVERSION/afbin-sql-OS-ARCH.gz` to that base. A locally built server
 uses `CLI__SERVICE_BASE_URL=http://localhost:3030/chat/releases`. Checksums stay pinned in the executable.
@@ -125,7 +122,8 @@ and nothing to add to `.gitignore`. A forced overwrite keeps the replaced bytes 
 content hash, so publishing bytes you already own reuses that artifact instead of uploading them again.
 
 A command reference is `<url|id|path>[@version]`; existing filenames win. Published references in
-markup use `ref:<id>`, including Query/Mutation sources. SQL names tables; `$query` binds a result.
+markup use `ref:<id>`: `<Import name="d" src="ref:<id>" />` reads a dataset or folder as `d.<table>`, and a
+connected Postgres query runs inside it with `<Query source="ref:<id>">`. SQL names tables; `$query` binds a result.
 Old reference spellings are rejected. Register files with add and reference their IDs. Local-path references in artifact source are refused.
 
 For automation, use `setup --yes --json --harness pi --harness opencode`, or `--harness none`.
@@ -308,7 +306,7 @@ command below. Prose and the CLI's own tests are exempt.
    commits the version straight to main (admin PAT), and that push selects only `checks` and the
    five binary builds.
 3. Successful main CI triggers `Release tested afbin CLI`, which tags that exact commit and
-   publishes all five tested executables, host runtimes, DuckDB/Chromium packages and checksums.
+   publishes all five tested executables, host runtimes, Chromium packages and checksums.
    It publishes the bytes CI built: the run main CI's `tested-run` artifact names when the tree was
    tested elsewhere, the main run itself otherwise. The release stays draft until every asset is
    attached. Published releases are immutable.

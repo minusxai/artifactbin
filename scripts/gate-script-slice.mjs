@@ -54,7 +54,7 @@ const SCRIPT = [
 
 const markup = [
   '<Helmet><title>slice gate</title>',
-  `<Query name="rows" source="ref:${ds.id}">{\`select * from public.rows\`}</Query>`,
+  `<Import name="rows_data" src="ref:${ds.id}" /><Query name="rows">{\`select * from rows_data.rows\`}</Query>`,
   '<style>{`h1 { color: rgb(200, 10, 10); }`}</style>',
   '</Helmet>',
   '<h1 className="text-4xl font-bold">Slice doc</h1>',

@@ -9,10 +9,22 @@ const tableName = (catalog?: DatasetCatalog) => {
   return `${quote(table?.schema ?? 'public')}.${quote(table?.name ?? 'rows')}`;
 };
 const templateSql = (sql: string) => sql.replaceAll('\\', '\\\\').replaceAll('`', '\\`').replaceAll('${', '\\${');
+/** The name a stored dataset is imported under in these examples. */
+const IMPORT = 'data';
+/** The default table as the import exposes it: `data."orders"`, `data."rows"` for a flat upload. */
+const importedTable = (importName: string, catalog?: DatasetCatalog) => `${importName}.${quote(defaultTable(catalog)?.name ?? 'rows')}`;
+const importTag = (importName: string, id: string) => `<Import name="${importName}" src="ref:${id}" />`;
 
-/** A stable logical table, never the connection's physical source names. */
+/**
+ * Read this dataset: a stored one is IMPORTED (its tables read as
+ * `<import>.<table>`); a connected Postgres database runs the query inside
+ * itself (`source=`), over its stable logical table names — never the
+ * connection's physical ones.
+ */
 export function datasetQuerySnippet(id: string, catalog?: DatasetCatalog, name = 'rows'): string {
-  return `<Query name="${name}" source="ref:${id}">{\`SELECT * FROM ${templateSql(tableName(catalog))}\`}</Query>`;
+  if (catalog?.kind === 'postgres') return `<Query name="${name}" source="ref:${id}">{\`SELECT * FROM ${templateSql(tableName(catalog))}\`}</Query>`;
+  const importName = name === IMPORT ? 'dataset' : IMPORT;
+  return `${importTag(importName, id)}<Query name="${name}">{\`SELECT * FROM ${templateSql(importedTable(importName, catalog))}\`}</Query>`;
 }
 
 const jsonAttr = (value: unknown) => `{${JSON.stringify(value)}}`;
@@ -21,7 +33,7 @@ const jsonAttr = (value: unknown) => `{${JSON.stringify(value)}}`;
  * A `<Query>` over this dataset plus a `<Question>` bound to it — the shape of
  * nearly every first chart (a non-numeric x, a numeric y); the agent edits
  * from something that works rather than assembling from a description. The
- * SQL names a stable table inside the sourced dataset; the chart binds the query.
+ * SQL names a stable table of the imported dataset; the chart binds the query.
  */
 function datasetUsageExample(id: string, columns: DatasetColumn[], catalog?: DatasetCatalog): string {
   const numeric = columns.find((c) => c.type === 'number');
@@ -62,7 +74,7 @@ function datasetMutationExample(id: string, columns: DatasetColumn[], catalog?: 
   const values = cols.map((c) => `<Value name="${c.name}" type="${c.type}" />`).join('');
   const names = cols.map((c) => quote(c.name)).join(', ');
   const binds = cols.map((c) => `$${c.name}`).join(', ');
-  return `<Helmet>${values}<Mutation name="add" source="ref:${id}">{\`insert into ${templateSql(tableName(catalog))} (${names}) values (${binds})\`}</Mutation></Helmet>\n`
+  return `<Helmet>${importTag(IMPORT, id)}${values}<Mutation name="add">{\`insert into ${templateSql(importedTable(IMPORT, catalog))} (${names}) values (${binds})\`}</Mutation></Helmet>\n`
     + cols.map((c) => `<input value="$${c.name}" placeholder="${c.name}" />`).join('')
     + '\n<Button run="$add">Add</Button>';
 }
@@ -83,13 +95,12 @@ export function datasetCreateFields(id: string, columns: unknown, rowCount: unkn
       ? { totalRows: meta.totalRows, truncated: true,
           note: `Source had ${meta.totalRows} rows; the first ${rowCount} were kept.` }
       : {}),
-    // Wire field retained for older callers; authoring uses the
-    // source="ref:<id>" form the usage example below teaches.
+    // The id to import: <Import name="…" src="ref:<id>" />, as the usage example below teaches.
     ref: `ref:${id}`,
     usage: datasetUsageExample(id, cols, meta?.catalog)
       + (effectiveAccess === 'readwrite' ? `\n\n${datasetMutationExample(id, cols, meta?.catalog)}` : ''),
     ...(postgres ? { writes: 'PostgreSQL database rows are read-only. Editors can manage the connection, notebook and whitelist. Viewers can query exposed data.' } : effectiveAccess === 'read'
-      ? { writes: `read-only — a <Mutation source="ref:${id}"> is refused at publish. To open it: afbin push <file> --type dataset --access readwrite (API: PATCH /api/my/artifacts/${id} { "access": "readwrite" }, or set access on create/PUT).` }
+      ? { writes: `read-only — a <Mutation> writing its import (<Import src="ref:${id}">) is refused at publish. To open it: afbin push <file> --type dataset --access readwrite (API: PATCH /api/my/artifacts/${id} { "access": "readwrite" }, or set access on create/PUT).` }
       : { writes: 'readwrite — viewers with edit access may insert/update/delete rows through a <Mutation>.' }),
   };
 }

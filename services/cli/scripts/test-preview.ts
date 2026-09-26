@@ -19,11 +19,10 @@ await writeFile(join(root,'pixel.png'),Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEA
 await writeFile(join(root,'published.jsx'),'---\nid: abc123\nhead_version: 3\n---\n<p id="text">Published local draft</p>');
 const binary=resolve(process.argv[2]??`dist/afbin-${process.platform}-${process.arch}`);
 const packaged=!binary.endsWith('.mjs');
-const nativeBytes=packaged?await readFile(resolve(`dist/afbin-sql-${process.platform}-${process.arch}.gz`)):null;
 const runtimeBytes=packaged?await readFile(resolve(`dist/afbin-runtime-${process.platform}-${process.arch}.gz`)):null;
 const chromiumBytes=packaged?await readFile(resolve(`dist/afbin-chromium-${process.platform}-${process.arch}.gz`)):null;
 let downloads=0;
-const packages=createServer((req,res)=>{downloads++;res.end(req.url?.includes('/afbin-runtime-')?runtimeBytes:req.url?.includes('/afbin-chromium-')?chromiumBytes:nativeBytes);});
+const packages=createServer((req,res)=>{downloads++;if(req.url?.includes('/afbin-runtime-'))res.end(runtimeBytes);else if(req.url?.includes('/afbin-chromium-'))res.end(chromiumBytes);else{res.writeHead(404);res.end();}});
 await new Promise<void>(resolve=>packages.listen(0,'127.0.0.1',resolve));
 const packagePort=(packages.address() as {port:number}).port;
 // Seed a server-issued pool fixture, then exercise actual offline add in the built CLI.
@@ -40,7 +39,7 @@ const ids=await new Promise<Record<string,string>>((resolve,reject)=>{
 });
 const registered=(await readFile(join(root,'report.jsx'),'utf8'));
 await writeFile(join(root,'covers.csv'),'id,title,cover_ref\n'+['red','blue'].map(color=>`${color},${color},ref:${ids[color+'-cover.png']}`).join('\n')+'\n');
-await writeFile(join(root,'report.jsx'),registered.replace('<p>Draft</p>',`<Helmet><Value name="minimum" type="number" default={0} /><Query name="sales" source="ref:${ids['sales.csv']}">{\`select sum(amount) as total from public.rows where amount > $minimum\`}</Query></Helmet><div><a href="/a/${ids['appendix.jsx']}">Local appendix</a><img src="ref:${ids['pixel.png']}" alt="Local image" /><p id="text">Draft paragraph</p><Select label="Minimum" value="$minimum" options={[{"label":"All","value":0},{"label":"Above fifteen","value":15}]} /><Number data="$sales" col="total" agg="sum" /></div>`));
+await writeFile(join(root,'report.jsx'),registered.replace('<p>Draft</p>',`<Helmet><Value name="minimum" type="number" default={0} /><Import name="sales_data" src="ref:${ids['sales.csv']}" /><Query name="sales">{\`select sum(amount) as total from sales_data.rows where amount > $minimum\`}</Query></Helmet><div><a href="/a/${ids['appendix.jsx']}">Local appendix</a><img src="ref:${ids['pixel.png']}" alt="Local image" /><p id="text">Draft paragraph</p><Select label="Minimum" value="$minimum" options={[{"label":"All","value":0},{"label":"Above fifteen","value":15}]} /><Number data="$sales" col="total" agg="sum" /></div>`));
 async function launch(port=0){
  const args=['preview',ids['report.jsx']!,'published.jsx','--port',String(port),'--json'];
  const child=spawn(packaged?binary:process.execPath,packaged?args:[binary,...args],{cwd:root,env:{...process.env,ARTIFACTBIN_HOME:join(root,'engine-cache'),CLI__AUTO_UPDATE:'0',CLI__SERVICE_BASE_URL:`http://127.0.0.1:${packagePort}/chat/releases`},stdio:['ignore','pipe','pipe']});
@@ -74,12 +73,12 @@ try{
  await b.locator('#text').filter({hasText:'Browser saved paragraph'}).waitFor();
  console.log('PASS real in-place editor -> HTTP -> file -> second browser');
  await a.getByRole('button',{name:'Stop editing',exact:true}).click();
- // Observe real DuckDB result changes through the production control/dataflow runtime.
+ // Observe real SQLite result changes through the production control/dataflow runtime.
  const firstQuery=a.waitForResponse(response=>response.url().endsWith('/query')&&response.request().postData()?.includes('15')===true);
  await a.getByRole('button',{name:'Minimum',exact:true}).click();
  await a.getByRole('option',{name:'Above fifteen',exact:true}).click();
  const answer=await (await firstQuery).json();assert.deepEqual(answer.tables.sales.rows,[{total:20}]);
- console.log('PASS control-driven SQL uses local CSV and real DuckDB');
+ console.log('PASS control-driven SQL uses local CSV and the built-in SQLite engine');
  const before=await a.getByRole('textbox',{name:'Source',exact:true}).inputValue();
  await b.getByRole('textbox',{name:'Source',exact:true}).fill(before.replace('Browser saved paragraph','Second writer draft'));
  await a.getByRole('textbox',{name:'Source',exact:true}).fill(before.replace('Browser saved paragraph','First writer saves'));
@@ -103,7 +102,7 @@ try{
  console.log('PASS published identity renders local bytes; save retains remote version');
  assert.equal((await a.request.get(server.url+'/document?file=home/preview-comments.sqlite')).status(),403);
  assert.equal((await a.request.post(server.url+'/save',{headers:{origin:'https://unrelated.example'},data:{}})).status(),403);
- assert.deepEqual(errors,[]);if(packaged)assert.equal(downloads,2,'Runtime and DuckDB each download once and reuses verified cache after process restart');console.log('PASS scope/origin restrictions; no browser exceptions'+(packaged?'; SEA ran outside checkout with lazy runtime and engine downloads':''));
+ assert.deepEqual(errors,[]);if(packaged)assert.equal(downloads,1,'The runtime downloads once and reuses its verified cache after process restart; SQL is built in');console.log('PASS scope/origin restrictions; no browser exceptions'+(packaged?'; SEA ran outside checkout with lazy runtime and engine downloads':''));
  // Export owns another browser. Release preview resources while retaining the
  // same home so cold runtime and SQL installation is not repeated for exports.
  await browser.close();browser=undefined;await server.close();server=undefined;
@@ -122,7 +121,7 @@ try{
  }
  // Include dataset images in the existing cold export: no extra browser launch is
  // needed to prove the shared resolver in every packaged executable.
- await writeFile(join(root,'report.jsx'),(await readFile(join(root,'report.jsx'),'utf8')).replace('</Helmet>',`<Query name="books" source="ref:${ids['covers.csv']}">{\`select * from public.rows\`}</Query></Helmet>`)+`<For each={$books} keyBy="id"><img src="$_row.cover_ref" alt="$_row.title" loading="lazy" width={48} height={64}/></For>`);
+ await writeFile(join(root,'report.jsx'),(await readFile(join(root,'report.jsx'),'utf8')).replace('</Helmet>',`<Import name="books_data" src="ref:${ids['covers.csv']}" /><Query name="books">{\`select * from books_data.rows\`}</Query></Helmet>`)+`<For each={$books} keyBy="id"><img src="$_row.cover_ref" alt="$_row.title" loading="lazy" width={48} height={64}/></For>`);
  const beforeExport=await readFile(join(root,'report.jsx'));
  await imageExport([ids['report.jsx']!,'--output','report.png']);
  assert.equal((await sharp(await readFile(join(root,'report.png'))).metadata()).format,'png');
@@ -152,7 +151,7 @@ try{
  await writeFile(join(root,'pixel.png'),await sharp({create:{width:100,height:100,channels:3,background:'#ff0000'}}).png().toBuffer());
  await writeFile(join(root,'cover.jsx'),`<Helmet><meta name="artifactbin:og-image" content="ref:${ids['pixel.png']}" /></Helmet><p>Cover</p>`);
  await writeFile(join(root,'slides.jsx'),'<SlideDeck><Slide title="One"><p>First</p></Slide><Slide title="Two"><p>Second</p></Slide></SlideDeck>');
- await writeFile(join(root,'bad.jsx'),`<Helmet><Query name="bad" source="ref:${ids['sales.csv']}">{\`select missing from public.rows\`}</Query></Helmet><p>Bad SQL</p>`);
+ await writeFile(join(root,'bad.jsx'),`<Helmet><Import name="bad_data" src="ref:${ids['sales.csv']}" /><Query name="bad">{\`select missing from bad_data.rows\`}</Query></Helmet><p>Bad SQL</p>`);
  proofs.push(
   async()=>{await imageExport(['card.jsx','--og','--output','card.png']);assert.deepEqual((( {width,height})=>({width,height}))(await sharp(await readFile(join(root,'card.png'))).metadata()),{width:1600,height:840});},
   async()=>{await imageExport(['cover.jsx','--og','--output','cover.png']);const cover=await color('cover.png');assert.ok(cover[0]!>240&&cover[2]!<10,'Local cover uses the same image pipeline as published exports');},
@@ -164,7 +163,7 @@ try{
  }
  const workers=await Promise.allSettled(Array.from({length:3},async()=>{for(let proof;(proof=proofs.shift());)await proof();}));
  for(const worker of workers)if(worker.status==='rejected')throw worker.reason;
- if(packaged)assert.equal(downloads,3,'Runtime, SQL and Chromium are downloaded once, then reused');
+ if(packaged)assert.equal(downloads,2,'Runtime and Chromium are downloaded once, then reused; SQL is built in');
  console.log(`PASS local image export proof (${phase}); sources unchanged and lazy caches reused`);
  }
 }catch(error){console.error('Browser errors:',errors);for(const context of browser?.contexts()??[])for(const page of context.pages())console.error((await page.locator('body').innerText()).slice(0,5000));throw error;}finally{await browser?.close();await server?.close();await new Promise<void>(resolve=>packages.close(()=>resolve()));await rm(root,{recursive:true,force:true});}

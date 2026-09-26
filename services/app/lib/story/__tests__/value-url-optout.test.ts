@@ -61,7 +61,7 @@ describe('<Value url={false}>', () => {
 });
 
 describe('<Mutation reset="…">', () => {
-  const mutation = (attrs: string) => parseMutationDecl(el(`<Import name="add_data" src="ref:abc123" /><Mutation name="add" ${attrs}>{\`insert into add_data.rows (d) values ($draft)\`}</Mutation>`));
+  const mutation = (attrs: string) => parseMutationDecl(el(`<Mutation name="add" ${attrs}>{\`insert into add_data.rows (d) values ($draft)\`}</Mutation>`));
 
   it('parses the names to clear after a successful write', () => {
     const r = mutation('reset="draft amount"');
