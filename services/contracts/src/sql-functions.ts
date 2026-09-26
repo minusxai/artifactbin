@@ -33,6 +33,7 @@ export const SQL_FUNCTIONS: readonly SqlFunctionSpec[] = [
   { name: 'to_timezone', arity: [2], kind: 'scalar', signature: 'to_timezone(timestamp, tz) → text', summary: 'The local wall-clock time in tz, as ISO text without offset.' },
   { name: 'make_date', arity: [3], kind: 'scalar', signature: 'make_date(year, month, day) → date', summary: 'The date with these parts; fails on one the calendar does not have.' },
   { name: 'to_date', arity: [1], kind: 'scalar', signature: 'to_date(text) → date', summary: "The calendar day a date or timestamp names (2026-9-30, 2026/09/30, 2026-09-30T10:00Z); fails on text that names none." },
+  { name: 'try_to_date', arity: [1], kind: 'scalar', signature: 'try_to_date(text) → date', summary: 'The calendar day, as to_date reads it; null when the text names none.' },
   { name: 'median', arity: [1], kind: 'aggregate', signature: 'median(x) → real', summary: 'Middle value, averaging the two middle values.' },
   { name: 'quantile', arity: [2], kind: 'aggregate', signature: 'quantile(x, q) → real', summary: 'Continuous quantile, q between 0 and 1.' },
   { name: 'stddev', arity: [1], kind: 'aggregate', signature: 'stddev(x) → real', summary: 'Sample standard deviation.' },
@@ -51,6 +52,8 @@ export const SQL_FUNCTIONS: readonly SqlFunctionSpec[] = [
   { name: 'regexp_extract', arity: [2, 3], kind: 'scalar', signature: 'regexp_extract(text, pattern[, group]) → text', summary: 'The first match, or one of its groups.' },
   { name: 'list_contains', arity: [2], kind: 'scalar', signature: 'list_contains(list, value) → boolean', summary: 'Whether a JSON list holds the value.' },
   { name: 'list_has_any', arity: [2], kind: 'scalar', signature: 'list_has_any(list, list) → boolean', summary: 'Whether two JSON lists share a value.' },
+  { name: 'to_list', arity: [1], kind: 'scalar', signature: 'to_list(text) → list', summary: "The list text names ([\"a\",\"b\"], [a, b], ['a', 'b']) as a JSON list of text, a bare null as null; fails on text that names none." },
+  { name: 'try_to_list', arity: [1], kind: 'scalar', signature: 'try_to_list(text) → list', summary: 'The list, as to_list reads it; null when the text names none.' },
   { name: 'list_value', arity: [0, 1, 2, 3, 4, 5, 6, 7, 8], kind: 'scalar', signature: 'list_value(a, b, …) → list', summary: 'Builds a JSON list.' },
   { name: 'uuid', arity: [0], kind: 'scalar', signature: 'uuid() → text', summary: 'A random UUID; the one non-deterministic function, allowed only in mutations.' },
 ];
