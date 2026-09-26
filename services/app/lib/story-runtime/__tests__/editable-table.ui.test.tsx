@@ -7,12 +7,15 @@ import { StoryRuntimeApp } from '../StoryRuntimeApp';
 import { createDataflowStore, type QueryTransport } from '../store';
 import type { DataflowState } from '@/lib/story/dataflow';
 import { parseJsxOrThrow } from '@/test/helpers/jsx';
+import { compiledOf } from '@/test/helpers/compiled';
+const HELMET='<Import name="task_rows" src="ref:abc123" /><Query name="tasks">{`select * from task_rows.rows`}</Query><Mutation name="set_item">{`update task_rows.rows set item=$_value where id=$_row.id`}</Mutation><Mutation name="set_hours">{`update task_rows.rows set hours=$_value where id=$_row.id`}</Mutation>';
+const FLOW=await compiledOf(HELMET,{abc123:[{name:'id',type:'number'},{name:'item',type:'string'},{name:'hours',type:'number'}]});
 const columns = [{name:'id',type:'number' as const},{name:'item',type:'string' as const},{name:'hours',type:'number' as const}];
 function setup(body = '<Column col="id"/><Column col="item"><input aria-label="Item" value="$_row.item" run="$set_item"/></Column><Column col="hours"><input aria-label="Hours {$_row.id}" type="number" value="$_row.hours" run="$set_hours"/></Column>', rows: DataflowState['tables'][string]['rows'] = [{id:1,item:'one',hours:2},{id:2,item:'two',hours:3}]) {
-  const parsed=parseJsxOrThrow('<Helmet><Query name="tasks" source="ref:abc123">{`select * from public.rows`}</Query><Mutation name="set_item" source="ref:abc123">{`update public.rows set item=$_value where id=$_row.id`}</Mutation><Mutation name="set_hours" source="ref:abc123">{`update public.rows set hours=$_value where id=$_row.id`}</Mutation></Helmet><DataTable data="$tasks" rowKey="id">'+body+'</DataTable>');
-  const {content,body:nodes}=splitHelmet(parsed.nodes);
+  const parsed=parseJsxOrThrow('<Helmet>'+HELMET+'</Helmet><DataTable data="$tasks" rowKey="id">'+body+'</DataTable>');
+  const {body:nodes}=splitHelmet(parsed.nodes);
   const state:DataflowState={values:{},tables:{tasks:{columns,rows}},errors:{},mutationAccess:{set_item:null,set_hours:null}};
-  const dataflow={flow:{values:content.values,queries:content.queries,mutations:content.mutations},state};
+  const dataflow={flow:FLOW,state};
   const mutate=vi.fn().mockResolvedValue({dataset:'abc123'});
   const transport:QueryTransport={mutate,run:vi.fn().mockResolvedValue({tables:state.tables,errors:{}}),page:vi.fn()};
   const store=createDataflowStore(dataflow,{transport});
@@ -68,7 +71,7 @@ describe('editable table runtime',()=>{
     expect(second.value).toBe('7');
     expect(table.getAttribute('aria-busy')).toBe('false');
     fireEvent.keyDown(second,{key:'Enter'});await act(async()=>{});
-    expect(v.mutate).toHaveBeenLastCalledWith({_value:7},'set_hours',{id:2,item:'two',hours:3});
+    expect(v.mutate).toHaveBeenLastCalledWith({mutation:'set_hours',args:{},row:{id:2},value:7});
     await act(async()=>resolveRun({tables:{tasks:{columns,rows:[{id:1,item:'one',hours:5},{id:2,item:'two',hours:7}]}},errors:{},mutationAccess:{set_item:null,set_hours:null}}));
   });
   it('keeps different row drafts isolated even when their labels are identical',()=>{
@@ -92,7 +95,7 @@ describe('editable table runtime',()=>{
     fireEvent.keyDown(input,{key:'Enter'});fireEvent.blur(input);
     await act(async()=>{});
     expect(v.mutate).toHaveBeenCalledTimes(1);
-    expect(v.mutate).toHaveBeenCalledWith({_value:null},'set_hours',{id:1,item:'one',hours:2});
+    expect(v.mutate).toHaveBeenCalledWith({mutation:'set_hours',args:{},row:{id:1},value:null});
     expect(input.value).toBe('');
     await act(async()=>resolveRun({tables:{tasks:{columns,rows:[{id:1,item:'one',hours:null},{id:2,item:'two',hours:3}]}},errors:{},mutationAccess:{set_item:null,set_hours:null}}));
     expect(input.value).toBe('');
@@ -109,7 +112,7 @@ describe('editable table runtime',()=>{
     fireEvent.click(v.getByLabelText('done'));
     await act(async()=>{});
     expect(v.mutate).toHaveBeenCalledTimes(1);
-    expect(v.mutate).toHaveBeenCalledWith({_value:'done'},'set_item',{id:1,item:'one',hours:2});
+    expect(v.mutate).toHaveBeenCalledWith({mutation:'set_item',args:{},row:{id:1},value:'done'});
     expect((v.getByLabelText('Item 1') as HTMLButtonElement).disabled).toBe(true);
   });
   it('commits a DatePicker cell once with the picked ISO date',async()=>{
@@ -121,7 +124,7 @@ describe('editable table runtime',()=>{
     fireEvent.click(v.getByLabelText('2026-09-15'));
     await act(async()=>{});
     expect(v.mutate).toHaveBeenCalledTimes(1);
-    expect(v.mutate).toHaveBeenCalledWith({_value:'2026-09-15'},'set_item',{id:1,item:'2026-09-01',hours:2});
+    expect(v.mutate).toHaveBeenCalledWith({mutation:'set_item',args:{},row:{id:1},value:'2026-09-15'});
     expect(trigger.textContent).toContain('2026-09-15');
     expect(trigger.disabled).toBe(true);
   });
@@ -143,7 +146,7 @@ describe('editable table runtime',()=>{
     await act(async()=>v.store.replaceFlow({...v.dataflow,state:{...v.dataflow.state,tables:{tasks:{columns,rows:[{id:1,item:'changed elsewhere',hours:9}]}}}}));
     const remounted=v.getByLabelText('Item') as HTMLInputElement;expect(remounted.value).toBe('draft');
     fireEvent.keyDown(remounted,{key:'Enter'});await act(async()=>{});
-    expect(v.mutate).toHaveBeenCalledWith({_value:'draft'},'set_item',{id:1,item:'one',hours:2});
+    expect(v.mutate).toHaveBeenCalledWith({mutation:'set_item',args:{},row:{id:1},value:'draft'});
   });
   it('multi Select keeps changes local until Done, preserves comma values, and cancels without writing',async()=>{
     const v=setup('<Column col="item"><Select label="Tags {$_row.id}" multiple allowCreate valueFormat="json" value="$_row.item" options={["feature","design,ux"]} run="$set_item"/></Column>',[{id:1,item:'[]',hours:2}]);
@@ -151,12 +154,12 @@ describe('editable table runtime',()=>{
     expect(v.mutate).not.toHaveBeenCalled();fireEvent.keyDown(v.getByLabelText('Search Tags 1'),{key:'Escape'});
     expect(v.mutate).not.toHaveBeenCalled();fireEvent.click(v.getByLabelText('Tags 1'));fireEvent.click(v.getByLabelText('design,ux'));fireEvent.click(v.getByLabelText('Done'));
     await act(async()=>{});expect(v.mutate).toHaveBeenCalledTimes(1);
-    expect(v.mutate).toHaveBeenCalledWith({_value:'["design,ux"]'},'set_item',{id:1,item:'[]',hours:2});
+    expect(v.mutate).toHaveBeenCalledWith({mutation:'set_item',args:{},row:{id:1},value:'["design,ux"]'});
   });
   it('binds a Select numeric value using query schema even when its original cell is null',async()=>{
     const v=setup('<Column col="hours"><Select label="Hours {$_row.id}" value="$_row.hours" options={[{value:1,label:"One"},{value:2,label:"Two"}]} run="$set_hours"/></Column>',[{id:1,item:'one',hours:null}]);
     fireEvent.click(v.getByLabelText('Hours 1'));fireEvent.click(v.getByLabelText('Two'));
-    await act(async()=>{});expect(v.mutate).toHaveBeenCalledWith({_value:2},'set_hours',{id:1,item:'one',hours:null});
+    await act(async()=>{});expect(v.mutate).toHaveBeenCalledWith({mutation:'set_hours',args:{},row:{id:1},value:2});
   });
   it('hydrates the SSR cell tree without changing its initial markup',async()=>{
     const v=setup(); const host=document.createElement('div');document.body.appendChild(host);
@@ -183,6 +186,6 @@ describe('editable table runtime',()=>{
   it('coerces native select values from the invocation query column schema',async()=>{
     const v=setup('<Column col="hours"><select aria-label="Hours {$_row.id}" value="$_row.hours" run="$set_hours"><option value="">None</option><option value="2">Two</option></select></Column>',[{id:1,item:'one',hours:null}]);
     const input=v.getByLabelText('Hours 1');fireEvent.focus(input);fireEvent.change(input,{target:{value:'2'}});
-    await act(async()=>{});expect(v.mutate).toHaveBeenCalledWith({_value:2},'set_hours',{id:1,item:'one',hours:null});
+    await act(async()=>{});expect(v.mutate).toHaveBeenCalledWith({mutation:'set_hours',args:{},row:{id:1},value:2});
   });
 });

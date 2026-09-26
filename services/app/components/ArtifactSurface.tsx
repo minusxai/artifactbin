@@ -358,7 +358,7 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
    */
   const backend = useMemo(() => createHttpBackend(id), [id]);
   const live = useLiveArtifact(backend, id, editId, version, !editing, undefined, onLiveData, setLiveAnnotations);
-  const hasDataMutations = format === 'markup' && !archived && (live?.dataflow?.flow ?? dataflow?.flow)?.mutations?.some(m => m.scope !== 'local') === true;
+  const hasDataMutations = format === 'markup' && !archived && (live?.dataflow?.flow ?? dataflow?.flow)?.mutations.some(m => 'import' in m.target) === true;
   const membershipChanged=useCallback(()=>onLiveData({datasets:['_members']}),[onLiveData]);
   const membership=useArtifactMembership(id,hasDataMutations,membershipRevision,membershipChanged);
   const joinArtifact=()=>{

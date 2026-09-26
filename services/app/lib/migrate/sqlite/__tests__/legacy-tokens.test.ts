@@ -1,5 +1,5 @@
 import {expect,it} from 'vitest';
-import {removedSqlReferenceTokens} from '../sql-reference-tokens';
+import {removedSqlReferenceTokens} from '../legacy-tokens';
 it('reports unterminated strings instead of treating the remaining SQL as valid',()=>{
  for(const source of ["select 'unfinished", "select 'escaped\\", "select 'quote''"]){expect(removedSqlReferenceTokens(source).diagnostic).toBe('unterminated SQL string');}
 });

@@ -6,7 +6,10 @@ import {join} from 'node:path';
 import {inferColumns} from '../../../utils/src/shape';
 import {parseCsv} from '../../../app/lib/data-ingest/csv';
 import {coerceRows} from '../../../app/lib/data-ingest/coerce';
-import type {DatasetTables} from '../../../app/lib/sql/dataflow-core';
+import type {DatasetColumn,Row} from '@artifactbin/contracts';
+
+/** A dataset's rows, by value. */
+export type LocalDataset={rows:Row[];columns:DatasetColumn[]};
 import {parseResourceFile,readResourceSource} from '../resource-file';
 import {confinedPath} from '../journal';
 import {readOptional} from '../files';
@@ -24,7 +27,7 @@ export async function localInputPath(root:string,path:string):Promise<string|und
 }
 
 /** Stored rows for dataset `id` from its local file; undefined when it is defined remotely (a `<Dataset>` definition or no source). */
-export async function readLocalDataset(root:string,path:string,id:string):Promise<DatasetTables[string]|undefined>{
+export async function readLocalDataset(root:string,path:string,id:string):Promise<LocalDataset|undefined>{
  let input:string|undefined=path;
  try{
   input=await localInputPath(root,path);

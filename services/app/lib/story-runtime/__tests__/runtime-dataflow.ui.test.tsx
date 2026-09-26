@@ -18,16 +18,20 @@ import { createMx } from '../mx';
 import type { StoryIslandDataflow } from '../contract';
 import type { DataflowState } from '@/lib/story/dataflow';
 import { parseJsxOrThrow } from '@/test/helpers/jsx';
+import { compiledOf } from '@/test/helpers/compiled';
 
-const HELMET =
-  '<Helmet>' +
+const HELMET_CHILDREN =
+  '<Import name="orders" src="ref:abc123" />' +
   '<Value name="region" type="string" />' +
   '<Value name="min_rev" type="number" default={100} />' +
   '<Value name="flag" type="boolean" default={false} />' +
-  '<Query name="sales" source="ref:abc123">{`select region, sum(revenue) revenue from public.rows where $region is null or region = $region group by 1`}</Query>' +
-  '<Query name="regions" source="ref:abc123">{`select distinct region, region || \'!\' label from public.rows`}</Query>' +
-  '<Query name="broken" source="ref:abc123">{`select nope from public.rows`}</Query>' +
-  '</Helmet>';
+  '<Query name="sales">{`select region, sum(revenue) revenue from orders.rows where $region is null or region = $region group by 1`}</Query>' +
+  '<Query name="regions">{`select distinct region, region || \'!\' label from orders.rows`}</Query>' +
+  // Compiles, and fails at run time: its error arrives in the state, as a real failure would.
+  '<Query name="broken">{`select region from orders.rows`}</Query>';
+const HELMET = `<Helmet>${HELMET_CHILDREN}</Helmet>`;
+const FLOW = await compiledOf(HELMET_CHILDREN, { abc123: [{ name: 'region', type: 'string' }, { name: 'revenue', type: 'number' }] });
+const ORDERS_FLOW = await compiledOf('<Value name="orders" type="table" value={[]} columns={[{"name":"id","type":"string"},{"name":"name","type":"string"}]} /><Query name="orders_now">{`select * from orders`}</Query>');
 
 const STATE: DataflowState = {
   values: { region: null, min_rev: 100, flag: false },
@@ -40,8 +44,8 @@ const STATE: DataflowState = {
 
 function build(body: string) {
   const parsed = parseJsxOrThrow(HELMET + body);
-  const { content, body: nodes } = splitHelmet(parsed.nodes as JsxNode[]);
-  const dataflow: StoryIslandDataflow = { flow: { values: content.values, queries: content.queries }, state: STATE };
+  const { body: nodes } = splitHelmet(parsed.nodes as JsxNode[]);
+  const dataflow: StoryIslandDataflow = { flow: FLOW, state: STATE };
   return { nodes, dataflow };
 }
 
@@ -305,9 +309,9 @@ describe('StoryRuntimeApp — dataflow', () => {
 
 describe('<For> over a query table', () => {
   it('subscribes For to actual query table results and preserves DOM identity after refresh',async()=>{
-   const parsed=parseJsxOrThrow('<For id="orders" each={$orders} keyBy="id"><p id="name">{$_row.name}</p></For>');
+   const parsed=parseJsxOrThrow('<For id="orders" each={$orders_now} keyBy="id"><p id="name">{$_row.name}</p></For>');
    let rows=[{id:'a',name:'Alice'}];
-   const store=createDataflowStore({flow:{values:[],queries:[{name:'orders',sql:'select * from ref_abc123',params:[],refs:['abc123'],start:0,end:0}]}},{transport:{page:async()=>{throw new Error('not used')},run:async()=>({tables:{orders:{rows,columns:[{name:'id',type:'string'},{name:'name',type:'string'}]}},errors:{}})}});
+   const store=createDataflowStore({flow:ORDERS_FLOW},{transport:{page:async()=>{throw new Error('not used')},run:async()=>({tables:{orders_now:{rows,columns:[{name:'id',type:'string'},{name:'name',type:'string'}]}},errors:{}})}});
    const view=renderWithProviders(<StoryRuntimeApp nodes={parsed.nodes} refData={{}} store={store} colorMode="light" chrome={false}/>);
    await act(async()=>store.start());await waitFor(()=>expect(screen.getByText('Alice')).toBeTruthy());const alice=screen.getByText('Alice');
    rows=[{id:'b',name:'Bob'},{id:'a',name:'Alicia'}];await act(async()=>store.refresh());

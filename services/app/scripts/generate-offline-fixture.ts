@@ -14,12 +14,12 @@
 import { readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { parseJsx } from '@/lib/jsx';
-import { splitHelmet } from '@/lib/story/helmet';
+import { declarationsOf } from '@/lib/story/helmet';
+import { compileWithLoader } from '@/lib/story/compile-dataflow';
 import { compileStoryCss } from '@/lib/data/story/story-css.server';
 import { stampNodeIds } from '@/lib/story/node-ids';
 import { prepareStoryParts } from '@/lib/story/prepare-runtime.server';
-import type { Dataflow, DataflowState, TableResult } from '@/lib/story/dataflow';
+import type { DataflowState, TableResult } from '@/lib/story/dataflow';
 import { ARTIFACT_FILE_FORMAT, parseArtifactFile, sourceDigest, type ArtifactFile } from '@/lib/offline/file-format';
 
 const APP = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -30,10 +30,14 @@ const FIXTURE = path.resolve(APP, '../../scripts/fixtures/offline-file');
  */
 const source = stampNodeIds(readFileSync(path.join(FIXTURE, 'dashboard.jsx'), 'utf8').trim(), { retireLegacyAliases: true }).source;
 
-const parsed = parseJsx(source);
-if (!parsed.ok) throw new Error('dashboard.jsx does not parse');
-const { content } = splitHelmet(parsed.nodes);
-const flow: Dataflow = { values: content.values, queries: content.queries, ...(content.mutations.length ? { mutations: content.mutations } : {}) };
+const declared = declarationsOf(source);
+if (!declared) throw new Error('dashboard.jsx does not parse');
+// The dataset it imports, by shape: the compiler needs nothing else.
+const compiledFlow = await compileWithLoader(declared, async () => ({
+  kind: 'dataset', tables: [{ name: 'rows', columns: [{ name: 'region', type: 'string' }, { name: 'month', type: 'string' }, { name: 'revenue', type: 'number' }] }],
+}));
+if (!compiledFlow.ok) throw new Error(compiledFlow.errors.map((e) => e.message).join('\n'));
+const flow = compiledFlow.compiled;
 
 const salesRows = [
   { region: 'east', month: '2026-07', revenue: 120 }, { region: 'east', month: '2026-08', revenue: 180 },

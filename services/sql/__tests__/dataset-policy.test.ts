@@ -1,24 +1,22 @@
 /**
- * THE DATA POLICY ON A WRITE, over both engines and both transports. DuckDB
- * reads the policy from the statement's plan; SQLite judges the effect the
- * statement had (engine triggers record it). The assertions are the same;
- * where the dialects differ — `$_row` (a DuckDB STRUCT; SQLite receives row
- * values as ordinary named parameters), UPDATE FROM and CTE-prefixed writes
- * (refused by DuckDB's plan reader, judged on their effect by SQLite) — each
- * engine gets its own SQL for the same rule.
+ * THE DATA POLICY ON A WRITE, over both compositions of the engine (this
+ * thread, the server's worker threads) and both transports. SQLite judges the
+ * effect the statement had (engine triggers record it): UPDATE FROM and
+ * CTE-prefixed writes are judged on the rows they changed like any other.
+ * Row values arrive as ordinary named parameters.
  */
 import { afterAll, describe, it, expect } from 'vitest';
 import { createSql } from '@artifactbin/sql/local';
 import { createSqliteSql } from '@artifactbin/sql/sqlite';
 import { serveSql, sqlClient } from '@artifactbin/sql';
 import type { DatasetMutationPolicy, Scalar, SqlService } from '@artifactbin/contracts';
-const local = createSql(),
-  server = serveSql(local),
+const pool = createSql({}, { workers: 1 }),
+  server = serveSql(pool),
   remote = sqlClient(server.listen(0).url);
 const sqlite = createSqliteSql(),
   sqliteServer = serveSql(sqlite),
   sqliteRemote = sqlClient(sqliteServer.listen(0).url);
-afterAll(() => Promise.all([server.close(), sqliteServer.close()]));
+afterAll(async () => { await Promise.all([server.close(), sqliteServer.close()]); await pool.close(); });
 const table = {
   name: 'rows',
   columns: [
@@ -63,16 +61,14 @@ const policy: DatasetMutationPolicy = {
   },
   execution: { functions: { deny: ['llm', 'lower'] } },
 };
-describe.each<[string, 'duckdb' | 'sqlite', SqlService]>([
-  ['duckdb local', 'duckdb', local],
-  ['duckdb HTTP', 'duckdb', remote],
-  ['sqlite local', 'sqlite', sqlite],
-  ['sqlite HTTP', 'sqlite', sqliteRemote],
-])('dataset policy %s', (_, engine, svc) => {
-  // The clicked row: a typed STRUCT in DuckDB, plain named parameters in SQLite.
-  const ROW: { id: string; body: string; status: string; params: Record<string, Scalar> } = engine === 'duckdb'
-    ? { id: '$_row.id', body: '$_row.body', status: '$_row.status', params: {} }
-    : { id: '$id', body: '$body', status: '$status', params: { id: 1, body: 'one', status: 'open' } };
+describe.each<[string, SqlService]>([
+  ['worker threads', pool],
+  ['worker threads HTTP', remote],
+  ['this thread', sqlite],
+  ['this thread HTTP', sqliteRemote],
+])('dataset policy %s', (_, svc) => {
+  // The clicked row: plain named parameters.
+  const ROW: { id: string; body: string; status: string; params: Record<string, Scalar> } = { id: '$id', body: '$body', status: '$status', params: { id: 1, body: 'one', status: 'open' } };
   const run = (sql: string, p = policy) =>
     svc.mutate({ table, sql, params: { body: 'changed' }, policy: p });
   it('does not expose an undeclared likes table',async()=>{
@@ -280,8 +276,7 @@ describe.each<[string, 'duckdb' | 'sqlite', SqlService]>([
     ).toHaveProperty('error');
   });
   it('keeps denying functions whose only arguments are parameters', async () => {
-    // A call over placeholders is a constant expression, and DuckDB folds it
-    // out of the plan it serializes — the parsed statement is the net.
+    // A call over placeholders is a constant expression: the authorizer still reports the call.
     const denied = { ...open, execution: { functions: { deny: ['lower'] } } };
     expect(
       await runRow(
@@ -332,43 +327,18 @@ describe.each<[string, 'duckdb' | 'sqlite', SqlService]>([
   it('leaves FROM inside an operator call alone, and still refuses a real UPDATE ... FROM', async () => {
     expect(
       await runRow(
-        engine === 'duckdb' ? `update rows set body = substring(body from 1 for 2) where id = ${ROW.id}` : `update rows set body = substr(body, 1, 2) where id = ${ROW.id}`,
+        `update rows set body = substr(body, 1, 2) where id = ${ROW.id}`,
       ),
     ).toMatchObject({ affected: 1, rows: [{ id: 1, body: 'on', status: 'open' }, table.rows[1]] });
-    if (engine === 'sqlite') {
-      // SQLite judges UPDATE ... FROM by the rows it changed: the filter still holds.
-      expect(await run('update rows set body=$body from rows as other where rows.id=other.id')).toMatchObject({ affected: 1, rows: [{ id: 1, body: 'changed', status: 'open' }, table.rows[1]] });
-      return;
-    }
-    expect(
-      await runRow(
-        'update rows set body=$body from rows as other where rows.id=other.id',
-        open,
-        { body: 'changed' },
-      ),
-    ).toMatchObject({ error: expect.stringContaining('UPDATE FROM') });
+    // UPDATE ... FROM is judged by the rows it changed: the filter still holds.
+    expect(await run('update rows set body=$body from rows as other where rows.id=other.id')).toMatchObject({ affected: 1, rows: [{ id: 1, body: 'changed', status: 'open' }, table.rows[1]] });
   });
   it('still refuses a statement that genuinely cannot be planned', async () => {
-    if (engine === 'sqlite') {
-      expect(await runRow(`update rows set status=nosuch where id=${ROW.id}`)).toMatchObject({ error: expect.stringContaining('no such column: nosuch') });
-      return;
-    }
-    expect(
-      await runRow(`update rows set status=$_row.nosuch where id=${ROW.id}`),
-    ).toMatchObject({ error: expect.stringContaining('cannot be safely analyzed') });
+    expect(await runRow(`update rows set status=nosuch where id=${ROW.id}`)).toMatchObject({ error: expect.stringContaining('no such column: nosuch') });
   });
   it('rejects opaque or unsupported write forms', async () => {
-    if (engine === 'sqlite') {
-      expect(await run('update rows set body=$body returning *')).toMatchObject({ error: expect.stringContaining('RETURNING') });
-      // A CTE-prefixed write is judged on its effect, like any other: the delete filter holds.
-      expect(await run('with a as (select 1) delete from rows')).toMatchObject({ affected: 1, rows: [table.rows[1]] });
-      return;
-    }
-    for (const sql of [
-      "insert into rows values (3,'x','x') on conflict do nothing",
-      'update rows set body=$body returning *',
-      'with a as (select 1) delete from rows',
-    ])
-      expect(await run(sql)).toHaveProperty('error');
+    expect(await run('update rows set body=$body returning *')).toMatchObject({ error: expect.stringContaining('RETURNING') });
+    // A CTE-prefixed write is judged on its effect, like any other: the delete filter holds.
+    expect(await run('with a as (select 1) delete from rows')).toMatchObject({ affected: 1, rows: [table.rows[1]] });
   });
 });

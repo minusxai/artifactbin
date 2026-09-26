@@ -5,7 +5,8 @@ import {STORY_UI_COMPONENTS} from '@/lib/story-ui/registry';
 import {renderToStaticMarkup} from 'react-dom/server';
 import {createElement} from 'react';
 import {splitHelmet} from '@/lib/story/helmet';
-import {initialValues,initialTables} from '@/lib/story/dataflow';
+import {initialValues,initialTables} from '@/lib/story/compiled-flow';
+import {compiledSource} from '@/test/helpers/compiled';
 import {createDataflowStore} from '../store';
 import { parseJsxOrThrow } from '@/test/helpers/jsx';
 it('reserves managed frame dimensions in the inert SSR registry',()=>{
@@ -22,8 +23,8 @@ it('renders separate managed regions without author DOM in the parent',async()=>
 });
 it('composes reactive branches with isolated frames and disposes the hidden branch',async()=>{
   const parsed=parseJsxOrThrow('<Helmet><Value name="visible" type="boolean" default={true}/></Helmet>{$visible ? <Iframe id="view" title="Conditional canvas"><style>{`canvas {position:fixed}`}</style><canvas/><script>{`window.label = "$visible";`}</script></Iframe> : <p>Closed</p>}');
-  const {content,body:nodes}=splitHelmet(parsed.nodes);
-  const flow={values:content.values,queries:content.queries,mutations:content.mutations};
+  const {body:nodes}=splitHelmet(parsed.nodes);
+  const flow=await compiledSource('<Helmet><Value name="visible" type="boolean" default={true}/></Helmet>');
   const state={values:initialValues(flow),tables:initialTables(flow),errors:{}};
   const store=createDataflowStore({flow,state});
   const view=render(<StoryRuntimeApp nodes={nodes} refData={{}} colorMode="light" store={store}/>);

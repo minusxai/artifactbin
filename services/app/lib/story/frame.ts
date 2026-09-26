@@ -13,7 +13,7 @@
  * build per version, not one per connection.
  */
 import type { ArtifactRow } from '@/lib/artifacts';
-import { datasetsForDocument } from '@/lib/artifacts';
+import { datasetsForDocument, declarationsForRow } from '@/lib/artifacts';
 import { currentStoryCss } from '@/lib/data/story/story-css.server';
 import { resolveStoredStoryDesign } from '@/lib/data/story/story-themes';
 import { authorHandle } from '@/lib/users';
@@ -31,7 +31,7 @@ export interface LiveFrame extends Omit<ArtifactLiveEvent, 'compiledCss' | 'auth
   /** A stable signature of the data declarations; the client rebinds when it moves. */
   declarations: string | null;
   /** The declarations as a flow, rows deliberately absent (the client re-runs). */
-  dataflow?: { flow: NonNullable<ReturnType<typeof storyUpdateParts>>['flow'] };
+  dataflow?: { flow: import('@/lib/story/compiled-dataflow').CompiledDataflow };
   /** The datasets this version reads or writes — what a relay must also follow. */
   datasets: string[];
 }
@@ -62,6 +62,8 @@ async function build(row: ArtifactRow): Promise<LiveFrame> {
   const parts = row.format === 'markup' && row.source
     ? storyUpdateParts(row.source, assetLookupFrom(assets))
     : null;
+  // The compiled declarations the runtime re-runs this version with (a reader's frame has no compiler).
+  const flow = parts ? (await declarationsForRow(row))?.flow ?? null : null;
   return {
     ...(row.document?.kind==='graph'?{document:row.document}:{}),
     editId: row.edit_id,
@@ -79,8 +81,8 @@ async function build(row: ArtifactRow): Promise<LiveFrame> {
     authorScript: parts?.authorScript ?? null,
     ...(parts ? { nodes: parts.nodes } : {}),
     declarations: parts?.declarations ?? null,
-    ...(parts && parts.flow.queries.length + parts.flow.values.length > 0 ? { dataflow: { flow: parts.flow } } : {}),
-    datasets: row.format === 'markup' ? datasetsForDocument(row) : [],
+    ...(parts && flow && flow.queries.length + flow.values.length > 0 ? { dataflow: { flow } } : {}),
+    datasets: row.format === 'markup' ? await datasetsForDocument(row) : [],
     theme: design.theme,
     colorMode: design.colorMode,
     template: meta.template ?? null,

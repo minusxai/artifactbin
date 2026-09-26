@@ -11,7 +11,7 @@ const CORS = {
 };
 
 /**
- * A reader supplies a declared mutation name and values; SQL comes from the
+ * A reader supplies a declared mutation name and its arguments (lib/story/mutation-request); SQL comes from the
  * stored document. Dataset edit permission belongs to the requesting actor,
  * independently of the document's role. Check it on every write.
  * Cookie credentials require same-site requests; bearers do not carry CSRF.
@@ -34,7 +34,7 @@ export async function POST(request: Request, ctx: { params: Promise<{ id: string
   const parsed = parseMutationRequest(body);
   if (parsed instanceof Response) return parsed;
 
-  const result = await runDocumentMutation(artifact, parsed.mutation, parsed.values ?? {}, parsed.row, {userId:actor.viewer?.userId ?? null,tokenId:actor.tokenId,email:actor.viewer?.email}, parsed.localTables);
+  const result = await runDocumentMutation(artifact, parsed, {userId:actor.viewer?.userId ?? null,tokenId:actor.tokenId,email:actor.viewer?.email});
   if (!result.ok) {
     switch (result.reason) {
       case 'unknown_mutation':

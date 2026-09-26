@@ -1,4 +1,4 @@
-import { datasetResolverForActor, runDocumentDataflow } from '@/lib/artifacts';
+import { datasetResolverForActor, refLoaderForActor, runDocumentDataflow } from '@/lib/artifacts';
 import { actorForArtifacts, sessionActor } from '@/lib/viewer';
 import { isCrossSiteRequest, json, readJson, unauthorized } from '@/lib/http';
 import { parseJsx } from '@/lib/jsx';
@@ -53,9 +53,10 @@ export async function POST(request: Request) {
     if(!current||current.tokenId!==admittedActor.tokenId||current.userId!==admittedActor.userId)throw new DatasetError('Query access revoked',403);
   };
   try {
-    const flow = await runDocumentDataflow(markup, datasetResolverForActor(actor), {...parsed,authorize,signal:request.signal});
+    const flow = await runDocumentDataflow(markup, refLoaderForActor(actor), datasetResolverForActor(actor), {...parsed,authorize,signal:request.signal});
     await authorize();
-    return json({ tables: flow?.state.tables ?? {}, errors: flow?.state.errors ?? {} },200,{[REVALIDATE_ACTOR_HEADER]:'1'});
+    // The compiled declarations ride along: the editor's canvas binds a draft the browser cannot compile.
+    return json({ tables: flow?.state.tables ?? {}, errors: flow?.state.errors ?? {}, flow: flow?.flow ?? null },200,{[REVALIDATE_ACTOR_HEADER]:'1'});
   } catch (error) {
     if (error instanceof DatasetError) return json({error:'query_access_revoked'},error.status,{'Cache-Control':'no-store'});
     throw error;

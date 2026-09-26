@@ -1,64 +1,58 @@
 import {normalizeTimestamp,isTimestamp} from '@artifactbin/utils/shape';
 /**
- * The document's DATAFLOW — the pure contract behind `$name` references.
+ * The document's DATAFLOW DECLARATIONS — the parsed `<Helmet>` data children
+ * and the `$name` reference syntax of the markup around them.
  *
  * A markup document declares its data in `<Helmet>`:
+ *   <Import name="bookings" src="ref:abc123" />             a stored dataset (or folder), read as bookings.rows
  *   <Value name="region" type="string" />                    scalar, bound to inputs
  *   <Value name="tiny" type="table" value={[{a:1}]} />      inline table
- *   <Query name="sales" source="ref:abc123">{`select … from public.rows where $region is null or region = $region`}</Query>
+ *   <Query name="sales">{`select … from bookings.rows where $region is null or region = $region`}</Query>
+ *   <Mutation name="book">{`insert into bookings.rows …`}</Mutation>
  * and refers to it everywhere else by NAME: `data="$sales"` on an embed,
  * `value="$region"` on a native control, `options="$regions"` on a select,
- * `$region` inside SQL (a bound parameter, never interpolated), and a bare
- * `sales` inside another query's SQL (a table). One namespace; the kind of a
- * name (scalar vs table) comes from its declaration, and every reference is
- * checked against it at publish — a typo'd `$sale` is a 400 naming the token,
- * never an embed that silently renders empty.
+ * `run="$book"` on a button. One namespace; the kind of a name comes from its
+ * declaration, and every markup reference is checked against it at publish.
  *
- * This module is PURE (no DB, no engine, no React) and is the ONLY place that
- * knows the reference syntax: helmet.ts calls
- * `parseValueDecl`/`parseQueryDecl`/`parseMutationDecl` for the three Helmet
- * data children, local-validation.ts calls `validateDataflow` in its
- * always-run error array (so /api/preview and publish agree), refs.ts asks
- * `datasetRefsInDataflow` for the datasets a document reads, and the runtime +
- * engine consume the same `Dataflow`/`DataflowState` shapes off the JSON island.
+ * This module is PURE and knows the MARKUP half only. What the SQL reads,
+ * binds and writes is SQLite's own report, taken by the compiler
+ * (lib/story/compile-dataflow → CompiledDataflow); nothing here reads SQL text.
  *
  * Reference grammar (deliberately narrow — the string stays inert data):
- *  - an attribute reference is the WHOLE value, `^\$[A-Za-z_]\w*$`, so
- *    `fmt="$,.0f"` and a literal "$5" are never mistaken for one;
+ *  - an attribute reference is the WHOLE value, `^\$[A-Za-z_]\w*$` (or a
+ *    markup built-in field, `$_me.id`), so `fmt="$,.0f"` and a literal "$5"
+ *    are never mistaken for one;
  *  - it is only read from the attributes in REF_ATTRS (below); anywhere else
- *    a `$…` string is a literal;
- *  - inside SQL, `$name` is a parameter naming a SCALAR value; a table (query
- *    or table-Value) is referenced by its bare name, like any table;
- *  - a dataset artifact is named by `source="ref:<id>"` on the declaration —
- *    collected here so `meta.refs` (dependents, ownership checks) keeps
- *    working. A `ref_<id>` table written into the SQL itself is refused
- *    (`removedSqlReferenceTokens`), because the source attribute is the one
- *    place a document says which dataset it reads.
+ *    a `$…` string is a literal.
  */
 import type { JsonValue, JsxAttribute, JsxElement, JsxNode, ValidationError } from '@/lib/jsx';
 import {parseDatasetColumn} from '@artifactbin/utils/shape';
 import { inferColumns, type ColumnType, type DatasetColumn } from './dataset-shape';
-import { localWriteTarget, SIGNALS_TABLE } from './local-target';
 import { reactiveNames, type ReactiveExpression } from '@/lib/jsx/reactive';
-import { removedSqlReferenceTokens } from './sql-reference-tokens';
 import { ARTIFACT_ID_PATTERN, ARTIFACT_REFERENCE_PATTERN } from '@artifactbin/contracts';
+import { builtinInput, READ_ONLY_REF_ATTRS, reservedDeclarationName, VIEWER, VIEWER_ID } from './builtins';
 
 // ── declarations ────────────────────────────────────────────────────────────
 
+/**
+ * `<Import name="bookings" src="ref:<id>" />` — a stored table-producing
+ * artifact (a dataset, a folder) every query and mutation reads as its own
+ * schema: `bookings.rows`, and a catalog dataset's whitelisted tables beside
+ * it. A connected Postgres dataset is never imported; its queries run inside
+ * it (`<Query source="ref:<id>">`).
+ */
+export const IMPORT_TAG = 'Import';
 export const VALUE_TAG = 'Value';
 export const QUERY_TAG = 'Query';
 /**
- * `<Mutation name source>{`insert into public.rows … values ($a)`}</Mutation>` —
- * a Query that WRITES. Same SQL dialect, same `$param` binding, same
- * `source="ref:<id>"` naming; the differences are exactly three: the statement
- * is INSERT/UPDATE/DELETE (judged by type, lib/sql/engine write mode), it
- * names exactly ONE dataset (the one it writes) or a local table, and it runs
+ * `<Mutation name>{`insert into bookings.rows … values ($a)`}</Mutation>` — a
+ * statement that WRITES exactly one imported table or one local table Value,
  * on demand — from `<Button run="$name">` or `mx.mutate(name)` — never at
- * render.
+ * render. Its plain `$name` parameters are its arguments.
  */
 export const MUTATION_TAG = 'Mutation';
 
-/** `<Value type>`: the four dataset column types, plus an inline table. */
+/** `<Value type>`: the dataset column types, plus an inline table. */
 type ValueType = ColumnType | 'table';
 const VALUE_TYPES: readonly ValueType[] = ['string', 'number', 'boolean', 'date', 'timestamp', 'user', 'table'];
 
@@ -68,6 +62,12 @@ export type Scalar = string | number | boolean | null;
 export type Row = Record<string, unknown>;
 
 interface Span { start: number; end: number }
+
+export interface ImportDecl extends Span {
+  name: string;
+  /** The artifact id `src="ref:<id>"` names. */
+  ref: string;
+}
 
 export interface ScalarValueDecl extends Span {
   kind: 'scalar';
@@ -93,45 +93,30 @@ interface TableValueDecl extends Span {
 export type ValueDecl = ScalarValueDecl | TableValueDecl;
 
 export interface QueryDecl extends Span {
-  source?: string;
   name: string;
   sql: string;
-  /** `$name` parameters the SQL mentions, in first-appearance order (deduped). */
-  params: string[];
-  /** Dataset artifact ids the SQL reads as `ref_<id>` tables (deduped). */
-  refs: string[];
+  /** A connected Postgres dataset the query runs inside (`source="ref:<id>"`). */
+  source?: string;
 }
 
 export interface MutationDecl extends Span {
-  source?: string;
-  /** Absent = persistent dataset; local targets never enter the ref graph. */
-  scope?: 'local';
   name: string;
   sql: string;
-  /** `$name` parameters the SQL mentions, in first-appearance order (deduped). */
-  params: string[];
-  /** The ONE dataset artifact id this statement writes (`ref_<id>`). */
-  target: string;
-  /** Same as `[target]` — the shape the ref graph reads (lib/story/refs). */
-  refs: string[];
   /** Optional affected-row guard, enforced by the mutation engine before persistence. */
   expectedAffected?: number;
   /** Scalar Values set back to their declared defaults after this write succeeds. */
   reset?: string[];
 }
 
-/** Everything a document declares — the parsed `<Helmet>` data children. */
+/** Everything a document declares — the parsed `<Helmet>` data children, in authored order. */
 export interface Dataflow {
+  imports: ImportDecl[];
   values: ValueDecl[];
   queries: QueryDecl[];
-  /** `<Mutation>` declarations in authored order. Absent = none (the common case; keeps the island small). */
-  mutations?: MutationDecl[];
+  mutations: MutationDecl[];
 }
 
-export const EMPTY_DATAFLOW: Dataflow = { values: [], queries: [] };
-
-/** The mutations a flow declares, absent read as none. */
-export const mutationsOf = (flow: Dataflow): MutationDecl[] => flow.mutations ?? [];
+export const EMPTY_DATAFLOW: Dataflow = { imports: [], values: [], queries: [], mutations: [] };
 
 // ── runtime state (what the island carries and the store holds) ─────────────
 
@@ -165,19 +150,70 @@ export interface DataflowState {
 
 // ── the reference syntax ────────────────────────────────────────────────────
 
-/** A whole-attribute reference: `$sales`. */
-const REF_NAME_RE = /^\$([A-Za-z_]\w*)$/;
-/** A SQL parameter: `$region` (not `$$…` dollar-quoting, not `$1`). */
-const SQL_PARAM_RE = /(?<![\w$])\$([A-Za-z_]\w*)/g;
-/** A declared name: an identifier that is not shaped like a dataset table. */
+/** A whole-attribute reference: `$sales`, or a built-in field (`$_me.id`, `$_row.day`). */
+const REF_NAME_RE = /^\$([A-Za-z_]\w*(?:\.[A-Za-z_]\w*)?)$/;
+/** A declared name: an identifier. */
 export const DECL_NAME_RE = /^[A-Za-z_]\w*$/;
 
-/** `"$sales"` → `"sales"`; anything else → null. */
+/**
+ * `"$sales"` → `"sales"`, `"$_me.id"` → `"_me.id"` (the one dotted name markup
+ * binds); anything else → null. A row field (`$_row.day`) is the row scope's,
+ * substituted before any binding reads it (lib/story/row-scope).
+ */
 export function refName(value: unknown): string | null {
   if (typeof value !== 'string') return null;
   const m = REF_NAME_RE.exec(value);
-  return m ? m[1] : null;
+  if (!m) return null;
+  return !m[1].includes('.') || builtinInput(m[1])?.markup ? m[1] : null;
 }
+
+/**
+ * WHERE `set=` AND `args=` TAKE A VALUE FROM: a page value (`"$day"`), a
+ * built-in (`"$_row.day"`, `"$_me.id"`), or a literal. A string that is
+ * shaped like a reference is one; anything else is itself.
+ */
+export type BindingSource = { ref: string } | { literal: Scalar };
+
+export function bindingSource(json: unknown): BindingSource | null {
+  if (typeof json === 'string') { const m = REF_NAME_RE.exec(json); return m ? { ref: m[1] } : { literal: json }; }
+  if (json === null || typeof json === 'boolean' || (typeof json === 'number' && Number.isFinite(json))) return { literal: json };
+  return null;
+}
+
+/** `set={{"day": "$_row.day"}}` / `args={{"when": "$day"}}` → name → source; null when it is not a flat object of sources. */
+export function bindingMap(json: unknown): Record<string, BindingSource> | null {
+  if (!json || typeof json !== 'object' || Array.isArray(json)) return null;
+  const out: Record<string, BindingSource> = {};
+  for (const [key, value] of Object.entries(json)) {
+    const source = bindingSource(value);
+    if (!source || !DECL_NAME_RE.test(key)) return null;
+    out[key] = source;
+  }
+  return out;
+}
+
+/**
+ * A binding map inside a row: every `$_row.<column>` source becomes the row's
+ * value, so what reaches the control is already unambiguous (a row value that
+ * happens to start with `$` stays a literal).
+ */
+export function rowBound(map: Record<string, BindingSource>, row: Record<string, unknown>): Record<string, BindingSource> {
+  return Object.fromEntries(Object.entries(map).map(([key, source]) => {
+    const field = 'ref' in source ? /^_row\.([A-Za-z_]\w*)$/.exec(source.ref)?.[1] : undefined;
+    if (field === undefined) return [key, source];
+    const value = row[field];
+    return [key, { literal: value === null || typeof value === 'string' || typeof value === 'boolean' || (typeof value === 'number' && Number.isFinite(value)) ? value : null }];
+  }));
+}
+
+/** A binding map's values now: literals as written, references read through `get`. */
+export function resolveBindings(map: Record<string, BindingSource>, get: (ref: string) => Scalar | undefined): Record<string, Scalar> {
+  return Object.fromEntries(Object.entries(map).map(([key, source]) => [key, 'literal' in source ? source.literal : get(source.ref) ?? null]));
+}
+
+/** The attributes that carry a `bindingMap`: `set=` on a Button (no SQL, no server), `args=` beside `run=`. */
+export const SET_ATTR = 'set';
+export const ARGS_ATTR = 'args';
 
 /**
  * A reference INSIDE a string: `https://cdn.x.com/{$pick}.png`.
@@ -285,9 +321,9 @@ export const REF_ATTRS: {
     Dialog: {open: 'scalar'},
     DialogContent: {run: 'mutation'},
     // A person (components/kit/user.tsx), and the two halves they are made of
-    // — the face (user-image.tsx) and the handle (user-handle.tsx). `id` READS
-    // its reference and never writes it back, which is what lets the viewer's
-    // own `$_me` sit there — see VIEWER_REF below.
+    // — the face (user-image.tsx) and the handle (user-handle.tsx). `userId`
+    // READS its reference and never writes it back, which is what lets the
+    // viewer's own `$_me.id` sit there (lib/story/builtins READ_ONLY_REF_ATTRS).
     User: { userId: 'scalar' },
     UserImage: { userId: 'scalar' },
     UserHandle: { userId: 'scalar' },
@@ -332,39 +368,13 @@ export const isTemplateRefPosition = (tag: string, attr: string, isComponent: bo
   !!(isComponent ? TEMPLATE_REF_ATTRS.components[tag] : TEMPLATE_REF_ATTRS.html[tag.toLowerCase()])
     ?.has(isComponent ? attr : attr.toLowerCase());
 
-/**
- * THE VIEWER, READ-ONLY — `$_me`.
- *
- * It is the account id of whoever is looking, and `null` for a guest. SQL has
- * always bound it (lib/sql/dataflow-core binds `_me` from the request's user);
- * markup reads the SAME name, so a page can branch on who is reading it
- * (`{$_me ? <form/> : <SignIn/>}`) without a script and without a `<Value>`
- * that would stick in the link.
- *
- * It is admitted WITHOUT a declaration, and it can never BE declared: `_`
- * names are reserved (checkName above), so no author can shadow it. It is
- * equally never WRITTEN — not by a control, not from a URL, not by
- * `mx.set` — so it is admitted only where a reference is READ: inside a
- * reactive expression, and in the read-only attributes below. Every other
- * reference position is a two-way binding or a data source, and refuses it by
- * name: who is reading a page is not something the page may set.
- */
-export const VIEWER_REF = '_me';
-
-/**
- * The REF_ATTRS positions that only READ their reference — where `$_me` is
- * therefore legal. Deliberately tiny and opt-in: a binding position added to
- * REF_ATTRS later must not silently become a place the viewer can be written.
- */
-const READ_ONLY_REF_ATTRS: Record<string, ReadonlySet<string>> = { User: new Set(['userId']), UserImage: new Set(['userId']), UserHandle: new Set(['userId']) };
-
 /** One `$name` occurrence in the body. */
 interface RefNameUse extends Span {
   name: string;
   tag: string;
   attr: string;
   expects: RefKind;
-  /** True where the reference is only READ — the positions `$_me` may sit in. */
+  /** True where the reference is only READ — the positions a built-in (`$_me.id`) may sit in. */
   readOnly?: boolean;
 }
 
@@ -384,11 +394,7 @@ const staticAttr = (el: JsxElement, name: string): { attr: JsxAttribute; json: J
   return attr.value.static ? { attr, json: attr.value.json } : { attr };
 };
 
-/**
- * `name` on either declaration: an identifier that is not shaped like a
- * dataset table (`ref_<id>` is how SQL names those, and a Value called
- * `ref_abc123` would shadow one).
- */
+/** `name` on every declaration: an identifier outside the built-ins' reserved space. */
 function checkName(el: JsxElement, tag: string, errors: ValidationError[]): string | null {
   const got = staticAttr(el, 'name');
   if (!got) { errors.push(err(`<${tag}> needs a name attribute`, el, tag, 'name')); return null; }
@@ -396,12 +402,9 @@ function checkName(el: JsxElement, tag: string, errors: ValidationError[]): stri
     errors.push(err(`<${tag}> name must be an identifier ([A-Za-z_][A-Za-z0-9_]*), got ${JSON.stringify(got.json ?? got.attr.value)}`, got.attr, tag, 'name'));
     return null;
   }
-  if (got.json.startsWith('ref_')) {
-    errors.push(err(`<${tag}> name "${got.json}" is reserved — ref_<id> names a dataset table inside SQL`, got.attr, tag, 'name'));
-    return null;
-  }
-  if (got.json.startsWith('_')) {
-    errors.push(err(`<${tag}> name "${got.json}" is reserved — names beginning with _ belong to the row runtime`, got.attr, tag, 'name'));
+  const reserved = reservedDeclarationName(got.json);
+  if (reserved) {
+    errors.push(err(`<${tag}> name "${got.json}" is reserved — ${reserved}`, got.attr, tag, 'name'));
     return null;
   }
   return got.json;
@@ -523,26 +526,53 @@ export function parseValueDecl(el: JsxElement): ParseDeclResult<ValueDecl> {
   return { ok: true, decl: { kind: 'scalar', name, type, ...(sourceAttr?{source:String(sourceAttr.json).slice(4),column:String(columnAttr!.json)}:{}), ...(constraints?{constraints}:{}), ...(outOfUrl ? { url: false as const } : {}), default: type==='timestamp'&&dflt!==null?normalizeTimestamp(dflt,name):dflt, start: el.start, end: el.end } };
 }
 
-/**
- * `<Query name>{`sql`}</Query>` → a declaration with its params and dataset
- * refs, or the errors: `name` and optional `source` are the attributes; the single child is a
- * template literal (SQL keeps `<`, `>` and braces raw that way — the same rule
- * as `<style>`); the SQL is non-empty.
- */
-function sourceAttribute(el:JsxElement,sql:string,errors:ValidationError[]):string|undefined {
-  const removed = removedSqlReferenceTokens(sql).tokens[0];
-  if (removed) errors.push(err(`Implicit SQL artifact references are unsupported. Use source="ref:${removed.id}" and query public.rows; use separate named queries to join sources.`, el, el.tag, 'source'));
-  const attribute=el.attributes.find(a=>a.name==='source');
-  if(!attribute)return;
-  const source=attribute.value.static?attribute.value.json:undefined;
-  const id = typeof source === 'string' ? ARTIFACT_REFERENCE_PATTERN.exec(source)?.[1] : undefined;
-  if(!id){
-    const example = typeof source === 'string' && ARTIFACT_ID_PATTERN.test(source) ? `ref:${source}` : 'ref:<id>';
-    errors.push(err(`source must be a literal artifact reference: source="${example}"`,attribute,el.tag,'source'));return;
+/** The single template-literal child holding a statement's SQL, or null. */
+function sqlChild(el: JsxElement): string | null {
+  const kids = el.children.filter((c) => !(c.type === 'text' && c.value.trim() === ''));
+  const kid = kids.length === 1 ? kids[0] : null;
+  return kid && kid.type === 'expression' && kid.value.static && typeof kid.value.json === 'string' ? kid.value.json : null;
+}
+
+/** A literal `ref:<id>` attribute, or the error that says how to write one. */
+function refAttribute(el: JsxElement, name: string, errors: ValidationError[]): string | undefined {
+  const attribute = el.attributes.find((a) => a.name === name);
+  if (!attribute) return;
+  const value = attribute.value.static ? attribute.value.json : undefined;
+  const id = typeof value === 'string' ? ARTIFACT_REFERENCE_PATTERN.exec(value)?.[1] : undefined;
+  if (!id) {
+    const example = typeof value === 'string' && ARTIFACT_ID_PATTERN.test(value) ? `ref:${value}` : 'ref:<id>';
+    errors.push(err(`${name} must be a literal artifact reference: ${name}="${example}"`, attribute, el.tag, name));
+    return;
   }
   return id;
 }
 
+/**
+ * `<Import name src />` → a declaration: `name` (the schema its tables are
+ * read under) and `src="ref:<id>"`. What the artifact is — a dataset, a
+ * folder, or a connected database that cannot be imported — is the
+ * compiler's to say, with the artifact in hand.
+ */
+export function parseImportDecl(el: JsxElement): ParseDeclResult<ImportDecl> {
+  const tag = IMPORT_TAG;
+  const errors: ValidationError[] = [];
+  for (const a of el.attributes) if (a.name !== 'name' && a.name !== 'src') errors.push(err(`<Import> takes only name= and src="ref:<id>" — not "${a.name}"`, a, tag, a.name));
+  if (el.children.some((c) => !(c.type === 'text' && c.value.trim() === ''))) errors.push(err('<Import> has no children: <Import name="…" src="ref:<id>" />', el, tag));
+  if (errors.length) return { ok: false, errors };
+  const name = checkName(el, tag, errors);
+  const ref = refAttribute(el, 'src', errors);
+  if (!el.attributes.some((a) => a.name === 'src')) errors.push(err(`<Import${name ? ` name="${name}"` : ''}> needs src="ref:<id>" — the dataset or folder it reads`, el, tag, 'src'));
+  if (!name || !ref || errors.length) return { ok: false, errors };
+  return { ok: true, decl: { name, ref, start: el.start, end: el.end } };
+}
+
+/**
+ * `<Query name source?>{`sql`}</Query>` → a declaration, or the errors: the
+ * single child is a template literal (SQL keeps `<`, `>` and braces raw that
+ * way — the same rule as `<style>`); `source=` names a connected Postgres
+ * dataset the query runs inside (a stored dataset is an `<Import>` — the
+ * compiler says so once it can see which one this is).
+ */
 export function parseQueryDecl(el: JsxElement): ParseDeclResult<QueryDecl> {
   const tag = QUERY_TAG;
   const errors: ValidationError[] = [];
@@ -552,58 +582,33 @@ export function parseQueryDecl(el: JsxElement): ParseDeclResult<QueryDecl> {
   if (errors.length) return { ok: false, errors };
   const name = checkName(el, tag, errors);
   if (!name) return { ok: false, errors };
-  const kids = el.children.filter((c) => !(c.type === 'text' && c.value.trim() === ''));
-  const kid = kids.length === 1 ? kids[0] : null;
-  const sql = kid && kid.type === 'expression' && kid.value.static && typeof kid.value.json === 'string' ? kid.value.json : null;
-  if (sql === null) {
-    return { ok: false, errors: [err(`<Query name="${name}"> holds a single template-literal child with the SQL: <Query name="${name}">{\`select …\`}</Query>`, el, tag)] };
-  }
+  const sql = sqlChild(el);
+  if (sql === null) return { ok: false, errors: [err(`<Query name="${name}"> holds a single template-literal child with the SQL: <Query name="${name}">{\`select …\`}</Query>`, el, tag)] };
   if (sql.trim() === '') return { ok: false, errors: [err(`<Query name="${name}"> has empty SQL`, el, tag)] };
-  const source = sourceAttribute(el, sql, errors);
-  if (errors.length) return {ok:false,errors};
-  return { ok: true, decl: { name, sql, ...(source ? {source} : {}), params: sqlParams(sql), refs: source ? [source] : [], start: el.start, end: el.end } };
+  const source = refAttribute(el, 'source', errors);
+  if (errors.length) return { ok: false, errors };
+  return { ok: true, decl: { name, sql, ...(source ? { source } : {}), start: el.start, end: el.end } };
 }
 
 /**
- * `<Mutation name source? expectedAffected? reset?>{`sql`}</Mutation>` → a
+ * `<Mutation name expectedAffected? reset?>{`sql`}</Mutation>` → a
  * declaration, or the errors. The Query rules (one template-literal child,
- * non-empty) plus one of its own: it names exactly ONE target — the dataset
- * `source="ref:<id>"` points at, or a local table the SQL writes directly.
- * Naming two would either read a second dataset into the first (the engine
- * registers only the target, so it would fail at run time anyway) or be
- * ambiguous about which one is being written, and a write must never be
- * ambiguous.
+ * non-empty); what it writes is the compiler's to establish from SQLite's own
+ * analysis — exactly one imported table or one local table Value.
  */
 export function parseMutationDecl(el: JsxElement): ParseDeclResult<MutationDecl> {
   const tag = MUTATION_TAG;
   const errors: ValidationError[] = [];
   for (const a of el.attributes) {
-    if (a.name !== 'name' && a.name !== 'source' && a.name !== 'expectedAffected' && a.name !== 'reset') errors.push(err(`<Mutation> takes only name=, source=, expectedAffected= and reset= — the SQL is its child: <Mutation name="…" source="ref:<id>">{\`insert into public.rows …\`}</Mutation>${a.name === 'sql' ? ' (not a sql= attribute)' : ''}`, a, tag, a.name));
+    if (a.name === 'source') errors.push(err('<Mutation> takes no source= — import the dataset (<Import name="…" src="ref:<id>" />) and write its table by name: insert into <name>.rows …', a, tag, a.name));
+    else if (a.name !== 'name' && a.name !== 'expectedAffected' && a.name !== 'reset') errors.push(err(`<Mutation> takes only name=, expectedAffected= and reset= — the SQL is its child: <Mutation name="…">{\`insert into <import>.rows …\`}</Mutation>${a.name === 'sql' ? ' (not a sql= attribute)' : ''}`, a, tag, a.name));
   }
   if (errors.length) return { ok: false, errors };
   const name = checkName(el, tag, errors);
   if (!name) return { ok: false, errors };
-  const kids = el.children.filter((c) => !(c.type === 'text' && c.value.trim() === ''));
-  const kid = kids.length === 1 ? kids[0] : null;
-  const sql = kid && kid.type === 'expression' && kid.value.static && typeof kid.value.json === 'string' ? kid.value.json : null;
-  if (sql === null) {
-    return { ok: false, errors: [err(`<Mutation name="${name}"> holds a single template-literal child with the SQL: <Mutation name="${name}">{\`insert into public.rows …\`}</Mutation>`, el, tag)] };
-  }
+  const sql = sqlChild(el);
+  if (sql === null) return { ok: false, errors: [err(`<Mutation name="${name}"> holds a single template-literal child with the SQL: <Mutation name="${name}">{\`insert into <import>.rows …\`}</Mutation>`, el, tag)] };
   if (sql.trim() === '') return { ok: false, errors: [err(`<Mutation name="${name}"> has empty SQL`, el, tag)] };
-  const source = sourceAttribute(el, sql, errors);
-  if (errors.length) return {ok:false,errors};
-  const refs = source ? [source] : [];
-  const direct = source ? null : localWriteTarget(sql);
-  const local = direct && !direct.name.startsWith('ref_');
-  if (local && refs.length) {
-    return { ok: false, errors: [err('A local mutation cannot mix local and persistent dataset tables', el, tag)] };
-  }
-  if (local && direct.name === SIGNALS_TABLE && direct.operation !== 'update') {
-    return { ok: false, errors: [err('_signals allows only UPDATE; it must remain a single row', el, tag)] };
-  }
-  if (!local && refs.length !== 1) {
-    return { ok: false, errors: [err(`<Mutation name="${name}"> must declare source="ref:<id>" or write a local table — found ${refs.length === 0 ? 'none' : refs.map((r) => `source="ref:${r}"`).join(', ')}`, el, tag)] };
-  }
   const expected = staticAttr(el, 'expectedAffected');
   if (expected && (typeof expected.json !== 'number' || !Number.isInteger(expected.json) || expected.json < 0)) {
     return { ok: false, errors: [err(`<Mutation expectedAffected> must be a non-negative integer`, expected.attr, tag, 'expectedAffected')] };
@@ -619,7 +624,7 @@ export function parseMutationDecl(el: JsxElement): ParseDeclResult<MutationDecl>
     return { ok: false, errors: [err(`<Mutation name="${name}"> reset must be a space-separated list of scalar <Value> names, got ${JSON.stringify(resetAttr.json ?? resetAttr.attr.value)}`, resetAttr.attr, tag, 'reset')] };
   }
   const reset = typeof resetAttr?.json === 'string' ? resetAttr.json.trim().split(/\s+/).filter(Boolean) : [];
-  return { ok: true, decl: { name, sql, ...(source ? {source} : {}), params: sqlParams(sql), target: local ? direct.name : refs[0], refs, ...(local ? {scope: 'local' as const} : {}), ...(expected ? { expectedAffected: expected.json as number } : {}), ...(reset.length ? { reset } : {}), start: el.start, end: el.end } };
+  return { ok: true, decl: { name, sql, ...(expected ? { expectedAffected: expected.json as number } : {}), ...(reset.length ? { reset } : {}), start: el.start, end: el.end } };
 }
 
 // ── the reference graph ─────────────────────────────────────────────────────
@@ -628,7 +633,7 @@ export function parseMutationDecl(el: JsxElement): ParseDeclResult<MutationDecl>
 export function collectRefNameUses(body: JsxNode[]): RefNameUse[] {
   const out: RefNameUse[] = [];
   const expressionUses = (expression: ReactiveExpression | undefined, span: Span, tag: string, attr: string) => {
-    // A reactive expression only reads: `{$_me ? … : …}` never writes anything.
+    // A reactive expression only reads: `{$_me.id ? … : …}` never writes anything.
     if (expression) for (const name of reactiveNames(expression).signals) out.push({name, tag, attr, expects: 'scalar', readOnly: true, start: span.start, end: span.end});
   };
   const visit = (nodes: JsxNode[]) => {
@@ -639,6 +644,14 @@ export function collectRefNameUses(body: JsxNode[]): RefNameUse[] {
       for (const a of n.attributes) if (!a.value.static) {
         if(n.tag === 'For' && a.name === 'each' && a.value.reactive?.kind === 'signal') out.push({name:a.value.reactive.name,tag:n.tag,attr:a.name,expects:'table',start:a.start,end:a.end});
         else expressionUses(a.value.reactive, a, n.tag, a.name);
+      }
+      // `set=` WRITES its keys (declared scalar Values) and READS its sources; `args=` only reads.
+      for (const a of n.attributes) {
+        if ((a.name !== SET_ATTR && a.name !== ARGS_ATTR) || !a.value.static) continue;
+        for (const [key, source] of Object.entries(bindingMap(a.value.json) ?? {})) {
+          if (a.name === SET_ATTR) out.push({ name: key, tag: n.tag, attr: a.name, expects: 'scalar', start: a.start, end: a.end });
+          if ('ref' in source && !source.ref.startsWith('_row.')) out.push({ name: source.ref, tag: n.tag, attr: a.name, expects: 'scalar', readOnly: true, start: a.start, end: a.end });
+        }
       }
       const table = n.isComponent ? REF_ATTRS.components[n.tag] : REF_ATTRS.html[n.tag.toLowerCase()];
       if (table) {
@@ -663,111 +676,51 @@ export function collectRefNameUses(body: JsxNode[]): RefNameUse[] {
   return out;
 }
 
-const dedupe = (xs: string[]): string[] => [...new Set(xs)];
-
-/** `$name` parameters a piece of SQL binds, deduped, in order. */
-export function sqlParams(sql: string): string[] {
-  return dedupe([...sql.matchAll(SQL_PARAM_RE)].map((m) => m[1]));
-}
-
-const escapeRe = (s: string): string => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-
 /**
- * The declared TABLE names (queries + table-Values) a query's SQL mentions as
- * bare identifiers — its dependencies. Text-level on purpose (a name inside a
- * string literal counts): a false dependency only affects ordering, and the
- * engine's own binder is the authority on what the SQL really reads.
- */
-export function queryDeps(sql: string, tableNames: Iterable<string>): string[] {
-  const out: string[] = [];
-  for (const name of tableNames) {
-    if (new RegExp(`(?<![\\w$.])${escapeRe(name)}(?![\\w])`).test(sql)) out.push(name);
-  }
-  return out;
-}
-
-const tableNamesOf = (flow: Dataflow): string[] => [
-  ...flow.values.filter((v) => v.kind === 'table').map((v) => v.name),
-  ...flow.queries.map((q) => q.name),
-];
-
-/** deps per query, restricted to declared table names. */
-const depGraph = (flow: Dataflow): Map<string, string[]> => {
-  const tables = tableNamesOf(flow);
-  const queryNames = new Set(flow.queries.map((q) => q.name));
-  return new Map(flow.queries.map((q) => [q.name, (q.source ? [] : queryDeps(q.sql, tables)).filter((d) => queryNames.has(d))]));
-};
-
-/**
- * Depth-first topological order: visit queries in authored order, emitting
- * each one's dependencies first — so "dependencies first, otherwise authored
- * order" holds exactly. Cyclic queries are reported, not ordered.
- */
-function topo(flow: Dataflow): { order: string[]; cyclic: string[] } {
-  const graph = depGraph(flow);
-  const order: string[] = [];
-  const done = new Set<string>();
-  const onPath = new Set<string>();
-  const cyclic = new Set<string>();
-  const visit = (name: string): void => {
-    if (done.has(name)) return;
-    if (onPath.has(name)) { cyclic.add(name); return; }
-    onPath.add(name);
-    for (const d of graph.get(name) ?? []) {
-      visit(d);
-      if (cyclic.has(d) && onPath.has(d)) cyclic.add(name);
-    }
-    onPath.delete(name);
-    done.add(name);
-    if (!cyclic.has(name)) order.push(name);
-  };
-  for (const q of flow.queries) visit(q.name);
-  // A query downstream of a cycle is not itself cyclic, but it cannot run either; report only the cycle members.
-  return { order: order.filter((n) => !cyclic.has(n)), cyclic: flow.queries.map((q) => q.name).filter((n) => cyclic.has(n)) };
-}
-
-/**
- * Publish-time semantics over the whole document. Reports, with spans:
- *  - a name declared twice (across Values and Queries);
- *  - a `$name` reference to nothing declared;
- *  - a reference of the wrong kind (`data="$region"` where region is a scalar,
- *    `value="$sales"` where sales is a table);
- *  - a SQL `$param` that names a table or nothing declared;
- *  - a dependency cycle between queries (a query may not read itself).
+ * Publish-time semantics of the MARKUP over the declarations. Reports, with spans:
+ *  - a name declared twice (across Imports, Values, Queries and Mutations);
+ *  - a `$name` reference to nothing declared, or to the wrong kind
+ *    (`data="$region"` where region is a scalar, `value="$sales"` where sales
+ *    is a table, `data="$bookings"` where bookings is an Import);
+ *  - a built-in bound where it would be written (built-ins are read-only),
+ *    and the bare `$_me` (a row; its field is `$_me.id`);
+ *  - `reset=` naming anything but a scalar Value.
+ * What the SQL reads and binds is the compiler's (lib/story/compile-dataflow).
  * [] = valid.
  */
 export function validateDataflow(flow: Dataflow, uses: RefNameUse[]): ValidationError[] {
   const errors: ValidationError[] = [];
-  const kinds = new Map<string, RefKind>();
-  const declare = (name: string, kind: RefKind, span: Span, tag: string) => {
+  const kinds = new Map<string, RefKind | 'import'>();
+  const declare = (name: string, kind: RefKind | 'import', span: Span, tag: string) => {
     if (kinds.has(name)) {
-      errors.push(err(`"${name}" is declared twice in <Helmet> — every <Value>/<Query> name is unique`, span, tag, 'name'));
+      errors.push(err(`"${name}" is declared twice in <Helmet> — every <Import>/<Value>/<Query>/<Mutation> name is unique`, span, tag, 'name'));
       return;
     }
     kinds.set(name, kind);
   };
+  for (const i of flow.imports) declare(i.name, 'import', i, IMPORT_TAG);
   for (const v of flow.values) declare(v.name, v.kind === 'table' ? 'table' : 'scalar', v, VALUE_TAG);
   for (const q of flow.queries) declare(q.name, 'table', q, QUERY_TAG);
-  for (const m of mutationsOf(flow)) declare(m.name, 'mutation', m, MUTATION_TAG);
+  for (const m of flow.mutations) declare(m.name, 'mutation', m, MUTATION_TAG);
 
   const hint = ' — declare it in <Helmet> as <Value name="…" …/> or <Query name="…">{`…`}</Query>';
-  const describe = (kind: RefKind): string =>
-    kind === 'scalar' ? 'a scalar <Value>' : kind === 'table' ? 'a table' : 'a <Mutation>';
+  const describe = (kind: RefKind | 'import'): string =>
+    kind === 'scalar' ? 'a scalar <Value>' : kind === 'table' ? 'a table' : kind === 'import' ? 'an <Import> (read it in a <Query>: select … from <name>.rows)' : 'a <Mutation>';
   for (const u of uses) {
-    // The one name nobody declares (VIEWER_REF): admitted where a reference is
-    // only read, refused by name anywhere it would be bound or written.
-    if (u.name === VIEWER_REF) {
-      if (!u.readOnly || u.expects !== 'scalar') {
-        errors.push(err(
-          `<${u.tag} ${u.attr}="$_me"> cannot bind $_me — it is the viewer's account id and read-only. Read it in a condition ({$_me ? … : …}) or show the person with <User userId="$_me" />`,
-          u, u.tag, u.attr,
-        ));
-      }
+    if (u.name === VIEWER) {
+      errors.push(err(`<${u.tag} ${u.attr}="$_me"> — $_me is the reader as a row; read its id: $${VIEWER_ID}`, u, u.tag, u.attr));
+      continue;
+    }
+    if (u.name.startsWith('_')) {
+      // A built-in: admitted only where a reference is READ, and only the ones markup may read.
+      const builtin = builtinInput(u.name);
+      if (!builtin?.markup) errors.push(err(`<${u.tag} ${u.attr}="$${u.name}"> — ${builtin ? `$${u.name} is not readable in markup` : `$${u.name} is not a built-in`}; markup reads $${VIEWER_ID}`, u, u.tag, u.attr));
+      else if (!u.readOnly || u.expects !== 'scalar') errors.push(err(`<${u.tag} ${u.attr}="$${u.name}"> cannot bind $${u.name} — built-ins are read-only. Read it in a condition ({$${u.name} ? … : …}) or show the person with <User userId="$${u.name}" />`, u, u.tag, u.attr));
       continue;
     }
     const kind = kinds.get(u.name);
     if (!kind) {
-      errors.push(err(`<${u.tag} ${u.attr}="$${u.name}"> refers to nothing declared${u.expects === 'mutation' ? ' — declare it in <Helmet> as <Mutation name="…">{`insert into public.rows …`}</Mutation>' : hint}`, u, u.tag, u.attr));
+      errors.push(err(`<${u.tag} ${u.attr}="$${u.name}"> refers to nothing declared${u.expects === 'mutation' ? ' — declare it in <Helmet> as <Mutation name="…">{`insert into <import>.rows …`}</Mutation>' : hint}`, u, u.tag, u.attr));
     } else if (kind !== u.expects) {
       errors.push(err(
         u.expects === 'table'
@@ -780,150 +733,16 @@ export function validateDataflow(flow: Dataflow, uses: RefNameUse[]): Validation
     }
   }
 
-  const checkParams = (decl: { name: string; params: string[] } & Span, tag: string) => {
-    for (const p of decl.params) {
-      if (p === '_me' || (tag === MUTATION_TAG && (p === '_row' || p === '_value'))) continue;
-      const kind = kinds.get(p);
-      if (!kind) errors.push(err(`<${tag} name="${decl.name}"> binds $${p}, which is not a declared <Value>${hint}`, decl, tag));
-      else if (kind === 'table') errors.push(err(`<${tag} name="${decl.name}"> binds $${p}, but "${p}" is a table — read a table by its bare name (… from ${p} …); $params bind scalar <Value>s`, decl, tag));
-      else if (kind === 'mutation') errors.push(err(`<${tag} name="${decl.name}"> binds $${p}, but "${p}" is a <Mutation> — $params bind scalar <Value>s`, decl, tag));
+  // `reset=` clears a FORM: every name must be a scalar <Value> with a default to go back to.
+  for (const m of flow.mutations) for (const name of m.reset ?? []) {
+    const kind = kinds.get(name);
+    if (kind !== 'scalar') {
+      errors.push(err(`<Mutation name="${m.name}"> reset="… ${name} …" names ${kind ? describe(kind) : 'nothing declared'} — reset clears scalar <Value>s${kind ? '' : hint}`, m, MUTATION_TAG, 'reset'));
     }
-  };
-  for (const q of flow.queries) checkParams(q, QUERY_TAG);
-  for (const m of mutationsOf(flow)) {
-    checkParams(m, MUTATION_TAG);
-    if (m.scope === 'local' && m.target !== SIGNALS_TABLE && !flow.values.some(v => v.kind === 'table' && v.name === m.target)) {
-      errors.push(err(`Local mutation "${m.name}" must target a declared table Value or _signals`, m, MUTATION_TAG));
-    }
-    // `reset=` clears a FORM: every name must be a scalar <Value> with a default to go back to.
-    for (const name of m.reset ?? []) {
-      const kind = kinds.get(name);
-      if (kind !== 'scalar') {
-        errors.push(err(`<Mutation name="${m.name}"> reset="… ${name} …" names ${kind ? describe(kind) : 'nothing declared'} — reset clears scalar <Value>s${kind ? '' : hint}`, m, MUTATION_TAG, 'reset'));
-      }
-    }
-  }
-
-  const { cyclic } = topo(flow);
-  if (cyclic.length) {
-    const self = flow.queries.find((q) => cyclic.length === 1 && q.name === cyclic[0]);
-    const anchor = flow.queries.find((q) => q.name === cyclic[0]) ?? flow.queries[0];
-    errors.push(err(
-      self
-        ? `<Query name="${self.name}"> reads itself — a query cannot depend on its own result (cycle)`
-        : `queries form a dependency cycle: ${cyclic.join(' → ')} — a query may only read queries that do not read it back`,
-      anchor, QUERY_TAG,
-    ));
   }
   return errors;
 }
 
-/**
- * The order queries must run in (dependencies first), or null on a cycle.
- * Table-Values are inputs, never ordered. Stable: ties keep authored order.
- */
-export function queryOrder(flow: Dataflow): string[] | null {
-  const { order, cyclic } = topo(flow);
-  return cyclic.length ? null : order;
-}
-
-/** Requested queries in dependency order; null preserves the existing global-cycle refusal. */
-export function selectedQueries(flow: Dataflow, selection: { only?: Iterable<string>; page?: { name: string } } = {}): QueryDecl[] | null {
-  const order = queryOrder(flow);
-  if (!order) return null;
-  const byName = new Map(flow.queries.map(q => [q.name, q]));
-  const roots = selection.page ? [selection.page.name] : selection.only;
-  if (!roots) return order.map(name => byName.get(name)!);
-  const graph = depGraph(flow);
-  const wanted = new Set<string>();
-  const visit = (name: string) => {
-    if (!byName.has(name) || wanted.has(name)) return;
-    wanted.add(name);
-    for (const dependency of graph.get(name) ?? []) visit(dependency);
-  };
-  for (const name of roots) visit(name);
-  return order.filter(name => wanted.has(name)).map(name => byName.get(name)!);
-}
-
-/** Every dataset id any query reads, deduped — what `meta.refs` needs. */
-export function datasetRefsInDataflow(flow: Dataflow): string[] {
-  return dedupe([...flow.queries.flatMap(q=>q.refs),...flow.values.flatMap(v=>v.kind==='scalar'&&v.source?[v.source]:[])]);
-}
-
-/**
- * The DECLARED type of every `$param` a statement may bind — what the SQL
- * service plans and binds with instead of guessing from the JavaScript value
- * (a `date` Value travels as a 'YYYY-MM-DD' string). ONE expression, shared by
- * the read path, the publish-time checks and the write door, so a statement is
- * never analyzed under one typing and executed under another.
- */
-export function scalarParamTypes(flow: Dataflow): Record<string, ColumnType> {
-  const out: Record<string, ColumnType> = {};
-  for (const v of flow.values) if (v.kind === 'scalar') out[v.name] = v.type;
-  out._me = 'user';
-  return out;
-}
-
-/** The initial `values` map: every scalar at its declared default. */
-export function initialValues(flow: Dataflow): Record<string, Scalar> {
-  const out: Record<string, Scalar> = {};
-  for (const v of flow.values) if (v.kind === 'scalar') out[v.name] = v.default;
-  return out;
-}
-
-/**
- * The tables a document already HAS: every inline `<Value type="table">`.
- *
- * Their rows are written in the source, so they travel with the declarations
- * and are a fact about the document rather than a result of running anything.
- * That matters under paint-first, where nobody runs a dataflow for a reader:
- * a chart bound to an inline table has its rows without one.
- */
-export function initialTables(flow: Dataflow): DataflowState['tables'] {
-  const out: DataflowState['tables'] = {};
-  for (const v of flow.values) if (v.kind === 'table') out[v.name] = { rows: v.rows, columns: v.columns };
-  return out;
-}
-
-/** The queries whose SQL binds any of the given value names — what a change re-runs (transitively, in run order). */
-export function queriesDependingOn(flow: Dataflow, valueNames: Iterable<string>): string[] {
-  const changed = new Set(valueNames);
-  const graph = depGraph(flow);
-  const order = queryOrder(flow) ?? flow.queries.map((q) => q.name);
-  const dirty = new Set<string>();
-  for (const name of order) {
-    const q = flow.queries.find((x) => x.name === name)!;
-    if (q.params.some((p) => changed.has(p))
-      || (changed.size > 0 && queryDeps(q.sql, [SIGNALS_TABLE]).length > 0)
-      || (graph.get(name) ?? []).some((d) => dirty.has(d))) dirty.add(name);
-  }
-  return order.filter((n) => dirty.has(n));
-}
-
-/**
- * The queries a WRITE to any of these datasets makes stale: every query whose
- * SQL reads one of them as `ref_<id>`, and everything downstream of those —
- * in run order, so a caller can re-run the list as given. The data-side twin
- * of `queriesDependingOn` (which follows a scalar); the runtime store calls
- * it when a `data` frame or its own mutation names a dataset.
- */
-export function queriesReadingDatasets(flow: Dataflow, datasetIds: Iterable<string>): string[] {
-  const changed = new Set(datasetIds);
-  const graph = depGraph(flow);
-  const order = queryOrder(flow) ?? flow.queries.map((q) => q.name);
-  const dirty = new Set<string>();
-  for (const name of order) {
-    const q = flow.queries.find((x) => x.name === name)!;
-    if (q.refs.some((id) => changed.has(id)) || (graph.get(name) ?? []).some((d) => dirty.has(d))) dirty.add(name);
-  }
-  return order.filter((n) => dirty.has(n));
-}
-
-/** Every dataset id any mutation writes, deduped — the refs a write needs resolved and owned. */
-export function mutationTargets(flow: Dataflow): string[] {
-  return dedupe(mutationsOf(flow).filter(m => m.scope !== 'local').map((m) => m.target));
-}
-
-/** True when the document declares nothing (no Values, no Queries, no Mutations). */
+/** True when the document declares nothing. */
 export const isEmptyDataflow = (flow: Dataflow): boolean =>
-  flow.values.length === 0 && flow.queries.length === 0 && mutationsOf(flow).length === 0;
+  flow.imports.length === 0 && flow.values.length === 0 && flow.queries.length === 0 && flow.mutations.length === 0;

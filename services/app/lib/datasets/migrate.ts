@@ -6,7 +6,7 @@ import type { DatasetCatalog } from './types';
 import type { DatasetColumn } from '@/lib/story/dataset-shape';
 import type { Db } from '@/lib/db';
 import { ARTIFACT_ID_PATTERN, ARTIFACT_REFERENCE_PATTERN } from '@artifactbin/contracts';
-import { removedSqlReferenceTokens } from '@/lib/story/sql-reference-tokens';
+import { removedSqlReferenceTokens } from '@/lib/migrate/sqlite/legacy-tokens';
 import { newEditId } from '@/lib/story/splice';
 import { finalizeArtifactMetadata } from '@/lib/story/parsed-artifact-metadata';
 import { catalogFromMetadata } from './catalog-metadata';

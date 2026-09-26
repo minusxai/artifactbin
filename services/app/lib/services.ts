@@ -1,6 +1,6 @@
 /**
  * WHERE THE APP GETS ITS SERVICES. The app tree never decides — and never
- * imports — where DuckDB or Chromium run. A URL in config means an HTTP
+ * imports — where the SQL engine or Chromium run. A URL in config means an HTTP
  * client; otherwise whatever the COMPOSITION ROOT registered (`server/host.ts`
  * from its caller's options, `test/setup/vitest.setup.ts` — the local
  * implementations, from the `./local` entries only they may reach); otherwise a

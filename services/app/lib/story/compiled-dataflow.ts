@@ -40,6 +40,10 @@ export interface CompiledValue {
   columns?: DatasetColumn[];
   /** `false`: never read from or written to the address. */
   url?: false;
+  /** A user picker's options: the dataset (`source="ref:<id>"`) and user column it draws from, and that column's constraints. */
+  source?: string;
+  column?: string;
+  constraints?: import('@artifactbin/contracts').UserConstraints;
 }
 
 /** What a query or mutation depends on, by kind. Every name is declared or built in. */

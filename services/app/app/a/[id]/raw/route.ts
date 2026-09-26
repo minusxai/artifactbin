@@ -343,7 +343,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
        *    than fast — /export photographs it — so its selection is threaded
        *    into the run itself and the rows it carries are the selected ones.
        */
-      const declared = declarationsForRow(row);
+      const declared = await declarationsForRow(row);
       const search = new URL(request.url).search;
       const urlValues = declared ? readUrlValues(search, declared.flow) : {};
       const hasUrlValues = Object.keys(urlValues).length > 0;

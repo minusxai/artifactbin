@@ -1,17 +1,15 @@
 /**
- * `<Mutation>` — a `<Query>` that writes. The pure contract: how the Helmet
- * child parses (one DML statement, exactly one `source="ref:<id>"` or local
- * target, `$params`), how it joins the document's namespace (`run="$add"` on a Button names it;
- * nothing else may), and what a write to a dataset invalidates (every query
- * reading that dataset, and everything downstream of those).
+ * `<Mutation>` — a statement that writes. The pure contract: how the Helmet
+ * child parses (one template-literal child; what it writes is the compiler's
+ * to establish), and how it joins the document's namespace (`run="$add"` on a
+ * Button names it; nothing else may).
  */
 import { describe, expect, it } from 'vitest';
 import { parseJsx, type JsxElement, type JsxNode } from '@/lib/jsx';
 import {
-  MUTATION_TAG, collectRefNameUses, isEmptyDataflow, mutationTargets, parseMutationDecl, queriesReadingDatasets,
-  validateDataflow, type Dataflow,
+  EMPTY_DATAFLOW, MUTATION_TAG, collectRefNameUses, isEmptyDataflow, parseMutationDecl, validateDataflow, type Dataflow,
 } from '@/lib/story/dataflow';
-import { declaresLiveData, declaresMutations, splitHelmet, validateHelmet } from '@/lib/story/helmet';
+import { dataflowOf, declaresLiveData, declaresMutations, splitHelmet, validateHelmet } from '@/lib/story/helmet';
 import { storyUpdateParts } from '@/lib/story/update-parts';
 
 const parse = (src: string): JsxNode[] => {
@@ -20,27 +18,21 @@ const parse = (src: string): JsxNode[] => {
   return p.nodes;
 };
 const element = (src: string): JsxElement => parse(src)[0] as JsxElement;
-const flowOf = (helmetChildren: string): Dataflow => {
-  const { content } = splitHelmet(parse(`<Helmet>${helmetChildren}</Helmet>`));
-  return { values: content.values, queries: content.queries, mutations: content.mutations };
-};
+const flowOf = (helmetChildren: string): Dataflow => dataflowOf(splitHelmet(parse(`<Helmet>${helmetChildren}</Helmet>`)).content);
 
 describe('parseMutationDecl', () => {
-  it('parses name, SQL, $params and the one dataset it writes', () => {
-    const r = parseMutationDecl(element('<Mutation name="add" source="ref:abc123">{`insert into public.rows (a, b) values ($a, $b)`}</Mutation>'));
+  it('parses name, SQL, expectedAffected and reset', () => {
+    const r = parseMutationDecl(element('<Mutation name="add" expectedAffected={1} reset="a b">{`insert into bookings.rows (a, b) values ($a, $b)`}</Mutation>'));
     expect(r.ok).toBe(true);
     if (!r.ok) return;
-    expect(r.decl).toMatchObject({ name: 'add', params: ['a', 'b'], target: 'abc123', refs: ['abc123'] });
-    expect(r.decl.sql).toContain('insert into public.rows');
+    expect(r.decl).toMatchObject({ name: 'add', expectedAffected: 1, reset: ['a', 'b'] });
+    expect(r.decl.sql).toContain('insert into bookings.rows');
   });
 
-  it('parses a syntactic local target, and refuses a dataset named implicitly in the SQL', () => {
-    const local = parseMutationDecl(element('<Mutation name="add">{`insert into sales values (1)`}</Mutation>'));
-    expect(local.ok).toBe(true);
-    if (local.ok) expect(local.decl).toMatchObject({ target: 'sales', scope: 'local' });
-    const two = parseMutationDecl(element('<Mutation name="mv">{`insert into ref_aaaaaa select * from ref_bbbbbb`}</Mutation>'));
-    expect(two.ok).toBe(false);
-    if (!two.ok) expect(two.errors[0].message).toMatch(/Implicit SQL artifact references/i);
+  it('refuses source= — a written dataset is an <Import>', () => {
+    const r = parseMutationDecl(element('<Mutation name="add" source="ref:abc123">{`insert into public.rows values (1)`}</Mutation>'));
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.errors[0].message).toMatch(/takes no source= — import the dataset/);
   });
 
   it('refuses the Query mistakes too: a sql= attribute, empty SQL, a non-literal child', () => {
@@ -55,8 +47,8 @@ describe('parseMutationDecl', () => {
 describe('<Helmet> grammar', () => {
   it('accepts <Mutation> beside <Value> and <Query>, and splits it into content.mutations', () => {
     const nodes = parse(
-      '<Helmet><Value name="a" type="number" /><Query name="rows" source="ref:abc123">{`select * from public.rows`}</Query>'
-      + '<Mutation name="add" source="ref:abc123">{`insert into public.rows (a) values ($a)`}</Mutation></Helmet><p>hi</p>',
+      '<Helmet><Import name="d" src="ref:abc123" /><Value name="a" type="number" /><Query name="rows">{`select * from d.rows`}</Query>'
+      + '<Mutation name="add">{`insert into d.rows (a) values ($a)`}</Mutation></Helmet><p>hi</p>',
     );
     expect(validateHelmet(nodes)).toEqual([]);
     const { content, body } = splitHelmet(nodes);
@@ -65,7 +57,7 @@ describe('<Helmet> grammar', () => {
   });
 
   it('reports a malformed Mutation with the Mutation tag, and names <Mutation> in the child list', () => {
-    const errors = validateHelmet(parse('<Helmet><Mutation name="x" source="ref:abc123">{`update public.rows set a = 1 where b = 2; delete from public.rows`}</Mutation></Helmet>'));
+    const errors = validateHelmet(parse('<Helmet><Mutation name="x">{`update d.rows set a = 1 where b = 2; delete from d.rows`}</Mutation></Helmet>'));
     // Two statements are the engine's business (it counts them); the parser
     // only refuses shapes. But a bare <b> child is not a Helmet child at all.
     expect(errors).toEqual([]);
@@ -74,7 +66,7 @@ describe('<Helmet> grammar', () => {
   });
 
   it('declaresMutations / declaresLiveData answer from the parsed Helmet only', () => {
-    const src = '<Helmet><Mutation name="add" source="ref:abc123">{`insert into public.rows (a) values ($a)`}</Mutation></Helmet><p>&lt;Mutation&gt; in prose</p>';
+    const src = '<Helmet><Mutation name="add">{`insert into d.rows (a) values ($a)`}</Mutation></Helmet><p>&lt;Mutation&gt; in prose</p>';
     expect(declaresMutations(src)).toBe(true);
     expect(declaresLiveData(src)).toBe(true);
     expect(declaresMutations('<p>Mutation</p>')).toBe(false);
@@ -85,10 +77,10 @@ describe('<Helmet> grammar', () => {
 
 describe('validateDataflow with mutations', () => {
   const FLOW = flowOf(
-    '<Value name="a" type="number" />'
+    '<Import name="d" src="ref:abc123" /><Value name="a" type="number" />'
     + '<Value name="tbl" type="table" value={[{"x":1}]} />'
-    + '<Query name="rows" source="ref:abc123">{`select * from public.rows`}</Query>'
-    + '<Mutation name="add" source="ref:abc123">{`insert into public.rows (a) values ($a)`}</Mutation>',
+    + '<Query name="rows">{`select * from d.rows`}</Query>'
+    + '<Mutation name="add">{`insert into d.rows (a) values ($a)`}</Mutation>',
   );
   const uses = (body: string) => collectRefNameUses(parse(body));
 
@@ -108,49 +100,22 @@ describe('validateDataflow with mutations', () => {
   });
 
   it('names are one namespace across Value, Query and Mutation', () => {
-    const dup = flowOf('<Query name="add">{`select 1`}</Query><Mutation name="add" source="ref:abc123">{`insert into public.rows (a) values (1)`}</Mutation>');
+    const dup = flowOf('<Query name="add">{`select 1`}</Query><Mutation name="add">{`insert into d.rows (a) values (1)`}</Mutation>');
     const errors = validateDataflow(dup, []);
     expect(errors.some((e) => /declared twice/.test(e.message))).toBe(true);
   });
-
-  it('a mutation $param must name a scalar Value', () => {
-    const bad = flowOf(
-      '<Value name="tbl" type="table" value={[{"x":1}]} />'
-      + '<Mutation name="add" source="ref:abc123">{`insert into public.rows (a) values ($tbl)`}</Mutation>'
-      + '<Mutation name="add2" source="ref:abc123">{`insert into public.rows (a) values ($ghost)`}</Mutation>',
-    );
-    const errors = validateDataflow(bad, []);
-    expect(errors.map((e) => e.message).join('\n')).toMatch(/<Mutation name="add"> binds \$tbl, but "tbl" is a table/);
-    expect(errors.map((e) => e.message).join('\n')).toMatch(/<Mutation name="add2"> binds \$ghost, which is not a declared <Value>/);
-  });
 });
 
-describe('what a dataset write invalidates', () => {
-  const FLOW = flowOf(
-    '<Query name="rows" source="ref:abc123">{`select * from public.rows`}</Query>'
-    + '<Query name="top">{`select * from rows limit 1`}</Query>'
-    + '<Query name="other" source="ref:zzzzzz">{`select * from public.rows`}</Query>'
-    + '<Query name="both">{`select * from other union all select * from top`}</Query>'
-    + '<Mutation name="add" source="ref:abc123">{`insert into public.rows (a) values (1)`}</Mutation>',
-  );
-
-  it('queriesReadingDatasets: the readers and everything downstream, in run order', () => {
-    expect(queriesReadingDatasets(FLOW, ['abc123'])).toEqual(['rows', 'top', 'both']);
-    expect(queriesReadingDatasets(FLOW, ['zzzzzz'])).toEqual(['other', 'both']);
-    expect(queriesReadingDatasets(FLOW, ['nope00'])).toEqual([]);
+describe('a document\'s declarations at rest', () => {
+  it('a mutation alone is not an empty dataflow', () => {
+    expect(isEmptyDataflow(flowOf('<Mutation name="add">{`insert into d.rows (a) values (1)`}</Mutation>'))).toBe(false);
+    expect(isEmptyDataflow(EMPTY_DATAFLOW)).toBe(true);
   });
 
-  it('mutationTargets lists the datasets a document writes; a mutation alone is not an empty dataflow', () => {
-    expect(mutationTargets(FLOW)).toEqual(['abc123']);
-    expect(isEmptyDataflow(flowOf('<Mutation name="add" source="ref:abc123">{`insert into public.rows (a) values (1)`}</Mutation>'))).toBe(false);
-    expect(isEmptyDataflow({ values: [], queries: [] })).toBe(true);
-  });
-
-  it('storyUpdateParts carries mutations and its declarations signature moves when one changes', () => {
-    const a = storyUpdateParts('<Helmet><Mutation name="add" source="ref:abc123">{`insert into public.rows (a) values (1)`}</Mutation></Helmet><p>x</p>')!;
-    const b = storyUpdateParts('<Helmet><Mutation name="add" source="ref:abc123">{`insert into public.rows (a) values (2)`}</Mutation></Helmet><p>x</p>')!;
-    const c = storyUpdateParts('<Helmet><Mutation name="add" source="ref:abc123">{`insert into public.rows (a) values (1)`}</Mutation></Helmet><p>y</p>')!;
-    expect(a.flow.mutations?.map((m) => m.name)).toEqual(['add']);
+  it('storyUpdateParts signs the declarations: a changed mutation moves it, prose does not', () => {
+    const a = storyUpdateParts('<Helmet><Mutation name="add">{`insert into d.rows (a) values (1)`}</Mutation></Helmet><p>x</p>')!;
+    const b = storyUpdateParts('<Helmet><Mutation name="add">{`insert into d.rows (a) values (2)`}</Mutation></Helmet><p>x</p>')!;
+    const c = storyUpdateParts('<Helmet><Mutation name="add">{`insert into d.rows (a) values (1)`}</Mutation></Helmet><p>y</p>')!;
     expect(a.declarations).not.toBe(b.declarations);
     expect(a.declarations).toBe(c.declarations);
   });

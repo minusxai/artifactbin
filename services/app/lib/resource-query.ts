@@ -48,9 +48,9 @@ async function queryResource(actor:TokenActor,id:string,body:Record<string,unkno
   }
   if(body.sql!==undefined)return json({error:'invalid_query',hint:'Use --name for a declared document query; --input SQL applies to datasets.'},400);
   if(row.format!=='markup'&&row.format!=='folder')return json({error:'not_queryable'},400);
-  const flow=declarationsForRow(row)?.flow;const names=flow?.queries.map(query=>query.name)??[];
+  const flow=(await declarationsForRow(row))?.flow;const names=flow?.queries.map(query=>query.name)??[];
   if(body.name&&!names.includes(String(body.name)))return json({error:'unknown_query',names},400);
-  const invalid=validateQueryValues(flow??{values:[],queries:[]},parsed.values??{});if(invalid)return json({error:invalid.code,names:invalid.names},400);
+  const invalid=validateQueryValues(flow??{values:[]},parsed.values??{});if(invalid)return json({error:invalid.code,names:invalid.names},400);
   const selected=body.name?[String(body.name)]:names;
   if(body.cursor&&selected.length!==1)return json({error:'invalid_cursor',hint:'Select one declared query with --name before paging.'},400);
   const results=[];

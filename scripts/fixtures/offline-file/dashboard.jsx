@@ -1,11 +1,12 @@
 <Helmet>
   <title>Regional sales</title>
+  <Import name="sales_data" src="ref:Ds1a2b" />
   <Value name="region" type="string" />
   <Value name="note" type="string" />
-  <Query name="regions" source="ref:Ds1a2b">{`select distinct region from public.rows order by 1`}</Query>
-  <Query name="sales" source="ref:Ds1a2b">{`select region, month, revenue from public.rows where $region is null or region = $region order by 1, 2`}</Query>
-  <Query name="matches" source="ref:Ds1a2b">{`select count(*) as n from public.rows where $note is null or region like $note`}</Query>
-  <Mutation name="add" source="ref:Ds1a2b">{`insert into public.rows (region, month, revenue) values ('north', '2026-09', 1)`}</Mutation>
+  <Query name="regions">{`select distinct region from sales_data.rows order by 1`}</Query>
+  <Query name="sales">{`select region, month, revenue from sales_data.rows where $region is null or region = $region order by 1, 2`}</Query>
+  <Query name="matches">{`select count(*) as n from sales_data.rows where $note is null or region like $note`}</Query>
+  <Mutation name="add">{`insert into sales_data.rows (region, month, revenue) values ('north', '2026-09', 1)`}</Mutation>
 </Helmet>
 <div className="@container p-8 space-y-6">
   <h1 className="text-3xl font-bold tracking-tight">Regional sales</h1>

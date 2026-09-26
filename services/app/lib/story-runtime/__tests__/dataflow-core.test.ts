@@ -11,15 +11,14 @@
  * checker must find the documents it strands.
  */
 import { describe, expect, it } from 'vitest';
-import { type JsxNode } from '@/lib/jsx';
-import { splitHelmet } from '@/lib/story/helmet';
-import { queriesDependingOn, queriesReadingDatasets, type DataflowState, type Row, type Scalar } from '@/lib/story/dataflow';
-import { parseJsxOrThrow } from '@/test/helpers/jsx';
+import type { DataflowState, Row, Scalar } from '@/lib/story/dataflow';
+import { queriesReadingValues } from '@/lib/story/compiled-flow';
+import { compiledOf } from '@/test/helpers/compiled';
 import {
   accessSettled, createCore, pendingOf, step,
   type CoreEffect, type CoreEvent, type CoreState, type RunAnswer, type Versions,
 } from '../dataflow-core';
-import { graphOfDataflow, type RuntimeGraph } from '../runtime-graph';
+import { graphOfCompiled, type RuntimeGraph } from '../runtime-graph';
 
 /** mulberry32: small, seedable, good enough to shuffle a schedule. */
 function prng(seed: number) {
@@ -221,41 +220,63 @@ describe('the runtime core under random interleavings', () => {
 });
 
 /*
- * The graph a parsed document becomes must make stale exactly what the
- * store's text-level rules always re-ran: the queries a scalar feeds, and the
- * readers of a dataset — transitively, through `_signals` and upstream queries.
+ * The graph a COMPILED document becomes (SQLite's own report of what every
+ * statement reads) makes stale exactly what a change can affect: the queries
+ * a value feeds, the readers of an imported dataset — transitively, through
+ * upstream queries — the readers of the viewer, and on a membership change
+ * everything.
  */
-describe('graphOfDataflow', () => {
-  const parsed = parseJsxOrThrow('<Helmet>'
-    + '<Value name="region" type="string" />'
-    + '<Value name="min_rev" type="number" default={0} />'
-    + '<Value name="choice" type="string" default="a" />'
-    + '<Query name="sales" source="ref:abc123">{`select * from public.rows where region = $region and revenue >= $min_rev`}</Query>'
-    + '<Query name="top">{`select * from sales limit 1`}</Query>'
-    + '<Query name="signals">{`select * from _signals`}</Query>'
-    + '<Query name="mine">{`select $choice as c`}</Query>'
-    + '<Query name="stock" source="ref:zzzzzz">{`select * from public.rows`}</Query>'
-    + '<Query name="both">{`select * from top join stock on true`}</Query>'
-    + '<Mutation name="vote" source="ref:abc123">{`insert into public.rows (choice) values ($choice)`}</Mutation>'
-    + '</Helmet>');
-  const { content } = splitHelmet(parsed.nodes as JsxNode[]);
-  const flow = { values: content.values, queries: content.queries, mutations: content.mutations };
-  const rest = () => createCore(graphOfDataflow(flow), { state: { values: {}, tables: {}, errors: {}, mutationAccess: { vote: null } } });
+const GRAPH_FLOW = await compiledOf(''
+  + '<Import name="sales_data" src="ref:abc123" /><Import name="stock_data" src="ref:zzzzzz" />'
+  + '<Value name="region" type="string" />'
+  + '<Value name="min_rev" type="number" default={0} />'
+  + '<Value name="choice" type="string" default="a" />'
+  + '<Query name="sales">{`select * from sales_data.rows where region = $region and revenue >= $min_rev`}</Query>'
+  + '<Query name="top">{`select * from sales limit 1`}</Query>'
+  + '<Query name="viewer">{`select $_me.id as me`}</Query>'
+  + '<Query name="mine">{`select $choice as c`}</Query>'
+  + '<Query name="stock">{`select * from stock_data.rows`}</Query>'
+  + '<Query name="both">{`select * from top join stock on true`}</Query>'
+  + '<Mutation name="vote">{`insert into sales_data.rows (region) values ($choice)`}</Mutation>', {
+  abc123: [{ name: 'region', type: 'string' }, { name: 'revenue', type: 'number' }],
+  zzzzzz: [{ name: 'item', type: 'string' }],
+});
 
-  it.each(['region', 'min_rev', 'choice'])('setting %s makes stale what queriesDependingOn names', (name) => {
-    const { state } = step(rest(), { type: 'set', values: { [name]: 'x' } });
-    expect([...pendingOf(state)].sort()).toEqual(queriesDependingOn(flow, [name]).sort());
+describe('graphOfCompiled', () => {
+  const rest = () => createCore(graphOfCompiled(GRAPH_FLOW), { state: { values: {}, tables: {}, errors: {}, mutationAccess: { vote: null } } });
+  const staleAfter = (event: CoreEvent) => [...pendingOf(step(rest(), event).state)].sort();
+
+  it.each([
+    ['region', ['both', 'sales', 'top']],
+    ['min_rev', ['both', 'sales', 'top']],
+    ['choice', ['mine']],
+  ])('setting %s makes stale the queries that read it, transitively', (name, stale) => {
+    expect(staleAfter({ type: 'set', values: { [name]: 'x' } })).toEqual(stale);
+    // …which is the offline file's own answer for the same value (lib/story/compiled-flow).
+    expect(queriesReadingValues(GRAPH_FLOW, [name]).sort()).toEqual(stale);
   });
 
-  it.each(['abc123', 'zzzzzz'])('a write to %s makes stale what queriesReadingDatasets names, and its write checks', (id) => {
-    const { state } = step(rest(), { type: 'sources', ids: [id] });
-    expect([...pendingOf(state)].sort()).toEqual(queriesReadingDatasets(flow, [id]).sort());
-    expect(accessSettled(state)).toBe(id !== 'abc123');
+  it('a write to an imported dataset makes stale its readers and the write check on it', () => {
+    const { state } = step(rest(), { type: 'sources', ids: ['abc123'] });
+    expect([...pendingOf(state)].sort()).toEqual(['both', 'sales', 'top']);
+    expect(accessSettled(state)).toBe(false);
+  });
+
+  it('a write to another import leaves the write check alone', () => {
+    const { state } = step(rest(), { type: 'sources', ids: ['zzzzzz'] });
+    expect([...pendingOf(state)].sort()).toEqual(['both', 'stock']);
+    expect(accessSettled(state)).toBe(true);
+  });
+
+  it('a new viewer makes stale the queries that read $_me.id, and the write checks', () => {
+    const { state } = step(rest(), { type: 'sources', ids: ['_me'] });
+    expect([...pendingOf(state)].sort()).toEqual(['viewer']);
+    expect(accessSettled(state)).toBe(false);
   });
 
   it('a membership change makes every query and every write check stale', () => {
     const { state } = step(rest(), { type: 'sources', ids: ['_members'] });
-    expect([...pendingOf(state)].sort()).toEqual(flow.queries.map((q) => q.name).sort());
+    expect([...pendingOf(state)].sort()).toEqual(GRAPH_FLOW.queries.map((q) => q.name).sort());
     expect(accessSettled(state)).toBe(false);
   });
 });

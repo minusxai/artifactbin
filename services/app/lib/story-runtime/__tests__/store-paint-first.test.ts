@@ -14,20 +14,15 @@
  */
 import { describe, expect, it, vi } from 'vitest';
 import { createDataflowStore, type QueryTransport } from '../store';
-import type { Dataflow } from '@/lib/story/dataflow';
-
-const scalar = (name: string, type: 'string' | 'number' = 'string', def: unknown = null) =>
-  ({ kind: 'scalar' as const, name, type, default: def } as Dataflow['values'][number]);
-
-const query = (name: string, params: string[] = []) =>
-  ({ name, sql: 'select 1', params, refs: [], start: 0, end: 0 } as Dataflow['queries'][number]);
+import type { CompiledDataflow } from '@/lib/story/compiled-dataflow';
+import { compiledOf } from '@/test/helpers/compiled';
 
 const rows = (n: number) => ({ rows: [{ v: n }], columns: [{ name: 'v', type: 'number' as const }] });
 
-const FLOW: Dataflow = {
-  values: [scalar('region'), scalar('zoom', 'number', 2)],
-  queries: [query('sales'), query('costs')],
-};
+const FLOW = await compiledOf(
+  '<Value name="region" /><Value name="zoom" type="number" default={2} />'
+  + '<Query name="sales">{`select 1 as v`}</Query><Query name="costs">{`select 1 as v`}</Query>',
+);
 
 /** A transport that records what it was asked for and answers with rows. */
 function recording() {
@@ -41,6 +36,8 @@ function recording() {
   };
   return { asked, transport };
 }
+
+const TABLE_FLOW: CompiledDataflow = await compiledOf('<Value name="rows" type="table" value={[{"x":"a","y":1},{"x":"b","y":3}]} />');
 
 describe('a store built with declarations but no rows', () => {
   it('asks the transport for every query the document declares', async () => {
@@ -91,15 +88,6 @@ describe('a store built with declarations but no rows', () => {
    * part of running the dataflow, which meant that with paint-first they
    * reached nobody: every chart bound to an inline table drew nothing at all.
    */
-  const TABLE_FLOW: Dataflow = {
-    values: [{
-      kind: 'table', name: 'rows',
-      rows: [{ x: 'a', y: 1 }, { x: 'b', y: 3 }],
-      columns: [{ name: 'x', type: 'string' }, { name: 'y', type: 'number' }],
-      start: 0, end: 0,
-    } as Dataflow['values'][number]],
-    queries: [],
-  };
 
   it('has an inline table immediately, with no transport and nothing to fetch', () => {
     const store = createDataflowStore({ flow: TABLE_FLOW }, { debounceMs: 0 });
@@ -109,10 +97,7 @@ describe('a store built with declarations but no rows', () => {
 
   it('keeps that true when a new version of the document is adopted', () => {
     const store = createDataflowStore({ flow: TABLE_FLOW }, { debounceMs: 0 });
-    store.replaceFlow({ flow: {
-      ...TABLE_FLOW,
-      values: [{ ...(TABLE_FLOW.values[0] as unknown as Record<string, unknown>), rows: [{ x: 'c', y: 9 }] } as unknown as Dataflow['values'][number]],
-    } });
+    store.replaceFlow({ flow: { ...TABLE_FLOW, values: [{ ...TABLE_FLOW.values[0]!, rows: [{ x: 'c', y: 9 }] }] } });
     expect(store.getTable('rows')?.rows).toEqual([{ x: 'c', y: 9 }]);
   });
 

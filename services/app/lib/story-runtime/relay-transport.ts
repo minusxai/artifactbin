@@ -14,6 +14,7 @@ import type {ImageAssetAnswer} from '@/lib/story/ref-data';
  * the message on the affected queries rather than spinning forever).
  * React-free; installed by the entry.
  */
+import { localZone } from '@/lib/story/builtins';
 import {
   STORY_ASSET_MESSAGE, STORY_ASSET_RESULT_MESSAGE,
   STORY_MUTATE_MESSAGE, STORY_MUTATE_RESULT_MESSAGE, STORY_QUERY_MESSAGE, STORY_QUERY_RESULT_MESSAGE,
@@ -127,17 +128,17 @@ export function createRelayTransport(target: Window, appOrigin: string, source: 
       post();
     }),
     run: async (values, only, localTables) => {
-      const r = await send({ values, only, ...(localTables ? { localTables } : {}) });
+      const r = await send({ values, only, tz: localZone(), ...(localTables ? { localTables } : {}) });
       return {userOptions:r.userOptions,people:r.people, tables: r.tables, errors: r.errors, ...(r.mutationAccess ? {mutationAccess:r.mutationAccess} : {}) };
     },
-    mutate: (values, mutation, row, localTables) => new Promise<import('./store').MutationAnswer>((resolve, reject) => {
+    mutate: (request) => new Promise<import('./store').MutationAnswer>((resolve, reject) => {
       const id = ++writeSeq;
       const timer = setTimeout(() => { writers.delete(id); reject(new Error('the page did not answer the write')); }, writeTimeoutMs);
       writers.set(id, { resolve, reject, timer });
-      target.postMessage({ type: STORY_MUTATE_MESSAGE, id, mutation, values, ...(row ? { row } : {}), ...(localTables ? { localTables } : {}) } satisfies StoryMutateRequest, appOrigin);
+      target.postMessage({ type: STORY_MUTATE_MESSAGE, id, request: { tz: localZone(), ...request } } satisfies StoryMutateRequest, appOrigin);
     }),
     page: async (values, name, page, localTables) => {
-      const r = await send({ values, only: [name], page: { name, ...page }, ...(localTables ? { localTables } : {}) });
+      const r = await send({ values, only: [name], page: { name, ...page }, tz: localZone(), ...(localTables ? { localTables } : {}) });
       const table = r.tables[name];
       if (!table) throw new Error(r.errors[name] ?? `no rows for "${name}"`);
       return table;

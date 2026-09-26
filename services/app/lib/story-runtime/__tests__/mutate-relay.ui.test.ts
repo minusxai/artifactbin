@@ -46,7 +46,7 @@ describe('relay transport — mutate', () => {
     try{
       const w=wire();const transport=createRelayTransport(w.target,ORIGIN,w.source);
       let settled=false;
-      const done=transport.mutate!({},'step').then(()=>{settled=true;},()=>{settled=true;});
+      const done=transport.mutate!({ mutation: 'step', args: {} }).then(()=>{settled=true;},()=>{settled=true;});
       await vi.advanceTimersByTimeAsync(21_000);expect(settled).toBe(false);
       w.answer({type:STORY_MUTATE_RESULT_MESSAGE,id:w.posted[0].message.id,ok:true,dataset:'abc123'});
       await done;expect(settled).toBe(true);
@@ -59,34 +59,34 @@ describe('relay transport — mutate', () => {
     answer({ type: STORY_QUERY_RESULT_MESSAGE, id: posted[0].message.id, tables: {}, errors: {} });
     await done;
   });
-  it('posts the name and values to the parent, at the app origin, and resolves with the dataset written', async () => {
+  it('posts the mutation request to the parent, at the app origin, and resolves with the dataset written', async () => {
     const { transport, posted, answer } = setup();
-    const done = transport.mutate!({ choice: 'tacos' }, 'vote');
+    const done = transport.mutate!({ mutation: 'vote', args: { choice: 'tacos' } });
     expect(posted).toHaveLength(1);
     expect(posted[0].origin).toBe(ORIGIN);
-    expect(posted[0].message).toMatchObject({ type: STORY_MUTATE_MESSAGE, mutation: 'vote', values: { choice: 'tacos' } });
+    expect(posted[0].message).toMatchObject({ type: STORY_MUTATE_MESSAGE, request: { mutation: 'vote', args: { choice: 'tacos' } } });
     answer({ type: STORY_MUTATE_RESULT_MESSAGE, id: posted[0].message.id, ok: true, dataset: 'k3Pq9z', version: 2, affected: 1 });
     await expect(done).resolves.toEqual({ dataset: 'k3Pq9z' });
   });
 
   it('posts the current local table snapshot to the parent', async () => {
     const { transport, posted, answer } = setup();
-    const done = transport.mutate!({}, 'add', undefined, { cart: [{ id: 1 }] });
-    expect(posted[0].message).toMatchObject({ localTables: { cart: [{ id: 1 }] } });
+    const done = transport.mutate!({ mutation: 'add', args: {}, localTables: { cart: [{ id: 1 }] } });
+    expect(posted[0].message).toMatchObject({ request: { localTables: { cart: [{ id: 1 }] } } });
     answer({ type: STORY_MUTATE_RESULT_MESSAGE, id: posted[0].message.id, ok: true, dataset: '', version: 0, affected: 0, local: { target: 'cart', table: { columns: [], rows: [] } } });
     await expect(done).resolves.toMatchObject({ local: { target: 'cart' } });
   });
 
   it('rejects with the page\'s message when the write was refused', async () => {
     const { transport, posted, answer } = setup();
-    const done = transport.mutate!({}, 'vote');
+    const done = transport.mutate!({ mutation: 'vote', args: {} });
     answer({ type: STORY_MUTATE_RESULT_MESSAGE, id: posted[0].message.id, ok: false, error: 'this dataset is not open for writes' });
     await expect(done).rejects.toThrow(/not open for writes/);
   });
 
   it('IGNORES an answer from another window, or from another origin — a forged one would make the document lie', async () => {
     const { transport, posted, answer } = setup();
-    const done = transport.mutate!({}, 'vote');
+    const done = transport.mutate!({ mutation: 'vote', args: {} });
     const id = posted[0].message.id;
     answer({ type: STORY_MUTATE_RESULT_MESSAGE, id, ok: true, dataset: 'evil' }, { source: {} });
     answer({ type: STORY_MUTATE_RESULT_MESSAGE, id, ok: true, dataset: 'evil' }, { origin: 'https://evil.test' });
@@ -95,7 +95,7 @@ describe('relay transport — mutate', () => {
 
   it('does not confuse a QUERY answer with a write answer (separate waiter maps, same ids)', async () => {
     const { transport, posted, answer } = setup();
-    const write = transport.mutate!({}, 'vote');
+    const write = transport.mutate!({ mutation: 'vote', args: {} });
     const id = posted[0].message.id;
     answer({ type: STORY_QUERY_RESULT_MESSAGE, id, tables: {}, errors: {} });
     await expect(write).rejects.toThrow(/did not answer/);
@@ -104,7 +104,7 @@ describe('relay transport — mutate', () => {
   it('times out rather than hanging when the page never answers', async () => {
     vi.useFakeTimers();
     const { transport } = setup();
-    const done = transport.mutate!({}, 'vote');
+    const done = transport.mutate!({ mutation: 'vote', args: {} });
     const assertion = expect(done).rejects.toThrow(/did not answer the write/);
     await vi.advanceTimersByTimeAsync(60);
     await assertion;
@@ -113,8 +113,8 @@ describe('relay transport — mutate', () => {
 
   it('matches concurrent writes to their own answers, by id', async () => {
     const { transport, posted, answer } = setup();
-    const a = transport.mutate!({}, 'vote');
-    const b = transport.mutate!({}, 'clear');
+    const a = transport.mutate!({ mutation: 'vote', args: {} });
+    const b = transport.mutate!({ mutation: 'clear', args: {} });
     answer({ type: STORY_MUTATE_RESULT_MESSAGE, id: posted[1].message.id, ok: true, dataset: 'second' });
     answer({ type: STORY_MUTATE_RESULT_MESSAGE, id: posted[0].message.id, ok: true, dataset: 'first' });
     expect(await b).toEqual({ dataset: 'second' });

@@ -1,24 +1,16 @@
-import type {SqlExtensions} from './extensions';
-export type {SqlExtensions} from './extensions';
 /**
- * THE ENGINE, IN THIS PROCESS. The only entry of this package that reaches
- * the native module — and lazily even then (engine.ts), so a broken binding
- * fails a QUERY, never the process. Import `@artifactbin/sql` for the client
- * and the server shell; import this only from a composition root.
+ * THE ENGINE FOR A SERVER PROCESS (`@artifactbin/sql/local`): the SQLite
+ * engine in a small pool of worker threads (./pool.ts), so no statement ever
+ * runs on the process's own event loop. Import `@artifactbin/sql` for the
+ * client and the server shell; import this only from a composition root.
  */
 import type { SqlService } from '@artifactbin/contracts';
-import { DEFAULT_CAPS, type SqlCaps } from './caps';
-import { dryRunMutations, dryRunQueries, runMutation, runQueries } from './engine';
+import type { SqlCaps } from './caps';
+import { createSqlitePool, type SqlPoolOptions } from './pool';
 
-export function createSql(opts: Partial<SqlCaps> = {}, extensions:SqlExtensions = {}): SqlService {
-  const caps: SqlCaps = { ...DEFAULT_CAPS, ...opts };
-  return {
-    run: (input) => runQueries(input, caps),
-    mutate: (input) => runMutation(input, caps, extensions),
-    // The dry runs take no caps: they prepare and execute against EMPTY tables,
-    // so there is no row cap to apply and nothing for the interrupt to stop.
-    dryRun: (input) => dryRunQueries(input),
-    dryRunMutations: (input) => dryRunMutations(input, extensions),
-  };
+export function createSql(opts: Partial<SqlCaps> = {}, pool: SqlPoolOptions = {}): SqlService & { close(): Promise<void> } {
+  return createSqlitePool(opts, pool);
 }
 export type { SqlCaps } from './caps';
+export type { SqlPoolOptions } from './pool';
+export type { SqlExtensions } from './extensions';

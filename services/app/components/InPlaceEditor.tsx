@@ -266,6 +266,8 @@ export default function InPlaceEditor({
   cssRef.current = css;
   const dataflowRef = useRef(dataflowState);
   dataflowRef.current = dataflowState;
+  /** The compiled declarations the document runs on: the served island's, then each compiled draft's. */
+  const compiledRef = useRef(art.dataflow?.flow ?? null);
   // Same resolution as the served document (lib/story/document.ts): the author's
   // colorMode decides, the theme's declared default is the fallback. Editing a
   // document must not show it in a mode it will never be read in.
@@ -319,8 +321,8 @@ export default function InPlaceEditor({
            * describes, and the chart is rebuilt to draw the answer. A prose edit
            * must cost neither.
            */
-          ...(dataflowRef.current && declarationsChanged
-            ? { dataflow: { flow: parts.flow, state: dataflowRef.current } satisfies StoryIslandDataflow }
+          ...(dataflowRef.current && compiledRef.current && declarationsChanged
+            ? { dataflow: { flow: compiledRef.current, state: dataflowRef.current } satisfies StoryIslandDataflow }
             : {}),
         },
       );
@@ -581,6 +583,8 @@ export default function InPlaceEditor({
           const next = { values: {}, tables: body.tables, errors: body.errors };
           setDataflowState(next);
           dataflowRef.current = next;
+          // The browser has no compiler: the draft's compiled declarations come back with its rows.
+          compiledRef.current = body.flow ?? null;
           showInDocument(sourceRef.current);
         })
         .catch(() => { if (alive) setDataflowPending(false); });

@@ -10,6 +10,8 @@
  * the kit's frame — and cleared by `<Mutation reset>` once a write commits.
  */
 import { describe, expect, it, beforeEach, vi } from 'vitest';
+import { compiledSource } from '@/test/helpers/compiled';
+import type { MutationRequest } from '@/lib/story/mutation-request';
 import { fireEvent, render, waitFor } from '@testing-library/react';
 import { type JsxNode } from '@/lib/jsx';
 import { splitHelmet } from '@/lib/story/helmet';
@@ -23,10 +25,12 @@ const HELMET =
   + '<Value name="item" type="string" url={false} />'
   + '<Value name="amount" type="number" url={false} />'
   + '<Value name="note" type="string" default="" url={false} />'
-  + '<Query name="tab" source="ref:abc123">{`select item, amount from public.expenses`}</Query>'
-  + '<Mutation name="add" source="ref:abc123" reset="item amount note">{`'
-  + 'insert into public.expenses (item, amount) values ($item, $amount)`}</Mutation>'
+  + '<Import name="expenses" src="ref:abc123" />'
+  + '<Query name="tab">{`select item, amount from expenses.rows`}</Query>'
+  + '<Mutation name="add" reset="item amount note">{`'
+  + 'insert into expenses.rows (item, amount) values ($item, $amount)`}</Mutation>'
   + '</Helmet>';
+const FLOW = await compiledSource(HELMET, { abc123: [{ name: 'item', type: 'string' }, { name: 'amount', type: 'number' }] });
 
 const STATE: DataflowState = {
   values: { item: null, amount: null, note: '' },
@@ -37,9 +41,8 @@ const STATE: DataflowState = {
 
 function build(body: string) {
   const parsed = parseJsxOrThrow(HELMET + body);
-  const { content, body: nodes } = splitHelmet(parsed.nodes as JsxNode[]);
-  const flow = { values: content.values, queries: content.queries, mutations: content.mutations };
-  return { nodes, dataflow: { flow, state: STATE } };
+  const { body: nodes } = splitHelmet(parsed.nodes as JsxNode[]);
+  return { nodes, dataflow: { flow: FLOW, state: STATE } };
 }
 
 function storeFor(dataflow: ReturnType<typeof build>['dataflow'], mutate?: QueryTransport['mutate']) {
@@ -144,13 +147,14 @@ describe('when a bound control re-runs what it feeds', () => {
     + '<div><Input label="Search" value="$q" />'
     + '<select aria-label="Size" value="$size"><option value="s">S</option><option value="l">L</option></select></div>';
 
-  it('typing waits for the debounce; a select runs at once', () => {
+  it('typing waits for the debounce; a select runs at once', async () => {
+    const flow = await compiledSource(SEARCH);
     vi.useFakeTimers();
     try {
       const parsed = parseJsxOrThrow(SEARCH);
-      const { content, body: nodes } = splitHelmet(parsed.nodes as JsxNode[]);
+      const { body: nodes } = splitHelmet(parsed.nodes as JsxNode[]);
       const dataflow = {
-        flow: { values: content.values, queries: content.queries },
+        flow,
         state: { values: { q: null, size: 's' }, tables: { hits: { rows: [], columns: [] } }, errors: {} },
       };
       const run = vi.fn<QueryTransport['run']>(() => new Promise(() => {}));
@@ -193,8 +197,8 @@ describe('inside a `run=` form', () => {
    * form), plus the submission itself running the write.
    */
   it('submits the enclosing form — the field belongs to it, and the submit runs the Mutation', async () => {
-    const writes: Array<Record<string, unknown>> = [];
-    const mutate = vi.fn(async (values: Record<string, unknown>) => { writes.push(values); return { dataset: 'abc123' }; });
+    const writes: MutationRequest[] = [];
+    const mutate = vi.fn(async (request: MutationRequest) => { writes.push(request); return { dataset: 'abc123' }; });
     const { nodes, dataflow } = build(DIALOG);
     const store = storeFor(dataflow, mutate);
     const { getByRole } = render(
@@ -208,6 +212,6 @@ describe('inside a `run=` form', () => {
     fireEvent.change(field, { target: { value: 'Dinner' } });
     fireEvent.submit(form!);
     await waitFor(() => expect(mutate).toHaveBeenCalledTimes(1));
-    expect(writes[0]).toMatchObject({ item: 'Dinner' });
+    expect(writes[0]).toMatchObject({ mutation: 'add', args: { item: 'Dinner' } });
   });
 });

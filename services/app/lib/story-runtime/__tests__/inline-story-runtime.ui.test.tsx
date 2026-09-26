@@ -1,4 +1,5 @@
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { compiledOf } from '@/test/helpers/compiled';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { InlineStoryRuntime, type InlineStoryController } from '../InlineStoryRuntime';
 import { STORY_DOCUMENT_MESSAGE, STORY_EDIT_MODE_MESSAGE, STORY_COMMIT_MESSAGE, STORY_SELECT_MESSAGE, STORY_READER_MODE_MESSAGE, type StoryIslandData } from '../contract';
@@ -37,7 +38,7 @@ describe('inline artifact runtime lifetime', () => {
   });
   it('survives StrictMode replay with a live store and scoped signal updates', async () => {
     const initial = data('Strict');
-    initial.dataflow = {flow:{values:[{kind:'scalar',name:'n',type:'number',default:0,start:0,end:0}],queries:[{name:'q',sql:'select $n',params:['n'],refs:[],start:0,end:0}]}};
+    initial.dataflow = {flow:await compiledOf('<Value name="n" type="number" default={0} /><Query name="q">{`select $n as n`}</Query>')};
     const run = vi.fn(async () => ({tables:{},errors:{}}));
     let controller: InlineStoryController | null = null;
     const view = render(<StrictMode><InlineStoryRuntime data={initial} transport={{...transport,run}} onController={value => { controller=value; }} /></StrictMode>);

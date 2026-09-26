@@ -2,7 +2,7 @@ import type {ImageAssetAnswer} from '@/lib/story/ref-data';
 /**
  * The document's DATA at runtime — one store per document, react-free.
  *
- * Seeded from the island's `dataflow` (declarations + the state the server
+ * Seeded from the island's `dataflow` (the compiled declarations + the state the server
  * rendered with), it holds every scalar's current value and every table's
  * current rows, and it is the ONE thing every consumer reads: the runtime's
  * React tree (through `useSyncExternalStore`), the bound native controls
@@ -27,13 +27,15 @@ import type {ImageAssetAnswer} from '@/lib/story/ref-data';
  * contract `useSyncExternalStore` needs, and what keeps a re-render from
  * cascading through every embed on every keystroke.
  */
-import type { Dataflow, DataflowState, Row, Scalar, TableResult } from '@/lib/story/dataflow';
+import type { DataflowState, Row, Scalar, TableResult } from '@/lib/story/dataflow';
+import type { CompiledDataflow } from '@/lib/story/compiled-dataflow';
+import { mutationRequestFor, type MutationRequest } from '@/lib/story/mutation-request';
 import type { LocalMutationResult } from '@/lib/story/local-state';
 import {
   accessSettled, busyOf, createCore, localRows, pendingOf, step,
   type CoreEffect, type CoreEvent, type CoreState, type RunAnswer,
 } from './dataflow-core';
-import { graphOfDataflow } from './runtime-graph';
+import { graphOfCompiled } from './runtime-graph';
 
 /** What `mutationUnavailable` answers while the permission check is still in flight. */
 export const ACCESS_PENDING = 'Checking edit access…';
@@ -58,12 +60,13 @@ export interface QueryTransport {
   /** Read a window of one query with these values; resolves with that query's rows for the window. */
   page(values: Record<string, Scalar>, name: string, page: TablePage, localTables?: Record<string, Row[]>): Promise<TableResult>;
   /**
-   * Perform a declared `<Mutation>` with these values. Resolves with the
+   * Perform a declared `<Mutation>` (lib/story/mutation-request: its name, its
+   * arguments, the row and value its control supplies). Resolves with the
    * dataset that changed (so the store knows what to re-run), rejects with the
    * server's message. Absent on a transport that cannot write (the editor's
    * draft path, a capture) — the store then reports that plainly.
    */
-  mutate?(values: Record<string, Scalar>, name: string, row?: Record<string, Scalar>, localTables?: Record<string, Row[]>): Promise<MutationAnswer>;
+  mutate?(request: MutationRequest): Promise<MutationAnswer>;
   /**
    * Import one web URL the document ended up with (a bound `<img src="$pick">`,
    * a column of logos) and resolve with the ADDRESS of our copy.
@@ -83,7 +86,7 @@ export interface DataflowStore {
   readonly disposed: boolean;
   /** Revoke this document lifetime, including queued and in-flight completions. */
   dispose(): void;
-  readonly flow: Dataflow;
+  readonly flow: CompiledDataflow;
   /** Current snapshot; identity-stable between changes. */
   getState(): DataflowState;
   getValue(name: string): Scalar;
@@ -119,11 +122,14 @@ export interface DataflowStore {
   /** Run everything waiting, immediately — the first load, when its transport can answer. */
   start(): void;
   /**
-   * Run a declared `<Mutation>` with the CURRENT values, then re-run every
-   * query that reads the dataset it wrote — so the click that adds a row is
-   * the click that redraws the chart, with no round trip through the live
-   * stream. Resolves when the write has landed (the re-run follows on its own);
-   * rejects with the server's message, which the caller may show.
+   * Run a declared `<Mutation>`: each argument from `overrides` (what the
+   * control's `args=` resolved to; `_value` for an editing cell) or else the
+   * CURRENT page value of the same name, with the row the control sits in.
+   * Then re-run every query that reads the dataset it wrote — so the click
+   * that adds a row is the click that redraws the chart, with no round trip
+   * through the live stream. Resolves when the write has landed (the re-run
+   * follows on its own); rejects with the server's message, which the caller
+   * may show.
    */
   mutate(name: string, overrides?: Record<string, Scalar>, row?: Record<string, Scalar>): Promise<void>;
   /** Mutations currently in flight (a bound <Button> shows itself busy). */
@@ -173,7 +179,7 @@ export interface DataflowStore {
    * not current and re-run through the transport — the same path a click on
    * the control takes. Their old rows stay on screen until the run lands.
    */
-  replaceFlow(next: { flow: Dataflow; state?: DataflowState }): void;
+  replaceFlow(next: { flow: CompiledDataflow; state?: DataflowState }): void;
 }
 
 interface CreateStoreOptions {
@@ -215,7 +221,7 @@ export function createDataflowStore(
    * the state a capture arrived with, then the URL — the reader's link is the
    * most specific thing anyone said about this document.
    */
-  input: { flow: Dataflow; state?: DataflowState; values?: Record<string, Scalar> },
+  input: { flow: CompiledDataflow; state?: DataflowState; values?: Record<string, Scalar> },
   options: CreateStoreOptions = {},
 ): DataflowStore {
   let flow = input.flow;
@@ -231,7 +237,7 @@ export function createDataflowStore(
    * case re-runs nothing: `state` present means somebody already did this work
    * with the same defaults (dataflow-core createCore).
    */
-  let core: CoreState = createCore(graphOfDataflow(flow), input);
+  let core: CoreState = createCore(graphOfCompiled(flow), input);
   let writeIds = 0;
   const writes = new Map<number, { resolve: () => void; reject: (error: unknown) => void }>();
   let accessWaiters: Array<() => void> = [];
@@ -279,7 +285,9 @@ export function createDataflowStore(
         let answer: Promise<MutationAnswer>;
         try {
           if (!t?.mutate) throw new Error('this document cannot write from here');
-          answer = localTables ? t.mutate(values, name, row, localTables) : row === undefined ? t.mutate(values, name) : t.mutate(values, name, row);
+          const m = flow.mutations.find((x) => x.name === name);
+          if (!m) throw new Error(`this document declares no <Mutation name="${name}">`);
+          answer = t.mutate(mutationRequestFor(m, { values, ...(row ? { row } : {}), ...(Object.hasOwn(values, '_value') ? { value: values._value } : {}), ...(localTables ? { localTables } : {}) }));
         } catch (error) { answer = Promise.reject(error); }
         // A settled write moves what it wrote (and what it reset): re-read at once.
         answer.then(
@@ -345,7 +353,7 @@ export function createDataflowStore(
     replaceFlow: (next) => {
       if (core.disposed) return;
       flow = next.flow;
-      dispatch({ type: 'replace', graph: graphOfDataflow(next.flow), ...(next.state ? { state: next.state } : {}) });
+      dispatch({ type: 'replace', graph: graphOfCompiled(next.flow), ...(next.state ? { state: next.state } : {}) });
       flush();
     },
     mutate,

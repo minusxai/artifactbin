@@ -12,6 +12,17 @@ export type Sqlite3 = Awaited<ReturnType<typeof sqlite3InitModule>>;
 // The package types its initializer without the Emscripten module argument it forwards.
 const init = sqlite3InitModule as unknown as (module?: { wasmBinary?: ArrayBuffer | Uint8Array }) => Promise<Sqlite3>;
 let fromPackage: Promise<Sqlite3> | null = null;
+/** Bytes a host supplied for the default module (a single-file binary cannot read the package's own file). */
+let supplied: ArrayBuffer | Uint8Array | null = null;
+
+/**
+ * Supply the wasm the DEFAULT module loads from, before the first load — for a
+ * host whose package files are not on disk (the CLI's single executable
+ * carries them as an embedded asset).
+ */
+export function provideSqliteWasm(wasm: ArrayBuffer | Uint8Array): void {
+  supplied = wasm;
+}
 
 async function start(wasmBinary?: ArrayBuffer | Uint8Array): Promise<Sqlite3> {
   const sqlite3 = await init(wasmBinary ? { wasmBinary } : undefined);
@@ -23,5 +34,5 @@ async function start(wasmBinary?: ArrayBuffer | Uint8Array): Promise<Sqlite3> {
 /** The module from the package's own wasm file, loaded once; or from supplied bytes. */
 export function loadSqliteModule(wasm?: ArrayBuffer | Uint8Array): Promise<Sqlite3> {
   if (wasm) return start(wasm);
-  return (fromPackage ??= start().catch((error) => { fromPackage = null; throw error; }));
+  return (fromPackage ??= start(supplied ?? undefined).catch((error) => { fromPackage = null; throw error; }));
 }

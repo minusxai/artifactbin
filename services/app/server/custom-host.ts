@@ -172,9 +172,9 @@ async function documentRoute(request: Request, id: string, route: string, ownerI
       if (method !== 'POST') return notFound();
       const body = await request.arrayBuffer();
       const name = parseJson(body)?.mutation;
-      const declared = declarationsForRow(row)?.flow.mutations?.find((m) => m.name === name);
+      const declared = (await declarationsForRow(row))?.flow.mutations.find((m) => m.name === name);
       // Only a local Mutation runs here: it writes the reader's own rows, never a dataset.
-      if (declared && declared.scope !== 'local') {
+      if (declared && 'import' in declared.target) {
         return json({ error: 'dataset_read_only', detail: 'This page is read-only.' }, 403, { 'Access-Control-Allow-Origin': '*', 'Cache-Control': 'no-store' });
       }
       return call(mutatePost, await asGuest(request, body), id);
