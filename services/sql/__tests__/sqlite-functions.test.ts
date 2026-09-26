@@ -134,6 +134,8 @@ describe('round', () => {
   it('rounds half away from zero on the scaled value, as the digits read', async () => {
     expect(await row('select round(13.975, 2) as a, round(14.85, 1) as b, round(2.5) as c, round(-2.5) as d, round(123.456, -1) as e, round(1.005, 2) as f, round(7, 2) as g'))
       .toEqual({ a: 13.98, b: 14.9, c: 3, d: -3, e: 120, f: 1, g: 7 });
+    // A real, like SQLite's own round: text shows the point.
+    expect(await row("select cast(round(10.96, 1) as text) as t, typeof(round(2.5)) as k, round('1.25', 1) as s")).toEqual({ t: '11.0', k: 'real', s: 1.3 });
   });
 });
 
