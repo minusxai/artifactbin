@@ -67,6 +67,13 @@ describe('shipped registry recipes at the publish door', () => {
     if (!r.ok) expect(r.details.join('\n')).toMatch(/accepts quantitative.*"period" is temporal/);
   });
 
+  it('judges no binding by a type the compiler cannot tell: a filtered aggregate no sample row reaches', async () => {
+    const filtered = '<Helmet>' +
+      `<Import name="trend_data" src="ref:${DS}" /><Query name="trend">{\`select day as period, sum(revenue) as revenue from trend_data.rows where region = 'north' group by 1 order by 1\`}</Query>` +
+      '</Helmet><Question data="$trend" viz={{"kind":"recipe","recipe":"minusx/trend@1","bindings":{"date":"period","value":["revenue"]}}} height="300px" />';
+    expect(await checkDocumentData(filtered, load)).toMatchObject({ ok: true });
+  });
+
   it('refuses an unknown shipped id, naming the shipped set', async () => {
     const r = await checkDocumentData(
       doc('{"kind":"recipe","recipe":"minusx/nope@1","bindings":{"date":"period","value":["revenue"]}}'),
