@@ -16,11 +16,11 @@ export async function createEditableTableFixture(base, count = 500, source = {})
   const dataset = await api('/api/artifacts', { title: 'Editable roadmap gate data', dataset: rows, access: 'readwrite', visibility: 'unlisted' });
   const sprints = await api('/api/artifacts', { title: 'Editable roadmap gate sprints', dataset: source.sprints ?? [{ name: 'Sprint 1', deadline: null, members: 'all' }, { name: 'Sprint 2', deadline: null, members: 'all' }], access: 'readwrite', visibility: 'unlisted' });
   const fields = ['item', 'owner', 'hours', 'depends_on', 'tags', 'status', 'sprint'];
-  const mutations = fields.map(field => `<Import name="mutation_data" src="ref:${dataset.id}" /><Mutation name="set_${field}" expectedAffected={1}>{\`update mutation_data.rows set ${field}=$_value where id=$_row.id and ${field} is $_row.${field}${field === 'depends_on' ? ' and not list_contains(cast($_value as varchar[]), cast(cast($_row.id as bigint) as varchar))' : ''}\`}</Mutation>`).join('\n');
+  const mutations = fields.map(field => `<Mutation name="set_${field}" expectedAffected={1}>{\`update tasks_data.rows set ${field}=$_value where id=$_row.id and ${field} is $_row.${field}${field === 'depends_on' ? ' and not exists (select 1 from json_each($_value) where value = cast(cast($_row.id as integer) as text))' : ''}\`}</Mutation>`).join('\n');
   let markup = `<Helmet><title>Editable roadmap review</title>
 <Value name="filter_status" type="string" />
 <Import name="tasks_data" src="ref:${dataset.id}" /><Query name="tasks">{\`select * from tasks_data.rows where $filter_status is null or status=$filter_status order by id\`}</Query>
-<Import name="task_options_data" src="ref:${dataset.id}" /><Query name="task_options">{\`select cast(cast(id as bigint) as varchar) as value, item as label from task_options_data.rows order by id\`}</Query>
+<Query name="task_options">{\`select cast(cast(id as integer) as text) as value, item as label from tasks_data.rows order by id\`}</Query>
 <Import name="sprints_data" src="ref:${sprints.id}" /><Query name="sprints">{\`select '' as value, 'Unscheduled' as label union all select name, name from sprints_data.rows\`}</Query>
 ${mutations}</Helmet>
 <div data-design="tw" className="p-6"><h1 className="text-2xl font-semibold">Editable roadmap review</h1>

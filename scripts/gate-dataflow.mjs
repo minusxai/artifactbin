@@ -36,11 +36,11 @@ const doc = await j(await api('/api/artifacts', { markup: doc1(ds.id) }));
 check(!!doc.id, `the dataflow document published (${doc.url ?? doc.error})`);
 const bad = await api('/api/artifacts', { markup: doc1(ds.id).replace('sum(revenue)', 'sum(revenu)') });
 const badBody = await j(bad);
-check(bad.status === 400 && badBody.error === 'invalid_sql' && /revenu.*Candidate.*revenue/s.test(JSON.stringify(badBody.details)),
-  'a bad column is refused at publish with the engine diagnostic naming candidates');
+check(bad.status === 400 && badBody.error === 'invalid_sql' && /<Query name=\\"sales\\"> reads revenu — no such column/.test(JSON.stringify(badBody.details)),
+  'a bad column is refused at publish, the compiler naming the query and the column');
 const retired = await api('/api/artifacts', { markup: `<Question data="ref:${ds.id}" />` });
 const retiredBody = await j(retired);
-check(retired.status === 400 && /<Query name="rows"[^>]*source="ref:/.test(retiredBody.details?.[0]?.message ?? ''), 'data="ref:" is retired and the 400 names the <Query> replacement');
+check(retired.status === 400 && /<Import name="data" src="ref:[^"]+" \/><Query name="rows">/.test(retiredBody.details?.[0]?.message ?? ''), 'data="ref:" is retired and the 400 names the <Import> + <Query> replacement');
 
 // ── 2 + 3. inline document and scoped authenticated transport ──────────────
 const b = await chromium.launch();
@@ -104,7 +104,9 @@ check((await frame.textContent('[aria-label="Live number"]')) === '$1,200', 'cha
 const busy = await frame.evaluate(() => ({ seen: window.__busySeen, flash: window.__flashSeen, now: document.querySelector('[aria-label="Question embed"]').getAttribute('aria-busy') }));
 check(busy.seen && !busy.flash && busy.now === 'false', `the embed showed the busy state during the re-run and cleared it (busy=${busy.seen}, flash=${busy.flash})`);
 check(!/EU/.test(await frame.textContent('[aria-label="Data table"]')), 'and the table shows only the selected region');
-check((await scriptRealm.textContent('#out')) === 'changed:NA', 'the managed author script saw the change through mx.subscribe');
+// The author realm hears of the change over its own port, a hop after the page has painted it.
+await scriptRealm.waitForFunction(() => document.getElementById('out')?.textContent === 'changed:NA', null, { timeout: 10000 }).catch(() => {});
+check((await scriptRealm.textContent('#out')) === 'changed:NA', `the managed author script saw the change through mx.subscribe (${await scriptRealm.textContent('#out')})`);
 check(directCalls.length === 0 && relayCalls.some(call => call.body.values?.region === 'NA'), `the scoped query POST carries the selected value (${directCalls.length} GET, ${relayCalls.length} POST)`);
 await frame.selectOption('select[aria-label="Region"]', '');
 await frame.waitForFunction(() => document.querySelector('[aria-label="Live number"]')?.textContent === '$2,040', null, { timeout: 15000 }).catch(() => {});
@@ -132,8 +134,8 @@ check(reach.violations.length >= reach.targetCount && blockedOrigins.has(new URL
 // ── 4. <DataTable> past the cap, through scoped POST windows ───────────────
 // A dataset can never exceed the ingest cap (MAX_ROWS_LIMIT), and the query cap
 // defaults to the same number — so a result past the cap comes from the QUERY:
-// a cross join of a 200-row dataset is 40,000 rows, 1,000 of which the island
-// carries, and the rest are read as engine windows.
+// a cross join of a 200-row dataset is 40,000 rows, the first 10,000 of which
+// (the query cap) the island carries, and the rest are read as engine windows.
 const rows = Array.from({ length: 200 }, (_, i) => ({ id: i, region: ['EU', 'NA', 'APAC'][i % 3], revenue: (i * 7919) % 10007 }));
 const big = await j(await api('/api/artifacts', { dataset: rows }));
 const expectedMax = Math.max(...rows.flatMap((a) => rows.map((b_) => (a.revenue + b_.revenue) % 10007)));
@@ -149,8 +151,8 @@ const f2 = p.mainFrame();
 await f2.locator('[aria-label="Data grid"] tbody tr').first().waitFor({ timeout: 20000 });
 await f2.waitForTimeout(600);
 const domRows = await f2.$$eval('[aria-label="Data grid"] tbody tr', (trs) => trs.length);
-check(domRows > 0 && domRows < 200, `the table is virtualised (${domRows} DOM rows for 1,000 loaded)`);
-check(/1,000 of 40,000/.test(await f2.textContent('[aria-label="Row count"]')), `and honest about holding a sample of the result (${await f2.textContent('[aria-label="Row count"]')})`);
+check(domRows > 0 && domRows < 200, `the table is virtualised (${domRows} DOM rows for 10,000 loaded)`);
+check(/10,000 of 40,000/.test(await f2.textContent('[aria-label="Row count"]')), `and honest about holding a sample of the result (${await f2.textContent('[aria-label="Row count"]')})`);
 await f2.click('[aria-label="Sort by Revenue"]');
 await f2.click('[aria-label="Sort by Revenue"]');
 await f2.waitForFunction(() => document.querySelector('[aria-label="Row count"]')?.textContent?.startsWith('500 of'), null, { timeout: 20000 }).catch(() => {});
