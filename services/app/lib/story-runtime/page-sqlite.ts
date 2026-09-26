@@ -29,8 +29,7 @@ export function sqliteFrom(wasm: string | Uint8Array): () => Promise<Core> {
     return response.arrayBuffer();
   };
   return () => (loading ??= Promise.all([import('@artifactbin/sql/core'), bytes()])
-    .then(([core, wasmBytes]) => core.loadSqlite(wasmBytes))
-    .catch((error: unknown) => { loading = null; throw error; }));
+    .then(([core, wasmBytes]) => core.loadSqlite(wasmBytes)));
 }
 
 /** The page's own engine for this document, or null when everything runs on the server. */

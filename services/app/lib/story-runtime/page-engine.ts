@@ -164,7 +164,8 @@ export function createPageEngine(source: PageEngineSource): PageEngine {
 
   return {
     prepare(flow, imports) {
-      loadingCore ??= source.load().then((loaded) => { core = loaded; view = null; }, () => { loadingCore = null; });
+      // A core that will not load is final for this document: its queries run on the server.
+      loadingCore ??= source.load().then((loaded) => { core = loaded; view = null; }, () => {});
       for (const name of imports) {
         const ref = importRef(flow, name);
         if (!ref) continue;
