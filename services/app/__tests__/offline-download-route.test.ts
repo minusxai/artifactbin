@@ -89,7 +89,7 @@ describe('GET /a/<id>/download', () => {
     expect(file.derivedFrom).toBe(sourceDigest(file.source));
     expect(html).toMatch(new RegExp(`^<!doctype html>\\n<!-- artifactbin offline file for "Trip plan" \\(${file.liveUrl.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\)\\.`));
     expect(html).toContain(`<link rel="help" href="${file.origin}/llms.txt"`);
-    expect(html).toContain(`script-src 'unsafe-inline' ${new URL(file.origin).origin};`);
+    expect(html).toContain(`script-src 'unsafe-inline' 'wasm-unsafe-eval' ${new URL(file.origin).origin};`);
     expect(html.indexOf('id="afbin-file"')).toBeLessThan(html.indexOf('id="afbin-code"'));
   });
 });
