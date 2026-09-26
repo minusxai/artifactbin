@@ -197,7 +197,11 @@ try {
   await select();await unkeyedAlice.click();await save('Unkeyed list owner comment');
   let ownerComment=(await annotations()).find(item=>item.thread[0].body==='Unkeyed list owner comment');
   assert.equal(ownerComment.anchor.nodeId,'index-cards');assert.equal(ownerComment.range,null);
+  // Wait for the re-run to redraw the rows: a selection made before it lands is on text it replaces.
+  const unkeyedOrder=()=>unkeyed.locator('p').allTextContents();
+  const orderBefore=await unkeyedOrder();
   await page.getByRole('button',{name:'Reverse JSX rows',exact:true}).click();
+  await expect.poll(unkeyedOrder).not.toEqual(orderBefore);
   await expect(unkeyed).toHaveAttribute('data-mx-annotated','');
   await expect(unkeyed.locator('[data-mx-comment-target], [data-mx-annotated]')).toHaveCount(0);
   await unkeyedAlice.dblclick({position:{x:25,y:20}});
