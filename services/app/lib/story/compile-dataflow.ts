@@ -31,6 +31,7 @@ import { BUILTIN_TABLES, builtinInput, isBuiltinTable, rowField, VIEWER, VIEWER_
 import type { BuiltinInput, BuiltinTable, CompiledDataflow, CompiledImport, CompiledMutation, CompiledQuery, CompiledReads, CompiledValue } from './compiled-dataflow';
 import { ARGS_ATTR, bindingMap, MUTATION_TAG, QUERY_TAG, refName, scalarMatches, SET_ATTR, type Dataflow, type MutationDecl, type QueryDecl } from './dataflow';
 import { analyzeRowScopes } from './row-scope';
+import { dateCastRefusal, editDistance, withSqliteHint } from './sqlite-hints';
 
 /** What an `<Import>` or `source=` names, as the loader found it. */
 export interface ImportSource {
@@ -70,9 +71,12 @@ export type CompileResult = { ok: true; compiled: CompiledDataflow } | { ok: fal
  * Also answers whether the statement holds the literal `'now'`, the one clock
  * read SQLite's authorizer cannot report (a function argument is not an event).
  */
-export function rewriteBuiltinFields(sql: string): { sql: string; fields: Map<string, string>; now: boolean; branches: string[] | null } {
+export function rewriteBuiltinFields(sql: string): { sql: string; fields: Map<string, string>; now: boolean; branches: string[] | null; casts: string[] } {
   const fields = new Map<string, string>();
   let out = '', i = 0, now = false, depth = 0, body = -1;
+  /** CAST targets, lower-cased: `cast(` opens a cast at the next depth, and the word after its own `as` is the type. */
+  const casts: string[] = [], castDepths: number[] = [];
+  let castOpens = false, castType = false;
   /** Top-level UNION/INTERSECT/EXCEPT, as [start, end) in the rewritten text. */
   const compounds: Array<[number, number]> = [];
   const skipTo = (end: number) => { out += sql.slice(i, end); i = end; };
@@ -108,6 +112,9 @@ export function rewriteBuiltinFields(sql: string): { sql: string; fields: Map<st
     } else if (/[A-Za-z_]/.test(c) && !/\w/.test(sql[i - 1] ?? '')) {
       const w = /^[A-Za-z_]\w*/.exec(sql.slice(i))![0];
       const lower = w.toLowerCase();
+      if (castType) casts.push(lower);
+      castType = lower === 'as' && castDepths.at(-1) === depth;
+      castOpens = lower === 'cast';
       if (depth === 0 && body < 0 && (lower === 'select' || lower === 'values')) body = out.length;
       if (depth === 0 && (lower === 'union' || lower === 'intersect' || lower === 'except')) {
         const all = /^\s+all\b/i.exec(sql.slice(i + w.length))?.[0] ?? '';
@@ -115,8 +122,9 @@ export function rewriteBuiltinFields(sql: string): { sql: string; fields: Map<st
         out += w + all; i += w.length + all.length;
       } else { out += w; i += w.length; }
     } else {
-      if (c === '(') depth++;
-      else if (c === ')') depth--;
+      if (c === '(') { depth++; if (castOpens) castDepths.push(depth); }
+      else if (c === ')') { if (castDepths.at(-1) === depth) castDepths.pop(); depth--; }
+      if (!/\s/.test(c)) { castOpens = false; castType = false; }
       out += c; i++;
     }
   }
@@ -124,23 +132,12 @@ export function rewriteBuiltinFields(sql: string): { sql: string; fields: Map<st
   const branches = compounds.length && body >= 0
     ? [body, ...compounds.map(([, end]) => end)].map((from, n) => out.slice(0, body) + out.slice(from, compounds[n]?.[0] ?? out.length))
     : null;
-  return { sql: out, fields, now, branches };
+  return { sql: out, fields, now, branches, casts };
 }
 
 /** A statement that touches SQLite's own schema table is DDL, whatever the engine says first. */
 const SCHEMA_TABLE = /\bsqlite_(master|schema|temp_master|temp_schema)\b/i;
 const QUERY_WRITES = 'writes — a <Query> runs only read statements (one SELECT); a write is a <Mutation>';
-
-/** Levenshtein distance, for "did you mean". */
-function editDistance(a: string, b: string): number {
-  let row = Array.from({ length: b.length + 1 }, (_, j) => j);
-  for (let i = 1; i <= a.length; i++) {
-    const next = [i];
-    for (let j = 1; j <= b.length; j++) next[j] = Math.min(row[j]! + 1, next[j - 1]! + 1, row[j - 1]! + (a[i - 1] === b[j - 1] ? 0 : 1));
-    row = next;
-  }
-  return row[b.length]!;
-}
 
 /** The clock functions a statement may not call: the current time is `$_now`, identical on server and browser. */
 const CLOCK_FUNCTIONS = new Set(['current_date', 'current_time', 'current_timestamp']);
@@ -300,8 +297,10 @@ export function compileDataflow(flow: Dataflow, ctx: CompileContext, body?: JsxN
     const key = q.name.toLowerCase();
     if (compiledQueries.has(key) || failed.has(key)) return;
     const fail = (message: string) => { failed.add(key); errors.push(at(q, QUERY_TAG, `<Query name="${q.name}"> ${message}`)); };
-    const { sql, fields, now, branches } = rewriteBuiltinFields(q.sql);
+    const { sql, fields, now, branches, casts } = rewriteBuiltinFields(q.sql);
     if (q.source) return compilePostgres(q, sql, fields);
+    const cast = dateCastRefusal(casts);
+    if (cast) return fail(cast);
     for (;;) {
       let analysis: StatementAnalysis;
       try { analysis = ctx.engine.analyze(sql, [...base, ...queryRelations()]); }
@@ -322,7 +321,7 @@ export function compileDataflow(flow: Dataflow, ctx: CompileContext, body?: JsxN
         const column = /^no such column: (.+)$/.exec(message)?.[1];
         if (column) return fail(noSuchColumn(column));
         if (SCHEMA_TABLE.test(message)) return fail(QUERY_WRITES);
-        return fail(message.replace(/^a <Query>/, '—'));
+        return fail(withSqliteHint(message.replace(/^a <Query>/, '—'), sql));
       }
       if (analysis.kind !== 'select') return fail(QUERY_WRITES);
       const { reads, params } = readsOf(analysis, fields, 'query', q, QUERY_TAG, q.name);
@@ -406,7 +405,9 @@ export function compileDataflow(flow: Dataflow, ctx: CompileContext, body?: JsxN
   }
   function compileMutation(m: MutationDecl): CompiledMutation | null {
     const fail = (message: string) => { errors.push(at(m, MUTATION_TAG, `<Mutation name="${m.name}"> ${message}`)); return null; };
-    const { sql, fields, now } = rewriteBuiltinFields(m.sql);
+    const { sql, fields, now, casts } = rewriteBuiltinFields(m.sql);
+    const cast = dateCastRefusal(casts);
+    if (cast) return fail(cast);
     let analysis: StatementAnalysis;
     try { analysis = ctx.engine.analyze(sql, [...base, ...queryRelations()], { mode: 'write', extensions: ctx.extensions }); }
     catch (e) {
@@ -416,7 +417,7 @@ export function compileDataflow(flow: Dataflow, ctx: CompileContext, body?: JsxN
       const column = /^no such column: (.+)$/.exec(message)?.[1];
       if (column) return fail(noSuchColumn(column));
       if (SCHEMA_TABLE.test(message)) return fail('changes the schema — a <Mutation> is one INSERT, UPDATE or DELETE on an imported table or a table Value');
-      return fail(message.replace(/^a <Mutation>/, '—'));
+      return fail(withSqliteHint(message.replace(/^a <Mutation>/, '—'), sql));
     }
     if (analysis.kind === 'select') return fail('only reads — a <Mutation> is one INSERT, UPDATE or DELETE; a read is a <Query>');
     const written = [...new Map(analysis.writes.map((w) => [`${w.schema.toLowerCase()}\0${w.table.toLowerCase()}`, w])).values()];
