@@ -11,7 +11,7 @@ import type { QueryCell } from '@/lib/story/query-notebook';
 import { httpBackendWrapper } from '@/test/helpers/artifact-backend';
 
 const cell = (over: Partial<QueryCell> = {}): QueryCell => ({
-  name: 'sales', sql: 'select region, revenue from "public"."rows"', source: 'ds1234', params: [],
+  name: 'sales', sql: 'select region, revenue from sales_data.rows', source: null,
   result: null, error: null, pending: false, bound: [], ...over,
 });
 const ROWS = Array.from({ length: 12 }, (_, i) => ({ region: `r${i}`, revenue: i * 10 }));

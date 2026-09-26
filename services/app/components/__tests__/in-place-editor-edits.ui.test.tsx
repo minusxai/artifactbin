@@ -76,7 +76,7 @@ describe('drafts', () => {
    * is what suppressed the run, because declarations alone are still a
    * dataflow.
    */
-  const flowOnly = { flow: { values: [{ kind: 'table' as const, name: 'rows', rows: [{ x: 1 }], columns: [{ name: 'x', type: 'number' as const }], start: 0, end: 0 }], queries: [] } };
+  const flowOnly = { flow: { imports: [], values: [{ kind: 'table' as const, type: 'table' as const, default: null, name: 'rows', rows: [{ x: 1 }], columns: [{ name: 'x', type: 'number' as const }] }], queries: [], mutations: [] } };
   const askedForQueries = () => (globalThis.fetch as unknown as ReturnType<typeof vi.fn>).mock.calls
     .some((c) => String(c[0]) === '/api/query');
 

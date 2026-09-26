@@ -86,6 +86,7 @@ describe('<Mutation reset="…">', () => {
       return parsed.decl;
     };
     const flow = (reset: string): Dataflow => ({
+      imports: [],
       values: [
         { kind: 'scalar', name: 'draft', type: 'string', default: null, start: 0, end: 0 },
         { kind: 'table', name: 'rows', rows: [{ a: 1 }], columns: [{ name: 'a', type: 'number' }], start: 0, end: 0 },

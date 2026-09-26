@@ -4,7 +4,7 @@ import { convertDocument, type ConvertLookups } from '../convert';
 const TITLES: Record<string, string> = { abc123: 'Team Tasks', def456: 'People', sal001: 'Sales 2026', sal002: 'sales-2026', pg0001: 'Warehouse' };
 const lookups: ConvertLookups = {
   importName: (ref) => TITLES[ref],
-  isPostgres: (ref) => ref === 'pg0001',
+  kind: (ref) => (ref === 'pg0001' ? 'postgres' : 'dataset'),
 };
 
 /** Converts cleanly to exactly `after`. */
@@ -104,7 +104,7 @@ describe('convertDocument', () => {
     const names = (titles: Record<string, string | null>, declared = '') => {
       const refs = Object.keys(titles);
       const doc = `<Helmet>${declared}${refs.map((ref, i) => `<Query name="q${i}" source="ref:${ref}">{\`select 1 from public.rows\`}</Query>`).join('')}</Helmet>`;
-      const result = convertDocument(doc, { importName: (ref) => titles[ref], isPostgres: () => false });
+      const result = convertDocument(doc, { importName: (ref) => titles[ref], kind: () => 'dataset' });
       expect(result.manual).toEqual([]);
       return result.changes.filter((c) => c.rule === 'import').map((c) => c.declaration);
     };

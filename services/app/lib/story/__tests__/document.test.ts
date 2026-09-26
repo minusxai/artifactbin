@@ -181,7 +181,7 @@ describe('buildStoryDocument', () => {
     const html = await doc({
       // A query RESULT carries reader-visible strings into the island.
       dataflow: {
-        flow: { values: [], queries: [{ name: 'q', sql: 'select 1', params: [], refs: [], start: 0, end: 0 }] },
+        flow: { imports: [], values: [], queries: [{ name: 'q', engine: 'sqlite', sql: 'select 1', params: [], reads: { imports: [], queries: [], values: [], builtins: [] }, columns: [{ name: 'note', type: 'string' }], start: 0, end: 0 }], mutations: [] },
         state: { values: {}, tables: { q: { rows: [{ note: '</script><script>alert(1)</script>' }], columns: [{ name: 'note', type: 'string' }] } }, errors: {} },
       },
       // A component, so the document actually carries an island to escape.
