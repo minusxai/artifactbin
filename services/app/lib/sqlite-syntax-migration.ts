@@ -190,7 +190,7 @@ async function prepareArtifact(db: Queryable, current: ArtifactRow, dryRun: bool
  * already show in its place (lib/data/story/story-themes resolveStoredStoryDesign),
  * so the new version looks as the old one did and the publish door admits it.
  */
-function servedDesign(meta: ArtifactRow['meta']): ArtifactRow['meta'] {
+export function servedDesign(meta: ArtifactRow['meta']): ArtifactRow['meta'] {
   const { theme, colorMode } = meta as { theme?: string | null; colorMode?: 'light' | 'dark' | null };
   if (theme == null) return meta;
   const served = resolveStoredStoryDesign(theme, colorMode);
