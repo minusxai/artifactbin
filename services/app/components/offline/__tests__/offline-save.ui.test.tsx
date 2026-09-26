@@ -8,7 +8,7 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { parseArtifactFile, type ArtifactFile } from '@/lib/offline/file-format';
+import { OFFLINE_QUERY_REASON, parseArtifactFile, type ArtifactFile } from '@/lib/offline/file-format';
 import { NAME_KEY, draftKey, readDraft, writeDraft } from '@/lib/offline/local-state';
 import { suggestedFileName } from '@/lib/offline/save-file';
 import { CHANGED_OUTSIDE } from '@/lib/offline/file-backend';
@@ -148,6 +148,13 @@ describe('a source changed outside the file', () => {
     expect(saved.derivedFrom).not.toBe(fixture().derivedFrom);
     expect(JSON.stringify(saved.island.nodes)).toContain('Quarterly sales');
     expect(saved.journal.map((entry) => entry.summary)).toEqual([CHANGED_OUTSIDE]);
+  });
+
+  it('says a query the agent changed needs a connection instead of showing the old rows', async () => {
+    render(<OfflineApp file={changed((s) => s.replace('select region, month, revenue from public.rows where', 'select region, month, revenue * 2 as revenue from public.rows where'))} code={CODE} />);
+    expect(await screen.findByRole('heading', { name: 'Regional sales' })).toBeInTheDocument();
+    await waitFor(() => expect(screen.getAllByText(OFFLINE_QUERY_REASON, { exact: false }).length).toBeGreaterThan(0));
+    expect(screen.queryByText('2026-07')).toBeNull();
   });
 
   it('keeps the last good render under a banner that names the error, and does not offer editing', async () => {

@@ -370,6 +370,33 @@ export async function rebuildArtifactFile(file: ArtifactFile, author: string | n
   return { file: { ...file, source, ...derived, journal: [...file.journal, entry] }, rebuilt: true, error: null };
 }
 
+/**
+ * The declarations the snapshot was taken over: the DOWNLOADED source's
+ * (`base.source`, which nothing in the file changes). Not the island's, which
+ * follows every edit — in the file, or outside it — so an edited query would
+ * otherwise be answered with the rows the old SQL returned.
+ */
+function ranFlowOf(file: ArtifactFile): Dataflow {
+  return storyUpdateParts(file.base.source)?.flow ?? file.island.dataflow?.flow ?? { values: [], queries: [] };
+}
+
+/**
+ * The state the page seeds the runtime with: the snapshot, minus the results
+ * of any query whose SQL or source is no longer what the download ran — those
+ * say OFFLINE_QUERY_REASON, as the transport answers them.
+ */
+export function snapshotStateFor(file: ArtifactFile): DataflowState {
+  const flow = file.island.dataflow?.flow;
+  const state = file.snapshot.state;
+  if (!flow) return state;
+  const unran = unranQueries(flow, ranFlowOf(file));
+  if (!unran.size) return state;
+  const tables = Object.fromEntries(Object.entries(state.tables).filter(([name]) => !unran.has(name)));
+  const errors = { ...state.errors };
+  for (const name of unran) errors[name] = OFFLINE_QUERY_REASON;
+  return { ...state, tables, errors };
+}
+
 // ── the backend ─────────────────────────────────────────────────────────────
 
 export function createFileBackend(initial: ArtifactFile, hooks: FileBackendHooks): ArtifactBackend {
@@ -390,7 +417,7 @@ export function createFileBackend(initial: ArtifactFile, hooks: FileBackendHooks
   let version = file.base.version + file.journal.length;
   let editId = file.journal.length || !file.base.editId ? `offline-${version}` : file.base.editId;
   /** What the snapshot was taken over — the declarations the download ran. */
-  const ranFlow: Dataflow = initial.island.dataflow?.flow ?? { values: [], queries: [] };
+  const ranFlow: Dataflow = ranFlowOf(initial);
   const assets = inlinedAssets(initial.source, initial.island.nodes);
   const created = new Map<string, string>();
   const author = () => hooks.author()?.trim() || UNNAMED_AUTHOR;

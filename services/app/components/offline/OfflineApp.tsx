@@ -58,7 +58,7 @@ import type { ArtifactBackend } from '@/lib/artifact-backend/types';
 import { APP_BAR_H, EDIT_BAR_H, RIGHT_RAIL_W } from '@/lib/story/edit-bar';
 import { useWideEditViewport } from '@/lib/story/use-edit-panel';
 import type { EditorFlushRef } from '@/lib/story/use-live-edits';
-import { createFileBackend, fileAssetInliner, rebuildArtifactFile, sourceChangedOutside } from '@/lib/offline/file-backend';
+import { createFileBackend, fileAssetInliner, rebuildArtifactFile, snapshotStateFor, sourceChangedOutside } from '@/lib/offline/file-backend';
 import { createExtrasLoader, extrasScriptUrl, FORMATTING_OFFLINE, RICH_EDITOR_OFFLINE } from '@/lib/offline/extras';
 import { OFFLINE_FILTER_REASON, OFFLINE_MUTATION_REASON, type ArtifactFile, type ArtifactFileEdit } from '@/lib/offline/file-format';
 import { clearDraft, readDraft, readName, writeDraft, writeName, type Draft } from '@/lib/offline/local-state';
@@ -298,7 +298,8 @@ function OfflineSurface({ file, restored, invalid, code, fileName }: { file: Art
    */
   const data = useMemo<StoryIslandData>(() => {
     const flow = file.island.dataflow?.flow;
-    return flow ? { ...file.island, dataflow: { flow, state: file.snapshot.state } } : file.island;
+    // A query edited since the download starts as "needs a connection", never as the old SQL's rows.
+    return flow ? { ...file.island, dataflow: { flow, state: snapshotStateFor(file) } } : file.island;
   }, [file]);
   const prepared = useMemo<PreparedStoryRuntime>(() => ({
     data, baseCss: file.css.base, compiledCss: file.css.compiled, authorCss: file.css.author, authorScript: null,

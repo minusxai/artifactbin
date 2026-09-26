@@ -22,7 +22,7 @@ import {
   OFFLINE_ASSET_REASON, OFFLINE_QUERY_REASON, parseArtifactFile, sourceDigest, type ArtifactFile,
 } from '../file-format';
 import {
-  CHANGED_OUTSIDE, createFileBackend, fileAssetInliner, LOCAL_DELETE_ONLY, OFFLINE_REASONS, rebuildArtifactFile, sourceChangedOutside,
+  CHANGED_OUTSIDE, createFileBackend, fileAssetInliner, LOCAL_DELETE_ONLY, OFFLINE_REASONS, rebuildArtifactFile, snapshotStateFor, sourceChangedOutside,
 } from '../file-backend';
 
 const FIXTURE = path.resolve(process.cwd(), '../../scripts/fixtures/offline-file/artifact-file.json');
@@ -418,6 +418,23 @@ describe('a source changed outside the file', () => {
     const { backend } = open(file);
     await expect(backend.load()).rejects.toBeInstanceOf(BackendRequestError);
     expect(await backend.listAnnotations()).toEqual([]);
+  });
+
+  it('never answers a query the agent changed with the rows the download ran for the old SQL', async () => {
+    const file = changed((s) => s.replace('select region, month, revenue from public.rows where', 'select region, month, revenue * 2 as revenue from public.rows where'));
+    const { file: after, error } = await rebuildArtifactFile(file);
+    expect(error).toBeNull();
+    const { backend } = open(after);
+    const answered = await backend.queryTransport().run({ region: null, note: null }, ['sales', 'regions']);
+    expect(answered.tables.sales).toBeUndefined();
+    expect(answered.errors.sales).toBe(OFFLINE_QUERY_REASON);
+    expect(answered.tables.regions).toEqual(after.snapshot.state.tables.regions);
+    // What the page seeds the runtime with says the same before any query runs.
+    const seeded = snapshotStateFor(after);
+    expect(seeded.tables.sales).toBeUndefined();
+    expect(seeded.errors.sales).toBe(OFFLINE_QUERY_REASON);
+    expect(seeded.tables.regions).toEqual(after.snapshot.state.tables.regions);
+    expect(snapshotStateFor(fixture())).toEqual(fixture().snapshot.state);
   });
 
   it('refuses what needs artifactbin, as a commit in the file does', async () => {
