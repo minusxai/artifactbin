@@ -17,17 +17,17 @@ export type TestSource = DatasetColumn[] | ImportSource;
 const sourceOf = (s: TestSource): ImportSource => (Array.isArray(s) ? { kind: 'dataset', tables: [{ name: 'rows', columns: s }] } : s);
 
 /** Compile a whole markup source (Helmet and body); throws the compiler's own messages. */
-export async function compiledSource(source: string, sources: Record<string, TestSource> = {}): Promise<CompiledDataflow> {
+export async function compiledSource(source: string, sources: Record<string, TestSource> = {}, opts: { bindings?: boolean } = {}): Promise<CompiledDataflow> {
   const parsed = parseJsx(source);
   if (!parsed.ok) throw new Error(`the test document does not parse: ${parsed.error}`);
   const { content, body } = splitHelmet(parsed.nodes);
   const flow = dataflowOf(content);
   const ctx = await prepareCompile(flow, async (ref) => (Object.hasOwn(sources, ref) ? sourceOf(sources[ref]!) : null));
-  const result = compileDataflow(flow, { ...ctx, now: '2026-09-30T10:00:00.000Z' }, body);
+  const result = compileDataflow(flow, { ...ctx, now: '2026-09-30T10:00:00.000Z' }, opts.bindings === false ? undefined : body);
   if (!result.ok) throw new Error(result.errors.map((e) => e.message).join('\n'));
   return result.compiled;
 }
 
-/** Compile `<Helmet>` children alone. */
+/** Compile `<Helmet>` children alone: declarations only, so the markup that would bind them is not checked. */
 export const compiledOf = (helmetChildren: string, sources: Record<string, TestSource> = {}): Promise<CompiledDataflow> =>
-  compiledSource(`<Helmet>${helmetChildren}</Helmet>`, sources);
+  compiledSource(`<Helmet>${helmetChildren}</Helmet>`, sources, { bindings: false });
