@@ -35,6 +35,8 @@ export async function restoreBrowserArtifact(backend:ArtifactBackend,version:num
  const target=await backend.version(version);if(!target)return null;
  if(target.format!=='markup'){const reverted=await backend.revert({version,expectedVersion:head.version,expectedState:head.state as string});return reverted.ok?reverted.body.version:null;}
  if(typeof target.markup!=='string')return null;
+ // Written for the previous query engine and not convertible without a person: the server says why (lib/story/data-syntax).
+ if(target.previous_engine)throw new Error(target.previous_engine);
  const document=head.document?.kind==='graph'?head.document:createDocumentGraph('',head.version);
  const update=await prepareBrowserDocumentUpdate(backend,{...head,document,meta:{...head}},{source:target.markup,whole:true,metadata:{title:target.title??null,description:target.description??null,theme:target.meta.theme??null,template:target.meta.template??null,colorMode:target.meta.colorMode??null}});
  const committed=await backend.commitEdit({edit_id:head.edit_id,document_update:update});
