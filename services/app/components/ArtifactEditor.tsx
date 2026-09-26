@@ -18,6 +18,7 @@ import type {DocumentGraph} from '@artifactbin/contracts';
  * protocol shortly after they stop arriving, and every way OUT drains first
  * (the flush ref below, published up to the page).
  */
+import type { SharingVerdict } from '@/lib/visibility-icons';
 import { type DocumentRuntimeRef } from '@/lib/story-runtime/document-endpoint';
 import { Home, Lock } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -75,8 +76,9 @@ interface EditorSeed {
   dataflow?: StoryIslandDataflow | null;
 }
 
-export default function ArtifactEditor({ id, seed, onExit, flushRef, frameRef, runtimeRef, sessionNonce, initialSelectionPath = null, onComment, onRightInsetChange, rightInset = 0, commentsOpen, onCommentsOpenChange, onCommentsHost }: {
+export default function ArtifactEditor({ id, seed, onExit, flushRef, frameRef, runtimeRef, sessionNonce, initialSelectionPath = null, onComment, onRightInsetChange, onSharingChange, rightInset = 0, commentsOpen, onCommentsOpenChange, onCommentsHost }: {
   id: string;
+  onSharingChange?: (verdict: SharingVerdict) => void;
   seed?: EditorSeed;
   onExit: () => void;
   /** The live document's iframe — editing happens IN it, so it is never remounted. */
@@ -206,6 +208,7 @@ export default function ArtifactEditor({ id, seed, onExit, flushRef, frameRef, r
 
   return (
     <InPlaceEditor
+      onSharingChange={onSharingChange}
       frameRef={frameRef} runtimeRef={runtimeRef}
       sessionNonce={sessionNonce}
       art={{

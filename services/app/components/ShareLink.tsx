@@ -89,7 +89,7 @@ export default function ShareLink({
   /** Known before sharing loads; the API also supplies this for shelf callers. */
   datasetKind?: DatasetCatalog['kind'];
   /** `menu` is a document-control row; `dialog` opens directly from an external menu. */
-  variant?: 'chip' | 'menu' | 'dialog';
+  variant?: 'chip' | 'menu' | 'dialog' | 'embedded';
   /** Explicit artifact address when opened from a shelf or table. */
   url?: string;
   /** Dialog-only callers unmount the sharing surface when dismissed. */
@@ -102,7 +102,7 @@ export default function ShareLink({
   onSharingChange?: (verdict: SharingVerdict) => void;
 }) {
   const [copied, setCopied] = useState(false);
-  const [open, setOpen] = useState(variant === 'dialog');
+  const [open, setOpen] = useState(variant === 'dialog' || variant === 'embedded');
   const [state, setState] = useState<SharingState | null>(null);
   const [email, setEmail] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -198,8 +198,8 @@ export default function ShareLink({
   };
   const toggle = () => setOpen((o) => !o);
   return (
-    <span className={variant === 'menu' ? 'relative block' : 'relative inline-flex items-center gap-1'}>
-      {variant === 'dialog' ? null : variant === 'menu' ? (
+    <span className={variant === 'menu' || variant === 'embedded' ? 'relative block' : 'relative inline-flex items-center gap-1'}>
+      {variant === 'dialog' || variant === 'embedded' ? null : variant === 'menu' ? (
         <button
           type="button"
           aria-label="Share"
@@ -227,7 +227,7 @@ export default function ShareLink({
       </Tooltip>
       )}
       {open && (
-        <SharePanel title={`Share “${title ?? (format === 'folder' ? 'Untitled folder' : 'Untitled')}”`} onClose={() => { setOpen(false); onClose?.(); }}>
+        <SharePanel embedded={variant === 'embedded'} title={`Share “${title ?? (format === 'folder' ? 'Untitled folder' : 'Untitled')}”`} onClose={() => { setOpen(false); onClose?.(); }}>
           <button
             type="button"
             aria-label="Copy link"
@@ -413,13 +413,15 @@ export default function ShareLink({
 
 /** One viewport-level sharing surface. Portaling keeps it centered even when
  * its trigger lives inside an animated controls popover. */
-function SharePanel({ onClose, children, title }: {
+function SharePanel({ onClose, children, title, embedded = false }: {
+  embedded?: boolean;
   title: string;
   onClose: () => void;
   children: React.ReactNode;
 }) {
   const portal = useTrustedPortalContainer();
   useEffect(() => {
+    if (embedded) return;
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
     const escape = (event: KeyboardEvent) => { if (event.key === 'Escape') onClose(); };
@@ -428,7 +430,13 @@ function SharePanel({ onClose, children, title }: {
       document.body.style.overflow = previousOverflow;
       window.removeEventListener('keydown', escape);
     };
-  }, [onClose]);
+  }, [onClose, embedded]);
+
+  if (embedded) return <section aria-label="Sharing settings" className="w-full max-w-2xl font-mono text-xs">
+    <h2 className="mb-2 break-words text-base font-semibold text-fg">{title}</h2>
+    <p className="mb-6 text-muted">Manage access, invite people, or copy the link.</p>
+    {children}
+  </section>;
 
   return createPortal(
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-3 sm:p-8">

@@ -1,6 +1,7 @@
 'use client';
 import type {DocumentGraph} from '@artifactbin/contracts';
 
+import type { SharingVerdict } from '@/lib/visibility-icons';
 import type { EditorSelectionChange } from '@/lib/editor-v2/bookmark';
 
 /**
@@ -28,7 +29,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import SourceEditor from '@/components/SourceEditorPane';
 import { editBlock } from '@/lib/editor-v2/block-edit';
 import { SourceHistory } from '@/lib/editor-v2/history';
-import { ChartColumn, Check, Code, Database, Hash, History, MessageSquare, Undo2, Redo2, Paintbrush, SlidersHorizontal, Workflow, X } from 'lucide-react';
+import { ChartColumn, Check, Code, Database, Hash, History, MessageSquare, Undo2, Redo2, Paintbrush, SlidersHorizontal, Workflow, X, Files, Users } from 'lucide-react';
+import ShareLink from '@/components/ShareLink';
+import { ReferencedFiles } from '@/components/ReferencedFiles';
 import { TrustedUi } from '@/components/TrustedUi';
 
 import ThemePicker, { ModeChip, TemplateChip } from '@/components/ThemePicker';
@@ -154,11 +157,13 @@ export default function InPlaceEditor({
   rightInset = 0,
   onDone = () => {},
   onRightInsetChange,
+  onSharingChange,
   commentsOpen = false,
   onCommentsOpenChange,
   onCommentsHost,
 }: {
   art: EditorArtifact;
+  onSharingChange?: (verdict: SharingVerdict) => void;
   /** Optional standalone document frame compatibility ref; the active page uses runtimeRef. */
   frameRef?: { current: HTMLIFrameElement | null };
   runtimeRef?: DocumentRuntimeRef;
@@ -226,6 +231,13 @@ export default function InPlaceEditor({
   }, [onComment]);
   /** The right rail's query notebook (components/views/story/QueryNotebookPanel). */
   const [queriesOpen, setQueriesOpen] = useState(false);
+  const [settingsView, setSettingsView] = useState<'files' | 'sharing' | null>(null);
+  const chooseView = (view: string) => {
+    setMode(view === 'code' ? 'code' : 'design');
+    setQueriesOpen(view === 'data');
+    setSettingsView(view === 'files' || view === 'sharing' ? view : null);
+    if (view !== 'design' && view !== 'code') edit.select(null);
+  };
   /** The cell the notebook lands on when opened FROM an embed's inspector; null once the rail has gone. */
   const [queryFocus, setQueryFocus] = useState<string | null>(null);
   /** True from the moment a draft-data run is sent until its answer lands — the notebook's "running…". */
@@ -699,7 +711,7 @@ export default function InPlaceEditor({
     (name: string, sql: string) => commitStructural(updateQuerySqlInJsx(sourceRef.current, name, sql)),
     [commitStructural],
   );
-  const notebookVisible = queriesOpen && !inspector && mode === 'design' && !preview && queryNotebook.length > 0;
+  const notebookVisible = queriesOpen && !inspector && mode === 'design' && !preview && !settingsView;
   /*
    * A spotlight is the notebook's, so it leaves with the notebook: a cell that
    * was focused when the rail closed, or when a selection handed the rail to
@@ -717,7 +729,7 @@ export default function InPlaceEditor({
    * app view draws both rows and every other view draws one, and the panes
    * below start at whichever height the bar actually is.
    */
-  const formattingRow = mode === 'design' && !notebookVisible;
+  const formattingRow = mode === 'design' && !notebookVisible && !settingsView;
   const barH = formattingRow ? EDIT_BAR_H : EDIT_BAR_ROW_H;
   /*
    * THE ONE WIDTH the page is told about: the panel's, which nothing in the
@@ -860,6 +872,7 @@ export default function InPlaceEditor({
     (name: string) => {
       select(null);
       setQueryFocus(name);
+      setSettingsView(null);
       setQueriesOpen(true);
     },
     [select],
@@ -1352,7 +1365,7 @@ export default function InPlaceEditor({
             {/* Icon-only on a phone, where every control in this row must fit; the names stay. */}
             {(
               [
-                ['design', 'app', <Paintbrush key="d" size={12} />, mode === 'design' && !queriesOpen],
+                ['design', 'app', <Paintbrush key="d" size={12} />, mode === 'design' && !queriesOpen && !settingsView],
                 ['code', 'code', <Code key="c" size={12} />, mode === 'code'],
               ] as const
             ).map(([m, label, icon, active]) => (
@@ -1362,8 +1375,7 @@ export default function InPlaceEditor({
                 aria-label={m === 'design' ? 'Edit on the page' : 'Edit the source'}
                 aria-pressed={active}
                 onClick={() => {
-                  setMode(m);
-                  setQueriesOpen(false);
+                  chooseView(m);
                 }}
                 className={`inline-flex h-6 cursor-pointer items-center gap-1 rounded-[3px] px-1 font-mono text-[11px] sm:px-1.5 ${
                   active ? 'bg-accent-soft text-accent' : 'text-muted hover:bg-raised hover:text-fg'
@@ -1374,17 +1386,14 @@ export default function InPlaceEditor({
               </button>
               </Tooltip>
             ))}
-            {queryNotebook.length > 0 && (
+            {(
               <Tooltip content="the document's queries">
               <button
                 type="button"
                 aria-label="Show data"
                 aria-pressed={queriesOpen}
                 onClick={() => {
-                  setQueriesOpen((v) => !v);
-                  setMode('design');
-                  // The notebook is a view over the document: nothing on the page is selected under it.
-                  if (!queriesOpen) edit.select(null);
+                  chooseView('data');
                 }}
                 className={`inline-flex h-6 cursor-pointer items-center gap-1 rounded-[3px] px-1 font-mono text-[11px] sm:px-1.5 ${
                   queriesOpen ? 'bg-accent-soft text-accent' : 'text-muted hover:bg-raised hover:text-fg'
@@ -1395,6 +1404,15 @@ export default function InPlaceEditor({
               </button>
               </Tooltip>
             )}
+            {([['files', 'Show files', Files], ['sharing', 'Show sharing', Users]] as const).map(([view, label, Icon]) => (
+              <Tooltip key={view} content={label.toLowerCase()}>
+                <button type="button" aria-label={label} aria-pressed={settingsView === view}
+                  onClick={() => chooseView(view)}
+                  className={`inline-flex h-6 cursor-pointer items-center gap-1 rounded-[3px] px-1 font-mono text-[11px] sm:px-1.5 ${settingsView === view ? 'bg-accent-soft text-accent' : 'text-muted hover:bg-raised hover:text-fg'}`}>
+                  <Icon size={12} /><span className="hidden sm:inline">{view}</span>
+                </button>
+              </Tooltip>
+            ))}
           </div>
           <ThemePicker
             value={theme}
@@ -1658,6 +1676,9 @@ export default function InPlaceEditor({
           className="fixed bottom-0 z-20 overflow-y-auto bg-surface p-4"
           style={{ top: barTop + barH, left: 0, right: panelWidth }}
         >
+          <div className="mb-8"><ReferencedFiles source={source} references={art.refs ?? []} datasetsOnly /></div>
+          <h2 className="mb-4 text-base font-semibold text-fg">Queries</h2>
+          {queryNotebook.length === 0 && <p className="text-sm text-muted">No queries in this artifact.</p>}
           <QueryNotebookPanel
             cells={queryNotebook}
             onSqlChange={onQuerySqlChange}
@@ -1665,6 +1686,15 @@ export default function InPlaceEditor({
             focus={queryFocus}
             titles={Object.fromEntries((art.refs ?? []).map((r) => [r.id, r.title ?? null]))}
           />
+        </aside>
+      )}
+
+      {settingsView && !preview && (
+        <aside aria-label={settingsView === 'files' ? 'Files' : 'Sharing'}
+          className="fixed bottom-0 z-20 overflow-y-auto bg-surface p-4 sm:p-6"
+          style={{ top: barTop + barH, left: 0, right: panelWidth }}>
+          {settingsView === 'files' ? <ReferencedFiles source={source} references={art.refs ?? []} />
+            : <ShareLink className="" artifactId={art.id} title={title} editable format="markup" variant="embedded" onSharingChange={onSharingChange} />}
         </aside>
       )}
 
