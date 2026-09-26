@@ -64,6 +64,40 @@ describe('diffStatements on the SQLite engine', () => {
   });
 });
 
+/**
+ * Each rule the rehearsal added, checked the way the migration checks a
+ * document: the DuckDB statement's answer (recorded from DuckDB over these
+ * same rows) against its translation run on the SQLite engine.
+ */
+describe('translations answer as DuckDB did', () => {
+  const duckdb: Record<string, QueryOutcome> = {
+    'select greatest(x, y) as g, least(x, y) as l from (select 1 as x, null as y union all select null, null union all select 4, 2) t':
+      { rows: [{ g: 1, l: 1 }, { g: null, l: null }, { g: 4, l: 2 }], columns: [{ name: 'g', type: 'number' }, { name: 'l', type: 'number' }] },
+    "select contains(lower(name), 'al') as c, left(name, 2) as l, right(name, 3) as r, name similar to '[A-Z].*' as s from ref_nums":
+      { rows: [{ c: true, l: 'Al', r: 'pha', s: true }, { c: true, l: 'al', r: 'ine', s: false }, { c: false, l: 'Be', r: 'eta', s: true }], columns: ['c', 'l', 'r', 's'].map((name) => ({ name, type: 'string' as const })) },
+    'select bool_or(a < 0) as anyneg, bool_and(a < 0) as allneg, stddev_samp(c) as sd from ref_nums':
+      { rows: [{ anyneg: true, allneg: false, sd: 1 }], columns: ['anyneg', 'allneg', 'sd'].map((name) => ({ name, type: 'number' as const })) },
+    "select extract(isodow from cast(day as date)) as iso, cast(day as date) + 1 as next, cast(day as date) - cast('2026-01-01' as date) as since from ref_nums":
+      { rows: [{ iso: 4, next: '2026-01-16', since: 14 }, { iso: 7, next: '2026-02-02', since: 31 }, { iso: 6, next: '2026-03-01', since: 58 }], columns: ['iso', 'next', 'since'].map((name) => ({ name, type: 'string' as const })) },
+    "select try_cast(v as double) as n from (select '1.5' as v union all select 'x' union all select ' 2 ') t":
+      { rows: [{ n: 1.5 }, { n: null }, { n: 2 }], columns: [{ name: 'n', type: 'number' }] },
+    'select b, sum(a) as s from ref_nums group by b qualify row_number() over (order by sum(a) desc) = 1':
+      { rows: [{ b: 3, s: 1 }], columns: [{ name: 'b', type: 'number' }, { name: 's', type: 'number' }] },
+    'select x.b, y.a from ref_nums x join ref_nums y on x.b = y.b order by b, a':
+      { rows: [{ b: 2, a: -7 }, { b: 2, a: -7 }, { b: 2, a: 7 }, { b: 2, a: 7 }, { b: 3, a: 1 }], columns: [{ name: 'b', type: 'number' }, { name: 'a', type: 'number' }] },
+    'with c as (select cast(day as date) as d from ref_nums), i as (select d, d - cast(row_number() over (order by d) as integer) as run from c) select run, count(*) as n from i group by run':
+      { rows: [{ run: '2026-01-14', n: 1 }, { run: '2026-01-30', n: 1 }, { run: '2026-02-25', n: 1 }], columns: [{ name: 'run', type: 'string' }, { name: 'n', type: 'number' }] },
+    "select cast(v as date) as d from (select '2026-1' as v) t": { error: 'Conversion Error: invalid date field format: "2026-1"' },
+  };
+  it.each(Object.keys(duckdb))('%s', async (original) => {
+    const translation = translateSql(original, { statement: 'query' });
+    expect(translation.manual).toEqual([]);
+    const [verdict] = await diffStatements({ cases: [{ name: 'q', original, translated: translation.sql }] }, { original: side(stub(duckdb)), translated: side(sqlite) });
+    if ('error' in duckdb[original]!) expect(verdict).toMatchObject({ status: 'failed', translated: expect.stringMatching(/to_date: 2026-1 is not a date/) });
+    else expect(verdict).toEqual({ name: 'q', status: 'same' });
+  });
+});
+
 describe('diffStatements seam and comparison', () => {
   it('each side runs with its own tables and parameters: the SQLite engine registers imports its own way', async () => {
     const seen: RunInput[] = [];

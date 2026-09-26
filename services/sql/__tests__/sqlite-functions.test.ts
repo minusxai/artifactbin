@@ -122,6 +122,14 @@ describe('text', () => {
   });
 });
 
+describe('numbers', () => {
+  it('reads the number text names, null when it names none', async () => {
+    expect(await row(`select to_number(' 1.5 ') as a, to_number('.5') as b, to_number('+1') as c, to_number('1e3') as d, to_number(7) as e,
+      to_number('abc') as f, to_number('') as g, to_number('0x1F') as h, to_number('5%') as i`))
+      .toEqual({ a: 1.5, b: 0.5, c: 1, d: 1000, e: 7, f: null, g: null, h: null, i: null });
+  });
+});
+
 describe('round', () => {
   it('rounds half away from zero on the scaled value, as the digits read', async () => {
     expect(await row('select round(13.975, 2) as a, round(14.85, 1) as b, round(2.5) as c, round(-2.5) as d, round(123.456, -1) as e, round(1.005, 2) as f, round(7, 2) as g'))
@@ -147,9 +155,11 @@ describe('aggregates', () => {
   };
   it('population deviation, least-squares slope, and the argument at the least or greatest value, skipping incomplete rows', async () => {
     const pairs = { rows: [{ y: 1, x: 1 }, { y: 2, x: 2 }, { y: 4, x: 3 }, { y: null, x: 5 }, { y: 7, x: null }, { y: 9, x: 3 }], columns: [{ name: 'y', type: 'number' as const }, { name: 'x', type: 'number' as const }] };
-    const [r] = await run('select stddev_pop(x) as p, regr_slope(y, x) as slope, arg_min(y, x) as ymin, arg_max(y, x) as ymax from p', { p: pairs });
+    const [r] = await run('select stddev_pop(x) as p, regr_slope(y, x) as slope, regr_intercept(y, x) as icpt, corr(y, x) as r, arg_min(y, x) as ymin, arg_max(y, x) as ymax from p', { p: pairs });
     expect(r!.p).toBeCloseTo(1.32665, 4);
     expect(r!.slope).toBeCloseTo(2.909091, 5);
+    expect(r!.icpt).toBeCloseTo(-2.545455, 5);
+    expect(r!.r).toBeCloseTo(0.782586, 5);
     expect(r).toMatchObject({ ymin: 1, ymax: 4 });
     expect(await row('select stddev_pop(x) as one from (select 5 as x)')).toEqual({ one: 0 });
   });

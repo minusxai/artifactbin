@@ -216,6 +216,16 @@ function deviation(values: number[], sample: boolean): number | null {
   const mean = values.reduce((a, b) => a + b, 0) / values.length;
   return Math.sqrt(values.reduce((a, b) => a + (b - mean) ** 2, 0) / (values.length - (sample ? 1 : 0)));
 }
+/** Least squares of y (argument 1) on x (argument 2) over the complete pairs; null with no spread in x. */
+function regression(rows: SqlValue[][]): { slope: number; intercept: number; r: number | null } | null {
+  const pairs = complete(rows, 2);
+  if (!pairs.length) return null;
+  const my = pairs.reduce((a, [y]) => a + y!, 0) / pairs.length, mx = pairs.reduce((a, [, x]) => a + x!, 0) / pairs.length;
+  const sxx = pairs.reduce((a, [, x]) => a + (x! - mx) ** 2, 0), syy = pairs.reduce((a, [y]) => a + (y! - my) ** 2, 0);
+  const sxy = pairs.reduce((a, [y, x]) => a + (x! - mx) * (y! - my), 0);
+  if (sxx === 0) return null;
+  return { slope: sxy / sxx, intercept: my - (sxy / sxx) * mx, r: syy === 0 ? null : sxy / Math.sqrt(sxx * syy) };
+}
 /** SQLite's order for two non-null values: numbers before text, numbers by value, text by code unit. */
 function compare(a: SqlValue, b: SqlValue): number {
   const x = numeric(a), y = numeric(b), xn = typeof a !== 'string', yn = typeof b !== 'string';
@@ -234,6 +244,8 @@ const whole = (fn: string, value: SqlValue): number => {
   if (!Number.isInteger(n)) fail(fn, 'expected whole numbers');
   return n;
 };
+/** A decimal number as DuckDB's cast to a double reads one: sign, digits with an optional point, exponent. */
+const NUMBER_TEXT = /^[+-]?(?:\d+\.?\d*|\.\d+)(?:e[+-]?\d+)?$/i;
 /** A date written as DuckDB's cast reads one: year, month, day with - or /, optionally a time after it. */
 const DATE_WRITTEN = /^\s*(\d{1,4})([-/])(\d{1,2})\2(\d{1,2})(?:[T ].*)?\s*$/s;
 function quantile(sorted: number[], q: number): number | null {
@@ -369,16 +381,9 @@ const IMPLEMENTATIONS: Record<string, Scalar | Aggregate> = {
   },
   stddev: { kind: 'aggregate', final: (rows) => deviation(column(rows), true) },
   stddev_pop: { kind: 'aggregate', final: (rows) => deviation(column(rows), false) },
-  regr_slope: {
-    kind: 'aggregate',
-    final: (rows) => {
-      const pairs = complete(rows, 2);
-      if (!pairs.length) return null;
-      const my = pairs.reduce((a, [y]) => a + y!, 0) / pairs.length, mx = pairs.reduce((a, [, x]) => a + x!, 0) / pairs.length;
-      const sxx = pairs.reduce((a, [, x]) => a + (x! - mx) ** 2, 0);
-      return sxx === 0 ? null : pairs.reduce((a, [y, x]) => a + (x! - mx) * (y! - my), 0) / sxx;
-    },
-  },
+  regr_slope: { kind: 'aggregate', final: (rows) => regression(rows)?.slope ?? null },
+  regr_intercept: { kind: 'aggregate', final: (rows) => regression(rows)?.intercept ?? null },
+  corr: { kind: 'aggregate', final: (rows) => regression(rows)?.r ?? null },
   arg_min: { kind: 'aggregate', final: argExtreme(1) },
   arg_max: { kind: 'aggregate', final: argExtreme(-1) },
   round: {
@@ -392,6 +397,14 @@ const IMPLEMENTATIONS: Record<string, Scalar | Aggregate> = {
       const scale = 10 ** Math.abs(digits);
       const r = Math.sign(n) * (digits >= 0 ? Math.round(Math.abs(n) * scale) / scale : Math.round(Math.abs(n) / scale) * scale);
       return Number.isFinite(r) ? r : n;
+    },
+  },
+  to_number: {
+    kind: 'scalar',
+    call: ([x]) => {
+      if (typeof x === 'number' || typeof x === 'bigint') return Number(x);
+      const text = String(x).trim();
+      return NUMBER_TEXT.test(text) ? Number(text) : null;
     },
   },
   string_split: { kind: 'scalar', call: ([text, sep]) => JSON.stringify(parts(String(text), String(sep))) },

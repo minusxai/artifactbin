@@ -77,7 +77,7 @@ describe('translateSql rules', () => {
   });
 
   it(':: casts bind to the preceding primary expression', () => {
-    ok('select a::date from t', 'select date(a) from t');
+    ok('select a::date from t', 'select to_date(a) from t');
     ok('select a::timestamp, b::timestamptz from t', "select strftime('%Y-%m-%dT%H:%M:%fZ', a), strftime('%Y-%m-%dT%H:%M:%fZ', b) from t");
     ok('select a::varchar, b::text, c::string from t', 'select cast(a as text), cast(b as text), cast(c as text) from t');
     expect(ok('select a::int, b::bigint, c::integer from t', 'select cast(a as integer), cast(b as integer), cast(c as integer) from t').join(' ')).toMatch(/truncates/);
@@ -86,11 +86,11 @@ describe('translateSql rules', () => {
     ok('select a + b::int from t', 'select a + cast(b as integer) from t');
     ok('select -a::int from t', 'select -cast(a as integer) from t');
     ok('select (a+b)::text from t', 'select cast((a+b) as text) from t');
-    ok('select f(x)::date from t', 'select date(f(x)) from t');
+    ok('select f(x)::date from t', 'select to_date(f(x)) from t');
     ok('select x::int::text from t', 'select cast(cast(x as integer) as text) from t');
-    ok('select t.col::date, "q".x::date from t', 'select date(t.col), date("q".x) from t');
+    ok('select t.col::date, "q".x::date from t', 'select to_date(t.col), to_date("q".x) from t');
     ok('update r set n = $_row.x::int + 1', 'update r set n = cast($_row.x as integer) + 1', MUTATION);
-    ok("select '2026-01-01'::date", "select date('2026-01-01')");
+    ok("select '2026-01-01'::date", "select to_date('2026-01-01')");
     ok('select count(*)::double / 2 from t', 'select cast(count(*) as real) * 1.0 / 2 from t');
     ok('select case when a then 1 else 2 end::text from t', 'select cast(case when a then 1 else 2 end as text) from t');
     ok('select sum(x) over (partition by g)::int from t', 'select cast(sum(x) over (partition by g) as integer) from t');
@@ -100,7 +100,7 @@ describe('translateSql rules', () => {
   });
 
   it('cast(… as T) is rewritten only where SQLite would read the type name differently', () => {
-    ok('select cast(a as date), cast(b as timestamp) from t', "select date(a), strftime('%Y-%m-%dT%H:%M:%fZ', b) from t");
+    ok('select cast(a as date), cast(b as timestamp) from t', "select to_date(a), strftime('%Y-%m-%dT%H:%M:%fZ', b) from t");
     ok('select cast(a as string), cast(b as uuid) from t', 'select cast(a as text), cast(b as text) from t');
     ok('select cast(a as decimal(8, 1)) from t', 'select round(cast(a as real), 1) from t');
     ok('select cast(a as varchar), cast(b as bigint), cast(c as double), cast(d as text) from t', 'select cast(a as varchar), cast(b as bigint), cast(c as double), cast(d as text) from t');
@@ -272,6 +272,96 @@ describe('translateSql rules', () => {
 
   it('Postgres SQL is left alone apart from $_me', () => {
     ok('select a::int, now() from public.t where owner = $_me', 'select a::int, now() from public.t where owner = $_me.id', { statement: 'query', dialect: 'postgres' });
+  });
+});
+
+describe('translateSql: DuckDB functions with a SQLite form', () => {
+  it('greatest/least skip nulls: max/min over each argument coalesced with the rest', () => {
+    ok('select greatest(a, b), least(a, b, c), greatest(a) from t',
+      'select max(coalesce(a, b), coalesce(b, a)), min(coalesce(a, b, c), coalesce(b, a, c), coalesce(c, a, b)), (a) from t');
+  });
+  it('contains → instr on text, list_contains on a list', () => {
+    ok("select contains(lower(title), 'x') from t", "select (instr(lower(title), 'x') > 0) from t");
+    ok("select contains(string_split(tags, ','), 'x') from t", "select list_contains(string_split(tags, ','), 'x') from t");
+  });
+  it('left/right with a literal length → substr; a computed or negative one is manual', () => {
+    ok('select left(m, 4), right(m, 2), right(m, 0) from t', 'select substr(m, 1, 4), substr(m, -2), substr(m, 1, 0) from t');
+    ok('select a from t left join u on true', 'select a from t left join u on true');
+    manual('select right(m, n) from t', /right\(\) with a computed or negative length/, 'right(m, n)');
+    manual('select left(m, -1) from t', /left\(\) with a computed or negative length/);
+  });
+  it('len of a list counts its items; of anything else it is manual, since a list and text look alike', () => {
+    ok("select len(string_split(s, ',')) from t", "select json_array_length(string_split(s, ',')) from t");
+    manual('select len(people) from t', /len\(\) of a value that may be a list/, 'len(people)');
+  });
+  it('unnest in FROM with a column alias → json_each, its column read as value', () => {
+    ok("select l.id, trim(p) as who from l, unnest(string_split(l.s, ',')) as t(p) where trim(p) <> '' and t.p is not null",
+      "select l.id, trim(t.value) as who from l, json_each(string_split(l.s, ',')) as t where trim(t.value) <> '' and t.value is not null");
+    manual("select id, p from l, unnest(string_split(l.s, ',')) as t(p)", /json_each's columns/);
+  });
+  it('bool_or/bool_and → max/min of the truth, stddev_samp → stddev', () => {
+    ok('select bool_or(not ok), bool_and(x > 1), stddev_samp(x) from t', 'select max((not ok) <> 0), min((x > 1) <> 0), stddev(x) from t');
+  });
+  it('isodow numbers Monday 1 … Sunday 7', () => {
+    ok('select extract(isodow from d), 2 * isodow(d), date_part(\'isodow\', d) from t', 'select ((dayofweek(d) + 6) % 7 + 1), 2 * ((dayofweek(d) + 6) % 7 + 1), ((dayofweek(d) + 6) % 7 + 1) from t');
+  });
+  it('SIMILAR TO is a whole-string regular expression match', () => {
+    ok("select x similar to 'a(b|c)%', y not similar to '[0-9]+' from t", "select regexp_matches(x, '^(?:a(b|c)%)$'), (not regexp_matches(y, '^(?:[0-9]+)$')) from t");
+    manual('select x similar to y from t', /SIMILAR TO a computed pattern/);
+  });
+  it('epoch_ms of the current time → milliseconds since the epoch', () => {
+    ok('select epoch_ms(now())', "select cast(round(unixepoch($_now, 'subsec') * 1000) as integer)");
+    manual('select epoch_ms(n) from t', /epoch_ms/);
+  });
+  it('epoch seconds and back, and position(a in b)', () => {
+    ok('select epoch(now()), epoch(at), to_timestamp(ts) from t', "select unixepoch($_now, 'subsec'), unixepoch(at, 'subsec'), strftime('%Y-%m-%dT%H:%M:%fZ', ts, 'unixepoch') from t");
+    ok("select position(',' in name) from t", "select instr(name, ',') from t");
+  });
+  it('try_cast to a number is null where the text is not one', () => {
+    ok('select try_cast(v as double), try_cast(v as decimal(6, 2)) from t', 'select to_number(v), round(to_number(v), 2) from t');
+    manual('select try_cast(v as integer) from t', /try_cast/, 'try_cast(v as integer)');
+  });
+  it('a cast to date reads the day as DuckDB did, and fails where DuckDB failed', () => {
+    ok('select cast(a as date), b::date from t', 'select to_date(a), to_date(b) from t');
+  });
+});
+
+describe('translateSql: date arithmetic', () => {
+  it('date ± n adds days, and date − date counts them, where the operand is a date by construction', () => {
+    ok('select cast(d as date) + 1, 2 + d::date, date_trunc(\'month\', d) - n from t',
+      "select date_add(to_date(d), 1, 'day'), date_add(to_date(d), 2, 'day'), date_add(date_trunc('month', d), -(n), 'day') from t");
+    ok("select date '2026-03-01' - date '2026-01-01' as n", "select date_diff('day', '2026-01-01', '2026-03-01') as n");
+  });
+  it('follows a date through the aliases the statement gives it, and through min/max and a scalar subquery', () => {
+    ok('with c as (select distinct cast(day as date) as day from e), i as (select day, day - cast(row_number() over (order by day) as integer) as run from c) select max(day) >= (select max(day) from c) - 1 from i',
+      "with c as (select distinct to_date(day) as day from e), i as (select day, date_add(day, -(cast(row_number() over (order by day) as integer)), 'day') as run from c) select max(day) >= date_add((select max(day) from c), -1, 'day') from i");
+  });
+  it('leaves arithmetic on anything not known to be a date', () => {
+    ok('select day - 1, n + 1 from t', 'select day - 1, n + 1 from t');
+    // A name the statement makes a date in one place and a number in another is not known to be either.
+    ok('with a as (select cast(x as date) as k from t), b as (select n as k from u) select k - 1 from a', 'with a as (select to_date(x) as k from t), b as (select n as k from u) select k - 1 from a');
+  });
+});
+
+describe('translateSql: clauses SQLite reads differently', () => {
+  it('QUALIFY filters the select it ends, as a subquery over its named outputs', () => {
+    ok('select g, sum(n) as s from t group by g qualify row_number() over (order by sum(n) desc) = 1 order by g',
+      'select g, s from (select g, sum(n) as s, row_number() over (order by sum(n) desc) = 1 as qualified from t group by g) as qualifying where qualified order by g');
+    manual('select * from t qualify row_number() over (partition by g) = 1', /QUALIFY over a select whose outputs are not all named/, 'qualify');
+  });
+  it('an ORDER BY expression on a compound select orders the compound as a subquery', () => {
+    ok("select a from t union all select b from u order by (case a when 1 then 0 else 1 end), a limit 5",
+      "select * from (select a from t union all select b from u) order by (case a when 1 then 0 else 1 end), a limit 5");
+    ok('with w as (select 1 as a) select a from w union select 2 order by a desc', 'with w as (select 1 as a) select a from w union select 2 order by a desc');
+    ok('with w as (select 1 as a) select a from w union select 2 order by -a', 'with w as (select 1 as a) select * from (select a from w union select 2) order by -a');
+  });
+  it('ORDER BY a name that only a qualified output carries names that output', () => {
+    ok('select a.mode, b.n - a.n as d from t a join t b on a.mode = b.mode order by mode', 'select a.mode as mode, b.n - a.n as d from t a join t b on a.mode = b.mode order by mode');
+  });
+  it('* EXCLUDE lists the remaining columns of the one table it reads', () => {
+    const context: TranslateContext = { statement: 'query', columns: (table) => (table === 'data.rows' ? ['date', 'amount', 'note'] : null) };
+    ok('select date(date) as date, * exclude (date) from data.rows order by date', 'select date(date) as date, "amount", "note" from data.rows order by date', context);
+    manual('select * exclude (date) from other.rows', /EXCLUDE/, undefined, context);
   });
 });
 
