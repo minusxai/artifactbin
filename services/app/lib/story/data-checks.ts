@@ -17,9 +17,8 @@ import { placeholderSession, viewerMutationPolicy } from '@/lib/datasets/policy/
 import { datasetSqlParams } from '@/lib/datasets/sql';
 import { importedTables } from '@/lib/datasets/catalog';
 import { refName, isEmptyDataflow } from './dataflow';
-import type { DatasetColumn } from './dataset-shape';
 import { dataflowOf, splitHelmet } from './helmet';
-import { refId, validateRecipeUse, validateRefs, validateVizAgainstColumns, writeRefusal, type RefLoader, type ResolvedRef } from './refs';
+import { refId, validateRecipeUse, validateRefs, validateVizAgainstColumns, writeRefusal, type BoundColumn, type RefLoader, type ResolvedRef } from './refs';
 import { compileDataflow, prepareCompile, type ImportSource, type SchemaLoader } from './compile-dataflow';
 import type { CompiledDataflow } from './compiled-dataflow';
 import { bindParams, bindTypes, importRef, mutationParams, mutationReads, valueTypes } from './compiled-flow';
@@ -61,7 +60,8 @@ export async function checkDocumentData(source: string, load: RefLoader): Promis
   // Who may write the dataset at all is a reference's question; what the policy admits is the statement's.
   if (writes.refs.length) return { ok: false, error: 'invalid_refs', details: writes.refs };
   if (writes.sql.length) return { ok: false, error: 'invalid_sql', details: writes.sql };
-  const columns = Object.fromEntries(compiled.compiled.queries.map((q) => [q.name, q.columns.map((c) => ({ name: c.name, type: c.type ?? 'string' }) as DatasetColumn)]));
+  // A type the compiler could not tell stays unknown: the reader's rows decide how that column draws.
+  const columns = Object.fromEntries(compiled.compiled.queries.map((q) => [q.name, q.columns.map((c): BoundColumn => ({ name: c.name, type: c.type }))]));
   const bindings = await validateQueryBindings(split.body, columns, load);
   if (bindings.length) return { ok: false, error: 'invalid_refs', details: bindings };
   return { ok: true, refs: checked.refs, compiled: compiled.compiled };
@@ -112,7 +112,7 @@ export function vegaLiteStructureError(spec: Record<string, unknown>): string | 
 }
 
 /** Every `<Question data="$q" viz>` checked against q's result columns (encodings, or recipe slots). */
-async function validateQueryBindings(body: JsxNode[], columns: Record<string, DatasetColumn[]>, load: RefLoader): Promise<string[]> {
+async function validateQueryBindings(body: JsxNode[], columns: Record<string, BoundColumn[]>, load: RefLoader): Promise<string[]> {
   const out: string[] = [];
   const questions: Array<{ name: string; viz: Record<string, unknown> }> = [];
   const visit = (nodes: JsxNode[]) => {
