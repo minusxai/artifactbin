@@ -31,7 +31,6 @@ const RENAMED: Record<string, string> = {
   today: 'today is date(to_timezone($_now, $_tz))',
   strptime: 'write date_parse(text, pattern)',
   to_char: 'write date_format(date, pattern)',
-  to_date: 'write date(x), or date_parse(text, pattern)',
   datediff: "write date_diff('day', start, end)",
   date_sub: "write date_add(d, -n, 'day')",
   extract: "write date_part('year', d)",
@@ -53,7 +52,6 @@ const RENAMED: Record<string, string> = {
   right: 'write substr(text, -n)',
   greatest: 'write max(a, b): with two or more arguments it is the scalar maximum',
   least: 'write min(a, b): with two or more arguments it is the scalar minimum',
-  split_part: 'write substr(text, 1, instr(text, sep) - 1) for the first part',
 };
 
 /** Every function name a document statement may call. */
@@ -88,7 +86,7 @@ export function withSqliteHint(message: string, sql: string): string {
     const name = (fn[1] ?? fn[2]!).toLowerCase();
     if (RENAMED[name]) return `${message} — ${RENAMED[name]}`;
     const near = CALLABLE.filter((n) => n !== name && editDistance(n, name) <= 2).slice(0, 3);
-    return near.length ? `${message} (did you mean ${near.join(', ')}?)` : `${message} — the functions are SQLite's own and the library in afbin help markup-sql`;
+    return near.length ? `${message} (did you mean ${near.join(', ')}?)` : `${message} — every function a statement may call is in afbin help markup-sql-functions`;
   }
   if (/syntax error|unrecognized token/.test(message)) {
     const hint = SYNTAX.find(([pattern]) => pattern.test(sql))?.[1];

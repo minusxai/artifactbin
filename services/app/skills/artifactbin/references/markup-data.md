@@ -53,7 +53,8 @@ SQLite rules and every function: [SQL](markup-sql.md). Editable cells: [editing]
   `$name` is a page value, bound, never spliced. A query reads imports, table
   values and other queries by name, in any order (cycles are refused). Checked
   at publish against the real columns; a mistake names the column and what to
-  write instead. Results stop at 10,000 rows and 5 s. Dates are ISO text; the
+  write instead.<!--bundle:skip--> A result shows its first [[ displayRows ]] rows and pages the rest;
+  a query stops at 10,000 rows and 5 s.<!--/bundle:skip--> Dates are ISO text; the
   library adds `date_add`, `date_part`, `date_format`, `date_series`,
   `to_timezone`, `dayname` and more ([SQL](markup-sql.md)).
 - `<Query name source="ref:<id>">` — ONLY for a connected Postgres dataset:
