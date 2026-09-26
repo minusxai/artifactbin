@@ -220,6 +220,8 @@ interface SelectControlProps {
   /** Show the null choice (a null-default `<Value>` must be reachable). */
   nullable?: boolean;
   disabled?: boolean;
+  /** Why the control is unavailable, as its accessible description (aria-description on the control itself). */
+  description?: string;
   onChange?: (value: string | null) => void;
   bound?: string;
   rest?: Record<string, unknown>;
@@ -234,7 +236,7 @@ const parseMultiValue = (raw: string | null | undefined): string[] | null => {
   return null;
 };
 
-export function SelectControl({ appearance = 'field', children, multiple = false, allowCreate = false, valueFormat, draftValue, onDraftChange, onOpenChange, onCommit, onCancel, label, placeholder = 'All', className, options, value, nullable, disabled, onChange, bound, rest }: SelectControlProps) {
+export function SelectControl({ appearance = 'field', children, multiple = false, allowCreate = false, valueFormat, draftValue, onDraftChange, onOpenChange, onCommit, onCancel, label, placeholder = 'All', className, options, value, nullable, disabled, description, onChange, bound, rest }: SelectControlProps) {
   void valueFormat;
   const [open, setOpen] = useState(false);
   const openRef = useRef(false);
@@ -374,6 +376,7 @@ export function SelectControl({ appearance = 'field', children, multiple = false
           aria-label={label}
           aria-haspopup="listbox"
           aria-expanded={open}
+          aria-description={description}
           disabled={inert}
           onClick={() => { if (open) multiple ? commitDraft() : finishClose(); else openList(); }}
           onKeyDown={onTriggerKeyDown}
@@ -462,12 +465,14 @@ interface SliderControlProps {
   suffix?: string;
   value: number | null;
   disabled?: boolean;
+  /** Why the control is unavailable, as its accessible description (aria-description on the control itself). */
+  description?: string;
   onChange?: (raw: string) => void;
   bound?: string;
   rest?: Record<string, unknown>;
 }
 
-export function SliderControl({ label, className, min, max, step, format, prefix, suffix, value, disabled, onChange, bound, rest }: SliderControlProps) {
+export function SliderControl({ label, className, min, max, step, format, prefix, suffix, value, disabled, description, onChange, bound, rest }: SliderControlProps) {
   const inert = disabled || !onChange;
   let readout = '—';
   if (value !== null) {
@@ -480,6 +485,7 @@ export function SliderControl({ label, className, min, max, step, format, prefix
       <input
         type="range"
         aria-label={label}
+        aria-description={description}
         min={min}
         max={max}
         step={step}
@@ -506,6 +512,8 @@ interface DateControlProps {
   /** Offer the Clear choice (a null-default `<Value>` must be reachable). */
   nullable?: boolean;
   disabled?: boolean;
+  /** Why the control is unavailable, as its accessible description (aria-description on the control itself). */
+  description?: string;
   onChange?: (raw: string) => void;
   bound?: string;
   rest?: Record<string, unknown>;
@@ -539,7 +547,7 @@ function monthGrid(y: number, m: number): { iso: string; day: number; inMonth: b
   return cells;
 }
 
-export function DateControl({ appearance = 'field', label, className, min, max, value, nullable, disabled, onChange, bound, rest }: DateControlProps) {
+export function DateControl({ appearance = 'field', label, className, min, max, value, nullable, disabled, description, onChange, bound, rest }: DateControlProps) {
   const [open, setOpen] = useState(false);
   // The month on display; (re)seeded from the value each time the calendar opens.
   const [view, setView] = useState<{ y: number; m: number } | null>(null);
@@ -586,6 +594,7 @@ export function DateControl({ appearance = 'field', label, className, min, max, 
           aria-label={label}
           aria-haspopup="dialog"
           aria-expanded={open}
+          aria-description={description}
           disabled={inert}
           onClick={openCalendar}
           onKeyDown={(e) => { if (e.key === 'Escape') setOpen(false); }}
@@ -663,12 +672,14 @@ interface SegmentedControlProps {
   value: string | null;
   nullable?: boolean;
   disabled?: boolean;
+  /** Why the control is unavailable, as its accessible description (aria-description on the control itself). */
+  description?: string;
   onChange?: (value: string | null) => void;
   bound?: string;
   rest?: Record<string, unknown>;
 }
 
-export function SegmentedControl({ label, placeholder = 'All', className, options, value, nullable, disabled, onChange, bound, rest }: SegmentedControlProps) {
+export function SegmentedControl({ label, placeholder = 'All', className, options, value, nullable, disabled, description, onChange, bound, rest }: SegmentedControlProps) {
   const inert = disabled || !onChange;
   const entries: { value: string | null; label: string }[] = [
     ...(nullable ? [{ value: null, label: placeholder }] : []),
@@ -676,7 +687,7 @@ export function SegmentedControl({ label, placeholder = 'All', className, option
   ];
   return (
     <ControlShell label={label} bound={bound} className={className} rest={rest}>
-      <div role="group" aria-label={label} className="inline-flex w-fit items-center gap-0.5 rounded-md border border-input bg-muted/40 p-0.5 shadow-xs">
+      <div role="group" aria-label={label} aria-description={description} className="inline-flex w-fit items-center gap-0.5 rounded-md border border-input bg-muted/40 p-0.5 shadow-xs">
         {entries.map((entry) => {
           const on = entry.value === value;
           return (
@@ -707,12 +718,14 @@ interface SwitchControlProps {
   className?: string;
   checked: boolean;
   disabled?: boolean;
+  /** Why the control is unavailable, as its accessible description (aria-description on the control itself). */
+  description?: string;
   onChange?: (next: boolean) => void;
   bound?: string;
   rest?: Record<string, unknown>;
 }
 
-export function SwitchControl({ label, className, checked, disabled, onChange, bound, rest }: SwitchControlProps) {
+export function SwitchControl({ label, className, checked, disabled, description, onChange, bound, rest }: SwitchControlProps) {
   const inert = disabled || !onChange;
   return (
     <ControlShell label={label} bound={bound} className={className} rest={rest}>
@@ -720,6 +733,7 @@ export function SwitchControl({ label, className, checked, disabled, onChange, b
         type="button"
         role="switch"
         aria-label={label}
+        aria-description={description}
         aria-checked={checked}
         disabled={inert}
         onClick={onChange ? () => onChange(!checked) : undefined}
@@ -777,12 +791,14 @@ interface TextControlProps {
   /** Resolved current value; null (an unset Value) is an EMPTY box, never "null". */
   value: string | null;
   disabled?: boolean;
+  /** Why the control is unavailable, as its accessible description (aria-description on the control itself). */
+  description?: string;
   onChange?: (raw: string) => void;
   bound?: string;
   rest?: Record<string, unknown>;
 }
 
-export function TextControl({ label, ariaLabel, className, type, placeholder, min, max, step, required, autoFocus, multiline, rows, value, disabled, onChange, bound, rest }: TextControlProps) {
+export function TextControl({ label, ariaLabel, className, type, placeholder, min, max, step, required, autoFocus, multiline, rows, value, disabled, description, onChange, bound, rest }: TextControlProps) {
   const inert = disabled || !onChange;
   /*
    * A real `<input>`/`<textarea>`, deliberately — not a div wearing a field's
@@ -792,6 +808,7 @@ export function TextControl({ label, ariaLabel, className, type, placeholder, mi
    */
   const shared = {
     'aria-label': ariaLabel ?? label,
+    'aria-description': description,
     placeholder,
     required: required || undefined,
     autoFocus: autoFocus || undefined,

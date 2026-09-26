@@ -1,6 +1,6 @@
 import { runtimeId } from './runtime-id';
 import { installMx } from './mx';
-import { useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useLayoutEffect, useMemo, useRef, useState, type ComponentType, type ReactNode } from 'react';
 import type { StoryDocumentUpdate, StoryIslandData } from './contract';
 import type { QueryTransport } from './store';
 import { createDataflowStore } from './store';
@@ -46,6 +46,17 @@ export interface InlineStoryRuntimeProps {
   authorScript?: string | null;
   prepared?: PreparedStoryRuntime;
   onController(controller: InlineStoryController | null): void;
+  /**
+   * One reason that refuses every write on this render (the store's
+   * `writesUnavailable`), so a write button says why instead of waiting on an
+   * access check nobody will answer. Read when a document lifetime starts.
+   * Absent for every served document; an offline file passes its own.
+   */
+  writesUnavailable?: string | null;
+  /** Values whose controls are disabled on this render, with the reason (the store's `frozenValues`). Read when a document lifetime starts. */
+  frozenValues?: Readonly<Record<string, string>> | null;
+  /** Registry overrides passed to StoryRuntimeApp (its `components`); keep the object stable. */
+  components?: Readonly<Record<string, ComponentType<Record<string, unknown>>>>;
 }
 
 /** Top-level artifact body; only authored Iframe/Helmet code creates sandboxed child realms. */
@@ -63,7 +74,8 @@ export function InlineStoryRuntime(props: InlineStoryRuntimeProps): ReactNode {
   const [styles, setStyles] = useState<{baseCss:string;compiledCss:string|null;authorCss:string|null;theme:string|null}>({baseCss:props.prepared?.baseCss ?? '', compiledCss:props.prepared?.compiledCss ?? null, authorCss:props.prepared?.authorCss ?? null, theme:props.prepared?.theme ?? null});
   const createLifetime = () => {
     const transport = latest.current.transportFactory?.() ?? latest.current.transport;
-    return { transport, store:createDataflowStore(latest.current.data.dataflow ?? {flow:EMPTY_DATAFLOW}, {transport}) };
+    const { writesUnavailable, frozenValues } = latest.current;
+    return { transport, store:createDataflowStore(latest.current.data.dataflow ?? {flow:EMPTY_DATAFLOW}, {transport, ...(writesUnavailable ? {writesUnavailable} : {}), ...(frozenValues ? {frozenValues} : {})}) };
   };
   const [lifetime, setLifetime] = useState(createLifetime);
   const { store } = lifetime;
@@ -203,6 +215,6 @@ export function InlineStoryRuntime(props: InlineStoryRuntimeProps): ReactNode {
   const nodes = useMemo(() => isolateStoryNodes(current.nodes, combinedCss), [current.nodes,combinedCss]);
   return <><TrustedUi overlay layer="selection"><SelectionPortal ready={portalReady} /></TrustedUi><div ref={root} data-mx-inline-story="" data-mx-story-root="" data-theme={styles.theme ?? undefined} className={current.colorMode}>
     <style>{css}</style>
-    <ArtifactDialogScope><StoryRuntimeApp {...current} nodes={nodes} store={store} importAsset={lifetime.transport?.importAsset} editDecorate={editRef.current?.decorate} editChildren={editRef.current?.decorateChildren} onSlideRename={editRef.current ? (path,title) => editRef.current?.renameSlide(path,title) : undefined} /></ArtifactDialogScope>
+    <ArtifactDialogScope><StoryRuntimeApp {...current} nodes={nodes} store={store} importAsset={lifetime.transport?.importAsset} editDecorate={editRef.current?.decorate} editChildren={editRef.current?.decorateChildren} onSlideRename={editRef.current ? (path,title) => editRef.current?.renameSlide(path,title) : undefined} components={props.components} /></ArtifactDialogScope>
   </div></>;
 }
