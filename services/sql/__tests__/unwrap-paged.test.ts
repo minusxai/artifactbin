@@ -11,7 +11,7 @@
  * regression the whole rewrite exists for.
  */
 import { describe, expect, it } from 'vitest';
-import { unwrapPaged } from '../src/engine';
+import { unwrapPaged } from '../src/paging';
 
 describe('unwrapPaged', () => {
   it('returns the author SQL from the two forms pagedQuery builds', () => {

@@ -1,0 +1,27 @@
+/**
+ * LOADING SQLITE. The official `@sqlite.org/sqlite-wasm` build, the same wasm
+ * on the server and in the browser. In Node the package reads its own
+ * `sqlite3.wasm`; a browser (or the offline file, which cannot fetch) hands
+ * the bytes in. One module per process serves every database: a database is
+ * cheap, the module is not (see CONTRACT.md for measured costs).
+ */
+import sqlite3InitModule from '@sqlite.org/sqlite-wasm';
+
+export type Sqlite3 = Awaited<ReturnType<typeof sqlite3InitModule>>;
+
+// The package types its initializer without the Emscripten module argument it forwards.
+const init = sqlite3InitModule as unknown as (module?: { wasmBinary?: ArrayBuffer | Uint8Array }) => Promise<Sqlite3>;
+let fromPackage: Promise<Sqlite3> | null = null;
+
+async function start(wasmBinary?: ArrayBuffer | Uint8Array): Promise<Sqlite3> {
+  const sqlite3 = await init(wasmBinary ? { wasmBinary } : undefined);
+  // Failures reach the caller as errors; the library's own console warnings would only duplicate them.
+  sqlite3.config.warn = () => {};
+  return sqlite3;
+}
+
+/** The module from the package's own wasm file, loaded once; or from supplied bytes. */
+export function loadSqliteModule(wasm?: ArrayBuffer | Uint8Array): Promise<Sqlite3> {
+  if (wasm) return start(wasm);
+  return (fromPackage ??= start().catch((error) => { fromPackage = null; throw error; }));
+}
