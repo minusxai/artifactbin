@@ -13,7 +13,8 @@ Every method is one `POST` with a JSON body; a `Set` anywhere in a body is sent 
 
 Rules the service enforces, whatever the caller says: one statement per query, admitted by type (reads on `/run`,
 one write on `/mutate`), params bound never spliced, a row cap and a per-query interrupt (`limit`/`timeoutMs`
-may lower the caps, never raise them), a 64 MiB body. A document's dependent queries MUST travel in one `run`.
+may lower the caps, never raise them), a 64 MiB body. A document's dependent queries MUST travel in one `run`; inside it
+each result is loaded WHOLE for the queries after it, and the row cap bounds only what is returned (`totalRows` counts the rest).
 No credentials, no storage, no request identity, no network from inside the engine. Private network only.
 
 Paged reads retain `totalRows`, the count before the page window. `truncated` is true only when

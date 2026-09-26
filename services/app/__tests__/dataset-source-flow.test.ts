@@ -1,4 +1,5 @@
 import {expect,it} from 'vitest';
+import {DISPLAY_ROWS} from '@artifactbin/contracts';
 import {request,useAppHarness} from './harness';
 import {mintToken} from '@/lib/tokens';
 import {POST as create} from '@/app/api/artifacts/route';
@@ -8,7 +9,6 @@ import {GET as getArtifact} from '@/app/api/artifacts/[id]/route';
 import {POST as mutateRows} from '@/app/api/artifacts/[id]/mutate/route';
 import {POST as mutate} from '@/app/a/[id]/mutate/route';
 import {convertDocument} from '@/lib/migrate/sqlite/convert';
-import {MAX_QUERY_ROWS} from '@/lib/config';
 import {runDocumentDataflow} from '@/lib/artifacts';
 useAppHarness();
 const ctx=(id:string)=>({params:Promise.resolve({id})});
@@ -51,9 +51,9 @@ it('aggregates complete stored source inputs beyond both source page limits whil
  expect(response.status,await response.clone().text()).toBe(200);const state=await response.json();
  expect(state.errors).toEqual({});
  expect(state.tables.stats.rows).toEqual([{n:10005,middle:5003,total:50055015}]);
- // Displayed rows stop at the engine's row cap; the aggregate above read every stored row.
- expect(state.tables.upstream.rows).toHaveLength(MAX_QUERY_ROWS);
- expect(state.tables.upstream.truncated).toBe(true);
+ // What travels is the display window, with the true count; the aggregate above read every stored row.
+ expect(state.tables.upstream.rows).toHaveLength(DISPLAY_ROWS);
+ expect(state.tables.upstream).toMatchObject({truncated:true,totalRows:10005});
  expect(state.tables.tail.rows).toEqual([{total:50015}]);
 });
 

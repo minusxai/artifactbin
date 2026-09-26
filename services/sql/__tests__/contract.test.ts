@@ -32,13 +32,13 @@ const input = {
 };
 
 describe.each(SHAPES)('%s', (_name, _engine, svc) => {
-  it('runs a dependency chain in ONE request, with the row cap and the true count travelling', async () => {
+  it('runs a dependency chain in ONE request: what travels is the window, what a downstream query reads is the whole result', async () => {
     const r = await svc.run(input);
     if (isQueryFailure(r.q) || isQueryFailure(r.q2)) throw new Error(JSON.stringify(r));
     expect(r.q.rows).toHaveLength(3);
     expect(r.q.truncated).toBe(true);
     expect(r.q.totalRows).toBe(4);
-    expect(r.q2.rows[0]).toEqual({ n: 3 });
+    expect(r.q2.rows[0]).toEqual({ n: 4 });
   });
   it('refuses a write on the read path, as a per-query failure', async () => {
     const r = await svc.run({ ...input, queries: [{ name: 'x', sql: 'drop table t' }] });

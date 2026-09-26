@@ -3,6 +3,7 @@
  * the island carries. Ordering, overrides, partial re-runs, and failure shape.
  */
 import { describe, expect, it } from 'vitest';
+import { DISPLAY_ROWS } from '@artifactbin/contracts';
 import { runDataflow } from '@/lib/sql/run-dataflow';
 import { EMPTY_COMPILED_DATAFLOW } from '@/lib/story/compiled-dataflow';
 import { compiledOf } from '@/test/helpers/compiled';
@@ -26,8 +27,7 @@ const FLOW = await compiledOf(
 );
 
 describe('runDataflow', () => {
-  // An import is the whole stored table: a query that reads it aggregates every row, past the display cap.
-  // (A query reading another QUERY reads that query's capped result — the engine's contract.)
+  // An import is the whole stored table: a query that reads it aggregates every row, past the display window.
   it('uses complete local source inputs for joins and aggregates, including empty and null rows', async () => {
     const flow=await compiledOf('<Import name="left_rows_data" src="ref:abc123" /><Query name="left_rows">{`select * from left_rows_data.rows`}</Query><Import name="right_rows_data" src="ref:def456" /><Query name="right_rows">{`select * from right_rows_data.rows`}</Query><Query name="stats">{`select count(*) as n, median(a.n) as middle from left_rows_data.rows a join right_rows_data.rows b on true`}</Query>',{abc123:N,def456:N});
     const columns=N;
@@ -35,8 +35,19 @@ describe('runDataflow', () => {
       const state=await runDataflow(flow,{left_rows_data:{rows:{rows,columns}},right_rows_data:{rows:{rows:[{n:1}],columns}}},{only:['stats','left_rows']});
       expect(state.errors).toEqual({});
       expect(state.tables.stats!.rows).toEqual([{n:rows.length,middle:rows.length===10005?5003:null}]);
-      expect(state.tables.left_rows!.rows.length).toBe(Math.min(rows.length,10000));
+      expect(state.tables.left_rows!.rows.length).toBe(Math.min(rows.length,DISPLAY_ROWS));
     }
+  });
+
+  // What travels per query is the display window, with the true count; a query reading another reads it WHOLE.
+  it('ships the display window with the total, while a downstream query reads the whole upstream result', async () => {
+    const flow = await compiledOf('<Import name="d" src="ref:abc123" /><Query name="all_rows">{`select n from d.rows order by n`}</Query><Query name="counted">{`select count(*) as n, max(n) as top from all_rows`}</Query>', { abc123: N });
+    const rows = Array.from({ length: 2500 }, (_, n) => ({ n: n + 1 }));
+    const state = await runDataflow(flow, { d: { rows: { rows, columns: N } } });
+    expect(state.errors).toEqual({});
+    expect(state.tables.all_rows).toMatchObject({ truncated: true, totalRows: 2500 });
+    expect(state.tables.all_rows!.rows).toHaveLength(DISPLAY_ROWS);
+    expect(state.tables.counted!.rows).toEqual([{ n: 2500, top: 2500 }]);
   });
 
   it('runs every query in dependency order with defaults bound and returns tables + values', async () => {
