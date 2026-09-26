@@ -98,11 +98,11 @@ your dataset's id in place of `BookRows1` (see Publish it).
   <Value name="note" type="string" url={false} />
 ```
 
-Two page values. `day` is the picked day; it starts null. `note` is a text box,
+Two page values: `day`, the picked day (null at first), and `note`, a text box
 kept out of the link.
 
-Four queries, each a function of the values it reads. `days` lists the next
-weekdays: it reads only built-ins. `picked` reads `$day` and the `days` query
+Four queries, each a function of what it reads. `days` lists the next
+weekdays from built-ins alone. `picked` reads `$day` and the `days` query
 by name (`from days`), so no day picked means the first one. `slots` builds 18
 half-hour slots for the picked day and joins them to the bookings. `mine` lists
 the reader's own bookings from today on.
@@ -111,10 +111,9 @@ the reader's own bookings from today on.
     from grid left join bookings.rows b on b.day = grid.day and b.slot = grid.slot
 ```
 
-Two mutations, each an action. `book` inserts one row, and only when the slot is
-still free, so a second booking of the same slot writes nothing;
-`expectedAffected={1}` turns that into a refusal the button shows. `reset="note"`
-empties the box after a booking commits.
+Two mutations, each an action. `book` inserts a row only while the slot is
+free; `expectedAffected={1}` turns "nothing written" into a refusal the button
+shows, and `reset="note"` empties the box once a booking commits.
 
 ```sql
     where not exists (select 1 from bookings.rows where day = $_row.day and slot = $_row.slot)
@@ -138,15 +137,15 @@ empties the box after a booking commits.
 | `$_me.id` | the reader's account id; null for a guest | the platform |
 | `$_now`, `$_tz` | the instant (UTC) and the reader's zone | the platform |
 
-In `book`, `$note` is the one argument: a plain `$name` is the page value of
-that name. Names starting with `_` are built in and read-only.
+In `book`, `$note` is the one argument: a plain `$name` is that page value.
+Names starting with `_` are built in and read-only.
 
 ### The view half
 
-The body binds names; it holds no SQL. `<For each={$days}>` repeats its children per row, and `{$_row.dow}` shows a
-field. `<Input label="Note for the booking" value="$note" />` writes the page
-value as the reader types. `{($_row.is_open) && (…)}` shows a button only when
-the row says so. The DataTable lists `$mine`, with a Cancel button in a `<Column>`.
+The body binds names and holds no SQL. `<For each={$days}>` repeats per row;
+`{$_row.dow}` shows a field. The `<Input>` writes `$note` as the reader types.
+`{($_row.is_open) && (…)}` shows a button only when the row says so. The
+DataTable lists `$mine`, a Cancel button in a `<Column>`.
 
 ### set= versus run=
 
@@ -154,8 +153,8 @@ the row says so. The DataTable lists `$mine`, with a Cancel button in a `<Column
     <Button set={{"day": "$_row.day"}} variant="outline">{$_row.dow} {$_row.num} {$_row.mon}</Button>
 ```
 
-`set=` changes page values on click: instant, no SQL, nothing saved. Queries
-that read `$day` re-run.
+`set=` changes page values on click: instant, no SQL, nothing saved; queries
+reading `$day` re-run.
 
 ```jsx
     {($_row.is_open) && (<Button run="$book">{$_row.slot}</Button>)}
@@ -167,13 +166,13 @@ because `book` binds `$_me.id`.
 
 ### Where the queries run
 
-You do not choose. A query runs in the reader's browser when the data it reads
-may be held there, otherwise on the server. Both run the same SQLite, the same
-functions and the same `$_now`, so the rows are the same.
+You do not choose: in the reader's browser when the reader may hold the data it
+reads, otherwise on the server, on the same SQLite and `$_now`. The rows are
+the same.
 
 ## Publish it
 
-The dataset declares its columns so `booked_by` is a `user`. Save `bookings.jsx`:
+The dataset declares its columns, so `booked_by` is a `user`. `bookings.jsx`:
 
 ```jsx
 <Dataset kind="stored">
@@ -184,31 +183,29 @@ The dataset declares its columns so `booked_by` is a `user`. Save `bookings.jsx`
 </Dataset>
 ```
 
-and `bookings.yaml`:
-
-```yaml
-type: dataset
-title: Bookings
-source: bookings.jsx
-```
+`bookings.yaml` is `type: dataset`, `title: Bookings`, `source: bookings.jsx`.
+Start `booking.jsx` with a fence, `---`, `visibility: unlisted`, `---`, so the
+people you send the link to can open it. Then:
 
 ```sh
 afbin push bookings.yaml --policy viewers-write --json
 afbin push booking.jsx --json
 ```
 
-Put `--policy viewers-write` on the push that CREATES the dataset: everyone who
-can open the page may then write rows, and the page's own SQL keeps each booking
-its booker's. Put the returned id in `src="ref:…"` before pushing the page.
+`--policy viewers-write` goes on the push that CREATES the dataset: everyone
+who can open the page may then write rows, and the page's SQL keeps each
+booking its booker's. Put the returned id in `src="ref:…"` first.
 
 ## Test it as two people
 
-`book.js` books a slot (give the second person another) and reads it back:
+`book.js` books a slot (give the second person another) and waits for it:
 
 ```js
 const page = await context.newPage();
 await page.goto('/a/<copy-id>');
+await page.waitForFunction(() => Boolean(window.mx));
 await page.getByRole('button', {name: '09:00', exact: true}).click();
+await page.getByRole('button', {name: 'Cancel 09:00', exact: true}).waitFor();
 return await page.evaluate(() => mx.read(['mine'], {wait: true}));
 ```
 
@@ -219,6 +216,6 @@ afbin sessions script new --as <tu1> --input book.js --json
 afbin sessions script new --as <tu2> --input book.js --json
 ```
 
-Both book and cancel on the copy; neither can cancel the other's booking. Then
-open the ORIGINAL `--as guest`: `book` and `cancel` stay disabled.
+Both book and cancel on the copy, never the other's booking. On the ORIGINAL,
+`--as guest`, both actions stay disabled.
 [Live sessions](live-sessions.md).
