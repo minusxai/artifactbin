@@ -14,7 +14,9 @@ import {graphPatchSql,graphReferencesSql} from './document-graph-sql';
 import {newEditId} from './splice';
 import {DATA_SYNTAX_META} from './data-syntax';
 export type DocumentCommitResult={applied:true;row:ArtifactRow}|{applied:false;head:ArtifactRow;refusal?:string;ownerOnly?:boolean;invalidParent?:boolean};
-export async function commitDocumentUpdate(db:Queryable,actor:TokenActor|null,scope:Scope,id:string,update:DocumentUpdate,options:{dryRun?:boolean}={}):Promise<DocumentCommitResult|null>{
+export async function commitDocumentUpdate(db:Queryable,actor:TokenActor|null,scope:Scope,id:string,update:DocumentUpdate,options:{dryRun?:boolean;
+ /** Refuse (as not applied) a markup head not yet in the current data syntax (./data-syntax): the edit door converts it first. */
+ currentSyntax?:boolean}={}):Promise<DocumentCommitResult|null>{
  const initial=[id,scope.val,newEditId(),actor?.userId??null,actor?.tokenId||null];
  const sql=update.replacement?documentReplacementSql(update.replacement,update.patch.baseVersion,initial):graphPatchSql('l.document','l.version',update.patch,initial);
  const param=(value:unknown)=>{sql.params.push(value);return `$${sql.params.length}`;};
@@ -29,7 +31,7 @@ export async function commitDocumentUpdate(db:Queryable,actor:TokenActor|null,sc
  const titleValue=param(title??null),hasTitle=param(title!==undefined),descriptionValue=param(description??null),hasDescription=param(description!==undefined);
  const annotationOps=param(JSON.stringify(annotationSqlInput(update.annotationOps))),aliases=param(JSON.stringify(update.aliases??[]));
  const replacement=param(update.replacement?JSON.stringify(update.replacement):null);
- const patch=param(JSON.stringify(update.patch)),whole=param(update.whole??false),wholeVersion=param(update.patch.baseVersion),policy=param(GRAPH_POLICY);
+ const patch=param(JSON.stringify(update.patch)),whole=param(update.whole??false),wholeVersion=param(update.patch.baseVersion),policy=param(GRAPH_POLICY),currentSyntax=param(!!options.currentSyntax);
  const changed=param([...new Set([...Object.keys(update.patch.updated),...Object.keys(update.patch.inserted),...update.patch.removed])]);
  const preimage=param([...new Set([...Object.keys(update.patch.updated),...update.patch.removed])]),touched=param(update.patch.touched);
  const refs=update.effects.references?`||jsonb_build_object('refs',${graphReferencesSql('l.next_document')})`:'';
@@ -51,6 +53,7 @@ export async function commitDocumentUpdate(db:Queryable,actor:TokenActor|null,sc
  ), ${mention.before} ${resources.before} transformed AS MATERIALIZED (
   SELECT l.*,${sql.expression} AS next_document FROM locked l
   WHERE ${mention.guard} AND ${resources.guard} AND ${annotationSqlGuard(annotationOps)} AND (l.format='markup' OR(${replacement}::jsonb IS NOT NULL AND l.format<>'folder' AND l.dataset_policy IS NULL)) AND (${replacement}::jsonb IS NOT NULL OR l.document->>'policy'=${policy}) AND ${sql.guard} AND (NOT ${whole}::boolean OR l.version=${wholeVersion}::int)
+   AND (NOT ${currentSyntax}::boolean OR l.format<>'markup' OR l.meta @> '${JSON.stringify(DATA_SYNTAX_META)}'::jsonb)
    AND (${visibility}::text IS DISTINCT FROM 'private' OR l.user_id IS NOT NULL)
    AND (${sharing}::int IS NULL OR l.sharing_revision=${sharing}::int)
    AND (NOT ${hasParent}::boolean OR (l.ancestor_ids=${oldParent}::text[] AND (${parent}::text IS NULL OR EXISTS(SELECT 1 FROM destination))

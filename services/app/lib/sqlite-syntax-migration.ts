@@ -141,6 +141,29 @@ export async function runSqliteSyntaxMigrationBatch(db: Db, options: SqliteSynta
   return report(cursor, documents, !more, dryRun);
 }
 
+/**
+ * Convert ONE document now, ahead of the batch: the edit door's first step on
+ * a document the migration has not reached (lib/artifacts applyEditScoped), so
+ * an edit never mixes syntaxes. The batch's own preparation, lock check and
+ * commit; a head that moved meanwhile is prepared again, and one a concurrent
+ * edit converted meanwhile is `current` — a document converts once. Null when
+ * there is no such document.
+ */
+export async function convertArtifactNow(db: Db, id: string): Promise<SqliteSyntaxMigrationOutcome | null> {
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const current = (await artifactQuery<ArtifactRow>(db, "SELECT * FROM artifacts WHERE id=$1 AND format='markup'", [id])).rows[0];
+    if (!current) return null;
+    const prepared = await prepareArtifact(db, current, false);
+    if (prepared.outcome.outcome === 'current' || prepared.outcome.outcome === 'conflict') return prepared.outcome;
+    const outcome = await db.transaction(async (tx) => {
+      const locked = (await artifactQuery<ArtifactRow>(tx, 'SELECT * FROM artifacts WHERE id=$1 FOR UPDATE', [id])).rows[0];
+      return locked && locked.edit_id === current.edit_id && locked.source === current.source ? commitArtifact(tx, locked, prepared) : null;
+    });
+    if (outcome) return outcome;
+  }
+  throw new Error('sqlite-syntax-migration: concurrent head changes exceeded retry limit');
+}
+
 /** Convert outside the transaction: the publish preparation reads DB-backed refs through its own connection. */
 async function prepareArtifact(db: Queryable, current: ArtifactRow, dryRun: boolean): Promise<Prepared> {
   const artifactId = current.id;

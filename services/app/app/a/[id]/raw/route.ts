@@ -19,7 +19,7 @@ import {savedMentionStates} from '@/lib/membership';
  *   though it is same-host. Verified live: reading localStorage throws.
  */
 import {agentDiscovery} from '@/lib/agent-discovery';
-import { archivedReadOnly, archivedVersionFor, rowAtVersion } from '@/lib/archived-version';
+import { archivedReadOnly, archivedVersionFor, servedRow } from '@/lib/archived-version';
 import { canReadArtifact, dataflowForRow, declarationsForRow, getArtifactById, linkRoleOf, refDataForRow, viewerIdentityFor } from '@/lib/artifacts';
 import { withIntent, type Intent } from '@/lib/intent';
 import { count, has } from '@/lib/relations';
@@ -261,7 +261,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
       // Everything below renders THIS row: the artifact wearing that version's
       // bytes when one was asked for, the artifact itself otherwise. One
       // substitution rather than a conditional at every read.
-      const row = at ? rowAtVersion(artifact, at) : artifact;
+      const row = await servedRow(artifact, at);
       /*
        * Explicit raw document reads still count here. Ordinary app readers
        * render inline and report through /api/page/artifact/:id/view instead;
