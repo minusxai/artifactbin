@@ -10,7 +10,8 @@ import type { DataflowState } from '@/lib/story/dataflow';
 const SALES_SQL = 'select region, sum(revenue) as revenue from "public"."rows" where region = $region group by 1';
 const SOURCE =
   '<Helmet><title>Doc</title><Value name="region" type="string" default="west" />'
-  + `<Import name="sales_data" src="ref:ds1234" /><Query name="sales">{\`${SALES_SQL}\`}</Query>`
+  // A connected Postgres query keeps its source= (and its Postgres SQL); the notebook shows where it runs.
+  + `<Query name="sales" source="ref:ds1234">{\`${SALES_SQL}\`}</Query>`
   + '<Query name="costs">{`select 1 as spend`}</Query></Helmet>'
   + '<div className="p-4"><h1>Title</h1><Question data="$sales" /></div>';
 
@@ -23,11 +24,11 @@ const STATE: DataflowState = {
 };
 
 describe('queryCells', () => {
-  it('lists every <Query> in authored order with its SQL, source and params', () => {
+  it('lists every <Query> in authored order with its SQL and source', () => {
     const cells = queryCells(SOURCE, null);
     expect(cells.map((c) => c.name)).toEqual(['sales', 'costs']);
-    expect(cells[0]).toMatchObject({ sql: SALES_SQL, source: 'ds1234', params: ['region'] });
-    expect(cells[1]).toMatchObject({ sql: 'select 1 as spend', source: null, params: [] });
+    expect(cells[0]).toMatchObject({ sql: SALES_SQL, source: 'ds1234' });
+    expect(cells[1]).toMatchObject({ sql: 'select 1 as spend', source: null });
   });
 
   it('pairs each cell with the last run: rows, an error, or nothing yet', () => {

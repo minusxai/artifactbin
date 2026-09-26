@@ -421,7 +421,7 @@ describe('a source changed outside the file', () => {
   });
 
   it('never answers a query the agent changed with the rows the download ran for the old SQL', async () => {
-    const file = changed((s) => s.replace('select region, month, revenue from public.rows where', 'select region, month, revenue * 2 as revenue from public.rows where'));
+    const file = changed((s) => s.replace('select region, month, revenue from sales_data.rows where', 'select region, month, revenue * 2 as revenue from sales_data.rows where'));
     const { file: after, error } = await rebuildArtifactFile(file);
     expect(error).toBeNull();
     const { backend } = open(after);

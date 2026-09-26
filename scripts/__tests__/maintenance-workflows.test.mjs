@@ -32,7 +32,9 @@ it('publishes only successful main CI artifacts, including all lazy runtime asse
   expect(definition.on.workflow_run.workflows).toEqual(['ci']);
   expect(definition.jobs.release.if).toContain("github.event.workflow_run.conclusion == 'success'");
   const step = definition.jobs.release.steps.find(step => step.name === 'Download the binaries tested by this CI run');
-  for (const name of ['afbin-runtime-', 'afbin-chromium-', 'afbin-sql-']) expect(step.run).toContain(name);
+  for (const name of ['afbin-runtime-', 'afbin-chromium-']) expect(step.run).toContain(name);
+  // The SQL engine is inside the executable: there is no separate package to publish.
+  expect(step.run).not.toContain('afbin-sql-');
   expect(step.run).toContain('gh run download');
 });
 

@@ -129,6 +129,8 @@ export const STORY_UI_RECIPE_CLASSES: readonly string[] = [
   "@/lib/story-ui/use-node-keys",
   "@/lib/story-ui/video-embed",
   "@/lib/story/asset-url",
+  "@/lib/story/builtins",
+  "@/lib/story/compiled-dataflow",
   "@/lib/story/data-table",
   "@/lib/story/dataflow",
   "@/lib/story/dataset-shape",

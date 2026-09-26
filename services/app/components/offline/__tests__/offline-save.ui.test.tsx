@@ -151,7 +151,7 @@ describe('a source changed outside the file', () => {
   });
 
   it('says a query the agent changed needs a connection instead of showing the old rows', async () => {
-    render(<OfflineApp file={changed((s) => s.replace('select region, month, revenue from public.rows where', 'select region, month, revenue * 2 as revenue from public.rows where'))} code={CODE} />);
+    render(<OfflineApp file={changed((s) => s.replace('select region, month, revenue from sales_data.rows where', 'select region, month, revenue * 2 as revenue from sales_data.rows where'))} code={CODE} />);
     expect(await screen.findByRole('heading', { name: 'Regional sales' })).toBeInTheDocument();
     await waitFor(() => expect(screen.getAllByText(OFFLINE_QUERY_REASON, { exact: false }).length).toBeGreaterThan(0));
     expect(screen.queryByText('2026-07')).toBeNull();
