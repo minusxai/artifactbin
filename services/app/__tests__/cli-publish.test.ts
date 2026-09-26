@@ -78,7 +78,7 @@ describe('cli-sync-integration', () => {
     const token=await cli.connect('real-cli-deps');
     await writeFile(join(root,'sales.csv'),'region,total\nEast,12\n');
     const dataId=(await cli.invoke(['add','sales.csv']))['sales.csv'];
-    await writeFile(join(root,'doc.jsx'),'<Helmet><Query name="sales" source="ref:'+dataId+'">{`select * from public.rows`}</Query></Helmet><Table data="$sales" />');
+    await writeFile(join(root,'doc.jsx'),'<Helmet><Import name="sales_data" src="ref:'+dataId+'" /><Query name="sales">{`select * from sales_data.rows`}</Query></Helmet><Table data="$sales" />');
     await writeFile(join(root,'other.jsx'),await readFile(join(root,'doc.jsx')));
     await cli.invoke(['push','doc.jsx','other.jsx']);
     expect(routesCalled(calls).filter(call=>call==='POST /api/artifacts')).toHaveLength(3);
@@ -87,7 +87,7 @@ describe('cli-sync-integration', () => {
     expect(routesCalled(calls).some(call=>call===`PUT /api/artifacts/${oldAsset}`)).toBe(true);
     expect(routesCalled(calls).filter(call=>call==='POST /api/artifacts')).toHaveLength(0);
     expect((await tracking(root,root)).files['sales.csv'].id).toBe(oldAsset);
-    expect(parseDocument(await readFile(join(root,'doc.jsx'),'utf8')).body).toContain(`source="ref:${oldAsset}"`);
+    expect(parseDocument(await readFile(join(root,'doc.jsx'),'utf8')).body).toContain(`src="ref:${oldAsset}"`);
     const old=await read(new Request(`http://localhost:3000/api/artifacts/${oldAsset}`,{headers:{Authorization:`Bearer ${token.token}`}}),{params:Promise.resolve({id:oldAsset})});expect((await old.json()).version).toBe(2);
     const titled=parseDocument(await readFile(join(root,'doc.jsx'),'utf8'));titled.metadata.title='Sales';await writeFile(join(root,'doc.jsx'),writeDocument(titled));
     calls.length=0;await cli.invoke(['push','doc.jsx']);expect(routesCalled(calls)).toEqual([`POST /api/artifacts/${titled.metadata.id}/edits`]);

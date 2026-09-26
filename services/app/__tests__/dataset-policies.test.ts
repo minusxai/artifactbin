@@ -55,7 +55,7 @@ async function fixture() {
     mutate(
       request(`/a/${doc}/mutate`, {
         method: 'POST',
-        json: { mutation, values: { n } },
+        json: { mutation, args: { n } },
       }),
       { params: Promise.resolve({ id: doc }) },
     );

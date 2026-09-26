@@ -34,7 +34,9 @@ it('previews canonical published references, preserves them on save and respects
    const rows=await result.json();return {rows,columns:inferColumns(rows)};
   }});
   const query=()=>fetch(session!.url+'/query',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({file:'report.jsx',values:{}})});
-  const answer=await(await query()).json();expect(answer.tables?.sales?.rows).toEqual([{total:42}]);expect(accesses).toEqual([ids['sales.csv']]);
+  const answer=await(await query()).json();expect(answer.tables?.sales?.rows).toEqual([{total:42}]);
+  // Compiling the draft reads the dataset's shape, running it reads its rows: both from the host, nothing else.
+  expect(accesses).toEqual([ids['sales.csv'],ids['sales.csv']]);
   await writeFile(join(cli.root,'sales.csv'),'amount\n999\n');
   expect((await(await query()).json()).tables.sales.rows).toEqual([{total:42}]);
   const datasetId=ids['sales.csv'];const context={params:Promise.resolve({id:datasetId})};

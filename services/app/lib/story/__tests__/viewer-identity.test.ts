@@ -17,7 +17,7 @@ import { parseJsxOrThrow } from '@/test/helpers/jsx';
 import { validateMarkupStructure } from '@/lib/story/local-validation';
 
 const nodes = (source: string): JsxNode[] => parseJsxOrThrow(source).nodes;
-const EMPTY = { values: [], queries: [], mutations: [] } as unknown as Dataflow;
+const EMPTY: Dataflow = { imports: [], values: [], queries: [], mutations: [] };
 const errors = (source: string) => validateDataflow(EMPTY, collectRefNameUses(nodes(source))).map((e) => e.message);
 
 describe('$_me in markup', () => {
