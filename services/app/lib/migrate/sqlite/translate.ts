@@ -283,7 +283,8 @@ function precheck(v: View, context: TranslateContext): { hit: Hit | null; notes:
     if (!call) continue;
     const whole = (reason: string): { hit: Hit; notes: string[] } => ({ hit: v.manual(reason, call.at, call.close), notes });
     const part = (arg: { from: number; to: number } | undefined, allowed: Set<string>, fn: string): { hit: Hit; notes: string[] } | null => {
-      const value = v.literal(arg) ?? (fn === 'extract' && arg && t[arg.from].kind === 'word' ? word(t[arg.from]) : null);
+      if (!arg) return whole(`${fn} needs a literal part`);
+      const value = v.literal(arg) ?? (fn === 'extract' && t[arg.from].kind === 'word' ? word(t[arg.from]) : null);
       if (value === null) return whole(`${fn} needs a literal part`);
       if (!allowed.has(value.toLowerCase())) return { hit: v.manual(`${fn}('${value}') has no library equivalent (parts: ${[...allowed].filter((p) => !DAY_OF_WEEK.has(p)).join(', ')})`, arg.from), notes };
       return null;
