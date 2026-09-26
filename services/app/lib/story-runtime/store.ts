@@ -31,11 +31,15 @@ import type { DataflowState, Row, Scalar, TableResult } from '@/lib/story/datafl
 import type { CompiledDataflow } from '@/lib/story/compiled-dataflow';
 import { mutationRequestFor, type MutationRequest } from '@/lib/story/mutation-request';
 import type { LocalMutationResult } from '@/lib/story/local-state';
+import { importRef, selectQueries } from '@/lib/story/compiled-flow';
+import { localZone } from '@/lib/story/builtins';
+import { placeDataflow, type DataflowPlacement } from '@/lib/story/placement';
 import {
-  accessSettled, busyOf, createCore, localRows, pendingOf, step,
+  accessSettled, busyOf, createCore, localRows, partitionRun, pendingOf, step,
   type CoreEffect, type CoreEvent, type CoreState, type RunAnswer,
 } from './dataflow-core';
-import { graphOfCompiled } from './runtime-graph';
+import { graphOfCompiled, heldSource, NOW_SOURCE } from './runtime-graph';
+import type { Optimistic, PageEngine } from './page-engine';
 
 /** What `mutationUnavailable` answers while the permission check is still in flight. */
 export const ACCESS_PENDING = 'Checking edit access…';
@@ -184,7 +188,7 @@ export interface DataflowStore {
    * not current and re-run through the transport — the same path a click on
    * the control takes. Their old rows stay on screen until the run lands.
    */
-  replaceFlow(next: { flow: CompiledDataflow; state?: DataflowState }): void;
+  replaceFlow(next: { flow: CompiledDataflow; state?: DataflowState; hold?: string[] }): void;
 }
 
 interface CreateStoreOptions {
@@ -210,6 +214,14 @@ interface CreateStoreOptions {
    * served document) no control is frozen.
    */
   frozenValues?: Readonly<Record<string, string>> | null;
+  /**
+   * The page's own engine (lib/story-runtime/page-engine) and who is reading
+   * (`$_me.id`). With it, every node the reader's holdings allow
+   * (StoryIslandDataflow.hold, lib/story/placement) runs in the page once the
+   * page holds what it reads, and only the rest goes through the transport.
+   * Absent, everything goes through the transport, as it always has.
+   */
+  page?: { engine: PageEngine; userId: string | null } | null;
 }
 
 /** Empty declarations + state, for a document that declares nothing. */
@@ -226,12 +238,20 @@ export function createDataflowStore(
    * the state a capture arrived with, then the URL — the reader's link is the
    * most specific thing anyone said about this document.
    */
-  input: { flow: CompiledDataflow; state?: DataflowState; values?: Record<string, Scalar> },
+  input: { flow: CompiledDataflow; state?: DataflowState; values?: Record<string, Scalar>; hold?: string[] },
   options: CreateStoreOptions = {},
 ): DataflowStore {
   let flow = input.flow;
   const debounceMs = options.debounceMs ?? 150;
   let transport: QueryTransport | null = options.transport ?? null;
+  const page = options.page ?? null;
+  let hold = input.hold;
+  let placement: DataflowPlacement = placeDataflow(flow, page ? hold : undefined);
+  /** `$_now` as the page binds it: set at load, advanced once a minute (the clock below). */
+  let now = new Date().toISOString();
+  let clock: ReturnType<typeof setInterval> | null = null;
+  /** Something can answer a run: the transport, or the page for what it holds. */
+  const canRun = () => !!transport || !!page;
   const listeners = new Set<() => void>();
   let timer: ReturnType<typeof setTimeout> | null = null;
   /*
@@ -242,7 +262,7 @@ export function createDataflowStore(
    * case re-runs nothing: `state` present means somebody already did this work
    * with the same defaults (dataflow-core createCore).
    */
-  let core: CoreState = createCore(graphOfCompiled(flow), input);
+  let core: CoreState = createCore(graphOfCompiled(flow, placement), input);
   let writeIds = 0;
   const writes = new Map<number, { resolve: () => void; reject: (error: unknown) => void }>();
   let accessWaiters: Array<() => void> = [];
@@ -272,27 +292,33 @@ export function createDataflowStore(
         return;
       }
       case 'run': {
-        const t = transport;
-        if (!t) { dispatch({ type: 'failed', at: effect.at, error: new Error('no query transport') }); return; }
-        let answer: ReturnType<QueryTransport['run']>;
-        try {
-          answer = effect.localTables ? t.run(effect.values, effect.only, effect.localTables) : t.run(effect.values, effect.only);
-        } catch (error) { answer = Promise.reject(error); }
-        answer.then(
-          (result) => { dispatch({ type: 'answered', at: effect.at, answer: result }); },
-          (error: unknown) => { dispatch({ type: 'failed', at: effect.at, error }); },
-        );
+        // ONE scheduling step, two places: what the page holds, the page
+        // answers; the rest (and every write check) goes to the server.
+        const { local, remote } = partitionRun(effect, inPage(effect.only));
+        const answer = (at: typeof effect.at, run: () => Promise<RunAnswer>) => {
+          let result: Promise<RunAnswer>;
+          try { result = run(); } catch (error) { result = Promise.reject(error); }
+          result.then(
+            (answered) => { dispatch({ type: 'answered', at, answer: answered }); },
+            (error: unknown) => { dispatch({ type: 'failed', at, error }); },
+          );
+        };
+        if (local && page) answer(local.at, () => page.engine.run(flow, local.only, { ...context(), values: local.values, ...(local.localTables ? { localTables: local.localTables } : {}) }));
+        if (remote) {
+          const t = transport;
+          if (!t) { dispatch({ type: 'failed', at: remote.at, error: new Error('no query transport') }); return; }
+          answer(remote.at, () => remote.localTables ? t.run(remote.values, remote.only, remote.localTables) : t.run(remote.values, remote.only));
+        }
         return;
       }
       case 'write': {
         const { id, name, values, row, localTables } = effect;
-        const t = transport;
         let answer: Promise<MutationAnswer>;
         try {
-          if (!t?.mutate) throw new Error('this document cannot write from here');
           const m = flow.mutations.find((x) => x.name === name);
           if (!m) throw new Error(`this document declares no <Mutation name="${name}">`);
-          answer = t.mutate(mutationRequestFor(m, { values, ...(row ? { row } : {}), ...(Object.hasOwn(values, '_value') ? { value: values._value } : {}), ...(localTables ? { localTables } : {}) }));
+          const request = mutationRequestFor(m, { values, ...(row ? { row } : {}), ...(Object.hasOwn(values, '_value') ? { value: values._value } : {}), ...(localTables ? { localTables } : {}) });
+          answer = writeThrough(m, request);
         } catch (error) { answer = Promise.reject(error); }
         // A settled write moves what it wrote (and what it reset): re-read at once.
         answer.then(
@@ -303,15 +329,86 @@ export function createDataflowStore(
     }
   };
 
+  /** What the page reads beside a run's values: the viewer, the clock, the zone. */
+  const context = () => ({ userId: page?.userId ?? null, now, tz: localZone() });
+
+  /** The imports these queries read, with everything upstream of them. */
+  const importsOf = (names: readonly string[]): string[] =>
+    [...new Set(selectQueries(flow, { only: names }).flatMap((q) => q.reads.imports))];
+
+  /**
+   * The queries of this run the page answers: placed in the browser, and the
+   * page holds everything they read. Otherwise the page starts fetching it,
+   * and the server answers this run — the first paint never waits on the
+   * engine.
+   */
+  const inPage = (only: readonly string[]): ReadonlySet<string> => {
+    if (!page) return new Set();
+    const mine = only.filter((name) => placement.queries[name] === 'browser');
+    if (!mine.length) return new Set();
+    const imports = importsOf(mine);
+    if (page.engine.ready(flow, imports)) return new Set(mine);
+    page.engine.prepare(flow, imports);
+    return new Set();
+  };
+
+  /**
+   * Where a write goes. A local-table write the page can compute never
+   * leaves it. A held dataset write is applied to the page's copy at once —
+   * what reads that copy re-runs in the page — and then the SERVER decides:
+   * confirmed, the page fetches what was stored; refused, the page withdraws
+   * it and the caller gets the server's reason.
+   */
+  const writeThrough = (m: CompiledDataflow['mutations'][number], request: MutationRequest): Promise<MutationAnswer> => {
+    const where = placement.mutations[m.name];
+    if (page && where === 'browser' && page.engine.ready(flow, m.reads.imports)) {
+      return page.engine.write(flow, m, request, context()).then((local) => ({ dataset: '', local }));
+    }
+    const t = transport;
+    if (!t?.mutate) throw new Error('this document cannot write from here');
+    const ref = 'import' in m.target ? importRef(flow, m.target.import) : undefined;
+    let optimistic: Optimistic | null = null;
+    if (page && ref && where === 'optimistic' && 'import' in m.target && page.engine.ready(flow, [...m.reads.imports, m.target.import])) {
+      optimistic = page.engine.apply(flow, m, request, context());
+      if (optimistic && dispatch({ type: 'sources', ids: [heldSource(ref)] })) flush();
+    }
+    return t.mutate(request).then((answer) => {
+      optimistic?.settle(true);
+      // What the server stored is the page's copy now: fetch it before the page answers from it.
+      page?.engine.invalidate([answer.dataset || ref || ''].filter(Boolean));
+      return answer;
+    }, (error: unknown) => { optimistic?.settle(false); throw error; });
+  };
+
+  /** Advance `$_now` once a minute, while anything reads it. */
+  const tickWhileRead = () => {
+    const reads = core.graph.queries.some((q) => q.reads.sources.includes(NOW_SOURCE));
+    if (reads && !clock) {
+      clock = setInterval(() => {
+        now = new Date().toISOString();
+        if (dispatch({ type: 'sources', ids: [NOW_SOURCE] })) flush();
+      }, 60_000);
+    } else if (!reads && clock) { clearInterval(clock); clock = null; }
+  };
+
+  /** Load the engine and every import the page will answer from — after the first run is on its way. */
+  const prepare = () => {
+    if (!page) return;
+    const queries = flow.queries.filter((q) => placement.queries[q.name] === 'browser').map((q) => q.name);
+    const writes = flow.mutations.filter((m) => placement.mutations[m.name] !== 'server');
+    if (!queries.length && !writes.length) return;
+    page.engine.prepare(flow, [...new Set([...importsOf(queries), ...writes.flatMap((m) => m.reads.imports)])]);
+  };
+
   const flush = () => {
     if (timer) { clearTimeout(timer); timer = null; }
     frame?.();
-    if (transport) dispatch({ type: 'flush' });
+    if (canRun()) dispatch({ type: 'flush' });
   };
   /** The pending frame's canceller: one flush per frame, whichever of the frame or its fallback comes first. */
   let frame: (() => void) | null = null;
   const nextFrame = () => {
-    if (frame || !transport) return;
+    if (frame || !canRun()) return;
     // A hidden tab runs no animation frames; the timer keeps its writes moving.
     const raf = typeof requestAnimationFrame === 'function' ? requestAnimationFrame(() => flush()) : null;
     const fallback = setTimeout(flush, 100);
@@ -319,7 +416,7 @@ export function createDataflowStore(
   };
   /** Only a continuous input (a slider, typing) waits: it must not fire per pixel or per keystroke. */
   const schedule = () => {
-    if (!transport) return;
+    if (!canRun()) return;
     if (timer) clearTimeout(timer);
     timer = setTimeout(flush, debounceMs);
   };
@@ -334,16 +431,19 @@ export function createDataflowStore(
     // refuses even a `local` write, which would otherwise mutate a document
     // the reader cannot save (see CreateStoreOptions.writesUnavailable).
     if (options.writesUnavailable) return options.writesUnavailable;
-    if (!transport?.mutate) return 'This view cannot save changes.';
     const decl = core.graph.mutations.find((m) => m.name === name);
+    const inPageWrite = !!page && placement.mutations[name] === 'browser';
+    if (!transport?.mutate && !inPageWrite) return 'This view cannot save changes.';
     if (decl && 'local' in decl.target) return null;
     const access = core.data.mutationAccess ?? {};
     return Object.hasOwn(access, name) ? access[name]! : ACCESS_PENDING;
   };
 
+  tickWhileRead();
+
   const mutate: DataflowStore['mutate'] = async (name, overrides, row) => {
     if (!core.graph.mutations.some((m) => m.name === name)) throw new Error(`this document declares no <Mutation name="${name}">`);
-    if (!transport?.mutate) throw new Error('this document cannot write from here');
+    if (!transport?.mutate && !(page && placement.mutations[name] === 'browser')) throw new Error('this document cannot write from here');
     const unavailable = mutationUnavailable(name);
     if (unavailable !== null) throw new Error(unavailable);
     if (!row && busyOf(core).has(name)) return; // generic Button double click is one write; row cells dedupe locally
@@ -359,7 +459,9 @@ export function createDataflowStore(
       if (core.disposed) return;
       dispatch({ type: 'dispose' });
       if (timer) clearTimeout(timer);
+      if (clock) clearInterval(clock);
       timer = null;
+      clock = null;
       frame?.();
       transport = null;
       listeners.clear();
@@ -369,8 +471,12 @@ export function createDataflowStore(
     replaceFlow: (next) => {
       if (core.disposed) return;
       flow = next.flow;
-      dispatch({ type: 'replace', graph: graphOfCompiled(next.flow), ...(next.state ? { state: next.state } : {}) });
+      hold = next.hold ?? hold;
+      placement = placeDataflow(flow, page ? hold : undefined);
+      dispatch({ type: 'replace', graph: graphOfCompiled(next.flow, placement), ...(next.state ? { state: next.state } : {}) });
+      tickWhileRead();
       flush();
+      prepare();
     },
     mutate,
     mutating: () => busyOf(core),
@@ -380,8 +486,11 @@ export function createDataflowStore(
     accessSettled: () => new Promise((resolve) => { if (accessIsSettled()) resolve(); else accessWaiters.push(resolve); }),
     invalidateDatasets: (datasetIds) => {
       // Immediately, not on the debounce: this is news from outside, and the
-      // reader is looking at rows that are now wrong.
-      if (dispatch({ type: 'sources', ids: [...datasetIds] })) flush();
+      // reader is looking at rows that are now wrong. The page's copy is too:
+      // until it is fetched again, its readers ask the server.
+      const ids = [...datasetIds];
+      page?.engine.invalidate(ids);
+      if (dispatch({ type: 'sources', ids })) flush();
     },
     getState: () => core.data,
     getValue: (name) => core.data.values[name] ?? null,
@@ -403,7 +512,7 @@ export function createDataflowStore(
      * Not the debounce: that exists to batch a reader changing their mind, and
      * a first load has nothing to batch.
      */
-    start: () => { flush(); },
+    start: () => { flush(); prepare(); },
     subscribe: (listener) => { if (!core.disposed) listeners.add(listener); return () => { listeners.delete(listener); }; },
     setTransport: (t) => {
       if (core.disposed) return;
@@ -414,10 +523,13 @@ export function createDataflowStore(
     refresh: (only) => {
       if (dispatch({ type: 'refresh', ...(only ? { queries: [...only] } : {}) })) flush();
     },
-    fetchPage: (name, page) => {
-      if (!transport) return Promise.reject(new Error('no query transport'));
+    fetchPage: (name, window) => {
       const rows = localRows(core);
-      return rows ? transport.page({ ...core.data.values }, name, page, rows) : transport.page({ ...core.data.values }, name, page);
+      if (page && inPage([name]).has(name)) {
+        return page.engine.page(flow, name, window, { ...context(), values: { ...core.data.values }, ...(rows ? { localTables: rows } : {}) });
+      }
+      if (!transport) return Promise.reject(new Error('no query transport'));
+      return rows ? transport.page({ ...core.data.values }, name, window, rows) : transport.page({ ...core.data.values }, name, window);
     },
   };
 }
