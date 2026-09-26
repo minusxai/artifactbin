@@ -1,6 +1,8 @@
 /**
- * PRECOMPUTED FILTERS — how an offline file keeps its filters working with no
- * SQL engine inside it.
+ * PRECOMPUTED FILTERS — how an offline file keeps a filter working for the
+ * queries its own engine cannot run: a connected database, or data the
+ * downloader may not hold (lib/story/placement). Queries over held data run
+ * live in the file, and need none of this.
  *
  * At download the server finds every `<Value>` that some query reads, works out
  * the finite set of values its bound controls can produce, runs the affected
@@ -89,16 +91,17 @@ function controlValues(domain: ControlDomain, decl: Pick<CompiledValue, "name" |
 }
 
 /**
- * For every Value that at least one query reads (directly, or through a query
- * it references): the finite list of values its bound controls can set, in
+ * For every Value that at least one of `queries` reads (directly, or through a
+ * query it references; every query unless named — the file passes the ones
+ * that need the server, lib/story/placement): the finite list of values its bound controls can set, in
  * the Value's own type — options from a literal list or a `$query` (resolved
  * against `base`), true/false for a Switch, plus null where the control can
  * clear ("All"). `null` for a Value no control makes finite (text, number,
  * date, slider inputs, or no control at all).
  */
-export function valueDomains(nodes: JsxNode[], flow: CompiledDataflow, base: DataflowState): Map<string, Scalar[] | null> {
+export function valueDomains(nodes: JsxNode[], flow: CompiledDataflow, base: DataflowState, queries: ReadonlySet<string> = new Set(flow.queries.map((q) => q.name))): Map<string, Scalar[] | null> {
   const scalars = new Map(flow.values.filter((v): v is CompiledValue & { type: Exclude<CompiledValue['type'], 'table'> } => v.kind === 'scalar' && v.type !== 'table').map((v) => [v.name, v]));
-  const read = new Set(flow.queries.flatMap((q) => q.reads.values).filter((p) => scalars.has(p)));
+  const read = new Set([...scalars.keys()].filter((name) => queriesReadingValues(flow, [name]).some((q) => queries.has(q))));
   const bound = new Map<string, ControlDomain[]>();
   const visit = (list: JsxNode[]) => {
     for (const n of list) {
@@ -124,6 +127,8 @@ export interface PrecomputeInput {
   domains: Map<string, Scalar[] | null>;
   /** Runs the named queries (dependency-closed) with these values, as the downloader. */
   run(values: Record<string, Scalar>, only: string[]): Promise<Pick<DataflowState, 'tables' | 'errors'>>;
+  /** The queries a variant carries (the ones the file cannot run itself); every query when absent. */
+  queries?: ReadonlySet<string>;
   caps?: VariantCaps;
 }
 
@@ -182,7 +187,7 @@ export async function precomputeVariants(input: PrecomputeInput): Promise<{ vari
   for (let i = 0; i < plan.length; i++) {
     const move = plan[i];
     const values = { ...input.base.values, ...baseValues, ...move };
-    const only = queriesReadingValues(input.flow, Object.keys(move));
+    const only = queriesReadingValues(input.flow, Object.keys(move)).filter((q) => !input.queries || input.queries.has(q));
     const result = await input.run(values, only);
     const variant: ArtifactFileVariant = {
       values: { ...baseValues, ...move },

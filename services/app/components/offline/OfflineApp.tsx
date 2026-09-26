@@ -63,6 +63,7 @@ import { createExtrasLoader, extrasScriptUrl, FORMATTING_OFFLINE, RICH_EDITOR_OF
 import { OFFLINE_FILTER_REASON, OFFLINE_MUTATION_REASON, type ArtifactFile, type ArtifactFileEdit } from '@/lib/offline/file-format';
 import { clearDraft, readDraft, readName, writeDraft, writeName, type Draft } from '@/lib/offline/local-state';
 import { saveArtifactFile, suggestedFileName, type SaveHandle } from '@/lib/offline/save-file';
+import { offlineSqliteWasm } from '@/lib/offline/sqlite-wasm';
 
 /** Where "Open live version" goes, for the stand-ins drawn deep inside the document. */
 const LiveUrl = createContext<string>('');
@@ -299,7 +300,8 @@ function OfflineSurface({ file, restored, invalid, code, fileName }: { file: Art
   const data = useMemo<StoryIslandData>(() => {
     const flow = file.island.dataflow?.flow;
     // A query edited since the download starts as "needs a connection", never as the old SQL's rows.
-    return flow ? { ...file.island, dataflow: { flow, state: snapshotStateFor(file) } } : file.island;
+    const hold = file.island.dataflow?.hold;
+    return flow ? { ...file.island, dataflow: { flow, state: snapshotStateFor(file), ...(hold ? { hold } : {}) } } : file.island;
   }, [file]);
   const prepared = useMemo<PreparedStoryRuntime>(() => ({
     data, baseCss: file.css.base, compiledCss: file.css.compiled, authorCss: file.css.author, authorScript: null,
@@ -430,6 +432,7 @@ function OfflineSurface({ file, restored, invalid, code, fileName }: { file: Art
             transportFactory={transportFactory}
             writesUnavailable={OFFLINE_MUTATION_REASON}
             frozenValues={frozenValues}
+            sqliteWasm={offlineSqliteWasm()}
             components={OFFLINE_COMPONENTS}
             onController={onController}
           />

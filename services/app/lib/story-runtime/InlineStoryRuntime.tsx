@@ -3,7 +3,7 @@ import { installMx } from './mx';
 import { useLayoutEffect, useMemo, useRef, useState, type ComponentType, type ReactNode } from 'react';
 import type { StoryDocumentUpdate, StoryIslandData } from './contract';
 import type { QueryTransport } from './store';
-import { createDataflowStore, type CreateStoreOptions } from './store';
+import { createDataflowStore } from './store';
 import { pageEngineFor } from './page-sqlite';
 import { EMPTY_COMPILED_DATAFLOW } from '@/lib/story/compiled-dataflow';
 import { StoryRuntimeApp } from './StoryRuntimeApp';
@@ -57,11 +57,11 @@ export interface InlineStoryRuntimeProps {
   /** Values whose controls are disabled on this render, with the reason (the store's `frozenValues`). Read when a document lifetime starts. */
   frozenValues?: Readonly<Record<string, string>> | null;
   /**
-   * The page's own engine, when the host supplies it (the offline file, whose
-   * data travels inside it). Absent, it is derived from the island and the
-   * transport (lib/story-runtime/page-sqlite). Read when a document lifetime starts.
+   * The SQLite wasm's bytes, when the host carries them (the offline file,
+   * which can fetch nothing); otherwise the island's URL is used
+   * (lib/story-runtime/page-sqlite). Read when a document lifetime starts.
    */
-  page?: CreateStoreOptions['page'];
+  sqliteWasm?: Uint8Array;
   /** Registry overrides passed to StoryRuntimeApp (its `components`); keep the object stable. */
   components?: Readonly<Record<string, ComponentType<Record<string, unknown>>>>;
 }
@@ -83,7 +83,7 @@ export function InlineStoryRuntime(props: InlineStoryRuntimeProps): ReactNode {
     const transport = latest.current.transportFactory?.() ?? latest.current.transport;
     const { writesUnavailable, frozenValues } = latest.current;
     const data = latest.current.data;
-    return { transport, store:createDataflowStore(data.dataflow ?? {flow:EMPTY_COMPILED_DATAFLOW}, {transport, ...(writesUnavailable ? {writesUnavailable} : {}), ...(frozenValues ? {frozenValues} : {}), page: latest.current.page ?? pageEngineFor(data, transport)}) };
+    return { transport, store:createDataflowStore(data.dataflow ?? {flow:EMPTY_COMPILED_DATAFLOW}, {transport, ...(writesUnavailable ? {writesUnavailable} : {}), ...(frozenValues ? {frozenValues} : {}), page: pageEngineFor(data, transport, latest.current.sqliteWasm ?? data.sqliteWasm)}) };
   };
   const [lifetime, setLifetime] = useState(createLifetime);
   const { store } = lifetime;

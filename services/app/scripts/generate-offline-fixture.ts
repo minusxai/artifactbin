@@ -3,9 +3,11 @@
  * (scripts/fixtures/offline-file/artifact-file.json) from its markup
  * (dashboard.jsx), through the SAME parse, prepare and CSS compile the app
  * serves a document with — so the fixture's nodes, dataflow and stylesheet
- * cannot drift from what a real download would carry. The query results are
- * written here by hand: the fixture has no dataset, and the point of the gate
- * is the file, not the engine.
+ * cannot drift from what a real download would carry. The rows are written
+ * here by hand: the fixture has no dataset. The downloader holds `sales_data`,
+ * so the file's own engine runs `regions` and `sales` live and nothing is
+ * precomputed for them; `targets_data` is not held, so `matches` answers from
+ * the snapshot and its free-text filter is frozen.
  *
  *   cd services/app && npx tsx scripts/generate-offline-fixture.ts
  *
@@ -58,10 +60,13 @@ const state: DataflowState = {
 };
 
 const compiledCss = await compileStoryCss(source, { force: true });
+const hold = ['sales_data'];
 const { runtime } = await prepareStoryParts({
   source, compiledCss, theme: null, colorMode: null, template: 'dashboard', refData: {}, title: 'Regional sales',
-  dataflow: { flow, state },
+  dataflow: { flow, state, hold },
 });
+// A file carries its engine inside itself: no server address for the wasm.
+delete runtime.data.sqliteWasm;
 
 /*
  * The download inlines every font as a data: URI. The fixture keeps it small:
@@ -92,16 +97,14 @@ const file: ArtifactFile = {
   source,
   metadata: { title: runtime.title, description: null, theme: null, template: 'dashboard', colorMode: null },
   css,
-  island: { ...runtime.data, dataflow: { flow, state } },
+  island: { ...runtime.data, dataflow: { flow, state, hold } },
   snapshot: {
     at,
     state,
-    variants: ['east', 'north', 'west'].map((region) => ({
-      values: { region },
-      tables: { sales: sales(salesRows.filter((r) => r.region === region)) },
-      errors: {},
-    })),
-    // Free text has no finite domain: its control is disabled offline.
+    held: { sales_data: { rows: sales(salesRows) } },
+    // `region` feeds only queries the file runs itself: nothing to precompute.
+    variants: [],
+    // `note` feeds `matches`, over data the file does not hold, and free text has no finite domain: disabled offline.
     frozen: ['note'],
   },
   journal: [],
