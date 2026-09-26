@@ -111,6 +111,8 @@ export interface ArtifactVersionSnapshot {
   html: string;
   title?: string | null; description?: string | null;
   markup: string | null;
+  /** Present when the version was written for the previous query engine and cannot be restored as it stands: why. */
+  previous_engine?: string;
   meta: {
     template?: string | null;
     theme?: string | null;

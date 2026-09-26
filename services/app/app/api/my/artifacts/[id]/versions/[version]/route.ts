@@ -1,4 +1,4 @@
-import { getVersionFor } from '@/lib/artifacts';
+import { getVersionFor, versionToWire } from '@/lib/artifacts';
 import { browserActor } from '@/lib/auth';
 import { actorForArtifacts } from '@/lib/viewer';
 import { json, unauthorized } from '@/lib/http';
@@ -14,7 +14,6 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string;
   if (!Number.isInteger(v) || v < 1) return json({ error: 'not_found' }, 404);
   const row = await getVersionFor(scoped, id, v);
   if (!row) return json({ error: 'not_found' }, 404);
-  // Same wire as the token route: `content` under its own name, `markup` for
-  // the source.
-  return json({ ...row, markup: row.source, source: undefined });
+  // Same wire as the token route.
+  return json(versionToWire(row));
 }

@@ -1042,7 +1042,9 @@ export default function InPlaceEditor({
 
   const restoreVersion = useCallback(
     async (v: number) => {
-      const next = await history.restore(v);
+      let next: number | null;
+      // A refusal the server explained (a version the current engine cannot restore) is shown, not swallowed.
+      try { next = await history.restore(v); } catch (error) { setHistoryError(error instanceof Error ? error.message : 'Could not restore that version.'); return; }
       if (next === null) return;
       // The restored state IS the document now; the live stream delivers it on
       // the same path an agent's edit arrives on.

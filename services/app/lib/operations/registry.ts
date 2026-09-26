@@ -20,7 +20,7 @@ import { TESTUSER_ERRORS } from '@artifactbin/contracts';
 import { z } from 'zod';
 import { STORY_TEMPLATE_NAMES } from '@/lib/validation/atlas-schemas';
 import {
-  applyEditFor, canReadArtifact, findDependentsFor, forkArtifact, forkDatasetPreview, forkRefusal, getArtifactById, getVersionFor, listArtifactPageFor, listVersionPageFor,
+  applyEditFor, versionToWire, canReadArtifact, findDependentsFor, forkArtifact, forkDatasetPreview, forkRefusal, getArtifactById, getVersionFor, listArtifactPageFor, listVersionPageFor,
   revertArtifactFor, isVersionNotArchived, type ForkOverrides, type TokenActor
 } from '@/lib/artifacts';
 import { isParentRefusal, resolveParent } from '@/lib/folders';
@@ -347,7 +347,7 @@ const getVersionOp: Operation = {
   name: 'get_version',
   title: 'Read one archived version',
   http: { method: 'GET', path: '/api/artifacts/{id}/versions/{version}' },
-  description: 'Read one archived version of an artifact, content included (`markup` carries the source).',
+  description: 'Read one archived version of an artifact, content included (`markup` carries the source). A document version reads in the current data syntax; `previous_engine` says one written for the previous query engine needs converting by hand and cannot be restored as it stands.',
   input: { id: z.string(), version: z.number() },
   annotations: { readOnly: true },
   example: { input: { id: 'aB3xK9', version: 2 } },
@@ -357,8 +357,7 @@ const getVersionOp: Operation = {
     if (!Number.isInteger(v) || v < 1) return reply({ error: 'not_found' }, 404);
     const row = await getVersionFor(ctx.actor, String(input.id), v);
     if (!row) return reply({ error: 'not_found' }, 404);
-    // `markup` carries the source; the raw `source` field stays off the wire.
-    return reply({ ...row, markup: row.source, source: undefined } as unknown as Record<string, unknown>);
+    return reply(versionToWire(row));
   },
 };
 

@@ -9,7 +9,7 @@
  * present and unforgeable.
  */
 import { artifactToWireWithAnnotations, replaceArtifactFromRequest } from '@/lib/artifact-wire';
-import { getArtifactFor } from '@/lib/artifacts';
+import { getEditableArtifactFor } from '@/lib/artifacts';
 import {updateMetadataFromBody} from '@/lib/metadata-wire';
 import { browserActor } from '@/lib/auth';
 import { canReadArtifact, getArtifactById } from '@/lib/artifacts';
@@ -29,7 +29,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
   const scoped = await scopeFor(request);
   if (scoped instanceof Response) return scoped;
   const { id } = await ctx.params;
-  const row = await getArtifactFor(scoped, id);
+  const row = await getEditableArtifactFor(scoped, id);
   if (!row) return json({ error: 'not_found' }, 404);
   const browser = await browserActor(request);
   const viewer = browser instanceof Response ? null : browser.viewer ?? null;

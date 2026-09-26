@@ -70,6 +70,22 @@ test('pull preserves local edits against an unchanged head and keeps explicit hi
   assert.equal(calls.filter(path=>path.endsWith('/versions/1')).length,1,'immutable history is reused');
  }finally{await rm(root,{recursive:true,force:true});}
 });
+test('pull refuses to restore a version written for the previous query engine that needs converting by hand, and still reads it to stdout',async()=>{
+ const root=await mkdtemp(join(tmpdir(),'afbin-previous-engine-'));const home=join(root,'home');const cwd=join(root,'work');await mkdir(home);await mkdir(cwd);
+ const head={id:'abc123',version:3,edit_id:'edit3',state:digest('head3'),markup:'<p id="p001">Head</p>',format:'markup',title:'Title',theme:null,template:null,visibility:'unlisted',link_role:'viewer',parent_id:null};
+ const refusal='Version 1 was written for the previous query engine and needs converting by hand, so it cannot be restored as it stands.';
+ const request:typeof fetch=async(input)=>{const path=new URL(String(input)).pathname;if(path==='/api/artifacts/abc123')return Response.json(head,{headers:{'X-Artifactbin-Account':'usr_one'}});if(path==='/api/artifacts/abc123/versions/1')return Response.json({version:1,markup:'<p id="p001">Old</p>',title:'Old',meta:{},format:'markup',previous_engine:refusal},{headers:{'X-Artifactbin-Account':'usr_one'}});throw new Error(`Unexpected ${path}`);};
+ const invoke=async(args:string[])=>{const out:string[]=[];const code=await runCli(args,{cwd,home,interactive:false,fetch:request,stdout:x=>out.push(x),stderr:()=>{}});return{code,out:out.join('')};};
+ try{
+  await saveTestConnection({server:'https://example.com',token:'mx_test'},home);
+  const refused=await invoke(['pull','abc123@1','--output','doc.jsx','--json']);
+  assert.notEqual(refused.code,0);
+  const error=JSON.parse(refused.out).error;assert.equal(error.code,'previous_engine_version');assert.equal(error.message,refusal);
+  await assert.rejects(stat(join(cwd,'doc.jsx')),'nothing is written');
+  const read=await invoke(['pull','abc123@1','--output','-']);
+  assert.equal(read.code,0);assert.match(read.out,/Old/);
+ }finally{await rm(root,{recursive:true,force:true});}
+});
 test('an unconfirmed binary replacement is retried when the head is unchanged, never falsely acknowledged',async()=>{
  const root=await mkdtemp(join(tmpdir(),'afbin-binary-recovery-'));
  let head:any={id:'abc123',version:1,edit_id:'one',state:digest('one'),format:'file'};let writes=0;
