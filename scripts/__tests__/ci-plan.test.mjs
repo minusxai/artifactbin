@@ -581,7 +581,7 @@ describe('CI job shape', () => {
     expect(cli.strategy.matrix.os).toContain('ubuntu-24.04');
     const suite = node.steps.filter((step) => (step.run ?? '').includes('npm test -w services/cli'));
     expect(suite).toHaveLength(1);
-    expect(suite[0].if).toBe("matrix.shard == 1 && needs.plan.outputs.cli-tests == 'true'");
+    expect(suite[0].if).toBe("matrix.shard == 3 && needs.plan.outputs.cli-tests == 'true'");
     // What is genuinely per-platform is the compiled binary; nothing else repeats per row.
     for (const command of ['npm run build:binary -w services/cli']) {
       expect(cli.steps.find((step) => step.run === command).if).toBeUndefined();
