@@ -20,7 +20,7 @@ import {savedMentionStates} from '@/lib/membership';
  */
 import {agentDiscovery} from '@/lib/agent-discovery';
 import { archivedReadOnly, archivedVersionFor, servedRow } from '@/lib/archived-version';
-import { canReadArtifact, dataflowForRow, declarationsForRow, getArtifactById, linkRoleOf, refDataForRow, viewerIdentityFor } from '@/lib/artifacts';
+import { canReadArtifact, dataflowForRow, declarationsForRow, getArtifactById, holdableImports, linkRoleOf, refDataForRow, viewerIdentityFor } from '@/lib/artifacts';
 import { withIntent, type Intent } from '@/lib/intent';
 import { count, has } from '@/lib/relations';
 import { countOpenAnnotations } from '@/lib/annotations';
@@ -357,7 +357,9 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
         // og card ends up showing the 640px one.
         refDataForRow(row, { capture: !chrome }),
         chrome
-          ? Promise.resolve(declared && hasUrlValues ? { ...declared, values: urlValues } : declared)
+          // A top-level reader queries through the ANONYMOUS GET door, so what it
+          // may hold is decided for nobody in particular.
+          ? (declared ? holdableImports(row, declared.flow, null).then((hold) => ({ ...declared, ...(hasUrlValues ? { values: urlValues } : {}), hold })) : Promise.resolve(declared))
           // The CAPTURE's run carries whoever asked for it, which matters for
           // any document reading a folder's children (`ref_<folderId>` is a
           // per-viewer table). The TOKEN travels beside the account:
