@@ -153,7 +153,7 @@ export interface DataflowStore {
   subscribe(listener: () => void): () => void;
   /** Attach/replace the transport; runs whatever is not current immediately. */
   setTransport(transport: QueryTransport | null): void;
-  /** Re-run the given queries (or every query) and the write checks now, current or not. */
+  /** Re-run the given queries (or every query) now, current or not. */
   refresh(only?: Iterable<string>): void;
   /**
    * Fetch a window of one query's rows with the CURRENT values, through the

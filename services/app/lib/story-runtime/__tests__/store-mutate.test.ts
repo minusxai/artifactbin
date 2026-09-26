@@ -321,4 +321,22 @@ describe('write checks', () => {
     expect(settled).toBe(true);
     expect(store.mutationUnavailable('vote')).toBe(ACCESS_PENDING);
   });
+
+  it('holds a caller while a failed check is being asked again', async () => {
+    const { store, answers } = checks({});
+    answers.push(() => Promise.reject(new Error('offline')));
+    store.start();
+    await settle();
+    let answer!: (r: Awaited<ReturnType<QueryTransport['run']>>) => void;
+    answers.push(() => new Promise((resolve) => { answer = resolve; }));
+    store.setValue('choice', 'tacos'); // the next run asks again
+    let settled = false;
+    void store.accessSettled().then(() => { settled = true; });
+    await settle();
+    expect(settled).toBe(false);
+    answer({ tables: {}, errors: {}, mutationAccess: { vote: null } });
+    await settle();
+    expect(settled).toBe(true);
+    expect(store.mutationUnavailable('vote')).toBeNull();
+  });
 });
