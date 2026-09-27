@@ -24,6 +24,7 @@ import { renderInlineStory } from '../ssr-entry';
 import { storyBodyFor } from '@/lib/story/body';
 import { glyphsForNodes } from '@/lib/story/icon-glyphs';
 import { servedStoryHtml } from '@/lib/story/inline-story-html';
+import { mermaidImageKey } from '@/lib/story-ui/mermaid-source';
 import type { ServedStoryRuntime } from '@/lib/story/prepared-runtime';
 import { storyBaseCss, type StoryBaseCssRecipe } from '@/lib/story/story-base-css';
 import { styleOverrides } from '@/lib/story/style-overrides';
@@ -93,7 +94,7 @@ const fixture = (name: string) => readFileSync(path.join(FIXTURES, name), 'utf8'
 const SALES = 'SaLes1';
 const SALES_COLUMNS = [{ name: 'month', type: 'date' }, { name: 'region', type: 'string' }, { name: 'product', type: 'string' }, { name: 'revenue', type: 'number' }, { name: 'units', type: 'number' }] as const;
 
-interface Serve { colorMode?: 'light' | 'dark'; template?: string | null; viewer?: StoryIslandData['viewer']; readOnly?: string; refData?: StoryIslandData['refData']; theme?: ServedStoryRuntime['theme']; sources?: Record<string, TestSource>; results?: ServedResults }
+interface Serve { colorMode?: 'light' | 'dark'; template?: string | null; viewer?: StoryIslandData['viewer']; readOnly?: string; refData?: StoryIslandData['refData']; theme?: ServedStoryRuntime['theme']; sources?: Record<string, TestSource>; results?: ServedResults; mermaidImages?: StoryIslandData['mermaidImages'] }
 type Served = ServedStoryRuntime & { css: string; raw: { compiledCss: string | null; authorCss: string | null } };
 /** What the reader page is sent (lib/story/prepared-page.server): the sheet and style values already isolated on the server. */
 async function served(source: string, opts: Serve = {}): Promise<Served> {
@@ -107,6 +108,7 @@ async function served(source: string, opts: Serve = {}): Promise<Served> {
     ...(Object.keys(glyphs).length ? { glyphs } : {}),
     ...(declares ? { dataflow: { flow: await compiledSource(source, opts.sources), ...(opts.results ? { results: opts.results } : {}) } } : {}),
     ...(opts.viewer ? { viewer: opts.viewer } : {}),
+    ...(opts.mermaidImages ? { mermaidImages: opts.mermaidImages } : {}),
     ...(opts.readOnly ? { readOnly: opts.readOnly } : {}),
   };
   const base: StoryBaseCssRecipe = { chrome: true, theme: opts.theme ?? null, faces: [], fonts: { slots: {}, families: [] } };
@@ -231,6 +233,30 @@ describe('the reader adopts the page the server served', () => {
     expect(page.story.textContent).toContain('2025-02-01');
     await act(async () => { await new Promise((r) => setTimeout(r, 50)); });
     expect(transports.length).toBeGreaterThan(0);
+    for (const t of transports) expect(t.run).not.toHaveBeenCalled();
+    await act(async () => { page.app.unmount(); });
+    expect(page.errors).toEqual([]);
+    page.stop();
+  });
+
+  it('hydrates a document with both a stored Mermaid drawing and its first results in one overlay', async () => {
+    const code = 'flowchart LR\n  a[Request] --> b[Read]';
+    const source = fixture('dashboard.jsx').replaceAll('{{sales}}', SALES).replace('<h2', `<Mermaid title="Flow" code={${JSON.stringify(code)}} /><h2`);
+    const stored = '/assets/mermaid/' + 'a'.repeat(64) + '.svg';
+    transports.length = 0;
+    const page = await adopt(await served(source, {
+      template: 'dashboard', sources: { [SALES]: [...SALES_COLUMNS] }, results: DASHBOARD_RESULTS,
+      mermaidImages: { [mermaidImageKey(code, 'light')]: { src: stored, type: 'flowchart-v2', width: 120, height: 80, palette: 'any' } },
+    }));
+    expect(page.serverNodes.some((n) => n.getAttribute('src') === stored)).toBe(true);
+    // Hydrated clean with the drawing AND the rows: no error or warning, the server's element adopted, and every
+    // served node survived — except the drawing itself, which this jsdom's palette ('any' is nobody's) replaces
+    // with the engine's AFTER hydration, as a reader with another palette would (components/kit/mermaid).
+    expect(page.errors).toEqual([]);
+    expect(document.getElementById('root')!.contains(page.story)).toBe(true);
+    const lost = page.serverNodes.filter((n) => !page.story.contains(n) && n.getAttribute('src') !== stored && !n.closest('[aria-label="Chart placeholder"],[data-slot="popover-trigger"]'));
+    expect(lost.map((n) => n.outerHTML.slice(0, 120))).toEqual([]);
+    expect(page.story.textContent).toContain('$744,503');
     for (const t of transports) expect(t.run).not.toHaveBeenCalled();
     await act(async () => { page.app.unmount(); });
     expect(page.errors).toEqual([]);
