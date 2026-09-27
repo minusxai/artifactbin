@@ -78,6 +78,10 @@ function drawnUnder(drawing: HarvestedSvg): { palette: string; metrics: number[]
   const faces = parseMermaidFaces(drawing.attributes['data-mx-mermaid-faces']);
   // A system face measures like this machine only: no reader could use it (lib/mermaid-images/match).
   if (!/^[0-9a-f]{32}$/.test(palette) || !metrics || !faces || drawing.attributes['data-mx-mermaid-portable'] !== '') return null;
+  // Whole-pixel widths for both faces: a browser that HINTS text drew this (one launched without the
+  // harvest's unhinted text — an older browser service mid-rollout). No reader the server offers
+  // drawings to measures that way, so it is not stored and readers keep the engine.
+  if (Number.isInteger(metrics[0]) && Number.isInteger(metrics[3])) return null;
   return { palette, metrics: [...metrics], faces };
 }
 

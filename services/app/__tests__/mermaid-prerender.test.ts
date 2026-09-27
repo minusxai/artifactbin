@@ -59,7 +59,7 @@ const reader = (path: string, ua = MAC_CHROME, headers: Record<string, string> =
  * code, each carrying the key and palette the component would set. `vary`
  * makes a code's drawing differ per load; `unsafe` makes it carry a script.
  */
-function drawingBrowser(codes: string[], opts: { vary?: string; unsafe?: string; down?: boolean; forged?: string; system?: string; unmeasured?: string; faces?: Partial<Record<'document' | 'inline', string>> } = {}) {
+function drawingBrowser(codes: string[], opts: { vary?: string; unsafe?: string; down?: boolean; forged?: string; system?: string; unmeasured?: string; faces?: Partial<Record<'document' | 'inline', string>>; metrics?: number[] } = {}) {
   const calls: SvgHarvestRequest[] = [];
   let loads = 0;
   const browser: BrowserService = {
@@ -75,7 +75,7 @@ function drawingBrowser(codes: string[], opts: { vary?: string; unsafe?: string;
         attributes: {
           'data-mx-mermaid-key': mermaidImageKey(code, mode), 'data-mx-mermaid-palette': PALETTE[surface], 'data-mermaid-type': 'flowchart-v2', 'data-mx-mermaid-state': 'ready',
           // `system`: drawn in a face that is not one of the document's loaded web fonts; `unmeasured`: no text boxes.
-          ...(code === opts.unmeasured ? {} : { 'data-mx-mermaid-metrics': METRICS.join(',') }),
+          ...(code === opts.unmeasured ? {} : { 'data-mx-mermaid-metrics': (opts.metrics ?? METRICS).join(',') }),
           ...(code === opts.system ? {} : { 'data-mx-mermaid-portable': '' }),
           'data-mx-mermaid-faces': opts.faces?.[surface] ?? FACES[surface],
         },
@@ -338,6 +338,16 @@ describe('a published Mermaid document', () => {
     expect((page.body as { surface: { runtime: { data: Record<string, unknown> } } }).surface.runtime.data.mermaidImages).toBeUndefined();
     expect(page.story!.html()).not.toContain('/assets/mermaid/');
     expect(page.story!.lazyCode).toEqual(expect.objectContaining({ mermaid: ['flowchart'], mermaidImages: [] }));
+  });
+
+  it('stores nothing from a browser that hints text (whole-pixel advances: a browser service without the unhinted harvest), so readers keep the engine', async () => {
+    // What Linux Chromium measures by default for the same faces (lib/mermaid-images/__tests__/match).
+    setServices({ browser: drawingBrowser([FLOW], { metrics: [851, 20, -16, 686, 14, -11] }).browser });
+    const { id } = await publish([FLOW]);
+    await runNextMermaidHarvest();
+    expect((await jobs(id))[0].state).toBe('done');
+    expect(island(await raw(id)).mermaidImages).toBeUndefined();
+    expect(Number((await (await getDb()).query<{ n: string }>('SELECT count(*) AS n FROM mermaid_images')).rows[0].n)).toBe(0);
   });
 
   it('never stores a drawing drawn in a system font, or one whose faces were not measured: no reader could be judged against it', async () => {
