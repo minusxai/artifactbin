@@ -56,6 +56,9 @@ import { panelFitsInMargin } from '@/lib/story/edit-panel-fit';
 import type { ArtifactFormat } from '@/lib/story/input';
 import { useLiveArtifact } from '@/lib/story/use-live-artifact';
 import { pageDataChanged } from '@/web/page-data-events';
+import { initialStoryFinal } from '@/web/initial-story';
+import { kitChunksOf } from '@/lib/story-ui/kit-chunks';
+import { FinalStory } from '@/components/FinalStory';
 import { useSession } from '@/web/session';
 import { STORY_DATA_MESSAGE, STORY_DOCUMENT_MESSAGE, STORY_READER_MODE_MESSAGE, type StoryDataUpdate, isEditFrameMessage, isValuesMessage, STORY_SELECTION_ACTION_MESSAGE, STORY_SELECTION_ACTIONS_MESSAGE, type StoryEditSelection, type StorySelectionActionsMessage } from '@/lib/story-runtime/contract';
 import { readUrlValues, writeUrlValues } from '@/lib/story/url-values';
@@ -73,8 +76,15 @@ const DatasetCatalogView = dynamic(() => import('@/components/DatasetCatalogView
 });
 
 const InlineStoryRuntime = dynamic(() => import('@/lib/story-runtime/InlineStoryRuntime').then(module => ({default:module.InlineStoryRuntime})), { ssr: false });
-/** The document runtime's code, which a document address awaits before the app's first render (web/main). */
-export const preloadInlineStoryRuntime = (): Promise<void> => InlineStoryRuntime.preload();
+/**
+ * The document runtime's code and the kit chunks its story draws (`kit`), which
+ * a document address awaits before the app's first render (web/main) — so the
+ * runtime hydrates the served story on that very commit.
+ */
+export const preloadInlineStoryRuntime = (kit: readonly string[] = []): Promise<void> => Promise.all([
+  InlineStoryRuntime.preload(),
+  kit.length ? import('@/lib/story-runtime/InlineStoryRuntime').then(module => module.loadKitChunks(kit as Parameters<typeof module.loadKitChunks>[0])) : undefined,
+]).then(() => undefined);
 const ArtifactEditor = dynamic(() => import('@/components/ArtifactEditor'), {
   ssr: false,
   loading: () => <p className="mt-10 text-center text-xs text-faint">loading the editor…</p>,
@@ -484,10 +494,42 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
 
   const transportFactory = useCallback(() => backend.queryTransport(), [backend]);
   const [frameLoaded, setFrameLoaded] = useState(false);
+  /*
+   * A STORY SERVED FINAL (lib/artifact-page) is kept as served (FinalStory): a
+   * static document read by someone who may neither edit nor comment runs no
+   * story runtime at all. The moment the page needs one — the viewer may now
+   * edit or comment (they joined, their role changed), or a new version
+   * arrived live — the runtime and the story's kit are loaded FIRST, and then
+   * the runtime replaces the kept story in one commit, hydrating it where it
+   * stands: no visible change, no loading state.
+   */
+  const [servedFinalFor] = useState(() => (initialStoryFinal() ? id : null));
+  const [runtimeAsked, setRuntimeAsked] = useState(false);
+  const [runtimeArrived, setRuntimeArrived] = useState(false);
+  const needRuntime = useCallback(() => setRuntimeAsked(true), []);
+  const keptFinal = servedFinalFor === id && !runtimeArrived;
+  const wantsRuntime = runtimeAsked || canEdit || canAnnotate;
+  useEffect(() => {
+    if (!keptFinal || !wantsRuntime) return;
+    let alive = true;
+    const arrive = () => { if (alive) setRuntimeArrived(true); };
+    // A failed download still hands over: the runtime's own boundary says so and offers its Retry.
+    void preloadInlineStoryRuntime(kitChunksOf(props.runtime?.data.nodes ?? [])).then(arrive, arrive);
+    return () => { alive = false; };
+  }, [keptFinal, wantsRuntime]);
+  /*
+   * The reader's light/dark choice, for a runtime taking over a kept story: it
+   * hydrates the story as served (the author's mode), so a choice the reader
+   * already made is handed to it the moment it arrives.
+   */
+  const keptChoice = useRef<{ kept: boolean; mode: AppearanceMode | null }>({ kept: false, mode: null });
+  keptChoice.current = { kept: servedFinalFor === id, mode: readerModeOverride };
   const onController = useCallback((controller: InlineStoryController | null) => {
     runtimeRef.current = controller;
     setSessionNonce(controller?.nonce ?? null);
     setFrameLoaded(!!controller);
+    const { kept, mode } = keptChoice.current;
+    if (controller && kept && mode) controller.send({ type: STORY_READER_MODE_MESSAGE, mode });
   }, []);
   const readerMode = readerModeOverride ?? resolveStoryMode(shownTheme, shownColorMode);
   // Signal changes update this document's store and route, never its initial
@@ -963,7 +1005,7 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
           )}
           {showStarter && <TrustedUi><StarterInstructions id={id} /></TrustedUi>}
           <div hidden={showStarter}>
-          {seedReady ? <InlineStoryRuntime
+          {keptFinal ? <FinalStory key={id} onController={onController} onNeedRuntime={needRuntime} /> : seedReady ? <InlineStoryRuntime
             key={id}
             data={initialRuntimeData}
             transportFactory={transportFactory}

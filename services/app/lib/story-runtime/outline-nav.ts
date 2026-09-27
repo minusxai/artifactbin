@@ -28,6 +28,15 @@ function pairs(doc: Document | HTMLElement): Array<{ row: HTMLElement; heading: 
   }));
 }
 
+/**
+ * Take back every mark `wireOutline` left in `root` — what a served story must
+ * look like again before a runtime hydrates it (components/FinalStory): the
+ * server drew no row as current.
+ */
+export function clearOutlineMarks(root: Document | HTMLElement): void {
+  for (const row of root.querySelectorAll<HTMLElement>(`.mx-outline-row[${OUTLINE_TARGET_ATTR}][aria-current]`)) row.removeAttribute('aria-current');
+}
+
 /** Wire the outline in `doc`. Returns a disposer. A no-op when the document has none. */
 export function wireOutline(doc: Document, root: Document | HTMLElement = doc): () => void {
   const win = doc.defaultView;

@@ -16,6 +16,14 @@
  */
 const SCROLLABLE_ATTR = 'data-mx-scrollable';
 
+/**
+ * Take back every mark this module left in `root` — what a served story must
+ * look like again before a runtime hydrates it (components/FinalStory).
+ */
+export function clearTableMarks(root: Document | HTMLElement): void {
+  for (const table of root.querySelectorAll<HTMLTableElement>(`table[${SCROLLABLE_ATTR}]`)) table.removeAttribute(SCROLLABLE_ATTR);
+}
+
 /** Mark now, and keep the marks honest on scroll and resize. Returns a disposer. */
 export function markScrollableTables(doc: Document, root: Document | HTMLElement = doc): () => void {
   const win = doc.defaultView;

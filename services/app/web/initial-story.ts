@@ -1,6 +1,16 @@
+import { KIT_CHUNK_IDS, type KitChunkId } from '@/lib/story-ui/kit-chunks';
+
 /** Server-owned sibling captured before author DOM is mounted into the SPA. */
 let initialStory: Element | null = null;
 let initialPath = '';
+/**
+ * The served story once a reader has taken it out of the wrapper WITHOUT a
+ * runtime (components/FinalStory): still the story a runtime hydrates, should
+ * the viewer come to need one.
+ */
+let held: HTMLElement | null = null;
+/** What the server said about the story, on its wrapper (server/app storyFacts). */
+let facts: { final: boolean; kit: KitChunkId[] } = { final: false, kit: [] };
 /**
  * The server's story wrapper: the body's last child carrying the attribute —
  * the page data (web/bootstrap) now rides after it, as the very last element.
@@ -14,6 +24,12 @@ export function captureInitialStory(): void {
   const candidate = servedWrapper();
   initialStory = candidate?.hasAttribute('data-mx-initial-story') ? candidate : null;
   initialPath = window.location.pathname;
+  held = null;
+  const kit = (initialStory?.getAttribute('data-mx-kit') ?? '').split(' ');
+  facts = {
+    final: initialStory?.hasAttribute('data-mx-final') ?? false,
+    kit: KIT_CHUNK_IDS.filter((id) => kit.includes(id)),
+  };
 }
 /** Clear the captured server sibling before an app-route commit can paint. */
 export function clearInitialStoryOnRoute(pathname: string): void {
@@ -22,6 +38,7 @@ export function clearInitialStoryOnRoute(pathname: string): void {
 export function clearInitialStory(): void {
   initialStory?.remove();
   initialStory = null;
+  held = null;
 }
 /**
  * The server-rendered document story (lib/story-runtime/inline-composition)
@@ -30,7 +47,31 @@ export function clearInitialStory(): void {
  */
 export function initialDocumentStory(): HTMLElement | null {
   const story = initialStory?.lastElementChild;
-  return story instanceof HTMLElement && story.hasAttribute('data-mx-inline-story') ? story : null;
+  return story instanceof HTMLElement && story.hasAttribute('data-mx-inline-story') ? story : held;
+}
+
+/**
+ * The served story is FINAL for this viewer (lib/artifact-page): the reader
+ * keeps it as served and loads no story runtime unless it comes to need one.
+ */
+export const initialStoryFinal = (): boolean => facts.final && !!initialDocumentStory();
+
+/** The kit chunks the served story draws — what the runtime loads before it hydrates it. */
+export const initialStoryKit = (): readonly KitChunkId[] => (initialDocumentStory() ? facts.kit : []);
+
+/**
+ * Take the served story out of the server's wrapper for a reader that keeps
+ * it AS SERVED (components/FinalStory), which moves it into the app's tree in
+ * the same commit. It stays the story `initialDocumentStory` names, so a
+ * runtime mounted later still finds it to hydrate.
+ */
+export function holdInitialStory(): HTMLElement | null {
+  const story = initialDocumentStory();
+  if (story && story !== held) story.remove();
+  initialStory?.remove();
+  initialStory = null;
+  held = story;
+  return story;
 }
 /**
  * Hand the waiting document story to the runtime that hydrates it, once: the

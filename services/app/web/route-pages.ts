@@ -1,4 +1,5 @@
 import { lazyPage } from './lazy-page';
+import { initialStoryFinal, initialStoryKit } from './initial-story';
 
 // Deliberate dynamic-import boundary. Code preloading and rendering share these
 // top-level identities; the registry itself never imports a page eagerly.
@@ -22,13 +23,17 @@ export const routePages = {
 
 /**
  * Everything a server-rendered DOCUMENT's first app render draws: the route
- * pages and the inline runtime that hydrates the story. The server names every
- * one of them in the head (server/reader-preloads), so awaiting them before the
- * first render costs nothing — and it lets every boundary render its module on
- * that first commit, where a lazy read would suspend and reveal behind React's
- * fallback throttle.
+ * pages, the inline runtime that hydrates the story and the kit chunks the
+ * story draws — or, for a story served FINAL, the route pages alone: it keeps
+ * its served markup and runs no runtime (components/FinalStory). The server
+ * names every one of them in the head (server/reader-preloads), so awaiting
+ * them before the first render costs nothing — and it lets every boundary
+ * render its module on that first commit, where a lazy read would suspend and
+ * reveal behind React's fallback throttle.
  */
 export function preloadDocumentReader(): Promise<void> {
-  const runtime = import('./pages/Artifact').then(m => m.preloadInlineStoryRuntime());
-  return Promise.all([routePages.ProfilePage.preload(), routePages.ArtifactPage.preload(), runtime]).then(() => undefined);
+  const pages = [routePages.ProfilePage.preload(), routePages.ArtifactPage.preload()];
+  if (initialStoryFinal()) return Promise.all(pages).then(() => undefined);
+  const runtime = import('./pages/Artifact').then(m => m.preloadInlineStoryRuntime(initialStoryKit()));
+  return Promise.all([...pages, runtime]).then(() => undefined);
 }
