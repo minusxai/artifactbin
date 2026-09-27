@@ -138,6 +138,16 @@ describe('the prepared page store', () => {
     expect({ ...spies }).toEqual({ parse: 0, css: 0, nodes: 0, render: 0 });
   });
 
+  it('reuses the anonymous render of a document with data, whose stored flow comes back from JSONB in another key order', async () => {
+    const { id } = await world(`<Helmet><Value name="n" type="number" default={2} /><Query name="q">{\`select $n * 3 as n\`}</Query></Helmet>
+<div><h1>Data notes</h1><p>Six is <Number data="$q" col="n" /></p></div>`);
+    resetSpies();
+    const res = await app.request(`/a/${id}`, { headers: { accept: 'text/html' } });
+    expect(res.status).toBe(200);
+    expect(inlined(await res.text()).artifact.surface.runtime.data.dataflow.flow.queries).toHaveLength(1);
+    expect({ ...spies }).toEqual({ parse: 0, css: 0, nodes: 0, render: 0 });
+  });
+
   it('writes back on a read miss and keys each archived version in its own slot', async () => {
     const { owner, id, token } = await world();
     await (await harness.db()).query('DELETE FROM prepared_pages');

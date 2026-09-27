@@ -116,10 +116,17 @@ function buildId(): string {
 }
 const BOOT = Date.now();
 
+/**
+ * JSON with its object keys in one order. The overlay carries the STORED flow,
+ * and a JSONB column hands objects back in its own key order: a digest of plain
+ * JSON would call a byte-identical overlay different, and never reuse a render.
+ */
+const canonical = (value: unknown): string => JSON.stringify(value, (_key, v: unknown) =>
+  v && typeof v === 'object' && !Array.isArray(v) ? Object.fromEntries(Object.entries(v as Record<string, unknown>).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))) : v);
 const slotOf = (at: ArchivedRender | null): string => (at ? `v:${at.version}` : 'head');
 /** Every stored field preparation reads, the CSS compile version and the build. */
 const keyOf = (row: ArtifactRow): string =>
-  `${PAGE_FORMAT}:${sha(JSON.stringify([row.format, row.title, row.meta, row.source ?? '', !!row.previousEngine]))}:${storyCssCompileVersion()}:${buildId()}`;
+  `${PAGE_FORMAT}:${sha(canonical([row.format, row.title, row.meta, row.source ?? '', !!row.previousEngine]))}:${storyCssCompileVersion()}:${buildId()}`;
 
 /** The current state of the other rows an entry was built from. Empty when it depends on none. */
 async function fingerprint(deps: PreparedDeps): Promise<string> {
@@ -153,7 +160,7 @@ async function readerInputFor(row: ArtifactRow, declared: StoryIslandDataflow | 
     ...(at ? { readOnly: archivedReadOnly(at.version) } : {}),
   };
 }
-const overlayDigest = (input: ReaderIslandInput): string => sha(JSON.stringify(readerIslandData(input)));
+const overlayDigest = (input: ReaderIslandInput): string => sha(canonical(readerIslandData(input)));
 
 /** Parse, isolate and render one version. The only place a served document is compiled. */
 async function build(row: ArtifactRow, at: ArchivedRender | null, origin: string): Promise<PreparedPage> {
