@@ -428,7 +428,7 @@ export function findBrokenEmbeds(source: string): ValidationError[] {
       const aggValue = agg?.value.static ? agg.value.json : undefined;
       if (agg && !NUMBER_AGGS.some((value) => value === aggValue)) {
         errors.push({
-          message: `<Number agg>: expected one of ${NUMBER_AGGS.join(', ')}. To display the latest row, order the Query by date descending and LIMIT 1, then use agg="first".`,
+          message: `<Number agg>: expected one of ${NUMBER_AGGS.join(', ')} ("mean" is avg; the final row's cell is last).`,
           tag: el.tag, attr: 'agg', start: agg.start, end: agg.end,
         });
       }
