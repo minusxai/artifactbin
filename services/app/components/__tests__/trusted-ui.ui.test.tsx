@@ -13,6 +13,12 @@ import { httpBackendWrapper } from '@/test/helpers/artifact-backend';
 
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((res) => { resolve = res; });
+  return { promise, resolve };
+}
+
 function SensitiveDialog() {
   const target = useTrustedPortalContainer();
   return target ? createPortal(<input aria-label="Owning token" value="fake-secret" readOnly />, target) : null;
@@ -128,7 +134,7 @@ describe('trusted UI CSS boundary', () => {
     configureTrustedUiStyles('');
   });
 
-  it('takes its sheet from the shell\'s own stylesheet links only — never a <style>, never another origin — and waits for one still loading', async () => {
+  it('takes its sheet from the shell\'s own stylesheet links only — never a <style>, never another origin — as the file\'s exact bytes', async () => {
     const sheet = (link: HTMLLinkElement, cssText: string | null) =>
       Object.defineProperty(link, 'sheet', { configurable: true, get: () => cssText === null ? null : { cssRules: [{ cssText }] } });
     const link = (href: string, cssText: string | null) => {
@@ -139,7 +145,21 @@ describe('trusted UI CSS boundary', () => {
       document.head.append(element);
       return element;
     };
-    const app = link('/assets/index-abc.css', ':root, :host { --color-fg: black; }');
+    // What the server holds, byte for byte — and what CSSOM makes of it: the
+    // `border` shorthand beside its overriding longhand serializes EMPTY.
+    const files: Record<string, string> = {
+      '/assets/index-abc.css': ':root,:host{--color-fg:black}.tab{border:1px solid var(--edge);border-bottom:0}',
+      '/assets/late-abc.css': '.late-probe{color:var(--color-fg)}',
+    };
+    const bytes = deferred<void>();
+    const fetched: string[] = [];
+    vi.stubGlobal('fetch', vi.fn(async (href: string) => {
+      const path = new URL(href).pathname;
+      fetched.push(path);
+      await bytes.promise;
+      return path in files ? new Response(files[path]) : new Response('', { status: 404 });
+    }));
+    const app = link('/assets/index-abc.css', ':root, :host { --color-fg: black; }\n.tab { border-top-color: ; border-bottom: 0px; }');
     const later = link('/assets/late-abc.css', null);
     const foreign = link('https://fonts.example.test/x.css', '.foreign-probe { color: red; }');
     const author = document.createElement('style');
@@ -149,15 +169,20 @@ describe('trusted UI CSS boundary', () => {
       configureTrustedUiFromShell(document);
       const result = render(<TrustedUi><button aria-label="Styled control">Safe</button></TrustedUi>);
       const root = result.container.querySelector('[data-trusted-ui]')!.shadowRoot!;
+      // At once, before any bytes: the parsed rules stand in, scoped.
       expect(root.textContent).toContain('[data-trusted-ui-root], [data-trusted-ui-root] { --color-fg: black; }');
       expect(root.textContent).toContain('--color-fg: initial');
-      expect(root.textContent).not.toContain('author-style-probe');
-      expect(root.textContent).not.toContain('foreign-probe');
-      expect(root.textContent).not.toContain('late-probe');
+      expect(fetched.sort()).toEqual(['/assets/index-abc.css', '/assets/late-abc.css']);
       sheet(later, '.late-probe { color: var(--color-fg); }');
       await act(async () => { later.dispatchEvent(new Event('load')); });
       expect(root.textContent).toContain('.late-probe { color: var(--color-fg); }');
-      expect(root.textContent).toContain('--color-fg: black');
+      // Then the exact bytes replace them in the mounted root.
+      await act(async () => { bytes.resolve(); await bytes.promise; await new Promise(r => setTimeout(r, 0)); });
+      expect(root.textContent).toContain('[data-trusted-ui-root],[data-trusted-ui-root]{--color-fg:black}.tab{border:1px solid var(--edge);border-bottom:0}');
+      expect(root.textContent).toContain('.late-probe{color:var(--color-fg)}');
+      expect(root.textContent).not.toContain('border-top-color: ;');
+      expect(root.textContent).not.toContain('author-style-probe');
+      expect(root.textContent).not.toContain('foreign-probe');
       result.unmount();
     } finally {
       for (const element of [app, later, foreign, author]) element.remove();

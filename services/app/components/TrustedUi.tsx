@@ -64,30 +64,40 @@ export function configureTrustedUiStyles(cssText: string): void {
  *
  * Exactly which sheets: the same-origin `<link rel="stylesheet">` elements in
  * the shell's `<head>` (web/index.html → the built `/assets/index-*.css`, or
- * `/shell.css` under the dev server), read ONCE, by the entrypoint, before any
+ * `/shell.css` under the dev server), found ONCE, by the entrypoint, before any
  * React tree mounts. Never a `<style>` element and never anything later:
  * author CSS reaches the document only as `<style>` (a server-rendered
  * document's sheet in <body>, the inline runtime's own), so it can never be
- * taken for the app's. A same-origin sheet's rules are readable; they are
- * serialized back to text and scoped exactly as an explicit copy would be. A
- * sheet the parser has not finished yet is read when it loads (the trusted
- * roots already mounted pick it up then).
+ * taken for the app's.
+ *
+ * The TEXT is the file's own bytes, re-read from the HTTP cache the link just
+ * filled (a same-origin fetch of an immutable, content-addressed asset). Not
+ * the parsed rules: CSSOM serialization is lossy — a shorthand carrying a
+ * `var()` beside a longhand that overrides part of it (`border: 1px solid
+ * var(--edge); border-bottom: 0`) serializes with EMPTY longhands, and parsing
+ * that back drops the border. Until the bytes land (a few milliseconds, before
+ * the first route chunk has mounted in practice) the parsed rules stand in, so
+ * trusted UI is never unstyled and never waits; the exact text then replaces
+ * them in every mounted root.
  */
 export function configureTrustedUiFromShell(doc: Document = document): void {
+  const origin = new URL(doc.baseURI).origin;
   const links = [...doc.head.querySelectorAll<HTMLLinkElement>('link[rel~="stylesheet"]')]
-    .filter(link => { try { return new URL(link.href, doc.baseURI).origin === new URL(doc.baseURI).origin; } catch { return false; } });
-  const text = (link: HTMLLinkElement): string | null => {
-    try { return link.sheet ? Array.from(link.sheet.cssRules, rule => rule.cssText).join('\n') : null; }
-    catch { return null; }
+    .filter(link => { try { return new URL(link.href, doc.baseURI).origin === origin; } catch { return false; } });
+  const exact = new Map<HTMLLinkElement, string>();
+  const parsed = (link: HTMLLinkElement): string => {
+    try { return link.sheet ? Array.from(link.sheet.cssRules, rule => rule.cssText).join('\n') : ''; }
+    catch { return ''; }
   };
-  const apply = () => configureTrustedUiStyles(links.map(link => text(link) ?? '').join('\n'));
-  const waiting = links.filter(link => text(link) === null);
+  const apply = () => configureTrustedUiStyles(links.map(link => exact.get(link) ?? parsed(link)).join('\n'));
   apply();
-  let remaining = waiting.length;
-  for (const link of waiting) {
-    const settle = () => { if (--remaining === 0) apply(); };
-    link.addEventListener('load', settle, { once: true });
-    link.addEventListener('error', settle, { once: true });
+  for (const link of links) {
+    // A sheet the parser has not finished yet stands in once it has loaded.
+    if (!link.sheet) link.addEventListener('load', () => { if (!exact.has(link)) apply(); }, { once: true });
+    void fetch(link.href, { credentials: 'same-origin' })
+      .then(response => response.ok ? response.text() : Promise.reject(new Error(String(response.status))))
+      .then(text => { exact.set(link, text); apply(); })
+      .catch(() => { /* the parsed rules keep standing in */ });
   }
 }
 
