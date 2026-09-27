@@ -1,6 +1,6 @@
 /**
- * Browser-only panes: the component mounts only in the browser, after the
- * first commit. A React.lazy alone is
+ * Browser-only panes: the component mounts only in the browser — after the
+ * hydration commit where there is server markup to agree with. A React.lazy alone is
  * not that — SSR would suspend on a boundary the server can never resolve, and
  * React answers that by discarding the tree and re-rendering the root (#419;
  * seen as "no page errors" failing in the full-kit gate, with the chart
@@ -8,28 +8,38 @@
  * shim is a client-only pane: the editor, the source editor, the chart chunk.
  */
 'use client';
-import { createElement, lazy, Suspense, useEffect, useState, type ComponentType, type ReactNode } from 'react';
+import { createElement, lazy, Suspense, useEffect, useState, useSyncExternalStore, type ComponentType, type ReactNode } from 'react';
+
+const NO_SUBSCRIBE = () => () => {};
 
 export default function dynamic<P extends object>(
   loader: () => Promise<{ default: ComponentType<P> } | ComponentType<P>>,
   opts: { loading?: () => ReactNode; ssr?: boolean } = {},
-): ComponentType<P> {
-  const Lazy = lazy(async () => {
-    const m = await loader();
-    return 'default' in m ? m : { default: m as ComponentType<P> };
+): ComponentType<P> & { preload(): Promise<void> } {
+  let pending: Promise<{ default: ComponentType<P> }> | undefined;
+  let arrived: ComponentType<P> | undefined;
+  const load = () => pending ??= loader().then(m => {
+    const module = 'default' in m ? m : { default: m as ComponentType<P> };
+    arrived = module.default;
+    return module;
   });
+  const Lazy = lazy(load);
   const fallback = () => (opts.loading ? opts.loading() : null);
   const Dynamic = (props: P) => {
-    // The server renders the fallback; the client swaps in the real component
-    // after mount, so the two agree on the first paint and nothing suspends
-    // where it cannot resolve.
-    const [mounted, setMounted] = useState(opts.ssr === true);
-    useEffect(() => { setMounted(true); }, []);
-    if (!mounted) return fallback();
-    return createElement(Suspense, { fallback: fallback() }, createElement(Lazy, props));
+    // The server renders the fallback, and a HYDRATING render draws the same;
+    // the client swaps in the real component right after, so the two agree on
+    // the first paint and nothing suspends where it cannot resolve. A plain
+    // client render (createRoot) has no server markup to agree with, so it
+    // draws the component at once.
+    const client = useSyncExternalStore(NO_SUBSCRIBE, () => true, () => opts.ssr === true);
+    // Code that already arrived renders on this commit — no lazy() read, so no
+    // suspended frame and no fallback reveal throttle. Chosen once per mount.
+    const [Arrived] = useState(() => arrived);
+    if (!client) return fallback();
+    return createElement(Suspense, { fallback: fallback() }, createElement(Arrived ?? Lazy, props));
   };
   Dynamic.displayName = 'Dynamic';
-  return Dynamic;
+  return Object.assign(Dynamic, { preload: () => load().then(() => undefined) });
 }
 
 /**

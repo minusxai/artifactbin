@@ -26,13 +26,25 @@
  * hundred milliseconds on a local server, which is exactly why this was easy to
  * ship and hard to see.
  *
+ * 3. THE READER'S TAKEOVER. The app page (`/a/<id>`, `/@owner/<slug>`) serves
+ *    the same document inline, and the reader's runtime HYDRATES that server
+ *    story instead of drawing it again (lib/story-runtime/inline-composition).
+ *    Every element the server drew must be the element React owns afterwards
+ *    — for the page-speed fixtures and the kitchen sink, as every role, in
+ *    both color schemes, on an archived version and on the /edit entry — with
+ *    no hydration error, no dangling generated id, and a takeover that no
+ *    Suspense fallback throttle (300 ms each, twice, before) sits in.
+ *
  *   usage: node scripts/gate-hydration.mjs [base]
  */
 import { createChecker } from './lib/assert.mjs';
 import {fixtureFetch as fetch} from './lib/fixture-http.mjs';
 import { chromium } from 'playwright';
-import { startDocument } from './lib/start-doc.mjs';
+import { becomeAccountOwner, becomeOwner, publishAs, startDocument } from './lib/start-doc.mjs';
 import { githubWidgetFixture } from './lib/github-widget-fixture.mjs';
+import { loginViaEmail, startMailSink } from './lib/mail-login.mjs';
+import { publishPageSpeedFixtures } from './fixtures/page-speed/index.mjs';
+import { kitchenSinkMarkup } from './lib/kitchen-sink-doc.mjs';
 
 const B = process.argv[2] ?? 'http://localhost:3030';
 const check = createChecker('hydration');
@@ -336,7 +348,181 @@ async function runMermaidPreload() {
   }
 }
 
+/*
+ * THE READER HYDRATES THE SERVER'S STORY.
+ *
+ * Marked when the HTML has been parsed (readyState `interactive`, before any
+ * deferred module runs): every element of the served story. Judged at the
+ * story root's FIRST COMMIT — React tells the DevTools hook about every commit,
+ * production builds included, and this probe is that hook — which is the
+ * hydration commit, before any effect or data has changed the document on
+ * purpose (a Radix part re-keying itself, a chart pane arriving):
+ *   - the story sits in the app's root and the server's wrapper is gone;
+ *   - every served element is still in the story, and React owns it (a fiber);
+ *     a discarded server tree (React's client-render fallback) fails both;
+ *   - no aria-controls/labelledby/describedby/for names an element that is
+ *     missing now and was present in the served markup;
+ *   - its time after DOMContentLoaded, the time the runtime takes to own it.
+ * A production React reports a mismatch through reportError (a page error);
+ * a development React also reports attribute-only mismatches (console.error).
+ * Any console error or page error fails the load.
+ */
+const TAKEOVER_PROBE = () => {
+  const refs = ['aria-controls', 'aria-labelledby', 'aria-describedby', 'for'];
+  const dangling = (root) => [...root.querySelectorAll(refs.map((a) => `[${a}]`).join(','))]
+    .flatMap((el) => refs.flatMap((a) => (el.getAttribute(a) ?? '').split(' ').filter(Boolean).filter((id) => !document.getElementById(id)).map((id) => `${a}=${id}`)));
+  const state = (window.__readerHydration = { served: null, story: null, dcl: null, verdict: null });
+  document.addEventListener('readystatechange', () => {
+    if (document.readyState !== 'interactive' || state.story) return;
+    const story = document.querySelector('[data-mx-initial-story] > [data-mx-inline-story]');
+    if (!story) return;
+    const where = (n) => { const a = n.parentElement?.closest('[data-mx-ast],[data-slot],[aria-label]'); return a ? `${a.localName}[${a.getAttribute('aria-label') ?? a.getAttribute('data-slot') ?? a.getAttribute('data-mx-ast')}]` : 'the story'; };
+    state.story = story;
+    // React 19 hoists a resource hint the server rendered (an image preload); it is not part of the tree.
+    state.served = [...story.querySelectorAll('*')].filter((n) => !(n.localName === 'link' && n.rel === 'preload')).map((n) => [n, where(n)]);
+    state.dangling = dangling(story);
+  });
+  document.addEventListener('DOMContentLoaded', () => { state.dcl = performance.now(); });
+  const judge = () => {
+    const story = state.story;
+    const show = ([n, at]) => `${n.outerHTML.slice(0, 90)} in ${at}`;
+    const lost = state.served.filter(([n]) => !story.contains(n));
+    // Markup React sets as raw HTML (an <Icon>'s glyph) is kept, never owned node by node.
+    const raw = (n) => { for (let e = n.parentElement; e && e !== story; e = e.parentElement) { const k = Object.keys(e).find((key) => key.startsWith('__reactProps$')); if (k && e[k]?.dangerouslySetInnerHTML) return true; } return false; };
+    const unowned = state.served.filter(([n]) => story.contains(n) && !Object.keys(n).some((k) => k.startsWith('__reactFiber$')) && !raw(n));
+    state.verdict = {
+      at: performance.now(), served: state.served.length,
+      adopted: !!document.getElementById('root')?.contains(story) && !document.querySelector('[data-mx-initial-story]'),
+      lost: lost.slice(0, 3).map(show), lostCount: lost.length,
+      unowned: unowned.slice(0, 3).map(show), unownedCount: unowned.length,
+      dangling: dangling(story).filter((ref) => !state.dangling.includes(ref)),
+    };
+  };
+  window.__REACT_DEVTOOLS_GLOBAL_HOOK__ = {
+    supportsFiber: true, renderers: new Map(), inject: () => 1,
+    onCommitFiberRoot: (_id, root) => { if (!state.verdict && state.story && root.containerInfo === state.story) judge(); },
+    onCommitFiberUnmount: () => {}, onPostCommitFiberRoot: () => {}, checkDCE: () => {},
+  };
+};
+
+/** Open `path` in a fresh page of `context`, the OS in `scheme`, and judge the takeover; returns the takeover time after DOMContentLoaded. */
+async function judgeTakeover(context, scheme, path, label, after) {
+  const page = await context.newPage();
+  await page.emulateMedia({ colorScheme: scheme });
+  const errors = [];
+  page.on('pageerror', (e) => errors.push(`page error: ${String(e).slice(0, 300)}`));
+  page.on('console', (m) => { if (m.type() === 'error') errors.push(`${m.text().slice(0, 300)} (${m.location().url})`); });
+  await page.addInitScript(TAKEOVER_PROBE);
+  await page.goto(`${B}${path}`, { waitUntil: 'domcontentloaded', timeout: 90000 });
+  const ready = await waitFor(page, '!!window.__readerHydration?.verdict', 30000);
+  // Leave the document running a moment, so an error raised as data and panes land is still this load's.
+  await page.waitForTimeout(500);
+  await after?.(page);
+  const { verdict, dcl, served } = await page.evaluate(() => { const h = window.__readerHydration; return { verdict: h.verdict, dcl: h.dcl, served: h.served?.length ?? 0 }; });
+  const where = new URL(page.url()).pathname + new URL(page.url()).search;
+  await page.close();
+  check(ready && served > 0 && verdict.adopted, `${label}: the served story was adopted by the app and hydrated (${where}, ${served} elements)`);
+  if (!ready || !verdict) return null;
+  check(verdict.lostCount === 0, `${label}: every served element survived hydration (${verdict.lostCount} lost ${verdict.lost.join(' ') || ''})`);
+  check(verdict.unownedCount === 0, `${label}: React owns every served element (${verdict.unownedCount} not ${verdict.unowned.join(' ') || ''})`);
+  check(verdict.dangling.length === 0, `${label}: no generated id reference dangles (${verdict.dangling.join(' ') || 'none'})`);
+  check(errors.length === 0, `${label}: no hydration error or warning, no page error (${errors.length}: ${errors[0] ?? ''})`);
+  return verdict.at - dcl;
+}
+
+const publish1 = (doc, markup) => publish(doc.id, doc.token, markup, 'hydration versions');
+
+async function runReaderHydration() {
+  const sink = await startMailSink();
+  const stamp = Date.now();
+  const account = async (role) => {
+    const context = await browser.newContext({ viewport: { width: 1400, height: 900 } });
+    await githubWidgetFixture(context);
+    const page = await context.newPage();
+    const email = `mxmx_test_hydration_${role}_${stamp}@example.com`;
+    await loginViaEmail(page, B, sink, email);
+    return { context, page, email };
+  };
+  const ownerContext = await browser.newContext({ viewport: { width: 1400, height: 900 } });
+  await githubWidgetFixture(ownerContext);
+  const ownerPage = await ownerContext.newPage();
+  await becomeAccountOwner(ownerPage, B, { sink, email: `mxmx_test_hydration_owner_${stamp}@example.com` });
+  const publish = (body) => publishAs(ownerPage, body);
+  const fixtures = await publishPageSpeedFixtures(publish);
+  const sinkDoc = await publish({ title: 'Hydration kitchen sink', markup: await kitchenSinkMarkup(publish), theme: 'modernist', colorMode: 'dark', visibility: 'unlisted' });
+  // An author's Helmet script runs in its own sandboxed frame; its document still hydrates.
+  const scripted = await publish({ title: 'Hydration scripted', markup: '<Helmet><script>{`document.body.dataset.ran = "yes"`}</script></Helmet><article><h1>Scripted</h1><Card><CardContent>with a card</CardContent></Card></article>', visibility: 'unlisted' });
+  // The parse-survival shapes of the repaint check below (a div in a <p>, a Button in a trigger, a <For> in an svg).
+  const survival = await publish({ title: 'Hydration parse survival', markup: PROSE, visibility: 'unlisted' });
+  const kit = fixtures.find((f) => f.key === 'kit');
+  // Two versions, so `?version=1` is an ARCHIVED render — which only the owner's history reaches.
+  const versioned = await startDocument(B);
+  await publish1(versioned, '<article><h1>First version</h1><Tabs defaultValue="a"><TabsList><TabsTrigger value="a">A</TabsTrigger><TabsTrigger value="b">B</TabsTrigger></TabsList><TabsContent value="a">a</TabsContent><TabsContent value="b">b</TabsContent></Tabs><Accordion type="single" collapsible><AccordionItem value="x"><AccordionTrigger>Open</AccordionTrigger><AccordionContent>inside</AccordionContent></AccordionItem></Accordion></article>');
+  await publish1(versioned, '<article><h1>Second version</h1></article>');
+  const historian = await browser.newContext({ viewport: { width: 1400, height: 900 } });
+  await githubWidgetFixture(historian);
+  await becomeOwner(await historian.newPage(), B, versioned.token);
+  const editor = await account('editor');
+  const commenter = await account('commenter');
+  for (const id of [sinkDoc.id, kit.id, fixtures.find((f) => f.key === 'dashboard').id]) {
+    const shared = await ownerPage.evaluate(async ({ id, shares }) => (await fetch(`/api/my/artifacts/${id}/sharing`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ shares }) })).status,
+      { id, shares: [{ email: editor.email, role: 'editor' }, { email: commenter.email, role: 'commenter' }] });
+    check(shared === 200, `shared ${id} with an editor and a commenter (${shared})`);
+  }
+  // A comment thread on the kit fixture, so a load can open the document through its deep link:
+  // the pins and the open thread are drawn over the story after it hydrates.
+  const thread = await ownerPage.evaluate(async (id) => {
+    const head = await (await fetch(`/api/my/artifacts/${id}`)).json();
+    const made = await fetch(`/api/my/artifacts/${id}/annotations`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ path: '1.1' /* the kit fixture's <h1> */, edit_id: head.edit_id, body: 'Is this heading right?' }) });
+    const wire = await (await fetch(`/api/my/artifacts/${id}`)).json();
+    return { status: made.status, refusal: made.ok ? '' : (await made.text()).slice(0, 200), id: wire.annotations?.[0]?.id ?? null };
+  }, kit.id);
+  check(thread.status === 201 && !!thread.id, `the owner left a comment on the kit fixture's heading (${thread.status}${thread.refusal ? ` ${thread.refusal}` : ''})`);
+  const anonymous = await browser.newContext({ viewport: { width: 1400, height: 900 } });
+  await githubWidgetFixture(anonymous);
+
+  const times = [];
+  const load = async (context, scheme, path, label, after) => {
+    const t = await judgeTakeover(context, scheme, path, `${label} (${scheme})`, after);
+    if (t !== null) times.push(t);
+  };
+  // Every fixture and the kitchen sink, anonymous and as the owner (whose address is the pretty /@owner one).
+  for (const doc of [...fixtures, { key: 'kitchen sink', id: sinkDoc.id }, { key: 'scripted', id: scripted.id }, { key: 'parse survival', id: survival.id }]) {
+    await load(anonymous, 'light', `/a/${doc.id}`, `${doc.key}, anonymous`);
+    await load(ownerContext, 'dark', `/a/${doc.id}`, `${doc.key}, owner`);
+  }
+  await load(historian, 'dark', `/a/${versioned.id}?version=1`, 'version 1 of 2 (archived), its owner');
+  await load(ownerContext, 'light', `/a/${kit.id}/edit`, 'kit, owner entering /edit');
+  const threadOpen = (who) => async (page) => check(await page.locator('[aria-label="Reply to annotation"]').first().waitFor({ timeout: 10000 }).then(() => true, () => false),
+    `kit, ${who}: the linked comment thread opened over the hydrated story`);
+  await load(ownerContext, 'dark', `/a/${kit.id}?comment=${thread.id}`, 'kit with its comment thread open, owner', threadOpen('owner'));
+  await load(commenter.context, 'light', `/a/${kit.id}?comment=${thread.id}`, 'kit with its comment thread open, commenter', threadOpen('commenter'));
+  for (const [who, context] of [['editor', editor.context], ['commenter', commenter.context]]) {
+    await load(context, 'light', `/a/${sinkDoc.id}`, `kitchen sink, ${who}`);
+    await load(context, 'dark', `/a/${fixtures.find((f) => f.key === 'dashboard').id}`, `dashboard, ${who}`);
+  }
+  times.sort((a, b) => a - b);
+  const median = times[Math.floor(times.length / 2)];
+  check.note(`takeover after DOMContentLoaded: median ${Math.round(median)} ms over ${times.length} loads (min ${Math.round(times[0])}, max ${Math.round(times.at(-1))})`);
+  // Only a production build is timed: a dev server's unbundled modules are not what readers get.
+  const head = (await (await fetch(`${B}/a/${kit.id}`, { headers: { accept: 'text/html' } })).text()).split('</head>')[0];
+  if (/<link rel="modulepreload" href="\/assets\//.test(head)) {
+    /*
+     * Judged on the FASTEST load, not the median: the fault this guards — a
+     * Suspense fallback revealed behind React's 300 ms throttle, twice per
+     * document before — is a wall-clock FLOOR every load pays, however idle the
+     * machine. A shard's parallel gates only ever ADD time (measured: median
+     * 180–351 ms across CI runs, min 122–190 ms), so one load under 300 ms is
+     * a load no throttle sat in, and a median threshold would be judging the
+     * runner's contention instead.
+     */
+    check(times[0] < 300, `the runtime takes over in under 300 ms after DOMContentLoaded, unthrottled (fastest ${Math.round(times[0])} ms, median ${Math.round(median)} ms)`);
+  }
+  for (const context of [ownerContext, anonymous, historian, editor.context, commenter.context]) await context.close();
+}
+
 try {
+  await runReaderHydration();
   await runNoRepaint();
   await runPreload();
   await runMermaidPreload();

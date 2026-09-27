@@ -6,6 +6,7 @@
  */
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { renderToString } from 'react-dom/server';
+import { hydrateRoot } from 'react-dom/client';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import dynamic, { onDemand, useOnDemand, whenIdle, type OnDemand } from '@/lib/dynamic';
 
@@ -21,6 +22,35 @@ describe('dynamic()', () => {
   it('swaps in the component in the browser', async () => {
     render(<Late />);
     await waitFor(() => expect(screen.getByText('the real pane')).toBeTruthy());
+  });
+
+  it('renders a pane whose code already arrived on the first browser commit, never its fallback', async () => {
+    const Ready = dynamic(async () => ({ default: () => <p>the ready pane</p> }), { ssr: false, loading: () => <p>still loading…</p> });
+    await Ready.preload();
+    const drawn: string[] = [];
+    const observer = new MutationObserver(records => { for (const r of records) for (const n of r.addedNodes) drawn.push(n.textContent ?? ''); });
+    observer.observe(document.body, { childList: true, subtree: true });
+    render(<Ready />);
+    expect(screen.getByText('the ready pane')).toBeTruthy();
+    await act(async () => {});
+    drawn.push(...observer.takeRecords().flatMap(r => [...r.addedNodes].map(n => n.textContent ?? '')));
+    observer.disconnect();
+    expect(drawn.some(text => text.includes('still loading…'))).toBe(false);
+  });
+
+  it('hydrates its server fallback first, even with the code already here, then swaps the pane in', async () => {
+    const Ready = dynamic(async () => ({ default: () => <p>the hydrated pane</p> }), { ssr: false, loading: () => <p>server fallback</p> });
+    await Ready.preload();
+    const host = document.createElement('div');
+    host.innerHTML = renderToString(<Ready />);
+    document.body.appendChild(host);
+    const errors: unknown[] = [];
+    const spy = vi.spyOn(console, 'error').mockImplementation((...args) => { errors.push(args); });
+    await act(async () => { hydrateRoot(host, <Ready />, { onRecoverableError: (e) => errors.push(e) }); });
+    await waitFor(() => expect(host.textContent).toBe('the hydrated pane'));
+    expect(errors).toEqual([]);
+    spy.mockRestore();
+    host.remove();
   });
 });
 

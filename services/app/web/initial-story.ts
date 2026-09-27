@@ -14,3 +14,23 @@ export function clearInitialStory(): void {
   initialStory?.remove();
   initialStory = null;
 }
+/**
+ * The server-rendered document story (lib/story-runtime/inline-composition)
+ * waiting to be hydrated, when there is one — a starter's instructions are not
+ * one. It stays in place until the inline runtime adopts it.
+ */
+export function initialDocumentStory(): HTMLElement | null {
+  const story = initialStory?.lastElementChild;
+  return story instanceof HTMLElement && story.hasAttribute('data-mx-inline-story') ? story : null;
+}
+/**
+ * Hand the waiting document story to the runtime that hydrates it, once: the
+ * story leaves the server's wrapper, and the wrapper (with its handoff rule) is
+ * removed. The caller moves the story into the app's tree in the same commit.
+ */
+export function adoptInitialStory(): HTMLElement | null {
+  const story = initialDocumentStory();
+  if (story) story.remove();
+  clearInitialStory();
+  return story;
+}

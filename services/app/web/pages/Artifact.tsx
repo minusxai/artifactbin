@@ -20,6 +20,9 @@ import { canEdit } from '@/lib/share-roles';
 import { NotFoundPage } from './NotFound';
 import { useArtifactView } from '../use-artifact-view';
 
+// Reached through this page's own chunk, so the entry names no module of its own for it (web/route-pages).
+export { preloadInlineStoryRuntime } from '@/components/ArtifactSurface';
+
 /**
  * A folder is a LISTING, never a document: its page (and the shelf, table and
  * JSX write-back it carries) is its own chunk, so no reader of a document
