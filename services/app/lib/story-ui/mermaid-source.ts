@@ -107,3 +107,11 @@ export function mermaidDiagramKind(code: unknown): string | null {
   const text = stripAnyComments(withoutCommentLines);
   return MERMAID_DIAGRAMS.find((d) => d.test.test(text))?.kind ?? null;
 }
+
+/**
+ * Key of a stored Mermaid drawing: the diagram's code and the colour mode it
+ * was drawn in. SEED (Track G): contract only.
+ */
+export function mermaidImageKey(code: string, mode: 'light' | 'dark'): string {
+  throw new Error(`mermaidImageKey not implemented (${code.length}, ${mode})`);
+}
