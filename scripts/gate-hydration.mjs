@@ -35,8 +35,15 @@
  *    no hydration error, no dangling generated id, and a takeover that no
  *    Suspense fallback throttle (300 ms each, twice, before) sits in.
  *
+ * 4. ONLY THE CODE A PAGE RUNS. A static document read by someone who may
+ *    neither edit nor comment is served FINAL: the app keeps the served story
+ *    as it is and the reader downloads no story runtime and no kit chunk. A
+ *    document that hydrates loads exactly the kit chunks it draws (from the
+ *    network log), awaited before hydration.
+ *
  *   usage: node scripts/gate-hydration.mjs [base]
  */
+import { readFileSync } from 'node:fs';
 import { createChecker } from './lib/assert.mjs';
 import {fixtureFetch as fetch} from './lib/fixture-http.mjs';
 import { chromium } from 'playwright';
@@ -79,6 +86,11 @@ const PROSE = '<Helmet><Value name="bars" type="table" value={[{"k":"a","x":0,"h
   + '<rect x="$_row.x" y="0" width="8" height="$_row.h" fill="currentColor" /></For></svg>'
   + '<Card><CardContent>a component, so the document hydrates</CardContent></Card>'
   + '</div>';
+
+/** Static components only (lib/story-ui/kit-chunks): the finished page for a reader who cannot edit or comment. */
+const STATIC_KIT = '<article><h1>Static <Badge>new</Badge></h1>'
+  + '<Alert><AlertTitle>Heads up</AlertTitle><AlertDescription>only static parts</AlertDescription></Alert>'
+  + '<Card><CardHeader><CardTitle>Card</CardTitle></CardHeader><CardContent><p>body</p></CardContent></Card></article>';
 
 /** A chart, with its rows declared inline so the document needs no dataset. */
 const CHART =
@@ -241,8 +253,10 @@ async function runPreload() {
   // It hydrates (it declares data), so the entry's own static chunks are
   // preloaded with the entry — but nothing only the chart module needs.
   const manifest = await (await fetch(`${B}/story/manifest.json`)).json();
+  // …nor the kit's: code the chart shares with a component the prose draws is that component's too.
+  const kitCode = new Set(Object.values(manifest.kit ?? {}).flat());
   const chartOnly = manifest.lazy.flatMap((chunk) => [chunk, ...(manifest.lazyDeps?.[chunk] ?? [])])
-    .filter((url) => !(manifest.entryDeps ?? []).includes(url));
+    .filter((url) => !(manifest.entryDeps ?? []).includes(url) && !kitCode.has(url));
   check(chartOnly.length > 0 && chartOnly.every((url) => !proseHead.includes(url)),
     `a prose document does not preload the chart chunk or its own dependencies (${chartOnly.filter((url) => proseHead.includes(url)).join(' ') || 'none'})`);
 
@@ -283,7 +297,8 @@ async function runMermaidPreload() {
   const manifest = await (await fetch(`${B}/story/manifest.json`)).json();
   // What the reader page names for EVERY document — the hints a Mermaid document adds are the rest.
   const plain = await startDocument(B);
-  await publish(plain.id, plain.token, '<Card><CardContent>no diagram</CardContent></Card>', 'mermaid preload baseline');
+  // Interactive (a Button), so its reader runs the story runtime too — a page of static components is served final and names none of it.
+  await publish(plain.id, plain.token, '<Card><CardContent>no diagram <Button>go</Button></CardContent></Card>', 'mermaid preload baseline');
   const hrefs = (head) => [...head.matchAll(/rel="modulepreload" href="([^"]+)"/g)].map((m) => m[1]);
   const plainHead = new Set(hrefs((await (await fetch(`${B}/a/${plain.id}`, { headers: { accept: 'text/html' } })).text()).split('</head>')[0]));
   /*
@@ -453,6 +468,89 @@ async function judgeTakeover(context, scheme, path, label, after) {
   return verdict.at - dcl;
 }
 
+/*
+ * THE STORY RUNTIME'S OWN CODE, as the network log names it: the inline
+ * runtime, and each kit chunk by id (lib/story-runtime/kit/<id>.tsx). A
+ * production build names them through its Vite manifest — read from the build
+ * this server serves — and a dev server by their source paths.
+ */
+const VITE_MANIFEST = new URL('../services/app/dist/web/.vite/manifest.json', import.meta.url);
+let storyCodeCache = null;
+function storyCode(production) {
+  if (!production) {
+    return {
+      runtime: (path) => path.endsWith('/lib/story-runtime/InlineStoryRuntime.tsx'),
+      kitOf: (path) => /\/lib\/story-runtime\/kit\/([\w-]+)\.tsx$/.exec(path)?.[1] ?? null,
+    };
+  }
+  if (!storyCodeCache) {
+    const manifest = JSON.parse(readFileSync(VITE_MANIFEST, 'utf8'));
+    const runtimeFile = `/${manifest['../lib/story-runtime/InlineStoryRuntime.tsx']?.file}`;
+    const kit = new Map(Object.entries(manifest).flatMap(([key, chunk]) => {
+      const id = /\/lib\/story-runtime\/kit\/([\w-]+)\.tsx$/.exec(key)?.[1];
+      return id ? [[`/${chunk.file}`, id]] : [];
+    }));
+    storyCodeCache = { runtime: (path) => path === runtimeFile, kitOf: (path) => kit.get(path) ?? null };
+  }
+  return storyCodeCache;
+}
+const isProductionPage = async (path) => /<link rel="modulepreload" href="\/assets\//.test((await (await fetch(`${B}${path}`, { headers: { accept: 'text/html' } })).text()).split('</head>')[0]);
+
+/** Every script `page` requests (a modulepreload is a request too), by path. */
+const scriptLog = (page) => {
+  const scripts = [];
+  page.on('request', (r) => { if (r.resourceType() === 'script' || /\.(?:m?js|tsx?)(?:\?|$)/.test(new URL(r.url()).pathname)) scripts.push(new URL(r.url()).pathname); });
+  return scripts;
+};
+
+/**
+ * A story served FINAL (lib/artifact-page): a static document read by someone
+ * who may neither edit nor comment. The app takes the served element into its
+ * root as it is — no hydration, every served element untouched — and the
+ * reader downloads NOTHING of the story runtime: not the inline runtime, not a
+ * single kit chunk.
+ */
+async function judgeFinal(context, scheme, path, label) {
+  const page = await context.newPage();
+  await page.emulateMedia({ colorScheme: scheme });
+  const errors = [];
+  page.on('pageerror', (e) => errors.push(`page error: ${String(e).slice(0, 300)}`));
+  page.on('console', (m) => { if (m.type() === 'error') errors.push(`${m.text().slice(0, 300)} (${m.location().url})`); });
+  const scripts = scriptLog(page);
+  await page.addInitScript(TAKEOVER_PROBE);
+  await page.goto(`${B}${path}`, { waitUntil: 'domcontentloaded', timeout: 90000 });
+  const kept = await waitFor(page, `(() => { const s = window.__readerHydration?.story; return !!s && !!document.getElementById('root')?.contains(s) && !document.querySelector('[data-mx-initial-story]'); })()`, 30000);
+  await page.waitForLoadState('networkidle').catch(() => {});
+  await page.waitForTimeout(800);
+  const verdict = await page.evaluate(() => {
+    const h = window.__readerHydration;
+    const story = h.story;
+    const lost = h.served.filter(([n]) => !story.contains(n)).length;
+    const owned = [story, ...h.served.map(([n]) => n)].filter((n) => Object.keys(n).some((k) => k.startsWith('__reactFiber$'))).length;
+    return { served: h.served.length, lost, owned, verdict: !!h.verdict, loading: !!document.querySelector('[aria-label="Loading document"]'), outline: document.querySelectorAll('.mx-outline-row').length, current: document.querySelectorAll('.mx-outline-row[aria-current="true"]').length };
+  });
+  await page.close();
+  const code = storyCode(await isProductionPage(path));
+  const runtime = scripts.filter((p) => code.runtime(p) || code.kitOf(p));
+  check(kept && verdict.served > 0, `${label}: the served story is in the app, as served (${verdict.served} elements)`);
+  check(verdict.lost === 0 && verdict.owned === 0 && !verdict.verdict, `${label}: nothing was hydrated or redrawn (${verdict.lost} lost, ${verdict.owned} React-owned)`);
+  check(!verdict.loading, `${label}: nothing is loading`);
+  if (verdict.outline) check(verdict.current === 1, `${label}: the outline marks the section being read without a runtime (${verdict.current} of ${verdict.outline})`);
+  check(runtime.length === 0, `${label}: the reader downloaded no story runtime and no kit chunk (${runtime.join(' ') || 'none'})`);
+  check(errors.length === 0, `${label}: no error (${errors.length}: ${errors[0] ?? ''})`);
+}
+
+/** The kit chunks a hydrating reader requested for `path`, by id. */
+async function kitRequested(context, path) {
+  const page = await context.newPage();
+  const scripts = scriptLog(page);
+  await page.goto(`${B}${path}`, { waitUntil: 'networkidle', timeout: 90000 });
+  await page.waitForTimeout(800);
+  await page.close();
+  const code = storyCode(await isProductionPage(path));
+  return { runtime: scripts.some((p) => code.runtime(p)), kit: [...new Set(scripts.map((p) => code.kitOf(p)).filter(Boolean))].sort() };
+}
+
 const publish1 = (doc, markup) => publish(doc.id, doc.token, markup, 'hydration versions');
 
 async function runReaderHydration() {
@@ -477,6 +575,8 @@ async function runReaderHydration() {
   const scripted = await publish({ title: 'Hydration scripted', markup: '<Helmet><script>{`document.body.dataset.ran = "yes"`}</script></Helmet><article><h1>Scripted</h1><Card><CardContent>with a card</CardContent></Card></article>', visibility: 'unlisted' });
   // The parse-survival shapes of the repaint check below (a div in a <p>, a Button in a trigger, a <For> in an svg).
   const survival = await publish({ title: 'Hydration parse survival', markup: PROSE, visibility: 'unlisted' });
+  // Static components only: final for a stranger (no runtime at all), hydrated for its owner with exactly these chunks.
+  const staticDoc = await publish({ title: 'Hydration static', markup: STATIC_KIT, visibility: 'unlisted' });
   const kit = fixtures.find((f) => f.key === 'kit');
   // The Mermaid fixture is read as readers meet it once its diagram is stored (lib/mermaid-images):
   // the stored drawing is in the served story and must hydrate as it was served.
@@ -521,10 +621,18 @@ async function runReaderHydration() {
     if (t !== null) times.push(t);
   };
   // Every fixture and the kitchen sink, anonymous and as the owner (whose address is the pretty /@owner one).
-  for (const doc of [...fixtures, { key: 'kitchen sink', id: sinkDoc.id }, { key: 'scripted', id: scripted.id }, { key: 'parse survival', id: survival.id }]) {
-    await load(anonymous, 'light', `/a/${doc.id}`, `${doc.key}, anonymous`, doc === diagram ? drawnFromStorage('anonymous') : undefined);
+  // A static document (the prose fixture, the static kit) is served final to a stranger: kept, never hydrated.
+  const FINAL = new Set(['prose', 'static']);
+  for (const doc of [...fixtures, { key: 'kitchen sink', id: sinkDoc.id }, { key: 'scripted', id: scripted.id }, { key: 'parse survival', id: survival.id }, { key: 'static', id: staticDoc.id }]) {
+    if (FINAL.has(doc.key)) await judgeFinal(anonymous, 'light', `/a/${doc.id}`, `${doc.key}, anonymous (final)`);
+    else await load(anonymous, 'light', `/a/${doc.id}`, `${doc.key}, anonymous`, doc === diagram ? drawnFromStorage('anonymous') : undefined);
     await load(ownerContext, 'dark', `/a/${doc.id}`, `${doc.key}, owner`, doc === diagram ? drawnFromStorage('owner') : undefined);
   }
+  // Only the components a document draws: its chunks, taken from the network log.
+  const kitLoads = await kitRequested(anonymous, `/a/${kit.id}`);
+  check(kitLoads.runtime && kitLoads.kit.join(' ') === 'accordion alert badge card tabs', `the kit fixture's reader loads exactly its components' chunks (${kitLoads.kit.join(' ') || 'none'})`);
+  const staticLoads = await kitRequested(ownerContext, `/a/${staticDoc.id}`);
+  check(staticLoads.runtime && staticLoads.kit.join(' ') === 'alert badge card', `the static document's owner loads the runtime and exactly its components' chunks (${staticLoads.kit.join(' ') || 'none'})`);
   await load(historian, 'dark', `/a/${versioned.id}?version=1`, 'version 1 of 2 (archived), its owner');
   await load(ownerContext, 'light', `/a/${kit.id}/edit`, 'kit, owner entering /edit');
   const threadOpen = (who) => async (page) => check(await page.locator('[aria-label="Reply to annotation"]').first().waitFor({ timeout: 10000 }).then(() => true, () => false),
