@@ -266,6 +266,20 @@ const FLOWCHART = '<div data-design="tw" className="p-10"><Mermaid title="Pipeli
 const SEQUENCE = '<div data-design="tw" className="p-10"><Mermaid title="Hello" code={"sequenceDiagram\\n  A->>B: hi\\n  B-->>A: back"} /></div>';
 async function runMermaidPreload() {
   const manifest = await (await fetch(`${B}/story/manifest.json`)).json();
+  // What the reader page names for EVERY document — the hints a Mermaid document adds are the rest.
+  const plain = await startDocument(B);
+  await publish(plain.id, plain.token, '<Card><CardContent>no diagram</CardContent></Card>', 'mermaid preload baseline');
+  const hrefs = (head) => [...head.matchAll(/rel="modulepreload" href="([^"]+)"/g)].map((m) => m[1]);
+  const plainHead = new Set(hrefs((await (await fetch(`${B}/a/${plain.id}`, { headers: { accept: 'text/html' } })).text()).split('</head>')[0]));
+  /*
+   * USED means EVALUATED, not fetched: a modulepreload is itself a request, so
+   * "requested" is true of every preload whether or not anything imports it.
+   * V8's coverage lists a module only once it has run (a preloaded module no
+   * one imports is absent), so the check reads that.
+   */
+  const evaluated = async (page) => new Set((await page.coverage.stopJSCoverage())
+    .filter((e) => /^https?:/.test(e.url) && (e.functions[0]?.ranges[0]?.count ?? 0) > 0)
+    .map((e) => new URL(e.url).pathname));
   for (const [kind, markup] of [['flowchart', FLOWCHART], ['sequence', SEQUENCE]]) {
     const st = await startDocument(B);
     await publish(st.id, st.token, markup, `mermaid preload ${kind}`);
@@ -276,6 +290,7 @@ async function runMermaidPreload() {
     const warnings = [];
     page.on('request', (r) => { if (r.resourceType() === 'script') scripts.push(new URL(r.url()).pathname); });
     page.on('console', (m) => { if (/preloaded .* not used/i.test(m.text())) warnings.push(m.text()); });
+    await page.coverage.startJSCoverage({ resetOnNavigation: false });
     await page.goto(`${B}/a/${st.id}/raw`, { waitUntil: 'domcontentloaded', timeout: 90000 });
     check(await waitFor(page, `!!document.querySelector('[data-mx-mermaid-state=ready]')`, 30000), `${kind}: the diagram draws in the served document`);
     const preloads = await page.evaluate(() => [...document.querySelectorAll('link[rel=modulepreload]')].map((l) => new URL(l.href).pathname));
@@ -283,8 +298,10 @@ async function runMermaidPreload() {
     check(closure.length > 0 && closure.every((url) => preloads.includes(url)), `${kind}: the head names the kind's whole closure (${closure.length} chunks)`);
     const missed = [...new Set(scripts)].filter((url) => !preloads.includes(url));
     check(missed.length === 0, `${kind}: every script the document runs was preloaded (${missed.join(' ') || 'all'})`);
-    const unused = preloads.filter((url) => !scripts.includes(url));
-    check(unused.length === 0, `${kind}: every preload is used (${unused.join(' ') || 'all'})`);
+    await page.waitForTimeout(500);
+    const ran = await evaluated(page);
+    const unused = preloads.filter((url) => !ran.has(url));
+    check(unused.length === 0, `${kind}: every preloaded module is evaluated (${unused.join(' ') || 'all'})`);
     const elk = scripts.some((url) => /\/elk-[\w-]+\.js$/.test(url));
     check(elk === (kind === 'flowchart'), `${kind}: elk is fetched exactly when the kind draws with it (${elk})`);
     const other = manifest.mermaid?.[kind === 'flowchart' ? 'sequence' : 'flowchart'] ?? [];
@@ -301,14 +318,19 @@ async function runMermaidPreload() {
     if (/<link rel="modulepreload" href="\/assets\//.test(appHead)) {
       check(/rel="modulepreload" href="\/assets\/mermaid-render-[\w-]+\.js"/.test(appHead), `${kind}: the reader page preloads the Mermaid engine`);
       check(/\/assets\/elk-[\w-]+\.js/.test(appHead) === (kind === 'flowchart'), `${kind}: the reader page preloads elk exactly when the kind draws with it`);
+      const added = hrefs(appHead).filter((href) => !plainHead.has(href));
       const app = await browser.newPage({ viewport: { width: 1200, height: 900 } });
       const appWarnings = [];
       app.on('console', (m) => { if (/preloaded .* not used/i.test(m.text())) appWarnings.push(m.text()); });
       await githubWidgetFixture(app.context());
+      await app.coverage.startJSCoverage({ resetOnNavigation: false });
       await app.goto(`${B}/a/${st.id}`, { waitUntil: 'domcontentloaded', timeout: 90000 });
       check(await waitFor(app, `!!document.querySelector('[data-mx-mermaid-state=ready]')`, 30000), `${kind}: the diagram draws on the reader page`);
       await app.waitForTimeout(3500);
       check(appWarnings.length === 0, `${kind}: no reader-page preload goes unused (${appWarnings[0] ?? 'clean'})`);
+      const appRan = await evaluated(app);
+      const idle = added.filter((href) => !appRan.has(href));
+      check(added.length > 0 && idle.length === 0, `${kind}: every chunk the reader page adds for this document is evaluated (${added.length} added; unused: ${idle.join(' ') || 'none'})`);
       await app.close();
     }
   }
