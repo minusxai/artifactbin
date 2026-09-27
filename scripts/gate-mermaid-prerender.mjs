@@ -99,8 +99,8 @@ async function drawings(url, mode = null) {
 /** Engine vs storage for one page and mode: every stored kind identical, every unstored kind left to the engine. */
 async function compare(label, url, samples, mode = null, { allStored = false } = {}) {
   const sep = url.includes('?') ? '&' : '?';
-  const engine = await drawings(`${url}${sep}mermaid=engine`, mode);
-  const served = await drawings(url, mode);
+  // Both pages at once: fresh contexts share nothing, and the gate's budget is the shard's.
+  const [engine, served] = await Promise.all([drawings(`${url}${sep}mermaid=engine`, mode), drawings(url, mode)]);
   check(engine.drawn && served.drawn, `${label}: every diagram draws, with the engine and from storage`);
   for (const sample of samples) {
     const drawnByEngine = engine.figures[sample.kind];
@@ -127,13 +127,18 @@ try {
   const context = await publish(CONTEXT_DOC, 'prerender: context', { colorMode: 'dark' });
   for (const id of [kinds, unstored, context]) check(await harvested(id), `${id}: the harvest stored this version's drawings`);
 
-  await compare('raw light', `${B}/a/${kinds}/raw`, STORED, null, { allStored: true });
-  await compare('raw dark (reader toggle)', `${B}/a/${kinds}/raw`, STORED, 'dark', { allStored: true });
-  await compare('app light', `${B}/a/${kinds}`, STORED, null, { allStored: true });
-  await compare('raw engine kinds', `${B}/a/${unstored}/raw`, [SENTINEL, ...UNSTORED]);
-  await compare('raw dark document with author CSS and a grid tile', `${B}/a/${context}/raw`, CONTEXT, null, { allStored: true });
-  await compare('raw author CSS toggled light', `${B}/a/${context}/raw`, CONTEXT, 'light', { allStored: true });
-  await compare('app dark document with author CSS and a grid tile', `${B}/a/${context}`, CONTEXT, null, { allStored: true });
+  // Every comparison is its own pair of pages; they run side by side.
+  await Promise.all([
+    compare('raw light', `${B}/a/${kinds}/raw`, STORED, null, { allStored: true }),
+    compare('raw dark (reader toggle)', `${B}/a/${kinds}/raw`, STORED, 'dark', { allStored: true }),
+    compare('app light', `${B}/a/${kinds}`, STORED, null, { allStored: true }),
+  ]);
+  await Promise.all([
+    compare('raw engine kinds', `${B}/a/${unstored}/raw`, [SENTINEL, ...UNSTORED]),
+    compare('raw dark document with author CSS and a grid tile', `${B}/a/${context}/raw`, CONTEXT, null, { allStored: true }),
+    compare('raw author CSS toggled light', `${B}/a/${context}/raw`, CONTEXT, 'light', { allStored: true }),
+    compare('app dark document with author CSS and a grid tile', `${B}/a/${context}`, CONTEXT, null, { allStored: true }),
+  ]);
 } finally {
   await browser.close();
 }
