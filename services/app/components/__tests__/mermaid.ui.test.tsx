@@ -72,6 +72,18 @@ describe('Mermaid', () => {
     await act(async () => finishOld({ src: 'data:image/svg+xml,old', type: 'flowchart-v2' }));
     expect(screen.getByRole('img')).toHaveAttribute('src', 'data:image/svg+xml,new');
   });
+  it('redraws when an ancestor\'s theme really changes, never when the same value is written again', async () => {
+    renderMermaid.mockResolvedValue({ src: 'data:image/svg+xml,test', type: 'flowchart-v2' });
+    const { container } = render(<div className="light" data-theme="modernist"><Mermaid code="flowchart TD; A-->B" /></div>);
+    await waitFor(() => expect(renderMermaid).toHaveBeenCalledTimes(1));
+    const ancestor = container.firstElementChild!;
+    // The reader's adopted story is re-stamped with the classes it already has (lib/story-runtime/InlineStoryRuntime).
+    await act(async () => { ancestor.setAttribute('class', 'light'); ancestor.setAttribute('data-theme', 'modernist'); });
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 20)); });
+    expect(renderMermaid).toHaveBeenCalledTimes(1);
+    await act(async () => { ancestor.setAttribute('class', 'dark'); });
+    await waitFor(() => expect(renderMermaid).toHaveBeenCalledTimes(2));
+  });
   it('refuses legacy stored configuration directives before loading the engine', () => {
     render(<Mermaid code={'%%{init: {"securityLevel":"loose"}}%%'} />);
     expect(screen.getByRole('alert')).toHaveTextContent('configuration directives');

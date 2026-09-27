@@ -122,9 +122,14 @@ export function Mermaid({ code, title = 'Diagram', colorMode = 'light', classNam
   const storedSrc = stored?.src ?? null;
   const storedPalette = stored?.palette ?? null;
   useEffect(() => {
-    const observer = new MutationObserver(() => setRevision(n => n + 1));
+    // Only a CHANGED value redraws: the reader's adopted story is re-stamped with
+    // the theme it already has (lib/story-runtime/InlineStoryRuntime), and each
+    // such write used to draw every diagram again.
+    const observer = new MutationObserver(records => {
+      if (records.some(record => record.oldValue !== (record.target as Element).getAttribute(record.attributeName ?? ''))) setRevision(n => n + 1);
+    });
     for (let element = host.current?.parentElement; element; element = element.parentElement) {
-      observer.observe(element, { attributes: true, attributeFilter: ['data-theme', 'data-color-mode', 'class'] });
+      observer.observe(element, { attributes: true, attributeOldValue: true, attributeFilter: ['data-theme', 'data-color-mode', 'class'] });
     }
     return () => observer.disconnect();
   }, []);
