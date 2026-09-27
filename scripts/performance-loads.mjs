@@ -102,8 +102,6 @@ try {
     assert.equal(await other.evaluate(async ({ id, email }) => (await fetch(`/api/my/artifacts/${id}/sharing`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ shares: [{ email, role: 'viewer' }] }) })).status, { id: shared.id, email }), 200);
   }
   await ownerContext.close();
-  // The document-view fixtures (scripts/fixtures/page-speed), owned by the same account.
-  const documentFixtures = await publishPageSpeedFixtures(body => publishAs(page, body));
   // Equalize server state before comparing browser cache modes. Otherwise the
   // faster candidate reaches the warm-cache phase while its freshly seeded
   // thumbnail renders still consume the app/browser worker; the slower baseline
@@ -154,6 +152,7 @@ try {
     });
     observer.observe(document, { subtree: true, childList: true });
   });
+  const sessionCookies = await context.cookies(base);
   for (const route of ['home', 'reader']) {
     if (route === 'reader') await context.clearCookies();
     for (const cache of ['cold', 'warm']) {
@@ -184,6 +183,13 @@ try {
   }
   // DOCUMENT VIEWS (scripts/lib/document-views.mjs): cold, throttled, anonymous
   // reader; every fixture on the reader view and on /raw, interleaved per run.
+  // Published only now, so the home listing above keeps exactly its 40 owned documents.
+  // The session page is back on the app origin with its cookies before it publishes.
+  await cdp.send('Emulation.setCPUThrottlingRate', { rate: 1 });
+  await cdp.send('Network.emulateNetworkConditions', { offline: false, latency: 0, downloadThroughput: -1, uploadThroughput: -1 });
+  await context.addCookies(sessionCookies);
+  await page.goto(base, { waitUntil: 'domcontentloaded' });
+  const documentFixtures = await publishPageSpeedFixtures(body => publishAs(page, body));
   const documentRuns = 5;
   const samples = await measureDocumentViews({ browser, base, fixtures: documentFixtures, runs: documentRuns, throttle: LAB_THROTTLE, log: line => console.log(line) });
   result.documents = { conditions: { ...LAB_THROTTLE, runs: documentRuns, cache: 'cold', viewer: 'anonymous', viewport: '1440x1000' }, fixtures: documentFixtures.map(({ key, id, template }) => ({ key, id, template })), summary: summarizeDocumentViews(samples), samples };
