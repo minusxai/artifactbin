@@ -26,6 +26,8 @@ import { wireOutline } from './outline-nav';
 import { markScrollableTables } from './table-scroll';
 import { syncValuesToUrl } from './url-values-sync';
 import { kitReadyFor, loadKitFor } from './kit-registry';
+// For the page that loads a document's chunks before its first render (components/ArtifactSurface).
+export { loadKitChunks } from './kit-registry';
 
 function SelectionPortal({ready}:{ready:(element:HTMLElement | null)=>void}) {
   const portal = useTrustedPortalContainer();
