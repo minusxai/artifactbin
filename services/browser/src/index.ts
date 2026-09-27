@@ -7,13 +7,14 @@
  * (Content-Type image/*) or a JSON verdict — the verdict is the contract as
  * much as the bytes are, because retry and 503-vs-500 depend on it.
  * `POST /render-upload` is the same render with the bytes PUT to a signed URL,
+ * `POST /harvest` answers the SVG drawings a loaded page drew, as JSON text,
  * and `POST /sessions` is the stateful surface: a BrowserSessionRequest against
  * a persistent isolated session, served only when the composition supplied a
  * `sessions` implementation (otherwise 503 `sessions_unavailable`).
  * See docs/mx-sessions.md.
  */
 import http from 'node:http';
-import type { BrowserService, RenderRequest, RenderUploadRequest, BrowserSessionRequest } from '@artifactbin/contracts';
+import type { BrowserService, RenderRequest, RenderUploadRequest, BrowserSessionRequest, SvgHarvestRequest } from '@artifactbin/contracts';
 import { BROWSER_ROUTES, SERVICE_AUTH_HEADER } from '@artifactbin/contracts';
 import type { JsonServer } from '@artifactbin/utils';
 
@@ -32,7 +33,7 @@ export function serveBrowser(svc: BrowserService, opts: { maxBody?: number; serv
     if (req.method === 'GET' && req.url === '/health') return json(200, { ok: true });
     if (opts.serviceSecret && req.headers[SERVICE_AUTH_HEADER] !== opts.serviceSecret) return json(401, { error: 'unauthorized' });
     if (req.method !== 'POST') return json(405, { error: 'method_not_allowed' });
-    if (req.url !== BROWSER_ROUTES.render && req.url !== BROWSER_ROUTES.renderUpload && req.url !== BROWSER_ROUTES.sessions) return json(404, { error: 'not_found' });
+    if (req.url !== BROWSER_ROUTES.render && req.url !== BROWSER_ROUTES.renderUpload && req.url !== BROWSER_ROUTES.harvest && req.url !== BROWSER_ROUTES.sessions) return json(404, { error: 'not_found' });
     const chunks: Buffer[] = []; let size = 0;
     for await (const c of req) { size += (c as Buffer).length; if (size > maxBody) { json(413, { error: 'too_large' }); req.destroy(); return; } chunks.push(c as Buffer); }
     let input: RenderRequest;
@@ -42,6 +43,12 @@ export function serveBrowser(svc: BrowserService, opts: { maxBody?: number; serv
       const request = input as unknown as BrowserSessionRequest;
       if (!request || !['script', 'status', 'close'].includes(request.op) || !request.actor || typeof request.actor !== 'object') return json(400, { error: 'bad_request' });
       return json(200, await svc.sessions.request(request));
+    }
+    if (req.url === BROWSER_ROUTES.harvest) {
+      if (!svc.harvestSvg) return json(503, { ok: false, reason: 'harvest_unavailable' });
+      const request = input as unknown as SvgHarvestRequest;
+      if (!request || typeof request.url !== 'string' || typeof request.selector !== 'string' || typeof request.collect !== 'string') return json(400, { error: 'bad_request' });
+      return json(200, await svc.harvestSvg(request));
     }
     if(req.url===BROWSER_ROUTES.renderUpload){
       if(!svc.renderAndUpload)return json(503,{ok:false,reason:"upload_unavailable"});

@@ -16,7 +16,7 @@ export function noopSql(): SqlService {
   };
 }
 export function noopBrowser(): BrowserService {
-  return { render: async () => ({ ok: false, reason: 'unavailable' }) };
+  return { render: async () => ({ ok: false, reason: 'unavailable' }), harvestSvg: async () => ({ ok: false, reason: 'unavailable' }) };
 }
 
 export interface FakeSql extends SqlService { calls: Array<{ method: keyof SqlService; input: unknown }> }

@@ -8,11 +8,12 @@ import type { BrowserSessionOptions } from './session-config';
  * on first use, closed after a minute idle; renders are SERIALISED — one page
  * at a time bounds memory, and a failed launch never poisons the next try.
  */
-import { chromium, type Browser } from 'playwright';
+import { chromium, type Browser, type Locator, type Page } from 'playwright';
 import sharp from 'sharp';
 import {admittedUploadUrl,uploadImage,type UploadOptions} from './upload';
 import {browserUploadOptions} from './upload-config';
-import type { BrowserService, BrowserSessions, RenderRequest, RenderResult } from '@artifactbin/contracts';
+import type { BrowserService, BrowserSessions, HarvestedSvg, PageRequest, RenderRequest, RenderResult, SvgHarvestRequest, SvgHarvestResult } from '@artifactbin/contracts';
+import { SVG_HARVEST_LIMITS } from '@artifactbin/contracts';
 import { internalAssetResponse } from './internal-assets';
 
 const DEFAULT_TIMEOUT_MS = 15_000;
@@ -39,6 +40,37 @@ function chartsSettled(selector:string):boolean {
  return !!root&&!root.matches('[data-mx-chart-state="pending"]')&&!root.querySelector('[data-mx-chart-state="pending"]');
 }
 
+/**
+ * Serialized into Chromium: every `collect` element under the surface whose
+ * `<img>` holds an SVG `data:` URL — its own `data-*` attributes, the image's
+ * width/height attributes and the URL. Self-contained, synchronous.
+ */
+function collectDrawings(input: { selector: string; collect: string; limit: number }) {
+  const root = document.querySelector(input.selector);
+  if (!root) return [];
+  const out: Array<{ attributes: Record<string, string>; width: number | null; height: number | null; src: string }> = [];
+  for (const element of root.querySelectorAll(input.collect)) {
+    const img = element.querySelector('img');
+    const src = img?.getAttribute('src') ?? '';
+    if (!img || !src.startsWith('data:image/svg+xml')) continue;
+    const attributes: Record<string, string> = {};
+    for (const attribute of element.attributes) if (attribute.name.startsWith('data-')) attributes[attribute.name] = attribute.value.slice(0, 512);
+    const size = (name: string) => { const value = Number(img.getAttribute(name)); return img.hasAttribute(name) && Number.isFinite(value) ? value : null; };
+    out.push({ attributes, width: size('width'), height: size('height'), src });
+    if (out.length >= input.limit) break;
+  }
+  return out;
+}
+
+/** The SVG text of an `image/svg+xml` data URL (percent-encoded or base64). */
+export function svgFromDataUrl(src: string): string {
+  const comma = src.indexOf(',');
+  const head = src.slice(0, comma);
+  if (comma < 0 || !/^data:image\/svg\+xml(;charset=utf-8)?(;base64)?$/i.test(head)) throw new Error('Not an SVG data URL');
+  const body = src.slice(comma + 1);
+  return head.toLowerCase().endsWith(';base64') ? Buffer.from(body, 'base64').toString('utf8') : decodeURIComponent(body);
+}
+
 export function createBrowser(opts: { idleShutdownMs?: number; executablePath?: () => Promise<string>; sessions?: BrowserSessionOptions; upload?:UploadOptions } = {}): BrowserService & { close(): Promise<void> } {
   const idleMs = opts.idleShutdownMs ?? 60_000;
   const upload=opts.upload??browserUploadOptions(process.env);
@@ -61,27 +93,26 @@ export function createBrowser(opts: { idleShutdownMs?: number; executablePath?: 
   };
   const scheduleIdle = () => { if (idle) clearTimeout(idle); idle = setTimeout(() => void close(), idleMs); idle.unref?.(); };
 
-  async function shoot(req: RenderRequest): Promise<{ mime: 'image/png' | 'image/jpeg'; bytes: Uint8Array }> {
+  /**
+   * ONE PAGE, LOADED AND SETTLED — what every operation that looks at a page
+   * shares: the deadline, the per-request page with service workers blocked,
+   * the context-wide admission/forwarding route, navigation, and every
+   * readiness wait (diagrams, managed frames, the settle, charts). `use` sees
+   * the ready page; the page is closed after, whatever happened.
+   */
+  async function withReadyPage<T>(req: PageRequest, deviceScaleFactor: number, use: (ready: { page: Page; surface: Locator; timeout: number; remaining: () => number; waitForCharts: () => Promise<void> }) => Promise<T>): Promise<T> {
     const deadline=Date.now()+(req.timeoutMs??DEFAULT_TIMEOUT_MS);
     const remaining=()=>{const ms=deadline-Date.now();if(ms<=0)throw new Error('Render deadline');return ms;};
     let b = await get(remaining());
     if (!b.isConnected()) { await close(); b = await get(remaining()); }
     const timeout = remaining();
-    const requestedCrop = typeof req.capture === 'object' && 'card' in req.capture ? req.capture.card : null;
-    // A crop narrower than the output must be RASTERIZED at the corresponding
-    // density. Scaling a 637px screenshot to 1600px only enlarges its pixels.
-    const cardDensity = requestedCrop
-      ? clamp(req.viewport.width / Math.max(1, requestedCrop.width), 1, 4)
-      : 1;
     // reducedMotion: the motion kit never arms scroll reveals under it, so a capture always sees the finished page.
     let deadlineClose:Promise<void>|undefined;
     const renderTimer=setTimeout(()=>{deadlineClose=b.close().catch(()=>{});},remaining());
-    const page = await b.newPage({ viewport: req.viewport, reducedMotion: 'reduce', deviceScaleFactor: cardDensity, serviceWorkers: 'block' }).catch(async error=>{clearTimeout(renderTimer);await deadlineClose;throw error;});
+    const page = await b.newPage({ viewport: req.viewport, reducedMotion: 'reduce', deviceScaleFactor, serviceWorkers: 'block' }).catch(async error=>{clearTimeout(renderTimer);await deadlineClose;throw error;});
     const forwarding = new AbortController();
     const pending = new Set<Promise<void>>();
     try {
-      const shotOpts = { timeout, ...(req.format === 'jpg' ? { type: 'jpeg' as const, quality: req.quality ?? 85 } : { type: 'png' as const }) };
-      const mime = req.format === 'jpg' ? 'image/jpeg' as const : 'image/png' as const;
       if (req.sameOriginOnly || req.assetOrigin) {
         const origin = new URL(req.url).origin;
         // Context routing also covers popup first requests. Service workers are
@@ -130,6 +161,27 @@ export function createBrowser(opts: { idleShutdownMs?: number; executablePath?: 
         }
       };
       await waitForCharts();
+      return await use({ page, surface, timeout, remaining, waitForCharts });
+    } finally {
+      forwarding.abort();
+      await Promise.allSettled(pending);
+      clearTimeout(renderTimer);
+      await page.close().catch(() => {});
+      await deadlineClose;
+      scheduleIdle();
+    }
+  }
+
+  async function shoot(req: RenderRequest): Promise<{ mime: 'image/png' | 'image/jpeg'; bytes: Uint8Array }> {
+    const requestedCrop = typeof req.capture === 'object' && 'card' in req.capture ? req.capture.card : null;
+    // A crop narrower than the output must be RASTERIZED at the corresponding
+    // density. Scaling a 637px screenshot to 1600px only enlarges its pixels.
+    const cardDensity = requestedCrop
+      ? clamp(req.viewport.width / Math.max(1, requestedCrop.width), 1, 4)
+      : 1;
+    return withReadyPage(req, cardDensity, async ({ page, surface, timeout, waitForCharts }) => {
+      const shotOpts = { timeout, ...(req.format === 'jpg' ? { type: 'jpeg' as const, quality: req.quality ?? 85 } : { type: 'png' as const }) };
+      const mime = req.format === 'jpg' ? 'image/jpeg' as const : 'image/png' as const;
       if (typeof req.capture === 'object' && 'slide' in req.capture) {
         const slides = surface.locator('[data-mx-slide]');
         const count = await slides.count();
@@ -206,14 +258,22 @@ export function createBrowser(opts: { idleShutdownMs?: number; executablePath?: 
       await waitForCharts();
       const bytes = await page.screenshot({ clip: { x: box.x, y: box.y, width: Math.min(box.width, width) || width, height }, ...shotOpts });
       return { mime, bytes: new Uint8Array(bytes) };
-    } finally {
-      forwarding.abort();
-      await Promise.allSettled(pending);
-      clearTimeout(renderTimer);
-      await page.close().catch(() => {});
-      await deadlineClose;
-      scheduleIdle();
-    }
+    });
+  }
+
+  /** One load's drawings, bounded (SVG_HARVEST_LIMITS); the page is the ready page above. */
+  async function harvestOnce(req: SvgHarvestRequest): Promise<HarvestedSvg[]> {
+    return withReadyPage(req, 1, async ({ page }) => {
+      const found = await page.evaluate(collectDrawings, { selector: req.selector, collect: req.collect, limit: SVG_HARVEST_LIMITS.images + 1 });
+      if (found.length > SVG_HARVEST_LIMITS.images) throw new Error('Too many drawings');
+      let total = 0;
+      return found.map(({ attributes, width, height, src }) => {
+        const svg = svgFromDataUrl(src);
+        total += svg.length;
+        if (svg.length > SVG_HARVEST_LIMITS.imageBytes || total > SVG_HARVEST_LIMITS.totalBytes) throw new Error('Drawings too large');
+        return { attributes, width, height, svg };
+      });
+    });
   }
 
   const started = createBrowserSessions(actor => {
@@ -241,6 +301,33 @@ export function createBrowser(opts: { idleShutdownMs?: number; executablePath?: 
         (r): RenderResult => Date.now()>deadline ? {ok:false,reason:'failed',detail:'Render deadline'} : { ok: true, ...r },
         (e): RenderResult => {
           if (e instanceof NoSlideError) return { ok: false, reason: 'no_slide', slides: e.slides };
+          if (e instanceof NavigationError) return { ok: false, reason: 'navigation', detail: e.message };
+          if (!browser) return { ok: false, reason: 'unavailable', detail: (e as Error).message };
+          return { ok: false, reason: 'failed', detail: (e as Error).message };
+        },
+      );
+      chain = run;
+      return run;
+    },
+    /**
+     * THE DRAWINGS, AS TEXT (SvgHarvestRequest): the same ready page a render
+     * photographs, on the same serialized chain and deadline, loaded `loads`
+     * times in fresh pages; each load's drawings are bounded.
+     */
+    async harvestSvg(req): Promise<SvgHarvestResult> {
+      if(opts.executablePath){try{executablePath=await opts.executablePath();}catch(error){return {ok:false,reason:'unavailable',detail:(error as Error).message};}}
+      const loads = Math.min(Math.max(Math.trunc(req.loads ?? 1), 1), SVG_HARVEST_LIMITS.loads);
+      const deadline=Date.now()+(req.timeoutMs??DEFAULT_TIMEOUT_MS);
+      const run = chain.then(async () => {
+        const answers: HarvestedSvg[][] = [];
+        for (let load = 0; load < loads; load++) {
+          const remaining=deadline-Date.now();if(remaining<=0)throw new Error('Harvest timed out in queue');
+          answers.push(await harvestOnce({ ...req, timeoutMs: remaining }));
+        }
+        return answers;
+      }).then(
+        (answers): SvgHarvestResult => Date.now()>deadline ? {ok:false,reason:'failed',detail:'Harvest deadline'} : { ok: true, loads: answers },
+        (e): SvgHarvestResult => {
           if (e instanceof NavigationError) return { ok: false, reason: 'navigation', detail: e.message };
           if (!browser) return { ok: false, reason: 'unavailable', detail: (e as Error).message };
           return { ok: false, reason: 'failed', detail: (e as Error).message };

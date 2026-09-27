@@ -24,6 +24,14 @@ const NEVER_READY_PAGE = `<html><body><main><div data-mx-managed-frame><iframe><
 const DIAGRAM_PAGE = `<html><body style="margin:0"><main data-mx-mermaid-state="pending" style="width:100px;height:100px;background:#c33"></main><script>setTimeout(()=>{document.querySelector('main').dataset.mxMermaidState='ready';document.querySelector('main').style.background='#3c3'},400)</script></body></html>`;
 const CHART_PAGE = `<html><body style="margin:0"><main data-mx-chart-state="pending" style="width:100px;height:100px;background:#c33"></main><script>setTimeout(()=>{const m=document.querySelector('main');m.innerHTML='<div data-mx-chart-state="pending"></div>';m.removeAttribute('data-mx-chart-state');setTimeout(()=>{m.firstChild.dataset.mxChartState='ready';m.style.background='#3c3'},300)},300)</script></body></html>`;
 const STUCK_CHART_PAGE = `<html><body><main data-mx-chart-state="pending" style="width:100px;height:100px">Loading chart</main></body></html>`;
+/*
+ * A page that draws the way the kit's diagrams do: an SVG `data:` URL in an
+ * <img>, pending until drawn. One figure is reproducible, one draws a random
+ * number every load, and one is a plain image the harvest must skip.
+ */
+const DRAWN = (label: string) => `data:image/svg+xml;charset=utf-8,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"><text>${label}</text></svg>`)}`;
+const HARVEST_PAGE = `<html><body style="margin:0"><main><figure data-mx-mermaid-state="pending" data-kind="fixed"></figure><figure data-mx-mermaid-state="pending" data-kind="random"></figure><figure data-mx-mermaid-state="ready" data-kind="png"><img src="data:image/png;base64,iVBORw0KGgo="></figure><img src="http://127.0.0.1:1/cross-origin.png"></main><script>
+setTimeout(()=>{const [a,b]=document.querySelectorAll('figure');a.innerHTML='<img width="120" height="80" src=${JSON.stringify(DRAWN('fixed & sound'))}>';b.innerHTML='<img src="'+${JSON.stringify(DRAWN('').split('%3C%2Ftext%3E')[0])}+Math.random()+'%3C%2Ftext%3E%3C%2Fsvg%3E">';a.dataset.mxMermaidState='ready';b.dataset.mxMermaidState='ready';},200)</script></body></html>`;
 let pages: RunningServer;
 let url: string;
 
@@ -32,7 +40,7 @@ const server = serveBrowser(local);
 const listening = server.listen(0);
 const remote = browserClient(listening.url, { deadlineMs: 20_000 });
 beforeAll(async () => {
-  pages = await withHttpServer((q, s) => { s.writeHead(200, { 'content-type': 'text/html' }); s.end(q.url==='/chart'?CHART_PAGE:q.url==='/stuck-chart'?STUCK_CHART_PAGE:q.url==='/diagram'?DIAGRAM_PAGE:q.url==='/ready'?READY_PAGE:q.url==='/never-ready'?NEVER_READY_PAGE:PAGE); });
+  pages = await withHttpServer((q, s) => { s.writeHead(200, { 'content-type': 'text/html' }); s.end(q.url==='/harvest'?HARVEST_PAGE:q.url==='/chart'?CHART_PAGE:q.url==='/stuck-chart'?STUCK_CHART_PAGE:q.url==='/diagram'?DIAGRAM_PAGE:q.url==='/ready'?READY_PAGE:q.url==='/never-ready'?NEVER_READY_PAGE:PAGE); });
   url = `${pages.base}/a/x`;
 });
 afterAll(async () => { await local.close?.(); await server.close(); await pages.close(); });
@@ -146,12 +154,43 @@ describe.each<[string, BrowserService]>([['in-process', local], ['over HTTP', re
     const r = await svc.render({ ...base(), selector: '#never', timeoutMs: 1000 });
     expect(!r.ok && r.reason).toBe('failed');
   });
+  it('harvests the drawn SVGs as text, after they draw, with their attributes, once per load', async () => {
+    const r = await svc.harvestSvg!({ url: `${pages.base}/harvest`, viewport: { width: 600, height: 400 }, selector: 'main', collect: 'figure', sameOriginOnly: true, settleMs: 0, timeoutMs: 10_000, loads: 2 });
+    if (!r.ok) throw new Error(JSON.stringify(r));
+    expect(r.loads).toHaveLength(2);
+    for (const load of r.loads) {
+      // The PNG figure is not a drawing; both SVG figures are, in document order.
+      expect(load.map(d => d.attributes['data-kind'])).toEqual(['fixed', 'random']);
+      expect(load[0]).toEqual({ attributes: { 'data-kind': 'fixed', 'data-mx-mermaid-state': 'ready' }, width: 120, height: 80, svg: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"><text>fixed & sound</text></svg>' });
+    }
+    // Two fresh loads: a caller can tell the reproducible drawing from the random one.
+    expect(r.loads[0][0].svg).toBe(r.loads[1][0].svg);
+    expect(r.loads[0][1].svg).not.toBe(r.loads[1][1].svg);
+  });
+  it('names an unreachable harvest page as navigation', async () => {
+    const r = await svc.harvestSvg!({ url: 'http://127.0.0.1:1/nope', viewport: { width: 600, height: 400 }, selector: 'main', collect: 'figure', timeoutMs: 2000 });
+    expect(!r.ok && r.reason).toBe('navigation');
+  });
 });
 
 describe('browserClient', () => {
   it('answers unavailable for a dead service within the deadline', async () => {
     const dead = browserClient('http://127.0.0.1:1', { deadlineMs: 500 });
     expect(await dead.render(base())).toEqual({ ok: false, reason: 'unavailable', detail: expect.any(String) });
+  });
+});
+
+describe('harvest over mixed versions', () => {
+  it('a service without the operation answers harvest_unavailable, and so does an older server with no route', async () => {
+    const renderOnly = serveBrowser({ render: local.render });
+    const older = await withHttpServer((_q, res) => { res.writeHead(404, { 'content-type': 'application/json' }); res.end('{"error":"not_found"}'); });
+    const listeningRenderOnly = renderOnly.listen(0);
+    try {
+      const request = { url, viewport: { width: 10, height: 10 }, selector: 'main', collect: 'figure' };
+      expect(await browserClient(listeningRenderOnly.url).harvestSvg!(request)).toEqual({ ok: false, reason: 'harvest_unavailable' });
+      expect(await browserClient(older.base).harvestSvg!(request)).toEqual({ ok: false, reason: 'harvest_unavailable' });
+      expect(await browserClient('http://127.0.0.1:1', { deadlineMs: 500 }).harvestSvg!(request)).toEqual({ ok: false, reason: 'unavailable', detail: expect.any(String) });
+    } finally { await renderOnly.close(); await older.close(); }
   });
 });
 

@@ -1,6 +1,6 @@
 # The browser service contract
 
-A Chromium that renders a URL to an image. `@artifactbin/contracts` `BrowserService` is the interface; this file is the wire.
+A Chromium that renders a URL to an image (and, for diagrams, hands back the SVG a page drew). `@artifactbin/contracts` `BrowserService` is the interface; this file is the wire.
 
 `GET /health` answers `200 {"ok":true}` — the liveness/readiness probe for whatever orchestrates the service; the one GET, every other route POST-only.
 
@@ -42,6 +42,18 @@ a named MODE and not a client recipe because that dance happens inside one page 
 Renders are stateless: one page per request, closed after, and serialised inside the service. The URL must be reachable
 FROM THE SERVICE'S NETWORK — a host that network resolves to the app, not 127.0.0.1, and never a bare host
 that Chrome canonicalises into a real TLD (`app` → `.app`, HSTS-preloaded). Private network only.
+
+`POST /harvest` with an `SvgHarvestRequest` loads the page exactly as `/render` does — same admission routing
+(`sameOriginOnly`, `allowedOrigins`, `assetOrigin`), blocked service workers, readiness waits (diagrams, managed
+frames, settle, charts), deadline and serialised queue — and answers JSON instead of pixels:
+`{ ok:true, loads:[[{ attributes, width, height, svg }]] }`, the SVG text of every element under `selector` matching
+`collect` whose `<img>` holds an `image/svg+xml` `data:` URL (the kit draws its diagrams that way), with that
+element's own `data-*` attributes. `loads` (1–3) repeats the page load in fresh pages so the caller can tell a
+reproducible drawing from a random one. Answers are bounded (`SVG_HARVEST_LIMITS`: drawings per load, bytes per
+drawing, bytes in all; over a bound is `failed`). The service returns text and never interprets it: the app
+sanitises and stores what it keeps. Failures use the render verdicts; a service without the operation answers
+`503 { ok:false, reason:"harvest_unavailable" }`, and `browserClient` maps an older service's 404 to the same
+verdict, so a mixed-version rollout harvests nothing and every reader keeps drawing with the engine.
 
 `POST /sessions` is the one STATEFUL surface: a `BrowserSessionRequest` (`script | status | close`) against a
 persistent isolated session whose worker keeps its browser, context and pages across calls. `503
