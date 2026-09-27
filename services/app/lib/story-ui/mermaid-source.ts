@@ -1,3 +1,5 @@
+import { sha256Hex } from '@/lib/sha256';
+
 /** Shared publish/read boundary; Mermaid configuration is owned by the app. */
 const MERMAID_MAX_SOURCE = 20_000;
 
@@ -109,9 +111,12 @@ export function mermaidDiagramKind(code: unknown): string | null {
 }
 
 /**
- * Key of a stored Mermaid drawing: the diagram's code and the colour mode it
- * was drawn in. SEED (Track G): contract only.
+ * Key of a stored Mermaid drawing (StoryIslandData.mermaidImages): the
+ * diagram's code and the colour mode it was drawn in. Computed on both sides
+ * of the wire — the server looks a document's stored drawings up by it, the
+ * client finds its own — so it is the synchronous, dependency-free hash
+ * (lib/sha256), never `node:crypto`.
  */
 export function mermaidImageKey(code: string, mode: 'light' | 'dark'): string {
-  throw new Error(`mermaidImageKey not implemented (${code.length}, ${mode})`);
+  return `${mode}-${sha256Hex(code).slice(0, 32)}`;
 }
