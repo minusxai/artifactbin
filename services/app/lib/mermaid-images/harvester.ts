@@ -18,7 +18,7 @@ import { servedRow } from '@/lib/archived-version';
 import { MERMAID_RENDER_ENGINE, mermaidPrerenderable } from './engine';
 import { mermaidCodesOf } from './codes';
 import { sanitizeMermaidSvg } from './sanitize';
-import { CAPTURE_COLOR_PARAM, MERMAID_ENGINE_PARAM, MERMAID_MODES, MERMAID_SURFACES, mermaidContentKey, mermaidObjectKey, onMermaidHarvestQueued, type MermaidHarvestMap, type MermaidImageInfo, type MermaidMode, type MermaidSurface } from './store';
+import { CAPTURE_COLOR_PARAM, MERMAID_ENGINE_PARAM, comparableSvg, MERMAID_MODES, MERMAID_SURFACES, mermaidContentKey, mermaidObjectKey, onMermaidHarvestQueued, type MermaidHarvestMap, type MermaidImageInfo, type MermaidMode, type MermaidSurface } from './store';
 
 type Mode = MermaidMode;
 type HarvestMap = MermaidHarvestMap;
@@ -30,7 +30,14 @@ const MAX_ATTEMPTS = 6;
 const LEASE_MS = 180_000;
 const RETRY_BASE_MS = 30_000;
 const RETRY_MAX_MS = 3_600_000;
-const HARVEST_TIMEOUT_MS = 45_000;
+/**
+ * One page load's budget. The browser serialises every page it loads, and an
+ * export counts its time in that queue against its own 30s: a harvest load
+ * must never be the reason one runs out, so it gets half of that at most.
+ */
+const HARVEST_TIMEOUT_MS = 15_000;
+/** While there is no browser to harvest with (an outage, a rollout), wait this long — without counting it a failure. */
+const UNAVAILABLE_RETRY_MS = 300_000;
 
 class HarvestUnavailable extends Error {}
 
@@ -58,8 +65,7 @@ async function harvestLoad(artifactId: string, surface: MermaidSurface, mode: Mo
   throw result.reason === 'harvest_unavailable' || result.reason === 'unavailable' ? new HarvestUnavailable(result.reason) : new Error(`harvest ${result.reason} on ${surface}/${mode}${detail}`);
 }
 
-/** Ids are the one thing two loads of one drawing may number differently. */
-const comparable = (svg: string) => svg.replace(/mx-mermaid-\d+/g, 'mx-mermaid-N');
+const comparable = comparableSvg;
 
 interface Candidate { surface: MermaidSurface; mode: Mode; imageKey: string; code: string; palette: string; type: string; width: number | null; height: number | null; svg: string; content: string }
 
@@ -78,7 +84,7 @@ function candidatesOf(drawn: HarvestedSvg[], surface: MermaidSurface, mode: Mode
     const svg = sanitizeMermaidSvg(drawing.svg);
     if (!svg) continue;
     seen.add(imageKey);
-    out.push({ surface, mode, imageKey, code, palette, type, width: drawing.width, height: drawing.height, svg, content: mermaidContentKey(mode, palette, code) });
+    out.push({ surface, mode, imageKey, code, palette, type, width: drawing.width, height: drawing.height, svg, content: mermaidContentKey(mode, palette, code, svg) });
   }
   return out;
 }
@@ -86,7 +92,8 @@ function candidatesOf(drawn: HarvestedSvg[], surface: MermaidSurface, mode: Mode
 /** Harvest one claimed version; the answer is the job's `images`, or null when the version is no longer the head. */
 async function harvestVersion(artifactId: string, version: number): Promise<HarvestMap | null> {
   const row = await getArtifactById(artifactId);
-  if (!row || row.format !== 'markup' || row.version !== version) return null;
+  // No longer the head, no longer a document, or private now: nothing to store for it.
+  if (!row || row.format !== 'markup' || row.version !== version || row.visibility === 'private') return null;
   const served = await servedRow(row, null);
   const nodes = storyBodyFor(served.source ?? '')?.body ?? [];
   const codes = mermaidCodesOf(nodes).filter(mermaidPrerenderable);
@@ -144,13 +151,15 @@ export async function runNextMermaidHarvest(): Promise<boolean> {
     const images = await harvestVersion(claimed.artifact_id, claimed.version);
     await settle(images === null ? 'superseded' : 'done', images);
   } catch (error) {
-    const last = claimed.attempts >= MAX_ATTEMPTS;
-    const delay = Math.min(RETRY_BASE_MS * 2 ** (claimed.attempts - 1), RETRY_MAX_MS);
-    if (!(error instanceof HarvestUnavailable)) console.warn(`[mermaid] harvest failed (attempt ${claimed.attempts}):`, (error as Error).message);
+    // No browser to harvest with is not this version's failure: it waits, uncounted, for one.
+    const unavailable = error instanceof HarvestUnavailable;
+    const last = !unavailable && claimed.attempts >= MAX_ATTEMPTS;
+    const delay = unavailable ? UNAVAILABLE_RETRY_MS : Math.min(RETRY_BASE_MS * 2 ** (claimed.attempts - 1), RETRY_MAX_MS);
+    if (!unavailable) console.warn(`[mermaid] harvest failed (attempt ${claimed.attempts}):`, (error as Error).message);
     await db.query(
-      `UPDATE mermaid_harvests SET state=$4,claim_token=NULL,lease_until=NULL,retry_after=clock_timestamp()+$5::int*interval '1 millisecond',updated_at=now()
+      `UPDATE mermaid_harvests SET state=$4,attempts=attempts-$7::int,claim_token=NULL,lease_until=NULL,retry_after=clock_timestamp()+$5::int*interval '1 millisecond',updated_at=now()
        WHERE artifact_id=$1 AND version=$2 AND engine=$3 AND claim_token=$6`,
-      [claimed.artifact_id, claimed.version, MERMAID_RENDER_ENGINE, last ? 'failed' : 'pending', delay, token]).catch(() => {});
+      [claimed.artifact_id, claimed.version, MERMAID_RENDER_ENGINE, last ? 'failed' : 'pending', delay, token, unavailable ? 1 : 0]).catch(() => {});
   }
   return true;
 }

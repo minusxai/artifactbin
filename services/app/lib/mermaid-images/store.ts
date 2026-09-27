@@ -68,17 +68,41 @@ export function captureColor(url: string | URL): Mode | null {
   return value === 'light' || value === 'dark' ? value : null;
 }
 
-/** Content address: the engine, the mode, the palette key and the code. */
-export function mermaidContentKey(mode: Mode, palette: string, code: string): string {
-  return createHash('sha256').update([MERMAID_RENDER_ENGINE, mode, palette, code].join('\0')).digest('hex');
+/**
+ * Content address: the engine, the mode, the palette key, the code — and the
+ * drawing's own bytes. The first four say what it is a drawing OF; the bytes
+ * make the address the drawing itself, so no page can plant bytes under an
+ * address another document's drawing would resolve to. A harvest reads the
+ * attributes it keys by from the page it loaded, which is an author's page:
+ * whatever a page claims, it can only ever name its own bytes.
+ */
+export function mermaidContentKey(mode: Mode, palette: string, code: string, svg: string): string {
+  return createHash('sha256').update([MERMAID_RENDER_ENGINE, mode, palette, code, createHash('sha256').update(comparableSvg(svg)).digest('hex')].join('\0')).digest('hex');
+}
+
+/**
+ * A drawing as two loads of it compare: the one thing that differs is the
+ * render id (`mx-mermaid-N`), which counts diagrams in page order and appears
+ * only as the drawing's own element id and its stylesheet's scope. Two
+ * drawings equal under this are the same picture wherever each sits on its
+ * page (kinds whose geometry reads the id are excluded, lib/mermaid-images/engine).
+ */
+export function comparableSvg(svg: string): string {
+  return svg.replace(/mx-mermaid-\d+/g, 'mx-mermaid-N');
 }
 
 export interface MermaidImageInfo { type: string; width?: number; height?: number; mode: Mode; palette: string }
 export type MermaidHarvestMap = Partial<Record<MermaidSurface, Record<string, string>>>;
 
-/** Would a write of this row leave something to harvest? A cheap look at the markup. */
-function mayDrawMermaid(row: { format: string; source?: string | null; document?: unknown }): boolean {
-  if (row.format !== 'markup') return false;
+/**
+ * Would a write of this row leave something to harvest? A cheap look at the
+ * markup. Never a PRIVATE document: a stored drawing is served by its address
+ * alone, to anyone holding it, for as long as it is stored — which is the
+ * posture of a public or link-shared document, not of one only its owner and
+ * named people may read.
+ */
+function mayDrawMermaid(row: { format: string; visibility?: string | null; source?: string | null; document?: unknown }): boolean {
+  if (row.format !== 'markup' || row.visibility === 'private') return false;
   const text = row.source ?? (row.document ? JSON.stringify(row.document) : '');
   return text.includes('Mermaid');
 }
@@ -95,7 +119,7 @@ async function insertHarvest(artifactId: string, version: number): Promise<void>
  * (PGLite serialises one connection), and never failing its caller: callers
  * write `void queueMermaidHarvest(row)`.
  */
-export async function queueMermaidHarvest(row: { id: string; version: number; format: string; source?: string | null; document?: unknown }): Promise<void> {
+export async function queueMermaidHarvest(row: { id: string; version: number; format: string; visibility?: string | null; source?: string | null; document?: unknown }): Promise<void> {
   try {
     if (mayDrawMermaid(row)) await insertHarvest(row.id, row.version);
   } catch (error) {
@@ -112,7 +136,7 @@ export async function queueMermaidHarvest(row: { id: string; version: number; fo
  * the queue one version at a time, and readers queue what they read anyway.
  */
 export async function queueMermaidBackfill(db: { query: (sql: string, params?: unknown[]) => Promise<{ rows: unknown[] }> }, options: { limit?: number; retryFailed?: boolean; dryRun?: boolean } = {}): Promise<{ queued: number; retried: number }> {
-  const candidates = `FROM artifacts a WHERE a.format='markup' AND a.deleted_at IS NULL
+  const candidates = `FROM artifacts a WHERE a.format='markup' AND a.deleted_at IS NULL AND a.visibility <> 'private'
     AND (a.source LIKE '%Mermaid%' OR (a.source IS NULL AND a.document::text LIKE '%Mermaid%'))
     AND NOT EXISTS (SELECT 1 FROM mermaid_harvests h WHERE h.artifact_id=a.id AND h.version=a.version AND h.engine=$1)`;
   const limit = Math.max(1, Math.min(options.limit ?? 1000, 100_000));
@@ -139,11 +163,13 @@ export function onMermaidHarvestQueued(listener: (() => void) | null): void { wa
  * when it has none yet — and a HEAD with no harvest row queues one, so the next
  * reader is served drawings. Never throws: a reader always gets a document.
  */
-export interface MermaidImageLookup { artifactId: string; version: number; surface: MermaidSurface; head: boolean }
+/** Which version, on which surface — and whether it is the head (only a head queues itself) and private (never served). */
+export interface MermaidImageLookup { artifactId: string; version: number; surface: MermaidSurface; head: boolean; visibility: string }
 export async function mermaidImagesFor(
   lookup: MermaidImageLookup,
   nodes: readonly JsxNode[],
 ): Promise<Record<string, StoredMermaidImage>> {
+  if (lookup.visibility === 'private') return {};
   const codes = mermaidCodesOf(nodes).filter(mermaidPrerenderable);
   if (!codes.length) return {};
   try {

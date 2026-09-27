@@ -39,7 +39,7 @@ const PALETTE = { document: 'a'.repeat(32), inline: 'b'.repeat(32) } as const;
  * code, each carrying the key and palette the component would set. `vary`
  * makes a code's drawing differ per load; `unsafe` makes it carry a script.
  */
-function drawingBrowser(codes: string[], opts: { vary?: string; unsafe?: string; down?: boolean } = {}) {
+function drawingBrowser(codes: string[], opts: { vary?: string; unsafe?: string; down?: boolean; forged?: string } = {}) {
   const calls: SvgHarvestRequest[] = [];
   let loads = 0;
   const browser: BrowserService = {
@@ -55,7 +55,7 @@ function drawingBrowser(codes: string[], opts: { vary?: string; unsafe?: string;
         attributes: { 'data-mx-mermaid-key': mermaidImageKey(code, mode), 'data-mx-mermaid-palette': PALETTE[surface], 'data-mermaid-type': 'flowchart-v2', 'data-mx-mermaid-state': 'ready' },
         width: 120, height: 80,
         // Ids are numbered per page load, as the kit's are (`mx-mermaid-N`).
-        svg: `<svg xmlns="http://www.w3.org/2000/svg" id="mx-mermaid-${loads * 10 + i}" viewBox="0 0 10 10"><text>${surface} ${mode} ${i}${code === opts.vary ? ` ${loads}` : ''}</text>${code === opts.unsafe ? '<script>alert(1)</script>' : ''}</svg>`,
+        svg: `<svg xmlns="http://www.w3.org/2000/svg" id="mx-mermaid-${loads * 10 + i}" viewBox="0 0 10 10"><text>${surface} ${mode} ${i}${code === opts.vary ? ` ${loads}` : ''}${opts.forged ?? ''}</text>${code === opts.unsafe ? '<script>alert(1)</script>' : ''}</svg>`,
       }))] };
     },
   };
@@ -153,6 +153,37 @@ describe('a published Mermaid document', () => {
     expect(Number((await (await getDb()).query<{ n: string }>('SELECT count(*) AS n FROM mermaid_images')).rows[0].n)).toBe(4);
   });
 
+  it('a page claiming another drawing for the same code only ever names its own bytes', async () => {
+    setServices({ browser: drawingBrowser([FLOW]).browser });
+    const honest = await publish([FLOW]);
+    await runNextMermaidHarvest();
+    // Another document's page hands the harvest a different drawing under the same key and palette.
+    setServices({ browser: drawingBrowser([FLOW], { forged: ' planted' }).browser });
+    const forger = await publish([FLOW]);
+    await runNextMermaidHarvest();
+    const src = (id: string) => async () => island(await raw(id)).mermaidImages![mermaidImageKey(FLOW, 'light')]!.src;
+    const [honestSrc, forgerSrc] = [await src(honest.id)(), await src(forger.id)()];
+    expect(forgerSrc).not.toBe(honestSrc);
+    const file = honestSrc.split('/').pop()!;
+    expect(await (await mermaidAsset(request(honestSrc), params({ file }))).text()).not.toContain('planted');
+  });
+
+  it('a private document is never harvested or served stored drawings (they are served to anyone with the address)', async () => {
+    const { calls, browser } = drawingBrowser([FLOW]);
+    setServices({ browser });
+    const { owner, id } = await publish([FLOW]);
+    await (await getDb()).query("UPDATE artifacts SET visibility='private' WHERE id=$1", [id]);
+    // Queued while public, harvested once private: nothing is drawn or stored.
+    expect(await runNextMermaidHarvest()).toBe(true);
+    expect(calls).toHaveLength(0);
+    expect((await jobs(id))[0].state).toBe('superseded');
+    await (await getDb()).query('DELETE FROM mermaid_harvests');
+    expect(island(await (await serveArtifact(request(`/a/${id}/raw`, { token: owner.token }), params({ id }))).text()).mermaidImages).toBeUndefined();
+    // …and reading it queues nothing either.
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(await jobs(id)).toEqual([]);
+  });
+
   it('never stores a drawing that differs between loads, carries a script, or is of an excluded kind', async () => {
     const { browser } = drawingBrowser([FLOW, SEQ, GANTT], { vary: FLOW, unsafe: SEQ });
     setServices({ browser });
@@ -223,12 +254,13 @@ describe('the backfill', () => {
 });
 
 describe('when the browser is down or slow', () => {
-  it('publishing neither waits nor fails, the job backs off, and readers keep the engine', async () => {
+  it('publishing neither waits nor fails, the job waits for a browser without counting it a failure, and readers keep the engine', async () => {
     setServices({ browser: drawingBrowser([FLOW], { down: true }).browser });
     const { id } = await publish([FLOW]);
     expect(await runNextMermaidHarvest()).toBe(true);
     const [job] = await jobs(id);
-    expect(job).toEqual(expect.objectContaining({ state: 'pending', attempts: 1 }));
+    // An outage (or an older browser without the operation) never uses up a version's attempts.
+    expect(job).toEqual(expect.objectContaining({ state: 'pending', attempts: 0 }));
     expect(job.retry_after).not.toBeNull();
     // Backing off: not due again yet.
     expect(await runNextMermaidHarvest()).toBe(false);

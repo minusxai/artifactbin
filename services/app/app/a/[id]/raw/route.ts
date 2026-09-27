@@ -556,7 +556,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
          * serves no stored drawings), and not when the engine was asked for by
          * name (`?mermaid=engine` — what the harvest itself loads).
          */
-        mermaidImages: domain || engineRequested(request.url) ? null : { artifactId: artifact.id, version: at?.version ?? artifact.version, surface: 'document', head: !at },
+        mermaidImages: domain || engineRequested(request.url) ? null : { artifactId: artifact.id, version: at?.version ?? artifact.version, surface: 'document', head: !at, visibility: artifact.visibility },
       });
       return new Response(html, {
         status: 200,
