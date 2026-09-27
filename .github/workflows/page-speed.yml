@@ -1,0 +1,136 @@
+name: page speed
+
+# THE PAGE-SPEED LAB, OFF THE CRITICAL PATH. A workflow of its own, so it runs
+# beside `ci` and never gates it: no job in ci.yml needs it, and it is not a
+# required check. It reports head against base in the job summary and a JSON
+# artifact, and never comments on a PR. How to read the numbers:
+# scripts/performance-loads.mjs (header).
+on:
+  pull_request:
+    paths:
+      - 'services/app/**'
+      - 'services/utils/**'
+      - 'services/contracts/**'
+      - 'package-lock.json'
+      - 'vite.config.mts'
+      - 'server.ts'
+      - 'scripts/performance-loads.mjs'
+      - 'scripts/performance-report.mjs'
+      - 'scripts/lib/document-views.mjs'
+      - 'scripts/fixtures/page-speed/**'
+      - '.github/workflows/page-speed.yml'
+  push:
+    branches: [ main ]
+    paths:
+      - 'services/app/**'
+      - 'services/utils/**'
+      - 'services/contracts/**'
+      - 'package-lock.json'
+      - 'vite.config.mts'
+      - 'server.ts'
+      - 'scripts/performance-loads.mjs'
+      - 'scripts/performance-report.mjs'
+      - 'scripts/lib/document-views.mjs'
+      - 'scripts/fixtures/page-speed/**'
+      - '.github/workflows/page-speed.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+jobs:
+  lab:
+    name: page speed lab
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 22
+          cache: npm
+      # The same whole-install cache as ci.yml (see its `checks` job for the key's reasoning), so a
+      # lab run restores what CI already installed for this lockfile.
+      - run: node scripts/ci.mjs lock-fingerprint
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
+        id: install
+        with:
+          path: |
+            node_modules
+            services/*/node_modules
+            services/app/public/fonts
+            services/app/lib/data/story/story-font-manifest.json
+          key: install-v4-${{ runner.os }}-${{ runner.arch }}-node22-${{ hashFiles('.ci-cache-key/install.json', 'services/app/scripts/copy-assets.mjs', 'services/cli/scripts/prepare-pty.mjs') }}
+      - if: steps.install.outputs.cache-hit != 'true'
+        run: npm ci
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
+        id: playwright
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('node_modules/playwright-core/browsers.json') }}
+      - if: steps.playwright.outputs.cache-hit != 'true'
+        run: npx playwright install --with-deps chromium
+      - if: steps.playwright.outputs.cache-hit == 'true'
+        run: npx playwright install chromium
+      # BASE: the PR's base commit, main's previous head on a push, the parent on a manual run.
+      - name: Check out the base beside the head
+        env:
+          EVENT: ${{ github.event_name }}
+          PR_BASE: ${{ github.event.pull_request.base.sha }}
+          BEFORE: ${{ github.event.before }}
+        run: |
+          case "$EVENT" in
+            pull_request) base="$PR_BASE" ;;
+            push) base="$BEFORE" ;;
+            *) base="" ;;
+          esac
+          if [ -z "$base" ] || ! git cat-file -e "$base^{commit}" 2>/dev/null; then base="$(git rev-parse HEAD~1)"; fi
+          echo "Base $base, head $(git rev-parse HEAD)"
+          git worktree add --detach .perf-base "$base"
+      # The base's dependencies: a hard-linked copy of the head's install when both lockfiles (and
+      # the install scripts) fingerprint the same — workspace links are relative, so they resolve
+      # inside the base — and a clean `npm ci` otherwise.
+      - name: Install the base
+        run: |
+          (cd .perf-base && node scripts/ci.mjs lock-fingerprint)
+          same=true
+          for f in .ci-cache-key/install.json services/app/scripts/copy-assets.mjs services/cli/scripts/prepare-pty.mjs; do
+            cmp -s "$f" ".perf-base/$f" || same=false
+          done
+          if [ "$same" = true ]; then
+            cp -al node_modules .perf-base/node_modules
+            for dir in services/*/node_modules; do cp -al "$dir" ".perf-base/$dir"; done
+            cp -al services/app/public/fonts .perf-base/services/app/public/fonts
+            cp services/app/lib/data/story/story-font-manifest.json .perf-base/services/app/lib/data/story/story-font-manifest.json
+            echo "Base install: linked from the head (same fingerprint)"
+          else
+            (cd .perf-base && npm ci)
+          fi
+      - name: Build base and head
+        run: |
+          (cd .perf-base && npm run build > ../base-build.log 2>&1) & base=$!
+          npm run build > head-build.log 2>&1 & head=$!
+          status=0
+          wait "$base" || { status=1; echo "::error::base build failed"; cat base-build.log; }
+          wait "$head" || { status=1; echo "::error::head build failed"; cat head-build.log; }
+          exit "$status"
+      # The HEAD's lab script measures both builds, one after the other on this runner.
+      - name: Measure the base
+        run: node scripts/performance-loads.mjs .perf-base page-speed/base.json
+      - name: Measure the head
+        run: node scripts/performance-loads.mjs . page-speed/head.json
+      - name: Report
+        run: node scripts/performance-report.mjs page-speed/base.json page-speed/head.json page-speed/combined.json >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: page-speed
+          path: page-speed
+          retention-days: 30
+          if-no-files-found: warn

@@ -1,6 +1,28 @@
 /** CI-only paired production-build lab. No production credentials or traffic.
  * Usage: node scripts/performance-loads.mjs <built-checkout> <output.json>
- * The calling workflow builds both refs on one runner and preserves raw samples.
+ *
+ * RUN BY .github/workflows/page-speed.yml — a separate workflow, never a
+ * required check and never a dependency of ci.yml, on pull requests that touch
+ * the app (or the lab) and on pushes to main. It builds the base (the PR's base
+ * commit, or main's previous head) and the head on ONE runner and runs THIS
+ * head-side script against each build in turn, so both are measured by the
+ * same code; every marker it reads is plain DOM, present in either build.
+ *
+ * HOW TO READ IT. The job summary holds the table (scripts/performance-report.mjs);
+ * the `page-speed` artifact holds base.json, head.json and combined.json with
+ * every raw sample. No PR comment is ever posted.
+ *   - Document views (scripts/lib/document-views.mjs defines every metric): the
+ *     five fixtures in scripts/fixtures/page-speed — prose, kit, dashboard
+ *     (CSV + queries + charts), deck, Mermaid — each on the reader view and on
+ *     /raw, as an anonymous reader with a cold cache under the throttling in
+ *     `LAB_THROTTLE`, median of `documentRuns`. `Takeover` is when the React
+ *     runtime owns the visible document (view only); `Painted` is when the
+ *     charts/diagram are drawn; bytes are response bodies, decoded and gzip.
+ *   - App loads: the signed-in home and the anonymous prose reader, cold and
+ *     warm cache, median `usefulMs` (first frame showing the content).
+ *   Values are head medians with the change from base in brackets. One shared
+ *   CI runner is noisy: treat single-digit-percent timing moves as noise and
+ *   trust byte and request counts, which are deterministic.
  */
 import assert from 'node:assert/strict';
 import { spawn, execFileSync } from 'node:child_process';
@@ -11,8 +33,10 @@ import { randomBytes } from 'node:crypto';
 import { gzipSync, createGzip } from 'node:zlib';
 import { createServer, request as httpRequest } from 'node:http';
 import { chromium } from 'playwright';
-import { connectAgent } from './lib/cli-connection.mjs';
-import { startMailSink, loginViaEmail } from './lib/mail-login.mjs';
+import { startMailSink } from './lib/mail-login.mjs';
+import { becomeAccountOwner, publishAs } from './lib/start-doc.mjs';
+import { publishPageSpeedFixtures } from './fixtures/page-speed/index.mjs';
+import { LAB_THROTTLE, measureDocumentViews, summarizeDocumentViews } from './lib/document-views.mjs';
 
 assert.equal(process.env.CI, 'true', 'Production builds and browser benchmarks run in CI only');
 const root = path.resolve(process.argv[2]), output = path.resolve(process.argv[3]);
@@ -60,32 +84,26 @@ try {
   const page = await context.newPage();
   const cdp = await context.newCDPSession(page);
   await cdp.send('Network.enable');
+  // Accounts sign in through the real email-code door and publish through the
+  // session's own `/api/my/artifacts` (lib/start-doc) — the page's door. A CLI
+  // connection's bearer cannot be claimed by an account, so it is not used.
   const email = 'mxmx_test_performance@example.com';
-  await loginViaEmail(page, base, await startMailSink(), email);
-  const { token } = await connectAgent(base);
-  assert.equal(await page.evaluate(async token => (await fetch('/api/tokens/claim', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token }) })).status, token), 200);
-  const api = async (endpoint, body) => {
-    const response = await fetch(`${base}${endpoint}`, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }, body: JSON.stringify(body) });
-    assert(response.ok, `fixture ${endpoint}: ${response.status}`);
-    return response.json();
-  };
+  await becomeAccountOwner(page, base, { sink: await startMailSink(), email });
   const markup = '<h1 id="performance-heading">Performance fixture</h1>' + Array.from({ length: 35 }, (_, i) => `<p id="paragraph-${i}">Section ${i}: A repeatable document for measuring useful content and application loading.</p>`).join('');
-  const doc = await api('/api/artifacts', { title: 'Performance fixture', markup, visibility: 'public' });
-  for (let i = 0; i < 39; i++) await api(`/api/artifacts/${doc.id}/fork`, { title: `Workspace sample ${String(i).padStart(2, '0')}`, visibility: 'public' });
+  const doc = await publishAs(page, { title: 'Performance fixture', markup, visibility: 'public' });
+  for (let i = 0; i < 39; i++) await publishAs(page, { title: `Workspace sample ${String(i).padStart(2, '0')}`, markup, visibility: 'public' });
   // A second synthetic account owns shared documents. This exercises metadata
   // trimming with real generated metadata, not arbitrary inflated JSON.
   const ownerContext = await browser.newContext();
   const other = await ownerContext.newPage();
-  await loginViaEmail(other, base, await startMailSink(), 'mxmx_test_performance_sharer@example.com');
-  const sharedToken = (await connectAgent(base)).token;
-  assert.equal(await other.evaluate(async token => (await fetch('/api/tokens/claim', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token }) })).status, sharedToken), 200);
+  await becomeAccountOwner(other, base, { sink: await startMailSink(), email: 'mxmx_test_performance_sharer@example.com' });
   for (let i = 0; i < 20; i++) {
-    const made = await fetch(`${base}/api/artifacts`, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${sharedToken}` }, body: JSON.stringify({ title: `Shared sample ${i}`, markup, visibility: 'private' }) });
-    assert(made.ok, `shared fixture: ${made.status}`);
-    const shared = await made.json();
+    const shared = await publishAs(other, { title: `Shared sample ${i}`, markup, visibility: 'private' });
     assert.equal(await other.evaluate(async ({ id, email }) => (await fetch(`/api/my/artifacts/${id}/sharing`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ shares: [{ email, role: 'viewer' }] }) })).status, { id: shared.id, email }), 200);
   }
   await ownerContext.close();
+  // The document-view fixtures (scripts/fixtures/page-speed), owned by the same account.
+  const documentFixtures = await publishPageSpeedFixtures(body => publishAs(page, body));
   // Equalize server state before comparing browser cache modes. Otherwise the
   // faster candidate reaches the warm-cache phase while its freshly seeded
   // thumbnail renders still consume the app/browser worker; the slower baseline
@@ -164,6 +182,11 @@ try {
       }
     }
   }
+  // DOCUMENT VIEWS (scripts/lib/document-views.mjs): cold, throttled, anonymous
+  // reader; every fixture on the reader view and on /raw, interleaved per run.
+  const documentRuns = 5;
+  const samples = await measureDocumentViews({ browser, base, fixtures: documentFixtures, runs: documentRuns, throttle: LAB_THROTTLE, log: line => console.log(line) });
+  result.documents = { conditions: { ...LAB_THROTTLE, runs: documentRuns, cache: 'cold', viewer: 'anonymous', viewport: '1440x1000' }, fixtures: documentFixtures.map(({ key, id, template }) => ({ key, id, template })), summary: summarizeDocumentViews(samples), samples };
   mkdirSync(path.dirname(output), { recursive: true });
   writeFileSync(output, JSON.stringify(result, null, 2));
   console.log(`Measured ${result.loads.length} loads for ${result.revision}; output ${output}`);
