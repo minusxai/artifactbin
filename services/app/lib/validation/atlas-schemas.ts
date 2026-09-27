@@ -6,6 +6,7 @@
  */
 import { Type, type Static, type TSchema } from 'typebox';
 import { STORY_UI_COMPONENT_NAME_LIST } from '@/lib/story-ui/component-names';
+import { STORY_THEME_NAMES, type StoryThemeName } from './story-theme-names';
 
 /** Shared helper: a string enum with an optional description. */
 const StringEnum = <const T extends readonly string[]>(values: T, description?: string) =>
@@ -17,12 +18,11 @@ const NullableD = <T extends TSchema>(schema: T, description: string) =>
   Type.Optional(Type.Union([schema, Type.Null()], { description }));
 
 /**
- * The six story design themes. The enum lives HERE (this module imports
- * nothing but typebox); the theme registry (`lib/data/story/story-themes.ts`)
- * types its entries against it and a registry test asserts one entry per name.
+ * The six story design themes. The list lives in a dependency-free leaf
+ * (`./story-theme-names`) so the reader can name themes without loading
+ * typebox; it is re-exported here for every schema-side caller.
  */
-export const STORY_THEME_NAMES = ['modernist', 'organic', 'industry', 'terminal', 'manuscript', 'pop'] as const;
-export type StoryThemeName = (typeof STORY_THEME_NAMES)[number];
+export { STORY_THEME_NAMES, type StoryThemeName };
 
 /**
  * The story templates — the document's structural GENRE (beat structure +

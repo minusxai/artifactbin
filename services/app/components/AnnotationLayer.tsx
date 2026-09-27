@@ -48,7 +48,6 @@ import type {ScreenshotDrawing} from './ScreenshotEditor';
 import {useCommentCapture} from '@/lib/capture/use-comment-capture';
 import CommentScreenshot from './CommentScreenshot';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { createPortal } from 'react-dom';
 import { Check, ChevronDown, ChevronRight, EllipsisVertical, MessageSquare, LoaderCircle, SquareDashedMousePointer, Trash2, X } from 'lucide-react';
 import { useArtifactBackend, useOptionalArtifactBackend } from '@/lib/artifact-backend/context';
 import { BackendRequestError } from '@/lib/artifact-backend/errors';
@@ -60,7 +59,8 @@ import { foldFromMeasure, isFolded, readFolds, toggleFold, unfold, type FoldKind
 import { loginHref } from '@/lib/login-href';
 import MarkdownField from '@/components/MarkdownField';
 import MarkdownLite from '@/components/MarkdownLite';
-import MobileSheet, { useIsPhoneViewport } from '@/components/MobileSheet';
+import { useIsPhoneViewport } from '@/components/MobileSheet';
+import { RailChrome } from '@/components/AnnotationRail';
 import { Tooltip } from '@/components/Tooltip';
 import { parseMarkdownLite, plainText } from '@/lib/markdown-lite';
 import { APP_BAR_H, RIGHT_RAIL_W } from '@/lib/story/edit-bar';
@@ -121,6 +121,12 @@ interface AnnotationLayerProps {
    * width while it is open.
    */
   panelWidth?: number;
+  /**
+   * The document's Select tool was pressed before this layer's code had
+   * arrived (AnnotationLayerOnDemand held the request): start the pick on
+   * mount, exactly as the message would have.
+   */
+  pickRequested?: boolean;
 }
 
 const cardClass = 'rounded-[6px] border border-edge bg-raised text-sm';
@@ -896,7 +902,7 @@ function Thread({
 export default function AnnotationLayer({
   id, editId, frameRef, runtimeRef, sessionNonce, railOpen, liveAnnotations, showViewComments,
   onRailOpenChange, initialSelection = null, topOffset, onAnnotationsChange, pickOnOpen = true, rightInset = 0,
-  railHost, railSheet = false, panelWidth,
+  railHost, railSheet = false, panelWidth, pickRequested = false,
 }: AnnotationLayerProps) {
   /** Every request the comments make (lib/artifact-backend), from the page's provider. */
   const backend = useArtifactBackend();
@@ -1424,6 +1430,9 @@ export default function AnnotationLayer({
     }
   };
   startPickRef.current=()=>{void beginPick('select');};
+  // A Select pressed while this code was downloading is started once, on arrival.
+  const pickRequestedOnMount=useRef(pickRequested);
+  useEffect(()=>{ if(pickRequestedOnMount.current&&pickOnOpen)startPickRef.current(); },[]); // eslint-disable-line react-hooks/exhaustive-deps
   const endPick = () => {capture.reset();setPick(null);};
   /** The header tool: pressing it while it is active is the way out. */
   const toggleTool = (mode: 'select') => (pick === mode ? endPick() : beginPick(mode));
@@ -1710,51 +1719,5 @@ export default function AnnotationLayer({
       </RailChrome>
       )}
     </PersonMentionProvider>
-  );
-}
-
-/**
- * The conversation's two homes: the fixed right rail on
- * desktop — the page narrows the document by its width — and a bottom sheet
- * on a phone. The content between them is identical; this wrapper is the only
- * thing that knows the difference.
- */
-function RailChrome({ phone, host, topOffset, rightInset, onClose, header, children }: {
-  phone: boolean;
-  /** The editor's panel, when it hosts the rail: rendered into it, not as a column of its own. */
-  host?: HTMLElement;
-  topOffset: number;
-  rightInset: number;
-  onClose: () => void;
-  /** The title row + close control — pinned above the scroll in BOTH homes:
-      the way out must stay reachable however long the list gets. */
-  header: React.ReactNode;
-  children: React.ReactNode;
-}) {
-  if (phone) {
-    return (
-      <MobileSheet label="Annotation sidebar" onClose={onClose} size="half" header={header}>
-        <div className="flex flex-col gap-2.5">{children}</div>
-      </MobileSheet>
-    );
-  }
-  if (host) {
-    return createPortal(
-      <section data-capture-chrome aria-label="Annotation sidebar" className="flex min-h-0 flex-1 flex-col gap-2.5 bg-bg p-2.5">
-        <div className="shrink-0">{header}</div>
-        <div className="flex min-h-0 flex-1 flex-col gap-2.5 overflow-y-auto">{children}</div>
-      </section>,
-      host,
-    );
-  }
-  return (
-    <aside
-      data-capture-chrome aria-label="Annotation sidebar"
-      className="fixed bottom-0 z-20 flex flex-col gap-2.5 border-l border-edge bg-bg p-2.5"
-      style={{ top: topOffset, right: rightInset, width: RIGHT_RAIL_W }}
-    >
-      <div className="shrink-0">{header}</div>
-      <div className="flex min-h-0 flex-1 flex-col gap-2.5 overflow-y-auto">{children}</div>
-    </aside>
   );
 }

@@ -32,7 +32,7 @@ import { getArtifactById } from '@/lib/artifacts';
 import { setAvatar } from '@/lib/avatars';
 import { resetExportRenderer } from '@/lib/export';
 import { setServices } from '@/lib/services';
-import { ProfileListing } from '@/web/pages/Profile';
+import { ProfileListing } from '@/web/pages/ProfileIndex';
 import { attachDomain, removeDomain, setDomainResolver, verifyDomain, type DomainResolver } from '@/lib/custom-domains';
 import { mintToken } from '@/lib/tokens';
 import { getDb } from '@/lib/db';

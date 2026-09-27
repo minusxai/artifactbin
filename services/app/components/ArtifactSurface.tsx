@@ -22,7 +22,7 @@ import { datasetQuerySnippet } from '@/lib/story/dataset-usage';
  * The editor is loaded ON DEMAND: it pulls in the WYSIWYG, the AST write-back
  * and the source editor, and a reader of a shared document must never pay for that.
  */
-import dynamic from '@/lib/dynamic';
+import dynamic, { onDemand, useOnDemand, whenIdle } from '@/lib/dynamic';
 import { MessageSquare, Pencil } from 'lucide-react';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { InlineStoryController } from '@/lib/story-runtime/InlineStoryRuntime';
@@ -31,15 +31,15 @@ import { ArtifactBackendProvider } from '@/lib/artifact-backend/context';
 import { subscribeDocument } from '@/lib/story-runtime/document-endpoint';
 import type { PreparedStoryRuntime } from '@/lib/story/prepared-runtime';
 import type { ReaderForkedFrom } from '@/lib/story/reader-chrome';
-import { storyUpdateParts } from '@/lib/story/update-parts';
 import { TrustedUi } from '@/components/TrustedUi';
 import { useLocation, useNavigate } from 'react-router';
 import { InlineReaderChrome } from '@/components/InlineReaderChrome';
 import { useArtifactOwner, useCanAnnotateArtifact, useCanEditArtifact } from '@/components/ArtifactShell';
-import AnnotationLayer from '@/components/AnnotationLayer';
+import AnnotationLayer from '@/components/AnnotationLayerOnDemand';
 import RefreshAssets from '@/components/RefreshAssets';
 import ForkArtifact, { ForkConfirm } from '@/components/ForkArtifact';
-import ShareLink from '@/components/ShareLink';
+import ShareLink, { shareLinkFeature } from '@/components/ShareLinkOnDemand';
+import { LoadFailure } from '@/components/LoadFailure';
 import DownloadOffline from '@/components/DownloadOffline';
 import type { AnnotationWire } from '@/lib/annotations';
 import { readIntent, stripIntent } from '@/lib/intent';
@@ -62,7 +62,7 @@ import { readUrlValues, writeUrlValues } from '@/lib/story/url-values';
 import { displayTitle } from '@/lib/story/title';
 import { formatFileSize } from '@/lib/file-display';
 import { resolveStoryMode } from '@/lib/data/story/story-themes';
-import type { StoryThemeName } from '@/lib/validation/atlas-schemas';
+import type { StoryThemeName } from '@/lib/validation/story-theme-names';
 import type { StoryIslandDataflow } from '@/lib/story-runtime/contract';
 
 // Dataset controls are a format-specific boundary. Text readers must not
@@ -77,6 +77,14 @@ const ArtifactEditor = dynamic(() => import('@/components/ArtifactEditor'), {
   ssr: false,
   loading: () => <p className="mt-10 text-center text-xs text-faint">loading the editor…</p>,
 });
+
+/*
+ * The JSX parser, for the one surface that arrives WITHOUT a prepared runtime
+ * (a bare `source` — the page endpoint prepares every document it serves). It
+ * is 250 KB of acorn that no reader of a served document needs, so it is its
+ * own chunk (lib/__tests__/reader-bundle-hygiene).
+ */
+const updatePartsFeature = onDemand(() => import('@/lib/story/update-parts'));
 
 const SocialPreviewDialog = dynamic(() => import('@/components/SocialPreviewDialog'), {
   ssr: false,
@@ -437,11 +445,14 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
   // Signal changes update this document's store and route, never its initial
   // seed. Only a new artifact identity receives a new runtime and URL seed.
   const initialRuntimeVersion = useMemo(() => version, [id]);
+  const needsParse = isDocumentFormat && !props.runtime;
+  const { module: parser, failed: parseFailed, retry: retryParse } = useOnDemand(updatePartsFeature, needsParse);
+  const seedReady = !needsParse || !!parser;
   const initialRuntimeData = useMemo(() => props.runtime?.data ?? {
-    nodes: storyUpdateParts(source ?? '')?.nodes ?? [], refData: {},
+    nodes: parser?.storyUpdateParts(source ?? '')?.nodes ?? [], refData: {},
     dataflow: dataflow ? {...dataflow, values:{...dataflow.values,...readUrlValues(search,dataflow.flow)}} : undefined,
     colorMode: readerMode, template, chrome: true,
-  }, [id]);
+  }, [id, seedReady]);
   const setReaderMode = useCallback((mode: AppearanceMode) => {
     setReaderModeOverride(mode);
     runtimeRef.current?.send({ type: STORY_READER_MODE_MESSAGE, mode });
@@ -504,7 +515,9 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
 
   /*
    * Fetch the editor bundle for permitted document editors while they read, so pressing edit
-   * swaps in rather than downloading it first.
+   * swaps in rather than downloading it first — and, the same way, the sharing dialog for
+   * the people who may manage sharing (components/ShareLinkOnDemand). One idle task for all
+   * of them; hovering or focusing a trigger warms its feature sooner (`warmFor`).
    *
    * A prefetch owes the page two things. It must be CANCELLED with the component:
    * an uncancelled timer fires into a page that is gone, which in the ui suite is
@@ -515,19 +528,17 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
    * real import, when the reader presses edit, is what gets to report.
    */
   useEffect(() => {
-    if (!canEdit || format !== 'markup') return;
-    const warm = () => void import('@/components/ArtifactEditor').catch(() => {});
-    const w = window as unknown as {
-      requestIdleCallback?: (c: () => void) => number;
-      cancelIdleCallback?: (h: number) => void;
-    };
-    if (w.requestIdleCallback) {
-      const handle = w.requestIdleCallback(warm);
-      return () => w.cancelIdleCallback?.(handle);
-    }
-    const timer = setTimeout(warm, 1500);
-    return () => clearTimeout(timer);
-  }, [canEdit, format]);
+    const warms: Array<() => void> = [];
+    if (canEdit && format === 'markup') warms.push(() => void import('@/components/ArtifactEditor').catch(() => {}));
+    // Sharing is managed by owners and editors only; nobody else downloads it.
+    if (owner || canEdit) warms.push(shareLinkFeature.prefetch);
+    if (!warms.length) return;
+    return whenIdle(() => { for (const warm of warms) warm(); });
+  }, [canEdit, owner, format]);
+  /** A reader is reaching for a chrome control: warm what it opens, for those who can use it. */
+  const warmFor = useCallback((action: string) => {
+    if ((action === 'share' && owner) || (action === 'controls' && (owner || canEdit))) shareLinkFeature.prefetch();
+  }, [owner, canEdit]);
 
   // Whether THIS page load is what pushed `#edit`, so `done` can undo its own
   // history entry instead of stacking another one.
@@ -831,7 +842,7 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
     return (
       <ArtifactBackendProvider backend={backend}>
         <TrustedUi overlay layer="navigation">
-        <InlineReaderChrome onShare={owner ? () => setSharingOpen(true) : undefined} pinned={editing || railOpen} editing={editing} input={{artifactId:id, ground:readerMode, editing, membership:hasDataMutations?membership.status:undefined, share:owner, archived, visibility:sharingVerdict?.id === id ? sharingVerdict.visibility : props.visibility, hasInvitedUsers:sharingVerdict?.id === id ? sharingVerdict.hasInvitedUsers : props.hasInvitedUsers, title:shownTitle, forkBusy:false, author:props.author ?? null, viewer:readerFace, edit:canEdit, ownerBreadcrumb:owner, reactions:{like:{...likeRef.current,href:'#'},follow:followRef.current ? {...followRef.current,href:'#'} : null,comment:{count:openAnnotationCount,href:'#'}}}} onAction={action => {
+        <InlineReaderChrome onIntent={warmFor} onShare={owner ? () => setSharingOpen(true) : undefined} pinned={editing || railOpen} editing={editing} input={{artifactId:id, ground:readerMode, editing, membership:hasDataMutations?membership.status:undefined, share:owner, archived, visibility:sharingVerdict?.id === id ? sharingVerdict.visibility : props.visibility, hasInvitedUsers:sharingVerdict?.id === id ? sharingVerdict.hasInvitedUsers : props.hasInvitedUsers, title:shownTitle, forkBusy:false, author:props.author ?? null, viewer:readerFace, edit:canEdit, ownerBreadcrumb:owner, reactions:{like:{...likeRef.current,href:'#'},follow:followRef.current ? {...followRef.current,href:'#'} : null,comment:{count:openAnnotationCount,href:'#'}}}} onAction={action => {
           if (action === 'like') void toggleLike();
           else if (action === 'follow') void toggleFollow();
           else if (action === 'membership') joinArtifact();
@@ -898,14 +909,14 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
           )}
           {showStarter && <TrustedUi><StarterInstructions id={id} /></TrustedUi>}
           <div hidden={showStarter}>
-          <InlineStoryRuntime
+          {seedReady ? <InlineStoryRuntime
             key={id}
             data={initialRuntimeData}
             transportFactory={transportFactory}
             prepared={props.runtime}
             authorScript={props.runtime?.authorScript}
             onController={onController}
-          />
+          /> : parseFailed && <TrustedUi><LoadFailure what="the document" onRetry={retryParse} className="p-4" /></TrustedUi>}
           </div>
         </div>
         {/* Annotations are chrome too: pins live IN the document runtime, markers and
@@ -971,9 +982,11 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
   // or an image inside the app's own measure.
   return (
     <>
+      <div className="contents" onPointerOver={() => warmFor('controls')} onFocus={() => warmFor('controls')} onPointerDown={() => warmFor('controls')}>
       <PageChrome authed={accountSession} anon={anonSession} title={shownTitle} label="Artifact controls" actions={<ForkArtifact id={id} title={shownTitle} variant="bar" />}>
         {documentControls}
       </PageChrome>
+      </div>
       <main className="mx-auto w-full max-w-5xl px-4 pt-6 pb-6">
       {format === 'image' && (
         // eslint-disable-next-line @next/next/no-img-element -- the artifact IS the image; no optimizer.

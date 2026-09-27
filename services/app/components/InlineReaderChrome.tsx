@@ -34,7 +34,8 @@ const triggerLabel=(which:PagePanelName,open:boolean)=>which==='notifications'?'
 
 /** Identical desktop/mobile reader layout, with local handlers inside TrustedUi. */
 /** `editing`: on a phone the rail would sit over the document being edited, so it steps off (the editor bar has Done). */
-export function InlineReaderChrome({ input, onAction,onShare,pinned=false,editing=false }: { input: ReaderChromeInput; onAction(action:string):void;onShare?:()=>void;pinned?:boolean;editing?:boolean }): ReactNode {
+/** `onIntent`: a control is being reached for (hover, focus, press start) — the page warms what it opens. */
+export function InlineReaderChrome({ input, onAction,onShare,onIntent,pinned=false,editing=false }: { input: ReaderChromeInput; onAction(action:string):void;onShare?:()=>void;onIntent?:(action:string)=>void;pinned?:boolean;editing?:boolean }): ReactNode {
   const notifications=useNotifications();
   const holder=useRef<HTMLDivElement>(null);
   const state=useRef<ChromeState|null>(null);
@@ -91,10 +92,16 @@ export function InlineReaderChrome({ input, onAction,onShare,pinned=false,editin
     sample();
     return ()=>{stopGithubStar();stopFaces();stopSheets();stop();sharing.current?.dispose();sharing.current=null;window.cancelAnimationFrame(raf);window.removeEventListener('scroll',schedule);window.removeEventListener('resize',schedule);};
   },[html,pinned,editing,input.artifactId]);
+  const intent=(target:EventTarget)=>{
+    if(!onIntent||!(target instanceof Element))return;
+    const control=target.closest<HTMLElement>('[data-mx-reader-action],[data-mx-reader-trigger]');
+    const action=control?.getAttribute('data-mx-reader-action')??control?.getAttribute('data-mx-reader-trigger');
+    if(action)onIntent(action);
+  };
   return <>
     <NotificationMenu/>
     <style>{STORY_CHROME_CSS}</style>
-    <div ref={holder} onClick={event => {
+    <div ref={holder} onPointerOver={event=>intent(event.target)} onFocus={event=>intent(event.target)} onPointerDown={event=>intent(event.target)} onClick={event => {
       const target = (event.target as Element).closest<HTMLElement>('[data-mx-reader-action],[data-mx-reader-trigger]');
       if (!target) return;
       event.preventDefault();

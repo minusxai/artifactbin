@@ -37,12 +37,13 @@ interface TrustedUiProps {
   layer?: 'selection' | 'discussion' | 'navigation' | 'modal';
 }
 
-/** Register only the app's compiled CSS, imported explicitly by its entrypoint. */
+/** Register only the app's compiled CSS, handed over explicitly by its entrypoint. */
 export function configureTrustedUiStyles(cssText: string): void {
   // all:initial does not reset custom properties. Reset every property used by
   // trusted CSS (including Tailwind/Radix inputs), then apply OUR defaults in
   // the next layer. Unknown author variables are harmless unless trusted CSS
-  // consumes them. Never take computed properties or sheets from the document.
+  // consumes them. Never take computed properties from the document, and no
+  // sheet but the app's own (configureTrustedUiFromShell).
   const properties = [...new Set(cssText.match(/--[a-zA-Z_][\w-]*/g) ?? [])];
   const reset = properties.map(name => `${name}: initial;`).join('');
   // These selectors refer to the app document in its normal stylesheet; in a
@@ -53,6 +54,41 @@ export function configureTrustedUiStyles(cssText: string): void {
     .replace(/(^|[},\s])(?:html|body)(?=[\s,{])/g, `$1${ROOT}`);
   trustedCss = `@layer trusted-ui-reset { ${ROOT} { all: initial; ${reset} } }\n${scoped}\n${ROOT} { display: contents; }\n${BOUNDARY_CSS}`;
   for (const style of installedStyles) style.textContent = trustedCss;
+}
+
+/**
+ * Configure the trusted sheet from the app's OWN stylesheet, where the HTML
+ * shell already loaded it — so the Tailwind sheet ships once, as the render-
+ * blocking CSS every page needs anyway, instead of a second copy inlined in the
+ * SPA's JavaScript (lib/__tests__/reader-bundle-hygiene).
+ *
+ * Exactly which sheets: the same-origin `<link rel="stylesheet">` elements in
+ * the shell's `<head>` (web/index.html → the built `/assets/index-*.css`, or
+ * `/shell.css` under the dev server), read ONCE, by the entrypoint, before any
+ * React tree mounts. Never a `<style>` element and never anything later:
+ * author CSS reaches the document only as `<style>` (a server-rendered
+ * document's sheet in <body>, the inline runtime's own), so it can never be
+ * taken for the app's. A same-origin sheet's rules are readable; they are
+ * serialized back to text and scoped exactly as an explicit copy would be. A
+ * sheet the parser has not finished yet is read when it loads (the trusted
+ * roots already mounted pick it up then).
+ */
+export function configureTrustedUiFromShell(doc: Document = document): void {
+  const links = [...doc.head.querySelectorAll<HTMLLinkElement>('link[rel~="stylesheet"]')]
+    .filter(link => { try { return new URL(link.href, doc.baseURI).origin === new URL(doc.baseURI).origin; } catch { return false; } });
+  const text = (link: HTMLLinkElement): string | null => {
+    try { return link.sheet ? Array.from(link.sheet.cssRules, rule => rule.cssText).join('\n') : null; }
+    catch { return null; }
+  };
+  const apply = () => configureTrustedUiStyles(links.map(link => text(link) ?? '').join('\n'));
+  const waiting = links.filter(link => text(link) === null);
+  apply();
+  let remaining = waiting.length;
+  for (const link of waiting) {
+    const settle = () => { if (--remaining === 0) apply(); };
+    link.addEventListener('load', settle, { once: true });
+    link.addEventListener('error', settle, { once: true });
+  }
 }
 
 /** Owns the protected root and its portal destination; no extra document or auth origin. */

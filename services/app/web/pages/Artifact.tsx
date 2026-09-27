@@ -13,11 +13,21 @@ import ArtifactSurface from '@/components/ArtifactSurface';
 import type { AccountWorkspace } from '@/lib/workspace';
 import { ShellFrame } from '@/web/Shell';
 import { PageLoading } from '@/web/PageLoading';
-import { FolderPage } from './Folder';
+import type { FolderPage as FolderView } from './Folder';
+import { lazyPage } from '../lazy-page';
 import { routePages } from '../route-pages';
 import { canEdit } from '@/lib/share-roles';
 import { NotFoundPage } from './NotFound';
 import { useArtifactView } from '../use-artifact-view';
+
+/**
+ * A folder is a LISTING, never a document: its page (and the shelf, table and
+ * JSX write-back it carries) is its own chunk, so no reader of a document
+ * downloads it (lib/__tests__/reader-bundle-hygiene). The server preloads it
+ * beside this page when the address is a folder (server/app `page`), and the
+ * route-code boundary retries a failed download on an explicit gesture.
+ */
+const FolderPage = lazyPage<Parameters<typeof FolderView>[0]>(() => import('./Folder').then(m => ({ default: m.FolderPage })));
 
 /**
  * ONE ADDRESS, TWO PAGES, and `folder` is the discriminator.
@@ -30,7 +40,7 @@ import { useArtifactView } from '../use-artifact-view';
  * second meaning for the word is how a payload starts lying about itself.
  */
 type Page =
-  | { canonical: string; role: Parameters<typeof ArtifactShell>[0]['role']; kind: string; folder: Parameters<typeof FolderPage>[0]['folder']; workspace?: AccountWorkspace; ownerUsername?: string | null; surface?: undefined }
+  | { canonical: string; role: Parameters<typeof ArtifactShell>[0]['role']; kind: string; folder: Parameters<typeof FolderView>[0]['folder']; workspace?: AccountWorkspace; ownerUsername?: string | null; surface?: undefined }
   | { canonical: string; role: Parameters<typeof ArtifactShell>[0]['role']; kind: string; like?: { liked: boolean; count: number }; follow?: { userId: string; following: boolean; count: number } | null;
       /** `?version=N` on this page's own address, resolved by the endpoint (lib/archived-version). Absent for the head. */
       archived?: { version: number; head: number };
