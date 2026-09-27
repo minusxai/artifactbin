@@ -5,8 +5,8 @@
  * `AGENT_HELP_TITLE`) and a `<meta name="afbin">` naming the CLI and its one-line install —
  * and repeats them as a comment that is the LAST thing before `</body>`, because a shell tool
  * that keeps the tail of a long page drops the whole head (inline CSS and bootstrap JSON come
- * first). The healing 302 from `/a/<id>` carries the same pointer in a `Link` header and a small
- * body, so a fetch that does not follow redirects still learns the way on.
+ * first). A shared `/a/<id>` is the document page itself (served in place, no redirect), so a
+ * fetch that does not follow redirects reads the same pointers, plus a `Link` header.
  * The served one-pager is `skills/artifactbin/llms.txt` with `[[ base ]]` filled in; its first
  * line is the blurb (`agentBlurb`) still used elsewhere. Read once per process; the file ships
  * in the image beside `skills/`.
@@ -14,7 +14,7 @@
 import {readFileSync} from 'node:fs';
 import path from 'node:path';
 import {escapeHtml} from './story/reader-chrome';
-import {AGENT_HELP_TITLE,agentDiscoveryHead,type AgentDiscovery} from './agent-discovery-tags';
+import {AGENT_HELP_TITLE,type AgentDiscovery} from './agent-discovery-tags';
 export {AGENT_HELP_TITLE,agentDiscovery,agentDiscoveryHead,type AgentDiscovery} from './agent-discovery-tags';
 const BASE_TAG='[[ base ]]';
 let source:string|null=null;
@@ -34,10 +34,4 @@ export function agentDiscoveryTail(help:AgentDiscovery):string{
 export function withAgentDiscoveryTail(html:string,help:AgentDiscovery):string{
  const at=html.lastIndexOf('</body>');
  return at<0?html:`${html.slice(0,at)}${agentDiscoveryTail(help)}${html.slice(at)}`;
-}
-/** The body of a healing redirect: the canonical address and the pointer, for a fetch that stopped at the 302. */
-export function agentDiscoveryRedirect(help:AgentDiscovery,canonical:string):string{
- const href=escapeHtml(canonical);
- return `<!doctype html><html><head><meta charset="utf-8"><link rel="canonical" href="${href}">${agentDiscoveryHead(help)}</head>`
-  +`<body><p>The document is at ${href}: <a href="${href}">${href}</a></p><p>${escapeHtml(help.instruction)} ${AGENT_HELP_TITLE}: <a href="${escapeHtml(help.url)}">${escapeHtml(help.url)}</a></p></body></html>`;
 }
