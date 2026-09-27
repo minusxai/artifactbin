@@ -94,8 +94,10 @@ export function configureTrustedUiFromShell(doc: Document = document): void {
   for (const link of links) {
     // A sheet the parser has not finished yet stands in once it has loaded.
     if (!link.sheet) link.addEventListener('load', () => { if (!exact.has(link)) apply(); }, { once: true });
-    void fetch(link.href, { credentials: 'same-origin' })
-      .then(response => response.ok ? response.text() : Promise.reject(new Error(String(response.status))))
+    // Asked for AS CSS, and only CSS accepted: the dev server answers a bare
+    // request for a .css path with its JS module wrapper instead.
+    void fetch(link.href, { credentials: 'same-origin', headers: { accept: 'text/css' } })
+      .then(response => response.ok && /\btext\/css\b/.test(response.headers.get('content-type') ?? '') ? response.text() : Promise.reject(new Error(String(response.status))))
       .then(text => { exact.set(link, text); apply(); })
       .catch(() => { /* the parsed rules keep standing in */ });
   }

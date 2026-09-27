@@ -153,11 +153,12 @@ describe('trusted UI CSS boundary', () => {
     };
     const bytes = deferred<void>();
     const fetched: string[] = [];
-    vi.stubGlobal('fetch', vi.fn(async (href: string) => {
+    vi.stubGlobal('fetch', vi.fn(async (href: string, init?: RequestInit) => {
+      expect(new Headers(init?.headers).get('accept')).toBe('text/css');
       const path = new URL(href).pathname;
       fetched.push(path);
       await bytes.promise;
-      return path in files ? new Response(files[path]) : new Response('', { status: 404 });
+      return path in files ? new Response(files[path], { headers: { 'content-type': 'text/css; charset=utf-8' } }) : new Response('', { status: 404 });
     }));
     const app = link('/assets/index-abc.css', ':root, :host { --color-fg: black; }\n.tab { border-top-color: ; border-bottom: 0px; }');
     const later = link('/assets/late-abc.css', null);
@@ -186,6 +187,27 @@ describe('trusted UI CSS boundary', () => {
       result.unmount();
     } finally {
       for (const element of [app, later, foreign, author]) element.remove();
+      configureTrustedUiStyles('');
+    }
+  });
+
+  it('keeps the parsed rules when the answer is not CSS (a dev server\'s JS module wrapper)', async () => {
+    const element = document.createElement('link');
+    element.rel = 'stylesheet';
+    element.href = '/shell.css';
+    Object.defineProperty(element, 'sheet', { configurable: true, get: () => ({ cssRules: [{ cssText: '.parsed-probe { color: red; }' }] }) });
+    document.head.append(element);
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('const __vite__css = ".wrapped-probe{}"', { headers: { 'content-type': 'text/javascript' } })));
+    try {
+      configureTrustedUiFromShell(document);
+      const result = render(<TrustedUi><button aria-label="Styled control">Safe</button></TrustedUi>);
+      const root = result.container.querySelector('[data-trusted-ui]')!.shadowRoot!;
+      await act(async () => { await new Promise(r => setTimeout(r, 0)); });
+      expect(root.textContent).toContain('.parsed-probe { color: red; }');
+      expect(root.textContent).not.toContain('wrapped-probe');
+      result.unmount();
+    } finally {
+      element.remove();
       configureTrustedUiStyles('');
     }
   });
