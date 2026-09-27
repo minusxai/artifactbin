@@ -1,5 +1,3 @@
-import { KIT_CHUNK_IDS, type KitChunkId } from '@/lib/story-ui/kit-chunks';
-
 /** Server-owned sibling captured before author DOM is mounted into the SPA. */
 let initialStory: Element | null = null;
 let initialPath = '';
@@ -10,7 +8,7 @@ let initialPath = '';
  */
 let held: HTMLElement | null = null;
 /** What the server said about the story, on its wrapper (server/app storyFacts). */
-let facts: { final: boolean; kit: KitChunkId[] } = { final: false, kit: [] };
+let facts: { final: boolean; kit: string[] } = { final: false, kit: [] };
 /**
  * The server's story wrapper: the body's last child carrying the attribute —
  * the page data (web/bootstrap) now rides after it, as the very last element.
@@ -25,10 +23,10 @@ export function captureInitialStory(): void {
   initialStory = candidate?.hasAttribute('data-mx-initial-story') ? candidate : null;
   initialPath = window.location.pathname;
   held = null;
-  const kit = (initialStory?.getAttribute('data-mx-kit') ?? '').split(' ');
   facts = {
     final: initialStory?.hasAttribute('data-mx-final') ?? false,
-    kit: KIT_CHUNK_IDS.filter((id) => kit.includes(id)),
+    // As served: the registry that loads them ignores any id it does not know (lib/story-runtime/kit-registry).
+    kit: (initialStory?.getAttribute('data-mx-kit') ?? '').split(' ').filter(Boolean),
   };
 }
 /** Clear the captured server sibling before an app-route commit can paint. */
@@ -57,7 +55,7 @@ export function initialDocumentStory(): HTMLElement | null {
 export const initialStoryFinal = (): boolean => facts.final && !!initialDocumentStory();
 
 /** The kit chunks the served story draws — what the runtime loads before it hydrates it. */
-export const initialStoryKit = (): readonly KitChunkId[] => (initialDocumentStory() ? facts.kit : []);
+export const initialStoryKit = (): readonly string[] => (initialDocumentStory() ? facts.kit : []);
 
 /**
  * Take the served story out of the server's wrapper for a reader that keeps

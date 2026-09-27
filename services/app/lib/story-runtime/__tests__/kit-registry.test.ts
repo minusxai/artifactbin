@@ -49,3 +49,9 @@ describe('the kit, split per chunk', () => {
     expect(kitLoaded(KIT_CHUNK_IDS)).toBe(true);
   });
 });
+
+it('ignores an id this build has no chunk for, as a page served by another build may name', async () => {
+  resetKitRegistry();
+  await loadKitChunks(['no-such-chunk', 'badge']);
+  expect(kitLoaded(['badge'])).toBe(true);
+});

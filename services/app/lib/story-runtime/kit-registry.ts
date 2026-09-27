@@ -116,11 +116,14 @@ export const kitLoaded = (ids: Iterable<KitChunkId>): boolean => { for (const id
  * Load the chunks in `ids` that are not here yet, together. Resolves once all
  * of them are registered; rejects when any fails, and a failed chunk is
  * forgotten so the next call asks again (a reader who went offline, a deploy
- * that replaced the content-addressed file).
+ * that replaced the content-addressed file). An id this build has no chunk
+ * for (a page served by another build) is ignored.
  */
-export function loadKitChunks(ids: Iterable<KitChunkId>): Promise<void> {
+export function loadKitChunks(ids: Iterable<string>): Promise<void> {
   const waits: Promise<void>[] = [];
-  for (const id of ids) {
+  for (const name of ids) {
+    if (!Object.hasOwn(LOADERS, name)) continue;
+    const id = name as KitChunkId;
     if (loaded.has(id)) continue;
     let wait = pending.get(id);
     if (!wait) {

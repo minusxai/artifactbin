@@ -84,7 +84,7 @@ const InlineStoryRuntime = dynamic(() => import('@/lib/story-runtime/InlineStory
 export const preloadInlineStoryRuntime = (kit: readonly string[] = []): Promise<void> => Promise.all([
   InlineStoryRuntime.preload(),
   // Beside the runtime, not after it: the registry is a small module of its own, so the chunks start at once.
-  kit.length ? import('@/lib/story-runtime/kit-registry').then(module => module.loadKitChunks(kit as Parameters<typeof module.loadKitChunks>[0])) : undefined,
+  kit.length ? import('@/lib/story-runtime/kit-registry').then(module => module.loadKitChunks(kit)) : undefined,
 ]).then(() => undefined);
 const ArtifactEditor = dynamic(() => import('@/components/ArtifactEditor'), {
   ssr: false,
