@@ -29,6 +29,7 @@ import { loadStorySsr } from './ssr.server';
 import type { WebAssetBox } from '@/lib/story/asset-url';
 import { AUTHOR_SCRIPT_TYPE, STORY_HELLO_MESSAGE, STORY_VALUES_HOOK, STORY_ISLAND_ID, STORY_PAINTED_MESSAGE, STORY_ROOT_ID, type StoryIslandData, type StoryIslandDataflow, type StoryViewer } from '@/lib/story-runtime/contract';
 import type { JsxNode } from '@/lib/jsx';
+import { lazyCodeOf } from './lazy-code';
 import type { RefDataMap } from '@/lib/story/ref-data';
 import { STORY_CHROME_CSS, STORY_COLUMN_CSS, STORY_EMBED_CSS, STORY_TABLE_CSS } from '@/lib/story-runtime/chrome-css';
 import { STORY_BARE_TYPOGRAPHY_CSS } from '@/lib/story-surface/bare-typography';
@@ -90,7 +91,8 @@ export interface StoryDocumentInput {
   live?: { id: string; editId: string } | null;
   /**
    * The runtime's lazy chunks (lib/story/runtime-asset) — preloaded, but only
-   * by a document that will actually reach for one. See {@link drawsChart}.
+   * by a document that will actually reach for one (lib/story/lazy-code). Each
+   * chunk's static dependencies follow it in the same list.
    */
   lazyChunks?: string[] | null;
   /** The entry's STATIC dependency chunks, preloaded with it by every hydrating document. */
@@ -252,31 +254,23 @@ function needsRuntime(nodes: JsxNode[]): boolean {
     n.type === 'element' && (n.isComponent || needsRuntime(n.children)));
 }
 
-/** The `viz.kind`s whose branch in QuestionEmbed reaches the lazy chart module. */
-const CHART_VIZ_KINDS = new Set(['vega', 'vega-lite', 'recipe']);
+
 
 /**
- * Will this document import the chart bundle?
- *
- * Only `<Question>` does, and only for the kinds above: a question with no
- * `viz`, or one whose kind is `table` or `single_value`, renders inline and
- * never touches it. That distinction is the whole reason the chunk is split
- * out, so the preload has to respect it or a prose document with one summary
- * number pays ~830 KB for nothing.
+ * What a hydrating document asks for with its runtime: the entry and its whole
+ * static closure, then the lazy code this document will reach for — the chart
+ * chunk only if it draws a chart, each Mermaid kind's closure only for the
+ * kinds it draws — each URL once, in the order it will be needed.
  */
-function drawsChart(nodes: JsxNode[]): boolean {
-  return nodes.some((n) => {
-    if (n.type !== 'element') return false;
-    if (n.isComponent && n.tag === 'Question') {
-      const viz = n.attributes.find((a) => a.name === 'viz')?.value;
-      const kind = viz?.static && viz.json && typeof viz.json === 'object' && !Array.isArray(viz.json)
-        ? viz.json.kind : null;
-      if (typeof kind === 'string' && CHART_VIZ_KINDS.has(kind)) return true;
-    }
-    return drawsChart(n.children);
-  });
+function runtimePreloads(runtimeSrc: string, body: JsxNode[], input: StoryDocumentInput): string[] {
+  const needs = lazyCodeOf(body);
+  return [...new Set([
+    runtimeSrc,
+    ...input.runtimeDeps ?? [],
+    ...(needs.chart ? input.lazyChunks ?? [] : []),
+    ...needs.mermaid.flatMap((kind) => input.mermaidChunks?.[kind] ?? []),
+  ])];
 }
-
 
 /**
  * The URL bar is ours, not the document's.
@@ -525,7 +519,7 @@ export async function buildStoryDocument(input: StoryDocumentInput): Promise<str
     // only for documents that hydrate, gets that backwards: the document that
     // gains most is the prose one that ships nothing else.
     ...(anchorSrc ? [anchorSrc] : []),
-    ...(hydrates ? [runtimeSrc!, ...(drawsChart(split!.body) ? input.lazyChunks ?? [] : [])] : []),
+    ...(hydrates ? runtimePreloads(runtimeSrc!, split!.body, input) : []),
   ].map((href) => `<link rel="modulepreload" href="${escapeHtml(href)}" crossorigin>`).join('');
 
   const island = prepared.data;

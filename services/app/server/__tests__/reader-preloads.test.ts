@@ -3,7 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { afterEach, expect, it } from 'vitest';
 import { JSDOM } from 'jsdom';
-import { createReaderPreloader, createEntryPreloader, createListingPreloader, listingPage } from '../reader-preloads';
+import { createReaderPreloader, createEntryPreloader, createListingPreloader, createDocumentPreloader, listingPage } from '../reader-preloads';
 
 const dirs: string[] = [];
 const shell = '<html><head><link rel="modulepreload" href="/assets/shared-abc.js"></head><body></body></html>';
@@ -92,4 +92,77 @@ it('names the listing page only from what the server inlined', () => {
   expect(listingPage({ profile: { kind: 'artifact', id: 'd' }, artifact: { surface: {} } })).toBeNull();
   expect(listingPage({ artifact: { surface: {} } })).toBeNull();
   expect(listingPage(null)).toBeNull();
+});
+
+/*
+ * PER DOCUMENT. The reader page above warms what EVERY document needs; the
+ * lazy code only some documents run — the chart module, a Mermaid kind's
+ * engine, diagram and layout — is named per document, from what its body
+ * draws (lib/story/lazy-code), so it downloads beside the runtime instead of
+ * three imports later. Never for a document that will not run it.
+ */
+const MERMAID = '../../../node_modules/mermaid/dist/chunks/mermaid.core';
+function documentFixture(modules: unknown = { kinds: { flowchart: ['flowDiagram-K.mjs', 'elk-E.mjs'], sequence: ['sequenceDiagram-S.mjs'] } }) {
+  const dir = fixture({
+    '../components/viz/VegaChart.tsx': { file: 'assets/VegaChart-abc.js', src: '../components/viz/VegaChart.tsx', isDynamicEntry: true, imports: ['_d3.js', 'shared'] },
+    '_d3.js': { file: 'assets/d3-abc.js' },
+    '../components/kit/mermaid-render.ts': { file: 'assets/mermaid-render-abc.js', src: '../components/kit/mermaid-render.ts', isDynamicEntry: true, imports: ['_mermaid-core.js'], dynamicImports: [`${MERMAID}/flowDiagram-K.mjs`, `${MERMAID}/sequenceDiagram-S.mjs`] },
+    '_mermaid-core.js': { file: 'assets/mermaid-core-abc.js', imports: ['shared'] },
+    [`${MERMAID}/flowDiagram-K.mjs`]: { file: 'assets/flowDiagram-K-abc.js', src: `${MERMAID}/flowDiagram-K.mjs`, isDynamicEntry: true, imports: ['_mermaid-core.js', '_flow-shared.js'] },
+    '_flow-shared.js': { file: 'assets/flow-shared-abc.js' },
+    [`${MERMAID}/elk-E.mjs`]: { file: 'assets/elk-E-abc.js', src: `${MERMAID}/elk-E.mjs`, isDynamicEntry: true, imports: ['_mermaid-core.js'] },
+    [`${MERMAID}/sequenceDiagram-S.mjs`]: { file: 'assets/sequenceDiagram-S-abc.js', src: `${MERMAID}/sequenceDiagram-S.mjs`, isDynamicEntry: true, imports: ['_mermaid-core.js'] },
+  });
+  const file = path.join(dir, 'mermaid-modules.json');
+  if (modules !== null) writeFileSync(file, JSON.stringify(modules));
+  return { dir, file };
+}
+const hinted = (html: string) => [...html.split('</head>')[0].matchAll(/<link rel="modulepreload" href="([^"]+)"/g)].map((m) => m[1]);
+
+it('a flowchart document names the Mermaid engine, the flowchart module and its layout engine — and nothing else lazy', () => {
+  const { dir, file } = documentFixture();
+  const html = createDocumentPreloader(dir, file)(shell, { chart: false, mermaid: ['flowchart'] });
+  expect(hinted(html)).toEqual([
+    '/assets/shared-abc.js',
+    '/assets/mermaid-render-abc.js', '/assets/mermaid-core-abc.js', '/assets/Artifact-abc.js',
+    '/assets/flowDiagram-K-abc.js', '/assets/flow-shared-abc.js', '/assets/elk-E-abc.js',
+  ]);
+  expect(html).not.toContain('sequenceDiagram');
+  expect(html).not.toContain('VegaChart');
+  expect(html).not.toContain('<script');
+});
+
+it('a chart document names the chart module and its static chunks, and no diagram engine', () => {
+  const { dir, file } = documentFixture();
+  const html = createDocumentPreloader(dir, file)(shell, { chart: true, mermaid: [] });
+  expect(hinted(html)).toEqual(['/assets/shared-abc.js', '/assets/VegaChart-abc.js', '/assets/d3-abc.js', '/assets/Artifact-abc.js']);
+  expect(html).not.toContain('mermaid');
+});
+
+it('each chunk is named once, however many kinds share it', () => {
+  const { dir, file } = documentFixture();
+  const links = hinted(createDocumentPreloader(dir, file)(shell, { chart: false, mermaid: ['flowchart', 'sequence'] }));
+  expect(links).toEqual([...new Set(links)]);
+  expect(links).toContain('/assets/sequenceDiagram-S-abc.js');
+});
+
+it('a document with no lazy code is left exactly as it was', () => {
+  const { dir, file } = documentFixture();
+  expect(createDocumentPreloader(dir, file)(shell, { chart: false, mermaid: [] })).toBe(shell);
+});
+
+it('a kind the build did not record, or a missing record, names no diagram code — the chart still preloads', () => {
+  const { dir, file } = documentFixture(null);
+  expect(createDocumentPreloader(dir, file)(shell, { chart: false, mermaid: ['flowchart'] })).toBe(shell);
+  expect(createDocumentPreloader(dir, file)(shell, { chart: true, mermaid: ['flowchart'] })).toContain('/assets/VegaChart-abc.js');
+  const recorded = documentFixture();
+  expect(createDocumentPreloader(recorded.dir, recorded.file)(shell, { chart: false, mermaid: ['gantt'] })).toBe(shell);
+});
+
+it('keeps readable HTML when the Vite manifest is missing or names an unsafe path', () => {
+  const { dir, file } = documentFixture();
+  rmSync(path.join(dir, '.vite/manifest.json'));
+  expect(createDocumentPreloader(dir, file)(shell, { chart: true, mermaid: ['flowchart'] })).toBe(shell);
+  const unsafe = fixture({ '../components/viz/VegaChart.tsx': { file: '//external.test/inject.js' } });
+  expect(createDocumentPreloader(unsafe, file)(shell, { chart: true, mermaid: [] })).toBe(shell);
 });

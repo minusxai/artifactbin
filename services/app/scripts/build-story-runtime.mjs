@@ -12,6 +12,7 @@ import { createRequire } from 'node:module';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { mermaidDispatch, mermaidKindModules, outputFor, staticClosure } from './story-runtime-graph.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -44,6 +45,7 @@ const listFiles = (dir) => fs.existsSync(dir)
 // source graph, so an esbuild bump or a dependency change rebuilds.
 const toolHash = sha(Buffer.concat([
   fs.readFileSync(fileURLToPath(import.meta.url)),
+  fs.readFileSync(path.join(root, 'scripts/story-runtime-graph.mjs')),
   fs.readFileSync(path.join(root, 'scripts/build-libraries.mjs')),
   fs.readFileSync(path.join(root, '../../package-lock.json')),
 ]));
@@ -157,12 +159,16 @@ if (!entryOut) throw new Error('build-story-runtime: no entry output in the meta
  * name: the name comes from whichever module esbuild happened to name the
  * chunk after, and a rename would quietly empty this list.
  */
-const dynamicChunks = (browser.metafile.outputs[entryOut[0]].imports ?? [])
+const outputs = browser.metafile.outputs;
+/** A metafile output key (relative to this package) as the URL the document names. */
+const storyUrl = (key) => `/story/${path.relative(outdir, path.join(root, key)).split(path.sep).join('/')}`;
+const dynamicChunks = (outputs[entryOut[0]].imports ?? [])
   .filter((i) => i.kind === 'dynamic-import')
   .map((i) => ({
-    url: `/story/${path.relative(outdir, path.join(root, i.path)).split(path.sep).join('/')}`,
+    key: i.path,
+    url: storyUrl(i.path),
     /** Which of OUR modules this chunk was split off for. */
-    from: Object.keys(browser.metafile.outputs[i.path]?.inputs ?? {}),
+    from: Object.keys(outputs[i.path]?.inputs ?? {}),
   }));
 
 /*
@@ -174,9 +180,49 @@ const dynamicChunks = (browser.metafile.outputs[entryOut[0]].imports ?? [])
  * (deck.gl, MapLibre) only for a <DeckGL>, not for every chart.
  * These need no preload entry: the runtime resolves them from their own URLs.
  */
-const lazy = dynamicChunks
-  .filter((c) => !c.from.some((f) => f.includes('lib/story-runtime/edit/') || f.endsWith('components/kit/mermaid-render.ts') || f.endsWith('components/kit/deck-gl-engine.tsx') || f.includes('/sql/src/') || f.includes('@sqlite.org/')))
-  .map((c) => c.url);
+const lazyChunks = dynamicChunks
+  .filter((c) => !c.from.some((f) => f.includes('lib/story-runtime/edit/') || f.endsWith('components/kit/mermaid-render.ts') || f.endsWith('components/kit/deck-gl-engine.tsx') || f.includes('/sql/src/') || f.includes('@sqlite.org/')));
+const lazy = lazyChunks.map((c) => c.url);
+
+/*
+ * THE STATIC CLOSURES. Naming a chunk is not the whole of naming what it needs:
+ * the entry imports a dozen shared chunks statically (React, the kit's shared
+ * code), and the chart chunk imports d3's — each discovered only once its
+ * importer has downloaded and parsed, one more round trip apiece. So the
+ * manifest names them too, for the document to preload beside their importer.
+ */
+const entryDeps = staticClosure(outputs, entryOut[0]).slice(1).map(storyUrl);
+const lazyDeps = Object.fromEntries(lazyChunks.map((c) => [c.url, staticClosure(outputs, c.key).slice(1).map(storyUrl)]));
+
+/*
+ * MERMAID, PER DIAGRAM KIND. The engine (components/kit/mermaid-render) is one
+ * `import()`; inside it Mermaid detects the kind and `import()`s that diagram's
+ * module, which in turn `import()`s its layout engine — three discoveries in a
+ * row before a flowchart can draw. The kinds are the kit's
+ * (lib/story-ui/mermaid-source, read here from the TypeScript so there is one
+ * table); which module each kind and layout loads is read from the installed
+ * Mermaid (scripts/story-runtime-graph.mjs); the chunks are this build's.
+ */
+const kindsBundle = await esbuild.build({
+  entryPoints: [path.join(root, 'lib/story-ui/mermaid-source.ts')],
+  bundle: true, write: false, format: 'esm', platform: 'node', logLevel: 'silent',
+});
+const { MERMAID_DIAGRAMS } = await import(`data:text/javascript;base64,${Buffer.from(kindsBundle.outputFiles[0].text).toString('base64')}`);
+const mermaidModules = mermaidKindModules(
+  MERMAID_DIAGRAMS,
+  mermaidDispatch(path.dirname(createRequire(path.join(root, 'package.json')).resolve('mermaid'))),
+);
+const mermaidEngine = dynamicChunks.find((c) => c.from.some((f) => f.endsWith('components/kit/mermaid-render.ts')));
+if (!mermaidEngine) throw new Error('build-story-runtime: no Mermaid engine chunk among the entry\'s dynamic imports');
+const engineClosure = staticClosure(outputs, mermaidEngine.key);
+const mermaid = Object.fromEntries(Object.entries(mermaidModules).map(([kind, modules]) => {
+  const keys = new Set(engineClosure);
+  for (const module of modules) {
+    const key = outputFor(outputs, (entry) => entry.endsWith(`/mermaid/dist/chunks/mermaid.core/${module}`));
+    for (const dep of staticClosure(outputs, key)) keys.add(dep);
+  }
+  return [kind, [...keys].map(storyUrl)];
+}));
 
 /*
  * The page's SQLite engine (lib/story-runtime/page-sqlite): the official wasm,
@@ -234,6 +280,9 @@ const manifest = {
   comment: `/story/${path.basename(commentOut[0])}`,
   lazy,
   sqlite: `/story/${sqliteName}`,
+  entryDeps,
+  lazyDeps,
+  mermaid,
 };
 
 /*
@@ -242,12 +291,34 @@ const manifest = {
  * so this is where it has to be loud. The serving accessor re-checks the same
  * thing (lib/story/runtime-asset.ts).
  */
-for (const url of [manifest.entry, manifest.anchor, manifest.comment, manifest.sqlite, ...manifest.lazy]) {
+const closureUrls = [...new Set([...entryDeps, ...Object.values(lazyDeps).flat(), ...Object.values(mermaid).flat()])];
+for (const url of [manifest.entry, manifest.anchor, manifest.comment, manifest.sqlite, ...manifest.lazy, ...closureUrls]) {
   const file = path.join(root, 'public', url.replace(/^\//, ''));
   if (!fs.existsSync(file)) throw new Error(`build-story-runtime: manifest names ${url}, which is not at ${file}`);
 }
 
 fs.writeFileSync(path.join(outdir, 'manifest.json'), JSON.stringify(manifest, null, 2) + '\n');
+
+/*
+ * The same kinds for the APP's reader (server/reader-preloads), whose Vite
+ * build names these modules' chunks differently: the Mermaid MODULES per kind,
+ * for it to resolve through its own manifest. Beside the SSR bundle, which the
+ * server image and `afbin serve` both ship.
+ */
+fs.mkdirSync(distDir, { recursive: true });
+fs.writeFileSync(path.join(distDir, 'mermaid-modules.json'), JSON.stringify({ kinds: mermaidModules }, null, 2) + '\n');
+
+/*
+ * Which packages each chunk carries — the build's evidence that a kind's
+ * closure holds what it needs and nothing else (elk only where elk lays the
+ * diagram out, cytoscape and the Langium parser only for the kinds that load
+ * them). Read by lib/story/__tests__/runtime-mermaid; nothing serves it.
+ */
+const packageOf = (input) => /node_modules\/((?:@[^/]+\/)?[^/]+)\//.exec(input)?.[1];
+const chunkPackages = Object.fromEntries(Object.entries(outputs)
+  .filter(([key]) => key.endsWith('.js'))
+  .map(([key, out]) => [storyUrl(key), [...new Set(Object.keys(out.inputs).map(packageOf).filter(Boolean))].sort()]));
+fs.writeFileSync(path.join(distDir, 'story-chunk-packages.json'), JSON.stringify(chunkPackages, null, 1) + '\n');
 
 // Server renderer loaded by lib/story/ssr.server.ts through createRequire.
 // The CJS bundle carries React. Vega stays external because its Node ESM
@@ -322,8 +393,10 @@ if (cache) {
   const outputs = [
     'lib/story-runtime/dist/story-ssr.cjs',
     'lib/story-runtime/dist/maplibre-gl-csp-worker.js',
+    'lib/story-runtime/dist/mermaid-modules.json',
+    'lib/story-runtime/dist/story-chunk-packages.json',
     'public/story/manifest.json',
-    ...[manifest.entry, manifest.anchor, manifest.comment, manifest.sqlite, ...manifest.lazy].map((url) => `public${url}`),
+    ...[manifest.entry, manifest.anchor, manifest.comment, manifest.sqlite, ...manifest.lazy, ...closureUrls].map((url) => `public${url}`),
     ...listFiles(path.join(root, 'public/libraries')).map((file) => path.relative(root, file)),
   ];
   fs.mkdirSync(distDir, { recursive: true });

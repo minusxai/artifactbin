@@ -495,7 +495,12 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
         runtimeSrc: runtime.entry,
         anchorSrc: runtime.anchor,
         commentSrc: runtime.comment,
-        lazyChunks: runtime.lazy,
+        // …with the whole static closure of each: the entry's shared chunks, the
+        // chart chunk's d3, and per Mermaid kind the engine, the diagram and its
+        // layout — each preloaded only by a document that will run it.
+        runtimeDeps: runtime.entryDeps,
+        lazyChunks: runtime.lazy.flatMap((chunk) => [chunk, ...runtime.lazyDeps[chunk] ?? []]),
+        mermaidChunks: runtime.mermaid,
         // Where this document fetches its re-runs when it IS the page (the
         // reader path); inside a parent the relay is chosen instead.
         queryUrl: queryPath(artifact.id),
