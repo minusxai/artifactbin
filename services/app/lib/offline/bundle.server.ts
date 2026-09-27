@@ -12,7 +12,7 @@
 import { createHash } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
-import { gunzipSync } from 'node:zlib';
+import { brotliDecompressSync, gunzipSync } from 'node:zlib';
 
 export type OfflineBundleKind = 'core' | 'mermaid';
 
@@ -68,7 +68,13 @@ const extras = once(async () => {
   if (!entry || !EXTRAS_NAME.test(entry.file)) throw new Error('offline bundle: the build names no extras (run npm run build:runtime)');
   const code = await readFile(path.join(dir(), entry.file));
   if (createHash('sha256').update(code).digest('hex') !== entry.sha256) throw new Error(`offline bundle: ${entry.file} does not match its manifest`);
-  return { ref: { path: entry.path, integrity: entry.integrity }, file: entry.file, code };
+  // The build's brotli/gzip siblings (scripts/build-offline), each kept only if it decodes to exactly these bytes.
+  const sibling = async (suffix: '.br' | '.gz', decode: (bytes: Buffer) => Buffer) => {
+    const bytes = await readFile(path.join(dir(), entry.file + suffix)).catch(() => null);
+    try { return bytes && decode(bytes).equals(code) ? bytes : undefined; } catch { return undefined; }
+  };
+  const [br, gzip] = await Promise.all([sibling('.br', brotliDecompressSync), sibling('.gz', gunzipSync)]);
+  return { ref: { path: entry.path, integrity: entry.integrity }, file: entry.file, code, encoded: { ...(br ? { br } : {}), ...(gzip ? { gzip } : {}) } };
 });
 
 /** What a downloaded file records to load its extras: their address on this server and their SRI hash. */
@@ -85,4 +91,11 @@ export async function offlineExtrasAsset(name: string): Promise<Buffer | null> {
   if (!EXTRAS_NAME.test(name)) return null;
   const current = await extras().catch(() => null);
   return current && current.file === name ? current.code : null;
+}
+
+/** The build-time brotli/gzip encodings of `GET /offline/<name>`, verified against its bytes; empty when there are none. */
+export async function offlineExtrasEncoded(name: string): Promise<{ br?: Buffer; gzip?: Buffer }> {
+  if (!EXTRAS_NAME.test(name)) return {};
+  const current = await extras().catch(() => null);
+  return current && current.file === name ? current.encoded : {};
 }

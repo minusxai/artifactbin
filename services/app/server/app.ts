@@ -30,7 +30,7 @@ import { STORY_ROOT_ATTR } from '@/lib/story-surface';
 import { APP_BAR_H } from '@/lib/story/edit-bar';
 import { Hono } from 'hono';
 import { serveStatic } from '@hono/node-server/serve-static';
-import { offlineExtrasAsset } from '@/lib/offline/bundle.server';
+import { offlineExtrasAsset, offlineExtrasEncoded } from '@/lib/offline/bundle.server';
 import { actorReceiver, isPublicAssetRequest, publicAssetResponse } from '@artifactbin/utils';
 import { canReadArtifact, getArtifactById } from '@/lib/artifacts';
 import { verifyExportKey } from '@/lib/export-key';
@@ -54,6 +54,7 @@ import { GITHUB_EXTERNAL_URL } from '@/lib/github-star';
 import { createDocumentPreloader, createListingPreloader, createReaderPreloader, listingPage } from './reader-preloads';
 import { lazyCodeOf } from '@/lib/story/lazy-code';
 import { mountBuildAssets } from './build-assets';
+import { compressDynamic, dynamicEncoding, precompressedStatic, variantResponse } from './content-encoding';
 import { customHostBoundary } from './custom-host';
 import { linkedStylesheets } from '@/lib/custom-domain-home';
 import { THEME_BOOTSTRAP_HASH } from '@/lib/theme-bootstrap';
@@ -317,11 +318,12 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
     // The address search engines index a document under (lib/custom-domains canonicalDocumentUrl).
     const indexed = canonical ? shell.replace('</head>', () => `<link rel="canonical" href="${escapeHtml(canonical)}"></head>`) : shell;
     // Last, so the pointer is the page's final line whatever else was inlined.
-    return new Response(withAgentDiscoveryTail(data ? withBootstrap(indexed, data) : indexed, agentDiscovery(baseUrl(c.req.raw))), { status: code, headers: {
+    // Brotli for a client that takes it (server/content-encoding); identity otherwise, as before.
+    return compressDynamic(c.req.raw, new Response(withAgentDiscoveryTail(data ? withBootstrap(indexed, data) : indexed, agentDiscovery(baseUrl(c.req.raw))), { status: code, headers: {
       'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store', ...APP_SECURITY_HEADERS,
       ...(opts.devHmrPort !== undefined ? { 'content-security-policy': developmentAppCsp(c.req.url, opts.devHmrPort) } : {}),
       ...(surface?.surface?.runtime ? { Link: `<${baseUrl(c.req.raw)}/llms.txt>; rel="help"` } : {}),
-    } });
+    } }));
   };
 
   const pageData = (dir: string) => ROUTES.find((r) => r.dir === dir)?.module.GET as ((request: Request, ctx: { params: Promise<Record<string, string>> }) => Promise<Response>) | undefined;
@@ -397,11 +399,9 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
   app.on(['GET', 'HEAD'], '/offline/:name', async (c) => {
     const code = await offlineExtrasAsset(c.req.param('name'));
     if (!code) return c.notFound();
-    c.header('content-type', 'text/javascript; charset=utf-8');
-    c.header('cache-control', IMMUTABLE);
-    c.header('access-control-allow-origin', '*');
-    c.header('x-content-type-options', 'nosniff');
-    return c.body(new Uint8Array(code));
+    return variantResponse(c, code, await offlineExtrasEncoded(c.req.param('name')), {
+      'content-type': 'text/javascript; charset=utf-8', 'cache-control': IMMUTABLE, 'access-control-allow-origin': '*', 'x-content-type-options': 'nosniff',
+    });
   });
   app.use('/libraries/*', async (c, next) => { await next(); c.header('cache-control', 'public, max-age=3600'); c.header('access-control-allow-origin', '*'); });
   app.use('/fonts/*', async (c, next) => { await next(); c.header('cache-control', IMMUTABLE); c.header('access-control-allow-origin', '*'); });
@@ -409,7 +409,7 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
   app.use('/assets/*', async (c, next) => { await next(); c.header('cache-control', IMMUTABLE); });
   // In development Vite owns /assets and dist/web does not exist yet. Avoid
   // registering a static root that can only warn; production builds it first.
-  if (existsSync(webDir)) app.use('/assets/*', serveStatic({ root: path.relative(process.cwd(), webDir) || '.' }));
+  if (existsSync(webDir)) app.use('/assets/*', precompressedStatic({ root: path.relative(process.cwd(), webDir) || '.' }));
   // The CLI installer and its uninstaller are fetched with `curl … | sh`; serve both the same way.
   for (const script of ['/install.sh', '/chat/install.sh', '/chat/uninstall.sh']) app.use(script, async (c, next) => {
     await next();
@@ -446,7 +446,8 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
     c.header('cache-control', 'no-store');
   });
   if(existsSync(cliReleaseDir)) app.use('/chat/releases/*', serveStatic({ root: path.relative(process.cwd(), cliReleaseDir) || '.', rewriteRequestPath: (p) => p.replace(/^\/chat\/releases\/[^/]+\//, '/'), onFound: () => {}, onNotFound: () => {} }));
-  app.use('/*', serveStatic({ root: path.relative(process.cwd(), publicDir) || '.', onFound: () => {}, onNotFound: () => {} }));
+  // Content-addressed trees (/story, /libraries) carry build-time brotli/gzip siblings (server/content-encoding).
+  app.use('/*', precompressedStatic({ root: path.relative(process.cwd(), publicDir) || '.', onFound: () => {}, onNotFound: () => {} }));
 
   app.on(['GET', 'HEAD'], '/', async c => {
     const signedIn = await runWithRequest(c.req.raw, async () => {
@@ -468,6 +469,8 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
   });
   // The tour for people.
   app.get('/docs-human', (c) => page(c));
+  // Page data is finished JSON: brotli for a client that takes it (server/content-encoding).
+  app.use('/api/page/*', dynamicEncoding());
   // The app's API and document handlers.
   mountRoutes(app);
 

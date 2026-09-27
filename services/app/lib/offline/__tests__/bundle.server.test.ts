@@ -7,7 +7,7 @@ import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { Script } from 'node:vm';
-import { gunzipSync } from 'node:zlib';
+import { brotliDecompressSync, gunzipSync } from 'node:zlib';
 import { describe, expect, it } from 'vitest';
 import { createAppServer } from '@/server/app';
 import { offlineBundle, offlineExtrasAsset, offlineExtrasRef } from '../bundle.server';
@@ -86,5 +86,30 @@ describe('the extras (the source editor and prettier), loaded on demand', () => 
     expect(`sha384-${createHash('sha384').update(body).digest('base64')}`).toBe(ref.integrity);
     expect((await app.request('/offline/extras-0000000000000000.js')).status).toBe(404);
   });
-});
 
+  /*
+   * A browser that takes brotli gets the sibling the build compressed once
+   * (quality 11), never a per-request encode — and it still decodes to exactly
+   * the bytes the SRI hash names.
+   */
+  it('are served as their build-time brotli or gzip sibling to a client that takes one', async () => {
+    const app = createAppServer({ indexHtml: async () => '<!doctype html><div id="root">SPA</div>' });
+    const ref = await offlineExtrasRef();
+    const sri = (bytes: Buffer) => `sha384-${createHash('sha384').update(bytes).digest('base64')}`;
+    const br = await app.request(ref.path, { headers: { 'accept-encoding': 'gzip, deflate, br, zstd' } });
+    expect(br.headers.get('content-encoding')).toBe('br');
+    expect(br.headers.get('vary')).toMatch(/accept-encoding/i);
+    expect(br.headers.get('cache-control')).toBe('public, max-age=31536000, immutable');
+    const brBytes = Buffer.from(await br.arrayBuffer());
+    expect(Number(br.headers.get('content-length'))).toBe(brBytes.byteLength);
+    expect(brBytes.byteLength).toBeLessThan(manifest.extras.raw / 3);
+    expect(sri(brotliDecompressSync(brBytes))).toBe(ref.integrity);
+    const gz = await app.request(ref.path, { headers: { 'accept-encoding': 'gzip' } });
+    expect(gz.headers.get('content-encoding')).toBe('gzip');
+    expect(sri(gunzipSync(Buffer.from(await gz.arrayBuffer())))).toBe(ref.integrity);
+    const head = await app.request(ref.path, { method: 'HEAD', headers: { 'accept-encoding': 'br' } });
+    expect(head.headers.get('content-encoding')).toBe('br');
+    expect(head.headers.get('content-length')).toBe(String(brBytes.byteLength));
+    expect(await head.text()).toBe('');
+  });
+});
