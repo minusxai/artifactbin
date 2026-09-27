@@ -25,6 +25,7 @@ import { prepareStoryRuntime } from '@/lib/story/prepare-runtime.server';
 import { storyBaseCss } from '@/lib/story/story-base-css';
 import { readerStorySheet } from '@/lib/story/reader-sheet.server';
 import { observedSourceBody } from '@/__tests__/prepared-document';
+import { mintExportKey } from '@/lib/export-key';
 
 const spies = vi.hoisted(() => ({ parse: 0, css: 0, nodes: 0, render: 0 }));
 vi.mock('@/lib/jsx/parse', async (original) => {
@@ -233,5 +234,47 @@ describe('the served HTML', () => {
     expect(json.surface.runtime.css).toContain('& more');
     expect(html.split(json.surface.runtime.css.slice(0, 200)).length - 1).toBe(1);
     dom.window.close();
+  });
+});
+
+/*
+ * A STATIC PAGE IS SERVED FINAL (lib/story/prepared-page.server `static`,
+ * lib/artifact-page `final`): the story's markup is the finished page for a
+ * reader who may neither edit nor comment, so the page names no story runtime
+ * for them. Anything that can change or answer after the server rendered —
+ * an interactive component, a conditional, declared data, an author script —
+ * and anyone who may edit or comment, or a capture, keeps the runtime.
+ */
+describe('a story served final', () => {
+  const storedStatic = async (id: string) => (await (await harness.db()).query<{ page: { static: boolean } }>('SELECT page FROM prepared_pages WHERE artifact_id = $1 AND slot = $2', [id, 'head'])).rows[0]?.page.static;
+  const served = async (id: string, search = '') => (await app.request(`/a/${id}${search}`, { headers: { accept: 'text/html' } })).text();
+  const isFinal = (html: string) => /<div data-mx-initial-story="" data-mx-final=""/.test(html);
+
+  it.each([
+    ['prose and static components', '<article><h1>T</h1><Card><CardContent><Badge>b</Badge></CardContent></Card></article>', true],
+    ['an interactive component', '<article><h1>T</h1><Tabs defaultValue="a"><TabsList><TabsTrigger value="a">A</TabsTrigger></TabsList></Tabs></article>', false],
+    ['a conditional on the reader', '<article>{$_me.id ? <p>in</p> : <p>out</p>}</article>', false],
+    ['declared data', '<Helmet><Value name="n" type="number" default={1} /></Helmet><article><p>n</p></article>', false],
+    ['an author script', '<Helmet><script>{`document.title = "x"`}</script></Helmet><article><p>scripted</p></article>', false],
+  ])('%s: static is %s', async (_name, markup, expected) => {
+    const { id } = await world(markup);
+    expect(await storedStatic(id)).toBe(expected);
+    expect(isFinal(await served(id))).toBe(expected);
+  });
+
+  it('is final for a stranger only: not for its owner, and not for a capture', async () => {
+    const { id, owner } = await world('<article><h1>T</h1><p>prose</p></article>');
+    const stranger = await served(id);
+    expect(isFinal(stranger)).toBe(true);
+    expect(stranger).not.toMatch(/data-mx-initial-story=""[^>]*data-mx-kit=/);
+    asSession({ id: owner.id, email: 'mxmx_test_prepared@example.com' });
+    expect(isFinal(await served(id))).toBe(false);
+    asSession(null);
+    expect(isFinal(await served(id, `?key=${encodeURIComponent(mintExportKey(id))}`))).toBe(false);
+  });
+
+  it('names the chunks of a story that hydrates, for its reader to load first', async () => {
+    const { id } = await world('<article><Card><CardContent>c</CardContent></Card><Tabs defaultValue="a"><TabsList><TabsTrigger value="a">A</TabsTrigger></TabsList></Tabs></article>');
+    expect(await served(id)).toMatch(/<div data-mx-initial-story="" data-mx-kit="card tabs"/);
   });
 });
