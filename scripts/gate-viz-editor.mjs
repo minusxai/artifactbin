@@ -169,12 +169,13 @@ await pick('Table', '$costs');
 const tableAfterPick = await triggerText(p, 'Table');
 await pick('X-Axis', 'month');
 await pick('Y-Axis', 'spend');
-check.note(`the Table trigger read ${tableAfterPick} after its pick and ${await triggerText(p, 'Table')} after the axes`);
+check.note(`the Table trigger read ${tableAfterPick} after its pick and ${await triggerText(p, 'Table')} after the axes; save status "${await p.locator('[aria-label="Document actions"] [role="status"]').textContent().catch(() => '?')}", recovery dialog ${await p.locator('[aria-label="Recover uncommitted text"]').count()}`);
 await p.waitForTimeout(2500);
 check((await marks()) > 0, 'the rebound chart renders — the seeded dataflow already held the other table');
 check(!/data unavailable/.test(await frameText()), 'and never settles on "data unavailable"');
 
 await p.waitForTimeout(1200);
+check.note(`before reading it back: save status "${await p.locator('[aria-label="Document actions"] [role="status"]').textContent().catch(() => '?')}"`);
 stored = await api(`/api/artifacts/${start.id}`, {}, token);
 check(stored.markup.includes('data="$costs"'), `the second edit repointed the stored document (${/<Question\b[^>]*>/.exec(stored.markup)?.[0]?.slice(0, 300) ?? 'no Question'})`);
 check(/"mark"\s*:\s*("line"|\{[^}]*"type"\s*:\s*"line")/.test(stored.markup), 'and changed the stored mark');
