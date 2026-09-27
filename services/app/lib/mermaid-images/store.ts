@@ -103,6 +103,32 @@ export async function queueMermaidHarvest(row: { id: string; version: number; fo
   }
 }
 
+/**
+ * THE BACKFILL (scripts/mermaid-backfill.ts): queue a harvest for every live
+ * document head that may draw a `<Mermaid>` and has no harvest for the current
+ * engine yet — newest first, at most `limit` — and, with `retryFailed`, give
+ * failed harvests their attempts back. Idempotent: run it twice and the second
+ * run queues nothing new. It only QUEUES; the running app's harvester drains
+ * the queue one version at a time, and readers queue what they read anyway.
+ */
+export async function queueMermaidBackfill(db: { query: (sql: string, params?: unknown[]) => Promise<{ rows: unknown[] }> }, options: { limit?: number; retryFailed?: boolean; dryRun?: boolean } = {}): Promise<{ queued: number; retried: number }> {
+  const candidates = `FROM artifacts a WHERE a.format='markup' AND a.deleted_at IS NULL
+    AND (a.source LIKE '%Mermaid%' OR (a.source IS NULL AND a.document::text LIKE '%Mermaid%'))
+    AND NOT EXISTS (SELECT 1 FROM mermaid_harvests h WHERE h.artifact_id=a.id AND h.version=a.version AND h.engine=$1)`;
+  const limit = Math.max(1, Math.min(options.limit ?? 1000, 100_000));
+  if (options.dryRun) {
+    const queued = Number(((await db.query(`SELECT count(*) AS n FROM (SELECT 1 ${candidates} LIMIT $2) c`, [MERMAID_RENDER_ENGINE, limit])).rows[0] as { n: string }).n);
+    const retried = options.retryFailed ? Number(((await db.query("SELECT count(*) AS n FROM mermaid_harvests WHERE state='failed' AND engine=$1", [MERMAID_RENDER_ENGINE])).rows[0] as { n: string }).n) : 0;
+    return { queued, retried };
+  }
+  const queued = (await db.query(`INSERT INTO mermaid_harvests(artifact_id,version,engine)
+    SELECT a.id,a.version,$1 ${candidates} ORDER BY a.updated_at DESC LIMIT $2 ON CONFLICT DO NOTHING RETURNING artifact_id`, [MERMAID_RENDER_ENGINE, limit])).rows.length;
+  const retried = options.retryFailed ? (await db.query(`UPDATE mermaid_harvests SET state='pending',attempts=0,retry_after=NULL,updated_at=now()
+    WHERE state='failed' AND engine=$1 RETURNING artifact_id`, [MERMAID_RENDER_ENGINE])).rows.length : 0;
+  if (queued || retried) wake?.();
+  return { queued, retried };
+}
+
 /** The running harvester's wake-up (lib/mermaid-images/harvester), when this process runs one. */
 let wake: (() => void) | null = null;
 export function onMermaidHarvestQueued(listener: (() => void) | null): void { wake = listener; }

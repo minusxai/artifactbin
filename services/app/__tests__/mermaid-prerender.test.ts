@@ -22,6 +22,7 @@ import { verifyExportKey } from '@/lib/export-key';
 import { mermaidImageKey } from '@/lib/story-ui/mermaid-source';
 import { runNextMermaidHarvest, startMermaidHarvester } from '@/lib/mermaid-images/harvester';
 import { MERMAID_RENDER_ENGINE } from '@/lib/mermaid-images/engine';
+import { queueMermaidBackfill } from '@/lib/mermaid-images/store';
 import { documentEditBody } from './prepared-document';
 
 useAppHarness();
@@ -199,6 +200,25 @@ describe('a published Mermaid document', () => {
     expect(await raw(id, '?color=dark')).not.toMatch(/<html[^>]*class="[^"]*\bdark\b/);
     const { mintExportKey } = await import('@/lib/export-key');
     expect(await raw(id, `?chrome=0&key=${mintExportKey(id)}&color=dark`)).toMatch(/<html[^>]*class="[^"]*\bdark\b/);
+  });
+});
+
+describe('the backfill', () => {
+  it('queues every live head that draws Mermaid and has no harvest, once, and can give failed harvests another go', async () => {
+    setServices({ browser: drawingBrowser([FLOW]).browser });
+    const a = await publish([FLOW]);
+    const b = await publish([SEQ]);
+    const prose = await createArtifactRoute(request('/api/artifacts', { method: 'POST', token: (await mintToken('prose')).token, json: { markup: '<p>No diagram</p>', visibility: 'public' } }));
+    expect(prose.status).toBe(201);
+    const db = await getDb();
+    await db.query('DELETE FROM mermaid_harvests');
+    expect(await queueMermaidBackfill(db, { dryRun: true })).toEqual({ queued: 2, retried: 0 });
+    expect(await jobs(a.id)).toEqual([]);
+    expect(await queueMermaidBackfill(db)).toEqual({ queued: 2, retried: 0 });
+    expect(await queueMermaidBackfill(db)).toEqual({ queued: 0, retried: 0 });
+    await db.query("UPDATE mermaid_harvests SET state='failed', attempts=6 WHERE artifact_id=$1", [b.id]);
+    expect(await queueMermaidBackfill(db, { retryFailed: true })).toEqual({ queued: 0, retried: 1 });
+    expect(await jobs(b.id)).toEqual([expect.objectContaining({ state: 'pending', attempts: 0 })]);
   });
 });
 
