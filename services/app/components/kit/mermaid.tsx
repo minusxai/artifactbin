@@ -66,9 +66,9 @@ const SVG_NS = 'http://www.w3.org/2000/svg';
 const ownCharacters = (code: string): string => [...new Set(code.replace(/[\x00-\x7f]/g, ''))].sort().join('');
 
 /**
- * The palette's key: every field Mermaid is configured with. Two browsers draw
- * the same code identically only when this AND their measurements agree
- * (lib/mermaid-images/match).
+ * The palette's key: every field Mermaid is configured with. With the faces'
+ * measurements, it tells whether the fonts held still while a drawing was
+ * made (only then is it marked for the harvest, lib/mermaid-images/drawn).
  */
 function mermaidPaletteKey(palette: MermaidPalette): string {
   const fields = [palette.dark, palette.background, palette.foreground, palette.primary, palette.border, palette.card,
@@ -139,10 +139,9 @@ function inUnicodeRange(range: string, point: number): boolean {
 /**
  * Is this drawing made ENTIRELY in the document's web fonts — the label and
  * edge-label stacks each led by a face this page loaded, covering every
- * character measured? Then every reader loads the same font files, and a
- * drawing the harvest made can be the reader's (lib/mermaid-images/match); a
- * system face or a fallback glyph resolves per machine, so such a drawing is
- * never stored.
+ * character measured? Only then can a stored drawing carry its faces
+ * (lib/mermaid-images/fonts); a system face or a fallback glyph resolves per
+ * machine, so such a drawing is never stored.
  */
 function drawnInWebFonts(palette: MermaidPalette, code: string): boolean {
   const fonts = typeof document !== 'undefined' ? document.fonts as (FontFaceSet & Iterable<FontFace>) | undefined : undefined;
@@ -165,8 +164,8 @@ const measured = (palette: MermaidPalette, code: string): Measured => ({ palette
 const sameMeasure = (a: Measured, b: Measured) => a.palette === b.palette && (a.metrics && formatMermaidMetrics(a.metrics)) === (b.metrics && formatMermaidMetrics(b.metrics));
 
 /**
- * Wait (briefly) for the faces a palette draws with, so a stored drawing is
- * judged by the fonts it will settle on. `document.fonts.ready` alone is not
+ * Wait (briefly) for the faces a palette draws with, so the engine lays a
+ * drawing out in the fonts it will settle on. `document.fonts.ready` alone is not
  * enough: a face nothing has asked for yet is not pending, so `ready` can
  * resolve before the label face has even started loading. Asking for the
  * label and edge-label faces by name, with every character they will measure
