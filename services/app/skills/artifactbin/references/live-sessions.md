@@ -25,20 +25,22 @@ over:
 afbin sessions script new --as guest --input actions.js --json
 ```
 
-The session is still yours: only you run scripts in it, read its status or close
-it, and it counts against your limit. Only the pages are anonymous. A write a
-signed-out reader could not make is refused exactly as it would be for a real
-guest; that refusal is the answer you came for, not a broken session.
+The session is still yours; only the pages are anonymous. A write a signed-out
+reader could not make is refused as it would be for a real guest; that refusal
+is the answer you came for, not a broken session.
 `--as <testuser-id>` browses as a test user — a throwaway PERSON you minted with
 `afbin testuser new` — so `$_me.id` is somebody else. A session is a BROWSER and a
 test user is a person: several sessions may share one, and a session never mints
 one. A test user is a guest on an account's page, so give it its own copy first:
 `afbin fork <id> --as <testuser-id>` ([apps](apps.md)).
 
-Who a session browses as is fixed when it is created. `--as` on an existing
-session ID is refused locally, and resuming with `afbin sessions script
-SESSION_ID` keeps the viewer that session was created with. Compare views by
-opening sessions as yourself, `--as guest` and `--as <testuser-id>`.
+Who a session browses as is fixed when it is created: resuming `afbin sessions
+script SESSION_ID` keeps that viewer, and `--as` there is refused.
+
+**Hold one session at a time**: a server runs two in total, shared by everyone.
+Go identity by identity: create, run, `afbin sessions close SESSION_ID`, then
+the next `--as`. `SESSION_CAPACITY` created nothing; its message lists your open
+sessions to close, or says to wait.
 
 A script is a **strict async JavaScript function body**: use top-level `await`
 and `return`, without exporting or wrapping a function. Each call gets:
@@ -73,10 +75,9 @@ not-found. `afbin export <id>@2 --format png` shoots that same page.
 Images are `{mime, base64}` attachments. Scripts can open several artifacts,
 including multiple copies of one. Returned page IDs remain stable until
 those pages close. In the next script use `const page = pages['PAGE_ID']`.
-Image attachments make JSON responses large: redirect `--json > result.json` and
-read the IDs/results from it rather than printing base64 into the agent's text
-context. A truncated display is not a failed execution; recover the saved response
-or use `sessions status`, without resubmitting `new`.
+Image attachments make JSON large: redirect `--json > result.json` and read IDs
+and results from it, not base64 in your context. A truncated display is not a
+failed execution; read the saved file or `sessions status`, never resubmit `new`.
 The JavaScript heap and DOM remain live between calls; script variables do not.
 Independent operations may use `await Promise.all([...])`; scripts in one session
 run sequentially. Playwright functions passed to `page.evaluate()` run in the page:
@@ -167,6 +168,6 @@ if (!after.signals.tab.value.length) await output.image(await page.screenshot())
 return after;
 ```
 
-Screenshot only on a wrong read back. Run it again `--as guest`: every `$_me.id`
-write must be refused with a sign-in offer, the reads still work. Fix and push
-until both passes are clean.
+Screenshot only on a wrong read back. Close it, then rerun `--as guest`: every
+`$_me.id` write must be refused with a sign-in offer, the reads still work.
+Stop once each `<Mutation>` has worked once per identity; retest only a failed run.

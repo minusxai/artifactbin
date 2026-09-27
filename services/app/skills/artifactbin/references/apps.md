@@ -135,9 +135,14 @@ leaving. A successful publish checks syntax and query shapes, not live actions.
 afbin testuser new --json
 afbin fork abc123 --as tu_example --json
 afbin sessions script new --as tu_example --input member.js --json
+afbin sessions close <session-id> --json   # one session open at a time
 afbin sessions script new --input owner.js --json # you, on the same copy
+afbin sessions close <session-id> --json
 afbin testuser delete tu_example --json
 ```
+
+Each identity is its own session, one after another; stop once every write has
+worked once for each.
 
 A test user verifies a COPY, never that `abc123` works; nothing a test user does reaches
 the original. An action outside its sandbox returns `sandbox_only`.
