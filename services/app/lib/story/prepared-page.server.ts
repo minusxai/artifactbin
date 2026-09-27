@@ -52,6 +52,7 @@ import { storedCompiledDataflow } from './parsed-artifact-metadata';
 import { prepareStoryParts, readerIslandData, type ReaderIslandInput } from './prepare-runtime.server';
 import { inlineStoryCss, inlineStoryNodes } from './inline-css';
 import { styleOverrides, type StyleOverride } from './style-overrides';
+import { readerStorySheet } from './reader-sheet.server';
 import { servedStoryHtml } from './inline-story-html';
 import { loadStorySsr } from './ssr.server';
 import { lazyCodeOf, type LazyCode } from './lazy-code';
@@ -176,9 +177,11 @@ async function build(row: ArtifactRow, at: ArchivedRender | null, origin: string
     refData: {}, assetUrls: held,
   });
   const { runtime } = parts;
-  const css = inlineStoryCss(runtime);
   const nodes = runtime.data.nodes;
-  const overrides = styleOverrides(nodes, inlineStoryNodes(nodes, runtime));
+  // The reader's copy of the sheet: only what this story can match (lib/story/reader-sheet.server).
+  const sheet = { ...runtime, compiledCss: readerStorySheet(compiledCss, { source, nodes, theme: design.theme }) };
+  const css = inlineStoryCss(sheet);
+  const overrides = styleOverrides(nodes, inlineStoryNodes(nodes, sheet));
   // A document whose compiled data is stored with its source compiles against nothing else.
   const compiledElsewhere = !!row.source && !row.previousEngine && !storedCompiledDataflow(row.meta, row.source);
   const datasets = compiledElsewhere

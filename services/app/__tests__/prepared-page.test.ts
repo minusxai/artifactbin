@@ -23,6 +23,7 @@ import { applyStyleOverrides } from '@/lib/story/style-overrides';
 import { inlineStoryCss as realInlineStoryCss, inlineStoryNodes as realInlineStoryNodes } from '@/lib/story/inline-css';
 import { prepareStoryRuntime } from '@/lib/story/prepare-runtime.server';
 import { storyBaseCss } from '@/lib/story/story-base-css';
+import { readerStorySheet } from '@/lib/story/reader-sheet.server';
 import { observedSourceBody } from '@/__tests__/prepared-document';
 
 const spies = vi.hoisted(() => ({ parse: 0, css: 0, nodes: 0, render: 0 }));
@@ -95,13 +96,16 @@ describe('the reader payload', () => {
     // The sheet the SSR `<style>` carries: base + compiled + author under the CSS policy.
     const row = (await getArtifactById(id))!;
     const raw = await prepareStoryRuntime({ source: row.source!, compiledCss: (row.meta as { compiledCss?: string }).compiledCss ?? null, theme: null, colorMode: null, refData: {}, title: null, assetUrls: new Map() });
-    expect(runtime.css).toBe(realInlineStoryCss(raw));
+    // …with the reader's copy of the compiled sheet: only what this story can match (lib/story/reader-sheet.server).
+    const reader = { ...raw, compiledCss: readerStorySheet(raw.compiledCss, { source: row.source!, nodes: raw.data.nodes, theme: null }) };
+    expect(reader.compiledCss!.length).toBeLessThan(raw.compiledCss!.length);
+    expect(runtime.css).toBe(realInlineStoryCss(reader));
     expect(runtime.css).not.toMatch(/<\/style/i);
     expect(storyBaseCss(runtime.base)).toBe(raw.baseCss);
     // Raw nodes plus the rewritten style values reproduce the isolated tree exactly.
     expect(runtime.data.nodes).toEqual(raw.data.nodes);
     expect(runtime.overrides.length).toBeGreaterThan(0);
-    expect(applyStyleOverrides(runtime.data.nodes, runtime.overrides)).toEqual(realInlineStoryNodes(raw.data.nodes, raw));
+    expect(applyStyleOverrides(runtime.data.nodes, runtime.overrides)).toEqual(realInlineStoryNodes(raw.data.nodes, reader));
   });
 
   it('hands the editor its source, graph and raw sheets only on the editor door, and only to a writer', async () => {
