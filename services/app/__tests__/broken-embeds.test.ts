@@ -138,13 +138,14 @@ describe('a correct embed still publishes', () => {
   });
 
   it('refuses an unsupported Number aggregation instead of silently displaying the first row', async () => {
-    const { status, body } = await create({ title: 'Latest revenue', markup: declared('<Number data="$rows" col="revenue" agg="last" />') });
+    const { status, body } = await create({ title: 'Mean revenue', markup: declared('<Number data="$rows" col="revenue" agg="mean" />') });
     expect(status).toBe(400);
     expect(body.error).toBe('invalid_jsx');
     expect(body.details).toEqual(expect.arrayContaining([expect.objectContaining({
-      tag: 'Number', attr: 'agg', message: expect.stringContaining('LIMIT 1'),
+      tag: 'Number', attr: 'agg', message: expect.stringContaining('"mean" is avg'),
     })]));
     expect((await create({ title: 'Revenue', markup: declared('<Number data="$rows" col="revenue" agg="first" />') })).status).toBe(201);
+    expect((await create({ title: 'Latest revenue', markup: declared('<Number data="$rows" col="revenue" agg="last" />') })).status).toBe(201);
   });
 
   it('leaves markup with no embeds alone', async () => {

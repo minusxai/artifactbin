@@ -13,7 +13,7 @@
 import { numberFormatter } from '@/lib/story/number-format';
 import { refName, type TableResult } from '@/lib/story/dataflow';
 
-import type { NumberAgg } from '@/lib/story/number-aggregation';
+import { aggregateNumber, type NumberAgg } from '@/lib/story/number-aggregation';
 export type { NumberAgg } from '@/lib/story/number-aggregation';
 
 interface InlineNumberProps {
@@ -33,16 +33,7 @@ export default function InlineNumber({ data, col, agg = 'first', prefix = '', su
   const rows: Array<Record<string, unknown>> | null = name && tables?.[name] ? tables[name].rows : null;
   if (!rows) return <span aria-label="Number placeholder">—</span>;
   const column = col ?? Object.keys(rows[0] ?? {})[0];
-  const nums = rows.map((r) => Number(r[column])).filter((n) => Number.isFinite(n));
-  let value: number;
-  switch (agg) {
-    case 'count': value = rows.length; break;
-    case 'sum': value = nums.reduce((a, b) => a + b, 0); break;
-    case 'avg': value = nums.length ? nums.reduce((a, b) => a + b, 0) / nums.length : NaN; break;
-    case 'min': value = nums.length ? Math.min(...nums) : NaN; break;
-    case 'max': value = nums.length ? Math.max(...nums) : NaN; break;
-    case 'first': default: value = nums[0] ?? NaN; break;
-  }
+  const value = aggregateNumber(rows, column, agg);
   // A spec d3 cannot parse must not throw here: this renders inside SSR, where a throw is a 500 for the whole document.
   const text = Number.isFinite(value) ? numberFormatter(format)(value) : '—';
   return <span aria-label="Live number">{prefix}{text}{suffix}</span>;
