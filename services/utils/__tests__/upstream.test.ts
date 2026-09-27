@@ -5,7 +5,9 @@
  * reaching the app directly is worth nothing either way.
  */
 import { afterAll, describe, expect, it } from 'vitest';
+import { brotliCompressSync, brotliDecompressSync } from 'node:zlib';
 import { Hono } from 'hono';
+import { readRawResponse } from '@artifactbin/test-support/net';
 import type { Actor, Part } from '@artifactbin/contracts';
 import { ACTOR_HEADER } from '@artifactbin/contracts';
 import { actorOf, actorReceiver, assemble, attachActor, inProcess, overHttp, serve, signActor } from '@artifactbin/utils';
@@ -24,9 +26,23 @@ function createApp(): Hono {
     });
     return new Response(body, { headers: { 'content-type': 'text/event-stream' } });
   });
+  // An already-encoded body: the bytes on the wire are the representation a client negotiated.
+  app.get('/encoded', (c) => new Response(ENCODED, { headers: {
+    'content-type': 'text/javascript', 'content-encoding': 'br', 'content-length': String(ENCODED.byteLength), vary: 'Accept-Encoding',
+    'x-seen-accept-encoding': c.req.header('accept-encoding') ?? '',
+  } }));
+  app.post('/echo', async (c) => c.text(await c.req.text()));
+  app.get('/cookies', () => {
+    const headers = new Headers({ location: '/elsewhere' });
+    headers.append('set-cookie', 'a=1; Path=/');
+    headers.append('set-cookie', 'b=2; Path=/');
+    return new Response(null, { status: 302, headers });
+  });
   return app;
 }
 const cancelled: string[] = [];
+const PLAIN = 'export const words = "' + 'the same sentence again, '.repeat(400) + '";';
+const ENCODED = brotliCompressSync(Buffer.from(PLAIN));
 const forward = (upstream: (r: Request, a: Actor) => Promise<Response>, actor: Actor): Part => ({ name: 'forward', mount: (h) => h.all('*', (c) => upstream(c.req.raw, actor)) });
 const readPings = async (res: Response, n: number) => { const reader = res.body!.getReader(); let text = ''; while ((text.match(/ping/g) ?? []).length < n) text += new TextDecoder().decode((await reader.read()).value); return reader; };
 
@@ -78,5 +94,39 @@ describe('overHttp', () => {
     ac.abort();
     await new Promise((r) => setTimeout(r, 200));
     expect(cancelled).toContain('events');
+  });
+  /*
+   * THE HOP CARRIES BYTES, NOT MEANINGS. A body the app already encoded (a
+   * precompressed asset, a brotli page) must reach the client as those bytes —
+   * decoding here and dropping `content-encoding` throws the compression away
+   * one hop before the client, and costs CPU on both sides of it.
+   */
+  it('passes an encoded body through untouched, with its encoding and length', async () => {
+    const raw = await readRawResponse(proxyServer.port, '/encoded', { headers: { 'accept-encoding': 'br' } });
+    expect(raw.status).toBe(200);
+    expect(raw.headers['content-encoding']).toBe('br');
+    expect(raw.headers['x-seen-accept-encoding']).toBe('br');
+    expect(raw.headers.vary).toBe('Accept-Encoding');
+    expect(raw.promised).toBe(ENCODED.byteLength);
+    expect(Buffer.compare(raw.body, ENCODED)).toBe(0);
+    expect(brotliDecompressSync(raw.body).toString()).toBe(PLAIN);
+  });
+  it('forwards no accept-encoding of its own when the client sent none', async () => {
+    const raw = await readRawResponse(proxyServer.port, '/encoded');
+    expect(raw.headers['x-seen-accept-encoding']).toBe('');
+  });
+  it('streams a request body, keeps every set-cookie and never follows a redirect', async () => {
+    const echoed = await fetch(`http://127.0.0.1:${proxyServer.port}/echo`, { method: 'POST', body: 'hello body' });
+    expect(await echoed.text()).toBe('hello body');
+    const moved = await fetch(`http://127.0.0.1:${proxyServer.port}/cookies`, { redirect: 'manual' });
+    expect(moved.status).toBe(302);
+    expect(moved.headers.get('location')).toBe('/elsewhere');
+    expect(moved.headers.getSetCookie()).toEqual(['a=1; Path=/', 'b=2; Path=/']);
+  });
+  it('answers HEAD with the length a GET would carry and no body', async () => {
+    const raw = await readRawResponse(proxyServer.port, '/encoded', { method: 'HEAD', headers: { 'accept-encoding': 'br' } });
+    expect(raw.status).toBe(200);
+    expect(raw.body.byteLength).toBe(0);
+    expect(raw.headers['content-encoding']).toBe('br');
   });
 });
