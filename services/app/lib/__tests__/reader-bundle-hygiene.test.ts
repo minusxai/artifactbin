@@ -236,3 +236,28 @@ describe('reader route bundle hygiene', () => {
     expect(inline.map((f) => chainTo(f, reach.parent))).toEqual([]);
   });
 });
+
+/**
+ * KIT COMPONENTS LOAD WITH THE DOCUMENTS THAT USE THEM. The story registry
+ * imported every kit component statically, so a page of prose paid for the
+ * data table and its virtualizer, tabs, accordions, popovers and progress bars.
+ * Each component is its own chunk, chosen per document by the server from the
+ * tags it draws, preloaded, and awaited before hydration.
+ */
+const KIT_ONLY = ['@tanstack/react-virtual', '@radix-ui/react-accordion', '@radix-ui/react-tabs', '@radix-ui/react-collapsible', '@radix-ui/react-progress', '@radix-ui/react-avatar', '@radix-ui/react-popover'];
+const KIT_FILES = ['components/kit/data-table.tsx', 'components/kit/controls.tsx', 'components/kit/tabs.tsx', 'components/kit/accordion.tsx'];
+
+describe.each([
+  ['the reader route', ROUTE_ENTRIES],
+  ['the served document runtime', RUNTIME_ENTRY],
+])('%s loads kit components per document', (_name, entries) => {
+  const reach = walk(entries);
+  it.each(KIT_ONLY)('never statically reaches %s', (pkg) => {
+    const importer = reach.packages.get(pkg);
+    expect(importer ? `${pkg} is statically imported via:\n    ${chainTo(importer, reach.parent)}` : null).toBeNull();
+  });
+  it.each(KIT_FILES)('loads %s only for documents that draw it', (rel) => {
+    const file = path.join(ROOT, rel);
+    expect(reach.files.has(file) ? chainTo(file, reach.parent) : null).toBeNull();
+  });
+});
