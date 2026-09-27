@@ -19,11 +19,18 @@ export const MERMAID_RENDER_ENGINE = `mermaid@12.0.0+kit${MERMAID_KIT_RENDER_VER
 
 /**
  * Kinds never prerendered, whatever a harvest would see. A gantt chart draws
- * a "today" line: stored, it would stand still while the engine's moves.
+ * a "today" line: stored, it would stand still while the engine's moves. A
+ * cynefin chart draws its boundaries from a seed hashed from the render's id,
+ * which counts diagrams in the order a page draws them: the harvest page's
+ * count is not a reader's (a mode switch alone redraws with another). The
+ * use-case and railroad kinds have no fixture in the fidelity gate
+ * (scripts/fixtures/mermaid/kinds.mjs) yet, so nothing proves a stored drawing
+ * of them equals the engine's: they keep the engine until one does.
  * Drawings that differ from one load to the next (gitGraph's generated commit
- * ids) are refused per drawing by the harvest itself, which draws twice.
+ * ids) are refused per drawing by the harvest itself, which draws twice, and
+ * drawings with HTML labels by the sanitizer.
  */
-export const MERMAID_PRERENDER_EXCLUDED_KINDS: ReadonlySet<string> = new Set(['gantt']);
+export const MERMAID_PRERENDER_EXCLUDED_KINDS: ReadonlySet<string> = new Set(['gantt', 'cynefin', 'usecase', 'railroad', 'railroad-ebnf', 'railroad-abnf', 'railroad-peg']);
 
 /** A code the harvest may store a drawing for: one the kit draws, of a kind that is not excluded. */
 export function mermaidPrerenderable(code: string): boolean {
