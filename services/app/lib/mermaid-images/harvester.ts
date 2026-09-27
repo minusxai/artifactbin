@@ -18,7 +18,9 @@ import { servedRow } from '@/lib/archived-version';
 import { warmPreparedPage } from '@/lib/story/prepared-page.server';
 import { MERMAID_RENDER_ENGINE, mermaidPrerenderable } from './engine';
 import { mermaidCodesOf } from './codes';
-import { sanitizeMermaidSvg } from './sanitize';
+import { sanitizeMermaidSvg, verifyEmbeddedMermaidSvg } from './sanitize';
+import { parseMermaidFaces, parseMermaidMetrics, type MermaidFaces } from './drawn';
+import { MermaidSubsetterUnavailable, embedMermaidFonts } from './fonts';
 import { CAPTURE_COLOR_PARAM, MERMAID_ENGINE_PARAM, comparableSvg, MERMAID_MODES, MERMAID_SURFACES, mermaidContentKey, mermaidObjectKey, onMermaidHarvestQueued, type MermaidHarvestMap, type MermaidImageInfo, type MermaidMode, type MermaidSurface } from './store';
 
 type Mode = MermaidMode;
@@ -49,7 +51,7 @@ function harvestRequest(artifactId: string, surface: MermaidSurface, mode: Mode)
   const url = new URL(surface === 'document' ? `/a/${artifactId}/raw?chrome=0&${query}` : `/a/${artifactId}?${query}`, EXPORT_INTERNAL_ORIGIN).toString();
   return {
     url, viewport: { width: 1440, height: 1000 }, selector: 'body',
-    // Only what the ENGINE drew here carries its palette (components/kit/mermaid).
+    // Only what the ENGINE drew here carries its palette and measurements (components/kit/mermaid).
     collect: 'figure[data-mx-mermaid-palette][data-mx-mermaid-key]',
     sameOriginOnly: true, ...(ASSETS_ORIGIN ? { assetOrigin: ASSETS_ORIGIN } : {}),
     settleMs: 100, timeoutMs: HARVEST_TIMEOUT_MS, loads: 1,
@@ -68,24 +70,50 @@ async function harvestLoad(artifactId: string, surface: MermaidSurface, mode: Mo
 
 const comparable = comparableSvg;
 
-interface Candidate { surface: MermaidSurface; mode: Mode; imageKey: string; code: string; palette: string; type: string; width: number | null; height: number | null; svg: string; content: string }
+/** `svg` is what the engine drew (sanitized, compared across loads); `stored` is it carrying its fonts — the bytes kept. */
+interface Candidate { surface: MermaidSurface; mode: Mode; imageKey: string; code: string; palette: string; faces: MermaidFaces; type: string; width: number | null; height: number | null; svg: string; stored: string; content: string }
 
-/** What one load drew that this version draws, may be stored and is inert. */
-function candidatesOf(drawn: HarvestedSvg[], surface: MermaidSurface, mode: Mode, expected: Map<string, string>): Candidate[] {
+/** What a drawing was drawn under, as the page reported it; null unless it was measured, in named faces, and drawn in web fonts only. */
+function drawnUnder(drawing: HarvestedSvg): { palette: string; faces: MermaidFaces } | null {
+  const palette = drawing.attributes['data-mx-mermaid-palette'] ?? '';
+  const metrics = parseMermaidMetrics(drawing.attributes['data-mx-mermaid-metrics']);
+  const faces = parseMermaidFaces(drawing.attributes['data-mx-mermaid-faces']);
+  // A system face resolves per machine, and a drawing cannot carry it (./fonts): never stored.
+  if (!/^[0-9a-f]{32}$/.test(palette) || !metrics || !faces || drawing.attributes['data-mx-mermaid-portable'] !== '') return null;
+  // Whole-pixel widths for both faces: this was laid out in HINTED advances (a page that did not
+  // lay text out unhinted, components/kit/mermaid), which the drawing's own unhinted text would
+  // not fill as laid out. Not stored; readers keep the engine.
+  if (Number.isInteger(metrics[0]) && Number.isInteger(metrics[3])) return null;
+  return { palette, faces };
+}
+
+/** What one load drew that this version draws, may be stored, is inert and can carry its fonts. */
+async function candidatesOf(drawn: HarvestedSvg[], surface: MermaidSurface, mode: Mode, expected: Map<string, string>): Promise<Candidate[]> {
   const out: Candidate[] = [];
   const seen = new Set<string>();
   for (const drawing of drawn) {
     const imageKey = drawing.attributes['data-mx-mermaid-key'] ?? '';
-    const palette = drawing.attributes['data-mx-mermaid-palette'] ?? '';
+    const under = drawnUnder(drawing);
     const type = drawing.attributes['data-mermaid-type'] ?? '';
     const code = expected.get(imageKey);
     // The same code twice on one page takes its first drawing.
     if (!code || !imageKey.startsWith(`${mode}-`) || seen.has(imageKey)) continue;
-    if (!/^[0-9a-f]{32}$/.test(palette) || !/^[\w.-]{1,64}$/.test(type)) continue;
+    if (!under || !/^[\w.-]{1,64}$/.test(type)) continue;
     const svg = sanitizeMermaidSvg(drawing.svg);
     if (!svg) continue;
+    // The drawing carrying the document's fonts (./fonts), admitted only as exactly that (./sanitize).
+    // No subsetter (a missing or broken install) is no browser to harvest with: the job waits, uncounted.
+    const embedded = await embedMermaidFonts(svg, under.faces).catch((error: unknown) => {
+      if (!(error instanceof MermaidSubsetterUnavailable)) throw error;
+      console.warn('[mermaid] font subsetter unavailable; nothing is stored until it loads:', error.message);
+      throw new HarvestUnavailable(`font subsetter: ${error.message}`);
+    });
+    const stored = embedded ? verifyEmbeddedMermaidSvg(embedded) : null;
+    if (!stored) continue;
     seen.add(imageKey);
-    out.push({ surface, mode, imageKey, code, palette, type, width: drawing.width, height: drawing.height, svg, content: mermaidContentKey(mode, palette, code, svg) });
+    const { palette, faces } = under;
+    out.push({ surface, mode, imageKey, code, palette, faces, type, width: drawing.width, height: drawing.height, svg, stored,
+      content: mermaidContentKey(mode, palette, code, stored) });
   }
   return out;
 }
@@ -104,7 +132,7 @@ async function harvestVersion(artifactId: string, version: number): Promise<Harv
   for (const surface of MERMAID_SURFACES) {
     for (const mode of MODES) {
       const expected = new Map(codes.map((code) => [mermaidImageKey(code, mode), code]));
-      const candidates = candidatesOf(await harvestLoad(artifactId, surface, mode), surface, mode, expected);
+      const candidates = await candidatesOf(await harvestLoad(artifactId, surface, mode), surface, mode, expected);
       if (!candidates.length) continue;
       const known = new Set((await db.query<{ key: string }>('SELECT key FROM mermaid_images WHERE key=ANY($1::text[])', [candidates.map((c) => c.content)])).rows.map((r) => r.key));
       // A drawing never stored before must come out the same from a second, fresh load.
@@ -114,11 +142,12 @@ async function harvestVersion(artifactId: string, version: number): Promise<Harv
       for (const candidate of candidates) {
         if (!known.has(candidate.content)) {
           const second = again.get(candidate.imageKey);
-          if (!second || second.attributes['data-mx-mermaid-palette'] !== candidate.palette || comparable(second.svg) !== comparable(candidate.svg)) continue;
-          await objectStore().put(objectKeyFor(candidate.content), candidate.svg, 'image/svg+xml');
-          const info: ImageInfo = { type: candidate.type, mode, palette: candidate.palette, ...(candidate.width !== null ? { width: candidate.width } : {}), ...(candidate.height !== null ? { height: candidate.height } : {}) };
+          const secondUnder = second ? drawnUnder(second) : null;
+          if (!second || secondUnder?.palette !== candidate.palette || comparable(second.svg) !== comparable(candidate.svg)) continue;
+          await objectStore().put(objectKeyFor(candidate.content), candidate.stored, 'image/svg+xml');
+          const info: ImageInfo = { type: candidate.type, mode, palette: candidate.palette, faces: candidate.faces, ...(candidate.width !== null ? { width: candidate.width } : {}), ...(candidate.height !== null ? { height: candidate.height } : {}) };
           await db.query('INSERT INTO mermaid_images(key,engine,object_key,bytes,info) VALUES($1,$2,$3,$4,$5::jsonb) ON CONFLICT DO NOTHING',
-            [candidate.content, MERMAID_RENDER_ENGINE, objectKeyFor(candidate.content), Buffer.byteLength(candidate.svg), JSON.stringify(info)]);
+            [candidate.content, MERMAID_RENDER_ENGINE, objectKeyFor(candidate.content), Buffer.byteLength(candidate.stored), JSON.stringify(info)]);
         }
         (images[surface] ??= {})[candidate.imageKey] = candidate.content;
       }

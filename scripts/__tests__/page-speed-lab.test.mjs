@@ -57,7 +57,12 @@ describe('page-speed fixtures', () => {
     const published = await publishPageSpeedFixtures(async body => { bodies.push(body); return { id: `id${bodies.length}` }; });
     expect(bodies[0]).toMatchObject({ title: 'Perf sales', visibility: 'unlisted' });
     expect(bodies[0].dataset.split('\n')[0]).toBe('month,region,product,revenue,units');
-    expect(published.map(f => f.key)).toEqual(['prose', 'kit', 'dashboard', 'deck', 'mermaid']);
+    expect(published.map(f => f.key)).toEqual(['prose', 'kit', 'dashboard', 'deck', 'mermaid', 'mermaid-industry']);
+    // The same diagram in a theme's web fonts: the drawing a stored copy is made of (the plain one draws in system fonts).
+    const themed = bodies.find(body => body.title === 'Perf F mermaid, industry theme');
+    expect(themed.theme).toBe('industry');
+    expect(themed.markup).toBe(bodies.find(body => body.title === 'Perf E mermaid').markup);
+    expect(bodies.find(body => body.title === 'Perf E mermaid').theme).toBeUndefined();
     const dashboard = bodies.find(body => body.title === 'Perf C dashboard');
     expect(dashboard.template).toBe('dashboard');
     expect(dashboard.markup).toContain('src="ref:id1"');

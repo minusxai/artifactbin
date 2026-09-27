@@ -22,6 +22,7 @@
  * does not parse.
  */
 import { parse, walk } from '@/lib/story/css-parser';
+import { MERMAID_BUNDLED_FAMILIES, MERMAID_TEXT_RENDERING } from './font-block';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 const XLINK_NS = 'http://www.w3.org/1999/xlink';
@@ -173,4 +174,35 @@ export function sanitizeMermaidSvg(svg: string): string | null {
     at = close + 1;
   }
   return null;
+}
+
+/**
+ * THE GATE FOR A STORED DRAWING THAT CARRIES ITS FONTS (lib/mermaid-images/fonts).
+ * Accepts it unchanged only when it is exactly: the root element, then ONE
+ * stylesheet of our making — `@font-face` rules for bundled families, each a
+ * `data:font/woff2;base64` source with a numeric weight and an optional
+ * unicode-range, then the unhinted-text rule — then a drawing that passes
+ * `sanitizeMermaidSvg` on its own, which refuses any other `@font-face` and
+ * any `url()` that is not a fragment. So no author-controlled CSS can name a
+ * font, and nothing in a stored drawing fetches anything.
+ */
+const FONT_RULE = /^@font-face\{font-family:"([\w .-]{1,64})";src:url\(data:font\/woff2;base64,[A-Za-z0-9+/]+={0,2}\) format\("woff2"\);font-weight:[1-9]00;font-style:normal(?:;unicode-range:U\+[0-9A-Fa-f?]{1,6}(?:-[0-9A-Fa-f]{1,6})?(?:,U\+[0-9A-Fa-f?]{1,6}(?:-[0-9A-Fa-f]{1,6})?)*)?\}/;
+export function verifyEmbeddedMermaidSvg(svg: string): string | null {
+  if (typeof svg !== 'string' || svg.length > MAX_MERMAID_SVG_BYTES) return null;
+  const open = /^<svg\b[^>]*>/.exec(svg);
+  if (!open || !svg.startsWith('<style>', open[0].length)) return null;
+  const start = open[0].length + '<style>'.length;
+  const end = svg.indexOf('</style>', start);
+  if (end < 0) return null;
+  let css = svg.slice(start, end);
+  if (!css.endsWith(MERMAID_TEXT_RENDERING)) return null;
+  css = css.slice(0, -MERMAID_TEXT_RENDERING.length);
+  if (!css) return null;
+  while (css) {
+    const rule = FONT_RULE.exec(css);
+    if (!rule || !MERMAID_BUNDLED_FAMILIES.has(rule[1]!)) return null;
+    css = css.slice(rule[0].length);
+  }
+  const drawing = open[0] + svg.slice(end + '</style>'.length);
+  return sanitizeMermaidSvg(drawing) === drawing ? svg : null;
 }

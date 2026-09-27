@@ -16,6 +16,10 @@ export const EXTERNALS = [
   // The SQLite engine reads its own sqlite3.wasm beside its module.
   '@sqlite.org/sqlite-wasm',
   'vega', 'vega-lite', 'vega-interpreter',
+  // The stored Mermaid drawings' font subsetter (services/app lib/mermaid-images/fonts): hb-subset
+  // reads its .wasm beside its module, and wawoff2's emscripten loader asks CommonJS for its own
+  // directory, which an ESM bundle does not have.
+  'harfbuzzjs', 'wawoff2',
   // nunjucks (the docs templates, lib/skills) optionally requires chokidar →
   // fsevents, a native addon esbuild has no loader for.
   'nunjucks',

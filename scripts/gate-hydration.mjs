@@ -481,15 +481,16 @@ async function runReaderHydration() {
   // The parse-survival shapes of the repaint check below (a div in a <p>, a Button in a trigger, a <For> in an svg).
   const survival = await publish({ title: 'Hydration parse survival', markup: PROSE, visibility: 'unlisted' });
   const kit = fixtures.find((f) => f.key === 'kit');
-  // The Mermaid fixture is read as readers meet it once its diagram is stored (lib/mermaid-images):
-  // the stored drawing is in the served story and must hydrate as it was served.
-  const diagram = fixtures.find((f) => f.key === 'mermaid');
+  // The Mermaid fixture in a theme's web fonts is read as readers meet it once its diagram is stored
+  // (lib/mermaid-images): the stored drawing is in the served story and must hydrate as it was served.
+  // (The plain Mermaid fixture has no theme, so it draws in system fonts, and always with the engine.)
+  const diagram = fixtures.find((f) => f.key === 'mermaid-industry');
   let storedDiagram = false;
   for (const end = Date.now() + 60000; !storedDiagram && Date.now() < end;) {
     storedDiagram = (await (await fetch(`${B}/api/page/artifact/${diagram.id}`)).text()).includes('"mermaidImages"');
     if (!storedDiagram) await new Promise((resolve) => setTimeout(resolve, 1000));
   }
-  check(storedDiagram, 'the mermaid fixture\'s diagram was stored before the reader loads');
+  check(storedDiagram, 'the stored-diagram document was harvested before the reader loads');
   const drawnFromStorage = (who) => async (page) => check(await waitFor(page, `!!document.querySelector('#root [data-mx-mermaid-state=ready] img[src^="/assets/mermaid/"]') && !document.querySelector('#root figure[data-mx-mermaid-palette]')`, 15000),
     `mermaid, ${who}: the hydrated story shows the stored drawing and drew nothing with the engine`);
   // Two versions, so `?version=1` is an ARCHIVED render — which only the owner's history reaches.

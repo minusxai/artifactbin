@@ -24,9 +24,11 @@ describe('the Mermaid render engine identity', () => {
     const source = readFileSync(path.resolve(import.meta.dirname, '../../../components/kit/mermaid-render.ts'));
     expect(createHash('sha256').update(source).digest('hex'), 'components/kit/mermaid-render changed: bump MERMAID_KIT_RENDER_VERSION and update this hash').toBe(RENDER_MODULE_SHA256);
   });
-  it('never prerenders a gantt chart (its "today" line moves), a cynefin chart (seeded by page order) or a code the kit refuses', () => {
+  it('never prerenders a gantt chart (its "today" line moves), a cynefin chart (seeded by page order), a C4 diagram (its own system fonts) or a code the kit refuses', () => {
     expect(mermaidPrerenderable('gantt\n  title Plan')).toBe(false);
     expect(mermaidPrerenderable('cynefin-beta\n  title T')).toBe(false);
+    // C4 draws in its own system font stack, measured differently per machine.
+    expect(mermaidPrerenderable('C4Context\n  title System\n  Person(p, "User")')).toBe(false);
     expect(mermaidPrerenderable('%%{init: {}}%%\nflowchart LR\n a-->b')).toBe(false);
     expect(mermaidPrerenderable('flowchart LR\n  a --> b')).toBe(true);
     expect(mermaidPrerenderable('classDiagram\n  A <|-- B')).toBe(true);

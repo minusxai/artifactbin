@@ -20,9 +20,14 @@
  *
  * THE READ. `mermaidImagesFor` answers a version's drawings for one surface,
  * both modes, keyed as the island wants them (StoryIslandData.mermaidImages);
- * the component uses one only while the reader's own palette key is the one it
- * was drawn under (components/kit/mermaid), so a drawing can be unused but
- * never wrong. Publishing never waits on any of this and never fails because
+ * the component shows one wherever it is offered (components/kit/mermaid).
+ * That is sound because a stored drawing depends on nothing of the reader's:
+ * its layout is fixed in SVG coordinates, measured by the harvest at unhinted
+ * advances, and it CARRIES ITS OWN FONTS — the document's bundled web faces,
+ * subset to its characters (./fonts) — so every platform renders its text in
+ * the theme's face at the advances it was laid out with. A drawing in a face
+ * the app does not bundle (a system font) could not carry it, and is never
+ * stored: its readers keep the engine. Publishing never waits on any of this and never fails because
  * of it: the queue insert runs after the commit and swallows its own errors,
  * and a browser that is down only means readers draw with the engine.
  *
@@ -40,6 +45,7 @@ import { getDb } from '@/lib/db';
 import { objectStore } from '@/lib/object-store';
 import { MERMAID_RENDER_ENGINE, mermaidPrerenderable } from './engine';
 import { mermaidCodesOf } from './codes';
+import type { MermaidFaces } from './drawn';
 
 export type MermaidSurface = 'document' | 'inline';
 export const MERMAID_SURFACES: readonly MermaidSurface[] = ['document', 'inline'];
@@ -91,7 +97,12 @@ export function comparableSvg(svg: string): string {
   return svg.replace(/mx-mermaid-\d+/g, 'mx-mermaid-N');
 }
 
-export interface MermaidImageInfo { type: string; width?: number; height?: number; mode: Mode; palette: string }
+/**
+ * A stored drawing's record. `faces` are the faces it carries (./fonts); a
+ * record without them was stored by an engine before drawings carried their
+ * fonts, and is never served (the engine string moved with it anyway).
+ */
+export interface MermaidImageInfo { type: string; width?: number; height?: number; mode: Mode; palette: string; faces?: MermaidFaces }
 export type MermaidHarvestMap = Partial<Record<MermaidSurface, Record<string, string>>>;
 
 /**
@@ -196,7 +207,8 @@ export async function mermaidImagesFor(
     const images: Record<string, StoredMermaidImage> = {};
     for (const row of rows) {
       const imageKey = wanted.get(row.key);
-      if (!imageKey) continue;
+      // Only a drawing that carries its fonts (./fonts): nothing of it is the reader's to resolve.
+      if (!imageKey || !row.info.faces) continue;
       images[imageKey] = {
         src: mermaidImagePath(row.key), type: row.info.type, palette: row.info.palette,
         ...(typeof row.info.width === 'number' ? { width: row.info.width } : {}),

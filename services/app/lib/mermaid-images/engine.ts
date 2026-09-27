@@ -13,8 +13,14 @@
  */
 import { mermaidDiagramKind } from '@/lib/story-ui/mermaid-source';
 
-/** Bump when components/kit/mermaid-render changes what it draws (its test pins the file). */
-export const MERMAID_KIT_RENDER_VERSION = 1;
+/**
+ * Bump when components/kit/mermaid-render changes what it draws (its test pins
+ * the file), or when what a stored drawing IS changes. 3: drawings are laid
+ * out unhinted and carry the document's fonts (lib/mermaid-images/fonts);
+ * kit1's were laid out in hinted Linux advances with no fonts of their own,
+ * and kit2 was an unreleased step between.
+ */
+export const MERMAID_KIT_RENDER_VERSION = 3;
 export const MERMAID_RENDER_ENGINE = `mermaid@12.0.0+kit${MERMAID_KIT_RENDER_VERSION}`;
 
 /**
@@ -23,6 +29,10 @@ export const MERMAID_RENDER_ENGINE = `mermaid@12.0.0+kit${MERMAID_KIT_RENDER_VER
  * cynefin chart draws its boundaries from a seed hashed from the render's id,
  * which counts diagrams in the order a page draws them: the harvest page's
  * count is not a reader's (a mode switch alone redraws with another). The
+ * C4 lays its text out in its own font stack (`"Open Sans", sans-serif`),
+ * never the document's web fonts, so its drawing is a system-font drawing on
+ * every theme: measured 1.07px taller on macOS than on Linux, and a face a
+ * stored drawing cannot carry (lib/mermaid-images/fonts). The
  * use-case and railroad kinds have no fixture in the fidelity gate
  * (scripts/fixtures/mermaid/kinds.mjs) yet, so nothing proves a stored drawing
  * of them equals the engine's: they keep the engine until one does.
@@ -30,7 +40,7 @@ export const MERMAID_RENDER_ENGINE = `mermaid@12.0.0+kit${MERMAID_KIT_RENDER_VER
  * ids) are refused per drawing by the harvest itself, which draws twice, and
  * drawings with HTML labels by the sanitizer.
  */
-export const MERMAID_PRERENDER_EXCLUDED_KINDS: ReadonlySet<string> = new Set(['gantt', 'cynefin', 'usecase', 'railroad', 'railroad-ebnf', 'railroad-abnf', 'railroad-peg']);
+export const MERMAID_PRERENDER_EXCLUDED_KINDS: ReadonlySet<string> = new Set(['gantt', 'cynefin', 'c4', 'usecase', 'railroad', 'railroad-ebnf', 'railroad-abnf', 'railroad-peg']);
 
 /** A code the harvest may store a drawing for: one the kit draws, of a kind that is not excluded. */
 export function mermaidPrerenderable(code: string): boolean {
