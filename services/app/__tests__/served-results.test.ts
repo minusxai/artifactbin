@@ -19,6 +19,9 @@ import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 import { PUT as putArtifactRoute } from '@/app/api/artifacts/[id]/route';
 import { GET as rawRoute } from '@/app/a/[id]/raw/route';
 import { POST as queryRoute } from '@/app/a/[id]/query/route';
+import { GET as eventsRoute } from '@/app/a/[id]/events/route';
+import { readEvents } from '@/__tests__/sse';
+import { resetLiveSubscriptions } from '@/lib/story/live';
 import { mintToken } from '@/lib/tokens';
 import { claimToken, createUser, ensureUsername } from '@/lib/users';
 import { setDatasetPolicy } from '@/lib/datasets/policy';
@@ -53,7 +56,7 @@ const fixture = (name: string) => readFileSync(path.join(FIXTURES, name), 'utf8'
 /** The dashboard fixture's KPI over the whole of sales.csv: sum(revenue). */
 const KPI = '$744,503';
 
-beforeEach(() => { asSession(null); });
+beforeEach(async () => { asSession(null); await resetLiveSubscriptions(); });
 
 async function owner() {
   const user = await ensureUsername(await createUser({ email: `mxmx_test_served_${Math.random().toString(36).slice(2, 8)}@example.com` }));
@@ -75,7 +78,7 @@ async function dashboard() {
 const html = async (id: string, search = '') => (await app.request(`/a/${id}${search}`, { headers: { accept: 'text/html' } })).text();
 const pageJson = async (id: string, search = '') => (await artifactPage(request(`/api/page/artifact/${id}${search}`), params(id))).json();
 const servedOf = (body: { surface: { runtime: { data: { dataflow?: { results?: unknown } } } } }) => body.surface.runtime.data.dataflow?.results as
-  { tables: Record<string, { rows: Array<Record<string, unknown>> }>; errors: Record<string, string>; mutationAccess?: Record<string, string | null> } | undefined;
+  { tables: Record<string, { rows: Array<Record<string, unknown>> }>; errors: Record<string, string>; mutationAccess?: Record<string, string | null>; since?: string } | undefined;
 /** What the query route answers this session for these values: the parity reference. */
 const routeAnswer = async (id: string, values: Record<string, unknown> = {}) =>
   (await queryRoute(request(`/a/${id}/query`, { method: 'POST', json: { values } }), params(id))).json() as Promise<{ tables: Record<string, unknown>; errors: Record<string, string>; mutationAccess?: Record<string, string | null> }>;
@@ -250,13 +253,44 @@ describe('the budget', () => {
 });
 
 describe('the standalone document', () => {
-  it('carries the anonymous door\'s results in /raw', async () => {
+  it('keeps /raw on the page\'s own first run: its live stream cannot yet pick up where served rows left off', async () => {
     const { id } = await dashboard();
     const res = await rawRoute(request(`/a/${id}/raw`), params(id));
     expect(res.status).toBe(200);
-    const doc = await res.text();
-    const dom = new JSDOM(doc);
-    expect(dom.window.document.body.textContent).toContain(KPI);
-    dom.window.close();
+    expect(await res.text()).not.toContain('"results":');
+  });
+});
+
+describe('the live stream picks up where the served results left off', () => {
+  const stream = (id: string, since?: string) => eventsRoute(request(`/a/${id}/events${since ? `?since=${encodeURIComponent(since)}` : ''}`), params(id));
+
+  it('sends a data frame at once for a dataset that changed between the page and the stream', async () => {
+    const { id, sales, token } = await dashboard();
+    const since = servedOf(await pageJson(id))!.since!;
+    expect(since).toEqual(expect.any(String));
+    const rows = fixture('sales.csv').trim().split('\n');
+    const replaced = await putArtifactRoute(await observedRequest(`/api/artifacts/${sales}`, { method: 'PUT', token, json: { dataset: `${rows[0]}\n2025-01-01,North,Alpha,1000,1\n` } }), params(sales));
+    expect(replaced.status).toBe(200);
+    const res = await stream(id, since);
+    expect(res.status).toBe(200);
+    const data = (await readEvents(res.body!, 2)).find((e) => e.event === 'data');
+    expect(data?.data).toMatchObject({ datasets: [sales] });
+  });
+
+  it('covers a change to who may read the dataset, not only to its rows', async () => {
+    const { id, sales } = await dashboard();
+    const since = servedOf(await pageJson(id))!.since!;
+    await (await harness.db()).query('UPDATE artifacts SET sharing_revision = sharing_revision + 1 WHERE id = $1', [sales]);
+    const data = (await readEvents((await stream(id, since)).body!, 2)).find((e) => e.event === 'data');
+    expect(data?.data).toMatchObject({ datasets: [sales] });
+  });
+
+  it('sends nothing when nothing changed, and ignores a token it cannot read', async () => {
+    const { id } = await dashboard();
+    const since = servedOf(await pageJson(id))!.since!;
+    for (const token of [since, 'not a token', `${'x'.repeat(6)}.deadbeef0000`]) {
+      const events = await readEvents((await stream(id, token)).body!, 2, 800);
+      expect(events.filter((e) => e.event === 'data')).toEqual([]);
+    }
   });
 });

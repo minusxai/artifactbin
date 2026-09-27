@@ -54,6 +54,18 @@ const frame = (over: Record<string, unknown>) => ({
 const emit = (f: Record<string, unknown>) => act(async () => { FakeEventSource.last!.emit(f); await Promise.resolve(); });
 
 describe('useLiveArtifact', () => {
+  it('opens the stream where the served results left off, and keeps that stream when the mark changes', () => {
+    let since = 'Ds1.abcdefghijkl';
+    const hook = renderHook(() => useLiveArtifact(httpBackend('story1'), 'story1', 'e1', 1, true, undefined, undefined, undefined, since));
+    expect(FakeEventSource.last?.url).toBe(`/a/story1/events?since=${encodeURIComponent('Ds1.abcdefghijkl')}`);
+    const first = FakeEventSource.last;
+    since = 'Ds1.mnopqrstuvwx';
+    hook.rerender();
+    expect(FakeEventSource.last).toBe(first);
+    expect(first?.closed).toBe(false);
+    hook.unmount();
+  });
+
   it('subscribes to this artifact and closes the stream on unmount', () => {
     const hook = renderHook(() => useLiveArtifact(httpBackend('story1'), 'story1', 'e1', 1));
     expect(FakeEventSource.last?.url).toBe('/a/story1/events');

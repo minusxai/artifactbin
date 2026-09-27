@@ -21,6 +21,7 @@ import { authorHandle } from '@/lib/users';
 import { ID_RE } from '@/lib/ids';
 import { subscribeToAnnotations, subscribeToArtifact, TooManyLiveChannels, type ArtifactDataEvent, type ArtifactVersionPing } from '@/lib/story/live';
 import { STORY_ANNOTATIONS_EVENT, STORY_DATA_EVENT } from '@/lib/story-runtime/contract';
+import { changedSince } from '@/lib/story/served-results.server';
 
 /** Browsers reconnect an idle EventSource; a comment frame keeps proxies from closing it. */
 const KEEPALIVE_MS = 15_000;
@@ -272,6 +273,20 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
   // It goes through `pushCurrent`, so it takes the same ACL re-check and the
   // same ordered `queueRow` path (version-guarded) as every later frame.
   void pushCurrent();
+  /*
+   * WHERE A SERVED PAGE LEFT OFF (`?since=`, lib/story/served-results.server):
+   * a page whose first rows came with its HTML names the datasets they were
+   * computed from and a mark of each. Every one that has moved since is sent
+   * the ordinary `data` frame NOW — after the subscriptions above, so nothing
+   * falls between this check and the wakeups that follow it. The frame names a
+   * dataset this document reads and nothing else, exactly as a wakeup would.
+   */
+  const since = new URL(request.url).searchParams.get('since');
+  if (since) {
+    void changedSince(since, [...datasetUnsubs.keys()])
+      .then(async (changed) => { for (const datasetId of changed) await wakeDataset(datasetId); })
+      .catch(() => { /* a failed catch-up is a missed wakeup: the next change still arrives */ });
+  }
 
   return new Response(readable, {
     headers: {

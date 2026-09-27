@@ -107,6 +107,19 @@ describe('a page that arrived with its first results', () => {
     expect(runs.map((r) => r.only)).toEqual([['count']]);
   });
 
+  it('re-runs the served rows and write checks a live dataset wakeup names, as it always has', async () => {
+    const { store, runs } = setup(SERVED);
+    store.start();
+    await vi.waitFor(() => expect(store.pending().size).toBe(0));
+    runs.length = 0;
+    store.invalidateDatasets(['Other0001']);
+    await vi.waitFor(() => expect(runs).toHaveLength(1));
+    expect(runs[0]!.only).toEqual(['count']);
+    await vi.waitFor(() => expect(store.getTable('count')?.rows).toEqual([{ server: 'count' }]));
+    expect(store.mutationUnavailable('add')).toBeNull();
+    expect(store.pending().size).toBe(0);
+  });
+
   it('loads the page engine at once when something it answers is still waiting', async () => {
     const idle = vi.fn();
     vi.stubGlobal('requestIdleCallback', idle);

@@ -161,8 +161,8 @@ export function createHttpBackend(id: string): ArtifactBackend {
     async revert(input) {
       return answer(await artifactRequests(id).revert(input));
     },
-    live(handlers) {
-      const source = new EventSource(`/a/${id}/events`);
+    live(handlers, options) {
+      const source = new EventSource(`/a/${id}/events${options?.since ? `?since=${encodeURIComponent(options.since)}` : ''}`);
       source.onmessage = (event) => {
         let ping: ArtifactVersionPing;
         try { ping = JSON.parse(event.data) as ArtifactVersionPing; } catch { return; }

@@ -54,6 +54,13 @@ export function useLiveArtifact(
    * replaces, never merges.
    */
   onAnnotations?: (annotations: AnnotationWire[]) => void,
+  /**
+   * Where the stream picks up (ServedResults.since): the page's first rows came
+   * with its HTML, and a dataset that changed since then is reported at once.
+   * Read when the stream opens, never a dependency. A reconnect sends it again,
+   * which at worst re-runs a query that is already current.
+   */
+  since?: string,
 ): ArtifactLiveEvent | null {
   // Keep the artifact id beside the frame: this component can be reused by
   // SPA navigation, and a high version from the previous id must never win.
@@ -65,6 +72,8 @@ export function useLiveArtifact(
 
   const isOwnFrameRef = useRef(isOwnFrame);
   isOwnFrameRef.current = isOwnFrame;
+  const sinceRef = useRef(since);
+  sinceRef.current = since;
 
   /** Highest version this connection has SEEN — including frames it dropped. */
   const seenVersionRef = useRef(initialVersion);
@@ -106,7 +115,7 @@ export function useLiveArtifact(
           .then((annotations) => { if (alive) onAnnotationsRef.current?.(annotations); })
           .catch(() => { /* next ping */ });
       },
-    });
+    }, sinceRef.current ? { since: sinceRef.current } : undefined);
     return () => { alive = false; annotationsRequest?.abort();unsubscribe(); };
   }, [backend, id, initialEditId, initialVersion, enabled]);
 

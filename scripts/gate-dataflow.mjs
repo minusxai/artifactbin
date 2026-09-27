@@ -99,9 +99,10 @@ check((await frame.textContent('[aria-label="Live number"]')) === '$2,040', 'the
 // "updating…") while the re-run is in flight and come back — with its old
 // rows on screen the whole time, never a flash to "loading".
 /*
- * The reader may hold this public dataset, so after the first paint (which the
- * server answers, through the scoped POST) the page fetches it once and runs
- * every later change itself: the select below must make NO request at all.
+ * The reader may hold this public dataset, so after the first paint (whose
+ * rows arrived in the HTML — lib/story/served-results.server) the page fetches
+ * it once and runs every later change itself: the select below must make NO
+ * request at all.
  */
 check(await docEngine, 'the page loaded its SQLite engine behind the first paint');
 await p.waitForTimeout(500);
@@ -124,8 +125,8 @@ check(!/EU/.test(await frame.textContent('[aria-label="Data table"]')), 'and the
 await scriptRealm.waitForFunction(() => document.getElementById('out')?.textContent === 'changed:NA', null, { timeout: 10000 }).catch(() => {});
 check((await scriptRealm.textContent('#out')) === 'changed:NA', `the managed author script saw the change through mx.subscribe (${await scriptRealm.textContent('#out')})`);
 const holds = relayCalls.filter((call) => call.body.hold !== undefined);
-check(directCalls.length === 0 && relayCalls.some((call) => call.body.only && call.body.hold === undefined) && holds.length === 1 && holds[0].body.hold === 'regions_data',
-  `the first paint ran through the scoped POST, and the page fetched the dataset it may hold ONCE through the same door (${relayCalls.length} POST: ${JSON.stringify(relayCalls.map((c) => c.body.hold ?? c.body.only))}, ${directCalls.length} GET)`);
+check(directCalls.length === 0 && relayCalls.every((call) => call.body.hold !== undefined) && holds.length === 1 && holds[0].body.hold === 'regions_data',
+  `the first paint's rows came with the page (no run request), and the page fetched the dataset it may hold ONCE through the scoped POST (${relayCalls.length} POST: ${JSON.stringify(relayCalls.map((c) => c.body.hold ?? c.body.only))}, ${directCalls.length} GET)`);
 check(relayCalls.length + directCalls.length === callsBeforeChange, `the select change ran in the page: no request (${relayCalls.length + directCalls.length - callsBeforeChange} made)`);
 await frame.selectOption('select[aria-label="Region"]', '');
 await frame.waitForFunction(() => document.querySelector('[aria-label="Live number"]')?.textContent === '$2,040', null, { timeout: 15000 }).catch(() => {});
@@ -258,8 +259,9 @@ await uf.waitForFunction(() => document.querySelector('[aria-label="Live number"
 check((await uf.$eval('select[aria-label="Region"]', (el) => el.value)) === 'west', `the link's selection is what the control shows at first paint (${await uf.$eval('select[aria-label="Region"]', (el) => el.value)})`);
 check((await uf.textContent('[aria-label="Live number"]')) === '$10', 'and the numbers are the SELECTED ones, not the defaults corrected a moment later');
 const upRuns = upQueries.filter((q) => q.body?.hold === undefined);
-check(upRuns.length === 1, `the document ran its queries ONCE, with the selection (${upRuns.length} run request(s))`);
-check(upRuns[0]?.method === 'POST' && upRuns[0]?.body.values?.region === 'west', 'and that one scoped POST carried the selection in its body');
+// The selected numbers arrived in the HTML (lib/story/served-results.server): the page asks for nothing to show them.
+check(upRuns.length === 0, `the document's first rows came with the page, for the selection: no run request (${upRuns.length} run request(s))`);
+check((await (await fetch(`${B}/a/${udoc.id}?$region=west`, { headers: { accept: 'text/html' } })).text()).includes('"results":{"tables":{'), 'and the served page carries those results for the linked selection');
 check(!upErrors.some((e) => /hydrat/i.test(e)), 'no hydration error: the SSR control and the hydrated store agree by construction');
 // (b) the address follows the reader
 await uf.selectOption('select[aria-label="Region"]', 'east');

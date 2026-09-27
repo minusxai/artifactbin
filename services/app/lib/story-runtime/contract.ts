@@ -70,7 +70,14 @@ export interface StoryIslandDataflow {
  * narrowed to those queries. `mutationAccess` is present when the document
  * declares writes — the same checks the route answers beside every run.
  */
-export type ServedResults = Pick<DataflowState, 'tables' | 'errors'> & Partial<Pick<DataflowState, 'mutationAccess' | 'userOptions' | 'people'>>;
+export type ServedResults = Pick<DataflowState, 'tables' | 'errors'> & Partial<Pick<DataflowState, 'mutationAccess' | 'userOptions' | 'people'>> & {
+  /**
+   * Where the page's live stream picks up (`/a/<id>/events?since=`): a mark of
+   * every dataset these answers were computed from, so a change between the
+   * serve and the stream still arrives as a `data` frame. Opaque to the page.
+   */
+  since?: string;
+};
 
 /**
  * A dataflow that HAS been run. Running it always produces state — only the
