@@ -51,7 +51,7 @@ import { ROUTES } from './routes.generated';
 import { authorFrameResponse } from './author-frame';
 import { AUTHOR_FRAME_PATH } from '@/lib/story-runtime/author-frame';
 import { GITHUB_EXTERNAL_URL } from '@/lib/github-star';
-import { createReaderPreloader } from './reader-preloads';
+import { createListingPreloader, createReaderPreloader, listingPage } from './reader-preloads';
 import { mountBuildAssets } from './build-assets';
 import { customHostBoundary } from './custom-host';
 import { linkedStylesheets } from '@/lib/custom-domain-home';
@@ -275,6 +275,7 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
   }
   if (!opts.indexHtml) mountBuildAssets(app, webDir);
   const preloadReader = opts.indexHtml ? (html: string) => html : createReaderPreloader(webDir);
+  const preloadListing = opts.indexHtml ? (html: string) => html : createListingPreloader(webDir);
   app.get(GITHUB_EXTERNAL_URL, createGithubResponse());
   const publicDir = opts.publicDir ?? path.resolve('public');
   const cliReleaseDir = opts.cliReleaseDir ?? path.resolve(publicDir, '..', '..', 'cli', 'dist');
@@ -303,9 +304,10 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
     // The agent pointer is injected here, on the request base, for EVERY shell
     // — the static index.html carries none, so there is one source (lib/agent-discovery).
     const discovered = withAgentDiscovery(html, baseUrl(c.req.raw));
+    const listing = listingPage(data);
     const shell = surface?.surface?.runtime
       ? withInitialStory(preloadReader(discovered), surface.surface.runtime, surface.surface.id, surface.description, baseUrl(c.req.raw), isStartPlaceholder(surface.surface.source, surface.surface.version))
-      : withGenericSocial(discovered, baseUrl(c.req.raw));
+      : withGenericSocial(listing ? preloadListing(discovered, listing) : discovered, baseUrl(c.req.raw));
     // The address search engines index a document under (lib/custom-domains canonicalDocumentUrl).
     const indexed = canonical ? shell.replace('</head>', () => `<link rel="canonical" href="${escapeHtml(canonical)}"></head>`) : shell;
     // Last, so the pointer is the page's final line whatever else was inlined.

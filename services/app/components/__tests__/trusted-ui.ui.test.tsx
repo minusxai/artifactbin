@@ -2,7 +2,7 @@ import { render, cleanup, act, fireEvent, waitFor, within } from '@testing-libra
 import { StrictMode, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { TrustedUi, useForegroundComposer, useTrustedPortalContainer, configureTrustedUiStyles } from '../TrustedUi';
+import { TrustedUi, useForegroundComposer, useTrustedPortalContainer, configureTrustedUiStyles, configureTrustedUiFromShell } from '../TrustedUi';
 import AnchoredPanel from '../AnchoredPanel';
 import MobileSheet from '../MobileSheet';
 import { SelectMenu } from '../SelectMenu';
@@ -126,6 +126,43 @@ describe('trusted UI CSS boundary', () => {
     authorStyle.remove();
     document.documentElement.removeAttribute('data-theme');
     configureTrustedUiStyles('');
+  });
+
+  it('takes its sheet from the shell\'s own stylesheet links only — never a <style>, never another origin — and waits for one still loading', async () => {
+    const sheet = (link: HTMLLinkElement, cssText: string | null) =>
+      Object.defineProperty(link, 'sheet', { configurable: true, get: () => cssText === null ? null : { cssRules: [{ cssText }] } });
+    const link = (href: string, cssText: string | null) => {
+      const element = document.createElement('link');
+      element.rel = 'stylesheet';
+      element.href = href;
+      sheet(element, cssText);
+      document.head.append(element);
+      return element;
+    };
+    const app = link('/assets/index-abc.css', ':root, :host { --color-fg: black; }');
+    const later = link('/assets/late-abc.css', null);
+    const foreign = link('https://fonts.example.test/x.css', '.foreign-probe { color: red; }');
+    const author = document.createElement('style');
+    author.textContent = '.author-style-probe { color: red; }';
+    document.head.append(author);
+    try {
+      configureTrustedUiFromShell(document);
+      const result = render(<TrustedUi><button aria-label="Styled control">Safe</button></TrustedUi>);
+      const root = result.container.querySelector('[data-trusted-ui]')!.shadowRoot!;
+      expect(root.textContent).toContain('[data-trusted-ui-root], [data-trusted-ui-root] { --color-fg: black; }');
+      expect(root.textContent).toContain('--color-fg: initial');
+      expect(root.textContent).not.toContain('author-style-probe');
+      expect(root.textContent).not.toContain('foreign-probe');
+      expect(root.textContent).not.toContain('late-probe');
+      sheet(later, '.late-probe { color: var(--color-fg); }');
+      await act(async () => { later.dispatchEvent(new Event('load')); });
+      expect(root.textContent).toContain('.late-probe { color: var(--color-fg); }');
+      expect(root.textContent).toContain('--color-fg: black');
+      result.unmount();
+    } finally {
+      for (const element of [app, later, foreign, author]) element.remove();
+      configureTrustedUiStyles('');
+    }
   });
 
   it('keeps desktop panels, select lists and tooltips in the boundary; keyboard events retain component state', () => {
