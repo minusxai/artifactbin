@@ -119,19 +119,32 @@ export const withBootstrap = (html: string, data: unknown): string => {
 const MODULE_TAG = /<script\b[^>]*\btype=["']module["'][^>]*>[\s\S]*?<\/script>|<link\b[^>]*\brel=["']modulepreload["'][^>]*>/gi;
 const FONT_PRELOAD = /<link\b[^>]*\brel=["']preload["'][^>]*\bas=["']font["'][^>]*>/gi;
 const STYLESHEET = /<link\b[^>]*\brel=["'](?:stylesheet|preload)["'][^>]*\bas=["']style["'][^>]*>|<link\b[^>]*\brel=["']stylesheet["'][^>]*>/gi;
+/** `text` with every match of `pattern` taken out, and the matches, in order — a MOVE, never a filter. */
+function lift(text: string, pattern: RegExp): { rest: string; lifted: string[] } {
+  const lifted: string[] = [];
+  let rest = '', at = 0;
+  for (const m of text.matchAll(pattern)) { rest += text.slice(at, m.index); lifted.push(m[0]); at = m.index! + m[0].length; }
+  return { rest: rest + text.slice(at), lifted };
+}
+/** Where the fonts go: after the render-blocking CSS, else the viewport, the charset, the agent pointer (always first), the head. */
+function fontSlot(head: string): number {
+  let cut = -1;
+  for (const m of head.matchAll(STYLESHEET)) cut = m.index! + m[0].length;
+  if (cut >= 0) return cut;
+  for (const tag of [/<meta\b[^>]*name=["']viewport["'][^>]*>/i, /<meta\b[^>]*charset=[^>]*>/i, /<meta\b[^>]*name=["']afbin["'][^>]*>/i, /<head\b[^>]*>/i]) {
+    const m = tag.exec(head);
+    if (m) return m.index + m[0].length;
+  }
+  return 0;
+}
 export function withReaderHeadOrder(html: string): string {
   const end = html.indexOf('</head>');
   if (end < 0) return html;
-  let head = html.slice(0, end);
-  const modules = head.match(MODULE_TAG) ?? [];
-  const fonts = (head.match(FONT_PRELOAD) ?? []).map((tag) => (/\bfetchpriority=/i.test(tag) ? tag : tag.replace(/^<link\b/i, '<link fetchpriority="high"')));
-  head = head.replace(MODULE_TAG, '').replace(FONT_PRELOAD, '');
-  // Fonts right after the last stylesheet (the render-blocking CSS), else after the viewport.
-  let cut = -1;
-  for (const m of head.matchAll(STYLESHEET)) cut = m.index! + m[0].length;
-  if (cut < 0) { const viewport = /<meta\b[^>]*name=["']viewport["'][^>]*>/i.exec(head); cut = viewport ? viewport.index + viewport[0].length : head.search(/<head\b[^>]*>/i) + (/<head\b[^>]*>/i.exec(head)?.[0].length ?? 0); }
-  head = head.slice(0, cut) + fonts.join('') + head.slice(cut);
-  return `${head}${modules.join('')}${html.slice(end)}`;
+  const code = lift(html.slice(0, end), MODULE_TAG);
+  const faces = lift(code.rest, FONT_PRELOAD);
+  const fonts = faces.lifted.map((tag) => (/\bfetchpriority=/i.test(tag) ? tag : `<link fetchpriority="high"${tag.slice('<link'.length)}`));
+  const cut = fontSlot(faces.rest);
+  return `${faces.rest.slice(0, cut)}${fonts.join('')}${faces.rest.slice(cut)}${code.lifted.join('')}${html.slice(end)}`;
 }
 
 /** What the app page inlines for a document: its story element and the head facts about it. */
