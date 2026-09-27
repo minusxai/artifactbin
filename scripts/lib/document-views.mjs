@@ -117,6 +117,27 @@ export async function measureDocumentView(context, url, { route, painted, thrott
   }
 }
 
+/**
+ * A build that prerenders Mermaid (lib/mermaid-images) draws a published
+ * diagram to stored SVG in the background; the lab measures the steady state a
+ * reader meets, so it waits — bounded — until each diagram fixture's served
+ * document carries its stored drawings. A build that does not (the base, before
+ * that change) never does, and the wait simply runs out. Answers the fixture
+ * keys that were seen stored.
+ */
+export async function waitForStoredDiagrams(base, fixtures, { timeoutMs = 60_000, pollMs = 1000, fetchImpl = fetch } = {}) {
+  const pending = new Map(fixtures.filter(f => f.painted?.diagrams).map(f => [f.key, f.id]));
+  const seen = [];
+  for (const end = Date.now() + timeoutMs; pending.size && Date.now() < end;) {
+    for (const [key, id] of [...pending]) {
+      const html = await (await fetchImpl(`${base}/a/${id}/raw`)).text();
+      if (html.includes('"mermaidImages"')) { pending.delete(key); seen.push(key); }
+    }
+    if (pending.size) await new Promise(resolve => setTimeout(resolve, pollMs));
+  }
+  return seen;
+}
+
 /** Resolve `/a/<id>` to the address a reader lands on: a redirect's target (one hop, untimed), else `/a/<id>`. */
 export async function canonicalView(base, id, fetchImpl = fetch) {
   const response = await fetchImpl(`${base}/a/${id}`, { redirect: 'manual' });

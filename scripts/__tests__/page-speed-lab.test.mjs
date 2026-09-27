@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import yaml from 'yaml';
 import { describe, expect, it } from 'vitest';
-import { documentViewsMarkdown, median, summarizeDocumentViews } from '../lib/document-views.mjs';
+import { documentViewsMarkdown, median, summarizeDocumentViews, waitForStoredDiagrams } from '../lib/document-views.mjs';
 import { PAGE_SPEED_FIXTURES, publishPageSpeedFixtures } from '../fixtures/page-speed/index.mjs';
 import { loadsSummary, reportMarkdown } from '../performance-report.mjs';
 
@@ -70,6 +70,20 @@ describe('page-speed fixtures', () => {
 const sample = (fixture, route, overrides = {}) => ({
   fixture, route, ready: true, errors: [], fcp: 100, lcp: 120, takeover: route === 'view' ? 700 : null, painted: null, requests: 10,
   bytes: { html: { decoded: 2048, gzip: 1024 }, js: { decoded: 4096, gzip: 2048 }, css: { decoded: 0, gzip: 0 }, other: { decoded: 0, gzip: 0 } }, scriptMs: 50, ...overrides,
+});
+
+describe('waiting for stored diagram drawings', () => {
+  const fixtures = [{ key: 'prose', id: 'p', painted: null }, { key: 'mermaid', id: 'm', painted: { diagrams: 1 } }];
+  it('waits only for diagram fixtures, until their served document carries stored drawings', async () => {
+    let calls = 0;
+    const fetchImpl = async (url) => { calls++; expect(url).toBe('http://lab/a/m/raw'); return { text: async () => (calls >= 3 ? '{"mermaidImages":{}}' : '{}') }; };
+    expect(await waitForStoredDiagrams('http://lab', fixtures, { pollMs: 1, fetchImpl })).toEqual(['mermaid']);
+    expect(calls).toBe(3);
+  });
+  it('gives up after its bound on a build that never stores them', async () => {
+    const fetchImpl = async () => ({ text: async () => '{}' });
+    expect(await waitForStoredDiagrams('http://lab', fixtures, { timeoutMs: 20, pollMs: 5, fetchImpl })).toEqual([]);
+  });
 });
 
 describe('the lab report', () => {
