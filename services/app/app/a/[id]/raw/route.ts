@@ -47,6 +47,7 @@ import { currentStoryCss } from '@/lib/data/story/story-css.server';
 import { declaresMutations } from '@/lib/story/helmet';
 import { assetsPath, resolvePath, markupCsp, mutatePath, queryPath } from '@/lib/story/markup-csp';
 import { readUrlValues } from '@/lib/story/url-values';
+import { servedResultsFor } from '@/lib/story/served-results.server';
 import { storyRuntimeAssets } from '@/lib/story/runtime-asset';
 import { getUserById } from '@/lib/users';
 import { avatarUrl } from '@/lib/avatars';
@@ -361,7 +362,15 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
         chrome
           // A top-level reader queries through the ANONYMOUS GET door, so what it
           // may hold is decided for nobody in particular.
-          ? (declared ? holdableImports(row, declared.flow, null).then((hold) => ({ ...declared, ...(hasUrlValues ? { values: urlValues } : {}), hold })) : Promise.resolve(declared))
+          ? (declared ? Promise.all([
+            holdableImports(row, declared.flow, null),
+            /*
+             * Its FIRST RESULTS, as that same anonymous door answers them
+             * (lib/story/served-results.server) — the head's only, and never on
+             * a custom domain, whose reader copy is served without doors.
+             */
+            !at && !domain && !declared.state ? servedResultsFor(row, declared.flow, { admit: null, viewer: null, search }) : Promise.resolve(null),
+          ]).then(([hold, results]) => ({ ...declared, ...(hasUrlValues ? { values: urlValues } : {}), hold, ...(results ? { results } : {}) })) : Promise.resolve(declared))
           // The CAPTURE's run carries whoever asked for it, which matters for
           // any document reading a folder's children (`ref_<folderId>` is a
           // per-viewer table). The TOKEN travels beside the account:

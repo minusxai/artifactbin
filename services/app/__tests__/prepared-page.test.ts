@@ -143,13 +143,29 @@ describe('the prepared page store', () => {
   });
 
   it('reuses the anonymous render of a document with data, whose stored flow comes back from JSONB in another key order', async () => {
-    const { id } = await world(`<Helmet><Value name="n" type="number" default={2} /><Query name="q">{\`select $n * 3 as n\`}</Query></Helmet>
+    // Its one query reads the reader's zone, so no first results ride in the overlay (lib/story/served-results.server).
+    const { id } = await world(`<Helmet><Value name="n" type="number" default={2} /><Query name="q">{\`select $n * 3 as n, $_tz as tz\`}</Query></Helmet>
 <div><h1>Data notes</h1><p>Six is <Number data="$q" col="n" /></p></div>`);
     resetSpies();
     const res = await app.request(`/a/${id}`, { headers: { accept: 'text/html' } });
     expect(res.status).toBe(200);
-    expect(inlined(await res.text()).artifact.surface.runtime.data.dataflow.flow.queries).toHaveLength(1);
+    const dataflow = inlined(await res.text()).artifact.surface.runtime.data.dataflow;
+    expect(dataflow.flow.queries).toHaveLength(1);
+    expect(dataflow).not.toHaveProperty('results');
     expect({ ...spies }).toEqual({ parse: 0, css: 0, nodes: 0, render: 0 });
+  });
+
+  it('renders a request\'s first results fresh, and never into the stored render', async () => {
+    const { id } = await world(`<Helmet><Value name="n" type="number" default={2} /><Query name="q">{\`select $n * 3 as n\`}</Query></Helmet>
+<div><h1>Data notes</h1><p>Six is <Number data="$q" col="n" /></p></div>`);
+    resetSpies();
+    const html = await (await app.request(`/a/${id}`, { headers: { accept: 'text/html' } })).text();
+    expect(inlined(html).artifact.surface.runtime.data.dataflow.results.tables.q.rows).toEqual([{ n: 6 }]);
+    expect(new JSDOM(html).window.document.querySelector('[data-mx-initial-story]')!.textContent).toContain('Six is 6');
+    // The overlay carries the rows, so its digest is not the stored anonymous render's: one fresh render, nothing else.
+    expect({ ...spies }).toEqual({ parse: 0, css: 0, nodes: 0, render: 1 });
+    const stored = (await (await harness.db()).query<{ page: { ssr: { html: string } } }>('SELECT page FROM prepared_pages WHERE artifact_id = $1', [id])).rows[0]!;
+    expect(stored.page.ssr.html).not.toContain('Six is 6');
   });
 
   it('writes back on a read miss and keys each archived version in its own slot', async () => {
