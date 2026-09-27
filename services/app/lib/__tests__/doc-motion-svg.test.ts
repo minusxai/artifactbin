@@ -7,6 +7,7 @@
  */
 import { describe, it, expect } from 'vitest';
 import { renderDoc } from '../skills';
+import { publishJsx } from '../story/jsx-tier';
 
 const B = 'https://example.test';
 /** The markup skill as one text: its SKILL.md plus the motion, svg and data files it links. */
@@ -58,6 +59,24 @@ describe('markup doc teaches the motion kit', () => {
     expect(doc).toContain('data-reveal');
     expect(doc).toContain('data-mx-seen');
     expect(doc).toContain('data-mx-motion');
+  });
+});
+
+describe('the svg reference teaches a <For> of shapes', () => {
+  const svg = renderDoc('artifactbin/references/markup-svg.md', BASE)!;
+  // By fence, not by backtick: the example's own SQL is a template literal.
+  const example = svg.split('```jsx\n').slice(1).map((block) => block.split('\n```')[0]).find((block) => block.includes('<For'));
+
+  it('says the rows group as a <g> and the template stays SVG', () => {
+    expect(svg).toMatch(/<For>` inside `<svg>`[^.]*`<g>`/);
+    expect(svg).toMatch(/SVG tags only/);
+    expect(example).toMatch(/<svg[^>]*>\s*<For each=\{\$\w+\}[^>]*>\s*<rect /);
+  });
+
+  it('carries an example that publishes through the validator the door uses', async () => {
+    const result = await publishJsx({}, example!);
+    const refused = result instanceof Response ? (await result.text()).slice(0, 300) : null;
+    expect(refused).toBeNull();
   });
 });
 

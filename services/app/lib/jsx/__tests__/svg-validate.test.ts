@@ -73,3 +73,24 @@ describe('svg subset — denied', () => {
     expect(errors.some((e) => /URL scheme/.test(e.message))).toBe(true);
   });
 });
+
+describe('svg subset — a <For> of shapes', () => {
+  it('accepts a <For> whose template is SVG drawing tags, including through a condition', () => {
+    const src = '<svg viewBox="0 0 30 10"><For each={$bars} keyBy="k" className="text-primary">'
+      + '<rect x="$_row.x" height="$_row.h" width="8" />{($_row.hot) && (<circle r="1" />)}</For></svg>';
+    expect(validate(src)).toEqual([]);
+  });
+
+  it.each([
+    ['an HTML tag', '<div>{$_row.name}</div>'],
+    ['an HTML tag inside a condition', '{($_row.hot) && (<span>hot</span>)}'],
+    ['a component', '<Badge>{$_row.name}</Badge>'],
+  ])('rejects %s in the template, naming the SVG subset', (_label, template) => {
+    const errors = validate(`<svg><For each={$bars}>${template}</For></svg>`);
+    expect(errors.some((e) => /<For> inside <svg>/.test(e.message) && e.message.includes('rect'))).toBe(true);
+  });
+
+  it('leaves a <For> outside svg free to repeat HTML', () => {
+    expect(validate('<For each={$rows}><div>{$_row.name}</div></For>')).toEqual([]);
+  });
+});
