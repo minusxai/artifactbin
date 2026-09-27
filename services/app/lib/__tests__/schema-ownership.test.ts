@@ -49,6 +49,13 @@ it('guest workspace adoption belongs to app users',()=>{
 
 it('export metadata and refresh claims belong to the app',()=>{expect(declared()['app.export_images']).toBe('app');expect(declared()['app.export_image_cache']).toBe('app');});
 
+it('prerendered Mermaid drawings and their per-version harvests belong to the app, and harvests are erased with their artifact',()=>{
+ expect(declared()['app.mermaid_images']).toBe('app');expect(declared()['app.mermaid_harvests']).toBe('app');
+ const sql=renderedSchema().schema;
+ expect(sql).toMatch(/CREATE TABLE IF NOT EXISTS app\.mermaid_harvests \([\s\S]*?artifact_id TEXT NOT NULL[\s\S]*?PRIMARY KEY \(artifact_id, version, engine\)/);
+ expect(sql).toMatch(/CREATE TABLE IF NOT EXISTS app\.mermaid_images \([\s\S]*?PRIMARY KEY \(key\)/);
+});
+
 it('remote identities and work receipts belong to app',()=>{expect(declared()['app.remote_agents']).toBe('app');expect(declared()['app.remote_work']).toBe('app');});
 
 it('comment image stages and attachments belong to app',()=>{expect(declared()['app.comment_images']).toBe('app');});

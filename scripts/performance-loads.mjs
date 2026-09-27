@@ -36,7 +36,7 @@ import { chromium } from 'playwright';
 import { startMailSink } from './lib/mail-login.mjs';
 import { becomeAccountOwner, publishAs } from './lib/start-doc.mjs';
 import { publishPageSpeedFixtures } from './fixtures/page-speed/index.mjs';
-import { LAB_THROTTLE, measureDocumentViews, summarizeDocumentViews } from './lib/document-views.mjs';
+import { LAB_THROTTLE, measureDocumentViews, summarizeDocumentViews, waitForStoredDiagrams } from './lib/document-views.mjs';
 
 assert.equal(process.env.CI, 'true', 'Production builds and browser benchmarks run in CI only');
 const root = path.resolve(process.argv[2]), output = path.resolve(process.argv[3]);
@@ -190,9 +190,12 @@ try {
   await context.addCookies(sessionCookies);
   await page.goto(base, { waitUntil: 'domcontentloaded' });
   const documentFixtures = await publishPageSpeedFixtures(body => publishAs(page, body));
+  // The steady state a reader meets: a build that prerenders diagrams has stored them by now (bounded; a no-op wait otherwise).
+  const storedDiagrams = await waitForStoredDiagrams(base, documentFixtures);
+  console.log(`Stored diagram drawings before timing: ${storedDiagrams.join(', ') || 'none'}`);
   const documentRuns = 5;
   const samples = await measureDocumentViews({ browser, base, fixtures: documentFixtures, runs: documentRuns, throttle: LAB_THROTTLE, log: line => console.log(line) });
-  result.documents = { conditions: { ...LAB_THROTTLE, runs: documentRuns, cache: 'cold', viewer: 'anonymous', viewport: '1440x1000' }, fixtures: documentFixtures.map(({ key, id, template }) => ({ key, id, template })), summary: summarizeDocumentViews(samples), samples };
+  result.documents = { conditions: { ...LAB_THROTTLE, runs: documentRuns, cache: 'cold', viewer: 'anonymous', viewport: '1440x1000', storedDiagrams }, fixtures: documentFixtures.map(({ key, id, template }) => ({ key, id, template })), summary: summarizeDocumentViews(samples), samples };
   mkdirSync(path.dirname(output), { recursive: true });
   writeFileSync(output, JSON.stringify(result, null, 2));
   console.log(`Measured ${result.loads.length} loads for ${result.revision}; output ${output}`);

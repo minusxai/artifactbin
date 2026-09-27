@@ -106,13 +106,14 @@ import * as r102 from '@/app/api/users/[id]/avatar/route';
 import * as r103 from '@/app/api/users/[id]/follow/route';
 import * as r104 from '@/app/assets/[hash]/route';
 import * as r105 from '@/app/assets/export/[id]/route';
-import * as r106 from '@/app/basemap/[...path]/route';
-import * as r107 from '@/app/email/[id]/route';
-import * as r108 from '@/app/health/route';
-import * as r109 from '@/app/llms.txt/route';
-import * as r110 from '@/app/people/[id]/route';
-import * as r111 from '@/app/tiles/[...tile]/route';
-import * as r112 from '@/app/webfonts/[file]/route';
+import * as r106 from '@/app/assets/mermaid/[file]/route';
+import * as r107 from '@/app/basemap/[...path]/route';
+import * as r108 from '@/app/email/[id]/route';
+import * as r109 from '@/app/health/route';
+import * as r110 from '@/app/llms.txt/route';
+import * as r111 from '@/app/people/[id]/route';
+import * as r112 from '@/app/tiles/[...tile]/route';
+import * as r113 from '@/app/webfonts/[file]/route';
 
 export interface RouteEntry { path: string; dir: string; methods: string[]; module: Record<string, unknown> }
 export const ROUTES: RouteEntry[] = [
@@ -222,11 +223,12 @@ export const ROUTES: RouteEntry[] = [
   { path: "/api/users/:id/follow", dir: "/api/users/[id]/follow", methods: ["GET","POST","DELETE"], module: r103 },
   { path: "/assets/:hash", dir: "/assets/[hash]", methods: ["GET"], module: r104 },
   { path: "/assets/export/:id", dir: "/assets/export/[id]", methods: ["GET","HEAD"], module: r105 },
-  { path: "/basemap/:path{.+}", dir: "/basemap/[...path]", methods: ["GET"], module: r106 },
-  { path: "/email/:id", dir: "/email/[id]", methods: ["GET"], module: r107 },
-  { path: "/health", dir: "/health", methods: ["GET"], module: r108 },
-  { path: "/llms.txt", dir: "/llms.txt", methods: ["GET"], module: r109 },
-  { path: "/people/:id", dir: "/people/[id]", methods: ["GET"], module: r110 },
-  { path: "/tiles/:tile{.+}", dir: "/tiles/[...tile]", methods: ["GET"], module: r111 },
-  { path: "/webfonts/:file", dir: "/webfonts/[file]", methods: ["GET"], module: r112 },
+  { path: "/assets/mermaid/:file", dir: "/assets/mermaid/[file]", methods: ["GET","HEAD"], module: r106 },
+  { path: "/basemap/:path{.+}", dir: "/basemap/[...path]", methods: ["GET"], module: r107 },
+  { path: "/email/:id", dir: "/email/[id]", methods: ["GET"], module: r108 },
+  { path: "/health", dir: "/health", methods: ["GET"], module: r109 },
+  { path: "/llms.txt", dir: "/llms.txt", methods: ["GET"], module: r110 },
+  { path: "/people/:id", dir: "/people/[id]", methods: ["GET"], module: r111 },
+  { path: "/tiles/:tile{.+}", dir: "/tiles/[...tile]", methods: ["GET"], module: r112 },
+  { path: "/webfonts/:file", dir: "/webfonts/[file]", methods: ["GET"], module: r113 },
 ];

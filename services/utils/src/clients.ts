@@ -12,6 +12,7 @@ import type {
   RenderUploadResult,
   RenderResult,
   SqlService,
+  SvgHarvestResult,
 } from '@artifactbin/contracts';
 import { BROWSER_ROUTES, EVENTS_ROUTES, SERVICE_AUTH_HEADER, SQL_ROUTES } from '@artifactbin/contracts';
 import { httpClient } from './http';
@@ -66,6 +67,16 @@ export function browserClient(url: string, opts: { deadlineMs?: number; serviceS
         if(response.ok||(!result.ok&&result.reason==='upload_unavailable'))return result;
         return {ok:false,reason:'unavailable',detail:`${response.status}`};
       }catch{return {ok:false,reason:'unavailable',detail:'Export upload service unavailable'};}
+    },
+    async harvestSvg(input) {
+      try {
+        const response = await fetch(`${url}${BROWSER_ROUTES.harvest}`, { method: 'POST', headers: { 'content-type': 'application/json', ...(opts.serviceSecret ? { [SERVICE_AUTH_HEADER]: opts.serviceSecret } : {}) }, body: JSON.stringify(input), signal: AbortSignal.timeout(Math.max(deadline, 45_000)) });
+        // An older service has no such route: a mixed-version rollout harvests nothing.
+        if (response.status === 404) return { ok: false, reason: 'harvest_unavailable' };
+        const result = await response.json() as SvgHarvestResult;
+        if (response.ok || (!result.ok && result.reason === 'harvest_unavailable')) return result;
+        return { ok: false, reason: 'unavailable', detail: `${response.status}` };
+      } catch { return { ok: false, reason: 'unavailable', detail: 'Harvest service unavailable' }; }
     },
     async render(req: RenderRequest): Promise<RenderResult> {
       try {

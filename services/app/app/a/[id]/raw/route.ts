@@ -41,6 +41,7 @@ import { serveStoredFile } from '@/lib/story/file-store';
 import { loadPdfStream, pdfFilename, pdfMetaOf } from '@/lib/story/pdf-store';
 import { webAssetsForSource } from '@/lib/web-assets';
 import { buildStoryDocument } from '@/lib/story/document';
+import { captureColor, engineRequested } from '@/lib/mermaid-images/store';
 import { resolveStoredStoryDesign } from '@/lib/data/story/story-themes';
 import { currentStoryCss } from '@/lib/data/story/story-css.server';
 import { declaresMutations } from '@/lib/story/helmet';
@@ -277,7 +278,8 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
       // Stored rows may still carry a retired theme name (aliased forward) and
       // a sheet compiled under an older registry (recompiled) — both resolve
       // at the door so the served document always speaks the live vocabulary.
-      const design = resolveStoredStoryDesign(meta.theme, meta.colorMode);
+      // A CAPTURE may be drawn in either mode (lib/mermaid-images harvests both); a reader sees the author's.
+      const design = resolveStoredStoryDesign(meta.theme, (byExportKey && !domain ? captureColor(request.url) : null) ?? meta.colorMode);
       const compiledCss = await currentStoryCss(meta, row.source);
       // ?chrome=0 — the capture path (lib/export screenshots this frame, so the
       // document's own rail/present bar and attribution footer would land in
@@ -548,6 +550,13 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
         bare: domain ? { footerHref: `${PUBLIC_BASE_URL.replace(/\/+$/, '')}/a/${artifact.id}` } : null,
         // A capture needs none; every reader copy names the address to index it under.
         canonical: domain ? domainPostUrl(domain.hostname, artifact) : chrome ? await canonicalDocumentUrl(artifact) : null,
+        /*
+         * THIS VERSION'S PRERENDERED DIAGRAMS (lib/mermaid-images), drawn from
+         * stored SVG with no Mermaid code. Not on a custom domain (its host
+         * serves no stored drawings), and not when the engine was asked for by
+         * name (`?mermaid=engine` — what the harvest itself loads).
+         */
+        mermaidImageLookup: domain || engineRequested(request.url) ? null : { artifactId: artifact.id, version: at?.version ?? artifact.version, surface: 'document', head: !at, visibility: artifact.visibility },
       });
       return new Response(html, {
         status: 200,

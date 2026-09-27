@@ -107,6 +107,13 @@ export interface StoryIslandData {
    */
   glyphs?: GlyphMap;
   /**
+   * Mermaid diagrams PRERENDERED to SVG after publish (Track G), keyed by
+   * `mermaidImageKey(code, mode)`. Each records the palette key it was drawn
+   * with; the client uses the stored image only while its own resolved palette
+   * has the same key, and otherwise draws with the engine as before.
+   */
+  mermaidImages?: Record<string, StoredMermaidImage>;
+  /**
    * The `<Value>`/`<Query>`/`<Mutation>` declarations and their render-time state
    * (lib/story/dataflow.ts). Absent for a document that declares nothing.
    */
@@ -948,3 +955,6 @@ export function isSessionMessage(data: unknown): data is StorySessionMessage {
   const d = data as { type?: unknown; nonce?: unknown };
   return d.type === STORY_SESSION_MESSAGE && typeof d.nonce === 'string' && d.nonce.length >= 16;
 }
+
+/** A server-harvested Mermaid drawing (lib/story-ui/mermaid-source). */
+export interface StoredMermaidImage { src: string; type: string; width?: number; height?: number; palette: string }

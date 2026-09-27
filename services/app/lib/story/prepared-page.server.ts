@@ -53,6 +53,7 @@ import { prepareStoryParts, readerIslandData, type ReaderIslandInput } from './p
 import { inlineStoryCss, inlineStoryNodes } from './inline-css';
 import { styleOverrides, type StyleOverride } from './style-overrides';
 import { readerStorySheet } from './reader-sheet.server';
+import { mermaidImagesFor } from '@/lib/mermaid-images/store';
 import { servedStoryHtml } from './inline-story-html';
 import { loadStorySsr } from './ssr.server';
 import { lazyCodeOf, type LazyCode } from './lazy-code';
@@ -96,6 +97,16 @@ export interface ReaderContext {
   search: string;
   /** The origin the page is served on (managed assets resolve through it). */
   origin: string;
+  /**
+   * `engine`: serve no stored diagram drawings (`?mermaid=engine`, what the
+   * harvest itself loads). Otherwise the version's stored drawings for the
+   * app's inline surface (lib/mermaid-images) are part of this overlay — per
+   * REQUEST, not per version, because a harvest lands after the page was
+   * prepared and the next read must carry it.
+   */
+  drawings?: 'stored' | 'engine';
+  /** A CAPTURE's colour (`color=`, under a verified export key); a reader gets the version's. */
+  colorMode?: 'light' | 'dark' | null;
 }
 
 const sha = (text: string): string => createHash('sha256').update(text).digest('hex');
@@ -145,13 +156,17 @@ async function fingerprint(deps: PreparedDeps): Promise<string> {
 }
 
 /** The per-reader half of the island, through the one writer (readerIslandData). */
-async function readerInputFor(row: ArtifactRow, declared: StoryIslandDataflow | null, reader: ReaderContext): Promise<ReaderIslandInput> {
+async function readerInputFor(row: ArtifactRow, page: Pick<PreparedPage, 'declared' | 'data'>, reader: ReaderContext): Promise<ReaderIslandInput & { colorMode?: 'light' | 'dark' }> {
   const { at, viewer, search, origin } = reader;
-  const [refData, mentionStatuses, identity, hold] = await Promise.all([
+  const declared = page.declared;
+  const [refData, mentionStatuses, identity, hold, mermaidImages] = await Promise.all([
     refDataForRow(row), savedMentionStates(row), viewerIdentityFor(row, viewer?.userId ?? null),
     declared ? holdableImports(row, declared.flow, viewer) : Promise.resolve([]),
+    reader.drawings === 'engine' ? Promise.resolve({}) : mermaidImagesFor({ artifactId: row.id, version: at?.version ?? row.version, surface: 'inline', head: !at, visibility: row.visibility }, page.data.nodes),
   ]);
   return {
+    mermaidImages,
+    ...(reader.colorMode ? { colorMode: reader.colorMode } : {}),
     refData, mentionStatuses, viewer: identity,
     dataflow: declared ? { ...declared, values: readUrlValues(search, declared.flow), hold } : null,
     queryUrl: queryPath(row.id), assetsUrl: assetsPath(row.id),
@@ -161,7 +176,8 @@ async function readerInputFor(row: ArtifactRow, declared: StoryIslandDataflow | 
     ...(at ? { readOnly: archivedReadOnly(at.version) } : {}),
   };
 }
-const overlayDigest = (input: ReaderIslandInput): string => sha(canonical(readerIslandData(input)));
+type ReaderOverlay = ReaderIslandInput & { colorMode?: 'light' | 'dark' };
+const overlayDigest = (input: ReaderOverlay): string => sha(canonical({ ...readerIslandData(input), ...(input.colorMode ? { colorMode: input.colorMode } : {}) }));
 
 /** Parse, isolate and render one version. The only place a served document is compiled. */
 async function build(row: ArtifactRow, at: ArchivedRender | null, origin: string): Promise<PreparedPage> {
@@ -199,19 +215,19 @@ async function build(row: ArtifactRow, at: ArchivedRender | null, origin: string
     ssr: null,
   };
   // The anonymous reader's render, whoever asked first.
-  const anonymous = await readerInputFor(row, page.declared, { at, viewer: null, search: '', origin });
+  const anonymous = await readerInputFor(row, page, { at, viewer: null, search: '', origin });
   page.ssr = { overlay: overlayDigest(anonymous), html: renderStory(page, anonymous) };
   return page;
 }
 
-function servedOf(page: PreparedPage, input: ReaderIslandInput): ServedStoryRuntime & { css: string } {
+function servedOf(page: PreparedPage, input: ReaderOverlay): ServedStoryRuntime & { css: string } {
   return {
-    data: { ...page.data, ...readerIslandData(input) } as StoryIslandData,
+    data: { ...page.data, ...readerIslandData(input), ...(input.colorMode ? { colorMode: input.colorMode } : {}) } as StoryIslandData,
     css: page.css, overrides: page.overrides, base: page.base,
     authorScript: page.authorScript, theme: page.theme, title: page.title, fontPreloads: page.fontPreloads,
   };
 }
-const renderStory = (page: PreparedPage, input: ReaderIslandInput): string => servedStoryHtml(servedOf(page, input), loadStorySsr().renderInlineStory);
+const renderStory = (page: PreparedPage, input: ReaderOverlay): string => servedStoryHtml(servedOf(page, input), loadStorySsr().renderInlineStory);
 
 interface StoredRow { page_key: string; deps: string; page: PreparedPage }
 
@@ -243,7 +259,7 @@ export async function preparedPageFor(stored: ArtifactRow, at: ArchivedRender | 
  * the one the stored render was made with.
  */
 export async function servedPage(row: ArtifactRow, page: PreparedPage, reader: ReaderContext): Promise<{ runtime: ServedStoryRuntime & { css: string }; storyHtml: () => string }> {
-  const input = await readerInputFor(row, page.declared, reader);
+  const input = await readerInputFor(row, page, reader);
   const runtime = servedOf(page, input);
   return {
     runtime,

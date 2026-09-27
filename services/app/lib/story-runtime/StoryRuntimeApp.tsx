@@ -1,6 +1,6 @@
 import {PersonMention,PersonMentionProvider} from '@/components/PersonMention';
 import {isPersonMentionHref} from '@/lib/person-mentions';
-import { Mermaid } from '@/components/kit/mermaid';
+import { Mermaid, MermaidImagesProvider } from '@/components/kit/mermaid';
 import { DeckGLMap } from '@/components/kit/deck-gl';
 /**
  * The ONE view composition for a served markup document. The registry and
@@ -1322,11 +1322,12 @@ export type StoryRuntimeAppProps = StoryIslandData & {
 };
 
 const EMPTY_GLYPHS: GlyphMap = {};
+const EMPTY_MERMAID_IMAGES: NonNullable<StoryIslandData['mermaidImages']> = {};
 
 /** A store-less subscribe (a Button rendered outside a document): nothing ever changes. */
 const NO_SUBSCRIBE = () => () => {};
 
-export function StoryRuntimeApp({ mentionStatuses, nodes, refData, glyphs, dataflow, viewer = null, colorMode, template = null, chrome = true, assetsUrl = null, managedAssets, importAsset, store: givenStore, onMounted, editDecorate, editChildren, onSlideRename, components }: StoryRuntimeAppProps) {
+export function StoryRuntimeApp({ mentionStatuses, nodes, refData, glyphs, mermaidImages, dataflow, viewer = null, colorMode, template = null, chrome = true, assetsUrl = null, managedAssets, importAsset, store: givenStore, onMounted, editDecorate, editChildren, onSlideRename, components }: StoryRuntimeAppProps) {
   const [localStore] = useState<DataflowStore>(() => givenStore ?? createDataflowStore(dataflow ?? { flow: EMPTY_COMPILED_DATAFLOW }));
   const store = givenStore ?? localStore;
   const actions = useMemo(() => createRowActions(), [store]);
@@ -1406,8 +1407,13 @@ export function StoryRuntimeApp({ mentionStatuses, nodes, refData, glyphs, dataf
    * make its previews, so a provider around the body alone gave every rail preview
    * the slide's text and a hole where its icon goes.
    */
+  /*
+   * <Mermaid> draws a diagram the server already harvested from its stored SVG
+   * (lib/mermaid-images), and imports the engine only for one it has not — the
+   * same whole-tree scope as the glyphs, for the same rail-preview reason.
+   */
   const withGlyphs = (tree: ReactElement) => (
-    <IconGlyphProvider value={glyphs ?? EMPTY_GLYPHS}>{tree}</IconGlyphProvider>
+    <IconGlyphProvider value={glyphs ?? EMPTY_GLYPHS}><MermaidImagesProvider value={mermaidImages ?? EMPTY_MERMAID_IMAGES}>{tree}</MermaidImagesProvider></IconGlyphProvider>
   );
 
   if (!deck) {

@@ -66,6 +66,9 @@ export const GATE_SPECS = Object.freeze([
   { name: 'local-sql-state', needsMail: true, timeoutMs: 60_000 },
   { name: 'live-data', needsMail: false, timeoutMs: 60_000 },
   { name: 'live-reader', needsMail: false, timeoutMs: 70_000 },
+  // Publishes three documents, waits for the background harvest (four surface/mode loads, each drawn
+  // twice when new), then loads 14 pages across ~35 kinds. Measured 42s alone against a dev server.
+  { name: 'mermaid-prerender', needsMail: false, timeoutMs: 130_000 },
   { name: 'mobile', needsMail: false, timeoutMs: 100_000 },
   { name: 'oauth-browser', needsMail: true, timeoutMs: 60_000 },
   { name: 'reading-chrome', needsMail: false, timeoutMs: 90_000 },

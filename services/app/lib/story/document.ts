@@ -30,7 +30,7 @@ import { loadStorySsr } from './ssr.server';
 import type { WebAssetBox } from '@/lib/story/asset-url';
 import { AUTHOR_SCRIPT_TYPE, STORY_HELLO_MESSAGE, STORY_VALUES_HOOK, STORY_ISLAND_ID, STORY_PAINTED_MESSAGE, STORY_ROOT_ID, type StoryIslandData, type StoryIslandDataflow, type StoryViewer } from '@/lib/story-runtime/contract';
 import type { JsxNode } from '@/lib/jsx';
-import { lazyCodeOf } from './lazy-code';
+import { lazyCodeOf, type LazyCode } from './lazy-code';
 import type { RefDataMap } from '@/lib/story/ref-data';
 import { STORY_CHROME_CSS, STORY_COLUMN_CSS, STORY_EMBED_CSS, STORY_TABLE_CSS } from '@/lib/story-runtime/chrome-css';
 import { STORY_BARE_TYPOGRAPHY_CSS } from '@/lib/story-surface/bare-typography';
@@ -40,6 +40,7 @@ import { escapeHtml, renderReaderChrome, type ReaderForkedFrom, type ReaderPerso
 import { getStoryFontCss, storyFontFaceCss, STORY_FONTS_ATTR } from '@/lib/data/story/story-fonts';
 import { documentFontCss } from './document-fonts';
 import type { StoryThemeName } from '@/lib/validation/atlas-schemas';
+import type { MermaidImageLookup } from '@/lib/mermaid-images/store';
 
 export interface StoryDocumentInput {
   source: string;
@@ -240,6 +241,15 @@ export interface StoryDocumentInput {
   bare?: { footerHref: string } | null;
   /** `<link rel="canonical">` — the address search engines should index this copy under. */
   canonical?: string | null;
+  /**
+   * WHICH STORED DIAGRAMS this render may draw from (lib/mermaid-images): the
+   * version and the reader surface it is served on. Set only by the reader
+   * routes; absent — an offline file, a draft, `?mermaid=engine`, a custom
+   * domain — every diagram is drawn by the engine, as it always was.
+   */
+  mermaidImageLookup?: MermaidImageLookup | null;
+  /** The stored drawings already resolved for this render (the prepared page's overlay, lib/story/prepared-page.server). */
+  mermaidImages?: StoryIslandData['mermaidImages'];
 }
 
 /**
@@ -263,8 +273,7 @@ function needsRuntime(nodes: JsxNode[]): boolean {
  * chunk only if it draws a chart, each Mermaid kind's closure only for the
  * kinds it draws — each URL once, in the order it will be needed.
  */
-function runtimePreloads(runtimeSrc: string, body: JsxNode[], input: StoryDocumentInput): string[] {
-  const needs = lazyCodeOf(body);
+function runtimePreloads(runtimeSrc: string, needs: LazyCode, input: StoryDocumentInput): string[] {
   return [...new Set([
     runtimeSrc,
     ...input.runtimeDeps ?? [],
@@ -402,6 +411,8 @@ export async function buildStoryDocument(input: StoryDocumentInput): Promise<str
    * reload would give them.
    */
   const { runtime: prepared, split, helmet, mode, title, docFonts, importedFaces } = await prepareStoryParts(input);
+  // The lazy code this document runs, and the stored diagram drawings it shows instead of running some of it.
+  const needs = split ? lazyCodeOf(split.body, { images: prepared.data.mermaidImages, mode: prepared.data.colorMode }) : null;
   const bodyHtml = split ? loadStorySsr().renderStoryBody(prepared.data) : `<pre>${escapeHtml(source)}</pre>`;
 
   /*
@@ -523,8 +534,12 @@ export async function buildStoryDocument(input: StoryDocumentInput): Promise<str
     // only for documents that hydrate, gets that backwards: the document that
     // gains most is the prose one that ships nothing else.
     ...(anchorSrc ? [anchorSrc] : []),
-    ...(hydrates ? runtimePreloads(runtimeSrc!, split!.body, input) : []),
-  ].map((href) => `<link rel="modulepreload" href="${escapeHtml(href)}" crossorigin>`).join('');
+    ...(hydrates ? runtimePreloads(runtimeSrc!, needs!, input) : []),
+  ].map((href) => `<link rel="modulepreload" href="${escapeHtml(href)}" crossorigin>`).join('')
+    // The first stored diagram's drawing, which is the document's own paint
+    // rather than code: asked for beside the fonts. The rest are found by the
+    // parser in the body, in order.
+    + (needs?.mermaidImages?.[0] ? `<link rel="preload" href="${escapeHtml(needs.mermaidImages[0])}" as="image">` : '');
 
   const island = prepared.data;
   // `<` escaped so no row value can close the script element from inside JSON.
