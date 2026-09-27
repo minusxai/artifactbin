@@ -190,14 +190,8 @@ await p.waitForTimeout(2500);
 check((await marks()) > 0, 'the rebound chart renders — the seeded dataflow already held the other table');
 check(!/data unavailable/.test(await frameText()), 'and never settles on "data unavailable"');
 
-// The editor saves on a debounce; under a loaded CI runner the second save can
-// land after any fixed wait. Poll the stored document until it carries the
-// repoint (or 15 s pass), then assert exactly as before.
-for (const deadline = Date.now() + 15_000; ;) {
-  stored = await api(`/api/artifacts/${start.id}`, {}, token);
-  if (stored.markup.includes('data="$costs"') || Date.now() > deadline) break;
-  await p.waitForTimeout(250);
-}
+await p.waitForTimeout(1200);
+stored = await api(`/api/artifacts/${start.id}`, {}, token);
 check(stored.markup.includes('data="$costs"'), 'the second edit repointed the stored document');
 check(/"mark"\s*:\s*("line"|\{[^}]*"type"\s*:\s*"line")/.test(stored.markup), 'and changed the stored mark');
 check(!stored.markup.includes('data="$sales"'), 'with no trace of the old binding left behind');
