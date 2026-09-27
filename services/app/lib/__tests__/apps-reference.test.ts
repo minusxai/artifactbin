@@ -91,3 +91,44 @@ it('teaches accepted platform membership without custom join tables',()=>{
  expect(text).not.toContain('insert into public.members');
  expect(text).toContain('afbin members');
 });
+
+/**
+ * ONE SESSION AT A TIME, AND A STOP. A server runs two browser sessions in total, and the skill
+ * taught comparing views by opening sessions as yourself, a test user and a guest — three at once, so
+ * the third create was refused. And "fix and push until clean" kept agents re-testing a tracker that
+ * already worked until the turn cap. Each identity is its own session, closed before the next, and a
+ * write seen working once per identity is done.
+ */
+describe('testing identities in live sessions', () => {
+  const live = () => readFileSync(path.resolve(process.cwd(), 'skills/artifactbin/references/live-sessions.md'), 'utf8');
+  const shell = (text: string) => [...text.matchAll(/```sh\n([\s\S]*?)```/g)].map((m) => m[1]!);
+
+  it('never holds two sessions open in a taught command sequence', () => {
+    const example = readFileSync(path.resolve(process.cwd(), 'skills/artifactbin/references/markup-data-example.md'), 'utf8');
+    for (const block of [...shell(reference()), ...shell(example)]) {
+      let open = 0;
+      for (const line of block.split('\n')) {
+        if (/afbin sessions script new\b/.test(line)) open += 1;
+        if (/afbin sessions close\b/.test(line)) open -= 1;
+        expect(open, block).toBeLessThanOrEqual(1);
+      }
+    }
+  });
+
+  it('teaches the sequence, the capacity refusal, and when to stop', () => {
+    const text = live();
+    expect(text).toContain('Hold one session at a time');
+    expect(text).toMatch(/two in total, shared by everyone/);
+    expect(text).toContain('SESSION_CAPACITY');
+    expect(text).not.toMatch(/Compare views by\s+opening sessions as yourself/);
+    expect(text).not.toContain('until both passes are clean');
+    expect(text).toContain('Stop once each `<Mutation>` has worked once per identity');
+  });
+
+  it('carries the same rule on the skill’s first page', () => {
+    const writes = sheet.split('\n').find((b) => b.startsWith('- ') && b.includes('<Mutation>') && /live session/i.test(b))!;
+    expect(writes).toContain('One session at a time');
+    expect(writes).toContain('Stop once each works once per identity');
+    expect(writes).not.toContain('until clean');
+  });
+});

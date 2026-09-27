@@ -198,7 +198,7 @@ booking its booker's. Put the returned id in `src="ref:…"` first.
 
 ## Test it as two people
 
-`book.js` books a slot (give the second person another) and waits for it:
+`book.js` books a slot (a different one per person) and waits:
 
 ```js
 const page = await context.newPage();
@@ -210,12 +210,13 @@ return await page.evaluate(() => mx.read(['mine'], {wait: true}));
 ```
 
 ```sh
-afbin testuser new --json          # twice: two people
+afbin testuser new --json  # twice
 afbin fork <page-id> --as <tu1> --json
 afbin sessions script new --as <tu1> --input book.js --json
+afbin sessions close <session-id> --json
 afbin sessions script new --as <tu2> --input book.js --json
 ```
 
 Both book and cancel on the copy, never the other's booking. On the ORIGINAL,
-`--as guest`, both actions stay disabled.
+`--as guest`, both stay disabled.
 [Live sessions](live-sessions.md).
