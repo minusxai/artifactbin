@@ -70,3 +70,60 @@ test('--as names a viewer afbin can browse as, only where it can be chosen', () 
     assert.throws(() => parseCommand(args), Error, args.join(' '));
   }
 });
+
+/**
+ * THE RECOVERY LINE NAMES ONLY A SESSION THAT EXISTS. It used to be printed before the create was
+ * sent, so a create refused for capacity still said "Recover with: afbin sessions status <id>", and
+ * that id answered SESSION_NOT_FOUND. It is printed once the server has accepted the execution —
+ * still before polling, which is what recovery after a disconnect needs.
+ */
+test('a create refused for capacity prints no recovery id and returns the refusal to act on', async () => {
+  const h = await cliHarness('afbin-session-capacity-');
+  try {
+    await writeFile(join(h.root, 'actions.js'), 'return 1;');
+    const message = 'This server runs at most 2 browser sessions at once and all are open. Your open sessions: s-1. Close one you are done with (afbin sessions close s-1), then create the new session again.';
+    const code = await h.invoke(['sessions', 'script', 'new', '--input', 'actions.js', '--json'], () =>
+      Response.json({ session_id: '', status: 'failed', pages: [], attachments: [], error: { code: 'SESSION_CAPACITY', message } }));
+    assert.notEqual(code, 0);
+    assert.equal(h.last().error.code, 'SESSION_CAPACITY');
+    assert.equal(h.last().error.message, message);
+    assert.doesNotMatch(h.err.join(''), /Recover with/);
+  } finally { await h.cleanup(); }
+});
+
+test('an accepted create prints its session and execution ids before polling', async () => {
+  const h = await cliHarness('afbin-session-recover-');
+  try {
+    await writeFile(join(h.root, 'actions.js'), 'return 1;');
+    let ids: { session_id: string; execution_id: string } | undefined;
+    let printedBeforePoll = false;
+    const code = await h.invoke(['sessions', 'script', 'new', '--input', 'actions.js', '--json'], call => {
+      const body = call.body as Record<string, unknown>;
+      if (body.op === 'script') {
+        ids = { session_id: String(body.session_id), execution_id: String(body.execution_id) };
+        return Response.json({ ...ids, status: 'queued', pages: [], attachments: [] });
+      }
+      printedBeforePoll = h.err.join('').includes(`Recover with: afbin sessions status ${ids!.session_id} --execution ${ids!.execution_id}`);
+      return Response.json({ ...ids, status: 'completed', result: 1, pages: [], attachments: [] });
+    });
+    assert.equal(code, 0, JSON.stringify(h.last()));
+    assert.ok(printedBeforePoll, h.err.join(''));
+  } finally { await h.cleanup(); }
+});
+
+test('a create whose answer was lost says the session may exist and how to check', async () => {
+  const h = await cliHarness('afbin-session-uncertain-');
+  try {
+    await writeFile(join(h.root, 'actions.js'), 'return 1;');
+    let ids: { session_id: string; execution_id: string } | undefined;
+    const code = await h.invoke(['sessions', 'script', 'new', '--input', 'actions.js', '--json'], call => {
+      const body = call.body as Record<string, unknown>;
+      ids = { session_id: String(body.session_id), execution_id: String(body.execution_id) };
+      throw new TypeError('fetch failed');
+    });
+    assert.notEqual(code, 0);
+    const printed = h.err.join('');
+    assert.match(printed, /may have started/);
+    assert.ok(printed.includes(`afbin sessions status ${ids!.session_id} --execution ${ids!.execution_id}`), printed);
+  } finally { await h.cleanup(); }
+});
