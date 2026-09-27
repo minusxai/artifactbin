@@ -15,6 +15,7 @@ import { mintExportKey } from '@/lib/export-key';
 import { storyBodyFor } from '@/lib/story/body';
 import { getArtifactById } from '@/lib/artifacts';
 import { servedRow } from '@/lib/archived-version';
+import { warmPreparedPage } from '@/lib/story/prepared-page.server';
 import { MERMAID_RENDER_ENGINE, mermaidPrerenderable } from './engine';
 import { mermaidCodesOf } from './codes';
 import { sanitizeMermaidSvg } from './sanitize';
@@ -150,6 +151,12 @@ export async function runNextMermaidHarvest(): Promise<boolean> {
   try {
     const images = await harvestVersion(claimed.artifact_id, claimed.version);
     await settle(images === null ? 'superseded' : 'done', images);
+    // The version's prepared reader page (lib/story/prepared-page.server) holds a render made
+    // before these drawings existed: drop it, and prepare the head again with them.
+    if (images?.inline && Object.keys(images.inline).length) {
+      await db.query("DELETE FROM prepared_pages WHERE artifact_id=$1 AND slot='head'", [claimed.artifact_id]);
+      warmPreparedPage(claimed.artifact_id);
+    }
   } catch (error) {
     // No browser to harvest with is not this version's failure: it waits, uncounted, for one.
     const unavailable = error instanceof HarvestUnavailable;

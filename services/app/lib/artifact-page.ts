@@ -37,6 +37,8 @@ import { accountWorkspaceFor } from '@/lib/workspace';
 import { canAnnotate, canEdit } from '@/lib/share-roles';
 import type { StoryThemeName } from '@/lib/validation/atlas-schemas';
 import { preparedPageFor, servedPage } from '@/lib/story/prepared-page.server';
+import { captureColor, engineRequested } from '@/lib/mermaid-images/store';
+import { lazyCodeOf } from '@/lib/story/lazy-code';
 import { firstHeadingTitle } from '@/lib/story/title';
 import { isStartPlaceholder } from '@/lib/start-placeholder';
 import type { LazyCode } from '@/lib/story/lazy-code';
@@ -170,13 +172,18 @@ export async function artifactPageAnswer(request: Request, id: string): Promise<
     columns?: Array<{ name: string; type?: string }>; template?: string | null; refs?: Array<{ id: string; kind: string }>;
     cssCompileVersion?: string | null;
   };
-  const design = resolveStoredStoryDesign(meta.theme, meta.colorMode);
+  // A CAPTURE may be drawn in either mode (lib/mermaid-images harvests both); a reader sees the author's.
+  const capturedColor = exporting ? captureColor(request.url) : null;
+  const design = resolveStoredStoryDesign(meta.theme, capturedColor ?? meta.colorMode);
   // A document's sheet is its prepared page's; the data tiers keep their stored one.
   const compiledCss = isDoc ? null : meta.compiledCss ?? null;
   const [served, [author, forkedFrom, liked, likeCount, following, followCount, openAnnotations, dataPreview]] = await Promise.all([
     // What only this request decides, over the stored version.
     prepared ? servedPage(prepared.row, prepared.page, {
       at, search: new URL(request.url).search, origin: baseUrl(request),
+      // This version's stored diagram drawings, unless the engine was asked for by name (`?mermaid=engine`).
+      drawings: engineRequested(request.url) ? 'engine' : 'stored',
+      colorMode: capturedColor,
       viewer: { userId: actor.viewer?.userId ?? null, tokenId: actor.tokenId ?? null, email: actor.viewer?.email ?? null },
     }) : Promise.resolve(null),
     social,
@@ -253,7 +260,11 @@ export async function artifactPageAnswer(request: Request, id: string): Promise<
     status: 200, body,
     ...(served && prepared ? { story: {
       html: served.storyHtml, title: served.runtime.title, fontPreloads: served.runtime.fontPreloads ?? [],
-      lazyCode: prepared.page.lazyCode, starter,
+      // A diagram drawn from its stored SVG runs no engine: its kind's code is not preloaded.
+      lazyCode: served.runtime.data.mermaidImages
+        ? lazyCodeOf(prepared.page.data.nodes, { images: served.runtime.data.mermaidImages, mode: served.runtime.data.colorMode })
+        : prepared.page.lazyCode,
+      starter,
     } } : {}),
   };
 }

@@ -14,6 +14,7 @@ import { PUT as replaceRoute } from '@/app/api/artifacts/[id]/route';
 import { GET as serveArtifact } from '@/app/a/[id]/raw/route';
 import { GET as pageData } from '@/app/api/page/artifact/[id]/route';
 import { GET as mermaidAsset } from '@/app/assets/mermaid/[file]/route';
+import { artifactPageAnswer } from '@/lib/artifact-page';
 import { getArtifactById } from '@/lib/artifacts';
 import { getDb } from '@/lib/db';
 import { mintToken } from '@/lib/tokens';
@@ -135,6 +136,32 @@ describe('a published Mermaid document', () => {
     const engine = await raw(id, '?mermaid=engine');
     expect(island(engine).mermaidImages).toBeUndefined();
     expect(head(engine)).toMatch(/mermaid-render-/);
+  });
+
+  it('a harvest that lands after the reader page was prepared is served on the next read, and its preloads drop the engine', async () => {
+    setServices({ browser: drawingBrowser([FLOW]).browser });
+    const { id } = await publish([FLOW]);
+    // The app's reader page is prepared (and stored) before any drawing exists.
+    const first = await artifactPageAnswer(request(`/a/${id}`, { headers: { accept: 'text/html' } }), id);
+    expect(first.status).toBe(200);
+    expect((first.body as { surface: { runtime: { data: Record<string, unknown> } } }).surface.runtime.data.mermaidImages).toBeUndefined();
+    expect(first.story?.lazyCode.mermaid).toEqual(['flowchart']);
+    const db = await getDb();
+    expect(Number((await db.query<{ n: string }>('SELECT count(*) AS n FROM prepared_pages WHERE artifact_id=$1', [id])).rows[0].n)).toBe(1);
+
+    expect(await runNextMermaidHarvest()).toBe(true);
+    const next = await artifactPageAnswer(request(`/a/${id}`, { headers: { accept: 'text/html' } }), id);
+    const images = (next.body as { surface: { runtime: { data: { mermaidImages?: Record<string, { src: string; palette: string }> } } } }).surface.runtime.data.mermaidImages;
+    const stored = images?.[mermaidImageKey(FLOW, 'light')];
+    expect(stored?.palette).toBe(PALETTE.inline);
+    // The served story itself carries the stored drawing, and the page names no engine code for it.
+    expect(next.story!.html()).toContain(`src="${stored!.src}"`);
+    expect(next.story!.lazyCode.mermaid).toEqual([]);
+    expect(next.story!.lazyCode.mermaidImages).toEqual([stored!.src]);
+    // Asked for by name, the engine draws as before.
+    const engine = await artifactPageAnswer(request(`/a/${id}?mermaid=engine`, { headers: { accept: 'text/html' } }), id);
+    expect((engine.body as { surface: { runtime: { data: Record<string, unknown> } } }).surface.runtime.data.mermaidImages).toBeUndefined();
+    expect(engine.story!.html()).not.toContain('/assets/mermaid/');
   });
 
   it('shares stored drawings across documents that draw the same thing, and verifies only what is new', async () => {

@@ -247,7 +247,9 @@ export interface StoryDocumentInput {
    * routes; absent — an offline file, a draft, `?mermaid=engine`, a custom
    * domain — every diagram is drawn by the engine, as it always was.
    */
-  mermaidImages?: MermaidImageLookup | null;
+  mermaidImageLookup?: MermaidImageLookup | null;
+  /** The stored drawings already resolved for this render (the prepared page's overlay, lib/story/prepared-page.server). */
+  mermaidImages?: StoryIslandData['mermaidImages'];
 }
 
 /**

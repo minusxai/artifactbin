@@ -19,7 +19,7 @@ export async function prepareStoryRuntime(input: StoryDocumentInput): Promise<Pr
 }
 
 /** The island's reader half: what a request, not the document, decides. */
-export type ReaderIslandInput = Pick<StoryDocumentInput, 'refData' | 'dataflow' | 'viewer' | 'queryUrl' | 'mutateUrl' | 'mentionStatuses' | 'assetsUrl' | 'managedAssets' | 'readOnly'>;
+export type ReaderIslandInput = Pick<StoryDocumentInput, 'refData' | 'dataflow' | 'viewer' | 'queryUrl' | 'mutateUrl' | 'mentionStatuses' | 'assetsUrl' | 'managedAssets' | 'readOnly' | 'mermaidImages'>;
 
 /**
  * The island fields a REQUEST decides (who reads, their `$` values and what
@@ -43,6 +43,9 @@ export function readerIslandData(input: ReaderIslandInput): Omit<StoryIslandData
     ...(input.managedAssets ? { managedAssets: input.managedAssets } : {}),
     // A SNAPSHOT render refuses every write by name (StoryIslandData.readOnly).
     ...(input.readOnly ? { readOnly: input.readOnly } : {}),
+    // The version's prerendered diagrams (lib/mermaid-images). A REQUEST's, not the version's: a
+    // harvest lands after the page was prepared, and `?mermaid=engine` asks for none.
+    ...(input.mermaidImages && Object.keys(input.mermaidImages).length ? { mermaidImages: input.mermaidImages } : {}),
   };
 }
 
@@ -55,14 +58,13 @@ export async function prepareStoryParts(input: StoryDocumentInput) {
   const title = helmet.title?.trim() || input.title || 'artifact';
   const glyphs = split ? loadStorySsr().glyphsForNodes(split.body) : {};
   // The version's prerendered diagrams, when the route asked for them (never an offline file or a draft).
-  const mermaidImages = split && input.mermaidImages ? await mermaidImagesFor(input.mermaidImages, split.body) : {};
+  const mermaidImages = input.mermaidImages ?? (split && input.mermaidImageLookup ? await mermaidImagesFor(input.mermaidImageLookup, split.body) : undefined);
   const docFonts = documentFonts(helmet);
   const importedFaces = docFonts.families.length ? await webFontAssets(docFonts.families) : [];
   const data: StoryIslandData = {
     nodes: split?.body ?? [], colorMode: mode, template: input.template ?? null, chrome,
     ...(Object.keys(glyphs).length ? { glyphs } : {}),
-    ...(Object.keys(mermaidImages).length ? { mermaidImages } : {}),
-    ...readerIslandData(input),
+    ...readerIslandData({ ...input, mermaidImages }),
   };
   const baseRecipe: StoryBaseCssRecipe = { chrome, theme: input.theme ?? null, faces: importedFaces, fonts: docFonts };
   const baseCss = storyBaseCss(baseRecipe);
