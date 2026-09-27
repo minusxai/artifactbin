@@ -299,7 +299,7 @@ async function runMermaidPreload() {
     // and names none, so there is nothing to assert there.
     const appHead = (await (await fetch(`${B}/a/${st.id}`, { headers: { accept: 'text/html' } })).text()).split('</head>')[0];
     if (/<link rel="modulepreload" href="\/assets\//.test(appHead)) {
-      check(/modulepreload href="\/assets\/mermaid-render-[\w-]+\.js"/.test(appHead), `${kind}: the reader page preloads the Mermaid engine`);
+      check(/rel="modulepreload" href="\/assets\/mermaid-render-[\w-]+\.js"/.test(appHead), `${kind}: the reader page preloads the Mermaid engine`);
       check(/\/assets\/elk-[\w-]+\.js/.test(appHead) === (kind === 'flowchart'), `${kind}: the reader page preloads elk exactly when the kind draws with it`);
       const app = await browser.newPage({ viewport: { width: 1200, height: 900 } });
       const appWarnings = [];
