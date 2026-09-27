@@ -226,8 +226,13 @@ async function runPreload() {
   const prose = await startDocument(B);
   await publish(prose.id, prose.token, PROSE, 'preload gate prose');
   const proseHead = (await (await fetch(`${B}/a/${prose.id}/raw`)).text()).split('</head>')[0];
-  check(!/modulepreload href="\/story\/chunks\//.test(proseHead) && !proseHead.includes('/story/chunks/'),
-    'a prose document does not preload the chart chunk');
+  // It hydrates (it declares data), so the entry's own static chunks are
+  // preloaded with the entry — but nothing only the chart module needs.
+  const manifest = await (await fetch(`${B}/story/manifest.json`)).json();
+  const chartOnly = manifest.lazy.flatMap((chunk) => [chunk, ...(manifest.lazyDeps?.[chunk] ?? [])])
+    .filter((url) => !(manifest.entryDeps ?? []).includes(url));
+  check(chartOnly.length > 0 && chartOnly.every((url) => !proseHead.includes(url)),
+    `a prose document does not preload the chart chunk or its own dependencies (${chartOnly.filter((url) => proseHead.includes(url)).join(' ') || 'none'})`);
 
   await page.close();
 }
@@ -248,9 +253,71 @@ async function runCaching() {
   }
 }
 
+/**
+ * A Mermaid document names exactly the code its diagram kind loads — the
+ * engine, the diagram's module, its layout engine — and every one is used.
+ *
+ * Mermaid discovers that code in a chain (engine → detect → diagram module →
+ * layout engine), so without the names a flowchart's elk layout starts four
+ * round trips after the document. Mermaid 12 lays flowcharts out with elk BY
+ * DEFAULT, so a flowchart's closure includes elk; a sequence diagram's must not.
+ */
+const FLOWCHART = '<div data-design="tw" className="p-10"><Mermaid title="Pipeline" code={"flowchart LR\\n  a[Request] --> b[Render]\\n  b --> c[Read]"} /></div>';
+const SEQUENCE = '<div data-design="tw" className="p-10"><Mermaid title="Hello" code={"sequenceDiagram\\n  A->>B: hi\\n  B-->>A: back"} /></div>';
+async function runMermaidPreload() {
+  const manifest = await (await fetch(`${B}/story/manifest.json`)).json();
+  for (const [kind, markup] of [['flowchart', FLOWCHART], ['sequence', SEQUENCE]]) {
+    const st = await startDocument(B);
+    await publish(st.id, st.token, markup, `mermaid preload ${kind}`);
+
+    // The served document: its head names the kind's closure, and the browser fetches nothing else.
+    const page = await browser.newPage({ viewport: { width: 1200, height: 900 } });
+    const scripts = [];
+    const warnings = [];
+    page.on('request', (r) => { if (r.resourceType() === 'script') scripts.push(new URL(r.url()).pathname); });
+    page.on('console', (m) => { if (/preloaded .* not used/i.test(m.text())) warnings.push(m.text()); });
+    await page.goto(`${B}/a/${st.id}/raw`, { waitUntil: 'domcontentloaded', timeout: 90000 });
+    check(await waitFor(page, `!!document.querySelector('[data-mx-mermaid-state=ready]')`, 30000), `${kind}: the diagram draws in the served document`);
+    const preloads = await page.evaluate(() => [...document.querySelectorAll('link[rel=modulepreload]')].map((l) => new URL(l.href).pathname));
+    const closure = manifest.mermaid?.[kind] ?? [];
+    check(closure.length > 0 && closure.every((url) => preloads.includes(url)), `${kind}: the head names the kind's whole closure (${closure.length} chunks)`);
+    const missed = [...new Set(scripts)].filter((url) => !preloads.includes(url));
+    check(missed.length === 0, `${kind}: every script the document runs was preloaded (${missed.join(' ') || 'all'})`);
+    const unused = preloads.filter((url) => !scripts.includes(url));
+    check(unused.length === 0, `${kind}: every preload is used (${unused.join(' ') || 'all'})`);
+    const elk = scripts.some((url) => /\/elk-[\w-]+\.js$/.test(url));
+    check(elk === (kind === 'flowchart'), `${kind}: elk is fetched exactly when the kind draws with it (${elk})`);
+    const other = manifest.mermaid?.[kind === 'flowchart' ? 'sequence' : 'flowchart'] ?? [];
+    const foreign = other.filter((url) => !closure.includes(url) && preloads.includes(url));
+    check(foreign.length === 0, `${kind}: no other kind's chunks are named (${foreign.join(' ') || 'none'})`);
+    await page.waitForTimeout(3500);
+    check(warnings.length === 0, `${kind}: no preload goes unused (${warnings[0] ?? 'clean'})`);
+    await page.close();
+
+    // The app's reader page: from a production build (a Vite manifest), the
+    // same kind's chunks are named in its head. A dev server has no manifest
+    // and names none, so there is nothing to assert there.
+    const appHead = (await (await fetch(`${B}/a/${st.id}`, { headers: { accept: 'text/html' } })).text()).split('</head>')[0];
+    if (/<link rel="modulepreload" href="\/assets\//.test(appHead)) {
+      check(/modulepreload href="\/assets\/mermaid-render-[\w-]+\.js"/.test(appHead), `${kind}: the reader page preloads the Mermaid engine`);
+      check(/\/assets\/elk-[\w-]+\.js/.test(appHead) === (kind === 'flowchart'), `${kind}: the reader page preloads elk exactly when the kind draws with it`);
+      const app = await browser.newPage({ viewport: { width: 1200, height: 900 } });
+      const appWarnings = [];
+      app.on('console', (m) => { if (/preloaded .* not used/i.test(m.text())) appWarnings.push(m.text()); });
+      await githubWidgetFixture(app.context());
+      await app.goto(`${B}/a/${st.id}`, { waitUntil: 'domcontentloaded', timeout: 90000 });
+      check(await waitFor(app, `!!document.querySelector('[data-mx-mermaid-state=ready]')`, 30000), `${kind}: the diagram draws on the reader page`);
+      await app.waitForTimeout(3500);
+      check(appWarnings.length === 0, `${kind}: no reader-page preload goes unused (${appWarnings[0] ?? 'clean'})`);
+      await app.close();
+    }
+  }
+}
+
 try {
   await runNoRepaint();
   await runPreload();
+  await runMermaidPreload();
   await runCaching();
 } finally {
   await browser.close();

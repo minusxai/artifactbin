@@ -102,7 +102,8 @@ it('names the listing page only from what the server inlined', () => {
  * three imports later. Never for a document that will not run it.
  */
 const MERMAID = '../../../node_modules/mermaid/dist/chunks/mermaid.core';
-function documentFixture(modules: unknown = { kinds: { flowchart: ['flowDiagram-K.mjs', 'elk-E.mjs'], sequence: ['sequenceDiagram-S.mjs'] } }) {
+const M = 'mermaid/dist/chunks/mermaid.core';
+function documentFixture(modules: unknown = { kinds: { flowchart: [`${M}/flowDiagram-K.mjs`, `${M}/elk-E.mjs`], sequence: [`${M}/sequenceDiagram-S.mjs`] } }) {
   const dir = fixture({
     '../components/viz/VegaChart.tsx': { file: 'assets/VegaChart-abc.js', src: '../components/viz/VegaChart.tsx', isDynamicEntry: true, imports: ['_d3.js', 'shared'] },
     '_d3.js': { file: 'assets/d3-abc.js' },

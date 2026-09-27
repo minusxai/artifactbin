@@ -50,6 +50,14 @@ describe('each Mermaid kind carries only what it loads', () => {
     for (const kind of ['flowchart', 'flowchart-elk', 'sequence', 'class', 'state', 'gantt', 'er', 'mindmap']) expect(langium, kind).not.toContain(kind);
   });
 
+  it('a Langium kind names the grammar module the parser imports for it, not only the parser', () => {
+    // The parser loads each grammar with its own `import()` (pie-*.js,
+    // architecture-*.js): missing from the closure, it is one more round trip.
+    expect(mermaid.pie).toEqual(expect.arrayContaining([expect.stringMatching(/\/pie-[A-Z0-9]+-[A-Z0-9]+\.js$/)]));
+    expect(mermaid.architecture).toEqual(expect.arrayContaining([expect.stringMatching(/\/architecture-[A-Z0-9]+-[A-Z0-9]+\.js$/)]));
+    expect(mermaid.flowchart.some((url) => /\/pie-[A-Z0-9]+-[A-Z0-9]+\.js$/.test(url))).toBe(false);
+  });
+
   it('a flowchart carries elk and neither cytoscape nor the Langium parser', () => {
     expect(carries('flowchart', 'elkjs')).toBe(true);
     expect(carries('flowchart', 'cytoscape')).toBe(false);

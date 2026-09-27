@@ -197,8 +197,8 @@ const lazyDeps = Object.fromEntries(lazyChunks.map((c) => [c.url, staticClosure(
 /*
  * MERMAID, PER DIAGRAM KIND. The engine (components/kit/mermaid-render) is one
  * `import()`; inside it Mermaid detects the kind and `import()`s that diagram's
- * module, which in turn `import()`s its layout engine — three discoveries in a
- * row before a flowchart can draw. The kinds are the kit's
+ * module, which in turn `import()`s its layout engine (or its Langium grammar)
+ * — three discoveries in a row before a flowchart can draw. The kinds are the kit's
  * (lib/story-ui/mermaid-source, read here from the TypeScript so there is one
  * table); which module each kind and layout loads is read from the installed
  * Mermaid (scripts/story-runtime-graph.mjs); the chunks are this build's.
@@ -208,9 +208,15 @@ const kindsBundle = await esbuild.build({
   bundle: true, write: false, format: 'esm', platform: 'node', logLevel: 'silent',
 });
 const { MERMAID_DIAGRAMS } = await import(`data:text/javascript;base64,${Buffer.from(kindsBundle.outputFiles[0].text).toString('base64')}`);
+/** The file this build bundled for a package module, e.g. `mermaid/dist/mermaid.core.mjs`. */
+const bundled = (module) => {
+  const input = Object.keys(browser.metafile.inputs).find((key) => key.endsWith(`node_modules/${module}`));
+  if (!input) throw new Error(`build-story-runtime: ${module} is not in the runtime's graph`);
+  return path.join(root, input);
+};
 const mermaidModules = mermaidKindModules(
   MERMAID_DIAGRAMS,
-  mermaidDispatch(path.dirname(createRequire(path.join(root, 'package.json')).resolve('mermaid'))),
+  mermaidDispatch(bundled('mermaid/dist/mermaid.core.mjs'), bundled('@mermaid-js/parser/dist/mermaid-parser.core.mjs')),
 );
 const mermaidEngine = dynamicChunks.find((c) => c.from.some((f) => f.endsWith('components/kit/mermaid-render.ts')));
 if (!mermaidEngine) throw new Error('build-story-runtime: no Mermaid engine chunk among the entry\'s dynamic imports');
@@ -218,7 +224,7 @@ const engineClosure = staticClosure(outputs, mermaidEngine.key);
 const mermaid = Object.fromEntries(Object.entries(mermaidModules).map(([kind, modules]) => {
   const keys = new Set(engineClosure);
   for (const module of modules) {
-    const key = outputFor(outputs, (entry) => entry.endsWith(`/mermaid/dist/chunks/mermaid.core/${module}`));
+    const key = outputFor(outputs, (entry) => entry.endsWith(`/node_modules/${module}`));
     for (const dep of staticClosure(outputs, key)) keys.add(dep);
   }
   return [kind, [...keys].map(storyUrl)];

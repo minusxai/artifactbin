@@ -98,8 +98,6 @@ interface DocumentHints { chart: Hint[]; mermaid: Record<string, Hint[]> }
 
 const CHART_MODULE = 'components/viz/VegaChart.tsx';
 const MERMAID_ENGINE = 'components/kit/mermaid-render.ts';
-/** Where Mermaid's own diagram and layout modules sit, as a Vite manifest key ends. */
-const MERMAID_MODULES = '/node_modules/mermaid/dist/chunks/mermaid.core/';
 
 /**
  * The Mermaid modules each diagram kind loads, recorded by the runtime build
@@ -120,7 +118,8 @@ function readDocumentHints(webDir: string, mermaidModulesFile: string): Document
   const engine = keyFor('/' + MERMAID_ENGINE);
   const mermaid: Record<string, Hint[]> = {};
   for (const [kind, modules] of Object.entries(kinds)) {
-    const moduleKeys = Array.isArray(modules) ? modules.map(module => keyFor(MERMAID_MODULES + module)) : [];
+    // Recorded by their path below node_modules/, which is how a Vite manifest key ends too.
+    const moduleKeys = Array.isArray(modules) ? modules.map(module => keyFor('/node_modules/' + module)) : [];
     // All or nothing: a kind whose modules this build cannot place is left to
     // load by discovery rather than preloaded in part.
     if (!engine || !moduleKeys.length || moduleKeys.some(key => !key)) continue;
