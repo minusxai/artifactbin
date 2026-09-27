@@ -283,7 +283,8 @@ export async function servedPage(row: ArtifactRow, page: PreparedPage, reader: R
   const runtime = servedOf(page, input);
   return {
     runtime,
-    storyHtml: () => (page.ssr && page.ssr.overlay === overlayDigest(input) ? page.ssr.html : renderStory(page, input)),
+    // An overlay carrying results can never be the stored one's: render it, and hash nothing the size of its rows.
+    storyHtml: () => (!results && page.ssr && page.ssr.overlay === overlayDigest(input) ? page.ssr.html : renderStory(page, input)),
   };
 }
 

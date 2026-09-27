@@ -43,10 +43,13 @@ import type { ServedResults } from '@/lib/story-runtime/contract';
 
 /**
  * How long a page's HTML may wait for its first results. Measured on the
- * page-speed dashboard fixture (three queries over a 144-row stored dataset):
- * the run answers in single-digit milliseconds warm and tens cold, and a
- * connected database that answers from `dataset_result_cache` is a lookup.
- * Past this, a query's rows cost the reader more in TTFB than they save.
+ * page-speed dashboard fixture (three queries over a 144-row stored dataset,
+ * dev server, worker-pool SQLite): the same run through `POST /a/<id>/query`
+ * answers in 8 ms p50 / 10–12 ms p95 warm, and ~160 ms on the first request
+ * after a restart (cold engine and dataset). The budget covers that cold run
+ * and stays far below what the page's own path costs the reader (the query
+ * round trip after hydration, or the SQLite wasm and the dataset download);
+ * a run that needs longer is left to the page, as before.
  */
 export const SERVED_RESULTS_BUDGET_MS = 250;
 

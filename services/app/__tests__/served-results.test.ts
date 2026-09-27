@@ -22,6 +22,7 @@ import { POST as queryRoute } from '@/app/a/[id]/query/route';
 import { mintToken } from '@/lib/tokens';
 import { claimToken, createUser, ensureUsername } from '@/lib/users';
 import { setDatasetPolicy } from '@/lib/datasets/policy';
+import { defaultDatasetGrants } from '@artifactbin/utils';
 import { createAppServer, BOOTSTRAP_ID } from '@/server/app';
 import { drainPreparedPageWarmups } from '@/lib/story/prepared-page.server';
 import { services, setServices } from '@/lib/services';
@@ -175,11 +176,35 @@ describe('who may see which rows', () => {
     expect(guest.tables.me).toMatchObject({ rows: [{ who: 'guest' }] });
   });
 
+  it('answers the write checks the route answers beside its rows, anonymous and as the owner', async () => {
+    const who = await owner();
+    const made = await createArtifactRoute(request('/api/artifacts', { method: 'POST', token: who.token, json: { dataset: [{ n: 1 }], access: 'readwrite' } }));
+    expect(made.status).toBe(201);
+    const ds = ((await made.json()) as { id: string }).id;
+    await setDatasetPolicy({ userId: who.user.id, tokenId: who.tokenId }, ds, defaultDatasetGrants(), 0);
+    const id = await publish(who.token, { markup: `<Helmet><Import name="d" src="ref:${ds}" /><Query name="rows">{\`select count(*) as n from d.rows\`}</Query><Mutation name="add">{\`insert into d.rows values (2)\`}</Mutation></Helmet><p><Number data="$rows" col="n" /></p><Button run="$add">Add</Button>` });
+    await drainPreparedPageWarmups();
+    const seen: Array<Record<string, string | null> | undefined> = [];
+    for (const who2 of [null, { id: who.user.id, email: who.user.email ?? '' }]) {
+      asSession(who2);
+      const results = servedOf(await pageJson(id))!;
+      const answer = await routeAnswer(id);
+      expect(answer.mutationAccess).toBeDefined();
+      expect(results.mutationAccess).toEqual(answer.mutationAccess);
+      expect(results.tables).toEqual(answer.tables);
+      seen.push(results.mutationAccess);
+    }
+    // The two viewers are answered differently, so the parity above compares something.
+    expect(seen[0]).not.toEqual(seen[1]);
+  });
+
   it('serves nothing on a render the query route would not answer for this viewer: an archived version', async () => {
     const { id, user, token, sales } = await dashboard();
     const edited = await putArtifactRoute(await observedRequest(`/api/artifacts/${id}`, { method: 'PUT', token, json: { markup: fixture('dashboard.jsx').replace('Sales dashboard', 'Sales board').replaceAll('{{sales}}', sales) } }), params(id));
     expect(edited.status, await edited.clone().text()).toBe(200);
     asSession({ id: user.id, email: user.email ?? '' });
+    // The head, for the same viewer, does carry them.
+    expect(servedOf(await pageJson(id))!.tables).toHaveProperty('monthly');
     const archived = await pageJson(id, '?version=1');
     expect(archived.archived).toMatchObject({ version: 1 });
     expect(servedOf(archived)).toBeUndefined();
