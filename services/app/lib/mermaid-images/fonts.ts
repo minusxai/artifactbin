@@ -221,7 +221,9 @@ export async function embedMermaidFonts(svg: string, faces: MermaidFaces): Promi
     // The label face is the one Mermaid sets on the drawing's root (`#<id>{font-family:…}`); a kind
     // that sets none (wardley) leaves its text to each machine's default face.
     const id = /\bid="([\w-]+)"/.exec(open[0])?.[1];
-    const root = id ? new RegExp(`#${id}\\{font-family:\\s*"?${faces.label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`).test(svg) : false;
+    const rule = id ? `#${id}{font-family:` : null;
+    const at = rule ? svg.indexOf(rule) : -1;
+    const root = at >= 0 && decode(svg.slice(at + rule!.length, at + rule!.length + 200)).split(/[,;}]/)[0]!.trim().replace(/^["']|["']$/g, '') === faces.label;
     if (!MERMAID_BUNDLED_FAMILIES.has(faces.label) || !root) return null;
     want(faces.label, labelText, weightsOf(svg));
   }
