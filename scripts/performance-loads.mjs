@@ -37,6 +37,7 @@ import { startMailSink } from './lib/mail-login.mjs';
 import { becomeAccountOwner, publishAs } from './lib/start-doc.mjs';
 import { publishPageSpeedFixtures } from './fixtures/page-speed/index.mjs';
 import { LAB_THROTTLE, measureDocumentViews, summarizeDocumentViews, waitForStoredDiagrams } from './lib/document-views.mjs';
+import { launchStoredDrawingReader } from './lib/mermaid-reader.mjs';
 
 assert.equal(process.env.CI, 'true', 'Production builds and browser benchmarks run in CI only');
 const root = path.resolve(process.argv[2]), output = path.resolve(process.argv[3]);
@@ -77,7 +78,9 @@ try {
     assert(attempt < 120 && child.exitCode === null, 'server failed to boot');
     await new Promise(resolve => setTimeout(resolve, 500));
   }
-  browser = await chromium.launch({ headless: true, args: ['--no-sandbox'] });
+  // As the reader stored Mermaid drawings are made for (scripts/lib/mermaid-reader): Blink on macOS
+  // or Windows. A Linux reader is served the engine's page instead, so the lab measures the majority.
+  browser = await launchStoredDrawingReader(chromium, { headless: true, args: ['--no-sandbox'] });
   const context = await browser.newContext({ viewport: { width: 1440, height: 1000 } });
   // Do not send fixture telemetry to any provider. CDP blocking preserves the
   // browser HTTP cache (Playwright route interception would disable it).

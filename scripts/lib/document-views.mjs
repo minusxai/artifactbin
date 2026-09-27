@@ -29,6 +29,7 @@
  *                   (after takeover on view), plus two animation frames
  *   scriptMs      — main-thread script execution (CDP ScriptDuration) for the tab
  */
+import { STORED_DRAWING_READER } from './mermaid-reader.mjs';
 
 /** Installed before any page script; records paint entries and DOM milestones. */
 export function documentViewProbe() {
@@ -123,14 +124,15 @@ export async function measureDocumentView(context, url, { route, painted, thrott
  * reader meets, so it waits — bounded — until each diagram fixture's served
  * document carries its stored drawings. A build that does not (the base, before
  * that change) never does, and the wait simply runs out. Answers the fixture
- * keys that were seen stored.
+ * keys that were seen stored. It asks as the reader stored drawings are
+ * served to (scripts/lib/mermaid-reader), the one the lab's browser stands in for.
  */
 export async function waitForStoredDiagrams(base, fixtures, { timeoutMs = 60_000, pollMs = 1000, fetchImpl = fetch } = {}) {
   const pending = new Map(fixtures.filter(f => f.painted?.diagrams).map(f => [f.key, f.id]));
   const seen = [];
   for (const end = Date.now() + timeoutMs; pending.size && Date.now() < end;) {
     for (const [key, id] of [...pending]) {
-      const html = await (await fetchImpl(`${base}/a/${id}/raw`)).text();
+      const html = await (await fetchImpl(`${base}/a/${id}/raw`, { headers: { 'user-agent': STORED_DRAWING_READER.userAgent } })).text();
       if (html.includes('"mermaidImages"')) { pending.delete(key); seen.push(key); }
     }
     if (pending.size) await new Promise(resolve => setTimeout(resolve, pollMs));

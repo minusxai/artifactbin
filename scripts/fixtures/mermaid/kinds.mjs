@@ -25,7 +25,7 @@ export const MERMAID_KIND_SAMPLES = [
   { kind: 'block', code: 'block-beta\n  columns 2\n  a b\n  c d', stored: true },
   { kind: 'packet', code: 'packet-beta\n  0-15: "Source Port"\n  16-31: "Destination Port"', stored: true },
   { kind: 'kanban', code: 'kanban\n  Todo\n    [Write]\n  Done\n    [Ship]', stored: true },
-  { kind: 'c4', code: 'C4Context\n  title System\n  Person(p, "User")\n  System(s, "App")\n  Rel(p, s, "Uses")', stored: true },
+  { kind: 'c4', code: 'C4Context\n  title System\n  Person(p, "User")\n  System(s, "App")\n  Rel(p, s, "Uses")', stored: false, why: 'excluded by kind: it draws in its own font stack ("Open Sans", sans-serif), a system face each machine resolves and measures differently' },
   { kind: 'radar', code: 'radar-beta\n  axis a, b, c\n  curve x{1, 2, 3}', stored: true },
   { kind: 'treemap', code: 'treemap-beta\n  "Root"\n    "A": 10\n    "B": 20', stored: true },
   { kind: 'info', code: 'info', stored: true },

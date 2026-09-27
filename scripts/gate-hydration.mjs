@@ -40,6 +40,7 @@
 import { createChecker } from './lib/assert.mjs';
 import {fixtureFetch as fetch} from './lib/fixture-http.mjs';
 import { chromium } from 'playwright';
+import { STORED_DRAWING_READER, launchStoredDrawingReader } from './lib/mermaid-reader.mjs';
 import { becomeAccountOwner, becomeOwner, publishAs, startDocument } from './lib/start-doc.mjs';
 import { githubWidgetFixture } from './lib/github-widget-fixture.mjs';
 import { loginViaEmail, startMailSink } from './lib/mail-login.mjs';
@@ -130,7 +131,9 @@ const publish = async (id, token, markup, title) => {
   if (!res.ok) throw new Error(`publish failed (${res.status}): ${await res.text()}`);
 };
 
-const browser = await chromium.launch();
+// The reader stored Mermaid drawings are made for (scripts/lib/mermaid-reader): the gate's
+// Mermaid fixture is judged as such a reader meets it, on any runner.
+const browser = await launchStoredDrawingReader(chromium);
 
 /** The document paints its final layout, and React never throws the tree away. */
 async function runNoRepaint() {
@@ -352,7 +355,7 @@ async function runMermaidPreload() {
     // HARVESTED: the stored drawing replaces the engine, so its code is neither named nor run.
     let rawHtml = '';
     for (const end = Date.now() + 60000; Date.now() < end && !rawHtml.includes('"mermaidImages"');) {
-      rawHtml = await (await fetch(`${B}/a/${st.id}/raw`)).text();
+      rawHtml = await (await fetch(`${B}/a/${st.id}/raw`, { headers: { 'user-agent': STORED_DRAWING_READER.userAgent } })).text();
       if (!rawHtml.includes('"mermaidImages"')) await new Promise((resolve) => setTimeout(resolve, 1000));
     }
     if (check(rawHtml.includes('"mermaidImages"'), `${kind}: the background harvest stored the diagram`)) {
@@ -486,7 +489,7 @@ async function runReaderHydration() {
   const diagram = fixtures.find((f) => f.key === 'mermaid');
   let storedDiagram = false;
   for (const end = Date.now() + 60000; !storedDiagram && Date.now() < end;) {
-    storedDiagram = (await (await fetch(`${B}/api/page/artifact/${diagram.id}`)).text()).includes('"mermaidImages"');
+    storedDiagram = (await (await fetch(`${B}/api/page/artifact/${diagram.id}`, { headers: { 'user-agent': STORED_DRAWING_READER.userAgent } })).text()).includes('"mermaidImages"');
     if (!storedDiagram) await new Promise((resolve) => setTimeout(resolve, 1000));
   }
   check(storedDiagram, 'the mermaid fixture\'s diagram was stored before the reader loads');
