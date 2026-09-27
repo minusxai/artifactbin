@@ -258,6 +258,67 @@ ALTER TABLE app.export_image_cache ADD COLUMN IF NOT EXISTS lease_until TIMESTAM
 
 ALTER TABLE app.export_image_cache ADD COLUMN IF NOT EXISTS retry_after TIMESTAMPTZ;
 
+CREATE TABLE IF NOT EXISTS app.mermaid_images (
+  key TEXT NOT NULL,
+  engine TEXT NOT NULL,
+  object_key TEXT NOT NULL,
+  bytes INTEGER NOT NULL,
+  info JSONB NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (key)
+);
+
+ALTER TABLE app.mermaid_images ADD COLUMN IF NOT EXISTS key TEXT NOT NULL;
+
+ALTER TABLE app.mermaid_images ADD COLUMN IF NOT EXISTS engine TEXT NOT NULL;
+
+ALTER TABLE app.mermaid_images ADD COLUMN IF NOT EXISTS object_key TEXT NOT NULL;
+
+ALTER TABLE app.mermaid_images ADD COLUMN IF NOT EXISTS bytes INTEGER NOT NULL;
+
+ALTER TABLE app.mermaid_images ADD COLUMN IF NOT EXISTS info JSONB NOT NULL;
+
+ALTER TABLE app.mermaid_images ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT now();
+
+CREATE TABLE IF NOT EXISTS app.mermaid_harvests (
+  artifact_id TEXT NOT NULL,
+  version INTEGER NOT NULL,
+  engine TEXT NOT NULL,
+  state TEXT NOT NULL DEFAULT 'pending',
+  images JSONB,
+  attempts INTEGER NOT NULL DEFAULT 0,
+  claim_token TEXT,
+  lease_until TIMESTAMPTZ,
+  retry_after TIMESTAMPTZ,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (artifact_id, version, engine)
+);
+
+ALTER TABLE app.mermaid_harvests ADD COLUMN IF NOT EXISTS artifact_id TEXT NOT NULL;
+
+ALTER TABLE app.mermaid_harvests ADD COLUMN IF NOT EXISTS version INTEGER NOT NULL;
+
+ALTER TABLE app.mermaid_harvests ADD COLUMN IF NOT EXISTS engine TEXT NOT NULL;
+
+ALTER TABLE app.mermaid_harvests ADD COLUMN IF NOT EXISTS state TEXT NOT NULL DEFAULT 'pending';
+
+ALTER TABLE app.mermaid_harvests ADD COLUMN IF NOT EXISTS images JSONB;
+
+ALTER TABLE app.mermaid_harvests ADD COLUMN IF NOT EXISTS attempts INTEGER NOT NULL DEFAULT 0;
+
+ALTER TABLE app.mermaid_harvests ADD COLUMN IF NOT EXISTS claim_token TEXT;
+
+ALTER TABLE app.mermaid_harvests ADD COLUMN IF NOT EXISTS lease_until TIMESTAMPTZ;
+
+ALTER TABLE app.mermaid_harvests ADD COLUMN IF NOT EXISTS retry_after TIMESTAMPTZ;
+
+ALTER TABLE app.mermaid_harvests ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT now();
+
+ALTER TABLE app.mermaid_harvests ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT now();
+
+CREATE INDEX IF NOT EXISTS idx_mermaid_harvests_pending ON app.mermaid_harvests (created_at) WHERE state = 'pending';
+
 CREATE TABLE IF NOT EXISTS app.mutation_receipts (
   scope TEXT NOT NULL,
   operation_key TEXT NOT NULL,
