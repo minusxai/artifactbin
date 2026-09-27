@@ -222,7 +222,9 @@ describe('the comment layer\'s data does not wait for its code', () => {
     expect(annotationLayerFeature.loaded()).toBeUndefined();
     // …and the layer, once here, consumes that read instead of issuing a second one.
     await layer.arrive();
-    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 0)); });
+    await waitFor(() => expect(annotationLayerFeature.loaded()).toBeDefined());
+    // Let the real layer mount and run its seeding effect.
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 50)); });
     expect(annotationReads()).toHaveLength(1);
   });
 });

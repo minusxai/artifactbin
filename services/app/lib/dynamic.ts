@@ -101,13 +101,3 @@ export function whenIdle(task: () => void, { timeout = 3000, fallbackDelay = 150
   const timer = setTimeout(task, fallbackDelay);
   return () => clearTimeout(timer);
 }
-
-/**
- * The props that warm a feature from its TRIGGER: hovering, focusing or
- * starting to press the control that opens it. Spread onto that control only
- * for a viewer who can use the feature.
- */
-export function warmOn(...features: Array<OnDemand<unknown>>): { onPointerEnter: () => void; onFocus: () => void; onPointerDown: () => void } {
-  const warm = () => { for (const feature of features) feature.prefetch(); };
-  return { onPointerEnter: warm, onFocus: warm, onPointerDown: warm };
-}
