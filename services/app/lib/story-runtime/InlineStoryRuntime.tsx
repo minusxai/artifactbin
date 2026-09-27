@@ -1,6 +1,6 @@
 import { runtimeId } from './runtime-id';
 import { installMx } from './mx';
-import { useLayoutEffect, useMemo, useRef, useState, type ComponentType, type ReactNode } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ComponentType, type ReactNode } from 'react';
 import { createRoot, hydrateRoot, type Root } from 'react-dom/client';
 import type { StoryDocumentUpdate, StoryIslandData } from './contract';
 import type { QueryTransport } from './store';
@@ -14,9 +14,13 @@ import type { FrameSelectionActions } from './edit/selection-actions';
 import type { RuntimeChannel } from './pristine';
 import { STORY_EDIT_MODE_MESSAGE, STORY_ANNOTATIONS_MESSAGE, STORY_SELECTION_ACTIONS_MESSAGE, STORY_SELECTION_ACTION_MESSAGE, STORY_SELECT_MESSAGE, STORY_VALUES_MESSAGE, isEditParentMessage, STORY_DATA_MESSAGE, STORY_READER_MODE_MESSAGE } from './contract';
 import { isStoryDocumentUpdate } from './document-update';
-import type { PreparedStoryRuntime } from '@/lib/story/prepared-runtime';
+import { isServedRuntime, type PreparedStoryRuntime, type ServedStoryRuntime } from '@/lib/story/prepared-runtime';
+import type { JsxNode } from '@/lib/jsx';
+import { applyStyleOverrides, type StyleOverride } from '@/lib/story/style-overrides';
+import type { StoryBaseCssRecipe } from '@/lib/story/story-base-css';
+import type { InlineSheetPolicy } from './inline-sheet';
 import { TrustedUi, useTrustedPortalContainer } from '@/components/TrustedUi';
-import { InlineStoryComposition, inlineStoryCss, inlineStoryNodes, type InlineStoryWiring } from './inline-composition';
+import { InlineStoryComposition, type InlineStoryWiring } from './inline-composition';
 import { adoptInitialStory, clearInitialStory, initialDocumentStory } from '@/web/initial-story';
 import { wireOutline } from './outline-nav';
 import { markScrollableTables } from './table-scroll';
@@ -44,7 +48,24 @@ export interface InlineStoryRuntimeProps {
   transport?: QueryTransport;
   transportFactory?: () => QueryTransport & { dispose(): void };
   authorScript?: string | null;
-  prepared?: PreparedStoryRuntime;
+  /**
+   * The document's stylesheet: SERVED already isolated (the reader page —
+   * lib/story/prepared-runtime ServedStoryRuntime), or as RAW parts this
+   * runtime isolates itself (the offline file; pass `sheetPolicy` with it).
+   */
+  prepared?: PreparedStoryRuntime | ServedStoryRuntime;
+  /**
+   * The inline CSS policy, when the host bundles it (./inline-sheet). Absent,
+   * it is loaded on demand, the first time a sheet must be isolated here.
+   */
+  sheetPolicy?: InlineSheetPolicy;
+  /**
+   * The served version's RAW compiled and authored sheets, fetched on demand —
+   * for an editor update that leaves one of them "unchanged" when this page
+   * was only ever served the isolated result. A writer's page provides it
+   * (components/ArtifactSurface, the editor door); null when unavailable.
+   */
+  rawSheets?: () => Promise<{ compiledCss: string | null; authorCss: string | null } | null>;
   onController(controller: InlineStoryController | null): void;
   /**
    * One reason that refuses every write on this render (the store's
@@ -113,6 +134,32 @@ function afterStory(story: AdoptedStory | null, task: () => void): void {
   else void story.hydrated.then(task);
 }
 
+/**
+ * THE DOCUMENT'S SHEET, as this runtime holds it. `served` is an isolated sheet
+ * and the style values that go with exactly `served.nodes` — what the server
+ * prepared, rendered as it is. `raw` is what a later update brings; `undefined`
+ * in it means "the served version's, not held here" (fetched on demand).
+ */
+interface SheetState {
+  theme: string | null;
+  served: { css: string; overrides?: StyleOverride[]; nodes: JsxNode[] } | null;
+  raw: { base: string | StoryBaseCssRecipe; compiledCss: string | null | undefined; authorCss: string | null | undefined };
+}
+function initialSheet(prepared: InlineStoryRuntimeProps['prepared'], nodes: JsxNode[]): SheetState {
+  if (!prepared) return { theme: null, served: null, raw: { base: '', compiledCss: null, authorCss: null } };
+  if (isServedRuntime(prepared)) {
+    return {
+      theme: prepared.theme ?? null,
+      served: prepared.data.nodes === nodes ? { css: prepared.css ?? '', overrides: prepared.overrides, nodes } : null,
+      raw: { base: prepared.base, compiledCss: undefined, authorCss: undefined },
+    };
+  }
+  return { theme: prepared.theme ?? null, served: null, raw: { base: prepared.baseCss, compiledCss: prepared.compiledCss, authorCss: prepared.authorCss } };
+}
+// eslint-disable-next-line no-restricted-syntax -- one module per page: the policy chunk, once loaded, serves every document
+let loadedPolicy: InlineSheetPolicy | null = null;
+const loadPolicy = (): Promise<InlineSheetPolicy> => import('./inline-sheet').then((module) => (loadedPolicy = module));
+
 /** Top-level artifact body; only authored Iframe/Helmet code creates sandboxed child realms. */
 export function InlineStoryRuntime(props: InlineStoryRuntimeProps): ReactNode {
   const root = useRef<HTMLDivElement>(null);
@@ -129,7 +176,10 @@ export function InlineStoryRuntime(props: InlineStoryRuntimeProps): ReactNode {
   const latest = useRef(props);
   latest.current = props;
   const [current, setCurrent] = useState(props.data);
-  const [styles, setStyles] = useState<{baseCss:string;compiledCss:string|null;authorCss:string|null;theme:string|null}>({baseCss:props.prepared?.baseCss ?? '', compiledCss:props.prepared?.compiledCss ?? null, authorCss:props.prepared?.authorCss ?? null, theme:props.prepared?.theme ?? null});
+  const [sheet, setSheet] = useState<SheetState>(() => initialSheet(props.prepared, props.data.nodes));
+  const [policy, setPolicy] = useState<InlineSheetPolicy | null>(() => props.sheetPolicy ?? loadedPolicy);
+  /** Raw parts fetched for the served version, or 'failed' when they cannot be had. */
+  const [fetchedRaw, setFetchedRaw] = useState<{ compiledCss: string | null; authorCss: string | null } | 'failed' | null>(null);
   const createLifetime = () => {
     const transport = latest.current.transportFactory?.() ?? latest.current.transport;
     const { writesUnavailable, frozenValues } = latest.current;
@@ -237,6 +287,8 @@ export function InlineStoryRuntime(props: InlineStoryRuntimeProps): ReactNode {
           if (!command.on) { editRef.current?.dispose(); editRef.current = null; render(); return; }
           if (editRef.current || editLoading) return;
           editLoading = true;
+          // Every edit re-isolates the sheet here: have the policy in hand before the first keystroke.
+          if (!loadedPolicy) void loadPolicy().then((module) => { if (!disposed) setPolicy(module); }).catch(() => {});
           // Editing is deliberately lazy: readers do not download the editor.
           void whenStory(import('./edit/session')).then(({ createFrameEditSession }) => {
             if (disposed || !editRequested || !root.current) return;
@@ -275,7 +327,18 @@ export function InlineStoryRuntime(props: InlineStoryRuntimeProps): ReactNode {
       },
       update(update) {
         if (disposed) return;
-        setStyles(previous => ({...previous, ...(update.compiledCss !== undefined ? {compiledCss:update.compiledCss} : {}), ...(update.authorCss !== undefined ? {authorCss:update.authorCss} : {}), ...(update.theme !== undefined ? {theme:update.theme} : {})}));
+        // Raw parts fetched for the version this page was served belong to it alone.
+        if (update.sheet) setFetchedRaw(null);
+        setSheet(previous => {
+          const theme = update.theme !== undefined ? update.theme : previous.theme;
+          // A prepared version brings its sheet isolated, for exactly its nodes.
+          if (update.sheet) return { theme, served: { css: update.sheet.css, overrides: update.sheet.overrides, nodes: update.nodes }, raw: { base: update.sheet.base, compiledCss: undefined, authorCss: undefined } };
+          const changesCss = update.compiledCss !== undefined || update.authorCss !== undefined;
+          return {
+            theme, served: changesCss ? null : previous.served,
+            raw: { ...previous.raw, ...(update.compiledCss !== undefined ? { compiledCss: update.compiledCss } : {}), ...(update.authorCss !== undefined ? { authorCss: update.authorCss } : {}) },
+          };
+        });
         if (update.dataflow) { store.replaceFlow(update.dataflow); publicMx = installMx(store); }
         if (update.authorScript !== undefined) author.replace(update.authorScript);
         documentData = { ...documentData, nodes: update.nodes, ...(update.refData ? { refData: { ...documentData.refData, ...update.refData } } : {}), ...(update.colorMode ? { colorMode: update.colorMode } : {}) };
@@ -305,8 +368,43 @@ export function InlineStoryRuntime(props: InlineStoryRuntimeProps): ReactNode {
     store.start();
     return () => { controller.dispose(); latest.current.onController(null); };
   }, [lifetime]);
-  const css = useMemo(() => inlineStoryCss(styles), [styles.baseCss,styles.compiledCss,styles.authorCss]);
-  const nodes = useMemo(() => inlineStoryNodes(current.nodes, styles), [current.nodes,styles.baseCss,styles.compiledCss,styles.authorCss]);
+  /*
+   * WHAT RENDERS: the served sheet for the nodes it was prepared with, as it
+   * is — the hydrating first render always — or, once an update has moved
+   * past it, the policy applied here to the raw parts. Until the policy chunk
+   * (and any raw part the page only ever had isolated) arrives, the last
+   * render stands: a live update lands a moment later, never unstyled.
+   */
+  const raw = sheet.raw;
+  const rawComplete = { compiledCss: raw.compiledCss !== undefined ? raw.compiledCss : fetchedRaw && fetchedRaw !== 'failed' ? fetchedRaw.compiledCss : undefined,
+    authorCss: raw.authorCss !== undefined ? raw.authorCss : fetchedRaw && fetchedRaw !== 'failed' ? fetchedRaw.authorCss : undefined };
+  const servedNow = sheet.served && sheet.served.nodes === current.nodes ? sheet.served : null;
+  const lastRender = useRef<{ css: string; nodes: JsxNode[] } | null>(null);
+  const rendered = useMemo(() => {
+    if (servedNow) return { css: servedNow.css, nodes: applyStyleOverrides(current.nodes, servedNow.overrides) };
+    if (!policy) return null;
+    if (rawComplete.compiledCss !== undefined && rawComplete.authorCss !== undefined) {
+      return policy.isolateStorySheet({ base: raw.base, compiledCss: rawComplete.compiledCss, authorCss: rawComplete.authorCss }, current.nodes);
+    }
+    // The raw parts cannot be had: keep the sheet this page holds, and put the new nodes under it.
+    if (fetchedRaw === 'failed' && lastRender.current) return { css: lastRender.current.css, nodes: policy.isolateAgainst(lastRender.current.css, current.nodes) };
+    return null;
+  }, [servedNow, current.nodes, policy, raw.base, rawComplete.compiledCss, rawComplete.authorCss, fetchedRaw]);
+  const shown = rendered ?? lastRender.current ?? { css: '', nodes: current.nodes };
+  lastRender.current = shown;
+  const css = shown.css;
+  const nodes = shown.nodes;
+  useEffect(() => {
+    if (rendered) return;
+    let alive = true;
+    if (!policy) void (props.sheetPolicy ? Promise.resolve(props.sheetPolicy) : loadPolicy()).then((module) => { if (alive) setPolicy(module); })
+      .catch((error) => console.error('Failed to load the document stylesheet policy', error));
+    if (fetchedRaw === null && (raw.compiledCss === undefined || raw.authorCss === undefined)) {
+      const fetchRaw = latest.current.rawSheets;
+      void (fetchRaw ? fetchRaw() : Promise.resolve(null)).then((parts) => { if (alive) setFetchedRaw(parts ?? 'failed'); }, () => { if (alive) setFetchedRaw('failed'); });
+    }
+    return () => { alive = false; };
+  }, [rendered, policy, fetchedRaw, raw.compiledCss, raw.authorCss]);
   // The first commit of an adopted story: renders queued behind hydration go now.
   const [storyCommitted] = useState(() => () => {
     const story = adopted.current;
@@ -325,7 +423,7 @@ export function InlineStoryRuntime(props: InlineStoryRuntimeProps): ReactNode {
     const story = adopted.current;
     if (!server || !story) return;
     server.className = current.colorMode;
-    if (styles.theme) server.setAttribute('data-theme', styles.theme); else server.removeAttribute('data-theme');
+    if (sheet.theme) server.setAttribute('data-theme', sheet.theme); else server.removeAttribute('data-theme');
     if (composition === story.shown) return;
     if (!story.committed) { story.next = composition; return; }
     story.shown = composition;
@@ -333,7 +431,7 @@ export function InlineStoryRuntime(props: InlineStoryRuntimeProps): ReactNode {
   });
   const selectionLayer = <TrustedUi overlay layer="selection"><SelectionPortal ready={portalReady} /></TrustedUi>;
   if (server) return <>{selectionLayer}<div ref={host} data-mx-story-host="" style={{ display: 'contents' }} /></>;
-  return <>{selectionLayer}<div ref={root} data-mx-inline-story="" data-mx-story-root="" data-theme={styles.theme ?? undefined} className={current.colorMode}>
+  return <>{selectionLayer}<div ref={root} data-mx-inline-story="" data-mx-story-root="" data-theme={sheet.theme ?? undefined} className={current.colorMode}>
     {composition}
   </div></>;
 }

@@ -17,15 +17,16 @@ import { createRoot, hydrateRoot } from 'react-dom/client';
 import { parseJsxOrThrow } from '@/test/helpers/jsx';
 import { compiledSource, type TestSource } from '@/test/helpers/compiled';
 import { STORY_DOCUMENT_MESSAGE, STORY_READER_MODE_MESSAGE, type StoryIslandData } from '../contract';
-import { InlineStoryComposition, inlineStoryCss } from '../inline-composition';
+import { InlineStoryComposition } from '../inline-composition';
+import { inlineStoryCss, inlineStoryNodes } from '@/lib/story/inline-css';
 import { InlineStoryRuntime, type InlineStoryController } from '../InlineStoryRuntime';
 import { renderInlineStory } from '../ssr-entry';
-import { STORY_CHROME_CSS, STORY_COLUMN_CSS, STORY_EMBED_CSS, STORY_TABLE_CSS } from '../chrome-css';
 import { storyBodyFor } from '@/lib/story/body';
 import { glyphsForNodes } from '@/lib/story/icon-glyphs';
-import { inlineStoryHtml } from '@/lib/story/inline-story-html';
-import type { PreparedStoryRuntime } from '@/lib/story/prepared-runtime';
-import { STORY_BARE_CONTROLS_CSS, STORY_BARE_TYPOGRAPHY_CSS } from '@/lib/story-surface';
+import { servedStoryHtml } from '@/lib/story/inline-story-html';
+import type { ServedStoryRuntime } from '@/lib/story/prepared-runtime';
+import { storyBaseCss, type StoryBaseCssRecipe } from '@/lib/story/story-base-css';
+import { styleOverrides } from '@/lib/story/style-overrides';
 import { captureInitialStory, clearInitialStory } from '@/web/initial-story';
 
 const KIT = `<article>
@@ -92,8 +93,10 @@ const fixture = (name: string) => readFileSync(path.join(FIXTURES, name), 'utf8'
 const SALES = 'SaLes1';
 const SALES_COLUMNS = [{ name: 'month', type: 'date' }, { name: 'region', type: 'string' }, { name: 'product', type: 'string' }, { name: 'revenue', type: 'number' }, { name: 'units', type: 'number' }] as const;
 
-interface Serve { colorMode?: 'light' | 'dark'; template?: string | null; viewer?: StoryIslandData['viewer']; readOnly?: string; refData?: StoryIslandData['refData']; theme?: PreparedStoryRuntime['theme']; sources?: Record<string, TestSource> }
-async function served(source: string, opts: Serve = {}): Promise<PreparedStoryRuntime> {
+interface Serve { colorMode?: 'light' | 'dark'; template?: string | null; viewer?: StoryIslandData['viewer']; readOnly?: string; refData?: StoryIslandData['refData']; theme?: ServedStoryRuntime['theme']; sources?: Record<string, TestSource> }
+type Served = ServedStoryRuntime & { css: string; raw: { compiledCss: string | null; authorCss: string | null } };
+/** What the reader page is sent (lib/story/prepared-page.server): the sheet and style values already isolated on the server. */
+async function served(source: string, opts: Serve = {}): Promise<Served> {
   const split = storyBodyFor(source);
   if (!split) throw new Error('fixture does not parse');
   const declares = split.content.values.length + split.content.queries.length + split.content.imports.length > 0;
@@ -106,8 +109,13 @@ async function served(source: string, opts: Serve = {}): Promise<PreparedStoryRu
     ...(opts.viewer ? { viewer: opts.viewer } : {}),
     ...(opts.readOnly ? { readOnly: opts.readOnly } : {}),
   };
-  const baseCss = [':root { --mx-vh: 100vh; } body { margin: 0; }', STORY_BARE_TYPOGRAPHY_CSS, STORY_BARE_CONTROLS_CSS, STORY_CHROME_CSS, STORY_EMBED_CSS, STORY_TABLE_CSS, STORY_COLUMN_CSS].join('\n');
-  return { data, baseCss, compiledCss: '.x{color:red}', authorCss: split.content.style ?? null, authorScript: null, theme: opts.theme ?? null, title: 'served' };
+  const base: StoryBaseCssRecipe = { chrome: true, theme: opts.theme ?? null, faces: [], fonts: { slots: {}, families: [] } };
+  const raw = { compiledCss: '.x{color:red}', authorCss: split.content.style ?? null };
+  const parts = { baseCss: storyBaseCss(base), ...raw };
+  return {
+    data, css: inlineStoryCss(parts), overrides: styleOverrides(data.nodes, inlineStoryNodes(data.nodes, parts)), base,
+    authorScript: null, theme: opts.theme ?? null, title: 'served', raw,
+  };
 }
 
 // Queries stay in flight: the served "loading" state is what the survival check compares against.
@@ -122,8 +130,8 @@ const dangling = (root: Element): string[] => [...root.querySelectorAll(REFERENC
   .flatMap((el) => REFERENCES.flatMap((a) => (el.getAttribute(a) ?? '').split(' ').filter(Boolean).filter((id) => !document.getElementById(id)).map((id) => `${a}=${id}`)));
 
 /** Serve `runtime` as the app page does, mount the reader's runtime over it, and let it hydrate. */
-async function adopt(runtime: PreparedStoryRuntime) {
-  document.body.innerHTML = `<div id="root"></div><div data-mx-initial-story=""><style>body > #root:first-child{display:none!important}</style>${inlineStoryHtml(runtime, renderInlineStory)}</div>`;
+async function adopt(runtime: Served) {
+  document.body.innerHTML = `<div id="root"></div><div data-mx-initial-story=""><style>body > #root:first-child{display:none!important}</style>${servedStoryHtml(runtime, renderInlineStory)}</div>`;
   const story = document.querySelector<HTMLElement>('[data-mx-inline-story]')!;
   const serverNodes = [...story.querySelectorAll('*')];
   const serverDangling = dangling(story);
@@ -135,10 +143,10 @@ async function adopt(runtime: PreparedStoryRuntime) {
   const app = createRoot(document.getElementById('root')!, { onRecoverableError: (e) => errors.push(e), onCaughtError: (e) => errors.push(e), onUncaughtError: (e) => errors.push(e) });
   let controller: InlineStoryController | null = null;
   await act(async () => {
-    app.render(<InlineStoryRuntime data={runtime.data} prepared={runtime} transportFactory={liveTransport} authorScript={null} onController={(c) => { controller = c; }} hydrateInitialStory />);
+    app.render(<InlineStoryRuntime data={runtime.data} prepared={runtime} rawSheets={async () => runtime.raw} transportFactory={liveTransport} authorScript={null} onController={(c) => { controller = c; }} hydrateInitialStory />);
   });
   await act(async () => {});
-  return { story, serverNodes, serverDangling, errors, app, controller: () => controller!, stop: () => window.removeEventListener('error', reported) };
+  return { story, serverNodes, serverDangling, errors, app, css: runtime.css, controller: () => controller!, stop: () => window.removeEventListener('error', reported) };
 }
 
 function expectAdopted({ story, serverNodes, serverDangling, errors }: Awaited<ReturnType<typeof adopt>>) {
@@ -178,7 +186,7 @@ const IMAGE_REF = { ImgRf1: { kind: 'image' as const, url: '/a/ImgRf1/raw?v=1', 
 describe('the reader adopts the page the server served', () => {
   afterEach(() => { clearInitialStory(); });
 
-  const cases: Array<[string, () => Promise<PreparedStoryRuntime>]> = [
+  const cases: Array<[string, () => Promise<Served>]> = [
     ['the kit fixture, light', () => served(fixture('kit.jsx'))],
     ['the kit fixture, dark, themed', () => served(fixture('kit.jsx'), { colorMode: 'dark', theme: 'modernist' })],
     ['a sectioned prose report with its outline rail', () => served(fixture('prose.jsx'), { template: 'editorial' })],
@@ -207,7 +215,9 @@ describe('the reader adopts the page the server served', () => {
     expectAdopted(page);
     const heading = page.story.querySelector('h1')!;
     await act(async () => { page.controller().update({ type: STORY_DOCUMENT_MESSAGE, nodes: parseJsxOrThrow('<article><h1>Second version</h1></article>').nodes, theme: 'modernist' }); });
-    expect(page.story.querySelector('h1')!.textContent).toBe('Second version');
+    // A version the page was not served is isolated here, by the policy chunk loaded on demand.
+    await vi.waitFor(() => expect(page.story.querySelector('h1')!.textContent).toBe('Second version'));
+    expect(page.story.querySelector('style')!.textContent).toBe(page.css);
     expect(page.story.getAttribute('data-theme')).toBe('modernist');
     expect(heading.isConnected || page.story.querySelector('h1') !== heading).toBe(true);
     await act(async () => { page.controller().send({ type: STORY_READER_MODE_MESSAGE, mode: 'dark' }); });
@@ -221,7 +231,7 @@ describe('the reader adopts the page the server served', () => {
 
   it('applies a version sent the moment the controller arrives, with no error', async () => {
     const runtime = await served(fixture('kit.jsx'));
-    document.body.innerHTML = `<div id="root"></div><div data-mx-initial-story="">${inlineStoryHtml(runtime, renderInlineStory)}</div>`;
+    document.body.innerHTML = `<div id="root"></div><div data-mx-initial-story="">${servedStoryHtml(runtime, renderInlineStory)}</div>`;
     captureInitialStory();
     const errors: unknown[] = [];
     // Outside act() on purpose, so React's act() environment warnings are not what this test is about.
@@ -229,7 +239,7 @@ describe('the reader adopts the page the server served', () => {
     const app = createRoot(document.getElementById('root')!);
     let controller: InlineStoryController | null = null;
     // No act(): the app's first commit and the story's hydration run as the browser runs them.
-    flushSync(() => app.render(<InlineStoryRuntime data={runtime.data} prepared={runtime} transportFactory={liveTransport} onController={(c) => { controller = c; }} hydrateInitialStory />));
+    flushSync(() => app.render(<InlineStoryRuntime data={runtime.data} prepared={runtime} rawSheets={async () => runtime.raw} transportFactory={liveTransport} onController={(c) => { controller = c; }} hydrateInitialStory />));
     expect(controller).not.toBeNull();
     // Synchronously, as a discrete event would: React takes a render of a root still hydrating as a reason to discard the server tree.
     flushSync(() => controller!.update({ type: STORY_DOCUMENT_MESSAGE, nodes: parseJsxOrThrow('<article><h1>Early version</h1></article>').nodes }));

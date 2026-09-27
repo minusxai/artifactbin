@@ -5,7 +5,7 @@
  */
 import { useEffect, useMemo, useRef } from 'react';
 import { usePageData } from '../use-page-data';
-import { expandSurface, type CompactSurface } from '@/lib/story/page-transport';
+import { expandSurface } from '@/lib/story/page-transport';
 import { takeBootstrap } from '../bootstrap';
 import { useLocation, useNavigate, useParams } from 'react-router';
 import ArtifactShell from '@/components/ArtifactShell';
@@ -49,9 +49,10 @@ type Page =
       archived?: { version: number; head: number };
       surface: Parameters<typeof ArtifactSurface>[0]; folder?: undefined };
 
-type TransportPage = Extract<Page, { folder: unknown }> | (Omit<Extract<Page, { surface: object }>, 'surface'> & { surface: CompactSurface<Parameters<typeof ArtifactSurface>[0]> });
+/** The wire shape: a document's surface carries no raw sheet and its dataflow only inside its runtime (lib/story/page-transport). */
+type TransportPage = Extract<Page, { folder: unknown }> | (Omit<Extract<Page, { surface: object }>, 'surface'> & { surface: object });
 function decodePage(page: TransportPage): Page {
-  return page.surface ? { ...page, surface: expandSurface<Parameters<typeof ArtifactSurface>[0]>(page.surface) } : page;
+  return page.folder ? page : { ...page, surface: expandSurface<Parameters<typeof ArtifactSurface>[0]>(page.surface) };
 }
 
 export function ArtifactPage({ id: given }: { id?: string } = {}) {

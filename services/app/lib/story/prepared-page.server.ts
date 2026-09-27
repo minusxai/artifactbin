@@ -39,7 +39,8 @@ import { fileURLToPath } from 'node:url';
 import { getDb } from '@/lib/db';
 import { ASSETS_ORIGIN, IS_DEV, PUBLIC_BASE_URL } from '@/lib/config';
 import type { ArtifactRow } from '@/lib/artifacts';
-import { declarationsForRow, getArtifactById, holdableImports, refDataForRow, viewerIdentityFor, type RoleActor } from '@/lib/artifacts';
+import { declarationsForRow, holdableImports, LIVE_ARTIFACT_SQL, refDataForRow, viewerIdentityFor, type RoleActor } from '@/lib/artifacts';
+import { artifactQuery } from '@/lib/artifact-document';
 import { savedMentionStates } from '@/lib/membership';
 import { archivedReadOnly, servedRow, type ArchivedRender } from '@/lib/archived-version';
 import { currentStoryCss, storyCssCompileVersion } from '@/lib/data/story/story-css.server';
@@ -258,7 +259,10 @@ export function warmPreparedPage(id: string, origin: string = PUBLIC_BASE_URL): 
       const [next, from] = queued.entries().next().value!;
       queued.delete(next);
       try {
-        const row = await getArtifactById(next);
+        // Decoded, never MIGRATED: a warm-up writes nothing but its own cache (a first reader's
+        // read still performs the lazy representation migration it always has).
+        const db = await getDb();
+        const row = (await artifactQuery<ArtifactRow>(db, `SELECT * FROM artifacts WHERE id = $1 AND ${LIVE_ARTIFACT_SQL}`, [next])).rows[0];
         if (row?.format === 'markup') await preparedPageFor(row, null, from);
       } catch (error) {
         console.warn('[prepared-page] warm-up failed', next, error);

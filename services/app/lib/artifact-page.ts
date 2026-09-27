@@ -140,7 +140,28 @@ export async function artifactPageAnswer(request: Request, id: string): Promise<
   }
 
   // Everything below reads THIS row: the artifact wearing that version's bytes
-  // when one was asked for, the artifact itself otherwise.
+  // when one was asked for, the artifact itself otherwise. A document's comes
+  // with its prepared page (lib/story/prepared-page.server) — a stored entry on
+  // a hit, a compile on a miss — while the reads that need neither run beside it.
+  const viewerId = actor.viewer?.userId ?? null;
+  // Independent reads begin only after ACL admission. These values belong to
+  // this request; no identity or permission answer is retained across requests.
+  const social = Promise.all([
+    // The author's row, once: the handle (byline, canonical) and their face.
+    artifact.user_id ? getUserById(artifact.user_id) : Promise.resolve(null), forkedFromCredit(artifact.forked_from),
+    // The heart renders from THIS answer: asking a second door for it would
+    // leave the control blank (or wrong) for a frame on every page load. An
+    // anonymous reader still gets the count — it is the number, not the button,
+    // that everyone can see.
+    viewerId ? has(viewerId, 'like', artifact.id) : Promise.resolve(false),
+    count('like', artifact.id),
+    artifact.user_id && artifact.user_id !== viewerId && viewerId ? has(viewerId, 'follow', artifact.user_id) : Promise.resolve(false),
+    artifact.user_id && artifact.user_id !== viewerId ? count('follow', artifact.user_id) : Promise.resolve(0),
+    canAnnotate(role) && isDoc ? countOpenAnnotations(artifact.id) : Promise.resolve(0),
+    artifact.format === 'dataset' ? loadDatasetRows(artifact).then(rows => JSON.stringify(rows)) : Promise.resolve(isDoc ? '' : (artifact.format === 'viz' ? artifact.source ?? '' : '')),
+  ] as const);
+  // Awaited below; a failure of the preparation first must not leave this one unobserved.
+  void social.catch(() => {});
   const prepared = isDoc ? await preparedPageFor(artifact, at, baseUrl(request)) : null;
   const row = prepared?.row ?? await servedRow(artifact, at);
 
@@ -150,29 +171,15 @@ export async function artifactPageAnswer(request: Request, id: string): Promise<
     cssCompileVersion?: string | null;
   };
   const design = resolveStoredStoryDesign(meta.theme, meta.colorMode);
-  // The heart renders from THIS answer: asking a second door for it would
-  // leave the control blank (or wrong) for a frame on every page load. An
-  // anonymous reader still gets the count — it is the number, not the button,
-  // that everyone can see.
-  const viewerId = actor.viewer?.userId ?? null;
-  // Independent reads begin only after ACL admission. These values belong to
-  // this request; no identity or permission answer is retained across requests.
-  const [author, forkedFrom, compiledCss, served, liked, likeCount, following, followCount, openAnnotations, dataPreview] = await Promise.all([
-    // The author's row, once: the handle (byline, canonical) and their face.
-    artifact.user_id ? getUserById(artifact.user_id) : Promise.resolve(null), forkedFromCredit(artifact.forked_from),
-    // A document's sheet is its prepared page's; the data tiers keep their stored one.
-    isDoc ? Promise.resolve(null) : Promise.resolve(meta.compiledCss ?? null),
-    // What only this request decides, over the stored version (lib/story/prepared-page.server).
+  // A document's sheet is its prepared page's; the data tiers keep their stored one.
+  const compiledCss = isDoc ? null : meta.compiledCss ?? null;
+  const [served, [author, forkedFrom, liked, likeCount, following, followCount, openAnnotations, dataPreview]] = await Promise.all([
+    // What only this request decides, over the stored version.
     prepared ? servedPage(prepared.row, prepared.page, {
       at, search: new URL(request.url).search, origin: baseUrl(request),
       viewer: { userId: actor.viewer?.userId ?? null, tokenId: actor.tokenId ?? null, email: actor.viewer?.email ?? null },
     }) : Promise.resolve(null),
-    viewerId ? has(viewerId, 'like', artifact.id) : Promise.resolve(false),
-    count('like', artifact.id),
-    artifact.user_id && artifact.user_id !== viewerId && viewerId ? has(viewerId, 'follow', artifact.user_id) : Promise.resolve(false),
-    artifact.user_id && artifact.user_id !== viewerId ? count('follow', artifact.user_id) : Promise.resolve(0),
-    canAnnotate(role) && isDoc ? countOpenAnnotations(artifact.id) : Promise.resolve(0),
-    artifact.format === 'dataset' ? loadDatasetRows(artifact).then(rows => JSON.stringify(rows)) : Promise.resolve(isDoc ? '' : (artifact.format === 'viz' ? artifact.source ?? '' : '')),
+    social,
   ]);
   const authorUsername = author?.username ?? null;
   const ownerScope = role === 'owner' ? actorForArtifacts(actor) : null;

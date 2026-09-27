@@ -5,18 +5,19 @@
  * two agree by construction: same root, same `useId` paths, same `<style>`
  * text, same dialog scope.
  *
- * The CSS assembly and the node isolation are part of the same contract, so
- * neither side can drift into a second way of joining the stylesheets.
+ * The CSS assembly and the node isolation are part of the same contract
+ * (lib/story/inline-css), so neither side can drift into a second way of
+ * joining the stylesheets.
  */
 import type { ReactNode } from 'react';
 import { ArtifactDialogScope } from '@/components/kit/dialog';
 import { StoryRuntimeApp, type StoryRuntimeAppProps } from './StoryRuntimeApp';
 import type { StoryIslandData } from './contract';
 
-// The CSS assembly lives beside the CSS policy (lib/story/inline-css) so the
-// app server can reach it without importing this React tree; re-exported here
-// as part of the composition's contract.
-export { inlineStoryCss, inlineStoryNodes, type InlineStoryCssParts } from '@/lib/story/inline-css';
+// The CSS assembly lives beside the CSS policy (lib/story/inline-css). The
+// server applies it once per version (lib/story/prepared-page.server); the
+// browser renders that result as it is and loads the policy only on demand
+// (./inline-sheet), so this tree imports no CSS parser.
 
 /**
  * What only a browser render wires in: the live store, the asset relay, edit

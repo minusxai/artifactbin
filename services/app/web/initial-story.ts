@@ -34,3 +34,15 @@ export function adoptInitialStory(): HTMLElement | null {
   clearInitialStory();
   return story;
 }
+
+/**
+ * The text of the served story's `<style>` — the ONE copy of the document's
+ * isolated sheet on an app page that inlined its story (server/app
+ * withoutInlinedSheet). Read from the DOM as served, before anything adopts it.
+ */
+export function initialStorySheet(): string | null {
+  const wrapper = document.body.lastElementChild;
+  if (!wrapper?.hasAttribute('data-mx-initial-story')) return null;
+  const style = wrapper.lastElementChild?.hasAttribute('data-mx-inline-story') ? wrapper.lastElementChild.firstElementChild : null;
+  return style instanceof HTMLStyleElement ? style.textContent : null;
+}

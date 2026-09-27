@@ -767,8 +767,10 @@ it('updates the retained runtime when refreshed server props advance the documen
   const initial=surfaceProps({source:'<p>old</p>',version:1});
   const view=render(<ArtifactShell role="owner"><ArtifactSurface {...initial} /></ArtifactShell>);
   const nodes=storyUpdateParts('<p>new document</p>')!.nodes;
-  const runtime={title:'Updated document',data:{nodes,refData:{},colorMode:'light' as const},baseCss:'',compiledCss:null,authorCss:null,authorScript:null,theme:null};
+  const base={chrome:true,theme:null,faces:[],fonts:{slots:{},families:[]}};
+  const runtime={title:'Updated document',data:{nodes,refData:{},colorMode:'light' as const},css:'.served{}',overrides:[],base,authorScript:null,theme:null};
   view.rerender(<ArtifactShell role="owner"><ArtifactSurface {...initial} source="<p>new document</p>" version={2} editId="edit_2" runtime={runtime} /></ArtifactShell>);
-  await waitFor(()=>expect(runtimes.at(-1)!.update).toHaveBeenCalledWith(expect.objectContaining({nodes})));
+  // The refreshed version's sheet arrives isolated, for exactly its nodes.
+  await waitFor(()=>expect(runtimes.at(-1)!.update).toHaveBeenCalledWith(expect.objectContaining({nodes,sheet:{css:'.served{}',overrides:[],base}})));
   expect(runtimes).toHaveLength(1);
 });

@@ -29,7 +29,7 @@ import type { InlineStoryController } from '@/lib/story-runtime/InlineStoryRunti
 import { createHttpBackend } from '@/lib/artifact-backend/http';
 import { ArtifactBackendProvider } from '@/lib/artifact-backend/context';
 import { subscribeDocument } from '@/lib/story-runtime/document-endpoint';
-import type { PreparedStoryRuntime } from '@/lib/story/prepared-runtime';
+import type { ServedStoryRuntime } from '@/lib/story/prepared-runtime';
 import type { ReaderForkedFrom } from '@/lib/story/reader-chrome';
 import { TrustedUi } from '@/components/TrustedUi';
 import { useLocation, useNavigate } from 'react-router';
@@ -93,8 +93,16 @@ const SocialPreviewDialog = dynamic(() => import('@/components/SocialPreviewDial
   loading: () => <p className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 font-mono text-xs text-white">loading preview…</p>,
 });
 
+/**
+ * THE EDITOR'S DOOR (lib/artifact-page `?part=editor`): what only writing
+ * needs, which the reader payload no longer carries — the source, the
+ * document graph and the raw sheets. A writer's page prefetches it on idle.
+ */
+interface EditorPart { editId: string; version: number; source: string; document?: DocumentGraph; compiledCss: string | null; authorCss: string | null }
+
 export interface ArtifactSurfaceProps {
-  runtime?: PreparedStoryRuntime;
+  /** The prepared reader runtime (lib/story/prepared-page.server): its sheet already isolated. */
+  runtime?: ServedStoryRuntime;
   /** The author: handle, and the account id and picture their face is drawn with (null on an anonymous document). */
   author?: { username: string | null; id?: string | null; image?: string | null; forkedFrom?: ReaderForkedFrom | null } | null;
   /**
@@ -112,7 +120,12 @@ export interface ArtifactSurfaceProps {
   /** pdf: how big the file is and how long, as the file view says it. */
   bytes?: number;
   pages?: number | null;
-  source: string | null;
+  /** The data tiers' content; a served DOCUMENT carries none (a writer fetches it on the editor door). */
+  source?: string | null;
+  /** A served document's own name, derived from its source on the server (lib/story/title). */
+  heading?: string | null;
+  /** A served document is still the starter placeholder (lib/start-placeholder). */
+  starter?: boolean;
   /** meta scalars the editor needs, so entering edit mode costs no round trip. */
   template: string | null;
   refs: Array<{ id: string; kind: string; title?: string | null }>;
@@ -161,6 +174,12 @@ export interface ArtifactSurfaceProps {
   compiledCss: string | null;
   theme: StoryThemeName | null;
   colorMode: 'light' | 'dark' | null;
+}
+
+/** Asks for the editor's door once, when something that needs the source opened before it arrived. */
+function LoadEditorPart({ load }: { load: () => Promise<unknown> }) {
+  useEffect(() => { void load(); }, [load]);
+  return null;
 }
 
 /**
@@ -215,7 +234,7 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
   const { session } = useSession();
   const person = session?.kind === 'account' ? session.user : null;
   const readerFace = useMemo(() => person ? { id: person.id, name: person.username || person.email || '', image: person.image } : null, [person]);
-  const { id, editId, format, title, source, dataPreview, columns, bytes: fileBytes = 0, pages: filePages = null, compiledCss, theme, colorMode, template, refs, dataflow = null, search = '', accountSession = false, anonSession = false, version, openAnnotations = 0, like = { liked: false, count: 0 }, follow = null } = props;
+  const { id, editId, format, title, source = null, dataPreview, columns, bytes: fileBytes = 0, pages: filePages = null, compiledCss, theme, colorMode, template, refs, dataflow = null, search = '', accountSession = false, anonSession = false, version, openAnnotations = 0, like = { liked: false, count: 0 }, follow = null } = props;
   const [editing, setEditing] = useState(false);
   /** A view-mode text selection asks edit mode to open on its containing node. */
   const [initialEditSelectionPath, setInitialEditSelectionPath] = useState<string | null>(null);
@@ -400,14 +419,41 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
 
   const liveSource = live && live.format === 'markup' ? live.source : null;
   const shownSource = liveSource ?? source;
-  const showStarter = !editing && !props.captureKey && isStartPlaceholder(shownSource, live?.version ?? version);
+  /*
+   * A served document's source, graph and raw sheets are the EDITOR's (lib/artifact-page
+   * `?part=editor`): fetched once, on idle for a writer (the warms below) or the moment
+   * edit mode opens, and shared by the editor's seed, the social preview and the
+   * runtime's own on-demand raw sheets.
+   */
+  const needsEditorPart = canEdit && format === 'markup' && !!props.runtime && source === null;
+  const editorPartRequest = useRef<Promise<EditorPart | null> | null>(null);
+  const [editorPart, setEditorPart] = useState<EditorPart | null>(null);
+  const [editorPartFailed, setEditorPartFailed] = useState(false);
+  const loadEditorPart = useCallback((): Promise<EditorPart | null> => {
+    if (!needsEditorPart) return Promise.resolve(null);
+    return editorPartRequest.current ??= fetch(`/api/page/artifact/${encodeURIComponent(id)}?part=editor`, { credentials: 'same-origin' })
+      .then((response) => (response.ok ? response.json() as Promise<EditorPart> : null))
+      .catch(() => null)
+      .then((part) => {
+        if (part) setEditorPart(part);
+        else { editorPartRequest.current = null; setEditorPartFailed(true); }
+        return part;
+      });
+  }, [needsEditorPart, id]);
+  const rawSheets = useCallback(() => loadEditorPart().then((part) => (part ? { compiledCss: part.compiledCss, authorCss: part.authorCss } : null)), [loadEditorPart]);
+  useEffect(() => { if (editing) void loadEditorPart(); }, [editing, loadEditorPart]);
+  const previewSource = shownSource ?? editorPart?.source ?? null;
+  // Offered wherever a source exists — for a served document, the one its writer's page fetches.
+  const canPreview = shownSource !== null || needsEditorPart;
+  // A served document's placeholder test was answered on the server; a live source answers it here.
+  const showStarter = !editing && !props.captureKey && (shownSource !== null ? isStartPlaceholder(shownSource, live?.version ?? version) : !!props.starter);
   // What the row actually holds — null when nobody has named it. The editor's
   // field must seed from THIS, so an inherited name never becomes an explicit
   // one just because someone opened the editor.
   const storedTitle = live?.title ?? title;
   // What every reader-facing surface says: the stored name, else the document's
   // own first heading (lib/story/title.ts).
-  const shownTitle = displayTitle({ title: storedTitle, source: shownSource });
+  const shownTitle = displayTitle({ title: storedTitle, source: shownSource, heading: props.heading });
   // Edit is the only mode, so only edit has a title to announce. A rail that
   // is open is not a different state of the document.
   const titleMode = editing ? '[edit mode]' : null;
@@ -471,7 +517,8 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
         type: STORY_DOCUMENT_MESSAGE, nodes: prepared.data.nodes,
         refData: prepared.data.refData,
         ...(prepared.data.dataflow ? {dataflow: {flow: prepared.data.dataflow.flow}} : {}),
-        compiledCss: prepared.compiledCss, authorCss: prepared.authorCss,
+        // Its sheet arrives isolated for exactly these nodes: rendered as it is.
+        ...(prepared.css !== undefined ? { sheet: { css: prepared.css, overrides: prepared.overrides, base: prepared.base } } : {}),
         authorScript: prepared.authorScript, theme: prepared.theme,
         ...(prepared.data.colorMode ? {colorMode: prepared.data.colorMode} : {}),
       });
@@ -532,11 +579,13 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
   useEffect(() => {
     const warms: Array<() => void> = [];
     if (canEdit && format === 'markup') warms.push(() => void import('@/components/ArtifactEditor').catch(() => {}));
+    // …and what the editor opens on: the source and raw sheets the reader payload leaves out.
+    if (needsEditorPart) warms.push(() => void loadEditorPart());
     // Sharing is managed by owners and editors only; nobody else downloads it.
     if (owner || canEdit) warms.push(shareLinkFeature.prefetch);
     if (!warms.length) return;
     return whenIdle(() => { for (const warm of warms) warm(); });
-  }, [canEdit, owner, format]);
+  }, [canEdit, owner, format, needsEditorPart, loadEditorPart]);
   /** A reader is reaching for a chrome control: warm what it opens, for those who can use it. */
   const warmFor = useCallback((action: string) => {
     if ((action === 'share' && owner) || (action === 'controls' && (owner || canEdit))) shareLinkFeature.prefetch();
@@ -750,15 +799,18 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
    * before pressing edit, and seeding the original would rewind the editor to a
    * document nobody has — and hand it a stale head pointer.
    */
-  const editorSeed = canEdit ? {
-    document: live?.document ?? props.document,
+  // A served document's source comes from the editor's door; its head pointer and version come WITH it, as one pair.
+  const fromPart = shownSource === null && editorPart ? editorPart : null;
+  const seedMarkup = shownSource ?? fromPart?.source ?? null;
+  const editorSeed = canEdit && (!needsEditorPart || seedMarkup !== null) ? {
+    document: live?.document ?? props.document ?? fromPart?.document,
     id,
-    version: live?.version ?? version,
-    edit_id: live?.editId ?? editId,
+    version: live?.version ?? fromPart?.version ?? version,
+    edit_id: live?.editId ?? fromPart?.editId ?? editId,
     title: storedTitle,
-    markup: shownSource,
+    markup: seedMarkup,
     theme: shownTheme, colorMode: shownColorMode, template: shownTemplate, refs,
-    compiledCss: shownCss,
+    compiledCss: shownCss ?? editorPart?.compiledCss ?? null,
     dataflow,
   } : undefined;
 
@@ -809,7 +861,7 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
             version the page shows (an archived render names its version). */}
         {format === 'markup' && <DownloadOffline id={id} version={archived?.version} className={CONTROL_ROW} onSaved={close} />}
         {canEdit && !owner && (
-          <ShareLink version={live?.version ?? version} onSharingChange={onSharingChange} artifactId={id} title={shownTitle} editable format={format} datasetKind={shownCatalog?.kind} variant="menu" className="" onSocialPreview={shownSource !== null && format === 'markup' ? () => { close(); setSocialPreviewOpen(true); } : undefined} />
+          <ShareLink version={live?.version ?? version} onSharingChange={onSharingChange} artifactId={id} title={shownTitle} editable format={format} datasetKind={shownCatalog?.kind} variant="menu" className="" onSocialPreview={canPreview && format === 'markup' ? () => { close(); setSocialPreviewOpen(true); } : undefined} />
         )}
       </section>}
 
@@ -831,7 +883,7 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
               {copiedRef ? 'copied dataset reference' : shownCatalog ? `copy query · source="${id}"` : `copy ref:${id}`}
             </button>
           )}
-          <ShareLink version={live?.version ?? version} onSharingChange={onSharingChange} artifactId={id} title={shownTitle} owner format={format} datasetKind={shownCatalog?.kind} variant="menu" className="" onSocialPreview={canEdit && shownSource !== null && format === 'markup' ? () => { close(); setSocialPreviewOpen(true); } : undefined} />
+          <ShareLink version={live?.version ?? version} onSharingChange={onSharingChange} artifactId={id} title={shownTitle} owner format={format} datasetKind={shownCatalog?.kind} variant="menu" className="" onSocialPreview={canEdit && canPreview && format === 'markup' ? () => { close(); setSocialPreviewOpen(true); } : undefined} />
         </section>
       )}
     </div>
@@ -854,7 +906,7 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
           else if (action === 'controls' || action === 'menu') requestPageChrome(action);
         }} />
         {membership.error && <div role="alert" className="fixed left-4 top-16 z-50 rounded-lg border border-edge bg-surface p-3 text-sm text-danger">{membership.error}</div>}
-        {sharingOpen && <ShareLink version={live?.version ?? version} onSharingChange={onSharingChange} artifactId={id} title={shownTitle} owner={owner} editable={canEdit} format={format} datasetKind={shownCatalog?.kind} variant="dialog" className="" onClose={() => setSharingOpen(false)} onSocialPreview={shownSource !== null && format === 'markup' ? () => { setSharingOpen(false); setSocialPreviewOpen(true); } : undefined} />}
+        {sharingOpen && <ShareLink version={live?.version ?? version} onSharingChange={onSharingChange} artifactId={id} title={shownTitle} owner={owner} editable={canEdit} format={format} datasetKind={shownCatalog?.kind} variant="dialog" className="" onClose={() => setSharingOpen(false)} onSocialPreview={canPreview && format === 'markup' ? () => { setSharingOpen(false); setSocialPreviewOpen(true); } : undefined} />}
         {editing ? (
           /* EDIT MODE: the document's own bar stays, PINNED at the top, and the
              editor's toolbar sits under it. The panels drop below both. */
@@ -917,6 +969,7 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
             transportFactory={transportFactory}
             prepared={props.runtime}
             authorScript={props.runtime?.authorScript}
+            rawSheets={needsEditorPart ? rawSheets : undefined}
             onController={onController}
             hydrateInitialStory
           /> : parseFailed && <TrustedUi><LoadFailure what="the document" onRetry={retryParse} className="p-4" /></TrustedUi>}
@@ -950,7 +1003,7 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
           />
         )}
         {/* Edit mode is CHROME around the document, not a replacement for it. */}
-        {editing && (
+        {editing && (editorSeed || !needsEditorPart || editorPartFailed) && (
           <ArtifactEditor
             id={id}
             seed={editorSeed}
@@ -967,10 +1020,11 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
           />
         )}
         {forkAsked && <ForkConfirm id={id} title={shownTitle} onClose={() => setForkAsked(false)} />}
-        {socialPreviewOpen && shownSource !== null && (
+        {socialPreviewOpen && previewSource === null && needsEditorPart && <LoadEditorPart load={loadEditorPart} />}
+        {socialPreviewOpen && previewSource !== null && (
           <SocialPreviewDialog
             id={id}
-            source={shownSource}
+            source={previewSource}
             editId={live?.editId ?? editId}
             version={live?.version ?? version}
             onClose={() => setSocialPreviewOpen(false)}
