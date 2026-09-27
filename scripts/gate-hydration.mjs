@@ -268,6 +268,9 @@ async function runCaching() {
 /**
  * A Mermaid document names exactly the code its diagram kind loads — the
  * engine, the diagram's module, its layout engine — and every one is used.
+ * That is the ENGINE's path (`?mermaid=engine`, what a reader gets until the
+ * background harvest has stored the diagram, lib/mermaid-images); once it has,
+ * the same document names no diagram code at all and runs none.
  *
  * Mermaid discovers that code in a chain (engine → detect → diagram module →
  * layout engine), so without the names a flowchart's elk layout starts four
@@ -303,7 +306,7 @@ async function runMermaidPreload() {
     page.on('request', (r) => { if (r.resourceType() === 'script') scripts.push(new URL(r.url()).pathname); });
     page.on('console', (m) => { if (/preloaded .* not used/i.test(m.text())) warnings.push(m.text()); });
     await page.coverage.startJSCoverage({ resetOnNavigation: false });
-    await page.goto(`${B}/a/${st.id}/raw`, { waitUntil: 'domcontentloaded', timeout: 90000 });
+    await page.goto(`${B}/a/${st.id}/raw?mermaid=engine`, { waitUntil: 'domcontentloaded', timeout: 90000 });
     check(await waitFor(page, `!!document.querySelector('[data-mx-mermaid-state=ready]')`, 30000), `${kind}: the diagram draws in the served document`);
     const preloads = await page.evaluate(() => [...document.querySelectorAll('link[rel=modulepreload]')].map((l) => new URL(l.href).pathname));
     const closure = manifest.mermaid?.[kind] ?? [];
@@ -326,7 +329,7 @@ async function runMermaidPreload() {
     // The app's reader page: from a production build (a Vite manifest), the
     // same kind's chunks are named in its head. A dev server has no manifest
     // and names none, so there is nothing to assert there.
-    const appHead = (await (await fetch(`${B}/a/${st.id}`, { headers: { accept: 'text/html' } })).text()).split('</head>')[0];
+    const appHead = (await (await fetch(`${B}/a/${st.id}?mermaid=engine`, { headers: { accept: 'text/html' } })).text()).split('</head>')[0];
     if (/<link rel="modulepreload" href="\/assets\//.test(appHead)) {
       check(/rel="modulepreload" href="\/assets\/mermaid-render-[\w-]+\.js"/.test(appHead), `${kind}: the reader page preloads the Mermaid engine`);
       check(/\/assets\/elk-[\w-]+\.js/.test(appHead) === (kind === 'flowchart'), `${kind}: the reader page preloads elk exactly when the kind draws with it`);
@@ -336,7 +339,7 @@ async function runMermaidPreload() {
       app.on('console', (m) => { if (/preloaded .* not used/i.test(m.text())) appWarnings.push(m.text()); });
       await githubWidgetFixture(app.context());
       await app.coverage.startJSCoverage({ resetOnNavigation: false });
-      await app.goto(`${B}/a/${st.id}`, { waitUntil: 'domcontentloaded', timeout: 90000 });
+      await app.goto(`${B}/a/${st.id}?mermaid=engine`, { waitUntil: 'domcontentloaded', timeout: 90000 });
       check(await waitFor(app, `!!document.querySelector('[data-mx-mermaid-state=ready]')`, 30000), `${kind}: the diagram draws on the reader page`);
       await app.waitForTimeout(3500);
       check(appWarnings.length === 0, `${kind}: no reader-page preload goes unused (${appWarnings[0] ?? 'clean'})`);
@@ -344,6 +347,26 @@ async function runMermaidPreload() {
       const idle = added.filter((href) => !appRan.has(href));
       check(added.length > 0 && idle.length === 0, `${kind}: every chunk the reader page adds for this document is evaluated (${added.length} added; unused: ${idle.join(' ') || 'none'})`);
       await app.close();
+    }
+
+    // HARVESTED: the stored drawing replaces the engine, so its code is neither named nor run.
+    let rawHtml = '';
+    for (const end = Date.now() + 60000; Date.now() < end && !rawHtml.includes('"mermaidImages"');) {
+      rawHtml = await (await fetch(`${B}/a/${st.id}/raw`)).text();
+      if (!rawHtml.includes('"mermaidImages"')) await new Promise((resolve) => setTimeout(resolve, 1000));
+    }
+    if (check(rawHtml.includes('"mermaidImages"'), `${kind}: the background harvest stored the diagram`)) {
+      const storedHead = rawHtml.split('</head>')[0];
+      check(closure.every((url) => !storedHead.includes(url) || manifest.entryDeps?.includes(url)), `${kind}: once stored, the head names none of the kind's closure`);
+      check(/<link rel="preload" href="\/assets\/mermaid\/[0-9a-f]{64}\.svg" as="image">/.test(storedHead), `${kind}: once stored, the head asks for the drawing instead`);
+      const stored = await browser.newPage({ viewport: { width: 1200, height: 900 } });
+      const storedScripts = [];
+      stored.on('request', (r) => { if (r.resourceType() === 'script') storedScripts.push(new URL(r.url()).pathname); });
+      await stored.goto(`${B}/a/${st.id}/raw`, { waitUntil: 'domcontentloaded', timeout: 90000 });
+      check(await waitFor(stored, `!!document.querySelector('[data-mx-mermaid-state=ready] img[src^="/assets/mermaid/"]')`, 30000), `${kind}: the stored drawing draws in the served document`);
+      const engine = storedScripts.filter((url) => closure.includes(url) && !manifest.entryDeps?.includes(url));
+      check(engine.length === 0, `${kind}: once stored, the served document runs no diagram code (${engine.join(' ') || 'none'})`);
+      await stored.close();
     }
   }
 }
