@@ -204,7 +204,8 @@ function renderNode(node: JsxNode, options: StoryInterpreterOptions, path: strin
     }
     if (!isReactiveExpression(node.control.test) || node.children.length !== 2) return null;
     const value = evaluateReactive(node.control.test, options.values ?? {}, options.row);
-    if (node.control.kind === 'and' && !value) return typeof value === 'number' ? value : null;
+    // Not JSX's `{0 && …}`, which prints "0": SQLite booleans ARE 0 and 1, so a falsy condition renders nothing.
+    if (node.control.kind === 'and' && !value) return null;
     const index = value ? 0 : 1;
     return renderNode(node.children[index], options, `${path}.${index}`);
   }
