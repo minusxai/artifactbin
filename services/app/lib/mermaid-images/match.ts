@@ -21,11 +21,13 @@
  *
  * So the READER keeps a stored drawing only when its palette key is the same
  * and every measurement is within a sub-pixel tolerance of the harvest's
- * (`storedDrawingFits`); and the SERVER offers stored drawings only to readers
- * that can pass that check — Blink on macOS or Windows — and only drawings made
- * entirely in the document's web fonts (`readerMayUseStoredDrawings`,
- * `servableStoredDrawing`). Everyone else is served the engine's page exactly
- * as before, so no reader downloads a drawing and then the engine as well.
+ * (`storedDrawingFits`). Whether a reader CAN pass that check depends on its
+ * platform, the face and the size (Blink on macOS agrees with the harvest for
+ * Inter at 16px but not at 14px), so the SERVER offers a stored drawing only
+ * where a measured table says so (lib/mermaid-images/readers); everyone else is
+ * served the engine's page exactly as before, so a reader downloads a drawing
+ * and the engine both only when its browser has moved since the table was
+ * measured — and even then never shows a drawing that is not its own.
  */
 
 /**
@@ -46,6 +48,9 @@ const WIDTH_TOLERANCE_PX = 0.1;
 const BOX_TOLERANCE_PX = 0.01;
 const METRIC_LIMIT = 100_000;
 
+/** The Latin a label is made of; the diagram's own other characters are measured beside it. */
+export const METRICS_PROBE = 'The quick brown fox jumps over the lazy dog 0123456789 THE QUICK BROWN FOX JUMPS OVER THE LAZY DOG';
+
 export function parseMermaidMetrics(text: string | null | undefined): MermaidMetrics | null {
   if (typeof text !== 'string' || text.length > 256) return null;
   const parts = text.split(',');
@@ -61,10 +66,15 @@ export function formatMermaidMetrics(metrics: MermaidMetrics): string {
 const asMetrics = (value: readonly number[] | null | undefined): MermaidMetrics | null =>
   Array.isArray(value) ? parseMermaidMetrics(value.join(',')) : null;
 
+/** One face's text box — width, height, y — as two browsers measured it: the same layout, up to sub-pixel noise? */
+export function mermaidBoxesAgree(a: readonly number[], b: readonly number[]): boolean {
+  return a.length === 3 && b.length === 3 && a.every((value, i) => Math.abs(value - b[i]!) <= (i === 0 ? WIDTH_TOLERANCE_PX : BOX_TOLERANCE_PX));
+}
+
 /** Do two browsers' measurements lay a drawing out the same (up to invisible, sub-pixel differences)? */
 export function mermaidMetricsAgree(a: MermaidMetrics | null, b: MermaidMetrics | null): boolean {
   if (!a || !b) return a === b;
-  return a.every((value, i) => Math.abs(value - b[i]!) <= (i % 3 === 0 ? WIDTH_TOLERANCE_PX : BOX_TOLERANCE_PX));
+  return mermaidBoxesAgree(a.slice(0, 3), b.slice(0, 3)) && mermaidBoxesAgree(a.slice(3), b.slice(3));
 }
 
 /**
@@ -81,28 +91,27 @@ export function storedDrawingFits(stored: { palette: string; metrics?: readonly 
 }
 
 /**
- * THE SERVER'S RULE, per request: is this reader one whose measurements can
- * be the harvest's? Blink (Chrome, Edge and the other Chromium browsers) on
- * macOS — measured — and on Windows, where DirectWrite positions glyphs at
- * fractional advances from the same font file (reasoned; not measured here).
- * Not Blink on Linux (hinted), Android or ChromeOS (unmeasured), not WebKit
- * (every iOS browser, Safari) and not Gecko. A reader it says no to is served
- * the engine's page — no stored drawing, and the engine's code preloaded.
+ * The faces a drawing was drawn in — the label face (the first family of the
+ * host's stack) at the label size, and the edge-label face (at 11px) — as the
+ * harvest records them: what the server looks up in its measured table of
+ * readers (lib/mermaid-images/readers).
  */
-export function readerMayUseStoredDrawings(userAgent: string | null | undefined): boolean {
-  if (!userAgent) return false;
-  const blink = /\b(?:Headless)?Chrom(?:e|ium)\/\d/.test(userAgent) && !/\b(?:CriOS|EdgiOS|FxiOS|OPiOS)\//.test(userAgent) && !/\bFirefox\//.test(userAgent);
-  if (!blink) return false;
-  if (/Android|CrOS|Linux|iPhone|iPad|iPod/.test(userAgent)) return false;
-  return /\(Macintosh;/.test(userAgent) || /\(Windows NT /.test(userAgent);
+export interface MermaidFaces { label: string; size: number; edge: string }
+
+const FAMILY = /^[\w .-]{1,64}$/;
+
+export function formatMermaidFaces(faces: MermaidFaces): string {
+  return `${faces.label}|${faces.size}|${faces.edge}`;
 }
 
-/**
- * A stored drawing the server may offer at all: drawn entirely in the
- * document's loaded web fonts (`portable`, recorded by the harvest's page) and
- * stored with its measurements. A system-font drawing measures like the
- * harvest's own machine, which no reader is.
- */
-export function servableStoredDrawing(info: { portable?: boolean; metrics?: readonly number[] }): boolean {
-  return info.portable === true && asMetrics(info.metrics) !== null;
+export function parseMermaidFaces(text: string | null | undefined): MermaidFaces | null {
+  if (typeof text !== 'string') return null;
+  const [label, size, edge, ...rest] = text.split('|');
+  if (rest.length || !label || !edge || !FAMILY.test(label) || !FAMILY.test(edge) || !/^\d{1,3}$/.test(size ?? '')) return null;
+  return { label, size: Number(size), edge };
+}
+
+/** Metrics as stored (a JSON array), when they are six finite measurements. */
+export function storedMermaidMetrics(value: readonly number[] | null | undefined): MermaidMetrics | null {
+  return asMetrics(value);
 }

@@ -23,10 +23,11 @@
  * the component uses one only while the reader's own palette key and face
  * measurements are the ones it was drawn under (components/kit/mermaid,
  * lib/mermaid-images/match), so a drawing can be unused but never wrong. The
- * routes offer them only to readers that can pass that check
- * (`storedDrawingsServed`), and the harvest keeps only drawings made entirely
- * in the document's web fonts, measured by a browser that does not hint text
- * (services/browser): the drawing a macOS or Windows reader's engine makes. Publishing never waits on any of this and never fails because
+ * routes offer each only to a reader measured to pass that check
+ * (`storedDrawingReader`, lib/mermaid-images/readers), and the harvest keeps
+ * only drawings made entirely in the document's web fonts, measured by a
+ * browser that does not hint text (services/browser). Publishing never waits
+ * on any of this and never fails because
  * of it: the queue insert runs after the commit and swallows its own errors,
  * and a browser that is down only means readers draw with the engine.
  *
@@ -44,7 +45,8 @@ import { getDb } from '@/lib/db';
 import { objectStore } from '@/lib/object-store';
 import { MERMAID_RENDER_ENGINE, mermaidPrerenderable } from './engine';
 import { mermaidCodesOf } from './codes';
-import { readerMayUseStoredDrawings, servableStoredDrawing } from './match';
+import type { MermaidFaces } from './match';
+import { mermaidReaderClass, servableTo, type MermaidReaderClass } from './readers';
 
 export type MermaidSurface = 'document' | 'inline';
 export const MERMAID_SURFACES: readonly MermaidSurface[] = ['document', 'inline'];
@@ -69,14 +71,15 @@ export function engineRequested(url: string | URL): boolean {
 }
 
 /**
- * May this request be served stored drawings? Not when it asks for the engine
- * by name, and not when its reader's browser cannot measure as the harvest's
- * does (lib/mermaid-images/match): that reader would check the drawing, find
- * it is not its own, and download the engine as well — so it is served the
- * engine's page, with the engine's code preloaded, exactly as before.
+ * The reader class this request may be offered stored drawings as
+ * (lib/mermaid-images/readers), or null: when it asks for the engine by name,
+ * or its browser is not one measured to lay drawings out as the harvest's
+ * does — that reader would check a drawing, find it is not its own, and
+ * download the engine as well, so it is served the engine's page, with the
+ * engine's code preloaded, exactly as before.
  */
-export function storedDrawingsServed(request: Request): boolean {
-  return !engineRequested(request.url) && readerMayUseStoredDrawings(request.headers.get('user-agent'));
+export function storedDrawingReader(request: Request): MermaidReaderClass | null {
+  return engineRequested(request.url) ? null : mermaidReaderClass(request.headers.get('user-agent'));
 }
 /** The colour a CAPTURE asked to be rendered in; the caller has verified its export key. */
 export function captureColor(url: string | URL): Mode | null {
@@ -113,7 +116,7 @@ export function comparableSvg(svg: string): string {
  * the palette key, the harvest's measurements of the palette's faces, and
  * whether it was drawn entirely in the document's web fonts (lib/mermaid-images/match).
  */
-export interface MermaidImageInfo { type: string; width?: number; height?: number; mode: Mode; palette: string; metrics?: number[]; portable?: boolean }
+export interface MermaidImageInfo { type: string; width?: number; height?: number; mode: Mode; palette: string; metrics?: number[]; portable?: boolean; faces?: MermaidFaces }
 export type MermaidHarvestMap = Partial<Record<MermaidSurface, Record<string, string>>>;
 
 /**
@@ -185,8 +188,12 @@ export function onMermaidHarvestQueued(listener: (() => void) | null): void { wa
  * when it has none yet — and a HEAD with no harvest row queues one, so the next
  * reader is served drawings. Never throws: a reader always gets a document.
  */
-/** Which version, on which surface — and whether it is the head (only a head queues itself) and private (never served). */
-export interface MermaidImageLookup { artifactId: string; version: number; surface: MermaidSurface; head: boolean; visibility: string }
+/**
+ * Which version, on which surface, for which reader class (only drawings it is
+ * measured to lay out as the harvest did are offered) — and whether it is the
+ * head (only a head queues itself) and private (never served).
+ */
+export interface MermaidImageLookup { artifactId: string; version: number; surface: MermaidSurface; head: boolean; visibility: string; reader: MermaidReaderClass }
 export async function mermaidImagesFor(
   lookup: MermaidImageLookup,
   nodes: readonly JsxNode[],
@@ -218,8 +225,8 @@ export async function mermaidImagesFor(
     const images: Record<string, StoredMermaidImage> = {};
     for (const row of rows) {
       const imageKey = wanted.get(row.key);
-      // Only a drawing some reader could find to be its own (lib/mermaid-images/match).
-      if (!imageKey || !servableStoredDrawing(row.info)) continue;
+      // Only a drawing this reader is measured to find its own (lib/mermaid-images/readers).
+      if (!imageKey || !servableTo(row.info, lookup.reader)) continue;
       images[imageKey] = {
         src: mermaidImagePath(row.key), type: row.info.type, palette: row.info.palette, metrics: row.info.metrics!,
         ...(typeof row.info.width === 'number' ? { width: row.info.width } : {}),

@@ -3,7 +3,7 @@ import { cn } from './cn';
 import { GridItemContext } from './grid';
 import { mermaidImageKey, mermaidSourceError } from '@/lib/story-ui/mermaid-source';
 import { sha256Hex } from '@/lib/sha256';
-import { formatMermaidMetrics, parseMermaidMetrics, storedDrawingFits, type MermaidMetrics } from '@/lib/mermaid-images/match';
+import { METRICS_PROBE, formatMermaidFaces, formatMermaidMetrics, parseMermaidFaces, parseMermaidMetrics, storedDrawingFits, type MermaidMetrics } from '@/lib/mermaid-images/match';
 import type { StoredMermaidImage } from '@/lib/story-runtime/contract';
 import type { MermaidImage, MermaidPalette } from './mermaid-render';
 
@@ -60,8 +60,6 @@ function paletteFor(element: HTMLElement, dark: boolean): MermaidPalette {
   };
 }
 
-/** The Latin a label is made of; the diagram's own other characters are measured beside it. */
-const METRICS_PROBE = 'The quick brown fox jumps over the lazy dog 0123456789 THE QUICK BROWN FOX JUMPS OVER THE LAZY DOG';
 const SVG_NS = 'http://www.w3.org/2000/svg';
 
 /** The diagram's characters beyond ASCII, once each: they may come from another face, or a subset that loads only when asked. */
@@ -113,6 +111,19 @@ function measureFaces(palette: MermaidPalette, code: string): MermaidMetrics | n
   }
 }
 
+const unquote = (family: string) => family.trim().replace(/^(["'])(.*)\1$/, '$2');
+/** The face a font stack leads with, unquoted: the one it draws in when it has loaded. */
+const firstFamily = (stack: string) => unquote(stack.split(',')[0] ?? '');
+
+/**
+ * The faces a drawing is drawn in, as the harvest records them for the server
+ * (lib/mermaid-images/readers): the label face at its size, the edge-label face.
+ */
+const facesOf = (palette: MermaidPalette): string | undefined => {
+  const faces = parseMermaidFaces(formatMermaidFaces({ label: firstFamily(palette.fontFamily), size: Number.parseFloat(palette.fontSize), edge: firstFamily(palette.fontMono) }));
+  return faces ? formatMermaidFaces(faces) : undefined;
+};
+
 /** A `unicode-range` descriptor holds this code point (`U+0-FF, U+131, U+4??`). */
 function inUnicodeRange(range: string, point: number): boolean {
   return (range || 'U+0-10FFFF').split(',').some((part) => {
@@ -137,9 +148,8 @@ function drawnInWebFonts(palette: MermaidPalette, code: string): boolean {
   if (!fonts || typeof fonts[Symbol.iterator] !== 'function') return false;
   const faces = [...fonts];
   const points = [...new Set(METRICS_PROBE + ownCharacters(code))].map((ch) => ch.codePointAt(0)!);
-  const unquote = (family: string) => family.trim().replace(/^(["'])(.*)\1$/, '$2');
   return [palette.fontFamily, palette.fontMono].every((stack) => {
-    const family = unquote(stack.split(',')[0] ?? '');
+    const family = firstFamily(stack);
     const loaded = faces.filter((face) => face.status === 'loaded' && unquote(face.family) === family);
     return loaded.length > 0 && points.every((point) => loaded.some((face) => inUnicodeRange(face.unicodeRange, point)));
   });
@@ -171,7 +181,7 @@ function fontsFor(palette: MermaidPalette, code: string): Promise<void> {
 }
 
 /** An engine drawing, and — when the fonts held still while it was drawn — what it was drawn under, for the harvest. */
-type Drawn = { code: string; image?: MermaidImage; error?: string; palette?: string; metrics?: string; portable?: boolean };
+type Drawn = { code: string; image?: MermaidImage; error?: string; palette?: string; metrics?: string; portable?: boolean; faces?: string };
 
 export function Mermaid({ code, title = 'Diagram', colorMode = 'light', className, ...props }: MermaidProps) {
   const host = useRef<HTMLElement>(null);
@@ -231,7 +241,7 @@ export function Mermaid({ code, title = 'Diagram', colorMode = 'light', classNam
           const after = paletteFor(element, colorMode === 'dark');
           const now = measured(after, code);
           setResult({ code, image, ...(before && sameMeasure(before, now) ? {
-            palette: now.palette, ...(now.metrics ? { metrics: formatMermaidMetrics(now.metrics) } : {}), portable: drawnInWebFonts(after, code),
+            palette: now.palette, ...(now.metrics ? { metrics: formatMermaidMetrics(now.metrics) } : {}), portable: drawnInWebFonts(after, code), faces: facesOf(after),
           } : {}) });
         },
         () => { if (active) setResult({ code, error: 'Could not render this diagram. Check its Mermaid syntax.' }); },
@@ -278,7 +288,8 @@ export function Mermaid({ code, title = 'Diagram', colorMode = 'light', classNam
     // What the engine drew here, and under which palette — read by the harvest
     // (lib/mermaid-images) to store it. Client-only: the server never draws.
     data-mx-mermaid-key={engineDrawn && imageKey ? imageKey : undefined} data-mx-mermaid-palette={engineDrawn ? current?.palette : undefined}
-    data-mx-mermaid-metrics={engineDrawn ? current?.metrics : undefined} data-mx-mermaid-portable={engineDrawn && current?.portable ? '' : undefined}>
+    data-mx-mermaid-metrics={engineDrawn ? current?.metrics : undefined} data-mx-mermaid-portable={engineDrawn && current?.portable ? '' : undefined}
+    data-mx-mermaid-faces={engineDrawn ? current?.faces : undefined}>
     {/* In a tile the title is chart chrome, like a Question's; in prose it is a caption. */}
     <figcaption className={inGridItem ? 'border-b border-border px-3 py-2 font-mono text-sm font-medium' : 'mb-2 font-mono text-sm font-medium'}>{title}</figcaption>
     {error ? <p role="alert" className={cn('text-sm text-destructive', inGridItem && 'p-3')}>{error}</p> : image ?

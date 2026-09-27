@@ -38,6 +38,12 @@ const PALETTE = { document: 'a'.repeat(32), inline: 'b'.repeat(32) } as const;
 /** What the harvest's (unhinted) browser measured the palette's faces as (lib/mermaid-images/match). */
 const METRICS = [855.9375, 20, -16, 646.796875, 14, -11];
 /**
+ * The faces each surface draws in: the served document's label face at 16px,
+ * the app reader's at 14px — faces Blink on macOS is measured to lay out as the
+ * harvest does (lib/mermaid-images/reader-match.json), unless a test says otherwise.
+ */
+const FACES = { document: 'Inter|16|JetBrains Mono', inline: 'JetBrains Mono|14|JetBrains Mono' } as const;
+/**
  * Readers, by what the server knows of them: Blink on macOS measures as the
  * harvest does; Blink on Linux rounds its glyph advances, and WebKit draws its
  * line boxes shorter, so neither can use a stored drawing.
@@ -45,6 +51,7 @@ const METRICS = [855.9375, 20, -16, 646.796875, 14, -11];
 const MAC_CHROME = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36';
 const LINUX_CHROME = 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36';
 const MAC_SAFARI = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15';
+const WINDOWS_CHROME = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36';
 const reader = (path: string, ua = MAC_CHROME, headers: Record<string, string> = {}) => request(path, { headers: { 'user-agent': ua, ...headers } });
 
 /**
@@ -52,7 +59,7 @@ const reader = (path: string, ua = MAC_CHROME, headers: Record<string, string> =
  * code, each carrying the key and palette the component would set. `vary`
  * makes a code's drawing differ per load; `unsafe` makes it carry a script.
  */
-function drawingBrowser(codes: string[], opts: { vary?: string; unsafe?: string; down?: boolean; forged?: string; system?: string; unmeasured?: string } = {}) {
+function drawingBrowser(codes: string[], opts: { vary?: string; unsafe?: string; down?: boolean; forged?: string; system?: string; unmeasured?: string; faces?: Partial<Record<'document' | 'inline', string>> } = {}) {
   const calls: SvgHarvestRequest[] = [];
   let loads = 0;
   const browser: BrowserService = {
@@ -70,6 +77,7 @@ function drawingBrowser(codes: string[], opts: { vary?: string; unsafe?: string;
           // `system`: drawn in a face that is not one of the document's loaded web fonts; `unmeasured`: no text boxes.
           ...(code === opts.unmeasured ? {} : { 'data-mx-mermaid-metrics': METRICS.join(',') }),
           ...(code === opts.system ? {} : { 'data-mx-mermaid-portable': '' }),
+          'data-mx-mermaid-faces': opts.faces?.[surface] ?? FACES[surface],
         },
         width: 120, height: 80,
         // Ids are numbered per page load, as the kit's are (`mx-mermaid-N`).
@@ -299,7 +307,7 @@ describe('a published Mermaid document', () => {
     const src = island(mac).mermaidImages![mermaidImageKey(FLOW, 'light')]!.src;
     expect(head(mac)).toContain(`<link rel="preload" href="${src}" as="image">`);
     expect(head(mac)).not.toMatch(/mermaid-render-/);
-    for (const ua of [LINUX_CHROME, MAC_SAFARI, '']) {
+    for (const ua of [LINUX_CHROME, MAC_SAFARI, WINDOWS_CHROME, '']) {
       // The served document: nothing stored in it, the engine's chunks preloaded — the decision and its preloads agree.
       const html = await raw(id, '', ua);
       expect(island(html).mermaidImages, ua).toBeUndefined();
@@ -313,6 +321,22 @@ describe('a published Mermaid document', () => {
     }
     const macPage = await artifactPageAnswer(reader(`/a/${id}`, MAC_CHROME, { accept: 'text/html' }), id);
     expect(macPage.story!.lazyCode).toEqual(expect.objectContaining({ mermaid: [], mermaidImages: [expect.stringMatching(/^\/assets\/mermaid\//)] }));
+  });
+
+  it('offers a drawing only where the reader is measured to lay its faces out as the harvest did: Inter at 16px on the served document, not at 14px on the app\'s reader', async () => {
+    setServices({ browser: drawingBrowser([FLOW], { faces: { document: 'Inter|16|JetBrains Mono', inline: 'Inter|14|JetBrains Mono' } }).browser });
+    const { id } = await publish([FLOW]);
+    await runNextMermaidHarvest();
+    // The served document: offered, preloaded, no engine code.
+    const html = await raw(id);
+    const src = island(html).mermaidImages![mermaidImageKey(FLOW, 'light')]!.src;
+    expect(head(html)).toContain(`<link rel="preload" href="${src}" as="image">`);
+    expect(head(html)).not.toMatch(/mermaid-render-/);
+    // The app's reader draws Inter at 14px, whose line box macOS does not share with the harvest: the engine's page.
+    const page = await artifactPageAnswer(reader(`/a/${id}`, MAC_CHROME, { accept: 'text/html' }), id);
+    expect((page.body as { surface: { runtime: { data: Record<string, unknown> } } }).surface.runtime.data.mermaidImages).toBeUndefined();
+    expect(page.story!.html()).not.toContain('/assets/mermaid/');
+    expect(page.story!.lazyCode).toEqual(expect.objectContaining({ mermaid: ['flowchart'], mermaidImages: [] }));
   });
 
   it('never stores a drawing drawn in a system font, or one whose faces were not measured: no reader could be judged against it', async () => {

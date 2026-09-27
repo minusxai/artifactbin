@@ -1,0 +1,42 @@
+{
+ "generated": "scripts/mermaid-reader-match.mjs — do not edit",
+ "probe": "3afa3f86a1fa7e8b",
+ "classes": {
+  "macos-blink": {
+   "measured": {
+    "reader": "Chromium 151.0.7922.34 on darwin/arm64",
+    "harvest": "Chromium 151.0.7922.34 on linux/arm64, unhinted (--font-render-hinting=none)"
+   },
+   "faces": {
+    "Inter": [
+     11,
+     12,
+     13,
+     15,
+     16
+    ],
+    "JetBrains Mono": [
+     11,
+     12,
+     13,
+     14,
+     15,
+     16
+    ],
+    "Noto Serif": [
+     14
+    ],
+    "Cormorant Garamond": [
+     13,
+     14,
+     16
+    ],
+    "Bricolage Grotesque": [
+     11,
+     12,
+     15
+    ]
+   }
+  }
+ }
+}

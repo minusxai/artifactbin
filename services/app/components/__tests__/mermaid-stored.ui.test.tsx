@@ -232,6 +232,11 @@ describe('a drawing the harvest may store for every reader', () => {
     expect(await figureOf(CODE)).toHaveAttribute('data-mx-mermaid-portable');
   });
 
+  it('names the faces it was drawn in — the label face at its size, the edge-label face — for the server\'s measured table of readers', async () => {
+    fonts([{ family: 'Inter', status: 'loaded', unicodeRange: LATIN }, { family: '"JetBrains Mono"', status: 'loaded', unicodeRange: LATIN }]);
+    expect(await figureOf(CODE, { ...WEB_FACES, fontSize: '16px' } as CSSProperties)).toHaveAttribute('data-mx-mermaid-faces', 'Inter|16|JetBrains Mono');
+  });
+
   it('is not when a face is a system font, has not loaded, or lacks one of the diagram\'s characters', async () => {
     fonts([{ family: 'Inter', status: 'loaded', unicodeRange: LATIN }, { family: '"JetBrains Mono"', status: 'loaded', unicodeRange: LATIN }]);
     expect(await figureOf(CODE, { fontFamily: 'Georgia, serif', '--font-mono': '"JetBrains Mono", monospace' } as CSSProperties)).not.toHaveAttribute('data-mx-mermaid-portable');

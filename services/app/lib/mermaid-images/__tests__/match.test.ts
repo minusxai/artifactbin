@@ -12,7 +12,7 @@
  *   - macOS WebKit (Safari's engine: the same widths to 2dp, a shorter line box).
  */
 import { describe, expect, it } from 'vitest';
-import { formatMermaidMetrics, mermaidMetricsAgree, parseMermaidMetrics, readerMayUseStoredDrawings, servableStoredDrawing, storedDrawingFits, type MermaidMetrics } from '../match';
+import { formatMermaidFaces, formatMermaidMetrics, mermaidMetricsAgree, parseMermaidFaces, parseMermaidMetrics, storedDrawingFits, type MermaidMetrics } from '../match';
 
 const HARVEST_UNHINTED: MermaidMetrics = [855.9375, 20, -16, 646.796875, 14, -11];
 const MACOS_BLINK: MermaidMetrics = [855.9375, 20, -16, 646.8125, 14, -11];
@@ -71,47 +71,13 @@ describe('the metrics', () => {
   });
 });
 
-describe('a reader the server serves stored drawings to', () => {
-  // Blink with unhinted, fractional glyph advances: macOS (measured) and Windows (DirectWrite, reasoned).
-  it.each([
-    ['Chrome on macOS', 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36'],
-    ['headless Chrome on macOS', 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/140.0.0.0 Safari/537.36'],
-    ['Chrome on Windows', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36'],
-    ['Edge on Windows', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 Edg/140.0.0.0'],
-  ])('%s', (_name, ua) => {
-    expect(readerMayUseStoredDrawings(ua)).toBe(true);
-  });
-
-  // Everyone else draws with the engine, as before: their measurements are not the harvest's.
-  it.each([
-    ['Chrome on Linux (hinted: whole-pixel advances)', 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36'],
-    ['headless Chrome on Linux', 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/140.0.0.0 Safari/537.36'],
-    ['Chrome on Android (unmeasured)', 'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Mobile Safari/537.36'],
-    ['Chrome on ChromeOS (unmeasured)', 'Mozilla/5.0 (X11; CrOS x86_64 14541.0.0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36'],
-    ['Chrome on iOS (WebKit)', 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) CriOS/140.0.0.0 Mobile/15E148 Safari/604.1'],
-    ['Safari on macOS', 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15'],
-    ['Firefox on macOS', 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:130.0) Gecko/20100101 Firefox/130.0'],
-    ['Firefox on Windows', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:130.0) Gecko/20100101 Firefox/130.0'],
-    ['no user agent', ''],
-  ])('not %s', (_name, ua) => {
-    expect(readerMayUseStoredDrawings(ua)).toBe(false);
-  });
-  it('not a request that names none', () => {
-    expect(readerMayUseStoredDrawings(null)).toBe(false);
-    expect(readerMayUseStoredDrawings(undefined)).toBe(false);
-  });
-});
-
-describe('a stored drawing the server serves at all', () => {
-  it('is one drawn entirely in the document\'s web fonts, with its measurements', () => {
-    expect(servableStoredDrawing({ portable: true, metrics: [...HARVEST_UNHINTED] })).toBe(true);
-  });
-  it('is never one drawn in a system font (it measures like the harvest\'s machine, and no reader is that machine)', () => {
-    expect(servableStoredDrawing({ portable: false, metrics: [...HARVEST_UNHINTED] })).toBe(false);
-    expect(servableStoredDrawing({ metrics: [...HARVEST_UNHINTED] })).toBe(false);
-  });
-  it('is never one stored without its measurements', () => {
-    expect(servableStoredDrawing({ portable: true })).toBe(false);
-    expect(servableStoredDrawing({ portable: true, metrics: [1, 2, 3] })).toBe(false);
+describe('the faces a drawing was drawn in', () => {
+  it('round-trip through the attribute the harvest reads, and refuse anything else', () => {
+    expect(parseMermaidFaces(formatMermaidFaces({ label: 'Inter', size: 16, edge: 'JetBrains Mono' }))).toEqual({ label: 'Inter', size: 16, edge: 'JetBrains Mono' });
+    expect(parseMermaidFaces('Inter|16')).toBeNull();
+    expect(parseMermaidFaces('Inter|sixteen|JetBrains Mono')).toBeNull();
+    expect(parseMermaidFaces('Inter|16|<script>')).toBeNull();
+    expect(parseMermaidFaces(`${'x'.repeat(200)}|16|Inter`)).toBeNull();
+    expect(parseMermaidFaces(null)).toBeNull();
   });
 });

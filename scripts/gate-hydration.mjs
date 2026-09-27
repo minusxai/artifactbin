@@ -46,6 +46,7 @@ import { githubWidgetFixture } from './lib/github-widget-fixture.mjs';
 import { loginViaEmail, startMailSink } from './lib/mail-login.mjs';
 import { publishPageSpeedFixtures } from './fixtures/page-speed/index.mjs';
 import { kitchenSinkMarkup } from './lib/kitchen-sink-doc.mjs';
+import { readFileSync } from 'node:fs';
 
 const B = process.argv[2] ?? 'http://localhost:3030';
 const check = createChecker('hydration');
@@ -484,15 +485,19 @@ async function runReaderHydration() {
   // The parse-survival shapes of the repaint check below (a div in a <p>, a Button in a trigger, a <For> in an svg).
   const survival = await publish({ title: 'Hydration parse survival', markup: PROSE, visibility: 'unlisted' });
   const kit = fixtures.find((f) => f.key === 'kit');
-  // The Mermaid fixture is read as readers meet it once its diagram is stored (lib/mermaid-images):
-  // the stored drawing is in the served story and must hydrate as it was served.
-  const diagram = fixtures.find((f) => f.key === 'mermaid');
+  // A Mermaid document read as readers meet it once its diagram is stored (lib/mermaid-images):
+  // the stored drawing is in the served story and must hydrate as it was served. The server offers
+  // it on the app's reader only where macOS Blink lays the faces out as the harvest does
+  // (lib/mermaid-images/reader-match.json): JetBrains Mono at 14px, not Inter — so this is the
+  // Mermaid fixture in the terminal theme; the fixture itself (Inter) hydrates with the engine.
+  const mermaidMarkup = readFileSync(new URL('./fixtures/page-speed/mermaid.jsx', import.meta.url), 'utf8');
+  const diagram = { key: 'mermaid, stored (terminal)', ...(await publish({ title: 'Hydration stored diagram', markup: mermaidMarkup, theme: 'terminal', visibility: 'unlisted' })) };
   let storedDiagram = false;
   for (const end = Date.now() + 60000; !storedDiagram && Date.now() < end;) {
     storedDiagram = (await (await fetch(`${B}/api/page/artifact/${diagram.id}`, { headers: { 'user-agent': STORED_DRAWING_READER.userAgent } })).text()).includes('"mermaidImages"');
     if (!storedDiagram) await new Promise((resolve) => setTimeout(resolve, 1000));
   }
-  check(storedDiagram, 'the mermaid fixture\'s diagram was stored before the reader loads');
+  check(storedDiagram, 'the stored-diagram document was harvested before the reader loads');
   const drawnFromStorage = (who) => async (page) => check(await waitFor(page, `!!document.querySelector('#root [data-mx-mermaid-state=ready] img[src^="/assets/mermaid/"]') && !document.querySelector('#root figure[data-mx-mermaid-palette]')`, 15000),
     `mermaid, ${who}: the hydrated story shows the stored drawing and drew nothing with the engine`);
   // Two versions, so `?version=1` is an ARCHIVED render — which only the owner's history reaches.
@@ -530,7 +535,7 @@ async function runReaderHydration() {
     if (t !== null) times.push(t);
   };
   // Every fixture and the kitchen sink, anonymous and as the owner (whose address is the pretty /@owner one).
-  for (const doc of [...fixtures, { key: 'kitchen sink', id: sinkDoc.id }, { key: 'scripted', id: scripted.id }, { key: 'parse survival', id: survival.id }]) {
+  for (const doc of [...fixtures, diagram, { key: 'kitchen sink', id: sinkDoc.id }, { key: 'scripted', id: scripted.id }, { key: 'parse survival', id: survival.id }]) {
     await load(anonymous, 'light', `/a/${doc.id}`, `${doc.key}, anonymous`, doc === diagram ? drawnFromStorage('anonymous') : undefined);
     await load(ownerContext, 'dark', `/a/${doc.id}`, `${doc.key}, owner`, doc === diagram ? drawnFromStorage('owner') : undefined);
   }
