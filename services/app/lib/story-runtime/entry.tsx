@@ -211,26 +211,24 @@ if (island?.textContent && root) {
      * (./kit-registry): the chunks this document draws — named in its head, so
      * they arrive beside this module — are awaited BEFORE hydrating, and the
      * first client render is the server's, component for component. A render
-     * asked for before the hydration commits (the reader's mode, an adopted
-     * version) waits for it: rendering into a root still hydrating would make
-     * React throw the server's tree away.
+     * asked for while they load (the reader's mode, an adopted version) is
+     * handed to the root the moment it exists, exactly as it was handed to it
+     * right after `hydrateRoot` when the kit shipped inside this module.
      */
     let reactRoot: Root | null = null;
-    let hydrated = false;
     let waiting: ReactElement | null = null;
     const show = (element: ReactElement) => {
-      if (reactRoot && hydrated) reactRoot.render(element);
+      if (reactRoot) reactRoot.render(element);
       else waiting = element;
     };
-    const firstCommit = () => {
-      hydrated = true;
-      runAuthorScript();
-      const next = waiting;
-      waiting = null;
-      if (next) reactRoot?.render(next);
-    };
     void loadKitFor(data.nodes).then(
-      () => { reactRoot = hydrateRoot(root, createElement(StoryRuntimeApp, { ...data, store, ...assetImport, onMounted: firstCommit })); },
+      () => {
+        const hydrating = hydrateRoot(root, createElement(StoryRuntimeApp, { ...data, store, ...assetImport, onMounted: runAuthorScript }));
+        reactRoot = hydrating;
+        const next = waiting;
+        waiting = null;
+        if (next) hydrating.render(next);
+      },
       // Without its components the document is not hydrated at all: the served
       // markup stays on screen, readable, and the author's script still runs (below).
       (error: unknown) => { console.error('[story-runtime] the document\'s components failed to load:', error); },
