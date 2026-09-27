@@ -19,7 +19,7 @@ import { warmPreparedPage } from '@/lib/story/prepared-page.server';
 import { MERMAID_RENDER_ENGINE, mermaidPrerenderable } from './engine';
 import { mermaidCodesOf } from './codes';
 import { sanitizeMermaidSvg } from './sanitize';
-import { parseMermaidFaces, parseMermaidMetrics, type MermaidFaces } from './match';
+import { formatMermaidFaces, parseMermaidFaces, parseMermaidMetrics, type MermaidFaces } from './match';
 import { CAPTURE_COLOR_PARAM, MERMAID_ENGINE_PARAM, comparableSvg, MERMAID_MODES, MERMAID_SURFACES, mermaidContentKey, mermaidObjectKey, onMermaidHarvestQueued, type MermaidHarvestMap, type MermaidImageInfo, type MermaidMode, type MermaidSurface } from './store';
 
 type Mode = MermaidMode;
@@ -98,7 +98,8 @@ function candidatesOf(drawn: HarvestedSvg[], surface: MermaidSurface, mode: Mode
     seen.add(imageKey);
     const { palette, metrics, faces } = under;
     out.push({ surface, mode, imageKey, code, palette, metrics, faces, type, width: drawing.width, height: drawing.height, svg,
-      content: mermaidContentKey(mode, `${palette}:${metrics.join(',')}`, code, svg) });
+      // What it was drawn under is part of its address: the same bytes measured otherwise are another record.
+      content: mermaidContentKey(mode, `${palette}:${metrics.join(',')}:${formatMermaidFaces(faces)}`, code, svg) });
   }
   return out;
 }
