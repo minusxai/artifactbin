@@ -20,10 +20,9 @@ import { useConfirmation } from './ConfirmDialog';
 import { artifactEditPath } from '@/lib/urls';
 import { CARD_RENDER_GENERATION } from '@/lib/export-card';
 import { useEffect, useState } from 'react';
-import { createPortal } from 'react-dom';
-import { useTrustedPortalContainer } from '@/components/TrustedUi';
-import { Check, createLucideIcon, Link as LinkIcon, PenLine, X } from 'lucide-react';
-import { VISIBILITY_ICON_NODES, sharingIconFor, type SharingVerdict } from '@/lib/visibility-icons';
+import { SharePanel, VISIBILITY_ICONS, shareTitle } from '@/components/SharePanel';
+import { Check, Link as LinkIcon, PenLine, X } from 'lucide-react';
+import { sharingIconFor, type SharingVerdict } from '@/lib/visibility-icons';
 import { SelectMenu } from '@/components/SelectMenu';
 import { Tooltip } from '@/components/Tooltip';
 import type { DatasetCatalog } from '@/lib/datasets/types';
@@ -44,12 +43,6 @@ interface SharingState {
   canPrivate?: boolean;
 }
 
-const VISIBILITY_ICONS = {
-  shared: createLucideIcon('users', VISIBILITY_ICON_NODES.shared),
-  public: createLucideIcon('globe', VISIBILITY_ICON_NODES.public),
-  unlisted: createLucideIcon('eye-off', VISIBILITY_ICON_NODES.unlisted),
-  private: createLucideIcon('lock', VISIBILITY_ICON_NODES.private),
-} as const;
 
 /**
  * The role list, as the house dropdown wants it. A native <select> draws its
@@ -74,6 +67,7 @@ export default function ShareLink({
   onSocialPreview,
   version,
   onSharingChange,
+  initialOpen = false,
 }: {
   className: string;
   /** Enables the ACL dialog; without it this is just the copy button. */
@@ -100,9 +94,11 @@ export default function ShareLink({
   version?: number;
   /** Keep a separately rendered toolbar verdict in sync with this dialog. */
   onSharingChange?: (verdict: SharingVerdict) => void;
+  /** Open the panel on mount: the row was pressed while this code was still downloading (ShareLinkOnDemand). */
+  initialOpen?: boolean;
 }) {
   const [copied, setCopied] = useState(false);
-  const [open, setOpen] = useState(variant === 'dialog');
+  const [open, setOpen] = useState(variant === 'dialog' || initialOpen);
   const [state, setState] = useState<SharingState | null>(null);
   const [email, setEmail] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -227,7 +223,7 @@ export default function ShareLink({
       </Tooltip>
       )}
       {open && (
-        <SharePanel title={`Share “${title ?? (format === 'folder' ? 'Untitled folder' : 'Untitled')}”`} onClose={() => { setOpen(false); onClose?.(); }}>
+        <SharePanel title={shareTitle(title, format)} onClose={() => { setOpen(false); onClose?.(); }}>
           <button
             type="button"
             aria-label="Copy link"
@@ -410,65 +406,6 @@ export default function ShareLink({
     </span>
   );
 }
-
-/** One viewport-level sharing surface. Portaling keeps it centered even when
- * its trigger lives inside an animated controls popover. */
-function SharePanel({ onClose, children, title }: {
-  title: string;
-  onClose: () => void;
-  children: React.ReactNode;
-}) {
-  const portal = useTrustedPortalContainer();
-  useEffect(() => {
-    const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
-    const escape = (event: KeyboardEvent) => { if (event.key === 'Escape') onClose(); };
-    window.addEventListener('keydown', escape);
-    return () => {
-      document.body.style.overflow = previousOverflow;
-      window.removeEventListener('keydown', escape);
-    };
-  }, [onClose]);
-
-  return createPortal(
-    <div className="fixed inset-0 z-[100] flex items-center justify-center p-3 sm:p-8">
-      <button
-        type="button"
-        aria-label="Close sharing by clicking outside"
-        onClick={onClose}
-        className="absolute inset-0 cursor-default border-0 bg-black/45 p-0 backdrop-blur-[2px]"
-      />
-      <section
-        role="dialog"
-        aria-modal="true"
-        aria-label="Sharing"
-        className="relative z-10 flex w-full max-w-2xl animate-[rise_.16s_ease-out] flex-col overflow-hidden rounded-[9px] border border-edge-bright bg-surface font-mono text-xs shadow-2xl"
-        style={{ maxHeight: 'calc(100svh - 24px)' }}
-      >
-        <header className="flex items-start gap-4 border-b border-edge px-4 py-4 sm:px-6">
-          <div className="min-w-0 flex-1">
-            <h2 className="break-words text-base font-semibold text-fg">{title}</h2>
-            <p className="mt-1 text-[11px] text-faint">Manage access, invite people, or copy the link.</p>
-          </div>
-          <button
-            type="button"
-            aria-label="Close sharing"
-            autoFocus
-            onClick={onClose}
-            className="ml-auto inline-flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-[4px] text-muted hover:bg-raised hover:text-fg"
-          >
-            <X size={16} />
-          </button>
-        </header>
-        <div className="overflow-y-auto px-4 py-4 sm:px-6 sm:py-5">
-          {children}
-        </div>
-      </section>
-    </div>,
-    portal ?? document.body,
-  );
-}
-
 
 /** Shows the saved card; the existing editor owns uploading, cropping and saving. */
 function SocialThumbnail({ src, onEdit }: { src?: string; onEdit: () => void }) {

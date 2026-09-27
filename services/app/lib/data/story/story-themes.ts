@@ -30,8 +30,8 @@
  * package + one FONT_FILES entry in copy-assets; families outside the catalog fall back to
  * the closest packaged one (documented per theme below).
  */
-import type { StoryThemeName } from '@/lib/validation/atlas-schemas';
-import { STORY_THEME_NAMES } from '@/lib/validation/atlas-schemas';
+import type { StoryThemeName } from '@/lib/validation/story-theme-names';
+import { STORY_THEME_NAMES } from '@/lib/validation/story-theme-names';
 
 export type { StoryThemeName };
 export { STORY_THEME_NAMES };

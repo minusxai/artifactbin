@@ -94,6 +94,8 @@ const leaveEdit = () => act(() => { window.location.hash = ''; window.dispatchEv
 describe('coming back from edit mode', () => {
   it('never gives comment creation an editor drain, while normal edit exit still flushes', async () => {
     render(<ArtifactShell role="owner"><ArtifactSurface {...props()} /></ArtifactShell>);
+    // The comment layer is an on-demand chunk (AnnotationLayerOnDemand): wait for it to mount.
+    await waitFor(() => expect(surfaceSpies.annotationProps.length).toBeGreaterThan(0));
     expect(surfaceSpies.annotationProps.at(-1)).not.toHaveProperty('beforeCreate');
     goEdit();
     await waitFor(() => expect(screen.queryByLabelText('Editor stub')).not.toBeNull());

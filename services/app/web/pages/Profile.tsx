@@ -3,15 +3,18 @@ import { usePageData } from '../use-page-data';
 import { takeBootstrap } from '../bootstrap';
 import { PageLoading } from '../PageLoading';
 import { Navigate, useLocation, useParams } from 'react-router';
-import { ListingShell } from '@/components/Listing';
 import type { ProfileSocial } from '@/lib/profile-social';
-import { ProfileListing } from '@/components/ProfileListing';
+import { lazyPage } from '../lazy-page';
+import type { ProfileIndexPage as ProfileIndexView } from './ProfileIndex';
 import { artifactViewPath, parsePrettyPath } from '@/lib/urls';
 import { routePages } from '../route-pages';
 import { NotFoundPage } from './NotFound';
 
 // A profile listing does not need the artifact renderer/editor bundle.
 const { ArtifactPage } = routePages;
+// …and a document behind a pretty address does not need the listing: the index
+// is its own chunk, framed like this route's own pending state while it loads.
+const ProfileIndexPage = lazyPage<Parameters<typeof ProfileIndexView>[0]>(() => import('./ProfileIndex').then(m => ({ default: m.ProfileIndexPage })), true);
 
 type Resolved =
   | { kind: 'redirect'; to: string }
@@ -37,13 +40,5 @@ function ResolvedProfile({ user, rest }: { user: string | undefined; rest: strin
   if (page === null) return error ? <NotFoundPage /> : <PageLoading />;
   if (page.kind === 'redirect') return <Navigate to={page.to} replace />;
   if (page.kind === 'artifact') return <ArtifactPage id={page.id} />;
-  return (
-    <ListingShell authed={page.authed} anon={page.anon}>
-      {error && <button aria-label="Retry profile" onClick={() => void refresh(true)}>Could not refresh profile. Retry</button>}
-      <ProfileListing data={page} />
-    </ListingShell>
-  );
+  return <ProfileIndexPage page={page} stale={!!error} onRetry={() => void refresh(true)} />;
 }
-
-/** The listing is shared with the custom-domain home page (components/ProfileListing). */
-export { ProfileListing };

@@ -23,10 +23,7 @@
  *  - Params substitute by the same rules; a declared `default` fills an omitted param.
  *  - Any other `{{token}}` is a hard error naming the token.
  */
-import {
-  type VizRecipeBinding,
-  type VizRecipeContent
-} from '@/lib/validation/atlas-schemas';
+import type { VizRecipeBinding, VizRecipeContent } from '@/lib/validation/atlas-schemas';
 import type { VizResultColumn } from './types';
 
 /** Column kinds a slot may accept (drives drop-zone hints and dummy synthesis). */
