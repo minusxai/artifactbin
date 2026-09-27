@@ -1,10 +1,9 @@
 /**
- * THE SQLITE WASM IN A SINGLE EXECUTABLE. The engine package reads its
- * `sqlite3.wasm` from beside its own module, which a single executable does
- * not have on disk; the binary carries the file as an asset instead
- * (scripts/binary.mjs), supplied here before the first query. From npm or
- * source the package's own file is read and this does nothing.
+ * THE SQLITE WASM IN A BUILT CLI. The engine package reads its `sqlite3.wasm` from beside its own
+ * module, which neither the single executable nor a bundle copied on its own has on disk; every build
+ * embeds the bytes (src/sqlite-wasm-embedded.ts), supplied here before the first query. From source
+ * nothing is embedded and the package's own file is read.
  */
-import {isSea,getAsset} from 'node:sea';
 import {provideSqliteWasm} from '@artifactbin/sql/core';
-if(isSea())provideSqliteWasm(new Uint8Array(getAsset('sqlite-wasm')));
+import {embeddedSqliteWasm} from './sqlite-wasm-embedded';
+if(embeddedSqliteWasm)provideSqliteWasm(embeddedSqliteWasm);
