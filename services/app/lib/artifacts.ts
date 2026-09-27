@@ -66,6 +66,7 @@ import {newEditId} from './story/splice';
 import type {StringEdit} from './story/edit-batch';
 import { nodeIndex, stampNodeIds } from './story/node-ids';
 import { COMPILED_DATAFLOW, finalizeArtifactMetadata, readCompiledDataflow, storedCompiledDataflow } from './story/parsed-artifact-metadata';
+import { warmPreparedPage } from './story/prepared-page.server';
 import { DATA_SYNTAX_META, hasCurrentDataSyntax, PREVIOUS_ENGINE, previousEngineRestore } from './story/data-syntax';
 import { inCurrentSyntax } from './migrate/sqlite/stored';
 import { convertArtifactNow } from './sqlite-syntax-migration';
@@ -493,6 +494,8 @@ export async function createArtifact(
 /** What a creation says to the rest of the system, AFTER its transaction committed. */
 async function afterCreated(row: ArtifactRow, userId: string | null): Promise<void> {
   void trackEvent('create', row.id, { userId, parentId: parentOf(row) });
+  // The first reader of a new document finds it prepared (lib/story/prepared-page.server).
+  if (row.format === 'markup') warmPreparedPage(row.id);
   // A child arriving wakes the folder it landed in, so an open listing
   // re-runs its own query with no reload.
   await notifyParent(parentOf(row));
@@ -1606,7 +1609,11 @@ export async function applyEditScoped(actor: TokenActor, id: string, input: Edit
     if(!committed.applied&&committed.refusal)return json({error:'mention_refused',detail:committed.refusal},403);
     if(!committed.applied&&input.documentUpdate.settings?.visibility==='private'&&!committed.head.user_id)return json({error:'private_requires_account'},400);
     if(opts.dryRun)return committed.applied?json({valid:true,dry_run:true,commit_checks:['authorization','dependency_revisions','metadata','sharing','size']}):json({error:'doc_changed'},409);
-    return committed.applied?{applied:true,row:await storeCompiledRecord(db,committed.row)}:{applied:false,reason:'doc_changed',head:headOf(committed.head)};
+    if(!committed.applied)return {applied:false,reason:'doc_changed',head:headOf(committed.head)};
+    const row=await storeCompiledRecord(db,committed.row);
+    // After the commit, off the write's path: the new head is prepared for its readers.
+    if(row.format==='markup')warmPreparedPage(row.id);
+    return {applied:true,row};
   }
 
 

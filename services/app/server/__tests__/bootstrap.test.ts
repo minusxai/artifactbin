@@ -17,7 +17,7 @@ import { POST as startRoute } from '@/app/api/start/route';
 
 import { mintToken } from '@/lib/tokens';
 import { claimToken, createUser, ensureUsername } from '@/lib/users';
-import { BOOTSTRAP_ID, createAppServer, withBootstrap, withInitialStory } from '../app';
+import { BOOTSTRAP_ID, createAppServer, initialStoryOf, withBootstrap, withInitialStory } from '../app';
 import { prepareStoryRuntime } from '@/lib/story/prepare-runtime.server';
 import { STORY_FONT_THEMES } from '@/lib/data/story/story-fonts';
 import { APP_SHELL_FONT_PRELOADS } from '@/lib/app-fonts';
@@ -117,7 +117,7 @@ describe('inlined page data', () => {
   it('discovers exactly the faces the first screen paints as crossorigin preloads before body markup', async () => {
     const preloadsFor = async (source: string, theme: string | null) => {
       const runtime = await prepareStoryRuntime({source,compiledCss:null,theme:theme as never,colorMode:'light',refData:{},title:'Fonts'});
-      return fontPreloadsIn(withInitialStory('<html><head></head><body><div id="root"></div></body></html>',runtime,'ABC123'));
+      return fontPreloadsIn(withInitialStory('<html><head></head><body><div id="root"></div></body></html>',initialStoryOf(runtime),'ABC123'));
     };
     // A heading alone paints the display face only: the body face would go unused.
     expect(await preloadsFor('<h1>Headline</h1>','manuscript')).toEqual([latinOf('Cormorant Garamond')]);
@@ -128,7 +128,7 @@ describe('inlined page data', () => {
   });
   it('keeps SSR as the sole in-flow document until the captured handoff is removed', async () => {
     const runtime = await prepareStoryRuntime({source:'<h1>Stable first paint</h1><div id="root">Author collision</div>',compiledCss:null,theme:null,colorMode:'light',refData:{},title:'Stable'});
-    const html = withInitialStory('<html><head></head><body><div id="root"><main style="min-height:100vh">Lazy app</main></div></body></html>',runtime,'ABC123');
+    const html = withInitialStory('<html><head></head><body><div id="root"><main style="min-height:100vh">Lazy app</main></div></body></html>',initialStoryOf(runtime),'ABC123');
     const dom = new JSDOM(html);
     const root = dom.window.document.body.firstElementChild!;
     const initial = dom.window.document.body.lastElementChild!;
@@ -150,7 +150,7 @@ describe('inlined page data', () => {
   it('keeps trusted root and bootstrap ahead of author-colliding ids and leaves author scripts inert', async () => {
     const runtime = await prepareStoryRuntime({source:`<Helmet><script>{\`globalThis.shouldNotRun=true\`}</script></Helmet><div id="root">Collision</div><div id="${BOOTSTRAP_ID}">Not data</div>`,compiledCss:null,theme:null,colorMode:'light',refData:{},title:'Safe'});
     const shell = '<html><head><title>x</title></head><body><div id="root"></div></body></html>';
-    const html = withBootstrap(withInitialStory(shell,runtime,'ABC123'),{runtime});
+    const html = withBootstrap(withInitialStory(shell,initialStoryOf(runtime),'ABC123'),{runtime});
     expect(html.indexOf('<div id="root"></div>')).toBeLessThan(html.indexOf('data-mx-initial-story'));
     expect(html.indexOf(`id="${BOOTSTRAP_ID}"`)).toBeLessThan(html.indexOf('data-mx-initial-story'));
     expect(html).not.toContain('<script>globalThis.shouldNotRun');

@@ -26,6 +26,7 @@ import { fetchWebResource } from '@/lib/web-ingest/fetch';
 import { WebIngestError } from '@/lib/web-ingest/guard';
 import { isWoff2 } from '@/lib/web-ingest/sniff';
 import { parseGoogleFontCss } from './google';
+import { FAMILY_RE } from '@/lib/story/document-fonts';
 
 /** The two pinned upstreams. Overridable ONLY by tests (never reaches the network). */
 let sources = { cssBase: 'https://fonts.googleapis.com', fileHost: 'fonts.gstatic.com' };
@@ -43,8 +44,8 @@ export class UnknownFontError extends Error {
   }
 }
 
-/** A family name is a css identifier, not free text — it lands in a stylesheet. */
-export const FAMILY_RE = /^[A-Za-z0-9][A-Za-z0-9 ]{0,48}$/;
+/** A family name is a css identifier, not free text — it lands in a stylesheet (lib/story/document-fonts). */
+export { FAMILY_RE };
 
 const MAX_FONT_BYTES = 2_000_000;
 /** Only the latin upright is preloaded — the same rule the bundled catalog follows. */

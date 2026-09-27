@@ -13,10 +13,13 @@
  * the override is a var block rather than a new theme — a document keeps its
  * theme's palette, radii and rules and changes only the face.
  */
-import { FAMILY_RE } from '@/lib/webfonts';
 import type { HelmetContent } from './helmet';
 
 /** The three slots a document may override, in the order the head declares them. */
+/** A family name is a css identifier, not free text — it lands in a stylesheet. Browser safe: the lazy
+ * inline-CSS path rebuilds a document's base sheet from these same modules (lib/story/story-base-css). */
+export const FAMILY_RE = /^[A-Za-z0-9][A-Za-z0-9 ]{0,48}$/;
+
 const FONT_SLOTS = ['font-display', 'font-body', 'font-mono'] as const;
 type FontSlot = (typeof FONT_SLOTS)[number];
 

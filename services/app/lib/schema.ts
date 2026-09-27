@@ -590,6 +590,30 @@ const DATASET_RESULT_CACHE: Table = {
   primaryKey: ['cache_key'],
 };
 
+/**
+ * THE PREPARED PAGE — each document version compiled ONCE for the reader
+ * (lib/story/prepared-page.server): its isolated stylesheet, its node tree and
+ * the style values the CSS policy rewrote, its glyphs, fonts and lazy-code
+ * manifest, its declared dataflow, and the anonymous server render. Derived and
+ * disposable: one slot per head or archived version, overwritten whenever the
+ * key (a digest of what preparation reads + the CSS compile version + the
+ * server build) or the dependency fingerprint (imported datasets, held web
+ * assets, imported fonts) no longer matches. Holds no per-viewer data.
+ */
+const PREPARED_PAGES: Table = {
+  name: 'prepared_pages',
+  columns: [
+    { name: 'artifact_id', type: 'TEXT', notNull: true },
+    // 'head' | 'v:<n>' — the head's slot is overwritten as it moves; an archived version never changes.
+    { name: 'slot', type: 'TEXT', notNull: true },
+    { name: 'page_key', type: 'TEXT', notNull: true },
+    { name: 'deps', type: 'TEXT', notNull: true, default: "''" },
+    { name: 'page', type: 'JSONB', notNull: true },
+    { name: 'updated_at', type: 'TIMESTAMPTZ', notNull: true, default: 'now()' },
+  ],
+  primaryKey: ['artifact_id', 'slot'],
+};
+
 /** Immutable export images and the shared, fenced refresh pointer for each variant. */
 const EXPORT_IMAGES: Table = {
  name:'export_images',
@@ -766,7 +790,7 @@ const EVENT_OUTBOX: Table = {name:'event_outbox',columns:[
  {name:'id',type:'TEXT',notNull:true},{name:'envelope',type:'JSONB',notNull:true},
  {name:'created_at',type:'TIMESTAMPTZ',notNull:true,default:'now()'},
 ],primaryKey:['id']};
-export const TABLES: Table[] = [EVENT_OUTBOX, MEMBER_NOTIFICATIONS, USER_BLOCKS, COMMENT_IMAGES, REMOTE_AGENTS, REMOTE_WORK, EXPORT_IMAGES, EXPORT_IMAGE_CACHE, MUTATION_RECEIPTS, DATASET_POLICY_AUDIT, DATASET_USAGE, USERS, CUSTOM_DOMAINS, TOKENS, ARTIFACTS, ARTIFACT_VERSIONS, ARTIFACT_EDITS, ARTIFACT_SOURCE_IDS, ARTIFACT_NODE_ALIASES, NODE_IDENTITY_MIGRATION_JOBS, ARTIFACT_SHARES, ANNOTATIONS, CODES, ANALYTICS_EVENTS, RELATIONS, WEBFONTS, WEB_ASSETS, DATASET_SECRETS, DATASET_RESULT_CACHE, ARTIFACT_CREATION_OPERATIONS, ID_RESERVATION_BATCHES, ARTIFACT_ID_REGISTRY, BROWSER_TEST_USERS];
+export const TABLES: Table[] = [EVENT_OUTBOX, MEMBER_NOTIFICATIONS, USER_BLOCKS, COMMENT_IMAGES, REMOTE_AGENTS, REMOTE_WORK, EXPORT_IMAGES, EXPORT_IMAGE_CACHE, MUTATION_RECEIPTS, DATASET_POLICY_AUDIT, DATASET_USAGE, USERS, CUSTOM_DOMAINS, TOKENS, ARTIFACTS, ARTIFACT_VERSIONS, ARTIFACT_EDITS, ARTIFACT_SOURCE_IDS, ARTIFACT_NODE_ALIASES, NODE_IDENTITY_MIGRATION_JOBS, ARTIFACT_SHARES, ANNOTATIONS, CODES, ANALYTICS_EVENTS, RELATIONS, WEBFONTS, WEB_ASSETS, DATASET_SECRETS, DATASET_RESULT_CACHE, PREPARED_PAGES, ARTIFACT_CREATION_OPERATIONS, ID_RESERVATION_BATCHES, ARTIFACT_ID_REGISTRY, BROWSER_TEST_USERS];
 
 /** Ordered, individually-executable DDL statements (no splitting needed) — rendered by utils. */
 export const SCHEMA_STATEMENTS: string[] = renderSchema(TABLES);
