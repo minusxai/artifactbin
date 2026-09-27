@@ -373,9 +373,12 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
    */
   const [membershipRevision,setMembershipRevision]=useState(0);
   const invitationLanding=accountSession&&new URLSearchParams(route.search).has('invitation');
+  /** Wakeups that arrived before the runtime did: delivered the moment it mounts (onController). */
+  const earlyData = useRef<string[]>([]);
   const onLiveData = useCallback((event: { datasets: string[] }) => {
     if(event.datasets.includes('_members'))setMembershipRevision(n=>n+1);
-    runtimeRef.current?.send(
+    if (!runtimeRef.current) { earlyData.current.push(...event.datasets); return; }
+    runtimeRef.current.send(
       { type: STORY_DATA_MESSAGE, datasets: event.datasets } satisfies StoryDataUpdate,
     );
   }, []);
@@ -386,7 +389,8 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
    * new instance would re-open the live stream and re-read the comments.
    */
   const backend = useMemo(() => createHttpBackend(id), [id]);
-  const live = useLiveArtifact(backend, id, editId, version, !editing, undefined, onLiveData, setLiveAnnotations);
+  // The served first results' mark (lib/story/served-results.server): the stream reports what moved since.
+  const live = useLiveArtifact(backend, id, editId, version, !editing, undefined, onLiveData, setLiveAnnotations, props.runtime?.data.dataflow?.results?.since);
   const hasDataMutations = format === 'markup' && !archived && (live?.dataflow?.flow ?? dataflow?.flow)?.mutations.some(m => 'import' in m.target) === true;
   const membershipChanged=useCallback(()=>onLiveData({datasets:['_members']}),[onLiveData]);
   const membership=useArtifactMembership(id,hasDataMutations,membershipRevision,membershipChanged);
@@ -486,6 +490,11 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
   const [frameLoaded, setFrameLoaded] = useState(false);
   const onController = useCallback((controller: InlineStoryController | null) => {
     runtimeRef.current = controller;
+    if (controller && earlyData.current.length) {
+      const datasets = [...new Set(earlyData.current)];
+      earlyData.current = [];
+      controller.send({ type: STORY_DATA_MESSAGE, datasets } satisfies StoryDataUpdate);
+    }
     setSessionNonce(controller?.nonce ?? null);
     setFrameLoaded(!!controller);
   }, []);

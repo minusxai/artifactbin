@@ -43,6 +43,17 @@ export interface StoryIslandDataflow {
    */
   values?: Record<string, Scalar>;
   /**
+   * THE FIRST RESULTS, run by the server for THIS request
+   * (lib/story/served-results.server): the answers the query route would give
+   * this reader for the values the page starts from — defaults and the URL's
+   * `values` — for the queries it could answer inside its budget. A query
+   * named here (in `tables` or `errors`) starts current, so the page paints
+   * its rows and asks nothing until an input it reads changes; one absent
+   * runs as it always has. PARTIAL by design, which is why it is not `state`
+   * ("every query already ran"). Never stored with the version.
+   */
+  results?: ServedResults;
+  /**
    * The imports THIS reader may hold in full — read access to the dataset's
    * own rows, stored rather than connected, under the hold cap — decided for
    * the door this render's page queries through (lib/artifacts
@@ -52,6 +63,21 @@ export interface StoryIslandDataflow {
    */
   hold?: string[];
 }
+
+/**
+ * What the server answered for some of a document's queries at the request's
+ * starting values (StoryIslandDataflow.results): the query route's answer,
+ * narrowed to those queries. `mutationAccess` is present when the document
+ * declares writes — the same checks the route answers beside every run.
+ */
+export type ServedResults = Pick<DataflowState, 'tables' | 'errors'> & Partial<Pick<DataflowState, 'mutationAccess' | 'userOptions' | 'people'>> & {
+  /**
+   * Where the page's live stream picks up (`/a/<id>/events?since=`): a mark of
+   * every dataset these answers were computed from, so a change between the
+   * serve and the stream still arrives as a `data` frame. Opaque to the page.
+   */
+  since?: string;
+};
 
 /**
  * A dataflow that HAS been run. Running it always produces state — only the

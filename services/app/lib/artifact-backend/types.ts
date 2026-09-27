@@ -190,8 +190,12 @@ export interface ArtifactBackend {
   version(n: number): Promise<ArtifactVersionSnapshot | null>;
   /** Restore a non-document version on its conditional endpoint (POST /revert). */
   revert(input: { version: number; expectedVersion: number; expectedState: string }): Promise<EditAnswer>;
-  /** Subscribe to live changes; returns the unsubscribe. A no-op offline. */
-  live(handlers: LiveHandlers): () => void;
+  /**
+   * Subscribe to live changes; returns the unsubscribe. A no-op offline.
+   * `since` is the served results' mark (ServedResults.since): the stream first
+   * reports every dataset that changed after the page's rows were computed.
+   */
+  live(handlers: LiveHandlers, options?: { since?: string }): () => void;
   /** The complete document a ping announced (GET /a/<id>/events/frame). Null when refused. */
   liveFrame(): Promise<ArtifactLiveEvent | null>;
   /** The runtime's data transport (authenticated online, snapshot offline). */

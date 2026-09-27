@@ -136,6 +136,10 @@ export function DataTable({
     estimateSize: () => ROW_H,
     overscan: 12,
     enabled: virtual,
+    // Where the reader already is: rows can be on screen before the switch
+    // (served with the page), and a virtualizer starting at 0 would scroll a
+    // reader who had already scrolled the static table back to the top.
+    initialOffset: () => scrollRef.current?.scrollTop ?? 0,
   })
   // Parent selection coordinator requests a loaded row by its durable typed key.
   React.useEffect(() => {

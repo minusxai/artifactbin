@@ -38,7 +38,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { getDb } from '@/lib/db';
 import { ASSETS_ORIGIN, IS_DEV, PUBLIC_BASE_URL } from '@/lib/config';
-import type { ArtifactRow } from '@/lib/artifacts';
+import type { ArtifactRow, Viewer } from '@/lib/artifacts';
 import { declarationsForRow, holdableImports, LIVE_ARTIFACT_SQL, refDataForRow, viewerIdentityFor, type RoleActor } from '@/lib/artifacts';
 import { artifactQuery } from '@/lib/artifact-document';
 import { savedMentionStates } from '@/lib/membership';
@@ -59,6 +59,7 @@ import { loadStorySsr } from './ssr.server';
 import { lazyCodeOf, type LazyCode } from './lazy-code';
 import { assetsPath, mutatePath, queryPath } from './markup-csp';
 import { readUrlValues } from './url-values';
+import { servedResultsFor } from './served-results.server';
 import type { StoryBaseCssRecipe } from './story-base-css';
 import type { ServedStoryRuntime } from './prepared-runtime';
 import type { StoryIslandData, StoryIslandDataflow } from '@/lib/story-runtime/contract';
@@ -107,6 +108,12 @@ export interface ReaderContext {
   drawings?: 'stored' | 'engine';
   /** A CAPTURE's colour (`color=`, under a verified export key); a reader gets the version's. */
   colorMode?: 'light' | 'dark' | null;
+  /**
+   * Serve this request's first results (lib/story/served-results.server),
+   * admitted as the page's query door admits this viewer. Absent: the page
+   * fetches its own rows, as the stored anonymous render always does.
+   */
+  results?: { admit: Viewer };
 }
 
 const sha = (text: string): string => createHash('sha256').update(text).digest('hex');
@@ -259,11 +266,25 @@ export async function preparedPageFor(stored: ArtifactRow, at: ArchivedRender | 
  * the one the stored render was made with.
  */
 export async function servedPage(row: ArtifactRow, page: PreparedPage, reader: ReaderContext): Promise<{ runtime: ServedStoryRuntime & { css: string }; storyHtml: () => string }> {
-  const input = await readerInputFor(row, page, reader);
+  // Only the head's answers are the query route's: an archived render, and a
+  // version that cannot run (its declarations already carry every answer), serve none.
+  const servable = reader.results && !reader.at && page.declared && !page.declared.state ? page.declared.flow : null;
+  const [overlay, results] = await Promise.all([
+    readerInputFor(row, page, reader),
+    servable ? servedResultsFor(row, servable, { admit: reader.results!.admit, viewer: reader.viewer, search: reader.search }) : Promise.resolve(null),
+  ]);
+  /*
+   * The results ride in the overlay, beside the request's other facts (its
+   * stored diagram drawings), so its digest differs from the stored anonymous
+   * render's and the story is rendered fresh WITH them. The stored render
+   * never holds data: its key does not follow the datasets.
+   */
+  const input: ReaderOverlay = results && overlay.dataflow ? { ...overlay, dataflow: { ...overlay.dataflow, results } } : overlay;
   const runtime = servedOf(page, input);
   return {
     runtime,
-    storyHtml: () => (page.ssr && page.ssr.overlay === overlayDigest(input) ? page.ssr.html : renderStory(page, input)),
+    // An overlay carrying results can never be the stored one's: render it, and hash nothing the size of its rows.
+    storyHtml: () => (!results && page.ssr && page.ssr.overlay === overlayDigest(input) ? page.ssr.html : renderStory(page, input)),
   };
 }
 

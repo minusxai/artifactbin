@@ -25,6 +25,7 @@ import type { DataflowState, Row, Scalar, TableResult } from '@/lib/story/datafl
 import { checkedLocalRows } from '@/lib/story/local-tables';
 import { graphDefaults, graphInlineTables, type GraphReads, type RuntimeGraph } from './runtime-graph';
 import type { MutationAnswer } from './store';
+import type { ServedResults } from './contract';
 
 /** What one run answers: rows and errors for its queries, and the write checks. */
 export type RunAnswer = Pick<DataflowState, 'tables' | 'errors' | 'mutationAccess' | 'userOptions' | 'people'>;
@@ -198,22 +199,31 @@ export function partitionRun(run: RunEffect, local: ReadonlySet<string>): { loca
 /**
  * A document's starting state. `state` present means somebody already ran the
  * queries with these values (a capture, the editor's canvas): they start
- * current. Absent, nothing has run and every query starts pending.
+ * current. `results` are the server's answers for SOME of them at the values
+ * this page starts from (StoryIslandDataflow.results): exactly the queries and
+ * write checks they name start current, and the rest run as usual. Neither,
+ * nothing has run and every query starts pending.
  */
-export function createCore(graph: RuntimeGraph, seed: { state?: DataflowState; values?: Record<string, Scalar> }): CoreState {
-  const { state, values } = seed;
+export function createCore(graph: RuntimeGraph, seed: { state?: DataflowState; values?: Record<string, Scalar>; results?: ServedResults }): CoreState {
+  const { state, values, results } = seed;
   const answered: Record<NodeKey, number> = {};
+  const served = (k: NodeKey): boolean => {
+    if (!results) return false;
+    const name = nameOf(k);
+    return k.startsWith('query:') ? Object.hasOwn(results.tables, name) || Object.hasOwn(results.errors, name) : !!results.mutationAccess && Object.hasOwn(results.mutationAccess, name);
+  };
   for (const k of indexOf(graph).computed) {
-    if (k.startsWith('query:') ? state : state?.mutationAccess) answered[k] = 0;
+    if ((k.startsWith('query:') ? state : state?.mutationAccess) || served(k)) answered[k] = 0;
   }
   return {
     graph, clock: 0, versions: {}, answered, requested: {}, failed: {},
     data: {
       values: { ...graphDefaults(graph), ...(state?.values ?? {}), ...(values ?? {}) },
-      tables: { ...graphInlineTables(graph), ...(state?.tables ?? {}) },
-      errors: { ...(state?.errors ?? {}) },
-      mutationAccess: state?.mutationAccess ?? {},
-      userOptions: state?.userOptions ?? {}, people: state?.people ?? {},
+      tables: { ...graphInlineTables(graph), ...(state?.tables ?? {}), ...(results?.tables ?? {}) },
+      errors: { ...(state?.errors ?? {}), ...(results?.errors ?? {}) },
+      mutationAccess: { ...(state?.mutationAccess ?? {}), ...(results?.mutationAccess ?? {}) },
+      userOptions: { ...(state?.userOptions ?? {}), ...(results?.userOptions ?? {}) },
+      people: { ...(state?.people ?? {}), ...(results?.people ?? {}) },
     },
     local: {}, busy: {}, localQueue: [], localHead: null, disposed: false,
   };

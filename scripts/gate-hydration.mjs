@@ -404,6 +404,8 @@ const TAKEOVER_PROBE = () => {
     // React 19 hoists a resource hint the server rendered (an image preload); it is not part of the tree.
     state.served = [...story.querySelectorAll('*')].filter((n) => !(n.localName === 'link' && n.rel === 'preload')).map((n) => [n, where(n)]);
     state.dangling = dangling(story);
+    // What the reader SAW before the runtime ran: a data document's first results are in it (lib/story/served-results.server).
+    state.servedText = story.textContent;
   });
   document.addEventListener('DOMContentLoaded', () => { state.dcl = performance.now(); });
   const judge = () => {
@@ -429,7 +431,7 @@ const TAKEOVER_PROBE = () => {
 };
 
 /** Open `path` in a fresh page of `context`, the OS in `scheme`, and judge the takeover; returns the takeover time after DOMContentLoaded. */
-async function judgeTakeover(context, scheme, path, label, after) {
+async function judgeTakeover(context, scheme, path, label, after, servedText) {
   const page = await context.newPage();
   await page.emulateMedia({ colorScheme: scheme });
   const errors = [];
@@ -441,10 +443,11 @@ async function judgeTakeover(context, scheme, path, label, after) {
   // Leave the document running a moment, so an error raised as data and panes land is still this load's.
   await page.waitForTimeout(500);
   await after?.(page);
-  const { verdict, dcl, served } = await page.evaluate(() => { const h = window.__readerHydration; return { verdict: h.verdict, dcl: h.dcl, served: h.served?.length ?? 0 }; });
+  const { verdict, dcl, served, text } = await page.evaluate(() => { const h = window.__readerHydration; return { verdict: h.verdict, dcl: h.dcl, served: h.served?.length ?? 0, text: h.servedText ?? '' }; });
   const where = new URL(page.url()).pathname + new URL(page.url()).search;
   await page.close();
   check(ready && served > 0 && verdict.adopted, `${label}: the served story was adopted by the app and hydrated (${where}, ${served} elements)`);
+  if (servedText) check(text.includes(servedText), `${label}: the served story already shows its first results (${servedText}) before the runtime ran`);
   if (!ready || !verdict) return null;
   check(verdict.lostCount === 0, `${label}: every served element survived hydration (${verdict.lostCount} lost ${verdict.lost.join(' ') || ''})`);
   check(verdict.unownedCount === 0, `${label}: React owns every served element (${verdict.unownedCount} not ${verdict.unowned.join(' ') || ''})`);
@@ -516,8 +519,11 @@ async function runReaderHydration() {
   await githubWidgetFixture(anonymous);
 
   const times = [];
+  const dashboardId = fixtures.find((f) => f.key === 'dashboard').id;
+  // The dashboard fixture's KPI over sales.csv, which its HTML carries (a data fixture WITH results).
+  const firstResults = (path) => (path === `/a/${dashboardId}` ? '$744,503' : undefined);
   const load = async (context, scheme, path, label, after) => {
-    const t = await judgeTakeover(context, scheme, path, `${label} (${scheme})`, after);
+    const t = await judgeTakeover(context, scheme, path, `${label} (${scheme})`, after, firstResults(path));
     if (t !== null) times.push(t);
   };
   // Every fixture and the kitchen sink, anonymous and as the owner (whose address is the pretty /@owner one).

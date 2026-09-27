@@ -80,6 +80,27 @@ const island = (html: string) => JSON.parse(/<script[^>]*type="application\/json
 const head = (html: string) => html.split('</head>')[0];
 
 describe('a published Mermaid document', () => {
+  it('carries its stored drawings AND a data document\'s first results in one overlay, rendered fresh and never stored', async () => {
+    const { browser } = drawingBrowser([FLOW]);
+    setServices({ browser });
+    const owner = await mintToken('mermaid-with-data');
+    const made = await createArtifactRoute(request('/api/artifacts', { method: 'POST', token: owner.token, json: { visibility: 'public',
+      markup: `<Helmet><Value name="n" type="number" default={2} /><Query name="q">{\`select $n * 21 as n\`}</Query></Helmet><div><p>Answer <Number data="$q" col="n" /></p><Mermaid title="D0" code={${JSON.stringify(FLOW)}} /></div>` } }));
+    expect(made.status, await made.clone().text()).toBe(201);
+    const id = (await made.json()).id as string;
+    while (await runNextMermaidHarvest()) { /* drain */ }
+    const answer = await artifactPageAnswer(request(`/a/${id}`), id);
+    const data = (answer.body as { surface: { runtime: { data: { mermaidImages?: Record<string, { src: string }>; dataflow?: { results?: { tables: Record<string, { rows: unknown[] }> } } } } } }).surface.runtime.data;
+    expect(data.dataflow?.results?.tables.q?.rows).toEqual([{ n: 42 }]);
+    const drawing = data.mermaidImages?.[mermaidImageKey(FLOW, 'light')];
+    expect(drawing?.src).toMatch(/^\/assets\/mermaid\//);
+    const html = answer.story!.html();
+    expect(html).toContain('aria-label="Live number">42<');
+    expect(html).toContain(`src="${drawing!.src}"`);
+    const stored = (await (await getDb()).query<{ page: { ssr: { html: string } } }>(`SELECT page FROM prepared_pages WHERE artifact_id = $1 AND slot = 'head'`, [id])).rows[0]!;
+    expect(stored.page.ssr.html).not.toContain('aria-label="Live number">42<');
+  });
+
   it('queues a harvest after its commit, and the harvested version is drawn from stored SVG on both reader paths', async () => {
     const { browser, calls } = drawingBrowser([FLOW, SEQ]);
     setServices({ browser });

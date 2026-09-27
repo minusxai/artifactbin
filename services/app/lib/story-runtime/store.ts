@@ -39,9 +39,12 @@ import {
   accessSettled, busyOf, createCore, localRows, partitionRun, pendingOf, step, unnamedPeople,
   type CoreEffect, type CoreEvent, type CoreState, type RunAnswer,
 } from './dataflow-core';
-import { MAX_PEOPLE_IDS } from './contract';
+import { MAX_PEOPLE_IDS, type ServedResults } from './contract';
 import { graphOfCompiled, heldSource, NOW_SOURCE } from './runtime-graph';
 import type { Optimistic, PageEngine } from './page-engine';
+
+/** The longest the page's engine waits for an idle moment when nothing needs it yet. */
+const IDLE_PREPARE_MS = 2000;
 
 /** What `mutationUnavailable` answers while the permission check is still in flight. */
 export const ACCESS_PENDING = 'Checking edit access…';
@@ -253,7 +256,7 @@ export function createDataflowStore(
    * the state a capture arrived with, then the URL — the reader's link is the
    * most specific thing anyone said about this document.
    */
-  input: { flow: CompiledDataflow; state?: DataflowState; values?: Record<string, Scalar>; hold?: string[] },
+  input: { flow: CompiledDataflow; state?: DataflowState; values?: Record<string, Scalar>; hold?: string[]; results?: ServedResults },
   options: CreateStoreOptions = {},
 ): DataflowStore {
   let flow = input.flow;
@@ -434,11 +437,32 @@ export function createDataflowStore(
 
   /** Load the engine and every import the page will answer from — after the first run is on its way. */
   const prepare = () => {
-    if (!page) return;
+    if (!page || core.disposed) return;
     const queries = flow.queries.filter((q) => placement.queries[q.name] === 'browser').map((q) => q.name);
     const writes = flow.mutations.filter((m) => placement.mutations[m.name] !== 'server');
     if (!queries.length && !writes.length) return;
     page.engine.prepare(flow, [...new Set([...importsOf(queries), ...writes.flatMap((m) => m.reads.imports)])]);
+  };
+  /*
+   * When the page ARRIVED with the answers of everything it would run itself
+   * (StoryIslandDataflow.results), nothing waits on the engine: it loads once
+   * the page is idle, so its wasm and rows do not compete with what the first
+   * paint still fetches (a chart's code). Until it is ready a change is
+   * answered by the server, as a change before the engine loaded always was.
+   */
+  let idle: (() => void) | null = null;
+  const prepareSoon = () => {
+    const mine = flow.queries.filter((q) => placement.queries[q.name] === 'browser');
+    const waiting = pendingOf(core);
+    if (!page || !input.results || mine.some((q) => waiting.has(q.name))) { prepare(); return; }
+    const run = () => { idle = null; prepare(); };
+    if (typeof requestIdleCallback === 'function') {
+      const handle = requestIdleCallback(run, { timeout: IDLE_PREPARE_MS });
+      idle = () => cancelIdleCallback(handle);
+    } else {
+      const handle = setTimeout(run, 0);
+      idle = () => clearTimeout(handle);
+    }
   };
 
   const flush = () => {
@@ -499,6 +523,8 @@ export function createDataflowStore(
       dispatch({ type: 'dispose' });
       if (timer) clearTimeout(timer);
       if (clock) clearInterval(clock);
+      idle?.();
+      idle = null;
       timer = null;
       clock = null;
       frame?.();
@@ -552,7 +578,7 @@ export function createDataflowStore(
      * Not the debounce: that exists to batch a reader changing their mind, and
      * a first load has nothing to batch.
      */
-    start: () => { started = true; flush(); prepare(); tickWhileRead(); },
+    start: () => { started = true; flush(); prepareSoon(); tickWhileRead(); },
     subscribe: (listener) => { if (!core.disposed) listeners.add(listener); return () => { listeners.delete(listener); }; },
     setTransport: (t) => {
       if (core.disposed) return;

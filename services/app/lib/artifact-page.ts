@@ -185,6 +185,8 @@ export async function artifactPageAnswer(request: Request, id: string): Promise<
       drawings: engineRequested(request.url) ? 'engine' : 'stored',
       colorMode: capturedColor,
       viewer: { userId: actor.viewer?.userId ?? null, tokenId: actor.tokenId ?? null, email: actor.viewer?.email ?? null },
+      // The first results, as the page's own query door (POST, this session) would answer them.
+      results: { admit: actor.viewer },
     }) : Promise.resolve(null),
     social,
   ]);

@@ -16,7 +16,7 @@ import { flushSync } from 'react-dom';
 import { createRoot, hydrateRoot } from 'react-dom/client';
 import { parseJsxOrThrow } from '@/test/helpers/jsx';
 import { compiledSource, type TestSource } from '@/test/helpers/compiled';
-import { STORY_DOCUMENT_MESSAGE, STORY_READER_MODE_MESSAGE, type StoryIslandData } from '../contract';
+import { STORY_DOCUMENT_MESSAGE, STORY_READER_MODE_MESSAGE, type ServedResults, type StoryIslandData } from '../contract';
 import { InlineStoryComposition } from '../inline-composition';
 import { inlineStoryCss, inlineStoryNodes } from '@/lib/story/inline-css';
 import { InlineStoryRuntime, type InlineStoryController } from '../InlineStoryRuntime';
@@ -24,6 +24,7 @@ import { renderInlineStory } from '../ssr-entry';
 import { storyBodyFor } from '@/lib/story/body';
 import { glyphsForNodes } from '@/lib/story/icon-glyphs';
 import { servedStoryHtml } from '@/lib/story/inline-story-html';
+import { mermaidImageKey } from '@/lib/story-ui/mermaid-source';
 import type { ServedStoryRuntime } from '@/lib/story/prepared-runtime';
 import { storyBaseCss, type StoryBaseCssRecipe } from '@/lib/story/story-base-css';
 import { styleOverrides } from '@/lib/story/style-overrides';
@@ -93,7 +94,7 @@ const fixture = (name: string) => readFileSync(path.join(FIXTURES, name), 'utf8'
 const SALES = 'SaLes1';
 const SALES_COLUMNS = [{ name: 'month', type: 'date' }, { name: 'region', type: 'string' }, { name: 'product', type: 'string' }, { name: 'revenue', type: 'number' }, { name: 'units', type: 'number' }] as const;
 
-interface Serve { colorMode?: 'light' | 'dark'; template?: string | null; viewer?: StoryIslandData['viewer']; readOnly?: string; refData?: StoryIslandData['refData']; theme?: ServedStoryRuntime['theme']; sources?: Record<string, TestSource> }
+interface Serve { colorMode?: 'light' | 'dark'; template?: string | null; viewer?: StoryIslandData['viewer']; readOnly?: string; refData?: StoryIslandData['refData']; theme?: ServedStoryRuntime['theme']; sources?: Record<string, TestSource>; results?: ServedResults; mermaidImages?: StoryIslandData['mermaidImages'] }
 type Served = ServedStoryRuntime & { css: string; raw: { compiledCss: string | null; authorCss: string | null } };
 /** What the reader page is sent (lib/story/prepared-page.server): the sheet and style values already isolated on the server. */
 async function served(source: string, opts: Serve = {}): Promise<Served> {
@@ -105,8 +106,9 @@ async function served(source: string, opts: Serve = {}): Promise<Served> {
     nodes: split.body, refData: opts.refData ?? {}, colorMode: opts.colorMode ?? 'light', template: opts.template ?? null, chrome: true,
     assetsUrl: '/a/DocAbc/assets', queryUrl: '/a/DocAbc/query',
     ...(Object.keys(glyphs).length ? { glyphs } : {}),
-    ...(declares ? { dataflow: { flow: await compiledSource(source, opts.sources) } } : {}),
+    ...(declares ? { dataflow: { flow: await compiledSource(source, opts.sources), ...(opts.results ? { results: opts.results } : {}) } } : {}),
     ...(opts.viewer ? { viewer: opts.viewer } : {}),
+    ...(opts.mermaidImages ? { mermaidImages: opts.mermaidImages } : {}),
     ...(opts.readOnly ? { readOnly: opts.readOnly } : {}),
   };
   const base: StoryBaseCssRecipe = { chrome: true, theme: opts.theme ?? null, faces: [], fonts: { slots: {}, families: [] } };
@@ -118,11 +120,23 @@ async function served(source: string, opts: Serve = {}): Promise<Served> {
   };
 }
 
+/** The dashboard fixture's first results, as the server serves them with the page (lib/story/served-results.server). */
+const DASHBOARD_RESULTS: ServedResults = {
+  tables: {
+    regions: { rows: [{ region: 'East' }, { region: 'North' }], columns: [{ name: 'region', type: 'string' }] },
+    monthly: { rows: [{ month: '2025-01-01', revenue: 700000, units: 900 }, { month: '2025-02-01', revenue: 44503, units: 100 }], columns: [{ name: 'month', type: 'date' }, { name: 'revenue', type: 'number' }, { name: 'units', type: 'number' }] },
+    by_product: { rows: [{ product: 'Alpha', revenue: 744503 }], columns: [{ name: 'product', type: 'string' }, { name: 'revenue', type: 'number' }] },
+  },
+  errors: {},
+};
+/** Every transport this file makes, so a case can ask what the page asked for. */
+const transports: Array<ReturnType<typeof liveTransport>> = [];
 // Queries stay in flight: the served "loading" state is what the survival check compares against.
-const liveTransport = () => ({
+const liveTransport = () => transportOf({
   run: vi.fn(() => new Promise<never>(() => {})), page: vi.fn(() => new Promise<never>(() => {})),
   importAsset: vi.fn(async () => ({ refused: 'not in this test' })), dispose: vi.fn(),
 });
+const transportOf = <T,>(t: T): T => { transports.push(t as never); return t; };
 
 const REFERENCES = ['aria-controls', 'aria-labelledby', 'aria-describedby', 'for'] as const;
 /** Every id reference in `root` that names no element in the document. */
@@ -193,6 +207,7 @@ describe('the reader adopts the page the server served', () => {
     ['the deck fixture', () => served(fixture('deck.jsx'), { template: 'deck' })],
     ['the Mermaid fixture', () => served(fixture('mermaid.jsx'))],
     ['the dashboard fixture, anonymous', () => served(fixture('dashboard.jsx').replaceAll('{{sales}}', SALES), { template: 'dashboard', sources: { [SALES]: [...SALES_COLUMNS] } })],
+    ['the dashboard fixture with its first results', () => served(fixture('dashboard.jsx').replaceAll('{{sales}}', SALES), { template: 'dashboard', sources: { [SALES]: [...SALES_COLUMNS] }, results: DASHBOARD_RESULTS })],
     ['the dashboard fixture, signed in, an archived version', () => served(fixture('dashboard.jsx').replaceAll('{{sales}}', SALES), { template: 'dashboard', sources: { [SALES]: [...SALES_COLUMNS] }, viewer: { id: 'user-1', name: 'Reader' } as StoryIslandData['viewer'], readOnly: 'This is version 2 of 3.' })],
     ['bound values, a table, a number, a chart and a stored image', () => served(DATA, { refData: IMAGE_REF })],
     ['a dialog trigger holding the author\'s Button', () => served(`<article>${DIALOG}</article>`)],
@@ -209,6 +224,44 @@ describe('the reader adopts the page the server served', () => {
       page.stop();
     });
   }
+
+  it('hydrates the first results the page arrived with: the numbers were served, and nothing is asked for them', async () => {
+    transports.length = 0;
+    const page = await adopt(await served(fixture('dashboard.jsx').replaceAll('{{sales}}', SALES), { template: 'dashboard', sources: { [SALES]: [...SALES_COLUMNS] }, results: DASHBOARD_RESULTS }));
+    expectAdopted(page);
+    expect(page.story.textContent).toContain('$744,503');
+    expect(page.story.textContent).toContain('2025-02-01');
+    await act(async () => { await new Promise((r) => setTimeout(r, 50)); });
+    expect(transports.length).toBeGreaterThan(0);
+    for (const t of transports) expect(t.run).not.toHaveBeenCalled();
+    await act(async () => { page.app.unmount(); });
+    expect(page.errors).toEqual([]);
+    page.stop();
+  });
+
+  it('hydrates a document with both a stored Mermaid drawing and its first results in one overlay', async () => {
+    const code = 'flowchart LR\n  a[Request] --> b[Read]';
+    const source = fixture('dashboard.jsx').replaceAll('{{sales}}', SALES).replace('<h2', `<Mermaid title="Flow" code={${JSON.stringify(code)}} /><h2`);
+    const stored = '/assets/mermaid/' + 'a'.repeat(64) + '.svg';
+    transports.length = 0;
+    const page = await adopt(await served(source, {
+      template: 'dashboard', sources: { [SALES]: [...SALES_COLUMNS] }, results: DASHBOARD_RESULTS,
+      mermaidImages: { [mermaidImageKey(code, 'light')]: { src: stored, type: 'flowchart-v2', width: 120, height: 80, palette: 'any' } },
+    }));
+    expect(page.serverNodes.some((n) => n.getAttribute('src') === stored)).toBe(true);
+    // Hydrated clean with the drawing AND the rows: no error or warning, the server's element adopted, and every
+    // served node survived — except the drawing itself, which this jsdom's palette ('any' is nobody's) replaces
+    // with the engine's AFTER hydration, as a reader with another palette would (components/kit/mermaid).
+    expect(page.errors).toEqual([]);
+    expect(document.getElementById('root')!.contains(page.story)).toBe(true);
+    const lost = page.serverNodes.filter((n) => !page.story.contains(n) && n.getAttribute('src') !== stored && !n.closest('[aria-label="Chart placeholder"],[data-slot="popover-trigger"]'));
+    expect(lost.map((n) => n.outerHTML.slice(0, 120))).toEqual([]);
+    expect(page.story.textContent).toContain('$744,503');
+    for (const t of transports) expect(t.run).not.toHaveBeenCalled();
+    await act(async () => { page.app.unmount(); });
+    expect(page.errors).toEqual([]);
+    page.stop();
+  });
 
   it('renders later versions, reader modes and themes through the adopted root, and unmounts it', async () => {
     const page = await adopt(await served(fixture('kit.jsx')));
