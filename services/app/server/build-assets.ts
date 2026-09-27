@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import type { Hono } from 'hono';
 import type { Manifest } from 'vite';
-import { serveStatic } from '@hono/node-server/serve-static';
+import { precompressedStatic } from './content-encoding';
 import { BUILD_ASSET_HEADER, BUILD_ASSET_PATH } from '@artifactbin/contracts';
 import { isBuildAssetPath } from '@artifactbin/utils';
 
@@ -15,11 +15,11 @@ function allowedFiles(webDir: string): Set<string> {
   } catch { return new Set(); }
 }
 
-/** App-owned manifest admission and bytes; never fall through to content routes. */
+/** App-owned manifest admission and bytes (or their build-time brotli/gzip sibling); never fall through to content routes. */
 export function mountBuildAssets(app: Hono, webDir: string): void {
   const files = allowedFiles(webDir);
   if (!files.size) return;
-  const staticFile = serveStatic({
+  const staticFile = precompressedStatic({
     root: path.relative(process.cwd(), webDir) || '.',
     rewriteRequestPath: p => p.slice(BUILD_ASSET_PATH.length),
   });

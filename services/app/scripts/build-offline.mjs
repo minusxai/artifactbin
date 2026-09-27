@@ -52,6 +52,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import zlib from 'node:zlib';
 import { fileURLToPath } from 'node:url';
+import { precompressFile } from '../../../scripts/lib/precompress.mjs';
 import { createRequire } from 'node:module';
 import { compile, optimize } from '@tailwindcss/node';
 import { Scanner } from '@tailwindcss/oxide';
@@ -62,7 +63,8 @@ const markerPath = path.join(outdir, '.build-cache.json');
 const manifestPath = path.join(outdir, 'manifest.json');
 const cache = process.argv.includes('--cache');
 const KINDS = /** @type {const} */ (['core', 'mermaid']);
-const EXTRAS_FILE = /^extras-[0-9a-f]{16}\.js$/;
+/** The extras and their build-time brotli/gzip siblings (server/content-encoding serves them). */
+const EXTRAS_OR_SIBLING = /^extras-[0-9a-f]{16}\.js(?:\.br|\.gz)?$/;
 
 const sha = (buf) => crypto.createHash('sha256').update(buf).digest('hex');
 const fileSha = (file) => sha(fs.readFileSync(file));
@@ -239,7 +241,9 @@ async function build() {
   const extrasFile = `extras-${sha(extrasCode).slice(0, 16)}.js`;
   // Served as it is, SRI-checked by the browser: the file names exactly these bytes.
   fs.writeFileSync(path.join(outdir, extrasFile), extrasCode);
-  for (const old of fs.readdirSync(outdir)) if (EXTRAS_FILE.test(old) && old !== extrasFile) fs.rmSync(path.join(outdir, old));
+  // …and compressed ONCE here, so a browser that takes brotli never waits on a per-request encode.
+  const extrasSiblings = await precompressFile(path.join(outdir, extrasFile));
+  for (const old of fs.readdirSync(outdir)) if (EXTRAS_OR_SIBLING.test(old) && !old.startsWith(extrasFile)) fs.rmSync(path.join(outdir, old));
   manifest.extras = {
     file: extrasFile,
     path: `/offline/${extrasFile}`,
@@ -255,7 +259,8 @@ async function build() {
   inputs['app/globals.css'] = fileSha(path.join(root, 'app/globals.css'));
   for (const file of scanned) inputs[file] ??= fileSha(path.join(root, file));
   fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2) + '\n');
-  const outputs = [rel(manifestPath), ...KINDS.map((kind) => rel(path.join(outdir, manifest.bundles[kind].file))), rel(path.join(outdir, extrasFile))];
+  const outputs = [rel(manifestPath), ...KINDS.map((kind) => rel(path.join(outdir, manifest.bundles[kind].file))), rel(path.join(outdir, extrasFile)),
+    ...(extrasSiblings?.br ? [rel(path.join(outdir, extrasFile + '.br'))] : []), ...(extrasSiblings?.gzip ? [rel(path.join(outdir, extrasFile + '.gz'))] : [])];
   fs.writeFileSync(markerPath, JSON.stringify({ toolHash, inputs, cssFiles: scanned, outputs }, null, 2) + '\n');
   const kb = (n) => `${(n / 1024).toFixed(0)} KB`;
   const sizes = (entry) => `${kb(entry.raw)} raw / ${kb(entry.gzip)} gzip / ${kb(entry.base64)} base64`;

@@ -6,11 +6,27 @@
 import path from 'node:path';
 import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
-import { defineConfig } from 'vite';
+import { defineConfig, type Plugin } from 'vite';
+import { describePrecompression, precompressTree } from './scripts/lib/precompress.mjs';
+
+const outDir = path.resolve(import.meta.dirname, 'services/app/dist/web');
+
+/**
+ * Brotli/gzip siblings for the content-addressed build (server/content-encoding
+ * serves them), written by the build that wrote the files — `emptyOutDir`
+ * wipes the tree first, so no sibling survives its source.
+ */
+const precompressAssets = (): Plugin => ({
+  name: 'artifactbin-precompress',
+  apply: 'build',
+  async closeBundle() {
+    this.info(describePrecompression('dist/web/assets', await precompressTree(path.join(outDir, 'assets'))));
+  },
+});
 
 export default defineConfig({
   root: path.resolve(import.meta.dirname, 'services/app/web'),
-  plugins: [react(), tailwindcss()],
+  plugins: [react(), tailwindcss(), precompressAssets()],
   resolve: {
     alias: [
       { find: '@', replacement: path.resolve(import.meta.dirname, 'services/app') },
@@ -20,7 +36,7 @@ export default defineConfig({
       { find: /^acorn$/, replacement: path.resolve(import.meta.dirname, 'node_modules/acorn/dist/acorn.mjs') },
     ],
   },
-  build: { outDir: path.resolve(import.meta.dirname, 'services/app/dist/web'), emptyOutDir: true, sourcemap: false, manifest: true },
+  build: { outDir, emptyOutDir: true, sourcemap: false, manifest: true },
   server: { middlewareMode: true },
   appType: 'custom',
 });

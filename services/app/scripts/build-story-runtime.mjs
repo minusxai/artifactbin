@@ -13,6 +13,7 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { mermaidDispatch, mermaidKindModules, outputFor, staticClosure } from './story-runtime-graph.mjs';
+import { describePrecompression, precompressTree } from '../../../scripts/lib/precompress.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -47,6 +48,7 @@ const toolHash = sha(Buffer.concat([
   fs.readFileSync(fileURLToPath(import.meta.url)),
   fs.readFileSync(path.join(root, 'scripts/story-runtime-graph.mjs')),
   fs.readFileSync(path.join(root, 'scripts/build-libraries.mjs')),
+  fs.readFileSync(path.join(root, '../../scripts/lib/precompress.mjs')),
   fs.readFileSync(path.join(root, '../../package-lock.json')),
 ]));
 
@@ -306,6 +308,13 @@ for (const url of [manifest.entry, manifest.anchor, manifest.comment, manifest.s
 fs.writeFileSync(path.join(outdir, 'manifest.json'), JSON.stringify(manifest, null, 2) + '\n');
 
 /*
+ * Brotli/gzip siblings for every content-addressed file this build wrote
+ * (server/content-encoding serves them). Here, in the step that wrote the
+ * sources, so a sibling can never outlive or disagree with its file.
+ */
+console.log(describePrecompression('build-story-runtime /story', await precompressTree(outdir)));
+
+/*
  * The same kinds for the APP's reader (server/reader-preloads), whose Vite
  * build names these modules' chunks differently: the Mermaid MODULES per kind,
  * for it to resolve through its own manifest. Beside the SSR bundle, which the
@@ -404,6 +413,7 @@ if (cache) {
     'public/story/manifest.json',
     ...[manifest.entry, manifest.anchor, manifest.comment, manifest.sqlite, ...manifest.lazy, ...closureUrls].map((url) => `public${url}`),
     ...listFiles(path.join(root, 'public/libraries')).map((file) => path.relative(root, file)),
+    ...listFiles(outdir).filter((file) => /\.(?:br|gz)$/.test(file)).map((file) => path.relative(root, file)),
   ];
   fs.mkdirSync(distDir, { recursive: true });
   fs.writeFileSync(markerPath, JSON.stringify({ toolHash, inputs, outputs }, null, 2) + '\n');

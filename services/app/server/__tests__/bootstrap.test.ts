@@ -43,6 +43,9 @@ const inlined = (html: string) => {
   const m = new RegExp(`id="${BOOTSTRAP_ID}">([\\s\\S]*?)</script>`).exec(html);
   return m ? JSON.parse(m[1]) : null;
 };
+/** The canonical address `/a/<id>` names — it is served in place, with the address the page heals to. */
+const canonicalOf = async (server: { request: (path: string, init?: RequestInit) => Response | Promise<Response> }, id: string, headers: Record<string, string> = {}): Promise<string> =>
+  inlined(await (await server.request(`/a/${id}`, { headers })).text()).address;
 
 async function world() {
   const owner = await ensureUsername(await createUser({ email: 'mxmx_test_owner@example.com' }));
@@ -63,7 +66,7 @@ describe('inlined page data', () => {
         '../lib/story-runtime/InlineStoryRuntime.tsx': { file: 'assets/InlineStoryRuntime-test.js' },
       }));
       const built = createAppServer({ webDir: dir }), w = await world();
-      const canonical = (await built.request(`/a/${w.pub.id}`)).headers.get('location')!;
+      const canonical = await canonicalOf(built, w.pub.id);
       const html = await (await built.request(canonical)).text();
       expect(html).toContain('rel="modulepreload" href="/assets/InlineStoryRuntime-test.js"');
       expect(html.indexOf('/assets/InlineStoryRuntime-test.js')).toBeLessThan(html.indexOf(`id="${BOOTSTRAP_ID}"`));
@@ -112,7 +115,7 @@ describe('inlined page data', () => {
   it('serves public markup as readable initial content under app CSP, with one prepared bootstrap', async () => {
     const w = await world();
     const owner = as({ credential: 'session', userId: w.owner.id, email: w.owner.email });
-    const canonical = (await app.request(`/a/${w.pub.id}`, { headers: owner })).headers.get('location')!;
+    const canonical = await canonicalOf(app, w.pub.id, owner);
     const response = await app.request(canonical);
     const html = await response.text();
     expect(response.status).toBe(200);
@@ -141,9 +144,9 @@ describe('inlined page data', () => {
 
   it('carries the owner\'s document page: the surface props and the canonical address', async () => {
     const w = await world();
-    // At the canonical address — /a/<id> heals there first (server/app documentPreparation).
+    // At the canonical address — the one /a/<id> names and heals to (server/app documentPreparation).
     const owner = as({ credential: 'session', userId: w.owner.id, email: w.owner.email });
-    const path = (await app.request(`/a/${w.pub.id}`, { headers: owner })).headers.get('location')!;
+    const path = await canonicalOf(app, w.pub.id, owner);
     const res = await app.request(path, { headers: owner });
     const data = inlined(await res.text());
     expect(data.path).toBe(path);
@@ -178,11 +181,14 @@ describe('inlined page data', () => {
 it('serves shared artifact edit addresses with authorized bootstrap data and removes the dataset-specific route', async () => {
   const w=await world();
   const headers=as({credential:'session',userId:w.owner.id,email:w.owner.email});
+  // Served in place: the same authorized data, and the canonical /edit address the page heals to.
   const first=await app.request(`/a/${w.pub.id}/edit`,{headers});
-  expect(first.status).toBe(302);
-  const canonical=first.headers.get('location')!;
-  expect(canonical).toMatch(new RegExp(`/@[^/]+/${w.pub.id}[^/]*/edit$`));
-  const page=await app.request(canonical,{headers});
+  expect(first.status).toBe(200);
+  expect(first.headers.get('location')).toBeNull();
+  const shared=inlined(await first.text());
+  expect(shared.address).toMatch(new RegExp(`^/@[^/]+/${w.pub.id}[^/]*/edit$`));
+  expect(shared.artifact.surface.id).toBe(w.pub.id);
+  const page=await app.request(shared.address,{headers});
   expect(page.status).toBe(200);
   expect(inlined(await page.text()).artifact.surface.id).toBe(w.pub.id);
   expect((await app.request(`/datasets/${w.pub.id}/edit`,{headers})).status).toBe(404);

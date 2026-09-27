@@ -3,8 +3,9 @@
  *
  * One sample = one fresh tab in a cookie-less context, a cold browser cache,
  * the lab's network/CPU throttling, and one navigation to either the reader
- * view (`view`, the canonical `/@owner/<id>-slug` address `/a/<id>` redirects
- * to; the redirect hop is resolved once, outside timing) or the sandboxed
+ * view (`view`: where `/a/<id>` lands — a build that redirects it is resolved
+ * once, outside timing, to the canonical `/@owner/<id>-slug`; a build that
+ * serves it in place is measured at `/a/<id>` itself) or the sandboxed
  * document (`raw`, `/a/<id>/raw`). Every marker is read from the DOM, so the
  * same head-side script measures a base build that knows nothing about it.
  *
@@ -116,7 +117,7 @@ export async function measureDocumentView(context, url, { route, painted, thrott
   }
 }
 
-/** Resolve `/a/<id>` to the canonical address a reader lands on (one hop, untimed). */
+/** Resolve `/a/<id>` to the address a reader lands on: a redirect's target (one hop, untimed), else `/a/<id>`. */
 export async function canonicalView(base, id, fetchImpl = fetch) {
   const response = await fetchImpl(`${base}/a/${id}`, { redirect: 'manual' });
   const location = response.headers.get('location');
