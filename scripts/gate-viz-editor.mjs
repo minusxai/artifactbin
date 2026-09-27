@@ -110,6 +110,23 @@ const optionsOf = async (pg, label) => {
   await pg.keyboard.press('Escape');
   return texts;
 };
+/*
+ * A table switch re-derives the axis pickers from the NEW table's columns. Pick
+ * an axis only once its picker offers that table's column — picking against the
+ * previous table's options (or a still-disabled picker) is a gate race, not a
+ * product result.
+ */
+const waitForOption = async (pg, label, option) => {
+  for (let i = 0; i < 60; i++) {
+    const trigger = pg.locator(`[aria-label="${label}"]`);
+    if (await trigger.isEnabled().catch(() => false)
+      && (await optionsOf(pg, label)).some((o) => o.trim().split(/\s/)[0] === option)) return true;
+    await pg.waitForTimeout(250);
+  }
+  return false;
+};
+/** The toolbar's save status: "not saved — …", "Saving…", or "vN · Saved". */
+const saveStatus = async (pg) => (await pg.locator('[aria-label="Document actions"] [role="status"]').textContent().catch(() => '')) ?? '';
 
 // ── the journey ─────────────────────────────────────────────────────────────
 await openEditor();
@@ -166,6 +183,7 @@ check((await triggerText(p, 'Chart type')).includes('bar'), 'the inspector reads
 
 await pick('Chart type', 'line');
 await pick('Table', '$costs');
+check(await waitForOption(p, 'X-Axis', 'month'), 'the axis pickers offer the new table\'s columns after the switch');
 await pick('X-Axis', 'month');
 await pick('Y-Axis', 'spend');
 await p.waitForTimeout(2500);
@@ -189,6 +207,69 @@ check(stored.markup.includes('data="$costs"'), 'while keeping the data binding')
 const tableText = await frameText();
 check(/month|spend/i.test(tableText), 'and the page falls back to the data table');
 await p.screenshot({ path: '/tmp/viz-editor-table.png' });
+
+// ── the SLOW human path: switch table, pause, then fix the axes ──────────────
+// A person switches the table and only then looks for the axes. Between those
+// picks the chart still encodes the old table's columns, so that write is
+// REFUSED on its own — honestly. The axis picks that make it valid again must
+// then land: a refused intermediate may not wedge the queue on "not saved".
+{
+  const storedChart = async () => {
+    const doc = await api(`/api/artifacts/${start.id}`, {}, token);
+    return doc.markup ?? '';
+  };
+  const until = async (test, tries = 40) => {
+    for (let i = 0; i < tries; i++) { if (await test()) return true; await p.waitForTimeout(250); }
+    return false;
+  };
+  await pick('Chart type', 'bar');
+  check(await waitForOption(p, 'X-Axis', 'month'), 'a fresh bar chart on $costs offers its columns');
+  await pick('X-Axis', 'month');
+  await pick('Y-Axis', 'spend');
+  const barOnCosts = (m) => m.includes('data="$costs"') && m.includes('"field":"month"') && m.includes('"field":"spend"')
+    && /"mark"\s*:\s*("bar"|\{[^}]*"type"\s*:\s*"bar")/.test(m);
+  check(await until(async () => barOnCosts(await storedChart())), 'the slow leg starts from a stored bar chart on $costs');
+
+  await pick('Table', '$sales');
+  const refused = await until(async () => /not saved/.test(await saveStatus(p)));
+  check(refused, `the table switch alone is refused while the axes still name $costs columns (${await saveStatus(p)})`);
+  await p.waitForTimeout(1500); // the human pause: well past the batch window
+  check(await waitForOption(p, 'X-Axis', 'region'), 'after the pause the axis pickers offer $sales columns');
+  await pick('X-Axis', 'region');
+  await p.waitForTimeout(1500); // and another between the two axes
+  await pick('Y-Axis', 'revenue');
+  const barOnSales = (m) => m.includes('data="$sales"') && m.includes('"field":"region"') && m.includes('"field":"revenue"')
+    && !m.includes('"field":"month"') && /"mark"\s*:\s*("bar"|\{[^}]*"type"\s*:\s*"bar")/.test(m);
+  check(await until(async () => barOnSales(await storedChart())), 'the axis picks after the refusal SAVED: the stored chart is bar on $sales, region × revenue');
+  check(await until(async () => !/not saved/.test(await saveStatus(p))), `and the "not saved" status cleared (${await saveStatus(p)})`);
+  check((await storedChart()).includes('A paragraph that must survive'), 'with the prose still intact');
+
+  // The same rebind on a SLOW NETWORK: the lone table switch is still on the
+  // wire (its /prepare held back) when the axis picks land. Those picks are
+  // newer work queued behind a write that will be refused, and must go out
+  // after it — dropping them left the editor on "not saved" with the stored
+  // chart still bound to the old table.
+  const prepareStatuses = [];
+  await p.route('**/prepare', async (route) => {
+    await new Promise((resolve) => setTimeout(resolve, 2500));
+    const response = await route.fetch();
+    prepareStatuses.push(response.status());
+    await route.fulfill({ response });
+  });
+  try {
+    await pick('Table', '$costs');
+    await p.waitForTimeout(400); // with pick's own 400 ms: past the batch window, so the switch flushes alone
+    check(await waitForOption(p, 'X-Axis', 'month'), 'on a slow network the axis pickers offer $costs columns');
+    await pick('X-Axis', 'month');
+    await pick('Y-Axis', 'spend');
+    check(await until(async () => barOnCosts(await storedChart()), 60),
+      `the axis picks queued behind the refused switch SAVED: bar on $costs, month × spend (prepare answered ${prepareStatuses.join(', ')})`);
+    check(prepareStatuses[0] === 400, 'and the switch was refused on its own first, so this leg exercised the refusal');
+    check(await until(async () => !/not saved/.test(await saveStatus(p))), `and the "not saved" status cleared (${await saveStatus(p)})`);
+  } finally {
+    await p.unroute('**/prepare');
+  }
+}
 
 // ── the inspector is not offered where it must not write ────────────────────
 await p.locator('[aria-label="Close chart inspector"]').click();

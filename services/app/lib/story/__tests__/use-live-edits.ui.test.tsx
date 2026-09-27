@@ -404,3 +404,18 @@ it('keeps a locally invalid draft without labelling it offline or retrying forev
  expect(fetchMock).not.toHaveBeenCalled();
  expect(await hook.result.current.flushForNavigation(async()=>{})).toBe(false);
 });
+
+it('a drain sends newer work queued behind a refused commit instead of stopping at the refusal',async()=>{
+ let refuse!:(r:Response)=>void;
+ fetchMock.mockReturnValueOnce(new Promise<Response>(r=>{refuse=r;}));
+ const {hook}=setup();
+ act(()=>hook.result.current.queue({source:'<p>invalid for now</p>'}));
+ await act(async()=>{await vi.advanceTimersByTimeAsync(501);});
+ act(()=>hook.result.current.queue({source:'<p>fixed</p>'}));
+ const drain=hook.result.current.flushNow();
+ await act(async()=>{refuse(errResponse(400,{error:'invalid_jsx',details:[{message:'not a column'}]}));await drain;});
+ expect(fetchMock).toHaveBeenCalledTimes(2);
+ expect(sourceOf(JSON.parse(fetchMock.mock.calls[1][1].body))).toBe('<p>fixed</p>');
+ expect(hook.result.current.state.status).toBe('');
+ expect(hook.result.current.isIdle()).toBe(true);
+});
