@@ -3,7 +3,6 @@ import { cn } from './cn';
 import { GridItemContext } from './grid';
 import { mermaidImageKey, mermaidSourceError } from '@/lib/story-ui/mermaid-source';
 import { sha256Hex } from '@/lib/sha256';
-import type { StoredMermaidImage } from '@/lib/story-runtime/contract';
 import type { MermaidImage, MermaidPalette } from './mermaid-render';
 import { MermaidImagesContext } from './mermaid-images';
 

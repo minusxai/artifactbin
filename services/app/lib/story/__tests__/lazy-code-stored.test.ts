@@ -16,12 +16,12 @@ const stored = (code: string, mode: 'light' | 'dark', src: string) => ({ [mermai
 
 describe('lazyCodeOf with stored drawings', () => {
   it('without any, names every kind, as before', () => {
-    expect(lazyCodeOf(nodes)).toEqual({ chart: false, mermaid: ['flowchart', 'sequence'], mermaidImages: [] });
+    expect(lazyCodeOf(nodes)).toEqual({ chart: false, mermaid: ['flowchart', 'sequence'], mermaidImages: [], kit: ['mermaid'] });
   });
   it('names a kind only while some diagram of it has no drawing for the served mode', () => {
     const images = { ...stored(FLOW, 'light', '/f1'), ...stored(SEQ, 'light', '/s'), ...stored(FLOW2, 'dark', '/f2-dark') };
-    expect(lazyCodeOf(nodes, { images, mode: 'light' })).toEqual({ chart: false, mermaid: ['flowchart'], mermaidImages: ['/f1', '/s'] });
-    expect(lazyCodeOf(nodes, { images: { ...images, ...stored(FLOW2, 'light', '/f2') }, mode: 'light' })).toEqual({ chart: false, mermaid: [], mermaidImages: ['/f1', '/s', '/f2'] });
+    expect(lazyCodeOf(nodes, { images, mode: 'light' })).toEqual({ chart: false, mermaid: ['flowchart'], mermaidImages: ['/f1', '/s'], kit: ['mermaid'] });
+    expect(lazyCodeOf(nodes, { images: { ...images, ...stored(FLOW2, 'light', '/f2') }, mode: 'light' })).toEqual({ chart: false, mermaid: [], mermaidImages: ['/f1', '/s', '/f2'], kit: ['mermaid'] });
   });
   it('a drawing stored for the other mode does not stand in', () => {
     expect(lazyCodeOf(nodes, { images: stored(SEQ, 'dark', '/s-dark'), mode: 'light' }).mermaid).toContain('sequence');

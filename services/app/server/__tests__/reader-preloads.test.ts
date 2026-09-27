@@ -206,7 +206,7 @@ it('a kit chunk this build cannot place is left to load on demand', () => {
 
 it('a document whose diagrams are all stored names no diagram code, and asks for its first drawing as an image', () => {
   const { dir, file } = documentFixture();
-  const html = createDocumentPreloader(dir, file)(shell, { chart: false, mermaid: [], mermaidImages: ['/assets/mermaid/a.svg', '/assets/mermaid/b.svg'] });
+  const html = createDocumentPreloader(dir, file)(shell, { chart: false, mermaid: [], mermaidImages: ['/assets/mermaid/a.svg', '/assets/mermaid/b.svg'], kit: [] });
   expect(html).not.toContain('mermaid-render');
   expect(html).not.toContain('flowDiagram');
   expect(html.split('</head>')[0]).toContain('<link rel="preload" href="/assets/mermaid/a.svg" as="image">');
@@ -215,7 +215,7 @@ it('a document whose diagrams are all stored names no diagram code, and asks for
 
 it('a document with one stored diagram and one drawn by the engine names that kind and the stored image', () => {
   const { dir, file } = documentFixture();
-  const html = createDocumentPreloader(dir, file)(shell, { chart: false, mermaid: ['sequence'], mermaidImages: ['/assets/mermaid/a.svg'] });
+  const html = createDocumentPreloader(dir, file)(shell, { chart: false, mermaid: ['sequence'], mermaidImages: ['/assets/mermaid/a.svg'], kit: [] });
   expect(hinted(html)).toContain('/assets/sequenceDiagram-S-abc.js');
   expect(hinted(html)).not.toContain('/assets/flowDiagram-K-abc.js');
   expect(html).toContain('<link rel="preload" href="/assets/mermaid/a.svg" as="image">');
