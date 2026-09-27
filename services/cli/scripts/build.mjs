@@ -1,20 +1,10 @@
 import { execFileSync } from "node:child_process";
 import { createRequire } from "node:module";
 import { build } from "esbuild";
+import { cliBundle } from "./bundle-options.mjs";
 import { chmod, mkdir, readFile, writeFile, rm } from "node:fs/promises";
 execFileSync(process.execPath,["scripts/generate-teaching.mjs"],{stdio:"inherit"});
-await build({
-  entryPoints: { afbin: "src/main.ts", index: "src/index.ts" },
-  outdir: "dist",
-  outExtension: { ".js": ".mjs" },
-  bundle: true,
-  platform: "node",
-  format: "esm",
-  target: "node22",
-  // The SQLite engine reads its sqlite3.wasm beside its own module: it stays a real dependency.
-  external: ["node-pty", "@sqlite.org/sqlite-wasm"],
-  banner: { js: "#!/usr/bin/env node\nimport {createRequire as __afbinCreateRequire} from 'node:module'; const require=__afbinCreateRequire(import.meta.url);" },
-});
+await build({ ...cliBundle({ afbin: "src/main.ts", index: "src/index.ts" }), outdir: "dist" });
 await chmod("dist/afbin.mjs", 0o755);
 await rm('dist/skills/artifactbin',{recursive:true,force:true});
 const teaching=JSON.parse(await readFile("src/generated/teaching.json","utf8"));

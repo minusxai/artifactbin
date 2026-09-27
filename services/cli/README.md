@@ -74,9 +74,10 @@ same script, pinned to the release they were built with;
 
 macOS/Linux standalone releases use Node's small-ICU build: English locale formatting is included; other locale
 formatting may fall back to English. Unicode normalization, IDN URLs and the Intl APIs remain.
-Local CSV/JSON/document queries run on SQLite (the official wasm build), which every executable carries:
-there is nothing to download, and no local rows are uploaded. The npm/source CLI uses its installed
-`@sqlite.org/sqlite-wasm` dependency, the same engine the server runs.
+Local CSV/JSON/document queries run on SQLite (the official wasm build, the same engine the server
+runs), which every build carries — the executables and `dist/afbin.mjs` embed its wasm, so the bundle
+runs with nothing installed beside it: there is nothing to download, and no local rows are uploaded.
+Running from source uses the installed `@sqlite.org/sqlite-wasm` dependency's own file.
 For development or a trusted mirror, `CLI__SERVICE_BASE_URL` accepts an HTTPS base URL with an optional path prefix (HTTP loopback
 also works); append `afbin-vVERSION/afbin-sql-OS-ARCH.gz` to that base. A locally built server
 uses `CLI__SERVICE_BASE_URL=http://localhost:3030/chat/releases`. Checksums stay pinned in the executable.

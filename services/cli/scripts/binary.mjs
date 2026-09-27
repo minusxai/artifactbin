@@ -5,6 +5,7 @@ import {injectNative} from './inject-native.mjs';
 import { createHash } from "node:crypto";
 import { tmpdir } from "node:os";
 import { build } from "esbuild";
+import { embedSqliteWasm } from "./bundle-options.mjs";
 import { createRequire } from "node:module";
 import {
   readFile,
@@ -65,8 +66,6 @@ for(const [file,data] of Object.entries(files)) {
 export const pty=createRequire(join(root,'package.json'))(root);
 `;
 const chromium=await chromiumNative();
-// The SQLite engine's wasm travels inside the executable; the entry supplies it before the first query (src/sqlite-wasm.ts).
-const sqliteWasm=require.resolve('@sqlite.org/sqlite-wasm/sqlite3.wasm');
 await build({
   entryPoints: ["src/main.ts"],
   outfile: "dist/sea.cjs",
@@ -78,6 +77,8 @@ await build({
   inject: [resolve("scripts/sea-import-meta.mjs")],
   define: { "import.meta.url": "__afbinImportMetaUrl" },
   plugins: [
+    // The SQLite engine's wasm travels inside the bundle, as in dist/afbin.mjs (src/sqlite-wasm.ts).
+    embedSqliteWasm,
     {
       name: "native-asset",
       setup(b) {
@@ -97,7 +98,7 @@ await writeFile(
     disableExperimentalSEAWarning: true,
     useCodeCache: false,
     useSnapshot: false,
-    assets: { "chromium-manifest":chromium.asset, pty: resolve("dist/pty.json.gz"), "sqlite-wasm":sqliteWasm, "host-runtime-manifest":resolve("dist/runtime.manifest.json") },
+    assets: { "chromium-manifest":chromium.asset, pty: resolve("dist/pty.json.gz"), "host-runtime-manifest":resolve("dist/runtime.manifest.json") },
   }),
 );
 execFileSync(
@@ -139,5 +140,5 @@ const released=[hostArchive,basename(binary),`${basename(binary)}.manifest.json`
 await writeFile('dist/SHA256SUMS',(await Promise.all(released.map(async file=>`${sha256(await readFile(join('dist',file)))}  ${file}`))).join('\n')+'\n');
 console.log(`Built ${binary} with matching local skills, release manifest and SHA256SUMS.`);
 
-const javascriptBytes=(await readFile('dist/sea.cjs')).length,terminalArchiveBytes=(await readFile('dist/pty.json.gz')).length,sqliteWasmBytes=(await readFile(sqliteWasm)).length;
-await writeFile(`${binary}.sizes.json`,JSON.stringify({platform:process.platform,arch:process.arch,node:execFileSync(runtime,['--version'],{encoding:'utf8'}).trim(),smallIcu:execFileSync(runtime,['-p','String(process.config.variables.icu_small)'],{encoding:'utf8'}).trim(),coreInstalled:rawBytes.length,coreDownload:compressed.length,components:{nodeAndContainer:rawBytes.length-javascriptBytes-terminalArchiveBytes-sqliteWasmBytes-(await readFile('dist/runtime.manifest.json')).length,hostManifest:(await readFile('dist/runtime.manifest.json')).length,javascript:javascriptBytes,terminalArchive:terminalArchiveBytes,sqliteWasm:sqliteWasmBytes},runtimeDownload:(await stat(join('dist',hostArchive))).size,runtimeInstalled:JSON.parse(await readFile('dist/runtime.manifest.json','utf8')).files.reduce((sum,file)=>sum+file.size,0)},null,2)+'\n');
+const javascriptBytes=(await readFile('dist/sea.cjs')).length,terminalArchiveBytes=(await readFile('dist/pty.json.gz')).length;
+await writeFile(`${binary}.sizes.json`,JSON.stringify({platform:process.platform,arch:process.arch,node:execFileSync(runtime,['--version'],{encoding:'utf8'}).trim(),smallIcu:execFileSync(runtime,['-p','String(process.config.variables.icu_small)'],{encoding:'utf8'}).trim(),coreInstalled:rawBytes.length,coreDownload:compressed.length,components:{nodeAndContainer:rawBytes.length-javascriptBytes-terminalArchiveBytes-(await readFile('dist/runtime.manifest.json')).length,hostManifest:(await readFile('dist/runtime.manifest.json')).length,javascript:javascriptBytes,terminalArchive:terminalArchiveBytes},runtimeDownload:(await stat(join('dist',hostArchive))).size,runtimeInstalled:JSON.parse(await readFile('dist/runtime.manifest.json','utf8')).files.reduce((sum,file)=>sum+file.size,0)},null,2)+'\n');
