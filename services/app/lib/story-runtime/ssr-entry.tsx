@@ -10,6 +10,7 @@
 import { createElement } from 'react';
 import { renderToString } from 'react-dom/server';
 import { StoryRuntimeApp } from './StoryRuntimeApp';
+import { InlineStoryComposition } from './inline-composition';
 import type { StoryIslandData } from './contract';
 
 // Expose server-rendered icon glyphs through the same prebuilt renderer.
@@ -20,9 +21,9 @@ export function renderStoryBody(data: StoryIslandData): string {
 }
 
 /**
- * The inline reader's composition as a string (lib/story-runtime/inline-composition).
- * SEED (Track E): today's server render, which the client does not hydrate.
+ * The inline reader's composition as a string (lib/story-runtime/inline-composition):
+ * the tree InlineStoryRuntime hydrates with the same `data` and `css`.
  */
-export function renderInlineStory(data: StoryIslandData, _css: string): string {
-  return renderToString(createElement(StoryRuntimeApp, data));
+export function renderInlineStory(data: StoryIslandData, css: string): string {
+  return renderToString(createElement(InlineStoryComposition, { data, css }));
 }

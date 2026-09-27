@@ -9,12 +9,24 @@
  * React 19 leaves WRONG in the page — fails here.
  */
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
 import { act } from 'react';
-import { hydrateRoot } from 'react-dom/client';
+import { flushSync } from 'react-dom';
+import { createRoot, hydrateRoot } from 'react-dom/client';
 import { parseJsxOrThrow } from '@/test/helpers/jsx';
-import type { StoryIslandData } from '../contract';
+import { compiledSource, type TestSource } from '@/test/helpers/compiled';
+import { STORY_DOCUMENT_MESSAGE, STORY_READER_MODE_MESSAGE, type StoryIslandData } from '../contract';
 import { InlineStoryComposition, inlineStoryCss } from '../inline-composition';
+import { InlineStoryRuntime, type InlineStoryController } from '../InlineStoryRuntime';
 import { renderInlineStory } from '../ssr-entry';
+import { STORY_CHROME_CSS, STORY_COLUMN_CSS, STORY_EMBED_CSS, STORY_TABLE_CSS } from '../chrome-css';
+import { storyBodyFor } from '@/lib/story/body';
+import { glyphsForNodes } from '@/lib/story/icon-glyphs';
+import { inlineStoryHtml } from '@/lib/story/inline-story-html';
+import type { PreparedStoryRuntime } from '@/lib/story/prepared-runtime';
+import { STORY_BARE_CONTROLS_CSS, STORY_BARE_TYPOGRAPHY_CSS } from '@/lib/story-surface';
+import { captureInitialStory, clearInitialStory } from '@/web/initial-story';
 
 const KIT = `<article>
   <h1>Hydrate me</h1>
@@ -63,5 +75,159 @@ describe('one CSS assembly for both sides', () => {
   it('skips missing parts without leaving blank separators, identically every time', () => {
     const a = inlineStoryCss({ baseCss: 'b{}', compiledCss: null, authorCss: null });
     expect(a).toBe(inlineStoryCss({ baseCss: 'b{}', compiledCss: '', authorCss: '' }));
+  });
+});
+
+/*
+ * THE PRODUCT PATH. The page the server builds (lib/story/inline-story-html,
+ * as server/app withInitialStory places it), captured before the app mounts
+ * (web/initial-story), and the reader's real InlineStoryRuntime adopting it with
+ * a live store, a transport and its asset relay — every divergence the
+ * store-less composition above cannot see. React's development build reports
+ * attribute-only mismatches here (console.error); the browser gate runs a
+ * production build, which does not, so THIS matrix is where those are caught.
+ */
+const FIXTURES = path.resolve(process.cwd(), '../../scripts/fixtures/page-speed');
+const fixture = (name: string) => readFileSync(path.join(FIXTURES, name), 'utf8');
+const SALES = 'SaLes1';
+const SALES_COLUMNS = [{ name: 'month', type: 'date' }, { name: 'region', type: 'string' }, { name: 'product', type: 'string' }, { name: 'revenue', type: 'number' }, { name: 'units', type: 'number' }] as const;
+
+interface Serve { colorMode?: 'light' | 'dark'; template?: string | null; viewer?: StoryIslandData['viewer']; readOnly?: string; refData?: StoryIslandData['refData']; theme?: PreparedStoryRuntime['theme']; sources?: Record<string, TestSource> }
+async function served(source: string, opts: Serve = {}): Promise<PreparedStoryRuntime> {
+  const split = storyBodyFor(source);
+  if (!split) throw new Error('fixture does not parse');
+  const declares = split.content.values.length + split.content.queries.length + split.content.imports.length > 0;
+  const glyphs = glyphsForNodes(split.body);
+  const data: StoryIslandData = {
+    nodes: split.body, refData: opts.refData ?? {}, colorMode: opts.colorMode ?? 'light', template: opts.template ?? null, chrome: true,
+    assetsUrl: '/a/DocAbc/assets', queryUrl: '/a/DocAbc/query',
+    ...(Object.keys(glyphs).length ? { glyphs } : {}),
+    ...(declares ? { dataflow: { flow: await compiledSource(source, opts.sources) } } : {}),
+    ...(opts.viewer ? { viewer: opts.viewer } : {}),
+    ...(opts.readOnly ? { readOnly: opts.readOnly } : {}),
+  };
+  const baseCss = [':root { --mx-vh: 100vh; } body { margin: 0; }', STORY_BARE_TYPOGRAPHY_CSS, STORY_BARE_CONTROLS_CSS, STORY_CHROME_CSS, STORY_EMBED_CSS, STORY_TABLE_CSS, STORY_COLUMN_CSS].join('\n');
+  return { data, baseCss, compiledCss: '.x{color:red}', authorCss: split.content.style ?? null, authorScript: null, theme: opts.theme ?? null, title: 'served' };
+}
+
+// Queries stay in flight: the served "loading" state is what the survival check compares against.
+const liveTransport = () => ({
+  run: vi.fn(() => new Promise<never>(() => {})), page: vi.fn(() => new Promise<never>(() => {})),
+  importAsset: vi.fn(async () => ({ refused: 'not in this test' })), dispose: vi.fn(),
+});
+
+const REFERENCES = ['aria-controls', 'aria-labelledby', 'aria-describedby', 'for'] as const;
+/** Every id reference in `root` that names no element in the document. */
+const dangling = (root: Element): string[] => [...root.querySelectorAll(REFERENCES.map((a) => `[${a}]`).join(','))]
+  .flatMap((el) => REFERENCES.flatMap((a) => (el.getAttribute(a) ?? '').split(' ').filter(Boolean).filter((id) => !document.getElementById(id)).map((id) => `${a}=${id}`)));
+
+/** Serve `runtime` as the app page does, mount the reader's runtime over it, and let it hydrate. */
+async function adopt(runtime: PreparedStoryRuntime) {
+  document.body.innerHTML = `<div id="root"></div><div data-mx-initial-story=""><style>body > #root:first-child{display:none!important}</style>${inlineStoryHtml(runtime, renderInlineStory)}</div>`;
+  const story = document.querySelector<HTMLElement>('[data-mx-inline-story]')!;
+  const serverNodes = [...story.querySelectorAll('*')];
+  const serverDangling = dangling(story);
+  captureInitialStory();
+  const errors: unknown[] = [];
+  vi.spyOn(console, 'error').mockImplementation((...args) => { errors.push(args); });
+  const reported = (event: ErrorEvent) => { errors.push(event.error ?? event.message); };
+  window.addEventListener('error', reported);
+  const app = createRoot(document.getElementById('root')!, { onRecoverableError: (e) => errors.push(e), onCaughtError: (e) => errors.push(e), onUncaughtError: (e) => errors.push(e) });
+  let controller: InlineStoryController | null = null;
+  await act(async () => {
+    app.render(<InlineStoryRuntime data={runtime.data} prepared={runtime} transportFactory={liveTransport} authorScript={null} onController={(c) => { controller = c; }} hydrateInitialStory />);
+  });
+  await act(async () => {});
+  return { story, serverNodes, serverDangling, errors, app, controller: () => controller!, stop: () => window.removeEventListener('error', reported) };
+}
+
+function expectAdopted({ story, serverNodes, serverDangling, errors }: Awaited<ReturnType<typeof adopt>>) {
+  expect(errors).toEqual([]);
+  // The server's element is the story now, inside the app's root, and every element it drew survived.
+  expect(document.querySelector('[data-mx-initial-story]')).toBeNull();
+  expect(document.getElementById('root')!.contains(story)).toBe(true);
+  // (A client-only pane's fallback — the chart placeholder — is replaced after hydration, by design.)
+  const lost = serverNodes.filter((n) => !story.contains(n) && !n.closest('[aria-label="Chart placeholder"]'));
+  expect(lost.map((n) => n.outerHTML.slice(0, 120))).toEqual([]);
+  // Generated ids agree: no reference names an element that is missing now and was not already
+  // missing in the served markup (an author's own id on a Radix part is the only way to get one).
+  expect(dangling(story).filter((ref) => !serverDangling.includes(ref))).toEqual([]);
+}
+
+const DIALOG = '<Dialog><DialogTrigger id="trigger"><Button id="add">Add task</Button></DialogTrigger><DialogContent aria-label="Add a task"><DialogClose>Cancel</DialogClose></DialogContent></Dialog>';
+const DATA = `<Helmet>
+  <Value name="rows" type="table" value={[{"k":"a","n":4},{"k":"b","n":7}]} />
+  <Value name="pick" type="string" default="a" />
+</Helmet>
+<article><h1>Data</h1>
+  <Select label="Pick" value="$pick" options={["a","b"]} />
+  <p>Total <Number data="$rows" col="n" agg="sum" /></p>
+  <DataTable data="$rows" height="200px" />
+  <img src="ref:ImgRf1" alt="stored picture" />
+  <Question title="Bars" data="$rows" height="200px" viz={{"kind":"vega-lite","spec":{"mark":"bar","encoding":{"x":{"field":"k","type":"nominal"},"y":{"field":"n","type":"quantitative"}}}}} />
+</article>`;
+const IMAGE_REF = { ImgRf1: { kind: 'image' as const, url: '/a/ImgRf1/raw?v=1', width: 640, height: 480 } };
+
+describe('the reader adopts the page the server served', () => {
+  afterEach(() => { clearInitialStory(); });
+
+  const cases: Array<[string, () => Promise<PreparedStoryRuntime>]> = [
+    ['the kit fixture, light', () => served(fixture('kit.jsx'))],
+    ['the kit fixture, dark, themed', () => served(fixture('kit.jsx'), { colorMode: 'dark', theme: 'modernist' })],
+    ['a sectioned prose report with its outline rail', () => served(fixture('prose.jsx'), { template: 'editorial' })],
+    ['the deck fixture', () => served(fixture('deck.jsx'), { template: 'deck' })],
+    ['the Mermaid fixture', () => served(fixture('mermaid.jsx'))],
+    ['the dashboard fixture, anonymous', () => served(fixture('dashboard.jsx').replaceAll('{{sales}}', SALES), { template: 'dashboard', sources: { [SALES]: [...SALES_COLUMNS] } })],
+    ['the dashboard fixture, signed in, an archived version', () => served(fixture('dashboard.jsx').replaceAll('{{sales}}', SALES), { template: 'dashboard', sources: { [SALES]: [...SALES_COLUMNS] }, viewer: { id: 'user-1', name: 'Reader' } as StoryIslandData['viewer'], readOnly: 'This is version 2 of 3.' })],
+    ['bound values, a table, a number, a chart and a stored image', () => served(DATA, { refData: IMAGE_REF })],
+    ['a dialog trigger holding the author\'s Button', () => served(`<article>${DIALOG}</article>`)],
+    ['author CSS that tries to close its <style>', () => served('<Helmet><style>{`.a::after{content:"</style><STYLE>"}`}</style></Helmet><article><p className="a">styled</p></article>')],
+  ];
+  for (const [name, runtime] of cases) {
+    it(`hydrates ${name} with no error or warning and keeps every server node`, async () => {
+      const page = await adopt(await runtime());
+      expectAdopted(page);
+      await act(async () => { page.app.unmount(); });
+      await act(async () => {});
+      expect(page.errors).toEqual([]);
+      page.stop();
+    });
+  }
+
+  it('renders later versions, reader modes and themes through the adopted root, and unmounts it', async () => {
+    const page = await adopt(await served(fixture('kit.jsx')));
+    expectAdopted(page);
+    const heading = page.story.querySelector('h1')!;
+    await act(async () => { page.controller().update({ type: STORY_DOCUMENT_MESSAGE, nodes: parseJsxOrThrow('<article><h1>Second version</h1></article>').nodes, theme: 'modernist' }); });
+    expect(page.story.querySelector('h1')!.textContent).toBe('Second version');
+    expect(page.story.getAttribute('data-theme')).toBe('modernist');
+    expect(heading.isConnected || page.story.querySelector('h1') !== heading).toBe(true);
+    await act(async () => { page.controller().send({ type: STORY_READER_MODE_MESSAGE, mode: 'dark' }); });
+    expect(page.story).toHaveClass('dark');
+    await act(async () => { page.app.unmount(); });
+    await act(async () => {});
+    expect(page.story.childNodes.length).toBe(0);
+    expect(page.errors).toEqual([]);
+    page.stop();
+  });
+
+  it('applies a version sent the moment the controller arrives, with no error', async () => {
+    const runtime = await served(fixture('kit.jsx'));
+    document.body.innerHTML = `<div id="root"></div><div data-mx-initial-story="">${inlineStoryHtml(runtime, renderInlineStory)}</div>`;
+    captureInitialStory();
+    const errors: unknown[] = [];
+    // Outside act() on purpose, so React's act() environment warnings are not what this test is about.
+    vi.spyOn(console, 'error').mockImplementation((...args) => { if (!String(args[0]).includes('not wrapped in act')) errors.push(args); });
+    const app = createRoot(document.getElementById('root')!);
+    let controller: InlineStoryController | null = null;
+    // No act(): the app's first commit and the story's hydration run as the browser runs them.
+    flushSync(() => app.render(<InlineStoryRuntime data={runtime.data} prepared={runtime} transportFactory={liveTransport} onController={(c) => { controller = c; }} hydrateInitialStory />));
+    expect(controller).not.toBeNull();
+    // Synchronously, as a discrete event would: React takes a render of a root still hydrating as a reason to discard the server tree.
+    flushSync(() => controller!.update({ type: STORY_DOCUMENT_MESSAGE, nodes: parseJsxOrThrow('<article><h1>Early version</h1></article>').nodes }));
+    await act(async () => { await new Promise((r) => setTimeout(r, 50)); });
+    expect(document.querySelector('[data-mx-inline-story] h1')!.textContent).toBe('Early version');
+    expect(errors).toEqual([]);
+    await act(async () => { app.unmount(); });
   });
 });

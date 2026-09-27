@@ -24,9 +24,8 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import StarterInstructions from '@/components/StarterInstructions';
 import { isStartPlaceholder } from '@/lib/start-placeholder';
 import type { PreparedStoryRuntime } from '@/lib/story/prepared-runtime';
-import { isolateStoryCss, isolateStoryNodes } from '@/lib/story/inline-css';
+import { inlineStoryHtml } from '@/lib/story/inline-story-html';
 import { escapeHtml } from '@/lib/story/reader-chrome';
-import { STORY_ROOT_ATTR } from '@/lib/story-surface';
 import { APP_BAR_H } from '@/lib/story/edit-bar';
 import { Hono } from 'hono';
 import { serveStatic } from '@hono/node-server/serve-static';
@@ -94,15 +93,15 @@ export const withBootstrap = (html: string, data: unknown): string =>
   html.replace('</head>', () => `  <script type="application/json" id="${BOOTSTRAP_ID}">${safeJson(data)}</script>\n  </head>`);
 
 /** Initial readable document, outside React's empty root; captured by reference
- * before React mounts and removed when the inline runtime commits. App root
- * and head bootstrap precede ALL author nodes, including colliding ids.
+ * before React mounts. The inline runtime ADOPTS its story element and hydrates
+ * it (lib/story-runtime/inline-composition is the tree on both sides); the
+ * wrapper around it, with its handoff rule, is removed in the same commit. App
+ * root and head bootstrap precede ALL author nodes, including colliding ids.
  */
 export function withInitialStory(html: string, runtime: PreparedStoryRuntime, id: string, description?: string | null, origin = '', starter = false): string {
-  const combined = [runtime.baseCss, runtime.compiledCss ?? '', runtime.authorCss ?? ''].join('\n');
-  const css = isolateStoryCss(combined).replace(/<\/style/gi, '');
-  const body = starter
+  const story = starter
     ? renderToStaticMarkup(createElement(StarterInstructions, { id, initialOrigin: origin }))
-    : loadStorySsr().renderStoryBody({ ...runtime.data, nodes: isolateStoryNodes(runtime.data.nodes, combined) });
+    : inlineStoryHtml(runtime, loadStorySsr().renderInlineStory);
   // While lazy app code mounts, it must not push the readable server sibling
   // down by its viewport height. This temporary rule belongs to the captured
   // sibling, so its removal atomically reveals the committed app document.
@@ -114,7 +113,7 @@ export function withInitialStory(html: string, runtime: PreparedStoryRuntime, id
     + `<meta property="og:image" content="${escapeHtml(origin)}/a/${escapeHtml(id)}/export?mode=card&amp;r=${CARD_RENDER_GENERATION}"><meta name="twitter:card" content="summary_large_image">`;
   return html.replace(/<title>[\s\S]*?<\/title>/i, () => `<title>${escapeHtml(runtime.title)}</title>`)
     .replace('</head>', () => `${metadata}</head>`)
-    .replace('</body>', () => `<div data-mx-initial-story=""><style>${handoffCss}</style>${starter ? body : `<div data-mx-inline-story="" ${STORY_ROOT_ATTR} class="${runtime.data.colorMode}"${runtime.theme ? ` data-theme="${escapeHtml(runtime.theme)}"` : ''}><style>${css}</style>${body}</div>`}</div></body>`);
+    .replace('</body>', () => `<div data-mx-initial-story=""><style>${handoffCss}</style>${story}</div></body>`);
 }
 
 // Inline scripts emitted by our source HTML and Vite's development transform.

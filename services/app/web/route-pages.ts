@@ -19,3 +19,16 @@ export const routePages = {
   WelcomePage: lazyPage<Record<string, never>>(() => import('./pages/Welcome').then(m => ({ default: m.WelcomePage }))),
   ArtifactPage: lazyPage<{ id?: string }>(() => import('./pages/Artifact').then(m => ({ default: m.ArtifactPage })), true),
 };
+
+/**
+ * Everything a server-rendered DOCUMENT's first app render draws: the route
+ * pages and the inline runtime that hydrates the story. The server names every
+ * one of them in the head (server/reader-preloads), so awaiting them before the
+ * first render costs nothing — and it lets every boundary render its module on
+ * that first commit, where a lazy read would suspend and reveal behind React's
+ * fallback throttle.
+ */
+export function preloadDocumentReader(): Promise<void> {
+  const runtime = import('./pages/Artifact').then(m => m.preloadInlineStoryRuntime());
+  return Promise.all([routePages.ProfilePage.preload(), routePages.ArtifactPage.preload(), runtime]).then(() => undefined);
+}

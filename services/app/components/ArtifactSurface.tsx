@@ -73,6 +73,8 @@ const DatasetCatalogView = dynamic(() => import('@/components/DatasetCatalogView
 });
 
 const InlineStoryRuntime = dynamic(() => import('@/lib/story-runtime/InlineStoryRuntime').then(module => ({default:module.InlineStoryRuntime})), { ssr: false });
+/** The document runtime's code, which a document address awaits before the app's first render (web/main). */
+export const preloadInlineStoryRuntime = (): Promise<void> => InlineStoryRuntime.preload();
 const ArtifactEditor = dynamic(() => import('@/components/ArtifactEditor'), {
   ssr: false,
   loading: () => <p className="mt-10 text-center text-xs text-faint">loading the editor…</p>,
@@ -916,6 +918,7 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
             prepared={props.runtime}
             authorScript={props.runtime?.authorScript}
             onController={onController}
+            hydrateInitialStory
           /> : parseFailed && <TrustedUi><LoadFailure what="the document" onRetry={retryParse} className="p-4" /></TrustedUi>}
           </div>
         </div>

@@ -142,3 +142,32 @@ export function isolateStoryCss(css: string): string {
   });
   return cssTree.generate(ast);
 }
+
+/*
+ * THE INLINE READER'S CSS ASSEMBLY (lib/story-runtime/inline-composition) —
+ * used by the server's render and the browser's hydration alike.
+ */
+export interface InlineStoryCssParts { baseCss: string; compiledCss: string | null; authorCss: string | null }
+
+/** Base, compiled and author CSS as ONE stylesheet: fonts and their references share a namespace. */
+const combined = (parts: InlineStoryCssParts): string => [parts.baseCss, parts.compiledCss, parts.authorCss].filter(Boolean).join('\n');
+
+/*
+ * `<style` and `</style` can never survive into the element's text. The
+ * replacement is React's own server escape for style text (react-dom/server
+ * `styleRegex`), a CSS escape of the `s` that leaves a string's meaning intact:
+ * applying it HERE makes React's server pass a no-op, so the text the server
+ * writes is byte-for-byte the text the browser's render compares against.
+ */
+const STYLE_TAG = /(<\/|<)(s)(tyle)/gi;
+const neutralize = (css: string): string => css.replace(STYLE_TAG, (_match, prefix: string, s: string, suffix: string) => `${prefix}${s === 's' ? '\\73 ' : '\\53 '}${suffix}`);
+
+/** The one CSS string both sides put in the story's `<style>`. */
+export function inlineStoryCss(parts: InlineStoryCssParts): string {
+  return neutralize(isolateStoryCss(combined(parts)));
+}
+
+/** The document's nodes under the same CSS policy (inline style values and font aliases). */
+export function inlineStoryNodes(nodes: JsxNode[], parts: InlineStoryCssParts): JsxNode[] {
+  return isolateStoryNodes(nodes, combined(parts));
+}

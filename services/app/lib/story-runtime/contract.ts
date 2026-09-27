@@ -534,6 +534,8 @@ export interface StoryDataUpdate {
 /** Shape of the prebuilt SSR bundle (lib/story-runtime/dist/story-ssr.cjs). */
 export interface StorySsrBundle {
   renderStoryBody: (data: StoryIslandData) => string;
+  /** The inline reader's story (lib/story-runtime/inline-composition), which the browser hydrates. */
+  renderInlineStory: (data: StoryIslandData, css: string) => string;
   /**
    * The document's `<Icon>` glyphs. Reached through the bundle rather than
    * imported, for the same reason renderStoryBody is: resolving one renders

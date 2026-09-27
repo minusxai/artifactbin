@@ -1,24 +1,32 @@
 /**
  * THE inline reader's story tree — one composition, rendered to a string by the
- * server (ssr-entry renderInlineStory) and hydrated with the same props by the
- * browser (InlineStoryRuntime), so the two agree by construction.
+ * server (ssr-entry renderInlineStory, placed by server/app withInitialStory)
+ * and hydrated with the same props by the browser (InlineStoryRuntime), so the
+ * two agree by construction: same root, same `useId` paths, same `<style>`
+ * text, same dialog scope.
  *
- * SEED (Track E): the signatures are the contract; the bodies reproduce today's
- * client-only behaviour and are expected to change.
+ * The CSS assembly and the node isolation are part of the same contract, so
+ * neither side can drift into a second way of joining the stylesheets.
  */
 import type { ReactNode } from 'react';
 import { ArtifactDialogScope } from '@/components/kit/dialog';
-import { isolateStoryCss } from '@/lib/story/inline-css';
-import { StoryRuntimeApp } from './StoryRuntimeApp';
+import { StoryRuntimeApp, type StoryRuntimeAppProps } from './StoryRuntimeApp';
 import type { StoryIslandData } from './contract';
 
-export interface InlineStoryCssParts { baseCss: string; compiledCss: string | null; authorCss: string | null }
+// The CSS assembly lives beside the CSS policy (lib/story/inline-css) so the
+// app server can reach it without importing this React tree; re-exported here
+// as part of the composition's contract.
+export { inlineStoryCss, inlineStoryNodes, type InlineStoryCssParts } from '@/lib/story/inline-css';
 
-/** The one CSS string both sides put in the story's `<style>`. */
-export function inlineStoryCss(parts: InlineStoryCssParts): string {
-  return isolateStoryCss([parts.baseCss, parts.compiledCss, parts.authorCss].filter(Boolean).join('\n'));
-}
+/**
+ * What only a browser render wires in: the live store, the asset relay, edit
+ * decorators, registry overrides and the first-commit signal. None of them may
+ * change the FIRST render's markup — the store serves the island's snapshot to
+ * a hydrating render, edit decorators arrive only after an owner asks — so the
+ * server can render without them and still match.
+ */
+export type InlineStoryWiring = Omit<StoryRuntimeAppProps, keyof StoryIslandData>;
 
-export function InlineStoryComposition({ data, css }: { data: StoryIslandData; css: string }): ReactNode {
-  return <><style>{css}</style><ArtifactDialogScope><StoryRuntimeApp {...data} /></ArtifactDialogScope></>;
+export function InlineStoryComposition({ data, css, wiring }: { data: StoryIslandData; css: string; wiring?: InlineStoryWiring }): ReactNode {
+  return <><style>{css}</style><ArtifactDialogScope><StoryRuntimeApp {...data} {...wiring} /></ArtifactDialogScope></>;
 }
