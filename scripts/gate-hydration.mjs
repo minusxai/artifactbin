@@ -415,8 +415,8 @@ async function judgeTakeover(context, scheme, path, label) {
   await page.addInitScript(TAKEOVER_PROBE);
   await page.goto(`${B}${path}`, { waitUntil: 'domcontentloaded', timeout: 90000 });
   const ready = await waitFor(page, '!!window.__readerHydration?.verdict', 30000);
-  // Leave the document running for a moment: data, charts and diagrams land after hydration.
-  await page.waitForTimeout(1500);
+  // Leave the document running a moment, so an error raised as data and panes land is still this load's.
+  await page.waitForTimeout(500);
   const { verdict, dcl, served } = await page.evaluate(() => { const h = window.__readerHydration; return { verdict: h.verdict, dcl: h.dcl, served: h.served?.length ?? 0 }; });
   const where = new URL(page.url()).pathname + new URL(page.url()).search;
   await page.close();
