@@ -259,8 +259,18 @@ export async function servedPage(row: ArtifactRow, page: PreparedPage, reader: R
  */
 const queued = new Map<string, string>();
 let worker: Promise<void> | null = null;
+let warming = false;
+
+/**
+ * Background work belongs to a SERVER: the app's composition (server/app
+ * createAppServer) turns publish-time preparation on. A caller that writes
+ * without serving — a script, a unit test measuring one statement — gets no
+ * work behind its back, and its readers still miss and write back.
+ */
+export function enablePreparedPageWarmups(): void { warming = true; }
 
 export function warmPreparedPage(id: string, origin: string = PUBLIC_BASE_URL): void {
+  if (!warming) return;
   queued.set(id, origin);
   if (worker) return;
   // A microtask, not a timer: a test's fake clock must never strand the queue.

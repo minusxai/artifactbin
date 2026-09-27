@@ -51,6 +51,7 @@ import { AUTHOR_FRAME_PATH } from '@/lib/story-runtime/author-frame';
 import { GITHUB_EXTERNAL_URL } from '@/lib/github-star';
 import { createDocumentPreloader, createListingPreloader, createReaderPreloader, listingPage } from './reader-preloads';
 import { artifactPageAnswer, type InitialStory } from '@/lib/artifact-page';
+import { enablePreparedPageWarmups } from '@/lib/story/prepared-page.server';
 import { mountBuildAssets } from './build-assets';
 import { compressDynamic, dynamicEncoding, precompressedStatic, variantResponse } from './content-encoding';
 import { customHostBoundary } from './custom-host';
@@ -272,6 +273,8 @@ const apiNotFound = (c: { req: { raw: Request } }) => {
 
 export function createAppServer(opts: AppServerOptions = {}): Hono {
   const app = new Hono();
+  // A serving process prepares each new head for its readers after the write commits (lib/story/prepared-page.server).
+  enablePreparedPageWarmups();
   // Transport identity must be attached before any app middleware or route
   // asks viewer.ts who is calling.
   if (opts.actorSecret) actorReceiver(opts.actorSecret).mount(app);

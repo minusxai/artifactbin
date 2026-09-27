@@ -214,8 +214,12 @@ describe('the reader adopts the page the server served', () => {
     const page = await adopt(await served(fixture('kit.jsx')));
     expectAdopted(page);
     const heading = page.story.querySelector('h1')!;
-    await act(async () => { page.controller().update({ type: STORY_DOCUMENT_MESSAGE, nodes: parseJsxOrThrow('<article><h1>Second version</h1></article>').nodes, theme: 'modernist' }); });
-    // A version the page was not served is isolated here, by the policy chunk loaded on demand.
+    // A version the page was not served is isolated here, by the policy chunk loaded on demand, and lands whole.
+    await act(async () => {
+      page.controller().update({ type: STORY_DOCUMENT_MESSAGE, nodes: parseJsxOrThrow('<article><h1>Second version</h1></article>').nodes, theme: 'modernist' });
+      // The policy chunk loads on demand: give it its moment inside act, so the commit it causes is act's.
+      await new Promise((resolve) => setTimeout(resolve, 500));
+    });
     await vi.waitFor(() => expect(page.story.querySelector('h1')!.textContent).toBe('Second version'));
     expect(page.story.querySelector('style')!.textContent).toBe(page.css);
     expect(page.story.getAttribute('data-theme')).toBe('modernist');

@@ -157,6 +157,17 @@ function initialSheet(prepared: InlineStoryRuntimeProps['prepared'], nodes: JsxN
   }
   return { theme: prepared.theme ?? null, served: null, raw: { base: prepared.baseCss, compiledCss: prepared.compiledCss, authorCss: prepared.authorCss } };
 }
+/** The sheet after `update`: a prepared version's isolated sheet, or raw parts merged over the last ones. */
+function nextSheet(previous: SheetState, update: StoryDocumentUpdate): SheetState {
+  const theme = update.theme !== undefined ? update.theme : previous.theme;
+  // A prepared version brings its sheet isolated, for exactly its nodes.
+  if (update.sheet) return { theme, served: { css: update.sheet.css, overrides: update.sheet.overrides, nodes: update.nodes }, raw: { base: update.sheet.base, compiledCss: undefined, authorCss: undefined } };
+  const changesCss = update.compiledCss !== undefined || update.authorCss !== undefined;
+  return {
+    theme, served: changesCss ? null : previous.served,
+    raw: { ...previous.raw, ...(update.compiledCss !== undefined ? { compiledCss: update.compiledCss } : {}), ...(update.authorCss !== undefined ? { authorCss: update.authorCss } : {}) },
+  };
+}
 // eslint-disable-next-line no-restricted-syntax -- one module per page: the policy chunk, once loaded, serves every document
 let loadedPolicy: InlineSheetPolicy | null = null;
 const loadPolicy = (): Promise<InlineSheetPolicy> => import('./inline-sheet').then((module) => (loadedPolicy = module));
@@ -177,10 +188,17 @@ export function InlineStoryRuntime(props: InlineStoryRuntimeProps): ReactNode {
   const latest = useRef(props);
   latest.current = props;
   const [current, setCurrent] = useState(props.data);
-  const [sheet, setSheet] = useState<SheetState>(() => initialSheet(props.prepared, props.data.nodes));
-  const [policy, setPolicy] = useState<InlineSheetPolicy | null>(() => props.sheetPolicy ?? loadedPolicy);
+  const [sheet, setSheetState] = useState<SheetState>(() => initialSheet(props.prepared, props.data.nodes));
+  const [policy, setPolicyState] = useState<InlineSheetPolicy | null>(() => props.sheetPolicy ?? loadedPolicy);
   /** Raw parts fetched for the served version, or 'failed' when they cannot be had. */
-  const [fetchedRaw, setFetchedRaw] = useState<{ compiledCss: string | null; authorCss: string | null } | 'failed' | null>(null);
+  const [fetchedRaw, setFetchedRawState] = useState<{ compiledCss: string | null; authorCss: string | null } | 'failed' | null>(null);
+  // Mirrors the document lifetime reads synchronously, to decide whether an update can render at once.
+  const sheetRef = useRef(sheet);
+  const policyRef = useRef(policy);
+  const fetchedRawRef = useRef(fetchedRaw);
+  const setSheet = (next: SheetState) => { sheetRef.current = next; setSheetState(next); };
+  const setPolicy = (next: InlineSheetPolicy) => { policyRef.current = next; setPolicyState(next); };
+  const setFetchedRaw = (next: typeof fetchedRaw) => { fetchedRawRef.current = next; setFetchedRawState(next); };
   const createLifetime = () => {
     const transport = latest.current.transportFactory?.() ?? latest.current.transport;
     const { writesUnavailable, frozenValues } = latest.current;
@@ -273,6 +291,35 @@ export function InlineStoryRuntime(props: InlineStoryRuntimeProps): ReactNode {
       stopTables = markScrollableTables(document,root.current);
     });
     const stopValues = syncValuesToUrl(store, () => store.flow, { post: values => emit({ type: STORY_VALUES_MESSAGE, nonce, values }) });
+    let pendingUpdates: Promise<void> | null = null;
+    const rawKnown = (raw: SheetState['raw']) => (raw.compiledCss !== undefined && raw.authorCss !== undefined) || fetchedRawRef.current !== null;
+    const sheetReadyFor = (update: StoryDocumentUpdate): boolean => {
+      const next = nextSheet(sheetRef.current, update);
+      if (next.served && next.served.nodes === update.nodes) return true;
+      return !!policyRef.current && rawKnown(next.raw);
+    };
+    const prepareSheetFor = async (update: StoryDocumentUpdate): Promise<void> => {
+      if (!policyRef.current) {
+        const module = latest.current.sheetPolicy ?? await loadPolicy();
+        if (!disposed) setPolicy(module);
+      }
+      const next = nextSheet(sheetRef.current, update);
+      if (!rawKnown(next.raw)) {
+        const fetchRaw = latest.current.rawSheets;
+        const parts = await (fetchRaw ? fetchRaw().catch(() => null) : Promise.resolve(null));
+        if (!disposed) setFetchedRaw(parts ?? 'failed');
+      }
+    };
+    const applyUpdate = (update: StoryDocumentUpdate) => {
+      // Raw parts fetched for the version this page was served belong to it alone.
+      if (update.sheet) setFetchedRaw(null);
+      setSheet(nextSheet(sheetRef.current, update));
+      if (update.dataflow) { store.replaceFlow(update.dataflow); publicMx = installMx(store); }
+      if (update.authorScript !== undefined) author.replace(update.authorScript);
+      documentData = { ...documentData, nodes: update.nodes, ...(update.refData ? { refData: { ...documentData.refData, ...update.refData } } : {}), ...(update.colorMode ? { colorMode: update.colorMode } : {}) };
+      if (readerModeOverride) documentData.colorMode = readerModeOverride;
+      render();
+    };
     const controller: InlineStoryController = {
       nonce,
       send(command) {
@@ -328,23 +375,16 @@ export function InlineStoryRuntime(props: InlineStoryRuntimeProps): ReactNode {
       },
       update(update) {
         if (disposed) return;
-        // Raw parts fetched for the version this page was served belong to it alone.
-        if (update.sheet) setFetchedRaw(null);
-        setSheet(previous => {
-          const theme = update.theme !== undefined ? update.theme : previous.theme;
-          // A prepared version brings its sheet isolated, for exactly its nodes.
-          if (update.sheet) return { theme, served: { css: update.sheet.css, overrides: update.sheet.overrides, nodes: update.nodes }, raw: { base: update.sheet.base, compiledCss: undefined, authorCss: undefined } };
-          const changesCss = update.compiledCss !== undefined || update.authorCss !== undefined;
-          return {
-            theme, served: changesCss ? null : previous.served,
-            raw: { ...previous.raw, ...(update.compiledCss !== undefined ? { compiledCss: update.compiledCss } : {}), ...(update.authorCss !== undefined ? { authorCss: update.authorCss } : {}) },
-          };
-        });
-        if (update.dataflow) { store.replaceFlow(update.dataflow); publicMx = installMx(store); }
-        if (update.authorScript !== undefined) author.replace(update.authorScript);
-        documentData = { ...documentData, nodes: update.nodes, ...(update.refData ? { refData: { ...documentData.refData, ...update.refData } } : {}), ...(update.colorMode ? { colorMode: update.colorMode } : {}) };
-        if (readerModeOverride) documentData.colorMode = readerModeOverride;
-        render();
+        // A version this page holds the sheet for renders in this very call, as it always has;
+        // one that needs the CSS policy (or the served version's raw sheets) waits for them, in
+        // order, and then lands whole — its nodes, its DOM and every session's view together.
+        if (!pendingUpdates && sheetReadyFor(update)) { applyUpdate(update); return; }
+        const mine: Promise<void> = (pendingUpdates ?? Promise.resolve())
+          .then(() => prepareSheetFor(update))
+          .catch((error) => { console.error('Failed to prepare the document stylesheet', error); })
+          .then(() => { if (!disposed) applyUpdate(update); });
+        pendingUpdates = mine;
+        void mine.finally(() => { if (pendingUpdates === mine) pendingUpdates = null; });
       },
       invalidate(datasets) { if (!disposed) store.invalidateDatasets(datasets); },
       subscribe(listener) { if (!disposed) listeners.add(listener); return () => { listeners.delete(listener); }; },
