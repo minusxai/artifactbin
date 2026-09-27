@@ -7,7 +7,7 @@ import type { LazyCode } from '@/lib/story/lazy-code';
 type ReaderPreloader = (html: string) => string;
 
 const READER_ENTRIES = ['pages/Profile.tsx', 'pages/Artifact.tsx', '../lib/story-runtime/InlineStoryRuntime.tsx'];
-interface Hint { href: string; style: boolean }
+interface Hint { href: string; style: boolean; as?: 'image' }
 
 const readManifest = (webDir: string): Manifest => JSON.parse(readFileSync(path.join(webDir, '.vite/manifest.json'), 'utf8'));
 
@@ -40,8 +40,9 @@ function inject(html: string, hints: readonly Hint[]): string {
   const head = html.split('</head>')[0];
   const existing = new Set([...head.matchAll(/\bhref=["']([^"']+)["']/g)].map(match => match[1]));
   const seen = new Set<string>();
-  const links = hints.filter(hint => !existing.has(hint.href) && !seen.has(hint.href) && seen.add(hint.href)).map(({ href, style }) =>
-    style ? `<link rel="preload" href="${href}" as="style" crossorigin>` : `<link rel="modulepreload" href="${href}" crossorigin>`).join('');
+  const links = hints.filter(hint => !existing.has(hint.href) && !seen.has(hint.href) && seen.add(hint.href)).map(({ href, style, as }) =>
+    as === 'image' ? `<link rel="preload" href="${href}" as="image">`
+      : style ? `<link rel="preload" href="${href}" as="style" crossorigin>` : `<link rel="modulepreload" href="${href}" crossorigin>`).join('');
   return links ? html.replace('</head>', () => links + '</head>') : html;
 }
 
@@ -138,7 +139,10 @@ function readDocumentHints(webDir: string, mermaidModulesFile: string): Document
 export function createDocumentPreloader(webDir: string, mermaidModulesFile = MERMAID_MODULES_FILE): (html: string, needs: LazyCode) => string {
   let cached: DocumentHints | undefined;
   return (html, needs) => {
-    if (!needs.chart && !needs.mermaid.length) return html;
+    // A stored diagram drawing is the page's own paint: the first is asked for beside the code.
+    const first = needs.mermaidImages?.[0];
+    const image = first ? [{ href: first, style: false, as: 'image' as const }] : [];
+    if (!needs.chart && !needs.mermaid.length) return image.length ? inject(html, image) : html;
     if (!cached) {
       try { cached = readDocumentHints(webDir, mermaidModulesFile); }
       catch {
@@ -147,6 +151,6 @@ export function createDocumentPreloader(webDir: string, mermaidModulesFile = MER
       }
     }
     const { chart, mermaid } = cached;
-    return inject(html, [...(needs.chart ? chart : []), ...needs.mermaid.flatMap(kind => mermaid[kind] ?? [])]);
+    return inject(html, [...(needs.chart ? chart : []), ...needs.mermaid.flatMap(kind => mermaid[kind] ?? []), ...image]);
   };
 }

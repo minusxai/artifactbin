@@ -188,6 +188,15 @@ async function main(): Promise<void> {
     reader = createTokenReader({ db: queryable, ttlMs: 5000, ...(appSchema ? { schema: appSchema } : {}) });
   }
 
+  /*
+   * THE MERMAID HARVESTER (lib/mermaid-images): published diagrams are drawn to
+   * stored SVG in the background, through whichever browser was registered
+   * above. Started here, by the root, never on import — publishing never waits
+   * on it, and a browser that is down only means readers draw with the engine.
+   */
+  const { startMermaidHarvester } = await import('@/lib/mermaid-images/harvester');
+  startMermaidHarvester();
+
   const app = createAppServer({
     webDir: path.resolve('dist/web'),
     ...(hmrPort !== null ? { devHmrPort: hmrPort } : {}),

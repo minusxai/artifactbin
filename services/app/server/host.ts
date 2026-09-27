@@ -2,6 +2,7 @@ import {setNotificationDelivery,type NotificationDelivery} from '@/lib/notificat
 export type {NotificationDelivery} from '@/lib/notification-delivery';
 import {startEventPublisher} from '@/lib/event-outbox';
 import {startDomainRecheck} from '@/lib/custom-domains';
+import {startMermaidHarvester} from '@/lib/mermaid-images/harvester';
 import {setDocumentEditorPolicy,type DocumentEditorPolicy} from '@/lib/document-policy';
 import {setMutationInvocation,type MutationInvocationFactory} from '@/lib/mutation-invocation';
 import {useSqlExtensions} from '@/lib/sql/extensions';
@@ -42,11 +43,13 @@ export async function createAppHost(options:AppHostOptions={}):Promise<AppHost>{
  const stopPublisher=startEventPublisher(db);
  // Custom domains' daily TXT re-check: at boot, then every 24h, flag or no flag (lib/custom-domains).
  const stopRecheck=startDomainRecheck();
+ // Published diagrams are drawn to stored SVG in the background (lib/mermaid-images); nothing waits on it.
+ const stopHarvester=startMermaidHarvester();
  const app=createAppServer(options),request=inProcess(app);
  const fetch=options.identity?.(request).fetch??((incoming:Request)=>Promise.resolve(app.fetch(incoming)));
  let closing:Promise<void>|undefined;
  return {fetch,request,close:()=>closing??=(async()=>{
-  try{await stopRecheck();await stopPublisher();await services().events.close?.();await options.shutdown?.();}
+  try{await stopRecheck();await stopHarvester();await stopPublisher();await services().events.close?.();await options.shutdown?.();}
   finally{await db.close();}
  })()};
 }

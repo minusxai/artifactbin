@@ -11,7 +11,8 @@
  * round trips stays.
  */
 import type { JsxNode } from '@/lib/jsx';
-import { mermaidDiagramKind } from '@/lib/story-ui/mermaid-source';
+import { mermaidDiagramKind, mermaidImageKey } from '@/lib/story-ui/mermaid-source';
+import type { StoredMermaidImage } from '@/lib/story-runtime/contract';
 
 /** The `viz.kind`s whose branch in QuestionEmbed reaches the lazy chart module. */
 const CHART_VIZ_KINDS = new Set(['vega', 'vega-lite', 'recipe']);
@@ -19,9 +20,22 @@ const CHART_VIZ_KINDS = new Set(['vega', 'vega-lite', 'recipe']);
 export interface LazyCode {
   /** A `<Question>` draws a chart, so the document imports the chart module. */
   chart: boolean;
-  /** The Mermaid diagram kinds it draws (lib/story-ui/mermaid-source), each once, in document order. */
+  /** The Mermaid diagram kinds it draws WITH THE ENGINE (lib/story-ui/mermaid-source), each once, in document order. */
   mermaid: string[];
+  /**
+   * The stored drawings it shows instead (lib/mermaid-images), in document
+   * order: those need no engine, only their image. Absent or empty when none is stored.
+   */
+  mermaidImages?: string[];
 }
+
+/**
+ * What a render already holds for its diagrams: the version's stored drawings
+ * and the mode it is served in. A diagram with a drawing stored for that mode
+ * is drawn from it (components/kit/mermaid), so its kind's engine code is not
+ * this document's to preload — unless another diagram of the kind has none.
+ */
+export interface StoredDrawings { images?: Readonly<Record<string, StoredMermaidImage>>; mode: 'light' | 'dark' }
 
 /**
  * Only `<Question>` imports the chart bundle, and only for the kinds above: a
@@ -29,9 +43,10 @@ export interface LazyCode {
  * renders inline and never touches it. Only a `<Mermaid>` with a static code
  * string the kit will draw imports the diagram engine, and then only its kind.
  */
-export function lazyCodeOf(nodes: JsxNode[]): LazyCode {
+export function lazyCodeOf(nodes: JsxNode[], stored?: StoredDrawings): LazyCode {
   let chart = false;
   const mermaid = new Set<string>();
+  const images = new Set<string>();
   const walk = (list: JsxNode[]) => {
     for (const n of list) {
       if (n.type !== 'element') continue;
@@ -43,12 +58,15 @@ export function lazyCodeOf(nodes: JsxNode[]): LazyCode {
       }
       if (n.isComponent && n.tag === 'Mermaid') {
         const code = n.attributes.find((a) => a.name === 'code')?.value;
-        const kind = code?.static ? mermaidDiagramKind(code.json) : null;
-        if (kind) mermaid.add(kind);
+        const json = code?.static ? code.json : null;
+        const kind = mermaidDiagramKind(json);
+        const drawn = kind && typeof json === 'string' && stored?.images ? stored.images[mermaidImageKey(json, stored.mode)] : undefined;
+        if (drawn) images.add(drawn.src);
+        else if (kind) mermaid.add(kind);
       }
       walk(n.children);
     }
   };
   walk(nodes);
-  return { chart, mermaid: [...mermaid] };
+  return { chart, mermaid: [...mermaid], mermaidImages: [...images] };
 }

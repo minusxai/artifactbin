@@ -43,7 +43,8 @@ function chartsSettled(selector:string):boolean {
 /**
  * Serialized into Chromium: every `collect` element under the surface whose
  * `<img>` holds an SVG `data:` URL — its own `data-*` attributes, the image's
- * width/height attributes and the URL. Self-contained, synchronous.
+ * width/height attributes and the URL. Self-contained, synchronous, and with
+ * no nested function: a bundler's name-keeping helper would not exist there.
  */
 function collectDrawings(input: { selector: string; collect: string; limit: number }) {
   const root = document.querySelector(input.selector);
@@ -55,8 +56,8 @@ function collectDrawings(input: { selector: string; collect: string; limit: numb
     if (!img || !src.startsWith('data:image/svg+xml')) continue;
     const attributes: Record<string, string> = {};
     for (const attribute of element.attributes) if (attribute.name.startsWith('data-')) attributes[attribute.name] = attribute.value.slice(0, 512);
-    const size = (name: string) => { const value = Number(img.getAttribute(name)); return img.hasAttribute(name) && Number.isFinite(value) ? value : null; };
-    out.push({ attributes, width: size('width'), height: size('height'), src });
+    const width = Number(img.getAttribute('width')), height = Number(img.getAttribute('height'));
+    out.push({ attributes, width: img.hasAttribute('width') && Number.isFinite(width) ? width : null, height: img.hasAttribute('height') && Number.isFinite(height) ? height : null, src });
     if (out.length >= input.limit) break;
   }
   return out;

@@ -11,6 +11,7 @@ import { webFontAssets } from '@/lib/webfonts';
 import { firstScreenFonts } from './first-screen-fonts';
 import type { StoryIslandData } from '@/lib/story-runtime/contract';
 import { storyRuntimeAssets } from './runtime-asset';
+import { mermaidImagesFor } from '@/lib/mermaid-images/store';
 
 /** Shared preparation for inline app rendering and standalone raw/export rendering. */
 export async function prepareStoryRuntime(input: StoryDocumentInput): Promise<PreparedStoryRuntime> {
@@ -53,11 +54,14 @@ export async function prepareStoryParts(input: StoryDocumentInput) {
   const mode = resolveStoryMode(input.theme, input.colorMode);
   const title = helmet.title?.trim() || input.title || 'artifact';
   const glyphs = split ? loadStorySsr().glyphsForNodes(split.body) : {};
+  // The version's prerendered diagrams, when the route asked for them (never an offline file or a draft).
+  const mermaidImages = split && input.mermaidImages ? await mermaidImagesFor(input.mermaidImages, split.body) : {};
   const docFonts = documentFonts(helmet);
   const importedFaces = docFonts.families.length ? await webFontAssets(docFonts.families) : [];
   const data: StoryIslandData = {
     nodes: split?.body ?? [], colorMode: mode, template: input.template ?? null, chrome,
     ...(Object.keys(glyphs).length ? { glyphs } : {}),
+    ...(Object.keys(mermaidImages).length ? { mermaidImages } : {}),
     ...readerIslandData(input),
   };
   const baseRecipe: StoryBaseCssRecipe = { chrome, theme: input.theme ?? null, faces: importedFaces, fonts: docFonts };

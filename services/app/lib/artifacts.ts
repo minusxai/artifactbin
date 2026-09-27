@@ -1,5 +1,6 @@
 import type {DocumentUpdate} from '@artifactbin/contracts';
 import {commitDocumentUpdate} from './story/document-update-write';
+import {queueMermaidHarvest} from './mermaid-images/store';
 import type {ProseOperation} from './story/document-prose';
 import type {DocumentOperation} from '@artifactbin/contracts';
 import type {StoredDocument} from './story/document-codec';
@@ -496,6 +497,8 @@ async function afterCreated(row: ArtifactRow, userId: string | null): Promise<vo
   void trackEvent('create', row.id, { userId, parentId: parentOf(row) });
   // The first reader of a new document finds it prepared (lib/story/prepared-page.server).
   if (row.format === 'markup') warmPreparedPage(row.id);
+  // Its diagrams are drawn to stored SVG in the background; nothing waits on it.
+  void queueMermaidHarvest(row);
   // A child arriving wakes the folder it landed in, so an open listing
   // re-runs its own query with no reload.
   await notifyParent(parentOf(row));
@@ -1301,7 +1304,7 @@ async function revertScoped(actor: TokenActor, id: string, version: number, opts
     }
     return updated.rows[0];
   });
-  if (result && !isVersionNotArchived(result)) void trackEvent('revert', result.id, { userId: result.user_id });
+  if (result && !isVersionNotArchived(result)) { void trackEvent('revert', result.id, { userId: result.user_id }); void queueMermaidHarvest(result); }
   return result;
 }
 
@@ -1473,7 +1476,7 @@ async function replaceScoped(
     return updated.rows[0];
   });
   const written = result && !isVersionConflict(result) && !(result instanceof Response) ? result : null;
-  if (written) void trackEvent('update', written.id, { userId: written.user_id });
+  if (written) { void trackEvent('update', written.id, { userId: written.user_id }); void queueMermaidHarvest(written); }
   // BOTH ends of a move wake: the folder the row left and the one it joined.
   if (moved) await wakeParents(moved);
   if (written) sayMoved(actor, written.id, moved);
@@ -1611,8 +1614,9 @@ export async function applyEditScoped(actor: TokenActor, id: string, input: Edit
     if(opts.dryRun)return committed.applied?json({valid:true,dry_run:true,commit_checks:['authorization','dependency_revisions','metadata','sharing','size']}):json({error:'doc_changed'},409);
     if(!committed.applied)return {applied:false,reason:'doc_changed',head:headOf(committed.head)};
     const row=await storeCompiledRecord(db,committed.row);
-    // After the commit, off the write's path: the new head is prepared for its readers.
+    // After the commit, off the write's path: the new head is prepared for its readers, and its diagrams harvested.
     if(row.format==='markup')warmPreparedPage(row.id);
+    void queueMermaidHarvest(row);
     return {applied:true,row};
   }
 
