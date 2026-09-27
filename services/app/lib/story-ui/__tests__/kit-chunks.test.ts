@@ -6,7 +6,7 @@
 import { describe, expect, it } from 'vitest';
 import { parseJsx, type JsxNode } from '@/lib/jsx';
 import { STORY_UI_COMPONENT_NAME_LIST } from '@/lib/story-ui/component-names';
-import { CORE_TAGS, KIT_CHUNKS, KIT_CHUNK_IDS, isStaticComponent, isStaticStory, kitChunkOf, kitChunksOf } from '@/lib/story-ui/kit-chunks';
+import { CORE_TAGS, KIT_CHUNKS, KIT_CHUNK_IDS, drawsInteractiveComponent, isStaticComponent, isStaticStory, kitChunkOf, kitChunksOf } from '@/lib/story-ui/kit-chunks';
 
 const nodes = (src: string): JsxNode[] => {
   const parsed = parseJsx(src);
@@ -95,5 +95,13 @@ describe('a static story', () => {
   it('is not one that links a person, whose card the browser fetches', () => {
     expect(judged('<p>Ask <a href="/people/u_123">@ana</a></p>')).toBe(false);
     expect(judged('<p>Read <a href="https://example.com/people">this</a></p>')).toBe(true);
+  });
+});
+
+describe('an interactive component anywhere (the served document\'s own rule, lib/story/document)', () => {
+  it('is found at any depth and in any branch, and never in prose or static components', () => {
+    expect(drawsInteractiveComponent(nodes('<article><h1>T</h1><Card><CardContent><Badge>b</Badge></CardContent></Card></article>'))).toBe(false);
+    expect(drawsInteractiveComponent(nodes('<article><Card><CardContent><div><Tabs defaultValue="a"><TabsList><TabsTrigger value="a">A</TabsTrigger></TabsList></Tabs></div></CardContent></Card></article>'))).toBe(true);
+    expect(drawsInteractiveComponent(nodes('<Helmet><Value name="on" type="boolean" value={true} /></Helmet><div>{$on ? <p>a</p> : <Button>b</Button>}</div>'))).toBe(true);
   });
 });

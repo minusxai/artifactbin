@@ -503,6 +503,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
         runtimeDeps: runtime.entryDeps,
         lazyChunks: runtime.lazy.flatMap((chunk) => [chunk, ...runtime.lazyDeps[chunk] ?? []]),
         mermaidChunks: runtime.mermaid,
+        kitChunks: runtime.kit,
         // Where this document fetches its re-runs when it IS the page (the
         // reader path); inside a parent the relay is chosen instead.
         queryUrl: queryPath(artifact.id),

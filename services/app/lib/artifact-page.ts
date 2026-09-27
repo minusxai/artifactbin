@@ -51,6 +51,14 @@ export interface InitialStory {
   fontPreloads: string[];
   lazyCode: LazyCode;
   starter: boolean;
+  /**
+   * The served story is FINAL for this viewer: a static document
+   * (lib/story/prepared-page.server `static`) read by someone who may neither
+   * edit nor comment on it, outside a capture. The page names no story
+   * runtime, and the reader does not load one unless the viewer comes to need
+   * it (components/ArtifactSurface).
+   */
+  final: boolean;
 }
 
 export interface ArtifactPageAnswer {
@@ -265,6 +273,7 @@ export async function artifactPageAnswer(request: Request, id: string): Promise<
         ? lazyCodeOf(prepared.page.data.nodes, { images: served.runtime.data.mermaidImages, mode: served.runtime.data.colorMode })
         : prepared.page.lazyCode,
       starter,
+      final: prepared.page.static && !starter && !exporting && !canEdit(role) && !canAnnotate(role),
     } } : {}),
   };
 }

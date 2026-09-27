@@ -30,7 +30,8 @@ const COMMENT = '/story/comment-TESTHASH.js';
 /** Pure prose — nothing to hydrate, so delivery is decided entirely by the flags. */
 const PROSE = '<div><h1>Hello</h1><p>Ordinary prose.</p></div>';
 /** A component: this document hydrates whatever anyone asks for. */
-const WITH_COMPONENT = '<div><h1>Hello</h1><Card><CardContent>inside</CardContent></Card></div>';
+// An INTERACTIVE component: a document of static ones (a card, a badge) hydrates nothing (lib/story-ui/kit-chunks).
+const WITH_COMPONENT = '<div><h1>Hello</h1><Card><CardContent>inside <Button>Go</Button></CardContent></Card></div>';
 
 const doc = (over: Partial<StoryDocumentInput> = {}): Promise<string> =>
   buildStoryDocument({

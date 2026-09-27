@@ -13,6 +13,7 @@
 import type { JsxNode } from '@/lib/jsx';
 import { mermaidDiagramKind, mermaidImageKey } from '@/lib/story-ui/mermaid-source';
 import type { StoredMermaidImage } from '@/lib/story-runtime/contract';
+import { kitChunksOf, type KitChunkId } from '@/lib/story-ui/kit-chunks';
 
 /** The `viz.kind`s whose branch in QuestionEmbed reaches the lazy chart module. */
 const CHART_VIZ_KINDS = new Set(['vega', 'vega-lite', 'recipe']);
@@ -27,6 +28,8 @@ export interface LazyCode {
    * order: those need no engine, only their image. Absent or empty when none is stored.
    */
   mermaidImages?: string[];
+  /** The kit chunks it draws (lib/story-ui/kit-chunks), which the runtime loads before it hydrates. */
+  kit: KitChunkId[];
 }
 
 /**
@@ -68,5 +71,5 @@ export function lazyCodeOf(nodes: JsxNode[], stored?: StoredDrawings): LazyCode 
     }
   };
   walk(nodes);
-  return { chart, mermaid: [...mermaid], mermaidImages: [...images] };
+  return { chart, mermaid: [...mermaid], mermaidImages: [...images], kit: kitChunksOf(nodes) };
 }

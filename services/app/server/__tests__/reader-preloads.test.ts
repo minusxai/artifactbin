@@ -3,7 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { afterEach, expect, it } from 'vitest';
 import { JSDOM } from 'jsdom';
-import { createReaderPreloader, createEntryPreloader, createListingPreloader, createDocumentPreloader, listingPage } from '../reader-preloads';
+import { createReaderPreloader, createEntryPreloader, createListingPreloader, createDocumentPreloader, createFinalReaderPreloader, listingPage } from '../reader-preloads';
 
 const dirs: string[] = [];
 const shell = '<html><head><link rel="modulepreload" href="/assets/shared-abc.js"></head><body></body></html>';
@@ -35,6 +35,12 @@ it('discovers all reader stages and static dependencies in the head without load
   expect(html).not.toContain('VegaChart');
   expect(dom.window.document.querySelector('script')).toBeNull();
   dom.window.close();
+});
+
+it('a story served final names the reader pages and nothing of the story runtime', () => {
+  const html = createFinalReaderPreloader(fixture())(shell);
+  expect(hinted(html).sort()).toEqual(['/assets/Artifact-abc.js', '/assets/Profile-abc.js', '/assets/shared-abc.js']);
+  expect(html).not.toContain('InlineStoryRuntime');
 });
 
 it('reuses the manifest snapshot across requests', () => {
@@ -122,7 +128,7 @@ const hinted = (html: string) => [...html.split('</head>')[0].matchAll(/<link re
 
 it('a flowchart document names the Mermaid engine, the flowchart module and its layout engine — and nothing else lazy', () => {
   const { dir, file } = documentFixture();
-  const html = createDocumentPreloader(dir, file)(shell, { chart: false, mermaid: ['flowchart'] });
+  const html = createDocumentPreloader(dir, file)(shell, { chart: false, mermaid: ['flowchart'], kit: [] });
   expect(hinted(html)).toEqual([
     '/assets/shared-abc.js',
     '/assets/mermaid-render-abc.js', '/assets/mermaid-core-abc.js', '/assets/Artifact-abc.js',
@@ -135,37 +141,67 @@ it('a flowchart document names the Mermaid engine, the flowchart module and its 
 
 it('a chart document names the chart module and its static chunks, and no diagram engine', () => {
   const { dir, file } = documentFixture();
-  const html = createDocumentPreloader(dir, file)(shell, { chart: true, mermaid: [] });
+  const html = createDocumentPreloader(dir, file)(shell, { chart: true, mermaid: [], kit: [] });
   expect(hinted(html)).toEqual(['/assets/shared-abc.js', '/assets/VegaChart-abc.js', '/assets/d3-abc.js', '/assets/Artifact-abc.js']);
   expect(html).not.toContain('mermaid');
 });
 
 it('each chunk is named once, however many kinds share it', () => {
   const { dir, file } = documentFixture();
-  const links = hinted(createDocumentPreloader(dir, file)(shell, { chart: false, mermaid: ['flowchart', 'sequence'] }));
+  const links = hinted(createDocumentPreloader(dir, file)(shell, { chart: false, mermaid: ['flowchart', 'sequence'], kit: [] }));
   expect(links).toEqual([...new Set(links)]);
   expect(links).toContain('/assets/sequenceDiagram-S-abc.js');
 });
 
 it('a document with no lazy code is left exactly as it was', () => {
   const { dir, file } = documentFixture();
-  expect(createDocumentPreloader(dir, file)(shell, { chart: false, mermaid: [] })).toBe(shell);
+  expect(createDocumentPreloader(dir, file)(shell, { chart: false, mermaid: [], kit: [] })).toBe(shell);
 });
 
 it('a kind the build did not record, or a missing record, names no diagram code — the chart still preloads', () => {
   const { dir, file } = documentFixture(null);
-  expect(createDocumentPreloader(dir, file)(shell, { chart: false, mermaid: ['flowchart'] })).toBe(shell);
-  expect(createDocumentPreloader(dir, file)(shell, { chart: true, mermaid: ['flowchart'] })).toContain('/assets/VegaChart-abc.js');
+  expect(createDocumentPreloader(dir, file)(shell, { chart: false, mermaid: ['flowchart'], kit: [] })).toBe(shell);
+  expect(createDocumentPreloader(dir, file)(shell, { chart: true, mermaid: ['flowchart'], kit: [] })).toContain('/assets/VegaChart-abc.js');
   const recorded = documentFixture();
-  expect(createDocumentPreloader(recorded.dir, recorded.file)(shell, { chart: false, mermaid: ['gantt'] })).toBe(shell);
+  expect(createDocumentPreloader(recorded.dir, recorded.file)(shell, { chart: false, mermaid: ['gantt'], kit: [] })).toBe(shell);
 });
 
 it('keeps readable HTML when the Vite manifest is missing or names an unsafe path', () => {
   const { dir, file } = documentFixture();
   rmSync(path.join(dir, '.vite/manifest.json'));
-  expect(createDocumentPreloader(dir, file)(shell, { chart: true, mermaid: ['flowchart'] })).toBe(shell);
+  expect(createDocumentPreloader(dir, file)(shell, { chart: true, mermaid: ['flowchart'], kit: [] })).toBe(shell);
   const unsafe = fixture({ '../components/viz/VegaChart.tsx': { file: '//external.test/inject.js' } });
-  expect(createDocumentPreloader(unsafe, file)(shell, { chart: true, mermaid: [] })).toBe(shell);
+  expect(createDocumentPreloader(unsafe, file)(shell, { chart: true, mermaid: [], kit: [] })).toBe(shell);
+});
+
+/*
+ * THE KIT, PER DOCUMENT. Each kit chunk is its own dynamic import
+ * (lib/story-runtime/kit-registry); a document's head names exactly the chunks
+ * it draws, with their static closures, so the runtime's await before
+ * hydration finds them already downloading.
+ */
+const KIT = '../lib/story-runtime/kit';
+function kitFixture() {
+  return fixture({
+    [`${KIT}/card.tsx`]: { file: 'assets/card-abc.js', src: `${KIT}/card.tsx`, isDynamicEntry: true, imports: ['shared', '_cn.js'] },
+    [`${KIT}/tabs.tsx`]: { file: 'assets/tabs-abc.js', src: `${KIT}/tabs.tsx`, isDynamicEntry: true, imports: ['_cn.js', '_radix-tabs.js'] },
+    [`${KIT}/accordion.tsx`]: { file: 'assets/accordion-abc.js', src: `${KIT}/accordion.tsx`, isDynamicEntry: true, imports: ['_cn.js', '_radix-accordion.js'] },
+    '_cn.js': { file: 'assets/cn-abc.js' },
+    '_radix-tabs.js': { file: 'assets/radix-tabs-abc.js' },
+    '_radix-accordion.js': { file: 'assets/radix-accordion-abc.js' },
+  });
+}
+
+it('a kit document names exactly the chunks it draws and their static closures', () => {
+  const dir = kitFixture();
+  const links = hinted(createDocumentPreloader(dir, path.join(dir, 'none.json'))(shell, { chart: false, mermaid: [], kit: ['card', 'tabs'] }));
+  expect(links).toEqual(['/assets/shared-abc.js', '/assets/card-abc.js', '/assets/Artifact-abc.js', '/assets/cn-abc.js', '/assets/tabs-abc.js', '/assets/radix-tabs-abc.js']);
+  expect(links.join(' ')).not.toContain('accordion');
+});
+
+it('a kit chunk this build cannot place is left to load on demand', () => {
+  const dir = kitFixture();
+  expect(createDocumentPreloader(dir, path.join(dir, 'none.json'))(shell, { chart: false, mermaid: [], kit: ['popover'] })).toBe(shell);
 });
 
 it('a document whose diagrams are all stored names no diagram code, and asks for its first drawing as an image', () => {

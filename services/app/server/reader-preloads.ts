@@ -52,6 +52,15 @@ export function createReaderPreloader(webDir: string): ReaderPreloader {
 }
 
 /**
+ * The reader of a story served FINAL (lib/artifact-page `InitialStory.final`):
+ * its markup is the finished page for this viewer, so nothing of the story
+ * runtime is named — only the pages that draw the chrome around it.
+ */
+export function createFinalReaderPreloader(webDir: string): ReaderPreloader {
+  return createEntryPreloader(webDir, READER_ENTRIES.filter(entry => !entry.endsWith('/InlineStoryRuntime.tsx')));
+}
+
+/**
  * The LISTING pages behind the same addresses: a folder (`/a/<id>` answered
  * with a listing) and a profile's index (`/@handle`). Their pages are chunks of
  * their own so a document's reader never downloads them; when the server
@@ -95,7 +104,7 @@ export function createEntryPreloader(webDir: string, entries: readonly string[])
 }
 
 /** What a document's lazy code resolves to in the app's build. */
-interface DocumentHints { chart: Hint[]; mermaid: Record<string, Hint[]> }
+interface DocumentHints { chart: Hint[]; mermaid: Record<string, Hint[]>; kit: Record<string, Hint[]> }
 
 const CHART_MODULE = 'components/viz/VegaChart.tsx';
 const MERMAID_ENGINE = 'components/kit/mermaid-render.ts';
@@ -126,13 +135,20 @@ function readDocumentHints(webDir: string, mermaidModulesFile: string): Document
     if (!engine || !moduleKeys.length || moduleKeys.some(key => !key)) continue;
     mermaid[kind] = closureHints(manifest, [engine, ...moduleKeys as string[]]);
   }
-  return { chart, mermaid };
+  // Each kit chunk (lib/story-runtime/kit/<id>.tsx) and its static closure, by id.
+  const kit: Record<string, Hint[]> = {};
+  for (const key of keys) {
+    const id = /\/lib\/story-runtime\/kit\/([\w-]+)\.tsx$/.exec(key)?.[1];
+    if (id) kit[id] = closureHints(manifest, [key]);
+  }
+  return { chart, mermaid, kit };
 }
 
 /**
  * Per DOCUMENT: the lazy code this document will run (lib/story/lazy-code) —
- * the chart module when it draws a chart, each Mermaid kind's engine, diagram
- * and layout closure for the kinds it draws — and never code it will not run.
+ * the kit chunks it draws, the chart module when it draws a chart, each
+ * Mermaid kind's engine, diagram and layout closure for the kinds it draws —
+ * and never code it will not run.
  * Resolved once per server from the Vite manifest; a document with none gets
  * its HTML back unchanged.
  */
@@ -142,15 +158,16 @@ export function createDocumentPreloader(webDir: string, mermaidModulesFile = MER
     // A stored diagram drawing is the page's own paint: the first is asked for beside the code.
     const first = needs.mermaidImages?.[0];
     const image = first ? [{ href: first, style: false, as: 'image' as const }] : [];
-    if (!needs.chart && !needs.mermaid.length) return image.length ? inject(html, image) : html;
+    if (!needs.chart && !needs.mermaid.length && !needs.kit.length) return image.length ? inject(html, image) : html;
     if (!cached) {
       try { cached = readDocumentHints(webDir, mermaidModulesFile); }
       catch {
         console.warn('[reader] preload manifest unavailable; using lazy discovery');
-        cached = { chart: [], mermaid: {} };
+        cached = { chart: [], mermaid: {}, kit: {} };
       }
     }
-    const { chart, mermaid } = cached;
-    return inject(html, [...(needs.chart ? chart : []), ...needs.mermaid.flatMap(kind => mermaid[kind] ?? []), ...image]);
+    const { chart, mermaid, kit } = cached;
+    // The kit first: the runtime awaits these before it hydrates; the chart and diagram engines load after.
+    return inject(html, [...needs.kit.flatMap(id => kit[id] ?? []), ...(needs.chart ? chart : []), ...needs.mermaid.flatMap(kind => mermaid[kind] ?? []), ...image]);
   };
 }

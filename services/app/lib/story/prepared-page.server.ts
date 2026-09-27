@@ -57,6 +57,7 @@ import { mermaidImagesFor } from '@/lib/mermaid-images/store';
 import { servedStoryHtml } from './inline-story-html';
 import { loadStorySsr } from './ssr.server';
 import { lazyCodeOf, type LazyCode } from './lazy-code';
+import { isStaticStory } from '@/lib/story-ui/kit-chunks';
 import { assetsPath, mutatePath, queryPath } from './markup-csp';
 import { readUrlValues } from './url-values';
 import type { StoryBaseCssRecipe } from './story-base-css';
@@ -65,7 +66,7 @@ import type { StoryIslandData, StoryIslandDataflow } from '@/lib/story-runtime/c
 import type { StoryThemeName } from '@/lib/validation/atlas-schemas';
 
 /** Bump when the stored shape changes; old entries then miss and are overwritten. */
-const PAGE_FORMAT = 1;
+const PAGE_FORMAT = 2;
 
 /** One version, prepared for the reader. Nothing in it depends on who reads. */
 export interface PreparedPage {
@@ -80,6 +81,13 @@ export interface PreparedPage {
   title: string;
   fontPreloads: string[];
   lazyCode: LazyCode;
+  /**
+   * Whether the served markup is the FINISHED page for a reader who can
+   * neither edit nor comment: static components only, nothing conditional or
+   * reactive (lib/story-ui/kit-chunks isStaticStory), no declared data and no
+   * author script. Such a reader downloads no story runtime (lib/artifact-page).
+   */
+  static: boolean;
   /** The declared dataflow — declarations, or a version's answers when it cannot run. */
   declared: StoryIslandDataflow | null;
   /** What other rows this entry was built from; fingerprinted on every read. */
@@ -211,6 +219,7 @@ async function build(row: ArtifactRow, at: ArchivedRender | null, origin: string
     css, overrides, base: parts.baseRecipe, authorCss: runtime.authorCss, authorScript: runtime.authorScript,
     theme: runtime.theme, title: runtime.title, fontPreloads: runtime.fontPreloads ?? [],
     lazyCode: lazyCodeOf(nodes), declared: declared ?? null,
+    static: isStaticStory(nodes) && !runtime.authorScript && !declared,
     deps: { datasets, assets: assetUrls, fonts: parts.docFonts.families },
     ssr: null,
   };

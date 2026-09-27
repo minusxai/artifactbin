@@ -104,6 +104,17 @@ export function kitChunksOf(nodes: readonly JsxNode[]): KitChunkId[] {
   return KIT_CHUNK_IDS.filter((id) => found.has(id));
 }
 
+/**
+ * Whether `nodes` draw any component that is not static — at any depth, in
+ * any branch. The served document's rule for shipping its runtime
+ * (lib/story/document), beside its data, its script and its readers' roles.
+ */
+export function drawsInteractiveComponent(nodes: readonly JsxNode[]): boolean {
+  let found = false;
+  walkElements(nodes, (node) => { if (node.isComponent && !isStaticComponent(node.tag)) found = true; });
+  return found;
+}
+
 /** A `$name` reference in a static string: a bound value, source or template. */
 const REFERENCE = /\$[A-Za-z_]/;
 

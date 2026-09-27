@@ -21,11 +21,13 @@ import { describe, expect, it } from 'vitest';
 import { buildStoryDocument, type StoryDocumentInput } from '@/lib/story/document';
 
 const RUNTIME = '/story/entry-TESTHASH.js';
+const TABS = '<h1>Hello</h1><Tabs defaultValue="a"><TabsList><TabsTrigger value="a">A</TabsTrigger></TabsList><TabsContent value="a">inside</TabsContent></Tabs>';
 const CHART = '/story/chunks/VegaChart-TESTHASH.js';
 
 const doc = (over: Partial<StoryDocumentInput> = {}): Promise<string> =>
   buildStoryDocument({
-    source: '<h1>Hello</h1><Card><CardContent>inside</CardContent></Card>',
+    // An interactive component, so the document hydrates (lib/story-ui/kit-chunks).
+    source: TABS,
     compiledCss: null, theme: null, colorMode: null, refData: {},
     title: 'T', runtimeSrc: RUNTIME, lazyChunks: [CHART],
     ...over,
@@ -86,7 +88,7 @@ describe('the chart chunk is preloaded only by documents that draw one', () => {
   });
 
   it('is NOT asked for by DataTable, Number, or the rest of the kit', async () => {
-    for (const src of ['<DataTable data="$q" />', '<Number data="$q" col="n" />', '<Card><CardContent>x</CardContent></Card>']) {
+    for (const src of ['<DataTable data="$q" />', '<Number data="$q" col="n" />', '<Accordion type="single"><AccordionItem value="x"><AccordionTrigger>x</AccordionTrigger></AccordionItem></Accordion>']) {
       expect(preloads(await doc({ source: src })), src).toEqual([RUNTIME]);
     }
   });
@@ -232,5 +234,27 @@ describe('a Mermaid document preloads only the diagram kinds it draws', () => {
 
   it('a document without Mermaid names none', async () => {
     expect(preloads(await doc({ mermaidChunks }))).toEqual([RUNTIME]);
+  });
+});
+
+/*
+ * THE KIT, PER DOCUMENT. The runtime loads each component's chunk before it
+ * hydrates (lib/story-runtime/entry); the document names exactly the chunks it
+ * draws — each with its static closure — beside the entry, so that await finds
+ * them already on their way. A document of static components hydrates nothing.
+ */
+describe('the kit chunks', () => {
+  const KIT = { tabs: ['/story/chunks/tabs-T.js', '/story/chunks/radix-T.js'], card: ['/story/chunks/card-C.js'], accordion: ['/story/chunks/accordion-A.js', '/story/chunks/radix-T.js'] };
+
+  it('a hydrating document preloads the chunks it draws, after the entry, and no others', async () => {
+    expect(preloads(await doc({ kitChunks: KIT }))).toEqual([RUNTIME, '/story/chunks/tabs-T.js', '/story/chunks/radix-T.js']);
+    const both = preloads(await doc({ source: `${TABS}<Card><CardContent>x</CardContent></Card>`, kitChunks: KIT }));
+    expect(both).toEqual([RUNTIME, '/story/chunks/card-C.js', '/story/chunks/tabs-T.js', '/story/chunks/radix-T.js']);
+  });
+
+  it('a document of static components ships no runtime at all', async () => {
+    const html = await doc({ source: '<h1>Hello</h1><Card><CardHeader><CardTitle>T <Badge>b</Badge></CardTitle></CardHeader><CardContent><Alert><AlertTitle>a</AlertTitle></Alert></CardContent></Card>', kitChunks: KIT });
+    expect(preloads(html)).toEqual([]);
+    expect(html).not.toContain(`src="${RUNTIME}"`);
   });
 });

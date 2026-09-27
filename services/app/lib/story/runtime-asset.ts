@@ -60,6 +60,12 @@ interface StoryRuntimeManifest {
    * Empty for an older manifest.
    */
   mermaid: Record<string, string[]>;
+  /**
+   * Per kit chunk (lib/story-ui/kit-chunks), the chunk and its full static
+   * closure — what a document drawing it preloads, and the runtime awaits
+   * before it hydrates. Empty for an older manifest.
+   */
+  kit: Record<string, string[]>;
 }
 
 let cached: StoryRuntimeManifest | null = null;
@@ -112,6 +118,7 @@ export function readStoryRuntimeManifest(file: string = storyRuntimeManifest()):
     entryDeps: urls(parsed.entryDeps),
     lazyDeps: record(parsed.lazyDeps, (k) => lazy.includes(k)),
     mermaid: record(parsed.mermaid, (k) => /^[\w-]+$/.test(k)),
+    kit: record(parsed.kit, (k) => /^[\w-]+$/.test(k)),
   };
   return cached;
 }
@@ -147,7 +154,7 @@ export function storyRuntimeAssets(file?: string): Omit<StoryRuntimeManifest, 'e
       warned = true;
       console.error('[story] serving documents WITHOUT the hydration runtime:', err);
     }
-    return { entry: null, anchor: null, comment: null, lazy: [], sqlite: null, entryDeps: [], lazyDeps: {}, mermaid: {} };
+    return { entry: null, anchor: null, comment: null, lazy: [], sqlite: null, entryDeps: [], lazyDeps: {}, mermaid: {}, kit: {} };
   }
 }
 

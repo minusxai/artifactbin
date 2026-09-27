@@ -18,7 +18,8 @@ import { parseJsxOrThrow } from '@/test/helpers/jsx';
 
 const URL_A = 'https://picsum.photos/id/237/300/200';
 // A component in the body so the document carries an island at all.
-const SOURCE = `<div className="p-8"><img src="${URL_A}" alt="dog" /><Card><CardContent>x</CardContent></Card></div>`;
+// It hydrates (an interactive component), so both renderings — SSR and island — are in the document.
+const SOURCE = `<div className="p-8"><img src="${URL_A}" alt="dog" /><Card><CardContent>x <Button>Go</Button></CardContent></Card></div>`;
 const ROW: WebAssetBox = {
   object_key: 'webasset/abcdef0102030405060708090a0b0c0d',
   width: 1600, height: 1200, placeholder: null,

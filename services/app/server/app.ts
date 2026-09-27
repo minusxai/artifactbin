@@ -49,7 +49,7 @@ import { ROUTES } from './routes.generated';
 import { authorFrameResponse } from './author-frame';
 import { AUTHOR_FRAME_PATH } from '@/lib/story-runtime/author-frame';
 import { GITHUB_EXTERNAL_URL } from '@/lib/github-star';
-import { createDocumentPreloader, createListingPreloader, createReaderPreloader, listingPage } from './reader-preloads';
+import { createDocumentPreloader, createFinalReaderPreloader, createListingPreloader, createReaderPreloader, listingPage } from './reader-preloads';
 import { artifactPageAnswer, type InitialStory } from '@/lib/artifact-page';
 import { enablePreparedPageWarmups } from '@/lib/story/prepared-page.server';
 import { mountBuildAssets } from './build-assets';
@@ -153,11 +153,28 @@ export interface InitialStoryParts {
   html: () => string;
   title: string;
   fontPreloads: readonly string[];
+  /** The kit chunks the story draws (lib/story/lazy-code), for the reader to load before it hydrates. */
+  lazyCode?: { kit: readonly string[] };
+  /** The served markup is final for this viewer (lib/artifact-page): the reader loads no story runtime. */
+  final?: boolean;
 }
 
 /** A story from RAW prepared parts (a test, or any caller without a prepared page): isolated and rendered here. */
 export function initialStoryOf(runtime: PreparedStoryRuntime): InitialStoryParts {
   return { html: () => inlineStoryHtml(runtime, loadStorySsr().renderInlineStory), title: runtime.title, fontPreloads: runtime.fontPreloads ?? [] };
+}
+
+/**
+ * What the reader reads off the server's wrapper before its first render
+ * (web/initial-story): the kit chunks to load before hydrating
+ * (`data-mx-kit`), or that the story is final and needs no runtime at all
+ * (`data-mx-final`). A starter's instructions are not the story: neither.
+ */
+function storyFacts(initial: InitialStoryParts, starter: boolean): string {
+  if (starter) return '';
+  if (initial.final) return ' data-mx-final=""';
+  const kit = initial.lazyCode?.kit ?? [];
+  return kit.length ? ` data-mx-kit="${escapeHtml(kit.join(' '))}"` : '';
 }
 
 /** Initial readable document, outside React's empty root; captured by reference
@@ -183,7 +200,7 @@ export function withInitialStory(html: string, initial: InitialStoryParts, id: s
     + `<meta property="og:image" content="${escapeHtml(origin)}/a/${escapeHtml(id)}/export?mode=card&amp;r=${CARD_RENDER_GENERATION}"><meta name="twitter:card" content="summary_large_image">`;
   return html.replace(/<title>[\s\S]*?<\/title>/i, () => `<title>${escapeHtml(initial.title)}</title>`)
     .replace('</head>', () => `${metadata}</head>`)
-    .replace('</body>', () => `<div data-mx-initial-story=""><style>${handoffCss}</style>${story}</div></body>`);
+    .replace('</body>', () => `<div data-mx-initial-story=""${storyFacts(initial, starter)}><style>${handoffCss}</style>${story}</div></body>`);
 }
 
 /**
@@ -362,6 +379,8 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
   }
   if (!opts.indexHtml) mountBuildAssets(app, webDir);
   const preloadReader = opts.indexHtml ? (html: string) => html : createReaderPreloader(webDir);
+  // A story served final (lib/artifact-page) names the reader's pages and none of the story runtime.
+  const preloadFinalReader = opts.indexHtml ? (html: string) => html : createFinalReaderPreloader(webDir);
   const preloadListing = opts.indexHtml ? (html: string) => html : createListingPreloader(webDir);
   // …and per document, the lazy code THIS document runs: its chart module, its Mermaid kinds.
   const preloadDocument = opts.indexHtml ? (html: string) => html : createDocumentPreloader(webDir);
@@ -400,7 +419,7 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
     const story = found?.story;
     const shell = story && surface?.surface
       // A starter placeholder draws its instructions, not its body: no lazy code of its own.
-      ? withInitialStory(preloadDocument(preloadReader(discovered), story.starter ? { chart: false, mermaid: [] } : story.lazyCode), story, surface.surface.id, surface.description, baseUrl(c.req.raw), story.starter)
+      ? withInitialStory(story.final ? preloadFinalReader(discovered) : preloadDocument(preloadReader(discovered), story.starter ? { chart: false, mermaid: [], kit: [] } : story.lazyCode), story, surface.surface.id, surface.description, baseUrl(c.req.raw), story.starter)
       // No document: the first screen is the shell's, set in its own face.
       : withGenericSocial(withShellFonts(listing ? preloadListing(discovered, listing) : discovered), baseUrl(c.req.raw));
     // The address search engines index a document under (lib/custom-domains canonicalDocumentUrl).

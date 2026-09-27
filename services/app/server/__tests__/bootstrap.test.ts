@@ -48,11 +48,12 @@ const inlined = (html: string) => {
 const canonicalOf = async (server: { request: (path: string, init?: RequestInit) => Response | Promise<Response> }, id: string, headers: Record<string, string> = {}): Promise<string> =>
   inlined(await (await server.request(`/a/${id}`, { headers })).text()).address;
 
+const mkDoc = async (token: string, body: Record<string, unknown>) => (await (await createArtifactRoute(new Request('http://localhost:3000/api/artifacts', { method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${token}` }, body: JSON.stringify(body) }))).json()) as { id: string };
 async function world() {
   const owner = await ensureUsername(await createUser({ email: 'mxmx_test_owner@example.com' }));
   const t = await mintToken('o'); await claimToken(owner.id, t.token);
-  const mk = async (body: Record<string, unknown>) => (await (await createArtifactRoute(new Request('http://localhost:3000/api/artifacts', { method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${t.token}` }, body: JSON.stringify(body) }))).json()) as { id: string };
-  return { owner, pub: await mk({ title: 'Pub', markup: '<div><p>hi</p></div>', visibility: 'public' }), priv: await mk({ title: 'Priv', markup: '<div><p>secret</p></div>', visibility: 'private' }) };
+  const mk = (body: Record<string, unknown>) => mkDoc(t.token, body);
+  return { owner, token: t.token, pub: await mk({ title: 'Pub', markup: '<div><p>hi</p></div>', visibility: 'public' }), priv: await mk({ title: 'Priv', markup: '<div><p>secret</p></div>', visibility: 'private' }) };
 }
 
 /** A bundled family's latin upright — what a first-screen preload names. */
@@ -103,15 +104,37 @@ describe('inlined page data', () => {
         'pages/Profile.tsx': { file: 'assets/Profile-test.js' },
         'pages/Artifact.tsx': { file: 'assets/Artifact-test.js' },
         '../lib/story-runtime/InlineStoryRuntime.tsx': { file: 'assets/InlineStoryRuntime-test.js' },
+        '../lib/story-runtime/kit/card.tsx': { file: 'assets/card-test.js', isDynamicEntry: true },
+        '../lib/story-runtime/kit/tabs.tsx': { file: 'assets/tabs-test.js', isDynamicEntry: true },
+        '../lib/story-runtime/kit/accordion.tsx': { file: 'assets/accordion-test.js', isDynamicEntry: true },
       }));
-      const built = createAppServer({ webDir: dir }), w = await world();
-      const canonical = await canonicalOf(built, w.pub.id);
-      const html = await (await built.request(canonical)).text();
+      const built = createAppServer({ webDir: dir, actorSecret: SECRET }), w = await world();
+      const owner = as({ credential: 'session', userId: w.owner.id, email: w.owner.email });
+      // The owner of a page of prose may edit it: the reader runtime is theirs, preloaded.
+      const canonical = await canonicalOf(built, w.pub.id, owner);
+      const html = await (await built.request(canonical, { headers: owner })).text();
       expect(html).toContain('rel="modulepreload" href="/assets/InlineStoryRuntime-test.js"');
       expect(html.indexOf('/assets/InlineStoryRuntime-test.js')).toBeLessThan(html.indexOf(`id="${BOOTSTRAP_ID}"`));
+      expect(html).not.toContain('data-mx-final');
       for (const url of [`/@${w.owner.username}`, `/a/${w.priv.id}`]) {
         expect(await (await built.request(url, { headers: { accept: 'text/html' } })).text()).not.toContain('/assets/InlineStoryRuntime-test.js');
       }
+
+      // A STRANGER reading the same prose: its served markup is final — no story runtime is named, only the reader's pages.
+      const stranger = await (await built.request(canonical)).text();
+      expect(stranger).toContain('rel="modulepreload" href="/assets/Artifact-test.js"');
+      expect(stranger).not.toContain('/assets/InlineStoryRuntime-test.js');
+      expect(stranger).toMatch(/<div data-mx-initial-story="" data-mx-final=""/);
+
+      // A stranger reading a document that draws tabs and a card: the runtime and exactly those chunks.
+      const kit = await mkDoc(w.token, { title: 'Kit', markup: '<div><Card><CardContent>c</CardContent></Card><Tabs defaultValue="a"><TabsList><TabsTrigger value="a">A</TabsTrigger></TabsList></Tabs></div>', visibility: 'public' });
+      const kitHtml = await (await built.request(await canonicalOf(built, kit.id))).text();
+      expect(kitHtml).toContain('rel="modulepreload" href="/assets/InlineStoryRuntime-test.js"');
+      expect(kitHtml).toContain('rel="modulepreload" href="/assets/card-test.js"');
+      expect(kitHtml).toContain('rel="modulepreload" href="/assets/tabs-test.js"');
+      expect(kitHtml).not.toContain('/assets/accordion-test.js');
+      expect(kitHtml).toMatch(/<div data-mx-initial-story="" data-mx-kit="card tabs"/);
+      expect(kitHtml).not.toContain('data-mx-final');
     } finally { rmSync(dir, { recursive: true, force: true }); }
   });
   it('discovers exactly the faces the first screen paints as crossorigin preloads before body markup', async () => {
@@ -193,7 +216,8 @@ describe('inlined page data', () => {
       }));
       const built = createAppServer({ webDir: dir });
       const t = await mintToken('order');
-      const made = await (await createArtifactRoute(new Request('http://localhost:3000/api/artifacts', { method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${t.token}` }, body: JSON.stringify({ title: 'Order', theme: 'modernist', markup: '<h1>Headline</h1><p>Body</p>', visibility: 'public' }) }))).json() as { id: string };
+      // It draws something interactive, so the reader page names the story runtime too (a page of prose is final: lib/artifact-page).
+      const made = await (await createArtifactRoute(new Request('http://localhost:3000/api/artifacts', { method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${t.token}` }, body: JSON.stringify({ title: 'Order', theme: 'modernist', markup: '<h1>Headline</h1><p>Body</p><Button>Go</Button>', visibility: 'public' }) }))).json() as { id: string };
       const html = await (await built.request(`/a/${made.id}`, { headers: { accept: 'text/html' } })).text();
       const head = html.split('</head>')[0]!;
       const at = (needle: string) => { const i = head.indexOf(needle); expect(i, needle).toBeGreaterThanOrEqual(0); return i; };

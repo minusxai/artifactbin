@@ -165,7 +165,8 @@ describe('/a/<id>/raw for markup rows', () => {
    * new render path that forgets it is a document whose icons vanish.
    */
   it('resolves the icons a document uses into both the SSR body and the island, and nothing more', async () => {
-    const id = await publish('<div><Icon name="chart-column" /><Icon name="grid-2x2" /></div>');
+    // With something interactive beside the icons, so the document hydrates and carries an island.
+    const id = await publish('<div><Icon name="chart-column" /><Icon name="grid-2x2" /><Button>Go</Button></div>');
     const html = await (await serveArtifact(request(`/a/${id}/raw`), params({ id }))).text();
 
     // Server-rendered, so the icon is in the document a crawler and a capture see.

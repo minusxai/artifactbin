@@ -31,6 +31,7 @@ import type { WebAssetBox } from '@/lib/story/asset-url';
 import { AUTHOR_SCRIPT_TYPE, STORY_HELLO_MESSAGE, STORY_VALUES_HOOK, STORY_ISLAND_ID, STORY_PAINTED_MESSAGE, STORY_ROOT_ID, type StoryIslandData, type StoryIslandDataflow, type StoryViewer } from '@/lib/story-runtime/contract';
 import type { JsxNode } from '@/lib/jsx';
 import { lazyCodeOf, type LazyCode } from './lazy-code';
+import { drawsInteractiveComponent } from '@/lib/story-ui/kit-chunks';
 import type { RefDataMap } from '@/lib/story/ref-data';
 import { STORY_CHROME_CSS, STORY_COLUMN_CSS, STORY_EMBED_CSS, STORY_TABLE_CSS } from '@/lib/story-runtime/chrome-css';
 import { STORY_BARE_TYPOGRAPHY_CSS } from '@/lib/story-surface/bare-typography';
@@ -104,6 +105,12 @@ export interface StoryDocumentInput {
    * full static closure: a document preloads only the kinds it draws.
    */
   mermaidChunks?: Record<string, string[]> | null;
+  /**
+   * The kit chunks per id (lib/story-ui/kit-chunks), each its full static
+   * closure: a hydrating document preloads exactly the chunks it draws, which
+   * the runtime awaits before it hydrates (lib/story-runtime/entry).
+   */
+  kitChunks?: Record<string, string[]> | null;
   /**
    * Where an AGENT that fetched this document learns how to edit it (discover): rendered as
    * `<link rel="help" href={llms} title="…">` and `<meta name="afbin" content="{blurb} Guide: {llms}">`
@@ -255,28 +262,29 @@ export interface StoryDocumentInput {
 /**
  * Does this document need the runtime at all?
  *
- * Only components hydrate — tabs open, charts draw, a rail navigates. A
- * document of plain HTML tags is FINISHED once its markup is parsed, and
- * shipping it ~600 KB of JavaScript to do nothing is the difference between a
- * prose page that costs one request and one that costs two and a bundle.
+ * Only INTERACTIVE components hydrate — tabs open, charts draw, a rail
+ * navigates (lib/story-ui/kit-chunks classifies every one). A document of
+ * plain HTML tags and static components (a card, a badge, an alert) is
+ * FINISHED once its markup is parsed, and shipping it ~600 KB of JavaScript to
+ * do nothing is the difference between a prose page that costs one request and
+ * one that costs two and a bundle.
  */
-function needsRuntime(nodes: JsxNode[]): boolean {
-  return nodes.some((n) =>
-    n.type === 'element' && (n.isComponent || needsRuntime(n.children)));
-}
+const needsRuntime = (nodes: JsxNode[]): boolean => drawsInteractiveComponent(nodes);
 
 
 
 /**
  * What a hydrating document asks for with its runtime: the entry and its whole
- * static closure, then the lazy code this document will reach for — the chart
- * chunk only if it draws a chart, each Mermaid kind's closure only for the
- * kinds it draws — each URL once, in the order it will be needed.
+ * static closure, then the lazy code this document will reach for — the kit
+ * chunks it draws (awaited before it hydrates), the chart chunk only if it
+ * draws a chart, each Mermaid kind's closure only for the kinds it draws —
+ * each URL once, in the order it will be needed.
  */
 function runtimePreloads(runtimeSrc: string, needs: LazyCode, input: StoryDocumentInput): string[] {
   return [...new Set([
     runtimeSrc,
     ...input.runtimeDeps ?? [],
+    ...needs.kit.flatMap((id) => input.kitChunks?.[id] ?? []),
     ...(needs.chart ? input.lazyChunks ?? [] : []),
     ...needs.mermaid.flatMap((kind) => input.mermaidChunks?.[kind] ?? []),
   ])];
