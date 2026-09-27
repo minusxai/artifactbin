@@ -451,6 +451,8 @@ async function runReaderHydration() {
   const sinkDoc = await publish({ title: 'Hydration kitchen sink', markup: await kitchenSinkMarkup(publish), theme: 'modernist', colorMode: 'dark', visibility: 'unlisted' });
   // An author's Helmet script runs in its own sandboxed frame; its document still hydrates.
   const scripted = await publish({ title: 'Hydration scripted', markup: '<Helmet><script>{`document.body.dataset.ran = "yes"`}</script></Helmet><article><h1>Scripted</h1><Card><CardContent>with a card</CardContent></Card></article>', visibility: 'unlisted' });
+  // The parse-survival shapes of the repaint check below (a div in a <p>, a Button in a trigger, a <For> in an svg).
+  const survival = await publish({ title: 'Hydration parse survival', markup: PROSE, visibility: 'unlisted' });
   const kit = fixtures.find((f) => f.key === 'kit');
   // Two versions, so `?version=1` is an ARCHIVED render — which only the owner's history reaches.
   const versioned = await startDocument(B);
@@ -475,7 +477,7 @@ async function runReaderHydration() {
     if (t !== null) times.push(t);
   };
   // Every fixture and the kitchen sink, anonymous and as the owner (whose address is the pretty /@owner one).
-  for (const doc of [...fixtures, { key: 'kitchen sink', id: sinkDoc.id }, { key: 'scripted', id: scripted.id }]) {
+  for (const doc of [...fixtures, { key: 'kitchen sink', id: sinkDoc.id }, { key: 'scripted', id: scripted.id }, { key: 'parse survival', id: survival.id }]) {
     await load(anonymous, 'light', `/a/${doc.id}`, `${doc.key}, anonymous`);
     await load(ownerContext, 'dark', `/a/${doc.id}`, `${doc.key}, owner`);
   }
