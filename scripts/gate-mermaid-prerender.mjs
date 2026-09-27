@@ -101,8 +101,10 @@ async function fontsRender(stored, plain) {
   return differ;
 }
 
-async function drawings(url, mode = null) {
+async function drawings(url, mode = null, { blockStored = false } = {}) {
   const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
+  // A stored drawing whose bytes will not load gives way to the reader's own engine.
+  if (blockStored) await page.route('**/assets/mermaid/**', (route) => route.abort());
   const scripts = [];
   page.on('request', (r) => { if (r.resourceType() === 'script') scripts.push(new URL(r.url()).pathname); });
   if (mode) await page.addInitScript((m) => { window.name = `mx:doc:${JSON.stringify({ mode: m })}`; }, mode);
@@ -173,6 +175,17 @@ try {
     compare('app dark document with author CSS and a grid tile', `${B}/a/${context}`, CONTEXT, null, { allStored: true }),
     compare('raw system font', `${B}/a/${systemFont}/raw`, [SENTINEL, ...SYSTEM_FONT]),
   ]);
+  // A READER'S OWN ENGINE DRAWING carries the page's font files too (components/kit/mermaid-fonts), so it shows
+  // the theme's face as a stored one does — and a system-font drawing carries none.
+  for (const [label, url, sample, carries] of [['raw', `${B}/a/${kinds}/raw`, STORED[0], true], ['app', `${B}/a/${kinds}`, STORED[0], true], ['raw system font', `${B}/a/${systemFont}/raw`, SYSTEM_FONT[0], false]]) {
+    const own = await drawings(url, null, { blockStored: true });
+    const svg = own.figures[sample.kind]?.svg ?? '';
+    const fonts = /^<svg\b[^>]*><style>(@font-face\{font-family:"[\w .-]+";src:url\(data:font\/woff2;base64,[A-Za-z0-9+/]+={0,2}\) format\("woff2"\);[^}]*\})+<\/style>/.exec(svg);
+    if (!carries) { check(!!svg && !svg.includes('@font-face'), `${label} ${sample.kind}: a reader's own engine drawing in a system font carries no fonts`); continue; }
+    if (!check(!!fonts, `${label} ${sample.kind}: a reader's own engine drawing carries the page's font files`)) continue;
+    const plain = svg.replace(/<style>@font-face[\s\S]*?<\/style>/, '');
+    check(await fontsRender(svg, plain), `${label} ${sample.kind}: its text renders in the carried face (the image differs without it)`);
+  }
 } finally {
   await browser.close();
 }

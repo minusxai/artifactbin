@@ -233,6 +233,40 @@ describe('a drawing the harvest may store for every reader', () => {
     expect(await figureOf(CODE)).not.toHaveAttribute('data-mx-mermaid-portable');
   });
 
+  describe('an engine drawing in the document\'s web fonts', () => {
+    const ENGINE_SVG = '<svg xmlns="http://www.w3.org/2000/svg" id="mx-mermaid-9" viewBox="0 0 10 10"><style>#mx-mermaid-9{font-family:Inter,ui-sans-serif,sans-serif}</style><text>a</text></svg>';
+    const engineSrc = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(ENGINE_SVG)}`;
+    let style: HTMLStyleElement;
+    const realFetch = globalThis.fetch;
+    beforeEach(() => {
+      style = document.createElement('style');
+      style.textContent = '@font-face { font-family: "Inter"; src: url("/fonts/inter-latin.woff2") format("woff2"); font-weight: 100 900; unicode-range: U+0000-00FF; }';
+      document.head.appendChild(style);
+      globalThis.fetch = vi.fn(async () => new Response(new Uint8Array([1, 2, 3]))) as typeof fetch;
+      renderMermaid.mockResolvedValue({ src: engineSrc, type: 'flowchart-v2', width: 10, height: 10 });
+    });
+    afterEach(() => { style.remove(); globalThis.fetch = realFetch; window.history.replaceState(null, '', '/'); });
+    const drawnSvg = async () => {
+      fonts([{ family: 'Inter', status: 'loaded', unicodeRange: LATIN }, { family: '"JetBrains Mono"', status: 'loaded', unicodeRange: LATIN }]);
+      const { container } = render(<Mermaid code={CODE} style={WEB_FACES} title="Flow" />);
+      await waitFor(() => expect(container.querySelector('figure')).toHaveAttribute('data-mx-mermaid-state', 'pending'));
+      await waitFor(() => expect(container.querySelector('img')).toBeTruthy());
+      const src = container.querySelector('img')!.getAttribute('src')!;
+      return decodeURIComponent(src.slice(src.indexOf(',') + 1));
+    };
+
+    it('carries the page\'s font files, so a reader\'s own drawing shows the theme\'s face as a stored one does', async () => {
+      await waitFor(async () => expect(await drawnSvg()).toContain('@font-face{font-family:"Inter";src:url(data:font/woff2;base64,AQID)'));
+    });
+
+    it('the harvest\'s page (the engine asked for by name) draws without them: the harvest embeds its own subsets', async () => {
+      window.history.replaceState(null, '', '/a/x/raw?key=k&mermaid=engine&color=light');
+      const svg = await drawnSvg();
+      await act(async () => { await new Promise((resolve) => setTimeout(resolve, 30)); });
+      expect(svg).toBe(ENGINE_SVG);
+    });
+  });
+
   it('asks for the faces covering the diagram\'s own characters before measuring (a unicode-range subset loads only when asked)', async () => {
     const load = fonts([{ family: 'Inter', status: 'loaded', unicodeRange: LATIN }]);
     await figureOf('flowchart TD\n  a[Café] --> b[Ärger]');

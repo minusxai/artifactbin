@@ -22,7 +22,7 @@
  * does not parse.
  */
 import { parse, walk } from '@/lib/story/css-parser';
-import { MERMAID_BUNDLED_FAMILIES, MERMAID_TEXT_RENDERING } from './fonts';
+import { MERMAID_BUNDLED_FAMILIES, MERMAID_TEXT_RENDERING } from './font-block';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 const XLINK_NS = 'http://www.w3.org/1999/xlink';

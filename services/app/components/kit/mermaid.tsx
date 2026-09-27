@@ -6,6 +6,7 @@ import { sha256Hex } from '@/lib/sha256';
 import { METRICS_PROBE, formatMermaidFaces, formatMermaidMetrics, parseMermaidFaces, parseMermaidMetrics, type MermaidMetrics } from '@/lib/mermaid-images/drawn';
 import type { StoredMermaidImage } from '@/lib/story-runtime/contract';
 import type { MermaidImage, MermaidPalette } from './mermaid-render';
+import { embedPageFonts, pageFontFaces } from './mermaid-fonts';
 
 interface MermaidProps extends Omit<HTMLAttributes<HTMLElement>, 'children'> {
   code: string;
@@ -155,6 +156,15 @@ function drawnInWebFonts(palette: MermaidPalette, code: string): boolean {
   });
 }
 
+const SVG_DATA = 'data:image/svg+xml;charset=utf-8,';
+/** The engine's drawing with the page's font files in it, or as it was when it cannot carry them. */
+async function withPageFonts(image: MermaidImage, palette: MermaidPalette): Promise<MermaidImage> {
+  if (!image.src.startsWith(SVG_DATA)) return image;
+  const svg = decodeURIComponent(image.src.slice(SVG_DATA.length));
+  const embedded = await embedPageFonts(svg, { label: firstFamily(palette.fontFamily), edge: firstFamily(palette.fontMono) }, pageFontFaces());
+  return embedded ? { ...image, src: SVG_DATA + encodeURIComponent(embedded) } : image;
+}
+
 /** Does this page ask for the engine by name (`?mermaid=engine`, lib/mermaid-images/store MERMAID_ENGINE_PARAM)? */
 const engineAskedFor = (): boolean => typeof location !== 'undefined' && new URLSearchParams(location.search).get('mermaid') === 'engine';
 
@@ -241,12 +251,17 @@ export function Mermaid({ code, title = 'Diagram', colorMode = 'light', classNam
         // measured the same before and after it was drawn: a face that landed
         // mid-draw leaves no telling which metrics Mermaid laid it out with, and
         // the harvest (lib/mermaid-images) then stores nothing for it.
-        image => {
+        async image => {
           if (!active) return;
           const after = paletteFor(element, colorMode === 'dark');
           const now = measured(after, code);
-          setResult({ code, image, ...(before && sameMeasure(before, now) ? {
-            palette: now.palette, ...(now.metrics ? { metrics: formatMermaidMetrics(now.metrics) } : {}), portable: drawnInWebFonts(after, code), faces: facesOf(after),
+          const portable = drawnInWebFonts(after, code);
+          // A reader's drawing carries the page's own font files, so it shows the theme's face as a
+          // stored drawing does (./mermaid-fonts). Not on the harvest's page: the harvest embeds its own subsets.
+          const shown = portable && !engineAskedFor() ? await withPageFonts(image, after) : image;
+          if (!active) return;
+          setResult({ code, image: shown, ...(before && sameMeasure(before, now) ? {
+            palette: now.palette, ...(now.metrics ? { metrics: formatMermaidMetrics(now.metrics) } : {}), portable, faces: facesOf(after),
           } : {}) });
         },
         () => { if (active) setResult({ code, error: 'Could not render this diagram. Check its Mermaid syntax.' }); },

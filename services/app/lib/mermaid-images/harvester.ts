@@ -20,7 +20,7 @@ import { MERMAID_RENDER_ENGINE, mermaidPrerenderable } from './engine';
 import { mermaidCodesOf } from './codes';
 import { sanitizeMermaidSvg, verifyEmbeddedMermaidSvg } from './sanitize';
 import { parseMermaidFaces, parseMermaidMetrics, type MermaidFaces } from './drawn';
-import { embedMermaidFonts } from './fonts';
+import { MermaidSubsetterUnavailable, embedMermaidFonts } from './fonts';
 import { CAPTURE_COLOR_PARAM, MERMAID_ENGINE_PARAM, comparableSvg, MERMAID_MODES, MERMAID_SURFACES, mermaidContentKey, mermaidObjectKey, onMermaidHarvestQueued, type MermaidHarvestMap, type MermaidImageInfo, type MermaidMode, type MermaidSurface } from './store';
 
 type Mode = MermaidMode;
@@ -102,7 +102,12 @@ async function candidatesOf(drawn: HarvestedSvg[], surface: MermaidSurface, mode
     const svg = sanitizeMermaidSvg(drawing.svg);
     if (!svg) continue;
     // The drawing carrying the document's fonts (./fonts), admitted only as exactly that (./sanitize).
-    const embedded = await embedMermaidFonts(svg, under.faces);
+    // No subsetter (a missing or broken install) is no browser to harvest with: the job waits, uncounted.
+    const embedded = await embedMermaidFonts(svg, under.faces).catch((error: unknown) => {
+      if (!(error instanceof MermaidSubsetterUnavailable)) throw error;
+      console.warn('[mermaid] font subsetter unavailable; nothing is stored until it loads:', error.message);
+      throw new HarvestUnavailable(`font subsetter: ${error.message}`);
+    });
     const stored = embedded ? verifyEmbeddedMermaidSvg(embedded) : null;
     if (!stored) continue;
     seen.add(imageKey);

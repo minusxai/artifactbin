@@ -12,8 +12,9 @@
  * the `page-speed` artifact holds base.json, head.json and combined.json with
  * every raw sample. No PR comment is ever posted.
  *   - Document views (scripts/lib/document-views.mjs defines every metric): the
- *     five fixtures in scripts/fixtures/page-speed — prose, kit, dashboard
- *     (CSV + queries + charts), deck, Mermaid — each on the reader view and on
+ *     fixtures in scripts/fixtures/page-speed — prose, kit, dashboard
+ *     (CSV + queries + charts), deck, Mermaid (plain, and in the industry
+ *     theme) — each on the reader view and on
  *     /raw, as an anonymous reader with a cold cache under the throttling in
  *     `LAB_THROTTLE`, median of `documentRuns`. `Takeover` is when the React
  *     runtime owns the visible document (view only); `Painted` is when the

@@ -22,25 +22,30 @@
 import { readFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import path from 'node:path';
-import wawoff2 from 'wawoff2';
-import fontManifest from '@/lib/data/story/story-font-manifest.json';
 import type { MermaidFaces } from './drawn';
+import { MERMAID_TEXT_RENDERING, bundledFontFiles } from './font-block';
+import { planFontFiles, type FontPlanEntry } from './svg-text';
 
-interface ManifestFace { family: string; url: string; weight: string; style?: string | null; unicodeRange?: string | null }
-const FAMILIES = (fontManifest as { families: Record<string, ManifestFace[]> }).families;
+export { MERMAID_BUNDLED_FAMILIES, MERMAID_FONT_BLOCK, MERMAID_TEXT_RENDERING } from './font-block';
 
-/** The families a stored drawing may carry: the bundled ones. */
-export const MERMAID_BUNDLED_FAMILIES: ReadonlySet<string> = new Set(Object.keys(FAMILIES));
-/** Every stored drawing lays its text out unhinted, as the harvest measured it. */
-export const MERMAID_TEXT_RENDERING = 'svg{text-rendering:geometricPrecision}';
-/** The block, wherever it sits (the gate that admits it is lib/mermaid-images/sanitize). */
-export const MERMAID_FONT_BLOCK = /<style>(?:@font-face\{[^}]*\})+svg\{text-rendering:geometricPrecision\}<\/style>/;
+/** The subsetter's WebAssembly (harfbuzzjs, wawoff2) could not be loaded: nothing can be embedded now. */
+export class MermaidSubsetterUnavailable extends Error {}
 
 /*
  * THE SUBSETTER: HarfBuzz's hb-subset (harfbuzzjs) and Google's woff2
  * (wawoff2), both WebAssembly, both left out of the server bundle
  * (scripts/runtime-externals): each reads its own files beside its module.
+ * Both load on first use, inside a harvest — never at import — so a missing
+ * or broken install can only fail harvesting (MermaidSubsetterUnavailable:
+ * nothing stored, readers keep the engine), never the app or the read path.
  */
+type Woff2 = { compress(sfnt: Uint8Array): Promise<Uint8Array>; decompress(woff2: Uint8Array): Promise<Uint8Array> };
+let woff2Module: Promise<Woff2> | null = null;
+function loadWoff2(): Promise<Woff2> {
+  woff2Module ??= import('wawoff2').then((module) => (module as unknown as { default?: Woff2 }).default ?? (module as unknown as Woff2));
+  woff2Module.catch(() => { woff2Module = null; });
+  return woff2Module;
+}
 interface HarfBuzz {
   memory: WebAssembly.Memory;
   malloc(size: number): number; free(ptr: number): void;
@@ -62,6 +67,7 @@ function loadHarfBuzz(): Promise<HarfBuzz> {
     exports._initialize();
     return exports;
   })();
+  harfbuzz.catch(() => { harfbuzz = null; });
   return harfbuzz;
 }
 const HB_MEMORY_MODE_WRITABLE = 2;
@@ -93,7 +99,7 @@ async function subset(sfnt: Uint8Array, characters: string, weight: number | nul
     const bytes = heap().slice(hb.hb_blob_get_data(result, 0), hb.hb_blob_get_data(result, 0) + hb.hb_blob_get_length(result));
     hb.hb_blob_destroy(result);
     hb.hb_face_destroy(cut);
-    return Buffer.from(await wawoff2.compress(bytes));
+    return Buffer.from(await (await loadWoff2()).compress(bytes));
   } finally {
     hb.hb_subset_input_destroy(input);
     hb.hb_face_destroy(face);
@@ -109,90 +115,11 @@ function sfntOf(url: string): Promise<Uint8Array> {
     // public/fonts, beside the app (server/app serves the same directory; lib/offline reads it too).
     found = readFile(path.join(path.resolve('public'), 'fonts', path.basename(url)))
       // A copy: wawoff2 answers a view of its own heap, which its next call reuses.
-      .then(async (woff2) => new Uint8Array(await wawoff2.decompress(woff2)));
+      .then(async (woff2) => new Uint8Array(await (await loadWoff2()).decompress(woff2)));
     found.catch(() => sfnts.delete(url));
     sfnts.set(url, found);
   }
   return found;
-}
-
-const ENTITIES: Record<string, string> = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'" };
-const decode = (text: string) => text.replace(/&(#x[0-9a-f]+|#\d+|[a-z]+);/gi, (entity, name: string) =>
-  name[0] === '#' ? String.fromCodePoint(name[1] === 'x' || name[1] === 'X' ? Number.parseInt(name.slice(2), 16) : Number(name.slice(1))) : ENTITIES[name] ?? entity);
-
-/** The drawing's rendered text: in edge labels (the edge-label face) and everywhere else (the label face). */
-function textOf(svg: string): { label: string; edge: string } {
-  const text = { label: '', edge: '' };
-  const stack: Array<{ edge: boolean; hidden: boolean }> = [];
-  for (const match of svg.matchAll(/<(\/?)([\w:-]+)([^>]*?)(\/?)>|([^<]+)/g)) {
-    const [, closing, name, attributes, selfClosing, chars] = match;
-    const top = stack[stack.length - 1];
-    if (chars !== undefined) {
-      if (top && !top.hidden) text[top.edge ? 'edge' : 'label'] += decode(chars);
-    } else if (closing) stack.pop();
-    else if (!selfClosing) {
-      const edge = (top?.edge ?? false) || /\bclass\s*=\s*"[^"]*\bedgeLabel\b/.test(attributes ?? '');
-      stack.push({ edge, hidden: (top?.hidden ?? false) || /^(style|title|desc)$/i.test(name!) });
-    }
-  }
-  return text;
-}
-
-/** The first family of every font stack the drawing declares (its own CSS and attributes). */
-function namedFamilies(svg: string): Set<string> {
-  const named = new Set<string>();
-  // `font-family` itself, never a custom property that ends in it (Mermaid's own `--mermaid-font-family`).
-  for (const match of svg.matchAll(/(?<![\w-])font-family\s*(?::|=\s*")\s*([^;}"]*(?:&quot;|"[^"]*")?[^;}"]*)/gi)) {
-    const first = decode(match[1] ?? '').split(',')[0]!.trim().replace(/^["']|["']$/g, '');
-    if (first) named.add(first);
-  }
-  return named;
-}
-
-const WEIGHTS: Record<string, number> = { normal: 400, bold: 700, bolder: 700, lighter: 300 };
-/** The weights the drawing's text is set in: 400, and whatever bold it asks for. */
-function weightsOf(svg: string): number[] {
-  const weights = new Set([400]);
-  for (const match of svg.matchAll(/font-weight\s*[:=]\s*"?\s*([a-z]+|\d{3})/gi)) {
-    const weight = WEIGHTS[match[1]!.toLowerCase()] ?? Number(match[1]);
-    if (weight >= 100 && weight <= 900) weights.add(weight);
-  }
-  return [...weights].sort((a, b) => a - b);
-}
-
-function inRange(range: string | null | undefined, point: number): boolean {
-  return (range || 'U+0-10FFFF').split(',').some((part) => {
-    const match = /^\s*U\+([0-9a-f?]+)(?:-([0-9a-f]+))?\s*$/i.exec(part);
-    if (!match) return false;
-    const low = Number.parseInt(match[1]!.replace(/\?/g, '0'), 16);
-    const high = Number.parseInt(match[2] ?? match[1]!.replace(/\?/g, 'f'), 16);
-    return point >= low && point <= high;
-  });
-}
-
-/** One family's `@font-face` rules for these characters at these weights; null when it cannot cover them. */
-async function rulesFor(family: string, characters: string, weights: number[]): Promise<string[] | null> {
-  const faces = (FAMILIES[family] ?? []).filter((face) => (face.style ?? 'normal') === 'normal');
-  const points = [...new Set(characters)].filter((ch) => ch.trim()).map((ch) => ch.codePointAt(0)!);
-  if (!faces.length || points.some((point) => !faces.some((face) => inRange(face.unicodeRange, point)))) return null;
-  const byFile = new Map<string, ManifestFace[]>();
-  for (const face of faces) byFile.set(face.url, [...(byFile.get(face.url) ?? []), face]);
-  const rules: string[] = [];
-  for (const [url, declared] of byFile) {
-    const first = declared[0]!;
-    const cut = [...new Set(characters)].filter((ch) => inRange(first.unicodeRange, ch.codePointAt(0)!)).join('');
-    if (!cut.trim()) continue;
-    // A variable file (a weight range, or one file declared at several weights) is pinned to each weight drawn;
-    // a static one is carried as the weights it has (a bold it lacks is synthesized, as in the page).
-    const variable = declared.length > 1 || /\s/.test(first.weight.trim());
-    const instances = variable ? weights : [...new Set(declared.map((face) => Number.parseInt(face.weight, 10)))];
-    const sfnt = await sfntOf(url);
-    for (const weight of instances) {
-      const woff2 = await subset(sfnt, cut, variable ? weight : null);
-      rules.push(`@font-face{font-family:"${family}";src:url(data:font/woff2;base64,${woff2.toString('base64')}) format("woff2");font-weight:${weight};font-style:normal${first.unicodeRange ? `;unicode-range:${first.unicodeRange}` : ''}}`);
-    }
-  }
-  return rules;
 }
 
 /**
@@ -203,40 +130,25 @@ async function rulesFor(family: string, characters: string, weights: number[]): 
 export async function embedMermaidFonts(svg: string, faces: MermaidFaces): Promise<string | null> {
   const open = /^<svg\b[^>]*>/.exec(svg);
   if (!open) return null;
-  const text = textOf(svg);
-  const named = namedFamilies(svg);
-  // Every stack it declares must lead with a face it can carry: one that leads with a system face
-  // (C4's "Open Sans", gitGraph's "trebuchet ms") sets text that renders per machine.
-  if ([...named].some((family) => !MERMAID_BUNDLED_FAMILIES.has(family))) return null;
-  const labelText = text.label.trim() ? text.label : '';
-  const edgeText = text.edge.trim() ? text.edge : '';
-  const wanted = new Map<string, { characters: string; weights: Set<number> }>();
-  const want = (family: string, characters: string, weights: number[]) => {
-    const entry = wanted.get(family) ?? { characters: '', weights: new Set<number>() };
-    entry.characters += characters;
-    for (const weight of weights) entry.weights.add(weight);
-    wanted.set(family, entry);
-  };
-  if (labelText) {
-    // The label face is the one Mermaid sets on the drawing's root (`#<id>{font-family:…}`); a kind
-    // that sets none (wardley) leaves its text to each machine's default face.
-    const id = /\bid="([\w-]+)"/.exec(open[0])?.[1];
-    const rule = id ? `#${id}{font-family:` : null;
-    const at = rule ? svg.indexOf(rule) : -1;
-    const root = at >= 0 && decode(svg.slice(at + rule!.length, at + rule!.length + 200)).split(/[,;}]/)[0]!.trim().replace(/^["']|["']$/g, '') === faces.label;
-    if (!MERMAID_BUNDLED_FAMILIES.has(faces.label) || !root) return null;
-    want(faces.label, labelText, weightsOf(svg));
-  }
-  if (edgeText) {
-    if (!MERMAID_BUNDLED_FAMILIES.has(faces.edge) || !named.has(faces.edge)) return null;
-    want(faces.edge, edgeText, [400]);
+  const plan = planFontFiles(svg, faces, bundledFontFiles);
+  if (!plan) return null;
+  try {
+    await Promise.all([loadHarfBuzz(), loadWoff2()]);
+  } catch (error) {
+    throw new MermaidSubsetterUnavailable((error as Error).message);
   }
   const rules: string[] = [];
-  for (const [family, { characters, weights }] of wanted) {
-    const made = await rulesFor(family, characters, [...weights].sort((a, b) => a - b));
-    if (!made) return null;
-    rules.push(...made);
-  }
-  if (!rules.length) return null;
+  for (const file of plan) rules.push(...await rulesFor(file));
   return `${open[0]}<style>${rules.join('')}${MERMAID_TEXT_RENDERING}</style>${svg.slice(open[0].length)}`;
+}
+
+/** One planned file's `@font-face` rules: subset to its characters, one per weight drawn. */
+async function rulesFor(file: FontPlanEntry): Promise<string[]> {
+  const sfnt = await sfntOf(file.url);
+  const rules: string[] = [];
+  for (const weight of file.weights) {
+    const woff2 = await subset(sfnt, file.characters, file.variable ? weight : null);
+    rules.push(`@font-face{font-family:"${file.family}";src:url(data:font/woff2;base64,${woff2.toString('base64')}) format("woff2");font-weight:${weight};font-style:normal${file.unicodeRange ? `;unicode-range:${file.unicodeRange}` : ''}}`);
+  }
+  return rules;
 }

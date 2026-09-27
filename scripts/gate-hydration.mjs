@@ -45,7 +45,6 @@ import { githubWidgetFixture } from './lib/github-widget-fixture.mjs';
 import { loginViaEmail, startMailSink } from './lib/mail-login.mjs';
 import { publishPageSpeedFixtures } from './fixtures/page-speed/index.mjs';
 import { kitchenSinkMarkup } from './lib/kitchen-sink-doc.mjs';
-import { readFileSync } from 'node:fs';
 
 const B = process.argv[2] ?? 'http://localhost:3030';
 const check = createChecker('hydration');
@@ -482,13 +481,10 @@ async function runReaderHydration() {
   // The parse-survival shapes of the repaint check below (a div in a <p>, a Button in a trigger, a <For> in an svg).
   const survival = await publish({ title: 'Hydration parse survival', markup: PROSE, visibility: 'unlisted' });
   const kit = fixtures.find((f) => f.key === 'kit');
-  // A Mermaid document read as readers meet it once its diagram is stored (lib/mermaid-images):
-  // the stored drawing is in the served story and must hydrate as it was served. A stored drawing
-  // carries the document's fonts, so only a document in a theme's web fonts has one: this is the
-  // Mermaid fixture in the terminal theme (the fixture itself has no theme, so system fonts, and
-  // always draws with the engine).
-  const mermaidMarkup = readFileSync(new URL('./fixtures/page-speed/mermaid.jsx', import.meta.url), 'utf8');
-  const diagram = { key: 'mermaid, stored (terminal)', ...(await publish({ title: 'Hydration stored diagram', markup: mermaidMarkup, theme: 'terminal', visibility: 'unlisted' })) };
+  // The Mermaid fixture in a theme's web fonts is read as readers meet it once its diagram is stored
+  // (lib/mermaid-images): the stored drawing is in the served story and must hydrate as it was served.
+  // (The plain Mermaid fixture has no theme, so it draws in system fonts, and always with the engine.)
+  const diagram = fixtures.find((f) => f.key === 'mermaid-industry');
   let storedDiagram = false;
   for (const end = Date.now() + 60000; !storedDiagram && Date.now() < end;) {
     storedDiagram = (await (await fetch(`${B}/api/page/artifact/${diagram.id}`)).text()).includes('"mermaidImages"');
@@ -532,7 +528,7 @@ async function runReaderHydration() {
     if (t !== null) times.push(t);
   };
   // Every fixture and the kitchen sink, anonymous and as the owner (whose address is the pretty /@owner one).
-  for (const doc of [...fixtures, diagram, { key: 'kitchen sink', id: sinkDoc.id }, { key: 'scripted', id: scripted.id }, { key: 'parse survival', id: survival.id }]) {
+  for (const doc of [...fixtures, { key: 'kitchen sink', id: sinkDoc.id }, { key: 'scripted', id: scripted.id }, { key: 'parse survival', id: survival.id }]) {
     await load(anonymous, 'light', `/a/${doc.id}`, `${doc.key}, anonymous`, doc === diagram ? drawnFromStorage('anonymous') : undefined);
     await load(ownerContext, 'dark', `/a/${doc.id}`, `${doc.key}, owner`, doc === diagram ? drawnFromStorage('owner') : undefined);
   }

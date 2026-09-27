@@ -53,6 +53,14 @@ describe('embedding the document\'s fonts in a stored drawing', () => {
     expect(await embedMermaidFonts(drawing(), { ...FACES, edge: 'ui-monospace' })).toBeNull();
   });
 
+  it('refuses bold text in a face the app bundles at one weight only: engines synthesize its bold at different strengths', async () => {
+    // Noto Serif ships at 400 only; the page, and so the drawing, would draw its bold by synthesis —
+    // measured ink over regular: Chromium +55%, WebKit +20%, Firefox +17% (a class title reads bold in one, regular in the others).
+    const serif = (bold: boolean) => drawing({ edge: false, bold }).replace('font-family:Inter,ui-sans-serif,system-ui,sans-serif', 'font-family:"Noto Serif",Georgia,serif');
+    expect(await embedMermaidFonts(serif(true), { label: 'Noto Serif', size: 16, edge: 'Noto Serif' })).toBeNull();
+    expect(faces((await embedMermaidFonts(serif(false), { label: 'Noto Serif', size: 16, edge: 'Noto Serif' }))!).map(({ family, weight }) => `${family} ${weight}`)).toEqual(['Noto Serif 400']);
+  });
+
   it('what it makes is exactly what the stored-drawing gate admits', async () => {
     const embedded = (await embedMermaidFonts(drawing(), FACES))!;
     expect(verifyEmbeddedMermaidSvg(embedded)).toBe(embedded);
