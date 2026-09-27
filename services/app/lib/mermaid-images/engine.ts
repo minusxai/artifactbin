@@ -15,11 +15,12 @@ import { mermaidDiagramKind } from '@/lib/story-ui/mermaid-source';
 
 /**
  * Bump when components/kit/mermaid-render changes what it draws (its test pins
- * the file). 2: drawings are harvested with unhinted text and carry their face
- * measurements (lib/mermaid-images/match); kit1's were laid out in Linux's
- * whole-pixel advances, which no macOS or Windows reader measures.
+ * the file), or when what a stored drawing IS changes. 3: drawings are laid
+ * out unhinted and carry the document's fonts (lib/mermaid-images/fonts);
+ * kit1's were laid out in hinted Linux advances with no fonts of their own,
+ * and kit2 was an unreleased step between.
  */
-export const MERMAID_KIT_RENDER_VERSION = 2;
+export const MERMAID_KIT_RENDER_VERSION = 3;
 export const MERMAID_RENDER_ENGINE = `mermaid@12.0.0+kit${MERMAID_KIT_RENDER_VERSION}`;
 
 /**
@@ -30,8 +31,8 @@ export const MERMAID_RENDER_ENGINE = `mermaid@12.0.0+kit${MERMAID_KIT_RENDER_VER
  * count is not a reader's (a mode switch alone redraws with another). The
  * C4 lays its text out in its own font stack (`"Open Sans", sans-serif`),
  * never the document's web fonts, so its drawing is a system-font drawing on
- * every theme: measured 1.07px taller on macOS than on Linux, where no palette
- * measurement can see it (lib/mermaid-images/match). The
+ * every theme: measured 1.07px taller on macOS than on Linux, and a face a
+ * stored drawing cannot carry (lib/mermaid-images/fonts). The
  * use-case and railroad kinds have no fixture in the fidelity gate
  * (scripts/fixtures/mermaid/kinds.mjs) yet, so nothing proves a stored drawing
  * of them equals the engine's: they keep the engine until one does.

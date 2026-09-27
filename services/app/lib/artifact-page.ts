@@ -37,7 +37,7 @@ import { accountWorkspaceFor } from '@/lib/workspace';
 import { canAnnotate, canEdit } from '@/lib/share-roles';
 import type { StoryThemeName } from '@/lib/validation/atlas-schemas';
 import { preparedPageFor, servedPage } from '@/lib/story/prepared-page.server';
-import { captureColor, storedDrawingReader } from '@/lib/mermaid-images/store';
+import { captureColor, engineRequested } from '@/lib/mermaid-images/store';
 import { lazyCodeOf } from '@/lib/story/lazy-code';
 import { firstHeadingTitle } from '@/lib/story/title';
 import { isStartPlaceholder } from '@/lib/start-placeholder';
@@ -181,9 +181,8 @@ export async function artifactPageAnswer(request: Request, id: string): Promise<
     // What only this request decides, over the stored version.
     prepared ? servedPage(prepared.row, prepared.page, {
       at, search: new URL(request.url).search, origin: baseUrl(request),
-      // This version's stored diagram drawings this reader is measured to lay out as the harvest did
-      // (lib/mermaid-images/readers) — none when the engine was asked for by name (`?mermaid=engine`).
-      drawings: storedDrawingReader(request) ?? 'engine',
+      // This version's stored diagram drawings, unless the engine was asked for by name (`?mermaid=engine`).
+      drawings: engineRequested(request.url) ? 'engine' : 'stored',
       colorMode: capturedColor,
       viewer: { userId: actor.viewer?.userId ?? null, tokenId: actor.tokenId ?? null, email: actor.viewer?.email ?? null },
       // The first results, as the page's own query door (POST, this session) would answer them.

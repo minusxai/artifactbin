@@ -54,7 +54,6 @@ import { inlineStoryCss, inlineStoryNodes } from './inline-css';
 import { styleOverrides, type StyleOverride } from './style-overrides';
 import { readerStorySheet } from './reader-sheet.server';
 import { mermaidImagesFor } from '@/lib/mermaid-images/store';
-import type { MermaidReaderClass } from '@/lib/mermaid-images/readers';
 import { servedStoryHtml } from './inline-story-html';
 import { loadStorySsr } from './ssr.server';
 import { lazyCodeOf, type LazyCode } from './lazy-code';
@@ -101,14 +100,12 @@ export interface ReaderContext {
   origin: string;
   /**
    * `engine`: serve no stored diagram drawings (`?mermaid=engine`, what the
-   * harvest itself loads, or a reader no drawing is measured to fit). Otherwise
-   * the version's stored drawings for the app's inline surface that this reader
-   * class is measured to lay out as the harvest did (lib/mermaid-images/readers;
-   * unset: Blink on macOS, the anonymous render's) are part of this overlay —
-   * per REQUEST, not per version, because a harvest lands after the page was
+   * harvest itself loads). Otherwise the version's stored drawings for the
+   * app's inline surface (lib/mermaid-images) are part of this overlay — per
+   * REQUEST, not per version, because a harvest lands after the page was
    * prepared and the next read must carry it.
    */
-  drawings?: MermaidReaderClass | 'engine';
+  drawings?: 'stored' | 'engine';
   /** A CAPTURE's colour (`color=`, under a verified export key); a reader gets the version's. */
   colorMode?: 'light' | 'dark' | null;
   /**
@@ -172,7 +169,7 @@ async function readerInputFor(row: ArtifactRow, page: Pick<PreparedPage, 'declar
   const [refData, mentionStatuses, identity, hold, mermaidImages] = await Promise.all([
     refDataForRow(row), savedMentionStates(row), viewerIdentityFor(row, viewer?.userId ?? null),
     declared ? holdableImports(row, declared.flow, viewer) : Promise.resolve([]),
-    reader.drawings === 'engine' ? Promise.resolve({}) : mermaidImagesFor({ artifactId: row.id, version: at?.version ?? row.version, surface: 'inline', head: !at, visibility: row.visibility, reader: reader.drawings ?? 'macos-blink' }, page.data.nodes),
+    reader.drawings === 'engine' ? Promise.resolve({}) : mermaidImagesFor({ artifactId: row.id, version: at?.version ?? row.version, surface: 'inline', head: !at, visibility: row.visibility }, page.data.nodes),
   ]);
   return {
     mermaidImages,

@@ -40,7 +40,6 @@
 import { createChecker } from './lib/assert.mjs';
 import {fixtureFetch as fetch} from './lib/fixture-http.mjs';
 import { chromium } from 'playwright';
-import { STORED_DRAWING_READER, launchStoredDrawingReader } from './lib/mermaid-reader.mjs';
 import { becomeAccountOwner, becomeOwner, publishAs, startDocument } from './lib/start-doc.mjs';
 import { githubWidgetFixture } from './lib/github-widget-fixture.mjs';
 import { loginViaEmail, startMailSink } from './lib/mail-login.mjs';
@@ -132,9 +131,7 @@ const publish = async (id, token, markup, title) => {
   if (!res.ok) throw new Error(`publish failed (${res.status}): ${await res.text()}`);
 };
 
-// The reader stored Mermaid drawings are made for (scripts/lib/mermaid-reader): the gate's
-// Mermaid fixture is judged as such a reader meets it, on any runner.
-const browser = await launchStoredDrawingReader(chromium);
+const browser = await chromium.launch();
 
 /** The document paints its final layout, and React never throws the tree away. */
 async function runNoRepaint() {
@@ -356,7 +353,7 @@ async function runMermaidPreload() {
     // HARVESTED: the stored drawing replaces the engine, so its code is neither named nor run.
     let rawHtml = '';
     for (const end = Date.now() + 60000; Date.now() < end && !rawHtml.includes('"mermaidImages"');) {
-      rawHtml = await (await fetch(`${B}/a/${st.id}/raw`, { headers: { 'user-agent': STORED_DRAWING_READER.userAgent } })).text();
+      rawHtml = await (await fetch(`${B}/a/${st.id}/raw`)).text();
       if (!rawHtml.includes('"mermaidImages"')) await new Promise((resolve) => setTimeout(resolve, 1000));
     }
     if (check(rawHtml.includes('"mermaidImages"'), `${kind}: the background harvest stored the diagram`)) {
@@ -486,15 +483,15 @@ async function runReaderHydration() {
   const survival = await publish({ title: 'Hydration parse survival', markup: PROSE, visibility: 'unlisted' });
   const kit = fixtures.find((f) => f.key === 'kit');
   // A Mermaid document read as readers meet it once its diagram is stored (lib/mermaid-images):
-  // the stored drawing is in the served story and must hydrate as it was served. The server offers
-  // it on the app's reader only where macOS Blink lays the faces out as the harvest does
-  // (lib/mermaid-images/reader-match.json): JetBrains Mono at 14px, not Inter — so this is the
-  // Mermaid fixture in the terminal theme; the fixture itself (Inter) hydrates with the engine.
+  // the stored drawing is in the served story and must hydrate as it was served. A stored drawing
+  // carries the document's fonts, so only a document in a theme's web fonts has one: this is the
+  // Mermaid fixture in the terminal theme (the fixture itself has no theme, so system fonts, and
+  // always draws with the engine).
   const mermaidMarkup = readFileSync(new URL('./fixtures/page-speed/mermaid.jsx', import.meta.url), 'utf8');
   const diagram = { key: 'mermaid, stored (terminal)', ...(await publish({ title: 'Hydration stored diagram', markup: mermaidMarkup, theme: 'terminal', visibility: 'unlisted' })) };
   let storedDiagram = false;
   for (const end = Date.now() + 60000; !storedDiagram && Date.now() < end;) {
-    storedDiagram = (await (await fetch(`${B}/api/page/artifact/${diagram.id}`, { headers: { 'user-agent': STORED_DRAWING_READER.userAgent } })).text()).includes('"mermaidImages"');
+    storedDiagram = (await (await fetch(`${B}/api/page/artifact/${diagram.id}`)).text()).includes('"mermaidImages"');
     if (!storedDiagram) await new Promise((resolve) => setTimeout(resolve, 1000));
   }
   check(storedDiagram, 'the stored-diagram document was harvested before the reader loads');

@@ -3,7 +3,7 @@ import { cn } from './cn';
 import { GridItemContext } from './grid';
 import { mermaidImageKey, mermaidSourceError } from '@/lib/story-ui/mermaid-source';
 import { sha256Hex } from '@/lib/sha256';
-import { METRICS_PROBE, formatMermaidFaces, formatMermaidMetrics, parseMermaidFaces, parseMermaidMetrics, storedDrawingFits, type MermaidMetrics } from '@/lib/mermaid-images/match';
+import { METRICS_PROBE, formatMermaidFaces, formatMermaidMetrics, parseMermaidFaces, parseMermaidMetrics, type MermaidMetrics } from '@/lib/mermaid-images/drawn';
 import type { StoredMermaidImage } from '@/lib/story-runtime/contract';
 import type { MermaidImage, MermaidPalette } from './mermaid-render';
 
@@ -156,6 +156,9 @@ function drawnInWebFonts(palette: MermaidPalette, code: string): boolean {
   });
 }
 
+/** Does this page ask for the engine by name (`?mermaid=engine`, lib/mermaid-images/store MERMAID_ENGINE_PARAM)? */
+const engineAskedFor = (): boolean => typeof location !== 'undefined' && new URLSearchParams(location.search).get('mermaid') === 'engine';
+
 /** What this browser would draw with — the palette's key and the faces' measurements. */
 interface Measured { palette: string; metrics: MermaidMetrics | null }
 const measured = (palette: MermaidPalette, code: string): Measured => ({ palette: mermaidPaletteKey(palette), metrics: measureFaces(palette, code) });
@@ -202,8 +205,6 @@ export function Mermaid({ code, title = 'Diagram', colorMode = 'light', classNam
   const offered = imageKey ? images[imageKey] : undefined;
   const stored = offered && offered.src !== refused ? offered : undefined;
   const storedSrc = stored?.src ?? null;
-  const storedPalette = stored?.palette ?? null;
-  const storedMetrics = stored?.metrics ? stored.metrics.join(',') : null;
   useEffect(() => {
     // Only a CHANGED value redraws: the reader's adopted story is re-stamped with
     // the theme it already has (lib/story-runtime/InlineStoryRuntime), and each
@@ -225,6 +226,10 @@ export function Mermaid({ code, title = 'Diagram', colorMode = 'light', classNam
       // palette's own faces have loaded (fontsFor, at most 3s): otherwise a
       // diagram drawn during hydration, before a web face arrives, is laid out
       // in its fallback — a drawing that depends on the network's timing.
+      // The page that asks for the engine by name — the harvest's (lib/mermaid-images)
+      // — lays text out unhinted, as every stored drawing renders it; a reader's
+      // own engine drawing is laid out as it always was.
+      if (engineAskedFor()) document.documentElement.style.setProperty('text-rendering', 'geometricPrecision');
       let palette = paletteFor(element, colorMode === 'dark');
       let before: Measured | null = null;
       // Intentional engine split: Mermaid is large and browser-only.
@@ -248,23 +253,15 @@ export function Mermaid({ code, title = 'Diagram', colorMode = 'light', classNam
         () => { if (active) setResult({ code, error: 'Could not render this diagram. Check its Mermaid syntax.' }); },
       );
     };
-    if (!storedSrc) {
-      setResult(null);
-      draw();
-      return () => { active = false; };
-    }
-    // A stored drawing is already on screen (the server rendered it). It stays
-    // while this browser checks it would have drawn the same thing; only a
-    // different palette or measurement brings the engine in.
-    void fontsFor(paletteFor(element, colorMode === 'dark'), code).then(() => {
-      if (!active) return;
-      const reader = measured(paletteFor(element, colorMode === 'dark'), code);
-      const drawnUnder = { palette: storedPalette ?? '', ...(storedMetrics !== null ? { metrics: storedMetrics.split(',').map(Number) } : {}) };
-      if (storedDrawingFits(drawnUnder, reader)) setResult(null);
-      else draw();
-    });
+    // A stored drawing is already on screen (the server rendered it), and it is
+    // the drawing as it is on every platform: its layout fixed, its fonts inside
+    // it (lib/mermaid-images/fonts). Nothing of this browser's decides it, so
+    // nothing is measured or waited for; only bytes that will not load bring
+    // the engine in (below).
+    setResult(null);
+    if (!storedSrc) draw();
     return () => { active = false; };
-  }, [code, colorMode, invalid, revision, storedSrc, storedPalette, storedMetrics]);
+  }, [code, colorMode, invalid, revision, storedSrc]);
   const current = result?.code === code ? result : null;
   const error = invalid || current?.error;
   const image: MermaidImage | undefined = current?.image ?? stored;

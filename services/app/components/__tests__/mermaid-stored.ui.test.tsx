@@ -1,8 +1,9 @@
 /**
  * A stored drawing in the reader (components/kit/mermaid): hydrates without a
- * mismatch, is kept while the reader's palette key is the one it was drawn
- * under — including across a colour-mode switch, which picks the other stored
- * variant — and gives way to the engine when its bytes will not load.
+ * mismatch and is shown as served — it carries its own fonts and fixed layout
+ * (lib/mermaid-images/fonts), so nothing of this browser's decides it — across
+ * a colour-mode switch too, which picks the other stored variant; it gives
+ * way to the engine only when its bytes will not load.
  */
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { renderToString } from 'react-dom/server';
@@ -11,7 +12,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { CSSProperties } from 'react';
 import { Mermaid, MermaidImagesProvider } from '../kit/mermaid';
 import { mermaidImageKey } from '@/lib/story-ui/mermaid-source';
-import { parseMermaidMetrics, type MermaidMetrics } from '@/lib/mermaid-images/match';
+import { parseMermaidMetrics, type MermaidMetrics } from '@/lib/mermaid-images/drawn';
 
 const { renderMermaid } = vi.hoisted(() => ({ renderMermaid: vi.fn() }));
 vi.mock('../kit/mermaid-render', () => ({ renderMermaid }));
@@ -41,7 +42,7 @@ const stored = (light: string, dark = light) => ({
 });
 
 describe('a stored Mermaid drawing', () => {
-  it('hydrates the server render without a mismatch and loads no engine when the palette is the reader\'s', async () => {
+  it('hydrates the server render without a mismatch and loads no engine', async () => {
     const images = stored(await readersPaletteKey());
     const tree = <MermaidImagesProvider value={images}><Mermaid code={CODE} title="Flow" /></MermaidImagesProvider>;
     const host = document.createElement('div');
@@ -71,14 +72,11 @@ describe('a stored Mermaid drawing', () => {
     expect(renderMermaid).not.toHaveBeenCalled();
   });
 
-  it('keeps showing the stored drawing while the engine redraws for a different palette, then shows the engine\'s', async () => {
-    let finish!: (value: unknown) => void;
-    renderMermaid.mockImplementationOnce(() => new Promise((resolve) => { finish = resolve; }));
+  it('is shown whatever palette key it records: the drawing is the document\'s, not the reader\'s', async () => {
     render(<MermaidImagesProvider value={stored('another-palette')}><Mermaid code={CODE} title="Flow" /></MermaidImagesProvider>);
-    await waitFor(() => expect(renderMermaid).toHaveBeenCalledTimes(1));
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 30)); });
     expect(screen.getByRole('img', { name: 'Flow' })).toHaveAttribute('src', '/assets/mermaid/light.svg');
-    await act(async () => finish({ src: 'data:image/svg+xml,engine', type: 'flowchart-v2' }));
-    expect(screen.getByRole('img', { name: 'Flow' })).toHaveAttribute('src', 'data:image/svg+xml,engine');
+    expect(renderMermaid).not.toHaveBeenCalled();
   });
 
   it('the engine measures only once the palette\'s faces have loaded', async () => {
@@ -110,17 +108,15 @@ describe('a stored Mermaid drawing', () => {
     }
   });
 
-  it('asks for the palette\'s own faces before judging a stored drawing', async () => {
+  it('waits for nothing before keeping a stored drawing: no font is asked for, nothing is measured', async () => {
     const load = vi.fn(async (_font: string, _text?: string) => [] as FontFace[]);
     Object.defineProperty(document, 'fonts', { configurable: true, value: { load, ready: Promise.resolve() } });
     try {
       const images = stored(await readersPaletteKey());
-      // The engine asked for the same faces before it measured; now the stored drawing's check.
       load.mockClear();
       render(<MermaidImagesProvider value={images}><Mermaid code={CODE} title="Flow" /></MermaidImagesProvider>);
-      await waitFor(() => expect(load).toHaveBeenCalledTimes(2));
-      expect(load.mock.calls.map(([font]) => font)).toEqual([expect.stringMatching(/^\d+px /), expect.stringMatching(/^11px /)]);
       await act(async () => { await new Promise((resolve) => setTimeout(resolve, 20)); });
+      expect(load).not.toHaveBeenCalled();
       expect(renderMermaid).not.toHaveBeenCalled();
     } finally {
       delete (document as unknown as { fonts?: unknown }).fonts;
@@ -148,7 +144,7 @@ const MACOS_BLINK: MermaidMetrics = [855.9375, 20, -16, 646.8125, 14, -11];
 const LINUX_HINTED: MermaidMetrics = [851, 20, -16, 686, 14, -11];
 const MACOS_WEBKIT: MermaidMetrics = [859.3125, 19.359375, -15.5, 646.8125, 14.546875, -11.234375];
 
-describe('a stored drawing, judged by what Mermaid measures in this browser', () => {
+describe('a stored drawing, whatever this browser measures', () => {
   let faces: MermaidMetrics = HARVEST_UNHINTED;
   const measured: string[] = [];
   beforeEach(() => {
@@ -163,52 +159,44 @@ describe('a stored drawing, judged by what Mermaid measures in this browser', ()
       },
     });
   });
-  afterEach(() => { delete (window.SVGElement.prototype as unknown as { getBBox?: unknown }).getBBox; });
-
-  /** What the harvest's page records for the drawing its engine made: the palette key and the measurements. */
-  async function harvested(): Promise<{ palette: string; metrics: MermaidMetrics }> {
-    faces = HARVEST_UNHINTED;
-    const { container, unmount } = render(<Mermaid code={CODE} />);
-    await waitFor(() => expect(container.querySelector('figure')).toHaveAttribute('data-mx-mermaid-metrics'));
-    const figure = container.querySelector('figure')!;
-    const drawn = { palette: figure.getAttribute('data-mx-mermaid-palette')!, metrics: parseMermaidMetrics(figure.getAttribute('data-mx-mermaid-metrics'))! };
-    unmount();
-    renderMermaid.mockClear();
-    return drawn;
-  }
-  const storedAs = (drawn: { palette: string; metrics: MermaidMetrics }) => ({
-    [mermaidImageKey(CODE, 'light')]: { src: '/assets/mermaid/light.svg', type: 'flowchart-v2', width: 120, height: 80, palette: drawn.palette, metrics: [...drawn.metrics] },
+  afterEach(() => {
+    delete (window.SVGElement.prototype as unknown as { getBBox?: unknown }).getBBox;
+    document.documentElement.style.removeProperty('text-rendering');
+    window.history.replaceState(null, '', '/');
   });
 
   it('the harvest records the faces as Mermaid measures them: SVG text boxes of the label face and the 11px edge-label face', async () => {
-    const drawn = await harvested();
-    expect(drawn.metrics).toEqual(HARVEST_UNHINTED);
+    const { container } = render(<Mermaid code={CODE} />);
+    await waitFor(() => expect(container.querySelector('figure')).toHaveAttribute('data-mx-mermaid-metrics'));
+    expect(parseMermaidMetrics(container.querySelector('figure')!.getAttribute('data-mx-mermaid-metrics'))).toEqual(HARVEST_UNHINTED);
     expect(measured.some((style) => /font-size:\s*11px/.test(style))).toBe(true);
     expect(measured.some((style) => /font-size:\s*1[2-6]px/.test(style))).toBe(true);
   });
 
-  it('a reader whose faces measure as the unhinted harvest\'s (Blink on macOS) keeps the stored drawing and loads no engine', async () => {
-    const images = storedAs(await harvested());
-    faces = MACOS_BLINK;
-    render(<MermaidImagesProvider value={images}><Mermaid code={CODE} title="Flow" /></MermaidImagesProvider>);
+  it.each([['Blink on macOS', MACOS_BLINK], ['hinted Linux (whole-pixel advances)', LINUX_HINTED], ['WebKit (a shorter line box)', MACOS_WEBKIT]])('a reader measuring like %s keeps the stored drawing and loads no engine', async (_name, reader) => {
+    faces = reader;
+    render(<MermaidImagesProvider value={stored('the-harvest\'s')}><Mermaid code={CODE} title="Flow" /></MermaidImagesProvider>);
     await act(async () => { await new Promise((resolve) => setTimeout(resolve, 30)); });
     expect(screen.getByRole('img', { name: 'Flow' })).toHaveAttribute('src', '/assets/mermaid/light.svg');
     expect(renderMermaid).not.toHaveBeenCalled();
-  });
-
-  it.each([['hinted Linux (whole-pixel advances)', LINUX_HINTED], ['WebKit (a shorter line box)', MACOS_WEBKIT]])('a reader measuring like %s draws with the engine', async (_name, reader) => {
-    const images = storedAs(await harvested());
-    faces = reader;
-    render(<MermaidImagesProvider value={images}><Mermaid code={CODE} title="Flow" /></MermaidImagesProvider>);
-    await waitFor(() => expect(renderMermaid).toHaveBeenCalledTimes(1));
-    await waitFor(() => expect(screen.getByRole('img', { name: 'Flow' })).toHaveAttribute('src', 'data:image/svg+xml,engine'));
-  });
-
-  it('a drawing stored without measurements is never used by a browser that measures', async () => {
-    const { palette } = await harvested();
     faces = HARVEST_UNHINTED;
-    render(<MermaidImagesProvider value={{ [mermaidImageKey(CODE, 'light')]: { src: '/assets/mermaid/light.svg', type: 'flowchart-v2', palette } }}><Mermaid code={CODE} title="Flow" /></MermaidImagesProvider>);
+  });
+
+  it('a page that asks for the engine by name (the harvest\'s) lays text out unhinted before it measures, as every stored drawing renders it', async () => {
+    window.history.replaceState(null, '', '/a/x/raw?key=k&mermaid=engine&color=light');
+    let during = '';
+    renderMermaid.mockImplementationOnce(async () => { during = document.documentElement.style.getPropertyValue('text-rendering'); return { src: 'data:image/svg+xml,engine', type: 'flowchart-v2' }; });
+    render(<Mermaid code={CODE} title="Flow" />);
     await waitFor(() => expect(renderMermaid).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(during).toBe('geometricprecision'));
+  });
+
+  it('a reader\'s own engine drawing is laid out as before (no unhinted text)', async () => {
+    let during = 'unset';
+    renderMermaid.mockImplementationOnce(async () => { during = document.documentElement.style.getPropertyValue('text-rendering'); return { src: 'data:image/svg+xml,engine', type: 'flowchart-v2' }; });
+    render(<Mermaid code={CODE} title="Flow" />);
+    await waitFor(() => expect(renderMermaid).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(during).toBe(''));
   });
 });
 
@@ -232,7 +220,7 @@ describe('a drawing the harvest may store for every reader', () => {
     expect(await figureOf(CODE)).toHaveAttribute('data-mx-mermaid-portable');
   });
 
-  it('names the faces it was drawn in — the label face at its size, the edge-label face — for the server\'s measured table of readers', async () => {
+  it('names the faces it was drawn in — the label face at its size, the edge-label face — which the harvest embeds', async () => {
     fonts([{ family: 'Inter', status: 'loaded', unicodeRange: LATIN }, { family: '"JetBrains Mono"', status: 'loaded', unicodeRange: LATIN }]);
     expect(await figureOf(CODE, { ...WEB_FACES, fontSize: '16px' } as CSSProperties)).toHaveAttribute('data-mx-mermaid-faces', 'Inter|16|JetBrains Mono');
   });

@@ -35,24 +35,21 @@ const PIE = 'pie\n  "a" : 1';
 const GANTT = 'gantt\n  title Plan\n  dateFormat YYYY-MM-DD\n  section A\n  One :a1, 2024-01-01, 3d';
 const markup = (codes: string[]) => `<div>${codes.map((code, i) => `<Mermaid title="D${i}" code={${JSON.stringify(code)}} />`).join('')}</div>`;
 const PALETTE = { document: 'a'.repeat(32), inline: 'b'.repeat(32) } as const;
-/** What the harvest's (unhinted) browser measured the palette's faces as (lib/mermaid-images/match). */
+/** What the harvest's (unhinted) browser measured the palette's faces as (lib/mermaid-images/drawn). */
 const METRICS = [855.9375, 20, -16, 646.796875, 14, -11];
-/**
- * The faces each surface draws in: the served document's label face at 16px,
- * the app reader's at 14px — faces Blink on macOS is measured to lay out as the
- * harvest does (lib/mermaid-images/reader-match.json), unless a test says otherwise.
- */
-const FACES = { document: 'Inter|16|JetBrains Mono', inline: 'JetBrains Mono|14|JetBrains Mono' } as const;
-/**
- * Readers, by what the server knows of them: Blink on macOS measures as the
- * harvest does; Blink on Linux rounds its glyph advances, and WebKit draws its
- * line boxes shorter, so neither can use a stored drawing.
- */
-const MAC_CHROME = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36';
-const LINUX_CHROME = 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36';
-const MAC_SAFARI = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15';
-const WINDOWS_CHROME = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36';
-const reader = (path: string, ua = MAC_CHROME, headers: Record<string, string> = {}) => request(path, { headers: { 'user-agent': ua, ...headers } });
+/** The faces each surface draws in: the served document's label face at 16px, the app reader's at 14px. */
+const FACES = { document: 'Inter|16|JetBrains Mono', inline: 'Inter|14|JetBrains Mono' } as const;
+/** Readers of every kind: a stored drawing depends on nothing of theirs. */
+const READERS = [
+  'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36',
+  'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36',
+  'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15',
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:130.0) Gecko/20100101 Firefox/130.0',
+  '',
+];
+const reader = (path: string, ua = '', headers: Record<string, string> = {}) => request(path, { headers: { ...(ua ? { 'user-agent': ua } : {}), ...headers } });
+/** The fonts block a stored drawing carries first (lib/mermaid-images/fonts). */
+const FONTS = /^<style>@font-face\{font-family:"Inter";src:url\(data:font\/woff2;base64,[A-Za-z0-9+/=]+\)[^<]*svg\{text-rendering:geometricPrecision\}<\/style>/;
 
 /**
  * A browser that draws like the kit: per surface and mode, one figure per
@@ -81,7 +78,7 @@ function drawingBrowser(codes: string[], opts: { vary?: string; unsafe?: string;
         },
         width: 120, height: 80,
         // Ids are numbered per page load, as the kit's are (`mx-mermaid-N`).
-        svg: `<svg xmlns="http://www.w3.org/2000/svg" id="mx-mermaid-${loads * 10 + i}" viewBox="0 0 10 10"><text>${surface} ${mode} ${i}${code === opts.vary ? ` ${loads}` : ''}${opts.forged ?? ''}</text>${code === opts.unsafe ? '<script>alert(1)</script>' : ''}</svg>`,
+        svg: `<svg xmlns="http://www.w3.org/2000/svg" id="mx-mermaid-${loads * 10 + i}" viewBox="0 0 10 10"><style>#mx-mermaid-${loads * 10 + i}{font-family:Inter,ui-sans-serif,sans-serif}</style><text>${surface} ${mode} ${i}${code === opts.vary ? ` ${loads}` : ''}${opts.forged ?? ''}</text>${code === opts.unsafe ? '<script>alert(1)</script>' : ''}</svg>`,
       }))] };
     },
   };
@@ -100,7 +97,7 @@ async function publish(codes: string[], visibility = 'public') {
 }
 const jobs = async (id: string) => (await (await getDb()).query<{ version: number; state: string; attempts: number; retry_after: string | null; images: Record<string, Record<string, string>> | null }>(
   'SELECT version,state,attempts,retry_after,images FROM mermaid_harvests WHERE artifact_id=$1 ORDER BY version', [id])).rows;
-const raw = async (id: string, query = '', ua = MAC_CHROME) => (await serveArtifact(reader(`/a/${id}/raw${query}`, ua), params({ id }))).text();
+const raw = async (id: string, query = '', ua = '') => (await serveArtifact(reader(`/a/${id}/raw${query}`, ua), params({ id }))).text();
 const island = (html: string) => JSON.parse(/<script[^>]*type="application\/json"[^>]*>([\s\S]*?)<\/script>/.exec(html)![1].replace(/\\u003c/g, '<')) as { mermaidImages?: Record<string, { src: string; palette: string; type: string; width?: number; height?: number; metrics?: number[] }> };
 const head = (html: string) => html.split('</head>')[0];
 
@@ -157,7 +154,7 @@ describe('a published Mermaid document', () => {
     const images = island(after).mermaidImages!;
     expect(Object.keys(images).sort()).toEqual([FLOW, SEQ].flatMap((code) => [mermaidImageKey(code, 'light'), mermaidImageKey(code, 'dark')]).sort());
     const flow = images[mermaidImageKey(FLOW, 'light')]!;
-    expect(flow).toEqual({ src: expect.stringMatching(/^\/assets\/mermaid\/[0-9a-f]{64}\.svg$/), type: 'flowchart-v2', palette: PALETTE.document, metrics: METRICS, width: 120, height: 80 });
+    expect(flow).toEqual({ src: expect.stringMatching(/^\/assets\/mermaid\/[0-9a-f]{64}\.svg$/), type: 'flowchart-v2', palette: PALETTE.document, width: 120, height: 80 });
     expect(after).toContain(`src="${flow.src}"`);
     expect(head(after)).not.toMatch(/mermaid-render-|flowDiagram|sequenceDiagram|elk-/);
     expect(head(after)).toContain(`<link rel="preload" href="${flow.src}" as="image">`);
@@ -176,7 +173,11 @@ describe('a published Mermaid document', () => {
     expect(served.headers.get('x-content-type-options')).toBe('nosniff');
     expect(served.headers.get('content-security-policy')).toBe('sandbox');
     expect(served.headers.get('cache-control')).toContain('immutable');
-    expect(await served.text()).toMatch(/^<svg xmlns="http:\/\/www\.w3\.org\/2000\/svg" id="mx-mermaid-\d+" viewBox="0 0 10 10"><text>document light 0<\/text><\/svg>$/);
+    // The drawing as the engine drew it, carrying its fonts first: the document's Inter, subset to its text.
+    const bytes = await served.text();
+    const opening = /^<svg xmlns="http:\/\/www\.w3\.org\/2000\/svg" id="mx-mermaid-\d+" viewBox="0 0 10 10">/.exec(bytes)![0];
+    expect(bytes.slice(opening.length)).toMatch(FONTS);
+    expect(bytes.slice(opening.length).replace(FONTS, '')).toMatch(/^<style>#mx-mermaid-\d+\{font-family:Inter,ui-sans-serif,sans-serif\}<\/style><text>document light 0<\/text><\/svg>$/);
     expect((await mermaidAsset(request('/assets/mermaid/x.svg'), params({ file: `${'0'.repeat(64)}.svg` }))).status).toBe(404);
 
     // Asked for by name, the engine draws as before: nothing stored reaches the page.
@@ -189,7 +190,7 @@ describe('a published Mermaid document', () => {
     setServices({ browser: drawingBrowser([FLOW]).browser });
     const { id } = await publish([FLOW]);
     // The app's reader page is prepared (and stored) before any drawing exists.
-    const first = await artifactPageAnswer(reader(`/a/${id}`, MAC_CHROME, { accept: 'text/html' }), id);
+    const first = await artifactPageAnswer(reader(`/a/${id}`, '', { accept: 'text/html' }), id);
     expect(first.status).toBe(200);
     expect((first.body as { surface: { runtime: { data: Record<string, unknown> } } }).surface.runtime.data.mermaidImages).toBeUndefined();
     expect(first.story?.lazyCode.mermaid).toEqual(['flowchart']);
@@ -197,7 +198,7 @@ describe('a published Mermaid document', () => {
     expect(Number((await db.query<{ n: string }>('SELECT count(*) AS n FROM prepared_pages WHERE artifact_id=$1', [id])).rows[0].n)).toBe(1);
 
     expect(await runNextMermaidHarvest()).toBe(true);
-    const next = await artifactPageAnswer(reader(`/a/${id}`, MAC_CHROME, { accept: 'text/html' }), id);
+    const next = await artifactPageAnswer(reader(`/a/${id}`, '', { accept: 'text/html' }), id);
     const images = (next.body as { surface: { runtime: { data: { mermaidImages?: Record<string, { src: string; palette: string }> } } } }).surface.runtime.data.mermaidImages;
     const stored = images?.[mermaidImageKey(FLOW, 'light')];
     expect(stored?.palette).toBe(PALETTE.inline);
@@ -206,7 +207,7 @@ describe('a published Mermaid document', () => {
     expect(next.story!.lazyCode.mermaid).toEqual([]);
     expect(next.story!.lazyCode.mermaidImages).toEqual([stored!.src]);
     // Asked for by name, the engine draws as before.
-    const engine = await artifactPageAnswer(reader(`/a/${id}?mermaid=engine`, MAC_CHROME, { accept: 'text/html' }), id);
+    const engine = await artifactPageAnswer(reader(`/a/${id}?mermaid=engine`, '', { accept: 'text/html' }), id);
     expect((engine.body as { surface: { runtime: { data: Record<string, unknown> } } }).surface.runtime.data.mermaidImages).toBeUndefined();
     expect(engine.story!.html()).not.toContain('/assets/mermaid/');
   });
@@ -252,7 +253,7 @@ describe('a published Mermaid document', () => {
     expect(calls).toHaveLength(0);
     expect((await jobs(id))[0].state).toBe('superseded');
     await (await getDb()).query('DELETE FROM mermaid_harvests');
-    expect(island(await (await serveArtifact(request(`/a/${id}/raw`, { token: owner.token, headers: { 'user-agent': MAC_CHROME } }), params({ id }))).text()).mermaidImages).toBeUndefined();
+    expect(island(await (await serveArtifact(request(`/a/${id}/raw`, { token: owner.token }), params({ id }))).text()).mermaidImages).toBeUndefined();
     // …and reading it queues nothing either.
     await new Promise((resolve) => setTimeout(resolve, 50));
     expect(await jobs(id)).toEqual([]);
@@ -299,45 +300,28 @@ describe('a published Mermaid document', () => {
     expect(MERMAID_RENDER_ENGINE).not.toBe('mermaid@11.0.0+kit1');
   });
 
-  it('serves a reader whose browser cannot measure as the harvest did no stored drawing: no image, no image preload, the engine\'s code named', async () => {
+  it('serves every reader the stored drawing — macOS, Linux, Safari, Firefox, none named — with its image preloaded and no engine code', async () => {
     setServices({ browser: drawingBrowser([FLOW]).browser });
     const { id } = await publish([FLOW]);
     await runNextMermaidHarvest();
-    // The reader the harvest measured like: the drawing, preloaded, and no engine code.
-    const mac = await raw(id);
-    const src = island(mac).mermaidImages![mermaidImageKey(FLOW, 'light')]!.src;
-    expect(head(mac)).toContain(`<link rel="preload" href="${src}" as="image">`);
-    expect(head(mac)).not.toMatch(/mermaid-render-/);
-    for (const ua of [LINUX_CHROME, MAC_SAFARI, WINDOWS_CHROME, '']) {
-      // The served document: nothing stored in it, the engine's chunks preloaded — the decision and its preloads agree.
+    for (const ua of READERS) {
       const html = await raw(id, '', ua);
-      expect(island(html).mermaidImages, ua).toBeUndefined();
-      expect(html, ua).not.toContain('/assets/mermaid/');
-      expect(head(html), ua).toMatch(/modulepreload" href="[^"]*mermaid-render-/);
-      // The app's reader: the same decision, on its own surface.
+      const src = island(html).mermaidImages?.[mermaidImageKey(FLOW, 'light')]?.src;
+      expect(src, ua).toMatch(/^\/assets\/mermaid\//);
+      expect(head(html), ua).toContain(`<link rel="preload" href="${src}" as="image">`);
+      expect(head(html), ua).not.toMatch(/mermaid-render-/);
       const page = await artifactPageAnswer(reader(`/a/${id}`, ua, { accept: 'text/html' }), id);
-      expect((page.body as { surface: { runtime: { data: Record<string, unknown> } } }).surface.runtime.data.mermaidImages, ua).toBeUndefined();
-      expect(page.story!.html(), ua).not.toContain('/assets/mermaid/');
-      expect(page.story!.lazyCode, ua).toEqual(expect.objectContaining({ mermaid: ['flowchart'], mermaidImages: [] }));
+      expect(page.story!.lazyCode, ua).toEqual(expect.objectContaining({ mermaid: [], mermaidImages: [expect.stringMatching(/^\/assets\/mermaid\//)] }));
     }
-    const macPage = await artifactPageAnswer(reader(`/a/${id}`, MAC_CHROME, { accept: 'text/html' }), id);
-    expect(macPage.story!.lazyCode).toEqual(expect.objectContaining({ mermaid: [], mermaidImages: [expect.stringMatching(/^\/assets\/mermaid\//)] }));
   });
 
-  it('offers a drawing only where the reader is measured to lay its faces out as the harvest did: Inter at 16px on the served document, not at 14px on the app\'s reader', async () => {
-    setServices({ browser: drawingBrowser([FLOW], { faces: { document: 'Inter|16|JetBrains Mono', inline: 'Inter|14|JetBrains Mono' } }).browser });
+  it('never stores a drawing in a face the app does not bundle (it could not carry it): its readers keep the engine', async () => {
+    setServices({ browser: drawingBrowser([FLOW], { faces: { document: 'Georgia|16|JetBrains Mono', inline: 'Georgia|14|JetBrains Mono' } }).browser });
     const { id } = await publish([FLOW]);
     await runNextMermaidHarvest();
-    // The served document: offered, preloaded, no engine code.
-    const html = await raw(id);
-    const src = island(html).mermaidImages![mermaidImageKey(FLOW, 'light')]!.src;
-    expect(head(html)).toContain(`<link rel="preload" href="${src}" as="image">`);
-    expect(head(html)).not.toMatch(/mermaid-render-/);
-    // The app's reader draws Inter at 14px, whose line box macOS does not share with the harvest: the engine's page.
-    const page = await artifactPageAnswer(reader(`/a/${id}`, MAC_CHROME, { accept: 'text/html' }), id);
-    expect((page.body as { surface: { runtime: { data: Record<string, unknown> } } }).surface.runtime.data.mermaidImages).toBeUndefined();
-    expect(page.story!.html()).not.toContain('/assets/mermaid/');
-    expect(page.story!.lazyCode).toEqual(expect.objectContaining({ mermaid: ['flowchart'], mermaidImages: [] }));
+    expect((await jobs(id))[0].state).toBe('done');
+    expect(island(await raw(id)).mermaidImages).toBeUndefined();
+    expect(head(await raw(id))).toMatch(/mermaid-render-/);
   });
 
   it('stores nothing from a browser that hints text (whole-pixel advances: a browser service without the unhinted harvest), so readers keep the engine', async () => {
@@ -350,7 +334,7 @@ describe('a published Mermaid document', () => {
     expect(Number((await (await getDb()).query<{ n: string }>('SELECT count(*) AS n FROM mermaid_images')).rows[0].n)).toBe(0);
   });
 
-  it('never stores a drawing drawn in a system font, or one whose faces were not measured: no reader could be judged against it', async () => {
+  it('never stores a drawing drawn in a system font, or one whose faces were not measured', async () => {
     setServices({ browser: drawingBrowser([FLOW, SEQ, PIE], { system: FLOW, unmeasured: SEQ }).browser });
     const { id } = await publish([FLOW, SEQ, PIE]);
     await runNextMermaidHarvest();

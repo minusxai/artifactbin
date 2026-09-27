@@ -72,37 +72,17 @@ export function svgFromDataUrl(src: string): string {
   return head.toLowerCase().endsWith(';base64') ? Buffer.from(body, 'base64').toString('utf8') : decodeURIComponent(body);
 }
 
-/**
- * THE CHROMIUM EACH KIND OF WORK LAUNCHES. A HARVEST (harvestSvg) lays text out
- * UNHINTED: Linux Chromium hints by default, rounding every glyph advance to a
- * whole pixel, and a Mermaid drawing laid out in those advances is one no macOS
- * or Windows reader's engine would make (they position glyphs at the font's
- * fractional advances — measured equal to unhinted Linux to 1/64px; the
- * app's lib/mermaid-images/match has the numbers). Renders and exports keep
- * the default, so their pixels and PDF text are exactly what they were. The
- * switch is a no-op off Linux.
- */
-export type BrowserPurpose = 'render' | 'harvest';
-export function chromiumLaunchArgs(purpose: BrowserPurpose): string[] {
-  return purpose === 'harvest' ? ['--font-render-hinting=none'] : [];
-}
-
 export function createBrowser(opts: { idleShutdownMs?: number; executablePath?: () => Promise<string>; sessions?: BrowserSessionOptions; upload?:UploadOptions } = {}): BrowserService & { close(): Promise<void> } {
   const idleMs = opts.idleShutdownMs ?? 60_000;
   const upload=opts.upload??browserUploadOptions(process.env);
   let browser: Promise<Browser> | undefined;
-  // What the running browser was launched for: one Chromium at a time, relaunched when the work changes kind.
-  let launchedFor: BrowserPurpose = 'render';
   let executablePath: string | undefined;
   let chain: Promise<unknown> = Promise.resolve();
   let idle: ReturnType<typeof setTimeout> | undefined;
 
-  const get = async (timeoutMs=DEFAULT_TIMEOUT_MS, purpose: BrowserPurpose = 'render'): Promise<Browser> => {
-    // Work is serialised (`chain`), so nothing else holds the other kind's browser while it closes.
-    if (browser && launchedFor !== purpose) await close();
+  const get = (timeoutMs=DEFAULT_TIMEOUT_MS): Promise<Browser> => {
     if (!browser) {
-      launchedFor = purpose;
-      const p = chromium.launch({ headless: true, timeout:timeoutMs, args: chromiumLaunchArgs(purpose), ...(executablePath?{executablePath}:{}) }).catch((e) => { if (browser === p) browser = undefined; throw e; });
+      const p = chromium.launch({ headless: true, timeout:timeoutMs, ...(executablePath?{executablePath}:{}) }).catch((e) => { if (browser === p) browser = undefined; throw e; });
       browser = p;
     }
     return browser;
@@ -121,11 +101,11 @@ export function createBrowser(opts: { idleShutdownMs?: number; executablePath?: 
    * readiness wait (diagrams, managed frames, the settle, charts). `use` sees
    * the ready page; the page is closed after, whatever happened.
    */
-  async function withReadyPage<T>(req: PageRequest, deviceScaleFactor: number, use: (ready: { page: Page; surface: Locator; timeout: number; remaining: () => number; waitForCharts: () => Promise<void> }) => Promise<T>, purpose: BrowserPurpose = 'render'): Promise<T> {
+  async function withReadyPage<T>(req: PageRequest, deviceScaleFactor: number, use: (ready: { page: Page; surface: Locator; timeout: number; remaining: () => number; waitForCharts: () => Promise<void> }) => Promise<T>): Promise<T> {
     const deadline=Date.now()+(req.timeoutMs??DEFAULT_TIMEOUT_MS);
     const remaining=()=>{const ms=deadline-Date.now();if(ms<=0)throw new Error('Render deadline');return ms;};
-    let b = await get(remaining(), purpose);
-    if (!b.isConnected()) { await close(); b = await get(remaining(), purpose); }
+    let b = await get(remaining());
+    if (!b.isConnected()) { await close(); b = await get(remaining()); }
     const timeout = remaining();
     // reducedMotion: the motion kit never arms scroll reveals under it, so a capture always sees the finished page.
     let deadlineClose:Promise<void>|undefined;
@@ -294,7 +274,7 @@ export function createBrowser(opts: { idleShutdownMs?: number; executablePath?: 
         if (svg.length > SVG_HARVEST_LIMITS.imageBytes || total > SVG_HARVEST_LIMITS.totalBytes) throw new Error('Drawings too large');
         return { attributes, width, height, svg };
       });
-    }, 'harvest');
+    });
   }
 
   const started = createBrowserSessions(actor => {

@@ -9,30 +9,16 @@
  * scripts/fixtures/mermaid/kinds.mjs, on both reader surfaces (the served
  * document `/a/<id>/raw` and the app's reader `/a/<id>`), in both colour modes,
  * with author CSS overriding the theme, and inside a grid tile, the page drawn
- * with the engine (`?mermaid=engine`, what every reader got before) and the
- * page drawn from storage must show BYTE-IDENTICAL SVG once the per-page ids
- * (`mx-mermaid-N`) are normalized. Kinds that are not stored must not be, for
+ * with the engine (`?mermaid=engine`, what every reader got before, and what
+ * the harvest loads) and the page drawn from storage must show BYTE-IDENTICAL
+ * SVG once the per-page ids (`mx-mermaid-N`) are normalized and the stored
+ * drawing's one leading fonts block (lib/mermaid-images/fonts) is set aside —
+ * and that block must be there, of exactly our grammar, and must change what
+ * the image renders (the embedded face is used: an `<img>` cannot reach the
+ * page's fonts). A drawing in a system font carries none and is never stored. Kinds that are not stored must not be, for
  * the reason the fixture gives (gantt's "today" line is never stored, so it is
  * never compared), and a page whose diagrams are all stored must request no
  * Mermaid, elk, cytoscape or langium code.
- *
- * THE READER IT IS FOR (lib/mermaid-images/readers, scripts/lib/mermaid-reader):
- * the server offers a stored drawing only to Blink on macOS, and only where
- * its measured table (lib/mermaid-images/reader-match.json) says that reader
- * lays the drawing's faces out as the unhinted harvest does — Inter at 16px
- * (the served document) but not at 14px (the app's reader), JetBrains Mono at
- * both. The comparisons run as that reader (Chromium launched unhinted, a
- * macOS user agent), and each diagram's expectation FOLLOWS THE TABLE for the
- * faces the engine page reports: offered ⇒ served stored and byte-identical;
- * not offered ⇒ drawn by the engine with no stored drawing requested. Each
- * surface also states the verdict it expects (every diagram offered, or none),
- * so the gate cannot pass by offering nothing. On a Linux runner a
- * byte-identical stored drawing and a page with no engine code prove the
- * harvest's browser measured unhinted too. Then the other side: a reader whose
- * Chromium hints text (Linux) is served the engine's page — no stored drawing,
- * no image preload, the engine drawing every diagram — and a diagram drawn in
- * a system font is never stored, so even the reader it is for draws it with
- * the engine.
  *
  *   usage: node scripts/gate-mermaid-prerender.mjs [base]
  */
@@ -41,17 +27,6 @@ import { createChecker } from './lib/assert.mjs';
 import { fixtureFetch as fetch } from './lib/fixture-http.mjs';
 import { startDocument } from './lib/start-doc.mjs';
 import { MERMAID_KIND_SAMPLES } from './fixtures/mermaid/kinds.mjs';
-import { LINUX_READER_USER_AGENT, STORED_DRAWING_READER, launchStoredDrawingReader } from './lib/mermaid-reader.mjs';
-import { tsImport } from 'tsx/esm/api';
-
-const { servableTo } = await tsImport('../services/app/lib/mermaid-images/readers.ts', import.meta.url);
-const { parseMermaidFaces, parseMermaidMetrics } = await tsImport('../services/app/lib/mermaid-images/match.ts', import.meta.url);
-/** Would the server offer this engine-drawn figure's stored drawing to the reader the gate stands in for? */
-const offered = (figure) => {
-  const metrics = parseMermaidMetrics(figure.metrics);
-  const faces = parseMermaidFaces(figure.faces);
-  return servableTo({ portable: figure.portable, ...(metrics ? { metrics: [...metrics] } : {}), ...(faces ? { faces } : {}) }, 'macos-blink');
-};
 
 const B = process.argv[2] ?? 'http://localhost:3030';
 const check = createChecker('mermaid-prerender');
@@ -64,6 +39,13 @@ const KINDS_DOC = `<div data-design="tw" className="p-10"><h1>Every kind</h1>${S
 /** The kinds that must stay with the engine — beside one that is stored, so the gate can see the harvest has run. */
 const SENTINEL = STORED.find((s) => s.kind === 'pie');
 const UNSTORED_DOC = `<div data-design="tw" className="p-10"><h1>Engine kinds</h1>${[SENTINEL, ...UNSTORED].map(diagram).join('')}</div>`;
+/** Diagrams in a system font beside a stored one (the pie, in the theme's web fonts): the harvest ran, and kept only the pie. */
+const SYSTEM_FONT = [
+  { kind: 'system-font flowchart', code: 'flowchart LR\n  a[System] --> b{Font?}\n  b -->|yes| c[Engine]', stored: false, why: 'drawn in a system font, which a stored drawing cannot carry' },
+  { kind: 'system-font sequence', code: 'sequenceDiagram\n  Reader->>Server: page\n  Server-->>Reader: engine', stored: false, why: 'drawn in a system font, which a stored drawing cannot carry' },
+];
+const SYSTEM_FONT_DOC = '<Helmet><style>{`.system-font { font-family: ui-sans-serif, system-ui, sans-serif; --font-mono: ui-monospace, Menlo, monospace; }`}</style></Helmet>'
+  + `<div data-design="tw" className="p-10"><h1>System font</h1>${diagram(SENTINEL)}<div className="system-font">${SYSTEM_FONT.map(diagram).join('')}</div></div>`;
 /** Author CSS overriding the theme's colours, a dark document, and a diagram in a grid tile. */
 const CONTEXT = [
   { kind: 'styled flowchart', code: 'flowchart LR\n  a[Styled] --> b{Theme?}\n  b -->|override| c[Author CSS]' },
@@ -72,14 +54,6 @@ const CONTEXT = [
 const CONTEXT_DOC = '<Helmet><style>{`:root { --primary: #c2410c; --card: #fff7ed; --muted: #ffedd5; --border: #fb923c; } .dark { --primary: #fdba74; --card: #431407; --muted: #7c2d12; }`}</style></Helmet>'
   + `<div data-design="tw" className="p-10"><h1>Context</h1>${diagram(CONTEXT[0])}`
   + `<Grid><GridItem x={0} y={0} w={6} h={4}>${diagram(CONTEXT[1])}</GridItem></Grid></div>`;
-
-/** A diagram in a system font beside a stored one (the pie, in the theme's web fonts): the harvest ran, and kept only the pie. */
-const SYSTEM_FONT = [
-  { kind: 'system-font flowchart', code: 'flowchart LR\n  a[System] --> b{Font?}\n  b -->|yes| c[Engine]' },
-  { kind: 'system-font sequence', code: 'sequenceDiagram\n  Reader->>Server: page\n  Server-->>Reader: engine' },
-];
-const SYSTEM_FONT_DOC = '<Helmet><style>{`.system-font { font-family: ui-sans-serif, system-ui, sans-serif; --font-mono: ui-monospace, Menlo, monospace; }`}</style></Helmet>'
-  + `<div data-design="tw" className="p-10"><h1>System font</h1>${diagram(SENTINEL)}<div className="system-font">${SYSTEM_FONT.map(diagram).join('')}</div></div>`;
 
 const publish = async (markup, title, extra = {}) => {
   const st = await startDocument(B);
@@ -94,7 +68,7 @@ const publish = async (markup, title, extra = {}) => {
 /** The harvest writes a version's drawings at once; wait until the served document carries them. */
 async function harvested(id, ms = 170_000) {
   for (const end = Date.now() + ms; Date.now() < end;) {
-    const html = await (await fetch(`${B}/a/${id}/raw`, { headers: { 'user-agent': STORED_DRAWING_READER.userAgent } })).text();
+    const html = await (await fetch(`${B}/a/${id}/raw`)).text();
     if (html.includes('"mermaidImages"')) return true;
     await new Promise((resolve) => setTimeout(resolve, 1000));
   }
@@ -104,24 +78,33 @@ async function harvested(id, ms = 170_000) {
 const ENGINE_CODE = (path) => /mermaid-render|mermaid\.core|mermaid-core|^(elk|cytoscape|langium)[\w.-]*\.js$/i.test(path.split('/').pop() ?? '')
   || /node_modules\/(\.vite\/deps\/)?(mermaid|elkjs|cytoscape|langium|@mermaid-js)/.test(path);
 const normalize = (svg) => svg.replace(/mx-mermaid-\d+/g, 'mx-mermaid-N');
+/** A stored drawing's fonts block: first child, bundled faces as woff2 data, unhinted text (lib/mermaid-images/sanitize). */
+const FONTS_BLOCK = /^(<svg\b[^>]*>)(<style>(?:@font-face\{font-family:"[\w .-]+";src:url\(data:font\/woff2;base64,[A-Za-z0-9+/]+={0,2}\) format\("woff2"\);font-weight:[1-9]00;font-style:normal(?:;unicode-range:[U+0-9A-Fa-f?,-]+)?\})+svg\{text-rendering:geometricPrecision\}<\/style>)/;
 
-const browser = await launchStoredDrawingReader(chromium);
-/** A reader whose Chromium hints text, as Linux's does by default; its user agent says Linux on any runner. */
-const hinted = await chromium.launch();
+const browser = await chromium.launch();
 
 /**
  * One page, every diagram drawn: title → { src, svg (decoded when the engine
  * drew it), palette }, and the script paths the page asked for. `mode` is the
  * reader's own override, carried the way the reader toggle carries it.
  */
-async function drawings(url, mode = null, reader = browser, userAgent = undefined) {
-  const page = await reader.newPage({ viewport: { width: 1440, height: 1000 }, ...(userAgent ? { userAgent } : {}) });
+/** Does the stored drawing render differently with its fonts than without them (the embedded face is used)? */
+async function fontsRender(stored, plain) {
+  const page = await browser.newPage({ deviceScaleFactor: 2 });
+  const shot = async (svg) => {
+    await page.setContent(`<body style="margin:0;background:#fff"><img id=i width=600 src="data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}"></body>`);
+    await page.waitForFunction(() => document.getElementById('i').complete);
+    return (await page.locator('#i').screenshot()).toString('base64');
+  };
+  const differ = (await shot(stored)) !== (await shot(plain));
+  await page.close();
+  return differ;
+}
+
+async function drawings(url, mode = null) {
+  const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
   const scripts = [];
-  const images = [];
-  page.on('request', (r) => {
-    if (r.resourceType() === 'script') scripts.push(new URL(r.url()).pathname);
-    if (new URL(r.url()).pathname.startsWith('/assets/mermaid/')) images.push(new URL(r.url()).pathname);
-  });
+  page.on('request', (r) => { if (r.resourceType() === 'script') scripts.push(new URL(r.url()).pathname); });
   if (mode) await page.addInitScript((m) => { window.name = `mx:doc:${JSON.stringify({ mode: m })}`; }, mode);
   await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 90_000 });
   const drawn = await page.waitForFunction(() => {
@@ -133,44 +116,19 @@ async function drawings(url, mode = null, reader = browser, userAgent = undefine
   const figures = await page.evaluate(() => Object.fromEntries([...document.querySelectorAll('figure[data-mx-mermaid-state]')].map((f) => {
     const src = f.querySelector('img')?.getAttribute('src') ?? '';
     const prefix = 'data:image/svg+xml;charset=utf-8,';
-    return [f.querySelector('figcaption')?.textContent ?? '', {
-      state: f.getAttribute('data-mx-mermaid-state'), src, svg: src.startsWith(prefix) ? decodeURIComponent(src.slice(prefix.length)) : null,
-      palette: f.getAttribute('data-mx-mermaid-palette'), metrics: f.getAttribute('data-mx-mermaid-metrics'), faces: f.getAttribute('data-mx-mermaid-faces'), portable: f.hasAttribute('data-mx-mermaid-portable'),
-    }];
+    return [f.querySelector('figcaption')?.textContent ?? '', { state: f.getAttribute('data-mx-mermaid-state'), src, svg: src.startsWith(prefix) ? decodeURIComponent(src.slice(prefix.length)) : null, palette: f.getAttribute('data-mx-mermaid-palette') }];
   })));
-  const head = await page.evaluate(() => document.head.innerHTML);
   await page.close();
-  return { drawn, figures, scripts, images, head };
+  return { drawn, figures, scripts };
 }
 
-/**
- * THE OTHER SIDE OF THE DECISION: a reader that cannot use the stored drawings
- * is served the engine's page. It downloads no stored drawing (none is named,
- * none preloaded), and the engine draws every diagram.
- */
-async function engineServed(label, url, samples, reader, userAgent) {
-  const served = await drawings(url, null, reader, userAgent);
-  check(served.drawn, `${label}: every diagram draws`);
-  check(served.images.length === 0, `${label}: no stored drawing is requested (${served.images.slice(0, 2).join(' ') || 'none'})`);
-  check(!/rel="preload" href="\/assets\/mermaid\//.test(served.head), `${label}: no stored drawing is preloaded`);
-  for (const sample of samples) check(served.figures[sample.kind]?.src.startsWith('data:'), `${label} ${sample.kind}: drawn by the engine`);
-  check(served.scripts.some(ENGINE_CODE), `${label}: the engine's code is loaded`);
-}
-
-/**
- * Engine vs storage for one page and mode. Every kind that is stored, and
- * offered to this reader by the table, is served stored and byte-identical to
- * the engine's drawing; every other is drawn by the engine and its stored
- * drawing never requested. `offer` is the verdict this surface is expected to
- * get from the table: 'all' (and then no engine code at all) or 'none' (and
- * then no stored drawing requested or preloaded).
- */
-async function compare(label, url, samples, mode = null, { offer = null } = {}) {
+/** Engine vs storage for one page and mode: every stored kind identical, every unstored kind left to the engine. */
+async function compare(label, url, samples, mode = null, { allStored = false } = {}) {
+  let rendered = false;
   const sep = url.includes('?') ? '&' : '?';
   // Both pages at once: fresh contexts share nothing, and the gate's budget is the shard's.
   const [engine, served] = await Promise.all([drawings(`${url}${sep}mermaid=engine`, mode), drawings(url, mode)]);
   check(engine.drawn && served.drawn, `${label}: every diagram draws, with the engine and from storage`);
-  const verdicts = [];
   for (const sample of samples) {
     const drawnByEngine = engine.figures[sample.kind];
     const shown = served.figures[sample.kind];
@@ -179,61 +137,43 @@ async function compare(label, url, samples, mode = null, { offer = null } = {}) 
       check(shown.src.startsWith('data:'), `${label} ${sample.kind}: stays with the engine (${sample.why})`);
       continue;
     }
-    const isOffered = offered(drawnByEngine);
-    verdicts.push(isOffered);
-    if (!isOffered) {
-      check(shown.src.startsWith('data:'), `${label} ${sample.kind}: not offered to this reader for ${drawnByEngine.faces ?? 'unnamed faces'} (lib/mermaid-images/reader-match.json), so the engine draws it`);
-      continue;
-    }
     if (!check(shown.src.startsWith('/assets/mermaid/'), `${label} ${sample.kind}: served as a stored drawing`)) continue;
     const stored = await (await fetch(new URL(shown.src, B).toString())).text();
-    const same = normalize(stored) === normalize(drawnByEngine.svg);
-    check(same, `${label} ${sample.kind}: the stored drawing is byte-identical to the engine's in this page (${stored.length} B)`);
+    const block = FONTS_BLOCK.exec(stored);
+    if (!check(!!block, `${label} ${sample.kind}: the stored drawing carries its fonts, first, in our grammar`)) continue;
+    const plain = block[1] + stored.slice(block[0].length);
+    const same = normalize(plain) === normalize(drawnByEngine.svg);
+    check(same, `${label} ${sample.kind}: the stored drawing, fonts aside, is byte-identical to the engine's in this page (${stored.length} B, fonts ${block[2].length} B)`);
+    // Once per page: the image really is set in the embedded face.
+    if (!rendered && /<text\b/.test(plain)) { rendered = true; check(await fontsRender(stored, plain), `${label} ${sample.kind}: its text renders in the embedded face (the image differs without it)`); }
   }
-  if (offer === 'all') {
-    check(verdicts.length > 0 && verdicts.every(Boolean), `${label}: the table offers this reader every stored diagram here (${verdicts.filter(Boolean).length}/${verdicts.length})`);
+  if (allStored) {
     const loaded = served.scripts.filter(ENGINE_CODE);
     check(loaded.length === 0, `${label}: no Mermaid, elk, cytoscape or langium code is requested (${loaded.slice(0, 3).join(' ') || 'none'})`);
-  }
-  if (offer === 'none') {
-    check(verdicts.length > 0 && !verdicts.some(Boolean), `${label}: the table offers this reader none of the stored diagrams here (${verdicts.filter(Boolean).length}/${verdicts.length})`);
-    check(served.images.length === 0, `${label}: no stored drawing is requested (${served.images.slice(0, 2).join(' ') || 'none'})`);
-    check(!/rel="preload" href="\/assets\/mermaid\//.test(served.head), `${label}: no stored drawing is preloaded`);
   }
 }
 
 try {
   const kinds = await publish(KINDS_DOC, 'prerender: every kind');
-  // The same kinds in JetBrains Mono, which macOS lays out as the harvest does at the app reader's 14px too.
-  const monoKinds = await publish(KINDS_DOC, 'prerender: every kind, terminal', { theme: 'terminal' });
   const unstored = await publish(UNSTORED_DOC, 'prerender: engine kinds');
   const context = await publish(CONTEXT_DOC, 'prerender: context', { colorMode: 'dark' });
   const systemFont = await publish(SYSTEM_FONT_DOC, 'prerender: system font');
-  for (const id of [kinds, monoKinds, unstored, context, systemFont]) check(await harvested(id), `${id}: the harvest stored this version's drawings`);
+  for (const id of [kinds, unstored, context, systemFont]) check(await harvested(id), `${id}: the harvest stored this version's drawings`);
 
   // Every comparison is its own pair of pages; they run side by side.
   await Promise.all([
-    compare('raw light', `${B}/a/${kinds}/raw`, STORED, null, { offer: 'all' }),
-    compare('raw dark (reader toggle)', `${B}/a/${kinds}/raw`, STORED, 'dark', { offer: 'all' }),
-    // Inter at 14px: macOS's line box is not the harvest's, so the app's reader gets the engine's page.
-    compare('app light, Inter', `${B}/a/${kinds}`, STORED, null, { offer: 'none' }),
-    compare('app light, JetBrains Mono', `${B}/a/${monoKinds}`, STORED, null, { offer: 'all' }),
+    compare('raw light', `${B}/a/${kinds}/raw`, STORED, null, { allStored: true }),
+    compare('raw dark (reader toggle)', `${B}/a/${kinds}/raw`, STORED, 'dark', { allStored: true }),
+    compare('app light', `${B}/a/${kinds}`, STORED, null, { allStored: true }),
   ]);
   await Promise.all([
     compare('raw engine kinds', `${B}/a/${unstored}/raw`, [SENTINEL, ...UNSTORED]),
-    compare('raw dark document with author CSS and a grid tile', `${B}/a/${context}/raw`, CONTEXT, null),
-    compare('raw author CSS toggled light', `${B}/a/${context}/raw`, CONTEXT, 'light'),
-    compare('app dark document with author CSS and a grid tile', `${B}/a/${context}`, CONTEXT, null),
-  ]);
-  await Promise.all([
-    // Drawn in a system font: never stored, so the reader it is for draws it with the engine (its sentinel stays stored).
-    compare('raw system font', `${B}/a/${systemFont}/raw`, [SENTINEL, ...SYSTEM_FONT.map((s) => ({ ...s, stored: false, why: 'drawn in a system font' }))]),
-    // A Linux reader (hinted text): the engine's page, on both surfaces.
-    engineServed('raw, hinted Linux reader', `${B}/a/${kinds}/raw`, STORED, hinted, LINUX_READER_USER_AGENT),
-    engineServed('app, hinted Linux reader', `${B}/a/${kinds}`, STORED, hinted, LINUX_READER_USER_AGENT),
+    compare('raw dark document with author CSS and a grid tile', `${B}/a/${context}/raw`, CONTEXT, null, { allStored: true }),
+    compare('raw author CSS toggled light', `${B}/a/${context}/raw`, CONTEXT, 'light', { allStored: true }),
+    compare('app dark document with author CSS and a grid tile', `${B}/a/${context}`, CONTEXT, null, { allStored: true }),
+    compare('raw system font', `${B}/a/${systemFont}/raw`, [SENTINEL, ...SYSTEM_FONT]),
   ]);
 } finally {
   await browser.close();
-  await hinted.close();
 }
 check.done();

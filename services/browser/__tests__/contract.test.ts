@@ -6,7 +6,7 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { BrowserService, RenderRequest } from '@artifactbin/contracts';
 import { BROWSER_ROUTES, browserClient, serveBrowser } from '@artifactbin/browser';
-import { chromiumLaunchArgs, createBrowser,requestOriginAllowed } from '@artifactbin/browser/local';
+import { createBrowser,requestOriginAllowed } from '@artifactbin/browser/local';
 import sharp from 'sharp';
 import { withHttpServer, type RunningServer } from '@artifactbin/test-support/net';
 
@@ -32,15 +32,6 @@ const STUCK_CHART_PAGE = `<html><body><main data-mx-chart-state="pending" style=
 const DRAWN = (label: string) => `data:image/svg+xml;charset=utf-8,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"><text>${label}</text></svg>`)}`;
 const HARVEST_PAGE = `<html><body style="margin:0"><main><figure data-mx-mermaid-state="pending" data-kind="fixed"></figure><figure data-mx-mermaid-state="pending" data-kind="random"></figure><figure data-mx-mermaid-state="ready" data-kind="png"><img src="data:image/png;base64,iVBORw0KGgo="></figure><img src="http://127.0.0.1:1/cross-origin.png"></main><script>
 setTimeout(()=>{const [a,b]=document.querySelectorAll('figure');a.innerHTML='<img width="120" height="80" src=${JSON.stringify(DRAWN('fixed & sound'))}>';b.innerHTML='<img src="'+${JSON.stringify(DRAWN('').split('%3C%2Ftext%3E')[0])}+Math.random()+'%3C%2Ftext%3E%3C%2Fsvg%3E">';a.dataset.mxMermaidState='ready';b.dataset.mxMermaidState='ready';},200)</script></body></html>`;
-/*
- * A page that measures a line of text the way Mermaid lays a label out, and
- * reports the width on its figure: whole pixels when the browser hints glyph
- * advances (Linux Chromium's default), fractional when it does not.
- */
-const MEASURE_PAGE = `<html><body><main><figure data-mx-mermaid-state="pending"></figure></main><script>
-const f=document.querySelector('figure');const c=document.createElement('canvas').getContext('2d');c.font='11px monospace';
-f.dataset.width=String(c.measureText('The quick brown fox jumps over the lazy dog 0123456789').width);
-f.innerHTML='<img src=${JSON.stringify(DRAWN('measured'))}>';f.dataset.mxMermaidState='ready';</script></body></html>`;
 let pages: RunningServer;
 let url: string;
 
@@ -49,7 +40,7 @@ const server = serveBrowser(local);
 const listening = server.listen(0);
 const remote = browserClient(listening.url, { deadlineMs: 20_000 });
 beforeAll(async () => {
-  pages = await withHttpServer((q, s) => { s.writeHead(200, { 'content-type': 'text/html' }); s.end(q.url==='/measure'?MEASURE_PAGE:q.url==='/harvest'?HARVEST_PAGE:q.url==='/chart'?CHART_PAGE:q.url==='/stuck-chart'?STUCK_CHART_PAGE:q.url==='/diagram'?DIAGRAM_PAGE:q.url==='/ready'?READY_PAGE:q.url==='/never-ready'?NEVER_READY_PAGE:PAGE); });
+  pages = await withHttpServer((q, s) => { s.writeHead(200, { 'content-type': 'text/html' }); s.end(q.url==='/harvest'?HARVEST_PAGE:q.url==='/chart'?CHART_PAGE:q.url==='/stuck-chart'?STUCK_CHART_PAGE:q.url==='/diagram'?DIAGRAM_PAGE:q.url==='/ready'?READY_PAGE:q.url==='/never-ready'?NEVER_READY_PAGE:PAGE); });
   url = `${pages.base}/a/x`;
 });
 afterAll(async () => { await local.close?.(); await server.close(); await pages.close(); });
@@ -57,10 +48,6 @@ afterAll(async () => { await local.close?.(); await server.close(); await pages.
 const base = (): RenderRequest => ({ url, format: 'png', viewport: { width: 1200, height: 630 }, selector: 'main', capture: 'full', sameOriginOnly: true, settleMs: 50, timeoutMs: 10_000 });
 const pngSize = (b: Uint8Array) => { const v = new DataView(b.buffer, b.byteOffset); return { width: v.getUint32(16), height: v.getUint32(20) }; };
 
-it('launches the harvest\'s browser with unhinted text and leaves every export\'s text as it was', () => {
-  expect(chromiumLaunchArgs('harvest')).toContain('--font-render-hinting=none');
-  expect(chromiumLaunchArgs('render')).not.toContain('--font-render-hinting=none');
-});
 it('matches allowed request origins exactly, never by prefix',()=>{
   expect(requestOriginAllowed('https://assets.example/x','https://app.example',['https://assets.example'])).toBe(true);
   expect(requestOriginAllowed('https://assets.example.evil/x','https://app.example',['https://assets.example'])).toBe(false);
@@ -179,13 +166,6 @@ describe.each<[string, BrowserService]>([['in-process', local], ['over HTTP', re
     // Two fresh loads: a caller can tell the reproducible drawing from the random one.
     expect(r.loads[0][0].svg).toBe(r.loads[1][0].svg);
     expect(r.loads[0][1].svg).not.toBe(r.loads[1][1].svg);
-  });
-  it('harvests with unhinted text, so a drawing is laid out in the fractional advances macOS and Windows readers measure', async () => {
-    const r = await svc.harvestSvg!({ url: `${pages.base}/measure`, viewport: { width: 600, height: 400 }, selector: 'main', collect: 'figure', sameOriginOnly: true, settleMs: 0, timeoutMs: 10_000 });
-    if (!r.ok) throw new Error(JSON.stringify(r));
-    const width = Number(r.loads[0]![0]!.attributes['data-width']);
-    expect(width).toBeGreaterThan(0);
-    expect(Number.isInteger(width), `measured ${width}`).toBe(false);
   });
   it('names an unreachable harvest page as navigation', async () => {
     const r = await svc.harvestSvg!({ url: 'http://127.0.0.1:1/nope', viewport: { width: 600, height: 400 }, selector: 'main', collect: 'figure', timeoutMs: 2000 });

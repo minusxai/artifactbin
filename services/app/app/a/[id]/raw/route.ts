@@ -41,7 +41,7 @@ import { serveStoredFile } from '@/lib/story/file-store';
 import { loadPdfStream, pdfFilename, pdfMetaOf } from '@/lib/story/pdf-store';
 import { webAssetsForSource } from '@/lib/web-assets';
 import { buildStoryDocument } from '@/lib/story/document';
-import { captureColor, storedDrawingReader } from '@/lib/mermaid-images/store';
+import { captureColor, engineRequested } from '@/lib/mermaid-images/store';
 import { resolveStoredStoryDesign } from '@/lib/data/story/story-themes';
 import { currentStoryCss } from '@/lib/data/story/story-css.server';
 import { declaresMutations } from '@/lib/story/helmet';
@@ -258,8 +258,6 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
        * rest of this route answers, so nobody learns the parameter exists.
        */
       const at = domain ? null : await archivedVersionFor(request, artifact, { capture: byExportKey });
-      // Which stored diagram drawings this reader may be offered (lib/mermaid-images/readers); none on a custom domain.
-      const drawingReader = domain ? null : storedDrawingReader(request);
       if (at === 'not_found') return notFound();
       // Everything below renders THIS row: the artifact wearing that version's
       // bytes when one was asked for, the artifact itself otherwise. One
@@ -555,13 +553,10 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
         /*
          * THIS VERSION'S PRERENDERED DIAGRAMS (lib/mermaid-images), drawn from
          * stored SVG with no Mermaid code. Not on a custom domain (its host
-         * serves no stored drawings), not when the engine was asked for by
-         * name (`?mermaid=engine` — what the harvest itself loads); and to a
-         * reader only the drawings its browser is measured to lay out as the
-         * harvest did (lib/mermaid-images/readers): the rest, and every other
-         * reader, get the engine's page and preloads.
+         * serves no stored drawings), and not when the engine was asked for by
+         * name (`?mermaid=engine` — what the harvest itself loads).
          */
-        mermaidImageLookup: !drawingReader ? null : { artifactId: artifact.id, version: at?.version ?? artifact.version, surface: 'document', head: !at, visibility: artifact.visibility, reader: drawingReader },
+        mermaidImageLookup: domain || engineRequested(request.url) ? null : { artifactId: artifact.id, version: at?.version ?? artifact.version, surface: 'document', head: !at, visibility: artifact.visibility },
       });
       return new Response(html, {
         status: 200,

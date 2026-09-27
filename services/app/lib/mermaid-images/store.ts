@@ -20,14 +20,14 @@
  *
  * THE READ. `mermaidImagesFor` answers a version's drawings for one surface,
  * both modes, keyed as the island wants them (StoryIslandData.mermaidImages);
- * the component uses one only while the reader's own palette key and face
- * measurements are the ones it was drawn under (components/kit/mermaid,
- * lib/mermaid-images/match), so a drawing can be unused but never wrong. The
- * routes offer each only to a reader measured to pass that check
- * (`storedDrawingReader`, lib/mermaid-images/readers), and the harvest keeps
- * only drawings made entirely in the document's web fonts, measured by a
- * browser that does not hint text (services/browser). Publishing never waits
- * on any of this and never fails because
+ * the component shows one wherever it is offered (components/kit/mermaid).
+ * That is sound because a stored drawing depends on nothing of the reader's:
+ * its layout is fixed in SVG coordinates, measured by the harvest at unhinted
+ * advances, and it CARRIES ITS OWN FONTS — the document's bundled web faces,
+ * subset to its characters (./fonts) — so every platform renders its text in
+ * the theme's face at the advances it was laid out with. A drawing in a face
+ * the app does not bundle (a system font) could not carry it, and is never
+ * stored: its readers keep the engine. Publishing never waits on any of this and never fails because
  * of it: the queue insert runs after the commit and swallows its own errors,
  * and a browser that is down only means readers draw with the engine.
  *
@@ -45,8 +45,7 @@ import { getDb } from '@/lib/db';
 import { objectStore } from '@/lib/object-store';
 import { MERMAID_RENDER_ENGINE, mermaidPrerenderable } from './engine';
 import { mermaidCodesOf } from './codes';
-import type { MermaidFaces } from './match';
-import { mermaidReaderClass, servableTo, type MermaidReaderClass } from './readers';
+import type { MermaidFaces } from './drawn';
 
 export type MermaidSurface = 'document' | 'inline';
 export const MERMAID_SURFACES: readonly MermaidSurface[] = ['document', 'inline'];
@@ -69,18 +68,6 @@ export const CAPTURE_COLOR_PARAM = 'color';
 export function engineRequested(url: string | URL): boolean {
   return new URL(url).searchParams.get(MERMAID_ENGINE_PARAM) === 'engine';
 }
-
-/**
- * The reader class this request may be offered stored drawings as
- * (lib/mermaid-images/readers), or null: when it asks for the engine by name,
- * or its browser is not one measured to lay drawings out as the harvest's
- * does — that reader would check a drawing, find it is not its own, and
- * download the engine as well, so it is served the engine's page, with the
- * engine's code preloaded, exactly as before.
- */
-export function storedDrawingReader(request: Request): MermaidReaderClass | null {
-  return engineRequested(request.url) ? null : mermaidReaderClass(request.headers.get('user-agent'));
-}
 /** The colour a CAPTURE asked to be rendered in; the caller has verified its export key. */
 export function captureColor(url: string | URL): Mode | null {
   const value = new URL(url).searchParams.get(CAPTURE_COLOR_PARAM);
@@ -96,7 +83,6 @@ export function captureColor(url: string | URL): Mode | null {
  * whatever a page claims, it can only ever name its own bytes.
  */
 export function mermaidContentKey(mode: Mode, palette: string, code: string, svg: string): string {
-  // `palette` is what the drawing was drawn under: the palette key and the faces' measurements.
   return createHash('sha256').update([MERMAID_RENDER_ENGINE, mode, palette, code, createHash('sha256').update(comparableSvg(svg)).digest('hex')].join('\0')).digest('hex');
 }
 
@@ -112,11 +98,11 @@ export function comparableSvg(svg: string): string {
 }
 
 /**
- * A stored drawing's record: its kind and size, and what it was drawn under —
- * the palette key, the harvest's measurements of the palette's faces, and
- * whether it was drawn entirely in the document's web fonts (lib/mermaid-images/match).
+ * A stored drawing's record. `faces` are the faces it carries (./fonts); a
+ * record without them was stored by an engine before drawings carried their
+ * fonts, and is never served (the engine string moved with it anyway).
  */
-export interface MermaidImageInfo { type: string; width?: number; height?: number; mode: Mode; palette: string; metrics?: number[]; portable?: boolean; faces?: MermaidFaces }
+export interface MermaidImageInfo { type: string; width?: number; height?: number; mode: Mode; palette: string; faces?: MermaidFaces }
 export type MermaidHarvestMap = Partial<Record<MermaidSurface, Record<string, string>>>;
 
 /**
@@ -188,12 +174,8 @@ export function onMermaidHarvestQueued(listener: (() => void) | null): void { wa
  * when it has none yet — and a HEAD with no harvest row queues one, so the next
  * reader is served drawings. Never throws: a reader always gets a document.
  */
-/**
- * Which version, on which surface, for which reader class (only drawings it is
- * measured to lay out as the harvest did are offered) — and whether it is the
- * head (only a head queues itself) and private (never served).
- */
-export interface MermaidImageLookup { artifactId: string; version: number; surface: MermaidSurface; head: boolean; visibility: string; reader: MermaidReaderClass }
+/** Which version, on which surface — and whether it is the head (only a head queues itself) and private (never served). */
+export interface MermaidImageLookup { artifactId: string; version: number; surface: MermaidSurface; head: boolean; visibility: string }
 export async function mermaidImagesFor(
   lookup: MermaidImageLookup,
   nodes: readonly JsxNode[],
@@ -225,10 +207,10 @@ export async function mermaidImagesFor(
     const images: Record<string, StoredMermaidImage> = {};
     for (const row of rows) {
       const imageKey = wanted.get(row.key);
-      // Only a drawing this reader is measured to find its own (lib/mermaid-images/readers).
-      if (!imageKey || !servableTo(row.info, lookup.reader)) continue;
+      // Only a drawing that carries its fonts (./fonts): nothing of it is the reader's to resolve.
+      if (!imageKey || !row.info.faces) continue;
       images[imageKey] = {
-        src: mermaidImagePath(row.key), type: row.info.type, palette: row.info.palette, metrics: row.info.metrics!,
+        src: mermaidImagePath(row.key), type: row.info.type, palette: row.info.palette,
         ...(typeof row.info.width === 'number' ? { width: row.info.width } : {}),
         ...(typeof row.info.height === 'number' ? { height: row.info.height } : {}),
       };

@@ -1,9 +1,8 @@
 /**
  * A diagram harvested to SVG after publish is DRAWN BY THE SERVER and needs no
  * Mermaid code in the reader: the server render carries the stored image, the
- * client hydrates the same image, and the engine is imported only when the
- * reader's resolved palette differs from the one it was drawn with (or nothing
- * is stored) — exactly today's path.
+ * client hydrates the same image, and the engine is imported only when
+ * nothing is stored for the diagram — exactly today's path.
  */
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { act } from 'react';
@@ -35,10 +34,10 @@ describe('a prerendered Mermaid diagram', () => {
     expect(engine.renderMermaid).toHaveBeenCalledTimes(1);
   });
 
-  it('draws with the engine when the stored palette is not the reader\'s', async () => {
+  it('never imports the engine for a stored drawing: it carries its own fonts and layout, so nothing of the reader\'s decides it', async () => {
     const images = { [mermaidImageKey(CODE, 'light')]: { src: STORED, type: 'flowchart-v2', width: 120, height: 80, palette: 'not-this-palette' } };
     await act(async () => { render(<StoryRuntimeApp nodes={nodes} refData={{}} colorMode="light" mermaidImages={images} />); });
-    expect(engine.renderMermaid).toHaveBeenCalledTimes(1);
+    expect(engine.renderMermaid).not.toHaveBeenCalled();
   });
 
   it('distinguishes light from dark and one diagram from another', () => {
