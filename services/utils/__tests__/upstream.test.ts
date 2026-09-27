@@ -7,10 +7,10 @@
 import { afterAll, describe, expect, it } from 'vitest';
 import { brotliCompressSync, brotliDecompressSync } from 'node:zlib';
 import { Hono } from 'hono';
-import { readRawResponse } from '@artifactbin/test-support/net';
+import { readRawResponse, withHttpServer } from '@artifactbin/test-support/net';
 import type { Actor, Part } from '@artifactbin/contracts';
 import { ACTOR_HEADER } from '@artifactbin/contracts';
-import { actorOf, actorReceiver, assemble, attachActor, inProcess, overHttp, serve, signActor } from '@artifactbin/utils';
+import { actorOf, actorReceiver, assemble, attachActor, inProcess, overHttp, serve, signActor, UPSTREAM_TIMEOUTS } from '@artifactbin/utils';
 
 const SECRET = 's'.repeat(32);
 const alice: Actor = { credential: 'bearer', userId: 'usr_alice', tokenId: 'tok_1' };
@@ -128,5 +128,56 @@ describe('overHttp', () => {
     expect(raw.status).toBe(200);
     expect(raw.body.byteLength).toBe(0);
     expect(raw.headers['content-encoding']).toBe('br');
+  });
+});
+
+/*
+ * THE OLD CLIENT'S BOUNDS, KEPT. Node's fetch (undici 6.24.1 in Node 22.22.3)
+ * bounded every upstream call with headersTimeout and bodyTimeout of 300 s.
+ * The node:http hop keeps both: a stalled header wait rejects, an idle body
+ * errors the stream, and either closes the socket to the app. Injected tiny
+ * values here; the defaults are the old ones.
+ */
+describe('overHttp bounds', () => {
+  const closedAfter = () => { let resolve!: () => void; const closed = new Promise<void>(r => { resolve = r; }); return { closed, resolve }; };
+  it('defaults to the old client\'s 300 s header and body bounds', () => {
+    expect(UPSTREAM_TIMEOUTS).toEqual({ headersTimeoutMs: 300_000, bodyTimeoutMs: 300_000 });
+  });
+  it('rejects a response whose headers never come, and closes the upstream socket', async () => {
+    const socket = closedAfter();
+    const server = await withHttpServer((req) => { req.socket.on('close', socket.resolve); });
+    try {
+      const upstream = overHttp(server.base, SECRET, { headersTimeoutMs: 100, bodyTimeoutMs: 5_000 });
+      const started = Date.now();
+      await expect(upstream(new Request('http://proxy/stalled'), alice)).rejects.toMatchObject({ code: 'UPSTREAM_HEADERS_TIMEOUT' });
+      expect(Date.now() - started).toBeLessThan(2_000);
+      await socket.closed;
+    } finally { await server.close(); }
+  });
+  it('errors a body that goes idle mid-stream, and closes the upstream socket', async () => {
+    const socket = closedAfter();
+    const server = await withHttpServer((req, res) => {
+      req.socket.on('close', socket.resolve);
+      res.writeHead(200, { 'content-type': 'text/plain' });
+      res.write('first chunk');
+    });
+    try {
+      const upstream = overHttp(server.base, SECRET, { headersTimeoutMs: 5_000, bodyTimeoutMs: 100 });
+      const res = await upstream(new Request('http://proxy/half'), alice);
+      const reader = res.body!.getReader();
+      expect(new TextDecoder().decode((await reader.read()).value)).toBe('first chunk');
+      await expect(reader.read()).rejects.toMatchObject({ code: 'UPSTREAM_BODY_TIMEOUT' });
+      await socket.closed;
+    } finally { await server.close(); }
+  });
+  it('never cuts a body that keeps arriving, however long it runs', async () => {
+    const app = assemble([actorReceiver(SECRET), { name: 'app', mount: (h) => h.route('/', createApp()) }]);
+    const appServer = serve(app, 0);
+    try {
+      // Pings every 10 ms against a 60 ms idle bound, read for well past it.
+      const res = await overHttp(`http://127.0.0.1:${appServer.port}`, SECRET, { headersTimeoutMs: 5_000, bodyTimeoutMs: 60 })(new Request('http://proxy/events'), alice);
+      const reader = await readPings(res, 30);
+      await reader.cancel();
+    } finally { await appServer.close(); }
   });
 });
