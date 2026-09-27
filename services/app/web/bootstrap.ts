@@ -7,7 +7,11 @@
  */
 const BOOTSTRAP_ID = 'mx-page-data';
 
-interface Payload { path: string; profile?: unknown; artifact?: unknown }
+interface Payload {
+  path: string; profile?: unknown; artifact?: unknown;
+  /** The canonical path, when the document was served at another address (server/app; web/heal-address). */
+  address?: string;
+}
 
 const payload: Payload | null = (() => {
   try {
@@ -32,4 +36,13 @@ export function takeBootstrap<T>(path: string, which: 'profile' | 'artifact'): T
   if (value === undefined) return null;
   taken.add(which);
   return value as T;
+}
+
+/**
+ * The canonical path the server named for this page, when it served the
+ * document at another address (`/a/<id>`, a stale slug) instead of redirecting.
+ * Null otherwise.
+ */
+export function canonicalAddress(): string | null {
+  return typeof payload?.address === 'string' ? payload.address : null;
 }

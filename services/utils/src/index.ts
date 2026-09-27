@@ -1,6 +1,6 @@
 export { assemble } from './assemble';
 export { serve, type Listening } from './serve';
-export { attachActor, actorOf, inProcess, overHttp, actorReceiver } from './upstream';
+export { attachActor, actorOf, inProcess, overHttp, actorReceiver, UPSTREAM_TIMEOUTS, UpstreamTimeoutError, type UpstreamTimeouts } from './upstream';
 export { signActor, verifyActor, timingSafeEqualUsed } from './actor-sign';
 export { createEnv, type Env, type EnvOptions } from './env';
 export { httpClient, jsonServer, type HttpClient, type JsonRoutes, type JsonServer } from './http';
