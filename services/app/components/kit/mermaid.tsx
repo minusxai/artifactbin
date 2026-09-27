@@ -1,10 +1,11 @@
-import { createContext, useContext, useEffect, useMemo, useRef, useState, type HTMLAttributes } from 'react';
+import { useContext, useEffect, useMemo, useRef, useState, type HTMLAttributes } from 'react';
 import { cn } from './cn';
 import { GridItemContext } from './grid';
 import { mermaidImageKey, mermaidSourceError } from '@/lib/story-ui/mermaid-source';
 import { sha256Hex } from '@/lib/sha256';
 import type { StoredMermaidImage } from '@/lib/story-runtime/contract';
 import type { MermaidImage, MermaidPalette } from './mermaid-render';
+import { MermaidImagesContext } from './mermaid-images';
 
 interface MermaidProps extends Omit<HTMLAttributes<HTMLElement>, 'children'> {
   code: string;
@@ -12,15 +13,8 @@ interface MermaidProps extends Omit<HTMLAttributes<HTMLElement>, 'children'> {
   colorMode?: 'light' | 'dark';
 }
 
-/**
- * The document's PRERENDERED drawings (StoryIslandData.mermaidImages), keyed by
- * `mermaidImageKey(code, mode)`. Provided around everything a document draws —
- * the deck rail re-renders each slide's nodes — and empty wherever nothing was
- * stored: an editor's draft, an offline file, a document the harvest has not
- * reached. Empty means exactly today's path: the engine draws.
- */
-const MermaidImagesContext = createContext<Readonly<Record<string, StoredMermaidImage>>>({});
-export const MermaidImagesProvider = MermaidImagesContext.Provider;
+// The drawings' context lives beside this module (./mermaid-images), so a story can provide it without loading this one.
+export { MermaidImagesProvider } from './mermaid-images';
 
 /**
  * The document's theme as Mermaid needs it: tokens resolved to hex (its colour

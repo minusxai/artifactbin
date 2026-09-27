@@ -35,6 +35,12 @@ export const EXTRA_CLASS_SOURCES = [
   // The in-frame runtime composition renders embed chrome of its own (the
   // DataTable adapter's loading/error box) — its utilities must compile too.
   join(ROOT, 'lib', 'story-runtime', 'StoryRuntimeApp.tsx'),
+  // …and so do the contexts' own hints and the kit chunks' live adapters, which
+  // are that composition split per component (lib/story-runtime/kit-registry):
+  // loaded on demand, but every one of them part of what a document can render.
+  join(ROOT, 'lib', 'story-runtime', 'runtime-context.tsx'),
+  ...['button', 'controls', 'data-table', 'deck-gl', 'dialog', 'files', 'iframe', 'mermaid', 'number', 'question', 'sign-in', 'user']
+    .map((chunk) => join(ROOT, 'lib', 'story-runtime', 'kit', `${chunk}.tsx`)),
   // App chrome AND a registered story component, so it lives beside the app's
   // primitives (the reader graph may not reach components/kit) — but a story
   // still renders it, so its classes belong in the sheet.

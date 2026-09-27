@@ -25,6 +25,9 @@ import { adoptInitialStory, clearInitialStory, initialDocumentStory, initialStor
 import { wireOutline } from './outline-nav';
 import { markScrollableTables } from './table-scroll';
 import { syncValuesToUrl } from './url-values-sync';
+import { kitReadyFor, loadKitFor } from './kit-registry';
+// For the page that preloads a document's chunks before its first render (components/ArtifactSurface).
+export { loadKitChunks } from './kit-registry';
 
 function SelectionPortal({ready}:{ready:(element:HTMLElement | null)=>void}) {
   const portal = useTrustedPortalContainer();
@@ -172,8 +175,33 @@ function nextSheet(previous: SheetState, update: StoryDocumentUpdate): SheetStat
 let loadedPolicy: InlineSheetPolicy | null = null;
 const loadPolicy = (): Promise<InlineSheetPolicy> => import('./inline-sheet').then((module) => (loadedPolicy = module));
 
-/** Top-level artifact body; only authored Iframe/Helmet code creates sandboxed child realms. */
+/**
+ * Top-level artifact body; only authored Iframe/Helmet code creates sandboxed child realms.
+ *
+ * THE DOCUMENT'S COMPONENTS BEFORE ANYTHING ELSE. The kit is loaded per
+ * document (./kit-registry): nothing mounts — no server story is adopted, no
+ * hydration starts — until every chunk the document draws is here, so the
+ * first client render is the server's, component for component, with no
+ * Suspense in the story tree. The reader page loads them before its first
+ * render (web/route-pages), and then this renders at once. A download that
+ * fails is thrown to the route's boundary, which offers its Retry, exactly as
+ * a failed download of this module is.
+ */
 export function InlineStoryRuntime(props: InlineStoryRuntimeProps): ReactNode {
+  const nodes = props.data.nodes;
+  const [ready, setReady] = useState(() => kitReadyFor(nodes));
+  const [failed, setFailed] = useState<{ error: unknown } | null>(null);
+  useEffect(() => {
+    if (ready) return;
+    let alive = true;
+    loadKitFor(nodes).then(() => { if (alive) setReady(true); }, (error: unknown) => { if (alive) setFailed({ error }); });
+    return () => { alive = false; };
+  }, [ready]);
+  if (failed) throw failed.error;
+  return ready ? <InlineDocument {...props} /> : null;
+}
+
+function InlineDocument(props: InlineStoryRuntimeProps): ReactNode {
   const root = useRef<HTMLDivElement>(null);
   // Read, not taken: the story leaves the server's wrapper when it is adopted, in the layout effect below.
   const [server] = useState(() => (props.hydrateInitialStory ? initialDocumentStory() : null));
@@ -293,6 +321,8 @@ export function InlineStoryRuntime(props: InlineStoryRuntimeProps): ReactNode {
     const stopValues = syncValuesToUrl(store, () => store.flow, { post: values => emit({ type: STORY_VALUES_MESSAGE, nonce, values }) });
     let pendingUpdates: Promise<void> | null = null;
     const rawKnown = (raw: SheetState['raw']) => (raw.compiledCss !== undefined && raw.authorCss !== undefined) || fetchedRawRef.current !== null;
+    /** A version lands at once when its sheet is in hand and every component it draws is loaded. */
+    const readyFor = (update: StoryDocumentUpdate): boolean => kitReadyFor(update.nodes) && sheetReadyFor(update);
     const sheetReadyFor = (update: StoryDocumentUpdate): boolean => {
       const next = nextSheet(sheetRef.current, update);
       if (next.served && next.served.nodes === update.nodes) return true;
@@ -375,13 +405,17 @@ export function InlineStoryRuntime(props: InlineStoryRuntimeProps): ReactNode {
       },
       update(update) {
         if (disposed) return;
-        // A version this page holds the sheet for renders in this very call, as it always has;
-        // one that needs the CSS policy (or the served version's raw sheets) waits for them, in
-        // order, and then lands whole — its nodes, its DOM and every session's view together.
-        if (!pendingUpdates && sheetReadyFor(update)) { applyUpdate(update); return; }
+        // A version this page holds the sheet and the components for renders in this very call, as
+        // it always has; one that needs the CSS policy (or the served version's raw sheets), or a
+        // component chunk not loaded yet, waits for them, in order, and then lands whole — its
+        // nodes, its DOM and every session's view together.
+        if (!pendingUpdates && readyFor(update)) { applyUpdate(update); return; }
         const mine: Promise<void> = (pendingUpdates ?? Promise.resolve())
-          .then(() => prepareSheetFor(update))
-          .catch((error) => { console.error('Failed to prepare the document stylesheet', error); })
+          .then(() => Promise.all([
+            prepareSheetFor(update).catch((error) => { console.error('Failed to prepare the document stylesheet', error); }),
+            // The chunks of any component this version draws for the first time, before it renders.
+            loadKitFor(update.nodes).catch((error) => { console.error('Failed to load the document\'s components', error); }),
+          ]))
           .then(() => { if (!disposed) applyUpdate(update); });
         pendingUpdates = mine;
         void mine.finally(() => { if (pendingUpdates === mine) pendingUpdates = null; });

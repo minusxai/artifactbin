@@ -14,6 +14,8 @@
  *    app this document belongs to.
  */
 import { configureTrustedUiStyles } from '@/components/TrustedUi';
+// A file fetches nothing: every kit chunk rides in the bundle and is registered before the document renders.
+import '@/lib/story-runtime/kit/all';
 import { mountOfflineFile } from './mount';
 
 declare const __AFBIN_APP_CSS__: string;

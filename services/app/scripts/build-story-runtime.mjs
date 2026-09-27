@@ -151,39 +151,53 @@ const entryOut = Object.entries(browser.metafile.outputs)
 if (!entryOut) throw new Error('build-story-runtime: no entry output in the metafile');
 
 /*
- * …along with the chunks the entry reaches only through `import()` — today
- * exactly one, the ~830 KB vega bundle behind QuestionEmbed. A document that
- * draws a chart cannot discover that URL until the entry has downloaded AND
- * parsed, so it lands third in a chain of three; naming it here lets such a
- * document preload it in its own head instead (lib/story/document.ts).
+ * …along with the chunks the runtime reaches only through `import()`, at any
+ * depth: the kit chunks the entry loads per document, and what THEY load on
+ * demand — the ~830 KB vega bundle behind a <Question>, the Mermaid engine
+ * behind a <Mermaid>. A document that draws a chart cannot discover that URL
+ * until the entry, then the kit chunk, have downloaded AND parsed; naming it
+ * here lets such a document preload it in its own head instead
+ * (lib/story/document.ts).
  *
- * Taken from the metafile's import KINDS rather than by matching the chunk's
- * name: the name comes from whichever module esbuild happened to name the
- * chunk after, and a rename would quietly empty this list.
+ * Taken from the metafile's import KINDS and each chunk's entry module rather
+ * than by matching the chunk's name: the name comes from whichever module
+ * esbuild happened to name the chunk after, and a rename would quietly empty
+ * this list.
  */
 const outputs = browser.metafile.outputs;
 /** A metafile output key (relative to this package) as the URL the document names. */
 const storyUrl = (key) => `/story/${path.relative(outdir, path.join(root, key)).split(path.sep).join('/')}`;
-const dynamicChunks = (outputs[entryOut[0]].imports ?? [])
-  .filter((i) => i.kind === 'dynamic-import')
-  .map((i) => ({
-    key: i.path,
-    url: storyUrl(i.path),
-    /** Which of OUR modules this chunk was split off for. */
-    from: Object.keys(outputs[i.path]?.inputs ?? {}),
-  }));
+const dynamicKeys = new Set();
+{
+  const reached = new Set([entryOut[0]]);
+  const queue = [entryOut[0]];
+  while (queue.length) {
+    for (const i of outputs[queue.shift()]?.imports ?? []) {
+      if (i.external || !outputs[i.path]) continue;
+      if (i.kind === 'dynamic-import') dynamicKeys.add(i.path);
+      if (!reached.has(i.path)) { reached.add(i.path); queue.push(i.path); }
+    }
+  }
+}
+const dynamicChunks = [...dynamicKeys].map((key) => ({
+  key,
+  url: storyUrl(key),
+  /** The module this chunk was split off for (esbuild's `entryPoint` for an `import()` target). */
+  entry: outputs[key].entryPoint ?? '',
+}));
 
 /*
- * `lazy` is a PRELOAD hint for READERS, so it names only what a reader can
- * need: the chart module. Edit mode is also a dynamic import, but it is loaded
- * on demand by an owner who has pressed Edit — preloading it would make every
- * reader of every charted document download an editor they will never open.
- * Mermaid likewise loads only for a Mermaid component, and the map engine
- * (deck.gl, MapLibre) only for a <DeckGL>, not for every chart.
- * These need no preload entry: the runtime resolves them from their own URLs.
+ * `lazy` is a PRELOAD hint for READERS of a chart, so it names only the chart
+ * module. Edit mode is also a dynamic import, but it is loaded on demand by an
+ * owner who has pressed Edit — preloading it would make every reader of every
+ * charted document download an editor they will never open. Mermaid likewise
+ * loads only for a Mermaid component (per kind, below), the map engine
+ * (deck.gl, MapLibre) only for a <DeckGL>, and the kit chunks per document
+ * (`kit`, below). These need no `lazy` entry.
  */
-const lazyChunks = dynamicChunks
-  .filter((c) => !c.from.some((f) => f.includes('lib/story-runtime/edit/') || f.endsWith('components/kit/mermaid-render.ts') || f.endsWith('components/kit/deck-gl-engine.tsx') || f.includes('/sql/src/') || f.includes('@sqlite.org/')));
+const CHART_MODULE = 'components/viz/VegaChart.tsx';
+const lazyChunks = dynamicChunks.filter((c) => c.entry.endsWith(CHART_MODULE));
+if (lazyChunks.length !== 1) throw new Error(`build-story-runtime: expected one chart chunk (${CHART_MODULE}), found ${lazyChunks.length}`);
 const lazy = lazyChunks.map((c) => c.url);
 
 /*
@@ -195,6 +209,21 @@ const lazy = lazyChunks.map((c) => c.url);
  */
 const entryDeps = staticClosure(outputs, entryOut[0]).slice(1).map(storyUrl);
 const lazyDeps = Object.fromEntries(lazyChunks.map((c) => [c.url, staticClosure(outputs, c.key).slice(1).map(storyUrl)]));
+
+/*
+ * THE KIT, PER CHUNK (lib/story-ui/kit-chunks). Each kit chunk is its own
+ * `import()` (lib/story-runtime/kit-registry), which the entry awaits for the
+ * chunks a document draws BEFORE it hydrates — so a document names exactly
+ * those chunks and their static closures in its head (lib/story/document.ts),
+ * and the browser fetches them beside the entry instead of after it.
+ */
+const KIT_DIR = path.join(root, 'lib/story-runtime/kit');
+const kitIds = fs.readdirSync(KIT_DIR).filter((f) => f.endsWith('.tsx')).map((f) => path.basename(f, '.tsx')).sort();
+const kit = Object.fromEntries(kitIds.map((id) => {
+  const chunk = dynamicChunks.find((c) => c.entry.endsWith(`lib/story-runtime/kit/${id}.tsx`));
+  if (!chunk) throw new Error(`build-story-runtime: the kit chunk ${id} is not among the runtime's dynamic imports`);
+  return [id, staticClosure(outputs, chunk.key).map(storyUrl)];
+}));
 
 /*
  * MERMAID, PER DIAGRAM KIND. The engine (components/kit/mermaid-render) is one
@@ -220,8 +249,8 @@ const mermaidModules = mermaidKindModules(
   MERMAID_DIAGRAMS,
   mermaidDispatch(bundled('mermaid/dist/mermaid.core.mjs'), bundled('@mermaid-js/parser/dist/mermaid-parser.core.mjs')),
 );
-const mermaidEngine = dynamicChunks.find((c) => c.from.some((f) => f.endsWith('components/kit/mermaid-render.ts')));
-if (!mermaidEngine) throw new Error('build-story-runtime: no Mermaid engine chunk among the entry\'s dynamic imports');
+const mermaidEngine = dynamicChunks.find((c) => c.entry.endsWith('components/kit/mermaid-render.ts'));
+if (!mermaidEngine) throw new Error('build-story-runtime: no Mermaid engine chunk among the runtime\'s dynamic imports');
 const engineClosure = staticClosure(outputs, mermaidEngine.key);
 const mermaid = Object.fromEntries(Object.entries(mermaidModules).map(([kind, modules]) => {
   const keys = new Set(engineClosure);
@@ -291,6 +320,7 @@ const manifest = {
   entryDeps,
   lazyDeps,
   mermaid,
+  kit,
 };
 
 /*
@@ -299,7 +329,7 @@ const manifest = {
  * so this is where it has to be loud. The serving accessor re-checks the same
  * thing (lib/story/runtime-asset.ts).
  */
-const closureUrls = [...new Set([...entryDeps, ...Object.values(lazyDeps).flat(), ...Object.values(mermaid).flat()])];
+const closureUrls = [...new Set([...entryDeps, ...Object.values(lazyDeps).flat(), ...Object.values(mermaid).flat(), ...Object.values(kit).flat()])];
 for (const url of [manifest.entry, manifest.anchor, manifest.comment, manifest.sqlite, ...manifest.lazy, ...closureUrls]) {
   const file = path.join(root, 'public', url.replace(/^\//, ''));
   if (!fs.existsSync(file)) throw new Error(`build-story-runtime: manifest names ${url}, which is not at ${file}`);

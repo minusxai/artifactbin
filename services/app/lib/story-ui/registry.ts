@@ -1,5 +1,4 @@
 import type * as React from 'react';
-import { createElement } from 'react';
 import { Mermaid } from '@/components/kit/mermaid';
 import { DeckGLMap } from '@/components/kit/deck-gl';
 
@@ -87,15 +86,12 @@ import { UserHandle } from '@/components/kit/user-handle';
 import { SignIn } from '@/components/kit/sign-in';
 import {Dialog, DialogTrigger, DialogContent, DialogClose} from '@/components/kit/dialog';
 import { Files } from '@/components/kit/files';
-import { managedFrameLayout } from '@/lib/story/managed-frame-layout';
+import { IframeFace } from './iframe-face';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export const STORY_UI_COMPONENTS: Record<string, React.ComponentType<any>> = {
   Dialog, DialogTrigger, DialogContent, DialogClose,
-  Iframe: props => {
-    const { label, pixels } = managedFrameLayout(props.title, props.height);
-    return createElement('div', { id: props.id, className: props.className, 'data-mx-ast': props['data-mx-ast'], 'data-mx-managed-frame': '', 'aria-label': label, style: { height: pixels, width: '100%' } }, createElement('div', { style: { height: '100%' } }));
-  },
+  Iframe: IframeFace,
   Mermaid,
   DeckGL: DeckGLMap as unknown as React.ComponentType<any>, // eslint-disable-line @typescript-eslint/no-explicit-any
   Card,

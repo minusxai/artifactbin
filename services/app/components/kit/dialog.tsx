@@ -1,6 +1,9 @@
 import React, {createContext, useContext, useEffect, useRef, useState} from 'react';
 import {buttonVariants} from './button';
 import {cn} from './cn';
+import {ArtifactScope} from './dialog-scope';
+// The scope every inline story wears, from its own module so a story needs no dialog to wear it.
+export {ArtifactDialogScope} from './dialog-scope';
 
 /**
  * What a `<dialog>` looks like when the author styled nothing.
@@ -40,11 +43,6 @@ const Context = createContext<DialogState | null>(null);
  * focus back to it.
  */
 const FOCUSABLE = 'button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), a[href], [tabindex="0"]';
-const ArtifactScope = createContext(false);
-/** Inline documents may cover their content, but must leave app chrome usable. */
-export function ArtifactDialogScope({children}: {children: React.ReactNode}) {
-  return <ArtifactScope.Provider value>{children}</ArtifactScope.Provider>;
-}
 
 export function Dialog({open, defaultOpen = false, onOpenChange, children, ...props}: Omit<React.HTMLAttributes<HTMLSpanElement>, 'onChange'> & {open?: boolean; defaultOpen?: boolean; onOpenChange?: (open: boolean) => void}) {
   const [local, setLocal] = useState(defaultOpen);

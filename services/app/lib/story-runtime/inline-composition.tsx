@@ -10,7 +10,7 @@
  * joining the stylesheets.
  */
 import type { ReactNode } from 'react';
-import { ArtifactDialogScope } from '@/components/kit/dialog';
+import { ArtifactDialogScope } from '@/components/kit/dialog-scope';
 import { StoryRuntimeApp, type StoryRuntimeAppProps } from './StoryRuntimeApp';
 import type { StoryIslandData } from './contract';
 

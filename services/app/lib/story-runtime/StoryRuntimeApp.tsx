@@ -1,7 +1,6 @@
 import {PersonMention,PersonMentionProvider} from '@/components/PersonMention';
 import {isPersonMentionHref} from '@/lib/person-mentions';
-import { Mermaid, MermaidImagesProvider } from '@/components/kit/mermaid';
-import { DeckGLMap } from '@/components/kit/deck-gl';
+import { MermaidImagesProvider } from '@/components/kit/mermaid-images';
 /**
  * The ONE view composition for a served markup document. The registry and
  * adapters are shared by server rendering and the browser runtime, while
@@ -11,68 +10,37 @@ import { DeckGLMap } from '@/components/kit/deck-gl';
  * embeds (Question, Number, DataTable, Files and bound controls). The same
  * components render in the document and receive live query/page data from
  * the runtime store and its transport; refData resolution remains local.
+ *
+ * The KIT is not imported here: each component (and its live adapter) is a
+ * chunk of its own (lib/story-runtime/kit/*), loaded for the documents that
+ * draw it and read from the kit registry (./kit-registry). The contexts the
+ * adapters read live beside this module (./runtime-context).
  */
-import { cloneElement, createContext, useContext, useEffect, useId, useMemo, useRef, useState, useSyncExternalStore } from 'react';
-import type { CSSProperties, ReactElement, ReactNode } from 'react';
+import { cloneElement, useContext, useEffect, useId, useMemo, useRef, useState, useSyncExternalStore } from 'react';
+import type { ReactElement, ReactNode } from 'react';
 import type { JsxElement, JsxNode } from '@/lib/jsx';
 import type { ComponentType } from 'react';
 import { renderStoryNodes, type BoundControlProps, type BoundSourceProps, type CellControlProps, type RowActionProps } from '@/lib/story-ui/interpreter';
-import {Dialog, DialogContent} from '@/components/kit/dialog';
 import { useNodeKeys } from '@/lib/story-ui/use-node-keys';
-import { AST_PATH_ATTR } from '@/lib/story-ui/ast-path';
-import { STORY_UI_COMPONENTS } from '@/lib/story-ui/registry';
-import { resolveRefProps, type RefDataMap, type ImageAssetAnswer } from '@/lib/story/ref-data';
+import { resolveRefProps, type ImageAssetAnswer } from '@/lib/story/ref-data';
 import { IconGlyphProvider } from '@/components/kit/icon';
 import type { GlyphMap } from '@/lib/story-ui/icon-contract';
-// The leaf module, not story-viz: the <Question> write-back also imports the
-// editor's AST path (jsx-edit → lib/jsx → acorn), which drags the JSX parser
-// into every reader's download for a number
-// (lib/__tests__/reader-bundle-hygiene.test.ts).
-import { questionEmbedHeightPx } from '@/lib/data/story/question-height';
 import { discoverSlides, MIN_SLIDES_FOR_RAIL, type DiscoveredSlide } from './slides';
 import { discoverOutline, hasOutline, type OutlineEntry } from './outline';
-import QuestionEmbed from '@/components/views/story/QuestionEmbed';
-import InlineNumber, { type NumberAgg } from '@/components/views/story/InlineNumber';
 import { createRowActions } from './row-actions';
-import { createCellSessions, type CellSessions } from './cell-sessions';
-import type { ColumnTemplate } from '@/components/kit/data-table';
-import { createDataflowStore, EMPTY_STATE, type DataflowStore } from './store';
-import { coerceScalarInput, refName, resolveBindings, type BindingSource, type DataflowState, type Row, type Scalar, type TableResult } from '@/lib/story/dataflow';
-import { EMPTY_COMPILED_DATAFLOW, type CompiledDataflow, type CompiledValue } from '@/lib/story/compiled-dataflow';
+import { createDataflowStore, type DataflowStore } from './store';
+import { coerceScalarInput, refName, type Scalar } from '@/lib/story/dataflow';
+import { EMPTY_COMPILED_DATAFLOW, type CompiledValue } from '@/lib/story/compiled-dataflow';
 import { VIEWER_ID } from '@/lib/story/builtins';
-import { User } from '@/components/kit/user';
-import { UserImage } from '@/components/kit/user-image';
-import { UserHandle } from '@/components/kit/user-handle';
-import type { PersonCard } from '@artifactbin/contracts';
 import { refusalText } from '@/lib/story/sign-in-required';
-import { SignIn } from '@/components/kit/sign-in';
 import { isWebUrl, runtimeAssetUrl } from '@/lib/story/asset-url';
 import {boundImageValue,imageReferenceId} from '@/lib/story/image-source';
-import { Button } from '@/components/kit/button';
 import { cn } from '@/components/kit/cn';
-import { DataTable } from '@/components/kit/data-table';
-import { Files } from '@/components/kit/files';
-import { ManagedIframeView } from './managed-iframe';
-import type { ManagedIframeContent } from '@/lib/story/managed-iframe';
 import type { ManagedAssetRelay } from './managed-assets';
-import { GridItemContext } from '@/components/kit/grid';
-import { DateControl, SegmentedControl, SelectControl, SliderControl, SwitchControl, TextControl, attrScalar, fieldLabel, inputType, normalizeControlOptions, num, shellRest, str, textRest } from '@/components/kit/controls';
-import { parseColumnSpecs, parseSortSpec, parseTableHeight, type SortSpec } from '@/lib/story/data-table';
 import { createPreviewIdentityAllocator } from './preview-identity';
 import { Tooltip } from '@/components/Tooltip';
-
-/** Authored options choose rows; user labels only use already-visible person cards.
- * Without options, retain the server's field-scoped choices. This is presentation,
- * never authorization: user constraints remain enforced at the write boundary. */
-function selectOptions(state: DataflowState, raw: unknown, field: string, isUser: boolean) {
-  if (raw === undefined && isUser) return state.userOptions?.[field] ?? [];
-  const name = refName(raw);
-  const table = name ? state.tables[name] : undefined;
-  const options = normalizeControlOptions(raw, table);
-  return isUser && (!table || table.columns.length === 1)
-    ? options.map(option => ({...option, label: option.label === option.value ? state.people?.[option.value]?.name ?? option.label : option.label}))
-    : options;
-}
+import { CellSessionsContext, FrozenHint, NO_SUBSCRIBE, RowActionsContext, RuntimeAssetContext, RuntimeEmbedContext, scalarRow, useBindingReader } from './runtime-context';
+import { kitComponents, subscribeKit, type KitComponents } from './kit-registry';
 
 /** The disabled input cannot receive focus; its stable wrapper explains why. */
 function MutationCellHint({reason,children}:{reason:string|null;children:ReactNode}) {
@@ -83,40 +51,18 @@ function MutationCellHint({reason,children}:{reason:string|null;children:ReactNo
 }
 
 /**
- * A control bound to a FROZEN Value (DataflowStore.frozenReason): the control
- * itself is disabled and described by the reason, and — because a disabled
- * control cannot take focus — this wrapper is what a keyboard reaches to hear
- * it, and what shows the tooltip. Present only when a reason is.
+ * The kit as loaded now (./kit-registry): its faces, live faces and cell
+ * controls, one snapshot per chunk arrival. A document renders only after the
+ * chunks it draws are here, so what it reads is always present.
  */
-function FrozenHint({reason,children}:{reason:string|null;children:ReactElement}) {
-  const [open,setOpen]=useState(false);
-  if (!reason) return children;
-  return <Tooltip content={reason} open={open} onOpenChange={setOpen}>
-    <span className="inline-flex" tabIndex={0} aria-description={reason}>{children}</span>
-  </Tooltip>;
-}
+const useKit = () => useSyncExternalStore(subscribeKit, kitComponents, kitComponents);
 
-const CellSessionsContext = createContext<CellSessions | null>(null);
-
-/**
- * A control's `set=` / `args=` map, read NOW: literals as written (a row
- * field was already read into one by the interpreter), page values from the
- * store, `$_me.id` from the viewer. Read at the click, never at render, so a
- * press uses the values the reader is looking at.
- */
-function useBindingReader(): (map: unknown) => Record<string, Scalar> | undefined {
-  const { store, viewer } = useContext(RuntimeEmbedContext);
-  return (map) => map && typeof map === 'object'
-    ? resolveBindings(map as Record<string, BindingSource>, (ref) => (ref === VIEWER_ID ? viewer?.id ?? null : store?.getValue(ref)))
-    : undefined;
-}
-const scalarRow = (row: Row): Record<string, Scalar> => Object.fromEntries(Object.entries(row).filter((entry): entry is [string, Scalar] => {
-  const v = entry[1]; return v === null || typeof v === 'string' || typeof v === 'boolean' || (typeof v === 'number' && Number.isFinite(v));
-}));
-
-const RowActionsContext = createContext<ReturnType<typeof createRowActions> | null>(null);
+/** An authored string prop, or nothing. */
+const str = (v: unknown): string | undefined => (typeof v === 'string' ? v : undefined);
 
 function RuntimeRowAction({props, row, identity, children}: RowActionProps) {
+  // The row's `<Button>`: this tag's chunk is loaded with every document that draws one.
+  const Button = (useKit().faces.Button ?? 'button') as ComponentType<Record<string, unknown>>;
   const {store, chrome} = useContext(RuntimeEmbedContext);
   const actions = useContext(RowActionsContext);
   const read = useBindingReader();
@@ -140,6 +86,8 @@ function RuntimeRowAction({props, row, identity, children}: RowActionProps) {
 
 function RuntimeCellControl({ tag, component: Component, props, row, identity, column, rowKey, tableName, valueField, children }: CellControlProps) {
   const ctx = useContext(RuntimeEmbedContext);
+  // The kit controls a cell draws with, from the controls chunk (loaded for any document that draws a Select or DatePicker).
+  const cells = useKit().cells;
   const sessions = useContext(CellSessionsContext);
   const read = useBindingReader();
   const name = typeof props.run === 'string' ? refName(props.run) : null;
@@ -163,7 +111,8 @@ function RuntimeCellControl({ tag, component: Component, props, row, identity, c
   const valueType = tableName ? ctx.state.tables[tableName]?.columns.find((c) => c.name === valueField)?.type : undefined;
   const selectValue = (next: string | null): Scalar => next === null ? null : valueType === 'number' ? next === '' ? null : Number(next) : valueType === 'boolean' ? next === 'true' : next;
   // Cell values remain readable even when the viewer cannot mutate them.
-  if (tag === 'Select') {
+  if (tag === 'Select' && cells) {
+    const { SelectControl, selectOptions, shellRest } = cells;
     const options = selectOptions(ctx.state, props.options, `${tableName}.${valueField}`, valueType === 'user')
       .filter((option) => props.exclude === undefined || option.value !== String(props.exclude));
     return <MutationCellHint reason={refusalText(unavailable)}><SelectControl
@@ -177,7 +126,8 @@ function RuntimeCellControl({ tag, component: Component, props, row, identity, c
       rest={{ ...shellRest(rest), 'aria-busy': busy || undefined, 'aria-description': unavailable ?? undefined }}
     >{children}</SelectControl>{error}</MutationCellHint>;
   }
-  if (tag === 'DatePicker') {
+  if (tag === 'DatePicker' && cells) {
+    const { DateControl, shellRest } = cells;
     // A pick is the whole edit: stage it and commit in one gesture. A
     // timestamp column shows (and, like the bound DatePicker, writes) its day.
     const shown = typeof value === 'string' ? valueType === 'timestamp' ? value.slice(0, 10) : value : null;
@@ -212,94 +162,7 @@ function RuntimeCellControl({ tag, component: Component, props, row, identity, c
 }
 
 export type { StoryIslandData } from './contract';
-import type { StoryIslandData, StoryViewer } from './contract';
-
-/**
- * What every embed and bound control reads: the document's data (one store
- * snapshot — identity-stable between changes) plus the setter, and the
- * ref-resolved recipes/images. `pending` names the queries a re-run has in
- * flight, so an embed says "loading" only about its OWN table.
- */
-interface RuntimeEmbedContextValue {
-  /**
-   * The store itself, for the one consumer that needs more than a snapshot:
-   * a `<Button run>` performs a write and watches its in-flight set. Every
-   * other consumer reads the fields below, which are already snapshot-stable.
-   */
-  store: DataflowStore | null;
-  flow: CompiledDataflow;
-  state: DataflowState;
-  pending: ReadonlySet<string>;
-  /** `debounce` for a continuous input (typing, a slider); a discrete change runs at once. */
-  setValue: (name: string, value: Scalar, options?: { debounce?: boolean }) => void;
-  /** A window of one query's rows through the transport (a table reading past the cap). */
-  fetchPage: DataflowStore['fetchPage'];
-  refData: RefDataMap;
-  /**
-   * FALSE inside a `chrome=0` capture. An embed that must draw differently for
-   * a photograph reads it here rather than being told by the author: `<Files>`
-   * draws glyphs instead of every child's own og card, because a capture that
-   * waits on N captures is not a capture (and a private child's is a 404 to the
-   * session-less browser taking the shot).
-   */
-  chrome: boolean;
-  glyphs?: GlyphMap;
-  colorMode: 'light' | 'dark';
-  /**
-   * WHO IS READING (StoryIslandData.viewer), null for a guest. `<User>` and
-   * `<SignIn>` are its only consumers: one names a person, the other exists
-   * solely for the absence of one. Read from the island rather than from the
-   * store, so it is already right on the first paint of a document that
-   * declares no data at all.
-   */
-  viewer: StoryViewer | null;
-  managedAssets?: StoryIslandData['managedAssets'];
-  importManagedAsset?: ManagedAssetRelay;
-}
-
-const RuntimeEmbedContext = createContext<RuntimeEmbedContextValue>({
-  store: null,
-  flow: EMPTY_COMPILED_DATAFLOW,
-  state: EMPTY_STATE,
-  pending: new Set(),
-  setValue: () => {},
-  fetchPage: () => Promise.reject(new Error('no store')),
-  refData: {},
-  chrome: true,
-  glyphs: {},
-  colorMode: 'light',
-  viewer: null,
-});
-
-/**
- * WHERE A RUNTIME-COMPUTED IMAGE URL IS SERVED FROM.
- *
- * `endpoint` is the document's own asset import address (StoryIslandData
- * `assetsUrl`); `seen` is the small set of URLs the browser has actually
- * LOADED, which is the only evidence this side has that we hold a copy. It
- * starts empty on both ends of the wire deliberately — see `runtimeAssetUrl`:
- * the island carries no asset lookup, so a server that knew more than the
- * hydrating client would hand React a mismatch and lose the whole server tree.
- *
- * A mutable Set rather than state: recording a load must not re-render (the
- * image is already on screen — a re-render would only swap its src for an
- * equivalent one and fetch again). The next render that happens for its own
- * reasons picks the shorter address up.
- */
-interface RuntimeAssetContextValue {
-  endpoint: string | null;
-  seen: Set<string>;
-  /**
-   * An optional asset importer supplied by the caller. When present, the
-   * importer is authoritative and the element's own load/error bookkeeping is
-   * skipped; a document transport relay is one caller, especially for opaque
-   * framed child realms.
-   */
-  importAsset?: (url: string) => Promise<ImageAssetAnswer>;
-  images?: Map<string,Promise<ImageAssetAnswer>>;
-}
-
-const RuntimeAssetContext = createContext<RuntimeAssetContextValue>({ endpoint: null, seen: new Set() });
+import type { StoryIslandData } from './contract';
 
 /**
  * The LIVE bound image source (the interpreter's `boundSource` seam):
@@ -519,505 +382,6 @@ function NativeBoundControl({ tag, props, bind, children }: BoundControlProps) {
 }
 
 /**
- * The live wiring every kit control adapter shares: the bound scalar's
- * declaration (for typed coercion and the "all" entry), its current value as
- * a control-facing string, and the typed writer. `name` null (an unbound
- * control in a live document) leaves `write` undefined — the control renders
- * disabled, same as the static face. A `continuous` control (typing, a
- * slider) debounces the queries it feeds; every other one runs them at once.
- */
-function useScalarControl(name: string | null, continuous = false) {
-  const { flow, state, setValue, store } = useContext(RuntimeEmbedContext);
-  const decl = name ? flow.values.find((v) => v.kind === 'scalar' && v.name === name) : undefined;
-  return {
-    state,
-    /** Why this Value's control must not move on this render (an offline file), or null. */
-    frozen: name !== null && store ? store.frozenReason(name) : null,
-    type: decl?.type,
-    nullable: name !== null && (decl?.default ?? null) === null,
-    current: name !== null && state.values[name] !== null && state.values[name] !== undefined ? String(state.values[name]) : null,
-    write: name === null ? undefined : (raw: string | null) => setValue(name, raw === null ? null : coerceScalarInput(decl?.type, raw), { debounce: continuous }),
-    writeBool: name === null ? undefined : (next: boolean) => setValue(name, next),
-    isTrue: name !== null && state.values[name] === true,
-    asNumber: name !== null && typeof state.values[name] === 'number' ? (state.values[name] as number) : null,
-  };
-}
-
-/**
- * The live `<Input>`/`<Textarea>`: a real text field showing the bound scalar
- * and writing it back typed on every keystroke, which is what makes
- * `<Mutation reset>` able to empty it — the control holds nothing of its own.
- */
-function InputAdapter(props: Record<string, unknown>) {
-  const bind = useScalarControl(refName(props.value), true);
-  return (
-    <FrozenHint reason={bind.frozen}><TextControl
-      label={str(props.label)} ariaLabel={fieldLabel(props)} className={str(props.className)}
-      type={inputType(props.type)} placeholder={str(props.placeholder)}
-      min={attrScalar(props.min)} max={attrScalar(props.max)} step={attrScalar(props.step)}
-      required={props.required === true} autoFocus={props.autoFocus === true}
-      value={bind.current} disabled={props.disabled === true || !!bind.frozen} description={bind.frozen ?? undefined}
-      onChange={bind.write} rest={textRest(props)}
-    /></FrozenHint>
-  );
-}
-
-function TextareaAdapter(props: Record<string, unknown>) {
-  const bind = useScalarControl(refName(props.value), true);
-  return (
-    <FrozenHint reason={bind.frozen}><TextControl
-      label={str(props.label)} ariaLabel={fieldLabel(props)} className={str(props.className)}
-      placeholder={str(props.placeholder)} multiline
-      rows={typeof props.rows === 'number' ? props.rows : undefined}
-      required={props.required === true} autoFocus={props.autoFocus === true}
-      value={bind.current} disabled={props.disabled === true || !!bind.frozen} description={bind.frozen ?? undefined}
-      onChange={bind.write} rest={textRest(props)}
-    /></FrozenHint>
-  );
-}
-
-function SelectAdapter(props: Record<string, unknown>) {
-  const { state } = useContext(RuntimeEmbedContext);
-  const bind = useScalarControl(refName(props.value));
-  const userControl=Object.hasOwn(state.userOptions??{},refName(props.value)??'');
-  const options = selectOptions(state, props.options, refName(props.value) ?? '', userControl);
-  return (
-    <FrozenHint reason={bind.frozen}><SelectControl
-      label={str(props.label)} placeholder={str(props.placeholder)} className={str(props.className)}
-      options={options} value={bind.current} nullable={bind.nullable}
-      multiple={!userControl&&props.multiple === true} allowCreate={!userControl&&props.allowCreate === true} valueFormat={props.valueFormat === 'json' ? 'json' : undefined}
-      disabled={!!bind.frozen} description={bind.frozen ?? undefined}
-      onChange={bind.write} rest={shellRest(props)}
-    >{props.children as ReactNode}</SelectControl></FrozenHint>
-  );
-}
-
-function SegmentedAdapter(props: Record<string, unknown>) {
-  const { state } = useContext(RuntimeEmbedContext);
-  const bind = useScalarControl(refName(props.value));
-  const optsName = refName(props.options);
-  const options = normalizeControlOptions(props.options, optsName ? state.tables[optsName] : undefined);
-  return (
-    <FrozenHint reason={bind.frozen}><SegmentedControl
-      label={str(props.label)} placeholder={str(props.placeholder)} className={str(props.className)}
-      options={options} value={bind.current} nullable={bind.nullable}
-      disabled={!!bind.frozen} description={bind.frozen ?? undefined}
-      onChange={bind.write} rest={shellRest(props)}
-    /></FrozenHint>
-  );
-}
-
-function SliderAdapter(props: Record<string, unknown>) {
-  const bind = useScalarControl(refName(props.value), true);
-  return (
-    <FrozenHint reason={bind.frozen}><SliderControl
-      label={str(props.label)} className={str(props.className)}
-      min={num(props.min, 0)} max={num(props.max, 100)}
-      step={typeof props.step === 'number' ? props.step : undefined}
-      format={str(props.format)} prefix={str(props.prefix)} suffix={str(props.suffix)}
-      disabled={!!bind.frozen} description={bind.frozen ?? undefined}
-      value={bind.asNumber} onChange={bind.write} rest={shellRest(props)}
-    /></FrozenHint>
-  );
-}
-
-function DatePickerAdapter(props: Record<string, unknown>) {
-  const bind = useScalarControl(refName(props.value));
-  return (
-    <FrozenHint reason={bind.frozen}><DateControl
-      label={str(props.label)} className={str(props.className)}
-      min={str(props.min)} max={str(props.max)}
-      disabled={!!bind.frozen} description={bind.frozen ?? undefined}
-      value={bind.type==='timestamp'?bind.current?.slice(0,10)??null:bind.current} nullable={bind.nullable} onChange={bind.write} rest={shellRest(props)}
-    /></FrozenHint>
-  );
-}
-
-function SwitchAdapter(props: Record<string, unknown>) {
-  const bind = useScalarControl(typeof props.checked === 'string' ? refName(props.checked) : null);
-  return (
-    <FrozenHint reason={bind.frozen}><SwitchControl
-      label={str(props.label)} className={str(props.className)}
-      disabled={!!bind.frozen} description={bind.frozen ?? undefined}
-      checked={bind.isTrue} onChange={bind.writeBool} rest={shellRest(props)}
-    /></FrozenHint>
-  );
-}
-
-function DialogAdapter(props: Record<string, unknown>) {
-  const {state, setValue} = useContext(RuntimeEmbedContext);
-  const name = typeof props.open === 'string' ? refName(props.open) : null;
-  return <Dialog {...props} open={name ? state.values[name] === true : typeof props.open === 'boolean' ? props.open : undefined}
-    onOpenChange={name ? open => setValue(name, open) : undefined} />;
-}
-
-function DialogContentAdapter(props: Record<string, unknown>) {
-  const {store, chrome} = useContext(RuntimeEmbedContext);
-  const read = useBindingReader();
-  const name = typeof props.run === 'string' ? refName(props.run) : null;
-  const unavailable = useSyncExternalStore(store?.subscribe ?? NO_SUBSCRIBE,
-    () => name ? store?.mutationUnavailable(name) ?? (store ? null : 'Checking edit access…') : null,
-    () => name ? 'Checking edit access…' : null);
-  const reason = !chrome && name ? 'Read-only preview' : unavailable;
-  const {args, ...rest} = props;
-  return <DialogContent {...rest} unavailable={refusalText(reason)}
-    onSubmitMutation={name && store ? () => store.mutate(name, read(args)) : undefined} />;
-}
-
-/**
- * The LIVE `<Button run="$add" set={{…}} args={{…}}>`: a click first sets
- * the page values `set=` names — all of them in ONE step, no SQL and no
- * server — then performs the named `<Mutation>` with its arguments (`args=`,
- * else the page values of the same names; lib/story-runtime/store mutate), and
- * the queries reading the dataset it wrote re-run on their own — so the click
- * that adds a row is the click that redraws the chart. A button with only
- * `set=` is the page's own state machine: it never writes anything.
- *
- * Three things it owes the reader while that happens: it is `aria-busy` and
- * disabled for the duration (a double click is one write, enforced in the
- * store as well as here), a refusal is SHOWN rather than swallowed — the
- * server's own message, in a role="alert" beside the button, because a button
- * that silently does nothing is the failure this whole path exists to avoid —
- * and the message clears on the next attempt.
- */
-function ButtonAdapter(props: Record<string, unknown>) {
-  const { store, chrome } = useContext(RuntimeEmbedContext);
-  const read = useBindingReader();
-  const name = typeof props.run === 'string' ? refName(props.run) : null;
-  const [error, setError] = useState<string | null>(null);
-  const unavailable = useSyncExternalStore(store?.subscribe ?? NO_SUBSCRIBE, () => name ? store ? store.mutationUnavailable(name) : 'Checking edit access…' : null, () => name ? 'Checking edit access…' : null);
-  // Hooks run unconditionally (an unbound Button renders through the same
-  // component); the subscription is a no-op when there is no store.
-  const busy = useSyncExternalStore(
-    store ? store.subscribe : NO_SUBSCRIBE,
-    () => (store && name ? store.mutating().has(name) : false),
-    () => false,
-  );
-  const { run: _run, set, args, children, ...rest } = props;
-  if (!store || (!name && !set)) return <Button {...(rest as Record<string, unknown>)} run={props.run} set={set}>{children as ReactNode}</Button>;
-  return (
-    <>
-      <Button
-        {...(rest as Record<string, unknown>)}
-        aria-busy={busy || undefined}
-        disabled={!chrome || busy || unavailable !== null || rest.disabled === true}
-        aria-description={refusalText(unavailable) ?? undefined}
-        onClick={() => {
-          setError(null);
-          const values = read(set);
-          if (values) store.setValues(values);
-          if (name) store.mutate(name, read(args)).catch((e: unknown) => setError(e instanceof Error ? e.message : 'that did not save'));
-        }}
-      >
-        {children as ReactNode}
-      </Button>
-      {unavailable ? <span className="text-xs text-muted-foreground">{refusalText(unavailable)}</span> : null}
-      {error ? <span role="alert" className="mx-write-error">{error}</span> : null}
-    </>
-  );
-}
-
-/**
- * The authored identity that belongs on an adapter's existing outer DOM
- * target. Keep this deliberately narrow: embed props include data/viz objects
- * and binding strings that must never be spread onto a host element.
- */
-function runtimeTargetIdentity(props: Record<string, unknown>): { id?: string; [AST_PATH_ATTR]?: string } {
-  return {
-    ...(typeof props.id === 'string' ? { id: props.id } : {}),
-    ...(typeof props[AST_PATH_ATTR] === 'string' ? { [AST_PATH_ATTR]: props[AST_PATH_ATTR] } : {}),
-  };
-}
-
-function QuestionAdapter(props: Record<string, unknown>) {
-  const ctx = useContext(RuntimeEmbedContext);
-  // The shared question sizing contract — a chart
-  // must not change height between editing and reading, and inside a GridItem
-  // the CELL is the single source of height: a fixed default here is what
-  // clipped every tall recipe (the trend card's sparkline) at the tile edge.
-  const inGridItem = useContext(GridItemContext);
-  const bare = (props.viz as { kind?: string } | undefined)?.kind === 'single_value';
-  const h = questionEmbedHeightPx(props.height, bare);
-  // A re-run in flight keeps the current rows on screen (no flash) and says so.
-  const table = refName(props.data);
-  const busy = table !== null && ctx.pending.has(table);
-  return (
-    <div
-      {...runtimeTargetIdentity(props)}
-      aria-label="Question embed"
-      aria-busy={busy}
-      className={busy ? 'mx-busy' : undefined}
-      style={{ width: '100%', height: inGridItem ? '100%' : `${h}px` }}
-    >
-      <QuestionEmbed
-        data={props.data}
-        viz={props.viz as Record<string, unknown> | undefined}
-        title={typeof props.title === 'string' ? props.title : undefined}
-        colorMode={ctx.colorMode}
-        tables={ctx.state.tables}
-        tableErrors={ctx.state.errors}
-        pendingTables={ctx.pending}
-        refData={ctx.refData}
-      />
-    </div>
-  );
-}
-
-function NumberAdapter(props: Record<string, unknown>) {
-  const ctx = useContext(RuntimeEmbedContext);
-  const table = refName(props.data);
-  const busy = table !== null && ctx.pending.has(table);
-  // The figure stays while its query re-runs (no flash to a dash); the wrapper
-  // says so — dimmed by the embed CSS, announced by aria-busy.
-  return (
-    <span {...runtimeTargetIdentity(props)} aria-busy={busy} className={busy ? 'mx-busy-inline' : undefined}>
-      <InlineNumber
-        data={props.data}
-        col={typeof props.col === 'string' ? props.col : undefined}
-        agg={typeof props.agg === 'string' ? (props.agg as NumberAgg) : undefined}
-        prefix={typeof props.prefix === 'string' ? props.prefix : undefined}
-        suffix={typeof props.suffix === 'string' ? props.suffix : undefined}
-        format={typeof props.format === 'string' ? props.format : undefined}
-        tables={ctx.state.tables}
-      />
-    </span>
-  );
-}
-
-/** How many rows one window read brings in. */
-const TABLE_PAGE = 500;
-
-/**
- * `<DataTable data="$name" columns sort height sticky>` — the live table. Its
- * rows are the store's until the reader asks for more of a truncated result:
- * then windows come through the store's page transport (sorted by the engine,
- * because sorting a sample locally would lie) and are held here. A store
- * update (a value changed, the query re-ran) resets to the store's rows.
- */
-function DataTableAdapter(props: Record<string, unknown>) {
-  const ctx = useContext(RuntimeEmbedContext);
-  // An `image` column's cells go through the SAME mapping a bound <img src>
-  // does — one function, so a URL in a table and a URL in the markup are
-  // served from the same place and imported through the same door.
-  const { endpoint, seen } = useContext(RuntimeAssetContext);
-  const resolveSrc = useMemo(() => (url: string) => {
-    // Null both ways: the mapping refused the value, or there is no endpoint to
-    // import a web URL through. Either way the cell stays text (kit data-table).
-    const mapped = runtimeAssetUrl(url, (u) => seen.has(u), endpoint);
-    return mapped === url && isWebUrl(url) ? null : mapped;
-  }, [endpoint, seen]);
-  // Same cell contract as QuestionAdapter: inside a GridItem the cell sizes the embed.
-  const inGridItem = useContext(GridItemContext);
-  const name = refName(props.data);
-  const table = name ? ctx.state.tables[name] : undefined;
-  const spec = useMemo(() => parseColumnSpecs(props.columns), [props.columns]);
-  const authoredSort = useMemo(() => parseSortSpec(props.sort), [props.sort]);
-  const templates = Array.isArray(props.templates) ? props.templates as ColumnTemplate[] : [];
-  const sessions = useMemo(() => createCellSessions(), []);
-  // A CEILING, not a reserved height (the kit's scroll box caps itself): outside a
-  // grid cell the wrapper leaves the table to hug its rows, and the cap is the TABLE
-  // parser's — questionEmbedHeightPx floors at MIN_CHART_H, a chart rule that would
-  // turn an authored height="120px" into a 340px box.
-  const cap = parseTableHeight(props.height);
-  const wrapper: CSSProperties = inGridItem ? { width: '100%', height: '100%' } : { width: '100%' };
-
-  const [extra, setExtra] = useState<{ base: TableResult | undefined; rows: Row[]; sort: SortSpec | null; loading: boolean; replaced: boolean }>({ base: table, rows: [], sort: authoredSort, loading: false, replaced: false });
-  const paged = extra.base === table ? extra : { base: table, rows: [], sort: authoredSort, loading: false, replaced: false };
-  // Two quick header clicks are two window reads; only the LATEST may land.
-  const readSeq = useRef(0);
-
-  const readWindow = (offset: number, sort: SortSpec | null, replace: boolean) => {
-    if (!name || !table) return;
-    const seq = ++readSeq.current;
-    setExtra({ base: table, rows: replace ? [] : paged.rows, sort, loading: true, replaced: replace || paged.replaced });
-    ctx.fetchPage(name, { offset, limit: TABLE_PAGE, sort: sort ?? undefined }).then(
-      (win) => { if (seq === readSeq.current) setExtra((prev) => (prev.base === table ? { base: table, rows: replace ? win.rows : [...prev.rows, ...win.rows], sort, loading: false, replaced: replace || prev.replaced } : prev)); },
-      () => { if (seq === readSeq.current) setExtra((prev) => (prev.base === table ? { ...prev, loading: false } : prev)); },
-    );
-  };
-
-  if (!table) {
-    const error = name ? ctx.state.errors[name] : undefined;
-    const pending = name !== null && ctx.pending.has(name);
-    return (
-      <div {...runtimeTargetIdentity(props)} aria-label="DataTable embed" className="flex w-full flex-col items-center justify-center gap-2.5 rounded-md border border-border p-4 text-sm text-muted-foreground" style={wrapper}>
-        {/* Pending speaks the platform loading lockup (see QuestionEmbed's `waiting`). */}
-        {pending ? (
-          <>
-            <span aria-hidden="true" className="size-[22px] animate-spin rounded-full border-2 border-border border-t-primary motion-reduce:animate-none" />
-            <span className="font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-muted-foreground">loading data…</span>
-          </>
-        ) : !name ? 'data unavailable — bind a declared table with data="$name"'
-          : error ? `query "${name}" failed: ${error}`
-          : `data unavailable — "$${name}" has no rows yet`}
-      </div>
-    );
-  }
-  const truncated = !!table.truncated;
-  // A load-more window APPENDS to the sample; a re-read REPLACES it, so the rows
-  // on screen are exactly the engine's order for that read. Which one happened is
-  // carried on the window itself — the SORT cannot stand in for it, because
-  // cycling a sort back off (asc -> desc -> none) is a replacing read whose sort
-  // is null, and appending that window to the sample duplicates every row.
-  const shown = paged.replaced && paged.rows.length ? paged.rows : [...table.rows, ...paged.rows];
-  const busy = name !== null && ctx.pending.has(name);
-  // Cell sessions already indicate saving and retain drafts during refresh.
-  // Keep the rest of an editable table visually stable and available to edit.
-  const dimRefresh = busy && templates.length === 0;
-  return (
-    <div {...runtimeTargetIdentity(props)} aria-label="DataTable embed" aria-busy={busy} className={dimRefresh ? 'mx-busy' : undefined} style={wrapper}>
-      <CellSessionsContext.Provider value={sessions}><DataTable
-        commentOwner={typeof props.id === 'string' ? props.id : undefined}
-        rows={shown}
-        columns={table.columns}
-        people={ctx.state.people}
-        spec={spec}
-        rowKey={typeof props.rowKey === 'string' ? props.rowKey : undefined}
-        templates={templates}
-        renderCell={typeof props.renderCell === 'function' ? props.renderCell as (template: ColumnTemplate, row: Row) => ReactNode : undefined}
-        sort={authoredSort}
-        height={cap}
-        sticky={props.sticky !== false}
-        totalRows={table.totalRows}
-        truncated={truncated}
-        loading={paged.loading}
-        resolveSrc={resolveSrc}
-        onSortChange={truncated ? (sort) => readWindow(0, sort, true) : undefined}
-        onLoadMore={truncated ? () => readWindow(shown.length, paged.sort, false) : undefined}
-      /></CellSessionsContext.Provider>
-    </div>
-  );
-}
-
-/**
- * `<Files data="$q">` — a bound LISTING, live. The rows are the store's,
- * exactly like every other bound embed: the document's own <Query> over
- * `ref_<folderId>` runs through the transport its island already names, so the
- * listing follows a child being created or moved with no reload (lib/folders
- * notifyParent wakes the folder's channel, and the store re-runs the query the
- * ping dirties).
- */
-function FilesAdapter(props: Record<string, unknown>) {
-  const ctx = useContext(RuntimeEmbedContext);
-  const name = refName(props.data);
-  const table = name ? ctx.state.tables[name] : undefined;
-  return (
-    <Files
-      rows={table?.rows}
-      variant={typeof props.variant === 'string' ? props.variant : undefined}
-      capture={!ctx.chrome}
-    />
-  );
-}
-
-/**
- * A PERSON, LIVE: the authored reference resolved, then carded.
- *
- * Three shapes of `id` reach here, and they are resolved in this order because
- * only the first two are references at all:
- *  - `$_me` — the viewer, off the island (right on the first paint, no query);
- *  - `$name` — a scalar `<Value>`, off the store;
- *  - anything else — already a literal id, including a `$_row.field` the
- *    interpreter substituted inside a `<For>` or a `<Column>`.
- *
- * The PERSON then comes from one map: `state.people`, the same server-computed
- * cards a DataTable cell reads, plus the viewer's own from the island. Nothing
- * here can ask the server about an id, which is the point — an id the server did
- * not already put in front of this viewer stays "Unknown person".
- *
- * One hook for all three person tags, so a face, a handle and the composition
- * of the two can never disagree about who they are showing.
- */
-function usePerson(idProp: unknown): { id: string | null; card: PersonCard | null } {
-  const ctx = useContext(RuntimeEmbedContext);
-  const reference = typeof idProp === 'string' ? refName(idProp) : null;
-  const resolved = reference === VIEWER_ID ? ctx.viewer?.id ?? null
-    : reference !== null ? ctx.state.values[reference] ?? null
-    : idProp ?? null;
-  const id = typeof resolved === 'string' ? resolved : null;
-  const card = id === null ? null
-    : id === ctx.viewer?.id ? ctx.viewer.card ?? ctx.state.people?.[id] ?? null
-    : ctx.state.people?.[id] ?? null;
-  return { id, card };
-}
-
-function UserImageAdapter(props: Record<string, unknown>) {
-  const { id, card } = usePerson(props.userId);
-  const { userId: _userId, card: _card, ...rest } = props;
-  return <UserImage {...rest} userId={id} card={card} />;
-}
-
-function UserHandleAdapter(props: Record<string, unknown>) {
-  const { id, card } = usePerson(props.userId);
-  const { userId: _userId, card: _card, ...rest } = props;
-  return <UserHandle {...rest} userId={id} card={card} />;
-}
-
-function UserAdapter(props: Record<string, unknown>) {
-  const { id, card } = usePerson(props.userId);
-  const { userId: _userId, card: _card, ...rest } = props;
-  return <User {...rest} userId={id} card={card} />;
-}
-
-/**
- * `<SignIn>` LIVE: the guest's door, and nothing at all for anyone else.
- *
- * A signed-in reader has no use for it and a document that shows it to them is
- * simply wrong, so the branch is taken HERE rather than left to the author —
- * `{$_me ? … : <SignIn/>}` is the idiom, but `<SignIn>` alone must also be
- * honest. Decided from the island, so the server render and the hydration agree.
- */
-function SignInAdapter(props: Record<string, unknown>) {
-  const { viewer } = useContext(RuntimeEmbedContext);
-  if (viewer) return null;
-  const { children, ...rest } = props;
-  return <SignIn {...rest}>{children as ReactNode}</SignIn>;
-}
-
-const RUNTIME_REGISTRY: Record<string, ComponentType<Record<string, unknown>>> = {
-  ...STORY_UI_COMPONENTS,
-  Dialog: DialogAdapter,
-  User: UserAdapter,
-  UserImage: UserImageAdapter,
-  UserHandle: UserHandleAdapter,
-  SignIn: SignInAdapter,
-  DialogContent: DialogContentAdapter,
-  Mermaid: props => {
-    const { colorMode } = useContext(RuntimeEmbedContext);
-    return <Mermaid {...props} code={props.code as string} colorMode={colorMode} />;
-  },
-  Iframe: props => {
-    const { store, managedAssets, importManagedAsset } = useContext(RuntimeEmbedContext);
-    return store ? <ManagedIframeView {...props} compiled={props.compiled as ManagedIframeContent} store={store} assets={managedAssets} importAsset={importManagedAsset} /> : null;
-  },
-  DeckGL: props => {
-    const { colorMode, state } = useContext(RuntimeEmbedContext);
-    const name = refName(props.data);
-    // The identity lands on the adapter's own box; the map inside must not repeat it.
-    const { id: _id, 'data-mx-ast': _ast, ...mapProps } = props;
-    return (
-      <div {...runtimeTargetIdentity(props)}>
-        <DeckGLMap {...(mapProps as unknown as Parameters<typeof DeckGLMap>[0])} rows={name ? state.tables[name]?.rows ?? [] : []} colorMode={colorMode} />
-      </div>
-    );
-  },
-  Files: FilesAdapter,
-  Question: QuestionAdapter,
-  Number: NumberAdapter,
-  DataTable: DataTableAdapter,
-  // The kit controls, live: resolved from the store, writing back typed.
-  Input: InputAdapter,
-  Textarea: TextareaAdapter,
-  Select: SelectAdapter,
-  Segmented: SegmentedAdapter,
-  Slider: SliderAdapter,
-  DatePicker: DatePickerAdapter,
-  Switch: SwitchAdapter,
-  // The one TRIGGER: a click writes (lib/story/dataflow REF_ATTRS Button.run).
-  Button: ButtonAdapter,
-};
-
-/**
  * The rail's miniature of a slide: the slide's OWN nodes re-rendered into a
  * fixed 1280×800 box and scaled down, so a preview is always current and
  * nothing has to be captured, timed, or rasterized — a raster thumbnail lands
@@ -1045,8 +409,8 @@ const PREVIEW_EMBED = (label: string) => {
   return Placeholder;
 };
 
-const PREVIEW_REGISTRY: Record<string, ComponentType<Record<string, unknown>>> = {
-  ...STORY_UI_COMPONENTS,
+/** What a rail preview draws in place of the kit's static faces. */
+const PREVIEW_OVERRIDES: KitComponents = {
   Question: PREVIEW_EMBED('chart'),
   Number: PREVIEW_EMBED('#'),
   DataTable: PREVIEW_EMBED('table'),
@@ -1054,8 +418,10 @@ const PREVIEW_REGISTRY: Record<string, ComponentType<Record<string, unknown>>> =
   Video: PREVIEW_EMBED('video'),
 };
 
-function SlideRail({ slides, documentNodes, values, active, onGo, onRename }: {
+function SlideRail({ slides, documentNodes, values, active, onGo, onRename, components }: {
   values: Record<string, unknown>;
+  /** The static faces of the kit as loaded, with the preview stand-ins over them. */
+  components: KitComponents;
   slides: DiscoveredSlide[];
   documentNodes: StoryRuntimeAppProps['nodes'];
   active: number;
@@ -1119,7 +485,7 @@ function SlideRail({ slides, documentNodes, values, active, onGo, onRename }: {
             <div style={{ ['--mx-vh' as string]: '800px' }}>
               {renderStoryNodes([slide.node], {
                 values,
-                components: PREVIEW_REGISTRY,
+                components,
                 decorateElement: allocatePreviewIdentity([slide.node], slide.path),
               })}
             </div>
@@ -1324,14 +690,14 @@ export type StoryRuntimeAppProps = StoryIslandData & {
 const EMPTY_GLYPHS: GlyphMap = {};
 const EMPTY_MERMAID_IMAGES: NonNullable<StoryIslandData['mermaidImages']> = {};
 
-/** A store-less subscribe (a Button rendered outside a document): nothing ever changes. */
-const NO_SUBSCRIBE = () => () => {};
-
 export function StoryRuntimeApp({ mentionStatuses, nodes, refData, glyphs, mermaidImages, dataflow, viewer = null, colorMode, template = null, chrome = true, assetsUrl = null, managedAssets, importAsset, store: givenStore, onMounted, editDecorate, editChildren, onSlideRename, components }: StoryRuntimeAppProps) {
   const [localStore] = useState<DataflowStore>(() => givenStore ?? createDataflowStore(dataflow ?? { flow: EMPTY_COMPILED_DATAFLOW }));
   const store = givenStore ?? localStore;
   const actions = useMemo(() => createRowActions(), [store]);
-  const registry = useMemo(() => (components ? { ...RUNTIME_REGISTRY, ...components } : RUNTIME_REGISTRY), [components]);
+  // The kit's faces, its live faces over them, and the caller's overrides over both.
+  const kit = useKit();
+  const registry = useMemo(() => ({ ...kit.faces, ...kit.live, ...components }), [kit, components]);
+  const previewRegistry = useMemo(() => ({ ...kit.faces, ...PREVIEW_OVERRIDES }), [kit]);
   const mountedRef = useRef(onMounted);
   mountedRef.current = onMounted;
   useEffect(() => { mountedRef.current?.(); }, []);
@@ -1431,7 +797,7 @@ export function StoryRuntimeApp({ mentionStatuses, nodes, refData, glyphs, merma
 
   return withGlyphs(
     <div className="mx-deck">
-      <SlideRail slides={slides} documentNodes={nodes} values={signals} active={active} onGo={go} onRename={onSlideRename} />
+      <SlideRail slides={slides} documentNodes={nodes} values={signals} active={active} onGo={go} onRename={onSlideRename} components={previewRegistry} />
       <div className="mx-doc">{body}</div>
       <PresentBar active={active} total={slides.length} onGo={go} />
     </div>,

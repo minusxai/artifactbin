@@ -5,6 +5,10 @@
 import '@testing-library/jest-dom';
 import { vi, beforeAll, afterAll, afterEach } from 'vitest';
 import { cleanup } from '@testing-library/react';
+// The document runtime draws from a registry of kit chunks loaded per document
+// (lib/story-runtime/kit-registry); a test renders in one pass, like the server,
+// so every chunk is registered up front. Tests of the loading itself reset it.
+import '@/lib/story-runtime/kit/all';
 
 // structuredClone polyfill — jsdom doesn't expose Node's global to the window scope.
 if (typeof structuredClone === 'undefined') {

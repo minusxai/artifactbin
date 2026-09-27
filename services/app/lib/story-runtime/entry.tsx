@@ -10,8 +10,8 @@
  * the SAME StoryRuntimeApp the server rendered — the island carries parsed
  * NODES, not source, so the runtime needs no JSX parser.
  */
-import { createElement } from 'react';
-import { hydrateRoot } from 'react-dom/client';
+import { createElement, type ReactElement } from 'react';
+import { hydrateRoot, type Root } from 'react-dom/client';
 import { StoryRuntimeApp } from './StoryRuntimeApp';
 import {
   AUTHOR_SCRIPT_TYPE, STORY_ADOPTS_MESSAGE, STORY_ADOPT_HOOK, STORY_DATA_HOOK, STORY_DATA_MESSAGE, STORY_DOCUMENT_ACK_MESSAGE,
@@ -34,6 +34,7 @@ import { createDocumentTransport } from './document-transport';
 import { pageEngineFor } from './page-sqlite';
 import { syncValuesToUrl } from './url-values-sync';
 import { EMPTY_COMPILED_DATAFLOW } from '@/lib/story/compiled-dataflow';
+import { kitReadyFor, loadKitFor } from './kit-registry';
 
 /**
  * Start the parked Helmet script in its opaque realm after the renderer's
@@ -178,7 +179,7 @@ if (island?.textContent && root) {
       edit?.setNodes(current.nodes);
       annotate?.setNodes(current.nodes);
       selectionActions?.setNodes(current.nodes);
-      reactRoot.render(createElement(StoryRuntimeApp, {
+      show(createElement(StoryRuntimeApp, {
         ...current,
         store,
         ...assetImport,
@@ -205,7 +206,35 @@ if (island?.textContent && root) {
      * replaced, not at all. A script that runs when the document is ready is
      * worth more than a script that runs when the data is.
      */
-    const reactRoot = hydrateRoot(root, createElement(StoryRuntimeApp, { ...data, store, ...assetImport, onMounted: runAuthorScript }));
+    /*
+     * THE DOCUMENT'S COMPONENTS FIRST. The kit is loaded per document
+     * (./kit-registry): the chunks this document draws — named in its head, so
+     * they arrive beside this module — are awaited BEFORE hydrating, and the
+     * first client render is the server's, component for component. A render
+     * asked for before the hydration commits (the reader's mode, an adopted
+     * version) waits for it: rendering into a root still hydrating would make
+     * React throw the server's tree away.
+     */
+    let reactRoot: Root | null = null;
+    let hydrated = false;
+    let waiting: ReactElement | null = null;
+    const show = (element: ReactElement) => {
+      if (reactRoot && hydrated) reactRoot.render(element);
+      else waiting = element;
+    };
+    const firstCommit = () => {
+      hydrated = true;
+      runAuthorScript();
+      const next = waiting;
+      waiting = null;
+      if (next) reactRoot?.render(next);
+    };
+    void loadKitFor(data.nodes).then(
+      () => { reactRoot = hydrateRoot(root, createElement(StoryRuntimeApp, { ...data, store, ...assetImport, onMounted: firstCommit })); },
+      // Without its components the document is not hydrated at all: the served
+      // markup stays on screen, readable, and the author's script still runs (below).
+      (error: unknown) => { console.error('[story-runtime] the document\'s components failed to load:', error); },
+    );
     setTimeout(runAuthorScript, 3000);
 
     /*
@@ -260,11 +289,11 @@ if (island?.textContent && root) {
     (window as unknown as Record<string, unknown>)[STORY_MODE_HOOK] = (mode: 'light' | 'dark') => {
       readerOverride = mode;
       current = { ...current, colorMode: mode };
-      reactRoot.render(createElement(StoryRuntimeApp, { ...current, store, ...assetImport }));
+      show(createElement(StoryRuntimeApp, { ...current, store, ...assetImport }));
     };
     if (readerOverride && readerOverride !== data.colorMode) {
       current = { ...current, colorMode: readerOverride };
-      reactRoot.render(createElement(StoryRuntimeApp, { ...current, store, ...assetImport }));
+      show(createElement(StoryRuntimeApp, { ...current, store, ...assetImport }));
     }
 
     /**
@@ -274,7 +303,22 @@ if (island?.textContent && root) {
      * callers. An active reader override outranks the frame's colorMode — the
      * author's default must not stomp the reader's choice on every write.
      */
+    /*
+     * A version that draws a component this page has not loaded lands once its
+     * chunk has: nodes, flow, script and render together, in the order the
+     * versions arrived. Everything else lands in this very call, as always.
+     */
+    let adopting: Promise<void> | null = null;
     const adopt = (update: StoryDocumentUpdate) => {
+      if (!adopting && kitReadyFor(update.nodes)) { adoptNow(update); return; }
+      const mine: Promise<void> = (adopting ?? Promise.resolve())
+        .then(() => loadKitFor(update.nodes))
+        .catch((error: unknown) => { console.error('[story-runtime] a component of the new version failed to load:', error); })
+        .then(() => adoptNow(update));
+      adopting = mine;
+      void mine.finally(() => { if (adopting === mine) adopting = null; });
+    };
+    const adoptNow = (update: StoryDocumentUpdate) => {
       applyDocumentChrome(document, update, readerOverride);
       // Absent declarations mean the data did not change — replacing the flow
       // with an empty one would drop every table the reader is looking at.

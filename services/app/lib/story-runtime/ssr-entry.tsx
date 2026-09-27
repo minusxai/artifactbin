@@ -9,6 +9,8 @@
  */
 import { createElement } from 'react';
 import { renderToString } from 'react-dom/server';
+// The server renders in one synchronous pass: every kit chunk is registered up front.
+import './kit/all';
 import { StoryRuntimeApp } from './StoryRuntimeApp';
 import { InlineStoryComposition } from './inline-composition';
 import type { StoryIslandData } from './contract';
