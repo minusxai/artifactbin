@@ -93,11 +93,22 @@ function mermaidPaletteKey(palette: MermaidPalette, code: string): string {
   return sha256Hex(JSON.stringify(fields)).slice(0, 32);
 }
 
-/** Wait (briefly) for the page's fonts, so a stored drawing is judged by the faces it will settle on. */
-function fontsSettled(): Promise<void> {
-  const ready = typeof document !== 'undefined' ? document.fonts?.ready : undefined;
-  if (!ready) return Promise.resolve();
-  return Promise.race([ready.then(() => undefined), new Promise<void>(resolve => setTimeout(resolve, 3000))]);
+/**
+ * Wait (briefly) for the faces a palette draws with, so a stored drawing is
+ * judged by the fonts it will settle on. `document.fonts.ready` alone is not
+ * enough: a face nothing has asked for yet is not pending, so `ready` can
+ * resolve before the label face has even started loading. Asking for the
+ * label and edge-label faces by name loads them (or resolves at once when the
+ * stack has no such web font).
+ */
+function fontsFor(palette: MermaidPalette): Promise<void> {
+  const fonts = typeof document !== 'undefined' ? document.fonts : undefined;
+  if (!fonts?.load) return Promise.resolve();
+  const loaded = Promise.all([
+    fonts.load(`${palette.fontSize} ${palette.fontFamily}`, METRICS_PROBE),
+    fonts.load(`11px ${palette.fontMono}`, METRICS_PROBE),
+  ]).then(() => fonts.ready).then(() => undefined, () => undefined);
+  return Promise.race([loaded, new Promise<void>(resolve => setTimeout(resolve, 3000))]);
 }
 
 type Drawn = { code: string; image?: MermaidImage; error?: string; palette?: string };
@@ -138,11 +149,23 @@ export function Mermaid({ code, title = 'Diagram', colorMode = 'light', classNam
     let active = true;
     const element = host.current;
     const draw = () => {
-      const palette = paletteFor(element, colorMode === 'dark');
-      const key = mermaidPaletteKey(palette, code);
+      // Mermaid lays labels out by measuring them, so it measures once the
+      // palette's own faces have loaded (fontsFor, at most 3s): otherwise a
+      // diagram drawn during hydration, before a web face arrives, is laid out
+      // in its fallback — a drawing that depends on the network's timing.
+      let palette = paletteFor(element, colorMode === 'dark');
+      let key = '';
       // Intentional engine split: Mermaid is large and browser-only.
-      void import('./mermaid-render').then(engine => engine.renderMermaid(code, palette)).then(
-        image => { if (active) setResult({ code, image, palette: key }); },
+      void Promise.all([import('./mermaid-render'), fontsFor(palette)]).then(([engine]) => {
+        palette = paletteFor(element, colorMode === 'dark');
+        key = mermaidPaletteKey(palette, code);
+        return engine.renderMermaid(code, palette);
+      }).then(
+        // The drawing is marked with its palette key only when the fonts measured
+        // the same before and after it was drawn: a face that landed mid-draw
+        // leaves no telling which metrics Mermaid laid it out with, and the
+        // harvest (lib/mermaid-images) then stores nothing for it.
+        image => { if (active) setResult({ code, image, ...(mermaidPaletteKey(paletteFor(element, colorMode === 'dark'), code) === key ? { palette: key } : {}) }); },
         () => { if (active) setResult({ code, error: 'Could not render this diagram. Check its Mermaid syntax.' }); },
       );
     };
@@ -154,7 +177,7 @@ export function Mermaid({ code, title = 'Diagram', colorMode = 'light', classNam
     // A stored drawing is already on screen (the server rendered it). It stays
     // while this browser checks it would have drawn the same thing; only a
     // different palette or measurement brings the engine in.
-    void fontsSettled().then(() => {
+    void fontsFor(paletteFor(element, colorMode === 'dark')).then(() => {
       if (!active) return;
       const key = mermaidPaletteKey(paletteFor(element, colorMode === 'dark'), code);
       if (key === storedPalette) setResult(null);
@@ -179,7 +202,7 @@ export function Mermaid({ code, title = 'Diagram', colorMode = 'light', classNam
     if (src && src === storedSrc) setRefused(src);
     else setResult({ code, error: 'Could not display this diagram.' });
   };
-  const engineDrawn = !!current?.image;
+  const engineDrawn = !!current?.image && !!current.palette;
   // The source is not shown here: in edit mode the diagram inspector holds it.
   return <figure {...props} ref={host} className={cn('min-w-0', inGridItem ? 'flex h-full w-full flex-col' : 'my-4', className)}
     data-mx-mermaid-state={error ? 'error' : image && loadedSrc === image.src ? 'ready' : 'pending'} data-mermaid-type={image?.type}

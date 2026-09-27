@@ -79,6 +79,52 @@ describe('a stored Mermaid drawing', () => {
     expect(screen.getByRole('img', { name: 'Flow' })).toHaveAttribute('src', 'data:image/svg+xml,engine');
   });
 
+  it('the engine measures only once the palette\'s faces have loaded', async () => {
+    let release!: () => void;
+    const face = new Promise<FontFace[]>((resolve) => { release = () => resolve([]); });
+    Object.defineProperty(document, 'fonts', { configurable: true, value: { load: vi.fn(() => face), ready: Promise.resolve() } });
+    try {
+      render(<Mermaid code={CODE} title="Flow" />);
+      await act(async () => { await new Promise((resolve) => setTimeout(resolve, 30)); });
+      expect(renderMermaid).not.toHaveBeenCalled();
+      await act(async () => { release(); });
+      await waitFor(() => expect(renderMermaid).toHaveBeenCalledTimes(1));
+    } finally {
+      delete (document as unknown as { fonts?: unknown }).fonts;
+    }
+  });
+
+  it('an engine drawing whose fonts changed while it was drawn carries no palette, so it is never harvested', async () => {
+    let width = 100;
+    const fake = { clearRect() {}, fillRect() {}, fillStyle: '', font: '', getImageData: () => ({ data: [0, 0, 0, 255] }), measureText: () => ({ width: width++ }) };
+    const canvas = vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(fake as unknown as CanvasRenderingContext2D);
+    try {
+      const { container } = render(<Mermaid code={CODE} title="Flow" />);
+      await waitFor(() => expect(screen.getByRole('img', { name: 'Flow' })).toHaveAttribute('src', 'data:image/svg+xml,engine'));
+      expect(container.querySelector('figure')).not.toHaveAttribute('data-mx-mermaid-palette');
+      expect(container.querySelector('figure')).not.toHaveAttribute('data-mx-mermaid-key');
+    } finally {
+      canvas.mockRestore();
+    }
+  });
+
+  it('asks for the palette\'s own faces before judging a stored drawing', async () => {
+    const load = vi.fn(async (_font: string, _text?: string) => [] as FontFace[]);
+    Object.defineProperty(document, 'fonts', { configurable: true, value: { load, ready: Promise.resolve() } });
+    try {
+      const images = stored(await readersPaletteKey());
+      // The engine asked for the same faces before it measured; now the stored drawing's check.
+      load.mockClear();
+      render(<MermaidImagesProvider value={images}><Mermaid code={CODE} title="Flow" /></MermaidImagesProvider>);
+      await waitFor(() => expect(load).toHaveBeenCalledTimes(2));
+      expect(load.mock.calls.map(([font]) => font)).toEqual([expect.stringMatching(/^\d+px /), expect.stringMatching(/^11px /)]);
+      await act(async () => { await new Promise((resolve) => setTimeout(resolve, 20)); });
+      expect(renderMermaid).not.toHaveBeenCalled();
+    } finally {
+      delete (document as unknown as { fonts?: unknown }).fonts;
+    }
+  });
+
   it('gives way to the engine when its bytes will not load', async () => {
     const images = stored(await readersPaletteKey());
     render(<MermaidImagesProvider value={images}><Mermaid code={CODE} title="Flow" /></MermaidImagesProvider>);
