@@ -1,0 +1,110 @@
+/** The page-speed lab: its workflow stays off the critical path, and its report reads what it measured. */
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
+import yaml from 'yaml';
+import { describe, expect, it } from 'vitest';
+import { documentViewsMarkdown, median, summarizeDocumentViews } from '../lib/document-views.mjs';
+import { PAGE_SPEED_FIXTURES, publishPageSpeedFixtures } from '../fixtures/page-speed/index.mjs';
+import { loadsSummary, reportMarkdown } from '../performance-report.mjs';
+
+const root = path.resolve(import.meta.dirname, '../..');
+const workflowText = readFileSync(path.join(root, '.github/workflows/page-speed.yml'), 'utf8');
+const workflow = yaml.parse(workflowText);
+const ci = yaml.parse(readFileSync(path.join(root, '.github/workflows/ci.yml'), 'utf8'));
+
+describe('the page-speed workflow', () => {
+  it('runs beside CI for app changes and main pushes, including changes to the lab itself', () => {
+    for (const trigger of [workflow.on.pull_request, workflow.on.push]) {
+      expect(trigger.paths).toEqual(expect.arrayContaining(['services/app/**', 'scripts/performance-loads.mjs', 'scripts/lib/document-views.mjs', 'scripts/fixtures/page-speed/**', '.github/workflows/page-speed.yml']));
+    }
+    expect(workflow.on.push.branches).toEqual(['main']);
+    expect(workflow.concurrency['cancel-in-progress']).toContain("github.event_name == 'pull_request'");
+  });
+
+  it('never lengthens or gates CI: no ci.yml job waits on it or runs the lab', () => {
+    const ciText = readFileSync(path.join(root, '.github/workflows/ci.yml'), 'utf8');
+    expect(ciText).not.toContain('performance-loads');
+    expect(ciText).not.toContain('page-speed');
+    for (const job of Object.values(ci.jobs)) expect(job.needs ?? []).not.toContain('lab');
+    expect(Object.keys(workflow.jobs)).toEqual(['lab']);
+  });
+
+  it('only reads the repository and posts no PR comment', () => {
+    expect(workflow.permissions).toEqual({ contents: 'read' });
+    expect(workflow.jobs.lab.permissions).toBeUndefined();
+    expect(workflowText).not.toMatch(/gh pr comment|pull-requests:\s*write|issues:\s*write|createComment/);
+    const steps = workflow.jobs.lab.steps.map(step => step.run ?? '').join('\n');
+    expect(steps).toContain('GITHUB_STEP_SUMMARY');
+    expect(workflow.jobs.lab.steps.some(step => String(step.uses).startsWith('actions/upload-artifact@'))).toBe(true);
+  });
+
+  it('pins every action to a full commit SHA', () => {
+    const refs = [...workflowText.matchAll(/uses:\s+([^\s#]+)/g)].map(m => m[1]);
+    expect(refs.length).toBeGreaterThan(0);
+    for (const ref of refs) expect(ref).toMatch(/@[0-9a-f]{40}$/);
+  });
+
+  it('measures both builds with the head script', () => {
+    const runs = workflow.jobs.lab.steps.map(step => step.run ?? '');
+    expect(runs).toContain('node scripts/performance-loads.mjs .perf-base page-speed/base.json');
+    expect(runs).toContain('node scripts/performance-loads.mjs . page-speed/head.json');
+  });
+});
+
+describe('page-speed fixtures', () => {
+  it('publishes the dataset first and points the dashboard at it', async () => {
+    const bodies = [];
+    const published = await publishPageSpeedFixtures(async body => { bodies.push(body); return { id: `id${bodies.length}` }; });
+    expect(bodies[0]).toMatchObject({ title: 'Perf sales', visibility: 'unlisted' });
+    expect(bodies[0].dataset.split('\n')[0]).toBe('month,region,product,revenue,units');
+    expect(published.map(f => f.key)).toEqual(['prose', 'kit', 'dashboard', 'deck', 'mermaid']);
+    const dashboard = bodies.find(body => body.title === 'Perf C dashboard');
+    expect(dashboard.template).toBe('dashboard');
+    expect(dashboard.markup).toContain('src="ref:id1"');
+    expect(dashboard.markup).not.toContain('{{sales}}');
+    expect(bodies.find(body => body.title === 'Perf D deck').template).toBe('deck');
+    expect(PAGE_SPEED_FIXTURES.find(f => f.key === 'mermaid').painted).toEqual({ diagrams: 1 });
+  });
+});
+
+const sample = (fixture, route, overrides = {}) => ({
+  fixture, route, ready: true, errors: [], fcp: 100, lcp: 120, takeover: route === 'view' ? 700 : null, painted: null, requests: 10,
+  bytes: { html: { decoded: 2048, gzip: 1024 }, js: { decoded: 4096, gzip: 2048 }, css: { decoded: 0, gzip: 0 }, other: { decoded: 0, gzip: 0 } }, scriptMs: 50, ...overrides,
+});
+
+describe('the lab report', () => {
+  it('takes medians of what was measured, ignoring missing values', () => {
+    expect(median([3, 1, 2])).toBe(2);
+    expect(median([4, 1, 3, 2])).toBe(2.5);
+    expect(median([null, undefined, 5])).toBe(5);
+    expect(median([null])).toBeNull();
+  });
+
+  it('summarizes each fixture and route, counting timeouts', () => {
+    const summary = summarizeDocumentViews([
+      sample('prose', 'view', { takeover: 600 }), sample('prose', 'view', { takeover: 800, ready: false }), sample('prose', 'view'),
+      sample('prose', 'raw'),
+    ]);
+    expect(summary.prose.view).toMatchObject({ runs: 3, timedOut: 1, takeover: 700, jsGzip: 2048, requests: 10 });
+    expect(summary.prose.raw.takeover).toBeNull();
+  });
+
+  it('shows head values with the signed change from base', () => {
+    const base = summarizeDocumentViews([sample('prose', 'view', { takeover: 700 })]);
+    const head = summarizeDocumentViews([sample('prose', 'view', { takeover: 150, bytes: { ...sample('x', 'y').bytes, js: { decoded: 4096, gzip: 3072 } } })]);
+    const row = documentViewsMarkdown(head, base).split('\n').find(line => line.startsWith('| prose | view'));
+    expect(row).toContain('150 (−550)');
+    expect(row).toContain('3.0 (+1.0)');
+    expect(documentViewsMarkdown(head)).toContain('| 150 |');
+  });
+
+  it('reports document views and app loads for base and head', () => {
+    const loads = [{ route: 'home', cache: 'cold', usefulMs: 900, ttfbMs: 40, jsTransferredBytes: 2048 }, { route: 'home', cache: 'cold', usefulMs: 1100, ttfbMs: 60, jsTransferredBytes: 2048 }];
+    expect(loadsSummary({ loads })['home cold']).toEqual({ runs: 2, usefulMs: 1000, ttfbMs: 50, jsTransferredBytes: 2048 });
+    const documents = { conditions: { latencyMs: 80, downloadMbps: 10, cpuSlowdown: 4, runs: 5 }, summary: summarizeDocumentViews([sample('deck', 'view')]) };
+    const text = reportMarkdown({ revision: 'b'.repeat(40), loads, documents }, { revision: 'a'.repeat(40), loads, documents, conditions: { repetitions: 7 } });
+    expect(text).toContain('`bbbbbbbbbbbb` → head `aaaaaaaaaaaa`');
+    expect(text).toContain('| deck | view |');
+    expect(text).toContain('| home | cold | 1000 (±0) | 50 (±0) | 2.0 (±0.0) |');
+  });
+});
