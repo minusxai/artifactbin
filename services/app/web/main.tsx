@@ -1,3 +1,5 @@
+// FIRST: the address bar holds the canonical path before anything below reads it.
+import './heal-address';
 import { createRoot } from 'react-dom/client';
 import { createBrowserRouter, RouterProvider } from 'react-router';
 import { configureTrustedUiFromShell } from '@/components/TrustedUi';

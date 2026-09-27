@@ -38,8 +38,10 @@ describe('reader delivery over HTTP',()=>{
  });
  it('heals private owner addresses only after read ACL and retains no-store',async()=>{
   const owner=await ensureUsername(await createUser({email:'mxmx_test_reader@example.com'}));const {row}=await publish('private','<p>Private owner body</p>',owner.id);
-  const headers=actor({credential:'session',userId:owner.id,email:owner.email});const redirect=await app.request(`/a/${row.id}`,{headers});expect(redirect.status).toBe(302);
-  const response=await app.request(redirect.headers.get('location')!,{headers});expect(response.status).toBe(200);expect(response.headers.get('cache-control')).toBe('no-store');expect(await response.text()).toContain('>Private owner body</p>');
+  // Served in place (no redirect hop), naming the canonical address the page heals to.
+  const headers=actor({credential:'session',userId:owner.id,email:owner.email});const response=await app.request(`/a/${row.id}`,{headers});
+  expect(response.status).toBe(200);expect(response.headers.get('location')).toBeNull();expect(response.headers.get('cache-control')).toBe('no-store');
+  const html=await response.text();expect(html).toContain('>Private owner body</p>');expect(html).toContain(`"address":"/@${owner.username}/${row.id}`);
  });
  it('retains raw sandbox without inheriting it into the app reader',async()=>{
   const {row}=await publish(),raw=await app.request(`/a/${row.id}/raw?chrome=0`),page=await app.request(`/a/${row.id}`);

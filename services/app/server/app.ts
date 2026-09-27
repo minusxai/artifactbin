@@ -14,7 +14,7 @@ import { loginRedirectTarget } from '@/lib/safe-redirect';
  * The request is held in AsyncLocalStorage for the duration of each handler
  * (lib/request-context), which is how `publicOrigin()` and analytics see it.
  */
-import {agentDiscovery,agentDiscoveryHead,agentDiscoveryRedirect,withAgentDiscoveryTail} from '@/lib/agent-discovery';
+import {agentDiscovery,agentDiscoveryHead,withAgentDiscoveryTail} from '@/lib/agent-discovery';
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { createGithubResponse } from './external/github';
@@ -290,15 +290,18 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
    * no fetch round trip, no chrome settling, no address healing a beat later.
    * The endpoints stay the truth; this is the same data, arriving earlier.
    */
-  const page = async (c: { req: { raw: Request; url: string } }, status?: 200 | 404, canonical?: string) => {
-    const html = await index(c.req.url);
-    const data = await bootstrapFor(c.req.raw);
+  const page = async (c: { req: { raw: Request; url: string } }, status?: 200 | 404, canonical?: string, address?: string) => {
+    // A document served at a non-canonical address is rendered AS its canonical address (see documentAddress).
+    const url = address ? new URL(address + new URL(c.req.url).search, c.req.url).href : c.req.url;
+    const html = await index(url);
+    const found = await bootstrapFor(c.req.raw, new URL(url).pathname);
+    const data = found && address ? { ...found, address } : found;
     // An @-address whose profile resolves to NOTHING is a miss, and a miss is
     // 404 as a STATUS (the rule documents already live by) — the SPA is still
     // the body, so the person sees the app's own 404 page rather than a
     // default. Only derived when the caller did not already decide (the
     // document handlers pass their admission's 404 explicitly).
-    const miss = data === null && new URL(c.req.url).pathname.split('/').filter(Boolean)[0]?.startsWith('@');
+    const miss = data === null && new URL(url).pathname.split('/').filter(Boolean)[0]?.startsWith('@');
     const code = status ?? (miss ? 404 : 200);
     // A dead end is answered in the language the caller asked in: a browser
     // gets the app's own 404 page, anything else (curl's `*/*`, a fetch tool)
@@ -336,8 +339,9 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
    * because the profile page renders the artifact page, and one missing answer
    * is one round trip and one visible settle.
    */
-  async function bootstrapFor(request: Request): Promise<{ path: string; profile?: unknown; artifact?: unknown } | null> {
-    const url = new URL(request.url);
+  async function bootstrapFor(request: Request, pathname = new URL(request.url).pathname): Promise<{ path: string; profile?: unknown; artifact?: unknown } | null> {
+    // The ORIGINAL request answers, whatever path it is rendered as: its actor rides on the object (utils inProcess).
+    const url = { pathname };
     const segments = url.pathname.split('/').filter(Boolean);
     const call = async (fn: typeof artifactData, params: Record<string, string>) => {
       if (!fn) return null;
@@ -367,11 +371,14 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
    */
   /**
    * The canonical address for a document, when the one the viewer asked for is
-   * not it — a redirect. It runs AFTER the ACL, so a private document never
-   * leaks its owner through a redirect target; a valid export key skips the
-   * healing, because a capture must stay at the address it was handed.
+   * not it — served IN PLACE, not redirected: the page is rendered as the
+   * canonical address and names it (`address`) for the SPA to put in the
+   * address bar (web/heal-address), saving a shared link its round trip. It
+   * runs AFTER the ACL, so a private document never leaks its owner to a
+   * viewer who cannot read it; a valid export key skips the healing, because a
+   * capture must stay at the address it was handed.
    */
-  const documentPreparation = async (request: Request): Promise<{ status: 200 | 404; redirect?: string; canonical?: string }> => {
+  const documentPreparation = async (request: Request): Promise<{ status: 200 | 404; address?: string; canonical?: string }> => {
     const url = new URL(request.url);
     const found = candidateDocument(url.pathname);
     if (!found) return { status: 200 };
@@ -385,8 +392,7 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
     if (!(await canReadArtifact(row, actor?.viewer ?? null))) return { status: 404 };
     if (url.searchParams.has('key')) return { status: 200 };
     const canonical = canonicalArtifactPath(row, await ownerUsername(row.user_id)) + (url.pathname.endsWith('/edit') ? '/edit' : '');
-    if (canonical !== url.pathname) return { status: 200, redirect: canonical + url.search };
-    return { status: 200, canonical: await canonicalDocumentUrl(row) };
+    return { status: 200, canonical: await canonicalDocumentUrl(row), ...(canonical !== url.pathname ? { address: canonical } : {}) };
   };
 
   // Static: content-addressed trees are immutable; everything else is served plainly.
@@ -484,21 +490,11 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
     // Canonical readers share the app document so its router can transition
     // without changing security policy. Only /raw and exports retain the
     // standalone top-level sandbox; authored scripts still run in Iframes.
-    const { status, redirect, canonical } = await runWithRequest(c.req.raw, () => documentPreparation(c.req.raw));
-    // A browser follows Location and never shows this body; a fetch that stops
-    // here (curl without -L, a HEAD) still reads the canonical address and the
-    // agent pointer — in the header and in the body.
-    if (redirect) {
-      const base = baseUrl(c.req.raw);
-      const help = agentDiscovery(base);
-      return new Response(agentDiscoveryRedirect(help, `${base.replace(/\/$/, '')}${redirect}`), { status: 302, headers: {
-        location: redirect, 'cache-control': 'no-store', 'content-type': 'text/html; charset=utf-8', Link: `<${help.url}>; rel="help"`,
-      } });
-    }
+    const { status, address, canonical } = await runWithRequest(c.req.raw, () => documentPreparation(c.req.raw));
     // Admission's 404 is final; its 200 can mean "not a document
     // address" — a pretty path under an unknown handle still misses, and
     // page() derives that from the profile resolution it already ran.
-    return page(c, status === 404 ? 404 : undefined, canonical);
+    return page(c, status === 404 ? 404 : undefined, canonical, address);
   };
 
   app.get('/a/:id/edit', documentAddress);

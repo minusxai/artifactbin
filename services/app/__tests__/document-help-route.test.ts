@@ -72,22 +72,24 @@ describe('GET /a/:id (the document itself)', () => {
     const res = await rawRoute(new Request(`${BASE}/a/${row.id}`, { headers: { 'x-forwarded-proto': 'https', 'x-forwarded-host': 'docs.example' } }), params(row.id));
     expect(res.headers.get('link')).toBe('<https://docs.example/llms.txt>; rel="help"');
   });
-  it('a healing 302 carries the pointer in its header and body, so an unfollowed redirect still names the way on', async () => {
+  it('a shared /a/<id> is served in place with the pointer in its header and head, and names its canonical address', async () => {
     const owner = await ensureUsername(await createUser({ email: 'redirect-help@example.com' }));
     const t = await mintToken('t', owner.id);
     const row = await createArtifact(t.id, owner.id, { format: 'markup', source: '<div>hop</div>', meta: {}, title: 'Hop', description: null, visibility: 'public' });
     const app = createAppServer({ indexHtml: async () => '<!doctype html><html><head><title>SPA</title></head><body><div id="root">SPA</div></body></html>' });
     const res = await app.request(`${BASE}/a/${row.id}`);
-    expect(res.status).toBe(302);
+    // No hop: a fetch that does not follow redirects reads the document itself.
+    expect(res.status).toBe(200);
+    expect(res.headers.get('location')).toBeNull();
     const canonical = `/@${owner.username}/${row.id}-hop`;
-    expect(res.headers.get('location')).toBe(canonical);
     expect(res.headers.get('link')).toBe(`<${BASE}/llms.txt>; rel="help"`);
     expect(res.headers.get('content-type')).toBe('text/html; charset=utf-8');
     const html = await res.text();
     expect(html).toContain(`<link rel="help" href="${BASE}/llms.txt" title="Agents: read this to create, edit, or operate artifacts on the CLI using afbin">`);
     expect(html).toContain(`<meta name="afbin" content="afbin: a CLI to operate artifacts. Install: curl -fsSL ${BASE}/chat/install.sh | sh; Windows: /chat/install.ps1 (PowerShell)">`);
-    expect(html).toContain(`The document is at ${BASE}${canonical}`);
-    expect(html).toContain(`<a href="${BASE}${canonical}">`);
+    expect(html).toContain('hop');
+    expect(html).toMatch(new RegExp(`<link rel="canonical" href="[^"]*${canonical}">`));
+    expect(html).toContain(`"address":"${canonical}"`);
   });
   it('repeats the pointer as the LAST thing before </body>, where a tail-keeping reader still sees it', async () => {
     const owner = await ensureUsername(await createUser({ email: 'tail-help@example.com' }));

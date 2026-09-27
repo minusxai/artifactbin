@@ -38,8 +38,7 @@ describe('a document address', () => {
   it('serves readable initial markup under app CSP at the canonical address', async () => {
     const w = await world();
     for (const path of [`/a/${w.pub.id}`, `/@${w.owner.username}/${w.pub.id}-pub`]) {
-      let res = await app.request(path, { headers: as({ credential: 'none' }) });
-      if (res.status === 302) res = await app.request(res.headers.get('location')!, { headers: as({ credential: 'none' }) });
+      const res = await app.request(path, { headers: as({ credential: 'none' }) });
       expect(res.status, path).toBe(200);
       expect(res.headers.get('content-security-policy'), path).toBe(APP_CSP);
       expect(await res.text()).toContain('public words');
@@ -84,30 +83,81 @@ describe('a document address', () => {
   });
 });
 
+/**
+ * A NON-CANONICAL ADDRESS IS SERVED, NOT REDIRECTED. `/a/<id>` and a stale
+ * pretty URL answer 200 with the same document the canonical address serves —
+ * its data inlined for the canonical path, `<link rel="canonical">`, and the
+ * canonical `address` the page puts in the address bar before its router reads
+ * it (web/heal-address). No round trip for a shared link. It runs AFTER the
+ * ACL: an unreadable document still answers 404 and never names its owner.
+ */
+const payloadOf = (html: string) => JSON.parse(/<script type="application\/json" id="mx-page-data">([\s\S]*?)<\/script>/.exec(html)![1]!) as { path: string; address?: string; profile?: unknown; artifact?: unknown };
+
 describe('the address heals after checking read access', () => {
-  it('redirects the owner from /a/<id> to the canonical pretty URL', async () => {
+  it('serves the owner /a/<id> directly, carrying the canonical pretty URL', async () => {
     const w = await world();
     const res = await app.request(`/a/${w.pub.id}`, { headers: as({ credential: 'session', userId: w.owner.id, email: w.owner.email }) });
-    expect(res.status).toBe(302);
-    expect(res.headers.get('location')).toBe(`/@${w.owner.username}/${w.pub.id}-pub`);
+    expect(res.status).toBe(200);
+    expect(res.headers.get('location')).toBeNull();
+    const html = await res.text();
+    expect(html).toContain('public words');
+    expect(html).toMatch(new RegExp(`<link rel="canonical" href="https?://[^"/]+/@${w.owner.username}/${w.pub.id}-pub">`));
+    const payload = payloadOf(html);
+    expect(payload.address).toBe(`/@${w.owner.username}/${w.pub.id}-pub`);
+    expect(payload.path).toBe(payload.address);
+    // The same answers the canonical address inlines: its resolution and the document page.
+    expect(payload.profile).toBeDefined();
+    expect(JSON.stringify(payload.artifact)).toContain(w.pub.id);
   });
-  it('heals a mangled pretty URL by id', async () => {
+  it('heals a mangled pretty URL by id, in place', async () => {
     const w = await world();
     const res = await app.request(`/@wrongname/${w.pub.id}-stale-title`, { headers: as({ credential: 'session', userId: w.owner.id, email: w.owner.email }) });
-    expect(res.status).toBe(302);
-    expect(res.headers.get('location')).toBe(`/@${w.owner.username}/${w.pub.id}-pub`);
+    expect(res.status).toBe(200);
+    expect(res.headers.get('location')).toBeNull();
+    expect(payloadOf(await res.text()).address).toBe(`/@${w.owner.username}/${w.pub.id}-pub`);
   });
-  it('heals a public reader address to its canonical app route', async () => {
+  it('heals a public reader address to its canonical app route, in place', async () => {
     const w = await world();
     const res = await app.request(`/a/${w.pub.id}`, { headers: as({ credential: 'none' }) });
-    expect(res.status).toBe(302);
-    expect(res.headers.get('location')).toBe(`/@${w.owner.username}/${w.pub.id}-pub`);
+    expect(res.status).toBe(200);
+    expect(res.headers.get('location')).toBeNull();
+    const html = await res.text();
+    expect(html).toContain('public words');
+    expect(payloadOf(html).address).toBe(`/@${w.owner.username}/${w.pub.id}-pub`);
+  });
+  it('serves the owner their PRIVATE document at /a/<id> as themselves, and keeps /edit', async () => {
+    const w = await world();
+    const owner = { headers: as({ credential: 'session', userId: w.owner.id, email: w.owner.email }) };
+    const res = await app.request(`/a/${w.priv.id}`, owner);
+    expect(res.status).toBe(200);
+    const html = await res.text();
+    expect(html).toContain('secret words');
+    expect(payloadOf(html).address).toBe(`/@${w.owner.username}/${w.priv.id}-priv`);
+    const edit = await app.request(`/a/${w.priv.id}/edit`, owner);
+    expect(edit.status).toBe(200);
+    expect(payloadOf(await edit.text()).address).toBe(`/@${w.owner.username}/${w.priv.id}-priv/edit`);
+  });
+  it('carries no address at the canonical address, or where an export key holds the page', async () => {
+    const w = await world();
+    const canonical = await app.request(`/@${w.owner.username}/${w.pub.id}-pub`, { headers: as({ credential: 'none' }) });
+    expect(payloadOf(await canonical.text()).address).toBeUndefined();
+    const keyed = await app.request(`/a/${w.priv.id}?key=${mintExportKey(w.priv.id)}`, { headers: as({ credential: 'none' }) });
+    expect(keyed.status).toBe(200);
+    expect(payloadOf(await keyed.text()).address).toBeUndefined();
   });
   it('never redirects an unreadable document — that target would name its owner', async () => {
     const w = await world();
     const res = await app.request(`/a/${w.priv.id}`, { headers: as({ credential: 'none' }) });
     expect(res.status).toBe(404);
     expect(res.headers.get('location')).toBeNull();
+  });
+  it('never names the owner of an unreadable document in its body either', async () => {
+    const w = await world();
+    const res = await app.request(`/a/${w.priv.id}`, { headers: { accept: 'text/html', ...as({ credential: 'none' }) } });
+    expect(res.status).toBe(404);
+    const html = await res.text();
+    expect(html).not.toContain(w.owner.username!);
+    expect(html).not.toContain('rel="canonical"');
   });
 });
 
@@ -161,10 +211,13 @@ describe('the app\'s paths', () => {
     }
     // A document's page keeps its own card, and only one.
     const w = await world();
-    const canonical = (await app.request(`/a/${w.pub.id}`, { headers: as({ credential: 'none' }) })).headers.get('location')!;
-    const document = await (await app.request(canonical, { headers: { ...forwarded, ...as({ credential: 'none' }) } })).text();
-    expect(document).not.toContain('/og.png');
-    expect(document.match(/property="og:image"/g)).toHaveLength(1);
+    // At its canonical address and at the /a/<id> a link shares, which is now served in place.
+    for (const address of [`/@${w.owner.username}/${w.pub.id}-pub`, `/a/${w.pub.id}`]) {
+      const document = await (await app.request(address, { headers: { ...forwarded, ...as({ credential: 'none' }) } })).text();
+      expect(document, address).not.toContain('/og.png');
+      expect(document.match(/property="og:image"/g), address).toHaveLength(1);
+      expect(document.match(/<link rel="canonical" href="[^"]*">/g), address).toEqual([expect.stringContaining(`/@${w.owner.username}/${w.pub.id}-pub"`)]);
+    }
   });
   it('mounts the API: an unauthenticated write is the handler\'s own 401', async () => {
     const res = await app.request('/api/artifacts', { method: 'POST', body: '{}', headers: { 'content-type': 'application/json', ...as({ credential: 'none' }) } });
