@@ -58,6 +58,8 @@ import { customHostBoundary } from './custom-host';
 import { linkedStylesheets } from '@/lib/custom-domain-home';
 import { THEME_BOOTSTRAP_HASH } from '@/lib/theme-bootstrap';
 import { canonicalDocumentUrl } from '@/lib/custom-domains';
+import { APP_SHELL_FONT_PRELOADS } from '@/lib/app-fonts';
+import { fontPreloadTags } from '@/lib/story/first-screen-fonts';
 
 /**
  * The `<link rel="help">` and `<meta name="afbin">` an agent that fetched any page reads, on the caller's
@@ -84,6 +86,9 @@ function withGenericSocial(html: string, origin: string): string {
   return html.replace('</head>', () => `${tags}</head>`);
 }
 
+/** The shell's first-screen face (lib/app-fonts), preloaded on a page with no document of its own. */
+const withShellFonts = (html: string): string => html.replace('</head>', () => `${fontPreloadTags(APP_SHELL_FONT_PRELOADS)}</head>`);
+
 /** Where the server hands the SPA a page's data so its FIRST paint is its final one. */
 export const BOOTSTRAP_ID = 'mx-page-data';
 /** `<` is the only character that can end a script element early; JSON never needs it. */
@@ -108,7 +113,9 @@ export function withInitialStory(html: string, runtime: PreparedStoryRuntime, id
   // sibling, so its removal atomically reveals the committed app document.
   // Only the real first body child is hidden, never an authored colliding id.
   const handoffCss = `body > #root:first-child{display:none!important}[data-mx-initial-story]{position:relative;min-height:100vh;box-sizing:border-box;padding-top:0}@media(min-width:640px){[data-mx-initial-story]{padding-top:${APP_BAR_H}px}}`;
-  const fontPreloads = (runtime.fontPreloads ?? []).map(url => `<link rel="preload" href="${escapeHtml(url)}" as="font" type="font/woff2" crossorigin>`).join('');
+  // What this first screen paints: the document's faces, or — for a starter
+  // placeholder, which draws the shell's instructions — the shell's own.
+  const fontPreloads = fontPreloadTags(starter ? APP_SHELL_FONT_PRELOADS : runtime.fontPreloads ?? []);
   const metadata = fontPreloads + `<meta property="og:title" content="${escapeHtml(runtime.title)}">`
     + (description ? `<meta name="description" content="${escapeHtml(description)}"><meta property="og:description" content="${escapeHtml(description)}">` : '')
     + `<meta property="og:image" content="${escapeHtml(origin)}/a/${escapeHtml(id)}/export?mode=card&amp;r=${CARD_RENDER_GENERATION}"><meta name="twitter:card" content="summary_large_image">`;
@@ -316,7 +323,8 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
     const shell = story?.runtime
       // A starter placeholder draws its instructions, not its body: no lazy code of its own.
       ? withInitialStory(preloadDocument(preloadReader(discovered), starter ? { chart: false, mermaid: [] } : lazyCodeOf(story.runtime.data.nodes)), story.runtime, story.id, surface?.description, baseUrl(c.req.raw), starter)
-      : withGenericSocial(listing ? preloadListing(discovered, listing) : discovered, baseUrl(c.req.raw));
+      // No document: the first screen is the shell's, set in its own face.
+      : withGenericSocial(withShellFonts(listing ? preloadListing(discovered, listing) : discovered), baseUrl(c.req.raw));
     // The address search engines index a document under (lib/custom-domains canonicalDocumentUrl).
     const indexed = canonical ? shell.replace('</head>', () => `<link rel="canonical" href="${escapeHtml(canonical)}"></head>`) : shell;
     // Last, so the pointer is the page's final line whatever else was inlined.

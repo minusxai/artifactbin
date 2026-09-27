@@ -19,7 +19,8 @@ import { mintToken } from '@/lib/tokens';
 import { claimToken, createUser, ensureUsername } from '@/lib/users';
 import { BOOTSTRAP_ID, createAppServer, withBootstrap, withInitialStory } from '../app';
 import { prepareStoryRuntime } from '@/lib/story/prepare-runtime.server';
-import { criticalStoryFonts } from '@/lib/data/story/story-fonts';
+import { STORY_FONT_THEMES } from '@/lib/data/story/story-fonts';
+import { APP_SHELL_FONT_PRELOADS } from '@/lib/app-fonts';
 import { useAppHarness } from '@/__tests__/harness';
 
 useAppHarness();
@@ -54,6 +55,44 @@ async function world() {
   return { owner, pub: await mk({ title: 'Pub', markup: '<div><p>hi</p></div>', visibility: 'public' }), priv: await mk({ title: 'Priv', markup: '<div><p>secret</p></div>', visibility: 'private' }) };
 }
 
+/** A bundled family's latin upright — what a first-screen preload names. */
+const latinOf = (family: string): string => STORY_FONT_THEMES.neutral.find((a) => a.family === family && a.preload === true)!.url;
+/** The font preloads in a page's head, in order; every one must be crossorigin (fonts fetch in CORS mode). */
+const fontPreloadsIn = (html: string): string[] => {
+  const head = html.split('</head>')[0];
+  const all = [...head.matchAll(/<link [^>]*as="font"[^>]*>/g)].map(match=>match[0]);
+  expect(all.every(tag=>/ crossorigin[ >]/.test(tag) && tag.includes('type="font/woff2"')), all.join(' ')).toBe(true);
+  return all.map(tag=>/href="([^"]+)"/.exec(tag)![1]);
+};
+
+describe('the app shell preloads its own face', () => {
+  it('is the one file JetBrains Mono is served as — the shell and a mono story share it', () => {
+    expect(APP_SHELL_FONT_PRELOADS).toEqual([latinOf('JetBrains Mono')]);
+  });
+
+  it('on a page with no document, once, crossorigin', async () => {
+    for (const url of ['/login', '/start', '/docs-human', '/@nobody-here', '/no-such-page']) {
+      const html = await (await app.request(url, { headers: { accept: 'text/html' } })).text();
+      expect(fontPreloadsIn(html), url).toEqual(APP_SHELL_FONT_PRELOADS);
+    }
+  });
+
+  it('on a starter placeholder, whose first screen is the shell\'s instructions', async () => {
+    const created = await startRoute(new Request('http://localhost:3000/api/start', { method: 'POST' }));
+    const { id } = await created.json() as { id: string };
+    expect(fontPreloadsIn(await (await app.request(`/a/${id}`)).text())).toEqual(APP_SHELL_FONT_PRELOADS);
+  });
+
+  it('not on a document page, whose first screen is the document', async () => {
+    const w = await world();
+    const html = await (await app.request(await canonicalOf(app, w.pub.id))).text();
+    expect(html).toContain('data-mx-initial-story');
+    // Themeless prose: system stacks, and the shell's face is not the first screen's.
+    expect(fontPreloadsIn(html)).toEqual([]);
+  });
+});
+
+
 describe('inlined page data', () => {
   it('preloads the authorized markup reader before bootstrap data, but not listings or denied documents', async () => {
     const dir = mkdtempSync(path.join(os.tmpdir(), 'reader-page-'));
@@ -75,12 +114,17 @@ describe('inlined page data', () => {
       }
     } finally { rmSync(dir, { recursive: true, force: true }); }
   });
-  it('discovers only the theme critical fonts as crossorigin preloads before body markup', async () => {
-    const runtime = await prepareStoryRuntime({source:'<h1>Headline</h1>',compiledCss:null,theme:'manuscript',colorMode:'light',refData:{},title:'Fonts'});
-    const html = withInitialStory('<html><head></head><body><div id="root"></div></body></html>',runtime,'ABC123');
-    const head = html.split('</head>')[0];
-    const urls = [...head.matchAll(/<link rel="preload" href="([^"]+)" as="font" type="font\/woff2" crossorigin>/g)].map(match=>match[1]);
-    expect(urls).toEqual(criticalStoryFonts('manuscript').map(font=>font.url));
+  it('discovers exactly the faces the first screen paints as crossorigin preloads before body markup', async () => {
+    const preloadsFor = async (source: string, theme: string | null) => {
+      const runtime = await prepareStoryRuntime({source,compiledCss:null,theme:theme as never,colorMode:'light',refData:{},title:'Fonts'});
+      return fontPreloadsIn(withInitialStory('<html><head></head><body><div id="root"></div></body></html>',runtime,'ABC123'));
+    };
+    // A heading alone paints the display face only: the body face would go unused.
+    expect(await preloadsFor('<h1>Headline</h1>','manuscript')).toEqual([latinOf('Cormorant Garamond')]);
+    // A mono eyebrow above the heading is on the first screen too.
+    expect((await preloadsFor('<p className="font-mono">Eyebrow</p><h1>Headline</h1><p>Body</p>','industry')).sort()).toEqual([latinOf('Inter'),latinOf('JetBrains Mono')].sort());
+    // Themeless prose paints the system stacks.
+    expect(await preloadsFor('<h1>Headline</h1><p>Body</p>',null)).toEqual([]);
   });
   it('keeps SSR as the sole in-flow document until the captured handoff is removed', async () => {
     const runtime = await prepareStoryRuntime({source:'<h1>Stable first paint</h1><div id="root">Author collision</div>',compiledCss:null,theme:null,colorMode:'light',refData:{},title:'Stable'});

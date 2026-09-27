@@ -15,6 +15,7 @@
 import { readFileSync, writeFileSync } from 'fs';
 import path from 'path';
 import { chromium } from 'playwright';
+import { STORY_FAMILY_ASSETS, storyFontFaceCss } from '../lib/data/story/story-fonts';
 
 const PUBLIC_DIR = path.join(process.cwd(), 'public');
 const OUT_FILE = path.join(PUBLIC_DIR, 'og.png');
@@ -23,9 +24,8 @@ const ORIGIN = 'http://og-image.local';
 const WIDTH = 1200;
 const HEIGHT = 630;
 
-/** Exact hashed names — the files in public/fonts are content-addressed. */
-const MONO_400 = '/fonts/jetbrains-mono-latin-400-normal.14425ba9.woff2';
-const MONO_700 = '/fonts/jetbrains-mono-latin-700-normal.d0d4e818.woff2';
+/** JetBrains Mono as a story declares it — content-addressed files, named by the generated manifest. */
+const MONO_FACES = storyFontFaceCss(STORY_FAMILY_ASSETS['JetBrains Mono'] ?? []);
 
 // Terminal-graphite, dark — the palette in app/globals.css, inlined because
 // this page never loads Tailwind.
@@ -34,8 +34,7 @@ const HTML = `<!doctype html>
 <head>
 <meta charset="utf-8">
 <style>
-  @font-face { font-family: 'JetBrains Mono'; font-weight: 400; src: url('${MONO_400}') format('woff2'); }
-  @font-face { font-family: 'JetBrains Mono'; font-weight: 700; src: url('${MONO_700}') format('woff2'); }
+  ${MONO_FACES}
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body {
     width: ${WIDTH}px; height: ${HEIGHT}px;

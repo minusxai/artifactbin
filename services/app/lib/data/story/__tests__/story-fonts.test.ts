@@ -9,7 +9,7 @@ import { createHash } from 'node:crypto';
 import { brotliDecompressSync } from 'node:zlib';
 import { readdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
-import { criticalStoryFonts, getStoryFontCss, STORY_FONT_THEMES, STORY_FONTS_ATTR } from '@/lib/data/story/story-fonts';
+import { getStoryFontCss, STORY_FONT_THEMES, STORY_FONTS_ATTR } from '@/lib/data/story/story-fonts';
 import { STORY_THEMES } from '@/lib/data/story/story-themes';
 
 const FONT_DIR = path.join(process.cwd(), 'public', 'fonts');
@@ -209,10 +209,34 @@ describe('bundled font assets are subset WOFF2, and safe to serve immutable', ()
     }
   });
 
-  it('an asset declaring a single weight carries no variation tables to pay for', () => {
-    for (const a of allAssets().filter((x) => x.weight && !x.weight.includes(' '))) {
-      expect(woff2Tables(bytesOf(a.url)), a.url).not.toContain('fvar');
+  /**
+   * A FILE declared at one weight only carries no variation tables to pay for.
+   * Judged per file, not per rule: JetBrains Mono is one variable file per
+   * subset (the app shell's own face, so a mono story and the shell download it
+   * once), declared at 400 AND at 700 so a story keeps the static pair's
+   * matching — 500 sets as 400, 600 as 700 — rather than rendering every
+   * weight in between.
+   */
+  it('a file declared at a single weight only carries no variation tables to pay for', () => {
+    const weightsByUrl = new Map<string, Set<string>>();
+    for (const a of allAssets()) weightsByUrl.set(a.url, (weightsByUrl.get(a.url) ?? new Set()).add(a.weight ?? ''));
+    for (const [url, weights] of weightsByUrl) {
+      if (weights.size !== 1 || [...weights][0].includes(' ')) continue;
+      expect(woff2Tables(bytesOf(url)), url).not.toContain('fvar');
     }
+  });
+
+  it('JetBrains Mono is one variable file per subset, declared at the static pair\'s weights', () => {
+    const mono = STORY_FONT_THEMES.neutral.filter((a) => a.family === 'JetBrains Mono');
+    const files = [...new Set(mono.map((a) => a.url))];
+    expect(files.length, files.join(' ')).toBe(2);
+    for (const url of files) {
+      expect(woff2Tables(bytesOf(url)), url).toContain('fvar');
+      expect(mono.filter((a) => a.url === url).map((a) => a.weight).sort(), url).toEqual(['400', '700']);
+    }
+    // Two rules, one URL: the CSS a story is served names each file twice and the browser fetches it once.
+    const css = getStoryFontCss('terminal');
+    for (const url of files) expect(css.split(`url("${url}")`).length - 1, url).toBe(2);
   });
 
   /**
@@ -240,40 +264,5 @@ describe('bundled font assets are subset WOFF2, and safe to serve immutable', ()
       const { data } = woff2Parse(bytesOf(a.url));
       expect(data.includes(Buffer.from('tnum', 'latin1')), `${a.url} lost tnum`).toBe(true);
     }
-  });
-});
-
-describe('criticalStoryFonts — what earns a preload in the document head', () => {
-  it('is always a non-empty subset of the faces the theme actually declares', () => {
-    for (const theme of [...STORY_THEMES.map((t) => t.name), 'neutral', 'no-such-theme']) {
-      const declared = STORY_FONT_THEMES[theme] ?? STORY_FONT_THEMES.neutral;
-      const critical = criticalStoryFonts(theme);
-      expect(critical.length, theme).toBeGreaterThan(0);
-      for (const a of critical) expect(declared, `${theme} -> ${a.url}`).toContainEqual(a);
-    }
-  });
-
-  it('carries only the display and body families — never mono', () => {
-    for (const t of STORY_THEMES) {
-      const families = new Set(criticalStoryFonts(t.name).map((a) => a.family));
-      expect([...families].sort(), t.name).toEqual([...new Set([t.fonts.display, t.fonts.body])].sort());
-    }
-  });
-
-  it('skips italic — it sets a phrase, not a page', () => {
-    for (const t of STORY_THEMES) {
-      expect(criticalStoryFonts(t.name).some((a) => a.style === 'italic'), t.name).toBe(false);
-    }
-  });
-
-  it('stays small: preloading a face the page never paints just races the one it does', () => {
-    for (const t of STORY_THEMES) {
-      expect(criticalStoryFonts(t.name).length, t.name).toBeLessThanOrEqual(2);
-    }
-  });
-
-  it('answers for an unknown theme with the neutral default sans', () => {
-    expect(criticalStoryFonts('no-such-theme')).toEqual(criticalStoryFonts('neutral'));
-    expect(criticalStoryFonts('neutral').map((a) => a.family)).toEqual(['Inter']);
   });
 });

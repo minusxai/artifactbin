@@ -1,7 +1,8 @@
 /* HTML owns first-paint styles. Vite bundles these imports in production and
  * serves them as CSS in development; neither path waits for main.tsx. */
-@import '@fontsource-variable/cormorant-garamond';
-@import '@fontsource-variable/jetbrains-mono';
-@import '@fontsource/ibm-plex-sans/400.css';
-@import '@fontsource/ibm-plex-sans/500.css';
+/* The shell's faces (Cormorant Garamond Variable, JetBrains Mono Variable, IBM
+ * Plex Sans 400/500) are written in HERE at build time by vite.config.mts, from
+ * the generated font manifest (lib/app-fonts): the same /fonts files a story
+ * names, so a document read inside the app never downloads a face twice. */
+/* @app-font-faces */
 @import '../app/globals.css';
