@@ -190,17 +190,13 @@ await p.waitForTimeout(2500);
 check((await marks()) > 0, 'the rebound chart renders — the seeded dataflow already held the other table');
 check(!/data unavailable/.test(await frameText()), 'and never settles on "data unavailable"');
 
-await p.waitForTimeout(1200);
-stored = await api(`/api/artifacts/${start.id}`, {}, token);
-if (!stored.markup.includes('data="$costs"')) {
-  // DIAGNOSTIC (temporary): is the repoint late, or lost?
-  console.log('  ·   diag at check: v' + stored.version + ' ' + (stored.markup.match(/<Question[^>]*>/)?.[0] ?? 'no Question'));
-  for (let i = 0; i < 20; i++) {
-    await p.waitForTimeout(500);
-    const later = await api(`/api/artifacts/${start.id}`, {}, token);
-    if (later.markup.includes('data="$costs"')) { console.log('  ·   diag: repoint landed after ' + ((i + 1) * 500) + 'ms more, v' + later.version); break; }
-    if (i === 19) console.log('  ·   diag: still not repointed after 10s, v' + later.version + ' ' + (later.markup.match(/<Question[^>]*>/)?.[0] ?? ''));
-  }
+// The editor saves on a debounce; under a loaded CI runner the second save can
+// land after any fixed wait. Poll the stored document until it carries the
+// repoint (or 15 s pass), then assert exactly as before.
+for (const deadline = Date.now() + 15_000; ;) {
+  stored = await api(`/api/artifacts/${start.id}`, {}, token);
+  if (stored.markup.includes('data="$costs"') || Date.now() > deadline) break;
+  await p.waitForTimeout(250);
 }
 check(stored.markup.includes('data="$costs"'), 'the second edit repointed the stored document');
 check(/"mark"\s*:\s*("line"|\{[^}]*"type"\s*:\s*"line")/.test(stored.markup), 'and changed the stored mark');
