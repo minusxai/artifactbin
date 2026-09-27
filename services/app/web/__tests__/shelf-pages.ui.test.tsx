@@ -72,7 +72,8 @@ describe('the homepage workspace and profile column', () => {
     cleanup();
 
     const prof = render(<MemoryRouter initialEntries={['/@cee']}><Routes><Route path="/:user/*" element={<ProfilePage />} /></Routes></MemoryRouter>);
-    await waitFor(() => expect(mainWidth(prof.container)).toBeDefined());
+    // The profile's index is its own chunk: measure the listing, not its pending frame.
+    await waitFor(() => { expect(screen.queryByLabelText('Loading page')).toBeNull(); expect(mainWidth(prof.container)).toBeDefined(); });
     expect(mainWidth(prof.container)).toBe('max-w-4xl');
   });
 

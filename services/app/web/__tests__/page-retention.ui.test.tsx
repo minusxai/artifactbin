@@ -31,8 +31,10 @@ it.each(['profile', 'account', 'artifact', 'folder'])('retains %s data across un
   const tree = (shown: boolean) => <MemoryRouter initialEntries={[path]}><SessionProvider>{shown && <Routes><Route path={kind === 'profile' ? '/:user/*' : '*'} element={node} /></Routes>}</SessionProvider></MemoryRouter>;
   const view = render(tree(true));
   const content = () => kind === 'account' ? screen.getByLabelText('Username') : kind === 'artifact' ? screen.getByLabelText('Mounted author runtime') : screen.getByRole('heading', { level: 1 });
+  // The folder page and a profile's index are their own chunks: the FIRST
+  // mount waits for that download; the remount below must not wait for anything.
   await act(async () => {});
-  expect(content()).toBeInTheDocument();
+  await vi.waitFor(() => expect(content()).toBeInTheDocument());
   view.rerender(tree(false));
   if (kind === 'artifact') expect(disposed).toHaveBeenCalledTimes(1);
   view.rerender(tree(true));
