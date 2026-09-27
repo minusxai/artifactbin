@@ -78,6 +78,6 @@ describe('updateNumberEmbedInJsx', () => {
 
 describe('NUMBER_AGGS', () => {
   it('matches the aggregations InlineNumber actually computes', () => {
-    expect(NUMBER_AGGS).toEqual(['first', 'sum', 'avg', 'min', 'max', 'count']);
+    expect(NUMBER_AGGS).toEqual(['first', 'last', 'sum', 'avg', 'median', 'min', 'max', 'count']);
   });
 });
