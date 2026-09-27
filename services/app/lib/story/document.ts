@@ -25,6 +25,7 @@
  */
 import {agentDiscoveryHead,agentDiscoveryTail,type AgentDiscovery} from '../agent-discovery';
 import { prepareStoryParts } from './prepare-runtime.server';
+import { fontPreloadTags, readerChromeFonts } from './first-screen-fonts';
 import { loadStorySsr } from './ssr.server';
 import type { WebAssetBox } from '@/lib/story/asset-url';
 import { AUTHOR_SCRIPT_TYPE, STORY_HELLO_MESSAGE, STORY_VALUES_HOOK, STORY_ISLAND_ID, STORY_PAINTED_MESSAGE, STORY_ROOT_ID, type StoryIslandData, type StoryIslandDataflow, type StoryViewer } from '@/lib/story-runtime/contract';
@@ -441,12 +442,15 @@ export async function buildStoryDocument(input: StoryDocumentInput): Promise<str
   // OPAQUE origin, so its font fetch is cross-origin (hence `crossorigin`, and
   // the ACAO header on /fonts in services/app/server/app.ts) and lands in its own cache
   // partition — a parent preload would warm an entry nothing here can use.
-  // The families this document ASKED for (Helmet meta), already resolved and
-  // copied at publish (lib/webfonts) — served from this origin like a bundled
-  // face, and preloaded on the same rule (the latin upright only).
-  const fontPreloads = (prepared.fontPreloads ?? [])
-    .map((url) => `<link rel="preload" href="${escapeHtml(url)}" as="font" type="font/woff2" crossorigin>`)
-    .join('');
+  // What is preloaded is what the first screen paints (lib/story/first-screen-fonts):
+  // the body's faces — including the families this document ASKED for (Helmet
+  // meta), copied at publish (lib/webfonts) and served from this origin like a
+  // bundled face — and, when this document draws its reader chrome, the face
+  // that chrome is set in.
+  const fontPreloads = fontPreloadTags([
+    ...(prepared.fontPreloads ?? []),
+    ...(readerChrome ? readerChromeFonts({ theme, docFonts, importedFaces }).map((face) => face.url) : []),
+  ]);
 
   const styles = [
     '<style>:root { --mx-vh: 100vh; } body { margin: 0; }</style>',

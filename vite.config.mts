@@ -6,6 +6,7 @@
 import path from 'node:path';
 import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
+import { readFileSync } from 'node:fs';
 import { defineConfig, type Plugin } from 'vite';
 import { describePrecompression, precompressTree } from './scripts/lib/precompress.mjs';
 
@@ -24,9 +25,30 @@ const precompressAssets = (): Plugin => ({
   },
 });
 
+/**
+ * The shell's @font-face rules, from the generated font manifest
+ * (services/app/scripts/copy-assets.mjs → lib/app-fonts). They name the
+ * content-addressed /fonts files the app server serves immutable — the SAME
+ * files a story names — rather than Vite /assets copies of those bytes, so a
+ * document read inside the app fetches each face once.
+ */
+const FONT_MANIFEST = path.resolve(import.meta.dirname, 'services/app/lib/data/story/story-font-manifest.json');
+const FONT_MARKER = '/* @app-font-faces */';
+const appFontFaces = (): Plugin => ({
+  name: 'artifactbin-app-font-faces',
+  enforce: 'pre',
+  transform(code, id) {
+    if (!id.split('?')[0].endsWith('/web/shell.css') || !code.includes(FONT_MARKER)) return null;
+    const faces = (JSON.parse(readFileSync(FONT_MANIFEST, 'utf8')) as { app: Array<Record<string, string>> }).app;
+    const css = faces.map((f) => `@font-face{font-family:'${f.family}';font-style:${f.style};font-display:${f.display};font-weight:${f.weight};`
+      + `src:url(${f.url}) format('${f.format}');${f.unicodeRange ? `unicode-range:${f.unicodeRange};` : ''}}`).join('\n');
+    return { code: code.replace(FONT_MARKER, css), map: null };
+  },
+});
+
 export default defineConfig({
   root: path.resolve(import.meta.dirname, 'services/app/web'),
-  plugins: [react(), tailwindcss(), precompressAssets()],
+  plugins: [appFontFaces(), react(), tailwindcss(), precompressAssets()],
   resolve: {
     alias: [
       { find: '@', replacement: path.resolve(import.meta.dirname, 'services/app') },
@@ -36,7 +58,11 @@ export default defineConfig({
       { find: /^acorn$/, replacement: path.resolve(import.meta.dirname, 'node_modules/acorn/dist/acorn.mjs') },
     ],
   },
-  build: { outDir, emptyOutDir: true, sourcemap: false, manifest: true },
+  build: {
+    outDir, emptyOutDir: true, sourcemap: false, manifest: true,
+    // The shell's /fonts files are the app server's (appFontFaces above), never Vite assets.
+    rolldownOptions: { external: [/^\/fonts\//] },
+  },
   server: { middlewareMode: true },
   appType: 'custom',
 });

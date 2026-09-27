@@ -7,7 +7,7 @@
 import { describe, expect, it } from 'vitest';
 import { buildStoryDocument, type StoryDocumentInput } from '@/lib/story/document';
 import { STORY_ISLAND_ID, STORY_ROOT_ID } from '@/lib/story-runtime/contract';
-import { criticalStoryFonts } from '@/lib/data/story/story-fonts';
+import { STORY_FONT_THEMES } from '@/lib/data/story/story-fonts';
 import { STORY_BARE_CONTROLS_CSS } from '@/lib/story-surface/bare-controls';
 
 const CSS = 'h1 { letter-spacing: -0.02em; }';
@@ -16,6 +16,12 @@ const JS = 'document.body.dataset.ran = "1";';
 const HELMET =
   '<Helmet><title>Scripted doc</title><style>{`' + CSS + '`}</style><script>{`' + JS + '`}</script></Helmet>';
 
+/** A bundled family's latin file at a style — what a first-screen preload names. */
+const latinOf = (family: string, style: 'normal' | 'italic' = 'normal'): string => {
+  const upright = STORY_FONT_THEMES.neutral.find((a) => a.family === family && a.preload === true)!;
+  return style === 'normal' ? upright.url
+    : STORY_FONT_THEMES.neutral.find((a) => a.family === family && a.style === 'italic' && a.unicodeRange === upright.unicodeRange)!.url;
+};
 const doc = (over: Partial<StoryDocumentInput> = {}): Promise<string> =>
   buildStoryDocument({
     source: HELMET + '<h1 className="text-4xl">Hello</h1><Card><CardContent>inside</CardContent></Card>',
@@ -368,17 +374,28 @@ describe('buildStoryDocument', () => {
     expect(head.indexOf('description')).toBeLessThan(head.indexOf('author'));
   });
 
-  it('preloads exactly the theme\'s critical faces, cross-origin (the frame is opaque)', async () => {
+  it('preloads the faces its first screen paints — its body and its reader chrome — cross-origin (the frame is opaque)', async () => {
     // The parent cannot preload for an opaque-origin frame, so the document
     // does it itself.
     // `crossorigin` is load-bearing — fonts fetch in CORS mode, and a preload
     // without it warms an entry the real request can never use.
-    const html = await doc({ theme: 'manuscript' as never });
-    const head = html.slice(0, html.indexOf('</head>'));
-    const hrefs = [...head.matchAll(/<link rel="preload" href="([^"]+)" as="font" type="font\/woff2" crossorigin>/g)].map((m) => m[1]);
-    expect(hrefs.sort()).toEqual(criticalStoryFonts('manuscript').map((a) => a.url).sort());
-    expect(hrefs.length).toBeGreaterThan(0);
+    const hrefsOf = async (over: Partial<StoryDocumentInput>) => {
+      const head = (await doc(over)).split('</head>')[0];
+      expect(head.match(/rel="preload"[^>]*as="font"/g)?.length ?? 0).toBe([...head.matchAll(/<link rel="preload" href="[^"]+" as="font" type="font\/woff2" crossorigin>/g)].length);
+      return [...head.matchAll(/<link rel="preload" href="([^"]+)" as="font" type="font\/woff2" crossorigin>/g)].map((m) => m[1]).sort();
+    };
+    const manuscript = await hrefsOf({ theme: 'manuscript' as never, source: '<h1>Title</h1><p>Body with <em>emphasis</em></p>' });
+    // Heading → Cormorant; prose → Noto Serif, and its italic; the chrome sets its labels in Noto Serif (no mono in this theme).
+    expect(manuscript).toEqual([latinOf('Cormorant Garamond'), latinOf('Noto Serif'), latinOf('Noto Serif', 'italic')].sort());
+    // The reader chrome is set in the theme mono, so a chrome-bearing industry document needs it on its first screen…
+    expect(await hrefsOf({ theme: 'industry' as never, source: '<h1>Title</h1>' })).toEqual([latinOf('Inter'), latinOf('JetBrains Mono')].sort());
+    // …and a capture render, which draws no chrome, does not.
+    expect(await hrefsOf({ theme: 'industry' as never, source: '<h1>Title</h1>', chrome: false })).toEqual([latinOf('Inter')]);
+    // Themeless prose paints the system stacks: nothing to preload.
+    expect(await hrefsOf({ source: '<h1>Title</h1><p>Body</p>', chrome: false })).toEqual([]);
     // Preload must precede the stylesheet that references it — parse-time discovery.
+    const head = (await doc({ theme: 'manuscript' as never })).split('</head>')[0];
+    expect(head.indexOf('rel="preload"')).toBeGreaterThan(-1);
     expect(head.indexOf('rel="preload"')).toBeLessThan(head.indexOf('data-mx-tw'));
   });
 });

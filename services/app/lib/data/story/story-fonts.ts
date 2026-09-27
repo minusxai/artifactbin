@@ -43,7 +43,8 @@ export interface StoryFontAsset {
  * public/fonts and the manifest are gitignored). Families outside this catalog
  * are substituted at the registry level (see story-themes.ts per-theme notes).
  */
-const FAMILY_ASSETS: Record<string, readonly StoryFontAsset[]> = fontManifest as Record<string, StoryFontAsset[]>;
+export const STORY_FAMILY_ASSETS: Readonly<Record<string, readonly StoryFontAsset[]>> = fontManifest.families as Record<string, StoryFontAsset[]>;
+const FAMILY_ASSETS = STORY_FAMILY_ASSETS;
 
 /** The families compiled into this build — a document asking for one of these
  *  needs no web fetch (lib/webfonts short-circuits on it). */
@@ -75,9 +76,6 @@ export const STORY_FONT_THEMES: Record<string, readonly StoryFontAsset[]> = {
   ])),
 };
 
-/** The family a themeless document paints its body text in (Tailwind preflight's sans). */
-const NEUTRAL_BODY_FAMILY = 'Inter';
-
 const fontFaceRule = (a: StoryFontAsset): string =>
   '@font-face {\n' +
   `  font-family: "${a.family}";\n` +
@@ -100,28 +98,5 @@ export function getStoryFontCss(theme = 'neutral'): string {
   return storyFontFaceCss(STORY_FONT_THEMES[theme] ?? STORY_FONT_THEMES.neutral);
 }
 
-/**
- * The faces worth a `<link rel="preload">` in the document head: a theme's
- * DISPLAY and BODY families at upright style.
- *
- * Why a subset rather than the whole registry — the declared set is lazy. A
- * browser fetches a face only when text actually matching it renders, so
- * declaring five faces costs nothing, but preloading five would fetch fonts
- * the document never paints (and burn bandwidth racing the one it does).
- * Display + body is what sets the bulk of a page, so it is what visibly
- * reflows when it arrives late; italic is incidental, and mono only appears
- * where there is code.
- *
- * The preload is asked for in the head ahead of the style tags, so the browser
- * fetches the face alongside the stylesheet rather than only after parsing the
- * @font-face rule that names it.
- */
-export function criticalStoryFonts(theme = 'neutral'): readonly StoryFontAsset[] {
-  const entry = STORY_THEMES.find((t) => t.name === theme);
-  const families = entry ? [entry.fonts.display, entry.fonts.body] : [NEUTRAL_BODY_FAMILY];
-  // Only the flagged file per family — its latin upright. The other subsets
-  // (latin-ext, italics) stay declared-but-lazy: preloading a unicode-range
-  // file the page never hits fetches bytes for nothing.
-  return assetsForFamilies(families).filter((a) => a.preload === true);
-}
-
+// What a document's first screen paints, and so what its head preloads, is
+// lib/story/first-screen-fonts: read from the document's nodes, not the theme alone.
