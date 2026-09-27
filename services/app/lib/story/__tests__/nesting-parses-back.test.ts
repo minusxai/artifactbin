@@ -206,6 +206,23 @@ describe('a component inside a paragraph — the case the rule steps around', ()
     expect(num.closest('p')).not.toBeNull();
   });
 
+  it('<For> is not opaque: its wrapper is a <div>, so a paragraph holding one is rewritten', async () => {
+    /*
+     * The scrolly document behind the pi eval's #418 (run 36290939455): a
+     * headline figure written as `<p className="text-5xl"><For>…</For></p>`.
+     * The interpreter renders every non-table <For> into a wrapper <div>, so
+     * the parser closed the paragraph and React threw the server tree away.
+     */
+    const html = await serve('<Helmet><Value name="fastest" type="table" value={[{"mode":"Bicycle","m":29}]} /></Helmet>'
+      + '<div><p className="lede text-5xl"><For each={$fastest}>{$_row.mode} · <Number data="$fastest" col="m" /> min</For></p></div>');
+    expect(reparented(html)).toEqual([]);
+    const { document } = new JSDOM(html).window;
+    const holder = document.querySelector('[class*="lede"]')!;
+    expect(holder.tagName.toLowerCase()).toBe('div');
+    // The rows' wrapper stays inside the element carrying the headline classes.
+    expect(holder.querySelector(':scope > [data-mx-ast="0.0.0"]')).not.toBeNull();
+  });
+
   it('is why component children are ignored: a block one would still be a fault', async () => {
     /*
      * Stated, not hidden. `<Card>` renders a div, so a `<p>` holding one is

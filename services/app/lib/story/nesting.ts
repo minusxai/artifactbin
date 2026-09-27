@@ -94,12 +94,15 @@ const isElement = (n: JsxNode): n is JsxElement => n.type === 'element';
  * open elements, not at one level of nesting.
  *
  * It stops at two things. A component, because what it renders is unknowable
- * from here (see the module header). And a button-scope element, because that is
- * precisely where the parser stops looking too.
+ * from here (see the module header) — except `<For>`, which is the
+ * interpreter's own control element and always draws a wrapper `<div>` around
+ * its rows (lib/story-ui/interpreter.tsx). And a button-scope element, because
+ * that is precisely where the parser stops looking too.
  */
 function breaksParagraph(nodes: JsxNode[], inSvg = false): boolean {
   return nodes.some((n) => {
-    if (!isElement(n) || n.isComponent) return false;
+    if (!isElement(n)) return false;
+    if (n.isComponent) return n.tag === 'For';
     const tag = n.tag.toLowerCase();
     if ((inSvg ? CLOSES_OPEN_P_IN_SVG : CLOSES_OPEN_P).has(tag)) return true;
     if (BUTTON_SCOPE.has(tag)) return false;
