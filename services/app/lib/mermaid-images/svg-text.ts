@@ -13,6 +13,12 @@
  * Firefox +17%), so such a drawing carries nothing and draws as before.
  */
 
+/**
+ * Every drawing that carries its fonts lays that text out unhinted: a stored
+ * one as the harvest measured it, a reader's own as a stored one renders.
+ */
+export const MERMAID_TEXT_RENDERING = 'svg{text-rendering:geometricPrecision}';
+
 /** A face file as a document declares it: `weight` is a number or a `min max` range. */
 export interface FontFile { url: string; weight: string; unicodeRange?: string | null }
 /** One file to carry: at these weights (instances of a variable file; the declared weight of a static one). */

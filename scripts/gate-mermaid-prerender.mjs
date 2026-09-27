@@ -180,7 +180,7 @@ try {
   for (const [label, url, sample, carries] of [['raw', `${B}/a/${kinds}/raw`, STORED[0], true], ['app', `${B}/a/${kinds}`, STORED[0], true], ['raw system font', `${B}/a/${systemFont}/raw`, SYSTEM_FONT[0], false]]) {
     const own = await drawings(url, null, { blockStored: true });
     const svg = own.figures[sample.kind]?.svg ?? '';
-    const fonts = /^<svg\b[^>]*><style>(@font-face\{font-family:"[\w .-]+";src:url\(data:font\/woff2;base64,[A-Za-z0-9+/]+={0,2}\) format\("woff2"\);[^}]*\})+<\/style>/.exec(svg);
+    const fonts = /^<svg\b[^>]*><style>(@font-face\{font-family:"[\w .-]+";src:url\(data:font\/woff2;base64,[A-Za-z0-9+/]+={0,2}\) format\("woff2"\);[^}]*\})+svg\{text-rendering:geometricPrecision\}<\/style>/.exec(svg);
     if (!carries) { check(!!svg && !svg.includes('@font-face'), `${label} ${sample.kind}: a reader's own engine drawing in a system font carries no fonts`); continue; }
     if (!check(!!fonts, `${label} ${sample.kind}: a reader's own engine drawing carries the page's font files`)) continue;
     const plain = svg.replace(/<style>@font-face[\s\S]*?<\/style>/, '');

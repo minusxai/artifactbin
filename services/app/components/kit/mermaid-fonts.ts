@@ -6,14 +6,15 @@
  * carries subsets of the same faces, lib/mermaid-images/fonts) shows the
  * theme's face. So the kit puts the face files the page already loaded — its
  * own @font-face rules; the bytes come from the HTTP cache — into the drawing,
- * whole, as `data:` URLs, one leading stylesheet. The same planner decides
+ * whole, as `data:` URLs, one leading stylesheet, with the stored drawing's
+ * unhinted-text rule. The same planner decides
  * which files (lib/mermaid-images/svg-text), so a drawing the harvest would
  * not store (a system font, a synthesized bold) carries nothing here either
  * and draws as before. Whole files, not subsets: a subsetter in the reader
  * would cost ~645KB gzipped (hb-subset and woff2 WebAssembly); the files are
  * already in the cache (Inter 73KB, JetBrains Mono 40KB, Noto Serif 14KB).
  */
-import { planFontFiles, type FontFile } from '@/lib/mermaid-images/svg-text';
+import { MERMAID_TEXT_RENDERING, planFontFiles, type FontFile } from '@/lib/mermaid-images/svg-text';
 
 /** A face the page declares: its family, file, weight (or range) and range of characters. */
 export interface PageFontFace extends FontFile { family: string }
@@ -65,7 +66,9 @@ const loaded = new Map<string, Promise<string>>();
 export function pageFontData(url: string): Promise<string> {
   let found = loaded.get(url);
   if (!found) {
-    found = fetch(url, { cache: 'force-cache', credentials: 'same-origin' }).then(async (response) => {
+    // As the page's @font-face loaded it — CORS, no credentials — so the HTTP cache answers (measured in
+    // Chromium: a credentialed read of the same file misses the cache on the app's page).
+    found = fetch(url, { cache: 'force-cache', mode: 'cors', credentials: 'omit' }).then(async (response) => {
       if (!response.ok) throw new Error(`font ${response.status}`);
       const bytes = new Uint8Array(await response.arrayBuffer());
       let binary = '';
@@ -100,7 +103,8 @@ export async function embedPageFonts(
         rules.push(`@font-face{font-family:"${file.family}";src:url(${data}) format("woff2");font-weight:${face.weight};font-style:normal${face.unicodeRange ? `;unicode-range:${face.unicodeRange}` : ''}}`);
       }
     }
-    return `${open[0]}<style>${rules.join('')}</style>${svg.slice(open[0].length)}`;
+    // Unhinted, as a stored drawing renders its text: the two look alike wherever the layouts agree.
+    return `${open[0]}<style>${rules.join('')}${MERMAID_TEXT_RENDERING}</style>${svg.slice(open[0].length)}`;
   } catch {
     return null;
   }

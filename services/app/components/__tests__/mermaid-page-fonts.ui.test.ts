@@ -52,8 +52,8 @@ describe('an engine drawing carrying the page\'s fonts', () => {
     expect(out.replace(/<style>@font-face[\s\S]*?<\/style>/, '')).toBe(svg);
     // Only the files covering its characters: Inter's Latin, not its Latin Extended; JetBrains Mono's one file, once.
     expect(fetchFont.mock.calls.map(([url]) => url).sort()).toEqual(['/fonts/inter-latin.woff2', '/fonts/jbm-latin.woff2']);
-    // Laid out by this page as it renders here: no unhinted-text rule (that is the stored drawing's, which the harvest measured unhinted).
-    expect(out).not.toContain('geometricPrecision');
+    // Its text unhinted, as a stored drawing renders it (measured on macOS Chromium: 13 of 25 drawings pixel-identical with it, 0 without).
+    expect(out).toContain('svg{text-rendering:geometricPrecision}</style>');
   });
 
   it('carries no edge-label face without edge labels', async () => {
