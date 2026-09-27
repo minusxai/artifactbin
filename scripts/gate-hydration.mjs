@@ -406,7 +406,7 @@ const TAKEOVER_PROBE = () => {
 };
 
 /** Open `path` in a fresh page of `context`, the OS in `scheme`, and judge the takeover; returns the takeover time after DOMContentLoaded. */
-async function judgeTakeover(context, scheme, path, label) {
+async function judgeTakeover(context, scheme, path, label, after) {
   const page = await context.newPage();
   await page.emulateMedia({ colorScheme: scheme });
   const errors = [];
@@ -417,6 +417,7 @@ async function judgeTakeover(context, scheme, path, label) {
   const ready = await waitFor(page, '!!window.__readerHydration?.verdict', 30000);
   // Leave the document running a moment, so an error raised as data and panes land is still this load's.
   await page.waitForTimeout(500);
+  await after?.(page);
   const { verdict, dcl, served } = await page.evaluate(() => { const h = window.__readerHydration; return { verdict: h.verdict, dcl: h.dcl, served: h.served?.length ?? 0 }; });
   const where = new URL(page.url()).pathname + new URL(page.url()).search;
   await page.close();
@@ -468,12 +469,21 @@ async function runReaderHydration() {
       { id, shares: [{ email: editor.email, role: 'editor' }, { email: commenter.email, role: 'commenter' }] });
     check(shared === 200, `shared ${id} with an editor and a commenter (${shared})`);
   }
+  // A comment thread on the kit fixture, so a load can open the document through its deep link:
+  // the pins and the open thread are drawn over the story after it hydrates.
+  const thread = await ownerPage.evaluate(async (id) => {
+    const head = await (await fetch(`/api/my/artifacts/${id}`)).json();
+    const made = await fetch(`/api/my/artifacts/${id}/annotations`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ path: '1.1' /* the kit fixture's <h1> */, edit_id: head.edit_id, body: 'Is this heading right?' }) });
+    const wire = await (await fetch(`/api/my/artifacts/${id}`)).json();
+    return { status: made.status, refusal: made.ok ? '' : (await made.text()).slice(0, 200), id: wire.annotations?.[0]?.id ?? null };
+  }, kit.id);
+  check(thread.status === 201 && !!thread.id, `the owner left a comment on the kit fixture's heading (${thread.status}${thread.refusal ? ` ${thread.refusal}` : ''})`);
   const anonymous = await browser.newContext({ viewport: { width: 1400, height: 900 } });
   await githubWidgetFixture(anonymous);
 
   const times = [];
-  const load = async (context, scheme, path, label) => {
-    const t = await judgeTakeover(context, scheme, path, `${label} (${scheme})`);
+  const load = async (context, scheme, path, label, after) => {
+    const t = await judgeTakeover(context, scheme, path, `${label} (${scheme})`, after);
     if (t !== null) times.push(t);
   };
   // Every fixture and the kitchen sink, anonymous and as the owner (whose address is the pretty /@owner one).
@@ -483,6 +493,10 @@ async function runReaderHydration() {
   }
   await load(historian, 'dark', `/a/${versioned.id}?version=1`, 'version 1 of 2 (archived), its owner');
   await load(ownerContext, 'light', `/a/${kit.id}/edit`, 'kit, owner entering /edit');
+  const threadOpen = (who) => async (page) => check(await page.locator('[aria-label="Reply to annotation"]').first().waitFor({ timeout: 10000 }).then(() => true, () => false),
+    `kit, ${who}: the linked comment thread opened over the hydrated story`);
+  await load(ownerContext, 'dark', `/a/${kit.id}?comment=${thread.id}`, 'kit with its comment thread open, owner', threadOpen('owner'));
+  await load(commenter.context, 'light', `/a/${kit.id}?comment=${thread.id}`, 'kit with its comment thread open, commenter', threadOpen('commenter'));
   for (const [who, context] of [['editor', editor.context], ['commenter', commenter.context]]) {
     await load(context, 'light', `/a/${sinkDoc.id}`, `kitchen sink, ${who}`);
     await load(context, 'dark', `/a/${fixtures.find((f) => f.key === 'dashboard').id}`, `dashboard, ${who}`);
