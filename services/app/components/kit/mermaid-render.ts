@@ -81,6 +81,13 @@ export function renderMermaid(code: string, palette: MermaidPalette): Promise<Me
       // every node and actor through the theme's dropShadow filter. Document tiles
       // are flat, so the diagram is too: the classic look draws plain fills and hairlines.
       look: 'classic',
+      // The classic look still strokes some shapes through rough.js at zero
+      // roughness, where the seed only places bezier control points ALONG
+      // straight edges: invisible, but unseeded (0) every render's bytes
+      // differ. A fixed seed is one of the drawings an unseeded render could
+      // produce, and makes a drawing reproducible — what a stored drawing
+      // (lib/mermaid-images) must be.
+      handDrawnSeed: 1,
       theme: 'base',
       themeVariables: {
         darkMode: palette.dark, background: palette.background,
