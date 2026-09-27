@@ -117,6 +117,8 @@ export function useLiveEdits({
   const navigationFlush = useRef(false);
   const failedRef = useRef(false);
   const failedChangeRef = useRef<PendingChange | null>(null);
+  /** The pending change IS the failed one, re-queued for retry (offline) — not newer work. */
+  const retryOwedRef = useRef(false);
 
   const flush = useCallback(async () => {
     if (inFlightRef.current) return inFlightRef.current;
@@ -124,6 +126,7 @@ export function useLiveEdits({
     if (!change) return;
     pendingRef.current = null;
     failedRef.current = false;
+    retryOwedRef.current = false;
     const edits =
       change.source !== undefined && baseSourceRef.current !== undefined
         ? sourceEdits(baseSourceRef.current, change.source)
@@ -219,8 +222,16 @@ export function useLiveEdits({
       } catch (error) {
         failedRef.current = true;
         failedChangeRef.current = mergePending(change, pendingRef.current);
-        // Offline or a dropped request: keep the change and let the next tick retry.
-        pendingRef.current = prepared?mergePending(change,pendingRef.current):null;
+        /*
+         * Offline or a dropped request: keep the change and let the next tick
+         * retry. A REFUSAL (the authoring door said the document is invalid)
+         * is not retried as-is — but anything queued while it was on the wire
+         * is newer work and still goes out, exactly as after a refused commit.
+         * Dropping it here is how a chart rebind lost the axis picks that made
+         * the refused table switch valid again, and sat on "not saved".
+         */
+        retryOwedRef.current = prepared;
+        if (prepared) pendingRef.current = mergePending(change, pendingRef.current);
         setState((s) => ({ ...s, status: prepared?'offline — will retry':`not saved — ${error instanceof Error?error.message:'Document validation failed'}`, pending: false }));
       } finally {
         inFlightRef.current = null;
@@ -267,7 +278,10 @@ export function useLiveEdits({
     do {
       window.clearTimeout(timerRef.current);
       await (inFlightRef.current ?? flush());
-      if (failedRef.current) break;
+      // A failure stops the drain unless newer work is queued behind it: that
+      // work is sent (it may be the very edit that fixes a refused state), but
+      // re-sending the same offline change would spin.
+      if (failedRef.current && (retryOwedRef.current || !pendingRef.current)) break;
     } while (pendingRef.current || inFlightRef.current);
   }, [flush]);
 
