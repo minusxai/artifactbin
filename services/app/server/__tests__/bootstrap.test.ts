@@ -41,7 +41,7 @@ const actorHeaders = (actor: Actor, secret: string): Record<string, string> => (
 const app = createAppServer({ actorSecret: SECRET, indexHtml: async () => '<!doctype html><head><title>x</title></head><body><div id="root"></div></body>' });
 const as = (actor: Parameters<typeof actorHeaders>[0]) => actorHeaders(actor, SECRET);
 const inlined = (html: string) => {
-  const m = new RegExp(`id="${BOOTSTRAP_ID}">([\\s\\S]*?)</script>`).exec(html);
+  const m = new RegExp(`<script type="application/json" id="${BOOTSTRAP_ID}">([\\s\\S]*?)</script>`).exec(html);
   return m ? JSON.parse(m[1]) : null;
 };
 /** The canonical address `/a/<id>` names — it is served in place, with the address the page heals to. */
@@ -152,7 +152,14 @@ describe('inlined page data', () => {
     const shell = '<html><head><title>x</title></head><body><div id="root"></div></body></html>';
     const html = withBootstrap(withInitialStory(shell,initialStoryOf(runtime),'ABC123'),{runtime});
     expect(html.indexOf('<div id="root"></div>')).toBeLessThan(html.indexOf('data-mx-initial-story'));
-    expect(html.indexOf(`id="${BOOTSTRAP_ID}"`)).toBeLessThan(html.indexOf('data-mx-initial-story'));
+    // The trusted payload is the body's own LAST child, after the story: an author's colliding id is inside the story.
+    const dom = new JSDOM(html, { url: 'http://localhost:3000/' });
+    // By attribute, not `#id`: an engine may resolve an id selector through the FIRST element with that id.
+    const trusted = dom.window.document.querySelector(`body > script[type="application/json"][id="${BOOTSTRAP_ID}"]`);
+    expect(trusted).toBe(dom.window.document.body.lastElementChild);
+    expect(JSON.parse(trusted!.textContent!).runtime.authorScript).toBe('globalThis.shouldNotRun=true');
+    expect(dom.window.document.querySelector(`[data-mx-initial-story] #${BOOTSTRAP_ID}`)?.textContent).toBe('Not data');
+    dom.window.close();
     expect(html).not.toContain('<script>globalThis.shouldNotRun');
     expect(inlined(html).runtime.authorScript).toBe('globalThis.shouldNotRun=true');
   });
@@ -171,6 +178,45 @@ describe('inlined page data', () => {
     const raw = await app.request(`/a/${w.pub.id}/raw`);
     expect(raw.headers.get('content-security-policy')).toContain('sandbox');
   });
+  it('serves the reader\'s bytes first: CSS, then the fonts it paints, then code — and the story before its data', async () => {
+    const dir = mkdtempSync(path.join(os.tmpdir(), 'reader-order-'));
+    try {
+      mkdirSync(path.join(dir, '.vite'));
+      // The shape Vite builds: its entry and preloads land in the head, ahead of anything the server adds.
+      writeFileSync(path.join(dir, 'index.html'), '<!doctype html><html><head><meta charset="utf-8" /><meta name="viewport" content="width=device-width" /><title>x</title>'
+        + '<script type="module" crossorigin src="/assets/main-test.js"></script><link rel="modulepreload" crossorigin href="/assets/vendor-test.js"><link rel="stylesheet" href="/shell.css" /><link rel="stylesheet" crossorigin href="/assets/main-test.css">'
+        + '<script>/* theme */</script></head><body><div id="root"></div></body></html>');
+      writeFileSync(path.join(dir, '.vite/manifest.json'), JSON.stringify({
+        'pages/Profile.tsx': { file: 'assets/Profile-test.js' },
+        'pages/Artifact.tsx': { file: 'assets/Artifact-test.js' },
+        '../lib/story-runtime/InlineStoryRuntime.tsx': { file: 'assets/InlineStoryRuntime-test.js' },
+      }));
+      const built = createAppServer({ webDir: dir });
+      const t = await mintToken('order');
+      const made = await (await createArtifactRoute(new Request('http://localhost:3000/api/artifacts', { method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${t.token}` }, body: JSON.stringify({ title: 'Order', theme: 'modernist', markup: '<h1>Headline</h1><p>Body</p>', visibility: 'public' }) }))).json() as { id: string };
+      const html = await (await built.request(`/a/${made.id}`, { headers: { accept: 'text/html' } })).text();
+      const head = html.split('</head>')[0]!;
+      const at = (needle: string) => { const i = head.indexOf(needle); expect(i, needle).toBeGreaterThanOrEqual(0); return i; };
+      const fonts = [...head.matchAll(/<link [^>]*as="font"[^>]*>/g)].map((m) => m[0]);
+      expect(fonts.length).toBeGreaterThan(0);
+      expect(fonts.every((tag) => tag.includes('fetchpriority="high"'))).toBe(true);
+      const firstFont = head.indexOf(fonts[0]!);
+      expect(at('<meta charset')).toBeLessThan(at('name="viewport"'));
+      expect(at('name="viewport"')).toBeLessThan(at('href="/shell.css"'));
+      expect(at('href="/assets/main-test.css"')).toBeLessThan(firstFont);
+      for (const code of ['src="/assets/main-test.js"', 'href="/assets/vendor-test.js"', 'href="/assets/Artifact-test.js"', 'href="/assets/InlineStoryRuntime-test.js"']) {
+        expect(firstFont, code).toBeLessThan(at(code));
+      }
+      // The page data rides AFTER the story, as the body's last element: first paint never waits for it.
+      expect(head).not.toContain(BOOTSTRAP_ID);
+      expect(html.indexOf('data-mx-initial-story')).toBeLessThan(html.indexOf(`id="${BOOTSTRAP_ID}"`));
+      const dom = new JSDOM(html);
+      expect(dom.window.document.body.lastElementChild?.id).toBe(BOOTSTRAP_ID);
+      expect(inlined(html).artifact.surface.id).toBe(made.id);
+      dom.window.close();
+    } finally { rmSync(dir, { recursive: true, force: true }); }
+  });
+
   it('escapes `<` so the payload can never end the script early', () => {
     const html = withBootstrap('<head></head>', { evil: '</script><img onerror=alert(1)>' });
     expect(html).not.toContain('</script><img');

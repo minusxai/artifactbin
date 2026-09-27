@@ -94,7 +94,8 @@ describe('a document asks for a Google font by Helmet metadata', () => {
     const app = createAppServer({indexHtml:async()=>'<html><head></head><body><div id="root"></div></body></html>'});
     const initial = await (await app.request(`/a/${id}`)).text();
     const head = initial.split('</head>')[0];
-    expect(head).toMatch(/<link rel="preload" href="\/webfonts\/[0-9a-f]{32}\.woff2" as="font" type="font\/woff2" crossorigin>/);
+    // The app page asks for the faces it paints at high priority, ahead of its code (server/app withReaderHeadOrder).
+    expect(head).toMatch(/<link fetchpriority="high" rel="preload" href="\/webfonts\/[0-9a-f]{32}\.woff2" as="font" type="font\/woff2" crossorigin>/);
   });
 
   it('/webfonts serves the copied bytes — immutable, CORS-open, no app CSP', async () => {

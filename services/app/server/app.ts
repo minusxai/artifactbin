@@ -93,10 +93,45 @@ const withShellFonts = (html: string): string => html.replace('</head>', () => `
 export const BOOTSTRAP_ID = 'mx-page-data';
 /** `<` is the only character that can end a script element early; JSON never needs it. */
 const safeJson = (value: unknown): string => JSON.stringify(value).replace(/</g, '\\u003c');
-export const withBootstrap = (html: string, data: unknown): string =>
+/**
+ * The page's data rides at the END of the body — after the story the server
+ * rendered, as the body's own last element — so the first paint never waits
+ * for it to download. Still read before the app's first render: the SPA's
+ * module runs after the document is parsed (web/bootstrap reads exactly this
+ * element, a direct child of body, which no authored id inside the story can be).
+ */
+export const withBootstrap = (html: string, data: unknown): string => {
   // A function replacement keeps JavaScript's special replacement tokens in
   // user-authored JSON literal instead of expanding them with the HTML shell.
-  html.replace('</head>', () => `  <script type="application/json" id="${BOOTSTRAP_ID}">${safeJson(data)}</script>\n  </head>`);
+  const tag = `<script type="application/json" id="${BOOTSTRAP_ID}">${safeJson(data)}</script>`;
+  const at = html.lastIndexOf('</body>');
+  return at < 0 ? html.replace('</head>', () => `${tag}</head>`) : `${html.slice(0, at)}${tag}${html.slice(at)}`;
+};
+
+/**
+ * THE HEAD IN THE ORDER A READER NEEDS IT. The story is readable before any
+ * JavaScript runs, so code must not starve what paints it: the charset and
+ * viewport, the render-blocking CSS, then the fonts the first screen paints —
+ * at high priority — and only then the app's modules and their preloads,
+ * which Vite writes early in the shell and the preloaders add at its end.
+ */
+const MODULE_TAG = /<script\b[^>]*\btype=["']module["'][^>]*>\s*<\/script>|<link\b[^>]*\brel=["']modulepreload["'][^>]*>/gi;
+const FONT_PRELOAD = /<link\b[^>]*\brel=["']preload["'][^>]*\bas=["']font["'][^>]*>/gi;
+const STYLESHEET = /<link\b[^>]*\brel=["'](?:stylesheet|preload)["'][^>]*\bas=["']style["'][^>]*>|<link\b[^>]*\brel=["']stylesheet["'][^>]*>/gi;
+export function withReaderHeadOrder(html: string): string {
+  const end = html.indexOf('</head>');
+  if (end < 0) return html;
+  let head = html.slice(0, end);
+  const modules = head.match(MODULE_TAG) ?? [];
+  const fonts = (head.match(FONT_PRELOAD) ?? []).map((tag) => (/\bfetchpriority=/i.test(tag) ? tag : tag.replace(/^<link\b/i, '<link fetchpriority="high"')));
+  head = head.replace(MODULE_TAG, '').replace(FONT_PRELOAD, '');
+  // Fonts right after the last stylesheet (the render-blocking CSS), else after the viewport.
+  let cut = -1;
+  for (const m of head.matchAll(STYLESHEET)) cut = m.index! + m[0].length;
+  if (cut < 0) { const viewport = /<meta\b[^>]*name=["']viewport["'][^>]*>/i.exec(head); cut = viewport ? viewport.index + viewport[0].length : head.search(/<head\b[^>]*>/i) + (/<head\b[^>]*>/i.exec(head)?.[0].length ?? 0); }
+  head = head.slice(0, cut) + fonts.join('') + head.slice(cut);
+  return `${head}${modules.join('')}${html.slice(end)}`;
+}
 
 /** What the app page inlines for a document: its story element and the head facts about it. */
 export interface InitialStoryParts {
@@ -359,7 +394,8 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
     // Last, so the pointer is the page's final line whatever else was inlined.
     // Brotli for a client that takes it (server/content-encoding); identity otherwise, as before.
     const inlined = story && !story.starter ? withoutInlinedSheet(data) : data;
-    return compressDynamic(c.req.raw, new Response(withAgentDiscoveryTail(inlined ? withBootstrap(indexed, inlined) : indexed, agentDiscovery(baseUrl(c.req.raw))), { status: code, headers: {
+    const ordered = withReaderHeadOrder(indexed);
+    return compressDynamic(c.req.raw, new Response(withAgentDiscoveryTail(inlined ? withBootstrap(ordered, inlined) : ordered, agentDiscovery(baseUrl(c.req.raw))), { status: code, headers: {
       'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store', ...APP_SECURITY_HEADERS,
       ...(opts.devHmrPort !== undefined ? { 'content-security-policy': developmentAppCsp(c.req.url, opts.devHmrPort) } : {}),
       ...(story ? { Link: `<${baseUrl(c.req.raw)}/llms.txt>; rel="help"` } : {}),

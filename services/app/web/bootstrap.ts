@@ -31,7 +31,9 @@ function withStorySheet(payload: Payload): Payload {
 
 const payload: Payload | null = (() => {
   try {
-    const el = document.getElementById(BOOTSTRAP_ID);
+    // The body's own child (server/app withBootstrap), never an element of the same id inside the story —
+    // matched by attribute, since an engine may resolve `#id` through the FIRST element with that id.
+    const el = document.querySelector(`body > script[type="application/json"][id="${BOOTSTRAP_ID}"]`);
     return el?.textContent ? withStorySheet(JSON.parse(el.textContent) as Payload) : null;
   } catch {
     return null;

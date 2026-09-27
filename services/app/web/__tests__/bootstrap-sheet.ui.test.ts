@@ -9,9 +9,10 @@ import { afterEach, expect, it, vi } from 'vitest';
 afterEach(() => { document.head.innerHTML = ''; document.body.innerHTML = ''; vi.resetModules(); });
 
 const SHEET = '[data-mx-inline-story] .a::after{content:"<\\73 tyle> & more"}';
+/** The page as the server writes it: the story, then the page data as the body's last element. */
 const serve = (payload: unknown, story: string) => {
-  document.head.innerHTML = `<script type="application/json" id="mx-page-data">${JSON.stringify(payload).replace(/</g, '\\u003c')}</script>`;
-  document.body.innerHTML = `<div id="root"></div><div data-mx-initial-story=""><style>body > #root:first-child{display:none!important}</style>${story}</div>`;
+  document.body.innerHTML = `<div id="root"></div><div data-mx-initial-story=""><style>body > #root:first-child{display:none!important}</style>${story}</div>`
+    + `<script type="application/json" id="mx-page-data">${JSON.stringify(payload).replace(/</g, '\\u003c')}</script>`;
 };
 
 it('restores the runtime sheet from the served story before the page reads it', async () => {
@@ -28,4 +29,13 @@ it('keeps a sheet the payload already carries and invents none where no story wa
   serve({ path: '/a/Abc123', artifact: { surface: { runtime: { css: '.kept{}', data: {} } } } }, '<div>starter instructions</div>');
   const { takeBootstrap } = await import('../bootstrap');
   expect(takeBootstrap<{ surface: { runtime: { css?: string } } }>('/a/Abc123', 'artifact')?.surface.runtime.css).toBe('.kept{}');
+});
+
+it('reads the body\'s own payload, never an authored element of the same id inside the story', async () => {
+  serve({ path: '/a/Abc123', artifact: { surface: { runtime: { data: {}, base: {} } } } },
+    `<div data-mx-inline-story="" data-mx-story-root="" class="light"><style>${SHEET}</style><div id="mx-page-data">{"path":"/a/Abc123","artifact":{"forged":true}}</div></div>`);
+  const { takeBootstrap } = await import('../bootstrap');
+  const artifact = takeBootstrap<{ forged?: boolean; surface: { runtime: { css?: string } } }>('/a/Abc123', 'artifact');
+  expect(artifact?.forged).toBeUndefined();
+  expect(artifact?.surface.runtime.css).toContain('& more');
 });

@@ -18,7 +18,8 @@ function serve(path: string, payload: Record<string, unknown> | null) {
   script.type = 'application/json';
   script.id = BOOTSTRAP;
   script.textContent = JSON.stringify(payload);
-  document.head.appendChild(script);
+  // Where the server writes it: the body's last element, after the story (server/app withBootstrap).
+  document.body.appendChild(script);
 }
 const evaluate = async () => { vi.resetModules(); await import('../heal-address'); };
 afterEach(() => { document.getElementById(BOOTSTRAP)?.remove(); window.history.replaceState(null, '', '/'); });

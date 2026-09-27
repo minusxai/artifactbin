@@ -58,7 +58,7 @@ const asSession = (u: { id: string; email: string } | null) => { sessionUser.id 
 const resetSpies = () => { spies.parse = 0; spies.css = 0; spies.nodes = 0; spies.render = 0; };
 const app = createAppServer({ indexHtml: async () => '<!doctype html><html><head><title>x</title></head><body><div id="root"></div></body></html>' });
 const inlined = (html: string) => {
-  const m = new RegExp(`id="${BOOTSTRAP_ID}">([\\s\\S]*?)</script>`).exec(html);
+  const m = new RegExp(`<script type="application/json" id="${BOOTSTRAP_ID}">([\\s\\S]*?)</script>`).exec(html);
   return m ? JSON.parse(m[1]!) : null;
 };
 
