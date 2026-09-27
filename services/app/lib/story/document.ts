@@ -93,6 +93,13 @@ export interface StoryDocumentInput {
    * by a document that will actually reach for one. See {@link drawsChart}.
    */
   lazyChunks?: string[] | null;
+  /** The entry's STATIC dependency chunks, preloaded with it by every hydrating document. */
+  runtimeDeps?: string[] | null;
+  /**
+   * Mermaid's chunks per diagram kind (`flowchart`, `sequence`, ...), each its
+   * full static closure: a document preloads only the kinds it draws.
+   */
+  mermaidChunks?: Record<string, string[]> | null;
   /**
    * Where an AGENT that fetched this document learns how to edit it (discover): rendered as
    * `<link rel="help" href={llms} title="…">` and `<meta name="afbin" content="{blurb} Guide: {llms}">`
