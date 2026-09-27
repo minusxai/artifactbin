@@ -194,3 +194,40 @@ describe('document runtime bundle hygiene', () => {
     ).toBeNull();
   });
 });
+
+/**
+ * The /a/<id> READER ROUTE as the server preloads it (server/reader-preloads.ts)
+ * plus the SPA shell: what every reader of every document downloads before the
+ * page is theirs. Owner and on-demand features (sharing, the folder view, the
+ * comment layer, the JSX parser that writing needs) load when first used, and
+ * are prefetched on idle/hover so the first click does not wait.
+ */
+const ROUTE_ENTRIES = ['web/main.tsx', 'web/pages/Artifact.tsx', 'web/pages/Profile.tsx', 'lib/story-runtime/InlineStoryRuntime.tsx'];
+const ROUTE_FORBIDDEN_PACKAGES = ['acorn', 'acorn-jsx', 'typebox', ...FORBIDDEN];
+const ROUTE_FORBIDDEN_FILES = ['components/ShareLink.tsx', 'components/AnnotationLayer.tsx', 'web/pages/Folder.tsx', 'lib/jsx/parse.ts'];
+
+describe('reader route bundle hygiene', () => {
+  const reach = walk(ROUTE_ENTRIES);
+
+  it('sanity: the walker descends through the SPA shell and the inline runtime', () => {
+    const files = [...reach.files].map((f) => path.relative(ROOT, f));
+    expect(files).toContain('lib/story-runtime/StoryRuntimeApp.tsx');
+    expect(files).toContain('components/ArtifactSurface.tsx');
+    expect([...reach.packages.keys()]).toContain('react');
+  });
+
+  it.each(ROUTE_FORBIDDEN_PACKAGES)('never statically reaches %s', (pkg) => {
+    const importer = reach.packages.get(pkg);
+    expect(importer ? `${pkg} is statically imported via:\n    ${chainTo(importer, reach.parent)}` : null).toBeNull();
+  });
+
+  it.each(ROUTE_FORBIDDEN_FILES)('loads %s only on demand', (rel) => {
+    const file = path.join(ROOT, rel);
+    expect(reach.files.has(file) ? chainTo(file, reach.parent) : null).toBeNull();
+  });
+
+  it('ships the Tailwind sheet once: no `?inline` CSS copy in the reader JS', () => {
+    const inline = [...reach.files].filter((f) => staticImports(readFileSync(f, 'utf8')).some((s) => /\.css\?inline$/.test(s)));
+    expect(inline.map((f) => chainTo(f, reach.parent))).toEqual([]);
+  });
+});
