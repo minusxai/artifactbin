@@ -115,7 +115,8 @@ export const withBootstrap = (html: string, data: unknown): string => {
  * at high priority — and only then the app's modules and their preloads,
  * which Vite writes early in the shell and the preloaders add at its end.
  */
-const MODULE_TAG = /<script\b[^>]*\btype=["']module["'][^>]*>\s*<\/script>|<link\b[^>]*\brel=["']modulepreload["'][^>]*>/gi;
+// Every module script — inline ones too, so modules keep their relative (execution) order.
+const MODULE_TAG = /<script\b[^>]*\btype=["']module["'][^>]*>[\s\S]*?<\/script>|<link\b[^>]*\brel=["']modulepreload["'][^>]*>/gi;
 const FONT_PRELOAD = /<link\b[^>]*\brel=["']preload["'][^>]*\bas=["']font["'][^>]*>/gi;
 const STYLESHEET = /<link\b[^>]*\brel=["'](?:stylesheet|preload)["'][^>]*\bas=["']style["'][^>]*>|<link\b[^>]*\brel=["']stylesheet["'][^>]*>/gi;
 export function withReaderHeadOrder(html: string): string {
