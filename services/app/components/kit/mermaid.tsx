@@ -111,7 +111,8 @@ function measureFaces(palette: MermaidPalette, code: string): MermaidMetrics | n
   }
 }
 
-const unquote = (family: string) => family.trim().replace(/^(["'])(.*)\1$/, '$2');
+// Quotes as escapes: the kit's class extraction (lib/story-ui/recipe-classes) reads this file as text.
+const unquote = (family: string) => family.trim().replace(/^[\x22\x27]|[\x22\x27]$/g, '');
 /** The face a font stack leads with, unquoted: the one it draws in when it has loaded. */
 const firstFamily = (stack: string) => unquote(stack.split(',')[0] ?? '');
 

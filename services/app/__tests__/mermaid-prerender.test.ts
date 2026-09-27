@@ -114,7 +114,8 @@ describe('a published Mermaid document', () => {
     expect(made.status, await made.clone().text()).toBe(201);
     const id = (await made.json()).id as string;
     while (await runNextMermaidHarvest()) { /* drain */ }
-    const answer = await artifactPageAnswer(request(`/a/${id}`), id);
+    // As the reader stored drawings are offered to (lib/mermaid-images/readers).
+    const answer = await artifactPageAnswer(reader(`/a/${id}`), id);
     const data = (answer.body as { surface: { runtime: { data: { mermaidImages?: Record<string, { src: string }>; dataflow?: { results?: { tables: Record<string, { rows: unknown[] }> } } } } } }).surface.runtime.data;
     expect(data.dataflow?.results?.tables.q?.rows).toEqual([{ n: 42 }]);
     const drawing = data.mermaidImages?.[mermaidImageKey(FLOW, 'light')];
