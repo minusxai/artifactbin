@@ -478,6 +478,17 @@ async function runReaderHydration() {
   // The parse-survival shapes of the repaint check below (a div in a <p>, a Button in a trigger, a <For> in an svg).
   const survival = await publish({ title: 'Hydration parse survival', markup: PROSE, visibility: 'unlisted' });
   const kit = fixtures.find((f) => f.key === 'kit');
+  // The Mermaid fixture is read as readers meet it once its diagram is stored (lib/mermaid-images):
+  // the stored drawing is in the served story and must hydrate as it was served.
+  const diagram = fixtures.find((f) => f.key === 'mermaid');
+  let storedDiagram = false;
+  for (const end = Date.now() + 60000; !storedDiagram && Date.now() < end;) {
+    storedDiagram = (await (await fetch(`${B}/api/page/artifact/${diagram.id}`)).text()).includes('"mermaidImages"');
+    if (!storedDiagram) await new Promise((resolve) => setTimeout(resolve, 1000));
+  }
+  check(storedDiagram, 'the mermaid fixture\'s diagram was stored before the reader loads');
+  const drawnFromStorage = (who) => async (page) => check(await waitFor(page, `!!document.querySelector('#root [data-mx-mermaid-state=ready] img[src^="/assets/mermaid/"]') && !document.querySelector('#root figure[data-mx-mermaid-palette]')`, 15000),
+    `mermaid, ${who}: the hydrated story shows the stored drawing and drew nothing with the engine`);
   // Two versions, so `?version=1` is an ARCHIVED render — which only the owner's history reaches.
   const versioned = await startDocument(B);
   await publish1(versioned, '<article><h1>First version</h1><Tabs defaultValue="a"><TabsList><TabsTrigger value="a">A</TabsTrigger><TabsTrigger value="b">B</TabsTrigger></TabsList><TabsContent value="a">a</TabsContent><TabsContent value="b">b</TabsContent></Tabs><Accordion type="single" collapsible><AccordionItem value="x"><AccordionTrigger>Open</AccordionTrigger><AccordionContent>inside</AccordionContent></AccordionItem></Accordion></article>');
@@ -511,8 +522,8 @@ async function runReaderHydration() {
   };
   // Every fixture and the kitchen sink, anonymous and as the owner (whose address is the pretty /@owner one).
   for (const doc of [...fixtures, { key: 'kitchen sink', id: sinkDoc.id }, { key: 'scripted', id: scripted.id }, { key: 'parse survival', id: survival.id }]) {
-    await load(anonymous, 'light', `/a/${doc.id}`, `${doc.key}, anonymous`);
-    await load(ownerContext, 'dark', `/a/${doc.id}`, `${doc.key}, owner`);
+    await load(anonymous, 'light', `/a/${doc.id}`, `${doc.key}, anonymous`, doc === diagram ? drawnFromStorage('anonymous') : undefined);
+    await load(ownerContext, 'dark', `/a/${doc.id}`, `${doc.key}, owner`, doc === diagram ? drawnFromStorage('owner') : undefined);
   }
   await load(historian, 'dark', `/a/${versioned.id}?version=1`, 'version 1 of 2 (archived), its owner');
   await load(ownerContext, 'light', `/a/${kit.id}/edit`, 'kit, owner entering /edit');
