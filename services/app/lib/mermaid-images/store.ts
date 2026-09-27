@@ -20,9 +20,13 @@
  *
  * THE READ. `mermaidImagesFor` answers a version's drawings for one surface,
  * both modes, keyed as the island wants them (StoryIslandData.mermaidImages);
- * the component uses one only while the reader's own palette key is the one it
- * was drawn under (components/kit/mermaid), so a drawing can be unused but
- * never wrong. Publishing never waits on any of this and never fails because
+ * the component uses one only while the reader's own palette key and face
+ * measurements are the ones it was drawn under (components/kit/mermaid,
+ * lib/mermaid-images/match), so a drawing can be unused but never wrong. The
+ * routes offer them only to readers that can pass that check
+ * (`storedDrawingsServed`), and the harvest keeps only drawings made entirely
+ * in the document's web fonts, measured by a browser that does not hint text
+ * (services/browser): the drawing a macOS or Windows reader's engine makes. Publishing never waits on any of this and never fails because
  * of it: the queue insert runs after the commit and swallows its own errors,
  * and a browser that is down only means readers draw with the engine.
  *
@@ -40,6 +44,7 @@ import { getDb } from '@/lib/db';
 import { objectStore } from '@/lib/object-store';
 import { MERMAID_RENDER_ENGINE, mermaidPrerenderable } from './engine';
 import { mermaidCodesOf } from './codes';
+import { readerMayUseStoredDrawings, servableStoredDrawing } from './match';
 
 export type MermaidSurface = 'document' | 'inline';
 export const MERMAID_SURFACES: readonly MermaidSurface[] = ['document', 'inline'];
@@ -62,6 +67,17 @@ export const CAPTURE_COLOR_PARAM = 'color';
 export function engineRequested(url: string | URL): boolean {
   return new URL(url).searchParams.get(MERMAID_ENGINE_PARAM) === 'engine';
 }
+
+/**
+ * May this request be served stored drawings? Not when it asks for the engine
+ * by name, and not when its reader's browser cannot measure as the harvest's
+ * does (lib/mermaid-images/match): that reader would check the drawing, find
+ * it is not its own, and download the engine as well — so it is served the
+ * engine's page, with the engine's code preloaded, exactly as before.
+ */
+export function storedDrawingsServed(request: Request): boolean {
+  return !engineRequested(request.url) && readerMayUseStoredDrawings(request.headers.get('user-agent'));
+}
 /** The colour a CAPTURE asked to be rendered in; the caller has verified its export key. */
 export function captureColor(url: string | URL): Mode | null {
   const value = new URL(url).searchParams.get(CAPTURE_COLOR_PARAM);
@@ -77,6 +93,7 @@ export function captureColor(url: string | URL): Mode | null {
  * whatever a page claims, it can only ever name its own bytes.
  */
 export function mermaidContentKey(mode: Mode, palette: string, code: string, svg: string): string {
+  // `palette` is what the drawing was drawn under: the palette key and the faces' measurements.
   return createHash('sha256').update([MERMAID_RENDER_ENGINE, mode, palette, code, createHash('sha256').update(comparableSvg(svg)).digest('hex')].join('\0')).digest('hex');
 }
 
@@ -91,7 +108,12 @@ export function comparableSvg(svg: string): string {
   return svg.replace(/mx-mermaid-\d+/g, 'mx-mermaid-N');
 }
 
-export interface MermaidImageInfo { type: string; width?: number; height?: number; mode: Mode; palette: string }
+/**
+ * A stored drawing's record: its kind and size, and what it was drawn under —
+ * the palette key, the harvest's measurements of the palette's faces, and
+ * whether it was drawn entirely in the document's web fonts (lib/mermaid-images/match).
+ */
+export interface MermaidImageInfo { type: string; width?: number; height?: number; mode: Mode; palette: string; metrics?: number[]; portable?: boolean }
 export type MermaidHarvestMap = Partial<Record<MermaidSurface, Record<string, string>>>;
 
 /**
@@ -196,9 +218,10 @@ export async function mermaidImagesFor(
     const images: Record<string, StoredMermaidImage> = {};
     for (const row of rows) {
       const imageKey = wanted.get(row.key);
-      if (!imageKey) continue;
+      // Only a drawing some reader could find to be its own (lib/mermaid-images/match).
+      if (!imageKey || !servableStoredDrawing(row.info)) continue;
       images[imageKey] = {
-        src: mermaidImagePath(row.key), type: row.info.type, palette: row.info.palette,
+        src: mermaidImagePath(row.key), type: row.info.type, palette: row.info.palette, metrics: row.info.metrics!,
         ...(typeof row.info.width === 'number' ? { width: row.info.width } : {}),
         ...(typeof row.info.height === 'number' ? { height: row.info.height } : {}),
       };

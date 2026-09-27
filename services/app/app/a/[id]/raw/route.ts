@@ -41,7 +41,7 @@ import { serveStoredFile } from '@/lib/story/file-store';
 import { loadPdfStream, pdfFilename, pdfMetaOf } from '@/lib/story/pdf-store';
 import { webAssetsForSource } from '@/lib/web-assets';
 import { buildStoryDocument } from '@/lib/story/document';
-import { captureColor, engineRequested } from '@/lib/mermaid-images/store';
+import { captureColor, storedDrawingsServed } from '@/lib/mermaid-images/store';
 import { resolveStoredStoryDesign } from '@/lib/data/story/story-themes';
 import { currentStoryCss } from '@/lib/data/story/story-css.server';
 import { declaresMutations } from '@/lib/story/helmet';
@@ -553,10 +553,12 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
         /*
          * THIS VERSION'S PRERENDERED DIAGRAMS (lib/mermaid-images), drawn from
          * stored SVG with no Mermaid code. Not on a custom domain (its host
-         * serves no stored drawings), and not when the engine was asked for by
-         * name (`?mermaid=engine` — what the harvest itself loads).
+         * serves no stored drawings), not when the engine was asked for by
+         * name (`?mermaid=engine` — what the harvest itself loads), and not to
+         * a reader whose browser cannot measure as the harvest's did
+         * (lib/mermaid-images/match): it gets the engine's page and preloads.
          */
-        mermaidImageLookup: domain || engineRequested(request.url) ? null : { artifactId: artifact.id, version: at?.version ?? artifact.version, surface: 'document', head: !at, visibility: artifact.visibility },
+        mermaidImageLookup: domain || !storedDrawingsServed(request) ? null : { artifactId: artifact.id, version: at?.version ?? artifact.version, surface: 'document', head: !at, visibility: artifact.visibility },
       });
       return new Response(html, {
         status: 200,

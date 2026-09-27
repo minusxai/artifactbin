@@ -54,6 +54,10 @@ drawing, bytes in all; over a bound is `failed`). The service returns text and n
 sanitises and stores what it keeps. Failures use the render verdicts; a service without the operation answers
 `503 { ok:false, reason:"harvest_unavailable" }`, and `browserClient` maps an older service's 404 to the same
 verdict, so a mixed-version rollout harvests nothing and every reader keeps drawing with the engine.
+A harvest's page lays text out UNHINTED (`--font-render-hinting=none`, `chromiumLaunchArgs('harvest')`): Linux
+Chromium hints by default, rounding glyph advances to whole pixels, and a diagram laid out in those advances is one no
+macOS or Windows reader draws. Renders keep the default, so export pixels and PDF text are unchanged; the service runs
+one Chromium at a time and relaunches it when the work switches between the two.
 
 `POST /sessions` is the one STATEFUL surface: a `BrowserSessionRequest` (`script | status | close`) against a
 persistent isolated session whose worker keeps its browser, context and pages across calls. `503

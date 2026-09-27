@@ -134,9 +134,10 @@ export interface StoryIslandData {
   glyphs?: GlyphMap;
   /**
    * Mermaid diagrams PRERENDERED to SVG after publish (Track G), keyed by
-   * `mermaidImageKey(code, mode)`. Each records the palette key it was drawn
-   * with; the client uses the stored image only while its own resolved palette
-   * has the same key, and otherwise draws with the engine as before.
+   * `mermaidImageKey(code, mode)`. Each records the palette key and the face
+   * measurements it was drawn under; the client uses the stored image only
+   * while its own palette and measurements are the same (up to sub-pixel noise,
+   * lib/mermaid-images/match), and otherwise draws with the engine as before.
    */
   mermaidImages?: Record<string, StoredMermaidImage>;
   /**
@@ -982,5 +983,9 @@ export function isSessionMessage(data: unknown): data is StorySessionMessage {
   return d.type === STORY_SESSION_MESSAGE && typeof d.nonce === 'string' && d.nonce.length >= 16;
 }
 
-/** A server-harvested Mermaid drawing (lib/story-ui/mermaid-source). */
-export interface StoredMermaidImage { src: string; type: string; width?: number; height?: number; palette: string }
+/**
+ * A server-harvested Mermaid drawing (lib/mermaid-images): the palette key it
+ * was drawn under and what the harvest's browser measured its faces as — the
+ * reader keeps it only while both are its own (lib/mermaid-images/match).
+ */
+export interface StoredMermaidImage { src: string; type: string; width?: number; height?: number; palette: string; metrics?: number[] }

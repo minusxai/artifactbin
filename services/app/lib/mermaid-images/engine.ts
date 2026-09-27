@@ -13,8 +13,13 @@
  */
 import { mermaidDiagramKind } from '@/lib/story-ui/mermaid-source';
 
-/** Bump when components/kit/mermaid-render changes what it draws (its test pins the file). */
-export const MERMAID_KIT_RENDER_VERSION = 1;
+/**
+ * Bump when components/kit/mermaid-render changes what it draws (its test pins
+ * the file). 2: drawings are harvested with unhinted text and carry their face
+ * measurements (lib/mermaid-images/match); kit1's were laid out in Linux's
+ * whole-pixel advances, which no macOS or Windows reader measures.
+ */
+export const MERMAID_KIT_RENDER_VERSION = 2;
 export const MERMAID_RENDER_ENGINE = `mermaid@12.0.0+kit${MERMAID_KIT_RENDER_VERSION}`;
 
 /**
