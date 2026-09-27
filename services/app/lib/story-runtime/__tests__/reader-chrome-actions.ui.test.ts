@@ -258,3 +258,30 @@ describe('wireReaderChrome — the page\'s rail', () => {
     expect(railInset()).toBe('320px');
   });
 });
+
+describe('wireReaderChrome — the GitHub star', () => {
+  /*
+   * A standalone document is served under its own CSP (lib/story/markup-csp),
+   * whose connect-src deliberately admits that document's endpoints and no
+   * `/api/*` route — so the count request could only ever be refused, logging
+   * a CSP violation on every load while the count stayed hidden. The star is
+   * a link and needs no request; the app's reader page shows the count.
+   */
+  it('asks nothing of /api from a standalone document, and keeps the count hidden', async () => {
+    const fetch = vi.fn(async () => new Response('{"stars":1}'));
+    vi.stubGlobal('fetch', fetch);
+    try {
+      // Fresh modules: the count is cached per page, and an earlier mount must not answer for this one.
+      vi.resetModules();
+      const fresh = await import('@/lib/story-runtime/reader-chrome-actions');
+      document.body.innerHTML = renderReaderChrome({ share: true, artifactId: 'ab12cd', title: 'T', author: { username: 'ada' } });
+      fresh.wireReaderChrome(window, document);
+      await tick();
+      expect(fetch).not.toHaveBeenCalled();
+      expect(document.querySelector('[data-mx-github-star] a[href^="https://github.com/"]')).not.toBeNull();
+      expect(document.querySelector<HTMLElement>('[data-mx-github-count]')?.hidden).toBe(true);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+});
