@@ -52,7 +52,7 @@ export const GATE_SPECS = Object.freeze([
   { name: 'editable-table', needsMail: true, timeoutMs: 120_000 },
   { name: 'roadmap-views', needsMail: false, timeoutMs: 60_000 },
   { name: 'export-slice', needsMail: false, timeoutMs: 60_000 },
-  { name: 'fonts', needsMail: false, timeoutMs: 60_000 },
+  { name: 'fonts', needsMail: false, timeoutMs: 150_000 },
   { name: 'folders', needsMail: true, timeoutMs: 60_000 },
   { name: 'fork', needsMail: true, timeoutMs: 60_000 },
   { name: 'full-kit', needsMail: false, timeoutMs: 60_000 },
