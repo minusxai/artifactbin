@@ -309,7 +309,10 @@ command below. Prose and the CLI's own tests are exempt.
 3. Successful main CI triggers `Release tested afbin CLI`, which tags that exact commit and
    publishes all five tested executables, host runtimes, Chromium packages and checksums.
    It publishes the bytes CI built: the run main CI's `tested-run` artifact names when the tree was
-   tested elsewhere, the main run itself otherwise. The release stays draft until every asset is
+   tested elsewhere, the main run itself otherwise. Whether there is a release to publish is that
+   run's artifacts: all five binaries, their manifests naming this version, publish; none (a merge
+   that did not change the version) publish nothing; some is an error. So a bump rebase-merged below
+   other commits publishes from the head's run. The release stays draft until every asset is
    attached. Published releases are immutable.
 4. Deploy a matching server/installer only after publication succeeds. Rollback keeps the
    previous release available; installers also accept `--version` explicitly.
