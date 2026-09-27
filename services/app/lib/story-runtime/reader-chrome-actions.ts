@@ -27,7 +27,6 @@ import { STORY_MODE_HOOK, STORY_READER_ACTION_MESSAGE, STORY_READER_ACTION_RESUL
 import { applyReaderMode, persistReaderMode } from './reader-mode';
 import { chromeAfterSample, type ChromeState } from './reader-chrome-policy';
 import { wireReaderSharing } from './reader-share';
-import { wireGithubStar } from '@/lib/github-star';
 
 interface ReaderChromeHandle {
   /** Remove every listener this wiring installed. */
@@ -79,7 +78,13 @@ export function wireReaderChrome(win: Window, doc: Document): ReaderChromeHandle
   const root = doc.querySelector<HTMLElement>('[data-mx-reader-chrome]');
   if (!root) return null;
 
-  const cleanups: Array<() => void> = [wireGithubStar(root), wireFaceFallback(root)];
+  /*
+   * No GitHub star COUNT here. This document's own CSP (lib/story/markup-csp)
+   * admits its own endpoints and no `/api/*` route, by design, so the count
+   * request could only be refused — a CSP violation on every load, with the
+   * count left hidden. The star stays a link; the app's reader shows the count.
+   */
+  const cleanups: Array<() => void> = [wireFaceFallback(root)];
   const on = <T extends EventTarget>(target: T, type: string, handler: EventListener, options?: AddEventListenerOptions) => {
     target.addEventListener(type, handler, options);
     cleanups.push(() => target.removeEventListener(type, handler, options));

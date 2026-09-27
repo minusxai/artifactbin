@@ -50,6 +50,16 @@ interface StoryRuntimeManifest {
   lazy: string[];
   /** The page's SQLite engine wasm (StoryIslandData.sqliteWasm). Null for a manifest written before it existed. */
   sqlite: string | null;
+  /** The entry's STATIC chunks (not the entry itself), preloaded with it. Empty for an older manifest. */
+  entryDeps: string[];
+  /** Each `lazy` chunk's static chunks, keyed by that chunk. Empty for an older manifest. */
+  lazyDeps: Record<string, string[]>;
+  /**
+   * Per Mermaid diagram kind (lib/story-ui/mermaid-source), the full static
+   * closure it loads: the engine, the diagram's module, its layout engine.
+   * Empty for an older manifest.
+   */
+  mermaid: Record<string, string[]>;
 }
 
 let cached: StoryRuntimeManifest | null = null;
@@ -83,6 +93,13 @@ export function readStoryRuntimeManifest(file: string = storyRuntimeManifest()):
   // place is a smaller failure than one that does not hydrate at all. The build
   // asserts the file it names is really there, so a real build always has one.
   const lazy = Array.isArray(parsed.lazy) ? parsed.lazy.filter(local) : [];
+  // The closures are ADDITIVE preload hints, validated like every other name:
+  // anything not a path under /story/ is dropped, never served.
+  const urls = (v: unknown): string[] => Array.isArray(v) ? v.filter(local) : [];
+  const record = (v: unknown, key: (k: string) => boolean): Record<string, string[]> =>
+    v && typeof v === 'object' && !Array.isArray(v)
+      ? Object.fromEntries(Object.entries(v).filter(([k, list]) => key(k) && Array.isArray(list)).map(([k, list]) => [k, urls(list)]))
+      : {};
   cached = {
     entry: parsed.entry,
     anchor: local(parsed.anchor) ? parsed.anchor : null,
@@ -92,6 +109,9 @@ export function readStoryRuntimeManifest(file: string = storyRuntimeManifest()):
     lazy,
     // ADDITIVE too: without it a page runs nothing itself, as before.
     sqlite: local(parsed.sqlite) ? parsed.sqlite : null,
+    entryDeps: urls(parsed.entryDeps),
+    lazyDeps: record(parsed.lazyDeps, (k) => lazy.includes(k)),
+    mermaid: record(parsed.mermaid, (k) => /^[\w-]+$/.test(k)),
   };
   return cached;
 }
@@ -119,16 +139,15 @@ let warned = false;
  * (scripts/build-story-runtime.mjs), mirroring the `test -f libduckdb.so` guard
  * that exists because a partial trace took every route down once already.
  */
-export function storyRuntimeAssets(file?: string): { entry: string | null; anchor: string | null; comment: string | null; lazy: string[]; sqlite: string | null } {
+export function storyRuntimeAssets(file?: string): Omit<StoryRuntimeManifest, 'entry'> & { entry: string | null } {
   try {
-    const { entry, anchor, comment, lazy, sqlite } = readStoryRuntimeManifest(file);
-    return { entry, anchor, comment, lazy, sqlite };
+    return readStoryRuntimeManifest(file);
   } catch (err) {
     if (!warned) {
       warned = true;
       console.error('[story] serving documents WITHOUT the hydration runtime:', err);
     }
-    return { entry: null, anchor: null, comment: null, lazy: [], sqlite: null };
+    return { entry: null, anchor: null, comment: null, lazy: [], sqlite: null, entryDeps: [], lazyDeps: {}, mermaid: {} };
   }
 }
 

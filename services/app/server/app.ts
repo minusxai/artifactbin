@@ -51,7 +51,8 @@ import { ROUTES } from './routes.generated';
 import { authorFrameResponse } from './author-frame';
 import { AUTHOR_FRAME_PATH } from '@/lib/story-runtime/author-frame';
 import { GITHUB_EXTERNAL_URL } from '@/lib/github-star';
-import { createListingPreloader, createReaderPreloader, listingPage } from './reader-preloads';
+import { createDocumentPreloader, createListingPreloader, createReaderPreloader, listingPage } from './reader-preloads';
+import { lazyCodeOf } from '@/lib/story/lazy-code';
 import { mountBuildAssets } from './build-assets';
 import { customHostBoundary } from './custom-host';
 import { linkedStylesheets } from '@/lib/custom-domain-home';
@@ -276,6 +277,8 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
   if (!opts.indexHtml) mountBuildAssets(app, webDir);
   const preloadReader = opts.indexHtml ? (html: string) => html : createReaderPreloader(webDir);
   const preloadListing = opts.indexHtml ? (html: string) => html : createListingPreloader(webDir);
+  // …and per document, the lazy code THIS document runs: its chart module, its Mermaid kinds.
+  const preloadDocument = opts.indexHtml ? (html: string) => html : createDocumentPreloader(webDir);
   app.get(GITHUB_EXTERNAL_URL, createGithubResponse());
   const publicDir = opts.publicDir ?? path.resolve('public');
   const cliReleaseDir = opts.cliReleaseDir ?? path.resolve(publicDir, '..', '..', 'cli', 'dist');
@@ -305,8 +308,11 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
     // — the static index.html carries none, so there is one source (lib/agent-discovery).
     const discovered = withAgentDiscovery(html, baseUrl(c.req.raw));
     const listing = listingPage(data);
-    const shell = surface?.surface?.runtime
-      ? withInitialStory(preloadReader(discovered), surface.surface.runtime, surface.surface.id, surface.description, baseUrl(c.req.raw), isStartPlaceholder(surface.surface.source, surface.surface.version))
+    const story = surface?.surface;
+    const starter = !!story && isStartPlaceholder(story.source, story.version);
+    const shell = story?.runtime
+      // A starter placeholder draws its instructions, not its body: no lazy code of its own.
+      ? withInitialStory(preloadDocument(preloadReader(discovered), starter ? { chart: false, mermaid: [] } : lazyCodeOf(story.runtime.data.nodes)), story.runtime, story.id, surface?.description, baseUrl(c.req.raw), starter)
       : withGenericSocial(listing ? preloadListing(discovered, listing) : discovered, baseUrl(c.req.raw));
     // The address search engines index a document under (lib/custom-domains canonicalDocumentUrl).
     const indexed = canonical ? shell.replace('</head>', () => `<link rel="canonical" href="${escapeHtml(canonical)}"></head>`) : shell;

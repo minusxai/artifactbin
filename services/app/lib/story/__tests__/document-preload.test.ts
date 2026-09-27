@@ -192,3 +192,45 @@ describe('the anchor module — every document ships it', () => {
     expect(preloads(await doc({ anchorSrc: null }))).toEqual([RUNTIME]);
   });
 });
+
+/*
+ * The whole static closure, not just its head. The entry imports shared chunks
+ * statically (React, the kit's shared code); naming only the entry leaves those
+ * to be discovered after it parses — one more round trip for every hydrating
+ * document. The chart chunk likewise imports d3 statically. Mermaid documents
+ * name exactly the diagram kinds they draw, and nothing else.
+ */
+const DEP = '/story/chunks/chunk-SHARED.js';
+const CHART_DEP = '/story/chunks/chunk-D3.js';
+const FLOW = ['/story/chunks/mermaid-render.js', '/story/chunks/flowDiagram.js'];
+const SEQ = ['/story/chunks/mermaid-render.js', '/story/chunks/sequenceDiagram.js'];
+
+describe('the static closure is preloaded', () => {
+  it("names the entry's static dependencies with the entry", async () => {
+    expect(preloads(await doc({ runtimeDeps: [DEP] }))).toEqual([RUNTIME, DEP]);
+  });
+
+  it("names the chart chunk's static dependencies with it", async () => {
+    const got = preloads(await doc({ source: CHART_Q, runtimeDeps: [DEP], lazyChunks: [CHART, CHART_DEP] }));
+    expect(got).toEqual([RUNTIME, DEP, CHART, CHART_DEP]);
+  });
+});
+
+describe('a Mermaid document preloads only the diagram kinds it draws', () => {
+  const mermaidChunks = { flowchart: FLOW, sequence: SEQ };
+  const mermaid = (code: string) => `<Mermaid code={${JSON.stringify(code)}} />`;
+
+  it('a flowchart names the flowchart chunks, once each, and no other kind', async () => {
+    const got = preloads(await doc({ source: mermaid('flowchart TD\n  a --> b') + mermaid('graph LR\n  c --> d'), mermaidChunks }));
+    expect(got).toEqual([RUNTIME, ...FLOW]);
+  });
+
+  it('a sequence diagram names its own chunks', async () => {
+    const got = preloads(await doc({ source: mermaid('sequenceDiagram\n  A->>B: hi'), mermaidChunks }));
+    expect(got).toEqual([RUNTIME, ...SEQ]);
+  });
+
+  it('a document without Mermaid names none', async () => {
+    expect(preloads(await doc({ mermaidChunks }))).toEqual([RUNTIME]);
+  });
+});

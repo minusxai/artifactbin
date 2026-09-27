@@ -119,7 +119,7 @@ describe('the serving path degrades instead of failing', () => {
     resetStoryRuntimeManifest();
     const missing = path.join(tmpdir(), 'mx-absent', 'manifest.json');
     expect(() => storyRuntimeAssets(missing)).not.toThrow();
-    expect(storyRuntimeAssets(missing)).toEqual({ entry: null, anchor: null, comment: null, lazy: [], sqlite: null });
+    expect(storyRuntimeAssets(missing)).toEqual({ entry: null, anchor: null, comment: null, lazy: [], sqlite: null, entryDeps: [], lazyDeps: {}, mermaid: {} });
   });
 
   it('still reports the real assets when the build IS there', () => {
@@ -127,5 +127,69 @@ describe('the serving path degrades instead of failing', () => {
     const assets = storyRuntimeAssets();
     expect(assets.entry).toBe(storyRuntimeSrc());
     expect(assets.lazy.length).toBe(1);
+  });
+});
+
+/*
+ * THE STATIC CLOSURES. The entry and the chart chunk each import shared chunks
+ * statically, and Mermaid reaches a diagram's module and its layout engine only
+ * after the engine runs — every one of those a round trip after its importer
+ * parses. The build names them so a document can preload them with it.
+ */
+describe('the closures the build records', () => {
+  const fixture = (contents: string): string => {
+    const dir = mkdtempSync(path.join(tmpdir(), 'mx-manifest-'));
+    const file = path.join(dir, 'manifest.json');
+    writeFileSync(file, contents);
+    return file;
+  };
+  const onDisk = (url: string) => existsSync(path.join(process.cwd(), 'public', url.replace(/^\//, '')));
+
+  it("names the entry's static chunks, on disk, without the entry itself", () => {
+    const { entry, entryDeps } = storyRuntimeAssets();
+    expect(entryDeps.length).toBeGreaterThan(0);
+    expect(entryDeps).not.toContain(entry);
+    for (const url of entryDeps) {
+      expect(url).toMatch(/^\/story\/chunks\/.+\.js$/);
+      expect(onDisk(url), url).toBe(true);
+    }
+  });
+
+  it("names each lazy chunk's static chunks, keyed by the lazy chunk", () => {
+    const { lazy, lazyDeps } = storyRuntimeAssets();
+    expect(Object.keys(lazyDeps)).toEqual(lazy);
+    for (const url of Object.values(lazyDeps).flat()) expect(onDisk(url), url).toBe(true);
+    // The chart chunk imports d3 statically: its closure is not empty.
+    expect(lazyDeps[lazy[0]].length).toBeGreaterThan(0);
+  });
+
+  it('names every Mermaid kind the kit draws, each with the engine and its own diagram module', () => {
+    const { mermaid } = storyRuntimeAssets();
+    for (const kind of ['flowchart', 'flowchart-elk', 'sequence', 'class', 'state', 'gantt', 'er', 'pie', 'mindmap', 'architecture']) {
+      expect(mermaid[kind], kind).toEqual(expect.arrayContaining([expect.stringMatching(/\/story\/chunks\/mermaid-render-[A-Z0-9]+\.js$/)]));
+    }
+    expect(mermaid.sequence).toEqual(expect.arrayContaining([expect.stringMatching(/\/sequenceDiagram-[A-Z0-9]+-[A-Z0-9]+\.js$/)]));
+    expect(mermaid.flowchart).toEqual(expect.arrayContaining([expect.stringMatching(/\/flowDiagram-[A-Z0-9]+-[A-Z0-9]+\.js$/)]));
+    for (const url of Object.values(mermaid).flat()) expect(onDisk(url), url).toBe(true);
+  });
+
+  it('is empty for a manifest written before the closures existed', () => {
+    resetStoryRuntimeManifest();
+    expect(readStoryRuntimeManifest(fixture('{"entry":"/story/entry-A.js","lazy":["/story/chunks/V.js"]}')))
+      .toMatchObject({ entryDeps: [], lazyDeps: {}, mermaid: {} });
+  });
+
+  it('keeps only paths under /story/ — a closure is never a way off our origin', () => {
+    resetStoryRuntimeManifest();
+    const read = readStoryRuntimeManifest(fixture(JSON.stringify({
+      entry: '/story/entry-A.js',
+      lazy: ['/story/chunks/V.js'],
+      entryDeps: ['/story/chunks/a.js', 'https://evil.example/x.js', 42],
+      lazyDeps: { '/story/chunks/V.js': ['/story/chunks/d3.js', '//evil.example/y.js'], 'https://evil.example/z.js': ['/story/chunks/z.js'] },
+      mermaid: { flowchart: ['/story/chunks/flow.js', '/nope/x.js'], sequence: 'not a list', 'bad kind"': ['/story/chunks/q.js'] },
+    })));
+    expect(read.entryDeps).toEqual(['/story/chunks/a.js']);
+    expect(read.lazyDeps).toEqual({ '/story/chunks/V.js': ['/story/chunks/d3.js'] });
+    expect(read.mermaid).toEqual({ flowchart: ['/story/chunks/flow.js'] });
   });
 });
