@@ -1,5 +1,6 @@
-import { expect, it, vi } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { createBrowserSessions, type SessionWorker } from '../src/sessions';
+import { DEFAULT_SESSION_CAPACITY } from '../src/session-config';
 
 it('persists execution IDs before waiting, serializes scripts, and refuses cross-owner access and replay', async () => {
   const release: Array<() => void> = [];
@@ -63,7 +64,7 @@ it('reports artifact identity for canonical page addresses', async () => {
 });
 
 /**
- * A REFUSED CREATE NAMES NO SESSION. Capacity is shared by every owner (SESSION_LIMITS.sessions), and
+ * A REFUSED CREATE NAMES NO SESSION. Capacity is shared by every owner (`BROWSER__SESSION_MAX`), and
  * the refusal used to echo the id the caller proposed — which the CLI printed as "Recover with", and
  * `status`/`close` on it then answered SESSION_NOT_FOUND. The refusal names what the CALLER can close,
  * and nothing that belongs to anybody else.
@@ -91,4 +92,72 @@ it('refuses a create over capacity with no session id, listing only the caller\'
     expect(none.error!.message).not.toMatch(/stranger-/);
     expect(none.error!.message).toMatch(/none of them are yours/i);
   }finally{await sessions.close();}
+});
+
+/**
+ * CAPACITY IS THE OPERATOR'S, AND NO ONE CREDENTIAL TAKES IT ALL. The global cap comes from
+ * `BROWSER__SESSION_MAX` and a second cap, `BROWSER__SESSION_MAX_PER_ACTOR`, bounds what one owner
+ * holds, so a single agent cannot fill every slot. The two refusals are told apart by code, and both
+ * name only the caller's own sessions.
+ */
+describe('session capacity', () => {
+  const worker=async()=>({run:async()=>({result:1,pages:[],attachments:[]}),close:async()=>{}});
+  const actor=(tokenId:string)=>({credential:'bearer' as const,tokenId});
+  const creator=(sessions:ReturnType<typeof createBrowserSessions>)=>(tokenId:string,session_id:string)=>
+    sessions.request({actor:actor(tokenId),op:'script',session_id,execution_id:`${session_id}-run`,create:true,code:'return 1'});
+
+  it('keeps the defaults of two in total and two per credential', () => {
+    expect(DEFAULT_SESSION_CAPACITY).toEqual({sessions:2,sessionsPerActor:2});
+  });
+
+  it('enforces the global cap it is given, across owners', async () => {
+    const sessions=createBrowserSessions(worker,{sessions:3,sessionsPerActor:3});
+    const create=creator(sessions);
+    try{
+      expect((await create('a','a-1')).error).toBeUndefined();
+      expect((await create('b','b-1')).error).toBeUndefined();
+      expect((await create('c','c-1')).error).toBeUndefined();
+      const refused=await create('a','a-2');
+      expect(refused).toMatchObject({session_id:'',status:'failed',error:{code:'SESSION_CAPACITY'}});
+      expect(refused.error!.message).toContain('at most 3 browser sessions');
+      expect(refused.error!.message).toContain('afbin sessions close a-1');
+      expect(refused.error!.message).not.toMatch(/[bc]-1/);
+    }finally{await sessions.close();}
+  });
+
+  it('refuses one credential past its own cap while the server still has room, naming only its sessions', async () => {
+    const sessions=createBrowserSessions(worker,{sessions:4,sessionsPerActor:2});
+    const create=creator(sessions);
+    try{
+      await create('greedy','g-1');
+      await create('greedy','g-2');
+      const refused=await create('greedy','g-3');
+      expect(refused).toMatchObject({session_id:'',status:'failed',error:{code:'SESSION_ACTOR_CAPACITY'}});
+      expect(refused.execution_id).toBeUndefined();
+      expect(refused.error!.message).toContain('at most 2 browser sessions');
+      expect(refused.error!.message).toContain('afbin sessions close g-1');
+      expect(refused.error!.message).toContain('afbin sessions close g-2');
+      expect(refused.error!.message).not.toMatch(/none of them are yours/i);
+      expect((await sessions.request({actor:actor('greedy'),op:'status',session_id:'g-3'})).error?.code).toBe('SESSION_NOT_FOUND');
+      // Another credential is not held back by the first one's cap.
+      expect((await create('other','o-1')).error).toBeUndefined();
+      // Only LIVE sessions count: closing one frees the credential's slot.
+      await sessions.request({actor:actor('greedy'),op:'close',session_id:'g-1'});
+      expect((await create('greedy','g-3')).error).toBeUndefined();
+    }finally{await sessions.close();}
+  });
+
+  it('names the per-credential limit when the caller hits both at once', async () => {
+    const sessions=createBrowserSessions(worker,{sessions:2,sessionsPerActor:2});
+    const create=creator(sessions);
+    try{
+      await create('solo','s-1');
+      await create('solo','s-2');
+      expect((await create('solo','s-3')).error?.code).toBe('SESSION_ACTOR_CAPACITY');
+      // A different credential meets the global limit, and none of the open sessions are its own.
+      const other=await create('other','o-1');
+      expect(other.error?.code).toBe('SESSION_CAPACITY');
+      expect(other.error!.message).toMatch(/none of them are yours/i);
+    }finally{await sessions.close();}
+  });
 });

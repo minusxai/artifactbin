@@ -1,6 +1,7 @@
 export { sessionEnvNamesRead, sessionProcessPaths } from './session-config';
 import { createBrowserSessions } from './sessions';
-import { createSessionProcess, type SessionProcessOptions } from './session-process';
+import { createSessionProcess } from './session-process';
+import type { BrowserSessionOptions } from './session-config';
 /**
  * CHROMIUM, IN THIS PROCESS. The only entry of this package that loads
  * Playwright; import it from a composition root only. One browser, launched
@@ -38,7 +39,7 @@ function chartsSettled(selector:string):boolean {
  return !!root&&!root.matches('[data-mx-chart-state="pending"]')&&!root.querySelector('[data-mx-chart-state="pending"]');
 }
 
-export function createBrowser(opts: { idleShutdownMs?: number; executablePath?: () => Promise<string>; sessions?: SessionProcessOptions; upload?:UploadOptions } = {}): BrowserService & { close(): Promise<void> } {
+export function createBrowser(opts: { idleShutdownMs?: number; executablePath?: () => Promise<string>; sessions?: BrowserSessionOptions; upload?:UploadOptions } = {}): BrowserService & { close(): Promise<void> } {
   const idleMs = opts.idleShutdownMs ?? 60_000;
   const upload=opts.upload??browserUploadOptions(process.env);
   let browser: Promise<Browser> | undefined;
@@ -218,7 +219,7 @@ export function createBrowser(opts: { idleShutdownMs?: number; executablePath?: 
   const started = createBrowserSessions(actor => {
     if (!opts.sessions) throw new Error('Browser session forwarding is not configured');
     return createSessionProcess(actor, opts.sessions);
-  });
+  }, opts.sessions?.capacity);
   /*
    * SAID OUT LOUD, TWICE. `BROWSER__SANDBOX=none` is a development escape hatch, so the
    * boot says so once in the log for whoever started this process, and every session

@@ -93,7 +93,7 @@ it('teaches accepted platform membership without custom join tables',()=>{
 });
 
 /**
- * ONE SESSION AT A TIME, AND A STOP. A server runs two browser sessions in total, and the skill
+ * ONE SESSION AT A TIME, AND A STOP. A server runs few browser sessions in total (two by default), and the skill
  * taught comparing views by opening sessions as yourself, a test user and a guest — three at once, so
  * the third create was refused. And "fix and push until clean" kept agents re-testing a tracker that
  * already worked until the turn cap. Each identity is its own session, closed before the next, and a
@@ -118,8 +118,9 @@ describe('testing identities in live sessions', () => {
   it('teaches the sequence, the capacity refusal, and when to stop', () => {
     const text = live();
     expect(text).toContain('Hold one session at a time');
-    expect(text).toMatch(/two in total, shared by everyone/);
+    expect(text).toMatch(/few in total \(two by default\),\s+shared by everyone/);
     expect(text).toContain('SESSION_CAPACITY');
+    expect(text).toContain('SESSION_ACTOR_CAPACITY');
     expect(text).not.toMatch(/Compare views by\s+opening sessions as yourself/);
     expect(text).not.toContain('until both passes are clean');
     expect(text).toContain('Stop once each `<Mutation>` has worked once per identity');

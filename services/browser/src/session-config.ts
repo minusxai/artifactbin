@@ -1,6 +1,9 @@
 import { createEnv, overHttp } from '@artifactbin/utils';
 import type { SessionProcessOptions } from './session-process';
 
+/** What a composition hands `createBrowser` for sessions: how to spawn one, and how many may live. */
+export type BrowserSessionOptions = SessionProcessOptions & { capacity?: SessionCapacity };
+
 /**
  * WHERE THE SANDBOX IS DECIDED — once, at this service's env boundary, never by a
  * session asking the host what it happens to be.
@@ -22,11 +25,35 @@ export function sessionSandboxChoice(source: NodeJS.ProcessEnv): SessionSandboxC
   return readSessionEnv(source).sandbox;
 }
 
+/**
+ * HOW MANY LIVE BROWSERS THIS SERVICE HOLDS. `sessions` is the whole service's cap, shared by
+ * every owner (`BROWSER__SESSION_MAX`); `sessionsPerActor` is what one credential may hold of it
+ * (`BROWSER__SESSION_MAX_PER_ACTOR`), so a single agent cannot take every slot. Each session's own
+ * resources (1 GiB, 512 processes, one CPU) are the cgroup's and do not change with these.
+ */
+export interface SessionCapacity { sessions: number; sessionsPerActor: number }
+export const DEFAULT_SESSION_CAPACITY: SessionCapacity = { sessions: 2, sessionsPerActor: 2 };
+
+export function sessionCapacity(source: NodeJS.ProcessEnv): SessionCapacity {
+  return readSessionEnv(source).capacity;
+}
+
 /** The session settings and the names they were read under, from ONE audited reader. */
 function readSessionEnv(source: NodeJS.ProcessEnv) {
   const { env, namesRead } = createEnv(source);
   const cgroupRoot = env('BROWSER', 'SESSION_CGROUP_ROOT');
-  return { cgroupRoot, sandbox: sandboxFrom(env('BROWSER', 'SANDBOX'), source), names: namesRead() };
+  const capacity = {
+    sessions: wholeCount('BROWSER__SESSION_MAX', env('BROWSER', 'SESSION_MAX'), DEFAULT_SESSION_CAPACITY.sessions),
+    sessionsPerActor: wholeCount('BROWSER__SESSION_MAX_PER_ACTOR', env('BROWSER', 'SESSION_MAX_PER_ACTOR'), DEFAULT_SESSION_CAPACITY.sessionsPerActor),
+  };
+  return { cgroupRoot, capacity, sandbox: sandboxFrom(env('BROWSER', 'SANDBOX'), source), names: namesRead() };
+}
+
+/** Digits only: `Number` would read ' 3' as 3 and '1e2' as 100, and a limit must mean what it says. */
+function wholeCount(name: string, value: string | undefined, fallback: number): number {
+  if (value === undefined || value === '') return fallback;
+  if (!/^\d+$/.test(value) || Number(value) < 1) throw new Error(`${name}=${value} is not a limit this build understands; it must be a whole number of at least 1.`);
+  return Number(value);
 }
 
 /**
@@ -43,13 +70,14 @@ function sandboxFrom(value: string | undefined, source: NodeJS.ProcessEnv): Sess
   return { mode: 'none' };
 }
 
-export function sessionProcessPaths(source: NodeJS.ProcessEnv): Pick<SessionProcessOptions, 'cgroupRoot' | 'browsersPath' | 'sandbox'> {
-  const { cgroupRoot, sandbox } = readSessionEnv(source);
-  return { cgroupRoot, sandbox, ...(source.PLAYWRIGHT_BROWSERS_PATH ? { browsersPath: source.PLAYWRIGHT_BROWSERS_PATH } : {}) };
+/** Every session setting a composition spreads into `createBrowser({ sessions })`, read once. */
+export function sessionProcessPaths(source: NodeJS.ProcessEnv): Pick<BrowserSessionOptions, 'cgroupRoot' | 'browsersPath' | 'sandbox' | 'capacity'> {
+  const { cgroupRoot, sandbox, capacity } = readSessionEnv(source);
+  return { cgroupRoot, sandbox, capacity, ...(source.PLAYWRIGHT_BROWSERS_PATH ? { browsersPath: source.PLAYWRIGHT_BROWSERS_PATH } : {}) };
 }
 
 /** Browser-service environment boundary; these credentials never enter a worker. */
-export function sessionProcessOptions(source: NodeJS.ProcessEnv): SessionProcessOptions | undefined {
+export function sessionProcessOptions(source: NodeJS.ProcessEnv): BrowserSessionOptions | undefined {
   const { env } = createEnv(source);
   const target = env('BROWSER', 'SESSION_APP_URL');
   const baseURL = env('APP', 'PUBLIC_BASE_URL');

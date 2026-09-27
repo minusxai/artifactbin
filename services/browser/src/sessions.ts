@@ -2,6 +2,7 @@ import { artifactIdFromPathPrefix } from '@artifactbin/utils/artifact-reference'
 import { randomUUID } from 'node:crypto';
 import type { Actor, BrowserSessionRequest, BrowserSessionResult, BrowserSessions, ViewerChoice } from '@artifactbin/contracts';
 import { ANONYMOUS, SESSION_LIMITS } from '@artifactbin/contracts';
+import { DEFAULT_SESSION_CAPACITY, type SessionCapacity } from './session-config';
 
 export interface SessionWorker {
   run(code: string): Promise<Pick<BrowserSessionResult, 'result' | 'pages' | 'attachments' | 'error'>>;
@@ -33,19 +34,23 @@ const viewerKey = (viewer: ViewerChoice | undefined): string | undefined =>
     : undefined;
 /**
  * A create refused for capacity: NO session id, because none was created (an echoed id is one that
- * `status` and `close` then answer SESSION_NOT_FOUND for). The limit is shared by every owner, so the
- * way out it names is the caller's own open sessions, never anybody else's.
+ * `status` and `close` then answer SESSION_NOT_FOUND for). The way out it names is the caller's own
+ * open sessions, never anybody else's. SESSION_ACTOR_CAPACITY is this credential's own cap, so closing
+ * one of its sessions always frees a slot; SESSION_CAPACITY is the whole server's, shared by every owner.
  */
-function capacityRefusal(yours: string[]): BrowserSessionResult {
+function capacityRefusal(limit: 'server' | 'actor', capacity: SessionCapacity, yours: string[]): BrowserSessionResult {
   const way = yours.length
     ? `Your open sessions: ${yours.join(', ')}. Close one you are done with (${yours.map(id => `afbin sessions close ${id}`).join(' or ')}), then create the new session again.`
     : `None of them are yours: wait a minute and create the session again (a session ends when its owner closes it or after ${SESSION_LIMITS.idleMs / 60000} idle minutes).`;
-  return { session_id: '', status: 'failed', pages: [], attachments: [], error: { code: 'SESSION_CAPACITY', message: `This server runs at most ${SESSION_LIMITS.sessions} browser sessions at once and all are open. ${way}` } };
+  const error = limit === 'actor'
+    ? { code: 'SESSION_ACTOR_CAPACITY', message: `One credential may hold at most ${capacity.sessionsPerActor} browser sessions at once on this server, and you hold ${yours.length}. ${way}` }
+    : { code: 'SESSION_CAPACITY', message: `This server runs at most ${capacity.sessions} browser sessions at once and all are open. ${way}` };
+  return { session_id: '', status: 'failed', pages: [], attachments: [], error };
 }
 const idValid = (id: unknown): id is string => typeof id === 'string' && /^[a-zA-Z0-9_-]{1,80}$/.test(id);
 
 /** Owns leases, execution receipts, and serialization; workers own live browser objects. */
-export function createBrowserSessions(factory: SessionWorkerFactory): BrowserSessions {
+export function createBrowserSessions(factory: SessionWorkerFactory, capacity: SessionCapacity = DEFAULT_SESSION_CAPACITY): BrowserSessions {
   const sessions = new Map<string, Session>();
   const empty = (id: string, code: string, message: string): BrowserSessionResult => ({ session_id: id, status: 'failed', pages: [], attachments: [], error: { code, message } });
   const close = async (session: Session, status: 'lost' | 'closed') => {
@@ -75,12 +80,15 @@ export function createBrowserSessions(factory: SessionWorkerFactory): BrowserSes
       if (input.op === 'script') {
         if (!idValid(input.execution_id) || typeof input.code !== 'string' || Buffer.byteLength(input.code) > SESSION_LIMITS.scriptBytes) return empty(input.session_id, 'INVALID_REQUEST', 'Invalid execution ID or script exceeds 64 KiB');
         if (!session && input.create) {
-          if (sessions.size >= SESSION_LIMITS.sessions) {
+          if (sessions.size >= capacity.sessions) {
             const ended = [...sessions].find(([, value]) => value.status !== 'idle');
             if (ended) sessions.delete(ended[0]);
           }
+          // Only live sessions count; the caller's own cap is named first, since closing one of them is its way out either way.
           const open = [...sessions].filter(([, value]) => value.status === 'idle');
-          if (open.length >= SESSION_LIMITS.sessions) return capacityRefusal(open.filter(([, value]) => value.owner === owner).map(([id]) => id));
+          const yours = open.filter(([, value]) => value.owner === owner).map(([id]) => id);
+          if (yours.length >= capacity.sessionsPerActor) return capacityRefusal('actor', capacity, yours);
+          if (open.length >= capacity.sessions) return capacityRefusal('server', capacity, yours);
           // PAGES browse as whoever the viewer names; ownership above stays the creator's.
           // `pageActor` is the APP's decision (a throwaway second person it minted and can
           // revoke); this service never invents an identity, it only obeys the one it is handed.
