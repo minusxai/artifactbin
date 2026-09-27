@@ -18,3 +18,11 @@ export { glyphsForNodes } from '@/lib/story/icon-glyphs';
 export function renderStoryBody(data: StoryIslandData): string {
   return renderToString(createElement(StoryRuntimeApp, data));
 }
+
+/**
+ * The inline reader's composition as a string (lib/story-runtime/inline-composition).
+ * SEED (Track E): today's server render, which the client does not hydrate.
+ */
+export function renderInlineStory(data: StoryIslandData, _css: string): string {
+  return renderToString(createElement(StoryRuntimeApp, data));
+}
