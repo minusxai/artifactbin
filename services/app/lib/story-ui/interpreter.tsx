@@ -125,6 +125,13 @@ export interface StoryInterpreterOptions {
    */
   keyFor?: (path: string) => string;
   row?: Record<string, unknown>;
+  /**
+   * Rendering inside an `<svg>` subtree. Set by the interpreter itself as it
+   * descends, never by a caller: there an HTML element is foreign content the
+   * parser breaks OUT of, so what the interpreter draws on its own account (the
+   * `<For>` wrapper and its refusals) has to be SVG to parse back as rendered.
+   */
+  svg?: boolean;
   cellScope?: { table: string; key: unknown; column: string; tableName?: string };
   rowAction?: React.ComponentType<RowActionProps>;
   cellControl?: React.ComponentType<CellControlProps>;
@@ -211,20 +218,23 @@ function renderNode(node: JsxNode, options: StoryInterpreterOptions, path: strin
   }
 
   const buildProps = (...args: Parameters<typeof rawBuildProps>) => scopeProps(rawBuildProps(...args), options);
+  // A refusal drawn in place of a For or its template. In SVG it is a `<text>`:
+  // a `<div>` there would break out of the drawing and fail hydration (#418).
+  const refuse = (message: string) => React.createElement(options.svg ? 'text' : 'div', {role: 'alert', key: path}, message);
   if (node.tag === 'For') {
-    if (options.row) return React.createElement('div', {role: 'alert', key: path}, 'Nested For is not supported');
+    if (options.row) return refuse('Nested For is not supported');
     const each = node.attributes.find(a => a.name === 'each');
     const keyBy = node.attributes.find(a => a.name === 'keyBy')?.value;
     const owner = node.attributes.find(a => a.name === 'id')?.value;
     const expr = each && !each.value.static ? each.value.reactive : undefined;
     const name = expr?.kind === 'signal' ? expr.name : null;
-    if (!name) return React.createElement('div', {role: 'alert', key:path}, 'For requires each={$table}');
-    if (keyBy && (!keyBy.static || typeof keyBy.json !== 'string' || !keyBy.json)) return React.createElement('div', {role:'alert',key:path}, 'For keyBy must be a nonempty field name when supplied');
+    if (!name) return refuse('For requires each={$table}');
+    if (keyBy && (!keyBy.static || typeof keyBy.json !== 'string' || !keyBy.json)) return refuse('For keyBy must be a nonempty field name when supplied');
     const keyField = keyBy?.static ? keyBy.json as string : undefined;
     const source = options.tables?.[name]?.rows ?? options.values?.[name] ?? [];
-    if (!Array.isArray(source) || source.some(row => !row || typeof row !== 'object' || Array.isArray(row))) return React.createElement('div', {role:'alert', key:path}, 'For requires table rows');
+    if (!Array.isArray(source) || source.some(row => !row || typeof row !== 'object' || Array.isArray(row))) return refuse('For requires table rows');
     const error = source.length > 1000 ? 'For supports at most 1000 rows' : source.length * templateSize(node.children) > 50000 ? 'For expansion exceeds 50000 nodes' : keyField === undefined ? null : keyedRowsError(source, keyField, 'keyBy');
-    if (error) return React.createElement('div', {role:'alert', key:path}, error);
+    if (error) return refuse(error);
     const ownerId = owner?.static && typeof owner.json === 'string' ? owner.json : '';
     const ids = templateIds(node.children);
     const wrapper = buildProps(node.attributes.filter(a=>a.name !== 'each' && a.name !== 'keyBy'),true,node.tag,path,undefined,options.values);
@@ -236,12 +246,17 @@ function renderNode(node: JsxNode, options: StoryInterpreterOptions, path: strin
     // the browser hoists it out of the table while parsing the server-rendered page, so hydration
     // sees a different DOM and fails with React error 418. The
     // instances still carry the owner attribute; only the wrapper's own id and classes have nowhere to go.
+    const nodeKey = options.keyFor?.(path) ?? path;
     const tableParts = node.children.every(child => child.type === 'text' ? !child.value.trim() : child.type === 'element' && ['tr','td','th'].includes(child.tag));
-    if (tableParts) return React.createElement(React.Fragment, {key:options.keyFor?.(path) ?? path}, ...instances);
-    return React.createElement('div', {...wrapper,id: ownerId || undefined, key:options.keyFor?.(path) ?? path, style:{minHeight:1,...(wrapper.style as object ?? {})}}, ...instances);
+    if (tableParts) return React.createElement(React.Fragment, {key: nodeKey}, ...instances);
+    // In SVG the same holds for a `<div>`: the parser breaks out of the drawing and the rows it held
+    // become HTML elements that draw nothing. A `<g>` groups the shapes and keeps id and classes;
+    // it has no box of its own, so the one-pixel floor the `<div>` keeps for an empty result is moot.
+    if (options.svg) return React.createElement('g', {...wrapper, id: ownerId || undefined, key: nodeKey}, ...instances);
+    return React.createElement('div', {...wrapper,id: ownerId || undefined, key: nodeKey, style:{minHeight:1,...(wrapper.style as object ?? {})}}, ...instances);
   }
-  if (options.repeatScope && node.attributes.some(a=>(['value','checked','options'].includes(a.name) || (a.name === 'run' && node.tag !== 'Button')) && a.value.static && refName(a.value.json))) return React.createElement('div', {role:'alert',key:path}, 'Bound controls inside For are not supported; use editable DataTable columns');
-  if (options.repeatScope && ['DataTable', 'Iframe'].includes(node.tag)) return React.createElement('div', {role:'alert',key:path}, 'DataTable and Iframe must be outside For templates');
+  if (options.repeatScope && node.attributes.some(a=>(['value','checked','options'].includes(a.name) || (a.name === 'run' && node.tag !== 'Button')) && a.value.static && refName(a.value.json))) return refuse('Bound controls inside For are not supported; use editable DataTable columns');
+  if (options.repeatScope && ['DataTable', 'Iframe'].includes(node.tag)) return refuse('DataTable and Iframe must be outside For templates');
   const isComponent = node.isComponent;
   const Component = isComponent ? options.components[node.tag] : null;
   if (isComponent && !Component) return null; // validator rejects these; render stays safe regardless
@@ -316,7 +331,8 @@ function renderNode(node: JsxNode, options: StoryInterpreterOptions, path: strin
   }
 
   const props = buildProps(node.attributes, isComponent, node.tag, path, options.row, options.values);
-  const rendered = node.children.map((c, i) => renderNode(c, options, `${path}.${i}`));
+  const inner = !isComponent && node.tag.toLowerCase() === 'svg' ? {...options, svg: true} : options;
+  const rendered = node.children.map((c, i) => renderNode(c, inner, `${path}.${i}`));
   const children = options.decorateChildren && !options.row && node.children.length > 0 && (!node.isComponent || ['GridItem','Slide'].includes(node.tag))
     ? [options.decorateChildren(rendered, node.children, path)] : rendered;
   const type = (Component ?? SVG_TAG_CASE[node.tag.toLowerCase()] ?? node.tag.toLowerCase()) as React.ElementType;

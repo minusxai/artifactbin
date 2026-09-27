@@ -52,3 +52,28 @@ describe('svg rendering', () => {
     expect(container.querySelector('text')!.textContent).toBe('FRAME 0000');
   });
 });
+
+describe('a <For> in svg', () => {
+  const rows = { bars: { rows: [{ k: 'a', h: 4 }, { k: 'b', h: 7 }] } };
+  const wrapperOf = (src: string) => {
+    const { container } = render(<>{renderStoryNodes(parseJsxOrThrow(src).nodes, { components: {}, tables: rows })}</>);
+    return container.querySelector('#bars')!;
+  };
+
+  it('wraps its rows in a <g>, keeping the owner id, classes and AST path', () => {
+    const g = wrapperOf('<svg><For id="bars" each={$bars} keyBy="k" className="text-primary"><rect height="$_row.h" /></For></svg>');
+    expect(g.tagName).toBe('g');
+    expect(g.namespaceURI).toBe('http://www.w3.org/2000/svg');
+    expect(g.getAttribute('class')).toBe('text-primary');
+    expect(g.getAttribute('data-mx-ast')).toBe('0.0');
+    expect([...g.children].map((c) => c.getAttribute('height'))).toEqual(['4', '7']);
+  });
+
+  it('wraps them in a <g> anywhere in the svg subtree, not only as its direct child', () => {
+    expect(wrapperOf('<svg><g><For id="bars" each={$bars}><rect /></For></g></svg>').tagName).toBe('g');
+  });
+
+  it('is still a <div> outside svg', () => {
+    expect(wrapperOf('<div><For id="bars" each={$bars}><p>x</p></For></div>').tagName).toBe('DIV');
+  });
+});

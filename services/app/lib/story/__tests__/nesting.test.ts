@@ -190,3 +190,15 @@ describe('the invariants other code rests on', () => {
     expect(out).toContain('<div><div>x</div></div>');
   });
 });
+
+describe('a <For> inside an <svg>', () => {
+  it('renders a <g>, so a paragraph holding the drawing stays a paragraph', () => {
+    const src = '<p id="x">Sales <svg viewBox="0 0 9 9"><For each={$bars}><rect height="$_row.h" /></For></svg></p>';
+    expect(fix(src)).toBe(src);
+  });
+
+  it('still looks inside its template for a tag that breaks out of the svg', () => {
+    const out = fix('<p id="x"><svg><For each={$bars}><div /></For></svg></p>');
+    expect(out.startsWith('<div id="x">')).toBe(true);
+  });
+});

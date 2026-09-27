@@ -17,6 +17,7 @@
 import { describe, expect, it } from 'vitest';
 import { JSDOM } from 'jsdom';
 import { buildStoryDocument } from '@/lib/story/document';
+import { compiledSource } from '@/test/helpers/compiled';
 
 /** Nodes whose parsed parent is not the parent their AST path names. */
 function reparented(html: string): string[] {
@@ -233,5 +234,57 @@ describe('a component inside a paragraph — the case the rule steps around', ()
      */
     const html = await serve('<div><p className="x"><Card><CardContent>c</CardContent></Card></p></div>');
     expect(reparented(html).length).toBeGreaterThan(0);
+  });
+});
+
+/**
+ * `<For>` inside `<svg>`. Its wrapper is a `<div>` everywhere else, and inside
+ * SVG that is foreign content the parser breaks OUT of: the `<div>` closes the
+ * `<svg>`, and the rows it held become HTML-namespace elements that draw
+ * nothing — while React's client tree keeps them inside the SVG. #418 again, so
+ * in SVG the wrapper is a `<g>`, which groups the shapes and parses back as
+ * written.
+ */
+describe('a <For> of shapes inside <svg>', () => {
+  const SVG_NS = 'http://www.w3.org/2000/svg';
+  // The rows arrive as the query's answer, the way a served document gets them:
+  // a declaration alone serves the template with nothing to repeat.
+  const bars = async (rows: Record<string, unknown>[]): Promise<string> => {
+    const columns = [{ name: 'k', type: 'string' as const }, { name: 'x', type: 'number' as const }, { name: 'h', type: 'number' as const }];
+    const source = `<Helmet><Value name="bars" type="table" value={[]} columns={${JSON.stringify(columns)}} /></Helmet>`
+      + '<div><svg viewBox="0 0 30 10"><For id="bars" each={$bars} keyBy="k" className="text-primary">'
+      + '<rect x="$_row.x" y="0" width="8" height="$_row.h" fill="currentColor" /></For></svg></div>';
+    return buildStoryDocument({
+      source, compiledCss: null, theme: null, colorMode: null, refData: {},
+      title: 'bars', runtimeSrc: '/story/entry-TESTHASH.js',
+      dataflow: { flow: await compiledSource(source), state: { values: {}, tables: { bars: { rows, columns } }, errors: {} } },
+    });
+  };
+
+  it('parses back as the tree it was rendered from, every bar an SVG element inside the svg', async () => {
+    const html = await bars([{ k: 'a', x: 0, h: 4 }, { k: 'b', x: 10, h: 7 }, { k: 'c', x: 20, h: 2 }]);
+    expect(reparented(html)).toEqual([]);
+    const { document } = new JSDOM(html).window;
+    const rects = [...document.querySelectorAll('rect')];
+    expect(rects.map((r) => r.getAttribute('height'))).toEqual(['4', '7', '2']);
+    for (const rect of rects) {
+      expect(rect.namespaceURI).toBe(SVG_NS);
+      expect(rect.closest('svg')).not.toBeNull();
+    }
+    const group = rects[0].parentElement!;
+    expect(group.tagName).toBe('g');
+    expect(group.id).toBe('bars');
+    expect(group.getAttribute('class')).toContain('text-primary');
+  });
+
+  it('keeps a row-data error inside the svg too', async () => {
+    // Duplicate keys are a property of the rows, not the markup, so no publish
+    // check can catch them: the refusal the interpreter draws must itself parse back.
+    const html = await bars([{ k: 'a', x: 0, h: 4 }, { k: 'a', x: 10, h: 7 }]);
+    expect(reparented(html)).toEqual([]);
+    const { document } = new JSDOM(html).window;
+    const alert = document.querySelector('[role="alert"]')!;
+    expect(alert.textContent).toContain('duplicate');
+    expect(alert.namespaceURI).toBe(SVG_NS);
   });
 });
