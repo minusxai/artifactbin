@@ -21,7 +21,7 @@ import type { StoryBaseCssRecipe } from '@/lib/story/story-base-css';
 import type { InlineSheetPolicy } from './inline-sheet';
 import { TrustedUi, useTrustedPortalContainer } from '@/components/TrustedUi';
 import { InlineStoryComposition, type InlineStoryWiring } from './inline-composition';
-import { adoptInitialStory, clearInitialStory, initialDocumentStory } from '@/web/initial-story';
+import { adoptInitialStory, clearInitialStory, initialDocumentStory, initialStorySheet } from '@/web/initial-story';
 import { wireOutline } from './outline-nav';
 import { markScrollableTables } from './table-scroll';
 import { syncValuesToUrl } from './url-values-sync';
@@ -150,7 +150,8 @@ function initialSheet(prepared: InlineStoryRuntimeProps['prepared'], nodes: JsxN
   if (isServedRuntime(prepared)) {
     return {
       theme: prepared.theme ?? null,
-      served: prepared.data.nodes === nodes ? { css: prepared.css ?? '', overrides: prepared.overrides, nodes } : null,
+      // The payload's sheet — or, should a page have come without it, the served story's own `<style>`.
+      served: prepared.data.nodes === nodes ? { css: prepared.css ?? initialStorySheet() ?? '', overrides: prepared.overrides, nodes } : null,
       raw: { base: prepared.base, compiledCss: undefined, authorCss: undefined },
     };
   }

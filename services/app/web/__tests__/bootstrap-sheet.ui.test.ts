@@ -16,7 +16,8 @@ const serve = (payload: unknown, story: string) => {
 
 it('restores the runtime sheet from the served story before the page reads it', async () => {
   serve({ path: '/a/Abc123', artifact: { surface: { runtime: { data: {}, base: {} } } } },
-    `<div data-mx-inline-story="" data-mx-story-root="" class="light"><style>${SHEET}</style><p>Hello</p></div>`);
+    // React may put resource hints ahead of the composition's <style>.
+    `<div data-mx-inline-story="" data-mx-story-root="" class="light"><link rel="preload" as="image" href="/a/Img/raw"><style>${SHEET}</style><p>Hello</p></div>`);
   const { takeBootstrap } = await import('../bootstrap');
   const artifact = takeBootstrap<{ surface: { runtime: { css?: string } } }>('/a/Abc123', 'artifact');
   expect(artifact?.surface.runtime.css).toBe(document.querySelector('[data-mx-inline-story] > style')!.textContent);

@@ -43,6 +43,8 @@ export function adoptInitialStory(): HTMLElement | null {
 export function initialStorySheet(): string | null {
   const wrapper = document.body.lastElementChild;
   if (!wrapper?.hasAttribute('data-mx-initial-story')) return null;
-  const style = wrapper.lastElementChild?.hasAttribute('data-mx-inline-story') ? wrapper.lastElementChild.firstElementChild : null;
+  const story = wrapper.lastElementChild;
+  // The composition's own `<style>` — its first STYLE child: React may emit resource hints (`<link>`) ahead of it.
+  const style = story?.hasAttribute('data-mx-inline-story') ? story.querySelector(':scope > style') : null;
   return style instanceof HTMLStyleElement ? style.textContent : null;
 }
