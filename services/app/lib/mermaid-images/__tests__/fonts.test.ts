@@ -29,7 +29,7 @@ describe('embedding the document\'s fonts in a stored drawing', () => {
   it('puts one stylesheet first: each face it draws in, as a woff2 subset, and unhinted text; the drawing itself is untouched', async () => {
     const svg = drawing();
     const embedded = (await embedMermaidFonts(svg, FACES))!;
-    expect(embedded).toMatch(new RegExp(`^<svg xmlns="${SVG_NS}" id="mx-mermaid-1" viewBox="0 0 100 40"><style>@font-face`));
+    expect(embedded.startsWith(`<svg xmlns="${SVG_NS}" id="mx-mermaid-1" viewBox="0 0 100 40"><style>@font-face`)).toBe(true);
     expect(embedded.replace(block(embedded), '')).toBe(svg);
     expect(block(embedded)).toContain('svg{text-rendering:geometricPrecision}');
     // The label face at the weights it is drawn in (bold labels), the edge-label face at its one weight.
