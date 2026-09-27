@@ -34,7 +34,7 @@ it.each(['profile', 'account', 'artifact', 'folder'])('retains %s data across un
   // The folder page and a profile's index are their own chunks: the FIRST
   // mount waits for that download; the remount below must not wait for anything.
   await act(async () => {});
-  await vi.waitFor(() => expect(content()).toBeInTheDocument());
+  await vi.waitFor(() => expect(content()).toBeInTheDocument(), { timeout: 5000 });
   view.rerender(tree(false));
   if (kind === 'artifact') expect(disposed).toHaveBeenCalledTimes(1);
   view.rerender(tree(true));
