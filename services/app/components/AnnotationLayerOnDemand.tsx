@@ -14,8 +14,11 @@
  *    in the document is held here and handed over (`pickRequested`);
  *  - either shows that comments are loading meanwhile, and a failed download
  *    says so with Retry — never a control that silently does nothing.
+ *
+ * The layer's DATA never waits for its code: the first read of the open threads
+ * leaves on this mount (lib/annotation-seed) and the layer consumes it.
  */
-import { useEffect, useState, type ComponentProps } from 'react';
+import { useEffect, useMemo, useState, type ComponentProps } from 'react';
 import { X } from 'lucide-react';
 import type AnnotationLayer from '@/components/AnnotationLayer';
 import { onDemand, useOnDemand } from '@/lib/dynamic';
@@ -24,17 +27,28 @@ import { LoadFailure } from '@/components/LoadFailure';
 import { useIsPhoneViewport } from '@/components/MobileSheet';
 import { subscribeDocument } from '@/lib/story-runtime/document-endpoint';
 import { isEditFrameMessage, STORY_SELECTION_ACTION_MESSAGE } from '@/lib/story-runtime/contract';
+import { useOptionalArtifactBackend } from '@/lib/artifact-backend/context';
+import { annotationSeed } from '@/lib/annotation-seed';
 
 /** The one comment-layer download, shared by the mount and any warm. */
 export const annotationLayerFeature = onDemand(() => import('@/components/AnnotationLayer'));
 
-type AnnotationLayerProps = Omit<ComponentProps<typeof AnnotationLayer>, 'pickRequested'>;
+type AnnotationLayerProps = Omit<ComponentProps<typeof AnnotationLayer>, 'pickRequested' | 'seed'>;
 
 export default function AnnotationLayerOnDemand(props: AnnotationLayerProps) {
   const { module, failed, retry } = useOnDemand(annotationLayerFeature);
   const [pickRequested, setPickRequested] = useState(false);
   const phone = useIsPhoneViewport();
   const { runtimeRef, frameRef, sessionNonce, pickOnOpen = true } = props;
+  // The open threads are read as this mounts — when the layer, part of the page,
+  // used to read them — whether or not its code has arrived yet.
+  const backend = useOptionalArtifactBackend();
+  const seed = useMemo(() => backend ? annotationSeed(backend) : undefined, [backend]);
+  useEffect(() => {
+    if (!seed) return;
+    void seed.take();
+    return () => seed.abort();
+  }, [seed]);
   // The layer owns the document's Select tool; until it is here, remember a press.
   useEffect(() => {
     if (module || !sessionNonce || !pickOnOpen) return;
@@ -46,7 +60,7 @@ export default function AnnotationLayerOnDemand(props: AnnotationLayerProps) {
 
   if (module) {
     const Real = module.default;
-    return <Real {...props} pickRequested={pickRequested} />;
+    return <Real {...props} pickRequested={pickRequested} {...(seed ? { seed } : {})} />;
   }
   const status = failed
     ? <LoadFailure what="comments" onRetry={retry} className="p-2" />

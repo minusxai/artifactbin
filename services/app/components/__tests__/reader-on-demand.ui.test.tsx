@@ -210,3 +210,19 @@ describe('comments opened before the comment layer arrives', () => {
     expect(within(screen.getByRole('complementary', { name: 'Annotation sidebar' })).getByText('open threads')).toBeInTheDocument();
   });
 });
+
+describe('the comment layer\'s data does not wait for its code', () => {
+  it('asks for the open threads as the page mounts, before the layer module has arrived', async () => {
+    const layer = control(annotationLayerFeature, () => vi.importActual<typeof import('@/components/AnnotationLayer')>('@/components/AnnotationLayer'));
+    render(<ArtifactShell role="commenter"><ArtifactSurface {...surfaceProps()} /></ArtifactShell>);
+    await screen.findByText('Document body');
+    const annotationReads = () => vi.mocked(fetch).mock.calls.map(([url]) => String(url)).filter((url) => /\/annotations(\?|$)/.test(url) && !url.includes('status=resolved'));
+    await waitFor(() => expect(annotationReads()).toHaveLength(1));
+    expect(annotationReads()[0]).toContain('/story1/annotations');
+    expect(annotationLayerFeature.loaded()).toBeUndefined();
+    // …and the layer, once here, consumes that read instead of issuing a second one.
+    await layer.arrive();
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 0)); });
+    expect(annotationReads()).toHaveLength(1);
+  });
+});

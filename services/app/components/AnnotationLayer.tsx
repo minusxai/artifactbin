@@ -61,6 +61,7 @@ import MarkdownField from '@/components/MarkdownField';
 import MarkdownLite from '@/components/MarkdownLite';
 import { useIsPhoneViewport } from '@/components/MobileSheet';
 import { RailChrome } from '@/components/AnnotationRail';
+import type { AnnotationSeed } from '@/lib/annotation-seed';
 import { Tooltip } from '@/components/Tooltip';
 import { parseMarkdownLite, plainText } from '@/lib/markdown-lite';
 import { APP_BAR_H, RIGHT_RAIL_W } from '@/lib/story/edit-bar';
@@ -127,6 +128,11 @@ interface AnnotationLayerProps {
    * mount, exactly as the message would have.
    */
   pickRequested?: boolean;
+  /**
+   * The page's first read of the open threads, started on its own mount
+   * (lib/annotation-seed): consumed here instead of a second read.
+   */
+  seed?: AnnotationSeed;
 }
 
 const cardClass = 'rounded-[6px] border border-edge bg-raised text-sm';
@@ -902,7 +908,7 @@ function Thread({
 export default function AnnotationLayer({
   id, editId, frameRef, runtimeRef, sessionNonce, railOpen, liveAnnotations, showViewComments,
   onRailOpenChange, initialSelection = null, topOffset, onAnnotationsChange, pickOnOpen = true, rightInset = 0,
-  railHost, railSheet = false, panelWidth, pickRequested = false,
+  railHost, railSheet = false, panelWidth, pickRequested = false, seed,
 }: AnnotationLayerProps) {
   /** Every request the comments make (lib/artifact-backend), from the page's provider. */
   const backend = useArtifactBackend();
@@ -1072,9 +1078,13 @@ export default function AnnotationLayer({
   useEffect(() => { setFolds(readFolds(id)); }, [id]);
 
   // Seed from the session's own read; the live stream replaces it wholesale.
+  // The page usually started that read already (lib/annotation-seed).
+  const seedRef = useRef(seed);
+  seedRef.current = seed;
   useEffect(() => {
     let gone = false;const abort=new AbortController();
-    void backend.listAnnotations(undefined,{signal:abort.signal})
+    const started = seedRef.current?.backend === backend ? seedRef.current.take() : undefined;
+    void (started ?? backend.listAnnotations(undefined,{signal:abort.signal}))
       .then((list) => { if (!gone) setAnnotations(list); })
       .catch(() => {});
     return () => { gone = true;abort.abort(); };
