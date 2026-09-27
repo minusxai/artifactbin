@@ -61,3 +61,34 @@ it('reports artifact identity for canonical page addresses', async () => {
     await vi.waitFor(async()=>expect((await sessions.request({actor,op:'status',session_id:'canonical',execution_id:'open'})).pages).toEqual([{page_id:'page',url:'http://app/@owner/abc123-report?$region=South',artifact_id:'abc123'}]));
   }finally{await sessions.close();}
 });
+
+/**
+ * A REFUSED CREATE NAMES NO SESSION. Capacity is shared by every owner (SESSION_LIMITS.sessions), and
+ * the refusal used to echo the id the caller proposed — which the CLI printed as "Recover with", and
+ * `status`/`close` on it then answered SESSION_NOT_FOUND. The refusal names what the CALLER can close,
+ * and nothing that belongs to anybody else.
+ */
+it('refuses a create over capacity with no session id, listing only the caller\'s own open sessions', async () => {
+  const sessions=createBrowserSessions(async()=>({run:async()=>({result:1,pages:[],attachments:[]}),close:async()=>{}}));
+  const owner={credential:'bearer' as const,tokenId:'owner'};
+  const stranger={credential:'bearer' as const,tokenId:'stranger'};
+  const create=(actor:typeof owner,session_id:string)=>sessions.request({actor,op:'script',session_id,execution_id:`${session_id}-run`,create:true,code:'return 1'});
+  try{
+    await create(owner,'owner-one');
+    await create(stranger,'stranger-one');
+    const refused=await create(owner,'owner-two');
+    expect(refused).toMatchObject({session_id:'',status:'failed',error:{code:'SESSION_CAPACITY'}});
+    expect(refused.execution_id).toBeUndefined();
+    expect(refused.error!.message).toContain('afbin sessions close owner-one');
+    expect(refused.error!.message).not.toContain('stranger-one');
+    // Nothing was created under the proposed id.
+    expect((await sessions.request({actor:owner,op:'status',session_id:'owner-two'})).error?.code).toBe('SESSION_NOT_FOUND');
+
+    await sessions.request({actor:owner,op:'close',session_id:'owner-one'});
+    await create(stranger,'stranger-two');
+    const none=await create(owner,'owner-three');
+    expect(none.error?.code).toBe('SESSION_CAPACITY');
+    expect(none.error!.message).not.toMatch(/stranger-/);
+    expect(none.error!.message).toMatch(/none of them are yours/i);
+  }finally{await sessions.close();}
+});

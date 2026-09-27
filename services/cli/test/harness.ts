@@ -30,6 +30,8 @@ export interface CliHarness {
   root: string;
   home: string;
   out: string[];
+  /** Everything written to stderr — progress lines and diagnostics. */
+  err: string[];
   bytes: Buffer[];
   calls: RecordedCall[];
   /** `pathname + search` per call, in order — for the tests that only care where a request went. */
@@ -66,6 +68,7 @@ export async function cliHarness(prefix: string, options: HarnessOptions = {}): 
   const account = options.account === undefined ? 'usr_seed' : options.account;
 
   const out: string[] = [];
+  const err: string[] = [];
   const bytes: Buffer[] = [];
   const calls: RecordedCall[] = [];
   const paths: string[] = [];
@@ -78,7 +81,7 @@ export async function cliHarness(prefix: string, options: HarnessOptions = {}): 
     interactive: false,
     stdout: (s: string) => out.push(s),
     stdoutBytes: (b: Uint8Array) => bytes.push(Buffer.from(b)),
-    stderr: () => {},
+    stderr: (s: string) => err.push(s),
     auth: { open: async () => { throw new Error('a test must not open a browser'); } },
     fetch: async (input: RequestInfo | URL, init?: RequestInit) => {
       network++;
@@ -109,6 +112,7 @@ export async function cliHarness(prefix: string, options: HarnessOptions = {}): 
     root,
     home: root,
     out,
+    err,
     bytes,
     calls,
     paths,

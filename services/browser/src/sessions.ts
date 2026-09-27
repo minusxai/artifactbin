@@ -31,6 +31,17 @@ const viewerKey = (viewer: ViewerChoice | undefined): string | undefined =>
   viewer === 'guest' ? 'guest'
     : viewer && typeof viewer === 'object' && typeof viewer.testuser === 'string' ? `testuser:${viewer.testuser}`
     : undefined;
+/**
+ * A create refused for capacity: NO session id, because none was created (an echoed id is one that
+ * `status` and `close` then answer SESSION_NOT_FOUND for). The limit is shared by every owner, so the
+ * way out it names is the caller's own open sessions, never anybody else's.
+ */
+function capacityRefusal(yours: string[]): BrowserSessionResult {
+  const way = yours.length
+    ? `Your open sessions: ${yours.join(', ')}. Close one you are done with (${yours.map(id => `afbin sessions close ${id}`).join(' or ')}), then create the new session again.`
+    : `None of them are yours: wait a minute and create the session again (a session ends when its owner closes it or after ${SESSION_LIMITS.idleMs / 60000} idle minutes).`;
+  return { session_id: '', status: 'failed', pages: [], attachments: [], error: { code: 'SESSION_CAPACITY', message: `This server runs at most ${SESSION_LIMITS.sessions} browser sessions at once and all are open. ${way}` } };
+}
 const idValid = (id: unknown): id is string => typeof id === 'string' && /^[a-zA-Z0-9_-]{1,80}$/.test(id);
 
 /** Owns leases, execution receipts, and serialization; workers own live browser objects. */
@@ -68,7 +79,8 @@ export function createBrowserSessions(factory: SessionWorkerFactory): BrowserSes
             const ended = [...sessions].find(([, value]) => value.status !== 'idle');
             if (ended) sessions.delete(ended[0]);
           }
-          if ([...sessions.values()].filter(s => s.status === 'idle').length >= SESSION_LIMITS.sessions) return empty(input.session_id, 'CAPACITY', 'Browser session capacity reached; close an existing session');
+          const open = [...sessions].filter(([, value]) => value.status === 'idle');
+          if (open.length >= SESSION_LIMITS.sessions) return capacityRefusal(open.filter(([, value]) => value.owner === owner).map(([id]) => id));
           // PAGES browse as whoever the viewer names; ownership above stays the creator's.
           // `pageActor` is the APP's decision (a throwaway second person it minted and can
           // revoke); this service never invents an identity, it only obeys the one it is handed.
