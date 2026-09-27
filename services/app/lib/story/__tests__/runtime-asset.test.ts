@@ -6,6 +6,7 @@
  * time, and a fixture would test a shape nobody ships. The malformed cases get
  * a fixture, since a build cannot be asked to produce one.
  */
+import { KIT_CHUNK_IDS } from '@/lib/story-ui/kit-chunks';
 import { describe, expect, it, afterEach } from 'vitest';
 import { existsSync, mkdtempSync, writeFileSync } from 'fs';
 import { tmpdir } from 'os';
@@ -119,7 +120,7 @@ describe('the serving path degrades instead of failing', () => {
     resetStoryRuntimeManifest();
     const missing = path.join(tmpdir(), 'mx-absent', 'manifest.json');
     expect(() => storyRuntimeAssets(missing)).not.toThrow();
-    expect(storyRuntimeAssets(missing)).toEqual({ entry: null, anchor: null, comment: null, lazy: [], sqlite: null, entryDeps: [], lazyDeps: {}, mermaid: {} });
+    expect(storyRuntimeAssets(missing)).toEqual({ entry: null, anchor: null, comment: null, lazy: [], sqlite: null, entryDeps: [], lazyDeps: {}, mermaid: {}, kit: {} });
   });
 
   it('still reports the real assets when the build IS there', () => {
@@ -127,6 +128,9 @@ describe('the serving path degrades instead of failing', () => {
     const assets = storyRuntimeAssets();
     expect(assets.entry).toBe(storyRuntimeSrc());
     expect(assets.lazy.length).toBe(1);
+    // Every kit chunk is named with its static closure, the chunk itself first.
+    expect(Object.keys(assets.kit).sort()).toEqual([...KIT_CHUNK_IDS].sort());
+    for (const closure of Object.values(assets.kit)) expect(closure[0]).toMatch(/^\/story\/chunks\/[\w-]+\.js$/);
   });
 });
 

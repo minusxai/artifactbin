@@ -95,7 +95,8 @@ describe('the served document', () => {
 
   it('carries no dataflow for a document without declarations', async () => {
     const t = await mintToken('t');
-    const doc = ((await (await create(t.token, { markup: '<div><Badge>plain</Badge></div>' })).json()) as { id: string }).id;
+    // An interactive component, so the document hydrates and carries an island (a static one ships none).
+    const doc = ((await (await create(t.token, { markup: '<div><Button>plain</Button></div>' })).json()) as { id: string }).id;
     const html = await (await rawRoute(request(`/a/${doc}/raw`), params({ id: doc }))).text();
     expect(island(html).dataflow).toBeUndefined();
   });

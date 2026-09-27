@@ -26,7 +26,6 @@ const runtime = vi.hoisted(() => ({ imported: false, mounts: [] as Array<{ story
 vi.mock('@/lib/story-runtime/InlineStoryRuntime', () => {
   runtime.imported = true;
   return {
-    loadKitChunks: async () => {},
     InlineStoryRuntime: ({ onController, hydrateInitialStory }: InlineStoryRuntimeProps) => {
       useLayoutEffect(() => {
         const story = initialDocumentStory();
