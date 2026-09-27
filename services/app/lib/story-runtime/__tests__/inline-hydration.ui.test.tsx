@@ -146,8 +146,11 @@ function expectAdopted({ story, serverNodes, serverDangling, errors }: Awaited<R
   // The server's element is the story now, inside the app's root, and every element it drew survived.
   expect(document.querySelector('[data-mx-initial-story]')).toBeNull();
   expect(document.getElementById('root')!.contains(story)).toBe(true);
-  // (A client-only pane's fallback — the chart placeholder — is replaced after hydration, by design.)
-  const lost = serverNodes.filter((n) => !story.contains(n) && !n.closest('[aria-label="Chart placeholder"]'));
+  // Judged after the effects that follow hydration have run, so two parts replaced ON PURPOSE after
+  // it are excused: a client-only pane's fallback (the chart placeholder), and a Radix popover
+  // trigger, which re-wraps itself once its custom anchor registers (the same on /raw). The browser
+  // gate judges at the hydration commit itself (scripts/gate-hydration.mjs) and excuses nothing.
+  const lost = serverNodes.filter((n) => !story.contains(n) && !n.closest('[aria-label="Chart placeholder"],[data-slot="popover-trigger"]'));
   expect(lost.map((n) => n.outerHTML.slice(0, 120))).toEqual([]);
   // Generated ids agree: no reference names an element that is missing now and was not already
   // missing in the served markup (an author's own id on a Radix part is the only way to get one).
@@ -155,6 +158,10 @@ function expectAdopted({ story, serverNodes, serverDangling, errors }: Awaited<R
 }
 
 const DIALOG = '<Dialog><DialogTrigger id="trigger"><Button id="add">Add task</Button></DialogTrigger><DialogContent aria-label="Add a task"><DialogClose>Cancel</DialogClose></DialogContent></Dialog>';
+const POPOVER = `<div className="flex items-start gap-8">
+  <TooltipProvider><Tooltip defaultOpen><TooltipTrigger className="underline">Hover target</TooltipTrigger><TooltipContent>Pinned open</TooltipContent></Tooltip></TooltipProvider>
+  <Popover><PopoverAnchor /><PopoverTrigger className="underline">Popover trigger</PopoverTrigger><PopoverContent><PopoverHeader><PopoverTitle>Title</PopoverTitle></PopoverHeader></PopoverContent></Popover>
+</div>`;
 const DATA = `<Helmet>
   <Value name="rows" type="table" value={[{"k":"a","n":4},{"k":"b","n":7}]} />
   <Value name="pick" type="string" default="a" />
@@ -181,6 +188,7 @@ describe('the reader adopts the page the server served', () => {
     ['the dashboard fixture, signed in, an archived version', () => served(fixture('dashboard.jsx').replaceAll('{{sales}}', SALES), { template: 'dashboard', sources: { [SALES]: [...SALES_COLUMNS] }, viewer: { id: 'user-1', name: 'Reader' } as StoryIslandData['viewer'], readOnly: 'This is version 2 of 3.' })],
     ['bound values, a table, a number, a chart and a stored image', () => served(DATA, { refData: IMAGE_REF })],
     ['a dialog trigger holding the author\'s Button', () => served(`<article>${DIALOG}</article>`)],
+    ['icons, a tooltip and a popover', () => served(`<article><p><Icon name="circle-check" /> done <Icon name="ChartBar" /></p>${POPOVER}</article>`)],
     ['author CSS that tries to close its <style>', () => served('<Helmet><style>{`.a::after{content:"</style><STYLE>"}`}</style></Helmet><article><p className="a">styled</p></article>')],
   ];
   for (const [name, runtime] of cases) {

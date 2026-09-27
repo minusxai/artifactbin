@@ -22,8 +22,7 @@ import { artifactDocument } from './lib/artifact-document.mjs';
  */
 import { chromium } from 'playwright';
 import { becomeOwner } from './lib/start-doc.mjs';
-import { samplePdf } from './lib/sample-pdf.mjs';
-import { execFileSync } from 'child_process';
+import { kitchenSinkMarkup } from './lib/kitchen-sink-doc.mjs';
 import { connectAgent } from './lib/cli-connection.mjs';
 
 const BASE = process.argv[2] ?? 'http://localhost:3040';
@@ -41,52 +40,8 @@ const publish = async (body) => {
   return res.json();
 };
 
-// The kitchen sink's three refs, then the document itself, built from the
-// SOURCE OF TRUTH: lib/story/kitchen-sink.ts.
-const dataset = await publish({
-  title: 'kit rows',
-  dataset: [
-    { month: '2026-01-01', region: 'NA', revenue: 120 },
-    { month: '2026-02-01', region: 'NA', revenue: 160 },
-    { month: '2026-01-01', region: 'EU', revenue: 90 },
-    { month: '2026-02-01', region: 'EU', revenue: 140 },
-    { month: '2026-01-01', region: 'APAC', revenue: 70 },
-    { month: '2026-02-01', region: 'APAC', revenue: 110 },
-  ],
-});
-const recipe = await publish({
-  title: 'kit recipe',
-  viz: {
-    description: 'Line by series',
-    engine: 'vega-lite',
-    bindings: [
-      { name: 'x', label: 'X', accepts: ['nominal', 'temporal'] },
-      { name: 'y', label: 'Y', accepts: ['quantitative'] },
-      { name: 'series', label: 'Series', accepts: ['nominal'] },
-    ],
-    template: {
-      mark: 'line',
-      encoding: {
-        x: { field: '{{x}}', type: '{{x:kind}}' },
-        y: { field: '{{y}}', type: 'quantitative' },
-        color: { field: '{{series}}', type: 'nominal' },
-      },
-    },
-  },
-});
-const PNG = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
-const image = await publish({ title: 'kit image', image: `data:image/png;base64,${PNG}` });
-// The file a <File> card links. Built by the same helper the pdf gate and the
-// unit tests use, so all three assert the same bytes.
-const pdf = await publish({ title: 'kit paper', pdf: `data:application/pdf;base64,${samplePdf(2).toString('base64')}` });
-
-// The kitchen sink comes from the MODULE, not from slicing its source: it is
-// the registry drift gate's definition of "every component", and a hand-rolled
-// unescape of its template literal breaks the moment a nested backtick appears.
-const markup = execFileSync('npx', ['tsx', '-e',
-  `import { kitchenSinkMarkup } from './services/app/lib/story/kitchen-sink.ts';` +
-  `process.stdout.write(kitchenSinkMarkup(${JSON.stringify({ dataset: dataset.id, recipe: recipe.id, image: image.id, pdf: pdf.id })}));`,
-], { encoding: 'utf8', cwd: new URL('..', import.meta.url).pathname });
+// The kitchen sink's refs, then the document itself (lib/kitchen-sink-doc).
+const markup = await kitchenSinkMarkup(publish);
 
 const doc = await publish({ markup, theme: 'modernist', colorMode: 'dark', title: 'Kitchen sink (unified)' });
 console.log(`   doc: ${BASE}/a/${doc.id}`);
