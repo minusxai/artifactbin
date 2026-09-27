@@ -990,6 +990,28 @@ ALTER TABLE app.dataset_result_cache ADD COLUMN IF NOT EXISTS lease_until TIMEST
 
 ALTER TABLE app.dataset_result_cache ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT now();
 
+CREATE TABLE IF NOT EXISTS app.prepared_pages (
+  artifact_id TEXT NOT NULL,
+  slot TEXT NOT NULL,
+  page_key TEXT NOT NULL,
+  deps TEXT NOT NULL DEFAULT '',
+  page JSONB NOT NULL,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (artifact_id, slot)
+);
+
+ALTER TABLE app.prepared_pages ADD COLUMN IF NOT EXISTS artifact_id TEXT NOT NULL;
+
+ALTER TABLE app.prepared_pages ADD COLUMN IF NOT EXISTS slot TEXT NOT NULL;
+
+ALTER TABLE app.prepared_pages ADD COLUMN IF NOT EXISTS page_key TEXT NOT NULL;
+
+ALTER TABLE app.prepared_pages ADD COLUMN IF NOT EXISTS deps TEXT NOT NULL DEFAULT '';
+
+ALTER TABLE app.prepared_pages ADD COLUMN IF NOT EXISTS page JSONB NOT NULL;
+
+ALTER TABLE app.prepared_pages ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT now();
+
 CREATE TABLE IF NOT EXISTS app.artifact_creation_operations (
   scope TEXT NOT NULL,
   operation_key TEXT NOT NULL,

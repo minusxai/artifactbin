@@ -1,14 +1,11 @@
 import { expect, it } from 'vitest';
-import { compactSurface, expandSurface } from '../page-transport';
-it('round-trips runtime-bearing surfaces losslessly with only one CSS copy', () => {
-  const surface = { compiledCss: '.page{}', runtime: { compiledCss: '.page{}', source: '<p />' }, source: '<p />', title: 'Title' };
-  const compact = compactSurface(surface);
-  expect(compact).not.toHaveProperty('compiledCss');
-  expect(expandSurface(compact)).toEqual(surface);
-  expect(surface.compiledCss).toBe('.page{}');
+import { expandSurface } from '../page-transport';
+it('reads a document\'s declarations from its runtime island instead of a second copy', () => {
+  const dataflow = { flow: { imports: [], values: [], queries: [], mutations: [] }, values: {} };
+  const surface = { runtime: { data: { dataflow }, css: '.page{}' }, title: 'Title' };
+  expect(expandSurface(surface)).toEqual({ ...surface, compiledCss: null, dataflow });
 });
-it('preserves non-runtime surface CSS and accepts already expanded bootstrap shapes', () => {
-  const surface = { compiledCss: null, source: 'dataset' };
-  expect(expandSurface(compactSurface(surface))).toEqual(surface);
-  expect(expandSurface({ compiledCss: 'sheet', runtime: { compiledCss: 'sheet' } })).toEqual({ compiledCss: 'sheet', runtime: { compiledCss: 'sheet' } });
+it('preserves a data tier\'s stored sheet and its absent dataflow', () => {
+  expect(expandSurface({ compiledCss: '.sheet{}', source: 'dataset' })).toEqual({ compiledCss: '.sheet{}', source: 'dataset', dataflow: null });
+  expect(expandSurface({ source: 'dataset' })).toEqual({ compiledCss: null, source: 'dataset', dataflow: null });
 });

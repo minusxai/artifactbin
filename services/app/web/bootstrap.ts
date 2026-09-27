@@ -5,6 +5,8 @@
  * Consumed ONCE per address — a client navigation to another page fetches,
  * because the inlined answer belongs to the address the document was served at.
  */
+import { initialStorySheet } from './initial-story';
+
 const BOOTSTRAP_ID = 'mx-page-data';
 
 interface Payload {
@@ -13,10 +15,26 @@ interface Payload {
   address?: string;
 }
 
+/**
+ * A document page carries its isolated sheet ONCE: in the served story's
+ * `<style>`, not in this payload (server/app withoutInlinedSheet). Put it back
+ * here, before any reader of the payload — the page's cache keeps the whole
+ * answer, and a return visit after the story is gone must still have it.
+ */
+function withStorySheet(payload: Payload): Payload {
+  const runtime = (payload.artifact as { surface?: { runtime?: { css?: string } } } | undefined)?.surface?.runtime;
+  if (!runtime || runtime.css !== undefined) return payload;
+  const css = initialStorySheet();
+  if (css !== null) runtime.css = css;
+  return payload;
+}
+
 const payload: Payload | null = (() => {
   try {
-    const el = document.getElementById(BOOTSTRAP_ID);
-    return el?.textContent ? (JSON.parse(el.textContent) as Payload) : null;
+    // The body's own child (server/app withBootstrap), never an element of the same id inside the story —
+    // matched by attribute, since an engine may resolve `#id` through the FIRST element with that id.
+    const el = document.querySelector(`body > script[type="application/json"][id="${BOOTSTRAP_ID}"]`);
+    return el?.textContent ? withStorySheet(JSON.parse(el.textContent) as Payload) : null;
   } catch {
     return null;
   }

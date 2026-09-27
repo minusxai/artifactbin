@@ -89,3 +89,29 @@ describe('warming the editor bundle', () => {
     expect(editorImported).toBe(true);
   });
 });
+
+/*
+ * A SERVED document carries no source (lib/artifact-page): a writer's page fetches the
+ * editor's door (`?part=editor`) on the same idle warm, so pressing edit still opens
+ * on the document at once; a reader's page never asks for it.
+ */
+describe('warming the editor door', () => {
+  const served = {
+    ...PROPS,
+    runtime: { data: { nodes: [], refData: {}, colorMode: 'light' }, css: '', overrides: [], base: { chrome: true, theme: null, faces: [], fonts: { slots: {}, families: [] } }, authorScript: null, theme: null, title: 'doc' },
+    heading: 'doc', starter: false,
+  } as unknown as ArtifactSurfaceProps;
+  const doors = (fetcher: ReturnType<typeof vi.fn>) => fetcher.mock.calls.map(([url]) => String(url)).filter((url) => url.includes('part=editor'));
+
+  it('fetches the source and raw sheets for a writer, once, and never for a reader', async () => {
+    const fetcher = vi.fn(async () => new Response(JSON.stringify({ editId: 'e1', version: 1, source: '<p>doc</p>', compiledCss: null, authorCss: null })));
+    vi.stubGlobal('fetch', fetcher);
+    const reader = render(<ArtifactShell role="viewer"><ArtifactSurface {...served} /></ArtifactShell>);
+    await act(async () => { await vi.advanceTimersByTimeAsync(5000); });
+    expect(doors(fetcher)).toEqual([]);
+    reader.unmount();
+    render(<ArtifactShell role="editor"><ArtifactSurface {...served} /></ArtifactShell>);
+    await act(async () => { await vi.advanceTimersByTimeAsync(5000); });
+    expect(doors(fetcher)).toEqual(['/api/page/artifact/abc123?part=editor']);
+  });
+});

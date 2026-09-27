@@ -580,7 +580,8 @@ const varsBlock = (vars: Record<string, string>): string =>
   Object.entries(vars).map(([k, v]) => `  ${k}: ${v};`).join('\n');
 
 /**
- * Emit ALL themes' variable + font-family blocks as one CSS string. Appended
+ * Emit ALL themes' variable + font-family blocks as one CSS string (or, given
+ * `only`, the shared rules and that one theme's blocks). Appended
  * AFTER the compiled utility sheet so the attribute-scoped blocks beat the
  * `:root`/`.dark` neutral defaults on document order; authored Tailwind
  * utilities then consume the resolved variables per element.
@@ -592,7 +593,7 @@ const varsBlock = (vars: Record<string, string>): string =>
  * element and an authored `:root { --primary: … }` override still wins by
  * coming later, in BOTH modes.
  */
-export function storyThemeCss(): string {
+export function storyThemeCss(only?: string | null): string {
   // The theme lives on the iframe document element. `:root` is therefore the
   // stable author contract for overrides: an authored style block appears
   // after this sheet, and its `:root { --primary: … }` ties specificity with
@@ -608,7 +609,12 @@ export function storyThemeCss(): string {
     `${descendantScope} :is(h1, h2, h3, h4, h5, h6) {\n  font-family: var(--font-display);\n}`,
     `${descendantScope} :is(code, pre, kbd, samp) {\n  font-family: var(--font-mono);\n}`,
   ];
+  // `only` (a document's own theme, or null for none): the reader's sheet
+  // (lib/story/reader-sheet.server) keeps the blocks its story root can match
+  // and drops every other theme's — byte-identical otherwise, so the kept
+  // blocks keep their order and specificity.
   for (const t of STORY_THEMES) {
+    if (only !== undefined && t.name !== only) continue;
     // Variables must tie the neutral :root block's specificity and come
     // later. Structural personality rules are true defaults: :where removes
     // the theme scope's weight so an ordinary authored class beats them.

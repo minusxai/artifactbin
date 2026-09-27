@@ -11,6 +11,8 @@ import type { BlockEdit } from '@/lib/editor-v2/block-edit';
  */
 import type { AnnotationRange } from '@/lib/story/annotation-range';
 import type { JsxNode } from '@/lib/jsx';
+import type { StyleOverride } from '@/lib/story/style-overrides';
+import type { StoryBaseCssRecipe } from '@/lib/story/story-base-css';
 import type { GlyphMap } from '@/lib/story-ui/icon-contract';
 import type { ImageRefData, RefDataMap } from '@/lib/story/ref-data';
 import type { DataflowState, Row, Scalar } from '@/lib/story/dataflow';
@@ -266,6 +268,13 @@ export interface StoryDocumentUpdate {
   authorScript?: string | null;
   theme?: string | null;
   colorMode?: 'light' | 'dark';
+  /**
+   * THE SHEET ALREADY ISOLATED for exactly these `nodes` — a newer prepared
+   * page the reader's route refreshed to (lib/story/prepared-runtime
+   * ServedStoryRuntime). Replaces the raw parts above: the runtime renders it
+   * as it is, with no CSS parser.
+   */
+  sheet?: { css: string; overrides?: StyleOverride[]; base: StoryBaseCssRecipe };
 }
 
 /**

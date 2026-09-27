@@ -203,7 +203,12 @@ describe('document runtime bundle hygiene', () => {
  * are prefetched on idle/hover so the first click does not wait.
  */
 const ROUTE_ENTRIES = ['web/main.tsx', 'web/pages/Artifact.tsx', 'web/pages/Profile.tsx', 'lib/story-runtime/InlineStoryRuntime.tsx'];
-const ROUTE_FORBIDDEN_PACKAGES = ['acorn', 'acorn-jsx', 'typebox', ...FORBIDDEN];
+/*
+ * css-tree (+ source-map-js) rewrote the document's CSS IN THE BROWSER — work the
+ * server already did. The prepared page carries the rewritten sheet, so the
+ * reader never parses CSS.
+ */
+const ROUTE_FORBIDDEN_PACKAGES = ['acorn', 'acorn-jsx', 'typebox', 'css-tree', 'source-map-js', ...FORBIDDEN];
 const ROUTE_FORBIDDEN_FILES = ['components/ShareLink.tsx', 'components/AnnotationLayer.tsx', 'web/pages/Folder.tsx', 'lib/jsx/parse.ts'];
 
 describe('reader route bundle hygiene', () => {

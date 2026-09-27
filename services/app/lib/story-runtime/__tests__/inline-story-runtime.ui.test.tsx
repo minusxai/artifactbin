@@ -46,7 +46,8 @@ describe('inline artifact runtime lifetime', () => {
     const listener = vi.fn(); controller!.subscribe(listener);
     await act(async () => { controller!.update({type:STORY_DOCUMENT_MESSAGE,nodes:data('Replayed').nodes,dataflow:initial.dataflow}); });
     await waitFor(() => expect(run.mock.calls.length).toBeGreaterThan(1));
-    expect(screen.getByLabelText('Artifact heading')).toHaveTextContent('Replayed');
+    // A version this page was not served goes under the CSS policy, loaded on demand (./inline-sheet).
+    await waitFor(() => expect(screen.getByLabelText('Artifact heading')).toHaveTextContent('Replayed'));
     view.unmount();
   });
   it('renders directly in the main document and adopts versions without replacing its root', async () => {
@@ -58,7 +59,7 @@ describe('inline artifact runtime lifetime', () => {
     expect(view.container.querySelector('iframe')).toBeNull();
     const parent = heading.parentElement;
     await act(async () => { session!.update({ type: STORY_DOCUMENT_MESSAGE, nodes: data('Second').nodes }); });
-    expect(screen.getByLabelText('Artifact heading')).toHaveTextContent('Second');
+    await waitFor(() => expect(screen.getByLabelText('Artifact heading')).toHaveTextContent('Second'));
     expect(screen.getByLabelText('Artifact heading').parentElement).toBe(parent);
   });
 

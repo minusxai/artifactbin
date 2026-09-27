@@ -11,6 +11,7 @@ import { resetRateLimit } from '@/lib/auth';
 import { EVENTS_SCHEMA } from '@/lib/config';
 import { AUTH_SECRET } from '@/lib/config';
 import { getDb, resetDb } from '@/lib/db';
+import { drainPreparedPageWarmups } from '@/lib/story/prepared-page.server';
 import { SCHEMA_STATEMENTS } from '@/lib/schema';
 import { createHash } from 'node:crypto';
 
@@ -125,6 +126,9 @@ export function useAppHarness(): AppHarness {
 
   beforeEach(async () => {
     const db = await database!;
+    // A publish prepares its page after the response (lib/story/prepared-page.server): let the last
+    // test's finish before its rows go, so no warm-up writes into the next test's database.
+    await drainPreparedPageWarmups();
     // The schema is declared parent-first. Reverse it so a future foreign key
     // can never make the shared wipe depend on a copied cleanup list.
     for (const table of SCHEMA_TABLES.toReversed()) {
@@ -140,6 +144,7 @@ export function useAppHarness(): AppHarness {
   });
 
   afterAll(async () => {
+    await drainPreparedPageWarmups();
     database = undefined;
     await resetDb();
   });

@@ -8,12 +8,24 @@
  */
 import { STORY_ROOT_ATTR } from '@/lib/story-surface';
 import type { StorySsrBundle } from '@/lib/story-runtime/contract';
-import type { PreparedStoryRuntime } from './prepared-runtime';
+import type { PreparedStoryRuntime, ServedStoryRuntime } from './prepared-runtime';
+import { applyStyleOverrides } from './style-overrides';
 import { inlineStoryCss, inlineStoryNodes } from './inline-css';
 import { escapeHtml } from './reader-chrome';
+
+/** The story element around a composition's server render. */
+export function inlineStoryElement(body: string, colorMode: string, theme: string | null): string {
+  return `<div data-mx-inline-story="" ${STORY_ROOT_ATTR} class="${escapeHtml(colorMode)}"${theme ? ` data-theme="${escapeHtml(theme)}"` : ''}>${body}</div>`;
+}
 
 /** `render` is the SSR bundle's renderInlineStory (lib/story/ssr.server), or its source in a test. */
 export function inlineStoryHtml(runtime: PreparedStoryRuntime, render: StorySsrBundle['renderInlineStory']): string {
   const body = render({ ...runtime.data, nodes: inlineStoryNodes(runtime.data.nodes, runtime) }, inlineStoryCss(runtime));
-  return `<div data-mx-inline-story="" ${STORY_ROOT_ATTR} class="${escapeHtml(runtime.data.colorMode)}"${runtime.theme ? ` data-theme="${escapeHtml(runtime.theme)}"` : ''}>${body}</div>`;
+  return inlineStoryElement(body, runtime.data.colorMode, runtime.theme);
+}
+
+/** The same element for a served runtime (lib/story/prepared-runtime): its sheet and nodes are already isolated. */
+export function servedStoryHtml(runtime: ServedStoryRuntime & { css: string }, render: StorySsrBundle['renderInlineStory']): string {
+  const body = render({ ...runtime.data, nodes: applyStyleOverrides(runtime.data.nodes, runtime.overrides) }, runtime.css);
+  return inlineStoryElement(body, runtime.data.colorMode, runtime.theme);
 }

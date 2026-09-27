@@ -38,9 +38,13 @@ export function firstHeadingTitle(source: string | null | undefined): string | n
   return text ? text.slice(0, MAX_TITLE) : null;
 }
 
-/** The name to SHOW: an explicit title, else the first heading, else "Untitled". */
-export function displayTitle(row: { title?: string | null; source?: string | null }): string {
-  return row.title?.trim() || firstHeadingTitle(row.source) || UNTITLED;
+/**
+ * The name to SHOW: an explicit title, else the first heading, else "Untitled".
+ * `heading` is that first heading already derived — a served reader page
+ * carries it instead of the source it came from (lib/artifact-page).
+ */
+export function displayTitle(row: { title?: string | null; source?: string | null; heading?: string | null }): string {
+  return row.title?.trim() || (row.source != null ? firstHeadingTitle(row.source) : row.heading) || UNTITLED;
 }
 
 /**

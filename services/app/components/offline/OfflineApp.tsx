@@ -37,6 +37,8 @@
  */
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ComponentType, type ReactNode } from 'react';
 import { InlineStoryRuntime, type InlineStoryController } from '@/lib/story-runtime/InlineStoryRuntime';
+// The file carries RAW sheets and can fetch nothing: the CSS policy is bundled with it, not loaded on demand.
+import * as inlineSheet from '@/lib/story-runtime/inline-sheet';
 import {
   STORY_SELECTION_ACTION_MESSAGE, STORY_SELECTION_ACTIONS_MESSAGE, isEditFrameMessage,
   type StoryEditSelection, type StoryIslandData, type StorySelectionActionsMessage,
@@ -427,6 +429,7 @@ function OfflineSurface({ file, restored, invalid, code, fileName }: { file: Art
         <main aria-label={file.metadata.title} style={{ background: DOCUMENT_GROUND[data.colorMode === 'dark' ? 'dark' : 'light'], minHeight: '100vh', paddingTop: topOffset, paddingRight: rightInset, paddingBottom: editing && !wideEdit ? '50vh' : 0 }}>
           {invalid && <InvalidSourceBanner error={invalid} />}
           <InlineStoryRuntime
+            sheetPolicy={inlineSheet}
             data={data}
             prepared={prepared}
             transportFactory={transportFactory}

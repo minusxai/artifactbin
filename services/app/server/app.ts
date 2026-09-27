@@ -22,7 +22,6 @@ import { loadStorySsr } from '@/lib/story/ssr.server';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import StarterInstructions from '@/components/StarterInstructions';
-import { isStartPlaceholder } from '@/lib/start-placeholder';
 import type { PreparedStoryRuntime } from '@/lib/story/prepared-runtime';
 import { inlineStoryHtml } from '@/lib/story/inline-story-html';
 import { escapeHtml } from '@/lib/story/reader-chrome';
@@ -51,7 +50,8 @@ import { authorFrameResponse } from './author-frame';
 import { AUTHOR_FRAME_PATH } from '@/lib/story-runtime/author-frame';
 import { GITHUB_EXTERNAL_URL } from '@/lib/github-star';
 import { createDocumentPreloader, createListingPreloader, createReaderPreloader, listingPage } from './reader-preloads';
-import { lazyCodeOf } from '@/lib/story/lazy-code';
+import { artifactPageAnswer, type InitialStory } from '@/lib/artifact-page';
+import { enablePreparedPageWarmups } from '@/lib/story/prepared-page.server';
 import { mountBuildAssets } from './build-assets';
 import { compressDynamic, dynamicEncoding, precompressedStatic, variantResponse } from './content-encoding';
 import { customHostBoundary } from './custom-host';
@@ -93,10 +93,72 @@ const withShellFonts = (html: string): string => html.replace('</head>', () => `
 export const BOOTSTRAP_ID = 'mx-page-data';
 /** `<` is the only character that can end a script element early; JSON never needs it. */
 const safeJson = (value: unknown): string => JSON.stringify(value).replace(/</g, '\\u003c');
-export const withBootstrap = (html: string, data: unknown): string =>
+/**
+ * The page's data rides at the END of the body — after the story the server
+ * rendered, as the body's own last element — so the first paint never waits
+ * for it to download. Still read before the app's first render: the SPA's
+ * module runs after the document is parsed (web/bootstrap reads exactly this
+ * element, a direct child of body, which no authored id inside the story can be).
+ */
+export const withBootstrap = (html: string, data: unknown): string => {
   // A function replacement keeps JavaScript's special replacement tokens in
   // user-authored JSON literal instead of expanding them with the HTML shell.
-  html.replace('</head>', () => `  <script type="application/json" id="${BOOTSTRAP_ID}">${safeJson(data)}</script>\n  </head>`);
+  const tag = `<script type="application/json" id="${BOOTSTRAP_ID}">${safeJson(data)}</script>`;
+  const at = html.lastIndexOf('</body>');
+  return at < 0 ? html.replace('</head>', () => `${tag}</head>`) : `${html.slice(0, at)}${tag}${html.slice(at)}`;
+};
+
+/**
+ * THE HEAD IN THE ORDER A READER NEEDS IT. The story is readable before any
+ * JavaScript runs, so code must not starve what paints it: the charset and
+ * viewport, the render-blocking CSS, then the fonts the first screen paints —
+ * at high priority — and only then the app's modules and their preloads,
+ * which Vite writes early in the shell and the preloaders add at its end.
+ */
+// Every module script — inline ones too, so modules keep their relative (execution) order.
+const MODULE_TAG = /<script\b[^>]*\btype=["']module["'][^>]*>[\s\S]*?<\/script>|<link\b[^>]*\brel=["']modulepreload["'][^>]*>/gi;
+const FONT_PRELOAD = /<link\b[^>]*\brel=["']preload["'][^>]*\bas=["']font["'][^>]*>/gi;
+const STYLESHEET = /<link\b[^>]*\brel=["'](?:stylesheet|preload)["'][^>]*\bas=["']style["'][^>]*>|<link\b[^>]*\brel=["']stylesheet["'][^>]*>/gi;
+/** `text` with every match of `pattern` taken out, and the matches, in order — a MOVE, never a filter. */
+function lift(text: string, pattern: RegExp): { rest: string; lifted: string[] } {
+  const lifted: string[] = [];
+  let rest = '', at = 0;
+  for (const m of text.matchAll(pattern)) { rest += text.slice(at, m.index); lifted.push(m[0]); at = m.index! + m[0].length; }
+  return { rest: rest + text.slice(at), lifted };
+}
+/** Where the fonts go: after the render-blocking CSS, else the viewport, the charset, the agent pointer (always first), the head. */
+function fontSlot(head: string): number {
+  let cut = -1;
+  for (const m of head.matchAll(STYLESHEET)) cut = m.index! + m[0].length;
+  if (cut >= 0) return cut;
+  for (const tag of [/<meta\b[^>]*name=["']viewport["'][^>]*>/i, /<meta\b[^>]*charset=[^>]*>/i, /<meta\b[^>]*name=["']afbin["'][^>]*>/i, /<head\b[^>]*>/i]) {
+    const m = tag.exec(head);
+    if (m) return m.index + m[0].length;
+  }
+  return 0;
+}
+export function withReaderHeadOrder(html: string): string {
+  const end = html.indexOf('</head>');
+  if (end < 0) return html;
+  const code = lift(html.slice(0, end), MODULE_TAG);
+  const faces = lift(code.rest, FONT_PRELOAD);
+  const fonts = faces.lifted.map((tag) => (/\bfetchpriority=/i.test(tag) ? tag : `<link fetchpriority="high"${tag.slice('<link'.length)}`));
+  const cut = fontSlot(faces.rest);
+  return `${faces.rest.slice(0, cut)}${fonts.join('')}${faces.rest.slice(cut)}${code.lifted.join('')}${html.slice(end)}`;
+}
+
+/** What the app page inlines for a document: its story element and the head facts about it. */
+export interface InitialStoryParts {
+  /** The story element (lib/story/inline-story-html), rendered on demand. */
+  html: () => string;
+  title: string;
+  fontPreloads: readonly string[];
+}
+
+/** A story from RAW prepared parts (a test, or any caller without a prepared page): isolated and rendered here. */
+export function initialStoryOf(runtime: PreparedStoryRuntime): InitialStoryParts {
+  return { html: () => inlineStoryHtml(runtime, loadStorySsr().renderInlineStory), title: runtime.title, fontPreloads: runtime.fontPreloads ?? [] };
+}
 
 /** Initial readable document, outside React's empty root; captured by reference
  * before React mounts. The inline runtime ADOPTS its story element and hydrates
@@ -104,10 +166,10 @@ export const withBootstrap = (html: string, data: unknown): string =>
  * wrapper around it, with its handoff rule, is removed in the same commit. App
  * root and head bootstrap precede ALL author nodes, including colliding ids.
  */
-export function withInitialStory(html: string, runtime: PreparedStoryRuntime, id: string, description?: string | null, origin = '', starter = false): string {
+export function withInitialStory(html: string, initial: InitialStoryParts, id: string, description?: string | null, origin = '', starter = false): string {
   const story = starter
     ? renderToStaticMarkup(createElement(StarterInstructions, { id, initialOrigin: origin }))
-    : inlineStoryHtml(runtime, loadStorySsr().renderInlineStory);
+    : initial.html();
   // While lazy app code mounts, it must not push the readable server sibling
   // down by its viewport height. This temporary rule belongs to the captured
   // sibling, so its removal atomically reveals the committed app document.
@@ -115,13 +177,28 @@ export function withInitialStory(html: string, runtime: PreparedStoryRuntime, id
   const handoffCss = `body > #root:first-child{display:none!important}[data-mx-initial-story]{position:relative;min-height:100vh;box-sizing:border-box;padding-top:0}@media(min-width:640px){[data-mx-initial-story]{padding-top:${APP_BAR_H}px}}`;
   // What this first screen paints: the document's faces, or — for a starter
   // placeholder, which draws the shell's instructions — the shell's own.
-  const fontPreloads = fontPreloadTags(starter ? APP_SHELL_FONT_PRELOADS : runtime.fontPreloads ?? []);
-  const metadata = fontPreloads + `<meta property="og:title" content="${escapeHtml(runtime.title)}">`
+  const fontPreloads = fontPreloadTags(starter ? APP_SHELL_FONT_PRELOADS : initial.fontPreloads);
+  const metadata = fontPreloads + `<meta property="og:title" content="${escapeHtml(initial.title)}">`
     + (description ? `<meta name="description" content="${escapeHtml(description)}"><meta property="og:description" content="${escapeHtml(description)}">` : '')
     + `<meta property="og:image" content="${escapeHtml(origin)}/a/${escapeHtml(id)}/export?mode=card&amp;r=${CARD_RENDER_GENERATION}"><meta name="twitter:card" content="summary_large_image">`;
-  return html.replace(/<title>[\s\S]*?<\/title>/i, () => `<title>${escapeHtml(runtime.title)}</title>`)
+  return html.replace(/<title>[\s\S]*?<\/title>/i, () => `<title>${escapeHtml(initial.title)}</title>`)
     .replace('</head>', () => `${metadata}</head>`)
     .replace('</body>', () => `<div data-mx-initial-story=""><style>${handoffCss}</style>${story}</div></body>`);
+}
+
+/**
+ * THE SHEET RIDES ONCE. When the page inlines the document's story, that
+ * story's `<style>` is the one copy of its isolated sheet: the bootstrap drops
+ * `runtime.css`, and web/bootstrap puts the style's text back before anything
+ * reads the payload. A starter's instructions are not the story, so its
+ * payload keeps the sheet.
+ */
+function withoutInlinedSheet<T>(data: T): T {
+  const artifact = (data as { artifact?: { surface?: { runtime?: { css?: string } } } }).artifact;
+  const runtime = artifact?.surface?.runtime;
+  if (!runtime || runtime.css === undefined) return data;
+  const { css: _sheet, ...rest } = runtime;
+  return { ...data, artifact: { ...artifact, surface: { ...artifact.surface, runtime: rest } } };
 }
 
 // Inline scripts emitted by our source HTML and Vite's development transform.
@@ -245,6 +322,8 @@ const apiNotFound = (c: { req: { raw: Request } }) => {
 
 export function createAppServer(opts: AppServerOptions = {}): Hono {
   const app = new Hono();
+  // A serving process prepares each new head for its readers after the write commits (lib/story/prepared-page.server).
+  enablePreparedPageWarmups();
   // Transport identity must be attached before any app middleware or route
   // asks viewer.ts who is calling.
   if (opts.actorSecret) actorReceiver(opts.actorSecret).mount(app);
@@ -301,7 +380,7 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
     const url = address ? new URL(address + new URL(c.req.url).search, c.req.url).href : c.req.url;
     const html = await index(url);
     const found = await bootstrapFor(c.req.raw, new URL(url).pathname);
-    const data = found && address ? { ...found, address } : found;
+    const data = found ? { ...found.data, ...(address ? { address } : {}) } : null;
     // An @-address whose profile resolves to NOTHING is a miss, and a miss is
     // 404 as a STATUS (the rule documents already live by) — the SPA is still
     // the body, so the person sees the app's own 404 page rather than a
@@ -313,58 +392,59 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
     // gets the app's own 404 page, anything else (curl's `*/*`, a fetch tool)
     // gets the refusal that names the way on.
     if (code === 404 && !(c.req.raw.headers.get('accept') ?? '').includes('text/html')) return apiNotFound(c);
-    const surface = (data?.artifact as { surface?: { id: string; source: string | null; version: number; runtime?: PreparedStoryRuntime }; description?: string | null } | undefined);
+    const surface = (data?.artifact as { surface?: { id: string }; description?: string | null } | undefined);
     // The agent pointer is injected here, on the request base, for EVERY shell
     // — the static index.html carries none, so there is one source (lib/agent-discovery).
     const discovered = withAgentDiscovery(html, baseUrl(c.req.raw));
     const listing = listingPage(data);
-    const story = surface?.surface;
-    const starter = !!story && isStartPlaceholder(story.source, story.version);
-    const shell = story?.runtime
+    const story = found?.story;
+    const shell = story && surface?.surface
       // A starter placeholder draws its instructions, not its body: no lazy code of its own.
-      ? withInitialStory(preloadDocument(preloadReader(discovered), starter ? { chart: false, mermaid: [] } : lazyCodeOf(story.runtime.data.nodes)), story.runtime, story.id, surface?.description, baseUrl(c.req.raw), starter)
+      ? withInitialStory(preloadDocument(preloadReader(discovered), story.starter ? { chart: false, mermaid: [] } : story.lazyCode), story, surface.surface.id, surface.description, baseUrl(c.req.raw), story.starter)
       // No document: the first screen is the shell's, set in its own face.
       : withGenericSocial(withShellFonts(listing ? preloadListing(discovered, listing) : discovered), baseUrl(c.req.raw));
     // The address search engines index a document under (lib/custom-domains canonicalDocumentUrl).
     const indexed = canonical ? shell.replace('</head>', () => `<link rel="canonical" href="${escapeHtml(canonical)}"></head>`) : shell;
     // Last, so the pointer is the page's final line whatever else was inlined.
     // Brotli for a client that takes it (server/content-encoding); identity otherwise, as before.
-    return compressDynamic(c.req.raw, new Response(withAgentDiscoveryTail(data ? withBootstrap(indexed, data) : indexed, agentDiscovery(baseUrl(c.req.raw))), { status: code, headers: {
+    const inlined = story && !story.starter ? withoutInlinedSheet(data) : data;
+    const ordered = withReaderHeadOrder(indexed);
+    return compressDynamic(c.req.raw, new Response(withAgentDiscoveryTail(inlined ? withBootstrap(ordered, inlined) : ordered, agentDiscovery(baseUrl(c.req.raw))), { status: code, headers: {
       'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store', ...APP_SECURITY_HEADERS,
       ...(opts.devHmrPort !== undefined ? { 'content-security-policy': developmentAppCsp(c.req.url, opts.devHmrPort) } : {}),
-      ...(surface?.surface?.runtime ? { Link: `<${baseUrl(c.req.raw)}/llms.txt>; rel="help"` } : {}),
+      ...(story ? { Link: `<${baseUrl(c.req.raw)}/llms.txt>; rel="help"` } : {}),
     } }));
   };
 
   const pageData = (dir: string) => ROUTES.find((r) => r.dir === dir)?.module.GET as ((request: Request, ctx: { params: Promise<Record<string, string>> }) => Promise<Response>) | undefined;
-  const artifactData = pageData('/api/page/artifact/[id]');
   const profileData = pageData('/api/page/profile/[user]/[[...path]]');
 
   /**
    * What this address will be asked for, answered now. A pretty URL that names
    * a document carries BOTH answers — the resolution and the document page —
    * because the profile page renders the artifact page, and one missing answer
-   * is one round trip and one visible settle.
+   * is one round trip and one visible settle. A document's answer comes with
+   * the story its runtime renders (lib/artifact-page), which the page inlines.
    */
-  async function bootstrapFor(request: Request, pathname = new URL(request.url).pathname): Promise<{ path: string; profile?: unknown; artifact?: unknown } | null> {
+  async function bootstrapFor(request: Request, pathname = new URL(request.url).pathname): Promise<{ data: { path: string; profile?: unknown; artifact?: unknown }; story?: InitialStory } | null> {
     // The ORIGINAL request answers, whatever path it is rendered as: its actor rides on the object (utils inProcess).
     const url = { pathname };
     const segments = url.pathname.split('/').filter(Boolean);
-    const call = async (fn: typeof artifactData, params: Record<string, string>) => {
-      if (!fn) return null;
-      const res = await runWithRequest(request, () => fn(request, { params: Promise.resolve(params) }));
-      return res.ok ? await res.json() : null;
+    const document = async (id: string) => {
+      const answer = await runWithRequest(request, () => artifactPageAnswer(request, id));
+      return answer.status === 200 ? answer : null;
     };
     if (segments.at(-1) === 'edit') segments.pop();
     if (segments[0] === 'a' && segments.length === 2) {
-      const artifact = await call(artifactData, { id: segments[1] });
-      return artifact ? { path: url.pathname, artifact } : null;
+      const artifact = await document(segments[1]!);
+      return artifact ? { data: { path: url.pathname, artifact: artifact.body }, ...(artifact.story ? { story: artifact.story } : {}) } : null;
     }
     if (segments[0]?.startsWith('@')) {
-      const profile = await call(profileData, { user: segments[0], ...(segments.length > 1 ? { path: segments.slice(1).join('/') } : {}) }) as { kind?: string; id?: string } | null;
+      const res = profileData ? await runWithRequest(request, () => profileData(request, { params: Promise.resolve({ user: segments[0]!, ...(segments.length > 1 ? { path: segments.slice(1).join('/') } : {}) }) })) : null;
+      const profile = res?.ok ? await res.json() as { kind?: string; id?: string } : null;
       if (!profile) return null;
-      const artifact = profile.kind === 'artifact' && profile.id ? await call(artifactData, { id: profile.id }) : null;
-      return { path: url.pathname, profile, ...(artifact ? { artifact } : {}) };
+      const artifact = profile.kind === 'artifact' && profile.id ? await document(profile.id) : null;
+      return { data: { path: url.pathname, profile, ...(artifact ? { artifact: artifact.body } : {}) }, ...(artifact?.story ? { story: artifact.story } : {}) };
     }
     return null;
   }

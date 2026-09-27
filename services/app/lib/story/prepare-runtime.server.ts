@@ -5,13 +5,10 @@ import { assetLookupFrom } from './asset-url';
 import { EMPTY_HELMET_CONTENT } from './helmet';
 import { resolveStoryMode } from '@/lib/data/story/story-themes';
 import { loadStorySsr } from './ssr.server';
-import { documentFonts, documentFontCss } from './document-fonts';
+import { documentFonts } from './document-fonts';
+import { storyBaseCss, type StoryBaseCssRecipe } from './story-base-css';
 import { webFontAssets } from '@/lib/webfonts';
-import { getStoryFontCss, storyFontFaceCss } from '@/lib/data/story/story-fonts';
 import { firstScreenFonts } from './first-screen-fonts';
-import { STORY_BARE_TYPOGRAPHY_CSS } from '@/lib/story-surface/bare-typography';
-import { STORY_BARE_CONTROLS_CSS } from '@/lib/story-surface/bare-controls';
-import { STORY_CHROME_CSS, STORY_COLUMN_CSS, STORY_EMBED_CSS, STORY_TABLE_CSS } from '@/lib/story-runtime/chrome-css';
 import type { StoryIslandData } from '@/lib/story-runtime/contract';
 import { storyRuntimeAssets } from './runtime-asset';
 
@@ -20,19 +17,18 @@ export async function prepareStoryRuntime(input: StoryDocumentInput): Promise<Pr
   return (await prepareStoryParts(input)).runtime;
 }
 
-/** One parse, glyph resolution and font lookup shared by raw/export and SPA. */
-export async function prepareStoryParts(input: StoryDocumentInput) {
-  const chrome = input.chrome ?? true;
-  const split = storyBodyFor(input.source, input.assetUrls ? assetLookupFrom(input.assetUrls) : undefined, { capture: !chrome });
-  const helmet = split?.content ?? EMPTY_HELMET_CONTENT;
-  const mode = resolveStoryMode(input.theme, input.colorMode);
-  const title = helmet.title?.trim() || input.title || 'artifact';
-  const glyphs = split ? loadStorySsr().glyphsForNodes(split.body) : {};
-  const docFonts = documentFonts(helmet);
-  const importedFaces = docFonts.families.length ? await webFontAssets(docFonts.families) : [];
-  const data: StoryIslandData = {
-    nodes: split?.body ?? [], refData: input.refData, colorMode: mode, template: input.template ?? null, chrome,
-    ...(Object.keys(glyphs).length ? { glyphs } : {}),
+/** The island's reader half: what a request, not the document, decides. */
+export type ReaderIslandInput = Pick<StoryDocumentInput, 'refData' | 'dataflow' | 'viewer' | 'queryUrl' | 'mutateUrl' | 'mentionStatuses' | 'assetsUrl' | 'managedAssets' | 'readOnly'>;
+
+/**
+ * The island fields a REQUEST decides (who reads, their `$` values and what
+ * they may hold, the other artifacts the document embeds) — never the
+ * document's own parse. One writer, so the served page's per-viewer overlay
+ * (lib/story/prepared-page.server) is exactly what the whole preparation writes.
+ */
+export function readerIslandData(input: ReaderIslandInput): Omit<StoryIslandData, 'nodes' | 'colorMode' | 'template' | 'chrome' | 'glyphs'> {
+  return {
+    refData: input.refData,
     ...(input.dataflow ? { dataflow: input.dataflow } : {}),
     // WHO IS READING — carried even when the document declares nothing, because
     // `{$_me ? … : <SignIn/>}` is exactly such a document.
@@ -47,11 +43,25 @@ export async function prepareStoryParts(input: StoryDocumentInput) {
     // A SNAPSHOT render refuses every write by name (StoryIslandData.readOnly).
     ...(input.readOnly ? { readOnly: input.readOnly } : {}),
   };
-  const baseCss = [
-    ':root { --mx-vh: 100vh; } body { margin: 0; }', STORY_BARE_TYPOGRAPHY_CSS, STORY_BARE_CONTROLS_CSS,
-    chrome ? STORY_CHROME_CSS : '', STORY_EMBED_CSS, STORY_TABLE_CSS, STORY_COLUMN_CSS,
-    getStoryFontCss(input.theme ?? undefined), storyFontFaceCss(importedFaces), documentFontCss(docFonts),
-  ].join('\n');
+}
+
+/** One parse, glyph resolution and font lookup shared by raw/export and SPA. */
+export async function prepareStoryParts(input: StoryDocumentInput) {
+  const chrome = input.chrome ?? true;
+  const split = storyBodyFor(input.source, input.assetUrls ? assetLookupFrom(input.assetUrls) : undefined, { capture: !chrome });
+  const helmet = split?.content ?? EMPTY_HELMET_CONTENT;
+  const mode = resolveStoryMode(input.theme, input.colorMode);
+  const title = helmet.title?.trim() || input.title || 'artifact';
+  const glyphs = split ? loadStorySsr().glyphsForNodes(split.body) : {};
+  const docFonts = documentFonts(helmet);
+  const importedFaces = docFonts.families.length ? await webFontAssets(docFonts.families) : [];
+  const data: StoryIslandData = {
+    nodes: split?.body ?? [], colorMode: mode, template: input.template ?? null, chrome,
+    ...(Object.keys(glyphs).length ? { glyphs } : {}),
+    ...readerIslandData(input),
+  };
+  const baseRecipe: StoryBaseCssRecipe = { chrome, theme: input.theme ?? null, faces: importedFaces, fonts: docFonts };
+  const baseCss = storyBaseCss(baseRecipe);
   const runtime: PreparedStoryRuntime = {
     data, baseCss, compiledCss: input.compiledCss, authorCss: helmet.style,
     authorScript: helmet.script && !/<\/script/i.test(helmet.script) ? helmet.script : null,
@@ -59,5 +69,5 @@ export async function prepareStoryParts(input: StoryDocumentInput) {
     // The faces this document's first screen paints (lib/story/first-screen-fonts), one per file.
     fontPreloads: firstScreenFonts({ theme: input.theme, nodes: split?.body ?? [], docFonts, importedFaces }).map(face => face.url),
   };
-  return { runtime, split, helmet, mode, title, glyphs, docFonts, importedFaces };
+  return { runtime, split, helmet, mode, title, glyphs, docFonts, importedFaces, baseRecipe };
 }

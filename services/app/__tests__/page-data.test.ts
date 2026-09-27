@@ -139,8 +139,11 @@ describe('GET /api/page/artifact/:id', () => {
     expect(anon).toMatchObject({ role: 'viewer', kind: 'none', canonical: `/@${w.owner.username}/${w.pub.id}-public-one` });
     expect(anon.surface).toMatchObject({ id: w.pub.id, editId: w.pub.edit_id, format: 'markup', title: 'Public one', version: 1, visibility: 'public' });
     expect(anon.surface).not.toHaveProperty('hasInvitedUsers');
+    // The prepared reader runtime: one isolated sheet, no raw copy and no source (__tests__/prepared-page).
     expect(anon.surface).not.toHaveProperty('compiledCss');
-    expect(anon.surface.runtime).toHaveProperty('compiledCss');
+    expect(anon.surface).not.toHaveProperty('source');
+    expect(anon.surface.runtime.css).toEqual(expect.any(String));
+    expect(anon.surface.runtime).not.toHaveProperty('compiledCss');
     asSession(w.owner);
     const own = await (await artifactPage(request(`/api/page/artifact/${w.priv.id}`), params({ id: w.priv.id }))).json();
     expect(own).toMatchObject({ role: 'owner', kind: 'account' });
