@@ -29,9 +29,12 @@ jobs:
       GH_TOKEN: ${{ github.token }}
       SOURCE_SHA: ${{ github.event.workflow_run.head_sha }}
       SOURCE_RUN: ${{ github.event.workflow_run.id }}
+      # Every platform a release carries, as `<CI runner>:<asset suffix>`: the `cli` job uploads
+      # `afbin-<runner>`, and the release ships `afbin-<suffix>`.
+      PLATFORMS: macos-14:darwin-arm64 macos-15-intel:darwin-x64 ubuntu-24.04:linux-x64 ubuntu-24.04-arm:linux-arm64 windows-2022:win32-x64
     outputs:
-      tag: ${{ steps.release.outputs.tag }}
-      sha: ${{ steps.release.outputs.sha }}
+      tag: ${{ steps.publish.outputs.tag }}
+      sha: ${{ steps.publish.outputs.sha }}
     steps:
       # No checkout or execution of downloaded code in this privileged workflow.
       - name: Identify the tested release
@@ -44,10 +47,6 @@ jobs:
           version_at() { gh api "repos/$GITHUB_REPOSITORY/contents/services/cli/package.json?ref=$1" --jq .content | base64 --decode | jq -r .version; }
           version=$(version_at "$SOURCE_SHA")
           [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
-          # Only the commit that bumped the version built its binaries: later merges that carry the same
-          # version have none, and leave publishing to the bump's own run.
-          parent=$(gh api "repos/$GITHUB_REPOSITORY/commits/$SOURCE_SHA" --jq '.parents[0].sha')
-          if [ "$(version_at "$parent")" = "$version" ]; then exit 0; fi
           # A newer version on main supersedes this one. Merges that landed on top WITHOUT a bump do not:
           # requiring the bump to still be main's head stranded afbin 0.1.48 and 0.1.49, whose builds
           # finished after other work merged, and no later build could publish them.
@@ -59,22 +58,31 @@ jobs:
           # The pointer the CLI resolves its release from ships with the same commit.
           pointer=$(gh api "repos/$GITHUB_REPOSITORY/contents/services/app/public/chat/release.json?ref=$SOURCE_SHA" --jq .content | base64 --decode)
           test "$(jq -r .version <<< "$pointer")" = "$version"
-          # Existing published versions are immutable; unrelated merges are no-ops.
+          # Existing published versions are immutable.
           if gh release view "$tag" --repo "$GITHUB_REPOSITORY" --json isDraft --jq .isDraft > draft.txt 2> release-error.txt; then
             if [ "$(cat draft.txt)" = false ]; then exit 0; fi
           elif ! grep -qi 'not found\|HTTP 404' release-error.txt; then
             cat release-error.txt >&2; exit 1
           fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
-          echo "sha=$SOURCE_SHA" >> "$GITHUB_OUTPUT"
 
       # WHICH RUN HOLDS THE TESTED BYTES. Main's CI no longer always builds them itself: when the
       # merged tree was already tested on its pull request it selects no job at all and records, in a
       # `tested-run` artifact, the id of the run that did the work (scripts/ci.mjs `record-tree`).
       # Reading it keeps this workflow publishing exactly what CI built and proved. Absent — an older
       # run, or a main build that did everything itself — the workflow_run's own id is still right.
+      #
+      # WHETHER THERE IS ANYTHING TO PUBLISH is that run's artifacts, not the commit's history. Asking
+      # whether the parent carried the same version stood in for "this run built no binaries" and was
+      # wrong for a rebase merge: PR #124 landed the 0.3.3 bump one commit below main's head, main CI
+      # ran for the head alone, and its tested run held 0.3.3's binaries that nothing published.
       - name: The run whose binaries this publishes
+        id: publish
         if: steps.release.outputs.tag != ''
+        env:
+          VERSION: ${{ steps.release.outputs.version }}
+          RELEASE_TAG: ${{ steps.release.outputs.tag }}
         shell: bash
         run: |
           set -euo pipefail
@@ -82,20 +90,35 @@ jobs:
             tested=$(jq -r '.run_id' tested-run/tested-run.json)
             # Artifact content is data, never a command: it is one integer or this stops.
             [[ "$tested" =~ ^[0-9]+$ ]]
+            # $GITHUB_ENV reaches the later steps; this one reads the run's artifacts below.
+            SOURCE_RUN=$tested
             echo "SOURCE_RUN=$tested" >> "$GITHUB_ENV"
             echo "Publishing the binaries built by run $tested."
           else
             cat tested-run-error.txt >&2
             echo "No tested-run artifact; publishing from run $SOURCE_RUN itself."
           fi
+          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$SOURCE_RUN/artifacts" --paginate --jq '.artifacts[] | select(.expired | not) | .name' > artifacts.txt
+          present=0
+          missing=''
+          for mapping in $PLATFORMS; do
+            if grep -Fxq "afbin-${mapping%%:*}" artifacts.txt; then present=$((present + 1)); else missing="$missing afbin-${mapping%%:*}"; fi
+          done
+          # A merge that did not change the version built no binaries: the run that did publishes them.
+          if [ "$present" = 0 ]; then echo "Run $SOURCE_RUN built no release binaries; nothing to publish."; exit 0; fi
+          if [ -n "$missing" ]; then echo "::error::Run $SOURCE_RUN holds only some of afbin $VERSION's binaries; missing$missing"; exit 1; fi
+          echo "tag=$RELEASE_TAG" >> "$GITHUB_OUTPUT"
+          echo "sha=$SOURCE_SHA" >> "$GITHUB_OUTPUT"
 
       - name: Download the binaries tested by this CI run
-        if: steps.release.outputs.tag != ''
+        if: steps.publish.outputs.tag != ''
+        env:
+          VERSION: ${{ steps.release.outputs.version }}
         shell: bash
         run: |
           set -euo pipefail
           mkdir bundle
-          for mapping in macos-14:darwin-arm64 macos-15-intel:darwin-x64 ubuntu-24.04:linux-x64 ubuntu-24.04-arm:linux-arm64 windows-2022:win32-x64; do
+          for mapping in $PLATFORMS; do
             runner=${mapping%%:*}
             binary=afbin-${mapping#*:}
             if [ "$runner" = windows-2022 ]; then binary="$binary.exe"; fi
@@ -104,13 +127,15 @@ jobs:
             test ! -L "downloads/$runner/$binary"
             test -s "downloads/$runner/$binary"
             cp "downloads/$runner/$binary" "bundle/$binary"
-            cp "downloads/$runner/$binary.manifest.json" "bundle/$binary.manifest.json"
-            for asset in "$binary.gz" "$binary.sizes.json" "afbin-runtime-${mapping#*:}.gz" "afbin-chromium-${mapping#*:}.gz"; do
+            for asset in "$binary.manifest.json" "$binary.gz" "$binary.sizes.json" "afbin-runtime-${mapping#*:}.gz" "afbin-chromium-${mapping#*:}.gz"; do
               test -f "downloads/$runner/$asset"
               test ! -L "downloads/$runner/$asset"
               test -s "downloads/$runner/$asset"
               cp "downloads/$runner/$asset" "bundle/$asset"
             done
+            # Bytes built from another version are never published under this one's tag.
+            built=$(jq -r .version "bundle/$binary.manifest.json")
+            if [ "$built" != "$VERSION" ]; then echo "::error::afbin-$runner from run $SOURCE_RUN was built as $built, not $VERSION"; exit 1; fi
             for common in afbin-skills.json afbin.1; do
               if [ -f "bundle/$common" ]; then cmp "bundle/$common" "downloads/$runner/$common"; else cp "downloads/$runner/$common" "bundle/$common"; fi
             done
@@ -118,9 +143,9 @@ jobs:
           (cd bundle && sha256sum afbin-* afbin.1 > SHA256SUMS)
 
       - name: Tag and publish together
-        if: steps.release.outputs.tag != ''
+        if: steps.publish.outputs.tag != ''
         env:
-          RELEASE_TAG: ${{ steps.release.outputs.tag }}
+          RELEASE_TAG: ${{ steps.publish.outputs.tag }}
         shell: bash
         run: |
           set -euo pipefail
