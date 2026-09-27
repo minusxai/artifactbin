@@ -45,7 +45,17 @@ to 1 GiB memory, 512 processes/threads, and one CPU. Set
 `BROWSER__SESSION_CGROUP_ROOT` to that subtree (default `/sys/fs/cgroup/afbin-sessions`). Split services additionally configure
 `BROWSER__SESSION_APP_URL`, `APP__PUBLIC_BASE_URL`, and `CONTRACT__ACTOR_SECRET`.
 
-Current limits: two active browsers per service, eight pages per browser, sixteen
+`BROWSER__SESSION_MAX` (default 2) caps the live browsers one browser service holds, shared by
+every owner; `BROWSER__SESSION_MAX_PER_ACTOR` (default 2) caps how many of them one credential
+may hold, so one agent cannot take every slot. Both are whole numbers of at least 1, read by the
+process that runs the sessions: the browser service when it is split out, the app otherwise.
+A create over the server's cap is refused with `SESSION_CAPACITY`, over the credential's with
+`SESSION_ACTOR_CAPACITY`; neither creates anything, and both list the caller's own open sessions.
+Raising them does not change a session's own resources: every browser still gets the cgroup
+bounds above, so size the host for `BROWSER__SESSION_MAX` of them.
+
+Current limits: `BROWSER__SESSION_MAX` active browsers per service, at most
+`BROWSER__SESSION_MAX_PER_ACTOR` per credential, eight pages per browser, sixteen
 execution receipts per session, 30-minute idle leases, 64-KiB scripts, 8-MiB
 outputs, 5-second Playwright actions, 10-second navigation, and a 20-second hard
 script deadline. A hard deadline destroys the instance. Script errors preserve

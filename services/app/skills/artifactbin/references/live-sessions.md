@@ -37,10 +37,12 @@ one. A test user is a guest on an account's page, so give it its own copy first:
 Who a session browses as is fixed when it is created: resuming `afbin sessions
 script SESSION_ID` keeps that viewer, and `--as` there is refused.
 
-**Hold one session at a time**: a server runs two in total, shared by everyone.
-Go identity by identity: create, run, `afbin sessions close SESSION_ID`, then
-the next `--as`. `SESSION_CAPACITY` created nothing; its message lists your open
-sessions to close, or says to wait.
+**Hold one session at a time**: a server runs few in total (two by default),
+shared by everyone, and caps how many one credential holds. Go identity by
+identity: create, run, `afbin sessions close SESSION_ID`, then the next `--as`.
+`SESSION_CAPACITY` (the server is full) and `SESSION_ACTOR_CAPACITY` (you hold
+your share) created nothing; the message lists your open sessions to close, or
+says to wait.
 
 A script is a **strict async JavaScript function body**: use top-level `await`
 and `return`, without exporting or wrapping a function. Each call gets:

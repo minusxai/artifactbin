@@ -2,7 +2,7 @@ import {expect,it,vi} from 'vitest';
 import {ACTOR_HEADER,ANONYMOUS,BROWSER_SESSION_HEADER,type Actor} from '@artifactbin/contracts';
 import {createEnv} from '@artifactbin/utils';
 import {createSessionProcess,forwardSessionFetch,sessionPlainPlan,sessionSandboxPlan} from '../src/session-process';
-import {sessionProcessPaths,sessionSandboxChoice} from '../src/session-config';
+import {sessionCapacity,sessionEnvNamesRead,sessionProcessPaths,sessionSandboxChoice} from '../src/session-config';
 import {createBrowserSessions} from '../src/sessions';
 it('launches SEA through its trusted selector with only the executable and browser tree mounted',()=>{
  const plan=sessionSandboxPlan('/tmp/private-session','/cache/chromium/chrome-linux64','/home/operator/bin/afbin',['--internal-browser-worker']);
@@ -113,4 +113,16 @@ it('spawns without bubblewrap when the sandbox is off, and refuses a production 
   baseURL:'http://app',request:async()=>new Response('page'),
   sandbox:sessionSandboxChoice({BROWSER__SANDBOX:'nope'}),
  })).rejects.toThrow(/BROWSER__SANDBOX/);
+});
+
+it('reads session capacity at the same env boundary, defaulting to two and refusing anything but a whole number',()=>{
+ expect(sessionCapacity({})).toEqual({sessions:2,sessionsPerActor:2});
+ expect(sessionCapacity({BROWSER__SESSION_MAX:'',BROWSER__SESSION_MAX_PER_ACTOR:''})).toEqual({sessions:2,sessionsPerActor:2});
+ expect(sessionCapacity({BROWSER__SESSION_MAX:'8',BROWSER__SESSION_MAX_PER_ACTOR:'3'})).toEqual({sessions:8,sessionsPerActor:3});
+ for(const value of ['0','-1','1.5','abc',' 3','3 ','1e2'])for(const name of ['BROWSER__SESSION_MAX','BROWSER__SESSION_MAX_PER_ACTOR'])
+  expect(()=>sessionCapacity({[name]:value}),`${name}=${value}`).toThrow(name);
+ // It travels with the other session settings, so every composition that spreads them enforces it.
+ expect(sessionProcessPaths({BROWSER__SESSION_MAX:'5'})).toMatchObject({capacity:{sessions:5,sessionsPerActor:2}});
+ // And the boot audit hears that this boundary read both names.
+ expect([...sessionEnvNamesRead()]).toEqual(expect.arrayContaining(['BROWSER__SESSION_MAX','BROWSER__SESSION_MAX_PER_ACTOR']));
 });

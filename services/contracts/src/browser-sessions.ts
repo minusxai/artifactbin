@@ -30,4 +30,4 @@ export type BrowserSessionRequest = { actor: Actor; pageActor?: Actor } & (
   | { op: 'close'; session_id: string }
 );
 export interface BrowserSessions { request(input: BrowserSessionRequest): Promise<BrowserSessionResult>; close(): Promise<void> }
-export const SESSION_LIMITS = { scriptBytes: 65536, outputBytes: 8 * 1024 * 1024, scriptMs: 20000, idleMs: 30 * 60 * 1000, sessions: 2, executions: 16, pages: 8 } as const;
+export const SESSION_LIMITS = { scriptBytes: 65536, outputBytes: 8 * 1024 * 1024, scriptMs: 20000, idleMs: 30 * 60 * 1000, executions: 16, pages: 8 } as const;
