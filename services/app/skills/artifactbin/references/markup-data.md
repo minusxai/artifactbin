@@ -99,8 +99,8 @@ First read [chart authoring](markup-data-authoring.md).
   `minusx/choropleth@1` and `minusx/point-map@1` ([maps](markup-maps.md)); slots
   in [chart authoring](markup-data-authoring.md).
 - `<Number data="$q" col="revenue" agg="sum" prefix="$" suffix=" M" format=",.0f" />`
-  — one live figure inline. `agg` defaults to `first` (the first row's cell), so
-  a total needs `agg="sum"`; `last`, `avg`, `median`, `min`, `max`, `count` are the rest. [[ computedFigureRule ]]
+  — one live figure inline. `agg` defaults to `first` (the first row's cell);
+  a total is `sum`, and `last`, `avg`, `median`, `min`, `max`, `count` exist. [[ computedFigureRule ]]
 - `<DataTable data="$q" rowKey="id" columns={[…]} height="420px" />` — sortable,
   virtualised; `columns` picks `{col, title, fmt, align, bar, colorScale, width, kind: "image"}`,
   or `<Column col title>` children hold a control per row ([editing](markup-editing.md)).
