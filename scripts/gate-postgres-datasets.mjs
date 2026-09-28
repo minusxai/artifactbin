@@ -159,6 +159,9 @@ try {
   assert.ok(!(await guest.getByLabel('DataTable embed', { exact: true }).innerText()).includes('90'));
   if (compiledReader) await guest.locator('html[data-mx-ready]').waitFor();
   const queryCalls = [];
+  const browserErrors = [];
+  if (compiledReader) guest.on('console', message => { if (message.type() === 'error') browserErrors.push(message.text()); });
+  if (compiledReader) guest.on('pageerror', error => browserErrors.push(error.message));
   if (compiledReader) guest.on('response', async response => {
     if (!response.url().includes(`/a/${start.id}/query`)) return;
     const request = JSON.parse(new URL(response.url()).searchParams.get('q') ?? '{}');
@@ -170,11 +173,15 @@ try {
   if (compiledReader) {
     await guest.waitForTimeout(700);
     const state = await guest.evaluate(() => {
-      const store = document.querySelector('[data-mx-inline-story]')?.__mxIslands?.store;
-      return { input: document.querySelector('[aria-label="Region"]')?.value, value: store?.getValue('region'), rows: store?.getTable('orders')?.rows, pending: store?.pending(), error: store?.getState().errors, queryUrl: !!JSON.parse(document.querySelector('#mx-story-data')?.textContent ?? '{}').queryUrl };
+      const roots = [...document.querySelectorAll('[data-mx-inline-story]')];
+      const owner = roots.find(root => root.__mxIslands);
+      const store = owner?.__mxIslands?.store;
+      const table = document.querySelector('[aria-label="DataTable embed"]');
+      return { input: document.querySelector('[aria-label="Region"]')?.value, value: store?.getValue('region'), rows: store?.getTable('orders')?.rows, pending: store?.pending(), error: store?.getState().errors, queryUrl: !!JSON.parse(document.querySelector('#mx-story-data')?.textContent ?? '{}').queryUrl, mode: owner?.__mxIslands?.mode(), rootCount: roots.length, table: table?.textContent?.slice(0, 150), tableKey: table?.getAttribute('data-hk'), tableOwner: table?.closest('[data-hk]')?.getAttribute('data-hk') };
     });
     secretFree(state);
-    log(`compiled Region after fill: ${JSON.stringify(state)}; query responses ${JSON.stringify(queryCalls)}`);
+    secretFree(browserErrors);
+    log(`compiled Region after fill: ${JSON.stringify(state)}; query responses ${JSON.stringify(queryCalls)}; browser errors ${JSON.stringify(browserErrors)}`);
   }
   await previewContains(guest, '90', 'DataTable embed');
   assert.ok(!(await guest.getByLabel('DataTable embed', { exact: true }).innerText()).includes('120'));
