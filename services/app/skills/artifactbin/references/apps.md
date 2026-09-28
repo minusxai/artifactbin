@@ -120,9 +120,9 @@ Connected Postgres datasets remain read-only.
 
 ## Fork and verify
 
-Forks copy stored datasets they write, including the owner’s own datasets, and
-remap references and artefact-specific grants. Public read-only references stay
-shared. Restricted dependencies are copied only when the forker can read them.
+Server forks copy writable datasets and remap references and grants. A local
+fork can retain dataset references; its draft alone does not isolate writes.
+Restricted dependencies are copied only when the forker can read them.
 No memberships or notifications are copied; the new owner starts as a member.
 
 Verify shared behaviour on a disposable test-user fork with `afbin testuser`,
@@ -136,17 +136,25 @@ afbin testuser new --json
 afbin fork abc123 --as tu_example --json
 afbin sessions script new --as tu_example --input member.js --json
 afbin sessions close <session-id> --json   # one session open at a time
-afbin sessions script new --input owner.js --json # you, on the same copy
+afbin fork abc123 --json
+# Before owner.js: isolate datasets and publish a local draft as described below.
+afbin sessions script new --input owner.js --json # you, on your own copy
 afbin sessions close <session-id> --json
 afbin testuser delete tu_example --json
 ```
+
+A path-only result is an unpublished local draft, not a test URL. Fork and publish
+each writable dataset, replace its Import references with those new dataset IDs,
+then publish the draft. For a server copy, check its returned copied dataset IDs.
+Use that isolated page’s returned URL. Never fall back to testing writes on the original.
 
 Each identity is its own session, one after another; stop once every write has
 worked once for each.
 
 A test user verifies a COPY, never that `abc123` works; nothing a test user does reaches
 the original. An action outside its sandbox returns `sandbox_only`.
-Run each write on the test-user fork. On the original,
+Run each write on that identity’s authorized disposable copy. Have each script
+open its returned fork URL; a test-user fork may be private to that user. On the original,
 `$_me.id` writes must stay disabled and change no data when checked as a guest.
 A Mutation may read other imports and `_members`
 (`where exists (select 1 from _members where user_id = $_me.id)`), never a

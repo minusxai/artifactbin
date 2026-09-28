@@ -23,3 +23,27 @@ describe('headless operation guidance',()=>{
   expect(guide).toMatch(/--write\s+--name/);
  });
 });
+
+describe('notification authoring contract',()=>{
+ it('teaches native source queries and one combined result per joined recipient',()=>{
+  const guide=teaching.files['references/markup-notifications.md'];
+  expect(guide).toBeDefined();
+  expect(guide).toContain('source="ref:');
+  expect(guide).toContain('existing dataset query interface');
+  expect(guide).toContain('Postgres');
+  expect(guide).toContain('one notification per user per mutation run');
+  expect(guide).toContain('across all linked rules');
+  expect(guide).toContain('distinct messages');
+  expect(guide).toContain('explicitly joined');
+  expect(guide).toContain('all rules succeed');
+  expect(guide).not.toContain('one job per rule');
+ });
+ it('teaches failure isolation and preserves current-state reads rather than snapshots',()=>{
+  const guide=teaching.files['references/markup-notifications.md']??'';
+  expect(guide).toContain('saved scalar arguments');
+  expect(guide).toContain('may see later changes');
+  expect(guide).toContain('zero rows');
+  expect(guide).toContain('never rerun the successful mutation');
+  expect(guide).toContain('every dataset used by the query');
+ });
+});

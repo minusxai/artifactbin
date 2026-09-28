@@ -6,10 +6,8 @@ order: 1
 ---
 ## Read first
 
-A document has two halves. The DATA half is in `<Helmet>`: `<Import>` a dataset,
-declare page values (`<Value>`), read with `<Query>` (SQLite SQL) and write with
-`<Mutation>`. The VIEW half binds them by name: `data="$query"`,
-`value="$value"`, `run="$mutation"`. The view holds no SQL.
+In `<Helmet>`: `<Import>` datasets, `<Value>` state, `<Query>` reads and `<Mutation>`
+writes. The view binds names: `data="$query"`, `value="$value"`, `run="$mutation"`; no SQL.
 
 ```jsx
 <Helmet>
@@ -65,6 +63,8 @@ SQLite rules and every function: [SQL](markup-sql.md). Editable cells: [editing]
   the page value of that name (a control's `args=` can pass another); built-ins
   come from context. `expectedAffected` refuses a write that changed another
   number of rows; `reset` returns those values to their defaults after it commits.
+
+After-write notifications: [notification queries](markup-notifications.md).
 
 Built-ins are never declared and never written: `$_me.id`, `$_now` and `$_tz`
 come from the platform; `$_row.<column>` and `$_value` from the control that

@@ -540,3 +540,11 @@ test('auth help and skill teach browserless email OTP recovery',()=>{
  assert.match(helpDocument('publishing-auth'),/--otp/);
  for(const code of ['browser_unavailable','otp_required','otp_send_failed','otp_rejected'])assert.match(helpDocument('errors'),new RegExp(code));
 });
+
+test('unknown write outcomes recover the original command and arguments', async () => {
+ const {diagnosticCatalog}=await import('../src/diagnostics');
+ const {fix}=diagnosticCatalog['outcome_unknown']!;
+ assert.match(fix,/same command and arguments/);
+ assert.match(fix,/same operation key/);
+ assert.ok(!fix.includes('rerun afbin push'));
+});
