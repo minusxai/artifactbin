@@ -78,7 +78,7 @@ export function createRelayTransport(target: Window, appOrigin: string, source: 
     if (!w) return;
     writers.delete(data.id);
     clearTimeout(w.timer);
-    if (data.ok) w.resolve({ dataset: data.dataset, ...(data.mutationRunId?{mutationRunId:data.mutationRunId}:{}), ...(data.local ? { local: data.local } : {}) });
+    if (data.ok) w.resolve({ dataset: data.dataset, local: data.local, mutationRunId: data.mutationRunId });
     else w.reject(new Error(data.error));
   });
 
