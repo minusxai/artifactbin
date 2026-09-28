@@ -207,8 +207,9 @@ describe('the island path, over a stand-in server half', () => {
     const bytes = (await store.get(module.sha))!;
     const text = new TextDecoder().decode(bytes);
     expect(text).not.toMatch(/from\s*["'](@mx\/|solid-js)/);
-    // Solid's DOM helpers come through the runtime's one import surface, never the whole solid-js/web chunk.
-    expect(text).not.toContain(build.manifest['solid-js/web']);
+    // Solid's DOM helpers come through the runtime's one import surface: every import is a shared-build URL of an @mx/* entry.
+    const entryUrls = new Set(Object.entries(build.manifest).filter(([spec]) => spec.startsWith('@mx/')).map(([, url]) => url));
+    for (const m of text.matchAll(/from\s*"([^"]+)"/g)) expect(entryUrls, m[1]).toContain(m[1]);
     const br = brotliCompressSync(bytes).byteLength;
     // Target 2's per-document share (the brief: ≤ 5 KB br for the kit fixture); measured 2283 B raw / 614 B br.
     expect(br, `kit per-document module: ${bytes.byteLength} B raw, ${br} B br`).toBeLessThanOrEqual(5 * 1024);
