@@ -78,7 +78,7 @@ describe('queries', () => {
     expect(signals).toMatch(/_signals, which is removed — .*set=/);
     expect((await errorsOf(doc(`<Query name="q">{\`select * from public.rows\`}</Query>`)))[0]).toMatch(/public\.rows is removed: <Import/);
     expect((await errorsOf(doc(`<Query name="q">{\`select * from ref_BookRows1\`}</Query>`)))[0]).toMatch(/<Import name="…" src="ref:BookRows1"/);
-    expect((await errorsOf(doc(`<Query name="q" source="ref:BookRows1">{\`select * from public.rows\`}</Query>`)))[0]).toMatch(/source= is only for a connected Postgres dataset, and ref:BookRows1 is stored — <Import/);
+    expect((await errorsOf(doc(`<Query name="q" source="ref:BookRows1">{\`select * from public.rows\`}</Query>`)))[0]).toMatch(/not reached/);
     expect((await errorsOf(doc(`<Import name="pg" src="ref:PgConn001" />`)))[0]).toMatch(/is never imported: run the query inside it with <Query name="…" source="ref:PgConn001">/);
   });
 

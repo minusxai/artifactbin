@@ -31,6 +31,7 @@ import { BUILTIN_TABLES, builtinInput, isBuiltinTable, rowField, VIEWER, VIEWER_
 import type { BuiltinInput, BuiltinTable, CompiledDataflow, CompiledImport, CompiledMutation, CompiledNotify, CompiledQuery, CompiledReads, CompiledValue } from './compiled-dataflow';
 import { ARGS_ATTR, bindingMap, MUTATION_TAG, QUERY_TAG, refName, scalarMatches, SET_ATTR, type Dataflow, type MutationDecl, type QueryDecl } from './dataflow';
 import { analyzeRowScopes } from './row-scope';
+import { datasetSqlParams } from '@/lib/datasets/sql';
 import { dateCastRefusal, editDistance, withSqliteHint } from './sqlite-hints';
 
 /** What an `<Import>` or `source=` names, as the loader found it. */
@@ -162,6 +163,7 @@ export async function prepareCompile(flow: Dataflow, load: SchemaLoader): Promis
     // The declared defaults, and the platform's built-ins as a guest would see them now.
     const defaults: Record<string, Scalar> = { ...Object.fromEntries(flow.values.flatMap((v) => (v.kind === 'scalar' ? [[v.name, v.default]] : []))), [paramSqlName('_me.id')]: null, _now: new Date().toISOString(), _tz: 'UTC' };
     for (const sqlName of fields.keys()) defaults[sqlName] ??= null;
+    if ('on' in q) for (const name of datasetSqlParams(sql)) defaults[name] ??= null;
     const bindTypes: Record<string, ColumnType> = { ...types, _now: 'timestamp', _tz: 'string' };
     for (const [sqlName, logical] of fields) { const t = builtinInput(logical)?.type; if (t) bindTypes[sqlName] = t; }
     try { postgres[postgresKey(q)] = await source.probe(sql, defaults, bindTypes); }
