@@ -14,13 +14,13 @@ const ROOT = path.resolve(import.meta.dirname, '../..');
 const KIT_FAMILIES = ['basic', 'tabs', 'accordion', 'dialog', 'disclosure', 'controls', 'data', 'files', 'people', 'mermaid'];
 
 describe('the toolchain', () => {
-  it('pins Solid 2.x and a matching babel preset', () => {
+  it('pins Solid 2.x and the Babel plugin of the same release (Solid 2.0 replaced babel-preset-solid with @solidjs/babel-plugin)', () => {
     const solid = JSON.parse(readFileSync(path.join(ROOT, 'node_modules/solid-js/package.json'), 'utf8'));
     expect(solid.version).toMatch(/^2\./);
     const lock = JSON.parse(readFileSync(path.join(ROOT, 'package-lock.json'), 'utf8'));
-    const preset = lock.packages['node_modules/babel-preset-solid'];
-    expect(preset, 'babel-preset-solid is pinned in the lockfile').toBeTruthy();
-    expect(preset.version).toMatch(/^2\./);
+    const preset = lock.packages['node_modules/@solidjs/babel-plugin'];
+    expect(preset, '@solidjs/babel-plugin is pinned in the lockfile').toBeTruthy();
+    expect(preset.version).toBe(solid.version);
   });
 });
 
