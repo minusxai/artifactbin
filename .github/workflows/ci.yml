@@ -315,18 +315,18 @@ jobs:
           if-no-files-found: error
 
   # On PRs #158 and #159, five shards spent up to 215s in Vitest and 25s
-  # provisioning Chromium. Seven spreads the growing API file set while the
+  # provisioning Chromium. Eight spreads the growing API file set while the
   # independent runners keep the run's critical path at the slowest shard.
   api:
     needs: [ plan ]
     if: needs.plan.outputs.api == 'true'
-    name: api tests (${{ matrix.shard }}/7)
+    name: api tests (${{ matrix.shard }}/8)
     runs-on: ubuntu-latest
     timeout-minutes: 10
     strategy:
       fail-fast: false
       matrix:
-        shard: [ 1, 2, 3, 4, 5, 6, 7 ]
+        shard: [ 1, 2, 3, 4, 5, 6, 7, 8 ]
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
@@ -363,7 +363,7 @@ jobs:
         run: npx playwright install --with-deps chromium
       - if: steps.playwright.outputs.cache-hit == 'true'
         run: npx playwright install chromium
-      - run: npx vitest run --project=api --shard=${{ matrix.shard }}/7
+      - run: npx vitest run --project=api --shard=${{ matrix.shard }}/8
 
   # THE SHARDS RUN WHAT `build` BUILT. Every shard used to build the app and the CLI for itself —
   # the same bytes, six times over, in a job that already had to wait for nothing. It waits for

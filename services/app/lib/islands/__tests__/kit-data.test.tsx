@@ -322,14 +322,14 @@ describe('DataTable behavior', () => {
     expect(host.textContent).not.toContain('Alice updated');
     dispose();
   });
-  it('switches a measured long table from static rows to a virtual window', () => {
+  it('switches a measured long table from static rows to a virtual window after hydration', async () => {
     const height = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'clientHeight');
     Object.defineProperty(HTMLElement.prototype, 'clientHeight', { configurable: true, get() { return 300; } });
     try {
       const ctx = island();
       ctx.table = () => ({ rows: Array.from({ length: 200 }, (_, i) => ({ row: i })), columns: [{ name: 'row', type: 'number' }] });
       const { host } = mount(ctx, () => <DataTable data="$long" />);
-      expect(host.querySelector('tbody')?.style.position).toBe('relative');
+      await vi.waitFor(() => expect(host.querySelector('tbody')?.style.position).toBe('relative'));
       expect(host.querySelectorAll('tbody tr').length).toBeGreaterThan(0);
       expect(host.querySelectorAll('tbody tr').length).toBeLessThan(50);
     } finally {
@@ -492,7 +492,7 @@ describe('data widget parity with the live reader', () => {
     expect(host.querySelector('[data-slot="data-table"] > div')?.getAttribute('style')).toBe('max-height: 420px;');
   });
 
-  it('DataTable becomes a virtual window once measured, whatever its row count, and keeps the rows it rendered', () => {
+  it('DataTable becomes a virtual window after measurement, whatever its row count, and keeps the rows it rendered', async () => {
     const height = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'clientHeight');
     Object.defineProperty(HTMLElement.prototype, 'clientHeight', { configurable: true, get() { return 300; } });
     const host = document.createElement('div'); document.body.append(host);
@@ -501,8 +501,8 @@ describe('data widget parity with the live reader', () => {
     observer.observe(host, { childList: true, subtree: true });
     try {
       const unmount = render(() => <IslandProvider value={island()}><DataTable data="$monthly" /></IslandProvider>, host);
+      await vi.waitFor(() => expect(host.querySelector('table')?.getAttribute('style')).toBe('display: block;'));
       for (const record of observer.takeRecords()) removed.push(...record.removedNodes);
-      expect(host.querySelector('table')?.getAttribute('style')).toBe('display: block;');
       expect(host.querySelector('tbody')?.getAttribute('style')).toMatch(/^display: block; height: \d+px; position: relative;$/);
       expect(host.querySelector('tbody tr')?.getAttribute('style')).toMatch(/position: absolute; top: 0px; left: 0px; transform: translateY\(0px\);$/);
       expect(host.querySelectorAll('tbody tr')).toHaveLength(2);
