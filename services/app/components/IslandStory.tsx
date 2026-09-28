@@ -150,9 +150,14 @@ function createIslandController({ win, root, islands, nodes: served, portal }: I
     },
     update(command: StoryDocumentUpdate) {
       if (disposed) return;
-      // The version's source nodes, for the comments and selections classified against them.
-      if (command.nodes) { nodes = command.nodes; annotate?.setNodes(nodes); selection?.setNodes(nodes); }
-      void updateCompiledStory(win, { mode: () => mode, adopted: true });
+      // The version's source nodes, for the comments and selections classified against them — re-stamped
+      // once the morph has drawn the version they describe.
+      if (command.nodes) nodes = command.nodes;
+      void updateCompiledStory(win, { mode: () => mode, adopted: true }).then(() => {
+        if (disposed) return;
+        annotate?.setNodes(nodes);
+        selection?.setNodes(nodes);
+      });
     },
     invalidate(datasets: string[]) {
       if (disposed) return;
