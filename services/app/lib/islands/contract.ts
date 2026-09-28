@@ -179,7 +179,7 @@ export const ISLANDS_READY_EVENT = 'mx:ready';
  * ids and `data-mx-ast` paths verbatim, closed content rendered (hidden), never
  * omitted. The families, one module each under lib/islands/kit/:
  */
-export const KIT_FAMILIES = ['basic', 'tabs', 'accordion', 'dialog', 'disclosure', 'controls', 'data', 'files', 'people', 'mermaid'] as const;
+export const KIT_FAMILIES = ['basic', 'tabs', 'accordion', 'dialog', 'disclosure', 'controls', 'data', 'files', 'people', 'mermaid', 'embed'] as const;
 export type KitFamily = (typeof KIT_FAMILIES)[number];
 
 /**

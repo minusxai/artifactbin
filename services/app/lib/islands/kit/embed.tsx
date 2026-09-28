@@ -1,6 +1,6 @@
 /* @jsxImportSource solid-js */
 /**
- * THE EMBEDS (data family: `@mx/kit/data` re-exports them): `<Iframe>` and `<DeckGL>` as islands. Each
+ * THE EMBED FAMILY (`@mx/kit/embed`): `<Iframe>` and `<DeckGL>` as islands. Each
  * island is the box today's reader draws, server-rendered at its final size; its behaviour is a lazy chunk
  * loaded once the island is mounted, never part of the shared runtime or of a page's first paint:
  *

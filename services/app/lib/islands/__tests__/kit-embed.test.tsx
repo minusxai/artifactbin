@@ -9,7 +9,9 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { render } from 'solid-js/web';
 import { IslandProvider } from '../context';
 import { fakeIsland } from './context.test';
-import { Iframe, DeckGL } from '../kit/data';
+import { Iframe, DeckGL } from '../kit/embed';
+import * as dataFamily from '../kit/data';
+import { KIT_FAMILIES } from '../contract';
 import type { IslandContext } from '../contract';
 import type { DataflowStore } from '@/lib/story-runtime/store';
 import type { TableResult } from '@/lib/story/dataflow';
@@ -44,6 +46,14 @@ const store = (): DataflowStore => ({
   getState: () => ({ values: {}, tables: {}, errors: {} }),
   pending: () => new Set(),
 }) as unknown as DataflowStore;
+
+describe('the embed family', () => {
+  it('is its own kit family: the data family no longer carries the embeds', () => {
+    expect(KIT_FAMILIES).toContain('embed');
+    expect(Object.keys(dataFamily)).not.toContain('Iframe');
+    expect(Object.keys(dataFamily)).not.toContain('DeckGL');
+  });
+});
 
 describe('<Iframe>', () => {
   it('draws today\'s managed frame box, then mounts one sandboxed author realm in it, and removes it with the island', async () => {

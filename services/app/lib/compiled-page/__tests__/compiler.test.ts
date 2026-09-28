@@ -106,9 +106,16 @@ describe('compilePage', () => {
     }
   });
 
-  it('compiles <Iframe> and <DeckGL> as islands in the data family, served as today\'s boxes', async () => {
+  it('compiles <Iframe> and <DeckGL> as islands in the embed family, served as today\'s boxes', async () => {
     const source = '<div><Iframe title="Gallery" height={120} id="f" className="my-4"><p>Hello</p><script>{`document.body.dataset.ok = "1"`}</script></Iframe><DeckGL id="map" className="rounded" title="Countries" height="320px" basemap="none" layers={[{"@@type":"ScatterplotLayer","getPosition":"@@=[lng, lat]"}]} /></div>';
-    const page = await compilePage(await inputOf(source), loadCompilerBuild());
+    const input = await inputOf(source);
+    // Their own family (lib/islands/contract KIT_FAMILIES 'embed'): a page with a table never downloads the frame's island code.
+    const { islands } = generate(input);
+    expect(islands).toContain('import { DeckGL, Iframe } from "@mx/kit/embed";');
+    expect(islands).not.toContain('@mx/kit/data');
+    // The asset door is the page's (IslandPageData.managedAssets), never a compile-time prop.
+    expect(islands).not.toContain('assetsOrigin');
+    const page = await compilePage(input, loadCompilerBuild());
     expect(page.partial).toEqual([]);
     expect(page.islands.map((i) => i.kit)).toEqual([['Iframe'], ['DeckGL']]);
     const html = dom(page.html);

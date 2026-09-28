@@ -39,7 +39,7 @@ import { REF_ATTRS, carriesRef, refName, type Scalar } from '@/lib/story/dataflo
 import { resolveRefProps } from '@/lib/story/ref-data';
 import { discoverSlides, MIN_SLIDES_FOR_RAIL } from '@/lib/story-runtime/slides';
 import { createPreviewIdentityAllocator } from '@/lib/story-runtime/preview-identity';
-import { ASSETS_ORIGIN, PUBLIC_BASE_URL } from '@/lib/config';
+import { PUBLIC_BASE_URL } from '@/lib/config';
 import { compileManagedIframe } from '@/lib/story/managed-iframe';
 import { RECIPES, cn } from '@/lib/islands/kit/recipes';
 import { peopleClasses } from '@/lib/islands/kit/recipes/people';
@@ -118,9 +118,9 @@ export const KIT: Readonly<Record<string, KitMeta>> = {
   // A person's class depends on whom it resolves to in the browser (a guest's fallback, a card): every state's class
   // is evaluated here (recipes/people peopleClasses) and handed to the port as `classes`.
   User: { mod: 'people', island: true, api: ['userId', 'fallback', 'avatar', 'link', 'classes'] }, UserImage: { mod: 'people', island: true, api: ['userId', 'fallback', 'size', 'decorative', 'classes'] }, UserHandle: { mod: 'people', island: true, api: ['userId', 'fallback', 'link', 'classes'] }, SignIn: { mod: 'people', island: true },
-  // Embeds with behaviour in a lazy chunk (lib/islands/kit/embed): today's managed frame and map.
-  Iframe: { mod: 'data', island: true, api: ['title', 'height', 'compiled', 'assetsOrigin'], dom: 'box', noChildren: true },
-  DeckGL: { mod: 'data', island: true, api: ['data', 'layers', 'basemap', 'initialViewState', 'tooltip', 'legend', 'title', 'height', 'colorMode'], dom: 'box', grid: true },
+  // Embeds with behaviour in a lazy chunk (lib/islands/kit/embed, their own family): today's managed frame and map.
+  Iframe: { mod: 'embed', island: true, api: ['title', 'height', 'compiled'], dom: 'box', noChildren: true },
+  DeckGL: { mod: 'embed', island: true, api: ['data', 'layers', 'basemap', 'initialViewState', 'tooltip', 'legend', 'title', 'height', 'colorMode'], dom: 'box', grid: true },
   Dialog: { mod: 'dialog', island: true, api: ['defaultOpen'] }, DialogTrigger: { mod: 'dialog', api: ['wrapsControl', 'disabled'] }, DialogClose: { mod: 'dialog', api: ['wrapsControl', 'disabled'] }, DialogContent: { mod: 'dialog', api: ['run', 'args', 'stacked'] },
 };
 /** The rail's miniature stubs its embeds (StoryRuntimeApp PREVIEW_REGISTRY). */
@@ -354,7 +354,6 @@ export function generate(input: GenerateInput): Generated {
         // The interpreter's rules (renderNode): refused inside a row, and invalid content renders nothing.
         if (ctx.row) return `<div role="alert">{${lit('DataTable and Iframe must be outside For templates')}}</div>`;
         props.compiled = managedFrameOf(node);
-        if (ASSETS_ORIGIN) props.assetsOrigin = ASSETS_ORIGIN;
       }
       // The runtime hands the map the document's colour mode (StoryRuntimeApp RUNTIME_REGISTRY DeckGL).
       if (node.tag === 'DeckGL') props.colorMode = input.colorMode ?? 'light';
