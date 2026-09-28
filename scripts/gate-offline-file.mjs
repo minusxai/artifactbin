@@ -311,7 +311,8 @@ for (const [engineName, engine] of ENGINES) {
     await answerName(page, 'Asha');
     await expect(page.getByRole('button', { name: 'Edit the source' })).toBeVisible({ timeout: 20_000 });
     await selectHeading(page, 'Regional'.length);
-    await page.keyboard.type('Quarterly');
+    // One edit transaction keeps WebKit's selection stable while the offline editor rerenders.
+    await page.keyboard.insertText('Quarterly');
     await expect(page.getByRole('heading', { name: 'Quarterly sales' })).toBeVisible();
     await expect(page.getByRole('status').filter({ hasText: 'Unsaved changes' })).toBeVisible({ timeout: 10_000 });
     await expect(saveButton(page)).toBeEnabled();

@@ -238,7 +238,8 @@ describe('the compiled legs (w3-behaviour)', () => {
 
   it('every leg\'s gate reads GATE_READER (its own switch or scripts/lib/gate-reader)', () => {
     // These gates exercise the same user-visible assertions under either reader flag.
-    const unchanged = new Set(['image-upload', 'libraries', 'postgres-datasets']);
+    // Mermaid also covers /raw, which always serves the compiled reader now.
+    const unchanged = new Set(['image-upload', 'libraries', 'mermaid-prerender', 'postgres-datasets']);
     for (const leg of COMPILED_LEGS.filter((l) => !l.disabled && l.gate !== 'export-slice' && !unchanged.has(l.gate))) expect(source(leg.gate), leg.gate).toMatch(/GATE_READER|lib\/gate-reader\.mjs/);
   });
 
