@@ -24,6 +24,7 @@ import { InlineStoryComposition, type InlineStoryWiring } from './inline-composi
 import { adoptInitialStory, clearInitialStory, initialDocumentStory, initialStorySheet } from '@/web/initial-story';
 import { wireOutline } from './outline-nav';
 import { markScrollableTables } from './table-scroll';
+import { createWriteStatusFeed } from '@/lib/islands/writes';
 import { syncValuesToUrl } from './url-values-sync';
 
 function SelectionPortal({ready}:{ready:(element:HTMLElement | null)=>void}) {
@@ -257,6 +258,17 @@ export function InlineStoryRuntime(props: InlineStoryRuntimeProps): ReactNode {
      */
     const story = adopted.current;
     const whenStory = <T,>(load: Promise<T>): Promise<T> => story && !story.committed ? Promise.all([load, story.hydrated]).then(([module]) => module) : load;
+    const writeFeed = createWriteStatusFeed(store);
+    let statusLoading = false, stopWriteStatus = () => {};
+    // The compatibility pipeline compiles React: keep its view lazy, while sharing the
+    // framework-free feed with Solid. A page that never notifies loads no status view.
+    const stopStatusUpdates = writeFeed.subscribe(statuses => {
+      if (statusLoading || !statuses.some(status => status.mutationRunId)) return;
+      statusLoading = true;
+      void import('./notification-run-status').then(({mountNotificationRunStatus}) => {
+        if (!disposed && root.current) stopWriteStatus = mountNotificationRunStatus(writeFeed, root.current);
+      }).catch(error => { statusLoading = false; console.error('Failed to load notification status', error); });
+    });
     const listeners = new Set<(event: unknown) => void>();
     const nonce = runtimeId();
     const emit = (event: unknown) => { if (!disposed) for (const listener of [...listeners]) listener(event); };
@@ -395,7 +407,7 @@ export function InlineStoryRuntime(props: InlineStoryRuntimeProps): ReactNode {
         if (selectionReady.current === ensureSelection) selectionReady.current = null;
         listeners.clear();
         stopValues();
-        stopOutline(); stopTables();
+        stopOutline(); stopTables(); stopStatusUpdates(); stopWriteStatus();
         author.dispose();
         editRef.current?.dispose(); editRef.current = null;
         annotate?.dispose(); selection?.dispose();
