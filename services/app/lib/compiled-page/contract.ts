@@ -200,6 +200,7 @@ export const isCompileFailure = (stored: StoredCompile): stored is CompileFailur
 
 /** What the SSR module renders the islands from: the declared dataflow plus a snapshot's answers, and the version's drawings. */
 export interface IslandRenderData {
+  colorMode?: 'light' | 'dark';
   values: Record<string, Scalar>;
   results: ServedResults | null;
   mermaidImages: Readonly<Record<string, StoredMermaidImage>>;

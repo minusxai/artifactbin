@@ -1,6 +1,7 @@
 /* @jsxImportSource solid-js */
 import { Show, createEffect, createSignal, on, onCleanup, onMount, type JSX } from 'solid-js';
 import { mermaidImageKey, mermaidSourceError } from '@/lib/story-ui/mermaid-source';
+import { readerMode } from '@/lib/story-runtime/reader-mode';
 import { useIsland } from '../context';
 import { deferEngine } from '../defer-engine';
 import type { MermaidImage } from '@/components/kit/mermaid-render';
@@ -25,15 +26,14 @@ export function Mermaid(p: Props) {
   // A stored drawing this reader cannot use (its bytes would not load): the engine draws instead.
   const [refused, setRefused] = createSignal<string | null>(null);
   const [revision, setRevision] = createSignal(0);
+  // Hydration must start from the compiled prop, then move to the reader's current mode on mount:
+  // Solid only patches the server's image when the signal changes. SSR itself uses the request mode.
+  const [activeMode, setActiveMode] = createSignal<'light' | 'dark'>(typeof window === 'undefined'
+    ? island.colorMode?.() ?? p.colorMode ?? 'light' : p.colorMode ?? 'light');
+  let host!: HTMLElement;
+  let img: HTMLImageElement | undefined;
   const invalid = () => mermaidSourceError(p.code);
-  const mode = () => {
-    revision();
-    if (typeof document !== 'undefined') {
-      if (document.documentElement.classList.contains('dark')) return 'dark';
-      if (document.documentElement.classList.contains('light')) return 'light';
-    }
-    return p.colorMode ?? 'light';
-  };
+  const mode = () => activeMode();
   const imageKey = () => (invalid() ? null : p.imageKey && mode() === (p.colorMode ?? 'light') ? p.imageKey : mermaidImageKey(p.code, mode()));
   const stored = () => { const key = imageKey(); const offered = key ? island.drawings()[key] : undefined; return offered && offered.src !== refused() ? offered : undefined; };
   const storedSrc = () => stored()?.src ?? null;
@@ -42,16 +42,27 @@ export function Mermaid(p: Props) {
   const image = (): MermaidImage | undefined => current()?.image ?? stored();
   const src = () => image()?.src ?? null;
   const engineDrawn = () => !!current()?.image && !!current()?.palette;
-  let host!: HTMLElement; let img: HTMLImageElement | undefined;
-
   onMount(() => {
+    const doc = host.ownerDocument;
+    const readMode = (): 'light' | 'dark' => (doc.defaultView ? readerMode(doc.defaultView) : null)
+      ?? (doc.documentElement.classList.contains('dark') ? 'dark'
+        : doc.documentElement.classList.contains('light') ? 'light' : island.colorMode?.() ?? p.colorMode ?? 'light');
     // Only a CHANGED value redraws (a re-stamp with the same theme does not).
     const observer = new MutationObserver(records => {
-      if (records.some(record => record.oldValue !== (record.target as Element).getAttribute(record.attributeName ?? ''))) setRevision(n => n + 1);
+      if (records.some(record => record.oldValue !== (record.target as Element).getAttribute(record.attributeName ?? ''))) {
+        setActiveMode(readMode());
+        setRevision(n => n + 1);
+      }
     });
+    // During Solid hydration the figure's parent can still be detached when onMount runs.
+    // The document mode is stamped on <html>; watch it regardless of that insertion timing.
+    observer.observe(doc.documentElement, { attributes: true, attributeOldValue: true, attributeFilter: ['data-theme', 'data-color-mode', 'class'] });
     for (let element = host.parentElement; element; element = element.parentElement) {
+      if (element === doc.documentElement) continue;
       observer.observe(element, { attributes: true, attributeOldValue: true, attributeFilter: ['data-theme', 'data-color-mode', 'class'] });
     }
+    setActiveMode(readMode());
+    setRevision(n => n + 1);
     onCleanup(() => observer.disconnect());
     createEffect(on([() => p.code, mode, invalid, revision, storedSrc], ([code, colorMode, bad, , servedSrc]) => {
       if (bad) return;
@@ -92,6 +103,7 @@ export function Mermaid(p: Props) {
   const imgAttrs = (): JSX.ImgHTMLAttributes<HTMLImageElement> => ({ 'attr:style': !p.inGridItem && image() && !current()?.image ? servedStyle(image()!) : undefined } as JSX.ImgHTMLAttributes<HTMLImageElement>);
   return <figure ref={host} class={join('min-w-0', p.inGridItem ? 'flex h-full w-full flex-col' : 'my-4', className)}
     data-mx-mermaid-state={error() ? 'error' : image() && loadedSrc() === image()!.src ? 'ready' : 'pending'} data-mermaid-type={image()?.type}
+    data-mx-mermaid-mode={mode()} data-mx-mermaid-image-key={imageKey() ?? undefined}
     data-mx-mermaid-key={engineDrawn() ? imageKey() ?? undefined : undefined} data-mx-mermaid-palette={engineDrawn() ? current()?.palette : undefined}
     data-mx-mermaid-metrics={engineDrawn() ? current()?.metrics : undefined} data-mx-mermaid-portable={engineDrawn() && current()?.portable ? '' : undefined}
     data-mx-mermaid-faces={engineDrawn() ? current()?.faces : undefined} {...rest}>

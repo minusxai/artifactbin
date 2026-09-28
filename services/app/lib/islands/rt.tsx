@@ -65,6 +65,7 @@ export interface IslandDataflowInput {
 
 /** What one document's runtime starts from. */
 export interface IslandRuntimeData {
+  colorMode?: 'light' | 'dark';
   /** The store's input; absent or null for a document that declares no data (tabs, a diagram). */
   dataflow?: IslandDataflowInput | null;
   /** The version's stored Mermaid drawings (lib/mermaid-images). */
@@ -199,6 +200,7 @@ export function createIslandRuntime(
     mutating: (name) => { checks(); return !!store?.mutating().has(name); },
     viewer,
     drawings: () => drawings,
+    colorMode: () => data.colorMode ?? 'light',
     writes: (options.writes ?? (() => EMPTY_WRITE_FEED))(store),
     store: () => store,
     trustedPortal: options.trustedPortal ?? (() => trustedPortalOf()),

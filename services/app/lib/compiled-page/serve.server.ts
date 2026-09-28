@@ -308,6 +308,7 @@ const digest = (value: unknown): string => createHash('sha256').update(JSON.stri
 const sorted = (record: Readonly<Record<string, unknown>>): Array<[string, unknown]> => Object.entries(record).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
 
 interface StoryInput {
+  colorMode: 'light' | 'dark';
   values: Record<string, Scalar>;
   results: ServedResults | null;
   mermaidImages: Readonly<Record<string, StoredMermaidImage>>;
@@ -320,7 +321,7 @@ async function storyOf(compiled: CompiledPage, input: StoryInput): Promise<strin
   const plain = !input.results && !Object.keys(input.values).length && !Object.keys(input.mermaidImages).length;
   if (!compiled.ssr || plain) return compiled.html;
   const cacheKey = input.resultsId === null && input.results ? null
-    : `${compiled.build}:${compiled.ssr.sha}:${input.resultsId ?? '-'}:${digest(sorted(input.values))}:${digest(sorted(input.mermaidImages))}`;
+    : `${compiled.build}:${compiled.ssr.sha}:${input.colorMode}:${input.resultsId ?? '-'}:${digest(sorted(input.values))}:${digest(sorted(input.mermaidImages))}`;
   const cached = cacheKey ? renders.get(cacheKey) : undefined;
   if (cached !== undefined) {
     renders.delete(cacheKey!);
@@ -332,7 +333,7 @@ async function storyOf(compiled: CompiledPage, input: StoryInput): Promise<strin
   // (the same boundary prepared-page.server keeps for the compiler).
   const { loadSsrModule } = await import('./bundle.server');
   const module = await loadSsrModule(compiled.ssr);
-  const html = module.render({ values: input.values, results: input.results, mermaidImages: input.mermaidImages, drawings: input.drawings });
+  const html = module.render({ values: input.values, results: input.results, mermaidImages: input.mermaidImages, drawings: input.drawings, colorMode: input.colorMode });
   if (cacheKey) {
     renders.set(cacheKey, html);
     while (renders.size > RENDERS_KEPT) renders.delete(renders.keys().next().value!);
@@ -414,12 +415,13 @@ export async function compiledPageFor(row: ArtifactRow, page: PreparedPage, read
       ? { ...snapshot, results: { ...snapshot.results, ...(Object.keys(snapshot.marks).length ? { since: tokenOf(new Map(Object.entries(snapshot.marks))) } : {}) } }
       : null;
     const results = reader.results ?? served?.results ?? null;
+    const colorMode = reader.colorMode ?? page.data.colorMode;
     const story = await storyOf(compiled, {
+      colorMode,
       values, results, mermaidImages, drawings: served?.drawings ?? {},
       resultsId: served ? `${keyString(served.key)}:${served.computedAt}` : null,
     });
 
-    const colorMode = reader.colorMode ?? page.data.colorMode;
     const bare = reader.documentChrome === false;
     const behaviors = [...new Set([...(reader.behaviors ?? []), ...compiled.behaviors])].filter((b) => !(bare && b === DECK_BEHAVIOR));
     const assembled = assembleReaderPage({

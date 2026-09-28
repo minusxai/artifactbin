@@ -234,13 +234,11 @@ const claimedPriv = await api('/api/artifacts', { title: 'Claimed Private', mark
 check(claimedPriv.visibility === 'private', 'a claimed token publishes a private doc owned by the account');
 const splitCtx = await browser.newContext({ viewport: { width: 1400, height: 950 } });
 const splitPage = await splitCtx.newPage();
-// A brand-new context: it has NO account session. It exchanges the claimed
-// token for the agent cookie, and nothing else.
-await splitPage.goto(`${BASE}/`, { waitUntil: 'load' });
-const splitExchange = await splitPage.evaluate(async (t) => (await fetch('/api/session/token', {
-  method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token: t }),
-})).status, anon.token);
-check(splitExchange === 204, 'the split-viewer browser holds only the agent cookie (no account session)');
+// A brand-new context carries the guest approval's browser cookie, distinct
+// from the CLI's API-scoped token, and no account session.
+await becomeOwner(splitPage, BASE, anon.token);
+check(!!(await splitCtx.cookies(BASE)).find((c) => /mx-agent-session/.test(c.name)) && !(await sessionOf(splitCtx)),
+  'the split-viewer browser holds only the approval cookie (no account session)');
 const splitResponse = await splitPage.goto(`${BASE}/a/${claimedPriv.id}`, { waitUntil: 'load' });
 const splitText = await splitPage.locator('[data-mx-inline-story]').locator('h1').first().textContent({ timeout: 20000 }).catch(() => null);
 check(splitText === 'CLAIMED-PRIVATE-BODY', `the shell frame shows the DOCUMENT, not a 404 — raw resolved the cookie viewer (status ${splitResponse?.status()}, text ${splitText}, body ${(await splitPage.locator('body').innerText()).slice(0, 140)})`);

@@ -109,7 +109,7 @@ export async function artifactPageAnswer(request: Request, id: string, options: 
   const key = search.get('key');
   const exporting = verifyExportKey(artifact.id, key ?? undefined);
   const actor = await sessionActor(request);
-  if (!admitted && !exporting && !(await canReadArtifact(artifact, actor.viewer))) return notFound();
+  if (!admitted && !exporting && actor.tokenId !== artifact.token_id && !(await canReadArtifact(artifact, actor.viewer))) return notFound();
   if (!ARTIFACT_FORMATS.includes(artifact.format as ArtifactFormat)) return notFound();
 
   const role = await roleFor(artifact, actor);

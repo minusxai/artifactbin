@@ -94,6 +94,52 @@ describe('Mermaid, drawn by the reader', () => {
 
 describe('Mermaid, from a stored drawing', () => {
   const stored = { [mermaidImageKey(CODE, 'light')]: { src: '/assets/mermaid/abc.svg', type: 'flowchart-v2', width: 856.234375, height: 120, palette: 'p' } };
+  it('selects the requested dark drawing when the server supplies a dark first-paint mode', async () => {
+    const host = themed();
+    const island = fakeIsland();
+    island.colorMode = () => 'dark';
+    island.drawings = () => ({
+      [mermaidImageKey(CODE, 'light')]: stored[mermaidImageKey(CODE, 'light')]!,
+      [mermaidImageKey(CODE, 'dark')]: { src: '/assets/mermaid/dark.svg', type: 'flowchart-v2', palette: 'dark' },
+    });
+    const dispose = render(() => <IslandProvider value={island}><Mermaid code={CODE} colorMode="light" /></IslandProvider>, host);
+    try {
+      expect(host.querySelector('img')?.getAttribute('src')).toBe('/assets/mermaid/dark.svg');
+      expect(host.querySelector('figure')?.getAttribute('data-mx-mermaid-mode')).toBe('dark');
+    } finally { dispose(); host.remove(); }
+  });
+  it('changes a stored drawing when the reader changes the document mode', async () => {
+    const host = themed();
+    const island = fakeIsland();
+    island.drawings = () => ({
+      [mermaidImageKey(CODE, 'light')]: stored[mermaidImageKey(CODE, 'light')]!,
+      [mermaidImageKey(CODE, 'dark')]: { src: '/assets/mermaid/dark.svg', type: 'flowchart-v2', palette: 'dark' },
+    });
+    const dispose = render(() => <IslandProvider value={island}><Mermaid code={CODE} colorMode="light" /></IslandProvider>, host);
+    try {
+      expect(host.querySelector('img')?.getAttribute('src')).toBe('/assets/mermaid/abc.svg');
+      document.documentElement.classList.add('dark');
+      await vi.waitFor(() => expect(host.querySelector('img')?.getAttribute('src')).toBe('/assets/mermaid/dark.svg'));
+      expect(host.querySelector('figure')?.getAttribute('data-mx-mermaid-image-key')).toBe(mermaidImageKey(CODE, 'dark'));
+    } finally { document.documentElement.classList.remove('dark'); dispose(); host.remove(); }
+  });
+  it('uses the reader preference for a light override of a dark document', () => {
+    const previousName = window.name;
+    window.name = 'mx:doc:{"mode":"light"}';
+    document.documentElement.classList.add('dark');
+    const host = themed();
+    const island = fakeIsland();
+    island.colorMode = () => 'light';
+    island.drawings = () => ({
+      [mermaidImageKey(CODE, 'light')]: stored[mermaidImageKey(CODE, 'light')]!,
+      [mermaidImageKey(CODE, 'dark')]: { src: '/assets/mermaid/dark.svg', type: 'flowchart-v2', palette: 'dark' },
+    });
+    const dispose = render(() => <IslandProvider value={island}><Mermaid code={CODE} colorMode="dark" /></IslandProvider>, host);
+    try {
+      expect(host.querySelector('img')?.getAttribute('src')).toBe('/assets/mermaid/abc.svg');
+      expect(host.querySelector('figure')?.getAttribute('data-mx-mermaid-mode')).toBe('light');
+    } finally { dispose(); host.remove(); document.documentElement.classList.remove('dark'); window.name = previousName; }
+  });
   it('serves the stored image as React does, never loads the drawing code, and is ready once it loads', async () => {
     const both = await mountBoth(stored);
     try {
