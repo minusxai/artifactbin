@@ -1,5 +1,5 @@
 /* @jsxImportSource solid-js */
-import { createContext, createEffect, createSignal, createUniqueId, onMount, Show, splitProps, useContext, type JSX } from 'solid-js';
+import { createContext, createEffect, createSignal, createUniqueId, onCleanup, onMount, Show, splitProps, useContext, type JSX } from 'solid-js';
 import { collapsibleStyle } from './collapsible-style';
 import { TrustedOverlay } from './trusted-overlay';
 
@@ -55,9 +55,40 @@ export function PopoverAnchor(props: JSX.HTMLAttributes<HTMLDivElement>) { retur
 export function PopoverHeader(props: JSX.HTMLAttributes<HTMLDivElement>) { return <div data-slot="popover-header" {...props} />; }
 export function PopoverTitle(props: JSX.HTMLAttributes<HTMLDivElement>) { return <div data-slot="popover-title" {...props} />; }
 export function PopoverDescription(props: JSX.HTMLAttributes<HTMLParagraphElement>) { return <p data-slot="popover-description" {...props} />; }
-export function Avatar(props: JSX.HTMLAttributes<HTMLSpanElement> & { size?: string }) { const { size = 'default', ...rest } = props; return <span data-slot="avatar" data-size={size} {...rest} />; }
-export function AvatarImage(_props: JSX.ImgHTMLAttributes<HTMLImageElement>) { return null; }
-export function AvatarFallback(props: JSX.HTMLAttributes<HTMLSpanElement>) { return <span data-slot="avatar-fallback" {...props} />; }
+/**
+ * Radix Avatar: the image is drawn only once the browser has loaded it (a detached `Image` probes the
+ * address); until then — and for an address that fails — the fallback shows. The served markup is the
+ * fallback, as today's server render is.
+ */
+type ImageStatus = 'idle' | 'loading' | 'loaded' | 'error';
+const AvatarContext = createContext<{ status: () => ImageStatus; setStatus: (status: ImageStatus) => void }>();
+export function Avatar(props: JSX.HTMLAttributes<HTMLSpanElement> & { size?: string }) {
+  // splitProps, not destructuring: the children must be created INSIDE the provider.
+  const [local, rest] = splitProps(props, ['size']); const [status, setStatus] = createSignal<ImageStatus>('idle');
+  return <AvatarContext.Provider value={{ status, setStatus }}><span data-slot="avatar" data-size={local.size ?? 'default'} {...rest} /></AvatarContext.Provider>;
+}
+const imageStatus = (image: HTMLImageElement): ImageStatus => image.complete ? image.naturalWidth > 0 ? 'loaded' : 'error' : 'loading';
+export function AvatarImage(props: JSX.ImgHTMLAttributes<HTMLImageElement>) {
+  const ctx = useContext(AvatarContext);
+  onMount(() => {
+    if (!ctx) return;
+    const src = props.src;
+    if (!src) { ctx.setStatus('error'); return; }
+    const image = new window.Image();
+    const load = () => ctx.setStatus(imageStatus(image)); const fail = () => ctx.setStatus('error');
+    image.addEventListener('load', load); image.addEventListener('error', fail);
+    if (props.referrerPolicy) image.referrerPolicy = props.referrerPolicy;
+    image.crossOrigin = (props.crossOrigin as string | undefined) ?? null;
+    image.src = src;
+    ctx.setStatus(imageStatus(image));
+    onCleanup(() => { image.removeEventListener('load', load); image.removeEventListener('error', fail); ctx.setStatus('idle'); });
+  });
+  return <Show when={ctx?.status() === 'loaded'}><img data-slot="avatar-image" {...props} /></Show>;
+}
+export function AvatarFallback(props: JSX.HTMLAttributes<HTMLSpanElement>) {
+  const ctx = useContext(AvatarContext);
+  return <Show when={ctx?.status() !== 'loaded'}><span data-slot="avatar-fallback" {...props} /></Show>;
+}
 export function AvatarBadge(props: JSX.HTMLAttributes<HTMLSpanElement>) { return <span data-slot="avatar-badge" {...props} />; }
 export function AvatarGroup(props: JSX.HTMLAttributes<HTMLDivElement>) { return <div data-slot="avatar-group" {...props} />; }
 export function AvatarGroupCount(props: JSX.HTMLAttributes<HTMLDivElement>) { return <div data-slot="avatar-group-count" {...props} />; }

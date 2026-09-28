@@ -166,6 +166,37 @@ describe('disclosure', () => {
   });
 });
 
+describe('avatar image, as mounted Radix shows it', () => {
+  it('draws the image once it has loaded, in place of the fallback; keeps the fallback for an address that fails', async () => {
+    // A browser's Image, as jsdom has none that loads: complete with a width for a good address, broken otherwise.
+    const RealImage = window.Image;
+    const LoadingImage = function LoadingImage() {
+      const image = document.createElement('img');
+      let address = '';
+      Object.defineProperty(image, 'src', { get: () => address, set: (value: string) => { address = value; setTimeout(() => {
+        Object.defineProperty(image, 'complete', { value: true }); Object.defineProperty(image, 'naturalWidth', { value: value.includes('broken') ? 0 : 32 });
+        image.dispatchEvent(new Event(value.includes('broken') ? 'error' : 'load'));
+      }, 0); } });
+      return image;
+    };
+    window.Image = LoadingImage as unknown as typeof Image;
+    try {
+      for (const src of ['/a.png', '/broken.png']) {
+        const markup = `<Avatar id="av"><AvatarImage src="${src}" alt="A" id="img" /><AvatarFallback id="fb">AB</AvatarFallback></Avatar>`;
+        const react = await reactMount(markup);
+        const { host } = mount(() => <Avatar id="av" class={cls('Avatar')}><AvatarImage src={src} alt="A" id="img" class={cls('AvatarImage')} /><AvatarFallback id="fb" class={cls('AvatarFallback')}>AB</AvatarFallback></Avatar>);
+        document.body.append(host);
+        try {
+          await act(async () => { await new Promise((r) => setTimeout(r, 10)); });
+          expect(diffShapes(shapeOf(react.host), shapeOf(host)), src).toEqual([]);
+          expect(!!host.querySelector('#img'), src).toBe(src === '/a.png');
+          expect(!!host.querySelector('#fb'), src).toBe(src !== '/a.png');
+        } finally { host.remove(); await react.unmount(); }
+      }
+    } finally { window.Image = RealImage; }
+  });
+});
+
 /**
  * Accordion and Collapsible content, MOUNTED on both sides: Radix measures the content once it runs and
  * on every open/close, writing through the CSSOM (the served style string comes back in its form, the
