@@ -47,16 +47,27 @@ export function shapeOf(html: string | Element): Shape[] {
 }
 
 /** Every difference between two shapes, as one line each; empty means parity. */
-export function diffShapes(a: Shape[], b: Shape[], path = ''): string[] {
+export function diffShapes(a: Shape[], b: Shape[], path = '', reactIds?: Set<string>): string[] {
+  reactIds ??= new Set<string>();
+  if (!path) {
+    const collect = (nodes: Shape[]) => { for (const node of nodes) { if (node.attrs.id) reactIds!.add(node.attrs.id); collect(node.kids); } };
+    collect(a);
+  }
   const out: string[] = [];
   if (a.length !== b.length) out.push(`${path || 'root'}: ${a.length} vs ${b.length} children`);
   a.forEach((x, i) => {
     const y = b[i];
     const at = `${path}/${i}<${x.tag}>`;
     if (!y || x.tag !== y.tag) { out.push(`${at}: tag ${x.tag} vs ${y?.tag}`); return; }
-    for (const n of new Set([...Object.keys(x.attrs), ...Object.keys(y.attrs)])) if (x.attrs[n] !== y.attrs[n]) out.push(`${at} @${n}: ${JSON.stringify(x.attrs[n])} vs ${JSON.stringify(y.attrs[n])}`);
+    for (const n of new Set([...Object.keys(x.attrs), ...Object.keys(y.attrs)])) if (x.attrs[n] !== y.attrs[n]) {
+      // Today's React kit can emit a dangling idref when an author supplies an id.
+      // Accept a corrected Solid idref only when React's referenced element is absent.
+      const reactRef = x.attrs[n];
+      if ((n === 'aria-controls' || n === 'aria-labelledby') && reactRef && !reactRef.includes(' ') && !reactIds.has(reactRef)) continue;
+      out.push(`${at} @${n}: ${JSON.stringify(x.attrs[n])} vs ${JSON.stringify(y.attrs[n])}`);
+    }
     if (x.text !== y.text) out.push(`${at} text: ${JSON.stringify(x.text)} vs ${JSON.stringify(y.text)}`);
-    out.push(...diffShapes(x.kids, y.kids, at));
+    out.push(...diffShapes(x.kids, y.kids, at, reactIds));
   });
   return out;
 }
