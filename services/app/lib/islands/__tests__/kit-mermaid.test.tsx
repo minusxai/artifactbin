@@ -148,6 +148,54 @@ describe('Mermaid, drawn by the reader', () => {
 
 describe('Mermaid, from a stored drawing', () => {
   const stored = { [mermaidImageKey(CODE, 'light')]: { src: '/assets/mermaid/abc.svg', type: 'flowchart-v2', width: 856.234375, height: 120, palette: 'p' } };
+  it('switches stored images with the reader mode', async () => {
+    const host = themed();
+    host.classList.add('light');
+    const island = fakeIsland();
+    island.drawings = () => ({
+      [mermaidImageKey(CODE, 'light')]: { ...stored[mermaidImageKey(CODE, 'light')] },
+      [mermaidImageKey(CODE, 'dark')]: { src: '/assets/mermaid/dark.svg', type: 'flowchart-v2', width: 800, height: 110, palette: 'd' },
+    }) as never;
+    let dispose!: () => void;
+    try {
+      dispose = render(() => <IslandProvider value={island}><Mermaid code={CODE} colorMode="light" /></IslandProvider>, host);
+      expect(host.querySelector('img')?.getAttribute('src')).toBe('/assets/mermaid/abc.svg');
+      host.classList.replace('light', 'dark');
+      await vi.waitFor(() => expect(host.querySelector('img')?.getAttribute('src')).toBe('/assets/mermaid/dark.svg'));
+    } finally { dispose?.(); host.remove(); }
+  });
+  it('selects the dark stored image on first mount inside a dark story', async () => {
+    const host = themed();
+    host.classList.add('dark');
+    const island = fakeIsland();
+    island.drawings = () => ({
+      [mermaidImageKey(CODE, 'light')]: { ...stored[mermaidImageKey(CODE, 'light')] },
+      [mermaidImageKey(CODE, 'dark')]: { src: '/assets/mermaid/dark.svg', type: 'flowchart-v2', width: 800, height: 110, palette: 'd' },
+    }) as never;
+    let dispose!: () => void;
+    try {
+      dispose = render(() => <IslandProvider value={island}><Mermaid code={CODE} colorMode="light" /></IslandProvider>, host);
+      await vi.waitFor(() => expect(host.querySelector('img')?.getAttribute('src')).toBe('/assets/mermaid/dark.svg'));
+    } finally { dispose?.(); host.remove(); }
+  });
+  it('uses the story root mode when a nested author element has a mode class', async () => {
+    const story = themed();
+    story.setAttribute('data-mx-inline-story', '');
+    story.classList.add('dark');
+    const nested = document.createElement('div');
+    nested.classList.add('light');
+    story.append(nested);
+    const island = fakeIsland();
+    island.drawings = () => ({
+      [mermaidImageKey(CODE, 'light')]: { ...stored[mermaidImageKey(CODE, 'light')] },
+      [mermaidImageKey(CODE, 'dark')]: { src: '/assets/mermaid/dark.svg', type: 'flowchart-v2', width: 800, height: 110, palette: 'd' },
+    }) as never;
+    let dispose!: () => void;
+    try {
+      dispose = render(() => <IslandProvider value={island}><Mermaid code={CODE} colorMode="light" /></IslandProvider>, nested);
+      await vi.waitFor(() => expect(nested.querySelector('img')?.getAttribute('src')).toBe('/assets/mermaid/dark.svg'));
+    } finally { dispose?.(); story.remove(); }
+  });
   it('serves the stored image as React does, never loads the drawing code, and is ready once it loads', async () => {
     const both = await mountBoth(stored);
     try {

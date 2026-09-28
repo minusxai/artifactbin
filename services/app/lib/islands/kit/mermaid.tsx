@@ -28,7 +28,7 @@ export function Mermaid(p: Props) {
   const invalid = () => mermaidSourceError(p.code);
   const liveMode = () => {
     revision();
-    const themed = host?.closest('.dark, .light');
+    const themed = host?.closest('[data-mx-inline-story]') ?? host?.closest('.dark, .light');
     const modeRoot = themed ?? (typeof document !== 'undefined' ? document.documentElement : null);
     return modeRoot?.classList.contains('dark') ? 'dark' : modeRoot?.classList.contains('light') ? 'light' : p.colorMode ?? 'light';
   };
@@ -61,6 +61,9 @@ export function Mermaid(p: Props) {
     if (host.isConnected) watchAncestors();
     else attach.observe(document.documentElement, { childList: true, subtree: true });
     onCleanup(() => { observer.disconnect(); attach.disconnect(); });
+    // JSX evaluates the stored-image key before its figure ref is assigned.
+    // Resample once with the mounted host, so an initial dark page does not keep the light drawing.
+    setRevision(n => n + 1);
     createEffect(on([() => p.code, liveMode, invalid, revision, storedSrc], ([code, mode, bad, , servedSrc]) => {
       if (bad) return;
       // The page module may apply a same-tab colour override after this island mounts.
