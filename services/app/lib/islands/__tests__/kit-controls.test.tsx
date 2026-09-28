@@ -48,12 +48,25 @@ describe('controls', () => {
 
   it('Select and Segmented write chosen values immediately', () => {
     const island = fakeIsland({ region: 'West', size: 'S' }); island.setValue = vi.fn();
-    const { host } = mount(island, () => <><Select label="Region" value="$region" options={['West','East']} /><Segmented label="Size" value="$size" options={['S','M']} /></>);
+    const { host, dispose } = mount(island, () => <><Select label="Region" value="$region" options={['West','East']} /><Segmented label="Size" value="$size" options={['S','M']} /></>);
     (host.querySelector('[aria-haspopup="listbox"]') as HTMLButtonElement).click();
-    ([...host.querySelectorAll('[role="option"]')].find(x => x.textContent === 'East') as HTMLButtonElement).click();
+    ([...document.querySelectorAll('[role="option"]')].find(x => x.textContent === 'East') as HTMLButtonElement).click();
     expect(island.setValue).toHaveBeenCalledWith('region', 'East', undefined);
     ([...host.querySelectorAll('[role="group"] button')].find(x => x.textContent === 'M') as HTMLButtonElement).click();
     expect(island.setValue).toHaveBeenCalledWith('size', 'M', undefined);
+    dispose();
+  });
+
+  it('Select opens a searchable list and DatePicker opens a calendar', () => {
+    const island = fakeIsland({ region: 'West', when: '2026-09-28' }); island.setValue = vi.fn();
+    const { host, dispose } = mount(island, () => <><Select label="Region" value="$region" options={['West','East']} /><DatePicker label="When" value="$when" /></>);
+    (host.querySelector('[aria-haspopup="listbox"]') as HTMLButtonElement).click();
+    expect(document.querySelector('[role="searchbox"]')).toBeTruthy();
+    (host.querySelector('[aria-haspopup="dialog"]') as HTMLButtonElement).click();
+    const date = document.querySelector('[role="dialog"] [aria-label="2026-09-29"]') as HTMLButtonElement;
+    expect(date).toBeTruthy(); date.click();
+    expect(island.setValue).toHaveBeenCalledWith('when', '2026-09-29', undefined);
+    dispose();
   });
 
   it('a $-bound native field reads and writes the value', () => {
