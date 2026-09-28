@@ -21,6 +21,7 @@ import { createDataflowStore, type DataflowStore } from '@/lib/story-runtime/sto
 import type { ManagedIframeContent } from '@/lib/story/managed-iframe';
 import { ISLAND_DATA_ID } from '@/lib/compiled-page/contract';
 import type { IslandPageData } from '../../contract';
+import { STORY_ASSET_MESSAGE, STORY_ASSET_RESULT_MESSAGE, type StoryAssetRequest } from '@/lib/story-runtime/contract';
 
 export interface ManagedFrameMount {
   /** The frame box's inner element: the realm's iframe is mounted in it. */
@@ -53,6 +54,28 @@ export function pageAssetDoor(doc: Document, win: Window = doc.defaultView ?? wi
   return { ...(assets ? { assets } : {}), ...(importAsset ? { importAsset } : {}) };
 }
 
+/** Answer only the managed frame this mount owns; its opaque origin cannot use the page's cookie. */
+export function installFrameAssetRelay(doc: Document, host: HTMLElement, assets?: ManagedAssetsConfig): () => void {
+  const win = doc.defaultView;
+  if (!win || !assets) return () => {};
+  const resolver = createManagedAssetResolver(assets);
+  let disposed = false;
+  const receive = (event: MessageEvent) => {
+    const frame = host.querySelector('iframe');
+    if (!frame || event.source !== frame.contentWindow || event.origin !== 'null') return;
+    const data = event.data as Partial<StoryAssetRequest> | null;
+    if (!data || data.type !== STORY_ASSET_MESSAGE || !Number.isSafeInteger(data.id) || (data.id ?? 0) < 1 || typeof data.url !== 'string') return;
+    const kind = data.kind ?? 'image';
+    if (!['image', 'font', 'pdf', 'script', 'binary'].includes(kind)) return;
+    void resolver.resolve(data.url, kind).then(
+      url => { if (!disposed) frame.contentWindow?.postMessage({ type: STORY_ASSET_RESULT_MESSAGE, id: data.id, url }, '*'); },
+      () => { if (!disposed) frame.contentWindow?.postMessage({ type: STORY_ASSET_RESULT_MESSAGE, id: data.id, refused: 'asset_fetch_failed' }, '*'); },
+    );
+  };
+  win.addEventListener('message', receive);
+  return () => { disposed = true; win.removeEventListener('message', receive); resolver.dispose(); };
+}
+
 export function mountManagedFrame(mount: ManagedFrameMount): () => void {
   const doc = mount.host.ownerDocument;
   const own = mount.store ? null : createDataflowStore({ flow: { imports: [], values: [], queries: [], mutations: [] } });
@@ -61,6 +84,7 @@ export function mountManagedFrame(mount: ManagedFrameMount): () => void {
   const resolver = createManagedAssetResolver(assets, importAsset);
   let disposed = false;
   let stop = () => {};
+  const stopRelay = installFrameAssetRelay(doc, mount.host, assets);
   void prepareManagedContent(mount.compiled, resolver, doc).then((prepared) => {
     if (disposed) return;
     stop = startAuthorScript('', store, doc, { host: mount.host, title: mount.label, html: prepared.html, scripts: prepared.scripts, document: managedAuthorDocument(assets?.origin), assets, importAsset });
@@ -68,6 +92,7 @@ export function mountManagedFrame(mount: ManagedFrameMount): () => void {
   return () => {
     disposed = true;
     resolver.dispose();
+    stopRelay();
     stop();
     mount.host.replaceChildren();
     own?.dispose();

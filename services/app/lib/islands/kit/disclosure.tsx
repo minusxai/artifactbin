@@ -98,6 +98,18 @@ export function TooltipTrigger(props: JSX.ButtonHTMLAttributes<HTMLButtonElement
     on:pointerdown={() => { if (ctx.open()) ctx.close(); pointerDown = true; document.addEventListener('pointerup', () => { pointerDown = false; }, { once: true }); }}
     on:focus={() => { if (!pointerDown) ctx.openNow(); }} on:blur={() => ctx.close()} on:click={() => ctx.close()}>{props.children}</button>;
 }
+/** A disabled editing control needs a focusable span as its tooltip anchor. */
+export function TooltipSpanTrigger(props: JSX.HTMLAttributes<HTMLSpanElement>) {
+  const ctx = useContext(TooltipContext)!; let span!: HTMLSpanElement; let movedOpen = false;
+  onMount(() => createEffect(() => {
+    for (const [name, value] of [['aria-describedby', ctx.open() ? ctx.contentId() : null], ['data-state', ctx.state()], ['data-radix-popper-side', ctx.placed()?.side], ['data-radix-popper-align', ctx.placed()?.align]] as const) {
+      if (value) span.setAttribute(name, value); else span.removeAttribute(name);
+    }
+  }));
+  return <span ref={el => { span = el; ctx.setTrigger(el); }} data-state={ctx.state()} data-slot="tooltip-trigger" {...props}
+    on:pointermove={e => { if (e.pointerType !== 'touch' && !movedOpen) { ctx.enter(); movedOpen = true; } }} on:pointerleave={() => { ctx.leave(); movedOpen = false; }}
+    on:focus={() => ctx.openNow()} on:blur={() => ctx.close()} on:pointerdown={() => ctx.close()}>{props.children}</span>;
+}
 const ARROW_TRANSFORM: Record<Side, string> = { top: 'translateY(100%)', right: 'translateY(50%) rotate(90deg) translateX(-50%)', bottom: 'rotate(180deg)', left: 'translateY(50%) rotate(-90deg) translateX(50%)' };
 const ARROW_ORIGIN: Record<Side, string> = { top: '', right: '0 0', bottom: 'center 0', left: '100% 0' };
 const OPPOSITE: Record<Side, Side> = { top: 'bottom', right: 'left', bottom: 'top', left: 'right' };

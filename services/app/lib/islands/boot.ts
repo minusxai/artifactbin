@@ -31,7 +31,7 @@ import type { Component } from 'solid-js';
 import type { CompiledDataflow } from '@/lib/story/compiled-dataflow';
 import type { PageEngine } from '@/lib/story-runtime/page-engine';
 import { createDataflowStore } from '@/lib/story-runtime/store';
-import { createDocumentTransport } from '@/lib/story-runtime/document-transport';
+import { createIslandDocumentTransport } from './document-transport';
 import { STORY_DATA_HOOK } from '@/lib/story-runtime/contract';
 import { ISLAND_DATA_ID, READER_READY_ATTR } from '@/lib/compiled-page/contract';
 import { ISLAND_DOCUMENT_KEY, ISLANDS_READY_EVENT, type IslandDocument, type IslandDocumentMode, type IslandEvent, type IslandHost, type IslandPageData, type IslandViewer } from './contract';
@@ -72,6 +72,8 @@ export interface IslandMorphSeam {
   readonly modules: WeakMap<readonly IslandEntry[], IslandModule>;
   /** Set by the engine while it imports a newer version's module: that module's `boot` hands it in here. */
   take?: (module: IslandModule) => void;
+  /** Replace only the sandboxed author realm after a version changes its source. */
+  restartAuthor(source: string | null): Promise<void>;
 }
 export type MorphableIslandDocument = IslandDocument & { morph?: IslandMorphSeam };
 
@@ -149,7 +151,7 @@ export function boot(input: IslandModule | readonly IslandEntry[], win: Window =
 
   // A signed-in reader's queries and writes are theirs: the transport carries the session to the
   // doors that read it. A guest page keeps the anonymous GET door (lib/story-runtime/fetch-transport).
-  const transport = flow ? createDocumentTransport(win, data.queryUrl, appOrigin(), undefined, data.mutateUrl, { session: data.signedIn }) : null;
+  const transport = flow ? createIslandDocumentTransport(win, data.queryUrl, appOrigin(), data.mutateUrl, data.signedIn) : null;
   /*
    * The page's own engine, when this page may hold data and its door can fetch it (the relay cannot):
    * `$_me` is bound to the reader the door answers for — nobody on a guest page; on a signed-in page
@@ -218,8 +220,16 @@ export function boot(input: IslandModule | readonly IslandEntry[], win: Window =
   let ready = false;
   let disposed = false;
   let stopAuthor = () => {};
+  let authorGeneration = 0;
+  const restartAuthor = async (source: string | null) => {
+    const generation = ++authorGeneration;
+    stopAuthor();
+    if (!source) return;
+    const { startAuthorHost } = await import('./author-host');
+    if (generation === authorGeneration && !disposed && mode === 'read') stopAuthor = startAuthorHost(source, store, doc);
+  };
   const islandDocument: MorphableIslandDocument = {
-    morph: { islands, hydrate, modules: new WeakMap([[module.ISLANDS, module]]) },
+    morph: { islands, hydrate, modules: new WeakMap([[module.ISLANDS, module]]), restartAuthor },
     root,
     store,
     context,
@@ -265,10 +275,6 @@ export function boot(input: IslandModule | readonly IslandEntry[], win: Window =
 
   // The author's script, never in this document: its host (and the sandboxed frame) load only when the version has one.
   const authorScript = typeof data.authorScript === 'string' && data.authorScript ? data.authorScript : null;
-  if (authorScript) {
-    void import('./author-host').then(({ startAuthorHost }) => {
-      if (!disposed && mode === 'read') stopAuthor = startAuthorHost(authorScript, store, doc);
-    }).catch((error: unknown) => console.error('[islands] author host failed', error));
-  }
+  if (authorScript) void restartAuthor(authorScript).catch((error: unknown) => console.error('[islands] author host failed', error));
   return islandDocument;
 }

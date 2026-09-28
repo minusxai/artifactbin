@@ -29,7 +29,8 @@ import type {ImageAssetAnswer} from '@/lib/story/ref-data';
  */
 import type { DataflowState, Row, Scalar, TableResult } from '@/lib/story/dataflow';
 import type { CompiledDataflow } from '@/lib/story/compiled-dataflow';
-import { mutationRequestFor, type MutationRequest } from '@/lib/story/mutation-request';
+import type { MutationRequest } from '@/lib/story/mutation-request';
+import { mutationRequestFor } from '@/lib/story/mutation-request-builder';
 import type { LocalMutationResult } from '@/lib/story/local-state';
 import { importRef, selectQueries, type ImportTables } from '@/lib/story/compiled-flow';
 import { localZone } from '@/lib/story/builtins';

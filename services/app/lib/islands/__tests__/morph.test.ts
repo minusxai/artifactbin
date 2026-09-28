@@ -297,15 +297,66 @@ describe('the live morph', () => {
     expect($('lede')!.textContent).toBe('landed');
   });
 
-  it('refuses what it cannot draw in place: an unreadable fragment, another island build, a deck, a new author script', async () => {
+  it('refuses an unreadable fragment or another island build before changing the page', async () => {
     load(served({ edit: 'e1' }));
     start();
     await expect(morph(window, { fetch: answer('not found', 404) })).rejects.toBeInstanceOf(MorphRefused);
     await expect(morph(window, { fetch: answer(served({ edit: 'e2', module: '/islands/d/9999999999999999.js', boot: '/islands/boot-2222.js' })) })).rejects.toThrow(/island build/);
-    await expect(morph(window, { fetch: answer(served({ edit: 'e2', extra: '<nav class="mx-rail"></nav>' })) })).rejects.toThrow(/deck/);
-    const scripted = served({ edit: 'e2' }).replace('"readOnly":null', '"readOnly":null,"authorScript":"mx.set(1)"');
-    await expect(morph(window, { fetch: answer(scripted) }), 'the author\'s realm is started once, by boot').rejects.toThrow(/author script/);
     expect($('lede')!.textContent, 'a refusal changes nothing').toBe('the first version');
+  });
+
+  it('morphs a deck in place and keeps its slide and rail', async () => {
+    const deck = (edit: string, slides: string[]) => served({ edit, islands: [], module: null,
+      extra: `<div class="mx-deck"><nav class="mx-rail">${slides.map((s) => `<button class="mx-rail-row" aria-label="Go to ${s}">${s}</button>`).join('')}</nav><div class="mx-doc">${slides.map((s) => `<section id="${s}" data-mx-slide="" data-mx-ast="0.${s}">${s}</section>`).join('')}</div><div class="mx-present"><span class="mx-present-count"></span></div></div>`,
+    });
+    load(deck('e1', ['one', 'two']));
+    const rail = document.querySelector('.mx-rail');
+    const slide = $('two');
+    const fetch = answer(deck('e2', ['new', 'one', 'two']));
+    await morph(window, { fetch });
+    expect(document.querySelector('.mx-rail')).toBe(rail);
+    expect($('two')).toBe(slide);
+    expect(document.querySelectorAll('.mx-rail-row')).toHaveLength(3);
+    expect(document.body.getAttribute('data-mx-live-edit')).toBe('e2');
+  });
+
+  it('restarts only the author realm when its source changes', async () => {
+    load(served({ edit: 'e1' }).replace('"readOnly":null', '"readOnly":null,"authorScript":"one"'));
+    const doc = start();
+    const restart = vi.fn(async () => {});
+    doc.morph!.restartAuthor = restart;
+    const root = $('mx-story-root');
+    await morph(window, { fetch: answer(served({ edit: 'e2', lede: 'changed' }).replace('"readOnly":null', '"readOnly":null,"authorScript":"two"')) });
+    expect(restart).toHaveBeenCalledWith('two');
+    expect($('mx-story-root')).toBe(root);
+    expect($('lede')!.textContent).toBe('changed');
+  });
+
+  it('uses the raw copy\'s existing key without cookies for its opaque-origin fragment fetch', async () => {
+    load(served({ edit: 'e1' }));
+    start();
+    const win = new Proxy(window, { get: (target, key) => key === 'location'
+      ? { search: '?reader=compiled&key=existing', reload: vi.fn() }
+      : key === 'origin' ? 'null' : Reflect.get(target, key, target) }) as Window;
+    const fetch = answer(served({ edit: 'e2', lede: 'private update' }));
+    await morphStory(win, { fetch });
+    expect(fetch).toHaveBeenCalledWith('/a/doc1/story?reader=compiled&key=existing&surface=raw', expect.objectContaining({ credentials: 'omit' }));
+    expect($('lede')!.textContent).toBe('private update');
+  });
+
+  it('anchors the first visible persistent id when a paragraph is inserted above it', async () => {
+    load(served({ edit: 'e1' }));
+    start();
+    const rect = vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (this: HTMLElement) {
+      const top = this.id === 'lede' ? (document.getElementById('added') ? 140 : 40) : -100;
+      return { top, bottom: top + 30, height: this.id === 'lede' ? 30 : 0, width: 100 } as DOMRect;
+    });
+    const scrollBy = vi.fn();
+    const win = new Proxy(window, { get: (target, key) => key === 'scrollBy' ? scrollBy : Reflect.get(target, key, target) }) as Window;
+    const next = served({ edit: 'e2' }).replace('<p id="lede" data-mx-ast="0.1">', '<p id="added" data-mx-ast="0.1">new</p><p id="lede" data-mx-ast="0.2">');
+    await morph(win, { fetch: answer(next) });
+    expect(scrollBy).toHaveBeenCalledWith({ top: 100 });
+    rect.mockRestore();
   });
 });
 

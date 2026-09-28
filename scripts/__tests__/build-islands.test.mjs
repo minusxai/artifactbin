@@ -150,7 +150,15 @@ describe('buildIslands', () => {
     // helpers any kit family uses land in the shared chunk that rt's closure includes; they load on every
     // interactive page anyway. The owner's target 2 (≤ 85 KB before ready on interactive pages) is the
     // real check, in scripts/size-targets.mjs.
-    expect(bytes).toBeLessThanOrEqual(28 * 1024);
+    expect(bytes).toBeLessThanOrEqual(27_979);
+  });
+
+  it('keeps framed transport, comment target parsing and event contracts out of rt+boot', () => {
+    const { manifest, closure, outputInputs } = first;
+    const modules = closure([manifest['@mx/rt'], manifest['@mx/boot']]).flatMap((url) => outputInputs[url]);
+    for (const name of ['story-runtime/relay-transport.ts', 'story/comment-target.ts', 'contracts/src/events.ts']) {
+      expect(modules.some((input) => input.endsWith(name)), name).toBe(false);
+    }
   });
 
   it('keeps every kit family inside the ready-time static budget, with the map and frame engines behind dynamic imports', () => {

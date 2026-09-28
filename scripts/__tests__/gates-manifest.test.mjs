@@ -194,6 +194,18 @@ it('prints the selected gate names for shard-specific CI setup without starting 
   expect(selected.filter((name) => name === 'postgres-datasets')).toHaveLength(1);
 });
 
+it('prints the selected gate names for shard-specific CI setup without starting servers', () => {
+  const set = [...onDisk, ...compiledLegNames()];
+  const selected = [];
+  for (let index = 1; index <= 7; index++) {
+    const expected = shardOf(set, { index, total: 7 }, shardWeight);
+    const output = execFileSync(process.execPath, [path.join(SCRIPTS, 'gates.mjs'), '--selected', `--shard=${index}/7`], { encoding: 'utf8' }).trim().split('\n');
+    expect(output).toEqual(expected);
+    selected.push(...output);
+  }
+  expect(selected.filter((name) => name === 'postgres-datasets')).toHaveLength(1);
+});
+
 describe('the compiled legs (w3-behaviour)', () => {
   it('each leg names one gate on disk, carries a measured timeout, and a disabled one says why', () => {
     expect(() => checkLegs(onDisk)).not.toThrow();

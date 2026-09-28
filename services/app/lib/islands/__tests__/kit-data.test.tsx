@@ -82,6 +82,49 @@ describe('Select', () => {
 });
 
 describe('DataTable', () => {
+  it('shows the matching row when a filter shrinks a scrolled virtual table', async () => {
+    const height = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'clientHeight');
+    Object.defineProperty(HTMLElement.prototype, 'clientHeight', { configurable: true, get() { return (this as HTMLElement).classList.contains('overflow-auto') ? 420 : 0; } });
+    try {
+      const ctx = fakeIsland();
+      const all: TableResult = { rows: Array.from({ length: 500 }, (_, i) => ({ id: i + 1, item: `Item ${i + 1}` })), columns: [{ name: 'id', type: 'number' }, { name: 'item', type: 'string' }] };
+      const [table, setTable] = createSignal(all);
+      ctx.table = ctx.tableSnapshot = () => table();
+      const { host, dispose } = mount(ctx, () => <DataTable data="$tasks" rowKey="id" height={420} />);
+      const scroll = host.querySelector<HTMLElement>('.overflow-auto')!;
+      scroll.scrollTop = 16117; scroll.dispatchEvent(new Event('scroll'));
+      setTable({ ...all, rows: [all.rows[499]!] });
+      await vi.waitFor(() => expect(host.querySelector('tbody')?.textContent).toContain('Item 500'));
+      await vi.waitFor(() => expect(scroll.scrollTop).toBe(0));
+      dispose();
+    } finally {
+      if (height) Object.defineProperty(HTMLElement.prototype, 'clientHeight', height);
+      else Reflect.deleteProperty(HTMLElement.prototype, 'clientHeight');
+    }
+  });
+  it('shows a user card that arrives after the row, then follows its updated handle', async () => {
+    const ctx = fakeIsland();
+    const [people, setPeople] = createSignal<Record<string, { name: string; handle: string; image: null }>>({});
+    ctx.people = () => people();
+    ctx.table = ctx.tableSnapshot = () => ({ rows: [{ id: 1, assignee: 'usr_1' }], columns: [{ name: 'id', type: 'number' }, { name: 'assignee', type: 'user' }] });
+    const { host, dispose } = mount(ctx, () => <DataTable data="$tasks" rowKey="id" />);
+    expect(host.querySelector('tbody')?.textContent).toContain('Unknown person');
+    setPeople({ usr_1: { name: 'Native User', handle: 'mxmx_test_native_user', image: null } });
+    await vi.waitFor(() => expect(host.querySelector('tbody')?.textContent).toContain('@mxmx_test_native_user'));
+    setPeople({ usr_1: { name: 'Native User', handle: 'new_handle', image: null } });
+    await vi.waitFor(() => expect(host.querySelector('tbody')?.textContent).toContain('@new_handle'));
+    dispose();
+  });
+  it('replaces an initially empty user cell after a write updates the row in place', async () => {
+    const ctx = fakeIsland();
+    const [rows, setRows] = createStore([{ id: 1, completed_by: null as string | null }]);
+    ctx.people = () => ({ usr_1: { name: 'Native User', handle: 'mxmx_test_native_user', image: null } });
+    ctx.table = ctx.tableSnapshot = () => ({ rows, columns: [{ name: 'id', type: 'number' }, { name: 'completed_by', type: 'user' }] });
+    const { host, dispose } = mount(ctx, () => <DataTable data="$tasks" rowKey="id" />);
+    setRows(0, 'completed_by', 'usr_1');
+    await vi.waitFor(() => expect(host.querySelector('tbody')?.textContent).toContain('@mxmx_test_native_user'));
+    dispose();
+  });
   it('renders the rows and header of its table and matches today\'s DOM', () => {
     const { host } = mount(undefined, () => <DataTable data="$monthly" height="300px" id="dIQl" />);
     expect(host.querySelectorAll('tbody tr')).toHaveLength(2);

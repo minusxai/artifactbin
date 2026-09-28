@@ -21,7 +21,8 @@ import { batch, createComponent, createMemo, createRoot, createSignal, For, Show
 import type { Component, JSX } from 'solid-js';
 import { createStore, reconcile } from 'solid-js/store';
 import { hydrate, insert as solidInsert, isServer } from 'solid-js/web';
-import { evaluateReactive, type ReactiveExpression } from '@/lib/jsx/reactive';
+import type { ReactiveExpression } from '@/lib/jsx/reactive';
+import { evaluateReactive } from '@/lib/jsx/reactive-eval';
 import { substituteRow } from '@/lib/story/row-scope';
 import type { CompiledDataflow } from '@/lib/story/compiled-dataflow';
 import type { DataflowState, Row, Scalar, TableResult } from '@/lib/story/dataflow';
