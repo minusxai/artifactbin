@@ -613,7 +613,7 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
   app.use('/libraries/*', async (c, next) => { await next(); c.header('cache-control', 'public, max-age=3600'); c.header('access-control-allow-origin', '*'); });
   // Opaque-origin /raw frames import these modules and fetch the page engine's wasm.
   // Every file is content-addressed; both requests need CORS and immutable caching.
-  app.use('/islands/*', async (c, next) => { await next(); c.header('cache-control', IMMUTABLE); c.header('access-control-allow-origin', '*'); });
+  app.use('/islands/*', async (c, next) => { await next(); if (c.res.status < 400) c.header('cache-control', IMMUTABLE); c.header('access-control-allow-origin', '*'); });
   app.use('/fonts/*', async (c, next) => { await next(); c.header('cache-control', IMMUTABLE); c.header('access-control-allow-origin', '*'); });
   app.use('/geojson/*', async (c, next) => { await next(); c.header('cache-control', 'public, max-age=86400'); c.header('access-control-allow-origin', '*'); });
   app.use('/assets/*', async (c, next) => { await next(); c.header('cache-control', IMMUTABLE); });

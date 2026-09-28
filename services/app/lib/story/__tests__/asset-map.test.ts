@@ -11,6 +11,7 @@
  * thing that never differed and is blind to the rest.
  */
 import { describe, expect, it } from 'vitest';
+import { JSDOM } from 'jsdom';
 import { compiledDocument, type DocumentCase } from '@/lib/compiled-page/__tests__/document-helper';
 import { storyUpdateParts } from '@/lib/story/update-parts';
 import { assetLookupFrom, assetUrlFor, mapExternalImageSources, type WebAssetBox } from '@/lib/story/asset-url';
@@ -78,9 +79,9 @@ describe('the three renderings agree', () => {
    */
   it('offers both widths to the browser it is served to', async () => {
     const html = await build();
-    expect(html).toContain('srcset="');
-    expect(html).toContain('w=640 640w');
-    expect(html).toContain('sizes="(max-width: 640px) 100vw, 768px"');
+    const image = new JSDOM(html).window.document.querySelector('img')!;
+    expect(image.getAttribute('srcset')).toContain('w=640 640w');
+    expect(image.getAttribute('sizes')).toBe('(max-width: 640px) 100vw, 768px');
   });
 
   it('photographs the full variant, eagerly, for a capture', async () => {

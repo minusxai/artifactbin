@@ -2,7 +2,7 @@
  * THE COMPILE BESIDE THE PREPARED PAGE (docs/phase2-architecture.md §2.1, §6; lib/story/prepared-page.server
  * `PreparedPage.compiled`): a deployment that compiles (`FLAG__COMPILED_READER=shadow|on`) stores the
  * version's compiled page — or its recorded failure — in the same row as the prepared page, keyed with
- * the compiler build; one that does not (`off`) stores none. Real publish handler on the harness's
+ * the compiler build. Every flag value compiles once the standalone reader is gone. Real publish handler on the harness's
  * isolated database.
  */
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
@@ -54,12 +54,12 @@ describe('the compiled page on the prepared page', () => {
     expect(key.endsWith(`:${loadCompilerBuild().id}`)).toBe(true);
   });
 
-  it('off: a publish stores no compile', async () => {
+  it('off: a publish still stores the compile after standalone removal', async () => {
     setCompiledReaderFlagForTests('off');
     const id = await publish(fixture('prose.jsx'));
     const { key, compiled } = await stored(id);
-    expect(compiled).toBeUndefined();
-    expect(key.endsWith(':off')).toBe(true);
+    expect(compiled).toMatchObject({ build: loadCompilerBuild().id, unported: [] });
+    expect(key.endsWith(`:${loadCompilerBuild().id}`)).toBe(true);
   });
 
   it('a page with islands: the browser module is served, the SSR module (the whole page) never is', async () => {
@@ -73,11 +73,12 @@ describe('the compiled page on the prepared page', () => {
     expect((await app.request(`${DOCUMENT_MODULE_PATH}/${compiled.ssr!.sha}.js`)).status).toBe(404);
   });
 
-  it('a version the compiler refuses stores the failure with its reason, not a page', async () => {
+  it('a nested Separator compiles as a shell inside a repeated row', async () => {
     setCompiledReaderFlagForTests('shadow');
-    // A registered component with no Solid port, inside a row: React cannot render it at compile time.
+    // The compiler coverage pass can render this registered component in a React shell.
     const id = await publish(UNPORTED);
     const { compiled } = await stored(id);
-    expect(compiled).toEqual({ build: loadCompilerBuild().id, error: 'unported: Separator', reason: 'unported', unported: ['Separator'] });
+    expect(compiled).toMatchObject({ build: loadCompilerBuild().id, unported: [] });
+    expect((compiled as CompiledPage).html).toContain('data-slot="separator"');
   });
 });

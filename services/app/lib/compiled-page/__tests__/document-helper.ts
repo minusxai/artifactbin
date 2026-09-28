@@ -30,7 +30,7 @@ export async function compiledDocument(input: DocumentCase): Promise<string> {
     ? (await loadSsrModule(compiled.ssr)).render({ values: { ...state?.values, ...overlay.values }, results, mermaidImages: overlay.mermaidImages, drawings: {} })
     : compiled.html;
   return assembleReaderPage({
-    compiled, story, css: '', fontPreloads: parts.runtime.fontPreloads ?? [],
+    compiled, story, capture: input.chrome === false, css: '', fontPreloads: parts.runtime.fontPreloads ?? [],
     title: parts.runtime.title, theme: input.theme, colorMode, snapshot: null,
     overlay,
     chrome: null, spa: null, build, head: input.head ?? null, footer: input.footer ?? null,

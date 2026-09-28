@@ -31,6 +31,7 @@ import { STORY_CHROME_CSS } from '@/lib/story-runtime/chrome-css';
 import { STORY_ROOT_ID } from '@/lib/story-runtime/contract';
 import { fontPreloadTags } from '@/lib/story/first-screen-fonts';
 import { inlineStoryElement } from '@/lib/story/inline-story-html';
+import { parseFragment } from 'parse5';
 import { escapeHtml, renderReaderChrome } from '@/lib/story/reader-chrome';
 import { APP_BAR_H } from '@/lib/story/edit-bar';
 import { DOCUMENT_ROOT_CSS } from '@/lib/story/document-styles';
@@ -45,7 +46,7 @@ export const assembleReaderPage: AssembleReaderPage = (input: AssembleInput): As
   const help = input.head?.help ?? null;
   const module = compiled.module;
 
-  const story = storyElement(fillChartSlots(input.story, input.snapshot?.drawings ?? {}), input.colorMode, input.theme);
+  const story = storyElement(fillChartSlots(input.capture ? fullImageVariants(input.story) : input.story, input.snapshot?.drawings ?? {}), input.colorMode, input.theme, input.outline ?? []);
 
   const islandPreloads = module ? unique([module.url, ...module.imports]) : [];
   const behaviorSrcs = unique(compiled.behaviors.map((behavior) => behaviorUrl(build, behavior)).filter((url): url is string => !!url));
@@ -150,10 +151,38 @@ function behaviorUrl(build: CompilerBuild, behavior: string): string | null {
 }
 
 /** The story element, carrying the id the island runtime and the SPA find it by. */
-function storyElement(body: string, colorMode: string, theme: string | null): string {
-  const element = inlineStoryElement(body, colorMode, theme);
+function storyElement(body: string, colorMode: string, theme: string | null, outline: NonNullable<AssembleInput['outline']>): string {
+  const contents = outline.length ? body + renderOutline(outline) : body;
+  const element = inlineStoryElement(contents, colorMode, theme);
   if (!element.startsWith('<div ')) throw new Error('assembler: the story element is not a <div>');
-  return `<div id="${STORY_ROOT_ID}" ${element.slice('<div '.length)}`;
+  const rooted = `<div id="${STORY_ROOT_ID}" ${element.slice('<div '.length)}`;
+  return outline.length ? rooted.replace(`class="${escapeHtml(colorMode)}"`, `class="${escapeHtml(colorMode)} mx-reading"`) : rooted;
+}
+
+function renderOutline(entries: NonNullable<AssembleInput['outline']>): string {
+  let section = 0;
+  return '<nav class="mx-outline" aria-label="Contents"><div class="mx-outline-label">Contents</div>'
+    + entries.map((entry) => {
+      if (entry.level === 2) section += 1;
+      const label = entry.level === 2 ? `Go to section ${section}: ${entry.title}` : `Go to ${entry.title}`;
+      return `<button type="button" class="${entry.level === 3 ? 'mx-outline-row mx-outline-sub' : 'mx-outline-row'}" aria-label="${escapeHtml(label)}" data-mx-target="${escapeHtml(entry.path)}">${escapeHtml(entry.title)}</button>`;
+    }).join('') + '</nav>';
+}
+
+/** Captures photograph the full image; remove only responsive attributes from image tags. */
+function fullImageVariants(html: string): string {
+  type Located = { tagName?: string; childNodes?: Located[]; sourceCodeLocation?: { attrs?: Record<string, { startOffset: number; endOffset: number }> } };
+  const root = parseFragment(html, { sourceCodeLocationInfo: true }) as unknown as Located;
+  const cuts: Array<{ start: number; end: number }> = [];
+  const walk = (node: Located): void => {
+    if (node.tagName === 'img') for (const [name, range] of Object.entries(node.sourceCodeLocation?.attrs ?? {})) {
+      if (name.toLowerCase() === 'srcset' || name.toLowerCase() === 'sizes') cuts.push({ start: range.startOffset, end: range.endOffset });
+    }
+    for (const child of node.childNodes ?? []) walk(child);
+  };
+  walk(root);
+  for (const cut of cuts.sort((a, b) => b.start - a.start)) html = html.slice(0, cut.start) + html.slice(cut.end);
+  return html;
 }
 
 function islandData(input: AssembleInput): IslandPageData {

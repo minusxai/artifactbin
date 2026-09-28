@@ -24,6 +24,7 @@ import type { Scalar } from '@/lib/story/dataflow';
 import type { RefDataMap } from '@/lib/story/ref-data';
 import type { GlyphMap } from '@/lib/story-ui/icon-contract';
 import type { ReaderChromeInput } from '@/lib/story/reader-chrome';
+import type { OutlineEntry } from '@/lib/story-runtime/outline';
 import type { ServedResults, StoredMermaidImage, StoryViewer } from '@/lib/story-runtime/contract';
 import type { AgentDiscovery } from '@/lib/agent-discovery-tags';
 
@@ -430,6 +431,10 @@ export interface AssembleInput {
    * cached per build + snapshot key). The assembler never renders islands.
    */
   story: string;
+  /** Section navigation discovered from the prepared source; empty for captures, decks and dashboards. */
+  outline?: readonly OutlineEntry[];
+  /** An export capture uses the full image variant and no responsive srcset. */
+  capture?: boolean;
   /** The version's isolated stylesheet and font preloads, from the prepared page. */
   css: string;
   fontPreloads: readonly string[];

@@ -362,6 +362,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
           behaviors: capture ? [] : ['page'],
           // `chrome=0` draws the document without its own chrome (a deck's rail and present bar), as today's does.
           documentChrome: chrome,
+          capture: !chrome,
           head: chrome
             ? {
               description: row.description,

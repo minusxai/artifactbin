@@ -297,8 +297,7 @@ jobs:
           path: |
             dist
             services/app/dist
-            services/app/lib/story-runtime/dist
-            services/app/public/story
+            services/app/lib/build-assets
             services/app/public/islands
             services/app/public/libraries
             services/app/server/routes.generated.ts

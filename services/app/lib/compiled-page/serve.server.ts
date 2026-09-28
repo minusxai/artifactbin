@@ -56,6 +56,7 @@
 import { parseFragment } from 'parse5';
 import { createHash } from 'node:crypto';
 import { holdableImports, type ArtifactRow } from '@/lib/artifacts';
+import { discoverOutline, hasOutline } from '@/lib/story-runtime/outline';
 import type { ArchivedRender } from '@/lib/archived-version';
 import { mermaidImagesFor } from '@/lib/mermaid-images/store';
 import type { ServedResults, StoredMermaidImage } from '@/lib/story-runtime/contract';
@@ -117,6 +118,7 @@ export interface CompiledReaderRequest {
    * Default true.
    */
   documentChrome?: boolean;
+  capture?: boolean;
 }
 
 export type CompiledReaderAnswer =
@@ -408,10 +410,14 @@ export async function compiledPageFor(row: ArtifactRow, page: PreparedPage, read
 
     const colorMode = reader.colorMode ?? page.data.colorMode;
     const bare = reader.documentChrome === false;
+    const outline = !bare && (page.data.template === 'editorial' || page.data.template === 'plan') && hasOutline(page.data.nodes)
+      ? discoverOutline(page.data.nodes) : [];
     const behaviors = [...new Set([...(reader.behaviors ?? []), ...compiled.behaviors])].filter((b) => !(bare && b === DECK_BEHAVIOR));
     const assembled = assembleReaderPage({
       compiled: { ...compiled, behaviors },
       story: bare ? withoutDeckChrome(story) : story,
+      outline,
+      capture: reader.capture ?? false,
       css: page.css,
       fontPreloads: [...page.fontPreloads, ...(reader.chromeFonts ?? [])],
       title: page.title,

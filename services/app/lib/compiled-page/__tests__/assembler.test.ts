@@ -29,6 +29,13 @@ const input = (over: Partial<AssembleInput> = {}): AssembleInput => ({
 const dom = (page: { html: string }) => new JSDOM(page.html).window.document;
 
 describe('assembleReaderPage', () => {
+  it('uses only the full image variant for an export capture', () => {
+    const doc = dom(assembleReaderPage(input({ capture: true, story: '<div class="mx-doc"><img src="/full.jpg" srcSet="/small.jpg 640w, /full.jpg 1600w" sizes="100vw"></div>' })));
+    const image = doc.querySelector('img')!;
+    expect(image.getAttribute('src')).toBe('/full.jpg');
+    expect(image.hasAttribute('srcset')).toBe(false);
+    expect(image.hasAttribute('sizes')).toBe(false);
+  });
   it('places the request\'s story, never re-rendering it: the story input is what appears', () => {
     const page = assembleReaderPage(input({ story: '<div class="mx-doc"><b id="with-data">$744,503</b></div>' }));
     expect(dom(page).querySelector('#mx-story-root #with-data')?.textContent).toBe('$744,503');
