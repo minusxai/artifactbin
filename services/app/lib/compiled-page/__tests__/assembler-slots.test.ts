@@ -5,6 +5,8 @@
  */
 import { describe, expect, it } from 'vitest';
 import { JSDOM } from 'jsdom';
+import { parse, View } from 'vega';
+import { compile, type TopLevelSpec } from 'vega-lite';
 import { assembleReaderPage, isInertSvg, scriptJson } from '../assembler';
 import { speculationRulesOf } from '../speculation';
 import { CHART_SLOT_ATTR, ISLAND_DATA_ID, SIGNED_IN_HINT_ATTR, SPA_IDLE_ATTR, SPECULATION_RULES_HEADER, type AssembleInput, type CompiledPage, type DataSnapshot } from '../contract';
@@ -157,7 +159,28 @@ describe('chart slots', () => {
   });
 });
 
+/** What charts.server draws with: vega-lite compiled, rendered headless to an SVG string. */
+const vegaSvg = (spec: TopLevelSpec) => new View(parse(compile(spec).spec), { renderer: 'none' }).toSVG();
+const values = [{ m: 'Jan </svg><script>alert(1)</script>', v: 3, u: 'https://example.com/a?x=1&y=2' }, { m: 'Feb & "co"', v: 5, u: '/a/Btruq6' }];
+
 describe('isInertSvg', () => {
+  it('admits what vega actually draws: axes, text, a link encoding, a legend, a gradient', async () => {
+    const charts: TopLevelSpec[] = [
+      { title: 'Sales <1>', width: 300, height: 150, data: { values }, mark: 'bar', encoding: { x: { field: 'm', type: 'nominal' }, y: { field: 'v', type: 'quantitative' }, href: { field: 'u' }, tooltip: { field: 'v' } } },
+      { width: 300, height: 150, data: { values }, layer: [{ mark: { type: 'line', point: true, clip: true }, encoding: { x: { field: 'm', type: 'ordinal' }, y: { field: 'v', type: 'quantitative' } } }, { mark: { type: 'text', dy: -5 }, encoding: { x: { field: 'm', type: 'ordinal' }, y: { field: 'v', type: 'quantitative' }, text: { field: 'm' } } }] },
+      { width: 150, height: 150, data: { values }, mark: { type: 'arc', innerRadius: 30 }, encoding: { theta: { field: 'v', type: 'quantitative' }, color: { field: 'm', type: 'nominal', legend: { title: 'Month' } } } },
+      { width: 300, height: 150, data: { values }, mark: { type: 'area', line: true, color: { x1: 1, y1: 1, x2: 1, y2: 0, gradient: 'linear', stops: [{ offset: 0, color: 'white' }, { offset: 1, color: 'darkgreen' }] } }, encoding: { x: { field: 'm', type: 'ordinal' }, y: { field: 'v', type: 'quantitative' } } },
+    ];
+    for (const spec of charts) {
+      const svg = await vegaSvg(spec);
+      expect(isInertSvg(svg), svg.slice(0, 200)).toBe(true);
+      const page = doc(assembleReaderPage(input({ story: `<div ${CHART_SLOT_ATTR}="q"><i class="skeleton"></i></div><p id="after"></p>`, snapshot: snapshot({ q: drawn(svg) }) })).html);
+      expect(page.querySelector(`[${CHART_SLOT_ATTR}="q"][data-mx-chart-state="ready"] > svg`)).toBeTruthy();
+      expect(page.querySelectorAll('script:not([src]):not([type="application/json"])')).toHaveLength(0);
+      expect(page.querySelector('#after')?.parentElement?.tagName).toBe('DIV');
+    }
+  });
+
   it('admits what a chart renderer draws', () => {
     expect(isInertSvg(SVG)).toBe(true);
     expect(isInertSvg('<svg><a href="https://example.com/x"><path d="M0 0"/></a><image href="data:image/png;base64,AAAA"/><title>Sales &lt; 3</title></svg>')).toBe(true);
