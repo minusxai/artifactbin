@@ -67,6 +67,7 @@ describe('the compiled page\'s engine facts', () => {
     const id = await create(t.token, { title: 'Sales', markup: SALES(ds), visibility: 'public' });
     const data = await appPage(id);
     expect(data.hold).toEqual(['regions_data', 'sales_data']);
+    expect(data.state, 'a healthy page must start its own engine instead of treating prepared rows as settled state').toBeUndefined();
     const wasm = loadCompilerBuild().sqliteWasm;
     expect(wasm, 'the island build records the engine\'s wasm').toMatch(/^\/islands\/sqlite3-[0-9a-f]{16}\.wasm$/);
     expect(data.sqliteWasm).toBe(wasm);

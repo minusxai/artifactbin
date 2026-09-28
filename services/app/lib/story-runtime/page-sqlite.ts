@@ -4,7 +4,7 @@
  * runs nothing in the page (prose, a chart over a dataset the reader may not
  * hold) never downloads it (lib/__tests__/reader-bundle-hygiene pins this).
  * Its wasm is fetched once from this origin at a content-addressed URL the
- * runtime build records (StoryIslandData.sqliteWasm), cached `immutable`; the
+ * island build records (StoryIslandData.sqliteWasm), cached `immutable`; the
  * offline file hands its embedded bytes in instead.
  *
  * `pageEngineFor` decides, once per document lifetime, whether the page runs

@@ -161,8 +161,8 @@ export interface StoryIslandData {
    */
   queryUrl?: string;
   /**
-   * The SQLite engine's wasm, at the content-addressed URL the runtime build
-   * records (public/story/manifest.json), for a page that runs the queries
+   * The SQLite engine's wasm, at the content-addressed URL the island build
+   * records (public/islands/manifest.json), for a page that runs the queries
    * over what its reader holds (dataflow.hold, lib/story-runtime/page-sqlite).
    * Absent where nothing runs in the page.
    */

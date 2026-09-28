@@ -25,8 +25,16 @@ export function Mermaid(p: Props) {
   // A stored drawing this reader cannot use (its bytes would not load): the engine draws instead.
   const [refused, setRefused] = createSignal<string | null>(null);
   const [revision, setRevision] = createSignal(0);
+  let host!: HTMLElement; let img: HTMLImageElement | undefined;
+  /** The reader's class, including a per-visit override that differs from the compiled props. */
+  const readMode = (): 'light' | 'dark' => {
+    const doc = host?.ownerDocument ?? (typeof document === 'undefined' ? null : document);
+    const root = host?.closest('[data-mx-inline-story]') ?? doc?.querySelector('[data-mx-inline-story]') ?? doc?.documentElement;
+    return root?.classList.contains('dark') ? 'dark' : root?.classList.contains('light') ? 'light' : p.colorMode ?? 'light';
+  };
+  const [mode, setMode] = createSignal<'light' | 'dark'>(readMode());
   const invalid = () => mermaidSourceError(p.code);
-  const imageKey = () => (invalid() ? null : p.imageKey ?? mermaidImageKey(p.code, p.colorMode ?? 'light'));
+  const imageKey = () => (invalid() ? null : p.imageKey ?? mermaidImageKey(p.code, mode()));
   const stored = () => { const key = imageKey(); const offered = key ? island.drawings()[key] : undefined; return offered && offered.src !== refused() ? offered : undefined; };
   const storedSrc = () => stored()?.src ?? null;
   const current = () => { const r = result(); return r?.code === p.code ? r : null; };
@@ -34,28 +42,53 @@ export function Mermaid(p: Props) {
   const image = (): MermaidImage | undefined => current()?.image ?? stored();
   const src = () => image()?.src ?? null;
   const engineDrawn = () => !!current()?.image && !!current()?.palette;
-  let host!: HTMLElement; let img: HTMLImageElement | undefined;
-
   onMount(() => {
+    // Hydration can begin before the page behaviour applies a per-visit mode. The next frame
+    // sees the settled document even when an island was hydrated in a detached mount.
+    let mounted = true;
+    const sync = (themeChanged = false) => {
+      if (!mounted) return;
+      const next = readMode();
+      const modeChanged = next !== mode();
+      if (modeChanged) setMode(next);
+      if (themeChanged) setRevision(n => n + 1);
+    };
+    sync();
+    const frame = requestAnimationFrame(() => sync());
+    onCleanup(() => { mounted = false; cancelAnimationFrame(frame); });
     // Only a CHANGED value redraws (a re-stamp with the same theme does not).
     const observer = new MutationObserver(records => {
-      if (records.some(record => record.oldValue !== (record.target as Element).getAttribute(record.attributeName ?? ''))) setRevision(n => n + 1);
+      if (records.some(record => record.oldValue !== (record.target as Element).getAttribute(record.attributeName ?? ''))) sync(true);
     });
-    for (let element = host.parentElement; element; element = element.parentElement) {
+    const doc = host.ownerDocument;
+    const watched = new Set<Element>([doc.documentElement]);
+    const storyRoot = doc.querySelector('[data-mx-inline-story]');
+    if (storyRoot) watched.add(storyRoot);
+    for (let element = host.parentElement; element; element = element.parentElement) watched.add(element);
+    for (const element of watched) {
       observer.observe(element, { attributes: true, attributeOldValue: true, attributeFilter: ['data-theme', 'data-color-mode', 'class'] });
     }
     onCleanup(() => observer.disconnect());
-    createEffect(on([() => p.code, () => p.colorMode, invalid, revision, storedSrc], ([code, colorMode, bad, , servedSrc]) => {
+    createEffect(on([() => p.code, mode, invalid, storedSrc, revision], ([code, currentMode, bad, servedSrc]) => {
       if (bad) return;
       let live = true;
       setResult(null);
       if (servedSrc) return;
       // Intentional lazy boundary: a stored drawing never loads the drawing helpers or Mermaid.
-      const cancel = deferEngine(host, () => { void import('@/lib/mermaid-images/reader-draw').then(m => m.drawForReader(host, code, colorMode === 'dark', () => live)).then(
+      const cancel = deferEngine(host, () => { void import('@/lib/mermaid-images/reader-draw').then(m => m.drawForReader(host, code, currentMode === 'dark', () => live)).then(
         drawn => { if (live && drawn) setResult({ code, ...drawn }); },
         () => { if (live) setResult({ code, error: 'Could not render this diagram. Check its Mermaid syntax.' }); },
       ); });
       onCleanup(() => { live = false; cancel(); });
+    }));
+    // Solid hydration retains the server's initial `<img src>` attribute when the stored image
+    // exists at first paint. Keep that DOM attribute in step with a reader mode changed by page.ts.
+    createEffect(on([storedSrc, () => current()?.image?.src], ([servedSrc, drawnSrc]) => {
+      const source = drawnSrc ?? servedSrc;
+      const element = host.querySelector('img');
+      if (!source || !element || element.getAttribute('src') === source) return;
+      element.setAttribute('src', source);
+      setLoadedSrc(null);
     }));
     // An image that finished (or failed) before hydration fired its event into nothing: read its own state.
     createEffect(on([src, storedSrc], ([source, servedSrc]) => {

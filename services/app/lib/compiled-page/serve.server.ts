@@ -401,18 +401,22 @@ export async function compiledPageFor(row: ArtifactRow, page: PreparedPage, read
     }
 
     const flow = page.declared?.flow ?? null;
+    // Prepared state is useful for a version that cannot run. A healthy reader starts from defaults
+    // and the guest snapshot, then lets its page engine take over; seeding `state` suppresses that run.
+    const failedState = page.declared?.state && Object.keys(page.declared.state.errors).length ? page.declared.state : undefined;
     const values = flow ? readUrlValues(reader.search, flow) : {};
     const [mermaidImages, snapshot, hold] = await Promise.all([
       reader.drawings
         ? mermaidImagesFor({ artifactId: row.id, version: reader.at?.version ?? row.version, surface: reader.drawings, head: !reader.at, visibility: row.visibility }, page.data.nodes)
         : Promise.resolve({}),
       // A capture brings its own settled run; an archived version and a version that cannot run have no snapshot.
-      reader.results !== undefined || reader.at || !flow || page.declared?.state ? Promise.resolve(null) : snapshotFor(row, compiled, flow, values),
+      reader.results !== undefined || reader.at || !flow || failedState ? Promise.resolve(null) : snapshotFor(row, compiled, flow, values),
       // What the page's engine may hold, for the door it queries through (today's reader asks on every render).
       flow && reader.doors && reader.holder !== undefined ? holdableImports(row, flow, reader.holder) : Promise.resolve([]),
     ]);
     // Local tables use the page engine even when no imported dataset is holdable.
-    const sqliteWasm = flow && reader.doors ? build.sqliteWasm ?? null : null;
+    const sqliteWasm = flow && reader.doors && (hold.length || flow.values.some((value) => value.kind === 'table'))
+      ? build.sqliteWasm ?? null : null;
     // The live stream picks up from the snapshot's marks (served-results.server `since`): a write between
     // the snapshot and the page's stream reaches the page as the ordinary `data` frame.
     const served: DataSnapshot | null = snapshot
@@ -420,7 +424,7 @@ export async function compiledPageFor(row: ArtifactRow, page: PreparedPage, read
       : null;
     const results = reader.results ?? served?.results ?? null;
     const story = await storyOf(compiled, {
-      values, state: page.declared?.state, results, assetsUrl: reader.assetsUrl ?? reader.doors?.assetsUrl, mermaidImages, drawings: served?.drawings ?? {},
+      values, state: failedState, results, assetsUrl: reader.assetsUrl ?? reader.doors?.assetsUrl, mermaidImages, drawings: served?.drawings ?? {},
       resultsId: served ? `${keyString(served.key)}:${served.computedAt}` : null,
     });
 
@@ -441,7 +445,7 @@ export async function compiledPageFor(row: ArtifactRow, page: PreparedPage, read
       colorMode,
       // A capture's answers ride as the snapshot the page starts from: the islands then ask for nothing.
       snapshot: reader.results ? { ...(served ?? emptySnapshot(row)), results: reader.results } : served,
-      overlay: { values, state: page.declared?.state, mermaidImages, signedIn: reader.signedIn, doors: doorsFor(compiled, reader.doors), ...(reader.assetsUrl ? { assetsUrl: reader.assetsUrl } : {}), managedAssets: reader.managedAssets ?? null, readOnly: reader.readOnly ?? null, hold, sqliteWasm },
+      overlay: { values, state: failedState, mermaidImages, signedIn: reader.signedIn, doors: doorsFor(compiled, reader.doors), ...(reader.assetsUrl ? { assetsUrl: reader.assetsUrl } : {}), managedAssets: reader.managedAssets ?? null, readOnly: reader.readOnly ?? null, hold, sqliteWasm },
       chrome: reader.chrome,
       spa: reader.spa,
       build,

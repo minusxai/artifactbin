@@ -13,6 +13,7 @@ import { mermaidImagesFor, type MermaidImageLookup } from '@/lib/mermaid-images/
 import type { WebAssetBox } from './asset-url';
 import type { RefDataMap } from './ref-data';
 import type { StoryThemeName } from '@/lib/validation/atlas-schemas';
+import { loadCompilerBuild } from '@/lib/compiled-page/build.server';
 
 /** Inputs still used by the app's editor preparation and the offline file. */
 export interface PrepareStoryInput {
@@ -52,9 +53,12 @@ export type ReaderIslandInput = Pick<PrepareStoryInput, 'refData' | 'dataflow' |
  * (lib/story/prepared-page.server) is exactly what the whole preparation writes.
  */
 export function readerIslandData(input: ReaderIslandInput): Omit<StoryIslandData, 'nodes' | 'colorMode' | 'template' | 'chrome' | 'glyphs'> {
+  const sqliteWasm = input.dataflow?.hold ? loadCompilerBuild().sqliteWasm : undefined;
   return {
     refData: input.refData,
     ...(input.dataflow ? { dataflow: input.dataflow } : {}),
+    // The remaining inline app reader runs held queries with the same wasm the compiled islands use.
+    ...(sqliteWasm ? { sqliteWasm } : {}),
     // WHO IS READING — carried even when the document declares nothing, because
     // `{$_me ? … : <SignIn/>}` is exactly such a document.
     ...(input.viewer ? { viewer: input.viewer } : {}),
