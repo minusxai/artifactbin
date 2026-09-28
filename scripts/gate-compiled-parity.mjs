@@ -14,7 +14,9 @@
  *  - Attributes as sets. `data-hk` (Solid's hydration key) is dropped. Generated
  *    ids (radix-*, «r*», _R_*_, Solid's cl-*) are mapped to G1, G2… by order of
  *    first appearance on each side, and every idref (aria-controls/-labelledby/
- *    -describedby, for) is checked for the SAME dangling/resolved status.
+ *    -describedby, for) is checked for the SAME dangling/resolved status. The one accepted
+ *    difference (lib/compiled-parity-diff, the unit helper's rule): an aria-controls/-labelledby
+ *    whose legacy value is a single id absent from the legacy page (a dangling Radix id).
  *  - Computed style on a fixed property list and the border box (0.5 px grid).
  *  - Excluded subtrees: drawn charts (children of `[data-mx-chart-state=ready]`),
  *    Mermaid drawings (children of svg under `[data-mx-mermaid-state]`), canvases.
@@ -32,17 +34,20 @@
  * compiled` header: the gate records that as its one check and exits 0, so it
  * can sit in the manifest before the compiler exists.
  *
- *   usage: node scripts/gate-compiled-parity.mjs [base]
+ *   usage: node scripts/gate-compiled-parity.mjs [base] [--only=kit,deck] [--verbose]
  */
 import { chromium } from 'playwright';
 import { createChecker } from './lib/assert.mjs';
 import { startDocument, pageHeaders } from './lib/start-doc.mjs';
 import { publishPageSpeedFixtures } from './fixtures/page-speed/index.mjs';
 import { kitchenSinkMarkup } from './lib/kitchen-sink-doc.mjs';
+import { diffTrees as diff } from './lib/compiled-parity-diff.mjs';
 
 const B = process.argv[2] ?? 'http://localhost:3030';
 const check = createChecker('compiled-parity');
 const only = process.argv.find((a) => a.startsWith('--only='))?.slice(7)?.split(',');
+/** `--verbose`: every difference as a note, not only the first three per kind. */
+const verbose = process.argv.includes('--verbose');
 
 /** The response header the assembler sets (lib/compiled-page/contract READER_MODE_HEADER). */
 const READER_HEADER = 'x-mx-reader';
@@ -98,24 +103,6 @@ const SNAPSHOT = (STYLE) => {
 const settle = async (page) => {
   await page.waitForFunction(() => { const r = document.getElementById('mx-story-root'); return r && !r.querySelector('[data-mx-chart-state="pending"],[aria-busy="true"]'); }, null, { timeout: 30000 }).catch(() => {});
   await page.waitForTimeout(1500);
-};
-
-function compare(a, b, path, out) {
-  if (!a || !b || a.tag !== b.tag) { out.structure.push(`${path}: ${a?.tag} vs ${b?.tag}`); return; }
-  out.elements++;
-  for (const n of new Set([...Object.keys(a.attrs), ...Object.keys(b.attrs)])) if (a.attrs[n] !== b.attrs[n]) out.attrs.push(`${path}<${a.tag}> @${n}: ${JSON.stringify(a.attrs[n])?.slice(0, 80)} vs ${JSON.stringify(b.attrs[n])?.slice(0, 80)}`);
-  for (const n of new Set([...Object.keys(a.refs), ...Object.keys(b.refs)])) if (a.refs[n] !== b.refs[n]) out.refs.push(`${path}<${a.tag}> ${n}: ${a.refs[n]} vs ${b.refs[n]}`);
-  if (a.text !== b.text) out.text.push(`${path}<${a.tag}>: ${JSON.stringify(a.text).slice(0, 60)} vs ${JSON.stringify(b.text).slice(0, 60)}`);
-  for (const p of Object.keys(a.style)) if (a.style[p] !== b.style[p]) out.style.push(`${path}<${a.tag}> ${p}: ${a.style[p]} vs ${b.style[p]}`);
-  if (a.box.join() !== b.box.join()) out.box.push(`${path}<${a.tag}> ${a.box.join(',')} vs ${b.box.join(',')}`);
-  if (a.kids.length !== b.kids.length) { out.structure.push(`${path}<${a.tag}> children ${a.kids.length} vs ${b.kids.length}`); return; }
-  a.kids.forEach((k, i) => compare(k, b.kids[i], `${path}.${i}`, out));
-}
-const diff = (a, b) => {
-  const out = { elements: 0, attrs: [], refs: [], text: [], style: [], box: [], structure: [] };
-  if (a.length !== b.length) out.structure.push(`root children ${a.length} vs ${b.length}`);
-  a.forEach((n, i) => compare(n, b[i], String(i), out));
-  return out;
 };
 
 /** What a reader does on the kit fixture: opens the second tab and the first accordion item. */
@@ -174,6 +161,7 @@ try {
     const d = diff(snaps.legacy.tree, snaps.compiled.tree);
     check(d.elements > 0, `${f.key}: the story has elements to compare (${d.elements})`);
     for (const kind of ['structure', 'text', 'style', 'box', 'attrs', 'refs']) {
+      if (verbose) for (const line of d[kind]) check.note(`${f.key} ${kind}: ${line}`);
       check(d[kind].length === 0, `${f.key}: no ${kind} differences (${d[kind].length}${d[kind].length ? `: ${d[kind].slice(0, 3).join(' | ')}` : ''})`);
     }
     const s = snaps.compiled.survival;
@@ -182,6 +170,7 @@ try {
     check(snaps.compiled.errors.length === 0, `${f.key}: no page errors on the compiled page (${snaps.compiled.errors[0] ?? 'clean'})`);
     if (snaps.legacy.after && snaps.compiled.after) {
       const da = diff(snaps.legacy.after, snaps.compiled.after);
+      if (verbose) for (const line of [...da.structure, ...da.attrs, ...da.text, ...da.style, ...da.box]) check.note(`${f.key} after: ${line}`);
       const total = da.structure.length + da.text.length + da.style.length + da.box.length + da.attrs.length;
       check(total === 0, `${f.key}: identical after interaction (${total}${total ? `: ${[...da.structure, ...da.attrs, ...da.text, ...da.style, ...da.box].slice(0, 3).join(' | ')}` : ''})`);
     }
