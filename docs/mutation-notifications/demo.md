@@ -1,7 +1,8 @@
 # Task-server notification demo and smoke
 
 Use only the integrated task server; a server lacking notification workers is not a feature demo.
-Root owns its process/data; the final handoff names the running port, artifact URL and inbox URL.
+Root owns its process/data. This task uses http://localhost:5001; the final handoff names the
+artifact URL and inbox URL.
 
 ## Fixture
 
@@ -38,12 +39,23 @@ published document. Keep the CLI's returned JSON receipts in the task's ignored 
 8. Open one CLI live session on the document; click Change local value, read scratch_list and
    assert changed, reload and assert initial. Run the Complete this row control and confirm
    persisted state via tasks_list. Verify the named headless row action is refused before writing.
-9. On a disposable test-user fork, exercise newly authored actions as its test user and owner;
+9. Exercise newly authored actions on each identity’s own authorized disposable fork;
    then use a guest session on the original to verify identity-bearing controls cannot write.
    Close each session before starting the next. A failed/uncertain script is recovered by its
    session/execution receipt, never blindly resubmitted.
 
-The automated smoke should assert persisted state, actual job discovery and browser controls,
+After steps 1–3, run the CLI portion of steps 5–7 with:
+
+```sh
+APP__PORT=5001 node scripts/smoke-notification-operations.mjs \
+  --document=ID --cwd=/absolute/fixture-workspace --disposable=yes \
+  --output=/absolute/ignored-evidence.json
+```
+
+It asserts persisted rows and returned run IDs, then stops with the failed-output row committed
+so the browser can observe failure before repair. The workspace must run this branch’s CLI.
+
+The full smoke should assert persisted state, actual job discovery and browser controls,
 not sleeps or help strings. Tests that inject a failed output/read belong to the internal fixture
 seam; agents use the CLI and visible recovery UI, never raw product HTTP.
 
