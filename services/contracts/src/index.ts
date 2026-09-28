@@ -44,3 +44,4 @@ export type {
   MutationNotificationActor, MutationNotificationView, MutationNotificationEvaluator,
   MutationNotificationJobStore,
 } from './mutation-notifications';
+export { NOTIFICATION_QUERY_LIMITS } from './mutation-notifications';

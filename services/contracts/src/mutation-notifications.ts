@@ -175,3 +175,13 @@ export interface MutationNotificationJobStore {
   /** Only failed jobs; retain original definition/bindings/identity and audit who retried. */
   retry(principal: MutationInitiator['principal'], jobId: string): Promise<boolean>;
 }
+
+/** Initial bounded service ceilings; query/storage owners measure before widening. */
+export const NOTIFICATION_QUERY_LIMITS = {
+  rows: 1000,
+  recipients: 2000,
+  recipientsPerRow: 20,
+  messageCodePoints: 500,
+  resultBytes: 1024 * 1024,
+  timeoutMs: 5000,
+} as const;
