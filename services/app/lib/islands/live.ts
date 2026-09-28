@@ -33,6 +33,9 @@ export function startIslandLive(win: Window, id: string, initialEditId: string, 
   let seen = initialEditId;
 
   const reload = () => {
+    // The editor owns its save and preview updates. A page-level stream can
+    // still be open when a document has no island module to hand off from.
+    if (win.location.hash === '#edit') return source.close();
     const anchor = currentAnchor(win);
     if (anchor) writeReloadAnchor(win, anchor);
     win.location.reload();

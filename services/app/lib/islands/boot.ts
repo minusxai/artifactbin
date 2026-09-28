@@ -202,7 +202,6 @@ export function boot(input: IslandModule | readonly IslandEntry[], win: Window =
       // The interpreter owns edits and their live updates. A version ping from this compiled
       // lifetime must not reload the page while its editor is saving a new source.
       stopLive();
-      stopLive = () => {};
       disposeIslands();
       mode = next;
       emit({ type: 'mode', mode });

@@ -415,15 +415,8 @@ const browser = await chromium.launch();
   const dropped = await waitReplaced(srcOf(original));
   const afterDrop = await stored();
   await page.waitForTimeout(1000);
-  console.log('editor after drop', await frame.evaluate(() => ({
-    sameRoot: window.__gateRootBeforeDrop === document.querySelector('[data-mx-inline-story]'),
-    heldRoot: !!window.__gateRootBeforeDrop,
-    heldConnected: window.__gateRootBeforeDrop?.isConnected,
-    editCss: !!document.querySelector('style[data-mx-edit-css]'),
-    editBar: !!document.querySelector('[aria-label="Exit edit mode"]'),
-    rootCount: document.querySelectorAll('[data-mx-inline-story]').length,
-    url: location.href,
-  })));
+  check(await frame.evaluate(() => window.__gateRootBeforeDrop === document.querySelector('[data-mx-inline-story]')),
+    'the editor stays mounted after the image save');
   check(srcOf(dropped) !== srcOf(original) && /^ref:/.test(srcOf(dropped) ?? ''), `a drop onto the image changes its src (${srcOf(original)} → ${srcOf(dropped)})`);
   check(idOf(dropped) && idOf(dropped) === idOf(original), 'and it is the same node: the id is kept');
   check(dropped.includes('alt="the original"') && dropped.includes('w-40 rounded-xl'), 'with its alt text and classes');
@@ -440,17 +433,6 @@ const browser = await chromium.launch();
   });
   const selectedImage = frame.locator('[data-mx-inline-story] img[alt="the original"]');
   await selectedImage.click();
-  if (await selectedImage.getAttribute('data-mx-selected') !== 'block') {
-    console.log('image click did not select', await frame.evaluate(() => ({
-      image: document.querySelector('[data-mx-inline-story] img[alt="the original"]')?.outerHTML.slice(0, 500),
-      selected: [...document.querySelectorAll('[data-mx-selected], [data-mx-embed-selected]')].map(el => el.outerHTML.slice(0, 300)),
-      root: !!window.__gateRootBeforeDrop,
-      rootConnected: window.__gateRootBeforeDrop?.isConnected,
-      editCss: !!document.querySelector('style[data-mx-edit-css]'),
-      atPoint: (() => { const img = document.querySelector('[data-mx-inline-story] img[alt="the original"]'); const r = img?.getBoundingClientRect(); return r ? document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2)?.outerHTML.slice(0, 300) : null; })(),
-    })));
-    await selectedImage.click({ force: true });
-  }
   await frame.waitForFunction(() => document.querySelector('[data-mx-inline-story] img[alt="the original"]')?.getAttribute('data-mx-selected') === 'block');
   await page.keyboard.press(PASTE);
   const pasted = await waitReplaced(srcOf(dropped));

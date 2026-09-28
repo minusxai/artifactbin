@@ -70,6 +70,18 @@ describe('the island live stream', () => {
     stop();
   });
 
+  it('does not reload the editor on its own saved version when the page has no island module', () => {
+    vi.stubGlobal('EventSource', FakeEventSource);
+    const reload = vi.fn();
+    const win = new Proxy(window, { get: (target, key) => (key === 'location' ? { hash: '#edit', reload } : Reflect.get(target, key, target)) });
+    const stop = startIslandLive(win, 'abc', 'e1');
+    const [source] = FakeEventSource.made;
+    source!.onmessage!(new MessageEvent('message', { data: JSON.stringify({ editId: 'e2', version: 2 }) }));
+    expect(reload).not.toHaveBeenCalled();
+    expect(source!.closed).toBe(true);
+    stop();
+  });
+
   it('boot opens the stream from the served snapshot\'s `since`', async () => {
     vi.stubGlobal('EventSource', FakeEventSource);
     document.body.innerHTML = '<div data-mx-inline-story="" id="mx-story-root"><p>static</p></div>'
