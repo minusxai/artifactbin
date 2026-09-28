@@ -217,15 +217,17 @@ for (const signal of ['SIGINT', 'SIGTERM', 'SIGHUP']) {
 const needsMail = selected.some((gate) => specFor(gate.name).needsMail);
 const mailOutbox = needsMail && servers > 0 ? path.join(scratch, 'dev-mail.jsonl') : null;
 let authSecret = null;
-/** One pool of `servers` servers, booted for this part of the run (`readerFlag`: the compiled reader switch). */
-async function bootPool(readerFlag, offset) {
+if (servers > 0) {
   // The servers this boots are the real thing: they want the auth secret, the
   // mail key and whatever store the caller configured, all of which live where
   // `npm run dev` finds them.
-  if (authSecret === null) { loadDotEnv(); authSecret = runSecret(process.env); }
-  process.stdout.write(`booting ${servers} server(s)${readerFlag === 'on' ? ' with the compiled reader on' : ''}${serversFrom === 'default' ? ' (one per core, capped — pass --servers=N to choose, or a base URL to drive a server you already have)' : ''}`);
+  loadDotEnv();
+  authSecret = runSecret(process.env);
+}
+/** One pool of `servers` servers (`readerFlag`: the compiled reader switch, `on` for the compiled legs' pool). */
+async function bootPool(readerFlag, offset) {
   const pool = await Promise.all(Array.from({ length: servers }, (_, i) => bootServer(offset + i, mailOutbox, authSecret, readerFlag)));
-  console.log(` — ${pool.join(' ')}\n`);
+  console.log(`booted ${servers} server(s)${readerFlag === 'on' ? ' with the compiled reader on' : ''}${serversFrom === 'default' ? ' (one per core, capped — pass --servers=N to choose, or a base URL to drive a server you already have)' : ''} — ${pool.join(' ')}\n`);
   return pool;
 }
 if (servers === 0 && bases.length === 0) {
@@ -282,26 +284,34 @@ const timings = [];
 const wall = Date.now();
 let widest = 0;
 
-/** Run `gates` over `targets`: one worker per server, then one retry alone for what failed under load. */
-async function runSet(gates, targets) {
-  widest = Math.max(widest, targets.length);
+/**
+ * A worker: the server a gate runs against, and the one a compiled leg does (booted with the compiled
+ * reader on). Driving servers someone else started, both are that server.
+ * @typedef {{ plain: string, compiled: string }} Worker
+ */
+/** @param {Worker} worker @param {{ name: string }} gate */
+const serverFor = (worker, gate) => (isCompiledLeg(gate.name) ? worker.compiled : worker.plain);
+
+/** Run `gates` over `workers`: one queue, each worker pulling the next gate, then one retry alone for what failed under load. */
+async function runSet(gates, workers) {
+  widest = Math.max(widest, workers.length);
   /*
    * SAY HOW WIDE THE RUN IS, BEFORE IT RUNS. A serial pass and a parallel one differ by an order of magnitude
    * in wall-clock and by nothing at all in output, so a log that does not say which it was cannot be read
    * afterwards — and the failure mode this guards is silent: a `--servers=1` somewhere upstream turns a
    * three-minute set into half an hour and looks exactly like a slow machine.
    */
-  console.log(`gates: ${targets.length} server(s), ${gates.length} gate(s)${serversFrom === 'default' ? ' (default: one per core, capped at 6 — --servers=1 is serial, for debugging)' : ''}\n`);
+  console.log(`gates: ${workers.length} server(s), ${gates.length} gate(s)${serversFrom === 'default' ? ' (default: one per core, capped at 6 — --servers=1 is serial, for debugging)' : ''}\n`);
   const queue = [...gates];
   const setFailed = [];
   /** One worker per server, each pulling the next gate — so a slow gate delays
    *  only its own worker and the set finishes when the last one does. */
-  await Promise.all(targets.map(async (base) => {
+  await Promise.all(workers.map(async (worker) => {
     for (let gate = queue.shift(); gate; gate = queue.shift()) {
       const spec = specFor(gate.name);
       const { ok, output, seconds } = await withinSerialGroup(
         spec.serialGroup,
-        () => run(gate, base, spec.timeoutMs),
+        () => run(gate, serverFor(worker, gate), spec.timeoutMs),
       );
       timings.push({ name: gate.name, seconds });
       if (!ok) setFailed.push(gate.name);
@@ -326,12 +336,12 @@ async function runSet(gates, targets) {
    * both directions — no red for a lost race, no green that quietly swallowed
    * a genuine flake.
    */
-  if (setFailed.length > 0 && targets.length > 1) {
+  if (setFailed.length > 0 && workers.length > 1) {
     console.log(`\n──────── retrying ${setFailed.length} gate(s) alone ────────`);
     for (const name of [...setFailed]) {
       const gate = gates.find((g) => g.name === name);
       const spec = specFor(gate.name);
-      const { ok, output, seconds } = await run(gate, targets[0], spec.timeoutMs);
+      const { ok, output, seconds } = await run(gate, serverFor(workers[0], gate), spec.timeoutMs);
       if (!ok) { console.log(output.trimEnd()); continue; }
       setFailed.splice(setFailed.indexOf(name), 1);
       retried.push(name);
@@ -341,17 +351,19 @@ async function runSet(gates, targets) {
   failed.push(...setFailed);
 }
 
-const plain = selected.filter((gate) => !isCompiledLeg(gate.name));
-const legs = selected.filter((gate) => isCompiledLeg(gate.name));
+const hasLegs = selected.some((gate) => isCompiledLeg(gate.name));
+let workers;
 if (servers > 0) {
-  // Today's reader first, then the compiled legs on servers of their own that serve the compiled page to
-  // every reader. One pool at a time: two would put twice the browsers on the same cores.
-  if (plain.length) { await runSet(plain, await bootPool(undefined, 0)); await stopAll(); started.length = 0; }
-  if (legs.length) { await runSet(legs, await bootPool('on', servers)); }
+  // A compiled leg runs on a server that serves the compiled page to every reader: each worker holds one
+  // of those beside its ordinary server, booted together, so the legs share the workers' queue rather than
+  // waiting for the rest of the set to finish. An idle server costs next to nothing.
+  const [plainPool, compiledPool] = await Promise.all([bootPool(undefined, 0), hasLegs ? bootPool('on', servers) : Promise.resolve([])]);
+  workers = plainPool.map((plain, i) => ({ plain, compiled: compiledPool[i] ?? plain }));
 } else {
   // Driving servers someone else started: they serve whatever reader they were started with.
-  await runSet(selected, bases);
+  workers = bases.map((base) => ({ plain: base, compiled: base }));
 }
+await runSet(selected, workers);
 
 // The servers are OURS and they outlive the last gate: node keeps running
 // while a spawned child is attached, so the set would finish and then hang.
