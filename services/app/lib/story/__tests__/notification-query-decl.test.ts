@@ -24,7 +24,7 @@ const dataset: ImportSource = {kind:'dataset',tables:[{name:'rows',columns:[
 const compile = async (markup: string) => {
   const {content, body} = splitHelmet(parse(markup));
   const flow = dataflowOf(content);
-  const ctx = {...await prepareCompile(flow, async ref => ref === 'TaskRows1' ? dataset : null), now:'2026-09-28T10:00:00.000Z'};
+  const ctx = {...await prepareCompile(flow, async ref => ref === 'Folder001' ? {...dataset, kind:'folder'} : ['TaskRows1', 'TaskRows2'].includes(ref) ? dataset : ref === 'PgConn001' ? {kind:'postgres', tables:[], probe:async () => ({columns:[{name:'assignee',type:'user'}],params:[]})} : null), now:'2026-09-28T10:00:00.000Z'};
   return compileDataflow(flow, ctx, body);
 };
 
@@ -165,7 +165,36 @@ describe('notification authoring boundaries', () => {
     expect(parseCompiledDataflow({...result.compiled,notifications:[{...result.compiled.notifications![0], secret:'credentials'}]})).toBeNull();
     expect(parseCompiledDataflow({...result.compiled,notifications:[{...result.compiled.notifications![0], params:[1]}]})).toBeNull();
     expect(readerDataflow(result.compiled)).not.toHaveProperty('notifications');
+    expect(readerDataflow(result.compiled)?.mutations[0]?.notifies).toBe(true);
     expect(result.compiled.notifications).toHaveLength(1);
     expect(readerDataflow(null)).toBeNull();
+  });
+});
+
+
+describe('notification source provenance', () => {
+  it('retains a second source used only in a filter', async () => {
+    const result = await compile(withSql('select t.assignee as "to", t.status as message from tasks.rows t where exists (select 1 from reviewers.rows r where r.id=t.id)', '<Import name="reviewers" src="ref:TaskRows2" />'));
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.compiled.notifications?.[0]?.relations).toEqual([{schema:'tasks',table:'rows'},{schema:'reviewers',table:'rows'}]);
+  });
+
+  it('refuses unsupported folder source authority', async () => {
+    await refusal(withSql('select assignee as "to", status as message from folder.rows', '<Import name="folder" src="ref:Folder001" />'), /folder|stored dataset/);
+  });
+
+  it('refuses connected Postgres query dependency without transitive lineage', async () => {
+    await refusal(withSql('select assignee as "to", \'current\' as message from remote', '<Query name="remote" source="ref:PgConn001">{`select assignee from remote_table`}</Query>'), /unsupported source lineage/);
+  });
+
+  it('rebinds notification spans to normalized source without losing linkage', async () => {
+    const markup=source();
+    const result=await compile(markup);
+    if(!result.ok)throw new Error(JSON.stringify(result.errors));
+    const moved='\n\n'+markup;
+    const meta=finalizeArtifactMetadata('markup',moved,{[COMPILED_DATAFLOW]:result.compiled});
+    const restored=storedCompiledDataflow(meta,moved)!;
+    expect(restored.notifications?.[0]?.start).toBe(result.compiled.notifications![0]!.start+2);
+    expect(restored.notifications?.[0]?.on).toBe('change_status');
   });
 });

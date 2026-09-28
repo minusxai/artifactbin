@@ -505,6 +505,7 @@ export function compileDataflow(flow: Dataflow, ctx: CompileContext, body?: JsxN
     };
     for (const query of reads.queries) visit(query);
     reads.queries = ordered.filter((q) => dependencyNames.has(q.name)).map((q) => q.name);
+    for (const imported of reads.imports) if (importKinds.get(imported.toLowerCase()) !== 'dataset') fail(`reads ${imported}, which is not a stored dataset; this notification adapter cannot establish its source lineage`);
     for (const value of reads.values) if (tableValues.has(value.toLowerCase())) fail(`reads local table Value ${value}; notification jobs cannot read browser state`);
     if (reads.builtins.includes('_members')) fail('reads _members, whose membership source lineage is not supported for notification jobs');
     const parameterTypes: CompiledNotify['parameterTypes'] = {};
@@ -518,6 +519,7 @@ export function compileDataflow(flow: Dataflow, ctx: CompileContext, body?: JsxN
     notifications.push({ name: n.name, on: n.on, engine: 'sqlite', sql, params, parameterTypes, reads, relations: [...relations.values()], start: n.start, end: n.end });
   }
 
+  for (const mutation of mutations) if (notifications.some((n) => n.on === mutation.name)) mutation.notifies = true;
   let compiled: CompiledDataflow = { imports, values, queries: ordered, mutations, ...(notifications.length ? { notifications } : {}) };
   if (body && !errors.length) {
     const bound = checkBindings(compiled, body);
