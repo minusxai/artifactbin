@@ -579,7 +579,7 @@ export function generate(input: GenerateInput): Generated {
   const skeleton = `${kitImports(kitUsed.skeleton)}${dataConsts}export default function Skeleton() { return ${root}; }\n`;
   const islandsSource = `import * as rt from '@mx/rt';\n${kitImports(kitUsed.islands)}${dataConsts}`
     + islands.map((isl) => `export function I${isl.id}() { return ${isl.source}; }\n`).join('')
-    + `export const ISLANDS = [${islands.map((isl) => `[${lit(`s${isl.id}-`)}, I${isl.id}]`).join(', ')}];\n`;
+    + `export const ISLANDS = [${islands.map((isl) => `[${lit(`s${isl.id}-`)}, I${isl.id}, ${lit(islandKey(isl.source, data))}]`).join(', ')}];\n`;
   return {
     skeleton,
     islands: islandsSource,
@@ -591,6 +591,25 @@ export function generate(input: GenerateInput): Generated {
     behaviors: deck ? [DECK_BEHAVIOR] : [],
     statics,
   };
+}
+
+/**
+ * AN ISLAND'S KEY: a digest of its definition — its generated source with every hoisted constant
+ * (`$d<n>`, numbered by position in the whole module) replaced by the data it names — so two versions'
+ * islands have the same key exactly when they are the same island, wherever the rest of the document
+ * moved. The live morph (lib/islands/morph/engine) keeps a running island whose key a new version
+ * carries again. Its AST paths are part of the definition: an island that moved is drawn afresh.
+ * FNV-1a over two lanes (64 bits, hex): an identity, not a secret.
+ */
+export function islandKey(source: string, data: readonly string[]): string {
+  const text = source.replace(/\$d(\d+)\b/g, (whole, n: string) => data[Number(n)] ?? whole);
+  let a = 0x811c9dc5, b = 0xcbf29ce4;
+  for (let i = 0; i < text.length; i++) {
+    const c = text.charCodeAt(i);
+    a = Math.imul(a ^ c, 0x01000193) >>> 0;
+    b = Math.imul(b ^ c, 0x01000197) >>> 0;
+  }
+  return a.toString(16).padStart(8, '0') + b.toString(16).padStart(8, '0');
 }
 
 /* ────────────────────────────────────────────────────────────────────────────

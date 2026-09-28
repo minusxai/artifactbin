@@ -137,6 +137,25 @@ describe('boot', () => {
     booted = null;
   });
 
+  it('hands a newer version\'s module to the running document instead of booting a second one (the live morph)', () => {
+    page(snapshot);
+    booted = boot({ ISLANDS: [['s0-', Total, 'k0']], FLOW: flow });
+    const doc = booted as import('../boot').MorphableIslandDocument;
+    expect([...doc.morph!.islands.keys()]).toEqual(['s0-']);
+    expect(doc.morph!.islands.get('s0-')![0], 'each running island carries its key').toBe('k0');
+    const handed: unknown[] = [];
+    doc.morph!.take = (module) => handed.push(module);
+    const next = { ISLANDS: [['s0-', Total, 'k1']] as const, FLOW: flow };
+    const ready = vi.fn();
+    document.addEventListener('mx:ready', ready, { once: true });
+    expect(boot(next)).toBe(booted);
+    expect(handed).toEqual([next]);
+    expect(ready, 'no second boot').not.toHaveBeenCalled();
+    expect(islandDocumentOf(document.querySelector('[data-mx-inline-story]'))).toBe(booted);
+    delete doc.morph!.take;
+    document.removeEventListener('mx:ready', ready);
+  });
+
   it('does not hold a live stream inside a frame (the page above holds it)', () => {
     page(snapshot);
     document.body.setAttribute('data-mx-live-id', 'abc');

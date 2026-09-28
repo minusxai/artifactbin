@@ -26,6 +26,7 @@
  * __tests__/raw-document.test.ts.
  */
 import { BASEMAP_PATH } from '@/lib/basemap';
+import { storyFragmentPath } from '@/lib/compiled-page/story-fragment';
 /** Where each kind of subresource may come from — content-independent. */
 const SOURCE_DIRECTIVES = [
   "default-src 'none'",
@@ -136,6 +137,12 @@ const FONTS_DIR_PATH = '/fonts/';
 const viewerPath = (id: string): string => `/a/${id}/viewer`;
 
 /**
+ * …and, on a compiled page only, its STORY FRAGMENT (app/a/[id]/story): the document's newest version as
+ * this very page is served it, which the live morph draws in place (lib/islands/morph/engine). The same
+ * read ACL as the page and the same answer a reload would give, to someone already reading it.
+ */
+
+/**
  * The compiled page's `script-src`: NO `'unsafe-inline'`. The compiled reader
  * emits no inline script at all — its code is the shared island chunks and the
  * per-document module, same-origin files — and its data is an
@@ -157,7 +164,7 @@ export function markupCsp(origin: string, id: string, assetOrigin?: string, opti
   // without a trailing slash exactly, so `/events` does not cover `/events/frame`.
   // GLB loaders fetch embedded textures/buffers through local blob/data URLs;
   // these add no network destination or access to the application's APIs.
-  const viewer = options.compiled ? ` ${self}${viewerPath(id)}` : '';
+  const viewer = options.compiled ? ` ${self}${viewerPath(id)} ${self}${storyFragmentPath(id)}` : '';
   const connect = `connect-src ${self}${queryPath(id)} ${self}${eventsPath(id)} ${self}${eventsPath(id)}/frame ${self}${mutatePath(id)} ${self}${resolvePath(id)}${viewer} ${self}${GEOJSON_DIR_PATH} ${self}${BASEMAP_PATH} ${self}${STORY_DIR_PATH} ${self}${FONTS_DIR_PATH} blob: data:`;
   if(assetOrigin && (new URL(assetOrigin).origin!==assetOrigin||!/^https?:\/\//.test(assetOrigin)))throw Error('Invalid asset origin');
   const sources=SOURCE_DIRECTIVES.map(d=>{
