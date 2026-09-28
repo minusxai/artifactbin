@@ -233,7 +233,7 @@ export async function anonymousAccessFacts(document: ArtifactRow, flow: Compiled
   return { datasets };
 }
 
-async function revalidateKey(key: SnapshotKey, given?: Recipe): Promise<DataSnapshot | null> {
+async function revalidateKey(key: SnapshotKey, given?: Recipe & { build?: string }): Promise<DataSnapshot | null> {
   // An archived version is readable only through its editors' history scope (lib/archived-version
   // `archivedVersionForActor` refuses a null actor), so no anonymous snapshot of one can exist.
   if (key.slot !== 'head') return null;
@@ -285,7 +285,8 @@ async function revalidateKey(key: SnapshotKey, given?: Recipe): Promise<DataSnap
     results,
     drawings,
     computedAt: Date.now(),
-    build: stored?.snapshot?.build ?? SNAPSHOT_BUILD_NONE,
+    // The compiler build the plan came from: the caller's when it names one, else the one already recorded.
+    build: given?.build ?? stored?.snapshot?.build ?? SNAPSHOT_BUILD_NONE,
   };
   await write(snapshot, { document, recipe });
   return snapshot;

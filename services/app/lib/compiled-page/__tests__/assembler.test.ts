@@ -104,6 +104,24 @@ describe('assembleReaderPage', () => {
     expect(none.headers[SPECULATION_RULES_HEADER]).toBeUndefined();
   });
 
+  it('writes the live identity on <body>, escaped, and none when the input has none', () => {
+    const live = dom(assembleReaderPage(input({ live: { id: 'X34b00', editId: 'e"1' } })));
+    expect(live.body.getAttribute('data-mx-live-id')).toBe('X34b00');
+    expect(live.body.getAttribute('data-mx-live-edit')).toBe('e"1');
+    const captured = dom(assembleReaderPage(input()));
+    expect(captured.body.hasAttribute('data-mx-live-id')).toBe(false);
+    expect(captured.body.hasAttribute('data-mx-live-edit')).toBe(false);
+  });
+
+  it('places a footer after the story root, never inside it, with its CSS in the head', () => {
+    const doc = dom(assembleReaderPage(input({ footer: { html: '<footer data-mx-domain-footer="">Made with <a href="https://app.example/a/X34b00">artifactbin</a></footer>', css: '[data-mx-domain-footer]{opacity:.65}' } })));
+    const footer = doc.querySelector('[data-mx-domain-footer]')!;
+    expect(footer.parentElement).toBe(doc.body);
+    expect(doc.getElementById('mx-story-root')!.contains(footer)).toBe(false);
+    expect(doc.getElementById('mx-story-root')!.compareDocumentPosition(footer) & 4 /* FOLLOWING */).toBeTruthy();
+    expect([...doc.head.querySelectorAll('style')].some((s) => s.textContent?.includes('[data-mx-domain-footer]{opacity:.65}'))).toBe(true);
+  });
+
   it('never lets a title, a value or a drawing break out of its element', () => {
     const page = assembleReaderPage(input({ title: '</title><script>alert(1)</script>', overlay: { ...input().overlay, values: { region: '</script><script>alert(2)</script>' } } }));
     expect(page.html).not.toContain('<script>alert(1)');

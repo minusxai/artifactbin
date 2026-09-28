@@ -11,7 +11,7 @@
  *
  * Pure over a window-shaped argument so it is testable without a browser.
  */
-import { createFetchTransport, type FetchLike } from './fetch-transport';
+import { createFetchTransport, type FetchLike, type FetchTransportOptions } from './fetch-transport';
 import { createRelayTransport } from './relay-transport';
 import type { QueryTransport } from './store';
 
@@ -27,9 +27,11 @@ export function createDocumentTransport(
   appOrigin: string,
   fetchFn?: FetchLike,
   mutateUrl?: string,
+  /** For the top-level fetch transport only (the relay's page holds its own session). */
+  options?: FetchTransportOptions,
 ): QueryTransport | null {
   const parent = win.parent;
   if (parent && parent !== win && parent !== win.self) return createRelayTransport(parent as Window, appOrigin, win as unknown as Window);
-  if (queryUrl) return createFetchTransport(queryUrl, fetchFn, mutateUrl);
+  if (queryUrl) return createFetchTransport(queryUrl, fetchFn, mutateUrl, options);
   return null;
 }

@@ -134,21 +134,22 @@ jobs:
   # running whole, which made `validate + node` a 2m16s job of which 103s was
   # this step alone.
   #
-  # THREE shards, and not more: the files sum to ~337s of work but the slowest
-  # single file is 36s (services/auth login-routes, then lib/images optimise at
-  # 34s), and vitest shards by FILE COUNT rather than duration — so past three
-  # each extra shard approaches that 36s floor while still paying a runner's
-  # startup. Measured locally, 2026-09-04.
+  # FOUR shards. Three was the measured optimum on 2026-09-04 (the files summed to
+  # ~337s of work, the slowest single file is 36s, and vitest shards by FILE
+  # COUNT rather than duration), but the project grew: by 2026-09-28 each of the
+  # three jobs ran 238–243s against the 240s job budget — 83s of CLI build every
+  # shard pays, 87–108s of tests, plus integration (shard 1) or the CLI suite
+  # (shard 3). A fourth shard takes ~25s of tests off each job.
   node:
     needs: [ plan ]
     if: needs.plan.outputs.node == 'true'
-    name: node tests (${{ matrix.shard }}/3)
+    name: node tests (${{ matrix.shard }}/4)
     runs-on: ubuntu-latest
     timeout-minutes: 10
     strategy:
       fail-fast: false
       matrix:
-        shard: [ 1, 2, 3 ]
+        shard: [ 1, 2, 3, 4 ]
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
@@ -188,7 +189,7 @@ jobs:
       - run: npm run build -w services/cli
       - env:
           CI__PLAN: ${{ needs.plan.outputs.plan }}
-        run: node scripts/ci.mjs node ${{ matrix.shard }}/3
+        run: node scripts/ci.mjs node ${{ matrix.shard }}/4
       # The heavy tests that `npm test` leaves out — a disposable Dockerised
       # Postgres and real Chromium — live in the `integration` project and
       # would otherwise run nowhere in CI. This job already provisions both

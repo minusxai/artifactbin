@@ -21,8 +21,8 @@ import { setCompiledReaderFlagForTests } from '@/lib/compiled-page/reader-mode';
 import { READER_FALLBACK_HEADER, READER_MODE_HEADER, SPA_IDLE_ATTR } from '@/lib/compiled-page/contract';
 import * as artifacts from '@/lib/artifacts';
 import { updateSharingFor } from '@/lib/artifacts';
-import { withBodyAttributes } from '@/lib/compiled-page/serve.server';
 import { mintExportKey } from '@/lib/export-key';
+import { loadCompilerBuild } from '@/lib/compiled-page/build.server';
 
 vi.mock('@/auth', () => ({ auth: async () => null }));
 const harness = useAppHarness();
@@ -72,7 +72,12 @@ describe('the reader mode on /raw', () => {
     expect(compiled.headers.get('content-security-policy')).not.toMatch(/'unsafe-inline'[^;]*;?\s*style-src|script-src[^;]*'unsafe-inline'/);
     const doc = new JSDOM(await compiled.text()).window.document;
     for (const script of doc.querySelectorAll('script')) if (script.type !== 'application/json' && script.type !== 'speculationrules') expect(script.getAttribute('src'), script.outerHTML).toMatch(/^\//);
-    expect(doc.querySelectorAll('script[type="module"]'), 'prose loads no module at all').toHaveLength(0);
+    // Prose loads no island module and no runtime: its one module is the page's own behaviour
+    // (lib/islands/page, `@mx/page` — framing, colour override, live stream, scroll restore; the
+    // coordinator's decision for compiled /raw pages), and there is no data island.
+    expect([...doc.querySelectorAll('script[type="module"]')].map((s) => s.getAttribute('src')), 'prose loads no island module at all')
+      .toEqual([loadCompilerBuild().manifest['@mx/page']]);
+    expect(doc.getElementById('mx-story-data')).toBeNull();
     expect((await raw(id)).headers.get('content-security-policy')).toMatch(/script-src 'unsafe-inline'/);
   });
 
@@ -124,7 +129,17 @@ describe('the HTML-first reader page', () => {
     expect(doc.querySelector(`script[type="module"][${SPA_IDLE_ATTR}]`)).toBeTruthy();
     expect(doc.querySelector('[data-mx-artifact-id]')).toBeTruthy();
     expect(storyText(html)).toContain('$744,503');
-    expect(storyText(html)).toBe(new JSDOM(legacy).window.document.querySelector('[data-mx-initial-story]')?.textContent?.replace(/\s+/g, ' ').trim());
+    // The same text as today with every <style> removed and each chart slot's contents excluded on both sides:
+    // the compiled page draws the snapshot's chart where today's says `loading chart…` (an intended improvement).
+    const slots = [...doc.querySelectorAll('#mx-story-root [data-mx-chart-slot]')].map((slot) => slot.id).filter(Boolean);
+    const textOf = (root: Element | null) => {
+      if (!root) return '';
+      for (const s of root.querySelectorAll('style, script')) s.remove();
+      for (const id of slots) { const slot = root.querySelector(`[id="${id}"]`); if (slot) slot.textContent = ''; }
+      return root.textContent?.replace(/\s+/g, ' ').trim() ?? '';
+    };
+    expect(slots.length, 'the dashboard has chart slots to exclude').toBeGreaterThan(0);
+    expect(textOf(new JSDOM(html).window.document.getElementById('mx-story-root'))).toBe(textOf(new JSDOM(legacy).window.document.querySelector('[data-mx-initial-story]')));
   });
 });
 
@@ -235,6 +250,7 @@ describe('the reader switch at its edges', () => {
       expect(post.headers.get(READER_MODE_HEADER)).toBe('compiled');
       const doc = new JSDOM(await post.text()).window.document;
       expect(doc.querySelector('[data-mx-domain-footer] a')?.getAttribute('href')).toMatch(new RegExp(`/a/${id}$`));
+      expect(doc.querySelector('#mx-story-root [data-mx-domain-footer]'), 'the attribution is outside the story root').toBeNull();
       expect(doc.body.getAttribute('data-mx-live-id')).toBe(id);
     } finally {
       setCompiledReaderFlagForTests('shadow');
@@ -249,7 +265,14 @@ describe('the reader switch at its edges', () => {
     expect(doc.body.getAttribute('data-mx-live-edit')).toMatch(/.+/);
     const page = new JSDOM(await (await app.request(`/a/${id}?reader=compiled`, { headers: { accept: 'text/html' } })).text()).window.document;
     expect(page.body.getAttribute('data-mx-live-id')).toBe(id);
-    expect(page.querySelector('body > script[type="application/json"][id="mx-page-data"]'), 'the app\'s page data rides with the compiled page').toBeTruthy();
+    const data = page.querySelector('body > script[type="application/json"][id="mx-page-data"]');
+    expect(data, 'the app\'s page data rides with the compiled page').toBeTruthy();
+    const payload = JSON.parse(data!.textContent!) as { artifact: { surface: { runtime: { css?: string; data: unknown } } } };
+    expect(payload.artifact.surface.runtime.data, 'the app still gets the version it may edit').toBeTruthy();
+    expect(payload.artifact.surface.runtime.css, 'the sheet rides once, in the head').toBeUndefined();
+    expect(page.head.querySelector('style[data-mx-story-css]')?.textContent).toMatch(/\S/);
+    expect(page.head.querySelector('style[data-mx-app-reserve]')?.textContent, 'the app bar is reserved before first paint').toContain('body:has(> [data-mx-inline-story])');
+    expect(doc.head.querySelector('style[data-mx-app-reserve]'), '/raw has no app to reserve for').toBeNull();
   });
 });
 
@@ -271,6 +294,7 @@ describe('the compiled capture', () => {
     expect(doc.querySelector('link[rel="canonical"], meta[property="og:image"]')).toBeNull();
     const data = JSON.parse(doc.getElementById('mx-story-data')?.textContent ?? '{}') as Record<string, unknown>;
     expect(data.queryUrl, 'a capture carries no doors').toBeUndefined();
+    expect(doc.querySelector(`script[src="${loadCompilerBuild().manifest['@mx/page']}"]`), 'a capture runs no page behaviour').toBeNull();
     const stored = await (await harness.db()).query('SELECT 1 FROM data_snapshots WHERE artifact_id = $1', [id]);
     expect(stored.rows, 'a capture\'s run is never stored as the guest snapshot').toHaveLength(0);
   });
@@ -285,6 +309,20 @@ describe('the compiled capture', () => {
     expect(res.headers.get(READER_MODE_HEADER)).toBe('compiled');
     const stored = await (await harness.db()).query('SELECT 1 FROM data_snapshots WHERE artifact_id = $1', [id]);
     expect(stored.rows).toHaveLength(0);
+  });
+});
+
+describe('a version the compiled page cannot yet serve whole', () => {
+  it('an author script keeps the version on today\'s renderer, which runs it, and says why', async () => {
+    const who = await owner();
+    const id = await publish(who.token, { title: 'Scripted', markup: '<Helmet><script>{`document.body.dataset.ran = "1";`}</script></Helmet><h1>Scripted</h1><Tabs defaultValue="a"><TabsList><TabsTrigger value="a">A</TabsTrigger></TabsList><TabsContent value="a">a</TabsContent></Tabs>' });
+    const res = await raw(id, '?reader=compiled');
+    expect(res.headers.get(READER_MODE_HEADER)).toBe('legacy');
+    expect(res.headers.get(READER_FALLBACK_HEADER)).toBe('unported');
+    expect(await res.text()).toContain('document.body.dataset.ran');
+    const page = await app.request(`/a/${id}?reader=compiled`, { headers: { accept: 'text/html' } });
+    expect(page.headers.get(READER_MODE_HEADER)).toBe('legacy');
+    expect(page.headers.get(READER_FALLBACK_HEADER)).toBe('unported');
   });
 });
 
@@ -309,11 +347,3 @@ describe('the viewer overlay door', () => {
   });
 });
 
-describe('withBodyAttributes', () => {
-  it('splices at the real head/body boundary, past a stylesheet that spells the boundary', () => {
-    const html = '<!doctype html><html><head><title>t</title><style data-mx-story-css>p::after{content:"</head><body>"}</style></head><body><p>x</p></body></html>';
-    const out = withBodyAttributes(html, { 'data-mx-live-id': 'a"b' });
-    expect(out).toContain('content:"</head><body>"');
-    expect(out).toContain('</style></head><body data-mx-live-id="a&quot;b"><p>x</p>');
-  });
-});

@@ -329,9 +329,11 @@ export interface SnapshotStore {
    * (the same run as `POST /a/:id/query`), draw the charts, store and return
    * the new snapshot; null when the version cannot be snapshotted any more.
    * `recipe` is the plan and input values the key was made from, when the
-   * caller holds them (else the store's own record of the key).
+   * caller holds them (else the store's own record of the key), and the
+   * compiler build the plan came from, which the snapshot records (else the
+   * build already stored for the key).
    */
-  revalidate(key: SnapshotKey, recipe?: { plan: DataPlan; values: Record<string, Scalar> }): Promise<DataSnapshot | null>;
+  revalidate(key: SnapshotKey, recipe?: { plan: DataPlan; values: Record<string, Scalar>; build?: string }): Promise<DataSnapshot | null>;
 }
 
 /* ────────────────────────────────────────────────────────────────────────────
@@ -416,6 +418,17 @@ export interface AssembleInput {
    * Null where a path emits none (captures, the offline file).
    */
   head: AssembleHead | null;
+  /**
+   * The document's live identity, written on `<body>` as `data-mx-live-id` / `data-mx-live-edit`: the
+   * island runtime holds the document's live stream only when both are present. Null or absent on a
+   * capture, an archived version and the offline file.
+   */
+  live?: { id: string; editId: string } | null;
+  /**
+   * A line of page furniture after the story root (and after the chrome), never inside it: a domain
+   * post's attribution back to the app. Its CSS joins the head's styles.
+   */
+  footer?: { html: string; css: string } | null;
 }
 
 /** The head metadata of an assembled page (see AssembleInput.head). */

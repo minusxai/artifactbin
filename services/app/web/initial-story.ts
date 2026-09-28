@@ -112,7 +112,11 @@ export function adoptInitialStory(): HTMLElement | null {
  */
 export function initialStorySheet(): string | null {
   const wrapper = servedWrapper();
-  if (!wrapper) return null;
+  // A compiled page (lib/compiled-page/assembler) carries the version's isolated sheet once, in the head.
+  if (!wrapper) {
+    const sheet = compiledRoot() ? document.head.querySelector('style[data-mx-story-css]') : null;
+    return sheet instanceof HTMLStyleElement ? sheet.textContent : null;
+  }
   const story = wrapper.lastElementChild;
   // The composition's own `<style>` — its first STYLE child: React may emit resource hints (`<link>`) ahead of it.
   const style = story?.hasAttribute('data-mx-inline-story') ? story.querySelector(':scope > style') : null;
