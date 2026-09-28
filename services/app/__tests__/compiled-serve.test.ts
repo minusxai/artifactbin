@@ -312,6 +312,20 @@ describe('the compiled capture', () => {
   });
 });
 
+describe('a version the compiled page cannot yet serve whole', () => {
+  it('an author script keeps the version on today\'s renderer, which runs it, and says why', async () => {
+    const who = await owner();
+    const id = await publish(who.token, { title: 'Scripted', markup: '<Helmet><script>{`document.body.dataset.ran = "1";`}</script></Helmet><h1>Scripted</h1><Tabs defaultValue="a"><TabsList><TabsTrigger value="a">A</TabsTrigger></TabsList><TabsContent value="a">a</TabsContent></Tabs>' });
+    const res = await raw(id, '?reader=compiled');
+    expect(res.headers.get(READER_MODE_HEADER)).toBe('legacy');
+    expect(res.headers.get(READER_FALLBACK_HEADER)).toBe('unported');
+    expect(await res.text()).toContain('document.body.dataset.ran');
+    const page = await app.request(`/a/${id}?reader=compiled`, { headers: { accept: 'text/html' } });
+    expect(page.headers.get(READER_MODE_HEADER)).toBe('legacy');
+    expect(page.headers.get(READER_FALLBACK_HEADER)).toBe('unported');
+  });
+});
+
 describe('the viewer overlay door', () => {
   it('is named only when the version has a viewer-scope query, on /raw and on the app page', async () => {
     const who = await owner();

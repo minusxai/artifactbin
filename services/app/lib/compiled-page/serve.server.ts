@@ -10,6 +10,8 @@
  * it says so).
  *
  * THE STEPS, each of which may end in a fallback that names its reason:
+ *  0. A version with an author script (a managed frame the island runtime does
+ *     not host yet) → `unported`: a page must be whole.
  *  1. The stored compile. None → `not-compiled`. A recorded failure of THIS
  *     build → its own reason (`compile-error`, `unported`). A compile (or a
  *     failure) from another build, or made when no island build could be read
@@ -264,6 +266,12 @@ export async function compiledPageFor(row: ArtifactRow, page: PreparedPage, read
     } catch (error) {
       logOnce(row, 'build-mismatch', error instanceof Error ? error.message : String(error));
       return fallback('build-mismatch');
+    }
+    // An author's own script runs in a managed frame the island runtime does not host yet: a page
+    // must be whole, so the version is today's renderer's until it does (spec §6, `unported`).
+    if (page.authorScript) {
+      logOnce(row, 'unported', 'the version carries an author script');
+      return fallback('unported');
     }
     const usable = await compiledOf(row, page, reader.at, build);
     if ('reason' in usable) return fallback(usable.reason);
