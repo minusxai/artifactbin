@@ -11,7 +11,7 @@ import path from 'node:path';
 import { buildIslands, ISLAND_SPECIFIERS } from '../build-islands.mjs';
 
 const ROOT = path.resolve(import.meta.dirname, '../..');
-const KIT_FAMILIES = ['basic', 'tabs', 'accordion', 'dialog', 'disclosure', 'controls', 'data', 'files', 'people', 'mermaid'];
+const KIT_FAMILIES = ['basic', 'tabs', 'accordion', 'dialog', 'disclosure', 'controls', 'data', 'files', 'people', 'mermaid', 'embed', 'cells'];
 
 describe('the toolchain', () => {
   it('pins Solid 1.9 and a matching babel preset', () => {
@@ -35,7 +35,7 @@ describe('buildIslands', () => {
     first = await buildIslands({ outDir });
   }, 120_000);
   it('names every specifier a compiled page may import', () => {
-    expect(ISLAND_SPECIFIERS).toEqual(expect.arrayContaining(['@mx/rt', '@mx/boot', '@mx/deck', ...KIT_FAMILIES.map((f) => `@mx/kit/${f}`)]));
+    expect(ISLAND_SPECIFIERS).toEqual(expect.arrayContaining(['@mx/rt', '@mx/boot', '@mx/deck', '@mx/row-class', ...KIT_FAMILIES.map((f) => `@mx/kit/${f}`)]));
     expect(ISLAND_SPECIFIERS.filter((s) => s.startsWith('solid-js')), 'generated code reaches Solid only through @mx/rt').toEqual([]);
   });
 
@@ -71,7 +71,7 @@ describe('buildIslands', () => {
   it('writes the server half: one file, a namespace per runtime and kit specifier, only Solid external, no lazy engine', () => {
     const { ssr } = first;
     expect(ssr.url).toMatch(/^\/islands\/ssr-[0-9a-f]{16}\.js$/);
-    expect(Object.keys(ssr.exports).sort()).toEqual(['@mx/rt', ...KIT_FAMILIES.map((f) => `@mx/kit/${f}`)].sort());
+    expect(Object.keys(ssr.exports).sort()).toEqual(['@mx/rt', '@mx/row-class', ...KIT_FAMILIES.map((f) => `@mx/kit/${f}`)].sort());
     const text = readFileSync(path.join(outDir, ssr.url.slice('/islands/'.length)), 'utf8');
     const specifiers = [...new Set([...text.matchAll(/^import\s[^;]*?from\s*["']([^"']+)["']/gm)].map((m) => m[1]))].sort();
     expect(specifiers.every((s) => /^solid-js(\/web|\/store)?$/.test(s)), specifiers.join(', ')).toBe(true);
@@ -80,7 +80,7 @@ describe('buildIslands', () => {
     expect(text.length).toBeLessThan(512 * 1024);
   });
 
-  it('bundles the managed frame\'s behaviour alone: its own file, no imports, no Solid, loaded by the data family by content address', () => {
+  it('bundles the managed frame\'s behaviour alone: its own file, no imports, no Solid, loaded by the embed family by content address', () => {
     const { manifest, files } = first;
     const engines = Object.keys(files).filter((url) => /\/frame-engine-[0-9a-f]{16}\.js$/.test(url));
     expect(engines).toHaveLength(1);
@@ -88,10 +88,12 @@ describe('buildIslands', () => {
     expect(files[engine].imports).toEqual([]);
     const code = readFileSync(path.join(outDir, engine.slice('/islands/'.length)), 'utf8');
     expect(code).not.toMatch(/\$DX_DELEGATE|_\$HY/);
-    // Some chunk of the data family's closure asks for it by its file name, lazily.
+    // Some chunk of the embed family's closure asks for it by its file name, lazily.
     const name = engine.slice('/islands/'.length);
     const reach = (urls, seen = new Set()) => { for (const u of urls) { if (seen.has(u)) continue; seen.add(u); reach(files[u].imports, seen); } return seen; };
-    expect([...reach([manifest['@mx/kit/data']])].some((url) => readFileSync(path.join(outDir, url.slice('/islands/'.length)), 'utf8').includes(`import("./${name}")`))).toBe(true);
+    expect([...reach([manifest['@mx/kit/embed']])].some((url) => readFileSync(path.join(outDir, url.slice('/islands/'.length)), 'utf8').includes(`import("./${name}")`))).toBe(true);
+    // …and nothing the data family loads does: a page with a table never carries the frame's door.
+    expect([...reach([manifest['@mx/kit/data']])].some((url) => readFileSync(path.join(outDir, url.slice('/islands/'.length)), 'utf8').includes(name))).toBe(false);
     // …and nothing in the shared runtime's closure does.
     expect([...reach([manifest['@mx/rt'], manifest['@mx/boot']])].some((url) => readFileSync(path.join(outDir, url.slice('/islands/'.length)), 'utf8').includes(name))).toBe(false);
   });
@@ -131,6 +133,14 @@ describe('buildIslands', () => {
     expect(runtime.some((url) => readFileSync(path.join(outDir, url.slice('/islands/'.length)), 'utf8').includes(`import("./${name}")`)), 'boot asks for it lazily').toBe(true);
     // The engine's own modules stay out of the runtime's closure: only the lazy request names it.
     expect(runtime.some((url) => readFileSync(path.join(outDir, url.slice('/islands/'.length)), 'utf8').includes('the page engine is not loaded'))).toBe(false);
+  });
+
+  it('keeps the editing cells in their own family: nothing the data family loads carries them', () => {
+    const { manifest, files } = first;
+    const reach = (urls, seen = new Set()) => { for (const u of urls) { if (seen.has(u)) continue; seen.add(u); reach(files[u].imports, seen); } return seen; };
+    const carries = (spec) => [...reach([manifest[spec]])].some((url) => readFileSync(path.join(outDir, url.slice('/islands/'.length)), 'utf8').includes('Expected a JSON array of strings.'));
+    expect(carries('@mx/kit/cells')).toBe(true);
+    expect(carries('@mx/kit/data')).toBe(false);
   });
 
   it('keeps the shared runtime under the interactive budget: solid + rt + store bridge ≤ 28 KB brotli', async () => {

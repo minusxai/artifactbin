@@ -7,7 +7,6 @@ import { refusalText } from '@/lib/story/sign-in-required';
 import { useIsland } from '../context';
 import type { IslandContext } from '../contract';
 import type { RowScope } from '../rt';
-import { cn } from '@/components/kit/cn';
 import { substituteRow } from '@/lib/story/row-scope';
 import { URL_ATTRS, URL_LIST_ATTRS, urlListUrls } from '@/lib/jsx/url-attrs';
 import { commentMetadata, instanceDomId } from '@/lib/story/repeat-identity';
@@ -15,9 +14,6 @@ import { iconGlyphKey, FALLBACK_ICON_KEY, type GlyphMap } from '@/lib/story-ui/i
 
 import { createRowActions } from '@/lib/story-runtime/row-actions';
 import { ACCESS_PENDING, hydratedRead } from './store-read';
-
-/** A row's class must be substituted before tailwind-merge sees its utility tokens. */
-export const rowClass = (base: string, authored: string, row: Record<string, unknown>): string => cn(base, substituteRow(authored, row));
 
 // Mirrors lib/jsx/validate hasDangerousScheme without importing the validator into the browser kit.
 // eslint-disable-next-line no-control-regex -- browsers remove controls and spaces within URL schemes
@@ -91,7 +87,7 @@ export function Icon(props: JSX.SvgSVGAttributes<SVGSVGElement> & { name: string
   const glyph = () => own.glyphs[iconGlyphKey(String(own.name))] ?? catalog()[iconGlyphKey(String(own.name))] ?? own.glyphs[FALLBACK_ICON_KEY] ?? catalog()[FALLBACK_ICON_KEY];
   const accessible = Object.keys(rest).some((key) => key.startsWith('aria-') || key === 'role' || key === 'title');
   return <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
-    class={['lucide', glyph()?.cls, cn('inline-block size-4 shrink-0 align-[-0.125em]', own.class)].filter(Boolean).join(' ')}
+    class={['lucide', glyph()?.cls, own.class ?? 'inline-block size-4 shrink-0 align-[-0.125em]'].filter(Boolean).join(' ')}
     aria-hidden={accessible ? undefined : 'true'} data-slot="icon" {...rest} innerHTML={glyph()?.inner ?? ''} />;
 }
 export function Alert(props: DivProps & { variant?: string }) { const { variant: _variant, ...rest } = props; return <div data-slot="alert" role="alert" {...rest} />; }

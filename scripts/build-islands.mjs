@@ -77,6 +77,8 @@ const ENTRIES = [
   { specifier: '@mx/rt', name: 'rt', file: () => islandModule('rt') },
   { specifier: '@mx/boot', name: 'boot', file: () => islandModule('boot') },
   { specifier: '@mx/deck', name: 'deck', file: () => islandModule('deck') },
+  // Tailwind class merging is loaded only for authored classes inside live rows.
+  { specifier: '@mx/row-class', name: 'row-class', file: () => islandModule('row-class') },
   // The compiled /raw page's own behaviour: framing, the reader's colour override, the live stream and the scroll restore.
   { specifier: '@mx/page', name: 'page', file: () => islandModule('page') },
   ...KIT_FAMILIES.map((family) => ({ specifier: `@mx/kit/${family}`, name: `kit-${family}`, file: () => islandModule(`kit/${family}`) })),
@@ -96,6 +98,8 @@ const STANDALONE_LAZY = [
   { request: './embed/frame-engine', name: 'frame-engine', file: () => path.join(ISLANDS_SRC, 'kit/embed/frame-engine.ts') },
   // The version's author script (lib/islands/author-host), loaded by boot only when the page data names one.
   { request: './author-host', name: 'author-host', file: () => path.join(ISLANDS_SRC, 'author-host.ts') },
+  // The live morph (lib/islands/live-update → ./morph/engine): a new version drawn in place, loaded only when one lands.
+  { request: './morph/engine', name: 'morph-engine', file: () => path.join(ISLANDS_SRC, 'morph/engine.ts') },
   // The page's own SQLite engine (today's page engine and the SQLite core), loaded by boot behind the first paint.
   { request: './sqlite-engine', name: 'sqlite-engine', file: () => path.join(ISLANDS_SRC, 'sqlite-engine.ts') },
   // The link following the reader (today's url-values-sync), loaded by boot after hydration.
@@ -120,7 +124,7 @@ async function buildStandaloneLazy() {
 const standaloneLazyPlugin = (built) => ({
   name: 'mx-standalone-lazy',
   setup(build) {
-    build.onResolve({ filter: /^\.\/(?:embed\/)?[\w-]+$/ }, (args) => {
+    build.onResolve({ filter: /^\.\/(?:embed\/|morph\/)?[\w-]+$/ }, (args) => {
       if (args.kind !== 'dynamic-import') return undefined;
       // By the module it names, so a same-named request elsewhere is never taken for it.
       const target = path.resolve(path.dirname(args.importer), args.path);
@@ -139,7 +143,7 @@ export function solidPlugin({ generate = 'dom', hydratable = true } = {}) {
   return {
     name: 'mx-solid',
     setup(build) {
-      build.onResolve({ filter: /^@mx\/(rt|boot|deck|page|kit\/[a-z-]+)$/ }, (args) => {
+      build.onResolve({ filter: /^@mx\/(rt|boot|deck|page|row-class|kit\/[a-z-]+)$/ }, (args) => {
         const entry = ENTRIES.find((e) => e.specifier === args.path);
         if (!entry) return { errors: [{ text: `build-islands: unknown island specifier ${args.path}` }] };
         return { path: entry.file() };
@@ -280,8 +284,8 @@ export async function buildIslands({ outDir = DEFAULT_OUT_DIR } = {}) {
  * server injects its own one Solid when it evaluates the file, as it does for every generated module.
  * Never imported by a browser; nothing in it is per document.
  */
-export const SSR_SPECIFIERS = Object.freeze(ISLAND_SPECIFIERS.filter((s) => s === '@mx/rt' || s.startsWith('@mx/kit/')));
-const SSR_EXPORTS = Object.freeze(Object.fromEntries(SSR_SPECIFIERS.map((s) => [s, s === '@mx/rt' ? 'rt' : `kit_${s.slice('@mx/kit/'.length).replace(/-/g, '_')}`])));
+export const SSR_SPECIFIERS = Object.freeze(ISLAND_SPECIFIERS.filter((s) => s === '@mx/rt' || s === '@mx/row-class' || s.startsWith('@mx/kit/')));
+const SSR_EXPORTS = Object.freeze(Object.fromEntries(SSR_SPECIFIERS.map((s) => [s, s === '@mx/rt' ? 'rt' : s === '@mx/row-class' ? 'row_class' : `kit_${s.slice('@mx/kit/'.length).replace(/-/g, '_')}`])));
 
 /** The server half's generated entry, as the metafile names it (never a file on disk). */
 const SSR_ENTRY = toPosix(path.relative(ROOT, path.join(ISLANDS_SRC, 'mx-ssr-half.js')));

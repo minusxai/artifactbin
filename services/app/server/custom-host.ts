@@ -13,6 +13,7 @@
  *   /a/<id>/resolve                 GET/HEAD
  *   /a/<id>/assets                  GET
  *   /a/<id>/viewer                  GET (the compiled reader's viewer overlay, as a guest)
+ *   /a/<id>/story                   GET (the compiled reader's newest story fragment, as a guest)
  *   GET/HEAD /a/<id>/raw            an image, file or PDF one of the owner's public posts embeds
  *   GET/HEAD /assets/<sha>          our copy of a web image one of those posts names
  *   GET/HEAD /a/<id>/export?format=jpg&mode=card   a public post's card, the home page's thumbnail
@@ -54,6 +55,7 @@ import { GET as webAssetGet } from '@/app/assets/[hash]/route';
 import { GET as exportGet } from '@/app/a/[id]/export/route';
 import { GET as avatarGet } from '@/app/api/users/[id]/avatar/route';
 import { GET as profileGet } from '@/app/api/page/profile/[user]/[[...path]]/route';
+import { GET as storyGet } from '@/app/a/[id]/story/route';
 import { ROUTES } from './routes.generated';
 
 type Handler = (request: Request, ctx: { params: Promise<{ id: string }> }) => Promise<Response> | Response;
@@ -191,6 +193,7 @@ async function documentRoute(request: Request, id: string, route: string, ownerI
     case 'events/frame': return get ? call(eventsFrameGet, await asGuest(request), id) : notFound();
     case 'resolve': return get || method === 'HEAD' ? call(resolveGet, await asGuest(request), id) : notFound();
     case 'assets': return get ? call(assetsGet, await asGuest(request), id) : notFound();
+    case 'story': return get ? call(storyGet, await asGuest(request), id) : notFound();
     case 'viewer': {
       const viewerGet = viewerRoute();
       return get && viewerGet ? call(viewerGet, await asGuest(request), id) : notFound();
@@ -259,7 +262,7 @@ async function embedded(request: Request, path: string, ownerId: string): Promis
   return null;
 }
 
-const DOCUMENT_ROUTE = /^\/a\/([^/]+)\/(query|mutate|events|events\/frame|resolve|assets|viewer)$/;
+const DOCUMENT_ROUTE = /^\/a\/([^/]+)\/(query|mutate|events|events\/frame|resolve|assets|viewer|story)$/;
 
 /**
  * The compiled reader's viewer-overlay door (`GET /a/<id>/viewer`, docs/phase2-architecture.md §4.1),

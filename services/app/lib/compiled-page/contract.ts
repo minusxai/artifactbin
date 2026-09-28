@@ -19,6 +19,7 @@
  *   links.ts            linkHintsOf            w1-planners
  */
 import type { JsxNode } from '@/lib/jsx';
+import type { OutlineEntry } from '@/lib/story-runtime/outline';
 import type { CompiledDataflow, CompiledReads } from '@/lib/story/compiled-dataflow';
 import type { Scalar } from '@/lib/story/dataflow';
 import type { RefDataMap } from '@/lib/story/ref-data';
@@ -127,6 +128,10 @@ export interface CompilerBuild {
  */
 export interface CompiledPage {
   build: string;
+  /** Version-owned navigation, decided from the same nodes and template as the legacy reader. */
+  outline: readonly OutlineEntry[];
+  /** The plan template uses the wider reading wrapper. */
+  outlinePlan: boolean;
   /**
    * The story element's inner HTML with every island rendered in its DECLARED
    * state (no rows): static parts final, islands as skeletons. Served only when
@@ -414,6 +419,12 @@ export interface AssembleOverlay {
   signedIn: boolean;
   /** Where the page queries, writes and fetches its overlay (lib/story/markup-csp paths); absent on a capture. */
   doors: { queryUrl: string; mutateUrl?: string; viewerUrl?: string; assetsUrl: string } | null;
+  /**
+   * The managed `<Iframe>`'s asset door for this request (islands contract `IslandPageData.managedAssets`):
+   * beside `doors` because a capture has no doors and still resolves its frames' assets with its key.
+   * Absent or null without an asset origin.
+   */
+  managedAssets?: { origin: string; resolveUrl: string } | null;
   /** An archived version's read-only reason (lib/archived-version); absent for the head. */
   readOnly?: string | null;
   /** The imports the page may hold for the door it queries through (IslandPageData.hold); absent: none. */
@@ -424,6 +435,8 @@ export interface AssembleOverlay {
 
 export interface AssembleInput {
   compiled: CompiledPage;
+  /** False for captures that intentionally omit the document's own navigation. */
+  documentChrome?: boolean;
   /**
    * The story HTML for THIS request: `compiled.html` when no snapshot exists,
    * else the SSR module's render with the snapshot's rows (serve.server.ts,
