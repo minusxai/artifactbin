@@ -29,9 +29,11 @@ const input = (over: Partial<AssembleInput> = {}): AssembleInput => ({
 const dom = (page: { html: string }) => new JSDOM(page.html).window.document;
 
 describe('assembleReaderPage', () => {
-  it('uses the app reader font size before the idle app shell loads', () => {
+  it('uses the app reader body font before the idle app shell loads', () => {
     const app = assembleReaderPage(input({ spa: { entry: '/assets/main-abc.js', preload: [] } }));
-    expect(app.html).toContain('body{margin:0;font-size:14px}');
+    expect(app.html).toContain('body{margin:0;font-size:14px;font-family:var(--font-mono)}');
+    expect(app.html).toContain('--font-mono:"JetBrains Mono Variable",ui-monospace,"SF Mono",Menlo,monospace');
+    expect(app.html).toContain('@font-face{font-family:"JetBrains Mono Variable"');
   });
   it('places the request\'s story, never re-rendering it: the story input is what appears', () => {
     const page = assembleReaderPage(input({ story: '<div class="mx-doc"><b id="with-data">$744,503</b></div>' }));

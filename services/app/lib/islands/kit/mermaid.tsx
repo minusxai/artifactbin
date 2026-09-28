@@ -32,7 +32,12 @@ export function Mermaid(p: Props) {
     const modeRoot = themed ?? (typeof document !== 'undefined' ? document.documentElement : null);
     return modeRoot?.classList.contains('dark') ? 'dark' : modeRoot?.classList.contains('light') ? 'light' : p.colorMode ?? 'light';
   };
-  const imageKey = () => (invalid() ? null : p.imageKey ?? mermaidImageKey(p.code, liveMode()));
+  const imageKey = () => {
+    if (invalid()) return null;
+    const mode = liveMode();
+    const override = typeof window === 'undefined' ? null : readerMode(window);
+    return p.imageKey ?? mermaidImageKey(p.code, override ?? mode);
+  };
   const stored = () => { const key = imageKey(); const offered = key ? island.drawings()[key] : undefined; return offered && offered.src !== refused() ? offered : undefined; };
   const storedSrc = () => stored()?.src ?? null;
   const current = () => { const r = result(); return r?.code === p.code ? r : null; };
@@ -64,6 +69,14 @@ export function Mermaid(p: Props) {
     // JSX evaluates the stored-image key before its figure ref is assigned.
     // Resample once with the mounted host, so an initial dark page does not keep the light drawing.
     setRevision(n => n + 1);
+    // Solid hydration adopts the server's <img> without writing an initially different src.
+    // A reader mode carried in window.name can make that server image the wrong variant.
+    createEffect(on(src, source => {
+      if (img && source && img.getAttribute('src') !== source) {
+        setLoadedSrc(null);
+        img.setAttribute('src', source);
+      }
+    }));
     createEffect(on([() => p.code, liveMode, invalid, revision, storedSrc], ([code, mode, bad, , servedSrc]) => {
       if (bad) return;
       // The page module may apply a same-tab colour override after this island mounts.
