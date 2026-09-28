@@ -1,4 +1,4 @@
-import {observedTextBody} from './prepared-document';
+import {observedSourceBody,observedTextBody} from './prepared-document';
 import {observedRequest} from '@/__tests__/conditional-request';
 /**
  * Live down-sync: the SSE surface at /a/<id>/events and the LISTEN fan-out
@@ -177,6 +177,7 @@ describe('capacity', () => {
 describe('subscription lifecycle', () => {
   it('shares one LISTEN across subscribers and releases it on the last unsubscribe', async () => {
     const { token, doc } = await setup();
+    const source = (text: string) => `<section><p>${text}</p><p>beta text</p></section>`;
     const seenA: string[] = [];
     const seenB: string[] = [];
     const offA = await subscribeToArtifact(doc.id, (id) => seenA.push(id));
@@ -185,7 +186,7 @@ describe('subscription lifecycle', () => {
     expect(liveChannelCount()).toBe(1);
 
     const edit = await editRoute(
-      request(`/api/artifacts/${doc.id}/edits`, { method: 'POST', token: token, json: await observedTextBody(doc.id,'alpha text','A2') }),
+      request(`/api/artifacts/${doc.id}/edits`, { method: 'POST', token: token, json: await observedSourceBody(doc.id,source('A2')) }),
       params({ id: doc.id }),
     );
     const updated = (await edit.json()) as Wire;
@@ -199,7 +200,7 @@ describe('subscription lifecycle', () => {
     await offB();
     expect(liveChannelCount()).toBe(0); // the LISTEN itself is released, not just the handler
     await editRoute(
-      request(`/api/artifacts/${doc.id}/edits`, { method: 'POST', token: token, json: await observedTextBody(doc.id,'A2','A3') }),
+      request(`/api/artifacts/${doc.id}/edits`, { method: 'POST', token: token, json: await observedSourceBody(doc.id,source('A3')) }),
       params({ id: doc.id }),
     );
     await new Promise((r) => setTimeout(r, 150));

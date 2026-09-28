@@ -17,7 +17,7 @@ import { STORY_UI_COMPONENTS } from '@/lib/story-ui/registry';
 import { IconGlyphProvider } from '@/components/kit/icon';
 import { IslandProvider } from '../context';
 import { fakeIsland } from './context.test';
-import { Badge, Alert, AlertTitle, AlertDescription, Card, CardHeader, CardTitle, CardContent, Button } from '../kit/basic';
+import { Badge, Alert, AlertTitle, AlertDescription, Card, CardHeader, CardTitle, CardContent, Button, Icon } from '../kit/basic';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '../kit/tabs';
 import { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from '../kit/accordion';
 import { Dialog, DialogTrigger, DialogContent, DialogClose } from '../kit/dialog';
@@ -46,6 +46,16 @@ const press = (el: HTMLElement) => {
 const cls = (tag: string, props: Record<string, unknown> = {}) => cn(RECIPES[tag]!(props));
 
 describe('basic', () => {
+  it('loads an unseen row icon from the optional glyph catalog', async () => {
+    const fallback = { cls: 'lucide-circle-question-mark', inner: '<circle cx="12" cy="12" r="10"></circle>' };
+    const check = { cls: 'lucide-check', inner: '<path d="m20 6-11 11-5-5"></path>' };
+    const url = 'data:text/javascript,' + encodeURIComponent(`export const glyphs = ${JSON.stringify({ Check: check })}`);
+    const { host, dispose } = mount(() => <Icon name="check" glyphs={{ CircleQuestionMark: fallback }} catalogUrl={url} />);
+    try {
+      expect(host.querySelector('circle')).toBeTruthy();
+      await vi.waitFor(() => expect(host.querySelector('path')?.getAttribute('d')).toBe(check.inner.match(/d="([^"]+)/)?.[1]));
+    } finally { dispose(); }
+  });
   it('Badge, Alert and Card match today\'s render', () => {
     const { host } = mount(() => <>
       <Badge id="b" variant="secondary" class={cls('Badge', { variant: 'secondary' })}>beta</Badge>

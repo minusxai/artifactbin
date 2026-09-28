@@ -169,13 +169,29 @@ it('balances the extra cross-browser setup without extending any test timeout', 
   expect(shardWeight('screenshot-comments')).toBe(specFor('screenshot-comments').timeoutMs + 270_000);
 });
 
-it('prints the same browser plan used by shard selection without starting servers', () => {
+it('prints the same browser and Postgres plans used by shard selection without starting servers', () => {
   const set = [...onDisk, ...compiledLegNames()];
-  for (let index = 1; index <= 8; index++) {
-    const selected = shardOf(set, {index, total: 8}, shardWeight);
-    const output = execFileSync(process.execPath, [path.join(SCRIPTS, 'gates.mjs'), '--browsers', `--shard=${index}/8`], {encoding: 'utf8'}).trim();
+  for (let index = 1; index <= 11; index++) {
+    const selected = shardOf(set, {index, total: 11}, shardWeight);
+    const output = execFileSync(process.execPath, [path.join(SCRIPTS, 'gates.mjs'), '--browsers', `--shard=${index}/11`], {encoding: 'utf8'}).trim();
     expect(output).toBe(browsersFor(selected).join(' '));
+    const postgres = execFileSync(process.execPath, [path.join(SCRIPTS, 'gates.mjs'), '--needs-postgres', `--shard=${index}/11`], {encoding: 'utf8'}).trim();
+    expect(postgres).toBe(String(selected.some((name) => gateOf(name) === 'postgres-datasets')));
   }
+  expect(Array.from({length: 11}, (_, offset) => shardOf(set, {index: offset + 1, total: 11}, shardWeight))
+    .find((shard) => shard.includes('editor-v2'))).toEqual(['editor-v2']);
+});
+
+it('prints the selected gate names for shard-specific CI setup without starting servers', () => {
+  const set = [...onDisk, ...compiledLegNames()];
+  const selected = [];
+  for (let index = 1; index <= 11; index++) {
+    const expected = shardOf(set, { index, total: 11 }, shardWeight);
+    const output = execFileSync(process.execPath, [path.join(SCRIPTS, 'gates.mjs'), '--selected', `--shard=${index}/11`], { encoding: 'utf8' }).trim().split('\n');
+    expect(output).toEqual(expected);
+    selected.push(...output);
+  }
+  expect(selected.filter((name) => name === 'postgres-datasets')).toHaveLength(1);
 });
 
 describe('the compiled legs (w3-behaviour)', () => {
@@ -188,7 +204,7 @@ describe('the compiled legs (w3-behaviour)', () => {
       if (leg.disabled !== undefined) expect(leg.disabled.length, leg.gate).toBeGreaterThan(20);
     }
     // The brief's behavioural set is wired, enabled or with its reason.
-    expect(COMPILED_LEGS.map((leg) => leg.gate).sort()).toEqual(['annotations', 'collab-edit', 'comment-targets', 'dataflow', 'editor-v2', 'export-slice', 'full-kit', 'hydration', 'inplace-edit', 'layout-shift', 'live-data', 'live-reader', 'reader-chrome', 'reading-chrome']);
+    expect(COMPILED_LEGS.map((leg) => leg.gate).sort()).toEqual(['annotations', 'collab-edit', 'comment-targets', 'dataflow', 'editable-table', 'editor-v2', 'export-slice', 'full-kit', 'hydration', 'inplace-edit', 'layout-shift', 'live-data', 'live-reader', 'reader-chrome', 'reading-chrome']);
   });
 
   it('a leg is its gate\'s row under its own name and timeout, and the default set leaves disabled legs out', () => {

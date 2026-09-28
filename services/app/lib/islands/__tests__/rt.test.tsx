@@ -9,7 +9,8 @@
 import { describe, expect, it } from 'vitest';
 import { render } from 'solid-js/web';
 import { createStore } from 'solid-js/store';
-import { createIslandRuntime, Repeat, When, rowAttrs, hydrateIsland } from '../rt';
+import { createIslandRuntime, Repeat, When, hydrateIsland } from '../rt';
+import { rowAttrs } from '../kit/basic';
 import { IslandProvider, useIsland } from '../context';
 import { createDataflowStore } from '@/lib/story-runtime/store';
 import type { CompiledDataflow } from '@/lib/story/compiled-dataflow';
