@@ -55,7 +55,7 @@ describe('DataTable', () => {
 describe('Question', () => {
   it('shows the server-drawn chart as ready and loads the chart engine only when its table changes or on interaction', async () => {
     const ctx = island();
-    const loadChart = vi.fn(async () => ({ mountChart: () => ({ update() {}, dispose() {} }) }));
+    const loadChart = vi.fn(async () => ({ mountChart: () => ({ update() {}, destroy() {} }) }));
     const { host } = mount(ctx, () => <Question title="Revenue by month" data="$monthly" height="300px" viz={{ kind: 'vega-lite', spec: { mark: 'line' } }} id="AVkX" drawn={{ svg: '<svg data-drawn="1"></svg>', table: 'monthly', rows: 'r1' }} chart={loadChart} />);
     expect(host.querySelector('[data-mx-chart-state="ready"] svg[data-drawn]')).toBeTruthy();
     expect(loadChart).not.toHaveBeenCalled();
@@ -67,12 +67,30 @@ describe('Question', () => {
     const ctx = island();
     const [snapshot, setSnapshot] = createSignal(monthly);
     ctx.tableSnapshot = () => snapshot();
-    const loadChart = vi.fn(async () => ({ mountChart: () => ({ dispose() {} }) }));
+    const loadChart = vi.fn(async () => ({ mountChart: () => ({ destroy() {} }) }));
     mount(ctx, () => <Question data="$monthly" viz={{ kind: 'vega-lite', spec: { mark: 'line' } }} drawn={{ svg: '<svg></svg>', table: 'monthly', rows: 'r1' }} chart={loadChart} />);
     expect(loadChart).not.toHaveBeenCalled();
     setSnapshot({ ...monthly, rows: [...monthly.rows, { month: '2025-03-01', revenue: 10, units: 1 }] });
     await Promise.resolve();
     expect(loadChart).toHaveBeenCalledTimes(1);
+  });
+  it('uses the context loader by default after interaction and destroys its chart on dispose', async () => {
+    const ctx = island();
+    const destroy = vi.fn();
+    const mountChart = vi.fn(() => ({ destroy }));
+    ctx.loadChart = vi.fn(async () => ({ mountChart }));
+    const { host, dispose } = mount(ctx, () => <Question data="$monthly" viz={{ kind: 'vega-lite', spec: { mark: 'line' } }} drawn={{ svg: '<svg></svg>', table: 'monthly', rows: 'r1' }} />);
+    expect(ctx.loadChart).not.toHaveBeenCalled();
+    host.querySelector('[data-mx-chart-state]')!.dispatchEvent(new Event('pointerenter', { bubbles: true }));
+    await Promise.resolve();
+    expect(ctx.loadChart).toHaveBeenCalledTimes(1);
+    expect(mountChart).toHaveBeenCalledWith({
+      element: host.querySelector('[data-mx-chart-slot]'),
+      envelope: { version: 2, source: { kind: 'vega-lite', grammar: 'vega-lite@6', spec: { mark: 'line' } }, dataBindings: null, viewParams: null, interactions: null, assets: null },
+      rows: monthly.rows,
+    });
+    dispose();
+    expect(destroy).toHaveBeenCalledTimes(1);
   });
 });
 

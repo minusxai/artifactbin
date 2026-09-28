@@ -4,7 +4,7 @@ import { createEffect, createMemo, createSignal, For, on, onCleanup, onMount, Sh
 import { Portal } from 'solid-js/web';
 import { createVirtualizer } from '@tanstack/solid-virtual';
 import { useIsland } from '../context';
-import { refName, type TableResult } from '@/lib/story/dataflow';
+import { refName } from '@/lib/story/dataflow';
 import { aggregateNumber, type NumberAgg } from '@/lib/story/number-aggregation';
 import { numberFormatter } from '@/lib/story/number-format';
 import { barFraction, cellTint, formatCell, gridGeometry, parseColumnSpecs, parseSortSpec, parseTableHeight, resolveColumns, sortRows, type SortSpec } from '@/lib/story/data-table';
@@ -15,6 +15,7 @@ import type { Row } from '@/lib/story/dataflow';
 import { CHART_SLOT_ATTR, CHART_STATE_ATTR, type DrawnChart } from '@/lib/compiled-page/contract';
 import { questionEnvelope } from '@/lib/viz/chart-envelope';
 import type { RefDataMap } from '@/lib/story/ref-data';
+import type { IslandChart, IslandChartModule } from '../contract';
 
 const nameOf = (raw: unknown) => refName(raw) ?? '';
 const rootProps = (props: object) => Object.fromEntries(Object.entries(props).filter(([key]) => key === 'id' || key.startsWith('data-')));
@@ -141,31 +142,29 @@ export function DataTable(props: DataTableProps) {
   </div>;
 }
 
-export interface ChartController { update?(rows: TableResult['rows']): void; dispose(): void }
-export interface ChartModule { mountChart(input: { element: HTMLElement; envelope: unknown; rows: TableResult['rows'] }): ChartController }
-export interface QuestionProps { data: unknown; viz?: Record<string, unknown>; title?: string; height?: number | string; id?: string; drawn?: DrawnChart; chart?: () => Promise<ChartModule>; refData?: RefDataMap; className?: string }
+export interface QuestionProps { data: unknown; viz?: Record<string, unknown>; title?: string; height?: number | string; id?: string; drawn?: DrawnChart; chart?: () => Promise<IslandChartModule>; refData?: RefDataMap; className?: string }
 export function Question(props: QuestionProps) {
   const island = useIsland();
   const name = nameOf(props.data);
   const table = () => island.tableSnapshot(name);
   const [state, setState] = createSignal(props.drawn ? 'ready' : 'pending');
   let slot!: HTMLDivElement;
-  let controller: ChartController | undefined;
+  let controller: IslandChart | undefined;
   let started = false;
+  let disposed = false;
   const load = async () => {
     if (started) return;
     started = true;
     const result = questionEnvelope(props.viz ?? {}, table()?.columns ?? [], props.refData);
     if ('error' in result) { setState('pending'); return; }
-    // TODO(w2-runtime): use ctx.loadChart / lib/islands/chart.ts as the default lazy loader.
-    if (!props.chart) return;
-    const module = await props.chart();
+    const module = await (props.chart ?? island.loadChart)();
+    if (disposed) return;
     controller = module.mountChart({ element: slot, envelope: result, rows: table()?.rows ?? [] });
     setState('live');
   };
   onMount(() => { if (props.drawn?.svg) slot.innerHTML = props.drawn.svg; });
   createEffect(on(table, current => { if (current && props.drawn && current.rows !== undefined && state() === 'ready' && !started) void load(); }, { defer: true }));
-  onCleanup(() => controller?.dispose());
+  onCleanup(() => { disposed = true; controller?.destroy(); });
   return <div {...rootProps(props)} class={`flex h-full w-full flex-col${props.className ? ` ${props.className}` : ''}`} style={{ height: props.height ? typeof props.height === 'number' ? `${props.height}px` : props.height : undefined }} aria-label="Question embed body">
     <Show when={props.title}><div class="border-b border-border px-3 py-2 font-mono text-sm font-medium">{props.title}</div></Show>
     <div class="flex min-h-0 flex-1 flex-col"><div ref={slot} {...{ [CHART_SLOT_ATTR]: props.id ?? '' }} {...{ [CHART_STATE_ATTR]: state() }} onPointerEnter={() => void load()} onClick={() => void load()} /></div>
