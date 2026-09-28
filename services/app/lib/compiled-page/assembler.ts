@@ -31,6 +31,7 @@ import { STORY_ROOT_ID } from '@/lib/story-runtime/contract';
 import { fontPreloadTags } from '@/lib/story/first-screen-fonts';
 import { inlineStoryElement } from '@/lib/story/inline-story-html';
 import { escapeHtml, renderReaderChrome } from '@/lib/story/reader-chrome';
+import { APP_BAR_H } from '@/lib/story/edit-bar';
 import {
   CHART_SLOT_ATTR, CHART_STATE_ATTR, ISLAND_DATA_ID, SIGNED_IN_HINT_ATTR, SPA_IDLE_ATTR, SPECULATION_RULES_HEADER,
   type AssembleHead, type AssembleInput, type AssembleReaderPage, type AssembledPage, type CompilerBuild, type DrawnChart,
@@ -64,6 +65,10 @@ export const assembleReaderPage: AssembleReaderPage = (input: AssembleInput): As
     + prefetch.map((href) => `<link rel="prefetch" href="${escapeHtml(href)}" as="document">`).join('')
     + '<style>:root{--mx-vh:100vh}body{margin:0}</style>'
     + (chrome ? styleTag('data-mx-chrome', STORY_CHROME_CSS) : '')
+    // The page the app adopts (/a/:id): its bar is the top of the page from a phone's width up, so the
+    // story reserves it before first paint and the app's arrival moves nothing. On <body>: the story
+    // root is the body's own child (a rule on the root itself does not hold).
+    + (spa ? styleTag('data-mx-app-reserve', `@media(min-width:640px){body:has(> [data-mx-inline-story]){padding-top:${APP_BAR_H}px}}`) : '')
     + (input.css ? styleTag('data-mx-story-css', input.css) : '')
     + (input.footer?.css ? styleTag('data-mx-footer-css', input.footer.css) : '');
 

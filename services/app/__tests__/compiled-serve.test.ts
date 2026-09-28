@@ -265,7 +265,14 @@ describe('the reader switch at its edges', () => {
     expect(doc.body.getAttribute('data-mx-live-edit')).toMatch(/.+/);
     const page = new JSDOM(await (await app.request(`/a/${id}?reader=compiled`, { headers: { accept: 'text/html' } })).text()).window.document;
     expect(page.body.getAttribute('data-mx-live-id')).toBe(id);
-    expect(page.querySelector('body > script[type="application/json"][id="mx-page-data"]'), 'the app\'s page data rides with the compiled page').toBeTruthy();
+    const data = page.querySelector('body > script[type="application/json"][id="mx-page-data"]');
+    expect(data, 'the app\'s page data rides with the compiled page').toBeTruthy();
+    const payload = JSON.parse(data!.textContent!) as { artifact: { surface: { runtime: { css?: string; data: unknown } } } };
+    expect(payload.artifact.surface.runtime.data, 'the app still gets the version it may edit').toBeTruthy();
+    expect(payload.artifact.surface.runtime.css, 'the sheet rides once, in the head').toBeUndefined();
+    expect(page.head.querySelector('style[data-mx-story-css]')?.textContent).toMatch(/\S/);
+    expect(page.head.querySelector('style[data-mx-app-reserve]')?.textContent, 'the app bar is reserved before first paint').toContain('body:has(> [data-mx-inline-story])');
+    expect(doc.head.querySelector('style[data-mx-app-reserve]'), '/raw has no app to reserve for').toBeNull();
   });
 });
 
