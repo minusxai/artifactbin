@@ -81,8 +81,16 @@ export function Tooltip(props: { open?: boolean; defaultOpen?: boolean; onOpenCh
 }
 export function TooltipProvider(props: { children?: JSX.Element }) { return props.children; }
 export function TooltipTrigger(props: JSX.ButtonHTMLAttributes<HTMLButtonElement>) {
-  const ctx = useContext(TooltipContext)!; let pointerDown = false; let movedOpen = false;
-  return <button ref={el => ctx.setTrigger(el)} aria-describedby={ctx.open() ? ctx.contentId() : undefined} data-state={ctx.state()} data-slot="tooltip-trigger"
+  const ctx = useContext(TooltipContext)!; let pointerDown = false; let movedOpen = false; let button!: HTMLButtonElement;
+  // While hydrating Solid leaves served attributes alone; the content's id and the placement arrive after, so once
+  // live these follow the state as Radix's re-renders do.
+  onMount(() => createEffect(() => {
+    const described = ctx.open() ? ctx.contentId() : null; const placed = ctx.placed();
+    for (const [name, value] of [['aria-describedby', described], ['data-state', ctx.state()], ['data-radix-popper-side', placed?.side], ['data-radix-popper-align', placed?.align]] as const) {
+      if (value) button.setAttribute(name, value); else button.removeAttribute(name);
+    }
+  }));
+  return <button ref={el => { button = el; ctx.setTrigger(el); }} aria-describedby={ctx.open() ? ctx.contentId() : undefined} data-state={ctx.state()} data-slot="tooltip-trigger"
     data-radix-popper-side={ctx.placed()?.side} data-radix-popper-align={ctx.placed()?.align} {...props}
     on:pointermove={e => { if (e.pointerType === 'touch') return; if (!movedOpen) { ctx.enter(); movedOpen = true; } }}
     on:pointerleave={() => { ctx.leave(); movedOpen = false; }}
@@ -103,27 +111,31 @@ export function TooltipContent(props: JSX.HTMLAttributes<HTMLDivElement> & { sid
     document.addEventListener(TOOLTIP_OPEN, onOtherOpen); document.addEventListener('keydown', onKey); window.addEventListener('scroll', onScroll, { capture: true });
     onCleanup(() => { document.removeEventListener(TOOLTIP_OPEN, onOtherOpen); document.removeEventListener('keydown', onKey); window.removeEventListener('scroll', onScroll, { capture: true }); });
   });
-  return <Show when={ctx.open() && !isServer}>{(() => {
-    let wrapper!: HTMLDivElement; let content!: HTMLDivElement; let arrow!: HTMLSpanElement;
-    onMount(() => {
-      const anchor = ctx.trigger(); if (!anchor) return;
-      wrapper.style.zIndex = getComputedStyle(content).zIndex;
-      const stop = placePopper(anchor, wrapper, arrow, { side: local.side ?? 'top', align: local.align ?? 'center', sideOffset: local.sideOffset ?? 6, collisionPadding: 8, arrowWidth: 10, arrowHeight: 5, onPlaced: ctx.setPlaced });
-      onCleanup(() => { stop(); ctx.setPlaced(undefined); });
-    });
-    const side = () => ctx.placed()?.side ?? 'top';
-    return <Portal mount={island.trustedPortal() ?? document.body}><div data-mx-theme-host="">
-      <div ref={wrapper} data-radix-popper-content-wrapper="" style={{ position: 'fixed', left: '0px', top: '0px', transform: 'translate(0, -200%)', 'min-width': 'max-content' }}>
-        <div ref={content} data-side={ctx.placed()?.side} data-align={ctx.placed()?.align} data-state={ctx.state()} role="tooltip" id={ctx.contentId()} data-slot="tooltip-content" data-story-floating="" {...rest}
-          style={{ '--radix-tooltip-content-transform-origin': 'var(--radix-popper-transform-origin)', '--radix-tooltip-content-available-width': 'var(--radix-popper-available-width)', '--radix-tooltip-content-available-height': 'var(--radix-popper-available-height)', '--radix-tooltip-trigger-width': 'var(--radix-popper-anchor-width)', '--radix-tooltip-trigger-height': 'var(--radix-popper-anchor-height)', ...(ctx.placed() ? {} : { animation: 'none' }) }}>
-          {local.children}
-          <span ref={arrow} style={{ position: 'absolute', ...(ctx.placed()?.arrowX !== undefined ? { left: `${ctx.placed()!.arrowX}px` } : {}), ...(ctx.placed()?.arrowY !== undefined ? { top: `${ctx.placed()!.arrowY}px` } : {}), [OPPOSITE[side()]]: '0px', 'transform-origin': ARROW_ORIGIN[side()] || undefined, transform: ARROW_TRANSFORM[side()], ...(ctx.placed()?.hideArrow ? { visibility: 'hidden' } : {}) }}>
-            <svg stroke="var(--color-edge-bright)" stroke-width="1" stroke-linejoin="round" class="z-[100] fill-surface" width="10" height="5" viewBox="0 0 30 10" preserveAspectRatio="none" style="display: block;"><polygon points="0,0 30,0 15,10" /></svg>
-          </span>
-        </div>
+  return <Show when={ctx.open() && !isServer}>
+    <Portal mount={island.trustedPortal() ?? document.body}><TooltipPopper ctx={ctx} side={local.side} align={local.align} sideOffset={local.sideOffset} rest={rest}>{local.children}</TooltipPopper></Portal>
+  </Show>;
+}
+/** The portaled content: placed once ITS OWN elements exist (a portal renders after hydration, so never from the owner's mount). */
+function TooltipPopper(p: { ctx: TooltipState; side?: Side; align?: Align; sideOffset?: number; rest: JSX.HTMLAttributes<HTMLDivElement>; children?: JSX.Element }) {
+  const ctx = p.ctx; let wrapper!: HTMLDivElement; let content!: HTMLDivElement; let arrow!: HTMLSpanElement;
+  onMount(() => {
+    const anchor = ctx.trigger(); if (!anchor) return;
+    wrapper.style.zIndex = getComputedStyle(content).zIndex;
+    const stop = placePopper(anchor, wrapper, arrow, { side: p.side ?? 'top', align: p.align ?? 'center', sideOffset: p.sideOffset ?? 6, collisionPadding: 8, arrowWidth: 10, arrowHeight: 5, onPlaced: ctx.setPlaced });
+    onCleanup(() => { stop(); ctx.setPlaced(undefined); });
+  });
+  const side = () => ctx.placed()?.side ?? 'top';
+  return <div data-mx-theme-host="">
+    <div ref={wrapper} data-radix-popper-content-wrapper="" style={{ position: 'fixed', left: '0px', top: '0px', transform: 'translate(0, -200%)', 'min-width': 'max-content' }}>
+      <div ref={content} data-side={ctx.placed()?.side} data-align={ctx.placed()?.align} data-state={ctx.state()} role="tooltip" id={ctx.contentId()} data-slot="tooltip-content" data-story-floating="" {...p.rest}
+        style={{ '--radix-tooltip-content-transform-origin': 'var(--radix-popper-transform-origin)', '--radix-tooltip-content-available-width': 'var(--radix-popper-available-width)', '--radix-tooltip-content-available-height': 'var(--radix-popper-available-height)', '--radix-tooltip-trigger-width': 'var(--radix-popper-anchor-width)', '--radix-tooltip-trigger-height': 'var(--radix-popper-anchor-height)', ...(ctx.placed() ? {} : { animation: 'none' }) }}>
+        {p.children}
+        <span ref={arrow} style={{ position: 'absolute', ...(ctx.placed()?.arrowX !== undefined ? { left: `${ctx.placed()!.arrowX}px` } : {}), ...(ctx.placed()?.arrowY !== undefined ? { top: `${ctx.placed()!.arrowY}px` } : {}), [OPPOSITE[side()]]: '0px', 'transform-origin': ARROW_ORIGIN[side()] || undefined, transform: ARROW_TRANSFORM[side()], ...(ctx.placed()?.hideArrow ? { visibility: 'hidden' } : {}) }}>
+          <svg stroke="var(--color-edge-bright)" stroke-width="1" stroke-linejoin="round" class="z-[100] fill-surface" width="10" height="5" viewBox="0 0 30 10" preserveAspectRatio="none" style="display: block;"><polygon points="0,0 30,0 15,10" /></svg>
+        </span>
       </div>
-    </div></Portal>;
-  })()}</Show>;
+    </div>
+  </div>;
 }
 export function PopoverAnchor(props: JSX.HTMLAttributes<HTMLDivElement>) { return <div data-slot="popover-anchor" {...props} />; }
 export function PopoverHeader(props: JSX.HTMLAttributes<HTMLDivElement>) { return <div data-slot="popover-header" {...props} />; }
