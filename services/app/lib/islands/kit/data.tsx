@@ -15,7 +15,7 @@
  *    the JSX `attr:style` form, which the compiler turns back into one — re-sets it through the
  *    CSSOM (`width: 100%;`).
  */
-import { createEffect, createMemo, createSignal, For, Match, on, onCleanup, onMount, Show, Switch } from 'solid-js';
+import { createEffect, createMemo, createSignal, For, Match, on, onCleanup, onMount, Show, Switch, untrack } from 'solid-js';
 import { isServer } from 'solid-js/web';
 import { createVirtualizer } from '@tanstack/solid-virtual';
 import { useIsland } from '../context';
@@ -36,6 +36,10 @@ import type { RefDataMap } from '@/lib/story/ref-data';
 import type { IslandChart, IslandChartModule } from '../contract';
 import { DRAWING_CLASS, drawingIsCurrent } from '../chart';
 import { rowsDigest } from '../digest';
+import type { CellScope } from './cells';
+
+/** The editing cells and the cell scope (./cells), loaded with the table that draws them. */
+export { CellControl, cellAttrs, type CellScope } from './cells';
 
 const nameOf = (raw: unknown) => refName(raw) ?? '';
 /** The authored identity today's adapters put on their outer element (StoryRuntimeApp runtimeTargetIdentity): the id and the compiler's `data-*` stamps, never the chart slot marker. */
@@ -108,12 +112,14 @@ export function Select(p: SelectProps) {
 
 
 /**
- * A `<Column>` of the table. The compiler passes `{ col, id, path }` (the column's author id and AST
- * path, which today's header cell carries) beside the parsed `columns`; the interpreter's shape also
- * carries the column's `props` and its cell template `nodes`.
+ * A `<Column>` of the table. The compiler passes `{ col, id, path, ids }` (the column's author id and AST
+ * path, which today's header cell carries, and its content's author ids) beside the parsed `columns`; the
+ * interpreter's shape also carries the column's `props` and its cell template `nodes`.
  */
-interface ColumnTemplate { col: string; id?: string; path?: string; props?: Record<string, unknown>; nodes?: unknown[] }
-interface DataTableProps { data: unknown; columns?: unknown; sort?: unknown; height?: number | string; sticky?: boolean; className?: string; id?: string; rowKey?: string; inGridItem?: boolean; templates?: ColumnTemplate[]; renderCell?: (template: ColumnTemplate, row: Row, index: number) => import('solid-js').JSX.Element; resolveSrc?: (url: string) => string | null; [key: `data-${string}`]: unknown }
+interface ColumnTemplate { col: string; id?: string; path?: string; ids?: string[]; props?: Record<string, unknown>; nodes?: unknown[] }
+/** A column's content, compiled: drawn in each row's cell with the row and where the cell sits (interpreter renderCell). */
+type CellContent = (row: Row, cell: CellScope) => import('solid-js').JSX.Element;
+interface DataTableProps { data: unknown; columns?: unknown; sort?: unknown; height?: number | string; sticky?: boolean; className?: string; id?: string; rowKey?: string; inGridItem?: boolean; templates?: ColumnTemplate[]; cells?: (CellContent | undefined)[]; renderCell?: (template: ColumnTemplate, row: Row, index: number) => import('solid-js').JSX.Element; resolveSrc?: (url: string) => string | null; [key: `data-${string}`]: unknown }
 const STATIC_ROWS = 50;
 const ROW_H = 33;
 function TimestampCell(props: { value: string }) {
@@ -182,6 +188,8 @@ function DataGrid(props: DataTableProps & { table: TableResult }) {
   const resolved = createMemo(() => resolveColumns(spec(), table()?.columns ?? [], shown()));
   const ordered = createMemo(() => remote() ? shown() : sortRows(shown(), sort()));
   const templateOf = (col: string) => props.templates?.find(t => t.col === col);
+  // The first template for a column is its content (components/kit/data-table), in the compiler's order.
+  const contentOf = (col: string) => { const at = props.templates?.findIndex(t => t.col === col) ?? -1; return at < 0 ? undefined : props.cells?.[at]; };
   const readWindow = (offset: number, next: SortSpec | null, replace: boolean) => {
     const base = table(), store = island.store();
     if (!name() || !base || !store) return;
@@ -215,9 +223,12 @@ function DataGrid(props: DataTableProps & { table: TableResult }) {
   // widths are read while the served table's auto layout is still on screen.
   onMount(() => { if (scroll?.clientHeight) { setMeasured([...scroll.querySelectorAll('thead th')].map(th => th.getBoundingClientRect().width)); setVirtual(true); } });
   const onScroll = () => { if (!scroll || !remote() || loading()) return; if (scroll.scrollTop + scroll.clientHeight >= scroll.scrollHeight - ROW_H * 6 && askedAt !== shown().length) { askedAt = shown().length; readWindow(shown().length, sort(), false); } };
-  const cell = (value: unknown, column: ReturnType<typeof resolved>[number], row: Row, index: number) => {
+  const cell = (value: unknown, column: ReturnType<typeof resolved>[number], row: Row, index: () => number) => {
     const template = templateOf(column.col);
-    if (template?.nodes?.length && props.renderCell) return props.renderCell(template, row, index);
+    const content = contentOf(column.col);
+    // The row's position scopes only a row without a stable key: a sort never redraws a cell (or loses its focus).
+    if (template && content) return content(row, { owner: owner ?? '', table: String(props['data-mx-ast'] ?? ''), data: name(), key: row[String(props.rowKey)], durable: true, index: untrack(index), column: template.col, ids: template.ids ?? [] });
+    if (template?.nodes?.length && props.renderCell) return props.renderCell(template, row, untrack(index));
     if (column.kind === 'image' && typeof value === 'string' && /^https?:\/\//i.test(value)) { const src = props.resolveSrc?.(value); if (src) return <img src={src} alt="" loading="lazy" class="inline-block max-h-8 w-auto align-middle" />; }
     if (column.type === 'user' && typeof value === 'string') return <UserCell id={value} card={island.people()[value]} />;
     if (column.type === 'timestamp' && typeof value === 'string') return <TimestampCell value={value} />;
@@ -238,7 +249,7 @@ function DataGrid(props: DataTableProps & { table: TableResult }) {
             const index = () => at()?.index ?? 0;
             let el!: HTMLTableRowElement;
             createEffect(() => { if (virtual() && at()) virtualizer.measureElement(el); });
-            return <tr ref={el} {...rowMeta(row)} data-index={index()} class="border-b border-border/50 transition-colors hover:bg-muted/30" {...attr('style', at()?.start == null ? undefined : css({ ...rowGrid(), position: 'absolute', top: '0px', left: '0px', transform: `translateY(${at()!.start}px)` }))}><For each={resolved()}>{column => { const value = row[column.col]; const bar = barFraction(value, column); const tint = cellTint(value, column); return <td {...rowMeta(row, column.col)} class={`relative whitespace-nowrap px-3 py-1.5 align-middle${column.type === 'number' ? ' tabular-nums' : ''}`} style={css({ 'text-align': column.align, width: column.width ? `${column.width}px` : undefined, background: tint ?? undefined })}><Show when={bar !== null}><span data-bar="" aria-hidden="true" class="pointer-events-none absolute inset-y-1 left-1 rounded-sm opacity-25" style={css({ width: `${Math.round((bar ?? 0) * 100)}%`, background: typeof column.bar === 'object' && column.bar.color ? column.bar.color : 'var(--chart-1)' })} /></Show><span class="relative">{cell(value, column, row, index())}</span></td>; }}</For></tr>;
+            return <tr ref={el} {...rowMeta(row)} data-index={index()} class="border-b border-border/50 transition-colors hover:bg-muted/30" {...attr('style', at()?.start == null ? undefined : css({ ...rowGrid(), position: 'absolute', top: '0px', left: '0px', transform: `translateY(${at()!.start}px)` }))}><For each={resolved()}>{column => { const value = row[column.col]; const bar = barFraction(value, column); const tint = cellTint(value, column); return <td {...rowMeta(row, column.col)} class={`relative whitespace-nowrap px-3 py-1.5 align-middle${column.type === 'number' ? ' tabular-nums' : ''}`} style={css({ 'text-align': column.align, width: column.width ? `${column.width}px` : undefined, background: tint ?? undefined })}><Show when={bar !== null}><span data-bar="" aria-hidden="true" class="pointer-events-none absolute inset-y-1 left-1 rounded-sm opacity-25" style={css({ width: `${Math.round((bar ?? 0) * 100)}%`, background: typeof column.bar === 'object' && column.bar.color ? column.bar.color : 'var(--chart-1)' })} /></Show><span class="relative">{cell(value, column, row, index)}</span></td>; }}</For></tr>;
           }}</For>
         </Show></tbody>
       </table>

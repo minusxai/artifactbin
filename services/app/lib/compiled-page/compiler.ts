@@ -33,6 +33,8 @@ import { STORY_UI_COMPONENTS } from '@/lib/story-ui/registry';
 import { STORY_SVG_TAGS } from '@/lib/story-ui/component-names';
 import { gridCols, gridRowHeight, gridItemRect, gridRows } from '@/lib/story-ui/grid-layout';
 import { IconGlyphProvider } from '@/components/kit/icon';
+import { shellRest } from '@/components/kit/controls';
+import { parseRowRef } from '@/lib/story/row-scope';
 import { isReactiveExpression } from '@/lib/jsx/reactive';
 import type { JsxElement, JsxNode } from '@/lib/jsx';
 import { REF_ATTRS, carriesRef, refName, type Scalar } from '@/lib/story/dataflow';
@@ -132,6 +134,20 @@ const PARTIAL: ReadonlySet<string> = new Set<string>([]);
 const INERT: ReadonlySet<string> = new Set(['Helmet', 'Value', 'Query', 'Import', 'Mutation', 'Column']);
 /** Registered components with behaviour: always an island root when ported (and the partial ones, which the browser would run). */
 const ISLAND_TAGS: ReadonlySet<string> = new Set([...Object.keys(KIT).filter((tag) => KIT[tag]!.island), ...PARTIAL]);
+/**
+ * The editing cell's pieces (lib/islands/kit/cells, re-exported by `@mx/kit/data`), imported by name like a kit
+ * tag: the control, and the cell scope's attribute resolver every element in a column's content uses.
+ */
+const CELL_EXPORTS: ReadonlySet<string> = new Set(['CellControl', 'cellAttrs']);
+/** The tags today's editing cell draws (StoryRuntimeApp RuntimeCellControl); another tag with `run` in a cell draws nothing. */
+const CELL_CONTROLS: ReadonlySet<string> = new Set(['Select', 'DatePicker', 'input', 'textarea', 'select']);
+/** Today's native editing cell's classes (RuntimeCellControl), before the author's. */
+const NATIVE_CELL = 'w-full min-w-0 rounded-md border border-transparent bg-transparent px-2 py-1 text-sm outline-none transition-colors hover:border-border focus:border-ring focus:ring-2 focus:ring-ring/20 disabled:opacity-50';
+/** What the editing cell reads of its authored props at run time (the rest are its element's attributes). */
+const CELL_API = ['value', 'label', 'aria-label', 'placeholder', 'options', 'multiple', 'allowCreate', 'valueFormat', 'nullable', 'exclude', 'min', 'max', 'type', 'args', 'disabled'];
+/** A column's content that draws something (components/kit/data-table: whitespace alone is no template). */
+const hasContent = (nodes: JsxNode[]): boolean => nodes.some((n) => n.type !== 'text' || !!n.value.trim());
+
 /** The deck's framework-free behaviour chunk, by its manifest specifier. */
 const DECK_BEHAVIOR = '@mx/deck';
 
@@ -218,6 +234,8 @@ interface Ctx {
   scope?: string;
   svg?: boolean;
   grid?: { cols: number; flow: boolean };
+  /** Inside a DataTable column's content: `scope` names the row's CellScope, and attributes resolve through `cellAttrs`. */
+  cell?: boolean;
   /** The deck rail's thumbnail decoration. */
   preview?: Decorate;
   /** The island being emitted, for its kit accounting. */
@@ -324,6 +342,13 @@ export function generate(input: GenerateInput): Generated {
     const children = (inner: Ctx = ctx): string => node.children.map((c, i) => emit(c, `${path}.${i}`, mode, inner)).join('');
     if (node.tag === 'For') return emitFor(node, path, ctx);
     if (node.tag === 'Grid' || node.tag === 'GridItem') return emitGrid(node, path, mode, ctx);
+    // A control with `run` in a column's content is an editing cell (interpreter renderNode → cellControl).
+    const run = node.attributes.find((a) => a.name === 'run');
+    if (ctx.cell && node.tag !== 'Button' && run?.value.static && typeof run.value.json === 'string' && refName(run.value.json)) {
+      const cellTag = node.isComponent ? node.tag : node.tag.toLowerCase();
+      if (CELL_CONTROLS.has(cellTag)) return emitCellControl(node, cellTag, path, mode, ctx);
+      if (!node.isComponent) return '';
+    }
     if (ctx.preview && PREVIEW_EMBEDS[node.tag]) return `<div${attrsJsx(domAttrs('div', { style: PREVIEW_STYLE }))}>{${lit(PREVIEW_EMBEDS[node.tag])}}</div>`;
     if (node.isComponent) {
       const meta = KIT[node.tag];
@@ -342,11 +367,17 @@ export function generate(input: GenerateInput): Generated {
       // The runtime registry hands Mermaid the document's colour mode (StoryRuntimeApp RUNTIME_REGISTRY).
       if (node.tag === 'Mermaid') props.colorMode = input.colorMode ?? 'light';
       // <Column> children ARE the column spec (interpreter DataTable templates → parseColumnSpecs(templates.map(t => t.props))).
+      let cellsJsx = '';
       if (node.tag === 'DataTable') {
-        const cols = node.children.flatMap((c, i) => (isElement(c) && c.tag === 'Column' ? [rawBuildProps(c.attributes, true, 'Column', `${path}.${i}`, undefined, {})] : []));
+        const columns = node.children.flatMap((c, i) => (isElement(c) && c.tag === 'Column' ? [[c, i] as const] : []));
+        const cols = columns.map(([c, i]) => rawBuildProps(c.attributes, true, 'Column', `${path}.${i}`, undefined, {}));
         if (cols.length) {
           props.columns = cols.map(({ [AST]: _ast, ...rest }) => rest);
-          props.templates = cols.map((c) => ({ col: c.col, id: typeof c.id === 'string' ? c.id : undefined, path: c[AST] }));
+          props.templates = cols.map((c, k) => {
+            const ids = [...templateIds(columns[k]![0].children)];
+            return { col: c.col, id: typeof c.id === 'string' ? c.id : undefined, path: c[AST], ...(ids.length ? { ids } : {}) };
+          });
+          cellsJsx = emitCells(columns, path, ctx);
         }
       }
       if (node.tag === 'Files') props.glyphs = input.glyphs ?? {};
@@ -380,8 +411,8 @@ export function generate(input: GenerateInput): Generated {
       const tag = safeTag(node.tag);
       // A row action writes with its row (interpreter rowAction → StoryRuntimeApp RuntimeRowAction).
       const rowJsx = node.tag === 'Button' && (api.run !== undefined || api.set !== undefined) ? ` row={${ctx.row}} rowScope={${ctx.scope}}` : '';
-      if (ctx.row) return `<${tag}${apiJsx}${rowJsx}${clsJsx} {...rt.rowAttrs(${json(Object.fromEntries(attrs))}, ${ctx.row}, ${ctx.scope})}>${children()}</${tag}>`;
-      return `<${tag}${apiJsx}${clsJsx}${attrsJsx(attrs)}>${meta.noChildren ? '' : children()}</${tag}>`;
+      if (ctx.row) return `<${tag}${apiJsx}${rowJsx}${clsJsx} {...${rowAttrsFn(mode, ctx)}(${json(Object.fromEntries(attrs))}, ${ctx.row}, ${ctx.scope})}>${children()}</${tag}>`;
+      return `<${tag}${apiJsx}${cellsJsx}${clsJsx}${attrsJsx(attrs)}>${meta.noChildren ? '' : children()}</${tag}>`;
     }
     const lower = node.tag.toLowerCase();
     const tag = safeTag(SVG_TAG_CASE[lower] ?? lower);
@@ -400,9 +431,60 @@ export function generate(input: GenerateInput): Generated {
     if (ctx.preview) props = (ctx.preview(createElement(tag, props), node, path) as ReactElement<Props>).props;
     const inner = lower === 'svg' ? { ...ctx, svg: true } : ctx;
     const attrs = domAttrs(tag, props);
-    const open = ctx.row ? `<${tag} {...rt.rowAttrs(${json(Object.fromEntries(attrs))}, ${ctx.row}, ${ctx.scope})}>` : `<${tag}${attrsJsx(attrs)}>`;
+    const open = ctx.row ? `<${tag} {...${rowAttrsFn(mode, ctx)}(${json(Object.fromEntries(attrs))}, ${ctx.row}, ${ctx.scope})}>` : `<${tag}${attrsJsx(attrs)}>`;
     if (VOID.test(lower)) return open.replace(/>$/, ' />');
     return `${open}${children(inner)}</${tag}>`;
+  }
+
+  /** An element's attributes in a row: a `<For>` row's through rt, a table cell's through the cell scope. */
+  function rowAttrsFn(mode: Mode, ctx: Ctx): string {
+    if (!ctx.cell) return 'rt.rowAttrs';
+    useKit('cellAttrs', mode, ctx);
+    return 'cellAttrs';
+  }
+
+  /**
+   * A DataTable's column content (interpreter DataTable renderCell): one function per `<Column>`, aligned with
+   * `templates`, a hole where the column draws nothing; each renders the content for one row and its CellScope.
+   */
+  function emitCells(columns: ReadonlyArray<readonly [JsxElement, number]>, path: string, ctx: Ctx): string {
+    const fns = columns.map(([column, i]) => {
+      if (!hasContent(column.children)) return 'undefined';
+      const cpath = `${path}.${i}`;
+      const suffix = cpath.replace(/\./g, '_');
+      const inner: Ctx = { row: `row${suffix}`, scope: `cell${suffix}`, cell: true, svg: false, island: ctx.island };
+      return `(${inner.row}, ${inner.scope}) => <>${column.children.map((c, k) => emit(c, `${cpath}.${k}`, 'island', inner)).join('')}</>`;
+    });
+    return fns.some((f) => f !== 'undefined') ? ` cells={[${fns.join(', ')}]}` : '';
+  }
+
+  /**
+   * Today's editing cell (StoryRuntimeApp RuntimeCellControl). What differs per row — the row's values, the
+   * scope, the draft, the write check — is resolved by `CellControl`; everything authored is decided here, as
+   * today's React renders it: the element's attributes serialised by React's server renderer, and its class
+   * merged by the kit's merger (order included).
+   */
+  function emitCellControl(node: JsxElement, tag: string, path: string, mode: Mode, ctx: Ctx): string {
+    useKit('CellControl', mode, ctx);
+    const props = rawBuildProps(node.attributes, node.isComponent, node.tag, path, undefined, {});
+    // In a row the interpreter keeps a field's controlled name (rawBuildProps with a row): undo the static rename.
+    if ('defaultValue' in props) { props.value = props.defaultValue; delete props.defaultValue; }
+    const { run, value: _value, 'aria-label': _label, disabled: _disabled, exclude: _exclude, className, ...rest } = props;
+    const valueAttr = node.attributes.find((a) => a.name === 'value');
+    const field = valueAttr?.value.static ? parseRowRef(valueAttr.value.json) : null;
+    const api = Object.fromEntries(CELL_API.filter((k) => props[k] !== undefined).map((k) => [k, props[k]]));
+    const author = typeof className === 'string' ? className : undefined;
+    let attrs: Attr[];
+    let cls: string;
+    if (tag === 'Select' || tag === 'DatePicker') {
+      attrs = domAttrs('div', shellRest(rest));
+      cls = cn('mx-control relative inline-flex flex-col gap-1.5 align-top', cn('flex w-full min-w-0', author));
+    } else {
+      attrs = domAttrs(tag, rest);
+      cls = cn(NATIVE_CELL, tag === 'textarea' ? 'min-h-8 resize-y' : 'h-8', props.type === 'number' && 'text-right tabular-nums', author);
+    }
+    const children = node.children.map((c, i) => emit(c, `${path}.${i}`, mode, ctx)).join('');
+    return `<CellControl tag={${lit(tag)}} run={${lit(refName(run))}}${field ? ` field={${lit(field)}}` : ''} p={${json(api)}} attrs={${json(Object.fromEntries(attrs.filter(([n]) => n !== 'class')))}} cls={${lit(cls)}} path={${lit(path)}} row={${ctx.row}} cell={${ctx.scope}}>${children}</CellControl>`;
   }
 
   /** Grid/GridItem are compile-time macros: layout arithmetic done here, plain HTML out (components/kit/grid). */
@@ -474,7 +556,7 @@ export function generate(input: GenerateInput): Generated {
 
   const kitImports = (set: Set<string>): string => {
     const byMod: Record<string, string[]> = {};
-    for (const tag of set) (byMod[tag === 'BoundNative' ? 'controls' : KIT[tag]!.mod] ??= []).push(tag);
+    for (const tag of set) (byMod[tag === 'BoundNative' ? 'controls' : CELL_EXPORTS.has(tag) ? 'data' : KIT[tag]!.mod] ??= []).push(tag);
     return Object.entries(byMod).sort(([a], [b]) => a.localeCompare(b)).map(([mod, tags]) => `import { ${tags.sort().map(safeProp).join(', ')} } from ${lit(`@mx/kit/${safeTag(mod)}`)};\n`).join('');
   };
   const dataConsts = data.map((text, i) => `const $d${i} = JSON.parse(${lit(text)});\n`).join('');
