@@ -25,19 +25,19 @@ visibility: unlisted
   <Value name="status" type="string" default="Done" />
   <Value name="expected_status" type="string" default="Todo" />
   <Value name="scratch" type="table" value={[{"id":1,"value":"initial"}]} />
-  <Query name="tasks_list">{`select *, '' as action from tasks.rows order by id`}</Query>
-  <Query name="scratch_list">{`select * from scratch`}</Query>
-  <Mutation name="change_status" expectedAffected={1}>{`update tasks.rows set status = $status where id = $task_id and status = $expected_status`}</Mutation>
-  <Mutation name="bulk_status">{`update tasks.rows set status = $status where status = $expected_status`}</Mutation>
-  <Mutation name="zero_match">{`update tasks.rows set status = $status where id = $task_id`}</Mutation>
-  <Mutation name="row_complete" expectedAffected={1}>{`update tasks.rows set status = 'Done' where id = $_row.id`}</Mutation>
-  <Mutation name="local_edit">{`update scratch set value = 'changed'`}</Mutation>
-  <Mutation name="repairable" expectedAffected={1}>{`update tasks.rows set status = $status where id = $task_id`}</Mutation>
-  <Notify name="task_status" on="change_status">{`select assignee as "to", 'Task ' || title || ' is now ' || status as message from tasks.rows where id = $task_id`}</Notify>
-  <Notify name="bulk_summary" on="bulk_status">{`select assignee as "to", cast(count(*) as text) || ' tasks are now ' || status as message from tasks.rows where status = $status group by assignee, status`}</Notify>
-  <Notify name="zero_notice" on="zero_match">{`select assignee as "to", title as message from tasks.rows where id = $task_id`}</Notify>
+  <Query name="tasks_list">{\`select *, '' as action from tasks.rows order by id\`}</Query>
+  <Query name="scratch_list">{\`select * from scratch\`}</Query>
+  <Mutation name="change_status" expectedAffected={1}>{\`update tasks.rows set status = $status where id = $task_id and status = $expected_status\`}</Mutation>
+  <Mutation name="bulk_status">{\`update tasks.rows set status = $status where status = $expected_status\`}</Mutation>
+  <Mutation name="zero_match">{\`update tasks.rows set status = $status where id = $task_id\`}</Mutation>
+  <Mutation name="row_complete" expectedAffected={1}>{\`update tasks.rows set status = 'Done' where id = $_row.id\`}</Mutation>
+  <Mutation name="local_edit">{\`update scratch set value = 'changed'\`}</Mutation>
+  <Mutation name="repairable" expectedAffected={1}>{\`update tasks.rows set status = $status where id = $task_id\`}</Mutation>
+  <Notify name="task_status" on="change_status">{\`select assignee as "to", 'Task ' || title || ' is now ' || status as message from tasks.rows where id = $task_id\`}</Notify>
+  <Notify name="bulk_summary" on="bulk_status">{\`select assignee as "to", cast(count(*) as text) || ' tasks are now ' || status as message from tasks.rows where status = $status group by assignee, status\`}</Notify>
+  <Notify name="zero_notice" on="zero_match">{\`select assignee as "to", title as message from tasks.rows where id = $task_id\`}</Notify>
   {/* status='' makes this job fail; repair the current row then retry the job. */}
-  <Notify name="repairable_notice" on="repairable">{`select assignee as "to", status as message from tasks.rows where id = $task_id`}</Notify>
+  <Notify name="repairable_notice" on="repairable">{\`select assignee as "to", status as message from tasks.rows where id = $task_id\`}</Notify>
 </Helmet>
 <div className="mx-auto max-w-5xl px-6 py-10">
   <h1 className="text-3xl font-semibold">Mutation notifications</h1>
