@@ -12,6 +12,8 @@ export interface ArtifactMember {
   direction: MembershipDirection;
   initiated_by: string;
   joined_at: string | null;
+  /** Artifact-specific consent, distinct from automatic invitation acceptance. */
+  explicit_join: boolean;
 }
 export interface MembershipInput {
   action: MembershipAction;

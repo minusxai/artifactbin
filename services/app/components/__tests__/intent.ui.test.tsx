@@ -166,7 +166,7 @@ describe('membership in the reader breadcrumb',()=>{
  it('joins once on return from login and shows the acknowledged state',async()=>{
   let joined=false;
   const state={members:[],pending:[],self:null,canManage:true,canInvite:true};
-  vi.stubGlobal('fetch',vi.fn(async(_url:string,options?:RequestInit)=>{if(options?.method==='POST')joined=true;return new Response(JSON.stringify(joined?{...state,self:{status:'accepted',direction:'request'}}:state));}));
+  vi.stubGlobal('fetch',vi.fn(async(_url:string,options?:RequestInit)=>{if(options?.method==='POST')joined=true;return new Response(JSON.stringify(joined?{...state,self:{status:'accepted',direction:'request',explicit_join:true}}:state));}));
   at('/a/story1?intent=join',{dataflow:mutationFlow,accountSession:true});
   await waitFor(()=>expect(fetch).toHaveBeenCalledWith('/api/my/artifacts/story1/members',expect.objectContaining({method:'POST',body:JSON.stringify({action:'join'})})));
   expect(window.location.search).toBe('');

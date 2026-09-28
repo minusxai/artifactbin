@@ -1,6 +1,7 @@
 import {createCipheriv,createDecipheriv,createHash,randomBytes} from 'node:crypto';
 import {AUTH_SECRET} from '@/lib/config';
-import {getDb,type Queryable} from '@/lib/db';
+import {getDb} from '@/lib/db';
+import type {Queryable} from '@artifactbin/contracts';
 import {getArtifactFor,type TokenActor} from '@/lib/artifacts';
 import type {DatasetConnection,PostgresConfig} from './types';
 import {DatasetError} from './errors';
