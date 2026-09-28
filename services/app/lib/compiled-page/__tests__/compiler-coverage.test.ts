@@ -10,7 +10,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import { JSDOM } from 'jsdom';
-import { compilePage, generate } from '../compiler';
+import { compilePage, declaredValues, generate } from '../compiler';
 import { loadCompilerBuild } from '../build.server';
 import type { CompileInput } from '../contract';
 import { shapeOf, diffShapes } from '@/lib/islands/__tests__/kit-parity';
@@ -25,6 +25,7 @@ import { renderStoryNodes } from '@/lib/story-ui/interpreter';
 import { IconGlyphProvider } from '@/components/kit/icon';
 import { createElement, Fragment } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
+import { COMPILED_PARITY_FIXTURES } from '../../../../../scripts/fixtures/compiled-parity/index.mjs';
 
 async function compiledFlow(declared: Dataflow, body: JsxNode[]) {
   const result = compileDataflow(declared, await prepareCompile(declared, async () => null), body);
@@ -45,9 +46,10 @@ const todays = (input: CompileInput, values: Record<string, unknown>): string =>
   renderToStaticMarkup(createElement(IconGlyphProvider, { value: input.glyphs ?? {} }, createElement(Fragment, null, renderStoryNodes(input.nodes, { values, components: STORY_UI_COMPONENTS }))))
     .replace(/<link rel="preload"[^>]*>/g, '').replace(/<!-- -->/g, '');
 /** The compiled column's children against today's render of the same version at the same values. */
-const columnParity = (html: string, input: CompileInput, values: Record<string, unknown> = {}): string[] => {
+const columnParity = (html: string, input: CompileInput, values: Record<string, unknown> = {}, drop: string[] = []): string[] => {
   const column = dom(html).querySelector('.mx-doc')!;
   const react = new JSDOM(`<div>${todays(input, values)}</div>`).window.document.body.firstElementChild!;
+  for (const root of [column, react]) for (const id of drop) root.querySelector(`#${id}`)?.remove();
   return diffShapes(shapeOf(react), shapeOf(column));
 };
 
@@ -165,6 +167,21 @@ describe('a wrapper is today\'s render around its compiled children', () => {
     expect(cell.getAttribute('data-slot')).toBe('table-cell');
     expect(cell.querySelector('[data-hk]')).toBeTruthy();
   });
+});
+
+describe('the compiled-parity gate\'s wrapper fixtures', () => {
+  const ROWS = [{ k: 'a', n: 1, on: true }, { k: 'b', n: 2, on: false }, { k: 'c', n: 3, on: true }];
+  for (const fixture of COMPILED_PARITY_FIXTURES as Array<{ key: string; markup: string; template: string | null }>) {
+    it(`${fixture.key}: compiles whole, and its column is today's render at the declared values`, async () => {
+      const input = await inputOf(fixture.markup, fixture.template);
+      const page = await compilePage(input, loadCompilerBuild());
+      expect(page.unported).toEqual([]);
+      expect(page.islands.length).toBeGreaterThan(0);
+      // The live controls are the kit's (their parity with today's live reader is the kit tests' and the gate's); the
+      // reference here is the static interpreter, which draws their disabled faces.
+      expect(columnParity(page.html, input, { ...declaredValues(input.flow), rows: ROWS }, ['dk5', 'tb17'])).toEqual([]);
+    });
+  }
 });
 
 describe('an unregistered legacy tag', () => {
