@@ -10,6 +10,9 @@
  *     build        sha256(manifest text + the island sources)[0..16] — the compiler build id's input
  *
  * One graph, so there is exactly one Solid: every chunk that needs it imports the same shared chunk.
+ * Solid has no entry of its own: generated island code imports only `@mx/rt` (babel-preset-solid's
+ * `moduleName`), which re-exports the DOM helpers it uses. esbuild shares code between entries a FILE at
+ * a time, so an `export * from "solid-js"` entry would put all of Solid in every page's closure.
  * Names are `<name>-<sha256 of the bytes, 16 hex>.js`, so a changed chunk is a new URL and every URL
  * can be cached `immutable`. Build artifact, gitignored; produced by `npm run build` (the app's
  * `build`, before Vite) and by the test global setup (`--cache`).
@@ -54,9 +57,6 @@ const islandModule = (base) => {
 
 /** Every specifier a compiled page may import, with its chunk's name and its source. */
 const ENTRIES = [
-  { specifier: 'solid-js', name: 'solid', source: 'export * from "solid-js";' },
-  { specifier: 'solid-js/web', name: 'web', source: 'export * from "solid-js/web";' },
-  { specifier: 'solid-js/store', name: 'store', source: 'export * from "solid-js/store";' },
   { specifier: '@mx/rt', name: 'rt', file: () => islandModule('rt') },
   { specifier: '@mx/boot', name: 'boot', file: () => islandModule('boot') },
   { specifier: '@mx/deck', name: 'deck', file: () => islandModule('deck') },
@@ -65,7 +65,7 @@ const ENTRIES = [
 export const ISLAND_SPECIFIERS = Object.freeze(ENTRIES.map((e) => e.specifier));
 
 /**
- * esbuild plugin: the page entries, the `@mx/*` modules, and Solid's JSX transform over
+ * esbuild plugin: the `@mx/*` modules and Solid's JSX transform over
  * lib/islands `.tsx`/`.jsx` (TypeScript stripped by esbuild first, JSX kept for Babel). A React file
  * reached from an island would be compiled as React; `buildIslands` refuses a graph containing React.
  */
@@ -73,8 +73,6 @@ export function solidPlugin({ generate = 'dom', hydratable = true } = {}) {
   return {
     name: 'mx-solid',
     setup(build) {
-      build.onResolve({ filter: /^mx-entry:/ }, (args) => ({ path: args.path.slice('mx-entry:'.length), namespace: 'mx-entry' }));
-      build.onLoad({ filter: /.*/, namespace: 'mx-entry' }, (args) => ({ contents: ENTRIES.find((e) => e.specifier === args.path).source, loader: 'js', resolveDir: ISLANDS_SRC }));
       build.onResolve({ filter: /^@mx\/(rt|boot|deck|kit\/[a-z-]+)$/ }, (args) => {
         const entry = ENTRIES.find((e) => e.specifier === args.path);
         if (!entry) return { errors: [{ text: `build-islands: unknown island specifier ${args.path}` }] };
@@ -122,7 +120,7 @@ export function closureOf(files, urls) {
  * the same sources give the same build id, manifest and bytes whatever `outDir` is.
  */
 export async function buildIslands({ outDir = DEFAULT_OUT_DIR } = {}) {
-  const entryPoints = ENTRIES.map((e) => ({ in: e.file ? e.file() : `mx-entry:${e.specifier}`, out: e.name }));
+  const entryPoints = ENTRIES.map((e) => ({ in: e.file(), out: e.name }));
   const result = await esbuild.build({
     absWorkingDir: ROOT,
     entryPoints,
@@ -177,7 +175,7 @@ export async function buildIslands({ outDir = DEFAULT_OUT_DIR } = {}) {
       ...sizes(bytes),
       imports: meta.imports.filter((i) => i.kind === 'import-statement').map((i) => url(byOldName.get(path.basename(i.path)).newName)),
     };
-    const entry = meta.entryPoint && ENTRIES.find((e) => meta.entryPoint === (e.file ? toPosix(path.relative(ROOT, e.file())) : `mx-entry:${e.specifier}`));
+    const entry = meta.entryPoint && ENTRIES.find((e) => meta.entryPoint === toPosix(path.relative(ROOT, e.file())));
     if (entry) manifest[entry.specifier] = url(newName);
   }
   const missing = ISLAND_SPECIFIERS.filter((s) => !manifest[s]);
@@ -236,7 +234,7 @@ async function main(argv) {
   const { build, manifest, files, closure, inputs } = await buildIslands({ outDir });
   console.log(describePrecompression(`build-islands ${ISLANDS_PATH}`, await precompressTree(outDir)));
   const br = (urls) => closure(urls).reduce((n, u) => n + files[u].br, 0);
-  console.log(`build-islands: build ${build}, ${Object.keys(files).length} chunks; solid+web+store ${br([manifest['solid-js'], manifest['solid-js/web'], manifest['solid-js/store']])} B br, rt+boot ${br([manifest['@mx/rt'], manifest['@mx/boot']])} B br`);
+  console.log(`build-islands: build ${build}, ${Object.keys(files).length} chunks; rt+boot ${br([manifest['@mx/rt'], manifest['@mx/boot']])} B br`);
   fs.mkdirSync(path.dirname(CACHE_MARKER), { recursive: true });
   fs.writeFileSync(CACHE_MARKER, JSON.stringify({ outDir, toolHash: toolHash(), sources: sourceHashes(trackedSources(inputs)) }, null, 1) + '\n');
 }

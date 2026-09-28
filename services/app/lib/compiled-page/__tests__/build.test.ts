@@ -10,7 +10,7 @@ describe('loadCompilerBuild', () => {
     expect(existsSync(path.resolve(process.cwd(), ISLANDS_MANIFEST_PATH))).toBe(true);
     const build = loadCompilerBuild();
     expect(build.id).toMatch(/^[0-9a-f]{16}$/);
-    for (const specifier of ['solid-js', 'solid-js/web', 'solid-js/store', '@mx/rt', '@mx/boot', '@mx/kit/tabs']) expect(build.manifest[specifier], specifier).toMatch(/^\/islands\//);
+    for (const specifier of ['@mx/rt', '@mx/boot', '@mx/kit/tabs']) expect(build.manifest[specifier], specifier).toMatch(/^\/islands\//);
   });
   it('is read once per process in production and re-read in development', () => {
     expect(loadCompilerBuild()).toBe(loadCompilerBuild());
