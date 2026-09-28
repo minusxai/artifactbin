@@ -162,6 +162,7 @@ function islandData(input: AssembleInput): IslandPageData {
     values: overlay.values,
     results: input.snapshot?.results ?? null,
     ...(overlay.doors ?? {}),
+    ...(overlay.managedAssets ? { managedAssets: overlay.managedAssets } : {}),
     signedIn: overlay.signedIn,
     mermaidImages: overlay.mermaidImages,
     readOnly: overlay.readOnly ?? null,

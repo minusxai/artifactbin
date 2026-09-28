@@ -194,6 +194,12 @@ export interface IslandPageData {
   mutateUrl?: string;
   viewerUrl?: string;
   assetsUrl?: string;
+  /**
+   * The managed `<Iframe>`'s asset door (lib/story-runtime/managed-assets ManagedAssetsConfig): the
+   * deployment's asset origin and this page's absolute import door (with a capture's verified export key),
+   * exactly as today's island carries it. Absent without an asset origin; a frame then refuses external assets.
+   */
+  managedAssets?: { origin: string; resolveUrl: string };
   /** The non-secret "signed in" hint: viewer-dependent islands show a neutral placeholder rather than guest content. */
   signedIn: boolean;
   mermaidImages: Readonly<Record<string, StoredMermaidImage>>;

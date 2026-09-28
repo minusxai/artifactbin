@@ -296,6 +296,8 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
       // A cohost HTTPS proxy can otherwise stamp https onto an HTTP backend,
       // breaking scoped asset imports and the capture's CSP before rendering.
       const base = byExportKey && !chrome ? new URL(request.url).origin : baseUrl(request);
+      // The managed <Iframe>'s asset door, one rule for both renderers: a capture's verified key rides in it.
+      const managedAssets = ASSETS_ORIGIN ? { origin: ASSETS_ORIGIN, resolveUrl: `${base}${assetsPath(artifact.id)}${byExportKey ? `?key=${encodeURIComponent(key!)}` : ''}` } : null;
       /*
        * ?edit=1 — the OWNER's copy. In-place editing is the runtime, and a
        * document of pure prose ships none; asking for it here means pressing
@@ -346,6 +348,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
             viewerUrl: VIEWER_OVERLAY_PATH(artifact.id),
             assetsUrl: assetsPath(artifact.id),
           },
+          managedAssets,
           ...(at ? { readOnly: archivedReadOnly(at.version) } : {}),
           live: chrome && !at ? { id: artifact.id, editId: artifact.edit_id } : null,
           chrome: null,
@@ -584,7 +587,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
         queryUrl: queryPath(artifact.id),
         resolveUrl: `${base}${resolvePath(artifact.id)}`,
         libraryOrigin: base,
-        ...(ASSETS_ORIGIN ? { managedAssets: { origin: ASSETS_ORIGIN, resolveUrl: `${base}${assetsPath(artifact.id)}${byExportKey ? `?key=${encodeURIComponent(key!)}` : ''}` } } : {}),
+        ...(managedAssets ? { managedAssets } : {}),
         /*
          * …and where it imports an image URL only its reader can compute (a
          * bound <img src="$pick">). Unconditional, unlike mutateUrl: a source
