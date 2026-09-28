@@ -24,6 +24,7 @@ import { hydrate, insert as solidInsert, isServer } from 'solid-js/web';
 import type { ReactiveExpression } from '@/lib/jsx/reactive';
 import { evaluateReactive } from '@/lib/jsx/reactive-eval';
 import { substituteRow } from '@/lib/story/row-scope';
+import { keyedRowsError } from '@/lib/story/row-key';
 import type { CompiledDataflow } from '@/lib/story/compiled-dataflow';
 import type { DataflowState, Row, Scalar, TableResult } from '@/lib/story/dataflow';
 import { ACCESS_PENDING, type DataflowStore } from '@/lib/story-runtime/store';
@@ -65,7 +66,7 @@ export interface IslandDataflowInput {
 
 /** What one document's runtime starts from. */
 export interface IslandRuntimeData {
-  colorMode?: 'light' | 'dark';
+  assetsUrl?: string;
   /** The store's input; absent or null for a document that declares no data (tabs, a diagram). */
   dataflow?: IslandDataflowInput | null;
   /** The version's stored Mermaid drawings (lib/mermaid-images). */
@@ -169,6 +170,7 @@ export function createIslandRuntime(
 
   const noData = () => new Error('no data declared');
   const context: IslandContext = {
+    assetsUrl: () => data.assetsUrl ?? null,
     values: () => state.values,
     value: (name) => state.values[name],
     // A reconciled result can retain the table and row-array proxies across a
@@ -200,7 +202,6 @@ export function createIslandRuntime(
     mutating: (name) => { checks(); return !!store?.mutating().has(name); },
     viewer,
     drawings: () => drawings,
-    colorMode: () => data.colorMode ?? 'light',
     writes: (options.writes ?? (() => EMPTY_WRITE_FEED))(store),
     store: () => store,
     trustedPortal: options.trustedPortal ?? (() => trustedPortalOf()),
@@ -295,21 +296,6 @@ export function Repeat({ name, keyBy, owner, ids, tableParts, svg, children, ...
     // Snapshot the positions so For observes reorder and removal as list changes.
     return Array.isArray(source) ? [...(source as Row[])] : [];
   });
-  const error = createMemo(() => {
-    const source = rows();
-    if (source.length > 1000) return 'For supports at most 1000 rows';
-    if (!keyBy) return null;
-    const seen = new Set<string>();
-    for (const row of source) {
-      const value = Object.hasOwn(row, keyBy) ? row[keyBy] : undefined;
-      if (!((typeof value === 'string' && value.length <= 256 && !/[\u0000-\u001f]/.test(value)) || (typeof value === 'number' && Number.isFinite(value))))
-        return 'keyBy must have a non-null string (at most 256 characters, without control characters) or finite number for every row';
-      const key = JSON.stringify([typeof value, value]);
-      if (seen.has(key)) return `keyBy must be unique; duplicate key ${String(value)}`;
-      seen.add(key);
-    }
-    return null;
-  });
   // A reconciled store can retain a row proxy while changing its key. Give that key a distinct
   // For identity so the row's compiled scope and comment target are built again.
   const instances = new WeakMap<Row, { row: Row; key: unknown }>();
@@ -321,13 +307,13 @@ export function Repeat({ name, keyBy, owner, ids, tableParts, svg, children, ...
     instances.set(row, next);
     return next;
   });
-  const body = () => (
-    keyBy
+  const error = createMemo(() => keyBy ? keyedRowsError(rows(), keyBy, 'keyBy') : null);
+  const body = () => error()
+    ? (svg ? <text role="alert">{error()}</text> : <span role="alert">{error()}</span>)
+    : keyBy
       ? <For each={keyedRows()}>{instance => children(instance.row, { owner: owner || '', key: instance.key, durable: true, ids: ids || [] })}</For>
-      : <For each={rows()}>{(row, index) => children(row, { owner: owner || '', key: index(), durable: false, ids: ids || [] })}</For>
-  );
-  const content = () => <Show when={!error()} fallback={svg ? <text role="alert">{error()}</text> : <div role="alert">{error()}</div>}>{body()}</Show>;
-  return tableParts ? content() : svg ? <g {...attrs}>{content()}</g> : <div {...attrs}>{content()}</div>;
+      : <For each={rows()}>{(row, index) => children(row, { owner: owner || '', key: index(), durable: false, ids: ids || [] })}</For>;
+  return tableParts ? body() : svg ? <g {...attrs}>{body()}</g> : <div {...attrs}>{body()}</div>;
 }
 
 /** `{cond && …}` / `{cond ? a : b}` — the interpreter's conditional; a falsy value (0 included) renders nothing. */

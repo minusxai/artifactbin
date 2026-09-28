@@ -90,8 +90,6 @@ export interface CompiledReaderRequest {
   signedIn: boolean;
   /** Where the page queries, writes and fetches its overlay; null on a capture. */
   doors: AssembleOverlay['doors'];
-  /** Chrome-less export surface uses the full image, without generated responsive candidates. */
-  capture?: boolean;
   /** The managed `<Iframe>`'s asset door (AssembleOverlay.managedAssets), or none without an asset origin. */
   managedAssets?: AssembleOverlay['managedAssets'];
   /**
@@ -115,6 +113,10 @@ export interface CompiledReaderRequest {
    * snapshot, rendered into the story and never cached — they were computed for whoever asked.
    */
   results?: ServedResults | null;
+  /** Export captures use full-size image bytes and no responsive srcset. */
+  capture?: boolean;
+  /** A capture's verified image import door without opening a query door. */
+  assetsUrl?: string;
   /** A domain post's attribution line (lib/story/document's bare footer), after the story. */
   footer?: { html: string; css: string } | null;
   /** A document served by itself: today's standalone stylesheets, byte for byte (AssembleInput.sheets). */
@@ -151,8 +153,8 @@ let policyOverride: FallbackPolicy | null = null;
 /** A test's override for its file; the product never calls it. */
 export function setFallbackPolicyForTests(policy: FallbackPolicy | null): void { policyOverride = policy; }
 /**
- * THE SWITCH. Wave 4 has deleted today's reader, so compiled-only is the default.
- * w4-flip-docs removes this function, its override and the obsolete legacy branches.
+ * THE SWITCH. `legacy` until Wave 4 deletes today's reader; w4-flip-docs removes this function, its
+ * override and every `legacy` branch below, leaving `compiled-only` as the only behaviour.
  */
 export function fallbackPolicy(): FallbackPolicy { return policyOverride ?? 'compiled-only'; }
 
@@ -308,8 +310,9 @@ const digest = (value: unknown): string => createHash('sha256').update(JSON.stri
 const sorted = (record: Readonly<Record<string, unknown>>): Array<[string, unknown]> => Object.entries(record).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
 
 interface StoryInput {
-  colorMode: 'light' | 'dark';
   values: Record<string, Scalar>;
+  state?: import('@/lib/story/dataflow').DataflowState;
+  assetsUrl?: string;
   results: ServedResults | null;
   mermaidImages: Readonly<Record<string, StoredMermaidImage>>;
   drawings: DataSnapshot['drawings'];
@@ -318,10 +321,10 @@ interface StoryInput {
 }
 
 async function storyOf(compiled: CompiledPage, input: StoryInput): Promise<string> {
-  const plain = !input.results && !Object.keys(input.values).length && !Object.keys(input.mermaidImages).length;
+  const plain = !input.state && !input.assetsUrl && !input.results && !Object.keys(input.values).length && !Object.keys(input.mermaidImages).length;
   if (!compiled.ssr || plain) return compiled.html;
   const cacheKey = input.resultsId === null && input.results ? null
-    : `${compiled.build}:${compiled.ssr.sha}:${input.colorMode}:${input.resultsId ?? '-'}:${digest(sorted(input.values))}:${digest(sorted(input.mermaidImages))}`;
+    : `${compiled.build}:${compiled.ssr.sha}:${input.resultsId ?? '-'}:${digest(sorted(input.values))}:${digest(input.state ?? null)}:${digest(sorted(input.mermaidImages))}:${input.assetsUrl ?? ''}`;
   const cached = cacheKey ? renders.get(cacheKey) : undefined;
   if (cached !== undefined) {
     renders.delete(cacheKey!);
@@ -333,7 +336,7 @@ async function storyOf(compiled: CompiledPage, input: StoryInput): Promise<strin
   // (the same boundary prepared-page.server keeps for the compiler).
   const { loadSsrModule } = await import('./bundle.server');
   const module = await loadSsrModule(compiled.ssr);
-  const html = module.render({ values: input.values, results: input.results, mermaidImages: input.mermaidImages, drawings: input.drawings, colorMode: input.colorMode });
+  const html = module.render({ values: input.values, state: input.state, assetsUrl: input.assetsUrl, results: input.results, mermaidImages: input.mermaidImages, drawings: input.drawings });
   if (cacheKey) {
     renders.set(cacheKey, html);
     while (renders.size > RENDERS_KEPT) renders.delete(renders.keys().next().value!);
@@ -398,37 +401,43 @@ export async function compiledPageFor(row: ArtifactRow, page: PreparedPage, read
     }
 
     const flow = page.declared?.flow ?? null;
+    // Prepared state is useful for a version that cannot run. A healthy reader starts from defaults
+    // and the guest snapshot, then lets its page engine take over; seeding `state` suppresses that run.
+    const failedState = page.declared?.state && Object.keys(page.declared.state.errors).length ? page.declared.state : undefined;
     const values = flow ? readUrlValues(reader.search, flow) : {};
     const [mermaidImages, snapshot, hold] = await Promise.all([
       reader.drawings
         ? mermaidImagesFor({ artifactId: row.id, version: reader.at?.version ?? row.version, surface: reader.drawings, head: !reader.at, visibility: row.visibility }, page.data.nodes)
         : Promise.resolve({}),
       // A capture brings its own settled run; an archived version and a version that cannot run have no snapshot.
-      reader.results !== undefined || reader.at || !flow || page.declared?.state ? Promise.resolve(null) : snapshotFor(row, compiled, flow, values),
+      reader.results !== undefined || reader.at || !flow || failedState ? Promise.resolve(null) : snapshotFor(row, compiled, flow, values),
       // What the page's engine may hold, for the door it queries through (today's reader asks on every render).
       flow && reader.doors && reader.holder !== undefined ? holdableImports(row, flow, reader.holder) : Promise.resolve([]),
     ]);
-    const sqliteWasm = hold.length || flow?.values.some((value) => value.kind === 'table') ? build.sqliteWasm ?? null : null;
+    // Local tables need the page engine even without a holdable import.
+    const sqliteWasm = flow && reader.doors && (hold.length || flow.values.some((value) => value.kind === 'table'))
+      ? build.sqliteWasm ?? null : null;
     // The live stream picks up from the snapshot's marks (served-results.server `since`): a write between
     // the snapshot and the page's stream reaches the page as the ordinary `data` frame.
     const served: DataSnapshot | null = snapshot
       ? { ...snapshot, results: { ...snapshot.results, ...(Object.keys(snapshot.marks).length ? { since: tokenOf(new Map(Object.entries(snapshot.marks))) } : {}) } }
       : null;
     const results = reader.results ?? served?.results ?? null;
-    const colorMode = reader.colorMode ?? page.data.colorMode;
     const story = await storyOf(compiled, {
-      colorMode,
-      values, results, mermaidImages, drawings: served?.drawings ?? {},
+      values, state: failedState, results, assetsUrl: reader.assetsUrl ?? reader.doors?.assetsUrl, mermaidImages, drawings: served?.drawings ?? {},
       resultsId: served ? `${keyString(served.key)}:${served.computedAt}` : null,
     });
 
+    const colorMode = reader.colorMode ?? page.data.colorMode;
     const bare = reader.documentChrome === false;
     const behaviors = [...new Set([...(reader.behaviors ?? []), ...compiled.behaviors])].filter((b) => !(bare && b === DECK_BEHAVIOR));
     const assembled = assembleReaderPage({
       compiled: { ...compiled, behaviors },
-      documentChrome: !bare,
-      story: bare ? withoutDeckChrome(story) : story,
       capture: reader.capture,
+      documentChrome: !bare,
+      story: reader.capture
+        ? (bare ? withoutDeckChrome(story) : story).replace(/<img\b[^>]*>/g, (tag) => tag.replace(/\s(?:srcSet|srcset|sizes)="[^"]*"/g, ''))
+        : bare ? withoutDeckChrome(story) : story,
       css: page.css,
       fontPreloads: [...page.fontPreloads, ...(reader.chromeFonts ?? [])],
       title: page.title,
@@ -436,7 +445,7 @@ export async function compiledPageFor(row: ArtifactRow, page: PreparedPage, read
       colorMode,
       // A capture's answers ride as the snapshot the page starts from: the islands then ask for nothing.
       snapshot: reader.results ? { ...(served ?? emptySnapshot(row)), results: reader.results } : served,
-      overlay: { values, mermaidImages, signedIn: reader.signedIn, doors: doorsFor(compiled, reader.doors), managedAssets: reader.managedAssets ?? null, readOnly: reader.readOnly ?? null, hold, sqliteWasm },
+      overlay: { values, state: failedState, mermaidImages, signedIn: reader.signedIn, doors: doorsFor(compiled, reader.doors), ...(reader.assetsUrl ? { assetsUrl: reader.assetsUrl } : {}), managedAssets: reader.managedAssets ?? null, readOnly: reader.readOnly ?? null, hold, sqliteWasm },
       chrome: reader.chrome,
       spa: reader.spa,
       build,
@@ -460,9 +469,7 @@ export async function compiledPageFor(row: ArtifactRow, page: PreparedPage, read
  * has a viewer-scope query, so the page never asks a door the server has nothing to answer on.
  */
 function doorsFor(compiled: CompiledPage, doors: CompiledReaderRequest['doors']): CompiledReaderRequest['doors'] {
-  const needsViewerIdentity = compiled.islands.some((island) => island.kit.some((name) =>
-    name === 'User' || name === 'UserImage' || name === 'UserHandle' || name === 'SignIn'));
-  if (!doors?.viewerUrl || needsViewerIdentity || compiled.plan?.queries.some((q) => q.scope === 'viewer')) return doors;
+  if (!doors?.viewerUrl || compiled.plan?.queries.some((q) => q.scope === 'viewer')) return doors;
   const { viewerUrl: _unused, ...rest } = doors;
   return rest;
 }

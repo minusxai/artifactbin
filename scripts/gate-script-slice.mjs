@@ -34,7 +34,7 @@ const check = createChecker('script-slice');
  * documents (6c, 8) must be SERVED compiled — the compiled page hosts the version's author script
  * (lib/islands/author-host) in today's sandboxed frame. Unset, today's reader.
  */
-const COMPILED = true;
+const COMPILED = process.env.GATE_READER === 'compiled';
 const readerUrl = (url) => (COMPILED ? `${url}${url.includes('?') ? '&' : '?'}reader=compiled` : url);
 /** The path that answered a navigation (`x-mx-reader`), or null. */
 const readerOf = (response) => response?.headers()['x-mx-reader'] ?? null;
@@ -252,8 +252,8 @@ await page.click('[aria-label="Edit artifact"]');
 await page.waitForSelector('[aria-label="Exit edit mode"]', { timeout: 30000 });
 await page.waitForTimeout(4000);
 
-check(await documentFrame().evaluate("document.querySelector('h1')?.textContent === 'Slice doc v2'").catch(() => false),
-  'the scripted document remains visible when the editor takes over');
+check(await page.evaluate(() => document.querySelector('[data-mx-inline-story]')?.__probe) === 'same-document',
+  'a scripted document is edited in the frame it was already in');
 check(await documentFrame().evaluate("!!document.querySelector('h1')?.isContentEditable").catch(() => false),
   'and it becomes editable');
 const afterRealm = await managedRealm(documentFrame(), 'Slice script');
@@ -314,6 +314,7 @@ check(await afterRealm.evaluate("document.querySelectorAll('#script-made').lengt
     const wrapperCsp = wrapper.headers.get('content-security-policy') ?? '';
     check(wrapper.status === 200 && wrapperCsp.includes('sandbox allow-scripts') && wrapperCsp.includes("frame-src 'none'"),
       'the author-script wrapper answers at /author-frame under its own sandbox policy');
+    check((await fetch(`${BASE}/story/author-frame`)).status === 404, 'the retired /story/author-frame alias is absent');
   }
   const f4 = await artifactDocument(p4, { timeout: 20000 });
   const settled = await f4.waitForFunction(

@@ -8,7 +8,7 @@
  * No I/O, no database, no clock: the same input is the same bytes.
  *
  * What it adds to the stored, per-version parts is what one request decides:
- *   - the story element (lib/story/story-element) around `input.story` —
+ *   - the story element (lib/story/inline-story-html) around `input.story` —
  *     the serve path's render, placed verbatim and never re-rendered here —
  *     with the snapshot's server-drawn charts put into their slots;
  *   - the island data as `<script type="application/json" id="mx-story-data">`,
@@ -48,9 +48,7 @@ export const assembleReaderPage: AssembleReaderPage = (input: AssembleInput): As
   const help = input.head?.help ?? null;
   const module = compiled.module;
 
-  const storyHtml = input.capture
-    ? stripGeneratedImageCandidates(fillChartSlots(input.story, input.snapshot?.drawings ?? {}))
-    : fillChartSlots(input.story, input.snapshot?.drawings ?? {});
+  const storyHtml = fillChartSlots(input.story, input.snapshot?.drawings ?? {});
   const withOutline = input.documentChrome !== false && compiled.outline?.length
     ? `<div class="${compiled.outlinePlan ? 'mx-reading mx-reading--plan' : 'mx-reading'}">${renderToStaticMarkup(createElement(OutlineRail, { entries: compiled.outline }))}${storyHtml}</div>`
     : storyHtml;
@@ -71,8 +69,7 @@ export const assembleReaderPage: AssembleReaderPage = (input: AssembleInput): As
     + (chrome ? '' : '<base target="_top">')
     + `<title>${escapeHtml(input.title)}</title>`
     + headMetadata(input.head)
-    + (spa ? fontPreloadTags(input.fontPreloads).replaceAll('<link rel="preload"', '<link fetchpriority="high" rel="preload"') : fontPreloadTags(input.fontPreloads))
-    + imagePreload(storyHtml)
+    + fontPreloadTags(input.fontPreloads)
     + islandPreloads.map(modulePreload).join('')
     + prefetch.map((href) => `<link rel="prefetch" href="${escapeHtml(href)}" as="document">`).join('')
     + (input.sheets
@@ -170,9 +167,11 @@ function islandData(input: AssembleInput): IslandPageData {
   const { overlay } = input;
   return {
     values: overlay.values,
+    ...(overlay.state ? { state: overlay.state } : {}),
     results: input.snapshot?.results ?? null,
-    appPage: !!input.spa,
+    appPage: input.spa !== null,
     ...(overlay.doors ?? {}),
+    ...((overlay.assetsUrl ?? overlay.doors?.assetsUrl) ? { assetsUrl: overlay.assetsUrl ?? overlay.doors?.assetsUrl } : {}),
     ...(overlay.managedAssets ? { managedAssets: overlay.managedAssets } : {}),
     signedIn: overlay.signedIn,
     hold: [...(overlay.hold ?? [])],
@@ -294,30 +293,6 @@ function tagsOf(html: string, rawText = true): Tag[] {
     }
   }
   return tags;
-}
-
-/** Preload the first eager image whose source will not be replaced by a responsive candidate. */
-function imagePreload(html: string): string {
-  for (const tag of tagsOf(html)) {
-    if (tag.closing || tag.name !== 'img') continue;
-    const attr = (name: string) => tag.attrs.find((item) => item.name === name)?.value;
-    if (attr('loading') === 'lazy' || attr('srcset')) continue;
-    const src = attr('src');
-    if (src) return `<link rel="preload" as="image" href="${src}">`;
-  }
-  return '';
-}
-
-/** The old chrome-less capture took the full held image rather than a viewport-sized variant. */
-function stripGeneratedImageCandidates(html: string): string {
-  const removals = tagsOf(html).filter((tag) => !tag.closing && tag.name === 'img').flatMap((tag) => {
-    const srcSet = tag.attrs.find((attr) => attr.name === 'srcset');
-    if (!srcSet?.value?.includes('&amp;w=1280')) return [];
-    const sizes = tag.attrs.find((attr) => attr.name === 'sizes');
-    return [srcSet, ...(sizes ? [sizes] : [])];
-  });
-  for (const attr of removals.sort((a, b) => b.start - a.start)) html = html.slice(0, attr.start) + html.slice(attr.end);
-  return html;
 }
 
 /** The index in `tags` of the close matching the open tag at `open`, or -1. */

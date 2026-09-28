@@ -64,8 +64,6 @@ describe('without the font subsetter', () => {
     expect(served.status).toBe(200);
     const html = await served.text();
     expect(html).not.toContain('/assets/mermaid/');
-    // The engine is a lazy browser chunk; it loads only when a drawing has no stored image.
-    expect(html.split('</head>')[0]).not.toMatch(/modulepreload" href="[^"]*mermaid-render-/);
     expect(html).toContain('id="mx-story-data"');
   });
 

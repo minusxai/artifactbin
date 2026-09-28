@@ -202,6 +202,8 @@ export const isCompileFailure = (stored: StoredCompile): stored is CompileFailur
 export interface IslandRenderData {
   colorMode?: 'light' | 'dark';
   values: Record<string, Scalar>;
+  state?: import('@/lib/story/dataflow').DataflowState;
+  assetsUrl?: string;
   results: ServedResults | null;
   mermaidImages: Readonly<Record<string, StoredMermaidImage>>;
   /** The snapshot's server-drawn charts, by chart slot id. */
@@ -416,12 +418,15 @@ export type LinkHintsOf = (nodes: JsxNode[], deployment: { origins: readonly str
 export interface AssembleOverlay {
   /** The reader's URL `$` values (lib/story/url-values), already parsed against the flow. */
   values: Record<string, Scalar>;
+  state?: import('@/lib/story/dataflow').DataflowState;
   /** The version's stored Mermaid drawings for this surface (lib/mermaid-images), or none. */
   mermaidImages: Readonly<Record<string, StoredMermaidImage>>;
   /** Whether the request carries a session: the signed-in hint, never the identity (that arrives after paint). */
   signedIn: boolean;
   /** Where the page queries, writes and fetches its overlay (lib/story/markup-csp paths); absent on a capture. */
   doors: { queryUrl: string; mutateUrl?: string; viewerUrl?: string; assetsUrl: string } | null;
+  /** A capture's verified image import door, even though it has no query or mutation door. */
+  assetsUrl?: string;
   /**
    * The managed `<Iframe>`'s asset door for this request (islands contract `IslandPageData.managedAssets`):
    * beside `doors` because a capture has no doors and still resolves its frames' assets with its key.
@@ -431,7 +436,7 @@ export interface AssembleOverlay {
   /** An archived version's read-only reason (lib/archived-version); absent for the head. */
   readOnly?: string | null;
   /** The imports the page may hold for the door it queries through (IslandPageData.hold); absent: none. */
-  hold?: readonly string[];
+  hold?: string[];
   /** The page's SQLite engine wasm (IslandPageData.sqliteWasm), when `hold` is not empty. */
   sqliteWasm?: string | null;
 }

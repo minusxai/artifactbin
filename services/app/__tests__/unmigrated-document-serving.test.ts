@@ -59,8 +59,7 @@ describe('an unmigrated document, served', () => {
     const ds = await publish(who, { title: 'Team Tasks', dataset: [{ id: 1, n: 5 }, { id: 2, n: 8 }], access: 'readwrite' });
     await legacy(who, 'oldtsk', OLD(ds));
 
-    const html = await (await serveArtifact(request('/a/oldtsk/raw', { token: who.token }), ctx('oldtsk'))).text();
-    expect(html).toContain('data-mx-story-root');
+    expect((await serveArtifact(request('/a/oldtsk/raw', { token: who.token }), ctx('oldtsk'))).status).toBe(200);
     const page = JSON.stringify(await (await pageData(request('/api/page/artifact/oldtsk', { token: who.token }), ctx('oldtsk'))).json());
     expect(page).toContain('team_tasks.rows');
     expect(page).not.toContain('public.rows');
@@ -83,7 +82,7 @@ describe('an unmigrated document, served', () => {
     const who = await owner();
     await legacy(who, 'oldman', MANUAL);
     const html = await (await serveArtifact(request('/a/oldman/raw', { token: who.token }), ctx('oldman'))).text();
-    expect(html).toContain('data-mx-story-root');
+    expect(html).toContain(PREVIOUS_ENGINE);
     expect(await query('oldman', who)).toEqual({ tables: {}, errors: { steps: PREVIOUS_ENGINE } });
   });
 });

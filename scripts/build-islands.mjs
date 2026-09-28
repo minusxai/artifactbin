@@ -39,9 +39,9 @@ import { icons } from 'lucide-react';
 const ROOT = path.resolve(import.meta.dirname, '..');
 const APP = path.join(ROOT, 'services/app');
 const ISLANDS_SRC = path.join(APP, 'lib/islands');
-const SQLITE_WASM = path.join(ROOT, 'node_modules/@sqlite.org/sqlite-wasm/dist/sqlite3.wasm');
 export const DEFAULT_OUT_DIR = path.join(APP, 'public/islands');
 const CACHE_MARKER = path.join(ROOT, 'node_modules/.cache/build-islands.json');
+const SQLITE_WASM = path.join(ROOT, 'node_modules/@sqlite.org/sqlite-wasm/dist/sqlite3.wasm');
 
 /** The Icon port fetches this only when query rows name a glyph absent from the page's small inline map. */
 function glyphCatalog() {
@@ -82,6 +82,8 @@ const ENTRIES = [
   { specifier: '@mx/row-class', name: 'row-class', file: () => islandModule('row-class') },
   // The compiled /raw page's own behaviour: framing, the reader's colour override, the live stream and the scroll restore.
   { specifier: '@mx/page', name: 'page', file: () => islandModule('page') },
+  // Image bindings load only on pages that author a data-selected image.
+  { specifier: '@mx/kit/image', name: 'kit-image', file: () => islandModule('kit/image') },
   ...KIT_FAMILIES.map((family) => ({ specifier: `@mx/kit/${family}`, name: `kit-${family}`, file: () => islandModule(`kit/${family}`) })),
 ];
 export const ISLAND_SPECIFIERS = Object.freeze(ENTRIES.map((e) => e.specifier));
@@ -97,6 +99,7 @@ export const ISLAND_SPECIFIERS = Object.freeze(ENTRIES.map((e) => e.specifier));
  */
 const STANDALONE_LAZY = [
   { request: './embed/frame-engine', name: 'frame-engine', file: () => path.join(ISLANDS_SRC, 'kit/embed/frame-engine.ts') },
+  { request: './image-map', name: 'image-map', file: () => path.join(ISLANDS_SRC, 'kit/image-map.ts') },
   // The version's author script (lib/islands/author-host), loaded by boot only when the page data names one.
   { request: './author-host', name: 'author-host', file: () => path.join(ISLANDS_SRC, 'author-host.ts') },
   // The live morph (lib/islands/live-update → ./morph/engine): a new version drawn in place, loaded only when one lands.
@@ -264,7 +267,7 @@ export async function buildIslands({ outDir = DEFAULT_OUT_DIR } = {}) {
   fs.writeFileSync(path.join(outDir, catalogName), catalog);
   files[url(catalogName)] = { ...sizes(catalog), imports: [] };
   manifest['@mx/glyphs'] = url(catalogName);
-  // The page engine fetches wasm, so keep it with the content-addressed island build.
+  // The page engine fetches its wasm; emit it beside the reader modules.
   const sqliteBytes = fs.readFileSync(SQLITE_WASM);
   const sqliteName = `sqlite3-${sha256(sqliteBytes).slice(0, 16)}.wasm`;
   fs.writeFileSync(path.join(outDir, sqliteName), sqliteBytes);
@@ -281,7 +284,7 @@ export async function buildIslands({ outDir = DEFAULT_OUT_DIR } = {}) {
   const sortedFiles = Object.fromEntries(Object.keys(files).sort().map((k) => [k, files[k]]));
   const build = buildId(sortedManifest, ssr, inputs);
   fs.writeFileSync(path.join(outDir, 'manifest.json'), JSON.stringify({ build, manifest: sortedManifest, files: sortedFiles, ssr, sqliteWasm }, null, 1) + '\n');
-  return { build, manifest: sortedManifest, files: sortedFiles, ssr, sqliteWasm, closure: (urls) => closureOf(sortedFiles, urls), inputs, outputInputs, metafile: result.metafile };
+  return { build, manifest: sortedManifest, files: sortedFiles, ssr, closure: (urls) => closureOf(sortedFiles, urls), inputs, outputInputs, metafile: result.metafile };
 }
 
 /**
@@ -350,7 +353,7 @@ function buildId(manifest, ssr, graphInputs) {
 }
 
 /** What the `--cache` marker keys on: this script, the lockfile, and every repository file the last build read. */
-const toolHash = () => sha256(Buffer.concat([fs.readFileSync(new URL(import.meta.url)), fs.readFileSync(path.join(ROOT, 'scripts/lib/precompress.mjs')), fs.readFileSync(path.join(ROOT, 'package-lock.json'))]));
+const toolHash = () => sha256(Buffer.concat([fs.readFileSync(new URL(import.meta.url)), fs.readFileSync(path.join(ROOT, 'scripts/lib/precompress.mjs')), fs.readFileSync(path.join(ROOT, 'package-lock.json')), fs.readFileSync(SQLITE_WASM)]));
 const sourceHashes = (rels) => Object.fromEntries(rels.map((rel) => [rel, fs.existsSync(path.join(ROOT, rel)) ? sha256(fs.readFileSync(path.join(ROOT, rel))) : null]));
 const trackedSources = (inputs) => [...new Set([
   ...listFiles(ISLANDS_SRC).filter((f) => !f.split(path.sep).includes('__tests__')).map((f) => toPosix(path.relative(ROOT, f))),

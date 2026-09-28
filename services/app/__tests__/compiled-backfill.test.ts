@@ -114,7 +114,7 @@ describe('backfillCompiledPages', () => {
     for (const version of archived) expect(after[`${id}/v:${version}`], `v:${version}`).toBe(loadCompilerBuild().id);
   });
 
-  it('compiles through the reader even while the rollout flag is off', async () => {
+  it('still compiles when the retained reader flag says off', async () => {
     const token = await owner();
     await publish(token, { title: 'off', markup: '<p>Off</p>', visibility: 'public' });
     setCompiledReaderFlagForTests('off');

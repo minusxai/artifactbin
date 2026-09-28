@@ -148,7 +148,7 @@ describe('native user fields',()=>{
   * and re-mint it, which left the second tag naming nobody ("Unknown person").
   * Through the real publish and the real served page, for every person tag.
   */
- it('resolves every person tag naming the viewer, however many, in the served page',async()=>{
+ it('keeps every person tag and resolves the reader through the viewer overlay',async()=>{
   const reader=await account('twice'), owner=await account('host');
   const cases=[
    '<p><User userId="$_me.id" /> <UserImage userId="$_me.id" size="lg" /></p>',
@@ -161,10 +161,11 @@ describe('native user fields',()=>{
    const stored=(await getArtifactById(report.id))!.source ?? '';
    expect(stored.match(/userId="\$_me\.id"/g),stored).toHaveLength(2);
    const html=await (await rawRoute(request(`/a/${report.id}/raw`,{token:reader.token}),ctx(report.id))).text();
-   // The compiled first paint is anonymous; the viewer door supplies the card after paint.
-   expect(html,markup).toContain(`"viewerUrl":"/a/${report.id}/viewer"`);
-   expect(html,markup).toContain('id="mx-story-data"');
-   expect(html,markup).toContain('data-mx-inline-story');
+   const body=html.slice(html.indexOf('class="mx-doc"'));
+   expect(body,markup).not.toContain('data-unknown');
+   expect(body,markup).not.toContain('Unknown person');
+   expect(body,markup).toContain('data-mx-ast');
+   expect(await viewerIdentityFor((await getArtifactById(report.id))!,reader.user.id)).toEqual({id:reader.user.id,card:{name:'twice',handle:null,image:null}});
   }
  });
  /*

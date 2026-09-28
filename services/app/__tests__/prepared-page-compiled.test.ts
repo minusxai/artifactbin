@@ -54,7 +54,7 @@ describe('the compiled page on the prepared page', () => {
     expect(key.endsWith(`:${loadCompilerBuild().id}`)).toBe(true);
   });
 
-  it('off: a publish still stores the compile required by the sole reader', async () => {
+  it('off: a publish still stores the compiled-only reader page', async () => {
     setCompiledReaderFlagForTests('off');
     const id = await publish(fixture('prose.jsx'));
     const { key, compiled } = await stored(id);

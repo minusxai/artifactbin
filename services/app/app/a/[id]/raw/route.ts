@@ -23,13 +23,9 @@ import { canReadArtifact, dataflowForRow, getArtifactById, linkRoleOf, type Arti
 import { withIntent, type Intent } from '@/lib/intent';
 import { count, has } from '@/lib/relations';
 import { countOpenAnnotations } from '@/lib/annotations';
-import { isCookieCredential, roleFor, type RequestActor } from '@/lib/viewer';
+import { roleFor, type RequestActor } from '@/lib/viewer';
 import { canAnnotate, canEdit, roleBehindLogin } from '@/lib/share-roles';
 import { forkedFromCredit } from '@/lib/story/fork-credit.server';
-import { getUserById } from '@/lib/users';
-import { avatarUrl } from '@/lib/avatars';
-import type { ReaderChromeInput } from '@/lib/story/reader-chrome';
-import { readerChromeFonts } from '@/lib/story/first-screen-fonts';
 import { trackEvent } from '@/lib/analytics';
 import { requestOrSessionActor } from '@/lib/viewer';
 import { verifyExportKey } from '@/lib/export-key';
@@ -47,6 +43,8 @@ import { currentStoryCss } from '@/lib/data/story/story-css.server';
 import { declaresMutations } from '@/lib/story/helmet';
 import { assetsPath, markupCsp, mutatePath, queryPath } from '@/lib/story/markup-csp';
 import { readUrlValues } from '@/lib/story/url-values';
+import { getUserById } from '@/lib/users';
+import { avatarUrl } from '@/lib/avatars';
 import { displayTitle } from '@/lib/story/title';
 import { CARD_RENDER_GENERATION } from '@/lib/export-card';
 import type { StoryThemeName } from '@/lib/validation/atlas-schemas';
@@ -58,6 +56,8 @@ import type { StorySurface } from '@/lib/compiled-page/story-fragment';
 import { compiledPageFor, domainFooter } from '@/lib/compiled-page/serve.server';
 import { preparedPageFor } from '@/lib/story/prepared-page.server';
 import { documentStyleSheets } from '@/lib/story/document-styles';
+import type { ReaderChromeInput } from '@/lib/story/reader-chrome';
+import { readerChromeFonts } from '@/lib/story/first-screen-fonts';
 
 // The markup document's policy — per document, built in lib/story/markup-csp:
 // content-independent except for the ONE connect-src that admits exactly this
@@ -70,8 +70,6 @@ const COMMON = {
 };
 
 const NOT_FOUND = '<!doctype html><meta charset="utf-8"><title>Not found</title><h1>Not found</h1>';
-const notFound = () =>
-  new Response(NOT_FOUND, { status: 404, headers: { 'Content-Type': 'text/html; charset=utf-8', ...COMMON } });
 
 /** Request-specific reader furniture around the compiled story. */
 async function rawChrome(row: ArtifactRow, actor: RequestActor, at: { version: number; head: number } | null, ground: 'light' | 'dark'): Promise<ReaderChromeInput> {
@@ -120,7 +118,30 @@ async function rawChrome(row: ArtifactRow, actor: RequestActor, at: { version: n
  */
 export interface DomainPost { hostname: string; ownerId: string }
 
-export async function GET(request: Request, ctx: { params: Promise<{ id: string }>; domain?: DomainPost; fragment?: { surface: StorySurface } }) {
+const notFound = () =>
+  new Response(NOT_FOUND, { status: 404, headers: { 'Content-Type': 'text/html; charset=utf-8', ...COMMON } });
+
+
+/**
+ * A POST ON ITS OWNER'S CUSTOM DOMAIN (server/custom-host). Only the host
+ * boundary sets it — the router passes params alone — so no request can ask
+ * for this mode. It renders the reader copy with no reader chrome and no doors,
+ * a footer back to the app, and a self-canonical on the domain; every
+ * capture, archive and editing switch on the URL is ignored.
+ */
+export interface DomainPost { hostname: string; ownerId: string }
+
+/**
+ * THE STORY FRAGMENT (`GET /a/:id/story`, app/a/[id]/story): the compiled document's newest version as
+ * the page that asks is served it, for the live morph (lib/islands/morph/engine) — `raw`, this route's
+ * own reader copy, or `app`, the app page's story (its isolated sheet, its inline drawings). Only the
+ * route sets it (the router passes params alone), so no request can ask for it here. Same admission,
+ * same compiled inputs, same sandbox; never a view, never today's renderer (a fallback is an answer the
+ * page reloads on), and readable from the `/raw` copy's opaque origin by an anonymous reader.
+ */
+export interface StoryFragmentRequest { surface: StorySurface }
+
+export async function GET(request: Request, ctx: { params: Promise<{ id: string }>; domain?: DomainPost; fragment?: StoryFragmentRequest }) {
   const { id } = await ctx.params;
   const domain = ctx.domain ?? null;
   const fragment = domain ? null : ctx.fragment ?? null;
@@ -332,8 +353,11 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
       // A cohost HTTPS proxy can otherwise stamp https onto an HTTP backend,
       // breaking scoped asset imports and the capture's CSP before rendering.
       const base = byExportKey && !chrome ? new URL(request.url).origin : baseUrl(request);
-      // Every admitted markup read uses the compiled reader. The serve boundary
-      // supplies the version's compile and a request-specific overlay.
+      // The managed <Iframe>'s asset door, one rule for both renderers: a capture's verified key rides in it.
+      const managedAssets = ASSETS_ORIGIN ? { origin: ASSETS_ORIGIN, resolveUrl: `${base}${assetsPath(artifact.id)}${byExportKey ? `?key=${encodeURIComponent(key!)}` : ''}` } : null;
+      // Every admitted document read is compiled, including live story fragments.
+      /** The app page's story (lib/artifact-page) differs from this copy in its sheet and its drawings, never in its story. */
+      const appStory = fragment?.surface === 'app';
       {
         const capture = byExportKey && !chrome;
         const prepared = await preparedPageFor(artifact, at, base);
@@ -346,29 +370,31 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
         const answer = await compiledPageFor(prepared.row, prepared.page, {
           at,
           search: new URL(request.url).search,
-          drawings: domain || engineRequested(request.url) ? null : fragment?.surface === 'app' ? 'inline' : 'document',
+          drawings: domain || engineRequested(request.url) ? null : appStory ? 'inline' : 'document',
           colorMode: byExportKey && !domain ? captureColor(request.url) : null,
-          signedIn: fragment?.surface === 'app' ? isCookieCredential(actor) : actor.credential === 'session' && !!viewer?.userId,
-          holder: fragment?.surface === 'app' ? { userId: viewer?.userId ?? null, tokenId: actor.tokenId ?? null, email: viewer?.email ?? null } : null,
-          managedAssets: ASSETS_ORIGIN ? { origin: ASSETS_ORIGIN, resolveUrl: `${base}${assetsPath(artifact.id)}${byExportKey ? `?key=${encodeURIComponent(key!)}` : ''}` } : null,
-          capture: !chrome,
-          // A capture has settled rows but still needs its verified asset door.
+          signedIn: actor.credential === 'session' && !!viewer?.userId,
+          // A sandboxed copy's doors carry no credential (its origin is opaque): it holds what anyone may, as today's /raw does.
+          holder: null,
+          // A capture's rows are settled, but its managed iframe still needs the scoped asset door.
           doors: capture ? { queryUrl: '', assetsUrl: `${assetsPath(artifact.id)}?key=${encodeURIComponent(key!)}` } : {
             queryUrl: queryPath(artifact.id),
             ...(!at && declaresMutations(row.source) ? { mutateUrl: mutatePath(artifact.id) } : {}),
             viewerUrl: VIEWER_OVERLAY_PATH(artifact.id),
             assetsUrl: assetsPath(artifact.id),
           },
+          ...(capture ? { assetsUrl: `${assetsPath(artifact.id)}?key=${encodeURIComponent(key!)}` } : {}),
+          managedAssets,
           ...(at ? { readOnly: archivedReadOnly(at.version) } : {}),
           live: chrome && !at ? { id: artifact.id, editId: artifact.edit_id } : null,
           chrome: reader && !fragment ? await rawChrome(artifact, actor, at, design.colorMode ?? prepared.page.data.colorMode) : null,
-          chromeFonts: reader ? readerChromeFonts({ theme: prepared.page.base.theme, docFonts: prepared.page.base.fonts, importedFaces: prepared.page.base.faces }).map((face) => face.url) : [],
+          chromeFonts: reader && !fragment ? readerChromeFonts({ theme: prepared.page.base.theme, docFonts: prepared.page.base.fonts, importedFaces: prepared.page.base.faces }).map((face) => face.url) : [],
           spa: null,
           // The page's own behaviour (lib/islands/page): framing, the reader's colour override, the live
           // stream of a page with no islands, the scroll a live reload keeps. Never on a capture.
           behaviors: capture ? [] : ['page'],
           // `chrome=0` draws the document without its own chrome (a deck's rail and present bar), as today's does.
           documentChrome: chrome,
+          capture: !chrome,
           head: chrome
             ? {
               description: row.description,
@@ -380,8 +406,9 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
           ...(ran ? { results: { tables: ran.state.tables, errors: ran.state.errors, ...(ran.state.userOptions ? { userOptions: ran.state.userOptions, people: ran.state.people ?? {} } : {}) } } : {}),
           // Its style rides in the sheets, where today's document has it.
           footer: domain ? { html: domainFooter(`${PUBLIC_BASE_URL.replace(/\/+$/, '')}/a/${artifact.id}`).html, css: '' } : null,
-          // Today's standalone document's stylesheets, byte for byte (lib/story/document-styles).
-          sheets: fragment?.surface === 'app' ? null : documentStyleSheets({
+          // Today's standalone document's stylesheets, byte for byte (lib/story/document-styles); the app
+          // page's story carries its one isolated sheet instead (the assembler's `css`).
+          sheets: appStory ? null : documentStyleSheets({
             compiledCss, chrome, bare: !!domain, theme: design.theme,
             importedFaces: prepared.page.base.faces, docFonts: prepared.page.base.fonts, authorCss: prepared.page.authorCss,
           }),
@@ -394,18 +421,25 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
               'Content-Security-Policy': markupCsp(base, artifact.id, ASSETS_ORIGIN ?? undefined, { compiled: true }),
               ...answer.headers,
               [READER_MODE_HEADER]: 'compiled',
+              // The /raw copy asks from an opaque origin; an anonymous answer is what anyone with the link reads.
               ...(fragment && !actor.viewer && !actor.tokenId ? { 'Access-Control-Allow-Origin': '*' } : {}),
               ...COMMON,
             },
           });
         }
-        // The serve boundary logs and counts failures; this route has no legacy renderer.
+        // No renderer is left to answer (compiled-only, lib/compiled-page/serve.server fallbackPolicy): a reported 500.
+        if (answer.mode === 'failed') {
+          return new Response('<!doctype html><meta charset="utf-8"><title>Unavailable</title><h1>This document could not be rendered</h1>', {
+            status: answer.status,
+            headers: { 'Content-Type': 'text/html; charset=utf-8', [READER_MODE_HEADER]: 'compiled', ...COMMON },
+          });
+        }
+        // The serve boundary reports a compiled failure; no legacy renderer remains.
         return new Response('<!doctype html><meta charset="utf-8"><title>Unavailable</title><h1>This document could not be rendered</h1>', {
           status: 500,
           headers: { 'Content-Type': 'text/html; charset=utf-8', [READER_MODE_HEADER]: 'compiled', ...COMMON },
         });
       }
-
     }
 
     /*

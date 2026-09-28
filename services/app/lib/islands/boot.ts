@@ -160,7 +160,7 @@ export function boot(input: IslandModule | readonly IslandEntry[], win: Window =
   const readsMe = !!flow && [...flow.queries, ...flow.mutations].some((node) => node.reads.builtins.some((b) => b === '_me' || b.startsWith('_me.')));
   let identified = !(data.signedIn && readsMe);
   let viewerId: string | null = null;
-  const page = data.sqliteWasm
+  const page = flow && transport?.hold && data.sqliteWasm
     ? {
       engine: lazyEngine(() => import('./sqlite-engine').then((m) => m.pageEngine(data.sqliteWasm!, (name) => transport!.hold!(name))), () => identified),
       get userId() { return viewerId; },
@@ -168,7 +168,8 @@ export function boot(input: IslandModule | readonly IslandEntry[], win: Window =
     : null;
   const runtime = createIslandRuntime(
     {
-      dataflow: flow ? { flow, values: data.values ?? {}, hold: data.hold ?? [], ...(data.results ? { results: data.results } : {}) } : null,
+      dataflow: flow ? { flow, values: data.values ?? {}, hold: data.hold ?? [], ...(data.state ? { state: data.state } : {}), ...(data.results ? { results: data.results } : {}) } : null,
+      assetsUrl: data.assetsUrl,
       mermaidImages: data.mermaidImages ?? {},
       viewer: data.signedIn ? { hinted: true } : null,
       readOnly: data.readOnly ?? null,

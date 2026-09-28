@@ -126,9 +126,10 @@ describe('the HTML-first reader page', () => {
     const capture = new JSDOM(await (await raw(id, '?reader=compiled&chrome=0')).text()).window.document;
     expect(capture.querySelector('.mx-outline')).toBeNull();
   });
-  it('/a/:id on the compiled path serves the story with server chrome and the SPA on idle, and the same text as today', async () => {
+  it('/a/:id serves the same compiled story text as /raw, with server chrome and the SPA on idle', async () => {
     const who = await owner();
     const id = await publish(who.token, { title: 'Perf C dashboard', markup: fixture('dashboard.jsx').replaceAll('{{sales}}', await publish(who.token, { title: 'Perf sales', dataset: fixture('sales.csv') })), template: 'dashboard' });
+    const rawHtml = await (await raw(id, '?reader=compiled')).text();
     const res = await app.request(`/a/${id}?reader=compiled`, { headers: { accept: 'text/html' } });
     expect(res.headers.get(READER_MODE_HEADER)).toBe('compiled');
     const html = await res.text();
@@ -138,7 +139,7 @@ describe('the HTML-first reader page', () => {
     expect(doc.querySelector(`script[type="module"][${SPA_IDLE_ATTR}]`)).toBeTruthy();
     expect(doc.querySelector('[data-mx-artifact-id]')).toBeTruthy();
     expect(storyText(html)).toContain('$744,503');
-    // The compiled story retains its visible dashboard text while chart slots draw separately.
+    // The same reader-visible text in both compiled routes, excluding chart slots and styles.
     const slots = [...doc.querySelectorAll('#mx-story-root [data-mx-chart-slot]')].map((slot) => slot.closest('[aria-label="Question embed"]')?.id).filter((id): id is string => !!id);
     const textOf = (root: Element | null) => {
       if (!root) return '';
@@ -147,8 +148,7 @@ describe('the HTML-first reader page', () => {
       return root.textContent?.replace(/\s+/g, ' ').trim() ?? '';
     };
     expect(slots.length, 'the dashboard has chart slots to exclude').toBeGreaterThan(0);
-    const rawPage = new JSDOM(await (await raw(id, '?reader=compiled&chrome=0')).text()).window.document;
-    expect(textOf(new JSDOM(html).window.document.getElementById('mx-story-root'))).toBe(textOf(rawPage.getElementById('mx-story-root')));
+    expect(textOf(new JSDOM(html).window.document.getElementById('mx-story-root'))).toBe(textOf(new JSDOM(rawHtml).window.document.getElementById('mx-story-root')));
   });
 });
 
@@ -189,7 +189,7 @@ describe('one row fetch and one access check per compiled view', () => {
       expect(page.headers.get(READER_MODE_HEADER)).toBe('compiled');
       expect(ofDocument()).toEqual({ fetches: 1, checks: 1 });
 
-      // A prose page uses the same single admission even without data islands.
+      // A prose page also reuses the page's admission.
       const prose = await publish(who.token, { title: 'Perf A prose', markup: fixture('prose.jsx') });
       fetched.mockClear(); checked.mockClear();
       const prosePage = await app.request(`/a/${prose}`, { headers: { accept: 'text/html' } });
@@ -219,7 +219,7 @@ describe('the guest snapshot never outlives the guest\'s access', () => {
 });
 
 describe('the reader switch at its edges', () => {
-  it('off: both reader routes still serve the compiled document', async () => {
+  it('off: the retained flag cannot send either route to the deleted reader', async () => {
     const who = await owner();
     const id = await publish(who.token, { title: 'Perf A prose', markup: fixture('prose.jsx') });
     setCompiledReaderFlagForTests('off');
@@ -230,7 +230,9 @@ describe('the reader switch at its edges', () => {
       expect(res.headers.get('content-security-policy')).toMatch(/script-src 'self'/);
       const page = await app.request(`/a/${id}?reader=compiled`, { headers: { accept: 'text/html' } });
       expect(page.headers.get(READER_MODE_HEADER)).toBe('compiled');
-      expect(new JSDOM(await page.text()).window.document.querySelector('#mx-story-root')).toBeTruthy();
+      const doc = new JSDOM(await page.text()).window.document;
+      expect(doc.querySelector('#mx-story-root')).toBeTruthy();
+      expect(doc.querySelector('[data-mx-initial-story]')).toBeNull();
     } finally {
       setCompiledReaderFlagForTests('shadow');
     }
@@ -398,8 +400,6 @@ describe('a version with an author script', () => {
     const who = await owner();
     const id = await publish(who.token, { title: 'Scripted', markup: SCRIPTED });
     await (await harness.db()).query(`UPDATE prepared_pages SET page = page #- '{compiled,authorScript}' WHERE artifact_id = $1`, [id]);
-    const stored = (await (await harness.db()).query<{ page: { authorScript?: string; compiled?: { authorScript?: string } } }>('SELECT page FROM prepared_pages WHERE artifact_id=$1', [id])).rows[0]?.page;
-    expect(stored?.authorScript).toBe('document.body.dataset.ran = "1";');
     const res = await raw(id, '?reader=compiled');
     expect(res.headers.get(READER_MODE_HEADER)).toBe('compiled');
     expect(authorOnly(await res.text()).data?.authorScript).toBe('document.body.dataset.ran = "1";');

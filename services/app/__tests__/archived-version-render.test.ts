@@ -126,7 +126,7 @@ describe('who may open an archived version', () => {
    */
   it('tells a hydrating document why it can never write', async () => {
     const owner = await mintToken('archived-readonly');
-    const created = await createArtifactRoute(request('/api/artifacts', { method: 'POST', token: owner.token, json: { markup: '<Helmet><Value name="n" type="number" default={1} /></Helmet><div><p>Version one</p><Input value="$n" label="Number" /></div>', visibility: 'public' } }));
+    const created = await createArtifactRoute(request('/api/artifacts', { method: 'POST', token: owner.token, json: { markup: '<Helmet><Value name="n" type="number" default={1} /></Helmet><div><p>Version one</p><Input value="$n" label="N" /></div>', visibility: 'public' } }));
     expect(created.status, await created.clone().text()).toBe(201);
     const id = (await created.json()).id as string;
 

@@ -114,7 +114,7 @@ export const assetsPath = (id: string): string => `/a/${id}/assets`;
 const GEOJSON_DIR_PATH = '/geojson/';
 
 /**
- * …and the runtime's own build directory, for the one file the runtime
+ * …and the island build directory, for the one file the runtime
  * FETCHES rather than imports: the page's SQLite wasm, content-addressed
  * there (StoryIslandData.sqliteWasm). Public build output, like /geojson/.
  */

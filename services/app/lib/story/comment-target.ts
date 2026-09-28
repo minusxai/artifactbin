@@ -1,5 +1,7 @@
 /** Persistent refinements scoped to the annotation's independently validated source owner. */
-export type CommentKey = string | number;
+import { isCommentKey, type CommentKey } from './row-key';
+export { isCommentKey } from './row-key';
+export type { CommentKey } from './row-key';
 export type IframeNodeTarget =
   | { kind: 'source'; id: string }
   | { kind: 'key'; path: string[] }
@@ -12,7 +14,6 @@ export type CommentTarget =
 /** Strict, bounded canonicalization at every incoming message and persistence boundary. */
 const record = (value: unknown): value is Record<string, unknown> => !!value && typeof value === 'object' && !Array.isArray(value);
 const identity = (value: unknown): value is string => typeof value === 'string' && value.length > 0 && value.length <= 256 && !/[\u0000-\u001f]/.test(value);
-export const isCommentKey = (value: unknown): value is CommentKey => (typeof value === 'string' && value.length <= 256 && !/[\u0000-\u001f]/.test(value)) || (typeof value === 'number' && Number.isFinite(value));
 const only = (value: Record<string, unknown>, names: string[]) => Object.keys(value).every((name) => names.includes(name));
 export function parseCommentTarget(value: unknown): CommentTarget | null {
   if (!record(value)) return null;

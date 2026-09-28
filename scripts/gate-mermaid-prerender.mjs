@@ -69,8 +69,8 @@ const publish = async (markup, title, extra = {}) => {
 async function harvested(id, ms = 170_000) {
   for (const end = Date.now() + ms; Date.now() < end;) {
     const html = await (await fetch(`${B}/a/${id}/raw`)).text();
-    const json = /<script type="application\/json" id="mx-story-data">([^<]+)<\/script>/.exec(html)?.[1];
-    if (json && Object.keys(JSON.parse(json).mermaidImages ?? {}).length > 0) return true;
+    // The compiled page always serializes an empty map; wait for a stored drawing, not the field.
+    if (/"mermaidImages":\{"[^"]+":/.test(html)) return true;
     await new Promise((resolve) => setTimeout(resolve, 1000));
   }
   return false;
@@ -121,9 +121,8 @@ async function drawings(url, mode = null, { blockStored = false } = {}) {
     const prefix = 'data:image/svg+xml;charset=utf-8,';
     return [f.querySelector('figcaption')?.textContent ?? '', { state: f.getAttribute('data-mx-mermaid-state'), src, svg: src.startsWith(prefix) ? decodeURIComponent(src.slice(prefix.length)) : null, palette: f.getAttribute('data-mx-mermaid-palette') }];
   })));
-  const state = await page.evaluate(() => { try { return { offered: Object.keys(JSON.parse(document.getElementById('mx-story-data')?.textContent ?? '{}').mermaidImages ?? {}).length, mode: document.documentElement.className, rootMode: document.querySelector('[data-mx-story-root]')?.className ?? '', windowName: window.name }; } catch { return { offered: -1, mode: '', rootMode: '', windowName: '' }; } });
   await page.close();
-  return { drawn, figures, scripts, ...state };
+  return { drawn, figures, scripts };
 }
 
 /** Engine vs storage for one page and mode: every stored kind identical, every unstored kind left to the engine. */
@@ -141,13 +140,13 @@ async function compare(label, url, samples, mode = null, { allStored = false } =
       check(shown.src.startsWith('data:'), `${label} ${sample.kind}: stays with the engine (${sample.why})`);
       continue;
     }
-    if (!check(shown.src.startsWith('/assets/mermaid/'), `${label} ${sample.kind}: served as a stored drawing (${shown.src.slice(0, 96)}, offered ${served.offered}, mode ${served.mode}/${served.rootMode}, name ${served.windowName})`)) continue;
+    if (!check(shown.src.startsWith('/assets/mermaid/'), `${label} ${sample.kind}: served as a stored drawing`)) continue;
     const stored = await (await fetch(new URL(shown.src, B).toString())).text();
     const block = FONTS_BLOCK.exec(stored);
     if (!check(!!block, `${label} ${sample.kind}: the stored drawing carries its fonts, first, in our grammar`)) continue;
     const plain = block[1] + stored.slice(block[0].length);
     const same = normalize(plain) === normalize(drawnByEngine.svg);
-    check(same, `${label} ${sample.kind}: the stored drawing, fonts aside, is byte-identical to the engine's in this page (${stored.length} B, fonts ${block[2].length} B, src ${shown.src}, mode ${served.mode}/${served.rootMode}, name ${served.windowName})`);
+    check(same, `${label} ${sample.kind}: the stored drawing, fonts aside, is byte-identical to the engine's in this page (${stored.length} B, fonts ${block[2].length} B)`);
     // Once per page: the image really is set in the embedded face.
     if (!rendered && /<text\b/.test(plain)) { rendered = true; check(await fontsRender(stored, plain), `${label} ${sample.kind}: its text renders in the embedded face (the image differs without it)`); }
   }

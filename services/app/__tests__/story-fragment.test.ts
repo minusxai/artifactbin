@@ -89,15 +89,17 @@ describe('the story fragment', () => {
     expect(owner.headers.get('access-control-allow-origin')).toBeNull();
   });
 
-  it('always answers with the compiled renderer and waits for a missing compile', async () => {
+  it('always answers with the compiled reader and compiles a missing version inline', async () => {
     const { id } = await publish({ title: 'Prose', markup: fixture('prose.jsx') });
     const ordinary = await story(id, '');
     expect(ordinary.status).toBe(200);
     expect(ordinary.headers.get(READER_MODE_HEADER)).toBe('compiled');
+    expect(await ordinary.text()).toContain('A plain prose document');
     const db = await harness.db();
     await db.query(`UPDATE prepared_pages SET page = page - 'compiled' WHERE artifact_id = $1`, [id]);
     const notYet = await story(id, '?reader=compiled');
-    expect(notYet.status, 'a missing compile is made before answering').toBe(200);
+    expect(notYet.status).toBe(200);
+    expect(notYet.headers.get(READER_MODE_HEADER)).toBe('compiled');
   });
 
   it('is the uniform 404 for an artifact that is not a document', async () => {

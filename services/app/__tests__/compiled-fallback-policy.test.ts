@@ -1,7 +1,6 @@
 /**
  * THE FALLBACK CONTRACT AFTER WAVE 4 (docs/phase2-architecture.md §6; lib/compiled-page/serve.server
- * `fallbackPolicy`). Today every reason a compiled read cannot be served answers with today's renderer
- * (`legacy`). Once that renderer is deleted (`compiled-only`): a missing compile or one from another
+ * `fallbackPolicy`). With the standalone renderer deleted (`compiled-only`), a missing compile or one from another
  * build is compiled inline and waited for, the inline budget only decides whether that is logged as
  * slow, and a compile that fails is a reported 500. Real routes, the harness's database, the reader
  * flag at `shadow` and the inline budget at zero for this file (every inline compile is "over budget").
@@ -22,7 +21,7 @@ import { READER_FALLBACK_HEADER, READER_MODE_HEADER } from '@/lib/compiled-page/
 import { compiledPageFailures, fallbackPolicy, setFallbackPolicyForTests } from '@/lib/compiled-page/serve.server';
 
 vi.mock('@/auth', () => ({ auth: async () => null }));
-// Every inline compile takes longer than this: under `legacy` it is `over-budget`, under `compiled-only` it is waited for.
+// Every inline compile takes longer than this; compiled-only waits for it.
 vi.mock('@/lib/compiled-page/contract', async (importOriginal) => ({ ...(await importOriginal<typeof import('@/lib/compiled-page/contract')>()), COMPILE_INLINE_BUDGET_MS: 0 }));
 const harness = useAppHarness();
 const params = (id: string) => ({ params: Promise.resolve({ id }) });
@@ -51,7 +50,7 @@ const storedBuild = async (id: string) => (await (await harness.db()).query<{ bu
 const storyText = (html: string) => new JSDOM(html).window.document.getElementById('mx-story-root')?.textContent?.replace(/\s+/g, ' ').trim() ?? '';
 
 describe('fallbackPolicy', () => {
-  it('is compiled-only after Wave 4 deletes today\'s reader', () => {
+  it('is compiled-only after the standalone reader is deleted', () => {
     expect(fallbackPolicy()).toBe('compiled-only');
   });
 });

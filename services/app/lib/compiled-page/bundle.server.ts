@@ -362,7 +362,7 @@ function ssrSource(islands: string, skeletonHtml: string, flow: CompiledDataflow
 const $skeleton = ${lit(skeletonHtml)};
 const $flow = JSON.parse(${lit(JSON.stringify(flow))});
 export function render(data) {
-  const runtime = rt.createIslandRuntime({ dataflow: $flow ? { flow: $flow, values: data.values, ...(data.results ? { results: data.results } : {}) } : null, mermaidImages: data.mermaidImages, colorMode: data.colorMode, viewer: null }, rt.createDataflowStore);
+  const runtime = rt.createIslandRuntime({ dataflow: $flow ? { flow: $flow, values: data.values, ...(data.state ? { state: data.state } : {}), ...(data.results ? { results: data.results } : {}) } : null, assetsUrl: data.assetsUrl, mermaidImages: data.mermaidImages, viewer: null }, rt.createDataflowStore);
   try {
     let html = $skeleton;
     ISLANDS.forEach(([renderId, Island], n) => {

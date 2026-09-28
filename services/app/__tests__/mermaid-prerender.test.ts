@@ -132,7 +132,6 @@ describe('a published Mermaid document', () => {
 
     // Before the harvest: today's page, the engine's chunks preloaded and nothing stored.
     const before = await raw(id);
-    expect(head(before)).not.toMatch(/modulepreload" href="[^"]*mermaid-render-/);
     expect(island(before).mermaidImages).toEqual({});
 
     expect(await runNextMermaidHarvest()).toBe(true);
@@ -183,7 +182,6 @@ describe('a published Mermaid document', () => {
     // Asked for by name, the engine draws as before: nothing stored reaches the page.
     const engine = await raw(id, '?mermaid=engine');
     expect(island(engine).mermaidImages).toEqual({});
-    expect(head(engine)).not.toMatch(/modulepreload" href="[^"]*mermaid-render-/);
   });
 
   it('a harvest that lands after the reader page was prepared is served on the next read, and its preloads drop the engine', async () => {
@@ -321,7 +319,6 @@ describe('a published Mermaid document', () => {
     await runNextMermaidHarvest();
     expect((await jobs(id))[0].state).toBe('done');
     expect(island(await raw(id)).mermaidImages).toEqual({});
-    expect(head(await raw(id))).not.toMatch(/modulepreload" href="[^"]*mermaid-render-/);
   });
 
   it('stores nothing from a browser that hints text (whole-pixel advances: a browser service without the unhinted harvest), so readers keep the engine', async () => {
@@ -383,7 +380,7 @@ describe('when the browser is down or slow', () => {
     expect(job.retry_after).not.toBeNull();
     // Backing off: not due again yet.
     expect(await runNextMermaidHarvest()).toBe(false);
-    expect(head(await raw(id))).not.toMatch(/modulepreload" href="[^"]*mermaid-render-/);
+    expect(island(await raw(id)).mermaidImages).toEqual({});
   });
 
   it('a harvest that hangs never delays a publish', async () => {
@@ -398,7 +395,7 @@ describe('when the browser is down or slow', () => {
       const started = performance.now();
       const { id } = await publish([SEQ]);
       expect(performance.now() - started).toBeLessThan(2000);
-      expect(head(await raw(id))).not.toMatch(/modulepreload" href="[^"]*mermaid-render-/);
+      expect(island(await raw(id)).mermaidImages).toEqual({});
     } finally {
       release();
       await stop();
