@@ -19,6 +19,9 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { SelectControl } from '@/components/kit/controls';
 import { rowsDigest } from '../digest';
 import { DRAWING_CLASS } from '../chart';
+import { createIslandRuntime } from '../rt';
+import { createDataflowStore } from '@/lib/story-runtime/store';
+import type { CompiledDataflow } from '@/lib/story/compiled-dataflow';
 
 const monthly: TableResult = { rows: [{ month: '2025-01-01', revenue: 120, units: 3 }, { month: '2025-02-01', revenue: 160, units: 4 }], columns: [{ name: 'month', type: 'date' }, { name: 'revenue', type: 'number' }, { name: 'units', type: 'number' }] };
 const regions: TableResult = { rows: [{ region: 'East' }, { region: 'West' }], columns: [{ name: 'region', type: 'string' }] };
@@ -79,6 +82,36 @@ describe('Select', () => {
 });
 
 describe('DataTable', () => {
+  it('repaints a server query result through the store bridge', async () => {
+    const columns: TableResult['columns'] = [{ name: 'id', type: 'number' }, { name: 'region', type: 'string' }, { name: 'amount', type: 'number' }];
+    const west = { rows: [{ id: 1, region: 'west', amount: 120 }], columns };
+    const east = { rows: [{ id: 2, region: 'east', amount: 90 }], columns };
+    const flow: CompiledDataflow = { imports: [], mutations: [], values: [{ name: 'region', kind: 'scalar', type: 'string', default: 'west' }], queries: [{ name: 'orders', engine: 'postgres', source: 'DS1', sql: 'select id, region, amount from orders where region=$region', params: ['region'], reads: { imports: [], queries: [], values: ['region'], builtins: [] }, columns, start: 0, end: 0 }] };
+    const run = vi.fn(async () => ({ tables: { orders: east }, errors: {} }));
+    const rt = createIslandRuntime({ dataflow: { flow, values: { region: 'west' }, results: { tables: { orders: west }, errors: {} } } }, input => createDataflowStore(input, { transport: { run, page: vi.fn() }, debounceMs: 0 }));
+    const { host, dispose } = mount(rt.context, () => <DataTable data="$orders" />);
+    rt.store!.start();
+    expect(host.querySelector('tbody')?.textContent).toContain('120');
+    rt.context.setValue('region', 'east');
+    await vi.waitFor(() => expect(host.querySelector('tbody')?.textContent).toContain('90'));
+    expect(host.querySelector('tbody')?.textContent).not.toContain('120');
+    expect(run).toHaveBeenCalledTimes(1);
+    dispose();
+    rt.dispose();
+  });
+
+  it('repaints rows when a query returns a new table', () => {
+    const ctx = fakeIsland();
+    const [table, setTable] = createSignal<TableResult>({ rows: [{ id: 1, region: 'west', amount: 120 }], columns: [{ name: 'id', type: 'number' }, { name: 'region', type: 'string' }, { name: 'amount', type: 'number' }] });
+    ctx.table = () => table();
+    const { host, dispose } = mount(ctx, () => <DataTable data="$orders" />);
+    expect(host.querySelector('tbody')?.textContent).toContain('120');
+    setTable({ rows: [{ id: 2, region: 'east', amount: 90 }], columns: table().columns });
+    expect(host.querySelector('tbody')?.textContent).toContain('90');
+    expect(host.querySelector('tbody')?.textContent).not.toContain('120');
+    dispose();
+  });
+
   it('renders the rows and header of its table and matches today\'s DOM', () => {
     const { host } = mount(undefined, () => <DataTable data="$monthly" height="300px" id="dIQl" />);
     expect(host.querySelectorAll('tbody tr')).toHaveLength(2);

@@ -159,15 +159,19 @@ try {
   assert.ok(!(await guest.getByLabel('DataTable embed', { exact: true }).innerText()).includes('90'));
   if (compiledReader) await guest.locator('html[data-mx-ready]').waitFor();
   const queryCalls = [];
-  if (compiledReader) guest.on('response', response => {
-    if (response.url().includes(`/a/${start.id}/query`)) queryCalls.push(response.status());
+  if (compiledReader) guest.on('response', async response => {
+    if (!response.url().includes(`/a/${start.id}/query`)) return;
+    const request = JSON.parse(new URL(response.url()).searchParams.get('q') ?? '{}');
+    const body = await response.json();
+    secretFree(body);
+    queryCalls.push({ status: response.status(), values: request.values, rows: body.tables?.orders?.rows });
   });
   await guest.getByLabel('Region', { exact: true }).fill('east');
   if (compiledReader) {
     await guest.waitForTimeout(700);
     const state = await guest.evaluate(() => {
       const store = document.querySelector('[data-mx-inline-story]')?.__mxIslands?.store;
-      return { input: document.querySelector('[aria-label="Region"]')?.value, value: store?.getValue('region'), pending: store?.pending(), error: store?.getState().errors, queryUrl: !!JSON.parse(document.querySelector('#mx-story-data')?.textContent ?? '{}').queryUrl };
+      return { input: document.querySelector('[aria-label="Region"]')?.value, value: store?.getValue('region'), rows: store?.getTable('orders')?.rows, pending: store?.pending(), error: store?.getState().errors, queryUrl: !!JSON.parse(document.querySelector('#mx-story-data')?.textContent ?? '{}').queryUrl };
     });
     secretFree(state);
     log(`compiled Region after fill: ${JSON.stringify(state)}; query responses ${JSON.stringify(queryCalls)}`);
