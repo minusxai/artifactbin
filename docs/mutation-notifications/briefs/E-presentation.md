@@ -21,3 +21,5 @@ Read AGENTS.md, docs/agent-workflows.md, and docs/mutation-notifications.md firs
 Use TDD. Where supplied, copy the .test.ts.txt seed to its destination and observe red before implementation. Report commands and actual counts; do not claim new-feature green from old baseline tests. Run npm run validate and affected npm test; follow the 50-file deferral, empty PR-body and CI rules. No production testing, no broad suite bypass, no hand-edited generated assets. Server/CLI checks use only your task server and allocated port block.
 
 Commit implementation and tests in your worktree. Handoff .agent/REPORT.md with contracts consumed/provided, red/green evidence, checks/deferred CI, remaining risks, commit, and a ===CONCISE=== section. Do not merge or claim integrated feature completion. Stop if another owner's contract is insufficient; send the exact missing requirement to root while continuing independent work.
+
+Multirow: one logical item per recipient/effect. Invocation grouping is optional presentation only; counts/content must include only currently visible items for that recipient. Preserve each item identity/read state and paginate large lists.

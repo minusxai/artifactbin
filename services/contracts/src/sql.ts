@@ -89,13 +89,11 @@ export interface RunInput {
 }
 
 export interface MutationInput {
-  /**
-   * Opt-in change images for at most one touched row. Zero rows gives effect:null;
-   * more than one refuses the result. expectedAffected remains the stricter guard.
-   * A caller requesting capture MUST refuse a successful result missing effect.
-   * Foundation contract: engines implement this in the capture workstream.
+  /** Projected images for every affected record; independent of expectedAffected.
+   * Missing effects on capture success is a capability failure. Adapter-private
+   * identities and capture mechanisms never cross this boundary.
    */
-  capture?: 'single-row';
+  capture?: { before: string[]; after: string[] };
   policy?: DatasetMutationPolicy;
   /** Internal capability preview: analyze only, never execute effects. */
   policyPreview?: boolean;
@@ -125,11 +123,14 @@ export type MutationEffect =
 export interface MutationResult extends TableResult {
   affected: number;
   /**
-   * Present on capture success, null only for zero touched rows. Same-value UPDATE
-   * is touched. Before is captured during the statement; after includes presets.
-   * Omitted means no capture, never an empty effect. Not a public API response.
+   * Present on capture success: one effect per affected record, [] for zero.
+   * Array index is an execution-local ordinal, NOT persistent record identity.
+   * Before is captured during the statement; after includes final presets/checks.
+   * Only requested fields are included; an existing empty projection is {}.
+   * Ordering is adapter-owned and frozen with the winning invocation, not portable
+   * across retries. Ordinary writes omit effects. Never a public API response.
    */
-  effect?: MutationEffect | null;
+  effects?: MutationEffect[];
   analysis?: MutationAnalysis;
   /** Actual assigned user fields, after expressions/presets. App validates before commit. */
   userWrites?: Row[];

@@ -85,7 +85,8 @@ export interface ResolvedMutationNotification {
 export interface MutationNotificationCommit {
   origin: MutationNotificationOrigin;
   initiator: MutationInitiator;
-  resolved: ResolvedMutationNotification;
+  /** Array index matches the winning effects ordinal, including empty recipient sets. */
+  resolved: ResolvedMutationNotification[];
 }
 
 /** Internal principal details never cross this presentation boundary. */
@@ -101,6 +102,9 @@ export interface MutationNotificationView {
   title: string | null;
   actor: MutationNotificationActor;
   action_text: string;
+  /** Safe grouping metadata; counts must only include this recipient’s visible items. */
+  invocation_id: string;
+  effect_ordinal: number;
   mutation_name: string;
   revision: number;
   read_at: string | null;

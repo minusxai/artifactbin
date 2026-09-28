@@ -11,6 +11,12 @@ describe('notification declarations',()=>{
   expect(result.ok).toBe(true);if(!result.ok)return;
   expect(result.decl).toMatchObject({name:'complete',sql:"update tasks.rows set status = 'done' where id = $task_id",expectedAffected:1,notify:{to:[{kind:'field',ref:{snapshot:'after',field:'assignee'}}],message:[{kind:'text',text:'changed “'},{kind:'field',ref:{snapshot:'after',field:'title'}},{kind:'text',text:'” to '},{kind:'field',ref:{snapshot:'after',field:'status'}}]}});
  });
+ it.each([undefined,2])('preserves author cardinality %s without an implicit guard',count=>{
+  const guard=count===undefined?'':` expectedAffected={${count}}`;
+  const result=parseMutationDecl(element('<Mutation name="bulk"'+guard+'>{`update tasks.rows set status = $status`}<Notify to={$_after.assignee}>changed status</Notify></Mutation>'));
+  expect(result.ok).toBe(true);if(!result.ok)return;
+  expect(result.decl.expectedAffected).toBe(count);
+ });
  it('normalizes a recipient list into inert references',()=>{
   const result=parseMutationDecl(element('<Mutation name="reassign" expectedAffected={1}>{`update tasks.rows set assignee = $assignee where id = $task_id`}<Notify to={[$_before.assignee, $_after.assignee]}>reassigned “{$_after.title}”</Notify></Mutation>'));
   expect(result.ok).toBe(true);if(!result.ok)return;

@@ -4,10 +4,10 @@
 Own services/app/lib/story/dataflow.ts, helmet.ts, compiled-dataflow.ts, compile-dataflow.ts, parsed-artifact-metadata.ts; necessary bounded lib/jsx parser/serializer/validation changes; new lib/story/mutation-notification.ts pure parser/resolver; declaration/compile/roundtrip tests. Own notification metadata projection in compiled-page/bundle.server.ts only; coordinate any other renderer edits with root. Do not touch skill text, SQL engine, DB, notification storage, or UI inbox files.
 
 ## Contract
-Use shared MutationNotificationSpec exactly. Preserve one SQL child plus optional Notify. Before/after are notification-only scoped fields. Normalize scalar/list/null/quoted-ref forms. Check recipient user columns, message scalar columns, impossible insert/delete sides, local/nonphysical targets and exact-one count. Resolver returns candidate IDs/actionText, never authorization. Enforce count/text limits as specified. No arbitrary JSX evaluator or browser Notify execution.
+Use shared MutationNotificationSpec exactly. Preserve one SQL child plus optional Notify. Before/after are notification-only scoped fields. Normalize scalar/list/null/quoted-ref forms. Check recipient user columns, message scalar columns, impossible insert/delete sides, local/nonphysical targets; preserve explicit counts without injecting a guard. Resolver returns candidate IDs/actionText, never authorization. Enforce count/text limits as specified. No arbitrary JSX evaluator or browser Notify execution.
 
 ## Order and proof
-1. Copy declaration seed, observe its four semantic failures.
+1. Copy declaration seed, observe its six semantic failures.
 2. Implement grammar/resolver and add positive/negative shape tests with useful error spans.
 3. Compile against target column metadata; add notify to compiled flow and strict stored schema with revision bump. Preserve declaration invalidation when only message/recipients change.
 4. Verify repeated serialization, CLI local compilation, SSR/legacy validation defense, and client projection preserves needed mutation operation metadata.

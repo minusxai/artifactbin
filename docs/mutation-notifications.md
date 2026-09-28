@@ -16,13 +16,13 @@ This file, shared types, and seeds are the implementation handoff. The linked pr
 | Server-owned before/after records | A + root | Typed actual effect, presets, winning retry, no client row trust |
 | Implicit actor; action phrase renders after user mention | D + E | Principal-derived identity, honest provenance, no $_actor author API |
 | Successful commits only, replay-safe | D + root + C | Dataset pointer, receipt, inbox and outbox atomic; lost-response replay once |
-| Single affected row, potentially several recipients | A + B | Notify compiles exact-one guard, bulk declaration/refusal checks |
+| Any supported affected-row count, recipients resolved per row | A + B + C | No implicit cardinality guard; zero effects notify nobody; distinct rows retain distinct effects |
 | Large commented skill example | F | Coherent user-typed task schema and short rendered-notification comment |
 | V1 restrictions: user-typed recipient fields, no argument/query recipients, authenticated Notify invocation | B + C + D | Explicit compile/sign-in refusals; no silent widening |
 | Running dev-server URL and usable example at feature handoff | F + root | Same named action from UI and CLI; recipient inbox + test steps; task server left running |
 | Parallel GPT-6 work, bounded responsibilities | root | Six workstreams, critical-path scheduling, isolated worktrees, no overlapping file ownership |
 
-Deferred, not forgotten: authenticated GET query alias (POST already works), headless row/cell context APIs, connected Postgres writes, bulk notification effects, watchers/groups/recipient queries, rich HTML, and externally delivered production email. The OSS internal delivery view is in scope; the deployment-specific email adapter is a separate repo follow-up and must not be claimed shipped here.
+Deferred, not forgotten: authenticated GET query alias (POST already works), headless row/cell context APIs, connected Postgres write implementation, watchers/groups/recipient queries, rich HTML, and externally delivered production email. The OSS internal delivery view is in scope; the deployment-specific email adapter is a separate repo follow-up and must not be claimed shipped here.
 
 ## Exact authoring contract
 
@@ -44,15 +44,38 @@ The import and all three scalar Values must exist; demo/example schemas must act
 - `to={$_after.assignee}`, `to={[$_before.assignee, $_after.assignee]}`, literal user ID strings, and lists of such strings are supported. For compatibility with existing binding notation, `to="$_after.assignee"` is the same field reference, never a literal ID. Null literal/list entries normalize away.
 - Known target `user` columns only for recipient references; known scalar target columns for message references. Runtime validates resolved IDs and authorization. No arbitrary mutation argument or other query references in v1.
 - Only Notify has before/after scope. INSERT cannot reference before; DELETE cannot reference after. Nullable message fields render empty text. Scalar formatting uses existing scalar conversion, not JavaScript object coercion.
-- Notify implies `expectedAffected:1` if omitted. Any other explicit count is rejected. Zero touched rows fails existing exact-one guard; more than one fails before persistence. Same-value UPDATE is successful and may notify; semantic-diff suppression is not part of this change.
+- Notify never adds or overrides `expectedAffected`. An explicit author guard keeps its existing semantics. Without a guard, zero touched rows succeeds with no notifications; multiple rows each resolve the same Notify template against their own before/after. Same-value UPDATE is successful and may notify; semantic-diff suppression is not part of this change.
 - Initial limits: 20 authored recipient entries before null/dedup normalization; 500 Unicode code points of resolved action text. Limit overflow is a clear declaration/invocation refusal, not silent truncation. Limits are validated before persistence, including expressions whose resolved strings are longer than source.
 - Local mutations and nonphysical/connected target tables cannot carry Notify. A direct SQL dataset write has no Notify declaration.
 
 ## Shared contracts and module ownership
 
-`services/contracts/src/sql.ts` adds optional `capture:'single-row'` and `MutationEffect` on `MutationResult.effect`. This foundation does not implement the engine. Callers must not begin requesting capture until A passes; missing effect on a capture request is a capability refusal, not success.
+`services/contracts/src/sql.ts` adds optional projected `capture:{before:string[],after:string[]}` and `MutationEffect[]` on `MutationResult.effects`. This foundation does not implement the engine. Callers must not begin requesting capture until A passes; missing effects on a capture request is a capability refusal, not success.
 
-Engine semantics: before is captured during the author statement, after is read after presets and checks, both use normal typed column conversion. Zero without an exact count returns explicit `effect:null`; >1 returns `row_not_unique` with no rows/effect. An independent `expectedAffected` guard remains stricter. Ordinary writes omit effect. Never persist internal rowid, infer changes by comparing row values, or expose full images in the API reply. Capture remains bounded on wide/multirow inputs and preserves extension continuation behavior.
+Engine semantics: capture only the union of referenced fields; validate names before execution and normalize duplicate projections. Before is captured during the author statement, after after presets/checks; typed conversion is adapter-owned. Zero returns `effects:[]`; successful capture has `effects.length === affected`. Nonexistent sides are null; existing empty projections are {}. Same-value updates count. Array position is a winning-execution ordinal, not cross-retry identity or an ordering promise across database engines. Ordinary writes omit effects. Never infer pairs from row values, persist private row IDs, or expose images publicly. Resource overflow refuses before persistence, never truncates.
+
+### Multirow delivery and capacity
+
+Resolve recipients and text independently for each effect. Skip nulls and deduplicate users within a row, never collapse distinct effects by equal values/text. Logical item identity is invocation + declaration + winning effect ordinal + recipient. The writer takes the full ordered resolved array, performs eligibility reads once per unique recipient where whole-table policy permits, then parameterized batched inserts in the winning transaction. A failure in the last batch rolls back all earlier batches, the dataset pointer and receipt.
+
+Keep one logical inbox item per admitted row/recipient. Presentation may group these by invocation for that recipient, preserving individual content and read state. Group counts and text must use only that recipient's currently visible items. Visual grouping is optional initial UI work, not a new storage identity or permission boundary.
+
+Bound aggregate captured bytes, resolved-plan bytes and row-recipient fanout as well as the existing per-row limits. Incremental capture must stop before unbounded allocation. Final numeric service-owned limits require measurements on PGLite and CI Postgres; do not invent a hidden row-count limit or claim unlimited bulk support. Explicit resource exhaustion still refuses the whole invocation before persistence, with a clear capacity error; this is the remaining intentional atomicity tradeoff, distinct from rejecting any second row. No silent dropped notification, partial success, automatic mutation splitting, or uncertain retry with a fresh key. Benchmark transaction duration, query count and memory/output bytes before choosing defaults.
+
+Start with synchronous batched persistence. An async alternative requires an immutable, commit-authorized recipient/message plan atomically recorded with the mutation, plus durable worker leases/cursors/recovery. The current event outbox only forwards envelopes; it is not that worker. Async materialization is a separate milestone if measurements require it.
+
+### Database-neutral boundary and future connected writes
+
+Notify syntax, projected typed effects, per-effect resolution and dedupe semantics must not depend on SQLite, rowid, whole-table replacement, RETURNING order, or a dataset CAS implementation. The current MutationInput/Success and transaction writer are local-dataset adapters, not a universal external-write protocol. Keep those details behind execution and commit adapters; adding a connected database must not change author syntax.
+
+A future adapter must declare and test reliable projected before/after capture, affected-row semantics, replay identity, type normalization and durable commit evidence. It must pair images within the execution even if primary keys change or records are identical. Trigger/cascade effects, generated values and supported statement forms require explicit capability definitions; unsupported operations fail before execution, never silently omit notifications. Preserve supported normal database types via explicit scalar normalization; arbitrary database values are not automatically valid message fields.
+
+A remote Postgres transaction cannot atomically commit artifactbin's local inbox transaction. Its write plus durable operation receipt and notification intent must commit in that source transaction (or an equivalently proven CDC integration), then artifactbin consumes the intent idempotently. A post-write HTTP notification call is insufficient. Source permissions/install requirements, authorization timing, outage/recovery and cross-system revocation semantics need a connector milestone before external Notify is enabled. This planning stage does not claim distributed atomicity or implement Postgres writes.
+
+Research: [SQLite trigger semantics](https://www.sqlite.org/lang_createtrigger.html) support row-level OLD/NEW capture; [SQLite RETURNING](https://www.sqlite.org/lang_returning.html) has arbitrary result order and does not include later trigger changes. [Postgres triggers and transition relations](https://www.postgresql.org/docs/current/sql-createtrigger.html) provide different adapter mechanisms, not an identical implementation. [Transactional outbox guidance](https://docs.aws.amazon.com/prescriptive-guidance/latest/cloud-design-patterns/transactional-outbox.html) explains the cross-system dual-write problem and need for idempotent consumption.
+
+Observed scratch probe: actual guarded SQLite WASM wrapper passed multirow insert/update/delete, duplicates without primary keys, filtered rows, same-value updates, final presets, boolean conversion and omission of unrequested fields. 10,000 projected effects serialized to 1,138,891 bytes (56.7 ms illustrative local capture phase). This is mechanism evidence, not production capture, a capacity benchmark, transport parity or transactional notification proof.
+
 
 `services/contracts/src/mutation-notifications.ts` freezes:
 
@@ -108,7 +131,7 @@ Seeds are stored as `.test.ts.txt` so an unfinished feature does not make founda
 Observed at this base:
 
 - Existing focused baseline: 4 files, 163 tests passed (35.83 seconds runner duration).
-- SQL capture and declaration seeds: 2 files, all 10 tests failed for the intended missing effects/grammar/signature behavior (19.83 seconds). This is genuine semantic red, not a missing import failure.
+- Historical single-row SQL capture and declaration seeds (superseded below): 2 files, all 10 tests failed for the intended missing effects/grammar/signature behavior (19.83 seconds). This is genuine semantic red, not a missing import failure.
 - Headless teaching seed: 1 file, three tests failed in the final strengthened seed: first-page named operation examples absent, no explicit routine-operation versus authoring-QA guidance, and generated help incorrectly restricts writes to dataset targets. The original two-test probe also failed (5.11 seconds).
 - No feature green or end-to-end proof yet. The earlier scratch SQLite mechanism probe and 219-test planning baseline are supporting evidence, not substitute integration tests.
 
@@ -118,8 +141,30 @@ Run routine `npm run validate` and `npm test`. For scoped TDD use `npm test -- -
 
 ## Feature handoff is a running example
 
-The foundation worktree owns port block 5000–5099; read its .env for APP__PORT, never guess or borrow another server. F seeds local mxmx_test_* actor/recipient accounts and a task dataset with real user fields, a named read, and one guarded named mutation used by both CLI and UI. Verify scalar/list/null/duplicate/ineligible recipients, a failed guard, and replay without duplication. The final integrated server runs via npm run dev and stays running. Provide its artifact URL, recipient inbox URLs and local sign-in steps, plus process ownership. Read OTPs only with npm run dev:otp.
+The foundation worktree owns port block 5000–5099; read its .env for APP__PORT, never guess or borrow another server. F seeds local mxmx_test_* actor/recipient accounts and a task dataset with real user fields, a named read, and a guarded single-task action plus an unguarded bulk named mutation used by both CLI and UI. Verify scalar/list/null/duplicate/ineligible recipients, a failed guard, and replay without duplication. The final integrated server runs via npm run dev and stays running. Provide its artifact URL, recipient inbox URLs and local sign-in steps, plus process ownership. Read OTPs only with npm run dev:otp.
 
 Use npm run afbin against that same task server; do not iterate on production. Publishing the design proposal is documentation only. No baseline app URL may be presented as a working Notify demo.
 
 Agent-following-instructions eval requires the separate private evals repository, absent at foundation time. F checks availability and adds/runs a scoped task there if available; otherwise report the unrun eval explicitly, with real CLI/browser evidence. Production email adapter is likewise separately owned and not implied by an OSS inbox pass.
+
+## Agent workflow regression proof (F owns both layers)
+
+1. Deterministic branch-CLI smoke: seed a saved artifact with a named read and parameter-only named mutation. Execute the read and write headlessly, verify persisted rows and replay behavior, then use a session to test the authored UI and notification inbox. Include a row/cell-context action requiring the documented session fallback. Test state/results, not merely help-text strings.
+2. Behavioral agent eval: provide the updated skill and a task to inspect/update an existing artifact; require named query/write calls with no unnecessary session. A separate authoring/UI-verification task must use a session and actually inspect behavior. A third local-state/row-context case checks appropriate fallback. Grade tool traces and resulting state, fail duplicate writes/uncertain fresh-key retries, and report scenario-level results; do not make stochastic evals a substitute for deterministic CI.
+3. Existing pinned teaching tests remain cheap regression coverage. Add/run the eval in the separate private evals repository when available, as its own scoped change. If unavailable, keep the explicit unrun status and concrete task/rubric; smoke coverage is still required before feature handoff. No eval execution is claimed in this foundation.
+
+Revised multirow evidence: seven engine seed failures plus the original four declaration failures observed together (11 failures, 15.24 seconds). Expanded declaration seed then observed six semantic failures, including omitted and explicit multirow guards (843 ms). These replace the old exact-one seed contract; no implementation green is claimed.
+
+## New alternative under review: mutation-triggered notification queries
+
+User suggestion: declare a notification rule referring to a named mutation, with a read-only query producing recipient/message rows. This is possible and generalizes per-effect templates to related users, watchers and explicit bulk summaries. It is NOT yet the frozen implementation choice; A–F implementation must not launch against the old authoring contract until this decision is resolved.
+
+Prefer one rule query returning `to` and `message` per output row over separate recipient/data queries: their pairing and grouping remain explicit. `to` must resolve to a validated user ID (optionally a bounded list); `message` is plain action text with the platform actor still implicit. Association by mutation name must be compile-validated, invalidated on rename/removal, and bound to the declaration revision claimed by the invocation. This is server metadata, not a reactive page Query or a GET-triggered delivery side effect.
+
+Evaluate after the write logically but against captured winning effects and a consistent authorized transaction/snapshot, BEFORE committing the resolved notification plan. Expose bounded virtual before/after effect relations with an execution-local pairing key; never join snapshots by mutable business primary keys or unspecified query order. Aggregation can explicitly produce one summary per user; a summary must include only records/data that user is allowed to see. Delivery remains after successful commit; zero result rows means no notifications. Replays deliver the saved result and never rerun the query. Freeze output ordinals with the winning plan for identity; notification identity is then invocation + rule + output ordinal + recipient, rather than necessarily one per mutated record.
+
+The query's execution principal does not authorize disclosing its result to every recipient. Every joined source and selected message value introduces a disclosure boundary. Existing target-table read admission is insufficient for arbitrary joins, aggregates or privately imported datasets. Start with captured changes and explicitly declared, recipient-readable relations or require conservative whole-source admission; never silently run with artifact-owner privileges and send to arbitrary IDs. This source/provenance authorization must be designed and tested before broadening the query grammar.
+
+Effects-only query evaluation can remain portable in the existing embedded SQL layer. Queries joining a connected source need a connector-owned consistent snapshot/transaction and explicit dialect/capability handling. Remote source writes still require a durable source-side receipt/intent; a post-commit query against live tables is not reliable event capture. Read-only SQL restrictions, no network/functions with side effects, byte/result/fanout/time budgets, query failures and atomic refusal semantics remain explicit.
+
+Recommendation for decision: adopt a mutation-triggered result-query model if relational recipient selection and bulk summaries are near-term requirements; keep per-row Notify only as optional shorthand if it meaningfully reduces authoring. Do not maintain two independent delivery engines. This broadens B (rule/query compilation) and C/root (multi-source authorization/snapshot integration); re-estimate and seed tests before implementation. Initial research establishes architectural feasibility, not implementation proof for this alternative.
