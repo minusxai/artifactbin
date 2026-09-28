@@ -1,5 +1,5 @@
 /* @jsxImportSource solid-js */
-import { Show, createSignal, onCleanup, splitProps, type JSX } from 'solid-js';
+import { Show, createEffect, createSignal, onCleanup, splitProps, type JSX } from 'solid-js';
 import { isServer } from 'solid-js/web';
 import { refName, resolveBindings, rowBound, type BindingSource, type Row, type Scalar } from '@/lib/story/dataflow';
 import { VIEWER_ID } from '@/lib/story/builtins';
@@ -38,9 +38,24 @@ export function Progress(props: DivProps & { value?: number | string }) {
     <div data-slot="progress-indicator" data-state={state()} data-value={valid() ? own.value : undefined} data-max="100" class="h-full w-full flex-1 bg-primary transition-all" style={{ transform: `translateX(-${100 - (Number(own.value) || 0)}%)` }} />
   </div>;
 }
-export function Icon(props: JSX.SvgSVGAttributes<SVGSVGElement> & { name: string; glyphs: GlyphMap }) {
-  const [own, rest] = splitProps(props, ['name', 'glyphs', 'class']);
-  const glyph = () => own.glyphs[iconGlyphKey(String(own.name))] ?? own.glyphs[FALLBACK_ICON_KEY];
+const catalogs = new Map<string, Promise<GlyphMap>>();
+function loadGlyphCatalog(url: string): Promise<GlyphMap> {
+  let loading = catalogs.get(url);
+  if (!loading) {
+    loading = import(/* @vite-ignore */ url).then((module: { glyphs?: GlyphMap }) => module.glyphs ?? {});
+    catalogs.set(url, loading);
+    loading.catch(() => catalogs.delete(url));
+  }
+  return loading;
+}
+export function Icon(props: JSX.SvgSVGAttributes<SVGSVGElement> & { name: string; glyphs: GlyphMap; catalogUrl?: string }) {
+  const [own, rest] = splitProps(props, ['name', 'glyphs', 'catalogUrl', 'class']);
+  const [catalog, setCatalog] = createSignal<GlyphMap>({});
+  createEffect(() => {
+    const key = iconGlyphKey(String(own.name));
+    if (!own.glyphs[key] && !catalog()[key] && own.catalogUrl) void loadGlyphCatalog(own.catalogUrl).then(setCatalog);
+  });
+  const glyph = () => own.glyphs[iconGlyphKey(String(own.name))] ?? catalog()[iconGlyphKey(String(own.name))] ?? own.glyphs[FALLBACK_ICON_KEY] ?? catalog()[FALLBACK_ICON_KEY];
   const accessible = Object.keys(rest).some((key) => key.startsWith('aria-') || key === 'role' || key === 'title');
   return <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
     class={['lucide', glyph()?.cls, cn('inline-block size-4 shrink-0 align-[-0.125em]', own.class)].filter(Boolean).join(' ')}

@@ -150,7 +150,7 @@ export function createIslandRuntime(
   sync();
   const unsubscribe = store?.subscribe(sync) ?? (() => {});
 
-  const noData = () => new Error('this document declares no data');
+  const noData = () => new Error('no data declared');
   const context: IslandContext = {
     values: () => state.values,
     value: (name) => state.values[name],
@@ -184,7 +184,7 @@ export function createIslandRuntime(
     writes: (options.writes ?? (() => EMPTY_WRITE_FEED))(store),
     store: () => store,
     trustedPortal: options.trustedPortal ?? (() => trustedPortalOf()),
-    loadChart: options.loadChart ?? (() => Promise.reject(new Error('charts are drawn in the browser'))),
+    loadChart: options.loadChart ?? (() => Promise.reject(new Error('chart unavailable'))),
   };
 
   return {
@@ -249,11 +249,9 @@ export const sub = <T,>(value: T, row: Record<string, unknown>): T => substitute
 
 // Mirrors lib/jsx/validate hasDangerousScheme (importing validate.ts would drag its whole top level
 // into the shared chunk): browsers strip control characters and spaces inside the scheme.
-const DANGEROUS_URL = /^(javascript|vbscript|data):/i;
-const SAFE_DATA_URL = /^data:image\//i;
 // eslint-disable-next-line no-control-regex -- deliberately mirrors browser scheme normalization
-const dangerous = (url: string) => { const n = url.replace(/[\x00-\x20]/g, ''); return DANGEROUS_URL.test(n) && !SAFE_DATA_URL.test(n); };
-const IDREF_ATTRS = ['for', 'aria-labelledby', 'aria-describedby', 'aria-controls', 'aria-owns', 'headers', 'list', 'form'];
+const dangerous = (url: string) => /^(?:javascript:|vbscript:|data:(?!image\/))/i.test(url.replace(/[\x00-\x20]/g, ''));
+const IDREF_ATTRS = 'for aria-labelledby aria-describedby aria-controls aria-owns headers list form'.split(' ');
 
 /**
  * The attributes of an element inside a row template, resolved for one row (the interpreter's

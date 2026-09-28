@@ -95,7 +95,7 @@ interface KitMeta {
 /** Which module each ported kit component comes from, and its API props (everything else is a DOM attribute). */
 export const KIT: Readonly<Record<string, KitMeta>> = {
   Badge: { mod: 'basic', api: ['variant'] }, Alert: { mod: 'basic', api: ['variant'] }, AlertTitle: { mod: 'basic' }, AlertDescription: { mod: 'basic' },
-  Progress: { mod: 'basic', api: ['value'] }, Icon: { mod: 'basic', api: ['name', 'glyphs'] },
+  Progress: { mod: 'basic', api: ['value'] }, Icon: { mod: 'basic', api: ['name', 'glyphs', 'catalogUrl'] },
   Card: { mod: 'basic' }, CardHeader: { mod: 'basic' }, CardTitle: { mod: 'basic' }, CardDescription: { mod: 'basic' }, CardAction: { mod: 'basic' }, CardContent: { mod: 'basic' }, CardFooter: { mod: 'basic' },
   Tabs: { mod: 'tabs', island: true, api: ['defaultValue', 'value', 'orientation', 'dir'] }, TabsList: { mod: 'tabs', api: ['variant'] }, TabsTrigger: { mod: 'tabs', api: ['value', 'disabled'] }, TabsContent: { mod: 'tabs', api: ['value'] },
   Accordion: { mod: 'accordion', island: true, api: ['type', 'collapsible', 'defaultValue', 'value', 'orientation'] }, AccordionItem: { mod: 'accordion', api: ['value', 'disabled'] }, AccordionTrigger: { mod: 'accordion' }, AccordionContent: { mod: 'accordion' },
@@ -267,7 +267,7 @@ export interface Generated extends GeneratedSources {
 }
 
 /** One version's facts the generator reads (CompileInput without the build). */
-type GenerateInput = Omit<CompileInput, 'build'>;
+type GenerateInput = Omit<CompileInput, 'build'> & { glyphCatalogUrl?: string };
 
 export function generate(input: GenerateInput): Generated {
   const refData = input.refData ?? {};
@@ -485,6 +485,7 @@ export function generate(input: GenerateInput): Generated {
         }
       }
       if (node.tag === 'Files' || node.tag === 'Icon') props.glyphs = glyphs;
+      if (node.tag === 'Icon' && input.glyphCatalogUrl) props.catalogUrl = input.glyphCatalogUrl;
       if (node.tag === 'Iframe') {
         // The interpreter's rules (renderNode): refused inside a row, and invalid content renders nothing.
         if (ctx.row) return `<div role="alert">{${lit('DataTable and Iframe must be outside For templates')}}</div>`;
@@ -669,7 +670,7 @@ const deploymentOrigins = (): string[] => { try { return [new URL(PUBLIC_BASE_UR
  */
 export async function compilePage(input: CompileInput, build: CompilerBuild): Promise<CompiledPage> {
   if (input.build !== build.id) throw new Error(`compile: input is for build ${input.build}, not ${build.id}`);
-  const generated = generate(input);
+  const generated = generate({ ...input, glyphCatalogUrl: build.manifest['@mx/glyphs'] });
   const unknown = generated.behaviors.filter((b) => !build.manifest[b]);
   if (unknown.length) throw new Error(`compile: the island build carries no ${unknown.join(', ')}`);
   // Classified with the anonymous reader's admission the caller decided (snapshots.server

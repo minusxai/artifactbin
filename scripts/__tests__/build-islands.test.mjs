@@ -59,6 +59,15 @@ describe('buildIslands', () => {
     expect(again.ssr).toEqual(first.ssr);
   });
 
+  it('ships an optional, content-addressed glyph catalog without React in the reader graph', () => {
+    const url = first.manifest['@mx/glyphs'];
+    expect(url).toMatch(/^\/islands\/glyphs-[0-9a-f]{16}\.js$/);
+    expect(first.files[url].imports).toEqual([]);
+    const source = readFileSync(path.join(outDir, url.slice('/islands/'.length)), 'utf8');
+    expect(source).toContain('CircleQuestionMark');
+    expect(source).toContain('Check');
+  });
+
   it('writes the server half: one file, a namespace per runtime and kit specifier, only Solid external, no lazy engine', () => {
     const { ssr } = first;
     expect(ssr.url).toMatch(/^\/islands\/ssr-[0-9a-f]{16}\.js$/);

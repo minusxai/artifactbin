@@ -28,6 +28,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { COMPILED_PARITY_FIXTURES } from '../../../../../scripts/fixtures/compiled-parity/index.mjs';
 import { buildGlyphMap } from '@/lib/story/icon-glyphs';
 import { loadSsrModule } from '../bundle.server';
+import { createModuleStore } from '../modules.server';
 
 async function compiledFlow(declared: Dataflow, body: JsxNode[]) {
   const result = compileDataflow(declared, await prepareCompile(declared, async () => null), body);
@@ -220,6 +221,8 @@ describe('reactive shells match the React reader', () => {
     const page = await compilePage(input, loadCompilerBuild());
     expect(columnParity(page.html, input, { rows })).toEqual([]);
     expect([...dom(page.html).querySelectorAll('svg[data-slot="icon"]')]).toHaveLength(2);
+    const code = new TextDecoder().decode((await createModuleStore().get(page.module!.sha))!);
+    expect(code).toContain('glyphs-');
   });
 
   it('renders a live rail miniature from the current values', async () => {

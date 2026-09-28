@@ -32,12 +32,27 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import zlib from 'node:zlib';
 import { precompressTree, describePrecompression } from './lib/precompress.mjs';
+import { createElement } from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
+import { icons } from 'lucide-react';
 
 const ROOT = path.resolve(import.meta.dirname, '..');
 const APP = path.join(ROOT, 'services/app');
 const ISLANDS_SRC = path.join(APP, 'lib/islands');
 export const DEFAULT_OUT_DIR = path.join(APP, 'public/islands');
 const CACHE_MARKER = path.join(ROOT, 'node_modules/.cache/build-islands.json');
+
+/** The Icon port fetches this only when query rows name a glyph absent from the page's small inline map. */
+function glyphCatalog() {
+  const glyphs = {};
+  for (const [name, component] of Object.entries(icons)) {
+    const markup = renderToStaticMarkup(createElement(component));
+    const open = /^<svg\b[^>]*>/.exec(markup)?.[0] ?? '';
+    const cls = (open.match(/\bclass="([^"]*)"/)?.[1] ?? '').split(/\s+/).filter((part) => part && part !== 'lucide').join(' ');
+    glyphs[name] = { cls, inner: markup.slice(open.length).replace(/<\/svg>$/, '') };
+  }
+  return Buffer.from(`export const glyphs=${JSON.stringify(glyphs)};\n`);
+}
 
 /** The contract's constants, read from the TypeScript so there is one table (both files import only types). */
 function readContracts() {
@@ -237,6 +252,11 @@ export async function buildIslands({ outDir = DEFAULT_OUT_DIR } = {}) {
     fs.writeFileSync(path.join(outDir, lazy.fileName), lazy.bytes);
     files[url(lazy.fileName)] = { ...sizes(lazy.bytes), imports: [] };
   }
+  const catalog = glyphCatalog();
+  const catalogName = `glyphs-${sha256(catalog).slice(0, 16)}.js`;
+  fs.writeFileSync(path.join(outDir, catalogName), catalog);
+  files[url(catalogName)] = { ...sizes(catalog), imports: [] };
+  manifest['@mx/glyphs'] = url(catalogName);
   const missing = ISLAND_SPECIFIERS.filter((s) => !manifest[s]);
   if (missing.length) throw new Error(`build-islands: no chunk for ${missing.join(', ')}`);
 
@@ -244,7 +264,7 @@ export async function buildIslands({ outDir = DEFAULT_OUT_DIR } = {}) {
   fs.writeFileSync(path.join(outDir, ssrName), ssrHalf.bytes);
   const ssr = { url: url(ssrName), exports: SSR_EXPORTS };
 
-  const sortedManifest = Object.fromEntries(ISLAND_SPECIFIERS.map((s) => [s, manifest[s]]));
+  const sortedManifest = Object.fromEntries([...ISLAND_SPECIFIERS, '@mx/glyphs'].map((s) => [s, manifest[s]]));
   const sortedFiles = Object.fromEntries(Object.keys(files).sort().map((k) => [k, files[k]]));
   const build = buildId(sortedManifest, ssr, inputs);
   fs.writeFileSync(path.join(outDir, 'manifest.json'), JSON.stringify({ build, manifest: sortedManifest, files: sortedFiles, ssr }, null, 1) + '\n');
