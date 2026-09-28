@@ -66,7 +66,7 @@ export const mutationTargetRef = (flow: CompiledDataflow, m: CompiledMutation): 
  * from — what `meta.refs`, ownership and the live stream need.
  */
 export function dataRefs(flow: CompiledDataflow, pickerSources: Iterable<string> = []): string[] {
-  return [...new Set([...flow.imports.map((i) => i.ref), ...flow.queries.flatMap((q) => (q.source ? [q.source] : [])), ...pickerSources])];
+  return [...new Set([...flow.imports.map((i) => i.ref), ...[...flow.queries, ...(flow.notifications ?? [])].flatMap((q) => (q.source ? [q.source] : [])), ...pickerSources])];
 }
 
 /**

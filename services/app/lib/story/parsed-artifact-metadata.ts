@@ -16,7 +16,7 @@ import { compileWithLoader, type CompileResult, type SchemaLoader } from './comp
  * Bump the revision when compiled semantics change: every stored record then
  * reads as stale and recompiles.
  */
-const PARSED_ARTIFACT_COMPILER_REVISION = 'sqlite-compiled-1';
+const PARSED_ARTIFACT_COMPILER_REVISION = 'dataset-notify-2';
 
 /**
  * The door's compiled record rides on the prepared meta under this SYMBOL:
@@ -44,8 +44,12 @@ const compiledSchema = z.object({
     ...span, name, engine: z.enum(['sqlite', 'postgres']), source: z.string().optional(), sql: z.string(), params: z.array(z.string()), reads,
     columns: z.array(z.object({ name: z.string(), type: columnType.nullable() }).strict()),
   }).strict()),
+  notifications: z.array(z.object({
+    ...span, name, on: name, engine: z.enum(['sqlite', 'postgres']), source: z.string().optional(), sql: z.string(), params: z.array(z.string()), reads,
+    columns: z.array(z.object({ name: z.string(), type: columnType.nullable() }).strict()).optional(),
+  }).strict()).optional(),
   mutations: z.array(z.object({
-    ...span, name, sql: z.string(),
+    ...span, name, notifies: z.literal(true).optional(), sql: z.string(),
     target: z.union([z.object({ import: z.string(), table: z.string() }).strict(), z.object({ local: z.string() }).strict()]),
     args: z.array(z.object({ name: z.string(), type: columnType.nullable() }).strict()), reads,
     rowTypes: z.record(z.string(), columnType.nullable()).optional(), valueType: columnType.nullable().optional(),
@@ -74,13 +78,14 @@ const hash = (source: string) => createHash('sha256').update(source).digest('hex
 function rebind(compiled: CompiledDataflow, source: string): CompiledDataflow | null {
   const flow = declarationsOf(source);
   if (!flow) return null;
-  const spans = new Map<string, { start: number; end: number; sql: string }>([...flow.queries, ...flow.mutations].map((d) => [d.name, d]));
+  const spans = new Map<string, { start: number; end: number; sql: string }>([...flow.queries, ...flow.mutations, ...(flow.notifications ?? [])].map((d) => [d.name, d]));
   const same = flow.imports.length === compiled.imports.length && flow.imports.every((i, n) => compiled.imports[n]?.name === i.name && compiled.imports[n]?.ref === i.ref)
+    && (flow.notifications?.length ?? 0) === (compiled.notifications?.length ?? 0)
     && flow.values.length === compiled.values.length && flow.queries.length === compiled.queries.length && flow.mutations.length === compiled.mutations.length
-    && [...compiled.queries, ...compiled.mutations].every((d) => spans.has(d.name));
+    && [...compiled.queries, ...compiled.mutations, ...(compiled.notifications ?? [])].every((d) => spans.has(d.name));
   if (!same) return null;
   const at = <T extends { name: string; start: number; end: number }>(d: T): T => ({ ...d, start: spans.get(d.name)!.start, end: spans.get(d.name)!.end });
-  return { ...compiled, queries: compiled.queries.map(at), mutations: compiled.mutations.map(at) };
+  return { ...compiled, queries: compiled.queries.map(at), mutations: compiled.mutations.map(at), ...(compiled.notifications ? { notifications: compiled.notifications.map(at) } : {}) };
 }
 
 /** The stored record, when it is current for this source; null otherwise. */
@@ -89,7 +94,7 @@ export function storedCompiledDataflow(meta: unknown, source: string): CompiledD
   const parsed = metadataSchema.safeParse(raw);
   if (!parsed.success || parsed.data.sourceHash !== hash(source)) return null;
   const { compiled } = parsed.data;
-  const declarations = [...compiled.queries, ...compiled.mutations];
+  const declarations = [...compiled.queries, ...compiled.mutations, ...(compiled.notifications ?? [])];
   const names = [...compiled.imports, ...compiled.values, ...declarations].map((d) => d.name);
   if (!declarations.every((d) => d.start <= d.end && d.end <= source.length) || new Set(names).size !== names.length) return null;
   return compiled;
@@ -125,4 +130,9 @@ export function finalizeArtifactMetadata(format: string, source: string | null, 
   if (!compiled) return clean;
   const record: ParsedArtifactMetadataV2 = { schemaVersion: 2, compilerRevision: PARSED_ARTIFACT_COMPILER_REVISION, sourceHash: hash(source), compiled };
   return { ...clean, parsedArtifact: record };
+}
+
+export function parseCompiledDataflow(value: unknown): CompiledDataflow | null {
+  const parsed = compiledSchema.safeParse(value);
+  return parsed.success ? parsed.data : null;
 }

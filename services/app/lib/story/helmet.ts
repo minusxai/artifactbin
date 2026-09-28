@@ -32,7 +32,7 @@
  *    CSS has no use for the sequence; the snapshot's styleTag precedent.)
  */
 import { parseJsx, type JsxElement, type JsxNode, type ValidationError } from '@/lib/jsx';
-import { IMPORT_TAG, MUTATION_TAG, QUERY_TAG, VALUE_TAG, carriesRef, parseImportDecl, parseMutationDecl, parseQueryDecl, parseValueDecl, type Dataflow, type ImportDecl, type MutationDecl, type QueryDecl, type ValueDecl } from './dataflow';
+import { IMPORT_TAG, MUTATION_TAG, NOTIFY_TAG, QUERY_TAG, VALUE_TAG, carriesRef, parseImportDecl, parseMutationDecl, parseNotifyDecl, parseQueryDecl, parseValueDecl, type Dataflow, type ImportDecl, type MutationDecl, type NotifyDecl, type QueryDecl, type ValueDecl } from './dataflow';
 
 export const HELMET_TAG = 'Helmet';
 
@@ -57,6 +57,7 @@ export interface HelmetContent {
   queries: QueryDecl[];
   /** `<Mutation>` declarations in authored order (lib/story/dataflow.ts). */
   mutations: MutationDecl[];
+  notifications?: NotifyDecl[];
 }
 
 export interface HelmetSplit {
@@ -77,14 +78,15 @@ export function declarationsOf(source: string): Dataflow | null {
 
 /** The data declarations of a split Helmet, as one `Dataflow`. */
 export const dataflowOf = (content: HelmetContent): Dataflow =>
-  ({ imports: content.imports, values: content.values, queries: content.queries, mutations: content.mutations });
+  ({ imports: content.imports, values: content.values, queries: content.queries, mutations: content.mutations, ...(content.notifications?.length ? { notifications: content.notifications } : {}) });
 
 /** The DATA declarations a Helmet may repeat (lib/story/dataflow.ts owns their shapes). */
-const DATA_TAGS: Record<string, (el: JsxElement) => { ok: true; decl: ImportDecl | ValueDecl | QueryDecl | MutationDecl } | { ok: false; errors: ValidationError[] }> = {
+const DATA_TAGS: Record<string, (el: JsxElement) => { ok: true; decl: ImportDecl | ValueDecl | QueryDecl | MutationDecl | NotifyDecl } | { ok: false; errors: ValidationError[] }> = {
   [IMPORT_TAG]: parseImportDecl,
   [VALUE_TAG]: parseValueDecl,
   [QUERY_TAG]: parseQueryDecl,
   [MUTATION_TAG]: parseMutationDecl,
+  [NOTIFY_TAG]: parseNotifyDecl,
 };
 
 /** Children that may appear at most ONCE and carry a text payload. */
@@ -161,7 +163,7 @@ export function validateHelmet(nodes: JsxNode[]): ValidationError[] {
     }
     if (child.type !== 'element' || !(CHILD_TAGS as readonly string[]).includes(child.tag.toLowerCase()) || child.isComponent) {
       errors.push({
-        message: `<Helmet> may only contain <title>, <style>, <script>, <meta>, <Import>, <Value>, <Query>, <Mutation>`,
+        message: `<Helmet> may only contain <title>, <style>, <script>, <meta>, <Import>, <Value>, <Query>, <Mutation>, <Notify>`,
         start: child.start, end: child.end, ...(child.type === 'element' ? { tag: child.tag } : {}),
       });
       continue;
@@ -237,6 +239,7 @@ function helmetContent(helmet: JsxElement): HelmetContent {
       else if (child.tag === VALUE_TAG) { const p = parseValueDecl(child); if (p.ok) content.values.push(p.decl); }
       else if (child.tag === QUERY_TAG) { const p = parseQueryDecl(child); if (p.ok) content.queries.push(p.decl); }
       else if (child.tag === MUTATION_TAG) { const p = parseMutationDecl(child); if (p.ok) content.mutations.push(p.decl); }
+      else if (child.tag === NOTIFY_TAG) { const p = parseNotifyDecl(child); if (p.ok) (content.notifications ??= []).push(p.decl); }
       continue;
     }
     const tag = child.tag.toLowerCase();

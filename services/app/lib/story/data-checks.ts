@@ -38,7 +38,8 @@ export function schemaSourceOf(r: ResolvedRef | null): ImportSource | null {
     const query = r.query;
     return { kind: 'postgres', tables: [], ...(query ? { probe: async (sql, params, types) => ({ columns: (await query(sql, params, types)).columns, params: datasetSqlParams(sql) }) } : {}) };
   }
-  return { kind: 'dataset', tables: r.catalog ? importedTables(r.catalog).map((t) => ({ name: t.name, columns: t.columns })) : [{ name: 'rows', columns: r.columns ?? [] }] };
+  const query = r.query;
+  return { kind: 'dataset', ...(query ? { probe: async (sql, params, types) => ({ columns: (await query(sql, params, types)).columns, params: datasetSqlParams(sql) }) } : {}), tables: r.catalog ? importedTables(r.catalog).map((t) => ({ name: t.name, columns: t.columns })) : [{ name: 'rows', columns: r.columns ?? [] }] };
 }
 
 /** The compiler's loader over a ref loader. */

@@ -28,7 +28,7 @@ import { isQueryFailure } from '@artifactbin/contracts';
 import type { JsxNode, ValidationError } from '@/lib/jsx';
 import { sqlExtensions } from '@/lib/sql/extensions';
 import { BUILTIN_TABLES, builtinInput, isBuiltinTable, rowField, VIEWER, VIEWER_ID } from './builtins';
-import type { BuiltinInput, BuiltinTable, CompiledDataflow, CompiledImport, CompiledMutation, CompiledQuery, CompiledReads, CompiledValue } from './compiled-dataflow';
+import type { BuiltinInput, BuiltinTable, CompiledDataflow, CompiledImport, CompiledMutation, CompiledNotify, CompiledQuery, CompiledReads, CompiledValue } from './compiled-dataflow';
 import { ARGS_ATTR, bindingMap, MUTATION_TAG, QUERY_TAG, refName, scalarMatches, SET_ATTR, type Dataflow, type MutationDecl, type QueryDecl } from './dataflow';
 import { analyzeRowScopes } from './row-scope';
 import { dateCastRefusal, editDistance, withSqliteHint } from './sqlite-hints';
@@ -151,11 +151,11 @@ export const postgresKey = (q: Pick<QueryDecl, 'name' | 'sql'>): string => `${q.
 /** Load the engine and every artifact the declarations name. */
 export async function prepareCompile(flow: Dataflow, load: SchemaLoader): Promise<CompileContext> {
   const engine = await loadSqlite();
-  const refs = [...new Set([...flow.imports.map((i) => i.ref), ...flow.queries.flatMap((q) => (q.source ? [q.source] : [])), ...flow.values.flatMap((v) => (v.kind === 'scalar' && v.source ? [v.source] : []))])];
+  const refs = [...new Set([...flow.imports.map((i) => i.ref), ...[...flow.queries, ...(flow.notifications ?? [])].flatMap((q) => (q.source ? [q.source] : [])), ...flow.values.flatMap((v) => (v.kind === 'scalar' && v.source ? [v.source] : []))])];
   const sources: CompileContext['sources'] = Object.fromEntries(await Promise.all(refs.map(async (ref) => [ref, await load(ref).catch(() => null)] as const)));
   const postgres: CompileContext['postgres'] = {};
   const types = scalarTypes(flow);
-  for (const q of flow.queries) {
+  for (const q of [...flow.queries, ...(flow.notifications ?? [])]) {
     const source = q.source ? sources[q.source] : null;
     if (!source?.probe) continue;
     const { sql, fields } = rewriteBuiltinFields(q.sql);
@@ -372,13 +372,13 @@ export function compileDataflow(flow: Dataflow, ctx: CompileContext, body?: JsxN
     const fail = (message: string) => { failed.add(key); errors.push(at(q, QUERY_TAG, `<Query name="${q.name}" source="ref:${q.source}">: ${message}`, 'source')); };
     const source = ctx.sources[q.source!];
     if (!source) return fail(`ref:${q.source} is not a dataset you can read`);
-    if (source.kind !== 'postgres') return fail(`source= is only for a connected Postgres dataset, and ref:${q.source} is stored — <Import name="…" src="ref:${q.source}" /> it and read <name>.rows`);
+    if (source.kind === 'folder') return fail('source= requires a dataset');
     const shape = ctx.postgres[postgresKey(q)];
     if (!shape) return fail('the connected database was not reached');
     if ('error' in shape) return fail(shape.error);
     const analysis: StatementAnalysis = { kind: 'select', reads: [], writes: [], functions: [], params: shape.params, columns: [] };
     const { reads, params } = readsOf(analysis, fields, 'query', q, QUERY_TAG, q.name);
-    compiledQueries.set(key, { name: q.name, engine: 'postgres', source: q.source!, sql, params, reads, columns: shape.columns.map((c) => ({ name: c.name, type: c.type })), start: q.start, end: q.end });
+    compiledQueries.set(key, { name: q.name, engine: source.kind === 'postgres' ? 'postgres' : 'sqlite', source: q.source!, sql, params, reads, columns: shape.columns.map((c) => ({ name: c.name, type: c.type })), start: q.start, end: q.end });
   };
 
   for (const q of flow.queries) compileQuery(q, []);
@@ -447,7 +447,39 @@ export function compileDataflow(flow: Dataflow, ctx: CompileContext, body?: JsxN
     };
   }
 
-  let compiled: CompiledDataflow = { imports, values, queries: ordered, mutations };
+  // Notifications are ordinary query plans compiled in their mutation's saved-input
+  // scope. Reuse the compiler rather than interpreting SQL a second way.
+  const notifications: CompiledNotify[] = [];
+  for (const notification of flow.notifications ?? []) {
+    const mutation = mutations.find((m) => m.name === notification.on);
+    const fail = (message: string) => errors.push(at(notification, 'Notify', `<Notify name="${notification.name}"> ${message}`));
+    if (!mutation) { fail(`on="${notification.on}" must name a declared persistent Mutation`); continue; }
+    if ('local' in mutation.target) { fail('must refer to a persistent Mutation'); continue; }
+    const allowed = new Set(mutation.args.map((arg) => arg.name));
+    const scoped = compileDataflow({
+      imports: flow.imports,
+      values: [...flow.values, ...mutation.args.filter((arg) => !flow.values.some((v) => v.name === arg.name)).map((arg) => ({
+        name: arg.name, kind: 'scalar' as const, type: arg.type ?? 'string' as const, default: null, start: notification.start, end: notification.end,
+      }))],
+      queries: [...flow.queries, notification], mutations: [],
+    }, ctx);
+    if (!scoped.ok) { for (const error of scoped.errors) fail(error.message); continue; }
+    const query = scoped.compiled.queries.find((q) => q.name === notification.name)!;
+    const closure = new Set<string>();
+    const visit = (q: CompiledQuery) => {
+      if (closure.has(q.name)) return;
+      closure.add(q.name);
+      for (const value of q.reads.values) if (!allowed.has(value)) fail(`binds ${value}, which is not a saved argument of Mutation ${mutation.name}`);
+      for (const param of q.params) if (!param.startsWith('_') && !allowed.has(param)) fail(`binds $${param}, which is not a saved argument of Mutation ${mutation.name}`);
+      for (const name of q.reads.queries) { const upstream = scoped.compiled.queries.find((q) => q.name === name); if (upstream) visit(upstream); }
+    };
+    visit(query);
+    const columns = query.columns.map((column) => column.name);
+    if (columns.length !== 2 || !columns.includes('to') || !columns.includes('message')) fail('must return exactly the columns to and message');
+    notifications.push({ ...query, on: notification.on });
+    mutation.notifies = true;
+  }
+  let compiled: CompiledDataflow = { imports, values, queries: ordered, mutations, ...(notifications.length ? { notifications } : {}) };
   if (body && !errors.length) {
     const bound = checkBindings(compiled, body);
     errors.push(...bound.errors);
@@ -476,14 +508,14 @@ const sampleRow = (columns: DatasetColumn[], sample: Record<ColumnType, Scalar>)
 const NO_TEXT: Record<ColumnType, Scalar> = { ...SAMPLE, string: null };
 
 function typeFromDryRun(ctx: CompileContext, queries: CompiledQuery[], imports: CompiledImport[], flow: Dataflow, types: Record<string, ColumnType>): void {
-  const local = queries.filter((q) => q.engine === 'sqlite');
+  const local = queries.filter((q) => !q.source);
   if (!local.some((q) => q.columns.some((c) => c.type === null))) return;
   const tables: Record<string, { rows: Array<Record<string, unknown>>; columns: DatasetColumn[] }> = {
     _me: { rows: [{ id: null }], columns: BUILTIN_TABLES._me.columns },
     _members: { rows: [], columns: BUILTIN_TABLES._members.columns },
   };
   for (const v of flow.values) if (v.kind === 'table') tables[v.name] = { rows: v.rows, columns: v.columns };
-  for (const q of queries) if (q.engine === 'postgres') tables[q.name] = { rows: [], columns: q.columns.map((c) => ({ name: c.name, type: c.type ?? 'string' })) };
+  for (const q of queries) if (q.source) tables[q.name] = { rows: [], columns: q.columns.map((c) => ({ name: c.name, type: c.type ?? 'string' })) };
   const params: Record<string, Scalar> = { [paramSqlName('_me.id')]: null, _now: ctx.now ?? new Date().toISOString(), _tz: 'UTC' };
   for (const v of flow.values) if (v.kind === 'scalar') params[v.name] = v.default;
   const paramTypes: Record<string, ColumnType> = { ...types, [paramSqlName('_me.id')]: 'user', _now: 'timestamp', _tz: 'string' };
