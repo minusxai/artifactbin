@@ -144,7 +144,7 @@ const managed = frame.locator('iframe[title="Isolated gallery region"]');
 await frame.waitForSelector('iframe[title="Isolated gallery region"][data-mx-author-ready]');
 check(await frame.locator('[data-mx-inline-story] iframe').count() === 1
   && await managed.getAttribute('sandbox') === 'allow-scripts'
-  && await managed.getAttribute('src') === `${origin}/story/author-frame`,
+  && await managed.getAttribute('src') === `${origin}/author-frame`,
   'only the managed opaque gallery wrapper is framed; Video remains a link');
 
 // 3. isolation

@@ -551,8 +551,11 @@ export async function compilePage(input: CompileInput, build: CompilerBuild): Pr
   const base = {
     build: build.id, islands: generated.islandRefs, behaviors: generated.behaviors, plan, links,
     kit: generated.kit, reactStatic: generated.reactStatic, unported: generated.unported, partial: generated.partial,
+    // Data for the page's JSON island, never module code (contract CompiledPage.authorScript).
+    authorScript: input.authorScript || null,
   };
   if (generated.unported.length) return { ...base, html: '', module: null, ssr: null };
-  const built = await buildDocumentModules(generated, { build, flow: input.flow, values: declaredValues(input.flow) });
+  // A version with an author script boots even with no island: its store and its author host start there.
+  const built = await buildDocumentModules(generated, { build, flow: input.flow, values: declaredValues(input.flow), boot: !!base.authorScript });
   return { ...base, html: built.html, module: built.module, ssr: built.ssr };
 }

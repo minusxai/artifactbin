@@ -177,6 +177,33 @@ describe('the kit table', () => {
   });
 });
 
+describe('a version with an author script', () => {
+  const SCRIPT = 'mx.set({ n: 1 })';
+  it('carries the script as data and boots even with no island: a module with ISLANDS = [], no SSR module, the skeleton as its story', async () => {
+    const build = loadCompilerBuild();
+    const input = { ...(await inputOf(fixture('prose.jsx'))), authorScript: SCRIPT };
+    const page = await compilePage(input, build);
+    expect(page.authorScript).toBe(SCRIPT);
+    expect(page.islands).toEqual([]);
+    expect(page.module, 'the page must start its store and the author host').not.toBeNull();
+    expect(page.module!.imports).toEqual(expect.arrayContaining([build.manifest['@mx/boot']]));
+    expect(page.ssr, 'no island renders data: the stored html is the story').toBeNull();
+    expect(page.html).toBe((await compilePage(await inputOf(fixture('prose.jsx')), build)).html);
+    const code = new TextDecoder().decode((await createModuleStore().get(page.module!.sha))!);
+    expect(code, 'the author code is never part of a module served under /islands/d/').not.toContain('mx.set');
+  });
+
+  it('keeps it beside the islands of a version that has them, and none when it has none', async () => {
+    const build = loadCompilerBuild();
+    const kit = await compilePage({ ...(await inputOf(fixture('kit.jsx'))), authorScript: SCRIPT }, build);
+    expect(kit.authorScript).toBe(SCRIPT);
+    expect(kit.module).not.toBeNull();
+    const plain = await compilePage(await inputOf(fixture('prose.jsx')), build);
+    expect(plain.authorScript).toBeNull();
+    expect(plain.module).toBeNull();
+  });
+});
+
 describe('the stored plan', () => {
   const source = '<Helmet><Import name="sales" src="ref:SALES1" /><Query name="total">{`select sum(revenue) as r from sales.rows`}</Query></Helmet><p id="p">Totals</p>';
   it('is planned with the anonymous reader\'s access the caller decided, and conservatively without it', async () => {

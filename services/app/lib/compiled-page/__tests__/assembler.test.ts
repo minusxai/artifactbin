@@ -17,7 +17,7 @@ const compiled = (over: Partial<CompiledPage> = {}): CompiledPage => ({
   islands: [{ renderId: 's0-', path: '0.1', kit: ['Select'], readsData: true }],
   module: { sha: 'a'.repeat(16), url: '/islands/d/aaaaaaaaaaaaaaaa.js', bytes: 512, imports: ['/islands/rt-4444dddd.js', '/islands/web-2222bbbb.js'] },
   ssr: { sha: 'c'.repeat(16), url: '/islands/d/cccccccccccccccc.js', bytes: 700, imports: [] },
-  behaviors: [], plan: null, links: { prefetch: ['/a/Btruq6'], prerender: ['/a/Btruq6'] }, kit: { skeleton: [], islands: ['Select'] }, reactStatic: ['Card'], unported: [], partial: [],
+  behaviors: [], plan: null, links: { prefetch: ['/a/Btruq6'], prerender: ['/a/Btruq6'] }, kit: { skeleton: [], islands: ['Select'] }, reactStatic: ['Card'], unported: [], partial: [], authorScript: null,
   ...over,
 });
 const snapshot: DataSnapshot = { key: { artifactId: 'X34b00', slot: 'head', planKey: 'p', inputsKey: 'i' }, marks: { sales: 'm' }, results: { tables: { monthly: { rows: [{ revenue: 1 }], columns: [{ name: 'revenue', type: 'number' }] } }, errors: {} }, drawings: { AVkX: { svg: '<svg data-drawn="1"></svg>', table: 'monthly', rows: 'r' } }, computedAt: 1, build: build.id };
@@ -72,6 +72,19 @@ describe('assembleReaderPage', () => {
     const still = dom(assembleReaderPage(input({ compiled: compiled({ islands: [], module: null, ssr: null }), story: compiled({ islands: [] }).html, snapshot: null })));
     expect(still.querySelectorAll('script[type="module"]')).toHaveLength(0);
     expect(still.getElementById(ISLAND_DATA_ID)).toBeNull();
+  });
+
+  it('carries the version\'s author script as inert data only: in the JSON island, escaped, never as a script', () => {
+    const script = 'mx.set({n:1}); "</script><script>alert(1)</script>" \u2028';
+    const page = assembleReaderPage(input({ compiled: compiled({ authorScript: script }) }));
+    const doc = dom(page);
+    expect(JSON.parse(doc.getElementById(ISLAND_DATA_ID)!.textContent!).authorScript).toBe(script);
+    expect(page.html).not.toContain('</script><script>alert');
+    expect(page.html.split('mx.set({n:1})')).toHaveLength(2);
+    for (const el of doc.querySelectorAll('script')) if (el.type !== 'application/json') expect(el.textContent, el.outerHTML).toBe('');
+    expect(doc.querySelectorAll('script:not([type="application/json"]):not([src])')).toHaveLength(0);
+    // A version without one names none.
+    expect(JSON.parse(dom(assembleReaderPage(input())).getElementById(ISLAND_DATA_ID)!.textContent!)).not.toHaveProperty('authorScript');
   });
 
   it('puts the snapshot\'s drawing in its chart slot and marks it ready; leaves the skeleton when none is stored', () => {
