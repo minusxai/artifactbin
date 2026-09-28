@@ -549,11 +549,18 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
   const needsParse = isDocumentFormat && !props.runtime;
   const { module: parser, failed: parseFailed, retry: retryParse } = useOnDemand(updatePartsFeature, needsParse);
   const seedReady = !needsParse || !!parser;
-  const initialRuntimeData = useMemo(() => props.runtime?.data ?? {
-    nodes: parser?.storyUpdateParts(source ?? '')?.nodes ?? [], refData: {},
-    dataflow: dataflow ? {...dataflow, values:{...dataflow.values,...readUrlValues(search,dataflow.flow)}} : undefined,
-    colorMode: readerMode, template, chrome: true,
-  }, [id, seedReady]);
+  const initialRuntimeData = useMemo(() => {
+    const served = props.runtime?.data ?? {
+      nodes: parser?.storyUpdateParts(source ?? '')?.nodes ?? [], refData: {},
+      dataflow: dataflow ? {...dataflow, values:{...dataflow.values,...readUrlValues(search,dataflow.flow)}} : undefined,
+      colorMode: readerMode, template, chrome: true,
+    };
+    // The compiled reader has already adopted live versions in place. When it gives way to
+    // the editor, seed the interpreter from that latest version, not the original HTML.
+    return compiled && editing && live?.nodes
+      ? { ...served, nodes: live.nodes, ...(live.dataflow ? { dataflow: { ...served.dataflow, ...live.dataflow } } : {}) }
+      : served;
+  }, [id, seedReady, editing]);
   const setReaderMode = useCallback((mode: AppearanceMode) => {
     modeOverride.current = mode;
     setReaderModeOverride(mode);

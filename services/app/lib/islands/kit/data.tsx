@@ -161,14 +161,14 @@ export function DataTable(props: DataTableProps) {
   }>
     {/* Cell sessions show saving on an editable table; only a read-only table dims while it refreshes. */}
     <div {...rootProps(props)} aria-label="DataTable embed" aria-busy={busy() ? 'true' : 'false'} {...attr('class', busy() && !props.templates?.length ? 'mx-busy' : undefined)} {...attr('attr:style', wrapper())}>
-      <DataGrid {...props} table={table()!} />
+      <DataGrid {...props} table={table} />
     </div>
   </Show>;
 }
 
-function DataGrid(props: DataTableProps & { table: TableResult }) {
+function DataGrid(props: DataTableProps & { table: () => TableResult | undefined }) {
   const island = useIsland();
-  const table = () => props.table;
+  const table = props.table;
   const owner = typeof props.id === 'string' ? props.id : undefined;
   const [sort, setSort] = createSignal<SortSpec | null>(parseSortSpec(props.sort));
   const [extra, setExtra] = createSignal<Row[]>([]);

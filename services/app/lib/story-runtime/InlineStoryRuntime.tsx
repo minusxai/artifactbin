@@ -1,6 +1,6 @@
 import { runtimeId } from './runtime-id';
 import { installMx } from './mx';
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ComponentType, type ReactNode } from 'react';
+import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState, type ComponentType, type ReactNode } from 'react';
 import { createRoot, hydrateRoot, type Root } from 'react-dom/client';
 import type { StoryDocumentUpdate, StoryIslandData } from './contract';
 import type { QueryTransport } from './store';
@@ -173,7 +173,7 @@ let loadedPolicy: InlineSheetPolicy | null = null;
 const loadPolicy = (): Promise<InlineSheetPolicy> => import('./inline-sheet').then((module) => (loadedPolicy = module));
 
 /** Top-level artifact body; only authored Iframe/Helmet code creates sandboxed child realms. */
-export function InlineStoryRuntime(props: InlineStoryRuntimeProps): ReactNode {
+function InlineStoryRuntimeView(props: InlineStoryRuntimeProps): ReactNode {
   const root = useRef<HTMLDivElement>(null);
   // Read, not taken: the story leaves the server's wrapper when it is adopted, in the layout effect below.
   const [server] = useState(() => (props.hydrateInitialStory ? initialDocumentStory() : null));
@@ -476,3 +476,9 @@ export function InlineStoryRuntime(props: InlineStoryRuntimeProps): ReactNode {
     {composition}
   </div></>;
 }
+
+// The app's comment chrome rerenders after a relation-only write. Re-rendering
+// an unchanged interpreter redraws its editable text from the saved source and
+// loses keystrokes the editor has not committed yet. Runtime changes arrive via
+// its controller; stable parent props must leave the live editing DOM alone.
+export const InlineStoryRuntime = memo(InlineStoryRuntimeView);

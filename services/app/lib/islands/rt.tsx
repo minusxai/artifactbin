@@ -128,18 +128,15 @@ export function createIslandRuntime(
   /** Every store change: what the write checks (`mutationUnavailable`, `mutating`) re-read on. */
   const [checks, touch] = createSignal(undefined, { equals: false });
   const drawings = data.mermaidImages ?? {};
-  let lastTables: Record<string, TableResult> = {};
-
   const sync = () => {
     if (!store) return;
     const snap = store.getState();
     const pending: Record<string, true> = {};
     for (const name of store.pending()) pending[name] = true;
     batch(() => {
-      for (const [name, table] of Object.entries(snap.tables)) if (lastTables[name] !== table) setVersions(name, (v) => (v ?? 0) + 1);
-      lastTables = snap.tables;
+      for (const name of Object.keys(snap.tables)) setVersions(name, (v) => (v ?? 0) + 1);
       setState('values', reconcile(snap.values));
-      setState('tables', reconcile(snap.tables, { merge: true }));
+      setState('tables', reconcile(Object.fromEntries(Object.entries(snap.tables).map(([name, table]) => [name, { ...table }])), { merge: true }));
       setState('errors', reconcile(snap.errors));
       setState('pending', reconcile(pending));
       setState('people', reconcile(snap.people ?? {}));
@@ -153,7 +150,9 @@ export function createIslandRuntime(
   const context: IslandContext = {
     values: () => state.values,
     value: (name) => state.values[name],
-    table: (name) => state.tables[name],
+    // A reconciled result can retain the table and row-array proxies across a
+    // query answer. Its version makes list consumers observe removals and order.
+    table: (name) => { void versions[name]; return state.tables[name]; },
     tableSnapshot: (name) => {
       void versions[name];
       return store?.getTable(name) ?? state.tables[name];
@@ -261,44 +260,36 @@ export interface RepeatProps {
   [attr: string]: unknown;
 }
 
-const REPEAT_PROPS = new Set(['name', 'keyBy', 'owner', 'ids', 'tableParts', 'svg', 'children']);
-
 /**
  * `<For each={$name} keyBy="k">` — the interpreter's repeat: a wrapper element (a `<div>`, a `<g>`
  * in SVG, none among table parts) around one instance of the template per row. Rows come from the
  * bridged store, so a changed result re-renders only the rows that changed.
  */
-export function Repeat(props: RepeatProps): JSX.Element {
+export function Repeat({ name, keyBy, owner, ids, tableParts, svg, children, ...attrs }: RepeatProps): JSX.Element {
   const island = useIsland();
   const rows = createMemo((): Row[] => {
-    const source: unknown = island.table(props.name)?.rows ?? island.values()[props.name] ?? [];
-    return Array.isArray(source) ? (source as Row[]) : [];
+    const source: unknown = island.table(name)?.rows ?? island.values()[name] ?? [];
+    // Solid's reconciled table keeps its array proxy while changing its members.
+    // Snapshot the positions so For observes reorder and removal as list changes.
+    return Array.isArray(source) ? [...(source as Row[])] : [];
   });
   // A reconciled store can retain a row proxy while changing its key. Give that key a distinct
   // For identity so the row's compiled scope and comment target are built again.
-  const instances = new WeakMap<Row, Map<unknown, { row: Row; key: unknown }>>();
-  const keyedRows = createMemo(() => rows().map(row => {
-    const key = row[props.keyBy!];
-    let keys = instances.get(row);
-    if (!keys) {
-      keys = new Map();
-      instances.set(row, keys);
-    }
-    let instance = keys.get(key);
-    if (!instance) {
-      instance = { row, key };
-      keys.set(key, instance);
-    }
-    return instance;
-  }));
+  const instances = new WeakMap<Row, { row: Row; key: unknown }>();
+  const keyedRows = () => rows().map(row => {
+    const key = row[keyBy!];
+    const previous = instances.get(row);
+    if (previous && previous.key === key) return previous;
+    const next = { row, key };
+    instances.set(row, next);
+    return next;
+  });
   const body = () => (
-    props.keyBy
-      ? <For each={keyedRows()}>{instance => props.children(instance.row, { owner: props.owner ?? '', key: instance.key, durable: true, ids: props.ids ?? [] })}</For>
-      : <For each={rows()}>{(row, index) => props.children(row, { owner: props.owner ?? '', key: index(), durable: false, ids: props.ids ?? [] })}</For>
+    keyBy
+      ? <For each={keyedRows()}>{instance => children(instance.row, { owner: owner || '', key: instance.key, durable: true, ids: ids || [] })}</For>
+      : <For each={rows()}>{(row, index) => children(row, { owner: owner || '', key: index(), durable: false, ids: ids || [] })}</For>
   );
-  if (props.tableParts) return body();
-  const attrs = Object.fromEntries(Object.entries(props).filter(([k]) => !REPEAT_PROPS.has(k)));
-  return props.svg ? <g {...attrs}>{body()}</g> : <div {...attrs}>{body()}</div>;
+  return tableParts ? body() : svg ? <g {...attrs}>{body()}</g> : <div {...attrs}>{body()}</div>;
 }
 
 /** `{cond && …}` / `{cond ? a : b}` — the interpreter's conditional; a falsy value (0 included) renders nothing. */

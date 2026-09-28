@@ -20,6 +20,16 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { SelectControl } from '@/components/kit/controls';
 import { rowsDigest } from '../digest';
 import { DRAWING_CLASS } from '../chart';
+import { createIslandRuntime } from '../rt';
+import { createDataflowStore, type DataflowStore, type QueryTransport } from '@/lib/story-runtime/store';
+import { Button } from '../kit/basic';
+import { compiledOf } from '@/test/helpers/compiled';
+import { initialTables, initialValues } from '@/lib/story/compiled-flow';
+import { runDataflow } from '@/lib/sql/run-dataflow';
+import { runLocalStateMutation } from '@/lib/story/local-state';
+import { createSqliteSql } from '@artifactbin/sql/sqlite';
+import { loadSqlite } from '@artifactbin/sql/core';
+import { createPageEngine } from '@/lib/story-runtime/page-engine';
 
 const monthly: TableResult = { rows: [{ month: '2025-01-01', revenue: 120, units: 3 }, { month: '2025-02-01', revenue: 160, units: 4 }], columns: [{ name: 'month', type: 'date' }, { name: 'revenue', type: 'number' }, { name: 'units', type: 'number' }] };
 const regions: TableResult = { rows: [{ region: 'East' }, { region: 'West' }], columns: [{ name: 'region', type: 'string' }] };
@@ -177,6 +187,98 @@ describe('Question', () => {
 });
 
 describe('DataTable behavior', () => {
+  it('removes a row in the DOM after a remote local-table mutation answers', async () => {
+    const flow = await compiledOf(
+      '<Value name="flags" type="table" value={[{"reverse":false}]}/>'
+      + '<Value name="orders" type="table" value={[{"order_id":"order-101","customer":"Alice"},{"order_id":"order-102","customer":"Bob"}]}/>'
+      + '<Query name="ordered">{`select o.* from orders o, flags f order by case when f.reverse then o.customer end desc, o.customer asc`}</Query>'
+      + '<Mutation name="reverseRows">{`update flags set reverse = not reverse`}</Mutation>'
+      + '<Mutation name="renameAlice">{`update orders set customer=\'Alice updated\' where order_id=\'order-101\'`}</Mutation>'
+      + '<Mutation name="removeAlice">{`delete from orders where order_id=\'order-101\'`}</Mutation>',
+    );
+    const engine = createSqliteSql();
+    const tables = initialTables(flow);
+    const initial = await runDataflow(flow, {}, { only: ['ordered'], localTables: { orders: tables.orders!.rows, flags: tables.flags!.rows } });
+    const transport: QueryTransport = {
+      run: async (values, only, localTables) => {
+        const answer = await runDataflow(flow, {}, { values, only, localTables });
+        return { tables: answer.tables, errors: answer.errors, mutationAccess: {} };
+      },
+      page: async () => ({ columns: [], rows: [] }),
+      mutate: async (request) => {
+        const source = initialTables(flow);
+        for (const [name, rows] of Object.entries(request.localTables ?? {})) source[name] = { ...source[name]!, rows };
+        return { dataset: '', local: await runLocalStateMutation(flow, flow.mutations.find(item => item.name === request.mutation)!, { tables: source }, engine, { params: {}, paramTypes: {} }) };
+      },
+    };
+    const runtime = createIslandRuntime({ dataflow: { flow, state: { values: initialValues(flow), tables: { ...tables, ...initial.tables }, errors: {}, mutationAccess: {} } }, viewer: null }, input => createDataflowStore(input, { transport, debounceMs: 0 }));
+    const { host, dispose } = mount(runtime.context, () => <><Button run="$reverseRows">Reverse</Button><Button run="$renameAlice">Rename</Button><Button run="$removeAlice">Remove</Button><DataTable data="$ordered" rowKey="order_id" id="orders" /></>);
+    runtime.store!.start();
+    for (const name of ['Reverse', 'Rename', 'Remove']) {
+      const button = [...host.querySelectorAll('button')].find(node => node.textContent === name)!;
+      button.click();
+      await vi.waitFor(() => expect(runtime.store!.mutating().size).toBe(0));
+    }
+    await vi.waitFor(() => expect(runtime.store!.getTable('ordered')?.rows).toHaveLength(1));
+    expect(host.querySelector('tbody')?.textContent).not.toContain('Alice');
+    dispose(); runtime.dispose();
+  });
+  it('removes an annotated table row after clicking successive local mutations', async () => {
+    const flow = await compiledOf(
+      '<Value name="orders" type="table" value={[{"order_id":"order-101","customer":"Alice"},{"order_id":"order-102","customer":"Bob"}]}/>'
+      + '<Query name="ordered">{`select * from orders order by customer`}</Query>'
+      + '<Mutation name="renameAlice">{`update orders set customer=\'Alice updated\' where order_id=\'order-101\'`}</Mutation>'
+      + '<Mutation name="removeAlice">{`delete from orders where order_id=\'order-101\'`}</Mutation>',
+    );
+    const engine = createSqliteSql();
+    const initialAnswer = await runDataflow(flow, {}, { only: ['ordered'], localTables: { orders: initialTables(flow).orders!.rows } });
+    expect(initialAnswer.errors).toEqual({});
+    expect(initialAnswer.tables.ordered?.rows).toHaveLength(2);
+    const transport: QueryTransport = {
+      run: async (values, only, localTables) => {
+        const answer = await runDataflow(flow, {}, { values, only, localTables: { orders: localTables?.orders ?? initialTables(flow).orders!.rows } });
+        return { tables: answer.tables, errors: answer.errors };
+      },
+      page: async () => ({ columns: [], rows: [] }),
+      mutate: async (request) => {
+        const tables = initialTables(flow);
+        tables.orders = { ...tables.orders!, rows: request.localTables?.orders ?? tables.orders!.rows };
+        return { dataset: '', local: await runLocalStateMutation(flow, flow.mutations.find(item => item.name === request.mutation)!, { tables }, engine, { params: {}, paramTypes: {} }) };
+      },
+    };
+    const pageEngine = createPageEngine({ load: () => loadSqlite(), fetch: async () => ({}) });
+    pageEngine.prepare(flow, []);
+    await vi.waitFor(() => expect(pageEngine.ready(flow, [])).toBe(true));
+    const runtime = createIslandRuntime({ dataflow: { flow, hold: [], state: { values: initialValues(flow), tables: { ...initialTables(flow), ...initialAnswer.tables }, errors: {}, mutationAccess: {} } }, mermaidImages: {}, viewer: null }, input => createDataflowStore(input, { transport, page: { engine: pageEngine, userId: null }, debounceMs: 0 }));
+    const { host, dispose } = mount(runtime.context, () => <><Button run="$renameAlice">Rename</Button><Button run="$removeAlice">Remove</Button><DataTable data="$ordered" rowKey="order_id" id="orders" /></>);
+    runtime.store!.start();
+    await vi.waitFor(() => expect(host.textContent).toContain('Alice'));
+    (host.querySelectorAll('button')[0] as HTMLButtonElement).click();
+    await vi.waitFor(() => expect(host.textContent).toContain('Alice updated'));
+    (host.querySelectorAll('button')[1] as HTMLButtonElement).click();
+    await vi.waitFor(() => expect(host.textContent).not.toContain('Alice updated'));
+    dispose();
+    runtime.dispose();
+    pageEngine.close();
+  });
+  it('drops a removed row after the runtime bridges a local mutation result', () => {
+    const columns = [{ name: 'key', type: 'string' as const }, { name: 'customer', type: 'string' as const }];
+    let rows = [{ key: 'a', customer: 'Alice' }, { key: 'b', customer: 'Bob' }];
+    let notify = () => {};
+    const store = {
+      getState: () => ({ values: {}, tables: { orders: { columns, rows } }, errors: {}, people: {} }),
+      pending: () => [], subscribe: (fn: () => void) => { notify = fn; return () => {}; },
+      dispose: () => {},
+    } as unknown as DataflowStore;
+    const runtime = createIslandRuntime({ dataflow: { flow: { imports: [], values: [], queries: [], mutations: [] } }, mermaidImages: {}, viewer: null }, () => store);
+    const { host, dispose } = mount(runtime.context, () => <DataTable data="$orders" rowKey="key" id="orders" />);
+    expect(host.textContent).toContain('Alice');
+    rows = [{ key: 'b', customer: 'Bob' }];
+    notify();
+    expect(host.textContent).not.toContain('Alice');
+    dispose();
+    runtime.dispose();
+  });
   it('updates a comment target when a reconciled row proxy changes its key', () => {
     const ctx = island();
     const [state, setState] = createStore({ rows: [{ key: 'a', customer: 'Alice' }, { key: 'b', customer: 'Bob' }] });

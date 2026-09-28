@@ -269,8 +269,12 @@ const run = async () => {
       toolbar: await toolbar.count(),
     }));
     check(await toolbar.isVisible(), 'the editor selects the annotated paragraph');
+    // The editor transition may preserve the selection while focus moves to the
+    // app chrome. Type into the editable paragraph, as a reader does.
+    await para.click();
     await page.keyboard.press('End');
     await page.keyboard.type(' MIDSENTENCE');
+    check((await para.innerText()).includes('MIDSENTENCE'), 'typing reached the editor before opening a comment');
 
     // The toolbar's Comment button keeps focus in the host on mousedown, so
     // the typing above is still UNCOMMITTED when the composer opens.
