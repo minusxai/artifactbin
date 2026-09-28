@@ -248,14 +248,13 @@ export function generate(input: GenerateInput): Generated {
   const mustPromote = (node: JsxElement): boolean =>
     node.children.some((c) => needsBrowser(c) && (!isElement(c) || !!c.control || (c.tag === 'For' && isTableParts(c))));
 
-  // Structured author data never becomes an object literal: each value is a module constant parsed from a string literal.
+  // Structured author data never becomes an object literal: each value is a module constant parsed
+  // from a string literal — one per emission site, never shared by content, so the module's shape
+  // depends on the tree alone.
   const data: string[] = [];
-  const dataIndex = new Map<string, number>();
   const json = (value: unknown): string => {
-    const text = JSON.stringify(value === undefined ? null : value);
-    let index = dataIndex.get(text);
-    if (index === undefined) { index = data.length; data.push(text); dataIndex.set(text, index); }
-    return `$d${index}`;
+    data.push(JSON.stringify(value === undefined ? null : value));
+    return `$d${data.length - 1}`;
   };
   const useKit = (tag: string, mode: Mode, ctx: Ctx): void => {
     (mode === 'static' ? kitUsed.skeleton : kitUsed.islands).add(tag);
@@ -352,7 +351,7 @@ export function generate(input: GenerateInput): Generated {
       if (node.tag === 'Question') dom[CHART_SLOT_ATTR] = typeof dom.id === 'string' && dom.id ? dom.id : path;
       if (meta.grid && ctx.grid && !ctx.grid.flow) api.inGridItem = true;
       const attrs = domAttrs('div', dom).filter(([n]) => n !== 'class');
-      const apiJsx = Object.entries(api).map(([k, v]) => ` ${safeProp(k)}={${typeof v === 'string' ? lit(v) : json(v)}}`).join('');
+      const apiJsx = Object.entries(api).map(([k, v]) => ` ${safeAttr(k)}={${typeof v === 'string' ? lit(v) : json(v)}}`).join('');
       const clsJsx = cls ? ` class={${lit(cls)}}` : '';
       const tag = safeTag(node.tag);
       if (ctx.row) return `<${tag}${apiJsx}${clsJsx} {...rt.rowAttrs(${json(Object.fromEntries(attrs))}, ${ctx.row}, ${ctx.scope})}>${children()}</${tag}>`;

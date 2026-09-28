@@ -110,6 +110,13 @@ describe('refusal', () => {
   });
 });
 
+describe('names', () => {
+  it('a hyphenated api prop is an attribute name, not a refusal', async () => {
+    const { islands } = await compileSources(await inputOf('<Helmet><Value name="q" type="string" /></Helmet><div id="w"><Input aria-label="Search" value="$q" id="i" /></div>'));
+    expect(islands).toContain('aria-label={"Search"}');
+  });
+});
+
 describe('codegen safety', () => {
   it('the generated modules have the same structure for benign and hostile author strings, and leak nothing raw', async () => {
     const verdict = await structureIndependent((doc) => compileSources({ ...doc, build: loadCompilerBuild().id }));
