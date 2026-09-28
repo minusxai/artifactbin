@@ -33,6 +33,11 @@ export const GATE_SPECS = Object.freeze([
   // smaller version overran 60s there), so the budget is ~5x the measured run.
   { name: 'offline-file', browsers: ['chromium', 'firefox', 'webkit'], needsMail: false, timeoutMs: 240_000 },
   { name: 'cli-conformance', needsMail: true, timeoutMs: 180_000 },
+  // Publishes the six page-speed fixtures and the kitchen sink through a bearer token, then loads each
+  // on today's renderer and on the compiled reader (`?reader=compiled`) and compares the story element by
+  // element (docs/phase2-architecture.md §12). Against a server without the compiled path it records the
+  // skip and exits in seconds; the budget is for the comparison run (~14 loads plus settling).
+  { name: 'compiled-parity', needsMail: false, timeoutMs: 150_000 },
   { name: 'browser-sessions', needsMail: false, timeoutMs: 150_000 },
   { name: 'testusers', needsMail: true, timeoutMs: 60_000 },
   { name: 'comment-targets', needsMail: false, timeoutMs: 60_000 },

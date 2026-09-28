@@ -1,0 +1,149 @@
+/**
+ * THE ISLAND RUNTIME — Phase 2's browser-side contracts (docs/phase2-architecture.md §4, §7).
+ *
+ * Types and constants only, browser-safe and framework-free: an island is
+ * typed against the existing react-free document store (lib/story-runtime/store),
+ * and the Solid bridge that feeds it is an implementation detail of rt.ts.
+ * The SPA (React) and the islands (Solid) share ONE store and ONE document
+ * element; this file is where they agree on the handle.
+ *
+ * Owners: rt.ts / boot.ts (w2-runtime), kit/* (w2-kit-*), viewer + writes (w3-viewer-writes), handover (w3-handover).
+ */
+import type { Scalar, TableResult } from '@/lib/story/dataflow';
+import type { MutationRequest } from '@/lib/story/mutation-request';
+import type { DataflowStore, MutationAnswer } from '@/lib/story-runtime/store';
+import type { StoredMermaidImage, StoryViewer } from '@/lib/story-runtime/contract';
+import type { PersonCard } from '@artifactbin/contracts';
+
+/* ────────────────────────────────────────────────────────────────────────────
+ * What an island receives
+ * ──────────────────────────────────────────────────────────────────────────── */
+
+/**
+ * The document's data as one island reads it. Every accessor is reactive
+ * inside an island (the bridge tracks reads), and plain outside one.
+ */
+export interface IslandData {
+  /** Every declared scalar at its current value. */
+  values(): Readonly<Record<string, Scalar>>;
+  value(name: string): Scalar | undefined;
+  /** One query's result, tracked per cell: a row that changed re-runs only what read it. */
+  table(name: string): TableResult | undefined;
+  /** The whole result object, replaced when a run lands — what a chart binds to. */
+  tableSnapshot(name: string): TableResult | undefined;
+  pending(name: string): boolean;
+  error(name: string): string | undefined;
+  /** People the store resolved (for `<User>`, user columns). */
+  people(): Readonly<Record<string, PersonCard>>;
+}
+
+export interface IslandWrites {
+  /** Set a declared scalar; a continuous control passes `debounce`. */
+  setValue(name: string, value: Scalar, options?: { debounce?: number }): void;
+  /** Run a declared `<Mutation>`. Optimistic when the plan allows; the status feed reports saving/saved/failed. */
+  mutate(request: MutationRequest): Promise<MutationAnswer>;
+  /** Why writes are refused on this render (an archived version, a capture), or null. */
+  writesUnavailable(): string | null;
+}
+
+/**
+ * Who reads. Before the overlay lands: `null` for a guest, `{ hinted: true }`
+ * on a signed-in page (the server's hint), so a viewer-scope island draws a
+ * neutral placeholder instead of guest content. After: the identity.
+ */
+export type IslandViewer = StoryViewer | { hinted: true } | null;
+
+/** What every island receives (rt.ts). One per document, shared by every island in it. */
+export interface IslandContext extends IslandData, IslandWrites {
+  viewer(): IslandViewer;
+  /** The version's stored Mermaid drawings, keyed by `mermaidImageKey(code, mode)`. */
+  drawings(): Readonly<Record<string, StoredMermaidImage>>;
+  writes: WriteStatusFeed;
+  /** The underlying store — for the SPA and the author script; islands read through the accessors above. */
+  store(): DataflowStore | null;
+}
+
+/* ────────────────────────────────────────────────────────────────────────────
+ * Optimistic writes and the status indicator
+ * ──────────────────────────────────────────────────────────────────────────── */
+
+export type WriteState = 'saving' | 'saved' | 'failed';
+
+export interface WriteStatus {
+  /** The store's write id (dataflow-core `write` event). */
+  id: number;
+  mutation: string;
+  state: WriteState;
+  startedAt: number;
+  /** When `failed`: the server's reason and a way to try the same write again. A refused change stays visible and marked. */
+  error?: { message: string; code?: string; retry(): void };
+}
+
+/** The indicator's source: every write in flight or recently settled, newest last. */
+export interface WriteStatusFeed {
+  current(): readonly WriteStatus[];
+  subscribe(listener: (statuses: readonly WriteStatus[]) => void): () => void;
+}
+
+/** How long a `saved` status stays in the feed before it is dropped. */
+export const SAVED_STATUS_TTL_MS = 2000;
+/** The indicator's element attribute, for gates and the SPA to find it. */
+export const WRITE_STATUS_ATTR = 'data-mx-write-status';
+
+/* ────────────────────────────────────────────────────────────────────────────
+ * The SPA's handover (docs §7)
+ * ──────────────────────────────────────────────────────────────────────────── */
+
+export type IslandDocumentMode = 'read' | 'edit';
+
+/**
+ * The live island document, as the React app adopts it WITHOUT re-rendering:
+ * the app moves `root` into its tree and renders chrome around it; the islands
+ * keep running on the same store. `setMode('edit')` disposes every island and
+ * the editor mounts today's interpreter over the source in the same element.
+ */
+export interface IslandDocument {
+  /** The story element (`[data-mx-inline-story]`), server-rendered, hydrated in place. */
+  readonly root: HTMLElement;
+  readonly store: DataflowStore | null;
+  readonly context: IslandContext;
+  mode(): IslandDocumentMode;
+  /** `edit` unmounts the islands (their roots stay as static DOM until the editor replaces them); `read` is not re-entered in place. */
+  setMode(mode: IslandDocumentMode): void;
+  /** Every island hydrated, or the page has none. */
+  ready(): boolean;
+  subscribe(listener: (event: IslandEvent) => void): () => void;
+  /** Tear everything down (navigation away). */
+  dispose(): void;
+}
+
+export type IslandEvent =
+  | { type: 'ready' }
+  | { type: 'mode'; mode: IslandDocumentMode }
+  | { type: 'overlay'; viewer: StoryViewer | null }
+  | { type: 'writes'; statuses: readonly WriteStatus[] };
+
+/**
+ * Where the SPA finds the document: a property on the story root, never on
+ * `window` (the author's script shares no realm with the page, but a global is
+ * still a wider door than the element the app already holds).
+ */
+export const ISLAND_DOCUMENT_KEY = '__mxIslands';
+export type IslandHost = HTMLElement & { [ISLAND_DOCUMENT_KEY]?: IslandDocument };
+
+/** Fired on `document` once every island has hydrated (the same event today's runtime fires after hydration). */
+export const ISLANDS_READY_EVENT = 'mx:ready';
+
+/* ────────────────────────────────────────────────────────────────────────────
+ * The kit's DOM conventions (w2-kit-*): what the parity gate compares against
+ * ──────────────────────────────────────────────────────────────────────────── */
+
+/**
+ * Every vendored interactive component renders the DOM today's Radix-based kit
+ * renders: the same elements, roles, `data-state`/`data-orientation` attributes,
+ * `aria-*` idrefs (generated ids may differ, their RESOLUTION may not), author
+ * ids and `data-mx-ast` paths verbatim, closed content rendered (hidden), never
+ * omitted. The families, one module each under lib/islands/kit/:
+ */
+export const KIT_FAMILIES = ['basic', 'tabs', 'accordion', 'dialog', 'disclosure', 'controls', 'data', 'files', 'people', 'mermaid'] as const;
+export type KitFamily = (typeof KIT_FAMILIES)[number];
