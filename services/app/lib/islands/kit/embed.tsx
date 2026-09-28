@@ -9,10 +9,11 @@
  * - `<DeckGL>`: today's map (components/kit/deck-gl + the runtime adapter) — ./embed/deck-engine replaces
  *   the loading stand-in with deck.gl (and MapLibre for a basemap), over the table `data` names.
  */
-import { Show, createComponent, createSignal, onCleanup, onMount, type Component, type JSX } from 'solid-js';
+import { Show, createSignal, onCleanup, onMount, type JSX } from 'solid-js';
 import { refName } from '@/lib/story/dataflow';
 import { managedFrameLayout } from '@/lib/story/managed-frame-layout';
 import { deckGlHeight } from '@/lib/viz/deck-height';
+import { MAP_CLASSES } from '@/lib/viz/deck-chrome';
 import type { ManagedIframeContent } from '@/lib/story/managed-iframe';
 import type { ManagedAssetsConfig } from '@/lib/story-runtime/managed-assets';
 import { ISLAND_DATA_ID } from '@/lib/compiled-page/contract';
@@ -62,28 +63,40 @@ export function Iframe(props: Props) {
   );
 }
 
-/** `<DeckGL>`: the runtime adapter's box (identity) around the map's own (class), the stand-in until the engine lands. */
+/**
+ * `<DeckGL>`: the runtime adapter's box (identity) around the map's own (class), and in it the map's box —
+ * served as today's loading stand-in and turned into the map's figure when the engine lands, so the element
+ * the page was served with is the one the map draws into.
+ */
 export function DeckGL(props: Props) {
   const island = useIsland();
-  const [Engine, setEngine] = createSignal<Component<DeckEngineProps> | null>(null);
-  onMount(() => {
-    let live = true;
-    void import('./embed/deck-engine').then((m) => { if (live) setEngine(() => m.DeckEngine); });
-    onCleanup(() => { live = false; });
-  });
+  const [ready, setReady] = createSignal(false);
   const height = deckGlHeight(props.height);
   const name = refName(props.data);
-  const rows = () => (name ? island.tableSnapshot(name)?.rows ?? [] : []);
+  const title = str(props.title);
+  let box!: HTMLDivElement;
+  onMount(() => {
+    let live = true;
+    let stop = () => {};
+    void import('./embed/deck-engine').then(({ mountDeckEngine }) => {
+      if (!live) return;
+      // Through the CSSOM, as today's engine sets its figure's height (the attribute then reads `height: 320px;`).
+      box.style.cssText = '';
+      box.style.height = `${height}px`;
+      stop = mountDeckEngine(box, {
+        rows: () => (name ? island.tableSnapshot(name)?.rows ?? [] : []), layers: props.layers, basemap: str(props.basemap), colorMode: props.colorMode === 'dark' ? 'dark' : 'light',
+        initialViewState: props.initialViewState as DeckEngineProps['initialViewState'], tooltip: props.tooltip as DeckEngineProps['tooltip'],
+        legend: props.legend as boolean | undefined, title, height,
+      });
+      setReady(true);
+    });
+    onCleanup(() => { live = false; stop(); });
+  });
   return (
     <div id={str(props.id)} data-mx-ast={str(props['data-mx-ast'])}>
       <div class={str(props.class)}>
-        <Show when={Engine()} fallback={<div class="w-full rounded-md bg-muted" {...servedStyle(`height:${height}px`)} aria-busy="true" aria-label={str(props.title) ?? 'Map loading'} />}>
-          {(E) => createComponent(E(), {
-            rows, layers: props.layers, basemap: str(props.basemap), colorMode: props.colorMode === 'dark' ? 'dark' : 'light',
-            initialViewState: props.initialViewState as DeckEngineProps['initialViewState'], tooltip: props.tooltip as DeckEngineProps['tooltip'],
-            legend: props.legend as boolean | undefined, title: str(props.title), height,
-          })}
-        </Show>
+        <div ref={box} class={ready() ? MAP_CLASSES.figure : MAP_CLASSES.loading} role={ready() ? 'figure' : undefined} aria-busy={ready() ? undefined : 'true'}
+          aria-label={ready() ? title ?? 'Map' : title ?? 'Map loading'} {...servedStyle(`height:${height}px`)} />
       </div>
     </div>
   );

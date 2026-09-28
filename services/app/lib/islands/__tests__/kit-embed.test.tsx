@@ -15,13 +15,13 @@ import type { DataflowStore } from '@/lib/story-runtime/store';
 import type { TableResult } from '@/lib/story/dataflow';
 
 vi.mock('../kit/embed/deck-engine', () => ({
-  DeckEngine: (props: { rows: () => readonly Record<string, unknown>[]; title?: string; height: number }) => {
-    const el = document.createElement('div');
-    el.setAttribute('role', 'figure');
-    el.setAttribute('aria-label', props.title ?? 'Map');
-    el.dataset.rows = String(props.rows().length);
-    el.dataset.height = String(props.height);
-    return el;
+  mountDeckEngine: (box: HTMLElement, props: { rows: () => readonly Record<string, unknown>[]; height: number }) => {
+    const view = document.createElement('div');
+    view.className = 'engine-view';
+    view.dataset.rows = String(props.rows().length);
+    view.dataset.height = String(props.height);
+    box.append(view);
+    return () => view.remove();
   },
 }));
 
@@ -72,7 +72,7 @@ describe('<Iframe>', () => {
 });
 
 describe('<DeckGL>', () => {
-  it('draws today\'s stand-in, then the engine over the named table', async () => {
+  it('draws today\'s stand-in, then turns that same element into the map\'s figure with the engine drawing into it over the named table', async () => {
     const table: TableResult = { rows: [{ lng: 1, lat: 2 }, { lng: 3, lat: 4 }], columns: [] };
     const island = { ...fakeIsland(), tableSnapshot: (name: string) => (name === 'places' ? table : undefined) };
     const { host } = mount(island, () => <DeckGL id="map" data-mx-ast="1.3" class="rounded" data="$places" title="Places" height="300px" layers={[]} />);
@@ -80,13 +80,14 @@ describe('<DeckGL>', () => {
     expect(outer.getAttribute('data-mx-ast')).toBe('1.3');
     const inner = outer.firstElementChild!;
     expect(inner.getAttribute('class')).toBe('rounded');
-    const standIn = inner.firstElementChild!;
-    expect([standIn.getAttribute('class'), standIn.getAttribute('aria-busy'), standIn.getAttribute('aria-label'), standIn.getAttribute('style')]).toEqual(['w-full rounded-md bg-muted', 'true', 'Places', 'height:300px']);
-    await until(() => inner.querySelector('[role="figure"]') !== null);
-    const figure = inner.querySelector<HTMLElement>('[role="figure"]')!;
-    expect(figure.getAttribute('aria-label')).toBe('Places');
-    expect(figure.dataset.rows).toBe('2');
-    expect(figure.dataset.height).toBe('300');
-    expect(inner.querySelector('[aria-busy]')).toBeNull();
+    const box = inner.firstElementChild as HTMLElement;
+    expect([box.getAttribute('class'), box.getAttribute('aria-busy'), box.getAttribute('aria-label'), box.getAttribute('style'), box.getAttribute('role')]).toEqual(['w-full rounded-md bg-muted', 'true', 'Places', 'height:300px', null]);
+    await until(() => box.getAttribute('role') === 'figure');
+    // Today's engine figure (components/kit/deck-gl-engine), on the element the page was served with.
+    expect(inner.firstElementChild).toBe(box);
+    expect([box.getAttribute('class'), box.getAttribute('aria-busy'), box.getAttribute('aria-label'), box.style.height]).toEqual(['relative w-full overflow-hidden rounded-md', null, 'Places', '300px']);
+    const view = box.querySelector<HTMLElement>('.engine-view')!;
+    expect(view.dataset.rows).toBe('2');
+    expect(view.dataset.height).toBe('300');
   });
 });

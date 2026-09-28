@@ -113,10 +113,13 @@ describe('compilePage', () => {
     expect(page.islands.map((i) => i.kit)).toEqual([['Iframe'], ['DeckGL']]);
     const html = dom(page.html);
     const frame = html.querySelector('#f')!;
-    expect(frame.outerHTML.replace(/ data-hk="[^"]*"/g, '').replace(/<!--[^>]*-->/g, '')).toBe('<div id="f" class="my-4" data-mx-ast="0.0" data-mx-managed-frame="" aria-label="Gallery" style="height:120px;width:100%"><div style="height:100%"></div></div>');
+    // Attributes compared as sets (shapeOf keeps data-mx-ast out; it is asserted on its own).
+    expect(frame.getAttribute('data-mx-ast')).toBe('0.0');
+    expect(shapeOf(frame.outerHTML)).toEqual(shapeOf('<div id="f" class="my-4" data-mx-managed-frame="" aria-label="Gallery" style="height:120px;width:100%"><div style="height:100%"></div></div>'));
     // Today's runtime adapter: the identity on the outer box, the author's class on the map's own box, the stand-in inside.
     const map = html.querySelector('#map')!;
-    expect(map.outerHTML.replace(/ data-hk="[^"]*"/g, '').replace(/<!--[^>]*-->/g, '')).toBe('<div id="map" data-mx-ast="0.1"><div class="rounded"><div class="w-full rounded-md bg-muted" style="height:320px" aria-busy="true" aria-label="Countries"></div></div></div>');
+    expect(map.getAttribute('data-mx-ast')).toBe('0.1');
+    expect(shapeOf(map.outerHTML)).toEqual(shapeOf('<div id="map"><div class="rounded"><div class="w-full rounded-md bg-muted" style="height:320px" aria-busy="true" aria-label="Countries"></div></div></div>'));
     // The frame's author content reaches the island only as data: compiled at publish (lib/story/managed-iframe), never as markup.
     expect(page.html).not.toContain('Hello');
   });

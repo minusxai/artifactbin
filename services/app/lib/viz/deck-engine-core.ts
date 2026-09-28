@@ -19,6 +19,7 @@ type Rgb = [number, number, number];
 export type Feature = { type: 'Feature'; properties: Row; geometry: unknown };
 export interface Built { spec: Row; data: readonly unknown[]; accessors: Row; layer: unknown }
 export type { ColorScale, MapViewState, PickingInfo };
+export { ATTRIBUTION, MAP_CLASSES } from './deck-chrome';
 
 // H3 cells drawn from h3-js: @deck.gl/geo-layers imports loaders.gl code that
 // compiles WebAssembly on load, which the document CSP refuses.
@@ -158,21 +159,3 @@ export const basemapStyleOf = (basemap: string, colorMode: 'light' | 'dark'): 'l
 /** The legend's compact number format and colour swatch. */
 export const compactNumber = new Intl.NumberFormat(undefined, { notation: 'compact', maximumFractionDigits: 1 });
 export const rgbCss = (c: readonly number[]) => `rgb(${c[0]}, ${c[1]}, ${c[2]})`;
-
-/** The map's chrome classes, shared by both views (Tailwind candidates stay in one place). */
-export const MAP_CLASSES = {
-  figure: 'relative w-full overflow-hidden rounded-md',
-  controls: 'absolute right-2 top-2 flex flex-col divide-y divide-border overflow-hidden rounded-md border border-border shadow-sm',
-  button: 'flex h-7 w-7 cursor-pointer items-center justify-center border-0 bg-background p-0 text-foreground hover:bg-muted focus-visible:outline-2 focus-visible:outline-ring',
-  legend: 'absolute bottom-5 left-2 flex max-w-[45%] flex-col gap-2 rounded-md border border-border bg-background/90 px-2 py-1.5 text-[11px] leading-tight text-foreground shadow-sm',
-  legendEntry: 'flex flex-col gap-1',
-  legendLabel: 'font-medium text-muted-foreground',
-  ramp: 'flex items-center gap-1.5',
-  rampBar: 'h-2 w-24 rounded-sm',
-  swatches: 'm-0 flex list-none flex-wrap gap-x-2 gap-y-0.5 p-0',
-  swatch: 'flex items-center gap-1',
-  dot: 'h-2 w-2 shrink-0 rounded-full',
-  swatchLabel: 'truncate',
-  attribution: 'pointer-events-none absolute bottom-1 right-2 m-0 text-[10px] leading-none text-muted-foreground',
-} as const;
-export const ATTRIBUTION = '© OpenFreeMap © OpenMapTiles © OpenStreetMap contributors';

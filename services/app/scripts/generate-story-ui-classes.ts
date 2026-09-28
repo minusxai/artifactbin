@@ -42,7 +42,7 @@ export const EXTRA_CLASS_SOURCES = [
   join(ROOT, 'components', 'PersonMention.tsx'),
   // The <DeckGL> map's chrome classes, shared by today's engine (components/kit/deck-gl-engine) and the
   // compiled page's (lib/islands/kit/embed/deck-engine).
-  join(ROOT, 'lib', 'viz', 'deck-engine-core.ts'),
+  join(ROOT, 'lib', 'viz', 'deck-chrome.ts'),
 ];
 const OUT_FILE = join(ROOT, 'lib', 'story-ui', 'recipe-classes.ts');
 

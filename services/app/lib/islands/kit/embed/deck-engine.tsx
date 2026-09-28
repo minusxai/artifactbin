@@ -1,13 +1,16 @@
 /* @jsxImportSource solid-js */
 /**
  * THE `<DeckGL>` ENGINE ON A COMPILED PAGE, loaded lazily by the island (../embed.tsx) once it is mounted:
- * today's React engine (components/kit/deck-gl-engine) without React. The layers, legend, fitted view and
+ * today's React engine (components/kit/deck-gl-engine) without React. It draws INTO the island's box — the
+ * served stand-in, which the island turns into the map's figure — so the element the page was served with
+ * is the element the reader keeps. The layers, legend, fitted view and
  * tooltip record come from the shared framework-free half (lib/viz/deck-engine-core); this file is the
  * view — deck.gl's `Deck` in the same wrapper DOM @deck.gl/react's `DeckGL` draws, or, with a basemap,
  * MapLibre with deck drawing into its GL context (interleaved), in the container react-maplibre's `Map`
  * draws.
  */
 import { For, Show, createEffect, createMemo, createSignal, onCleanup, onMount, type JSX } from 'solid-js';
+import { render } from 'solid-js/web';
 import { Deck } from '@deck.gl/core';
 import { MapboxOverlay } from '@deck.gl/mapbox';
 // @ts-expect-error The CSP build ships no typings of its own; it is the default build's twin.
@@ -141,7 +144,20 @@ function MapLegend(props: { scales: readonly ColorScale[] }) {
   );
 }
 
-export function DeckEngine(props: DeckEngineProps) {
+/**
+ * Draw the map into `box` (the island's figure: its class, role, label and height are the island's) and
+ * return its disposer. The engine's own content is the view, the zoom/reset controls, the legend and the
+ * basemap attribution, in today's order.
+ */
+export function mountDeckEngine(box: HTMLElement, props: DeckEngineProps): () => void {
+  const leave = () => hideVegaTooltip(box.ownerDocument);
+  box.addEventListener('pointerleave', leave);
+  const dispose = render(() => <DeckContent box={box} {...props} />, box);
+  return () => { box.removeEventListener('pointerleave', leave); dispose(); leave(); };
+}
+
+function DeckContent(props: DeckEngineProps & { box: HTMLElement }) {
+  const box = props.box;
   const specs = layerSpecs(props.layers);
   const [boundaries, setBoundaries] = createSignal<Record<string, Feature[]>>({});
   for (const id of new Set(boundaryKeyOf(specs).split(',').filter(Boolean))) {
@@ -152,13 +168,11 @@ export function DeckEngine(props: DeckEngineProps) {
   const scales = createMemo(() => legendScales(built(), palette));
 
   // ── The view: fitted to the data until the reader moves it ──────────────────
-  let box!: HTMLDivElement;
-  const [width, setWidth] = createSignal(0);
+  const [width, setWidth] = createSignal(box.clientWidth);
   onMount(() => {
     const observer = new ResizeObserver(() => setWidth(box.clientWidth));
     observer.observe(box);
-    setWidth(box.clientWidth);
-    onCleanup(() => { observer.disconnect(); hideVegaTooltip(box.ownerDocument); });
+    onCleanup(() => observer.disconnect());
   });
   const extent = createMemo(() => extentOf(built()));
   const fitted = createMemo(() => fittedView(props.initialViewState, extent(), width(), props.height));
@@ -182,14 +196,12 @@ export function DeckEngine(props: DeckEngineProps) {
   const style = basemapStyleOf(props.basemap ?? 'auto', props.colorMode);
   const title = props.title ?? 'Map';
   const layers = () => built().map((b) => b.layer);
-  return (
-    <div ref={box} role="figure" aria-label={title} class={MAP_CLASSES.figure} style={{ height: `${props.height}px` }} on:pointerleave={() => hideVegaTooltip(box.ownerDocument)}>
-      {style
-        ? <BaseMapView style={style} title={title} layers={layers} view={view} move={move} onHover={onHover} />
-        : <DeckView layers={layers} view={view} move={move} onHover={onHover} />}
-      <MapControls zoomIn={() => zoomBy(1)} zoomOut={() => zoomBy(-1)} reset={reset} />
-      <Show when={(props.legend ?? true) && scales().length > 0}><MapLegend scales={scales()} /></Show>
-      {style ? <p class={MAP_CLASSES.attribution}>{ATTRIBUTION}</p> : null}
-    </div>
-  );
+  return <>
+    {style
+      ? <BaseMapView style={style} title={title} layers={layers} view={view} move={move} onHover={onHover} />
+      : <DeckView layers={layers} view={view} move={move} onHover={onHover} />}
+    <MapControls zoomIn={() => zoomBy(1)} zoomOut={() => zoomBy(-1)} reset={reset} />
+    <Show when={(props.legend ?? true) && scales().length > 0}><MapLegend scales={scales()} /></Show>
+    {style ? <p class={MAP_CLASSES.attribution}>{ATTRIBUTION}</p> : null}
+  </>;
 }
