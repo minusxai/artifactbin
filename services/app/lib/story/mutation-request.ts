@@ -32,23 +32,13 @@ export interface MutationRequest {
   localTables?: Record<string, Row[]>;
 }
 
+export { mutationRequestFor } from './mutation-request-builder';
+
 /**
  * The request a control's press makes: each argument from `args` (what the
  * control's `args=` resolved to) or else the page value of the same name; the
  * row fields and edited value the statement reads, and nothing else.
  */
-export function mutationRequestFor(m: Pick<CompiledMutation, 'name' | 'args' | 'reads'>, input: { values: Record<string, Scalar>; args?: Record<string, Scalar>; row?: Record<string, Scalar>; value?: Scalar; tz?: string; localTables?: Record<string, Row[]> }): MutationRequest {
-  const args = Object.fromEntries(m.args.map((a) => [a.name, input.args && Object.hasOwn(input.args, a.name) ? input.args[a.name]! : input.values[a.name] ?? null]));
-  const fields = m.reads.builtins.flatMap((b) => rowField(b) ?? []);
-  const row = fields.length && input.row ? Object.fromEntries(fields.map((f) => [f, input.row![f] ?? null])) : undefined;
-  return {
-    mutation: m.name, args,
-    ...(row ? { row } : {}),
-    ...(m.reads.builtins.includes('_value') && input.value !== undefined ? { value: input.value } : {}),
-    ...(input.tz ? { tz: input.tz } : {}),
-    ...(input.localTables ? { localTables: input.localTables } : {}),
-  };
-}
 
 const isScalar = (v: unknown): v is Scalar =>
   v === null || typeof v === 'string' || typeof v === 'boolean' || (typeof v === 'number' && Number.isFinite(v));

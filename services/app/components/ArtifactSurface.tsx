@@ -66,6 +66,7 @@ import { resolveStoryMode } from '@/lib/data/story/story-themes';
 import type { StoryThemeName } from '@/lib/validation/story-theme-names';
 import type { StoryIslandDataflow } from '@/lib/story-runtime/contract';
 import { IslandStory } from '@/components/IslandStory';
+import { islandDocumentOf } from '@/lib/islands/handover';
 import { initialDocumentStory, initialIslandDocument, initialStoryIsCompiled } from '@/web/initial-story';
 import { takeChromeIntent } from '@/web/idle-boot';
 
@@ -333,7 +334,8 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
    * islands running, adopted AS IT IS (components/IslandStory) — never hydrated, never drawn again.
    * Read once, by the surface the page was served for (web/initial-story clears it on any other
    * route). The interpreter (InlineStoryRuntime) takes over, for good, only when the document must
-   * become something the islands cannot: an editor's draft, or a newer version.
+   * become something the islands cannot: an editor's draft. A newer version is drawn in place over the
+   * islands (IslandStory → lib/islands/live-update), never by the interpreter.
    */
   const [servedCompiled] = useState(initialStoryIsCompiled);
   const [compiled] = useState(() => {
@@ -341,7 +343,8 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
     return story ? { story, islands: initialIslandDocument() } : null;
   });
   const [interpreting, setInterpreting] = useState(!compiled);
-  const handOver = useCallback(() => setInterpreting(true), []);
+  const editReadingY = useRef<number | null>(null);
+  const exitReadingY = useRef<number | null>(null);
 
   const intentDone = useRef(false);
   useEffect(() => {
@@ -506,6 +509,18 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
 
   const transportFactory = useCallback(() => backend.queryTransport(), [backend]);
   const [frameLoaded, setFrameLoaded] = useState(false);
+  useLayoutEffect(() => {
+    if (!editing || !interpreting || !frameLoaded || editReadingY.current === null) return;
+    const y = editReadingY.current;
+    editReadingY.current = null;
+    window.requestAnimationFrame(() => window.scrollTo(0, y));
+  }, [editing, interpreting, frameLoaded]);
+  useLayoutEffect(() => {
+    if (editing || exitReadingY.current === null) return;
+    const y = exitReadingY.current;
+    exitReadingY.current = null;
+    window.requestAnimationFrame(() => window.scrollTo(0, y));
+  }, [editing]);
   /** The reader's own mode, for a runtime that mounts after they chose it (the interpreter taking over an adopted compiled page). */
   const modeOverride = useRef<AppearanceMode | null>(null);
   const onController = useCallback((controller: InlineStoryController | null) => {
@@ -523,20 +538,29 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
   // Signal changes update this document's store and route, never its initial
   // seed. Only a new artifact identity receives a new runtime and URL seed.
   const initialRuntimeVersion = useMemo(() => version, [id]);
-  // Edit mode or a newer version: the islands give way to the interpreter (a render-time adjustment, so no frame shows both).
-  if (!interpreting && (editing || !!live?.nodes || version > initialRuntimeVersion)) setInterpreting(true);
+  // Edit mode: the islands give way to the interpreter (a render-time adjustment, so no frame shows both).
+  // A newer version reaches the adopted islands through their controller's `update` (the effect below).
+  if (!interpreting && editing) setInterpreting(true);
   const islandsLive = !!compiled && !interpreting && !!props.runtime;
   // Edit mode begins: the islands are unmounted (`setMode('edit')`) before IslandStory disposes them
   // (a microtask after this commit) and the interpreter the editor drives is already in their place.
-  useLayoutEffect(() => { if (editing) compiled?.islands?.setMode('edit'); }, [editing, compiled]);
+  // The document running on the story now: a version that brought a prose page its first islands booted one.
+  useLayoutEffect(() => { if (editing && compiled) (islandDocumentOf(compiled.story) ?? compiled.islands)?.setMode('edit'); }, [editing, compiled]);
   const needsParse = isDocumentFormat && !props.runtime;
   const { module: parser, failed: parseFailed, retry: retryParse } = useOnDemand(updatePartsFeature, needsParse);
   const seedReady = !needsParse || !!parser;
-  const initialRuntimeData = useMemo(() => props.runtime?.data ?? {
-    nodes: parser?.storyUpdateParts(source ?? '')?.nodes ?? [], refData: {},
-    dataflow: dataflow ? {...dataflow, values:{...dataflow.values,...readUrlValues(search,dataflow.flow)}} : undefined,
-    colorMode: readerMode, template, chrome: true,
-  }, [id, seedReady]);
+  const initialRuntimeData = useMemo(() => {
+    const served = props.runtime?.data ?? {
+      nodes: parser?.storyUpdateParts(source ?? '')?.nodes ?? [], refData: {},
+      dataflow: dataflow ? {...dataflow, values:{...dataflow.values,...readUrlValues(search,dataflow.flow)}} : undefined,
+      colorMode: readerMode, template, chrome: true,
+    };
+    // The compiled reader has already adopted live versions in place. When it gives way to
+    // the editor, seed the interpreter from that latest version, not the original HTML.
+    return compiled && editing && live?.nodes
+      ? { ...served, nodes: live.nodes, ...(live.dataflow ? { dataflow: { ...served.dataflow, ...live.dataflow } } : {}) }
+      : served;
+  }, [id, seedReady, editing]);
   const setReaderMode = useCallback((mode: AppearanceMode) => {
     modeOverride.current = mode;
     setReaderModeOverride(mode);
@@ -639,6 +663,8 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
 
   const beginEdit = useCallback((selectionPath: string | null) => {
     if (window.location.hash === '#edit') return;
+    if (compiled) editReadingY.current = window.scrollY;
+    if (compiled && !interpreting) setFrameLoaded(false);
     // pushState, not replaceState: entering edit mode is a place you can come
     // BACK from, and the browser's back button is the obvious way to do it. The
     // hashchange listener above turns that navigation into leaving edit mode.
@@ -646,7 +672,7 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
     void navigate(window.location.pathname + window.location.search + '#edit', {state:route.state});
     pushedEdit.current = true;
     setEditing(true);
-  }, []);
+  }, [compiled, interpreting, route.state]);
   const enterEdit = useCallback(() => beginEdit(null), [beginEdit]);
 
   /*
@@ -722,6 +748,7 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
     // LANDED on #edit — a deep link from the dashboard, a shared url — there is
     // nothing of ours to pop, and going back would leave the app entirely.
     setInitialEditSelectionPath(null);
+    if (compiled) exitReadingY.current = window.scrollY;
     if (pushedEdit.current) {
       pushedEdit.current = false;
       history.back();
@@ -1021,7 +1048,6 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
             islands={compiled.islands}
             nodes={props.runtime!.data.nodes}
             onController={onController}
-            onStale={handOver}
           /> : seedReady ? <InlineStoryRuntime
             key={id}
             data={initialRuntimeData}

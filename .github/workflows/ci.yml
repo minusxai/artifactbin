@@ -136,10 +136,9 @@ jobs:
   #
   # FOUR shards. Three was the measured optimum on 2026-09-04 (the files summed to
   # ~337s of work, the slowest single file is 36s, and vitest shards by FILE
-  # COUNT rather than duration), but the project grew: by 2026-09-28 each of the
-  # three jobs ran 238–243s against the 240s job budget — 83s of CLI build every
-  # shard pays, 87–108s of tests, plus integration (shard 1) or the CLI suite
-  # (shard 3). A fourth shard takes ~25s of tests off each job.
+  # COUNT rather than duration). Only shard 3 runs the CLI source suite, so only
+  # that shard needs the CLI build. The other three shards run source tests and
+  # shard 1 also runs the browser/Docker integration suite.
   node:
     needs: [ plan ]
     if: needs.plan.outputs.node == 'true'
@@ -186,7 +185,8 @@ jobs:
         run: npx playwright install chromium
       - if: matrix.shard == 1
         run: docker pull postgres:17-alpine
-      - run: npm run build -w services/cli
+      - if: matrix.shard == 3 && needs.plan.outputs.cli-tests == 'true'
+        run: npm run build -w services/cli
       - env:
           CI__PLAN: ${{ needs.plan.outputs.plan }}
         run: node scripts/ci.mjs node ${{ matrix.shard }}/4
@@ -275,11 +275,10 @@ jobs:
           key: install-v4-${{ runner.os }}-${{ runner.arch }}-node22-${{ hashFiles('.ci-cache-key/install.json', 'services/app/scripts/copy-assets.mjs', 'services/cli/scripts/prepare-pty.mjs') }}
       - if: steps.install.outputs.cache-hit != 'true'
         run: npm ci
-      # Build the Vite SPA, document runtime and bundled Hono server.
-      - run: npm run build
-      # …and the CLI bundle, here rather than in every gate shard: the gates drive `afbin` against
-      # the servers they boot, and this job is already the one that builds.
+      # The CLI host build already builds the app SPA and document runtime. Do it once here;
+      # the gates drive this CLI bundle against the server bundled immediately afterward.
       - run: npm run build -w services/cli
+      - run: node scripts/build-server.mjs dist/server.mjs
       # ONE BUILD FOR THE WHOLE RUN. Each of the six gate shards used to rebuild these same bytes
       # for itself (`npm run build` ~7s, `npm run build -w services/cli` ~22s, measured on run
       # 35335620538) while this job produced them and threw them away. Compression is off: the
@@ -316,16 +315,19 @@ jobs:
           retention-days: 1
           if-no-files-found: error
 
+  # On PRs #158 and #159, five shards spent up to 215s in Vitest and 25s
+  # provisioning Chromium. Seven spreads the growing API file set while the
+  # independent runners keep the run's critical path at the slowest shard.
   api:
     needs: [ plan ]
     if: needs.plan.outputs.api == 'true'
-    name: api tests (${{ matrix.shard }}/5)
+    name: api tests (${{ matrix.shard }}/7)
     runs-on: ubuntu-latest
     timeout-minutes: 10
     strategy:
       fail-fast: false
       matrix:
-        shard: [ 1, 2, 3, 4, 5 ]
+        shard: [ 1, 2, 3, 4, 5, 6, 7 ]
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
@@ -362,7 +364,7 @@ jobs:
         run: npx playwright install --with-deps chromium
       - if: steps.playwright.outputs.cache-hit == 'true'
         run: npx playwright install chromium
-      - run: npx vitest run --project=api --shard=${{ matrix.shard }}/5
+      - run: npx vitest run --project=api --shard=${{ matrix.shard }}/7
 
   # THE SHARDS RUN WHAT `build` BUILT. Every shard used to build the app and the CLI for itself —
   # the same bytes, six times over, in a job that already had to wait for nothing. It waits for
@@ -371,13 +373,13 @@ jobs:
   gates:
     needs: [ plan, build ]
     if: needs.plan.outputs.gates == 'true'
-    name: browser gates (${{ matrix.shard }}/7)
+    name: browser gates (${{ matrix.shard }}/11)
     runs-on: ubuntu-latest
     timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
-        shard: [ 1, 2, 3, 4, 5, 6, 7 ]
+        shard: [ 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11 ]
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
@@ -409,7 +411,9 @@ jobs:
       # Chromium libraries ship on the runner. Firefox/WebKit need additional system
       # packages even on a browser-cache hit; install them only on shards that use them.
       - id: gate-browsers
-        run: echo "browsers=$(node scripts/gates.mjs --browsers --shard=${{ matrix.shard }}/7)" >> "$GITHUB_OUTPUT"
+        run: |
+          echo "browsers=$(node scripts/gates.mjs --browsers --shard=${{ matrix.shard }}/11)" >> "$GITHUB_OUTPUT"
+          echo "postgres=$(node scripts/gates.mjs --needs-postgres --shard=${{ matrix.shard }}/11)" >> "$GITHUB_OUTPUT"
       - name: Install selected gate browsers
         env:
           BROWSERS: ${{ steps.gate-browsers.outputs.browsers }}
@@ -431,7 +435,7 @@ jobs:
         with:
           name: app-build
       # The runner boots the servers with one protected per-run mail outbox.
-      # Two servers within the runner, six runners across the set. The
+      # Two servers within each of the eleven runners. The
       # within-machine fan-out bottomed out at 192s on four vCPUs; the shard is
       # balanced by each gate's measured weight, not by count, so no one runner
       # ends up holding every slow gate (scripts/gates.shard.mjs). More than two
@@ -439,27 +443,27 @@ jobs:
       # 34697938970, and further shards divide that work rather than the machine.
       #
       #
-      # SEVEN since the compiled legs (w3-behaviour): the behavioural gates run a second time against the
+      # ELEVEN with the compiled legs (w3-behaviour): the behavioural gates run a second time against the
       # compiled reader (`<gate>@compiled`, scripts/gates.manifest COMPILED_LEGS) on servers the runner
       # boots beside the ordinary two with FLAG__COMPILED_READER=on; the two workers share one queue. The
-      # legs add ~530s of weight to ~5440s; a seventh shard keeps every shard's weight below what six
-      # carried without them, so no job grows toward the 240s budget.
+      # legs and reading-chrome expand the set. Seven and eight shards crossed 240s after
+      # editor-v2 needed a retry. Eleven isolate it and leave capacity for the growing compiled set.
       #
-      # postgres-datasets drives a real Dockerised Postgres; pulling the image
-      # before the run keeps that cost out of the gate's own timeout budget.
+      # The gate runner selects the shard on this host; pull Postgres only when
+      # that selection includes postgres-datasets, before its gate timeout starts.
       - name: pull the Postgres image the datasets gate needs
+        if: steps.gate-browsers.outputs.postgres == 'true'
         run: docker pull postgres:17-alpine
       - name: Prepare isolated browser session workers
         run: |
-          sudo apt-get update
-          sudo apt-get install -y bubblewrap
+          sudo apt-get install -y bubblewrap || { sudo apt-get update; sudo apt-get install -y bubblewrap; }
           sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
           sudo mkdir -p /sys/fs/cgroup/afbin-sessions
           echo '+cpu +memory +pids' | sudo tee /sys/fs/cgroup/afbin-sessions/cgroup.subtree_control
           sudo chown -R "$USER" /sys/fs/cgroup/afbin-sessions
           sudo chown "$USER" /sys/fs/cgroup/cgroup.procs
       - name: every gate, two servers
-        run: node scripts/gates.mjs --servers=2 --shard=${{ matrix.shard }}/7
+        run: node scripts/gates.mjs --servers=2 --shard=${{ matrix.shard }}/11
         env:
           AUTH__SECRET: gates-ci-${{ github.run_id }}
           DATASET__ALLOW_PRIVATE_NETWORKS: 'true'

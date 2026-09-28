@@ -6,7 +6,7 @@
  * roles, aria idrefs, data-state/data-orientation/data-slot, closed content rendered hidden), and
  * behaves the same on interaction. `parityOf` (./kit-parity) is the unit-level form of the parity gate.
  */
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { render } from 'solid-js/web';
 import { createSignal } from 'solid-js';
 import { act, createElement } from 'react';
@@ -18,7 +18,7 @@ import { STORY_UI_COMPONENTS } from '@/lib/story-ui/registry';
 import { IconGlyphProvider } from '@/components/kit/icon';
 import { IslandProvider } from '../context';
 import { fakeIsland } from './context.test';
-import { Badge, Alert, AlertTitle, AlertDescription, Card, CardHeader, CardTitle, CardContent, Button } from '../kit/basic';
+import { Badge, Alert, AlertTitle, AlertDescription, Card, CardHeader, CardTitle, CardContent, Button, Icon } from '../kit/basic';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '../kit/tabs';
 import { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from '../kit/accordion';
 import { Dialog, DialogTrigger, DialogContent, DialogClose } from '../kit/dialog';
@@ -47,6 +47,16 @@ const press = (el: HTMLElement) => {
 const cls = (tag: string, props: Record<string, unknown> = {}) => cn(RECIPES[tag]!(props));
 
 describe('basic', () => {
+  it('loads an unseen row icon from the optional glyph catalog', async () => {
+    const fallback = { cls: 'lucide-circle-question-mark', inner: '<circle cx="12" cy="12" r="10"></circle>' };
+    const check = { cls: 'lucide-check', inner: '<path d="m20 6-11 11-5-5"></path>' };
+    const url = 'data:text/javascript,' + encodeURIComponent(`export const glyphs = ${JSON.stringify({ Check: check })}`);
+    const { host, dispose } = mount(() => <Icon name="check" glyphs={{ CircleQuestionMark: fallback }} catalogUrl={url} />);
+    try {
+      expect(host.querySelector('circle')).toBeTruthy();
+      await vi.waitFor(() => expect(host.querySelector('path')?.getAttribute('d')).toBe(check.inner.match(/d="([^"]+)/)?.[1]));
+    } finally { dispose(); }
+  });
   it('Badge, Alert and Card match today\'s render', () => {
     const { host } = mount(() => <>
       <Badge id="b" variant="secondary" class={cls('Badge', { variant: 'secondary' })}>beta</Badge>
@@ -168,9 +178,22 @@ describe('disclosure', () => {
 });
 
 describe('tooltip, as today\'s story tooltip runs', () => {
+  it('leaves placement unloaded until the reader signals readiness', async () => {
+    document.documentElement.removeAttribute('data-mx-ready');
+    const { host, dispose } = mount(() => <Tooltip defaultOpen><TooltipTrigger>Target</TooltipTrigger><TooltipContent>Tooltip body</TooltipContent></Tooltip>);
+    try {
+      await new Promise((resolve) => setTimeout(resolve, 30));
+      expect(host.querySelector('[data-slot="tooltip-trigger"]')?.hasAttribute('data-radix-popper-side')).toBe(false);
+      document.documentElement.setAttribute('data-mx-ready', '');
+      document.dispatchEvent(new Event('mx:ready'));
+      await vi.waitFor(() => expect(host.querySelector('[data-slot="tooltip-trigger"]')?.getAttribute('data-radix-popper-side')).toBe('top'));
+    } finally { dispose(); document.documentElement.removeAttribute('data-mx-ready'); }
+  });
+
   it('a tooltip open on mount: the trigger is the placed anchor, described by the content, which is portaled out of the document', async () => {
     // Radix measures its arrow with a ResizeObserver, which jsdom lacks: an inert one for both sides.
     const hadObserver = 'ResizeObserver' in globalThis;
+    document.documentElement.setAttribute('data-mx-ready', '');
     if (!hadObserver) (globalThis as { ResizeObserver?: unknown }).ResizeObserver = class { observe() {} unobserve() {} disconnect() {} };
     const markup = '<div id="w"><TooltipProvider><Tooltip defaultOpen><TooltipTrigger id="tt" className="text-sm">Hover target</TooltipTrigger><TooltipContent id="tc">Pinned</TooltipContent></Tooltip></TooltipProvider></div>';
     const react = await reactMount(markup);
@@ -194,7 +217,7 @@ describe('tooltip, as today\'s story tooltip runs', () => {
       await act(async () => { await new Promise((r) => setTimeout(r, 0)); });
       expect(host.querySelector('#tt')?.getAttribute('data-state')).toBe('closed');
       expect(host.querySelector('#tt')?.hasAttribute('aria-describedby')).toBe(false);
-    } finally { dispose(); host.remove(); await react.unmount(); if (!hadObserver) delete (globalThis as { ResizeObserver?: unknown }).ResizeObserver; }
+    } finally { dispose(); host.remove(); await react.unmount(); document.documentElement.removeAttribute('data-mx-ready'); if (!hadObserver) delete (globalThis as { ResizeObserver?: unknown }).ResizeObserver; }
   });
 });
 

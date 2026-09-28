@@ -115,6 +115,8 @@ export const COMPILED_LEGS = Object.freeze([
   { gate: 'live-reader', timeoutMs: 70_000 },
   { gate: 'hydration', timeoutMs: 190_000, disabled: 'its takeover legs 1–3 assert React hydrating the legacy inline story; the compiled takeover (leg 4) already runs in the plain gate on ?reader=compiled' },
   { gate: 'reader-chrome', timeoutMs: 110_000 },
+  { gate: 'editable-table', timeoutMs: 120_000 },
+  { gate: 'reading-chrome', timeoutMs: 110_000 },
   { gate: 'dataflow', timeoutMs: 60_000 },
   { gate: 'local-sql-state', timeoutMs: 60_000 },
   { gate: 'postgres-datasets', timeoutMs: 60_000 },
@@ -122,6 +124,11 @@ export const COMPILED_LEGS = Object.freeze([
   { gate: 'image-upload', timeoutMs: 110_000 },
   { gate: 'web-assets', timeoutMs: 60_000 },
   { gate: 'libraries', timeoutMs: 60_000 },
+  { gate: 'annotations', timeoutMs: 60_000 },
+  { gate: 'comment-targets', timeoutMs: 60_000 },
+  { gate: 'inplace-edit', timeoutMs: 180_000 },
+  { gate: 'editor-v2', timeoutMs: 310_000 },
+  { gate: 'collab-edit', timeoutMs: 100_000 },
 ]);
 
 /** `<gate>@compiled` → `<gate>`; a gate name is itself. */
@@ -192,5 +199,10 @@ export function browsersFor(names) {
  */
 export function shardWeight(name) {
   const spec = specFor(name);
-  return spec.timeoutMs + (browsersFor([name]).some(browser => browser !== 'chromium') ? 270_000 : 0);
+  // editor-v2's long selection flow passed alone after losing a parallel race on CI run
+  // 36422408100; the retry made its shard exceed 240s. With nine bins, this weight
+  // leaves it alone without changing the gate's own timeout or coverage.
+  return spec.timeoutMs
+    + (browsersFor([name]).some(browser => browser !== 'chromium') ? 270_000 : 0)
+    + (name === 'editor-v2' ? 400_000 : 0);
 }

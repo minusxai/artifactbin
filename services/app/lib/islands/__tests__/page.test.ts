@@ -6,12 +6,14 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { startPage, CHROME_HIDDEN_CLASS } from '../page';
 import { READER_CHROME_HIDDEN_CLASS } from '@/lib/story/reader-chrome';
+import { captureInitialStory, clearInitialStory } from '@/web/initial-story';
 
 class FakeEventSource extends EventTarget {
   static made: FakeEventSource[] = [];
   onmessage: ((e: MessageEvent) => void) | null = null;
   constructor(public url: string) { super(); FakeEventSource.made.push(this); }
-  close() {}
+  closed = false;
+  close() { this.closed = true; }
 }
 
 const page = ({ live = true, module = false } = {}) => {
@@ -32,6 +34,24 @@ afterEach(() => {
 });
 
 describe('startPage', () => {
+  it('wires the served outline and scrolling tables, including later rows', () => {
+    page({ live: false });
+    document.querySelector('#mx-story-root')!.innerHTML = '<div class="mx-reading"><nav class="mx-outline"><button class="mx-outline-row" data-mx-target="0" type="button">One</button></nav><div class="mx-doc"><h2 data-mx-ast="0">One</h2><table><tr><td>Wide</td></tr></table></div></div>';
+    const heading = document.querySelector<HTMLElement>('h2')!;
+    const scroll = vi.fn();
+    heading.scrollIntoView = scroll;
+    heading.getBoundingClientRect = () => ({ top: 0 }) as DOMRect;
+    const table = document.querySelector<HTMLTableElement>('table')!;
+    Object.defineProperties(table, { scrollWidth: { value: 300 }, clientWidth: { value: 100 }, scrollLeft: { value: 0, writable: true } });
+    stops.push(startPage());
+    expect(document.querySelector('.mx-outline-row')?.getAttribute('aria-current')).toBe('true');
+    document.querySelector<HTMLElement>('.mx-outline-row')!.click();
+    expect(scroll).toHaveBeenCalledWith({ behavior: 'smooth', block: 'start' });
+    expect(table.getAttribute('data-mx-scrollable')).toBe('');
+    table.scrollLeft = 200;
+    table.dispatchEvent(new Event('scroll'));
+    expect(table.getAttribute('data-mx-scrollable')).toBe('end');
+  });
   it('applies the reader\'s per-visit colour override on <html> and the story root, and nothing without one', () => {
     vi.stubGlobal('EventSource', FakeEventSource);
     page();
@@ -57,6 +77,17 @@ describe('startPage', () => {
     page({ module: true });
     stops.push(startPage());
     expect(FakeEventSource.made).toEqual([]);
+  });
+
+  it('closes a static compiled page stream when the app takes over for editing', () => {
+    vi.stubGlobal('EventSource', FakeEventSource);
+    page();
+    stops.push(startPage());
+    captureInitialStory();
+    const source = FakeEventSource.made.at(-1)!;
+    expect(source.closed).toBe(false);
+    clearInitialStory();
+    expect(source.closed).toBe(true);
   });
 
   it('framed: marks <html> mx-framed and holds no stream (the page above does)', () => {

@@ -31,10 +31,10 @@ import type { Component } from 'solid-js';
 import type { CompiledDataflow } from '@/lib/story/compiled-dataflow';
 import type { PageEngine } from '@/lib/story-runtime/page-engine';
 import { createDataflowStore } from '@/lib/story-runtime/store';
-import { createDocumentTransport } from '@/lib/story-runtime/document-transport';
+import { createIslandDocumentTransport } from './document-transport';
 import { STORY_DATA_HOOK } from '@/lib/story-runtime/contract';
 import { ISLAND_DATA_ID, READER_READY_ATTR } from '@/lib/compiled-page/contract';
-import { ISLANDS_READY_EVENT, type IslandDocument, type IslandDocumentMode, type IslandEvent, type IslandPageData, type IslandViewer } from './contract';
+import { ISLAND_DOCUMENT_KEY, ISLANDS_READY_EVENT, type IslandDocument, type IslandDocumentMode, type IslandEvent, type IslandHost, type IslandPageData, type IslandViewer } from './contract';
 import { createIslandRuntime, hydrateIsland } from './rt';
 import { installIslandDocument } from './handover';
 import { loadViewerOverlay } from './viewer';
@@ -42,8 +42,13 @@ import { createWriteStatusFeed } from './writes';
 import { installStatus } from './kit/status';
 import { loadChart } from './chart';
 
-/** One island of the per-document module: its hydration key prefix (`IslandRef.renderId`) and its component. */
-export type IslandEntry = readonly [renderId: string, component: Component];
+/**
+ * One island of the per-document module: its hydration key prefix (`IslandRef.renderId`), its component,
+ * and its KEY — a digest of the island's definition (the compiler's `islandKey`), equal across versions
+ * exactly when the island is the same island, whatever its position. A new version keeps a running
+ * island whose key it carries again (./morph/engine).
+ */
+export type IslandEntry = readonly [renderId: string, component: Component, key?: string];
 
 /** What the per-document module hands `boot`. */
 export interface IslandModule {
@@ -52,6 +57,25 @@ export interface IslandModule {
   /** The version's compiled dataflow (the islands' data), or null/absent when they read none. */
   FLOW?: CompiledDataflow | null;
 }
+
+/**
+ * THE MORPH SEAM (./morph/engine, framework-free): what a running document lends the engine that draws a
+ * new version in place — never part of the SPA's contract (`IslandDocument`). The engine does the
+ * matching and the DOM; the Solid work (hydrating) stays here, on this document's context.
+ */
+export interface IslandMorphSeam {
+  /** Every running island by render id: its key and its disposer (which leaves its DOM as static markup). */
+  readonly islands: Map<string, readonly [key: string | undefined, dispose: () => void]>;
+  /** Hydrate one more island under the root on this document's context, and record it running. */
+  hydrate(entry: IslandEntry): void;
+  /** Every module this document has run, by its `ISLANDS` (a cached re-import runs no `boot`). */
+  readonly modules: WeakMap<readonly IslandEntry[], IslandModule>;
+  /** Set by the engine while it imports a newer version's module: that module's `boot` hands it in here. */
+  take?: (module: IslandModule) => void;
+  /** Replace only the sandboxed author realm after a version changes its source. */
+  restartAuthor(source: string | null): Promise<void>;
+}
+export type MorphableIslandDocument = IslandDocument & { morph?: IslandMorphSeam };
 
 /** The story element the islands live in (the assembler's `inlineStoryElement`). */
 const STORY_ROOT_SELECTOR = '[data-mx-inline-story]';
@@ -119,12 +143,15 @@ export function boot(input: IslandModule | readonly IslandEntry[], win: Window =
   const module: IslandModule = Array.isArray(input) ? { ISLANDS: input as readonly IslandEntry[] } : (input as IslandModule);
   const doc = win.document;
   const root = doc.querySelector<HTMLElement>(STORY_ROOT_SELECTOR) ?? doc.body;
+  // A newer version's module, imported by the morph engine: handed to the running document, never booted twice.
+  const running = (root as IslandHost)[ISLAND_DOCUMENT_KEY] as MorphableIslandDocument | undefined;
+  if (running?.morph?.take) { running.morph.take(module); return running; }
   const data = readPageData(doc);
   const flow = module.FLOW ?? null;
 
   // A signed-in reader's queries and writes are theirs: the transport carries the session to the
   // doors that read it. A guest page keeps the anonymous GET door (lib/story-runtime/fetch-transport).
-  const transport = flow ? createDocumentTransport(win, data.queryUrl, appOrigin(), undefined, data.mutateUrl, { session: data.signedIn }) : null;
+  const transport = flow ? createIslandDocumentTransport(win, data.queryUrl, appOrigin(), data.mutateUrl, data.signedIn) : null;
   /*
    * The page's own engine, when this page may hold data and its door can fetch it (the relay cannot):
    * `$_me` is bound to the reader the door answers for — nobody on a guest page; on a signed-in page
@@ -156,16 +183,17 @@ export function boot(input: IslandModule | readonly IslandEntry[], win: Window =
   const emit = (event: IslandEvent) => { for (const listener of [...listeners]) listener(event); };
 
   // Each island on its own: one that fails to hydrate stays static markup and the rest still run.
-  let islands: Array<() => void> = [];
-  for (const [renderId, Component] of module.ISLANDS) {
+  const islands: IslandMorphSeam['islands'] = new Map();
+  const hydrate = ([renderId, Component, key]: IslandEntry) => {
     try {
       const dispose = hydrateIsland(renderId, Component, context, root);
-      if (dispose) islands.push(dispose);
+      if (dispose) islands.set(renderId, [key, dispose]);
     } catch (error) {
-      console.error(`[islands] ${renderId} did not hydrate`, error);
+      console.error(`[islands] hydrate ${renderId}`, error);
     }
-  }
-  const disposeIslands = () => { const all = islands; islands = []; for (const dispose of all) dispose(); };
+  };
+  module.ISLANDS.forEach(hydrate);
+  const disposeIslands = () => { const all = [...islands.values()]; islands.clear(); for (const [, dispose] of all) dispose(); };
 
   const stopWrites = context.writes.subscribe((statuses) => emit({ type: 'writes', statuses }));
   const stopStatus = installStatus(context.writes, root);
@@ -181,7 +209,7 @@ export function boot(input: IslandModule | readonly IslandEntry[], win: Window =
     // Loaded after hydration, off the shared runtime's closure: the marks cover the gap, so nothing is missed.
     void import('./live').then(({ startIslandLive }) => {
       if (!disposed && mode === 'read') stopLive = startIslandLive(win, liveId, liveEdit, data.results?.since ?? null);
-    }).catch((error: unknown) => console.error('[islands] the live stream did not load', error));
+    }).catch((error: unknown) => console.error('[islands] live failed', error));
   }
   // The link follows the reader (./url-sync), top-level only: a framed document's address is its frame's.
   let stopUrl = () => {};
@@ -191,7 +219,16 @@ export function boot(input: IslandModule | readonly IslandEntry[], win: Window =
   let ready = false;
   let disposed = false;
   let stopAuthor = () => {};
-  const islandDocument: IslandDocument = {
+  let authorGeneration = 0;
+  const restartAuthor = async (source: string | null) => {
+    const generation = ++authorGeneration;
+    stopAuthor();
+    if (!source) return;
+    const { startAuthorHost } = await import('./author-host');
+    if (generation === authorGeneration && !disposed && mode === 'read') stopAuthor = startAuthorHost(source, store, doc);
+  };
+  const islandDocument: MorphableIslandDocument = {
+    morph: { islands, hydrate, modules: new WeakMap([[module.ISLANDS, module]]), restartAuthor },
     root,
     store,
     context,
@@ -242,10 +279,6 @@ export function boot(input: IslandModule | readonly IslandEntry[], win: Window =
 
   // The author's script, never in this document: its host (and the sandboxed frame) load only when the version has one.
   const authorScript = typeof data.authorScript === 'string' && data.authorScript ? data.authorScript : null;
-  if (authorScript) {
-    void import('./author-host').then(({ startAuthorHost }) => {
-      if (!disposed && mode === 'read') stopAuthor = startAuthorHost(authorScript, store, doc);
-    }).catch((error: unknown) => console.error('[islands] the author script host did not load', error));
-  }
+  if (authorScript) void restartAuthor(authorScript).catch((error: unknown) => console.error('[islands] author host failed', error));
   return islandDocument;
 }

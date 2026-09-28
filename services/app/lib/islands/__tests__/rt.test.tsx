@@ -8,7 +8,9 @@
  */
 import { describe, expect, it } from 'vitest';
 import { render } from 'solid-js/web';
-import { createIslandRuntime, Repeat, When, rowAttrs, hydrateIsland } from '../rt';
+import { createStore } from 'solid-js/store';
+import { createIslandRuntime, Repeat, When, hydrateIsland } from '../rt';
+import { rowAttrs } from '../kit/basic';
 import { IslandProvider, useIsland } from '../context';
 import { createDataflowStore } from '@/lib/story-runtime/store';
 import type { CompiledDataflow } from '@/lib/story/compiled-dataflow';
@@ -48,6 +50,24 @@ describe('createIslandRuntime', () => {
     expect(host.querySelector('i')?.textContent).toBe('has region');
     rt.context.setValue('region', '');
     expect(host.querySelector('i')).toBeNull();
+    dispose();
+  });
+
+  it('keeps a keyed repeat comment target with its row when reconciled row proxies change keys', () => {
+    const rt = runtime();
+    const host = document.createElement('div');
+    const [live, setLive] = createStore({ rows: [{ k: 'a', label: 'Alice' }, { k: 'b', label: 'Bob' }] });
+    const context = { ...rt.context, table: () => ({ rows: live.rows, columns: [] }) };
+    const dispose = render(() => <IslandProvider value={context}>
+      <Repeat name="rows" keyBy="k" owner="list" ids={['item']}>{(row, scope) =>
+        <p {...rowAttrs({ id: 'item' }, row, scope)}>{String(row.label)}</p>}
+      </Repeat>
+    </IslandProvider>, host);
+    const target = (label: string) => JSON.parse([...host.querySelectorAll('p')].find(node => node.textContent === label)!.getAttribute('data-mx-comment-target')!);
+    expect(target('Alice').scopes[0].key).toBe('a');
+    setLive('rows', 0, { k: 'b', label: 'Bob updated' });
+    setLive('rows', 1, { k: 'a', label: 'Alice updated' });
+    expect(target('Alice updated').scopes[0].key).toBe('a');
     dispose();
   });
 

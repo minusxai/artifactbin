@@ -5,7 +5,7 @@ import { render } from 'solid-js/web';
 import { IslandProvider } from '../context';
 import { fakeIsland } from './context.test';
 import { BoundImage, rowImageAttrs } from '../kit/files';
-import { rowAttrs } from '../rt';
+import { rowAttrs } from '../kit/basic';
 import type { IslandContext } from '../contract';
 
 describe('compiled bound image', () => {

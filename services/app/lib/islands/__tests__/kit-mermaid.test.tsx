@@ -57,8 +57,8 @@ async function mountBoth(drawings: Record<string, unknown> = {}) {
   };
 }
 
-beforeEach(() => { engine.renderMermaid.mockClear(); drawCode.loaded = 0; });
-afterEach(() => { vi.restoreAllMocks(); });
+beforeEach(() => { document.documentElement.setAttribute('data-mx-ready', ''); engine.renderMermaid.mockClear(); drawCode.loaded = 0; });
+afterEach(() => { document.documentElement.removeAttribute('data-mx-ready'); vi.restoreAllMocks(); });
 
 describe('Mermaid, drawn by the reader', () => {
   it('hands Mermaid the theme as hex, resolved through the canvas as React does', async () => {

@@ -116,6 +116,18 @@ describe('the reader mode on /raw', () => {
 });
 
 describe('the HTML-first reader page', () => {
+  it('serves a plan outline in the initial compiled HTML and omits it from a capture', async () => {
+    const who = await owner();
+    const markup = '<article><h2>One</h2><p>Text</p><h2>Two</h2><p>Text</p><h2>Three</h2><p>Text</p></article>';
+    const id = await publish(who.token, { title: 'Plan outline', markup, template: 'plan' });
+    const res = await app.request(`/a/${id}?reader=compiled`, { headers: { accept: 'text/html' } });
+    expect(res.headers.get(READER_MODE_HEADER)).toBe('compiled');
+    const doc = new JSDOM(await res.text()).window.document;
+    expect(doc.querySelectorAll('#mx-story-root .mx-outline-row')).toHaveLength(3);
+    expect(doc.querySelector('#mx-story-root > .mx-reading--plan > .mx-doc')).toBeTruthy();
+    const capture = new JSDOM(await (await raw(id, '?reader=compiled&chrome=0')).text()).window.document;
+    expect(capture.querySelector('.mx-outline')).toBeNull();
+  });
   it('/a/:id on the compiled path serves the story with server chrome and the SPA on idle, and the same text as today', async () => {
     const who = await owner();
     const id = await publish(who.token, { title: 'Perf C dashboard', markup: fixture('dashboard.jsx').replaceAll('{{sales}}', await publish(who.token, { title: 'Perf sales', dataset: fixture('sales.csv') })), template: 'dashboard' });

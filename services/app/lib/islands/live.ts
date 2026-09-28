@@ -12,33 +12,39 @@
  *  - `data` frame → the page's data hook (`STORY_DATA_HOOK`, which boot points at the store's
  *    `invalidateDatasets`); a page with no data hook has nothing to re-run and reloads, keeping the
  *    reader's place.
- *  - a version ping (a new `editId`) → the compiled page cannot re-render its static parts in the
- *    browser, so it reloads, keeping the reader's place; the server serves the new version compiled.
- *    Once the app has adopted the page (components/IslandStory installs `STORY_ADOPT_HOOK`) the app
- *    holds the document's stream and renders the new version itself: a reload under it would lose it.
+ *  - a version ping (a new `editId`) → the new version drawn IN PLACE by the one update path
+ *    (./live-update: the story fragment fetched and morphed, islands kept or re-hydrated, the store
+ *    surviving), falling back to a reload that keeps the reader's place. Once the app has adopted the
+ *    page (components/IslandStory installs `STORY_ADOPT_HOOK`) the app holds the document's stream and
+ *    calls the same path itself.
+ *
+ * ONE stream per page: `page` opens it on a page with no island module, `boot` on a page with one; a
+ * page whose islands arrive with a later version (prose, then a chart) keeps the stream it has — the
+ * data hook `boot` installs is read per frame.
  *
  * The same stream, door and ACL as today's (lib/story-runtime/live-entry, which the standalone
  * runtime's deletion removes); only `since` is new.
  */
 import { STORY_ADOPT_HOOK, STORY_DATA_EVENT, STORY_DATA_HOOK } from '@/lib/story-runtime/contract';
-import { currentAnchor } from '@/lib/story-runtime/anchor';
-import { writeReloadAnchor } from '@/lib/story-runtime/reader-mode';
+import { reloadKeepingPlace, updateCompiledStory } from './live-update';
+
+/** The page's open stream, on the window: a second starter reuses it. */
+const LIVE_KEY = '__mxLiveStream';
 
 /** The stream's address: the document's own events door, with the snapshot's marks when the page was served from one. */
 export const islandLiveUrl = (id: string, since?: string | null): string =>
   `/a/${encodeURIComponent(id)}/events${since ? `?since=${encodeURIComponent(since)}` : ''}`;
 
 export function startIslandLive(win: Window, id: string, initialEditId: string, since?: string | null): () => void {
+  const hooks = win as unknown as Record<string, unknown>;
+  if (hooks[LIVE_KEY]) return () => {};
   const source = new EventSource(islandLiveUrl(id, since));
+  hooks[LIVE_KEY] = source;
   let seen = initialEditId;
 
   const reload = () => {
-    // The editor owns its save and preview updates. A page-level stream can
-    // still be open when a document has no island module to hand off from.
-    if (win.location.hash === '#edit') return source.close();
-    const anchor = currentAnchor(win);
-    if (anchor) writeReloadAnchor(win, anchor);
-    win.location.reload();
+    if (win.location.hash === '#edit') return;
+    reloadKeepingPlace(win);
   };
 
   source.addEventListener(STORY_DATA_EVENT, (event: MessageEvent) => {
@@ -56,9 +62,13 @@ export function startIslandLive(win: Window, id: string, initialEditId: string, 
     try { ping = JSON.parse(event.data as string) as { editId?: unknown }; } catch { return; }
     if (typeof ping.editId !== 'string' || !ping.editId || ping.editId === seen) return;
     seen = ping.editId;
-    if (typeof (win as unknown as Record<string, unknown>)[STORY_ADOPT_HOOK] === 'function') return;
-    reload();
+    if (typeof hooks[STORY_ADOPT_HOOK] === 'function') return;
+    if (win.location.hash === '#edit') return;
+    void updateCompiledStory(win);
   };
 
-  return () => source.close();
+  return () => {
+    source.close();
+    if (hooks[LIVE_KEY] === source) delete hooks[LIVE_KEY];
+  };
 }

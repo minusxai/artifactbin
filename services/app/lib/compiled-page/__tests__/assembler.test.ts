@@ -13,6 +13,7 @@ import { CHART_SLOT_ATTR, ISLAND_DATA_ID, SPA_IDLE_ATTR, SPECULATION_RULES_HEADE
 const build = { id: 'b'.repeat(16), manifest: { 'solid-js': '/islands/solid-1111aaaa.js', 'solid-js/web': '/islands/web-2222bbbb.js', 'solid-js/store': '/islands/store-3333cccc.js', '@mx/rt': '/islands/rt-4444dddd.js', '@mx/boot': '/islands/boot-5555eeee.js', '@mx/deck': '/islands/deck-6666ffff.js' } };
 const compiled = (over: Partial<CompiledPage> = {}): CompiledPage => ({
   build: build.id,
+  outline: [], outlinePlan: false,
   html: `<div class="mx-doc"><h1 id="h">Title &amp; more</h1><div data-hk="s0-0" id="G2uA">select</div><div id="AVkX" ${CHART_SLOT_ATTR}="AVkX"><div class="skeleton"></div></div></div>`,
   islands: [{ renderId: 's0-', path: '0.1', kit: ['Select'], readsData: true }],
   module: { sha: 'a'.repeat(16), url: '/islands/d/aaaaaaaaaaaaaaaa.js', bytes: 512, imports: ['/islands/rt-4444dddd.js', '/islands/web-2222bbbb.js'] },
@@ -29,6 +30,15 @@ const input = (over: Partial<AssembleInput> = {}): AssembleInput => ({
 const dom = (page: { html: string }) => new JSDOM(page.html).window.document;
 
 describe('assembleReaderPage', () => {
+  it('serves the outline beside the column with legacy markup before the SPA loads', () => {
+    const entries = [{ level: 2 as const, title: 'One & all', path: '0.0' }, { level: 3 as const, title: 'Part', path: '0.1' }];
+    const page = assembleReaderPage(input({ compiled: compiled({ outline: entries, outlinePlan: true }), story: '<div class="mx-doc"><h2 data-mx-ast="0.0">One &amp; all</h2></div>' }));
+    const doc = dom(page);
+    const reading = doc.querySelector('#mx-story-root > .mx-reading.mx-reading--plan')!;
+    expect(reading.children[0]?.outerHTML).toBe('<nav class="mx-outline" aria-label="Contents"><div class="mx-outline-label">Contents</div><button type="button" class="mx-outline-row" aria-label="Go to section 1: One &amp; all" data-mx-target="0.0">One &amp; all</button><button type="button" class="mx-outline-row mx-outline-sub" aria-label="Go to Part" data-mx-target="0.1">Part</button></nav>');
+    expect(reading.children[1]?.className).toBe('mx-doc');
+    expect(dom(assembleReaderPage(input())).querySelector('.mx-outline')).toBeNull();
+  });
   it('places the request\'s story, never re-rendering it: the story input is what appears', () => {
     const page = assembleReaderPage(input({ story: '<div class="mx-doc"><b id="with-data">$744,503</b></div>' }));
     expect(dom(page).querySelector('#mx-story-root #with-data')?.textContent).toBe('$744,503');
@@ -133,6 +143,16 @@ describe('assembleReaderPage', () => {
     expect(doc.getElementById('mx-story-root')!.contains(footer)).toBe(false);
     expect(doc.getElementById('mx-story-root')!.compareDocumentPosition(footer) & 4 /* FOLLOWING */).toBeTruthy();
     expect([...doc.head.querySelectorAll('style')].some((s) => s.textContent?.includes('[data-mx-domain-footer]{opacity:.65}'))).toBe(true);
+  });
+
+  it('writes the managed asset door into the data island only when the request has one (IslandPageData.managedAssets)', () => {
+    const door = { origin: 'https://assets.example.test', resolveUrl: 'https://app.example.test/a/X34b00/assets?key=k' };
+    const data = (overlay: AssembleInput['overlay']) => JSON.parse(dom(assembleReaderPage(input({ overlay }))).getElementById(ISLAND_DATA_ID)!.textContent!);
+    expect(data({ ...input().overlay, managedAssets: door }).managedAssets).toEqual(door);
+    // A capture has no doors, and still its door: the frame it photographs resolves assets with the capture's key.
+    expect(data({ ...input().overlay, doors: null, managedAssets: door }).managedAssets).toEqual(door);
+    expect(data(input().overlay)).not.toHaveProperty('managedAssets');
+    expect(data({ ...input().overlay, managedAssets: null })).not.toHaveProperty('managedAssets');
   });
 
   it('never lets a title, a value or a drawing break out of its element', () => {

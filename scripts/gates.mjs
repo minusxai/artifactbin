@@ -3,6 +3,7 @@
  * Run the browser gates as a SET.
  *
  *   node scripts/gates.mjs [base-url ...] [--only=a,b] [--list] [--servers=N] [--shard=i/n]
+ *   node scripts/gates.mjs --browsers|--needs-postgres --shard=i/n
  *
  * The set is DISCOVERED from disk — a new `scripts/gate-*.mjs` joins by
  * existing — and every gate must have a row in gates.manifest.mjs, which says
@@ -92,9 +93,20 @@ if (selected.length === 0) {
   process.exit(2);
 }
 
+// CI setup needs the same shard selection as execution: only the shard with
+// postgres-datasets pulls its image before the browser gates start.
+if (args.includes('--selected')) {
+  for (const gate of selected) console.log(gate.name);
+  process.exit(0);
+}
+
 // Provisioning uses the same discovery and shard selection as execution, without booting hosts.
 if (args.includes('--browsers')) {
   console.log(browsersFor(selected.map(gate => gate.name)).join(' '));
+  process.exit(0);
+}
+if (args.includes('--needs-postgres')) {
+  console.log(selected.some((gate) => gateOf(gate.name) === 'postgres-datasets'));
   process.exit(0);
 }
 

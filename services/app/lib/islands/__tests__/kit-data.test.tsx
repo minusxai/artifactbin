@@ -6,9 +6,10 @@
  * table's rows and writes its value, a DataTable renders rows and sorts, a Question shows its
  * server-drawn chart until its table changes and loads Vega only then.
  */
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { render } from 'solid-js/web';
 import { createSignal } from 'solid-js';
+import { createStore, reconcile } from 'solid-js/store';
 import { parityOf } from './kit-parity';
 import { IslandProvider } from '../context';
 import { fakeIsland } from './context.test';
@@ -20,14 +21,24 @@ import { SelectControl } from '@/components/kit/controls';
 import { rowsDigest } from '../digest';
 import { DRAWING_CLASS } from '../chart';
 import { createIslandRuntime } from '../rt';
-import { createDataflowStore } from '@/lib/story-runtime/store';
+import { createDataflowStore, type DataflowStore, type QueryTransport } from '@/lib/story-runtime/store';
 import type { CompiledDataflow } from '@/lib/story/compiled-dataflow';
+import { Button } from '../kit/basic';
+import { compiledOf } from '@/test/helpers/compiled';
+import { initialTables, initialValues } from '@/lib/story/compiled-flow';
+import { runDataflow } from '@/lib/sql/run-dataflow';
+import { runLocalStateMutation } from '@/lib/story/local-state';
+import { createSqliteSql } from '@artifactbin/sql/sqlite';
+import { loadSqlite } from '@artifactbin/sql/core';
+import { createPageEngine } from '@/lib/story-runtime/page-engine';
 
 const monthly: TableResult = { rows: [{ month: '2025-01-01', revenue: 120, units: 3 }, { month: '2025-02-01', revenue: 160, units: 4 }], columns: [{ name: 'month', type: 'date' }, { name: 'revenue', type: 'number' }, { name: 'units', type: 'number' }] };
 const regions: TableResult = { rows: [{ region: 'East' }, { region: 'West' }], columns: [{ name: 'region', type: 'string' }] };
 const parityData = { tables: { monthly, regions }, values: { region: 'West' } };
 const island = () => { const i = fakeIsland({ region: 'West' }); i.table = (n) => (n === 'monthly' ? monthly : n === 'regions' ? regions : undefined); i.tableSnapshot = i.table; return i; };
 const mount = (ctx = island(), view: () => import('solid-js').JSX.Element) => { const host = document.createElement('div'); document.body.append(host); const unmount = render(() => <IslandProvider value={ctx}>{view()}</IslandProvider>, host); return { host, dispose: () => { unmount(); host.remove(); } }; };
+beforeEach(() => document.documentElement.setAttribute('data-mx-ready', ''));
+afterEach(() => document.documentElement.removeAttribute('data-mx-ready'));
 
 describe('Number', () => {
   it('aggregates and formats like today\'s InlineNumber', () => {
@@ -107,18 +118,49 @@ describe('DataTable', () => {
     }
   });
 
-  it('repaints rows when a query returns a new table', () => {
+  it('shows the matching row when a filter shrinks a scrolled virtual table', async () => {
+    const height = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'clientHeight');
+    Object.defineProperty(HTMLElement.prototype, 'clientHeight', { configurable: true, get() { return (this as HTMLElement).classList.contains('overflow-auto') ? 420 : 0; } });
+    try {
+      const ctx = fakeIsland();
+      const all: TableResult = { rows: Array.from({ length: 500 }, (_, i) => ({ id: i + 1, item: `Item ${i + 1}` })), columns: [{ name: 'id', type: 'number' }, { name: 'item', type: 'string' }] };
+      const [table, setTable] = createSignal(all);
+      ctx.table = ctx.tableSnapshot = () => table();
+      const { host, dispose } = mount(ctx, () => <DataTable data="$tasks" rowKey="id" height={420} />);
+      const scroll = host.querySelector<HTMLElement>('.overflow-auto')!;
+      scroll.scrollTop = 16117; scroll.dispatchEvent(new Event('scroll'));
+      setTable({ ...all, rows: [all.rows[499]!] });
+      await vi.waitFor(() => expect(host.querySelector('tbody')?.textContent).toContain('Item 500'));
+      await vi.waitFor(() => expect(scroll.scrollTop).toBe(0));
+      dispose();
+    } finally {
+      if (height) Object.defineProperty(HTMLElement.prototype, 'clientHeight', height);
+      else Reflect.deleteProperty(HTMLElement.prototype, 'clientHeight');
+    }
+  });
+  it('shows a user card that arrives after the row, then follows its updated handle', async () => {
     const ctx = fakeIsland();
-    const [table, setTable] = createSignal<TableResult>({ rows: [{ id: 1, region: 'west', amount: 120 }], columns: [{ name: 'id', type: 'number' }, { name: 'region', type: 'string' }, { name: 'amount', type: 'number' }] });
-    ctx.table = () => table();
-    const { host, dispose } = mount(ctx, () => <DataTable data="$orders" />);
-    expect(host.querySelector('tbody')?.textContent).toContain('120');
-    setTable({ rows: [{ id: 2, region: 'east', amount: 90 }], columns: table().columns });
-    expect(host.querySelector('tbody')?.textContent).toContain('90');
-    expect(host.querySelector('tbody')?.textContent).not.toContain('120');
+    const [people, setPeople] = createSignal<Record<string, { name: string; handle: string; image: null }>>({});
+    ctx.people = () => people();
+    ctx.table = ctx.tableSnapshot = () => ({ rows: [{ id: 1, assignee: 'usr_1' }], columns: [{ name: 'id', type: 'number' }, { name: 'assignee', type: 'user' }] });
+    const { host, dispose } = mount(ctx, () => <DataTable data="$tasks" rowKey="id" />);
+    expect(host.querySelector('tbody')?.textContent).toContain('Unknown person');
+    setPeople({ usr_1: { name: 'Native User', handle: 'mxmx_test_native_user', image: null } });
+    await vi.waitFor(() => expect(host.querySelector('tbody')?.textContent).toContain('@mxmx_test_native_user'));
+    setPeople({ usr_1: { name: 'Native User', handle: 'new_handle', image: null } });
+    await vi.waitFor(() => expect(host.querySelector('tbody')?.textContent).toContain('@new_handle'));
     dispose();
   });
-
+  it('replaces an initially empty user cell after a write updates the row in place', async () => {
+    const ctx = fakeIsland();
+    const [rows, setRows] = createStore([{ id: 1, completed_by: null as string | null }]);
+    ctx.people = () => ({ usr_1: { name: 'Native User', handle: 'mxmx_test_native_user', image: null } });
+    ctx.table = ctx.tableSnapshot = () => ({ rows, columns: [{ name: 'id', type: 'number' }, { name: 'completed_by', type: 'user' }] });
+    const { host, dispose } = mount(ctx, () => <DataTable data="$tasks" rowKey="id" />);
+    setRows(0, 'completed_by', 'usr_1');
+    await vi.waitFor(() => expect(host.querySelector('tbody')?.textContent).toContain('@mxmx_test_native_user'));
+    dispose();
+  });
   it('renders the rows and header of its table and matches today\'s DOM', () => {
     const { host } = mount(undefined, () => <DataTable data="$monthly" height="300px" id="dIQl" />);
     expect(host.querySelectorAll('tbody tr')).toHaveLength(2);
@@ -138,8 +180,7 @@ describe('Question', () => {
     expect(host.querySelector('[data-mx-chart-state="ready"] svg[data-drawn]')).toBeTruthy();
     expect(loadChart).not.toHaveBeenCalled();
     host.querySelector('[data-mx-chart-state]')!.dispatchEvent(new Event('pointerenter', { bubbles: true }));
-    await Promise.resolve();
-    expect(loadChart).toHaveBeenCalledTimes(1);
+    await vi.waitFor(() => expect(loadChart).toHaveBeenCalledTimes(1));
   });
   it('loads after a new table snapshot lands after boot', async () => {
     const ctx = island();
@@ -160,8 +201,7 @@ describe('Question', () => {
     const { host, dispose } = mount(ctx, () => <Question data="$monthly" viz={{ kind: 'vega-lite', spec: { mark: 'line' } }} drawn={{ svg: '<svg></svg>', table: 'monthly', rows: 'r1' }} />);
     expect(ctx.loadChart).not.toHaveBeenCalled();
     host.querySelector('[data-mx-chart-state]')!.dispatchEvent(new Event('pointerenter', { bubbles: true }));
-    await Promise.resolve();
-    expect(ctx.loadChart).toHaveBeenCalledTimes(1);
+    await vi.waitFor(() => expect(ctx.loadChart).toHaveBeenCalledTimes(1));
     expect(mountChart).toHaveBeenCalledWith({
       element: host.querySelector('[role="graphics-document"]'),
       envelope: { version: 2, source: { kind: 'vega-lite', grammar: 'vega-lite@6', spec: { mark: 'line' } }, dataBindings: null, viewParams: null, interactions: null, assets: null },
@@ -173,6 +213,115 @@ describe('Question', () => {
 });
 
 describe('DataTable behavior', () => {
+  it('removes a row in the DOM after a remote local-table mutation answers', async () => {
+    const flow = await compiledOf(
+      '<Value name="flags" type="table" value={[{"reverse":false}]}/>'
+      + '<Value name="orders" type="table" value={[{"order_id":"order-101","customer":"Alice"},{"order_id":"order-102","customer":"Bob"}]}/>'
+      + '<Query name="ordered">{`select o.* from orders o, flags f order by case when f.reverse then o.customer end desc, o.customer asc`}</Query>'
+      + '<Mutation name="reverseRows">{`update flags set reverse = not reverse`}</Mutation>'
+      + '<Mutation name="renameAlice">{`update orders set customer=\'Alice updated\' where order_id=\'order-101\'`}</Mutation>'
+      + '<Mutation name="removeAlice">{`delete from orders where order_id=\'order-101\'`}</Mutation>',
+    );
+    const engine = createSqliteSql();
+    const tables = initialTables(flow);
+    const initial = await runDataflow(flow, {}, { only: ['ordered'], localTables: { orders: tables.orders!.rows, flags: tables.flags!.rows } });
+    const transport: QueryTransport = {
+      run: async (values, only, localTables) => {
+        const answer = await runDataflow(flow, {}, { values, only, localTables });
+        return { tables: answer.tables, errors: answer.errors, mutationAccess: {} };
+      },
+      page: async () => ({ columns: [], rows: [] }),
+      mutate: async (request) => {
+        const source = initialTables(flow);
+        for (const [name, rows] of Object.entries(request.localTables ?? {})) source[name] = { ...source[name]!, rows };
+        return { dataset: '', local: await runLocalStateMutation(flow, flow.mutations.find(item => item.name === request.mutation)!, { tables: source }, engine, { params: {}, paramTypes: {} }) };
+      },
+    };
+    const runtime = createIslandRuntime({ dataflow: { flow, state: { values: initialValues(flow), tables: { ...tables, ...initial.tables }, errors: {}, mutationAccess: {} } }, viewer: null }, input => createDataflowStore(input, { transport, debounceMs: 0 }));
+    const { host, dispose } = mount(runtime.context, () => <><Button run="$reverseRows">Reverse</Button><Button run="$renameAlice">Rename</Button><Button run="$removeAlice">Remove</Button><DataTable data="$ordered" rowKey="order_id" id="orders" /></>);
+    runtime.store!.start();
+    for (const name of ['Reverse', 'Rename', 'Remove']) {
+      const button = [...host.querySelectorAll('button')].find(node => node.textContent === name)!;
+      button.click();
+      await vi.waitFor(() => expect(runtime.store!.mutating().size).toBe(0));
+    }
+    await vi.waitFor(() => expect(runtime.store!.getTable('ordered')?.rows).toHaveLength(1));
+    expect(host.querySelector('tbody')?.textContent).not.toContain('Alice');
+    dispose(); runtime.dispose();
+  });
+  it('removes an annotated table row after clicking successive local mutations', async () => {
+    const flow = await compiledOf(
+      '<Value name="orders" type="table" value={[{"order_id":"order-101","customer":"Alice"},{"order_id":"order-102","customer":"Bob"}]}/>'
+      + '<Query name="ordered">{`select * from orders order by customer`}</Query>'
+      + '<Mutation name="renameAlice">{`update orders set customer=\'Alice updated\' where order_id=\'order-101\'`}</Mutation>'
+      + '<Mutation name="removeAlice">{`delete from orders where order_id=\'order-101\'`}</Mutation>',
+    );
+    const engine = createSqliteSql();
+    const initialAnswer = await runDataflow(flow, {}, { only: ['ordered'], localTables: { orders: initialTables(flow).orders!.rows } });
+    expect(initialAnswer.errors).toEqual({});
+    expect(initialAnswer.tables.ordered?.rows).toHaveLength(2);
+    const transport: QueryTransport = {
+      run: async (values, only, localTables) => {
+        const answer = await runDataflow(flow, {}, { values, only, localTables: { orders: localTables?.orders ?? initialTables(flow).orders!.rows } });
+        return { tables: answer.tables, errors: answer.errors };
+      },
+      page: async () => ({ columns: [], rows: [] }),
+      mutate: async (request) => {
+        const tables = initialTables(flow);
+        tables.orders = { ...tables.orders!, rows: request.localTables?.orders ?? tables.orders!.rows };
+        return { dataset: '', local: await runLocalStateMutation(flow, flow.mutations.find(item => item.name === request.mutation)!, { tables }, engine, { params: {}, paramTypes: {} }) };
+      },
+    };
+    const pageEngine = createPageEngine({ load: () => loadSqlite(), fetch: async () => ({}) });
+    pageEngine.prepare(flow, []);
+    await vi.waitFor(() => expect(pageEngine.ready(flow, [])).toBe(true));
+    const runtime = createIslandRuntime({ dataflow: { flow, hold: [], state: { values: initialValues(flow), tables: { ...initialTables(flow), ...initialAnswer.tables }, errors: {}, mutationAccess: {} } }, mermaidImages: {}, viewer: null }, input => createDataflowStore(input, { transport, page: { engine: pageEngine, userId: null }, debounceMs: 0 }));
+    const { host, dispose } = mount(runtime.context, () => <><Button run="$renameAlice">Rename</Button><Button run="$removeAlice">Remove</Button><DataTable data="$ordered" rowKey="order_id" id="orders" /></>);
+    runtime.store!.start();
+    await vi.waitFor(() => expect(host.textContent).toContain('Alice'));
+    (host.querySelectorAll('button')[0] as HTMLButtonElement).click();
+    await vi.waitFor(() => expect(host.textContent).toContain('Alice updated'));
+    (host.querySelectorAll('button')[1] as HTMLButtonElement).click();
+    await vi.waitFor(() => expect(host.textContent).not.toContain('Alice updated'));
+    dispose();
+    runtime.dispose();
+    pageEngine.close();
+  });
+  it('drops a removed row after the runtime bridges a local mutation result', () => {
+    const columns = [{ name: 'key', type: 'string' as const }, { name: 'customer', type: 'string' as const }];
+    let rows = [{ key: 'a', customer: 'Alice' }, { key: 'b', customer: 'Bob' }];
+    let notify = () => {};
+    const store = {
+      getState: () => ({ values: {}, tables: { orders: { columns, rows } }, errors: {}, people: {} }),
+      pending: () => [], subscribe: (fn: () => void) => { notify = fn; return () => {}; },
+      dispose: () => {},
+    } as unknown as DataflowStore;
+    const runtime = createIslandRuntime({ dataflow: { flow: { imports: [], values: [], queries: [], mutations: [] } }, mermaidImages: {}, viewer: null }, () => store);
+    const { host, dispose } = mount(runtime.context, () => <DataTable data="$orders" rowKey="key" id="orders" />);
+    expect(host.textContent).toContain('Alice');
+    rows = [{ key: 'b', customer: 'Bob' }];
+    notify();
+    expect(host.textContent).not.toContain('Alice');
+    dispose();
+    runtime.dispose();
+  });
+  it('updates a comment target when a reconciled row proxy changes its key', () => {
+    const ctx = island();
+    const [state, setState] = createStore({ rows: [{ key: 'a', customer: 'Alice' }, { key: 'b', customer: 'Bob' }] });
+    ctx.table = () => ({ rows: state.rows, columns: [{ name: 'key', type: 'string' }, { name: 'customer', type: 'string' }] });
+    const { host, dispose } = mount(ctx, () => <DataTable data="$monthly" rowKey="key" id="orders" />);
+    const target = (name: string) => {
+      const cell = [...host.querySelectorAll('td')].find(node => node.textContent === name)!;
+      return JSON.parse(cell.getAttribute('data-mx-comment-target')!).rowKey;
+    };
+    expect(target('Alice')).toBe('a');
+    setState('rows', reconcile([{ key: 'b', customer: 'Bob updated' }, { key: 'a', customer: 'Alice updated' }], { merge: true }));
+    expect([...host.querySelectorAll('td')].map(node => node.textContent)).toContain('Alice updated');
+    expect(target('Alice updated')).toBe('a');
+    setState('rows', reconcile([{ key: 'b', customer: 'Bob updated' }], { merge: true }));
+    expect(host.textContent).not.toContain('Alice updated');
+    dispose();
+  });
   it('switches a measured long table from static rows to a virtual window', () => {
     const height = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'clientHeight');
     Object.defineProperty(HTMLElement.prototype, 'clientHeight', { configurable: true, get() { return 300; } });
@@ -271,9 +420,21 @@ describe('data widget parity with the live reader', () => {
     expect(host.querySelectorAll('#t [aria-label="Data table"] tbody tr')).toHaveLength(2);
   });
 
-  it('Question draws a chart the server did not draw at once, as today\'s reader draws every chart', async () => {
+  it('Question draws a chart the server did not draw after readiness', async () => {
     const loadChart = vi.fn(async () => ({ mountChart: () => ({ destroy() {} }) }));
     mount(undefined, () => <Question data="$monthly" viz={chart} chart={loadChart} />);
+    await vi.waitFor(() => expect(loadChart).toHaveBeenCalledTimes(1));
+  });
+
+  it('Question leaves the placeholder and keeps Vega unloaded until reader readiness', async () => {
+    document.documentElement.removeAttribute('data-mx-ready');
+    const loadChart = vi.fn(async () => ({ mountChart: () => ({ destroy() {} }) }));
+    const { host } = mount(undefined, () => <Question data="$monthly" viz={chart} chart={loadChart} />);
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    expect(loadChart).not.toHaveBeenCalled();
+    expect(host.querySelector('[data-mx-chart-state]')?.getAttribute('data-mx-chart-state')).toBe('pending');
+    document.documentElement.setAttribute('data-mx-ready', '');
+    document.dispatchEvent(new Event('mx:ready'));
     await vi.waitFor(() => expect(loadChart).toHaveBeenCalledTimes(1));
   });
 
