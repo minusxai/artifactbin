@@ -1,7 +1,7 @@
-import type { InlineStoryController } from './InlineStoryRuntime';
+import type { StoryController } from './EditorStoryRuntime';
 
 /** Explicit local document capability. No Window-like object is created. */
-export type DocumentRuntimeRef = { current: InlineStoryController | null };
+export type DocumentRuntimeRef = { current: StoryController | null };
 interface DocumentTarget {
   runtimeRef?: DocumentRuntimeRef;
   /** Real standalone frame compatibility, used by raw/editor fixtures. Never an author iframe. */

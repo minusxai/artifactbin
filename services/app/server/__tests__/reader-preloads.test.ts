@@ -14,7 +14,7 @@ function fixture(overrides: Record<string, unknown> = {}) {
   writeFileSync(path.join(dir, '.vite/manifest.json'), JSON.stringify({
     'pages/Profile.tsx': { file: 'assets/Profile-abc.js', imports: ['shared'] },
     'pages/Artifact.tsx': { file: 'assets/Artifact-abc.js', imports: ['shared'], dynamicImports: ['editor'] },
-    '../lib/story-runtime/InlineStoryRuntime.tsx': { file: 'assets/InlineStoryRuntime-abc.js', imports: ['shared'], dynamicImports: ['chart'] },
+    '../lib/story-runtime/EditorStoryRuntime.tsx': { file: 'assets/EditorStoryRuntime-abc.js', imports: ['shared'], dynamicImports: ['chart'] },
     shared: { file: 'assets/shared-abc.js', imports: ['pages/Artifact.tsx'], css: ['assets/reader-abc.css'] },
     editor: { file: 'assets/ArtifactEditor-abc.js' },
     chart: { file: 'assets/VegaChart-abc.js' },
@@ -28,7 +28,7 @@ it('discovers all reader stages and static dependencies in the head without load
   const html = createReaderPreloader(fixture())(shell);
   const dom = new JSDOM(html);
   expect([...dom.window.document.head.querySelectorAll('link[rel="modulepreload"]')].map(link => link.getAttribute('href')).sort()).toEqual([
-    '/assets/Artifact-abc.js', '/assets/InlineStoryRuntime-abc.js', '/assets/Profile-abc.js', '/assets/shared-abc.js',
+    '/assets/Artifact-abc.js', '/assets/Profile-abc.js', '/assets/shared-abc.js',
   ]);
   expect(dom.window.document.head.querySelector('link[rel="preload"][as="style"]')?.getAttribute('href')).toBe('/assets/reader-abc.css');
   expect(html).not.toContain('ArtifactEditor');
@@ -41,7 +41,8 @@ it('reuses the manifest snapshot across requests', () => {
   const dir = fixture(), preload = createReaderPreloader(dir);
   const first = preload(shell);
   rmSync(path.join(dir, '.vite/manifest.json'));
-  expect(first).toContain('/assets/InlineStoryRuntime-abc.js');
+  expect(first).toContain('/assets/Artifact-abc.js');
+  expect(first).not.toContain('/assets/EditorStoryRuntime-abc.js');
   expect(preload(shell)).toBe(first);
 });
 

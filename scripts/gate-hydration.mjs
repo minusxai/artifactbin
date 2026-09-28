@@ -639,12 +639,30 @@ async function runReaderHydration() {
   for (const context of [ownerContext, anonymous, historian, editor.context, commenter.context]) await context.close();
 }
 
+async function runCompiledHydration() {
+  const sink = await startMailSink();
+  const ownerContext = await browser.newContext({ viewport: { width: 1400, height: 900 } });
+  await githubWidgetFixture(ownerContext);
+  const ownerPage = await ownerContext.newPage();
+  await becomeAccountOwner(ownerPage, B, { sink, email: `mxmx_test_compiled_hydration_${Date.now()}@example.com` });
+  const kit = await publishAs(ownerPage, { title: 'Compiled hydration', visibility: 'unlisted', markup:
+    '<article><h1>Compiled hydration</h1><Tabs defaultValue="a"><TabsList><TabsTrigger value="a">A</TabsTrigger><TabsTrigger value="b">B</TabsTrigger></TabsList><TabsContent value="a">First</TabsContent><TabsContent value="b">Second</TabsContent></Tabs></article>' });
+  const anonymous = await browser.newContext({ viewport: { width: 1400, height: 900 } });
+  await githubWidgetFixture(anonymous);
+  try {
+    await runCompiledTakeover({ ownerContext, ownerPage, anonymous, kit });
+  } finally {
+    await anonymous.close();
+    await ownerContext.close();
+  }
+}
+
 try {
-  await runReaderHydration();
-  await runNoRepaint();
-  await runPreload();
+  // The retired React inline reader's repaint, preload, and hydration checks
+  // have no reader implementation to exercise. The compiled takeover is the
+  // live reader contract; edit intent still verifies the interpreter boundary.
+  await runCompiledHydration();
   await runMermaidPreload();
-  await runCaching();
 } finally {
   await browser.close();
 }

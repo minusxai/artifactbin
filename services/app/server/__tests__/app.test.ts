@@ -48,7 +48,9 @@ describe('a document address', () => {
     const w = await world();
     const res = await app.request(`/@${w.owner.username}/${w.pub.id}-pub`, { headers: as({ credential: 'session', userId: w.owner.id, email: w.owner.email }) });
     expect(res.headers.get('content-security-policy')).toBe(APP_CSP);
-    expect(await res.text()).toContain('SPA');
+    const html = await res.text();
+    expect(html).toContain('public words');
+    expect(html).toContain('data-mx-inline-story');
   });
   /**
    * The exporter's key is the ONE credential that opens a private document to

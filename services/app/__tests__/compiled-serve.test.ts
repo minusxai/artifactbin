@@ -126,10 +126,10 @@ describe('the HTML-first reader page', () => {
     const capture = new JSDOM(await (await raw(id, '?reader=compiled&chrome=0')).text()).window.document;
     expect(capture.querySelector('.mx-outline')).toBeNull();
   });
-  it('/a/:id on the compiled path serves the story with server chrome and the SPA on idle, and the same text as today', async () => {
+  it('/a/:id serves the same compiled story text as /raw, with server chrome and the SPA on idle', async () => {
     const who = await owner();
     const id = await publish(who.token, { title: 'Perf C dashboard', markup: fixture('dashboard.jsx').replaceAll('{{sales}}', await publish(who.token, { title: 'Perf sales', dataset: fixture('sales.csv') })), template: 'dashboard' });
-    const legacy = await (await app.request(`/a/${id}`, { headers: { accept: 'text/html' } })).text();
+    const rawHtml = await (await raw(id, '?reader=compiled')).text();
     const res = await app.request(`/a/${id}?reader=compiled`, { headers: { accept: 'text/html' } });
     expect(res.headers.get(READER_MODE_HEADER)).toBe('compiled');
     const html = await res.text();
@@ -139,8 +139,7 @@ describe('the HTML-first reader page', () => {
     expect(doc.querySelector(`script[type="module"][${SPA_IDLE_ATTR}]`)).toBeTruthy();
     expect(doc.querySelector('[data-mx-artifact-id]')).toBeTruthy();
     expect(storyText(html)).toContain('$744,503');
-    // The same text as today with every <style> removed and each chart slot's contents excluded on both sides:
-    // the compiled page draws the snapshot's chart where today's says `loading chart…` (an intended improvement).
+    // The same reader-visible text in both compiled routes, excluding chart slots and styles.
     const slots = [...doc.querySelectorAll('#mx-story-root [data-mx-chart-slot]')].map((slot) => slot.closest('[aria-label="Question embed"]')?.id).filter((id): id is string => !!id);
     const textOf = (root: Element | null) => {
       if (!root) return '';
@@ -149,7 +148,7 @@ describe('the HTML-first reader page', () => {
       return root.textContent?.replace(/\s+/g, ' ').trim() ?? '';
     };
     expect(slots.length, 'the dashboard has chart slots to exclude').toBeGreaterThan(0);
-    expect(textOf(new JSDOM(html).window.document.getElementById('mx-story-root'))).toBe(textOf(new JSDOM(legacy).window.document.querySelector('[data-mx-initial-story]')));
+    expect(textOf(new JSDOM(html).window.document.getElementById('mx-story-root'))).toBe(textOf(new JSDOM(rawHtml).window.document.getElementById('mx-story-root')));
   });
 });
 
@@ -190,12 +189,11 @@ describe('one row fetch and one access check per compiled view', () => {
       expect(page.headers.get(READER_MODE_HEADER)).toBe('compiled');
       expect(ofDocument()).toEqual({ fetches: 1, checks: 1 });
 
-      // Today's app page reuses the page's admission too; its served results (a data document's
-      // per-viewer first rows) keep the query route's own recheck after the run, so a prose page shows it.
+      // A prose page also reuses the page's admission.
       const prose = await publish(who.token, { title: 'Perf A prose', markup: fixture('prose.jsx') });
       fetched.mockClear(); checked.mockClear();
-      const legacy = await app.request(`/a/${prose}`, { headers: { accept: 'text/html' } });
-      expect(legacy.headers.get(READER_MODE_HEADER)).toBe('legacy');
+      const prosePage = await app.request(`/a/${prose}`, { headers: { accept: 'text/html' } });
+      expect(prosePage.headers.get(READER_MODE_HEADER)).toBe('compiled');
       expect({ fetches: fetched.mock.calls.filter(([asked]) => asked === prose).length, checks: checked.mock.calls.filter(([row]) => row.id === prose).length }).toEqual({ fetches: 1, checks: 1 });
     } finally {
       fetched.mockRestore();
@@ -221,7 +219,7 @@ describe('the guest snapshot never outlives the guest\'s access', () => {
 });
 
 describe('the reader switch at its edges', () => {
-  it('off: /raw still serves compiled while the app page retains its separate switch', async () => {
+  it('off: the retained flag cannot send either route to the deleted reader', async () => {
     const who = await owner();
     const id = await publish(who.token, { title: 'Perf A prose', markup: fixture('prose.jsx') });
     setCompiledReaderFlagForTests('off');
@@ -231,8 +229,10 @@ describe('the reader switch at its edges', () => {
       expect(res.headers.get(READER_FALLBACK_HEADER)).toBeNull();
       expect(res.headers.get('content-security-policy')).toMatch(/script-src 'self'/);
       const page = await app.request(`/a/${id}?reader=compiled`, { headers: { accept: 'text/html' } });
-      expect(page.headers.get(READER_MODE_HEADER)).toBe('legacy');
-      expect(new JSDOM(await page.text()).window.document.querySelector('[data-mx-initial-story]')).toBeTruthy();
+      expect(page.headers.get(READER_MODE_HEADER)).toBe('compiled');
+      const doc = new JSDOM(await page.text()).window.document;
+      expect(doc.querySelector('#mx-story-root')).toBeTruthy();
+      expect(doc.querySelector('[data-mx-initial-story]')).toBeNull();
     } finally {
       setCompiledReaderFlagForTests('shadow');
     }

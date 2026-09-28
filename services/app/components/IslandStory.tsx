@@ -7,7 +7,7 @@
  * again: this component MOVES that very element into the app's tree (state-preserving
  * `moveBefore` where the browser has it) and renders nothing of the story itself. The page's
  * chrome around it, its comments and its selection bubble are the app's; they reach the document
- * through the same private controller the inline runtime hands the page (`InlineStoryController`),
+ * through the same private controller the inline runtime hands the page (`StoryController`),
  * implemented here over the island DOM — comments and selections anchor on the `data-mx-ast`
  * paths the compiler keeps verbatim, classified against the version's SOURCE nodes.
  *
@@ -24,7 +24,7 @@
 import { useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import type { IslandDocument } from '@/lib/islands/contract';
 import type { JsxNode } from '@/lib/jsx';
-import type { InlineStoryController } from '@/lib/story-runtime/InlineStoryRuntime';
+import type { StoryController } from '@/lib/story-runtime/EditorStoryRuntime';
 import type { FrameAnnotateSession } from '@/lib/story-runtime/edit/annotate';
 import type { FrameSelectionActions } from '@/lib/story-runtime/edit/selection-actions';
 import type { RuntimeChannel } from '@/lib/story-runtime/pristine';
@@ -46,7 +46,7 @@ export interface IslandStoryProps {
   islands: IslandDocument | null;
   /** The version's SOURCE nodes (the served runtime's), which comments and selections are classified against. */
   nodes: JsxNode[];
-  onController(controller: InlineStoryController | null): void;
+  onController(controller: StoryController | null): void;
 }
 
 function SelectionPortal({ ready }: { ready: (element: HTMLElement | null) => void }) {
@@ -80,7 +80,7 @@ interface IslandControllerInput {
  * for comments, selections, reader mode and data wakeups, over the island DOM. Editing is the
  * interpreter's; a new version is morphed in place (lib/islands/live-update).
  */
-function createIslandController({ win, root, islands, nodes: served, portal }: IslandControllerInput): InlineStoryController & { selectionReady(): void } {
+function createIslandController({ win, root, islands, nodes: served, portal }: IslandControllerInput): StoryController & { selectionReady(): void } {
   let nodes = served;
   /** The reader's own mode, as the app last set it: a new version never stomps it. */
   let mode: 'light' | 'dark' | null = null;

@@ -243,7 +243,7 @@ await page.goto(readerUrl(`${BASE}/a/${doc.id}`), { waitUntil: 'load' });
 await inlineStory(page);
 await page.waitForTimeout(4000);
 const documentFrame = () => page.mainFrame();
-await page.evaluate(() => { document.querySelector('[data-mx-inline-story]').__probe = 'same-document'; });
+await page.evaluate(() => { window.__scriptEditDocumentProbe = 'same-document'; });
 const beforeRealm = await managedRealm(documentFrame(), 'Slice script');
 const runsBefore = await beforeRealm.evaluate("document.querySelectorAll('#script-made').length").catch(() => 0);
 
@@ -252,7 +252,7 @@ await page.click('[aria-label="Edit artifact"]');
 await page.waitForSelector('[aria-label="Exit edit mode"]', { timeout: 30000 });
 await page.waitForTimeout(4000);
 
-check(await page.evaluate(() => document.querySelector('[data-mx-inline-story]')?.__probe) === 'same-document',
+check(await page.evaluate(() => window.__scriptEditDocumentProbe) === 'same-document',
   'a scripted document is edited in the frame it was already in');
 check(await documentFrame().evaluate("!!document.querySelector('h1')?.isContentEditable").catch(() => false),
   'and it becomes editable');

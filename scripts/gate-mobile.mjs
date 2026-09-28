@@ -149,7 +149,7 @@ await view.waitForSelector('[aria-label="Artifact controls"]');
 const controls = await fitsAcross(view, 'Artifact controls');
 check(controls.fits, `artifact controls: sheet fits the screen (${controls.left}..${controls.right}px of ${controls.viewport}px)`);
 check(!(await overflows(view)), 'artifact controls: and opening it does not make the page scroll sideways');
-const sheetOwnsOverlap = await view.getByRole('dialog', { name: 'Artifact controls', exact: true }).evaluate(sheet => {
+const sheetOverlap = await view.getByRole('dialog', { name: 'Artifact controls', exact: true }).evaluate(sheet => {
   const root = sheet.getRootNode();
   const bounds = sheet.getBoundingClientRect();
   const overlap = [...root.querySelectorAll('[data-mx-reader-action], [data-mx-reader-trigger]')].find(button => {
@@ -157,11 +157,12 @@ const sheetOwnsOverlap = await view.getByRole('dialog', { name: 'Artifact contro
     return r.width && r.height && r.x + r.width / 2 > bounds.left && r.x + r.width / 2 < bounds.right
       && r.y + r.height / 2 > bounds.top && r.y + r.height / 2 < bounds.bottom;
   });
-  if (!overlap) return false;
+  if (!overlap) return { overlapping: false, owns: true, actions: root.querySelectorAll('[data-mx-reader-action], [data-mx-reader-trigger]').length };
   const r = overlap.getBoundingClientRect();
-  return sheet.contains(root.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2));
+  const hit = root.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2);
+  return { overlapping: true, owns: sheet.contains(hit), actions: root.querySelectorAll('[data-mx-reader-action], [data-mx-reader-trigger]').length, hit: hit?.outerHTML.slice(0, 160) };
 });
-check(sheetOwnsOverlap, 'artifact controls: the open sheet paints above overlapping reader actions');
+check(sheetOverlap.owns, `artifact controls: the open sheet paints above overlapping reader actions (${JSON.stringify(sheetOverlap)})`);
 await view.close();
 
 // ── 3. the editor on a phone: `done` and the theme picker must be reachable ─

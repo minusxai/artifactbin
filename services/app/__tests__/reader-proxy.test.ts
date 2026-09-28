@@ -25,7 +25,7 @@ describe('reader delivery over HTTP',()=>{
  it.each(['public','unlisted'] as const)('serves %s readers initial content and prepared data under app CSP',async visibility=>{
   const {row}=await publish(visibility),response=await app.request(`/a/${row.id}`),html=await response.text();
   expect(response.status).toBe(200);expect(response.headers.get('content-security-policy')).toBe(APP_CSP);
-  expect(response.headers.get('cache-control')).toBe('no-store');expect(html).toContain('data-mx-initial-story');
+  expect(response.headers.get('cache-control')).toBe('no-store');expect(html).toContain('data-mx-story-root');
   expect(html).toContain('>Readable body</h1>');expect(html).toContain(BOOTSTRAP_ID);expect(html).not.toContain('<iframe title="artifact"');
  });
  it('serves anonymous owners the same document policy',async()=>{

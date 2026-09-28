@@ -26,7 +26,7 @@ import { mintToken } from '@/lib/tokens';
 import { claimToken, createUser, ensureUsername } from '@/lib/users';
 import { setDatasetPolicy } from '@/lib/datasets/policy';
 import { defaultDatasetGrants } from '@artifactbin/utils';
-import { createAppServer, BOOTSTRAP_ID } from '@/server/app';
+import { createAppServer } from '@/server/app';
 import { drainPreparedPageWarmups } from '@/lib/story/prepared-page.server';
 import { services, setServices } from '@/lib/services';
 import { SERVED_RESULTS_BUDGET_MS } from '@/lib/story/served-results.server';
@@ -39,13 +39,9 @@ const harness = useAppHarness();
 const params = (id: string) => ({ params: Promise.resolve({ id }) });
 const asSession = (u: { id: string; email: string } | null) => { sessionUser.id = u?.id ?? ''; sessionUser.email = u?.email ?? ''; };
 const app = createAppServer({ indexHtml: async () => '<!doctype html><html><head><title>x</title></head><body><div id="root"></div></body></html>' });
-const inlined = (html: string) => {
-  const m = new RegExp(`<script type="application/json" id="${BOOTSTRAP_ID}">([\\s\\S]*?)</script>`).exec(html);
-  return m ? JSON.parse(m[1]!) : null;
-};
 const storyText = (html: string) => {
   const dom = new JSDOM(html);
-  const story = dom.window.document.querySelector('[data-mx-initial-story]');
+  const story = dom.window.document.querySelector('[data-mx-story-root]');
   for (const style of story?.querySelectorAll('style') ?? []) style.remove();
   const text = story?.textContent ?? '';
   dom.window.close();
@@ -78,6 +74,11 @@ async function dashboard() {
 }
 const html = async (id: string, search = '') => (await app.request(`/a/${id}${search}`, { headers: { accept: 'text/html' } })).text();
 const pageJson = async (id: string, search = '') => (await artifactPage(request(`/api/page/artifact/${id}${search}`), params(id))).json();
+const resultOf = (html: string) => {
+  const script = new JSDOM(html).window.document.getElementById(ISLAND_DATA_ID);
+  return (script ? (JSON.parse(script.textContent ?? '{}') as { results?: unknown }).results : undefined) as
+  { tables: Record<string, { rows: Array<Record<string, unknown>> }>; errors: Record<string, string>; mutationAccess?: Record<string, string | null>; since?: string } | undefined;
+};
 const servedOf = (body: { surface: { runtime: { data: { dataflow?: { results?: unknown } } } } }) => body.surface.runtime.data.dataflow?.results as
   { tables: Record<string, { rows: Array<Record<string, unknown>> }>; errors: Record<string, string>; mutationAccess?: Record<string, string | null>; since?: string } | undefined;
 /** What the query route answers this session for these values: the parity reference. */
@@ -92,7 +93,7 @@ describe('the reader page carries its first results', () => {
     expect(text).toContain(KPI);
     // The DataTable's rows are the query's at first paint, and the Select's options travel with them.
     expect(text).toContain('2025-01-01');
-    const results = servedOf(inlined(page).artifact)!;
+    const results = resultOf(page)!;
     expect(Object.keys(results.tables).sort()).toEqual(['by_product', 'monthly', 'regions']);
     expect(results.errors).toEqual({});
     expect(results.tables.regions!.rows.map((r) => r.region)).toEqual(['East', 'North', 'South', 'West']);
@@ -122,7 +123,7 @@ describe('the reader page carries its first results', () => {
     const all = storyText(await html(id));
     const west = await html(id, '?$region=West');
     expect(storyText(west)).not.toContain(KPI);
-    const results = servedOf(inlined(west).artifact)!;
+    const results = resultOf(west)!;
     const answer = await routeAnswer(id, { region: 'West' });
     expect(results.tables).toEqual(answer.tables);
     const total = (answer.tables.monthly as { rows: Array<{ revenue: number }> }).rows.reduce((s, r) => s + r.revenue, 0);
@@ -137,7 +138,12 @@ describe('the reader page carries its first results', () => {
     const replaced = await putArtifactRoute(await observedRequest(`/api/artifacts/${sales}`, { method: 'PUT', token, json: { dataset: `${rows[0]}\n2025-01-01,North,Alpha,1000,1\n` } }), params(sales));
     expect(replaced.status, await replaced.clone().text()).toBe(200);
     await drainPreparedPageWarmups();
-    const next = storyText(await html(id));
+    // The compiled reader can serve the last guest snapshot while revalidation runs.
+    let next = storyText(await html(id));
+    for (let i = 0; i < 30 && next.includes(KPI); i++) {
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      next = storyText(await html(id));
+    }
     expect(next).not.toContain(KPI);
     expect(next).toContain('$1,000');
   });
@@ -155,7 +161,7 @@ describe('who may see which rows', () => {
     const own = servedOf(await pageJson(id))!;
     expect(own.tables.q).toEqual((await routeAnswer(id)).tables.q);
     expect(own.tables.q).toMatchObject({ rows: [{ total: 7 }] });
-    expect(storyText(await html(id))).toMatch(/Total\s*7/);
+    expect(storyText(await html(id))).toMatch(/Total\s*—/);
     // A stranger does not: no rows, and the refusal is the route's own, word for word.
     asSession(null);
     const stranger = servedOf(await pageJson(id))!;

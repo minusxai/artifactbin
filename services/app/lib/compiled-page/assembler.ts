@@ -33,7 +33,7 @@ import { STORY_CHROME_CSS } from '@/lib/story-runtime/chrome-css';
 import { OutlineRail } from '@/lib/story-runtime/outline-rail';
 import { STORY_ROOT_ID } from '@/lib/story-runtime/contract';
 import { fontPreloadTags } from '@/lib/story/first-screen-fonts';
-import { inlineStoryElement } from '@/lib/story/inline-story-html';
+import { inlineStoryElement } from '@/lib/compiled-page/story-element';
 import { escapeHtml, renderReaderChrome } from '@/lib/story/reader-chrome';
 import { APP_BAR_H } from '@/lib/story/edit-bar';
 import { APP_FONT_FACES, APP_SHELL_FONT_PRELOADS } from '@/lib/app-fonts';
@@ -74,7 +74,7 @@ export const assembleReaderPage: AssembleReaderPage = (input: AssembleInput): As
     + (chrome ? '' : '<base target="_top">')
     + `<title>${escapeHtml(input.title)}</title>`
     + headMetadata(input.head)
-    + fontPreloadTags(unique([...input.fontPreloads, ...(spa ? APP_SHELL_FONT_PRELOADS : [])]))
+    + fontPreloadTags(unique([...input.fontPreloads, ...(spa ? APP_SHELL_FONT_PRELOADS : [])]), Boolean(spa))
     + islandPreloads.map(modulePreload).join('')
     + prefetch.map((href) => `<link rel="prefetch" href="${escapeHtml(href)}" as="document">`).join('')
     + (input.sheets
