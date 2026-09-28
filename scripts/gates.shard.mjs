@@ -40,16 +40,26 @@ export function parseShard(arg) {
  * @param {readonly string[]} names  every gate in the set
  * @param {{index: number, total: number}} shard  1-based
  * @param {(name: string) => number} weight  how long the gate is expected to take
+ * @param {{ isolated?: readonly string[] }} [options]  names that each occupy a whole bin when enough bins exist
  * @returns {string[]}
  */
-export function shardOf(names, { index, total }, weight) {
+export function shardOf(names, { index, total }, weight, { isolated = [] } = {}) {
   if (total === 1) return [...names];
   const bins = Array.from({ length: total }, () => ({ load: 0, names: new Set() }));
+  // A heavy gate whose first attempt is sensitive to parallel browser load gets its own runner.
+  // Keep the other bins available only when at least one remains for ordinary gates.
+  const reserved = [...new Set(isolated)].filter(name => names.includes(name));
+  const exclusive = reserved.length < total ? reserved : [];
+  for (const [offset, name] of exclusive.entries()) {
+    bins[offset].names.add(name);
+    bins[offset].load = weight(name);
+  }
+  const shared = bins.slice(exclusive.length);
   // Heaviest first, name as the tie-break so the split never depends on the
   // order the filesystem happened to hand back.
-  const ordered = [...names].sort((a, b) => weight(b) - weight(a) || a.localeCompare(b));
+  const ordered = names.filter(name => !exclusive.includes(name)).sort((a, b) => weight(b) - weight(a) || a.localeCompare(b));
   for (const name of ordered) {
-    const lightest = bins.reduce((min, bin) => (bin.load < min.load ? bin : min), bins[0]);
+    const lightest = shared.reduce((min, bin) => (bin.load < min.load ? bin : min), shared[0]);
     lightest.names.add(name);
     lightest.load += weight(name);
   }
