@@ -1,0 +1,13 @@
+import {describe,it,expect,vi,afterEach} from 'vitest';
+import type {MutationNotificationClaim,MutationNotificationJobStore,MutationNotificationPlan} from '@artifactbin/contracts';
+import {createNotificationWorker} from '../notification-worker';
+const claim={jobId:'job',generation:1,leaseUntil:'2100-01-01',input:{}} as MutationNotificationClaim;
+const plan:MutationNotificationPlan={executionFence:{principalRevision:'p',documentRevision:'d',contextRevision:'c'},rows:[],sources:[]};
+const fixture=()=>{let next:MutationNotificationClaim|null=claim;const store={claim:vi.fn(async()=>{const value=next;next=null;return value;}),renew:vi.fn(async()=>true),complete:vi.fn(async()=>true),fail:vi.fn(async()=>true)} as unknown as MutationNotificationJobStore;const evaluator={evaluate:vi.fn(async()=>plan)};return {store,evaluator};};
+afterEach(()=>vi.useRealTimers());
+describe('durable notification worker',()=>{
+ it('claims and completes empty plans, then leaves completed work alone',async()=>{const f=fixture(),worker=createNotificationWorker(f);expect(await worker.drainOnce()).toBe(true);expect(f.store.complete).toHaveBeenCalledWith(claim,plan);expect(await worker.drainOnce()).toBe(false);expect(f.evaluator.evaluate).toHaveBeenCalledTimes(1);});
+ it('classifies exceptions without storing raw SQL or content',async()=>{const f=fixture();f.evaluator.evaluate.mockRejectedValueOnce(new Error('secret query'));await createNotificationWorker(f).drainOnce();expect(f.store.fail).toHaveBeenCalledWith(claim,'notification_execution_failed',true);});
+ it('discards the evaluated output after renewal loses ownership',async()=>{vi.useFakeTimers();const f=fixture();vi.mocked(f.store.renew).mockResolvedValue(false);let resolve!:(p:MutationNotificationPlan)=>void;f.evaluator.evaluate.mockImplementation(()=>new Promise(r=>{resolve=r;}));const worker=createNotificationWorker({...f,renewMs:10});const running=worker.drainOnce();await vi.advanceTimersByTimeAsync(20);resolve(plan);await running;expect(f.store.renew).toHaveBeenCalled();expect(f.store.complete).not.toHaveBeenCalled();expect(f.store.fail).not.toHaveBeenCalled();});
+ it('starts recovery immediately, polls without overlapping, and stops gracefully',async()=>{vi.useFakeTimers();const f=fixture(),worker=createNotificationWorker({...f,pollMs:20});worker.start();await vi.advanceTimersByTimeAsync(1);expect(f.store.complete).toHaveBeenCalledTimes(1);await worker.stop();const calls=vi.mocked(f.store.claim).mock.calls.length;await vi.advanceTimersByTimeAsync(100);expect(f.store.claim).toHaveBeenCalledTimes(calls);});
+});
