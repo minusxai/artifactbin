@@ -85,3 +85,29 @@ describe('bound controls, as today\'s live reader renders them', () => {
     });
   }
 });
+
+describe('Files, as today\'s live listing renders it', () => {
+  it('a bound listing: the section carries no authored id, stamp or class, and each row draws its format\'s glyph', async () => {
+    const { Files } = await import('../kit/files');
+    const { Files: ReactFiles } = await import('@/components/kit/files');
+    const { IconGlyphProvider } = await import('@/components/kit/icon');
+    const { buildGlyphMap } = await import('@/lib/story/icon-glyphs');
+    const { FILE_GLYPH_NAMES } = await import('@/lib/story-ui/file-glyphs');
+    const glyphs = buildGlyphMap(FILE_GLYPH_NAMES);
+    const rows = [{ id: 'a1', title: 'Report', format: 'markup' }, { id: 'f1', title: 'Folder', format: 'folder', count: 2 }, { id: 'x', title: 'Odd', format: 'weird' }];
+    for (const variant of ['icons', 'tiles']) {
+      (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+      const reactHost = document.createElement('div');
+      const root = createRoot(reactHost);
+      // What StoryRuntimeApp's FilesAdapter renders: rows, variant, capture — nothing authored.
+      await act(async () => { root.render(createElement(IconGlyphProvider, { value: glyphs }, createElement(ReactFiles, { rows, variant, capture: false }))); });
+      const island = { ...fakeIsland(), table: () => ({ rows, columns: [] }) } as never;
+      const solidHost = document.createElement('div');
+      const dispose = render(() => <IslandProvider value={island}><Files data="$files" variant={variant} glyphs={glyphs} id="f" data-mx-ast="1.2" /></IslandProvider>, solidHost);
+      try {
+        expect(raw(solidHost.firstElementChild!), variant).toEqual(raw(reactHost.firstElementChild!));
+        expect(solidHost.querySelectorAll('svg[data-slot="icon"]')).toHaveLength(3);
+      } finally { dispose(); await act(async () => root.unmount()); }
+    }
+  });
+});
