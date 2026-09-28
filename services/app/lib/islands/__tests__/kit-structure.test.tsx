@@ -21,7 +21,7 @@ import { Badge, Alert, AlertTitle, AlertDescription, Card, CardHeader, CardTitle
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '../kit/tabs';
 import { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from '../kit/accordion';
 import { Dialog, DialogTrigger, DialogContent, DialogClose } from '../kit/dialog';
-import { Collapsible, CollapsibleTrigger, CollapsibleContent, Popover, PopoverTrigger, PopoverContent, Tooltip, TooltipContent, Avatar, AvatarImage, AvatarFallback } from '../kit/disclosure';
+import { Collapsible, CollapsibleTrigger, CollapsibleContent, Popover, PopoverTrigger, PopoverContent, Tooltip, TooltipTrigger, TooltipContent, TooltipProvider, Avatar, AvatarImage, AvatarFallback } from '../kit/disclosure';
 import { RECIPES, cn } from '../kit/recipes';
 
 const mount = (view: () => import('solid-js').JSX.Element, portal: HTMLElement | null = null) => { const host = document.createElement('div'); const dispose = render(() => <IslandProvider value={{ ...fakeIsland(), trustedPortal: () => portal }}>{view()}</IslandProvider>, host); return { host, dispose }; };
@@ -166,6 +166,37 @@ describe('disclosure', () => {
   });
 });
 
+describe('tooltip, as today\'s story tooltip runs', () => {
+  it('a tooltip open on mount: the trigger is the placed anchor, described by the content, which is portaled out of the document', async () => {
+    // Radix measures its arrow with a ResizeObserver, which jsdom lacks: an inert one for both sides.
+    const hadObserver = 'ResizeObserver' in globalThis;
+    if (!hadObserver) (globalThis as { ResizeObserver?: unknown }).ResizeObserver = class { observe() {} unobserve() {} disconnect() {} };
+    const markup = '<div id="w"><TooltipProvider><Tooltip defaultOpen><TooltipTrigger id="tt" className="text-sm">Hover target</TooltipTrigger><TooltipContent id="tc">Pinned</TooltipContent></Tooltip></TooltipProvider></div>';
+    const react = await reactMount(markup);
+    const { host, dispose } = mount(() => <div id="w"><TooltipProvider><Tooltip defaultOpen><TooltipTrigger id="tt" class="text-sm">Hover target</TooltipTrigger><TooltipContent id="tc" class={cls('TooltipContent')}>Pinned</TooltipContent></Tooltip></TooltipProvider></div>);
+    document.body.append(host);
+    try {
+      await act(async () => { await new Promise((r) => setTimeout(r, 20)); });
+      // The story root keeps the trigger alone, byte for byte (raw attributes).
+      const rawAttrs = (el: Element) => Object.fromEntries([...el.attributes].filter((a) => a.name !== 'data-mx-ast').map((a) => [a.name, a.value]));
+      expect(rawAttrs(host.querySelector('#w')!.firstElementChild!)).toEqual(rawAttrs(react.host.querySelector('#w')!.firstElementChild!));
+      expect(host.querySelector('#w')!.children).toHaveLength(react.host.querySelector('#w')!.children.length);
+      expect(host.querySelector('#tt')?.getAttribute('aria-describedby')).toBe('tc');
+      expect(host.querySelector('#tt')?.getAttribute('data-radix-popper-side')).toBe('top');
+      const contents = [...document.querySelectorAll('#tc')];
+      expect(contents.every((c) => !c.closest('#w'))).toBe(true);
+      const solidContent = contents.find((c) => !react.host.contains(c) && c.closest('[data-mx-theme-host]'))!;
+      const reactContent = contents.find((c) => c !== solidContent)!;
+      expect(solidContent.getAttribute('class')).toBe(reactContent.getAttribute('class'));
+      expect([solidContent.getAttribute('data-side'), solidContent.getAttribute('data-state')]).toEqual([reactContent.getAttribute('data-side'), reactContent.getAttribute('data-state')]);
+      (host.querySelector('#tt') as HTMLButtonElement).dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
+      await act(async () => { await new Promise((r) => setTimeout(r, 0)); });
+      expect(host.querySelector('#tt')?.getAttribute('data-state')).toBe('closed');
+      expect(host.querySelector('#tt')?.hasAttribute('aria-describedby')).toBe(false);
+    } finally { dispose(); host.remove(); await react.unmount(); if (!hadObserver) delete (globalThis as { ResizeObserver?: unknown }).ResizeObserver; }
+  });
+});
+
 describe('avatar image, as mounted Radix shows it', () => {
   it('draws the image once it has loaded, in place of the fallback; keeps the fallback for an address that fails', async () => {
     // A browser's Image, as jsdom has none that loads: complete with a width for a good address, broken otherwise.
@@ -263,13 +294,16 @@ describe('trusted overlay portal', () => {
         expect((portal ?? host).querySelector('[data-slot="popover-content"]')).toBeNull();
       } finally { dispose(); }
     });
-    it(`places Tooltip content ${portalEnabled ? 'in the trusted portal' : 'in place'}`, () => {
+    // Today's story tooltip portals like Radix's Portal: to the trusted container when the page has one, else to the
+    // BODY — never in place (the parity gate's probe of today's reader: the content's top element is a child of <body>).
+    it(`places Tooltip content ${portalEnabled ? 'in the trusted portal' : 'in the body, as Radix does without one'}`, () => {
       const portal = portalEnabled ? document.createElement('div') : null;
-      const { host, dispose } = mount(() => <Tooltip defaultOpen><TooltipContent>Tooltip body</TooltipContent></Tooltip>, portal);
+      const { host, dispose } = mount(() => <Tooltip defaultOpen><TooltipTrigger>Target</TooltipTrigger><TooltipContent>Tooltip body</TooltipContent></Tooltip>, portal);
+      document.body.append(host);
       try {
-        expect((portal ?? host).querySelector('[data-slot="tooltip-content"]')?.textContent).toBe('Tooltip body');
-        if (portal) expect(host.querySelector('[data-slot="tooltip-content"]')).toBeNull();
-      } finally { dispose(); }
+        expect((portal ?? document.body).querySelector('[data-slot="tooltip-content"]')?.textContent).toBe('Tooltip body');
+        expect(host.querySelector('[data-slot="tooltip-content"]')).toBeNull();
+      } finally { dispose(); host.remove(); }
     });
   }
 });
