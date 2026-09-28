@@ -33,7 +33,7 @@ do not routinely repeat the implementer's entire red/green sequence. CI checks t
 Review the diff against the brief and inspect PR checks, including CodeQL when
 configured. Merge only reviewed work and then dispatch remaining authorized work whose dependencies
 are satisfied. A passing test against an old server is not verification: check the process and build you
-started. Browser gates run in one agent at a time; other agents may run isolated unit tests.
+started. Browser gates run in containers via `scripts/gate-container.mjs`, up to N at once (below).
 
 After merging lockfile changes, regenerate the lock if needed and run `npm ci --dry-run`. Read install
 output unfiltered: an already populated `node_modules` can hide a missing lock entry.
@@ -48,7 +48,7 @@ Work up the tiers, and stop at the cheapest one that can still be wrong:
    against that same server, with its state in `~/.artifactbin-dev/<port>` and
    `ARTIFACTBIN_SKILLS=off`, so the released `afbin`, `~/.artifactbin` and `~/.claude/skills` are
    untouched. A dev server that is not answering `/api/health` is refused in one line.
-4. Browser gates — `node scripts/gate-*.mjs http://localhost:<port>`, one agent at a time.
+4. Browser gates — `node scripts/gate-container.mjs <gate ...>`, in a Linux container, up to N at once.
 5. The agent itself — `npm run eval -- --tasks <name>`, against the same server.
 6. Docker and Postgres — pre-release only, not a routine loop.
 
@@ -58,6 +58,34 @@ defaulted by `npm run dev` on a non-Linux development host so the loop works on 
 assertions are Linux containment facts skips those by name when a session reports `sandbox: none`.
 
 Every tier takes `APP__PORT=<n>`, so a worktree's own port block keeps it off another agent's server.
+The gate container needs no port at all: it has its own network namespace.
+
+## Browser gates in containers
+
+`node scripts/gate-container.mjs [--cpus 4] [--memory 8g] [--servers N] <gate ...>` runs the named
+gates the way CI's gate job does, from any worktree: the official Playwright image for the pinned
+Playwright (Linux Chromium, Firefox, WebKit and fonts) with Node 22 and bubblewrap; the worktree's
+source copied from a read-only mount; `npm run build` and `npm run build -w services/cli`; then
+`node scripts/gates.mjs --servers=N --only=<gates>` against production servers inside the container,
+with the real bubblewrap session sandbox instead of `BROWSER__SANDBOX=none`. The output streams, the
+exit status is the gates', and the container is removed afterwards, also when the runner is killed.
+
+- **Up to N at once.** Each container holds a slot (`/tmp/afbin-gate-slots/<n>`, a `mkdir`); N is
+  `GATES__CONTAINER_SLOTS`, else the engine's CPUs ÷ `--cpus` or memory ÷ `--memory`, whichever is
+  smaller (3 on a 14-CPU, 36 GB Colima). A runner that finds every slot taken waits and names the
+  holders; a slot whose runner died is reclaimed.
+- **Caches.** Dependencies install once per `afbin-gate-deps-<key>` volume, keyed like CI's install
+  cache, and are copied into each container; the `afbin-gate:*` image is built once per Playwright
+  version. Both persist; nothing else does. Remove stale ones with
+  `docker volume ls -q --filter label=afbin.gate-container=1`.
+- **Not in a container:** `postgres-datasets` starts Postgres through the host's Docker, which the
+  container cannot reach; the runner refuses it by name and PR CI runs it.
+- The worktree must be under `$HOME`, which Colima shares. The gates run as root in the container:
+  the Colima VM restricts unprivileged user namespaces, and root there is what lets bubblewrap build
+  the session sandbox without changing a VM-wide setting.
+- Host runs (`node scripts/gate-*.mjs`, `node scripts/gates.mjs`) are discouraged: they compete with
+  every container for the same CPUs. If one is unavoidable, hold the old single lock
+  (`mkdir /tmp/afbin-gate-lock`, `rmdir` after) so two host runs never overlap.
 
 ## Exercising the agent policy
 

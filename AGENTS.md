@@ -28,7 +28,7 @@
   a deferred suite into local batches. Focused TDD tests are allowed, not broad local reruns.
 - **On deferral: commit, push, open/update a PR with an empty body, and inspect CI.** A branch push
   alone does not start CI. Report deferral accurately; require selected checks before merging.
-  Full suites, Docker/Chromium integration, browser gates and production builds are
+  Full suites, Docker/Chromium integration, the whole gate set and production builds are
   CI-only. Collect CI failures and fix them together; never blindly retry unchanged code.
 - **Reuse handoff evidence:** in the same worktree, use `npm run validate -- --reuse` and
   `npm test -- --reuse` with the original test arguments. Successful receipts last one hour and
@@ -78,6 +78,8 @@ Run these from the repository root. Keep this list current.
 - `npm test` — affected api/node/ui + CLI tests, at most 50 files combined. Exit 2: use PR CI,
   never widen. `-- <ref>` selects branch changes; `-- --files <paths>` selects TDD tests;
   `-- --reuse` reuses matching evidence. Config/package edits may defer everything; that is expected.
+- `node scripts/gate-container.mjs [--cpus 4] [--memory 8g] <gate ...>` — the named browser gates in
+  a Linux container, built and served as CI does; the output and exit status are the gates'.
 - CI-only: `npm run test:all`, `test:api`, `test:node`, `test:ui`, `test:integration`, `build`,
   `test:gates`. Do not invoke these locally to work around deferral.
 - `npm run generate:routes`, `generate-story-ui-classes`, `render:schema`, `build:runtime` —
@@ -112,5 +114,7 @@ Run these from the repository root. Keep this list current.
 
 The orchestrator defines and seeds contracts, core tests and a bounded brief; the implementer
 completes that brief without further delegation. Use isolated worktrees, data directories and port
-blocks; never two implementers in one checkout, and only one agent runs browser gates at a time.
+blocks; never two implementers in one checkout. Browser gates run in containers via
+`scripts/gate-container.mjs`, up to N at once (engine CPUs ÷ container CPUs, 3 on a 14-CPU Colima;
+`GATES__CONTAINER_SLOTS` overrides); host `node scripts/gate-*.mjs` runs are discouraged.
 Keep PRs scoped per repository. Handoff: [docs/agent-workflows.md](docs/agent-workflows.md).

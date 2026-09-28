@@ -85,6 +85,21 @@ export const GATE_SPECS = Object.freeze([
 ]);
 
 /**
+ * Scripts named `gate-*.mjs` that RUN gates rather than being one: scripts/gate-container.mjs runs a
+ * set in a Linux container. Discovery leaves them out, so they need no row and never run as a gate.
+ */
+export const GATE_RUNNERS = Object.freeze(['container']);
+
+/** The gate names among a directory's file names: `gate-<name>.mjs`, less the runners. */
+export function gateNamesOnDisk(fileNames) {
+  return fileNames
+    .filter((file) => file.startsWith('gate-') && file.endsWith('.mjs'))
+    .map((file) => file.slice('gate-'.length, -'.mjs'.length))
+    .filter((name) => !GATE_RUNNERS.includes(name))
+    .sort();
+}
+
+/**
  * Disk ↔ manifest bijection. Throws ONE error naming every file without a row and every row without a file
  * (sorted, both lists), returns silently when they match. Pure: the runner calls it with `readdirSync`'s names.
  * @param {readonly string[]} diskNames  gate names on disk (without `gate-`/`.mjs`)

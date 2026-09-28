@@ -3,6 +3,7 @@
  * path lists never become shell code. Missing diff evidence selects all jobs. */
 import { execFileSync, spawnSync } from 'node:child_process';
 import { appendFileSync, mkdirSync, writeFileSync, readFileSync } from 'node:fs';
+import { normalisedLock } from './lib/lock-fingerprint.mjs';
 import { CI_JOBS, CLI_BUMP_REFUSAL, VERSION_BUMP_FILES, checkCiResults, cliBumpRequired, isVersionOnlyBump, planCi } from './lib/ci-plan.mjs';
 
 const env = process.env;
@@ -178,22 +179,10 @@ if (mode === 'plan') {
   if (env.GITHUB_STEP_SUMMARY) appendFileSync(env.GITHUB_STEP_SUMMARY, `tree ${tree} tested by run ${source}\n`);
   console.log(`tree ${tree} tested by run ${source}`);
 } else if (mode === 'lock-fingerprint') {
-  /*
-   * THE INSTALL CACHE KEY THAT A RELEASE DOES NOT INVALIDATE.
-   *
-   * `install-v3` keys on hashFiles('package-lock.json'), and `npm run release:cli` rewrites one line
-   * of that file — the CLI workspace's own version. Measured on release PR run 35325636096, job
-   * `CLI (macos-15-intel)`: "Cache not found for input keys: install-v3-macOS-X64-node22-a979…",
-   * 50s of `npm ci` and 29s of cache-post, while the three caches beside it (Chromium, the prebuilt
-   * Node, the Chromium archive) all restored on that same runner — they key on files a bump does not
-   * touch. The version of a workspace resolves no dependency, so it has no business in the key.
-   */
-  const lock = JSON.parse(readFileSync('package-lock.json', 'utf8'));
-  for (const [name, meta] of Object.entries(lock.packages ?? {})) {
-    if (!name.includes('node_modules/') && meta?.version) meta.version = '0.0.0-fingerprint';
-  }
+  // Why the versions are normalised: scripts/lib/lock-fingerprint.mjs.
+  const lock = normalisedLock(readFileSync('package-lock.json', 'utf8'));
   mkdirSync('.ci-cache-key', { recursive: true });
-  writeFileSync('.ci-cache-key/install.json', JSON.stringify(lock));
+  writeFileSync('.ci-cache-key/install.json', lock);
   console.log('Wrote .ci-cache-key/install.json (the lockfile with workspace versions normalised).');
 } else {
   throw new Error('Expected plan, node, check, cli-bump, record-tree or lock-fingerprint');
