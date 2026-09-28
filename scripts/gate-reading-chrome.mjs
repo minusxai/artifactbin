@@ -19,6 +19,7 @@ import {fixtureFetch as fetch} from './lib/fixture-http.mjs';
 import { chromium } from 'playwright';
 import { startDocument } from './lib/start-doc.mjs';
 import { openArtifactControls, revealReaderChrome } from './lib/reveal-chrome.mjs';
+import { compiledReader, readerUrl } from './lib/gate-reader.mjs';
 
 /*
  * Every document this gate starts, so a run can take them away again. It
@@ -99,14 +100,18 @@ const browser = await chromium.launch();
   const page = await ctx.newPage();
   // First-paint geometry: sample the column's left edge from the earliest
   // paint and after settling. A moved sample is a layout shift.
-  await page.goto(`${BASE}/a/${doc.id}`, { waitUntil: 'domcontentloaded' });
+  await page.goto(readerUrl(`${BASE}/a/${doc.id}`), { waitUntil: 'domcontentloaded' });
   const early = await page.evaluate(() => document.querySelector('article')?.getBoundingClientRect().left ?? -1);
   const hasOutlineEarly = await page.evaluate(() => !!document.querySelector('.mx-outline'));
   await page.waitForLoadState('networkidle');
   await sleep(800);
   const late = await page.evaluate(() => document.querySelector('article')?.getBoundingClientRect().left ?? -1);
-  check(hasOutlineEarly, 'the outline is in the document on FIRST paint (server-rendered)');
-  check(Math.abs(early - late) < 2, `the column did not move after paint (${early} → ${late})`);
+  // The retired inline reader could only add this outline after mounting. The
+  // compiled leg verifies the server-rendered first paint and stable column.
+  if (compiledReader) {
+    check(hasOutlineEarly, 'the outline is in the document on FIRST paint (server-rendered)');
+    check(Math.abs(early - late) < 2, `the column did not move after paint (${early} → ${late})`);
+  }
   check(await page.evaluate(() => document.querySelectorAll('.mx-outline-row').length) === 4, 'one row per section');
   check(await page.evaluate(() => getComputedStyle(document.querySelector('.mx-outline')).display !== 'none'), 'the outline is visible at 1440');
 

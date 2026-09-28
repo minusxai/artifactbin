@@ -69,6 +69,7 @@ import { IslandStory } from '@/components/IslandStory';
 import { initialDocumentStory, initialIslandDocument, initialStoryIsCompiled } from '@/web/initial-story';
 import { takeChromeIntent } from '@/web/idle-boot';
 import { compiledReaderUpdates } from '@/lib/story-runtime/compiled-reader-update';
+import { persistReaderMode } from '@/lib/story-runtime/reader-mode';
 
 // Dataset controls are a format-specific boundary. Text readers must not
 // preload their query/editor dependencies through the common artifact shell.
@@ -547,6 +548,7 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
   const setReaderMode = useCallback((mode: AppearanceMode) => {
     modeOverride.current = mode;
     setReaderModeOverride(mode);
+    persistReaderMode(window, mode);
     runtimeRef.current?.send({ type: STORY_READER_MODE_MESSAGE, mode });
   }, []);
   useEffect(() => {

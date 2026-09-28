@@ -112,8 +112,9 @@ export const COMPILED_LEGS = Object.freeze([
   { gate: 'full-kit', timeoutMs: 90_000 },
   { gate: 'export-slice', timeoutMs: 60_000 },
   { gate: 'layout-shift', timeoutMs: 140_000 },
+  { gate: 'reading-chrome', timeoutMs: 90_000, disabled: 'the compiled assembler has no outline metadata to render a server-side table of contents yet' },
   { gate: 'live-reader', timeoutMs: 70_000 },
-  { gate: 'hydration', timeoutMs: 190_000, disabled: 'its takeover legs 1–3 assert React hydrating the legacy inline story; the compiled takeover (leg 4) already runs in the plain gate on ?reader=compiled' },
+  { gate: 'hydration', timeoutMs: 190_000, disabled: 'the plain gate already opens the compiled reader explicitly and runs the same takeover checks' },
   { gate: 'reader-chrome', timeoutMs: 110_000 },
   { gate: 'dataflow', timeoutMs: 60_000, disabled: 'the compiled page runs no in-browser SQLite engine yet (IslandPageData carries no `hold`/`sqliteWasm`): six checks assert the page engine' },
 ]);
