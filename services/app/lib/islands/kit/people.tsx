@@ -5,18 +5,24 @@ import { refName } from '@/lib/story/dataflow';
 import { useIsland } from '../context';
 import type { PersonCard } from '@artifactbin/contracts';
 
-type Props = { userId?: unknown; id?: string; fallback?: string; className?: string; link?: boolean; avatar?: boolean | string; size?: 'sm' | 'md' | 'lg'; decorative?: boolean; children?: JSX.Element; [key: string]: unknown };
+type HandleClasses = { muted: string; plain: string; link: string };
+type ImageClasses = { fallback: string; avatar: string; initial: string; unknownInitial: string };
+/** Every state's class, evaluated by the compiler (recipes/people peopleClasses); absent, the port joins its own. */
+type Classes = Partial<HandleClasses & ImageClasses & { person: string; image: ImageClasses; handle: HandleClasses }>;
+type Props = { userId?: unknown; id?: string; fallback?: string; className?: string; link?: boolean; avatar?: boolean | string; size?: 'sm' | 'md' | 'lg'; decorative?: boolean; classes?: Classes; children?: JSX.Element; [key: string]: unknown };
 const join = (...v: (string | false | undefined)[]) => v.filter(Boolean).join(' ');
 const hasId = (v: unknown) => typeof v === 'string' ? v !== '' : v != null;
 function identity(p: Props) { const island = useIsland(); const name = typeof p.userId === 'string' ? refName(p.userId) : null; const id = name ? island.value(name) : p.userId; return { id, card: typeof id === 'string' && id.startsWith('usr_') ? island.people()[id] : undefined }; }
-const rest = (p: Props) => { const { userId,id,card,avatar,link,fallback,className,size,decorative,children,...other } = p; void userId; void card; void avatar; void link; void fallback; void className; void size; void decorative; void children; return { id, ...other }; };
+// The compiler's recipe `class` is dropped: a person's root class depends on whom it resolves to, built here from `className`.
+const rest = (p: Props) => { const { userId,id,card,avatar,link,fallback,className,size,decorative,children,classes,class: _recipe,...other } = p; void userId; void card; void avatar; void link; void fallback; void className; void size; void decorative; void children; void classes; void _recipe; return { id, ...other }; };
 export function UserHandle(p: Props) {
   const who = () => identity(p); const card = (): PersonCard | undefined => who().card;
-  return <Show when={hasId(who().id)} fallback={p.fallback ? <span data-slot="user-handle" class={join('text-muted-foreground',p.className)} {...rest(p)}>{p.fallback}</span> : null}>
-    <Show when={card()} fallback={<span data-slot="user-handle" data-unknown="" class={join('text-muted-foreground',p.className)} {...rest(p)}>Unknown person</span>}>
-      <Show when={card()?.handle} fallback={<span data-slot="user-handle" class={p.className} {...rest(p)}>{card()?.name}</span>}>
-        <Show when={p.link !== false} fallback={<span data-slot="user-handle" class={p.className} {...rest(p)}>@{card()?.handle}</span>}>
-          <a data-slot="user-handle" href={`/@${card()?.handle}`} target="_top" rel="noopener" class={join('underline-offset-2 hover:underline',p.className)} {...rest(p)}>@{card()?.handle}</a>
+  const muted = () => p.classes?.muted ?? join('text-muted-foreground',p.className); const plain = () => p.classes?.plain ?? p.className ?? '';
+  return <Show when={hasId(who().id)} fallback={p.fallback ? <span data-slot="user-handle" class={muted()} {...rest(p)}>{p.fallback}</span> : null}>
+    <Show when={card()} fallback={<span data-slot="user-handle" data-unknown="" class={muted()} {...rest(p)}>Unknown person</span>}>
+      <Show when={card()?.handle} fallback={<span data-slot="user-handle" class={plain()} {...rest(p)}>{card()?.name}</span>}>
+        <Show when={p.link !== false} fallback={<span data-slot="user-handle" class={plain()} {...rest(p)}>@{card()?.handle}</span>}>
+          <a data-slot="user-handle" href={`/@${card()?.handle}`} target="_top" rel="noopener" class={p.classes?.link ?? join('underline-offset-2 hover:underline',p.className)} {...rest(p)}>@{card()?.handle}</a>
         </Show>
       </Show>
     </Show>
@@ -29,21 +35,21 @@ const FALLBACK = 'flex size-full items-center justify-center rounded-full bg-mut
 export function UserImage(p: Props) {
   const who = () => identity(p); const card = () => who().card; const size = () => p.size ?? 'sm'; const [failed,setFailed] = createSignal<string | null>(null);
   const box = () => join('inline-flex shrink-0 align-middle',BOX[size()],p.className);
-  return <Show when={hasId(who().id)} fallback={p.fallback ? <span data-slot="user-image" class={join('text-muted-foreground',p.className)} {...rest(p)}>{p.fallback}</span> : null}>
+  return <Show when={hasId(who().id)} fallback={p.fallback ? <span data-slot="user-image" class={p.classes?.fallback ?? join('text-muted-foreground',p.className)} {...rest(p)}>{p.fallback}</span> : null}>
     <span data-slot="avatar" data-size="default" data-unknown={!card() ? '' : undefined} aria-hidden={p.decorative || !card() ? 'true' : undefined}
       role={!p.decorative && card() && !card()?.image ? 'img' : undefined} aria-label={!p.decorative && card() && !card()?.image ? card()?.name : undefined}
-      class={join(AVATAR,box())} style={card() && typeof who().id === 'string' ? { 'background-color': personFaceBackground(who().id as string) } : undefined} {...rest(p)}>
-      <span data-slot="avatar-fallback" class={join(FALLBACK,card() && 'bg-transparent font-medium text-white',GLYPH[size()])}>{card() ? personInitial(card()!.name) : '?'}</span>
+      class={p.classes?.avatar ?? join(AVATAR,box())} style={card() && typeof who().id === 'string' ? { 'background-color': personFaceBackground(who().id as string) } : undefined} {...rest(p)}>
+      <span data-slot="avatar-fallback" class={(card() ? p.classes?.initial : p.classes?.unknownInitial) ?? join(FALLBACK,card() && 'bg-transparent font-medium text-white',GLYPH[size()])}>{card() ? personInitial(card()!.name) : '?'}</span>
       <Show when={card()?.image && failed() !== card()?.image}><img data-slot="avatar-image" class="absolute inset-0 aspect-square size-full object-cover" src={card()!.image!} alt={p.decorative ? '' : card()!.name} aria-hidden={p.decorative ? 'true' : undefined} onError={() => setFailed(card()!.image)} /></Show>
     </span>
   </Show>;
 }
 export function User(p: Props) {
   const who = () => identity(p);
-  return <Show when={hasId(who().id)} fallback={p.fallback ? <span data-slot="user" class={join('text-muted-foreground',p.className)} {...rest(p)}>{p.fallback}</span> : null}>
-    <span data-slot="user" class={join('inline-flex items-center gap-1.5 align-middle',p.className)} {...rest(p)}>
-      <Show when={p.avatar !== false && p.avatar !== 'false'}><UserImage userId={who().id} size="sm" decorative /></Show>
-      <UserHandle userId={who().id} link={p.link} />
+  return <Show when={hasId(who().id)} fallback={p.fallback ? <span data-slot="user" class={p.classes?.fallback ?? join('text-muted-foreground',p.className)} {...rest(p)}>{p.fallback}</span> : null}>
+    <span data-slot="user" class={p.classes?.person ?? join('inline-flex items-center gap-1.5 align-middle',p.className)} {...rest(p)}>
+      <Show when={p.avatar !== false && p.avatar !== 'false'}><UserImage userId={who().id} size="sm" decorative classes={p.classes?.image} /></Show>
+      <UserHandle userId={who().id} link={p.link} classes={p.classes?.handle} />
     </span>
   </Show>;
 }

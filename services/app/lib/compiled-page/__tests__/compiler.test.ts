@@ -209,6 +209,13 @@ describe('unit parity with today\'s render', () => {
     expect(textarea.textContent).toBe('Two & more');
     expect(root.querySelector('#in input')?.getAttribute('value')).toBe('3');
   });
+  it('a guest\'s person components are served with the fallback\'s class, merged with the author\'s as today', async () => {
+    const page = await compilePage(await inputOf('<div id="w"><User userId="$_me.id" fallback="a guest" className="text-red-500" id="u" /><UserImage userId="$_me.id" size="lg" fallback="no picture" id="i" /></div>'), loadCompilerBuild());
+    const root = dom(page.html);
+    expect(root.querySelector('#u')?.getAttribute('class')).toBe('text-red-500');
+    expect(root.querySelector('#u')?.textContent).toBe('a guest');
+    expect(root.querySelector('#i')?.getAttribute('class')).toBe('text-muted-foreground');
+  });
   it('deck: the compiled column is today\'s render; the rail and present bar sit around it', async () => {
     const source = fixture('deck.jsx');
     const page = await compilePage(await inputOf(source, 'deck'), loadCompilerBuild());

@@ -14,6 +14,7 @@ import { IslandProvider } from '../context';
 import { fakeIsland } from './context.test';
 import { Input, Textarea, Segmented, Slider, Switch, DatePicker, BoundNative } from '../kit/controls';
 import { RECIPES, cn } from '../kit/recipes';
+import { peopleClasses } from '../kit/recipes/people';
 import { StoryRuntimeApp } from '@/lib/story-runtime/StoryRuntimeApp';
 import { createDataflowStore } from '@/lib/story-runtime/store';
 import { compiledSource } from '@/test/helpers/compiled';
@@ -107,6 +108,42 @@ describe('Files, as today\'s live listing renders it', () => {
       try {
         expect(raw(solidHost.firstElementChild!), variant).toEqual(raw(reactHost.firstElementChild!));
         expect(solidHost.querySelectorAll('svg[data-slot="icon"]')).toHaveLength(3);
+      } finally { dispose(); await act(async () => root.unmount()); }
+    }
+  });
+});
+
+describe('people, as today\'s live adapters render them', () => {
+  it('User, UserImage and UserHandle for a guest and for a known person: byte for byte, whatever the compile-time recipe class', async () => {
+    const { User, UserImage, UserHandle } = await import('../kit/people');
+    const { User: RUser } = await import('@/components/kit/user');
+    const { UserImage: RUserImage } = await import('@/components/kit/user-image');
+    const { UserHandle: RUserHandle } = await import('@/components/kit/user-handle');
+    const ada = { id: 'usr_ada', name: 'Ada Lovelace', handle: 'ada', image: null };
+    const cases: [string, Record<string, unknown>][] = [
+      ['guest', { userId: undefined, fallback: 'nobody', className: 'x' }],
+      ['known', { userId: 'usr_ada', fallback: 'nobody', className: 'x' }],
+      ['unknown id', { userId: 'usr_zed', fallback: 'nobody', className: 'text-red-500 size-20' }],
+      ['guest, conflicting class', { userId: undefined, fallback: 'nobody', className: 'text-red-500' }],
+    ];
+    for (const [label, props] of cases) for (const size of ['sm', 'md', 'lg'] as const) {
+      (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+      const card = props.userId === 'usr_ada' ? ada : undefined;
+      const reactHost = document.createElement('div');
+      const root = createRoot(reactHost);
+      await act(async () => { root.render(createElement('div', null,
+        createElement(RUser, { ...props, card, id: 'u' } as never), createElement(RUserImage, { ...props, card, size, id: 'i' } as never), createElement(RUserHandle, { ...props, card, id: 'h' } as never))); });
+      const island = { ...fakeIsland(), people: () => ({ usr_ada: ada }) } as never;
+      const solidHost = document.createElement('div');
+      // As the compiler emits them: the recipe's class, and every state's class (peopleClasses); the authored className is not passed.
+      const { className: _authored, ...api } = props;
+      const dispose = render(() => <IslandProvider value={island}><div>
+        <User {...api} id="u" class={cls('User', props)} classes={peopleClasses('User', props) as never} />
+        <UserImage {...api} size={size} id="i" class={cls('UserImage', { ...props, size })} classes={peopleClasses('UserImage', { ...props, size }) as never} />
+        <UserHandle {...api} id="h" class={cls('UserHandle', props)} classes={peopleClasses('UserHandle', props) as never} />
+      </div></IslandProvider>, solidHost);
+      try {
+        expect(raw(solidHost.firstElementChild!), `${label} ${size}`).toEqual(raw(reactHost.firstElementChild!));
       } finally { dispose(); await act(async () => root.unmount()); }
     }
   });
