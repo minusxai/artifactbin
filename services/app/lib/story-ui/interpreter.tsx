@@ -363,7 +363,7 @@ const BUTTON_TRIGGERS = new Set(['DialogTrigger', 'DialogClose']);
 const INTERACTIVE_TAGS = new Set(['button', 'a', 'input', 'select', 'textarea', 'label', 'Button', 'Select', 'Slider', 'DatePicker', 'Segmented', 'Switch']);
 
 /** Does this trigger already hold a control of its own — at any depth? */
-function wrapsControl(node: JsxElement): boolean {
+export function wrapsControl(node: JsxElement): boolean {
   return node.children.some((child) => child.type === 'element'
     && (INTERACTIVE_TAGS.has(child.tag) || INTERACTIVE_TAGS.has(child.tag.toLowerCase()) || wrapsControl(child)));
 }
@@ -421,7 +421,7 @@ function StaticBoundControl({ tag, props, bind, children }: BoundControlProps) {
   return React.createElement(tag, { ...props, disabled: true, 'data-mx-bound': bindings }, ...(React.Children.toArray(children)));
 }
 
-function rawBuildProps(
+export function rawBuildProps(
   attributes: JsxAttribute[],
   isComponent: boolean,
   tag: string,
@@ -519,7 +519,7 @@ function sanitizeStyleObject(value: unknown): Record<string, string | number> | 
 function templateSize(nodes: JsxNode[]): number {
   return nodes.reduce((sum,node)=>sum+1+(node.type==='element'?templateSize(node.children):0),0);
 }
-function templateIds(nodes: JsxNode[]): Set<string> {
+export function templateIds(nodes: JsxNode[]): Set<string> {
   const ids = new Set<string>();
   const visit = (nodes: JsxNode[]) => nodes.forEach(node => { if(node.type === 'element') { const id = node.attributes.find(a=>a.name==='id')?.value; if(id?.static && typeof id.json==='string') ids.add(id.json); visit(node.children); } });
   visit(nodes); return ids;
