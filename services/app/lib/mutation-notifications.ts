@@ -3,7 +3,7 @@ import type {Queryable} from '@artifactbin/contracts';
 
 /** ACL additions have no existing row to lock. Keep this short fence ordered across writers. */
 export async function lockMutationNotificationAuthority(tx:Queryable,mode:'read'|'write'='read'):Promise<void>{
- await tx.query(`LOCK TABLE artifact_shares, artifacts, relations, tokens, user_blocks, users IN ${mode==='read'?'SHARE':'SHARE ROW EXCLUSIVE'} MODE`);
+ await tx.query(`LOCK TABLE artifact_shares, artifacts, dataset_secrets, relations, tokens, user_blocks, users IN ${mode==='read'?'SHARE':'SHARE ROW EXCLUSIVE'} MODE`);
 }
 
 /** Disposable-account erasure also removes immutable job arguments and pending envelopes. */
