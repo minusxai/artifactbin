@@ -8,7 +8,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import { render } from 'solid-js/web';
-import { parityOf } from './kit-parity';
+import { parityOf, reactRender, shapeOf } from './kit-parity';
 import { IslandProvider } from '../context';
 import { fakeIsland } from './context.test';
 import { Badge, Alert, AlertTitle, AlertDescription, Card, CardHeader, CardTitle, CardContent, Button } from '../kit/basic';
@@ -86,5 +86,54 @@ describe('disclosure', () => {
       <Avatar id="av" class={cls('Avatar')}><AvatarImage src="/a.png" alt="A" class={cls('AvatarImage')} /><AvatarFallback class={cls('AvatarFallback')}>AB</AvatarFallback></Avatar>
     </>);
     expect(parityOf('<Collapsible id="col"><CollapsibleTrigger id="ct">More</CollapsibleTrigger><CollapsibleContent id="cc">Hidden text</CollapsibleContent></Collapsible><Popover><PopoverTrigger id="pt">Open</PopoverTrigger><PopoverContent id="pc">Popped</PopoverContent></Popover><Avatar id="av"><AvatarImage src="/a.png" alt="A" /><AvatarFallback>AB</AvatarFallback></Avatar>', host)).toEqual([]);
+  });
+});
+
+
+describe('compile-time structure recipes', () => {
+  const cases: Array<{ tag: string; markup: string; props?: Record<string, unknown>; path?: number[] }> = [
+    { tag: 'Badge', markup: '<Badge>new</Badge>' },
+    { tag: 'Badge', markup: '<Badge variant="secondary">new</Badge>', props: { variant: 'secondary' } },
+    { tag: 'Alert', markup: '<Alert>text</Alert>' },
+    { tag: 'Alert', markup: '<Alert variant="destructive">text</Alert>', props: { variant: 'destructive' } },
+    { tag: 'Button', markup: '<Button>Save</Button>' },
+    { tag: 'Button', markup: '<Button variant="outline" size="sm">Save</Button>', props: { variant: 'outline', size: 'sm' } },
+    { tag: 'TabsList', markup: '<Tabs defaultValue="one"><TabsList><TabsTrigger value="one">One</TabsTrigger></TabsList></Tabs>', path: [0] },
+    { tag: 'TabsList', markup: '<Tabs defaultValue="one"><TabsList variant="line"><TabsTrigger value="one">One</TabsTrigger></TabsList></Tabs>', props: { variant: 'line' }, path: [0] },
+    { tag: 'AccordionItem', markup: '<Accordion type="single"><AccordionItem value="one"><AccordionTrigger>One</AccordionTrigger></AccordionItem></Accordion>', path: [0] },
+    { tag: 'DialogContent', markup: '<Dialog><DialogContent aria-label="Example">Body</DialogContent></Dialog>', path: [0] },
+    { tag: 'DialogTrigger', markup: '<Dialog><DialogTrigger>Open</DialogTrigger></Dialog>', path: [0] },
+    { tag: 'DialogClose', markup: '<Dialog><DialogClose>Close</DialogClose></Dialog>', path: [0] },
+    { tag: 'PopoverTitle', markup: '<PopoverTitle>Body</PopoverTitle>' },
+    { tag: 'Avatar', markup: '<Avatar><AvatarFallback>AB</AvatarFallback></Avatar>' },
+    { tag: 'Avatar', markup: '<Avatar size="sm"><AvatarFallback>AB</AvatarFallback></Avatar>', props: { size: 'sm' } },
+  ];
+  for (const { tag, markup, props = {}, path = [] } of cases) it(`${tag} recipe matches today's class for ${JSON.stringify(props)}`, () => {
+    let node = shapeOf(reactRender(markup))[0]!;
+    for (const index of path) node = node.kids[index]!;
+    expect(cn(RECIPES[tag]!(props)).split(/\s+/).sort()).toEqual((node.attrs.class ?? '').split(/\s+/).sort());
+  });
+  it("merges an author className with today's class", () => {
+    const markup = '<Badge variant="secondary" className="rounded-none bg-lime-500">new</Badge>';
+    const expected = shapeOf(reactRender(markup))[0]!.attrs.class;
+    expect(cn(RECIPES.Badge!({ variant: 'secondary', className: 'rounded-none bg-lime-500' })).split(/\s+/).sort()).toEqual(expected.split(/\s+/).sort());
+  });
+});
+
+
+describe('dialog interaction with its own resolved recipe', () => {
+  it('opens, closes, and restores trigger focus', () => {
+    const { host, dispose } = mount(() => <Dialog><DialogTrigger id="open-dialog">Open</DialogTrigger><DialogContent aria-label="Example" class={cls('DialogContent')}><DialogClose class={cls('Button', { variant: 'outline' })}>Close</DialogClose></DialogContent></Dialog>);
+    const trigger = host.querySelector<HTMLButtonElement>('#open-dialog')!;
+    trigger.focus(); trigger.click();
+    const dialog = host.querySelector<HTMLDialogElement>('dialog')!;
+    expect(dialog.open).toBe(true);
+    dialog.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    expect(dialog.open).toBe(false);
+    trigger.click();
+    expect(dialog.open).toBe(true);
+    dialog.querySelector<HTMLButtonElement>('button')!.click();
+    expect(dialog.open).toBe(false);
+    dispose();
   });
 });
