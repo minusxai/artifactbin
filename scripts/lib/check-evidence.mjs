@@ -10,7 +10,7 @@ import { existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, readlinkSy
 import path from 'node:path';
 
 const sha = value => createHash('sha256').update(value).digest('hex');
-const GENERATED = ['services/app/public/story', 'services/app/lib/story-runtime/dist', 'services/app/public/fonts',
+const GENERATED = ['services/app/public/story', 'services/app/public/islands', 'services/app/lib/story-runtime/dist', 'services/app/public/fonts',
   'services/app/public/libraries', 'services/app/lib/data/story/story-font-manifest.json', 'services/cli/dist', 'services/cli/src/generated/teaching.json'];
 function descendants(root, file) {
   const full = path.join(root, file);

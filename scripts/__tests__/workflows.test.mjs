@@ -86,6 +86,7 @@ describe('ci.yml: one build, shared with the gates', () => {
       'services/app/dist',
       'services/app/lib/story-runtime/dist',
       'services/app/public/story',
+      'services/app/public/islands',
       'services/app/public/libraries',
       'services/app/server/routes.generated.ts',
       'services/cli/dist',
