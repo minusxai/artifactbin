@@ -126,12 +126,21 @@ export const KIT: Readonly<Record<string, KitMeta>> = {
 /** The rail's miniature stubs its embeds (StoryRuntimeApp PREVIEW_REGISTRY). */
 const PREVIEW_EMBEDS: Readonly<Record<string, string>> = { Question: 'chart', Number: '#', DataTable: 'table', Video: 'video' };
 const PREVIEW_STYLE = { display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%', height: '100%', minHeight: 120, border: '1px solid var(--border, rgba(128,128,128,0.35))', borderRadius: 6, background: 'color-mix(in srgb, var(--muted-foreground, gray) 6%, transparent)', font: '500 11px/1 var(--font-mono, ui-monospace, monospace)', letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--muted-foreground, graytext)' };
+/** The rail's miniature registry (StoryRuntimeApp PREVIEW_REGISTRY): today's static kit with each embed a labelled box. */
+const PREVIEW_COMPONENTS: StoryInterpreterOptions['components'] = {
+  ...STORY_UI_COMPONENTS,
+  ...Object.fromEntries(Object.entries(PREVIEW_EMBEDS).map(([tag, label]) => [tag, () => createElement('div', { style: PREVIEW_STYLE }, label)])),
+};
 /** Components whose HTML the React kit renders at compile time but whose BEHAVIOUR is not ported (reported as partial). None: every registered component with behaviour has its island. */
 const PARTIAL: ReadonlySet<string> = new Set<string>([]);
 /** Registered tags that render nothing (declarations, templates). */
 const INERT: ReadonlySet<string> = new Set(['Helmet', 'Value', 'Query', 'Import', 'Mutation', 'Column']);
 /** Registered components with behaviour: always an island root when ported (and the partial ones, which the browser would run). */
 const ISLAND_TAGS: ReadonlySet<string> = new Set([...Object.keys(KIT).filter((tag) => KIT[tag]!.island), ...PARTIAL]);
+/** A rail miniature served inert, put in place by the deck behaviour (lib/islands/deck RAIL_THUMB_ATTR, the same name). */
+const RAIL_THUMB_ATTR = 'data-mx-thumb';
+/** The skeleton's placeholder for a static subtree's HTML (bundle.server STATIC_SLOT, the same name). */
+const STATIC_SLOT = 'mx-static';
 /** The deck's framework-free behaviour chunk, by its manifest specifier. */
 const DECK_BEHAVIOR = '@mx/deck';
 
@@ -155,15 +164,23 @@ const attrsJsx = (attrs: Attr[]): string => attrs.map(([n, v]) => ` ${safeAttr(n
 
 interface P5Node { nodeName: string; tagName?: string; value?: string; attrs?: Array<{ name: string; value: string; prefix?: string }>; childNodes?: P5Node[]; content?: { childNodes: P5Node[] } }
 
+/** The element a SHELL's children are spliced at (a `<template>`: the HTML parser keeps it in place inside a table). */
+const HOLE_ATTR = 'data-mx-hole';
+
+/** How `htmlToJsx` writes a shell: the hole's content, and each element's attributes (a row template's go through `rt.rowAttrs`). */
+interface HtmlToJsxOptions { hole?: () => string; attrs?: (attrs: Attr[]) => string }
+
 /** Static HTML (from React's server renderer) → Solid JSX with every value a string literal. */
-export function htmlToJsx(html: string, svg = false): string {
+export function htmlToJsx(html: string, svg = false, options: HtmlToJsxOptions = {}): string {
   const frag = parseFragment(svg ? `<svg>${html}</svg>` : html) as unknown as P5Node;
   const nodes = svg ? frag.childNodes?.[0]?.childNodes ?? [] : frag.childNodes ?? [];
   const walk = (n: P5Node): string => {
     if (n.nodeName === '#text') return n.value ? `{${lit(n.value)}}` : '';
     if (n.nodeName === '#comment' || !n.tagName) return '';
+    if (options.hole && n.tagName === 'template' && n.attrs?.some((a) => a.name === HOLE_ATTR)) return options.hole();
     const tag = safeTag(n.tagName);
-    const attrs = (n.attrs ?? []).map((a) => ` ${safeAttr(a.prefix ? `${a.prefix}:${a.name}` : a.name)}={${lit(a.value)}}`).join('');
+    const pairs = (n.attrs ?? []).map((a): Attr => [safeAttr(a.prefix ? `${a.prefix}:${a.name}` : a.name), a.value]);
+    const attrs = options.attrs ? options.attrs(pairs) : pairs.map(([name, value]) => ` ${name}={${lit(value)}}`).join('');
     const kids = ((n.tagName === 'template' ? n.content?.childNodes : n.childNodes) ?? []).map(walk).join('');
     return VOID.test(tag) ? `<${tag}${attrs} />` : `<${tag}${attrs}>${kids}</${tag}>`;
   };
@@ -200,6 +217,13 @@ function readsDataNode(node: JsxNode): boolean {
   return node.children.some(readsDataNode);
 }
 
+/**
+ * A component tag the reader draws nothing for (legacy markup such as `<Param>`): in neither the reader's
+ * registry (StoryRuntimeApp RUNTIME_REGISTRY: the story registry plus the kit's store adapters) nor a
+ * declaration, nor a structural node — the interpreter's renderNode returns null for it.
+ */
+const unregistered = (node: JsxElement): boolean => node.isComponent && !node.control && !INERT.has(node.tag) && !STORY_UI_COMPONENTS[node.tag] && !KIT[node.tag];
+
 const isTableParts = (node: JsxElement): boolean => node.children.every((c) => (c.type === 'text' ? !c.value.trim() : c.type === 'element' && ['tr', 'td', 'th'].includes(c.tag)));
 
 /** The managed frame's author content compiled as inert data (lib/story/managed-iframe), or null when it is refused. */
@@ -232,6 +256,11 @@ export interface Generated extends GeneratedSources {
   unported: string[];
   partial: string[];
   behaviors: string[];
+  /**
+   * The skeleton's static subtrees as today's React render, in order: the skeleton holds a
+   * `<mx-static data-i="n">` for each, which bundle.server splices after rendering it (`spliceStatics`).
+   */
+  statics: string[];
 }
 
 /** One version's facts the generator reads (CompileInput without the build). */
@@ -245,11 +274,33 @@ export function generate(input: GenerateInput): Generated {
   const partial = new Set<string>();
   const unported = new Set<string>();
   const kitUsed = { skeleton: new Set<string>(), islands: new Set<string>() };
+  const statics: string[] = [];
+  /** A skeleton static subtree's HTML, carried beside the skeleton (never through JSX, Babel and Solid's server renderer). */
+  const staticSlot = (html: string): string => { statics.push(html); return `<${STATIC_SLOT} data-i={${lit(String(statics.length - 1))}}></${STATIC_SLOT}>`; };
+  /**
+   * A static subtree's names, checked as the JSX path checks them (a tag outside the grammar refuses the compile;
+   * React drops a malformed attribute name itself), and the registered components it renders, reported.
+   */
+  const accountStatic = (node: JsxNode): void => {
+    if (!isElement(node)) return;
+    if (node.isComponent) { if (STORY_UI_COMPONENTS[node.tag]) reactStatic.add(node.tag); } else if (!node.control) safeTag(node.tag);
+    node.children.forEach(accountStatic);
+  };
+  const grids = new WeakMap<JsxNode, boolean>();
+  /** Does this subtree hold a Grid (a compile-time macro, emitted by emitGrid)? */
+  const holdsGrid = (node: JsxNode): boolean => {
+    if (!isElement(node)) return false;
+    const known = grids.get(node);
+    if (known !== undefined) return known;
+    const value = node.tag === 'Grid' || node.tag === 'GridItem' || node.children.some(holdsGrid);
+    grids.set(node, value);
+    return value;
+  };
   const needs = new WeakMap<JsxNode, boolean>();
   const needsBrowser = (node: JsxNode): boolean => {
     const known = needs.get(node);
     if (known !== undefined) return known;
-    const value = selfDynamic(node) || (isElement(node) && node.children.some(needsBrowser));
+    const value = !(isElement(node) && unregistered(node)) && (selfDynamic(node) || (isElement(node) && node.children.some(needsBrowser)));
     needs.set(node, value);
     return value;
   };
@@ -270,8 +321,12 @@ export function generate(input: GenerateInput): Generated {
     ctx.island?.kit.add(tag);
   };
 
-  /** Render one static subtree with the React kit (the interpreter, its registry, the glyph provider), with its real AST paths. */
-  function reactStaticJsx(node: JsxElement, path: string, ctx: Ctx): string {
+  /**
+   * Render one subtree with the React kit (the interpreter, its registry, the glyph provider), with its real AST
+   * paths. `render` picks the registry and the values: the static kit at no values by default; the rail's
+   * miniature registry at the declared values for a slide thumbnail.
+   */
+  function reactStaticHtml(node: JsxElement, path: string, ctx: Ctx, render: { components: StoryInterpreterOptions['components']; values: Record<string, unknown> } = { components: STORY_UI_COMPONENTS, values: {} }): string {
     const prefix = path.split('.');
     // The runtime's own decoration (StoryRuntimeApp decorateElement): `ref:` sources resolved, then the path rebased.
     const rebase: Decorate = (element, n, p) => {
@@ -280,9 +335,39 @@ export function generate(input: GenerateInput): Generated {
     };
     const decorate: Decorate = ctx.preview ? (element, n, p) => ctx.preview!(rebase(element, n, p) as ReactElement, n, p) : rebase;
     // React's hoisted image preloads are dropped: a compiled page names its preloads in the head.
-    const html = renderToStaticMarkup(createElement(IconGlyphProvider, { value: input.glyphs ?? {} }, renderStoryNodes([node], { values: {}, components: STORY_UI_COMPONENTS, decorateElement: decorate })))
+    return renderToStaticMarkup(createElement(IconGlyphProvider, { value: input.glyphs ?? {} }, renderStoryNodes([node], { values: render.values, components: render.components, decorateElement: decorate })))
       .replace(/<link rel="preload"[^>]*>/g, '');
-    return htmlToJsx(html, !!ctx.svg);
+  }
+  const reactStaticJsx = (node: JsxElement, path: string, ctx: Ctx): string => htmlToJsx(reactStaticHtml(node, path, ctx), !!ctx.svg);
+
+  /**
+   * A registered component with no Solid port that the browser must reach INTO (it holds an island, a `$`
+   * value, or sits in a row): a container with no behaviour of its own, so it compiles as a SHELL. Today's
+   * React kit renders the component at compile time around a hole, and its children compile into the hole
+   * — islands inside hydrate, static parts stay HTML. Its own props are rendered without a row, so a row
+   * template (`{$_row.f}`) stays literal in its attributes and `rt.rowAttrs` fills it per row, exactly as a
+   * native element in a row is compiled. A component that draws no children (an `<Icon>`'s glyph) is its
+   * shell alone, as today's render drops them too.
+   */
+  function shellJsx(node: JsxElement, path: string, mode: Mode, ctx: Ctx): string {
+    reactStatic.add(node.tag);
+    const hole: JsxElement = { type: 'element', tag: 'template', isComponent: false, attributes: [{ name: HOLE_ATTR, value: { static: true, json: '' }, start: node.start, end: node.start }], children: [], selfClosing: true, start: node.start, end: node.start };
+    let html: string;
+    let holed = node.children.length > 0;
+    try {
+      html = reactStaticHtml({ ...node, children: holed ? [hole] : [] }, path, ctx);
+    } catch (error) {
+      if (!holed) throw error;
+      // A component whose element carries markup of its own cannot also take children (React refuses both).
+      holed = false;
+      html = reactStaticHtml({ ...node, children: [] }, path, ctx);
+    }
+    const children = (): string => node.children.map((c, i) => emit(c, `${path}.${i}`, mode, ctx)).join('');
+    const row = ctx.row;
+    return htmlToJsx(html, !!ctx.svg, {
+      ...(holed ? { hole: children } : {}),
+      ...(row ? { attrs: (attrs: Attr[]) => ` {...rt.rowAttrs(${json(Object.fromEntries(attrs))}, ${row}, ${ctx.scope})}` } : {}),
+    });
   }
 
   /** Emit one node as a JSX child. */
@@ -308,10 +393,17 @@ export function generate(input: GenerateInput): Generated {
       return `<rt.When test={${json(node.control.test)}} row={${ctx.row ?? 'undefined'}}${node.control.kind === 'conditional' ? ` fallback={<>${no}</>}` : ''}>{<>${yes}</>}</rt.When>`;
     }
     if (INERT.has(node.tag)) return '';
+    // An unregistered component (legacy markup such as `<Param>`) renders nothing, as the interpreter's renderNode does.
+    if (unregistered(node)) return '';
     // A managed frame whose content is refused renders nothing (the interpreter's renderNode), island or not.
     if (node.tag === 'Iframe' && !ctx.row && managedFrameOf(node) === null) return '';
+    // A static subtree of the SKELETON is today's React render (the interpreter, parity by construction), carried as
+    // HTML and spliced in after the skeleton renders: no JSX re-parse, no Babel, no Solid render of static markup —
+    // most of a large document's compile. Never inside an island (hydration walks its template) and never across a
+    // Grid (a compile-time macro, emitGrid).
+    if (mode === 'static' && !ctx.row && !needsBrowser(node) && !holdsGrid(node)) { accountStatic(node); return staticSlot(reactStaticHtml(node, path, ctx)); }
     // An island root in the skeleton: rendered by its own island component, spliced in by the server.
-    if (mode === 'static' && !ctx.preview && !PARTIAL.has(node.tag) && needsBrowser(node) && (selfDynamic(node) || mustPromote(node))) {
+    if (mode === 'static' && !PARTIAL.has(node.tag) && needsBrowser(node) && (selfDynamic(node) || mustPromote(node))) {
       const island: IslandBuild = { id: islands.length, path, source: '', kit: new Set(), readsData: !!input.flow && readsDataNode(node) };
       islands.push(island);
       island.source = emitElement(node, path, 'island', { row: null, svg: !!ctx.svg, grid: ctx.grid, island });
@@ -324,7 +416,6 @@ export function generate(input: GenerateInput): Generated {
     const children = (inner: Ctx = ctx): string => node.children.map((c, i) => emit(c, `${path}.${i}`, mode, inner)).join('');
     if (node.tag === 'For') return emitFor(node, path, ctx);
     if (node.tag === 'Grid' || node.tag === 'GridItem') return emitGrid(node, path, mode, ctx);
-    if (ctx.preview && PREVIEW_EMBEDS[node.tag]) return `<div${attrsJsx(domAttrs('div', { style: PREVIEW_STYLE }))}>{${lit(PREVIEW_EMBEDS[node.tag])}}</div>`;
     if (node.isComponent) {
       const meta = KIT[node.tag];
       // A STATIC registered component: today's React kit renders it AT COMPILE TIME (parity by
@@ -332,6 +423,7 @@ export function generate(input: GenerateInput): Generated {
       // ports it, inside an island when it has no port. Nothing of it ever reaches a reader as code.
       const staticHere = !ctx.row && !!STORY_UI_COMPONENTS[node.tag] && (!needsBrowser(node) || PARTIAL.has(node.tag));
       if (staticHere && (!meta || mode === 'static')) { (PARTIAL.has(node.tag) ? partial : reactStatic).add(node.tag); return reactStaticJsx(node, path, ctx); }
+      if (!meta && STORY_UI_COMPONENTS[node.tag]) return shellJsx(node, path, mode, ctx);
       if (!meta) { unported.add(node.tag); return `<div data-mx-unported={${lit(node.tag)}} data-mx-ast={${lit(path)}}></div>`; }
       useKit(node.tag, mode, ctx);
       const props = rawBuildProps(node.attributes, true, node.tag, path, undefined, {});
@@ -370,7 +462,6 @@ export function generate(input: GenerateInput): Generated {
       const cls = meta.dom === 'identity' ? null : recipe ? cn(recipe({ ...props, ...(inGrid ? { inGridItem: true } : {}) })) : typeof props.className === 'string' ? props.className : null;
       let dom: Props = { ...props };
       for (const k of [...(meta.api ?? []), 'className']) delete dom[k];
-      if (ctx.preview) dom = (ctx.preview(createElement('div', dom), node, path) as ReactElement<Props>).props;
       if (meta.dom) dom = Object.fromEntries(Object.entries(dom).filter(([k]) => k === 'id' || k === AST));
       // A `<Question>`'s chart box: the assembler puts the snapshot's drawing inside it (contract CHART_SLOT_ATTR).
       if (node.tag === 'Question') dom[CHART_SLOT_ATTR] = typeof dom.id === 'string' && dom.id ? dom.id : path;
@@ -398,7 +489,6 @@ export function generate(input: GenerateInput): Generated {
     let props = rawBuildProps(node.attributes, false, node.tag, path, undefined, {});
     const patch = resolveRefProps(node, props, refData);
     if (patch) props = { ...props, ...patch };
-    if (ctx.preview) props = (ctx.preview(createElement(tag, props), node, path) as ReactElement<Props>).props;
     const inner = lower === 'svg' ? { ...ctx, svg: true } : ctx;
     const attrs = domAttrs(tag, props);
     const open = ctx.row ? `<${tag} {...rt.rowAttrs(${json(Object.fromEntries(attrs))}, ${ctx.row}, ${ctx.scope})}>` : `<${tag}${attrsJsx(attrs)}>`;
@@ -465,9 +555,15 @@ export function generate(input: GenerateInput): Generated {
   let root = `<div class="mx-doc">${body}</div>`;
   if (deck) {
     const allocate = createPreviewIdentityAllocator(nodes, '_R_1_');
+    const previewValues = declaredValues(input.flow);
     const rail = slides.map((slide) => {
-      const decorate = allocate([slide.node], slide.path);
-      const thumb = emit(slide.node, '0', 'static', { row: null, preview: decorate });
+      // Drawn as today's rail draws it (StoryRuntimeApp SlideRail): the interpreter over the miniature registry at
+      // the declared values, whatever the slide holds — a miniature never hydrates.
+      const html = reactStaticHtml(slide.node, '0', { row: null, preview: allocate([slide.node], slide.path) }, { components: PREVIEW_COMPONENTS, values: previewValues });
+      // A miniature holding a button sits in the rail row's own button: parsed in place, the inner button would close
+      // the row. Served inert in a `<template>` (a parser scope boundary) and put in place by the deck behaviour
+      // (lib/islands/deck RAIL_THUMB_ATTR), so the rail ends as the tree today's rail renders.
+      const thumb = /<button\b/i.test(html) ? `<template ${RAIL_THUMB_ATTR}="">${staticSlot(html)}</template>` : staticSlot(html);
       return `<button type="button" class="mx-rail-row" aria-label={${lit(`Go to slide ${slide.index + 1}: ${slide.title}`)}} aria-current={${lit(String(slide.index === 0))}}><span class="mx-rail-label"><span class="mx-rail-index">{${lit(String(slide.index + 1))}}</span><span class="mx-rail-title">{${lit(slide.title)}}</span></span><span class="mx-rail-thumb" aria-hidden="true"><div style="--mx-vh:800px">${thumb}</div></span></button>`;
     }).join('');
     root = `<div class="mx-deck"><nav class="mx-rail" aria-label="Slides">${rail}</nav>${root}<div class="mx-present" aria-label="Slide controls"><button type="button" aria-label="Previous slide">{"‹"}</button><span class="mx-present-count" aria-label="Slide position">{${lit(`1 / ${slides.length}`)}}</span><button type="button" aria-label="Next slide">{"›"}</button><button type="button" aria-label="Present">{"present"}</button></div></div>`;
@@ -493,6 +589,7 @@ export function generate(input: GenerateInput): Generated {
     unported: [...unported].sort(),
     partial: [...partial].sort(),
     behaviors: deck ? [DECK_BEHAVIOR] : [],
+    statics,
   };
 }
 

@@ -136,10 +136,9 @@ jobs:
   #
   # FOUR shards. Three was the measured optimum on 2026-09-04 (the files summed to
   # ~337s of work, the slowest single file is 36s, and vitest shards by FILE
-  # COUNT rather than duration), but the project grew: by 2026-09-28 each of the
-  # three jobs ran 238–243s against the 240s job budget — 83s of CLI build every
-  # shard pays, 87–108s of tests, plus integration (shard 1) or the CLI suite
-  # (shard 3). A fourth shard takes ~25s of tests off each job.
+  # COUNT rather than duration). Only shard 3 runs the CLI source suite, so only
+  # that shard needs the CLI build. The other three shards run source tests and
+  # shard 1 also runs the browser/Docker integration suite.
   node:
     needs: [ plan ]
     if: needs.plan.outputs.node == 'true'
@@ -186,7 +185,8 @@ jobs:
         run: npx playwright install chromium
       - if: matrix.shard == 1
         run: docker pull postgres:17-alpine
-      - run: npm run build -w services/cli
+      - if: matrix.shard == 3 && needs.plan.outputs.cli-tests == 'true'
+        run: npm run build -w services/cli
       - env:
           CI__PLAN: ${{ needs.plan.outputs.plan }}
         run: node scripts/ci.mjs node ${{ matrix.shard }}/4
@@ -316,16 +316,19 @@ jobs:
           retention-days: 1
           if-no-files-found: error
 
+  # On PRs #158 and #159, five shards spent up to 215s in Vitest and 25s
+  # provisioning Chromium. Seven spreads the growing API file set while the
+  # independent runners keep the run's critical path at the slowest shard.
   api:
     needs: [ plan ]
     if: needs.plan.outputs.api == 'true'
-    name: api tests (${{ matrix.shard }}/5)
+    name: api tests (${{ matrix.shard }}/7)
     runs-on: ubuntu-latest
     timeout-minutes: 10
     strategy:
       fail-fast: false
       matrix:
-        shard: [ 1, 2, 3, 4, 5 ]
+        shard: [ 1, 2, 3, 4, 5, 6, 7 ]
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
@@ -362,7 +365,7 @@ jobs:
         run: npx playwright install --with-deps chromium
       - if: steps.playwright.outputs.cache-hit == 'true'
         run: npx playwright install chromium
-      - run: npx vitest run --project=api --shard=${{ matrix.shard }}/5
+      - run: npx vitest run --project=api --shard=${{ matrix.shard }}/7
 
   # THE SHARDS RUN WHAT `build` BUILT. Every shard used to build the app and the CLI for itself —
   # the same bytes, six times over, in a job that already had to wait for nothing. It waits for

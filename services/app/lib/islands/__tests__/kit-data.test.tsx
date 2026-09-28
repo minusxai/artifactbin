@@ -6,7 +6,7 @@
  * table's rows and writes its value, a DataTable renders rows and sorts, a Question shows its
  * server-drawn chart until its table changes and loads Vega only then.
  */
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { render } from 'solid-js/web';
 import { createSignal } from 'solid-js';
 import { parityOf } from './kit-parity';
@@ -25,6 +25,8 @@ const regions: TableResult = { rows: [{ region: 'East' }, { region: 'West' }], c
 const parityData = { tables: { monthly, regions }, values: { region: 'West' } };
 const island = () => { const i = fakeIsland({ region: 'West' }); i.table = (n) => (n === 'monthly' ? monthly : n === 'regions' ? regions : undefined); i.tableSnapshot = i.table; return i; };
 const mount = (ctx = island(), view: () => import('solid-js').JSX.Element) => { const host = document.createElement('div'); document.body.append(host); const unmount = render(() => <IslandProvider value={ctx}>{view()}</IslandProvider>, host); return { host, dispose: () => { unmount(); host.remove(); } }; };
+beforeEach(() => document.documentElement.setAttribute('data-mx-ready', ''));
+afterEach(() => document.documentElement.removeAttribute('data-mx-ready'));
 
 describe('Number', () => {
   it('aggregates and formats like today\'s InlineNumber', () => {
@@ -98,8 +100,7 @@ describe('Question', () => {
     expect(host.querySelector('[data-mx-chart-state="ready"] svg[data-drawn]')).toBeTruthy();
     expect(loadChart).not.toHaveBeenCalled();
     host.querySelector('[data-mx-chart-state]')!.dispatchEvent(new Event('pointerenter', { bubbles: true }));
-    await Promise.resolve();
-    expect(loadChart).toHaveBeenCalledTimes(1);
+    await vi.waitFor(() => expect(loadChart).toHaveBeenCalledTimes(1));
   });
   it('loads after a new table snapshot lands after boot', async () => {
     const ctx = island();
@@ -120,8 +121,7 @@ describe('Question', () => {
     const { host, dispose } = mount(ctx, () => <Question data="$monthly" viz={{ kind: 'vega-lite', spec: { mark: 'line' } }} drawn={{ svg: '<svg></svg>', table: 'monthly', rows: 'r1' }} />);
     expect(ctx.loadChart).not.toHaveBeenCalled();
     host.querySelector('[data-mx-chart-state]')!.dispatchEvent(new Event('pointerenter', { bubbles: true }));
-    await Promise.resolve();
-    expect(ctx.loadChart).toHaveBeenCalledTimes(1);
+    await vi.waitFor(() => expect(ctx.loadChart).toHaveBeenCalledTimes(1));
     expect(mountChart).toHaveBeenCalledWith({
       element: host.querySelector('[role="graphics-document"]'),
       envelope: { version: 2, source: { kind: 'vega-lite', grammar: 'vega-lite@6', spec: { mark: 'line' } }, dataBindings: null, viewParams: null, interactions: null, assets: null },
@@ -231,9 +231,21 @@ describe('data widget parity with the live reader', () => {
     expect(host.querySelectorAll('#t [aria-label="Data table"] tbody tr')).toHaveLength(2);
   });
 
-  it('Question draws a chart the server did not draw at once, as today\'s reader draws every chart', async () => {
+  it('Question draws a chart the server did not draw after readiness', async () => {
     const loadChart = vi.fn(async () => ({ mountChart: () => ({ destroy() {} }) }));
     mount(undefined, () => <Question data="$monthly" viz={chart} chart={loadChart} />);
+    await vi.waitFor(() => expect(loadChart).toHaveBeenCalledTimes(1));
+  });
+
+  it('Question leaves the placeholder and keeps Vega unloaded until reader readiness', async () => {
+    document.documentElement.removeAttribute('data-mx-ready');
+    const loadChart = vi.fn(async () => ({ mountChart: () => ({ destroy() {} }) }));
+    const { host } = mount(undefined, () => <Question data="$monthly" viz={chart} chart={loadChart} />);
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    expect(loadChart).not.toHaveBeenCalled();
+    expect(host.querySelector('[data-mx-chart-state]')?.getAttribute('data-mx-chart-state')).toBe('pending');
+    document.documentElement.setAttribute('data-mx-ready', '');
+    document.dispatchEvent(new Event('mx:ready'));
     await vi.waitFor(() => expect(loadChart).toHaveBeenCalledTimes(1));
   });
 
