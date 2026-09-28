@@ -42,9 +42,13 @@ function normalize(raw: unknown, table?: TableResult): Option[] {
   return Array.isArray(raw) ? raw.map(x => typeof x === 'object' && x !== null ? { value: String(x.value ?? ''), label: String(x.label ?? x.value ?? '') } : { value: String(x), label: String(x) }) : [];
 }
 function options(p: Props) { const n = nameOf(p,'options'); return normalize(p.options, n ? useIsland().table(n) : undefined); }
+const nullable = (p: Props) => { const name = nameOf(p); const flow = useIsland().store()?.flow; if (!name) return false; if (!flow) return true;
+  const decl = flow.values.find((v) => v.kind === 'scalar' && v.name === name); return (decl?.default ?? null) === null; };
 const choiceValue = (p: Props) => nameOf(p) ? valueOf(p) == null ? null : String(valueOf(p)) : lit(p.value);
 export function Segmented(p: Props) {
-  const island = useIsland(); const entries = () => [...(nameOf(p) ? [{ value: null, label: str(p.placeholder) ?? 'All' }] : []), ...options(p)];
+  // "All" only when the bound Value's declared default is null (StoryRuntimeApp useScalarControl `nullable`);
+  // without the declarations (no store), the static face's rule: a bound value may offer it.
+  const island = useIsland(); const entries = () => [...(nullable(p) ? [{ value: null, label: str(p.placeholder) ?? 'All' }] : []), ...options(p)];
   return <Shell authored={p}><div role="group" aria-label={str(p.label)} class="inline-flex w-fit items-center gap-0.5 rounded-md border border-input bg-muted/40 p-0.5 shadow-xs"><For each={entries()}>{o =>
     <button type="button" aria-pressed={o.value === choiceValue(p)} disabled={!active(p)} on:click={() => { const n = nameOf(p); if (n) island.setValue(n,o.value,undefined); }}
       class={join('h-8 rounded-[5px] px-3 text-sm transition-colors disabled:cursor-not-allowed disabled:opacity-50',o.value === choiceValue(p) ? 'bg-background text-foreground shadow-xs' : 'text-muted-foreground hover:text-foreground')}>{o.label}</button>}</For></div></Shell>;

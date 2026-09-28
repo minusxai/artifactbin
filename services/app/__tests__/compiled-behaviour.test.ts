@@ -1,0 +1,57 @@
+/**
+ * THE COMPILED PAGE BEHAVES LIKE TODAY'S (w3-behaviour). Real routes, the harness's database, the
+ * reader switch in shadow for this file.
+ *
+ * - A reader who holds a credential for the document — an account session, or a held connection (the
+ *   guest owner who made it) — gets the page's credentialed doors (`signedIn` in the data island), so
+ *   the store's write check answers for them, as today's reader page does; a guest does not.
+ */
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
+import { JSDOM } from 'jsdom';
+import { useAppHarness, request, agentCookie } from '@/__tests__/harness';
+import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
+import { createAppServer } from '@/server/app';
+import { mintToken } from '@/lib/tokens';
+import { drainPreparedPageWarmups } from '@/lib/story/prepared-page.server';
+import { setCompiledReaderFlagForTests } from '@/lib/compiled-page/reader-mode';
+import { ISLAND_DATA_ID, READER_MODE_HEADER } from '@/lib/compiled-page/contract';
+import type { IslandPageData } from '@/lib/islands/contract';
+
+vi.mock('@/auth', () => ({ auth: async () => null }));
+useAppHarness();
+const app = createAppServer({ indexHtml: async () => '<!doctype html><html><head><title>x</title></head><body><div id="root"></div></body></html>' });
+
+beforeAll(() => setCompiledReaderFlagForTests('shadow'));
+afterAll(() => setCompiledReaderFlagForTests(null));
+
+async function publish(token: string, body: Record<string, unknown>): Promise<string> {
+  const made = await createArtifactRoute(request('/api/artifacts', { method: 'POST', token, json: { visibility: 'unlisted', ...body } }));
+  if (made.status !== 201) throw new Error(await made.text());
+  const id = ((await made.json()) as { id: string }).id;
+  await drainPreparedPageWarmups();
+  return id;
+}
+const islandData = (html: string): IslandPageData => JSON.parse(new JSDOM(html).window.document.getElementById(ISLAND_DATA_ID)?.textContent ?? 'null') as IslandPageData;
+
+const POLL = (ds: string) => '<Helmet><Value name="choice" type="string" default="ramen" />'
+  + `<Import name="votes" src="ref:${ds}" /><Mutation name="vote">{\`insert into votes.rows (choice) values ($choice)\`}</Mutation></Helmet>`
+  + '<div><Button run="$vote">Vote</Button></div>';
+
+describe('a held connection is a credentialed reader on the compiled app page', () => {
+  it('the guest owner\'s page carries signedIn (the session doors); a guest\'s does not', async () => {
+    const t = await mintToken('behaviour');
+    const made = await createArtifactRoute(request('/api/artifacts', { method: 'POST', token: t.token, json: { title: 'votes', dataset: [{ choice: 'ramen' }], columns: [{ name: 'choice', type: 'string' }], access: 'readwrite', visibility: 'unlisted' } }));
+    const ds = ((await made.json()) as { id: string }).id;
+    const id = await publish(t.token, { title: 'Poll', markup: POLL(ds) });
+
+    const guest = await app.request(`/a/${id}?reader=compiled`, { headers: { accept: 'text/html' } });
+    expect(guest.headers.get(READER_MODE_HEADER)).toBe('compiled');
+    expect(islandData(await guest.text()).signedIn).toBe(false);
+
+    const held = await app.request(`/a/${id}?reader=compiled`, { headers: { accept: 'text/html', cookie: await agentCookie([t.id]) } });
+    expect(held.headers.get(READER_MODE_HEADER)).toBe('compiled');
+    const data = islandData(await held.text());
+    expect(data.signedIn).toBe(true);
+    expect(data.mutateUrl).toBe(`/a/${id}/mutate`);
+  });
+});

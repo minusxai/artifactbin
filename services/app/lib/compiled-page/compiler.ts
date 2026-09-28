@@ -100,7 +100,7 @@ export const KIT: Readonly<Record<string, KitMeta>> = {
   DataTable: { mod: 'data', island: true, api: ['data', 'columns', 'sort', 'height', 'sticky', 'rowKey', 'templates'], dom: 'identity', grid: true, noChildren: true },
   Files: { mod: 'files', island: true, api: ['data', 'variant', 'glyphs'], dom: 'identity' },
   Select: { mod: 'data', island: true, api: ['label', 'placeholder', 'value', 'options'] },
-  Button: { mod: 'basic', api: ['variant', 'size'] },
+  Button: { mod: 'basic', api: ['variant', 'size', 'run', 'set', 'args'] },
   Mermaid: { mod: 'mermaid', island: true, api: ['code', 'title', 'colorMode'], grid: true },
   Input: { mod: 'controls', island: true, api: ['label', 'placeholder', 'value', 'type', 'min', 'max', 'step', 'aria-label'] },
   Textarea: { mod: 'controls', island: true, api: ['label', 'placeholder', 'value', 'rows', 'aria-label'] },
@@ -355,7 +355,9 @@ export function generate(input: GenerateInput): Generated {
       const apiJsx = Object.entries(api).map(([k, v]) => ` ${safeAttr(k)}={${typeof v === 'string' ? lit(v) : json(v)}}`).join('');
       const clsJsx = cls ? ` class={${lit(cls)}}` : '';
       const tag = safeTag(node.tag);
-      if (ctx.row) return `<${tag}${apiJsx}${clsJsx} {...rt.rowAttrs(${json(Object.fromEntries(attrs))}, ${ctx.row}, ${ctx.scope})}>${children()}</${tag}>`;
+      // A row action writes with its row (interpreter rowAction → StoryRuntimeApp RuntimeRowAction).
+      const rowJsx = node.tag === 'Button' && (api.run !== undefined || api.set !== undefined) ? ` row={${ctx.row}} rowScope={${ctx.scope}}` : '';
+      if (ctx.row) return `<${tag}${apiJsx}${rowJsx}${clsJsx} {...rt.rowAttrs(${json(Object.fromEntries(attrs))}, ${ctx.row}, ${ctx.scope})}>${children()}</${tag}>`;
       return `<${tag}${apiJsx}${clsJsx}${attrsJsx(attrs)}>${meta.noChildren ? '' : children()}</${tag}>`;
     }
     const lower = node.tag.toLowerCase();

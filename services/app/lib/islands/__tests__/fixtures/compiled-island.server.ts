@@ -8,6 +8,7 @@
  */
 import { generate, declaredValues } from '@/lib/compiled-page/compiler';
 import { buildDocumentModules } from '@/lib/compiled-page/bundle.server';
+import { loadCompilerBuild } from '@/lib/compiled-page/build.server';
 import type { ModuleRef, ModuleStore } from '@/lib/compiled-page/contract';
 import { parseJsx, type JsxNode } from '@/lib/jsx';
 import { dataflowOf, splitHelmet } from '@/lib/story/helmet';
@@ -28,7 +29,8 @@ const store: ModuleStore = {
 };
 const generated = generate({ nodes: parsed.nodes, colorMode: 'light', template: null, chrome: true, refData: {}, flow });
 const built = await buildDocumentModules(generated, {
-  build: { id: 'test', manifest: { '@mx/rt': '/islands/rt.js', '@mx/boot': '/islands/boot.js' } },
+  // `--shipped`: the shared island build's real manifest, for islands that import kit families.
+  build: process.argv[3] === '--shipped' ? loadCompilerBuild() : { id: 'test', manifest: { '@mx/rt': '/islands/rt.js', '@mx/boot': '/islands/boot.js' } },
   flow, values: declaredValues(flow), store, ssrStore: store,
 });
 process.stdout.write(JSON.stringify({ html: built.html, islands: generated.islands, islandRefs: generated.islandRefs, flow }));

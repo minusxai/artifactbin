@@ -257,7 +257,9 @@ export async function artifactPageAnswer(request: Request, id: string, options: 
       at,
       search: new URL(request.url).search,
       drawings: engineRequested(request.url) ? null : 'inline',
-      signedIn: kind === 'account',
+      // Any held credential: an account session, or the connection a guest owner holds. Either one is
+      // who the write check and a private query answer for, so the page uses the credentialed doors.
+      signedIn: kind !== 'none',
       doors: {
         queryUrl: queryPath(artifact.id),
         ...(!at && declaresMutations(row.source) ? { mutateUrl: mutatePath(artifact.id) } : {}),
