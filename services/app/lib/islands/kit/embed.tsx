@@ -30,14 +30,13 @@ const servedStyle = (css: string) => ({ 'attr:style': css }) as JSX.HTMLAttribut
 
 /**
  * The managed asset door for this page: the deployment's asset origin (compiled in) and the page's own
- * asset import door (the data island's `assetsUrl`, made absolute against the page's own address). None without an origin.
+ * asset import door (the data island's `assetsUrl`, made absolute against the page's own address).
  */
-function assetsConfig(origin: unknown, doc: Document): ManagedAssetsConfig | undefined {
-  if (typeof origin !== 'string' || !origin) return undefined;
+export function assetsConfig(origin: unknown, doc: Document): ManagedAssetsConfig | undefined {
   let door: string | undefined;
   try { door = (JSON.parse(doc.getElementById(ISLAND_DATA_ID)?.textContent || '{}') as { assetsUrl?: string }).assetsUrl; } catch { door = undefined; }
   if (!door) return undefined;
-  return { origin, resolveUrl: new URL(door, doc.baseURI).href };
+  return { origin: typeof origin === 'string' && origin ? origin : new URL(doc.baseURI).origin, resolveUrl: new URL(door, doc.baseURI).href };
 }
 
 /** `<Iframe>`: the managed frame's box (today's `data-mx-managed-frame` element), the author realm mounted in it. */

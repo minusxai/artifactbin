@@ -2,6 +2,7 @@ import { createChecker } from './lib/assert.mjs';
 import {fixtureFetch as fetch} from './lib/fixture-http.mjs';
 import { checkWebImport } from './lib/web-import-cases.mjs';
 import { artifactDocument } from './lib/artifact-document.mjs';
+import { compiledReader } from './lib/gate-reader.mjs';
 /**
  * Gate: an external URL in a document is OURS by the time a reader sees it.
  *
@@ -542,7 +543,7 @@ await checkWebImport(B, browser, WEB, check);
   await loginViaEmail(guest, B, sink, guestEmail);
   const beforeGuest = hits.filter((h) => h === '/pic3.png').length;
   await guest.goto(`${B}/a/${mine.id}`, { waitUntil: 'networkidle' });
-  const seenByGuest = await paints(await artifactDocument(guest, { timeout: 30_000 }));
+  const seenByGuest = await paints(compiledReader ? guest.mainFrame() : await artifactDocument(guest, { timeout: 30_000 }));
   check(seenByGuest.natural[0] === 48,
     `bound: an INVITED VIEWER of the private document sees the picture too, through the shell (${JSON.stringify(seenByGuest)})`);
   check(hits.filter((h) => h === '/pic3.png').length === beforeGuest,

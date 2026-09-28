@@ -116,6 +116,12 @@ export const COMPILED_LEGS = Object.freeze([
   { gate: 'hydration', timeoutMs: 190_000, disabled: 'its takeover legs 1–3 assert React hydrating the legacy inline story; the compiled takeover (leg 4) already runs in the plain gate on ?reader=compiled' },
   { gate: 'reader-chrome', timeoutMs: 110_000 },
   { gate: 'dataflow', timeoutMs: 60_000 },
+  { gate: 'local-sql-state', timeoutMs: 60_000 },
+  { gate: 'postgres-datasets', timeoutMs: 60_000 },
+  { gate: 'row-images', timeoutMs: 60_000 },
+  { gate: 'image-upload', timeoutMs: 110_000 },
+  { gate: 'web-assets', timeoutMs: 60_000 },
+  { gate: 'libraries', timeoutMs: 60_000 },
 ]);
 
 /** `<gate>@compiled` → `<gate>`; a gate name is itself. */

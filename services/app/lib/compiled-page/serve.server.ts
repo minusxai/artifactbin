@@ -319,7 +319,7 @@ export async function compiledPageFor(row: ArtifactRow, page: PreparedPage, read
       // What the page's engine may hold, for the door it queries through (today's reader asks on every render).
       flow && reader.doors && reader.holder !== undefined ? holdableImports(row, flow, reader.holder) : Promise.resolve([]),
     ]);
-    const sqliteWasm = hold.length ? storyRuntimeAssets().sqlite : null;
+    const sqliteWasm = hold.length || flow?.values.some((value) => value.kind === 'table') ? storyRuntimeAssets().sqlite : null;
     // The live stream picks up from the snapshot's marks (served-results.server `since`): a write between
     // the snapshot and the page's stream reaches the page as the ordinary `data` frame.
     const served: DataSnapshot | null = snapshot

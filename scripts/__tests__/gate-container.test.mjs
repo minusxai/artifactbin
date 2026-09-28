@@ -49,6 +49,7 @@ describe('checkGates', () => {
 
   it('refuses a gate that needs the host’s Docker, with the reason, and only gates that exist', () => {
     expect(() => checkGates(['postgres-datasets'], known)).toThrow(/postgres-datasets cannot run in a gate container: it starts its own Postgres/);
+    expect(() => checkGates(['postgres-datasets@compiled'], [...known, 'postgres-datasets@compiled'])).toThrow(/postgres-datasets@compiled cannot run in a gate container: it starts its own Postgres/);
     for (const name of Object.keys(CONTAINER_REFUSALS)) expect(known).toContain(name);
   });
 });

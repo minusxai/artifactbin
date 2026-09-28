@@ -8,6 +8,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import { render } from 'solid-js/web';
+import { createSignal } from 'solid-js';
 import { act, createElement } from 'react';
 import { createRoot } from 'react-dom/client';
 import { diffShapes, parityOf, reactRender, shapeOf } from './kit-parity';
@@ -341,6 +342,26 @@ describe('compile-time structure recipes', () => {
 
 
 describe('dialog interaction with its own resolved recipe', () => {
+  it('focuses the authored field after a framed dialog opens', async () => {
+    Object.defineProperty(HTMLDialogElement.prototype, 'showModal', { configurable: true, value: function(this: HTMLDialogElement) { this.open = true; this.focus(); } });
+    const host = document.createElement('div'); document.body.append(host);
+    const dispose = render(() => <IslandProvider value={fakeIsland()}><Dialog><DialogTrigger>Open</DialogTrigger><DialogContent aria-label="Focused dialog"><input aria-label="Draft" autofocus /></DialogContent></Dialog></IslandProvider>, host);
+    try {
+      host.querySelector<HTMLButtonElement>('button')!.click();
+      await new Promise<void>(resolve => requestAnimationFrame(() => resolve()));
+      expect(document.activeElement).toBe(host.querySelector('[aria-label="Draft"]'));
+    } finally { dispose(); host.remove(); Reflect.deleteProperty(HTMLDialogElement.prototype, 'showModal'); }
+  });
+  it('writes a bound open Value and follows it when the trigger is pressed', () => {
+    const [open, setOpen] = createSignal(false);
+    const host = document.createElement('div');
+    const island = { ...fakeIsland(), value: (name: string) => name === 'open' ? open() : undefined, setValue: (name: string, value: unknown) => { if (name === 'open') setOpen(Boolean(value)); } };
+    const dispose = render(() => <IslandProvider value={island as import('../contract').IslandContext}><Dialog open="$open"><DialogTrigger>Open</DialogTrigger><DialogContent aria-label="Bound dialog">Body</DialogContent></Dialog></IslandProvider>, host);
+    host.querySelector<HTMLButtonElement>('button')!.click();
+    expect(open()).toBe(true);
+    expect(host.querySelector<HTMLDialogElement>('dialog')?.open).toBe(true);
+    dispose();
+  });
   it('opens, closes, and restores trigger focus', () => {
     const { host, dispose } = mount(() => <Dialog><DialogTrigger id="open-dialog">Open</DialogTrigger><DialogContent aria-label="Example" class={cls('DialogContent')}><DialogClose class={cls('Button', { variant: 'outline' })}>Close</DialogClose></DialogContent></Dialog>);
     const trigger = host.querySelector<HTMLButtonElement>('#open-dialog')!;

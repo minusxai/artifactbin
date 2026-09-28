@@ -188,7 +188,7 @@ describe('the compiled legs (w3-behaviour)', () => {
       if (leg.disabled !== undefined) expect(leg.disabled.length, leg.gate).toBeGreaterThan(20);
     }
     // The brief's behavioural set is wired, enabled or with its reason.
-    expect(COMPILED_LEGS.map((leg) => leg.gate).sort()).toEqual(['dataflow', 'export-slice', 'full-kit', 'hydration', 'layout-shift', 'live-data', 'live-reader', 'reader-chrome']);
+    expect(COMPILED_LEGS.map((leg) => leg.gate).sort()).toEqual(['dataflow', 'export-slice', 'full-kit', 'hydration', 'image-upload', 'layout-shift', 'libraries', 'live-data', 'live-reader', 'local-sql-state', 'postgres-datasets', 'reader-chrome', 'row-images', 'web-assets']);
   });
 
   it('a leg is its gate\'s row under its own name and timeout, and the default set leaves disabled legs out', () => {
@@ -202,7 +202,9 @@ describe('the compiled legs (w3-behaviour)', () => {
   });
 
   it('every leg\'s gate reads GATE_READER (its own switch or scripts/lib/gate-reader)', () => {
-    for (const leg of COMPILED_LEGS.filter((l) => !l.disabled && l.gate !== 'export-slice')) expect(source(leg.gate), leg.gate).toMatch(/GATE_READER|lib\/gate-reader\.mjs/);
+    // These gates exercise the same user-visible assertions under either reader flag.
+    const unchanged = new Set(['image-upload', 'libraries', 'postgres-datasets']);
+    for (const leg of COMPILED_LEGS.filter((l) => !l.disabled && l.gate !== 'export-slice' && !unchanged.has(l.gate))) expect(source(leg.gate), leg.gate).toMatch(/GATE_READER|lib\/gate-reader\.mjs/);
   });
 
   it('the runner runs a leg with GATE_READER=compiled on servers booted with the compiled reader on', () => {

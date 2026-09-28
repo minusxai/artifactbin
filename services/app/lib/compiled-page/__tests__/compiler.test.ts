@@ -49,6 +49,20 @@ async function inputOf(source: string, template: string | null = null): Promise<
 const dom = (html: string) => new JSDOM(`<div id="r">${html}</div>`).window.document.getElementById('r')!;
 
 describe('compilePage', () => {
+  it('keeps a bound image live and sends its source template to the image island', async () => {
+    const source = '<Helmet><Value name="pick" type="string" default="https://example.test/a.png" /></Helmet><img src="$pick" alt="the pick" />';
+    const generated = generate(await inputOf(source));
+    expect(generated.islands).toContain('BoundImage');
+    expect(generated.islands).toContain('template={"$pick"}');
+    expect(generated.skeleton).not.toContain('src="$pick"');
+  });
+
+  it('routes row image attributes through the image helper after row substitution', async () => {
+    const source = '<Helmet><Value name="covers" type="table" value={[{"id":1,"cover_ref":"ref:Abc123"}]} /></Helmet><For each={$covers}><img src="$_row.cover_ref" alt="cover" /></For>';
+    const generated = generate(await inputOf(source));
+    expect(generated.islands).toContain('rowImageAttrs(rt.rowAttrs(');
+    expect(generated.islandRefs.flatMap((island) => island.kit)).not.toContain('rowImageAttrs');
+  });
   it('prose: static HTML only — no islands, no module, no slot left behind', async () => {
     const page = await compilePage(await inputOf(fixture('prose.jsx')), loadCompilerBuild());
     expect(page.islands).toEqual([]);

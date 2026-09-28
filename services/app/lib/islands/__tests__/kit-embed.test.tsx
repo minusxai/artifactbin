@@ -10,6 +10,7 @@ import { render } from 'solid-js/web';
 import { IslandProvider } from '../context';
 import { fakeIsland } from './context.test';
 import { Iframe, DeckGL } from '../kit/data';
+import { assetsConfig } from '../kit/embed';
 import type { IslandContext } from '../contract';
 import type { DataflowStore } from '@/lib/story-runtime/store';
 import type { TableResult } from '@/lib/story/dataflow';
@@ -46,6 +47,13 @@ const store = (): DataflowStore => ({
 }) as unknown as DataflowStore;
 
 describe('<Iframe>', () => {
+  it('uses the document origin for its scoped asset door when no separate asset host is configured', () => {
+    const data = document.createElement('script');
+    data.id = 'mx-story-data'; data.type = 'application/json'; data.textContent = JSON.stringify({ assetsUrl: '/a/Doc123/assets' });
+    document.body.append(data);
+    expect(assetsConfig(undefined, document)).toEqual({ origin: new URL(document.baseURI).origin, resolveUrl: new URL('/a/Doc123/assets', document.baseURI).href });
+    data.remove();
+  });
   it('draws today\'s managed frame box, then mounts one sandboxed author realm in it, and removes it with the island', async () => {
     const island = { ...fakeIsland(), store: () => store() };
     const { host, dispose } = mount(island, () => <Iframe id="f" class="my-4" data-mx-ast="1.2" title="Gallery" height={120} compiled={{ html: '<p>Hello</p>', scripts: [] }} />);

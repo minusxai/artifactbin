@@ -252,12 +252,13 @@ const browser = await chromium.launch();
   const frame = await documentFrame(page);
 
   await page.evaluate(() => navigator.clipboard.writeText('PASTED_TEXT_OK'));
-  const para = await frame.$('p');
+  // The editor replaces the paragraph node after a text edit; keep a locator that resolves the current one.
+  const para = frame.locator('p').filter({ hasText: 'START' }).first();
   await para.click();
   await page.waitForTimeout(400);
   await page.keyboard.press(PASTE);
   await page.waitForTimeout(1200);
-  const text = await frame.evaluate(() => document.querySelector('p')?.textContent ?? '');
+  const text = await para.textContent() ?? '';
   check(text.includes('PASTED_TEXT_OK'), `a real text paste lands in the paragraph (got ${JSON.stringify(text)})`);
   check(text.includes('START'), 'and it did not replace what was already there');
 
