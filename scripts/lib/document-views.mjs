@@ -43,7 +43,10 @@ export function documentViewProbe() {
    */
   const ready = () => { if (state.ready === null) state.ready = performance.now(); };
   document.addEventListener('mx:ready', ready);
-  document.addEventListener('DOMContentLoaded', () => { if (!document.querySelector('script[type="module"]')) ready(); });
+  // The idle SPA and standalone behavior scripts are modules too. A page with
+  // no island data has no hydration boot to signal ready; modules have loaded
+  // by DOMContentLoaded, so this is the static page's byte boundary.
+  document.addEventListener('DOMContentLoaded', () => { if (!document.getElementById('mx-story-data')) ready(); });
   try {
     new PerformanceObserver(list => { for (const entry of list.getEntries()) if (entry.name === 'first-contentful-paint') state.fcp = entry.startTime; }).observe({ type: 'paint', buffered: true });
     new PerformanceObserver(list => { for (const entry of list.getEntries()) state.lcp = entry.startTime; }).observe({ type: 'largest-contentful-paint', buffered: true });
