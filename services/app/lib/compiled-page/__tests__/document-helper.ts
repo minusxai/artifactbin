@@ -32,7 +32,6 @@ export async function compiledDocument(input: DocumentCase): Promise<string> {
     title: parts.runtime.title, theme: input.theme, colorMode, snapshot: null,
     overlay,
     chrome: null, spa: null, build, head: input.head ?? null, footer: input.footer ?? null,
-    documentChrome: input.chrome ?? true,
     sheets: documentStyleSheets({
       compiledCss: input.compiledCss, chrome: input.chrome ?? true, bare: !!input.footer,
       theme: input.theme, importedFaces: parts.importedFaces, docFonts: parts.docFonts,
