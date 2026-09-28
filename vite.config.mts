@@ -18,13 +18,18 @@ const outDir = path.resolve(import.meta.dirname, 'services/app/dist/web');
  * serves them), written by the build that wrote the files — `emptyOutDir`
  * wipes the tree first, so no sibling survives its source.
  */
-const precompressAssets = (): Plugin => ({
-  name: 'artifactbin-precompress',
-  apply: 'build',
-  async closeBundle() {
-    this.info(describePrecompression('dist/web/assets', await precompressTree(path.join(outDir, 'assets'))));
-  },
-});
+const precompressAssets = (): Plugin => {
+  let writesFiles = true;
+  return {
+    name: 'artifactbin-precompress',
+    apply: 'build',
+    configResolved(config) { writesFiles = config.build.write !== false; },
+    async closeBundle() {
+      if (!writesFiles) return;
+      this.info(describePrecompression('dist/web/assets', await precompressTree(path.join(outDir, 'assets'))));
+    },
+  };
+};
 
 /**
  * The shell's @font-face rules, from the generated font manifest
