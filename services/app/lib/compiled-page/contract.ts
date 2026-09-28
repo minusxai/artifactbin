@@ -429,6 +429,12 @@ export interface AssembleInput {
    * post's attribution back to the app. Its CSS joins the head's styles.
    */
   footer?: { html: string; css: string } | null;
+  /**
+   * A document served BY ITSELF (`/raw`, a domain post, a capture) carries today's standalone
+   * document's stylesheets, byte for byte (lib/story/document-styles), in place of `css`: the story is
+   * the page, and Mermaid reads `--font-mono`'s text into the palette that names a stored drawing.
+   */
+  sheets?: ReadonlyArray<{ attr: string; css: string }> | null;
 }
 
 /** The head metadata of an assembled page (see AssembleInput.head). */

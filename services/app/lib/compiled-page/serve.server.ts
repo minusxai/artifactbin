@@ -52,6 +52,7 @@ import { SERVED_RESULTS_BUDGET_MS, tokenOf } from '@/lib/story/served-results.se
 import { readUrlValues } from '@/lib/story/url-values';
 import { escapeHtml } from '@/lib/story/reader-chrome';
 import { DOMAIN_FOOTER_TEXT } from '@/lib/story/document';
+import { DOMAIN_FOOTER_CSS } from '@/lib/story/document-styles';
 import { assembleReaderPage } from './assembler';
 import { loadCompilerBuild } from './build.server';
 import {
@@ -93,6 +94,8 @@ export interface CompiledReaderRequest {
   results?: ServedResults | null;
   /** A domain post's attribution line (lib/story/document's bare footer), after the story. */
   footer?: { html: string; css: string } | null;
+  /** A document served by itself: today's standalone stylesheets, byte for byte (AssembleInput.sheets). */
+  sheets?: AssembleInput['sheets'];
   /** Behaviour chunks this path adds to the version's own (`page`: the compiled /raw page's behaviour, lib/islands/page). */
   behaviors?: readonly string[];
 }
@@ -243,12 +246,7 @@ async function storyOf(compiled: CompiledPage, input: StoryInput): Promise<strin
   return html;
 }
 
-/**
- * A DOMAIN POST's one line of attribution (lib/story/document's bare footer, which the standalone
- * renderer's deletion leaves here): theme-neutral, it inherits the document's colour and face.
- */
-const DOMAIN_FOOTER_CSS = '[data-mx-domain-footer]{box-sizing:border-box;max-width:100%;margin:0;padding:40px 16px 48px;text-align:center;font-size:13px;line-height:1.5;opacity:.65}'
-  + '[data-mx-domain-footer] a{color:inherit;text-decoration:underline;text-underline-offset:2px}';
+/** A DOMAIN POST's one line of attribution (its style: lib/story/document-styles DOMAIN_FOOTER_CSS). */
 export const domainFooter = (href: string): { html: string; css: string } => ({
   html: `<footer data-mx-domain-footer="">${DOMAIN_FOOTER_TEXT} <a href="${escapeHtml(href)}" rel="noopener">artifactbin</a></footer>`,
   css: DOMAIN_FOOTER_CSS,
@@ -315,6 +313,7 @@ export async function compiledPageFor(row: ArtifactRow, page: PreparedPage, read
       head: reader.head,
       live: reader.live,
       footer: reader.footer ?? null,
+      sheets: reader.sheets ?? null,
     });
     return { mode: 'compiled', html: assembled.html, headers: assembled.headers };
   } catch (error) {

@@ -312,6 +312,33 @@ describe('the compiled capture', () => {
   });
 });
 
+describe('the compiled /raw page carries today\'s stylesheets byte for byte', () => {
+  it('every fixture: the same style tags, in the same order, with the same text, and the theme on <html>', async () => {
+    const who = await owner();
+    const sales = await publish(who.token, { title: 'Perf sales', dataset: fixture('sales.csv') });
+    const fixtures = [
+      { title: 'Perf A prose', markup: fixture('prose.jsx') },
+      { title: 'Perf B kit', markup: fixture('kit.jsx') },
+      { title: 'Perf C dashboard', markup: fixture('dashboard.jsx').replaceAll('{{sales}}', sales), template: 'dashboard' },
+      { title: 'Perf D deck', markup: fixture('deck.jsx'), template: 'deck' },
+      { title: 'Perf E mermaid', markup: fixture('mermaid.jsx') },
+      { title: 'Perf F mermaid, industry theme', markup: fixture('mermaid.jsx'), theme: 'industry' },
+    ];
+    const sheets = (html: string) => [...new JSDOM(html).window.document.head.querySelectorAll('style')]
+      .map((style) => `${[...style.attributes].map((a) => a.name).join(' ')}|${style.textContent}`);
+    for (const f of fixtures) {
+      const id = await publish(who.token, f);
+      const legacy = await (await raw(id, '?reader=legacy')).text();
+      const compiled = await raw(id, '?reader=compiled');
+      expect(compiled.headers.get(READER_MODE_HEADER), f.title).toBe('compiled');
+      const html = await compiled.text();
+      expect(sheets(html), f.title).toEqual(sheets(legacy));
+      expect(new JSDOM(html).window.document.documentElement.getAttribute('data-theme'), f.title)
+        .toBe(new JSDOM(legacy).window.document.documentElement.getAttribute('data-theme'));
+    }
+  });
+});
+
 describe('a version the compiled page cannot yet serve whole', () => {
   it('an author script keeps the version on today\'s renderer, which runs it, and says why', async () => {
     const who = await owner();
