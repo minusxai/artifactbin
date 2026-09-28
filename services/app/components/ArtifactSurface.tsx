@@ -46,6 +46,7 @@ import { readIntent, stripIntent } from '@/lib/intent';
 import { loginHref } from '@/lib/login-href';
 import { refusedForSignIn } from '@/lib/story/sign-in-required';
 import PageChrome, { PageControls, PageMenu, requestPageChrome, type AppearanceMode } from '@/components/PageChrome';
+import { openPageChromeOnceMounted } from '@/components/page-chrome-state';
 import { useIsPhoneViewport } from '@/components/MobileSheet';
 /* The editing bar's height is RESERVED by this page, never measured — and it
  * comes from a leaf module, because importing it from the editor would put the
@@ -940,7 +941,8 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
     const intent = takeChromeIntent();
     if (!intent) return;
     if (intent === 'share') { if (owner) setSharingOpen(true); }
-    else if (intent === 'notifications') requestPageChrome('notifications');
+    // This effect runs as the app mounts, before the panels that answer a request have: kept until they do.
+    else if (intent === 'notifications' || intent === 'controls' || intent === 'menu') openPageChromeOnceMounted(intent);
     else onChromeAction(intent);
   }, []);
 

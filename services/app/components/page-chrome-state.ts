@@ -36,12 +36,32 @@ export function useExclusiveLayer(open: boolean, setOpen: (open: boolean) => voi
   return toggle;
 }
 
+/**
+ * A panel the page asked for before it could exist: the compiled reader page's served chrome remembers a
+ * Settings press until the app arrives (web/idle-boot takeChromeIntent), and the app performs it while it
+ * mounts — before its own panels have mounted to hear a request. Kept until the panel that answers it
+ * mounts, then gone; a plain `requestPageChrome` nobody hears is still dropped.
+ */
+// eslint-disable-next-line no-restricted-syntax -- one page, one pending ask: the app sets it as it mounts and its panel takes it once
+let openOnMount: PagePanelName | null = null;
+export function openPageChromeOnceMounted(which: PagePanelName) {
+  openOnMount = which;
+  requestPageChrome(which);
+}
+
 /** Open on the framed chrome's request — exclusively, like a click on the trigger. */
 export function useOpenOnRequest(which: PagePanelName, open: boolean, setOpen: (open: boolean) => void) {
   const id = useId();
   useEffect(() => {
+    if (openOnMount !== which) return;
+    openOnMount = null;
+    window.dispatchEvent(new CustomEvent(OPEN_EVENT, { detail: id }));
+    setOpen(true);
+  }, [id, setOpen, which]);
+  useEffect(() => {
     const onRequest = (event: Event) => {
       if ((event as CustomEvent<string>).detail !== which) return;
+      if (openOnMount === which) openOnMount = null;
       if (open) { setOpen(false); return; }
       window.dispatchEvent(new CustomEvent(OPEN_EVENT, { detail: id }));
       setOpen(true);
