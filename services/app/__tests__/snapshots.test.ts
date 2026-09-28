@@ -283,4 +283,28 @@ describe('the probe\'s write paths', () => {
     expect(await store.get(snapshotKeyFor(d.id, 'head', plan, { region: 'R0' }))).toBeNull();
     expect((await store.get(snapshotKeyFor(d.id, 'head', plan, { region: regions.at(-1)! })))!.fresh).toBe(true);
   });
+
+  it('stores only the shared queries\' tables and errors: a run\'s per-viewer mutation access, user options and people never persist', async () => {
+    const who = await owner();
+    const made = await createArtifactRoute(request('/api/artifacts', { method: 'POST', token: who.token, json: { visibility: 'public', dataset: [{ n: 1 }], access: 'readwrite' } }));
+    const wds = ((await made.json()) as { id: string }).id;
+    await setDatasetPolicy({ userId: who.user.id, tokenId: who.tokenId }, wds, defaultDatasetGrants(), 0);
+    const doc = await publish(who.token, { markup: `<Helmet><Import name="d" src="ref:${wds}" /><Query name="rows">{\`select count(*) as n from d.rows\`}</Query><Mutation name="add">{\`insert into d.rows values (2)\`}</Mutation></Helmet><p><Number data="$rows" col="n" /></p><User userId="${who.user.id}" /><Button run="$add">Add</Button>` });
+    await drainPreparedPageWarmups();
+    // The run itself carries them (the route answers them to this door): the snapshot must not.
+    const route = (await (await queryRoute(request(`/a/${doc}/query`, { method: 'POST', json: { values: {} } }), params(doc))).json()) as Record<string, unknown>;
+    expect(route).toHaveProperty('mutationAccess');
+    expect(route).toHaveProperty('people');
+    const store = createSnapshotStore();
+    const key = snapshotKeyFor(doc, 'head', (await planFor(doc)).plan, {});
+    const snap = (await store.revalidate(key))!;
+    expect(Object.keys(snap.results).sort()).toEqual(['errors', 'tables']);
+    expect(Object.keys((await store.get(key))!.snapshot.results).sort()).toEqual(['errors', 'tables']);
+    const db = await harness.db();
+    const stored = (await db.query<{ body: string }>('SELECT snapshot::text AS body FROM data_snapshots WHERE artifact_id = $1', [doc])).rows[0]!.body;
+    for (const field of ['mutationAccess', 'userOptions', 'people']) expect(stored).not.toContain(`"${field}"`);
+    // An outside put carrying them is stripped too.
+    await store.put({ ...snap, results: { ...snap.results, mutationAccess: { add: null }, people: {}, userOptions: {} } });
+    expect(Object.keys((await store.get(key))!.snapshot.results).sort()).toEqual(['errors', 'tables']);
+  });
 });

@@ -30,7 +30,8 @@
  * REVALIDATION. `revalidate(key)` re-runs the shared queries at the key's
  * inputs through the SAME run as `POST /a/:id/query` (`dataflowForRow`, the
  * same engine, caches, caps and timeouts) with anonymous admission, marks
- * taken before the run, and the route's own recheck after it. Background
+ * taken before the run, and the route's own recheck after it. Only the shared
+ * queries' tables and errors are stored: nothing the run computes per viewer. Background
  * revalidation is one worker with one pending entry per key and every failure
  * swallowed (the discipline of prepared-page.server `warmPreparedPage`): a
  * failed revalidation is an older snapshot, never a failed read. Like the
@@ -164,10 +165,13 @@ function snapshotOf(row: StoredRow): DataSnapshot | null {
   };
 }
 
+/** What a guest snapshot may hold of a run's answer: the tables and errors, never a per-viewer field. */
+const sharedResults = (results: ServedResults): ServedResults => ({ tables: results.tables, errors: results.errors });
+
 async function write(snapshot: DataSnapshot, extra: Pick<StoredBody, 'document' | 'recipe'>): Promise<void> {
   const { key } = snapshot;
   const body: StoredBody = {
-    results: snapshot.results,
+    results: sharedResults(snapshot.results),
     drawings: { ...snapshot.drawings },
     build: snapshot.build,
     ...(snapshot.membersMark === undefined ? {} : { membersMark: snapshot.membersMark }),
@@ -243,12 +247,9 @@ async function revalidateKey(key: SnapshotKey): Promise<DataSnapshot | null> {
   }
   const answered = new Set(shared);
   const { state } = ran;
-  const results: ServedResults = {
-    tables: pick(state.tables, answered),
-    errors: pick(state.errors, answered),
-    ...(ran.flow.mutations.length ? { mutationAccess: state.mutationAccess ?? {} } : {}),
-    ...(state.userOptions ? { userOptions: state.userOptions, people: state.people ?? {} } : {}),
-  };
+  // The shared queries' tables and errors, and NOTHING else the run attaches: its mutation access, user
+  // options and person cards are computed for whoever the run is for (the viewer overlay's to answer).
+  const results = sharedResults({ tables: pick(state.tables, answered), errors: pick(state.errors, answered) });
   // TODO(w1-planners drawSnapshotCharts): draw the version's <Question> charts from `results` —
   // `drawSnapshotCharts(page.data.nodes, results, { colorMode: page.data.colorMode })` over
   // `preparedPageFor(row, null, PUBLIC_BASE_URL)` — once charts.server.ts has merged.
