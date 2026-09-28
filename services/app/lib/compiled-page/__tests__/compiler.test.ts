@@ -216,6 +216,16 @@ describe('unit parity with today\'s render', () => {
     expect(root.querySelector('#u')?.textContent).toBe('a guest');
     expect(root.querySelector('#i')?.getAttribute('class')).toBe('text-muted-foreground');
   });
+  it('writing a spread class as React does never moves hydration keys: the children still render after their element', async () => {
+    const source = `function Box(p) { return <span data-slot="box" {...p} />; }
+function Leaf() { return <i>leaf</i>; }
+export function render(withClass) { return renderToString(() => withClass ? <Box class="x y"><Leaf /><Leaf /></Box> : <Box><Leaf /><Leaf /></Box>, { renderId: 's0-' }); }
+import { renderToString } from 'solid-js/web';`;
+    const mod = await evaluateModule(await transformSolid(source, { generate: 'ssr', hydratable: true }), ssrImportTable(), 'test/keys.js') as { render: (withClass: boolean) => string };
+    const keys = (html: string) => [...html.matchAll(/data-hk="([^"]+)"/g)].map((m) => m[1]);
+    expect(keys(mod.render(true))).toEqual(keys(mod.render(false)));
+    expect(mod.render(true)).toContain('class="x y"');
+  });
   it('deck: the compiled column is today\'s render; the rail and present bar sit around it', async () => {
     const source = fixture('deck.jsx');
     const page = await compilePage(await inputOf(source, 'deck'), loadCompilerBuild());

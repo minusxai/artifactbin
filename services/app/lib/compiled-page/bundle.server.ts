@@ -196,7 +196,9 @@ export const ssrElementReactClass: SsrElement = (tag, props, children, needsId) 
       if (values.length && !('attr:class' in exact)) exact['attr:class'] = values.join(' ');
       continue;
     }
-    exact[key] = given[key];
+    // The descriptor, not the value: a `children` getter must run inside ssrElement, AFTER it takes the element's
+    // hydration key, or the children's components shift every key the browser expects.
+    Object.defineProperty(exact, key, Object.getOwnPropertyDescriptor(given, key)!);
   }
   return solidSsrElement(tag, exact, children, needsId);
 };
