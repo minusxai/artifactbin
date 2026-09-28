@@ -14,12 +14,9 @@ async function fixture(){
  const created=await create(request('/api/artifacts',{method:'POST',token:token.token,json:{dataset:[{n:0}],access:'readwrite'}}));
  expect(created.status).toBe(201);const dataset=await created.json();
  const declarations=`<Import name="tasks" src="ref:${dataset.id}" /><Mutation name="increment">{\`update tasks.rows set n=n+$amount\`}</Mutation>`;
- const docResponse=await create(request('/api/artifacts',{method:'POST',token:token.token,json:{markup:`<Helmet>${declarations}</Helmet><p>Counter</p>`}}));
- expect(docResponse.status).toBe(201);const doc=await docResponse.json();
- // Install the future declaration through isolated state so this integration seed
- // reaches the real write/receipt path before publish grammar is implemented.
+ const docResponse=await create(request('/api/artifacts',{method:'POST',token:token.token,json:{markup:`<Helmet>${declarations}<Notify name="counter_status" on="increment">{\`select null as "to", 'Counter is current' as message from tasks.rows\`}</Notify></Helmet><p>Counter</p>`}}));
+ expect(docResponse.status,await docResponse.clone().text()).toBe(201);const doc=await docResponse.json();
  const db=await getDb();
- await db.query('UPDATE artifacts SET source=$2 WHERE id=$1',[doc.id,`<Helmet>${declarations}<Notify name="counter_status" on="increment">{\`select null as "to", 'Counter is current' as message from tasks.rows\`}</Notify></Helmet><p>Counter</p>`]);
  const send=(key:string)=>mutate(request(`/api/artifacts/${doc.id}/mutate`,{method:'POST',token:token.token,headers:{'Idempotency-Key':key},json:{name:'increment',args:{amount:1}}}),{params:Promise.resolve({id:doc.id})});
  return {db,dataset,doc,send};
 }
