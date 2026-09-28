@@ -570,16 +570,16 @@ describe('CI job shape', () => {
     }
   });
 
-  it('fans the gate set over seven runners and pulls the Postgres image the datasets gate drives', () => {
+  it('fans the gate set over eight runners and pulls Postgres only for its assigned shard', () => {
     const { jobs } = ci();
-    expect(jobs.gates.strategy.matrix.shard).toEqual([1, 2, 3, 4, 5, 6, 7]);
+    expect(jobs.gates.strategy.matrix.shard).toEqual([1, 2, 3, 4, 5, 6, 7, 8]);
     const run = jobs.gates.steps.find((step) => step.name === 'every gate, two servers');
     expect(run.run).toContain('--servers=2');
-    expect(run.run).toContain('--shard=${{ matrix.shard }}/7');
+    expect(run.run).toContain('--shard=${{ matrix.shard }}/8');
     const browser = jobs.gates.steps.find((step) => step.id === 'playwright');
     expect(browser.with.key).toContain("hashFiles('node_modules/playwright-core/browsers.json')");
     const selection = jobs.gates.steps.find(step => step.id === 'gate-browsers');
-    expect(selection.run).toContain('--browsers --shard=${{ matrix.shard }}/7');
+    expect(selection.run).toContain('--browsers --shard=${{ matrix.shard }}/8');
     const install = jobs.gates.steps.find(step => step.name === 'Install selected gate browsers');
     expect(install.env.BROWSERS).toBe('${{ steps.gate-browsers.outputs.browsers }}');
     expect(install.run).toContain('"$BROWSERS" != chromium');
@@ -588,9 +588,12 @@ describe('CI job shape', () => {
     // postgres-datasets stays a browser gate (it boots the whole app); the image is pulled once, before the run.
     const pulls = jobs.gates.steps.filter((step) => /docker pull postgres:17-alpine/.test(step.run ?? ''));
     expect(pulls).toHaveLength(1);
-    expect(pulls[0].if).toBe('matrix.shard == 4');
+    expect(pulls[0].if).toBe('matrix.shard == 8');
     const names = [...gateNamesOnDisk(readdirSync(path.join(root, 'scripts'))), ...compiledLegNames()];
-    expect(shardOf(names, { index: 4, total: 7 }, shardWeight)).toContain('postgres-datasets');
+    expect(shardOf(names, { index: 8, total: 8 }, shardWeight)).toContain('postgres-datasets');
+    const heaviest = (count) => Math.max(...Array.from({ length: count }, (_, offset) =>
+      shardOf(names, { index: offset + 1, total: count }, shardWeight).reduce((sum, name) => sum + shardWeight(name), 0)));
+    expect(heaviest(8)).toBeLessThan(heaviest(7));
     expect(jobs.gates.steps.indexOf(pulls[0])).toBeLessThan(jobs.gates.steps.indexOf(run));
     const sessions = jobs.gates.steps.find((step) => step.name === 'Prepare isolated browser session workers');
     expect(sessions.run).toContain('sudo apt-get install -y bubblewrap ||');
