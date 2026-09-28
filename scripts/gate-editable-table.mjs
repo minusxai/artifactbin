@@ -142,7 +142,7 @@ try {
   assert.equal(await b.getByLabel('Item 1',{exact:true}).inputValue(),'second reader');
   const versionBeforeConflict = (await fixture.api(`/api/artifacts/${fixture.datasetId}`,undefined,'GET')).version;
   await commit(b, () => b.getByLabel('Item 1',{exact:true}).press('Enter'), 409);
-  await b.getByRole('alert').filter({hasText:/changed|conflict/i}).waitFor();
+  await b.getByRole('alert').filter({hasText:/changed|conflict/i}).first().waitFor();
   check('same-cell stale edit is rejected while preserving the draft');
   assert.equal((await fixture.api(`/api/artifacts/${fixture.datasetId}`,undefined,'GET')).version,versionBeforeConflict);
   await b.getByLabel('Item 1',{exact:true}).press('Escape');

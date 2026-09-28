@@ -66,6 +66,7 @@ interface Page {
   written: MutationRequest[];
   /** Answer the next write: resolve (saved) or reject with the server's message. */
   settle: Array<(error?: string) => void>;
+  refresh(): void;
   dispose(): void;
 }
 let open: Page | null = null;
@@ -102,13 +103,13 @@ async function page(refusal: string | null): Promise<Page> {
       });
     }),
   };
-  const runtime = (rt.createIslandRuntime as (d: unknown, s: (i: unknown) => unknown) => { context: unknown; store: { start(): void } | null; dispose(): void })(
+  const runtime = (rt.createIslandRuntime as (d: unknown, s: (i: unknown) => unknown) => { context: unknown; store: { start(): void; invalidateDatasets(ids: string[]): void } | null; dispose(): void })(
     { dataflow: { flow: server.flow, values: {}, results: SNAPSHOT }, viewer: null }, (input) => (rt.createDataflowStore as (i: unknown, o: unknown) => unknown)(input, { transport }));
   runtime.store?.start();
   const disposers = ISLANDS.map(([renderId, Island]) => (rt.hydrateIsland as (r: string, c: unknown, x: unknown, p: ParentNode) => (() => void) | null)(renderId, Island, runtime.context, host));
   markHydrated();
   await until(() => !!host.querySelector('[aria-label="Item 1"]'), 'the first row\'s cells');
-  const result = { host, written, settle, dispose: () => { for (const d of disposers) d?.(); runtime.dispose(); host.remove(); } };
+  const result = { host, written, settle, refresh: () => runtime.store?.invalidateDatasets(['CELLS1']), dispose: () => { for (const d of disposers) d?.(); runtime.dispose(); host.remove(); } };
   open = result;
   return result;
 }
@@ -130,6 +131,27 @@ const shapeOf = (el: Element): Shape => ({
 const shapesOf = (html: string): Shape[] => { const t = document.createElement('template'); t.innerHTML = html; return [...t.content.children].map(shapeOf); };
 
 describe('editable cells on the compiled page', () => {
+  it('keeps a cell menu mounted through an unrelated data refresh', async () => {
+    const { host, refresh } = await page(null);
+    await until(() => !cellOf(host, 'tbl', 'status')!.querySelector('button')!.disabled, 'the write check');
+    cellOf(host, 'tbl', 'status')!.querySelector('button')!.click();
+    const popup = document.querySelector<HTMLElement>('[role="listbox"][aria-label="Status 1"]')?.parentElement;
+    expect(popup?.style.position).toBe('fixed');
+    refresh();
+    await new Promise(resolve => setTimeout(resolve, 30));
+    expect(popup?.isConnected).toBe(true);
+    expect(document.querySelector('[role="listbox"][aria-label="Status 1"]')?.parentElement).toBe(popup);
+  });
+  it('draws the disabled cell reason on hover and focus', async () => {
+    const { host } = await page(EDITABLE_CELLS_REFUSAL);
+    await until(() => cellOf(host, 'tbl', 'item')?.querySelector('input')?.getAttribute('aria-description') === EDITABLE_CELLS_REFUSAL, 'the write check');
+    const trigger = cellOf(host, 'tbl', 'item')!.querySelector<HTMLElement>('[data-slot="tooltip-trigger"]')!;
+    trigger.dispatchEvent(new Event('pointermove', { bubbles: true }));
+    await until(() => document.querySelector('[role="tooltip"]')?.textContent?.includes(EDITABLE_CELLS_REFUSAL) ?? false, 'the hovered cell tooltip');
+    trigger.dispatchEvent(new Event('pointerleave', { bubbles: true }));
+    trigger.focus();
+    await until(() => document.querySelector('[role="tooltip"]')?.textContent?.includes(EDITABLE_CELLS_REFUSAL) ?? false, 'the focused cell tooltip');
+  });
   it('a reader who may not write sees today\'s refused cells, element for element', async () => {
     const { host } = await page(EDITABLE_CELLS_REFUSAL);
     await until(() => cellOf(host, 'tbl', 'item')?.querySelector('input')?.getAttribute('aria-description') === EDITABLE_CELLS_REFUSAL, 'the write check');
@@ -177,6 +199,8 @@ describe('editable cells on the compiled page', () => {
     expect(alert.previousElementSibling).toBe(root());
     expect(root().hasAttribute('aria-busy')).toBe(false);
     expect(root().querySelector('.truncate')!.textContent, 'the draft is kept').toBe('active');
+    cellOf(host, 'tbl', 'status', 2)!.querySelector('button')!.click();
+    await until(() => !!document.querySelector('[role="listbox"][aria-label="Status 2"]'), 'the other cell menu after a refusal');
   });
 
   it('a text cell keeps its draft, writes on Enter, and Escape puts the saved value back', async () => {

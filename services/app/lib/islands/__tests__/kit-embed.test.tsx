@@ -15,7 +15,7 @@ import { KIT_FAMILIES } from '../contract';
 import type { IslandContext } from '../contract';
 import type { DataflowStore } from '@/lib/story-runtime/store';
 import type { TableResult } from '@/lib/story/dataflow';
-import { pageAssetDoor } from '../kit/embed/frame-engine';
+import { installFrameAssetRelay, pageAssetDoor } from '../kit/embed/frame-engine';
 import { ISLAND_DATA_ID } from '@/lib/compiled-page/contract';
 import { STORY_ASSET_MESSAGE } from '@/lib/story-runtime/contract';
 
@@ -97,6 +97,20 @@ const DOOR = { origin: 'https://assets.example.test', resolveUrl: 'https://app.e
 const HASHED = `https://assets.example.test/assets/${'a'.repeat(64)}`;
 
 describe('the frame\'s asset door (IslandPageData.managedAssets)', () => {
+  it('answers an owned opaque frame through the page asset door and ignores another source', async () => {
+    const host = document.createElement('div');
+    const frame = document.createElement('iframe'); host.append(frame); document.body.append(host);
+    const fetchMock = vi.fn(async () => Response.json({ url: HASHED })); vi.stubGlobal('fetch', fetchMock);
+    const post = vi.spyOn(frame.contentWindow!, 'postMessage');
+    const stop = installFrameAssetRelay(document, host, DOOR);
+    const request = { type: STORY_ASSET_MESSAGE, id: 7, url: 'https://img.example/a.png', kind: 'image' };
+    window.dispatchEvent(new MessageEvent('message', { source: window, origin: 'null', data: request }));
+    expect(fetchMock).not.toHaveBeenCalled();
+    window.dispatchEvent(new MessageEvent('message', { source: frame.contentWindow, origin: 'null', data: request }));
+    await vi.waitFor(() => expect(post).toHaveBeenCalledWith({ type: 'mx:asset-result', id: 7, url: HASHED }, '*'));
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    stop(); host.remove();
+  });
   it('top-level, resolves the author content\'s assets through the page\'s own door with the page\'s credentials', async () => {
     pageData({ managedAssets: DOOR });
     const fetchMock = vi.fn(async (_url: string, _init?: RequestInit) => new Response(JSON.stringify({ url: HASHED }), { status: 200, headers: { 'content-type': 'application/json' } }));
