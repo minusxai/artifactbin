@@ -218,12 +218,16 @@ describe('the stored plan', () => {
   });
 });
 
-describe('refusal', () => {
-  it('a registered component with no Solid port inside a row refuses the compile, named, with nothing built', async () => {
-    const page = await compilePage(await inputOf('<Helmet><Value name="rows" type="table" value={[{"k":"a"}]} /></Helmet><ul id="l"><For each={$rows} keyBy="k"><li id="i"><Separator id="s" /></li></For></ul>'), loadCompilerBuild());
-    expect(page.unported).toEqual(['Separator']);
-    expect(page.module).toBeNull();
-    expect(page.ssr).toBeNull();
+describe('no refusal', () => {
+  // w3-compiler-coverage: a registered component with no Solid port inside a row compiles as a shell (today's React
+  // render with the row's attributes filled per row); nothing a stored document holds is refused any more.
+  it('a registered component with no Solid port inside a row compiles whole, its markup today\'s per row', async () => {
+    const page = await compilePage(await inputOf('<Helmet><Value name="rows" type="table" value={[{"k":"a"},{"k":"b"}]} /></Helmet><ul id="l"><For each={$rows} keyBy="k"><li id="i"><Separator id="s" /></li></For></ul>'), loadCompilerBuild());
+    expect(page.unported).toEqual([]);
+    expect(page.module).not.toBeNull();
+    expect(page.ssr).not.toBeNull();
+    expect(page.reactStatic).toContain('Separator');
+    expect([...dom(page.html).querySelectorAll('li [data-slot="separator"]')]).toHaveLength(2);
   });
 });
 

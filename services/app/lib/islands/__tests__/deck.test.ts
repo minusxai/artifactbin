@@ -57,6 +57,23 @@ describe('startDeck', () => {
     stop();
   });
 
+  it('puts a miniature served inert (one holding a button) in place inside its rail row, as today\'s rail renders it', () => {
+    document.body.innerHTML = '<div class="mx-deck"><nav class="mx-rail" aria-label="Slides">'
+      + '<button type="button" class="mx-rail-row"><span class="mx-rail-thumb" aria-hidden="true"><div style="--mx-vh:800px"><template data-mx-thumb=""><section data-mx-slide=""><button type="button" disabled>Pick</button><p>after</p></section></template></div></span></button>'
+      + '<button type="button" class="mx-rail-row"><span class="mx-rail-thumb" aria-hidden="true"><div style="--mx-vh:800px"><section data-mx-slide=""><p>plain</p></section></div></span></button>'
+      + '</nav><div class="mx-doc"><section data-mx-slide="">a</section><section data-mx-slide="">b</section></div></div>';
+    // Parsed in place, the inner button would have closed the row: served in a template, it is still inside it.
+    expect(document.querySelectorAll('.mx-rail-row')).toHaveLength(2);
+    const stop = startDeck();
+    const rows = [...document.querySelectorAll('.mx-rail > .mx-rail-row')];
+    expect(rows).toHaveLength(2);
+    expect(rows[0]!.querySelector('.mx-rail-thumb > div > section[data-mx-slide] > button')?.textContent).toBe('Pick');
+    expect(rows[0]!.querySelector('.mx-rail-thumb section > p')?.textContent).toBe('after');
+    expect(document.querySelector('.mx-rail template')).toBeNull();
+    expect(document.querySelector('.mx-present-count'), 'no present bar in this deck').toBeNull();
+    stop();
+  });
+
   it('signals ready on a deck with no island module, and leaves that to boot when there is one', () => {
     deck(false);
     const ready = vi.fn();

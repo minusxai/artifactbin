@@ -27,7 +27,7 @@ const fixture = (name: string) => readFileSync(path.join(FIXTURES, name), 'utf8'
 // Publish warms the head's prepared page after commit (warmPreparedPage), as the server does.
 beforeAll(() => enablePreparedPageWarmups());
 afterEach(() => setCompiledReaderFlagForTests(null));
-const UNPORTED = '<Helmet><Value name="rows" type="table" value={[{"k":"a"}]} /></Helmet><ul id="l"><For each={$rows} keyBy="k"><li id="i"><Separator id="s" /></li></For></ul>';
+const WAS_UNPORTED = '<Helmet><Value name="rows" type="table" value={[{"k":"a"}]} /></Helmet><ul id="l"><For each={$rows} keyBy="k"><li id="i"><Separator id="s" /></li></For></ul>';
 
 async function publish(markup: string): Promise<string> {
   const user = await ensureUsername(await createUser({ email: `mxmx_test_compile_${Math.random().toString(36).slice(2, 8)}@example.com` }));
@@ -73,11 +73,15 @@ describe('the compiled page on the prepared page', () => {
     expect((await app.request(`${DOCUMENT_MODULE_PATH}/${compiled.ssr!.sha}.js`)).status).toBe(404);
   });
 
-  it('a version the compiler refuses stores the failure with its reason, not a page', async () => {
+  it('a version the compiler used to refuse (a registered component with no Solid port, in a row) stores its whole page', async () => {
     setCompiledReaderFlagForTests('shadow');
-    // A registered component with no Solid port, inside a row: React cannot render it at compile time.
-    const id = await publish(UNPORTED);
-    const { compiled } = await stored(id);
-    expect(compiled).toEqual({ build: loadCompilerBuild().id, error: 'unported: Separator', reason: 'unported', unported: ['Separator'] });
+    // w3-compiler-coverage: such a component compiles as a React shell with its row attributes filled per row, so
+    // no stored document is refused (`unported`) any more; the refusal door in compiledFor stays for the contract.
+    const id = await publish(WAS_UNPORTED);
+    const compiled = (await stored(id)).compiled as CompiledPage;
+    expect(compiled).toMatchObject({ build: loadCompilerBuild().id, unported: [] });
+    expect('error' in compiled).toBe(false);
+    expect(compiled.reactStatic).toContain('Separator');
+    expect(compiled.html).toContain('data-slot="separator"');
   });
 });

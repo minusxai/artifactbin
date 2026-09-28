@@ -143,4 +143,24 @@ describe('buildIslands', () => {
     // real check, in scripts/size-targets.mjs.
     expect(bytes).toBeLessThanOrEqual(28 * 1024);
   });
+
+  it('keeps every kit family inside the ready-time static budget, with the map and frame engines behind dynamic imports', () => {
+    const { manifest, files, closure } = first;
+    const staticUrls = closure([manifest['@mx/boot'], ...KIT_FAMILIES.map(family => manifest[`@mx/kit/${family}`])]);
+    const staticBytes = staticUrls.reduce((sum, url) => sum + files[url].br, 0);
+    expect(staticBytes).toBeLessThanOrEqual(80 * 1024);
+    const dataCode = staticUrls.map(url => readFileSync(path.join(outDir, url.slice('/islands/'.length)), 'utf8')).join('\n');
+    const dynamic = [...dataCode.matchAll(/import\("\.\/([\w-]+\.js)"\)/g)].map(match => `/islands/${match[1]}`);
+    expect(dynamic.some(url => /frame-engine-[0-9a-f]{16}\.js$/.test(url))).toBe(true);
+    expect(dynamic.some(url => files[url]?.gz > 100 * 1024)).toBe(true);
+    expect(dynamic.every(url => !staticUrls.includes(url))).toBe(true);
+  });
+
+  it('loads tooltip placement only when a tooltip opens', () => {
+    const { manifest, files, closure } = first;
+    const staticUrls = closure([manifest['@mx/kit/disclosure']]);
+    const code = staticUrls.map(url => readFileSync(path.join(outDir, url.slice('/islands/'.length)), 'utf8')).join('\n');
+    const lazy = [...code.matchAll(/import\("\.\/([\w-]+\.js)"\)/g)].map(match => `/islands/${match[1]}`);
+    expect(lazy.some(url => files[url]?.br > 4 * 1024 && !staticUrls.includes(url))).toBe(true);
+  });
 });
