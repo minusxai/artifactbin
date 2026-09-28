@@ -1,3 +1,4 @@
+import { executeDocumentQueries } from './sql/document-queries';
 import type {DocumentUpdate} from '@artifactbin/contracts';
 import {commitDocumentUpdate} from './story/document-update-write';
 import {queueMermaidHarvest} from './mermaid-images/store';
@@ -86,7 +87,6 @@ import type { MutationRequest } from '@/lib/story/mutation-request';
 import { schemaLoaderFor } from '@/lib/story/data-checks';
 import { canUseDataPolicy, mutationPolicy } from '@/lib/datasets/policy';
 import { isMutationRefused, mutateDataset } from '@/lib/story/dataset-mutate';
-import { runDataflow } from '@/lib/sql/run-dataflow';
 import { runMutation } from '@/lib/sql/engine';
 import { runLocalStateMutation, type LocalMutationResult } from '@/lib/story/local-state';
 import { localTableOverrides } from '@/lib/story/local-tables';
@@ -2229,7 +2229,7 @@ export async function runDocumentMutation(
 const readsViewer = (m: { reads: { builtins: string[] } }): boolean => m.reads.builtins.some((b) => b === VIEWER || b === VIEWER_ID);
 
 /** The artifact's accepted members, oldest first — the `_members` table. */
-async function acceptedMembers(artifactId: string): Promise<Row[]> {
+export async function acceptedMembers(artifactId: string): Promise<Row[]> {
   return (await (await getDb()).query<Row>(`SELECT user_id,joined_at::text FROM ${JOIN_RELATIONS} WHERE artifact_id=$1 AND status='accepted' ORDER BY joined_at,user_id`,[artifactId])).rows;
 }
 
@@ -2559,7 +2559,7 @@ type DatasetResolver = (id: string) => Promise<RefData | null>;
 type RefData = { tables: ImportTables[string]; catalog?: import('@/lib/datasets/types').DatasetCatalog };
 
 /** A resolved ref row → its data, under the viewer whose run this is. */
-async function tableForRef(r: ArtifactRow | null, viewer: RoleActor | null, document?:ArtifactRow): Promise<RefData | null> {
+export async function tableForRef(r: ArtifactRow | null, viewer: RoleActor | null, document?:ArtifactRow): Promise<RefData | null> {
   if (!r) return null;
   if (r.format === 'folder') {
     return { tables: { rows: await childrenTableFor(r, { userId: viewer?.userId ?? null, email: viewer?.email ?? null, tokenId: viewer?.tokenId ?? null }) } };
@@ -2725,41 +2725,7 @@ function compileErrorsByName(errors: ReadonlyArray<{ message: string }>): Record
 }
 
 async function runDeclaredDataflow(flow: CompiledDataflow, resolve: DatasetResolver, opts: DataflowRunOptions): Promise<RanDataflow> {
-  // Materialize a one-shot iterable once; selection and execution share it.
-  opts = { ...opts, ...(opts.only ? { only: [...opts.only] } : {}) };
-  const selected = selectQueries(flow, opts);
-  const resolved = new Map<string, RefData | null>();
-  const data = async (ref: string) => { if (!resolved.has(ref)) resolved.set(ref, await resolve(ref)); return resolved.get(ref) ?? null; };
-  const imports: ImportTables = {};
-  // Every artifact whose rows or database this run touched, with what it was: rechecked before anything is returned.
-  const usedSources = new Map<string, string>();
-  for (const name of new Set(selected.flatMap((q) => q.reads.imports))) {
-    const ref = importRef(flow, name);
-    const found = ref ? await data(ref) : null;
-    if (!found) continue;
-    imports[name] = found.tables;
-    usedSources.set(ref!, JSON.stringify(found.catalog ?? null));
-  }
-  const state = await runDataflow(flow, imports, {members:opts.members,userId:opts.viewer?.userId??null, tz: readerZone(opts.tz), values: opts.values, only: opts.only, page: opts.page, localTables: opts.localTables,
-    sourceQuery:async(q,params,paramTypes,page)=>{
-      const catalog = (await data(q.source!))?.catalog;
-      if (!catalog) throw new Error(`Source ref:${q.source} is unavailable`);
-      usedSources.set(q.source!, JSON.stringify(catalog));
-      return executeCatalog(catalog,q.sql,params,{datasetId:q.source!,limit:page?.limit,offset:page?.offset,sort:page?.sort,signal:opts.signal,paramTypes,authorize:async()=>{
-        await opts.authorize?.();
-        const current=await resolve(q.source!);
-        if(!current || JSON.stringify(current.catalog)!==JSON.stringify(catalog))throw new DatasetError('Dataset source is unavailable',404);
-      }});
-    },
-  });
-  // Per-query failures are deliberately isolated by runDataflow. Admission is
-  // not a query error: q1's rows must not escape if access changes while q2
-  // waits. Recheck every import read and every connected source a query ran inside.
-  for (const [id, snapshot] of usedSources) {
-    const current = await resolve(id);
-    if (!current || JSON.stringify(current.catalog ?? null) !== snapshot) throw new DatasetError('Dataset source is unavailable',404);
-  }
-  await opts.authorize?.();
+  const { state } = await executeDocumentQueries(flow, resolve, { ...opts, userId: opts.viewer?.userId ?? null, tz: readerZone(opts.tz) });
   return { flow, state };
 }
 
