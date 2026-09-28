@@ -49,8 +49,8 @@ export function createWriteStatusFeed(store: DataflowStore | null): WriteStatusF
       case 'written': {
         const current = statuses.find((s) => s.id === event.id);
         if (!current) return;
-        replace(event.id, { id: current.id, mutation: current.mutation, state: 'saved', startedAt: current.startedAt });
-        timers.set(event.id, setTimeout(() => { timers.delete(event.id); publish(without(event.id)); }, SAVED_STATUS_TTL_MS));
+        replace(event.id, { id: current.id, mutation: current.mutation, state: 'saved', startedAt: current.startedAt, ...(event.mutationRunId?{mutationRunId:event.mutationRunId}:{}) });
+        if(!event.mutationRunId)timers.set(event.id, setTimeout(() => { timers.delete(event.id); publish(without(event.id)); }, SAVED_STATUS_TTL_MS));
         return;
       }
       case 'writeFailed': {
@@ -70,7 +70,7 @@ export function createWriteStatusFeed(store: DataflowStore | null): WriteStatusF
     current: () => statuses,
     subscribe: (listener) => { listeners.add(listener); return () => { listeners.delete(listener); }; },
     dismiss: (id) => {
-      if (statuses.some((s) => s.id === id && s.state === 'failed')) publish(without(id));
+      if (statuses.some((s) => s.id === id && (s.state === 'failed'||!!s.mutationRunId))) publish(without(id));
     },
   };
 }

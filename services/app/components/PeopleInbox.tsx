@@ -4,9 +4,9 @@ import {Button,timeAgo} from './ui';
 import Avatar from './Avatar';
 import RowMenu from './RowMenu';
 import {useNotificationInbox} from './use-notification-inbox';
-import type {InboxItem} from './notification-context';
+import type {InboxItem,LegacyInboxItem} from './notification-context';
 
-function destination(n:InboxItem){
+function destination(n:LegacyInboxItem){
  if(n.kind==='follow')return `/people/${n.sender_id}`;
  const target=n.source?.startsWith('node:')?`#${n.source.slice(5)}`:n.source?.startsWith('comment:')?`?thread=${n.source.slice(8)}${n.first_update_id?`&comment=${encodeURIComponent(n.first_update_id)}`:''}`:'';
  return `/a/${n.artifact_id}${target}`;
@@ -15,6 +15,7 @@ const actionText:Record<string,string>={request:'asked to join',invitation:'invi
 
 /** One notification row for the compact menu and the full history. */
 function NotificationRow({item:n,busy,onRead,onRespond,onBlock}:{item:InboxItem;busy:boolean;onRead:()=>void;onRespond:(action:'accept'|'approve'|'dismiss')=>void;onBlock:()=>void}){
+ if('actor' in n)return <MutationRow item={n} busy={busy} onRead={onRead} onBlock={onBlock}/>;
  const invitation=n.kind==='invitation'||n.kind==='request'||n.kind==='joined'||(n.kind==='mention'&&n.direction==='invitation');
  return <li data-notification-id={n.id} className={`relative flex gap-3 px-3 py-3.5 ${n.read_at?'':'bg-accent-soft/40'}`}>
   <div className="pt-0.5"><Avatar image={null} initial={n.username??'?'} userId={n.sender_id} size={32}/></div>
@@ -31,13 +32,26 @@ function NotificationRow({item:n,busy,onRead,onRespond,onBlock}:{item:InboxItem;
  </li>;
 }
 
+function MutationRow({item:n,busy,onRead,onBlock}:{item:Extract<InboxItem,{kind:'mutation'}>;busy:boolean;onRead:()=>void;onBlock:()=>void}){
+ const person=n.actor.kind==='user'?n.actor:null;
+ const label=person?.person.name??({'deleted-user':'Deleted user',system:'System',anonymous:'Anonymous',agent:'Agent',token:'API token'} as Record<string,string>)[n.actor.kind]??'Unknown actor';
+ return <li data-notification-id={n.id} className={`relative flex gap-3 px-3 py-3.5 ${n.read_at?'':'bg-accent-soft/40'}`}>
+  {person&&<Avatar image={person.person.image} initial={label} userId={person.userId} size={32}/>}
+  <div className="min-w-0 flex-1"><p className="text-xs text-muted"><span>Triggered by</span>{' '}{person?<a href={`/people/${person.userId}`} className="font-semibold">{label}</a>:<span>{label}</span>}{person?.viaAgent?' via agent':''}</p>
+   <a href={`/a/${n.artifact_id}`} onClick={onRead} className="block break-words text-sm"><span>{n.message}</span><span className="mt-1 block text-xs text-muted">{n.title??'Untitled artefact'}</span></a>
+   {n.created_at&&<time dateTime={n.created_at} className="text-xs text-muted">{timeAgo(n.created_at)}</time>}
+  </div>
+  <div>{!n.read_at&&<span aria-label="Unread" className="block h-1.5 w-1.5 rounded-full bg-accent"/>}{person&&<RowMenu name={`notification from ${label}`} items={[{label:`Block ${label}`,text:'Block sender',icon:<ShieldBan size={13}/>,disabled:busy,onSelect:onBlock}]}/>}</div>
+ </li>;
+}
+
 export function PeopleInbox({compact=false}:{compact?:boolean}){
  const {state,error,load,loadMore,close}=useNotificationInbox();
  const root=useRef<HTMLElement>(null),displayed=useRef<Map<string,number>|null>(null),read=useRef(new Set<string>());
  const [busy,setBusy]=useState(false),[actionError,setActionError]=useState('');
  const items=compact?state?.notifications.slice(0,6):state?.notifications;
  async function respond(n:InboxItem,action:'accept'|'approve'|'dismiss'){
-  if(!n.artifact_id)return;
+  if(!n.artifact_id||'actor' in n)return;
   setBusy(true);setActionError('');
   try{
    const res=await fetch(`/api/my/artifacts/${encodeURIComponent(n.artifact_id)}/members`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action,...(n.direction==='request'?{userId:n.user_id}:{})})});
@@ -60,7 +74,7 @@ export function PeopleInbox({compact=false}:{compact?:boolean}){
   {(error||actionError)&&<p role="alert" className="p-3 text-sm text-danger">{actionError||error} <button onClick={()=>void load()}>Retry</button></p>}
   {!state&&!error&&<p role="status" className="p-4 text-sm text-muted">Loading notifications…</p>}
   {state&&!items?.length&&<div className="px-6 py-10 text-center"><Bell size={24} className="mx-auto mb-3 text-muted"/><p className="text-sm font-medium">You’re all caught up.</p><p className="mt-1 text-xs leading-5 text-muted">Invitations, replies and activity will appear here.</p></div>}
-  <ul className="m-0 list-none divide-y divide-edge p-0">{items?.map(n=><NotificationRow key={n.id} item={n} busy={busy} onRead={()=>{void load({read:n.id,revision:n.revision});close?.();}} onRespond={action=>void respond(n,action)} onBlock={()=>void load({block:n.sender_id})}/>)}</ul>
+  <ul className="m-0 list-none divide-y divide-edge p-0">{items?.map(n=><NotificationRow key={n.id} item={n} busy={busy} onRead={()=>{void load({read:n.id,revision:n.revision});close?.();}} onRespond={action=>void respond(n,action)} onBlock={()=>{const id='actor' in n?(n.actor.kind==='user'?n.actor.userId:null):n.sender_id;if(id)void load({block:id});}}/>)}</ul>
   {!compact&&state?.next!=null&&<div className="border-t border-edge p-3 text-center"><Button onClick={()=>void loadMore()}>Load more</Button></div>}
  </section>;
 }

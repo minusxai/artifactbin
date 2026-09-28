@@ -57,3 +57,11 @@ describe('createWriteStatusFeed', () => {
     expect(feed.current().filter((s) => s.state === 'failed')).toEqual([]);
   });
 });
+
+it('retains a notifying saved run for status discovery until explicitly dismissed',async()=>{
+ const store=storeWith(async()=>({dataset:'DS1',mutationRunId:'run-1'}));
+ const feed=createWriteStatusFeed(store);await store.mutate({mutation:'add',args:{}} as never);
+ expect(feed.current()[0]).toMatchObject({state:'saved',mutationRunId:'run-1'});
+ vi.advanceTimersByTime(SAVED_STATUS_TTL_MS+1);expect(feed.current()).toHaveLength(1);
+ feed.dismiss(feed.current()[0]!.id);expect(feed.current()).toEqual([]);
+});
