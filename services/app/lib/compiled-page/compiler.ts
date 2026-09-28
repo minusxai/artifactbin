@@ -121,7 +121,7 @@ export const KIT: Readonly<Record<string, KitMeta>> = {
   // Embeds with behaviour in a lazy chunk (lib/islands/kit/embed): today's managed frame and map.
   Iframe: { mod: 'data', island: true, api: ['title', 'height', 'compiled', 'assetsOrigin'], dom: 'box', noChildren: true },
   DeckGL: { mod: 'data', island: true, api: ['data', 'layers', 'basemap', 'initialViewState', 'tooltip', 'legend', 'title', 'height', 'colorMode'], dom: 'box', grid: true },
-  Dialog: { mod: 'dialog', island: true, api: ['defaultOpen'] }, DialogTrigger: { mod: 'dialog', api: ['wrapsControl', 'disabled'] }, DialogClose: { mod: 'dialog', api: ['wrapsControl', 'disabled'] }, DialogContent: { mod: 'dialog' },
+  Dialog: { mod: 'dialog', island: true, api: ['defaultOpen'] }, DialogTrigger: { mod: 'dialog', api: ['wrapsControl', 'disabled'] }, DialogClose: { mod: 'dialog', api: ['wrapsControl', 'disabled'] }, DialogContent: { mod: 'dialog', api: ['run', 'args', 'stacked'] },
 };
 /** The rail's miniature stubs its embeds (StoryRuntimeApp PREVIEW_REGISTRY). */
 const PREVIEW_EMBEDS: Readonly<Record<string, string>> = { Question: 'chart', Number: '#', DataTable: 'table', Video: 'video' };
@@ -337,6 +337,8 @@ export function generate(input: GenerateInput): Generated {
       const props = rawBuildProps(node.attributes, true, node.tag, path, undefined, {});
       // Decided here, never read from the author (interpreter BUTTON_TRIGGERS).
       if (node.tag === 'DialogTrigger' || node.tag === 'DialogClose') props.wrapsControl = wrapsControl(node);
+      // Today's dialog stacks its fields (and its mutation form is `display:contents`) only without an author class.
+      if (node.tag === 'DialogContent') props.stacked = !(typeof props.className === 'string' && props.className);
       // The runtime registry hands Mermaid the document's colour mode (StoryRuntimeApp RUNTIME_REGISTRY).
       if (node.tag === 'Mermaid') props.colorMode = input.colorMode ?? 'light';
       // <Column> children ARE the column spec (interpreter DataTable templates → parseColumnSpecs(templates.map(t => t.props))).

@@ -9,6 +9,8 @@
  *   performs the `<Mutation>` with `set=` applied first and `args=` resolved at the click, busy while
  *   it is in flight, and a refusal is shown in a `role="alert"`.
  * - In a `<For>` row the button writes with the row, and refuses without a durable row key.
+ * - `<DialogContent run>` is a form performing the mutation on submit: disabled with the reason for a
+ *   write the reader may not make, closed once saved, open with the refusal shown when it fails.
  * - `<Segmented>` offers "All" only when the bound Value's declared default is null.
  */
 import { describe, expect, it, vi } from 'vitest';
@@ -20,6 +22,7 @@ import { ACCESS_PENDING } from '../kit/store-read';
 import { ACCESS_PENDING as STORE_ACCESS_PENDING } from '@/lib/story-runtime/store';
 import { validRowKey } from '@/lib/story/repeat-identity';
 import { Segmented } from '../kit/controls';
+import { Dialog, DialogContent, DialogTrigger } from '../kit/dialog';
 import type { IslandContext } from '../contract';
 import type { DataflowStore } from '@/lib/story-runtime/store';
 import type { CompiledDataflow } from '@/lib/story/compiled-dataflow';
@@ -164,6 +167,45 @@ describe('<Segmented> options', () => {
     const [choice, pick] = [...host.querySelectorAll('[role="group"]')].map((g) => [...g.querySelectorAll('button')].map((b) => b.textContent));
     expect(choice).toEqual(['ramen', 'tacos']);
     expect(pick).toEqual(['All', 'a', 'b']);
+    dispose();
+  });
+});
+
+describe('<DialogContent run> on the island store', () => {
+  const open = (host: HTMLElement) => { (host.querySelector('button') as HTMLButtonElement).click(); return document.querySelector('dialog') as HTMLDialogElement; };
+
+  it('a guest\'s identity write: the form\'s fields are disabled and it says why, as today\'s dialog does', () => {
+    const s = fakeStore({ access: { mine: 'sign_in_required' } });
+    const { host, dispose } = mount(islandOn(s.store), () => <Dialog><DialogTrigger>Open</DialogTrigger><DialogContent aria-label="Add" run="$mine" stacked><input name="t" /><button type="submit">Save</button></DialogContent></Dialog>);
+    const dialog = open(host);
+    const form = dialog.querySelector('form')!;
+    expect(form.className).toBe('contents');
+    expect(form.querySelector('fieldset')!.disabled).toBe(true);
+    expect(dialog.querySelector('[role="status"]')?.textContent).toBe('Unavailable while signed out.');
+    form.dispatchEvent(new Event('submit', { cancelable: true, bubbles: true }));
+    expect(s.store.mutate).not.toHaveBeenCalled();
+    dispose();
+  });
+
+  it('an allowed write submits with `args=`, closes once saved, and stays open with the refusal when it fails', async () => {
+    const s = fakeStore({ access: { add: null }, values: { title: 'Milk' } });
+    const { host, dispose } = mount(islandOn(s.store), () => <Dialog><DialogTrigger>Open</DialogTrigger><DialogContent aria-label="Add" run="$add" args={{ t: { ref: 'title' } }} stacked={false}><button type="submit">Save</button></DialogContent></Dialog>);
+    const dialog = open(host);
+    const form = dialog.querySelector('form')!;
+    expect(form.hasAttribute('class')).toBe(false);
+    expect(form.querySelector('fieldset')!.disabled).toBe(false);
+    expect(dialog.querySelector('[role="status"]')).toBeNull();
+    form.dispatchEvent(new Event('submit', { cancelable: true, bubbles: true }));
+    expect(s.store.mutate).toHaveBeenCalledWith('add', { t: 'Milk' });
+    expect(form.querySelector('fieldset')!.disabled, 'busy while in flight').toBe(true);
+    s.settle(new Error('row_changed'));
+    await flush();
+    expect(dialog.querySelector('[role="alert"]')?.textContent).toBe('row_changed');
+    expect(dialog.open || dialog.hasAttribute('open')).toBe(true);
+    form.dispatchEvent(new Event('submit', { cancelable: true, bubbles: true }));
+    s.settle();
+    await flush();
+    expect(dialog.open || dialog.hasAttribute('open')).toBe(false);
     dispose();
   });
 });
