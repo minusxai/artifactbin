@@ -41,7 +41,7 @@ export function placeDataflow(flow: CompiledDataflow, hold: readonly string[] | 
   const queries: Record<string, NodePlacement> = {};
   // Run order puts every upstream query first.
   for (const q of flow.queries) {
-    queries[q.name] = q.engine === 'sqlite' && readsHeld(q.reads) && q.reads.queries.every((u) => queries[u] === 'browser') ? 'browser' : 'server';
+    queries[q.name] = !q.source && q.engine === 'sqlite' && readsHeld(q.reads) && q.reads.queries.every((u) => queries[u] === 'browser') ? 'browser' : 'server';
   }
   const mutations: Record<string, WritePlacement> = {};
   for (const m of flow.mutations) {

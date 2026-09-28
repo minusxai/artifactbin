@@ -74,7 +74,12 @@ export interface CompiledQuery {
   end: number;
 }
 
+export interface CompiledNotify extends CompiledQuery {
+  on: string;
+}
+
 export interface CompiledMutation {
+  notifies?: true;
   name: string;
   sql: string;
   /** What it writes: an imported dataset table, or a local table value. */
@@ -107,6 +112,13 @@ export interface CompiledDataflow {
   /** In dependency order: a query appears after every query it reads. */
   queries: CompiledQuery[];
   mutations: CompiledMutation[];
+  notifications?: CompiledNotify[];
 }
 
 export const EMPTY_COMPILED_DATAFLOW: CompiledDataflow = { imports: [], values: [], queries: [], mutations: [] };
+
+/** Reader bundles never carry notification SQL. */
+export function readerDataflow(flow: CompiledDataflow): CompiledDataflow {
+  const {notifications: _notifications, ...reader} = flow;
+  return reader;
+}
