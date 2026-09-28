@@ -343,8 +343,11 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
             },
           });
         }
-        console.error(`[compiled-page] ${artifact.id} v${row.version}: no compiled reader page (${answer.fallback})`);
-        return new Response('Reader unavailable', { status: 500, headers: COMMON });
+        // The serve boundary logs and counts failures; this route has no legacy renderer.
+        return new Response('<!doctype html><meta charset="utf-8"><title>Unavailable</title><h1>This document could not be rendered</h1>', {
+          status: 500,
+          headers: { 'Content-Type': 'text/html; charset=utf-8', [READER_MODE_HEADER]: 'compiled', ...COMMON },
+        });
       }
 
     }
