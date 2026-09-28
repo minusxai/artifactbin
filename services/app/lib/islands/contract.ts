@@ -9,10 +9,19 @@
  *
  * Owners: rt.ts / boot.ts (w2-runtime), kit/* (w2-kit-*), viewer + writes (w3-viewer-writes), handover (w3-handover).
  */
+/*
+ * SOLID 2 NAMES (Phase 2, w1-toolchain): island code imports Solid under its
+ * 1.x names (`solid-js`, `solid-js/web`, `solid-js/store`,
+ * `@jsxImportSource solid-js`). Solid 2 moved the renderer to `@solidjs/web`
+ * and the store into `solid-js`; scripts/lib/solid-aliases.mjs,
+ * lib/islands/solid-compat.d.ts and lib/islands/solid-store.ts map the old
+ * names for the build, vitest and TypeScript. Generated code imports
+ * `@solidjs/web` directly; both routes reach one module.
+ */
 import type { Scalar, TableResult } from '@/lib/story/dataflow';
 import type { MutationRequest } from '@/lib/story/mutation-request';
 import type { DataflowStore, MutationAnswer } from '@/lib/story-runtime/store';
-import type { StoredMermaidImage, StoryViewer } from '@/lib/story-runtime/contract';
+import type { ServedResults, StoredMermaidImage, StoryViewer } from '@/lib/story-runtime/contract';
 import type { PersonCard } from '@artifactbin/contracts';
 
 /* ────────────────────────────────────────────────────────────────────────────
@@ -147,3 +156,21 @@ export const ISLANDS_READY_EVENT = 'mx:ready';
  */
 export const KIT_FAMILIES = ['basic', 'tabs', 'accordion', 'dialog', 'disclosure', 'controls', 'data', 'files', 'people', 'mermaid'] as const;
 export type KitFamily = (typeof KIT_FAMILIES)[number];
+
+/**
+ * The page's data island (`<script type="application/json">`, written by the
+ * assembler, read by the island runtime's boot): everything a reader's islands
+ * start from before any request.
+ */
+export interface IslandPageData {
+  values: Record<string, Scalar>;
+  results: ServedResults | null;
+  queryUrl?: string;
+  mutateUrl?: string;
+  viewerUrl?: string;
+  assetsUrl?: string;
+  /** The non-secret "signed in" hint: viewer-dependent islands show a neutral placeholder rather than guest content. */
+  signedIn: boolean;
+  mermaidImages: Readonly<Record<string, StoredMermaidImage>>;
+  readOnly: string | null;
+}
