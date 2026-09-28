@@ -353,6 +353,8 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
           // The page's own behaviour (lib/islands/page): framing, the reader's colour override, the live
           // stream of a page with no islands, the scroll a live reload keeps. Never on a capture.
           behaviors: capture ? [] : ['page'],
+          // `chrome=0` draws the document without its own chrome (a deck's rail and present bar), as today's does.
+          documentChrome: chrome,
           head: chrome
             ? {
               description: row.description,

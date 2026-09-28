@@ -6,6 +6,8 @@
  *   the reader's place across the reload a new version delivers, and carries their mode: the page's own
  *   behaviour (`@mx/page`), the same one a `/raw` copy runs. An interactive page loads it too (its
  *   reload keeps the place); the islands' module holds the stream there.
+ * - `/raw?chrome=0` (the capture's render) carries no deck chrome — no slide rail, no present bar, no deck
+ *   behaviour — exactly as today's renderer honours it; the story itself is the same.
  * - A reader who holds a credential for the document — an account session, or a held connection (the
  *   guest owner who made it) — gets the page's credentialed doors (`signedIn` in the data island), so
  *   the store's write check answers for them, as today's reader page does; a guest does not.
@@ -14,6 +16,9 @@ import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { JSDOM } from 'jsdom';
 import { useAppHarness, request, agentCookie } from '@/__tests__/harness';
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
+import { GET as rawRoute } from '@/app/a/[id]/raw/route';
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
 import { createAppServer } from '@/server/app';
 import { mintToken } from '@/lib/tokens';
 import { drainPreparedPageWarmups } from '@/lib/story/prepared-page.server';
@@ -77,5 +82,31 @@ describe('the compiled app page holds its own live stream until the app loads', 
     const kit = await publish(t.token, { title: 'Tabs', markup: '<Tabs defaultValue="a"><TabsList><TabsTrigger value="a">A</TabsTrigger><TabsTrigger value="b">B</TabsTrigger></TabsList><TabsContent value="a">One</TabsContent><TabsContent value="b">Two</TabsContent></Tabs>' });
     const interactive = new JSDOM(await (await app.request(`/a/${kit}?reader=compiled`, { headers: { accept: 'text/html' } })).text()).window.document;
     expect([...interactive.querySelectorAll('script[type="module"]')].map((s) => s.getAttribute('src'))).toContain(loadCompilerBuild().manifest['@mx/page']);
+  });
+});
+
+describe('chrome=0 on a compiled /raw', () => {
+  it('drops the deck\'s rail, present bar and behaviour, keeping the document; without it the deck chrome is there', async () => {
+    const t = await mintToken('behaviour');
+    const markup = readFileSync(path.resolve(process.cwd(), '../../scripts/fixtures/page-speed/deck.jsx'), 'utf8');
+    const id = await publish(t.token, { title: 'Deck', markup });
+    const raw = async (search: string) => {
+      const res = await rawRoute(request(`/a/${id}/raw${search}`), { params: Promise.resolve({ id }) });
+      expect(res.headers.get(READER_MODE_HEADER)).toBe('compiled');
+      return new JSDOM(await res.text()).window.document;
+    };
+    const deckScript = loadCompilerBuild().manifest['@mx/deck'];
+    const full = await raw('?reader=compiled');
+    expect(full.querySelector('nav.mx-rail')).toBeTruthy();
+    expect(full.querySelector('[aria-label="Slide controls"]')).toBeTruthy();
+    expect([...full.querySelectorAll('script[type="module"]')].map((s) => s.getAttribute('src'))).toContain(deckScript);
+
+    const capture = await raw('?reader=compiled&chrome=0');
+    expect(capture.querySelector('nav.mx-rail')).toBeNull();
+    expect(capture.querySelector('[aria-label="Slide controls"]')).toBeNull();
+    expect(capture.querySelector('.mx-deck')).toBeNull();
+    expect([...capture.querySelectorAll('script[type="module"]')].map((s) => s.getAttribute('src'))).not.toContain(deckScript);
+    // The same document, less its chrome.
+    expect(capture.querySelector('#mx-story-root .mx-doc')?.innerHTML).toBe(full.querySelector('#mx-story-root .mx-deck > .mx-doc')?.innerHTML);
   });
 });
