@@ -31,7 +31,8 @@ import type { DataflowStore } from '@/lib/story-runtime/store';
 import type { ServedResults, StoredMermaidImage } from '@/lib/story-runtime/contract';
 import type { PersonCard } from '@artifactbin/contracts';
 import { IslandProvider, useIsland } from './context';
-import type { IslandContext, IslandViewer, WriteStatusFeed } from './contract';
+import type { IslandChartModule, IslandContext, IslandViewer, WriteStatusFeed } from './contract';
+import { trustedPortalOf } from './trusted-portal';
 
 /*
  * THE GENERATED-CODE SURFACE. Islands are compiled with `moduleName: '@mx/rt'`, so every DOM
@@ -46,6 +47,9 @@ export {
   setAttribute, setAttributeNS, setBoolAttribute, setProperty, setStyleProperty, spread, style,
   template, use,
 } from 'solid-js/web';
+/** For the SSR module's `render(data)`, which builds the same runtime without a transport. */
+export { IslandProvider } from './context';
+export { createDataflowStore } from '@/lib/story-runtime/store';
 
 /* ────────────────────────────────────────────────────────────────────────────
  * The store bridge
@@ -78,6 +82,10 @@ export interface IslandRuntimeOptions {
    * injected so this module never imports the writes seam; absent: the empty feed.
    */
   writes?: (store: DataflowStore | null) => WriteStatusFeed;
+  /** The lazy chart module (lib/islands/chart `loadChart`), injected by boot; absent (the SSR render): charts stay as drawn. */
+  loadChart?: () => Promise<IslandChartModule>;
+  /** Where overlays portal; absent: the page's trusted UI container, looked up when asked (trusted-portal.ts). */
+  trustedPortal?: () => HTMLElement | null;
 }
 
 /** One document's runtime: the context every island receives, and the handles only the page holds. */
@@ -169,6 +177,8 @@ export function createIslandRuntime(
     drawings: () => drawings,
     writes: (options.writes ?? (() => EMPTY_WRITE_FEED))(store),
     store: () => store,
+    trustedPortal: options.trustedPortal ?? (() => trustedPortalOf()),
+    loadChart: options.loadChart ?? (() => Promise.reject(new Error('charts are drawn in the browser'))),
   };
 
   return {

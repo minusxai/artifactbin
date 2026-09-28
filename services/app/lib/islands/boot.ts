@@ -31,6 +31,7 @@ import { installIslandDocument } from './handover';
 import { loadViewerOverlay } from './viewer';
 import { createWriteStatusFeed } from './writes';
 import { installStatus } from './kit/status';
+import { loadChart } from './chart';
 
 /** One island of the per-document module: its hydration key prefix (`IslandRef.renderId`) and its component. */
 export type IslandEntry = readonly [renderId: string, component: Component];
@@ -68,7 +69,12 @@ const appOrigin = (): string => {
   try { return new URL(import.meta.url).origin; } catch { return ''; }
 };
 
-export function boot(module: IslandModule, win: Window = window): IslandDocument {
+/**
+ * `ISLANDS` alone is accepted for a module whose islands read no data (the compiler's first shape);
+ * a module with data passes `{ ISLANDS, FLOW }`.
+ */
+export function boot(input: IslandModule | readonly IslandEntry[], win: Window = window): IslandDocument {
+  const module: IslandModule = Array.isArray(input) ? { ISLANDS: input as readonly IslandEntry[] } : (input as IslandModule);
   const doc = win.document;
   const root = doc.querySelector<HTMLElement>(STORY_ROOT_SELECTOR) ?? doc.body;
   const data = readPageData(doc);
@@ -83,7 +89,7 @@ export function boot(module: IslandModule, win: Window = window): IslandDocument
       readOnly: data.readOnly ?? null,
     },
     (input) => createDataflowStore(input, { transport, writesUnavailable: data.readOnly ?? null }),
-    { writes: createWriteStatusFeed },
+    { writes: createWriteStatusFeed, loadChart },
   );
   const { context, store } = runtime;
   store?.start();

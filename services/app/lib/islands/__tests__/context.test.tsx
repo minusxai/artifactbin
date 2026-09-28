@@ -14,6 +14,7 @@ export const fakeIsland = (values: Record<string, string> = {}): IslandContext =
   values: () => values, value: (n) => values[n], table: () => undefined, tableSnapshot: () => undefined, pending: () => false, error: () => undefined, people: () => ({}),
   setValue: () => {}, mutate: async () => ({ dataset: 'x' }), writesUnavailable: () => null,
   viewer: () => null, drawings: () => ({}), writes: { current: () => [], subscribe: () => () => {} }, store: () => null,
+  trustedPortal: () => null, loadChart: () => Promise.reject(new Error('no charts in this fake')),
 });
 
 function Reads() { const island = useIsland(); return <span>{String(island.value('region'))}</span>; }

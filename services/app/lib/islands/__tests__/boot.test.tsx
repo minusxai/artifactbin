@@ -81,6 +81,14 @@ describe('boot', () => {
     expect(booted.context.writesUnavailable()).toBeNull();
   });
 
+  it('accepts ISLANDS alone for a module whose islands read no data', () => {
+    page(snapshot);
+    booted = boot([['s0-', Total]]);
+    expect(booted.store).toBeNull();
+    expect(document.getElementById('island')?.textContent, 'no data: the island renders its declared state').toBe('…undefined');
+    expect(document.documentElement.hasAttribute('data-mx-ready')).toBe(true);
+  });
+
   it('edit mode disposes the islands and leaves their DOM as static markup', () => {
     page(snapshot);
     booted = boot({ ISLANDS: [['s0-', Total]], FLOW: flow });

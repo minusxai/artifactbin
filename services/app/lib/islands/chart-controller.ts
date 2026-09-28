@@ -13,7 +13,7 @@ import { beginChartRender, trackChartRender } from '@/lib/viz/render-readiness';
 import { computeFacetLayoutPlan, computeLegendPlan, computeXLabelAngle, createVegaView, injectNamedAssets, resizeVegaView, resolveEnvelopeSpec, setMainData, toVegaSpec } from '@/lib/viz/render-vega';
 import { inferVizColumnsFromRows } from '@/lib/viz/query-data';
 import { chartTokenRangeFromElement, resolveCssVarColors } from '@/lib/viz/chart-tokens';
-import type { ChartController, ChartOptions, ChartRows } from './chart';
+import type { IslandChart, IslandChartInput } from './contract';
 
 type View = ReturnType<typeof createVegaView>;
 
@@ -26,12 +26,18 @@ const promoteFontAttrs = (root: HTMLElement) => {
   }
 };
 const sizeOf = (el: HTMLElement) => ({ width: Math.max(80, Math.floor(el.clientWidth)), height: Math.max(60, Math.floor(el.clientHeight)) });
-const message = (error: unknown) => (error instanceof Error ? error.message : String(error));
+/** The story element's colour mode (its `light`/`dark` class), which the chart themes with. */
+const colorModeOf = (el: HTMLElement): 'light' | 'dark' => (el.closest('.dark') ? 'dark' : 'light');
+/** A chart that cannot draw keeps whatever the slot shows (the server's drawing) and says why once. */
+const onError = (el: HTMLElement, error: unknown) => {
+  el.setAttribute('data-mx-chart-error', error instanceof Error ? error.message : String(error));
+};
 
-export function mountChart(el: HTMLElement, { envelope, rows, colorMode, onError }: ChartOptions): ChartController {
+export function mountChart({ element: el, envelope, rows }: IslandChartInput): IslandChart {
+  const colorMode = colorModeOf(el);
   let view: View | null = null;
   let vl: Record<string, unknown> | null = null;
-  let current: ChartRows = rows;
+  let current: IslandChartInput['rows'] = rows;
   let disposed = false;
   const finish = beginChartRender(el);
   void (async () => {
@@ -54,7 +60,7 @@ export function mountChart(el: HTMLElement, { envelope, rows, colorMode, onError
       await view.runAsync();
       promoteFontAttrs(el);
     } catch (error) {
-      onError?.(message(error));
+      onError(el, error);
     } finally {
       finish();
     }
@@ -72,9 +78,9 @@ export function mountChart(el: HTMLElement, { envelope, rows, colorMode, onError
       const v = view;
       if (!v) return;
       setMainData(v, next);
-      trackChartRender(el, () => v.runAsync()).then(() => promoteFontAttrs(el), (error: unknown) => onError?.(message(error)));
+      trackChartRender(el, () => v.runAsync()).then(() => promoteFontAttrs(el), (error: unknown) => onError(el, error));
     },
-    dispose() {
+    destroy() {
       disposed = true;
       resize.disconnect();
       view?.finalize();

@@ -1,45 +1,53 @@
 /**
- * The lazy chart door (lib/islands/chart): a handle at once, the controller chunk (Vega and lib/viz)
- * imported only on first mount, and calls made while it loads applied once it has.
+ * The lazy chart module (lib/islands/chart `loadChart`, contract `IslandChartModule`): nothing loads
+ * the controller chunk (Vega, lib/viz) until the first call; one chunk per page; a failed fetch is
+ * retried; boot hands the loader to every island as `IslandContext.loadChart`.
  */
 import { describe, expect, it, vi } from 'vitest';
+import type { IslandChartInput } from '../contract';
 
-const controller = vi.hoisted(() => ({ loaded: 0, mounts: [] as Array<{ el: HTMLElement; update: ReturnType<typeof vi.fn>; dispose: ReturnType<typeof vi.fn> }> }));
+const controller = vi.hoisted(() => ({ loaded: 0, fail: false, mounts: [] as IslandChartInput[] }));
 vi.mock('../chart-controller', () => {
   controller.loaded++;
+  if (controller.fail) throw new Error('chunk unavailable');
   return {
-    mountChart: (el: HTMLElement) => {
-      const handle = { el, update: vi.fn(), dispose: vi.fn() };
-      controller.mounts.push(handle);
-      return handle;
+    mountChart: (input: IslandChartInput) => {
+      controller.mounts.push(input);
+      return { update: vi.fn(), destroy: vi.fn() };
     },
   };
 });
 
-describe('mountChart', () => {
-  it('imports the controller on first use only, then applies queued rows and dispose', async () => {
-    const { mountChart, loadChartController } = await import('../chart');
-    expect(controller.loaded, 'importing the door loads no controller').toBe(0);
+describe('loadChart', () => {
+  it('imports the controller on the first call only and hands it to islands through the context', async () => {
+    const { loadChart } = await import('../chart');
+    const { boot } = await import('../boot');
+    expect(controller.loaded, 'importing the door and boot loads no controller').toBe(0);
 
-    const el = document.createElement('div');
-    const handle = mountChart(el, { envelope: {} as never, rows: [{ n: 1 }], colorMode: 'light' });
-    handle.update([{ n: 2 }]);
-    await loadChartController();
-    await Promise.resolve();
+    const module = await loadChart();
     expect(controller.loaded).toBe(1);
-    expect(controller.mounts).toHaveLength(1);
-    expect(controller.mounts[0]!.update).toHaveBeenCalledWith([{ n: 2 }]);
+    const element = document.createElement('div');
+    const chart = module.mountChart({ element, envelope: { version: 2 } as never, rows: [{ n: 1 }] });
+    expect(controller.mounts).toEqual([{ element, envelope: { version: 2 }, rows: [{ n: 1 }] }]);
+    chart.update?.([{ n: 2 }]);
+    chart.destroy();
+    expect(chart.destroy).toHaveBeenCalledTimes(1);
 
-    handle.update([{ n: 3 }]);
-    expect(controller.mounts[0]!.update).toHaveBeenLastCalledWith([{ n: 3 }]);
-    handle.dispose();
-    expect(controller.mounts[0]!.dispose).toHaveBeenCalledTimes(1);
-
-    const late = mountChart(document.createElement('div'), { envelope: {} as never, rows: [], colorMode: 'dark' });
-    late.dispose();
-    await loadChartController();
-    await Promise.resolve();
-    expect(controller.mounts, 'a chart disposed before the chunk arrived never mounts').toHaveLength(1);
+    expect(await loadChart()).toBe(module);
     expect(controller.loaded, 'one chunk per page').toBe(1);
+
+    document.body.innerHTML = '<div data-mx-inline-story=""></div>';
+    const doc = boot({ ISLANDS: [] });
+    expect(await doc.context.loadChart()).toBe(module);
+    doc.dispose();
+  });
+});
+
+describe('the default runtime without a loader (the SSR render)', () => {
+  it('refuses to draw rather than loading Vega', async () => {
+    const { createIslandRuntime } = await import('../rt');
+    const { createDataflowStore } = await import('@/lib/story-runtime/store');
+    const rt = createIslandRuntime({}, (df) => createDataflowStore(df));
+    await expect(rt.context.loadChart()).rejects.toThrow(/browser/);
   });
 });
