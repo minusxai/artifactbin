@@ -38,6 +38,7 @@ export const CHROME_HIDDEN_CLASS = 'mx-reader-chrome--hidden';
 
 /** Report a framed reader's scroll to the shell, which cannot inspect an opaque frame. */
 function relayFrameScroll(win: Window, doc: Document): () => void {
+  if (typeof win.parent.postMessage !== 'function') return () => {};
   let queued = false;
   const post = () => {
     queued = false;

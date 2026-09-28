@@ -1,10 +1,26 @@
 /* @jsxImportSource solid-js */
-import { For, Show, createEffect, createSignal, untrack, type JSX } from 'solid-js';
+import { For, Show, createEffect, createMemo, createSignal, untrack, type JSX } from 'solid-js';
 import { format as d3format } from 'd3-format';
 import { Portal } from 'solid-js/web';
 import { refName, type Scalar, type TableResult } from '@/lib/story/dataflow';
 import { coerceScalarInput } from '@/lib/story/scalar-input';
+import { boundImageValue, imageReferenceId } from '@/lib/story/image-source';
 import { useIsland } from '../context';
+
+/** A data-bound image resolves through the document's own asset door on SSR and hydration. */
+export function BoundImage(props: { template: string; attrs: Record<string, string>; row?: Record<string, unknown> }): JSX.Element {
+  const island = useIsland();
+  const source = createMemo(() => {
+    const value = boundImageValue(props.template, island.values() as Record<string, Scalar>, props.row);
+    const endpoint = island.assetsUrl();
+    const url = value && endpoint && (imageReferenceId(value) || /^https?:\/\//i.test(value))
+      ? `${endpoint}${endpoint.includes('?') ? '&' : '?'}u=${encodeURIComponent(value)}` : null;
+    return { value, url };
+  });
+  return <img {...props.attrs} src={source().url ?? undefined}
+    data-mx-bound={!source().value ? `src:${props.template}` : undefined}
+    data-mx-asset={source().value && !source().url ? 'refused' : undefined} />;
+}
 
 type Props = Record<string, unknown>;
 const join = (...v: (string | false | undefined)[]) => v.filter(Boolean).join(' ');

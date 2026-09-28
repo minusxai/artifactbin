@@ -24,9 +24,7 @@ import { hydrate, insert as solidInsert, isServer } from 'solid-js/web';
 import type { ReactiveExpression } from '@/lib/jsx/reactive';
 import { evaluateReactive } from '@/lib/jsx/reactive-eval';
 import { substituteRow } from '@/lib/story/row-scope';
-import { keyedRowsError } from '@/lib/story/repeat-identity';
-import { boundImageValue } from '@/lib/story/image-source';
-import { runtimeAssetUrl, isWebUrl } from '@/lib/story/asset-url';
+import { keyedRowsError } from '@/lib/story/row-key';
 import type { CompiledDataflow } from '@/lib/story/compiled-dataflow';
 import type { DataflowState, Row, Scalar, TableResult } from '@/lib/story/dataflow';
 import { ACCESS_PENDING, type DataflowStore } from '@/lib/story-runtime/store';
@@ -105,19 +103,6 @@ export interface IslandRuntime {
 }
 
 export const EMPTY_WRITE_FEED: WriteStatusFeed = Object.freeze({ current: () => [], subscribe: () => () => {}, dismiss: () => {} });
-
-/** A data-bound image resolves through the document's own asset door on SSR and hydration. */
-export function BoundImage(props: { template: string; attrs: Record<string, string>; row?: Record<string, unknown> }): JSX.Element {
-  const island = useIsland();
-  const source = createMemo(() => {
-    const value = boundImageValue(props.template, island.values() as Record<string, Scalar>, props.row);
-    const url = value ? runtimeAssetUrl(value, () => false, island.assetsUrl()) : null;
-    return { value, url: url && (!isWebUrl(url) || !!island.assetsUrl()) ? url : null };
-  });
-  return <img {...props.attrs} src={source().url ?? undefined}
-    data-mx-bound={!source().value ? `src:${props.template}` : undefined}
-    data-mx-asset={source().value && !source().url ? 'refused' : undefined} />;
-}
 
 interface Bridged {
   values: Record<string, Scalar>;

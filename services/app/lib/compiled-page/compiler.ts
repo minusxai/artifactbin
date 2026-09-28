@@ -561,9 +561,11 @@ export function generate(input: GenerateInput): Generated {
     // The image source is data, including URL templates. Its first paint and live value use the same asset door.
     const imageSource = lower === 'img' && !node.isComponent ? node.attributes.find((a) => a.name.toLowerCase() === 'src') : undefined;
     if (imageSource?.value.static && typeof imageSource.value.json === 'string'
-      && (refName(imageSource.value.json) || carriesRef(imageSource.value.json))) {
+      && (refName(imageSource.value.json) || parseRowRef(imageSource.value.json) || carriesRef(imageSource.value.json))) {
+      useKit('BoundImage', mode, ctx);
       const props = rawBuildProps(node.attributes.filter((a) => a !== imageSource), false, node.tag, path, undefined, {});
-      return `<rt.BoundImage template={${lit(imageSource.value.json)}} attrs={${json(Object.fromEntries(domAttrs(tag, props)))}}${ctx.row ? ` row={${ctx.row}}` : ''} />`;
+      const attrs = json(Object.fromEntries(domAttrs(tag, props)));
+      return `<BoundImage template={${lit(imageSource.value.json)}} attrs={${ctx.row ? `${rowAttrsFn(mode, ctx)}(${attrs}, ${ctx.row}, ${ctx.scope})` : attrs}}${ctx.row ? ` row={${ctx.row}}` : ''} />`;
     }
     // A `$`-bound native form control (interpreter boundAttrs → StoryRuntimeApp NativeBoundControl).
     const boundTable = ['input', 'select', 'textarea'].includes(lower) ? REF_ATTRS.html[lower] : null;
@@ -712,7 +714,7 @@ export function generate(input: GenerateInput): Generated {
 
   const kitImports = (set: Set<string>): string => {
     const byMod: Record<string, string[]> = {};
-    for (const tag of set) (byMod[tag === 'BoundNative' ? 'controls' : CELL_EXPORTS.has(tag) ? 'cells' : KIT[tag]!.mod] ??= []).push(tag);
+    for (const tag of set) (byMod[tag === 'BoundNative' || tag === 'BoundImage' ? 'controls' : CELL_EXPORTS.has(tag) ? 'cells' : KIT[tag]!.mod] ??= []).push(tag);
     return Object.entries(byMod).sort(([a], [b]) => a.localeCompare(b)).map(([mod, tags]) => `import { ${tags.sort().map(safeProp).join(', ')} } from ${lit(`@mx/kit/${safeTag(mod)}`)};\n`).join('');
   };
   const dataConsts = data.map((text, i) => `const $d${i} = JSON.parse(${lit(text)});\n`).join('');
