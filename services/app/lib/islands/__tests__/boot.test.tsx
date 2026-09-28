@@ -10,9 +10,11 @@
  * adoption of the served node with compiler-shaped hydratable code.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { Show } from 'solid-js';
 import { boot } from '../boot';
 import { islandDocumentOf } from '../handover';
 import { useIsland } from '../context';
+import { DataTable, Question } from '../kit/data';
 import type { IslandDocument, IslandEvent } from '../contract';
 import type { CompiledDataflow } from '@/lib/story/compiled-dataflow';
 
@@ -47,6 +49,41 @@ afterEach(() => {
 });
 
 describe('boot', () => {
+  it('replaces cold DataTable and Question placeholders when their query answers, including a multi-root island', async () => {
+    const cold = { ...snapshot, results: null, queryUrl: '/a/abc/query' };
+    document.body.innerHTML = '<div data-mx-inline-story="" id="mx-story-root">'
+      + '<p id="before">static</p><div data-hk="s0-0" id="table">loading data…</div>'
+      + '<div data-hk="s1-0" id="question">loading data…</div>'
+      + '<div data-hk="s2-0" id="multi">loading data…</div>'
+      + '<aside data-hk="s3-0" id="swap">loading data…</aside><p id="after">static</p></div>'
+      + `<script type="application/json" id="mx-story-data">${JSON.stringify(cold)}</script>`;
+    const before = document.getElementById('before');
+    const after = document.getElementById('after');
+    let answer!: (response: Response) => void;
+    const fetchMock = vi.fn(() => new Promise<Response>((resolve) => { answer = resolve; }));
+    vi.stubGlobal('fetch', fetchMock);
+    const Table = () => <DataTable data="$total" id="table" />;
+    const Chart = () => <Question data="$total" id="question" />;
+    const Multi = () => <><DataTable data="$total" id="multi" /><span id="companion">companion</span></>;
+    const Swap = () => { const island = useIsland(); return <Show when={island.table('total')} fallback={<aside id="swap">loading data…</aside>}><section id="swap">rows ready</section></Show>; };
+
+    booted = boot({ ISLANDS: [['s0-', Table], ['s1-', Chart], ['s2-', Multi], ['s3-', Swap]], FLOW: flow });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(document.querySelector('#table')?.textContent).toContain('loading data');
+    expect(document.querySelector('#question')?.textContent).toContain('loading data');
+    answer(Response.json({ tables: { total: { rows: [{ n: 42 }], columns: [{ name: 'n', type: 'number' }] } }, errors: {} }));
+    await vi.waitFor(() => expect(booted?.store?.getTable('total')?.rows).toEqual([{ n: 42 }]));
+
+    await vi.waitFor(() => {
+      expect(document.querySelector('#table tbody')?.textContent, document.getElementById('mx-story-root')?.innerHTML).toContain('42');
+      expect(document.querySelector('#question [aria-label="Data table"] tbody')?.textContent).toContain('42');
+      expect(document.querySelector('#multi tbody')?.textContent).toContain('42');
+      expect(document.querySelector('section#swap')?.textContent).toBe('rows ready');
+    });
+    expect(document.getElementById('companion')?.textContent).toBe('companion');
+    expect(document.getElementById('before')).toBe(before);
+    expect(document.getElementById('after')).toBe(after);
+  });
   it('hydrates the island from the snapshot in place, installs the document, marks ready and fires mx:ready', () => {
     page(snapshot);
     const root = document.querySelector<HTMLElement>('[data-mx-inline-story]')!;
