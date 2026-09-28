@@ -171,13 +171,15 @@ it('balances the extra cross-browser setup without extending any test timeout', 
 
 it('prints the same browser and Postgres plans used by shard selection without starting servers', () => {
   const set = [...onDisk, ...compiledLegNames()];
-  for (let index = 1; index <= 8; index++) {
-    const selected = shardOf(set, {index, total: 8}, shardWeight);
-    const output = execFileSync(process.execPath, [path.join(SCRIPTS, 'gates.mjs'), '--browsers', `--shard=${index}/8`], {encoding: 'utf8'}).trim();
+  for (let index = 1; index <= 9; index++) {
+    const selected = shardOf(set, {index, total: 9}, shardWeight);
+    const output = execFileSync(process.execPath, [path.join(SCRIPTS, 'gates.mjs'), '--browsers', `--shard=${index}/9`], {encoding: 'utf8'}).trim();
     expect(output).toBe(browsersFor(selected).join(' '));
-    const postgres = execFileSync(process.execPath, [path.join(SCRIPTS, 'gates.mjs'), '--needs-postgres', `--shard=${index}/8`], {encoding: 'utf8'}).trim();
+    const postgres = execFileSync(process.execPath, [path.join(SCRIPTS, 'gates.mjs'), '--needs-postgres', `--shard=${index}/9`], {encoding: 'utf8'}).trim();
     expect(postgres).toBe(String(selected.some((name) => gateOf(name) === 'postgres-datasets')));
   }
+  expect(Array.from({length: 9}, (_, offset) => shardOf(set, {index: offset + 1, total: 9}, shardWeight))
+    .find((shard) => shard.includes('editor-v2'))).toEqual(['editor-v2']);
 });
 
 describe('the compiled legs (w3-behaviour)', () => {

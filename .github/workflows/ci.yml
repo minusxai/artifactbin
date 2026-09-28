@@ -373,13 +373,13 @@ jobs:
   gates:
     needs: [ plan, build ]
     if: needs.plan.outputs.gates == 'true'
-    name: browser gates (${{ matrix.shard }}/8)
+    name: browser gates (${{ matrix.shard }}/9)
     runs-on: ubuntu-latest
     timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
-        shard: [ 1, 2, 3, 4, 5, 6, 7, 8 ]
+        shard: [ 1, 2, 3, 4, 5, 6, 7, 8, 9 ]
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
@@ -412,8 +412,8 @@ jobs:
       # packages even on a browser-cache hit; install them only on shards that use them.
       - id: gate-browsers
         run: |
-          echo "browsers=$(node scripts/gates.mjs --browsers --shard=${{ matrix.shard }}/8)" >> "$GITHUB_OUTPUT"
-          echo "postgres=$(node scripts/gates.mjs --needs-postgres --shard=${{ matrix.shard }}/8)" >> "$GITHUB_OUTPUT"
+          echo "browsers=$(node scripts/gates.mjs --browsers --shard=${{ matrix.shard }}/9)" >> "$GITHUB_OUTPUT"
+          echo "postgres=$(node scripts/gates.mjs --needs-postgres --shard=${{ matrix.shard }}/9)" >> "$GITHUB_OUTPUT"
       - name: Install selected gate browsers
         env:
           BROWSERS: ${{ steps.gate-browsers.outputs.browsers }}
@@ -435,7 +435,7 @@ jobs:
         with:
           name: app-build
       # The runner boots the servers with one protected per-run mail outbox.
-      # Two servers within each of the eight runners. The
+      # Two servers within each of the nine runners. The
       # within-machine fan-out bottomed out at 192s on four vCPUs; the shard is
       # balanced by each gate's measured weight, not by count, so no one runner
       # ends up holding every slow gate (scripts/gates.shard.mjs). More than two
@@ -443,11 +443,11 @@ jobs:
       # 34697938970, and further shards divide that work rather than the machine.
       #
       #
-      # EIGHT since the compiled legs (w3-behaviour): the behavioural gates run a second time against the
+      # NINE since the compiled legs (w3-behaviour): the behavioural gates run a second time against the
       # compiled reader (`<gate>@compiled`, scripts/gates.manifest COMPILED_LEGS) on servers the runner
       # boots beside the ordinary two with FLAG__COMPILED_READER=on; the two workers share one queue. The
-      # legs add ~530s of weight to ~5440s. Seven shards put the slowest gate job at 249–250s
-      # on PR #166; eight lowers the heaviest planned shard from 870s to 770s.
+      # legs add ~530s of weight to ~5440s. Seven and eight shards crossed 240s after
+      # editor-v2 needed a retry. Nine isolate it and divide the remaining gates over eight runners.
       #
       # The gate runner selects the shard on this host; pull Postgres only when
       # that selection includes postgres-datasets, before its gate timeout starts.
@@ -463,7 +463,7 @@ jobs:
           sudo chown -R "$USER" /sys/fs/cgroup/afbin-sessions
           sudo chown "$USER" /sys/fs/cgroup/cgroup.procs
       - name: every gate, two servers
-        run: node scripts/gates.mjs --servers=2 --shard=${{ matrix.shard }}/8
+        run: node scripts/gates.mjs --servers=2 --shard=${{ matrix.shard }}/9
         env:
           AUTH__SECRET: gates-ci-${{ github.run_id }}
           DATASET__ALLOW_PRIVATE_NETWORKS: 'true'

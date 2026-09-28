@@ -186,5 +186,10 @@ export function browsersFor(names) {
  */
 export function shardWeight(name) {
   const spec = specFor(name);
-  return spec.timeoutMs + (browsersFor([name]).some(browser => browser !== 'chromium') ? 270_000 : 0);
+  // editor-v2's long selection flow passed alone after losing a parallel race on CI run
+  // 36422408100; the retry made its shard exceed 240s. With nine bins, this weight
+  // leaves it alone without changing the gate's own timeout or coverage.
+  return spec.timeoutMs
+    + (browsersFor([name]).some(browser => browser !== 'chromium') ? 270_000 : 0)
+    + (name === 'editor-v2' ? 400_000 : 0);
 }
