@@ -261,6 +261,23 @@ describe('the live morph', () => {
     expect($('A')!.textContent).toBe('A:East');
   });
 
+  it('records what the page runs now: the next static edit imports nothing, and a later island build is still refused', async () => {
+    load(served({ edit: 'e1' }));
+    start();
+    await morph(window, { fetch: answer(served({ edit: 'e2', module: '/islands/d/bbbbbbbbbbbbbbbb.js', islands: [['s0-', 'A', 'A'], ['s1-', 'B', 'B2']] })), importModule: moduleOf([['s0-', A, 'kA'], ['s1-', B2, 'kB2']]) });
+    const importModule = vi.fn();
+    await morph(window, { fetch: answer(served({ edit: 'e3', lede: 'static only', module: '/islands/d/bbbbbbbbbbbbbbbb.js', islands: [['s0-', 'A', 'A'], ['s1-', 'B', 'B2']] })), importModule });
+    expect(importModule, 'the page already runs that module').not.toHaveBeenCalled();
+    expect($('lede')!.textContent).toBe('static only');
+  });
+
+  it('a prose page that gained islands still refuses a version from another island build', async () => {
+    load(served({ edit: 'e1', islands: [], module: null }));
+    await morph(window, { fetch: answer(served({ edit: 'e2', islands: [['s0-', 'A', 'A']] })), importModule: vi.fn(async () => { start([['s0-', A, 'kA']]); return {}; }) });
+    expect(document.querySelector('script[src="/islands/d/aaaaaaaaaaaaaaaa.js"]'), 'the module the page now runs is on record').not.toBeNull();
+    await expect(morph(window, { fetch: answer(served({ edit: 'e3', islands: [['s0-', 'A', 'A']], module: '/islands/d/9999999999999999.js', boot: '/islands/boot-2222.js' })) })).rejects.toThrow(/island build/);
+  });
+
   it('does nothing for the version the page already shows', async () => {
     load(served({ edit: 'e1' }));
     start();

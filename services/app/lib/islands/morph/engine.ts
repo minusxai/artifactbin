@@ -156,6 +156,9 @@ export async function morphStory(win: Window, options: MorphOptions = {}): Promi
     await importModule(newModuleHref);
   }
 
+  // The page's record of what it runs is the new version's now: the next version compares against it.
+  syncModuleRecord(doc, next);
+
   if (focused && !focused.isConnected && focused.id) doc.getElementById(focused.id)?.focus({ preventScroll: true });
   if (anchor && anchorTop !== null) {
     const after = topOf(root, anchor.path);
@@ -191,16 +194,33 @@ function authorScriptOf(doc: Document): string | null {
 }
 
 /** The page's per-document module script, or null (a page with no islands). */
-const moduleUrl = (doc: Document): string | null =>
+const moduleScript = (doc: Document): HTMLScriptElement | null =>
   [...doc.querySelectorAll<HTMLScriptElement>('script[type="module"][src]')]
-    .map((script) => script.getAttribute('src')!)
-    .find((src) => src.startsWith(`${DOCUMENT_MODULE_PATH}/`)) ?? null;
+    .find((script) => script.getAttribute('src')!.startsWith(`${DOCUMENT_MODULE_PATH}/`)) ?? null;
+const moduleUrl = (doc: Document): string | null => moduleScript(doc)?.getAttribute('src') ?? null;
 
 /** The shared boot chunk a page's module runs on (its preload), which names the island build. */
-const bootUrl = (doc: Document): string | null =>
+const bootLink = (doc: Document): HTMLLinkElement | null =>
   [...doc.querySelectorAll<HTMLLinkElement>('link[rel="modulepreload"][href]')]
-    .map((link) => link.getAttribute('href')!)
-    .find((href) => href.startsWith(`${ISLANDS_PATH}/boot-`)) ?? null;
+    .find((link) => link.getAttribute('href')!.startsWith(`${ISLANDS_PATH}/boot-`)) ?? null;
+const bootUrl = (doc: Document): string | null => bootLink(doc)?.getAttribute('href') ?? null;
+
+/**
+ * The page's module script and boot preload become the new version's, so the next version is compared
+ * with what the page runs now (the same-module shortcut, the island-build guard). A script cloned from a
+ * parsed document is already started: inserting it runs nothing (its module was imported, and a module
+ * runs once per URL anyway).
+ */
+function syncModuleRecord(doc: Document, next: Document): void {
+  const record = <T extends Element>(here: T | null, there: T | null, parent: Element) => {
+    if (!there) { here?.remove(); return; }
+    if (here?.isEqualNode(there)) return;
+    const copy = doc.importNode(there, true);
+    if (here) here.replaceWith(copy); else parent.append(copy);
+  };
+  record(moduleScript(doc), moduleScript(next), doc.body);
+  record(bootLink(doc), bootLink(next), doc.head);
+}
 
 /**
  * The newer version's `{ ISLANDS, FLOW }`: its first import runs its `boot`, which hands it to the
