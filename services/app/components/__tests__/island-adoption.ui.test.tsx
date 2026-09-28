@@ -147,6 +147,13 @@ describe('adopting the compiled page', () => {
     expect(controllers[0]!.nonce).not.toBe('interpreter');
   });
 
+  it('a surface that cannot adopt it (no prepared runtime) never hydrates the compiled story with React', async () => {
+    servePage();
+    render(<ArtifactSurface {...surfaceProps()} />);
+    await waitFor(() => expect(interpreters).toHaveLength(1));
+    expect(interpreters[0]!.hydrateInitialStory).toBe(false);
+  });
+
   it('performs a served chrome control pressed before the app arrived, once', async () => {
     servePage();
     const load = vi.fn(async () => {});

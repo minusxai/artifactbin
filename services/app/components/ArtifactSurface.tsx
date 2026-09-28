@@ -334,8 +334,9 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
    * route). The interpreter (InlineStoryRuntime) takes over, for good, only when the document must
    * become something the islands cannot: an editor's draft, or a newer version.
    */
+  const [servedCompiled] = useState(initialStoryIsCompiled);
   const [compiled] = useState(() => {
-    const story = isDocumentFormat && !props.captureKey && props.runtime && initialStoryIsCompiled() ? initialDocumentStory() : null;
+    const story = servedCompiled && isDocumentFormat && !props.captureKey && props.runtime ? initialDocumentStory() : null;
     return story ? { story, islands: initialIslandDocument() } : null;
   });
   const [interpreting, setInterpreting] = useState(!compiled);
@@ -1023,8 +1024,8 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
             authorScript={props.runtime?.authorScript}
             rawSheets={needsEditorPart ? rawSheets : undefined}
             onController={onController}
-            // A compiled story is never React's to hydrate: after the islands, the interpreter draws afresh.
-            hydrateInitialStory={!compiled}
+            // A compiled story is never React's to hydrate: the interpreter draws afresh (and clears it, web/initial-story).
+            hydrateInitialStory={!servedCompiled}
           /> : parseFailed && <TrustedUi><LoadFailure what="the document" onRetry={retryParse} className="p-4" /></TrustedUi>}
           </div>
         </div>
