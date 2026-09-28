@@ -25,6 +25,7 @@
 import type { Component } from 'solid-js';
 import type { CompiledDataflow } from '@/lib/story/compiled-dataflow';
 import { createDataflowStore } from '@/lib/story-runtime/store';
+import { pageEngineFor } from '@/lib/story-runtime/page-sqlite';
 import { createDocumentTransport } from '@/lib/story-runtime/document-transport';
 import { STORY_DATA_HOOK } from '@/lib/story-runtime/contract';
 import { ISLAND_DATA_ID, READER_READY_ATTR } from '@/lib/compiled-page/contract';
@@ -88,12 +89,12 @@ export function boot(input: IslandModule | readonly IslandEntry[], win: Window =
   const transport = flow ? createDocumentTransport(win, data.queryUrl, appOrigin(), undefined, data.mutateUrl, { session: data.signedIn }) : null;
   const runtime = createIslandRuntime(
     {
-      dataflow: flow ? { flow, values: data.values ?? {}, ...(data.results ? { results: data.results } : {}) } : null,
+      dataflow: flow ? { flow, values: data.values ?? {}, hold: data.hold ?? [], ...(data.results ? { results: data.results } : {}) } : null,
       mermaidImages: data.mermaidImages ?? {},
       viewer: data.signedIn ? { hinted: true } : null,
       readOnly: data.readOnly ?? null,
     },
-    (input) => createDataflowStore(input, { transport, writesUnavailable: data.readOnly ?? null }),
+    (input) => createDataflowStore(input, { transport, writesUnavailable: data.readOnly ?? null, page: pageEngineFor({ dataflow: input, sqliteWasm: data.sqliteWasm }, transport, null) }),
     { writes: createWriteStatusFeed, loadChart },
   );
   const { context, store } = runtime;

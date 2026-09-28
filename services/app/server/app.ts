@@ -611,6 +611,9 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
     });
   });
   app.use('/libraries/*', async (c, next) => { await next(); c.header('cache-control', 'public, max-age=3600'); c.header('access-control-allow-origin', '*'); });
+  // Opaque-origin /raw frames import these modules and fetch the page engine's wasm.
+  // Every file is content-addressed; both requests need CORS and immutable caching.
+  app.use('/islands/*', async (c, next) => { await next(); c.header('cache-control', IMMUTABLE); c.header('access-control-allow-origin', '*'); });
   app.use('/fonts/*', async (c, next) => { await next(); c.header('cache-control', IMMUTABLE); c.header('access-control-allow-origin', '*'); });
   app.use('/geojson/*', async (c, next) => { await next(); c.header('cache-control', 'public, max-age=86400'); c.header('access-control-allow-origin', '*'); });
   app.use('/assets/*', async (c, next) => { await next(); c.header('cache-control', IMMUTABLE); });
@@ -653,7 +656,7 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
     c.header('cache-control', 'no-store');
   });
   if(existsSync(cliReleaseDir)) app.use('/chat/releases/*', serveStatic({ root: path.relative(process.cwd(), cliReleaseDir) || '.', rewriteRequestPath: (p) => p.replace(/^\/chat\/releases\/[^/]+\//, '/'), onFound: () => {}, onNotFound: () => {} }));
-  // Content-addressed trees (/story, /libraries) carry build-time brotli/gzip siblings (server/content-encoding).
+  // Content-addressed islands and the compatibility libraries carry build-time brotli/gzip siblings.
   app.use('/*', precompressedStatic({ root: path.relative(process.cwd(), publicDir) || '.', onFound: () => {}, onNotFound: () => {} }));
 
   app.on(['GET', 'HEAD'], '/', async c => {

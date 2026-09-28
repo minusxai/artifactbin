@@ -64,7 +64,7 @@ export function diffTrees(legacy, compiled) {
 export function survivalOf(records) {
   const served = records.length;
   const survived = records.filter((r) => r.kept).length;
-  const exempt = records.filter((r) => !r.kept && (r.undrawnMermaid || r.avatarReplaced)).length;
+  const exempt = records.filter((r) => !r.kept && (r.undrawnMermaid || r.avatarReplaced || r.thumbReplaced)).length;
   return { served, survived, exempt, ok: served > 0 && survived + exempt === served };
 }
 

@@ -24,8 +24,10 @@ export async function compiledDocument(input: DocumentCase): Promise<string> {
     authorScript: parts.runtime.authorScript, build: build.id,
   }, build);
   const overlay = input.overlay ?? { values: {}, mermaidImages: {}, signedIn: false, doors: null };
-  const story = compiled.ssr && Object.keys(overlay.values).length
-    ? (await loadSsrModule(compiled.ssr)).render({ values: overlay.values, results: null, mermaidImages: overlay.mermaidImages, drawings: {} })
+  const state = input.dataflow?.state;
+  const results = state ? { tables: state.tables, errors: state.errors } : null;
+  const story = compiled.ssr && (Object.keys(overlay.values).length || results)
+    ? (await loadSsrModule(compiled.ssr)).render({ values: { ...state?.values, ...overlay.values }, results, mermaidImages: overlay.mermaidImages, drawings: {} })
     : compiled.html;
   return assembleReaderPage({
     compiled, story, css: '', fontPreloads: parts.runtime.fontPreloads ?? [],

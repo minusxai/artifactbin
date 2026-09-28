@@ -50,21 +50,21 @@ const raw = (id: string, search = '') => rawRoute(request(`/a/${id}/raw${search}
 const storyText = (html: string) => { const d = new JSDOM(html).window.document; const root = d.getElementById('mx-story-root'); for (const s of root?.querySelectorAll('style, script') ?? []) s.remove(); return root?.textContent?.replace(/\s+/g, ' ').trim() ?? ''; };
 
 describe('the reader mode on /raw', () => {
-  it('serves today\'s renderer by default in shadow and the compiled page on request, both naming their path', async () => {
+  it('serves the compiled reader by default, including its interactive kit', async () => {
     const who = await owner();
     const id = await publish(who.token, { title: 'Perf B kit', markup: fixture('kit.jsx') });
-    const legacy = await raw(id);
-    expect(legacy.headers.get(READER_MODE_HEADER)).toBe('legacy');
+    const ordinary = await raw(id);
+    expect(ordinary.headers.get(READER_MODE_HEADER)).toBe('compiled');
     const compiled = await raw(id, '?reader=compiled');
     expect(compiled.status).toBe(200);
     expect(compiled.headers.get(READER_MODE_HEADER)).toBe('compiled');
     expect(compiled.headers.get(READER_FALLBACK_HEADER)).toBeNull();
-    const [legacyHtml, compiledHtml] = [await legacy.text(), await compiled.text()];
-    expect(storyText(compiledHtml)).toBe(storyText(legacyHtml));
+    const [ordinaryHtml, compiledHtml] = [await ordinary.text(), await compiled.text()];
+    expect(storyText(compiledHtml)).toBe(storyText(ordinaryHtml));
     expect(new JSDOM(compiledHtml).window.document.querySelector('#mx-story-root [role="tablist"]')).toBeTruthy();
   });
 
-  it('a compiled response has no inline script and a CSP without unsafe-inline; the legacy one is unchanged', async () => {
+  it('a compiled response has no inline script and a CSP without unsafe-inline', async () => {
     const who = await owner();
     const id = await publish(who.token, { title: 'Perf A prose', markup: fixture('prose.jsx') });
     const compiled = await raw(id, '?reader=compiled');
@@ -78,7 +78,7 @@ describe('the reader mode on /raw', () => {
     expect([...doc.querySelectorAll('script[type="module"]')].map((s) => s.getAttribute('src')), 'prose loads no island module at all')
       .toEqual([loadCompilerBuild().manifest['@mx/page']]);
     expect(doc.getElementById('mx-story-data')).toBeNull();
-    expect((await raw(id)).headers.get('content-security-policy')).toMatch(/script-src 'unsafe-inline'/);
+    expect((await raw(id)).headers.get('content-security-policy')).toMatch(/script-src 'self'/);
   });
 
   it('stores the compile beside the prepared page, keyed by the compiler build', async () => {
@@ -97,21 +97,19 @@ describe('the reader mode on /raw', () => {
     const res = await raw(id, '?reader=compiled');
     expect(res.status).toBe(200);
     const mode = res.headers.get(READER_MODE_HEADER);
-    expect(['compiled', 'legacy']).toContain(mode);
-    if (mode === 'legacy') expect(res.headers.get(READER_FALLBACK_HEADER)).toBe('build-mismatch');
-    else expect((await db.query<{ build: string }>(`SELECT page->'compiled'->>'build' AS build FROM prepared_pages WHERE artifact_id = $1`, [id])).rows[0]!.build).not.toBe('0000000000000000');
+    expect(mode).toBe('compiled');
+    expect((await db.query<{ build: string }>(`SELECT page->'compiled'->>'build' AS build FROM prepared_pages WHERE artifact_id = $1`, [id])).rows[0]!.build).not.toBe('0000000000000000');
   });
 
-  it('a recorded compile failure serves today\'s renderer and names the reason', async () => {
+  it('a recorded compile failure reports an unavailable page', async () => {
     const who = await owner();
     const id = await publish(who.token, { title: 'Perf A prose', markup: fixture('prose.jsx') });
     const db = await harness.db();
     const build = (await db.query<{ build: string }>(`SELECT page->'compiled'->>'build' AS build FROM prepared_pages WHERE artifact_id = $1`, [id])).rows[0]!.build;
     await db.query(`UPDATE prepared_pages SET page = jsonb_set(page, '{compiled}', $2::jsonb) WHERE artifact_id = $1`, [id, JSON.stringify({ build, error: 'boom', reason: 'compile-error' })]);
     const res = await raw(id, '?reader=compiled');
-    expect(res.headers.get(READER_MODE_HEADER)).toBe('legacy');
-    expect(res.headers.get(READER_FALLBACK_HEADER)).toBe('compile-error');
-    expect(storyText(await res.text())).toContain('A plain prose document');
+    expect(res.status).toBe(500);
+    expect(await res.text()).toContain('could not be rendered');
   });
 });
 
@@ -211,15 +209,15 @@ describe('the guest snapshot never outlives the guest\'s access', () => {
 });
 
 describe('the reader switch at its edges', () => {
-  it('off: `?reader=` is ignored and nothing names a fallback', async () => {
+  it('off: /raw still serves compiled while the app page retains its separate switch', async () => {
     const who = await owner();
     const id = await publish(who.token, { title: 'Perf A prose', markup: fixture('prose.jsx') });
     setCompiledReaderFlagForTests('off');
     try {
       const res = await raw(id, '?reader=compiled');
-      expect(res.headers.get(READER_MODE_HEADER)).toBe('legacy');
+      expect(res.headers.get(READER_MODE_HEADER)).toBe('compiled');
       expect(res.headers.get(READER_FALLBACK_HEADER)).toBeNull();
-      expect(res.headers.get('content-security-policy')).toMatch(/script-src 'unsafe-inline'/);
+      expect(res.headers.get('content-security-policy')).toMatch(/script-src 'self'/);
       const page = await app.request(`/a/${id}?reader=compiled`, { headers: { accept: 'text/html' } });
       expect(page.headers.get(READER_MODE_HEADER)).toBe('legacy');
       expect(new JSDOM(await page.text()).window.document.querySelector('[data-mx-initial-story]')).toBeTruthy();
@@ -228,24 +226,24 @@ describe('the reader switch at its edges', () => {
     }
   });
 
-  it('a domain post ignores `?reader=`; the owner\'s editing copy is today\'s runtime', async () => {
+  it('a domain post and the owner\'s editing copy use the compiled /raw response', async () => {
     const who = await owner();
     const id = await publish(who.token, { title: 'Perf B kit', markup: fixture('kit.jsx') });
     const post = await rawRoute(request(`/a/${id}/raw?reader=compiled`), { params: Promise.resolve({ id }), domain: { hostname: 'blog.example.com', ownerId: who.user.id } });
     expect(post.status).toBe(200);
-    expect(post.headers.get(READER_MODE_HEADER)).toBe('legacy');
+    expect(post.headers.get(READER_MODE_HEADER)).toBe('compiled');
     const editing = await raw(id, '?reader=compiled&edit=1');
-    expect(editing.headers.get(READER_MODE_HEADER)).toBe('legacy');
+    expect(editing.headers.get(READER_MODE_HEADER)).toBe('compiled');
     expect(editing.headers.get(READER_FALLBACK_HEADER)).toBeNull();
   });
 
-  it('on: readers get the compiled page wherever it exists, a domain post included; `?reader=legacy` escapes', async () => {
+  it('on: readers get the compiled page everywhere, including a legacy query and a domain post', async () => {
     const who = await owner();
     const id = await publish(who.token, { title: 'Perf B kit', markup: fixture('kit.jsx') });
     setCompiledReaderFlagForTests('on');
     try {
       expect((await raw(id)).headers.get(READER_MODE_HEADER)).toBe('compiled');
-      expect((await raw(id, '?reader=legacy')).headers.get(READER_MODE_HEADER)).toBe('legacy');
+      expect((await raw(id, '?reader=legacy')).headers.get(READER_MODE_HEADER)).toBe('compiled');
       const post = await rawRoute(request(`/a/${id}/raw?reader=legacy`), { params: Promise.resolve({ id }), domain: { hostname: 'blog.example.com', ownerId: who.user.id } });
       expect(post.headers.get(READER_MODE_HEADER)).toBe('compiled');
       const doc = new JSDOM(await post.text()).window.document;
@@ -389,8 +387,8 @@ describe('a version with an author script', () => {
     const id = await publish(who.token, { title: 'Scripted', markup: SCRIPTED });
     await (await harness.db()).query(`UPDATE prepared_pages SET page = page #- '{compiled,authorScript}' WHERE artifact_id = $1`, [id]);
     const res = await raw(id, '?reader=compiled');
-    expect(res.headers.get(READER_MODE_HEADER)).toBe('legacy');
-    expect(res.headers.get(READER_FALLBACK_HEADER)).toBe('unported');
+    expect(res.headers.get(READER_MODE_HEADER)).toBe('compiled');
+    expect(authorOnly(await res.text()).data?.authorScript).toBe('document.body.dataset.ran = "1";');
   });
 
   it('its wrapper answers at its own address: fixed bytes under their own sandbox CSP', async () => {

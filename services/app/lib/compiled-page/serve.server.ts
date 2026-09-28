@@ -55,7 +55,7 @@
  */
 import { parseFragment } from 'parse5';
 import { createHash } from 'node:crypto';
-import type { ArtifactRow } from '@/lib/artifacts';
+import { holdableImports, type ArtifactRow } from '@/lib/artifacts';
 import type { ArchivedRender } from '@/lib/archived-version';
 import { mermaidImagesFor } from '@/lib/mermaid-images/store';
 import type { ServedResults, StoredMermaidImage } from '@/lib/story-runtime/contract';
@@ -141,10 +141,9 @@ let policyOverride: FallbackPolicy | null = null;
 /** A test's override for its file; the product never calls it. */
 export function setFallbackPolicyForTests(policy: FallbackPolicy | null): void { policyOverride = policy; }
 /**
- * THE SWITCH. `legacy` until Wave 4 deletes today's reader; w4-flip-docs removes this function, its
- * override and every `legacy` branch below, leaving `compiled-only` as the only behaviour.
+ * The standalone reader is gone; compiled requests wait for a current compile.
  */
-export function fallbackPolicy(): FallbackPolicy { return policyOverride ?? 'legacy'; }
+export function fallbackPolicy(): FallbackPolicy { return policyOverride ?? 'compiled-only'; }
 
 /** Thrown by a page that has no other way to answer a `failed` read (lib/artifact-page): the server answers 500. */
 export class CompiledPageFailed extends Error {
@@ -388,12 +387,13 @@ export async function compiledPageFor(row: ArtifactRow, page: PreparedPage, read
 
     const flow = page.declared?.flow ?? null;
     const values = flow ? readUrlValues(reader.search, flow) : {};
-    const [mermaidImages, snapshot] = await Promise.all([
+    const [mermaidImages, snapshot, hold] = await Promise.all([
       reader.drawings
         ? mermaidImagesFor({ artifactId: row.id, version: reader.at?.version ?? row.version, surface: reader.drawings, head: !reader.at, visibility: row.visibility }, page.data.nodes)
         : Promise.resolve({}),
       // A capture brings its own settled run; an archived version and a version that cannot run have no snapshot.
       reader.results !== undefined || reader.at || !flow || page.declared?.state ? Promise.resolve(null) : snapshotFor(row, compiled, flow, values),
+      flow && !reader.signedIn ? holdableImports(row, flow, null) : Promise.resolve([]),
     ]);
     // The live stream picks up from the snapshot's marks (served-results.server `since`): a write between
     // the snapshot and the page's stream reaches the page as the ordinary `data` frame.
@@ -419,7 +419,7 @@ export async function compiledPageFor(row: ArtifactRow, page: PreparedPage, read
       colorMode,
       // A capture's answers ride as the snapshot the page starts from: the islands then ask for nothing.
       snapshot: reader.results ? { ...(served ?? emptySnapshot(row)), results: reader.results } : served,
-      overlay: { values, mermaidImages, signedIn: reader.signedIn, doors: doorsFor(compiled, reader.doors), readOnly: reader.readOnly ?? null },
+      overlay: { values, hold, mermaidImages, signedIn: reader.signedIn, doors: doorsFor(compiled, reader.doors), readOnly: reader.readOnly ?? null },
       chrome: reader.chrome,
       spa: reader.spa,
       build,

@@ -23,8 +23,8 @@ const island = (html: string): Record<string, unknown> | null => {
 describe('a compiled document served with URL-carried values', () => {
   it('renders the bound control at the reader\'s value, not the declared default', async () => {
     const html = await build({ region: 'west' });
-    expect(html).toContain('<option value="west" selected="">west</option>');
-    expect(html).not.toContain('<option value="north" selected="">');
+    expect(html).toMatch(/<option[^>]*value="west" selected(?:="")?>west<\/option>/);
+    expect(html).not.toMatch(/<option[^>]*value="north" selected(?:="")?>/);
   });
 
   it('carries the same values on the island with no result rows', async () => {
@@ -35,7 +35,7 @@ describe('a compiled document served with URL-carried values', () => {
 
   it('paints the declared default when the link says nothing', async () => {
     const html = await build();
-    expect(html).toContain('<option value="north" selected="">north</option>');
+    expect(html).toMatch(/<option[^>]*value="north" selected(?:="")?>north<\/option>/);
     expect(island(html)?.values).toEqual({});
   });
 });

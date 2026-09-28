@@ -89,7 +89,7 @@ export const IS_TEST = process.env.NODE_ENV === 'test';
 /**
  * Development mode. Used to decide whether prebuilt server-side bundles may be
  * cached in module memory: in dev they are rebuilt under the running process
- * (scripts/build-story-runtime.mjs), and a cached copy would serve markup from
+ * (scripts/build-server-reader.mjs), and a cached copy would serve markup from
  * BEFORE the rebuild while the browser loads the new client half — a hydration
  * mismatch produced entirely by the dev loop.
  */

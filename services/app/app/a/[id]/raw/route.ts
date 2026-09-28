@@ -19,7 +19,17 @@
  */
 import {agentDiscovery} from '@/lib/agent-discovery';
 import { archivedReadOnly, archivedVersionFor, servedRow } from '@/lib/archived-version';
-import { canReadArtifact, dataflowForRow, getArtifactById } from '@/lib/artifacts';
+import { canReadArtifact, dataflowForRow, getArtifactById, linkRoleOf, type ArtifactRow } from '@/lib/artifacts';
+import { withIntent, type Intent } from '@/lib/intent';
+import { count, has } from '@/lib/relations';
+import { countOpenAnnotations } from '@/lib/annotations';
+import { roleFor, type RequestActor } from '@/lib/viewer';
+import { canAnnotate, canEdit, roleBehindLogin } from '@/lib/share-roles';
+import { forkedFromCredit } from '@/lib/story/fork-credit.server';
+import { getUserById } from '@/lib/users';
+import { avatarUrl } from '@/lib/avatars';
+import type { ReaderChromeInput } from '@/lib/story/reader-chrome';
+import { readerChromeFonts } from '@/lib/story/first-screen-fonts';
 import { trackEvent } from '@/lib/analytics';
 import { requestOrSessionActor } from '@/lib/viewer';
 import { verifyExportKey } from '@/lib/export-key';
@@ -61,6 +71,43 @@ const COMMON = {
 const NOT_FOUND = '<!doctype html><meta charset="utf-8"><title>Not found</title><h1>Not found</h1>';
 const notFound = () =>
   new Response(NOT_FOUND, { status: 404, headers: { 'Content-Type': 'text/html; charset=utf-8', ...COMMON } });
+
+/** Request-specific reader furniture around the compiled story. */
+async function rawChrome(row: ArtifactRow, actor: RequestActor, at: { version: number; head: number } | null, ground: 'light' | 'dark'): Promise<ReaderChromeInput> {
+  const viewerId = actor.viewer?.userId ?? null;
+  const role = await roleFor(row, actor);
+  const [creator, source, reader, likes, liked, follows, following, comments] = await Promise.all([
+    row.user_id ? getUserById(row.user_id) : Promise.resolve(null),
+    forkedFromCredit(row.forked_from),
+    actor.credential === 'session' && viewerId ? getUserById(viewerId) : Promise.resolve(null),
+    count('like', row.id),
+    viewerId ? has(viewerId, 'like', row.id) : Promise.resolve(false),
+    row.user_id && row.user_id !== viewerId ? count('follow', row.user_id) : Promise.resolve(0),
+    viewerId && row.user_id && row.user_id !== viewerId ? has(viewerId, 'follow', row.user_id) : Promise.resolve(false),
+    canAnnotate(role) ? countOpenAnnotations(row.id) : Promise.resolve(0),
+  ]);
+  const door = (intent: Intent) => viewerId
+    ? `/a/${row.id}${withIntent('', intent)}`
+    : `/login?callbackUrl=${encodeURIComponent(`/a/${row.id}${withIntent('', intent)}`)}`;
+  const unlock = roleBehindLogin(linkRoleOf(row));
+  return {
+    artifactId: row.id, title: displayTitle(row), ground, visibility: row.visibility,
+    author: creator ? { username: creator.username ?? null, id: creator.id, image: avatarUrl(creator), forkedFrom: source } : { username: null, forkedFrom: source },
+    viewer: reader ? { id: reader.id, name: reader.username || reader.email || '', image: avatarUrl(reader) } : null,
+    ownerBreadcrumb: role === 'owner' && !at, share: role === 'owner' && !at,
+    archived: at ? { version: at.version, head: at.head } : null,
+    edit: canEdit(role) && !at,
+    reactions: at ? null : {
+      like: { count: likes, liked, href: door('like') },
+      follow: row.user_id && row.user_id !== viewerId ? { count: follows, following, href: door('follow') } : null,
+      comment: { count: comments, href: door('comment') },
+    },
+    signIn: !at && !viewerId && (unlock === 'commenter' || unlock === 'editor')
+      ? { unlocks: unlock, callbackUrl: `/a/${row.id}${withIntent('', 'comment')}` } : null,
+    login: !viewerId ? { href: `/login?callbackUrl=${encodeURIComponent(`/a/${row.id}`)}` } : null,
+    fork: at ? null : { href: door('fork') },
+  };
+}
 
 
 /**
@@ -307,7 +354,8 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
           },
           ...(at ? { readOnly: archivedReadOnly(at.version) } : {}),
           live: chrome && !at ? { id: artifact.id, editId: artifact.edit_id } : null,
-          chrome: null,
+          chrome: reader ? await rawChrome(artifact, actor, at, design.colorMode ?? prepared.page.data.colorMode) : null,
+          chromeFonts: reader ? readerChromeFonts({ theme: prepared.page.base.theme, docFonts: prepared.page.base.fonts, importedFaces: prepared.page.base.faces }).map((face) => face.url) : [],
           spa: null,
           // The page's own behaviour (lib/islands/page): framing, the reader's colour override, the live
           // stream of a page with no islands, the scroll a live reload keeps. Never on a capture.

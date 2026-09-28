@@ -190,6 +190,8 @@ export type KitFamily = (typeof KIT_FAMILIES)[number];
 export interface IslandPageData {
   values: Record<string, Scalar>;
   results: ServedResults | null;
+  sqliteWasm?: string;
+  hold?: string[];
   queryUrl?: string;
   mutateUrl?: string;
   viewerUrl?: string;

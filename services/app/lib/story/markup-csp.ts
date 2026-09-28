@@ -115,16 +115,16 @@ const GEOJSON_DIR_PATH = '/geojson/';
 /**
  * …and the runtime's own build directory, for the one file the runtime
  * FETCHES rather than imports: the page's SQLite wasm, content-addressed
- * there (StoryIslandData.sqliteWasm). Public build output, like /geojson/.
+ * there (IslandPageData.sqliteWasm). Public build output, like /geojson/.
  */
-const STORY_DIR_PATH = '/story/';
+const ISLANDS_DIR_PATH = '/islands/';
 
 /**
  * …and the bundled font files (public/fonts, the manifest's faces): the kit
  * reads the files the page already loaded — from the HTTP cache — to put them
  * into its Mermaid drawings, which an `<img>` shows and which cannot reach the
  * page's fonts otherwise (components/kit/mermaid-fonts). Public, immutable
- * files, like /geojson/ and /story/.
+ * files, like /geojson/ and /islands/.
  */
 const FONTS_DIR_PATH = '/fonts/';
 
@@ -158,7 +158,7 @@ export function markupCsp(origin: string, id: string, assetOrigin?: string, opti
   // GLB loaders fetch embedded textures/buffers through local blob/data URLs;
   // these add no network destination or access to the application's APIs.
   const viewer = options.compiled ? ` ${self}${viewerPath(id)}` : '';
-  const connect = `connect-src ${self}${queryPath(id)} ${self}${eventsPath(id)} ${self}${eventsPath(id)}/frame ${self}${mutatePath(id)} ${self}${resolvePath(id)}${viewer} ${self}${GEOJSON_DIR_PATH} ${self}${BASEMAP_PATH} ${self}${STORY_DIR_PATH} ${self}${FONTS_DIR_PATH} blob: data:`;
+  const connect = `connect-src ${self}${queryPath(id)} ${self}${eventsPath(id)} ${self}${eventsPath(id)}/frame ${self}${mutatePath(id)} ${self}${resolvePath(id)}${viewer} ${self}${GEOJSON_DIR_PATH} ${self}${BASEMAP_PATH} ${self}${ISLANDS_DIR_PATH} ${self}${FONTS_DIR_PATH} blob: data:`;
   if(assetOrigin && (new URL(assetOrigin).origin!==assetOrigin||!/^https?:\/\//.test(assetOrigin)))throw Error('Invalid asset origin');
   const sources=SOURCE_DIRECTIVES.map(d=>{
     // Firefox evaluates inherited 'self' against the opaque srcdoc realm for

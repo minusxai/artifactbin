@@ -7,7 +7,7 @@ import type { BlockEdit } from '@/lib/editor-v2/block-edit';
  * the other's bundle. The React composition lives in StoryRuntimeApp.tsx,
  * which reaches the server exclusively as a prebuilt esbuild bundle
  * (story-ssr.cjs) loaded outside the module graph — see
- * scripts/build-story-runtime.mjs.
+ * scripts/build-server-reader.mjs.
  */
 import type { AnnotationRange } from '@/lib/story/annotation-range';
 import type { JsxNode } from '@/lib/jsx';

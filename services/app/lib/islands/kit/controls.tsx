@@ -114,7 +114,7 @@ export function BoundNative(p: Props & { tag: 'input' | 'select' | 'textarea'; b
     const rows = () => { const t = table(); const [valueCol, labelCol] = t?.columns ?? []; return t && valueCol ? t.rows.map(row => { const v = String(row[valueCol.name] ?? ''); return { value: v, label: labelCol ? String(row[labelCol.name] ?? v) : v }; }) : []; };
     let select!: HTMLSelectElement; createEffect(() => { rows(); select.value = String(value() ?? ''); });
     return <select ref={select} {...attrs as JSX.SelectHTMLAttributes<HTMLSelectElement>} onChange={update}>
-      <Show when={table() && nullable()}><option value="">All</option></Show><For each={rows()}>{o => <option value={o.value}>{o.label}</option>}</For>{children}</select>;
+      <Show when={table() && nullable()}><option value="" selected={value() == null}>All</option></Show><For each={rows()}>{o => <option value={o.value} selected={o.value === String(value() ?? '')}>{o.label}</option>}</For>{children}</select>;
   }
   if (tag === 'textarea') return <textarea {...attrs as JSX.TextareaHTMLAttributes<HTMLTextAreaElement>} value={String(value() ?? '')} onInput={update}>{children}</textarea>;
   return <input {...attrs as JSX.InputHTMLAttributes<HTMLInputElement>} value={String(value() ?? '')} checked={bind?.checked ? value() === true : undefined} onInput={update} onChange={bind?.checked ? update : undefined} />;

@@ -24,7 +24,7 @@ import { hydrate, isServer } from 'solid-js/web';
 import { evaluateReactive, type ReactiveExpression } from '@/lib/jsx/reactive';
 import { URL_ATTRS, URL_LIST_ATTRS, urlListUrls } from '@/lib/jsx/url-attrs';
 import { substituteRow } from '@/lib/story/row-scope';
-import { commentMetadata, instanceDomId } from '@/lib/story/repeat-identity';
+import { commentMetadata, instanceDomId, keyedRowsError } from '@/lib/story/repeat-identity';
 import type { CompiledDataflow } from '@/lib/story/compiled-dataflow';
 import type { DataflowState, Row, Scalar, TableResult } from '@/lib/story/dataflow';
 import type { DataflowStore } from '@/lib/story-runtime/store';
@@ -307,8 +307,10 @@ export function Repeat(props: RepeatProps): JSX.Element {
     const source: unknown = island.table(props.name)?.rows ?? island.values()[props.name] ?? [];
     return Array.isArray(source) ? (source as Row[]) : [];
   });
+  const error = createMemo(() => props.keyBy ? keyedRowsError(rows(), props.keyBy, 'keyBy') : null);
   const body = () => (
-    <For each={rows()}>{(row, index) => props.children(row, { owner: props.owner ?? '', key: props.keyBy ? row[props.keyBy] : index(), durable: !!props.keyBy, ids: props.ids ?? [] })}</For>
+    error() ? (props.svg ? <text role="alert">{error()}</text> : <span role="alert">{error()}</span>)
+      : <For each={rows()}>{(row, index) => props.children(row, { owner: props.owner ?? '', key: props.keyBy ? row[props.keyBy] : index(), durable: !!props.keyBy, ids: props.ids ?? [] })}</For>
   );
   if (props.tableParts) return body();
   const attrs = Object.fromEntries(Object.entries(props).filter(([k]) => !REPEAT_PROPS.has(k)));

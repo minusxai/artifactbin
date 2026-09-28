@@ -160,11 +160,13 @@ function islandData(input: AssembleInput): IslandPageData {
   const { overlay } = input;
   return {
     values: overlay.values,
+    ...(overlay.hold ? { hold: overlay.hold } : {}),
     results: input.snapshot?.results ?? null,
     ...(overlay.doors ?? {}),
     signedIn: overlay.signedIn,
     mermaidImages: overlay.mermaidImages,
     readOnly: overlay.readOnly ?? null,
+    ...(input.build.sqliteWasm ? { sqliteWasm: input.build.sqliteWasm } : {}),
     // The version's author script rides as DATA (escaped by scriptJson), for boot's lazy author host to
     // hand to its sandboxed frame; it is never a script of this page (contract CompiledPage.authorScript).
     ...(input.compiled.authorScript ? { authorScript: input.compiled.authorScript } : {}),

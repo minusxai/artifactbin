@@ -72,7 +72,7 @@ const PROBE = () => {
   const undrawn = (n) => { const p = n.closest('p[role="status"]'); return !!p && !!p.parentElement?.matches('figure[data-mx-mermaid-state="pending"]'); };
   // An Avatar fallback, noted with its avatar (the second exemption: replaced by the avatar's loaded image).
   const avatarOf = (n) => (n.closest('[data-slot="avatar-fallback"]') ? n.closest('[data-slot="avatar"]') : null);
-  const mark = (n) => { n.__served = true; n.__undrawnMermaid = undrawn(n); n.__avatar = avatarOf(n); s.served.push(n); };
+  const mark = (n) => { n.__served = true; n.__undrawnMermaid = undrawn(n); n.__avatar = avatarOf(n); n.__thumbHost = n.matches?.('template[data-mx-thumb]') ? n.parentElement : null; s.served.push(n); };
   const tag = (n) => { if (n.nodeType !== 1 || n.__served) return; mark(n); for (const c of n.querySelectorAll('*')) if (!c.__served) mark(c); };
   const inStory = (t) => t.closest?.('#mx-story-root') || t.parentElement?.closest?.('#mx-story-root');
   new MutationObserver((l) => {
@@ -177,9 +177,10 @@ try {
       const survival = await page.evaluate(() => {
         const s = window.__sv; const root = document.getElementById('mx-story-root');
         const imageShown = (avatar) => { const img = avatar?.isConnected && root.contains(avatar) ? avatar.querySelector(':scope > img[data-slot="avatar-image"]') : null; return !!img && img.complete && img.naturalWidth > 0; };
-        return { records: s.served.map((n) => ({ kept: n.isConnected && root.contains(n), undrawnMermaid: !!n.__undrawnMermaid, avatarReplaced: !!n.__avatar && imageShown(n.__avatar) })), mutations: s.mutations, mutated: s.mutated };
+        return { records: s.served.map((n) => ({ kept: n.isConnected && root.contains(n), undrawnMermaid: !!n.__undrawnMermaid, avatarReplaced: !!n.__avatar && imageShown(n.__avatar), thumbReplaced: !!n.__thumbHost?.isConnected && !!n.__thumbHost.querySelector(':scope > [data-mx-slide]'), tag: n.tagName, id: n.id, sample: n.outerHTML.slice(0, 160) })), mutations: s.mutations, mutated: s.mutated };
       });
       Object.assign(survival, survivalOf(survival.records));
+      survival.removed = survival.records.filter((n) => !n.kept && !n.undrawnMermaid && !n.avatarReplaced && !n.thumbReplaced).map((n) => `${n.tag}#${n.id}: ${n.sample}`);
       delete survival.records;
       // Every animation held still the same way on both pages (lib/compiled-parity-diff holdAnimations) before each capture.
       const capture = async () => { await page.evaluate(holdAnimations); return page.evaluate(SNAPSHOT, STYLE); };
@@ -202,7 +203,8 @@ try {
       check(snaps.compiled.tree.length > 0, `${f.key}: compiled story has elements`);
     }
     const s = snaps.compiled.survival;
-    check(s.ok, `${f.key}: every served element survives hydration on the compiled page (${s.survived}/${s.served}${s.exempt ? `, ${s.exempt} replaced by design: an undrawn Mermaid placeholder or an Avatar fallback its image replaced` : ''})`);
+    check(s.ok, `${f.key}: every served element survives hydration on the compiled page (${s.survived}/${s.served}${s.exempt ? `, ${s.exempt} replaced by design: an undrawn Mermaid placeholder, an Avatar fallback, or a deck thumbnail template replaced by its slide` : ''})`);
+    if (!s.ok) for (const removed of s.removed) check.note(`${f.key}: removed ${removed}`);
     check.note(`${f.key}: DOM mutations during hydration — ${hasLegacy ? `legacy ${snaps.legacy.survival.mutations}, ` : ''}compiled ${s.mutations}${s.mutated.length ? ` (${s.mutated.join(', ')})` : ''}`);
     check(snaps.compiled.errors.length === 0, `${f.key}: no page errors on the compiled page (${snaps.compiled.errors[0] ?? 'clean'})`);
     if (hasLegacy && snaps.legacy.after && snaps.compiled.after) {
