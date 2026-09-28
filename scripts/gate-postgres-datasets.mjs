@@ -13,6 +13,7 @@ import pg from 'pg';
 import { chromium } from 'playwright';
 import { becomeOwner, startDocument } from './lib/start-doc.mjs';
 import { loginViaEmail, startMailSink } from './lib/mail-login.mjs';
+import { compiledReader } from './lib/gate-reader.mjs';
 
 const base = process.argv[2] ?? 'http://localhost:3030';
 const log = label => console.log(`  ok ${label}`);
@@ -156,8 +157,21 @@ try {
   await guest.goto(`${base}/a/${start.id}`, { waitUntil: 'load' });
   await previewContains(guest, '120', 'DataTable embed');
   assert.ok(!(await guest.getByLabel('DataTable embed', { exact: true }).innerText()).includes('90'));
-  await guest.locator('html[data-mx-ready]').waitFor();
+  if (compiledReader) await guest.locator('html[data-mx-ready]').waitFor();
+  const queryCalls = [];
+  if (compiledReader) guest.on('response', response => {
+    if (response.url().includes(`/a/${start.id}/query`)) queryCalls.push(response.status());
+  });
   await guest.getByLabel('Region', { exact: true }).fill('east');
+  if (compiledReader) {
+    await guest.waitForTimeout(700);
+    const state = await guest.evaluate(() => {
+      const store = document.querySelector('[data-mx-inline-story]')?.__mxIslands?.store;
+      return { input: document.querySelector('[aria-label="Region"]')?.value, value: store?.getValue('region'), pending: store?.pending(), error: store?.getState().errors, queryUrl: !!JSON.parse(document.querySelector('#mx-story-data')?.textContent ?? '{}').queryUrl };
+    });
+    secretFree(state);
+    log(`compiled Region after fill: ${JSON.stringify(state)}; query responses ${JSON.stringify(queryCalls)}`);
+  }
   await previewContains(guest, '90', 'DataTable embed');
   assert.ok(!(await guest.getByLabel('DataTable embed', { exact: true }).innerText()).includes('120'));
   secretFree(await guest.content());

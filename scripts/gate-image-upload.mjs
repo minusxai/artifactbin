@@ -427,7 +427,15 @@ const browser = await chromium.launch();
     const blob = await new Promise((res) => canvas.toBlob(res, 'image/png'));
     await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
   });
-  await frame.locator('[data-mx-inline-story] img[alt="the original"]').click();
+  const selectedImage = frame.locator('[data-mx-inline-story] img[alt="the original"]');
+  await selectedImage.click();
+  if (await selectedImage.getAttribute('data-mx-selected') !== 'block') {
+    console.log('image click did not select', await frame.evaluate(() => ({
+      image: document.querySelector('[data-mx-inline-story] img[alt="the original"]')?.outerHTML.slice(0, 500),
+      selected: [...document.querySelectorAll('[data-mx-selected], [data-mx-embed-selected]')].map(el => el.outerHTML.slice(0, 300)),
+    })));
+    await selectedImage.click({ force: true });
+  }
   await frame.waitForFunction(() => document.querySelector('[data-mx-inline-story] img[alt="the original"]')?.getAttribute('data-mx-selected') === 'block');
   await page.keyboard.press(PASTE);
   const pasted = await waitReplaced(srcOf(dropped));
