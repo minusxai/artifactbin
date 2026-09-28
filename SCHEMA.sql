@@ -1073,6 +1073,42 @@ ALTER TABLE app.prepared_pages ADD COLUMN IF NOT EXISTS page JSONB NOT NULL;
 
 ALTER TABLE app.prepared_pages ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT now();
 
+CREATE TABLE IF NOT EXISTS app.data_snapshots (
+  artifact_id TEXT NOT NULL,
+  slot TEXT NOT NULL,
+  plan_key TEXT NOT NULL,
+  inputs_key TEXT NOT NULL,
+  datasets TEXT[] NOT NULL DEFAULT '{}',
+  marks JSONB,
+  snapshot JSONB,
+  stale_at TIMESTAMPTZ,
+  computed_at TIMESTAMPTZ,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (artifact_id, slot, plan_key, inputs_key)
+);
+
+ALTER TABLE app.data_snapshots ADD COLUMN IF NOT EXISTS artifact_id TEXT NOT NULL;
+
+ALTER TABLE app.data_snapshots ADD COLUMN IF NOT EXISTS slot TEXT NOT NULL;
+
+ALTER TABLE app.data_snapshots ADD COLUMN IF NOT EXISTS plan_key TEXT NOT NULL;
+
+ALTER TABLE app.data_snapshots ADD COLUMN IF NOT EXISTS inputs_key TEXT NOT NULL;
+
+ALTER TABLE app.data_snapshots ADD COLUMN IF NOT EXISTS datasets TEXT[] NOT NULL DEFAULT '{}';
+
+ALTER TABLE app.data_snapshots ADD COLUMN IF NOT EXISTS marks JSONB;
+
+ALTER TABLE app.data_snapshots ADD COLUMN IF NOT EXISTS snapshot JSONB;
+
+ALTER TABLE app.data_snapshots ADD COLUMN IF NOT EXISTS stale_at TIMESTAMPTZ;
+
+ALTER TABLE app.data_snapshots ADD COLUMN IF NOT EXISTS computed_at TIMESTAMPTZ;
+
+ALTER TABLE app.data_snapshots ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT now();
+
+CREATE INDEX IF NOT EXISTS idx_data_snapshots_datasets ON app.data_snapshots USING gin (datasets);
+
 CREATE TABLE IF NOT EXISTS app.artifact_creation_operations (
   scope TEXT NOT NULL,
   operation_key TEXT NOT NULL,

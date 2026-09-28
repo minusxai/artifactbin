@@ -99,8 +99,8 @@ const pick = <T>(from: Record<string, T> | undefined, names: ReadonlySet<string>
 const MARK_SQL = `SELECT id, version, edit_id, visibility, link_role, sharing_revision, policy_revision, deleted_at IS NULL AS live, md5(meta::text) AS meta
   FROM artifacts WHERE id = ANY($1::text[])`;
 
-/** The current mark of each of these datasets; a missing one has none. */
-async function marksOf(ids: readonly string[]): Promise<Map<string, string>> {
+/** The current mark of each of these datasets; a missing one has none. Also the guest snapshots' freshness rule (lib/compiled-page/snapshots.server). */
+export async function marksOf(ids: readonly string[]): Promise<Map<string, string>> {
   if (!ids.length) return new Map();
   const rows = (await (await getDb()).query<{ id: string }>(MARK_SQL, [[...ids]])).rows;
   return new Map(rows.map((r) => [r.id, createHash('sha256').update(JSON.stringify(r)).digest('base64url').slice(0, 12)]));
@@ -109,7 +109,7 @@ async function marksOf(ids: readonly string[]): Promise<Map<string, string>> {
 const TOKEN_PART = /^([A-Za-z0-9]+)\.([A-Za-z0-9_-]{12})$/;
 
 /** `id.mark~id.mark` — what a page hands its live stream (`?since=`). */
-const tokenOf = (marks: Map<string, string>): string => [...marks].sort(([a], [b]) => a.localeCompare(b)).map(([id, mark]) => `${id}.${mark}`).join('~');
+export const tokenOf = (marks: Map<string, string>): string => [...marks].sort(([a], [b]) => a.localeCompare(b)).map(([id, mark]) => `${id}.${mark}`).join('~');
 
 /**
  * The datasets among `followed` whose mark has moved since `since` (a token a

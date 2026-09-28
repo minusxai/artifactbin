@@ -614,6 +614,35 @@ const PREPARED_PAGES: Table = {
   primaryKey: ['artifact_id', 'slot'],
 };
 
+/**
+ * GUEST SNAPSHOTS (lib/compiled-page/snapshots.server) — a document version's
+ * SHARED queries answered for the anonymous reader, keyed by the version slot,
+ * a digest of its data plan and a digest of the inputs those queries read.
+ * Freshness is decided on read by comparing `marks` (each dataset's mark taken
+ * before the run) with the current ones; `stale_at` is only the write path's
+ * eager hint, set when a dataset in `datasets` is written (GIN: "every
+ * snapshot that reads this dataset"). Derived and disposable: holds no
+ * per-viewer data.
+ */
+const DATA_SNAPSHOTS: Table = {
+  name: 'data_snapshots',
+  columns: [
+    { name: 'artifact_id', type: 'TEXT', notNull: true },
+    // 'head' | 'v:<n>', as prepared_pages.slot.
+    { name: 'slot', type: 'TEXT', notNull: true },
+    { name: 'plan_key', type: 'TEXT', notNull: true },
+    { name: 'inputs_key', type: 'TEXT', notNull: true },
+    { name: 'datasets', type: 'TEXT[]', notNull: true, default: "'{}'" },
+    { name: 'marks', type: 'JSONB' },
+    { name: 'snapshot', type: 'JSONB' },
+    { name: 'stale_at', type: 'TIMESTAMPTZ' },
+    { name: 'computed_at', type: 'TIMESTAMPTZ' },
+    { name: 'updated_at', type: 'TIMESTAMPTZ', notNull: true, default: 'now()' },
+  ],
+  primaryKey: ['artifact_id', 'slot', 'plan_key', 'inputs_key'],
+  indexes: [{ name: 'idx_data_snapshots_datasets', columns: ['datasets'], using: 'gin' }],
+};
+
 /** Immutable export images and the shared, fenced refresh pointer for each variant. */
 const EXPORT_IMAGES: Table = {
  name:'export_images',
@@ -834,7 +863,7 @@ const EVENT_OUTBOX: Table = {name:'event_outbox',columns:[
  {name:'id',type:'TEXT',notNull:true},{name:'envelope',type:'JSONB',notNull:true},
  {name:'created_at',type:'TIMESTAMPTZ',notNull:true,default:'now()'},
 ],primaryKey:['id']};
-export const TABLES: Table[] = [EVENT_OUTBOX, MEMBER_NOTIFICATIONS, USER_BLOCKS, COMMENT_IMAGES, REMOTE_AGENTS, REMOTE_WORK, EXPORT_IMAGES, EXPORT_IMAGE_CACHE, MERMAID_IMAGES, MERMAID_HARVESTS, MUTATION_RECEIPTS, DATASET_POLICY_AUDIT, DATASET_USAGE, USERS, CUSTOM_DOMAINS, TOKENS, ARTIFACTS, ARTIFACT_VERSIONS, ARTIFACT_EDITS, ARTIFACT_SOURCE_IDS, ARTIFACT_NODE_ALIASES, NODE_IDENTITY_MIGRATION_JOBS, ARTIFACT_SHARES, ANNOTATIONS, CODES, ANALYTICS_EVENTS, RELATIONS, WEBFONTS, WEB_ASSETS, DATASET_SECRETS, DATASET_RESULT_CACHE, PREPARED_PAGES, ARTIFACT_CREATION_OPERATIONS, ID_RESERVATION_BATCHES, ARTIFACT_ID_REGISTRY, BROWSER_TEST_USERS];
+export const TABLES: Table[] = [EVENT_OUTBOX, MEMBER_NOTIFICATIONS, USER_BLOCKS, COMMENT_IMAGES, REMOTE_AGENTS, REMOTE_WORK, EXPORT_IMAGES, EXPORT_IMAGE_CACHE, MERMAID_IMAGES, MERMAID_HARVESTS, MUTATION_RECEIPTS, DATASET_POLICY_AUDIT, DATASET_USAGE, USERS, CUSTOM_DOMAINS, TOKENS, ARTIFACTS, ARTIFACT_VERSIONS, ARTIFACT_EDITS, ARTIFACT_SOURCE_IDS, ARTIFACT_NODE_ALIASES, NODE_IDENTITY_MIGRATION_JOBS, ARTIFACT_SHARES, ANNOTATIONS, CODES, ANALYTICS_EVENTS, RELATIONS, WEBFONTS, WEB_ASSETS, DATASET_SECRETS, DATASET_RESULT_CACHE, PREPARED_PAGES, DATA_SNAPSHOTS, ARTIFACT_CREATION_OPERATIONS, ID_RESERVATION_BATCHES, ARTIFACT_ID_REGISTRY, BROWSER_TEST_USERS];
 
 /** Ordered, individually-executable DDL statements (no splitting needed) — rendered by utils. */
 export const SCHEMA_STATEMENTS: string[] = renderSchema(TABLES);
