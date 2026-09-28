@@ -53,7 +53,8 @@ const markupCspFor = (id: string) => [
  * THE COMPILED READER'S policy (docs/phase2-architecture.md §9): the same sandbox and the same
  * per-document doors, with two differences and no others — `script-src` admits NO inline script
  * (`'self'` first: the page runs same-origin files only, its data is an `application/json` island),
- * and `connect-src` adds the document's own viewer-overlay door (`/a/<id>/viewer`, fetched after paint).
+ * and `connect-src` adds the document's own viewer-overlay door (`/a/<id>/viewer`, fetched after paint)
+ * and its story fragment (`/a/<id>/story`, the newest version the live morph draws in place).
  */
 const compiledCspFor = (id: string) => [
   "default-src 'none'",
@@ -63,7 +64,7 @@ const compiledCspFor = (id: string) => [
   "font-src 'self' data:",
   "media-src 'self' data: blob:",
   "frame-src 'self'",
-  `connect-src ${BASE}/a/${id}/query ${BASE}/a/${id}/events ${BASE}/a/${id}/events/frame ${BASE}/a/${id}/mutate ${BASE}/a/${id}/resolve ${BASE}/a/${id}/viewer ${BASE}/geojson/ ${BASE}/basemap/ ${BASE}/story/ ${BASE}/fonts/ blob: data:`,
+  `connect-src ${BASE}/a/${id}/query ${BASE}/a/${id}/events ${BASE}/a/${id}/events/frame ${BASE}/a/${id}/mutate ${BASE}/a/${id}/resolve ${BASE}/a/${id}/viewer ${BASE}/a/${id}/story ${BASE}/geojson/ ${BASE}/basemap/ ${BASE}/story/ ${BASE}/fonts/ blob: data:`,
   "form-action 'none'",
   "base-uri 'none'",
   "frame-ancestors 'self'",

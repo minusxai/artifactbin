@@ -1,0 +1,399 @@
+/**
+ * THE LIVE MORPH ENGINE (docs/phase2-architecture.md §2.4, §7.2): a compiled page brought to the
+ * document's newest version IN PLACE, as today's React reader re-renders a write — no navigation, the
+ * reader's place, mode, focus, values and rows kept, a chart that did not change keeping its element.
+ *
+ * Framework-free and standalone (scripts/build-islands `STANDALONE_LAZY`): loaded only when a version
+ * lands, by the one update path (../live-update), never part of the shared runtime's rt+boot closure.
+ * The Solid work — hydrating an island — is the running document's own (boot's `IslandMorphSeam`); this
+ * module matches, and moves DOM.
+ *
+ *  1. FETCH the new version's story fragment (`/a/:id/story`, lib/compiled-page/story-fragment): the same
+ *     assembler output the page was served, for this page's surface and query string (its `$` values).
+ *     A version the server has not compiled yet answers 409 and is asked again, briefly.
+ *  2. MATCH islands. The new page's module (imported: its `boot` hands `{ ISLANDS, FLOW }` to the running
+ *     document instead of booting a second one) names each island's KEY, a digest of its definition. An
+ *     island is KEPT when an island with the same root element id (the persistent node id every body
+ *     element carries) was running with the same key; every other running island is disposed.
+ *  3. MORPH the story keyed by element ids: a matched static element keeps its node and takes the new
+ *     attributes and children; text is updated in place; a kept island's nodes are moved into place
+ *     untouched (their hydration keys renamed when the island's position changed); a changed or new
+ *     island is the new page's served markup.
+ *  4. HYDRATE the changed and new islands on the SAME context: the store (with the new declarations,
+ *     `replaceFlow`, only when they changed), the reader's values and the snapshot rows survive.
+ *
+ * Anything it cannot do throws, and the caller reloads keeping the reader's place (../live-update).
+ */
+import { DOCUMENT_MODULE_PATH, ISLAND_DATA_ID, ISLANDS_PATH } from '@/lib/compiled-page/contract';
+import { storyFragmentUrl, type StorySurface } from '@/lib/compiled-page/story-fragment';
+import { applyAnchor, currentAnchor } from '@/lib/story-runtime/anchor';
+import { readerMode } from '@/lib/story-runtime/reader-mode';
+import { writeUrlValues } from '@/lib/story/url-values';
+import { AST_PATH_ATTR } from '@/lib/story-ui/ast-path';
+import { ISLAND_DOCUMENT_KEY, type IslandHost } from '../contract';
+import type { IslandEntry, IslandModule, IslandMorphSeam, MorphableIslandDocument } from '../boot';
+import type { StoryUpdateOptions } from '../live-update';
+
+const STORY_ROOT_SELECTOR = '[data-mx-inline-story]';
+const LIVE_ID_ATTR = 'data-mx-live-id';
+const LIVE_EDIT_ATTR = 'data-mx-live-edit';
+const HK = 'data-hk';
+/** A compiler-generated render id (`s<i>-`), as rt's `hydrateIsland` accepts one. */
+const RENDER_ID = /^[\w-]+$/;
+/** Sheets that belong to one version and may be absent from the next (lib/story/document-styles, the assembler). */
+const VERSION_SHEETS = ['data-mx-tw', 'data-mx-story-css', 'data-mx-webfonts', 'data-mx-font-vars', 'data-mx-author'];
+/** How often a version the server is still compiling is asked for again, and how long apart. */
+const NOT_READY_RETRIES = 6;
+const NOT_READY_DELAY_MS = 250;
+
+/** A new version this engine will not draw in place: the caller reloads. */
+export class MorphRefused extends Error {}
+const refuse = (why: string): MorphRefused => new MorphRefused(why);
+
+export interface MorphDependencies {
+  fetch?: (url: string, init?: RequestInit) => Promise<Response>;
+  /** Import a document module by URL (its `boot` runs on first import only). */
+  importModule?: (url: string) => Promise<unknown>;
+  /** Which page asks; decided from the origin when absent (a `/raw` copy's is opaque). */
+  surface?: StorySurface;
+}
+
+export type MorphOptions = StoryUpdateOptions & MorphDependencies;
+
+const defaultImport = (url: string): Promise<unknown> => import(/* @vite-ignore */ url);
+
+export async function morphStory(win: Window, options: MorphOptions = {}): Promise<void> {
+  const doc = win.document;
+  const root = doc.querySelector<HTMLElement>(STORY_ROOT_SELECTOR);
+  const id = doc.body?.getAttribute(LIVE_ID_ATTR);
+  if (!root || !id) throw refuse('the page has no live story');
+  const surface = options.surface ?? (win.origin === 'null' ? 'raw' : 'app');
+
+  const running = (root as IslandHost)[ISLAND_DOCUMENT_KEY] as MorphableIslandDocument | undefined;
+  const seam = running?.morph ?? null;
+  if (running && running.mode() !== 'read') throw refuse('the document is being edited');
+
+  // The fragment is rendered at the reader's CURRENT values (as a link to them would be), so an island it
+  // hydrates matches the store it joins; the page's own query string rides along (`reader=`, the rest).
+  const store = running?.store ?? null;
+  const search = store ? writeUrlValues(win.location.search, store.flow, store.getState().values) : win.location.search;
+  const next = await fetchFragment(win, storyFragmentUrl(id, search, surface), options.fetch ?? win.fetch.bind(win));
+  const nextRoot = next.querySelector<HTMLElement>(STORY_ROOT_SELECTOR);
+  if (!nextRoot) throw refuse('the fragment carries no story');
+  const nextEdit = next.body.getAttribute(LIVE_EDIT_ATTR);
+  if (nextEdit && nextEdit === doc.body.getAttribute(LIVE_EDIT_ATTR)) return;
+  // A deck's rail and present bar are bound once by its behaviour (lib/islands/deck): a changed deck reloads.
+  if (root.querySelector('.mx-rail') || nextRoot.querySelector('.mx-rail')) throw refuse('a deck is redrawn by a reload');
+
+  const oldModule = moduleUrl(doc);
+  const newModule = moduleUrl(next);
+  // Content-addressed chunks: another boot URL is another island build, whose islands would run on a second Solid.
+  if (oldModule && newModule && bootUrl(doc) !== bootUrl(next)) throw refuse('the island build changed under the page');
+
+  // What the new version runs: nothing changed when the module is the same file (it is content-addressed).
+  const importModule = options.importModule ?? defaultImport;
+  // Absolute, as the page's own script resolved it: one URL is one module instance.
+  const newModuleHref = newModule ? new URL(newModule, doc.baseURI).href : null;
+  let incoming: IslandModule | null = null;
+  if (seam && newModuleHref && newModule !== oldModule) {
+    incoming = await takeModule(seam, newModuleHref, importModule);
+    if (incoming.FLOW && !store) throw refuse('the new version declares data the running islands have no store for');
+  }
+
+  // The islands to keep (new render id → old), and the ones to let go.
+  const oldUnits = seam ? unitsOf(root, [...seam.islands.keys()]) : new Map<string, Element[]>();
+  const keep = new Map<string, string>();
+  if (seam && newModule && newModule === oldModule) {
+    for (const rid of seam.islands.keys()) if (oldUnits.has(rid)) keep.set(rid, rid);
+  } else if (seam && incoming) {
+    const byRootId = new Map<string, string>();
+    for (const [rid, nodes] of oldUnits) { const rootId = (nodes[0] as Element).id; if (rootId) byRootId.set(rootId, rid); }
+    const newUnits = unitsOf(nextRoot, incoming.ISLANDS.map(([rid]) => rid));
+    for (const [rid, , key] of incoming.ISLANDS) {
+      const rootId = newUnits.get(rid)?.[0]?.id;
+      const oldRid = rootId ? byRootId.get(rootId) : undefined;
+      if (key && oldRid && seam.islands.get(oldRid)?.[0] === key && ![...keep.values()].includes(oldRid)) keep.set(rid, oldRid);
+    }
+  }
+  if (seam) {
+    const kept = new Set(keep.values());
+    for (const [rid, [, dispose]] of [...seam.islands]) if (!kept.has(rid)) { seam.islands.delete(rid); dispose(); }
+  }
+
+  // Where the reader is, and what they hold.
+  const anchor = currentAnchor(win);
+  const anchorTop = anchor ? topOf(root, anchor.path) : null;
+  const focused = doc.activeElement instanceof HTMLElement && root.contains(doc.activeElement) ? doc.activeElement : null;
+
+  const override = options.mode?.() ?? readerMode(win);
+  syncAttributes(root, nextRoot, override);
+  morphChildren(root, nextRoot, { keep, oldUnits, used: new Set(), kept: new Set([...keep.values()].flatMap((rid) => oldUnits.get(rid) ?? [])) });
+
+  syncHead(doc, next, { adopted: !!options.adopted, override });
+  const data = next.getElementById(ISLAND_DATA_ID);
+  if (data) {
+    const here = doc.getElementById(ISLAND_DATA_ID);
+    if (here) here.textContent = data.textContent;
+    else doc.body.append(doc.importNode(data, true));
+  }
+  if (nextEdit) doc.body.setAttribute(LIVE_EDIT_ATTR, nextEdit);
+
+  if (seam) {
+    // Kept islands answer to their new render ids from here on.
+    const byOld = new Map(seam.islands);
+    seam.islands.clear();
+    for (const [rid, oldRid] of keep) { const island = byOld.get(oldRid); if (island) seam.islands.set(rid, island); }
+    if (incoming) {
+      if (incoming.FLOW && store && JSON.stringify(incoming.FLOW) !== JSON.stringify(store.flow)) store.replaceFlow({ flow: incoming.FLOW });
+      for (const entry of incoming.ISLANDS) if (!keep.has(entry[0])) seam.hydrate(entry);
+    }
+  } else if (newModuleHref) {
+    // The page ran no islands (prose until now): the new version's module boots them on this very DOM.
+    await importModule(newModuleHref);
+  }
+
+  if (focused && !focused.isConnected && focused.id) doc.getElementById(focused.id)?.focus({ preventScroll: true });
+  if (anchor && anchorTop !== null) {
+    const after = topOf(root, anchor.path);
+    if (after !== null && Math.abs(after - anchorTop) > 1) applyAnchor(win, anchor);
+  }
+}
+
+/* ──────────────────────────────────────────────────────────────────────────
+ * The fragment and the new module
+ * ────────────────────────────────────────────────────────────────────────── */
+
+async function fetchFragment(win: Window, url: string, fetchFn: NonNullable<MorphDependencies['fetch']>): Promise<Document> {
+  for (let attempt = 0; ; attempt++) {
+    const response = await fetchFn(url, { credentials: 'same-origin', cache: 'no-store' });
+    // Compiled off the write's path: a version this fresh may still be compiling.
+    if (response.status === 409 && attempt < NOT_READY_RETRIES) {
+      await new Promise((resolve) => win.setTimeout(resolve, NOT_READY_DELAY_MS * (attempt + 1)));
+      continue;
+    }
+    if (!response.ok) throw refuse(`the story fragment answered ${response.status}`);
+    return new DOMParser().parseFromString(await response.text(), 'text/html');
+  }
+}
+
+/** The page's per-document module script, or null (a page with no islands). */
+const moduleUrl = (doc: Document): string | null =>
+  [...doc.querySelectorAll<HTMLScriptElement>('script[type="module"][src]')]
+    .map((script) => script.getAttribute('src')!)
+    .find((src) => src.startsWith(`${DOCUMENT_MODULE_PATH}/`)) ?? null;
+
+/** The shared boot chunk a page's module runs on (its preload), which names the island build. */
+const bootUrl = (doc: Document): string | null =>
+  [...doc.querySelectorAll<HTMLLinkElement>('link[rel="modulepreload"][href]')]
+    .map((link) => link.getAttribute('href')!)
+    .find((href) => href.startsWith(`${ISLANDS_PATH}/boot-`)) ?? null;
+
+/**
+ * The newer version's `{ ISLANDS, FLOW }`: its first import runs its `boot`, which hands it to the
+ * running document (`seam.take`); a module this page ran before is not evaluated again, and is found
+ * by its `ISLANDS`.
+ */
+async function takeModule(seam: IslandMorphSeam, url: string, importModule: NonNullable<MorphDependencies['importModule']>): Promise<IslandModule> {
+  let taken: IslandModule | null = null;
+  seam.take = (module) => { taken = module; seam.modules.set(module.ISLANDS, module); };
+  let exports: { ISLANDS?: readonly IslandEntry[] } | null;
+  try {
+    exports = (await importModule(url)) as { ISLANDS?: readonly IslandEntry[] } | null;
+  } finally {
+    delete seam.take;
+  }
+  const module = taken ?? (exports?.ISLANDS ? seam.modules.get(exports.ISLANDS) : undefined);
+  if (!module) throw refuse('the new version\'s module did not hand in its islands');
+  return module;
+}
+
+/* ──────────────────────────────────────────────────────────────────────────
+ * Islands in a tree
+ * ────────────────────────────────────────────────────────────────────────── */
+
+/** The render id an island node answers to: its hydration key's prefix (`s3-` of `s3-0000`). */
+function renderIdOf(node: Node): string | null {
+  if (node.nodeType !== 1) return null;
+  const key = (node as Element).getAttribute(HK);
+  const dash = key ? key.indexOf('-') : -1;
+  return dash > 0 ? key!.slice(0, dash + 1) : null;
+}
+
+/** Each island's top-level nodes (its root first), by render id: what hydration handed the island. */
+function unitsOf(tree: ParentNode, renderIds: readonly string[]): Map<string, Element[]> {
+  const units = new Map<string, Element[]>();
+  for (const rid of renderIds) {
+    if (!RENDER_ID.test(rid)) continue;
+    const selector = `[${HK}^="${rid}"]`;
+    const nodes = [...tree.querySelectorAll(selector)].filter((el) => !el.parentElement?.closest(selector));
+    if (nodes.length) units.set(rid, nodes);
+  }
+  return units;
+}
+
+/** A kept island at a new position answers to the new render id (its hydration keys), for the next version's matching. */
+function renameIsland(node: Element, from: string, to: string): void {
+  for (const el of [node, ...node.querySelectorAll(`[${HK}^="${from}"]`)]) {
+    const key = el.getAttribute(HK);
+    if (key?.startsWith(from)) el.setAttribute(HK, to + key.slice(from.length));
+  }
+}
+
+/* ──────────────────────────────────────────────────────────────────────────
+ * The morph
+ * ────────────────────────────────────────────────────────────────────────── */
+
+interface MorphContext {
+  /** New render id → the running island (old render id) that stays. */
+  keep: ReadonlyMap<string, string>;
+  /** The running islands' top-level nodes in the current tree. */
+  oldUnits: ReadonlyMap<string, Element[]>;
+  /** Current nodes already placed in the new tree. */
+  used: Set<Node>;
+  /** Every node of a kept island: moved into place, never removed with its old parent. */
+  kept: ReadonlySet<Node>;
+}
+
+type Movable = Element & { moveBefore?: (node: Node, child: Node | null) => void };
+
+/** Put `node` before `ref` under `parent`, keeping its state where the browser can (iframes, focus). */
+function move(parent: Element, node: Node, ref: Node | null): void {
+  const moveBefore = (parent as Movable).moveBefore;
+  if (typeof moveBefore === 'function' && node.isConnected && parent.isConnected) {
+    try { moveBefore.call(parent, node, ref); return; } catch { /* not movable here: insert instead */ }
+  }
+  parent.insertBefore(node, ref);
+}
+
+function morphChildren(from: Element, to: Element, ctx: MorphContext): void {
+  const doc = from.ownerDocument;
+  const olds = [...from.childNodes];
+  const byId = new Map<string, Element>();
+  for (const node of olds) if (node.nodeType === 1 && !renderIdOf(node) && (node as Element).id) byId.set((node as Element).id, node as Element);
+  let at: ChildNode | null = from.firstChild;
+  const place = (node: Node) => {
+    ctx.used.add(node);
+    if (node === at) { at = at.nextSibling; return; }
+    move(from, node, at);
+  };
+  const placedIslands = new Set<string>();
+  const nextIds = new Set<string>();
+  for (const node of to.childNodes) if (node.nodeType === 1 && (node as Element).id) nextIds.add((node as Element).id);
+
+  for (const next of [...to.childNodes]) {
+    const rid = renderIdOf(next);
+    if (rid) {
+      const oldRid = ctx.keep.get(rid);
+      if (oldRid === undefined) { place(doc.importNode(next, true)); continue; }
+      // A kept island: every node it runs, where the new page has it, once.
+      if (placedIslands.has(rid)) continue;
+      placedIslands.add(rid);
+      for (const node of ctx.oldUnits.get(oldRid) ?? []) {
+        if (rid !== oldRid) renameIsland(node, oldRid, rid);
+        place(node);
+      }
+      continue;
+    }
+    // By persistent id first; else (no id, or an id the current page does not have — a node minted anew)
+    // the next free node of the same kind whose own id the new version no longer names.
+    const byOwnId = next.nodeType === 1 && (next as Element).id ? byId.get((next as Element).id) : undefined;
+    const match = byOwnId && !ctx.used.has(byOwnId) ? byOwnId : softMatch(at, next, ctx, nextIds);
+    if (match && !ctx.used.has(match) && sameKind(match, next)) {
+      if (match.nodeType === 1) {
+        syncAttributes(match as Element, next as Element, null);
+        morphChildren(match as Element, next as Element, ctx);
+      } else if (match.nodeValue !== next.nodeValue) {
+        match.nodeValue = next.nodeValue;
+      }
+      place(match);
+      continue;
+    }
+    place(fresh(doc, next, ctx));
+  }
+  for (const node of olds) if (!ctx.used.has(node) && !ctx.kept.has(node) && node.parentNode === from) from.removeChild(node);
+}
+
+/** A new node that matched nothing: an element is built through the morph, so a kept island inside it still lands. */
+function fresh(doc: Document, next: Node, ctx: MorphContext): Node {
+  if (next.nodeType !== 1) return doc.importNode(next, false);
+  const element = doc.importNode(next, false) as Element;
+  morphChildren(element, next as Element, ctx);
+  return element;
+}
+
+/**
+ * The next unplaced current sibling a node can be when its id matched nothing: same type and tag, not an
+ * island, and not an element the new version still names by its own id (that one waits for its match).
+ */
+function softMatch(from: ChildNode | null, next: Node, ctx: MorphContext, nextIds: ReadonlySet<string>): Node | null {
+  for (let node = from; node; node = node.nextSibling) {
+    if (ctx.used.has(node) || ctx.kept.has(node) || renderIdOf(node)) continue;
+    if (node.nodeType === 1 && (node as Element).id && nextIds.has((node as Element).id)) continue;
+    if (sameKind(node, next)) return node;
+  }
+  return null;
+}
+
+const sameKind = (a: Node, b: Node): boolean =>
+  a.nodeType === b.nodeType && (a.nodeType !== 1 || (a as Element).tagName === (b as Element).tagName);
+
+/**
+ * `to`'s attributes on `from`. On the story root, `override` is the reader's own colour: the new
+ * version's `light`/`dark` never replaces it.
+ */
+function syncAttributes(from: Element, to: Element, override: 'light' | 'dark' | null): void {
+  for (const attr of [...from.attributes]) if (!to.hasAttributeNS(attr.namespaceURI, attr.localName)) from.removeAttributeNS(attr.namespaceURI, attr.localName);
+  for (const attr of [...to.attributes]) {
+    let value = attr.value;
+    if (override && attr.name === 'class' && from.hasAttribute('data-mx-inline-story')) value = withMode(value, override);
+    if (from.getAttributeNS(attr.namespaceURI, attr.localName) !== value) from.setAttributeNS(attr.namespaceURI, attr.name, value);
+  }
+}
+
+const withMode = (classes: string, mode: 'light' | 'dark'): string =>
+  [...classes.split(/\s+/).filter((c) => c && c !== 'light' && c !== 'dark'), mode].join(' ');
+
+/* ──────────────────────────────────────────────────────────────────────────
+ * The page around the story
+ * ────────────────────────────────────────────────────────────────────────── */
+
+/** The version's sheets (new classes, fonts, the author's own CSS), its title, and the document's colour. */
+function syncHead(doc: Document, next: Document, { adopted, override }: { adopted: boolean; override: 'light' | 'dark' | null }): void {
+  const sheetKey = (style: Element): string | null => [...style.attributes].find((a) => a.name.startsWith('data-mx-'))?.name ?? null;
+  const incoming = new Map<string, string>();
+  for (const style of next.head.querySelectorAll('style')) { const key = sheetKey(style); if (key) incoming.set(key, style.textContent ?? ''); }
+  const present = new Set<string>();
+  for (const style of [...doc.head.querySelectorAll('style')]) {
+    const key = sheetKey(style);
+    if (!key) continue;
+    present.add(key);
+    const css = incoming.get(key);
+    if (css === undefined) { if (VERSION_SHEETS.includes(key)) style.remove(); continue; }
+    if (style.textContent !== css) style.textContent = css;
+  }
+  for (const [key, css] of incoming) {
+    if (present.has(key)) continue;
+    const style = doc.createElement('style');
+    style.setAttribute(key, '');
+    style.textContent = css;
+    doc.head.append(style);
+  }
+  if (adopted) return;
+  // The page's own title and colour are the story's until the app holds the page.
+  const title = next.querySelector('title')?.textContent;
+  if (title && doc.title !== title) doc.title = title;
+  const html = doc.documentElement;
+  const theme = next.documentElement.getAttribute('data-theme');
+  if (theme) html.setAttribute('data-theme', theme); else html.removeAttribute('data-theme');
+  if (!override) {
+    const mode = next.documentElement.classList.contains('dark') ? 'dark' : 'light';
+    html.classList.toggle('dark', mode === 'dark');
+    html.classList.toggle('light', mode !== 'dark');
+  }
+}
+
+/** Where the element the reader's anchor names sits in the viewport now, or null. */
+function topOf(root: Element, path: string): number | null {
+  const el = [...root.querySelectorAll(`[${AST_PATH_ATTR}]`)].find((candidate) => candidate.getAttribute(AST_PATH_ATTR) === path);
+  return el ? el.getBoundingClientRect().top : null;
+}

@@ -79,6 +79,8 @@ export const ISLAND_SPECIFIERS = Object.freeze(ENTRIES.map((e) => e.specifier));
  */
 const STANDALONE_LAZY = [
   { request: './embed/frame-engine', name: 'frame-engine', file: () => path.join(ISLANDS_SRC, 'kit/embed/frame-engine.ts') },
+  // The live morph (lib/islands/live-update → ./morph/engine): a new version drawn in place, loaded only when one lands.
+  { request: './morph/engine', name: 'morph-engine', file: () => path.join(ISLANDS_SRC, 'morph/engine.ts') },
 ];
 
 async function buildStandaloneLazy() {
@@ -99,7 +101,7 @@ async function buildStandaloneLazy() {
 const standaloneLazyPlugin = (built) => ({
   name: 'mx-standalone-lazy',
   setup(build) {
-    build.onResolve({ filter: /^\.\/embed\/[\w-]+$/ }, (args) => {
+    build.onResolve({ filter: /^\.\/(embed|morph)\/[\w-]+$/ }, (args) => {
       const lazy = built.find((b) => b.request === args.path && args.kind === 'dynamic-import');
       return lazy ? { path: `./${lazy.fileName}`, external: true } : undefined;
     });
