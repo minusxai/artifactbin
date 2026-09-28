@@ -8,6 +8,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { scheduleSpaBoot } from '../idle-boot';
 import { adoptInitialStory, captureInitialStory, initialDocumentStory } from '../initial-story';
+import { capabilityOf, startSpaIdle, stampSavedTheme, takeChromeIntent } from '../idle-boot';
+import { clearInitialStory } from '../initial-story';
+import { THEME_BOOTSTRAP_SCRIPT } from '@/lib/theme-bootstrap';
 import { installIslandDocument, islandDocumentOf } from '@/lib/islands/handover';
 import type { IslandDocument } from '@/lib/islands/contract';
 
@@ -69,5 +72,131 @@ describe('adopting the island document', () => {
     islandDocumentOf(root)!.setMode('edit');
     expect(doc.disposed).toBe(1);
     expect(root.querySelector('#i')?.textContent).toBe('island');
+  });
+});
+
+/*
+ * ORCHESTRATOR AMENDMENT (w3-handover): readers who can't edit load the app ONLY ON INTENT; writers
+ * also boot it on idle. Size target 3 measures to network idle, so an idle prefetch for every
+ * reader would fail it by construction.
+ */
+const servedChrome = (writer: boolean) =>
+  '<div id="mx-story-root" data-mx-inline-story=""><p id="p">text</p></div>'
+  + '<div class="mx-reader-chrome" data-mx-reader-chrome=""><div data-mx-reader-rail="">'
+  + '<button type="button" data-mx-reader-action="like" aria-label="Like">like</button>'
+  + '<button type="button" data-mx-reader-action="comment" aria-label="Comment">comment</button>'
+  + (writer ? '<button type="button" data-mx-reader-action="edit" aria-label="Edit">edit</button>' : '')
+  + '<button type="button" data-mx-reader-trigger="controls" aria-label="Open artifact controls">settings</button>'
+  + '</div></div>';
+
+describe('an anonymous reader loads the app only on intent', () => {
+  beforeEach(() => { (globalThis as { requestIdleCallback?: unknown }).requestIdleCallback = undefined; takeChromeIntent(); });
+
+  it('loads no app chunk after idle, nor on a press in the document itself', () => {
+    document.body.innerHTML = servedChrome(false);
+    const load = vi.fn(async () => {});
+    const boot = startSpaIdle({ load, stylesheet: null, idleMs: 1000 });
+    vi.advanceTimersByTime(60_000);
+    document.getElementById('p')!.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    document.getElementById('p')!.dispatchEvent(new Event('keydown', { bubbles: true }));
+    document.querySelector('[aria-label="Like"]')!.dispatchEvent(new Event('pointerover', { bubbles: true }));
+    expect(load).not.toHaveBeenCalled();
+    expect(document.getElementById('root')).toBeNull();
+    boot.cancel();
+  });
+
+  it.each(['pointerover', 'focusin', 'pointerdown'])('reaching for a comment control (%s) loads it, once', async (type) => {
+    document.body.innerHTML = servedChrome(false);
+    const load = vi.fn(async () => {});
+    const boot = startSpaIdle({ load, stylesheet: null, idleMs: 1000 });
+    const comment = document.querySelector('[aria-label="Comment"]')!;
+    comment.dispatchEvent(new Event(type, { bubbles: true }));
+    comment.dispatchEvent(new Event(type, { bubbles: true }));
+    await vi.waitFor(() => expect(load).toHaveBeenCalledTimes(1));
+    // The app gets a root to render into, hidden until it adopts the served story.
+    expect(document.body.firstElementChild?.id).toBe('root');
+    expect((document.getElementById('root') as HTMLElement).hidden).toBe(true);
+    boot.cancel();
+  });
+
+  it('a click on any served chrome control loads it and is remembered for the app to perform', async () => {
+    document.body.innerHTML = servedChrome(false);
+    const load = vi.fn(async () => {});
+    const boot = startSpaIdle({ load, stylesheet: null, idleMs: 1000 });
+    const click = new MouseEvent('click', { bubbles: true, cancelable: true });
+    document.querySelector('[data-mx-reader-trigger="controls"]')!.dispatchEvent(click);
+    expect(click.defaultPrevented).toBe(true);
+    await vi.waitFor(() => expect(load).toHaveBeenCalledTimes(1));
+    expect(takeChromeIntent()).toBe('controls');
+    expect(takeChromeIntent()).toBeNull();
+    boot.cancel();
+  });
+
+  it('a deep link that needs the app (#edit, ?comment=) loads it at once', async () => {
+    document.body.innerHTML = servedChrome(false);
+    window.history.replaceState(null, '', '/a/doc1?comment=t1');
+    const load = vi.fn(async () => {});
+    const boot = startSpaIdle({ load, stylesheet: null, idleMs: 1000 });
+    await vi.waitFor(() => expect(load).toHaveBeenCalledTimes(1));
+    window.history.replaceState(null, '', '/');
+    boot.cancel();
+  });
+});
+
+describe('a writer boots the app on idle', () => {
+  it('the served chrome offers Edit: the app loads when the page is idle, through requestIdleCallback when present', async () => {
+    document.body.innerHTML = servedChrome(true);
+    expect(capabilityOf(document)).toBe('writer');
+    let idle: (() => void) | null = null;
+    (globalThis as { requestIdleCallback?: unknown }).requestIdleCallback = (cb: () => void, options: { timeout: number }) => { idle = cb; expect(options.timeout).toBe(1000); return 1; };
+    const load = vi.fn(async () => {});
+    startSpaIdle({ load, stylesheet: null, idleMs: 1000 });
+    expect(load).not.toHaveBeenCalled();
+    idle!();
+    await vi.waitFor(() => expect(load).toHaveBeenCalledTimes(1));
+    (globalThis as { requestIdleCallback?: unknown }).requestIdleCallback = undefined;
+  });
+  it('the app stylesheet is linked and loaded before the app runs', async () => {
+    document.body.innerHTML = servedChrome(true);
+    document.head.innerHTML = '';
+    const load = vi.fn(async () => { expect(document.head.querySelector('link[rel="stylesheet"][href="/assets/shell-x.css"]')).not.toBeNull(); });
+    const boot = startSpaIdle({ load, stylesheet: '/assets/shell-x.css', idleMs: 1000 });
+    boot.boot();
+    const link = await vi.waitFor(() => document.head.querySelector<HTMLLinkElement>('link[href="/assets/shell-x.css"]')!);
+    expect(load).not.toHaveBeenCalled();
+    link.dispatchEvent(new Event('load'));
+    await vi.waitFor(() => expect(load).toHaveBeenCalledTimes(1));
+  });
+});
+
+describe('the saved theme applies without an inline script', () => {
+  const cases: Array<[string | null, boolean]> = [['dark', false], ['light', true], [null, true], [null, false]];
+  it.each(cases)('stored %s, device dark %s: the same stamp as web/index.html\'s script', (stored, deviceDark) => {
+    const stamp = (run: () => void) => {
+      delete document.documentElement.dataset.theme;
+      localStorage.clear();
+      if (stored) localStorage.setItem('mx_theme', stored);
+      window.matchMedia = ((query: string) => ({ matches: deviceDark && query.includes('dark') })) as never;
+      run();
+      return document.documentElement.dataset.theme ?? null;
+    };
+    // eslint-disable-next-line no-new-func -- the reference: the very bytes the shell runs before paint
+    const reference = stamp(() => new Function(THEME_BOOTSTRAP_SCRIPT)());
+    expect(stamp(() => stampSavedTheme(window))).toBe(reference);
+  });
+});
+
+describe('leaving a compiled page before the app adopts it', () => {
+  it('disposes the islands, removes the served story and chrome, and reveals the app root', () => {
+    document.body.innerHTML = '<div id="root" hidden></div>' + servedChrome(false);
+    const root = document.getElementById('mx-story-root') as HTMLElement;
+    const doc = fakeDocument(root);
+    installIslandDocument(root, doc);
+    captureInitialStory();
+    clearInitialStory();
+    expect(doc.disposed).toBe(1);
+    expect(root.isConnected).toBe(false);
+    expect(document.querySelector('[data-mx-reader-chrome]')).toBeNull();
+    expect((document.getElementById('root') as HTMLElement).hidden).toBe(false);
   });
 });
