@@ -28,8 +28,8 @@
  *    (lib/compiled-parity-diff survivalOf, the one exemption).
  *  - One interaction sequence on the kit fixture (a tab, an accordion), compared again.
  *
- * Fixtures: the page-speed set (scripts/fixtures/page-speed) and the kitchen sink
- * (scripts/lib/kitchen-sink-doc), published through one bearer token.
+ * Fixtures: the page-speed set (scripts/fixtures/page-speed), which includes the kitchen sink
+ * (scripts/lib/kitchen-sink-doc), published through one bearer token; each is compared once.
  *
  * Until a server serves the compiled path (`FLAG__COMPILED_READER` off, or no
  * compile stored yet), the first compiled response carries no `x-mx-reader:
@@ -136,8 +136,11 @@ if (probe.headers.get(READER_HEADER) !== 'compiled') {
 
 const publish = publisher(token);
 const fixtures = await publishPageSpeedFixtures(publish);
-const kitchen = await publish({ title: 'Perf G kitchen sink', markup: await kitchenSinkMarkup(publish) });
-fixtures.push({ key: 'kitchen', id: kitchen.id, painted: { charts: 1 } });
+// The page-speed set carries the kitchen sink itself now; publish it here only when it does not (never twice).
+if (!fixtures.some((f) => f.key === 'kitchen')) {
+  const kitchen = await publish({ title: 'Perf G kitchen sink', markup: await kitchenSinkMarkup(publish) });
+  fixtures.push({ key: 'kitchen', id: kitchen.id, painted: { charts: 1 } });
+}
 const chosen = fixtures.filter((f) => !only || only.includes(f.key));
 
 const browser = await chromium.launch();
