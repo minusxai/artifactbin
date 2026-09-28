@@ -373,6 +373,12 @@ describe('everything else on a verified host is 404', () => {
     }
     const frame = await app().request(`${HOST}/a/${w.post.id}/events/frame`);
     expect(frame.status).toBe(200);
+    // The compiled reader's viewer door, answered as it answers any guest; scoped like the rest.
+    const viewer = await app().request(`${HOST}/a/${w.post.id}/viewer`, { headers: { cookie: 'authjs.session-token=forged' } });
+    expect(viewer.status, await viewer.clone().text()).toBe(200);
+    expect(((await viewer.json()) as { viewer: unknown }).viewer, 'a domain post\'s reader is a guest').toBeNull();
+    noCookie(viewer);
+    for (const id of [w.quiet.id, w.theirs.id, w.secret.id]) expect((await app().request(`${HOST}/a/${id}/viewer`)).status, id).toBe(404);
     expect((await app().request(`${HOST}/story/author-frame?artifact=${w.post.id}`)).status).toBe(200);
   });
 
