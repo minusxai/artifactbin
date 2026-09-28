@@ -20,6 +20,20 @@ visibility: unlisted  # private | unlisted | public
     where $region is null or region = $region group by 1 order by 1
   `}</Query>
   <Query name="by_region">{`select region, sum(revenue) as revenue from sales.rows group by 1 order by 2 desc`}</Query>
+  {/* Optional task workflow: publish a typed dataset (afbin help users) with
+      id:number, title:string, status:string, assignee:user; use its ID below. */}
+  <Import name="tasks" src="ref:tsk123" />
+  <Value name="task_id" type="number" default={1} />
+  <Value name="status" type="string" default="Done" />
+  <Mutation name="change_status" expectedAffected={1}>{`
+    update tasks.rows set status = $status where id = $task_id
+  `}</Mutation>
+  {/* Actor shown separately; message: Task Review pricing is now Done.
+      Runs after success, reading current data with this run's saved task_id. */}
+  <Notify name="status_notice" on="change_status">{`
+    select assignee as "to", 'Task ' || title || ' is now ' || status as message
+    from tasks.rows where id = $task_id
+  `}</Notify>
 </Helmet>
 {/* The body is static JSX: HTML prose plus kit components, styled with
     className (Tailwind), never style=. No CDN scripts, <script>, <iframe> or
@@ -50,6 +64,7 @@ visibility: unlisted  # private | unlisted | public
   </Grid>
   <h2 className="mt-8 text-2xl font-semibold">By region</h2>
   <DataTable data="$by_region" height="240px" />
+  <Button run="$change_status">Complete selected task</Button>
   {/* Images: <img src="ref:<imageId>" /> for an uploaded one, or a web URL; publish stores a copy. */}
   <Alert className="mt-6"><AlertTitle>Method</AlertTitle><AlertDescription>Revenue is summed from the monthly rows in sales.csv.</AlertDescription></Alert>
 </div>
