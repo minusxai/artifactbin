@@ -453,7 +453,8 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
   const compiledPage = (c: { req: { raw: Request; url: string } }, compiled: CompiledStory, data: unknown, code: 200 | 404) => {
     const tail = agentDiscoveryTailOf(baseUrl(c.req.raw));
     const end = compiled.html.endsWith(`${tail}</body></html>`) ? compiled.html.length - `${tail}</body></html>`.length : compiled.html.lastIndexOf('</body>');
-    const bootstrap = `<script type="application/json" id="${BOOTSTRAP_ID}">${safeJson(data)}</script>`;
+    // The sheet rides once, in the page's head (web/initial-story reads it back): not in the page data too.
+    const bootstrap = `<script type="application/json" id="${BOOTSTRAP_ID}">${safeJson(withoutInlinedSheet(data))}</script>`;
     const html = `${compiled.html.slice(0, end)}${bootstrap}${compiled.html.slice(end)}`;
     return compressDynamic(c.req.raw, new Response(html, { status: code, headers: {
       'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store', ...APP_SECURITY_HEADERS,
