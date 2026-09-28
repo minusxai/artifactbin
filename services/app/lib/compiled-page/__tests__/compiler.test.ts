@@ -119,9 +119,16 @@ describe('compilePage', () => {
     }
   });
 
-  it('compiles <Iframe> and <DeckGL> as islands in the data family, served as today\'s boxes', async () => {
+  it('compiles <Iframe> and <DeckGL> as islands in the embed family, served as today\'s boxes', async () => {
     const source = '<div><Iframe title="Gallery" height={120} id="f" className="my-4"><p>Hello</p><script>{`document.body.dataset.ok = "1"`}</script></Iframe><DeckGL id="map" className="rounded" title="Countries" height="320px" basemap="none" layers={[{"@@type":"ScatterplotLayer","getPosition":"@@=[lng, lat]"}]} /></div>';
-    const page = await compilePage(await inputOf(source), loadCompilerBuild());
+    const input = await inputOf(source);
+    // Their own family (lib/islands/contract KIT_FAMILIES 'embed'): a page with a table never downloads the frame's island code.
+    const { islands } = generate(input);
+    expect(islands).toContain('import { DeckGL, Iframe } from "@mx/kit/embed";');
+    expect(islands).not.toContain('@mx/kit/data');
+    // The asset door is the page's (IslandPageData.managedAssets), never a compile-time prop.
+    expect(islands).not.toContain('assetsOrigin');
+    const page = await compilePage(input, loadCompilerBuild());
     expect(page.partial).toEqual([]);
     expect(page.islands.map((i) => i.kit)).toEqual([['Iframe'], ['DeckGL']]);
     const html = dom(page.html);
@@ -135,6 +142,27 @@ describe('compilePage', () => {
     expect(shapeOf(map.outerHTML)).toEqual(shapeOf('<div id="map"><div class="rounded"><div class="w-full rounded-md bg-muted" style="height:320px" aria-busy="true" aria-label="Countries"></div></div></div>'));
     // The frame's author content reaches the island only as data: compiled at publish (lib/story/managed-iframe), never as markup.
     expect(page.html).not.toContain('Hello');
+  });
+
+  it('compiles a DataTable column\'s content per row, and a control with run there as today\'s editing cell', async () => {
+    const source = '<Helmet><Value name="t" type="table" value={[{"id":1,"s":"a","n":2,"w":""}]} /><Mutation name="set_s">{`update t set s=$_value where id=$_row.id`}</Mutation>'
+      + '<Mutation name="set_n">{`update t set n=$_value where id=$_row.id`}</Mutation></Helmet>'
+      + '<DataTable data="$t" rowKey="id" id="tbl"><Column col="id" /> <Column col="w">\n  </Column><Column col="note"><b id="n">{$_row.s}</b></Column>'
+      + '<Column col="s"><Select label="S {$_row.id}" value="$_row.s" options={["a","b"]} run="$set_s" className="w-24" /></Column>'
+      + '<Column col="n"><input type="number" value="$_row.n" run="$set_n" /></Column></DataTable>';
+    const { islands } = generate(await inputOf(source.replace('"w":""}', '"w":"","note":""}')));
+    // Its own family: a page without column content never loads the cells.
+    expect(islands).toContain('import { CellControl, cellAttrs } from "@mx/kit/cells";');
+    expect(islands).toContain('import { DataTable } from "@mx/kit/data";');
+    // One entry per <Column>, a hole where the content draws nothing (whitespace), a function per row otherwise.
+    expect(islands).toContain('cells={[undefined, undefined, (row');
+    expect(islands).toMatch(/<b \{\.\.\.cellAttrs\(\$d\d+, row\d+_\d+, cell\d+_\d+\)\}>\{rt\.text\(/);
+    // Today's classes, merged at compile time (tailwind-merge: the cell's flex replaces the shell's inline-flex, the author's w-24 the cell's w-full).
+    expect(islands).toContain('<CellControl tag={"Select"} run={"set_s"} field={"s"}');
+    expect(islands).toContain('cls={"mx-control relative flex-col gap-1.5 align-top flex min-w-0 w-24"}');
+    expect(islands).toContain('<CellControl tag={"input"} run={"set_n"} field={"n"}');
+    expect(islands).toContain('cls={"w-full min-w-0 rounded-md border border-transparent bg-transparent px-2 py-1 text-sm outline-none transition-colors hover:border-border focus:border-ring focus:ring-2 focus:ring-ring/20 disabled:opacity-50 h-8 text-right tabular-nums"}');
+    expect(islands).toMatch(/templates=\{\$d\d+\}/);
   });
 
   it('an <Iframe> whose content is refused renders nothing, as the interpreter does', async () => {

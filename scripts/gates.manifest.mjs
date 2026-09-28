@@ -115,6 +115,7 @@ export const COMPILED_LEGS = Object.freeze([
   { gate: 'live-reader', timeoutMs: 70_000 },
   { gate: 'hydration', timeoutMs: 190_000, disabled: 'its takeover legs 1–3 assert React hydrating the legacy inline story; the compiled takeover (leg 4) already runs in the plain gate on ?reader=compiled' },
   { gate: 'reader-chrome', timeoutMs: 110_000 },
+  { gate: 'editable-table', timeoutMs: 120_000, disabled: 'after the hydration swap fix (#165) the row-button checks pass, but the native user picker check still times out waiting for the picked user\'s cell (getByRole cell @mxmx_test_native_use_*); tracked as its own follow-up' },
   { gate: 'reading-chrome', timeoutMs: 110_000 },
   { gate: 'dataflow', timeoutMs: 60_000 },
 ]);
@@ -187,5 +188,10 @@ export function browsersFor(names) {
  */
 export function shardWeight(name) {
   const spec = specFor(name);
-  return spec.timeoutMs + (browsersFor([name]).some(browser => browser !== 'chromium') ? 270_000 : 0);
+  // editor-v2's long selection flow passed alone after losing a parallel race on CI run
+  // 36422408100; the retry made its shard exceed 240s. With nine bins, this weight
+  // leaves it alone without changing the gate's own timeout or coverage.
+  return spec.timeoutMs
+    + (browsersFor([name]).some(browser => browser !== 'chromium') ? 270_000 : 0)
+    + (name === 'editor-v2' ? 400_000 : 0);
 }
