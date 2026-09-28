@@ -16,6 +16,7 @@ on:
       - 'server.ts'
       - 'scripts/performance-loads.mjs'
       - 'scripts/performance-report.mjs'
+      - 'scripts/size-targets.mjs'
       - 'scripts/lib/document-views.mjs'
       - 'scripts/fixtures/page-speed/**'
       - '.github/workflows/page-speed.yml'
@@ -30,6 +31,7 @@ on:
       - 'server.ts'
       - 'scripts/performance-loads.mjs'
       - 'scripts/performance-report.mjs'
+      - 'scripts/size-targets.mjs'
       - 'scripts/lib/document-views.mjs'
       - 'scripts/fixtures/page-speed/**'
       - '.github/workflows/page-speed.yml'
@@ -127,6 +129,10 @@ jobs:
         run: node scripts/performance-loads.mjs . page-speed/head.json
       - name: Report
         run: node scripts/performance-report.mjs page-speed/base.json page-speed/head.json page-speed/combined.json >> "$GITHUB_STEP_SUMMARY"
+      # The Phase 2 size targets on the head (docs/phase2-architecture.md): informational until Phase 2
+      # flips the check to `--strict`; a target that is not met is a line in the summary, never a red job.
+      - name: Size targets
+        run: node scripts/size-targets.mjs page-speed/head.json --markdown >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         if: always()
         with:

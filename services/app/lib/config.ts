@@ -2,6 +2,7 @@ import {isIP} from 'node:net';
 
 import { parseAssetsOrigin } from '@artifactbin/utils';
 import { DEFAULT_UPLOAD_MAX_BYTES, normalizeOrigin } from '@artifactbin/contracts';
+import { parseCompiledReaderFlag } from '@/lib/compiled-page/reader-mode';
 
 /**
  * The ONLY file that reads process.env, which keeps runtime configuration
@@ -305,6 +306,17 @@ export function parseCustomDomainsTarget(value: string | undefined): string | nu
   return target || null;
 }
 export const CUSTOM_DOMAINS_TARGET = parseCustomDomainsTarget(env('FLAG', 'CUSTOM_DOMAINS'));
+
+/**
+ * THE COMPILED READER (docs/phase2-architecture.md §10) — which renderer a
+ * document reader gets. `off` (the default): today's renderer, nothing
+ * compiles. `shadow`: every version is compiled and stored beside its prepared
+ * page and readers still get today's renderer unless a request asks
+ * `?reader=compiled` (the parity gate does). `on`: readers get the compiled
+ * page wherever one exists; `?reader=legacy` is the escape hatch. Anything
+ * else reads as `off`. Decided per request by lib/compiled-page/reader-mode.
+ */
+export const COMPILED_READER = parseCompiledReaderFlag(env('FLAG', 'COMPILED_READER'));
 
 /**
  * Where Chromium runs. Set, the export renders through an HTTP client to the

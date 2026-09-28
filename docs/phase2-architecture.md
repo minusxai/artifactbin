@@ -1,0 +1,458 @@
+# Phase 2 architecture: compile every published document to a tiny Data→UI app
+
+Status: contracts and gates landed (step 0); every module below is built by the tracks in the
+parallel plan. The approved proposal is `https://app.artifactbin.dev/a/R9gGaO`; its TL;DR and three
+size targets are the scope. Its "Future work" list is out of scope.
+
+Targets (brotli/wire bytes, checked by `scripts/size-targets.mjs` against the page-speed lab):
+
+| # | Target | Today | Phase 2 |
+|---|--------|-------|---------|
+| 1 | JS before ready, pages with nothing interactive (prose, deck) | 275 KB | ≤ 10 KB |
+| 2 | JS before ready, interactive pages (kit, dashboard, every component) | 275–300 KB | ≤ 85 KB |
+| 3 | Production prose page, total transferred | 481 KB | ≤ 200 KB |
+
+Owner decisions, not reopened here: publish-time compiler to Solid islands; Solid 2.0; a vendored
+interactive kit with Radix DOM conventions (no solid-ui/Kobalte dependency); static components render
+at publish with today's React kit until Phase 3; snapshot-first data (minutes-old is fine), guest-only
+snapshots, viewer data after paint; optimistic writes with a saving/saved/failed indicator;
+prefetch/prerender of linked artifacts; one output for every reader path (`/raw` stays, no separate
+runtime); no CDN/edge work; every milestone deletes what it replaces.
+
+## 1. Module map
+
+One owner per module. Contracts (types and narrow interfaces) are committed in
+`services/app/lib/compiled-page/contract.ts` (server side) and `services/app/lib/islands/contract.ts`
+(browser side). Both are framework-free: `solid-js` is not a dependency of main and the reader runtime
+is typed against the existing react-free store (`lib/story-runtime/store`), never against Solid.
+
+| Module | Path | Responsibility | Track |
+|--------|------|----------------|-------|
+| Compiler | `lib/compiled-page/compiler.ts` | `compilePage(input) → CompiledPage`: the parsed version → static HTML with islands spliced in, one per-document module source, island refs, data plan, link hints. Pure and deterministic for one compiler build. | T1 |
+| Codegen safety harness | `lib/compiled-page/codegen-safety.ts` | `shapeOf` (AST with every literal blanked), the hostile string set, `hostileDocument` and `structureIndependent` — the test harness the compiler is proven with. Landed in step 0. | T0 |
+| Shared island build | `scripts/build-islands.mjs` → `public/islands/` | Once per deploy: `solid-js`, the runtime and each kit module as content-addressed browser chunks + `public/islands/manifest.json` (specifier → URL) + the compiler build id. Same shape as `scripts/build-story-runtime.mjs`, which it replaces in T7. | T1 |
+| Module store | `lib/compiled-page/modules.server.ts` + `GET /islands/d/:sha.js` | The per-document module's bytes, content-addressed in the object store (`lib/object-store`), served immutable under `script-src 'self'`. | T1 |
+| Compiled page store | `lib/story/prepared-page.server.ts` (`PreparedPage.compiled`) | The compiled artifact is stored WITH the prepared page, in the same row and under the same key discipline plus the compiler build id. A read whose stored compile is from another build recompiles inline (budgeted) or falls back. | T1 |
+| Reader mode switch | `lib/config.ts` `COMPILED_READER`; `lib/compiled-page/reader-mode.ts` | `FLAG__COMPILED_READER=off\|shadow\|on` plus `?reader=compiled\|legacy` (honoured only when the flag is not `off`, never on a custom-domain post). Landed in step 0. | T0 |
+| Data plan | `lib/compiled-page/plan.ts` | `planOf(flow, access) → DataPlan`: every query classified `shared` / `viewer` / `page` from the compiled dataflow's reads and the datasets' access facts; the datasets a snapshot depends on; the values that key a snapshot. Pure. | T4 |
+| Snapshot store | `lib/compiled-page/snapshots.server.ts` + `app.data_snapshots` | Guest snapshots keyed by version + plan + inputs; marks of every dataset read; freshness decided on read by comparing marks (the correctness rule) and eagerly by the dataset write hook (the optimisation); background revalidation; server-drawn charts stored with the snapshot. | T4 |
+| Server chart drawing | `lib/compiled-page/charts.server.ts` | A `<Question>` drawn to SVG from a snapshot with vega on the server; Vega loads in the browser only on interaction. | T4 |
+| Reader page assembler | `lib/compiled-page/assembler.ts` | `assembleReaderPage(input) → string`: ONE function for `/a/:id` (server-rendered chrome, SPA loaded on idle) and `/raw` (no chrome, no SPA), custom domains, exports, the offline file and the CLI preview. Replaces `lib/story/document.ts` assembly and `server/app withInitialStory`. | T2 |
+| Island runtime | `lib/islands/rt.ts(x)`, `lib/islands/boot.ts` | What every island receives (`IslandContext`): data accessors, values, `mutate`, viewer overlay, write status feed, revalidation patching. Bridges the existing react-free store into Solid's store. | T1 (runtime), T5 (viewer/writes) |
+| Interactive kit | `lib/islands/kit/*.tsx` | Vendored Solid components with Radix DOM conventions, one file per family, byte-for-byte the DOM today's kit renders (the parity gate is the definition). | T3a, T3b, T3c |
+| Viewer overlay door | `GET /a/:id/viewer` | After paint: the viewer's identity, the `viewer`-scope results, mutation access, holdable imports — the same admission as `POST /a/:id/query`. | T5 |
+| SPA handover | `web/initial-story.ts`, `components/ArtifactSurface.tsx`, `lib/islands/handover.ts` | The React app adopts the live island document without re-rendering it (`IslandDocument`); edit mode disposes the islands and mounts today's editor. | T5 |
+| Link hints | `lib/compiled-page/links.ts` | `<a href>` to same-deployment artifacts, collected at compile → `<link rel=prefetch>` and speculation rules emitted by the assembler. | T6 |
+| Parity gate | `scripts/gate-compiled-parity.mjs` | Element-by-element comparison of the compiled render against today's renderer on the page-speed fixtures and the kitchen sink. Landed in step 0; skips with a reason until a server serves the compiled path. | T0 |
+| Size targets | `scripts/size-targets.mjs`, `scripts/lib/document-views.mjs` (`jsBeforeReady`) | The three targets, pass/fail per target from a lab result JSON; non-blocking in `page-speed.yml` until T7 flips it. Landed in step 0. | T0 → T7 |
+
+Routes translate results to HTTP; every module above returns data or a string and never a `Response`.
+
+## 2. Data flow
+
+```
+publish ──► prepare (prepared-page.server build)        stored: prepared_pages.page
+             │  nodes, css, glyphs, declared dataflow
+             ▼
+           compile (compiler.ts, off the write path, in warmPreparedPage)
+             │  CompiledPage { html, islands, module?, plan, links, build }
+             ├─► module bytes → object store (/islands/d/<sha>.js)
+             └─► stored beside the prepared page (PreparedPage.compiled)
+             ▼
+           snapshot (snapshots.server put)               stored: data_snapshots
+             │  shared-scope queries at default values, anonymous admission,
+             │  charts drawn to SVG, marks of every dataset read
+             ▼
+serve  ──► assembler (one function)                      /a/:id, /raw, domains, export, offline, CLI
+             │  compiled.html + snapshot results/drawings + per-request overlay
+             │  (viewer hint, URL $values, stored Mermaid drawings, hints)
+             ▼
+hydrate ─► boot.ts loads the shared runtime + the per-doc module (only when islands exist)
+             │  store seeded from the snapshot island JSON; islands hydrate in place
+             │  viewer-scope data fetched from /a/:id/viewer after paint; islands patch
+             ▼
+revalidate ► server: dataset write → marks move → snapshot stale → background re-snapshot
+             client: live stream `data`/`snapshot` frames → store.refresh(queries) → only the
+             islands reading a changed table update (fine-grained Solid store diff)
+```
+
+### 2.1 Publish → compile
+
+`warmPreparedPage` already prepares the head after every commit, off the write's path. T1 extends
+`build()` so that, when `COMPILED_READER !== 'off'`, the prepared page also carries `compiled`.
+Compilation is pure over the prepared page's inputs (`nodes`, `glyphs`, `colorMode`, `template`,
+`chrome`, the stored `CompiledDataflow`, `refData` for `ref:` sources) and the compiler build id. A
+compile error is stored as `compiled: { build, error }` so the read path never retries in a loop and
+the fallback is explicit.
+
+The per-document module (`islands.jsx` + `client.jsx` in the prototype) is built with esbuild against
+the shared chunk manifest (`externals`), minified, hashed and written to the object store; the compiled
+page stores only its `ModuleRef`. A document with no islands has no module (prose, deck: the deck rail
+is a 0.6 KB framework-free behaviour chunk from the shared build).
+
+### 2.2 Serve
+
+The assembler takes `AssembleInput` (contract) and returns the whole HTML document. Chrome is an
+input (`ReaderChromeInput` rendered by today's `renderReaderChrome`, or null for `/raw`, exports and
+the offline file). The story HTML is the compiled `html` with three substitutions the server makes per
+request without re-rendering: the island data JSON (`<script type="application/json" id="mx-story-data">`),
+the snapshot's drawings for `<Question>` slots, and the version's stored Mermaid drawings. Everything
+else in the page is per version and cached with it.
+
+The Phase 1 open items come with the rewritten route (T2): one row fetch and one access check per view
+(`artifactPageAnswer` and the raw route today each fetch the row and decide admission separately), and
+per-version caching keyed on the compiled build.
+
+`/a/:id` is HTML-first: the reader sees the finished document and server-rendered chrome; the React
+app is loaded on idle (`requestIdleCallback`, falling back to a timer) or on the first interaction with
+the chrome, and adopts the page (§7). `/raw` is the same assembler output without chrome and without
+the SPA loader; it keeps its CSP sandbox.
+
+### 2.3 Hydrate
+
+`boot.ts` (shared chunk) reads `#mx-story-data`, starts the existing `createDataflowStore` with the
+existing `createDocumentTransport`, seeds it from the snapshot's `results`, and hydrates each island in
+place by its hydration-key prefix (`rt.island(renderId, Component)` in the prototype): the parent's
+other children are handed back as the same nodes, so static siblings are never touched. The store is
+the one source of document data for islands, the author's `window.mx`, and later the SPA.
+
+### 2.4 Revalidate
+
+Server side: §5. Client side: the live stream (`/a/:id/events`) already sends `data` frames naming a
+written dataset; the store re-runs exactly the queries that read it (`queriesReadingDatasets`) and the
+Solid store bridge applies the result with `reconcile`, so only the computations that read a changed
+cell re-run. Charts drawn on the server re-draw in the browser only when their table changes or the
+reader interacts (Vega loads then).
+
+## 3. The compiled page artifact
+
+`CompiledPage` (contract):
+
+- `build`: the compiler build id — a digest of the compiler's own bundle, the shared island build
+  manifest and the kit sources. A stored compile whose `build` differs from the serving server's is a
+  miss (deploy lag; §6).
+- `html`: the story element's inner HTML, static parts included, each island's server render spliced
+  in at its slot, `<mx-slot>` never left in the output.
+- `islands`: `IslandRef[]` — hydration key prefix, the island's root node path (`data-mx-ast`), the
+  kit tags it uses, whether it reads data.
+- `module`: `ModuleRef | null` — the per-document module's content address and URL, and the shared
+  chunk URLs it imports (for `<link rel=modulepreload>`), null when the page has no islands.
+- `plan`: `DataPlan` (§4) or null when the version declares no data.
+- `links`: `LinkHints` (§8).
+- `kit`, `reactStatic`, `unported`, `partial`: what the compile used and could not port — reported,
+  and `unported.length > 0` means the compile is refused (fallback), never a page with holes.
+- `behaviors`: framework-free behaviour chunks the page needs (`deck`).
+
+Stored inside `prepared_pages.page` as `compiled`, so the existing key and dependency fingerprint
+discipline applies unchanged; the compiler build id joins `page_key` so a deploy misses and recompiles.
+
+## 4. Islands and the data plan
+
+### 4.1 What an island receives
+
+`IslandContext` (browser contract): `values()` (every scalar's current value), `value(name)`,
+`table(name)` (fine-grained), `tableSnapshot(name)` (the whole result, for charts), `pending(name)`,
+`error(name)`, `setValue(name, value, { debounce })`, `mutate(request)`, `viewer()`
+(`StoryViewer | null` — the signed-in hint first, the full identity after the overlay lands),
+`people()`, `writes` (the status feed), `drawings` (the version's stored Mermaid drawings),
+`subscribe(fn)`. All of it is the existing store's vocabulary; the Solid bridge is an implementation
+detail behind `IslandContext`.
+
+Reactive markup (`$x`, `$_row.f`, conditionals, `<For>`) is data: the compiler emits the parser's
+`ReactiveExpression` objects as JSON literals and the runtime evaluates them with the interpreter's own
+evaluator (`lib/jsx/reactive`). No author string ever becomes code.
+
+### 4.2 The data plan
+
+`planOf(flow: CompiledDataflow, access: DatasetAccessFacts) → DataPlan`, pure. For each query, in run
+order, scope is the most specific of its own reads and its upstream queries' scopes:
+
+| Reads | Scope | Why |
+|-------|-------|-----|
+| `_tz` (transitively) | `page` | Only the page knows the reader's zone; never served (today's rule, `served-results.server servable`). |
+| `_me`, `_me.id`, `_me.role` (transitively) | `viewer` | The answer names the reader. |
+| an import or Postgres `source` the ANONYMOUS reader is not admitted to through this document (the run's own admission, `tableForRef`: `grantsPermitRead` for the anonymous principal — every dataset carries grants, the defaults read to `*` — else `visibility !== 'private'`) | `viewer` | The guest's answer is the dataset's refusal; a reader who is admitted gets rows. The guest snapshot would be correct for guests and wrong for everyone else, which is why these fetch after paint. Reads carry no row-level rules today (a read grant is the whole dataset), so admitted-or-not is the whole fact. |
+| a `user`-typed column or a user picker value (`people`, `userOptions`) | `viewer` | Person cards are named per viewer's visibility (`lib/datasets/user-fields`). |
+| `_members` | `shared` | The artifact's accepted members are the same for every reader; the membership change is a source (`MEMBERS_SOURCE`) the snapshot's marks must cover (§5). |
+| `_now` | `shared` | Time-dependent but not viewer-dependent; the snapshot's age bound covers it. |
+| everything else | `shared` | In the guest snapshot. |
+
+`DataPlan.datasets` lists every artifact the shared queries read (imports, Postgres sources, picker
+sources) — the snapshot's dependency set, carried by the plan because `prepared_pages.deps.datasets`
+is empty whenever the compiled dataflow is stored with the source (`compiledElsewhere` is false) and
+cannot be reused. `DataPlan.inputs` names the scalar values the shared queries read; a snapshot is keyed
+by their values (defaults, and the URL's `$` values when a request carries them).
+
+Mutations: `optimistic` when the runtime can apply the write to a held copy (`placeDataflow` today);
+otherwise `server`. The plan records the target dataset for invalidation.
+
+## 5. Snapshots: keys, freshness, invalidation, revalidation
+
+### 5.1 Key
+
+`SnapshotKey = { artifactId, slot ('head' | 'v:<n>'), planKey, inputsKey }` where `planKey` is a
+digest of the `DataPlan` (so a republish that changes a query misses) and `inputsKey` a canonical
+digest of the shared-scope input values. The head's default-input snapshot is the one that is
+prepared eagerly; other input sets are snapshotted on first read (bounded per artifact; over the bound
+the request runs its queries as today's served results do).
+
+### 5.2 Freshness — the correctness rule is decided on read
+
+A snapshot stores `marks`: the mark of every dataset in `DataPlan.datasets`, taken BEFORE its queries
+ran (exactly `served-results.server marksOf`: `version, edit_id, visibility, link_role, sharing_revision,
+policy_revision, live, md5(meta)`), plus the membership revision when the plan reads `_members`. A read
+compares the stored marks with the current ones in one query (`MARK_SQL` over the dataset ids); equal
+means fresh, otherwise stale. This is the same philosophy as the live stream: NOTIFY is a pointer, the
+read is the truth. It catches every way a dataset changes, not only `mutateDataset`: `PUT /api/artifacts/:id`
+replacing a dataset, a revert, a fork's copy, a sharing or policy change, a deletion (all of which
+move `edit_id`, `version`, `sharing_revision`, `policy_revision` or `live`).
+
+A stale snapshot is still SERVED when it is younger than `SNAPSHOT_MAX_AGE_MS` (minutes-old is the
+owner's accepted staleness) and a revalidation is queued; older than that, the request waits for the
+revalidation within `SERVED_RESULTS_BUDGET_MS` (250 ms today) and otherwise serves declarations without
+rows, as the page does now.
+
+### 5.3 Eager invalidation — the optimisation
+
+`data_snapshots` carries an indexable `datasets TEXT[]` column. The dataset write path
+(`mutateDataset`, after its CAS UPDATE commits and beside its `pg_notify`) calls
+`invalidateSnapshots(datasetId)`: `UPDATE data_snapshots SET stale_at = now() WHERE $1 = ANY(datasets)
+AND stale_at IS NULL`, then queues revalidation of the affected heads. Exactly the dependent snapshots
+are marked, because the plan's dataset list is exactly what its shared queries read. The other write
+paths (replace, revert, fork, sharing, policy) are covered by the marks rule; T4 may add the same call
+to them where cheap, but correctness never depends on it.
+
+Postgres-sourced queries (`engine: 'postgres'`) read a connected database that has no mark and sends
+no NOTIFY. Their snapshots are keyed by the dataset row's mark (credentials, sharing) and additionally
+time-bounded: `computedAt + SNAPSHOT_MAX_AGE_MS` is a hard revalidation deadline, and a request older
+than that revalidates before serving.
+
+### 5.4 Revalidation
+
+`revalidate(key)` re-runs the shared queries at the snapshot's inputs with anonymous admission —
+`dataflowForRow(row, { only: sharedQueries, viewer: null, values })`, the same run, engine, caches,
+caps and timeouts as `POST /a/:id/query` — takes fresh marks BEFORE the run (a change after the mark
+is caught by the next comparison), draws the charts, and stores the new snapshot under the same key.
+One worker, one pending entry per key, every failure swallowed (the same discipline as
+`warmPreparedPage`): a failed revalidation is an older snapshot, never a failed read.
+
+Open pages learn of it through the live stream: the existing `data` frame already re-runs the reading
+queries in the page; T4 adds no new frame type unless the snapshot's SVG drawings must be pushed (open
+question Q3).
+
+### 5.5 Probe findings (step 0)
+
+A throwaway test against the real dataflow and dataset code (the dashboard fixture, `compileDataflow`,
+the marks query, `mutateDataset`, `PUT /api/artifacts/:id`, `setDatasetPolicy`) — run on this branch,
+not committed — established:
+
+- PROBE-1 (the marks rule, `changedSince` over the page's `since` token): a declared `<Mutation>`
+  through `POST /a/:id/mutate` moved the written dataset's mark and NOTIFYed its channel
+  (`subscribeToArtifact` fired once, in-process PGLite); `PUT /api/artifacts/:id` replacing a
+  dataset, `updateSharingFor` (a new share) and `setDatasetPolicy` each moved the mark too. In
+  every case `changedSince` named exactly the written dataset and nothing else; a document whose
+  token never named the dataset reported nothing (negative control). Observed:
+  `mutation → wakeups 1 changed ['RiD2xn']`, `PUT replace → changed ['9gML2X']`,
+  `sharing → changed ['9gML2X']`, `policy → changed ['9gML2X']`.
+- PROBE-2 (classification on the dashboard fixture plus five added queries, real `compiledForRow`
+  output): `regions`, `monthly`, `by_product` → shared (they read only the public `sales` import);
+  `me` (`$_me.id`) and `downstream_me` (reads `me`) → viewer; a query over a PRIVATE dataset and a
+  query over a public dataset whose grants read `from: { user: '$owner' }` → viewer; `select $_tz`
+  → page. The access fact that decides it is the run's own admission (`tableForRef`:
+  `grantsPermitRead` for the anonymous principal through the document): `canReadArtifact(ds, null)`
+  agreed in all three cases, and `!!dataset_policy` did NOT — every dataset carries the default
+  grants (`read` from `*`), so "has a policy" says nothing; the contract's `DatasetAccessFacts` is
+  therefore `{ anonymousRead }` alone.
+- Consequences taken into the contracts: `DataPlan.datasets` carries the dependency set (the
+  prepared page's `deps.datasets` is empty when the compiled dataflow is stored with the source);
+  `DataSnapshot.marks` reuses the served-results mark shape verbatim; the eager hook is
+  `invalidate(datasetId)` beside `pg_notify` in `mutateDataset`, and the other write paths are
+  covered by the marks comparison on read.
+
+## 6. Failure and fallback
+
+- Compile error at warm time → `compiled: { build, error }` stored; the read serves today's renderer
+  and logs once per version. A later deploy (new build id) retries.
+- Read miss on `compiled.build` (deploy lag: the page was compiled by the previous build; the shared
+  chunk URLs it imports are still served because chunks are content-addressed and never deleted
+  during a rolling deploy) → recompile inline under `COMPILE_INLINE_BUDGET_MS`; over budget or on error
+  → today's renderer for this request, the warm-up queue recompiles.
+- `unported` components in a version → the compile is refused (a page must be whole) → today's
+  renderer; the parity gate's kitchen sink is the list of what must be ported before `on`.
+- Snapshot missing or too old → the request runs the shared queries within `SERVED_RESULTS_BUDGET_MS`
+  exactly as served results do today; otherwise declarations without rows and the page fetches.
+- Module store unavailable → the module URL 404s → the page is static HTML with inert islands; the
+  runtime's `boot` reports and the reader still reads the document. The assembler never inlines the
+  module (CSP), so this is the accepted degradation.
+- Viewer overlay failure → islands keep the guest snapshot with the "signed in" placeholder for
+  viewer-scope parts and a retry.
+
+Every fallback is observable: the response carries `x-mx-reader: compiled | legacy` and a
+`x-mx-reader-fallback: <reason>` when a compiled path fell back, which is what the parity gate and the
+size check read.
+
+## 7. Coexistence with the React app and the editor
+
+The editor keeps today's interpreter for drafts (`StoryRuntimeApp`, the registry, the in-place edit
+session): the browser never compiles. What changes is how the READER page relates to the SPA:
+
+1. The page is HTML-first. The assembler renders the reader chrome on the server (`renderReaderChrome`
+   already exists for domain posts) and the compiled story; the SPA's entry is loaded on idle or on
+   the first chrome interaction, exactly as the prototype's "SPA prefetched on idle, adopts live
+   islands" path (warm takeover 126–139 ms at 4× CPU).
+2. Adoption without re-render. The SPA finds the island document through `IslandDocument`
+   (`lib/islands/handover.ts`): `root` (the story element), `store` (the same react-free
+   `DataflowStore` the islands run on), `mode`, `setMode('read' | 'edit')`, `dispose()`, `subscribe`.
+   `ArtifactSurface` moves `root` into its tree (the same move `adoptInitialStory` makes today) and
+   renders chrome around it; it does NOT hydrate or re-render the story. The islands keep running and
+   the SPA's reactions (like, follow, comments) keep reading the store.
+3. Edit mode. `setMode('edit')` disposes the islands (Solid roots unmounted, listeners removed) and
+   hands the SPA the raw `nodes`; the editor mounts its interpreter over the source as it does today
+   and re-renders in place. Leaving edit mode publishes, and the next read is a compiled page again;
+   the SPA re-adopts on navigation, not in place (an edited draft's islands are not recompiled in the
+   browser).
+4. Migration rules from the Phase 3 probe that apply now: register island handlers with `on:click`
+   semantics where a Solid child sits under React chrome (click order inverts otherwise); never nest a
+   Solid overlay inside a React overlay or the reverse — island overlays portal to the trusted UI
+   container (`components/TrustedUi`) the SPA already owns; one framework-free store shared by both;
+   one context per island (no cross-island context); refs are read after hydration, not at creation.
+5. Comments and annotations anchor on author ids and `data-mx-ast` paths, which the compiler preserves
+   verbatim (Kobalte was rejected for rewriting ids). The comment layer stays the SPA's.
+
+## 8. Link hints
+
+At compile, every `<a href>` that resolves to an artifact on this deployment (`/a/<id>`,
+`/@user/<id>-slug`, a verified custom domain of this deployment) is collected into `LinkHints`:
+`prefetch` (all such links, emitted as `<link rel="prefetch" as="document">`) and `prerender` (the
+first few in document order, emitted as speculation rules with `eagerness: moderate` so hover/viewport
+triggers them). Speculation rules ship as an external JSON script (`<script type="speculationrules"
+src="/islands/s/<sha>.json">`) so `script-src 'self'` holds without `'inline-speculation-rules'`.
+Private documents are never prerendered (the anonymous prerender would be a 404 page cached under the
+reader's URL); the hint set is computed from the compiled page and carried by the assembler input.
+
+## 9. Security model for generated code
+
+- Author text reaches the generated module only through `lit()` (JSON.stringify with `<`, `>`, U+2028
+  and U+2029 escaped). Tag and attribute NAMES come from the validated AST and are re-checked against
+  a strict grammar; a name outside it refuses the compile.
+- Props are computed by the interpreter's own `rawBuildProps` (dangerous URL schemes, handlers and
+  denied attributes dropped exactly as today) and serialised by React's server renderer, so a static
+  element's attributes are byte-identical to today's render.
+- `$` expressions travel as JSON data and are evaluated at runtime by `lib/jsx/reactive`; row
+  substitution goes through `substituteRow` and the runtime's `rowAttrs` re-applies the dangerous-scheme
+  filter per row.
+- Structure independence is a test (`codegen-safety.ts structureIndependent`): a document compiled
+  with benign strings and with hostile strings yields modules with identical ASTs once literals are
+  blanked. The compiler's own tests assert it on every kit family.
+- CSP: the compiled page emits NO inline script. The per-document module and the shared chunks are
+  same-origin files; the data island is `application/json`. `/raw`'s `script-src` drops
+  `'unsafe-inline'` for compiled responses (the history prelude moves into the shared runtime), and
+  `/a/:id` keeps `APP_CSP` unchanged. `services/app/__tests__/raw-document.test.ts` pins the text and
+  is updated in T2.
+- The module store serves only content-addressed paths it wrote; a request for an unknown hash is a
+  404, never a compile.
+
+## 10. Reader mode switch and rollout
+
+`FLAG__COMPILED_READER` (audited in `lib/config.ts`):
+
+- `off` (default, and main today): nothing compiles; `?reader=` is ignored.
+- `shadow`: every prepared page is compiled and stored, snapshots are prepared, but readers get
+  today's renderer unless the request says `?reader=compiled`. The parity gate runs against
+  `?reader=compiled`; the size check reads a lab run with `?reader=compiled`. The gate servers boot
+  in `shadow` (one line in `scripts/gates.mjs`'s server environment, T1).
+- `on`: readers get the compiled page wherever a compile exists; `?reader=legacy` is the escape
+  hatch for a gate or a bug report until T7 deletes the legacy path.
+
+`readerModeFor(flag, search, { domainPost })` is pure and tested. The custom-domain post path ignores
+`?reader=` like every other URL switch there.
+
+## 11. What gets deleted, and when
+
+The owner's rule is "every milestone deletes what it replaces in the same PR". A switch-gated rollout
+cannot delete the legacy path while the flag still serves it, so the plan states the exception once:
+tracks T1–T6 delete the code THEIR path makes unreachable when their path is the only one (listed per
+brief), and T7 — the flip to `on` — deletes the legacy reader in the same PR as the flip. Line counts
+are `wc -l` on main today, not the proposal's round numbers.
+
+| What | Lines | Replaced by | Deleted in |
+|------|-------|-------------|-----------|
+| `lib/story/document.ts` (standalone assembly) | 665 | assembler | T2 (when `/raw` serves compiled under `on`; T7 otherwise) |
+| `lib/story/inline-story-html.ts` | 32 | assembler | T2/T7 |
+| `server/app.ts withInitialStory`, `withoutInlinedSheet` | ~60 | assembler | T2/T7 |
+| `lib/story-runtime/entry.tsx` (the /story runtime) | see T7 brief | shared island build | T7 |
+| `lib/story-runtime/InlineStoryRuntime.tsx` | see T7 brief | handover | T7 |
+| `lib/story-runtime/live-entry.ts`, `anchor-entry.ts`, `comment-entry.ts` | see T7 brief | runtime chunks | T7 |
+| `scripts/build-story-runtime.mjs`, `lib/story/runtime-asset.ts`, `public/story/` | see T7 brief | `scripts/build-islands.mjs` | T7 |
+| `lib/story-runtime/inline-sheet.ts` (browser CSS work) | see T7 brief | server-only isolation | T7 |
+| runtime class merging in the reader (`tailwind-merge`/`clsx`/`cva` in reader chunks) | 9.0 KB gz | classes resolved at publish | T7 |
+| `lib/story/served-results.server.ts` | 173 | snapshots | T4 (the served-results path becomes the snapshot's cold path; the module is folded, not duplicated) |
+| Radix wrappers used only by the reader | per component | vendored kit | T3 (each family's PR removes the reader import of its Radix wrapper; the editor's use stays until Phase 3) |
+
+`StoryRuntimeApp.tsx`, the interpreter and the registry stay for the editor's drafts and for
+static-component rendering at publish until Phase 3.
+
+## 12. Gates and the size targets
+
+- `scripts/gate-compiled-parity.mjs`: publishes the page-speed fixtures and the kitchen sink through
+  a bearer token, loads `/a/:id/raw` (legacy, `?reader=legacy`) and `/a/:id/raw?reader=compiled` in
+  fresh contexts, and compares `#mx-story-root` element by element (tags, attributes with generated
+  ids normalised, idref resolution, direct text, 25 computed styles, border boxes on a 0.5 px grid),
+  plus served-element survival and DOM mutations during hydration, and one interaction sequence on
+  the kit fixture. Any difference outside the documented exclusions fails. When the server answers
+  without `x-mx-reader: compiled`, it records one passing check naming the reason and exits 0.
+- `scripts/size-targets.mjs <lab.json>`: target 1 from `jsBeforeReady` on prose and deck (view route),
+  target 2 from `jsBeforeReady` on kit, dashboard and kitchen (view route), target 3 from the total
+  wire bytes of prose (view route); one line per target, `pass`/`fail`/`no data`; exit 0 unless
+  `--strict`. `page-speed.yml` runs it on the head result into the job summary. T7 adds `--strict`.
+- `jsBeforeReady` joins the page's resource timing (names and `responseEnd`, available at the opaque
+  origin even though sizes are not) to the CDP wire bytes per URL; ready is: view → takeover, raw →
+  the `mx:ready` event, or DOMContentLoaded when the page has no module script. Unit: wire bytes as the
+  lab measures them (the gateway gzips only what the server did not already brotli).
+- The codegen-safety harness is a library with its own tests; the compiler's tests use it.
+
+## 13. Assumptions
+
+A1. Solid 2.0 ships in time (rc.10 on 27 Sep 2026). The kit and runtime are written against 2.0's API;
+    if 2.0 slips, T1a pins the last rc and T7 bumps. The ~13 KB is budgeted in target 2.
+A2. The prototype's compiler (`scripts/probe/solid/compile.mjs`, ~320 lines) ports to TypeScript with
+    the same inputs; its measured parity (0 structure/text/style/box diffs on prose, kit, dashboard,
+    deck, mermaid; attribute diffs are inline-style formatting) holds after the port because the parity
+    gate is the same comparison.
+A3. React's server renderer stays available at publish for static components (`renderToStaticMarkup`
+    in the compiler) until Phase 3 — the app already depends on react-dom/server.
+A4. The object store (`lib/object-store`) is the right home for per-document module bytes: content-
+    addressed, already used for datasets, no schema change. Module URLs are served by a route, not a
+    static mount, because the bytes live in the store, not on disk.
+A5. `prepared_pages.page` (JSONB) can carry the compiled HTML and plan without a size problem: the
+    kitchen sink's HTML shrank from 47.6 KB to 35.1 KB in the prototype (no node tree in the payload).
+A6. The lab's `bytes.*.gzip` (wire bytes) is the measurement the targets are checked against; brotli
+    is what the server emits for dynamic HTML and precompressed assets, gzip only where the gateway
+    compressed identity responses.
+A7. The dashboard fixture's `Select` (a kit control bound to `$region`) and `DataTable` are islands;
+    its `Card`s are static and render with React at publish. This is the shape target 2 is checked on.
+A8. Membership changes bump `sharing_revision` on the artifact row, so the marks rule covers
+    `_members` without a second source (verified in the probe; see the report).
+A9. The `x-mx-reader` header is safe to expose: it names a rendering path, never a version or a viewer.
+
+## 14. Open questions
+
+Q1. Per-viewer overlay for the editor's own reads: does the owner's page fetch `/a/:id/viewer` before
+    the SPA loads (a second request on every page) or does the SPA's session answer it? Proposed:
+    the page fetches it after paint only when the plan has viewer-scope queries or the signed-in hint
+    is present (a cookie the server sets at login; a guest never fetches).
+Q2. Snapshot bound per artifact for non-default inputs (URL `$` values): proposed 16 keys per artifact,
+    LRU by `updated_at`; beyond it the cold path runs. Owner to confirm the number.
+Q3. Should a background revalidation push the new SVG drawings to open pages (a `snapshot` frame) or
+    is the existing `data` frame (page re-runs and draws in the browser, loading Vega) enough? The
+    proposal accepts Vega on interaction; a re-run after a write is close to an interaction.
+Q4. Custom domains: the domain post today renders through `buildStoryDocument` with a footer; the
+    assembler's `chrome` input covers it, but the canonical/self-canonical rules stay in
+    `server/custom-host`. Confirm no separate output is wanted for domains.
+Q5. Speculation rules as an external JSON file: Chrome supports `<script type="speculationrules" src>`;
+    Safari/Firefox ignore it. `<link rel=prefetch>` is the cross-browser floor. Confirm the CSP stance
+    (no `'inline-speculation-rules'`).
+Q6. Exports (`/a/:id/export`) photograph `/raw?key=`: compiled output means the capture waits for
+    islands to hydrate instead of React; the export route's readiness signal (`mx:painted`) must be
+    emitted by the island runtime too. Owned by T2 with the assembler; confirm no capture-specific
+    output.

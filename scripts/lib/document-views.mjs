@@ -32,7 +32,18 @@
 
 /** Installed before any page script; records paint entries and DOM milestones. */
 export function documentViewProbe() {
-  const state = (window.__documentView = { fcp: null, lcp: null, takeover: null, painted: null, want: null, view: false });
+  const state = (window.__documentView = { fcp: null, lcp: null, takeover: null, painted: null, ready: null, want: null, view: false });
+  /*
+   * READY — when the page is interactive (docs/phase2-architecture.md §12): on the
+   * reader view, the takeover (stamped below); on the raw document, the runtime's
+   * `mx:ready` after hydration (today's runtime and the compiled islands both fire
+   * it), or DOMContentLoaded on a page that loads no module script at all (a compiled
+   * prose page: nothing to hydrate). `jsBeforeReady` counts the script bytes that
+   * finished before this moment.
+   */
+  const ready = () => { if (state.ready === null) state.ready = performance.now(); };
+  document.addEventListener('mx:ready', ready);
+  document.addEventListener('DOMContentLoaded', () => { if (!document.querySelector('script[type="module"]')) ready(); });
   try {
     new PerformanceObserver(list => { for (const entry of list.getEntries()) if (entry.name === 'first-contentful-paint') state.fcp = entry.startTime; }).observe({ type: 'paint', buffered: true });
     new PerformanceObserver(list => { for (const entry of list.getEntries()) state.lcp = entry.startTime; }).observe({ type: 'largest-contentful-paint', buffered: true });
@@ -44,7 +55,7 @@ export function documentViewProbe() {
     if (!state.configured && window.__documentViewConfig) { Object.assign(state, window.__documentViewConfig, { configured: true }); }
     if (state.view && !takeoverSeen) {
       const owned = document.querySelector('body > #root [data-mx-inline-story] > :not(style)');
-      if (owned && !document.querySelector('[data-mx-initial-story]')) { takeoverSeen = true; stamp('takeover'); }
+      if (owned && !document.querySelector('[data-mx-initial-story]')) { takeoverSeen = true; stamp('takeover'); requestAnimationFrame(() => requestAnimationFrame(ready)); }
     }
     const want = state.want;
     if (want && !paintedSeen && (!state.view || takeoverSeen)) {
@@ -95,7 +106,10 @@ export async function measureDocumentView(context, url, { route, painted, thrott
     await page.waitForTimeout(1000);
     const measured = await page.evaluate(() => {
       const s = window.__documentView;
-      return { fcp: s.fcp, lcp: s.lcp, takeover: s.takeover, painted: s.painted };
+      // Resource timing names every script and when it finished, even at the opaque origin (where its sizes read zero).
+      const scriptsBeforeReady = s.ready === null ? null
+        : performance.getEntriesByType('resource').filter(e => e.initiatorType === 'script' || /\.m?js(\?|$)/.test(e.name)).filter(e => e.responseEnd <= s.ready).map(e => e.name);
+      return { fcp: s.fcp, lcp: s.lcp, takeover: s.takeover, painted: s.painted, readyAt: s.ready, scriptsBeforeReady };
     });
     const metrics = Object.fromEntries((await cdp.send('Performance.getMetrics')).metrics.map(m => [m.name, m.value]));
     const bytes = { html: { decoded: 0, gzip: 0 }, js: { decoded: 0, gzip: 0 }, css: { decoded: 0, gzip: 0 }, other: { decoded: 0, gzip: 0 } };
@@ -103,13 +117,19 @@ export async function measureDocumentView(context, url, { route, painted, thrott
       const kind = bytes[kindOf(request)];
       kind.decoded += request.decoded; kind.gzip += request.gzip;
     }
+    // JS BEFORE READY: the wire bytes (CDP, per URL) of the scripts the page had finished loading when it became ready.
+    const before = new Set(measured.scriptsBeforeReady ?? []);
+    const jsBeforeReady = measured.scriptsBeforeReady === null ? null : { decoded: 0, gzip: 0 };
+    if (jsBeforeReady) for (const request of requests.values()) if (kindOf(request) === 'js' && before.has(request.url)) { jsBeforeReady.decoded += request.decoded; jsBeforeReady.gzip += request.gzip; }
     return {
       route, ready, errors,
       fcp: measured.fcp, lcp: measured.lcp,
       takeover: route === 'view' ? measured.takeover : null,
       painted: painted ? measured.painted : null,
+      readyAt: measured.readyAt,
       requests: requests.size,
       bytes,
+      jsBeforeReady,
       scriptMs: Math.round((metrics.ScriptDuration ?? 0) * 1000),
     };
   } finally {
@@ -184,7 +204,11 @@ const METRICS = {
   htmlDecoded: s => s.bytes.html.decoded, htmlGzip: s => s.bytes.html.gzip,
   jsDecoded: s => s.bytes.js.decoded, jsGzip: s => s.bytes.js.gzip,
   cssDecoded: s => s.bytes.css.decoded, cssGzip: s => s.bytes.css.gzip,
-  fcp: s => s.fcp, lcp: s => s.lcp, takeover: s => s.takeover, painted: s => s.painted, scriptMs: s => s.scriptMs,
+  /** Every response body on the wire (the size targets' "total transferred"). */
+  totalGzip: s => Object.values(s.bytes).reduce((n, kind) => n + kind.gzip, 0),
+  /** Script bytes on the wire that had finished before the page was ready (the size targets' "JS before ready"); null on a build that never signalled ready. */
+  jsBeforeReadyGzip: s => s.jsBeforeReady?.gzip ?? null,
+  fcp: s => s.fcp, lcp: s => s.lcp, takeover: s => s.takeover, painted: s => s.painted, readyAt: s => s.readyAt ?? null, scriptMs: s => s.scriptMs,
 };
 
 /** `{ [fixture]: { [route]: { runs, timedOut, <metric>: median } } }` */
@@ -216,6 +240,7 @@ const delta = (head, base, format) => {
 export function documentViewsMarkdown(head, base = {}) {
   const columns = [
     ['requests', 'Requests', String], ['htmlGzip', 'HTML gz KB', kb], ['jsDecoded', 'JS KB', kb], ['jsGzip', 'JS gz KB', kb],
+    ['jsBeforeReadyGzip', 'JS before ready gz KB', kb], ['totalGzip', 'Total gz KB', kb],
     ['cssGzip', 'CSS gz KB', kb], ['fcp', 'FCP ms', ms], ['lcp', 'LCP ms', ms], ['takeover', 'Takeover ms', ms],
     ['painted', 'Painted ms', ms], ['scriptMs', 'Script ms', ms],
   ];
