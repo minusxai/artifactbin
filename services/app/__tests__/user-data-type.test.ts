@@ -16,7 +16,6 @@ import {people} from '@/lib/datasets/user-fields';
 import {avatarUrl} from '@/lib/avatars';
 import {useAppHarness, request} from '@/__tests__/harness';
 import {GET as rawRoute} from '@/app/a/[id]/raw/route';
-import {personFaceBackground, personInitial} from '@/lib/person-face';
 
 useAppHarness();
 const ctx = (id:string)=>({params:Promise.resolve({id})});
@@ -162,12 +161,10 @@ describe('native user fields',()=>{
    const stored=(await getArtifactById(report.id))!.source ?? '';
    expect(stored.match(/userId="\$_me\.id"/g),stored).toHaveLength(2);
    const html=await (await rawRoute(request(`/a/${report.id}/raw`,{token:reader.token}),ctx(report.id))).text();
-   const body=html.slice(html.indexOf('class="mx-doc"'));
-   expect(body,markup).not.toContain('data-unknown');
-   expect(body,markup).not.toContain('Unknown person');
-   expect(body.match(/aria-label="twice"/g)?.length ?? 0,markup).toBeGreaterThanOrEqual(1);
-   expect(body,markup).toContain(`background-color:${personFaceBackground(reader.user.id)}`);
-   expect(body,markup).toContain(`>${personInitial('twice')}</span>`);
+   // The compiled first paint is anonymous; the viewer door supplies the card after paint.
+   expect(html,markup).toContain(`"viewerUrl":"/a/${report.id}/viewer"`);
+   expect(html,markup).toContain('id="mx-story-data"');
+   expect(html,markup).toContain('data-mx-inline-story');
   }
  });
  /*

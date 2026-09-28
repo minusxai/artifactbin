@@ -88,9 +88,9 @@ check(doc.visibility === 'public', 'a PUBLIC document — the case a stranger ca
 
 // ── 2. the parameter is not a lever on a shared link ──────────────────────
 const strangerHtml = await (await fetch(`${BASE}/a/${doc.id}?intent=fork`)).text();
-check(strangerHtml.includes('data-mx-initial-story') && strangerHtml.includes('The original, published by its owner.'),
+check(strangerHtml.includes('data-mx-story-root') && strangerHtml.includes('The original, published by its owner.'),
   'an anonymous ?intent=fork still receives the server-rendered document');
-check(strangerHtml.includes('id="root"'), 'the shared SPA supplies the authenticated fork action, not an outer document iframe');
+check(strangerHtml.includes('data-mx-spa-idle') && !strangerHtml.includes('<iframe title="artifact"'), 'the shared SPA supplies the authenticated fork action, not an outer document iframe');
 
 // ── 3. the logged-out reader taps Fork in the document's own controls ─────
 await forker.goto(`${BASE}/a/${doc.id}`, { waitUntil: 'load' });

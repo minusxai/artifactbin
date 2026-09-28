@@ -65,6 +65,7 @@ export type IslandViewer = StoryViewer | { hinted: true } | null;
 /** What every island receives (rt.ts). One per document, shared by every island in it. */
 export interface IslandContext extends IslandData, IslandWrites {
   viewer(): IslandViewer;
+  assetsUrl?(): string | null;
   /** The version's stored Mermaid drawings, keyed by `mermaidImageKey(code, mode)`. */
   drawings(): Readonly<Record<string, StoredMermaidImage>>;
   writes: WriteStatusFeed;

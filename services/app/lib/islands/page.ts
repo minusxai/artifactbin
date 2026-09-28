@@ -80,13 +80,15 @@ export function startPage(doc: Document = document, win: Window = window): () =>
   if (chrome) stops.push(followChrome(win, doc, chrome));
 
   const kept = takeReloadAnchor(win);
-  if (kept) stops.push(holdAnchor(win, kept, applyAnchor));
-  const stop = () => {
-    win.removeEventListener(PAGE_TAKEOVER_EVENT, stop);
+  // The SPA takes over the stream and chrome before its layout has settled.
+  // Keep the reading anchor until its own timer or a reader gesture releases it.
+  const stopAnchor = kept ? holdAnchor(win, kept, applyAnchor) : null;
+  const takeover = () => {
+    win.removeEventListener(PAGE_TAKEOVER_EVENT, takeover);
     for (const release of stops.splice(0)) release();
   };
-  win.addEventListener(PAGE_TAKEOVER_EVENT, stop, { once: true });
-  return stop;
+  win.addEventListener(PAGE_TAKEOVER_EVENT, takeover, { once: true });
+  return () => { takeover(); stopAnchor?.(); };
 }
 
 if (typeof document !== 'undefined' && typeof window !== 'undefined') startPage();

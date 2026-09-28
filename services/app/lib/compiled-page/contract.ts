@@ -130,6 +130,8 @@ export interface CompilerBuild {
  */
 export interface CompiledPage {
   build: string;
+  /** A bound image needs request-specific asset resolution during SSR. */
+  boundImages?: boolean;
   /** Version-owned navigation, decided from the same nodes and template as the legacy reader. */
   outline: readonly OutlineEntry[];
   /** The plan template uses the wider reading wrapper. */
@@ -203,6 +205,7 @@ export interface IslandRenderData {
   values: Record<string, Scalar>;
   results: ServedResults | null;
   mermaidImages: Readonly<Record<string, StoredMermaidImage>>;
+  assetsUrl?: string | null;
   /** The snapshot's server-drawn charts, by chart slot id. */
   drawings: Readonly<Record<string, DrawnChart>>;
 }
@@ -421,6 +424,8 @@ export interface AssembleOverlay {
   signedIn: boolean;
   /** Where the page queries, writes and fetches its overlay (lib/story/markup-csp paths); absent on a capture. */
   doors: { queryUrl: string; mutateUrl?: string; viewerUrl?: string; assetsUrl: string } | null;
+  /** The image asset door, including a verified export key on a capture with no query door. */
+  assetsUrl?: string | null;
   /**
    * The managed `<Iframe>`'s asset door for this request (islands contract `IslandPageData.managedAssets`):
    * beside `doors` because a capture has no doors and still resolves its frames' assets with its key.

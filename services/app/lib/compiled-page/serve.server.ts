@@ -90,6 +90,10 @@ export interface CompiledReaderRequest {
   signedIn: boolean;
   /** Where the page queries, writes and fetches its overlay; null on a capture. */
   doors: AssembleOverlay['doors'];
+  /** Image asset door independent of query/write doors on an export capture. */
+  assetsUrl?: string | null;
+  /** Chrome-less export surface uses the full image, without generated responsive candidates. */
+  capture?: boolean;
   /** The managed `<Iframe>`'s asset door (AssembleOverlay.managedAssets), or none without an asset origin. */
   managedAssets?: AssembleOverlay['managedAssets'];
   /**
@@ -310,15 +314,16 @@ interface StoryInput {
   results: ServedResults | null;
   mermaidImages: Readonly<Record<string, StoredMermaidImage>>;
   drawings: DataSnapshot['drawings'];
+  assetsUrl: string | null;
   /** What identifies the results without hashing them: the snapshot's key and time; null for a capture's run (not cached). */
   resultsId: string | null;
 }
 
 async function storyOf(compiled: CompiledPage, input: StoryInput): Promise<string> {
-  const plain = !input.results && !Object.keys(input.values).length && !Object.keys(input.mermaidImages).length;
+  const plain = !input.results && !Object.keys(input.values).length && !Object.keys(input.mermaidImages).length && !compiled.boundImages;
   if (!compiled.ssr || plain) return compiled.html;
   const cacheKey = input.resultsId === null && input.results ? null
-    : `${compiled.build}:${compiled.ssr.sha}:${input.resultsId ?? '-'}:${digest(sorted(input.values))}:${digest(sorted(input.mermaidImages))}`;
+    : `${compiled.build}:${compiled.ssr.sha}:${input.resultsId ?? '-'}:${digest(sorted(input.values))}:${digest(sorted(input.mermaidImages))}:${digest(input.assetsUrl)}`;
   const cached = cacheKey ? renders.get(cacheKey) : undefined;
   if (cached !== undefined) {
     renders.delete(cacheKey!);
@@ -330,7 +335,7 @@ async function storyOf(compiled: CompiledPage, input: StoryInput): Promise<strin
   // (the same boundary prepared-page.server keeps for the compiler).
   const { loadSsrModule } = await import('./bundle.server');
   const module = await loadSsrModule(compiled.ssr);
-  const html = module.render({ values: input.values, results: input.results, mermaidImages: input.mermaidImages, drawings: input.drawings });
+  const html = module.render({ values: input.values, results: input.results, mermaidImages: input.mermaidImages, drawings: input.drawings, assetsUrl: input.assetsUrl });
   if (cacheKey) {
     renders.set(cacheKey, html);
     while (renders.size > RENDERS_KEPT) renders.delete(renders.keys().next().value!);
@@ -413,7 +418,7 @@ export async function compiledPageFor(row: ArtifactRow, page: PreparedPage, read
       : null;
     const results = reader.results ?? served?.results ?? null;
     const story = await storyOf(compiled, {
-      values, results, mermaidImages, drawings: served?.drawings ?? {},
+      values, results, mermaidImages, drawings: served?.drawings ?? {}, assetsUrl: reader.assetsUrl ?? reader.doors?.assetsUrl ?? null,
       resultsId: served ? `${keyString(served.key)}:${served.computedAt}` : null,
     });
 
@@ -424,6 +429,7 @@ export async function compiledPageFor(row: ArtifactRow, page: PreparedPage, read
       compiled: { ...compiled, behaviors },
       documentChrome: !bare,
       story: bare ? withoutDeckChrome(story) : story,
+      capture: reader.capture,
       css: page.css,
       fontPreloads: [...page.fontPreloads, ...(reader.chromeFonts ?? [])],
       title: page.title,
@@ -431,7 +437,7 @@ export async function compiledPageFor(row: ArtifactRow, page: PreparedPage, read
       colorMode,
       // A capture's answers ride as the snapshot the page starts from: the islands then ask for nothing.
       snapshot: reader.results ? { ...(served ?? emptySnapshot(row)), results: reader.results } : served,
-      overlay: { values, mermaidImages, signedIn: reader.signedIn, doors: doorsFor(compiled, reader.doors), managedAssets: reader.managedAssets ?? null, readOnly: reader.readOnly ?? null, hold, sqliteWasm },
+      overlay: { values, mermaidImages, signedIn: reader.signedIn, doors: doorsFor(compiled, reader.doors), assetsUrl: reader.assetsUrl ?? reader.doors?.assetsUrl ?? null, managedAssets: reader.managedAssets ?? null, readOnly: reader.readOnly ?? null, hold, sqliteWasm },
       chrome: reader.chrome,
       spa: reader.spa,
       build,
@@ -455,7 +461,9 @@ export async function compiledPageFor(row: ArtifactRow, page: PreparedPage, read
  * has a viewer-scope query, so the page never asks a door the server has nothing to answer on.
  */
 function doorsFor(compiled: CompiledPage, doors: CompiledReaderRequest['doors']): CompiledReaderRequest['doors'] {
-  if (!doors?.viewerUrl || compiled.plan?.queries.some((q) => q.scope === 'viewer')) return doors;
+  const needsViewerIdentity = compiled.islands.some((island) => island.kit.some((name) =>
+    name === 'User' || name === 'UserImage' || name === 'UserHandle' || name === 'SignIn'));
+  if (!doors?.viewerUrl || needsViewerIdentity || compiled.plan?.queries.some((q) => q.scope === 'viewer')) return doors;
   const { viewerUrl: _unused, ...rest } = doors;
   return rest;
 }

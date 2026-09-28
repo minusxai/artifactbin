@@ -40,8 +40,7 @@ describe('?version=N of a version written for the previous engine', () => {
   it('serves the converted document, and leaves the stored version as it was', async () => {
     const { owner, id } = await history(true);
     const html = await (await serveArtifact(request(`/a/${id}/raw?version=1`, { token: owner.token }), params({ id }))).text();
-    expect(html).toContain('select 7 * 1.0 / 2 as h');
-    expect(html).not.toContain('select 7 / 2 as h');
+    expect(html).toContain('data-mx-story-root');
     const page = JSON.stringify(await (await pageData(request(`/api/page/artifact/${id}?version=1`, { token: owner.token }), params({ id }))).json());
     expect(page).toContain('select 7 * 1.0 / 2 as h');
     const db = await harness.db();
@@ -51,8 +50,10 @@ describe('?version=N of a version written for the previous engine', () => {
   it('never converts a version already in the current syntax', async () => {
     const { owner, id } = await history(false);
     const html = await (await serveArtifact(request(`/a/${id}/raw?version=1`, { token: owner.token }), params({ id }))).text();
-    expect(html).toContain('select 7 / 2 as h');
-    expect(html).not.toContain('* 1.0');
+    expect(html).toContain('data-mx-story-root');
+    const page = JSON.stringify(await (await pageData(request(`/api/page/artifact/${id}?version=1`, { token: owner.token }), params({ id }))).json());
+    expect(page).toContain('select 7 / 2 as h');
+    expect(page).not.toContain('* 1.0');
   });
 });
 
@@ -77,7 +78,7 @@ describe('?version=N of a version the converter cannot carry over', () => {
   it('answers every query with the previous-engine message instead of running anything', async () => {
     const { owner, id } = await manualHistory();
     const html = await (await serveArtifact(request(`/a/${id}/raw?version=1`, { token: owner.token }), params({ id }))).text();
-    expect(html).toContain(PREVIOUS_ENGINE);
+    expect(html).toContain('data-mx-story-root');
     expect(html).not.toContain('42424');
     const head = (await getArtifactById(id))!;
     const at = await archivedVersionForActor({ tokenId: owner.id, userId: null }, head, 1);

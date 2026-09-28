@@ -85,6 +85,7 @@ describe('warming sharing', () => {
     expect(prefetch).not.toHaveBeenCalled();
     reader.unmount();
 
+    setupSurface();
     render(<ArtifactShell role="owner"><ArtifactSurface {...surfaceProps()} /></ArtifactShell>);
     await screen.findByText('Document body');
     expect(prefetch).not.toHaveBeenCalled();

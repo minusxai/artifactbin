@@ -351,6 +351,8 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
           signedIn: actor.credential === 'session' && !!viewer?.userId,
           holder: fragment?.surface === 'app' ? { userId: viewer?.userId ?? null, tokenId: actor.tokenId ?? null, email: viewer?.email ?? null } : null,
           managedAssets: ASSETS_ORIGIN ? { origin: ASSETS_ORIGIN, resolveUrl: `${base}${assetsPath(artifact.id)}${byExportKey ? `?key=${encodeURIComponent(key!)}` : ''}` } : null,
+          assetsUrl: `${assetsPath(artifact.id)}${byExportKey ? `?key=${encodeURIComponent(key!)}` : ''}`,
+          capture: !chrome,
           doors: capture ? null : {
             queryUrl: queryPath(artifact.id),
             ...(!at && declaresMutations(row.source) ? { mutateUrl: mutatePath(artifact.id) } : {}),

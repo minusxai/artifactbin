@@ -172,6 +172,7 @@ export function boot(input: IslandModule | readonly IslandEntry[], win: Window =
       dataflow: flow ? { flow, values: data.values ?? {}, hold: data.hold ?? [], ...(data.results ? { results: data.results } : {}) } : null,
       mermaidImages: data.mermaidImages ?? {},
       viewer: data.signedIn ? { hinted: true } : null,
+      assetsUrl: data.assetsUrl ?? null,
       readOnly: data.readOnly ?? null,
     },
     (input) => createDataflowStore(input, { transport, writesUnavailable: data.readOnly ?? null, page }),

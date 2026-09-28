@@ -71,6 +71,7 @@ export interface IslandRuntimeData {
   mermaidImages?: Readonly<Record<string, StoredMermaidImage>>;
   /** Who reads: null for a guest, `{ hinted: true }` on a signed-in page until the overlay lands. */
   viewer?: IslandViewer;
+  assetsUrl?: string | null;
   /** An archived render's refusal of every write (IslandPageData.readOnly). */
   readOnly?: string | null;
 }
@@ -198,6 +199,7 @@ export function createIslandRuntime(
     mutationUnavailable: (name) => { checks(); return store && !isServer ? store.mutationUnavailable(name) : ACCESS_PENDING; },
     mutating: (name) => { checks(); return !!store?.mutating().has(name); },
     viewer,
+    assetsUrl: () => data.assetsUrl ?? null,
     drawings: () => drawings,
     writes: (options.writes ?? (() => EMPTY_WRITE_FEED))(store),
     store: () => store,
@@ -293,6 +295,21 @@ export function Repeat({ name, keyBy, owner, ids, tableParts, svg, children, ...
     // Snapshot the positions so For observes reorder and removal as list changes.
     return Array.isArray(source) ? [...(source as Row[])] : [];
   });
+  const error = createMemo(() => {
+    const source = rows();
+    if (source.length > 1000) return 'For supports at most 1000 rows';
+    if (!keyBy) return null;
+    const seen = new Set<string>();
+    for (const row of source) {
+      const value = Object.hasOwn(row, keyBy) ? row[keyBy] : undefined;
+      if (!((typeof value === 'string' && value.length <= 256 && !/[\u0000-\u001f]/.test(value)) || (typeof value === 'number' && Number.isFinite(value))))
+        return 'keyBy must have a non-null string (at most 256 characters, without control characters) or finite number for every row';
+      const key = JSON.stringify([typeof value, value]);
+      if (seen.has(key)) return `keyBy must be unique; duplicate key ${String(value)}`;
+      seen.add(key);
+    }
+    return null;
+  });
   // A reconciled store can retain a row proxy while changing its key. Give that key a distinct
   // For identity so the row's compiled scope and comment target are built again.
   const instances = new WeakMap<Row, { row: Row; key: unknown }>();
@@ -309,7 +326,8 @@ export function Repeat({ name, keyBy, owner, ids, tableParts, svg, children, ...
       ? <For each={keyedRows()}>{instance => children(instance.row, { owner: owner || '', key: instance.key, durable: true, ids: ids || [] })}</For>
       : <For each={rows()}>{(row, index) => children(row, { owner: owner || '', key: index(), durable: false, ids: ids || [] })}</For>
   );
-  return tableParts ? body() : svg ? <g {...attrs}>{body()}</g> : <div {...attrs}>{body()}</div>;
+  const content = () => <Show when={!error()} fallback={svg ? <text role="alert">{error()}</text> : <div role="alert">{error()}</div>}>{body()}</Show>;
+  return tableParts ? content() : svg ? <g {...attrs}>{content()}</g> : <div {...attrs}>{content()}</div>;
 }
 
 /** `{cond && …}` / `{cond ? a : b}` — the interpreter's conditional; a falsy value (0 included) renders nothing. */

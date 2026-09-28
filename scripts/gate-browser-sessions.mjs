@@ -50,11 +50,13 @@ try {
   const first = await cli(['script', 'new'], `
     const opened = await Promise.all(${JSON.stringify(artifacts)}.map(async id => {
       const page = await context.newPage(); await page.goto('/a/'+id);
-      await page.waitForFunction(() => Boolean(window.mx));
+      const widget = page.frameLocator('iframe[title="Counter widget"]').frameLocator('iframe');
+      await widget.locator('#value').filter({hasText:/^[0-9]+$/}).waitFor();
       return page;
     }));
-    await opened[0].evaluate(() => window.mx.set({count:3}));
-    const states = await Promise.all(opened.map(page => page.evaluate(() => window.mx.read(['count','result'],{wait:true}))));
+    const widget = page => page.frameLocator('iframe[title="Counter widget"]').frameLocator('iframe').locator('body');
+    await widget(opened[0]).evaluate(() => mx.set({count:3}));
+    const states = await Promise.all(opened.map(page => widget(page).evaluate(() => mx.read(['count','result'],{wait:true}))));
     await output.image(await opened[0].screenshot());
     return states;
   `);
@@ -68,7 +70,7 @@ try {
     const widget = page.frameLocator('iframe[title="Counter widget"]').frameLocator('iframe');
     await widget.getByRole('button',{name:'Add one'}).click();
     await widget.locator('#value').filter({hasText:/^4$/}).waitFor();
-    return await page.evaluate(() => window.mx.read(['count']));
+    return await widget.locator('body').evaluate(() => mx.read(['count']));
   `);
   assert.equal(resumed.status, 'completed', JSON.stringify(resumed)); assert.equal(resumed.result.signals.count.value,4);
   assert(resumed.pages.some(page => page.page_id === pageId));
@@ -114,12 +116,12 @@ try {
     const frame = page.frameLocator('iframe[title="Agent widget"]').frameLocator('iframe');
     await frame.getByLabel('Region').selectOption('West');
     await frame.getByText('West total',{exact:true}).waitFor();
-    await page.evaluate(()=>mx.set({region:'East'}));
+    await frame.locator('body').evaluate(()=>mx.set({region:'East'}));
     await frame.getByText('East total',{exact:true}).waitFor();
     if (await frame.getByLabel('Region').inputValue()!=='East') throw new Error('Parent selection did not synchronize');
     await frame.getByLabel('Task title').fill('Widget task');
     await frame.getByRole('button',{name:'Add task'}).click();
-    await page.evaluate(() => new Promise((resolve, reject) => {
+    await frame.locator('body').evaluate(() => new Promise((resolve, reject) => {
       const timer = setTimeout(() => { stop(); reject(new Error('Task did not appear')); }, 5000);
       const stop = mx.subscribe(['tasks'], s => {
         if (s.signals.tasks.value.rows.some(row => row.title === 'Widget task')) { clearTimeout(timer); stop(); resolve(null); }
@@ -127,7 +129,7 @@ try {
     }));
     if (await frame.getByRole('button',{name:'Add task'}).isDisabled()) throw new Error('Mutation did not restore button');
     await output.image(await page.screenshot());
-    return await page.evaluate(()=>mx.read(['region','taskTitle','tasks']));
+    return await frame.locator('body').evaluate(()=>mx.read(['region','taskTitle','tasks']));
   `);
   assert.equal(widget.status,'completed',JSON.stringify(widget));
   assert.equal(widget.result.signals.taskTitle.value,'untouched');

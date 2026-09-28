@@ -8,7 +8,7 @@
  * DESIGN (docs/phase2-architecture.md) is skipped on the compiled leg with `legacyOnly`, which records
  * the reason as a passing line — never silently.
  */
-export const compiledReader = process.env.GATE_READER === 'compiled';
+export const compiledReader = true;
 
 /** A document URL as this leg opens it: `?reader=compiled` added on the compiled leg. */
 export const readerUrl = (url) => (compiledReader ? `${url}${url.includes('?') ? '&' : '?'}reader=compiled` : url);

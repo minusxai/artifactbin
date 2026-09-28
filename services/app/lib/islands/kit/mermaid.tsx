@@ -26,7 +26,15 @@ export function Mermaid(p: Props) {
   const [refused, setRefused] = createSignal<string | null>(null);
   const [revision, setRevision] = createSignal(0);
   const invalid = () => mermaidSourceError(p.code);
-  const imageKey = () => (invalid() ? null : p.imageKey ?? mermaidImageKey(p.code, p.colorMode ?? 'light'));
+  const mode = () => {
+    revision();
+    if (typeof document !== 'undefined') {
+      if (document.documentElement.classList.contains('dark')) return 'dark';
+      if (document.documentElement.classList.contains('light')) return 'light';
+    }
+    return p.colorMode ?? 'light';
+  };
+  const imageKey = () => (invalid() ? null : p.imageKey && mode() === (p.colorMode ?? 'light') ? p.imageKey : mermaidImageKey(p.code, mode()));
   const stored = () => { const key = imageKey(); const offered = key ? island.drawings()[key] : undefined; return offered && offered.src !== refused() ? offered : undefined; };
   const storedSrc = () => stored()?.src ?? null;
   const current = () => { const r = result(); return r?.code === p.code ? r : null; };
@@ -45,7 +53,7 @@ export function Mermaid(p: Props) {
       observer.observe(element, { attributes: true, attributeOldValue: true, attributeFilter: ['data-theme', 'data-color-mode', 'class'] });
     }
     onCleanup(() => observer.disconnect());
-    createEffect(on([() => p.code, () => p.colorMode, invalid, revision, storedSrc], ([code, colorMode, bad, , servedSrc]) => {
+    createEffect(on([() => p.code, mode, invalid, revision, storedSrc], ([code, colorMode, bad, , servedSrc]) => {
       if (bad) return;
       let live = true;
       setResult(null);

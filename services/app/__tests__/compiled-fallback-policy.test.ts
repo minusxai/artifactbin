@@ -51,21 +51,12 @@ const storedBuild = async (id: string) => (await (await harness.db()).query<{ bu
 const storyText = (html: string) => new JSDOM(html).window.document.getElementById('mx-story-root')?.textContent?.replace(/\s+/g, ' ').trim() ?? '';
 
 describe('fallbackPolicy', () => {
-  it('is `legacy` until Wave 4 deletes today\'s reader', () => {
-    expect(fallbackPolicy()).toBe('legacy');
+  it('is compiled-only after Wave 4 deletes today\'s reader', () => {
+    expect(fallbackPolicy()).toBe('compiled-only');
   });
 });
 
 describe('a compile from another build', () => {
-  it('legacy: over the inline budget, today\'s renderer answers and says why', async () => {
-    const who = await owner();
-    const id = await publish(who.token, { title: 'Perf B kit', markup: fixture('kit.jsx') });
-    await (await harness.db()).query(`UPDATE prepared_pages SET page = jsonb_set(page, '{compiled,build}', '"0000000000000000"') WHERE artifact_id = $1`, [id]);
-    const res = await raw(id);
-    expect(res.headers.get(READER_MODE_HEADER)).toBe('legacy');
-    expect(res.headers.get(READER_FALLBACK_HEADER)).toBe('over-budget');
-  });
-
   it('compiled-only: compiled inline and waited for, however long it takes; the slow compile is logged, not refused', async () => {
     setFallbackPolicyForTests('compiled-only');
     const who = await owner();
@@ -96,15 +87,6 @@ describe('a compile from another build', () => {
 });
 
 describe('a version with no stored compile', () => {
-  it('legacy: today\'s renderer answers (`not-compiled`)', async () => {
-    const who = await owner();
-    const id = await publish(who.token, { title: 'Perf A prose', markup: fixture('prose.jsx') });
-    await (await harness.db()).query(`UPDATE prepared_pages SET page = page - 'compiled' WHERE artifact_id = $1`, [id]);
-    const res = await raw(id);
-    expect(res.headers.get(READER_MODE_HEADER)).toBe('legacy');
-    expect(res.headers.get(READER_FALLBACK_HEADER)).toBe('not-compiled');
-  });
-
   it('compiled-only: compiled inline and served, and the compile is stored for the next read', async () => {
     setFallbackPolicyForTests('compiled-only');
     const who = await owner();
@@ -125,15 +107,6 @@ describe('a compile that fails', () => {
     const build = await storedBuild(id);
     await db.query(`UPDATE prepared_pages SET page = jsonb_set(page, '{compiled}', $2::jsonb) WHERE artifact_id = $1`, [id, JSON.stringify({ build, error: 'boom', reason: 'compile-error' })]);
   };
-
-  it('legacy: today\'s renderer answers and says why', async () => {
-    const who = await owner();
-    const id = await publish(who.token, { title: 'Perf A prose', markup: fixture('prose.jsx') });
-    await recordFailure(id);
-    const res = await raw(id);
-    expect(res.headers.get(READER_MODE_HEADER)).toBe('legacy');
-    expect(res.headers.get(READER_FALLBACK_HEADER)).toBe('compile-error');
-  });
 
   it('compiled-only: /raw and the app page answer 500, and every occurrence is reported', async () => {
     setFallbackPolicyForTests('compiled-only');

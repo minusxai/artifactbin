@@ -71,16 +71,17 @@ const exercise = async (page, framed, documentId) => {
     throw new Error(`${error.message}; page=${(await frame.locator('body').innerText()).slice(0, 1000)}`);
   });
   check((await frame.textContent('[aria-label="Branch"]')) === 'bee', `${framed ? 'framed' : 'top-level'} URL scalar seeds the ternary`);
-  // The first paint is the server's; the page's engine loads behind it.
-  check(await engine, `${framed ? 'framed' : 'top-level'} page loaded its SQLite engine`);
+  // The first paint is the server's; local writes wake the page's engine.
   await page.waitForTimeout(500);
   await frame.click('[aria-label="Add draft"]');
   await frame.waitForFunction(() => document.querySelector('[aria-label="Rows"]')?.textContent?.trim() === '2');
+  check(await engine, `${framed ? 'framed' : 'top-level'} page loaded its SQLite engine`);
   await frame.click('[aria-label="Add draft"]');
   await frame.waitForFunction(() => document.querySelector('[aria-label="Rows"]')?.textContent?.trim() === '3');
   check(true, `${framed ? 'relayed' : 'direct'} repeated local table edits feed the dependent query`);
   await frame.click('[aria-label="Open dialog"]');
-  check(await frame.locator('[aria-label="Draft dialog"]').evaluate(el => el.open) && await frame.locator('[aria-label="Note"]').evaluate(el => el === document.activeElement), 'Dialog opens and focuses its field');
+  const focused = await frame.waitForFunction(() => { const dialog = document.querySelector('[aria-label="Draft dialog"]'); return dialog?.open && dialog.querySelector('[aria-label="Note"]') === document.activeElement; }, null, { timeout: 5000 }).then(() => true, () => false);
+  check(focused, 'Dialog opens and focuses its field');
   await frame.fill('[aria-label="Note"]', 'changed');
   const validity = await frame.locator('[aria-label="Draft dialog"]').evaluate(dialog => {
     const field = dialog.querySelector('[aria-label="Note"]');

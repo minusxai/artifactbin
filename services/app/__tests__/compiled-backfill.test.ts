@@ -114,13 +114,14 @@ describe('backfillCompiledPages', () => {
     for (const version of archived) expect(after[`${id}/v:${version}`], `v:${version}`).toBe(loadCompilerBuild().id);
   });
 
-  it('stops on a server that does not compile, rather than report a no-op as done', async () => {
+  it('compiles through the reader even while the rollout flag is off', async () => {
     const token = await owner();
     await publish(token, { title: 'off', markup: '<p>Off</p>', visibility: 'public' });
     setCompiledReaderFlagForTests('off');
     try {
       const off = server();
-      await expect(backfillCompiledPages({ db: await harness.db(), base: BASE, fetch: off.fetch, mintKey: (a) => mintExportKey(a) })).rejects.toThrow(/does not serve the compiled reader/);
+      const report = await backfillCompiledPages({ db: await harness.db(), base: BASE, fetch: off.fetch, mintKey: (a) => mintExportKey(a) });
+      expect(report.errors).toEqual([]);
       expect(off.asked).toHaveLength(1);
     } finally {
       setCompiledReaderFlagForTests('shadow');

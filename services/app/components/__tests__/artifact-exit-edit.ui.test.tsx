@@ -1,23 +1,17 @@
-/**
- * EDIT MODE DOES NOT TOUCH THE DOCUMENT.
- *
- * Editing happens IN the frame the reader is already looking at, so a whole
- * class of faults cannot occur: there is no second document to build, nothing
- * to reveal, and no moment where the page has to decide whether a frame has
- * painted yet. What has to be true is simpler and stronger — the frame is the
- * SAME ELEMENT throughout, and the page's own stale copy of the text never
- * comes back over it.
- *
- * (An iframe that is re-parented reloads, so "same element" is not a detail:
- * it is the difference between a mode and a reload.)
- */
+/** The compiled reader hands its live document to the editor and reloads the compiled page on exit. */
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { act, screen, waitFor } from '@testing-library/react';
 import { render } from '@/test/helpers/surface-ui';
 
 const surfaceSpies = vi.hoisted(() => ({
   flush: vi.fn(async () => {}),
+  reload: vi.fn(),
   annotationProps: [] as Array<Record<string, unknown>>,
+}));
+
+vi.mock('@/lib/islands/live-update', async (importOriginal) => ({
+  ...await importOriginal<typeof import('@/lib/islands/live-update')>(),
+  reloadKeepingPlace: surfaceSpies.reload,
 }));
 
 vi.mock('@/components/ArtifactEditor', () => ({
@@ -36,6 +30,7 @@ vi.mock('@/components/AnnotationLayer', () => ({
 
 import ArtifactSurface, { type ArtifactSurfaceProps } from '../ArtifactSurface';
 import ArtifactShell from '../ArtifactShell';
+import { setupSurface, surfaceProps } from '@/test/helpers/inline-surface';
 
 class FakeEventSource {
   /** The named `data` channel (a dataset under the document changed). */
@@ -49,7 +44,9 @@ class FakeEventSource {
 }
 
 beforeEach(() => {
+  setupSurface();
   surfaceSpies.flush.mockClear();
+  surfaceSpies.reload.mockClear();
   surfaceSpies.annotationProps.length = 0;
   vi.stubGlobal('EventSource', FakeEventSource);
   vi.stubGlobal('fetch', (async () => { throw new Error('unexpected fetch'); }) as unknown as typeof fetch);
@@ -66,22 +63,7 @@ beforeEach(() => {
 
 afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); window.location.hash = ''; });
 
-const props = (over: Partial<ArtifactSurfaceProps> = {}): ArtifactSurfaceProps => ({
-  id: 'doc123',
-  editId: 'edit_1',
-  format: 'markup',
-  title: 'doc',
-  source: '<p>first</p>',
-  template: null,
-  refs: [],
-  version: 1,
-  dataPreview: '',
-  columns: [],
-  compiledCss: null,
-  theme: null,
-  colorMode: null,
-  ...over,
-});
+const props = (over: Partial<ArtifactSurfaceProps> = {}): ArtifactSurfaceProps => surfaceProps({ source: '<p>first</p>', ...over });
 
 const loader = () => screen.queryByLabelText('Loading document');
 const theFrame = () => document.querySelector<HTMLElement>('[data-mx-inline-story]')!;
@@ -104,7 +86,7 @@ describe('coming back from edit mode', () => {
     await waitFor(() => expect(surfaceSpies.flush).toHaveBeenCalledTimes(1));
   });
 
-  it('keeps the SAME frame element through edit and back — a mode, not a reload', async () => {
+  it('hands the visible document to the editor and reloads the compiled reader on exit', async () => {
     {
       render(<ArtifactShell role="owner"><ArtifactSurface {...props()} /></ArtifactShell>);
       await painted();
@@ -113,21 +95,16 @@ describe('coming back from edit mode', () => {
 
       goEdit();
       await vi.waitFor(() => expect(screen.queryByLabelText('Editor stub')).not.toBeNull());
-      // The document is still there, still the same element, still shown.
-      expect(theFrame()).toBe(original);
+      expect(theFrame()).not.toBe(original);
       expect(theFrame()).toHaveTextContent('first');
 
       leaveEdit();
       await vi.waitFor(() => expect(screen.queryByLabelText('Editor stub')).toBeNull());
-      expect(theFrame()).toBe(original);
-      expect(theFrame()).toHaveTextContent('first');
+      expect(surfaceSpies.reload).toHaveBeenCalledWith(window);
     }
   });
 
-  it('never asks the reader to wait again once the document has painted', async () => {
-    // The loader exists for a frame that has nothing on it yet. Edit mode
-    // never makes one, so after the first paint it must not come back — the
-    // reader is looking at the document the whole time.
+  it('does not show loading ink while the editor takes over the painted document', async () => {
     render(<ArtifactShell role="owner"><ArtifactSurface {...props()} /></ArtifactShell>);
     await painted();
     expect(loader()).toBeNull();
@@ -135,8 +112,7 @@ describe('coming back from edit mode', () => {
     await waitFor(() => expect(screen.queryByLabelText('Editor stub')).not.toBeNull());
     expect(loader()).toBeNull();
     leaveEdit();
-    await waitFor(() => expect(screen.queryByLabelText('Editor stub')).toBeNull());
-    expect(loader()).toBeNull();
+    await waitFor(() => expect(surfaceSpies.reload).toHaveBeenCalledWith(window));
   });
 
   it('keeps the frame where it is across edit mode — the document insets itself under the bars', async () => {

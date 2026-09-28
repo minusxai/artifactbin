@@ -5,9 +5,9 @@
  */
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { startPage, CHROME_HIDDEN_CLASS } from '../page';
-import { STORY_SCROLL_MESSAGE } from '@/lib/story-runtime/contract';
 import { READER_CHROME_HIDDEN_CLASS } from '@/lib/story/reader-chrome';
 import { captureInitialStory, clearInitialStory } from '@/web/initial-story';
+import { PAGE_TAKEOVER_EVENT } from '@/lib/islands/page-lifetime';
 
 class FakeEventSource extends EventTarget {
   static made: FakeEventSource[] = [];
@@ -27,6 +27,7 @@ const page = ({ live = true, module = false } = {}) => {
 const stops: Array<() => void> = [];
 
 afterEach(() => {
+  vi.useRealTimers();
   for (const stop of stops.splice(0)) stop();
   FakeEventSource.made = [];
   window.name = '';
@@ -94,10 +95,8 @@ describe('startPage', () => {
   it('framed: marks <html> mx-framed and holds no stream (the page above does)', () => {
     vi.stubGlobal('EventSource', FakeEventSource);
     page();
-    const postMessage = vi.fn();
-    const framed = new Proxy(window, { get: (target, key) => (key === 'parent' ? { postMessage } : Reflect.get(target, key, target)) });
+    const framed = new Proxy(window, { get: (target, key) => (key === 'parent' ? {} : Reflect.get(target, key, target)) });
     stops.push(startPage(document, framed));
-    expect(postMessage).toHaveBeenCalledWith(expect.objectContaining({ type: STORY_SCROLL_MESSAGE }), '*');
     expect(document.documentElement.classList.contains('mx-framed')).toBe(true);
     expect(FakeEventSource.made).toEqual([]);
   });
@@ -113,6 +112,23 @@ describe('startPage', () => {
     stops.push(startPage());
     expect(scrollTo).toHaveBeenCalledWith({ top: 700 });
     expect(window.name, 'one reload, one restore').not.toContain('anchor');
+  });
+
+  it('keeps restoring the reader position while the SPA takes over a settling page', () => {
+    vi.useFakeTimers();
+    page({ live: false });
+    const target = document.querySelector<HTMLElement>('[data-mx-ast="1"]')!;
+    let top = 500;
+    target.getBoundingClientRect = () => ({ top, height: 400, width: 100 }) as DOMRect;
+    const scrollTo = vi.spyOn(window, 'scrollTo').mockImplementation(() => {});
+    window.name = 'mx:doc:' + JSON.stringify({ anchor: { path: '1', fraction: 0.5 } });
+    stops.push(startPage());
+    const before = scrollTo.mock.calls.length;
+    window.dispatchEvent(new Event(PAGE_TAKEOVER_EVENT));
+    top = 537;
+    vi.advanceTimersByTime(100);
+    expect(scrollTo.mock.calls.length).toBeGreaterThan(before);
+    vi.useRealTimers();
   });
 });
 

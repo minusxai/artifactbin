@@ -127,6 +127,23 @@ describe('Files, as today\'s live listing renders it', () => {
 });
 
 describe('people, as today\'s live adapters render them', () => {
+  it('resolves repeated viewer references to the same public person card', async () => {
+    const { User, UserImage, UserHandle } = await import('../kit/people');
+    const person = { id: 'usr_twice', name: 'twice', handle: 'twice', image: null };
+    const island = { ...fakeIsland(), value: (name: string) => name === '_me.id' ? person.id : undefined, people: () => ({ [person.id]: person }) } as never;
+    const host = document.createElement('div');
+    const dispose = render(() => <IslandProvider value={island}><div>
+      <User userId="$_me.id" /><UserImage userId="$_me.id" size="lg" />
+      <UserHandle userId="$_me.id" /><UserImage userId="$_me.id" size="lg" />
+    </div></IslandProvider>, host);
+    try {
+      expect(host.querySelectorAll('[data-slot="avatar"]')).toHaveLength(3);
+      expect(host.querySelectorAll('[data-slot="avatar"][aria-label="twice"]')).toHaveLength(2);
+      expect(host.querySelectorAll('[data-unknown]')).toHaveLength(0);
+      expect(host.textContent).toContain('@twice');
+    } finally { dispose(); }
+  });
+
   it('User, UserImage and UserHandle for a guest and for a known person: byte for byte, whatever the compile-time recipe class', async () => {
     const { User, UserImage, UserHandle } = await import('../kit/people');
     const { User: RUser } = await import('@/components/kit/user');

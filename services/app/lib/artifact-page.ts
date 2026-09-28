@@ -212,7 +212,7 @@ export async function artifactPageAnswer(request: Request, id: string, options: 
    * today's page whatever it says — the compiled page photographs nothing here and runs no editor.
    */
   const starterDoc = isDoc && isStartPlaceholder(row.source ?? null, artifact.version);
-  const compiledMode = !!options.page && !!prepared && !exporting && !starterDoc
+  const compiledMode = !!options.page && !!prepared && (!exporting || engineRequested(request.url)) && !starterDoc
     && !new URL(request.url).pathname.endsWith('/edit');
 
   const meta = (row.meta ?? {}) as {
@@ -255,6 +255,7 @@ export async function artifactPageAnswer(request: Request, id: string, options: 
       at,
       search: new URL(request.url).search,
       drawings: engineRequested(request.url) ? null : 'inline',
+      colorMode: capturedColor,
       // Any held credential: an account session, or the connection a guest owner holds. Either one is
       // who the write check and a private query answer for, so the page uses the credentialed doors.
       signedIn: kind !== 'none',

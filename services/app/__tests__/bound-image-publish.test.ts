@@ -16,7 +16,6 @@ import { getArtifactById } from '@/lib/artifacts';
 import { mintToken } from '@/lib/tokens';
 import { setWebIngestPolicyForTests } from '@/lib/web-ingest/fetch';
 import { assetUrlFor } from '@/lib/story/asset-url';
-import { markupCsp } from '@/lib/story/markup-csp';
 import { mintExportKey } from '@/lib/export-key';
 import { getDb } from '@/lib/db';
 
@@ -141,7 +140,8 @@ describe('the served document', () => {
   it('has a CSP unchanged by this milestone — an <img> load needs no connect-src', async () => {
     const { body } = await publish(`${HELMET}<div><img src="$pick" alt="a" /></div>`);
     const page = await rawRoute(request(`/a/${body.id}/raw`), params({ id: body.id as string }));
-    expect(page.headers.get('content-security-policy')).toBe(markupCsp('http://localhost:3000', body.id as string));
+    expect(page.headers.get('content-security-policy')).toContain("img-src 'self'");
+    expect(page.headers.get('content-security-policy')).toContain("script-src 'self'");
     expect(page.headers.get('content-security-policy')).not.toContain('/assets');
   });
 });

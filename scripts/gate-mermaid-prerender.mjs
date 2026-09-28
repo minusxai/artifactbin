@@ -69,7 +69,8 @@ const publish = async (markup, title, extra = {}) => {
 async function harvested(id, ms = 170_000) {
   for (const end = Date.now() + ms; Date.now() < end;) {
     const html = await (await fetch(`${B}/a/${id}/raw`)).text();
-    if (html.includes('"mermaidImages"')) return true;
+    const json = /<script type="application\/json" id="mx-story-data">([^<]+)<\/script>/.exec(html)?.[1];
+    if (json && Object.keys(JSON.parse(json).mermaidImages ?? {}).length > 0) return true;
     await new Promise((resolve) => setTimeout(resolve, 1000));
   }
   return false;
@@ -120,8 +121,9 @@ async function drawings(url, mode = null, { blockStored = false } = {}) {
     const prefix = 'data:image/svg+xml;charset=utf-8,';
     return [f.querySelector('figcaption')?.textContent ?? '', { state: f.getAttribute('data-mx-mermaid-state'), src, svg: src.startsWith(prefix) ? decodeURIComponent(src.slice(prefix.length)) : null, palette: f.getAttribute('data-mx-mermaid-palette') }];
   })));
+  const offered = await page.evaluate(() => { try { return Object.keys(JSON.parse(document.getElementById('mx-story-data')?.textContent ?? '{}').mermaidImages ?? {}).length; } catch { return -1; } });
   await page.close();
-  return { drawn, figures, scripts };
+  return { drawn, figures, scripts, offered };
 }
 
 /** Engine vs storage for one page and mode: every stored kind identical, every unstored kind left to the engine. */
@@ -139,7 +141,7 @@ async function compare(label, url, samples, mode = null, { allStored = false } =
       check(shown.src.startsWith('data:'), `${label} ${sample.kind}: stays with the engine (${sample.why})`);
       continue;
     }
-    if (!check(shown.src.startsWith('/assets/mermaid/'), `${label} ${sample.kind}: served as a stored drawing`)) continue;
+    if (!check(shown.src.startsWith('/assets/mermaid/'), `${label} ${sample.kind}: served as a stored drawing (${shown.src.slice(0, 96)}, offered ${served.offered})`)) continue;
     const stored = await (await fetch(new URL(shown.src, B).toString())).text();
     const block = FONTS_BLOCK.exec(stored);
     if (!check(!!block, `${label} ${sample.kind}: the stored drawing carries its fonts, first, in our grammar`)) continue;

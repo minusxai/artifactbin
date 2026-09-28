@@ -559,6 +559,12 @@ export function generate(input: GenerateInput): Generated {
     const lower = node.tag.toLowerCase();
     const tag = safeTag(SVG_TAG_CASE[lower] ?? lower);
     // A `$`-bound native form control (interpreter boundAttrs → StoryRuntimeApp NativeBoundControl).
+    const imageSrc = lower === 'img' ? node.attributes.find((a) => a.name.toLowerCase() === 'src') : undefined;
+    if (imageSrc?.value.static && typeof imageSrc.value.json === 'string' && carriesRef(imageSrc.value.json)) {
+      useKit('BoundImage', mode, ctx);
+      const props = rawBuildProps(node.attributes.filter((a) => a !== imageSrc), false, node.tag, path, undefined, {});
+      return `<BoundImage template={${lit(imageSrc.value.json)}}${attrsJsx(domAttrs(tag, props))} />`;
+    }
     const boundTable = ['input', 'select', 'textarea'].includes(lower) ? REF_ATTRS.html[lower] : null;
     const boundAttrs = boundTable ? node.attributes.filter((a) => boundTable[a.name.toLowerCase()] && a.value.static && refName(a.value.json)) : [];
     if (boundAttrs.length) {
@@ -705,7 +711,7 @@ export function generate(input: GenerateInput): Generated {
 
   const kitImports = (set: Set<string>): string => {
     const byMod: Record<string, string[]> = {};
-    for (const tag of set) (byMod[tag === 'BoundNative' ? 'controls' : CELL_EXPORTS.has(tag) ? 'cells' : KIT[tag]!.mod] ??= []).push(tag);
+    for (const tag of set) (byMod[tag === 'BoundNative' || tag === 'BoundImage' ? 'controls' : CELL_EXPORTS.has(tag) ? 'cells' : KIT[tag]!.mod] ??= []).push(tag);
     return Object.entries(byMod).sort(([a], [b]) => a.localeCompare(b)).map(([mod, tags]) => `import { ${tags.sort().map(safeProp).join(', ')} } from ${lit(`@mx/kit/${safeTag(mod)}`)};\n`).join('');
   };
   const dataConsts = data.map((text, i) => `const $d${i} = JSON.parse(${lit(text)});\n`).join('');
@@ -785,6 +791,7 @@ export async function compilePage(input: CompileInput, build: CompilerBuild): Pr
     ? discoverOutline(input.nodes) : [];
   const base = {
     build: build.id, islands: generated.islandRefs, behaviors: generated.behaviors, plan, links, outline, outlinePlan,
+    boundImages: generated.kit.islands.includes('BoundImage') || generated.kit.skeleton.includes('BoundImage'),
     kit: generated.kit, reactStatic: generated.reactStatic, unported: generated.unported, partial: generated.partial,
     // Data for the page's JSON island, never module code (contract CompiledPage.authorScript).
     authorScript: input.authorScript || null,

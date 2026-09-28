@@ -60,8 +60,7 @@ describe('an unmigrated document, served', () => {
     await legacy(who, 'oldtsk', OLD(ds));
 
     const html = await (await serveArtifact(request('/a/oldtsk/raw', { token: who.token }), ctx('oldtsk'))).text();
-    expect(html).toContain('team_tasks.rows');
-    expect(html).not.toContain('public.rows');
+    expect(html).toContain('data-mx-story-root');
     const page = JSON.stringify(await (await pageData(request('/api/page/artifact/oldtsk', { token: who.token }), ctx('oldtsk'))).json());
     expect(page).toContain('team_tasks.rows');
     expect(page).not.toContain('public.rows');
@@ -84,7 +83,7 @@ describe('an unmigrated document, served', () => {
     const who = await owner();
     await legacy(who, 'oldman', MANUAL);
     const html = await (await serveArtifact(request('/a/oldman/raw', { token: who.token }), ctx('oldman'))).text();
-    expect(html).toContain(PREVIOUS_ENGINE);
+    expect(html).toContain('data-mx-story-root');
     expect(await query('oldman', who)).toEqual({ tables: {}, errors: { steps: PREVIOUS_ENGINE } });
   });
 });

@@ -192,7 +192,7 @@ try {
       await context.close();
     }
     check(snaps.compiled.served === 'compiled', `${f.key}: the compiled route is served by the compiled reader (${READER_HEADER}: ${snaps.compiled.served})`);
-    check(snaps.legacy.served !== 'compiled', `${f.key}: the legacy route is served by today's renderer (${READER_HEADER}: ${snaps.legacy.served})`);
+    check(snaps.legacy.served === 'compiled', `${f.key}: a legacy query cannot select the deleted reader (${READER_HEADER}: ${snaps.legacy.served})`);
     const d = diff(snaps.legacy.tree, snaps.compiled.tree);
     check(d.elements > 0, `${f.key}: the story has elements to compare (${d.elements})`);
     for (const kind of ['structure', 'text', 'style', 'box', 'attrs', 'refs']) {
