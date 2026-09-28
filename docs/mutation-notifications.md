@@ -1,6 +1,7 @@
 # Mutation notifications: foundation and implementation contract
 
 Status: foundation only; no Notify implementation, schema migration, or feature demo yet.
+LATEST DESIGN DIRECTION: user accepts notification queries reading current state after commit. The captured-effect design below is retained research, not a frozen implementation mandate. Rework contracts/tests/briefs before launching implementation; see the final section.
 Base: `fae1e6e628784ab4d53616907f0c6b7c56e4f065`.
 Published proposal: https://app.artifactbin.dev/a/61YVj6.
 This file, shared types, and seeds are the implementation handoff. The linked proposal is its reader summary.
@@ -168,3 +169,16 @@ The query's execution principal does not authorize disclosing its result to ever
 Effects-only query evaluation can remain portable in the existing embedded SQL layer. Queries joining a connected source need a connector-owned consistent snapshot/transaction and explicit dialect/capability handling. Remote source writes still require a durable source-side receipt/intent; a post-commit query against live tables is not reliable event capture. Read-only SQL restrictions, no network/functions with side effects, byte/result/fanout/time budgets, query failures and atomic refusal semantics remain explicit.
 
 Recommendation for decision: adopt a mutation-triggered result-query model if relational recipient selection and bulk summaries are near-term requirements; keep per-row Notify only as optional shorthand if it meaningfully reduces authoring. Do not maintain two independent delivery engines. This broadens B (rule/query compilation) and C/root (multi-source authorization/snapshot integration); re-estimate and seed tests before implementation. Initial research establishes architectural feasibility, not implementation proof for this alternative.
+
+
+## Latest clarification: current-state notification queries are acceptable
+
+The user explicitly accepts that a notification query may see changes made after the triggering mutation. Therefore historical snapshot capture is NOT required for this alternative. Recommended direction: a rule refers to a mutation, and a read-only query returns `to`/`message` rows from current authorized data. Queries can join declared relations or aggregate bulk changes subject to recipient disclosure checks; ordinary reactive page queries do not send notifications.
+
+Commit the mutation plus a durable trigger job; execute the query afterward. Pin rule revision, authoritative actor and invocation identity in the job. Define any mutation-argument inputs explicitly; latest-state reads do not require before/after images. Query/recipient/message failures leave the mutation committed, retry visibly with bounded backoff, and eventually expose a failed-job state. Do not silently lose failed jobs or promise exactly-once external delivery.
+
+Evaluate and authorize against current data at job execution, then persist the resolved output plan atomically with query-job completion. Once a plan exists, delivery retries reuse it rather than rerun the query. A crash before that plan commits may rerun the query against newer state, which is allowed by the chosen semantics. Recheck current access before disclosure/delivery. Dedup by invocation/rule/output identity. Multiple triggering mutations can independently produce the same latest-state message; coalescing is a separate explicit rule, not automatic.
+
+Messages should describe current state (for example “Task X is now Done”) unless the rule has trustworthy event context supporting stronger historical attribution. Implicit actor identifies the triggering mutation’s actor; it must not falsely attribute a later actor’s changes. This wording/attribution distinction must appear in the commented example and eval fixtures.
+
+This changes the earlier atomicity contract: dataset mutation + trigger job commit together; notification rows materialize later. No resource or query failure after commit rolls back the mutation. Local mutation failure creates no job. A remote adapter still needs a durable source-side job/outbox or equivalent committed-change feed to avoid lost triggers. The durable worker, leases, recovery, capacity and failed-job observability now become required work, not a deferred optional subsystem. Re-scope C/D/root and seed these tests before implementation. Existing capture types/seeds are exploratory foundation, not required implementation for current-state queries.
