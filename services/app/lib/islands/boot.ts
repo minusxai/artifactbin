@@ -210,7 +210,7 @@ export function boot(input: IslandModule | readonly IslandEntry[], win: Window =
     // Loaded after hydration, off the shared runtime's closure: the marks cover the gap, so nothing is missed.
     void import('./live').then(({ startIslandLive }) => {
       if (!disposed) stopLive = startIslandLive(win, liveId, liveEdit, data.results?.since ?? null);
-    }).catch((error: unknown) => console.error(error));
+    }).catch(console.error);
   }
   // The link follows the reader (./url-sync), top-level only: a framed document's address is its frame's.
   let stopUrl = () => {};
@@ -274,7 +274,7 @@ export function boot(input: IslandModule | readonly IslandEntry[], win: Window =
   doc.dispatchEvent(new Event(ISLANDS_READY_EVENT));
 
   // The author's script, never in this document: its host (and the sandboxed frame) load only when the version has one.
-  const authorScript = typeof data.authorScript === 'string' && data.authorScript ? data.authorScript : null;
-  if (authorScript) void restartAuthor(authorScript).catch((error: unknown) => console.error(error));
+  const authorScript = data.authorScript || null;
+  if (authorScript) void restartAuthor(authorScript).catch(console.error);
   return islandDocument;
 }
