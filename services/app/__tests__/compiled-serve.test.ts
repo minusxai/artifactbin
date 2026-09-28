@@ -22,6 +22,7 @@ import { READER_FALLBACK_HEADER, READER_MODE_HEADER, SPA_IDLE_ATTR } from '@/lib
 import * as artifacts from '@/lib/artifacts';
 import { updateSharingFor } from '@/lib/artifacts';
 import { withBodyAttributes } from '@/lib/compiled-page/serve.server';
+import { mintExportKey } from '@/lib/export-key';
 
 vi.mock('@/auth', () => ({ auth: async () => null }));
 const harness = useAppHarness();
@@ -249,6 +250,41 @@ describe('the reader switch at its edges', () => {
     const page = new JSDOM(await (await app.request(`/a/${id}?reader=compiled`, { headers: { accept: 'text/html' } })).text()).window.document;
     expect(page.body.getAttribute('data-mx-live-id')).toBe(id);
     expect(page.querySelector('body > script[type="application/json"][id="mx-page-data"]'), 'the app\'s page data rides with the compiled page').toBeTruthy();
+  });
+});
+
+describe('the compiled capture', () => {
+  it('under the exporter\'s key: settled rows from its own run (never the guest snapshot), no doors, no live identity, no head', async () => {
+    const who = await owner();
+    const sales = await publish(who.token, { title: 'Perf sales', dataset: fixture('sales.csv') });
+    const id = await publish(who.token, { title: 'Perf C dashboard', markup: fixture('dashboard.jsx').replaceAll('{{sales}}', sales), template: 'dashboard' });
+    const capture = `chrome=0&key=${encodeURIComponent(mintExportKey(id))}`;
+    const legacy = await raw(id, `?${capture}`);
+    expect(storyText(await legacy.text()), 'today\'s capture of it').toContain('$744,503');
+    const res = await raw(id, `?reader=compiled&${capture}`);
+    expect(res.status).toBe(200);
+    expect(res.headers.get(READER_MODE_HEADER)).toBe('compiled');
+    const html = await res.text();
+    const doc = new JSDOM(html).window.document;
+    expect(storyText(html), 'the capture is settled: its own run\'s rows are in the first byte').toContain('$744,503');
+    expect(doc.body.hasAttribute('data-mx-live-id')).toBe(false);
+    expect(doc.querySelector('link[rel="canonical"], meta[property="og:image"]')).toBeNull();
+    const data = JSON.parse(doc.getElementById('mx-story-data')?.textContent ?? '{}') as Record<string, unknown>;
+    expect(data.queryUrl, 'a capture carries no doors').toBeUndefined();
+    const stored = await (await harness.db()).query('SELECT 1 FROM data_snapshots WHERE artifact_id = $1', [id]);
+    expect(stored.rows, 'a capture\'s run is never stored as the guest snapshot').toHaveLength(0);
+  });
+
+  it('a private document: photographed under the key, never snapshotted for guests', async () => {
+    const who = await owner();
+    const sales = await publish(who.token, { title: 'Perf sales', dataset: fixture('sales.csv') });
+    const id = await publish(who.token, { title: 'Perf C dashboard', markup: fixture('dashboard.jsx').replaceAll('{{sales}}', sales), template: 'dashboard', visibility: 'private' });
+    expect((await raw(id, '?reader=compiled')).status, 'a guest never sees it').toBe(404);
+    const res = await raw(id, `?reader=compiled&chrome=0&key=${encodeURIComponent(mintExportKey(id))}`);
+    expect(res.status).toBe(200);
+    expect(res.headers.get(READER_MODE_HEADER)).toBe('compiled');
+    const stored = await (await harness.db()).query('SELECT 1 FROM data_snapshots WHERE artifact_id = $1', [id]);
+    expect(stored.rows).toHaveLength(0);
   });
 });
 
