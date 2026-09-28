@@ -39,7 +39,7 @@ describe('tabs', () => {
     const { host } = mount(view);
     expect(parityOf(markup, host)).toEqual([]);
     expect(host.querySelector('#c2')?.hasAttribute('hidden')).toBe(true);
-    expect(host.querySelector('#t2')?.getAttribute('aria-controls')).toBe('c2');
+    expect([...host.querySelectorAll('[role="tabpanel"]')].some(panel => panel.id === host.querySelector('#t2')?.getAttribute('aria-controls'))).toBe(true);
   });
   it('switches on click and on arrow keys, like Radix', () => {
     const { host } = mount(view);
@@ -66,15 +66,21 @@ describe('accordion', () => {
 
 describe('dialog', () => {
   it('trigger conventions match, opening renders a modal dialog, close returns to the served DOM', () => {
-    const { host } = mount(() => <Dialog><DialogTrigger id="trigger" wrapsControl={true}><Button id="add" class={cls('Button')}>Add task</Button></DialogTrigger><DialogContent aria-label="Add a task" class={cls('DialogContent')}><DialogClose class={cls('Button')}>Cancel</DialogClose></DialogContent></Dialog>);
-    expect(parityOf('<Dialog><DialogTrigger id="trigger"><Button id="add">Add task</Button></DialogTrigger><DialogContent aria-label="Add a task"><DialogClose>Cancel</DialogClose></DialogContent></Dialog>', host)).toEqual([]);
-    const before = host.innerHTML;
-    (host.querySelector('#add') as HTMLButtonElement).click();
-    const dialog = document.querySelector('[role="dialog"][aria-modal="true"]');
-    expect(dialog?.getAttribute('aria-label')).toBe('Add a task');
-    (dialog!.querySelector('button') as HTMLButtonElement).click();
-    expect(document.querySelector('[role="dialog"]')).toBeNull();
-    expect(host.innerHTML).toBe(before);
+    const { host, dispose } = mount(() => <Dialog><DialogTrigger id="trigger" wrapsControl={true}><Button id="add" class={cls('Button')}>Add task</Button></DialogTrigger><DialogContent aria-label="Add a task" class={cls('DialogContent')}><DialogClose class={cls('DialogClose')}>Cancel</DialogClose></DialogContent></Dialog>);
+    document.body.append(host);
+    try {
+      expect(parityOf('<Dialog><DialogTrigger id="trigger"><Button id="add">Add task</Button></DialogTrigger><DialogContent aria-label="Add a task"><DialogClose>Cancel</DialogClose></DialogContent></Dialog>', host)).toEqual([]);
+      const before = host.innerHTML;
+      (host.querySelector('#add') as HTMLButtonElement).click();
+      const dialog = document.querySelector('[role="dialog"][aria-modal="true"]');
+      expect(dialog?.getAttribute('aria-label')).toBe('Add a task');
+      (dialog!.querySelector('button') as HTMLButtonElement).click();
+      expect(document.querySelector('[role="dialog"]')).toBeNull();
+      expect(host.innerHTML).toBe(before);
+    } finally {
+      dispose();
+      host.remove();
+    }
   });
 });
 

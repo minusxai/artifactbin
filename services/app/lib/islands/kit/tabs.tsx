@@ -1,7 +1,7 @@
 /* @jsxImportSource solid-js */
 import { createContext, createEffect, createSignal, createUniqueId, splitProps, useContext, type JSX } from 'solid-js';
 
-type TabsState = { value: () => string; setValue: (value: string) => void; orientation: 'horizontal' | 'vertical'; rootId: string; triggerId: (value: string) => string; contentId: (value: string) => string };
+type TabsState = { value: () => string; setValue: (value: string) => void; orientation: 'horizontal' | 'vertical'; triggerId: (value: string) => string; contentId: (value: string) => string; registerTrigger: (value: string, id: string) => void; registerContent: (value: string, id: string) => void };
 const Context = createContext<TabsState>();
 const state = () => { const value = useContext(Context); if (!value) throw new Error('Tabs child outside Tabs'); return value; };
 
@@ -9,7 +9,15 @@ export function Tabs(props: JSX.HTMLAttributes<HTMLDivElement> & { value?: strin
   const [local, setLocal] = createSignal(props.defaultValue ?? '');
   const rootId = createUniqueId();
   const orientation = props.orientation ?? 'horizontal';
-  const ctx: TabsState = { value: () => props.value ?? local(), setValue: next => { setLocal(next); props.onValueChange?.(next); }, orientation, rootId, triggerId: value => `${rootId}-trigger-${value}`, contentId: value => `${rootId}-content-${value}` };
+  const [triggerIds, setTriggerIds] = createSignal<Record<string, string>>({});
+  const [contentIds, setContentIds] = createSignal<Record<string, string>>({});
+  const ctx: TabsState = {
+    value: () => props.value ?? local(), setValue: next => { setLocal(next); props.onValueChange?.(next); }, orientation,
+    triggerId: value => triggerIds()[value] ?? `${rootId}-trigger-${value}`,
+    contentId: value => contentIds()[value] ?? `${rootId}-content-${value}`,
+    registerTrigger: (value, id) => setTriggerIds(ids => ({ ...ids, [value]: id })),
+    registerContent: (value, id) => setContentIds(ids => ({ ...ids, [value]: id })),
+  };
   const [localProps, rest] = splitProps(props, ['value', 'defaultValue', 'orientation', 'onValueChange', 'children']);
   return <Context.Provider value={ctx}><div data-slot="tabs" data-orientation={orientation} dir="ltr" class="group/tabs flex gap-2 data-[orientation=horizontal]:flex-col" {...rest}>{localProps.children}</div></Context.Provider>;
 }
@@ -29,11 +37,13 @@ export function TabsList(props: JSX.HTMLAttributes<HTMLDivElement> & { variant?:
 }
 export function TabsTrigger(props: JSX.ButtonHTMLAttributes<HTMLButtonElement> & { value: string }) {
   const ctx = state(); const { value, onClick: _onClick, ...rest } = props;
+  if (props.id) ctx.registerTrigger(value, props.id);
   const active = () => ctx.value() === value;
   return <button type="button" role="tab" aria-selected={active()} aria-controls={ctx.contentId(value)} data-state={active() ? 'active' : 'inactive'} data-orientation={ctx.orientation} data-radix-collection-item="" data-slot="tabs-trigger" id={props.id ?? ctx.triggerId(value)} tabIndex={-1} {...rest} on:click={() => ctx.setValue(value)} />;
 }
 export function TabsContent(props: JSX.HTMLAttributes<HTMLDivElement> & { value: string; forceMount?: boolean }) {
   const ctx = state(); const { value, forceMount: _forceMount, ...rest } = props; const active = () => ctx.value() === value; let panel!: HTMLDivElement;
+  if (props.id) ctx.registerContent(value, props.id);
   createEffect(() => { if (active()) panel.setAttribute('style', 'animation-duration:0s'); else panel.removeAttribute('style'); });
   return <div ref={panel} data-state={active() ? 'active' : 'inactive'} data-orientation={ctx.orientation} role="tabpanel" aria-labelledby={ctx.triggerId(value)} data-slot="tabs-content" id={props.id ?? ctx.contentId(value)} tabIndex={0} hidden={!active()} {...rest}>{active() ? props.children : null}</div>;
 }

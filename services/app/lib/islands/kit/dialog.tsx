@@ -23,6 +23,7 @@ export function DialogClose(props: TriggerProps) {
   return <button {...rest} type="button" on:click={() => ctx.setOpen(false)}>{props.children}</button>;
 }
 export function DialogContent(props: JSX.DialogHtmlAttributes<HTMLDialogElement> & { run?: unknown; onSubmitMutation?: () => Promise<unknown>; unavailable?: JSX.Element; conflictMessage?: string }) {
+  // TODO: Portal this overlay through IslandContext.trustedPortal() when the runtime contract lands.
   const ctx = state(); let dialog!: HTMLDialogElement;
   const { run: _run, onSubmitMutation: _onSubmitMutation, unavailable: _unavailable, conflictMessage: _conflictMessage, onKeyDown: _onKeyDown, ...rest } = props;
   createEffect(() => {
@@ -30,7 +31,7 @@ export function DialogContent(props: JSX.DialogHtmlAttributes<HTMLDialogElement>
     else if (dialog.open) { if (typeof dialog.close === 'function') dialog.close(); else dialog.removeAttribute('open'); queueMicrotask(() => ctx.trigger()?.focus()); }
   });
   onCleanup(() => { if (dialog.open && typeof dialog.close === 'function') dialog.close(); });
-  return <dialog ref={dialog} aria-modal="true" tabIndex={props.tabIndex ?? -1} {...rest} on:keydown={event => {
+  return <dialog ref={dialog} role={ctx.open() ? 'dialog' : undefined} aria-modal="true" tabIndex={props.tabIndex ?? -1} {...rest} on:keydown={event => {
     if (event.key === 'Escape') { event.preventDefault(); ctx.setOpen(false); }
     if (event.key === 'Tab') {
       const stops = [...dialog.querySelectorAll<HTMLElement>('button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), a[href], [tabindex="0"]')].filter(el => !el.closest('[hidden], [inert], fieldset[disabled]'));
