@@ -184,4 +184,7 @@ export const NOTIFICATION_QUERY_LIMITS = {
   messageCodePoints: 500,
   resultBytes: 1024 * 1024,
   timeoutMs: 5000,
+  sourceBytes: 16 * 1024 * 1024,
+  sourceRows: 100_000,
+  loadingTimeoutMs: 5000,
 } as const;
