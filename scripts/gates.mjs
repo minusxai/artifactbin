@@ -26,7 +26,7 @@ import net from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { GATE_SPECS, checkManifest, specFor, browsersFor, shardWeight } from './gates.manifest.mjs';
+import { GATE_SPECS, checkManifest, gateNamesOnDisk, specFor, browsersFor, shardWeight } from './gates.manifest.mjs';
 import { resolveServers, runSecret } from './gates.servers.mjs';
 import { parseShard, shardOf } from './gates.shard.mjs';
 import { loadDotEnv } from './lib/dev-env.mjs';
@@ -55,10 +55,7 @@ try {
 }
 
 /** Every gate on disk, by short name (`gate-visibility.mjs` → `visibility`). */
-const GATES = readdirSync(HERE)
-  .filter((f) => f.startsWith('gate-') && f.endsWith('.mjs'))
-  .sort()
-  .map((file) => ({ name: file.slice('gate-'.length, -'.mjs'.length), file }));
+const GATES = gateNamesOnDisk(readdirSync(HERE)).map((name) => ({ name, file: `gate-${name}.mjs` }));
 
 try {
   checkManifest(GATES.map((gate) => gate.name), GATE_SPECS);
