@@ -10,6 +10,7 @@ import { readFileSync } from 'node:fs';
 import { defineConfig, type Plugin } from 'vite';
 import { describePrecompression, precompressTree } from './scripts/lib/precompress.mjs';
 
+const webRoot = path.resolve(import.meta.dirname, 'services/app/web');
 const outDir = path.resolve(import.meta.dirname, 'services/app/dist/web');
 
 /**
@@ -47,7 +48,7 @@ const appFontFaces = (): Plugin => ({
 });
 
 export default defineConfig({
-  root: path.resolve(import.meta.dirname, 'services/app/web'),
+  root: webRoot,
   plugins: [appFontFaces(), react(), tailwindcss(), precompressAssets()],
   resolve: {
     alias: [
@@ -60,8 +61,16 @@ export default defineConfig({
   },
   build: {
     outDir, emptyOutDir: true, sourcemap: false, manifest: true,
-    // The shell's /fonts files are the app server's (appFontFaces above), never Vite assets.
-    rolldownOptions: { external: [/^\/fonts\//] },
+    rolldownOptions: {
+      input: {
+        index: path.join(webRoot, 'index.html'),
+        // The compiled reader page's loader (web/spa-idle): an entry of its own, so the server names
+        // it from the manifest (`spa-idle.ts`) and the page loads the app only when it is wanted.
+        'spa-idle': path.join(webRoot, 'spa-idle.ts'),
+      },
+      // The shell's /fonts files are the app server's (appFontFaces above), never Vite assets.
+      external: [/^\/fonts\//],
+    },
   },
   server: { middlewareMode: true },
   appType: 'custom',

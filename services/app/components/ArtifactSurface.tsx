@@ -64,6 +64,9 @@ import { formatFileSize } from '@/lib/file-display';
 import { resolveStoryMode } from '@/lib/data/story/story-themes';
 import type { StoryThemeName } from '@/lib/validation/story-theme-names';
 import type { StoryIslandDataflow } from '@/lib/story-runtime/contract';
+import { IslandStory } from '@/components/IslandStory';
+import { initialDocumentStory, initialIslandDocument, initialStoryIsCompiled } from '@/web/initial-story';
+import { takeChromeIntent } from '@/web/idle-boot';
 
 // Dataset controls are a format-specific boundary. Text readers must not
 // preload their query/editor dependencies through the common artifact shell.
@@ -324,6 +327,20 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
    * listing and web/pages/Artifact hands that to FolderPage.
    */
   const isDocumentFormat = format === 'markup';
+  /*
+   * THE COMPILED PAGE'S DOCUMENT (docs/phase2-architecture.md §7): the served story root with its
+   * islands running, adopted AS IT IS (components/IslandStory) — never hydrated, never drawn again.
+   * Read once, by the surface the page was served for (web/initial-story clears it on any other
+   * route). The interpreter (InlineStoryRuntime) takes over, for good, only when the document must
+   * become something the islands cannot: an editor's draft, or a newer version.
+   */
+  const [servedCompiled] = useState(initialStoryIsCompiled);
+  const [compiled] = useState(() => {
+    const story = servedCompiled && isDocumentFormat && !props.captureKey && props.runtime ? initialDocumentStory() : null;
+    return story ? { story, islands: initialIslandDocument() } : null;
+  });
+  const [interpreting, setInterpreting] = useState(!compiled);
+  const handOver = useCallback(() => setInterpreting(true), []);
 
   const intentDone = useRef(false);
   useEffect(() => {
@@ -502,6 +519,12 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
   // Signal changes update this document's store and route, never its initial
   // seed. Only a new artifact identity receives a new runtime and URL seed.
   const initialRuntimeVersion = useMemo(() => version, [id]);
+  // Edit mode or a newer version: the islands give way to the interpreter (a render-time adjustment, so no frame shows both).
+  if (!interpreting && (editing || !!live?.nodes || version > initialRuntimeVersion)) setInterpreting(true);
+  const islandsLive = !!compiled && !interpreting && !!props.runtime;
+  // Edit mode begins: the islands are unmounted (`setMode('edit')`) before IslandStory disposes them
+  // (a microtask after this commit) and the interpreter the editor drives is already in their place.
+  useLayoutEffect(() => { if (editing) compiled?.islands?.setMode('edit'); }, [editing, compiled]);
   const needsParse = isDocumentFormat && !props.runtime;
   const { module: parser, failed: parseFailed, retry: retryParse } = useOnDemand(updatePartsFeature, needsParse);
   const seedReady = !needsParse || !!parser;
@@ -898,6 +921,29 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
     </div>
   );
 
+  /** What the reader chrome's controls do (components/InlineReaderChrome asks; this page performs). */
+  const onChromeAction = (action: string) => {
+    if (action === 'like') void toggleLike();
+    else if (action === 'follow') void toggleFollow();
+    else if (action === 'membership') joinArtifact();
+    else if (action === 'fork') setForkAsked(true);
+    else if (action === 'edit' && canEdit) { if (editing) void finishEdit(); else enterEdit(); }
+    else if (action === 'comment') { if (canAnnotate) setRailOpen(value => !value); else void navigate(loginHref(window.location, 'comment')); }
+    else if (action === 'controls' || action === 'menu') requestPageChrome(action);
+  };
+  /*
+   * A control of the SERVED chrome pressed before the app was here (web/idle-boot): performed once,
+   * now that this page's chrome has replaced it. Share and notifications are the chrome's own.
+   */
+  useEffect(() => {
+    if (!compiled) return;
+    const intent = takeChromeIntent();
+    if (!intent) return;
+    if (intent === 'share') { if (owner) setSharingOpen(true); }
+    else if (intent === 'notifications') requestPageChrome('notifications');
+    else onChromeAction(intent);
+  }, []);
+
   /** A document is full-bleed. Reading chrome floats over its safe corners;
    * only the contextual editing toolbar reserves any document space. The
    * alternative below is the DATA-TIER view. */
@@ -905,15 +951,7 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
     return (
       <ArtifactBackendProvider backend={backend}>
         <TrustedUi overlay layer="navigation">
-        <InlineReaderChrome onIntent={warmFor} onShare={owner ? () => setSharingOpen(true) : undefined} pinned={editing || railOpen} editing={editing} input={{artifactId:id, ground:readerMode, editing, membership:hasDataMutations?membership.status:undefined, share:owner, archived, visibility:sharingVerdict?.id === id ? sharingVerdict.visibility : props.visibility, hasInvitedUsers:sharingVerdict?.id === id ? sharingVerdict.hasInvitedUsers : props.hasInvitedUsers, title:shownTitle, forkBusy:false, author:props.author ?? null, viewer:readerFace, edit:canEdit, ownerBreadcrumb:owner, reactions:{like:{...likeRef.current,href:'#'},follow:followRef.current ? {...followRef.current,href:'#'} : null,comment:{count:openAnnotationCount,href:'#'}}}} onAction={action => {
-          if (action === 'like') void toggleLike();
-          else if (action === 'follow') void toggleFollow();
-          else if (action === 'membership') joinArtifact();
-          else if (action === 'fork') setForkAsked(true);
-          else if (action === 'edit' && canEdit) { if (editing) void finishEdit(); else enterEdit(); }
-          else if (action === 'comment') { if (canAnnotate) setRailOpen(value => !value); else void navigate(loginHref(window.location, 'comment')); }
-          else if (action === 'controls' || action === 'menu') requestPageChrome(action);
-        }} />
+        <InlineReaderChrome onIntent={warmFor} onShare={owner ? () => setSharingOpen(true) : undefined} pinned={editing || railOpen} editing={editing} input={{artifactId:id, ground:readerMode, editing, membership:hasDataMutations?membership.status:undefined, share:owner, archived, visibility:sharingVerdict?.id === id ? sharingVerdict.visibility : props.visibility, hasInvitedUsers:sharingVerdict?.id === id ? sharingVerdict.hasInvitedUsers : props.hasInvitedUsers, title:shownTitle, forkBusy:false, author:props.author ?? null, viewer:readerFace, edit:canEdit, ownerBreadcrumb:owner, reactions:{like:{...likeRef.current,href:'#'},follow:followRef.current ? {...followRef.current,href:'#'} : null,comment:{count:openAnnotationCount,href:'#'}}}} onAction={onChromeAction} />
         {membership.error && <div role="alert" className="fixed left-4 top-16 z-50 rounded-lg border border-edge bg-surface p-3 text-sm text-danger">{membership.error}</div>}
         {sharingOpen && <ShareLink version={live?.version ?? version} onSharingChange={onSharingChange} artifactId={id} title={shownTitle} owner={owner} editable={canEdit} format={format} datasetKind={shownCatalog?.kind} variant="dialog" className="" onClose={() => setSharingOpen(false)} onSocialPreview={canPreview && format === 'markup' ? () => { setSharingOpen(false); setSocialPreviewOpen(true); } : undefined} />}
         {editing ? (
@@ -972,7 +1010,13 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
           )}
           {showStarter && <TrustedUi><StarterInstructions id={id} /></TrustedUi>}
           <div hidden={showStarter}>
-          {seedReady ? <InlineStoryRuntime
+          {islandsLive ? <IslandStory
+            story={compiled.story}
+            islands={compiled.islands}
+            nodes={props.runtime!.data.nodes}
+            onController={onController}
+            onStale={handOver}
+          /> : seedReady ? <InlineStoryRuntime
             key={id}
             data={initialRuntimeData}
             transportFactory={transportFactory}
@@ -980,7 +1024,8 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
             authorScript={props.runtime?.authorScript}
             rawSheets={needsEditorPart ? rawSheets : undefined}
             onController={onController}
-            hydrateInitialStory
+            // A compiled story is never React's to hydrate: the interpreter draws afresh (and clears it, web/initial-story).
+            hydrateInitialStory={!servedCompiled}
           /> : parseFailed && <TrustedUi><LoadFailure what="the document" onRetry={retryParse} className="p-4" /></TrustedUi>}
           </div>
         </div>
