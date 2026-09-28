@@ -1,3 +1,35 @@
 /* @jsxImportSource solid-js */
-// Stub so the island build has an entry for @mx/kit/files: w2-kit-controls replaces it.
-export {};
+import { For, Show } from 'solid-js';
+import { refName, type Row } from '@/lib/story/dataflow';
+import { sparklineSvg } from '@/lib/viz/spark-markup';
+import { useIsland } from '../context';
+
+type Props = { data?: string; rows?: Row[]; variant?: string; capture?: boolean; className?: string; [key: string]: unknown };
+const text = (v: unknown) => typeof v === 'string' && v ? v : '';
+const count = (v: unknown) => typeof v === 'number' && Number.isFinite(v) ? v : null;
+const join = (...v: (string | false | undefined)[]) => v.filter(Boolean).join(' ');
+const GRID = { icons: 'grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4', tiles: 'grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3' };
+export function Files(p: Props) {
+  const island = useIsland(); const { data,rows,variant,capture,className,...rest } = p;
+  const density = () => variant === 'tiles' ? 'tiles' : 'icons';
+  const items = () => rows ?? (data && refName(data) ? island.table(refName(data)!)?.rows : undefined) ?? [];
+  return <section data-slot="files" class={join('my-6',className)} {...rest}>
+    <ul aria-label="Files" data-slot="files-list" data-variant={density()} class={join('m-0 list-none p-0',items().length > 0 && GRID[density()])}>
+      <For each={items()}>{row => {
+        const id = text(row.id); const name = text(row.title) || text(row.name) || id || 'Untitled'; const url = text(row.url) || (id ? `/a/${id}` : '');
+        const format = text(row.format) || 'markup'; const thumb = capture ? '' : text(row.thumbnail); const views = count(row.views); const spark = text(row.sparkline); const inside = format === 'folder' ? count(row.count) : null;
+        return <li data-slot="files-item" class="m-0 p-0"><a href={url || undefined} aria-label={`Open ${name}`} data-format={format}
+          class={join('group flex flex-col gap-2 rounded-md border border-border bg-card p-2 text-card-foreground no-underline transition-colors hover:border-muted-foreground/40',density() === 'tiles' && 'gap-3 p-3')}>
+          <span class="flex aspect-[40/21] w-full items-center justify-center overflow-hidden rounded-sm bg-muted">
+            <Show when={thumb} fallback={<span data-glyph={format} class="flex items-center justify-center opacity-70" />}>
+              <img src={thumb} alt="" loading="lazy" decoding="async" class="h-full w-full object-cover" />
+            </Show></span>
+          <span data-slot="files-title" class={join('truncate font-medium',density() === 'icons' && 'text-sm')}>{name}</span>
+          <Show when={inside !== null}><span data-slot="files-count" class="text-xs text-muted-foreground">{inside} item{inside === 1 ? '' : 's'}</span></Show>
+          <Show when={views !== null}><span aria-label={`${views} views`} data-slot="files-views" class="flex min-w-0 items-center gap-2 text-xs text-muted-foreground"><span class="shrink-0 tabular-nums">{views} view{views === 1 ? '' : 's'}</span>
+            <Show when={spark}><span aria-hidden="true" class="flex h-4 min-w-0 flex-1 items-center [&>svg]:h-full [&>svg]:w-full" innerHTML={sparklineSvg(spark)} /></Show>
+          </span></Show></a></li>;
+      }}</For>
+    </ul>
+  </section>;
+}

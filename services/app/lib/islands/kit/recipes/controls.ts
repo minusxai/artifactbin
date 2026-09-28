@@ -1,4 +1,7 @@
-// The controls family's class recipes (component tag → props → class string). Stub: w2-kit-controls fills it.
+/** Root shell shared by the seven themed controls. */
+import { cn } from './cn';
 import type { Recipe } from '.';
-
-export const RECIPES: Record<string, Recipe> = {};
+const shell: Recipe = p => cn('mx-control relative inline-flex flex-col gap-1.5 align-top', p.className as string | undefined);
+export const RECIPES: Record<string, Recipe> = {
+  Input: shell, Textarea: shell, Select: shell, Slider: shell, DatePicker: shell, Segmented: shell, Switch: shell,
+};
