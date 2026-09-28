@@ -24,6 +24,8 @@ import { applyAnchor } from '@/lib/story-runtime/anchor';
 import { holdAnchor } from '@/lib/story-runtime/anchor-restore';
 import { readerMode, takeReloadAnchor } from '@/lib/story-runtime/reader-mode';
 import { chromeAfterSample, type ChromeState } from '@/lib/story-runtime/reader-chrome-policy';
+import { wireOutline } from '@/lib/story-runtime/outline-nav';
+import { markScrollableTables } from '@/lib/story-runtime/table-scroll';
 import { startIslandLive } from './live';
 
 const STORY_ROOT_SELECTOR = '[data-mx-inline-story]';
@@ -64,9 +66,10 @@ export function startPage(doc: Document = document, win: Window = window): () =>
       el?.classList.toggle('light', mode !== 'dark');
     }
   }
-  if (framed) return () => {};
-
   const stops: Array<() => void> = [];
+  // These document affordances also run inside a frame, like the legacy page entry.
+  stops.push(markScrollableTables(doc), wireOutline(doc));
+  if (framed) return () => { for (const stop of stops.splice(0)) stop(); };
   const id = doc.body?.getAttribute('data-mx-live-id');
   const editId = doc.body?.getAttribute('data-mx-live-edit');
   const hasModule = !!doc.getElementById(ISLAND_DATA_ID);

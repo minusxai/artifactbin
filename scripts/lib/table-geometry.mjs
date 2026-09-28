@@ -1,6 +1,7 @@
 import {fixtureFetch as fetch} from './fixture-http.mjs';
 /** Short-table fit, height cap and virtualized tail, measured in Chromium. */
 import { startDocument } from './start-doc.mjs';
+import { readerUrl } from './gate-reader.mjs';
 
 export async function checkTableGeometry(BASE, browser, check) {
   const CAP = 420;
@@ -37,7 +38,7 @@ export async function checkTableGeometry(BASE, browser, check) {
   page.on('pageerror', (e) => pageErrors.push(e.message));
   // A public data document is served TOP-LEVEL to anyone but its owner, so the
   // boxes are measured on the main frame — no iframe to reach through.
-  await page.goto(`${BASE}/a/${start.id}`, { waitUntil: 'load' });
+  await page.goto(readerUrl(`${BASE}/a/${start.id}`), { waitUntil: 'load' });
   await page.waitForSelector('#long [data-slot="data-table"]', { timeout: 20000 });
   // The rows arrive with the page (lib/story/served-results.server) in the static regime; what is
   // measured below is the VIRTUAL one, which the runtime switches the long table to once it owns it.

@@ -33,13 +33,16 @@ import { STORY_UI_COMPONENTS } from '@/lib/story-ui/registry';
 import { STORY_SVG_TAGS } from '@/lib/story-ui/component-names';
 import { gridCols, gridRowHeight, gridItemRect, gridRows } from '@/lib/story-ui/grid-layout';
 import { IconGlyphProvider } from '@/components/kit/icon';
+import { shellRest } from '@/components/kit/controls';
+import { parseRowRef } from '@/lib/story/row-scope';
 import { isReactiveExpression } from '@/lib/jsx/reactive';
 import type { JsxElement, JsxNode } from '@/lib/jsx';
 import { REF_ATTRS, carriesRef, refName, type Scalar } from '@/lib/story/dataflow';
 import { resolveRefProps } from '@/lib/story/ref-data';
 import { discoverSlides, MIN_SLIDES_FOR_RAIL } from '@/lib/story-runtime/slides';
+import { discoverOutline, hasOutline } from '@/lib/story-runtime/outline';
 import { createPreviewIdentityAllocator } from '@/lib/story-runtime/preview-identity';
-import { ASSETS_ORIGIN, PUBLIC_BASE_URL } from '@/lib/config';
+import { PUBLIC_BASE_URL } from '@/lib/config';
 import { compileManagedIframe } from '@/lib/story/managed-iframe';
 import { RECIPES, cn } from '@/lib/islands/kit/recipes';
 import { peopleClasses } from '@/lib/islands/kit/recipes/people';
@@ -118,9 +121,9 @@ export const KIT: Readonly<Record<string, KitMeta>> = {
   // A person's class depends on whom it resolves to in the browser (a guest's fallback, a card): every state's class
   // is evaluated here (recipes/people peopleClasses) and handed to the port as `classes`.
   User: { mod: 'people', island: true, api: ['userId', 'fallback', 'avatar', 'link', 'classes'] }, UserImage: { mod: 'people', island: true, api: ['userId', 'fallback', 'size', 'decorative', 'classes'] }, UserHandle: { mod: 'people', island: true, api: ['userId', 'fallback', 'link', 'classes'] }, SignIn: { mod: 'people', island: true },
-  // Embeds with behaviour in a lazy chunk (lib/islands/kit/embed): today's managed frame and map.
-  Iframe: { mod: 'data', island: true, api: ['title', 'height', 'compiled', 'assetsOrigin'], dom: 'box', noChildren: true },
-  DeckGL: { mod: 'data', island: true, api: ['data', 'layers', 'basemap', 'initialViewState', 'tooltip', 'legend', 'title', 'height', 'colorMode'], dom: 'box', grid: true },
+  // Embeds with behaviour in a lazy chunk (lib/islands/kit/embed, their own family): today's managed frame and map.
+  Iframe: { mod: 'embed', island: true, api: ['title', 'height', 'compiled'], dom: 'box', noChildren: true },
+  DeckGL: { mod: 'embed', island: true, api: ['data', 'layers', 'basemap', 'initialViewState', 'tooltip', 'legend', 'title', 'height', 'colorMode'], dom: 'box', grid: true },
   Dialog: { mod: 'dialog', island: true, api: ['defaultOpen'] }, DialogTrigger: { mod: 'dialog', api: ['wrapsControl', 'disabled'] }, DialogClose: { mod: 'dialog', api: ['wrapsControl', 'disabled'] }, DialogContent: { mod: 'dialog', api: ['run', 'args', 'stacked'] },
 };
 /** The rail's miniature stubs its embeds (StoryRuntimeApp PREVIEW_REGISTRY). */
@@ -137,6 +140,19 @@ const PARTIAL: ReadonlySet<string> = new Set<string>([]);
 const INERT: ReadonlySet<string> = new Set(['Helmet', 'Value', 'Query', 'Import', 'Mutation', 'Column']);
 /** Registered components with behaviour: always an island root when ported (and the partial ones, which the browser would run). */
 const ISLAND_TAGS: ReadonlySet<string> = new Set([...Object.keys(KIT).filter((tag) => KIT[tag]!.island), ...PARTIAL]);
+/**
+ * The editing cell's pieces (lib/islands/kit/cells, `@mx/kit/cells`), imported by name like a kit tag: the
+ * control, and the cell scope's attribute resolver every element in a column's content uses.
+ */
+const CELL_EXPORTS: ReadonlySet<string> = new Set(['CellControl', 'cellAttrs']);
+/** The tags today's editing cell draws (StoryRuntimeApp RuntimeCellControl); another tag with `run` in a cell draws nothing. */
+const CELL_CONTROLS: ReadonlySet<string> = new Set(['Select', 'DatePicker', 'input', 'textarea', 'select']);
+/** Today's native editing cell's classes (RuntimeCellControl), before the author's. */
+const NATIVE_CELL = 'w-full min-w-0 rounded-md border border-transparent bg-transparent px-2 py-1 text-sm outline-none transition-colors hover:border-border focus:border-ring focus:ring-2 focus:ring-ring/20 disabled:opacity-50';
+/** What the editing cell reads of its authored props at run time (the rest are its element's attributes). */
+const CELL_API = ['value', 'label', 'aria-label', 'placeholder', 'options', 'multiple', 'allowCreate', 'valueFormat', 'nullable', 'exclude', 'min', 'max', 'type', 'args', 'disabled'];
+/** A column's content that draws something (components/kit/data-table: whitespace alone is no template). */
+const hasContent = (nodes: JsxNode[]): boolean => nodes.some((n) => n.type !== 'text' || !!n.value.trim());
 /** A rail miniature served inert, put in place by the deck behaviour (lib/islands/deck RAIL_THUMB_ATTR, the same name). */
 const RAIL_THUMB_ATTR = 'data-mx-thumb';
 /** The skeleton's placeholder for a static subtree's HTML (bundle.server STATIC_SLOT, the same name). */
@@ -242,6 +258,8 @@ interface Ctx {
   scope?: string;
   svg?: boolean;
   grid?: { cols: number; flow: boolean };
+  /** Inside a DataTable column's content: `scope` names the row's CellScope, and attributes resolve through `cellAttrs`. */
+  cell?: boolean;
   /** The deck rail's thumbnail decoration. */
   preview?: Decorate;
   /** The island being emitted, for its kit accounting. */
@@ -416,6 +434,14 @@ export function generate(input: GenerateInput): Generated {
     const children = (inner: Ctx = ctx): string => node.children.map((c, i) => emit(c, `${path}.${i}`, mode, inner)).join('');
     if (node.tag === 'For') return emitFor(node, path, ctx);
     if (node.tag === 'Grid' || node.tag === 'GridItem') return emitGrid(node, path, mode, ctx);
+    // A control with `run` in a column's content is an editing cell (interpreter renderNode → cellControl).
+    const run = node.attributes.find((a) => a.name === 'run');
+    if (ctx.cell && node.tag !== 'Button' && run?.value.static && typeof run.value.json === 'string' && refName(run.value.json)) {
+      const cellTag = node.isComponent ? node.tag : node.tag.toLowerCase();
+      if (CELL_CONTROLS.has(cellTag)) return emitCellControl(node, cellTag, path, mode, ctx);
+      if (!node.isComponent) return '';
+    }
+    if (ctx.preview && PREVIEW_EMBEDS[node.tag]) return `<div${attrsJsx(domAttrs('div', { style: PREVIEW_STYLE }))}>{${lit(PREVIEW_EMBEDS[node.tag])}}</div>`;
     if (node.isComponent) {
       const meta = KIT[node.tag];
       // A STATIC registered component: today's React kit renders it AT COMPILE TIME (parity by
@@ -434,11 +460,17 @@ export function generate(input: GenerateInput): Generated {
       // The runtime registry hands Mermaid the document's colour mode (StoryRuntimeApp RUNTIME_REGISTRY).
       if (node.tag === 'Mermaid') props.colorMode = input.colorMode ?? 'light';
       // <Column> children ARE the column spec (interpreter DataTable templates → parseColumnSpecs(templates.map(t => t.props))).
+      let cellsJsx = '';
       if (node.tag === 'DataTable') {
-        const cols = node.children.flatMap((c, i) => (isElement(c) && c.tag === 'Column' ? [rawBuildProps(c.attributes, true, 'Column', `${path}.${i}`, undefined, {})] : []));
+        const columns = node.children.flatMap((c, i) => (isElement(c) && c.tag === 'Column' ? [[c, i] as const] : []));
+        const cols = columns.map(([c, i]) => rawBuildProps(c.attributes, true, 'Column', `${path}.${i}`, undefined, {}));
         if (cols.length) {
           props.columns = cols.map(({ [AST]: _ast, ...rest }) => rest);
-          props.templates = cols.map((c) => ({ col: c.col, id: typeof c.id === 'string' ? c.id : undefined, path: c[AST] }));
+          props.templates = cols.map((c, k) => {
+            const ids = [...templateIds(columns[k]![0].children)];
+            return { col: c.col, id: typeof c.id === 'string' ? c.id : undefined, path: c[AST], ...(ids.length ? { ids } : {}) };
+          });
+          cellsJsx = emitCells(columns, path, ctx);
         }
       }
       if (node.tag === 'Files') props.glyphs = input.glyphs ?? {};
@@ -446,7 +478,6 @@ export function generate(input: GenerateInput): Generated {
         // The interpreter's rules (renderNode): refused inside a row, and invalid content renders nothing.
         if (ctx.row) return `<div role="alert">{${lit('DataTable and Iframe must be outside For templates')}}</div>`;
         props.compiled = managedFrameOf(node);
-        if (ASSETS_ORIGIN) props.assetsOrigin = ASSETS_ORIGIN;
       }
       // The runtime hands the map the document's colour mode (StoryRuntimeApp RUNTIME_REGISTRY DeckGL).
       if (node.tag === 'DeckGL') props.colorMode = input.colorMode ?? 'light';
@@ -472,8 +503,8 @@ export function generate(input: GenerateInput): Generated {
       const tag = safeTag(node.tag);
       // A row action writes with its row (interpreter rowAction → StoryRuntimeApp RuntimeRowAction).
       const rowJsx = node.tag === 'Button' && (api.run !== undefined || api.set !== undefined) ? ` row={${ctx.row}} rowScope={${ctx.scope}}` : '';
-      if (ctx.row) return `<${tag}${apiJsx}${rowJsx}${clsJsx} {...rt.rowAttrs(${json(Object.fromEntries(attrs))}, ${ctx.row}, ${ctx.scope})}>${children()}</${tag}>`;
-      return `<${tag}${apiJsx}${clsJsx}${attrsJsx(attrs)}>${meta.noChildren ? '' : children()}</${tag}>`;
+      if (ctx.row) return `<${tag}${apiJsx}${rowJsx}${clsJsx} {...${rowAttrsFn(mode, ctx)}(${json(Object.fromEntries(attrs))}, ${ctx.row}, ${ctx.scope})}>${children()}</${tag}>`;
+      return `<${tag}${apiJsx}${cellsJsx}${clsJsx}${attrsJsx(attrs)}>${meta.noChildren ? '' : children()}</${tag}>`;
     }
     const lower = node.tag.toLowerCase();
     const tag = safeTag(SVG_TAG_CASE[lower] ?? lower);
@@ -491,9 +522,60 @@ export function generate(input: GenerateInput): Generated {
     if (patch) props = { ...props, ...patch };
     const inner = lower === 'svg' ? { ...ctx, svg: true } : ctx;
     const attrs = domAttrs(tag, props);
-    const open = ctx.row ? `<${tag} {...rt.rowAttrs(${json(Object.fromEntries(attrs))}, ${ctx.row}, ${ctx.scope})}>` : `<${tag}${attrsJsx(attrs)}>`;
+    const open = ctx.row ? `<${tag} {...${rowAttrsFn(mode, ctx)}(${json(Object.fromEntries(attrs))}, ${ctx.row}, ${ctx.scope})}>` : `<${tag}${attrsJsx(attrs)}>`;
     if (VOID.test(lower)) return open.replace(/>$/, ' />');
     return `${open}${children(inner)}</${tag}>`;
+  }
+
+  /** An element's attributes in a row: a `<For>` row's through rt, a table cell's through the cell scope. */
+  function rowAttrsFn(mode: Mode, ctx: Ctx): string {
+    if (!ctx.cell) return 'rt.rowAttrs';
+    useKit('cellAttrs', mode, ctx);
+    return 'cellAttrs';
+  }
+
+  /**
+   * A DataTable's column content (interpreter DataTable renderCell): one function per `<Column>`, aligned with
+   * `templates`, a hole where the column draws nothing; each renders the content for one row and its CellScope.
+   */
+  function emitCells(columns: ReadonlyArray<readonly [JsxElement, number]>, path: string, ctx: Ctx): string {
+    const fns = columns.map(([column, i]) => {
+      if (!hasContent(column.children)) return 'undefined';
+      const cpath = `${path}.${i}`;
+      const suffix = cpath.replace(/\./g, '_');
+      const inner: Ctx = { row: `row${suffix}`, scope: `cell${suffix}`, cell: true, svg: false, island: ctx.island };
+      return `(${inner.row}, ${inner.scope}) => <>${column.children.map((c, k) => emit(c, `${cpath}.${k}`, 'island', inner)).join('')}</>`;
+    });
+    return fns.some((f) => f !== 'undefined') ? ` cells={[${fns.join(', ')}]}` : '';
+  }
+
+  /**
+   * Today's editing cell (StoryRuntimeApp RuntimeCellControl). What differs per row — the row's values, the
+   * scope, the draft, the write check — is resolved by `CellControl`; everything authored is decided here, as
+   * today's React renders it: the element's attributes serialised by React's server renderer, and its class
+   * merged by the kit's merger (order included).
+   */
+  function emitCellControl(node: JsxElement, tag: string, path: string, mode: Mode, ctx: Ctx): string {
+    useKit('CellControl', mode, ctx);
+    const props = rawBuildProps(node.attributes, node.isComponent, node.tag, path, undefined, {});
+    // In a row the interpreter keeps a field's controlled name (rawBuildProps with a row): undo the static rename.
+    if ('defaultValue' in props) { props.value = props.defaultValue; delete props.defaultValue; }
+    const { run, value: _value, 'aria-label': _label, disabled: _disabled, exclude: _exclude, className, ...rest } = props;
+    const valueAttr = node.attributes.find((a) => a.name === 'value');
+    const field = valueAttr?.value.static ? parseRowRef(valueAttr.value.json) : null;
+    const api = Object.fromEntries(CELL_API.filter((k) => props[k] !== undefined).map((k) => [k, props[k]]));
+    const author = typeof className === 'string' ? className : undefined;
+    let attrs: Attr[];
+    let cls: string;
+    if (tag === 'Select' || tag === 'DatePicker') {
+      attrs = domAttrs('div', shellRest(rest));
+      cls = cn('mx-control relative inline-flex flex-col gap-1.5 align-top', cn('flex w-full min-w-0', author));
+    } else {
+      attrs = domAttrs(tag, rest);
+      cls = cn(NATIVE_CELL, tag === 'textarea' ? 'min-h-8 resize-y' : 'h-8', props.type === 'number' && 'text-right tabular-nums', author);
+    }
+    const children = node.children.map((c, i) => emit(c, `${path}.${i}`, mode, ctx)).join('');
+    return `<CellControl tag={${lit(tag)}} run={${lit(refName(run))}}${field ? ` field={${lit(field)}}` : ''} p={${json(api)}} attrs={${json(Object.fromEntries(attrs.filter(([n]) => n !== 'class')))}} cls={${lit(cls)}} path={${lit(path)}} row={${ctx.row}} cell={${ctx.scope}}>${children}</CellControl>`;
   }
 
   /** Grid/GridItem are compile-time macros: layout arithmetic done here, plain HTML out (components/kit/grid). */
@@ -571,7 +653,7 @@ export function generate(input: GenerateInput): Generated {
 
   const kitImports = (set: Set<string>): string => {
     const byMod: Record<string, string[]> = {};
-    for (const tag of set) (byMod[tag === 'BoundNative' ? 'controls' : KIT[tag]!.mod] ??= []).push(tag);
+    for (const tag of set) (byMod[tag === 'BoundNative' ? 'controls' : CELL_EXPORTS.has(tag) ? 'cells' : KIT[tag]!.mod] ??= []).push(tag);
     return Object.entries(byMod).sort(([a], [b]) => a.localeCompare(b)).map(([mod, tags]) => `import { ${tags.sort().map(safeProp).join(', ')} } from ${lit(`@mx/kit/${safeTag(mod)}`)};\n`).join('');
   };
   const dataConsts = data.map((text, i) => `const $d${i} = JSON.parse(${lit(text)});\n`).join('');
@@ -579,7 +661,7 @@ export function generate(input: GenerateInput): Generated {
   const skeleton = `${kitImports(kitUsed.skeleton)}${dataConsts}export default function Skeleton() { return ${root}; }\n`;
   const islandsSource = `import * as rt from '@mx/rt';\n${kitImports(kitUsed.islands)}${dataConsts}`
     + islands.map((isl) => `export function I${isl.id}() { return ${isl.source}; }\n`).join('')
-    + `export const ISLANDS = [${islands.map((isl) => `[${lit(`s${isl.id}-`)}, I${isl.id}]`).join(', ')}];\n`;
+    + `export const ISLANDS = [${islands.map((isl) => `[${lit(`s${isl.id}-`)}, I${isl.id}, ${lit(islandKey(isl.source, data))}]`).join(', ')}];\n`;
   return {
     skeleton,
     islands: islandsSource,
@@ -591,6 +673,25 @@ export function generate(input: GenerateInput): Generated {
     behaviors: deck ? [DECK_BEHAVIOR] : [],
     statics,
   };
+}
+
+/**
+ * AN ISLAND'S KEY: a digest of its definition — its generated source with every hoisted constant
+ * (`$d<n>`, numbered by position in the whole module) replaced by the data it names — so two versions'
+ * islands have the same key exactly when they are the same island, wherever the rest of the document
+ * moved. The live morph (lib/islands/morph/engine) keeps a running island whose key a new version
+ * carries again. Its AST paths are part of the definition: an island that moved is drawn afresh.
+ * FNV-1a over two lanes (64 bits, hex): an identity, not a secret.
+ */
+export function islandKey(source: string, data: readonly string[]): string {
+  const text = source.replace(/\$d(\d+)\b/g, (whole, n: string) => data[Number(n)] ?? whole);
+  let a = 0x811c9dc5, b = 0xcbf29ce4;
+  for (let i = 0; i < text.length; i++) {
+    const c = text.charCodeAt(i);
+    a = Math.imul(a ^ c, 0x01000193) >>> 0;
+    b = Math.imul(b ^ c, 0x01000197) >>> 0;
+  }
+  return a.toString(16).padStart(8, '0') + b.toString(16).padStart(8, '0');
 }
 
 /* ────────────────────────────────────────────────────────────────────────────
@@ -626,8 +727,11 @@ export async function compilePage(input: CompileInput, build: CompilerBuild): Pr
   // every query that reads one is `viewer` — never a private answer in a guest snapshot.
   const plan = input.flow ? planOf(input.flow, input.access ?? { datasets: {} }) : null;
   const links = input.nodes.length ? linkHintsOf(input.nodes, { origins: deploymentOrigins() }) : EMPTY_LINK_HINTS;
+  const outlinePlan = input.template === 'plan';
+  const outline = input.chrome && (input.template === 'editorial' || outlinePlan) && hasOutline(input.nodes)
+    ? discoverOutline(input.nodes) : [];
   const base = {
-    build: build.id, islands: generated.islandRefs, behaviors: generated.behaviors, plan, links,
+    build: build.id, islands: generated.islandRefs, behaviors: generated.behaviors, plan, links, outline, outlinePlan,
     kit: generated.kit, reactStatic: generated.reactStatic, unported: generated.unported, partial: generated.partial,
     // Data for the page's JSON island, never module code (contract CompiledPage.authorScript).
     authorScript: input.authorScript || null,
