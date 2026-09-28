@@ -316,9 +316,9 @@ export function createDataflowStore(
    */
   let core: CoreState = createCore(graphOfCompiled(flow, placement), input);
   let writeIds = 0;
-  const writes = new Map<number, { resolve: () => void; reject: (error: unknown) => void }>();
-  /** Each accepted write's name and the request a retry re-issues (the sent one replaces the call's). */
-  const writeCalls = new Map<number, { name: string; request: MutationRequest;mutationRunId?:string }>();
+  /** One lifecycle record owns settlement and the exact request an uncertain retry re-issues. */
+  type WriteCall = { name: string; request: MutationRequest; resolve?: () => void; reject?: (error: unknown) => void };
+  const writes = new Map<number, WriteCall>();
   const writeListeners = new Set<(event: StoreWriteEvent) => void>();
   const emitWrite = (event: StoreWriteEvent) => {
     for (const listener of [...writeListeners]) {
@@ -346,12 +346,10 @@ export function createDataflowStore(
     switch (effect.type) {
       case 'notify': for (const l of [...listeners]) l(); return;
       case 'settle': {
-        const settle = writes.get(effect.id);
+        const call = writes.get(effect.id);
         writes.delete(effect.id);
-        const call = writeCalls.get(effect.id);
-        writeCalls.delete(effect.id);
-        if (call) emitWrite(effect.outcome.ok ? { type: 'written', id: effect.id, name: call.name,...(call.mutationRunId?{mutationRunId:call.mutationRunId}:{}) } : { type: 'writeFailed', id: effect.id, name: call.name, error: effect.outcome.error, request: call.request });
-        if (effect.outcome.ok) settle?.resolve(); else settle?.reject(effect.outcome.error);
+        if (call) emitWrite(effect.outcome.ok ? { type: 'written', id: effect.id, name: call.name, mutationRunId: effect.outcome.answer?.mutationRunId } : { type: 'writeFailed', id: effect.id, name: call.name, error: effect.outcome.error, request: call.request });
+        if (effect.outcome.ok) call?.resolve?.(); else call?.reject?.(effect.outcome.error);
         return;
       }
       case 'run': {
@@ -381,7 +379,7 @@ export function createDataflowStore(
           const m = flow.mutations.find((x) => x.name === name);
           if (!m) throw new Error(`this document declares no <Mutation name="${name}">`);
           const request = mutationRequestFor(m, { values, ...(row ? { row } : {}), ...(Object.hasOwn(values, '_value') ? { value: values._value } : {}), ...(localTables ? { localTables } : {}) });
-          const call = writeCalls.get(id);
+          const call = writes.get(id);
           const notifying = (m as typeof m & {notifies?:true}).notifies;
           if(call?.request.operationKey)request.operationKey=call.request.operationKey;
           else if(notifying)request.operationKey=crypto.randomUUID();
@@ -391,7 +389,7 @@ export function createDataflowStore(
         } catch (error) { answer = Promise.reject(error); }
         // A settled write moves what it wrote (and what it reset): re-read at once.
         answer.then(
-          (result) => { const call=writeCalls.get(id);if(call&&result.mutationRunId)call.mutationRunId=result.mutationRunId;dispatch({ type: 'written', id, name, answer: result }); flush(); },
+          (result) => { dispatch({ type: 'written', id, name, answer: result }); flush(); },
           (error: unknown) => { dispatch({ type: 'writeFailed', id, name, error }); flush(); },
         );
       }
@@ -571,16 +569,16 @@ export function createDataflowStore(
     const refusal = refusalOf(name, wire);
     if (refusal === null && !at && busyOf(core).has(name)) return; // generic Button double click is one write; row cells dedupe locally
     const id = ++writeIds;
-    writeCalls.set(id, { name, request: wire ? first : callRequest(name, given, at) });
+    const call: WriteCall = { name, request: wire ? first : callRequest(name, given, at) };
+    writes.set(id, call);
     emitWrite({ type: 'write', id, name });
     if (refusal !== null) {
       const error = new Error(refusal);
-      const call = writeCalls.get(id)!;
-      writeCalls.delete(id);
+      writes.delete(id);
       emitWrite({ type: 'writeFailed', id, name, error, request: call.request });
       throw error;
     }
-    const settled = new Promise<void>((resolve, reject) => { writes.set(id, { resolve, reject }); });
+    const settled = new Promise<void>((resolve, reject) => { call.resolve = resolve; call.reject = reject; });
     dispatch({ type: 'write', id, name, ...(given ? { overrides: given } : {}), ...(at ? { row: at } : {}) });
     return settled;
   }) as DataflowStore['mutate'];
