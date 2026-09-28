@@ -150,7 +150,7 @@ export function DataTable(props: DataTableProps) {
   const table = () => island.table(name());
   const busy = () => !!name() && island.pending(name());
   const wrapper = () => (props.inGridItem ? 'width:100%;height:100%' : 'width:100%');
-  return <Show when={table()} fallback={
+  return <Show when={!!table()} fallback={
     <div {...rootProps(props)} aria-label="DataTable embed" class="flex w-full flex-col items-center justify-center gap-2.5 rounded-md border border-border p-4 text-sm text-muted-foreground" {...attr('attr:style', wrapper())}>
       <Switch fallback={`data unavailable — "$${name()}" has no rows yet`}>
         <Match when={busy()}><span aria-hidden="true" class={SPINNER} /><span class={LOCKUP_LABEL}>loading data…</span></Match>
@@ -207,12 +207,23 @@ function DataGrid(props: DataTableProps & { table: TableResult }) {
   // In the virtual regime the header row and every body row are the same CSS grid (today's rowGrid).
   const rowGrid = () => ({ display: 'grid', 'grid-template-columns': geometry().template, width: '100%', 'min-width': geometry().minWidth ? `${geometry().minWidth}px` : undefined });
   const virtualizer = createVirtualizer<HTMLDivElement, HTMLTableRowElement>({ getScrollElement: () => scroll, get count() { return ordered().length; }, getItemKey: (index) => rowIdentity(ordered()[index], props.rowKey, index), estimateSize: () => ROW_H, overscan: 12, get enabled() { return virtual(); }, initialOffset: () => scroll?.scrollTop ?? 0 });
+  let previousRows = ordered().length;
+  createEffect(on(() => ordered().length, (count) => {
+    if (count < previousRows && scroll) {
+      scroll.scrollTop = 0;
+      queueMicrotask(() => virtualizer.scrollToOffset(0));
+    }
+    previousRows = count;
+  }, { defer: true }));
   const visible = createMemo(() => {
     if (!virtual()) return ordered().slice(0, STATIC_ROWS).map((row, index) => ({ row, index, start: null as number | null }));
-    const items = virtualizer.getVirtualItems();
+    const items = virtualizer.getVirtualItems().filter(v => v.index < ordered().length);
     if (items.length) return items.map(v => ({ row: ordered()[v.index]!, index: v.index, start: v.start as number | null }));
     // The observer may report its first rect after the switch; keep the window around the offset visible.
-    const first = Math.max(0, Math.floor((scroll?.scrollTop ?? 0) / ROW_H) - 12);
+    // A filter can shrink a 500-row list to one while the scroll box still holds
+    // its old offset. Clamp the fallback window to the new result before layout
+    // clamps scrollTop, or the only matching row disappears from the DOM.
+    const first = Math.min(Math.max(0, Math.floor((scroll?.scrollTop ?? 0) / ROW_H) - 12), Math.max(0, ordered().length - Math.ceil((scroll?.clientHeight ?? 0) / ROW_H)));
     return Array.from({ length: Math.max(0, Math.min(ordered().length - first, Math.ceil((scroll?.clientHeight ?? 0) / ROW_H) + 24)) }, (_, offset) => ({ row: ordered()[first + offset]!, index: first + offset, start: (first + offset) * ROW_H as number | null }));
   });
   // Rows are keyed by the row object, so the rows served with the page are the rows of the virtual window.
@@ -247,7 +258,7 @@ function DataGrid(props: DataTableProps & { table: TableResult }) {
             const index = () => at()?.index ?? 0;
             let el!: HTMLTableRowElement;
             createEffect(() => { if (virtual() && at()) virtualizer.measureElement(el); });
-            return <tr ref={el} {...rowMeta(row)} data-index={index()} class="border-b border-border/50 transition-colors hover:bg-muted/30" {...attr('style', at()?.start == null ? undefined : css({ ...rowGrid(), position: 'absolute', top: '0px', left: '0px', transform: `translateY(${at()!.start}px)` }))}><For each={resolved()}>{column => { const value = row[column.col]; const bar = barFraction(value, column); const tint = cellTint(value, column); return <td {...rowMeta(row, column.col)} class={`relative whitespace-nowrap px-3 py-1.5 align-middle${column.type === 'number' ? ' tabular-nums' : ''}`} style={css({ 'text-align': column.align, width: column.width ? `${column.width}px` : undefined, background: tint ?? undefined })}><Show when={bar !== null}><span data-bar="" aria-hidden="true" class="pointer-events-none absolute inset-y-1 left-1 rounded-sm opacity-25" style={css({ width: `${Math.round((bar ?? 0) * 100)}%`, background: typeof column.bar === 'object' && column.bar.color ? column.bar.color : 'var(--chart-1)' })} /></Show><span class="relative">{cell(value, column, row, index)}</span></td>; }}</For></tr>;
+            return <tr ref={el} {...rowMeta(row)} data-index={index()} class="border-b border-border/50 transition-colors hover:bg-muted/30" {...attr('style', at()?.start == null ? undefined : css({ ...rowGrid(), position: 'absolute', top: '0px', left: '0px', transform: `translateY(${at()!.start}px)` }))}><For each={resolved()}>{column => { const value = () => row[column.col]; const bar = () => barFraction(value(), column); const tint = () => cellTint(value(), column); return <td {...rowMeta(row, column.col)} class={`relative whitespace-nowrap px-3 py-1.5 align-middle${column.type === 'number' ? ' tabular-nums' : ''}`} style={css({ 'text-align': column.align, width: column.width ? `${column.width}px` : undefined, background: tint() ?? undefined })}><Show when={bar() !== null}><span data-bar="" aria-hidden="true" class="pointer-events-none absolute inset-y-1 left-1 rounded-sm opacity-25" style={css({ width: `${Math.round((bar() ?? 0) * 100)}%`, background: typeof column.bar === 'object' && column.bar.color ? column.bar.color : 'var(--chart-1)' })} /></Show><span class="relative">{cell(value(), column, row, index)}</span></td>; }}</For></tr>;
           }}</For>
         </Show></tbody>
       </table>

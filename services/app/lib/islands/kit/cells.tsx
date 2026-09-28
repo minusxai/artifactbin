@@ -16,8 +16,7 @@
  *
  * The DOM is today's, element for element: the compiler serialises each control's authored attributes with
  * React's server renderer and evaluates its class with the kit's merger at compile time (`attrs`, `cls`); only
- * the row's values, the scope and the state are applied here. Known difference: the refusal is the hint's
- * accessible description, but no hover bubble is drawn (today's Radix tooltip content).
+ * the row's values, the scope and the state are applied here.
  */
 import { For, Show, createEffect, createMemo, createSignal, onCleanup, untrack, type JSX } from 'solid-js';
 import { isServer } from 'solid-js/web';
@@ -31,6 +30,7 @@ import { rowAttrs } from './basic';
 import { useIsland } from '../context';
 import type { IslandContext } from '../contract';
 import { ACCESS_PENDING, hydratedRead } from './store-read';
+import { Tooltip, TooltipContent, TooltipSpanTrigger } from './disclosure';
 
 /** Where one cell sits: what the DataTable hands each column's content, per row. */
 export interface CellScope {
@@ -139,7 +139,9 @@ function usePopup(open: () => boolean, root: () => HTMLElement | undefined, view
   createEffect(() => {
     const anchorEl = root();
     if (!open() || !anchorEl) return;
-    const popup = view();
+    // Building the popup may read changing rows/options; those updates belong to its children,
+    // not to this mount effect, or a live refresh removes the anchor mid-interaction.
+    const popup = untrack(view);
     popupHost(anchorEl).append(popup);
     const stop = anchor(anchorEl, popup, width);
     onCleanup(() => { stop(); popup.remove(); });
@@ -228,8 +230,10 @@ export function CellControl(props: CellControlProps) {
   };
   // The disabled control cannot take focus: its stable wrapper carries the reason (StoryRuntimeApp MutationCellHint),
   // and holds the refusal of a write beside the control.
-  return <span class="inline-flex w-full" {...{ tabindex: reason() ? '0' : undefined, 'aria-description': reason() ?? undefined }} data-state="closed" data-slot="tooltip-trigger">{control()}
-    <Show when={session()?.error}>{(error) => <span role="alert" class="mx-write-error">{error()}</span>}</Show></span>;
+  return <Tooltip open={reason() ? undefined : false}><TooltipSpanTrigger class="inline-flex w-full" {...{ tabindex: reason() ? '0' : undefined, 'aria-description': reason() ?? undefined }}>{control()}
+    <Show when={session()?.error}>{(error) => <span role="alert" class="mx-write-error">{error()}</span>}</Show></TooltipSpanTrigger>
+    <TooltipContent class="pointer-events-none z-[100] w-max max-w-[min(28rem,calc(100vw-1rem))] whitespace-normal rounded-md bg-foreground px-2.5 py-1.5 text-left text-xs leading-normal text-background shadow-md">{reason()}</TooltipContent>
+  </Tooltip>;
 }
 
 interface Shared {
@@ -306,7 +310,9 @@ function CellSelect(props: Shared & {
     finish(focus);
   };
   const cancelDraft = () => { if (!opened) return; opened = false; props.cancel(); finish(); };
-  createEffect(() => { if (inert() && opened) setOpened(false); });
+  // A data refresh briefly makes the write check pending. Keep an already-open menu in place;
+  // choosing remains blocked by inert() until the check answers.
+  createEffect(() => { if ((invalid() || a().disabled === true || (props.unavailable() !== null && props.unavailable() !== ACCESS_PENDING)) && opened) setOpened(false); });
   const openList = () => { if (inert() || open()) return; if (multiple() && draftValue() === undefined) setInternal(parseMulti(value()) ?? []); setOpened(true); setQuery(''); setActive(-1); };
   const choose = (v: string | null) => {
     if (inert()) return;
@@ -335,8 +341,8 @@ function CellSelect(props: Shared & {
       setOpened(true); setQuery(e.key); setActive(matches(e.key.toLocaleLowerCase()) ? 0 : -1);
     }
   };
-  outsideDown(() => open() && !inert(), () => [root, popup], () => (multiple() ? commitDraft(false) : finish(false)));
-  usePopup(() => open() && !inert(), () => root, () => {
+  outsideDown(() => open(), () => [root, popup], () => (multiple() ? commitDraft(false) : finish(false)));
+  usePopup(() => open(), () => root, () => {
     const theme = popupTheme(root!);
     const node = <div ref={popup} {...{ 'data-theme': theme.dataTheme }} class={join(theme.className, POPUP)}
       on:focusout={(e) => { if (!opened) return; const next = e.relatedTarget as Node | null; if (next && (popup?.contains(next) || root?.contains(next))) return; if (multiple()) commitDraft(false); else finish(false); }}
@@ -446,6 +452,14 @@ function CellNative(props: Shared & {
     props.commit();
   };
   const onInput = (e: Event) => { const el = e.currentTarget as HTMLInputElement; props.change(props.tag === 'select' ? props.typed(el.value) : el.value); };
+  // Virtualization can blur a focused cell while removing its row. Commit only if the
+  // element survives that render; a draft for an unmounted row stays in CellSessions.
+  const onBlur = (el: HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement) => {
+    // An invalid input may have just yielded focus to another cell. A delayed
+    // reportValidity would steal that focus back and close the new cell's popup.
+    if (!el.validity.valid) return;
+    setTimeout(() => { if (el.isConnected) commitDraft(el); }, 0);
+  };
   const onKey = (e: KeyboardEvent) => {
     const el = e.currentTarget as HTMLInputElement;
     if (e.key === 'Escape') { e.preventDefault(); props.cancel(); el.blur(); }
@@ -456,12 +470,12 @@ function CellNative(props: Shared & {
   const bind = (el: HTMLInputElement | HTMLSelectElement) => createEffect(() => { const v = text(); if (el.value !== v) el.value = v; if (el instanceof HTMLInputElement) el.setAttribute('value', v); });
   if (props.tag === 'select') {
     return <select {...common()} disabled={props.disabled()} ref={(el) => queueMicrotask(() => bind(el))} on:focus={props.begin}
-      on:change={(e) => { onInput(e); commitDraft(e.currentTarget); }} on:blur={(e) => commitDraft(e.currentTarget)} on:keydown={onKey}>{props.children}</select>;
+      on:change={(e) => { onInput(e); commitDraft(e.currentTarget); }} on:blur={(e) => onBlur(e.currentTarget)} on:keydown={onKey}>{props.children}</select>;
   }
   if (props.tag === 'textarea') {
     // A textarea's served value is its content (React), the live value its property.
     return <textarea {...common()} disabled={props.disabled()} {...({ 'prop:value': text() } as JSX.TextareaHTMLAttributes<HTMLTextAreaElement>)}
-      on:focus={props.begin} on:input={onInput} on:blur={(e) => commitDraft(e.currentTarget)} on:keydown={onKey}>{untrack(text)}</textarea>;
+      on:focus={props.begin} on:input={onInput} on:blur={(e) => onBlur(e.currentTarget)} on:keydown={onKey}>{untrack(text)}</textarea>;
   }
-  return <input {...common()} value={text()} disabled={props.disabled()} ref={bind} on:focus={props.begin} on:input={onInput} on:blur={(e) => commitDraft(e.currentTarget)} on:keydown={onKey} />;
+  return <input {...common()} value={text()} disabled={props.disabled()} ref={bind} on:focus={props.begin} on:input={onInput} on:blur={(e) => onBlur(e.currentTarget)} on:keydown={onKey} />;
 }
