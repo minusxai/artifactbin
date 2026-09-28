@@ -16,7 +16,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import { JSDOM } from 'jsdom';
-import { buildStoryDocument } from '@/lib/story/document';
+import { compiledDocument } from '@/lib/compiled-page/__tests__/document-helper';
 import { compiledSource } from '@/test/helpers/compiled';
 
 /** Nodes whose parsed parent is not the parent their AST path names. */
@@ -34,9 +34,9 @@ function reparented(html: string): string[] {
 }
 
 const serve = (source: string): Promise<string> =>
-  buildStoryDocument({
+  compiledDocument({
     source, compiledCss: null, theme: null, colorMode: null, refData: {},
-    title: 'nesting', runtimeSrc: '/story/entry-TESTHASH.js',
+    title: 'nesting',
   });
 
 /*
@@ -254,9 +254,9 @@ describe('a <For> of shapes inside <svg>', () => {
     const source = `<Helmet><Value name="bars" type="table" value={[]} columns={${JSON.stringify(columns)}} /></Helmet>`
       + '<div><svg viewBox="0 0 30 10"><For id="bars" each={$bars} keyBy="k" className="text-primary">'
       + '<rect x="$_row.x" y="0" width="8" height="$_row.h" fill="currentColor" /></For></svg></div>';
-    return buildStoryDocument({
+    return compiledDocument({
       source, compiledCss: null, theme: null, colorMode: null, refData: {},
-      title: 'bars', runtimeSrc: '/story/entry-TESTHASH.js',
+      title: 'bars',
       dataflow: { flow: await compiledSource(source), state: { values: {}, tables: { bars: { rows, columns } }, errors: {} } },
     });
   };

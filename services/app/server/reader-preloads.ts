@@ -102,10 +102,10 @@ const MERMAID_ENGINE = 'components/kit/mermaid-render.ts';
 
 /**
  * The Mermaid modules each diagram kind loads, recorded by the runtime build
- * (scripts/build-story-runtime.mjs) beside the SSR bundle: Mermaid's dispatch
+ * (scripts/build-server-reader.mjs) beside the SSR bundle: Mermaid's dispatch
  * is read from the installed package there, and the kinds from the kit.
  */
-const MERMAID_MODULES_FILE = path.resolve('lib/story-runtime/dist/mermaid-modules.json');
+const MERMAID_MODULES_FILE = path.resolve('lib/build-assets/mermaid-modules.json');
 
 function readDocumentHints(webDir: string, mermaidModulesFile: string): DocumentHints {
   const manifest = readManifest(webDir);

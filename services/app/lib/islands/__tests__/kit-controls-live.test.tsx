@@ -74,6 +74,19 @@ async function compiled(values: Record<string, unknown>) {
 }
 
 describe('bound controls, as today\'s live reader renders them', () => {
+  it('writes null when a nullable query select returns to All', async () => {
+    const flow = await compiledSource(HELMET + BODY, { abc123: [{ name: 'region', type: 'string' }] });
+    const setValue = vi.fn();
+    const island = { ...fakeIsland(), value: () => 'EU', table: () => REGIONS, store: () => ({ flow }), setValue } as never;
+    const host = document.createElement('div');
+    const dispose = render(() => <IslandProvider value={island}><BoundNative tag="select" bind={{ value: 'region', options: 'regions' }} aria-label="Region" /></IslandProvider>, host);
+    try {
+      const select = host.querySelector('select')!;
+      select.value = '';
+      select.dispatchEvent(new Event('change', { bubbles: true }));
+      expect(setValue).toHaveBeenCalledWith('region', null, undefined);
+    } finally { dispose(); }
+  });
   for (const [label, values] of [['defaults', {}], ['chosen values', { region: 'EU', min_rev: 1200, title: 'Hello', note: 'Two\nlines', compare: true }]] as const) {
     it(`${label}: every control is byte for byte today's`, async () => {
       const react = await legacy(values);

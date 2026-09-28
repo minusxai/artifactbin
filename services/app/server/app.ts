@@ -47,7 +47,7 @@ import { publicRefAssetResponse } from '@/lib/public-ref-assets';
 import { mountRoutes } from './api';
 import { ROUTES } from './routes.generated';
 import { authorFrameResponse } from './author-frame';
-import { AUTHOR_FRAME_PATH, LEGACY_AUTHOR_FRAME_PATH } from '@/lib/story-runtime/author-frame';
+import { AUTHOR_FRAME_PATH } from '@/lib/story-runtime/author-frame';
 import { GITHUB_EXTERNAL_URL } from '@/lib/github-star';
 import { createDocumentPreloader, createListingPreloader, createReaderPreloader, createSpaEntry, listingPage } from './reader-preloads';
 import { artifactPageAnswer, type ArtifactPageAnswer, type CompiledStory, type InitialStory } from '@/lib/artifact-page';
@@ -358,8 +358,8 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
   // Its home page links the stylesheets THIS page links, read from the same shell.
   app.use('*', customHostBoundary({ stylesheets: async (url) => linkedStylesheets(await index(url)) }));
   const assetsOrigin = ASSETS_ORIGIN;
-  // The author-script wrapper, ahead of the /story/* and /islands/* middleware; its old address answers too until wave 4.
-  for (const wrapper of [AUTHOR_FRAME_PATH, LEGACY_AUTHOR_FRAME_PATH]) app.get(wrapper, c => authorFrameResponse(c.req.raw, assetsOrigin, baseUrl(c.req.raw)));
+  // The fixed author-script wrapper is separate from the content-addressed islands.
+  app.get(AUTHOR_FRAME_PATH, c => authorFrameResponse(c.req.raw, assetsOrigin, baseUrl(c.req.raw)));
   if (assetsOrigin) app.use('*', async (c, next) => {
     const incoming = new URL(c.req.url);
     if (incoming.host !== new URL(assetsOrigin).host && baseUrl(c.req.raw) !== assetsOrigin) return next();
@@ -548,7 +548,6 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
   };
 
   // Static: content-addressed trees are immutable; everything else is served plainly.
-  app.use('/story/*', async (c, next) => { await next(); c.header('cache-control', IMMUTABLE); c.header('access-control-allow-origin', '*'); });
   /*
    * The compiled reader's code (docs/phase2-architecture.md §9), all content-addressed: the shared
    * island chunks under public/islands/ (served by the public mount below), and the per-document
@@ -612,6 +611,9 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
     });
   });
   app.use('/libraries/*', async (c, next) => { await next(); c.header('cache-control', 'public, max-age=3600'); c.header('access-control-allow-origin', '*'); });
+  // Opaque-origin /raw frames import these modules and fetch the page engine's wasm.
+  // Every file is content-addressed; both requests need CORS and immutable caching.
+  app.use('/islands/*', async (c, next) => { await next(); if (c.res.status < 400) c.header('cache-control', IMMUTABLE); c.header('access-control-allow-origin', '*'); });
   app.use('/fonts/*', async (c, next) => { await next(); c.header('cache-control', IMMUTABLE); c.header('access-control-allow-origin', '*'); });
   app.use('/geojson/*', async (c, next) => { await next(); c.header('cache-control', 'public, max-age=86400'); c.header('access-control-allow-origin', '*'); });
   app.use('/assets/*', async (c, next) => { await next(); c.header('cache-control', IMMUTABLE); });
@@ -654,7 +656,7 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
     c.header('cache-control', 'no-store');
   });
   if(existsSync(cliReleaseDir)) app.use('/chat/releases/*', serveStatic({ root: path.relative(process.cwd(), cliReleaseDir) || '.', rewriteRequestPath: (p) => p.replace(/^\/chat\/releases\/[^/]+\//, '/'), onFound: () => {}, onNotFound: () => {} }));
-  // Content-addressed trees (/story, /libraries) carry build-time brotli/gzip siblings (server/content-encoding).
+  // Content-addressed islands and the compatibility libraries carry build-time brotli/gzip siblings.
   app.use('/*', precompressedStatic({ root: path.relative(process.cwd(), publicDir) || '.', onFound: () => {}, onNotFound: () => {} }));
 
   app.on(['GET', 'HEAD'], '/', async c => {

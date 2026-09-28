@@ -25,6 +25,7 @@ import type { Scalar } from '@/lib/story/dataflow';
 import type { RefDataMap } from '@/lib/story/ref-data';
 import type { GlyphMap } from '@/lib/story-ui/icon-contract';
 import type { ReaderChromeInput } from '@/lib/story/reader-chrome';
+import type { OutlineEntry } from '@/lib/story-runtime/outline';
 import type { ServedResults, StoredMermaidImage, StoryViewer } from '@/lib/story-runtime/contract';
 import type { AgentDiscovery } from '@/lib/agent-discovery-tags';
 
@@ -120,6 +121,8 @@ export interface CompilerBuild {
   id: string;
   /** The shared build's manifest: import specifier (`@mx/rt`, `@mx/kit/tabs`, `solid-js/web`) → content-addressed URL. */
   manifest: Readonly<Record<string, string>>;
+  /** Content-addressed SQLite engine fetched only when the reader runs a page query. */
+  sqliteWasm?: string;
 }
 
 /**
@@ -413,6 +416,8 @@ export type LinkHintsOf = (nodes: JsxNode[], deployment: { origins: readonly str
 export interface AssembleOverlay {
   /** The reader's URL `$` values (lib/story/url-values), already parsed against the flow. */
   values: Record<string, Scalar>;
+  /** Guest-safe imports the page may hold in full; an empty list keeps runs at the server. */
+  hold?: string[];
   /** The version's stored Mermaid drawings for this surface (lib/mermaid-images), or none. */
   mermaidImages: Readonly<Record<string, StoredMermaidImage>>;
   /** Whether the request carries a session: the signed-in hint, never the identity (that arrives after paint). */
@@ -443,6 +448,10 @@ export interface AssembleInput {
    * cached per build + snapshot key). The assembler never renders islands.
    */
   story: string;
+  /** Section navigation discovered from the prepared source; empty for captures, decks and dashboards. */
+  outline?: readonly OutlineEntry[];
+  /** An export capture uses the full image variant and no responsive srcset. */
+  capture?: boolean;
   /** The version's isolated stylesheet and font preloads, from the prepared page. */
   css: string;
   fontPreloads: readonly string[];

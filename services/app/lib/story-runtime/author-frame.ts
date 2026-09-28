@@ -1,14 +1,8 @@
 /**
  * Fixed trusted HTTP document. Author bytes arrive only after load over a transferred port. Its own
- * path, outside `/story/` (the legacy runtime tree, which wave 4 removes) and outside `/islands/` (the
- * compiled reader's content-addressed code): the island runtime and today's runtime both mount it.
+ * path, outside the compiled reader's content-addressed `/islands/` code.
  */
 export const AUTHOR_FRAME_PATH = '/author-frame';
-/**
- * Where it was served before: runtime bundles already cached in a reader's browser still mount this
- * address, so it answers the same bytes until wave 4 deletes the legacy runtime and this with it.
- */
-export const LEGACY_AUTHOR_FRAME_PATH = '/story/author-frame';
 export const AUTHOR_FRAME_DOCUMENT = '<!doctype html><html data-mx-author-wrapper><head><meta name="viewport" content="width=device-width,initial-scale=1"><style>html,body,iframe{margin:0;width:100%;height:100%;border:0;display:block}</style></head><body><script>'+String.raw`
 (()=>{
   let initialized=false, loaded=false, pendingPort=null, transferred=false;

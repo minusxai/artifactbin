@@ -56,7 +56,6 @@
 import { parseFragment } from 'parse5';
 import { createHash } from 'node:crypto';
 import { holdableImports, type ArtifactRow, type RoleActor } from '@/lib/artifacts';
-import { storyRuntimeAssets } from '@/lib/story/runtime-asset';
 import type { ArchivedRender } from '@/lib/archived-version';
 import { mermaidImagesFor } from '@/lib/mermaid-images/store';
 import type { ServedResults, StoredMermaidImage } from '@/lib/story-runtime/contract';
@@ -66,8 +65,7 @@ import { recompilePage, type PreparedPage } from '@/lib/story/prepared-page.serv
 import { SERVED_RESULTS_BUDGET_MS, tokenOf } from '@/lib/story/served-results.server';
 import { readUrlValues } from '@/lib/story/url-values';
 import { escapeHtml } from '@/lib/story/reader-chrome';
-import { DOMAIN_FOOTER_TEXT } from '@/lib/story/document';
-import { DOMAIN_FOOTER_CSS } from '@/lib/story/document-styles';
+import { DOMAIN_FOOTER_CSS, DOMAIN_FOOTER_TEXT } from '@/lib/story/document-styles';
 import { assembleReaderPage } from './assembler';
 import { loadCompilerBuild } from './build.server';
 import {
@@ -154,7 +152,7 @@ export function setFallbackPolicyForTests(policy: FallbackPolicy | null): void {
  * THE SWITCH. `legacy` until Wave 4 deletes today's reader; w4-flip-docs removes this function, its
  * override and every `legacy` branch below, leaving `compiled-only` as the only behaviour.
  */
-export function fallbackPolicy(): FallbackPolicy { return policyOverride ?? 'legacy'; }
+export function fallbackPolicy(): FallbackPolicy { return policyOverride ?? 'compiled-only'; }
 
 /** Thrown by a page that has no other way to answer a `failed` read (lib/artifact-page): the server answers 500. */
 export class CompiledPageFailed extends Error {
@@ -407,7 +405,7 @@ export async function compiledPageFor(row: ArtifactRow, page: PreparedPage, read
       // What the page's engine may hold, for the door it queries through (today's reader asks on every render).
       flow && reader.doors && reader.holder !== undefined ? holdableImports(row, flow, reader.holder) : Promise.resolve([]),
     ]);
-    const sqliteWasm = hold.length ? storyRuntimeAssets().sqlite : null;
+    const sqliteWasm = hold.length ? build.sqliteWasm ?? null : null;
     // The live stream picks up from the snapshot's marks (served-results.server `since`): a write between
     // the snapshot and the page's stream reaches the page as the ordinary `data` frame.
     const served: DataSnapshot | null = snapshot

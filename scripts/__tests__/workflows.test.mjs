@@ -78,14 +78,13 @@ describe('ci.yml: one build, shared with the gates', () => {
     expect(ci.jobs.gates.needs).toEqual(expect.arrayContaining(['plan', 'build']));
     const upload = ci.jobs.build.steps.find((step) => step.uses?.startsWith('actions/upload-artifact'));
     expect(upload?.with?.name).toBe('app-build');
-    // The whole of what `npm run build` (and the CLI's) writes: the SPA, the document runtime and
+    // The whole of what `npm run build` (and the CLI's) writes: the SPA, compiled reader and
     // its public assets, the generated route table, the bundled server the gates boot, the CLI.
     const uploaded = String(upload?.with?.path ?? '').split('\n').map((line) => line.trim()).filter(Boolean);
     expect(uploaded).toEqual(expect.arrayContaining([
       'dist',
       'services/app/dist',
-      'services/app/lib/story-runtime/dist',
-      'services/app/public/story',
+      'services/app/lib/build-assets',
       'services/app/public/islands',
       'services/app/public/libraries',
       'services/app/server/routes.generated.ts',

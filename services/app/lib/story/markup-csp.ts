@@ -118,7 +118,7 @@ const GEOJSON_DIR_PATH = '/geojson/';
  * FETCHES rather than imports: the page's SQLite wasm, content-addressed
  * there (StoryIslandData.sqliteWasm). Public build output, like /geojson/.
  */
-const STORY_DIR_PATH = '/story/';
+const ISLANDS_DIR_PATH = '/islands/';
 
 /**
  * …and the bundled font files (public/fonts, the manifest's faces): the kit
@@ -165,7 +165,7 @@ export function markupCsp(origin: string, id: string, assetOrigin?: string, opti
   // GLB loaders fetch embedded textures/buffers through local blob/data URLs;
   // these add no network destination or access to the application's APIs.
   const viewer = options.compiled ? ` ${self}${viewerPath(id)} ${self}${storyFragmentPath(id)}` : '';
-  const connect = `connect-src ${self}${queryPath(id)} ${self}${eventsPath(id)} ${self}${eventsPath(id)}/frame ${self}${mutatePath(id)} ${self}${resolvePath(id)}${viewer} ${self}${GEOJSON_DIR_PATH} ${self}${BASEMAP_PATH} ${self}${STORY_DIR_PATH} ${self}${FONTS_DIR_PATH} blob: data:`;
+  const connect = `connect-src ${self}${queryPath(id)} ${self}${eventsPath(id)} ${self}${eventsPath(id)}/frame ${self}${mutatePath(id)} ${self}${resolvePath(id)}${viewer} ${self}${GEOJSON_DIR_PATH} ${self}${BASEMAP_PATH} ${self}${ISLANDS_DIR_PATH} ${self}${FONTS_DIR_PATH} blob: data:`;
   if(assetOrigin && (new URL(assetOrigin).origin!==assetOrigin||!/^https?:\/\//.test(assetOrigin)))throw Error('Invalid asset origin');
   const sources=SOURCE_DIRECTIVES.map(d=>{
     // Firefox evaluates inherited 'self' against the opaque srcdoc realm for

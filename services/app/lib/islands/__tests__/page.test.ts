@@ -5,6 +5,7 @@
  */
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { startPage, CHROME_HIDDEN_CLASS } from '../page';
+import { STORY_SCROLL_MESSAGE } from '@/lib/story-runtime/contract';
 import { READER_CHROME_HIDDEN_CLASS } from '@/lib/story/reader-chrome';
 
 class FakeEventSource extends EventTarget {
@@ -80,8 +81,10 @@ describe('startPage', () => {
   it('framed: marks <html> mx-framed and holds no stream (the page above does)', () => {
     vi.stubGlobal('EventSource', FakeEventSource);
     page();
-    const framed = new Proxy(window, { get: (target, key) => (key === 'parent' ? {} : Reflect.get(target, key, target)) });
+    const postMessage = vi.fn();
+    const framed = new Proxy(window, { get: (target, key) => (key === 'parent' ? { postMessage } : Reflect.get(target, key, target)) });
     stops.push(startPage(document, framed));
+    expect(postMessage).toHaveBeenCalledWith(expect.objectContaining({ type: STORY_SCROLL_MESSAGE }), '*');
     expect(document.documentElement.classList.contains('mx-framed')).toBe(true);
     expect(FakeEventSource.made).toEqual([]);
   });

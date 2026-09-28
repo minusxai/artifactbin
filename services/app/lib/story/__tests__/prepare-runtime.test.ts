@@ -1,8 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { prepareStoryRuntime } from '../prepare-runtime.server';
-import type { StoryDocumentInput } from '../document';
+import { prepareStoryRuntime, type PrepareStoryInput } from '../prepare-runtime.server';
 
-const input = (source: string): StoryDocumentInput => ({ source, compiledCss: null, theme: null, colorMode: 'light', refData: {}, runtimeSrc: null, title: 'Stored title' });
+const input = (source: string): PrepareStoryInput => ({ source, compiledCss: null, theme: null, colorMode: 'light', refData: {}, title: 'Stored title' });
 
 describe('shared story preparation', () => {
   it('separates author code from top-level rendered nodes and honors the document title', async () => {

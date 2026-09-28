@@ -41,15 +41,10 @@ const SQLITE = ['@artifactbin/sql', '@sqlite.org/sqlite-wasm'];
 const FORBIDDEN = ['vega', 'vega-lite', 'vega-interpreter', 'vega-tooltip', '@codemirror/view', '@codemirror/state', '@codemirror/language', '@codemirror/lang-javascript', ...SQLITE];
 
 /**
- * The SERVED document's own runtime (scripts/build-story-runtime → /story/),
- * which is what a reader actually downloads — the page above is the owner's
- * shell. It is measured in whole megabytes and paid on EVERY visit: the
- * document runs at an opaque origin (the CSP sandbox on /a/<id>/raw), and a
- * browser cannot reuse cache entries across opaque-origin navigations, so the
- * year-long `immutable` on /story/ buys a returning reader nothing. Weight here
- * is not amortised, and this is the guard that keeps it from creeping back.
+ * The compiled document's page, boot and Solid runtime entries. They are the
+ * shared browser graph shipped to `/raw` readers under `/islands/`.
  */
-const RUNTIME_ENTRY = ['lib/story-runtime/entry.tsx'];
+const RUNTIME_ENTRY = ['lib/islands/page.ts', 'lib/islands/rt.tsx', 'lib/islands/boot.ts'];
 
 /**
  * Packages the document runtime must never reach statically.
@@ -175,16 +170,16 @@ describe('reader bundle hygiene', () => {
   });
 });
 
-describe('document runtime bundle hygiene', () => {
+describe('compiled document bundle hygiene', () => {
   const reach = walk(RUNTIME_ENTRY);
 
   it('sanity: the walker actually descends through the runtime graph', () => {
     // Guards the guard, exactly as above: a broken parse would make every
     // forbidden check below pass while importing nothing.
     expect([...reach.files].map((f) => path.relative(ROOT, f))).toContain(
-      'lib/story-runtime/StoryRuntimeApp.tsx',
+      'lib/islands/live.ts',
     );
-    expect([...reach.packages.keys()]).toContain('react');
+    expect([...reach.packages.keys()]).toContain('solid-js');
   });
 
   it.each(RUNTIME_FORBIDDEN)('never statically reaches %s', (pkg) => {

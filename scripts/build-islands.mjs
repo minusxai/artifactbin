@@ -39,6 +39,7 @@ import { icons } from 'lucide-react';
 const ROOT = path.resolve(import.meta.dirname, '..');
 const APP = path.join(ROOT, 'services/app');
 const ISLANDS_SRC = path.join(APP, 'lib/islands');
+const SQLITE_WASM = path.join(ROOT, 'node_modules/@sqlite.org/sqlite-wasm/dist/sqlite3.wasm');
 export const DEFAULT_OUT_DIR = path.join(APP, 'public/islands');
 const CACHE_MARKER = path.join(ROOT, 'node_modules/.cache/build-islands.json');
 
@@ -263,6 +264,12 @@ export async function buildIslands({ outDir = DEFAULT_OUT_DIR } = {}) {
   fs.writeFileSync(path.join(outDir, catalogName), catalog);
   files[url(catalogName)] = { ...sizes(catalog), imports: [] };
   manifest['@mx/glyphs'] = url(catalogName);
+  // The page engine fetches wasm, so keep it with the content-addressed island build.
+  const sqliteBytes = fs.readFileSync(SQLITE_WASM);
+  const sqliteName = `sqlite3-${sha256(sqliteBytes).slice(0, 16)}.wasm`;
+  fs.writeFileSync(path.join(outDir, sqliteName), sqliteBytes);
+  const sqliteWasm = url(sqliteName);
+  files[sqliteWasm] = { ...sizes(sqliteBytes), imports: [] };
   const missing = ISLAND_SPECIFIERS.filter((s) => !manifest[s]);
   if (missing.length) throw new Error(`build-islands: no chunk for ${missing.join(', ')}`);
 
@@ -273,8 +280,8 @@ export async function buildIslands({ outDir = DEFAULT_OUT_DIR } = {}) {
   const sortedManifest = Object.fromEntries([...ISLAND_SPECIFIERS, '@mx/glyphs'].map((s) => [s, manifest[s]]));
   const sortedFiles = Object.fromEntries(Object.keys(files).sort().map((k) => [k, files[k]]));
   const build = buildId(sortedManifest, ssr, inputs);
-  fs.writeFileSync(path.join(outDir, 'manifest.json'), JSON.stringify({ build, manifest: sortedManifest, files: sortedFiles, ssr }, null, 1) + '\n');
-  return { build, manifest: sortedManifest, files: sortedFiles, ssr, closure: (urls) => closureOf(sortedFiles, urls), inputs, outputInputs, metafile: result.metafile };
+  fs.writeFileSync(path.join(outDir, 'manifest.json'), JSON.stringify({ build, manifest: sortedManifest, files: sortedFiles, ssr, sqliteWasm }, null, 1) + '\n');
+  return { build, manifest: sortedManifest, files: sortedFiles, ssr, sqliteWasm, closure: (urls) => closureOf(sortedFiles, urls), inputs, outputInputs, metafile: result.metafile };
 }
 
 /**

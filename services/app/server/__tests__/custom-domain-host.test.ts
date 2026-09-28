@@ -382,7 +382,7 @@ describe('everything else on a verified host is 404', () => {
     noCookie(viewer);
     for (const id of [w.quiet.id, w.theirs.id, w.secret.id]) expect((await app().request(`${HOST}/a/${id}/viewer`)).status, id).toBe(404);
     // The author-script wrapper, at its address and (until wave 4) its old one under /story/.
-    for (const wrapper of ['/author-frame', '/story/author-frame']) {
+    for (const wrapper of ['/author-frame']) {
       const answer = await app().request(`${HOST}${wrapper}?artifact=${w.post.id}`);
       expect(answer.status, wrapper).toBe(200);
       expect(answer.headers.get('content-security-policy'), wrapper).toContain('sandbox allow-scripts');

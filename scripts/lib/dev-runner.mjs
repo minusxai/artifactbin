@@ -69,11 +69,9 @@ export async function runDev({ appOnly, args = [] }) {
     run.once('error', reject);
     run.once('exit', (code) => resolve(code ?? 1));
   });
-  // The reader runtime (public/story) and the compiled reader's shared island build (public/islands,
-  // docs/phase2-architecture.md §1): both content-addressed trees the server reads a manifest of.
-  const [runtimeStatus, islandsStatus] = await Promise.all([build('scripts/build-story-runtime.mjs'), build(ISLANDS_BUILD)]);
-  if (runtimeStatus !== 0 || islandsStatus !== 0) { process.exitCode = 1; return; }
-  watchRuntimeSources();
+  const [serverStatus, islandsStatus] = await Promise.all([build('scripts/build-server-reader.mjs'), build(ISLANDS_BUILD)]);
+  if (serverStatus !== 0 || islandsStatus !== 0) { process.exitCode = 1; return; }
+  watchServerSources();
   watchIslandSources();
 
   const nodeEnv = appOnly && process.env.NODE_ENV === 'test'
@@ -84,14 +82,12 @@ export async function runDev({ appOnly, args = [] }) {
     /*
      * LIVE. `tsx watch` restarts the server when any file it imports changes —
      * the document renderer, the chrome CSS the server inlines, a route. The
-     * reader RUNTIME is a separate esbuild bundle (public/story), rebuilt by the
-     * watcher below; its manifest is read once at boot (lib/story/runtime-asset),
-     * so the manifest itself is on the watch list and a rebuild restarts too.
+     * server SSR and offline assets are rebuilt by the watcher below.
      */
     // node_modules is excluded by name: Vite bundles its config into
     // node_modules/.vite-temp on every boot, and a watcher that sees that file
     // appear and vanish restarts forever.
-    ['tsx', 'watch', '--clear-screen=false', '--include', 'public/story/manifest.json', '--include', 'public/islands/manifest.json',
+    ['tsx', 'watch', '--clear-screen=false', '--include', 'lib/build-assets/story-ssr.cjs', '--include', 'public/islands/manifest.json',
       '--exclude', path.join(ROOT, 'node_modules/**'), '--exclude', '**/.vite-temp/**',
       path.join(ROOT, 'server.ts'), ...(appOnly ? ['--app-only'] : args)],
     {
@@ -104,21 +100,20 @@ export async function runDev({ appOnly, args = [] }) {
 }
 
 /**
- * The sources the reader runtime is bundled from. A change under any of them
- * rebuilds public/story (a few seconds of esbuild), debounced and serialised;
- * the new manifest then restarts the server through tsx's own watch list.
+ * The sources used by server SSR and the offline editor. Rebuild their assets
+ * when one changes, then let tsx restart the server from the changed bundle.
  */
-const RUNTIME_SOURCES = ['lib/story-runtime', 'lib/story-ui', 'lib/story', 'lib/viz', 'lib/data/story', 'components/kit'];
+const RUNTIME_SOURCES = ['lib/story-runtime', 'lib/story-ui', 'lib/story', 'lib/offline', 'lib/viz', 'lib/data/story', 'components/kit', 'components/offline'];
 
-function watchRuntimeSources() {
+function watchServerSources() {
   let timer = null;
   let building = false;
   let again = false;
   const rebuild = () => {
     if (building) { again = true; return; }
     building = true;
-    console.log('[dev] reader runtime source changed — rebuilding public/story');
-    const run = spawn('node', ['scripts/build-story-runtime.mjs', '--cache'], { cwd: APP_ROOT, stdio: 'inherit' });
+    console.log('[dev] server reader source changed — rebuilding server assets');
+    const run = spawn('node', ['scripts/build-server-reader.mjs', '--cache'], { cwd: APP_ROOT, stdio: 'inherit' });
     run.on('exit', () => {
       building = false;
       if (again) { again = false; rebuild(); }

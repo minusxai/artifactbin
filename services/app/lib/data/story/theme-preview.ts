@@ -3,7 +3,7 @@
  *
  * ONE canonical sample (eyebrow, display heading, prose, quote, rule, a small
  * table, an accent chip) rendered through the REAL pipeline: compileStoryCss
- * for the sheet, buildStoryDocument for the page, `colorMode` riding the real
+ * for the sheet, the compiled assembler for the page, `colorMode` riding the real
  * mode resolution. The driver (scripts/generate-theme-previews.ts) screenshots
  * the result per theme × mode into public/story-themes/<name>[-dark].png; a
  * registry tweak then only needs `npm run generate:theme-previews` to keep
@@ -13,7 +13,11 @@
  * without DuckDB, hydration or a data store, and its first paint is its final
  * geometry.
  */
-import { buildStoryDocument } from '@/lib/story/document';
+import { assembleReaderPage } from '@/lib/compiled-page/assembler';
+import { loadCompilerBuild } from '@/lib/compiled-page/build.server';
+import { compilePage } from '@/lib/compiled-page/compiler';
+import { prepareStoryParts } from '@/lib/story/prepare-runtime.server';
+import { documentStyleSheets } from '@/lib/story/document-styles';
 import { compileStoryCss } from './story-css.server';
 import type { StoryThemeName } from './story-themes';
 
@@ -57,7 +61,7 @@ export function themePreviewMarkup(theme: StoryThemeName): string {
 export async function buildThemePreviewDocument(theme: StoryThemeName, mode: 'light' | 'dark'): Promise<string> {
   const source = themePreviewMarkup(theme);
   const compiledCss = await compileStoryCss(source, { force: true });
-  return buildStoryDocument({
+  const parts = await prepareStoryParts({
     source,
     compiledCss,
     theme,
@@ -68,4 +72,19 @@ export async function buildThemePreviewDocument(theme: StoryThemeName, mode: 'li
     title: null,
     chrome: false,
   });
+  const build = loadCompilerBuild();
+  const compiled = await compilePage({
+    nodes: parts.runtime.data.nodes, colorMode: mode, template: null, chrome: false,
+    glyphs: parts.runtime.data.glyphs, refData: {}, flow: null, build: build.id,
+  }, build);
+  return assembleReaderPage({
+    compiled, story: compiled.html, css: '', fontPreloads: parts.runtime.fontPreloads ?? [],
+    title: parts.runtime.title, theme, colorMode: mode, snapshot: null,
+    overlay: { values: {}, mermaidImages: {}, signedIn: false, doors: null },
+    chrome: null, spa: null, build, head: null,
+    sheets: documentStyleSheets({
+      compiledCss, chrome: false, bare: false, theme,
+      importedFaces: parts.importedFaces, docFonts: parts.docFonts, authorCss: parts.runtime.authorCss,
+    }),
+  }).html;
 }

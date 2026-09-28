@@ -15,7 +15,7 @@ await rm(runtime,{recursive:true,force:true});await mkdir(runtime,{recursive:tru
 execFileSync(process.execPath,[join(repo,'scripts/build-server.mjs'),join(runtime,'host.mjs'),join(cli,'src/team-entry.ts'),'sharp'],{cwd:repo,stdio:'inherit'});
 execFileSync(process.execPath,[join(repo,'scripts/build-server.mjs'),join(runtime,'preview.mjs'),join(cli,'src/preview-entry.ts'),'sharp'],{cwd:repo,stdio:'inherit'});
 await build({entryPoints:[join(cli,'src/preview/client.tsx')],bundle:true,format:'esm',splitting:true,outdir:join(runtime,'preview'),platform:'browser',target:'es2022',jsx:'automatic',alias:{'@':app},define:{'process.env.NODE_ENV':'"production"'},loader:{'.woff2':'dataurl','.css':'empty'}});
-for(const name of ['public','skills','orchestrator','lib/story-runtime/dist','dist/web','package.json']){
+for(const name of ['public','skills','orchestrator','lib/build-assets','dist/web','package.json']){
  await mkdir(dirname(join(runtime,name)),{recursive:true});await cp(join(app,name),join(runtime,name),{recursive:true});
 }
 await writeFile(join(runtime,'bootstrap.cjs'),"exports.image=(options,assets)=>import('./preview.mjs').then(host=>host.exportPreviewImage(options,assets));\nexports.preview=(options,assets)=>import('./preview.mjs').then(host=>host.startPreviewHost(options,assets));\nexports.team=(config,assets,overrides)=>import('./host.mjs').then(host=>host.startTeamHost(config,assets,overrides));\n");
