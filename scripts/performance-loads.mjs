@@ -69,6 +69,7 @@ const child = spawn(process.execPath, [path.join(root, 'dist/server.mjs')], {
     SQL__SERVICE_URL: '', BROWSER__SERVICE_URL: '', EVENTS__SERVICE_URL: '',
     EXPORT__INTERNAL_ORIGIN: base, OBJECT_STORE__LOCAL_DIR: path.join(scratch, 'objects'),
     ARTIFACTS__ALLOW_PUBLIC: '1', EMAIL__DEV_OUTBOX_PATH: outbox,
+    FLAG__COMPILED_READER: 'on',
   },
 });
 let browser;
