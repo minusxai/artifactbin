@@ -15,7 +15,7 @@ import { render } from '@/test/helpers/surface-ui';
 import { setupSurface, surfaceProps } from '@/test/helpers/inline-surface';
 import { installIslandDocument } from '@/lib/islands/handover';
 import type { IslandDocument } from '@/lib/islands/contract';
-import type { InlineStoryController, InlineStoryRuntimeProps } from '@/lib/story-runtime/InlineStoryRuntime';
+import type { StoryController, EditorStoryRuntimeProps } from '@/lib/story-runtime/EditorStoryRuntime';
 import { STORY_DATA_MESSAGE, STORY_DOCUMENT_MESSAGE, STORY_READER_MODE_MESSAGE } from '@/lib/story-runtime/contract';
 import { updateCompiledStory } from '@/lib/islands/live-update';
 
@@ -23,12 +23,12 @@ vi.mock('@/lib/islands/live-update', () => ({ updateCompiledStory: vi.fn(async (
 import { captureInitialStory, clearInitialStory } from '@/web/initial-story';
 import { scheduleSpaBoot } from '@/web/idle-boot';
 
-const interpreters: InlineStoryRuntimeProps[] = [];
-vi.mock('@/lib/story-runtime/InlineStoryRuntime', () => ({
-  InlineStoryRuntime: (props: InlineStoryRuntimeProps) => {
+const interpreters: EditorStoryRuntimeProps[] = [];
+vi.mock('@/lib/story-runtime/EditorStoryRuntime', () => ({
+  EditorStoryRuntime: (props: EditorStoryRuntimeProps) => {
     useLayoutEffect(() => {
       interpreters.push(props);
-      const controller: InlineStoryController = {
+      const controller: StoryController = {
         nonce: 'interpreter', send: () => {}, update: () => {}, invalidate: () => {},
         subscribe: () => () => {}, getViewportRect: () => new DOMRect(), dispose: () => {},
       };
@@ -116,7 +116,6 @@ describe('adopting the compiled page', () => {
     const edit = document.querySelector<HTMLElement>('[data-mx-reader-rail] [data-mx-reader-action="edit"]')!;
     await act(async () => { fireEvent.click(edit); await Promise.resolve(); });
     await waitFor(() => expect(interpreters).toHaveLength(1));
-    expect(interpreters[0]!.hydrateInitialStory).toBe(false);
     expect(islands.events).toEqual(['edit', 'dispose']);
     expect(story.isConnected).toBe(false);
     expect(screen.getByLabelText('Artifact viewport').querySelector('[data-interpreter]')).not.toBeNull();
@@ -146,7 +145,7 @@ describe('adopting the compiled page', () => {
   it('carries the reader\'s own mode and the version\'s source nodes into the update', async () => {
     servePage();
     render(<ArtifactShell role="commenter"><ArtifactSurface {...compiledProps()} /></ArtifactShell>);
-    const controller = (layerProps.at(-1)!.runtimeRef as { current: InlineStoryController | null }).current!;
+    const controller = (layerProps.at(-1)!.runtimeRef as { current: StoryController | null }).current!;
     controller.send({ type: STORY_READER_MODE_MESSAGE, mode: 'dark' });
     vi.mocked(updateCompiledStory).mockClear();
     controller.update({ type: STORY_DOCUMENT_MESSAGE, nodes: [] } as never);
@@ -158,21 +157,21 @@ describe('adopting the compiled page', () => {
 
   it('a dataset wakeup re-runs the islands\' queries on their store', () => {
     const { islands } = servePage();
-    const controllers: Array<InlineStoryController | null> = [];
+    const controllers: Array<StoryController | null> = [];
     // The page's controller is what AnnotationLayer is handed: a commenter's page mounts it.
     render(<ArtifactShell role="commenter"><ArtifactSurface {...compiledProps()} /></ArtifactShell>);
-    const runtimeRef = layerProps.at(-1)!.runtimeRef as { current: InlineStoryController | null };
+    const runtimeRef = layerProps.at(-1)!.runtimeRef as { current: StoryController | null };
     controllers.push(runtimeRef.current);
     runtimeRef.current!.send({ type: STORY_DATA_MESSAGE, datasets: ['sales'] });
     expect(islands.invalidated).toEqual([['sales']]);
     expect(controllers[0]!.nonce).not.toBe('interpreter');
   });
 
-  it('a surface that cannot adopt it (no prepared runtime) never hydrates the compiled story with React', async () => {
+  it('a reader surface without a compiled root does not mount the editor interpreter', async () => {
     servePage();
     render(<ArtifactSurface {...surfaceProps()} />);
-    await waitFor(() => expect(interpreters).toHaveLength(1));
-    expect(interpreters[0]!.hydrateInitialStory).toBe(false);
+    await act(async () => { await Promise.resolve(); });
+    expect(interpreters).toHaveLength(0);
   });
 
   it('performs a served chrome control pressed before the app arrived, once', async () => {

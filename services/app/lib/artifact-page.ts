@@ -43,9 +43,8 @@ import { firstHeadingTitle } from '@/lib/story/title';
 import { isStartPlaceholder } from '@/lib/start-placeholder';
 import type { LazyCode } from '@/lib/story/lazy-code';
 import type { ArtifactRow } from '@/lib/artifacts';
-import { ASSETS_ORIGIN, COMPILED_READER } from '@/lib/config';
+import { ASSETS_ORIGIN } from '@/lib/config';
 import { VIEWER_OVERLAY_PATH, type AssembleInput, type ReaderFallbackReason } from '@/lib/compiled-page/contract';
-import { currentCompiledReaderFlag, readerModeFor } from '@/lib/compiled-page/reader-mode';
 import { CompiledPageFailed, compiledPageFor } from '@/lib/compiled-page/serve.server';
 import { agentDiscovery } from '@/lib/agent-discovery';
 import { canonicalDocumentUrl } from '@/lib/custom-domains';
@@ -214,8 +213,7 @@ export async function artifactPageAnswer(request: Request, id: string, options: 
    */
   const starterDoc = isDoc && isStartPlaceholder(row.source ?? null, artifact.version);
   const compiledMode = !!options.page && !!prepared && !exporting && !starterDoc
-    && !new URL(request.url).pathname.endsWith('/edit')
-    && readerModeFor(currentCompiledReaderFlag(COMPILED_READER), new URL(request.url).search) === 'compiled';
+    && !new URL(request.url).pathname.endsWith('/edit');
 
   const meta = (row.meta ?? {}) as {
     theme?: StoryThemeName | null; colorMode?: 'light' | 'dark' | null; compiledCss?: string | null;

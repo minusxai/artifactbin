@@ -8,7 +8,7 @@ const HELP = { url: 'https://x.test/llms.txt', instruction: 'afbin: a CLI to ope
 const build = { id: 'b'.repeat(16), manifest: {} };
 const compiled: CompiledPage = {
   build: build.id, html: '<h1>Hello</h1>', islands: [], module: null, ssr: null,
-  behaviors: [], plan: null, links: { prefetch: [], prerender: [] },
+  behaviors: [], plan: null, links: { prefetch: [], prerender: [] }, outline: [], outlinePlan: false,
   kit: { skeleton: [], islands: [] }, reactStatic: [], unported: [], partial: [], authorScript: null,
 };
 const doc = (head: AssembleHead | null = null): string => {

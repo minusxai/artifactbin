@@ -89,16 +89,15 @@ describe('the story fragment', () => {
     expect(owner.headers.get('access-control-allow-origin')).toBeNull();
   });
 
-  it('never answers with today\'s renderer: a request the compiled path does not serve is refused, for the page to reload', async () => {
+  it('always answers with the compiled renderer and waits for a missing compile', async () => {
     const { id } = await publish({ title: 'Prose', markup: fixture('prose.jsx') });
-    const legacy = await story(id, '');
-    expect(legacy.status).toBe(422);
-    expect(legacy.headers.get(READER_MODE_HEADER)).toBeNull();
-    expect(await legacy.json()).toEqual({ error: 'not_compiled' });
+    const ordinary = await story(id, '');
+    expect(ordinary.status).toBe(200);
+    expect(ordinary.headers.get(READER_MODE_HEADER)).toBe('compiled');
     const db = await harness.db();
     await db.query(`UPDATE prepared_pages SET page = page - 'compiled' WHERE artifact_id = $1`, [id]);
     const notYet = await story(id, '?reader=compiled');
-    expect([409, 200], 'a version not compiled yet is asked for again (or compiled inline)').toContain(notYet.status);
+    expect(notYet.status, 'a missing compile is made before answering').toBe(200);
   });
 
   it('is the uniform 404 for an artifact that is not a document', async () => {

@@ -6,6 +6,8 @@
  * because the inlined answer belongs to the address the document was served at.
  */
 
+import { initialStorySheet } from './initial-story';
+
 const BOOTSTRAP_ID = 'mx-page-data';
 
 interface Payload {
@@ -38,6 +40,14 @@ export function takeBootstrap<T>(path: string, which: 'profile' | 'artifact'): T
   const value = payload[which];
   if (value === undefined) return null;
   taken.add(which);
+  if (which === 'artifact' && value && typeof value === 'object') {
+    const artifact = value as { surface?: { runtime?: { css?: string } } };
+    const runtime = artifact.surface?.runtime;
+    if (runtime && runtime.css === undefined) {
+      const sheet = initialStorySheet();
+      if (sheet !== null) runtime.css = sheet;
+    }
+  }
   return value as T;
 }
 

@@ -200,8 +200,6 @@ export interface IslandPageData {
   results: ServedResults | null;
   /** The compiled app page uses its same-origin scoped POST query door, including for guests. */
   appPage: boolean;
-  sqliteWasm?: string;
-  hold?: string[];
   queryUrl?: string;
   mutateUrl?: string;
   viewerUrl?: string;

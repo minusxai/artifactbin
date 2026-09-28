@@ -5,6 +5,7 @@
  */
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { fireEvent } from '@testing-library/react';
+import { renderStoryNodes } from '@/lib/story-ui/interpreter';
 import {
   STORY_EDIT_READY_MESSAGE,
   STORY_TEXT_EDIT_MESSAGE,
@@ -86,6 +87,18 @@ describe('typing and committing', () => {
     expect(sent(STORY_TEXT_EDIT_MESSAGE)).toEqual([
       { type: STORY_TEXT_EDIT_MESSAGE, nonce: NONCE, path: '0.1', innerHtml: 'hello <b>brave</b> world' },
     ]);
+  });
+
+  it('keeps committed text visible through a composer render until the source update arrives', () => {
+    const { at, view, session, nodes } = mount();
+    const host = at('0.1');
+    fireEvent.focus(host);
+    host.innerHTML = 'hello MIDSENTENCE';
+    fireEvent.input(host);
+    fireEvent.blur(host);
+    view.rerender(<>{renderStoryNodes(nodes, { components: {}, decorateElement: session.decorate })}</>);
+    expect(at('0.1').textContent).toBe('hello MIDSENTENCE');
+    expect(last(STORY_TEXT_EDIT_MESSAGE)).toMatchObject({ innerHtml: 'hello MIDSENTENCE' });
   });
 
   it('sends NOTHING when the user only looked at it', () => {

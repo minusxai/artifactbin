@@ -168,6 +168,7 @@ function islandData(input: AssembleInput): IslandPageData {
   return {
     values: overlay.values,
     results: input.snapshot?.results ?? null,
+    appPage: !!input.spa,
     ...(overlay.doors ?? {}),
     ...(overlay.managedAssets ? { managedAssets: overlay.managedAssets } : {}),
     signedIn: overlay.signedIn,

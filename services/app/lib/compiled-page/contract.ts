@@ -19,7 +19,6 @@
  *   links.ts            linkHintsOf            w1-planners
  */
 import type { JsxNode } from '@/lib/jsx';
-import type { OutlineEntry } from '@/lib/story-runtime/outline';
 import type { CompiledDataflow, CompiledReads } from '@/lib/story/compiled-dataflow';
 import type { Scalar } from '@/lib/story/dataflow';
 import type { RefDataMap } from '@/lib/story/ref-data';
@@ -416,8 +415,6 @@ export type LinkHintsOf = (nodes: JsxNode[], deployment: { origins: readonly str
 export interface AssembleOverlay {
   /** The reader's URL `$` values (lib/story/url-values), already parsed against the flow. */
   values: Record<string, Scalar>;
-  /** Guest-safe imports the page may hold in full; an empty list keeps runs at the server. */
-  hold?: string[];
   /** The version's stored Mermaid drawings for this surface (lib/mermaid-images), or none. */
   mermaidImages: Readonly<Record<string, StoredMermaidImage>>;
   /** Whether the request carries a session: the signed-in hint, never the identity (that arrives after paint). */
