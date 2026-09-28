@@ -24,7 +24,7 @@ const snapshot: DataSnapshot = { key: { artifactId: 'X34b00', slot: 'head', plan
 const input = (over: Partial<AssembleInput> = {}): AssembleInput => ({
   compiled: compiled(), story: compiled().html, css: '.mx-doc{color:red}', fontPreloads: ['/fonts/inter.woff2'], title: 'Perf <C> dashboard', theme: 'industry', colorMode: 'light', snapshot,
   overlay: { values: { region: 'West' }, mermaidImages: {}, signedIn: false, doors: { queryUrl: '/a/X34b00/query', assetsUrl: '/a/X34b00/assets', viewerUrl: '/a/X34b00/viewer' } },
-  chrome: null, spa: null, build, ...over,
+  chrome: null, spa: null, build, head: null, ...over,
 });
 const dom = (page: { html: string }) => new JSDOM(page.html).window.document;
 

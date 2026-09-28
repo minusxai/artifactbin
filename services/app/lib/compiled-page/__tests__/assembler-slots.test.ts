@@ -9,6 +9,7 @@ import { parse, View } from 'vega';
 import { compile, type TopLevelSpec } from 'vega-lite';
 import { assembleReaderPage, isInertSvg, scriptJson } from '../assembler';
 import { speculationRulesOf } from '../speculation';
+import { agentDiscovery, agentDiscoveryTail } from '@/lib/agent-discovery';
 import { CHART_SLOT_ATTR, ISLAND_DATA_ID, SIGNED_IN_HINT_ATTR, SPA_IDLE_ATTR, SPECULATION_RULES_HEADER, type AssembleInput, type CompiledPage, type DataSnapshot } from '../contract';
 
 const build = { id: 'b'.repeat(16), manifest: { '@mx/rt': '/islands/rt-4444dddd.js', '@mx/deck': '/islands/deck-6666ffff.js' } };
@@ -24,7 +25,7 @@ const drawn = (svg: string) => ({ svg, table: 't', rows: 'r' });
 const input = (over: Partial<AssembleInput> = {}): AssembleInput => ({
   compiled: compiled(), story: '<p>x</p>', css: '', fontPreloads: [], title: 't', theme: null, colorMode: 'dark', snapshot: null,
   overlay: { values: {}, mermaidImages: {}, signedIn: false, doors: { queryUrl: '/a/X/query', assetsUrl: '/a/X/assets' } },
-  chrome: null, spa: null, build, ...over,
+  chrome: null, spa: null, build, head: null, ...over,
 });
 const doc = (html: string) => new JSDOM(html).window.document;
 const SVG = '<svg viewBox="0 0 10 10" role="img"><g><rect width="1" height="1"></rect><text x="1">Q&amp;A</text></g></svg>';
@@ -104,6 +105,44 @@ describe('the page around the story', () => {
     expect(page.headers[SPECULATION_RULES_HEADER]).toBe(`"${speculationRulesOf(links.prerender)!.url}"`);
     expect(JSON.parse(speculationRulesOf(links.prerender)!.text)).toEqual({ prerender: [{ source: 'list', urls: ['/a/One'], eagerness: 'moderate' }] });
     expect(page.html).not.toContain('javascript:');
+  });
+});
+
+describe('head metadata', () => {
+  const help = agentDiscovery('https://app.artifactbin.dev');
+  const head = { description: 'Monthly <revenue> & "churn"', canonical: 'https://app.artifactbin.dev/@sree/X34b00-perf', social: { title: 'Perf "Q3"', image: 'https://app.artifactbin.dev/a/X34b00/export?mode=card&r=3' }, help };
+
+  it('emits the description, canonical link and social card, escaped, with og:description falling back to the description', () => {
+    const page = doc(assembleReaderPage(input({ head })).html);
+    expect(page.querySelector('link[rel="canonical"]')?.getAttribute('href')).toBe(head.canonical);
+    expect(page.querySelector('meta[name="description"]')?.getAttribute('content')).toBe(head.description);
+    expect(page.querySelector('meta[property="og:title"]')?.getAttribute('content')).toBe('Perf "Q3"');
+    expect(page.querySelector('meta[property="og:description"]')?.getAttribute('content')).toBe(head.description);
+    expect(page.querySelector('meta[property="og:image"]')?.getAttribute('content')).toBe(head.social.image);
+    expect(page.querySelector('meta[name="twitter:card"]')?.getAttribute('content')).toBe('summary_large_image');
+    const own = doc(assembleReaderPage(input({ head: { ...head, social: { ...head.social, description: 'card text' } } })).html);
+    expect(own.querySelector('meta[property="og:description"]')?.getAttribute('content')).toBe('card text');
+  });
+
+  it('carries the agent pointer first in the head, as the last line of the body, and as a Link header', () => {
+    const page = assembleReaderPage(input({ head, spa: { entry: '/assets/main.js', preload: [] } }));
+    const html = page.html;
+    const pointer = html.indexOf('<link rel="help"');
+    expect(pointer).toBeGreaterThan(0);
+    expect(pointer).toBeLessThan(html.indexOf('<title>'));
+    expect(pointer).toBeLessThan(html.indexOf('rel="modulepreload"'));
+    expect(pointer).toBeLessThan(html.indexOf('<style'));
+    expect(doc(html).querySelector('meta[name="afbin"]')?.getAttribute('content')).toBe(help.instruction);
+    expect(html.endsWith(`${agentDiscoveryTail(help)}</body></html>`)).toBe(true);
+    expect(page.headers.Link).toBe(`<${help.url}>; rel="help"`);
+  });
+
+  it('emits none of it for a path with no head (a capture, the offline file)', () => {
+    const page = assembleReaderPage(input({ head: null }));
+    const d = doc(page.html);
+    for (const selector of ['link[rel="canonical"]', 'meta[name="description"]', 'meta[property^="og:"]', 'meta[name="twitter:card"]', 'link[rel="help"]', 'meta[name="afbin"]']) expect(d.querySelector(selector), selector).toBeNull();
+    expect(page.html).not.toContain('<!--');
+    expect(page.headers.Link).toBeUndefined();
   });
 });
 

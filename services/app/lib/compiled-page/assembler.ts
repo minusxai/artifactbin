@@ -24,40 +24,22 @@
  * at the end of the body: the React app is the reader's second screen, and its
  * bytes must never race the ones the first screen paints with.
  */
+import { agentDiscoveryHead, agentDiscoveryTail } from '@/lib/agent-discovery';
+import type { IslandPageData } from '@/lib/islands/contract';
 import { STORY_CHROME_CSS } from '@/lib/story-runtime/chrome-css';
-import { STORY_ROOT_ID, type ServedResults, type StoredMermaidImage } from '@/lib/story-runtime/contract';
-import type { Scalar } from '@/lib/story/dataflow';
+import { STORY_ROOT_ID } from '@/lib/story-runtime/contract';
 import { fontPreloadTags } from '@/lib/story/first-screen-fonts';
 import { inlineStoryElement } from '@/lib/story/inline-story-html';
 import { escapeHtml, renderReaderChrome } from '@/lib/story/reader-chrome';
 import {
-  CHART_SLOT_ATTR, ISLAND_DATA_ID, SIGNED_IN_HINT_ATTR, SPA_IDLE_ATTR, SPECULATION_RULES_HEADER,
-  type AssembleInput, type AssembleReaderPage, type AssembledPage, type CompilerBuild, type DrawnChart,
+  CHART_SLOT_ATTR, CHART_STATE_ATTR, ISLAND_DATA_ID, SIGNED_IN_HINT_ATTR, SPA_IDLE_ATTR, SPECULATION_RULES_HEADER,
+  type AssembleHead, type AssembleInput, type AssembleReaderPage, type AssembledPage, type CompilerBuild, type DrawnChart,
 } from './contract';
 import { isNavigable, speculationRulesOf } from './speculation';
 
-/** What the page's `#mx-story-data` carries: the island runtime's (lib/islands/boot) whole starting state. */
-export interface IslandPageData {
-  /** The reader's URL `$` values over the declared defaults. */
-  values: Record<string, Scalar>;
-  /** The guest snapshot's shared answers, or null (the islands fetch their own). */
-  results: ServedResults | null;
-  queryUrl?: string;
-  mutateUrl?: string;
-  viewerUrl?: string;
-  assetsUrl?: string;
-  /** The signed-in hint (never the identity: that arrives after paint from `viewerUrl`). */
-  signedIn: boolean;
-  mermaidImages: Readonly<Record<string, StoredMermaidImage>>;
-  /** An archived version's read-only reason; null for the head. */
-  readOnly: string | null;
-}
-
-/** The state a chart slot carries once its drawing is in place. */
-export const CHART_STATE_ATTR = 'data-mx-chart-state';
-
 export const assembleReaderPage: AssembleReaderPage = (input: AssembleInput): AssembledPage => {
   const { compiled, overlay, chrome, spa, build } = input;
+  const help = input.head?.help ?? null;
   const module = compiled.module;
 
   const story = storyElement(fillChartSlots(input.story, input.snapshot?.drawings ?? {}), input.colorMode, input.theme);
@@ -70,9 +52,13 @@ export const assembleReaderPage: AssembleReaderPage = (input: AssembleInput): As
   const head =
     '<meta charset="utf-8">'
     + '<meta name="viewport" content="width=device-width, initial-scale=1">'
+    // The agent pointer ahead of every preload and style, as server/app's withAgentDiscovery places it:
+    // a shell tool that keeps only a page's first few kilobytes still sees it.
+    + (help ? agentDiscoveryHead(help) : '')
     // A chrome-less page is the framed or standalone copy (/raw): its links leave the frame, as today's.
     + (chrome ? '' : '<base target="_top">')
     + `<title>${escapeHtml(input.title)}</title>`
+    + headMetadata(input.head)
     + fontPreloadTags(input.fontPreloads)
     + islandPreloads.map(modulePreload).join('')
     + prefetch.map((href) => `<link rel="prefetch" href="${escapeHtml(href)}" as="document">`).join('')
@@ -86,13 +72,19 @@ export const assembleReaderPage: AssembleReaderPage = (input: AssembleInput): As
     + (module ? `<script type="application/json" id="${ISLAND_DATA_ID}">${scriptJson(islandData(input))}</script>` : '')
     + behaviorSrcs.map((src) => moduleScript(src)).join('')
     + (module ? moduleScript(module.url) : '')
-    + (spa ? unique(spa.preload).map(modulePreload).join('') + moduleScript(spa.entry, ` ${SPA_IDLE_ATTR}=""`) : '');
+    + (spa ? unique(spa.preload).map(modulePreload).join('') + moduleScript(spa.entry, ` ${SPA_IDLE_ATTR}=""`) : '')
+    // The pointer again as the page's LAST line, for a reader that keeps only the tail (lib/agent-discovery).
+    + (help ? agentDiscoveryTail(help) : '');
 
   const html =
     `<!doctype html><html class="${escapeHtml(input.colorMode)}"${overlay.signedIn ? ` ${SIGNED_IN_HINT_ATTR}=""` : ''}>`
     + `<head>${head}</head><body>${body}</body></html>`;
 
-  return { html, headers: rules ? { [SPECULATION_RULES_HEADER]: `"${rules.url}"` } : {} };
+  const headers: Record<string, string> = {};
+  if (rules) headers[SPECULATION_RULES_HEADER] = `"${rules.url}"`;
+  // The same pointer as a header, for a fetch that reads no body (as /a/:id and /raw answer today).
+  if (help) headers.Link = `<${help.url}>; rel="help"`;
+  return { html, headers };
 };
 
 /* ──────────────────────────────────────────────────────────────────────────
@@ -109,6 +101,25 @@ const unique = (urls: readonly string[]): string[] => [...new Set(urls)];
  */
 const modulePreload = (href: string): string => `<link rel="modulepreload" href="${escapeHtml(href)}" crossorigin>`;
 const moduleScript = (src: string, attrs = ''): string => `<script type="module" src="${escapeHtml(src)}" crossorigin${attrs}></script>`;
+
+/**
+ * The description, canonical link and social card the reader paths emit today
+ * (server/app withInitialStory, lib/story/document): `og:description` falls
+ * back to the page description, as the app page's does.
+ */
+function headMetadata(head: AssembleHead | null): string {
+  if (!head) return '';
+  const { description = null, canonical = null, social = null } = head;
+  const socialDescription = social?.description ?? description;
+  return (canonical ? `<link rel="canonical" href="${escapeHtml(canonical)}">` : '')
+    + (description ? `<meta name="description" content="${escapeHtml(description)}">` : '')
+    + (social
+      ? `<meta property="og:title" content="${escapeHtml(social.title)}">`
+        + (socialDescription ? `<meta property="og:description" content="${escapeHtml(socialDescription)}">` : '')
+        + `<meta property="og:image" content="${escapeHtml(social.image)}">`
+        + '<meta name="twitter:card" content="summary_large_image">'
+      : '');
+}
 
 /** `</style` inside CSS would close the element early; CSS has no use for the sequence (lib/story/document's rule). */
 const styleTag = (attr: string, css: string): string => `<style ${attr}>${css.replace(/<\/style/gi, '')}</style>`;
