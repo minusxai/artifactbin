@@ -56,6 +56,7 @@ import { assetsPath, mutatePath, queryPath } from '@/lib/story/markup-csp';
 import { archivedReadOnly } from '@/lib/archived-version';
 import type { ReaderChromeInput } from '@/lib/story/reader-chrome';
 import { displayTitle } from '@/lib/story/title';
+import { APP_BAR_H } from '@/lib/story/edit-bar';
 
 /** The story the app page inlines for this answer (server/app withInitialStory). */
 export interface InitialStory {
@@ -269,6 +270,12 @@ export async function artifactPageAnswer(request: Request, id: string, options: 
       chrome: await readerChromeFor({ artifact, row, role, kind, actor, at, author: authorMark, likeCount, liked, follow, openAnnotations, hasInvitedUsers: ownerScope ? hasInvitedUsers : undefined, ground: design.colorMode ?? prepared.page.data.colorMode }),
       chromeFonts: readerChromeFonts({ theme: prepared.page.base.theme, docFonts: prepared.page.base.fonts, importedFaces: prepared.page.base.faces }).map((face) => face.url),
       spa: options.page!.spa,
+      /*
+       * The app's bar is the page's top 44 px from a phone's width up; the served story reserves it
+       * before first paint so the app's arrival moves nothing (today's page does the same with its
+       * wrapper's padding). On the body: the story root is the body's own child.
+       */
+      pageCss: `@media(min-width:640px){body:has(> [data-mx-inline-story]){padding-top:${APP_BAR_H}px}}`,
       head: {
         description: row.description,
         canonical: await canonicalDocumentUrl(artifact),

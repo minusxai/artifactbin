@@ -12,7 +12,7 @@
  * 4. installs the `IslandDocument` on the story root (handover.ts) for the SPA to adopt;
  * 5. marks `<html data-mx-ready>` and fires `mx:ready` on `document` — also when there are no
  *    islands, so a page with a module always signals ready;
- * 6. top-level only: holds the document's live stream (lib/story-runtime/live-entry, by import) and
+ * 6. top-level only: holds the document's live stream (./live, from the snapshot's `since`) and
  *    re-runs exactly the queries reading a dataset a `data` frame names (`store.invalidateDatasets`).
  *
  * The viewer overlay, the write status feed and its indicator are wave-3 seams (viewer.ts,
@@ -22,7 +22,7 @@ import type { Component } from 'solid-js';
 import type { CompiledDataflow } from '@/lib/story/compiled-dataflow';
 import { createDataflowStore } from '@/lib/story-runtime/store';
 import { createDocumentTransport } from '@/lib/story-runtime/document-transport';
-import { startDocumentLive } from '@/lib/story-runtime/live-entry';
+import { startIslandLive } from './live';
 import { STORY_DATA_HOOK } from '@/lib/story-runtime/contract';
 import { ISLAND_DATA_ID, READER_READY_ATTR } from '@/lib/compiled-page/contract';
 import { ISLANDS_READY_EVENT, type IslandDocument, type IslandDocumentMode, type IslandEvent, type IslandPageData, type IslandViewer } from './contract';
@@ -119,7 +119,8 @@ export function boot(input: IslandModule | readonly IslandEntry[], win: Window =
   const liveEdit = doc.body?.getAttribute(LIVE_EDIT_ATTR);
   if (win.parent === win && typeof (win as { EventSource?: unknown }).EventSource === 'function' && liveId && liveEdit) {
     if (store) hooks[STORY_DATA_HOOK] = (datasets: string[]) => store.invalidateDatasets(datasets);
-    stopLive = startDocumentLive(win, liveId, liveEdit);
+    // From the snapshot's marks: a dataset written since the snapshot was taken re-runs at once (live.ts).
+    stopLive = startIslandLive(win, liveId, liveEdit, data.results?.since ?? null);
   }
 
   let mode: IslandDocumentMode = 'read';

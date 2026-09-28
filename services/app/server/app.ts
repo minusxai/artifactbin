@@ -329,6 +329,8 @@ const apiNotFound = (c: { req: { raw: Request } }) => {
   }, 404, { 'Cache-Control': 'no-store' });
 };
 
+/** A document row this request already fetched and admitted (documentPreparation), and its canonical path when it was computed. */
+interface Admitted { row: ArtifactRow; canonicalPath?: string }
 /** The document page's reader headers (docs/phase2-architecture.md §6): which renderer answered, and why a compiled request fell back. */
 const readerHeaders = (reader: ArtifactPageAnswer['reader'] | undefined): Record<string, string> => (reader
   ? { [READER_MODE_HEADER]: reader.mode, ...(reader.fallback ? { [READER_FALLBACK_HEADER]: reader.fallback } : {}) }
@@ -398,7 +400,7 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
    * no fetch round trip, no chrome settling, no address healing a beat later.
    * The endpoints stay the truth; this is the same data, arriving earlier.
    */
-  const page = async (c: { req: { raw: Request; url: string } }, status?: 200 | 404, canonical?: string, address?: string, admitted?: ArtifactRow) => {
+  const page = async (c: { req: { raw: Request; url: string } }, status?: 200 | 404, canonical?: string, address?: string, admitted?: Admitted) => {
     // A document served at a non-canonical address is rendered AS its canonical address (see documentAddress).
     const url = address ? new URL(address + new URL(c.req.url).search, c.req.url).href : c.req.url;
     const found = await bootstrapFor(c.req.raw, new URL(url).pathname, admitted);
@@ -478,13 +480,13 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
     ...(answer.compiled ? { compiled: answer.compiled } : {}),
     ...(answer.reader ? { reader: answer.reader } : {}),
   } : {});
-  async function bootstrapFor(request: Request, pathname = new URL(request.url).pathname, admitted?: ArtifactRow): Promise<Bootstrap | null> {
+  async function bootstrapFor(request: Request, pathname = new URL(request.url).pathname, admitted?: Admitted): Promise<Bootstrap | null> {
     // The ORIGINAL request answers, whatever path it is rendered as: its actor rides on the object (utils inProcess).
     const url = { pathname };
     const segments = url.pathname.split('/').filter(Boolean);
     // The row documentPreparation already fetched and admitted for this request rides along: one fetch, one check.
     const document = async (id: string) => {
-      const answer = await runWithRequest(request, () => artifactPageAnswer(request, id, { ...(admitted ? { admitted } : {}), page: { spa: spaEntry() } }));
+      const answer = await runWithRequest(request, () => artifactPageAnswer(request, id, { ...(admitted ? { admitted: admitted.row } : {}), page: { spa: spaEntry() } }));
       return answer.status === 200 ? answer : null;
     };
     if (segments.at(-1) === 'edit') segments.pop();
@@ -493,8 +495,14 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
       return artifact ? { data: { path: url.pathname, artifact: artifact.body }, ...documentParts(artifact) } : null;
     }
     if (segments[0]?.startsWith('@')) {
-      const res = profileData ? await runWithRequest(request, () => profileData(request, { params: Promise.resolve({ user: segments[0]!, ...(segments.length > 1 ? { path: segments.slice(1).join('/') } : {}) }) })) : null;
-      const profile = res?.ok ? await res.json() as { kind?: string; id?: string } : null;
+      /*
+       * The document's own canonical address, already fetched and admitted for this request: the
+       * resolution is the profile route's own answer for it (`{ kind: 'artifact', id }`), without a
+       * second fetch of the row or a second admission.
+       */
+      const own = admitted?.canonicalPath !== undefined && `/${segments.join('/')}` === admitted.canonicalPath;
+      const res = own || !profileData ? null : await runWithRequest(request, () => profileData(request, { params: Promise.resolve({ user: segments[0]!, ...(segments.length > 1 ? { path: segments.slice(1).join('/') } : {}) }) }));
+      const profile = own ? { kind: 'artifact', id: admitted!.row.id } : res?.ok ? await res.json() as { kind?: string; id?: string } : null;
       if (!profile) return null;
       const artifact = profile.kind === 'artifact' && profile.id ? await document(profile.id) : null;
       return { data: { path: url.pathname, profile, ...(artifact ? { artifact: artifact.body } : {}) }, ...documentParts(artifact) };
@@ -518,7 +526,7 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
    * viewer who cannot read it; a valid export key skips the healing, because a
    * capture must stay at the address it was handed.
    */
-  const documentPreparation = async (request: Request): Promise<{ status: 200 | 404; address?: string; canonical?: string; admitted?: ArtifactRow }> => {
+  const documentPreparation = async (request: Request): Promise<{ status: 200 | 404; address?: string; canonical?: string; admitted?: Admitted }> => {
     const url = new URL(request.url);
     const found = candidateDocument(url.pathname);
     if (!found) return { status: 200 };
@@ -526,14 +534,15 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
     if (!row) return { status: 404 };
     // A key skips canonical healing, but only a valid key admits the page.
     const key = url.searchParams.get('key');
-    if (!url.pathname.endsWith('/edit') && key && verifyExportKey(row.id, key)) return { status: 200, admitted: row };
+    if (!url.pathname.endsWith('/edit') && key && verifyExportKey(row.id, key)) return { status: 200, admitted: { row } };
     const actor = await sessionActor(request).catch(() => null);
     if (url.pathname.endsWith('/edit') && (!actor || !canEdit(await roleFor(row, actor)))) return { status: 404 };
     if (!(await canReadArtifact(row, actor?.viewer ?? null))) return { status: 404 };
     // Admitted, by this request's own actor: the page's answer reuses the row and this decision.
-    if (url.searchParams.has('key')) return { status: 200, admitted: row };
-    const canonical = canonicalArtifactPath(row, await ownerUsername(row.user_id)) + (url.pathname.endsWith('/edit') ? '/edit' : '');
-    return { status: 200, admitted: row, canonical: await canonicalDocumentUrl(row), ...(canonical !== url.pathname ? { address: canonical } : {}) };
+    if (url.searchParams.has('key')) return { status: 200, admitted: { row } };
+    const canonicalPath = canonicalArtifactPath(row, await ownerUsername(row.user_id));
+    const canonical = canonicalPath + (url.pathname.endsWith('/edit') ? '/edit' : '');
+    return { status: 200, admitted: { row, canonicalPath }, canonical: await canonicalDocumentUrl(row), ...(canonical !== url.pathname ? { address: canonical } : {}) };
   };
 
   // Static: content-addressed trees are immutable; everything else is served plainly.

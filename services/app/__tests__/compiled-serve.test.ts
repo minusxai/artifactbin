@@ -19,6 +19,9 @@ import { claimToken, createUser, ensureUsername } from '@/lib/users';
 import { drainPreparedPageWarmups } from '@/lib/story/prepared-page.server';
 import { setCompiledReaderFlagForTests } from '@/lib/compiled-page/reader-mode';
 import { READER_FALLBACK_HEADER, READER_MODE_HEADER, SPA_IDLE_ATTR } from '@/lib/compiled-page/contract';
+import * as artifacts from '@/lib/artifacts';
+import { updateSharingFor } from '@/lib/artifacts';
+import { withBodyAttributes } from '@/lib/compiled-page/serve.server';
 
 vi.mock('@/auth', () => ({ auth: async () => null }));
 const harness = useAppHarness();
@@ -121,5 +124,139 @@ describe('the HTML-first reader page', () => {
     expect(doc.querySelector('[data-mx-artifact-id]')).toBeTruthy();
     expect(storyText(html)).toContain('$744,503');
     expect(storyText(html)).toBe(new JSDOM(legacy).window.document.querySelector('[data-mx-initial-story]')?.textContent?.replace(/\s+/g, ' ').trim());
+  });
+});
+
+/* ──────────────────────────────────────────────────────────────────────────
+ * Beyond the seeds: one ACL per view, the guest snapshot's access rule, the switch's edges
+ * ────────────────────────────────────────────────────────────────────────── */
+
+/** A dashboard over a public dataset its owner may later close, and the guest's first view of it (the cold path stores the snapshot). */
+async function dashboard(who: Awaited<ReturnType<typeof owner>>) {
+  const sales = await publish(who.token, { title: 'Perf sales', dataset: fixture('sales.csv') });
+  const id = await publish(who.token, { title: 'Perf C dashboard', markup: fixture('dashboard.jsx').replaceAll('{{sales}}', sales), template: 'dashboard' });
+  // The cold path answers within the served-results budget, and its late run stores the snapshot either way.
+  for (const end = Date.now() + 10_000; Date.now() < end;) {
+    if (storyText(await (await raw(id, '?reader=compiled')).text()).includes('$744,503')) break;
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+  return { sales, id };
+}
+
+describe('one row fetch and one access check per compiled view', () => {
+  it('/raw and /a/:id fetch the document row once and decide its admission once', async () => {
+    const who = await owner();
+    const { id } = await dashboard(who);
+    const fetched = vi.spyOn(artifacts, 'getArtifactById');
+    const checked = vi.spyOn(artifacts, 'canReadArtifact');
+    const ofDocument = () => ({
+      fetches: fetched.mock.calls.filter(([asked]) => asked === id).length,
+      checks: checked.mock.calls.filter(([row]) => row.id === id).length,
+    });
+    try {
+      const res = await raw(id, '?reader=compiled');
+      expect(res.headers.get(READER_MODE_HEADER)).toBe('compiled');
+      expect(storyText(await res.text()), 'the snapshot is fresh: no cold path runs').toContain('$744,503');
+      expect(ofDocument()).toEqual({ fetches: 1, checks: 1 });
+
+      fetched.mockClear(); checked.mockClear();
+      const page = await app.request(`/a/${id}?reader=compiled`, { headers: { accept: 'text/html' } });
+      expect(page.headers.get(READER_MODE_HEADER)).toBe('compiled');
+      expect(ofDocument()).toEqual({ fetches: 1, checks: 1 });
+
+      // Today's app page reuses the page's admission too; its served results (a data document's
+      // per-viewer first rows) keep the query route's own recheck after the run, so a prose page shows it.
+      const prose = await publish(who.token, { title: 'Perf A prose', markup: fixture('prose.jsx') });
+      fetched.mockClear(); checked.mockClear();
+      const legacy = await app.request(`/a/${prose}`, { headers: { accept: 'text/html' } });
+      expect(legacy.headers.get(READER_MODE_HEADER)).toBe('legacy');
+      expect({ fetches: fetched.mock.calls.filter(([asked]) => asked === prose).length, checks: checked.mock.calls.filter(([row]) => row.id === prose).length }).toEqual({ fetches: 1, checks: 1 });
+    } finally {
+      fetched.mockRestore();
+      checked.mockRestore();
+    }
+  });
+});
+
+describe('the guest snapshot never outlives the guest\'s access', () => {
+  it('a dataset closed to guests after the snapshot was taken serves no rows from it, stale or not', async () => {
+    const who = await owner();
+    const { sales, id } = await dashboard(who);
+    expect(storyText(await (await raw(id, '?reader=compiled')).text())).toContain('$744,503');
+    await updateSharingFor({ tokenId: who.tokenId, userId: who.user.id }, sales, { visibility: 'private' });
+    const res = await raw(id, '?reader=compiled');
+    expect(res.headers.get(READER_MODE_HEADER)).toBe('compiled');
+    const html = await res.text();
+    expect(storyText(html)).not.toContain('$744,503');
+    expect(html).not.toContain('744503');
+    const page = await (await app.request(`/a/${id}?reader=compiled`, { headers: { accept: 'text/html' } })).text();
+    expect(page).not.toContain('744503');
+  });
+});
+
+describe('the reader switch at its edges', () => {
+  it('off: `?reader=` is ignored and nothing names a fallback', async () => {
+    const who = await owner();
+    const id = await publish(who.token, { title: 'Perf A prose', markup: fixture('prose.jsx') });
+    setCompiledReaderFlagForTests('off');
+    try {
+      const res = await raw(id, '?reader=compiled');
+      expect(res.headers.get(READER_MODE_HEADER)).toBe('legacy');
+      expect(res.headers.get(READER_FALLBACK_HEADER)).toBeNull();
+      expect(res.headers.get('content-security-policy')).toMatch(/script-src 'unsafe-inline'/);
+      const page = await app.request(`/a/${id}?reader=compiled`, { headers: { accept: 'text/html' } });
+      expect(page.headers.get(READER_MODE_HEADER)).toBe('legacy');
+      expect(new JSDOM(await page.text()).window.document.querySelector('[data-mx-initial-story]')).toBeTruthy();
+    } finally {
+      setCompiledReaderFlagForTests('shadow');
+    }
+  });
+
+  it('a domain post ignores `?reader=`; the owner\'s editing copy is today\'s runtime', async () => {
+    const who = await owner();
+    const id = await publish(who.token, { title: 'Perf B kit', markup: fixture('kit.jsx') });
+    const post = await rawRoute(request(`/a/${id}/raw?reader=compiled`), { params: Promise.resolve({ id }), domain: { hostname: 'blog.example.com', ownerId: who.user.id } });
+    expect(post.status).toBe(200);
+    expect(post.headers.get(READER_MODE_HEADER)).toBe('legacy');
+    const editing = await raw(id, '?reader=compiled&edit=1');
+    expect(editing.headers.get(READER_MODE_HEADER)).toBe('legacy');
+    expect(editing.headers.get(READER_FALLBACK_HEADER)).toBeNull();
+  });
+
+  it('on: readers get the compiled page wherever it exists, a domain post included; `?reader=legacy` escapes', async () => {
+    const who = await owner();
+    const id = await publish(who.token, { title: 'Perf B kit', markup: fixture('kit.jsx') });
+    setCompiledReaderFlagForTests('on');
+    try {
+      expect((await raw(id)).headers.get(READER_MODE_HEADER)).toBe('compiled');
+      expect((await raw(id, '?reader=legacy')).headers.get(READER_MODE_HEADER)).toBe('legacy');
+      const post = await rawRoute(request(`/a/${id}/raw?reader=legacy`), { params: Promise.resolve({ id }), domain: { hostname: 'blog.example.com', ownerId: who.user.id } });
+      expect(post.headers.get(READER_MODE_HEADER)).toBe('compiled');
+      const doc = new JSDOM(await post.text()).window.document;
+      expect(doc.querySelector('[data-mx-domain-footer] a')?.getAttribute('href')).toMatch(new RegExp(`/a/${id}$`));
+      expect(doc.body.getAttribute('data-mx-live-id')).toBe(id);
+    } finally {
+      setCompiledReaderFlagForTests('shadow');
+    }
+  });
+
+  it('a compiled page names its live identity on <body>; a capture carries none', async () => {
+    const who = await owner();
+    const id = await publish(who.token, { title: 'Perf B kit', markup: fixture('kit.jsx') });
+    const doc = new JSDOM(await (await raw(id, '?reader=compiled')).text()).window.document;
+    expect(doc.body.getAttribute('data-mx-live-id')).toBe(id);
+    expect(doc.body.getAttribute('data-mx-live-edit')).toMatch(/.+/);
+    const page = new JSDOM(await (await app.request(`/a/${id}?reader=compiled`, { headers: { accept: 'text/html' } })).text()).window.document;
+    expect(page.body.getAttribute('data-mx-live-id')).toBe(id);
+    expect(page.querySelector('body > script[type="application/json"][id="mx-page-data"]'), 'the app\'s page data rides with the compiled page').toBeTruthy();
+  });
+});
+
+describe('withBodyAttributes', () => {
+  it('splices at the real head/body boundary, past a stylesheet that spells the boundary', () => {
+    const html = '<!doctype html><html><head><title>t</title><style data-mx-story-css>p::after{content:"</head><body>"}</style></head><body><p>x</p></body></html>';
+    const out = withBodyAttributes(html, { 'data-mx-live-id': 'a"b' });
+    expect(out).toContain('content:"</head><body>"');
+    expect(out).toContain('</style></head><body data-mx-live-id="a&quot;b"><p>x</p>');
   });
 });

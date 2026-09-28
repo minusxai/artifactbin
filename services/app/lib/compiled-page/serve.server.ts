@@ -91,6 +91,8 @@ export interface CompiledReaderRequest {
   results?: ServedResults | null;
   /** A domain post's attribution line (lib/story/document's bare footer), after the story. */
   footer?: { html: string; css: string } | null;
+  /** Page-level CSS the path adds after the version's sheet (the app page's first-paint layout reserve). */
+  pageCss?: string;
 }
 
 export type CompiledReaderAnswer =
@@ -322,7 +324,7 @@ export async function compiledPageFor(row: ArtifactRow, page: PreparedPage, read
     const assembled = assembleReaderPage({
       compiled,
       story: reader.footer ? story + reader.footer.html : story,
-      css: reader.footer ? `${page.css}\n${reader.footer.css}` : page.css,
+      css: [page.css, reader.footer?.css, reader.pageCss].filter(Boolean).join('\n'),
       fontPreloads: [...page.fontPreloads, ...(reader.chromeFonts ?? [])],
       title: page.title,
       theme: page.theme,
