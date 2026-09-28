@@ -49,7 +49,7 @@ const IDLE_PREPARE_MS = 2000;
 /** What `mutationUnavailable` answers while the permission check is still in flight. */
 export const ACCESS_PENDING = 'Checking edit access…';
 
-export interface MutationAnswer { dataset: string; local?: LocalMutationResult }
+export interface MutationAnswer { dataset: string; mutationRunId?:string; local?: LocalMutationResult }
 
 /**
  * One write's life, as `subscribeWrites` reports it (lib/islands/writes builds the status feed on it):
@@ -59,7 +59,7 @@ export interface MutationAnswer { dataset: string; local?: LocalMutationResult }
  */
 export type StoreWriteEvent =
   | { type: 'write'; id: number; name: string }
-  | { type: 'written'; id: number; name: string }
+  | { type: 'written'; id: number; name: string; mutationRunId?:string }
   | { type: 'writeFailed'; id: number; name: string; error: unknown; request: MutationRequest };
 
 /** A window of one query's rows — what a table reads past the cap. */
@@ -318,7 +318,7 @@ export function createDataflowStore(
   let writeIds = 0;
   const writes = new Map<number, { resolve: () => void; reject: (error: unknown) => void }>();
   /** Each accepted write's name and the request a retry re-issues (the sent one replaces the call's). */
-  const writeCalls = new Map<number, { name: string; request: MutationRequest }>();
+  const writeCalls = new Map<number, { name: string; request: MutationRequest;mutationRunId?:string }>();
   const writeListeners = new Set<(event: StoreWriteEvent) => void>();
   const emitWrite = (event: StoreWriteEvent) => {
     for (const listener of [...writeListeners]) {
@@ -350,7 +350,7 @@ export function createDataflowStore(
         writes.delete(effect.id);
         const call = writeCalls.get(effect.id);
         writeCalls.delete(effect.id);
-        if (call) emitWrite(effect.outcome.ok ? { type: 'written', id: effect.id, name: call.name } : { type: 'writeFailed', id: effect.id, name: call.name, error: effect.outcome.error, request: call.request });
+        if (call) emitWrite(effect.outcome.ok ? { type: 'written', id: effect.id, name: call.name,...(call.mutationRunId?{mutationRunId:call.mutationRunId}:{}) } : { type: 'writeFailed', id: effect.id, name: call.name, error: effect.outcome.error, request: call.request });
         if (effect.outcome.ok) settle?.resolve(); else settle?.reject(effect.outcome.error);
         return;
       }
@@ -382,7 +382,7 @@ export function createDataflowStore(
           if (!m) throw new Error(`this document declares no <Mutation name="${name}">`);
           const request = mutationRequestFor(m, { values, ...(row ? { row } : {}), ...(Object.hasOwn(values, '_value') ? { value: values._value } : {}), ...(localTables ? { localTables } : {}) });
           const call = writeCalls.get(id);
-          const notifying = (flow as typeof flow & {notifications?:Array<{on:string}>}).notifications?.some(rule=>rule.on===name);
+          const notifying = (m as typeof m & {notifies?:true}).notifies;
           if(call?.request.operationKey)request.operationKey=call.request.operationKey;
           else if(notifying)request.operationKey=crypto.randomUUID();
           if(notifying||request.operationKey)request.tz=call?.request.tz??localZone();
@@ -391,7 +391,7 @@ export function createDataflowStore(
         } catch (error) { answer = Promise.reject(error); }
         // A settled write moves what it wrote (and what it reset): re-read at once.
         answer.then(
-          (result) => { dispatch({ type: 'written', id, name, answer: result }); flush(); },
+          (result) => { const call=writeCalls.get(id);if(call&&result.mutationRunId)call.mutationRunId=result.mutationRunId;dispatch({ type: 'written', id, name, answer: result }); flush(); },
           (error: unknown) => { dispatch({ type: 'writeFailed', id, name, error }); flush(); },
         );
       }
