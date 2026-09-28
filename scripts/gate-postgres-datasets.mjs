@@ -250,7 +250,7 @@ try {
   };
   const trigger = await checked(owner, '/api/my/artifacts', 'POST', {
     access: 'readwrite',
-    markup: '<Dataset kind="stored"><Table schema="public" name="rows" columns={[{"name":"id","type":"number"},{"name":"recipient","type":"string"}]} rows={[{"id":1,"recipient":"initial"}]} /></Dataset>',
+    dataset: '<Dataset kind="stored"><Table schema="public" name="rows" columns={[{"name":"id","type":"number"},{"name":"recipient","type":"string"}]} rows={[{"id":1,"recipient":"initial"}]} /></Dataset>',
   }, 201);
   const nativeModel = `select ARRAY[$recipient, $recipient]::text[] as "to", format('West total %s', total) as message from models.region_totals where region = 'west'`;
   const nativeTable = `select $recipient::text as "to", format('Order %s', id) as message from sales.orders where id = 1`;
