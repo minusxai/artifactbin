@@ -109,7 +109,9 @@ it('refuses the winning commit if the initiating credential was revoked during S
  const sql=services().sql;
  setServices({sql:{...sql,async mutate(input){const result=await sql.mutate(input);await db.query('UPDATE tokens SET deleted_at=now() WHERE id=$1',[token.id]);return result;}}});
  try {
-  try {await send('mxmx_test_notification_revoked_during_write');} catch { /* Revocation refuses the pending write. */ }
+  const refused=await send('mxmx_test_notification_revoked_during_write');
+  expect(refused.status).toBe(403);
+  expect(await refused.json()).toMatchObject({error:'policy_denied'});
   expect(await loadDatasetRows((await getArtifactById(dataset.id))!)).toEqual([{n:0}]);
   expect((await db.query('SELECT id FROM notification_jobs')).rows).toEqual([]);
  } finally {setServices({sql});}

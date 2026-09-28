@@ -1,3 +1,4 @@
+import {NotificationExecutionError} from '@/lib/notification-error';
 import {artifactQuery} from '@/lib/artifact-document';
 import { grantsOf, assertGrantCommit } from '@/lib/datasets/policy/grants';
 import {validateUserWrites} from '@/lib/datasets/user-fields';
@@ -257,7 +258,11 @@ export async function mutateDataset(
     };
     let updated;
     try { updated=jobs||v2||guard.receipt||guard.expectedState||columns.some(c=>c.type==='user')?await db.transaction(commit):await commit(db); }
-    catch(error) { if(error instanceof DatasetError)return {reason:'policy_denied',detail:error.message}; throw error; }
+    catch(error) {
+     if(error instanceof NotificationExecutionError && error.code==='notification_access_revoked')return {reason:'policy_denied',detail:'Your access changed before the action could be saved.'};
+     if(error instanceof DatasetError)return {reason:'policy_denied',detail:error.message};
+     throw error;
+    }
 
     const row = updated.rows[0];
     if (row) {
