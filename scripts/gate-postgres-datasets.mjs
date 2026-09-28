@@ -13,6 +13,7 @@ import pg from 'pg';
 import { chromium } from 'playwright';
 import { becomeOwner, startDocument } from './lib/start-doc.mjs';
 import { loginViaEmail, startMailSink } from './lib/mail-login.mjs';
+import { compiledReader } from './lib/gate-reader.mjs';
 
 const base = process.argv[2] ?? 'http://localhost:3030';
 const log = label => console.log(`  ok ${label}`);
@@ -48,7 +49,12 @@ async function uiResponse(page, path, action, method = 'POST', expected = 200, r
 async function previewContains(page, text, label = 'Table preview') {
   const preview = page.getByLabel(label, { exact: true });
   await preview.waitFor();
-  await page.waitForFunction(({ label, text }) => [...document.querySelectorAll('[aria-label]')].some(node => node.getAttribute('aria-label') === label && node.textContent?.includes(text)), { label, text });
+  await page.waitForFunction(({ label, text }) => [...document.querySelectorAll('[aria-label]')].some(node => node.getAttribute('aria-label') === label && node.textContent?.includes(text)), { label, text }).catch(async error => {
+    const shown = (await preview.innerText()).slice(0, 300);
+    secretFree(shown);
+    console.error(`preview ${label} never showed ${text}: ${shown}`);
+    throw error;
+  });
 }
 
 try {
@@ -151,6 +157,7 @@ try {
   await guest.goto(`${base}/a/${start.id}`, { waitUntil: 'load' });
   await previewContains(guest, '120', 'DataTable embed');
   assert.ok(!(await guest.getByLabel('DataTable embed', { exact: true }).innerText()).includes('90'));
+  if (compiledReader) await guest.locator('html[data-mx-ready]').waitFor();
   await guest.getByLabel('Region', { exact: true }).fill('east');
   await previewContains(guest, '90', 'DataTable embed');
   assert.ok(!(await guest.getByLabel('DataTable embed', { exact: true }).innerText()).includes('120'));

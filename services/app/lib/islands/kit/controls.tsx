@@ -5,18 +5,8 @@ import { Portal } from 'solid-js/web';
 import { refName, type Scalar, type TableResult } from '@/lib/story/dataflow';
 import { coerceScalarInput } from '@/lib/story/scalar-input';
 import { useIsland } from '../context';
-import { boundImageValue } from '@/lib/story/image-source';
-import { runtimeAssetUrl } from '@/lib/story/asset-url';
 
 type Props = Record<string, unknown>;
-/** A data-bound image resolves through this document's asset door on both SSR and updates. */
-export function BoundImage(p: Props & { template: string }) {
-  const island = useIsland();
-  const source = () => boundImageValue(p.template, island.values());
-  const src = () => { const value = source(); return value ? runtimeAssetUrl(value, () => false, island.assetsUrl?.()) : null; };
-  const { template: _template, ...rest } = p;
-  return <img {...rest as JSX.ImgHTMLAttributes<HTMLImageElement>} src={src() ?? undefined} />;
-}
 const join = (...v: (string | false | undefined)[]) => v.filter(Boolean).join(' ');
 const str = (v: unknown): string | undefined => typeof v === 'string' ? v : undefined;
 const lit = (v: unknown) => typeof v === 'string' && !refName(v) ? v : typeof v === 'number' ? String(v) : null;

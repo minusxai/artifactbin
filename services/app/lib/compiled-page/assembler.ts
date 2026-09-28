@@ -173,7 +173,6 @@ function islandData(input: AssembleInput): IslandPageData {
     results: input.snapshot?.results ?? null,
     appPage: !!input.spa,
     ...(overlay.doors ?? {}),
-    ...(overlay.assetsUrl ? { assetsUrl: overlay.assetsUrl } : {}),
     ...(overlay.managedAssets ? { managedAssets: overlay.managedAssets } : {}),
     signedIn: overlay.signedIn,
     hold: [...(overlay.hold ?? [])],

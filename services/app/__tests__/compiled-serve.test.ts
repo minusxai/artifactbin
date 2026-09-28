@@ -285,7 +285,7 @@ describe('the reader switch at its edges', () => {
 });
 
 describe('the compiled capture', () => {
-  it('under the exporter\'s key: settled rows from its own run (never the guest snapshot), no doors, no live identity, no head', async () => {
+  it('under the exporter\'s key: settled rows from its own run (never the guest snapshot), only the asset door, no live identity, no head', async () => {
     const who = await owner();
     const sales = await publish(who.token, { title: 'Perf sales', dataset: fixture('sales.csv') });
     const id = await publish(who.token, { title: 'Perf C dashboard', markup: fixture('dashboard.jsx').replaceAll('{{sales}}', sales), template: 'dashboard' });
@@ -301,7 +301,9 @@ describe('the compiled capture', () => {
     expect(doc.body.hasAttribute('data-mx-live-id')).toBe(false);
     expect(doc.querySelector('link[rel="canonical"], meta[property="og:image"]')).toBeNull();
     const data = JSON.parse(doc.getElementById('mx-story-data')?.textContent ?? '{}') as Record<string, unknown>;
-    expect(data.queryUrl, 'a capture carries no doors').toBeUndefined();
+    expect(data.queryUrl, 'a capture has no query door').toBe('');
+    expect(data.mutateUrl, 'a capture has no write door').toBeUndefined();
+    expect(data.assetsUrl, 'the managed frame imports through the verified capture key').toBe(`/a/${id}/assets?key=${capture.slice('chrome=0&key='.length)}`);
     expect(doc.querySelector(`script[src="${loadCompilerBuild().manifest['@mx/page']}"]`), 'a capture runs no page behaviour').toBeNull();
     const stored = await (await harness.db()).query('SELECT 1 FROM data_snapshots WHERE artifact_id = $1', [id]);
     expect(stored.rows, 'a capture\'s run is never stored as the guest snapshot').toHaveLength(0);
@@ -396,6 +398,8 @@ describe('a version with an author script', () => {
     const who = await owner();
     const id = await publish(who.token, { title: 'Scripted', markup: SCRIPTED });
     await (await harness.db()).query(`UPDATE prepared_pages SET page = page #- '{compiled,authorScript}' WHERE artifact_id = $1`, [id]);
+    const stored = (await (await harness.db()).query<{ page: { authorScript?: string; compiled?: { authorScript?: string } } }>('SELECT page FROM prepared_pages WHERE artifact_id=$1', [id])).rows[0]?.page;
+    expect(stored?.authorScript).toBe('document.body.dataset.ran = "1";');
     const res = await raw(id, '?reader=compiled');
     expect(res.headers.get(READER_MODE_HEADER)).toBe('compiled');
     expect(authorOnly(await res.text()).data?.authorScript).toBe('document.body.dataset.ran = "1";');

@@ -42,7 +42,10 @@ export function startIslandLive(win: Window, id: string, initialEditId: string, 
   hooks[LIVE_KEY] = source;
   let seen = initialEditId;
 
-  const reload = () => reloadKeepingPlace(win);
+  const reload = () => {
+    if (win.location.hash === '#edit') return;
+    reloadKeepingPlace(win);
+  };
 
   source.addEventListener(STORY_DATA_EVENT, (event: MessageEvent) => {
     let frame: { datasets?: unknown };
@@ -60,6 +63,7 @@ export function startIslandLive(win: Window, id: string, initialEditId: string, 
     if (typeof ping.editId !== 'string' || !ping.editId || ping.editId === seen) return;
     seen = ping.editId;
     if (typeof hooks[STORY_ADOPT_HOOK] === 'function') return;
+    if (win.location.hash === '#edit') return;
     void updateCompiledStory(win);
   };
 

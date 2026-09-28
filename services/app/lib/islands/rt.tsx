@@ -71,7 +71,6 @@ export interface IslandRuntimeData {
   mermaidImages?: Readonly<Record<string, StoredMermaidImage>>;
   /** Who reads: null for a guest, `{ hinted: true }` on a signed-in page until the overlay lands. */
   viewer?: IslandViewer;
-  assetsUrl?: string | null;
   /** An archived render's refusal of every write (IslandPageData.readOnly). */
   readOnly?: string | null;
 }
@@ -199,7 +198,6 @@ export function createIslandRuntime(
     mutationUnavailable: (name) => { checks(); return store && !isServer ? store.mutationUnavailable(name) : ACCESS_PENDING; },
     mutating: (name) => { checks(); return !!store?.mutating().has(name); },
     viewer,
-    assetsUrl: () => data.assetsUrl ?? null,
     drawings: () => drawings,
     writes: (options.writes ?? (() => EMPTY_WRITE_FEED))(store),
     store: () => store,

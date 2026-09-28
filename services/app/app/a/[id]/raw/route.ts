@@ -23,7 +23,7 @@ import { canReadArtifact, dataflowForRow, getArtifactById, linkRoleOf, type Arti
 import { withIntent, type Intent } from '@/lib/intent';
 import { count, has } from '@/lib/relations';
 import { countOpenAnnotations } from '@/lib/annotations';
-import { roleFor, type RequestActor } from '@/lib/viewer';
+import { isCookieCredential, roleFor, type RequestActor } from '@/lib/viewer';
 import { canAnnotate, canEdit, roleBehindLogin } from '@/lib/share-roles';
 import { forkedFromCredit } from '@/lib/story/fork-credit.server';
 import { getUserById } from '@/lib/users';
@@ -348,12 +348,12 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
           search: new URL(request.url).search,
           drawings: domain || engineRequested(request.url) ? null : fragment?.surface === 'app' ? 'inline' : 'document',
           colorMode: byExportKey && !domain ? captureColor(request.url) : null,
-          signedIn: actor.credential === 'session' && !!viewer?.userId,
+          signedIn: fragment?.surface === 'app' ? isCookieCredential(actor) : actor.credential === 'session' && !!viewer?.userId,
           holder: fragment?.surface === 'app' ? { userId: viewer?.userId ?? null, tokenId: actor.tokenId ?? null, email: viewer?.email ?? null } : null,
           managedAssets: ASSETS_ORIGIN ? { origin: ASSETS_ORIGIN, resolveUrl: `${base}${assetsPath(artifact.id)}${byExportKey ? `?key=${encodeURIComponent(key!)}` : ''}` } : null,
-          assetsUrl: `${assetsPath(artifact.id)}${byExportKey ? `?key=${encodeURIComponent(key!)}` : ''}`,
           capture: !chrome,
-          doors: capture ? null : {
+          // A capture has settled rows but still needs its verified asset door.
+          doors: capture ? { queryUrl: '', assetsUrl: `${assetsPath(artifact.id)}?key=${encodeURIComponent(key!)}` } : {
             queryUrl: queryPath(artifact.id),
             ...(!at && declaresMutations(row.source) ? { mutateUrl: mutatePath(artifact.id) } : {}),
             viewerUrl: VIEWER_OVERLAY_PATH(artifact.id),

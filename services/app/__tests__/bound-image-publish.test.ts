@@ -105,7 +105,7 @@ describe('a bound src is a binding, not an external URL', () => {
 });
 
 describe('the served document', () => {
-  it('carries its own asset endpoint and renders the bound image through it', async () => {
+  it('carries its own asset endpoint for the bound image island', async () => {
     const { body } = await publish(`${HELMET}<div><img src="$pick" alt="the pick" /></div>`);
     const page = await rawRoute(request(`/a/${body.id}/raw`), params({ id: body.id as string }));
     const html = await page.text();
@@ -114,26 +114,17 @@ describe('the served document', () => {
     expect(html).not.toContain('src="$pick"');
   });
 
-  /*
-   * The SSR STRING, not only the island. The two are rendered from separate
-   * prop lists, and a prop that reaches one but not the other is a hydration
-   * mismatch — which React 19 answers by discarding the whole server tree.
-   * `assetsUrl` is the first island field that CHANGES WHAT IS DRAWN
-   * (queryUrl/mutateUrl only name a transport), and it was missing from the SSR
-   * call: the served document painted no image at all until hydration.
-   */
-  it('resolves the bound image IN THE SSR BODY, not only after hydration', async () => {
+  /* The island imports a reader-selected source after paint; SSR must never ask its origin. */
+  it('keeps the source out of the SSR image and marks it for the island import', async () => {
     const url = `${web}/default.png`;
     const helmet = `<Helmet><Value name="pick" type="string" default="${url}" /></Helmet>`;
     const { body } = await publish(`${helmet}<div><img src="$pick" alt="the pick" /></div>`);
     const page = await rawRoute(request(`/a/${body.id}/raw`), params({ id: body.id as string }));
     const html = await page.text();
     const tag = /<img[^>]*alt="the pick"[^>]*>/.exec(html)?.[0] ?? '';
-    expect(tag).toContain(`src="/a/${body.id}/assets?u=${encodeURIComponent(url)}"`);
-    expect(tag).not.toContain('data-mx-bound');
-    // …and the renderer's own preload hint follows the same mapped address, so
-    // the first thing the reader's browser asks for is ours and not the source.
-    expect(html).toContain(`rel="preload" as="image" href="/a/${body.id}/assets?u=${encodeURIComponent(url)}"`);
+    expect(tag).not.toContain('src=');
+    expect(tag).toContain('data-mx-bound="src:$pick"');
+    expect(html).toContain(`"assetsUrl":"/a/${body.id}/assets"`);
     expect(html).not.toContain(`href="${url}"`);
   });
 
@@ -165,8 +156,10 @@ describe('the capture carries the exporter\'s key into its asset endpoint', () =
     const shot = await rawRoute(request(`/a/${id}/raw?chrome=0&key=${encodeURIComponent(key)}`), params({ id }));
     const html = await shot.text();
     expect(html).toContain(`"assetsUrl":"/a/${id}/assets?key=${key}"`);
-    // …and the <img> the exporter loads therefore carries it too.
-    expect(/<img[^>]*alt="the pick"[^>]*>/.exec(html)?.[0]).toContain(`/a/${id}/assets?key=${key}&amp;u=`);
+    // The capture island uses that key for its JSON import; SSR never exposes the source as an image request.
+    const tag = /<img[^>]*alt="the pick"[^>]*>/.exec(html)?.[0] ?? '';
+    expect(tag).toContain('data-mx-bound="src:$pick"');
+    expect(tag).not.toContain('src=');
 
     // A reader's ordinary view keeps the bare address — the key is the
     // exporter's, and it must not ride in a document anyone else is served.
