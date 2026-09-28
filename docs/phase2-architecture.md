@@ -99,7 +99,7 @@ request without re-rendering: the island data JSON (`<script type="application/j
 the snapshot's drawings for `<Question>` slots, and the version's stored Mermaid drawings. Everything
 else in the page is per version and cached with it.
 
-The Phase 1 open items come with the rewritten route (T2): one row fetch and one access check per view
+The Phase 1 open items come with the rewritten route (w3-serve): one row fetch and one access check per view
 (`artifactPageAnswer` and the raw route today each fetch the row and decide admission separately), and
 per-version caching keyed on the compiled build.
 
@@ -219,7 +219,7 @@ rows, as the page does now.
 `invalidateSnapshots(datasetId)`: `UPDATE data_snapshots SET stale_at = now() WHERE $1 = ANY(datasets)
 AND stale_at IS NULL`, then queues revalidation of the affected heads. Exactly the dependent snapshots
 are marked, because the plan's dataset list is exactly what its shared queries read. The other write
-paths (replace, revert, fork, sharing, policy) are covered by the marks rule; T4 may add the same call
+paths (replace, revert, fork, sharing, policy) are covered by the marks rule; w1-snapshots may add the same call
 to them where cheap, but correctness never depends on it.
 
 Postgres-sourced queries (`engine: 'postgres'`) read a connected database that has no mark and sends
@@ -237,7 +237,7 @@ One worker, one pending entry per key, every failure swallowed (the same discipl
 `warmPreparedPage`): a failed revalidation is an older snapshot, never a failed read.
 
 Open pages learn of it through the live stream: the existing `data` frame already re-runs the reading
-queries in the page; T4 adds no new frame type unless the snapshot's SVG drawings must be pushed (open
+queries in the page; w1-snapshots adds no new frame type unless the snapshot's SVG drawings must be pushed (open
 question Q3).
 
 ### 5.5 Probe findings (step 0)
@@ -362,7 +362,7 @@ reader's URL); the hint set is computed from the compiled page and carried by th
   `?reader=compiled`; the size check reads a lab run with `?reader=compiled`. The gate servers boot
   in `shadow` (one line in `scripts/gates.mjs`'s server environment, w3-serve).
 - `on`: readers get the compiled page wherever a compile exists; `?reader=legacy` is the escape
-  hatch for a gate or a bug report until T7 deletes the legacy path.
+  hatch for a gate or a bug report until w4-delete-* removes the legacy path.
 
 `readerModeFor(flag, search, { domainPost })` is pure and tested. The custom-domain post path ignores
 `?reader=` like every other URL switch there.
