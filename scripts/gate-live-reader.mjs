@@ -9,8 +9,10 @@
  *
  * Two documents, because they take different routes to the same promise: one
  * with a chart (it hydrates, so it re-renders itself in place) and one of pure
- * prose (it ships no runtime at all, so it reloads — keeping the reader's
- * place across it, which is the only thing a reload would cost).
+ * prose (today's reader ships it no runtime, so it reloads — keeping the
+ * reader's place across it, which is the only thing a reload would cost). The
+ * compiled reader draws both in place (lib/islands/live-update): the page is
+ * never navigated and a chart keeps its element.
  *
  *   usage: node scripts/gate-live-reader.mjs [base]
  */
@@ -20,7 +22,7 @@ import {fixtureFetch as fetch} from './lib/fixture-http.mjs';
 import { chromium } from 'playwright';
 import { startDocument } from './lib/start-doc.mjs';
 import { openArtifactControls, revealReaderChrome } from './lib/reveal-chrome.mjs';
-import { legacyOnly, readerUrl } from './lib/gate-reader.mjs';
+import { readerUrl } from './lib/gate-reader.mjs';
 
 const BASE = process.argv[2] ?? 'http://localhost:3030';
 const check = createChecker('live-reader');
@@ -89,13 +91,10 @@ const browser = await chromium.launch();
     chartKept: document.querySelector('[aria-label="Question embed"] svg, [aria-label="Question embed"] canvas')?.__probe ?? null,
   }));
   check(/THE AGENT REWROTE THIS/.test(after.text), "the reader sees the agent's write, with no reload of their own");
-  // The compiled page cannot re-render its static parts in the browser: until the app has adopted it, a
-  // new version is a reload that keeps the reader's place (lib/islands/live); once adopted, the app's
-  // interpreter draws the new version afresh (components/IslandStory, docs/phase2-architecture.md §7.3).
-  legacyOnly(check, 'a new version reloads the compiled page (place kept, checked below) rather than re-rendering it in place', () => {
-    check(reloads === loadsBefore, `and the page was never navigated to do it (${reloads - loadsBefore})`);
-    check(before.chart && after.chartKept === 'keep', 'the chart kept its rendered element through the update');
-  });
+  // Both readers draw the new version in place: today's by re-rendering, the compiled page by morphing its
+  // served story into the new version's (lib/islands/live-update), an unchanged island left running.
+  check(reloads === loadsBefore, `and the page was never navigated to do it (${reloads - loadsBefore})`);
+  check(before.chart && after.chartKept === 'keep', 'the chart kept its rendered element through the update');
   check(Math.abs(after.y - before.y) < 60, `and the reader kept their place (${before.y} → ${after.y})`);
   await ctx.close();
 }

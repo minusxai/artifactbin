@@ -49,6 +49,19 @@ async function inputOf(source: string, template: string | null = null): Promise<
 const dom = (html: string) => new JSDOM(`<div id="r">${html}</div>`).window.document.getElementById('r')!;
 
 describe('compilePage', () => {
+  it('stores the legacy outline decision and heading paths with the version', async () => {
+    const source = '<article><h2>One &amp; all</h2><h3>Part</h3><h2>Two</h2><h2>Three</h2></article>';
+    const page = await compilePage(await inputOf(source, 'plan'), loadCompilerBuild());
+    expect(page.outline).toEqual([
+      { level: 2, title: 'One & all', path: '0.0' },
+      { level: 3, title: 'Part', path: '0.1' },
+      { level: 2, title: 'Two', path: '0.2' },
+      { level: 2, title: 'Three', path: '0.3' },
+    ]);
+    expect(page.outlinePlan).toBe(true);
+    expect((await compilePage(await inputOf(source, 'dashboard'), loadCompilerBuild())).outline).toEqual([]);
+    expect((await compilePage({ ...(await inputOf(source, 'plan')), chrome: false }, loadCompilerBuild())).outline).toEqual([]);
+  });
   it('prose: static HTML only — no islands, no module, no slot left behind', async () => {
     const page = await compilePage(await inputOf(fixture('prose.jsx')), loadCompilerBuild());
     expect(page.islands).toEqual([]);
@@ -157,6 +170,32 @@ describe('compilePage', () => {
     expect(page.islands).toEqual([]);
     expect(dom(page.html).querySelector('[data-mx-managed-frame]')).toBeNull();
     expect(dom(page.html).querySelector('#after')).toBeTruthy();
+  });
+});
+
+describe('island keys (the live morph keeps an island a new version carries again)', () => {
+  const keysOf = async (source: string): Promise<Record<string, string>> => {
+    const generated = generate(await inputOf(source));
+    const keys: Record<string, string> = {};
+    for (const [, rid, key] of generated.islands.matchAll(/\[("s\d+-"), I\d+, ("[0-9a-f]{16}")\]/g)) keys[JSON.parse(rid!)] = JSON.parse(key!);
+    return keys;
+  };
+  const helmet = '<Helmet><Value name="region" type="string" default="West" /><Value name="other" type="string" default="x" /></Helmet>';
+
+  it('names the same island by the same key when an island before it shifts its render id and its constants', async () => {
+    const before = await keysOf(`${helmet}<div id="w"><section id="s1"><p id="p1">static</p></section><section id="s2"><p id="b" title="{$other}">{$region}</p></section></div>`);
+    const after = await keysOf(`${helmet}<div id="w"><section id="s1"><p id="p1">static</p><p id="n" title="{$region}">{$other}</p></section><section id="s2"><p id="b" title="{$other}">{$region}</p></section></div>`);
+    expect(Object.keys(before)).toEqual(['s0-']);
+    expect(Object.keys(after)).toEqual(['s0-', 's1-']);
+    expect(after['s1-'], 'island b, now second: same definition, same key').toBe(before['s0-']);
+    expect(after['s0-']).not.toBe(before['s0-']);
+  });
+
+  it('gives a changed island another key', async () => {
+    const one = await keysOf(`${helmet}<div id="w"><p id="b">{$region}</p></div>`);
+    const two = await keysOf(`${helmet}<div id="w"><p id="b">{$other}</p></div>`);
+    expect(one['s0-']).toMatch(/^[0-9a-f]{16}$/);
+    expect(two['s0-']).not.toBe(one['s0-']);
   });
 });
 

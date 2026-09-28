@@ -14,7 +14,7 @@ import { CHART_SLOT_ATTR, ISLAND_DATA_ID, SIGNED_IN_HINT_ATTR, SPA_IDLE_ATTR, SP
 
 const build = { id: 'b'.repeat(16), manifest: { '@mx/rt': '/islands/rt-4444dddd.js', '@mx/deck': '/islands/deck-6666ffff.js' } };
 const compiled = (over: Partial<CompiledPage> = {}): CompiledPage => ({
-  build: build.id, html: '', islands: [{ renderId: 's0-', path: '0', kit: ['Question'], readsData: true }],
+  build: build.id, outline: [], outlinePlan: false, html: '', islands: [{ renderId: 's0-', path: '0', kit: ['Question'], readsData: true }],
   module: { sha: 'a'.repeat(16), url: '/islands/d/aaaaaaaaaaaaaaaa.js', bytes: 1, imports: ['/islands/rt-4444dddd.js'] },
   ssr: null, behaviors: [], plan: null, links: { prefetch: [], prerender: [] }, kit: { skeleton: [], islands: [] }, reactStatic: [], unported: [], partial: [], authorScript: null, ...over,
 });

@@ -40,6 +40,7 @@ import type { JsxElement, JsxNode } from '@/lib/jsx';
 import { REF_ATTRS, carriesRef, refName, type Scalar } from '@/lib/story/dataflow';
 import { resolveRefProps } from '@/lib/story/ref-data';
 import { discoverSlides, MIN_SLIDES_FOR_RAIL } from '@/lib/story-runtime/slides';
+import { discoverOutline, hasOutline } from '@/lib/story-runtime/outline';
 import { createPreviewIdentityAllocator } from '@/lib/story-runtime/preview-identity';
 import { PUBLIC_BASE_URL } from '@/lib/config';
 import { compileManagedIframe } from '@/lib/story/managed-iframe';
@@ -660,7 +661,7 @@ export function generate(input: GenerateInput): Generated {
   const skeleton = `${kitImports(kitUsed.skeleton)}${dataConsts}export default function Skeleton() { return ${root}; }\n`;
   const islandsSource = `import * as rt from '@mx/rt';\n${kitImports(kitUsed.islands)}${dataConsts}`
     + islands.map((isl) => `export function I${isl.id}() { return ${isl.source}; }\n`).join('')
-    + `export const ISLANDS = [${islands.map((isl) => `[${lit(`s${isl.id}-`)}, I${isl.id}]`).join(', ')}];\n`;
+    + `export const ISLANDS = [${islands.map((isl) => `[${lit(`s${isl.id}-`)}, I${isl.id}, ${lit(islandKey(isl.source, data))}]`).join(', ')}];\n`;
   return {
     skeleton,
     islands: islandsSource,
@@ -672,6 +673,25 @@ export function generate(input: GenerateInput): Generated {
     behaviors: deck ? [DECK_BEHAVIOR] : [],
     statics,
   };
+}
+
+/**
+ * AN ISLAND'S KEY: a digest of its definition — its generated source with every hoisted constant
+ * (`$d<n>`, numbered by position in the whole module) replaced by the data it names — so two versions'
+ * islands have the same key exactly when they are the same island, wherever the rest of the document
+ * moved. The live morph (lib/islands/morph/engine) keeps a running island whose key a new version
+ * carries again. Its AST paths are part of the definition: an island that moved is drawn afresh.
+ * FNV-1a over two lanes (64 bits, hex): an identity, not a secret.
+ */
+export function islandKey(source: string, data: readonly string[]): string {
+  const text = source.replace(/\$d(\d+)\b/g, (whole, n: string) => data[Number(n)] ?? whole);
+  let a = 0x811c9dc5, b = 0xcbf29ce4;
+  for (let i = 0; i < text.length; i++) {
+    const c = text.charCodeAt(i);
+    a = Math.imul(a ^ c, 0x01000193) >>> 0;
+    b = Math.imul(b ^ c, 0x01000197) >>> 0;
+  }
+  return a.toString(16).padStart(8, '0') + b.toString(16).padStart(8, '0');
 }
 
 /* ────────────────────────────────────────────────────────────────────────────
@@ -707,8 +727,11 @@ export async function compilePage(input: CompileInput, build: CompilerBuild): Pr
   // every query that reads one is `viewer` — never a private answer in a guest snapshot.
   const plan = input.flow ? planOf(input.flow, input.access ?? { datasets: {} }) : null;
   const links = input.nodes.length ? linkHintsOf(input.nodes, { origins: deploymentOrigins() }) : EMPTY_LINK_HINTS;
+  const outlinePlan = input.template === 'plan';
+  const outline = input.chrome && (input.template === 'editorial' || outlinePlan) && hasOutline(input.nodes)
+    ? discoverOutline(input.nodes) : [];
   const base = {
-    build: build.id, islands: generated.islandRefs, behaviors: generated.behaviors, plan, links,
+    build: build.id, islands: generated.islandRefs, behaviors: generated.behaviors, plan, links, outline, outlinePlan,
     kit: generated.kit, reactStatic: generated.reactStatic, unported: generated.unported, partial: generated.partial,
     // Data for the page's JSON island, never module code (contract CompiledPage.authorScript).
     authorScript: input.authorScript || null,

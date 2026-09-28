@@ -19,6 +19,7 @@
  *   links.ts            linkHintsOf            w1-planners
  */
 import type { JsxNode } from '@/lib/jsx';
+import type { OutlineEntry } from '@/lib/story-runtime/outline';
 import type { CompiledDataflow, CompiledReads } from '@/lib/story/compiled-dataflow';
 import type { Scalar } from '@/lib/story/dataflow';
 import type { RefDataMap } from '@/lib/story/ref-data';
@@ -127,6 +128,10 @@ export interface CompilerBuild {
  */
 export interface CompiledPage {
   build: string;
+  /** Version-owned navigation, decided from the same nodes and template as the legacy reader. */
+  outline: readonly OutlineEntry[];
+  /** The plan template uses the wider reading wrapper. */
+  outlinePlan: boolean;
   /**
    * The story element's inner HTML with every island rendered in its DECLARED
    * state (no rows): static parts final, islands as skeletons. Served only when
@@ -430,6 +435,8 @@ export interface AssembleOverlay {
 
 export interface AssembleInput {
   compiled: CompiledPage;
+  /** False for captures that intentionally omit the document's own navigation. */
+  documentChrome?: boolean;
   /**
    * The story HTML for THIS request: `compiled.html` when no snapshot exists,
    * else the SSR module's render with the snapshot's rows (serve.server.ts,
