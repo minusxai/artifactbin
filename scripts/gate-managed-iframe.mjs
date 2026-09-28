@@ -14,6 +14,7 @@ import {randomBytes} from 'node:crypto';
 import {chromium,firefox,webkit} from 'playwright';
 import sharp from 'sharp';
 import {startDocument,becomeOwner} from './lib/start-doc.mjs';
+import {compiledReader} from './lib/gate-reader.mjs';
 
 const engineName=process.argv.find(arg=>arg.startsWith('--browser='))?.split('=')[1]??'chromium';
 const engine={chromium,firefox,webkit}[engineName];assert(engine);
@@ -61,6 +62,7 @@ try {
   await new Promise(resolve=>tls.listen(port,'127.0.0.1',resolve));
   server=spawn(process.execPath,[resolve('dist/server.mjs')],{cwd:resolve('services/app'),stdio:['ignore','ignore','inherit'],env:{...process.env,
     NODE_ENV:'production',APP__PORT:String(backendPort),APP__PUBLIC_BASE_URL:base,APP__ASSETS_ORIGIN:assets,
+    FLAG__COMPILED_READER:compiledReader?'on':'shadow',
     EMAIL__RESEND_API_KEY:'mxmx_test_managed',AUTH__SECRET:randomBytes(32).toString('hex'),DATABASE_URL:'pglite://memory',SQL__SERVICE_URL:'',BROWSER__SERVICE_URL:'',EVENTS__SERVICE_URL:'',
     OBJECT_STORE__LOCAL_DIR:join(scratch,'objects'),ARTIFACTS__ALLOW_PUBLIC:'1',WEB_INGEST__ALLOW_PRIVATE:'1',
   }});
@@ -89,7 +91,7 @@ try {
   // speed, and keeps unrelated lazy editor/chart bundles out of the preload.
   const coldContext=await browser.newContext({ignoreHTTPSErrors:true}),cold=await coldContext.newPage();
   const shell=await mainFetch(backend+'/a/'+seed.id).then(response=>response.text());
-  const entry=/<script[^>]+src="([^"]+)"/.exec(shell)?.[1];assert(entry,'built app entry exists');
+  const entry=(compiledReader?/<script[^>]+src="([^"]+)"[^>]+data-mx-spa-idle=""/:/<script[^>]+src="([^"]+)"/).exec(shell)?.[1];assert(entry,'built app entry exists');
   let releaseEntry;
   const entryHeld=new Promise(resolve=>{releaseEntry=resolve;});
   await cold.route(base+entry,async route=>{await entryHeld;await route.continue();});

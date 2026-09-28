@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import { chromium } from 'playwright';
 import { becomeOwner, startDocument } from './lib/start-doc.mjs';
 import { startMailSink, loginViaEmail } from './lib/mail-login.mjs';
+import { readerUrl } from './lib/gate-reader.mjs';
 
 const base = process.argv[2] ?? 'http://localhost:3030';
 const first = await startDocument(base);
@@ -24,13 +25,19 @@ const browser = await chromium.launch();
 try {
   const page = await browser.newPage();
   const heading = (name) => page.getByRole('heading', { name, exact: true });
-  await page.goto(`${base}/a/${first.id}`);
+  const viewReport = (id) => page.waitForResponse(response =>
+    new URL(response.url()).pathname === `/api/page/artifact/${id}/view` && response.request().method() === 'POST');
+  const initialView = viewReport(first.id);
+  await page.goto(readerUrl(`${base}/a/${first.id}`));
   await heading('Artifact A').waitFor();
+  assert.equal((await initialView).status(), 204, 'initial compiled reader records a view');
   assert.equal(await page.locator('[data-mx-inline-story]').count(), 1, 'compiled reader is in the top-level DOM');
   assert.equal(await page.evaluate(() => document.querySelector('[aria-label="Artifact A"]')?.getRootNode() === document), true);
   await page.evaluate(() => { window.__navigationProbe = 'artifact-a'; });
+  const nextView = viewReport(second.id);
   await page.getByRole('link', { name: 'Next artifact' }).click();
   await heading('Artifact B').waitFor();
+  assert.equal((await nextView).status(), 204, 'navigation records the next document view');
   assert.equal(new URL(page.url()).pathname, `/a/${second.id}`);
   assert.equal(await page.evaluate(() => window.__navigationProbe), undefined, 'reader link loads its document');
   assert.equal(await heading('Artifact A').count(), 0, 'old reader body left');

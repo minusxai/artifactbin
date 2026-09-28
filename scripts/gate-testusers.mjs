@@ -13,6 +13,7 @@ import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { fixtureFetch as fetch } from './lib/fixture-http.mjs';
 import { startMailSink } from './lib/mail-login.mjs';
+import { readerUrl } from './lib/gate-reader.mjs';
 
 const base = process.argv[2] ?? 'http://localhost:3030';
 const origin = new URL(base).origin;
@@ -92,14 +93,14 @@ try {
   // The test user joins its COPY through the page, and is refused BY NAME on the original —
   // including a mutate issued the instant `window.mx` exists (the permission answer is awaited).
   const joined = await cli(['sessions', 'script', 'new', '--as', testuser.id], `
-    const page = await context.newPage(); const nav = await page.goto('/a/${copy}');
+    const page = await context.newPage(); const nav = await page.goto(${JSON.stringify(readerUrl(`/a/${copy}`))});
     const driver = page.frameLocator('iframe[title="Agent driver"]').frameLocator('iframe').locator('body');
     const ready = await driver.evaluate(async () => { for (let n = 0; n < 150; n++) { if (window.mx) return true; await new Promise(resolve => setTimeout(resolve, 100)); } return false; }).catch(() => false);
     if (!ready) return { debug: { status: nav?.status(), url: page.url(), body: (await page.content()).slice(0, 1500) } };
     const receipt = await driver.evaluate(() => mx.mutate('join', {}));
     await page.getByRole('button', { name: 'Join this tab' }).waitFor();
     const balances = await driver.evaluate(() => mx.read(['balances'], {wait:true}));
-    const real = await context.newPage(); await real.goto('/a/${original}');
+    const real = await context.newPage(); await real.goto(${JSON.stringify(readerUrl(`/a/${original}`))});
     const realDriver = real.frameLocator('iframe[title="Agent driver"]').frameLocator('iframe').locator('body');
     await realDriver.evaluate(async () => { for (let n = 0; n < 150; n++) { if (window.mx) return; await new Promise(resolve => setTimeout(resolve, 100)); } throw new Error('managed driver did not start'); });
     const refused = await realDriver.evaluate(async () => { try { await mx.mutate('join', {}); return null; } catch (e) { return { code: e.code, message: e.message }; } });
@@ -115,7 +116,7 @@ try {
 
   // The account looks at the copy: the test user is named, and joining works for the account too.
   const mine = await cli(['sessions', 'script', 'new'], `
-    const page = await context.newPage(); await page.goto('/a/${copy}');
+    const page = await context.newPage(); await page.goto(${JSON.stringify(readerUrl(`/a/${copy}`))});
     const driver = page.frameLocator('iframe[title="Agent driver"]').frameLocator('iframe').locator('body');
     await driver.evaluate(async () => { for (let n = 0; n < 150; n++) { if (window.mx) return; await new Promise(resolve => setTimeout(resolve, 100)); } throw new Error('managed driver did not start'); });
     await driver.evaluate(() => mx.mutate('join', {}));

@@ -108,6 +108,8 @@ const STANDALONE_LAZY = [
   { request: './sqlite-engine', name: 'sqlite-engine', file: () => path.join(ISLANDS_SRC, 'sqlite-engine.ts') },
   // The link following the reader (today's url-values-sync), loaded by boot after hydration.
   { request: './url-sync', name: 'url-sync', file: () => path.join(ISLANDS_SRC, 'url-sync.ts') },
+  // Browser sessions need the public mx API, but its dataflow grammar stays outside rt+boot.
+  { request: './mx-host', name: 'mx-host', file: () => path.join(ISLANDS_SRC, 'mx-host.ts') },
 ];
 
 async function buildStandaloneLazy() {

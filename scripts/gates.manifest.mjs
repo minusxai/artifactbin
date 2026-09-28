@@ -108,6 +108,12 @@ export const COMPILED = '@compiled';
 
 /** @type {readonly CompiledLeg[]} */
 export const COMPILED_LEGS = Object.freeze([
+  { gate: 'browser-sessions', timeoutMs: 150_000 },
+  { gate: 'testusers', timeoutMs: 60_000 },
+  { gate: 'seamless-navigation', timeoutMs: 60_000 },
+  { gate: 'roadmap-views', timeoutMs: 60_000 },
+  { gate: 'mermaid-prerender', timeoutMs: 130_000 },
+  { gate: 'managed-iframe', timeoutMs: 60_000 },
   { gate: 'live-data', timeoutMs: 60_000 },
   { gate: 'full-kit', timeoutMs: 90_000 },
   { gate: 'export-slice', timeoutMs: 60_000 },
@@ -193,7 +199,7 @@ export function browsersFor(names) {
 }
 
 /** Gates whose first attempt must not race another gate on the same CI runner. */
-export const ISOLATED_GATES = Object.freeze(['editor-v2', 'hydration', 'offline-file']);
+export const ISOLATED_GATES = Object.freeze(['editor-v2', 'hydration', 'offline-file', 'editor-v2@compiled']);
 
 /**
  * Cross-browser system setup measured 91s on CI run 35740918148. Match the
