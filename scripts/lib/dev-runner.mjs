@@ -64,13 +64,17 @@ export async function runDev({ appOnly, args = [] }) {
     }
   }
 
-  const runtime = spawn('node', ['scripts/build-story-runtime.mjs', '--cache'], { cwd: APP_ROOT, stdio: 'inherit' });
-  const runtimeStatus = await new Promise((resolve, reject) => {
-    runtime.once('error', reject);
-    runtime.once('exit', (code) => resolve(code ?? 1));
+  const build = (script) => new Promise((resolve, reject) => {
+    const run = spawn('node', [script, '--cache'], { cwd: APP_ROOT, stdio: 'inherit' });
+    run.once('error', reject);
+    run.once('exit', (code) => resolve(code ?? 1));
   });
-  if (runtimeStatus !== 0) { process.exitCode = 1; return; }
+  // The reader runtime (public/story) and the compiled reader's shared island build (public/islands,
+  // docs/phase2-architecture.md §1): both content-addressed trees the server reads a manifest of.
+  const [runtimeStatus, islandsStatus] = await Promise.all([build('scripts/build-story-runtime.mjs'), build(ISLANDS_BUILD)]);
+  if (runtimeStatus !== 0 || islandsStatus !== 0) { process.exitCode = 1; return; }
   watchRuntimeSources();
+  watchIslandSources();
 
   const nodeEnv = appOnly && process.env.NODE_ENV === 'test'
     ? 'development'
@@ -87,7 +91,7 @@ export async function runDev({ appOnly, args = [] }) {
     // node_modules is excluded by name: Vite bundles its config into
     // node_modules/.vite-temp on every boot, and a watcher that sees that file
     // appear and vanish restarts forever.
-    ['tsx', 'watch', '--clear-screen=false', '--include', 'public/story/manifest.json',
+    ['tsx', 'watch', '--clear-screen=false', '--include', 'public/story/manifest.json', '--include', 'public/islands/manifest.json',
       '--exclude', path.join(ROOT, 'node_modules/**'), '--exclude', '**/.vite-temp/**',
       path.join(ROOT, 'server.ts'), ...(appOnly ? ['--app-only'] : args)],
     {
@@ -126,6 +130,40 @@ function watchRuntimeSources() {
     timer = setTimeout(rebuild, 250);
   };
   for (const dir of RUNTIME_SOURCES) {
+    const full = path.join(APP_ROOT, dir);
+    if (fs.existsSync(full)) fs.watch(full, { recursive: true }, onChange);
+  }
+}
+
+/**
+ * The compiled reader's shared island build (scripts/build-islands.mjs → public/islands): the island
+ * runtime, the Solid kit and the behaviour chunks. A change under their sources rebuilds it, debounced
+ * and serialised like the runtime above; the new manifest (a new compiler build id, so every stored
+ * compile recompiles) restarts the server through tsx's watch list.
+ */
+const ISLANDS_BUILD = path.join(ROOT, 'scripts/build-islands.mjs');
+const ISLAND_SOURCES = ['lib/islands'];
+
+function watchIslandSources() {
+  let timer = null;
+  let building = false;
+  let again = false;
+  const rebuild = () => {
+    if (building) { again = true; return; }
+    building = true;
+    console.log('[dev] island source changed — rebuilding public/islands');
+    const run = spawn('node', [ISLANDS_BUILD, '--cache'], { cwd: APP_ROOT, stdio: 'inherit' });
+    run.on('exit', () => {
+      building = false;
+      if (again) { again = false; rebuild(); }
+    });
+  };
+  const onChange = (_event, file) => {
+    if (!file || !/\.(tsx?|css|mjs|json)$/.test(String(file)) || String(file).includes('__tests__')) return;
+    clearTimeout(timer);
+    timer = setTimeout(rebuild, 250);
+  };
+  for (const dir of ISLAND_SOURCES) {
     const full = path.join(APP_ROOT, dir);
     if (fs.existsSync(full)) fs.watch(full, { recursive: true }, onChange);
   }
