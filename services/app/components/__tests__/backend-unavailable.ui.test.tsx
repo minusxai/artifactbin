@@ -9,7 +9,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, renderHook, screen } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import ImageDialog from '@/components/views/story/ImageDialog';
-import EditPanel from '@/components/EditPanel';
+import EditPanel, { EditPanelPicker } from '@/components/EditPanel';
 import RemoteMentionPicker from '@/components/RemoteMentionPicker';
 import QueryNotebookPanel from '@/components/views/story/QueryNotebookPanel';
 import StoryFormatToolbar from '@/components/views/story/StoryFormatToolbar';
@@ -64,7 +64,20 @@ describe('the history entry points (versions)', () => {
   it.each([false, true])('disables the History tab with the reason (collapsed: %s)', (collapsed) => {
     panel(fakeBackend({ versions: OFFLINE }), collapsed);
     expectUnavailable(screen.getByRole('tab', { name: 'History' }));
-    expectAvailable(screen.getByRole('tab', { name: 'Selection' }));
+    expectAvailable(screen.getByRole('tab', { name: 'Inspector' }));
+  });
+
+  it('disables unavailable History in the mobile picker and skips it with sidebar arrow keys', () => {
+    const backend = fakeBackend({ versions: OFFLINE });
+    const onTab = vi.fn();
+    inBackend(backend, <>
+      <EditPanelPicker value="selection" onChange={onTab} commentsAvailable />
+      <EditPanel top={0} tab="selection" onTab={onTab} collapsed={false} onCollapsedChange={vi.fn()} selectionDot={false} commentsAvailable><p>body</p></EditPanel>
+    </>);
+    expect(screen.getByRole('option', { name: `History — ${OFFLINE}` })).toBeDisabled();
+    fireEvent.keyDown(screen.getByRole('tab', { name: 'Inspector' }), { key: 'ArrowRight' });
+    expect(onTab).toHaveBeenCalledWith('comments');
+    expect(screen.getByRole('tab', { name: 'Comments' })).toHaveFocus();
   });
 
   it.each([false, true])('offers the History tab online (collapsed: %s)', (collapsed) => {
