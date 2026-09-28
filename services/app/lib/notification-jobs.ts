@@ -37,7 +37,9 @@ export function createNotificationJobStore({db,authority,clock}:NotificationJobS
    :await tx.query('SELECT id FROM tokens WHERE id=$1 AND deleted_at IS NULL AND (expires_at IS NULL OR expires_at>coalesce($2::timestamptz,clock_timestamp()))',[principal.id,time()]);
   if(!alive.rows.length)return false;
   const original=row.input.initiator.principal;
-  return (original.kind===principal.kind&&'id' in original&&original.id===principal.id)||authority.canManage(tx,principal,row.input.origin.documentId);
+  // A token's account at the run is frozen by the server; its current owner may differ.
+  const initiatingAccount=original.kind==='token'&&principal.kind==='user'&&row.input.bindings.userId===principal.id;
+  return initiatingAccount||(original.kind===principal.kind&&'id' in original&&original.id===principal.id)||authority.canManage(tx,principal,row.input.origin.documentId);
  };
  return {
   async enqueue(tx,inputs){
