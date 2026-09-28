@@ -72,6 +72,8 @@ export interface IslandMorphSeam {
   readonly modules: WeakMap<readonly IslandEntry[], IslandModule>;
   /** Set by the engine while it imports a newer version's module: that module's `boot` hands it in here. */
   take?: (module: IslandModule) => void;
+  /** Replace only the sandboxed author realm after a version changes its source. */
+  restartAuthor(source: string | null): Promise<void>;
 }
 export type MorphableIslandDocument = IslandDocument & { morph?: IslandMorphSeam };
 
@@ -188,7 +190,7 @@ export function boot(input: IslandModule | readonly IslandEntry[], win: Window =
       const dispose = hydrateIsland(renderId, Component, context, root);
       if (dispose) islands.set(renderId, [key, dispose]);
     } catch (error) {
-      console.error(`[islands] ${renderId} did not hydrate`, error);
+      console.error(error);
     }
   };
   module.ISLANDS.forEach(hydrate);
@@ -208,7 +210,7 @@ export function boot(input: IslandModule | readonly IslandEntry[], win: Window =
     // Loaded after hydration, off the shared runtime's closure: the marks cover the gap, so nothing is missed.
     void import('./live').then(({ startIslandLive }) => {
       if (!disposed) stopLive = startIslandLive(win, liveId, liveEdit, data.results?.since ?? null);
-    }).catch((error: unknown) => console.error('[islands] the live stream did not load', error));
+    }).catch((error: unknown) => console.error(error));
   }
   // The link follows the reader (./url-sync), top-level only: a framed document's address is its frame's.
   let stopUrl = () => {};
@@ -218,8 +220,16 @@ export function boot(input: IslandModule | readonly IslandEntry[], win: Window =
   let ready = false;
   let disposed = false;
   let stopAuthor = () => {};
+  let authorGeneration = 0;
+  const restartAuthor = async (source: string | null) => {
+    const generation = ++authorGeneration;
+    stopAuthor();
+    if (!source) return;
+    const { startAuthorHost } = await import('./author-host');
+    if (generation === authorGeneration && !disposed && mode === 'read') stopAuthor = startAuthorHost(source, store, doc);
+  };
   const islandDocument: MorphableIslandDocument = {
-    morph: { islands, hydrate, modules: new WeakMap([[module.ISLANDS, module]]) },
+    morph: { islands, hydrate, modules: new WeakMap([[module.ISLANDS, module]]), restartAuthor },
     root,
     store,
     context,
@@ -265,10 +275,6 @@ export function boot(input: IslandModule | readonly IslandEntry[], win: Window =
 
   // The author's script, never in this document: its host (and the sandboxed frame) load only when the version has one.
   const authorScript = typeof data.authorScript === 'string' && data.authorScript ? data.authorScript : null;
-  if (authorScript) {
-    void import('./author-host').then(({ startAuthorHost }) => {
-      if (!disposed && mode === 'read') stopAuthor = startAuthorHost(authorScript, store, doc);
-    }).catch((error: unknown) => console.error('[islands] the author script host did not load', error));
-  }
+  if (authorScript) void restartAuthor(authorScript).catch((error: unknown) => console.error(error));
   return islandDocument;
 }

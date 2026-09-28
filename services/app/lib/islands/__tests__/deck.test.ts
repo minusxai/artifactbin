@@ -57,6 +57,23 @@ describe('startDeck', () => {
     stop();
   });
 
+  it('refreshes the rail and current slide after an in-place version update', () => {
+    const { slides } = deck(false);
+    slides.forEach((slide, i) => { slide.id = `slide-${i}`; slide.getBoundingClientRect = () => ({ top: i === 1 ? 10 : 900 }) as DOMRect; });
+    const stop = startDeck();
+    const rail = document.querySelector('.mx-rail')!;
+    rail.insertAdjacentHTML('afterbegin', '<button class="mx-rail-row" aria-label="Go to inserted">new</button>');
+    document.querySelector('.mx-doc')!.insertAdjacentHTML('afterbegin', '<section id="inserted" data-mx-slide="">new</section>');
+    document.dispatchEvent(new CustomEvent('mx:deck-morphed', { detail: { slideId: 'slide-1' } }));
+    expect([...rail.querySelectorAll('.mx-rail-row')].map((row) => row.getAttribute('aria-current'))).toEqual(['false', 'false', 'true', 'false']);
+    expect(document.querySelector('.mx-present-count')?.textContent).toBe('3 / 4');
+    const inserted = document.getElementById('inserted')!;
+    inserted.scrollIntoView = vi.fn();
+    rail.querySelector<HTMLElement>('.mx-rail-row')!.click();
+    expect(inserted.scrollIntoView).toHaveBeenCalledTimes(1);
+    stop();
+  });
+
   it('puts a miniature served inert (one holding a button) in place inside its rail row, as today\'s rail renders it', () => {
     document.body.innerHTML = '<div class="mx-deck"><nav class="mx-rail" aria-label="Slides">'
       + '<button type="button" class="mx-rail-row"><span class="mx-rail-thumb" aria-hidden="true"><div style="--mx-vh:800px"><template data-mx-thumb=""><section data-mx-slide=""><button type="button" disabled>Pick</button><p>after</p></section></template></div></span></button>'

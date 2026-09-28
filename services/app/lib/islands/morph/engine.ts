@@ -77,17 +77,12 @@ export async function morphStory(win: Window, options: MorphOptions = {}): Promi
   // hydrates matches the store it joins; the page's own query string rides along (`reader=`, the rest).
   const store = running?.store ?? null;
   const search = store ? writeUrlValues(win.location.search, store.flow, store.getState().values) : win.location.search;
-  const next = await fetchFragment(win, storyFragmentUrl(id, search, surface), options.fetch ?? win.fetch.bind(win));
+  const next = await fetchFragment(win, storyFragmentUrl(id, search, surface), options.fetch ?? win.fetch.bind(win), surface);
   const nextRoot = next.querySelector<HTMLElement>(STORY_ROOT_SELECTOR);
   if (!nextRoot) throw refuse('the fragment carries no story');
   const nextEdit = next.body.getAttribute(LIVE_EDIT_ATTR);
   if (nextEdit && nextEdit === doc.body.getAttribute(LIVE_EDIT_ATTR)) return;
-  // A deck's rail and present bar are bound once by its behaviour (lib/islands/deck): a changed deck reloads.
-  if (root.querySelector('.mx-rail') || nextRoot.querySelector('.mx-rail')) throw refuse('a deck is redrawn by a reload');
-
-  // The author's script runs in its own sandboxed realm against this page's store (../author-host), started
-  // once by `boot`: a version that changes it is drawn by a reload.
-  if (authorScriptOf(doc) !== authorScriptOf(next)) throw refuse('the author script changed');
+  const authorChanged = authorScriptOf(doc) !== authorScriptOf(next);
 
   const oldModule = moduleUrl(doc);
   const newModule = moduleUrl(next);
@@ -125,8 +120,12 @@ export async function morphStory(win: Window, options: MorphOptions = {}): Promi
   }
 
   // Where the reader is, and what they hold.
-  const anchor = currentAnchor(win);
-  const anchorTop = anchor ? topOf(root, anchor.path) : null;
+  const anchor = firstVisibleId(root, win);
+  const fallbackAnchor = anchor ? null : currentAnchor(win);
+  const fallbackTop = fallbackAnchor ? topOf(root, fallbackAnchor.path) : null;
+  const deck = root.querySelector('.mx-rail') || nextRoot.querySelector('.mx-rail');
+  const activeRow = root.querySelector('.mx-rail-row[aria-current="true"]');
+  const activeSlide = activeRow ? [...root.querySelectorAll('.mx-doc [data-mx-slide]')][[...root.querySelectorAll('.mx-rail-row')].indexOf(activeRow)]?.id : null;
   const focused = doc.activeElement instanceof HTMLElement && root.contains(doc.activeElement) ? doc.activeElement : null;
 
   const override = options.mode?.() ?? readerMode(win);
@@ -158,11 +157,16 @@ export async function morphStory(win: Window, options: MorphOptions = {}): Promi
 
   // The page's record of what it runs is the new version's now: the next version compares against it.
   syncModuleRecord(doc, next);
+  if (authorChanged && seam) await seam.restartAuthor(authorScriptOf(next));
+  if (deck) doc.dispatchEvent(new CustomEvent('mx:deck-morphed', { detail: { slideId: activeSlide } }));
 
   if (focused && !focused.isConnected && focused.id) doc.getElementById(focused.id)?.focus({ preventScroll: true });
-  if (anchor && anchorTop !== null) {
-    const after = topOf(root, anchor.path);
-    if (after !== null && Math.abs(after - anchorTop) > 1) applyAnchor(win, anchor);
+  if (anchor) {
+    const after = doc.getElementById(anchor.id)?.getBoundingClientRect().top;
+    if (after !== undefined && Math.abs(after - anchor.top) > 1) win.scrollBy({ top: after - anchor.top });
+  } else if (fallbackAnchor && fallbackTop !== null) {
+    const after = topOf(root, fallbackAnchor.path);
+    if (after !== null && Math.abs(after - fallbackTop) > 1) applyAnchor(win, fallbackAnchor);
   }
 }
 
@@ -170,9 +174,13 @@ export async function morphStory(win: Window, options: MorphOptions = {}): Promi
  * The fragment and the new module
  * ────────────────────────────────────────────────────────────────────────── */
 
-async function fetchFragment(win: Window, url: string, fetchFn: NonNullable<MorphDependencies['fetch']>): Promise<Document> {
+async function fetchFragment(win: Window, url: string, fetchFn: NonNullable<MorphDependencies['fetch']>, surface: StorySurface): Promise<Document> {
   for (let attempt = 0; ; attempt++) {
-    const response = await fetchFn(url, { credentials: 'same-origin', cache: 'no-store' });
+    // A sandboxed /raw copy has an opaque origin. Its existing export key, when present on the
+    // page address, admits this same fragment door without cookies; a credentialed CORS fetch
+    // from Origin:null would expose a session to unrelated sandboxed pages.
+    const keyedRaw = surface === 'raw' && win.origin === 'null' && new URL(url, win.document.baseURI).searchParams.has('key');
+    const response = await fetchFn(url, { credentials: keyedRaw ? 'omit' : 'same-origin', cache: 'no-store' });
     // Compiled off the write's path: a version this fresh may still be compiling.
     if (response.status === 409 && attempt < NOT_READY_RETRIES) {
       await new Promise((resolve) => win.setTimeout(resolve, NOT_READY_DELAY_MS * (attempt + 1)));
@@ -181,6 +189,18 @@ async function fetchFragment(win: Window, url: string, fetchFn: NonNullable<Morp
     if (!response.ok) throw refuse(`the story fragment answered ${response.status}`);
     return new DOMParser().parseFromString(await response.text(), 'text/html');
   }
+}
+
+/** First visible content element by persistent id, independent of an AST path shifted by an insertion. */
+function firstVisibleId(root: Element, win: Window): { id: string; top: number } | null {
+  const candidates = [...root.querySelectorAll<HTMLElement>(`[id][${AST_PATH_ATTR}]`)]
+    .filter((el) => {
+      const rect = el.getBoundingClientRect();
+      return rect.height > 0 && rect.height <= win.innerHeight && rect.bottom > 0 && rect.top < win.innerHeight;
+    })
+    .sort((a, b) => a.getBoundingClientRect().top - b.getBoundingClientRect().top);
+  const first = candidates[0];
+  return first ? { id: first.id, top: first.getBoundingClientRect().top } : null;
 }
 
 /** The version's author script, as its data island names it (IslandPageData.authorScript), or null. */
