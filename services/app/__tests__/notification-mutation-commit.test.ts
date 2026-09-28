@@ -110,3 +110,15 @@ it('refuses the winning commit if the initiating credential was revoked during S
   expect((await db.query('SELECT id FROM notification_jobs')).rows).toEqual([]);
  } finally {setServices({sql});}
 });
+
+it('accepts an evaluated current-state message after a later data write without treating content as revoked authority',async()=>{
+ const {db,send}=await fixture();
+ expect((await send('mxmx_test_notification_plan_before_later_write')).status).toBe(200);
+ const store=await notificationJobStore(),claim=await store.claim();expect(claim).not.toBeNull();
+ const plan=await evaluateNotificationQuery(claim!.input);
+ expect((await send('mxmx_test_notification_write_after_evaluation')).status).toBe(200);
+ expect(await store.complete(claim!,plan)).toBe(true);
+ const row=(await db.query<{status:string;plan:MutationNotificationPlan}>('SELECT status,plan FROM notification_jobs WHERE id=$1',[claim!.jobId])).rows[0]!;
+ expect(row.status).toBe('completed');
+ expect(row.plan.rows).toEqual([{recipientIds:[],message:'Counter is 1'}]);
+});

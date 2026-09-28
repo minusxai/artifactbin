@@ -35,7 +35,7 @@ export async function notificationArtifactAuthority(tx:Queryable,id:string):Prom
  const row=(await tx.query<ArtifactRow>('SELECT * FROM artifacts WHERE id=$1 AND deleted_at IS NULL',[id])).rows[0];
  if(!row)throw denied();
  const shares=(await tx.query<Share>('SELECT user_id,email,role FROM artifact_shares WHERE artifact_id=$1 ORDER BY email',[id])).rows;
- return {row,shares,revision:hash([row.id,row.edit_id,row.user_id,row.token_id,row.visibility,row.link_role,row.sharing_revision??0,row.policy_revision??0,row.dataset_policy??null,shares])};
+ return {row,shares,revision:hash([row.id,row.format,row.user_id,row.token_id,row.visibility,row.link_role,row.sharing_revision??0,row.policy_revision??0,row.dataset_policy??null,shares])};
 }
 function readable(authority:NotificationArtifactAuthority,identity:Identity):boolean {
  const {row,shares}=authority,{actor}=identity;
