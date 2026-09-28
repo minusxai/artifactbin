@@ -120,7 +120,12 @@ export async function measureDocumentView(context, url, { route, painted, thrott
     // JS BEFORE READY: the wire bytes (CDP, per URL) of the scripts the page had finished loading when it became ready.
     const before = new Set(measured.scriptsBeforeReady ?? []);
     const jsBeforeReady = measured.scriptsBeforeReady === null ? null : { decoded: 0, gzip: 0 };
-    if (jsBeforeReady) for (const request of requests.values()) if (kindOf(request) === 'js' && before.has(request.url)) { jsBeforeReady.decoded += request.decoded; jsBeforeReady.gzip += request.gzip; }
+    const scriptsBeforeReady = [];
+    if (jsBeforeReady) for (const request of requests.values()) if (kindOf(request) === 'js' && before.has(request.url)) {
+      jsBeforeReady.decoded += request.decoded;
+      jsBeforeReady.gzip += request.gzip;
+      scriptsBeforeReady.push({ url: new URL(request.url).pathname, gzip: request.gzip });
+    }
     return {
       route, ready, errors,
       fcp: measured.fcp, lcp: measured.lcp,
@@ -130,6 +135,7 @@ export async function measureDocumentView(context, url, { route, painted, thrott
       requests: requests.size,
       bytes,
       jsBeforeReady,
+      scriptsBeforeReady,
       scriptMs: Math.round((metrics.ScriptDuration ?? 0) * 1000),
     };
   } finally {
