@@ -81,7 +81,54 @@ Preserve the separate private repository's operation-headless, operation-authori
 and operation-context tasks. Grade actual wire/tool traces and independently read
 rows and source/version. Authoring additionally requires the original dataset
 version to remain unchanged: restoring rows after unsafe testing cannot pass.
-Prior GLM5.3Flash evidence was two passes and an authoring failure; corrected
-instructions were not rerun. Run a new paid eval only when root directs it, against
-this branch/server, and report model, tasks, failures and provider configuration
-separately. Private credentials/results never enter this product repository.
+The revised branch was evaluated once with Pi / Fireworks GLM 5.3 Flash against
+root7001 using the branch CLI and teaching. All three tasks passed the actual
+wire-route, independent final-state and source/version checks:
+
+| Task | Turns | Agent time | Result |
+| --- | ---: | ---: | --- |
+| Existing artifact headless update | 12 | 40.5 s | Named query/write; only task 1 changed; no sessions/source edits |
+| New action authoring | 33 | 84.6 s | Browser QA used a separate writable dataset and published page; original dataset version unchanged |
+| Row/local context | 11 | 33.9 s | Browser row 2 action persisted; scratch changed then reset on reload; definitions unchanged |
+
+The harness reported $0.228234 total; this is not a provider billing receipt.
+Limits were 40 turns, 600 seconds and $3 per task, concurrency one, with no retry
+or baseline sweep. The earlier implementation's two-pass/authoring-fail result
+remains historical evidence; it is not substituted for this new three-pass run.
+The private scorer's original-dataset-version guard was preserved without edits.
+
+## Verified local handoff (2026-09-29)
+
+Open [the demo](http://localhost:7001/a/i7L7bD). Its dataset is `9UMrTO`.
+The actor is `mxmx_test_notify_v2_actor@example.com`; the joined recipient is
+`mxmx_test_notify_v2_recipient@example.com`. Sign in at the local `/login` page.
+From the running root checkout, `npm run dev:otp -- EMAIL` reads that account's
+local code; do not put codes or credentials in this document. Use the actor for
+the mutation button and the recipient for the inbox.
+
+Actual compiled-reader UI verified one successful write/status link, one job with
+three rules, and one recipient item containing two distinct messages. Real join
+requests, owner approvals and leaving established the membership fixtures.
+Nonmember, pending, former-member and source-restricted accounts each had zero
+mutation items. The CLI smoke verified bulk six-row updates, zero-row success,
+guarded refusal without a dataset version change, and a dropped-response retry
+with the same run/version. A bad notification output committed the mutation but
+published no sibling partial item; UI retry after a separate repair produced one
+combined item without a further dataset write (version seven stayed seven).
+
+The demo was then intentionally reset: all seven rows are Todo at dataset version
+eight. Reset run `96f829f4c88e7065fdd3d8e1b00f916a1cd6e4d6ba4fbbfac86dce49b4777d2c`
+is separate evidence; the default task-1 button is ready to use again.
+
+Task-local evidence lives under `.agent/`: `demo/smoke.json`,
+`initial-query.jsonlog`, `joined-members.jsonlog`, `after-retry.jsonlog`,
+`reset.jsonlog`, `final-query.jsonlog`, and `paid-routing-glm53/` (three task
+ledgers, transcripts and score rows). Browser screenshots and network assertions
+are in the E worktree's report. These ignored files are evidence, not fixtures
+required to run the product.
+
+The real PostgreSQL gate is CI-only. Its first integrated run caught an incorrect
+stored-trigger creation payload before reaching native notification assertions;
+the payload was corrected to the established dataset create shape. Local syntax
+checks alone do not establish that gate passes; use the final integrated CI
+result for native PostgreSQL, typed arrays, notebook models and source authority.
