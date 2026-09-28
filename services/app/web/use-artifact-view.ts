@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react';
+import { initialViewWasReported } from './artifact-view-report';
 
 /** One report per mounted document, independent of bootstrap/cache/network data.
  * The page is keyed by artifact identity. StrictMode, data refreshes and URL
@@ -10,6 +11,7 @@ export function useArtifactView(id: string, readable: boolean): void {
   useEffect(() => {
     if (!readable || reported.current) return;
     reported.current = true;
+    if (initialViewWasReported(document, id)) return;
     void fetch(`/api/page/artifact/${id}/view`, { method: 'POST', credentials: 'same-origin', keepalive: true }).catch(() => {});
   }, [id, readable]);
 }

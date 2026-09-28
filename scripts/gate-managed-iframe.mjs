@@ -14,6 +14,7 @@ import {randomBytes} from 'node:crypto';
 import {chromium,firefox,webkit} from 'playwright';
 import sharp from 'sharp';
 import {startDocument,becomeOwner} from './lib/start-doc.mjs';
+import {compiledReader} from './lib/gate-reader.mjs';
 
 const engineName=process.argv.find(arg=>arg.startsWith('--browser='))?.split('=')[1]??'chromium';
 const engine={chromium,firefox,webkit}[engineName];assert(engine);
@@ -61,6 +62,7 @@ try {
   await new Promise(resolve=>tls.listen(port,'127.0.0.1',resolve));
   server=spawn(process.execPath,[resolve('dist/server.mjs')],{cwd:resolve('services/app'),stdio:['ignore','ignore','inherit'],env:{...process.env,
     NODE_ENV:'production',APP__PORT:String(backendPort),APP__PUBLIC_BASE_URL:base,APP__ASSETS_ORIGIN:assets,
+    FLAG__COMPILED_READER:compiledReader?'on':'shadow',
     EMAIL__RESEND_API_KEY:'mxmx_test_managed',AUTH__SECRET:randomBytes(32).toString('hex'),DATABASE_URL:'pglite://memory',SQL__SERVICE_URL:'',BROWSER__SERVICE_URL:'',EVENTS__SERVICE_URL:'',
     OBJECT_STORE__LOCAL_DIR:join(scratch,'objects'),ARTIFACTS__ALLOW_PUBLIC:'1',WEB_INGEST__ALLOW_PRIVATE:'1',
   }});
@@ -89,20 +91,20 @@ try {
   // speed, and keeps unrelated lazy editor/chart bundles out of the preload.
   const coldContext=await browser.newContext({ignoreHTTPSErrors:true}),cold=await coldContext.newPage();
   const shell=await mainFetch(backend+'/a/'+seed.id).then(response=>response.text());
-  const entry=/<script[^>]+src="([^"]+)"/.exec(shell)?.[1];assert(entry,'built app entry exists');
+  const entry=(compiledReader?/<script[^>]+src="([^"]+)"[^>]+data-mx-spa-idle=""/:/<script[^>]+src="([^"]+)"/).exec(shell)?.[1];assert(entry,'built app entry exists');
   let releaseEntry;
   const entryHeld=new Promise(resolve=>{releaseEntry=resolve;});
   await cold.route(base+entry,async route=>{await entryHeld;await route.continue();});
   const requested=new Set();cold.on('request',request=>requested.add(new URL(request.url()).pathname));
   try {
     await cold.goto(base+'/a/'+seed.id,{waitUntil:'commit'});
-    for(const name of ['Profile','Artifact','InlineStoryRuntime']) {
-      const loaded=()=>[...requested].some(url=>new RegExp('/assets/'+name+'-[^/]+\\.js$').test(url));
+    for(const name of compiledReader?['/islands/boot-','/islands/d/']:['Profile','Artifact','InlineStoryRuntime']) {
+      const loaded=()=>[...requested].some(url=>compiledReader?url.startsWith(name):new RegExp('/assets/'+name+'-[^/]+\\.js$').test(url));
       for(let attempt=0;attempt<100&&!loaded();attempt++)await new Promise(resolve=>setTimeout(resolve,20));
       assert(loaded(),name+' requested before app entry executes');
     }
     assert(![...requested].some(url=>/\/(?:ArtifactEditor|VegaChart)-/.test(url)),'editor and chart remain lazy');
-    console.log('Reader Profile, Artifact and InlineStoryRuntime discovered before app execution');
+    console.log(compiledReader?'Compiled boot and document module discovered before app execution':'Reader Profile, Artifact and InlineStoryRuntime discovered before app execution');
   } finally {releaseEntry();await cold.unrouteAll({behavior:'wait'});await coldContext.close();}
   const context=await browser.newContext({ignoreHTTPSErrors:true,viewport:{width:900,height:700}}),page=await context.newPage();
   await becomeOwner(page,base,seed.token);

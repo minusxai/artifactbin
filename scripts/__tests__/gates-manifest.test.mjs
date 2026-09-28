@@ -188,7 +188,7 @@ describe('the compiled legs (w3-behaviour)', () => {
       if (leg.disabled !== undefined) expect(leg.disabled.length, leg.gate).toBeGreaterThan(20);
     }
     // The brief's behavioural set is wired, enabled or with its reason.
-    expect(COMPILED_LEGS.map((leg) => leg.gate).sort()).toEqual(['dataflow', 'export-slice', 'full-kit', 'hydration', 'layout-shift', 'live-data', 'live-reader', 'reader-chrome']);
+    expect(COMPILED_LEGS.map((leg) => leg.gate).sort()).toEqual(['browser-sessions', 'dataflow', 'export-slice', 'full-kit', 'hydration', 'layout-shift', 'live-data', 'live-reader', 'managed-iframe', 'mermaid-prerender', 'reader-chrome', 'roadmap-views', 'seamless-navigation', 'testusers']);
   });
 
   it('a leg is its gate\'s row under its own name and timeout, and the default set leaves disabled legs out', () => {

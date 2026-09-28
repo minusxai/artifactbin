@@ -108,6 +108,12 @@ export const COMPILED = '@compiled';
 
 /** @type {readonly CompiledLeg[]} */
 export const COMPILED_LEGS = Object.freeze([
+  { gate: 'browser-sessions', timeoutMs: 150_000 },
+  { gate: 'testusers', timeoutMs: 60_000 },
+  { gate: 'seamless-navigation', timeoutMs: 60_000 },
+  { gate: 'roadmap-views', timeoutMs: 60_000 },
+  { gate: 'mermaid-prerender', timeoutMs: 130_000 },
+  { gate: 'managed-iframe', timeoutMs: 60_000 },
   { gate: 'live-data', timeoutMs: 60_000 },
   { gate: 'full-kit', timeoutMs: 90_000 },
   { gate: 'export-slice', timeoutMs: 60_000 },

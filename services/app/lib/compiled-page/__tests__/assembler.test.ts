@@ -29,6 +29,10 @@ const input = (over: Partial<AssembleInput> = {}): AssembleInput => ({
 const dom = (page: { html: string }) => new JSDOM(page.html).window.document;
 
 describe('assembleReaderPage', () => {
+  it('uses the app reader font size before the idle app shell loads', () => {
+    const app = assembleReaderPage(input({ spa: { entry: '/assets/main-abc.js', preload: [] } }));
+    expect(app.html).toContain('body{margin:0;font-size:14px}');
+  });
   it('places the request\'s story, never re-rendering it: the story input is what appears', () => {
     const page = assembleReaderPage(input({ story: '<div class="mx-doc"><b id="with-data">$744,503</b></div>' }));
     expect(dom(page).querySelector('#mx-story-root #with-data')?.textContent).toBe('$744,503');

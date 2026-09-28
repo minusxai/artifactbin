@@ -25,6 +25,11 @@ import { holdAnchor } from '@/lib/story-runtime/anchor-restore';
 import { readerMode, takeReloadAnchor } from '@/lib/story-runtime/reader-mode';
 import { chromeAfterSample, type ChromeState } from '@/lib/story-runtime/reader-chrome-policy';
 import { startIslandLive } from './live';
+import { ISLANDS_READY_EVENT, ISLAND_DOCUMENT_KEY, type IslandHost } from './contract';
+import type { MxApi } from '@artifactbin/contracts';
+
+/** The private root handle boot removes on edit/dispose; repeated here to keep boot out of page's chunk. */
+const PUBLIC_MX_KEY = '__mxPublicApi';
 
 const STORY_ROOT_SELECTOR = '[data-mx-inline-story]';
 /**
@@ -67,6 +72,24 @@ export function startPage(doc: Document = document, win: Window = window): () =>
   if (framed) return () => {};
 
   const stops: Array<() => void> = [];
+  // The public page API is a separate lazy chunk: browser sessions need it even when the
+  // React app waits for intent. Boot owns its lifetime through the root's private handle.
+  const installPublicMx = () => {
+    const root = doc.querySelector<IslandHost>(STORY_ROOT_SELECTOR);
+    const island = root?.[ISLAND_DOCUMENT_KEY];
+    const store = island?.store;
+    if (!root || !store) return;
+    void import('./mx-host').then(({ publicMxFor }) => {
+      if (!store.disposed && island.mode() === 'read' && root.isConnected) {
+        const api = publicMxFor(store);
+        (root as IslandHost & { [PUBLIC_MX_KEY]?: MxApi })[PUBLIC_MX_KEY] = api;
+        win.mx = api;
+      }
+    }).catch((error: unknown) => console.error('[islands] the public mx API did not load', error));
+  };
+  doc.addEventListener(ISLANDS_READY_EVENT, installPublicMx);
+  stops.push(() => doc.removeEventListener(ISLANDS_READY_EVENT, installPublicMx));
+  if (html.hasAttribute('data-mx-ready')) installPublicMx();
   const id = doc.body?.getAttribute('data-mx-live-id');
   const editId = doc.body?.getAttribute('data-mx-live-edit');
   const hasModule = !!doc.getElementById(ISLAND_DATA_ID);

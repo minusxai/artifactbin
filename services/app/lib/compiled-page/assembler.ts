@@ -68,7 +68,7 @@ export const assembleReaderPage: AssembleReaderPage = (input: AssembleInput): As
     + (input.sheets
       // Today's standalone document's sheets, exactly (lib/story/document-styles).
       ? `<style>${DOCUMENT_ROOT_CSS}</style>` + input.sheets.map((sheet) => styleTag(sheet.attr, sheet.css)).join('')
-      : '<style>:root{--mx-vh:100vh}body{margin:0}</style>')
+      : `<style>:root{--mx-vh:100vh}body{margin:0${spa ? ';font-size:14px' : ''}}</style>`)
     + (chrome ? styleTag('data-mx-chrome', STORY_CHROME_CSS) : '')
     // The page the app adopts (/a/:id): its bar is the top of the page from a phone's width up, so the
     // story reserves it before first paint and the app's arrival moves nothing. On <body>: the story

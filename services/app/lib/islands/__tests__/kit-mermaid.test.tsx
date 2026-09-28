@@ -61,6 +61,60 @@ beforeEach(() => { engine.renderMermaid.mockClear(); drawCode.loaded = 0; });
 afterEach(() => { vi.restoreAllMocks(); });
 
 describe('Mermaid, drawn by the reader', () => {
+  it('reads the document mode while a compiled island is mounted detached', async () => {
+    fakeCanvas();
+    document.documentElement.classList.add('dark');
+    const host = document.createElement('div');
+    const island = fakeIsland();
+    let dispose!: () => void;
+    try {
+      dispose = render(() => <IslandProvider value={island}><Mermaid code={CODE} colorMode="light" /></IslandProvider>, host);
+      await vi.waitFor(() => expect(engine.renderMermaid).toHaveBeenCalled());
+      expect(engine.renderMermaid.mock.calls[0]?.[1].dark).toBe(true);
+    } finally { dispose?.(); document.documentElement.classList.remove('dark'); }
+  });
+  it('redraws after a detached island joins a themed story root', async () => {
+    fakeCanvas();
+    const root = themed();
+    root.classList.add('dark');
+    const host = document.createElement('div');
+    const island = fakeIsland();
+    let dispose!: () => void;
+    try {
+      dispose = render(() => <IslandProvider value={island}><Mermaid code={CODE} colorMode="light" /></IslandProvider>, host);
+      await vi.waitFor(() => expect(engine.renderMermaid).toHaveBeenCalled());
+      root.append(host);
+      await vi.waitFor(() => expect(engine.renderMermaid.mock.calls.at(-1)?.[1].dark).toBe(true));
+    } finally { dispose?.(); root.remove(); }
+  });
+  it('waits for a per-visit mode override before the first engine draw', async () => {
+    fakeCanvas();
+    window.name = 'mx:doc:{"mode":"dark"}';
+    const host = themed();
+    host.classList.add('light');
+    const island = fakeIsland();
+    let dispose!: () => void;
+    try {
+      dispose = render(() => <IslandProvider value={island}><Mermaid code={CODE} colorMode="light" /></IslandProvider>, host);
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      expect(engine.renderMermaid).not.toHaveBeenCalled();
+      host.classList.replace('light', 'dark');
+      await vi.waitFor(() => expect(engine.renderMermaid.mock.calls.at(-1)?.[1].dark).toBe(true));
+      expect(engine.renderMermaid).toHaveBeenCalledTimes(1);
+    } finally { dispose?.(); host.remove(); window.name = ''; }
+  });
+  it('uses the live reader mode after the document theme changes', async () => {
+    fakeCanvas();
+    const host = themed();
+    const island = fakeIsland();
+    let dispose!: () => void;
+    try {
+      dispose = render(() => <IslandProvider value={island}><Mermaid code={CODE} colorMode="light" /></IslandProvider>, host);
+      await vi.waitFor(() => expect(engine.renderMermaid).toHaveBeenCalled());
+      host.classList.add('dark');
+      await vi.waitFor(() => expect(engine.renderMermaid.mock.calls.at(-1)?.[1].dark).toBe(true));
+    } finally { dispose?.(); host.remove(); }
+  });
   it('hands Mermaid the theme as hex, resolved through the canvas as React does', async () => {
     fakeCanvas();
     const both = await mountBoth();

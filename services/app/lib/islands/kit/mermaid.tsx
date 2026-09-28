@@ -1,6 +1,7 @@
 /* @jsxImportSource solid-js */
 import { Show, createEffect, createSignal, on, onCleanup, onMount, type JSX } from 'solid-js';
 import { mermaidImageKey, mermaidSourceError } from '@/lib/story-ui/mermaid-source';
+import { readerMode } from '@/lib/story-runtime/reader-mode';
 import { useIsland } from '../context';
 import type { MermaidImage } from '@/components/kit/mermaid-render';
 import type { Drawn } from '@/lib/mermaid-images/reader-draw';
@@ -25,7 +26,13 @@ export function Mermaid(p: Props) {
   const [refused, setRefused] = createSignal<string | null>(null);
   const [revision, setRevision] = createSignal(0);
   const invalid = () => mermaidSourceError(p.code);
-  const imageKey = () => (invalid() ? null : p.imageKey ?? mermaidImageKey(p.code, p.colorMode ?? 'light'));
+  const liveMode = () => {
+    revision();
+    const themed = host?.closest('.dark, .light');
+    const modeRoot = themed ?? (typeof document !== 'undefined' ? document.documentElement : null);
+    return modeRoot?.classList.contains('dark') ? 'dark' : modeRoot?.classList.contains('light') ? 'light' : p.colorMode ?? 'light';
+  };
+  const imageKey = () => (invalid() ? null : p.imageKey ?? mermaidImageKey(p.code, liveMode()));
   const stored = () => { const key = imageKey(); const offered = key ? island.drawings()[key] : undefined; return offered && offered.src !== refused() ? offered : undefined; };
   const storedSrc = () => stored()?.src ?? null;
   const current = () => { const r = result(); return r?.code === p.code ? r : null; };
@@ -40,18 +47,32 @@ export function Mermaid(p: Props) {
     const observer = new MutationObserver(records => {
       if (records.some(record => record.oldValue !== (record.target as Element).getAttribute(record.attributeName ?? ''))) setRevision(n => n + 1);
     });
-    for (let element = host.parentElement; element; element = element.parentElement) {
-      observer.observe(element, { attributes: true, attributeOldValue: true, attributeFilter: ['data-theme', 'data-color-mode', 'class'] });
-    }
-    onCleanup(() => observer.disconnect());
-    createEffect(on([() => p.code, () => p.colorMode, invalid, revision, storedSrc], ([code, colorMode, bad, , servedSrc]) => {
+    const watchAncestors = () => {
+      for (let element = host.parentElement; element; element = element.parentElement) {
+        observer.observe(element, { attributes: true, attributeOldValue: true, attributeFilter: ['data-theme', 'data-color-mode', 'class'] });
+      }
+    };
+    const attach = new MutationObserver(() => {
+      if (!host.isConnected) return;
+      attach.disconnect();
+      watchAncestors();
+      setRevision(n => n + 1);
+    });
+    if (host.isConnected) watchAncestors();
+    else attach.observe(document.documentElement, { childList: true, subtree: true });
+    onCleanup(() => { observer.disconnect(); attach.disconnect(); });
+    createEffect(on([() => p.code, liveMode, invalid, revision, storedSrc], ([code, mode, bad, , servedSrc]) => {
       if (bad) return;
+      // The page module may apply a same-tab colour override after this island mounts.
+      // Avoid priming Mermaid's module with the old palette before that class flip.
+      const override = typeof window === 'undefined' ? null : readerMode(window);
+      if (override && mode !== override) return;
       let live = true;
       onCleanup(() => { live = false; });
       setResult(null);
       if (servedSrc) return;
       // Intentional lazy boundary: a stored drawing never loads the drawing helpers or Mermaid.
-      void import('@/lib/mermaid-images/reader-draw').then(m => m.drawForReader(host, code, colorMode === 'dark', () => live)).then(
+      void import('@/lib/mermaid-images/reader-draw').then(m => m.drawForReader(host, code, mode === 'dark', () => live)).then(
         drawn => { if (live && drawn) setResult({ code, ...drawn }); },
         () => { if (live) setResult({ code, error: 'Could not render this diagram. Check its Mermaid syntax.' }); },
       );

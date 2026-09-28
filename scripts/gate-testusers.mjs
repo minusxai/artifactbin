@@ -13,8 +13,10 @@ import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { fixtureFetch as fetch } from './lib/fixture-http.mjs';
 import { startMailSink } from './lib/mail-login.mjs';
+import { compiledReader } from './lib/gate-reader.mjs';
 
 const base = process.argv[2] ?? 'http://localhost:3030';
+const readerQuery = compiledReader ? '?reader=compiled' : '';
 const origin = new URL(base).origin;
 // A test user is minted by an ACCOUNT, so the gate's bearer is paired to one:
 // sign a person in through the real email-code door, then approve the CLI's
@@ -91,13 +93,13 @@ try {
   // The test user joins its COPY through the page, and is refused BY NAME on the original —
   // including a mutate issued the instant `window.mx` exists (the permission answer is awaited).
   const joined = await cli(['sessions', 'script', 'new', '--as', testuser.id], `
-    const page = await context.newPage(); const nav = await page.goto('/a/${copy}');
+    const page = await context.newPage(); const nav = await page.goto('/a/${copy}${readerQuery}');
     const ready = await page.waitForFunction(() => Boolean(window.mx), null, { timeout: 15000 }).then(() => true).catch(() => false);
     if (!ready) return { debug: { status: nav?.status(), url: page.url(), body: (await page.content()).slice(0, 1500) } };
     const receipt = await page.evaluate(() => mx.mutate('join', {}));
     await page.getByRole('button', { name: 'Join this tab' }).waitFor();
     const balances = await page.evaluate(() => mx.read(['balances'], {wait:true}));
-    const real = await context.newPage(); await real.goto('/a/${original}');
+    const real = await context.newPage(); await real.goto('/a/${original}${readerQuery}');
     await real.waitForFunction(() => Boolean(window.mx));
     const refused = await real.evaluate(async () => { try { await mx.mutate('join', {}); return null; } catch (e) { return { code: e.code, message: e.message }; } });
     await output.image(await page.screenshot());
@@ -112,7 +114,7 @@ try {
 
   // The account looks at the copy: the test user is named, and joining works for the account too.
   const mine = await cli(['sessions', 'script', 'new'], `
-    const page = await context.newPage(); await page.goto('/a/${copy}');
+    const page = await context.newPage(); await page.goto('/a/${copy}${readerQuery}');
     await page.waitForFunction(() => Boolean(window.mx));
     await page.evaluate(() => mx.mutate('join', {}));
     const snapshot = await page.evaluate(() => mx.read(['balances'], {wait:true}));

@@ -32,10 +32,18 @@ const servedStyle = (css: string) => ({ 'attr:style': css }) as JSX.HTMLAttribut
  * The managed asset door for this page: the deployment's asset origin (compiled in) and the page's own
  * asset import door (the data island's `assetsUrl`, made absolute against the page's own address). None without an origin.
  */
-function assetsConfig(origin: unknown, doc: Document): ManagedAssetsConfig | undefined {
+export function assetsConfig(origin: unknown, doc: Document): ManagedAssetsConfig | undefined {
   if (typeof origin !== 'string' || !origin) return undefined;
   let door: string | undefined;
   try { door = (JSON.parse(doc.getElementById(ISLAND_DATA_ID)?.textContent || '{}') as { assetsUrl?: string }).assetsUrl; } catch { door = undefined; }
+  if (!door) {
+    // A capture carries settled data and no query/mutation doors. Its verified, short-lived
+    // export key still admits this document's managed assets through the existing asset route.
+    const page = new URL(doc.URL);
+    const id = /^\/a\/([A-Za-z0-9]{6,12})\/raw$/.exec(page.pathname)?.[1];
+    const key = page.searchParams.get('key');
+    if (id && key) door = `/a/${id}/assets?key=${encodeURIComponent(key)}`;
+  }
   if (!door) return undefined;
   return { origin, resolveUrl: new URL(door, doc.baseURI).href };
 }

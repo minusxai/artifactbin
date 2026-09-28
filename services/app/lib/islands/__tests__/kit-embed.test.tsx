@@ -10,6 +10,7 @@ import { render } from 'solid-js/web';
 import { IslandProvider } from '../context';
 import { fakeIsland } from './context.test';
 import { Iframe, DeckGL } from '../kit/data';
+import { assetsConfig } from '../kit/embed';
 import type { IslandContext } from '../contract';
 import type { DataflowStore } from '@/lib/story-runtime/store';
 import type { TableResult } from '@/lib/story/dataflow';
@@ -46,6 +47,16 @@ const store = (): DataflowStore => ({
 }) as unknown as DataflowStore;
 
 describe('<Iframe>', () => {
+  it('uses the verified raw capture key for the managed asset door when query doors are absent', () => {
+    const before = window.location.href;
+    window.history.replaceState(null, '', '/a/ABC123/raw?chrome=0&key=signed-capture');
+    document.body.innerHTML = '<script type="application/json" id="mx-story-data">{"values":{},"results":null}</script>';
+    expect(assetsConfig('https://assets.example', document)).toEqual({
+      origin: 'https://assets.example',
+      resolveUrl: `${window.location.origin}/a/ABC123/assets?key=signed-capture`,
+    });
+    window.history.replaceState(null, '', before);
+  });
   it('draws today\'s managed frame box, then mounts one sandboxed author realm in it, and removes it with the island', async () => {
     const island = { ...fakeIsland(), store: () => store() };
     const { host, dispose } = mount(island, () => <Iframe id="f" class="my-4" data-mx-ast="1.2" title="Gallery" height={120} compiled={{ html: '<p>Hello</p>', scripts: [] }} />);

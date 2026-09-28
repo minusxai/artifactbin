@@ -30,6 +30,7 @@
 import type { Component } from 'solid-js';
 import type { CompiledDataflow } from '@/lib/story/compiled-dataflow';
 import type { PageEngine } from '@/lib/story-runtime/page-engine';
+import type { MxApi } from '@artifactbin/contracts';
 import { createDataflowStore } from '@/lib/story-runtime/store';
 import { createDocumentTransport } from '@/lib/story-runtime/document-transport';
 import { STORY_DATA_HOOK } from '@/lib/story-runtime/contract';
@@ -41,6 +42,9 @@ import { loadViewerOverlay } from './viewer';
 import { createWriteStatusFeed } from './writes';
 import { installStatus } from './kit/status';
 import { loadChart } from './chart';
+
+/** Page behaviour installs the public API here; boot owns its lifetime. */
+const PUBLIC_MX_KEY = '__mxPublicApi';
 
 /** One island of the per-document module: its hydration key prefix (`IslandRef.renderId`) and its component. */
 export type IslandEntry = readonly [renderId: string, component: Component];
@@ -192,6 +196,11 @@ export function boot(input: IslandModule | readonly IslandEntry[], win: Window =
   let ready = false;
   let disposed = false;
   let stopAuthor = () => {};
+  const uninstallMx = () => {
+    const publicMx = (root as HTMLElement & { [PUBLIC_MX_KEY]?: MxApi })[PUBLIC_MX_KEY];
+    if (publicMx && win.mx === publicMx) delete win.mx;
+    delete (root as HTMLElement & { [PUBLIC_MX_KEY]?: MxApi })[PUBLIC_MX_KEY];
+  };
   const islandDocument: IslandDocument = {
     root,
     store,
@@ -200,6 +209,7 @@ export function boot(input: IslandModule | readonly IslandEntry[], win: Window =
     setMode: (next) => {
       if (disposed || next === mode || next === 'read') return;
       stopAuthor();
+      uninstallMx();
       disposeIslands();
       mode = next;
       emit({ type: 'mode', mode });
@@ -210,6 +220,7 @@ export function boot(input: IslandModule | readonly IslandEntry[], win: Window =
       if (disposed) return;
       disposed = true;
       stopAuthor();
+      uninstallMx();
       disposeIslands();
       stopLive();
       stopUrl();
