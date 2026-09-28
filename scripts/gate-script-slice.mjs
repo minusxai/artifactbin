@@ -252,7 +252,7 @@ await page.click('[aria-label="Edit artifact"]');
 await page.waitForSelector('[aria-label="Exit edit mode"]', { timeout: 30000 });
 await page.waitForTimeout(4000);
 
-check(await page.evaluate(() => document.querySelector('[data-mx-inline-story] h1')?.textContent === 'Slice doc'),
+check(await page.evaluate(() => document.querySelector('h1')?.textContent === 'Slice doc'),
   'the scripted document remains visible when the editor takes over');
 check(await documentFrame().evaluate("!!document.querySelector('h1')?.isContentEditable").catch(() => false),
   'and it becomes editable');

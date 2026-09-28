@@ -241,9 +241,9 @@ const splitExchange = await splitPage.evaluate(async (t) => (await fetch('/api/s
   method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token: t }),
 })).status, anon.token);
 check(splitExchange === 204, 'the split-viewer browser holds only the agent cookie (no account session)');
-await splitPage.goto(`${BASE}/a/${claimedPriv.id}`, { waitUntil: 'load' });
+const splitResponse = await splitPage.goto(`${BASE}/a/${claimedPriv.id}`, { waitUntil: 'load' });
 const splitText = await splitPage.locator('[data-mx-inline-story]').locator('h1').first().textContent({ timeout: 20000 }).catch(() => null);
-check(splitText === 'CLAIMED-PRIVATE-BODY', 'the shell frame shows the DOCUMENT, not a 404 — raw resolved the cookie viewer');
+check(splitText === 'CLAIMED-PRIVATE-BODY', `the shell frame shows the DOCUMENT, not a 404 — raw resolved the cookie viewer (status ${splitResponse?.status()}, text ${splitText}, body ${(await splitPage.locator('body').innerText()).slice(0, 140)})`);
 // And a browser with neither credential still gets the uniform 404.
 const nobodyCtx = await browser.newContext();
 const nobody = await nobodyCtx.newPage();
