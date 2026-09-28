@@ -37,7 +37,7 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { getDb } from '@/lib/db';
-import { ASSETS_ORIGIN, COMPILED_READER, IS_DEV, PUBLIC_BASE_URL } from '@/lib/config';
+import { ASSETS_ORIGIN, IS_DEV, PUBLIC_BASE_URL } from '@/lib/config';
 import type { ArtifactRow, Viewer } from '@/lib/artifacts';
 import { declarationsForRow, holdableImports, LIVE_ARTIFACT_SQL, refDataForRow, viewerIdentityFor, type RoleActor } from '@/lib/artifacts';
 import { artifactQuery } from '@/lib/artifact-document';
@@ -66,7 +66,6 @@ import type { StoryIslandData, StoryIslandDataflow } from '@/lib/story-runtime/c
 import type { StoryThemeName } from '@/lib/validation/atlas-schemas';
 import { loadCompilerBuild } from '@/lib/compiled-page/build.server';
 import { createSpeculationRulesStore } from '@/lib/compiled-page/modules.server';
-import { compilesPages, currentCompiledReaderFlag } from '@/lib/compiled-page/reader-mode';
 import type { CompilerBuild, StoredCompile } from '@/lib/compiled-page/contract';
 
 /** Bump when the stored shape changes; old entries then miss and are overwritten. */
@@ -134,7 +133,7 @@ function buildId(): string {
   if (staticBuild && !IS_DEV) return staticBuild;
   const hash = createHash('sha256');
   const read = (file: string) => { try { hash.update(readFileSync(file)); } catch { hash.update(`missing:${file}`); } };
-  read(path.join(process.cwd(), 'lib', 'story-runtime', 'dist', 'story-ssr.cjs'));
+  read(path.join(process.cwd(), 'lib', 'build-assets', 'story-ssr.cjs'));
   read(fileURLToPath(import.meta.url));
   if (IS_DEV) hash.update(String(BOOT));
   return (staticBuild = hash.digest('hex').slice(0, 16));
@@ -149,9 +148,8 @@ const BOOT = Date.now();
 const canonical = (value: unknown): string => JSON.stringify(value, (_key, v: unknown) =>
   v && typeof v === 'object' && !Array.isArray(v) ? Object.fromEntries(Object.entries(v as Record<string, unknown>).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))) : v);
 const slotOf = (at: ArchivedRender | null): string => (at ? `v:${at.version}` : 'head');
-/** The compiler this deployment compiles with, or null when it does not compile (the flag is `off`). */
+/** The standalone reader is retired, so every prepared page needs a compile. */
 function compilerBuild(): { build: CompilerBuild | null; error: string | null } | null {
-  if (!compilesPages(currentCompiledReaderFlag(COMPILED_READER))) return null;
   try {
     return { build: loadCompilerBuild(), error: null };
   } catch (error) {

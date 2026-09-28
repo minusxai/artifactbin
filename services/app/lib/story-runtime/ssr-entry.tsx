@@ -1,6 +1,6 @@
 /**
  * The server-render half of the runtime — bundled to
- * lib/story-runtime/dist/story-ssr.cjs by scripts/build-story-runtime.mjs and
+ * lib/build-assets/story-ssr.cjs by scripts/build-server-reader.mjs and
  * loaded by lib/story/ssr.server.ts. The self-contained bundle carries React
  * and accepts plain document data across the server rendering boundary.
  *

@@ -11,7 +11,8 @@
  * thing that never differed and is blind to the rest.
  */
 import { describe, expect, it } from 'vitest';
-import { buildStoryDocument } from '@/lib/story/document';
+import { JSDOM } from 'jsdom';
+import { compiledDocument, type DocumentCase } from '@/lib/compiled-page/__tests__/document-helper';
 import { storyUpdateParts } from '@/lib/story/update-parts';
 import { assetLookupFrom, assetUrlFor, mapExternalImageSources, type WebAssetBox } from '@/lib/story/asset-url';
 import { parseJsxOrThrow } from '@/test/helpers/jsx';
@@ -42,18 +43,15 @@ describe('mapExternalImageSources', () => {
 });
 
 describe('the three renderings agree', () => {
-  const build = (over: Partial<Parameters<typeof buildStoryDocument>[0]> = {}) => buildStoryDocument({
+  const build = (over: Partial<DocumentCase> = {}) => compiledDocument({
     source: SOURCE, compiledCss: null, theme: null, colorMode: null, refData: {},
-    title: 'T', runtimeSrc: '/story/entry-TEST.js', assetUrls: rows, ...over,
+    title: 'T', assetUrls: rows, ...over,
   });
 
-  it('SSR html and island json both carry the mapped, versioned src', async () => {
+  it('compiled HTML and the live update nodes both carry the mapped, versioned src', async () => {
     const html = await build();
-    const island = html.slice(html.indexOf('id="mx-story-data"'));
-    // The island is JSON inside HTML, so its `&` is entity-escaped — the same
-    // URL, spelled the way each rendering has to spell it.
     expect(html).toContain(`src="${assetUrlFor(URL_A, ROW)}"`);        // SSR string
-    expect(island).toContain(assetUrlFor(URL_A, ROW)); // island JSON
+    expect(JSON.stringify(storyUpdateParts(SOURCE, held)!.nodes)).toContain(assetUrlFor(URL_A, ROW));
     expect(html).not.toContain(URL_A);                                  // nothing points upstream
   });
 
@@ -81,9 +79,9 @@ describe('the three renderings agree', () => {
    */
   it('offers both widths to the browser it is served to', async () => {
     const html = await build();
-    expect(html).toContain('srcSet="');
-    expect(html).toContain('w=640 640w');
-    expect(html).toContain('sizes="(max-width: 640px) 100vw, 768px"');
+    const image = new JSDOM(html).window.document.querySelector('img')!;
+    expect(image.getAttribute('srcset')).toContain('w=640 640w');
+    expect(image.getAttribute('sizes')).toBe('(max-width: 640px) 100vw, 768px');
   });
 
   it('photographs the full variant, eagerly, for a capture', async () => {

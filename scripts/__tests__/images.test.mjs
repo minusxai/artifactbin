@@ -64,7 +64,7 @@ describe('runtime dependency closure', () => {
      * installs every runtime dependency (`npm install --omit=dev`), so WebGL code the
      * server never imports pushed the app image past its size budget and blocked the deploy. They
      * reach only the lazy browser chunk (components/kit/deck-gl-engine.tsx), which the SSR build
-     * stubs; MapLibre's CSP worker is copied into lib/story-runtime/dist/ at build time.
+     * stubs; MapLibre's CSP worker is copied into lib/build-assets/ at build time.
      */
     it('browser-only map packages are pinned build dependencies, excluded from runtime installs', () => {
       const { dependencies = {}, devDependencies = {} } = pkg('services/app/package.json');

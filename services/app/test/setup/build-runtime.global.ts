@@ -13,7 +13,7 @@ import path from 'path';
 
 export default function buildStoryRuntime(): void {
   const appRoot = path.resolve(__dirname, '../..');
-  execFileSync(process.execPath, [path.resolve(__dirname, '../../scripts/build-story-runtime.mjs'), '--cache'], {
+  execFileSync(process.execPath, [path.resolve(__dirname, '../../scripts/build-server-reader.mjs'), '--cache'], {
     cwd: appRoot,
     stdio: 'inherit',
   });

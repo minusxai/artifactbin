@@ -1,7 +1,7 @@
 /**
  * The offline bundle a downloaded file carries in `#afbin-code`, read from what
  * scripts/build-offline.mjs wrote beside the SSR bundle
- * (lib/story-runtime/dist/offline/, shipped with the server) and located the
+ * (lib/build-assets/offline/, shipped with the server) and located the
  * way lib/story/ssr.server finds its bundle.
  *
  * gzip then base64, exactly as the file stores it. Read, checked against the
@@ -22,7 +22,7 @@ interface OfflineBundleManifest {
   extras?: { file: string; path: string; integrity: string; sha256: string };
 }
 
-const dir = () => path.join(process.cwd(), 'lib', 'story-runtime', 'dist', 'offline');
+const dir = () => path.join(process.cwd(), 'lib', 'build-assets', 'offline');
 const loaded = new Map<OfflineBundleKind, Promise<string>>();
 
 const readManifest = async () => JSON.parse(await readFile(path.join(dir(), 'manifest.json'), 'utf8')) as OfflineBundleManifest;
@@ -30,7 +30,7 @@ const readManifest = async () => JSON.parse(await readFile(path.join(dir(), 'man
 async function load(kind: OfflineBundleKind): Promise<string> {
   const manifest = await readManifest();
   const entry = manifest.bundles?.[kind];
-  if (!entry) throw new Error(`offline bundle: the build names no ${kind} bundle (run npm run build:runtime)`);
+  if (!entry) throw new Error(`offline bundle: the build names no ${kind} bundle (run npm run build)`);
   const gz = await readFile(path.join(dir(), entry.file));
   const code = gunzipSync(gz);
   if (createHash('sha256').update(code).digest('hex') !== entry.sha256) throw new Error(`offline bundle: ${entry.file} does not match its manifest`);
@@ -65,7 +65,7 @@ const EXTRAS_NAME = /^extras-[0-9a-f]{16}\.js$/;
 
 const extras = once(async () => {
   const entry = (await readManifest()).extras;
-  if (!entry || !EXTRAS_NAME.test(entry.file)) throw new Error('offline bundle: the build names no extras (run npm run build:runtime)');
+  if (!entry || !EXTRAS_NAME.test(entry.file)) throw new Error('offline bundle: the build names no extras (run npm run build)');
   const code = await readFile(path.join(dir(), entry.file));
   if (createHash('sha256').update(code).digest('hex') !== entry.sha256) throw new Error(`offline bundle: ${entry.file} does not match its manifest`);
   // The build's brotli/gzip siblings (scripts/build-offline), each kept only if it decodes to exactly these bytes.

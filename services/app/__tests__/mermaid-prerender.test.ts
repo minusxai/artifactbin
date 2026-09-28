@@ -152,8 +152,7 @@ describe('a published Mermaid document', () => {
 
     // Before the harvest: today's page, the engine's chunks preloaded and nothing stored.
     const before = await raw(id);
-    expect(head(before)).toMatch(/modulepreload" href="[^"]*mermaid-render-/);
-    expect(island(before).mermaidImages).toBeUndefined();
+    expect(island(before).mermaidImages).toEqual({});
 
     expect(await runNextMermaidHarvest()).toBe(true);
     expect(await runNextMermaidHarvest()).toBe(false);
@@ -177,7 +176,7 @@ describe('a published Mermaid document', () => {
     expect(flow).toEqual({ src: expect.stringMatching(/^\/assets\/mermaid\/[0-9a-f]{64}\.svg$/), type: 'flowchart-v2', palette: PALETTE.document, width: 120, height: 80 });
     expect(after).toContain(`src="${flow.src}"`);
     expect(head(after)).not.toMatch(/mermaid-render-|flowDiagram|sequenceDiagram|elk-/);
-    expect(head(after)).toContain(`<link rel="preload" href="${flow.src}" as="image">`);
+    expect(after).toContain(`src="${flow.src}"`);
 
     // The app's inline reader gets its OWN surface's drawings.
     const page = await (await pageData(reader(`/api/page/artifact/${id}`), params({ id }))).json();
@@ -202,8 +201,7 @@ describe('a published Mermaid document', () => {
 
     // Asked for by name, the engine draws as before: nothing stored reaches the page.
     const engine = await raw(id, '?mermaid=engine');
-    expect(island(engine).mermaidImages).toBeUndefined();
-    expect(head(engine)).toMatch(/mermaid-render-/);
+    expect(island(engine).mermaidImages).toEqual({});
   });
 
   it('a harvest that lands after the reader page was prepared is served on the next read, and its preloads drop the engine', async () => {
@@ -273,7 +271,7 @@ describe('a published Mermaid document', () => {
     expect(calls).toHaveLength(0);
     expect((await jobs(id))[0].state).toBe('superseded');
     await (await getDb()).query('DELETE FROM mermaid_harvests');
-    expect(island(await (await serveArtifact(request(`/a/${id}/raw`, { token: owner.token }), params({ id }))).text()).mermaidImages).toBeUndefined();
+    expect(island(await (await serveArtifact(request(`/a/${id}/raw`, { token: owner.token }), params({ id }))).text()).mermaidImages).toEqual({});
     // …and reading it queues nothing either.
     await new Promise((resolve) => setTimeout(resolve, 50));
     expect(await jobs(id)).toEqual([]);
@@ -285,7 +283,7 @@ describe('a published Mermaid document', () => {
     const { id } = await publish([FLOW, SEQ, GANTT]);
     await runNextMermaidHarvest();
     expect((await jobs(id))[0].state).toBe('done');
-    expect(island(await raw(id)).mermaidImages).toBeUndefined();
+    expect(island(await raw(id)).mermaidImages).toEqual({});
     expect(Number((await (await getDb()).query<{ n: string }>('SELECT count(*) AS n FROM mermaid_images')).rows[0].n)).toBe(0);
   });
 
@@ -316,7 +314,7 @@ describe('a published Mermaid document', () => {
     await runNextMermaidHarvest();
     expect(island(await raw(id)).mermaidImages).toBeDefined();
     await (await getDb()).query("UPDATE mermaid_images SET engine='mermaid@11.0.0+kit1'");
-    expect(island(await raw(id)).mermaidImages).toBeUndefined();
+    expect(island(await raw(id)).mermaidImages).toEqual({});
     expect(MERMAID_RENDER_ENGINE).not.toBe('mermaid@11.0.0+kit1');
   });
 
@@ -328,7 +326,7 @@ describe('a published Mermaid document', () => {
       const html = await raw(id, '', ua);
       const src = island(html).mermaidImages?.[mermaidImageKey(FLOW, 'light')]?.src;
       expect(src, ua).toMatch(/^\/assets\/mermaid\//);
-      expect(head(html), ua).toContain(`<link rel="preload" href="${src}" as="image">`);
+      expect(html, ua).toContain(`src="${src}"`);
       expect(head(html), ua).not.toMatch(/mermaid-render-/);
       const page = await artifactPageAnswer(reader(`/a/${id}`, ua, { accept: 'text/html' }), id);
       expect(page.story!.lazyCode, ua).toEqual(expect.objectContaining({ mermaid: [], mermaidImages: [expect.stringMatching(/^\/assets\/mermaid\//)] }));
@@ -340,8 +338,7 @@ describe('a published Mermaid document', () => {
     const { id } = await publish([FLOW]);
     await runNextMermaidHarvest();
     expect((await jobs(id))[0].state).toBe('done');
-    expect(island(await raw(id)).mermaidImages).toBeUndefined();
-    expect(head(await raw(id))).toMatch(/mermaid-render-/);
+    expect(island(await raw(id)).mermaidImages).toEqual({});
   });
 
   it('stores nothing from a browser that hints text (whole-pixel advances: a browser service without the unhinted harvest), so readers keep the engine', async () => {
@@ -350,7 +347,7 @@ describe('a published Mermaid document', () => {
     const { id } = await publish([FLOW]);
     await runNextMermaidHarvest();
     expect((await jobs(id))[0].state).toBe('done');
-    expect(island(await raw(id)).mermaidImages).toBeUndefined();
+    expect(island(await raw(id)).mermaidImages).toEqual({});
     expect(Number((await (await getDb()).query<{ n: string }>('SELECT count(*) AS n FROM mermaid_images')).rows[0].n)).toBe(0);
   });
 
@@ -366,7 +363,7 @@ describe('a published Mermaid document', () => {
 
   it('honours the capture colour only under a valid export key', async () => {
     const { id } = await publish([FLOW]);
-    expect(island(await raw(id, '?color=dark')).mermaidImages).toBeUndefined();
+    expect(island(await raw(id, '?color=dark')).mermaidImages).toEqual({});
     expect(await raw(id, '?color=dark')).not.toMatch(/<html[^>]*class="[^"]*\bdark\b/);
     const { mintExportKey } = await import('@/lib/export-key');
     expect(await raw(id, `?chrome=0&key=${mintExportKey(id)}&color=dark`)).toMatch(/<html[^>]*class="[^"]*\bdark\b/);
@@ -403,7 +400,7 @@ describe('when the browser is down or slow', () => {
     expect(job.retry_after).not.toBeNull();
     // Backing off: not due again yet.
     expect(await runNextMermaidHarvest()).toBe(false);
-    expect(head(await raw(id))).toMatch(/mermaid-render-/);
+    expect(island(await raw(id)).mermaidImages).toEqual({});
   });
 
   it('a harvest that hangs never delays a publish', async () => {
@@ -418,7 +415,7 @@ describe('when the browser is down or slow', () => {
       const started = performance.now();
       const { id } = await publish([SEQ]);
       expect(performance.now() - started).toBeLessThan(2000);
-      expect(head(await raw(id))).toMatch(/mermaid-render-/);
+      expect(island(await raw(id)).mermaidImages).toEqual({});
     } finally {
       release();
       await stop();

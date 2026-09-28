@@ -14,10 +14,21 @@ import {createArtifact} from '@/lib/artifacts';
 import {storeFileContent} from '@/lib/story/file-store';
 import {internalAssetResponse} from '../../../browser/src/internal-assets';
 import {withHttpServer} from '@artifactbin/test-support/net';
+import {loadCompilerBuild} from '@/lib/compiled-page/build.server';
 import {getRequestListener} from '@hono/node-server';
 import {createAuthHost} from '@artifactbin/auth';
 import {testAuthOptions} from '../../../auth/__tests__/helpers';
 useAppHarness();
+it('serves the compiled page SQLite wasm to opaque-origin readers as immutable bytes',async()=>{
+ const app=createAppServer({indexHtml:async()=>'<head></head>'});
+ const url=loadCompilerBuild().sqliteWasm!;
+ const res=await app.request('https://example.test'+url);
+ expect(res.status).toBe(200);
+ expect(res.headers.get('content-type')).toContain('application/wasm');
+ expect(res.headers.get('cache-control')).toContain('immutable');
+ expect(res.headers.get('access-control-allow-origin')).toBe('*');
+ expect((await res.arrayBuffer()).byteLength).toBeGreaterThan(1000);
+});
 it('allows the export redirect host in app image policy, including development pages',async()=>{
  const imageOrigin=new URL(exportAssetUrl('00000000-0000-0000-0000-000000000001','https://example.test')).origin;
  for(const devHmrPort of [undefined,3041]){

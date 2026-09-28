@@ -1,42 +1,6 @@
-/**
- * What the served document's runtime build knows about its own chunk graph,
- * read out of esbuild's metafile and Mermaid's own dispatch code, for
- * scripts/build-story-runtime.mjs to record in public/story/manifest.json.
- *
- * A document can only preload what it can NAME at render time. The entry names
- * its static chunks only once it has downloaded and parsed; Mermaid names a
- * diagram's module only once it has detected the kind, and that module names
- * its layout engine only once it runs. Each of those is a round trip a reader
- * waits through, so the build writes the whole chain down here instead.
- */
+/** Resolve Mermaid's diagram and layout modules for the server's Vite preload hints. */
 import fs from 'node:fs';
 import path from 'node:path';
-
-/** esbuild's own names for an output's static imports (never `dynamic-import`). */
-const STATIC = new Set(['import-statement', 'require-call']);
-
-/**
- * `start` and every output it imports statically, transitively, in discovery
- * order. Metafile output keys are paths relative to the working directory.
- */
-export function staticClosure(outputs, start) {
-  const seen = new Set();
-  const visit = (key) => {
-    if (seen.has(key)) return;
-    if (!outputs[key]) throw new Error(`story-runtime-graph: no output ${key} in the metafile`);
-    seen.add(key);
-    for (const i of outputs[key].imports ?? []) if (STATIC.has(i.kind) && !i.external) visit(i.path);
-  };
-  visit(start);
-  return [...seen];
-}
-
-/** The output esbuild split off for `module` (a `import()` target), found by its entry point. */
-export function outputFor(outputs, matches) {
-  const found = Object.entries(outputs).filter(([, out]) => out.entryPoint && matches(out.entryPoint.split(path.sep).join('/')));
-  if (found.length !== 1) throw new Error(`story-runtime-graph: expected one output, found ${found.length}`);
-  return found[0][0];
-}
 
 /** A bundled file as the path below its `node_modules/`, e.g. `mermaid/dist/mermaid.core.mjs`. */
 export const packagePath = (file) => file.split(path.sep).join('/').split('/node_modules/').pop();
@@ -70,7 +34,7 @@ export function mermaidDispatch(coreFile, parserFile) {
   const chunks = path.join(path.dirname(coreFile), 'chunks/mermaid.core');
   const registry = fs.readdirSync(chunks).filter((f) => f.endsWith('.mjs')).map((f) => path.join(chunks, f))
     .find((file) => read(file).includes('registerDefaultLayoutLoaders'));
-  if (!registry) throw new Error('story-runtime-graph: Mermaid\'s layout registry was not found');
+  if (!registry) throw new Error('mermaid-graph: Mermaid\'s layout registry was not found');
   const layouts = {};
   const loaders = read(registry);
   for (const [, name, module] of loaders.matchAll(/name: "([\w.-]+)",\s*loader: [^\n]*import\("(\.\/[^"]+\.mjs)"\)/g)) layouts[name] = beside(registry, module);
@@ -79,7 +43,7 @@ export function mermaidDispatch(coreFile, parserFile) {
   const parser = read(parserFile);
   const grammarModules = {};
   for (const [, name, module] of parser.matchAll(/\n {2}(\w+): [^\n]*async \(\) => \{\n[^\n]*import\("(\.\/[^"]+\.mjs)"\)/g)) grammarModules[name] = beside(parserFile, module);
-  if (!Object.keys(grammarModules).length) throw new Error('story-runtime-graph: @mermaid-js/parser\'s grammar loaders were not found');
+  if (!Object.keys(grammarModules).length) throw new Error('mermaid-graph: @mermaid-js/parser\'s grammar loaders were not found');
   const grammars = {};
   for (const [id, file] of Object.entries(diagramFiles)) {
     const source = read(file);
@@ -101,10 +65,10 @@ export function mermaidKindModules(kinds, dispatch) {
   const modules = {};
   for (const { kind, mermaid, layouts } of kinds) {
     const diagram = dispatch.diagrams[mermaid];
-    if (!diagram) throw new Error(`story-runtime-graph: Mermaid has no diagram "${mermaid}" for the kind "${kind}"`);
+    if (!diagram) throw new Error(`mermaid-graph: Mermaid has no diagram "${mermaid}" for the kind "${kind}"`);
     modules[kind] = [diagram, ...dispatch.grammars[mermaid] ?? [], ...layouts.map((layout) => {
       const module = dispatch.layouts[layout];
-      if (!module) throw new Error(`story-runtime-graph: Mermaid has no layout "${layout}" for the kind "${kind}"`);
+      if (!module) throw new Error(`mermaid-graph: Mermaid has no layout "${layout}" for the kind "${kind}"`);
       return module;
     })];
   }

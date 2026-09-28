@@ -11,6 +11,7 @@ import { IslandProvider, useIsland } from '../context';
 import type { IslandContext } from '../contract';
 
 export const fakeIsland = (values: Record<string, string> = {}): IslandContext => ({
+  assetsUrl: () => null,
   values: () => values, value: (n) => values[n], table: () => undefined, tableSnapshot: () => undefined, pending: () => false, error: () => undefined, people: () => ({}),
   setValue: () => {}, mutate: async () => ({ dataset: 'x' }), writesUnavailable: () => null, mutationUnavailable: () => null, mutating: () => false,
   viewer: () => null, drawings: () => ({}), writes: { current: () => [], subscribe: () => () => {}, dismiss: () => {} }, store: () => null,

@@ -17,8 +17,7 @@ node_modules/.cache/tsc/
 .artifact-objects/
 .artifactbin/
 tmp/
-**/public/story/
-**/lib/story-runtime/dist/
+**/lib/build-assets/
 **/public/fonts/
 **/lib/data/story/story-font-manifest.json
 # landing illustration SOURCES — 1254px PNG, ~2.8 MB each, 34 MB for the set.

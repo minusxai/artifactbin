@@ -35,7 +35,7 @@ describe('buildIslands', () => {
     first = await buildIslands({ outDir });
   }, 120_000);
   it('names every specifier a compiled page may import', () => {
-    expect(ISLAND_SPECIFIERS).toEqual(expect.arrayContaining(['@mx/rt', '@mx/boot', '@mx/deck', '@mx/row-class', ...KIT_FAMILIES.map((f) => `@mx/kit/${f}`)]));
+    expect(ISLAND_SPECIFIERS).toEqual(expect.arrayContaining(['@mx/rt', '@mx/boot', '@mx/deck', '@mx/row-class', '@mx/kit/image', ...KIT_FAMILIES.map((f) => `@mx/kit/${f}`)]));
     expect(ISLAND_SPECIFIERS.filter((s) => s.startsWith('solid-js')), 'generated code reaches Solid only through @mx/rt').toEqual([]);
   });
 
@@ -46,7 +46,7 @@ describe('buildIslands', () => {
       expect(url, specifier).toMatch(/^\/islands\/[\w-]+-[0-9a-f]{8,}\.js$/);
       expect(existsSync(path.join(outDir, url.slice('/islands/'.length))), `${specifier} → ${url} exists`).toBe(true);
     }
-    expect(JSON.parse(readFileSync(path.join(outDir, 'manifest.json'), 'utf8'))).toEqual({ build: first.build, manifest: first.manifest, files: expect.any(Object), ssr: first.ssr });
+    expect(JSON.parse(readFileSync(path.join(outDir, 'manifest.json'), 'utf8'))).toEqual({ build: first.build, manifest: first.manifest, files: expect.any(Object), ssr: first.ssr, sqliteWasm: expect.stringMatching(/^\/islands\/sqlite3-[0-9a-f]{16}\.wasm$/) });
     // Exactly one Solid: its DOM runtime (the event-delegation key is a string literal in solid-js/web) is in one chunk.
     const withSolidWeb = Object.keys(first.files).filter((url) => readFileSync(path.join(outDir, url.slice('/islands/'.length)), 'utf8').includes('_$DX_DELEGATE'));
     expect(withSolidWeb).toHaveLength(1);
@@ -71,7 +71,7 @@ describe('buildIslands', () => {
   it('writes the server half: one file, a namespace per runtime and kit specifier, only Solid external, no lazy engine', () => {
     const { ssr } = first;
     expect(ssr.url).toMatch(/^\/islands\/ssr-[0-9a-f]{16}\.js$/);
-    expect(Object.keys(ssr.exports).sort()).toEqual(['@mx/rt', '@mx/row-class', ...KIT_FAMILIES.map((f) => `@mx/kit/${f}`)].sort());
+    expect(Object.keys(ssr.exports).sort()).toEqual(['@mx/rt', '@mx/row-class', '@mx/kit/image', ...KIT_FAMILIES.map((f) => `@mx/kit/${f}`)].sort());
     const text = readFileSync(path.join(outDir, ssr.url.slice('/islands/'.length)), 'utf8');
     const specifiers = [...new Set([...text.matchAll(/^import\s[^;]*?from\s*["']([^"']+)["']/gm)].map((m) => m[1]))].sort();
     expect(specifiers.every((s) => /^solid-js(\/web|\/store)?$/.test(s)), specifiers.join(', ')).toBe(true);
@@ -166,6 +166,8 @@ describe('buildIslands', () => {
     const staticUrls = closure([manifest['@mx/boot'], ...KIT_FAMILIES.map(family => manifest[`@mx/kit/${family}`])]);
     const staticBytes = staticUrls.reduce((sum, url) => sum + files[url].br, 0);
     expect(staticBytes).toBeLessThanOrEqual(80 * 1024);
+    const withImage = closure([manifest['@mx/kit/image'], ...staticUrls]);
+    expect(withImage.reduce((sum, url) => sum + files[url].br, 0)).toBeLessThanOrEqual(85 * 1024);
     const dataCode = staticUrls.map(url => readFileSync(path.join(outDir, url.slice('/islands/'.length)), 'utf8')).join('\n');
     const dynamic = [...dataCode.matchAll(/import\("\.\/([\w-]+\.js)"\)/g)].map(match => `/islands/${match[1]}`);
     expect(dynamic.some(url => /frame-engine-[0-9a-f]{16}\.js$/.test(url))).toBe(true);

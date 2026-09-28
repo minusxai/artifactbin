@@ -3,7 +3,7 @@
  *
  * Three doors, one grammar (lib/story/url-values):
  *  - the READER's document (`/a/<id>/raw`) is seeded through the island's
- *    third dataflow field — values, no rows — so paint-first is untouched and
+ *    value field alongside the first results, so paint-first is complete and
  *    the control the server paints already shows the reader's pick;
  *  - the CAPTURE (`chrome=0`, what /export photographs) has to be SETTLED
  *    rather than fast, so its selection is threaded into `dataflowForRow`
@@ -23,7 +23,9 @@ import {exportImage as exportRoute} from './export-helpers';
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 import { resetExportRenderer } from '@/lib/export';
 import { setServices } from '@/lib/services';
-import { STORY_ISLAND_ID, type StoryIslandData } from '@/lib/story-runtime/contract';
+import { ISLAND_DATA_ID } from '@/lib/compiled-page/contract';
+import type { IslandPageData } from '@/lib/islands/contract';
+import { mintExportKey } from '@/lib/export-key';
 import { mintToken } from '@/lib/tokens';
 import { useAppHarness, request } from '@/__tests__/harness';
 
@@ -41,10 +43,10 @@ const DOC = (ds: string) =>
   `<Import name="sales_data" src="ref:${ds}" /><Query name="sales">{\`select region, sum(revenue) revenue from sales_data.rows where $region is null or region = $region group by 1 order by 1\`}</Query>` +
   '</Helmet><div><select aria-label="Region" value="$region" options="$sales" /><Question data="$sales" viz={{"kind":"table"}} /></div>';
 
-const island = (html: string): StoryIslandData => {
-  const open = html.indexOf(`id="${STORY_ISLAND_ID}"`);
+const island = (html: string): IslandPageData => {
+  const open = html.indexOf(`id="${ISLAND_DATA_ID}"`);
   const start = html.indexOf('>', open) + 1;
-  return JSON.parse(html.slice(start, html.indexOf('</script>', start))) as StoryIslandData;
+  return JSON.parse(html.slice(start, html.indexOf('</script>', start))) as IslandPageData;
 };
 
 /** A published dataset + document over it. */
@@ -60,13 +62,14 @@ const raw = async (id: string, search = ''): Promise<string> => {
   expect(res.status).toBe(200);
   return res.text();
 };
+const capture = (id: string, search = '') => raw(id, `?chrome=0&key=${mintExportKey(id)}${search ? `&${search.replace(/^\?/, '')}` : ''}`);
 
 describe('the reader\'s document, opened at a link that names a selection', () => {
-  it('seeds the island with the URL values — and still no rows (paint first)', async () => {
+  it('seeds the island with the URL values and the selected first results', async () => {
     const { id } = await published();
     const data = island(await raw(id, '?$region=NA'));
-    expect(data.dataflow?.values).toEqual({ region: 'NA' });
-    expect(data.dataflow?.state).toBeUndefined();
+    expect(data.values).toEqual({ region: 'NA' });
+    expect(data.results?.tables.sales?.rows).toEqual([{ region: 'NA', revenue: 1200 }]);
   });
 
   it('ignores what the flow does not declare, and a value the type refuses', async () => {
@@ -74,12 +77,12 @@ describe('the reader\'s document, opened at a link that names a selection', () =
     // `nope` is undeclared; `top` is a number and "ten" is not one; `chrome`,
     // `edit` and `ref` carry no `$` and are not document values.
     const data = island(await raw(id, '?$nope=1&$top=ten&chrome=1&edit=0&ref=2'));
-    expect(data.dataflow?.values).toBeUndefined();
+    expect(data.values).toEqual({});
   });
 
   it('a link with no selection carries none — the plain address is the document at rest', async () => {
     const { id } = await published();
-    expect(island(await raw(id, '')).dataflow?.values).toBeUndefined();
+    expect(island(await raw(id, '')).values).toEqual({});
   });
 });
 
@@ -111,38 +114,35 @@ describe('a Value the author kept out of the link', () => {
   it('is not seeded from the address, while the Values that do travel still are', async () => {
     const { id } = await publishedWithDraft();
     const data = island(await raw(id, '?$draft=Dinner&$guest=true&$region=NA'));
-    expect(data.dataflow?.values).toEqual({ region: 'NA' });
+    expect(data.values).toEqual({ region: 'NA' });
   });
 
   it('leaves a document at rest when the link names only it', async () => {
     const { id } = await publishedWithDraft();
-    expect(island(await raw(id, '?$draft=Dinner')).dataflow?.values).toBeUndefined();
+    expect(island(await raw(id, '?$draft=Dinner')).values).toEqual({});
   });
 
   it('is at its declared default in the settled capture too', async () => {
     const { id } = await publishedWithDraft();
-    const data = island(await raw(id, '?chrome=0&$draft=Dinner&$guest=true'));
-    expect(data.dataflow?.state?.values.draft).toBeNull();
-    expect(data.dataflow?.state?.values.guest).toBe(false);
+    const data = island(await capture(id, '$draft=Dinner&$guest=true'));
+    expect(data.values).toEqual({});
+    expect(data.results).not.toBeNull();
   });
 });
 
 describe('the CAPTURE render (chrome=0), which /export photographs', () => {
   it('runs the dataflow WITH the selection, so the photograph is of the selected document', async () => {
     const { id } = await published();
-    const data = island(await raw(id, '?chrome=0&$region=NA'));
-    expect(data.dataflow?.state?.values.region).toBe('NA');
-    expect(data.dataflow?.state?.tables.sales?.rows).toEqual([{ region: 'NA', revenue: 1200 }]);
-    // A settled render seeds through `state`; the third field would be a
-    // second, redundant answer to the same question.
-    expect(data.dataflow?.values).toBeUndefined();
+    const data = island(await capture(id, '$region=NA'));
+    expect(data.values).toEqual({ region: 'NA' });
+    expect(data.results?.tables.sales?.rows).toEqual([{ region: 'NA', revenue: 1200 }]);
   });
 
   it('keeps the declared defaults when the link names nothing', async () => {
     const { id } = await published();
-    const data = island(await raw(id, '?chrome=0'));
-    expect(data.dataflow?.state?.values.region).toBe('EU');
-    expect(data.dataflow?.state?.tables.sales?.rows).toEqual([{ region: 'EU', revenue: 840 }]);
+    const data = island(await capture(id));
+    expect(data.values).toEqual({});
+    expect(data.results?.tables.sales?.rows).toEqual([{ region: 'EU', revenue: 840 }]);
   });
 });
 

@@ -16,7 +16,6 @@ import { getArtifactById } from '@/lib/artifacts';
 import { mintToken } from '@/lib/tokens';
 import { setWebIngestPolicyForTests } from '@/lib/web-ingest/fetch';
 import { assetUrlFor } from '@/lib/story/asset-url';
-import { markupCsp } from '@/lib/story/markup-csp';
 import { mintExportKey } from '@/lib/export-key';
 import { getDb } from '@/lib/db';
 
@@ -134,14 +133,15 @@ describe('the served document', () => {
     expect(tag).not.toContain('data-mx-bound');
     // …and the renderer's own preload hint follows the same mapped address, so
     // the first thing the reader's browser asks for is ours and not the source.
-    expect(html).toContain(`rel="preload" as="image" href="/a/${body.id}/assets?u=${encodeURIComponent(url)}"`);
+    expect(html).toContain(`src="/a/${body.id}/assets?u=${encodeURIComponent(url)}"`);
     expect(html).not.toContain(`href="${url}"`);
   });
 
-  it('has a CSP unchanged by this milestone — an <img> load needs no connect-src', async () => {
+  it('keeps image loads on self under the compiled page CSP', async () => {
     const { body } = await publish(`${HELMET}<div><img src="$pick" alt="a" /></div>`);
     const page = await rawRoute(request(`/a/${body.id}/raw`), params({ id: body.id as string }));
-    expect(page.headers.get('content-security-policy')).toBe(markupCsp('http://localhost:3000', body.id as string));
+    expect(page.headers.get('content-security-policy')).toContain("img-src 'self' data: blob:");
+    expect(page.headers.get('content-security-policy')).not.toContain("'unsafe-inline' 'self'");
     expect(page.headers.get('content-security-policy')).not.toContain('/assets');
   });
 });

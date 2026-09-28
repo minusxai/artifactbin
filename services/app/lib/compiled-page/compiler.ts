@@ -558,13 +558,14 @@ export function generate(input: GenerateInput): Generated {
     }
     const lower = node.tag.toLowerCase();
     const tag = safeTag(SVG_TAG_CASE[lower] ?? lower);
-    // A source chosen by a Value is known only in the reader. Its island asks the scoped asset
-    // door for the URL and never sends the authored URL to the browser as an image request.
-    const source = !ctx.row && lower === 'img' ? node.attributes.find((a) => a.name.toLowerCase() === 'src' && a.value.static && carriesRef(a.value.json)) : undefined;
-    if (source) {
+    // Values and row references share one image island; row attributes are substituted first.
+    const source = lower === 'img' && !node.isComponent ? node.attributes.find((a) => a.name.toLowerCase() === 'src') : undefined;
+    if (source?.value.static && typeof source.value.json === 'string'
+      && (refName(source.value.json) || parseRowRef(source.value.json) || carriesRef(source.value.json))) {
       useKit('BoundImage', mode, ctx);
       const props = rawBuildProps(node.attributes.filter((a) => a !== source), false, node.tag, path, undefined, {});
-      return `<BoundImage template={${lit(String(source.value.static ? source.value.json : ''))}} props={${json(Object.fromEntries(domAttrs(tag, props)))}} />`;
+      const attrs = json(Object.fromEntries(domAttrs(tag, props)));
+      return `<BoundImage template={${lit(source.value.json)}} props={${ctx.row ? `${rowAttrsFn(mode, ctx)}(${attrs}, ${ctx.row}, ${ctx.scope})` : attrs}}${ctx.row ? ` row={${ctx.row}}` : ''} />`;
     }
     // A `$`-bound native form control (interpreter boundAttrs → StoryRuntimeApp NativeBoundControl).
     const boundTable = ['input', 'select', 'textarea'].includes(lower) ? REF_ATTRS.html[lower] : null;
@@ -715,7 +716,7 @@ export function generate(input: GenerateInput): Generated {
 
   const kitImports = (set: Set<string>): string => {
     const byMod: Record<string, string[]> = {};
-    for (const tag of set) (byMod[tag === 'BoundNative' ? 'controls' : tag === 'BoundImage' || tag === 'rowImageAttrs' ? 'files' : CELL_EXPORTS.has(tag) ? 'cells' : KIT[tag]!.mod] ??= []).push(tag);
+    for (const tag of set) (byMod[tag === 'BoundNative' ? 'controls' : tag === 'BoundImage' ? 'image' : tag === 'rowImageAttrs' ? 'files' : CELL_EXPORTS.has(tag) ? 'cells' : KIT[tag]!.mod] ??= []).push(tag);
     return Object.entries(byMod).sort(([a], [b]) => a.localeCompare(b)).map(([mod, tags]) => `import { ${tags.sort().map(safeProp).join(', ')} } from ${lit(`@mx/kit/${safeTag(mod)}`)};\n`).join('');
   };
   const dataConsts = data.map((text, i) => `const $d${i} = JSON.parse(${lit(text)});\n`).join('');

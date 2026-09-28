@@ -54,12 +54,12 @@ describe('the compiled page on the prepared page', () => {
     expect(key.endsWith(`:${loadCompilerBuild().id}`)).toBe(true);
   });
 
-  it('off: a publish stores no compile', async () => {
+  it('off: a publish still stores the compiled-only reader page', async () => {
     setCompiledReaderFlagForTests('off');
     const id = await publish(fixture('prose.jsx'));
     const { key, compiled } = await stored(id);
-    expect(compiled).toBeUndefined();
-    expect(key.endsWith(':off')).toBe(true);
+    expect(compiled).toMatchObject({ build: loadCompilerBuild().id });
+    expect(key.endsWith(`:${loadCompilerBuild().id}`)).toBe(true);
   });
 
   it('a page with islands: the browser module is served, the SSR module (the whole page) never is', async () => {

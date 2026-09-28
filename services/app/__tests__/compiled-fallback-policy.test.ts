@@ -1,7 +1,6 @@
 /**
  * THE FALLBACK CONTRACT AFTER WAVE 4 (docs/phase2-architecture.md §6; lib/compiled-page/serve.server
- * `fallbackPolicy`). Today every reason a compiled read cannot be served answers with today's renderer
- * (`legacy`). Once that renderer is deleted (`compiled-only`): a missing compile or one from another
+ * `fallbackPolicy`). With the standalone renderer deleted (`compiled-only`), a missing compile or one from another
  * build is compiled inline and waited for, the inline budget only decides whether that is logged as
  * slow, and a compile that fails is a reported 500. Real routes, the harness's database, the reader
  * flag at `shadow` and the inline budget at zero for this file (every inline compile is "over budget").
@@ -22,7 +21,7 @@ import { READER_FALLBACK_HEADER, READER_MODE_HEADER } from '@/lib/compiled-page/
 import { compiledPageFailures, fallbackPolicy, setFallbackPolicyForTests } from '@/lib/compiled-page/serve.server';
 
 vi.mock('@/auth', () => ({ auth: async () => null }));
-// Every inline compile takes longer than this: under `legacy` it is `over-budget`, under `compiled-only` it is waited for.
+// Every inline compile takes longer than this; compiled-only waits for it.
 vi.mock('@/lib/compiled-page/contract', async (importOriginal) => ({ ...(await importOriginal<typeof import('@/lib/compiled-page/contract')>()), COMPILE_INLINE_BUDGET_MS: 0 }));
 const harness = useAppHarness();
 const params = (id: string) => ({ params: Promise.resolve({ id }) });
@@ -51,21 +50,12 @@ const storedBuild = async (id: string) => (await (await harness.db()).query<{ bu
 const storyText = (html: string) => new JSDOM(html).window.document.getElementById('mx-story-root')?.textContent?.replace(/\s+/g, ' ').trim() ?? '';
 
 describe('fallbackPolicy', () => {
-  it('is `legacy` until Wave 4 deletes today\'s reader', () => {
-    expect(fallbackPolicy()).toBe('legacy');
+  it('is compiled-only after the standalone reader is deleted', () => {
+    expect(fallbackPolicy()).toBe('compiled-only');
   });
 });
 
 describe('a compile from another build', () => {
-  it('legacy: over the inline budget, today\'s renderer answers and says why', async () => {
-    const who = await owner();
-    const id = await publish(who.token, { title: 'Perf B kit', markup: fixture('kit.jsx') });
-    await (await harness.db()).query(`UPDATE prepared_pages SET page = jsonb_set(page, '{compiled,build}', '"0000000000000000"') WHERE artifact_id = $1`, [id]);
-    const res = await raw(id);
-    expect(res.headers.get(READER_MODE_HEADER)).toBe('legacy');
-    expect(res.headers.get(READER_FALLBACK_HEADER)).toBe('over-budget');
-  });
-
   it('compiled-only: compiled inline and waited for, however long it takes; the slow compile is logged, not refused', async () => {
     setFallbackPolicyForTests('compiled-only');
     const who = await owner();
@@ -96,15 +86,6 @@ describe('a compile from another build', () => {
 });
 
 describe('a version with no stored compile', () => {
-  it('legacy: today\'s renderer answers (`not-compiled`)', async () => {
-    const who = await owner();
-    const id = await publish(who.token, { title: 'Perf A prose', markup: fixture('prose.jsx') });
-    await (await harness.db()).query(`UPDATE prepared_pages SET page = page - 'compiled' WHERE artifact_id = $1`, [id]);
-    const res = await raw(id);
-    expect(res.headers.get(READER_MODE_HEADER)).toBe('legacy');
-    expect(res.headers.get(READER_FALLBACK_HEADER)).toBe('not-compiled');
-  });
-
   it('compiled-only: compiled inline and served, and the compile is stored for the next read', async () => {
     setFallbackPolicyForTests('compiled-only');
     const who = await owner();
@@ -125,15 +106,6 @@ describe('a compile that fails', () => {
     const build = await storedBuild(id);
     await db.query(`UPDATE prepared_pages SET page = jsonb_set(page, '{compiled}', $2::jsonb) WHERE artifact_id = $1`, [id, JSON.stringify({ build, error: 'boom', reason: 'compile-error' })]);
   };
-
-  it('legacy: today\'s renderer answers and says why', async () => {
-    const who = await owner();
-    const id = await publish(who.token, { title: 'Perf A prose', markup: fixture('prose.jsx') });
-    await recordFailure(id);
-    const res = await raw(id);
-    expect(res.headers.get(READER_MODE_HEADER)).toBe('legacy');
-    expect(res.headers.get(READER_FALLBACK_HEADER)).toBe('compile-error');
-  });
 
   it('compiled-only: /raw and the app page answer 500, and every occurrence is reported', async () => {
     setFallbackPolicyForTests('compiled-only');

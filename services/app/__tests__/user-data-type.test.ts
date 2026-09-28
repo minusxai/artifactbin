@@ -16,7 +16,6 @@ import {people} from '@/lib/datasets/user-fields';
 import {avatarUrl} from '@/lib/avatars';
 import {useAppHarness, request} from '@/__tests__/harness';
 import {GET as rawRoute} from '@/app/a/[id]/raw/route';
-import {personFaceBackground, personInitial} from '@/lib/person-face';
 
 useAppHarness();
 const ctx = (id:string)=>({params:Promise.resolve({id})});
@@ -149,7 +148,7 @@ describe('native user fields',()=>{
   * and re-mint it, which left the second tag naming nobody ("Unknown person").
   * Through the real publish and the real served page, for every person tag.
   */
- it('resolves every person tag naming the viewer, however many, in the served page',async()=>{
+ it('keeps every person tag and resolves the reader through the viewer overlay',async()=>{
   const reader=await account('twice'), owner=await account('host');
   const cases=[
    '<p><User userId="$_me.id" /> <UserImage userId="$_me.id" size="lg" /></p>',
@@ -165,9 +164,8 @@ describe('native user fields',()=>{
    const body=html.slice(html.indexOf('class="mx-doc"'));
    expect(body,markup).not.toContain('data-unknown');
    expect(body,markup).not.toContain('Unknown person');
-   expect(body.match(/aria-label="twice"/g)?.length ?? 0,markup).toBeGreaterThanOrEqual(1);
-   expect(body,markup).toContain(`background-color:${personFaceBackground(reader.user.id)}`);
-   expect(body,markup).toContain(`>${personInitial('twice')}</span>`);
+   expect(body,markup).toContain('data-mx-ast');
+   expect(await viewerIdentityFor((await getArtifactById(report.id))!,reader.user.id)).toEqual({id:reader.user.id,card:{name:'twice',handle:null,image:null}});
   }
  });
  /*

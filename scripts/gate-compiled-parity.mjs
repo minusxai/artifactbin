@@ -166,7 +166,9 @@ const browser = await chromium.launch();
 try {
   for (const f of chosen) {
     const snaps = {};
-    for (const route of ['legacy', 'compiled']) {
+    const legacyResponse = await fetch(`${B}/a/${f.id}/raw?reader=legacy`, { headers: pageHeaders(B) });
+    const hasLegacy = legacyResponse.headers.get(READER_HEADER) === 'legacy';
+    for (const route of hasLegacy ? ['legacy', 'compiled'] : ['compiled']) {
       const context = await browser.newContext({ viewport: { width: 1440, height: 1000 }, colorScheme: 'light' });
       await context.addInitScript(PROBE);
       const page = await context.newPage();
@@ -179,9 +181,10 @@ try {
       const survival = await page.evaluate(() => {
         const s = window.__sv; const root = document.getElementById('mx-story-root');
         const imageShown = (avatar) => { const img = avatar?.isConnected && root.contains(avatar) ? avatar.querySelector(':scope > img[data-slot="avatar-image"]') : null; return !!img && img.complete && img.naturalWidth > 0; };
-        return { records: s.served.map((n) => ({ kept: n.isConnected && root.contains(n), undrawnMermaid: !!n.__undrawnMermaid, avatarReplaced: !!n.__avatar && imageShown(n.__avatar) })), mutations: s.mutations, mutated: s.mutated };
+        return { records: s.served.map((n) => ({ kept: n.isConnected && root.contains(n), undrawnMermaid: !!n.__undrawnMermaid, avatarReplaced: !!n.__avatar && imageShown(n.__avatar), thumbReplaced: !!n.__thumbHost?.isConnected && !!n.__thumbHost.querySelector(':scope > [data-mx-slide]'), tag: n.tagName, id: n.id, sample: n.outerHTML.slice(0, 160) })), mutations: s.mutations, mutated: s.mutated };
       });
       Object.assign(survival, survivalOf(survival.records));
+      survival.removed = survival.records.filter((n) => !n.kept && !n.undrawnMermaid && !n.avatarReplaced && !n.thumbReplaced).map((n) => `${n.tag}#${n.id}: ${n.sample}`);
       delete survival.records;
       // Every animation held still the same way on both pages (lib/compiled-parity-diff holdAnimations) before each capture.
       const capture = async () => { await page.evaluate(holdAnimations); return page.evaluate(SNAPSHOT, STYLE); };
@@ -192,18 +195,23 @@ try {
       await context.close();
     }
     check(snaps.compiled.served === 'compiled', `${f.key}: the compiled route is served by the compiled reader (${READER_HEADER}: ${snaps.compiled.served})`);
-    check(snaps.legacy.served !== 'compiled', `${f.key}: the legacy route is served by today's renderer (${READER_HEADER}: ${snaps.legacy.served})`);
-    const d = diff(snaps.legacy.tree, snaps.compiled.tree);
-    check(d.elements > 0, `${f.key}: the story has elements to compare (${d.elements})`);
-    for (const kind of ['structure', 'text', 'style', 'box', 'attrs', 'refs']) {
-      if (verbose) for (const line of d[kind]) check.note(`${f.key} ${kind}: ${line}`);
-      check(d[kind].length === 0, `${f.key}: no ${kind} differences (${d[kind].length}${d[kind].length ? `: ${d[kind].slice(0, 3).join(' | ')}` : ''})`);
+    if (hasLegacy) {
+      check(snaps.legacy.served === 'legacy', `${f.key}: legacy route answered legacy`);
+      const d = diff(snaps.legacy.tree, snaps.compiled.tree);
+      check(d.elements > 0, `${f.key}: the story has elements to compare (${d.elements})`);
+      for (const kind of ['structure', 'text', 'style', 'box', 'attrs', 'refs']) {
+        if (verbose) for (const line of d[kind]) check.note(`${f.key} ${kind}: ${line}`);
+        check(d[kind].length === 0, `${f.key}: no ${kind} differences (${d[kind].length}${d[kind].length ? `: ${d[kind].slice(0, 3).join(' | ')}` : ''})`);
+      }
+    } else {
+      check(snaps.compiled.tree.length > 0, `${f.key}: compiled story has elements`);
     }
     const s = snaps.compiled.survival;
-    check(s.ok, `${f.key}: every served element survives hydration on the compiled page (${s.survived}/${s.served}${s.exempt ? `, ${s.exempt} replaced by design: an undrawn Mermaid placeholder or an Avatar fallback its image replaced` : ''})`);
-    check.note(`${f.key}: DOM mutations during hydration — legacy ${snaps.legacy.survival.mutations}, compiled ${s.mutations}${s.mutated.length ? ` (${s.mutated.join(', ')})` : ''}`);
+    check(s.ok, `${f.key}: every served element survives hydration on the compiled page (${s.survived}/${s.served}${s.exempt ? `, ${s.exempt} replaced by design: an undrawn Mermaid placeholder, an Avatar fallback, or a deck thumbnail template replaced by its slide` : ''})`);
+    if (!s.ok) for (const removed of s.removed) check.note(`${f.key}: removed ${removed}`);
+    check.note(`${f.key}: DOM mutations during hydration — ${hasLegacy ? `legacy ${snaps.legacy.survival.mutations}, ` : ''}compiled ${s.mutations}${s.mutated.length ? ` (${s.mutated.join(', ')})` : ''}`);
     check(snaps.compiled.errors.length === 0, `${f.key}: no page errors on the compiled page (${snaps.compiled.errors[0] ?? 'clean'})`);
-    if (snaps.legacy.after && snaps.compiled.after) {
+    if (hasLegacy && snaps.legacy.after && snaps.compiled.after) {
       const da = diff(snaps.legacy.after, snaps.compiled.after);
       if (verbose) for (const line of [...da.structure, ...da.attrs, ...da.text, ...da.style, ...da.box]) check.note(`${f.key} after: ${line}`);
       const total = da.structure.length + da.text.length + da.style.length + da.box.length + da.attrs.length;

@@ -30,6 +30,7 @@ import { createAppServer, BOOTSTRAP_ID } from '@/server/app';
 import { drainPreparedPageWarmups } from '@/lib/story/prepared-page.server';
 import { services, setServices } from '@/lib/services';
 import { SERVED_RESULTS_BUDGET_MS } from '@/lib/story/served-results.server';
+import { ISLAND_DATA_ID, READER_MODE_HEADER } from '@/lib/compiled-page/contract';
 
 const sessionUser = { id: '', email: '' };
 vi.mock('@/auth', () => ({ auth: async () => (sessionUser.id ? { user: { id: sessionUser.id, email: sessionUser.email || null } } : null) }));
@@ -252,12 +253,14 @@ describe('the budget', () => {
   });
 });
 
-describe('the standalone document', () => {
-  it('keeps /raw on the page\'s own first run: its live stream cannot yet pick up where served rows left off', async () => {
+describe('the compiled raw document', () => {
+  it('serves its first results with the same compiled reader as the app page', async () => {
     const { id } = await dashboard();
     const res = await rawRoute(request(`/a/${id}/raw`), params(id));
     expect(res.status).toBe(200);
-    expect(await res.text()).not.toContain('"results":');
+    expect(res.headers.get(READER_MODE_HEADER)).toBe('compiled');
+    const data = JSON.parse(new JSDOM(await res.text()).window.document.getElementById(ISLAND_DATA_ID)!.textContent!);
+    expect(data.results?.tables).toBeTruthy();
   });
 });
 

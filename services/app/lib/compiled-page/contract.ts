@@ -120,6 +120,8 @@ export interface CompilerBuild {
   id: string;
   /** The shared build's manifest: import specifier (`@mx/rt`, `@mx/kit/tabs`, `solid-js/web`) → content-addressed URL. */
   manifest: Readonly<Record<string, string>>;
+  /** Content-addressed SQLite engine fetched only when the reader runs a page query. */
+  sqliteWasm?: string;
 }
 
 /**
@@ -199,6 +201,8 @@ export const isCompileFailure = (stored: StoredCompile): stored is CompileFailur
 /** What the SSR module renders the islands from: the declared dataflow plus a snapshot's answers, and the version's drawings. */
 export interface IslandRenderData {
   values: Record<string, Scalar>;
+  state?: import('@/lib/story/dataflow').DataflowState;
+  assetsUrl?: string;
   results: ServedResults | null;
   mermaidImages: Readonly<Record<string, StoredMermaidImage>>;
   /** The snapshot's server-drawn charts, by chart slot id. */
@@ -413,12 +417,15 @@ export type LinkHintsOf = (nodes: JsxNode[], deployment: { origins: readonly str
 export interface AssembleOverlay {
   /** The reader's URL `$` values (lib/story/url-values), already parsed against the flow. */
   values: Record<string, Scalar>;
+  state?: import('@/lib/story/dataflow').DataflowState;
   /** The version's stored Mermaid drawings for this surface (lib/mermaid-images), or none. */
   mermaidImages: Readonly<Record<string, StoredMermaidImage>>;
   /** Whether the request carries a session: the signed-in hint, never the identity (that arrives after paint). */
   signedIn: boolean;
   /** Where the page queries, writes and fetches its overlay (lib/story/markup-csp paths); absent on a capture. */
   doors: { queryUrl: string; mutateUrl?: string; viewerUrl?: string; assetsUrl: string } | null;
+  /** A capture's verified image import door, even though it has no query or mutation door. */
+  assetsUrl?: string;
   /**
    * The managed `<Iframe>`'s asset door for this request (islands contract `IslandPageData.managedAssets`):
    * beside `doors` because a capture has no doors and still resolves its frames' assets with its key.
@@ -428,7 +435,7 @@ export interface AssembleOverlay {
   /** An archived version's read-only reason (lib/archived-version); absent for the head. */
   readOnly?: string | null;
   /** The imports the page may hold for the door it queries through (IslandPageData.hold); absent: none. */
-  hold?: readonly string[];
+  hold?: string[];
   /** The page's SQLite engine wasm (IslandPageData.sqliteWasm), when `hold` is not empty. */
   sqliteWasm?: string | null;
 }
@@ -443,6 +450,10 @@ export interface AssembleInput {
    * cached per build + snapshot key). The assembler never renders islands.
    */
   story: string;
+  /** Section navigation discovered from the prepared source; empty for captures, decks and dashboards. */
+  outline?: readonly OutlineEntry[];
+  /** An export capture uses the full image variant and no responsive srcset. */
+  capture?: boolean;
   /** The version's isolated stylesheet and font preloads, from the prepared page. */
   css: string;
   fontPreloads: readonly string[];

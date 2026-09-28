@@ -215,6 +215,48 @@ describe('Mermaid, from a stored drawing', () => {
       await vi.waitFor(() => expect(nested.querySelector('img')?.getAttribute('src')).toBe('/assets/mermaid/dark.svg'));
     } finally { dispose?.(); story.remove(); }
   });
+  it('uses the dark page before the island host is mounted, even when compiled props began light', async () => {
+    const host = themed();
+    host.setAttribute('data-mx-inline-story', '');
+    host.classList.add('dark');
+    const island = fakeIsland();
+    island.drawings = () => ({ ...stored, [mermaidImageKey(CODE, 'dark')]: { ...stored[mermaidImageKey(CODE, 'light')], src: '/assets/mermaid/dark.svg' } }) as never;
+    const dispose = render(() => <IslandProvider value={island}><Mermaid code={CODE} colorMode="light" /></IslandProvider>, host);
+    try {
+      await vi.waitFor(() => expect(host.querySelector('img')?.getAttribute('src')).toBe('/assets/mermaid/dark.svg'));
+      expect(engine.renderMermaid).not.toHaveBeenCalled();
+    } finally { dispose(); host.remove(); }
+  });
+  it('switches to the matching stored drawing when the reader changes colour', async () => {
+    const host = themed();
+    host.setAttribute('data-mx-inline-story', '');
+    host.classList.add('light');
+    const island = fakeIsland();
+    island.drawings = () => ({ ...stored, [mermaidImageKey(CODE, 'dark')]: { ...stored[mermaidImageKey(CODE, 'light')], src: '/assets/mermaid/dark.svg' } }) as never;
+    const dispose = render(() => <IslandProvider value={island}><Mermaid code={CODE} colorMode="light" /></IslandProvider>, host);
+    try {
+      expect(host.querySelector('img')?.getAttribute('src')).toBe('/assets/mermaid/abc.svg');
+      host.classList.replace('light', 'dark');
+      await vi.waitFor(() => expect(host.querySelector('img')?.getAttribute('src')).toBe('/assets/mermaid/dark.svg'));
+      expect(engine.renderMermaid).not.toHaveBeenCalled();
+    } finally { dispose(); host.remove(); }
+  });
+  it('tracks the story root when hydration begins in a detached mount', async () => {
+    const story = themed();
+    story.setAttribute('data-mx-inline-story', '');
+    story.classList.add('light');
+    const mount = document.createElement('div');
+    const island = fakeIsland();
+    island.drawings = () => ({ ...stored, [mermaidImageKey(CODE, 'dark')]: { ...stored[mermaidImageKey(CODE, 'light')], src: '/assets/mermaid/dark.svg' } }) as never;
+    const dispose = render(() => <IslandProvider value={island}><Mermaid code={CODE} colorMode="light" /></IslandProvider>, mount);
+    try {
+      await Promise.resolve();
+      story.append(mount);
+      story.classList.replace('light', 'dark');
+      await vi.waitFor(() => expect(story.querySelector('img')?.getAttribute('src')).toBe('/assets/mermaid/dark.svg'));
+      expect(engine.renderMermaid).not.toHaveBeenCalled();
+    } finally { dispose(); story.remove(); }
+  });
   it('serves the stored image as React does, never loads the drawing code, and is ready once it loads', async () => {
     const both = await mountBoth(stored);
     try {

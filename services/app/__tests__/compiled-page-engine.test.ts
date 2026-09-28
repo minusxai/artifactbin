@@ -21,7 +21,7 @@ import { claimToken, createUser, ensureUsername } from '@/lib/users';
 import { drainPreparedPageWarmups } from '@/lib/story/prepared-page.server';
 import { setCompiledReaderFlagForTests } from '@/lib/compiled-page/reader-mode';
 import { ISLAND_DATA_ID, READER_MODE_HEADER } from '@/lib/compiled-page/contract';
-import { storyRuntimeAssets } from '@/lib/story/runtime-asset';
+import { loadCompilerBuild } from '@/lib/compiled-page/build.server';
 import type { IslandPageData } from '@/lib/islands/contract';
 
 const sessionUser = { id: '', email: '' };
@@ -67,8 +67,9 @@ describe('the compiled page\'s engine facts', () => {
     const id = await create(t.token, { title: 'Sales', markup: SALES(ds), visibility: 'public' });
     const data = await appPage(id);
     expect(data.hold).toEqual(['regions_data', 'sales_data']);
-    const wasm = storyRuntimeAssets().sqlite;
-    expect(wasm, 'the runtime build records the engine\'s wasm').toMatch(/^\/story\/sqlite3-[0-9a-f]{16}\.wasm$/);
+    expect(data.state, 'a healthy page must start its own engine instead of treating prepared rows as settled state').toBeUndefined();
+    const wasm = loadCompilerBuild().sqliteWasm;
+    expect(wasm, 'the island build records the engine\'s wasm').toMatch(/^\/islands\/sqlite3-[0-9a-f]{16}\.wasm$/);
     expect(data.sqliteWasm).toBe(wasm);
   });
 
@@ -86,7 +87,7 @@ describe('the compiled page\'s engine facts', () => {
     const owner = await appPage(id);
     expect(owner.signedIn).toBe(true);
     expect(owner.hold).toEqual(['regions_data', 'sales_data']);
-    expect(owner.sqliteWasm).toBe(storyRuntimeAssets().sqlite);
+    expect(owner.sqliteWasm).toBe(loadCompilerBuild().sqliteWasm);
 
     // /raw queries through the credential-free door, whoever asks: the anonymous reader's holdings (today's /raw).
     const raw = await rawRoute(request(`/a/${id}/raw?reader=compiled`), { params: Promise.resolve({ id }) });

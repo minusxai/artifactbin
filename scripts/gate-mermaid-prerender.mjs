@@ -24,7 +24,6 @@
  */
 import { chromium } from 'playwright';
 import { createChecker } from './lib/assert.mjs';
-import { readerUrl } from './lib/gate-reader.mjs';
 import { fixtureFetch as fetch } from './lib/fixture-http.mjs';
 import { startDocument } from './lib/start-doc.mjs';
 import { MERMAID_KIND_SAMPLES } from './fixtures/mermaid/kinds.mjs';
@@ -70,8 +69,8 @@ const publish = async (markup, title, extra = {}) => {
 async function harvested(id, ms = 170_000) {
   for (const end = Date.now() + ms; Date.now() < end;) {
     const html = await (await fetch(`${B}/a/${id}/raw`)).text();
-    const json = /<script[^>]*type="application\/json"[^>]*>([\s\S]*?)<\/script>/.exec(html)?.[1];
-    if (json && Object.keys(JSON.parse(json).mermaidImages ?? {}).length > 0) return true;
+    // The compiled page always serializes an empty map; wait for a stored drawing, not the field.
+    if (/"mermaidImages":\{"[^"]+":/.test(html)) return true;
     await new Promise((resolve) => setTimeout(resolve, 1000));
   }
   return false;
@@ -110,7 +109,7 @@ async function drawings(url, mode = null, { blockStored = false } = {}) {
   const scripts = [];
   page.on('request', (r) => { if (r.resourceType() === 'script') scripts.push(new URL(r.url()).pathname); });
   if (mode) await page.addInitScript((m) => { window.name = `mx:doc:${JSON.stringify({ mode: m })}`; }, mode);
-  await page.goto(readerUrl(url), { waitUntil: 'domcontentloaded', timeout: 90_000 });
+  await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 90_000 });
   const drawn = await page.waitForFunction(() => {
     const figures = [...document.querySelectorAll('figure[data-mx-mermaid-state]')];
     // Before the app's reader takes over, its server copy is a sibling that never draws.
@@ -141,7 +140,7 @@ async function compare(label, url, samples, mode = null, { allStored = false } =
       check(shown.src.startsWith('data:'), `${label} ${sample.kind}: stays with the engine (${sample.why})`);
       continue;
     }
-    if (!check(shown.src.startsWith('/assets/mermaid/'), `${label} ${sample.kind}: served as a stored drawing (got ${shown.src.slice(0, 100) || 'no src'})`)) continue;
+    if (!check(shown.src.startsWith('/assets/mermaid/'), `${label} ${sample.kind}: served as a stored drawing`)) continue;
     const stored = await (await fetch(new URL(shown.src, B).toString())).text();
     const block = FONTS_BLOCK.exec(stored);
     if (!check(!!block, `${label} ${sample.kind}: the stored drawing carries its fonts, first, in our grammar`)) continue;

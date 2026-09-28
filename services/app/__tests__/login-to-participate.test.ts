@@ -22,7 +22,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useAppHarness } from './harness';
 import { GET as rawRoute } from '@/app/a/[id]/raw/route';
 import { createArtifact, updateSharingFor, type ArtifactRow, type Visibility } from '@/lib/artifacts';
-import { buildStoryDocument } from '@/lib/story/document';
+import { renderReaderChrome } from '@/lib/story/reader-chrome';
 import { roleBehindLogin, type ShareRole } from '@/lib/share-roles';
 import { mintToken } from '@/lib/tokens';
 import { claimToken, createUser } from '@/lib/users';
@@ -124,7 +124,7 @@ describe('the served document offers a guest the door', () => {
 });
 
 describe('the door itself', () => {
-  const build = (over: Parameters<typeof buildStoryDocument>[0]) => buildStoryDocument(over);
+  const build = (over: Record<string, unknown>) => Promise.resolve(renderReaderChrome({ artifactId: null, title: null, author: null, signIn: over.signIn as { unlocks: 'commenter' | 'editor'; callbackUrl: string } }));
 
   it('cannot be broken out of by the return address', async () => {
     const html = await build({
