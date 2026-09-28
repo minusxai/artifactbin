@@ -35,3 +35,11 @@ export * from './membership';
 export * from './document-operation';
 
 export * from './document-update';
+
+export type {
+  MutationNotificationField, MutationNotificationRecipient, MutationNotificationPart,
+  MutationNotificationSpec, MutationInitiator, MutationOperationRequest,
+  MutationOperationSuccess, MutationNotificationOrigin,
+  ResolvedMutationNotification, MutationNotificationCommit, MutationNotificationActor,
+  MutationNotificationView, MutationNotificationResolver, MutationNotificationWriter,
+} from './mutation-notifications';

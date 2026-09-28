@@ -1,0 +1,33 @@
+import {describe,expect,it} from 'vitest';
+import {parseJsx,serializeJsx,type JsxElement} from '@/lib/jsx';
+import {parseMutationDecl} from '@/lib/story/dataflow';
+import {storyUpdateParts} from '@/lib/story/update-parts';
+const parse=(source:string)=>{const parsed=parseJsx(source);if(!parsed.ok)throw new Error(parsed.error);return parsed.nodes;};
+const element=(source:string)=>parse(source)[0] as JsxElement;
+
+describe('notification declarations',()=>{
+ it('keeps SQL separate from a single-recipient action phrase',()=>{
+  const result=parseMutationDecl(element('<Mutation name="complete" expectedAffected={1}>{`update tasks.rows set status = \'done\' where id = $task_id`}<Notify to={$_after.assignee}>changed “{$_after.title}” to {$_after.status}</Notify></Mutation>'));
+  expect(result.ok).toBe(true);if(!result.ok)return;
+  expect(result.decl).toMatchObject({name:'complete',sql:"update tasks.rows set status = 'done' where id = $task_id",expectedAffected:1,notify:{to:[{kind:'field',ref:{snapshot:'after',field:'assignee'}}],message:[{kind:'text',text:'changed “'},{kind:'field',ref:{snapshot:'after',field:'title'}},{kind:'text',text:'” to '},{kind:'field',ref:{snapshot:'after',field:'status'}}]}});
+ });
+ it('normalizes a recipient list into inert references',()=>{
+  const result=parseMutationDecl(element('<Mutation name="reassign" expectedAffected={1}>{`update tasks.rows set assignee = $assignee where id = $task_id`}<Notify to={[$_before.assignee, $_after.assignee]}>reassigned “{$_after.title}”</Notify></Mutation>'));
+  expect(result.ok).toBe(true);if(!result.ok)return;
+  expect(result.decl).toMatchObject({notify:{to:[{kind:'field',ref:{snapshot:'before',field:'assignee'}},{kind:'field',ref:{snapshot:'after',field:'assignee'}}]}});
+ });
+ it('preserves SQL and escaped notification content through serialization',()=>{
+  const source='<Mutation name="rename" expectedAffected={1}>{`update tasks.rows set title = \'A < B & C\' where id = $task_id`}<Notify to={[$_after.assignee]}>renamed &lt;{$_before.title}&gt; to “{$_after.title}” &amp; saved</Notify></Mutation>';
+  const result=parseMutationDecl(element(serializeJsx(parse(source))));
+  expect(result.ok).toBe(true);if(!result.ok)return;
+  expect(result.decl).toMatchObject({sql:"update tasks.rows set title = 'A < B & C' where id = $task_id",notify:{to:[{kind:'field',ref:{snapshot:'after',field:'assignee'}}],message:[{kind:'text',text:'renamed <'},{kind:'field',ref:{snapshot:'before',field:'title'}},{kind:'text',text:'> to “'},{kind:'field',ref:{snapshot:'after',field:'title'}},{kind:'text',text:'” & saved'}]}});
+ });
+ it('invalidates the declaration signature for message edits but not prose edits',()=>{
+  const document=(message:string,body:string)=>'<Helmet><Mutation name="complete" expectedAffected={1}>{`update tasks.rows set status = \'done\' where id = $task_id`}<Notify to={$_after.assignee}>'+message+'</Notify></Mutation></Helmet><p>'+body+'</p>';
+  const original=storyUpdateParts(document('completed the task','a'))!;
+  const changed=storyUpdateParts(document('finished the task','a'))!;
+  const proseOnly=storyUpdateParts(document('completed the task','b'))!;
+  expect(original.declarations).not.toBe(changed.declarations);
+  expect(original.declarations).toBe(proseOnly.declarations);
+ });
+});

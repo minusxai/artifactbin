@@ -89,6 +89,13 @@ export interface RunInput {
 }
 
 export interface MutationInput {
+  /**
+   * Opt-in change images for at most one touched row. Zero rows gives effect:null;
+   * more than one refuses the result. expectedAffected remains the stricter guard.
+   * A caller requesting capture MUST refuse a successful result missing effect.
+   * Foundation contract: engines implement this in the capture workstream.
+   */
+  capture?: 'single-row';
   policy?: DatasetMutationPolicy;
   /** Internal capability preview: analyze only, never execute effects. */
   policyPreview?: boolean;
@@ -108,9 +115,21 @@ export interface MutationInput {
   limit?: number;
   timeoutMs?: number;
 }
+/** Engine-owned, typed records; never includes private rowids or internal columns. */
+export type MutationEffect =
+  | { operation: 'insert'; before: null; after: Row }
+  | { operation: 'update'; before: Row; after: Row }
+  | { operation: 'delete'; before: Row; after: null };
+
 /** A write that ran: the table's new rows and how many rows the statement touched. */
 export interface MutationResult extends TableResult {
   affected: number;
+  /**
+   * Present on capture success, null only for zero touched rows. Same-value UPDATE
+   * is touched. Before is captured during the statement; after includes presets.
+   * Omitted means no capture, never an empty effect. Not a public API response.
+   */
+  effect?: MutationEffect | null;
   analysis?: MutationAnalysis;
   /** Actual assigned user fields, after expressions/presets. App validates before commit. */
   userWrites?: Row[];
