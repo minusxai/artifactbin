@@ -30,7 +30,8 @@ try {
   await switchView('Sprint');
   await ownerPage.waitForFunction(()=>new URLSearchParams(location.search).get('$view_mode')==='sprint');
   await page.locator('#view-sprint').getByLabel('Add Sprint',{exact:true}).click();
-  const dialog=ownerPage.locator('[data-mx-inline-story]').getByRole('dialog',{name:'Add sprint'});
+  // Once the app adopts the island root, its dialog uses the trusted UI portal outside the story.
+  const dialog=ownerPage.getByRole('dialog',{name:'Add sprint'});
   await dialog.waitFor();
   await page.getByLabel('Sprint name',{exact:true}).fill('Planning week');
   await page.getByLabel('Sprint deadline',{exact:true}).fill('2026-09-14');
@@ -40,7 +41,7 @@ try {
   await page.locator('#view-sprint').getByLabel('Add Sprint',{exact:true}).click();
   await page.getByLabel('Sprint name',{exact:true}).fill(' planning WEEK ');
   await page.getByLabel('Create sprint',{exact:true}).click();
-  const refusal=page.getByRole('alert');await refusal.waitFor();
+  const refusal=dialog.getByRole('alert');await refusal.waitFor();
   assert.match(await refusal.textContent(),/affected|changed|mutation/i);
   assert.equal(await dialog.isVisible(),true);
   await page.getByLabel('Cancel sprint',{exact:true}).click();

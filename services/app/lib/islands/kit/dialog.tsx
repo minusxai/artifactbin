@@ -9,9 +9,15 @@ import { ACCESS_PENDING, hydratedRead } from './store-read';
 type DialogState = { open: () => boolean; setOpen: (value: boolean) => void; trigger: () => HTMLElement | null; setTrigger: (value: HTMLElement | null) => void; busy: () => boolean; setBusy: (value: boolean) => void };
 const Context = createContext<DialogState>();
 const state = () => { const ctx = useContext(Context); if (!ctx) throw new Error('Dialog child outside Dialog'); return ctx; };
-export function Dialog(props: JSX.HTMLAttributes<HTMLSpanElement> & { open?: boolean; defaultOpen?: boolean; onOpenChange?: (open: boolean) => void }) {
+export function Dialog(props: JSX.HTMLAttributes<HTMLSpanElement> & { open?: boolean | string; defaultOpen?: boolean; onOpenChange?: (open: boolean) => void }) {
+  const island = useIsland();
+  const boundName = typeof props.open === 'string' ? refName(props.open) : null;
   const [local, setLocal] = createSignal(!!props.defaultOpen); const [trigger, setTrigger] = createSignal<HTMLElement | null>(null); const [busy, setBusy] = createSignal(false);
-  const ctx: DialogState = { open: () => props.open ?? local(), setOpen: next => { setLocal(next); props.onOpenChange?.(next); }, trigger, setTrigger, busy, setBusy };
+  const ctx: DialogState = {
+    open: () => boundName ? island.value(boundName) === true : typeof props.open === 'boolean' ? props.open : local(),
+    setOpen: next => { setLocal(next); if (boundName) island.setValue(boundName, next); props.onOpenChange?.(next); },
+    trigger, setTrigger, busy, setBusy,
+  };
   const [localProps, rest] = splitProps(props, ['open', 'defaultOpen', 'onOpenChange', 'children']);
   return <Context.Provider value={ctx}><span {...(rest as unknown as JSX.HTMLAttributes<HTMLSpanElement>)} class={`contents ${props.class ?? ''}`}>{localProps.children}</span></Context.Provider>;
 }

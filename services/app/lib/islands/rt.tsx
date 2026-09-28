@@ -1,7 +1,7 @@
 /* @jsxImportSource solid-js */
 /**
  * THE ISLAND RUNTIME (`@mx/rt`, docs/phase2-architecture.md §2.3, §4.1): what every compiled island
- * of one document runs on, and the ONE module generated island code imports.
+ * of one document runs on. Generated islands also import kit helpers when their markup needs them.
  *
  * - The document's data is the EXISTING react-free store (lib/story-runtime/store), bridged into
  *   one Solid store per document with `reconcile`, so a result that changes one cell re-runs only
@@ -20,11 +20,10 @@
 import { batch, createComponent, createMemo, createRoot, createSignal, For, Show } from 'solid-js';
 import type { Component, JSX } from 'solid-js';
 import { createStore, reconcile } from 'solid-js/store';
-import { hydrate, isServer } from 'solid-js/web';
-import { evaluateReactive, type ReactiveExpression } from '@/lib/jsx/reactive';
-import { URL_ATTRS, URL_LIST_ATTRS, urlListUrls } from '@/lib/jsx/url-attrs';
+import { hydrate, insert as solidInsert, isServer } from 'solid-js/web';
+import type { ReactiveExpression } from '@/lib/jsx/reactive';
+import { evaluateReactive } from '@/lib/jsx/reactive-eval';
 import { substituteRow } from '@/lib/story/row-scope';
-import { commentMetadata, instanceDomId } from '@/lib/story/repeat-identity';
 import type { CompiledDataflow } from '@/lib/story/compiled-dataflow';
 import type { DataflowState, Row, Scalar, TableResult } from '@/lib/story/dataflow';
 import { ACCESS_PENDING, type DataflowStore } from '@/lib/story-runtime/store';
@@ -111,6 +110,19 @@ interface Bridged {
   people: Record<string, PersonCard>;
 }
 
+/** Keep a hydrated table's controls mounted when a refresh answers with identical rows. */
+function sameTable(a: TableResult, b: TableResult): boolean {
+  const fields = Object.keys(a);
+  if (fields.length !== Object.keys(b).length || fields.some((key) => key !== 'rows' && key !== 'columns' && !Object.is(a[key as keyof TableResult], b[key as keyof TableResult]))) return false;
+  if (a.columns.length !== b.columns.length || a.columns.some((column, i) => JSON.stringify(column) !== JSON.stringify(b.columns[i]))) return false;
+  if (a.rows.length !== b.rows.length) return false;
+  return a.rows.every((row, i) => {
+    const other = b.rows[i];
+    const keys = Object.keys(row);
+    return !!other && keys.length === Object.keys(other).length && keys.every((key) => Object.is(row[key], other[key]));
+  });
+}
+
 /**
  * Start one document's runtime over `createStore` (the existing `createDataflowStore`, passed in
  * so the browser brings its transport and the server renders without one). Synchronous: the
@@ -130,17 +142,21 @@ export function createIslandRuntime(
   const [checks, touch] = createSignal(undefined, { equals: false });
   const drawings = data.mermaidImages ?? {};
   let lastTables: Record<string, TableResult> = {};
-
   const sync = () => {
     if (!store) return;
     const snap = store.getState();
     const pending: Record<string, true> = {};
     for (const name of store.pending()) pending[name] = true;
     batch(() => {
-      for (const [name, table] of Object.entries(snap.tables)) if (lastTables[name] !== table) setVersions(name, (v) => (v ?? 0) + 1);
-      lastTables = snap.tables;
+      const tables: Record<string, TableResult> = {};
+      for (const [name, table] of Object.entries(snap.tables)) {
+        const previous = lastTables[name];
+        if (previous && sameTable(previous, table)) tables[name] = previous;
+        else { tables[name] = { ...table }; setVersions(name, (v) => (v ?? 0) + 1); }
+      }
+      lastTables = tables;
       setState('values', reconcile(snap.values));
-      setState('tables', reconcile(snap.tables, { merge: true }));
+      setState('tables', reconcile(tables, { merge: true }));
       setState('errors', reconcile(snap.errors));
       setState('pending', reconcile(pending));
       setState('people', reconcile(snap.people ?? {}));
@@ -150,11 +166,13 @@ export function createIslandRuntime(
   sync();
   const unsubscribe = store?.subscribe(sync) ?? (() => {});
 
-  const noData = () => new Error('this document declares no data');
+  const noData = () => new Error('no data declared');
   const context: IslandContext = {
     values: () => state.values,
     value: (name) => state.values[name],
-    table: (name) => state.tables[name],
+    // A reconciled result can retain the table and row-array proxies across a
+    // query answer. Its version makes list consumers observe removals and order.
+    table: (name) => { void versions[name]; return state.tables[name]; },
     tableSnapshot: (name) => {
       void versions[name];
       return store?.getTable(name) ?? state.tables[name];
@@ -184,7 +202,7 @@ export function createIslandRuntime(
     writes: (options.writes ?? (() => EMPTY_WRITE_FEED))(store),
     store: () => store,
     trustedPortal: options.trustedPortal ?? (() => trustedPortalOf()),
-    loadChart: options.loadChart ?? (() => Promise.reject(new Error('charts are drawn in the browser'))),
+    loadChart: options.loadChart ?? (() => Promise.reject(new Error('browser chart only'))),
   };
 
   return {
@@ -247,44 +265,6 @@ export const text = (e: ReactiveExpression, row?: Record<string, unknown>, islan
 /** A static value with `$_row.f` references filled from `row` (lib/story/row-scope). */
 export const sub = <T,>(value: T, row: Record<string, unknown>): T => substituteRow(value, row);
 
-// Mirrors lib/jsx/validate hasDangerousScheme (importing validate.ts would drag its whole top level
-// into the shared chunk): browsers strip control characters and spaces inside the scheme.
-const DANGEROUS_URL = /^(javascript|vbscript|data):/i;
-const SAFE_DATA_URL = /^data:image\//i;
-// eslint-disable-next-line no-control-regex -- deliberately mirrors browser scheme normalization
-const dangerous = (url: string) => { const n = url.replace(/[\x00-\x20]/g, ''); return DANGEROUS_URL.test(n) && !SAFE_DATA_URL.test(n); };
-const IDREF_ATTRS = ['for', 'aria-labelledby', 'aria-describedby', 'aria-controls', 'aria-owns', 'headers', 'list', 'form'];
-
-/**
- * The attributes of an element inside a row template, resolved for one row (the interpreter's
- * rawBuildProps + scopeProps): `$_row.f` filled, a dangerous URL dropped PER ROW, author ids and
- * the idrefs naming them rewritten to the row's instance, comment metadata on durable rows.
- */
-export function rowAttrs(attrs: Readonly<Record<string, unknown>>, row: Record<string, unknown> | null | undefined, scope?: RowScope | null): Record<string, string> {
-  const out: Record<string, string> = {};
-  for (const [name, raw] of Object.entries(attrs)) {
-    const lower = name.toLowerCase();
-    const value = row && lower !== 'id' ? substituteRow(raw, row) : raw;
-    if (value === null || value === undefined || value === false) continue;
-    if (typeof value === 'string' && (URL_LIST_ATTRS.has(lower) ? urlListUrls(value, lower).some(dangerous) : URL_ATTRS.has(lower) && dangerous(value))) continue;
-    out[name] = value === true ? '' : String(value);
-  }
-  if (scope) {
-    const key = ['repeat', scope.owner, scope.durable ? typeof scope.key : 'index', scope.key];
-    if (!scope.durable) delete out['data-mx-ast'];
-    if (typeof out.id === 'string') {
-      if (scope.durable) Object.assign(out, commentMetadata(scope.owner, { kind: 'repeat', scopes: [{ nodeId: scope.owner, key: scope.key as string | number }], templateNodeId: out.id }));
-      out.id = instanceDomId(key, out.id);
-    }
-    for (const attr of IDREF_ATTRS) {
-      const v = out[attr];
-      if (typeof v === 'string') out[attr] = v.split(/\s+/).map((id) => (scope.ids.includes(id) ? instanceDomId(key, id) : id)).join(' ');
-    }
-    if (typeof out.href === 'string' && out.href.startsWith('#') && scope.ids.includes(out.href.slice(1))) out.href = '#' + instanceDomId(key, out.href.slice(1));
-  }
-  return out;
-}
-
 export interface RepeatProps {
   /** The table (or table value) whose rows repeat. */
   name: string;
@@ -300,25 +280,36 @@ export interface RepeatProps {
   [attr: string]: unknown;
 }
 
-const REPEAT_PROPS = new Set(['name', 'keyBy', 'owner', 'ids', 'tableParts', 'svg', 'children']);
-
 /**
  * `<For each={$name} keyBy="k">` — the interpreter's repeat: a wrapper element (a `<div>`, a `<g>`
  * in SVG, none among table parts) around one instance of the template per row. Rows come from the
  * bridged store, so a changed result re-renders only the rows that changed.
  */
-export function Repeat(props: RepeatProps): JSX.Element {
+export function Repeat({ name, keyBy, owner, ids, tableParts, svg, children, ...attrs }: RepeatProps): JSX.Element {
   const island = useIsland();
   const rows = createMemo((): Row[] => {
-    const source: unknown = island.table(props.name)?.rows ?? island.values()[props.name] ?? [];
-    return Array.isArray(source) ? (source as Row[]) : [];
+    const source: unknown = island.table(name)?.rows ?? island.values()[name] ?? [];
+    // Solid's reconciled table keeps its array proxy while changing its members.
+    // Snapshot the positions so For observes reorder and removal as list changes.
+    return Array.isArray(source) ? [...(source as Row[])] : [];
+  });
+  // A reconciled store can retain a row proxy while changing its key. Give that key a distinct
+  // For identity so the row's compiled scope and comment target are built again.
+  const instances = new WeakMap<Row, { row: Row; key: unknown }>();
+  const keyedRows = () => rows().map(row => {
+    const key = row[keyBy!];
+    const previous = instances.get(row);
+    if (previous && previous.key === key) return previous;
+    const next = { row, key };
+    instances.set(row, next);
+    return next;
   });
   const body = () => (
-    <For each={rows()}>{(row, index) => props.children(row, { owner: props.owner ?? '', key: props.keyBy ? row[props.keyBy] : index(), durable: !!props.keyBy, ids: props.ids ?? [] })}</For>
+    keyBy
+      ? <For each={keyedRows()}>{instance => children(instance.row, { owner: owner || '', key: instance.key, durable: true, ids: ids || [] })}</For>
+      : <For each={rows()}>{(row, index) => children(row, { owner: owner || '', key: index(), durable: false, ids: ids || [] })}</For>
   );
-  if (props.tableParts) return body();
-  const attrs = Object.fromEntries(Object.entries(props).filter(([k]) => !REPEAT_PROPS.has(k)));
-  return props.svg ? <g {...attrs}>{body()}</g> : <div {...attrs}>{body()}</div>;
+  return tableParts ? body() : svg ? <g {...attrs}>{body()}</g> : <div {...attrs}>{body()}</div>;
 }
 
 /** `{cond && …}` / `{cond ? a : b}` — the interpreter's conditional; a falsy value (0 included) renders nothing. */
@@ -369,14 +360,20 @@ export function hydrateIsland(renderId: string, Component: Component, context: I
       // An island may render siblings of its root (a button and its refusal): those are the island's own
       // (their key has its prefix), never handed back as static siblings, and its output stays LIVE (the
       // accessor, not a snapshot of it) so a sibling that comes and goes is inserted and removed.
-      return [...host.childNodes].filter((node) => node === root || !(node as Element).getAttribute?.('data-hk')?.startsWith(renderId)).map((node) => (node === root ? (Array.isArray(output) ? live : output) : node)) as JSX.Element;
+      const children = [...host.childNodes].filter((node) => node === root || !(node as Element).getAttribute?.('data-hk')?.startsWith(renderId));
+      return (() => children.map((node) => node === root ? (typeof live === 'function' ? (live as () => unknown)() : live) : node)) as unknown as JSX.Element;
     }), host, { renderId });
   } catch {
     // Solid's development build refuses to create nodes while hydrating (a mismatch); render the
     // island fresh instead, as the production build does on its own.
     disposeIsland();
     output = undefined;
-    createRoot(mount);
+    createRoot((dispose) => {
+      mount(dispose);
+      // A non-hydratable or mismatched root still needs Solid's insertion effect: a
+      // one-time replacement would strand a later placeholder-to-content switch.
+      solidInsert(host, () => live as JSX.Element, root.nextSibling, [root]);
+    });
   }
   if (output instanceof Node && output !== root && !output.isConnected && root.parentNode === host) host.replaceChild(output, root);
   return disposeIsland;

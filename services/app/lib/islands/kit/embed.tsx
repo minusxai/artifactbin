@@ -1,11 +1,12 @@
 /* @jsxImportSource solid-js */
 /**
- * THE EMBEDS (data family: `@mx/kit/data` re-exports them): `<Iframe>` and `<DeckGL>` as islands. Each
+ * THE EMBED FAMILY (`@mx/kit/embed`): `<Iframe>` and `<DeckGL>` as islands. Each
  * island is the box today's reader draws, server-rendered at its final size; its behaviour is a lazy chunk
  * loaded once the island is mounted, never part of the shared runtime or of a page's first paint:
  *
  * - `<Iframe>`: today's managed frame (lib/story-runtime/managed-iframe) — ./embed/frame-engine mounts the
- *   sandboxed author realm in the box and binds it to the document's store.
+ *   sandboxed author realm in the box and binds it to the document's store, its assets resolved through the
+ *   page's own door (IslandPageData.managedAssets) or, framed, the parent page's relay.
  * - `<DeckGL>`: today's map (components/kit/deck-gl + the runtime adapter) — ./embed/deck-engine replaces
  *   the loading stand-in with deck.gl (and MapLibre for a basemap), over the table `data` names.
  */
@@ -15,9 +16,8 @@ import { managedFrameLayout } from '@/lib/story/managed-frame-layout';
 import { deckGlHeight } from '@/lib/viz/deck-height';
 import { MAP_CLASSES } from '@/lib/viz/deck-chrome';
 import type { ManagedIframeContent } from '@/lib/story/managed-iframe';
-import type { ManagedAssetsConfig } from '@/lib/story-runtime/managed-assets';
-import { ISLAND_DATA_ID } from '@/lib/compiled-page/contract';
 import { useIsland } from '../context';
+import { deferEngine } from '../defer-engine';
 import type { DeckEngineProps } from './embed/deck-engine';
 
 type Props = Record<string, unknown>;
@@ -28,26 +28,6 @@ const str = (v: unknown): string | undefined => (typeof v === 'string' ? v : und
  */
 const servedStyle = (css: string) => ({ 'attr:style': css }) as JSX.HTMLAttributes<HTMLDivElement>;
 
-/**
- * The managed asset door for this page: the deployment's asset origin (compiled in) and the page's own
- * asset import door (the data island's `assetsUrl`, made absolute against the page's own address). None without an origin.
- */
-export function assetsConfig(origin: unknown, doc: Document): ManagedAssetsConfig | undefined {
-  if (typeof origin !== 'string' || !origin) return undefined;
-  let door: string | undefined;
-  try { door = (JSON.parse(doc.getElementById(ISLAND_DATA_ID)?.textContent || '{}') as { assetsUrl?: string }).assetsUrl; } catch { door = undefined; }
-  if (!door) {
-    // A capture carries settled data and no query/mutation doors. Its verified, short-lived
-    // export key still admits this document's managed assets through the existing asset route.
-    const page = new URL(doc.URL);
-    const id = /^\/a\/([A-Za-z0-9]{6,12})\/raw$/.exec(page.pathname)?.[1];
-    const key = page.searchParams.get('key');
-    if (id && key) door = `/a/${id}/assets?key=${encodeURIComponent(key)}`;
-  }
-  if (!door) return undefined;
-  return { origin, resolveUrl: new URL(door, doc.baseURI).href };
-}
-
 /** `<Iframe>`: the managed frame's box (today's `data-mx-managed-frame` element), the author realm mounted in it. */
 export function Iframe(props: Props) {
   const island = useIsland();
@@ -57,11 +37,11 @@ export function Iframe(props: Props) {
   onMount(() => {
     let disposed = false;
     let stop = () => {};
-    import('./embed/frame-engine').then(({ mountManagedFrame }) => {
+    const cancel = deferEngine(host, () => { void import('./embed/frame-engine').then(({ mountManagedFrame }) => {
       if (disposed) return;
-      stop = mountManagedFrame({ host, compiled: props.compiled as ManagedIframeContent, store: island.store(), label, assets: assetsConfig(props.assetsOrigin, host.ownerDocument), onError: setError });
-    }).catch((e: Error) => setError(String(e.message).slice(0, 500)));
-    onCleanup(() => { disposed = true; stop(); });
+      stop = mountManagedFrame({ host, compiled: props.compiled as ManagedIframeContent, store: island.store(), label, onError: setError });
+    }).catch((e: Error) => { if (!disposed) setError(String(e.message).slice(0, 500)); }); });
+    onCleanup(() => { disposed = true; cancel(); stop(); });
   });
   return (
     <div id={str(props.id)} class={str(props.class)} data-mx-ast={str(props['data-mx-ast'])} data-mx-managed-frame="" aria-label={label} {...servedStyle(`height:${pixels}px;width:100%`)}>
@@ -86,7 +66,7 @@ export function DeckGL(props: Props) {
   onMount(() => {
     let live = true;
     let stop = () => {};
-    void import('./embed/deck-engine').then(({ mountDeckEngine }) => {
+    const cancel = deferEngine(box, () => { void import('./embed/deck-engine').then(({ mountDeckEngine }) => {
       if (!live) return;
       // Through the CSSOM, as today's engine sets its figure's height (the attribute then reads `height: 320px;`).
       box.style.cssText = '';
@@ -97,8 +77,8 @@ export function DeckGL(props: Props) {
         legend: props.legend as boolean | undefined, title, height,
       });
       setReady(true);
-    });
-    onCleanup(() => { live = false; stop(); });
+    }); });
+    onCleanup(() => { live = false; cancel(); stop(); });
   });
   return (
     <div id={str(props.id)} data-mx-ast={str(props['data-mx-ast'])}>

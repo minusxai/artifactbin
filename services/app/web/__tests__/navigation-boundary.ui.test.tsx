@@ -22,6 +22,16 @@ function mount(guard: NavigationGuard, initialEntries = ['/']) {
 }
 
 describe('navigation retains the editor until persistence finishes', () => {
+  it('keeps scroll position when popping from a document edit hash to its reader', async () => {
+    const router = createMemoryRouter([{ element: <NavigationBoundary><Outlet /></NavigationBoundary>, children: [
+      { path: '/a/:id', element: <main>Document</main> },
+    ] }], { initialEntries: ['/a/a1'] });
+    render(<RouterProvider router={router} />);
+    await act(async () => { await router.navigate('/a/a1#edit'); });
+    vi.mocked(window.scrollTo).mockClear();
+    await act(async () => { await router.navigate(-1); });
+    expect(window.scrollTo).not.toHaveBeenCalled();
+  });
   it('intercepts an ordinary internal anchor and waits for the guard before changing routes', async () => {
     let finish!: (allowed: boolean) => void;
     const guard = vi.fn(() => new Promise<boolean>(resolve => { finish = resolve; }));

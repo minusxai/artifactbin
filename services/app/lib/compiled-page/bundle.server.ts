@@ -38,6 +38,7 @@ import type { Scalar } from '@/lib/story/dataflow';
 import { ISLANDS_MANIFEST_PATH } from './build.server';
 import { DOCUMENT_MODULE_RE, type CompilerBuild, type IslandRenderData, type ModuleRef, type ModuleStore } from './contract';
 import type { GeneratedSources } from './codegen-safety';
+import { syncRailPreview } from './rail-preview.server';
 import { objectStore, ObjectUnavailable, type ObjectStore } from '@/lib/object-store';
 import { createModuleStore } from './modules.server';
 import { contentSha } from './speculation';
@@ -311,7 +312,8 @@ const ssrModules = new Map<string, Promise<SsrModule>>();
 export async function ssrModuleOf(code: string, name: string, imports?: SsrImports): Promise<SsrModule> {
   const exports = await evaluateModule(code, imports ?? await defaultSsrImports(code), `mx-ssr/${name}.js`);
   if (typeof exports.render !== 'function') throw new Error(`island SSR: ${name} exports no render`);
-  return exports as unknown as SsrModule;
+  const module = exports as unknown as SsrModule;
+  return { ...module, render: (data) => syncRailPreview(module.render(data)) };
 }
 
 /**
@@ -336,6 +338,15 @@ export function loadSsrModule(ref: ModuleRef, store: ModuleStore = createSsrModu
 /* ────────────────────────────────────────────────────────────────────────────
  * One version's modules
  * ──────────────────────────────────────────────────────────────────────────── */
+
+/**
+ * The skeleton's static subtrees put in place (compiler `Generated.statics`): each `<mx-static data-i="n">` the
+ * skeleton rendered becomes the n-th subtree's HTML — today's React render of it, which never went through JSX.
+ * A placeholder the skeleton did not render exactly so (an author's own element carries its `data-mx-ast` first)
+ * is left alone.
+ */
+export const spliceStatics = (html: string, statics: readonly string[]): string =>
+  statics.length ? html.replace(/<mx-static data-i="(\d+)"><\/mx-static>/g, (whole, i: string) => statics[Number(i)] ?? whole) : html;
 
 /** The compile-time render of the skeleton: static HTML with a `<mx-slot data-i="n">` per island. */
 export async function renderSkeleton(skeleton: string, imports?: SsrImports): Promise<string> {
@@ -430,8 +441,8 @@ export interface BuildOptions {
  * declared state. A version with no island has neither module — unless it must boot (`boot`), when it
  * has the browser module alone.
  */
-export async function buildDocumentModules(sources: GeneratedSources & { islandRefs: readonly unknown[] }, options: BuildOptions): Promise<DocumentModules> {
-  const skeletonHtml = await renderSkeleton(sources.skeleton, options.imports);
+export async function buildDocumentModules(sources: GeneratedSources & { islandRefs: readonly unknown[]; statics?: readonly string[] }, options: BuildOptions): Promise<DocumentModules> {
+  const skeletonHtml = spliceStatics(await renderSkeleton(sources.skeleton, options.imports), sources.statics ?? []);
   if (!sources.islandRefs.length && !options.boot) return { html: skeletonHtml, module: null, ssr: null };
   const store = options.store ?? createModuleStore();
   if (!sources.islandRefs.length) {

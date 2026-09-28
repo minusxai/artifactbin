@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { createSqliteSql } from '@artifactbin/sql/sqlite';
+import { runDataflow } from '@/lib/sql/run-dataflow';
 import { runLocalStateMutation } from '@/lib/story/local-state';
 import { bindParams, bindTypes, initialTables, initialValues, mutationParams } from '@/lib/story/compiled-flow';
 import { compiledOf } from '@/test/helpers/compiled';
@@ -30,6 +31,34 @@ const transport = (): QueryTransport => ({
 const make = (t = transport()) => createDataflowStore({flow, state: {values: initialValues(flow), tables: initialTables(flow), errors: {}, mutationAccess: {}}}, {transport: t, debounceMs: 0});
 
 describe('local SQL mutations in the document store', () => {
+  it('removes a keyed row from a query after a local delete mutation', async () => {
+    const orders = await compiledOf(
+      '<Value name="flags" type="table" value={[{"reverse":false}]}/>'
+      + '<Value name="orders" type="table" value={[{"order_id":"order-101","customer":"Alice"},{"order_id":"order-102","customer":"Bob"}]}/>'
+      + '<Query name="ordered">{`select o.* from orders o, flags f order by case when f.reverse then o.customer end desc, o.customer asc`}</Query>'
+      + '<Mutation name="reverseRows">{`update flags set reverse = not reverse`}</Mutation>'
+      + '<Mutation name="renameAlice">{`update orders set customer=\'Alice updated\' where order_id=\'order-101\'`}</Mutation>'
+      + '<Mutation name="removeAlice">{`delete from orders where order_id=\'order-101\'`}</Mutation>',
+    );
+    const local = createDataflowStore({ flow: orders, state: { values: initialValues(orders), tables: initialTables(orders), errors: {}, mutationAccess: {} } }, {
+      transport: {
+        run: async (values, only, localTables) => {
+          const answer = await runDataflow(orders, {}, { values, only, localTables });
+          return { tables: answer.tables, errors: answer.errors };
+        },
+        page: async () => ({ columns: [], rows: [] }),
+        mutate: async (request) => {
+          const mutation = orders.mutations.find((item) => item.name === request.mutation)!;
+          const tables = initialTables(orders);
+          tables.orders = { ...tables.orders!, rows: request.localTables?.orders ?? tables.orders!.rows };
+          return { dataset: '', local: await runLocalStateMutation(orders, mutation, { tables }, engine, { params: {}, paramTypes: {} }) };
+        },
+      }, debounceMs: 0,
+    });
+    await Promise.all([local.mutate('reverseRows'), local.mutate('renameAlice'), local.mutate('removeAlice')]);
+    expect(local.getTable('orders')?.rows).toEqual([{ order_id: 'order-102', customer: 'Bob' }]);
+    await vi.waitFor(() => expect(local.getTable('ordered')?.rows).toEqual([{ order_id: 'order-102', customer: 'Bob' }]));
+  });
   it('needs no dataset edit permission, commits the local table, and keeps other viewers independent', async () => {
     const a = make(), b = make();
     expect(a.mutationUnavailable('inc')).toBeNull();

@@ -3,6 +3,7 @@ import { Show, createEffect, createSignal, on, onCleanup, onMount, type JSX } fr
 import { mermaidImageKey, mermaidSourceError } from '@/lib/story-ui/mermaid-source';
 import { readerMode } from '@/lib/story-runtime/reader-mode';
 import { useIsland } from '../context';
+import { deferEngine } from '../defer-engine';
 import type { MermaidImage } from '@/components/kit/mermaid-render';
 import type { Drawn } from '@/lib/mermaid-images/reader-draw';
 
@@ -84,14 +85,14 @@ export function Mermaid(p: Props) {
       const override = typeof window === 'undefined' ? null : readerMode(window);
       if (override && mode !== override) return;
       let live = true;
-      onCleanup(() => { live = false; });
       setResult(null);
       if (servedSrc) return;
       // Intentional lazy boundary: a stored drawing never loads the drawing helpers or Mermaid.
-      void import('@/lib/mermaid-images/reader-draw').then(m => m.drawForReader(host, code, mode === 'dark', () => live)).then(
+      const cancel = deferEngine(host, () => { void import('@/lib/mermaid-images/reader-draw').then(m => m.drawForReader(host, code, mode === 'dark', () => live)).then(
         drawn => { if (live && drawn) setResult({ code, ...drawn }); },
         () => { if (live) setResult({ code, error: 'Could not render this diagram. Check its Mermaid syntax.' }); },
-      );
+      ); });
+      onCleanup(() => { live = false; cancel(); });
     }));
     // An image that finished (or failed) before hydration fired its event into nothing: read its own state.
     createEffect(on([src, storedSrc], ([source, servedSrc]) => {

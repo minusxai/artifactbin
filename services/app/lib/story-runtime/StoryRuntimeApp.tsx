@@ -30,7 +30,8 @@ import type { GlyphMap } from '@/lib/story-ui/icon-contract';
 // (lib/__tests__/reader-bundle-hygiene.test.ts).
 import { questionEmbedHeightPx } from '@/lib/data/story/question-height';
 import { discoverSlides, MIN_SLIDES_FOR_RAIL, type DiscoveredSlide } from './slides';
-import { discoverOutline, hasOutline, type OutlineEntry } from './outline';
+import { discoverOutline, hasOutline } from './outline';
+import { OutlineRail } from './outline-rail';
 import QuestionEmbed from '@/components/views/story/QuestionEmbed';
 import InlineNumber, { type NumberAgg } from '@/components/views/story/InlineNumber';
 import { createRowActions } from './row-actions';
@@ -1203,42 +1204,6 @@ function PresentBar({ active, total, onGo }: { active: number; total: number; on
  */
 const documentSlides = (): HTMLElement[] =>
   [...document.querySelectorAll<HTMLElement>('.mx-doc [data-mx-slide]')];
-
-/**
- * THE OUTLINE — a sectioned document's table of contents, as chrome
- * (lib/story-runtime/outline). Rendered here beside the body exactly as the
- * deck rail is: a flex sibling in the SSR string at its final width, so the
- * reader never sees the column jump.
- *
- * INERT MARKUP, deliberately. A document of prose — the kind that has
- * sections — ships no runtime, so a React handler here would never exist for
- * the reader who needs it most. Each row names its heading by path
- * (`data-mx-target`); the ~1 KB entry every document loads wires the click and
- * the current-section mark from plain DOM (lib/story-runtime/outline-nav).
- * Rows are keyed by path so a live update keeps their DOM nodes, marks and all.
- */
-function OutlineRail({ entries }: { entries: OutlineEntry[] }) {
-  let section = 0;
-  return (
-    <nav className="mx-outline" aria-label="Contents">
-      <div className="mx-outline-label">Contents</div>
-      {entries.map((entry) => {
-        if (entry.level === 2) section += 1;
-        return (
-          <button
-            key={entry.path}
-            type="button"
-            className={entry.level === 3 ? 'mx-outline-row mx-outline-sub' : 'mx-outline-row'}
-            aria-label={entry.level === 2 ? `Go to section ${section}: ${entry.title}` : `Go to ${entry.title}`}
-            data-mx-target={entry.path}
-          >
-            {entry.title}
-          </button>
-        );
-      })}
-    </nav>
-  );
-}
 
 /** Slide navigation over the rendered document — one realm, so plain DOM. */
 function useSlideChrome(count: number) {

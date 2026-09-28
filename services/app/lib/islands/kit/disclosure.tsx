@@ -3,7 +3,8 @@ import { createContext, createEffect, createRenderEffect, createSignal, createUn
 import { collapsibleStyle } from './collapsible-style';
 import { Portal, isServer } from 'solid-js/web';
 import { useIsland } from '../context';
-import { placePopper, type Align, type Placed, type Side } from './popper';
+import { deferEngine } from '../defer-engine';
+import type { Align, Placed, Side } from './popper';
 import { TrustedOverlay } from './trusted-overlay';
 
 type State = { open: () => boolean; setOpen: (value: boolean) => void; contentId: string; panelId: () => string; setPanelId: (id: string) => void };
@@ -97,6 +98,18 @@ export function TooltipTrigger(props: JSX.ButtonHTMLAttributes<HTMLButtonElement
     on:pointerdown={() => { if (ctx.open()) ctx.close(); pointerDown = true; document.addEventListener('pointerup', () => { pointerDown = false; }, { once: true }); }}
     on:focus={() => { if (!pointerDown) ctx.openNow(); }} on:blur={() => ctx.close()} on:click={() => ctx.close()}>{props.children}</button>;
 }
+/** A disabled editing control needs a focusable span as its tooltip anchor. */
+export function TooltipSpanTrigger(props: JSX.HTMLAttributes<HTMLSpanElement>) {
+  const ctx = useContext(TooltipContext)!; let span!: HTMLSpanElement; let movedOpen = false;
+  onMount(() => createEffect(() => {
+    for (const [name, value] of [['aria-describedby', ctx.open() ? ctx.contentId() : null], ['data-state', ctx.state()], ['data-radix-popper-side', ctx.placed()?.side], ['data-radix-popper-align', ctx.placed()?.align]] as const) {
+      if (value) span.setAttribute(name, value); else span.removeAttribute(name);
+    }
+  }));
+  return <span ref={el => { span = el; ctx.setTrigger(el); }} data-state={ctx.state()} data-slot="tooltip-trigger" {...props}
+    on:pointermove={e => { if (e.pointerType !== 'touch' && !movedOpen) { ctx.enter(); movedOpen = true; } }} on:pointerleave={() => { ctx.leave(); movedOpen = false; }}
+    on:focus={() => ctx.openNow()} on:blur={() => ctx.close()} on:pointerdown={() => ctx.close()}>{props.children}</span>;
+}
 const ARROW_TRANSFORM: Record<Side, string> = { top: 'translateY(100%)', right: 'translateY(50%) rotate(90deg) translateX(-50%)', bottom: 'rotate(180deg)', left: 'translateY(50%) rotate(-90deg) translateX(50%)' };
 const ARROW_ORIGIN: Record<Side, string> = { top: '', right: '0 0', bottom: 'center 0', left: '100% 0' };
 const OPPOSITE: Record<Side, Side> = { top: 'bottom', right: 'left', bottom: 'top', left: 'right' };
@@ -121,8 +134,13 @@ function TooltipPopper(p: { ctx: TooltipState; side?: Side; align?: Align; sideO
   onMount(() => {
     const anchor = ctx.trigger(); if (!anchor) return;
     wrapper.style.zIndex = getComputedStyle(content).zIndex;
-    const stop = placePopper(anchor, wrapper, arrow, { side: p.side ?? 'top', align: p.align ?? 'center', sideOffset: p.sideOffset ?? 6, collisionPadding: 8, arrowWidth: 10, arrowHeight: 5, onPlaced: ctx.setPlaced });
-    onCleanup(() => { stop(); ctx.setPlaced(undefined); });
+    let live = true;
+    let stop = () => {};
+    const cancel = deferEngine(wrapper, () => { void import('./popper').then(({ placePopper }) => {
+      if (!live) return;
+      stop = placePopper(anchor, wrapper, arrow, { side: p.side ?? 'top', align: p.align ?? 'center', sideOffset: p.sideOffset ?? 6, collisionPadding: 8, arrowWidth: 10, arrowHeight: 5, onPlaced: ctx.setPlaced });
+    }); });
+    onCleanup(() => { live = false; cancel(); stop(); ctx.setPlaced(undefined); });
   });
   const side = () => ctx.placed()?.side ?? 'top';
   return <div data-mx-theme-host="">

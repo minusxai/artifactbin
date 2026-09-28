@@ -15,10 +15,11 @@
  *    the JSX `attr:style` form, which the compiler turns back into one — re-sets it through the
  *    CSSOM (`width: 100%;`).
  */
-import { createEffect, createMemo, createSignal, For, Match, on, onCleanup, onMount, Show, Switch } from 'solid-js';
+import { createEffect, createMemo, createSignal, For, Match, on, onCleanup, onMount, Show, Switch, untrack } from 'solid-js';
 import { isServer } from 'solid-js/web';
 import { createVirtualizer } from '@tanstack/solid-virtual';
 import { useIsland } from '../context';
+import { deferEngine } from '../defer-engine';
 import { TrustedOverlay } from './trusted-overlay';
 import { refName, type TableResult } from '@/lib/story/dataflow';
 import { aggregateNumber, type NumberAgg } from '@/lib/story/number-aggregation';
@@ -36,6 +37,7 @@ import type { RefDataMap } from '@/lib/story/ref-data';
 import type { IslandChart, IslandChartModule } from '../contract';
 import { DRAWING_CLASS, drawingIsCurrent } from '../chart';
 import { rowsDigest } from '../digest';
+import type { CellScope } from './cells';
 
 const nameOf = (raw: unknown) => refName(raw) ?? '';
 /** The authored identity today's adapters put on their outer element (StoryRuntimeApp runtimeTargetIdentity): the id and the compiler's `data-*` stamps, never the chart slot marker. */
@@ -108,12 +110,14 @@ export function Select(p: SelectProps) {
 
 
 /**
- * A `<Column>` of the table. The compiler passes `{ col, id, path }` (the column's author id and AST
- * path, which today's header cell carries) beside the parsed `columns`; the interpreter's shape also
- * carries the column's `props` and its cell template `nodes`.
+ * A `<Column>` of the table. The compiler passes `{ col, id, path, ids }` (the column's author id and AST
+ * path, which today's header cell carries, and its content's author ids) beside the parsed `columns`; the
+ * interpreter's shape also carries the column's `props` and its cell template `nodes`.
  */
-interface ColumnTemplate { col: string; id?: string; path?: string; props?: Record<string, unknown>; nodes?: unknown[] }
-interface DataTableProps { data: unknown; columns?: unknown; sort?: unknown; height?: number | string; sticky?: boolean; className?: string; id?: string; rowKey?: string; inGridItem?: boolean; templates?: ColumnTemplate[]; renderCell?: (template: ColumnTemplate, row: Row, index: number) => import('solid-js').JSX.Element; resolveSrc?: (url: string) => string | null; [key: `data-${string}`]: unknown }
+interface ColumnTemplate { col: string; id?: string; path?: string; ids?: string[]; props?: Record<string, unknown>; nodes?: unknown[] }
+/** A column's content, compiled: drawn in each row's cell with the row and where the cell sits (interpreter renderCell). */
+type CellContent = (row: Row, cell: CellScope) => import('solid-js').JSX.Element;
+interface DataTableProps { data: unknown; columns?: unknown; sort?: unknown; height?: number | string; sticky?: boolean; className?: string; id?: string; rowKey?: string; inGridItem?: boolean; templates?: ColumnTemplate[]; cells?: (CellContent | undefined)[]; renderCell?: (template: ColumnTemplate, row: Row, index: number) => import('solid-js').JSX.Element; resolveSrc?: (url: string) => string | null; [key: `data-${string}`]: unknown }
 const STATIC_ROWS = 50;
 const ROW_H = 33;
 function TimestampCell(props: { value: string }) {
@@ -146,7 +150,7 @@ export function DataTable(props: DataTableProps) {
   const table = () => island.table(name());
   const busy = () => !!name() && island.pending(name());
   const wrapper = () => (props.inGridItem ? 'width:100%;height:100%' : 'width:100%');
-  return <Show when={table()} fallback={
+  return <Show when={!!table()} fallback={
     <div {...rootProps(props)} aria-label="DataTable embed" class="flex w-full flex-col items-center justify-center gap-2.5 rounded-md border border-border p-4 text-sm text-muted-foreground" {...attr('attr:style', wrapper())}>
       <Switch fallback={`data unavailable — "$${name()}" has no rows yet`}>
         <Match when={busy()}><span aria-hidden="true" class={SPINNER} /><span class={LOCKUP_LABEL}>loading data…</span></Match>
@@ -157,14 +161,14 @@ export function DataTable(props: DataTableProps) {
   }>
     {/* Cell sessions show saving on an editable table; only a read-only table dims while it refreshes. */}
     <div {...rootProps(props)} aria-label="DataTable embed" aria-busy={busy() ? 'true' : 'false'} {...attr('class', busy() && !props.templates?.length ? 'mx-busy' : undefined)} {...attr('attr:style', wrapper())}>
-      <DataGrid {...props} table={table()!} />
+      <DataGrid {...props} table={table} />
     </div>
   </Show>;
 }
 
-function DataGrid(props: DataTableProps & { table: TableResult }) {
+function DataGrid(props: DataTableProps & { table: () => TableResult | undefined }) {
   const island = useIsland();
-  const table = () => props.table;
+  const table = props.table;
   const owner = typeof props.id === 'string' ? props.id : undefined;
   const [sort, setSort] = createSignal<SortSpec | null>(parseSortSpec(props.sort));
   const [extra, setExtra] = createSignal<Row[]>([]);
@@ -182,6 +186,8 @@ function DataGrid(props: DataTableProps & { table: TableResult }) {
   const resolved = createMemo(() => resolveColumns(spec(), table()?.columns ?? [], shown()));
   const ordered = createMemo(() => remote() ? shown() : sortRows(shown(), sort()));
   const templateOf = (col: string) => props.templates?.find(t => t.col === col);
+  // The first template for a column is its content (components/kit/data-table), in the compiler's order.
+  const contentOf = (col: string) => { const at = props.templates?.findIndex(t => t.col === col) ?? -1; return at < 0 ? undefined : props.cells?.[at]; };
   const readWindow = (offset: number, next: SortSpec | null, replace: boolean) => {
     const base = table(), store = island.store();
     if (!name() || !base || !store) return;
@@ -201,23 +207,48 @@ function DataGrid(props: DataTableProps & { table: TableResult }) {
   // In the virtual regime the header row and every body row are the same CSS grid (today's rowGrid).
   const rowGrid = () => ({ display: 'grid', 'grid-template-columns': geometry().template, width: '100%', 'min-width': geometry().minWidth ? `${geometry().minWidth}px` : undefined });
   const virtualizer = createVirtualizer<HTMLDivElement, HTMLTableRowElement>({ getScrollElement: () => scroll, get count() { return ordered().length; }, getItemKey: (index) => rowIdentity(ordered()[index], props.rowKey, index), estimateSize: () => ROW_H, overscan: 12, get enabled() { return virtual(); }, initialOffset: () => scroll?.scrollTop ?? 0 });
+  let previousRows = ordered().length;
+  createEffect(on(() => ordered().length, (count) => {
+    if (count < previousRows && scroll) {
+      scroll.scrollTop = 0;
+      queueMicrotask(() => virtualizer.scrollToOffset(0));
+    }
+    previousRows = count;
+  }, { defer: true }));
   const visible = createMemo(() => {
     if (!virtual()) return ordered().slice(0, STATIC_ROWS).map((row, index) => ({ row, index, start: null as number | null }));
-    const items = virtualizer.getVirtualItems();
+    const items = virtualizer.getVirtualItems().filter(v => v.index < ordered().length);
     if (items.length) return items.map(v => ({ row: ordered()[v.index]!, index: v.index, start: v.start as number | null }));
     // The observer may report its first rect after the switch; keep the window around the offset visible.
-    const first = Math.max(0, Math.floor((scroll?.scrollTop ?? 0) / ROW_H) - 12);
+    // A filter can shrink a 500-row list to one while the scroll box still holds
+    // its old offset. Clamp the fallback window to the new result before layout
+    // clamps scrollTop, or the only matching row disappears from the DOM.
+    const first = Math.min(Math.max(0, Math.floor((scroll?.scrollTop ?? 0) / ROW_H) - 12), Math.max(0, ordered().length - Math.ceil((scroll?.clientHeight ?? 0) / ROW_H)));
     return Array.from({ length: Math.max(0, Math.min(ordered().length - first, Math.ceil((scroll?.clientHeight ?? 0) / ROW_H) + 24)) }, (_, offset) => ({ row: ordered()[first + offset]!, index: first + offset, start: (first + offset) * ROW_H as number | null }));
   });
   // Rows are keyed by the row object, so the rows served with the page are the rows of the virtual window.
   const placed = createMemo(() => new Map(visible().map(v => [v.row, v])));
+  // Reconciliation can keep a row proxy while moving a different key into it. A key change must
+  // rebuild the row's comment metadata; same-key content still updates through reactive cell reads.
+  const instances = new WeakMap<Row, Map<unknown, { row: Row; key: unknown }>>();
+  const rendered = createMemo(() => visible().map(({ row }) => {
+    const key = props.rowKey ? row[props.rowKey] : row;
+    let keys = instances.get(row);
+    if (!keys) { keys = new Map(); instances.set(row, keys); }
+    let instance = keys.get(key);
+    if (!instance) { instance = { row, key }; keys.set(key, instance); }
+    return instance;
+  }));
   // Today's switch: virtual once mounted with a measured height, whatever the row count; the header
   // widths are read while the served table's auto layout is still on screen.
   onMount(() => { if (scroll?.clientHeight) { setMeasured([...scroll.querySelectorAll('thead th')].map(th => th.getBoundingClientRect().width)); setVirtual(true); } });
   const onScroll = () => { if (!scroll || !remote() || loading()) return; if (scroll.scrollTop + scroll.clientHeight >= scroll.scrollHeight - ROW_H * 6 && askedAt !== shown().length) { askedAt = shown().length; readWindow(shown().length, sort(), false); } };
-  const cell = (value: unknown, column: ReturnType<typeof resolved>[number], row: Row, index: number) => {
+  const cell = (value: unknown, column: ReturnType<typeof resolved>[number], row: Row, index: () => number) => {
     const template = templateOf(column.col);
-    if (template?.nodes?.length && props.renderCell) return props.renderCell(template, row, index);
+    const content = contentOf(column.col);
+    // The row's position scopes only a row without a stable key: a sort never redraws a cell (or loses its focus).
+    if (template && content) return content(row, { owner: owner ?? '', table: String(props['data-mx-ast'] ?? ''), data: name(), key: row[String(props.rowKey)], durable: true, index: untrack(index), column: template.col, ids: template.ids ?? [] });
+    if (template?.nodes?.length && props.renderCell) return props.renderCell(template, row, untrack(index));
     if (column.kind === 'image' && typeof value === 'string' && /^https?:\/\//i.test(value)) { const src = props.resolveSrc?.(value); if (src) return <img src={src} alt="" loading="lazy" class="inline-block max-h-8 w-auto align-middle" />; }
     if (column.type === 'user' && typeof value === 'string') return <UserCell id={value} card={island.people()[value]} />;
     if (column.type === 'timestamp' && typeof value === 'string') return <TimestampCell value={value} />;
@@ -233,12 +264,13 @@ function DataGrid(props: DataTableProps & { table: TableResult }) {
           <For each={resolved()}>{column => <th {...attr('id', templateOf(column.col)?.id ?? (typeof templateOf(column.col)?.props?.id === 'string' ? templateOf(column.col)!.props!.id as string : undefined))} {...attr('data-mx-ast', templateOf(column.col)?.path)} scope="col" aria-label={`Sort by ${column.title}`} aria-sort={sort()?.col === column.col ? sort()?.dir === 'asc' ? 'ascending' : 'descending' : 'none'} {...attr('title', column.type === 'string' && !(table()?.columns ?? []).some(k => k.name === column.col) ? `"${column.col}" is not a column of this table` : undefined)} onClick={() => cycle(column.col)} class="cursor-pointer select-none whitespace-nowrap px-3 py-2 font-bold" style={css({ 'text-align': column.align, width: column.width ? `${column.width}px` : undefined })}>{column.title}<Show when={sort()?.col === column.col}><span aria-hidden="true" class="ml-1 opacity-70">{sort()?.dir === 'asc' ? '▲' : '▼'}</span></Show></th>}</For>
         </tr></thead>
         <tbody {...attr('style', virtual() ? css({ display: 'block', height: `${virtualizer.getTotalSize()}px`, position: 'relative' }) : undefined)}><Show when={ordered().length} fallback={<tr {...attr('style', virtual() ? css({ display: 'block' }) : undefined)}><td colSpan={Math.max(1, resolved().length)} class="block px-3 py-6 text-center text-muted-foreground">no rows</td></tr>}>
-          <For each={visible().map(v => v.row)}>{row => {
+          <For each={rendered()}>{instance => {
+            const row = instance.row;
             const at = () => placed().get(row);
             const index = () => at()?.index ?? 0;
             let el!: HTMLTableRowElement;
             createEffect(() => { if (virtual() && at()) virtualizer.measureElement(el); });
-            return <tr ref={el} {...rowMeta(row)} data-index={index()} class="border-b border-border/50 transition-colors hover:bg-muted/30" {...attr('style', at()?.start == null ? undefined : css({ ...rowGrid(), position: 'absolute', top: '0px', left: '0px', transform: `translateY(${at()!.start}px)` }))}><For each={resolved()}>{column => { const value = row[column.col]; const bar = barFraction(value, column); const tint = cellTint(value, column); return <td {...rowMeta(row, column.col)} class={`relative whitespace-nowrap px-3 py-1.5 align-middle${column.type === 'number' ? ' tabular-nums' : ''}`} style={css({ 'text-align': column.align, width: column.width ? `${column.width}px` : undefined, background: tint ?? undefined })}><Show when={bar !== null}><span data-bar="" aria-hidden="true" class="pointer-events-none absolute inset-y-1 left-1 rounded-sm opacity-25" style={css({ width: `${Math.round((bar ?? 0) * 100)}%`, background: typeof column.bar === 'object' && column.bar.color ? column.bar.color : 'var(--chart-1)' })} /></Show><span class="relative">{cell(value, column, row, index())}</span></td>; }}</For></tr>;
+            return <tr ref={el} {...rowMeta(row)} data-index={index()} class="border-b border-border/50 transition-colors hover:bg-muted/30" {...attr('style', at()?.start == null ? undefined : css({ ...rowGrid(), position: 'absolute', top: '0px', left: '0px', transform: `translateY(${at()!.start}px)` }))}><For each={resolved()}>{column => { const value = () => row[column.col]; const bar = () => barFraction(value(), column); const tint = () => cellTint(value(), column); return <td {...rowMeta(row, column.col)} class={`relative whitespace-nowrap px-3 py-1.5 align-middle${column.type === 'number' ? ' tabular-nums' : ''}`} style={css({ 'text-align': column.align, width: column.width ? `${column.width}px` : undefined, background: tint() ?? undefined })}><Show when={bar() !== null}><span data-bar="" aria-hidden="true" class="pointer-events-none absolute inset-y-1 left-1 rounded-sm opacity-25" style={css({ width: `${Math.round((bar() ?? 0) * 100)}%`, background: typeof column.bar === 'object' && column.bar.color ? column.bar.color : 'var(--chart-1)' })} /></Show><span class="relative">{cell(value(), column, row, index)}</span></td>; }}</For></tr>;
           }}</For>
         </Show></tbody>
       </table>
@@ -361,17 +393,19 @@ function ChartSlot(props: { slot?: string; table: string; envelope: () => VizEnv
   let controller: IslandChart | undefined;
   let started = false;
   let disposed = false;
+  let cancelDraw = () => {};
   let drawing: Promise<DrawnChart | null> = Promise.resolve(null);
-  const draw = async () => {
+  const draw = () => {
     if (started) return;
     started = true;
-    // A render is in flight from here (render-readiness takes over once the view is built).
     const before = el.getAttribute(CHART_STATE_ATTR);
     el.setAttribute(CHART_STATE_ATTR, 'pending');
-    let module: IslandChartModule;
-    try { module = await (props.chart ?? island.loadChart)(); } catch { if (before) el.setAttribute(CHART_STATE_ATTR, before); started = false; return; } // a failed chunk fetch: keep what is shown; the next trigger retries
-    if (disposed) return;
-    controller = module.mountChart({ element: el, envelope: props.envelope(), rows: props.rows() });
+    cancelDraw = deferEngine(el, () => { void (async () => {
+      let module: IslandChartModule;
+      try { module = await (props.chart ?? island.loadChart)(); } catch { if (before) el.setAttribute(CHART_STATE_ATTR, before); started = false; return; } // a failed chunk fetch: keep what is shown; the next trigger retries
+      if (disposed) return;
+      controller = module.mountChart({ element: el, envelope: props.envelope(), rows: props.rows() });
+    })(); });
   };
   onMount(() => {
     el.removeAttribute(CHART_SLOT_ATTR);
@@ -387,9 +421,6 @@ function ChartSlot(props: { slot?: string; table: string; envelope: () => VizEnv
     if (started) return;
     void drawing.then(async current => { if (!started && !disposed && !(await drawingIsCurrent(current, rows))) void draw(); });
   }, { defer: true }));
-  onCleanup(() => { disposed = true; controller?.destroy(); });
+  onCleanup(() => { disposed = true; cancelDraw(); controller?.destroy(); });
   return <div ref={el} {...attr(CHART_SLOT_ATTR, isServer ? props.slot : undefined)} {...{ [CHART_STATE_ATTR]: 'pending' }} aria-label={chartLabel(props.envelope())} class="h-full w-full overflow-hidden [&_.vega-embed]:block [&_svg]:block" {...VEGA_CONTAINER} style="cursor: default;" onPointerEnter={() => void draw()} onClick={() => void draw()} />;
 }
-
-/** The embeds, loaded with the data family: their behaviour is a lazy chunk each (./embed). */
-export { Iframe, DeckGL } from './embed';

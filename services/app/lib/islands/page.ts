@@ -24,12 +24,15 @@ import { applyAnchor } from '@/lib/story-runtime/anchor';
 import { holdAnchor } from '@/lib/story-runtime/anchor-restore';
 import { readerMode, takeReloadAnchor } from '@/lib/story-runtime/reader-mode';
 import { chromeAfterSample, type ChromeState } from '@/lib/story-runtime/reader-chrome-policy';
+import { wireOutline } from '@/lib/story-runtime/outline-nav';
+import { markScrollableTables } from '@/lib/story-runtime/table-scroll';
 import { startIslandLive } from './live';
 import { ISLANDS_READY_EVENT, ISLAND_DOCUMENT_KEY, type IslandHost } from './contract';
 import type { MxApi } from '@artifactbin/contracts';
 
 /** The private root handle boot removes on edit/dispose; repeated here to keep boot out of page's chunk. */
 const PUBLIC_MX_KEY = '__mxPublicApi';
+import { PAGE_TAKEOVER_EVENT } from './page-lifetime';
 
 const STORY_ROOT_SELECTOR = '[data-mx-inline-story]';
 /**
@@ -69,8 +72,6 @@ export function startPage(doc: Document = document, win: Window = window): () =>
       el?.classList.toggle('light', mode !== 'dark');
     }
   }
-  if (framed) return () => {};
-
   const stops: Array<() => void> = [];
   // The public page API is a separate lazy chunk: browser sessions need it even when the
   // React app waits for intent. Boot owns its lifetime through the root's private handle.
@@ -90,6 +91,9 @@ export function startPage(doc: Document = document, win: Window = window): () =>
   doc.addEventListener(ISLANDS_READY_EVENT, installPublicMx);
   stops.push(() => doc.removeEventListener(ISLANDS_READY_EVENT, installPublicMx));
   if (html.hasAttribute('data-mx-ready')) installPublicMx();
+  // These document affordances also run inside a frame, like the legacy page entry.
+  stops.push(markScrollableTables(doc), wireOutline(doc));
+  if (framed) return () => { for (const stop of stops.splice(0)) stop(); };
   const id = doc.body?.getAttribute('data-mx-live-id');
   const editId = doc.body?.getAttribute('data-mx-live-edit');
   const hasModule = !!doc.getElementById(ISLAND_DATA_ID);
@@ -100,7 +104,12 @@ export function startPage(doc: Document = document, win: Window = window): () =>
 
   const kept = takeReloadAnchor(win);
   if (kept) stops.push(holdAnchor(win, kept, applyAnchor));
-  return () => { for (const stop of stops.splice(0)) stop(); };
+  const stop = () => {
+    win.removeEventListener(PAGE_TAKEOVER_EVENT, stop);
+    for (const release of stops.splice(0)) release();
+  };
+  win.addEventListener(PAGE_TAKEOVER_EVENT, stop, { once: true });
+  return stop;
 }
 
 if (typeof document !== 'undefined' && typeof window !== 'undefined') startPage();

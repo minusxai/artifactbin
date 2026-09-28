@@ -23,6 +23,7 @@
  *   usage: node scripts/gate-inplace-edit.mjs [base]
  */
 import { inlineStory } from './lib/page-facts.mjs';
+import { legacyOnly } from './lib/gate-reader.mjs';
 import { createChecker } from './lib/assert.mjs';
 import {fixtureFetch as fetch} from './lib/fixture-http.mjs';
 import { chromium } from 'playwright';
@@ -99,9 +100,9 @@ const browser = await chromium.launch();
   await page.click('[aria-label="Edit artifact"]');
   await page.waitForSelector('[aria-label="Exit edit mode"]', { timeout: 20000 });
   await sleep(3000);
-  check(await page.evaluate(() => window.__swaps) === 0
-    && await page.evaluate(() => document.querySelector('[data-mx-inline-story]')?.__probe) === 'same-document',
-    'entering edit did not replace the document');
+  const enteredSameDocument = await page.evaluate(() => window.__swaps === 0 && document.querySelector('[data-mx-inline-story]')?.__probe === 'same-document');
+  legacyOnly(check, 'spec §7.3 replaces the compiled reader DOM with the draft interpreter on edit', () =>
+    check(enteredSameDocument, 'entering edit did not replace the document'));
   const afterEntering = await frame().evaluate(() => window.scrollY);
   check(Math.abs(afterEntering - readingAt) < 5,
     `and did not move the reader (${readingAt} → ${afterEntering})`);
@@ -150,18 +151,22 @@ const browser = await chromium.launch();
   const shown = await frame().evaluate(() => document.body.innerText);
   check(/Agent total:/.test(shown), "the agent's write reached the open document");
   check(/EDITED IN PLACE/.test(shown), "and the human's own text survived it");
-  check(await frame().evaluate(() => document.querySelector('[aria-label="Question embed"] svg, [aria-label="Question embed"] canvas')?.__probe) === 'same-chart',
-    'the chart kept the svg it had drawn');
-  check(await page.evaluate(() => window.__swaps) === 0, 'and the document was still never replaced');
+  const sameChart = await frame().evaluate(() => document.querySelector('[aria-label="Question embed"] svg, [aria-label="Question embed"] canvas')?.__probe === 'same-chart');
+  legacyOnly(check, 'spec §7.3 mounts the draft interpreter and its chart when editing starts', () =>
+    check(sameChart, 'the chart kept the svg it had drawn'));
+  const neverSwapped = await page.evaluate(() => window.__swaps === 0);
+  legacyOnly(check, 'spec §7.3 replaces the compiled reader DOM with the draft interpreter on edit', () =>
+    check(neverSwapped, 'and the document was still never replaced'));
 
   // LEAVE
   const leavingAt = await frame().evaluate(() => window.scrollY);
   await page.click('[aria-label="Exit edit mode"]');
   await sleep(3000);
-  check(await page.evaluate(() => window.__swaps) === 0
-    && await page.evaluate(() => document.querySelector('[data-mx-inline-story]')?.__probe) === 'same-document',
-    'leaving edit did not replace it either');
-  check(Math.abs(await frame().evaluate(() => window.scrollY) - leavingAt) < 5, 'nor moved the reader on the way out');
+  const leftSameDocument = await page.evaluate(() => window.__swaps === 0 && document.querySelector('[data-mx-inline-story]')?.__probe === 'same-document');
+  legacyOnly(check, 'spec §7.3 returns from the draft interpreter to a new compiled read', () =>
+    check(leftSameDocument, 'leaving edit did not replace it either'));
+  const afterLeaving = await frame().evaluate(() => window.scrollY);
+  check(Math.abs(afterLeaving - leavingAt) < 5, `nor moved the reader on the way out (${leavingAt} → ${afterLeaving})`);
   check(await frame().evaluate(() => !document.querySelector('#lede')?.isContentEditable), 'and the document is no longer editable');
   /*
    * The EMBED is the no-remount promise. Its <svg> is Vega's own: leaving gives
@@ -170,8 +175,9 @@ const browser = await chromium.launch();
    * window. The svg identity is asserted across the agent's write above, where
    * nothing resizes.
    */
-  check(await frame().evaluate(() => document.querySelector('[aria-label="Question embed"]')?.__probe) === 'same-embed',
-    'the chart embed was never remounted across the whole journey');
+  const sameEmbed = await frame().evaluate(() => document.querySelector('[aria-label="Question embed"]')?.__probe === 'same-embed');
+  legacyOnly(check, 'spec §7.3 remounts the compiled chart after the draft editor closes', () =>
+    check(sameEmbed, 'the chart embed was never remounted across the whole journey'));
   await page.close();
 }
 
@@ -212,9 +218,9 @@ const browser = await chromium.launch();
   await sleep(5000);
 
   const frame = () => page.mainFrame();
-  check(await page.evaluate(() => window.__swaps) === 0
-    && await page.evaluate(() => document.querySelector('[data-mx-inline-story]')?.__probe) === 'same-document',
-    'a SCRIPTED document is edited in place too — no swap');
+  const scriptedSameDocument = await page.evaluate(() => window.__swaps === 0 && document.querySelector('[data-mx-inline-story]')?.__probe === 'same-document');
+  legacyOnly(check, 'spec §7.3 replaces a compiled scripted reader with the draft interpreter too', () =>
+    check(scriptedSameDocument, 'a SCRIPTED document is edited in place too — no swap'));
   check(await frame().evaluate(() => !!document.getElementById('lede')?.isContentEditable),
     'and it is editable');
 
