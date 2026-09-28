@@ -60,6 +60,9 @@ describe('references/apps.md', () => {
     }
     // Each identity tests its own authorized disposable copy.
     expect(text).toContain('afbin fork abc123 --json');
+    expect(text).toContain('A path-only result is an unpublished local draft');
+    expect(text).toContain('replace its Import references');
+    expect(text).toContain('Never fall back to testing writes on the original');
     expect(text).toMatch(/afbin sessions script new --input [^\n]*# you, on your own copy/);
     // The gap itself: a COPY, what a clean pass proves, and that nothing reaches the original.
     expect(text).toMatch(/A test user verifies a COPY/);

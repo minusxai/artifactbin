@@ -507,6 +507,7 @@ test('a published page that declares a write is told the push did not run it',as
   assert.match(result.next,/add/);
   assert.match(result.next,/live session/);
   assert.match(result.next,/each identity.s own authorized disposable fork/);
+  assert.match(result.next,/local fork draft can still reference original data/);
   assert.doesNotMatch(result.next,/on a test-user fork, once as that test user and once as yourself/);
   assert.match(result.next,/--as guest/);
   assert.match(result.next,/afbin help live-sessions/);
