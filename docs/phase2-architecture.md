@@ -284,7 +284,12 @@ not committed — established:
   during a rolling deploy) → recompile inline under `COMPILE_INLINE_BUDGET_MS`; over budget or on error
   → today's renderer for this request, the warm-up queue recompiles.
 - `unported` components in a version → the compile is refused (a page must be whole) → today's
-  renderer; the parity gate's kitchen sink is the list of what must be ported before `on`.
+  renderer. Since w3-compiler-coverage the set is empty: a registered component with no Solid port
+  (`Slide`, `SlideDeck`, `Icon`, the `Table` family, …) that holds an island, a `$` value or a row
+  compiles as a SHELL — today's React kit renders it at compile time around a hole its compiled
+  children fill (a row's attributes filled per row by `rt.rowAttrs`) — and an unregistered legacy tag
+  (`<Param>`) renders nothing, as the interpreter does. `compiler-coverage.test.ts` asserts every
+  registered component has a compile path in every context.
 - Snapshot missing or too old → the request runs the shared queries within `SERVED_RESULTS_BUDGET_MS`
   exactly as served results do today; otherwise declarations without rows and the page fetches.
 - Module store unavailable → the module URL 404s → the page is static HTML with inert islands; the
@@ -296,6 +301,30 @@ not committed — established:
 Every fallback is observable: the response carries `x-mx-reader: compiled | legacy` and an
 `x-mx-reader-fallback: <reason>` when a compiled path fell back, which is what the parity gate and the
 size check read.
+
+### 6.1 The fallback contract after Wave 4
+
+Today's renderer is the fallback above only while it exists. The contract without it is implemented
+now, behind one switch in `lib/compiled-page/serve.server.ts`, `fallbackPolicy()`: it returns
+`legacy` (everything above) until Wave 4, and w4-flip-docs deletes the switch and every `legacy`
+branch, leaving `compiled-only`:
+
+| Reason | `legacy` (today) | `compiled-only` (after Wave 4) |
+|--------|------------------|--------------------------------|
+| `not-compiled` | today's renderer | compile inline and wait; one compile per version shared by concurrent readers |
+| `build-mismatch` | recompile under the budget, else today's renderer | compile inline and wait |
+| `over-budget` | today's renderer; the detached compile writes back | never an answer: the budget only decides whether the inline compile is logged as slow |
+| `compile-error` | today's renderer, logged once per version | a 500 (`CompiledReaderAnswer` `{ mode: 'failed' }`; `/raw` answers it, the app page throws `CompiledPageFailed`), reported on every occurrence (`console.error`, `compiledPageFailures()`); it must stay at zero (the census: 0) |
+| `unported` | today's renderer | never reached: the set is empty (above); a stored compile missing the version's author script is recompiled once, then a 500 |
+
+The routes already translate `failed`, so the deletion track removes only the `legacy` branches and
+the switch.
+
+Backfill after a deploy: `scripts/compiled-backfill.ts` (its header is the runbook). A prepared page is
+keyed by the serving process's own build, so the script only decides what to warm and the RUNNING
+server prepares and compiles each version through its reader door (`/a/<id>/raw?reader=compiled`,
+admitted by a one-minute export key); it resumes by the key suffix this deployment stores, and ends
+with the census read from the database.
 
 ## 7. Coexistence with the React app and the editor
 

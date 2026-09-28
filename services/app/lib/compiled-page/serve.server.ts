@@ -39,6 +39,19 @@
  *
  * Any other throw is a `compile-error` fallback: a reader never gets a 500
  * because the compiled path failed.
+ *
+ * THE FALLBACK CONTRACT (spec §6) is one switch, `fallbackPolicy()`:
+ *  - `legacy` (today): every reason above answers `{ mode: 'legacy' }` and the
+ *    route serves today's renderer for this request.
+ *  - `compiled-only` (once Wave 4 deletes today's reader; w4-flip-docs removes
+ *    the switch and the `legacy` branch): `not-compiled` and `build-mismatch`
+ *    compile inline and WAIT (one compile per version shared by concurrent
+ *    readers); `over-budget` is gone — the budget only decides whether the
+ *    inline compile is logged as slow; `compile-error` (and any reason still
+ *    left after the wait) answers `{ mode: 'failed', status: 500 }`, reported
+ *    on every occurrence (`console.error` and `compiledPageFailures()`), and it
+ *    must stay at zero; `unported` is never reached — every registered
+ *    component has a compile path (compiler-coverage.test.ts asserts it).
  */
 import { parseFragment } from 'parse5';
 import { createHash } from 'node:crypto';
@@ -116,9 +129,48 @@ export interface CompiledReaderRequest {
 
 export type CompiledReaderAnswer =
   | { mode: 'compiled'; html: string; headers: Readonly<Record<string, string>> }
-  | { mode: 'legacy'; fallback: ReaderFallbackReason };
+  | { mode: 'legacy'; fallback: ReaderFallbackReason }
+  /** `compiled-only`: the compiled page could not be made; the route answers 500 (there is no other renderer). */
+  | { mode: 'failed'; reason: ReaderFallbackReason; status: 500 };
 
 const fallback = (reason: ReaderFallbackReason): CompiledReaderAnswer => ({ mode: 'legacy', fallback: reason });
+
+/* ──────────────────────────────────────────────────────────────────────────
+ * The fallback contract (spec §6)
+ * ────────────────────────────────────────────────────────────────────────── */
+
+/**
+ * What a read does when the stored compile cannot be served as it is. `legacy`: today's renderer
+ * answers the request. `compiled-only`: the read compiles inline and waits, and a compile that still
+ * fails is a 500 — the contract once today's reader is deleted.
+ */
+export type FallbackPolicy = 'legacy' | 'compiled-only';
+let policyOverride: FallbackPolicy | null = null;
+/** A test's override for its file; the product never calls it. */
+export function setFallbackPolicyForTests(policy: FallbackPolicy | null): void { policyOverride = policy; }
+/**
+ * THE SWITCH. `legacy` until Wave 4 deletes today's reader; w4-flip-docs removes this function, its
+ * override and every `legacy` branch below, leaving `compiled-only` as the only behaviour.
+ */
+export function fallbackPolicy(): FallbackPolicy { return policyOverride ?? 'legacy'; }
+
+/** Thrown by a page that has no other way to answer a `failed` read (lib/artifact-page): the server answers 500. */
+export class CompiledPageFailed extends Error {
+  constructor(readonly artifactId: string, readonly reason: ReaderFallbackReason) {
+    super(`compiled page ${artifactId} could not be rendered (${reason})`);
+    this.name = 'CompiledPageFailed';
+  }
+}
+
+let failures = 0;
+/** How many reads this process answered 500 because the compiled page could not be made (it must stay at zero). */
+export const compiledPageFailures = (): number => failures;
+/** A failed compiled read: reported on EVERY occurrence, never once per version — it is an incident, not a known state. */
+function failed(row: ArtifactRow, reason: ReaderFallbackReason, detail: string): CompiledReaderAnswer {
+  failures += 1;
+  console.error(`[compiled-page] FAILED ${row.id} v${row.version} (${reason}): ${detail}`);
+  return { mode: 'failed', reason, status: 500 };
+}
 
 /** A stored compile this deployment can serve, or the reason it cannot. */
 type Usable = { page: CompiledPage } | { reason: ReaderFallbackReason };
@@ -135,14 +187,40 @@ function logOnce(row: ArtifactRow, reason: ReaderFallbackReason, detail: string)
 
 const usableOf = (stored: StoredCompile): Usable => (isCompileFailure(stored) ? { reason: stored.reason } : { page: stored });
 
-/** Step 1: the stored compile, recompiled inline when it is from another build. */
-async function compiledOf(row: ArtifactRow, page: PreparedPage, at: ArchivedRender | null, build: CompilerBuild): Promise<Usable> {
+/** Inline compiles in flight, by version and build: concurrent readers of one uncompiled version share one. */
+const compiling = new Map<string, Promise<StoredCompile | null>>();
+
+/**
+ * `compiled-only`: this build's compile of the version, made now and WAITED for. The budget no longer
+ * decides the answer, only whether the compile is logged as slow.
+ */
+async function compileAndWait(row: ArtifactRow, page: PreparedPage, at: ArchivedRender | null, build: CompilerBuild): Promise<Usable> {
+  const key = `${row.id}\u0000${at ? `v:${at.version}` : 'head'}\u0000${row.version}\u0000${build.id}`;
+  let running = compiling.get(key);
+  if (!running) {
+    const started = Date.now();
+    running = recompilePage(row, at, page).finally(() => {
+      compiling.delete(key);
+      const ms = Date.now() - started;
+      if (ms > COMPILE_INLINE_BUDGET_MS) console.warn(`[compiled-page] ${row.id} v${row.version} compiled inline in ${ms} ms (over the ${COMPILE_INLINE_BUDGET_MS} ms budget)`);
+    });
+    compiling.set(key, running);
+  }
+  const compiled = await running;
+  if (!compiled || compiled.build !== build.id) return { reason: 'build-mismatch' };
+  if (isCompileFailure(compiled)) logOnce(row, compiled.reason, compiled.error);
+  return usableOf(compiled);
+}
+
+/** Step 1: the stored compile, recompiled inline when it is missing or from another build. */
+async function compiledOf(row: ArtifactRow, page: PreparedPage, at: ArchivedRender | null, build: CompilerBuild, policy: FallbackPolicy): Promise<Usable> {
   const stored = page.compiled;
-  if (!stored) return { reason: 'not-compiled' };
-  if (stored.build === build.id) {
+  if (stored?.build === build.id) {
     if (isCompileFailure(stored)) logOnce(row, stored.reason, stored.error);
     return usableOf(stored);
   }
+  if (policy === 'compiled-only') return compileAndWait(row, page, at, build);
+  if (!stored) return { reason: 'not-compiled' };
   // Deploy lag or a compile made without an island build: this build's compile, within the budget.
   let timer: ReturnType<typeof setTimeout> | undefined;
   const late = new Promise<'late'>((resolve) => { timer = setTimeout(() => resolve('late'), COMPILE_INLINE_BUDGET_MS); });
@@ -290,22 +368,30 @@ export const domainFooter = (href: string): { html: string; css: string } => ({
  * is served by today's renderer instead.
  */
 export async function compiledPageFor(row: ArtifactRow, page: PreparedPage, reader: CompiledReaderRequest): Promise<CompiledReaderAnswer> {
+  const policy = fallbackPolicy();
+  // Today: today's renderer answers. Once it is deleted: a 500, reported (spec §6).
+  const refuse = (reason: ReaderFallbackReason, detail: string): CompiledReaderAnswer => (policy === 'legacy' ? fallback(reason) : failed(row, reason, detail));
   try {
     let build: CompilerBuild;
     try {
       build = loadCompilerBuild();
     } catch (error) {
       logOnce(row, 'build-mismatch', error instanceof Error ? error.message : String(error));
-      return fallback('build-mismatch');
+      return refuse('build-mismatch', error instanceof Error ? error.message : String(error));
     }
-    const usable = await compiledOf(row, page, reader.at, build);
-    if ('reason' in usable) return fallback(usable.reason);
-    const compiled = usable.page;
+    let usable = await compiledOf(row, page, reader.at, build, policy);
+    if ('reason' in usable) return refuse(usable.reason, 'the version has no compile this build can serve');
     // The author's script runs from the compiled page's data (boot's lazy author host). A compile that
     // does not carry this version's script would serve the page without it: a page must be whole.
-    if ((page.authorScript || null) !== (compiled.authorScript || null)) {
+    const carriesScript = (compiled: CompiledPage) => (page.authorScript || null) === (compiled.authorScript || null);
+    if (!carriesScript(usable.page) && policy === 'compiled-only') {
+      usable = await compileAndWait(row, page, reader.at, build);
+      if ('reason' in usable) return refuse(usable.reason, 'the version has no compile this build can serve');
+    }
+    const compiled = usable.page;
+    if (!carriesScript(compiled)) {
       logOnce(row, 'unported', 'the stored compile does not carry the version\'s author script');
-      return fallback('unported');
+      return refuse('unported', 'the stored compile does not carry the version\'s author script');
     }
 
     const flow = page.declared?.flow ?? null;
@@ -356,9 +442,10 @@ export async function compiledPageFor(row: ArtifactRow, page: PreparedPage, read
     return { mode: 'compiled', html: assembled.html, headers: assembled.headers };
   } catch (error) {
     // `IslandSsrUnavailable` (the shared build has no server half for a kit module) and every other
-    // failure of this path: today's renderer answers, never a 500.
-    logOnce(row, 'compile-error', error instanceof Error ? error.message : String(error));
-    return fallback('compile-error');
+    // failure of this path: today's renderer answers while it exists, never a 500; after, a reported 500.
+    const detail = error instanceof Error ? error.message : String(error);
+    logOnce(row, 'compile-error', detail);
+    return refuse('compile-error', detail);
   }
 }
 
