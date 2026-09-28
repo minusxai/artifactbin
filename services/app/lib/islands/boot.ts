@@ -72,6 +72,8 @@ export interface IslandMorphSeam {
   readonly modules: WeakMap<readonly IslandEntry[], IslandModule>;
   /** Set by the engine while it imports a newer version's module: that module's `boot` hands it in here. */
   take?: (module: IslandModule) => void;
+  /** Replace only the sandboxed author realm after a version changes its source. */
+  restartAuthor(source: string | null): Promise<void>;
 }
 export type MorphableIslandDocument = IslandDocument & { morph?: IslandMorphSeam };
 
@@ -218,8 +220,16 @@ export function boot(input: IslandModule | readonly IslandEntry[], win: Window =
   let ready = false;
   let disposed = false;
   let stopAuthor = () => {};
+  let authorGeneration = 0;
+  const restartAuthor = async (source: string | null) => {
+    const generation = ++authorGeneration;
+    stopAuthor();
+    if (!source) return;
+    const { startAuthorHost } = await import('./author-host');
+    if (generation === authorGeneration && !disposed && mode === 'read') stopAuthor = startAuthorHost(source, store, doc);
+  };
   const islandDocument: MorphableIslandDocument = {
-    morph: { islands, hydrate, modules: new WeakMap([[module.ISLANDS, module]]) },
+    morph: { islands, hydrate, modules: new WeakMap([[module.ISLANDS, module]]), restartAuthor },
     root,
     store,
     context,
@@ -265,10 +275,6 @@ export function boot(input: IslandModule | readonly IslandEntry[], win: Window =
 
   // The author's script, never in this document: its host (and the sandboxed frame) load only when the version has one.
   const authorScript = typeof data.authorScript === 'string' && data.authorScript ? data.authorScript : null;
-  if (authorScript) {
-    void import('./author-host').then(({ startAuthorHost }) => {
-      if (!disposed && mode === 'read') stopAuthor = startAuthorHost(authorScript, store, doc);
-    }).catch((error: unknown) => console.error('[islands] author host failed', error));
-  }
+  if (authorScript) void restartAuthor(authorScript).catch((error: unknown) => console.error('[islands] author host failed', error));
   return islandDocument;
 }

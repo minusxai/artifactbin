@@ -1,7 +1,7 @@
 /**
  * THE DECK'S CHROME BEHAVIOUR (`@mx/deck`, a compiled page's `behaviors: ['deck']`), with NO
- * framework. The rail and the present bar are static server HTML (their thumbnails are big and never
- * change); this only tracks the active slide on scroll, marks `aria-current`, pages on clicks and
+ * framework. The rail and the present bar are server HTML; this tracks the active slide on scroll,
+ * keeps thumbnail text leaves in sync, marks `aria-current`, pages on clicks and
  * keys, and toggles fullscreen — what StoryRuntimeApp's SlideRail, PresentBar and useSlideChrome do
  * in React. The markup it drives is the compiler's static deck chrome: `.mx-rail .mx-rail-row`,
  * `.mx-present` (with its labelled buttons and `.mx-present-count`) and `[data-mx-slide]` slides.
@@ -21,16 +21,22 @@ import { ISLANDS_READY_EVENT } from './contract';
 export const RAIL_THUMB_ATTR = 'data-mx-thumb';
 
 export function startDeck(doc: Document = document, win: Window = window): () => void {
-  for (const held of doc.querySelectorAll<HTMLTemplateElement>(`.mx-rail template[${RAIL_THUMB_ATTR}]`)) held.replaceWith(doc.importNode(held.content, true));
+  const revealThumbs = () => {
+    for (const held of doc.querySelectorAll<HTMLTemplateElement>(`.mx-rail template[${RAIL_THUMB_ATTR}]`)) held.replaceWith(doc.importNode(held.content, true));
+  };
+  revealThumbs();
   // The document's slides, NOT the rail's miniatures (a thumbnail renders a real slide, stamps included):
   // StoryRuntimeApp documentSlides.
   const slides = () => [...doc.querySelectorAll<HTMLElement>('.mx-doc [data-mx-slide]')];
-  const rows = [...doc.querySelectorAll<HTMLElement>('.mx-rail .mx-rail-row')];
-  const column = doc.querySelector<HTMLElement>('.mx-doc');
+  const rows = () => [...doc.querySelectorAll<HTMLElement>('.mx-rail .mx-rail-row')];
+  const bar = () => doc.querySelector<HTMLElement>('.mx-present');
+  const present = () => bar()?.querySelector<HTMLElement>('[aria-label="Present"],[aria-label="Exit presentation"]') ?? null;
+  const column = () => doc.querySelector<HTMLElement>('.mx-doc');
   const syncPreview = () => {
-    const live = new Map([...column?.querySelectorAll<HTMLElement>('[data-mx-ast]') ?? []].map((node) => [node.getAttribute('data-mx-ast'), node]));
+    const currentColumn = column();
+    const live = new Map([...currentColumn?.querySelectorAll<HTMLElement>('[data-mx-ast]') ?? []].map((node) => [node.getAttribute('data-mx-ast'), node]));
     const previewSlides = [...doc.querySelectorAll<HTMLElement>('.mx-rail [data-mx-slide]')];
-    const liveSlides = [...column?.querySelectorAll<HTMLElement>('[data-mx-slide]') ?? []];
+    const liveSlides = [...currentColumn?.querySelectorAll<HTMLElement>('[data-mx-slide]') ?? []];
     for (const preview of doc.querySelectorAll<HTMLElement>('.mx-rail [data-mx-ast]')) {
       const railSlide = preview.closest<HTMLElement>('[data-mx-slide]');
       const index = railSlide ? previewSlides.indexOf(railSlide) : -1;
@@ -43,11 +49,13 @@ export function startDeck(doc: Document = document, win: Window = window): () =>
     }
   };
   syncPreview();
-  const previewObserver = column ? new MutationObserver(syncPreview) : null;
-  if (column) previewObserver?.observe(column, { subtree: true, childList: true, characterData: true, attributes: true });
-  const bar = doc.querySelector<HTMLElement>('.mx-present');
-  const count = bar?.querySelector<HTMLElement>('.mx-present-count') ?? null;
-  const present = bar?.querySelector<HTMLElement>('[aria-label="Present"],[aria-label="Exit presentation"]') ?? null;
+  const previewObserver = new MutationObserver(syncPreview);
+  const observeColumn = () => {
+    previewObserver.disconnect();
+    const currentColumn = column();
+    if (currentColumn) previewObserver.observe(currentColumn, { subtree: true, childList: true, characterData: true, attributes: true });
+  };
+  observeColumn();
   let active = 0;
   const cleanups: Array<() => void> = [];
   const on = <K extends string>(target: EventTarget | null | undefined, type: K, listener: (event: Event) => void, options?: AddEventListenerOptions) => {
@@ -57,7 +65,8 @@ export function startDeck(doc: Document = document, win: Window = window): () =>
   };
 
   const paint = () => {
-    rows.forEach((row, i) => row.setAttribute('aria-current', String(i === active)));
+    rows().forEach((row, i) => row.setAttribute('aria-current', String(i === active)));
+    const count = bar()?.querySelector<HTMLElement>('.mx-present-count');
     if (count) count.textContent = `${active + 1} / ${slides().length}`;
   };
   const onScroll = () => {
@@ -71,17 +80,34 @@ export function startDeck(doc: Document = document, win: Window = window): () =>
     all[Math.max(0, Math.min(index, all.length - 1))]?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   };
 
-  rows.forEach((row, i) => on(row, 'click', () => go(i)));
-  on(bar?.querySelector('[aria-label="Previous slide"]'), 'click', () => go(active - 1));
-  on(bar?.querySelector('[aria-label="Next slide"]'), 'click', () => go(active + 1));
-  on(present, 'click', () => {
-    if (doc.fullscreenElement) void doc.exitFullscreen?.();
-    else void doc.documentElement.requestFullscreen?.()?.catch(() => {});
+  on(doc, 'click', (event) => {
+    const row = (event.target as Element).closest('.mx-rail-row');
+    if (row?.closest('.mx-rail')) { go(rows().indexOf(row as HTMLElement)); return; }
+    const control = (event.target as Element).closest('.mx-present button');
+    if (!control) return;
+    const label = control.getAttribute('aria-label');
+    if (label === 'Previous slide') go(active - 1);
+    else if (label === 'Next slide') go(active + 1);
+    else if (label === 'Present' || label === 'Exit presentation') {
+      if (doc.fullscreenElement) void doc.exitFullscreen?.();
+      else void doc.documentElement.requestFullscreen?.()?.catch(() => {});
+    }
+  });
+  on(doc, 'mx:deck-morphed', (event) => {
+    revealThumbs();
+    observeColumn();
+    syncPreview();
+    const id = (event as CustomEvent<{ slideId?: string | null }>).detail?.slideId;
+    const index = id ? slides().findIndex((slide) => slide.id === id) : -1;
+    if (index >= 0) active = index;
+    else onScroll();
+    paint();
   });
   on(doc, 'fullscreenchange', () => {
     const full = !!doc.fullscreenElement;
-    present?.setAttribute('aria-label', full ? 'Exit presentation' : 'Present');
-    if (present) present.textContent = full ? 'exit' : 'present';
+    const button = present();
+    button?.setAttribute('aria-label', full ? 'Exit presentation' : 'Present');
+    if (button) button.textContent = full ? 'exit' : 'present';
   });
   on(win, 'keydown', (event) => {
     const e = event as KeyboardEvent;
@@ -101,4 +127,4 @@ export function startDeck(doc: Document = document, win: Window = window): () =>
   return () => { previewObserver?.disconnect(); for (const cleanup of cleanups.splice(0)) cleanup(); };
 }
 
-if (typeof document !== 'undefined' && typeof window !== 'undefined') startDeck();
+if (typeof document !== 'undefined' && typeof window !== 'undefined' && document.querySelector('.mx-rail')) startDeck();
