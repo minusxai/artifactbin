@@ -26,6 +26,17 @@ const B = process.argv[2] ?? 'http://localhost:3030';
 const READER_PARAM = process.env.GATE_READER === 'compiled' ? 'reader=compiled' : '';
 const readerUrl = (url) => (READER_PARAM ? `${url}${url.includes('?') ? '&' : '?'}${READER_PARAM}` : url);
 const check = createChecker('dataflow');
+/**
+ * The document's realm once it is live. Today's reader: the React root the app hydrated. The compiled
+ * reader: the served page itself, once its islands have hydrated (`<html data-mx-ready>`) — the app
+ * adopts it only on intent for a reader who cannot edit (docs/phase2-architecture.md §7), so no React
+ * root need ever appear.
+ */
+const liveDocument = async (page) => {
+  if (!READER_PARAM) return artifactDocument(page);
+  await page.locator('html[data-mx-ready] [data-mx-inline-story]').first().waitFor({ timeout: 30_000, state: 'visible' });
+  return page.mainFrame();
+};
 /** Armed BEFORE a navigation: resolves once that page has loaded its SQLite engine's wasm (false after 20 s). */
 const engineLoads = (page) => page.waitForResponse((r) => r.url().endsWith('.wasm') && r.ok(), { timeout: 20000 }).then(() => true, () => false);
 
@@ -229,7 +240,7 @@ reader.on('request', (r) => {
 const privResp = await reader.goto(readerUrl(`${B}/a/${priv.id}`), { waitUntil: 'load' });
 check(privResp.status() === 200, `the admitted reader opens the private document (${privResp.status()})`);
 check((await reader.locator('[data-mx-inline-story]').count()) === 1, 'the admitted private document renders inline after its ACL');
-const pf = await artifactDocument(reader);
+const pf = await liveDocument(reader);
 await pf.waitForFunction(() => document.querySelector('[aria-label="Live number"]')?.textContent === '$30', null, { timeout: 20000 }).catch(() => {});
 check((await pf.textContent('[aria-label="Live number"]').catch(() => '')) === '$30', 'the private document renders its server-run data for the reader');
 await pf.selectOption('select[aria-label="Region"]', 'NA');
@@ -287,7 +298,7 @@ await up.close();
 let frameLoads = 0;
 owner.on('domcontentloaded', () => { frameLoads++; });
 await owner.goto(readerUrl(`${B}/a/${udoc.id}?$region=west`), { waitUntil: 'load' });
-const ownerFrame = await artifactDocument(owner);
+const ownerFrame = await liveDocument(owner);
 await ownerFrame.waitForFunction(() => document.querySelector('[aria-label="Live number"]')?.textContent?.startsWith('$'), null, { timeout: 20000 }).catch(() => {});
 check(ownerFrame.url().includes('$region=west'), `the owner document receives the link's selection (${new URL(ownerFrame.url()).search})`);
 check((await ownerFrame.$eval('select[aria-label="Region"]', (el) => el.value)) === 'west', 'the owner control shows it');

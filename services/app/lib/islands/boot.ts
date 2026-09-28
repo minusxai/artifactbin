@@ -97,7 +97,7 @@ function lazyEngine(load: () => Promise<PageEngine>, identified: () => boolean):
         if (closed) return made.close();
         engine = made;
         for (const [f, i] of asked.splice(0)) made.prepare(f, i);
-      }, (error: unknown) => console.error('[islands] the page engine did not load', error));
+      }, () => {});
     },
     ready: (flow, imports) => !!engine && identified() && engine.ready(flow, imports),
     invalidate: (refs) => engine?.invalidate(refs),
