@@ -392,7 +392,7 @@ the reader flag removal. The line counts below were measured before deletion.
 | runtime class merging in the reader (`tailwind-merge`/`clsx`/`cva` in reader chunks) | 9.0 KB gz | classes resolved at publish | #177 |
 | `lib/story/served-results.server.ts` | 173 | snapshots | #175 |
 | Radix wrappers used only by the reader | per component | vendored kit | #177 (the editor's use stays until Phase 3) |
-| reader flag and `?reader=` selection | — | one compiled reader path | this PR |
+| reader flag and `?reader=` selection | — | one compiled reader path | #183 |
 
 `StoryRuntimeApp.tsx`, the interpreter and the registry stay for the editor's drafts and for
 static-component rendering at publish until Phase 3.

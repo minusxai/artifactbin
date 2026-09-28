@@ -3,7 +3,6 @@ import { mergeGuestIntoAccount } from './lib/start-doc.mjs';
 import { servedTopLevel } from './lib/page-facts.mjs';
 import { createChecker } from './lib/assert.mjs';
 import {fixtureFetch as fetch} from './lib/fixture-http.mjs';
-import { artifactDocument } from './lib/artifact-document.mjs';
 /**
  * Dataflow browser gate: publish diagnostics; signal/query subscriptions;
  * authenticated document-scoped POST transport for the first paint and for
@@ -23,13 +22,12 @@ const B = process.argv[2] ?? 'http://localhost:3030';
 const readerUrl = (url) => url;
 const check = createChecker('dataflow');
 /**
- * The document's realm once it is live. Today's reader: the React root the app hydrated. The compiled
- * reader: the served page itself, once its islands have hydrated (`<html data-mx-ready>`) — the app
+ * The document's realm once it is live: the served page itself, once its islands
+ * have hydrated (`<html data-mx-ready>`) — the app
  * adopts it only on intent for a reader who cannot edit (docs/phase2-architecture.md §7), so no React
  * root need ever appear.
  */
 const liveDocument = async (page) => {
-  if (!READER_PARAM) return artifactDocument(page);
   await page.locator('html[data-mx-ready] [data-mx-inline-story]').first().waitFor({ timeout: 30_000, state: 'visible' });
   return page.mainFrame();
 };

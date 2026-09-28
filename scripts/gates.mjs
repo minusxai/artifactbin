@@ -89,7 +89,7 @@ if (args.includes('--browsers')) {
   process.exit(0);
 }
 if (args.includes('--needs-postgres')) {
-  console.log(selected.some((gate) => gate.name === 'postgres-datasets'));
+  console.log(selected.map((gate) => gate.name).includes('postgres-datasets'));
   process.exit(0);
 }
 
