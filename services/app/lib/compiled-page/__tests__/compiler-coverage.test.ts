@@ -184,6 +184,25 @@ describe('the compiled-parity gate\'s wrapper fixtures', () => {
   }
 });
 
+describe('the static part of a large document', () => {
+  it('is today\'s React render carried as HTML beside the skeleton, never through the skeleton module, and spliced whole', async () => {
+    const rows = Array.from({ length: 400 }, (_, i) => `<TableRow><TableCell className="font-mono">row ${i} &amp; "q" 'a' &lt;b&gt;</TableCell><TableCell>${i}</TableCell></TableRow>`).join('');
+    const source = `<Helmet><Value name="q" type="string" default="Ada" /></Helmet><div id="w"><h1 id="h">Big</h1><Table id="t"><TableBody>${rows}</TableBody></Table><p id="live">Hello {$q}</p><mx-static data-i="0" id="own"></mx-static></div>`;
+    const input = await inputOf(source);
+    const generated = generate(input);
+    // The static markup is not in the module: the skeleton holds placeholders, the rows are in `statics`.
+    expect(generated.skeleton).not.toContain('row 399');
+    expect(generated.statics.join('')).toContain('row 399');
+    expect(generated.reactStatic).toEqual(expect.arrayContaining(['Table', 'TableBody', 'TableRow', 'TableCell']));
+    const page = await compilePage(input, loadCompilerBuild());
+    expect(page.html).not.toMatch(/<mx-static data-i="\d+"><\/mx-static>/);
+    // An author's own element of that name is theirs, not a placeholder.
+    expect(dom(page.html).querySelector('mx-static#own')).toBeTruthy();
+    expect(dom(page.html).querySelectorAll('#t tr')).toHaveLength(400);
+    expect(columnParity(page.html, input, { q: 'Ada' })).toEqual([]);
+  });
+});
+
 describe('an unregistered legacy tag', () => {
   it('<Param> renders nothing, with or without a $ value, and refuses nothing', async () => {
     const source = '<Helmet><Value name="y" type="string" default="v" /></Helmet><div id="w"><Param name="a" value="$y" /><Param name="b">inner {$y}</Param><p id="after">after</p></div>';
