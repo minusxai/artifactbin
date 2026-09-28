@@ -46,3 +46,20 @@ export function diffTrees(legacy, compiled) {
   legacy.forEach((n, i) => compare(n, compiled[i], String(i), out));
   return out;
 }
+
+/**
+ * SERVED-ELEMENT SURVIVAL on the compiled page: every element the server sent must still be in the story
+ * once it has hydrated. ONE EXEMPTION: the placeholder of a `<Mermaid>` figure served undrawn
+ * (`figure[data-mx-mermaid-state="pending"] > p[role="status"]`, "Rendering diagram…", and anything in it)
+ * — both pages replace it with the drawing by design. Nothing else is excused: not a drawn figure's
+ * image, not the figure itself, not any other placeholder.
+ *
+ * `records`: one per served element, `{ kept, undrawnMermaid }` — kept: still connected inside the story
+ * root; undrawnMermaid: the element was, when parsed, that placeholder or inside it.
+ */
+export function survivalOf(records) {
+  const served = records.length;
+  const survived = records.filter((r) => r.kept).length;
+  const exempt = records.filter((r) => !r.kept && r.undrawnMermaid).length;
+  return { served, survived, exempt, ok: served > 0 && survived + exempt === served };
+}
