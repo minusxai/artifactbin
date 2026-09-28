@@ -84,3 +84,10 @@ it('keeps preferences out of history and activity out of settings',async()=>{
  view.rerender(<NotificationProvider><PeopleInbox compact/></NotificationProvider>);
  expect(await screen.findAllByRole('listitem')).toHaveLength(6);
 });
+
+it('renders mutation actor separately from current-state text and offers no block control for nonusers',async()=>{
+ const notifications=[{id:'mutation',kind:'mutation',artifact_id:'doc',actor:{kind:'user',userId:'bob',person:{name:'Bob',handle:'bob',image:null},viaAgent:true},message:'Task is Done',title:'Tasks',revision:1,read_at:null},{id:'deleted',kind:'mutation',artifact_id:'doc',actor:{kind:'deleted-user'},message:'Another current message',title:'Tasks',revision:1,read_at:null}];
+ vi.stubGlobal('fetch',vi.fn(async()=>new Response(JSON.stringify({autoAccept:true,blocks:[],next:null,unread:2,notifications}))));
+ render(<PeopleInbox/>);
+ expect(await screen.findByText('Task is Done')).toBeVisible();expect(screen.getAllByText('Triggered by')).toHaveLength(2);expect(screen.getByRole('link',{name:'Bob'})).toHaveAttribute('href','/people/bob');expect(screen.getByText('Deleted user')).toBeVisible();expect(screen.queryByText(/mentioned you in/)).toBeNull();
+});
