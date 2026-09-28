@@ -415,7 +415,11 @@ export function generate(input: GenerateInput): Generated {
     const svg = !!ctx.svg;
     const style = svg ? {} : { style: { minHeight: 1, ...((wrapper.style && typeof wrapper.style === 'object' ? wrapper.style : {}) as Props) } };
     const { className, ...rest } = wrapper;
-    const attrs = domAttrs(svg ? 'g' : 'div', { ...rest, ...(className ? { className } : {}), ...style, id: ownerId || undefined });
+    // The wrapper's style goes to rt.Repeat as `attr:style`: its spread then SETS the attribute (skipped while
+    // hydrating), keeping React's served `min-height:1px` byte for byte. A spread `style` would be rewritten
+    // through the CSSOM (`min-height: 1px;`) during hydration, which today's page never does.
+    const attrs = domAttrs(svg ? 'g' : 'div', { ...rest, ...(className ? { className } : {}), ...style, id: ownerId || undefined })
+      .map(([n, v]): Attr => [n === 'style' ? 'attr:style' : n, v]);
     const suffix = path.replace(/\./g, '_');
     const row = `row${suffix}`;
     const scope = `scope${suffix}`;
