@@ -110,6 +110,19 @@ interface Bridged {
   people: Record<string, PersonCard>;
 }
 
+/** Keep a hydrated table's controls mounted when a refresh answers with identical rows. */
+function sameTable(a: TableResult, b: TableResult): boolean {
+  const fields = Object.keys(a);
+  if (fields.length !== Object.keys(b).length || fields.some((key) => key !== 'rows' && key !== 'columns' && !Object.is(a[key as keyof TableResult], b[key as keyof TableResult]))) return false;
+  if (a.columns.length !== b.columns.length || a.columns.some((column, i) => JSON.stringify(column) !== JSON.stringify(b.columns[i]))) return false;
+  if (a.rows.length !== b.rows.length) return false;
+  return a.rows.every((row, i) => {
+    const other = b.rows[i];
+    const keys = Object.keys(row);
+    return !!other && keys.length === Object.keys(other).length && keys.every((key) => Object.is(row[key], other[key]));
+  });
+}
+
 /**
  * Start one document's runtime over `createStore` (the existing `createDataflowStore`, passed in
  * so the browser brings its transport and the server renders without one). Synchronous: the
@@ -128,15 +141,22 @@ export function createIslandRuntime(
   /** Every store change: what the write checks (`mutationUnavailable`, `mutating`) re-read on. */
   const [checks, touch] = createSignal(undefined, { equals: false });
   const drawings = data.mermaidImages ?? {};
+  let lastTables: Record<string, TableResult> = {};
   const sync = () => {
     if (!store) return;
     const snap = store.getState();
     const pending: Record<string, true> = {};
     for (const name of store.pending()) pending[name] = true;
     batch(() => {
-      for (const name of Object.keys(snap.tables)) setVersions(name, (v) => (v ?? 0) + 1);
+      const tables: Record<string, TableResult> = {};
+      for (const [name, table] of Object.entries(snap.tables)) {
+        const previous = lastTables[name];
+        if (previous && sameTable(previous, table)) tables[name] = previous;
+        else { tables[name] = { ...table }; setVersions(name, (v) => (v ?? 0) + 1); }
+      }
+      lastTables = tables;
       setState('values', reconcile(snap.values));
-      setState('tables', reconcile(Object.fromEntries(Object.entries(snap.tables).map(([name, table]) => [name, { ...table }])), { merge: true }));
+      setState('tables', reconcile(tables, { merge: true }));
       setState('errors', reconcile(snap.errors));
       setState('pending', reconcile(pending));
       setState('people', reconcile(snap.people ?? {}));
