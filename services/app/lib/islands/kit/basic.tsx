@@ -8,6 +8,12 @@ import { useIsland } from '../context';
 import type { IslandContext } from '../contract';
 import type { RowScope } from '../rt';
 import { ACCESS_PENDING, storeRead } from './store-read';
+import { cn } from '@/components/kit/cn';
+import { substituteRow } from '@/lib/story/row-scope';
+import { iconGlyphKey, FALLBACK_ICON_KEY, type GlyphMap } from '@/lib/story-ui/icon-contract';
+
+/** A row's class must be substituted before tailwind-merge sees its utility tokens. */
+export const rowClass = (base: string, authored: string, row: Record<string, unknown>): string => cn(base, substituteRow(authored, row));
 
 /**
  * lib/story/comment-target isCommentKey (the interpreter's validRowKey), restated: importing it from a kit
@@ -22,6 +28,22 @@ type DivProps = JSX.HTMLAttributes<HTMLDivElement>;
 type SpanProps = JSX.HTMLAttributes<HTMLSpanElement>;
 
 export function Badge(props: SpanProps & { variant?: string }) { const { variant = 'default', ...rest } = props; return <span data-slot="badge" data-variant={variant} {...rest} />; }
+export function Progress(props: DivProps & { value?: number | string }) {
+  const [own, rest] = splitProps(props, ['value']);
+  const valid = () => typeof own.value === 'number' && Number.isFinite(own.value) && own.value >= 0 && own.value <= 100;
+  const state = () => valid() ? (own.value === 100 ? 'complete' : 'loading') : 'indeterminate';
+  return <div data-slot="progress" role="progressbar" aria-valuenow={valid() ? own.value : undefined} aria-valuemin="0" aria-valuemax="100" data-state={state()} data-value={valid() ? own.value : undefined} data-max="100" {...rest}>
+    <div data-slot="progress-indicator" data-state={state()} data-value={valid() ? own.value : undefined} data-max="100" class="h-full w-full flex-1 bg-primary transition-all" style={{ transform: `translateX(-${100 - (Number(own.value) || 0)}%)` }} />
+  </div>;
+}
+export function Icon(props: JSX.SvgSVGAttributes<SVGSVGElement> & { name: string; glyphs: GlyphMap }) {
+  const [own, rest] = splitProps(props, ['name', 'glyphs', 'class']);
+  const glyph = () => own.glyphs[iconGlyphKey(String(own.name))] ?? own.glyphs[FALLBACK_ICON_KEY];
+  const accessible = Object.keys(rest).some((key) => key.startsWith('aria-') || key === 'role' || key === 'title');
+  return <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+    class={['lucide', glyph()?.cls, cn('inline-block size-4 shrink-0 align-[-0.125em]', own.class)].filter(Boolean).join(' ')}
+    aria-hidden={accessible ? undefined : 'true'} data-slot="icon" {...rest} innerHTML={glyph()?.inner ?? ''} />;
+}
 export function Alert(props: DivProps & { variant?: string }) { const { variant: _variant, ...rest } = props; return <div data-slot="alert" role="alert" {...rest} />; }
 export function AlertTitle(props: DivProps) { return <div data-slot="alert-title" {...props} />; }
 export function AlertDescription(props: DivProps) { return <div data-slot="alert-description" {...props} />; }

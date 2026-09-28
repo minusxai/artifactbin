@@ -33,10 +33,12 @@ import { STORY_UI_COMPONENTS } from '@/lib/story-ui/registry';
 import { STORY_SVG_TAGS } from '@/lib/story-ui/component-names';
 import { gridCols, gridRowHeight, gridItemRect, gridRows } from '@/lib/story-ui/grid-layout';
 import { IconGlyphProvider } from '@/components/kit/icon';
-import { isReactiveExpression } from '@/lib/jsx/reactive';
+import { buildGlyphMap } from '@/lib/story/icon-glyphs';
+import { isReactiveExpression, REACTIVE_BOOLEAN_PROPS } from '@/lib/jsx/reactive';
 import type { JsxElement, JsxNode } from '@/lib/jsx';
 import { REF_ATTRS, carriesRef, refName, type Scalar } from '@/lib/story/dataflow';
 import { resolveRefProps } from '@/lib/story/ref-data';
+import { substituteRow } from '@/lib/story/row-scope';
 import { discoverSlides, MIN_SLIDES_FOR_RAIL } from '@/lib/story-runtime/slides';
 import { createPreviewIdentityAllocator } from '@/lib/story-runtime/preview-identity';
 import { ASSETS_ORIGIN, PUBLIC_BASE_URL } from '@/lib/config';
@@ -93,6 +95,7 @@ interface KitMeta {
 /** Which module each ported kit component comes from, and its API props (everything else is a DOM attribute). */
 export const KIT: Readonly<Record<string, KitMeta>> = {
   Badge: { mod: 'basic', api: ['variant'] }, Alert: { mod: 'basic', api: ['variant'] }, AlertTitle: { mod: 'basic' }, AlertDescription: { mod: 'basic' },
+  Progress: { mod: 'basic', api: ['value'] }, Icon: { mod: 'basic', api: ['name', 'glyphs'] },
   Card: { mod: 'basic' }, CardHeader: { mod: 'basic' }, CardTitle: { mod: 'basic' }, CardDescription: { mod: 'basic' }, CardAction: { mod: 'basic' }, CardContent: { mod: 'basic' }, CardFooter: { mod: 'basic' },
   Tabs: { mod: 'tabs', island: true, api: ['defaultValue', 'value', 'orientation', 'dir'] }, TabsList: { mod: 'tabs', api: ['variant'] }, TabsTrigger: { mod: 'tabs', api: ['value', 'disabled'] }, TabsContent: { mod: 'tabs', api: ['value'] },
   Accordion: { mod: 'accordion', island: true, api: ['type', 'collapsible', 'defaultValue', 'value', 'orientation'] }, AccordionItem: { mod: 'accordion', api: ['value', 'disabled'] }, AccordionTrigger: { mod: 'accordion' }, AccordionContent: { mod: 'accordion' },
@@ -275,6 +278,33 @@ export function generate(input: GenerateInput): Generated {
   const unported = new Set<string>();
   const kitUsed = { skeleton: new Set<string>(), islands: new Set<string>() };
   const statics: string[] = [];
+  const rowIconNames = new Set<string>();
+  const visitRowIcons = (node: JsxNode): void => {
+    if (!isElement(node)) return;
+    if (node.tag === 'For') {
+      const each = node.attributes.find((a) => a.name === 'each')?.value;
+      const signalName = each && !each.static && each.reactive?.kind === 'signal' ? each.reactive.name : null;
+      const table = signalName ? input.flow?.values.find((v) => v.name === signalName && v.kind === 'table') : null;
+      if (table?.rows) for (const child of node.children) {
+        const findNames = (part: JsxNode): void => {
+          if (!isElement(part)) return;
+          if (part.tag === 'Icon') {
+            const raw = part.attributes.find((a) => a.name === 'name')?.value;
+            if (raw?.static && typeof raw.json === 'string') for (const row of table.rows ?? []) {
+              const name = substituteRow(raw.json, row);
+              if (name) rowIconNames.add(name);
+            }
+          }
+          part.children.forEach(findNames);
+        };
+        findNames(child);
+      }
+    }
+    node.children.forEach(visitRowIcons);
+  };
+  nodes.forEach(visitRowIcons);
+  const glyphs = rowIconNames.size ? { ...input.glyphs, ...buildGlyphMap(rowIconNames) } : input.glyphs ?? {};
+  let usesRowClass = false;
   /** A skeleton static subtree's HTML, carried beside the skeleton (never through JSX, Babel and Solid's server renderer). */
   const staticSlot = (html: string): string => { statics.push(html); return `<${STATIC_SLOT} data-i={${lit(String(statics.length - 1))}}></${STATIC_SLOT}>`; };
   /**
@@ -335,7 +365,7 @@ export function generate(input: GenerateInput): Generated {
     };
     const decorate: Decorate = ctx.preview ? (element, n, p) => ctx.preview!(rebase(element, n, p) as ReactElement, n, p) : rebase;
     // React's hoisted image preloads are dropped: a compiled page names its preloads in the head.
-    return renderToStaticMarkup(createElement(IconGlyphProvider, { value: input.glyphs ?? {} }, renderStoryNodes([node], { values: render.values, components: render.components, decorateElement: decorate })))
+    return renderToStaticMarkup(createElement(IconGlyphProvider, { value: glyphs }, renderStoryNodes([node], { values: render.values, components: render.components, decorateElement: decorate })))
       .replace(/<link rel="preload"[^>]*>/g, '');
   }
   const reactStaticJsx = (node: JsxElement, path: string, ctx: Ctx): string => htmlToJsx(reactStaticHtml(node, path, ctx), !!ctx.svg);
@@ -441,7 +471,7 @@ export function generate(input: GenerateInput): Generated {
           props.templates = cols.map((c) => ({ col: c.col, id: typeof c.id === 'string' ? c.id : undefined, path: c[AST] }));
         }
       }
-      if (node.tag === 'Files') props.glyphs = input.glyphs ?? {};
+      if (node.tag === 'Files' || node.tag === 'Icon') props.glyphs = glyphs;
       if (node.tag === 'Iframe') {
         // The interpreter's rules (renderNode): refused inside a row, and invalid content renders nothing.
         if (ctx.row) return `<div role="alert">{${lit('DataTable and Iframe must be outside For templates')}}</div>`;
@@ -467,8 +497,14 @@ export function generate(input: GenerateInput): Generated {
       if (node.tag === 'Question') dom[CHART_SLOT_ATTR] = typeof dom.id === 'string' && dom.id ? dom.id : path;
       if (inGrid) api.inGridItem = true;
       const attrs = domAttrs('div', dom).filter(([n]) => n !== 'class');
-      const apiJsx = Object.entries(api).map(([k, v]) => ` ${safeAttr(k)}={${typeof v === 'string' ? lit(v) : json(v)}}`).join('');
-      const clsJsx = cls ? ` class={${lit(cls)}}` : '';
+      const apiJsx = Object.entries(api).map(([k, v]) => ` ${safeAttr(k)}={${typeof v === 'string' ? ctx.row ? `rt.sub(${lit(v)}, ${ctx.row})` : lit(v) : json(v)}}`).join('');
+      const authorClass = typeof props.className === 'string' ? props.className : '';
+      const rowClass = !!ctx.row && !!authorClass;
+      if (rowClass) usesRowClass = true;
+      const rowBase = rowClass && recipe ? cn(recipe({ ...props, className: undefined, ...(inGrid ? { inGridItem: true } : {}) })) : '';
+      const clsJsx = rowClass
+        ? ` class={$rowClass(${lit(rowBase)}, ${lit(authorClass)}, ${ctx.row})}`
+        : cls ? ` class={${lit(cls)}}` : '';
       const tag = safeTag(node.tag);
       // A row action writes with its row (interpreter rowAction → StoryRuntimeApp RuntimeRowAction).
       const rowJsx = node.tag === 'Button' && (api.run !== undefined || api.set !== undefined) ? ` row={${ctx.row}} rowScope={${ctx.scope}}` : '';
@@ -491,7 +527,9 @@ export function generate(input: GenerateInput): Generated {
     if (patch) props = { ...props, ...patch };
     const inner = lower === 'svg' ? { ...ctx, svg: true } : ctx;
     const attrs = domAttrs(tag, props);
-    const open = ctx.row ? `<${tag} {...rt.rowAttrs(${json(Object.fromEntries(attrs))}, ${ctx.row}, ${ctx.scope})}>` : `<${tag}${attrsJsx(attrs)}>`;
+    const reactive = node.attributes.filter((a) => !a.value.static && REACTIVE_BOOLEAN_PROPS.has(a.name) && isReactiveExpression(a.value.reactive));
+    const booleanJsx = reactive.map((a) => ` {...(rt.expr(${json(a.value.static ? null : a.value.reactive)}, ${ctx.row ?? 'undefined'}) ? { ${safeAttr(a.name)}: true } : {})}`).join('');
+    const open = ctx.row ? `<${tag} {...rt.rowAttrs(${json(Object.fromEntries(attrs))}, ${ctx.row}, ${ctx.scope})}${booleanJsx}>` : `<${tag}${attrsJsx(attrs)}${booleanJsx}>`;
     if (VOID.test(lower)) return open.replace(/>$/, ' />');
     return `${open}${children(inner)}</${tag}>`;
   }
@@ -577,7 +615,7 @@ export function generate(input: GenerateInput): Generated {
   const dataConsts = data.map((text, i) => `const $d${i} = JSON.parse(${lit(text)});\n`).join('');
   // The skeleton imports only what it renders with; the islands module always carries the runtime.
   const skeleton = `${kitImports(kitUsed.skeleton)}${dataConsts}export default function Skeleton() { return ${root}; }\n`;
-  const islandsSource = `import * as rt from '@mx/rt';\n${kitImports(kitUsed.islands)}${dataConsts}`
+  const islandsSource = `import * as rt from '@mx/rt';\n${usesRowClass ? "import { rowClass as $rowClass } from '@mx/kit/basic';\n" : ''}${kitImports(kitUsed.islands)}${dataConsts}`
     + islands.map((isl) => `export function I${isl.id}() { return ${isl.source}; }\n`).join('')
     + `export const ISLANDS = [${islands.map((isl) => `[${lit(`s${isl.id}-`)}, I${isl.id}]`).join(', ')}];\n`;
   return {

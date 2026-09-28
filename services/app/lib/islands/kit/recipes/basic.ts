@@ -72,6 +72,7 @@ const buttonVariants = cva(
   }
 )
 export const RECIPES: Record<string, Recipe> = {
+  Progress: props => cn('relative h-2 w-full overflow-hidden rounded-full bg-primary/20', props.className as string | undefined),
   Badge: props => cn(badgeVariants({ variant: props.variant as never }), props.className as string | undefined),
   Alert: props => cn(alertVariants({ variant: props.variant as never }), props.className as string | undefined),
   Button: props => cn(buttonVariants({ variant: props.variant as never, size: props.size as never }), props.className as string | undefined),
