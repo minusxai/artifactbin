@@ -12,7 +12,6 @@
  * Pure over a window-shaped argument so it is testable without a browser.
  */
 import { createFetchTransport, type FetchLike, type FetchTransportOptions } from './fetch-transport';
-import { createRelayTransport } from './relay-transport';
 import type { QueryTransport } from './store';
 
 interface DocumentWindow {
@@ -31,7 +30,17 @@ export function createDocumentTransport(
   options?: FetchTransportOptions,
 ): QueryTransport | null {
   const parent = win.parent;
-  if (parent && parent !== win && parent !== win.self) return createRelayTransport(parent as Window, appOrigin, win as unknown as Window);
+  if (parent && parent !== win && parent !== win.self) {
+    // A top-level compiled reader never needs the relay. Resolve it on the first framed request,
+    // then share its listener and sequence state across every request on this document.
+    const relay = import('./relay-transport').then(({ createRelayTransport }) => createRelayTransport(parent as Window, appOrigin, win as unknown as Window));
+    return {
+      run: async (...args) => (await relay).run(...args),
+      page: async (...args) => (await relay).page(...args),
+      mutate: async (...args) => (await relay).mutate!(...args),
+      importAsset: async (...args) => (await relay).importAsset!(...args),
+    };
+  }
   if (queryUrl) return createFetchTransport(queryUrl, fetchFn, mutateUrl, options);
   return null;
 }

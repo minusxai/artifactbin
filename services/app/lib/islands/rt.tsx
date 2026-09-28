@@ -21,10 +21,10 @@ import { batch, createComponent, createMemo, createRoot, createSignal, For, Show
 import type { Component, JSX } from 'solid-js';
 import { createStore, reconcile } from 'solid-js/store';
 import { hydrate, insert as solidInsert, isServer } from 'solid-js/web';
-import { evaluateReactive, type ReactiveExpression } from '@/lib/jsx/reactive';
+import type { ReactiveExpression } from '@/lib/jsx/reactive';
+import { evaluateReactive } from '@/lib/jsx/reactive-eval';
 import { URL_ATTRS, URL_LIST_ATTRS, urlListUrls } from '@/lib/jsx/url-attrs';
 import { substituteRow } from '@/lib/story/row-scope';
-import { commentMetadata, instanceDomId } from '@/lib/story/repeat-identity';
 import type { CompiledDataflow } from '@/lib/story/compiled-dataflow';
 import type { DataflowState, Row, Scalar, TableResult } from '@/lib/story/dataflow';
 import { ACCESS_PENDING, type DataflowStore } from '@/lib/story-runtime/store';
@@ -254,6 +254,8 @@ const SAFE_DATA_URL = /^data:image\//i;
 // eslint-disable-next-line no-control-regex -- deliberately mirrors browser scheme normalization
 const dangerous = (url: string) => { const n = url.replace(/[\x00-\x20]/g, ''); return DANGEROUS_URL.test(n) && !SAFE_DATA_URL.test(n); };
 const IDREF_ATTRS = ['for', 'aria-labelledby', 'aria-describedby', 'aria-controls', 'aria-owns', 'headers', 'list', 'form'];
+/** The repeat identity encoding shared with lib/story/repeat-identity, kept in the hydration seam. */
+const instanceDomId = (scope: unknown, sourceId: string): string => `mx-instance-${encodeURIComponent(JSON.stringify([scope, sourceId]))}`;
 
 /**
  * The attributes of an element inside a row template, resolved for one row (the interpreter's
@@ -273,7 +275,12 @@ export function rowAttrs(attrs: Readonly<Record<string, unknown>>, row: Record<s
     const key = ['repeat', scope.owner, scope.durable ? typeof scope.key : 'index', scope.key];
     if (!scope.durable) delete out['data-mx-ast'];
     if (typeof out.id === 'string') {
-      if (scope.durable) Object.assign(out, commentMetadata(scope.owner, { kind: 'repeat', scopes: [{ nodeId: scope.owner, key: scope.key as string | number }], templateNodeId: out.id }));
+      // Durable row keys were checked by the compiler. Emit the same canonical repeat target
+      // directly so ordinary hydration does not load the general comment target parser.
+      if (scope.durable && scope.owner) {
+        out['data-mx-comment-owner'] = scope.owner;
+        out['data-mx-comment-target'] = JSON.stringify({ kind: 'repeat', scopes: [{ nodeId: scope.owner, key: scope.key }], templateNodeId: out.id });
+      }
       out.id = instanceDomId(key, out.id);
     }
     for (const attr of IDREF_ATTRS) {

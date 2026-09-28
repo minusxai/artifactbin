@@ -15,14 +15,14 @@ const win = (parent: unknown) => {
 };
 
 describe('createDocumentTransport', () => {
-  it('inside a parent: the relay — a run posts mx:query to that parent, whatever the island says', () => {
+  it('inside a parent: the relay — a run posts mx:query to that parent, whatever the island says', async () => {
     const posted: unknown[] = [];
     const parent = { postMessage: (m: unknown) => posted.push(m) };
     const fetchFn = vi.fn();
     const t = createDocumentTransport(win(parent), '/a/abc123/query', APP, fetchFn);
     expect(t).not.toBeNull();
     void t!.run({ region: 'EU' }, ['sales']).catch(() => {});
-    expect(posted[0]).toMatchObject({ type: STORY_QUERY_MESSAGE, values: { region: 'EU' }, only: ['sales'] });
+    await vi.waitFor(() => expect(posted[0]).toMatchObject({ type: STORY_QUERY_MESSAGE, values: { region: 'EU' }, only: ['sales'] }));
     expect(fetchFn).not.toHaveBeenCalled();
   });
 
@@ -53,13 +53,13 @@ describe('createDocumentTransport', () => {
  * its absence is the instruction.
  */
 describe('createDocumentTransport — importAsset', () => {
-  it('inside a parent: importing posts mx:asset to that parent', () => {
+  it('inside a parent: importing posts mx:asset to that parent', async () => {
     const posted: unknown[] = [];
     const parent = { postMessage: (m: unknown) => posted.push(m) };
     const t = createDocumentTransport(win(parent), '/a/abc123/query', APP, vi.fn());
     expect(t!.importAsset).toBeTypeOf('function');
     void t!.importAsset!('https://cdn.x.com/app.js','script',new AbortController().signal);
-    expect(posted[0]).toMatchObject({ type: STORY_ASSET_MESSAGE, url: 'https://cdn.x.com/app.js', kind: 'script' });
+    await vi.waitFor(() => expect(posted[0]).toMatchObject({ type: STORY_ASSET_MESSAGE, url: 'https://cdn.x.com/app.js', kind: 'script' }));
   });
 
   it('top-level: no importAsset at all — the <img> src is already the endpoint', () => {
