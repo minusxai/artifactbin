@@ -175,6 +175,17 @@ describe('unit parity with today\'s render', () => {
     const source = fixture('prose.jsx');
     expect(columnParity((await compilePage(await inputOf(source), loadCompilerBuild())).html, source)).toEqual([]);
   });
+  it('kit: the served tabs are Radix\'s server render (tablist and tabs -1, the active panel\'s mount style as React writes it)', async () => {
+    const source = fixture('kit.jsx');
+    const page = await compilePage(await inputOf(source), loadCompilerBuild());
+    const root = dom(page.html);
+    expect(root.querySelector('[role="tablist"]')?.getAttribute('tabindex')).toBe('-1');
+    expect([...root.querySelectorAll('[role="tab"]')].map((t) => t.getAttribute('tabindex'))).toEqual(['-1', '-1']);
+    expect([...root.querySelectorAll('[role="tabpanel"]')].map((p) => p.getAttribute('style'))).toEqual(['animation-duration:0s', null]);
+    const react = new JSDOM(`<div>${reactRender(source)}</div>`).window.document;
+    expect([...react.querySelectorAll('[role="tabpanel"]')].map((p) => p.getAttribute('style'))).toEqual(['animation-duration:0s', null]);
+    expect(react.querySelector('[role="tablist"]')?.getAttribute('tabindex')).toBe('-1');
+  });
   it('deck: the compiled column is today\'s render; the rail and present bar sit around it', async () => {
     const source = fixture('deck.jsx');
     const page = await compilePage(await inputOf(source, 'deck'), loadCompilerBuild());
