@@ -12,7 +12,7 @@ import { describe, expect, it } from 'vitest';
 import { readdirSync, readFileSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import path from 'node:path';
-import { COMPILED_LEGS, GATE_RUNNERS, GATE_SPECS, ISOLATED_GATES, checkLegs, checkManifest, compiledLegNames, gateNamesOnDisk, gateOf, specFor, browsersFor, shardWeight } from '../gates.manifest.mjs';
+import { GATE_RUNNERS, GATE_SPECS, ISOLATED_GATES, checkManifest, gateNamesOnDisk, specFor, browsersFor, shardWeight } from '../gates.manifest.mjs';
 import { parseShard, shardOf } from '../gates.shard.mjs';
 
 const SCRIPTS = path.resolve(import.meta.dirname, '..');
@@ -87,8 +87,7 @@ describe('the rows tell the truth about their sources', () => {
     // No gate is special-cased by NAME in the runner: that is what the fields are for.
     expect(runner).not.toMatch(/gate\.name\s*===\s*'/);
     const listed = execFileSync(process.execPath, [path.join(SCRIPTS, 'gates.mjs'), '--list'], { encoding: 'utf8' }).trim().split('\n').sort();
-    // Every gate, and the compiled legs that are not disabled.
-    expect(listed).toEqual([...onDisk, ...compiledLegNames()].sort());
+    expect(listed).toEqual(onDisk);
   });
 
   it('8. every gate reports through the one verdict dialect, or asserts and throws', () => {
@@ -169,82 +168,13 @@ it('balances the extra cross-browser setup without extending any test timeout', 
   expect(shardWeight('screenshot-comments')).toBe(specFor('screenshot-comments').timeoutMs + 270_000);
 });
 
-it('prints the same browser and Postgres plans used by shard selection without starting servers', () => {
-  const set = [...onDisk, ...compiledLegNames()];
+it('prints the same browser plan used by the eleven CI shards without starting servers', () => {
+  const set = onDisk;
   for (let index = 1; index <= 11; index++) {
     const selected = shardOf(set, {index, total: 11}, shardWeight, { isolated: ISOLATED_GATES });
     const output = execFileSync(process.execPath, [path.join(SCRIPTS, 'gates.mjs'), '--browsers', `--shard=${index}/11`], {encoding: 'utf8'}).trim();
     expect(output).toBe(browsersFor(selected).join(' '));
     const postgres = execFileSync(process.execPath, [path.join(SCRIPTS, 'gates.mjs'), '--needs-postgres', `--shard=${index}/11`], {encoding: 'utf8'}).trim();
-    expect(postgres).toBe(String(selected.some((name) => gateOf(name) === 'postgres-datasets')));
+    expect(postgres).toBe(String(selected.includes('postgres-datasets')));
   }
-  expect(Array.from({length: 11}, (_, offset) => shardOf(set, {index: offset + 1, total: 11}, shardWeight, { isolated: ISOLATED_GATES }))
-    .find((shard) => shard.includes('editor-v2'))).toEqual(['editor-v2']);
-});
-
-it('gives the gates that lost parallel races an exclusive CI runner', () => {
-  const set = [...onDisk, ...compiledLegNames()];
-  const shards = Array.from({ length: 11 }, (_, offset) => shardOf(set, { index: offset + 1, total: 11 }, shardWeight, { isolated: ISOLATED_GATES }));
-  for (const name of ISOLATED_GATES) expect(shards.find(shard => shard.includes(name))).toEqual([name]);
-  expect(shards.flat().sort()).toEqual(set.slice().sort());
-});
-
-it('prints the selected gate names for shard-specific CI setup without starting servers', () => {
-  const set = [...onDisk, ...compiledLegNames()];
-  const selected = [];
-  for (let index = 1; index <= 11; index++) {
-    const expected = shardOf(set, { index, total: 11 }, shardWeight, { isolated: ISOLATED_GATES });
-    const output = execFileSync(process.execPath, [path.join(SCRIPTS, 'gates.mjs'), '--selected', `--shard=${index}/11`], { encoding: 'utf8' }).trim().split('\n');
-    expect(output).toEqual(expected);
-    selected.push(...output);
-  }
-  expect(selected.filter((name) => name === 'postgres-datasets')).toHaveLength(1);
-});
-
-it('prints the selected gate names for shard-specific CI setup without starting servers', () => {
-  const set = [...onDisk, ...compiledLegNames()];
-  const selected = [];
-  for (let index = 1; index <= 7; index++) {
-    const expected = shardOf(set, { index, total: 7 }, shardWeight);
-    const output = execFileSync(process.execPath, [path.join(SCRIPTS, 'gates.mjs'), '--selected', `--shard=${index}/7`], { encoding: 'utf8' }).trim().split('\n');
-    expect(output).toEqual(expected);
-    selected.push(...output);
-  }
-  expect(selected.filter((name) => name === 'postgres-datasets')).toHaveLength(1);
-});
-
-describe('the compiled legs (w3-behaviour)', () => {
-  it('each leg names one gate on disk, carries a measured timeout, and a disabled one says why', () => {
-    expect(() => checkLegs(onDisk)).not.toThrow();
-    expect(() => checkLegs(['live-data'], [{ gate: 'live-data', timeoutMs: 60_000 }, { gate: 'nope', timeoutMs: 60_000 }])).toThrow(/no gate for: nope/);
-    expect(() => checkLegs(['a'], [{ gate: 'a', timeoutMs: 60_000 }, { gate: 'a', timeoutMs: 60_000 }])).toThrow(/named twice: a/);
-    for (const leg of COMPILED_LEGS) {
-      expect(Number.isInteger(leg.timeoutMs) && leg.timeoutMs >= 60_000 && leg.timeoutMs % 10_000 === 0, leg.gate).toBe(true);
-      if (leg.disabled !== undefined) expect(leg.disabled.length, leg.gate).toBeGreaterThan(20);
-    }
-    // The brief's behavioural set is wired, enabled or with its reason.
-    expect(COMPILED_LEGS.map((leg) => leg.gate).sort()).toEqual(['annotations', 'collab-edit', 'comment-targets', 'dataflow', 'editable-table', 'editor-v2', 'export-slice', 'full-kit', 'hydration', 'image-upload', 'inplace-edit', 'layout-shift', 'libraries', 'live-data', 'live-reader', 'local-sql-state', 'postgres-datasets', 'reader-chrome', 'reading-chrome', 'row-images', 'web-assets']);
-  });
-
-  it('a leg is its gate\'s row under its own name and timeout, and the default set leaves disabled legs out', () => {
-    const leg = specFor('live-reader@compiled');
-    expect(leg).toMatchObject({ name: 'live-reader@compiled', needsMail: specFor('live-reader').needsMail, timeoutMs: COMPILED_LEGS.find((l) => l.gate === 'live-reader').timeoutMs });
-    expect(gateOf('live-reader@compiled')).toBe('live-reader');
-    expect(() => specFor('fonts@compiled')).toThrow(/no compiled leg/);
-    expect(compiledLegNames()).not.toContain('hydration@compiled');
-    expect(compiledLegNames({ all: true })).toContain('hydration@compiled');
-    expect(compiledLegNames(), 'the page engine runs on the compiled page (w3-page-engine)').toContain('dataflow@compiled');
-  });
-
-  it('every leg\'s gate reads GATE_READER (its own switch or scripts/lib/gate-reader)', () => {
-    // These gates exercise the same user-visible assertions under either reader flag.
-    const unchanged = new Set(['image-upload', 'libraries', 'postgres-datasets']);
-    for (const leg of COMPILED_LEGS.filter((l) => !l.disabled && l.gate !== 'export-slice' && !unchanged.has(l.gate))) expect(source(leg.gate), leg.gate).toMatch(/GATE_READER|lib\/gate-reader\.mjs/);
-  });
-
-  it('the runner runs a leg with GATE_READER=compiled on servers booted with the compiled reader on', () => {
-    const runner = readFileSync(path.join(SCRIPTS, 'gates.mjs'), 'utf8');
-    expect(runner).toMatch(/isCompiledLeg\(gate\.name\) \? \{ GATE_READER: 'compiled' \}/);
-    expect(runner).toMatch(/bootPool\('on'/);
-  });
 });

@@ -90,7 +90,7 @@ export interface PreparedPage {
   deps: PreparedDeps;
   /** The anonymous reader's render of the story element, and the digest of the overlay it was rendered with. */
   ssr: { overlay: string; html: string } | null;
-  /** The compiled page (lib/compiled-page), or its recorded failure; absent while the deployment does not compile (`FLAG__COMPILED_READER=off`). */
+  /** The compiled page (lib/compiled-page), or its recorded failure. */
   compiled?: StoredCompile;
 }
 interface PreparedDeps { datasets: string[]; assets: string[]; fonts: string[] }
@@ -213,7 +213,7 @@ async function compiledFor(row: ArtifactRow, page: PreparedPage, refData: Reader
     // Imported on first compile, not at the top: the compiler carries Babel, Solid and today's React
     // kit (it renders static components at compile time), and this module sits under lib/artifacts,
     // which every tool that reads artifacts loads (the CLI's teaching build among them). A process
-    // that never compiles (`FLAG__COMPILED_READER=off`) never loads any of it. The snapshot store
+    // that does not prepare a page never loads any of it. The snapshot store
     // imports this module, so its access helper is reached the same way (no import cycle at load).
     const [{ compilePage }, { anonymousAccessFacts }] = await Promise.all([import('@/lib/compiled-page/compiler'), import('@/lib/compiled-page/snapshots.server')]);
     const flow = page.declared?.flow ?? null;

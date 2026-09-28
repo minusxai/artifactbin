@@ -8,7 +8,7 @@ import { fileURLToPath } from 'node:url';
 import yaml from 'yaml';
 import { createServer } from 'node:http';
 import { CI_JOBS, CI_MODULES, CLI_BUMP_REFUSAL, VERSION_BUMP_FILES, checkCiResults, cliBumpRequired, isVersionOnlyBump, planCi } from '../lib/ci-plan.mjs';
-import { ISOLATED_GATES, compiledLegNames, gateNamesOnDisk, shardWeight } from '../gates.manifest.mjs';
+import { ISOLATED_GATES, gateNamesOnDisk, shardWeight } from '../gates.manifest.mjs';
 import { shardOf } from '../gates.shard.mjs';
 
 /** Built and proved only for a release: the four-platform binaries (the Intel proofs consume its artifact) and the distributions gate. */
@@ -590,7 +590,7 @@ describe('CI job shape', () => {
     const pulls = jobs.gates.steps.filter((step) => /docker pull postgres:17-alpine/.test(step.run ?? ''));
     expect(pulls).toHaveLength(1);
     expect(pulls[0].if).toBe("steps.gate-browsers.outputs.postgres == 'true'");
-    const names = [...gateNamesOnDisk(readdirSync(path.join(root, 'scripts'))), ...compiledLegNames()];
+    const names = gateNamesOnDisk(readdirSync(path.join(root, 'scripts')));
     const heaviest = (count) => Math.max(...Array.from({ length: count }, (_, offset) =>
       shardOf(names, { index: offset + 1, total: count }, shardWeight, { isolated: count === 11 ? ISOLATED_GATES : [] }).reduce((sum, name) => sum + shardWeight(name), 0)));
     expect(heaviest(11)).toBeLessThan(heaviest(9));

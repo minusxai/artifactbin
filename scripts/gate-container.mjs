@@ -36,7 +36,7 @@ import path from 'node:path';
 import readline from 'node:readline';
 import { fileURLToPath } from 'node:url';
 import { checkGates, containerName, depsVolume, dockerfile, dockerRunArgs, imageTag, INSIDE, parseArgs } from './lib/gate-container.mjs';
-import { compiledLegNames, gateNamesOnDisk } from './gates.manifest.mjs';
+import { gateNamesOnDisk } from './gates.manifest.mjs';
 import { acquireSlot, parseMemory, slotCount } from './lib/gate-slots.mjs';
 import { normalisedLock } from './lib/lock-fingerprint.mjs';
 
@@ -95,8 +95,7 @@ function sourceFiles() {
 }
 
 async function host({ cpus, memory, servers, gates }) {
-  // A compiled leg (`<gate>@compiled`, gates.manifest COMPILED_LEGS) runs like a gate, on its own compiled-reader servers.
-  const known = [...gateNamesOnDisk(readdirSync(HERE)), ...compiledLegNames({ all: true })];
+  const known = gateNamesOnDisk(readdirSync(HERE));
   let engine;
   let tag;
   let volume;

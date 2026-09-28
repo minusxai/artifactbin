@@ -82,7 +82,9 @@ Run these from the repository root. Keep this list current.
   a Linux container, built and served as CI does; the output and exit status are the gates'.
 - CI-only: `npm run test:all`, `test:api`, `test:node`, `test:ui`, `test:integration`, `build`,
   `test:gates`. Do not invoke these locally to work around deferral.
-- `npm run generate:routes`, `generate-story-ui-classes`, `render:schema`, `build:runtime` —
+- `npm run build:islands` — build the shared reader islands and manifest.
+- `node scripts/gate-container.mjs hydration` — verify the compiled reader handover in a Linux container.
+- `npm run generate:routes`, `generate-story-ui-classes`, `render:schema` —
   generated inputs.
 - `npm run generate:theme-previews`, `generate:og` — theme previews and unfurl images.
 - `npm run release:cli` — bump the CLI release; see Change checks.

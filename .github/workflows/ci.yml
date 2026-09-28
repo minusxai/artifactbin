@@ -442,11 +442,8 @@ jobs:
       # 34697938970, and further shards divide that work rather than the machine.
       #
       #
-      # ELEVEN with the compiled legs (w3-behaviour): the behavioural gates run a second time against the
-      # compiled reader (`<gate>@compiled`, scripts/gates.manifest COMPILED_LEGS) on servers the runner
-      # boots beside the ordinary two with FLAG__COMPILED_READER=on; the two workers share one queue. The
-      # legs and reading-chrome expand the set. Seven and eight shards crossed 240s after
-      # editor-v2 needed a retry. Eleven isolate it and leave capacity for the growing compiled set.
+      # Eleven shards keep the one compiled gate set under 240 s per job, with
+      # editor-v2, hydration and offline-file on separate runners.
       #
       # The gate runner selects the shard on this host; pull Postgres only when
       # that selection includes postgres-datasets, before its gate timeout starts.

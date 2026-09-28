@@ -10,7 +10,7 @@
  * digest, and every row it wrote would miss on the server's first read and be rebuilt there. So, like
  * the Mermaid backfill (which only queues what the server's harvester draws), this only DECIDES what
  * to warm; each version is prepared and compiled by the server itself, through its own reader door —
- * `GET /a/<id>/raw?reader=compiled[&version=N]` admitted by a short-lived export key (the exporter's
+ * `GET /a/<id>/raw[?version=N]` admitted by a short-lived export key (the exporter's
  * credential: no session, no view counted, the owner's history scope for an archived version). The
  * reader's default chrome is kept on purpose: `chrome=0` with a key is a capture, which would run
  * every document's queries.
@@ -24,7 +24,7 @@
  * switch is `off` compiles nothing and answers `legacy` without a reason: the run stops there rather
  * than report a no-op as done. The census at the end is read from the database, not from the run.
  */
-import { READER_FALLBACK_HEADER, READER_MODE_HEADER, READER_MODE_PARAM } from './contract';
+import { READER_FALLBACK_HEADER, READER_MODE_HEADER } from './contract';
 
 /** What the backfill reads and writes through: the app's database (lib/db). */
 export interface BackfillDb { query: <R = Record<string, unknown>>(sql: string, params?: unknown[]) => Promise<{ rows: R[] }> }
@@ -104,12 +104,11 @@ async function storedState(db: BackfillDb): Promise<Map<string, { pageKey: strin
  */
 const suffixOf = (pageKey: string): string => pageKey.split(':').slice(2).join(':');
 
-type Outcome = { kind: 'compiled' } | { kind: 'fallback'; reason: string } | { kind: 'legacy' } | { kind: 'error'; error: string };
+type Outcome = { kind: 'compiled' } | { kind: 'fallback'; reason: string } | { kind: 'error'; error: string };
 
 /** Ask the server to prepare and compile one version, as its reader would be served. */
 async function warm(options: BackfillOptions, target: BackfillTarget): Promise<Outcome> {
   const url = new URL(`/a/${encodeURIComponent(target.id)}/raw`, options.base);
-  url.searchParams.set(READER_MODE_PARAM, 'compiled');
   if (!target.head) url.searchParams.set('version', String(target.version));
   // Minted right before its request: the key lives for a minute.
   url.searchParams.set('key', options.mintKey(target.id));
@@ -119,7 +118,7 @@ async function warm(options: BackfillOptions, target: BackfillTarget): Promise<O
     if (res.status !== 200) return { kind: 'error', error: `HTTP ${res.status}` };
     const reason = res.headers.get(READER_FALLBACK_HEADER);
     if (reason) return { kind: 'fallback', reason };
-    return res.headers.get(READER_MODE_HEADER) === 'compiled' ? { kind: 'compiled' } : { kind: 'legacy' };
+    return res.headers.get(READER_MODE_HEADER) === 'compiled' ? { kind: 'compiled' } : { kind: 'error', error: 'unexpected reader mode' };
   } catch (error) {
     return { kind: 'error', error: error instanceof Error ? error.message : String(error) };
   }
@@ -154,14 +153,12 @@ export async function backfillCompiledPages(options: BackfillOptions): Promise<B
   const [probe, ...rest] = targets;
   const first = await warm(options, probe!);
   record(probe!, first);
-  if (first.kind === 'legacy') throw new Error(`the server at ${options.base} does not serve the compiled reader (x-mx-reader: legacy with no reason): is FLAG__COMPILED_READER shadow or on?`);
   if (first.kind === 'error') throw new Error(`the server at ${options.base} could not warm ${probe!.id}: ${first.error}`);
   stored = await storedState(options.db);
   const probed = stored.get(keyOf({ id: probe!.id, slot: slotOf(probe!) }));
   if (!probed) throw new Error(`the server at ${options.base} stored no prepared page for ${probe!.id}: is --db the server's database?`);
   report.suffix = suffixOf(probed.pageKey);
   report.build = probed.pageKey.split(':').at(-1) ?? null;
-  if (report.build === 'off' || report.build === 'none') throw new Error(`the server at ${options.base} compiles nothing (compiler build "${report.build}")`);
   log(`deployment ${report.suffix}; ${targets.length} version(s) considered`);
 
   const todo = rest.filter((t) => {

@@ -8,7 +8,7 @@
  *
  * From the repository root, against a RUNNING server of the deploy being backfilled. The script only
  * decides what to warm: each version is prepared and compiled by that server, through its own reader
- * door (`/a/<id>/raw?reader=compiled`, admitted by a one-minute export key), because a stored prepared
+ * door (`/a/<id>/raw`, admitted by a one-minute export key), because a stored prepared
  * page is keyed by the serving process's own build and a compile made here would be a miss there.
  *
  * Preconditions, each of which the run checks or states:
@@ -17,8 +17,6 @@
  *    are minted under it. The script refuses to run without it.
  *  - `--base` (or `APP__PUBLIC_BASE_URL`) reaches that server. On its host, the loopback address
  *    (`http://127.0.0.1:<APP__PORT>`) skips the proxy; an unknown host falls through to the app.
- *  - The server's `FLAG__COMPILED_READER` is `shadow` or `on`: with `off` it compiles nothing, and the
- *    first request says so (`x-mx-reader: legacy` with no reason) — the run stops there.
  *  - No object-store settings are needed here: the server writes the module bytes.
  *
  * On the production host, after a deploy has rolled out (the new server is the one answering):

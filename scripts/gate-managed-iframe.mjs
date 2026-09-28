@@ -89,20 +89,18 @@ try {
   // speed, and keeps unrelated lazy editor/chart bundles out of the preload.
   const coldContext=await browser.newContext({ignoreHTTPSErrors:true}),cold=await coldContext.newPage();
   const shell=await mainFetch(backend+'/a/'+seed.id).then(response=>response.text());
-  const entry=/<script[^>]+src="([^"]+)"/.exec(shell)?.[1];assert(entry,'built app entry exists');
+  const entry=/<script[^>]+src="([^"]*spa-idle[^"]*)"/.exec(shell)?.[1];assert(entry,'the compiled page names its idle app loader');
   let releaseEntry;
   const entryHeld=new Promise(resolve=>{releaseEntry=resolve;});
   await cold.route(base+entry,async route=>{await entryHeld;await route.continue();});
   const requested=new Set();cold.on('request',request=>requested.add(new URL(request.url()).pathname));
   try {
     await cold.goto(base+'/a/'+seed.id,{waitUntil:'commit'});
-    for(const name of ['Profile','Artifact','InlineStoryRuntime']) {
-      const loaded=()=>[...requested].some(url=>new RegExp('/assets/'+name+'-[^/]+\\.js$').test(url));
-      for(let attempt=0;attempt<100&&!loaded();attempt++)await new Promise(resolve=>setTimeout(resolve,20));
-      assert(loaded(),name+' requested before app entry executes');
-    }
+    const loaded=()=>[...requested].some(url=>/\/islands\/boot-[^/]+\.js$/.test(url));
+    for(let attempt=0;attempt<100&&!loaded();attempt++)await new Promise(resolve=>setTimeout(resolve,20));
+    assert(loaded(),'the compiled island boot is discovered before the idle app executes');
     assert(![...requested].some(url=>/\/(?:ArtifactEditor|VegaChart)-/.test(url)),'editor and chart remain lazy');
-    console.log('Reader Profile, Artifact and InlineStoryRuntime discovered before app execution');
+    console.log('Compiled island boot discovered before idle app execution');
   } finally {releaseEntry();await cold.unrouteAll({behavior:'wait'});await coldContext.close();}
   const context=await browser.newContext({ignoreHTTPSErrors:true,viewport:{width:900,height:700}}),page=await context.newPage();
   await becomeOwner(page,base,seed.token);

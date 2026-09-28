@@ -36,7 +36,6 @@ import { ProfileListing } from '@/web/pages/ProfileIndex';
 import { attachDomain, removeDomain, setDomainResolver, verifyDomain, type DomainResolver } from '@/lib/custom-domains';
 import { mintToken } from '@/lib/tokens';
 import { getDb } from '@/lib/db';
-import { setCompiledReaderFlagForTests } from '@/lib/compiled-page/reader-mode';
 import { drainPreparedPageWarmups } from '@/lib/story/prepared-page.server';
 import { objectKey, objectStore } from '@/lib/object-store';
 import { urlHash } from '@/lib/story/asset-url';
@@ -107,7 +106,7 @@ async function world() {
 const noCookie = (res: Response) => expect(res.headers.get('set-cookie')).toBeNull();
 
 beforeEach(() => { settings.target = 'domains.example.test'; settings.session = ''; });
-afterEach(() => { setDomainResolver(null); setCompiledReaderFlagForTests(null); });
+afterEach(() => { setDomainResolver(null); });
 
 describe('the home page on a verified host', () => {
   it('lists the owner\'s public root documents, server-rendered with links and the footer, and nothing private', async () => {
@@ -391,7 +390,6 @@ describe('everything else on a verified host is 404', () => {
   });
 
   it('serves the live story fragment for the owner\'s public post as a guest', async () => {
-    setCompiledReaderFlagForTests('on');
     const w = await world();
     await drainPreparedPageWarmups();
     const fragment = await app().request(`${HOST}/a/${w.post.id}/story`, { headers: { cookie: 'authjs.session-token=forged' } });

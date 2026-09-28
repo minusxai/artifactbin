@@ -19,12 +19,8 @@ import { chromium } from 'playwright';
 import { startMailSink, loginViaEmail } from './lib/mail-login.mjs';
 import { connectAgent } from './lib/cli-connection.mjs';
 const B = process.argv[2] ?? 'http://localhost:3030';
-/**
- * `GATE_READER=compiled` runs this gate against the compiled reader: every document page it opens
- * carries `?reader=compiled` (honoured while FLAG__COMPILED_READER is `shadow`). Unset, today's reader.
- */
-const READER_PARAM = process.env.GATE_READER === 'compiled' ? 'reader=compiled' : '';
-const readerUrl = (url) => (READER_PARAM ? `${url}${url.includes('?') ? '&' : '?'}${READER_PARAM}` : url);
+/** Every document route serves the compiled reader. */
+const readerUrl = (url) => url;
 const check = createChecker('dataflow');
 /**
  * The document's realm once it is live. Today's reader: the React root the app hydrated. The compiled
