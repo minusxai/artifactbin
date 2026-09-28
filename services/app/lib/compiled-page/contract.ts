@@ -9,14 +9,14 @@
  * (lib/story-runtime/store), not against Solid.
  *
  * Owners (one per module; see the parallel plan):
- *   compiler.ts         compilePage            T1
- *   modules.server.ts   ModuleStore            T1
- *   reader-mode.ts      readerModeFor          T0 (landed)
- *   plan.ts             planOf                 T4
- *   snapshots.server.ts SnapshotStore          T4
- *   charts.server.ts    drawn charts           T4
- *   assembler.ts        assembleReaderPage     T2
- *   links.ts            linkHintsOf            T6
+ *   compiler.ts         compilePage            w2-compiler
+ *   modules.server.ts   ModuleStore            w1-assembler
+ *   reader-mode.ts      readerModeFor          step 0 (landed)
+ *   plan.ts             planOf                 w1-planners
+ *   snapshots.server.ts SnapshotStore          w1-snapshots
+ *   charts.server.ts    drawn charts           w1-planners
+ *   assembler.ts        assembleReaderPage     w1-assembler
+ *   links.ts            linkHintsOf            w1-planners
  */
 import type { JsxNode } from '@/lib/jsx';
 import type { CompiledDataflow, CompiledReads } from '@/lib/story/compiled-dataflow';
@@ -137,7 +137,7 @@ export interface CompileFailure {
 export type StoredCompile = CompiledPage | CompileFailure;
 export const isCompileFailure = (stored: StoredCompile): stored is CompileFailure => 'error' in stored;
 
-/** `compilePage`'s signature (compiler.ts, T1). Pure: the same input and build produce the same page. */
+/** `compilePage`'s signature (compiler.ts, w2-compiler). Pure: the same input and build produce the same page. */
 export type CompilePage = (input: CompileInput, build: CompilerBuild) => Promise<CompiledPage>;
 
 /** The most a read may spend compiling inline on a build-id miss before it falls back to today's renderer (spec §6). */
@@ -153,7 +153,7 @@ export const DOCUMENT_MODULE_PATH = `${ISLANDS_PATH}/d`;
 /** `/islands/d/<sha>.js` — the sha is 16 hex chars; anything else is a 404, never a lookup. */
 export const DOCUMENT_MODULE_RE = /^[0-9a-f]{16}$/;
 
-/** Content-addressed module bytes (modules.server.ts, T1), backed by lib/object-store. */
+/** Content-addressed module bytes (modules.server.ts, w1-assembler), backed by lib/object-store. */
 export interface ModuleStore {
   /** Store the bytes; idempotent (the same bytes are the same key). Returns the ref the page imports. */
   put(bytes: Uint8Array, imports: string[]): Promise<ModuleRef>;
@@ -224,7 +224,7 @@ export interface DataPlan {
   postgres: boolean;
 }
 
-/** `planOf`'s signature (plan.ts, T4). Pure. */
+/** `planOf`'s signature (plan.ts, w1-planners). Pure. */
 export type PlanOf = (flow: CompiledDataflow, access: DatasetAccessFacts) => DataPlan;
 
 /* ────────────────────────────────────────────────────────────────────────────
@@ -276,7 +276,7 @@ export interface SnapshotRead {
 }
 
 /**
- * The snapshot store (snapshots.server.ts, T4; table `app.data_snapshots`).
+ * The snapshot store (snapshots.server.ts, w1-snapshots; table `app.data_snapshots`).
  * Freshness is decided on READ by comparing marks — the correctness rule; the
  * write hook is an optimisation that lets the head revalidate before anyone asks.
  */
@@ -302,7 +302,7 @@ export interface SnapshotStore {
  * The viewer overlay (after paint)
  * ──────────────────────────────────────────────────────────────────────────── */
 
-/** `GET /a/:id/viewer?<$values>` — what only this reader decides, answered with the query door's admission (T5). */
+/** `GET /a/:id/viewer?<$values>` — what only this reader decides, answered with the query door's admission (w3-viewer-writes). */
 export interface ViewerOverlay {
   viewer: StoryViewer | null;
   /** The `viewer`-scope queries' answers for this reader at these values. */
@@ -326,7 +326,7 @@ export interface LinkHints {
 }
 export const EMPTY_LINK_HINTS: LinkHints = { prefetch: [], prerender: [] };
 export const PRERENDER_LIMIT = 3;
-/** `linkHintsOf`'s signature (links.ts, T6). Pure over the nodes and the deployment's origins. */
+/** `linkHintsOf`'s signature (links.ts, w1-planners). Pure over the nodes and the deployment's origins. */
 export type LinkHintsOf = (nodes: JsxNode[], deployment: { origins: readonly string[] }) => LinkHints;
 
 /* ────────────────────────────────────────────────────────────────────────────
@@ -370,7 +370,7 @@ export interface AssembleInput {
   build: CompilerBuild;
 }
 
-/** `assembleReaderPage`'s signature (assembler.ts, T2): ONE function for every reader path. */
+/** `assembleReaderPage`'s signature (assembler.ts, w1-assembler): ONE function for every reader path. */
 export type AssembleReaderPage = (input: AssembleInput) => string;
 
 /** The element ids and attributes the assembled page and the runtime agree on. */

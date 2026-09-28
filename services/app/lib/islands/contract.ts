@@ -7,7 +7,7 @@
  * The SPA (React) and the islands (Solid) share ONE store and ONE document
  * element; this file is where they agree on the handle.
  *
- * Owners: rt.ts / boot.ts (T1), kit/* (T3a–c), viewer + writes (T5), handover (T5).
+ * Owners: rt.ts / boot.ts (w2-runtime), kit/* (w2-kit-*), viewer + writes (w3-viewer-writes), handover (w3-handover).
  */
 import type { Scalar, TableResult } from '@/lib/story/dataflow';
 import type { MutationRequest } from '@/lib/story/mutation-request';
@@ -135,7 +135,7 @@ export type IslandHost = HTMLElement & { [ISLAND_DOCUMENT_KEY]?: IslandDocument 
 export const ISLANDS_READY_EVENT = 'mx:ready';
 
 /* ────────────────────────────────────────────────────────────────────────────
- * The kit's DOM conventions (T3): what the parity gate compares against
+ * The kit's DOM conventions (w2-kit-*): what the parity gate compares against
  * ──────────────────────────────────────────────────────────────────────────── */
 
 /**
