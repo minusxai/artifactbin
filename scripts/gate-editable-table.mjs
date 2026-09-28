@@ -191,7 +191,7 @@ try {
   await a.getByRole('option', { name: 'first reader', exact: true }).click();
   const beforeSelf = (await fixture.api(`/api/artifacts/${fixture.datasetId}`, undefined, 'GET')).version;
   await commit(a, () => a.getByRole('button', { name: 'Done', exact: true }).click(), 409);
-  await a.getByRole('alert').filter({ hasText: /changed|conflict/i }).waitFor();
+  await a.getByRole('alert').filter({ hasText: /changed|conflict/i }).first().waitFor();
   assert.equal((await fixture.api(`/api/artifacts/${fixture.datasetId}`, undefined, 'GET')).version, beforeSelf);
   await a.getByLabel('Depends on 1', { exact: true }).click();
   await aPage.keyboard.press('Escape');
