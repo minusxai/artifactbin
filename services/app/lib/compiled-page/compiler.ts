@@ -38,6 +38,7 @@ import type { JsxElement, JsxNode } from '@/lib/jsx';
 import { REF_ATTRS, carriesRef, refName, type Scalar } from '@/lib/story/dataflow';
 import { resolveRefProps } from '@/lib/story/ref-data';
 import { discoverSlides, MIN_SLIDES_FOR_RAIL } from '@/lib/story-runtime/slides';
+import { discoverOutline, hasOutline } from '@/lib/story-runtime/outline';
 import { createPreviewIdentityAllocator } from '@/lib/story-runtime/preview-identity';
 import { ASSETS_ORIGIN, PUBLIC_BASE_URL } from '@/lib/config';
 import { compileManagedIframe } from '@/lib/story/managed-iframe';
@@ -645,8 +646,11 @@ export async function compilePage(input: CompileInput, build: CompilerBuild): Pr
   // every query that reads one is `viewer` — never a private answer in a guest snapshot.
   const plan = input.flow ? planOf(input.flow, input.access ?? { datasets: {} }) : null;
   const links = input.nodes.length ? linkHintsOf(input.nodes, { origins: deploymentOrigins() }) : EMPTY_LINK_HINTS;
+  const outlinePlan = input.template === 'plan';
+  const outline = input.chrome && (input.template === 'editorial' || outlinePlan) && hasOutline(input.nodes)
+    ? discoverOutline(input.nodes) : [];
   const base = {
-    build: build.id, islands: generated.islandRefs, behaviors: generated.behaviors, plan, links,
+    build: build.id, islands: generated.islandRefs, behaviors: generated.behaviors, plan, links, outline, outlinePlan,
     kit: generated.kit, reactStatic: generated.reactStatic, unported: generated.unported, partial: generated.partial,
     // Data for the page's JSON island, never module code (contract CompiledPage.authorScript).
     authorScript: input.authorScript || null,

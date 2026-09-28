@@ -49,6 +49,19 @@ async function inputOf(source: string, template: string | null = null): Promise<
 const dom = (html: string) => new JSDOM(`<div id="r">${html}</div>`).window.document.getElementById('r')!;
 
 describe('compilePage', () => {
+  it('stores the legacy outline decision and heading paths with the version', async () => {
+    const source = '<article><h2>One &amp; all</h2><h3>Part</h3><h2>Two</h2><h2>Three</h2></article>';
+    const page = await compilePage(await inputOf(source, 'plan'), loadCompilerBuild());
+    expect(page.outline).toEqual([
+      { level: 2, title: 'One & all', path: '0.0' },
+      { level: 3, title: 'Part', path: '0.1' },
+      { level: 2, title: 'Two', path: '0.2' },
+      { level: 2, title: 'Three', path: '0.3' },
+    ]);
+    expect(page.outlinePlan).toBe(true);
+    expect((await compilePage(await inputOf(source, 'dashboard'), loadCompilerBuild())).outline).toEqual([]);
+    expect((await compilePage({ ...(await inputOf(source, 'plan')), chrome: false }, loadCompilerBuild())).outline).toEqual([]);
+  });
   it('prose: static HTML only — no islands, no module, no slot left behind', async () => {
     const page = await compilePage(await inputOf(fixture('prose.jsx')), loadCompilerBuild());
     expect(page.islands).toEqual([]);
