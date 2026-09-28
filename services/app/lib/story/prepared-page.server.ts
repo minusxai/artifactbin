@@ -37,7 +37,7 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { getDb } from '@/lib/db';
-import { ASSETS_ORIGIN, IS_DEV, PUBLIC_BASE_URL } from '@/lib/config';
+import { ASSETS_ORIGIN, COMPILED_READER, IS_DEV, PUBLIC_BASE_URL } from '@/lib/config';
 import type { ArtifactRow, Viewer } from '@/lib/artifacts';
 import { declarationsForRow, holdableImports, LIVE_ARTIFACT_SQL, refDataForRow, viewerIdentityFor, type RoleActor } from '@/lib/artifacts';
 import { artifactQuery } from '@/lib/artifact-document';
@@ -64,9 +64,13 @@ import type { StoryBaseCssRecipe } from './story-base-css';
 import type { ServedStoryRuntime } from './prepared-runtime';
 import type { StoryIslandData, StoryIslandDataflow } from '@/lib/story-runtime/contract';
 import type { StoryThemeName } from '@/lib/validation/atlas-schemas';
+import { loadCompilerBuild } from '@/lib/compiled-page/build.server';
+import { createSpeculationRulesStore } from '@/lib/compiled-page/modules.server';
+import { compilesPages, currentCompiledReaderFlag } from '@/lib/compiled-page/reader-mode';
+import type { CompilerBuild, StoredCompile } from '@/lib/compiled-page/contract';
 
 /** Bump when the stored shape changes; old entries then miss and are overwritten. */
-const PAGE_FORMAT = 1;
+const PAGE_FORMAT = 2;
 
 /** One version, prepared for the reader. Nothing in it depends on who reads. */
 export interface PreparedPage {
@@ -87,6 +91,8 @@ export interface PreparedPage {
   deps: PreparedDeps;
   /** The anonymous reader's render of the story element, and the digest of the overlay it was rendered with. */
   ssr: { overlay: string; html: string } | null;
+  /** The compiled page (lib/compiled-page), or its recorded failure; absent while the deployment does not compile (`FLAG__COMPILED_READER=off`). */
+  compiled?: StoredCompile;
 }
 interface PreparedDeps { datasets: string[]; assets: string[]; fonts: string[] }
 
@@ -143,9 +149,19 @@ const BOOT = Date.now();
 const canonical = (value: unknown): string => JSON.stringify(value, (_key, v: unknown) =>
   v && typeof v === 'object' && !Array.isArray(v) ? Object.fromEntries(Object.entries(v as Record<string, unknown>).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))) : v);
 const slotOf = (at: ArchivedRender | null): string => (at ? `v:${at.version}` : 'head');
-/** Every stored field preparation reads, the CSS compile version and the build. */
-const keyOf = (row: ArtifactRow): string =>
-  `${PAGE_FORMAT}:${sha(canonical([row.format, row.title, row.meta, row.source ?? '', !!row.previousEngine]))}:${storyCssCompileVersion()}:${buildId()}`;
+/** The compiler this deployment compiles with, or null when it does not compile (the flag is `off`). */
+function compilerBuild(): { build: CompilerBuild | null; error: string | null } | null {
+  if (!compilesPages(currentCompiledReaderFlag(COMPILED_READER))) return null;
+  try {
+    return { build: loadCompilerBuild(), error: null };
+  } catch (error) {
+    // No island build (never run, or unreadable): recorded as a failure, never a failed read.
+    return { build: null, error: error instanceof Error ? error.message : String(error) };
+  }
+}
+/** Every stored field preparation reads, the CSS compile version, the build, and the compiler build (a deploy or a flag change misses). */
+const keyOf = (row: ArtifactRow, compiler: ReturnType<typeof compilerBuild>): string =>
+  `${PAGE_FORMAT}:${sha(canonical([row.format, row.title, row.meta, row.source ?? '', !!row.previousEngine]))}:${storyCssCompileVersion()}:${buildId()}:${compiler ? compiler.build?.id ?? 'none' : 'off'}`;
 
 /** The current state of the other rows an entry was built from. Empty when it depends on none. */
 async function fingerprint(deps: PreparedDeps): Promise<string> {
@@ -186,8 +202,41 @@ async function readerInputFor(row: ArtifactRow, page: Pick<PreparedPage, 'declar
 type ReaderOverlay = ReaderIslandInput & { colorMode?: 'light' | 'dark' };
 const overlayDigest = (input: ReaderOverlay): string => sha(canonical({ ...readerIslandData(input), ...(input.colorMode ? { colorMode: input.colorMode } : {}) }));
 
+/**
+ * The version compiled to static HTML and islands (lib/compiled-page/compiler), or the recorded
+ * failure: a refused compile (`unported`) and a thrown one are stored, so a read never retries the
+ * same build in a loop. The page's speculation rules are stored with it, so the header never names a
+ * missing file.
+ */
+async function compiledFor(row: ArtifactRow, page: PreparedPage, refData: ReaderIslandInput['refData'], compiler: NonNullable<ReturnType<typeof compilerBuild>>): Promise<StoredCompile> {
+  const build = compiler.build;
+  if (!build) return { build: 'none', error: compiler.error ?? 'no island build', reason: 'compile-error' };
+  try {
+    // Imported on first compile, not at the top: the compiler carries Babel, Solid and today's React
+    // kit (it renders static components at compile time), and this module sits under lib/artifacts,
+    // which every tool that reads artifacts loads (the CLI's teaching build among them). A process
+    // that never compiles (`FLAG__COMPILED_READER=off`) never loads any of it. The snapshot store
+    // imports this module, so its access helper is reached the same way (no import cycle at load).
+    const [{ compilePage }, { anonymousAccessFacts }] = await Promise.all([import('@/lib/compiled-page/compiler'), import('@/lib/compiled-page/snapshots.server')]);
+    const flow = page.declared?.flow ?? null;
+    const compiled = await compilePage({
+      nodes: page.data.nodes, colorMode: page.data.colorMode, template: page.data.template ?? null, chrome: page.data.chrome !== false,
+      ...(page.data.glyphs ? { glyphs: page.data.glyphs } : {}),
+      refData: refData ?? {}, flow, build: build.id,
+      // The plan snapshots key on: the anonymous reader's admission, decided as the snapshot store decides it.
+      ...(flow ? { access: await anonymousAccessFacts(row, flow) } : {}),
+    }, build);
+    if (compiled.unported.length) return { build: build.id, error: `unported: ${compiled.unported.join(', ')}`, reason: 'unported', unported: compiled.unported };
+    await createSpeculationRulesStore().put(compiled.links.prerender);
+    return compiled;
+  } catch (error) {
+    console.warn('[prepared-page] compile failed', error);
+    return { build: build.id, error: error instanceof Error ? error.message : String(error), reason: 'compile-error' };
+  }
+}
+
 /** Parse, isolate and render one version. The only place a served document is compiled. */
-async function build(row: ArtifactRow, at: ArchivedRender | null, origin: string): Promise<PreparedPage> {
+async function build(row: ArtifactRow, at: ArchivedRender | null, origin: string, compiler: ReturnType<typeof compilerBuild>): Promise<PreparedPage> {
   const meta = (row.meta ?? {}) as { theme?: StoryThemeName | null; colorMode?: 'light' | 'dark' | null; template?: string | null; compiledCss?: string | null; cssCompileVersion?: string | null; refs?: Array<{ id: string; kind: string }> };
   const design = resolveStoredStoryDesign(meta.theme, meta.colorMode);
   const source = row.source ?? '';
@@ -224,6 +273,7 @@ async function build(row: ArtifactRow, at: ArchivedRender | null, origin: string
   // The anonymous reader's render, whoever asked first.
   const anonymous = await readerInputFor(row, page, { at, viewer: null, search: '', origin });
   page.ssr = { overlay: overlayDigest(anonymous), html: renderStory(page, anonymous) };
+  if (compiler) page.compiled = await compiledFor(row, page, anonymous.refData, compiler);
   return page;
 }
 
@@ -241,12 +291,13 @@ interface StoredRow { page_key: string; deps: string; page: PreparedPage }
 /** The stored entry for this version when it is current, else a fresh one, written back. */
 export async function preparedPageFor(stored: ArtifactRow, at: ArchivedRender | null, origin: string): Promise<{ row: ArtifactRow; page: PreparedPage }> {
   const row = await servedRow(stored, at);
-  const key = keyOf(row);
+  const compiler = compilerBuild();
+  const key = keyOf(row, compiler);
   const slot = slotOf(at);
   const db = await getDb();
   const found = (await db.query<StoredRow>('SELECT page_key, deps, page FROM prepared_pages WHERE artifact_id = $1 AND slot = $2', [row.id, slot])).rows[0];
   if (found && found.page_key === key && found.deps === await fingerprint(found.page.deps)) return { row, page: found.page };
-  const page = await build(row, at, origin);
+  const page = await build(row, at, origin, compiler);
   try {
     await db.query(
       `INSERT INTO prepared_pages (artifact_id, slot, page_key, deps, page, updated_at) VALUES ($1, $2, $3, $4, $5::jsonb, now())

@@ -67,6 +67,12 @@ export interface CompileInput {
   refData: RefDataMap;
   /** The stored compiled dataflow, or null for a document that declares no data. */
   flow: CompiledDataflow | null;
+  /**
+   * The anonymous reader's admission to the datasets `flow` reads (snapshots.server
+   * `anonymousAccessFacts`), so the stored plan is the one snapshots key on. Absent: no dataset is
+   * admitted, and every query that reads one plans as `viewer`.
+   */
+  access?: DatasetAccessFacts;
   /** The compiler build this compile is made with (see `CompilerBuild`). */
   build: string;
 }
@@ -124,6 +130,10 @@ export interface CompiledPage {
    * returns the whole story HTML with the islands rendered from `data` (the
    * prototype's render.mjs). Imported by the serve path, cached per build; the
    * output is cached per (build, snapshot key). Null with `module`.
+   *
+   * It holds the whole page's HTML (private documents included), so it is stored under an object-store
+   * prefix NO route serves (`islands-ssr/<sha>`, lib/compiled-page/bundle.server `createSsrModuleStore`);
+   * its `url` is that object key, never a path a browser can fetch.
    */
   ssr: ModuleRef | null;
   /** Framework-free behaviour chunks the page loads (`deck`), as specifiers into the shared manifest. */

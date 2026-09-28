@@ -4,10 +4,12 @@
  * (`@mx/kit/<family>`, lib/islands/contract `KIT_FAMILIES`) become ONE module graph, split into
  * content-addressed browser chunks under services/app/public/islands/, with
  *
- *   manifest.json  { build, manifest, files }
+ *   manifest.json  { build, manifest, files, ssr }
  *     manifest     import specifier → URL (what a compiled page's module imports; `CompilerBuild.manifest`)
  *     files[url]   { raw, gz, br, imports } — byte counts and the STATIC imports, for preloads and budgets
- *     build        sha256(manifest text + the island sources)[0..16] — the compiler build id's input
+ *     ssr          { url, exports } — the SERVER half: one file, `generate: 'ssr'`, for the compiled
+ *                  page's SSR module (see buildServerHalf); never loaded by a browser
+ *     build        sha256(manifest text + server half + the island sources)[0..16] — the compiler build id's input
  *
  * One graph, so there is exactly one Solid: every chunk that needs it imports the same shared chunk.
  * Solid has no entry of its own: generated island code imports only `@mx/rt` (babel-preset-solid's
@@ -121,6 +123,8 @@ export function closureOf(files, urls) {
  */
 export async function buildIslands({ outDir = DEFAULT_OUT_DIR } = {}) {
   const entryPoints = ENTRIES.map((e) => ({ in: e.file(), out: e.name }));
+  // The browser graph and the server half are independent builds of the same sources: run them together.
+  const serverHalf = buildServerHalf();
   const result = await esbuild.build({
     absWorkingDir: ROOT,
     entryPoints,
@@ -141,8 +145,9 @@ export async function buildIslands({ outDir = DEFAULT_OUT_DIR } = {}) {
     plugins: [solidPlugin({ generate: 'dom', hydratable: true })],
   });
 
+  const ssrHalf = await serverHalf;
   // Exactly one framework: an island that reached a React file would carry a second runtime.
-  const inputs = Object.keys(result.metafile.inputs);
+  const inputs = [...new Set([...Object.keys(result.metafile.inputs), ...ssrHalf.inputs])].sort();
   const react = inputs.filter((i) => /node_modules\/(react|react-dom)\//.test(i));
   if (react.length) throw new Error(`build-islands: React reached the island graph (${react.slice(0, 3).join(', ')})`);
 
@@ -181,22 +186,78 @@ export async function buildIslands({ outDir = DEFAULT_OUT_DIR } = {}) {
   const missing = ISLAND_SPECIFIERS.filter((s) => !manifest[s]);
   if (missing.length) throw new Error(`build-islands: no chunk for ${missing.join(', ')}`);
 
+  const ssrName = `ssr-${sha256(ssrHalf.bytes).slice(0, 16)}.js`;
+  fs.writeFileSync(path.join(outDir, ssrName), ssrHalf.bytes);
+  const ssr = { url: url(ssrName), exports: SSR_EXPORTS };
+
   const sortedManifest = Object.fromEntries(ISLAND_SPECIFIERS.map((s) => [s, manifest[s]]));
   const sortedFiles = Object.fromEntries(Object.keys(files).sort().map((k) => [k, files[k]]));
-  const build = buildId(sortedManifest, inputs);
-  fs.writeFileSync(path.join(outDir, 'manifest.json'), JSON.stringify({ build, manifest: sortedManifest, files: sortedFiles }, null, 1) + '\n');
-  return { build, manifest: sortedManifest, files: sortedFiles, closure: (urls) => closureOf(sortedFiles, urls), inputs };
+  const build = buildId(sortedManifest, ssr, inputs);
+  fs.writeFileSync(path.join(outDir, 'manifest.json'), JSON.stringify({ build, manifest: sortedManifest, files: sortedFiles, ssr }, null, 1) + '\n');
+  return { build, manifest: sortedManifest, files: sortedFiles, ssr, closure: (urls) => closureOf(sortedFiles, urls), inputs };
 }
+
+/**
+ * THE SERVER HALF (docs/phase2-architecture.md §2.2; lib/compiled-page/bundle.server `loadSsrModule`):
+ * the runtime and EVERY kit family compiled `generate: 'ssr', hydratable`, for the compiled page's SSR
+ * module to render islands (and a skeleton's kit) on the server. ONE ESM file exporting a namespace per
+ * specifier (`exports`: specifier → export name), no splitting, so the runtime and every family share one
+ * module graph and one island context. Solid stays three bare imports (`solid-js`, `/web`, `/store`): the
+ * server injects its own one Solid when it evaluates the file, as it does for every generated module.
+ * Never imported by a browser; nothing in it is per document.
+ */
+export const SSR_SPECIFIERS = Object.freeze(ISLAND_SPECIFIERS.filter((s) => s === '@mx/rt' || s.startsWith('@mx/kit/')));
+const SSR_EXPORTS = Object.freeze(Object.fromEntries(SSR_SPECIFIERS.map((s) => [s, s === '@mx/rt' ? 'rt' : `kit_${s.slice('@mx/kit/'.length).replace(/-/g, '_')}`])));
+
+/** The server half's generated entry, as the metafile names it (never a file on disk). */
+const SSR_ENTRY = toPosix(path.relative(ROOT, path.join(ISLANDS_SRC, 'mx-ssr-half.js')));
+
+async function buildServerHalf() {
+  const result = await esbuild.build({
+    absWorkingDir: ROOT,
+    stdin: { contents: SSR_SPECIFIERS.map((s) => `export * as ${SSR_EXPORTS[s]} from ${JSON.stringify(s)};`).join('\n'), resolveDir: ISLANDS_SRC, sourcefile: path.basename(SSR_ENTRY), loader: 'js' },
+    write: false,
+    bundle: true,
+    format: 'esm',
+    platform: 'node',
+    target: 'node22',
+    metafile: true,
+    external: ['solid-js', 'solid-js/web', 'solid-js/store'],
+    alias: { '@': APP },
+    define: { 'process.env.NODE_ENV': '"production"' },
+    logLevel: 'error',
+    plugins: [browserOnlyLazy, solidPlugin({ generate: 'ssr', hydratable: true })],
+  });
+  const [file] = result.outputFiles;
+  const imported = Object.values(result.metafile.outputs).flatMap((o) => o.imports.map((i) => i.path));
+  const bare = imported.filter((spec) => !/^solid-js(\/web|\/store)?$/.test(spec));
+  if (bare.length) throw new Error(`build-islands: the server half imports ${[...new Set(bare)].join(', ')}; only Solid may stay external`);
+  return { bytes: Buffer.from(file.text), inputs: Object.keys(result.metafile.inputs).filter((i) => i !== SSR_ENTRY && !i.startsWith('mx-browser-only:')) };
+}
+
+/**
+ * What an island loads LAZILY is browser-only by construction (the chart controller and Vega, the
+ * Mermaid engine): it runs on interaction, never while the server renders. In the server half every
+ * dynamic import resolves to a stub that refuses when called, so neither engine is bundled (nor React,
+ * which the Mermaid engine reaches).
+ */
+const browserOnlyLazy = {
+  name: 'mx-browser-only-lazy',
+  setup(build) {
+    build.onResolve({ filter: /.*/ }, (args) => (args.kind === 'dynamic-import' ? { path: args.path, namespace: 'mx-browser-only' } : undefined));
+    build.onLoad({ filter: /.*/, namespace: 'mx-browser-only' }, (args) => ({ contents: `throw new Error(${JSON.stringify(`${args.path} is browser-only: the server never loads it`)});`, loader: 'js' }));
+  },
+};
 
 /**
  * The build id: the manifest text (every chunk's content address) and the island SOURCES — every file
  * under lib/islands outside tests, which covers the recipes the compiler evaluates at compile time and
  * are never in the browser graph, plus any repository module the graph reached.
  */
-function buildId(manifest, graphInputs) {
+function buildId(manifest, ssr, graphInputs) {
   const sources = new Set(listFiles(ISLANDS_SRC).filter((f) => !f.split(path.sep).includes('__tests__')).map((f) => toPosix(path.relative(ROOT, f))));
   for (const input of graphInputs) if (!/^[\w-]+:/.test(input) && !input.includes('node_modules/')) sources.add(input);
-  const hash = crypto.createHash('sha256').update(JSON.stringify(manifest));
+  const hash = crypto.createHash('sha256').update(JSON.stringify(manifest)).update(JSON.stringify(ssr));
   for (const rel of [...sources].sort()) hash.update(`\0${rel}\0`).update(fs.readFileSync(path.join(ROOT, rel)));
   return hash.digest('hex').slice(0, 16);
 }
@@ -216,8 +277,8 @@ function cacheHit(outDir) {
     // A source added under lib/islands since the last build is a miss too.
     const now = sourceHashes(trackedSources(Object.keys(marker.sources)));
     if (JSON.stringify(now) !== JSON.stringify(marker.sources)) return false;
-    const { manifest, files } = JSON.parse(fs.readFileSync(path.join(outDir, 'manifest.json'), 'utf8'));
-    return Object.keys(files).every((u) => fs.existsSync(path.join(outDir, u.slice(ISLANDS_PATH.length + 1)))) && ISLAND_SPECIFIERS.every((s) => manifest[s]);
+    const { manifest, files, ssr } = JSON.parse(fs.readFileSync(path.join(outDir, 'manifest.json'), 'utf8'));
+    return [...Object.keys(files), ssr?.url ?? '/missing-server-half'].every((u) => fs.existsSync(path.join(outDir, u.slice(ISLANDS_PATH.length + 1)))) && ISLAND_SPECIFIERS.every((s) => manifest[s]);
   } catch {
     return false;
   }

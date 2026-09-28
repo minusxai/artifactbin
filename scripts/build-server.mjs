@@ -25,6 +25,14 @@ import { existsSync, mkdirSync, readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { EXTERNALS } from './runtime-externals.mjs';
 
+/*
+ * Requires the bundle names but never reaches, so no image installs them: @babel/core (the
+ * publish-time compiler's Solid transform, lib/compiled-page/bundle.server) asks for
+ * @babel/preset-typescript only when a `.cts` Babel config fails to load, and the compiler loads
+ * no config file at all (`configFile: false`, `babelrc: false`).
+ */
+const BUNDLE_ONLY_EXTERNALS = ['@babel/preset-typescript'];
+
 generateTeaching();
 const out = process.argv[2] ?? 'dist/server.mjs';
 const entry = process.argv[3] ?? 'server.ts';
@@ -44,7 +52,7 @@ await esbuild.build({
   format: 'esm',
   target: 'node22',
   outfile: out,
-  external: [...EXTERNALS, ...process.argv.slice(4).filter(arg=>!arg.startsWith('--'))],
+  external: [...EXTERNALS, ...BUNDLE_ONLY_EXTERNALS, ...process.argv.slice(4).filter(arg=>!arg.startsWith('--'))],
   define: tailwindDefine,
   // `require` for the bundled CJS deps, under a name nothing else can collide
   // with: the app itself uses createRequire (lib/story/document loads the SSR
