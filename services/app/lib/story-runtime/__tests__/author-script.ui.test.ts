@@ -5,6 +5,7 @@ import { createAuthorScriptSession, startAuthorScript } from '../author-script';
 import { createDataflowStore } from '../store';
 import { AUTHOR_SCRIPT_FRAME_TITLE } from '../author-script-contract';
 import {AUTHOR_SCRIPT_DOCUMENT} from '../author-script-bootstrap';
+import {AUTHOR_FRAME_PATH} from '../author-frame';
 
 afterEach(() => { document.body.replaceChildren(); vi.useRealTimers(); vi.unstubAllGlobals(); });
 describe('isolated author script host', () => {
@@ -62,7 +63,7 @@ describe('isolated author script host', () => {
     expect(frame.hidden).toBe(true);
     expect(document.querySelector('script')).toBeNull();
     expect((window as unknown as { __authorEscaped?: boolean }).__authorEscaped).toBeUndefined();
-    expect(frame.srcdoc).toBe('');expect(new URL(frame.src).pathname).toBe('/story/author-frame');
+    expect(frame.srcdoc).toBe('');expect(new URL(frame.src).pathname).toBe(AUTHOR_FRAME_PATH);
     const post=vi.spyOn(frame.contentWindow!,'postMessage');frame.dispatchEvent(new Event('load'));
     expect(post).toHaveBeenCalledWith({type:'mx:author:init',document:AUTHOR_SCRIPT_DOCUMENT},'*',[{}]);
     expect(AUTHOR_SCRIPT_DOCUMENT).toContain("connect-src 'none'");

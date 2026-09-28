@@ -79,6 +79,8 @@ export const ISLAND_SPECIFIERS = Object.freeze(ENTRIES.map((e) => e.specifier));
  */
 const STANDALONE_LAZY = [
   { request: './embed/frame-engine', name: 'frame-engine', file: () => path.join(ISLANDS_SRC, 'kit/embed/frame-engine.ts') },
+  // The version's author script (lib/islands/author-host), loaded by boot only when the page data names one.
+  { request: './author-host', name: 'author-host', file: () => path.join(ISLANDS_SRC, 'author-host.ts') },
 ];
 
 async function buildStandaloneLazy() {
@@ -99,8 +101,11 @@ async function buildStandaloneLazy() {
 const standaloneLazyPlugin = (built) => ({
   name: 'mx-standalone-lazy',
   setup(build) {
-    build.onResolve({ filter: /^\.\/embed\/[\w-]+$/ }, (args) => {
-      const lazy = built.find((b) => b.request === args.path && args.kind === 'dynamic-import');
+    build.onResolve({ filter: /^\.\/(?:embed\/)?[\w-]+$/ }, (args) => {
+      if (args.kind !== 'dynamic-import') return undefined;
+      // By the module it names, so a same-named request elsewhere is never taken for it.
+      const target = path.resolve(path.dirname(args.importer), args.path);
+      const lazy = built.find((b) => b.request === args.path && b.file().replace(/\.tsx?$/, '') === target);
       return lazy ? { path: `./${lazy.fileName}`, external: true } : undefined;
     });
   },

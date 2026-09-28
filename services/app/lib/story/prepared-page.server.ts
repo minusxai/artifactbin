@@ -222,7 +222,7 @@ async function compiledFor(row: ArtifactRow, page: PreparedPage, refData: Reader
     const compiled = await compilePage({
       nodes: page.data.nodes, colorMode: page.data.colorMode, template: page.data.template ?? null, chrome: page.data.chrome !== false,
       ...(page.data.glyphs ? { glyphs: page.data.glyphs } : {}),
-      refData: refData ?? {}, flow, build: build.id,
+      refData: refData ?? {}, flow, build: build.id, authorScript: page.authorScript,
       // The plan snapshots key on: the anonymous reader's admission, decided as the snapshot store decides it.
       ...(flow ? { access: await anonymousAccessFacts(row, flow) } : {}),
     }, build);
