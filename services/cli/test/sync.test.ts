@@ -506,6 +506,8 @@ test('a published page that declares a write is told the push did not run it',as
   assert.ok(result.next.startsWith(PUBLISHED_NEXT),'the measured rule for documents is kept verbatim');
   assert.match(result.next,/add/);
   assert.match(result.next,/live session/);
+  assert.match(result.next,/each identity.s own authorized disposable fork/);
+  assert.doesNotMatch(result.next,/on a test-user fork, once as that test user and once as yourself/);
   assert.match(result.next,/--as guest/);
   assert.match(result.next,/afbin help live-sessions/);
   assert.ok(result.verified[0].checks.some((c:string)=>/1 write declared, not run/.test(c)),JSON.stringify(result.verified));
