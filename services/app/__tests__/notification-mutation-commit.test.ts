@@ -43,3 +43,24 @@ it('distinguishes intentional runs without coalescing their notification jobs',a
  expect(await loadDatasetRows((await getArtifactById(dataset.id))!)).toEqual([{n:2}]);
  expect((await db.query('SELECT id FROM notification_jobs WHERE mutation_run_id=ANY($1::text[])',[[a.mutationRunId,b.mutationRunId]])).rows).toHaveLength(2);
 });
+
+it('rolls back dataset and scheduled jobs when receipt persistence fails',async()=>{
+ const {db,dataset,send}=await fixture();
+ await db.query('ALTER TABLE mutation_receipts ADD CONSTRAINT mxmx_test_notification_receipt CHECK (response IS NULL)');
+ try {
+  try {await send('mxmx_test_notification_receipt');} catch {/* direct handler exposes the injected DB refusal */}
+  expect(await loadDatasetRows((await getArtifactById(dataset.id))!)).toEqual([{n:0}]);
+  expect((await db.query('SELECT id FROM notification_jobs')).rows).toEqual([]);
+ } finally {await db.query('ALTER TABLE mutation_receipts DROP CONSTRAINT mxmx_test_notification_receipt');}
+});
+
+it('refuses to commit the mutation if its durable trigger cannot be stored',async()=>{
+ const {db,dataset,send}=await fixture();
+ await db.query("ALTER TABLE notification_jobs ADD CONSTRAINT mxmx_test_notification_enqueue CHECK (rule_id <> 'counter_status')");
+ try {
+  try {await send('mxmx_test_notification_enqueue');} catch {/* injected job insert failure */}
+  expect(await loadDatasetRows((await getArtifactById(dataset.id))!)).toEqual([{n:0}]);
+  expect((await db.query('SELECT id FROM notification_jobs')).rows).toEqual([]);
+  expect((await db.query('SELECT response FROM mutation_receipts')).rows.every(row=>row.response===null)).toBe(true);
+ } finally {await db.query('ALTER TABLE notification_jobs DROP CONSTRAINT mxmx_test_notification_enqueue');}
+});
