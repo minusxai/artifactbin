@@ -13,7 +13,7 @@
  * (fixtures/editable-cells, captured from `/raw?reader=legacy`): tags, attributes (class strings in order),
  * text — the parity gate's comparison.
  */
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
@@ -131,6 +131,28 @@ const shapeOf = (el: Element): Shape => ({
 const shapesOf = (html: string): Shape[] => { const t = document.createElement('template'); t.innerHTML = html; return [...t.content.children].map(shapeOf); };
 
 describe('editable cells on the compiled page', () => {
+  it('keeps a draft when its focused row is detached by virtualization', async () => {
+    const { host, written } = await page(null);
+    const input = cellOf(host, 'tbl', 'item')!.querySelector('input')!;
+    await until(() => !input.disabled, 'the write check');
+    input.focus(); input.value = 'survives scroll'; input.dispatchEvent(new Event('input', { bubbles: true }));
+    input.blur(); input.remove();
+    await new Promise(resolve => setTimeout(resolve, 0));
+    expect(written).toEqual([]);
+  });
+  it('does not report an invalid blur after another cell opens', async () => {
+    const { host, written } = await page(null);
+    const input = cellOf(host, 'tbl', 'hours')!.querySelector('input')!;
+    await until(() => !input.disabled, 'the write check');
+    input.focus(); input.value = '-1'; input.dispatchEvent(new Event('input', { bubbles: true }));
+    const report = vi.spyOn(input, 'reportValidity');
+    input.blur();
+    cellOf(host, 'tbl', 'status', 2)!.querySelector('button')!.click();
+    await new Promise(resolve => setTimeout(resolve, 0));
+    expect(report).not.toHaveBeenCalled();
+    expect(document.querySelector('[role="listbox"][aria-label="Status 2"]')).toBeTruthy();
+    expect(written).toEqual([]);
+  });
   it('keeps a cell menu mounted through an unrelated data refresh', async () => {
     const { host, refresh } = await page(null);
     await until(() => !cellOf(host, 'tbl', 'status')!.querySelector('button')!.disabled, 'the write check');

@@ -82,6 +82,26 @@ describe('Select', () => {
 });
 
 describe('DataTable', () => {
+  it('shows the matching row when a filter shrinks a scrolled virtual table', async () => {
+    const height = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'clientHeight');
+    Object.defineProperty(HTMLElement.prototype, 'clientHeight', { configurable: true, get() { return (this as HTMLElement).classList.contains('overflow-auto') ? 420 : 0; } });
+    try {
+      const ctx = fakeIsland();
+      const all: TableResult = { rows: Array.from({ length: 500 }, (_, i) => ({ id: i + 1, item: `Item ${i + 1}` })), columns: [{ name: 'id', type: 'number' }, { name: 'item', type: 'string' }] };
+      const [table, setTable] = createSignal(all);
+      ctx.table = ctx.tableSnapshot = () => table();
+      const { host, dispose } = mount(ctx, () => <DataTable data="$tasks" rowKey="id" height={420} />);
+      const scroll = host.querySelector<HTMLElement>('.overflow-auto')!;
+      scroll.scrollTop = 16117; scroll.dispatchEvent(new Event('scroll'));
+      setTable({ ...all, rows: [all.rows[499]!] });
+      await vi.waitFor(() => expect(host.querySelector('tbody')?.textContent).toContain('Item 500'));
+      await vi.waitFor(() => expect(scroll.scrollTop).toBe(0));
+      dispose();
+    } finally {
+      if (height) Object.defineProperty(HTMLElement.prototype, 'clientHeight', height);
+      else Reflect.deleteProperty(HTMLElement.prototype, 'clientHeight');
+    }
+  });
   it('shows a user card that arrives after the row, then follows its updated handle', async () => {
     const ctx = fakeIsland();
     const [people, setPeople] = createSignal<Record<string, { name: string; handle: string; image: null }>>({});

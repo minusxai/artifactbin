@@ -452,6 +452,14 @@ function CellNative(props: Shared & {
     props.commit();
   };
   const onInput = (e: Event) => { const el = e.currentTarget as HTMLInputElement; props.change(props.tag === 'select' ? props.typed(el.value) : el.value); };
+  // Virtualization can blur a focused cell while removing its row. Commit only if the
+  // element survives that render; a draft for an unmounted row stays in CellSessions.
+  const onBlur = (el: HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement) => {
+    // An invalid input may have just yielded focus to another cell. A delayed
+    // reportValidity would steal that focus back and close the new cell's popup.
+    if (!el.validity.valid) return;
+    setTimeout(() => { if (el.isConnected) commitDraft(el); }, 0);
+  };
   const onKey = (e: KeyboardEvent) => {
     const el = e.currentTarget as HTMLInputElement;
     if (e.key === 'Escape') { e.preventDefault(); props.cancel(); el.blur(); }
@@ -462,12 +470,12 @@ function CellNative(props: Shared & {
   const bind = (el: HTMLInputElement | HTMLSelectElement) => createEffect(() => { const v = text(); if (el.value !== v) el.value = v; if (el instanceof HTMLInputElement) el.setAttribute('value', v); });
   if (props.tag === 'select') {
     return <select {...common()} disabled={props.disabled()} ref={(el) => queueMicrotask(() => bind(el))} on:focus={props.begin}
-      on:change={(e) => { onInput(e); commitDraft(e.currentTarget); }} on:blur={(e) => commitDraft(e.currentTarget)} on:keydown={onKey}>{props.children}</select>;
+      on:change={(e) => { onInput(e); commitDraft(e.currentTarget); }} on:blur={(e) => onBlur(e.currentTarget)} on:keydown={onKey}>{props.children}</select>;
   }
   if (props.tag === 'textarea') {
     // A textarea's served value is its content (React), the live value its property.
     return <textarea {...common()} disabled={props.disabled()} {...({ 'prop:value': text() } as JSX.TextareaHTMLAttributes<HTMLTextAreaElement>)}
-      on:focus={props.begin} on:input={onInput} on:blur={(e) => commitDraft(e.currentTarget)} on:keydown={onKey}>{untrack(text)}</textarea>;
+      on:focus={props.begin} on:input={onInput} on:blur={(e) => onBlur(e.currentTarget)} on:keydown={onKey}>{untrack(text)}</textarea>;
   }
-  return <input {...common()} value={text()} disabled={props.disabled()} ref={bind} on:focus={props.begin} on:input={onInput} on:blur={(e) => commitDraft(e.currentTarget)} on:keydown={onKey} />;
+  return <input {...common()} value={text()} disabled={props.disabled()} ref={bind} on:focus={props.begin} on:input={onInput} on:blur={(e) => onBlur(e.currentTarget)} on:keydown={onKey} />;
 }

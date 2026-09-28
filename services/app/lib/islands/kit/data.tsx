@@ -207,12 +207,23 @@ function DataGrid(props: DataTableProps & { table: TableResult }) {
   // In the virtual regime the header row and every body row are the same CSS grid (today's rowGrid).
   const rowGrid = () => ({ display: 'grid', 'grid-template-columns': geometry().template, width: '100%', 'min-width': geometry().minWidth ? `${geometry().minWidth}px` : undefined });
   const virtualizer = createVirtualizer<HTMLDivElement, HTMLTableRowElement>({ getScrollElement: () => scroll, get count() { return ordered().length; }, getItemKey: (index) => rowIdentity(ordered()[index], props.rowKey, index), estimateSize: () => ROW_H, overscan: 12, get enabled() { return virtual(); }, initialOffset: () => scroll?.scrollTop ?? 0 });
+  let previousRows = ordered().length;
+  createEffect(on(() => ordered().length, (count) => {
+    if (count < previousRows && scroll) {
+      scroll.scrollTop = 0;
+      queueMicrotask(() => virtualizer.scrollToOffset(0));
+    }
+    previousRows = count;
+  }, { defer: true }));
   const visible = createMemo(() => {
     if (!virtual()) return ordered().slice(0, STATIC_ROWS).map((row, index) => ({ row, index, start: null as number | null }));
-    const items = virtualizer.getVirtualItems();
+    const items = virtualizer.getVirtualItems().filter(v => v.index < ordered().length);
     if (items.length) return items.map(v => ({ row: ordered()[v.index]!, index: v.index, start: v.start as number | null }));
     // The observer may report its first rect after the switch; keep the window around the offset visible.
-    const first = Math.max(0, Math.floor((scroll?.scrollTop ?? 0) / ROW_H) - 12);
+    // A filter can shrink a 500-row list to one while the scroll box still holds
+    // its old offset. Clamp the fallback window to the new result before layout
+    // clamps scrollTop, or the only matching row disappears from the DOM.
+    const first = Math.min(Math.max(0, Math.floor((scroll?.scrollTop ?? 0) / ROW_H) - 12), Math.max(0, ordered().length - Math.ceil((scroll?.clientHeight ?? 0) / ROW_H)));
     return Array.from({ length: Math.max(0, Math.min(ordered().length - first, Math.ceil((scroll?.clientHeight ?? 0) / ROW_H) + 24)) }, (_, offset) => ({ row: ordered()[first + offset]!, index: first + offset, start: (first + offset) * ROW_H as number | null }));
   });
   // Rows are keyed by the row object, so the rows served with the page are the rows of the virtual window.
