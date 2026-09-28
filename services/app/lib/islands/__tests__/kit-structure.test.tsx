@@ -6,7 +6,7 @@
  * roles, aria idrefs, data-state/data-orientation/data-slot, closed content rendered hidden), and
  * behaves the same on interaction. `parityOf` (./kit-parity) is the unit-level form of the parity gate.
  */
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { render } from 'solid-js/web';
 import { act, createElement } from 'react';
 import { createRoot } from 'react-dom/client';
@@ -167,9 +167,22 @@ describe('disclosure', () => {
 });
 
 describe('tooltip, as today\'s story tooltip runs', () => {
+  it('leaves placement unloaded until the reader signals readiness', async () => {
+    document.documentElement.removeAttribute('data-mx-ready');
+    const { host, dispose } = mount(() => <Tooltip defaultOpen><TooltipTrigger>Target</TooltipTrigger><TooltipContent>Tooltip body</TooltipContent></Tooltip>);
+    try {
+      await new Promise((resolve) => setTimeout(resolve, 30));
+      expect(host.querySelector('[data-slot="tooltip-trigger"]')?.hasAttribute('data-radix-popper-side')).toBe(false);
+      document.documentElement.setAttribute('data-mx-ready', '');
+      document.dispatchEvent(new Event('mx:ready'));
+      await vi.waitFor(() => expect(host.querySelector('[data-slot="tooltip-trigger"]')?.getAttribute('data-radix-popper-side')).toBe('top'));
+    } finally { dispose(); document.documentElement.removeAttribute('data-mx-ready'); }
+  });
+
   it('a tooltip open on mount: the trigger is the placed anchor, described by the content, which is portaled out of the document', async () => {
     // Radix measures its arrow with a ResizeObserver, which jsdom lacks: an inert one for both sides.
     const hadObserver = 'ResizeObserver' in globalThis;
+    document.documentElement.setAttribute('data-mx-ready', '');
     if (!hadObserver) (globalThis as { ResizeObserver?: unknown }).ResizeObserver = class { observe() {} unobserve() {} disconnect() {} };
     const markup = '<div id="w"><TooltipProvider><Tooltip defaultOpen><TooltipTrigger id="tt" className="text-sm">Hover target</TooltipTrigger><TooltipContent id="tc">Pinned</TooltipContent></Tooltip></TooltipProvider></div>';
     const react = await reactMount(markup);
@@ -193,7 +206,7 @@ describe('tooltip, as today\'s story tooltip runs', () => {
       await act(async () => { await new Promise((r) => setTimeout(r, 0)); });
       expect(host.querySelector('#tt')?.getAttribute('data-state')).toBe('closed');
       expect(host.querySelector('#tt')?.hasAttribute('aria-describedby')).toBe(false);
-    } finally { dispose(); host.remove(); await react.unmount(); if (!hadObserver) delete (globalThis as { ResizeObserver?: unknown }).ResizeObserver; }
+    } finally { dispose(); host.remove(); await react.unmount(); document.documentElement.removeAttribute('data-mx-ready'); if (!hadObserver) delete (globalThis as { ResizeObserver?: unknown }).ResizeObserver; }
   });
 });
 

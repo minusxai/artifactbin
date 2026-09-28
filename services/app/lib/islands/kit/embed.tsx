@@ -18,6 +18,7 @@ import type { ManagedIframeContent } from '@/lib/story/managed-iframe';
 import type { ManagedAssetsConfig } from '@/lib/story-runtime/managed-assets';
 import { ISLAND_DATA_ID } from '@/lib/compiled-page/contract';
 import { useIsland } from '../context';
+import { deferEngine } from '../defer-engine';
 import type { DeckEngineProps } from './embed/deck-engine';
 
 type Props = Record<string, unknown>;
@@ -49,11 +50,11 @@ export function Iframe(props: Props) {
   onMount(() => {
     let disposed = false;
     let stop = () => {};
-    import('./embed/frame-engine').then(({ mountManagedFrame }) => {
+    const cancel = deferEngine(host, () => { void import('./embed/frame-engine').then(({ mountManagedFrame }) => {
       if (disposed) return;
       stop = mountManagedFrame({ host, compiled: props.compiled as ManagedIframeContent, store: island.store(), label, assets: assetsConfig(props.assetsOrigin, host.ownerDocument), onError: setError });
-    }).catch((e: Error) => setError(String(e.message).slice(0, 500)));
-    onCleanup(() => { disposed = true; stop(); });
+    }).catch((e: Error) => { if (!disposed) setError(String(e.message).slice(0, 500)); }); });
+    onCleanup(() => { disposed = true; cancel(); stop(); });
   });
   return (
     <div id={str(props.id)} class={str(props.class)} data-mx-ast={str(props['data-mx-ast'])} data-mx-managed-frame="" aria-label={label} {...servedStyle(`height:${pixels}px;width:100%`)}>
@@ -78,7 +79,7 @@ export function DeckGL(props: Props) {
   onMount(() => {
     let live = true;
     let stop = () => {};
-    void import('./embed/deck-engine').then(({ mountDeckEngine }) => {
+    const cancel = deferEngine(box, () => { void import('./embed/deck-engine').then(({ mountDeckEngine }) => {
       if (!live) return;
       // Through the CSSOM, as today's engine sets its figure's height (the attribute then reads `height: 320px;`).
       box.style.cssText = '';
@@ -89,8 +90,8 @@ export function DeckGL(props: Props) {
         legend: props.legend as boolean | undefined, title, height,
       });
       setReady(true);
-    });
-    onCleanup(() => { live = false; stop(); });
+    }); });
+    onCleanup(() => { live = false; cancel(); stop(); });
   });
   return (
     <div id={str(props.id)} data-mx-ast={str(props['data-mx-ast'])}>
