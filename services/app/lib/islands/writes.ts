@@ -12,31 +12,21 @@
 import type { DataflowStore, StoreWriteEvent } from '@/lib/story-runtime/store';
 import { SAVED_STATUS_TTL_MS, type WriteStatus, type WriteStatusFeed } from './contract';
 
-const messageOf = (error: unknown): string => (error instanceof Error ? error.message : typeof error === 'string' ? error : 'The change was not saved.');
-const codeOf = (error: unknown): string | undefined => {
-  const code = error && typeof error === 'object' ? (error as { code?: unknown }).code : undefined;
-  return typeof code === 'string' ? code : undefined;
-};
-
 export function createWriteStatusFeed(store: DataflowStore | null): WriteStatusFeed {
   let statuses: readonly WriteStatus[] = [];
   const listeners = new Set<(statuses: readonly WriteStatus[]) => void>();
-  const timers = new Map<number, ReturnType<typeof setTimeout>>();
 
   const publish = (next: readonly WriteStatus[]) => {
     statuses = next;
     for (const listener of [...listeners]) listener(statuses);
   };
-  const without = (id: number) => {
-    clearTimeout(timers.get(id));
-    timers.delete(id);
-    return statuses.filter((s) => s.id !== id);
-  };
-  const replace = (id: number, next: WriteStatus) => publish(statuses.map((s) => (s.id === id ? next : s)));
+  // Only ordinary saved entries expire; failed/notifying entries have no timer to cancel.
+  const remove = (id: number) => publish(statuses.filter((s) => s.id !== id));
+  const replace = (next: WriteStatus) => publish(statuses.map((s) => (s.id === next.id ? next : s)));
 
   const retry = (id: number, request: Extract<StoreWriteEvent, { type: 'writeFailed' }>['request']) => {
     if (!store || !statuses.some((s) => s.id === id && s.state === 'failed')) return;
-    publish(without(id));
+    remove(id);
     // The retry is a new write: its own `saving`, then its own outcome. Its rejection is that outcome, reported above.
     store.mutate(request).catch(() => {});
   };
@@ -49,13 +39,16 @@ export function createWriteStatusFeed(store: DataflowStore | null): WriteStatusF
     const current=statuses.find(s=>s.id===event.id);
     if(!current)return;
     if(event.type==='written'){
-      replace(event.id,{...current,state:'saved',mutationRunId:event.mutationRunId});
-      if(!event.mutationRunId)timers.set(event.id,setTimeout(()=>publish(without(event.id)),SAVED_STATUS_TTL_MS));
+      replace({...current,state:'saved',mutationRunId:event.mutationRunId});
+      if(!event.mutationRunId)setTimeout(remove,SAVED_STATUS_TTL_MS,event.id);
       return;
     }
-    replace(event.id,{
-      ...current,state:'failed',
-      error:{message:messageOf(event.error),code:codeOf(event.error),retry:()=>retry(event.id,event.request)},
+    const { error } = event;
+    const message = error instanceof Error ? error.message : typeof error === 'string' ? error : 'The change was not saved.';
+    const code = error && typeof error === 'object' ? (error as { code?: unknown }).code : undefined;
+    replace({
+      ...current, state: 'failed',
+      error: { message, code: typeof code === 'string' ? code : undefined, retry: () => retry(event.id, event.request) },
     });
   };
   store?.subscribeWrites(onWrite);
@@ -64,7 +57,7 @@ export function createWriteStatusFeed(store: DataflowStore | null): WriteStatusF
     current: () => statuses,
     subscribe: (listener) => { listeners.add(listener); return () => { listeners.delete(listener); }; },
     dismiss: (id) => {
-      if (statuses.some((s) => s.id === id && (s.state === 'failed'||s.mutationRunId))) publish(without(id));
+      if (statuses.some((s) => s.id === id && (s.state === 'failed'||s.mutationRunId))) remove(id);
     },
   };
 }
