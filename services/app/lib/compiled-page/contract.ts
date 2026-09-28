@@ -50,6 +50,13 @@ export const READER_MODE_PARAM = 'reader';
 export const READER_MODE_HEADER = 'x-mx-reader';
 /** Present only when a compiled path fell back to legacy for this request; the value is the reason (§6 of the spec). */
 export const READER_FALLBACK_HEADER = 'x-mx-reader-fallback';
+/**
+ * Why a compiled read could not be served as stored (spec §6). While today's renderer exists
+ * (serve.server `fallbackPolicy()` = `legacy`) each one serves it for the request. After Wave 4
+ * (`compiled-only`, spec §6.1): `not-compiled` and `build-mismatch` compile inline and wait,
+ * `over-budget` is never an answer (the budget only marks a slow compile), `compile-error` is a
+ * reported 500, and `unported` is never reached (every registered component compiles).
+ */
 export type ReaderFallbackReason = 'not-compiled' | 'compile-error' | 'build-mismatch' | 'unported' | 'over-budget';
 
 /* ────────────────────────────────────────────────────────────────────────────
@@ -155,7 +162,11 @@ export interface CompiledPage {
   kit: { skeleton: string[]; islands: string[] };
   /** Static components rendered by today's React kit at compile time (they ship no code). */
   reactStatic: string[];
-  /** Registered components with no Solid port that the version needs interactive: a non-empty list refuses the compile (fallback). */
+  /**
+   * Registered components the compile could not place: a non-empty list refuses the compile (fallback).
+   * Empty for every stored document since w3-compiler-coverage (a component with no Solid port compiles
+   * as a React shell around its children, spec §6); kept as the refusal's door.
+   */
   unported: string[];
   /** Components rendered statically whose BEHAVIOUR is not ported yet (`Iframe`, `DeckGL`): served, reported. */
   partial: string[];
@@ -170,7 +181,10 @@ export interface CompiledPage {
   authorScript: string | null;
 }
 
-/** A stored compile that failed: the read never retries the same build in a loop. */
+/**
+ * A stored compile that failed: the read never retries the same build in a loop. After Wave 4 a read
+ * of one is a reported 500 (spec §6.1); `unported` is no longer produced by the compiler.
+ */
 export interface CompileFailure {
   build: string;
   error: string;
@@ -194,7 +208,11 @@ export interface IslandRenderData {
 /** `compilePage`'s signature (compiler.ts, w2-compiler). Pure: the same input and build produce the same page. */
 export type CompilePage = (input: CompileInput, build: CompilerBuild) => Promise<CompiledPage>;
 
-/** The most a read may spend compiling inline on a build-id miss before it falls back to today's renderer (spec §6). */
+/**
+ * The most a read may spend compiling inline on a build-id miss before it falls back to today's renderer
+ * (spec §6). After Wave 4 (spec §6.1) a read always waits for the compile, and this only decides whether
+ * the inline compile is logged as slow.
+ */
 export const COMPILE_INLINE_BUDGET_MS = 300;
 
 /* ────────────────────────────────────────────────────────────────────────────
@@ -403,6 +421,10 @@ export interface AssembleOverlay {
   doors: { queryUrl: string; mutateUrl?: string; viewerUrl?: string; assetsUrl: string } | null;
   /** An archived version's read-only reason (lib/archived-version); absent for the head. */
   readOnly?: string | null;
+  /** The imports the page may hold for the door it queries through (IslandPageData.hold); absent: none. */
+  hold?: readonly string[];
+  /** The page's SQLite engine wasm (IslandPageData.sqliteWasm), when `hold` is not empty. */
+  sqliteWasm?: string | null;
 }
 
 export interface AssembleInput {

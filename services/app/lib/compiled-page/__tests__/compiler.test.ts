@@ -145,6 +145,32 @@ describe('compilePage', () => {
   });
 });
 
+describe('island keys (the live morph keeps an island a new version carries again)', () => {
+  const keysOf = async (source: string): Promise<Record<string, string>> => {
+    const generated = generate(await inputOf(source));
+    const keys: Record<string, string> = {};
+    for (const [, rid, key] of generated.islands.matchAll(/\[("s\d+-"), I\d+, ("[0-9a-f]{16}")\]/g)) keys[JSON.parse(rid!)] = JSON.parse(key!);
+    return keys;
+  };
+  const helmet = '<Helmet><Value name="region" type="string" default="West" /><Value name="other" type="string" default="x" /></Helmet>';
+
+  it('names the same island by the same key when an island before it shifts its render id and its constants', async () => {
+    const before = await keysOf(`${helmet}<div id="w"><section id="s1"><p id="p1">static</p></section><section id="s2"><p id="b" title="{$other}">{$region}</p></section></div>`);
+    const after = await keysOf(`${helmet}<div id="w"><section id="s1"><p id="p1">static</p><p id="n" title="{$region}">{$other}</p></section><section id="s2"><p id="b" title="{$other}">{$region}</p></section></div>`);
+    expect(Object.keys(before)).toEqual(['s0-']);
+    expect(Object.keys(after)).toEqual(['s0-', 's1-']);
+    expect(after['s1-'], 'island b, now second: same definition, same key').toBe(before['s0-']);
+    expect(after['s0-']).not.toBe(before['s0-']);
+  });
+
+  it('gives a changed island another key', async () => {
+    const one = await keysOf(`${helmet}<div id="w"><p id="b">{$region}</p></div>`);
+    const two = await keysOf(`${helmet}<div id="w"><p id="b">{$other}</p></div>`);
+    expect(one['s0-']).toMatch(/^[0-9a-f]{16}$/);
+    expect(two['s0-']).not.toBe(one['s0-']);
+  });
+});
+
 describe('unit parity with the real kit', () => {
   it('kit: the whole compiled column, islands included, is today\'s render', async () => {
     const source = fixture('kit.jsx');
@@ -203,12 +229,16 @@ describe('the stored plan', () => {
   });
 });
 
-describe('refusal', () => {
-  it('a registered component with no Solid port inside a row refuses the compile, named, with nothing built', async () => {
-    const page = await compilePage(await inputOf('<Helmet><Value name="rows" type="table" value={[{"k":"a"}]} /></Helmet><ul id="l"><For each={$rows} keyBy="k"><li id="i"><Separator id="s" /></li></For></ul>'), loadCompilerBuild());
-    expect(page.unported).toEqual(['Separator']);
-    expect(page.module).toBeNull();
-    expect(page.ssr).toBeNull();
+describe('no refusal', () => {
+  // w3-compiler-coverage: a registered component with no Solid port inside a row compiles as a shell (today's React
+  // render with the row's attributes filled per row); nothing a stored document holds is refused any more.
+  it('a registered component with no Solid port inside a row compiles whole, its markup today\'s per row', async () => {
+    const page = await compilePage(await inputOf('<Helmet><Value name="rows" type="table" value={[{"k":"a"},{"k":"b"}]} /></Helmet><ul id="l"><For each={$rows} keyBy="k"><li id="i"><Separator id="s" /></li></For></ul>'), loadCompilerBuild());
+    expect(page.unported).toEqual([]);
+    expect(page.module).not.toBeNull();
+    expect(page.ssr).not.toBeNull();
+    expect(page.reactStatic).toContain('Separator');
+    expect([...dom(page.html).querySelectorAll('li [data-slot="separator"]')]).toHaveLength(2);
   });
 });
 

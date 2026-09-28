@@ -20,14 +20,14 @@
 import { batch, createComponent, createMemo, createRoot, createSignal, For, Show } from 'solid-js';
 import type { Component, JSX } from 'solid-js';
 import { createStore, reconcile } from 'solid-js/store';
-import { hydrate, isServer } from 'solid-js/web';
+import { hydrate, insert as solidInsert, isServer } from 'solid-js/web';
 import { evaluateReactive, type ReactiveExpression } from '@/lib/jsx/reactive';
 import { URL_ATTRS, URL_LIST_ATTRS, urlListUrls } from '@/lib/jsx/url-attrs';
 import { substituteRow } from '@/lib/story/row-scope';
 import { commentMetadata, instanceDomId } from '@/lib/story/repeat-identity';
 import type { CompiledDataflow } from '@/lib/story/compiled-dataflow';
 import type { DataflowState, Row, Scalar, TableResult } from '@/lib/story/dataflow';
-import type { DataflowStore } from '@/lib/story-runtime/store';
+import { ACCESS_PENDING, type DataflowStore } from '@/lib/story-runtime/store';
 import type { ServedResults, StoredMermaidImage } from '@/lib/story-runtime/contract';
 import type { PersonCard } from '@artifactbin/contracts';
 import { IslandProvider, useIsland } from './context';
@@ -126,6 +126,8 @@ export function createIslandRuntime(
   /** A counter per table, bumped when the data store REPLACES that table's result (a run landed). */
   const [versions, setVersions] = createStore<Record<string, number>>({});
   const [viewer, setViewer] = createSignal<IslandViewer>(data.viewer ?? null);
+  /** Every store change: what the write checks (`mutationUnavailable`, `mutating`) re-read on. */
+  const [checks, touch] = createSignal(undefined, { equals: false });
   const drawings = data.mermaidImages ?? {};
   let lastTables: Record<string, TableResult> = {};
 
@@ -142,6 +144,7 @@ export function createIslandRuntime(
       setState('errors', reconcile(snap.errors));
       setState('pending', reconcile(pending));
       setState('people', reconcile(snap.people ?? {}));
+      touch();
     });
   };
   sync();
@@ -173,6 +176,9 @@ export function createIslandRuntime(
       return { dataset: ref ?? '' };
     },
     writesUnavailable: () => data.readOnly ?? null,
+    // The server renders without a transport: it says what today's served page says until the check answers.
+    mutationUnavailable: (name) => { checks(); return store && !isServer ? store.mutationUnavailable(name) : ACCESS_PENDING; },
+    mutating: (name) => { checks(); return !!store?.mutating().has(name); },
     viewer,
     drawings: () => drawings,
     writes: (options.writes ?? (() => EMPTY_WRITE_FEED))(store),
@@ -363,14 +369,20 @@ export function hydrateIsland(renderId: string, Component: Component, context: I
       // An island may render siblings of its root (a button and its refusal): those are the island's own
       // (their key has its prefix), never handed back as static siblings, and its output stays LIVE (the
       // accessor, not a snapshot of it) so a sibling that comes and goes is inserted and removed.
-      return [...host.childNodes].filter((node) => node === root || !(node as Element).getAttribute?.('data-hk')?.startsWith(renderId)).map((node) => (node === root ? (Array.isArray(output) ? live : output) : node)) as JSX.Element;
+      const children = [...host.childNodes].filter((node) => node === root || !(node as Element).getAttribute?.('data-hk')?.startsWith(renderId));
+      return (() => children.map((node) => node === root ? (typeof live === 'function' ? (live as () => unknown)() : live) : node)) as unknown as JSX.Element;
     }), host, { renderId });
   } catch {
     // Solid's development build refuses to create nodes while hydrating (a mismatch); render the
     // island fresh instead, as the production build does on its own.
     disposeIsland();
     output = undefined;
-    createRoot(mount);
+    createRoot((dispose) => {
+      mount(dispose);
+      // A non-hydratable or mismatched root still needs Solid's insertion effect: a
+      // one-time replacement would strand a later placeholder-to-content switch.
+      solidInsert(host, () => live as JSX.Element, root.nextSibling, [root]);
+    });
   }
   if (output instanceof Node && output !== root && !output.isConnected && root.parentNode === host) host.replaceChild(output, root);
   return disposeIsland;

@@ -5,7 +5,7 @@
  * `<DeckGL>` draws today's loading stand-in, then the lazily loaded engine over the table `data` names.
  * The engines themselves are proven in a browser (gates: dataflow, full-kit, compiled-parity).
  */
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { render } from 'solid-js/web';
 import { IslandProvider } from '../context';
 import { fakeIsland } from './context.test';
@@ -27,7 +27,8 @@ vi.mock('../kit/embed/deck-engine', () => ({
 
 const until = async (ok: () => boolean) => { for (let i = 0; i < 100 && !ok(); i++) await new Promise((r) => setTimeout(r, 10)); };
 let cleanup: (() => void) | null = null;
-afterEach(() => { cleanup?.(); cleanup = null; });
+beforeEach(() => document.documentElement.setAttribute('data-mx-ready', ''));
+afterEach(() => { cleanup?.(); cleanup = null; document.documentElement.removeAttribute('data-mx-ready'); });
 const mount = (island: IslandContext, view: () => import('solid-js').JSX.Element) => {
   const host = document.createElement('div');
   document.body.append(host);
@@ -72,6 +73,19 @@ describe('<Iframe>', () => {
 });
 
 describe('<DeckGL>', () => {
+  it('does not fetch the map engine before the compiled reader is ready', async () => {
+    document.documentElement.removeAttribute('data-mx-ready');
+    const { host } = mount(fakeIsland(), () => <DeckGL title="Deferred map" height={120} layers={[]} />);
+    const box = host.querySelector('[aria-busy="true"]');
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    expect(box?.querySelector('.engine-view')).toBeNull();
+    expect(box?.getAttribute('aria-busy')).toBe('true');
+    document.documentElement.setAttribute('data-mx-ready', '');
+    document.dispatchEvent(new Event('mx:ready'));
+    await until(() => !!box?.querySelector('.engine-view'));
+    expect(box?.querySelector('.engine-view')).not.toBeNull();
+  });
+
   it('draws today\'s stand-in, then turns that same element into the map\'s figure with the engine drawing into it over the named table', async () => {
     const table: TableResult = { rows: [{ lng: 1, lat: 2 }, { lng: 3, lat: 4 }], columns: [] };
     const island = { ...fakeIsland(), tableSnapshot: (name: string) => (name === 'places' ? table : undefined) };

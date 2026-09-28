@@ -337,6 +337,15 @@ export function loadSsrModule(ref: ModuleRef, store: ModuleStore = createSsrModu
  * One version's modules
  * ──────────────────────────────────────────────────────────────────────────── */
 
+/**
+ * The skeleton's static subtrees put in place (compiler `Generated.statics`): each `<mx-static data-i="n">` the
+ * skeleton rendered becomes the n-th subtree's HTML — today's React render of it, which never went through JSX.
+ * A placeholder the skeleton did not render exactly so (an author's own element carries its `data-mx-ast` first)
+ * is left alone.
+ */
+export const spliceStatics = (html: string, statics: readonly string[]): string =>
+  statics.length ? html.replace(/<mx-static data-i="(\d+)"><\/mx-static>/g, (whole, i: string) => statics[Number(i)] ?? whole) : html;
+
 /** The compile-time render of the skeleton: static HTML with a `<mx-slot data-i="n">` per island. */
 export async function renderSkeleton(skeleton: string, imports?: SsrImports): Promise<string> {
   const source = `${skeleton}import { renderToString as $renderToString } from 'solid-js/web';\nexport function render() { return $renderToString(() => <Skeleton />); }\n`;
@@ -430,8 +439,8 @@ export interface BuildOptions {
  * declared state. A version with no island has neither module — unless it must boot (`boot`), when it
  * has the browser module alone.
  */
-export async function buildDocumentModules(sources: GeneratedSources & { islandRefs: readonly unknown[] }, options: BuildOptions): Promise<DocumentModules> {
-  const skeletonHtml = await renderSkeleton(sources.skeleton, options.imports);
+export async function buildDocumentModules(sources: GeneratedSources & { islandRefs: readonly unknown[]; statics?: readonly string[] }, options: BuildOptions): Promise<DocumentModules> {
+  const skeletonHtml = spliceStatics(await renderSkeleton(sources.skeleton, options.imports), sources.statics ?? []);
   if (!sources.islandRefs.length && !options.boot) return { html: skeletonHtml, module: null, ssr: null };
   const store = options.store ?? createModuleStore();
   if (!sources.islandRefs.length) {

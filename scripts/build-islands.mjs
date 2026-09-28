@@ -81,6 +81,12 @@ const STANDALONE_LAZY = [
   { request: './embed/frame-engine', name: 'frame-engine', file: () => path.join(ISLANDS_SRC, 'kit/embed/frame-engine.ts') },
   // The version's author script (lib/islands/author-host), loaded by boot only when the page data names one.
   { request: './author-host', name: 'author-host', file: () => path.join(ISLANDS_SRC, 'author-host.ts') },
+  // The live morph (lib/islands/live-update → ./morph/engine): a new version drawn in place, loaded only when one lands.
+  { request: './morph/engine', name: 'morph-engine', file: () => path.join(ISLANDS_SRC, 'morph/engine.ts') },
+  // The page's own SQLite engine (today's page engine and the SQLite core), loaded by boot behind the first paint.
+  { request: './sqlite-engine', name: 'sqlite-engine', file: () => path.join(ISLANDS_SRC, 'sqlite-engine.ts') },
+  // The link following the reader (today's url-values-sync), loaded by boot after hydration.
+  { request: './url-sync', name: 'url-sync', file: () => path.join(ISLANDS_SRC, 'url-sync.ts') },
 ];
 
 async function buildStandaloneLazy() {
@@ -101,7 +107,7 @@ async function buildStandaloneLazy() {
 const standaloneLazyPlugin = (built) => ({
   name: 'mx-standalone-lazy',
   setup(build) {
-    build.onResolve({ filter: /^\.\/(?:embed\/)?[\w-]+$/ }, (args) => {
+    build.onResolve({ filter: /^\.\/(?:embed\/|morph\/)?[\w-]+$/ }, (args) => {
       if (args.kind !== 'dynamic-import') return undefined;
       // By the module it names, so a same-named request elsewhere is never taken for it.
       const target = path.resolve(path.dirname(args.importer), args.path);
