@@ -51,6 +51,7 @@ export const QUERY_TAG = 'Query';
  * render. Its plain `$name` parameters are its arguments.
  */
 export const MUTATION_TAG = 'Mutation';
+export const NOTIFY_TAG = 'Notify';
 
 /** `<Value type>`: the dataset column types, plus an inline table. */
 type ValueType = ColumnType | 'table';
@@ -109,11 +110,18 @@ export interface MutationDecl extends Span {
 }
 
 /** Everything a document declares — the parsed `<Helmet>` data children, in authored order. */
+export interface NotifyDecl extends Span {
+  name: string;
+  on: string;
+  sql: string;
+}
+
 export interface Dataflow {
   imports: ImportDecl[];
   values: ValueDecl[];
   queries: QueryDecl[];
   mutations: MutationDecl[];
+  notifications?: NotifyDecl[];
 }
 
 export const EMPTY_DATAFLOW: Dataflow = { imports: [], values: [], queries: [], mutations: [] };
@@ -590,6 +598,23 @@ export function parseQueryDecl(el: JsxElement): ParseDeclResult<QueryDecl> {
   return { ok: true, decl: { name, sql, ...(source ? { source } : {}), start: el.start, end: el.end } };
 }
 
+/** A standalone, static notification query linked to a persistent mutation. */
+export function parseNotifyDecl(el: JsxElement): ParseDeclResult<NotifyDecl> {
+  const errors: ValidationError[] = [];
+  for (const a of el.attributes) {
+    if (a.name !== 'name' && a.name !== 'on') errors.push(err('<Notify> takes only name= and on=; its child is one static SQL template literal', a, NOTIFY_TAG, a.name));
+  }
+  const name = checkName(el, NOTIFY_TAG, errors);
+  const on = staticAttr(el, 'on');
+  if (typeof on?.json !== 'string' || !DECL_NAME_RE.test(on.json) || reservedDeclarationName(on.json)) {
+    errors.push(err('<Notify> on= must name a declared persistent Mutation', on?.attr ?? el, NOTIFY_TAG, 'on'));
+  }
+  const sql = sqlChild(el);
+  if (sql === null || !sql.trim()) errors.push(err('<Notify> holds one non-empty static SQL template-literal child returning to and message', el, NOTIFY_TAG));
+  if (!name || errors.length) return { ok: false, errors };
+  return { ok: true, decl: { name, on: on!.json as string, sql: sql!, start: el.start, end: el.end } };
+}
+
 /**
  * `<Mutation name expectedAffected? reset?>{`sql`}</Mutation>` → a
  * declaration, or the errors. The Query rules (one template-literal child,
@@ -690,10 +715,10 @@ export function collectRefNameUses(body: JsxNode[]): RefNameUse[] {
  */
 export function validateDataflow(flow: Dataflow, uses: RefNameUse[]): ValidationError[] {
   const errors: ValidationError[] = [];
-  const kinds = new Map<string, RefKind | 'import'>();
-  const declare = (name: string, kind: RefKind | 'import', span: Span, tag: string) => {
+  const kinds = new Map<string, RefKind | 'import' | 'notification'>();
+  const declare = (name: string, kind: RefKind | 'import' | 'notification', span: Span, tag: string) => {
     if (kinds.has(name)) {
-      errors.push(err(`"${name}" is declared twice in <Helmet> — every <Import>/<Value>/<Query>/<Mutation> name is unique`, span, tag, 'name'));
+      errors.push(err(`"${name}" is declared twice in <Helmet> — every <Import>/<Value>/<Query>/<Mutation>/<Notify> name is unique`, span, tag, 'name'));
       return;
     }
     kinds.set(name, kind);
@@ -703,9 +728,11 @@ export function validateDataflow(flow: Dataflow, uses: RefNameUse[]): Validation
   for (const q of flow.queries) declare(q.name, 'table', q, QUERY_TAG);
   for (const m of flow.mutations) declare(m.name, 'mutation', m, MUTATION_TAG);
 
+  for (const n of flow.notifications ?? []) declare(n.name, 'notification', n, NOTIFY_TAG);
+
   const hint = ' — declare it in <Helmet> as <Value name="…" …/> or <Query name="…">{`…`}</Query>';
-  const describe = (kind: RefKind | 'import'): string =>
-    kind === 'scalar' ? 'a scalar <Value>' : kind === 'table' ? 'a table' : kind === 'import' ? 'an <Import> (read it in a <Query>: select … from <name>.rows)' : 'a <Mutation>';
+  const describe = (kind: RefKind | 'import' | 'notification'): string =>
+    kind === 'scalar' ? 'a scalar <Value>' : kind === 'table' ? 'a table' : kind === 'import' ? 'an <Import> (read it in a <Query>: select … from <name>.rows)' : kind === 'notification' ? 'a <Notify>' : 'a <Mutation>';
   for (const u of uses) {
     if (u.name === VIEWER) {
       errors.push(err(`<${u.tag} ${u.attr}="$_me"> — $_me is the reader as a row; read its id: $${VIEWER_ID}`, u, u.tag, u.attr));
@@ -745,4 +772,4 @@ export function validateDataflow(flow: Dataflow, uses: RefNameUse[]): Validation
 
 /** True when the document declares nothing. */
 export const isEmptyDataflow = (flow: Dataflow): boolean =>
-  flow.imports.length === 0 && flow.values.length === 0 && flow.queries.length === 0 && flow.mutations.length === 0;
+  flow.imports.length === 0 && flow.values.length === 0 && flow.queries.length === 0 && flow.mutations.length === 0 && !flow.notifications?.length;

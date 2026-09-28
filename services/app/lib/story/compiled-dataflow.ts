@@ -9,7 +9,7 @@
  * Types only. The compiler (lib/story/compile-dataflow) produces it; it is
  * stored in `meta.parsedArtifact` and shipped to the runtime in the island.
  */
-import type { ColumnType, DatasetColumn } from '@artifactbin/contracts';
+import type { ColumnType, DatasetColumn, MutationNotificationRule } from '@artifactbin/contracts';
 import type { Scalar, Row } from './dataflow';
 
 /**
@@ -101,12 +101,33 @@ export interface CompiledMutation {
   end: number;
 }
 
+/** Server-only query plan, executed after its linked mutation succeeds. */
+export interface CompiledNotify extends MutationNotificationRule {
+  engine: 'sqlite';
+  /** Logical parameters including transitive query inputs; bind saved run values. */
+  params: string[];
+  parameterTypes: Record<string, ColumnType | null>;
+  reads: CompiledReads;
+  /** All imported relations contributing data OR predicates, transitively. */
+  relations: Array<{ schema: string; table: string }>;
+  start: number;
+  end: number;
+}
+
 export interface CompiledDataflow {
   imports: CompiledImport[];
   values: CompiledValue[];
   /** In dependency order: a query appears after every query it reads. */
   queries: CompiledQuery[];
   mutations: CompiledMutation[];
+  notifications?: CompiledNotify[];
 }
 
 export const EMPTY_COMPILED_DATAFLOW: CompiledDataflow = { imports: [], values: [], queries: [], mutations: [] };
+
+/** Notifications are server jobs, never part of a browser or SSR reactive graph. */
+export function readerDataflow(flow: CompiledDataflow | null): CompiledDataflow | null {
+  if (!flow) return null;
+  const { notifications: _, ...reader } = flow;
+  return reader;
+}
