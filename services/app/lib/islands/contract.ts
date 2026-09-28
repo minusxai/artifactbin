@@ -9,6 +9,15 @@
  *
  * Owners: rt.ts / boot.ts (w2-runtime), kit/* (w2-kit-*), viewer + writes (w3-viewer-writes), handover (w3-handover).
  */
+/*
+ * SOLID 2 NAMES (Phase 2, w1-toolchain): island code imports Solid under its
+ * 1.x names (`solid-js`, `solid-js/web`, `solid-js/store`,
+ * `@jsxImportSource solid-js`). Solid 2 moved the renderer to `@solidjs/web`
+ * and the store into `solid-js`; scripts/lib/solid-aliases.mjs,
+ * lib/islands/solid-compat.d.ts and lib/islands/solid-store.ts map the old
+ * names for the build, vitest and TypeScript. Generated code imports
+ * `@solidjs/web` directly; both routes reach one module.
+ */
 import type { Scalar, TableResult } from '@/lib/story/dataflow';
 import type { MutationRequest } from '@/lib/story/mutation-request';
 import type { DataflowStore, MutationAnswer } from '@/lib/story-runtime/store';
