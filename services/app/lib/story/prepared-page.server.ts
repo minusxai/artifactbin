@@ -64,7 +64,6 @@ import type { StoryBaseCssRecipe } from './story-base-css';
 import type { ServedStoryRuntime } from './prepared-runtime';
 import type { StoryIslandData, StoryIslandDataflow } from '@/lib/story-runtime/contract';
 import type { StoryThemeName } from '@/lib/validation/atlas-schemas';
-import { compilePage } from '@/lib/compiled-page/compiler';
 import { loadCompilerBuild } from '@/lib/compiled-page/build.server';
 import { createSpeculationRulesStore } from '@/lib/compiled-page/modules.server';
 import { compilesPages, currentCompiledReaderFlag } from '@/lib/compiled-page/reader-mode';
@@ -213,6 +212,11 @@ async function compiledFor(page: PreparedPage, refData: ReaderIslandInput['refDa
   const build = compiler.build;
   if (!build) return { build: 'none', error: compiler.error ?? 'no island build', reason: 'compile-error' };
   try {
+    // Imported on first compile, not at the top: the compiler carries Babel, Solid and today's React
+    // kit (it renders static components at compile time), and this module sits under lib/artifacts,
+    // which every tool that reads artifacts loads (the CLI's teaching build among them). A process
+    // that never compiles (`FLAG__COMPILED_READER=off`) never loads any of it.
+    const { compilePage } = await import('@/lib/compiled-page/compiler');
     const compiled = await compilePage({
       nodes: page.data.nodes, colorMode: page.data.colorMode, template: page.data.template ?? null, chrome: page.data.chrome !== false,
       ...(page.data.glyphs ? { glyphs: page.data.glyphs } : {}),
