@@ -84,8 +84,10 @@ export interface MutationNotificationJobInput {
   rule: MutationNotificationRule;
   /** Immutable effective values/defaults plus server-established run context. */
   bindings: MutationNotificationBindings;
-  /** Immutable compiled context reference; reuse pinned imports/query dependency bindings. */
+  /** Canonical hash of the strictly validated immutable compiled snapshot below. */
   contextRevision: string;
+  /** JSON-only app compiled context, validated at its owning boundary; never credentials. */
+  contextSnapshot: Record<string, unknown>;
 }
 
 export interface MutationNotificationClaim {
