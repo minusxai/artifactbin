@@ -27,7 +27,7 @@ import { mutationTargetRef } from '@/lib/story/compiled-flow';
 import type { CompiledDataflow } from '@/lib/story/compiled-dataflow';
 import { updateSharingFor } from '@/lib/artifacts';
 import { createSnapshotStore, drainSnapshotRevalidations, enableSnapshotRevalidations, snapshotKeyFor, snapshotStore } from '@/lib/compiled-page/snapshots.server';
-import { SNAPSHOT_MAX_AGE_MS, type DataPlan, type DatasetAccessFacts } from '@/lib/compiled-page/contract';
+import { SNAPSHOT_INPUT_SETS_PER_ARTIFACT, SNAPSHOT_MAX_AGE_MS, type DataPlan, type DatasetAccessFacts } from '@/lib/compiled-page/contract';
 
 vi.mock('@/auth', () => ({ auth: async () => null }));
 const harness = useAppHarness();
@@ -267,5 +267,20 @@ describe('the probe\'s write paths', () => {
       expect(added.status).toBe(200);
       expect(failing).toHaveBeenCalledWith(wds);
     } finally { failing.mockRestore(); warn.mockRestore(); }
+  });
+
+  it('keeps at most the bound of non-default input sets per version plan, least recently written out, and always the default', async () => {
+    const d = await dashboard();
+    const { plan } = await planFor(d.id);
+    const store = createSnapshotStore();
+    const fallback = snapshotKeyFor(d.id, 'head', plan, { region: null });
+    await store.revalidate(fallback);
+    const regions = Array.from({ length: SNAPSHOT_INPUT_SETS_PER_ARTIFACT + 2 }, (_, i) => `R${i}`);
+    for (const region of regions) expect(await store.revalidate(snapshotKeyFor(d.id, 'head', plan, { region }))).toBeTruthy();
+    const db = await harness.db();
+    expect((await db.query('SELECT count(*)::int AS n FROM data_snapshots WHERE artifact_id = $1', [d.id])).rows[0]).toEqual({ n: SNAPSHOT_INPUT_SETS_PER_ARTIFACT + 1 });
+    expect((await store.get(fallback))!.fresh).toBe(true);
+    expect(await store.get(snapshotKeyFor(d.id, 'head', plan, { region: 'R0' }))).toBeNull();
+    expect((await store.get(snapshotKeyFor(d.id, 'head', plan, { region: regions.at(-1)! })))!.fresh).toBe(true);
   });
 });
