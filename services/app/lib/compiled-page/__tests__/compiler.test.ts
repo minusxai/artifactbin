@@ -192,6 +192,13 @@ describe('unit parity with today\'s render', () => {
     expect(dom(page.html).querySelector('#m')?.getAttribute('class')).toContain('flex h-full w-full flex-col');
     expect(columnParity(page.html, source)).toEqual([]);
   });
+  it('a kit component served around an island writes its class as React does (no trailing space, no empty class)', async () => {
+    const source = '<Helmet><Value name="who" type="string" default="Ada" /></Helmet><Card id="c"><CardContent id="cc" className="gap-4"><p id="p">{$who}</p></CardContent></Card>';
+    const page = await compilePage(await inputOf(source), loadCompilerBuild());
+    const react = new JSDOM(`<div>${reactRender(source)}</div>`).window.document;
+    for (const id of ['c', 'cc']) expect(dom(page.html).querySelector(`#${id}`)?.getAttribute('class'), id).toBe(react.querySelector(`#${id}`)?.getAttribute('class'));
+    expect(page.html).not.toMatch(/ class="[^"]* "/);
+  });
   it('deck: the compiled column is today\'s render; the rail and present bar sit around it', async () => {
     const source = fixture('deck.jsx');
     const page = await compilePage(await inputOf(source, 'deck'), loadCompilerBuild());

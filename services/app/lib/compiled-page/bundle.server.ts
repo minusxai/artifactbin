@@ -177,7 +177,30 @@ export async function evaluateModule(code: string, imports: SsrImports, filename
   return fn(imports);
 }
 
-const SOLID: Readonly<Record<string, Record<string, unknown>>> = { 'solid-js': solid, 'solid-js/web': solidWeb, 'solid-js/store': solidStore };
+/**
+ * Solid's server spread (`ssrElement`) writes `class="<class> <className> "` — a trailing space, and
+ * `class=""` for an absent value — where React writes the value as given and omits an absent one. The
+ * kit spreads its authored props, so every server render (skeleton, islands, the kit's own server half)
+ * goes through this: the class value React would write, handed to Solid as `attr:class`, which it
+ * writes verbatim. Hydration leaves a served class alone, and a client render sets `className` exactly.
+ */
+type SsrElement = (tag: string, props: unknown, children: unknown, needsId: boolean) => unknown;
+const solidSsrElement = solidWeb.ssrElement as unknown as SsrElement;
+export const ssrElementReactClass: SsrElement = (tag, props, children, needsId) => {
+  const given = (typeof props === 'function' ? (props as () => unknown)() : props ?? {}) as Record<string, unknown>;
+  if ('classList' in given || !('class' in given || 'className' in given)) return solidSsrElement(tag, given, children, needsId);
+  const values = [given.class, given.className].filter((v) => v !== undefined && v !== null && v !== false);
+  const exact: Record<string, unknown> = {};
+  for (const key of Object.keys(given)) {
+    if (key === 'class' || key === 'className') {
+      if (values.length && !('attr:class' in exact)) exact['attr:class'] = values.join(' ');
+      continue;
+    }
+    exact[key] = given[key];
+  }
+  return solidSsrElement(tag, exact, children, needsId);
+};
+const SOLID: Readonly<Record<string, Record<string, unknown>>> = { 'solid-js': solid, 'solid-js/web': { ...solidWeb, ssrElement: ssrElementReactClass }, 'solid-js/store': solidStore };
 
 /** An import table of this process's Solid plus the given namespaces (a test's stand-in server half). */
 export function ssrImportTable(extra: Readonly<Record<string, Record<string, unknown>>> = {}): SsrImports {
@@ -332,8 +355,8 @@ export function render(data) {
     ISLANDS.forEach(([renderId, Island], n) => {
       // Wrapped exactly as the browser's hydrateIsland wraps it (rt.withIsland): the wrapper's
       // component levels are part of Solid's hydration keys.
-      // Solid's server spread writes \`class="<value> "\` (a trailing space for classList); the kit's classes never end in one.
-      const island = $renderToString(() => rt.withIsland(Island, runtime.context), { renderId }).replace(/ class="([^"]*) "/g, ' class="$1"');
+      // Classes come out as React writes them: the injected Solid's ssrElement (ssrElementReactClass).
+      const island = $renderToString(() => rt.withIsland(Island, runtime.context), { renderId });
       html = html.replace('<mx-slot data-i="' + n + '"></mx-slot>', () => island);
     });
     return html;
