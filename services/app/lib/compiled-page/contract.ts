@@ -107,10 +107,24 @@ export interface CompilerBuild {
  */
 export interface CompiledPage {
   build: string;
-  /** The story element's inner HTML: static parts, and each island's server render spliced in at its slot. No `<mx-slot>` survives. */
+  /**
+   * The story element's inner HTML with every island rendered in its DECLARED
+   * state (no rows): static parts final, islands as skeletons. Served only when
+   * no snapshot exists; a request with a snapshot renders the islands WITH its
+   * rows through `ssr` (spec §2.2). No `<mx-slot>` survives in either.
+   */
   html: string;
   islands: IslandRef[];
+  /** The browser module (`generate: 'dom'`), or null when the version has no islands. */
   module: ModuleRef | null;
+  /**
+   * The SERVER module (`generate: 'ssr'`, hydratable) of the same islands, stored
+   * like the browser module: `export function render(data: IslandRenderData): string`
+   * returns the whole story HTML with the islands rendered from `data` (the
+   * prototype's render.mjs). Imported by the serve path, cached per build; the
+   * output is cached per (build, snapshot key). Null with `module`.
+   */
+  ssr: ModuleRef | null;
   /** Framework-free behaviour chunks the page loads (`deck`), as specifiers into the shared manifest. */
   behaviors: string[];
   plan: DataPlan | null;
@@ -136,6 +150,15 @@ export interface CompileFailure {
 /** What `PreparedPage.compiled` holds: a page, a recorded failure, or nothing yet. */
 export type StoredCompile = CompiledPage | CompileFailure;
 export const isCompileFailure = (stored: StoredCompile): stored is CompileFailure => 'error' in stored;
+
+/** What the SSR module renders the islands from: the declared dataflow plus a snapshot's answers, and the version's drawings. */
+export interface IslandRenderData {
+  values: Record<string, Scalar>;
+  results: ServedResults | null;
+  mermaidImages: Readonly<Record<string, StoredMermaidImage>>;
+  /** The snapshot's server-drawn charts, by chart slot id. */
+  drawings: Readonly<Record<string, DrawnChart>>;
+}
 
 /** `compilePage`'s signature (compiler.ts, w2-compiler). Pure: the same input and build produce the same page. */
 export type CompilePage = (input: CompileInput, build: CompilerBuild) => Promise<CompiledPage>;
@@ -349,6 +372,12 @@ export interface AssembleOverlay {
 
 export interface AssembleInput {
   compiled: CompiledPage;
+  /**
+   * The story HTML for THIS request: `compiled.html` when no snapshot exists,
+   * else the SSR module's render with the snapshot's rows (serve.server.ts,
+   * cached per build + snapshot key). The assembler never renders islands.
+   */
+  story: string;
   /** The version's isolated stylesheet and font preloads, from the prepared page. */
   css: string;
   fontPreloads: readonly string[];
@@ -370,8 +399,20 @@ export interface AssembleInput {
   build: CompilerBuild;
 }
 
+/** The assembled page and the response headers that belong to it. */
+export interface AssembledPage {
+  html: string;
+  /**
+   * `Speculation-Rules: "<url>"` when the page prerenders links: Chrome loads
+   * EXTERNAL rules only through this header (an inline `<script
+   * type="speculationrules">` would need `'inline-speculation-rules'` in the
+   * CSP, which stays `script-src 'self'`). The route sets it verbatim.
+   */
+  headers: Readonly<Record<string, string>>;
+}
 /** `assembleReaderPage`'s signature (assembler.ts, w1-assembler): ONE function for every reader path. */
-export type AssembleReaderPage = (input: AssembleInput) => string;
+export type AssembleReaderPage = (input: AssembleInput) => AssembledPage;
+export const SPECULATION_RULES_HEADER = 'Speculation-Rules';
 
 /** The element ids and attributes the assembled page and the runtime agree on. */
 export const ISLAND_DATA_ID = 'mx-story-data';

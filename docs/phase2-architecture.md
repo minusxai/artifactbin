@@ -94,10 +94,14 @@ is a 0.6 KB framework-free behaviour chunk from the shared build).
 
 The assembler takes `AssembleInput` (contract) and returns the whole HTML document. Chrome is an
 input (`ReaderChromeInput` rendered by today's `renderReaderChrome`, or null for `/raw`, exports and
-the offline file). The story HTML is the compiled `html` with three substitutions the server makes per
-request without re-rendering: the island data JSON (`<script type="application/json" id="mx-story-data">`),
-the snapshot's drawings for `<Question>` slots, and the version's stored Mermaid drawings. Everything
-else in the page is per version and cached with it.
+the offline file). The story HTML (`AssembleInput.story`) is produced by the serve path, never by the assembler: when the
+request has a snapshot, the compiled page's SSR module (`CompiledPage.ssr`, the `generate: 'ssr'` build of
+the same islands, imported once per build) renders the islands WITH the snapshot's rows and drawings —
+the prototype's `render(data)` — so a dashboard's first paint is its numbers, not skeletons; the result is
+cached per (build, snapshot key). Without a snapshot the stored `html` (islands in their declared state)
+is served. Static parts never re-render. The assembler then adds what is per request: the island data
+JSON (`<script type="application/json" id="mx-story-data">`), the chart slots' `ready` state, and the
+version's stored Mermaid drawings. Everything else in the page is per version and cached with it.
 
 The Phase 1 open items come with the rewritten route (w3-serve): one row fetch and one access check per view
 (`artifactPageAnswer` and the raw route today each fetch the row and decide admission separately), and
@@ -131,12 +135,14 @@ reader interacts (Vega loads then).
 - `build`: the compiler build id — a digest of the compiler's own bundle, the shared island build
   manifest and the kit sources. A stored compile whose `build` differs from the serving server's is a
   miss (deploy lag; §6).
-- `html`: the story element's inner HTML, static parts included, each island's server render spliced
-  in at its slot, `<mx-slot>` never left in the output.
+- `html`: the story element's inner HTML, static parts final, each island rendered in its DECLARED
+  state at its slot (served only when no snapshot exists), `<mx-slot>` never left in the output.
+- `ssr`: `ModuleRef | null` — the server build of the same islands (`render(data) → story HTML`), stored
+  like the browser module; the serve path renders the islands from a snapshot through it.
 - `islands`: `IslandRef[]` — hydration key prefix, the island's root node path (`data-mx-ast`), the
   kit tags it uses, whether it reads data.
-- `module`: `ModuleRef | null` — the per-document module's content address and URL, and the shared
-  chunk URLs it imports (for `<link rel=modulepreload>`), null when the page has no islands.
+- `module`: `ModuleRef | null` — the per-document BROWSER module's content address and URL, and the
+  shared chunk URLs it imports (for `<link rel=modulepreload>`), null when the page has no islands.
 - `plan`: `DataPlan` (§4) or null when the version declares no data.
 - `links`: `LinkHints` (§8).
 - `kit`, `reactStatic`, `unported`, `partial`: what the compile used and could not port — reported,
@@ -324,9 +330,12 @@ session): the browser never compiles. What changes is how the READER page relate
 At compile, every `<a href>` that resolves to an artifact on this deployment (`/a/<id>`,
 `/@user/<id>-slug`, a verified custom domain of this deployment) is collected into `LinkHints`:
 `prefetch` (all such links, emitted as `<link rel="prefetch" as="document">`) and `prerender` (the
-first few in document order, emitted as speculation rules with `eagerness: moderate` so hover/viewport
-triggers them). Speculation rules ship as an external JSON script (`<script type="speculationrules"
-src="/islands/s/<sha>.json">`) so `script-src 'self'` holds without `'inline-speculation-rules'`.
+first few in document order, as speculation rules with `eagerness: moderate` so hover/viewport
+triggers them). Speculation rules ship as an EXTERNAL JSON file (`/islands/s/<sha>.json`, content-
+addressed in the module store) named by the `Speculation-Rules` response header — the only way Chrome
+loads external rules; an inline `<script type="speculationrules">` would need `'inline-speculation-rules'`
+in the CSP, which stays `script-src 'self'`. The assembler returns the header with the page
+(`AssembledPage.headers`); the route sets it.
 Private documents are never prerendered (the anonymous prerender would be a 404 page cached under the
 reader's URL); the hint set is computed from the compiled page and carried by the assembler input.
 
@@ -449,9 +458,9 @@ Q3. Should a background revalidation push the new SVG drawings to open pages (a 
 Q4. Custom domains: the domain post today renders through `buildStoryDocument` with a footer; the
     assembler's `chrome` input covers it, but the canonical/self-canonical rules stay in
     `server/custom-host`. Confirm no separate output is wanted for domains.
-Q5. Speculation rules as an external JSON file: Chrome supports `<script type="speculationrules" src>`;
-    Safari/Firefox ignore it. `<link rel=prefetch>` is the cross-browser floor. Confirm the CSP stance
-    (no `'inline-speculation-rules'`).
+Q5. Speculation rules through the `Speculation-Rules` header: Chrome only; Safari/Firefox ignore it and
+    `<link rel=prefetch>` is the cross-browser floor. Confirm the CSP stance (no
+    `'inline-speculation-rules'`, no inline rules script).
 Q6. Exports (`/a/:id/export`) photograph `/raw?key=`: compiled output means the capture waits for
     islands to hydrate instead of React; the export route's readiness signal (`mx:painted`) must be
     emitted by the island runtime too. Owned by w3-serve; confirm no capture-specific
