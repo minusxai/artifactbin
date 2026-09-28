@@ -14,7 +14,9 @@ import { ISLAND_DATA_ID, READER_READY_ATTR } from '@/lib/compiled-page/contract'
 import { ISLANDS_READY_EVENT } from './contract';
 
 export function startDeck(doc: Document = document, win: Window = window): () => void {
-  const slides = () => [...doc.querySelectorAll<HTMLElement>('[data-mx-slide]')];
+  // The document's slides, NOT the rail's miniatures (a thumbnail renders a real slide, stamps included):
+  // StoryRuntimeApp documentSlides.
+  const slides = () => [...doc.querySelectorAll<HTMLElement>('.mx-doc [data-mx-slide]')];
   const rows = [...doc.querySelectorAll<HTMLElement>('.mx-rail .mx-rail-row')];
   const bar = doc.querySelector<HTMLElement>('.mx-present');
   const count = bar?.querySelector<HTMLElement>('.mx-present-count') ?? null;
