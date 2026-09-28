@@ -12,7 +12,7 @@
 import type { Scalar, TableResult } from '@/lib/story/dataflow';
 import type { MutationRequest } from '@/lib/story/mutation-request';
 import type { DataflowStore, MutationAnswer } from '@/lib/story-runtime/store';
-import type { StoredMermaidImage, StoryViewer } from '@/lib/story-runtime/contract';
+import type { ServedResults, StoredMermaidImage, StoryViewer } from '@/lib/story-runtime/contract';
 import type { PersonCard } from '@artifactbin/contracts';
 
 /* ────────────────────────────────────────────────────────────────────────────
@@ -147,3 +147,21 @@ export const ISLANDS_READY_EVENT = 'mx:ready';
  */
 export const KIT_FAMILIES = ['basic', 'tabs', 'accordion', 'dialog', 'disclosure', 'controls', 'data', 'files', 'people', 'mermaid'] as const;
 export type KitFamily = (typeof KIT_FAMILIES)[number];
+
+/**
+ * The page's data island (`<script type="application/json">`, written by the
+ * assembler, read by the island runtime's boot): everything a reader's islands
+ * start from before any request.
+ */
+export interface IslandPageData {
+  values: Record<string, Scalar>;
+  results: ServedResults | null;
+  queryUrl?: string;
+  mutateUrl?: string;
+  viewerUrl?: string;
+  assetsUrl?: string;
+  /** The non-secret "signed in" hint: viewer-dependent islands show a neutral placeholder rather than guest content. */
+  signedIn: boolean;
+  mermaidImages: Readonly<Record<string, StoredMermaidImage>>;
+  readOnly: string | null;
+}

@@ -25,6 +25,7 @@ import type { RefDataMap } from '@/lib/story/ref-data';
 import type { GlyphMap } from '@/lib/story-ui/icon-contract';
 import type { ReaderChromeInput } from '@/lib/story/reader-chrome';
 import type { ServedResults, StoredMermaidImage, StoryViewer } from '@/lib/story-runtime/contract';
+import type { AgentDiscovery } from '@/lib/agent-discovery-tags';
 
 /* ────────────────────────────────────────────────────────────────────────────
  * The reader mode switch and how a response names its path
@@ -397,6 +398,20 @@ export interface AssembleInput {
   spa: { entry: string; preload: readonly string[] } | null;
   /** Where the shared chunks are (the manifest), so the assembler emits `modulepreload`s and the boot import. */
   build: CompilerBuild;
+  /**
+   * Document head metadata the page carries today: description, canonical link,
+   * social (Open Graph / Twitter) card and the agent-discovery head and tail.
+   * Null where a path emits none (captures, the offline file).
+   */
+  head: AssembleHead | null;
+}
+
+/** The head metadata of an assembled page (see AssembleInput.head). */
+export interface AssembleHead {
+  description?: string | null;
+  canonical?: string | null;
+  social?: { title: string; description?: string | null; image: string } | null;
+  help?: AgentDiscovery | null;
 }
 
 /** The assembled page and the response headers that belong to it. */
@@ -423,6 +438,8 @@ export const ISLAND_DATA_ID = 'mx-story-data';
  * or the reader interacts (Vega loads then).
  */
 export const CHART_SLOT_ATTR = 'data-mx-chart-slot';
+/** A chart slot's drawing state, set by the assembler and updated by the island runtime (`drawn`, `pending`, `live`). */
+export const CHART_STATE_ATTR = 'data-mx-chart-state';
 /** The idle loader's marker on the SPA's script tag, so gates can tell the HTML-first page from today's. */
 export const SPA_IDLE_ATTR = 'data-mx-spa-idle';
 /** Set on `<html>` when every island has hydrated (or at DOMContentLoaded on a page with no module): the lab's ready marker. */
