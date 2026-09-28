@@ -145,14 +145,50 @@ describe('dialog', () => {
 });
 
 describe('disclosure', () => {
-  it('Collapsible, Popover and Avatar match today\'s render', () => {
+  it('Popover and Avatar match today\'s render', () => {
     const { host } = mount(() => <>
-      <Collapsible id="col"><CollapsibleTrigger id="ct">More</CollapsibleTrigger><CollapsibleContent id="cc">Hidden text</CollapsibleContent></Collapsible>
       <Popover><PopoverTrigger id="pt">Open</PopoverTrigger><PopoverContent id="pc">Popped</PopoverContent></Popover>
       <Avatar id="av" class={cls('Avatar')}><AvatarImage src="/a.png" alt="A" class={cls('AvatarImage')} /><AvatarFallback class={cls('AvatarFallback')}>AB</AvatarFallback></Avatar>
     </>);
-    expect(parityOf('<Collapsible id="col"><CollapsibleTrigger id="ct">More</CollapsibleTrigger><CollapsibleContent id="cc">Hidden text</CollapsibleContent></Collapsible><Popover><PopoverTrigger id="pt">Open</PopoverTrigger><PopoverContent id="pc">Popped</PopoverContent></Popover><Avatar id="av"><AvatarImage src="/a.png" alt="A" /><AvatarFallback>AB</AvatarFallback></Avatar>', host)).toEqual([]);
+    expect(parityOf('<Popover><PopoverTrigger id="pt">Open</PopoverTrigger><PopoverContent id="pc">Popped</PopoverContent></Popover><Avatar id="av"><AvatarImage src="/a.png" alt="A" /><AvatarFallback>AB</AvatarFallback></Avatar>', host)).toEqual([]);
   });
+});
+
+/**
+ * Accordion and Collapsible content, MOUNTED on both sides: Radix measures the content once it runs and
+ * on every open/close, writing through the CSSOM (the served style string comes back in its form, the
+ * mount-time `transition-duration: 0s; animation-name: none` stays on content open on mount).
+ */
+describe('collapsible content, as mounted React leaves it', () => {
+  const cases: [string, string, () => import('solid-js').JSX.Element][] = [
+    ['accordion, one item open on mount',
+      '<Accordion type="single" collapsible defaultValue="a" id="acc"><AccordionItem value="a" id="i1"><AccordionTrigger id="tr1">Question one</AccordionTrigger><AccordionContent id="co1">Answer one.</AccordionContent></AccordionItem><AccordionItem value="b" id="i2"><AccordionTrigger id="tr2">Question two</AccordionTrigger><AccordionContent id="co2">Answer two.</AccordionContent></AccordionItem></Accordion>',
+      () => <Accordion type="single" collapsible defaultValue="a" id="acc"><AccordionItem value="a" id="i1" class={cls('AccordionItem')}><AccordionTrigger id="tr1" class={cls('AccordionTrigger')}>Question one</AccordionTrigger><AccordionContent id="co1" class={cls('AccordionContent')}>Answer one.</AccordionContent></AccordionItem><AccordionItem value="b" id="i2" class={cls('AccordionItem')}><AccordionTrigger id="tr2" class={cls('AccordionTrigger')}>Question two</AccordionTrigger><AccordionContent id="co2" class={cls('AccordionContent')}>Answer two.</AccordionContent></AccordionItem></Accordion>],
+    ['collapsible, open on mount',
+      '<Collapsible defaultOpen id="col"><CollapsibleTrigger id="ct">More</CollapsibleTrigger><CollapsibleContent id="cc">Hidden text</CollapsibleContent></Collapsible>',
+      () => <Collapsible defaultOpen id="col"><CollapsibleTrigger id="ct">More</CollapsibleTrigger><CollapsibleContent id="cc">Hidden text</CollapsibleContent></Collapsible>],
+    ['collapsible, closed on mount',
+      '<Collapsible id="col"><CollapsibleTrigger id="ct">More</CollapsibleTrigger><CollapsibleContent id="cc">Hidden text</CollapsibleContent></Collapsible>',
+      () => <Collapsible id="col"><CollapsibleTrigger id="ct">More</CollapsibleTrigger><CollapsibleContent id="cc">Hidden text</CollapsibleContent></Collapsible>],
+  ];
+  for (const [label, markup, view] of cases) {
+    it(`${label}: identical once mounted, and after the first frame and a toggle`, async () => {
+      const react = await reactMount(markup);
+      const { host } = mount(view);
+      document.body.append(host);
+      try {
+        // Byte for byte too (shapeOf normalises style declarations): the CSSOM's form, as React's writes leave it.
+        const rawStyles = (root: Element) => [...root.querySelectorAll('[data-slot$="content"]')].map((el) => el.getAttribute('style'));
+        expect(diffShapes(shapeOf(react.host), shapeOf(host))).toEqual([]);
+        expect(rawStyles(host)).toEqual(rawStyles(react.host));
+        await frame();
+        for (const root of [react.host, host]) await act(async () => { press(root.querySelector('#tr2, #ct') as HTMLButtonElement); });
+        await frame();
+        expect(diffShapes(shapeOf(react.host), shapeOf(host))).toEqual([]);
+        expect(rawStyles(host)).toEqual(rawStyles(react.host));
+      } finally { host.remove(); await react.unmount(); }
+    });
+  }
 });
 
 describe('trusted overlay portal', () => {

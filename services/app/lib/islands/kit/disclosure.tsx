@@ -1,24 +1,30 @@
 /* @jsxImportSource solid-js */
-import { createContext, createSignal, createUniqueId, Show, splitProps, useContext, type JSX } from 'solid-js';
+import { createContext, createEffect, createSignal, createUniqueId, onMount, Show, splitProps, useContext, type JSX } from 'solid-js';
+import { collapsibleStyle } from './collapsible-style';
 import { TrustedOverlay } from './trusted-overlay';
 
-type State = { open: () => boolean; setOpen: (value: boolean) => void; contentId: string };
+type State = { open: () => boolean; setOpen: (value: boolean) => void; contentId: string; panelId: () => string; setPanelId: (id: string) => void };
 const CollapsibleContext = createContext<State>(); const PopoverContext = createContext<State>();
 function makeState(props: { open?: boolean; defaultOpen?: boolean; onOpenChange?: (value: boolean) => void }): State {
-  const [local, setLocal] = createSignal(!!props.defaultOpen); const contentId = createUniqueId();
-  return { open: () => props.open ?? local(), setOpen: value => { setLocal(value); props.onOpenChange?.(value); }, contentId };
+  const [local, setLocal] = createSignal(!!props.defaultOpen); const contentId = createUniqueId(); const [panelId, setPanelId] = createSignal(contentId);
+  return { open: () => props.open ?? local(), setOpen: value => { setLocal(value); props.onOpenChange?.(value); }, contentId, panelId, setPanelId };
 }
 export function Collapsible(props: JSX.HTMLAttributes<HTMLDivElement> & { open?: boolean; defaultOpen?: boolean; disabled?: boolean; onOpenChange?: (value: boolean) => void }) {
   const ctx = makeState(props); const [localProps, rest] = splitProps(props, ['open', 'defaultOpen', 'disabled', 'onOpenChange', 'children']);
   return <CollapsibleContext.Provider value={ctx}><div data-slot="collapsible" data-state={ctx.open() ? 'open' : 'closed'} {...rest}>{localProps.children}</div></CollapsibleContext.Provider>;
 }
 export function CollapsibleTrigger(props: JSX.ButtonHTMLAttributes<HTMLButtonElement>) {
-  const ctx = useContext(CollapsibleContext)!;
-  return <button type="button" aria-controls={undefined} aria-expanded={ctx.open()} data-state={ctx.open() ? 'open' : 'closed'} data-slot="collapsible-trigger" on:click={() => ctx.setOpen(!ctx.open())} {...props} />;
+  const ctx = useContext(CollapsibleContext)!; let button!: HTMLButtonElement;
+  // Radix names the open content (its own id, which an author's id replaces, leaving it dangling); this names
+  // the real one — set once the page is live, since the content registers its id after this rendered.
+  onMount(() => createEffect(() => { const id = ctx.open() ? ctx.panelId() : null; if (id) button.setAttribute('aria-controls', id); else button.removeAttribute('aria-controls'); }));
+  return <button ref={button} type="button" aria-controls={ctx.open() ? ctx.panelId() : undefined} aria-expanded={ctx.open()} data-state={ctx.open() ? 'open' : 'closed'} data-slot="collapsible-trigger" on:click={() => ctx.setOpen(!ctx.open())} {...props} />;
 }
 export function CollapsibleContent(props: JSX.HTMLAttributes<HTMLDivElement>) {
-  const ctx = useContext(CollapsibleContext)!;
-  return <div id={props.id ?? ctx.contentId} data-state={ctx.open() ? 'open' : 'closed'} data-slot="collapsible-content" hidden={!ctx.open()} {...props}>{ctx.open() ? props.children : null}</div>;
+  const ctx = useContext(CollapsibleContext)!; let node: HTMLDivElement | undefined;
+  if (props.id) ctx.setPanelId(props.id);
+  collapsibleStyle(() => node, ctx.open);
+  return <div ref={node} id={props.id ?? ctx.contentId} data-state={ctx.open() ? 'open' : 'closed'} data-slot="collapsible-content" hidden={!ctx.open()} {...props}>{ctx.open() ? props.children : null}</div>;
 }
 export function Popover(props: JSX.HTMLAttributes<HTMLSpanElement> & { open?: boolean; defaultOpen?: boolean; onOpenChange?: (value: boolean) => void }) {
   const ctx = makeState(props); return <PopoverContext.Provider value={ctx}>{props.children}</PopoverContext.Provider>;
