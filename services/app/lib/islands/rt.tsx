@@ -101,7 +101,7 @@ export interface IslandRuntime {
   dispose(): void;
 }
 
-export const EMPTY_WRITE_FEED: WriteStatusFeed = Object.freeze({ current: () => [], subscribe: () => () => {} });
+export const EMPTY_WRITE_FEED: WriteStatusFeed = Object.freeze({ current: () => [], subscribe: () => () => {}, dismiss: () => {} });
 
 interface Bridged {
   values: Record<string, Scalar>;
@@ -161,13 +161,13 @@ export function createIslandRuntime(
     people: () => state.people,
     setValue: (name, value, opts) => store?.setValue(name, value, opts?.debounce ? { debounce: true } : undefined),
     /*
-     * ADAPTER until w3-viewer-writes: the store's `mutate(name, overrides, row)` with the edited
-     * value as its `_value` override; the answer names the dataset the declaration writes.
+     * The write as the wire states it (the store's `mutate(request)`): OPTIMISTIC — a click before
+     * the write check has answered is sent and the server decides; a refusal lands in the status
+     * feed with its reason and a retry. The answer names the dataset the declaration writes.
      */
     mutate: async (request) => {
       if (!store) throw noData();
-      const overrides = request.value !== undefined ? { ...request.args, _value: request.value } : request.args;
-      await store.mutate(request.mutation, overrides, request.row);
+      await store.mutate(request);
       const target = store.flow.mutations.find((m) => m.name === request.mutation)?.target;
       const ref = target && 'import' in target ? store.flow.imports.find((i) => i.name === target.import)?.ref : undefined;
       return { dataset: ref ?? '' };

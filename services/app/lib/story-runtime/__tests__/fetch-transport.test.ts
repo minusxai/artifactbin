@@ -97,5 +97,20 @@ describe('createFetchTransport', () => {
     const refused = createFetchTransport('/a/abc123/query', vi.fn(async () => new Response('{"error":"not_holdable"}', { status: 404 })));
     await expect(refused.hold!('sales')).rejects.toThrow('404');
   });
-});
 
+  it('with the session (a signed-in page): every door is a POST that carries it — runs, windows, holds, people and writes', async () => {
+    const f = vi.fn(async (_url: string, init?: RequestInit) => ok(String(init?.body).includes('"mutation"') ? { ok: true, dataset: 'DS1' } : { tables: { sales: { rows: [], columns: [] } }, errors: {}, people: {} }));
+    const t = createFetchTransport('/a/abc123/query', f, '/a/abc123/mutate', { session: true });
+    await t.run({ region: 'EU' }, ['sales']);
+    await t.page({}, 'sales', { offset: 0, limit: 10 });
+    await t.hold!('sales').catch(() => {});
+    await t.people!(['usr_a']);
+    await t.mutate!({ mutation: 'vote', args: {} });
+    const calls = f.mock.calls as unknown as Array<[string, RequestInit]>;
+    expect(calls.map(([url, init]) => [url, init.method, init.credentials])).toEqual([
+      ['/a/abc123/query', 'POST', 'same-origin'], ['/a/abc123/query', 'POST', 'same-origin'], ['/a/abc123/query', 'POST', 'same-origin'],
+      ['/a/abc123/query', 'POST', 'same-origin'], ['/a/abc123/mutate', 'POST', 'same-origin'],
+    ]);
+    expect(JSON.parse(String(calls[0]![1].body))).toMatchObject({ values: { region: 'EU' }, only: ['sales'] });
+  });
+});
