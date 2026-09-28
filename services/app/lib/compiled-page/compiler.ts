@@ -139,6 +139,8 @@ const INERT: ReadonlySet<string> = new Set(['Helmet', 'Value', 'Query', 'Import'
 const ISLAND_TAGS: ReadonlySet<string> = new Set([...Object.keys(KIT).filter((tag) => KIT[tag]!.island), ...PARTIAL]);
 /** A rail miniature served inert, put in place by the deck behaviour (lib/islands/deck RAIL_THUMB_ATTR, the same name). */
 const RAIL_THUMB_ATTR = 'data-mx-thumb';
+/** The skeleton's placeholder for a static subtree's HTML (bundle.server STATIC_SLOT, the same name). */
+const STATIC_SLOT = 'mx-static';
 /** The deck's framework-free behaviour chunk, by its manifest specifier. */
 const DECK_BEHAVIOR = '@mx/deck';
 
@@ -254,6 +256,11 @@ export interface Generated extends GeneratedSources {
   unported: string[];
   partial: string[];
   behaviors: string[];
+  /**
+   * The skeleton's static subtrees as today's React render, in order: the skeleton holds a
+   * `<mx-static data-i="n">` for each, which bundle.server splices after rendering it (`spliceStatics`).
+   */
+  statics: string[];
 }
 
 /** One version's facts the generator reads (CompileInput without the build). */
@@ -267,6 +274,28 @@ export function generate(input: GenerateInput): Generated {
   const partial = new Set<string>();
   const unported = new Set<string>();
   const kitUsed = { skeleton: new Set<string>(), islands: new Set<string>() };
+  const statics: string[] = [];
+  /** A skeleton static subtree's HTML, carried beside the skeleton (never through JSX, Babel and Solid's server renderer). */
+  const staticSlot = (html: string): string => { statics.push(html); return `<${STATIC_SLOT} data-i={${lit(String(statics.length - 1))}}></${STATIC_SLOT}>`; };
+  /**
+   * A static subtree's names, checked as the JSX path checks them (a tag outside the grammar refuses the compile;
+   * React drops a malformed attribute name itself), and the registered components it renders, reported.
+   */
+  const accountStatic = (node: JsxNode): void => {
+    if (!isElement(node)) return;
+    if (node.isComponent) { if (STORY_UI_COMPONENTS[node.tag]) reactStatic.add(node.tag); } else if (!node.control) safeTag(node.tag);
+    node.children.forEach(accountStatic);
+  };
+  const grids = new WeakMap<JsxNode, boolean>();
+  /** Does this subtree hold a Grid (a compile-time macro, emitted by emitGrid)? */
+  const holdsGrid = (node: JsxNode): boolean => {
+    if (!isElement(node)) return false;
+    const known = grids.get(node);
+    if (known !== undefined) return known;
+    const value = node.tag === 'Grid' || node.tag === 'GridItem' || node.children.some(holdsGrid);
+    grids.set(node, value);
+    return value;
+  };
   const needs = new WeakMap<JsxNode, boolean>();
   const needsBrowser = (node: JsxNode): boolean => {
     const known = needs.get(node);
@@ -368,6 +397,11 @@ export function generate(input: GenerateInput): Generated {
     if (unregistered(node)) return '';
     // A managed frame whose content is refused renders nothing (the interpreter's renderNode), island or not.
     if (node.tag === 'Iframe' && !ctx.row && managedFrameOf(node) === null) return '';
+    // A static subtree of the SKELETON is today's React render (the interpreter, parity by construction), carried as
+    // HTML and spliced in after the skeleton renders: no JSX re-parse, no Babel, no Solid render of static markup —
+    // most of a large document's compile. Never inside an island (hydration walks its template) and never across a
+    // Grid (a compile-time macro, emitGrid).
+    if (mode === 'static' && !ctx.row && !needsBrowser(node) && !holdsGrid(node)) { accountStatic(node); return staticSlot(reactStaticHtml(node, path, ctx)); }
     // An island root in the skeleton: rendered by its own island component, spliced in by the server.
     if (mode === 'static' && !PARTIAL.has(node.tag) && needsBrowser(node) && (selfDynamic(node) || mustPromote(node))) {
       const island: IslandBuild = { id: islands.length, path, source: '', kit: new Set(), readsData: !!input.flow && readsDataNode(node) };
@@ -529,7 +563,7 @@ export function generate(input: GenerateInput): Generated {
       // A miniature holding a button sits in the rail row's own button: parsed in place, the inner button would close
       // the row. Served inert in a `<template>` (a parser scope boundary) and put in place by the deck behaviour
       // (lib/islands/deck RAIL_THUMB_ATTR), so the rail ends as the tree today's rail renders.
-      const thumb = /<button\b/i.test(html) ? `<template ${RAIL_THUMB_ATTR}="">${htmlToJsx(html)}</template>` : htmlToJsx(html);
+      const thumb = /<button\b/i.test(html) ? `<template ${RAIL_THUMB_ATTR}="">${staticSlot(html)}</template>` : staticSlot(html);
       return `<button type="button" class="mx-rail-row" aria-label={${lit(`Go to slide ${slide.index + 1}: ${slide.title}`)}} aria-current={${lit(String(slide.index === 0))}}><span class="mx-rail-label"><span class="mx-rail-index">{${lit(String(slide.index + 1))}}</span><span class="mx-rail-title">{${lit(slide.title)}}</span></span><span class="mx-rail-thumb" aria-hidden="true"><div style="--mx-vh:800px">${thumb}</div></span></button>`;
     }).join('');
     root = `<div class="mx-deck"><nav class="mx-rail" aria-label="Slides">${rail}</nav>${root}<div class="mx-present" aria-label="Slide controls"><button type="button" aria-label="Previous slide">{"‹"}</button><span class="mx-present-count" aria-label="Slide position">{${lit(`1 / ${slides.length}`)}}</span><button type="button" aria-label="Next slide">{"›"}</button><button type="button" aria-label="Present">{"present"}</button></div></div>`;
@@ -555,6 +589,7 @@ export function generate(input: GenerateInput): Generated {
     unported: [...unported].sort(),
     partial: [...partial].sort(),
     behaviors: deck ? [DECK_BEHAVIOR] : [],
+    statics,
   };
 }
 
