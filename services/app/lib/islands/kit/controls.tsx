@@ -105,12 +105,12 @@ export function DatePicker(p: Props) {
 /** Native fields keep their tag and authored attributes; only declared bindings are intercepted. */
 export function BoundNative(p: Props & { tag: 'input' | 'select' | 'textarea'; bind?: Record<string,string>; children?: JSX.Element }) {
   const island = useIsland(); const { tag,bind,children,...attrs } = p; const name = bind?.value ?? bind?.checked; const value = () => name ? island.value(name) : p.value;
-  const update = (e: Event) => { if (!name) return; const el = e.currentTarget as HTMLInputElement; island.setValue(name,bind?.checked ? el.checked : el.value,tag === 'select' || bind?.checked ? undefined : { debounce: 250 }); };
+  const nullable = () => { const n = bind?.value; if (!n) return false; const decl = island.store()?.flow.values.find(v => v.kind === 'scalar' && v.name === n); return (decl?.default ?? null) === null; };
+  const update = (e: Event) => { if (!name) return; const el = e.currentTarget as HTMLInputElement; island.setValue(name,bind?.checked ? el.checked : tag === 'select' && nullable() && el.value === '' ? null : el.value,tag === 'select' || bind?.checked ? undefined : { debounce: 250 }); };
   if (tag === 'select') {
     // Today's NativeBoundControl: a query-bound select lists its rows (first column the value, second the
     // label), after an "All" entry when the bound Value may be null; authored options follow.
     const table = () => bind?.options ? island.table(bind.options) : undefined;
-    const nullable = () => { const n = bind?.value; if (!n) return false; const decl = island.store()?.flow.values.find(v => v.kind === 'scalar' && v.name === n); return (decl?.default ?? null) === null; };
     const rows = () => { const t = table(); const [valueCol, labelCol] = t?.columns ?? []; return t && valueCol ? t.rows.map(row => { const v = String(row[valueCol.name] ?? ''); return { value: v, label: labelCol ? String(row[labelCol.name] ?? v) : v }; }) : []; };
     let select!: HTMLSelectElement; createEffect(() => { rows(); select.value = String(value() ?? ''); });
     return <select ref={select} {...attrs as JSX.SelectHTMLAttributes<HTMLSelectElement>} onChange={update}>

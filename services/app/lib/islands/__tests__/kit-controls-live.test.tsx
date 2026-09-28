@@ -6,7 +6,7 @@
  * lists its rows. Both sides are mounted over the same values and query result and compared byte for
  * byte — raw attribute values, class strings included, as the parity gate compares them.
  */
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { render } from 'solid-js/web';
 import { act, createElement } from 'react';
 import { createRoot } from 'react-dom/client';
@@ -74,6 +74,19 @@ async function compiled(values: Record<string, unknown>) {
 }
 
 describe('bound controls, as today\'s live reader renders them', () => {
+  it('writes null when a nullable query select returns to All', async () => {
+    const flow = await compiledSource(HELMET + BODY, { abc123: [{ name: 'region', type: 'string' }] });
+    const setValue = vi.fn();
+    const island = { ...fakeIsland(), value: () => 'EU', table: () => REGIONS, store: () => ({ flow }), setValue } as never;
+    const host = document.createElement('div');
+    const dispose = render(() => <IslandProvider value={island}><BoundNative tag="select" bind={{ value: 'region', options: 'regions' }} aria-label="Region" /></IslandProvider>, host);
+    try {
+      const select = host.querySelector('select')!;
+      select.value = '';
+      select.dispatchEvent(new Event('change', { bubbles: true }));
+      expect(setValue).toHaveBeenCalledWith('region', null, undefined);
+    } finally { dispose(); }
+  });
   for (const [label, values] of [['defaults', {}], ['chosen values', { region: 'EU', min_rev: 1200, title: 'Hello', note: 'Two\nlines', compare: true }]] as const) {
     it(`${label}: every control is byte for byte today's`, async () => {
       const react = await legacy(values);
