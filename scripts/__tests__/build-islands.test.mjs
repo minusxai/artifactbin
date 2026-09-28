@@ -71,6 +71,22 @@ describe('buildIslands', () => {
     expect(text.length).toBeLessThan(512 * 1024);
   });
 
+  it('bundles the managed frame\'s behaviour alone: its own file, no imports, no Solid, loaded by the data family by content address', () => {
+    const { manifest, files } = first;
+    const engines = Object.keys(files).filter((url) => /\/frame-engine-[0-9a-f]{16}\.js$/.test(url));
+    expect(engines).toHaveLength(1);
+    const engine = engines[0];
+    expect(files[engine].imports).toEqual([]);
+    const code = readFileSync(path.join(outDir, engine.slice('/islands/'.length)), 'utf8');
+    expect(code).not.toMatch(/\$DX_DELEGATE|_\$HY/);
+    // Some chunk of the data family's closure asks for it by its file name, lazily.
+    const name = engine.slice('/islands/'.length);
+    const reach = (urls, seen = new Set()) => { for (const u of urls) { if (seen.has(u)) continue; seen.add(u); reach(files[u].imports, seen); } return seen; };
+    expect([...reach([manifest['@mx/kit/data']])].some((url) => readFileSync(path.join(outDir, url.slice('/islands/'.length)), 'utf8').includes(`import("./${name}")`))).toBe(true);
+    // …and nothing in the shared runtime's closure does.
+    expect([...reach([manifest['@mx/rt'], manifest['@mx/boot']])].some((url) => readFileSync(path.join(outDir, url.slice('/islands/'.length)), 'utf8').includes(name))).toBe(false);
+  });
+
   it('keeps the shared runtime under the interactive budget: solid + rt + store bridge ≤ 28 KB brotli', async () => {
     const { manifest, files, closure } = first;
     const bytes = closure([manifest['@mx/rt'], manifest['@mx/boot']]).reduce((n, url) => n + files[url].br, 0);

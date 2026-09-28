@@ -40,6 +40,9 @@ export const EXTRA_CLASS_SOURCES = [
   // still renders it, so its classes belong in the sheet.
   join(ROOT, 'components', 'Tooltip.tsx'),
   join(ROOT, 'components', 'PersonMention.tsx'),
+  // The <DeckGL> map's chrome classes, shared by today's engine (components/kit/deck-gl-engine) and the
+  // compiled page's (lib/islands/kit/embed/deck-engine).
+  join(ROOT, 'lib', 'viz', 'deck-engine-core.ts'),
 ];
 const OUT_FILE = join(ROOT, 'lib', 'story-ui', 'recipe-classes.ts');
 
