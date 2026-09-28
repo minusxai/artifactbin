@@ -360,8 +360,12 @@ export interface AssembleInput {
   overlay: AssembleOverlay;
   /** Reader chrome to render on the server (`/a/:id`, a domain post); null for `/raw`, captures, the offline file. */
   chrome: ReaderChromeInput | null;
-  /** Load the React app on idle and hand it the island document (§7); false for `/raw` and every path without the SPA. */
-  spa: boolean;
+  /**
+   * Load the React app on idle (or first chrome interaction) and hand it the
+   * island document (§7): the SPA's entry and the chunks to `modulepreload`
+   * (server/reader-preloads). Null for `/raw` and every path without the SPA.
+   */
+  spa: { entry: string; preload: readonly string[] } | null;
   /** Where the shared chunks are (the manifest), so the assembler emits `modulepreload`s and the boot import. */
   build: CompilerBuild;
 }
@@ -371,5 +375,14 @@ export type AssembleReaderPage = (input: AssembleInput) => string;
 
 /** The element ids and attributes the assembled page and the runtime agree on. */
 export const ISLAND_DATA_ID = 'mx-story-data';
+/**
+ * A `<Question>` island's chart box in the compiled HTML, by the question's node
+ * id (or path): the assembler puts the snapshot's SVG inside it and marks it
+ * `data-mx-chart-state="ready"`; an island re-draws only when its table changes
+ * or the reader interacts (Vega loads then).
+ */
+export const CHART_SLOT_ATTR = 'data-mx-chart-slot';
+/** The idle loader's marker on the SPA's script tag, so gates can tell the HTML-first page from today's. */
+export const SPA_IDLE_ATTR = 'data-mx-spa-idle';
 /** Set on `<html>` when every island has hydrated (or at DOMContentLoaded on a page with no module): the lab's ready marker. */
 export const READER_READY_ATTR = 'data-mx-ready';

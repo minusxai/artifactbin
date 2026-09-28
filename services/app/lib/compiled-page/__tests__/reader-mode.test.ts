@@ -1,6 +1,17 @@
 /** The reader mode switch: the deployment decides, a request may only pick the other path when the switch allows. */
-import { describe, expect, it } from 'vitest';
-import { compilesPages, parseCompiledReaderFlag, readerModeFor } from '../reader-mode';
+import { afterEach, describe, expect, it } from 'vitest';
+import { compilesPages, currentCompiledReaderFlag, parseCompiledReaderFlag, readerModeFor, setCompiledReaderFlagForTests } from '../reader-mode';
+
+describe('currentCompiledReaderFlag', () => {
+  afterEach(() => setCompiledReaderFlagForTests(null));
+  it('is the configured flag unless a test overrides it for its file', () => {
+    expect(currentCompiledReaderFlag('off')).toBe('off');
+    setCompiledReaderFlagForTests('shadow');
+    expect(currentCompiledReaderFlag('off')).toBe('shadow');
+    setCompiledReaderFlagForTests(null);
+    expect(currentCompiledReaderFlag('on')).toBe('on');
+  });
+});
 
 describe('parseCompiledReaderFlag', () => {
   it('reads off, shadow and on, trimmed and case-insensitively', () => {

@@ -32,3 +32,14 @@ export function readerModeFor(flag: CompiledReaderFlag, search: string, options:
 
 /** Whether this deployment compiles and stores pages at all (shadow and on both do; off compiles nothing). */
 export const compilesPages = (flag: CompiledReaderFlag): boolean => flag !== 'off';
+
+/*
+ * THE DEPLOYMENT'S FLAG, AS THE SERVER READS IT. lib/config samples the
+ * environment once at import, and the test suite's setup imports it before any
+ * test runs — so a test that wants `shadow` or `on` cannot set the environment
+ * in time. Every server-side decision reads the flag through this door, and a
+ * test may override it for its file; the product never calls the setter.
+ */
+let override: CompiledReaderFlag | null = null;
+export function setCompiledReaderFlagForTests(flag: CompiledReaderFlag | null): void { override = flag; }
+export const currentCompiledReaderFlag = (configured: CompiledReaderFlag): CompiledReaderFlag => override ?? configured;
