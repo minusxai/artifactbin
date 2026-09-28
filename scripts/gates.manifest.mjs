@@ -114,7 +114,7 @@ export const COMPILED_LEGS = Object.freeze([
   { gate: 'layout-shift', timeoutMs: 140_000 },
   { gate: 'live-reader', timeoutMs: 70_000 },
   { gate: 'hydration', timeoutMs: 190_000, disabled: 'its takeover legs 1–3 assert React hydrating the legacy inline story; the compiled takeover (leg 4) already runs in the plain gate on ?reader=compiled' },
-  { gate: 'reader-chrome', timeoutMs: 110_000, disabled: 'the compiled app page\'s served chrome has no reveal-on-scroll rule and opens no settings panel until the app loads (lib/story-runtime/reader-chrome-actions runs on today\'s documents only)' },
+  { gate: 'reader-chrome', timeoutMs: 110_000 },
   { gate: 'dataflow', timeoutMs: 60_000, disabled: 'the compiled page runs no in-browser SQLite engine yet (IslandPageData carries no `hold`/`sqliteWasm`): six checks assert the page engine' },
 ]);
 

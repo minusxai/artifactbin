@@ -506,8 +506,11 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
 
   const transportFactory = useCallback(() => backend.queryTransport(), [backend]);
   const [frameLoaded, setFrameLoaded] = useState(false);
+  /** The reader's own mode, for a runtime that mounts after they chose it (the interpreter taking over an adopted compiled page). */
+  const modeOverride = useRef<AppearanceMode | null>(null);
   const onController = useCallback((controller: InlineStoryController | null) => {
     runtimeRef.current = controller;
+    if (controller && modeOverride.current) controller.send({ type: STORY_READER_MODE_MESSAGE, mode: modeOverride.current });
     if (controller && earlyData.current.length) {
       const datasets = [...new Set(earlyData.current)];
       earlyData.current = [];
@@ -535,6 +538,7 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
     colorMode: readerMode, template, chrome: true,
   }, [id, seedReady]);
   const setReaderMode = useCallback((mode: AppearanceMode) => {
+    modeOverride.current = mode;
     setReaderModeOverride(mode);
     runtimeRef.current?.send({ type: STORY_READER_MODE_MESSAGE, mode });
   }, []);

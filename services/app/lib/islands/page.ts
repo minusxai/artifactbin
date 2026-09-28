@@ -12,6 +12,9 @@
  *     own live stream (./live). A page with islands has `boot` hold it, seeded from its snapshot.
  *  4. Top-level: puts the reader back where a live reload left them, held against a settling layout
  *     and released the moment they take over (lib/story-runtime/anchor-restore).
+ *  5. On the app page (`/a/:id`, which loads this too): the SERVED reader chrome follows today's rule
+ *     (lib/story-runtime/reader-chrome-policy) — shown on load, hidden by a scroll down, revealed by a
+ *     scroll up and at the end — until the app's own chrome replaces it.
  *
  * A module script runs after the document is parsed, so every element it touches exists; it runs
  * before `boot` (the assembler writes behaviour scripts ahead of the per-document module).
@@ -20,9 +23,34 @@ import { ISLAND_DATA_ID } from '@/lib/compiled-page/contract';
 import { applyAnchor } from '@/lib/story-runtime/anchor';
 import { holdAnchor } from '@/lib/story-runtime/anchor-restore';
 import { readerMode, takeReloadAnchor } from '@/lib/story-runtime/reader-mode';
+import { chromeAfterSample, type ChromeState } from '@/lib/story-runtime/reader-chrome-policy';
 import { startIslandLive } from './live';
 
 const STORY_ROOT_SELECTOR = '[data-mx-inline-story]';
+/**
+ * lib/story/reader-chrome READER_CHROME_HIDDEN_CLASS, restated: that module is the chrome's server
+ * renderer and has no place in a reader chunk (page.test pins the two equal).
+ */
+export const CHROME_HIDDEN_CLASS = 'mx-reader-chrome--hidden';
+
+/** The served chrome's visibility, sampled once per frame, until the element leaves the page (the app took over). */
+function followChrome(win: Window, doc: Document, chrome: HTMLElement): () => void {
+  let state: ChromeState | null = null;
+  let queued = false;
+  const stop = () => { win.removeEventListener('scroll', schedule); win.removeEventListener('resize', schedule); };
+  const sample = () => {
+    queued = false;
+    if (!chrome.isConnected) { stop(); return; }
+    state = chromeAfterSample(state, { scrollY: Math.max(0, win.scrollY), viewportHeight: win.innerHeight, documentHeight: doc.documentElement.scrollHeight });
+    chrome.classList.toggle(CHROME_HIDDEN_CLASS, !state.visible);
+    chrome.setAttribute('data-mx-reader-state', state.visible ? 'shown' : 'hidden');
+  };
+  function schedule() { if (!queued) { queued = true; win.requestAnimationFrame(sample); } }
+  win.addEventListener('scroll', schedule, { passive: true });
+  win.addEventListener('resize', schedule);
+  sample();
+  return stop;
+}
 
 export function startPage(doc: Document = document, win: Window = window): () => void {
   const html = doc.documentElement;
@@ -43,6 +71,9 @@ export function startPage(doc: Document = document, win: Window = window): () =>
   const editId = doc.body?.getAttribute('data-mx-live-edit');
   const hasModule = !!doc.getElementById(ISLAND_DATA_ID);
   if (id && editId && !hasModule && typeof (win as { EventSource?: unknown }).EventSource === 'function') stops.push(startIslandLive(win, id, editId));
+
+  const chrome = doc.querySelector<HTMLElement>('body > [data-mx-reader-chrome]');
+  if (chrome) stops.push(followChrome(win, doc, chrome));
 
   const kept = takeReloadAnchor(win);
   if (kept) stops.push(holdAnchor(win, kept, applyAnchor));
