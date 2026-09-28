@@ -1,13 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import { execFile, execFileSync, spawnSync } from 'node:child_process';
 import { promisify } from 'node:util';
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import yaml from 'yaml';
 import { createServer } from 'node:http';
 import { CI_JOBS, CI_MODULES, CLI_BUMP_REFUSAL, VERSION_BUMP_FILES, checkCiResults, cliBumpRequired, isVersionOnlyBump, planCi } from '../lib/ci-plan.mjs';
+import { compiledLegNames, gateNamesOnDisk, shardWeight } from '../gates.manifest.mjs';
+import { shardOf } from '../gates.shard.mjs';
 
 /** Built and proved only for a release: the four-platform binaries (the Intel proofs consume its artifact) and the distributions gate. */
 const RELEASE_JOBS = ['cli', 'cli-preview', 'reference-compatibility'];
@@ -586,7 +588,12 @@ describe('CI job shape', () => {
     // postgres-datasets stays a browser gate (it boots the whole app); the image is pulled once, before the run.
     const pulls = jobs.gates.steps.filter((step) => /docker pull postgres:17-alpine/.test(step.run ?? ''));
     expect(pulls).toHaveLength(1);
+    expect(pulls[0].if).toBe('matrix.shard == 4');
+    const names = [...gateNamesOnDisk(readdirSync(path.join(root, 'scripts'))), ...compiledLegNames()];
+    expect(shardOf(names, { index: 4, total: 7 }, shardWeight)).toContain('postgres-datasets');
     expect(jobs.gates.steps.indexOf(pulls[0])).toBeLessThan(jobs.gates.steps.indexOf(run));
+    const sessions = jobs.gates.steps.find((step) => step.name === 'Prepare isolated browser session workers');
+    expect(sessions.run).toContain('sudo apt-get install -y bubblewrap ||');
   });
 
   it('does not rebuild the CLI before the binary builder rebuilds it', () => {

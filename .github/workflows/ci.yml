@@ -447,14 +447,14 @@ jobs:
       # legs add ~530s of weight to ~5440s; a seventh shard keeps every shard's weight below what six
       # carried without them, so no job grows toward the 240s budget.
       #
-      # postgres-datasets drives a real Dockerised Postgres; pulling the image
-      # before the run keeps that cost out of the gate's own timeout budget.
+      # postgres-datasets is on shard 4 (scripts/gates.shard.mjs). Pull only
+      # there, before its gate timeout starts.
       - name: pull the Postgres image the datasets gate needs
+        if: matrix.shard == 4
         run: docker pull postgres:17-alpine
       - name: Prepare isolated browser session workers
         run: |
-          sudo apt-get update
-          sudo apt-get install -y bubblewrap
+          sudo apt-get install -y bubblewrap || { sudo apt-get update; sudo apt-get install -y bubblewrap; }
           sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
           sudo mkdir -p /sys/fs/cgroup/afbin-sessions
           echo '+cpu +memory +pids' | sudo tee /sys/fs/cgroup/afbin-sessions/cgroup.subtree_control
