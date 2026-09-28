@@ -84,20 +84,27 @@ describe('Select', () => {
 describe('DataTable', () => {
   it('repaints a server query result through the store bridge', async () => {
     const columns: TableResult['columns'] = [{ name: 'id', type: 'number' }, { name: 'region', type: 'string' }, { name: 'amount', type: 'number' }];
-    const west = { rows: [{ id: 1, region: 'west', amount: 120 }], columns };
+    const west = { rows: [{ id: 1, region: 'west', amount: 120 }, { id: 3, region: 'west', amount: 30 }], columns };
     const east = { rows: [{ id: 2, region: 'east', amount: 90 }], columns };
     const flow: CompiledDataflow = { imports: [], mutations: [], values: [{ name: 'region', kind: 'scalar', type: 'string', default: 'west' }], queries: [{ name: 'orders', engine: 'postgres', source: 'DS1', sql: 'select id, region, amount from orders where region=$region', params: ['region'], reads: { imports: [], queries: [], values: ['region'], builtins: [] }, columns, start: 0, end: 0 }] };
     const run = vi.fn(async () => ({ tables: { orders: east }, errors: {} }));
     const rt = createIslandRuntime({ dataflow: { flow, values: { region: 'west' }, results: { tables: { orders: west }, errors: {} } } }, input => createDataflowStore(input, { transport: { run, page: vi.fn() }, debounceMs: 0 }));
-    const { host, dispose } = mount(rt.context, () => <DataTable data="$orders" />);
-    rt.store!.start();
-    expect(host.querySelector('tbody')?.textContent).toContain('120');
-    rt.context.setValue('region', 'east');
-    await vi.waitFor(() => expect(host.querySelector('tbody')?.textContent).toContain('90'));
-    expect(host.querySelector('tbody')?.textContent).not.toContain('120');
-    expect(run).toHaveBeenCalledTimes(1);
-    dispose();
-    rt.dispose();
+    const height = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'clientHeight');
+    Object.defineProperty(HTMLElement.prototype, 'clientHeight', { configurable: true, get() { return 300; } });
+    try {
+      const { host, dispose } = mount(rt.context, () => <DataTable data="$orders" />);
+      rt.store!.start();
+      expect(host.querySelector('tbody')?.textContent).toContain('120');
+      rt.context.setValue('region', 'east');
+      await vi.waitFor(() => expect(host.querySelector('tbody')?.textContent).toContain('90'));
+      expect(host.querySelector('tbody')?.textContent).not.toContain('120');
+      expect(run).toHaveBeenCalledTimes(1);
+      dispose();
+    } finally {
+      rt.dispose();
+      if (height) Object.defineProperty(HTMLElement.prototype, 'clientHeight', height);
+      else Reflect.deleteProperty(HTMLElement.prototype, 'clientHeight');
+    }
   });
 
   it('repaints rows when a query returns a new table', () => {

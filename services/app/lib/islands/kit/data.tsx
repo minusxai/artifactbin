@@ -204,7 +204,12 @@ function DataGrid(props: DataTableProps & { table: TableResult }) {
   const visible = createMemo(() => {
     if (!virtual()) return ordered().slice(0, STATIC_ROWS).map((row, index) => ({ row, index, start: null as number | null }));
     const items = virtualizer.getVirtualItems();
-    if (items.length) return items.map(v => ({ row: ordered()[v.index]!, index: v.index, start: v.start as number | null }));
+    // The virtualizer can retain indices from the previous result for one update when a query
+    // shrinks. Never hand an absent row to the cell renderer during that handoff.
+    if (items.length) return items.flatMap(v => {
+      const row = ordered()[v.index];
+      return row ? [{ row, index: v.index, start: v.start as number | null }] : [];
+    });
     // The observer may report its first rect after the switch; keep the window around the offset visible.
     const first = Math.max(0, Math.floor((scroll?.scrollTop ?? 0) / ROW_H) - 12);
     return Array.from({ length: Math.max(0, Math.min(ordered().length - first, Math.ceil((scroll?.clientHeight ?? 0) / ROW_H) + 24)) }, (_, offset) => ({ row: ordered()[first + offset]!, index: first + offset, start: (first + offset) * ROW_H as number | null }));
