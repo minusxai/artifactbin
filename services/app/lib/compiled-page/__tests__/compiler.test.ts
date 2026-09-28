@@ -101,6 +101,18 @@ describe('compilePage', () => {
   });
 });
 
+describe('the stored plan', () => {
+  const source = '<Helmet><Import name="sales" src="ref:SALES1" /><Query name="total">{`select sum(revenue) as r from sales.rows`}</Query></Helmet><p id="p">Totals</p>';
+  it('is planned with the anonymous reader\'s access the caller decided, and conservatively without it', async () => {
+    const input = await inputOf(source);
+    const admitted = await compilePage({ ...input, access: { datasets: { SALES1: { anonymousRead: true } } } }, loadCompilerBuild());
+    expect(admitted.plan!.queries.map((q) => [q.name, q.scope])).toEqual([['total', 'shared']]);
+    expect(admitted.plan!.datasets).toEqual(['SALES1']);
+    const unknown = await compilePage(input, loadCompilerBuild());
+    expect(unknown.plan!.queries.map((q) => [q.name, q.scope])).toEqual([['total', 'viewer']]);
+  });
+});
+
 describe('refusal', () => {
   it('a registered component with no Solid port inside a row refuses the compile, named, with nothing built', async () => {
     const page = await compilePage(await inputOf('<Helmet><Value name="rows" type="table" value={[{"k":"a"}]} /></Helmet><ul id="l"><For each={$rows} keyBy="k"><li id="i"><Separator id="s" /></li></For></ul>'), loadCompilerBuild());
