@@ -199,6 +199,16 @@ describe('unit parity with today\'s render', () => {
     for (const id of ['c', 'cc']) expect(dom(page.html).querySelector(`#${id}`)?.getAttribute('class'), id).toBe(react.querySelector(`#${id}`)?.getAttribute('class'));
     expect(page.html).not.toMatch(/ class="[^"]* "/);
   });
+  it('serves bound controls as today\'s live reader serves them: no binding stamp, no read-only flag, a textarea\'s value as its content', async () => {
+    const page = await compilePage(await inputOf('<Helmet><Value name="note" type="string" default="Two &amp; more" /><Value name="n" type="number" default={3} /></Helmet><div id="w"><Textarea label="Note" value="$note" id="ta" /><Input label="N" value="$n" id="in" /><Slider label="S" value="$n" min={0} max={10} id="sl" /></div>'), loadCompilerBuild());
+    const root = dom(page.html);
+    expect(page.html).not.toContain('data-mx-bound');
+    expect(root.querySelectorAll('[readonly]')).toHaveLength(0);
+    const textarea = root.querySelector('textarea')!;
+    expect(textarea.hasAttribute('value')).toBe(false);
+    expect(textarea.textContent).toBe('Two & more');
+    expect(root.querySelector('#in input')?.getAttribute('value')).toBe('3');
+  });
   it('deck: the compiled column is today\'s render; the rail and present bar sit around it', async () => {
     const source = fixture('deck.jsx');
     const page = await compilePage(await inputOf(source, 'deck'), loadCompilerBuild());
