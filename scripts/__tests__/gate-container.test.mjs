@@ -80,13 +80,13 @@ describe('image and dependency volume', () => {
 
 describe('dockerRunArgs', () => {
   const args = dockerRunArgs({
-    name: containerName('/Users/me/projects/Artifact Bin_tree', 4242), image: 'afbin-gate:pw1-abc', volume: 'afbin-gate-deps-1',
+    name: containerName('/Users/me/projects/Proof Tree_A', 4242), image: 'afbin-gate:pw1-abc', volume: 'afbin-gate-deps-1',
     worktree: '/Users/me/projects/tree', cpus: 4, memory: '8g', servers: 2, gates: ['hydration', 'fonts'],
   });
   const value = (flag) => args[args.indexOf(flag) + 1];
 
   it('names the container per runner process', () => {
-    expect(value('--name')).toBe('afbin-gate-artifact-bin_tree-4242');
+    expect(value('--name')).toBe('afbin-gate-proof-tree_a-4242');
   });
 
   it('mounts the worktree read-only and the dependency cache as the one named volume', () => {
