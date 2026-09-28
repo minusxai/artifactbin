@@ -37,6 +37,7 @@ import { ISLAND_DATA_ID, READER_READY_ATTR } from '@/lib/compiled-page/contract'
 import { ISLAND_DOCUMENT_KEY, ISLANDS_READY_EVENT, type IslandDocument, type IslandDocumentMode, type IslandEvent, type IslandHost, type IslandPageData, type IslandViewer } from './contract';
 import { createIslandRuntime, hydrateIsland } from './rt';
 import { installIslandDocument } from './handover';
+import { loadViewerOverlay } from './viewer';
 import { createWriteStatusFeed } from './writes';
 import { installStatus } from './kit/status';
 import { loadChart } from './chart';
@@ -248,20 +249,14 @@ export function boot(input: IslandModule | readonly IslandEntry[], win: Window =
   };
   installIslandDocument(root, islandDocument);
 
-  // The viewer door is used after paint. Its URL value parser and timestamp validation
-  // belong to that path, so a guest page with no overlay does not preload them.
-  void import('./viewer').then(({ loadViewerOverlay }) => {
-    if (disposed) return;
-    loadViewerOverlay(context, data, {
-      setViewer: (viewer: IslandViewer) => {
-        if (disposed) return;
-        viewerId = viewer && 'id' in viewer ? viewer.id : null;
-        identified = true;
-        runtime.setViewer(viewer);
-        emit({ type: 'overlay', viewer: viewer && 'id' in viewer ? viewer : null });
-      },
-    });
-  }).catch((error: unknown) => console.error('[islands] the viewer overlay did not load', error));
+  loadViewerOverlay(context, data, {
+    setViewer: (viewer: IslandViewer) => {
+      viewerId = viewer && 'id' in viewer ? viewer.id : null;
+      identified = true;
+      runtime.setViewer(viewer);
+      emit({ type: 'overlay', viewer: viewer && 'id' in viewer ? viewer : null });
+    },
+  });
 
   ready = true;
   doc.documentElement.setAttribute(READER_READY_ATTR, '');
