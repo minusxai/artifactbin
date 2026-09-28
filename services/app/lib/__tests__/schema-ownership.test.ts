@@ -88,3 +88,10 @@ it('artifact heads and archived versions have no content column',()=>{
   expect(sql).toContain(`ALTER TABLE app.${table} DROP COLUMN IF EXISTS content`);
  }
 });
+
+it('mutation jobs, saved output and frozen replay context belong to the app',()=>{
+ for(const name of ['notification_jobs','mutation_notifications'])expect(declared()['app.'+name]).toBe('app');
+ expect(renderedSchema().schema).toMatch(/CREATE UNIQUE INDEX IF NOT EXISTS idx_notification_jobs_run_rule/);
+ expect(renderedSchema().schema).toMatch(/CREATE UNIQUE INDEX IF NOT EXISTS idx_mutation_notifications_output/);
+ expect(renderedSchema().schema).toContain('context JSONB');
+});
