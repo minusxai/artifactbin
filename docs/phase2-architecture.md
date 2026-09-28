@@ -320,6 +320,12 @@ branch, leaving `compiled-only`:
 The routes already translate `failed`, so the deletion track removes only the `legacy` branches and
 the switch.
 
+Backfill after a deploy: `scripts/compiled-backfill.ts` (its header is the runbook). A prepared page is
+keyed by the serving process's own build, so the script only decides what to warm and the RUNNING
+server prepares and compiles each version through its reader door (`/a/<id>/raw?reader=compiled`,
+admitted by a one-minute export key); it resumes by the key suffix this deployment stores, and ends
+with the census read from the database.
+
 ## 7. Coexistence with the React app and the editor
 
 The editor keeps today's interpreter for drafts (`StoryRuntimeApp`, the registry, the in-place edit
