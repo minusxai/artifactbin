@@ -40,11 +40,11 @@ The query receives saved scalar mutation arguments and supported server identity
 
 ## Multiple rows, retries and failures
 
-Every successful mutation run schedules one job for each linked rule, including a mutation that affects zero rows. Failed or rolled-back mutations schedule nothing. Notification rules do not add an affected-row guard.
+Every successful mutation run with linked notification rules schedules one job containing all those rules, including a mutation that affects zero rows. All rules must finish successfully before any notifications are published. Failed or rolled-back mutations schedule nothing. Notification rules do not add an affected-row guard.
 
 Generate at most one notification per user per mutation run, across all notification rules linked to that mutation. A query may return zero, one or many rows; group all matching messages for a recipient into that single notification and collapse identical messages. Use mutationRunId plus recipient user ID as the notification identity. Request retries cannot create another notification; a deliberate new mutation run may create a new one. SQL WHERE and GROUP BY can still select recipients and compose bulk summaries.
 
-The data write, mutation receipt and notification jobs commit together. A request retry keeps the same run ID; an intentional new action gets a new ID. If the process crashes, a worker may run the read-only query again, but only one result is committed for that job.
+The data write, mutation receipt and notification job commit together. A request retry keeps the same run ID; an intentional new action gets a new ID. If the process crashes, a worker may run the read-only query again, but only one result is committed for that job.
 
 Once the mutation succeeds, a notification failure does not undo it. Authorized users can inspect its status and retry the notification job without repeating the mutation. The retry uses the saved rule and arguments, and may read newer data.
 
