@@ -43,10 +43,10 @@ import { firstHeadingTitle } from '@/lib/story/title';
 import { isStartPlaceholder } from '@/lib/start-placeholder';
 import type { LazyCode } from '@/lib/story/lazy-code';
 import type { ArtifactRow } from '@/lib/artifacts';
-import { COMPILED_READER } from '@/lib/config';
+import { ASSETS_ORIGIN, COMPILED_READER } from '@/lib/config';
 import { VIEWER_OVERLAY_PATH, type AssembleInput, type ReaderFallbackReason } from '@/lib/compiled-page/contract';
 import { currentCompiledReaderFlag, readerModeFor } from '@/lib/compiled-page/reader-mode';
-import { compiledPageFor } from '@/lib/compiled-page/serve.server';
+import { CompiledPageFailed, compiledPageFor } from '@/lib/compiled-page/serve.server';
 import { agentDiscovery } from '@/lib/agent-discovery';
 import { canonicalDocumentUrl } from '@/lib/custom-domains';
 import { CARD_RENDER_GENERATION } from '@/lib/export-card';
@@ -260,12 +260,16 @@ export async function artifactPageAnswer(request: Request, id: string, options: 
       // Any held credential: an account session, or the connection a guest owner holds. Either one is
       // who the write check and a private query answer for, so the page uses the credentialed doors.
       signedIn: kind !== 'none',
+      // The page queries its POST door as this request's reader: what they may hold, the page runs itself.
+      holder: { userId: actor.viewer?.userId ?? null, tokenId: actor.tokenId ?? null, email: actor.viewer?.email ?? null },
       doors: {
         queryUrl: queryPath(artifact.id),
         ...(!at && declaresMutations(row.source) ? { mutateUrl: mutatePath(artifact.id) } : {}),
         viewerUrl: VIEWER_OVERLAY_PATH(artifact.id),
         assetsUrl: assetsPath(artifact.id),
       },
+      // The managed <Iframe>'s asset door, as today's inline page's island carries it (prepared-page readerInputFor).
+      managedAssets: ASSETS_ORIGIN ? { origin: ASSETS_ORIGIN, resolveUrl: `${baseUrl(request)}${assetsPath(artifact.id)}` } : null,
       ...(at ? { readOnly: archivedReadOnly(at.version) } : {}),
       live: at ? null : { id: artifact.id, editId: artifact.edit_id },
       // The page's own behaviour (lib/islands/page), as a /raw copy runs it: the live stream of a page with
@@ -285,6 +289,9 @@ export async function artifactPageAnswer(request: Request, id: string, options: 
     if (answer.mode === 'compiled') {
       compiled = { html: answer.html, headers: answer.headers };
       reader = { mode: 'compiled' };
+    } else if (answer.mode === 'failed') {
+      // No renderer is left to answer (compiled-only, lib/compiled-page/serve.server fallbackPolicy): the page is a 500.
+      throw new CompiledPageFailed(artifact.id, answer.reason);
     } else {
       // Today's page for this request, exactly as it would have been, and the reason it is.
       served = await servedFor(true);

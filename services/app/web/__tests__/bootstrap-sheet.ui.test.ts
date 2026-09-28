@@ -10,3 +10,12 @@ it('reads the body payload without copying the story stylesheet into it', async 
   expect(artifact?.surface.runtime.css).toBeUndefined();
   expect(document.head.querySelector('style[data-mx-story-css]')?.textContent).toBe('.story{color:red}');
 });
+
+it('restores the runtime sheet on a COMPILED page from the head copy the page already carries', async () => {
+  // The compiled page (lib/compiled-page/assembler): the sheet once, in the head; the story root is the body's own child.
+  document.head.innerHTML = `<style data-mx-app-reserve="">@media(min-width:640px){body{padding-top:44px}}</style><style data-mx-story-css>${SHEET}</style>`;
+  document.body.innerHTML = '<div id="mx-story-root" data-mx-inline-story="" data-mx-story-root="" class="light"><p>Hello</p></div>'
+    + `<script type="application/json" id="mx-page-data">${JSON.stringify({ path: '/a/Abc123', artifact: { surface: { runtime: { data: {}, base: {} } } } })}</script>`;
+  const { takeBootstrap } = await import('../bootstrap');
+  expect(takeBootstrap<{ surface: { runtime: { css?: string } } }>('/a/Abc123', 'artifact')?.surface.runtime.css).toBe(SHEET);
+});

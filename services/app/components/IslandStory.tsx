@@ -7,27 +7,33 @@
  * again: this component MOVES that very element into the app's tree (state-preserving
  * `moveBefore` where the browser has it) and renders nothing of the story itself. The page's
  * chrome around it, its comments and its selection bubble are the app's; they reach the document
- * through the same private controller the inline runtime hands the page (`StoryController`),
+ * through the same private controller the inline runtime hands the page (`InlineStoryController`),
  * implemented here over the island DOM — comments and selections anchor on the `data-mx-ast`
  * paths the compiler keeps verbatim, classified against the version's SOURCE nodes.
  *
- * Leaving: the page swaps in the interpreter (components/ArtifactSurface) for edit mode or a new
- * version — the islands are not recompiled in the browser — and on navigation away. Either way the
- * islands go: `dispose()` (their live stream, store and roots), then the element, a microtask after
- * the commit that replaced them — after the page has put them in `edit` when the editor is what
- * replaces them. A StrictMode replay keeps them.
+ * A new version is drawn IN PLACE, as the reader's own page does it before the app arrives: the one
+ * update path (lib/islands/live-update) fetches the version's compiled story and morphs this element
+ * into it — the React interpreter is never mounted for a reader. The reader's mode (the app's toggle)
+ * and the version's source nodes (for comments and selections) follow.
+ *
+ * Leaving: the page swaps in the interpreter (components/ArtifactSurface) for edit mode, and on
+ * navigation away. Either way the islands go: `dispose()` (their live stream, store and roots), then
+ * the element, a microtask after the commit that replaced them — after the page has put them in `edit`
+ * when the editor is what replaces them. A StrictMode replay keeps them.
  */
 import { useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import type { IslandDocument } from '@/lib/islands/contract';
 import type { JsxNode } from '@/lib/jsx';
-import type { StoryController } from '@/lib/story-runtime/EditorStoryRuntime';
+import type { InlineStoryController } from '@/lib/story-runtime/InlineStoryRuntime';
 import type { FrameAnnotateSession } from '@/lib/story-runtime/edit/annotate';
 import type { FrameSelectionActions } from '@/lib/story-runtime/edit/selection-actions';
 import type { RuntimeChannel } from '@/lib/story-runtime/pristine';
 import { runtimeId } from '@/lib/story-runtime/runtime-id';
 import { isStoryDocumentUpdate } from '@/lib/story-runtime/document-update';
+import { islandDocumentOf } from '@/lib/islands/handover';
+import { updateCompiledStory } from '@/lib/islands/live-update';
 import {
-  STORY_ADOPT_HOOK, STORY_ANNOTATIONS_MESSAGE, STORY_DATA_HOOK, STORY_DATA_MESSAGE, STORY_READER_MODE_MESSAGE,
+  STORY_ADOPT_HOOK, STORY_ANNOTATIONS_MESSAGE, type StoryDocumentUpdate, STORY_DATA_HOOK, STORY_DATA_MESSAGE, STORY_READER_MODE_MESSAGE,
   STORY_SELECTION_ACTIONS_MESSAGE, STORY_SELECTION_ACTION_MESSAGE, STORY_SELECT_MESSAGE, isEditParentMessage,
 } from '@/lib/story-runtime/contract';
 import { TrustedUi, useTrustedPortalContainer } from '@/components/TrustedUi';
@@ -40,9 +46,7 @@ export interface IslandStoryProps {
   islands: IslandDocument | null;
   /** The version's SOURCE nodes (the served runtime's), which comments and selections are classified against. */
   nodes: JsxNode[];
-  onController(controller: StoryController | null): void;
-  /** Something asked this document to become another version: the page swaps in the interpreter. */
-  onStale(): void;
+  onController(controller: InlineStoryController | null): void;
 }
 
 function SelectionPortal({ ready }: { ready: (element: HTMLElement | null) => void }) {
@@ -69,15 +73,17 @@ interface IslandControllerInput {
   islands: IslandDocument | null;
   nodes: JsxNode[];
   portal: { current: HTMLElement | null };
-  onStale(): void;
 }
 
 /**
  * The page's private handle on the adopted document: what the inline runtime's controller does
- * for comments, selections, reader mode and data wakeups, over the island DOM. Editing and new
- * versions are the interpreter's, so an update asks the page to hand over (`onStale`).
+ * for comments, selections, reader mode and data wakeups, over the island DOM. Editing is the
+ * interpreter's; a new version is morphed in place (lib/islands/live-update).
  */
-function createIslandController({ win, root, islands, nodes, portal, onStale }: IslandControllerInput): StoryController & { selectionReady(): void } {
+function createIslandController({ win, root, islands, nodes: served, portal }: IslandControllerInput): InlineStoryController & { selectionReady(): void } {
+  let nodes = served;
+  /** The reader's own mode, as the app last set it: a new version never stomps it. */
+  let mode: 'light' | 'dark' | null = null;
   let disposed = false;
   const listeners = new Set<(event: unknown) => void>();
   const nonce = runtimeId();
@@ -103,11 +109,12 @@ function createIslandController({ win, root, islands, nodes, portal, onStale }: 
     selectionReady: ensureSelection,
     send(command: unknown) {
       if (disposed || !command || typeof command !== 'object') return;
-      if (isStoryDocumentUpdate(command)) { controller.update(); return; }
+      if (isStoryDocumentUpdate(command)) { controller.update(command); return; }
       const message = command as { type?: string; datasets?: unknown; mode?: unknown };
       if (message.type === STORY_DATA_MESSAGE && Array.isArray(message.datasets)) { controller.invalidate(message.datasets as string[]); return; }
       if (message.type === STORY_READER_MODE_MESSAGE && (message.mode === 'light' || message.mode === 'dark')) {
-        // The story root carries the document's mode as its class (lib/story/story-element).
+        // The story root carries the document's mode as its class (lib/story/inline-story-html).
+        mode = message.mode;
         root.classList.toggle('dark', message.mode === 'dark');
         root.classList.toggle('light', message.mode !== 'dark');
         return;
@@ -141,7 +148,17 @@ function createIslandController({ win, root, islands, nodes, portal, onStale }: 
       if (command.type === STORY_SELECT_MESSAGE) annotate?.select(command.path);
       // Edit mode is the interpreter's: the page swaps it in before the editor asks for it.
     },
-    update() { if (!disposed) onStale(); },
+    update(command: StoryDocumentUpdate) {
+      if (disposed) return;
+      // The version's source nodes, for the comments and selections classified against them — re-stamped
+      // once the morph has drawn the version they describe.
+      if (command.nodes) nodes = command.nodes;
+      void updateCompiledStory(win, { mode: () => mode, adopted: true }).then(() => {
+        if (disposed) return;
+        annotate?.setNodes(nodes);
+        selection?.setNodes(nodes);
+      });
+    },
     invalidate(datasets: string[]) {
       if (disposed) return;
       // The islands' own stream re-runs these already (lib/islands/boot installs the data hook while it holds it).
@@ -161,7 +178,7 @@ function createIslandController({ win, root, islands, nodes, portal, onStale }: 
   return controller;
 }
 
-export function IslandStory({ story, islands, nodes, onController, onStale }: IslandStoryProps): ReactNode {
+export function IslandStory({ story, islands, nodes, onController }: IslandStoryProps): ReactNode {
   const host = useRef<HTMLDivElement>(null);
   const portal = useRef<HTMLElement | null>(null);
   const selectionReady = useRef<(() => void) | null>(null);
@@ -169,8 +186,8 @@ export function IslandStory({ story, islands, nodes, onController, onStale }: Is
     portal.current = element;
     selectionReady.current?.();
   });
-  const latest = useRef({ onController, onStale });
-  latest.current = { onController, onStale };
+  const latest = useRef({ onController });
+  latest.current = { onController };
   /** A leave waiting one microtask, so a StrictMode replay can keep the document. */
   const leaving = useRef<{ kept: boolean } | null>(null);
   useLayoutEffect(() => {
@@ -187,7 +204,7 @@ export function IslandStory({ story, islands, nodes, onController, onStale }: Is
     const adoptedByPage = () => {};
     const ownsAdopt = hooks[STORY_ADOPT_HOOK] === undefined;
     if (ownsAdopt) hooks[STORY_ADOPT_HOOK] = adoptedByPage;
-    const controller = createIslandController({ win: window, root: story, islands, nodes, portal, onStale: () => latest.current.onStale() });
+    const controller = createIslandController({ win: window, root: story, islands, nodes, portal });
     selectionReady.current = controller.selectionReady;
     latest.current.onController(controller);
     return () => {
@@ -200,7 +217,8 @@ export function IslandStory({ story, islands, nodes, onController, onStale }: Is
       queueMicrotask(() => {
         if (leave.kept) return;
         if (leaving.current === leave) leaving.current = null;
-        islands?.dispose();
+        // The document running on the element now: a version that brought the page its first islands booted a new one.
+        (islandDocumentOf(story) ?? islands)?.dispose();
         story.remove();
       });
     };

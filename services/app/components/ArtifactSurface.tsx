@@ -25,7 +25,7 @@ import { datasetQuerySnippet } from '@/lib/story/dataset-usage';
 import dynamic, { onDemand, useOnDemand, whenIdle } from '@/lib/dynamic';
 import { MessageSquare, Pencil } from 'lucide-react';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import type { StoryController } from '@/lib/story-runtime/EditorStoryRuntime';
+import type { InlineStoryController } from '@/lib/story-runtime/InlineStoryRuntime';
 import { createHttpBackend } from '@/lib/artifact-backend/http';
 import { ArtifactBackendProvider } from '@/lib/artifact-backend/context';
 import { subscribeDocument } from '@/lib/story-runtime/document-endpoint';
@@ -66,10 +66,9 @@ import { resolveStoryMode } from '@/lib/data/story/story-themes';
 import type { StoryThemeName } from '@/lib/validation/story-theme-names';
 import type { StoryIslandDataflow } from '@/lib/story-runtime/contract';
 import { IslandStory } from '@/components/IslandStory';
+import { islandDocumentOf } from '@/lib/islands/handover';
 import { initialDocumentStory, initialIslandDocument, initialStoryIsCompiled } from '@/web/initial-story';
 import { takeChromeIntent } from '@/web/idle-boot';
-import { compiledReaderUpdates } from '@/lib/story-runtime/compiled-reader-update';
-import { persistReaderMode } from '@/lib/story-runtime/reader-mode';
 
 // Dataset controls are a format-specific boundary. Text readers must not
 // preload their query/editor dependencies through the common artifact shell.
@@ -78,7 +77,9 @@ const DatasetCatalogView = dynamic(() => import('@/components/DatasetCatalogView
   loading: () => <p role="status" className="mt-4 text-sm text-muted">Loading dataset…</p>,
 });
 
-const EditorStoryRuntime = dynamic(() => import('@/lib/story-runtime/EditorStoryRuntime').then(module => ({default:module.EditorStoryRuntime})), { ssr: false });
+const InlineStoryRuntime = dynamic(() => import('@/lib/story-runtime/InlineStoryRuntime').then(module => ({default:module.InlineStoryRuntime})), { ssr: false });
+/** The document runtime's code, which a document address awaits before the app's first render (web/main). */
+export const preloadInlineStoryRuntime = (): Promise<void> => InlineStoryRuntime.preload();
 const ArtifactEditor = dynamic(() => import('@/components/ArtifactEditor'), {
   ssr: false,
   loading: () => <p className="mt-10 text-center text-xs text-faint">loading the editor…</p>,
@@ -229,7 +230,7 @@ const selectionActionCapabilities = (canEdit: boolean, canAnnotate: boolean, inV
 });
 
 export default function ArtifactSurface(props: ArtifactSurfaceProps) {
-  const runtimeRef = useRef<StoryController | null>(null);
+  const runtimeRef = useRef<InlineStoryController | null>(null);
   const route = useLocation();
   const navigate = useNavigate();
   const [copiedRef, setCopiedRef] = useState(false);
@@ -332,8 +333,9 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
    * THE COMPILED PAGE'S DOCUMENT (docs/phase2-architecture.md §7): the served story root with its
    * islands running, adopted AS IT IS (components/IslandStory) — never hydrated, never drawn again.
    * Read once, by the surface the page was served for (web/initial-story clears it on any other
-   * route). The interpreter (EditorStoryRuntime) takes over, for good, only when the document must
-   * become an editor's draft. A newer reader version reloads the compiled page.
+   * route). The interpreter (InlineStoryRuntime) takes over, for good, only when the document must
+   * become something the islands cannot: an editor's draft. A newer version is drawn in place over the
+   * islands (IslandStory → lib/islands/live-update), never by the interpreter.
    */
   const [servedCompiled] = useState(initialStoryIsCompiled);
   const [compiled] = useState(() => {
@@ -341,12 +343,6 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
     return story ? { story, islands: initialIslandDocument() } : null;
   });
   const [interpreting, setInterpreting] = useState(!compiled);
-  const reloadRequested = useRef(false);
-  const reloadReader = useCallback(() => {
-    if (reloadRequested.current) return;
-    reloadRequested.current = true;
-    compiledReaderUpdates.reload();
-  }, []);
 
   const intentDone = useRef(false);
   useEffect(() => {
@@ -511,9 +507,9 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
 
   const transportFactory = useCallback(() => backend.queryTransport(), [backend]);
   const [frameLoaded, setFrameLoaded] = useState(false);
-  /** Preserve the chosen mode when edit intent mounts the editor runtime. */
+  /** The reader's own mode, for a runtime that mounts after they chose it (the interpreter taking over an adopted compiled page). */
   const modeOverride = useRef<AppearanceMode | null>(null);
-  const onController = useCallback((controller: StoryController | null) => {
+  const onController = useCallback((controller: InlineStoryController | null) => {
     runtimeRef.current = controller;
     if (controller && modeOverride.current) controller.send({ type: STORY_READER_MODE_MESSAGE, mode: modeOverride.current });
     if (controller && earlyData.current.length) {
@@ -528,15 +524,14 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
   // Signal changes update this document's store and route, never its initial
   // seed. Only a new artifact identity receives a new runtime and URL seed.
   const initialRuntimeVersion = useMemo(() => version, [id]);
-  // Only editing gives way to the interpreter (a render-time adjustment, so no frame shows both).
+  // Edit mode: the islands give way to the interpreter (a render-time adjustment, so no frame shows both).
+  // A newer version reaches the adopted islands through their controller's `update` (the effect below).
   if (!interpreting && editing) setInterpreting(true);
   const islandsLive = !!compiled && !interpreting && !!props.runtime;
-  useEffect(() => {
-    if (islandsLive && !editing && (!!live?.nodes || version > initialRuntimeVersion)) reloadReader();
-  }, [islandsLive, editing, live?.nodes, version, initialRuntimeVersion, reloadReader]);
   // Edit mode begins: the islands are unmounted (`setMode('edit')`) before IslandStory disposes them
   // (a microtask after this commit) and the interpreter the editor drives is already in their place.
-  useLayoutEffect(() => { if (editing) compiled?.islands?.setMode('edit'); }, [editing, compiled]);
+  // The document running on the story now: a version that brought a prose page its first islands booted one.
+  useLayoutEffect(() => { if (editing && compiled) (islandDocumentOf(compiled.story) ?? compiled.islands)?.setMode('edit'); }, [editing, compiled]);
   const needsParse = isDocumentFormat && !props.runtime;
   const { module: parser, failed: parseFailed, retry: retryParse } = useOnDemand(updatePartsFeature, needsParse);
   const seedReady = !needsParse || !!parser;
@@ -548,7 +543,6 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
   const setReaderMode = useCallback((mode: AppearanceMode) => {
     modeOverride.current = mode;
     setReaderModeOverride(mode);
-    persistReaderMode(window, mode);
     runtimeRef.current?.send({ type: STORY_READER_MODE_MESSAGE, mode });
   }, []);
   useEffect(() => {
@@ -1030,8 +1024,7 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
             islands={compiled.islands}
             nodes={props.runtime!.data.nodes}
             onController={onController}
-            onStale={reloadReader}
-          /> : seedReady ? <EditorStoryRuntime
+          /> : seedReady ? <InlineStoryRuntime
             key={id}
             data={initialRuntimeData}
             transportFactory={transportFactory}
@@ -1039,6 +1032,8 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
             authorScript={props.runtime?.authorScript}
             rawSheets={needsEditorPart ? rawSheets : undefined}
             onController={onController}
+            // A compiled story is never React's to hydrate: the interpreter draws afresh (and clears it, web/initial-story).
+            hydrateInitialStory={!servedCompiled}
           /> : parseFailed && <TrustedUi><LoadFailure what="the document" onRetry={retryParse} className="p-4" /></TrustedUi>}
           </div>
         </div>

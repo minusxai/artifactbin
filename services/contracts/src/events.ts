@@ -104,17 +104,17 @@ export type EventVerb<K extends ObjectKind = ObjectKind> = keyof EventVerbs[K] &
 export type EventPayload<K extends ObjectKind, V extends EventVerb<K>> = EventVerbs[K][V];
 
 /** The catalogue at runtime. Complete by construction: a verb missing from a list fails to type-check. */
-type Complete<K extends ObjectKind, T extends readonly EventVerb<K>[]> =
-  Exclude<EventVerb<K>, T[number]> extends never ? T : { 'missing verb': Exclude<EventVerb<K>, T[number]> };
-const complete = <K extends ObjectKind>() => <const T extends readonly EventVerb<K>[]>(verbs: Complete<K, T>): readonly EventVerb<K>[] => verbs as T;
-
-export const EVENT_VERBS: { readonly [K in ObjectKind]: readonly EventVerb<K>[] } = {
-  artifact: complete<'artifact'>()(['created', 'updated', 'edited', 'reverted', 'deleted', 'moved', 'restored', 'exported', 'mutated', 'viewed', 'forked', 'annotated', 'annotation_resolved', 'annotation_deleted', 'sharing_changed', 'liked', 'unliked', 'joined', 'left', 'join_requested', 'invited', 'mentioned', 'invitation_dismissed', 'annotation_reopened']),
-  user: complete<'user'>()(['notification_changed', 'signed_up', 'login_sent', 'login_verified', 'oauth_linked', 'followed', 'unfollowed']),
-  token: complete<'token'>()(['minted', 'claimed', 'revoked']),
-  door: complete<'door'>()(['denied']),
-  route: complete<'route'>()(['failed']),
-};
+export const EVENT_VERBS = {
+  artifact: ['created', 'updated', 'edited', 'reverted', 'deleted', 'moved', 'restored', 'exported', 'mutated', 'viewed', 'forked', 'annotated', 'annotation_resolved', 'annotation_deleted', 'sharing_changed', 'liked', 'unliked', 'joined', 'left', 'join_requested', 'invited', 'mentioned', 'invitation_dismissed', 'annotation_reopened'],
+  user: ['notification_changed', 'signed_up', 'login_sent', 'login_verified', 'oauth_linked', 'followed', 'unfollowed'],
+  token: ['minted', 'claimed', 'revoked'],
+  door: ['denied'],
+  route: ['failed'],
+} as const satisfies { readonly [K in ObjectKind]: readonly EventVerb<K>[] };
+type AssertComplete<T extends true> = T;
+export type CompleteEventVerbs = AssertComplete<{
+  [K in ObjectKind]: Exclude<EventVerb<K>, (typeof EVENT_VERBS)[K][number]> extends never ? true : false
+}[ObjectKind]>;
 
 /** One row of the log — the sentence plus what history needs. Flat, because it IS the row and the wire. */
 export interface EventEnvelope {

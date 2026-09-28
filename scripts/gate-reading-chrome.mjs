@@ -19,7 +19,7 @@ import {fixtureFetch as fetch} from './lib/fixture-http.mjs';
 import { chromium } from 'playwright';
 import { startDocument } from './lib/start-doc.mjs';
 import { openArtifactControls, revealReaderChrome } from './lib/reveal-chrome.mjs';
-import { compiledReader, readerUrl } from './lib/gate-reader.mjs';
+import { readerUrl } from './lib/gate-reader.mjs';
 
 /*
  * Every document this gate starts, so a run can take them away again. It
@@ -106,12 +106,8 @@ const browser = await chromium.launch();
   await page.waitForLoadState('networkidle');
   await sleep(800);
   const late = await page.evaluate(() => document.querySelector('article')?.getBoundingClientRect().left ?? -1);
-  // The retired inline reader could only add this outline after mounting. The
-  // compiled leg verifies the server-rendered first paint and stable column.
-  if (compiledReader) {
-    check(hasOutlineEarly, 'the outline is in the document on FIRST paint (server-rendered)');
-    check(Math.abs(early - late) < 2, `the column did not move after paint (${early} → ${late})`);
-  }
+  check(hasOutlineEarly, 'the outline is in the document on FIRST paint (server-rendered)');
+  check(Math.abs(early - late) < 2, `the column did not move after paint (${early} → ${late})`);
   check(await page.evaluate(() => document.querySelectorAll('.mx-outline-row').length) === 4, 'one row per section');
   check(await page.evaluate(() => getComputedStyle(document.querySelector('.mx-outline')).display !== 'none'), 'the outline is visible at 1440');
 
@@ -123,11 +119,11 @@ const browser = await chromium.launch();
   check(current[2] === 'true' && current.filter(Boolean).length === 1, `the row for the section being read is current (${JSON.stringify(current)})`);
 
   // Not for a page, not for a deck, not for a capture.
-  await page.goto(`${BASE}/a/${page2.id}`, { waitUntil: 'networkidle' });
+  await page.goto(readerUrl(`${BASE}/a/${page2.id}`), { waitUntil: 'networkidle' });
   check(await page.evaluate(() => !document.querySelector('.mx-outline')), 'a two-heading page has no outline');
-  await page.goto(`${BASE}/a/${deck.id}`, { waitUntil: 'networkidle' });
+  await page.goto(readerUrl(`${BASE}/a/${deck.id}`), { waitUntil: 'networkidle' });
   check(await page.evaluate(() => !document.querySelector('.mx-outline') && !!document.querySelector('.mx-rail')), 'a deck keeps its slide rail and gets no outline');
-  const capture = await fetch(`${BASE}/a/${doc.id}/raw?chrome=0`, { headers: { Authorization: `Bearer ${doc.token}` } }).then((r) => r.text());
+  const capture = await fetch(readerUrl(`${BASE}/a/${doc.id}/raw?chrome=0`), { headers: { Authorization: `Bearer ${doc.token}` } }).then((r) => r.text());
   check(!capture.includes('mx-outline'), 'the capture render has no outline');
   await ctx.close();
 }
@@ -136,7 +132,7 @@ const browser = await chromium.launch();
 {
   const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
   const page = await ctx.newPage();
-  await page.goto(`${BASE}/a/${doc.id}`, { waitUntil: 'networkidle' });
+  await page.goto(readerUrl(`${BASE}/a/${doc.id}`), { waitUntil: 'networkidle' });
   await sleep(1000);
   check(await page.evaluate(() => getComputedStyle(document.querySelector('.mx-outline')).display === 'none'), 'the outline is hidden on a phone');
   check(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), 'the page does not scroll sideways');
@@ -157,7 +153,7 @@ const browser = await chromium.launch();
 {
   const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
   const page = await ctx.newPage();
-  await page.goto(`${BASE}/a/${doc.id}`, { waitUntil: 'networkidle' });
+  await page.goto(readerUrl(`${BASE}/a/${doc.id}`), { waitUntil: 'networkidle' });
   const t = await page.evaluate(() => {
     const t = document.querySelector('table');
     return { w: Math.round(t.getBoundingClientRect().width), col: Math.round(t.parentElement.getBoundingClientRect().width), display: getComputedStyle(t).display, mark: t.getAttribute('data-mx-scrollable') };
@@ -176,7 +172,7 @@ const browser = await chromium.launch();
 {
   const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
   const page = await ctx.newPage();
-  await page.goto(`${BASE}/a/${doc.id}`, { waitUntil: 'networkidle' });
+  await page.goto(readerUrl(`${BASE}/a/${doc.id}`), { waitUntil: 'networkidle' });
   await sleep(600);
   const before = await page.evaluate(() => document.querySelectorAll('.mx-outline-row').length);
 
@@ -246,7 +242,7 @@ const browser = await chromium.launch();
   const dark = await publishDark(DOC);
   const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
   const page = await ctx.newPage();
-  await page.goto(`${BASE}/a/${dark.id}`, { waitUntil: 'networkidle' });
+  await page.goto(readerUrl(`${BASE}/a/${dark.id}`), { waitUntil: 'networkidle' });
   await sleep(600);
   const probe = await page.evaluate(() => {
     // Any CSS colour → rgb by letting the browser convert: the themes ship
@@ -289,7 +285,7 @@ const browser = await chromium.launch();
 
   // And the reader's own controls: a light document flipped to dark keeps it.
   const lightDoc = await publish(DOC);
-  await page.goto(`${BASE}/a/${lightDoc.id}`, { waitUntil: 'networkidle' });
+  await page.goto(readerUrl(`${BASE}/a/${lightDoc.id}`), { waitUntil: 'networkidle' });
   // The chrome opens hidden now — a scroll up is what brings it back.
   await revealReaderChrome(page);
   await openArtifactControls(page);

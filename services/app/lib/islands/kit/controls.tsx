@@ -3,6 +3,7 @@ import { For, Show, createEffect, createSignal, untrack, type JSX } from 'solid-
 import { format as d3format } from 'd3-format';
 import { Portal } from 'solid-js/web';
 import { refName, type Scalar, type TableResult } from '@/lib/story/dataflow';
+import { coerceScalarInput } from '@/lib/story/scalar-input';
 import { useIsland } from '../context';
 
 type Props = Record<string, unknown>;
@@ -105,7 +106,10 @@ export function DatePicker(p: Props) {
 /** Native fields keep their tag and authored attributes; only declared bindings are intercepted. */
 export function BoundNative(p: Props & { tag: 'input' | 'select' | 'textarea'; bind?: Record<string,string>; children?: JSX.Element }) {
   const island = useIsland(); const { tag,bind,children,...attrs } = p; const name = bind?.value ?? bind?.checked; const value = () => name ? island.value(name) : p.value;
-  const update = (e: Event) => { if (!name) return; const el = e.currentTarget as HTMLInputElement; island.setValue(name,bind?.checked ? el.checked : el.value,tag === 'select' || bind?.checked ? undefined : { debounce: 250 }); };
+  // Today's NativeBoundControl coerces to the bound Value's declared type: an empty choice is null (how
+  // `$region is null` means "all"), a number field a number.
+  const update = (e: Event) => { if (!name) return; const el = e.currentTarget as HTMLInputElement; const type = island.store()?.flow.values.find(v => v.kind === 'scalar' && v.name === name)?.type;
+    island.setValue(name,bind?.checked ? el.checked : coerceScalarInput(type, el.value),tag === 'select' || bind?.checked ? undefined : { debounce: 250 }); };
   if (tag === 'select') {
     // Today's NativeBoundControl: a query-bound select lists its rows (first column the value, second the
     // label), after an "All" entry when the bound Value may be null; authored options follow.

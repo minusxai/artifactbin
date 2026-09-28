@@ -5,14 +5,19 @@
  * `<DeckGL>` draws today's loading stand-in, then the lazily loaded engine over the table `data` names.
  * The engines themselves are proven in a browser (gates: dataflow, full-kit, compiled-parity).
  */
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { render } from 'solid-js/web';
 import { IslandProvider } from '../context';
 import { fakeIsland } from './context.test';
-import { Iframe, DeckGL } from '../kit/data';
+import { Iframe, DeckGL } from '../kit/embed';
+import * as dataFamily from '../kit/data';
+import { KIT_FAMILIES } from '../contract';
 import type { IslandContext } from '../contract';
 import type { DataflowStore } from '@/lib/story-runtime/store';
 import type { TableResult } from '@/lib/story/dataflow';
+import { installFrameAssetRelay, pageAssetDoor } from '../kit/embed/frame-engine';
+import { ISLAND_DATA_ID } from '@/lib/compiled-page/contract';
+import { STORY_ASSET_MESSAGE } from '@/lib/story-runtime/contract';
 
 vi.mock('../kit/embed/deck-engine', () => ({
   mountDeckEngine: (box: HTMLElement, props: { rows: () => readonly Record<string, unknown>[]; height: number }) => {
@@ -27,7 +32,8 @@ vi.mock('../kit/embed/deck-engine', () => ({
 
 const until = async (ok: () => boolean) => { for (let i = 0; i < 100 && !ok(); i++) await new Promise((r) => setTimeout(r, 10)); };
 let cleanup: (() => void) | null = null;
-afterEach(() => { cleanup?.(); cleanup = null; });
+beforeEach(() => document.documentElement.setAttribute('data-mx-ready', ''));
+afterEach(() => { cleanup?.(); cleanup = null; document.documentElement.removeAttribute('data-mx-ready'); document.getElementById(ISLAND_DATA_ID)?.remove(); vi.unstubAllGlobals(); });
 const mount = (island: IslandContext, view: () => import('solid-js').JSX.Element) => {
   const host = document.createElement('div');
   document.body.append(host);
@@ -44,6 +50,14 @@ const store = (): DataflowStore => ({
   getState: () => ({ values: {}, tables: {}, errors: {} }),
   pending: () => new Set(),
 }) as unknown as DataflowStore;
+
+describe('the embed family', () => {
+  it('is its own kit family: the data family no longer carries the embeds', () => {
+    expect(KIT_FAMILIES).toContain('embed');
+    expect(Object.keys(dataFamily)).not.toContain('Iframe');
+    expect(Object.keys(dataFamily)).not.toContain('DeckGL');
+  });
+});
 
 describe('<Iframe>', () => {
   it('draws today\'s managed frame box, then mounts one sandboxed author realm in it, and removes it with the island', async () => {
@@ -71,7 +85,87 @@ describe('<Iframe>', () => {
   });
 });
 
+/** The page's data island (contract IslandPageData), as the assembler writes it. */
+const pageData = (extra: Record<string, unknown>) => {
+  const script = document.createElement('script');
+  script.type = 'application/json';
+  script.id = ISLAND_DATA_ID;
+  script.textContent = JSON.stringify({ values: {}, results: null, signedIn: false, mermaidImages: {}, readOnly: null, ...extra });
+  document.body.append(script);
+};
+const DOOR = { origin: 'https://assets.example.test', resolveUrl: 'https://app.example.test/a/Abc123/assets' };
+const HASHED = `https://assets.example.test/assets/${'a'.repeat(64)}`;
+
+describe('the frame\'s asset door (IslandPageData.managedAssets)', () => {
+  it('answers an owned opaque frame through the page asset door and ignores another source', async () => {
+    const host = document.createElement('div');
+    const frame = document.createElement('iframe'); host.append(frame); document.body.append(host);
+    const fetchMock = vi.fn(async () => Response.json({ url: HASHED })); vi.stubGlobal('fetch', fetchMock);
+    const post = vi.spyOn(frame.contentWindow!, 'postMessage');
+    const stop = installFrameAssetRelay(document, host, DOOR);
+    const request = { type: STORY_ASSET_MESSAGE, id: 7, url: 'https://img.example/a.png', kind: 'image' };
+    window.dispatchEvent(new MessageEvent('message', { source: window, origin: 'null', data: request }));
+    expect(fetchMock).not.toHaveBeenCalled();
+    window.dispatchEvent(new MessageEvent('message', { source: frame.contentWindow, origin: 'null', data: request }));
+    await vi.waitFor(() => expect(post).toHaveBeenCalledWith({ type: 'mx:asset-result', id: 7, url: HASHED }, '*'));
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    stop(); host.remove();
+  });
+  it('top-level, resolves the author content\'s assets through the page\'s own door with the page\'s credentials', async () => {
+    pageData({ managedAssets: DOOR });
+    const fetchMock = vi.fn(async (_url: string, _init?: RequestInit) => new Response(JSON.stringify({ url: HASHED }), { status: 200, headers: { 'content-type': 'application/json' } }));
+    vi.stubGlobal('fetch', fetchMock);
+    const island = { ...fakeIsland(), store: () => store() };
+    const { host } = mount(island, () => <Iframe title="Gallery" height={100} compiled={{ html: '<img src="https://img.example/a.png">', scripts: [] }} />);
+    await until(() => !!host.querySelector('iframe') || !!host.querySelector('[role="alert"]'));
+    expect(host.querySelector('[role="alert"]')).toBeNull();
+    expect(host.querySelector('iframe')).toBeTruthy();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const [url, init] = fetchMock.mock.calls[0]!;
+    expect(url).toBe(`${DOOR.resolveUrl}?u=${encodeURIComponent('https://img.example/a.png')}&kind=image`);
+    expect(init).toMatchObject({ credentials: 'same-origin', redirect: 'error' });
+  });
+
+  it('reads the door from the page, not from the island: a page without one refuses, as today\'s frame does', async () => {
+    pageData({ assetsUrl: '/a/Abc123/assets' });
+    const island = { ...fakeIsland(), store: () => store() };
+    const { host } = mount(island, () => <Iframe title="x" height={100} assetsOrigin="https://assets.example.test" compiled={{ html: '<img src="https://img.example/a.png">', scripts: [] }} />);
+    await until(() => !!host.querySelector('[role="alert"]'));
+    expect(host.querySelector('[role="alert"]')?.textContent).toMatch(/assets are not configured/);
+  });
+
+  it('framed, asks the parent page through the relay (document-transport\'s rule: present exactly when framed)', async () => {
+    pageData({ managedAssets: DOOR });
+    const posted: unknown[] = [];
+    const parent = { postMessage: (message: unknown, origin: string) => posted.push([message, origin]) };
+    const listeners: Array<(e: MessageEvent) => void> = [];
+    const framed = { parent, self: null, addEventListener: (_type: string, listener: (e: MessageEvent) => void) => listeners.push(listener) } as unknown as Window;
+    const door = pageAssetDoor(document, framed, 'https://app.example.test');
+    expect(door.assets).toEqual(DOOR);
+    expect(door.importAsset).toBeTypeOf('function');
+    const answer = door.importAsset!('https://img.example/a.png', 'image');
+    expect(posted).toEqual([[{ type: STORY_ASSET_MESSAGE, id: 1, url: 'https://img.example/a.png', kind: 'image' }, 'https://app.example.test']]);
+    for (const listener of listeners) listener({ source: parent, origin: 'https://app.example.test', data: { type: 'mx:asset-result', id: 1, url: HASHED } } as unknown as MessageEvent);
+    await expect(answer).resolves.toEqual({ url: HASHED, image: undefined });
+    // Top-level there is no relay: the resolver fetches the door itself.
+    expect(pageAssetDoor(document, window, 'https://app.example.test').importAsset).toBeUndefined();
+  });
+});
+
 describe('<DeckGL>', () => {
+  it('does not fetch the map engine before the compiled reader is ready', async () => {
+    document.documentElement.removeAttribute('data-mx-ready');
+    const { host } = mount(fakeIsland(), () => <DeckGL title="Deferred map" height={120} layers={[]} />);
+    const box = host.querySelector('[aria-busy="true"]');
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    expect(box?.querySelector('.engine-view')).toBeNull();
+    expect(box?.getAttribute('aria-busy')).toBe('true');
+    document.documentElement.setAttribute('data-mx-ready', '');
+    document.dispatchEvent(new Event('mx:ready'));
+    await until(() => !!box?.querySelector('.engine-view'));
+    expect(box?.querySelector('.engine-view')).not.toBeNull();
+  });
+
   it('draws today\'s stand-in, then turns that same element into the map\'s figure with the engine drawing into it over the named table', async () => {
     const table: TableResult = { rows: [{ lng: 1, lat: 2 }, { lng: 3, lat: 4 }], columns: [] };
     const island = { ...fakeIsland(), tableSnapshot: (name: string) => (name === 'places' ? table : undefined) };

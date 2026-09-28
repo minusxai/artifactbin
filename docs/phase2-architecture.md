@@ -128,6 +128,12 @@ Solid store bridge applies the result with `reconcile`, so only the computations
 cell re-run. Charts drawn on the server re-draw in the browser only when their table changes or the
 reader interacts (Vega loads then).
 
+When the live stream announces a new document version, the reader fetches its compiled story from
+`GET /a/:id/story` and morphs it into the running page. Unchanged nodes and islands keep their DOM and
+state; changed islands are disposed and hydrated from the new version. The same path serves a public
+post on its custom host. If the fragment cannot be served or morphed, the reader reloads while keeping
+its place.
+
 ## 3. The compiled page artifact
 
 `CompiledPage` (contract):
@@ -284,7 +290,12 @@ not committed — established:
   during a rolling deploy) → recompile inline under `COMPILE_INLINE_BUDGET_MS`; over budget or on error
   → today's renderer for this request, the warm-up queue recompiles.
 - `unported` components in a version → the compile is refused (a page must be whole) → today's
-  renderer; the parity gate's kitchen sink is the list of what must be ported before `on`.
+  renderer. Since w3-compiler-coverage the set is empty: a registered component with no Solid port
+  (`Slide`, `SlideDeck`, `Icon`, the `Table` family, …) that holds an island, a `$` value or a row
+  compiles as a SHELL — today's React kit renders it at compile time around a hole its compiled
+  children fill (a row's attributes filled per row by `rt.rowAttrs`) — and an unregistered legacy tag
+  (`<Param>`) renders nothing, as the interpreter does. `compiler-coverage.test.ts` asserts every
+  registered component has a compile path in every context.
 - Snapshot missing or too old → the request runs the shared queries within `SERVED_RESULTS_BUDGET_MS`
   exactly as served results do today; otherwise declarations without rows and the page fetches.
 - Module store unavailable → the module URL 404s → the page is static HTML with inert islands; the
@@ -296,6 +307,30 @@ not committed — established:
 Every fallback is observable: the response carries `x-mx-reader: compiled | legacy` and an
 `x-mx-reader-fallback: <reason>` when a compiled path fell back, which is what the parity gate and the
 size check read.
+
+### 6.1 The fallback contract after Wave 4
+
+Today's renderer is the fallback above only while it exists. The contract without it is implemented
+now, behind one switch in `lib/compiled-page/serve.server.ts`, `fallbackPolicy()`: it returns
+`legacy` (everything above) until Wave 4, and w4-flip-docs deletes the switch and every `legacy`
+branch, leaving `compiled-only`:
+
+| Reason | `legacy` (today) | `compiled-only` (after Wave 4) |
+|--------|------------------|--------------------------------|
+| `not-compiled` | today's renderer | compile inline and wait; one compile per version shared by concurrent readers |
+| `build-mismatch` | recompile under the budget, else today's renderer | compile inline and wait |
+| `over-budget` | today's renderer; the detached compile writes back | never an answer: the budget only decides whether the inline compile is logged as slow |
+| `compile-error` | today's renderer, logged once per version | a 500 (`CompiledReaderAnswer` `{ mode: 'failed' }`; `/raw` answers it, the app page throws `CompiledPageFailed`), reported on every occurrence (`console.error`, `compiledPageFailures()`); it must stay at zero (the census: 0) |
+| `unported` | today's renderer | never reached: the set is empty (above); a stored compile missing the version's author script is recompiled once, then a 500 |
+
+The routes already translate `failed`, so the deletion track removes only the `legacy` branches and
+the switch.
+
+Backfill after a deploy: `scripts/compiled-backfill.ts` (its header is the runbook). A prepared page is
+keyed by the serving process's own build, so the script only decides what to warm and the RUNNING
+server prepares and compiles each version through its reader door (`/a/<id>/raw?reader=compiled`,
+admitted by a one-minute export key); it resumes by the key suffix this deployment stores, and ends
+with the census read from the database.
 
 ## 7. Coexistence with the React app and the editor
 
@@ -312,8 +347,10 @@ session): the browser never compiles. What changes is how the READER page relate
    `ArtifactSurface` moves `root` into its tree (the same move `adoptInitialStory` makes today) and
    renders chrome around it; it does NOT hydrate or re-render the story. The islands keep running and
    the SPA's reactions (like, follow, comments) keep reading the store.
-3. Edit mode. `setMode('edit')` disposes the islands (Solid roots unmounted, listeners removed) and
-   hands the SPA the raw `nodes`; the editor mounts its interpreter over the source as it does today
+3. Live version and edit mode. A new published version is morphed into the adopted story in place,
+   preserving unchanged nodes, islands, reader values and the store. The app refreshes its comment
+   anchors and selections after the morph. `setMode('edit')` disposes the islands (Solid roots
+   unmounted, listeners removed) and hands the SPA the raw `nodes`; the editor mounts its interpreter over the source as it does today
    and re-renders in place. Leaving edit mode publishes, and the next read is a compiled page again;
    the SPA re-adopts on navigation, not in place (an edited draft's islands are not recompiled in the
    browser).

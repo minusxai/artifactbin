@@ -28,6 +28,9 @@ export const routePages = {
  * that first commit, where a lazy read would suspend and reveal behind React's
  * fallback throttle.
  */
-export function preloadDocumentReader(): Promise<void> {
-  return Promise.all([routePages.ProfilePage.preload(), routePages.ArtifactPage.preload()]).then(() => undefined);
+export function preloadDocumentReader({ interpreter = true }: { interpreter?: boolean } = {}): Promise<void> {
+  // A COMPILED story (docs/phase2-architecture.md §7) is adopted as it is, its islands running: the
+  // interpreter is not needed to draw it, and loads only when the reader enters edit mode (ArtifactSurface).
+  const runtime = interpreter ? import('./pages/Artifact').then(m => m.preloadInlineStoryRuntime()) : Promise.resolve();
+  return Promise.all([routePages.ProfilePage.preload(), routePages.ArtifactPage.preload(), runtime]).then(() => undefined);
 }

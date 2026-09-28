@@ -24,7 +24,7 @@ import { canReadArtifact, dataflowForRow, declarationsForRow, getArtifactById, h
 import { withIntent, type Intent } from '@/lib/intent';
 import { count, has } from '@/lib/relations';
 import { countOpenAnnotations } from '@/lib/annotations';
-import { roleFor } from '@/lib/viewer';
+import { isCookieCredential, roleFor } from '@/lib/viewer';
 import { canAnnotate } from '@/lib/share-roles';
 import { forkedFromCredit } from '@/lib/story/fork-credit.server';
 import { roleBehindLogin } from '@/lib/share-roles';
@@ -57,6 +57,7 @@ import { catalogOf,publicCatalogOf } from '@/lib/datasets/catalog';
 import { ASSETS_ORIGIN, COMPILED_READER, PUBLIC_BASE_URL } from '@/lib/config';
 import { canonicalDocumentUrl, domainPostUrl, servesDocument } from '@/lib/custom-domains';
 import { READER_FALLBACK_HEADER, READER_MODE_HEADER, VIEWER_OVERLAY_PATH, type ReaderFallbackReason } from '@/lib/compiled-page/contract';
+import type { StorySurface } from '@/lib/compiled-page/story-fragment';
 import { currentCompiledReaderFlag, readerModeFor } from '@/lib/compiled-page/reader-mode';
 import { compiledPageFor, domainFooter } from '@/lib/compiled-page/serve.server';
 import { preparedPageFor } from '@/lib/story/prepared-page.server';
@@ -73,6 +74,18 @@ const COMMON = {
 };
 
 const NOT_FOUND = '<!doctype html><meta charset="utf-8"><title>Not found</title><h1>Not found</h1>';
+
+/**
+ * A story fragment the compiled path could not give: 409 while the version is still being compiled (off
+ * the write's path — the page asks again), else 422 naming why; either way the page reloads in the end.
+ */
+function storyFragmentRefused(reason: ReaderFallbackReason | null): Response {
+  const transient = reason === 'not-compiled' || reason === 'over-budget';
+  return new Response(JSON.stringify({ error: 'not_compiled', ...(reason ? { fallback: reason } : {}) }), {
+    status: transient ? 409 : 422,
+    headers: { 'Content-Type': 'application/json; charset=utf-8', 'Access-Control-Allow-Origin': '*', ...(reason ? { [READER_FALLBACK_HEADER]: reason } : {}), ...COMMON },
+  });
+}
 const notFound = () =>
   new Response(NOT_FOUND, { status: 404, headers: { 'Content-Type': 'text/html; charset=utf-8', ...COMMON } });
 
@@ -86,12 +99,24 @@ const notFound = () =>
  */
 export interface DomainPost { hostname: string; ownerId: string }
 
-export async function GET(request: Request, ctx: { params: Promise<{ id: string }>; domain?: DomainPost }) {
+/**
+ * THE STORY FRAGMENT (`GET /a/:id/story`, app/a/[id]/story): the compiled document's newest version as
+ * the page that asks is served it, for the live morph (lib/islands/morph/engine) — `raw`, this route's
+ * own reader copy, or `app`, the app page's story (its isolated sheet, its inline drawings). Only the
+ * route sets it (the router passes params alone), so no request can ask for it here. Same admission,
+ * same compiled inputs, same sandbox; never a view, never today's renderer (a fallback is an answer the
+ * page reloads on), and readable from the `/raw` copy's opaque origin by an anonymous reader.
+ */
+export interface StoryFragmentRequest { surface: StorySurface }
+
+export async function GET(request: Request, ctx: { params: Promise<{ id: string }>; domain?: DomainPost; fragment?: StoryFragmentRequest }) {
   const { id } = await ctx.params;
   const domain = ctx.domain ?? null;
+  const fragment = domain ? null : ctx.fragment ?? null;
   if (!ID_RE.test(id)) return notFound();
   const artifact = await getArtifactById(id);
   if (!artifact) return notFound();
+  if (fragment && artifact.format !== 'markup') return notFound();
   if (domain && !servesDocument(domain.ownerId, artifact)) return notFound();
   /*
    * The ACL decides before any bytes leave; a denied private doc is
@@ -277,7 +302,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
        * document to photograph it, not a reader. `void`, because analytics may
        * never delay or fail a render.
        */
-      if (!key && request.method !== 'HEAD') void trackEvent('view', artifact.id, { userId: viewer?.userId ?? null });
+      if (!key && !fragment && request.method !== 'HEAD') void trackEvent('view', artifact.id, { userId: viewer?.userId ?? null });
 
       const meta = row.meta as { theme?: StoryThemeName | null; template?: string | null; colorMode?: 'light' | 'dark' | null; compiledCss?: string | null; cssCompileVersion?: string | null };
       // Stored rows may still carry a retired theme name (aliased forward) and
@@ -296,6 +321,8 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
       // A cohost HTTPS proxy can otherwise stamp https onto an HTTP backend,
       // breaking scoped asset imports and the capture's CSP before rendering.
       const base = byExportKey && !chrome ? new URL(request.url).origin : baseUrl(request);
+      // The managed <Iframe>'s asset door, one rule for both renderers: a capture's verified key rides in it.
+      const managedAssets = ASSETS_ORIGIN ? { origin: ASSETS_ORIGIN, resolveUrl: `${base}${assetsPath(artifact.id)}${byExportKey ? `?key=${encodeURIComponent(key!)}` : ''}` } : null;
       /*
        * ?edit=1 — the OWNER's copy. In-place editing is the runtime, and a
        * document of pure prose ships none; asking for it here means pressing
@@ -324,6 +351,10 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
        * today's renderer unchanged and says why (`x-mx-reader-fallback`).
        */
       const compiledMode = readerModeFor(currentCompiledReaderFlag(COMPILED_READER), new URL(request.url).search, { domainPost: !!domain }) === 'compiled' && !editable && !commenting;
+      // A fragment is the compiled page's or nothing: the page that asked reloads onto today's renderer.
+      if (fragment && !compiledMode) return storyFragmentRefused(null);
+      /** The app page's story (lib/artifact-page) differs from this copy in its sheet and its drawings, never in its story. */
+      const appStory = fragment?.surface === 'app';
       let readerFallback: ReaderFallbackReason | null = null;
       if (compiledMode) {
         const capture = byExportKey && !chrome;
@@ -337,15 +368,18 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
         const answer = await compiledPageFor(prepared.row, prepared.page, {
           at,
           search: new URL(request.url).search,
-          drawings: domain || engineRequested(request.url) ? null : 'document',
+          drawings: domain || engineRequested(request.url) ? null : appStory ? 'inline' : 'document',
           colorMode: byExportKey && !domain ? captureColor(request.url) : null,
-          signedIn: actor.credential === 'session' && !!viewer?.userId,
+          signedIn: appStory ? isCookieCredential(actor) : actor.credential === 'session' && !!viewer?.userId,
+          // A sandboxed copy's doors carry no credential (its origin is opaque): it holds what anyone may, as today's /raw does.
+          holder: null,
           doors: capture ? null : {
             queryUrl: queryPath(artifact.id),
             ...(!at && declaresMutations(row.source) ? { mutateUrl: mutatePath(artifact.id) } : {}),
             viewerUrl: VIEWER_OVERLAY_PATH(artifact.id),
             assetsUrl: assetsPath(artifact.id),
           },
+          managedAssets,
           ...(at ? { readOnly: archivedReadOnly(at.version) } : {}),
           live: chrome && !at ? { id: artifact.id, editId: artifact.edit_id } : null,
           chrome: null,
@@ -366,8 +400,9 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
           ...(ran ? { results: { tables: ran.state.tables, errors: ran.state.errors, ...(ran.state.userOptions ? { userOptions: ran.state.userOptions, people: ran.state.people ?? {} } : {}) } } : {}),
           // Its style rides in the sheets, where today's document has it.
           footer: domain ? { html: domainFooter(`${PUBLIC_BASE_URL.replace(/\/+$/, '')}/a/${artifact.id}`).html, css: '' } : null,
-          // Today's standalone document's stylesheets, byte for byte (lib/story/document-styles).
-          sheets: documentStyleSheets({
+          // Today's standalone document's stylesheets, byte for byte (lib/story/document-styles); the app
+          // page's story carries its one isolated sheet instead (the assembler's `css`).
+          sheets: appStory ? null : documentStyleSheets({
             compiledCss, chrome, bare: !!domain, theme: design.theme,
             importedFaces: prepared.page.base.faces, docFonts: prepared.page.base.fonts, authorCss: prepared.page.authorCss,
           }),
@@ -380,10 +415,20 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
               'Content-Security-Policy': markupCsp(base, artifact.id, ASSETS_ORIGIN ?? undefined, { compiled: true }),
               ...answer.headers,
               [READER_MODE_HEADER]: 'compiled',
+              // The /raw copy asks from an opaque origin; an anonymous answer is what anyone with the link reads.
+              ...(fragment && !actor.viewer && !actor.tokenId ? { 'Access-Control-Allow-Origin': '*' } : {}),
               ...COMMON,
             },
           });
         }
+        // No renderer is left to answer (compiled-only, lib/compiled-page/serve.server fallbackPolicy): a reported 500.
+        if (answer.mode === 'failed') {
+          return new Response('<!doctype html><meta charset="utf-8"><title>Unavailable</title><h1>This document could not be rendered</h1>', {
+            status: answer.status,
+            headers: { 'Content-Type': 'text/html; charset=utf-8', [READER_MODE_HEADER]: 'compiled', ...COMMON },
+          });
+        }
+        if (fragment) return storyFragmentRefused(answer.fallback);
         readerFallback = answer.fallback;
       }
       // `none` whenever the link grants no more than a guest already has, which
@@ -584,7 +629,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
         queryUrl: queryPath(artifact.id),
         resolveUrl: `${base}${resolvePath(artifact.id)}`,
         libraryOrigin: base,
-        ...(ASSETS_ORIGIN ? { managedAssets: { origin: ASSETS_ORIGIN, resolveUrl: `${base}${assetsPath(artifact.id)}${byExportKey ? `?key=${encodeURIComponent(key!)}` : ''}` } } : {}),
+        ...(managedAssets ? { managedAssets } : {}),
         /*
          * …and where it imports an image URL only its reader can compute (a
          * bound <img src="$pick">). Unconditional, unlike mutateUrl: a source

@@ -4,8 +4,9 @@
  * element, the same island nodes, the islands not disposed and still in `read` — with the app's
  * chrome around it and no interpreter mounted over it. Edit mode puts the islands in `edit`,
  * disposes them and mounts the interpreter afresh (never hydrating compiled HTML); leaving the
- * page disposes them without edit mode; a chrome control pressed before the app arrived is
- * performed once it has.
+ * page disposes them without edit mode; a newer version is drawn in place over the islands by the
+ * one update path (lib/islands/live-update), never by the interpreter; a chrome control pressed
+ * before the app arrived is performed once it has.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, fireEvent, screen, waitFor } from '@testing-library/react';
@@ -14,18 +15,20 @@ import { render } from '@/test/helpers/surface-ui';
 import { setupSurface, surfaceProps } from '@/test/helpers/inline-surface';
 import { installIslandDocument } from '@/lib/islands/handover';
 import type { IslandDocument } from '@/lib/islands/contract';
-import type { StoryController, EditorStoryRuntimeProps } from '@/lib/story-runtime/EditorStoryRuntime';
-import { STORY_DATA_MESSAGE } from '@/lib/story-runtime/contract';
+import type { InlineStoryController, InlineStoryRuntimeProps } from '@/lib/story-runtime/InlineStoryRuntime';
+import { STORY_DATA_MESSAGE, STORY_DOCUMENT_MESSAGE, STORY_READER_MODE_MESSAGE } from '@/lib/story-runtime/contract';
+import { updateCompiledStory } from '@/lib/islands/live-update';
+
+vi.mock('@/lib/islands/live-update', () => ({ updateCompiledStory: vi.fn(async () => 'morphed') }));
 import { captureInitialStory, clearInitialStory } from '@/web/initial-story';
 import { scheduleSpaBoot } from '@/web/idle-boot';
-import { compiledReaderUpdates } from '@/lib/story-runtime/compiled-reader-update';
 
-const interpreters: EditorStoryRuntimeProps[] = [];
-vi.mock('@/lib/story-runtime/EditorStoryRuntime', () => ({
-  EditorStoryRuntime: (props: EditorStoryRuntimeProps) => {
+const interpreters: InlineStoryRuntimeProps[] = [];
+vi.mock('@/lib/story-runtime/InlineStoryRuntime', () => ({
+  InlineStoryRuntime: (props: InlineStoryRuntimeProps) => {
     useLayoutEffect(() => {
       interpreters.push(props);
-      const controller: StoryController = {
+      const controller: InlineStoryController = {
         nonce: 'interpreter', send: () => {}, update: () => {}, invalidate: () => {},
         subscribe: () => () => {}, getViewportRect: () => new DOMRect(), dispose: () => {},
       };
@@ -81,9 +84,9 @@ beforeEach(() => {
   vi.stubGlobal('fetch', vi.fn(async () => new Response('{}', { status: 404 })));
 });
 afterEach(() => {
+  vi.mocked(updateCompiledStory).mockClear();
   clearInitialStory();
   window.location.hash = '';
-  vi.restoreAllMocks();
   vi.unstubAllGlobals();
 });
 
@@ -113,7 +116,7 @@ describe('adopting the compiled page', () => {
     const edit = document.querySelector<HTMLElement>('[data-mx-reader-rail] [data-mx-reader-action="edit"]')!;
     await act(async () => { fireEvent.click(edit); await Promise.resolve(); });
     await waitFor(() => expect(interpreters).toHaveLength(1));
-    expect(interpreters[0]).not.toHaveProperty('hydrateInitialStory');
+    expect(interpreters[0]!.hydrateInitialStory).toBe(false);
     expect(islands.events).toEqual(['edit', 'dispose']);
     expect(story.isConnected).toBe(false);
     expect(screen.getByLabelText('Artifact viewport').querySelector('[data-interpreter]')).not.toBeNull();
@@ -128,37 +131,37 @@ describe('adopting the compiled page', () => {
     expect(story.isConnected).toBe(false);
   });
 
-  it('a newer version reloads the compiled document without mounting the interpreter', async () => {
-    const reload = vi.spyOn(compiledReaderUpdates, 'reload').mockImplementation(() => {});
-    const { islands } = servePage();
+  it('a newer version is drawn in place over the adopted islands, never by the interpreter', async () => {
+    const { story, islands } = servePage();
     const view = render(<ArtifactSurface {...compiledProps()} />);
     view.rerender(<ArtifactSurface {...compiledProps()} version={2} />);
     await act(async () => { await Promise.resolve(); });
-    expect(reload).toHaveBeenCalledOnce();
-    expect(interpreters).toHaveLength(0);
-    expect(islands.events).toEqual([]);
+    expect(updateCompiledStory).toHaveBeenCalledTimes(1);
+    expect(updateCompiledStory).toHaveBeenCalledWith(window, expect.objectContaining({ adopted: true }));
+    expect(interpreters, 'a reader never gets the React interpreter for a write').toHaveLength(0);
+    expect(islands.events, 'the islands keep running').toEqual([]);
+    expect(screen.getByLabelText('Artifact viewport').contains(story)).toBe(true);
   });
 
-  it('keeps the editor interpreter while an edit session receives a newer version', async () => {
-    const reload = vi.spyOn(compiledReaderUpdates, 'reload').mockImplementation(() => {});
+  it('carries the reader\'s own mode and the version\'s source nodes into the update', async () => {
     servePage();
-    const view = render(<ArtifactShell role="owner"><ArtifactSurface {...compiledProps()} /></ArtifactShell>);
-    expect(reload).not.toHaveBeenCalled();
-    const edit = document.querySelector<HTMLElement>('[data-mx-reader-rail] [data-mx-reader-action="edit"]')!;
-    await act(async () => { fireEvent.click(edit); await Promise.resolve(); });
-    await waitFor(() => expect(interpreters).toHaveLength(1));
-    reload.mockClear();
-    view.rerender(<ArtifactShell role="owner"><ArtifactSurface {...compiledProps()} version={2} /></ArtifactShell>);
-    expect(interpreters).toHaveLength(1);
-    expect(reload).not.toHaveBeenCalled();
+    render(<ArtifactShell role="commenter"><ArtifactSurface {...compiledProps()} /></ArtifactShell>);
+    const controller = (layerProps.at(-1)!.runtimeRef as { current: InlineStoryController | null }).current!;
+    controller.send({ type: STORY_READER_MODE_MESSAGE, mode: 'dark' });
+    vi.mocked(updateCompiledStory).mockClear();
+    controller.update({ type: STORY_DOCUMENT_MESSAGE, nodes: [] } as never);
+    expect(updateCompiledStory).toHaveBeenCalledTimes(1);
+    const options = vi.mocked(updateCompiledStory).mock.calls[0]![1]!;
+    expect(options.mode?.()).toBe('dark');
+    expect(interpreters).toHaveLength(0);
   });
 
   it('a dataset wakeup re-runs the islands\' queries on their store', () => {
     const { islands } = servePage();
-    const controllers: Array<StoryController | null> = [];
+    const controllers: Array<InlineStoryController | null> = [];
     // The page's controller is what AnnotationLayer is handed: a commenter's page mounts it.
     render(<ArtifactShell role="commenter"><ArtifactSurface {...compiledProps()} /></ArtifactShell>);
-    const runtimeRef = layerProps.at(-1)!.runtimeRef as { current: StoryController | null };
+    const runtimeRef = layerProps.at(-1)!.runtimeRef as { current: InlineStoryController | null };
     controllers.push(runtimeRef.current);
     runtimeRef.current!.send({ type: STORY_DATA_MESSAGE, datasets: ['sales'] });
     expect(islands.invalidated).toEqual([['sales']]);
@@ -169,7 +172,7 @@ describe('adopting the compiled page', () => {
     servePage();
     render(<ArtifactSurface {...surfaceProps()} />);
     await waitFor(() => expect(interpreters).toHaveLength(1));
-    expect(interpreters[0]).not.toHaveProperty('hydrateInitialStory');
+    expect(interpreters[0]!.hydrateInitialStory).toBe(false);
   });
 
   it('performs a served chrome control pressed before the app arrived, once', async () => {

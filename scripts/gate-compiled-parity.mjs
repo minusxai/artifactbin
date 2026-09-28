@@ -33,7 +33,9 @@
  *  - One interaction sequence on the kit fixture (a tab, an accordion), compared again.
  *
  * Fixtures: the page-speed set (scripts/fixtures/page-speed), which includes the kitchen sink
- * (scripts/lib/kitchen-sink-doc), published through one bearer token; each is compared once.
+ * (scripts/lib/kitchen-sink-doc), the parity-only wrappers around live children
+ * (scripts/fixtures/compiled-parity), and editable DataTable cells (scripts/lib/editable-cells-doc,
+ * as a guest sees them: every write refused). Each is compared once.
  *
  * Until a server serves the compiled path (`FLAG__COMPILED_READER` off, or no
  * compile stored yet), the first compiled response carries no `x-mx-reader:
@@ -46,7 +48,9 @@ import { chromium } from 'playwright';
 import { createChecker } from './lib/assert.mjs';
 import { startDocument, pageHeaders } from './lib/start-doc.mjs';
 import { publishPageSpeedFixtures } from './fixtures/page-speed/index.mjs';
+import { publishCompiledParityFixtures } from './fixtures/compiled-parity/index.mjs';
 import { kitchenSinkMarkup } from './lib/kitchen-sink-doc.mjs';
+import { publishEditableCells } from './lib/editable-cells-doc.mjs';
 import { diffTrees, holdAnimations, stripReaderParam, survivalOf } from './lib/compiled-parity-diff.mjs';
 
 const B = process.argv[2] ?? 'http://localhost:3030';
@@ -152,6 +156,10 @@ if (!fixtures.some((f) => f.key === 'kitchen')) {
   const kitchen = await publish({ title: 'Perf G kitchen sink', markup: await kitchenSinkMarkup(publish) });
   fixtures.push({ key: 'kitchen', id: kitchen.id, painted: { charts: 1 } });
 }
+// Every editing cell today's reader draws, refused for the guest the gate reads as (lib/islands/kit/cells).
+fixtures.push({ key: 'cells', id: (await publishEditableCells(publish)).id, painted: null });
+// The shapes the page-speed set does not hold: registered wrappers around live children (scripts/fixtures/compiled-parity).
+fixtures.push(...await publishCompiledParityFixtures(publish));
 const chosen = fixtures.filter((f) => !only || only.includes(f.key));
 
 const browser = await chromium.launch();

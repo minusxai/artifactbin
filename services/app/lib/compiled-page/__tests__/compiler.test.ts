@@ -49,6 +49,19 @@ async function inputOf(source: string, template: string | null = null): Promise<
 const dom = (html: string) => new JSDOM(`<div id="r">${html}</div>`).window.document.getElementById('r')!;
 
 describe('compilePage', () => {
+  it('stores the legacy outline decision and heading paths with the version', async () => {
+    const source = '<article><h2>One &amp; all</h2><h3>Part</h3><h2>Two</h2><h2>Three</h2></article>';
+    const page = await compilePage(await inputOf(source, 'plan'), loadCompilerBuild());
+    expect(page.outline).toEqual([
+      { level: 2, title: 'One & all', path: '0.0' },
+      { level: 3, title: 'Part', path: '0.1' },
+      { level: 2, title: 'Two', path: '0.2' },
+      { level: 2, title: 'Three', path: '0.3' },
+    ]);
+    expect(page.outlinePlan).toBe(true);
+    expect((await compilePage(await inputOf(source, 'dashboard'), loadCompilerBuild())).outline).toEqual([]);
+    expect((await compilePage({ ...(await inputOf(source, 'plan')), chrome: false }, loadCompilerBuild())).outline).toEqual([]);
+  });
   it('prose: static HTML only — no islands, no module, no slot left behind', async () => {
     const page = await compilePage(await inputOf(fixture('prose.jsx')), loadCompilerBuild());
     expect(page.islands).toEqual([]);
@@ -106,9 +119,16 @@ describe('compilePage', () => {
     }
   });
 
-  it('compiles <Iframe> and <DeckGL> as islands in the data family, served as today\'s boxes', async () => {
+  it('compiles <Iframe> and <DeckGL> as islands in the embed family, served as today\'s boxes', async () => {
     const source = '<div><Iframe title="Gallery" height={120} id="f" className="my-4"><p>Hello</p><script>{`document.body.dataset.ok = "1"`}</script></Iframe><DeckGL id="map" className="rounded" title="Countries" height="320px" basemap="none" layers={[{"@@type":"ScatterplotLayer","getPosition":"@@=[lng, lat]"}]} /></div>';
-    const page = await compilePage(await inputOf(source), loadCompilerBuild());
+    const input = await inputOf(source);
+    // Their own family (lib/islands/contract KIT_FAMILIES 'embed'): a page with a table never downloads the frame's island code.
+    const { islands } = generate(input);
+    expect(islands).toContain('import { DeckGL, Iframe } from "@mx/kit/embed";');
+    expect(islands).not.toContain('@mx/kit/data');
+    // The asset door is the page's (IslandPageData.managedAssets), never a compile-time prop.
+    expect(islands).not.toContain('assetsOrigin');
+    const page = await compilePage(input, loadCompilerBuild());
     expect(page.partial).toEqual([]);
     expect(page.islands.map((i) => i.kit)).toEqual([['Iframe'], ['DeckGL']]);
     const html = dom(page.html);
@@ -124,11 +144,58 @@ describe('compilePage', () => {
     expect(page.html).not.toContain('Hello');
   });
 
+  it('compiles a DataTable column\'s content per row, and a control with run there as today\'s editing cell', async () => {
+    const source = '<Helmet><Value name="t" type="table" value={[{"id":1,"s":"a","n":2,"w":""}]} /><Mutation name="set_s">{`update t set s=$_value where id=$_row.id`}</Mutation>'
+      + '<Mutation name="set_n">{`update t set n=$_value where id=$_row.id`}</Mutation></Helmet>'
+      + '<DataTable data="$t" rowKey="id" id="tbl"><Column col="id" /> <Column col="w">\n  </Column><Column col="note"><b id="n">{$_row.s}</b></Column>'
+      + '<Column col="s"><Select label="S {$_row.id}" value="$_row.s" options={["a","b"]} run="$set_s" className="w-24" /></Column>'
+      + '<Column col="n"><input type="number" value="$_row.n" run="$set_n" /></Column></DataTable>';
+    const { islands } = generate(await inputOf(source.replace('"w":""}', '"w":"","note":""}')));
+    // Its own family: a page without column content never loads the cells.
+    expect(islands).toContain('import { CellControl, cellAttrs } from "@mx/kit/cells";');
+    expect(islands).toContain('import { DataTable } from "@mx/kit/data";');
+    // One entry per <Column>, a hole where the content draws nothing (whitespace), a function per row otherwise.
+    expect(islands).toContain('cells={[undefined, undefined, (row');
+    expect(islands).toMatch(/<b \{\.\.\.cellAttrs\(\$d\d+, row\d+_\d+, cell\d+_\d+\)\}>\{rt\.text\(/);
+    // Today's classes, merged at compile time (tailwind-merge: the cell's flex replaces the shell's inline-flex, the author's w-24 the cell's w-full).
+    expect(islands).toContain('<CellControl tag={"Select"} run={"set_s"} field={"s"}');
+    expect(islands).toContain('cls={"mx-control relative flex-col gap-1.5 align-top flex min-w-0 w-24"}');
+    expect(islands).toContain('<CellControl tag={"input"} run={"set_n"} field={"n"}');
+    expect(islands).toContain('cls={"w-full min-w-0 rounded-md border border-transparent bg-transparent px-2 py-1 text-sm outline-none transition-colors hover:border-border focus:border-ring focus:ring-2 focus:ring-ring/20 disabled:opacity-50 h-8 text-right tabular-nums"}');
+    expect(islands).toMatch(/templates=\{\$d\d+\}/);
+  });
+
   it('an <Iframe> whose content is refused renders nothing, as the interpreter does', async () => {
     const page = await compilePage(await inputOf('<div><Iframe title="x" height={120}><iframe src="https://x.test" /></Iframe><p id="after">after</p></div>'), loadCompilerBuild());
     expect(page.islands).toEqual([]);
     expect(dom(page.html).querySelector('[data-mx-managed-frame]')).toBeNull();
     expect(dom(page.html).querySelector('#after')).toBeTruthy();
+  });
+});
+
+describe('island keys (the live morph keeps an island a new version carries again)', () => {
+  const keysOf = async (source: string): Promise<Record<string, string>> => {
+    const generated = generate(await inputOf(source));
+    const keys: Record<string, string> = {};
+    for (const [, rid, key] of generated.islands.matchAll(/\[("s\d+-"), I\d+, ("[0-9a-f]{16}")\]/g)) keys[JSON.parse(rid!)] = JSON.parse(key!);
+    return keys;
+  };
+  const helmet = '<Helmet><Value name="region" type="string" default="West" /><Value name="other" type="string" default="x" /></Helmet>';
+
+  it('names the same island by the same key when an island before it shifts its render id and its constants', async () => {
+    const before = await keysOf(`${helmet}<div id="w"><section id="s1"><p id="p1">static</p></section><section id="s2"><p id="b" title="{$other}">{$region}</p></section></div>`);
+    const after = await keysOf(`${helmet}<div id="w"><section id="s1"><p id="p1">static</p><p id="n" title="{$region}">{$other}</p></section><section id="s2"><p id="b" title="{$other}">{$region}</p></section></div>`);
+    expect(Object.keys(before)).toEqual(['s0-']);
+    expect(Object.keys(after)).toEqual(['s0-', 's1-']);
+    expect(after['s1-'], 'island b, now second: same definition, same key').toBe(before['s0-']);
+    expect(after['s0-']).not.toBe(before['s0-']);
+  });
+
+  it('gives a changed island another key', async () => {
+    const one = await keysOf(`${helmet}<div id="w"><p id="b">{$region}</p></div>`);
+    const two = await keysOf(`${helmet}<div id="w"><p id="b">{$other}</p></div>`);
+    expect(one['s0-']).toMatch(/^[0-9a-f]{16}$/);
+    expect(two['s0-']).not.toBe(one['s0-']);
   });
 });
 
@@ -190,12 +257,16 @@ describe('the stored plan', () => {
   });
 });
 
-describe('refusal', () => {
-  it('a registered component with no Solid port inside a row refuses the compile, named, with nothing built', async () => {
-    const page = await compilePage(await inputOf('<Helmet><Value name="rows" type="table" value={[{"k":"a"}]} /></Helmet><ul id="l"><For each={$rows} keyBy="k"><li id="i"><Separator id="s" /></li></For></ul>'), loadCompilerBuild());
-    expect(page.unported).toEqual(['Separator']);
-    expect(page.module).toBeNull();
-    expect(page.ssr).toBeNull();
+describe('no refusal', () => {
+  // w3-compiler-coverage: a registered component with no Solid port inside a row compiles as a shell (today's React
+  // render with the row's attributes filled per row); nothing a stored document holds is refused any more.
+  it('a registered component with no Solid port inside a row compiles whole, its markup today\'s per row', async () => {
+    const page = await compilePage(await inputOf('<Helmet><Value name="rows" type="table" value={[{"k":"a"},{"k":"b"}]} /></Helmet><ul id="l"><For each={$rows} keyBy="k"><li id="i"><Separator id="s" /></li></For></ul>'), loadCompilerBuild());
+    expect(page.unported).toEqual([]);
+    expect(page.module).not.toBeNull();
+    expect(page.ssr).not.toBeNull();
+    expect(page.reactStatic).toContain('Separator');
+    expect([...dom(page.html).querySelectorAll('li [data-slot="separator"]')]).toHaveLength(2);
   });
 });
 

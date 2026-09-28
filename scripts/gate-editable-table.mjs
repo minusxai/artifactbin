@@ -12,6 +12,7 @@ import { chromium } from 'playwright';
 import { createEditableTableFixture } from './lib/editable-table-fixture.mjs';
 import { becomeOwner, becomeAccountOwner, startDocument } from './lib/start-doc.mjs';
 import { startMailSink, loginViaEmail } from './lib/mail-login.mjs';
+import { readerUrl } from './lib/gate-reader.mjs';
 
 const base = process.argv[2] ?? 'http://localhost:3030';
 const fixture = await createEditableTableFixture(base);
@@ -33,7 +34,7 @@ try {
       <Import name="complete_data" src="ref:${dataset.id}" /><Mutation name="complete" expectedAffected={1}>{\`update complete_data.rows set status='done' where id=$_row.id\`}</Mutation></Helmet>
       <For each={$tasks} keyBy="id"><p aria-label="Repeated status {$_row.id}">{$_row.status}</p><Button run="$complete" aria-label="Repeat complete {$_row.id}">Complete</Button></For>
       <DataTable data="$tasks" rowKey="id"><Column col="id"/><Column col="status"><Button run="$complete" aria-label="Table complete {$_row.id}">Complete</Button></Column></DataTable>`});
-    await aPage.goto(`${base}/a/${doc.id}`);
+    await aPage.goto(readerUrl(`${base}/a/${doc.id}`));
     const page = await artifactDocument(aPage);
     for (const [label,id] of [['Repeat complete 1',1],['Table complete 2',2]]) {
       const response = aPage.waitForResponse(r=>r.url().endsWith(`/a/${doc.id}/mutate`) && r.request().method()==='POST');
@@ -60,7 +61,7 @@ try {
       <Import name="complete_data" src="ref:${dataset.id}" /><Mutation name="complete" expectedAffected={1}>{\`update complete_data.rows set completed_by=$_me.id where id=$_row.id\`}</Mutation></Helmet>
       <Select label="Team filter" value="$person" />
       <DataTable data="$tasks" rowKey="id"><Column col="id"/><Column col="assignee"><Select label="Assign member" value="$_row.assignee" run="$assign"/></Column><Column col="completed_by"/><Column col="action"><Button run="$complete">Finish user task</Button></Column></DataTable>`});
-    await userPage.goto(`${base}/a/${doc.id}`);
+    await userPage.goto(readerUrl(`${base}/a/${doc.id}`));
     const page=await artifactDocument(userPage);
     await page.getByRole('button',{name:'Assign member',exact:true}).click();
     const option=page.getByRole('option').last();
@@ -86,7 +87,7 @@ try {
     check('native user picker and row button persist IDs and display member names');
     await userPage.close();
   }
-  await Promise.all([aPage.goto(fixture.url), bPage.goto(fixture.url)]);
+  await Promise.all([aPage.goto(readerUrl(fixture.url)), bPage.goto(readerUrl(fixture.url))]);
   await Promise.all([aPage.locator('[data-mx-inline-story]').waitFor(),bPage.locator('[data-mx-inline-story]').waitFor()]);
   const a = await artifactDocument(aPage);
   const b = await artifactDocument(bPage);
@@ -141,7 +142,7 @@ try {
   assert.equal(await b.getByLabel('Item 1',{exact:true}).inputValue(),'second reader');
   const versionBeforeConflict = (await fixture.api(`/api/artifacts/${fixture.datasetId}`,undefined,'GET')).version;
   await commit(b, () => b.getByLabel('Item 1',{exact:true}).press('Enter'), 409);
-  await b.getByRole('alert').filter({hasText:/changed|conflict/i}).waitFor();
+  await b.getByRole('alert').filter({hasText:/changed|conflict/i}).first().waitFor();
   check('same-cell stale edit is rejected while preserving the draft');
   assert.equal((await fixture.api(`/api/artifacts/${fixture.datasetId}`,undefined,'GET')).version,versionBeforeConflict);
   await b.getByLabel('Item 1',{exact:true}).press('Escape');
@@ -190,7 +191,7 @@ try {
   await a.getByRole('option', { name: 'first reader', exact: true }).click();
   const beforeSelf = (await fixture.api(`/api/artifacts/${fixture.datasetId}`, undefined, 'GET')).version;
   await commit(a, () => a.getByRole('button', { name: 'Done', exact: true }).click(), 409);
-  await a.getByRole('alert').filter({ hasText: /changed|conflict/i }).waitFor();
+  await a.getByRole('alert').filter({ hasText: /changed|conflict/i }).first().waitFor();
   assert.equal((await fixture.api(`/api/artifacts/${fixture.datasetId}`, undefined, 'GET')).version, beforeSelf);
   await a.getByLabel('Depends on 1', { exact: true }).click();
   await aPage.keyboard.press('Escape');
@@ -237,7 +238,7 @@ try {
   const owner = await browser.newPage({ viewport: { width: 1500, height: 900 } });
   owner.on('pageerror', error => errors.push(error.message));
   await becomeOwner(owner, base, fixture.token);
-  await owner.goto(fixture.url);
+  await owner.goto(readerUrl(fixture.url));
   const frame = owner.locator('[data-mx-inline-story]');
   await frame.getByLabel('Item 1', { exact: true }).waitFor();
   await frame.getByLabel('Owner 1', { exact: true }).click();
@@ -248,7 +249,7 @@ try {
 
   const capture = await browser.newPage();
   capture.on('pageerror', error => errors.push(error.message));
-  await capture.goto(`${fixture.url}/raw?chrome=0`);
+  await capture.goto(readerUrl(`${fixture.url}/raw?chrome=0`));
   await capture.getByLabel('Item 1', { exact: true }).waitFor();
   assert.equal(await capture.getByLabel('Item 1', { exact: true }).inputValue(), 'first reader');
   assert.equal(await capture.getByLabel('Item 1', { exact: true }).isDisabled(), true);
@@ -274,7 +275,7 @@ try {
    */
   const shared = await createEditableTableFixture(base, 2, { seed: await startDocument(base) });
   const guest = await browser.newPage();
-  await guest.goto(shared.url);
+  await guest.goto(readerUrl(shared.url));
   await guest.getByLabel('Item 1', { exact: true }).waitFor();
   assert.equal(await guest.getByLabel('Item 1', { exact: true }).isDisabled(), true);
   const forged = await guest.request.post(`${shared.url}/mutate`, { data: {
@@ -291,7 +292,7 @@ try {
   const friend = await browser.newPage();
   const email = `mxmx_test_dataset_friend_${Date.now().toString(36)}@example.com`;
   await loginViaEmail(friend, base, sink, email);
-  await friend.goto(shared.url);
+  await friend.goto(readerUrl(shared.url));
   await friend.locator('[data-mx-inline-story]').waitFor();
   const friendDoc = friend.locator('[data-mx-inline-story]');
   await friendDoc.getByLabel('Item 1', { exact: true }).waitFor();
