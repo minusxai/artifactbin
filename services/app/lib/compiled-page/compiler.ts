@@ -170,7 +170,7 @@ interface P5Node { nodeName: string; tagName?: string; value?: string; attrs?: A
 /** The element a SHELL's children are spliced at (a `<template>`: the HTML parser keeps it in place inside a table). */
 const HOLE_ATTR = 'data-mx-hole';
 
-/** How `htmlToJsx` writes a shell: the hole's content, and each element's attributes (a row template's go through `rt.rowAttrs`). */
+/** How `htmlToJsx` writes a shell: the hole's content, and each element's attributes (a row template's go through `$rowAttrs`). */
 interface HtmlToJsxOptions { hole?: () => string; attrs?: (attrs: Attr[]) => string }
 
 /** Static HTML (from React's server renderer) → Solid JSX with every value a string literal. */
@@ -375,7 +375,7 @@ export function generate(input: GenerateInput): Generated {
    * value, or sits in a row): a container with no behaviour of its own, so it compiles as a SHELL. Today's
    * React kit renders the component at compile time around a hole, and its children compile into the hole
    * — islands inside hydrate, static parts stay HTML. Its own props are rendered without a row, so a row
-   * template (`{$_row.f}`) stays literal in its attributes and `rt.rowAttrs` fills it per row, exactly as a
+   * template (`{$_row.f}`) stays literal in its attributes and `$rowAttrs` fills it per row, exactly as a
    * native element in a row is compiled. A component that draws no children (an `<Icon>`'s glyph) is its
    * shell alone, as today's render drops them too.
    */
@@ -406,9 +406,9 @@ export function generate(input: GenerateInput): Generated {
         const root = first; first = false;
         if (root && rowClassTemplate !== null) {
           usesRowClass = true;
-          return ` {...rt.rowAttrs(${json(Object.fromEntries(attrs.filter(([name]) => name !== 'class')))}, ${row}, ${ctx.scope})} class={$rowClass(${lit(baseClass)}, ${lit(rowClassTemplate)}, ${row})}`;
+          return ` {...$rowAttrs(${json(Object.fromEntries(attrs.filter(([name]) => name !== 'class')))}, ${row}, ${ctx.scope})} class={$rowClass(${lit(baseClass)}, ${lit(rowClassTemplate)}, ${row})}`;
         }
-        return ` {...rt.rowAttrs(${json(Object.fromEntries(attrs))}, ${row}, ${ctx.scope})}`;
+        return ` {...$rowAttrs(${json(Object.fromEntries(attrs))}, ${row}, ${ctx.scope})}`;
       } } : {}),
     });
   }
@@ -522,7 +522,7 @@ export function generate(input: GenerateInput): Generated {
       const tag = safeTag(node.tag);
       // A row action writes with its row (interpreter rowAction → StoryRuntimeApp RuntimeRowAction).
       const rowJsx = node.tag === 'Button' && (api.run !== undefined || api.set !== undefined) ? ` row={${ctx.row}} rowScope={${ctx.scope}}` : '';
-      if (ctx.row) return `<${tag}${apiJsx}${rowJsx}${clsJsx} {...rt.rowAttrs(${json(Object.fromEntries(attrs))}, ${ctx.row}, ${ctx.scope})}>${children()}</${tag}>`;
+      if (ctx.row) return `<${tag}${apiJsx}${rowJsx}${clsJsx} {...$rowAttrs(${json(Object.fromEntries(attrs))}, ${ctx.row}, ${ctx.scope})}>${children()}</${tag}>`;
       return `<${tag}${apiJsx}${clsJsx}${attrsJsx(attrs)}>${meta.noChildren ? '' : children()}</${tag}>`;
     }
     const lower = node.tag.toLowerCase();
@@ -543,7 +543,7 @@ export function generate(input: GenerateInput): Generated {
     const attrs = domAttrs(tag, props);
     const reactive = node.attributes.filter((a) => !a.value.static && REACTIVE_BOOLEAN_PROPS.has(a.name) && isReactiveExpression(a.value.reactive));
     const booleanJsx = reactive.map((a) => ` {...(rt.expr(${json(a.value.static ? null : a.value.reactive)}, ${ctx.row ?? 'undefined'}) ? { ${safeAttr(a.name)}: true } : {})}`).join('');
-    const open = ctx.row ? `<${tag} {...rt.rowAttrs(${json(Object.fromEntries(attrs))}, ${ctx.row}, ${ctx.scope})}${booleanJsx}>` : `<${tag}${attrsJsx(attrs)}${booleanJsx}>`;
+    const open = ctx.row ? `<${tag} {...$rowAttrs(${json(Object.fromEntries(attrs))}, ${ctx.row}, ${ctx.scope})}${booleanJsx}>` : `<${tag}${attrsJsx(attrs)}${booleanJsx}>`;
     if (VOID.test(lower)) return open.replace(/>$/, ' />');
     return `${open}${children(inner)}</${tag}>`;
   }
@@ -629,7 +629,9 @@ export function generate(input: GenerateInput): Generated {
   const dataConsts = data.map((text, i) => `const $d${i} = JSON.parse(${lit(text)});\n`).join('');
   // The skeleton imports only what it renders with; the islands module always carries the runtime.
   const skeleton = `${kitImports(kitUsed.skeleton)}${dataConsts}export default function Skeleton() { return ${root}; }\n`;
-  const islandsSource = `import * as rt from '@mx/rt';\n${usesRowClass ? "import { rowClass as $rowClass } from '@mx/kit/basic';\n" : ''}${kitImports(kitUsed.islands)}${dataConsts}`
+  const usesRowAttrs = islands.some((isl) => isl.source.includes('$rowAttrs('));
+  const rowHelpers = [usesRowAttrs && 'rowAttrs as $rowAttrs', usesRowClass && 'rowClass as $rowClass'].filter(Boolean);
+  const islandsSource = `import * as rt from '@mx/rt';\n${rowHelpers.length ? `import { ${rowHelpers.join(', ')} } from '@mx/kit/basic';\n` : ''}${kitImports(kitUsed.islands)}${dataConsts}`
     + islands.map((isl) => `export function I${isl.id}() { return ${isl.source}; }\n`).join('')
     + `export const ISLANDS = [${islands.map((isl) => `[${lit(`s${isl.id}-`)}, I${isl.id}]`).join(', ')}];\n`;
   return {

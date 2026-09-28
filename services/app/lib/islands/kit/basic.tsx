@@ -9,6 +9,8 @@ import type { IslandContext } from '../contract';
 import type { RowScope } from '../rt';
 import { cn } from '@/components/kit/cn';
 import { substituteRow } from '@/lib/story/row-scope';
+import { URL_ATTRS, URL_LIST_ATTRS, urlListUrls } from '@/lib/jsx/url-attrs';
+import { commentMetadata, instanceDomId } from '@/lib/story/repeat-identity';
 import { iconGlyphKey, FALLBACK_ICON_KEY, type GlyphMap } from '@/lib/story-ui/icon-contract';
 
 import { createRowActions } from '@/lib/story-runtime/row-actions';
@@ -16,6 +18,37 @@ import { ACCESS_PENDING, hydratedRead } from './store-read';
 
 /** A row's class must be substituted before tailwind-merge sees its utility tokens. */
 export const rowClass = (base: string, authored: string, row: Record<string, unknown>): string => cn(base, substituteRow(authored, row));
+
+// Mirrors lib/jsx/validate hasDangerousScheme without importing the validator into the browser kit.
+// eslint-disable-next-line no-control-regex -- browsers remove controls and spaces within URL schemes
+const dangerous = (url: string) => /^(?:javascript:|vbscript:|data:(?!image\/))/i.test(url.replace(/[\x00-\x20]/g, ''));
+const IDREF_ATTRS = 'for aria-labelledby aria-describedby aria-controls aria-owns headers list form'.split(' ');
+
+/** Substitute and scope attributes only for the row components that use them. */
+export function rowAttrs(attrs: Readonly<Record<string, unknown>>, row: Record<string, unknown> | null | undefined, scope?: RowScope | null): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const [name, raw] of Object.entries(attrs)) {
+    const lower = name.toLowerCase();
+    const value = row && lower !== 'id' ? substituteRow(raw, row) : raw;
+    if (value === null || value === undefined || value === false) continue;
+    if (typeof value === 'string' && (URL_LIST_ATTRS.has(lower) ? urlListUrls(value, lower).some(dangerous) : URL_ATTRS.has(lower) && dangerous(value))) continue;
+    out[name] = value === true ? '' : String(value);
+  }
+  if (scope) {
+    const key = ['repeat', scope.owner, scope.durable ? typeof scope.key : 'index', scope.key];
+    if (!scope.durable) delete out['data-mx-ast'];
+    if (typeof out.id === 'string') {
+      if (scope.durable) Object.assign(out, commentMetadata(scope.owner, { kind: 'repeat', scopes: [{ nodeId: scope.owner, key: scope.key as string | number }], templateNodeId: out.id }));
+      out.id = instanceDomId(key, out.id);
+    }
+    for (const attr of IDREF_ATTRS) {
+      const v = out[attr];
+      if (typeof v === 'string') out[attr] = v.split(/\s+/).map((id) => (scope.ids.includes(id) ? instanceDomId(key, id) : id)).join(' ');
+    }
+    if (typeof out.href === 'string' && out.href.startsWith('#') && scope.ids.includes(out.href.slice(1))) out.href = '#' + instanceDomId(key, out.href.slice(1));
+  }
+  return out;
+}
 
 /**
  * lib/story/comment-target isCommentKey (the interpreter's validRowKey), restated: importing it from a kit
