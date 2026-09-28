@@ -156,6 +156,7 @@ try {
   await guest.goto(`${base}/a/${start.id}`, { waitUntil: 'load' });
   await previewContains(guest, '120', 'DataTable embed');
   assert.ok(!(await guest.getByLabel('DataTable embed', { exact: true }).innerText()).includes('90'));
+  await guest.locator('html[data-mx-ready]').waitFor();
   await guest.getByLabel('Region', { exact: true }).fill('east');
   await previewContains(guest, '90', 'DataTable embed');
   assert.ok(!(await guest.getByLabel('DataTable embed', { exact: true }).innerText()).includes('120'));

@@ -49,6 +49,14 @@ async function inputOf(source: string, template: string | null = null): Promise<
 const dom = (html: string) => new JSDOM(`<div id="r">${html}</div>`).window.document.getElementById('r')!;
 
 describe('compilePage', () => {
+  it('compiles a native Value input as a live binding', async () => {
+    const source = '<Helmet><Value name="region" type="string" default="west" /></Helmet><input aria-label="Region" value="$region" />';
+    const generated = generate(await inputOf(source));
+    expect(generated.islands).toContain('<BoundNative tag={"input"} bind={$d0}');
+    expect(generated.islands).toContain('JSON.parse("{\\\"value\\\":\\\"region\\\"}")');
+    expect(generated.islandRefs.flatMap((island) => island.kit)).toContain('BoundNative');
+  });
+
   it('keeps a bound image live and sends its source template to the image island', async () => {
     const source = '<Helmet><Value name="pick" type="string" default="https://example.test/a.png" /></Helmet><img src="$pick" alt="the pick" />';
     const generated = generate(await inputOf(source));
