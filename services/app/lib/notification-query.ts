@@ -4,8 +4,10 @@ import {bindParams,bindTypes,selectQueries,typedResult} from './story/compiled-f
 import {platformValues,BUILTIN_TABLES} from './story/builtins';
 import {QUERY_TIMEOUT_MS} from './config';
 import {getDb} from './db';
+import {objectStore} from './object-store';
+import {createNotificationSourceReader} from './notification-source';
 import {runQueries} from './sql/engine';
-import {catalogOf,importedRows,importedTables} from './datasets/catalog';
+import {catalogOf,importedTables} from './datasets/catalog';
 import {notificationQueryContext,notificationRevision} from './notification-context';
 import {notificationExecutionFence,notificationExecutionSource,notificationSourceSchema} from './notification-authority';
 export {notificationContextSnapshot} from './notification-context';
@@ -73,6 +75,7 @@ export async function evaluateNotificationQuery(input:MutationNotificationJobInp
 async function loadNotificationQuery(input:MutationNotificationJobInput):Promise<NotificationQueryContext>{
  const {flow,rule}=notificationQueryContext(input),db=await getDb();
  const executionFence=await notificationExecutionFence(db,input),imports:ImportTables={},sources:MutationNotificationPlan['sources']=[];
+ const reader=createNotificationSourceReader({store:objectStore()});
  const upstream=selectQueries(flow,{only:rule.reads.queries});
  if(rule.reads.queries.some(name=>!upstream.some(query=>query.name===name)))throw new NotificationExecutionError('notification_context_invalid');
  if(upstream.some(query=>query.engine!=='sqlite')||[...upstream,rule].some(query=>query.reads.values.some(name=>flow.values.find(value=>value.name===name)?.kind==='table')||query.reads.builtins.some(name=>!['_me','_me.id','_now','_tz'].includes(name))))throw new NotificationExecutionError('notification_context_unsupported');
@@ -89,7 +92,10 @@ async function loadNotificationQuery(input:MutationNotificationJobInput):Promise
    sources.push({artifactId:binding.ref,schema:catalog.defaultSchema,table:relation.table,authorityRevision:authority.revision,schemaRevision:notificationSourceSchema(authority,catalog.defaultSchema,relation.table)});
   }
   // Read only participating tables; a huge unrelated table must not enter the query worker.
-  imports[name]=await importedRows({...catalog,tables:tables.filter(table=>needed.some(relation=>relation.table===table.name))});
+  imports[name]={};
+  for(const table of tables.filter(table=>needed.some(relation=>relation.table===table.name))){
+   imports[name]![table.name]={columns:table.columns,rows:table.objectKey?await reader.read(table.objectKey):[]};
+  }
  }
  const expectedImports=new Set([...upstream,rule].flatMap(query=>query.reads.imports));
  if([...expectedImports].some(name=>!Object.hasOwn(imports,name)))throw new NotificationExecutionError('notification_context_invalid');

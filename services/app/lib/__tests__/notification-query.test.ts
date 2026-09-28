@@ -42,6 +42,6 @@ describe('notification query evaluation',()=>{
   const started=performance.now(),before=process.memoryUsage().heapUsed;
   const plan=await evaluate(`WITH RECURSIVE counter(n) AS (SELECT 1 UNION ALL SELECT n+1 FROM counter WHERE n<1000) SELECT 'usr_one' as "to", printf('%0500d',n) as message FROM counter`);
   expect(plan.rows).toHaveLength(1000);expect(plan.rows.every(row=>row.message.length===500)).toBe(true);
-  console.info('notification-query-capacity',JSON.stringify({rows:plan.rows.length,bytes:Buffer.byteLength(JSON.stringify(plan.rows)),durationMs:Math.round(performance.now()-started),heapDeltaBytes:process.memoryUsage().heapUsed-before}));
+  process.stdout.write('notification-query-capacity '+JSON.stringify({rows:plan.rows.length,bytes:Buffer.byteLength(JSON.stringify(plan.rows)),durationMs:Math.round(performance.now()-started),heapDeltaBytes:process.memoryUsage().heapUsed-before})+'\n');
  });
 });
