@@ -13,6 +13,7 @@ vi.mock('@tanstack/solid-virtual', () => ({
     getVirtualItems: () => [{ index: 0, start: 0 }, { index: 1, start: 32 }],
     getTotalSize: () => 64,
     measureElement: () => {},
+    scrollToOffset: () => {},
   }),
 }));
 
