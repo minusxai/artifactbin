@@ -26,8 +26,11 @@
  * bytes must never race the ones the first screen paints with.
  */
 import { agentDiscoveryHead, agentDiscoveryTail } from '@/lib/agent-discovery';
+import { createElement } from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
 import type { IslandPageData } from '@/lib/islands/contract';
 import { STORY_CHROME_CSS } from '@/lib/story-runtime/chrome-css';
+import { OutlineRail } from '@/lib/story-runtime/outline-rail';
 import { STORY_ROOT_ID } from '@/lib/story-runtime/contract';
 import { fontPreloadTags } from '@/lib/story/first-screen-fonts';
 import { inlineStoryElement } from '@/lib/story/inline-story-html';
@@ -45,7 +48,11 @@ export const assembleReaderPage: AssembleReaderPage = (input: AssembleInput): As
   const help = input.head?.help ?? null;
   const module = compiled.module;
 
-  const story = storyElement(fillChartSlots(input.story, input.snapshot?.drawings ?? {}), input.colorMode, input.theme);
+  const storyHtml = fillChartSlots(input.story, input.snapshot?.drawings ?? {});
+  const withOutline = input.documentChrome !== false && compiled.outline?.length
+    ? `<div class="${compiled.outlinePlan ? 'mx-reading mx-reading--plan' : 'mx-reading'}">${renderToStaticMarkup(createElement(OutlineRail, { entries: compiled.outline }))}${storyHtml}</div>`
+    : storyHtml;
+  const story = storyElement(withOutline, input.colorMode, input.theme);
 
   const islandPreloads = module ? unique([module.url, ...module.imports]) : [];
   const behaviorSrcs = unique(compiled.behaviors.map((behavior) => behaviorUrl(build, behavior)).filter((url): url is string => !!url));

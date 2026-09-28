@@ -326,6 +326,7 @@ export async function compiledPageFor(row: ArtifactRow, page: PreparedPage, read
     const behaviors = [...new Set([...(reader.behaviors ?? []), ...compiled.behaviors])].filter((b) => !(bare && b === DECK_BEHAVIOR));
     const assembled = assembleReaderPage({
       compiled: { ...compiled, behaviors },
+      documentChrome: !bare,
       story: bare ? withoutDeckChrome(story) : story,
       css: page.css,
       fontPreloads: [...page.fontPreloads, ...(reader.chromeFonts ?? [])],
