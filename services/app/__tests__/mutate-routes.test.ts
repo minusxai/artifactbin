@@ -1,3 +1,5 @@
+import {getDb} from '@/lib/db';
+import {revokeToken} from '@/lib/tokens';
 import {observedRequest} from '@/__tests__/conditional-request';
 /**
  * The WRITE endpoints:
@@ -64,7 +66,7 @@ beforeEach(async () => {
 
 describe('POST /a/<id>/mutate — the document\'s door', () => {
   it('a browser operation key recovers the same reply without repeating the write', async () => {
-    const {ds, doc} = await poll();
+    const {ds, doc, t} = await poll();
     const body = {mutation:'vote',args:{choice:'ramen'},operationKey:'browser-operation-once-0001'};
     const first = await mutate(doc, body);
     expect(first.status, await first.clone().text()).toBe(200);
@@ -75,6 +77,12 @@ describe('POST /a/<id>/mutate — the document\'s door', () => {
     const mismatch = await mutate(doc, {...body,args:{choice:'tacos'}});
     expect(mismatch.status).toBe(409);
     expect((await mismatch.json()).error).toBe('idempotency_mismatch');
+    const apiReplay=await mutateDatasetRoute(request(`/api/artifacts/${doc}/mutate`,{method:'POST',token:t.token,json:{name:'vote',args:body.args},headers:{'Idempotency-Key':body.operationKey}}),params({id:doc}));
+    expect(await apiReplay.json()).toEqual({id:ds,version:saved.version,affected:saved.affected,rowCount:saved.rowCount});
+    await (await getDb()).query("UPDATE artifacts SET source=NULL,document=NULL,meta='{}'::jsonb WHERE id=$1",[doc]);
+    expect(await (await mutate(doc,body)).json()).toEqual(saved);
+    await revokeToken(t.id);
+    expect((await mutate(doc,body)).status).not.toBe(200);
   });
 
   it('an authenticated owner of a public document runs a declared mutation; the dataset gains a version and its queries see the row', async () => {

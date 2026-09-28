@@ -8,7 +8,7 @@
  * waits for the live stream to tell this document about its own write.
  */
 import { describe, expect, it, vi } from 'vitest';
-import { ACCESS_PENDING, createDataflowStore, type QueryTransport } from '@/lib/story-runtime/store';
+import { ACCESS_PENDING, createDataflowStore, type QueryTransport,type StoreWriteEvent } from '@/lib/story-runtime/store';
 import type { DataflowState, Scalar } from '@/lib/story/dataflow';
 import type { MutationRequest } from '@/lib/story/mutation-request';
 import { compiledOf } from '@/test/helpers/compiled';
@@ -342,4 +342,24 @@ describe('write checks', () => {
     expect(settled).toBe(true);
     expect(store.mutationUnavailable('vote')).toBeNull();
   });
+});
+
+it('retains the notification operation key and zone across uncertain retries but creates a new one for a new gesture',async()=>{
+ const flow={...FLOW,mutations:FLOW.mutations.map(m=>({...m,notifies:true as const}))};
+ const requests:MutationRequest[]=[];
+ let rejectFirst=true;
+ const transport:QueryTransport={run:async()=>({tables:{},errors:{},mutationAccess:{vote:null}}),page:async()=>{throw new Error('unused');},mutate:async request=>{requests.push(request);if(rejectFirst){rejectFirst=false;throw new Error('lost response');}return {dataset:'abc123',mutationRunId:'saved-run'};}};
+ const store=createDataflowStore({flow,state:STATE},{transport,debounceMs:0});
+ await expect(store.mutate('vote')).rejects.toThrow('lost response');
+ const events:StoreWriteEvent[]=[];store.subscribeWrites(event=>events.push(event));
+ const saved=requests[0]!;
+ expect(saved.operationKey).toMatch(/^[A-Za-z0-9_-]{16,128}$/);
+ expect(saved.tz).toBeTruthy();
+ await store.mutate(saved);
+ expect(requests[1]!.operationKey).toBe(saved.operationKey);
+ expect(requests[1]!.tz).toBe(saved.tz);
+ expect(events).toContainEqual(expect.objectContaining({type:'written',mutationRunId:'saved-run'}));
+ await store.mutate('vote');
+ expect(requests[2]!.operationKey).not.toBe(saved.operationKey);
+ store.dispose();
 });

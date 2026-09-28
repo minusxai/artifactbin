@@ -9,7 +9,7 @@ export function normalizeMutationOperation(request:MutationOperationRequest):Mut
  ...(request.tz!==undefined?{tz:request.tz}:{}),...(request.expectedState!==undefined?{expectedState:request.expectedState}:{})};
 }
 export function mutationInitiator(actor:Pick<TokenActor,'userId'|'tokenId'>,execution:'human'|'agent',agentLabel:string|null=null):MutationInitiator{
- return {principal:actor.userId?{kind:'user',id:actor.userId}:actor.tokenId?{kind:'token',id:actor.tokenId}:{kind:'anonymous'},execution,agentLabel};
+ return {principal:actor.tokenId?{kind:'token',id:actor.tokenId}:actor.userId?{kind:'user',id:actor.userId}:{kind:'anonymous'},execution,agentLabel};
 }
 export const documentMutationReply=(success:MutationOperationSuccess):MutationReply=>({status:200,body:{mutationOperation:success}});
 export async function completeDocumentMutationReceipt(tx:Queryable,receipt:MutationReceipt,success:MutationOperationSuccess):Promise<void>{

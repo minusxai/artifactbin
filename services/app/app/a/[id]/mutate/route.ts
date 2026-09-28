@@ -79,7 +79,7 @@ export async function POST(request: Request, ctx: { params: Promise<{ id: string
   const key=parsed.operationKey??request.headers.get('Idempotency-Key');
   if(!key||(!actor.viewer?.userId&&!actor.tokenId))return work();
   const principal={userId:actor.viewer?.userId??null,tokenId:actor.tokenId!};
-  const reply=await durableMutation(principal,request.url,key,normalizeMutationOperation({documentId:id,...parsed}),async receipt=>{const response=await work(receipt);return {status:response.status,body:await response.json()};},{initiator:mutationInitiator(principal,request.headers.has('Authorization')?'agent':'human')});
+  const reply=await durableMutation(principal,request.url,key,normalizeMutationOperation({documentId:id,...parsed}),async receipt=>{const response=await work(receipt);return {status:response.status,body:await response.json()};},{initiator:mutationInitiator(principal,actor.credential==='session'?'human':'agent')});
   const adapted=adaptMutationOperationReply(reply,'browser');
   // Older non-Notify writes store the dataset-shaped success in their atomic receipt.
   if(adapted.status===200&&typeof adapted.body.id==='string')adapted.body={ok:true,dataset:adapted.body.id,version:adapted.body.version,affected:adapted.body.affected,rowCount:adapted.body.rowCount};

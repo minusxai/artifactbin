@@ -32,7 +32,7 @@ export function createAuthenticatedTransport(id: string, fetcher: typeof fetch =
     mutate: async (request) => {
       const result = await post(`${base}/mutate`, {tz:localZone(),...request});
       if (!result.ok) throw new Error(result.detail ?? result.error ?? 'write failed');
-      return {dataset:result.dataset ?? '',...(result.local ? {local:result.local} : {})};
+      return {dataset:result.dataset ?? '',...(result.mutationRunId?{mutationRunId:result.mutationRunId}:{}),...(result.local ? {local:result.local} : {})};
     },
     importAsset: async (url, kind, signal) => {
       const query = new URLSearchParams({u:url,...(kind ? {kind} : {})});
