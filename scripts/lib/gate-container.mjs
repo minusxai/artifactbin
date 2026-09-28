@@ -3,6 +3,7 @@
  * `docker run` line — so each can be tested without a container engine.
  */
 import { createHash } from 'node:crypto';
+import { gateOf } from '../gates.manifest.mjs';
 
 /** What a container asks for unless told otherwise: the shape of one CI gate runner (4 vCPUs). */
 export const DEFAULT_CPUS = 4;
@@ -62,10 +63,10 @@ export function parseArgs(argv) {
  */
 export function checkGates(requested, known) {
   const unknown = requested.filter((name) => !known.includes(name));
-  const refused = requested.filter((name) => Object.hasOwn(CONTAINER_REFUSALS, name));
+  const refused = requested.filter((name) => Object.hasOwn(CONTAINER_REFUSALS, gateOf(name)));
   const problems = [];
   if (unknown.length) problems.push(`unknown gate(s): ${unknown.join(', ')}. Known: ${known.join(', ')}`);
-  for (const name of refused) problems.push(`${name} cannot run in a gate container: it ${CONTAINER_REFUSALS[name]}`);
+  for (const name of refused) problems.push(`${name} cannot run in a gate container: it ${CONTAINER_REFUSALS[gateOf(name)]}`);
   if (problems.length) throw new Error(problems.join('\n'));
 }
 

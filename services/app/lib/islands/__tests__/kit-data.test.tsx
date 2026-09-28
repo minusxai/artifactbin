@@ -22,6 +22,7 @@ import { rowsDigest } from '../digest';
 import { DRAWING_CLASS } from '../chart';
 import { createIslandRuntime } from '../rt';
 import { createDataflowStore, type DataflowStore, type QueryTransport } from '@/lib/story-runtime/store';
+import type { CompiledDataflow } from '@/lib/story/compiled-dataflow';
 import { Button } from '../kit/basic';
 import { compiledOf } from '@/test/helpers/compiled';
 import { initialTables, initialValues } from '@/lib/story/compiled-flow';
@@ -92,6 +93,31 @@ describe('Select', () => {
 });
 
 describe('DataTable', () => {
+  it('repaints a server query result through the store bridge', async () => {
+    const columns: TableResult['columns'] = [{ name: 'id', type: 'number' }, { name: 'region', type: 'string' }, { name: 'amount', type: 'number' }];
+    const west = { rows: [{ id: 1, region: 'west', amount: 120 }, { id: 3, region: 'west', amount: 30 }], columns };
+    const east = { rows: [{ id: 2, region: 'east', amount: 90 }], columns };
+    const flow: CompiledDataflow = { imports: [], mutations: [], values: [{ name: 'region', kind: 'scalar', type: 'string', default: 'west' }], queries: [{ name: 'orders', engine: 'postgres', source: 'DS1', sql: 'select id, region, amount from orders where region=$region', params: ['region'], reads: { imports: [], queries: [], values: ['region'], builtins: [] }, columns, start: 0, end: 0 }] };
+    const run = vi.fn(async () => ({ tables: { orders: east }, errors: {} }));
+    const rt = createIslandRuntime({ dataflow: { flow, values: { region: 'west' }, results: { tables: { orders: west }, errors: {} } } }, input => createDataflowStore(input, { transport: { run, page: vi.fn() }, debounceMs: 0 }));
+    const height = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'clientHeight');
+    Object.defineProperty(HTMLElement.prototype, 'clientHeight', { configurable: true, get() { return 300; } });
+    try {
+      const { host, dispose } = mount(rt.context, () => <DataTable data="$orders" />);
+      rt.store!.start();
+      expect(host.querySelector('tbody')?.textContent).toContain('120');
+      rt.context.setValue('region', 'east');
+      await vi.waitFor(() => expect(host.querySelector('tbody')?.textContent).toContain('90'));
+      expect(host.querySelector('tbody')?.textContent).not.toContain('120');
+      expect(run).toHaveBeenCalledTimes(1);
+      dispose();
+    } finally {
+      rt.dispose();
+      if (height) Object.defineProperty(HTMLElement.prototype, 'clientHeight', height);
+      else Reflect.deleteProperty(HTMLElement.prototype, 'clientHeight');
+    }
+  });
+
   it('shows the matching row when a filter shrinks a scrolled virtual table', async () => {
     const height = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'clientHeight');
     Object.defineProperty(HTMLElement.prototype, 'clientHeight', { configurable: true, get() { return (this as HTMLElement).classList.contains('overflow-auto') ? 420 : 0; } });

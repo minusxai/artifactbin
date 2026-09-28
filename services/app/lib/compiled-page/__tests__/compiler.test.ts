@@ -49,6 +49,28 @@ async function inputOf(source: string, template: string | null = null): Promise<
 const dom = (html: string) => new JSDOM(`<div id="r">${html}</div>`).window.document.getElementById('r')!;
 
 describe('compilePage', () => {
+  it('compiles a native Value input as a live binding', async () => {
+    const source = '<Helmet><Value name="region" type="string" default="west" /></Helmet><input aria-label="Region" value="$region" />';
+    const generated = generate(await inputOf(source));
+    expect(generated.islands).toContain('<BoundNative tag={"input"} bind={$d0}');
+    expect(generated.islands).toContain('JSON.parse("{\\\"value\\\":\\\"region\\\"}")');
+    expect(generated.islandRefs.flatMap((island) => island.kit)).toContain('BoundNative');
+  });
+
+  it('keeps a bound image live and sends its source template to the image island', async () => {
+    const source = '<Helmet><Value name="pick" type="string" default="https://example.test/a.png" /></Helmet><img src="$pick" alt="the pick" />';
+    const generated = generate(await inputOf(source));
+    expect(generated.islands).toContain('BoundImage');
+    expect(generated.islands).toContain('template={"$pick"}');
+    expect(generated.skeleton).not.toContain('src="$pick"');
+  });
+
+  it('routes row image attributes through the image helper after row substitution', async () => {
+    const source = '<Helmet><Value name="covers" type="table" value={[{"id":1,"cover_ref":"ref:Abc123"}]} /></Helmet><For each={$covers}><img src="$_row.cover_ref" alt="cover" /></For>';
+    const generated = generate(await inputOf(source));
+    expect(generated.islands).toContain('rowImageAttrs($rowAttrs(');
+    expect(generated.islandRefs.flatMap((island) => island.kit)).not.toContain('rowImageAttrs');
+  });
   it('stores the legacy outline decision and heading paths with the version', async () => {
     const source = '<article><h2>One &amp; all</h2><h3>Part</h3><h2>Two</h2><h2>Three</h2></article>';
     const page = await compilePage(await inputOf(source, 'plan'), loadCompilerBuild());

@@ -118,6 +118,12 @@ export const COMPILED_LEGS = Object.freeze([
   { gate: 'editable-table', timeoutMs: 120_000 },
   { gate: 'reading-chrome', timeoutMs: 110_000 },
   { gate: 'dataflow', timeoutMs: 60_000 },
+  { gate: 'local-sql-state', timeoutMs: 60_000 },
+  { gate: 'postgres-datasets', timeoutMs: 60_000 },
+  { gate: 'row-images', timeoutMs: 60_000 },
+  { gate: 'image-upload', timeoutMs: 110_000 },
+  { gate: 'web-assets', timeoutMs: 60_000 },
+  { gate: 'libraries', timeoutMs: 60_000 },
   { gate: 'annotations', timeoutMs: 60_000 },
   { gate: 'comment-targets', timeoutMs: 60_000 },
   { gate: 'inplace-edit', timeoutMs: 180_000 },
@@ -186,6 +192,9 @@ export function browsersFor(names) {
   return [...new Set(names.flatMap(name => specFor(name).browsers ?? ['chromium']))].sort();
 }
 
+/** Gates whose first attempt must not race another gate on the same CI runner. */
+export const ISOLATED_GATES = Object.freeze(['editor-v2', 'hydration', 'offline-file']);
+
 /**
  * Cross-browser system setup measured 91s on CI run 35740918148. Match the
  * timeout-based balancer's 3x scale (90s × 3) without changing gate deadlines.
@@ -193,9 +202,8 @@ export function browsersFor(names) {
  */
 export function shardWeight(name) {
   const spec = specFor(name);
-  // editor-v2's long selection flow passed alone after losing a parallel race on CI run
-  // 36422408100; the retry made its shard exceed 240s. With nine bins, this weight
-  // leaves it alone without changing the gate's own timeout or coverage.
+  // Below the eleven-runner CI matrix, this weight keeps editor-v2's long
+  // selection flow apart from other gates when the bins permit it.
   return spec.timeoutMs
     + (browsersFor([name]).some(browser => browser !== 'chromium') ? 270_000 : 0)
     + (name === 'editor-v2' ? 400_000 : 0);

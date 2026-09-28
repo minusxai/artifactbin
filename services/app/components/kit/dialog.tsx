@@ -133,10 +133,11 @@ export function DialogContent({children, run, onSubmitMutation, unavailable, con
     if (open && !dialog.open) {
       setError(null);
       if (artifactScoped) dialog.show(); else dialog.showModal();
-      // show() performs the native dialog focusing steps too. Preserve its
-      // chosen field: React autoFocus does not leave an [autofocus] attribute,
-      // so focusing the container here would silently undo that choice.
-      dialog.querySelector<HTMLElement>('[autofocus]')?.focus({preventScroll: true});
+      // React autoFocus leaves no [autofocus] attribute. Native show() can
+      // focus a framed dialog's container, so choose its first usable control.
+      if (artifactScoped && (document.activeElement === dialog || !dialog.contains(document.activeElement)))
+        dialog.querySelector<HTMLElement>(FOCUSABLE)?.focus({preventScroll: true});
+      else dialog.querySelector<HTMLElement>('[autofocus]')?.focus({preventScroll: true});
     }
     if (!open && dialog.open) {
       dialog.close();

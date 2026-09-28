@@ -35,6 +35,16 @@ afterEach(() => {
 });
 
 describe('the island live stream', () => {
+  it('leaves editor saves to the editor when a page without islands holds the stream', () => {
+    vi.stubGlobal('EventSource', FakeEventSource);
+    const reload = vi.fn();
+    const win = new Proxy(window, { get: (target, key) => (key === 'location' ? { hash: '#edit', reload } : Reflect.get(target, key, target)) });
+    const stop = startIslandLive(win, 'abc', 'e1');
+    FakeEventSource.made[0]!.onmessage!(new MessageEvent('message', { data: JSON.stringify({ editId: 'e2', version: 2 }) }));
+    expect(updateCompiledStory).not.toHaveBeenCalled();
+    expect(reload).not.toHaveBeenCalled();
+    stop();
+  });
   it('names the snapshot\'s marks in the stream address, and nothing when the page was served none', () => {
     expect(islandLiveUrl('abc', 'DS1.aaaaaaaaaaaa~DS2.bbbbbbbbbbbb')).toBe('/a/abc/events?since=DS1.aaaaaaaaaaaa~DS2.bbbbbbbbbbbb');
     expect(islandLiveUrl('abc', null)).toBe('/a/abc/events');

@@ -127,7 +127,7 @@ export const KIT: Readonly<Record<string, KitMeta>> = {
   // Embeds with behaviour in a lazy chunk (lib/islands/kit/embed, their own family): today's managed frame and map.
   Iframe: { mod: 'embed', island: true, api: ['title', 'height', 'compiled'], dom: 'box', noChildren: true },
   DeckGL: { mod: 'embed', island: true, api: ['data', 'layers', 'basemap', 'initialViewState', 'tooltip', 'legend', 'title', 'height', 'colorMode'], dom: 'box', grid: true },
-  Dialog: { mod: 'dialog', island: true, api: ['defaultOpen'] }, DialogTrigger: { mod: 'dialog', api: ['wrapsControl', 'disabled'] }, DialogClose: { mod: 'dialog', api: ['wrapsControl', 'disabled'] }, DialogContent: { mod: 'dialog', api: ['run', 'args', 'stacked'] },
+  Dialog: { mod: 'dialog', island: true, api: ['defaultOpen', 'open'] }, DialogTrigger: { mod: 'dialog', api: ['wrapsControl', 'disabled'] }, DialogClose: { mod: 'dialog', api: ['wrapsControl', 'disabled'] }, DialogContent: { mod: 'dialog', api: ['run', 'args', 'stacked'] },
 };
 /** The rail's miniature stubs its embeds (StoryRuntimeApp PREVIEW_REGISTRY). */
 const PREVIEW_EMBEDS: Readonly<Record<string, string>> = { Question: 'chart', Number: '#', DataTable: 'table', Video: 'video' };
@@ -558,6 +558,14 @@ export function generate(input: GenerateInput): Generated {
     }
     const lower = node.tag.toLowerCase();
     const tag = safeTag(SVG_TAG_CASE[lower] ?? lower);
+    // A source chosen by a Value is known only in the reader. Its island asks the scoped asset
+    // door for the URL and never sends the authored URL to the browser as an image request.
+    const source = !ctx.row && lower === 'img' ? node.attributes.find((a) => a.name.toLowerCase() === 'src' && a.value.static && carriesRef(a.value.json)) : undefined;
+    if (source) {
+      useKit('BoundImage', mode, ctx);
+      const props = rawBuildProps(node.attributes.filter((a) => a !== source), false, node.tag, path, undefined, {});
+      return `<BoundImage template={${lit(String(source.value.static ? source.value.json : ''))}} props={${json(Object.fromEntries(domAttrs(tag, props)))}} />`;
+    }
     // A `$`-bound native form control (interpreter boundAttrs → StoryRuntimeApp NativeBoundControl).
     const boundTable = ['input', 'select', 'textarea'].includes(lower) ? REF_ATTRS.html[lower] : null;
     const boundAttrs = boundTable ? node.attributes.filter((a) => boundTable[a.name.toLowerCase()] && a.value.static && refName(a.value.json)) : [];
@@ -574,7 +582,9 @@ export function generate(input: GenerateInput): Generated {
     const attrs = domAttrs(tag, props);
     const reactive = node.attributes.filter((a) => !a.value.static && REACTIVE_BOOLEAN_PROPS.has(a.name) && isReactiveExpression(a.value.reactive));
     const booleanJsx = reactive.map((a) => ` {...(rt.expr(${json(a.value.static ? null : a.value.reactive)}, ${ctx.row ?? 'undefined'}) ? { ${safeAttr(a.name)}: true } : {})}`).join('');
-    const open = ctx.row ? `<${tag} {...${rowAttrsFn(mode, ctx)}(${json(Object.fromEntries(attrs))}, ${ctx.row}, ${ctx.scope})}${booleanJsx}>` : `<${tag}${attrsJsx(attrs)}${booleanJsx}>`;
+    if (ctx.row && lower === 'img') (mode === 'static' ? kitUsed.skeleton : kitUsed.islands).add('rowImageAttrs');
+    const rowAttrs = ctx.row ? `${rowAttrsFn(mode, ctx)}(${json(Object.fromEntries(attrs))}, ${ctx.row}, ${ctx.scope})` : '';
+    const open = ctx.row ? `<${tag} {...${lower === 'img' ? `rowImageAttrs(${rowAttrs})` : rowAttrs}}${booleanJsx}>` : `<${tag}${attrsJsx(attrs)}${booleanJsx}>`;
     if (VOID.test(lower)) return open.replace(/>$/, ' />');
     return `${open}${children(inner)}</${tag}>`;
   }
@@ -705,7 +715,7 @@ export function generate(input: GenerateInput): Generated {
 
   const kitImports = (set: Set<string>): string => {
     const byMod: Record<string, string[]> = {};
-    for (const tag of set) (byMod[tag === 'BoundNative' ? 'controls' : CELL_EXPORTS.has(tag) ? 'cells' : KIT[tag]!.mod] ??= []).push(tag);
+    for (const tag of set) (byMod[tag === 'BoundNative' ? 'controls' : tag === 'BoundImage' || tag === 'rowImageAttrs' ? 'files' : CELL_EXPORTS.has(tag) ? 'cells' : KIT[tag]!.mod] ??= []).push(tag);
     return Object.entries(byMod).sort(([a], [b]) => a.localeCompare(b)).map(([mod, tags]) => `import { ${tags.sort().map(safeProp).join(', ')} } from ${lit(`@mx/kit/${safeTag(mod)}`)};\n`).join('');
   };
   const dataConsts = data.map((text, i) => `const $d${i} = JSON.parse(${lit(text)});\n`).join('');

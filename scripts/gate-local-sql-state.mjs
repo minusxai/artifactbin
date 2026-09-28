@@ -3,6 +3,7 @@ import { servedTopLevel } from './lib/page-facts.mjs';
 import { createChecker } from './lib/assert.mjs';
 import {fixtureFetch as fetch} from './lib/fixture-http.mjs';
 import { artifactDocument } from './lib/artifact-document.mjs';
+import { compiledReader, legacyOnly } from './lib/gate-reader.mjs';
 /**
  * Gate: reactive JSX, document-local SQL, and Dialog over both document
  * transports. Local state belongs to one loaded document: once the page's
@@ -64,25 +65,38 @@ const exercise = async (page, framed, documentId) => {
       try { routeBodies.push({url:request.url(), body:request.postDataJSON()}); } catch {}
     }
   });
-  const engine = page.waitForResponse((r) => r.url().endsWith('.wasm') && r.ok(), {timeout:20_000}).then(() => true, () => false);
+  const engine = compiledReader ? null : page.waitForResponse((r) => r.url().endsWith('.wasm') && r.ok(), {timeout:20_000}).then(() => true, () => false);
   await page.goto(`${B}/a/${documentId}?$choice=b`, {waitUntil:'load'});
   const frame = framed ? await artifactDocument(page) : page.mainFrame();
-  await frame.waitForFunction(() => document.querySelector('[aria-label="Rows"]')?.textContent?.trim() === '1', null, {timeout:20_000}).catch(async error => {
+  const root = framed ? '#root ' : '';
+  const named = label => `${root}[aria-label="${label}"]`;
+  await frame.waitForFunction(root => document.querySelector(`${root}[aria-label="Rows"]`)?.textContent?.trim() === '1', root, {timeout:20_000}).catch(async error => {
     throw new Error(`${error.message}; page=${(await frame.locator('body').innerText()).slice(0, 1000)}`);
   });
-  check((await frame.textContent('[aria-label="Branch"]')) === 'bee', `${framed ? 'framed' : 'top-level'} URL scalar seeds the ternary`);
+  if (compiledReader) await frame.waitForFunction(() => document.documentElement.hasAttribute('data-mx-ready'));
+  check((await frame.textContent(named('Branch'))) === 'bee', `${framed ? 'framed' : 'top-level'} URL scalar seeds the ternary`);
   // The first paint is the server's; the page's engine loads behind it.
-  check(await engine, `${framed ? 'framed' : 'top-level'} page loaded its SQLite engine`);
+  const loadedEngine = engine ? await engine : false;
+  legacyOnly(check, 'the compiled page loads its SQLite engine in a lazy chunk; local edits without route calls below prove the visible behavior', () => check(loadedEngine, `${framed ? 'framed' : 'top-level'} page loaded its SQLite engine`));
   await page.waitForTimeout(500);
-  await frame.click('[aria-label="Add draft"]');
-  await frame.waitForFunction(() => document.querySelector('[aria-label="Rows"]')?.textContent?.trim() === '2');
-  await frame.click('[aria-label="Add draft"]');
-  await frame.waitForFunction(() => document.querySelector('[aria-label="Rows"]')?.textContent?.trim() === '3');
+  await frame.click(named('Add draft'));
+  await frame.waitForFunction(root => document.querySelector(`${root}[aria-label="Rows"]`)?.textContent?.trim() === '2', root);
+  await frame.click(named('Add draft'));
+  await frame.waitForFunction(root => document.querySelector(`${root}[aria-label="Rows"]`)?.textContent?.trim() === '3', root);
+  await frame.waitForFunction(root => !document.querySelector(`${root}[aria-label="Add draft"]`)?.hasAttribute('disabled'), root);
   check(true, `${framed ? 'relayed' : 'direct'} repeated local table edits feed the dependent query`);
-  await frame.click('[aria-label="Open dialog"]');
-  check(await frame.locator('[aria-label="Draft dialog"]').evaluate(el => el.open) && await frame.locator('[aria-label="Note"]').evaluate(el => el === document.activeElement), 'Dialog opens and focuses its field');
-  await frame.fill('[aria-label="Note"]', 'changed');
-  const validity = await frame.locator('[aria-label="Draft dialog"]').evaluate(dialog => {
+  await frame.click(named('Open dialog'));
+  await frame.locator(named('Draft dialog')).waitFor({ state: 'visible', timeout: 15_000 });
+  const note = frame.locator(named('Note'));
+  await note.waitFor({ state: 'visible', timeout: 15_000 });
+  const noteHandle = await note.elementHandle();
+  await frame.waitForFunction(el => el === el.getRootNode().activeElement, noteHandle, { timeout: 5000 }).catch(() => {});
+  const opened = await frame.locator(named('Draft dialog')).isVisible();
+  const focused = await note.evaluate(el => el === el.getRootNode().activeElement);
+  const focusState = opened && focused ? '' : JSON.stringify(await note.evaluate(el => ({ active: el.getRootNode().activeElement?.tagName, label: el.getRootNode().activeElement?.getAttribute('aria-label'), root: el.getRootNode().nodeName })));
+  check(opened && focused, `Dialog opens and focuses its field${focusState ? ` (${focusState})` : ''}`);
+  await frame.fill(named('Note'), 'changed');
+  const validity = await frame.locator(named('Draft dialog')).evaluate(dialog => {
     const field = dialog.querySelector('[aria-label="Note"]');
     const submit = dialog.querySelector('[aria-label="Save dialog"]');
     const form = dialog.querySelector('form');
@@ -90,22 +104,22 @@ const exercise = async (page, framed, documentId) => {
   });
   check(validity.value === 'changed' && !validity.disabled && validity.valid && validity.formValid && !validity.submitDisabled,
     `Dialog field is filled, enabled, and valid before submit (${JSON.stringify(validity)})`);
-  await frame.click('[aria-label="Save dialog"]');
+  await frame.click(named('Save dialog'));
   // set= changes Count on the click; the Dialog closes once its run= write has committed.
-  await frame.waitForFunction(() => document.querySelector('[aria-label="Count"]')?.textContent === '1' && document.querySelector('[aria-label="Draft dialog"]')?.open === false, null, {timeout:15_000});
-  check((await frame.locator('[aria-label="Draft dialog"]').evaluate(el => el.open)) === false && (await frame.textContent('[aria-label="Positive"]')) === 'positive', 'submit closes Dialog and set= drives && rendering');
-  check(await frame.locator('[aria-label="Open dialog"]').evaluate(el => el === document.activeElement), 'successful submit restores focus to the trigger');
-  await frame.click('[aria-label="Open dialog"]');
-  await frame.press('[aria-label="Note"]', 'Escape');
-  await frame.waitForFunction(() => !document.querySelector('[aria-label="Draft dialog"]')?.open);
-  check(await frame.locator('[aria-label="Open dialog"]').evaluate(el => el === document.activeElement), 'Escape closes Dialog and restores focus');
+  await frame.waitForFunction(root => document.querySelector(`${root}[aria-label="Count"]`)?.textContent === '1' && document.querySelector(`${root}[aria-label="Draft dialog"]`)?.open === false, root, {timeout:15_000});
+  check((await frame.locator(named('Draft dialog')).evaluate(el => el.open)) === false && (await frame.textContent(named('Positive'))) === 'positive', 'submit closes Dialog and set= drives && rendering');
+  check(await frame.locator(named('Open dialog')).evaluate(el => el === document.activeElement), 'successful submit restores focus to the trigger');
+  await frame.click(named('Open dialog'));
+  await frame.press(named('Note'), 'Escape');
+  await frame.waitForFunction(root => !document.querySelector(`${root}[aria-label="Draft dialog"]`)?.open, root);
+  check(await frame.locator(named('Open dialog')).evaluate(el => el === document.activeElement), 'Escape closes Dialog and restores focus');
   const snapshots = routeBodies.filter(call => call.body?.localTables && Object.keys(call.body.localTables).length);
   check(snapshots.length === 0 && !routeBodies.some(call => call.url.endsWith('/mutate')), `${framed ? 'framed' : 'top-level'} local writes and the queries over them ran in the page: no local snapshot reached a route (${routeBodies.map(call => call.url.split('/').pop()).join(', ')})`);
   await page.waitForFunction(() => new URLSearchParams(location.search).get('$count') === '1', null, {timeout:5_000});
   await page.reload({waitUntil:'load'});
   const reloaded = framed ? await artifactDocument(page) : page.mainFrame();
-  await reloaded.waitForFunction(() => document.querySelector('[aria-label="Rows"]')?.textContent?.trim() === '1', null, {timeout:20_000});
-  check((await reloaded.textContent('[aria-label="Count"]')) === '1' && (await reloaded.textContent('[aria-label="Branch"]')) === 'bee', 'reload resets local rows while URL scalar changes persist');
+  await reloaded.waitForFunction(root => document.querySelector(`${root}[aria-label="Rows"]`)?.textContent?.trim() === '1', root, {timeout:20_000});
+  check((await reloaded.textContent(named('Count'))) === '1' && (await reloaded.textContent(named('Branch'))) === 'bee', 'reload resets local rows while URL scalar changes persist');
 };
 
 const anonymous = await browser.newPage();
