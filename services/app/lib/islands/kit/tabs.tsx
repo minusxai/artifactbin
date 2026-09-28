@@ -1,4 +1,5 @@
 /* @jsxImportSource solid-js */
+import { useIsland } from '../context';
 import { createContext, createEffect, createSignal, createUniqueId, on, onCleanup, onMount, splitProps, untrack, useContext, type JSX } from 'solid-js';
 
 /**
@@ -111,18 +112,27 @@ export function TabsTrigger(props: JSX.ButtonHTMLAttributes<HTMLButtonElement> &
 }
 
 export function TabsContent(props: JSX.HTMLAttributes<HTMLDivElement> & { value: string; forceMount?: boolean }) {
-  const ctx = state(); const { value, forceMount: _forceMount, style: authorStyle, ...rest } = props; const active = () => ctx.value() === value; let panel!: HTMLDivElement;
+  const ctx = state(); const island = useIsland(); const { value, forceMount: _forceMount, style: authorStyle, ...rest } = props; const active = () => ctx.value() === value; let panel!: HTMLDivElement;
   if (props.id) ctx.registerContent(value, props.id);
   // Radix's isMountAnimationPreventedRef: true for the panel active on mount, false from the first frame.
   let prevented = untrack(active);
-  onMount(() => { const frame = requestAnimationFrame(() => { prevented = false; }); onCleanup(() => cancelAnimationFrame(frame)); });
   // Each later render writes `animationDuration` as React does: only when it changed, and '' to clear it.
   let written: string | undefined = prevented ? '0s' : undefined;
-  createEffect(on(ctx.value, () => {
+  const rerender = () => {
     const next = prevented ? '0s' : undefined;
     if (next !== written) panel.style.animationDuration = next ?? '';
     written = next;
-  }, { defer: true }));
+  };
+  // Today's reader re-renders the whole story when the document's query results land in the browser,
+  // after the first frame: an active panel then drops its mount style (`style=""`). A compiled page
+  // serves those results, so its store never lands them; a document that runs queries is re-rendered
+  // here, once, at the same point — a document without queries keeps the mount style, as it does today.
+  const runsQueries = !!island.store()?.flow.queries.length;
+  onMount(() => {
+    const frame = requestAnimationFrame(() => { prevented = false; if (runsQueries) rerender(); });
+    onCleanup(() => cancelAnimationFrame(frame));
+  });
+  createEffect(on(ctx.value, rerender, { defer: true }));
   // As an attribute: served as React serves it, and left alone while hydrating.
   const served = [typeof authorStyle === 'string' ? authorStyle : '', prevented ? 'animation-duration:0s' : ''].filter(Boolean).join(';') || undefined;
   return <div ref={panel} data-state={active() ? 'active' : 'inactive'} data-orientation={ctx.orientation} role="tabpanel" aria-labelledby={ctx.triggerId(value)} data-slot="tabs-content" id={props.id ?? ctx.contentId(value)} tabIndex={0} hidden={!active()} {...rest} {...({ 'attr:style': served } as JSX.HTMLAttributes<HTMLDivElement>)}>{active() ? props.children : null}</div>;

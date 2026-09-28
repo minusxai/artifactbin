@@ -65,7 +65,9 @@ export interface IslandContext extends IslandData, IslandWrites {
   /**
    * Where an island's overlay (Dialog, Popover, Tooltip content) portals: the first-party trusted
    * UI container (components/TrustedUi) when the page has one — the same destination today's React
-   * kit uses — else null, and the overlay renders in place. Read when the overlay opens.
+   * kit uses — else null. With null, Dialog and Popover content render in place; Tooltip content
+   * portals to `document.body`, as today's story tooltip (components/Tooltip, Radix's Portal) does.
+   * Read when the overlay opens.
    */
   trustedPortal(): HTMLElement | null;
   /** The lazy chart module (lib/islands/chart): Vega and lib/viz load on the first call, once per page. */

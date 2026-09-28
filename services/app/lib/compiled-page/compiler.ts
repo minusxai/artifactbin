@@ -41,6 +41,7 @@ import { discoverSlides, MIN_SLIDES_FOR_RAIL } from '@/lib/story-runtime/slides'
 import { createPreviewIdentityAllocator } from '@/lib/story-runtime/preview-identity';
 import { PUBLIC_BASE_URL } from '@/lib/config';
 import { RECIPES, cn } from '@/lib/islands/kit/recipes';
+import { peopleClasses } from '@/lib/islands/kit/recipes/people';
 import type { GeneratedSources } from './codegen-safety';
 import { CHART_SLOT_ATTR, EMPTY_LINK_HINTS, type CompileInput, type CompiledPage, type CompilerBuild, type IslandRef } from './contract';
 import { linkHintsOf } from './links';
@@ -113,7 +114,9 @@ export const KIT: Readonly<Record<string, KitMeta>> = {
   PopoverHeader: { mod: 'disclosure' }, PopoverTitle: { mod: 'disclosure' }, PopoverDescription: { mod: 'disclosure' },
   TooltipProvider: { mod: 'disclosure', island: true }, Tooltip: { mod: 'disclosure', island: true, api: ['defaultOpen'] }, TooltipTrigger: { mod: 'disclosure' }, TooltipContent: { mod: 'disclosure' },
   Avatar: { mod: 'disclosure', island: true, api: ['size'] }, AvatarImage: { mod: 'disclosure' }, AvatarFallback: { mod: 'disclosure' }, AvatarBadge: { mod: 'disclosure' }, AvatarGroup: { mod: 'disclosure' }, AvatarGroupCount: { mod: 'disclosure' },
-  User: { mod: 'people', island: true, api: ['userId', 'fallback', 'avatar', 'link'] }, UserImage: { mod: 'people', island: true, api: ['userId', 'fallback', 'size', 'decorative'] }, UserHandle: { mod: 'people', island: true, api: ['userId', 'fallback', 'link'] }, SignIn: { mod: 'people', island: true },
+  // A person's class depends on whom it resolves to in the browser (a guest's fallback, a card): every state's class
+  // is evaluated here (recipes/people peopleClasses) and handed to the port as `classes`.
+  User: { mod: 'people', island: true, api: ['userId', 'fallback', 'avatar', 'link', 'classes'] }, UserImage: { mod: 'people', island: true, api: ['userId', 'fallback', 'size', 'decorative', 'classes'] }, UserHandle: { mod: 'people', island: true, api: ['userId', 'fallback', 'link', 'classes'] }, SignIn: { mod: 'people', island: true },
   Dialog: { mod: 'dialog', island: true, api: ['defaultOpen'] }, DialogTrigger: { mod: 'dialog', api: ['wrapsControl', 'disabled'] }, DialogClose: { mod: 'dialog', api: ['wrapsControl', 'disabled'] }, DialogContent: { mod: 'dialog' },
 };
 /** The rail's miniature stubs its embeds (StoryRuntimeApp PREVIEW_REGISTRY). */
@@ -336,6 +339,8 @@ export function generate(input: GenerateInput): Generated {
         }
       }
       if (node.tag === 'Files') props.glyphs = input.glyphs ?? {};
+      const classes = peopleClasses(node.tag, props);
+      if (classes) props.classes = classes;
       const viz = props.viz as { recipe?: unknown } | undefined;
       if (node.tag === 'Question' && typeof viz?.recipe === 'string' && viz.recipe.startsWith('ref:')) props.recipeData = refData[viz.recipe.slice(4)] ?? null;
       const api: Props = Object.fromEntries((meta.api ?? []).filter((k) => props[k] !== undefined).map((k) => [k, props[k]]));

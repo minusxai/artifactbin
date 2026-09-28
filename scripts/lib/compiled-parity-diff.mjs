@@ -46,3 +46,61 @@ export function diffTrees(legacy, compiled) {
   legacy.forEach((n, i) => compare(n, compiled[i], String(i), out));
   return out;
 }
+
+/**
+ * SERVED-ELEMENT SURVIVAL on the compiled page: every element the server sent must still be in the story
+ * once it has hydrated. TWO EXEMPTIONS, each a replacement today's page makes by design:
+ *  - `undrawnMermaid`: the placeholder of a `<Mermaid>` figure served undrawn
+ *    (`figure[data-mx-mermaid-state="pending"] > p[role="status"]`, "Rendering diagram…", and anything in it),
+ *    which both pages replace with the drawing;
+ *  - `avatarReplaced`: an Avatar fallback (`[data-slot="avatar-fallback"]` and anything in it) whose avatar now
+ *    shows its LOADED image (`:scope > img[data-slot="avatar-image"]`, complete with a width) — Radix swaps the
+ *    fallback for the image once the browser has it, on both pages.
+ * Nothing else is excused: not a fallback still showing, not one whose image failed, not any other element.
+ *
+ * `records`: one per served element, `{ kept, undrawnMermaid, avatarReplaced }` — kept: still connected inside
+ * the story root; the other two as above, decided in the page.
+ */
+export function survivalOf(records) {
+  const served = records.length;
+  const survived = records.filter((r) => r.kept).length;
+  const exempt = records.filter((r) => !r.kept && (r.undrawnMermaid || r.avatarReplaced)).length;
+  return { served, survived, exempt, ok: served > 0 && survived + exempt === served };
+}
+
+/**
+ * THE GATE'S OWN SWITCH, OUT OF ATTRIBUTE VALUES. The two pages are loaded at `?reader=legacy` and
+ * `?reader=compiled`, and a link that returns the reader to the current address (SignIn's callbackUrl)
+ * carries that — plain or percent-encoded. Only this one query parameter, with exactly those two values,
+ * is removed; every other part of every value is compared as it is.
+ */
+const READER_PARAM = [
+  [/\?reader=(?:legacy|compiled)(?:&|(?=#|$))/g, (m) => (m.endsWith('&') ? '?' : '')],
+  [/&reader=(?:legacy|compiled)(?=&|#|$)/g, () => ''],
+  [/%3Freader%3D(?:legacy|compiled)(?:%26|(?=%23|&|"|$))/gi, (m) => (/%26$/i.test(m) ? '%3F' : '')],
+  [/%26reader%3D(?:legacy|compiled)(?=%26|%23|&|$)/gi, () => ''],
+];
+export function withoutReaderParam(value) {
+  return READER_PARAM.reduce((v, [re, to]) => v.replace(re, to), value);
+}
+/** The snapshot tree (SNAPSHOT's shape) with the switch removed from every attribute value. */
+export function stripReaderParam(nodes) {
+  return nodes.map((n) => ({ ...n, attrs: Object.fromEntries(Object.entries(n.attrs).map(([k, v]) => [k, typeof v === 'string' ? withoutReaderParam(v) : v])), kids: stripReaderParam(n.kids) }));
+}
+
+/**
+ * EVERY ANIMATION HELD STILL, THE SAME WAY ON BOTH PAGES, before a page is captured (run in the page:
+ * self-contained). An infinite animation (a skeleton's pulse) is paused at currentTime 0; a finite one
+ * (a transition, an entrance) is finished, so both pages show its end state whenever it started.
+ * Returns how many it held.
+ */
+export function holdAnimations(doc = document) {
+  const all = doc.getAnimations();
+  for (const animation of all) {
+    const timing = animation.effect?.getComputedTiming?.();
+    if (timing && timing.iterations !== Infinity && timing.endTime !== Infinity) { try { animation.finish(); continue; } catch { /* not finishable: hold it */ } }
+    animation.pause();
+    animation.currentTime = 0;
+  }
+  return all.length;
+}

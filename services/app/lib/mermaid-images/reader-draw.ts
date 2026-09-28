@@ -1,12 +1,9 @@
 /**
  * A READER'S OWN MERMAID DRAWING, framework-free: the palette the document's theme resolves to (tokens as
  * hex, through a canvas — Mermaid's colour math cannot parse `oklch(...)`), the fonts it waits for, and
- * what a drawing is marked with for the harvest (lib/mermaid-images). A verbatim move of the helpers in
- * components/kit/mermaid.tsx, so the compiled reader's Solid Mermaid (lib/islands/kit/mermaid) draws and
- * marks exactly as today's React one; `drawForReader` is that component's `draw()`.
- *
- * DUPLICATION NOTE: components/kit/mermaid.tsx still holds its own copy of these helpers (not this
- * track's file); it should import them from here.
+ * what a drawing is marked with for the harvest (lib/mermaid-images). ONE implementation for both readers:
+ * today's React Mermaid (components/kit/mermaid) and the compiled reader's Solid one
+ * (lib/islands/kit/mermaid) draw through `drawForReader`, so they draw and mark identically.
  */
 import { sha256Hex } from '@/lib/sha256';
 import { METRICS_PROBE, formatMermaidFaces, formatMermaidMetrics, parseMermaidFaces, parseMermaidMetrics, type MermaidMetrics } from '@/lib/mermaid-images/drawn';

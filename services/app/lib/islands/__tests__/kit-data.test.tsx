@@ -18,6 +18,7 @@ import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { SelectControl } from '@/components/kit/controls';
 import { rowsDigest } from '../digest';
+import { DRAWING_CLASS } from '../chart';
 
 const monthly: TableResult = { rows: [{ month: '2025-01-01', revenue: 120, units: 3 }, { month: '2025-02-01', revenue: 160, units: 4 }], columns: [{ name: 'month', type: 'date' }, { name: 'revenue', type: 'number' }, { name: 'units', type: 'number' }] };
 const regions: TableResult = { rows: [{ region: 'East' }, { region: 'West' }], columns: [{ name: 'region', type: 'string' }] };
@@ -252,6 +253,20 @@ describe('data widget parity with the live reader', () => {
     expect(slot.firstElementChild).toBe(served);
     setSnapshot({ ...monthly, rows: [...monthly.rows, { month: '2025-03-01', revenue: 10, units: 1 }] });
     await vi.waitFor(() => expect(loadChart).toHaveBeenCalledTimes(1));
+  });
+
+  it('Question leaves a responsive served drawing exactly as served: no inline size, no redraw', async () => {
+    const loadChart = vi.fn(async () => ({ mountChart: () => ({ destroy() {} }) }));
+    const drawn = { ...(await drawnFor(monthly.rows)), svg: `<svg class="marks ${DRAWING_CLASS}" width="640" height="303" viewBox="0 0 640 303"></svg>` };
+    // A box smaller than the nominal drawing (a fixed-height card): the drawing already fills it from the first paint.
+    const rect = vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue({ height: 249, width: 515 } as DOMRect);
+    try {
+      const { host } = mount(undefined, () => <Question data="$monthly" viz={chart} drawn={drawn} chart={loadChart} />);
+      const svg = host.querySelector('[role="graphics-document"] > svg')!;
+      expect(svg.hasAttribute('style')).toBe(false);
+    } finally { rect.mockRestore(); }
+    await new Promise((r) => setTimeout(r, 20));
+    expect(loadChart).not.toHaveBeenCalled();
   });
 
   it('Question feeds a chart drawn here the rows of every later result', async () => {

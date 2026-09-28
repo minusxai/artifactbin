@@ -2,11 +2,9 @@ import { createContext, useContext, useEffect, useMemo, useRef, useState, type H
 import { cn } from './cn';
 import { GridItemContext } from './grid';
 import { mermaidImageKey, mermaidSourceError } from '@/lib/story-ui/mermaid-source';
-import { sha256Hex } from '@/lib/sha256';
-import { METRICS_PROBE, formatMermaidFaces, formatMermaidMetrics, parseMermaidFaces, parseMermaidMetrics, type MermaidMetrics } from '@/lib/mermaid-images/drawn';
 import type { StoredMermaidImage } from '@/lib/story-runtime/contract';
-import type { MermaidImage, MermaidPalette } from './mermaid-render';
-import { embedPageFonts, pageFontFaces } from './mermaid-fonts';
+import type { MermaidImage } from './mermaid-render';
+import { drawForReader, type ReaderDrawing } from '@/lib/mermaid-images/reader-draw';
 
 interface MermaidProps extends Omit<HTMLAttributes<HTMLElement>, 'children'> {
   code: string;
@@ -24,177 +22,8 @@ interface MermaidProps extends Omit<HTMLAttributes<HTMLElement>, 'children'> {
 const MermaidImagesContext = createContext<Readonly<Record<string, StoredMermaidImage>>>({});
 export const MermaidImagesProvider = MermaidImagesContext.Provider;
 
-/**
- * The document's theme as Mermaid needs it: tokens resolved to hex (its colour
- * math expects hex, and modern CSS colours would not parse), plus the type the
- * host element already renders in.
- */
-function paletteFor(element: HTMLElement, dark: boolean): MermaidPalette {
-  const style = getComputedStyle(element);
-  const canvas = document.createElement('canvas');
-  canvas.width = canvas.height = 1;
-  const ctx = canvas.getContext('2d');
-  const color = (name: string, fallback: string) => {
-    if (!ctx) return fallback;
-    ctx.clearRect(0, 0, 1, 1);
-    ctx.fillStyle = fallback;
-    ctx.fillStyle = style.getPropertyValue(name).trim() || fallback;
-    ctx.fillRect(0, 0, 1, 1);
-    return '#' + [...ctx.getImageData(0, 0, 1, 1).data].slice(0, 3).map(v => v.toString(16).padStart(2, '0')).join('');
-  };
-  const size = Number.parseFloat(style.fontSize);
-  // Labels sit between apparatus and body text: never below 12px, never above 16px.
-  const labelPx = Number.isFinite(size) && size > 0 ? Math.round(Math.min(Math.max(size, 12), 16)) : 14;
-  return {
-    dark, background: color('--background', dark ? '#111827' : '#ffffff'),
-    foreground: color('--foreground', dark ? '#f9fafb' : '#111827'),
-    primary: color('--primary', '#2563eb'), border: color('--border', '#9ca3af'),
-    card: color('--card', dark ? '#1f2937' : '#ffffff'),
-    muted: color('--muted', dark ? '#1f2937' : '#f3f4f6'),
-    accent: color('--accent', dark ? '#1f2937' : '#f3f4f6'),
-    mutedForeground: color('--muted-foreground', dark ? '#9ca3af' : '#6b7280'),
-    // The theme's own face as the browser resolved it here; a web font the
-    // reader's machine lacks falls through the stack, as it does everywhere else.
-    fontFamily: style.fontFamily.trim() || 'system-ui, sans-serif',
-    fontMono: style.getPropertyValue('--font-mono').trim() || 'ui-monospace, Menlo, monospace',
-    fontSize: labelPx + 'px',
-  };
-}
-
-const SVG_NS = 'http://www.w3.org/2000/svg';
-
-/** The diagram's characters beyond ASCII, once each: they may come from another face, or a subset that loads only when asked. */
-const ownCharacters = (code: string): string => [...new Set(code.replace(/[\x00-\x7f]/g, ''))].sort().join('');
-
-/**
- * The palette's key: every field Mermaid is configured with. With the faces'
- * measurements, it tells whether the fonts held still while a drawing was
- * made (only then is it marked for the harvest, lib/mermaid-images/drawn).
- */
-function mermaidPaletteKey(palette: MermaidPalette): string {
-  const fields = [palette.dark, palette.background, palette.foreground, palette.primary, palette.border, palette.card,
-    palette.muted, palette.accent, palette.mutedForeground, palette.fontFamily, palette.fontMono, palette.fontSize];
-  return sha256Hex(JSON.stringify(fields)).slice(0, 32);
-}
-
-/**
- * WHAT MERMAID WOULD MEASURE HERE: the SVG text box — width, height and y,
- * what Mermaid's own label measurement reads — of the label face at the label
- * size and of the edge-label face at its 11px (components/kit/mermaid-render
- * documentStyles), over a fixed Latin probe plus the diagram's own other
- * characters. Measured in the page, as Mermaid measures, so every platform
- * difference that moves a drawing shows here: hinted (whole-pixel) advances,
- * another engine's line box, a system face another machine lacks. Null where
- * nothing lays text out (jsdom).
- */
-function measureFaces(palette: MermaidPalette, code: string): MermaidMetrics | null {
-  if (typeof document === 'undefined' || !document.body) return null;
-  const svg = document.createElementNS(SVG_NS, 'svg');
-  svg.setAttribute('aria-hidden', 'true');
-  svg.setAttribute('style', 'position: absolute; left: 0; top: 0; width: 0; height: 0; overflow: hidden; visibility: hidden;');
-  const text = METRICS_PROBE + ownCharacters(code).slice(0, 256);
-  document.body.appendChild(svg);
-  try {
-    const box = (fontFamily: string, fontSize: string): number[] | null => {
-      const label = document.createElementNS(SVG_NS, 'text') as SVGTextElement;
-      label.setAttribute('style', `font-family: ${fontFamily}; font-size: ${fontSize};`);
-      label.textContent = text;
-      svg.appendChild(label);
-      if (typeof label.getBBox !== 'function') return null;
-      const { width, height, y } = label.getBBox();
-      return [width, height, y];
-    };
-    const label = box(palette.fontFamily, palette.fontSize);
-    const edge = box(palette.fontMono, '11px');
-    return label && edge ? parseMermaidMetrics([...label, ...edge].join(',')) : null;
-  } finally {
-    svg.remove();
-  }
-}
-
-// Quotes as escapes: the kit's class extraction (lib/story-ui/recipe-classes) reads this file as text.
-const unquote = (family: string) => family.trim().replace(/^[\x22\x27]|[\x22\x27]$/g, '');
-/** The face a font stack leads with, unquoted: the one it draws in when it has loaded. */
-const firstFamily = (stack: string) => unquote(stack.split(',')[0] ?? '');
-
-/**
- * The faces a drawing is drawn in, as the harvest records them for the server
- * (lib/mermaid-images/readers): the label face at its size, the edge-label face.
- */
-const facesOf = (palette: MermaidPalette): string | undefined => {
-  const faces = parseMermaidFaces(formatMermaidFaces({ label: firstFamily(palette.fontFamily), size: Number.parseFloat(palette.fontSize), edge: firstFamily(palette.fontMono) }));
-  return faces ? formatMermaidFaces(faces) : undefined;
-};
-
-/** A `unicode-range` descriptor holds this code point (`U+0-FF, U+131, U+4??`). */
-function inUnicodeRange(range: string, point: number): boolean {
-  return (range || 'U+0-10FFFF').split(',').some((part) => {
-    const match = /^\s*U\+([0-9a-f?]+)(?:-([0-9a-f]+))?\s*$/i.exec(part);
-    if (!match) return false;
-    const low = Number.parseInt(match[1]!.replace(/\?/g, '0'), 16);
-    const high = Number.parseInt(match[2] ?? match[1]!.replace(/\?/g, 'f'), 16);
-    return point >= low && point <= high;
-  });
-}
-
-/**
- * Is this drawing made ENTIRELY in the document's web fonts — the label and
- * edge-label stacks each led by a face this page loaded, covering every
- * character measured? Only then can a stored drawing carry its faces
- * (lib/mermaid-images/fonts); a system face or a fallback glyph resolves per
- * machine, so such a drawing is never stored.
- */
-function drawnInWebFonts(palette: MermaidPalette, code: string): boolean {
-  const fonts = typeof document !== 'undefined' ? document.fonts as (FontFaceSet & Iterable<FontFace>) | undefined : undefined;
-  if (!fonts || typeof fonts[Symbol.iterator] !== 'function') return false;
-  const faces = [...fonts];
-  const points = [...new Set(METRICS_PROBE + ownCharacters(code))].map((ch) => ch.codePointAt(0)!);
-  return [palette.fontFamily, palette.fontMono].every((stack) => {
-    const family = firstFamily(stack);
-    const loaded = faces.filter((face) => face.status === 'loaded' && unquote(face.family) === family);
-    return loaded.length > 0 && points.every((point) => loaded.some((face) => inUnicodeRange(face.unicodeRange, point)));
-  });
-}
-
-const SVG_DATA = 'data:image/svg+xml;charset=utf-8,';
-/** The engine's drawing with the page's font files in it, or as it was when it cannot carry them. */
-async function withPageFonts(image: MermaidImage, palette: MermaidPalette): Promise<MermaidImage> {
-  if (!image.src.startsWith(SVG_DATA)) return image;
-  const svg = decodeURIComponent(image.src.slice(SVG_DATA.length));
-  const embedded = await embedPageFonts(svg, { label: firstFamily(palette.fontFamily), edge: firstFamily(palette.fontMono) }, pageFontFaces());
-  return embedded ? { ...image, src: SVG_DATA + encodeURIComponent(embedded) } : image;
-}
-
-/** Does this page ask for the engine by name (`?mermaid=engine`, lib/mermaid-images/store MERMAID_ENGINE_PARAM)? */
-const engineAskedFor = (): boolean => typeof location !== 'undefined' && new URLSearchParams(location.search).get('mermaid') === 'engine';
-
-/** What this browser would draw with — the palette's key and the faces' measurements. */
-interface Measured { palette: string; metrics: MermaidMetrics | null }
-const measured = (palette: MermaidPalette, code: string): Measured => ({ palette: mermaidPaletteKey(palette), metrics: measureFaces(palette, code) });
-const sameMeasure = (a: Measured, b: Measured) => a.palette === b.palette && (a.metrics && formatMermaidMetrics(a.metrics)) === (b.metrics && formatMermaidMetrics(b.metrics));
-
-/**
- * Wait (briefly) for the faces a palette draws with, so the engine lays a
- * drawing out in the fonts it will settle on. `document.fonts.ready` alone is not
- * enough: a face nothing has asked for yet is not pending, so `ready` can
- * resolve before the label face has even started loading. Asking for the
- * label and edge-label faces by name, with every character they will measure
- * (a `unicode-range` subset loads only for the characters asked for), loads
- * them — or resolves at once when the stack has no such web font.
- */
-function fontsFor(palette: MermaidPalette, code: string): Promise<void> {
-  const fonts = typeof document !== 'undefined' ? document.fonts : undefined;
-  if (!fonts?.load) return Promise.resolve();
-  const text = METRICS_PROBE + ownCharacters(code);
-  const loaded = Promise.all([
-    fonts.load(`${palette.fontSize} ${palette.fontFamily}`, text),
-    fonts.load(`11px ${palette.fontMono}`, text),
-  ]).then(() => fonts.ready).then(() => undefined, () => undefined);
-  return Promise.race([loaded, new Promise<void>(resolve => setTimeout(resolve, 3000))]);
-}
-
-/** An engine drawing, and — when the fonts held still while it was drawn — what it was drawn under, for the harvest. */
-type Drawn = { code: string; image?: MermaidImage; error?: string; palette?: string; metrics?: string; portable?: boolean; faces?: string };
+/** A reader's engine drawing, or why it failed (lib/mermaid-images/reader-draw draws and marks it). */
+type Drawn = { code: string; error?: string } & Partial<ReaderDrawing>;
 
 export function Mermaid({ code, title = 'Diagram', colorMode = 'light', className, ...props }: MermaidProps) {
   const host = useRef<HTMLElement>(null);
@@ -230,40 +59,12 @@ export function Mermaid({ code, title = 'Diagram', colorMode = 'light', classNam
     if (invalid || !host.current) return;
     let active = true;
     const element = host.current;
+    // Mermaid lays labels out by measuring them, so the reader's drawing waits for the palette's own
+    // faces and is marked with what it was drawn under only when the fonts held still
+    // (lib/mermaid-images/reader-draw, shared with the compiled reader's Solid Mermaid).
     const draw = () => {
-      // Mermaid lays labels out by measuring them, so it measures once the
-      // palette's own faces have loaded (fontsFor, at most 3s): otherwise a
-      // diagram drawn during hydration, before a web face arrives, is laid out
-      // in its fallback — a drawing that depends on the network's timing.
-      // The page that asks for the engine by name — the harvest's (lib/mermaid-images)
-      // — lays text out unhinted, as every stored drawing renders it; a reader's
-      // own engine drawing is laid out as it always was.
-      if (engineAskedFor()) document.documentElement.style.setProperty('text-rendering', 'geometricPrecision');
-      let palette = paletteFor(element, colorMode === 'dark');
-      let before: Measured | null = null;
-      // Intentional engine split: Mermaid is large and browser-only.
-      void Promise.all([import('./mermaid-render'), fontsFor(palette, code)]).then(([engine]) => {
-        palette = paletteFor(element, colorMode === 'dark');
-        before = measured(palette, code);
-        return engine.renderMermaid(code, palette);
-      }).then(
-        // The drawing is marked with what it was drawn under only when the fonts
-        // measured the same before and after it was drawn: a face that landed
-        // mid-draw leaves no telling which metrics Mermaid laid it out with, and
-        // the harvest (lib/mermaid-images) then stores nothing for it.
-        async image => {
-          if (!active) return;
-          const after = paletteFor(element, colorMode === 'dark');
-          const now = measured(after, code);
-          const portable = drawnInWebFonts(after, code);
-          // A reader's drawing carries the page's own font files, so it shows the theme's face as a
-          // stored drawing does (./mermaid-fonts). Not on the harvest's page: the harvest embeds its own subsets.
-          const shown = portable && !engineAskedFor() ? await withPageFonts(image, after) : image;
-          if (!active) return;
-          setResult({ code, image: shown, ...(before && sameMeasure(before, now) ? {
-            palette: now.palette, ...(now.metrics ? { metrics: formatMermaidMetrics(now.metrics) } : {}), portable, faces: facesOf(after),
-          } : {}) });
-        },
+      void drawForReader(element, code, colorMode === 'dark', () => active).then(
+        (drawn) => { if (active && drawn) setResult({ code, ...drawn }); },
         () => { if (active) setResult({ code, error: 'Could not render this diagram. Check its Mermaid syntax.' }); },
       );
     };

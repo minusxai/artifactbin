@@ -18,16 +18,22 @@
  *    difference (lib/compiled-parity-diff, the unit helper's rule): an aria-controls/-labelledby
  *    whose legacy value is a single id absent from the legacy page (a dangling Radix id).
  *  - Computed style on a fixed property list and the border box (0.5 px grid).
+ *  - Every animation is held still identically on both pages before each capture: an infinite one
+ *    paused at time 0, a finite one finished (lib/compiled-parity-diff holdAnimations).
+ *  - Attribute values are compared without the gate's own `reader=legacy|compiled` query parameter
+ *    (plain or percent-encoded, as in SignIn's callbackUrl): nothing else is rewritten.
  *  - Excluded subtrees: drawn charts (children of `[data-mx-chart-state=ready]`),
  *    Mermaid drawings (children of svg under `[data-mx-mermaid-state]`), canvases.
  *  - A structural mismatch (tag or element-child count) is reported and that
  *    subtree is not descended.
  *  - Served-element survival and DOM mutations during hydration are reported for
- *    both sides; the compiled side must keep every served element.
+ *    both sides; the compiled side must keep every served element except the two
+ *    replacements both pages make by design (lib/compiled-parity-diff survivalOf): an
+ *    undrawn Mermaid figure's placeholder, and an Avatar fallback its loaded image replaced.
  *  - One interaction sequence on the kit fixture (a tab, an accordion), compared again.
  *
- * Fixtures: the page-speed set (scripts/fixtures/page-speed) and the kitchen sink
- * (scripts/lib/kitchen-sink-doc), published through one bearer token.
+ * Fixtures: the page-speed set (scripts/fixtures/page-speed), which includes the kitchen sink
+ * (scripts/lib/kitchen-sink-doc), published through one bearer token; each is compared once.
  *
  * Until a server serves the compiled path (`FLAG__COMPILED_READER` off, or no
  * compile stored yet), the first compiled response carries no `x-mx-reader:
@@ -41,7 +47,7 @@ import { createChecker } from './lib/assert.mjs';
 import { startDocument, pageHeaders } from './lib/start-doc.mjs';
 import { publishPageSpeedFixtures } from './fixtures/page-speed/index.mjs';
 import { kitchenSinkMarkup } from './lib/kitchen-sink-doc.mjs';
-import { diffTrees as diff } from './lib/compiled-parity-diff.mjs';
+import { diffTrees, holdAnimations, stripReaderParam, survivalOf } from './lib/compiled-parity-diff.mjs';
 
 const B = process.argv[2] ?? 'http://localhost:3030';
 const check = createChecker('compiled-parity');
@@ -60,7 +66,12 @@ const PROBE = () => {
   // (hydration) runs before DCL. The parser only ever INSERTS, so attribute, text and removal
   // records are always script work; insertions count only after DCL.
   const s = (window.__sv = { served: [], mutations: 0, mutated: [], dcl: false });
-  const tag = (n) => { if (n.nodeType !== 1 || n.__served) return; n.__served = true; s.served.push(n); for (const c of n.querySelectorAll('*')) if (!c.__served) { c.__served = true; s.served.push(c); } };
+  // An undrawn Mermaid figure's placeholder, noted as parsed (lib/compiled-parity-diff survivalOf: the one exemption).
+  const undrawn = (n) => { const p = n.closest('p[role="status"]'); return !!p && !!p.parentElement?.matches('figure[data-mx-mermaid-state="pending"]'); };
+  // An Avatar fallback, noted with its avatar (the second exemption: replaced by the avatar's loaded image).
+  const avatarOf = (n) => (n.closest('[data-slot="avatar-fallback"]') ? n.closest('[data-slot="avatar"]') : null);
+  const mark = (n) => { n.__served = true; n.__undrawnMermaid = undrawn(n); n.__avatar = avatarOf(n); s.served.push(n); };
+  const tag = (n) => { if (n.nodeType !== 1 || n.__served) return; mark(n); for (const c of n.querySelectorAll('*')) if (!c.__served) mark(c); };
   const inStory = (t) => t.closest?.('#mx-story-root') || t.parentElement?.closest?.('#mx-story-root');
   new MutationObserver((l) => {
     for (const m of l) {
@@ -105,6 +116,9 @@ const settle = async (page) => {
   await page.waitForTimeout(1500);
 };
 
+/** The two trees compared with the gate's own `?reader=` switch taken out of attribute values (stripReaderParam). */
+const diff = (legacy, compiled) => diffTrees(stripReaderParam(legacy), stripReaderParam(compiled));
+
 /** What a reader does on the kit fixture: opens the second tab and the first accordion item. */
 const INTERACTIONS = {
   kit: async (page) => {
@@ -131,8 +145,11 @@ if (probe.headers.get(READER_HEADER) !== 'compiled') {
 
 const publish = publisher(token);
 const fixtures = await publishPageSpeedFixtures(publish);
-const kitchen = await publish({ title: 'Perf G kitchen sink', markup: await kitchenSinkMarkup(publish) });
-fixtures.push({ key: 'kitchen', id: kitchen.id, painted: { charts: 1 } });
+// The page-speed set carries the kitchen sink itself now; publish it here only when it does not (never twice).
+if (!fixtures.some((f) => f.key === 'kitchen')) {
+  const kitchen = await publish({ title: 'Perf G kitchen sink', markup: await kitchenSinkMarkup(publish) });
+  fixtures.push({ key: 'kitchen', id: kitchen.id, painted: { charts: 1 } });
+}
 const chosen = fixtures.filter((f) => !only || only.includes(f.key));
 
 const browser = await chromium.launch();
@@ -149,10 +166,18 @@ try {
       const response = await page.goto(`${B}/a/${f.id}/raw?reader=${route}`, { waitUntil: 'load' });
       const served = response?.headers()[READER_HEADER] ?? 'absent';
       await settle(page);
-      const survival = await page.evaluate(() => { const s = window.__sv; const root = document.getElementById('mx-story-root'); return { served: s.served.length, survived: s.served.filter((n) => n.isConnected && root.contains(n)).length, mutations: s.mutations, mutated: s.mutated }; });
-      const tree = await page.evaluate(SNAPSHOT, STYLE);
+      const survival = await page.evaluate(() => {
+        const s = window.__sv; const root = document.getElementById('mx-story-root');
+        const imageShown = (avatar) => { const img = avatar?.isConnected && root.contains(avatar) ? avatar.querySelector(':scope > img[data-slot="avatar-image"]') : null; return !!img && img.complete && img.naturalWidth > 0; };
+        return { records: s.served.map((n) => ({ kept: n.isConnected && root.contains(n), undrawnMermaid: !!n.__undrawnMermaid, avatarReplaced: !!n.__avatar && imageShown(n.__avatar) })), mutations: s.mutations, mutated: s.mutated };
+      });
+      Object.assign(survival, survivalOf(survival.records));
+      delete survival.records;
+      // Every animation held still the same way on both pages (lib/compiled-parity-diff holdAnimations) before each capture.
+      const capture = async () => { await page.evaluate(holdAnimations); return page.evaluate(SNAPSHOT, STYLE); };
+      const tree = await capture();
       let after = null;
-      if (INTERACTIONS[f.key]) { await INTERACTIONS[f.key](page); after = await page.evaluate(SNAPSHOT, STYLE); }
+      if (INTERACTIONS[f.key]) { await INTERACTIONS[f.key](page); after = await capture(); }
       snaps[route] = { served, tree, after, survival, errors: errors.filter((e) => !/favicon|GPU stall|Canvas2D/.test(e)) };
       await context.close();
     }
@@ -165,7 +190,7 @@ try {
       check(d[kind].length === 0, `${f.key}: no ${kind} differences (${d[kind].length}${d[kind].length ? `: ${d[kind].slice(0, 3).join(' | ')}` : ''})`);
     }
     const s = snaps.compiled.survival;
-    check(s.served > 0 && s.survived === s.served, `${f.key}: every served element survives hydration on the compiled page (${s.survived}/${s.served})`);
+    check(s.ok, `${f.key}: every served element survives hydration on the compiled page (${s.survived}/${s.served}${s.exempt ? `, ${s.exempt} replaced by design: an undrawn Mermaid placeholder or an Avatar fallback its image replaced` : ''})`);
     check.note(`${f.key}: DOM mutations during hydration — legacy ${snaps.legacy.survival.mutations}, compiled ${s.mutations}${s.mutated.length ? ` (${s.mutated.join(', ')})` : ''}`);
     check(snaps.compiled.errors.length === 0, `${f.key}: no page errors on the compiled page (${snaps.compiled.errors[0] ?? 'clean'})`);
     if (snaps.legacy.after && snaps.compiled.after) {

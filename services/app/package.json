@@ -30,6 +30,7 @@
     "@aws-sdk/client-s3": "3.1107.0",
     "@aws-sdk/s3-request-presigner": "3.1107.0",
     "@babel/core": "7.29.7",
+    "@floating-ui/dom": "1.8.0",
     "@electric-sql/pglite": "0.4.6",
     "@hono/node-server": "2.1.1",
     "@radix-ui/react-accordion": "1.2.20",

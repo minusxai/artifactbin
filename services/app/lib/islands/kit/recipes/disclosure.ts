@@ -6,6 +6,8 @@ export const RECIPES: Record<string, Recipe> = {
   PopoverHeader: props => cn("flex flex-col gap-1 text-sm", props.className as string | undefined),
   PopoverTitle: props => cn("font-medium", props.className as string | undefined),
   PopoverDescription: props => cn("text-muted-foreground", props.className as string | undefined),
+  // components/Tooltip TooltipContent, portalled (a story's default): twMerge(clsx(base, portalled surface, className)).
+  TooltipContent: props => cn("pointer-events-none z-[100] w-max max-w-[min(28rem,calc(100vw-1rem))] whitespace-normal rounded-md px-2.5 py-1.5 text-left text-xs leading-normal shadow-md", "border border-edge-bright bg-surface text-fg", props.className as string | undefined),
   Avatar: props => cn("group/avatar relative flex size-8 shrink-0 overflow-hidden rounded-full select-none data-[size=lg]:size-10 data-[size=sm]:size-6", props.className as string | undefined),
   AvatarImage: props => cn("aspect-square size-full", props.className as string | undefined),
   AvatarFallback: props => cn("flex size-full items-center justify-center rounded-full bg-muted text-sm text-muted-foreground group-data-[size=sm]/avatar:text-xs", props.className as string | undefined),
