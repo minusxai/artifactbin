@@ -58,8 +58,9 @@ describe('references/apps.md', () => {
       expect(at(step), step).toBeGreaterThan(previous);
       previous = at(step);
     }
-    // A second session, as yourself, on the same copy: two people need two browsers.
-    expect(text).toMatch(/afbin sessions script new --input [^\n]*# you/);
+    // Each identity tests its own authorized disposable copy.
+    expect(text).toContain('afbin fork abc123 --json');
+    expect(text).toMatch(/afbin sessions script new --input [^\n]*# you, on your own copy/);
     // The gap itself: a COPY, what a clean pass proves, and that nothing reaches the original.
     expect(text).toMatch(/A test user verifies a COPY/);
     expect(text).toMatch(/never that `abc123` works/);
@@ -75,9 +76,9 @@ describe('references/apps.md', () => {
   });
 });
 
-it('keeps successful test writes on the test-user fork and explains the mutation read boundary',()=>{
+it('keeps successful test writes on authorized copies and explains the mutation read boundary',()=>{
  const text=reference();
- expect(text).toContain('Run each write on the test-user fork');
+ expect(text).toContain('Run each write on that identity’s authorized disposable copy');
  expect(text).toContain('`$_me.id` writes must stay disabled and change no data');
  // The compiler and the write door load a mutation's other imports and `_members`; a query result is an argument.
  expect(text).toContain('A Mutation may read other imports and `_members`');
