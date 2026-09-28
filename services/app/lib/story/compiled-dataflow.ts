@@ -76,6 +76,8 @@ export interface CompiledQuery {
 
 export interface CompiledMutation {
   name: string;
+  /** Browser needs a durable invocation key; notification SQL remains server-only. */
+  notifies?: true;
   sql: string;
   /** What it writes: an imported dataset table, or a local table value. */
   target: { import: string; table: string } | { local: string };
