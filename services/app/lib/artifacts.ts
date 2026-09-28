@@ -1,4 +1,4 @@
-import { executeDocumentQueries } from './sql/document-queries';
+import { executeDocumentQueries, type DocumentQuerySourceMode } from './sql/document-queries';
 import type {DocumentUpdate} from '@artifactbin/contracts';
 import {commitDocumentUpdate} from './story/document-update-write';
 import {queueMermaidHarvest} from './mermaid-images/store';
@@ -2553,22 +2553,23 @@ interface DataflowRunOptions {
  * identity would hand a stranger the owner's private children. A connected
  * database resolves to its catalog, which its queries run inside.
  */
-type DatasetResolver = (id: string) => Promise<RefData | null>;
+type DatasetResolver = (id: string, mode?: DocumentQuerySourceMode) => Promise<RefData | null>;
 
 /** What a resolved ref contributes to the run: its tables by import name, or the catalog a query runs inside. */
 type RefData = { tables: ImportTables[string]; catalog?: import('@/lib/datasets/types').DatasetCatalog };
 
 /** A resolved ref row → its data, under the viewer whose run this is. */
-export async function tableForRef(r: ArtifactRow | null, viewer: RoleActor | null, document?:ArtifactRow): Promise<RefData | null> {
+export async function tableForRef(r: ArtifactRow | null, viewer: RoleActor | null, document?:ArtifactRow, loadRows=true): Promise<RefData | null> {
   if (!r) return null;
   if (r.format === 'folder') {
+    if (!loadRows) return {tables:{}};
     return { tables: { rows: await childrenTableFor(r, { userId: viewer?.userId ?? null, email: viewer?.email ?? null, tokenId: viewer?.tokenId ?? null }) } };
   }
   if (r.format !== 'dataset') return null; // wrong kind → the query reports the missing table
   if(grantsOf(r)&&!(await grantsPermitRead(r,viewer??{userId:null,tokenId:null},document)))return null;
   const catalog=catalogOf(r);
   if(!catalog)return null; // missing storage is unavailable data, never an empty computed source
-  if(catalog.kind==='postgres')return { tables: {}, catalog };
+  if(!loadRows||catalog.kind==='postgres')return { tables: {}, catalog };
   try {
     return { tables: await importedRows(catalog), catalog };
   } catch { return null; } // the query reports the missing table
@@ -2578,8 +2579,8 @@ export async function tableForRef(r: ArtifactRow | null, viewer: RoleActor | nul
  * anything link-readable — render-time must resolve whatever the publish door
  * admitted (getLinkReadableArtifact), or an accepted ref serves broken. The
  * VIEWER is separate and rides through: reach is the document's, rows are theirs. */
-const datasetResolverForRow = (row: ArtifactRow, viewer: RoleActor | null): DatasetResolver => async (id) =>
-  tableForRef(await importedArtifactFor(row, id), viewer, row);
+const datasetResolverForRow = (row: ArtifactRow, viewer: RoleActor | null): DatasetResolver => async (id,mode) =>
+  tableForRef(await importedArtifactFor(row, id), viewer, row, mode===undefined||mode==='import');
 
 /** The artifact a document's import names, by the document's own reach. */
 const importedArtifactFor = async (row: ArtifactRow, id: string): Promise<ArtifactRow | null> =>
@@ -2678,8 +2679,8 @@ export async function nameablePeople(row: ArtifactRow, viewer: RoleActor | null,
 }
 
 /** A bearer/session actor's scope — the editor running a DRAFT's queries. Reach and viewer are the same person here. */
-export const datasetResolverForActor = (actor: TokenActor): DatasetResolver => async (id) =>
-  tableForRef((await getArtifactFor(actor, id)) ?? (await getLinkReadableArtifact(id)), { userId: actor.userId, tokenId: actor.tokenId });
+export const datasetResolverForActor = (actor: TokenActor): DatasetResolver => async (id,mode) =>
+  tableForRef((await getArtifactFor(actor, id)) ?? (await getLinkReadableArtifact(id)), { userId: actor.userId, tokenId: actor.tokenId },undefined,mode===undefined||mode==='import');
 
 /** The rows of the named imports, resolved; an import that does not resolve is left out, and its readers report the missing table. */
 async function importsFor(flow: CompiledDataflow, names: Iterable<string>, resolve: DatasetResolver): Promise<ImportTables> {

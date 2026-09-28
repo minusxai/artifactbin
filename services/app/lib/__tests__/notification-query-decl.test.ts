@@ -66,7 +66,7 @@ it.each(['dataset', 'postgres'] as const)('compiles Notify through the ordinary 
   const markup = source().replace('<Notify name="status_notification"', '<Notify source="ref:Remote001" name="status_notification"');
   const flow = dataflowOf(splitHelmet(parse(markup)).content);
   const ctx = await prepareCompile(flow, async ref => ref === 'TaskRows1' ? dataset : {
-    kind, tables: [], probe: async () => ({columns:[{name:'to',type:'user'}, {name:'message',type:'string'}],params:['task_id']}),
+    kind, tables: [], probe: async (_sql, params) => { if (!Object.hasOwn(params,'task_id')) throw new Error('missing task_id'); return {columns:[{name:'to',type:'user'}, {name:'message',type:'string'}],params:['task_id']}; },
   });
   const result = compileDataflow(flow,ctx);
   expect(result.ok).toBe(true);
