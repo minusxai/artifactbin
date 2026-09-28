@@ -3,7 +3,7 @@
 After a named mutation succeeds, run a query and use its results to notify users.
 
 Published proposal: https://app.artifactbin.dev/a/61YVj6
-Implementation: https://github.com/minusxai/artifactbin/pull/168
+Implementation: https://github.com/minusxai/artifactbin/pull/188
 
 ## Dataset support
 
@@ -48,7 +48,7 @@ The data write, mutation receipt and notification jobs commit together. A reques
 
 Once the mutation succeeds, a notification failure does not undo it. Authorized users can inspect its status and retry the notification job without repeating the mutation. The retry uses the saved rule and arguments, and may read newer data.
 
-Current limits: 1,000 query-result rows, 2,000 recipients, 500 Unicode code points per message, 1 MiB of intermediate/final result data, and 5 seconds of query execution. Source loading has separate limits of 16 MiB, 100,000 rows and 5 seconds. Exceeding a limit fails the notification job visibly; it does not send a truncated result.
+Current limits: 1,000 query-result rows, 2,000 recipients, 500 Unicode code points per message, 1 MiB of intermediate/final result data, and 5 seconds of query execution. Source loading uses the existing dataset query layer; this change does not add a separate notification-specific loader or source-size cap. Exceeding a limit fails the notification job visibly; it does not send a truncated result.
 
 ## Recipients and access
 
@@ -68,18 +68,18 @@ UI write testing must use an isolated copy with copied writable datasets. A loca
 
 ## Implementation and verification
 
-Six workers completed separate areas: query execution/worker, compiler, job storage, run identity/replay, inbox/status UI, and teaching/demo/evals. Their changes are integrated in draft PR 168. The detailed worker briefs remain in the repository; they are not outstanding work assignments.
+Start from latest main and reuse only prior work that fits this proposal. Four implementation workstreams cover shared query execution, run jobs and aggregation, explicit membership and presentation, and teaching/demo/evals. Integration verifies the whole feature together.
 
-Live browser and CLI checks exercised bulk notifications, zero-row success, uncertain-response replay, access denial and retrying a failed notification without another mutation. The final teaching fixes passed 185 focused tests. Local validation passed; the routine affected-test command deferred to CI rather than reporting a pass.
+Required checks cover stored and PostgreSQL query sources (including models), saved arguments and actor identity, combined messages across rules, explicit membership, source access and credential revocation, bulk and zero-row mutations, concurrent retries, lost responses, and retrying notification processing without repeating a mutation. Real PostgreSQL integration runs through the existing CI gate.
 
-Three fresh session-agent smokes passed saved-state checks. The external Fireworks eval passed two of three scenarios. Authoring failed because the agent wrote and restored the original test dataset. Instructions and grading were corrected, but that failed run was not rerun or counted as passing.
+Agent evals verify headless operation of existing artifacts, session testing of newly authored UI, and session fallback for browser-local state. Test copies must isolate writable datasets; the grader checks that original dataset versions are unchanged.
 
-CI is not fully green: the latest inspected run has node-test failures and other checks still running. This proposal does not claim merge readiness. The current check results are on PR 168.
+Current implementation and check results: https://github.com/minusxai/artifactbin/pull/188. Focused checks, deferred suites and live eval outcomes are reported separately; a deferred suite is not a pass.
 
 ## Demo and remaining limitations
 
-The local demo is http://localhost:5001/a/UKT0Hn. Sign in as mxmx_test_notify_actor@example.com at /login. From the foundation checkout, run npm run dev:otp -- mxmx_test_notify_actor@example.com for the local login code. Use a separate browser for mxmx_test_notify_recipient@example.com and /notifications. These links require the task’s development server to be running.
+The implementation handoff includes a running local artifact, joined-recipient inbox, and notification status/retry flow. The executable setup and login steps are in [demo.md](mutation-notifications/demo.md). The branch CLI and browser must exercise the same named action against that server.
 
 Not included: an authenticated GET alias, a headless row/cell API, scheduled notifications independent of mutations, rich HTML messages, or production email delivery. Browser retry IDs survive retries on the same page; recovery after a full page reload is not implemented.
 
-A successful mutation must reliably schedule its notification query so a crash cannot lose the trigger. Dataset-specific execution belongs in the existing data layer, not in notification logic.
+A successful mutation must reliably schedule its notification query so a crash cannot lose the trigger. Dataset-specific execution belongs in the existing data layer, not in notification logic. Existing dataset write capabilities are unchanged; notification queries support the sources already supported by the query layer.
