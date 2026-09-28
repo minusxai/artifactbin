@@ -108,10 +108,14 @@ const seenInFrame = async (p, text) => {
   for (let i = 0; i < 60; i++) {
     // A no-runtime document RELOADS to show a live update, which destroys the
     // execution context mid-poll: that is the update arriving, not a failure.
-    const body = await p.locator('[data-mx-inline-story]').innerText().catch(() => '');
-    if (body.includes(text)) return true;
+    for (const frame of p.frames()) {
+      if (await frame.getByRole('heading', { name: text, exact: true }).isVisible().catch(() => false)) return true;
+    }
     await p.waitForTimeout(500);
   }
+  console.error('live document did not display the heading', await Promise.all(p.frames().map(async frame => ({
+    url: frame.url(), body: (await frame.locator('body').innerText({ timeout: 1000 }).catch(() => '')).slice(0, 800),
+  }))));
   return false;
 };
 check(await seenInFrame(page, 'Landed by the agent'), "the watching human's page updated live");

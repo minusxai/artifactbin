@@ -480,6 +480,11 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
   const canPreview = shownSource !== null || needsEditorPart;
   // A served document's placeholder test was answered on the server; a live source answers it here.
   const showStarter = !editing && !props.captureKey && (shownSource !== null ? isStartPlaceholder(shownSource, live?.version ?? version) : !!props.starter);
+  // The starter has no compiled story to morph. Its first agent edit becomes a
+  // real document, so open that version through the compiled reader route.
+  useEffect(() => {
+    if (props.starter && !compiled && !editing && live?.format === 'markup' && !showStarter) reloadKeepingPlace(window);
+  }, [props.starter, compiled, editing, live, showStarter]);
   // What the row actually holds — null when nobody has named it. The editor's
   // field must seed from THIS, so an inherited name never becomes an explicit
   // one just because someone opened the editor.

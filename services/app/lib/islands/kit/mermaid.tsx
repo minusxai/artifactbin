@@ -1,9 +1,7 @@
 /* @jsxImportSource solid-js */
 import { Show, createEffect, createSignal, on, onCleanup, onMount, type JSX } from 'solid-js';
 import { mermaidImageKey, mermaidSourceError } from '@/lib/story-ui/mermaid-source';
-import { readerMode } from '@/lib/story-runtime/reader-mode';
 import { useIsland } from '../context';
-import { deferEngine } from '../defer-engine';
 import type { MermaidImage } from '@/components/kit/mermaid-render';
 import type { Drawn } from '@/lib/mermaid-images/reader-draw';
 
@@ -17,64 +15,46 @@ import type { Drawn } from '@/lib/mermaid-images/reader-draw';
 type Props = { code: string; title?: string; colorMode?: 'light' | 'dark'; imageKey?: string; className?: string; inGridItem?: boolean; [key: string]: unknown };
 const join = (...v: (string | false | undefined)[]) => v.filter(Boolean).join(' ');
 /** The prose image's inline style as React's server renderer writes `{ width, maxWidth: '100%', height: 'auto' }`. */
-const servedStyle = (image: MermaidImage) => [image.width !== undefined ? `width:${image.width}px` : '', 'max-width:100%', 'height:auto'].filter(Boolean).join(';');
+const servedStyle = (image: MermaidImage) => `${image.width !== undefined ? `width:${image.width}px;` : ''}max-width:100%;height:auto`;
 
 export function Mermaid(p: Props) {
   const island = useIsland();
   const [result, setResult] = createSignal<Drawn | null>(null);
-  const [loadedSrc, setLoadedSrc] = createSignal<string | null>(null);
+  const [loadedSrc, setLoadedSrc] = createSignal<string>();
   // A stored drawing this reader cannot use (its bytes would not load): the engine draws instead.
-  const [refused, setRefused] = createSignal<string | null>(null);
-  const [revision, setRevision] = createSignal(0);
+  const [refused, setRefused] = createSignal<string>();
   // Hydration must start from the compiled prop, then move to the reader's current mode on mount:
   // Solid only patches the server's image when the signal changes. SSR itself uses the request mode.
   const [activeMode, setActiveMode] = createSignal<'light' | 'dark'>(typeof window === 'undefined'
-    ? island.colorMode?.() ?? p.colorMode ?? 'light' : p.colorMode ?? 'light');
+    ? island.colorMode?.() ?? p.colorMode ?? 'light' : p.colorMode ?? 'light', { equals: false });
   let host!: HTMLElement;
   let img: HTMLImageElement | undefined;
   const invalid = () => mermaidSourceError(p.code);
-  const mode = () => activeMode();
-  const imageKey = () => (invalid() ? null : p.imageKey && mode() === (p.colorMode ?? 'light') ? p.imageKey : mermaidImageKey(p.code, mode()));
-  const stored = () => { const key = imageKey(); const offered = key ? island.drawings()[key] : undefined; return offered && offered.src !== refused() ? offered : undefined; };
-  const storedSrc = () => stored()?.src ?? null;
+  const mode = activeMode;
+  const imageKey = () => p.imageKey && mode() === p.colorMode ? p.imageKey : mermaidImageKey(p.code, mode());
+  const stored = () => { const offered = island.drawings()[imageKey()]; return offered && offered.src !== refused() ? offered : undefined; };
+  const storedSrc = () => stored()?.src;
   const current = () => { const r = result(); return r?.code === p.code ? r : null; };
   const error = () => invalid() || current()?.error;
   const image = (): MermaidImage | undefined => current()?.image ?? stored();
-  const src = () => image()?.src ?? null;
+  const src = () => image()?.src;
   const engineDrawn = () => !!current()?.image && !!current()?.palette;
   onMount(() => {
-    const doc = host.ownerDocument;
-    const readMode = (): 'light' | 'dark' => (doc.defaultView ? readerMode(doc.defaultView) : null)
-      ?? (doc.documentElement.classList.contains('dark') ? 'dark'
-        : doc.documentElement.classList.contains('light') ? 'light' : island.colorMode?.() ?? p.colorMode ?? 'light');
-    // Only a CHANGED value redraws (a re-stamp with the same theme does not).
-    const observer = new MutationObserver(records => {
-      if (records.some(record => record.oldValue !== (record.target as Element).getAttribute(record.attributeName ?? ''))) {
-        setActiveMode(readMode());
-        setRevision(n => n + 1);
-      }
-    });
-    // During Solid hydration the figure's parent can still be detached when onMount runs.
-    // The document mode is stamped on <html>; watch it regardless of that insertion timing.
-    observer.observe(doc.documentElement, { attributes: true, attributeOldValue: true, attributeFilter: ['data-theme', 'data-color-mode', 'class'] });
-    for (let element = host.parentElement; element; element = element.parentElement) {
-      if (element === doc.documentElement) continue;
-      observer.observe(element, { attributes: true, attributeOldValue: true, attributeFilter: ['data-theme', 'data-color-mode', 'class'] });
-    }
-    setActiveMode(readMode());
-    setRevision(n => n + 1);
-    onCleanup(() => observer.disconnect());
-    createEffect(on([() => p.code, mode, invalid, revision, storedSrc], ([code, colorMode, bad, , servedSrc]) => {
+    setActiveMode(host.ownerDocument.documentElement.classList.contains('dark') ? 'dark' : 'light');
+    // A stored image needs no engine. Its later theme changes use a lazy observer outside the
+    // ready-time kit closure; it rechecks the current mode when loaded, covering that gap.
+    const controller = new AbortController();
+    void import('./mermaid-mode').then(m => m.observeMermaidMode(host, setActiveMode, controller.signal));
+    onCleanup(() => controller.abort());
+    createEffect(on([() => p.code, mode, invalid, storedSrc], ([code, colorMode, bad, servedSrc]) => {
       if (bad) return;
-      let live = true;
       setResult(null);
       if (servedSrc) return;
-      // Intentional lazy boundary: a stored drawing never loads the drawing helpers or Mermaid.
-      const cancel = deferEngine(host, () => { void import('@/lib/mermaid-images/reader-draw').then(m => m.drawForReader(host, code, colorMode === 'dark', () => live)).then(
-        drawn => { if (live && drawn) setResult({ code, ...drawn }); },
-        () => { if (live) setResult({ code, error: 'Could not render this diagram. Check its Mermaid syntax.' }); },
-      ); });
-      onCleanup(() => { live = false; cancel(); });
+      // A stored drawing never loads the scheduler, drawing helpers, or Mermaid.
+      const controller = new AbortController();
+      void import('./mermaid-draw').then(m => m.startMermaidDraw(host, code, colorMode === 'dark', controller.signal, setResult),
+        () => { if (!controller.signal.aborted) setResult({ code, error: 'Could not render this diagram. Check its Mermaid syntax.' }); });
+      onCleanup(() => controller.abort());
     }));
     // An image that finished (or failed) before hydration fired its event into nothing: read its own state.
     createEffect(on([src, storedSrc], ([source, servedSrc]) => {
@@ -90,10 +70,10 @@ export function Mermaid(p: Props) {
       img.style.height = 'auto';
     }));
   });
-  const onLoad = () => { const source = src(); if (source) setLoadedSrc(source); };
+  const onLoad = () => setLoadedSrc(src());
   const onError = () => {
     const source = src();
-    if (source && source === storedSrc()) setRefused(source);
+    if (source === storedSrc()) setRefused(source);
     else setResult({ code: p.code, error: 'Could not display this diagram.' });
   };
 
@@ -103,8 +83,8 @@ export function Mermaid(p: Props) {
   const imgAttrs = (): JSX.ImgHTMLAttributes<HTMLImageElement> => ({ 'attr:style': !p.inGridItem && image() && !current()?.image ? servedStyle(image()!) : undefined } as JSX.ImgHTMLAttributes<HTMLImageElement>);
   return <figure ref={host} class={join('min-w-0', p.inGridItem ? 'flex h-full w-full flex-col' : 'my-4', className)}
     data-mx-mermaid-state={error() ? 'error' : image() && loadedSrc() === image()!.src ? 'ready' : 'pending'} data-mermaid-type={image()?.type}
-    data-mx-mermaid-mode={mode()} data-mx-mermaid-image-key={imageKey() ?? undefined}
-    data-mx-mermaid-key={engineDrawn() ? imageKey() ?? undefined : undefined} data-mx-mermaid-palette={engineDrawn() ? current()?.palette : undefined}
+    data-m={mode()}
+    data-mx-mermaid-key={engineDrawn() ? imageKey() : undefined} data-mx-mermaid-palette={engineDrawn() ? current()?.palette : undefined}
     data-mx-mermaid-metrics={engineDrawn() ? current()?.metrics : undefined} data-mx-mermaid-portable={engineDrawn() && current()?.portable ? '' : undefined}
     data-mx-mermaid-faces={engineDrawn() ? current()?.faces : undefined} {...rest}>
     <figcaption class={p.inGridItem ? 'border-b border-border px-3 py-2 font-mono text-sm font-medium' : 'mb-2 font-mono text-sm font-medium'}>{name()}</figcaption>

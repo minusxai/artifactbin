@@ -29,7 +29,7 @@ try {
   await switchView('Sprint');
   await ownerPage.waitForFunction(()=>new URLSearchParams(location.search).get('$view_mode')==='sprint');
   await page.locator('#view-sprint').getByLabel('Add Sprint',{exact:true}).click();
-  const dialog=ownerPage.locator('[data-mx-inline-story]').getByRole('dialog',{name:'Add sprint'});
+  const dialog=ownerPage.getByRole('dialog',{name:'Add sprint'});
   await dialog.waitFor();
   await page.getByLabel('Sprint name',{exact:true}).fill('Planning week');
   await page.getByLabel('Sprint deadline',{exact:true}).fill('2026-09-14');
@@ -39,8 +39,12 @@ try {
   await page.locator('#view-sprint').getByLabel('Add Sprint',{exact:true}).click();
   await page.getByLabel('Sprint name',{exact:true}).fill(' planning WEEK ');
   await page.getByLabel('Create sprint',{exact:true}).click();
-  const refusal=page.getByRole('alert');await refusal.waitFor();
-  assert.match(await refusal.textContent(),/affected|changed|mutation/i);
+  let refusal='';
+  for(let attempt=0;attempt<40&&!refusal;attempt++){
+    refusal=await page.evaluate(() => document.querySelector('[role="alert"]')?.textContent ?? '');
+    if(!refusal)await page.waitForTimeout(250);
+  }
+  assert.match(refusal,/affected|changed|mutation/i,`missing refusal: ${await dialog.textContent()}`);
   assert.equal(await dialog.isVisible(),true);
   await page.getByLabel('Cancel sprint',{exact:true}).click();
   await switchView('Table');
