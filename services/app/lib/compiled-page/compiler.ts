@@ -716,7 +716,7 @@ export function generate(input: GenerateInput): Generated {
 
   const kitImports = (set: Set<string>): string => {
     const byMod: Record<string, string[]> = {};
-    for (const tag of set) (byMod[tag === 'BoundNative' ? 'controls' : tag === 'BoundImage' || tag === 'rowImageAttrs' ? 'files' : CELL_EXPORTS.has(tag) ? 'cells' : KIT[tag]!.mod] ??= []).push(tag);
+    for (const tag of set) (byMod[tag === 'BoundNative' ? 'controls' : tag === 'BoundImage' ? 'image' : tag === 'rowImageAttrs' ? 'files' : CELL_EXPORTS.has(tag) ? 'cells' : KIT[tag]!.mod] ??= []).push(tag);
     return Object.entries(byMod).sort(([a], [b]) => a.localeCompare(b)).map(([mod, tags]) => `import { ${tags.sort().map(safeProp).join(', ')} } from ${lit(`@mx/kit/${safeTag(mod)}`)};\n`).join('');
   };
   const dataConsts = data.map((text, i) => `const $d${i} = JSON.parse(${lit(text)});\n`).join('');

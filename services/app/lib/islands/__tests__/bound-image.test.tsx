@@ -4,7 +4,8 @@ import { createSignal } from 'solid-js';
 import { render } from 'solid-js/web';
 import { IslandProvider } from '../context';
 import { fakeIsland } from './context.test';
-import { BoundImage, rowImageAttrs } from '../kit/files';
+import { rowImageAttrs } from '../kit/files';
+import { BoundImage } from '../kit/image';
 import { rowAttrs } from '../kit/basic';
 import type { IslandContext } from '../contract';
 
@@ -32,7 +33,7 @@ describe('compiled bound image', () => {
     const host = document.createElement('div');
     const dispose = render(() => <IslandProvider value={island}><BoundImage template="$pick" props={{ alt: 'chosen' }} /></IslandProvider>, host);
     expect(host.querySelector('img')?.hasAttribute('src')).toBe(false);
-    expect(fetcher).toHaveBeenCalledWith('/a/Doc123/assets?u=https%3A%2F%2Fimages.example%2Fa.png', expect.objectContaining({ headers: { Accept: 'application/json' } }));
+    await vi.waitFor(() => expect(fetcher).toHaveBeenCalledWith('/a/Doc123/assets?u=https%3A%2F%2Fimages.example%2Fa.png', expect.objectContaining({ headers: { Accept: 'application/json' } })));
     resolve(new Response(JSON.stringify({ url: '/assets/cached' }), { status: 200 }));
     await vi.waitFor(() => expect(host.querySelector('img')?.getAttribute('src')).toBe('/assets/cached'));
     setPick('javascript:alert(1)');

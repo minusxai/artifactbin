@@ -82,6 +82,8 @@ const ENTRIES = [
   { specifier: '@mx/row-class', name: 'row-class', file: () => islandModule('row-class') },
   // The compiled /raw page's own behaviour: framing, the reader's colour override, the live stream and the scroll restore.
   { specifier: '@mx/page', name: 'page', file: () => islandModule('page') },
+  // Image bindings load only on pages that author a data-selected image.
+  { specifier: '@mx/kit/image', name: 'kit-image', file: () => islandModule('kit/image') },
   ...KIT_FAMILIES.map((family) => ({ specifier: `@mx/kit/${family}`, name: `kit-${family}`, file: () => islandModule(`kit/${family}`) })),
 ];
 export const ISLAND_SPECIFIERS = Object.freeze(ENTRIES.map((e) => e.specifier));
@@ -97,6 +99,7 @@ export const ISLAND_SPECIFIERS = Object.freeze(ENTRIES.map((e) => e.specifier));
  */
 const STANDALONE_LAZY = [
   { request: './embed/frame-engine', name: 'frame-engine', file: () => path.join(ISLANDS_SRC, 'kit/embed/frame-engine.ts') },
+  { request: './image-map', name: 'image-map', file: () => path.join(ISLANDS_SRC, 'kit/image-map.ts') },
   // The version's author script (lib/islands/author-host), loaded by boot only when the page data names one.
   { request: './author-host', name: 'author-host', file: () => path.join(ISLANDS_SRC, 'author-host.ts') },
   // The live morph (lib/islands/live-update → ./morph/engine): a new version drawn in place, loaded only when one lands.

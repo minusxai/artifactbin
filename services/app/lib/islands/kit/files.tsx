@@ -1,48 +1,12 @@
 /* @jsxImportSource solid-js */
-import { For, Show, createEffect, createMemo, createSignal, onCleanup } from 'solid-js';
+import { For, Show } from 'solid-js';
 import { refName, type Row } from '@/lib/story/dataflow';
-import { boundImageValue, imageReferenceId } from '@/lib/story/image-source';
-import { ISLAND_DATA_ID } from '@/lib/compiled-page/contract';
 import { sparklineSvg } from '@/lib/viz/spark-markup';
 import { useIsland } from '../context';
 import { fileGlyphName } from '@/lib/story-ui/file-glyphs';
 import { iconGlyphKey, FALLBACK_ICON_KEY, type GlyphMap } from '@/lib/story-ui/icon-contract';
 
 type Props = { data?: string; rows?: Row[]; variant?: string; capture?: boolean; className?: string; glyphs?: GlyphMap; [key: string]: unknown };
-
-/** A reader-chosen image source goes through this document's scoped import door. */
-export function BoundImage(p: { template: string; props: Record<string, string>; row?: Record<string, unknown> }) {
-  const island = useIsland();
-  const source = createMemo(() => {
-    const value = boundImageValue(p.template, island.values(), p.row);
-    return typeof value === 'string' && value ? value : null;
-  });
-  const [mapped, setMapped] = createSignal<{ source: string; url: string } | null>(null);
-  const [refused, setRefused] = createSignal<string | null>(null);
-  const imported = new Map<string, string>();
-  createEffect(() => {
-    const value = source();
-    if (!value) return;
-    if (p.row && imageReferenceId(value)) { setMapped({ source: value, url: `/a/${imageReferenceId(value)}/raw` }); setRefused(null); return; }
-    const cached = imported.get(value);
-    if (cached) { setMapped({ source: value, url: cached }); setRefused(null); return; }
-    if (!/^https?:\/\//i.test(value) && !imageReferenceId(value)) { setRefused(value); return; }
-    if (typeof document === 'undefined') return;
-    let door: string | undefined = island.assetsUrl() ?? undefined;
-    if (!door) try { door = (JSON.parse(document.getElementById(ISLAND_DATA_ID)?.textContent ?? '{}') as { assetsUrl?: string }).assetsUrl; } catch { door = undefined; }
-    if (!door) { setRefused(value); return; }
-    const controller = new AbortController();
-    const separator = door.includes('?') ? '&' : '?';
-    void fetch(`${door}${separator}u=${encodeURIComponent(value)}`, { headers: { Accept: 'application/json' }, signal: controller.signal })
-      .then(async response => response.ok ? response.json() as Promise<{ url: string }> : null)
-      .then(answer => { if (!controller.signal.aborted) { if (answer?.url) { imported.set(value, answer.url); setMapped({ source: value, url: answer.url }); setRefused(null); } else setRefused(value); } })
-      .catch(() => { if (!controller.signal.aborted) setRefused(value); });
-    onCleanup(() => controller.abort());
-  });
-  return <img {...p.props} src={mapped()?.source === source() ? mapped()?.url : undefined}
-    data-mx-bound={mapped()?.source === source() ? undefined : `src:${p.template}`}
-    data-mx-asset={refused() === source() ? 'refused' : undefined} />;
-}
 
 /** Row image URLs are resolved in the image chunk, outside every page's rt+boot closure. */
 export function rowImageAttrs(result: Record<string, string>): Record<string, string> {
