@@ -1,3 +1,4 @@
+import {eraseMutationNotifications,lockMutationNotificationAuthority} from './mutation-notifications';
 import {expireCommentImagesFor,sweepCommentImages} from './comment-images';
 /**
  * TEST USERS — the throwaway second people an account mints to verify an app,
@@ -209,6 +210,7 @@ export async function eraseTestUser(testUserId: string, database?: Database): Pr
   const db = database ?? (await getDb());
   let picture: string | null = null;
   const erased = await db.transaction(async (tx) => {
+    await lockMutationNotificationAuthority(tx,'write');
     const user = await tx.query<{ id: string; image_key: string | null }>(
       "SELECT id, image_key FROM users WHERE id = $1 AND kind = 'testuser' FOR UPDATE", [testUserId],
     );
@@ -216,6 +218,7 @@ export async function eraseTestUser(testUserId: string, database?: Database): Pr
     picture = user.rows[0]!.image_key;
     const owned = await tx.query<{ id: string }>('SELECT id FROM artifacts WHERE user_id = $1', [testUserId]);
     const ids = owned.rows.map((row) => row.id);
+    await eraseMutationNotifications(tx,testUserId,ids);
     await expireCommentImagesFor(tx,testUserId,ids);
     if (ids.length) {
       for (const { table, key } of ERASE_BY_ARTIFACT) await tx.query(`DELETE FROM ${table} WHERE ${key} = ANY($1::text[])`, [ids]);
