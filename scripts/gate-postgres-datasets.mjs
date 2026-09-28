@@ -14,7 +14,7 @@ import { chromium } from 'playwright';
 import { becomeOwner, startDocument } from './lib/start-doc.mjs';
 import { loginViaEmail, startMailSink } from './lib/mail-login.mjs';
 import { compiledReader } from './lib/gate-reader.mjs';
-import { modelNoticeSql, physicalNoticeSql, invalidRecipientSql } from './fixtures/postgres-notifications.mjs';
+import { notificationDocumentPayload, notificationMutationPayload } from './fixtures/postgres-notifications.mjs';
 
 const base = process.argv[2] ?? 'http://localhost:3030';
 const log = label => console.log(`  ok ${label}`);
@@ -253,28 +253,13 @@ try {
     access: 'readwrite',
     dataset: '<Dataset kind="stored"><Table schema="public" name="rows" columns={[{"name":"id","type":"number"},{"name":"recipient","type":"string"}]} rows={[{"id":1,"recipient":"initial"}]} /></Dataset>',
   }, 201);
-  const rule = (name, source, sql) => `<Notify name="${name}" on="save" source="ref:${source}">{\`${sql}\`}</Notify>`;
-  const documentMarkup = (invalid = false) => `---
-title: PostgreSQL notification contract
-visibility: unlisted
----
-<Helmet>
-<Import name="requests" src="ref:${trigger.id}" />
-<Value name="recipient" type="string" default="${recipientId}" />
-<Mutation name="save" expectedAffected={1}>{\`update requests.rows set recipient = $recipient where id = 1\`}</Mutation>
-${rule('model_notice', modelDatasetId, modelNoticeSql)}
-${rule('duplicate_notice', modelDatasetId, modelNoticeSql)}
-${rule('physical_notice', datasetId, physicalNoticeSql)}
-${invalid ? rule('invalid_notice', modelDatasetId, invalidRecipientSql) : ''}
-</Helmet>
-<h1 id="pg-notify">PostgreSQL notification contract</h1>`;
   // The stored import is also a required readable source.
   await checked(owner, `/api/my/artifacts/${trigger.id}/sharing`, 'PUT', { visibility: 'unlisted' });
-  const notice = await checked(owner, '/api/my/artifacts', 'POST', { markup: documentMarkup() }, 201);
+  const notice = await checked(owner, '/api/my/artifacts', 'POST', notificationDocumentPayload({triggerId:trigger.id,recipientId,modelDatasetId,datasetId}), 201);
   await checked(recipient, `/api/my/artifacts/${notice.id}/members`, 'POST', { action: 'join' });
   await checked(owner, `/api/my/artifacts/${notice.id}/members`, 'POST', { action: 'approve', userId: recipientId });
   const run = async (documentId = notice.id) => {
-    const result = await checked(owner, `/a/${documentId}/mutate`, 'POST', { mutation: 'save', args: { recipient: recipientId } });
+    const result = await checked(owner, `/a/${documentId}/mutate`, 'POST', notificationMutationPayload(recipientId));
     assert.equal(typeof result.mutationRunId, 'string');
     return result.mutationRunId;
   };
@@ -307,7 +292,7 @@ ${invalid ? rule('invalid_notice', modelDatasetId, invalidRecipientSql) : ''}
   assert.equal((await inbox(deniedRun)).length, 0, 'restoring source access does not backfill a suppressed run');
   log('current native-source authority gates both delivery and disclosure');
 
-  const invalidNotice = await checked(owner, '/api/my/artifacts', 'POST', { markup: documentMarkup(true) }, 201);
+  const invalidNotice = await checked(owner, '/api/my/artifacts', 'POST', notificationDocumentPayload({triggerId:trigger.id,recipientId,modelDatasetId,datasetId,invalid:true}), 201);
   await checked(recipient, `/api/my/artifacts/${invalidNotice.id}/members`, 'POST', { action: 'join' });
   await checked(owner, `/api/my/artifacts/${invalidNotice.id}/members`, 'POST', { action: 'approve', userId: recipientId });
   const invalidRun = await run(invalidNotice.id);
