@@ -12,6 +12,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Show } from 'solid-js';
 import { boot } from '../boot';
+import { startPage } from '../page';
 import { islandDocumentOf } from '../handover';
 import { useIsland } from '../context';
 import { DataTable, Question } from '../kit/data';
@@ -116,6 +117,30 @@ describe('boot', () => {
     expect(ready).toHaveBeenCalledTimes(1);
     expect(booted.store).toBeNull();
     expect(booted.context.writesUnavailable()).toBeNull();
+  });
+
+  it('keeps the public mx API on a compiled data page until that page is disposed', async () => {
+    page(snapshot);
+    const stopPage = startPage();
+    booted = boot({ ISLANDS: [['s0-', Total]], FLOW: flow });
+    await vi.waitFor(() => expect(window.mx).toBeDefined());
+    expect((await window.mx!.read(['region'])).signals.region.value).toBe('West');
+    const installed = window.mx;
+    booted.dispose();
+    booted = null;
+    expect(window.mx).not.toBe(installed);
+    stopPage();
+  });
+
+  it('releases the public mx API when the compiled document enters edit mode', async () => {
+    page(snapshot);
+    const stopPage = startPage();
+    booted = boot({ ISLANDS: [['s0-', Total]], FLOW: flow });
+    await vi.waitFor(() => expect(window.mx).toBeDefined());
+    const installed = window.mx;
+    booted.setMode('edit');
+    expect(window.mx).not.toBe(installed);
+    stopPage();
   });
 
   it('accepts ISLANDS alone for a module whose islands read no data', () => {

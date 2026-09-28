@@ -236,10 +236,14 @@ await page.goto(readerUrl(`${BASE}/a/${doc.id}`), { waitUntil: 'load' });
 await inlineStory(page);
 await page.waitForTimeout(4000);
 const documentFrame = () => page.mainFrame();
+
+
 await openArtifactControls(page);
 await page.click('[aria-label="Edit artifact"]');
 await page.waitForSelector('[aria-label="Exit edit mode"]', { timeout: 30000 });
 await page.waitForTimeout(4000);
+
+
 
 check(await documentFrame().evaluate("!!document.querySelector('h1')?.isContentEditable").catch(() => false),
   'and it becomes editable');

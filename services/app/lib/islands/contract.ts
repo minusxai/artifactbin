@@ -69,6 +69,8 @@ export interface IslandContext extends IslandData, IslandWrites {
   viewer(): IslandViewer;
   /** The version's stored Mermaid drawings, keyed by `mermaidImageKey(code, mode)`. */
   drawings(): Readonly<Record<string, StoredMermaidImage>>;
+  /** The requested first-paint colour mode during server rendering. */
+  colorMode?(): 'light' | 'dark';
   writes: WriteStatusFeed;
   /** The underlying store — for the SPA and the author script; islands read through the accessors above. */
   store(): DataflowStore | null;

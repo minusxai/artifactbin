@@ -121,10 +121,12 @@ describe('the HTML-first reader page', () => {
     const capture = new JSDOM(await (await raw(id, '?reader=compiled&chrome=0')).text()).window.document;
     expect(capture.querySelector('.mx-outline')).toBeNull();
   });
+
   it('/a/:id serves the story with server chrome and the SPA on idle, and the same text as /raw', async () => {
     const who = await owner();
     const id = await publish(who.token, { title: 'Perf C dashboard', markup: fixture('dashboard.jsx').replaceAll('{{sales}}', await publish(who.token, { title: 'Perf sales', dataset: fixture('sales.csv') })), template: 'dashboard' });
     const rawHtml = await (await raw(id)).text();
+
     const res = await app.request(`/a/${id}?reader=compiled`, { headers: { accept: 'text/html' } });
     expect(res.headers.get(READER_MODE_HEADER)).toBe('compiled');
     const html = await res.text();
@@ -134,7 +136,9 @@ describe('the HTML-first reader page', () => {
     expect(doc.querySelector(`script[type="module"][${SPA_IDLE_ATTR}]`)).toBeTruthy();
     expect(doc.querySelector('[data-mx-artifact-id]')).toBeTruthy();
     expect(storyText(html)).toContain('$744,503');
+
     // Both compiled surfaces carry the same story text after chart slots are excluded.
+
     const slots = [...doc.querySelectorAll('#mx-story-root [data-mx-chart-slot]')].map((slot) => slot.closest('[aria-label="Question embed"]')?.id).filter((id): id is string => !!id);
     const textOf = (root: Element | null) => {
       if (!root) return '';
@@ -184,7 +188,9 @@ describe('one row fetch and one access check per compiled view', () => {
       expect(page.headers.get(READER_MODE_HEADER)).toBe('compiled');
       expect(ofDocument()).toEqual({ fetches: 1, checks: 1 });
 
+
       // A prose app page also reuses its one admission decision.
+
       const prose = await publish(who.token, { title: 'Perf A prose', markup: fixture('prose.jsx') });
       fetched.mockClear(); checked.mockClear();
       const prosePage = await app.request(`/a/${prose}`, { headers: { accept: 'text/html' } });
@@ -213,8 +219,10 @@ describe('the guest snapshot never outlives the guest\'s access', () => {
   });
 });
 
+
 describe('the one reader path', () => {
   it('/raw and the app page both serve compiled prose', async () => {
+
     const who = await owner();
     const id = await publish(who.token, { title: 'Perf A prose', markup: fixture('prose.jsx') });
       const res = await raw(id, '?reader=compiled');
@@ -223,7 +231,9 @@ describe('the one reader path', () => {
       expect(res.headers.get('content-security-policy')).toMatch(/script-src 'self'/);
       const page = await app.request(`/a/${id}?reader=compiled`, { headers: { accept: 'text/html' } });
       expect(page.headers.get(READER_MODE_HEADER)).toBe('compiled');
+
       expect(new JSDOM(await page.text()).window.document.querySelector('#mx-story-root')).toBeTruthy();
+
   });
 
   it('a domain post and the owner\'s editing copy use the compiled /raw response', async () => {
@@ -240,7 +250,7 @@ describe('the one reader path', () => {
   it('on: readers get the compiled page everywhere, including a legacy query and a domain post', async () => {
     const who = await owner();
     const id = await publish(who.token, { title: 'Perf B kit', markup: fixture('kit.jsx') });
-    try {
+    {
       expect((await raw(id)).headers.get(READER_MODE_HEADER)).toBe('compiled');
       expect((await raw(id, '?reader=legacy')).headers.get(READER_MODE_HEADER)).toBe('compiled');
       const post = await rawRoute(request(`/a/${id}/raw?reader=legacy`), { params: Promise.resolve({ id }), domain: { hostname: 'blog.example.com', ownerId: who.user.id } });
@@ -249,7 +259,6 @@ describe('the one reader path', () => {
       expect(doc.querySelector('[data-mx-domain-footer] a')?.getAttribute('href')).toMatch(new RegExp(`/a/${id}$`));
       expect(doc.querySelector('#mx-story-root [data-mx-domain-footer]'), 'the attribution is outside the story root').toBeNull();
       expect(doc.body.getAttribute('data-mx-live-id')).toBe(id);
-    } finally {
     }
   });
 

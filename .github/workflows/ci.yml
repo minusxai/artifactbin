@@ -372,13 +372,13 @@ jobs:
   gates:
     needs: [ plan, build ]
     if: needs.plan.outputs.gates == 'true'
-    name: browser gates (${{ matrix.shard }}/11)
+    name: browser gates (${{ matrix.shard }}/12)
     runs-on: ubuntu-latest
     timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
-        shard: [ 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11 ]
+        shard: [ 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12 ]
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
@@ -411,8 +411,8 @@ jobs:
       # packages even on a browser-cache hit; install them only on shards that use them.
       - id: gate-browsers
         run: |
-          echo "browsers=$(node scripts/gates.mjs --browsers --shard=${{ matrix.shard }}/11)" >> "$GITHUB_OUTPUT"
-          echo "postgres=$(node scripts/gates.mjs --needs-postgres --shard=${{ matrix.shard }}/11)" >> "$GITHUB_OUTPUT"
+          echo "browsers=$(node scripts/gates.mjs --browsers --shard=${{ matrix.shard }}/12)" >> "$GITHUB_OUTPUT"
+          echo "postgres=$(node scripts/gates.mjs --needs-postgres --shard=${{ matrix.shard }}/12)" >> "$GITHUB_OUTPUT"
       - name: Install selected gate browsers
         env:
           BROWSERS: ${{ steps.gate-browsers.outputs.browsers }}
@@ -434,7 +434,7 @@ jobs:
         with:
           name: app-build
       # The runner boots the servers with one protected per-run mail outbox.
-      # Two servers within each of the eleven runners. The
+      # Two servers within each of the fourteen runners. The
       # within-machine fan-out bottomed out at 192s on four vCPUs; the shard is
       # balanced by each gate's measured weight, not by count, so no one runner
       # ends up holding every slow gate (scripts/gates.shard.mjs). More than two
@@ -442,8 +442,10 @@ jobs:
       # 34697938970, and further shards divide that work rather than the machine.
       #
       #
-      # Eleven shards keep the one compiled gate set under 240 s per job, with
+
+      # Twelve shards keep the one compiled gate set under 240 s per job, with
       # editor-v2, hydration and offline-file on separate runners.
+
       #
       # The gate runner selects the shard on this host; pull Postgres only when
       # that selection includes postgres-datasets, before its gate timeout starts.
@@ -459,7 +461,7 @@ jobs:
           sudo chown -R "$USER" /sys/fs/cgroup/afbin-sessions
           sudo chown "$USER" /sys/fs/cgroup/cgroup.procs
       - name: every gate, two servers
-        run: node scripts/gates.mjs --servers=2 --shard=${{ matrix.shard }}/11
+        run: node scripts/gates.mjs --servers=2 --shard=${{ matrix.shard }}/12
         env:
           AUTH__SECRET: gates-ci-${{ github.run_id }}
           DATASET__ALLOW_PRIVATE_NETWORKS: 'true'

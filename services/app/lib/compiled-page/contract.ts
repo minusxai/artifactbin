@@ -19,12 +19,12 @@
  *   links.ts            linkHintsOf            w1-planners
  */
 import type { JsxNode } from '@/lib/jsx';
-import type { OutlineEntry } from '@/lib/story-runtime/outline';
 import type { CompiledDataflow, CompiledReads } from '@/lib/story/compiled-dataflow';
 import type { Scalar } from '@/lib/story/dataflow';
 import type { RefDataMap } from '@/lib/story/ref-data';
 import type { GlyphMap } from '@/lib/story-ui/icon-contract';
 import type { ReaderChromeInput } from '@/lib/story/reader-chrome';
+import type { OutlineEntry } from '@/lib/story-runtime/outline';
 import type { ServedResults, StoredMermaidImage, StoryViewer } from '@/lib/story-runtime/contract';
 import type { AgentDiscovery } from '@/lib/agent-discovery-tags';
 
@@ -190,6 +190,7 @@ export const isCompileFailure = (stored: StoredCompile): stored is CompileFailur
 
 /** What the SSR module renders the islands from: the declared dataflow plus a snapshot's answers, and the version's drawings. */
 export interface IslandRenderData {
+  colorMode?: 'light' | 'dark';
   values: Record<string, Scalar>;
   state?: import('@/lib/story/dataflow').DataflowState;
   assetsUrl?: string;

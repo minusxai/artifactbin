@@ -1,7 +1,7 @@
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { compiledOf } from '@/test/helpers/compiled';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { InlineStoryRuntime, type InlineStoryController } from '../InlineStoryRuntime';
+import { EditorStoryRuntime, type StoryController } from '../EditorStoryRuntime';
 import { STORY_DOCUMENT_MESSAGE, STORY_EDIT_MODE_MESSAGE, STORY_COMMIT_MESSAGE, STORY_SELECT_MESSAGE, STORY_READER_MODE_MESSAGE, type StoryIslandData } from '../contract';
 import { StrictMode } from 'react';
 import { parseJsxOrThrow } from '@/test/helpers/jsx';
@@ -18,7 +18,7 @@ describe('inline artifact runtime lifetime', () => {
     const parsed=parseJsxOrThrow('<article><h2>One</h2><h2>Two</h2><h2>Three</h2><table><tbody><tr><td>Wide</td></tr></tbody></table></article>');
     vi.spyOn(HTMLTableElement.prototype,'scrollWidth','get').mockReturnValue(1000);
     vi.spyOn(HTMLTableElement.prototype,'clientWidth','get').mockReturnValue(100);
-    const view=render(<><table aria-label="Outside" /><InlineStoryRuntime data={{...data(''),nodes:parsed.nodes,chrome:true,template:'editorial'}} onController={()=>{}} /></>);
+    const view=render(<><table aria-label="Outside" /><EditorStoryRuntime data={{...data(''),nodes:parsed.nodes,chrome:true,template:'editorial'}} onController={()=>{}} /></>);
     const root=view.container.querySelector('[data-mx-inline-story]')!;
     await waitFor(()=>expect(root.querySelector('table')).toHaveAttribute('data-mx-scrollable',''));
     expect(screen.getByLabelText('Outside')).not.toHaveAttribute('data-mx-scrollable');
@@ -29,8 +29,8 @@ describe('inline artifact runtime lifetime', () => {
     view.unmount();vi.restoreAllMocks();
   });
   it('retains the reader color choice while adopting an authored version', async () => {
-    let controller:InlineStoryController|null=null;
-    const view=render(<InlineStoryRuntime data={data('First')} onController={value=>{controller=value;}} />);
+    let controller:StoryController|null=null;
+    const view=render(<EditorStoryRuntime data={data('First')} onController={value=>{controller=value;}} />);
     await waitFor(()=>expect(controller).not.toBeNull());
     await act(async()=>controller!.send({type:STORY_READER_MODE_MESSAGE,mode:'dark'}));
     await act(async()=>controller!.update({type:STORY_DOCUMENT_MESSAGE,nodes:data('Second').nodes,colorMode:'light'}));
@@ -40,19 +40,19 @@ describe('inline artifact runtime lifetime', () => {
     const initial = data('Strict');
     initial.dataflow = {flow:await compiledOf('<Value name="n" type="number" default={0} /><Query name="q">{`select $n as n`}</Query>')};
     const run = vi.fn(async () => ({tables:{},errors:{}}));
-    let controller: InlineStoryController | null = null;
-    const view = render(<StrictMode><InlineStoryRuntime data={initial} transport={{...transport,run}} onController={value => { controller=value; }} /></StrictMode>);
+    let controller: StoryController | null = null;
+    const view = render(<StrictMode><EditorStoryRuntime data={initial} transport={{...transport,run}} onController={value => { controller=value; }} /></StrictMode>);
     await waitFor(() => expect(controller).not.toBeNull());
     const listener = vi.fn(); controller!.subscribe(listener);
     await act(async () => { controller!.update({type:STORY_DOCUMENT_MESSAGE,nodes:data('Replayed').nodes,dataflow:initial.dataflow}); });
     await waitFor(() => expect(run.mock.calls.length).toBeGreaterThan(1));
-    // A version this page was not served goes under the CSS policy, loaded on demand (./inline-sheet).
+    // A version this page was not served goes under the CSS policy, loaded on demand (./editor-sheet).
     await waitFor(() => expect(screen.getByLabelText('Artifact heading')).toHaveTextContent('Replayed'));
     view.unmount();
   });
   it('renders directly in the main document and adopts versions without replacing its root', async () => {
-    let session: InlineStoryController | null = null;
-    const view = render(<InlineStoryRuntime data={data('First')} transport={transport} onController={value => { session = value; }} />);
+    let session: StoryController | null = null;
+    const view = render(<EditorStoryRuntime data={data('First')} transport={transport} onController={value => { session = value; }} />);
     await waitFor(() => expect(session).not.toBeNull());
     const heading = screen.getByLabelText('Artifact heading');
     expect(heading.getRootNode()).toBe(document);
@@ -64,8 +64,8 @@ describe('inline artifact runtime lifetime', () => {
   });
 
   it('scopes duplicate AST paths to its own root and commits actual edited text', async () => {
-    let session: InlineStoryController | null = null;
-    const view = render(<><p id="outside" data-mx-ast="0">Trusted sibling</p><InlineStoryRuntime data={data('First')} transport={transport} onController={value => {session=value;}} /></>);
+    let session: StoryController | null = null;
+    const view = render(<><p id="outside" data-mx-ast="0">Trusted sibling</p><EditorStoryRuntime data={data('First')} transport={transport} onController={value => {session=value;}} /></>);
     await waitFor(() => expect(session).not.toBeNull());
     const messages: unknown[] = [];
     session!.subscribe(message => messages.push(message));
@@ -83,10 +83,10 @@ describe('inline artifact runtime lifetime', () => {
   });
 
   it('keeps an uncommitted edit when surrounding comment chrome rerenders', async () => {
-    let session: InlineStoryController | null = null;
+    let session: StoryController | null = null;
     const initial = data('First');
-    const callback = (value: InlineStoryController | null) => { session = value; };
-    const view = render(<InlineStoryRuntime data={initial} transport={transport} onController={callback} />);
+    const callback = (value: StoryController | null) => { session = value; };
+    const view = render(<EditorStoryRuntime data={initial} transport={transport} onController={callback} />);
     await waitFor(() => expect(session).not.toBeNull());
     await act(async () => session!.send({ type: STORY_EDIT_MODE_MESSAGE, on: true }));
     const editor = await screen.findByLabelText('Artifact heading');
@@ -98,13 +98,13 @@ describe('inline artifact runtime lifetime', () => {
     expect(screen.getByLabelText('Artifact heading').closest('.ProseMirror')).toHaveTextContent('MIDSENTENCE');
     await act(async () => session!.send({ type: STORY_SELECT_MESSAGE, path: null }));
     expect(screen.getByLabelText('Artifact heading').closest('.ProseMirror')).toHaveTextContent('MIDSENTENCE');
-    view.rerender(<InlineStoryRuntime data={initial} transport={transport} onController={callback} />);
+    view.rerender(<EditorStoryRuntime data={initial} transport={transport} onController={callback} />);
     expect(screen.getByLabelText('Artifact heading').closest('.ProseMirror')).toHaveTextContent('MIDSENTENCE');
   });
 
   it('does not create a lazy edit session after unmount', async () => {
-    let session: InlineStoryController | null = null;
-    const view = render(<InlineStoryRuntime data={data('First')} transport={transport} onController={value=>{session=value;}} />);
+    let session: StoryController | null = null;
+    const view = render(<EditorStoryRuntime data={data('First')} transport={transport} onController={value=>{session=value;}} />);
     await waitFor(() => expect(session).not.toBeNull());
     const old = session!;
     await act(async () => { old.send({type:STORY_EDIT_MODE_MESSAGE,on:true}); view.unmount(); });
@@ -113,9 +113,9 @@ describe('inline artifact runtime lifetime', () => {
   });
 
   it('accepts editing through its private endpoint, never forged window messages, and revokes the endpoint on unmount', async () => {
-    let session: InlineStoryController | null = null;
-    const callback = (value: InlineStoryController | null) => { session = value; };
-    const view = render(<InlineStoryRuntime data={data('First')} transport={transport} onController={callback} />);
+    let session: StoryController | null = null;
+    const callback = (value: StoryController | null) => { session = value; };
+    const view = render(<EditorStoryRuntime data={data('First')} transport={transport} onController={callback} />);
     await waitFor(() => expect(session).not.toBeNull());
     await act(async () => { window.dispatchEvent(new MessageEvent('message', { data: { type: STORY_EDIT_MODE_MESSAGE, on: true }, source: window })); });
     expect(screen.getByLabelText('Artifact heading')).not.toHaveAttribute('contenteditable', 'true');

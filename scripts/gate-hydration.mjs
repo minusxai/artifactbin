@@ -168,8 +168,10 @@ try {
   const anonymous = await browser.newContext({ viewport: { width: 1400, height: 900 } });
   await githubWidgetFixture(anonymous);
   await runCompiledTakeover({ ownerContext, ownerPage, anonymous, kit });
+
   await anonymous.close();
   await ownerContext.close();
+
 } finally {
   await browser.close();
 }

@@ -123,7 +123,7 @@ describe('the shards are cut from those rows', () => {
     }
   });
 
-  // Six is what CI fans over (.github/workflows/ci.yml, `gates`); the set is DIVIDED, so a shard
+  // CI fans the set over twelve runners; (.github/workflows/ci.yml, `gates`); the set is DIVIDED, so a shard
   // count the packing cannot serve would silently run a gate twice, or not at all.
   it('10. every gate lands in exactly one shard, for one through six of them', () => {
     expect(shardOf(NAMES, { index: 1, total: 1 }, weight)).toEqual(NAMES);
@@ -168,13 +168,15 @@ it('balances the extra cross-browser setup without extending any test timeout', 
   expect(shardWeight('screenshot-comments')).toBe(specFor('screenshot-comments').timeoutMs + 270_000);
 });
 
-it('prints the same browser plan used by the eleven CI shards without starting servers', () => {
+
+it('prints the same browser plan used by the twelve CI shards without starting servers', () => {
   const set = onDisk;
-  for (let index = 1; index <= 11; index++) {
-    const selected = shardOf(set, {index, total: 11}, shardWeight, { isolated: ISOLATED_GATES });
-    const output = execFileSync(process.execPath, [path.join(SCRIPTS, 'gates.mjs'), '--browsers', `--shard=${index}/11`], {encoding: 'utf8'}).trim();
+  for (let index = 1; index <= 12; index++) {
+    const selected = shardOf(set, {index, total: 12}, shardWeight, { isolated: ISOLATED_GATES });
+    const output = execFileSync(process.execPath, [path.join(SCRIPTS, 'gates.mjs'), '--browsers', `--shard=${index}/12`], {encoding: 'utf8'}).trim();
     expect(output).toBe(browsersFor(selected).join(' '));
-    const postgres = execFileSync(process.execPath, [path.join(SCRIPTS, 'gates.mjs'), '--needs-postgres', `--shard=${index}/11`], {encoding: 'utf8'}).trim();
+    const postgres = execFileSync(process.execPath, [path.join(SCRIPTS, 'gates.mjs'), '--needs-postgres', `--shard=${index}/12`], {encoding: 'utf8'}).trim();
     expect(postgres).toBe(String(selected.includes('postgres-datasets')));
   }
+
 });

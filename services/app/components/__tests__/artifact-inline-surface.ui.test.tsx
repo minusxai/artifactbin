@@ -12,6 +12,24 @@ import ArtifactSurface, { type ArtifactSurfaceProps } from '../ArtifactSurface';
 import ArtifactShell from '../ArtifactShell';
 import { parseJsx } from '@/lib/jsx';
 import type { ArtifactLiveEvent } from '@/lib/story/live';
+const morphState = vi.hoisted(() => ({ next: null as ArtifactLiveEvent | null }));
+vi.mock('@/lib/islands/live-update', () => ({
+ reloadKeepingPlace: vi.fn(),
+ updateCompiledStory: vi.fn(async (win: Window) => {
+  const story = win.document.querySelector<HTMLElement>('[data-mx-inline-story]');
+  const next = morphState.next;
+  if (!story || !next?.nodes) return 'morphed';
+  const paragraph = story.querySelector('p');
+  if (paragraph) paragraph.textContent = 'Second version';
+  if (next.colorMode) story.className = next.colorMode;
+  if (next.theme) story.setAttribute('data-theme', next.theme);
+  if (next.compiledCss || next.authorCss) {
+   const style = story.querySelector('style') ?? story.appendChild(win.document.createElement('style'));
+   style.textContent = `${next.compiledCss ?? ''}${next.authorCss ?? ''}`;
+  }
+  return 'morphed';
+ }),
+}));
 
 afterEach(()=>vi.unstubAllGlobals());
 
@@ -59,6 +77,7 @@ describe('the inline document surface', () => {
  it('keeps owner controls while readers cannot enter editing',async()=>{
   const view=render(<ArtifactSurface {...surfaceProps()} />);await screen.findByText('Document body');
   expect(screen.queryByLabelText('Edit artifact')).toBeNull();view.unmount();
+  setupSurface();
   render(<ArtifactShell role="owner"><ArtifactSurface {...surfaceProps()} /></ArtifactShell>);
   await screen.findByText('Document body');fireEvent.click(screen.getByLabelText('Open artifact controls'));
   expect(screen.getByLabelText('Edit artifact')).toBeInTheDocument();
@@ -104,6 +123,7 @@ describe('adopting a new version into the live surface', () => {
  }));});
  async function update(over:Partial<ArtifactLiveEvent>={}){
   served=version('<p>Second version</p>',over);
+  morphState.next=served;
   await act(async()=>{SurfaceEvents.last.onmessage?.({data:JSON.stringify({editId:served.editId,version:served.version,by:null})} as MessageEvent);});
  }
 

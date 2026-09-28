@@ -6,7 +6,7 @@ import type { EditorSelectionChange } from '@/lib/editor-v2/bookmark';
 /**
  * EDITING, IN THE DOCUMENT THE READER IS ALREADY LOOKING AT.
  *
- * The page's mounted InlineStoryRuntime becomes editable in place. This
+ * The page's mounted EditorStoryRuntime becomes editable in place. This
  * component owns the editing chrome, source composition, persistence and history.
  *
  * Pressing edit does not unmount the runtime, build a second document, boot a

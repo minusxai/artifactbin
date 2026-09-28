@@ -1,0 +1,28 @@
+{
+  "format": 1,
+  "bundles": {
+    "core": {
+      "file": "core.js.gz",
+      "sha256": "b6c41214c2f5260143d04cb4ad728091b8764b6de58179e6ce13523eb9b658ad",
+      "raw": 5328915,
+      "gzip": 1785337,
+      "base64": 2380452
+    },
+    "mermaid": {
+      "file": "mermaid.js.gz",
+      "sha256": "b56e9410408374162ffb5e9816dbe9ff41bc01eebf6d73f3d9b9af46e787c4b2",
+      "raw": 10574562,
+      "gzip": 3279859,
+      "base64": 4373148
+    }
+  },
+  "extras": {
+    "file": "extras-b42eefba8c081687.js",
+    "path": "/offline/extras-b42eefba8c081687.js",
+    "integrity": "sha384-c7tmBFdywvSyL/ePOvtrwsO4rC/+7EMb3m57aWz3XkiUNITJrYzDq1NNLqTco1pU",
+    "sha256": "b42eefba8c08168775c783622ebddf32d6d56a74da78ef1ff7496401f38801e5",
+    "raw": 1042242,
+    "gzip": 315532,
+    "base64": 420712
+  }
+}

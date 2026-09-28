@@ -570,17 +570,17 @@ describe('CI job shape', () => {
     }
   });
 
-  it('fans the gate set over eleven runners and pulls Postgres only for its assigned shard', () => {
+  it('fans the gate set over twelve runners and pulls Postgres only for its assigned shard', () => {
     const { jobs } = ci();
-    expect(jobs.gates.strategy.matrix.shard).toEqual(Array.from({ length: 11 }, (_, index) => index + 1));
+    expect(jobs.gates.strategy.matrix.shard).toEqual(Array.from({ length: 12 }, (_, index) => index + 1));
     const run = jobs.gates.steps.find((step) => step.name === 'every gate, two servers');
     expect(run.run).toContain('--servers=2');
-    expect(run.run).toContain('--shard=${{ matrix.shard }}/11');
+    expect(run.run).toContain('--shard=${{ matrix.shard }}/12');
     const browser = jobs.gates.steps.find((step) => step.id === 'playwright');
     expect(browser.with.key).toContain("hashFiles('node_modules/playwright-core/browsers.json')");
     const selection = jobs.gates.steps.find(step => step.id === 'gate-browsers');
-    expect(selection.run).toContain('--browsers --shard=${{ matrix.shard }}/11');
-    expect(selection.run).toContain('--needs-postgres --shard=${{ matrix.shard }}/11');
+    expect(selection.run).toContain('--browsers --shard=${{ matrix.shard }}/12');
+    expect(selection.run).toContain('--needs-postgres --shard=${{ matrix.shard }}/12');
     const install = jobs.gates.steps.find(step => step.name === 'Install selected gate browsers');
     expect(install.env.BROWSERS).toBe('${{ steps.gate-browsers.outputs.browsers }}');
     expect(install.run).toContain('"$BROWSERS" != chromium');
@@ -590,10 +590,12 @@ describe('CI job shape', () => {
     const pulls = jobs.gates.steps.filter((step) => /docker pull postgres:17-alpine/.test(step.run ?? ''));
     expect(pulls).toHaveLength(1);
     expect(pulls[0].if).toBe("steps.gate-browsers.outputs.postgres == 'true'");
+
     const names = gateNamesOnDisk(readdirSync(path.join(root, 'scripts')));
     const heaviest = (count) => Math.max(...Array.from({ length: count }, (_, offset) =>
-      shardOf(names, { index: offset + 1, total: count }, shardWeight, { isolated: count === 11 ? ISOLATED_GATES : [] }).reduce((sum, name) => sum + shardWeight(name), 0)));
-    expect(heaviest(11)).toBeLessThan(heaviest(9));
+      shardOf(names, { index: offset + 1, total: count }, shardWeight, { isolated: count === 12 ? ISOLATED_GATES : [] }).reduce((sum, name) => sum + shardWeight(name), 0)));
+    expect(heaviest(12)).toBeLessThan(heaviest(11));
+
     expect(jobs.gates.steps.indexOf(pulls[0])).toBeLessThan(jobs.gates.steps.indexOf(run));
     const sessions = jobs.gates.steps.find((step) => step.name === 'Prepare isolated browser session workers');
     expect(sessions.run).toContain('sudo apt-get install -y bubblewrap ||');

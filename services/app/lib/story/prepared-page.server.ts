@@ -54,7 +54,7 @@ import { inlineStoryCss, inlineStoryNodes } from './inline-css';
 import { styleOverrides, type StyleOverride } from './style-overrides';
 import { readerStorySheet } from './reader-sheet.server';
 import { mermaidImagesFor } from '@/lib/mermaid-images/store';
-import { servedStoryHtml } from './inline-story-html';
+import { servedStoryHtml } from '@/lib/story/legacy-story-html';
 import { loadStorySsr } from './ssr.server';
 import { lazyCodeOf, type LazyCode } from './lazy-code';
 import { assetsPath, mutatePath, queryPath } from './markup-csp';

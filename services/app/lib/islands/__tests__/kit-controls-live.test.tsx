@@ -74,6 +74,19 @@ async function compiled(values: Record<string, unknown>) {
 }
 
 describe('bound controls, as today\'s live reader renders them', () => {
+  it('writes null when a nullable query select returns to All', async () => {
+    const flow = await compiledSource(HELMET + BODY, { abc123: [{ name: 'region', type: 'string' }] });
+    const setValue = vi.fn();
+    const island = { ...fakeIsland(), value: () => 'EU', table: () => REGIONS, store: () => ({ flow }), setValue } as never;
+    const host = document.createElement('div');
+    const dispose = render(() => <IslandProvider value={island}><BoundNative tag="select" bind={{ value: 'region', options: 'regions' }} aria-label="Region" /></IslandProvider>, host);
+    try {
+      const select = host.querySelector('select')!;
+      select.value = '';
+      select.dispatchEvent(new Event('change', { bubbles: true }));
+      expect(setValue).toHaveBeenCalledWith('region', null, undefined);
+    } finally { dispose(); }
+  });
   for (const [label, values] of [['defaults', {}], ['chosen values', { region: 'EU', min_rev: 1200, title: 'Hello', note: 'Two\nlines', compare: true }]] as const) {
     it(`${label}: every control is byte for byte today's`, async () => {
       const react = await legacy(values);
@@ -114,6 +127,23 @@ describe('Files, as today\'s live listing renders it', () => {
 });
 
 describe('people, as today\'s live adapters render them', () => {
+  it('resolves repeated viewer references to the same public person card', async () => {
+    const { User, UserImage, UserHandle } = await import('../kit/people');
+    const person = { id: 'usr_twice', name: 'twice', handle: 'twice', image: null };
+    const island = { ...fakeIsland(), value: (name: string) => name === '_me.id' ? person.id : undefined, people: () => ({ [person.id]: person }) } as never;
+    const host = document.createElement('div');
+    const dispose = render(() => <IslandProvider value={island}><div>
+      <User userId="$_me.id" /><UserImage userId="$_me.id" size="lg" />
+      <UserHandle userId="$_me.id" /><UserImage userId="$_me.id" size="lg" />
+    </div></IslandProvider>, host);
+    try {
+      expect(host.querySelectorAll('[data-slot="avatar"]')).toHaveLength(3);
+      expect(host.querySelectorAll('[data-slot="avatar"][aria-label="twice"]')).toHaveLength(2);
+      expect(host.querySelectorAll('[data-unknown]')).toHaveLength(0);
+      expect(host.textContent).toContain('@twice');
+    } finally { dispose(); }
+  });
+
   it('User, UserImage and UserHandle for a guest and for a known person: byte for byte, whatever the compile-time recipe class', async () => {
     const { User, UserImage, UserHandle } = await import('../kit/people');
     const { User: RUser } = await import('@/components/kit/user');

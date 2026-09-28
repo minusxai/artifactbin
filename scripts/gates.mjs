@@ -74,7 +74,7 @@ const chosen = only ? GATES.filter((g) => only.includes(g.name)) : GATES;
 // those two" rather than "whichever of them fell in shard 1 of the whole set".
 const selected = shard
   ? (() => {
-      const names = shardOf(chosen.map((g) => g.name), shard, shardWeight, { isolated: shard.total === 11 ? ISOLATED_GATES : [] });
+      const names = shardOf(chosen.map((g) => g.name), shard, shardWeight, { isolated: shard.total === 12 ? ISOLATED_GATES : [] });
       return chosen.filter((g) => names.includes(g.name));
     })()
   : chosen;

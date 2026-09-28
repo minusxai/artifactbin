@@ -11,10 +11,8 @@ vi.mock('../pages/Profile', () => ({ ProfilePage: () => null }));
 
 afterEach(() => interpreter.mockClear());
 
-it('awaits the interpreter for today\'s story, and never loads it for a compiled one', async () => {
+it('preloads reader pages without the editor interpreter', async () => {
   const { preloadDocumentReader } = await import('../route-pages');
-  await preloadDocumentReader({ interpreter: false });
-  expect(interpreter).not.toHaveBeenCalled();
   await preloadDocumentReader();
-  expect(interpreter).toHaveBeenCalledTimes(1);
+  expect(interpreter).not.toHaveBeenCalled();
 });

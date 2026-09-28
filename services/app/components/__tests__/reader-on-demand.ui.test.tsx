@@ -19,7 +19,7 @@ import { act, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { useLayoutEffect } from 'react';
 import { render } from '@/test/helpers/surface-ui';
 import { setupSurface, surfaceProps } from '@/test/helpers/inline-surface';
-import type { InlineStoryController, InlineStoryRuntimeProps } from '@/lib/story-runtime/InlineStoryRuntime';
+import type { StoryController, EditorStoryRuntimeProps } from '@/lib/story-runtime/EditorStoryRuntime';
 import { STORY_SELECTION_ACTION_MESSAGE } from '@/lib/story-runtime/contract';
 import ArtifactShell from '../ArtifactShell';
 import ArtifactSurface from '../ArtifactSurface';
@@ -27,13 +27,13 @@ import { shareLinkFeature } from '../ShareLinkOnDemand';
 import AnnotationLayerOnDemand, { annotationLayerFeature } from '../AnnotationLayerOnDemand';
 import type { OnDemand } from '@/lib/dynamic';
 
-vi.mock('@/lib/story-runtime/InlineStoryRuntime', () => ({
-  InlineStoryRuntime: ({ onController }: InlineStoryRuntimeProps) => {
+vi.mock('@/lib/story-runtime/EditorStoryRuntime', () => ({
+  EditorStoryRuntime: ({ onController }: EditorStoryRuntimeProps) => {
     useLayoutEffect(() => {
       const controller = {
         nonce: 'n'.repeat(32), send: vi.fn(), update: vi.fn(), invalidate: vi.fn(),
         subscribe: () => () => {}, getViewportRect: () => new DOMRect(), dispose: () => {},
-      } as unknown as InlineStoryController;
+      } as unknown as StoryController;
       onController(controller);
       return () => onController(null);
     }, [onController]);
@@ -85,6 +85,7 @@ describe('warming sharing', () => {
     expect(prefetch).not.toHaveBeenCalled();
     reader.unmount();
 
+    setupSurface();
     render(<ArtifactShell role="owner"><ArtifactSurface {...surfaceProps()} /></ArtifactShell>);
     await screen.findByText('Document body');
     expect(prefetch).not.toHaveBeenCalled();
@@ -188,7 +189,7 @@ describe('comments opened before the comment layer arrives', () => {
   it('holds a Select pressed in the document and hands it to the layer on arrival', async () => {
     const layer = control(annotationLayerFeature, async () => ({ default: FakeLayer }) as never);
     const listeners = new Set<(data: unknown) => void>();
-    const runtimeRef = { current: { subscribe: (fn: (data: unknown) => void) => { listeners.add(fn); return () => listeners.delete(fn); } } as unknown as InlineStoryController };
+    const runtimeRef = { current: { subscribe: (fn: (data: unknown) => void) => { listeners.add(fn); return () => listeners.delete(fn); } } as unknown as StoryController };
     render(<AnnotationLayerOnDemand {...baseProps({ railOpen: false, runtimeRef })} />);
     expect(screen.queryByRole('status')).toBeNull();
     act(() => { for (const fn of listeners) fn({ type: STORY_SELECTION_ACTION_MESSAGE, nonce: 'n'.repeat(32), action: 'select', selection: null }); });

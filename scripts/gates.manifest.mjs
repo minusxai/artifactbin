@@ -85,6 +85,8 @@ export const GATE_SPECS = Object.freeze([
 ]);
 
 /**
+
+
  * Scripts named `gate-*.mjs` that RUN gates rather than being one: scripts/gate-container.mjs runs a
  * set in a Linux container. Discovery leaves them out, so they need no row and never run as a gate.
  */
@@ -129,8 +131,10 @@ export function browsersFor(names) {
   return [...new Set(names.flatMap(name => specFor(name).browsers ?? ['chromium']))].sort();
 }
 
+
 /** Gates whose first attempt needs a runner to itself when the matrix has room. */
 export const ISOLATED_GATES = Object.freeze(['editor-v2', 'hydration', 'offline-file']);
+
 
 /**
  * Cross-browser system setup measured 91s on CI run 35740918148. Match the

@@ -45,7 +45,8 @@ import type { LazyCode } from '@/lib/story/lazy-code';
 import type { ArtifactRow } from '@/lib/artifacts';
 import { ASSETS_ORIGIN } from '@/lib/config';
 import { VIEWER_OVERLAY_PATH, type AssembleInput, type ReaderFallbackReason } from '@/lib/compiled-page/contract';
-import { compiledReaderForView } from '@/lib/compiled-page/reader-mode';
+
+
 import { CompiledPageFailed, compiledPageFor } from '@/lib/compiled-page/serve.server';
 import { agentDiscovery } from '@/lib/agent-discovery';
 import { canonicalDocumentUrl } from '@/lib/custom-domains';
@@ -110,7 +111,7 @@ export async function artifactPageAnswer(request: Request, id: string, options: 
   const key = search.get('key');
   const exporting = verifyExportKey(artifact.id, key ?? undefined);
   const actor = await sessionActor(request);
-  if (!admitted && !exporting && !(await canReadArtifact(artifact, actor.viewer))) return notFound();
+  if (!admitted && !exporting && actor.tokenId !== artifact.token_id && !(await canReadArtifact(artifact, actor.viewer))) return notFound();
   if (!ARTIFACT_FORMATS.includes(artifact.format as ArtifactFormat)) return notFound();
 
   const role = await roleFor(artifact, actor);
@@ -210,9 +211,10 @@ export async function artifactPageAnswer(request: Request, id: string, options: 
   // Captures, the editor's address and starter instructions use their dedicated
   // paths; document reader views use the prepared compiled page (§10).
   const starterDoc = isDoc && isStartPlaceholder(row.source ?? null, artifact.version);
-  const compiledMode = !!options.page && !!prepared && !exporting && !starterDoc
-    && !new URL(request.url).pathname.endsWith('/edit')
-    && compiledReaderForView();
+
+  const compiledMode = !!options.page && !!prepared && (!exporting || engineRequested(request.url)) && !starterDoc
+    && !new URL(request.url).pathname.endsWith('/edit');
+
 
   const meta = (row.meta ?? {}) as {
     theme?: StoryThemeName | null; colorMode?: 'light' | 'dark' | null; compiledCss?: string | null;
@@ -254,6 +256,7 @@ export async function artifactPageAnswer(request: Request, id: string, options: 
       at,
       search: new URL(request.url).search,
       drawings: engineRequested(request.url) ? null : 'inline',
+      colorMode: capturedColor,
       // Any held credential: an account session, or the connection a guest owner holds. Either one is
       // who the write check and a private query answer for, so the page uses the credentialed doors.
       signedIn: kind !== 'none',
