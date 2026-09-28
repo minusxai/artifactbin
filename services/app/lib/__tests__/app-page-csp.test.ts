@@ -86,7 +86,7 @@ describe('the app CSP', () => {
   });
 
   it('never lets author code compile WebAssembly: no author frame is given \'wasm-unsafe-eval\'', () => {
-    const wrapper = authorFrameResponse(new Request('https://app.test/story/author-frame?artifact=Ab12Cd'), 'https://assets.test', 'https://app.test').headers.get('content-security-policy')!;
+    const wrapper = authorFrameResponse(new Request('https://app.test/author-frame?artifact=Ab12Cd'), 'https://assets.test', 'https://app.test').headers.get('content-security-policy')!;
     for (const policy of [wrapper, AUTHOR_SCRIPT_DOCUMENT, managedAuthorDocument('https://assets.test')]) {
       expect(policy).toContain('script-src');
       expect(policy).not.toContain('wasm-unsafe-eval');

@@ -1,6 +1,6 @@
 import {describe,it,expect,vi} from 'vitest';
 import { EMPTY_COMPILED_DATAFLOW } from '@/lib/story/compiled-dataflow';
-import {AUTHOR_FRAME_DOCUMENT} from '../author-frame';
+import {AUTHOR_FRAME_DOCUMENT,AUTHOR_FRAME_PATH} from '../author-frame';
 import {startAuthorScript} from '../author-script';
 import {createDataflowStore} from '../store';
 import {runInNewContext} from 'node:vm';
@@ -29,7 +29,7 @@ describe('fixed HTTP author wrapper',()=>{
   const store=createDataflowStore({flow:EMPTY_COMPILED_DATAFLOW});
   const stop=startAuthorScript('',store,document,{host,title:'Visible',html:'<p>inside</p>',document:'<script>inner only</script>'});
   const frame=host.querySelector('iframe')!,post=vi.spyOn(frame.contentWindow!,'postMessage');
-  expect(new URL(frame.src).pathname).toBe('/story/author-frame');expect(frame.srcdoc).toBe('');
+  expect(new URL(frame.src).pathname).toBe(AUTHOR_FRAME_PATH);expect(frame.srcdoc).toBe('');
   expect(frame.getAttribute('sandbox')).toBe('allow-scripts');
   frame.dispatchEvent(new Event('load'));
   expect(post).toHaveBeenCalledWith({type:'mx:author:init',document:'<script>inner only</script>'},'*',[{}]);
