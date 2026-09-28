@@ -1,7 +1,7 @@
 /* @jsxImportSource solid-js */
 /**
  * THE ISLAND RUNTIME (`@mx/rt`, docs/phase2-architecture.md §2.3, §4.1): what every compiled island
- * of one document runs on, and the ONE module generated island code imports.
+ * of one document runs on. Generated islands also import kit helpers when their markup needs them.
  *
  * - The document's data is the EXISTING react-free store (lib/story-runtime/store), bridged into
  *   one Solid store per document with `reconcile`, so a result that changes one cell re-runs only
@@ -23,7 +23,6 @@ import { createStore, reconcile } from 'solid-js/store';
 import { hydrate, insert as solidInsert, isServer } from 'solid-js/web';
 import type { ReactiveExpression } from '@/lib/jsx/reactive';
 import { evaluateReactive } from '@/lib/jsx/reactive-eval';
-import { URL_ATTRS, URL_LIST_ATTRS, urlListUrls } from '@/lib/jsx/url-attrs';
 import { substituteRow } from '@/lib/story/row-scope';
 import type { CompiledDataflow } from '@/lib/story/compiled-dataflow';
 import type { DataflowState, Row, Scalar, TableResult } from '@/lib/story/dataflow';
@@ -150,7 +149,7 @@ export function createIslandRuntime(
   sync();
   const unsubscribe = store?.subscribe(sync) ?? (() => {});
 
-  const noData = () => new Error('this document declares no data');
+  const noData = () => new Error('no data declared');
   const context: IslandContext = {
     values: () => state.values,
     value: (name) => state.values[name],
@@ -184,7 +183,7 @@ export function createIslandRuntime(
     writes: (options.writes ?? (() => EMPTY_WRITE_FEED))(store),
     store: () => store,
     trustedPortal: options.trustedPortal ?? (() => trustedPortalOf()),
-    loadChart: options.loadChart ?? (() => Promise.reject(new Error('charts are drawn in the browser'))),
+    loadChart: options.loadChart ?? (() => Promise.reject(new Error('browser chart only'))),
   };
 
   return {
@@ -246,51 +245,6 @@ export const text = (e: ReactiveExpression, row?: Record<string, unknown>, islan
 };
 /** A static value with `$_row.f` references filled from `row` (lib/story/row-scope). */
 export const sub = <T,>(value: T, row: Record<string, unknown>): T => substituteRow(value, row);
-
-// Mirrors lib/jsx/validate hasDangerousScheme (importing validate.ts would drag its whole top level
-// into the shared chunk): browsers strip control characters and spaces inside the scheme.
-const DANGEROUS_URL = /^(javascript|vbscript|data):/i;
-const SAFE_DATA_URL = /^data:image\//i;
-// eslint-disable-next-line no-control-regex -- deliberately mirrors browser scheme normalization
-const dangerous = (url: string) => { const n = url.replace(/[\x00-\x20]/g, ''); return DANGEROUS_URL.test(n) && !SAFE_DATA_URL.test(n); };
-const IDREF_ATTRS = ['for', 'aria-labelledby', 'aria-describedby', 'aria-controls', 'aria-owns', 'headers', 'list', 'form'];
-/** The repeat identity encoding shared with lib/story/repeat-identity, kept in the hydration seam. */
-const instanceDomId = (scope: unknown, sourceId: string): string => `mx-instance-${encodeURIComponent(JSON.stringify([scope, sourceId]))}`;
-
-/**
- * The attributes of an element inside a row template, resolved for one row (the interpreter's
- * rawBuildProps + scopeProps): `$_row.f` filled, a dangerous URL dropped PER ROW, author ids and
- * the idrefs naming them rewritten to the row's instance, comment metadata on durable rows.
- */
-export function rowAttrs(attrs: Readonly<Record<string, unknown>>, row: Record<string, unknown> | null | undefined, scope?: RowScope | null): Record<string, string> {
-  const out: Record<string, string> = {};
-  for (const [name, raw] of Object.entries(attrs)) {
-    const lower = name.toLowerCase();
-    const value = row && lower !== 'id' ? substituteRow(raw, row) : raw;
-    if (value === null || value === undefined || value === false) continue;
-    if (typeof value === 'string' && (URL_LIST_ATTRS.has(lower) ? urlListUrls(value, lower).some(dangerous) : URL_ATTRS.has(lower) && dangerous(value))) continue;
-    out[name] = value === true ? '' : String(value);
-  }
-  if (scope) {
-    const key = ['repeat', scope.owner, scope.durable ? typeof scope.key : 'index', scope.key];
-    if (!scope.durable) delete out['data-mx-ast'];
-    if (typeof out.id === 'string') {
-      // Durable row keys were checked by the compiler. Emit the same canonical repeat target
-      // directly so ordinary hydration does not load the general comment target parser.
-      if (scope.durable && scope.owner) {
-        out['data-mx-comment-owner'] = scope.owner;
-        out['data-mx-comment-target'] = JSON.stringify({ kind: 'repeat', scopes: [{ nodeId: scope.owner, key: scope.key }], templateNodeId: out.id });
-      }
-      out.id = instanceDomId(key, out.id);
-    }
-    for (const attr of IDREF_ATTRS) {
-      const v = out[attr];
-      if (typeof v === 'string') out[attr] = v.split(/\s+/).map((id) => (scope.ids.includes(id) ? instanceDomId(key, id) : id)).join(' ');
-    }
-    if (typeof out.href === 'string' && out.href.startsWith('#') && scope.ids.includes(out.href.slice(1))) out.href = '#' + instanceDomId(key, out.href.slice(1));
-  }
-  return out;
-}
 
 export interface RepeatProps {
   /** The table (or table value) whose rows repeat. */

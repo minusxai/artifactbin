@@ -12,7 +12,7 @@ const OPS = new Set(['&&', '||', '===', '!==', '<', '<=', '>', '>=']);
 const scalar = (value: unknown): value is ReactiveScalar => value === null || typeof value === 'string'
   || typeof value === 'boolean' || (typeof value === 'number' && Number.isFinite(value));
 const object = (value: unknown): value is Record<string, unknown> => !!value && typeof value === 'object' && !Array.isArray(value);
-export const REACTIVE_BOOLEAN_PROPS: ReadonlySet<string> = new Set(['hidden', 'disabled', 'open']);
+export const REACTIVE_BOOLEAN_PROPS: ReadonlySet<string> = new Set(['hidden', 'disabled', 'open', 'checked', 'selected', 'required', 'readOnly', 'multiple', 'autoFocus', 'controls', 'loop', 'muted', 'autoPlay']);
 
 export function isReactiveExpression(value: unknown, depth = 0): value is ReactiveExpression {
   if (depth > 32 || !object(value)) return false;

@@ -27,7 +27,7 @@ import { VIEWER_ID } from '@/lib/story/builtins';
 import { refusalText } from '@/lib/story/sign-in-required';
 import { commentMetadata, instanceDomId } from '@/lib/story/repeat-identity';
 import { createCellSessions, type CellSessions } from '@/lib/story-runtime/cell-sessions';
-import { rowAttrs } from '../rt';
+import { rowAttrs } from './basic';
 import { useIsland } from '../context';
 import type { IslandContext } from '../contract';
 import { ACCESS_PENDING, hydratedRead } from './store-read';

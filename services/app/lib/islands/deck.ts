@@ -26,6 +26,25 @@ export function startDeck(doc: Document = document, win: Window = window): () =>
   // StoryRuntimeApp documentSlides.
   const slides = () => [...doc.querySelectorAll<HTMLElement>('.mx-doc [data-mx-slide]')];
   const rows = [...doc.querySelectorAll<HTMLElement>('.mx-rail .mx-rail-row')];
+  const column = doc.querySelector<HTMLElement>('.mx-doc');
+  const syncPreview = () => {
+    const live = new Map([...column?.querySelectorAll<HTMLElement>('[data-mx-ast]') ?? []].map((node) => [node.getAttribute('data-mx-ast'), node]));
+    const previewSlides = [...doc.querySelectorAll<HTMLElement>('.mx-rail [data-mx-slide]')];
+    const liveSlides = [...column?.querySelectorAll<HTMLElement>('[data-mx-slide]') ?? []];
+    for (const preview of doc.querySelectorAll<HTMLElement>('.mx-rail [data-mx-ast]')) {
+      const railSlide = preview.closest<HTMLElement>('[data-mx-slide]');
+      const index = railSlide ? previewSlides.indexOf(railSlide) : -1;
+      const path = preview.getAttribute('data-mx-ast') ?? '';
+      const railBase = railSlide?.getAttribute('data-mx-ast') ?? '';
+      const docBase = liveSlides[index]?.getAttribute('data-mx-ast') ?? '';
+      const source = live.get(railBase && docBase && path.startsWith(railBase) ? docBase + path.slice(railBase.length) : path);
+      if (!source || source.tagName !== preview.tagName || source.children.length || preview.children.length) continue;
+      if (preview.innerHTML !== source.innerHTML) preview.innerHTML = source.innerHTML;
+    }
+  };
+  syncPreview();
+  const previewObserver = column ? new MutationObserver(syncPreview) : null;
+  if (column) previewObserver?.observe(column, { subtree: true, childList: true, characterData: true, attributes: true });
   const bar = doc.querySelector<HTMLElement>('.mx-present');
   const count = bar?.querySelector<HTMLElement>('.mx-present-count') ?? null;
   const present = bar?.querySelector<HTMLElement>('[aria-label="Present"],[aria-label="Exit presentation"]') ?? null;
@@ -79,7 +98,7 @@ export function startDeck(doc: Document = document, win: Window = window): () =>
     doc.documentElement.setAttribute(READER_READY_ATTR, '');
     doc.dispatchEvent(new Event(ISLANDS_READY_EVENT));
   }
-  return () => { for (const cleanup of cleanups.splice(0)) cleanup(); };
+  return () => { previewObserver?.disconnect(); for (const cleanup of cleanups.splice(0)) cleanup(); };
 }
 
 if (typeof document !== 'undefined' && typeof window !== 'undefined') startDeck();

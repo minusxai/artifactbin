@@ -20,6 +20,14 @@ const deck = (withData: boolean) => {
 };
 
 describe('startDeck', () => {
+  it('updates a rail text leaf when the live slide changes', async () => {
+    document.body.innerHTML = '<div class="mx-deck"><nav class="mx-rail"><button class="mx-rail-row"><span class="mx-rail-thumb"><h1 data-mx-ast="0.0">Hello Ada</h1></span></button></nav><div class="mx-doc"><section data-mx-slide=""><h1 data-mx-ast="0.0">Hello Ada</h1></section></div></div>';
+    const stop = startDeck();
+    document.querySelector('.mx-doc h1')!.textContent = 'Hello Grace';
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(document.querySelector('.mx-rail-thumb h1')?.textContent).toBe('Hello Grace');
+    stop();
+  });
   it('follows the scroll position, pages on the rail, the bar and the keys, and ignores keys typed into a field', () => {
     const { slides, scrolled, rows } = deck(false);
     slides.forEach((s, i) => { s.getBoundingClientRect = () => ({ top: i === 0 ? -900 : i === 1 ? 10 : 900 }) as DOMRect; });

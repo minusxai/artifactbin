@@ -32,12 +32,27 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import zlib from 'node:zlib';
 import { precompressTree, describePrecompression } from './lib/precompress.mjs';
+import { createElement } from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
+import { icons } from 'lucide-react';
 
 const ROOT = path.resolve(import.meta.dirname, '..');
 const APP = path.join(ROOT, 'services/app');
 const ISLANDS_SRC = path.join(APP, 'lib/islands');
 export const DEFAULT_OUT_DIR = path.join(APP, 'public/islands');
 const CACHE_MARKER = path.join(ROOT, 'node_modules/.cache/build-islands.json');
+
+/** The Icon port fetches this only when query rows name a glyph absent from the page's small inline map. */
+function glyphCatalog() {
+  const glyphs = {};
+  for (const [name, component] of Object.entries(icons)) {
+    const markup = renderToStaticMarkup(createElement(component));
+    const open = /^<svg\b[^>]*>/.exec(markup)?.[0] ?? '';
+    const cls = (open.match(/\bclass="([^"]*)"/)?.[1] ?? '').split(/\s+/).filter((part) => part && part !== 'lucide').join(' ');
+    glyphs[name] = { cls, inner: markup.slice(open.length).replace(/<\/svg>$/, '') };
+  }
+  return Buffer.from(`export const glyphs=${JSON.stringify(glyphs)};\n`);
+}
 
 /** The contract's constants, read from the TypeScript so there is one table (both files import only types). */
 function readContracts() {
@@ -62,6 +77,8 @@ const ENTRIES = [
   { specifier: '@mx/rt', name: 'rt', file: () => islandModule('rt') },
   { specifier: '@mx/boot', name: 'boot', file: () => islandModule('boot') },
   { specifier: '@mx/deck', name: 'deck', file: () => islandModule('deck') },
+  // Tailwind class merging is loaded only for authored classes inside live rows.
+  { specifier: '@mx/row-class', name: 'row-class', file: () => islandModule('row-class') },
   // The compiled /raw page's own behaviour: framing, the reader's colour override, the live stream and the scroll restore.
   { specifier: '@mx/page', name: 'page', file: () => islandModule('page') },
   ...KIT_FAMILIES.map((family) => ({ specifier: `@mx/kit/${family}`, name: `kit-${family}`, file: () => islandModule(`kit/${family}`) })),
@@ -126,7 +143,7 @@ export function solidPlugin({ generate = 'dom', hydratable = true } = {}) {
   return {
     name: 'mx-solid',
     setup(build) {
-      build.onResolve({ filter: /^@mx\/(rt|boot|deck|page|kit\/[a-z-]+)$/ }, (args) => {
+      build.onResolve({ filter: /^@mx\/(rt|boot|deck|page|row-class|kit\/[a-z-]+)$/ }, (args) => {
         const entry = ENTRIES.find((e) => e.specifier === args.path);
         if (!entry) return { errors: [{ text: `build-islands: unknown island specifier ${args.path}` }] };
         return { path: entry.file() };
@@ -241,6 +258,11 @@ export async function buildIslands({ outDir = DEFAULT_OUT_DIR } = {}) {
     fs.writeFileSync(path.join(outDir, lazy.fileName), lazy.bytes);
     files[url(lazy.fileName)] = { ...sizes(lazy.bytes), imports: [] };
   }
+  const catalog = glyphCatalog();
+  const catalogName = `glyphs-${sha256(catalog).slice(0, 16)}.js`;
+  fs.writeFileSync(path.join(outDir, catalogName), catalog);
+  files[url(catalogName)] = { ...sizes(catalog), imports: [] };
+  manifest['@mx/glyphs'] = url(catalogName);
   const missing = ISLAND_SPECIFIERS.filter((s) => !manifest[s]);
   if (missing.length) throw new Error(`build-islands: no chunk for ${missing.join(', ')}`);
 
@@ -248,7 +270,7 @@ export async function buildIslands({ outDir = DEFAULT_OUT_DIR } = {}) {
   fs.writeFileSync(path.join(outDir, ssrName), ssrHalf.bytes);
   const ssr = { url: url(ssrName), exports: SSR_EXPORTS };
 
-  const sortedManifest = Object.fromEntries(ISLAND_SPECIFIERS.map((s) => [s, manifest[s]]));
+  const sortedManifest = Object.fromEntries([...ISLAND_SPECIFIERS, '@mx/glyphs'].map((s) => [s, manifest[s]]));
   const sortedFiles = Object.fromEntries(Object.keys(files).sort().map((k) => [k, files[k]]));
   const build = buildId(sortedManifest, ssr, inputs);
   fs.writeFileSync(path.join(outDir, 'manifest.json'), JSON.stringify({ build, manifest: sortedManifest, files: sortedFiles, ssr }, null, 1) + '\n');
@@ -264,8 +286,8 @@ export async function buildIslands({ outDir = DEFAULT_OUT_DIR } = {}) {
  * server injects its own one Solid when it evaluates the file, as it does for every generated module.
  * Never imported by a browser; nothing in it is per document.
  */
-export const SSR_SPECIFIERS = Object.freeze(ISLAND_SPECIFIERS.filter((s) => s === '@mx/rt' || s.startsWith('@mx/kit/')));
-const SSR_EXPORTS = Object.freeze(Object.fromEntries(SSR_SPECIFIERS.map((s) => [s, s === '@mx/rt' ? 'rt' : `kit_${s.slice('@mx/kit/'.length).replace(/-/g, '_')}`])));
+export const SSR_SPECIFIERS = Object.freeze(ISLAND_SPECIFIERS.filter((s) => s === '@mx/rt' || s === '@mx/row-class' || s.startsWith('@mx/kit/')));
+const SSR_EXPORTS = Object.freeze(Object.fromEntries(SSR_SPECIFIERS.map((s) => [s, s === '@mx/rt' ? 'rt' : s === '@mx/row-class' ? 'row_class' : `kit_${s.slice('@mx/kit/'.length).replace(/-/g, '_')}`])));
 
 /** The server half's generated entry, as the metafile names it (never a file on disk). */
 const SSR_ENTRY = toPosix(path.relative(ROOT, path.join(ISLANDS_SRC, 'mx-ssr-half.js')));
