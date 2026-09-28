@@ -2,13 +2,7 @@
 
 import * as React from "react"
 import * as TooltipPrimitive from "@radix-ui/react-tooltip"
-// Composed here rather than through `kit/cn`: this is APP chrome, and the
-// reader graph must not reach the story component layer to merge two class
-// strings (lib/__tests__/reader-bundle-hygiene.test.ts). tailwind-merge is not
-// optional decoration — without it a caller's `px-4` and the built-in `px-2.5`
-// both survive and stylesheet order decides which one paints.
 import { clsx } from "clsx"
-import { twMerge } from "tailwind-merge"
 import { useTrustedPortalContainer } from './TrustedUi'
 
 const TooltipPortalContext = React.createContext(true)
@@ -90,13 +84,13 @@ function TooltipContent({
       data-story-floating=""
       sideOffset={sideOffset}
       collisionPadding={collisionPadding}
-      className={twMerge(clsx(
-        "pointer-events-none z-[100] w-max max-w-[min(28rem,calc(100vw-1rem))] whitespace-normal rounded-md px-2.5 py-1.5 text-left text-xs leading-normal shadow-md",
+      className={clsx(
+        `pointer-events-none z-[100] w-max max-w-[min(28rem,calc(100vw-1rem))] whitespace-normal rounded-md ${typeof className === 'string' && /(?:^|\s)px-\S+/.test(className) ? '' : 'px-2.5'} py-1.5 text-left text-xs leading-normal shadow-md`,
         isPortalled
           ? "border border-edge-bright bg-surface text-fg"
           : "bg-foreground text-background",
         className
-      ))}
+      )}
       {...props}
     >
       {children}

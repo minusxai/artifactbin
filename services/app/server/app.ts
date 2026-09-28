@@ -18,14 +18,7 @@ import {agentDiscovery,agentDiscoveryHead,agentDiscoveryTail,withAgentDiscoveryT
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { createGithubResponse } from './external/github';
-import { loadStorySsr } from '@/lib/story/ssr.server';
-import { createElement } from 'react';
-import { renderToStaticMarkup } from 'react-dom/server';
-import StarterInstructions from '@/components/StarterInstructions';
-import type { PreparedStoryRuntime } from '@/lib/story/prepared-runtime';
-import { inlineStoryHtml } from '@/lib/story/inline-story-html';
 import { escapeHtml } from '@/lib/story/reader-chrome';
-import { APP_BAR_H } from '@/lib/story/edit-bar';
 import { Hono, type Context } from 'hono';
 import { serveStatic } from '@hono/node-server/serve-static';
 import { offlineExtrasAsset, offlineExtrasEncoded } from '@/lib/offline/bundle.server';
@@ -41,7 +34,6 @@ import { roleFor, sessionActor } from '@/lib/viewer';
 import { baseUrl, json } from '@/lib/http';
 import { ASSETS_ORIGIN } from '@/lib/config';
 import { GET as publicAssetBytes } from '@/app/assets/[hash]/route';
-import { CARD_RENDER_GENERATION } from '@/lib/export-card';
 import { exportAssetResponse } from '@/lib/export/assets';
 import { publicRefAssetResponse } from '@/lib/public-ref-assets';
 import { mountRoutes } from './api';
@@ -49,7 +41,7 @@ import { ROUTES } from './routes.generated';
 import { authorFrameResponse } from './author-frame';
 import { AUTHOR_FRAME_PATH } from '@/lib/story-runtime/author-frame';
 import { GITHUB_EXTERNAL_URL } from '@/lib/github-star';
-import { createDocumentPreloader, createListingPreloader, createReaderPreloader, createSpaEntry, listingPage } from './reader-preloads';
+import { createListingPreloader, createSpaEntry, listingPage } from './reader-preloads';
 import { artifactPageAnswer, type ArtifactPageAnswer, type CompiledStory, type InitialStory } from '@/lib/artifact-page';
 import type { ArtifactRow } from '@/lib/artifacts';
 import { enablePreparedPageWarmups } from '@/lib/story/prepared-page.server';
@@ -152,60 +144,6 @@ export function withReaderHeadOrder(html: string): string {
   const fonts = faces.lifted.map((tag) => (/\bfetchpriority=/i.test(tag) ? tag : `<link fetchpriority="high"${tag.slice('<link'.length)}`));
   const cut = fontSlot(faces.rest);
   return `${faces.rest.slice(0, cut)}${fonts.join('')}${faces.rest.slice(cut)}${code.lifted.join('')}${html.slice(end)}`;
-}
-
-/** What the app page inlines for a document: its story element and the head facts about it. */
-export interface InitialStoryParts {
-  /** The story element (lib/story/inline-story-html), rendered on demand. */
-  html: () => string;
-  title: string;
-  fontPreloads: readonly string[];
-}
-
-/** A story from RAW prepared parts (a test, or any caller without a prepared page): isolated and rendered here. */
-export function initialStoryOf(runtime: PreparedStoryRuntime): InitialStoryParts {
-  return { html: () => inlineStoryHtml(runtime, loadStorySsr().renderInlineStory), title: runtime.title, fontPreloads: runtime.fontPreloads ?? [] };
-}
-
-/** Initial readable document, outside React's empty root; captured by reference
- * before React mounts. The inline runtime ADOPTS its story element and hydrates
- * it (lib/story-runtime/inline-composition is the tree on both sides); the
- * wrapper around it, with its handoff rule, is removed in the same commit. App
- * root and head bootstrap precede ALL author nodes, including colliding ids.
- */
-export function withInitialStory(html: string, initial: InitialStoryParts, id: string, description?: string | null, origin = '', starter = false): string {
-  const story = starter
-    ? renderToStaticMarkup(createElement(StarterInstructions, { id, initialOrigin: origin }))
-    : initial.html();
-  // While lazy app code mounts, it must not push the readable server sibling
-  // down by its viewport height. This temporary rule belongs to the captured
-  // sibling, so its removal atomically reveals the committed app document.
-  // Only the real first body child is hidden, never an authored colliding id.
-  const handoffCss = `body > #root:first-child{display:none!important}[data-mx-initial-story]{position:relative;min-height:100vh;box-sizing:border-box;padding-top:0}@media(min-width:640px){[data-mx-initial-story]{padding-top:${APP_BAR_H}px}}`;
-  // What this first screen paints: the document's faces, or — for a starter
-  // placeholder, which draws the shell's instructions — the shell's own.
-  const fontPreloads = fontPreloadTags(starter ? APP_SHELL_FONT_PRELOADS : initial.fontPreloads);
-  const metadata = fontPreloads + `<meta property="og:title" content="${escapeHtml(initial.title)}">`
-    + (description ? `<meta name="description" content="${escapeHtml(description)}"><meta property="og:description" content="${escapeHtml(description)}">` : '')
-    + `<meta property="og:image" content="${escapeHtml(origin)}/a/${escapeHtml(id)}/export?mode=card&amp;r=${CARD_RENDER_GENERATION}"><meta name="twitter:card" content="summary_large_image">`;
-  return html.replace(/<title>[\s\S]*?<\/title>/i, () => `<title>${escapeHtml(initial.title)}</title>`)
-    .replace('</head>', () => `${metadata}</head>`)
-    .replace('</body>', () => `<div data-mx-initial-story=""><style>${handoffCss}</style>${story}</div></body>`);
-}
-
-/**
- * THE SHEET RIDES ONCE. When the page inlines the document's story, that
- * story's `<style>` is the one copy of its isolated sheet: the bootstrap drops
- * `runtime.css`, and web/bootstrap puts the style's text back before anything
- * reads the payload. A starter's instructions are not the story, so its
- * payload keeps the sheet.
- */
-function withoutInlinedSheet<T>(data: T): T {
-  const artifact = (data as { artifact?: { surface?: { runtime?: { css?: string } } } }).artifact;
-  const runtime = artifact?.surface?.runtime;
-  if (!runtime || runtime.css === undefined) return data;
-  const { css: _sheet, ...rest } = runtime;
-  return { ...data, artifact: { ...artifact, surface: { ...artifact.surface, runtime: rest } } };
 }
 
 // Inline scripts emitted by our source HTML and Vite's development transform.
@@ -381,10 +319,8 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
     });
   }
   if (!opts.indexHtml) mountBuildAssets(app, webDir);
-  const preloadReader = opts.indexHtml ? (html: string) => html : createReaderPreloader(webDir);
   const preloadListing = opts.indexHtml ? (html: string) => html : createListingPreloader(webDir);
   // …and per document, the lazy code THIS document runs: its chart module, its Mermaid kinds.
-  const preloadDocument = opts.indexHtml ? (html: string) => html : createDocumentPreloader(webDir);
   /*
    * The HTML-first page's app entry (web/spa-idle.ts): from the build's manifest in production; in
    * development Vite serves the web root's sources as they are, the entry by its own path.
@@ -419,22 +355,17 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
     // gets the app's own 404 page, anything else (curl's `*/*`, a fetch tool)
     // gets the refusal that names the way on.
     if (code === 404 && !(c.req.raw.headers.get('accept') ?? '').includes('text/html')) return apiNotFound(c);
-    const surface = (data?.artifact as { surface?: { id: string }; description?: string | null } | undefined);
     // The agent pointer is injected here, on the request base, for EVERY shell
     // — the static index.html carries none, so there is one source (lib/agent-discovery).
     const discovered = withAgentDiscovery(html, baseUrl(c.req.raw));
     const listing = listingPage(data);
     const story = found?.story;
-    const shell = story && surface?.surface
-      // A starter placeholder draws its instructions, not its body: no lazy code of its own.
-      ? withInitialStory(preloadDocument(preloadReader(discovered), story.starter ? { chart: false, mermaid: [] } : story.lazyCode), story, surface.surface.id, surface.description, baseUrl(c.req.raw), story.starter)
-      // No document: the first screen is the shell's, set in its own face.
-      : withGenericSocial(withShellFonts(listing ? preloadListing(discovered, listing) : discovered), baseUrl(c.req.raw));
+    const shell = withGenericSocial(withShellFonts(listing ? preloadListing(discovered, listing) : discovered), baseUrl(c.req.raw));
     // The address search engines index a document under (lib/custom-domains canonicalDocumentUrl).
     const indexed = canonical ? shell.replace('</head>', () => `<link rel="canonical" href="${escapeHtml(canonical)}"></head>`) : shell;
     // Last, so the pointer is the page's final line whatever else was inlined.
     // Brotli for a client that takes it (server/content-encoding); identity otherwise, as before.
-    const inlined = story && !story.starter ? withoutInlinedSheet(data) : data;
+    const inlined = data;
     const ordered = withReaderHeadOrder(indexed);
     return compressDynamic(c.req.raw, new Response(withAgentDiscoveryTail(inlined ? withBootstrap(ordered, inlined) : ordered, agentDiscovery(baseUrl(c.req.raw))), { status: code, headers: {
       'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store', ...APP_SECURITY_HEADERS,
@@ -453,8 +384,11 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
   const compiledPage = (c: { req: { raw: Request; url: string } }, compiled: CompiledStory, data: unknown, code: 200 | 404) => {
     const tail = agentDiscoveryTailOf(baseUrl(c.req.raw));
     const end = compiled.html.endsWith(`${tail}</body></html>`) ? compiled.html.length - `${tail}</body></html>`.length : compiled.html.lastIndexOf('</body>');
-    // The sheet rides once, in the page's head (web/initial-story reads it back): not in the page data too.
-    const bootstrap = `<script type="application/json" id="${BOOTSTRAP_ID}">${safeJson(withoutInlinedSheet(data))}</script>`;
+    // The compiled stylesheet is already in the head. The SPA needs the runtime's data, not its CSS.
+    const page = data as { artifact?: { surface?: { runtime?: { css?: string } } } };
+    const runtime = page.artifact?.surface?.runtime;
+    const bootstrapData = runtime ? { ...page, artifact: { ...page.artifact, surface: { ...page.artifact?.surface, runtime: { ...runtime, css: undefined } } } } : data;
+    const bootstrap = `<script type="application/json" id="${BOOTSTRAP_ID}">${safeJson(bootstrapData)}</script>`;
     const html = `${compiled.html.slice(0, end)}${bootstrap}${compiled.html.slice(end)}`;
     return compressDynamic(c.req.raw, new Response(html, { status: code, headers: {
       'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store', ...APP_SECURITY_HEADERS,

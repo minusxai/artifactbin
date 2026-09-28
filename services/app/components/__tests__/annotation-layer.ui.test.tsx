@@ -79,7 +79,7 @@ describe('AnnotationLayer', () => {
 
   it('subscribes when a lazy inline runtime becomes ready after the layer mounts',async()=>{
     const {frame}=makeFrame();
-    const runtimeRef:{current:import('@/lib/story-runtime/InlineStoryRuntime').InlineStoryController|null}={current:null};
+    const runtimeRef:{current:import('@/lib/story-runtime/EditorStoryRuntime').StoryController|null}={current:null};
     const frameRef={current:frame};
     const view=render(layer(frame,{frameRef,runtimeRef,sessionNonce:null,showViewComments:true,liveAnnotations:[ANN]}));
     const listeners=new Set<(event:unknown)=>void>();

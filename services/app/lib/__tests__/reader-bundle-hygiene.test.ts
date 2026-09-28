@@ -202,7 +202,7 @@ describe('document runtime bundle hygiene', () => {
  * comment layer, the JSX parser that writing needs) load when first used, and
  * are prefetched on idle/hover so the first click does not wait.
  */
-const ROUTE_ENTRIES = ['web/main.tsx', 'web/pages/Artifact.tsx', 'web/pages/Profile.tsx', 'lib/story-runtime/InlineStoryRuntime.tsx'];
+const ROUTE_ENTRIES = ['web/main.tsx', 'web/pages/Artifact.tsx', 'web/pages/Profile.tsx'];
 /*
  * css-tree (+ source-map-js) rewrote the document's CSS IN THE BROWSER — work the
  * server already did. The prepared page carries the rewritten sheet, so the
@@ -214,11 +214,17 @@ const ROUTE_FORBIDDEN_FILES = ['components/ShareLink.tsx', 'components/Annotatio
 describe('reader route bundle hygiene', () => {
   const reach = walk(ROUTE_ENTRIES);
 
-  it('sanity: the walker descends through the SPA shell and the inline runtime', () => {
+  it('sanity: the walker descends through the SPA shell', () => {
     const files = [...reach.files].map((f) => path.relative(ROOT, f));
-    expect(files).toContain('lib/story-runtime/StoryRuntimeApp.tsx');
     expect(files).toContain('components/ArtifactSurface.tsx');
     expect([...reach.packages.keys()]).toContain('react');
+  });
+
+  it('keeps the editor interpreter and runtime class merger out of the reader route', () => {
+    const editor = path.join(ROOT, 'lib/story-runtime/EditorStoryRuntime.tsx');
+    expect(reach.files.has(editor) ? chainTo(editor, reach.parent) : null).toBeNull();
+    const merger = reach.packages.get('tailwind-merge');
+    expect(merger ? chainTo(merger, reach.parent) : null).toBeNull();
   });
 
   it.each(ROUTE_FORBIDDEN_PACKAGES)('never statically reaches %s', (pkg) => {

@@ -12,11 +12,11 @@ import { START_PLACEHOLDER_MARKUP } from '@/lib/start-placeholder';
 import { existingPaste } from '@/lib/agent-copy';
 import { router, resetRouter } from '@/test/setup/router';
 import { useLayoutEffect } from 'react';
-import type { InlineStoryController, InlineStoryRuntimeProps } from '@/lib/story-runtime/InlineStoryRuntime';
+import type { StoryController, EditorStoryRuntimeProps } from '@/lib/story-runtime/EditorStoryRuntime';
 
-const runtimes: Array<InlineStoryController & { send: ReturnType<typeof vi.fn>; emit(data: unknown): void }> = [];
-vi.mock('@/lib/story-runtime/InlineStoryRuntime', () => ({
-  InlineStoryRuntime: ({onController}: InlineStoryRuntimeProps) => {
+const runtimes: Array<StoryController & { send: ReturnType<typeof vi.fn>; emit(data: unknown): void }> = [];
+vi.mock('@/lib/story-runtime/EditorStoryRuntime', () => ({
+  EditorStoryRuntime: ({onController}: EditorStoryRuntimeProps) => {
     useLayoutEffect(() => {
       const listeners = new Set<(event: unknown) => void>();
       const controller = {

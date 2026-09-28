@@ -8,7 +8,7 @@
  * No I/O, no database, no clock: the same input is the same bytes.
  *
  * What it adds to the stored, per-version parts is what one request decides:
- *   - the story element (lib/story/inline-story-html) around `input.story` —
+ *   - the story element (lib/story/story-element) around `input.story` —
  *     the serve path's render, placed verbatim and never re-rendered here —
  *     with the snapshot's server-drawn charts put into their slots;
  *   - the island data as `<script type="application/json" id="mx-story-data">`,
@@ -29,7 +29,7 @@ import type { IslandPageData } from '@/lib/islands/contract';
 import { STORY_CHROME_CSS } from '@/lib/story-runtime/chrome-css';
 import { STORY_ROOT_ID } from '@/lib/story-runtime/contract';
 import { fontPreloadTags } from '@/lib/story/first-screen-fonts';
-import { inlineStoryElement } from '@/lib/story/inline-story-html';
+import { inlineStoryElement } from '@/lib/compiled-page/story-element';
 import { escapeHtml, renderReaderChrome } from '@/lib/story/reader-chrome';
 import { APP_BAR_H } from '@/lib/story/edit-bar';
 import { DOCUMENT_ROOT_CSS } from '@/lib/story/document-styles';

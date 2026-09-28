@@ -1,7 +1,6 @@
 import { runtimeId } from './runtime-id';
 import { installMx } from './mx';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ComponentType, type ReactNode } from 'react';
-import { createRoot, hydrateRoot, type Root } from 'react-dom/client';
 import type { StoryDocumentUpdate, StoryIslandData } from './contract';
 import type { QueryTransport } from './store';
 import { createDataflowStore } from './store';
@@ -18,10 +17,9 @@ import { isServedRuntime, type PreparedStoryRuntime, type ServedStoryRuntime } f
 import type { JsxNode } from '@/lib/jsx';
 import { applyStyleOverrides, type StyleOverride } from '@/lib/story/style-overrides';
 import type { StoryBaseCssRecipe } from '@/lib/story/story-base-css';
-import type { InlineSheetPolicy } from './inline-sheet';
+import type { EditorSheetPolicy } from './editor-sheet';
 import { TrustedUi, useTrustedPortalContainer } from '@/components/TrustedUi';
 import { InlineStoryComposition, type InlineStoryWiring } from './inline-composition';
-import { adoptInitialStory, clearInitialStory, initialDocumentStory, initialStorySheet } from '@/web/initial-story';
 import { wireOutline } from './outline-nav';
 import { markScrollableTables } from './table-scroll';
 import { syncValuesToUrl } from './url-values-sync';
@@ -33,7 +31,7 @@ function SelectionPortal({ready}:{ready:(element:HTMLElement | null)=>void}) {
 }
 
 /** Private, instance-scoped application/runtime endpoint. Never published on window or sent to author frames. */
-export interface InlineStoryController {
+export interface StoryController {
   readonly nonce: string;
   send(command: unknown): void;
   update(document: StoryDocumentUpdate): void;
@@ -43,7 +41,7 @@ export interface InlineStoryController {
   dispose(): void;
 }
 
-export interface InlineStoryRuntimeProps {
+export interface EditorStoryRuntimeProps {
   data: StoryIslandData;
   transport?: QueryTransport;
   transportFactory?: () => QueryTransport & { dispose(): void };
@@ -55,10 +53,10 @@ export interface InlineStoryRuntimeProps {
    */
   prepared?: PreparedStoryRuntime | ServedStoryRuntime;
   /**
-   * The inline CSS policy, when the host bundles it (./inline-sheet). Absent,
+   * The inline CSS policy, when the host bundles it (./editor-sheet). Absent,
    * it is loaded on demand, the first time a sheet must be isolated here.
    */
-  sheetPolicy?: InlineSheetPolicy;
+  sheetPolicy?: EditorSheetPolicy;
   /**
    * The served version's RAW compiled and authored sheets, fetched on demand —
    * for an editor update that leaves one of them "unchanged" when this page
@@ -66,7 +64,7 @@ export interface InlineStoryRuntimeProps {
    * (components/ArtifactSurface, the editor door); null when unavailable.
    */
   rawSheets?: () => Promise<{ compiledCss: string | null; authorCss: string | null } | null>;
-  onController(controller: InlineStoryController | null): void;
+  onController(controller: StoryController | null): void;
   /**
    * One reason that refuses every write on this render (the store's
    * `writesUnavailable`), so a write button says why instead of waiting on an
@@ -84,54 +82,7 @@ export interface InlineStoryRuntimeProps {
   sqliteWasm?: Uint8Array;
   /** Registry overrides passed to StoryRuntimeApp (its `components`); keep the object stable. */
   components?: Readonly<Record<string, ComponentType<Record<string, unknown>>>>;
-  /**
-   * HYDRATE the server's render of this document (server/app withInitialStory,
-   * captured by web/initial-story) instead of drawing it again — the reader
-   * page's runtime, whose `data` and `prepared` are the very values the server
-   * rendered. Without a waiting server story it renders as usual.
-   */
-  hydrateInitialStory?: boolean;
-}
 
-/**
- * The story root of an ADOPTED server render: the server's element, hydrated
- * by a root of its own (as /raw's document is), which then takes every later
- * render. A render before the hydration commits would make React discard the
- * server tree, so it waits in `next`; `hydrated` settles on that commit.
- */
-interface AdoptedStory {
-  root: Root;
-  committed: boolean;
-  next: ReactNode | null;
-  /** The last tree handed to the root, so an unchanged render is not handed over twice. */
-  shown: ReactNode;
-  hydrated: Promise<void>;
-  settle(): void;
-  /** Set while an unmount waits one microtask, so a StrictMode replay can keep the root. */
-  unmounting: boolean;
-}
-
-/**
- * Take the waiting server story (web/initial-story) into `host` and hydrate it
- * with `first` — the composition the server rendered, with the same props. A
- * container already emptied (a replayed mount's unmount) is rendered instead.
- */
-function adoptStory(server: HTMLElement, host: HTMLElement, first: ReactNode): AdoptedStory {
-  adoptInitialStory();
-  host.appendChild(server);
-  let settle = () => {};
-  const hydrated = new Promise<void>((resolve) => { settle = resolve; });
-  const hydrate = server.hasChildNodes();
-  // React's default error reporting stays: a mismatch is reported, never silently redrawn.
-  const root = hydrate ? hydrateRoot(server, first) : createRoot(server);
-  if (!hydrate) root.render(first);
-  return { root, committed: false, next: null, shown: first, hydrated, settle, unmounting: false };
-}
-
-/** Run `task` once the adopted story has committed; at once for a story rendered in place. */
-function afterStory(story: AdoptedStory | null, task: () => void): void {
-  if (!story || story.committed) task();
-  else void story.hydrated.then(task);
 }
 
 /**
@@ -145,13 +96,13 @@ interface SheetState {
   served: { css: string; overrides?: StyleOverride[]; nodes: JsxNode[] } | null;
   raw: { base: string | StoryBaseCssRecipe; compiledCss: string | null | undefined; authorCss: string | null | undefined };
 }
-function initialSheet(prepared: InlineStoryRuntimeProps['prepared'], nodes: JsxNode[]): SheetState {
+function initialSheet(prepared: EditorStoryRuntimeProps['prepared'], nodes: JsxNode[]): SheetState {
   if (!prepared) return { theme: null, served: null, raw: { base: '', compiledCss: null, authorCss: null } };
   if (isServedRuntime(prepared)) {
     return {
       theme: prepared.theme ?? null,
       // The payload's sheet — or, should a page have come without it, the served story's own `<style>`.
-      served: prepared.data.nodes === nodes ? { css: prepared.css ?? initialStorySheet() ?? '', overrides: prepared.overrides, nodes } : null,
+      served: prepared.data.nodes === nodes ? { css: prepared.css ?? '', overrides: prepared.overrides, nodes } : null,
       raw: { base: prepared.base, compiledCss: undefined, authorCss: undefined },
     };
   }
@@ -169,16 +120,12 @@ function nextSheet(previous: SheetState, update: StoryDocumentUpdate): SheetStat
   };
 }
 // eslint-disable-next-line no-restricted-syntax -- one module per page: the policy chunk, once loaded, serves every document
-let loadedPolicy: InlineSheetPolicy | null = null;
-const loadPolicy = (): Promise<InlineSheetPolicy> => import('./inline-sheet').then((module) => (loadedPolicy = module));
+let loadedPolicy: EditorSheetPolicy | null = null;
+const loadPolicy = (): Promise<EditorSheetPolicy> => import('./editor-sheet').then((module) => (loadedPolicy = module));
 
 /** Top-level artifact body; only authored Iframe/Helmet code creates sandboxed child realms. */
-export function InlineStoryRuntime(props: InlineStoryRuntimeProps): ReactNode {
+export function EditorStoryRuntime(props: EditorStoryRuntimeProps): ReactNode {
   const root = useRef<HTMLDivElement>(null);
-  // Read, not taken: the story leaves the server's wrapper when it is adopted, in the layout effect below.
-  const [server] = useState(() => (props.hydrateInitialStory ? initialDocumentStory() : null));
-  const host = useRef<HTMLDivElement>(null);
-  const adopted = useRef<AdoptedStory | null>(null);
   const portal = useRef<HTMLElement | null>(null);
   const selectionReady = useRef<(() => void) | null>(null);
   const [portalReady] = useState(() => (element:HTMLElement | null) => {
@@ -189,7 +136,7 @@ export function InlineStoryRuntime(props: InlineStoryRuntimeProps): ReactNode {
   latest.current = props;
   const [current, setCurrent] = useState(props.data);
   const [sheet, setSheetState] = useState<SheetState>(() => initialSheet(props.prepared, props.data.nodes));
-  const [policy, setPolicyState] = useState<InlineSheetPolicy | null>(() => props.sheetPolicy ?? loadedPolicy);
+  const [policy, setPolicyState] = useState<EditorSheetPolicy | null>(() => props.sheetPolicy ?? loadedPolicy);
   /** Raw parts fetched for the served version, or 'failed' when they cannot be had. */
   const [fetchedRaw, setFetchedRawState] = useState<{ compiledCss: string | null; authorCss: string | null } | 'failed' | null>(null);
   // Mirrors the document lifetime reads synchronously, to decide whether an update can render at once.
@@ -197,7 +144,7 @@ export function InlineStoryRuntime(props: InlineStoryRuntimeProps): ReactNode {
   const policyRef = useRef(policy);
   const fetchedRawRef = useRef(fetchedRaw);
   const setSheet = (next: SheetState) => { sheetRef.current = next; setSheetState(next); };
-  const setPolicy = (next: InlineSheetPolicy) => { policyRef.current = next; setPolicyState(next); };
+  const setPolicy = (next: EditorSheetPolicy) => { policyRef.current = next; setPolicyState(next); };
   const setFetchedRaw = (next: typeof fetchedRaw) => { fetchedRawRef.current = next; setFetchedRawState(next); };
   const createLifetime = () => {
     const transport = latest.current.transportFactory?.() ?? latest.current.transport;
@@ -209,31 +156,7 @@ export function InlineStoryRuntime(props: InlineStoryRuntimeProps): ReactNode {
   const { store } = lifetime;
   const editRef = useRef<FrameEditSession | null>(null);
   const [, redraw] = useState(0);
-  /*
-   * ADOPT the server's story: into this component's host, out of the server's
-   * wrapper (which leaves with its handoff rule), in one commit — then hydrate
-   * it. Declared before the document lifetime below, so the lifetime's wiring
-   * sees `root` pointing at the adopted element.
-   */
   useLayoutEffect(() => {
-    if (!server) return;
-    let story = adopted.current;
-    // A StrictMode replay finds its root still waiting to unmount, and keeps it.
-    if (story?.unmounting) story.unmounting = false;
-    else { root.current = server as HTMLDivElement; story = adopted.current = adoptStory(server, host.current!, composition); }
-    const kept = story;
-    return () => {
-      kept.unmounting = true;
-      // A root cannot unmount synchronously inside another root's commit.
-      queueMicrotask(() => {
-        if (!kept.unmounting) return;
-        kept.root.unmount();
-        if (adopted.current === kept) adopted.current = null;
-      });
-    };
-  }, []);
-  useLayoutEffect(() => {
-    if (!server) clearInitialStory();
     // StrictMode replays effects without remounting state. Revoked capabilities
     // stay revoked; replay obtains an entirely new document lifetime instead.
     if (store.disposed) { setLifetime(createLifetime()); return; }
@@ -249,14 +172,6 @@ export function InlineStoryRuntime(props: InlineStoryRuntimeProps): ReactNode {
     let selectionFactory: typeof import('./edit/selection-actions').createFrameSelectionActions | null = null;
     let annotationCommand: Parameters<FrameAnnotateSession['update']>[0] | null = null;
     let selectionCommand: Parameters<FrameSelectionActions['update']>[0] | null = null;
-    /*
-     * Nothing writes into an ADOPTED story before its hydration commits: an
-     * attribute set there first (an outline mark, a table's scroll mark, an
-     * edit or annotation session's decoration) is a mismatch React leaves in
-     * the page. Renders queue on their own (the story render effect below).
-     */
-    const story = adopted.current;
-    const whenStory = <T,>(load: Promise<T>): Promise<T> => story && !story.committed ? Promise.all([load, story.hydrated]).then(([module]) => module) : load;
     const listeners = new Set<(event: unknown) => void>();
     const nonce = runtimeId();
     const emit = (event: unknown) => { if (!disposed) for (const listener of [...listeners]) listener(event); };
@@ -285,11 +200,10 @@ export function InlineStoryRuntime(props: InlineStoryRuntimeProps): ReactNode {
     let publicMx = installMx(store);
     let stopOutline = () => {};
     let stopTables = () => {};
-    afterStory(story, () => {
-      if (disposed || !root.current) return;
-      stopOutline = wireOutline(document,root.current);
-      stopTables = markScrollableTables(document,root.current);
-    });
+    if (root.current) {
+      stopOutline = wireOutline(document, root.current);
+      stopTables = markScrollableTables(document, root.current);
+    }
     const stopValues = syncValuesToUrl(store, () => store.flow, { post: values => emit({ type: STORY_VALUES_MESSAGE, nonce, values }) });
     let pendingUpdates: Promise<void> | null = null;
     const rawKnown = (raw: SheetState['raw']) => (raw.compiledCss !== undefined && raw.authorCss !== undefined) || fetchedRawRef.current !== null;
@@ -320,7 +234,7 @@ export function InlineStoryRuntime(props: InlineStoryRuntimeProps): ReactNode {
       if (readerModeOverride) documentData.colorMode = readerModeOverride;
       render();
     };
-    const controller: InlineStoryController = {
+    const controller: StoryController = {
       nonce,
       send(command) {
         if (disposed) return;
@@ -338,7 +252,7 @@ export function InlineStoryRuntime(props: InlineStoryRuntimeProps): ReactNode {
           // Every edit re-isolates the sheet here: have the policy in hand before the first keystroke.
           if (!loadedPolicy) void loadPolicy().then((module) => { if (!disposed) setPolicy(module); }).catch(() => {});
           // Editing is deliberately lazy: readers do not download the editor.
-          void whenStory(import('./edit/session')).then(({ createFrameEditSession }) => {
+          void import('./edit/session').then(({ createFrameEditSession }) => {
             if (disposed || !editRequested || !root.current) return;
             editRef.current = createFrameEditSession({ win: window, root: root.current, channel, requestRender: render });
             render();
@@ -350,7 +264,7 @@ export function InlineStoryRuntime(props: InlineStoryRuntimeProps): ReactNode {
           if (annotate) { annotate.update(command); return; }
           if (command.mode === 'off' || annotationLoading) return;
           annotationLoading = true;
-          void whenStory(import('./edit/annotate')).then(({ createFrameAnnotateSession }) => {
+          void import('./edit/annotate').then(({ createFrameAnnotateSession }) => {
             if (disposed || !root.current) return;
             annotate = createFrameAnnotateSession({ win: window, root: root.current, channel, isEditing: () => editRequested });
             annotate.setNodes(documentData.nodes);
@@ -364,7 +278,7 @@ export function InlineStoryRuntime(props: InlineStoryRuntimeProps): ReactNode {
           if (selectionFactory) { ensureSelection(); return; }
           if ((!command.edit && !command.annotate) || selectionLoading) return;
           selectionLoading = true;
-          void whenStory(import('./edit/selection-actions')).then(({ createFrameSelectionActions }) => {
+          void import('./edit/selection-actions').then(({ createFrameSelectionActions }) => {
             selectionFactory = createFrameSelectionActions;
             ensureSelection();
           }).catch(error => { if (!disposed) console.error('Failed to load artifact selection actions', error); }).finally(() => { selectionLoading = false; });
@@ -446,32 +360,10 @@ export function InlineStoryRuntime(props: InlineStoryRuntimeProps): ReactNode {
     }
     return () => { alive = false; };
   }, [rendered, policy, fetchedRaw, raw.compiledCss, raw.authorCss]);
-  // The first commit of an adopted story: renders queued behind hydration go now.
-  const [storyCommitted] = useState(() => () => {
-    const story = adopted.current;
-    if (!story || story.committed) return;
-    story.committed = true;
-    const next = story.next;
-    story.next = null;
-    if (next !== null && next !== story.shown) { story.shown = next; story.root.render(next); }
-    story.settle();
-  });
   const wiring: InlineStoryWiring = { store, importAsset: lifetime.transport?.importAsset, editDecorate: editRef.current?.decorate, editChildren: editRef.current?.decorateChildren,
-    onSlideRename: editRef.current ? (path,title) => editRef.current?.renameSlide(path,title) : undefined, components: props.components, ...(server ? { onMounted: storyCommitted } : {}) };
+    onSlideRename: editRef.current ? (path,title) => editRef.current?.renameSlide(path,title) : undefined, components: props.components };
   const composition = <InlineStoryComposition data={{ ...current, nodes }} css={css} wiring={wiring} />;
-  // Every later render of an adopted story goes through its own root; the root's container is the server's element, which React does not own.
-  useLayoutEffect(() => {
-    const story = adopted.current;
-    if (!server || !story) return;
-    server.className = current.colorMode;
-    if (sheet.theme) server.setAttribute('data-theme', sheet.theme); else server.removeAttribute('data-theme');
-    if (composition === story.shown) return;
-    if (!story.committed) { story.next = composition; return; }
-    story.shown = composition;
-    story.root.render(composition);
-  });
   const selectionLayer = <TrustedUi overlay layer="selection"><SelectionPortal ready={portalReady} /></TrustedUi>;
-  if (server) return <>{selectionLayer}<div ref={host} data-mx-story-host="" style={{ display: 'contents' }} /></>;
   return <>{selectionLayer}<div ref={root} data-mx-inline-story="" data-mx-story-root="" data-theme={sheet.theme ?? undefined} className={current.colorMode}>
     {composition}
   </div></>;

@@ -7,7 +7,7 @@
  * again: this component MOVES that very element into the app's tree (state-preserving
  * `moveBefore` where the browser has it) and renders nothing of the story itself. The page's
  * chrome around it, its comments and its selection bubble are the app's; they reach the document
- * through the same private controller the inline runtime hands the page (`InlineStoryController`),
+ * through the same private controller the inline runtime hands the page (`StoryController`),
  * implemented here over the island DOM — comments and selections anchor on the `data-mx-ast`
  * paths the compiler keeps verbatim, classified against the version's SOURCE nodes.
  *
@@ -20,7 +20,7 @@
 import { useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import type { IslandDocument } from '@/lib/islands/contract';
 import type { JsxNode } from '@/lib/jsx';
-import type { InlineStoryController } from '@/lib/story-runtime/InlineStoryRuntime';
+import type { StoryController } from '@/lib/story-runtime/EditorStoryRuntime';
 import type { FrameAnnotateSession } from '@/lib/story-runtime/edit/annotate';
 import type { FrameSelectionActions } from '@/lib/story-runtime/edit/selection-actions';
 import type { RuntimeChannel } from '@/lib/story-runtime/pristine';
@@ -40,7 +40,7 @@ export interface IslandStoryProps {
   islands: IslandDocument | null;
   /** The version's SOURCE nodes (the served runtime's), which comments and selections are classified against. */
   nodes: JsxNode[];
-  onController(controller: InlineStoryController | null): void;
+  onController(controller: StoryController | null): void;
   /** Something asked this document to become another version: the page swaps in the interpreter. */
   onStale(): void;
 }
@@ -77,7 +77,7 @@ interface IslandControllerInput {
  * for comments, selections, reader mode and data wakeups, over the island DOM. Editing and new
  * versions are the interpreter's, so an update asks the page to hand over (`onStale`).
  */
-function createIslandController({ win, root, islands, nodes, portal, onStale }: IslandControllerInput): InlineStoryController & { selectionReady(): void } {
+function createIslandController({ win, root, islands, nodes, portal, onStale }: IslandControllerInput): StoryController & { selectionReady(): void } {
   let disposed = false;
   const listeners = new Set<(event: unknown) => void>();
   const nonce = runtimeId();
@@ -107,7 +107,7 @@ function createIslandController({ win, root, islands, nodes, portal, onStale }: 
       const message = command as { type?: string; datasets?: unknown; mode?: unknown };
       if (message.type === STORY_DATA_MESSAGE && Array.isArray(message.datasets)) { controller.invalidate(message.datasets as string[]); return; }
       if (message.type === STORY_READER_MODE_MESSAGE && (message.mode === 'light' || message.mode === 'dark')) {
-        // The story root carries the document's mode as its class (lib/story/inline-story-html).
+        // The story root carries the document's mode as its class (lib/story/story-element).
         root.classList.toggle('dark', message.mode === 'dark');
         root.classList.toggle('light', message.mode !== 'dark');
         return;

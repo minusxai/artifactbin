@@ -25,7 +25,7 @@ import { datasetQuerySnippet } from '@/lib/story/dataset-usage';
 import dynamic, { onDemand, useOnDemand, whenIdle } from '@/lib/dynamic';
 import { MessageSquare, Pencil } from 'lucide-react';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import type { InlineStoryController } from '@/lib/story-runtime/InlineStoryRuntime';
+import type { StoryController } from '@/lib/story-runtime/EditorStoryRuntime';
 import { createHttpBackend } from '@/lib/artifact-backend/http';
 import { ArtifactBackendProvider } from '@/lib/artifact-backend/context';
 import { subscribeDocument } from '@/lib/story-runtime/document-endpoint';
@@ -75,9 +75,7 @@ const DatasetCatalogView = dynamic(() => import('@/components/DatasetCatalogView
   loading: () => <p role="status" className="mt-4 text-sm text-muted">Loading dataset…</p>,
 });
 
-const InlineStoryRuntime = dynamic(() => import('@/lib/story-runtime/InlineStoryRuntime').then(module => ({default:module.InlineStoryRuntime})), { ssr: false });
-/** The document runtime's code, which a document address awaits before the app's first render (web/main). */
-export const preloadInlineStoryRuntime = (): Promise<void> => InlineStoryRuntime.preload();
+const EditorStoryRuntime = dynamic(() => import('@/lib/story-runtime/EditorStoryRuntime').then(module => ({default:module.EditorStoryRuntime})), { ssr: false });
 const ArtifactEditor = dynamic(() => import('@/components/ArtifactEditor'), {
   ssr: false,
   loading: () => <p className="mt-10 text-center text-xs text-faint">loading the editor…</p>,
@@ -228,7 +226,7 @@ const selectionActionCapabilities = (canEdit: boolean, canAnnotate: boolean, inV
 });
 
 export default function ArtifactSurface(props: ArtifactSurfaceProps) {
-  const runtimeRef = useRef<InlineStoryController | null>(null);
+  const runtimeRef = useRef<StoryController | null>(null);
   const route = useLocation();
   const navigate = useNavigate();
   const [copiedRef, setCopiedRef] = useState(false);
@@ -331,7 +329,7 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
    * THE COMPILED PAGE'S DOCUMENT (docs/phase2-architecture.md §7): the served story root with its
    * islands running, adopted AS IT IS (components/IslandStory) — never hydrated, never drawn again.
    * Read once, by the surface the page was served for (web/initial-story clears it on any other
-   * route). The interpreter (InlineStoryRuntime) takes over, for good, only when the document must
+   * route). The interpreter (EditorStoryRuntime) takes over, for good, only when the document must
    * become something the islands cannot: an editor's draft, or a newer version.
    */
   const [servedCompiled] = useState(initialStoryIsCompiled);
@@ -505,7 +503,7 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
 
   const transportFactory = useCallback(() => backend.queryTransport(), [backend]);
   const [frameLoaded, setFrameLoaded] = useState(false);
-  const onController = useCallback((controller: InlineStoryController | null) => {
+  const onController = useCallback((controller: StoryController | null) => {
     runtimeRef.current = controller;
     if (controller && earlyData.current.length) {
       const datasets = [...new Set(earlyData.current)];
@@ -1016,7 +1014,7 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
             nodes={props.runtime!.data.nodes}
             onController={onController}
             onStale={handOver}
-          /> : seedReady ? <InlineStoryRuntime
+          /> : seedReady ? <EditorStoryRuntime
             key={id}
             data={initialRuntimeData}
             transportFactory={transportFactory}
@@ -1024,8 +1022,6 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
             authorScript={props.runtime?.authorScript}
             rawSheets={needsEditorPart ? rawSheets : undefined}
             onController={onController}
-            // A compiled story is never React's to hydrate: the interpreter draws afresh (and clears it, web/initial-story).
-            hydrateInitialStory={!servedCompiled}
           /> : parseFailed && <TrustedUi><LoadFailure what="the document" onRetry={retryParse} className="p-4" /></TrustedUi>}
           </div>
         </div>

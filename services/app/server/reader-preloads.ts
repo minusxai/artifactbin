@@ -6,7 +6,7 @@ import type { LazyCode } from '@/lib/story/lazy-code';
 /** Build-owned reader discovery. Hints never execute code or change access. */
 type ReaderPreloader = (html: string) => string;
 
-const READER_ENTRIES = ['pages/Profile.tsx', 'pages/Artifact.tsx', '../lib/story-runtime/InlineStoryRuntime.tsx'];
+const READER_ENTRIES = ['pages/Profile.tsx', 'pages/Artifact.tsx'];
 interface Hint { href: string; style: boolean; as?: 'image' }
 
 const readManifest = (webDir: string): Manifest => JSON.parse(readFileSync(path.join(webDir, '.vite/manifest.json'), 'utf8'));

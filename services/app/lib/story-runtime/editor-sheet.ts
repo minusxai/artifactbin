@@ -37,4 +37,4 @@ export function isolateAgainst(css: string, nodes: JsxNode[]): JsxNode[] {
   return inlineStoryNodes(nodes, { baseCss: css, compiledCss: null, authorCss: null });
 }
 
-export type InlineSheetPolicy = typeof import('./inline-sheet');
+export type EditorSheetPolicy = typeof import('./editor-sheet');
