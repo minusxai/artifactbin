@@ -124,7 +124,17 @@ describe('the HTML-first reader page', () => {
     expect(doc.querySelector(`script[type="module"][${SPA_IDLE_ATTR}]`)).toBeTruthy();
     expect(doc.querySelector('[data-mx-artifact-id]')).toBeTruthy();
     expect(storyText(html)).toContain('$744,503');
-    expect(storyText(html)).toBe(new JSDOM(legacy).window.document.querySelector('[data-mx-initial-story]')?.textContent?.replace(/\s+/g, ' ').trim());
+    // The same text as today with every <style> removed and each chart slot's contents excluded on both sides:
+    // the compiled page draws the snapshot's chart where today's says `loading chart…` (an intended improvement).
+    const slots = [...doc.querySelectorAll('#mx-story-root [data-mx-chart-slot]')].map((slot) => slot.id).filter(Boolean);
+    const textOf = (root: Element | null) => {
+      if (!root) return '';
+      for (const s of root.querySelectorAll('style, script')) s.remove();
+      for (const id of slots) { const slot = root.querySelector(`[id="${id}"]`); if (slot) slot.textContent = ''; }
+      return root.textContent?.replace(/\s+/g, ' ').trim() ?? '';
+    };
+    expect(slots.length, 'the dashboard has chart slots to exclude').toBeGreaterThan(0);
+    expect(textOf(new JSDOM(html).window.document.getElementById('mx-story-root'))).toBe(textOf(new JSDOM(legacy).window.document.querySelector('[data-mx-initial-story]')));
   });
 });
 
