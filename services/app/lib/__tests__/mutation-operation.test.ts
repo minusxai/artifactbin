@@ -9,3 +9,7 @@ it('keeps explicit request identity separate from server defaults and operation 
  expect(normalizeMutationOperation({documentId:'doc',mutation:'update',args:{},value:null})).toEqual({documentId:'doc',mutation:'update',args:{},value:null});
  expect(mutationInitiator({userId:null,tokenId:'token'},'agent','untrusted label')).toEqual({principal:{kind:'token',id:'token'},execution:'agent',agentLabel:'untrusted label'});
 });
+it('retains the presented token as authority even when it is attached to an account',()=>{
+ expect(mutationInitiator({userId:'account',tokenId:'credential'},'agent').principal).toEqual({kind:'token',id:'credential'});
+ expect(mutationInitiator({userId:'account',tokenId:''},'human').principal).toEqual({kind:'user',id:'account'});
+});

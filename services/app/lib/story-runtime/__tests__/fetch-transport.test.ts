@@ -1,3 +1,4 @@
+import {createAuthenticatedTransport} from '../authenticated-transport';
 /**
  * The top-level document's query transport: a GET of its own query url with
  * the request JSON in `?q=`, no credentials (the document's origin is opaque;
@@ -114,4 +115,18 @@ describe('createFetchTransport', () => {
     ]);
     expect(JSON.parse(String(calls[0]![1].body))).toMatchObject({ values: { region: 'EU' }, only: ['sales'] });
   });
+});
+
+it('preserves a saved operation key and discoverable run id through direct transport',async()=>{
+ const f=vi.fn(async(_url:unknown,_options?:RequestInit)=>Response.json({ok:true,dataset:'data',mutationRunId:'run'}));
+ const transport=createFetchTransport('/a/x/query',f,'/a/x/mutate');
+ const request={mutation:'add',args:{},operationKey:'saved-operation-key',tz:'UTC'};
+ expect(await transport.mutate!(request)).toEqual({dataset:'data',mutationRunId:'run'});
+ expect(JSON.parse(String(f.mock.calls[0]![1]!.body))).toMatchObject(request);
+});
+
+it('retains the run handle on the authenticated page transport',async()=>{
+ const transport=createAuthenticatedTransport('doc',async()=>Response.json({ok:true,dataset:'data',mutationRunId:'run'}));
+ expect(await transport.mutate!({mutation:'add',args:{},operationKey:'saved-operation-key'})).toEqual({dataset:'data',mutationRunId:'run'});
+ transport.dispose();
 });
