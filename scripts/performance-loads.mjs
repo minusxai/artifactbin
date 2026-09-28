@@ -1,12 +1,12 @@
-/** CI-only paired production-build lab. No production credentials or traffic.
- * Usage: node scripts/performance-loads.mjs <built-checkout> <output.json>
+/** CI-only production-build lab. No production credentials or traffic.
+ * Usage: node scripts/performance-loads.mjs <built-checkout> <output.json> [--size-only]
  *
  * RUN BY .github/workflows/page-speed.yml — a separate workflow, never a
  * required check and never a dependency of ci.yml, on pull requests that touch
- * the app (or the lab) and on pushes to main. It builds the base (the PR's base
- * commit, or main's previous head) and the head on ONE runner and runs THIS
- * head-side script against each build in turn, so both are measured by the
- * same code; every marker it reads is plain DOM, present in either build.
+ * the app (or the lab) and on pushes to main. Parallel jobs build the base
+ * (the PR's base commit, or main's previous head) and head separately, then
+ * run THIS head-side script against each build so both use the same probe.
+ * PRs run one unthrottled size pass; manual runs retain full timing mode.
  *
  * HOW TO READ IT. The job summary holds the table (scripts/performance-report.mjs);
  * the `page-speed` artifact holds base.json, head.json and combined.json with
@@ -37,9 +37,11 @@ import { chromium } from 'playwright';
 import { startMailSink } from './lib/mail-login.mjs';
 import { becomeAccountOwner, publishAs } from './lib/start-doc.mjs';
 import { publishPageSpeedFixtures } from './fixtures/page-speed/index.mjs';
-import { LAB_THROTTLE, measureDocumentViews, summarizeDocumentViews, waitForStoredDiagrams } from './lib/document-views.mjs';
+import { documentMeasurementMode, measureDocumentViews, summarizeDocumentViews, waitForStoredDiagrams } from './lib/document-views.mjs';
 
 assert.equal(process.env.CI, 'true', 'Production builds and browser benchmarks run in CI only');
+const sizeOnly = process.argv.includes('--size-only');
+const mode = documentMeasurementMode(sizeOnly);
 const root = path.resolve(process.argv[2]), output = path.resolve(process.argv[3]);
 const scratch = mkdtempSync(path.join(tmpdir(), 'artifactbin-performance-'));
 const base = 'http://localhost:5480';
@@ -91,6 +93,8 @@ try {
   // connection's bearer cannot be claimed by an account, so it is not used.
   const email = 'mxmx_test_performance@example.com';
   await becomeAccountOwner(page, base, { sink: await startMailSink(), email });
+  const result = { revision: execFileSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8' }).trim(), conditions: { runtime: process.version, browser: browser.version(), gateway: 'HTTP/1.1 with gzip', database: 'in-process PGLite', mode: sizeOnly ? 'size-only' : 'timing' }, loads: [] };
+  if (!sizeOnly) {
   const markup = '<h1 id="performance-heading">Performance fixture</h1>' + Array.from({ length: 35 }, (_, i) => `<p id="paragraph-${i}">Section ${i}: A repeatable document for measuring useful content and application loading.</p>`).join('');
   const doc = await publishAs(page, { title: 'Performance fixture', markup, visibility: 'public' });
   for (let i = 0; i < 39; i++) await publishAs(page, { title: `Workspace sample ${String(i).padStart(2, '0')}`, markup, visibility: 'public' });
@@ -120,11 +124,10 @@ try {
     await response.body(); await response.dispose();
   }
   console.log('Thumbnail preparation complete');
-  const result = {
-    revision: execFileSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8' }).trim(),
+  Object.assign(result, {
     conditions: { runtime: process.version, browser: browser.version(), gateway: 'HTTP/1.1 with gzip', database: 'in-process PGLite', store: 'local disk; thumbnail cache prewarmed', viewport: '1440x1000', latencyMs: 80, downloadMbps: 10, uploadMbps: 5, cpuSlowdown: 4, repetitions: 7, owned: 40, shared: 20, paragraphs: 35, analytics: 'real bundle; outbound telemetry blocked' },
     previewsPrepared: previews.length, core: {}, loads: [],
-  };
+  });
   const core = await page.evaluate(async () => { const response = await fetch('/api/page/home?part=core'); return response.text(); });
   const parsed = JSON.parse(core);
   assert.equal(parsed.artifacts.length, 40); assert.equal(parsed.shared.length, 20);
@@ -183,24 +186,25 @@ try {
       }
     }
   }
+  await context.addCookies(sessionCookies);
+  }
   // DOCUMENT VIEWS (scripts/lib/document-views.mjs): cold, throttled, anonymous
   // reader; every fixture on the reader view and on /raw, interleaved per run.
   // Published only now, so the home listing above keeps exactly its 40 owned documents.
   // The session page is back on the app origin with its cookies before it publishes.
   await cdp.send('Emulation.setCPUThrottlingRate', { rate: 1 });
   await cdp.send('Network.emulateNetworkConditions', { offline: false, latency: 0, downloadThroughput: -1, uploadThroughput: -1 });
-  await context.addCookies(sessionCookies);
   await page.goto(base, { waitUntil: 'domcontentloaded' });
   const documentFixtures = await publishPageSpeedFixtures(body => publishAs(page, body));
   // The steady state a reader meets: a build that prerenders diagrams has stored them by now (bounded; a no-op wait otherwise).
-  const storedDiagrams = await waitForStoredDiagrams(base, documentFixtures);
+  const storedDiagrams = sizeOnly ? [] : await waitForStoredDiagrams(base, documentFixtures);
   console.log(`Stored diagram drawings before timing: ${storedDiagrams.join(', ') || 'none'}`);
-  const documentRuns = 5;
-  const samples = await measureDocumentViews({ browser, base, fixtures: documentFixtures, runs: documentRuns, throttle: LAB_THROTTLE, log: line => console.log(line) });
-  result.documents = { conditions: { ...LAB_THROTTLE, runs: documentRuns, cache: 'cold', viewer: 'anonymous', viewport: '1440x1000', storedDiagrams }, fixtures: documentFixtures.map(({ key, id, template }) => ({ key, id, template })), summary: summarizeDocumentViews(samples), samples };
+  const samples = await measureDocumentViews({ browser, base, fixtures: documentFixtures, ...mode, log: line => console.log(line) });
+  if (sizeOnly) assert(samples.every(sample => sample.ready && sample.jsBeforeReady !== null), 'size pass needs a ready marker and JS byte count for every view');
+  result.documents = { conditions: { ...(mode.throttle ?? {}), mode: sizeOnly ? 'size-only' : 'timing', runs: mode.runs, cache: 'cold', viewer: 'anonymous', viewport: '1440x1000', storedDiagrams }, fixtures: documentFixtures.map(({ key, id, template }) => ({ key, id, template })), summary: summarizeDocumentViews(samples), samples };
   mkdirSync(path.dirname(output), { recursive: true });
   writeFileSync(output, JSON.stringify(result, null, 2));
-  console.log(`Measured ${result.loads.length} loads for ${result.revision}; output ${output}`);
+  console.log(`Measured ${samples.length} document views and ${result.loads.length} app loads for ${result.revision}; output ${output}`);
 } finally {
   console.log('Stopping benchmark app');
   child.kill('SIGTERM');

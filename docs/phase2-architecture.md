@@ -128,6 +128,12 @@ Solid store bridge applies the result with `reconcile`, so only the computations
 cell re-run. Charts drawn on the server re-draw in the browser only when their table changes or the
 reader interacts (Vega loads then).
 
+When the live stream announces a new document version, the reader fetches its compiled story from
+`GET /a/:id/story` and morphs it into the running page. Unchanged nodes and islands keep their DOM and
+state; changed islands are disposed and hydrated from the new version. The same path serves a public
+post on its custom host. If the fragment cannot be served or morphed, the reader reloads while keeping
+its place.
+
 ## 3. The compiled page artifact
 
 `CompiledPage` (contract):
@@ -312,8 +318,10 @@ session): the browser never compiles. What changes is how the READER page relate
    `ArtifactSurface` moves `root` into its tree (the same move `adoptInitialStory` makes today) and
    renders chrome around it; it does NOT hydrate or re-render the story. The islands keep running and
    the SPA's reactions (like, follow, comments) keep reading the store.
-3. Edit mode. `setMode('edit')` disposes the islands (Solid roots unmounted, listeners removed) and
-   hands the SPA the raw `nodes`; the editor mounts its interpreter over the source as it does today
+3. Live version and edit mode. A new published version is morphed into the adopted story in place,
+   preserving unchanged nodes, islands, reader values and the store. The app refreshes its comment
+   anchors and selections after the morph. `setMode('edit')` disposes the islands (Solid roots
+   unmounted, listeners removed) and hands the SPA the raw `nodes`; the editor mounts its interpreter over the source as it does today
    and re-renders in place. Leaving edit mode publishes, and the next read is a compiled page again;
    the SPA re-adopts on navigation, not in place (an edited draft's islands are not recompiled in the
    browser).
