@@ -52,10 +52,14 @@ export function createFetchTransport(queryUrl: string, fetchFn: FetchLike = (i, 
   };
   return {
     run: (values, only, localTables) => ask({ values, only, tz: localZone(), ...(localTables ? { localTables } : {}) }),
+    /*
+     * ONE scoped POST per held dataset, with or without the session: a dataset's rows are no URL's
+     * business (a GET puts the request in every log and cache on the way), and the POST door answers a
+     * credential-free request exactly as the GET door does — the anonymous read, CORS `*` — so a
+     * sandboxed copy's opaque origin can ask it too (`text/plain` keeps it a simple request).
+     */
     hold: async (name) => {
-      const res = session
-        ? await post(queryUrl, { hold: name })
-        : await fetchFn(`${queryUrl}${queryUrl.includes('?') ? '&' : '?'}${QUERY_REQUEST_PARAM}=${encodeURIComponent(JSON.stringify({ hold: name }))}`, { method: 'GET', credentials: 'omit' });
+      const res = await post(queryUrl, { hold: name });
       if (!res.ok) throw new Error(`hold failed (${res.status})`);
       return ((await res.json()) as { tables: ImportTables[string] }).tables;
     },

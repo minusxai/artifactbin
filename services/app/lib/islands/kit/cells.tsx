@@ -1,6 +1,6 @@
 /* @jsxImportSource solid-js */
 /**
- * EDITING CELLS (data family: `@mx/kit/data` re-exports them): a `<Column>`'s content in each row of a
+ * EDITING CELLS (`@mx/kit/cells`, a family of its own: only a page whose table has column content loads it): a `<Column>`'s content in each row of a
  * `<DataTable>`, and in it today's editing cell (lib/story-runtime/StoryRuntimeApp RuntimeCellControl) — a
  * `<Select>`, a `<DatePicker>` or a native `<input>`/`<textarea>`/`<select>` with `run="$mutation"`.
  *
@@ -30,7 +30,7 @@ import { createCellSessions, type CellSessions } from '@/lib/story-runtime/cell-
 import { rowAttrs } from '../rt';
 import { useIsland } from '../context';
 import type { IslandContext } from '../contract';
-import { ACCESS_PENDING, storeRead } from './store-read';
+import { ACCESS_PENDING, hydratedRead } from './store-read';
 
 /** Where one cell sits: what the DataTable hands each column's content, per row. */
 export interface CellScope {
@@ -196,7 +196,7 @@ export function CellControl(props: CellControlProps) {
   const authored = createMemo(() => Object.fromEntries(Object.entries(props.p).map(([k, v]) => [k, (k === 'args' || k === 'set') && v && typeof v === 'object' ? rowBound(v as Record<string, BindingSource>, row) : substituteRow(v, row)])));
   const identity = JSON.stringify([cell.table, typeof cell.key, cell.key, cell.column, props.path]);
   const initial = () => (authored().value ?? null) as Scalar;
-  const unavailable = store ? storeRead(store, () => (isServer ? ACCESS_PENDING : store.mutationUnavailable(props.run)), { value: ACCESS_PENDING }) : () => ACCESS_PENDING;
+  const unavailable = hydratedRead(() => island.mutationUnavailable(props.run), { value: ACCESS_PENDING });
   const [version, setVersion] = createSignal(0);
   if (!isServer) onCleanup(sessions.subscribe(() => setVersion((n) => n + 1)));
   const session = () => { version(); return sessions.get(identity); };
@@ -252,7 +252,9 @@ function CellSelect(props: Shared & {
   const multiple = () => props.valueType() !== 'user' && a().multiple === true;
   const allowCreate = () => props.valueType() !== 'user' && a().allowCreate === true;
   const placeholder = () => str(a().placeholder) ?? 'None';
-  const userOptions = store ? storeRead(store, () => store.getState().userOptions) : () => undefined;
+  // A person column's choices (the store's userOptions): no island accessor, so the store is followed directly.
+  const [userOptions, setUserOptions] = createSignal(store?.getState().userOptions);
+  if (store && !isServer) onCleanup(store.subscribe(() => setUserOptions(() => store.getState().userOptions)));
   const options = createMemo((): Option[] => {
     const isUser = props.valueType() === 'user';
     let out: Option[];

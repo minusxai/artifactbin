@@ -196,8 +196,9 @@ describe('the compiled legs (w3-behaviour)', () => {
     expect(leg).toMatchObject({ name: 'live-reader@compiled', needsMail: specFor('live-reader').needsMail, timeoutMs: COMPILED_LEGS.find((l) => l.gate === 'live-reader').timeoutMs });
     expect(gateOf('live-reader@compiled')).toBe('live-reader');
     expect(() => specFor('fonts@compiled')).toThrow(/no compiled leg/);
-    expect(compiledLegNames()).not.toContain('dataflow@compiled');
-    expect(compiledLegNames({ all: true })).toContain('dataflow@compiled');
+    expect(compiledLegNames()).not.toContain('hydration@compiled');
+    expect(compiledLegNames({ all: true })).toContain('hydration@compiled');
+    expect(compiledLegNames(), 'the page engine runs on the compiled page (w3-page-engine)').toContain('dataflow@compiled');
   });
 
   it('every leg\'s gate reads GATE_READER (its own switch or scripts/lib/gate-reader)', () => {

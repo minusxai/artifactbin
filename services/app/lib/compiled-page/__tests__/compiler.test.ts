@@ -138,7 +138,9 @@ describe('compilePage', () => {
       + '<Column col="s"><Select label="S {$_row.id}" value="$_row.s" options={["a","b"]} run="$set_s" className="w-24" /></Column>'
       + '<Column col="n"><input type="number" value="$_row.n" run="$set_n" /></Column></DataTable>';
     const { islands } = generate(await inputOf(source.replace('"w":""}', '"w":"","note":""}')));
-    expect(islands).toContain('import { CellControl, DataTable, cellAttrs } from "@mx/kit/data";');
+    // Its own family: a page without column content never loads the cells.
+    expect(islands).toContain('import { CellControl, cellAttrs } from "@mx/kit/cells";');
+    expect(islands).toContain('import { DataTable } from "@mx/kit/data";');
     // One entry per <Column>, a hole where the content draws nothing (whitespace), a function per row otherwise.
     expect(islands).toContain('cells={[undefined, undefined, (row');
     expect(islands).toMatch(/<b \{\.\.\.cellAttrs\(\$d\d+, row\d+_\d+, cell\d+_\d+\)\}>\{rt\.text\(/);

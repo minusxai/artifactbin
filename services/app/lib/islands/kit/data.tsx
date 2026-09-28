@@ -38,9 +38,6 @@ import { DRAWING_CLASS, drawingIsCurrent } from '../chart';
 import { rowsDigest } from '../digest';
 import type { CellScope } from './cells';
 
-/** The editing cells and the cell scope (./cells), loaded with the table that draws them. */
-export { CellControl, cellAttrs, type CellScope } from './cells';
-
 const nameOf = (raw: unknown) => refName(raw) ?? '';
 /** The authored identity today's adapters put on their outer element (StoryRuntimeApp runtimeTargetIdentity): the id and the compiler's `data-*` stamps, never the chart slot marker. */
 const rootProps = (props: object) => Object.fromEntries(Object.entries(props).filter(([key]) => (key === 'id' || key.startsWith('data-')) && key !== CHART_SLOT_ATTR));

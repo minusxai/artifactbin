@@ -11,7 +11,7 @@ import path from 'node:path';
 import { buildIslands, ISLAND_SPECIFIERS } from '../build-islands.mjs';
 
 const ROOT = path.resolve(import.meta.dirname, '../..');
-const KIT_FAMILIES = ['basic', 'tabs', 'accordion', 'dialog', 'disclosure', 'controls', 'data', 'files', 'people', 'mermaid', 'embed'];
+const KIT_FAMILIES = ['basic', 'tabs', 'accordion', 'dialog', 'disclosure', 'controls', 'data', 'files', 'people', 'mermaid', 'embed', 'cells'];
 
 describe('the toolchain', () => {
   it('pins Solid 1.9 and a matching babel preset', () => {
@@ -106,6 +106,32 @@ describe('buildIslands', () => {
     expect(runtime.some((url) => text(url).includes(`import("./${name}")`))).toBe(true);
     expect(runtime.some((url) => text(url).includes('mx:author:init'))).toBe(false);
     expect(runtime).not.toContain(host);
+  });
+
+  it('bundles the page\'s SQLite engine alone: its own file, no imports, no Solid, the core inlined, loaded by boot by content address', () => {
+    const { manifest, files } = first;
+    const engines = Object.keys(files).filter((url) => /\/sqlite-engine-[0-9a-f]{16}\.js$/.test(url));
+    expect(engines).toHaveLength(1);
+    const engine = engines[0];
+    expect(files[engine].imports).toEqual([]);
+    const name = engine.slice('/islands/'.length);
+    const code = readFileSync(path.join(outDir, name), 'utf8');
+    expect(code).not.toMatch(/\$DX_DELEGATE|_\$HY/);
+    // `@artifactbin/sql/core` is bundled in (a lazy import left in would be a bare specifier the browser cannot load).
+    expect(code).not.toMatch(/import\(\s*["']@artifactbin/);
+    const reach = (urls, seen = new Set()) => { for (const u of urls) { if (seen.has(u)) continue; seen.add(u); reach(files[u].imports, seen); } return seen; };
+    const runtime = [...reach([manifest['@mx/rt'], manifest['@mx/boot']])];
+    expect(runtime.some((url) => readFileSync(path.join(outDir, url.slice('/islands/'.length)), 'utf8').includes(`import("./${name}")`)), 'boot asks for it lazily').toBe(true);
+    // The engine's own modules stay out of the runtime's closure: only the lazy request names it.
+    expect(runtime.some((url) => readFileSync(path.join(outDir, url.slice('/islands/'.length)), 'utf8').includes('the page engine is not loaded'))).toBe(false);
+  });
+
+  it('keeps the editing cells in their own family: nothing the data family loads carries them', () => {
+    const { manifest, files } = first;
+    const reach = (urls, seen = new Set()) => { for (const u of urls) { if (seen.has(u)) continue; seen.add(u); reach(files[u].imports, seen); } return seen; };
+    const carries = (spec) => [...reach([manifest[spec]])].some((url) => readFileSync(path.join(outDir, url.slice('/islands/'.length)), 'utf8').includes('Expected a JSON array of strings.'));
+    expect(carries('@mx/kit/cells')).toBe(true);
+    expect(carries('@mx/kit/data')).toBe(false);
   });
 
   it('keeps the shared runtime under the interactive budget: solid + rt + store bridge ≤ 28 KB brotli', async () => {

@@ -342,6 +342,8 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
           drawings: domain || engineRequested(request.url) ? null : 'document',
           colorMode: byExportKey && !domain ? captureColor(request.url) : null,
           signedIn: actor.credential === 'session' && !!viewer?.userId,
+          // A sandboxed copy's doors carry no credential (its origin is opaque): it holds what anyone may, as today's /raw does.
+          holder: null,
           doors: capture ? null : {
             queryUrl: queryPath(artifact.id),
             ...(!at && declaresMutations(row.source) ? { mutateUrl: mutatePath(artifact.id) } : {}),

@@ -135,8 +135,8 @@ const INERT: ReadonlySet<string> = new Set(['Helmet', 'Value', 'Query', 'Import'
 /** Registered components with behaviour: always an island root when ported (and the partial ones, which the browser would run). */
 const ISLAND_TAGS: ReadonlySet<string> = new Set([...Object.keys(KIT).filter((tag) => KIT[tag]!.island), ...PARTIAL]);
 /**
- * The editing cell's pieces (lib/islands/kit/cells, re-exported by `@mx/kit/data`), imported by name like a kit
- * tag: the control, and the cell scope's attribute resolver every element in a column's content uses.
+ * The editing cell's pieces (lib/islands/kit/cells, `@mx/kit/cells`), imported by name like a kit tag: the
+ * control, and the cell scope's attribute resolver every element in a column's content uses.
  */
 const CELL_EXPORTS: ReadonlySet<string> = new Set(['CellControl', 'cellAttrs']);
 /** The tags today's editing cell draws (StoryRuntimeApp RuntimeCellControl); another tag with `run` in a cell draws nothing. */
@@ -556,7 +556,7 @@ export function generate(input: GenerateInput): Generated {
 
   const kitImports = (set: Set<string>): string => {
     const byMod: Record<string, string[]> = {};
-    for (const tag of set) (byMod[tag === 'BoundNative' ? 'controls' : CELL_EXPORTS.has(tag) ? 'data' : KIT[tag]!.mod] ??= []).push(tag);
+    for (const tag of set) (byMod[tag === 'BoundNative' ? 'controls' : CELL_EXPORTS.has(tag) ? 'cells' : KIT[tag]!.mod] ??= []).push(tag);
     return Object.entries(byMod).sort(([a], [b]) => a.localeCompare(b)).map(([mod, tags]) => `import { ${tags.sort().map(safeProp).join(', ')} } from ${lit(`@mx/kit/${safeTag(mod)}`)};\n`).join('');
   };
   const dataConsts = data.map((text, i) => `const $d${i} = JSON.parse(${lit(text)});\n`).join('');

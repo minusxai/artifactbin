@@ -33,13 +33,17 @@ const change = (head, base, unit) => {
 
 export function reportMarkdown(base, head) {
   const lines = ['## Page speed lab', ''];
-  lines.push(`Base \`${base.revision?.slice(0, 12)}\` → head \`${head.revision?.slice(0, 12)}\`, one runner, production builds behind a gzip gateway. Values are head medians; brackets are the change from base (negative is faster/smaller).`, '');
+  const sizeOnly = head.documents?.conditions?.mode === 'size-only';
+  lines.push(`Base \`${base.revision?.slice(0, 12)}\` → head \`${head.revision?.slice(0, 12)}\`, production builds behind a gzip gateway. Values are head medians; brackets are the change from base (negative is faster/smaller).`, '');
   if (head.documents) {
     const c = head.documents.conditions;
-    lines.push(`### Document views`, '', `Anonymous reader, cold cache, ${c.latencyMs} ms latency, ${c.downloadMbps} Mbps down, ${c.cpuSlowdown}× CPU slowdown, median of ${c.runs}. \`view\` is the reader page (\`/a/<id>\`), \`raw\` is \`/a/<id>/raw\`. Takeover: the React runtime owns the visible document. Painted: charts/diagram drawn. KB are response bodies.`, '');
+    lines.push(`### Document views`, '', sizeOnly
+      ? `Anonymous reader, cold cache, one unthrottled pass per fixture and route. \`view\` is the reader page (\`/a/<id>\`), \`raw\` is \`/a/<id>/raw\`. KB are response bodies; timing columns are informational.`
+      : `Anonymous reader, cold cache, ${c.latencyMs} ms latency, ${c.downloadMbps} Mbps down, ${c.cpuSlowdown}× CPU slowdown, median of ${c.runs}. \`view\` is the reader page (\`/a/<id>\`), \`raw\` is \`/a/<id>/raw\`. Takeover: the React runtime owns the visible document. Painted: charts/diagram drawn. KB are response bodies.`, '');
     lines.push(documentViewsMarkdown(head.documents.summary, base.documents?.summary ?? {}), '');
   }
   const headLoads = loadsSummary(head), baseLoads = loadsSummary(base);
+  if (sizeOnly) return lines.join('\n') + '\n';
   lines.push('### App loads', '', `Signed-in home and anonymous prose reader, ${head.conditions?.repetitions ?? '?'} runs each. Useful: the first frame with the content.`, '');
   lines.push('| Route | Cache | Useful ms | TTFB ms | JS transferred KB |', '| --- | --- | ---: | ---: | ---: |');
   for (const [cell, now] of Object.entries(headLoads)) {

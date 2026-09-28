@@ -9,6 +9,7 @@ import { RECIPES as accordion } from './accordion';
 import { RECIPES as basic } from './basic';
 import { RECIPES as controls } from './controls';
 import { RECIPES as data } from './data';
+import { RECIPES as cells } from './cells';
 import { RECIPES as dialog } from './dialog';
 import { RECIPES as embed } from './embed';
 import { RECIPES as disclosure } from './disclosure';
@@ -23,7 +24,7 @@ export { cn } from './cn';
 /** One component's recipe: its props → the class string its root element carries. */
 export type Recipe = (props: Record<string, unknown>) => string;
 
-const FAMILIES: Readonly<Record<KitFamily, Readonly<Record<string, Recipe>>>> = { basic, tabs, accordion, dialog, disclosure, controls, data, files, people, mermaid, embed };
+const FAMILIES: Readonly<Record<KitFamily, Readonly<Record<string, Recipe>>>> = { basic, tabs, accordion, dialog, disclosure, controls, data, files, people, mermaid, embed, cells };
 
 function merge(families: typeof FAMILIES): Readonly<Record<string, Recipe>> {
   const merged: Record<string, Recipe> = {};

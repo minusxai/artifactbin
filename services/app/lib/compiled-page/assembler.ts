@@ -164,6 +164,8 @@ function islandData(input: AssembleInput): IslandPageData {
     ...(overlay.doors ?? {}),
     ...(overlay.managedAssets ? { managedAssets: overlay.managedAssets } : {}),
     signedIn: overlay.signedIn,
+    hold: [...(overlay.hold ?? [])],
+    ...(overlay.sqliteWasm ? { sqliteWasm: overlay.sqliteWasm } : {}),
     mermaidImages: overlay.mermaidImages,
     readOnly: overlay.readOnly ?? null,
     // The version's author script rides as DATA (escaped by scriptJson), for boot's lazy author host to

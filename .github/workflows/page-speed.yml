@@ -1,10 +1,7 @@
 name: page speed
 
-# THE PAGE-SPEED LAB, OFF THE CRITICAL PATH. A workflow of its own, so it runs
-# beside `ci` and never gates it: no job in ci.yml needs it, and it is not a
-# required check. It reports head against base in the job summary and a JSON
-# artifact, and never comments on a PR. How to read the numbers:
-# scripts/performance-loads.mjs (header).
+# Informational lab: PRs measure deterministic bytes; manual runs retain the
+# throttled timing comparison. Neither mode gates ci.yml or comments on PRs.
 on:
   pull_request:
     paths:
@@ -45,10 +42,14 @@ permissions:
   contents: read
 
 jobs:
-  lab:
-    name: page speed lab
+  measure:
+    name: measure ${{ matrix.revision }}
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        revision: [base, head]
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
@@ -57,8 +58,6 @@ jobs:
         with:
           node-version: 22
           cache: npm
-      # The same whole-install cache as ci.yml (see its `checks` job for the key's reasoning), so a
-      # lab run restores what CI already installed for this lockfile.
       - run: node scripts/ci.mjs lock-fingerprint
       - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
         id: install
@@ -80,8 +79,8 @@ jobs:
         run: npx playwright install --with-deps chromium
       - if: steps.playwright.outputs.cache-hit == 'true'
         run: npx playwright install chromium
-      # BASE: the PR's base commit, main's previous head on a push, the parent on a manual run.
-      - name: Check out the base beside the head
+      - name: Check out base build
+        if: matrix.revision == 'base'
         env:
           EVENT: ${{ github.event_name }}
           PR_BASE: ${{ github.event.pull_request.base.sha }}
@@ -93,13 +92,7 @@ jobs:
             *) base="" ;;
           esac
           if [ -z "$base" ] || ! git cat-file -e "$base^{commit}" 2>/dev/null; then base="$(git rev-parse HEAD~1)"; fi
-          echo "Base $base, head $(git rev-parse HEAD)"
           git worktree add --detach .perf-base "$base"
-      # The base's dependencies: a hard-linked copy of the head's install when both lockfiles (and
-      # the install scripts) fingerprint the same — workspace links are relative, so they resolve
-      # inside the base — and a clean `npm ci` otherwise.
-      - name: Install the base
-        run: |
           (cd .perf-base && node scripts/ci.mjs lock-fingerprint)
           same=true
           for f in .ci-cache-key/install.json services/app/scripts/copy-assets.mjs services/cli/scripts/prepare-pty.mjs; do
@@ -110,33 +103,53 @@ jobs:
             for dir in services/*/node_modules; do cp -al "$dir" ".perf-base/$dir"; done
             cp -al services/app/public/fonts .perf-base/services/app/public/fonts
             cp services/app/lib/data/story/story-font-manifest.json .perf-base/services/app/lib/data/story/story-font-manifest.json
-            echo "Base install: linked from the head (same fingerprint)"
           else
             (cd .perf-base && npm ci)
           fi
-      - name: Build base and head
+      - name: Build selected revision
+        env:
+          REVISION: ${{ matrix.revision }}
         run: |
-          (cd .perf-base && npm run build > ../base-build.log 2>&1) & base=$!
-          npm run build > head-build.log 2>&1 & head=$!
-          status=0
-          wait "$base" || { status=1; echo "::error::base build failed"; cat base-build.log; }
-          wait "$head" || { status=1; echo "::error::head build failed"; cat head-build.log; }
-          exit "$status"
-      # The HEAD's lab script measures both builds, one after the other on this runner.
-      - name: Measure the base
-        run: node scripts/performance-loads.mjs .perf-base page-speed/base.json
-      - name: Measure the head
-        run: node scripts/performance-loads.mjs . page-speed/head.json
+          if [ "$REVISION" = base ]; then (cd .perf-base && npm run build); else npm run build; fi
+      - name: Measure selected revision
+        env:
+          REVISION: ${{ matrix.revision }}
+          EVENT: ${{ github.event_name }}
+        run: |
+          if [ "$REVISION" = base ]; then target=.perf-base; else target=.; fi
+          if [ "$EVENT" = workflow_dispatch ]; then
+            node scripts/performance-loads.mjs "$target" "page-speed/$REVISION.json"
+          else
+            node scripts/performance-loads.mjs "$target" "page-speed/$REVISION.json" --size-only
+          fi
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: page-speed-${{ matrix.revision }}
+          path: page-speed/${{ matrix.revision }}.json
+          retention-days: 30
+          if-no-files-found: warn
+
+  report:
+    name: page speed report
+    runs-on: ubuntu-latest
+    needs: [measure]
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 22
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          pattern: page-speed-*
+          path: page-speed
+          merge-multiple: true
       - name: Report
         run: node scripts/performance-report.mjs page-speed/base.json page-speed/head.json page-speed/combined.json >> "$GITHUB_STEP_SUMMARY"
-      # The Phase 2 size targets on the head (docs/phase2-architecture.md): informational until Phase 2
-      # flips the check to `--strict`; a target that is not met is a line in the summary, never a red job.
       - name: Size targets
         run: node scripts/size-targets.mjs page-speed/head.json --markdown >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
-        if: always()
         with:
           name: page-speed
           path: page-speed
           retention-days: 30
-          if-no-files-found: warn
