@@ -1,4 +1,4 @@
-/** Standalone notification-query foundation. Types only; no runtime installed. */
+/** Shared contracts for standalone mutation-triggered notification queries. */
 import type { Queryable } from './db';
 import type { ColumnType, PersonCard, Scalar } from './sql';
 

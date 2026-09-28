@@ -1,3 +1,4 @@
+import type {MutationNotificationJobInput,MutationNotificationPlan} from '@artifactbin/contracts';
 import {expect,it} from 'vitest';
 import {useAppHarness,request} from './harness';
 import {POST as create} from '@/app/api/artifacts/route';
@@ -87,12 +88,12 @@ it('keeps a successful write when output fails, then retries the original job ag
  const worker=createNotificationWorker({store,evaluator:{evaluate:evaluateNotificationQuery}});
  await worker.drainOnce();
  expect(await loadDatasetRows((await getArtifactById(dataset.id))!)).toEqual([{n:1}]);
- const failed=(await db.query('SELECT id,status,error_code,input FROM notification_jobs WHERE mutation_run_id=$1',[result.mutationRunId])).rows[0]!;
+ const failed=(await db.query<{id:string;status:string;error_code:string|null;input:MutationNotificationJobInput}>('SELECT id,status,error_code,input FROM notification_jobs WHERE mutation_run_id=$1',[result.mutationRunId])).rows[0]!;
  expect(failed).toMatchObject({status:'failed',error_code:'notification_output_invalid'});
  const repaired=await send('mxmx_test_notification_repair_current');expect(repaired.status).toBe(200);
  expect(await store.retry(failed.input.initiator.principal,failed.id)).toBe(true);
  while(await worker.drainOnce()) { /* Drain the two bounded pending jobs. */ }
- const completed=(await db.query('SELECT status,plan,input FROM notification_jobs WHERE id=$1',[failed.id])).rows[0]!;
+ const completed=(await db.query<{status:string;plan:MutationNotificationPlan;input:MutationNotificationJobInput}>('SELECT status,plan,input FROM notification_jobs WHERE id=$1',[failed.id])).rows[0]!;
  expect(completed.status).toBe('completed');
  expect(completed.plan.rows).toEqual([{recipientIds:[],message:'Repaired'}]);
  expect(completed.input).toEqual(failed.input);

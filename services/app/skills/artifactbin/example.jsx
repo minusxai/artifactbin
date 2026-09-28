@@ -19,8 +19,8 @@ where $region is null or region = $region group by 1 order by 1
 `}</Query>
 <Query name="by_region">{`select region, sum(revenue) as revenue from sales.rows group by 1 order by 2 desc`}</Query>
 {/* Tasks: afbin help users; columns id:number, title:string, status:string,
-assignee:user. Replace tsk123 with that published dataset's ID. */}
-<Import name="tasks" src="ref:tsk123" />
+assignee:user. Replace ntf123 with that published dataset's ID. */}
+<Import name="tasks" src="ref:ntf123" />
 <Value name="task_id" type="number" default={1} />
 <Value name="status" type="string" default="Done" />
 <Mutation name="change_status" expectedAffected={1}>{`

@@ -55,6 +55,11 @@ const PLACEHOLDERS: Record<string, Placeholder> = {
     ],
     rows: [{ id: 1, task: 'Review proposal', assigned_to: null, completed_by: null }],
   },
+  /** The standalone notification example explicitly declares this task shape. */
+  ntf123: {
+    columns: [{name:'id',type:'number'},{name:'title',type:'string'},{name:'status',type:'string'},{name:'assignee',type:'user'}],
+    rows: [{id:1,title:'Review pricing',status:'Todo',assignee:null}],
+  },
   /** A photo gallery's rows. */
   bks123: {
     columns: [{ name: 'id', type: 'string' }, { name: 'title', type: 'string' }, { name: 'cover_ref', type: 'string' }, { name: 'has_photo', type: 'boolean' }, { name: 'position', type: 'number' }],
