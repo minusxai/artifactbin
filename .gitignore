@@ -64,3 +64,6 @@ services/app/public/libraries/
 # Built from authored references and command registries.
 /services/cli/src/generated/teaching.json
 /services/cli/src/generated/teaching.json.*.tmp
+
+# the shared island build (scripts/build-islands.mjs) — content-addressed chunks + manifest
+**/public/islands/

@@ -1,5 +1,6 @@
 import path from 'path';
 import { generateTeaching } from './scripts/lib/generate-teaching.mjs';
+import { SOLID_ALIASES } from './scripts/lib/solid-aliases.mjs';
 import { defineConfig } from 'vitest/config';
 import react from '@vitejs/plugin-react';
 import solid from '@solidjs/vite-plugin';
@@ -10,10 +11,8 @@ generateTeaching();
 
 // The island tests (Solid, lib/islands): jsdom, the Solid JSX transform, never the React one. Every
 // other project matches `lib/**/__tests__` too, so they exclude this glob.
-const SOLID_SPECIFIERS = [
-  { find: /^solid-js\/web$/, replacement: '@solidjs/web' },
-  { find: /^solid-js\/store$/, replacement: path.resolve(import.meta.dirname, 'services/app/lib/islands/solid-store.ts') },
-];
+// Exact-match keys, so `solid-js` itself is untouched.
+const SOLID_SPECIFIERS = Object.entries(SOLID_ALIASES).map(([specifier, replacement]) => ({ find: new RegExp(`^${specifier}$`), replacement }));
 const ISLAND_TESTS = 'services/app/lib/islands/**/__tests__/**/*.test.{ts,tsx}';
 
 // API exercises route handlers and persistence; Node covers libraries, services,
@@ -128,11 +127,12 @@ export default defineConfig({
       },
       {
         // Solid files under lib/islands carry `/* @jsxImportSource solid-js */` (the root tsconfig
-        // stays react-jsx) and are compiled by the same Babel transform the island build uses
-        // (@solidjs/babel-plugin, `compiler: 'babel'`), so a test runs the code a reader gets. Only
-        // lib/islands goes through Solid's transform; the React kit a parity test imports keeps
-        // Vite's own (react-jsx) transform. The contract's Solid-1 specifiers resolve to Solid 2.0
-        // here exactly as in scripts/build-islands.mjs (see lib/islands/solid-compat.d.ts).
+        // stays react-jsx) and are compiled by the same Babel plugin the island build uses
+        // (@solidjs/babel-plugin via `compiler: 'babel'`, not the plugin's default native compiler).
+        // One difference: tests render client-side (`hydratable` off), the build emits hydratable
+        // code. Only lib/islands goes through Solid's transform; the React kit a parity test imports
+        // keeps Vite's own (react-jsx) transform. The contract's Solid-1 specifiers resolve to Solid
+        // 2.0 through the same map as scripts/build-islands.mjs (scripts/lib/solid-aliases.mjs).
         extends: true,
         plugins: [solid({ compiler: 'babel', include: ['services/app/lib/islands/**/*.{tsx,jsx}'], solid: { sourceNames: false } })],
         resolve: { alias: SOLID_SPECIFIERS },
