@@ -384,6 +384,13 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
             },
           });
         }
+        // No renderer is left to answer (compiled-only, lib/compiled-page/serve.server fallbackPolicy): a reported 500.
+        if (answer.mode === 'failed') {
+          return new Response('<!doctype html><meta charset="utf-8"><title>Unavailable</title><h1>This document could not be rendered</h1>', {
+            status: answer.status,
+            headers: { 'Content-Type': 'text/html; charset=utf-8', [READER_MODE_HEADER]: 'compiled', ...COMMON },
+          });
+        }
         readerFallback = answer.fallback;
       }
       // `none` whenever the link grants no more than a guest already has, which
