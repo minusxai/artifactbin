@@ -14,6 +14,7 @@ import { chromium } from 'playwright';
 import { becomeOwner, startDocument } from './lib/start-doc.mjs';
 import { loginViaEmail, startMailSink } from './lib/mail-login.mjs';
 import { compiledReader } from './lib/gate-reader.mjs';
+import { modelNoticeSql, physicalNoticeSql, invalidRecipientSql } from './fixtures/postgres-notifications.mjs';
 
 const base = process.argv[2] ?? 'http://localhost:3030';
 const log = label => console.log(`  ok ${label}`);
@@ -252,8 +253,6 @@ try {
     access: 'readwrite',
     dataset: '<Dataset kind="stored"><Table schema="public" name="rows" columns={[{"name":"id","type":"number"},{"name":"recipient","type":"string"}]} rows={[{"id":1,"recipient":"initial"}]} /></Dataset>',
   }, 201);
-  const nativeModel = `select ARRAY[$recipient, $recipient]::text[] as "to", format('West total %s', total) as message from models.region_totals where region = 'west'`;
-  const nativeTable = `select $recipient::text as "to", format('Order %s', id) as message from sales.orders where id = 1`;
   const rule = (name, source, sql) => `<Notify name="${name}" on="save" source="ref:${source}">{\`${sql}\`}</Notify>`;
   const documentMarkup = (invalid = false) => `---
 title: PostgreSQL notification contract
@@ -263,10 +262,10 @@ visibility: unlisted
 <Import name="requests" src="ref:${trigger.id}" />
 <Value name="recipient" type="string" default="${recipientId}" />
 <Mutation name="save" expectedAffected={1}>{\`update requests.rows set recipient = $recipient where id = 1\`}</Mutation>
-${rule('model_notice', modelDatasetId, nativeModel)}
-${rule('duplicate_notice', modelDatasetId, nativeModel)}
-${rule('physical_notice', datasetId, nativeTable)}
-${invalid ? rule('invalid_notice', modelDatasetId, `select json_build_array($recipient)::text as "to", 'Invalid recipient representation' as message from models.region_totals where region = 'west'`) : ''}
+${rule('model_notice', modelDatasetId, modelNoticeSql)}
+${rule('duplicate_notice', modelDatasetId, modelNoticeSql)}
+${rule('physical_notice', datasetId, physicalNoticeSql)}
+${invalid ? rule('invalid_notice', modelDatasetId, invalidRecipientSql) : ''}
 </Helmet>
 <h1 id="pg-notify">PostgreSQL notification contract</h1>`;
   // The stored import is also a required readable source.
@@ -297,7 +296,7 @@ ${invalid ? rule('invalid_notice', modelDatasetId, `select json_build_array($rec
   const delivered = await inbox(successRun);
   assert.equal(delivered.length, 1, 'one recipient gets one item across three rules and duplicate array entries');
   assert.deepEqual([...delivered[0].messages].sort(), ['Order 1', 'West total 155']);
-  log('native PostgreSQL arrays, format(), and chained notebook models combine distinct messages once per recipient/run');
+  log('native PostgreSQL arrays, native concatenation, and chained notebook models combine distinct messages once per recipient/run');
 
   await checked(owner, `/api/my/artifacts/${modelDatasetId}/sharing`, 'PUT', { visibility: 'private' });
   assert.equal((await inbox(successRun)).length, 0, 'disclosure rechecks the current native source authority');
