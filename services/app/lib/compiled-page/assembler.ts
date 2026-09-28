@@ -189,6 +189,7 @@ function islandData(input: AssembleInput): IslandPageData {
   const { overlay } = input;
   return {
     values: overlay.values,
+    appPage: !!input.spa,
     ...(overlay.hold ? { hold: overlay.hold } : {}),
     results: input.snapshot?.results ?? null,
     ...(overlay.doors ?? {}),

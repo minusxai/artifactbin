@@ -190,6 +190,8 @@ export type KitFamily = (typeof KIT_FAMILIES)[number];
 export interface IslandPageData {
   values: Record<string, Scalar>;
   results: ServedResults | null;
+  /** The compiled app page uses its same-origin scoped POST query door, including for guests. */
+  appPage: boolean;
   sqliteWasm?: string;
   hold?: string[];
   queryUrl?: string;

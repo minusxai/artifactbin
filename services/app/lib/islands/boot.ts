@@ -54,7 +54,7 @@ const STORY_ROOT_SELECTOR = '[data-mx-inline-story]';
 const LIVE_ID_ATTR = 'data-mx-live-id';
 const LIVE_EDIT_ATTR = 'data-mx-live-edit';
 
-const EMPTY_PAGE: IslandPageData = { values: {}, results: null, signedIn: false, mermaidImages: {}, readOnly: null };
+const EMPTY_PAGE: IslandPageData = { values: {}, results: null, appPage: false, signedIn: false, mermaidImages: {}, readOnly: null };
 
 /** The page data island, or the empty page when it is absent or unreadable (the islands still hydrate). */
 export function readPageData(doc: Document): IslandPageData {
@@ -86,7 +86,7 @@ export function boot(input: IslandModule | readonly IslandEntry[], win: Window =
 
   // A signed-in reader's queries and writes are theirs: the transport carries the session to the
   // doors that read it. A guest page keeps the anonymous GET door (lib/story-runtime/fetch-transport).
-  const transport = flow ? createDocumentTransport(win, data.queryUrl, appOrigin(), undefined, data.mutateUrl, { session: data.signedIn }) : null;
+  const transport = flow ? createDocumentTransport(win, data.queryUrl, appOrigin(), undefined, data.mutateUrl, { session: data.signedIn || data.appPage }) : null;
   const runtime = createIslandRuntime(
     {
       dataflow: flow ? { flow, values: data.values ?? {}, hold: data.hold ?? [], ...(data.results ? { results: data.results } : {}) } : null,

@@ -29,6 +29,11 @@ const input = (over: Partial<AssembleInput> = {}): AssembleInput => ({
 const dom = (page: { html: string }) => new JSDOM(page.html).window.document;
 
 describe('assembleReaderPage', () => {
+  it('marks the app page so its island boot uses the scoped POST query door', () => {
+    const data = (over: Partial<AssembleInput>) => JSON.parse(dom(assembleReaderPage(input(over))).getElementById(ISLAND_DATA_ID)!.textContent!);
+    expect(data({}).appPage).toBe(false);
+    expect(data({ spa: { entry: '/assets/main.js', preload: [] } }).appPage).toBe(true);
+  });
   it('uses only the full image variant for an export capture', () => {
     const doc = dom(assembleReaderPage(input({ capture: true, story: '<div class="mx-doc"><img src="/full.jpg" srcSet="/small.jpg 640w, /full.jpg 1600w" sizes="100vw"></div>' })));
     const image = doc.querySelector('img')!;
