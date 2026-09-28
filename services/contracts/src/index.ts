@@ -37,9 +37,10 @@ export * from './document-operation';
 export * from './document-update';
 
 export type {
-  MutationNotificationField, MutationNotificationRecipient, MutationNotificationPart,
-  MutationNotificationSpec, MutationInitiator, MutationOperationRequest,
-  MutationOperationSuccess, MutationNotificationOrigin,
-  ResolvedMutationNotification, MutationNotificationCommit, MutationNotificationActor,
-  MutationNotificationView, MutationNotificationResolver, MutationNotificationWriter,
+  MutationNotificationRule, MutationInitiator, MutationOperationRequest,
+  MutationOperationSuccess, NotificationSource, MutationNotificationOrigin,
+  MutationNotificationBindings, MutationNotificationJobInput, MutationNotificationClaim, ResolvedMutationNotification,
+  MutationNotificationPlan, MutationNotificationJobStatus, MutationNotificationJobView,
+  MutationNotificationActor, MutationNotificationView, MutationNotificationEvaluator,
+  MutationNotificationJobStore,
 } from './mutation-notifications';

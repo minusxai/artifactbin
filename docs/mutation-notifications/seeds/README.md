@@ -1,32 +1,40 @@
-# Behavioral seeds and integration checkpoints
+# Behavioral seeds and contract checkpoints
 
-These are executable test source templates, deliberately not discovered by normal test runs until the owning feature is implemented. Copy unchanged to the paths below before doing the work. This is not an excuse to avoid tests: their actual failing runs have been observed and recorded in the foundation report.
+Only the accepted standalone query design is active. Templates use .test.ts.txt so planning CI is not deliberately red. Copy to the destination before implementation; observe semantic red and retain the completed tests with the implementation.
 
-| Seed | Destination | Owner | Observed |
+| Seed | Destination | Owner | Evidence |
 | --- | --- | --- | --- |
-| mutation-effect.test.ts.txt | services/sql/__tests__/mutation-effect.test.ts | A | 7 expected semantic failures (revised seed) |
-| mutation-notification-decl.test.ts.txt | services/app/lib/story/__tests__/mutation-notification-decl.test.ts | B | 6 expected semantic failures (revised seed) |
-| headless-operation-guidance.test.ts.txt | services/app/lib/__tests__/headless-operation-guidance.test.ts | F | 3 expected teaching failures |
+| notification-query-decl.test.ts.txt | services/app/lib/story/__tests__/notification-query-decl.test.ts | B | 6 expected semantic failures, 17.94 seconds |
+| headless-operation-guidance.test.ts.txt | services/app/lib/__tests__/headless-operation-guidance.test.ts | F | Three earlier observed semantic failures; current workflow smoke/eval remains additional work |
 
-Run each with `npm test -- --files <destination>`. Extend engine seeds to the existing local/worker × direct/HTTP composition fixture. Add focused rejection tests only once valid syntax works, so refusal tests cannot pass merely because all Notify syntax is unsupported.
+The SQL capture and nested Notify seeds were removed. Their historical failures/probe are not proof of this design. The new seed calls existing Helmet/compiler/signature APIs; it must fail on missing behavior, not missing imports.
 
-## Root-owned integration cases (not yet executed)
+## Required pre-implementation module tests (specified, not yet run)
 
-Build with real handlers and isolated `services/app/__tests__/harness.ts` state. Existing supporting fixtures: mutate-routes, mutate-edges, cli-mutations, dataset-grants, dataset-policies, notification-activity, and CLI harness. Avoid unrelated broad test runs.
+A: saved normalized values/defaults plus initiating user/timezone/time survive later document edits and worker identity; current source changes are visible; deleted target returns empty; read-only SQL only; source lineage includes filter-only/nested dependencies; explicit result truncation/byte/fanout failure; malformed to/message fails without partial results. Compile/runtime typed recipient-list support must agree across transports; otherwise use SQL rows and refuse unsupported result types clearly.
 
-1. Three local accounts: actor, assignee, creator; one testuser. A task row with string ID/title/status and user-typed assignee/created_by. One dataset, saved document, two declared Values plus expected_status, Query tasks, Mutation change_status with Notify. User IDs are real fixture accounts, never invented names.
-2. Successful headless mutation: one version change, durable receipt, one source fact, one notification per distinct admitted recipient per effect. Assert message, implicit actor metadata, document/mutation origins, and no record images in API response/event payload.
-3. Browser action uses the same declared operation. Drop the committed response, retry same invocation key, compare original/replayed route response shapes and database effect counts. Try same key/different input; refuse. Authorize again before saved result access.
-4. Force first CAS attempt to lose with existing invocation test seam; successful second attempt must use its own before and after records. Losing attempt creates no source fact, receipt completion, or inbox rows. Label this simulated contention; real concurrent Postgres proof is CI work.
-5. Add deterministic database constraint failures for notification persistence and outbox insertion. Assert dataset head, receipt response, notifications and source fact all roll back. Reset database and limiters between cases.
-6. Private dataset behind public document: intended recipient without dataset authority gets no notification. Revoke dataset/document access after creation; inbox and internal delivery endpoint omit content. Existing write policy never grants read permission by implication.
-7. Deleted record: authorized-at-commit recipient still receives frozen message while current dataset/document authority remains. Newly granted reader gets no historical backfill. Account/artifact deletion and block behavior follow the agreed retention/access policy.
-8. Null/list/duplicate users; bad value types; count/text limits; human self suppression; agent-own-account delivery; testuser→real-user isolation. No raw token identifiers in presentation.
-9. Missing browser operation ID on Notify fails before SQL and prompts refresh. Anonymous Notify fails sign-in-required before SQL; anonymous non-Notify behavior unchanged. Stable principal scope and payload fingerprint tested.
-10. Old SQL adapter returns success without requested effect: app refuses before commit. Continuation/no-op and explicit expectedAffected guards respected. Capture field never reaches public replies automatically.
-11. Notification UI renders the explicit new view rather than legacy “mentioned you”; user prefix once, nonuser actors honestly, accessible link/read state, valid block controls only for users.
-12. Teach and demonstrate real named query/write CLI commands; retain required UI verification for authored features and session fallback for existing row/cell-context actions. Prove the final demo against the current task server, not a reused unrelated server.
+B: missing/duplicate on/name, wrong result columns, forbidden nested/body Notify, new undeclared invocation arg, linked local mutation, notification-only signature invalidation, strict metadata revision, immutable source dependency retention. Notify never becomes a page query or runs on GET/render.
 
-These cases are acceptance contracts and deterministic fixture instructions, not pre-existing passing tests. Root converts them into runnable tests at each adapter join before implementing/wiring the join. Do not claim red/green evidence until observed.
+C: real isolated DB claim competition, generation/lease fencing, renew/loss, expired recovery, status/retry authorization, enqueue dedupe. Fault last output batch and outbox write: result transaction rolls back but original mutation stays committed. Empty output marks completed. Completed job never re-evaluates. Distinct output rows and distinct run IDs remain distinct. Admission requires every source plus document; blocks, testuser origin, self/agent and source revocation cover both persist and read.
 
-Additional required cases: mixed row recipients, repeated user across effects, equal-valued distinct records, zero effects, bulk insert/delete, projected sensitive fields omitted, capacity overflow, last-batch failure rollback, recipient-local grouping, no per-effect duplicate ACL queries, and adapter capability refusal before any external write. The original single-row red log is historical, not evidence for these revised requirements.
+D: one key/gesture across direct/relay and browser/API; same key/input replays canonical original result; mismatch refuses. Save effective values and allowed platform bindings beyond SQL-used params. Completed receipt remains recoverable after declaration removal following current caller authorization. Missing key/anonymous Notify fails prewrite; unrelated mutations unchanged.
+
+E: actor identified separately from current-state text, current all-source read checks, legacy inbox variants, accessible safe status/retry controls, normal-reader denial, internal delivery parity.
+
+F: actual deterministic CLI+browser smoke and agent eval task/rubric; see parent scope and F brief. Pinned copy tests alone are insufficient.
+
+## Root integration checkpoint J0
+
+Before wiring implementation, seed real-handler tests using isolated app harness state and observe their failures against the module seams. Do not count missing modules as behavioral red.
+
+1. Successful mutation atomically stores pointer/version, canonical receipt and one job per matching rule. Failed write/CAS loser/enqueue failure leaves none; losing attempt's rule/bindings cannot escape.
+2. Lost mutation response and replay creates no extra job. Intentional new mutation creates a separate job. Zero-affected successful mutation still creates a job; empty query completes with no inbox rows.
+3. Crash/lease expiry after query execution but before complete can rerun query against newer data. Stale worker cannot commit; one fenced output wins. Crash after complete/restart does not rerun the query or duplicate inbox/outbox.
+4. Query/invalid output/capacity/last batch failures leave mutation committed, status visible and authorized recovery possible. Retry preserves identity/definition/bindings; it does not invoke mutation again.
+5. Source access changes during execution invalidate admission; revoke any joined source after completion hides messages from inbox/internal delivery. New access does not backfill completed results.
+6. Exact compiled definition remains available across document edit/removal and worker restart while current authority is rechecked. Dependency cleanup cannot delete referenced queued context.
+7. Branch CLI and UI exercise same named action, asynchronous job status and inbox. Browser/CLI actor provenance honest; no query/run args/row images/token IDs in public response or event payloads.
+
+Capacity and external adapter tests are implementation gates: measure bounded result transaction/query time, memory/output bytes and SQL count on local PGLite and CI Postgres. Source-side outbox/committed-run replay is required before future remote database writes, not demonstrated by local tests.
+
+Additional contract audit cases: first/replayed mutationRunId discovers all rule jobs via authorized list; ordinary readers denied. Source-free SQL still fences principal/document revocation. Schema replacement/incompatibility never silently rebinds saved SQL. Rule rename/removal leaves saved jobs executable; document deletion fails them. Fence races retry boundedly, permanent revocation fails visibly. Typed scalar/null/list-with-null/duplicate/mixed-type output follows compile/runtime adapter capability checks; JSON text never silently expands.

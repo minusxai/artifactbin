@@ -1,18 +1,18 @@
-# B — Notify grammar, compilation and pure resolution
+# B — Standalone Notify grammar and compilation
 
 ## Responsibility and exclusive files
-Own services/app/lib/story/dataflow.ts, helmet.ts, compiled-dataflow.ts, compile-dataflow.ts, parsed-artifact-metadata.ts; necessary bounded lib/jsx parser/serializer/validation changes; new lib/story/mutation-notification.ts pure parser/resolver; declaration/compile/roundtrip tests. Own notification metadata projection in compiled-page/bundle.server.ts only; coordinate any other renderer edits with root. Do not touch skill text, SQL engine, DB, notification storage, or UI inbox files.
+Own services/app/lib/story/dataflow.ts, helmet.ts, compiled-dataflow.ts, compile-dataflow.ts, parsed-artifact-metadata.ts; necessary lib/jsx validation/serializer changes; standalone declaration/compiler tests; server metadata projection in compiled-page/bundle.server.ts. No evaluator, worker, DB, transport, teaching or inbox edits.
 
 ## Contract
-Use shared MutationNotificationSpec exactly. Preserve one SQL child plus optional Notify. Before/after are notification-only scoped fields. Normalize scalar/list/null/quoted-ref forms. Check recipient user columns, message scalar columns, impossible insert/delete sides, local/nonphysical targets; preserve explicit counts without injecting a guard. Resolver returns candidate IDs/actionText, never authorization. Enforce count/text limits as specified. No arbitrary JSX evaluator or browser Notify execution.
+Direct Helmet <Notify name="..." on="mutation_name">{SQL}</Notify>. Static read-only SQL, exact to/message result columns; linked persistent mutation, document-unique name, no nested Notify/before/after/actor API. Compile mutations first. Notification params must come from linked mutation effective bindings plus allowed saved platform values, not arbitrary new caller args or browser state. Keep Notify separate from ordinary Query scheduling. Preserve all source dependencies for A/C/E admission, including filter-only reads; reject unsupported lineage.
+
+Compiled notifications need parameter names/types, saved binding requirements, source context and stable rule identity, retained with originating document revision. Use app-owned compiled structures extending inert shared types, never import app/compiler types into contracts. Pin schema/compiler revision and strip unused notification metadata from reader bundles without losing server compilation or markup round trips.
 
 ## Order and proof
-1. Copy declaration seed, observe its six semantic failures.
-2. Implement grammar/resolver and add positive/negative shape tests with useful error spans.
-3. Compile against target column metadata; add notify to compiled flow and strict stored schema with revision bump. Preserve declaration invalidation when only message/recipients change.
-4. Verify repeated serialization, CLI local compilation, SSR/legacy validation defense, and client projection preserves needed mutation operation metadata.
-
-Deletion list: no general runtime or framework removal. Remove any duplicated parsing paths created by this change. Complete when authored Notify compiles safely into the seeded inert contract and root/C can consume it; no dependency on actual delivery.
+1. Copy notification-query-decl seed and observe its six semantic failures. Positive syntax support must precede negative tests so unknown-tag rejection is not mistaken for safe compilation.
+2. Add missing/duplicate/on reference, wrong result columns, write SQL, parameter-scope, local target, nested/body placement and unsupported dependency tests.
+3. Verify source round-trip, notification-only signature invalidation, persisted metadata upgrades, client projection and no query-graph/render execution.
+4. Coordinate A/D saved effective binding context; normal Query binding regenerates worker time/identity and is insufficient.
 
 ## Rules shared by every brief
 

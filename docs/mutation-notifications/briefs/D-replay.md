@@ -1,20 +1,20 @@
-# D — Browser invocation identity, recovery and provenance
+# D — Run identity, saved bindings and recovery transports
 
 ## Responsibility and exclusive files
-Own new services/app/lib/mutation-operation.ts, mutation-receipt.ts, story/mutation-request.ts, story-runtime mutation request/store/fetch/relay transport paths, app/a/[id]/mutate/route.ts, API operation context/registry transport plumbing, and their replay/provenance tests. Keep shared type changes coordinated with root. Root alone changes artifacts.ts/dataset-mutate.ts/artifact-wire.ts/mutation-invocation.ts. No notification schema/inbox files.
+Own new services/app/lib/mutation-operation.ts; mutation-receipt.ts; story/mutation-request.ts; runtime mutation request/store/fetch/relay; browser mutate route; API operation registry/context; authorized notification-job status/retry transport and tests. Root alone owns artifacts.ts/dataset-mutate.ts/artifact-wire.ts/mutation-invocation.ts. No job schema, worker or inbox edits.
 
 ## Contract
-One key per gesture; preserve it through direct/relay calls, pending responses and lost-response recovery. Canonical input includes exact explicit args/row/value/tz/expected-state context; bind declaration head inside durable invocation. Require authenticated user/token scope for Notify; anonymous non-Notify stays unchanged. Existing scopes authorize before replay; no shared null-principal replay identity. Reject missing-key Notify before SQL with operation_key_required (browser may refresh; API/CLI must retain a key). Anonymous execution uses sign-in-required, a separate refusal. Freeze initiator at claim. Completed receipt lookup follows document/principal authorization but precedes current named-declaration lookup; removal/rename must not prevent authorized recovery.
+One durable run ID per successful action. Browser gestures generate a key once; direct/relay/lost-response recovery retain it. Normalize explicit fingerprint inputs, then separately persist effective validated run binding envelope (values/types, userId, now, tz) and exact notification/compiler context. bindMutationRequest currently returns only SQL-used params; do not accidentally omit Notify-used saved platform values or defaults.
 
-Principal comes from authentication. Agent transport classification is descriptive and may use existing self-reported labels; never authorize based on it. Pass initiator to root's write seam. Use the seeded MutationOperationRequest and MutationOperationSuccess canonical types and route adapters so first/replayed browser/API replies match; existing dataset-shaped receipt cannot silently replace a document-shaped response.
+Pin rule revision and initiator at claim; pass root all linked job inputs for winning commit. Notify does not alter affected-count semantics: zero-success still schedules. Anonymous Notify and missing operation key fail before SQL; non-Notify behavior unchanged. Auth principal authoritative, descriptive agent labels do not authorize. Reauthorize before completed receipt lookup, but do not require current declaration existence for saved recovery. Canonical persisted MutationOperationSuccess maps to identical first/replayed per-route shapes. Job failure cannot turn a committed mutation into a failed or retried mutation.
 
+
+Notification-bearing canonical success includes opaque mutationRunId. Expose it identically on first response and replay and provide authorized list-by-run via C so callers can find every rule job without knowing private job IDs.
 ## Order and proof
-1. Seed normalizer and receipt adapter tests before adding browser plumbing; root reviews exact input/outcome adapter interface.
-2. Fault-test key mismatch, pending, uncertainty, lost response, revoked caller, changed declaration and unsupported old clients. Invalid requests fail before persistent SQL.
-3. Test direct/relay and current Solid/legacy paths without notification storage using a bounded mutation fixture callback.
-4. Give root the adapter integration points and canonical outcome mapping; do not edit root-owned write implementation to force integration.
-
-Deletion list: consolidate duplicate browser/API replay logic introduced here. Do not build a second journal/receipt store. Complete when replay/provenance tests pass and shared write hook can call your adapter.
+1. Seed normalizer/canonical adapter tests before plumbing; root reviews actual persisted response shape and effective bindings.
+2. Test lost response, same-key/different-input, pending/unknown, declaration rename/removal, later document defaults, revoked identity, trusted $_me/_now/_tz and direct/relay parity.
+3. Expose C status/retry through the existing authenticated operation pattern; deny ordinary reader access. Do not implement a second queue/retry store.
+4. Root integrates enqueue. Verify failures after mutation commit remain notification status, not duplicate mutation attempts.
 
 ## Rules shared by every brief
 

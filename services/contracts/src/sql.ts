@@ -89,11 +89,6 @@ export interface RunInput {
 }
 
 export interface MutationInput {
-  /** Projected images for every affected record; independent of expectedAffected.
-   * Missing effects on capture success is a capability failure. Adapter-private
-   * identities and capture mechanisms never cross this boundary.
-   */
-  capture?: { before: string[]; after: string[] };
   policy?: DatasetMutationPolicy;
   /** Internal capability preview: analyze only, never execute effects. */
   policyPreview?: boolean;
@@ -113,24 +108,9 @@ export interface MutationInput {
   limit?: number;
   timeoutMs?: number;
 }
-/** Engine-owned, typed records; never includes private rowids or internal columns. */
-export type MutationEffect =
-  | { operation: 'insert'; before: null; after: Row }
-  | { operation: 'update'; before: Row; after: Row }
-  | { operation: 'delete'; before: Row; after: null };
-
 /** A write that ran: the table's new rows and how many rows the statement touched. */
 export interface MutationResult extends TableResult {
   affected: number;
-  /**
-   * Present on capture success: one effect per affected record, [] for zero.
-   * Array index is an execution-local ordinal, NOT persistent record identity.
-   * Before is captured during the statement; after includes final presets/checks.
-   * Only requested fields are included; an existing empty projection is {}.
-   * Ordering is adapter-owned and frozen with the winning invocation, not portable
-   * across retries. Ordinary writes omit effects. Never a public API response.
-   */
-  effects?: MutationEffect[];
   analysis?: MutationAnalysis;
   /** Actual assigned user fields, after expressions/presets. App validates before commit. */
   userWrites?: Row[];

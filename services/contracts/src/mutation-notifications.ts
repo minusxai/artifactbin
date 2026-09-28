@@ -1,28 +1,12 @@
-/**
- * Mutation notification contracts, seeded before implementation. Static data only:
- * no JSX evaluation, delivery code, or app imports. See docs/mutation-notifications.md.
- * SQL capture is independent of this declaration and lives in sql.ts.
- */
+/** Standalone notification-query foundation. Types only; no runtime installed. */
 import type { Queryable } from './db';
-import type { MutationEffect, PersonCard, Scalar } from './sql';
+import type { ColumnType, PersonCard, Scalar } from './sql';
 
-export interface MutationNotificationField {
-  snapshot: 'before' | 'after';
-  field: string;
-}
-
-export type MutationNotificationRecipient =
-  | { kind: 'field'; ref: MutationNotificationField }
-  | { kind: 'user'; id: string };
-
-export type MutationNotificationPart =
-  | { kind: 'text'; text: string }
-  | { kind: 'field'; ref: MutationNotificationField };
-
-/** One optional Notify per declaration. Null literal recipients normalize away. */
-export interface MutationNotificationSpec {
-  to: MutationNotificationRecipient[];
-  message: MutationNotificationPart[];
+/** Direct Helmet child. SQL returns to/message; no reactive page subscription. */
+export interface MutationNotificationRule {
+  name: string;
+  on: string;
+  sql: string;
 }
 
 /** Authenticated principal is authoritative; execution describes transport, not permission. */
@@ -58,70 +42,134 @@ export interface MutationOperationSuccess {
   version: number;
   affected: number;
   rowCount: number;
+  /** Present for notification-bearing runs; same discoverable handle on replay. */
+  mutationRunId?: string;
 }
 
-/** Internal provenance. Exact source and committed target heads, never credentials. */
+/** Frozen source identity; current data and current permissions are read at execution. */
+export interface NotificationSource {
+  artifactId: string;
+  schema: string;
+  table: string;
+  /** Server-produced authority revision/fence to recheck before result commit. */
+  authorityRevision: string;
+  /** Must remain compatible with the saved definition; never rebind by table name alone. */
+  schemaRevision: string;
+}
+
+/** Opaque durable identity, never raw request keys or credentials. */
 export interface MutationNotificationOrigin {
-  /** Platform-derived opaque identity of the durable scoped invocation, not its raw key. */
-  invocationId: string;
+  mutationRunId: string;
   documentId: string;
   documentEditId: string;
   documentVersion: number;
   mutationName: string;
-  /** Exactly one declaration today; included in the dedupe key for future compatibility. */
-  declarationIndex: 0;
-  datasetId: string;
-  datasetEditId: string;
-  table: { schema: string; name: string };
+  /** Document-scoped Notify name; unique job key is mutationRunId + ruleId. */
+  ruleId: string;
 }
 
-/** Pure resolution is not authorization: the commit module must admit each recipient. */
-export interface ResolvedMutationNotification {
-  recipientIds: string[];
-  /** Plain action phrase; never HTML. Stored in app-owned content, not the event service. */
-  actionText: string;
+/** Logical normalized run inputs, before SQL placeholder rewriting. */
+export interface MutationNotificationBindings {
+  values: Record<string, Scalar>;
+  types: Record<string, ColumnType>;
+  userId: string | null;
+  now: string;
+  tz: string;
 }
 
-export interface MutationNotificationCommit {
+/** Claimed before execution; persisted with the winning mutation, never its row images. */
+export interface MutationNotificationJobInput {
   origin: MutationNotificationOrigin;
   initiator: MutationInitiator;
-  /** Array index matches the winning effects ordinal, including empty recipient sets. */
-  resolved: ResolvedMutationNotification[];
+  rule: MutationNotificationRule;
+  /** Immutable effective values/defaults plus server-established run context. */
+  bindings: MutationNotificationBindings;
+  /** Immutable compiled context reference; reuse pinned imports/query dependency bindings. */
+  contextRevision: string;
 }
 
-/** Internal principal details never cross this presentation boundary. */
+export interface MutationNotificationClaim {
+  jobId: string;
+  /** Monotonic fencing token; a stale worker cannot complete or fail a new claim. */
+  generation: number;
+  leaseUntil: string;
+  input: MutationNotificationJobInput;
+}
+
+/** Validated query output. Nulls skip; users deduplicate within this result row. */
+export interface ResolvedMutationNotification {
+  recipientIds: string[];
+  message: string;
+}
+
+/** Output order is frozen once; no promise of stable SQL order across attempts. */
+export interface MutationNotificationPlan {
+  /** Recheck originating principal/document authority even when sources is empty. */
+  executionFence: { principalRevision: string; documentRevision: string; contextRevision: string };
+  rows: ResolvedMutationNotification[];
+  /** Every relation contributing data OR predicates, including transitive dependencies. */
+  sources: NotificationSource[];
+}
+
+export type MutationNotificationJobStatus =
+  | 'pending' | 'running' | 'retrying' | 'completed' | 'failed';
+
+/** Operational view excludes SQL, arguments, credentials and message content. */
+export interface MutationNotificationJobView {
+  id: string;
+  mutation_run_id: string;
+  notification_name: string;
+  status: MutationNotificationJobStatus;
+  attempts: number;
+  error_code: string | null;
+  next_attempt_at: string | null;
+}
+
 export type MutationNotificationActor =
   | { kind: 'user'; userId: string; person: PersonCard; viaAgent: boolean }
   | { kind: 'agent' | 'token' | 'anonymous' | 'system' | 'deleted-user' };
 
-/** New inbox variant; legacy notification variants retain their existing shapes. */
+/** Actor is the initiator of the trigger; message describes current query state. */
 export interface MutationNotificationView {
   id: string;
   kind: 'mutation';
   artifact_id: string;
   title: string | null;
   actor: MutationNotificationActor;
-  action_text: string;
-  /** Safe grouping metadata; counts must only include this recipient’s visible items. */
-  invocation_id: string;
-  effect_ordinal: number;
+  message: string;
+  mutation_run_id: string;
+  notification_name: string;
+  output_ordinal: number;
   mutation_name: string;
   revision: number;
   read_at: string | null;
   created_at: string;
 }
 
-/** App implementations stay behind these seams; no implementation is installed by this seed. */
-export interface MutationNotificationResolver {
-  resolve(spec: MutationNotificationSpec, effect: MutationEffect): ResolvedMutationNotification;
+export interface MutationNotificationEvaluator {
+  /** Read-only, current caller/document/source authority. No side effects or page state. */
+  evaluate(input: MutationNotificationJobInput): Promise<MutationNotificationPlan>;
 }
 
-export interface MutationNotificationWriter {
+export interface MutationNotificationJobStore {
+  /** Winning local write transaction: dataset pointer + receipt + all jobs or none. */
+  enqueue(tx: Queryable, inputs: MutationNotificationJobInput[]): Promise<void>;
+  /** Atomically claims pending/due/expired work with a new fence. */
+  claim(): Promise<MutationNotificationClaim | null>;
+  /** False means the lease/fence is lost; stale workers must discard their output. */
+  renew(claim: MutationNotificationClaim): Promise<boolean>;
   /**
-   * Caller supplies the winning dataset transaction. All queries use tx; failure
-   * rolls back the write and receipt. Resolve account kind through tx; check both
-   * block directions and testuser isolation, never trusting descriptive provenance.
-   * Enqueue IDs only; external delivery is later.
+   * Own transaction: verify claim/initiator/document/source schema and authority fences, admit recipients against current full-source read
+   * authority, insert all bounded inbox rows/ID-only outbox facts and mark completed.
+   * Empty plans complete too. Failure rolls back THIS transaction, not the mutation.
+   * False means another attempt owns/completed the job. Never overwrite saved results.
    */
-  commit(tx: Queryable, input: MutationNotificationCommit): Promise<void>;
+  complete(claim: MutationNotificationClaim, plan: MutationNotificationPlan): Promise<boolean>;
+  /** Fence-checked backoff or visible terminal failure; never stores raw exception SQL/data. */
+  fail(claim: MutationNotificationClaim, code: string, retryable: boolean): Promise<boolean>;
+  /** Current authorization: original principal or document manager, never ordinary readers. */
+  list(principal: MutationInitiator['principal'], mutationRunId: string): Promise<MutationNotificationJobView[]>;
+  status(principal: MutationInitiator['principal'], jobId: string): Promise<MutationNotificationJobView | null>;
+  /** Only failed jobs; retain original definition/bindings/identity and audit who retried. */
+  retry(principal: MutationInitiator['principal'], jobId: string): Promise<boolean>;
 }
