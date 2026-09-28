@@ -63,17 +63,18 @@ afterEach(() => {
 const text = () => document.getElementById('island')?.textContent;
 
 describe('the viewer overlay', () => {
-  it('a guest page with no viewer-scope query never asks the viewer door; one with a $_me query does', () => {
+  it('a guest page with no viewer-scope query never asks the viewer door; one with a $_me query does', async () => {
     const { fetchMock } = doors();
     vi.stubGlobal('fetch', fetchMock);
     page({ ...served, signedIn: false });
     booted = boot({ ISLANDS: [['s0-', Me]], FLOW: sharedOnly });
+    await new Promise((resolve) => setTimeout(resolve, 0));
     expect(fetchMock, 'the snapshot answered everything and nothing names the reader').not.toHaveBeenCalled();
     booted.dispose();
 
     page({ ...served, signedIn: false });
     booted = boot({ ISLANDS: [['s0-', Me]], FLOW: withMe });
-    expect(fetchMock.mock.calls.map(([url]) => url).filter((url) => url.startsWith('/a/abc/viewer'))).toEqual(['/a/abc/viewer?$region=West']);
+    await vi.waitFor(() => expect(fetchMock.mock.calls.map(([url]) => url).filter((url) => url.startsWith('/a/abc/viewer'))).toEqual(['/a/abc/viewer?$region=West']));
   });
 
   it('tells a viewer-scope query from the page\'s own data: $_me transitively, or left out of the guest answers, never a $_tz query', () => {
@@ -95,6 +96,7 @@ describe('the viewer overlay', () => {
 
     const guestRun = take('query');
     expect(guestRun.init, 'a signed-in page\'s own runs carry the session to the POST door').toMatchObject({ method: 'POST', credentials: 'same-origin' });
+    await vi.waitFor(() => expect(fetchMock.mock.calls.some(([url]) => url.startsWith('/a/abc/viewer'))).toBe(true));
     const overlay = take('viewer');
     expect(overlay.url).toBe('/a/abc/viewer?$region=West');
     expect(overlay.init).toMatchObject({ method: 'GET', credentials: 'same-origin' });
@@ -114,6 +116,7 @@ describe('the viewer overlay', () => {
     page({ ...served, signedIn: true });
     booted = boot({ ISLANDS: [['s0-', Me]], FLOW: withMe });
     take('query').answer({ tables: { me: table('u1-West') }, errors: {} });
+    await vi.waitFor(() => expect(waiting.some((w) => w.url.startsWith('/a/abc/viewer'))).toBe(true));
     take('viewer').answer({ viewer: { id: 'u1' }, results: { tables: { me: table('u1-West') }, errors: {} }, hold: [] });
     await vi.waitFor(() => expect(text()).toBe('u1-Westu1'));
 
@@ -139,6 +142,7 @@ describe('the viewer overlay', () => {
     page({ ...served, signedIn: true });
     booted = boot({ ISLANDS: [['s0-', Me]], FLOW: withMe });
     take('query').answer({ tables: { me: table('guest-West') }, errors: {} });
+    await vi.advanceTimersByTimeAsync(0);
     take('viewer').fail(new TypeError('network down'));
     await vi.advanceTimersByTimeAsync(0);
     expect(text()).toBe('guest-Westhinted');
@@ -156,6 +160,7 @@ describe('the viewer overlay', () => {
     vi.stubGlobal('fetch', fetchMock);
     page({ ...served, signedIn: true });
     booted = boot({ ISLANDS: [['s0-', Me]], FLOW: withMe });
+    await vi.advanceTimersByTimeAsync(0);
     take('viewer').answer({ error: 'not_found' }, 404);
     await vi.advanceTimersByTimeAsync(VIEWER_OVERLAY_RETRY_MS.reduce((a, b) => a + b, 0) + 1);
     expect(fetchMock.mock.calls.filter(([url]) => url.startsWith('/a/abc/viewer'))).toHaveLength(1);
