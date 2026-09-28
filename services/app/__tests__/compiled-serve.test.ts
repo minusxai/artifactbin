@@ -22,6 +22,7 @@ import { READER_FALLBACK_HEADER, READER_MODE_HEADER, SPA_IDLE_ATTR } from '@/lib
 import * as artifacts from '@/lib/artifacts';
 import { updateSharingFor } from '@/lib/artifacts';
 import { mintExportKey } from '@/lib/export-key';
+import { loadCompilerBuild } from '@/lib/compiled-page/build.server';
 
 vi.mock('@/auth', () => ({ auth: async () => null }));
 const harness = useAppHarness();
@@ -71,7 +72,12 @@ describe('the reader mode on /raw', () => {
     expect(compiled.headers.get('content-security-policy')).not.toMatch(/'unsafe-inline'[^;]*;?\s*style-src|script-src[^;]*'unsafe-inline'/);
     const doc = new JSDOM(await compiled.text()).window.document;
     for (const script of doc.querySelectorAll('script')) if (script.type !== 'application/json' && script.type !== 'speculationrules') expect(script.getAttribute('src'), script.outerHTML).toMatch(/^\//);
-    expect(doc.querySelectorAll('script[type="module"]'), 'prose loads no module at all').toHaveLength(0);
+    // Prose loads no island module and no runtime: its one module is the page's own behaviour
+    // (lib/islands/page, `@mx/page` — framing, colour override, live stream, scroll restore; the
+    // coordinator's decision for compiled /raw pages), and there is no data island.
+    expect([...doc.querySelectorAll('script[type="module"]')].map((s) => s.getAttribute('src')), 'prose loads no island module at all')
+      .toEqual([loadCompilerBuild().manifest['@mx/page']]);
+    expect(doc.getElementById('mx-story-data')).toBeNull();
     expect((await raw(id)).headers.get('content-security-policy')).toMatch(/script-src 'unsafe-inline'/);
   });
 
@@ -281,6 +287,7 @@ describe('the compiled capture', () => {
     expect(doc.querySelector('link[rel="canonical"], meta[property="og:image"]')).toBeNull();
     const data = JSON.parse(doc.getElementById('mx-story-data')?.textContent ?? '{}') as Record<string, unknown>;
     expect(data.queryUrl, 'a capture carries no doors').toBeUndefined();
+    expect(doc.querySelector(`script[src="${loadCompilerBuild().manifest['@mx/page']}"]`), 'a capture runs no page behaviour').toBeNull();
     const stored = await (await harness.db()).query('SELECT 1 FROM data_snapshots WHERE artifact_id = $1', [id]);
     expect(stored.rows, 'a capture\'s run is never stored as the guest snapshot').toHaveLength(0);
   });

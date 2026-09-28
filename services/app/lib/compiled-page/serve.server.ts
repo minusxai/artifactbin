@@ -93,6 +93,8 @@ export interface CompiledReaderRequest {
   footer?: { html: string; css: string } | null;
   /** Page-level CSS the path adds after the version's sheet (the app page's first-paint layout reserve). */
   pageCss?: string;
+  /** Behaviour chunks this path adds to the version's own (`page`: the compiled /raw page's behaviour, lib/islands/page). */
+  behaviors?: readonly string[];
 }
 
 export type CompiledReaderAnswer =
@@ -291,7 +293,7 @@ export async function compiledPageFor(row: ArtifactRow, page: PreparedPage, read
 
     const colorMode = reader.colorMode ?? page.data.colorMode;
     const assembled = assembleReaderPage({
-      compiled,
+      compiled: reader.behaviors?.length ? { ...compiled, behaviors: [...new Set([...reader.behaviors, ...compiled.behaviors])] } : compiled,
       story,
       css: [page.css, reader.pageCss].filter(Boolean).join('\n'),
       fontPreloads: [...page.fontPreloads, ...(reader.chromeFonts ?? [])],

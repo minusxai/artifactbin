@@ -1,6 +1,6 @@
 /**
  * THE SHARED ISLAND BUILD (docs/phase2-architecture.md §1, §3). Once per deploy: Solid 1.9, the island
- * runtime (`@mx/rt`, `@mx/boot`), the deck behaviour (`@mx/deck`) and every kit family
+ * runtime (`@mx/rt`, `@mx/boot`), the deck and page behaviours (`@mx/deck`, `@mx/page`) and every kit family
  * (`@mx/kit/<family>`, lib/islands/contract `KIT_FAMILIES`) become ONE module graph, split into
  * content-addressed browser chunks under services/app/public/islands/, with
  *
@@ -62,6 +62,8 @@ const ENTRIES = [
   { specifier: '@mx/rt', name: 'rt', file: () => islandModule('rt') },
   { specifier: '@mx/boot', name: 'boot', file: () => islandModule('boot') },
   { specifier: '@mx/deck', name: 'deck', file: () => islandModule('deck') },
+  // The compiled /raw page's own behaviour: framing, the reader's colour override, the live stream and the scroll restore.
+  { specifier: '@mx/page', name: 'page', file: () => islandModule('page') },
   ...KIT_FAMILIES.map((family) => ({ specifier: `@mx/kit/${family}`, name: `kit-${family}`, file: () => islandModule(`kit/${family}`) })),
 ];
 export const ISLAND_SPECIFIERS = Object.freeze(ENTRIES.map((e) => e.specifier));
@@ -75,7 +77,7 @@ export function solidPlugin({ generate = 'dom', hydratable = true } = {}) {
   return {
     name: 'mx-solid',
     setup(build) {
-      build.onResolve({ filter: /^@mx\/(rt|boot|deck|kit\/[a-z-]+)$/ }, (args) => {
+      build.onResolve({ filter: /^@mx\/(rt|boot|deck|page|kit\/[a-z-]+)$/ }, (args) => {
         const entry = ENTRIES.find((e) => e.specifier === args.path);
         if (!entry) return { errors: [{ text: `build-islands: unknown island specifier ${args.path}` }] };
         return { path: entry.file() };
