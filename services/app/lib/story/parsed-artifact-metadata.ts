@@ -50,7 +50,7 @@ const compiledSchema = z.object({
     relations: z.array(z.object({ schema: z.string(), table: z.string() }).strict()),
   }).strict()).optional(),
   mutations: z.array(z.object({
-    ...span, name, sql: z.string(),
+    ...span, name, sql: z.string(), notifies: z.literal(true).optional(),
     target: z.union([z.object({ import: z.string(), table: z.string() }).strict(), z.object({ local: z.string() }).strict()]),
     args: z.array(z.object({ name: z.string(), type: columnType.nullable() }).strict()), reads,
     rowTypes: z.record(z.string(), columnType.nullable()).optional(), valueType: columnType.nullable().optional(),
