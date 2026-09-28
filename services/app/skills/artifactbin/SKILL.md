@@ -15,7 +15,7 @@ Every action goes through the `afbin` CLI; the site's HTTP API is not for agents
 - For a supplied artifact: `afbin pull <url-or-id> --output report.jsx`, edit the file, `afbin push report.jsx`. For a new artifact, write the file and push it. Share its returned URL.
 - Several people — shared, friends, a team, each person, sign-up, vote, RSVP, who did what: read `afbin help apps` BEFORE picking a data shape: accounts, never typed names.
 - Few turns: `afbin help <template>`, then push a FIRST version within three calls of the pull — title and section headings, one line each — and fill the sections in later pushes; a person is waiting on a blank page. A successful push IS the verification that source was accepted. Skip pulling, diffing or grepping it just to confirm publication; filling sections is not re-checking.
-- For an existing artifact, prefer `afbin query ID --name tasks` to read and `afbin query ID --write --name change_status --param task_id=... --param status=...` to update. Read its declarations for names and arguments; do not rewrite source to perform an existing action.
+- For an existing artifact, prefer `afbin query ID --name tasks` to read and `afbin query ID --write --name change_status --param task_id=... --param status=...` to update. Use its declared names/arguments; preserve its source.
 - Use sessions for browser/UI testing of newly authored actions, page-local state and unsupported row/cell action context. Test every newly authored or changed `<Mutation>` in a live session (`afbin help live-sessions`) on a test-user fork, as that user and yourself. On the original, `--as guest`: identity writes stay disabled and change no data. One session at a time. Stop once each works once per identity.
 - Local files: `afbin add <files> --json` assigns reference IDs; preview/push auto-register named files. Push runs `afbin validate` and publishes unpublished IDs.
 - Native markup first: the components cover text, data, charts, tables, controls and motion; use `<Iframe>` only for an isolated DOM script or canvas, never for layout or content.
@@ -27,7 +27,7 @@ Every action goes through the `afbin` CLI; the site's HTTP API is not for agents
 
 ## Example
 
-Before writing, read design, markup, template and theme; a template's frame keeps content from sitting flush to the viewport edge. `afbin help <template>` prints every reference that kind needs.
+Before writing, read design, markup, template and theme. `afbin help <template>` prints every reference that kind needs.
 
 ```jsx
 [[ example ]]

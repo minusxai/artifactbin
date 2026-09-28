@@ -4,11 +4,6 @@ description: Operate live artifacts with JavaScript, Playwright and mx.
 ---
 # Live artifact sessions
 
-For an existing artifact's named reads and writes, prefer `afbin query ID --name tasks` and
-`afbin query ID --write --name change_status --param task_id=123 --param status=Done`.
-Use sessions to test newly authored controls and browser behavior, or when an action needs
-page-local state or row/cell context (`$_row`, `$_value`) the headless path cannot supply.
-
 Read declarations with `afbin pull ARTIFACT_ID --output source.jsx`, or inspect
 `mx.describe()` in a live page. Operate the instance without editing its source:
 
