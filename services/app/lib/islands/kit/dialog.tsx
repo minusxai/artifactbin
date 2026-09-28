@@ -1,5 +1,6 @@
 /* @jsxImportSource solid-js */
 import { createContext, createEffect, createSignal, splitProps, onCleanup, useContext, type JSX } from 'solid-js';
+import { TrustedOverlay } from './trusted-overlay';
 
 type DialogState = { open: () => boolean; setOpen: (value: boolean) => void; trigger: () => HTMLElement | null; setTrigger: (value: HTMLElement | null) => void };
 const Context = createContext<DialogState>();
@@ -23,20 +24,19 @@ export function DialogClose(props: TriggerProps) {
   return <button {...rest} type="button" on:click={() => ctx.setOpen(false)}>{props.children}</button>;
 }
 export function DialogContent(props: JSX.DialogHtmlAttributes<HTMLDialogElement> & { run?: unknown; onSubmitMutation?: () => Promise<unknown>; unavailable?: JSX.Element; conflictMessage?: string }) {
-  // TODO: Portal this overlay through IslandContext.trustedPortal() when the runtime contract lands.
-  const ctx = state(); let dialog!: HTMLDialogElement;
+  const ctx = state(); let dialog!: HTMLDialogElement; let openedDialog: HTMLDialogElement | null = null;
   const { run: _run, onSubmitMutation: _onSubmitMutation, unavailable: _unavailable, conflictMessage: _conflictMessage, onKeyDown: _onKeyDown, ...rest } = props;
   createEffect(() => {
-    if (ctx.open()) { if (!dialog.open) { if (typeof dialog.showModal === 'function') dialog.showModal(); else dialog.setAttribute('open', ''); } }
-    else if (dialog.open) { if (typeof dialog.close === 'function') dialog.close(); else dialog.removeAttribute('open'); queueMicrotask(() => ctx.trigger()?.focus()); }
+    if (ctx.open()) { if (!dialog.open) { if (typeof dialog.showModal === 'function') dialog.showModal(); else dialog.setAttribute('open', ''); } openedDialog = dialog; }
+    else if (openedDialog?.open) { if (typeof openedDialog.close === 'function') openedDialog.close(); else openedDialog.removeAttribute('open'); openedDialog = null; queueMicrotask(() => ctx.trigger()?.focus()); }
   });
-  onCleanup(() => { if (dialog.open && typeof dialog.close === 'function') dialog.close(); });
-  return <dialog ref={dialog} role={ctx.open() ? 'dialog' : undefined} aria-modal="true" tabIndex={props.tabIndex ?? -1} {...rest} on:keydown={event => {
+  onCleanup(() => { if (openedDialog?.open && typeof openedDialog.close === 'function') openedDialog.close(); });
+  return <TrustedOverlay open={ctx.open}><dialog ref={dialog} role={ctx.open() ? 'dialog' : undefined} aria-modal="true" tabIndex={props.tabIndex ?? -1} {...rest} on:keydown={event => {
     if (event.key === 'Escape') { event.preventDefault(); ctx.setOpen(false); }
     if (event.key === 'Tab') {
       const stops = [...dialog.querySelectorAll<HTMLElement>('button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), a[href], [tabindex="0"]')].filter(el => !el.closest('[hidden], [inert], fieldset[disabled]'));
       const edge = event.shiftKey ? stops[0] : stops[stops.length - 1];
       if (!stops.length || document.activeElement === edge || document.activeElement === dialog) { event.preventDefault(); (event.shiftKey ? stops[stops.length - 1] : stops[0])?.focus(); }
     }
-  }} on:cancel={event => { event.preventDefault(); ctx.setOpen(false); }} on:close={() => ctx.setOpen(false)}>{props.children}</dialog>;
+  }} on:cancel={event => { event.preventDefault(); ctx.setOpen(false); }} on:close={() => ctx.setOpen(false)}>{props.children}</dialog></TrustedOverlay>;
 }

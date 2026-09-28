@@ -15,10 +15,10 @@ import { Badge, Alert, AlertTitle, AlertDescription, Card, CardHeader, CardTitle
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '../kit/tabs';
 import { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from '../kit/accordion';
 import { Dialog, DialogTrigger, DialogContent, DialogClose } from '../kit/dialog';
-import { Collapsible, CollapsibleTrigger, CollapsibleContent, Popover, PopoverTrigger, PopoverContent, Avatar, AvatarImage, AvatarFallback } from '../kit/disclosure';
+import { Collapsible, CollapsibleTrigger, CollapsibleContent, Popover, PopoverTrigger, PopoverContent, Tooltip, TooltipContent, Avatar, AvatarImage, AvatarFallback } from '../kit/disclosure';
 import { RECIPES, cn } from '../kit/recipes';
 
-const mount = (view: () => import('solid-js').JSX.Element) => { const host = document.createElement('div'); const dispose = render(() => <IslandProvider value={fakeIsland()}>{view()}</IslandProvider>, host); return { host, dispose }; };
+const mount = (view: () => import('solid-js').JSX.Element, portal: HTMLElement | null = null) => { const host = document.createElement('div'); const dispose = render(() => <IslandProvider value={{ ...fakeIsland(), trustedPortal: () => portal }}>{view()}</IslandProvider>, host); return { host, dispose }; };
 const cls = (tag: string, props: Record<string, unknown> = {}) => cn(RECIPES[tag]!(props));
 
 describe('basic', () => {
@@ -93,6 +93,46 @@ describe('disclosure', () => {
     </>);
     expect(parityOf('<Collapsible id="col"><CollapsibleTrigger id="ct">More</CollapsibleTrigger><CollapsibleContent id="cc">Hidden text</CollapsibleContent></Collapsible><Popover><PopoverTrigger id="pt">Open</PopoverTrigger><PopoverContent id="pc">Popped</PopoverContent></Popover><Avatar id="av"><AvatarImage src="/a.png" alt="A" /><AvatarFallback>AB</AvatarFallback></Avatar>', host)).toEqual([]);
   });
+});
+
+describe('trusted overlay portal', () => {
+  for (const portalEnabled of [true, false]) {
+    it(`places Dialog content ${portalEnabled ? 'in the trusted portal' : 'in place'}`, () => {
+      const portal = portalEnabled ? document.createElement('div') : null;
+      const { host, dispose } = mount(() => <Dialog><DialogTrigger>Open</DialogTrigger><DialogContent aria-label="Portal dialog">Dialog body</DialogContent></Dialog>, portal);
+      document.body.append(host);
+      if (portal) document.body.append(portal);
+      try {
+        host.querySelector('button')!.click();
+        const dialog = (portal ?? host).querySelector<HTMLDialogElement>('dialog');
+        expect(dialog?.textContent).toBe('Dialog body');
+        expect(dialog?.open).toBe(true);
+        if (portal) expect(host.querySelector('dialog')).toBeNull();
+        dialog!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+        expect(dialog?.open).toBe(false);
+        if (portal) expect(portal.querySelector('dialog')).toBeNull();
+      } finally { dispose(); host.remove(); portal?.remove(); }
+    });
+    it(`places Popover content ${portalEnabled ? 'in the trusted portal' : 'in place'}`, () => {
+      const portal = portalEnabled ? document.createElement('div') : null;
+      const { host, dispose } = mount(() => <Popover><PopoverTrigger>Open</PopoverTrigger><PopoverContent>Popover body</PopoverContent></Popover>, portal);
+      try {
+        host.querySelector('button')!.click();
+        expect((portal ?? host).querySelector('[data-slot="popover-content"]')?.textContent).toBe('Popover body');
+        if (portal) expect(host.querySelector('[data-slot="popover-content"]')).toBeNull();
+        (portal ?? host).querySelector('[data-slot="popover-content"]')!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+        expect((portal ?? host).querySelector('[data-slot="popover-content"]')).toBeNull();
+      } finally { dispose(); }
+    });
+    it(`places Tooltip content ${portalEnabled ? 'in the trusted portal' : 'in place'}`, () => {
+      const portal = portalEnabled ? document.createElement('div') : null;
+      const { host, dispose } = mount(() => <Tooltip defaultOpen><TooltipContent>Tooltip body</TooltipContent></Tooltip>, portal);
+      try {
+        expect((portal ?? host).querySelector('[data-slot="tooltip-content"]')?.textContent).toBe('Tooltip body');
+        if (portal) expect(host.querySelector('[data-slot="tooltip-content"]')).toBeNull();
+      } finally { dispose(); }
+    });
+  }
 });
 
 

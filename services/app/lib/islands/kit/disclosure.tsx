@@ -1,5 +1,6 @@
 /* @jsxImportSource solid-js */
-import { createContext, createSignal, createUniqueId, splitProps, useContext, type JSX } from 'solid-js';
+import { createContext, createSignal, createUniqueId, Show, splitProps, useContext, type JSX } from 'solid-js';
+import { TrustedOverlay } from './trusted-overlay';
 
 type State = { open: () => boolean; setOpen: (value: boolean) => void; contentId: string };
 const CollapsibleContext = createContext<State>(); const PopoverContext = createContext<State>();
@@ -27,9 +28,22 @@ export function PopoverTrigger(props: JSX.ButtonHTMLAttributes<HTMLButtonElement
   return <button type="button" aria-haspopup="dialog" aria-expanded={ctx.open()} aria-controls={undefined} data-state={ctx.open() ? 'open' : 'closed'} data-slot="popover-trigger" on:click={() => ctx.setOpen(!ctx.open())} {...props} />;
 }
 export function PopoverContent(props: JSX.HTMLAttributes<HTMLDivElement> & { align?: string; sideOffset?: number }) {
-  // TODO: Portal this overlay through IslandContext.trustedPortal() when the runtime contract lands.
   const ctx = useContext(PopoverContext)!; const { align: _align, sideOffset: _sideOffset, ...rest } = props;
-  return ctx.open() ? <div id={props.id ?? ctx.contentId} role="dialog" data-state="open" data-slot="popover-content" data-story-floating="" {...rest} on:keydown={event => { if (event.key === 'Escape') { event.preventDefault(); ctx.setOpen(false); } }} /> : null;
+  return <Show when={ctx.open()}><TrustedOverlay open={ctx.open}><div id={props.id ?? ctx.contentId} role="dialog" data-state="open" data-slot="popover-content" data-story-floating="" {...rest} on:keydown={event => { if (event.key === 'Escape') { event.preventDefault(); ctx.setOpen(false); } }}>{props.children}</div></TrustedOverlay></Show>;
+}
+const TooltipContext = createContext<State>();
+export function Tooltip(props: { open?: boolean; defaultOpen?: boolean; onOpenChange?: (value: boolean) => void; children?: JSX.Element }) {
+  const ctx = makeState(props);
+  return <TooltipContext.Provider value={ctx}>{props.children}</TooltipContext.Provider>;
+}
+export function TooltipProvider(props: { children?: JSX.Element }) { return props.children; }
+export function TooltipTrigger(props: JSX.ButtonHTMLAttributes<HTMLButtonElement>) {
+  const ctx = useContext(TooltipContext)!;
+  return <button type="button" data-slot="tooltip-trigger" aria-describedby={ctx.open() ? ctx.contentId : undefined} on:mouseenter={() => ctx.setOpen(true)} on:mouseleave={() => ctx.setOpen(false)} on:focus={() => ctx.setOpen(true)} on:blur={() => ctx.setOpen(false)} {...props}>{props.children}</button>;
+}
+export function TooltipContent(props: JSX.HTMLAttributes<HTMLDivElement>) {
+  const ctx = useContext(TooltipContext)!;
+  return <Show when={ctx.open()}><TrustedOverlay open={ctx.open}><div id={props.id ?? ctx.contentId} role="tooltip" data-state="delayed-open" data-slot="tooltip-content" data-story-floating="" {...props}>{props.children}</div></TrustedOverlay></Show>;
 }
 export function PopoverAnchor(props: JSX.HTMLAttributes<HTMLDivElement>) { return <div data-slot="popover-anchor" {...props} />; }
 export function PopoverHeader(props: JSX.HTMLAttributes<HTMLDivElement>) { return <div data-slot="popover-header" {...props} />; }
