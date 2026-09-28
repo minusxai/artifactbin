@@ -1,3 +1,6 @@
+import {createUser} from '@/lib/users';
+import {changeMembership} from '@/lib/membership';
+import {membershipInbox} from '@/lib/membership-inbox';
 import type {MutationNotificationJobInput,MutationNotificationPlan} from '@artifactbin/contracts';
 import {expect,it} from 'vitest';
 import {useAppHarness,request} from './harness';
@@ -14,12 +17,12 @@ import {loadDatasetRows} from '@/lib/story/dataset-store';
 
 useAppHarness();
 
-async function fixture(notificationSql=`select null as "to", 'Counter is ' || cast(n as integer) as message from tasks.rows`){
- const token=await mintToken('mxmx_test_notify_commit');
+async function fixture(notificationSql=`select null as "to", 'Counter is ' || cast(n as integer) as message from tasks.rows`,userId?:string,secondSql=`select null as "to", 'Second status' as message`){
+ const token=await mintToken('mxmx_test_notify_commit',userId);
  const created=await create(request('/api/artifacts',{method:'POST',token:token.token,json:{dataset:[{n:0}],access:'readwrite'}}));
  expect(created.status).toBe(201);const dataset=await created.json();
  const declarations=`<Import name="tasks" src="ref:${dataset.id}" /><Mutation name="increment">{\`update tasks.rows set n=n+$amount\`}</Mutation>`;
- const docResponse=await create(request('/api/artifacts',{method:'POST',token:token.token,json:{markup:`<Helmet>${declarations}<Notify name="counter_status" on="increment">{\`${notificationSql}\`}</Notify><Notify name="second_status" on="increment">{\`select null as "to", 'Second status' as message\`}</Notify></Helmet><p>Counter</p>`}}));
+ const docResponse=await create(request('/api/artifacts',{method:'POST',token:token.token,json:{markup:`<Helmet>${declarations}<Notify name="counter_status" on="increment">{\`${notificationSql}\`}</Notify><Notify name="second_status" on="increment">{\`${secondSql}\`}</Notify></Helmet><p>Counter</p>`}}));
  expect(docResponse.status,await docResponse.clone().text()).toBe(201);const doc=await docResponse.json();
  const db=await getDb();
  const send=(key:string)=>mutate(request(`/api/artifacts/${doc.id}/mutate`,{method:'POST',token:token.token,headers:{'Idempotency-Key':key},json:{name:'increment',args:{amount:1}}}),{params:Promise.resolve({id:doc.id})});
@@ -122,4 +125,28 @@ it('accepts an evaluated current-state message after a later data write without 
  const row=(await db.query<{status:string;plan:MutationNotificationPlan}>('SELECT status,plan FROM notification_jobs WHERE id=$1',[claim!.jobId])).rows[0]!;
  expect(row.status).toBe('completed');
  expect(row.plan.rules[0]?.rows).toEqual([{recipientIds:[],message:'Counter is 1'}]);
+});
+
+it('publishes one combined item for an explicitly joined recipient, excludes readable nonmembers, and hides it after leave',async()=>{
+ const owner=await createUser({email:'mxmx_test_notify_owner@example.com'});
+ const recipient=await createUser({email:'mxmx_test_notify_recipient@example.com'});
+ const reader=await createUser({email:'mxmx_test_notify_reader@example.com'});
+ const firstSql=`select '${recipient.id}' as "to", 'Counter is ' || cast(n as integer) as message from tasks.rows union all select '${reader.id}', 'Not a member' from tasks.rows`;
+ const secondSql=`select '${recipient.id}' as "to", 'Counter is 1' as message union all select '${recipient.id}', 'Second message'`;
+ const {db,dataset,doc,send}=await fixture(firstSql,owner.id,secondSql);
+ await db.query("UPDATE artifacts SET visibility='public',link_role='commenter' WHERE id=ANY($1::text[])",[[dataset.id,doc.id]]);
+ await changeMembership({userId:recipient.id,tokenId:null},doc.id,{action:'join'});
+ await changeMembership({userId:owner.id,tokenId:null},doc.id,{action:'approve',userId:recipient.id});
+ const response=await send('mxmx_test_notification_combined_join');expect(response.status).toBe(200);
+ const run=(await response.json()).mutationRunId;
+ const store=await notificationJobStore(),worker=createNotificationWorker({store,evaluator:{evaluate:evaluateNotificationQuery}});
+ expect(await worker.drainOnce()).toBe(true);
+ const rows=(await db.query<{recipient_id:string;messages:string[]}>('SELECT recipient_id,messages FROM mutation_notifications WHERE mutation_run_id=$1',[run])).rows;
+ expect(rows).toEqual([{recipient_id:recipient.id,messages:['Counter is 1','Second message']}]);
+ const replay=await send('mxmx_test_notification_combined_join');expect(replay.status).toBe(200);
+ expect(await worker.drainOnce()).toBe(false);
+ expect((await db.query('SELECT id FROM mutation_notifications WHERE mutation_run_id=$1',[run])).rows).toHaveLength(1);
+ expect((await membershipInbox({userId:recipient.id,tokenId:null})).notifications.filter(item=>item.kind==='mutation')).toHaveLength(1);
+ await changeMembership({userId:recipient.id,tokenId:null},doc.id,{action:'leave'});
+ expect((await membershipInbox({userId:recipient.id,tokenId:null})).notifications.filter(item=>item.kind==='mutation')).toHaveLength(0);
 });
