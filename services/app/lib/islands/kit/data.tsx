@@ -34,7 +34,7 @@ import { questionEnvelope } from '@/lib/viz/chart-envelope';
 import type { VizEnvelope } from '@/lib/validation/atlas-schemas';
 import type { RefDataMap } from '@/lib/story/ref-data';
 import type { IslandChart, IslandChartModule } from '../contract';
-import { drawingIsCurrent } from '../chart';
+import { DRAWING_CLASS, drawingIsCurrent } from '../chart';
 import { rowsDigest } from '../digest';
 
 const nameOf = (raw: unknown) => refName(raw) ?? '';
@@ -333,22 +333,21 @@ export function Question(props: QuestionProps) {
  * Drawing: a slot the server did not draw is drawn here at once, as today's reader draws every chart.
  * A served drawing is kept while it is current — the rows it was drawn from are the rows the page was
  * served with, and every later result is checked with `drawingIsCurrent` — and replaced when the
- * rows change or when the reader interacts with it (the lazy Vega chunk); until then a drawing
- * taller than its box is scaled into it (`fitDrawing`).
+ * rows change or when the reader interacts with it (the lazy Vega chunk). The drawing fills its box
+ * from the first paint (`DRAWING_CLASS`; `fitDrawing` for one stored before that).
  */
 /** What Vega's initializeAria and cursor handling write on its container (vega-view). */
 const VEGA_CONTAINER: Record<string, string> = { role: 'graphics-document', 'aria-roledescription': 'visualization' };
 /**
- * Fit a served drawing to its box. The server draws at the question's nominal height; a box the page
- * makes smaller (a fixed-height card, a grid cell) is where today's reader draws a smaller chart, and
- * the drawing's own height would hold that box open. Taken out of the flow, the drawing lets the box
- * take today's size, and it is scaled into it (its viewBox keeps the aspect) until the chart is drawn
- * here — on new rows or on interaction, like any served drawing. A drawing that fits is left alone.
+ * A served drawing fills its box from the first paint (charts.server draws it with `DRAWING_CLASS`:
+ * out of flow, scaled by its viewBox), so the box has today's size and nothing moves. A drawing
+ * stored before that (in the flow, at its nominal height) would hold a smaller box open: it is taken
+ * out of the flow here instead, the one layout change such an old drawing still costs.
  */
 const FIT = { position: 'absolute', inset: '0px', width: '100%', height: '100%' } as const;
 function fitDrawing(el: HTMLElement): void {
   const svg = el.firstElementChild;
-  if (!(svg instanceof SVGSVGElement)) return;
+  if (!(svg instanceof SVGSVGElement) || DRAWING_CLASS.split(' ').every((c) => svg.classList.contains(c))) return;
   const drawn = globalThis.Number(svg.getAttribute('height'));
   Object.assign(svg.style, FIT);
   const box = el.getBoundingClientRect().height;
