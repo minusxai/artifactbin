@@ -20,7 +20,7 @@ const MAX_ATTEMPTS=5;
 const BATCH=100;
 const identity=(...parts:(string|number)[])=>createHash('sha256').update(JSON.stringify(parts)).digest('hex');
 const view=(row:JobRow):MutationNotificationJobView=>({id:row.id,mutation_run_id:row.input.origin.mutationRunId,notification_name:row.input.origin.ruleId,status:row.status as MutationNotificationJobView['status'],attempts:row.attempts,error_code:row.error_code,next_attempt_at:row.next_attempt_at});
-const SAFE_CODES=new Set(['notification_capacity','notification_output_invalid','notification_query_invalid','notification_query_timeout','notification_context_unsupported','notification_context_invalid','notification_bindings_invalid','notification_access_revoked','notification_schema_changed','notification_authority_changed','notification_execution_failed','notification_retry_exhausted']);
+const SAFE_CODES=new Set(['notification_capacity','notification_output_invalid','notification_query_invalid','notification_source_invalid','notification_query_timeout','notification_context_unsupported','notification_context_invalid','notification_bindings_invalid','notification_access_revoked','notification_schema_changed','notification_authority_changed','notification_execution_failed','notification_retry_exhausted']);
 
 /** Snapshot retention is intrinsic: each durable input contains its frozen compilation context. */
 export function createNotificationJobStore({db,authority,clock}:NotificationJobStoreOptions):MutationNotificationJobStore {
