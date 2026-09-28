@@ -4,8 +4,6 @@ import { build } from "esbuild";
 import { cliBundle } from "./bundle-options.mjs";
 import { chmod, mkdir, readFile, writeFile, rm } from "node:fs/promises";
 execFileSync(process.execPath,["scripts/generate-teaching.mjs"],{stdio:"inherit"});
-await build({ ...cliBundle({ afbin: "src/main.ts", index: "src/index.ts" }), outdir: "dist" });
-await chmod("dist/afbin.mjs", 0o755);
 await rm('dist/skills/artifactbin',{recursive:true,force:true});
 const teaching=JSON.parse(await readFile("src/generated/teaching.json","utf8"));
 for(const [file,content] of Object.entries(teaching.files)){
@@ -27,3 +25,8 @@ execFileSync(
 );
 
 execFileSync(process.execPath,["scripts/build-host.mjs"],{stdio:"inherit"});
+
+// The dev wrapper compares the entry timestamp with generated app inputs too.
+// Emit it only after host generation succeeds, or every command rebuilds again.
+await build({ ...cliBundle({ afbin: "src/main.ts", index: "src/index.ts" }), outdir: "dist" });
+await chmod("dist/afbin.mjs", 0o755);
