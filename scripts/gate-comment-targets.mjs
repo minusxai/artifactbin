@@ -1,5 +1,6 @@
 /** Real app acceptance for durable targets across managed and declarative content. */
 import {fixtureFetch as fetch} from './lib/fixture-http.mjs';
+import { readerUrl } from './lib/gate-reader.mjs';
 import assert from 'node:assert/strict';
 import { chromium } from 'playwright';
 import { expect } from 'playwright/test';
@@ -28,7 +29,7 @@ try {
   await page.addInitScript(()=>{if(navigator.mediaDevices)Object.defineProperty(navigator.mediaDevices,'setCaptureHandleConfig',{value:undefined});});
   page.on('response',async response=>{if(response.status()>=400&&response.url().includes('/annotations'))console.error('Annotation request failed:',response.status(),await response.text());});
   await becomeOwner(page,base,seed.token);
-  await page.goto(`${base}/a/${seed.id}`);
+  await page.goto(readerUrl(`${base}/a/${seed.id}`));
   const realm=page.frameLocator('iframe[title="Dynamic comment playground"]').frameLocator('iframe');
   const alice=realm.locator('[data-comment-key="order-101"] [data-comment-key="customer"]');
   await alice.waitFor();
@@ -53,7 +54,16 @@ try {
   };
   await select();
   await alice.hover();
-  await alice.and(realm.locator('[data-mx-annotate-pick-hover]')).waitFor();
+  await alice.and(realm.locator('[data-mx-annotate-pick-hover]')).waitFor({ timeout: 10000 }).catch(async error => {
+    console.error('Compiled iframe pick state:', JSON.stringify({
+      pressed: await page.getByRole('button',{name:'Select',exact:true}).getAttribute('aria-pressed'),
+      root: await page.locator('[data-mx-inline-story]').getAttribute('data-mx-annotate-picking'),
+      host: await page.locator('[data-mx-managed-frame]').getAttribute('data-mx-ast'),
+      child: await realm.locator('html').getAttribute('data-mx-annotate-picking'),
+      hover: await alice.getAttribute('data-mx-annotate-pick-hover'),
+    }));
+    throw error;
+  });
   await alice.click();
   await save('Keep this comment on iframe Alice');
   let stored=await annotations();
@@ -89,16 +99,39 @@ try {
   await page.getByRole('button',{name:'Reverse JSX rows',exact:true}).click();
   await page.getByRole('button',{name:'Rename JSX Alice',exact:true}).click();
   await cardText.filter({hasText:'updated'}).waitFor();
-  await cardText.and(page.locator('[data-mx-annotated]')).waitFor();
+  await cardText.and(page.locator('[data-mx-annotated]')).waitFor({ timeout: 10000 }).catch(async error => {
+    console.error('Compiled repeat pin state:', JSON.stringify({
+      stored: repeatComment.range.target,
+      cards: await page.locator('[data-mx-comment-owner="order-cards"]').evaluateAll(nodes => nodes.map(node => ({
+        text: node.textContent, target: node.getAttribute('data-mx-comment-target'), annotated: node.hasAttribute('data-mx-annotated'),
+      }))),
+      owner: await page.locator('#order-cards').getAttribute('data-mx-annotated'),
+    }));
+    throw error;
+  });
 
   const cell=page.locator('td[data-mx-comment-owner="order-table"]').filter({hasText:'Alice Chen'}).first();
   await select();await cell.click();await save('Keep this comment on the table customer');
   stored=await annotations();
   const tableComment=stored.find(item=>item.thread[0].body==='Keep this comment on the table customer');
+  if (tableComment?.range.target.rowKey !== 'order-101') console.error('Compiled table target state:', JSON.stringify({
+    stored: tableComment?.range.target,
+    cells: await page.locator('td[data-mx-comment-owner="order-table"]').evaluateAll(nodes => nodes.map(node => ({
+      text: node.textContent, target: node.getAttribute('data-mx-comment-target'), annotated: node.hasAttribute('data-mx-annotated'),
+    }))),
+  }));
   assert.equal(tableComment.anchor.nodeId,'order-table');
   assert.deepEqual(tableComment.range.target,{kind:'table',rowKey:'order-101',columnKey:'customer'});
   await page.getByRole('button',{name:'Remove JSX Alice',exact:true}).click();
-  await cell.waitFor({state:'detached'});
+  await cell.waitFor({state:'detached'}).catch(async error => {
+    console.error('Compiled removed row state:', JSON.stringify({
+      cells: await page.locator('td[data-mx-comment-owner="order-table"]').evaluateAll(nodes => nodes.map(node => ({ text: node.textContent, target: node.getAttribute('data-mx-comment-target') }))),
+      cards: await page.locator('p[data-mx-comment-owner="order-cards"]').allTextContents(),
+      errors: await page.getByRole('alert').allTextContents(),
+      remove: await page.getByRole('button',{name:'Remove JSX Alice',exact:true}).evaluate(node => ({ disabled: node.disabled, busy: node.getAttribute('aria-busy'), reason: node.getAttribute('aria-description') })),
+    }));
+    throw error;
+  });
   await page.getByRole('button',{name:'Restore JSX Alice',exact:true}).click();
   await cell.and(page.locator('[data-mx-annotated]')).waitFor();
   assert.equal((await annotations()).find(item=>item.id===tableComment.id).anchor.nodeId,'order-table');
@@ -223,7 +256,7 @@ try {
   await context.close();
 
   const mobile=await browser.newContext({viewport:{width:390,height:844},isMobile:true,hasTouch:true});
-  const phone=await mobile.newPage();await becomeOwner(phone,base,seed.token);await phone.goto(`${base}/a/${seed.id}`);
+  const phone=await mobile.newPage();await becomeOwner(phone,base,seed.token);await phone.goto(readerUrl(`${base}/a/${seed.id}`));
   const phoneRealm=phone.frameLocator('iframe[title="Dynamic comment playground"]').frameLocator('iframe');
   const heading=phoneRealm.locator('#static-iframe-heading');await heading.waitFor();
   await openArtifactControls(phone);await phone.getByRole('button',{name:'Toggle comments',exact:true}).tap();

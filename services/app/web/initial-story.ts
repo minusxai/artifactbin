@@ -1,5 +1,6 @@
 import type { IslandDocument } from '@/lib/islands/contract';
 import { islandDocumentOf } from '@/lib/islands/handover';
+import { PAGE_TAKEOVER_EVENT } from '@/lib/islands/page-lifetime';
 
 /**
  * THE SERVED DOCUMENT THE APP ADOPTS, captured before the app mounts. Two page shapes serve one:
@@ -55,6 +56,7 @@ export function clearInitialStoryOnRoute(pathname: string): void {
  */
 export function clearInitialStory(): void {
   if (compiled && initialStory) {
+    window.dispatchEvent(new Event(PAGE_TAKEOVER_EVENT));
     islandDocumentOf(initialStory)?.dispose();
     removeServedChrome();
     revealAppRoot();
@@ -94,6 +96,7 @@ export function initialIslandDocument(): IslandDocument | null {
 export function adoptInitialStory(): HTMLElement | null {
   const story = initialDocumentStory();
   if (compiled) {
+    window.dispatchEvent(new Event(PAGE_TAKEOVER_EVENT));
     initialStory = null;
     compiled = false;
     removeServedChrome();

@@ -15,10 +15,12 @@ import { describe, expect, it } from 'vitest';
 import { execFileSync } from 'node:child_process';
 import path from 'node:path';
 import * as rt from '../rt';
+import * as basic from '../kit/basic';
 import { evaluateModule, transformSolid } from '@/lib/compiled-page/bundle.server';
 import type { CompiledDataflow } from '@/lib/story/compiled-dataflow';
 import type { IslandRef } from '@/lib/compiled-page/contract';
 import { createDataflowStore } from '@/lib/story-runtime/store';
+import type { DataflowStore } from '@/lib/story-runtime/store';
 
 const ROOT = path.resolve(import.meta.dirname, '../../../../..');
 const SOURCE = '<Helmet><Value name="region" type="string" default="West" /></Helmet><div id="w"><h2 id="h">Static heading</h2><p id="r">{$region}</p><p id="after">Static after</p></div>';
@@ -30,6 +32,45 @@ function serverHalf(source: string): ServerHalf {
 }
 
 describe('a compiled island through the runtime', () => {
+  it('removes an adopted keyed row when the bridged table shrinks', async () => {
+    const server = serverHalf('<Helmet><Value name="rows" type="table" value={[{"k":"a","label":"Alice"},{"k":"b","label":"Bob"},{"k":"c","label":"Carla"}]} /><Query name="ordered">{`select * from rows order by label`}</Query></Helmet><div id="w"><For each={$ordered} keyBy="k" id="f"><p>{$_row.label}</p></For></div>');
+    const host = document.createElement('div');
+    host.innerHTML = server.html;
+    document.body.append(host);
+    const code = await transformSolid(server.islands, { generate: 'dom', hydratable: true }, { moduleName: '@mx/rt' });
+    const { ISLANDS } = await evaluateModule(code, spec => {
+      if (spec === '@mx/rt') return rt as unknown as Record<string, unknown>;
+      if (spec === '@mx/kit/basic') return basic as unknown as Record<string, unknown>;
+      throw new Error(`unexpected island import ${spec}`);
+    }, 'test/rows.js') as { ISLANDS: Array<[string, () => unknown]> };
+    const columns = [{ name: 'k', type: 'string' as const }, { name: 'label', type: 'string' as const }];
+    let rows = [{ k: 'a', label: 'Alice' }, { k: 'b', label: 'Bob' }, { k: 'c', label: 'Carla' }];
+    const table = { columns, rows };
+    let notify = () => {};
+    const store = {
+      getState: () => ({ values: {}, tables: { rows: table, ordered: table }, errors: {}, people: {} }),
+      pending: () => [], subscribe: (fn: () => void) => { notify = fn; return () => {}; }, dispose: () => {},
+    } as unknown as DataflowStore;
+    const runtime = rt.createIslandRuntime({ dataflow: { flow: server.flow } }, () => store);
+    const disposers = ISLANDS.map(([id, Island]) => rt.hydrateIsland(id, Island as never, runtime.context, host));
+    expect(host.querySelector('#f')?.textContent).toContain('Alice');
+    const cards = () => [...host.querySelectorAll('#f p')].map(node => node.textContent);
+    rows = [{ k: 'c', label: 'Carla' }, { k: 'b', label: 'Bob' }, { k: 'a', label: 'Alice' }];
+    table.rows = rows;
+    notify();
+    expect(cards()).toEqual(['Carla', 'Bob', 'Alice']);
+    rows = [{ k: 'c', label: 'Carla' }, { k: 'b', label: 'Bob' }, { k: 'a', label: 'Alice updated' }];
+    table.rows = rows;
+    notify();
+    expect(cards()).toEqual(['Carla', 'Bob', 'Alice updated']);
+    rows = [{ k: 'c', label: 'Carla' }, { k: 'b', label: 'Bob' }];
+    table.rows = rows;
+    notify();
+    expect(runtime.context.table('ordered')?.rows).toHaveLength(2);
+    expect(cards()).toEqual(['Carla', 'Bob']);
+    for (const dispose of disposers) dispose?.();
+    runtime.dispose(); host.remove();
+  });
   it('server-renders with the runtime, then hydrates in place: root adopted, siblings untouched, values live', async () => {
     const server = serverHalf(SOURCE);
     expect(server.islandRefs).toEqual([{ renderId: 's0-', path: '1.1', kit: [], readsData: true }]);

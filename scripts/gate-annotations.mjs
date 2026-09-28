@@ -18,6 +18,7 @@
  *   usage: node scripts/gate-annotations.mjs [base]
  */
 import { createChecker } from './lib/assert.mjs';
+import { readerUrl } from './lib/gate-reader.mjs';
 import {fixtureFetch as fetch} from './lib/fixture-http.mjs';
 import { chromium } from 'playwright';
 import { openArtifactControls } from './lib/reveal-chrome.mjs';
@@ -63,7 +64,7 @@ const run = async () => {
     const owner = await browser.newContext();
     const page = await owner.newPage();
     await becomeOwner(page, BASE, token);
-    await page.goto(`${BASE}/a/${id}`, { waitUntil: 'load' });
+    await page.goto(readerUrl(`${BASE}/a/${id}`), { waitUntil: 'load' });
     const frame = page.locator('[data-mx-inline-story]');
     await frame.locator('#figure').waitFor({ timeout: 15000 });
 
@@ -205,8 +206,11 @@ const run = async () => {
     check(resolved.status === 'resolved' && resolved.thread?.length === 2, 'the agent replies and resolves in one POST');
 
     // Resolution retains an actively read thread and its highlight; it moves into resolved history.
-    const retained = await until(() => page.getByLabel('Resolved annotation thread').filter({hasText:'Recomputed'}).count(), n=>n===1,10000);
-    check(retained===1 && await frame.locator('[data-mx-annotated]').count()===1, 'the resolve reaches the open tab live: the conversation and highlight remain readable');
+    const retained = await until(async () => ({
+      thread: await page.getByLabel('Resolved annotation thread').filter({hasText:'Recomputed'}).count(),
+      highlight: await frame.locator('[data-mx-annotated]').count(),
+    }), state => state.thread === 1 && state.highlight === 1, 10000);
+    check(retained.thread === 1 && retained.highlight === 1, 'the resolve reaches the open tab live: the conversation and highlight remain readable');
     const threadGone = await until(() => page.locator('[aria-label="Annotation thread"]').count(), (n) => n === 0, 8000);
     check(threadGone === 0, 'the open-thread list empties live too');
     const badgeGone = await until(() => page.locator('[data-mx-reader-count="comment"]').textContent().then((t) => (t ?? '').trim()), (t) => t === '', 5000);
@@ -254,13 +258,23 @@ const run = async () => {
     // after the mode does, and a click in that beat selects nothing.
     const para = frame.locator('#figure');
     const toolbar = page.locator('[aria-label="Typography toolbar"]');
-    await until(async () => {
+    const editorSelected = await until(async () => {
       await para.click({ timeout: 2000 }).catch(() => {});
       return toolbar.isVisible().catch(() => false);
     }, (v) => v === true, 20000);
+    if (!editorSelected) console.error('Compiled annotation edit state:', JSON.stringify({
+      hash: await page.evaluate(() => location.hash),
+      figure: await para.evaluate(el => ({ editable: el.isContentEditable, html: el.outerHTML.slice(0, 250) })).catch(() => null),
+      loading: await page.getByLabel('Loading document').count(),
+      toolbar: await toolbar.count(),
+    }));
     check(await toolbar.isVisible(), 'the editor selects the annotated paragraph');
+    // The editor transition may preserve the selection while focus moves to the
+    // app chrome. Type into the editable paragraph, as a reader does.
+    await para.click();
     await page.keyboard.press('End');
     await page.keyboard.type(' MIDSENTENCE');
+    check((await para.innerText()).includes('MIDSENTENCE'), 'typing reached the editor before opening a comment');
 
     // The toolbar's Comment button keeps focus in the host on mousedown, so
     // the typing above is still UNCOMMITTED when the composer opens.
@@ -300,7 +314,7 @@ const run = async () => {
     // ── a logged-out reader sees nothing ──────────────────────────────────
     const strangerCtx = await browser.newContext();
     const stranger = await strangerCtx.newPage();
-    await stranger.goto(`${BASE}/a/${id}`, { waitUntil: 'load' });
+    await stranger.goto(readerUrl(`${BASE}/a/${id}`), { waitUntil: 'load' });
     await sleep(1500);
     const strangerPins = await stranger.locator('[data-mx-annotated], [data-mx-annotation-open]').count();
     const strangerButtons = await stranger.locator('[aria-label="Toggle comments"]').count();
@@ -356,7 +370,7 @@ async function quoteLeg(browser) {
   const ctx = await browser.newContext();
   const page = await ctx.newPage();
   await becomeOwner(page, BASE, token);
-  await page.goto(`${BASE}/a/${id}`, { waitUntil: 'load' });
+  await page.goto(readerUrl(`${BASE}/a/${id}`), { waitUntil: 'load' });
   const frame = page.locator('[data-mx-inline-story]');
   await frame.locator('#second').waitFor({ timeout: 15000 });
   const raw = await until(async () => page.mainFrame(), (f) => !!f, 15000);
@@ -457,7 +471,7 @@ async function quoteLeg(browser) {
       tinted: !!document.querySelector('#first[data-mx-annotated]'),
       ranged: !!document.querySelector('#first[data-mx-annotation-ranged]'),
     }), `mx-annotation-${ann.id}`).catch(() => null),
-    (state) => state?.highlighted === false,
+    (state) => state?.highlighted === false && state?.tinted === true && state?.ranged === false,
     15000,
   );
   check(fallback?.highlighted === false && fallback?.tinted === true && fallback?.ranged === false,
@@ -502,7 +516,7 @@ async function markdownLeg(browser) {
   const ctx = await browser.newContext();
   const page = await ctx.newPage();
   await becomeOwner(page, BASE, token);
-  await page.goto(`${BASE}/a/${id}`, { waitUntil: 'load' });
+  await page.goto(readerUrl(`${BASE}/a/${id}`), { waitUntil: 'load' });
   const frame = page.locator('[data-mx-inline-story]');
   await frame.locator('#cap').waitFor({ timeout: 15000 });
 
@@ -603,7 +617,7 @@ async function foldLeg(browser) {
   const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
   const page = await ctx.newPage();
   await becomeOwner(page, BASE, token);
-  await page.goto(`${BASE}/a/${id}`, { waitUntil: 'load' });
+  await page.goto(readerUrl(`${BASE}/a/${id}`), { waitUntil: 'load' });
   const frame = page.locator('[data-mx-inline-story]');
   await frame.locator('#cap').waitFor({ timeout: 15000 });
 
@@ -766,7 +780,7 @@ async function pickLeg(browser) {
   const page = await ctx.newPage();
   await page.addInitScript(()=>{if(navigator.mediaDevices)Object.defineProperty(navigator.mediaDevices,'setCaptureHandleConfig',{value:undefined,configurable:true});});
   await becomeOwner(page, BASE, token);
-  await page.goto(`${BASE}/a/${id}`, { waitUntil: 'load' });
+  await page.goto(readerUrl(`${BASE}/a/${id}`), { waitUntil: 'load' });
   const frame = page.locator('[data-mx-inline-story]');
   await frame.locator('#figure').waitFor({ timeout: 15000 });
 
