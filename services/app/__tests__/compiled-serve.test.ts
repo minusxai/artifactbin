@@ -339,17 +339,70 @@ describe('the compiled /raw page carries today\'s stylesheets byte for byte', ()
   });
 });
 
-describe('a version the compiled page cannot yet serve whole', () => {
-  it('an author script keeps the version on today\'s renderer, which runs it, and says why', async () => {
+describe('a version with an author script', () => {
+  const SCRIPTED = '<Helmet><script>{`document.body.dataset.ran = "1";`}</script></Helmet><h1>Scripted</h1><Tabs defaultValue="a"><TabsList><TabsTrigger value="a">A</TabsTrigger></TabsList><TabsContent value="a">a</TabsContent></Tabs>';
+  const authorOnly = (html: string) => {
+    const doc = new JSDOM(html).window.document;
+    const data = JSON.parse(doc.getElementById('mx-story-data')?.textContent ?? 'null') as { authorScript?: string } | null;
+    const scripts = [...doc.querySelectorAll('script')].filter((s) => s.type !== 'application/json');
+    return { data, doc, scripts, occurrences: html.split('document.body.dataset.ran').length - 1 };
+  };
+
+  it('is served compiled, whole: the script rides only in the JSON data island, under a CSP with no unsafe-inline', async () => {
     const who = await owner();
-    const id = await publish(who.token, { title: 'Scripted', markup: '<Helmet><script>{`document.body.dataset.ran = "1";`}</script></Helmet><h1>Scripted</h1><Tabs defaultValue="a"><TabsList><TabsTrigger value="a">A</TabsTrigger></TabsList><TabsContent value="a">a</TabsContent></Tabs>' });
+    const id = await publish(who.token, { title: 'Scripted', markup: SCRIPTED });
+    const res = await raw(id, '?reader=compiled');
+    expect(res.headers.get(READER_MODE_HEADER)).toBe('compiled');
+    expect(res.headers.get(READER_FALLBACK_HEADER)).toBeNull();
+    const csp = res.headers.get('content-security-policy')!;
+    const scriptSrc = csp.split('; ').find((d) => d.startsWith('script-src '))!;
+    expect(scriptSrc).toMatch(/^script-src 'self'/);
+    expect(scriptSrc).not.toContain("'unsafe-inline'");
+    expect(csp.split('; '), 'the page may frame the same-origin wrapper').toContain("frame-src 'self'");
+    const { data, scripts, occurrences } = authorOnly(await res.text());
+    expect(data?.authorScript).toBe('document.body.dataset.ran = "1";');
+    expect(occurrences, 'nowhere but the data island').toBe(1);
+    for (const script of scripts) {
+      expect(script.getAttribute('src'), script.outerHTML).toMatch(/^\//);
+      expect(script.textContent).toBe('');
+      expect(script.getAttribute('src'), 'author code is never served under the trusted module prefix').not.toMatch(/^\/islands\/d\/.*author/);
+    }
+
+    const page = await app.request(`/a/${id}?reader=compiled`, { headers: { accept: 'text/html' } });
+    expect(page.headers.get(READER_MODE_HEADER)).toBe('compiled');
+    expect(page.headers.get(READER_FALLBACK_HEADER)).toBeNull();
+    expect(authorOnly(await page.text()).data?.authorScript).toBe('document.body.dataset.ran = "1";');
+  });
+
+  it('boots even with no island, so its store and its author host start', async () => {
+    const who = await owner();
+    const id = await publish(who.token, { title: 'Scripted prose', markup: '<Helmet><Value name="n" type="number" default={0} /><script>{`mx.set({n: 1});`}</script></Helmet><h1>Only prose</h1>' });
+    const res = await raw(id, '?reader=compiled');
+    expect(res.headers.get(READER_MODE_HEADER)).toBe('compiled');
+    const { data, doc } = authorOnly(await res.text());
+    expect(data?.authorScript).toBe('mx.set({n: 1});');
+    expect([...doc.querySelectorAll('script[type="module"]')].some((s) => /^\/islands\/d\/[0-9a-f]{16}\.js$/.test(s.getAttribute('src') ?? '')), 'the per-document module that boots').toBe(true);
+  });
+
+  it('a compile that does not carry the script (made before the field existed) never serves the page without it', async () => {
+    const who = await owner();
+    const id = await publish(who.token, { title: 'Scripted', markup: SCRIPTED });
+    await (await harness.db()).query(`UPDATE prepared_pages SET page = page #- '{compiled,authorScript}' WHERE artifact_id = $1`, [id]);
     const res = await raw(id, '?reader=compiled');
     expect(res.headers.get(READER_MODE_HEADER)).toBe('legacy');
     expect(res.headers.get(READER_FALLBACK_HEADER)).toBe('unported');
-    expect(await res.text()).toContain('document.body.dataset.ran');
-    const page = await app.request(`/a/${id}?reader=compiled`, { headers: { accept: 'text/html' } });
-    expect(page.headers.get(READER_MODE_HEADER)).toBe('legacy');
-    expect(page.headers.get(READER_FALLBACK_HEADER)).toBe('unported');
+  });
+
+  it('its wrapper answers at its own address and, until wave 4, the old one: fixed bytes under their own sandbox CSP', async () => {
+    for (const wrapper of ['/author-frame', '/story/author-frame']) {
+      const res = await app.request(wrapper);
+      expect(res.status, wrapper).toBe(200);
+      const csp = res.headers.get('content-security-policy')!;
+      expect(csp, wrapper).toContain('sandbox allow-scripts');
+      expect(csp, wrapper).toContain("frame-src 'none'");
+      expect(csp, wrapper).toContain("default-src 'none'");
+      expect(await res.text(), wrapper).toContain('data-mx-author-wrapper');
+    }
   });
 });
 

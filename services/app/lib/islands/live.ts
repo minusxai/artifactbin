@@ -14,11 +14,13 @@
  *    reader's place.
  *  - a version ping (a new `editId`) → the compiled page cannot re-render its static parts in the
  *    browser, so it reloads, keeping the reader's place; the server serves the new version compiled.
+ *    Once the app has adopted the page (components/IslandStory installs `STORY_ADOPT_HOOK`) the app
+ *    holds the document's stream and renders the new version itself: a reload under it would lose it.
  *
  * The same stream, door and ACL as today's (lib/story-runtime/live-entry, which the standalone
  * runtime's deletion removes); only `since` is new.
  */
-import { STORY_DATA_EVENT, STORY_DATA_HOOK } from '@/lib/story-runtime/contract';
+import { STORY_ADOPT_HOOK, STORY_DATA_EVENT, STORY_DATA_HOOK } from '@/lib/story-runtime/contract';
 import { currentAnchor } from '@/lib/story-runtime/anchor';
 import { writeReloadAnchor } from '@/lib/story-runtime/reader-mode';
 
@@ -51,6 +53,7 @@ export function startIslandLive(win: Window, id: string, initialEditId: string, 
     try { ping = JSON.parse(event.data as string) as { editId?: unknown }; } catch { return; }
     if (typeof ping.editId !== 'string' || !ping.editId || ping.editId === seen) return;
     seen = ping.editId;
+    if (typeof (win as unknown as Record<string, unknown>)[STORY_ADOPT_HOOK] === 'function') return;
     reload();
   };
 

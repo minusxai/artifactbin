@@ -12,7 +12,8 @@
  *     the serve path's render, placed verbatim and never re-rendered here —
  *     with the snapshot's server-drawn charts put into their slots;
  *   - the island data as `<script type="application/json" id="mx-story-data">`,
- *     every `<`, `>`, U+2028 and U+2029 escaped, only on a page that boots;
+ *     every `<`, `>`, U+2028 and U+2029 escaped, only on a page that boots — the
+ *     version's author script among it, as data for the sandboxed author frame;
  *   - the per-document module, its shared closure preloaded, and the idle SPA
  *     entry — every script a same-origin `src`, so the page runs under
  *     `script-src 'self'` with NO inline script at all;
@@ -164,6 +165,9 @@ function islandData(input: AssembleInput): IslandPageData {
     signedIn: overlay.signedIn,
     mermaidImages: overlay.mermaidImages,
     readOnly: overlay.readOnly ?? null,
+    // The version's author script rides as DATA (escaped by scriptJson), for boot's lazy author host to
+    // hand to its sandboxed frame; it is never a script of this page (contract CompiledPage.authorScript).
+    ...(input.compiled.authorScript ? { authorScript: input.compiled.authorScript } : {}),
   };
 }
 

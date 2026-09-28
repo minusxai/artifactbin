@@ -390,3 +390,6 @@ function ChartSlot(props: { slot?: string; table: string; envelope: () => VizEnv
   onCleanup(() => { disposed = true; controller?.destroy(); });
   return <div ref={el} {...attr(CHART_SLOT_ATTR, isServer ? props.slot : undefined)} {...{ [CHART_STATE_ATTR]: 'pending' }} aria-label={chartLabel(props.envelope())} class="h-full w-full overflow-hidden [&_.vega-embed]:block [&_svg]:block" {...VEGA_CONTAINER} style="cursor: default;" onPointerEnter={() => void draw()} onClick={() => void draw()} />;
 }
+
+/** The embeds, loaded with the data family: their behaviour is a lazy chunk each (./embed). */
+export { Iframe, DeckGL } from './embed';

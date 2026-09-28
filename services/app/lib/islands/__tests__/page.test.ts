@@ -4,7 +4,8 @@
  * override, the live stream of a page with no island module, and the scroll a live reload keeps.
  */
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { startPage } from '../page';
+import { startPage, CHROME_HIDDEN_CLASS } from '../page';
+import { READER_CHROME_HIDDEN_CLASS } from '@/lib/story/reader-chrome';
 
 class FakeEventSource extends EventTarget {
   static made: FakeEventSource[] = [];
@@ -78,5 +79,41 @@ describe('startPage', () => {
     stops.push(startPage());
     expect(scrollTo).toHaveBeenCalledWith({ top: 700 });
     expect(window.name, 'one reload, one restore').not.toContain('anchor');
+  });
+});
+
+describe('the served reader chrome on the compiled app page', () => {
+  const at = (y: number) => { Object.defineProperty(window, 'scrollY', { value: y, configurable: true }); window.dispatchEvent(new Event('scroll')); };
+  it('follows today\'s rule until the app takes it over: shown on load, a scroll down hides it, a scroll up reveals it, the end shows it', () => {
+    vi.stubGlobal('EventSource', FakeEventSource);
+    vi.stubGlobal('requestAnimationFrame', (fn: FrameRequestCallback) => { fn(0); return 0; });
+    page();
+    document.body.insertAdjacentHTML('beforeend', '<nav data-mx-reader-chrome="" data-mx-reader-state="shown"></nav>');
+    Object.defineProperty(document.documentElement, 'scrollHeight', { value: 5000, configurable: true });
+    Object.defineProperty(window, 'innerHeight', { value: 800, configurable: true });
+    at(0);
+    stops.push(startPage());
+    const chrome = document.querySelector<HTMLElement>('[data-mx-reader-chrome]')!;
+    expect(chrome.getAttribute('data-mx-reader-state')).toBe('shown');
+    at(600);
+    expect([chrome.getAttribute('data-mx-reader-state'), chrome.classList.contains(CHROME_HIDDEN_CLASS)]).toEqual(['hidden', true]);
+    at(300);
+    expect([chrome.getAttribute('data-mx-reader-state'), chrome.classList.contains(CHROME_HIDDEN_CLASS)]).toEqual(['shown', false]);
+    at(900);
+    expect(chrome.getAttribute('data-mx-reader-state')).toBe('hidden');
+    at(4200);
+    expect(chrome.getAttribute('data-mx-reader-state'), 'the end of the document shows it').toBe('shown');
+    // The app's chrome replaces the served one: nothing here touches it any more.
+    chrome.remove();
+    const app = document.createElement('nav');
+    app.setAttribute('data-mx-reader-chrome', '');
+    document.body.append(app);
+    at(600);
+    expect(app.hasAttribute('data-mx-reader-state')).toBe(false);
+    app.remove();
+  });
+
+  it('names today\'s hidden class', () => {
+    expect(CHROME_HIDDEN_CLASS).toBe(READER_CHROME_HIDDEN_CLASS);
   });
 });

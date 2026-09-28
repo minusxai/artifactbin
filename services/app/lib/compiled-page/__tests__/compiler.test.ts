@@ -23,6 +23,7 @@ import { dataflowOf, splitHelmet } from '@/lib/story/helmet';
 import type { Dataflow } from '@/lib/story/dataflow';
 import type { JsxNode } from '@/lib/jsx';
 import { parseJsx } from '@/lib/jsx';
+import { STORY_UI_COMPONENTS } from '@/lib/story-ui/registry';
 
 const FIXTURES = path.resolve(process.cwd(), '../../scripts/fixtures/page-speed');
 const fixture = (name: string) => readFileSync(path.join(FIXTURES, name), 'utf8');
@@ -94,10 +95,40 @@ describe('compilePage', () => {
     expect(a.module!.sha).toBe(b.module!.sha);
   });
 
-  it('refuses a version that needs an unported interactive component, naming it', async () => {
-    const page = await compilePage(await inputOf('<div><DeckGL id="map" /></div>'), loadCompilerBuild());
-    expect(page.partial).toContain('DeckGL');
-    expect(page.unported).toEqual([]);
+  it('ports every registered component: none is served with its behaviour missing (partial) or refused (unported)', () => {
+    // w3-behaviour: the managed <Iframe> and the <DeckGL> map were the last partial ones; each is an island now.
+    for (const tag of Object.keys(STORY_UI_COMPONENTS)) {
+      const { nodes } = parseJsx(`<div><${tag} id="x" /></div>`) as { nodes: JsxNode[] };
+      let generated: ReturnType<typeof generate>;
+      // A part that only renders inside its parent (AvatarImage outside Avatar) is not a component a page holds alone.
+      try { generated = generate({ nodes, colorMode: 'light', template: null, chrome: true, refData: {}, flow: null }); } catch (error) { if (/must be used within/.test(String(error))) continue; throw error; }
+      expect({ tag, partial: generated.partial, unported: generated.unported }).toEqual({ tag, partial: [], unported: [] });
+    }
+  });
+
+  it('compiles <Iframe> and <DeckGL> as islands in the data family, served as today\'s boxes', async () => {
+    const source = '<div><Iframe title="Gallery" height={120} id="f" className="my-4"><p>Hello</p><script>{`document.body.dataset.ok = "1"`}</script></Iframe><DeckGL id="map" className="rounded" title="Countries" height="320px" basemap="none" layers={[{"@@type":"ScatterplotLayer","getPosition":"@@=[lng, lat]"}]} /></div>';
+    const page = await compilePage(await inputOf(source), loadCompilerBuild());
+    expect(page.partial).toEqual([]);
+    expect(page.islands.map((i) => i.kit)).toEqual([['Iframe'], ['DeckGL']]);
+    const html = dom(page.html);
+    const frame = html.querySelector('#f')!;
+    // Attributes compared as sets (shapeOf keeps data-mx-ast out; it is asserted on its own).
+    expect(frame.getAttribute('data-mx-ast')).toBe('0.0');
+    expect(shapeOf(frame.outerHTML)).toEqual(shapeOf('<div id="f" class="my-4" data-mx-managed-frame="" aria-label="Gallery" style="height:120px;width:100%"><div style="height:100%"></div></div>'));
+    // Today's runtime adapter: the identity on the outer box, the author's class on the map's own box, the stand-in inside.
+    const map = html.querySelector('#map')!;
+    expect(map.getAttribute('data-mx-ast')).toBe('0.1');
+    expect(shapeOf(map.outerHTML)).toEqual(shapeOf('<div id="map"><div class="rounded"><div class="w-full rounded-md bg-muted" style="height:320px" aria-busy="true" aria-label="Countries"></div></div></div>'));
+    // The frame's author content reaches the island only as data: compiled at publish (lib/story/managed-iframe), never as markup.
+    expect(page.html).not.toContain('Hello');
+  });
+
+  it('an <Iframe> whose content is refused renders nothing, as the interpreter does', async () => {
+    const page = await compilePage(await inputOf('<div><Iframe title="x" height={120}><iframe src="https://x.test" /></Iframe><p id="after">after</p></div>'), loadCompilerBuild());
+    expect(page.islands).toEqual([]);
+    expect(dom(page.html).querySelector('[data-mx-managed-frame]')).toBeNull();
+    expect(dom(page.html).querySelector('#after')).toBeTruthy();
   });
 });
 
@@ -117,6 +148,33 @@ describe('the kit table', () => {
     const imports = await defaultSsrImports(families.map((spec, i) => `import * as k${i} from ${JSON.stringify(spec)};`).join('\n'));
     const missing = Object.entries(KIT).filter(([tag, meta]) => typeof imports(`@mx/kit/${meta.mod}`)[tag] !== 'function').map(([tag, meta]) => `${tag} (@mx/kit/${meta.mod})`);
     expect(missing).toEqual([]);
+  });
+});
+
+describe('a version with an author script', () => {
+  const SCRIPT = 'mx.set({ n: 1 })';
+  it('carries the script as data and boots even with no island: a module with ISLANDS = [], no SSR module, the skeleton as its story', async () => {
+    const build = loadCompilerBuild();
+    const input = { ...(await inputOf(fixture('prose.jsx'))), authorScript: SCRIPT };
+    const page = await compilePage(input, build);
+    expect(page.authorScript).toBe(SCRIPT);
+    expect(page.islands).toEqual([]);
+    expect(page.module, 'the page must start its store and the author host').not.toBeNull();
+    expect(page.module!.imports).toEqual(expect.arrayContaining([build.manifest['@mx/boot']]));
+    expect(page.ssr, 'no island renders data: the stored html is the story').toBeNull();
+    expect(page.html).toBe((await compilePage(await inputOf(fixture('prose.jsx')), build)).html);
+    const code = new TextDecoder().decode((await createModuleStore().get(page.module!.sha))!);
+    expect(code, 'the author code is never part of a module served under /islands/d/').not.toContain('mx.set');
+  });
+
+  it('keeps it beside the islands of a version that has them, and none when it has none', async () => {
+    const build = loadCompilerBuild();
+    const kit = await compilePage({ ...(await inputOf(fixture('kit.jsx'))), authorScript: SCRIPT }, build);
+    expect(kit.authorScript).toBe(SCRIPT);
+    expect(kit.module).not.toBeNull();
+    const plain = await compilePage(await inputOf(fixture('prose.jsx')), build);
+    expect(plain.authorScript).toBeNull();
+    expect(plain.module).toBeNull();
   });
 });
 

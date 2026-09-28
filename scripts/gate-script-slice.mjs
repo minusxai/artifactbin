@@ -28,6 +28,16 @@ import { connectAgent } from './lib/cli-connection.mjs';
 
 const BASE = process.argv[2] ?? 'http://localhost:3040';
 const check = createChecker('script-slice');
+/**
+ * `GATE_READER=compiled` runs this gate against the compiled reader: every document page it opens
+ * carries `?reader=compiled` (honoured while FLAG__COMPILED_READER is `shadow`), and the author-script
+ * documents (6c, 8) must be SERVED compiled — the compiled page hosts the version's author script
+ * (lib/islands/author-host) in today's sandboxed frame. Unset, today's reader.
+ */
+const COMPILED = process.env.GATE_READER === 'compiled';
+const readerUrl = (url) => (COMPILED ? `${url}${url.includes('?') ? '&' : '?'}reader=compiled` : url);
+/** The path that answered a navigation (`x-mx-reader`), or null. */
+const readerOf = (response) => response?.headers()['x-mx-reader'] ?? null;
 
 const mint = await connectAgent(BASE);
 const api = async (path, body, method = 'POST') => {
@@ -71,7 +81,7 @@ const browser = await chromium.launch();
 const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
 // The shell (and its frame) belongs to the owner; readers get the document.
 await becomeOwner(page, BASE, mint.token);
-await page.goto(`${BASE}/a/${doc.id}`);
+await page.goto(readerUrl(`${BASE}/a/${doc.id}`));
 
 const frameEl = await inlineStory(page, { timeout: 15000 });
 const frame = page.mainFrame();
@@ -172,7 +182,7 @@ const interactive = await api('/api/artifacts', {
 {
   const p2 = await browser.newPage({ viewport: { width: 1000, height: 700 } });
   await becomeOwner(p2, BASE, mint.token); // a fresh context owns nothing
-  await p2.goto(`${BASE}/a/${interactive.id}`);
+  await p2.goto(readerUrl(`${BASE}/a/${interactive.id}`));
   const f2 = await artifactDocument(p2, { timeout: 20000 });
   const interactiveRealm = await managedRealm(f2, 'Interactive script');
   await interactiveRealm.waitForSelector('#tick', { timeout: 20000 });
@@ -203,7 +213,8 @@ const broken = await api('/api/artifacts', {
 {
   const p3 = await browser.newPage({ viewport: { width: 1000, height: 700 } });
   await becomeOwner(p3, BASE, mint.token); // a fresh context owns nothing
-  await p3.goto(`${BASE}/a/${broken.id}`);
+  const brokenPage = await p3.goto(readerUrl(`${BASE}/a/${broken.id}`));
+  if (COMPILED) check(readerOf(brokenPage) === 'compiled', `a document with a throwing author script is served compiled (${readerOf(brokenPage)}, ${brokenPage?.headers()['x-mx-reader-fallback'] ?? 'no fallback'})`);
   const f3 = await artifactDocument(p3, { timeout: 20000 });
   await f3.waitForSelector('h1', { timeout: 20000 });
   await p3.waitForTimeout(2500);
@@ -228,7 +239,7 @@ const broken = await api('/api/artifacts', {
  * editable in the frame it was already in, without remounting that script.
  */
 await becomeOwner(page, BASE, mint.token);
-await page.goto(`${BASE}/a/${doc.id}`, { waitUntil: 'load' });
+await page.goto(readerUrl(`${BASE}/a/${doc.id}`), { waitUntil: 'load' });
 await inlineStory(page);
 await page.waitForTimeout(4000);
 const documentFrame = () => page.mainFrame();
@@ -287,7 +298,24 @@ check(await afterRealm.evaluate("document.querySelectorAll('#script-made').lengt
       accountRequests.push(r.url());
     }
   });
-  await p4.goto(`${BASE}/a/${isolated.id}`);
+  const isolatedPage = await p4.goto(readerUrl(`${BASE}/a/${isolated.id}`));
+  if (COMPILED) {
+    check(readerOf(isolatedPage) === 'compiled', `the author-script document is served compiled (${readerOf(isolatedPage)}, ${isolatedPage?.headers()['x-mx-reader-fallback'] ?? 'no fallback'})`);
+    // The same document by itself: compiled, its script only as data, under a policy with no inline script.
+    const rawCopy = await fetch(`${BASE}/a/${isolated.id}/raw?reader=compiled`);
+    const csp = rawCopy.headers.get('content-security-policy') ?? '';
+    const scriptSrc = csp.split('; ').find((d) => d.startsWith('script-src ')) ?? '';
+    const rawHtml = await rawCopy.text();
+    check(rawCopy.headers.get('x-mx-reader') === 'compiled' && /^script-src 'self'/.test(scriptSrc) && !scriptSrc.includes("'unsafe-inline'") && csp.split('; ').includes("frame-src 'self'"),
+      `the compiled /raw copy runs no inline script and may frame only same-origin (${scriptSrc})`);
+    check(rawHtml.split("mx.mutate('undeclared')").length === 2 && /<script type="application\/json" id="mx-story-data">[^<]*mx\.mutate\('undeclared'\)/.test(rawHtml),
+      'its author code is in the JSON data island and nowhere else');
+    const wrapper = await fetch(`${BASE}/author-frame`);
+    const wrapperCsp = wrapper.headers.get('content-security-policy') ?? '';
+    check(wrapper.status === 200 && wrapperCsp.includes('sandbox allow-scripts') && wrapperCsp.includes("frame-src 'none'"),
+      'the author-script wrapper answers at /author-frame under its own sandbox policy');
+    check((await fetch(`${BASE}/story/author-frame`)).status === 200, 'and still at its old address until wave 4');
+  }
   const f4 = await artifactDocument(p4, { timeout: 20000 });
   const settled = await f4.waitForFunction(
     () => document.querySelector('#probe-mutation')?.textContent === 'refused'
@@ -303,6 +331,8 @@ check(await afterRealm.evaluate("document.querySelectorAll('#script-made').lengt
   check((await head()).version === 1, 'and a forged mx:text-edit never reached the source');
   check(await f4.locator('iframe[title="Isolated artifact script"]').getAttribute('sandbox') === 'allow-scripts',
     'the author realm is sandboxed to scripts alone');
+  if (COMPILED) check(new URL(await f4.locator('iframe[title="Isolated artifact script"]').getAttribute('src'), BASE).pathname === '/author-frame',
+    'on the fixed HTTP wrapper, never an inherited srcdoc');
 
   // A changed script replaces its old realm, and a removed script revokes it.
   const oldRealm = await f4.locator('iframe[title="Isolated artifact script"]').elementHandle();

@@ -24,6 +24,7 @@ import { chromium } from 'playwright';
 import { becomeOwner } from './lib/start-doc.mjs';
 import { kitchenSinkMarkup } from './lib/kitchen-sink-doc.mjs';
 import { connectAgent } from './lib/cli-connection.mjs';
+import { compiledReader, readerUrl } from './lib/gate-reader.mjs';
 
 const BASE = process.argv[2] ?? 'http://localhost:3040';
 const origin = new URL(BASE).origin;
@@ -81,7 +82,7 @@ await page.addInitScript(() => {
   document.addEventListener('securitypolicyviolation', (e) => window.__csp.push(`${e.violatedDirective}: ${e.blockedURI}`));
 });
 
-await page.goto(`${BASE}/a/${doc.id}`);
+await page.goto(readerUrl(`${BASE}/a/${doc.id}`));
 const frameEl = await page.waitForSelector('[data-mx-inline-story]', { timeout: 30000 });
 const frame = page.mainFrame();
 await frame.waitForSelector('h1', { timeout: 30000 });
@@ -143,7 +144,7 @@ const managed = frame.locator('iframe[title="Isolated gallery region"]');
 await frame.waitForSelector('iframe[title="Isolated gallery region"][data-mx-author-ready]');
 check(await frame.locator('[data-mx-inline-story] iframe').count() === 1
   && await managed.getAttribute('sandbox') === 'allow-scripts'
-  && await managed.getAttribute('src') === `${origin}/story/author-frame`,
+  && await managed.getAttribute('src') === `${origin}/author-frame`,
   'only the managed opaque gallery wrapper is framed; Video remains a link');
 
 // 3. isolation
@@ -156,7 +157,20 @@ check(pageErrors.length === 0, `no page errors${pageErrors.length ? `: ${pageErr
 // 3b. the chart module is LAZY: a prose document must not download it
 //     (vega is ~1 MB; the old reader bundle kept it behind a dynamic import
 //     and the unified document must not regress that).
-check(requests.some((u) => /\/(?:story\/chunks\/|assets\/)?VegaChart[-.]/.test(u) || /\/VegaChart\.tsx(?:\?|$)/.test(u)), 'a chart document fetched the lazy chart chunk');
+// The compiled page draws its charts on the server and loads Vega only when a chart must be drawn in the
+// browser — its rows changed, or the reader reaches for it (docs/phase2-architecture.md §2.4). So on the
+// compiled leg the positive control is that interaction: the chart module arrives as an island chunk then,
+// not before, and the chart is redrawn by it.
+const islandChunks = () => requests.filter((u) => new URL(u).pathname.startsWith('/islands/'));
+if (compiledReader) {
+  const before = islandChunks().length;
+  // The first chart the server drew (its drawing fills the box: lib/islands/chart DRAWING_CLASS), reached for.
+  const served = frame.locator('[data-mx-chart-state="ready"]:has(> svg.absolute.inset-0)').first();
+  await served.evaluate((el) => { el.dataset.gateReached = '1'; }).catch(() => {});
+  await served.hover().catch(() => {});
+  const drawn = await frame.waitForFunction(() => { const el = document.querySelector('[data-gate-reached]'); return !!el && el.getAttribute('data-mx-chart-state') === 'ready' && !el.querySelector(':scope > svg.absolute.inset-0') && !!el.querySelector('canvas, svg'); }, null, { timeout: 20000 }).then(() => true, () => false);
+  check(drawn, `a chart document drew with the lazy chart module once the reader reached for a chart (${islandChunks().length - before} island chunks after the reach)`);
+} else check(requests.some((u) => /\/(?:story\/chunks\/|assets\/)?VegaChart[-.]/.test(u) || /\/VegaChart\.tsx(?:\?|$)/.test(u)), 'a chart document fetched the lazy chart chunk');
 
 // 4. the font resolved INSIDE the opaque frame
 const fontOk = await frame.evaluate(async () => {
@@ -192,7 +206,7 @@ const again = Buffer.from(await (await fetch(`${BASE}/a/${doc.id}/export?format=
 check(again.equals(pngBytes), 'a repeat export serves the stored render, byte for byte');
 
 // The capture must not contain the document's own chrome.
-check(!(await (await fetch(`${BASE}/a/${doc.id}/raw?chrome=0`)).text()).includes('Slide controls'),
+check(!(await (await fetch(readerUrl(`${BASE}/a/${doc.id}/raw?chrome=0`))).text()).includes('Slide controls'),
   'the capture render carries no navigation chrome');
 
 // A prose document (no embeds) must not pay for the chart module at all.
@@ -201,11 +215,18 @@ const proseRequests = [];
 const prosePage = await browser.newPage({ viewport: { width: 1200, height: 800 } });
   await becomeOwner(prosePage, BASE, mint.token); // a fresh context owns nothing
 prosePage.on('request', (r) => proseRequests.push(r.url()));
-await prosePage.goto(`${BASE}/a/${prose.id}`);
+await prosePage.goto(readerUrl(`${BASE}/a/${prose.id}`));
 const proseFrame = await artifactDocument(prosePage);
 await proseFrame.waitForSelector('h1', { timeout: 20000 });
 await prosePage.waitForTimeout(3000);
-check(!proseRequests.some((u) => /\/(?:story\/chunks\/|assets\/)?VegaChart[-.]/.test(u) || /\/VegaChart\.tsx(?:\?|$)/.test(u)), 'a prose document never fetches the chart chunk');
+if (compiledReader) {
+  // A compiled prose page loads its own behaviour (@mx/page) and nothing of the islands' runtime or charts.
+  const manifest = await (await fetch(`${BASE}/islands/manifest.json`)).json();
+  const closure = (urls, seen = new Set()) => { for (const u of urls) { if (seen.has(u) || !manifest.files[u]) continue; seen.add(u); closure(manifest.files[u].imports, seen); } return seen; };
+  const allowed = closure([manifest.manifest['@mx/page']]);
+  const extra = proseRequests.map((u) => new URL(u).pathname).filter((p) => p.startsWith('/islands/') && !allowed.has(p));
+  check(extra.length === 0, `a prose document never fetches the chart chunk (island files beyond its page behaviour: ${extra.join(', ') || 'none'})`);
+} else check(!proseRequests.some((u) => /\/(?:story\/chunks\/|assets\/)?VegaChart[-.]/.test(u) || /\/VegaChart\.tsx(?:\?|$)/.test(u)), 'a prose document never fetches the chart chunk');
 
 await browser.close();
 check.done();
