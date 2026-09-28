@@ -171,7 +171,7 @@ describe('the write status indicator', () => {
     const stop = installStatus(feed, document.getElementById('root')!);
     expect(document.querySelector('[data-mx-write-status-host]'), 'a page that never writes has no indicator').toBeNull();
     const done = store.mutate({ mutation: 'add', args: {} });
-    expect(document.querySelector('[data-mx-write-status]')?.getAttribute('data-mx-write-status')).toBe('saving');
+    await vi.waitFor(() => expect(document.querySelector('[data-mx-write-status]')?.getAttribute('data-mx-write-status'), 'the view loads on the first write').toBe('saving'));
     expect(document.querySelector('[role="status"]')?.textContent).toBe('Saving…');
     settle({ dataset: 'DS1' });
     await done;
@@ -193,7 +193,7 @@ describe('the write status indicator', () => {
     const stop = installStatus(feed, document.getElementById('root')!);
     await store.mutate({ mutation: 'add', args: {} }).catch(() => {});
     const status = () => document.querySelector('[data-mx-write-status]');
-    expect(status()?.getAttribute('data-mx-write-status')).toBe('failed');
+    await vi.waitFor(() => expect(status()?.getAttribute('data-mx-write-status')).toBe('failed'));
     expect(document.querySelector('[role="alert"]')?.textContent).toContain('Sign in to add a row');
 
     document.querySelector<HTMLButtonElement>('button[aria-label="Retry saving add"]')!.click();

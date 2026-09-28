@@ -1,108 +1,29 @@
-/* @jsxImportSource solid-js */
 /**
- * THE WRITE STATUS INDICATOR (`data-mx-write-status`, contract WRITE_STATUS_ATTR): what the page's
- * writes are doing, drawn from the document's feed (lib/islands/writes). `saving` while any write is
- * in flight, `saved` briefly after the last one lands, and every `failed` write with the server's
- * reason, a Retry (the same write again) and a Dismiss — a refused change never disappears on its own.
- *
- * First-party chrome, not the author's: it mounts in its own element at the end of the story root's
- * document body (never inside the story, so it meets no hydration key and no parity comparison) and
- * positions itself through the CSSOM, since the story sheet deliberately compiles no `fixed` utility
- * for authored markup. Its host is created on the first write; a page that never writes has none.
+ * THE WRITE STATUS INDICATOR SEAM (`data-mx-write-status`, contract WRITE_STATUS_ATTR): `boot.ts`
+ * calls `installStatus` once with the document's feed (lib/islands/writes) and story root and keeps
+ * the disposer. The view (kit/status-view.tsx: saving, saved, and every failure with its reason, a
+ * Retry and a Dismiss) is a lazy chunk, imported on the page's first write — as lib/islands/chart
+ * loads Vega — so it costs a reading page nothing and stays out of the shared runtime's budget.
  */
-import { createSignal, For, Show } from 'solid-js';
-import { render } from 'solid-js/web';
-import type { WriteState, WriteStatus, WriteStatusFeed } from '../contract';
-
-/** The indicator's own element (the status element inside carries WRITE_STATUS_ATTR), for the SPA and tests to find its mount. */
-export const WRITE_STATUS_HOST_ATTR = 'data-mx-write-status-host';
-
-type Dismissable = WriteStatusFeed & { dismiss?(id: number): void };
-
-/** The one word the indicator shows for the whole feed: a failure outranks a save in flight, which outranks a landed one. */
-export function overallWriteState(statuses: readonly WriteStatus[]): WriteState | null {
-  if (!statuses.length) return null;
-  if (statuses.some((s) => s.state === 'failed')) return 'failed';
-  if (statuses.some((s) => s.state === 'saving')) return 'saving';
-  return 'saved';
-}
-
-function Indicator(props: { statuses: () => readonly WriteStatus[]; dismiss: (id: number) => void }) {
-  const state = () => overallWriteState(props.statuses());
-  const failed = () => props.statuses().filter((s) => s.state === 'failed');
-  return (
-    <Show when={state()}>
-      {(now) => (
-        <div
-          data-mx-write-status={now()}
-          role="status"
-          aria-live="polite"
-          class="flex max-w-sm flex-col gap-2 rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground shadow-sm"
-          style={{ position: 'fixed', right: '16px', bottom: '16px', 'z-index': '2147483000' }}
-        >
-          <Show when={now() !== 'failed'}>
-            <span class="text-muted-foreground">{now() === 'saving' ? 'Saving…' : 'Saved'}</span>
-          </Show>
-          <For each={failed()}>
-            {(status) => (
-              <div role="alert" data-mx-write-failed={String(status.id)} class="flex items-start gap-2">
-                <span class="min-w-0 flex-1 text-destructive">
-                  Not saved ({status.mutation}): {status.error?.message ?? 'the change was refused.'}
-                </span>
-                <button
-                  type="button"
-                  aria-label={`Retry saving ${status.mutation}`}
-                  class="shrink-0 rounded-md border border-border px-2 text-sm hover:bg-muted"
-                  onClick={() => status.error?.retry()}
-                >
-                  Retry
-                </button>
-                <button
-                  type="button"
-                  aria-label={`Dismiss the failed save of ${status.mutation}`}
-                  class="shrink-0 rounded-md px-1 text-sm text-muted-foreground hover:text-foreground"
-                  onClick={() => props.dismiss(status.id)}
-                >
-                  ×
-                </button>
-              </div>
-            )}
-          </For>
-        </div>
-      )}
-    </Show>
-  );
-}
+import type { WriteStatusFeed } from '../contract';
 
 export function installStatus(feed: WriteStatusFeed, root: HTMLElement): () => void {
-  const doc = root.ownerDocument;
-  const [statuses, setStatuses] = createSignal<readonly WriteStatus[]>(feed.current());
-  /** Dismissed here when the feed cannot forget one itself (a feed without `dismiss`). */
-  const [hidden, setHidden] = createSignal<ReadonlySet<number>>(new Set());
-  const dismiss = (id: number) => {
-    const own = (feed as Dismissable).dismiss;
-    if (own) own(id); else setHidden((h) => new Set([...h, id]));
-  };
-  const visible = () => statuses().filter((s) => !hidden().has(s.id));
-
-  let host: HTMLElement | null = null;
+  let disposed = false;
+  let loading = false;
   let dispose = () => {};
   const mount = () => {
-    if (host) return;
-    host = doc.createElement('div');
-    host.setAttribute(WRITE_STATUS_HOST_ATTR, '');
-    (doc.body ?? root).appendChild(host);
-    dispose = render(() => <Indicator statuses={visible} dismiss={dismiss} />, host);
+    if (loading) return;
+    loading = true;
+    import('./status-view').then(
+      (view) => { if (!disposed) dispose = view.mountStatus(feed, root); },
+      (error: unknown) => { loading = false; console.error('[islands] the write status indicator did not load', error); },
+    );
   };
-  const unsubscribe = feed.subscribe((next) => {
-    setStatuses(next);
-    if (next.length) mount();
-  });
-  if (statuses().length) mount();
+  const unsubscribe = feed.subscribe((statuses) => { if (statuses.length) mount(); });
+  if (feed.current().length) mount();
   return () => {
+    disposed = true;
     unsubscribe();
     dispose();
-    host?.remove();
-    host = null;
   };
 }
