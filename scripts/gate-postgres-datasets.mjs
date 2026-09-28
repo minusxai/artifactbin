@@ -48,7 +48,12 @@ async function uiResponse(page, path, action, method = 'POST', expected = 200, r
 async function previewContains(page, text, label = 'Table preview') {
   const preview = page.getByLabel(label, { exact: true });
   await preview.waitFor();
-  await page.waitForFunction(({ label, text }) => [...document.querySelectorAll('[aria-label]')].some(node => node.getAttribute('aria-label') === label && node.textContent?.includes(text)), { label, text });
+  await page.waitForFunction(({ label, text }) => [...document.querySelectorAll('[aria-label]')].some(node => node.getAttribute('aria-label') === label && node.textContent?.includes(text)), { label, text }).catch(async error => {
+    const shown = (await preview.innerText()).slice(0, 300);
+    secretFree(shown);
+    console.error(`preview ${label} never showed ${text}: ${shown}`);
+    throw error;
+  });
 }
 
 try {

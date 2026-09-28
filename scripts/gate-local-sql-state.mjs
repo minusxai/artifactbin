@@ -87,8 +87,14 @@ const exercise = async (page, framed, documentId) => {
   check(true, `${framed ? 'relayed' : 'direct'} repeated local table edits feed the dependent query`);
   await frame.click(named('Open dialog'));
   await frame.locator(named('Draft dialog')).waitFor({ state: 'visible', timeout: 15_000 });
-  await frame.waitForFunction(root => document.querySelector(`${root}[aria-label="Note"]`) === document.activeElement, root, { timeout: 15_000 }).catch(() => {});
-  check(await frame.locator(named('Draft dialog')).isVisible() && await frame.locator(named('Note')).evaluate(el => el === document.activeElement), 'Dialog opens and focuses its field');
+  const note = frame.locator(named('Note'));
+  await note.waitFor({ state: 'visible', timeout: 15_000 });
+  const noteHandle = await note.elementHandle();
+  await frame.waitForFunction(el => el === el.getRootNode().activeElement, noteHandle, { timeout: 5000 }).catch(() => {});
+  const opened = await frame.locator(named('Draft dialog')).isVisible();
+  const focused = await note.evaluate(el => el === el.getRootNode().activeElement);
+  const focusState = opened && focused ? '' : JSON.stringify(await note.evaluate(el => ({ active: el.getRootNode().activeElement?.tagName, label: el.getRootNode().activeElement?.getAttribute('aria-label'), root: el.getRootNode().nodeName })));
+  check(opened && focused, `Dialog opens and focuses its field${focusState ? ` (${focusState})` : ''}`);
   await frame.fill(named('Note'), 'changed');
   const validity = await frame.locator(named('Draft dialog')).evaluate(dialog => {
     const field = dialog.querySelector('[aria-label="Note"]');
