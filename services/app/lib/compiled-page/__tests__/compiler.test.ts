@@ -10,8 +10,8 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { JSDOM } from 'jsdom';
 import { brotliCompressSync } from 'node:zlib';
-import { compilePage, compileSources, declaredValues, generate } from '../compiler';
-import { browserModuleCode, buildDocumentModules, evaluateModule, loadSsrModule, renderSkeleton, ssrImportTable, ssrModuleCode, transformSolid, type SsrImports } from '../bundle.server';
+import { compilePage, compileSources, declaredValues, generate, KIT } from '../compiler';
+import { browserModuleCode, buildDocumentModules, defaultSsrImports, evaluateModule, loadSsrModule, renderSkeleton, ssrImportTable, ssrModuleCode, transformSolid, type SsrImports } from '../bundle.server';
 import { createModuleStore } from '../modules.server';
 import { shapeOf, diffShapes, reactRender } from '@/lib/islands/__tests__/kit-parity';
 import { loadCompilerBuild } from '../build.server';
@@ -98,6 +98,25 @@ describe('compilePage', () => {
     const page = await compilePage(await inputOf('<div><DeckGL id="map" /></div>'), loadCompilerBuild());
     expect(page.partial).toContain('DeckGL');
     expect(page.unported).toEqual([]);
+  });
+});
+
+describe('unit parity with the real kit', () => {
+  it('kit: the whole compiled column, islands included, is today\'s render', async () => {
+    const source = fixture('kit.jsx');
+    const diffs = columnParity((await compilePage(await inputOf(source), loadCompilerBuild())).html, source);
+    // Radix's Presence writes `animation-duration:0s` on closed accordion content at its FIRST mount only
+    // (so a closed panel does not animate in); the Solid kit renders the steady state. Anything else is a diff.
+    expect(diffs.filter((d) => !d.endsWith('@style: "animation-duration:0s" vs undefined'))).toEqual([]);
+  });
+});
+
+describe('the kit table', () => {
+  it('names, for every ported component, a family of the shared build that exports it', async () => {
+    const families = [...new Set(Object.values(KIT).map((m) => m.mod))].map((mod) => `@mx/kit/${mod}`);
+    const imports = await defaultSsrImports(families.map((spec, i) => `import * as k${i} from ${JSON.stringify(spec)};`).join('\n'));
+    const missing = Object.entries(KIT).filter(([tag, meta]) => typeof imports(`@mx/kit/${meta.mod}`)[tag] !== 'function').map(([tag, meta]) => `${tag} (@mx/kit/${meta.mod})`);
+    expect(missing).toEqual([]);
   });
 });
 

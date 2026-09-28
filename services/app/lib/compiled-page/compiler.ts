@@ -110,11 +110,10 @@ export const KIT: Readonly<Record<string, KitMeta>> = {
   DatePicker: { mod: 'controls', island: true, api: ['label', 'value', 'min', 'max'] },
   Collapsible: { mod: 'disclosure', island: true, api: ['defaultOpen', 'open', 'disabled'] }, CollapsibleTrigger: { mod: 'disclosure' }, CollapsibleContent: { mod: 'disclosure' },
   Popover: { mod: 'disclosure', island: true, api: ['defaultOpen'] }, PopoverTrigger: { mod: 'disclosure' }, PopoverContent: { mod: 'disclosure' }, PopoverAnchor: { mod: 'disclosure' },
-  PopoverHeader: { mod: 'basic' }, PopoverTitle: { mod: 'basic' }, PopoverDescription: { mod: 'basic' },
+  PopoverHeader: { mod: 'disclosure' }, PopoverTitle: { mod: 'disclosure' }, PopoverDescription: { mod: 'disclosure' },
   TooltipProvider: { mod: 'disclosure', island: true }, Tooltip: { mod: 'disclosure', island: true, api: ['defaultOpen'] }, TooltipTrigger: { mod: 'disclosure' }, TooltipContent: { mod: 'disclosure' },
   Avatar: { mod: 'disclosure', island: true, api: ['size'] }, AvatarImage: { mod: 'disclosure' }, AvatarFallback: { mod: 'disclosure' }, AvatarBadge: { mod: 'disclosure' }, AvatarGroup: { mod: 'disclosure' }, AvatarGroupCount: { mod: 'disclosure' },
   User: { mod: 'people', island: true, api: ['userId', 'fallback', 'avatar', 'link'] }, UserImage: { mod: 'people', island: true, api: ['userId', 'fallback', 'size', 'decorative'] }, UserHandle: { mod: 'people', island: true, api: ['userId', 'fallback', 'link'] }, SignIn: { mod: 'people', island: true },
-  SlideDeck: { mod: 'basic' }, Slide: { mod: 'basic', api: ['title'] },
   Dialog: { mod: 'dialog', island: true, api: ['defaultOpen'] }, DialogTrigger: { mod: 'dialog', api: ['wrapsControl', 'disabled'] }, DialogClose: { mod: 'dialog', api: ['wrapsControl', 'disabled'] }, DialogContent: { mod: 'dialog' },
 };
 /** The rail's miniature stubs its embeds (StoryRuntimeApp PREVIEW_REGISTRY). */
