@@ -22,6 +22,12 @@ import { openArtifactControls } from './lib/reveal-chrome.mjs';
 import { becomeOwner, startDocument } from './lib/start-doc.mjs';
 
 const BASE = process.argv[2] ?? 'http://localhost:3030';
+/**
+ * `GATE_READER=compiled` runs this gate against the compiled reader: every document page it opens
+ * carries `?reader=compiled` (honoured while FLAG__COMPILED_READER is `shadow`). Unset, today's reader.
+ */
+const READER_PARAM = process.env.GATE_READER === 'compiled' ? 'reader=compiled' : '';
+const readerUrl = (url) => (READER_PARAM ? `${url}${url.includes('?') ? '&' : '?'}${READER_PARAM}` : url);
 const check = createChecker('live-data');
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -112,11 +118,11 @@ const totalRows = async (page) => page.evaluate(() => {
 });
 
 await becomeOwner(voterPage,BASE,seed.token);
-await voterPage.goto(`${BASE}/a/${seed.id}`, {waitUntil:'load'});
+await voterPage.goto(readerUrl(`${BASE}/a/${seed.id}`), {waitUntil:'load'});
 await voterPage.locator('[data-mx-inline-story]').waitFor();
 const voter = await artifactDocument(voterPage);
-await watcher.goto(`${BASE}/a/${seed.id}`, { waitUntil: 'load' });
-await dash.goto(`${BASE}/a/${second.id}`, { waitUntil: 'load' });
+await watcher.goto(readerUrl(`${BASE}/a/${seed.id}`), { waitUntil: 'load' });
+await dash.goto(readerUrl(`${BASE}/a/${second.id}`), { waitUntil: 'load' });
 
 // Everyone starts from the same server-rendered state.
 const start = await until(() => votes(watcher), (v) => typeof v === 'number');
@@ -209,7 +215,7 @@ check(refused === 403, `a write to a closed dataset is refused (${refused})`);
   await becomeOwner(page, BASE, owner.token);
 
   // The dataset is still read-only: the share menu makes it writable here.
-  await page.goto(`${BASE}/a/${ds2.id}`, { waitUntil: 'load' });
+  await page.goto(readerUrl(`${BASE}/a/${ds2.id}`), { waitUntil: 'load' });
 
   await openArtifactControls(page);
   await page.getByLabel('Share').click();
@@ -232,7 +238,7 @@ check(refused === 403, `a write to a closed dataset is refused (${refused})`);
   await publish(owner.token, owner.id, poll(ds2.id));
 
   // Now the RELAY write: the owner's own document, framed, writing through the page.
-  await page.goto(`${BASE}/a/${owner.id}`, { waitUntil: 'load' });
+  await page.goto(readerUrl(`${BASE}/a/${owner.id}`), { waitUntil: 'load' });
   const frame = await until(async () => page.mainFrame(), (f) => !!f);
   check(!!frame, 'the owner sees the document in a frame (the relay path)');
   const relayVotes = async () => frame.evaluate(() => {

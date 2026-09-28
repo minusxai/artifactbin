@@ -71,6 +71,11 @@ export type CoreEvent =
   | { type: 'set'; values: Record<string, Scalar> }
   | { type: 'flush' }
   | { type: 'answered'; at: Versions; answer: RunAnswer }
+  /**
+   * Another door's answer (the viewer overlay, lib/islands/viewer) asked at `at` (`versionsNow`): each
+   * node it names that has not moved since takes it and SUPERSEDES any run in flight for it.
+   */
+  | { type: 'served'; at: Versions; answer: RunAnswer }
   | { type: 'failed'; at: Versions; error: unknown }
   | { type: 'sources'; ids: readonly string[] }
   | { type: 'refresh'; queries?: readonly string[] }
@@ -259,6 +264,7 @@ function reduce(state: CoreState, event: CoreEvent, effects: CoreEffect[]): Core
     case 'set': return setValues(state, event.values);
     case 'flush': return flush(state, effects);
     case 'answered': return answered(state, event.at, event.answer);
+    case 'served': return served(state, event.at, event.answer);
     case 'failed': return failed(state, event.at, event.error);
     case 'sources': return bumpSources(state, event.ids);
     case 'refresh': {
@@ -359,6 +365,28 @@ function answered(state: CoreState, at: Versions, answer: RunAnswer): CoreState 
     ...state, requested, answered: answeredAt, failed: failedAt,
     data: { ...state.data, tables, errors, mutationAccess, ...mergedPeople(state.data, current, answer) },
   };
+}
+
+/** The version of every node a run may compute, now: what another door's answer is later judged by (`served`). */
+export function versionsNow(state: CoreState): Versions {
+  return Object.fromEntries(indexOf(state.graph).computed.map((k) => [k, versionOf(state, k)]));
+}
+
+/**
+ * Another door answered part of the graph at `at`. A node lands when the answer names it (a query's
+ * rows or error, a write check's verdict) and nothing it reads has moved since `at`. Each landing node
+ * is bumped first and answered at its new version, so a run still in flight for it — asked at the old
+ * version, by a door that answers for someone else — no longer lands over it.
+ */
+function served(state: CoreState, at: Versions, answer: RunAnswer): CoreState {
+  const named = (k: NodeKey): boolean => {
+    const name = nameOf(k);
+    return k.startsWith('query:') ? Object.hasOwn(answer.tables, name) || Object.hasOwn(answer.errors, name) : !!answer.mutationAccess && Object.hasOwn(answer.mutationAccess, name);
+  };
+  const lands = Object.keys(at).filter((k) => versionOf(state, k) === at[k] && named(k));
+  if (!lands.length) return state;
+  const bumped = bump(state, lands);
+  return answered(bumped, Object.fromEntries(lands.map((k) => [k, versionOf(bumped, k)])), answer);
 }
 
 /** The people these tables name (their `user` columns) that no answer has carried a card for. */

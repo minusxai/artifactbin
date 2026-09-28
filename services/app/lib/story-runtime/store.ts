@@ -36,7 +36,7 @@ import { localZone } from '@/lib/story/builtins';
 import { placeDataflow, type DataflowPlacement } from '@/lib/story/placement';
 import type { PersonCard } from '@artifactbin/contracts';
 import {
-  accessSettled, busyOf, createCore, localRows, partitionRun, pendingOf, step, unnamedPeople,
+  accessSettled, busyOf, createCore, localRows, partitionRun, pendingOf, step, unnamedPeople, versionsNow,
   type CoreEffect, type CoreEvent, type CoreState, type RunAnswer,
 } from './dataflow-core';
 import { MAX_PEOPLE_IDS, type ServedResults } from './contract';
@@ -50,6 +50,17 @@ const IDLE_PREPARE_MS = 2000;
 export const ACCESS_PENDING = 'Checking edit access…';
 
 export interface MutationAnswer { dataset: string; local?: LocalMutationResult }
+
+/**
+ * One write's life, as `subscribeWrites` reports it (lib/islands/writes builds the status feed on it):
+ * `write` when a call is accepted, then exactly one of `written` / `writeFailed` — also for a call the
+ * store refused before sending, so no change a reader asked for ends without an answer. `request` is
+ * what a retry re-issues through `mutate(request)`: the one that was sent, else the call as asked.
+ */
+export type StoreWriteEvent =
+  | { type: 'write'; id: number; name: string }
+  | { type: 'written'; id: number; name: string }
+  | { type: 'writeFailed'; id: number; name: string; error: unknown; request: MutationRequest };
 
 /** A window of one query's rows — what a table reads past the cap. */
 interface TablePage {
@@ -159,6 +170,15 @@ export interface DataflowStore {
    * may show.
    */
   mutate(name: string, overrides?: Record<string, Scalar>, row?: Record<string, Scalar>): Promise<void>;
+  /**
+   * The same write as the wire states it (lib/story/mutation-request): the island runtime's form and
+   * what a retry re-issues. Its arguments are taken as given (`value` is the `_value` override). One
+   * difference: a write whose check has not landed yet (ACCESS_PENDING) is SENT, and the server —
+   * which decides every write anyway — answers; its refusal settles the write with its reason.
+   */
+  mutate(request: MutationRequest): Promise<void>;
+  /** Every write's life (StoreWriteEvent), in order, synchronously as it happens. */
+  subscribeWrites(listener: (event: StoreWriteEvent) => void): () => void;
   /** Mutations currently in flight (a bound <Button> shows itself busy). */
   mutating(): ReadonlySet<string>;
   /** Whether the attached document transport can perform writes. */
@@ -207,6 +227,14 @@ export interface DataflowStore {
    * the control takes. Their old rows stay on screen until the run lands.
    */
   replaceFlow(next: { flow: CompiledDataflow; state?: DataflowState; hold?: string[] }): void;
+  /**
+   * ANOTHER DOOR is about to answer part of this document at the CURRENT values — the viewer overlay
+   * (lib/islands/viewer), which answers for the signed-in reader where the transport answers for a
+   * guest. Call it when the request leaves; the returned function lands the answer: each query and
+   * write check it names whose inputs have not moved since takes it and supersedes any run still in
+   * flight for it. What moved meanwhile is left to its own run.
+   */
+  expectAnswer(): (answer: RunAnswer) => void;
 }
 
 export interface CreateStoreOptions {
@@ -240,6 +268,12 @@ export interface CreateStoreOptions {
    * Absent, everything goes through the transport, as it always has.
    */
   page?: { engine: PageEngine; userId: string | null } | null;
+}
+
+/** A positional call as the wire would state it: its overrides as the arguments, `_value` as the value. */
+function callRequest(name: string, overrides: Record<string, Scalar> | undefined, row: Record<string, Scalar> | undefined): MutationRequest {
+  const { _value, ...args } = overrides ?? {};
+  return { mutation: name, args, ...(row ? { row } : {}), ...(overrides && Object.hasOwn(overrides, '_value') ? { value: _value ?? null } : {}) };
 }
 
 /** Empty declarations + state, for a document that declares nothing. */
@@ -283,6 +317,14 @@ export function createDataflowStore(
   let core: CoreState = createCore(graphOfCompiled(flow, placement), input);
   let writeIds = 0;
   const writes = new Map<number, { resolve: () => void; reject: (error: unknown) => void }>();
+  /** Each accepted write's name and the request a retry re-issues (the sent one replaces the call's). */
+  const writeCalls = new Map<number, { name: string; request: MutationRequest }>();
+  const writeListeners = new Set<(event: StoreWriteEvent) => void>();
+  const emitWrite = (event: StoreWriteEvent) => {
+    for (const listener of [...writeListeners]) {
+      try { listener(event); } catch (error) { console.error('[store] write listener failed', error); }
+    }
+  };
   let accessWaiters: Array<() => void> = [];
   const accessIsSettled = () => !transport || core.disposed || accessSettled(core);
 
@@ -306,6 +348,9 @@ export function createDataflowStore(
       case 'settle': {
         const settle = writes.get(effect.id);
         writes.delete(effect.id);
+        const call = writeCalls.get(effect.id);
+        writeCalls.delete(effect.id);
+        if (call) emitWrite(effect.outcome.ok ? { type: 'written', id: effect.id, name: call.name } : { type: 'writeFailed', id: effect.id, name: call.name, error: effect.outcome.error, request: call.request });
         if (effect.outcome.ok) settle?.resolve(); else settle?.reject(effect.outcome.error);
         return;
       }
@@ -336,6 +381,8 @@ export function createDataflowStore(
           const m = flow.mutations.find((x) => x.name === name);
           if (!m) throw new Error(`this document declares no <Mutation name="${name}">`);
           const request = mutationRequestFor(m, { values, ...(row ? { row } : {}), ...(Object.hasOwn(values, '_value') ? { value: values._value } : {}), ...(localTables ? { localTables } : {}) });
+          const call = writeCalls.get(id);
+          if (call) call.request = request;
           answer = writeThrough(m, request);
         } catch (error) { answer = Promise.reject(error); }
         // A settled write moves what it wrote (and what it reset): re-read at once.
@@ -504,17 +551,35 @@ export function createDataflowStore(
     return Object.hasOwn(access, name) ? access[name]! : ACCESS_PENDING;
   };
 
-  const mutate: DataflowStore['mutate'] = async (name, overrides, row) => {
-    if (!core.graph.mutations.some((m) => m.name === name)) throw new Error(`this document declares no <Mutation name="${name}">`);
-    if (!transport?.mutate && !(page && placement.mutations[name] === 'browser')) throw new Error('this document cannot write from here');
+  /** Why this write cannot be sent from here, or null. The wire form lets a pending check through: the server decides. */
+  const refusalOf = (name: string, wire: boolean): string | null => {
+    if (!core.graph.mutations.some((m) => m.name === name)) return `this document declares no <Mutation name="${name}">`;
+    if (!transport?.mutate && !(page && placement.mutations[name] === 'browser')) return 'this document cannot write from here';
     const unavailable = mutationUnavailable(name);
-    if (unavailable !== null) throw new Error(unavailable);
-    if (!row && busyOf(core).has(name)) return; // generic Button double click is one write; row cells dedupe locally
-    const id = ++writeIds;
-    const settled = new Promise<void>((resolve, reject) => { writes.set(id, { resolve, reject }); });
-    dispatch({ type: 'write', id, name, ...(overrides ? { overrides } : {}), ...(row ? { row } : {}) });
-    return settled;
+    return unavailable === ACCESS_PENDING && wire ? null : unavailable;
   };
+
+  const mutate = (async (first: string | MutationRequest, overrides?: Record<string, Scalar>, row?: Record<string, Scalar>): Promise<void> => {
+    const wire = typeof first !== 'string';
+    const name = wire ? first.mutation : first;
+    const given = wire ? (first.value !== undefined ? { ...first.args, _value: first.value } : first.args) : overrides;
+    const at = wire ? first.row : row;
+    const refusal = refusalOf(name, wire);
+    if (refusal === null && !at && busyOf(core).has(name)) return; // generic Button double click is one write; row cells dedupe locally
+    const id = ++writeIds;
+    writeCalls.set(id, { name, request: wire ? first : callRequest(name, given, at) });
+    emitWrite({ type: 'write', id, name });
+    if (refusal !== null) {
+      const error = new Error(refusal);
+      const call = writeCalls.get(id)!;
+      writeCalls.delete(id);
+      emitWrite({ type: 'writeFailed', id, name, error, request: call.request });
+      throw error;
+    }
+    const settled = new Promise<void>((resolve, reject) => { writes.set(id, { resolve, reject }); });
+    dispatch({ type: 'write', id, name, ...(given ? { overrides: given } : {}), ...(at ? { row: at } : {}) });
+    return settled;
+  }) as DataflowStore['mutate'];
 
   return {
     get disposed() { return core.disposed; },
@@ -545,6 +610,11 @@ export function createDataflowStore(
       prepare();
     },
     mutate,
+    subscribeWrites: (listener) => { writeListeners.add(listener); return () => { writeListeners.delete(listener); }; },
+    expectAnswer: () => {
+      const at = versionsNow(core);
+      return (answer) => { if (!core.disposed) dispatch({ type: 'served', at, answer }); };
+    },
     mutating: () => busyOf(core),
     canMutate: (name) => name ? mutationUnavailable(name) === null : !!transport?.mutate,
     mutationUnavailable,

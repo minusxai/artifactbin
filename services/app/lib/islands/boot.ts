@@ -80,7 +80,9 @@ export function boot(input: IslandModule | readonly IslandEntry[], win: Window =
   const data = readPageData(doc);
   const flow = module.FLOW ?? null;
 
-  const transport = flow ? createDocumentTransport(win, data.queryUrl, appOrigin(), undefined, data.mutateUrl) : null;
+  // A signed-in reader's queries and writes are theirs: the transport carries the session to the
+  // doors that read it. A guest page keeps the anonymous GET door (lib/story-runtime/fetch-transport).
+  const transport = flow ? createDocumentTransport(win, data.queryUrl, appOrigin(), undefined, data.mutateUrl, { session: data.signedIn }) : null;
   const runtime = createIslandRuntime(
     {
       dataflow: flow ? { flow, values: data.values ?? {}, ...(data.results ? { results: data.results } : {}) } : null,
