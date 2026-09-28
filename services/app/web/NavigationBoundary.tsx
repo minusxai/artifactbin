@@ -116,7 +116,9 @@ export function NavigationBoundary({ children }: { children: ReactNode }): React
     if (!positions.current.has(before.key)) positions.current.set(before.key, [window.scrollX, window.scrollY]);
     if (positions.current.size > 256) positions.current.delete(positions.current.keys().next().value!);
     previous.current = location;
-    if (documentIdentity(before.pathname) === documentIdentity(location.pathname) && before.hash === location.hash && action !== 'POP') return;
+    const sameDocument = documentIdentity(before.pathname) === documentIdentity(location.pathname);
+    if (sameDocument && (before.hash === '#edit' || location.hash === '#edit')) return;
+    if (sameDocument && before.hash === location.hash && action !== 'POP') return;
     if (location.hash === '#edit') return;
     const position = action === 'POP' ? positions.current.get(location.key) : undefined;
     if (!position && !location.hash) { window.scrollTo(0, 0); return; }

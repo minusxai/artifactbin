@@ -82,6 +82,26 @@ describe('inline artifact runtime lifetime', () => {
     view.unmount();
   });
 
+  it('keeps an uncommitted edit when surrounding comment chrome rerenders', async () => {
+    let session: StoryController | null = null;
+    const initial = data('First');
+    const callback = (value: StoryController | null) => { session = value; };
+    const view = render(<EditorStoryRuntime data={initial} transport={transport} onController={callback} />);
+    await waitFor(() => expect(session).not.toBeNull());
+    await act(async () => session!.send({ type: STORY_EDIT_MODE_MESSAGE, on: true }));
+    const editor = await screen.findByLabelText('Artifact heading');
+    await waitFor(() => expect(editor.closest('.ProseMirror')).toHaveAttribute('contenteditable', 'true'));
+    fireEvent.focus(editor.closest('.ProseMirror')!);
+    fireEvent.paste(editor.closest('.ProseMirror')!, { clipboardData: { files: [], getData: (type: string) => type === 'text/html' ? '<p>MIDSENTENCE</p>' : 'MIDSENTENCE' } });
+    expect(editor.closest('.ProseMirror')).toHaveTextContent('MIDSENTENCE');
+    await act(async () => { fireEvent.blur(editor.closest('.ProseMirror')!); await new Promise((resolve) => setTimeout(resolve, 0)); });
+    expect(screen.getByLabelText('Artifact heading').closest('.ProseMirror')).toHaveTextContent('MIDSENTENCE');
+    await act(async () => session!.send({ type: STORY_SELECT_MESSAGE, path: null }));
+    expect(screen.getByLabelText('Artifact heading').closest('.ProseMirror')).toHaveTextContent('MIDSENTENCE');
+    view.rerender(<EditorStoryRuntime data={initial} transport={transport} onController={callback} />);
+    expect(screen.getByLabelText('Artifact heading').closest('.ProseMirror')).toHaveTextContent('MIDSENTENCE');
+  });
+
   it('does not create a lazy edit session after unmount', async () => {
     let session: StoryController | null = null;
     const view = render(<EditorStoryRuntime data={data('First')} transport={transport} onController={value=>{session=value;}} />);

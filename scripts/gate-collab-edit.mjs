@@ -21,6 +21,7 @@
  */
 import { mergeGuestIntoAccount } from './lib/start-doc.mjs';
 import { createChecker } from './lib/assert.mjs';
+import { readerUrl } from './lib/gate-reader.mjs';
 import {tsImport} from 'tsx/esm/api';
 const {prepareClientDocumentUpdate}=await tsImport('../services/app/lib/story/document-update-client.ts',import.meta.url);
 import {fixtureFetch as fetch} from './lib/fixture-http.mjs';
@@ -80,7 +81,7 @@ check(doc.visibility === 'public', 'a PUBLIC document — the case that had no w
 
 // ── 1. invite + promote from the share menu ──────────────────────────────
 const sharingPut = (page) => page.waitForResponse((r) => r.url().includes('/sharing') && r.request().method() === 'PUT' && r.status() === 200, { timeout: 15000 });
-await owner.goto(`${BASE}/a/${doc.id}`, { waitUntil: 'load' });
+await owner.goto(readerUrl(`${BASE}/a/${doc.id}`), { waitUntil: 'load' });
 await openArtifactControls(owner);
 await owner.getByLabel('Owner actions').getByLabel('Share', { exact: true }).click();
 await owner.waitForSelector('[aria-label="Invite email"]', { timeout: 15000 });
@@ -104,7 +105,7 @@ await Promise.all([sharingPut(owner), owner.click('[aria-label="Add email"]')]);
 await roleTrigger(owner, COMMENTER_EMAIL).waitFor({ timeout: 15000 });
 await Promise.all([sharingPut(owner), pickRole(owner, COMMENTER_EMAIL, 'can comment')]);
 check(await roleReads(owner, COMMENTER_EMAIL, 'can comment'), 'promoted to can comment from the row');
-await commenter.goto(`${BASE}/a/${doc.id}`, { waitUntil: 'load' });
+await commenter.goto(readerUrl(`${BASE}/a/${doc.id}`), { waitUntil: 'load' });
 await openArtifactControls(commenter);
 check((await commenter.locator('[aria-label="Edit artifact"]').count()) === 0, 'the commenter sees no edit button');
 const head = await api(`/api/artifacts/${doc.id}`);
@@ -122,7 +123,7 @@ check(editAttempt === 404, `…and may not edit — the uniform 404 (${editAttem
 await commenterCtx.close();
 
 // ── 2. the editor gets the SHELL, with edit and without the owner's controls ──
-await editor.goto(`${BASE}/a/${doc.id}`, { waitUntil: 'load' });
+await editor.goto(readerUrl(`${BASE}/a/${doc.id}`), { waitUntil: 'load' });
 await openArtifactControls(editor);
 const editBtn = editor.locator('[aria-label="Edit artifact"]');
 check((await editBtn.count()) === 1, 'the editor sees the edit button (the shell, not the served document)');
@@ -145,7 +146,7 @@ await editor.click('[aria-label="Close sharing"]');
 // ── 3. both edit, different paragraphs, no reload ─────────────────────────
 const frameOf = (page) => page.mainFrame();
 const openEditor = async (page) => {
-  await page.goto(`${BASE}/a/${doc.id}#edit`, { waitUntil: 'load' });
+  await page.goto(`${readerUrl(`${BASE}/a/${doc.id}`)}#edit`, { waitUntil: 'load' });
   await page.waitForFunction(() => true, null, { timeout: 1000 }).catch(() => {});
   const f = () => frameOf(page);
   await page.waitForTimeout(6000);
@@ -192,10 +193,10 @@ await roleCell.waitFor({ timeout: 20000 }).catch(() => {});
 check((await roleCell.count()) === 1 && (await roleCell.textContent()) === 'can edit', 'shared-with-you lists the document as can edit');
 
 // ── 5. demotion takes effect on the next write ────────────────────────────
-await editor.goto(`${BASE}/a/${doc.id}#edit`, { waitUntil: 'load' });
+await editor.goto(`${readerUrl(`${BASE}/a/${doc.id}`)}#edit`, { waitUntil: 'load' });
 await editor.waitForTimeout(6000);
 await Promise.all([sharingPut(owner), (async () => {
-  await owner.goto(`${BASE}/a/${doc.id}`, { waitUntil: 'load' });
+  await owner.goto(readerUrl(`${BASE}/a/${doc.id}`), { waitUntil: 'load' });
   await openArtifactControls(owner);
   await owner.getByLabel('Owner actions').getByLabel('Share', { exact: true }).click();
   await roleTrigger(owner, EDITOR_EMAIL).waitFor({ timeout: 15000 });
@@ -210,7 +211,7 @@ check(Boolean(await refused.catch(() => null)), 'the demoted editor\'s next flus
 const after = await api(`/api/artifacts/${doc.id}`);
 check(!after.markup.includes('After demotion.'), 'nothing of it was stored');
 
-await editor.goto(`${BASE}/a/${doc.id}`, { waitUntil: 'load' });
+await editor.goto(readerUrl(`${BASE}/a/${doc.id}`), { waitUntil: 'load' });
 check((await editor.locator('[aria-label="Edit artifact"]').count()) === 0, 'reloaded, the viewer gets the served document — no edit button');
 
 await browser.close();

@@ -23,6 +23,7 @@
  *   usage: node scripts/gate-inplace-edit.mjs [base]
  */
 import { inlineStory } from './lib/page-facts.mjs';
+import { readerUrl } from './lib/gate-reader.mjs';
 import { createChecker } from './lib/assert.mjs';
 import {fixtureFetch as fetch} from './lib/fixture-http.mjs';
 import { chromium } from 'playwright';
@@ -65,7 +66,7 @@ const browser = await chromium.launch();
   const start = await publish(doc('the first version'));
   const page = await browser.newPage({ viewport: { width: 1400, height: 1000 } });
   await becomeOwner(page, BASE, start.token);
-  await page.goto(`${BASE}/a/${start.id}`, { waitUntil: 'load' });
+  await page.goto(readerUrl(`${BASE}/a/${start.id}`), { waitUntil: 'load' });
   await inlineStory(page);
   await sleep(7000);
 
@@ -168,7 +169,7 @@ const browser = await chromium.launch();
   const start = await publish(markup);
   const page = await browser.newPage({ viewport: { width: 1400, height: 1000 } });
   await becomeOwner(page, BASE, start.token);
-  await page.goto(`${BASE}/a/${start.id}`, { waitUntil: 'load' });
+  await page.goto(readerUrl(`${BASE}/a/${start.id}`), { waitUntil: 'load' });
   await inlineStory(page);
   await sleep(6000);
 
@@ -213,7 +214,7 @@ const browser = await chromium.launch();
   // Seeding BEFORE the first navigation is load-bearing: `/a/<id>#edit` differs
   // from `/a/<id>` only by a hash, so a later visit would be a client-side hash
   // change with no re-render and the editor would seed the stale placeholder.
-  await page.goto(`${BASE}/a/${start.id}#edit`, { waitUntil: 'load' });
+  await page.goto(`${readerUrl(`${BASE}/a/${start.id}`)}#edit`, { waitUntil: 'load' });
   // Wait for the canvas to POPULATE, then let it settle: the editor runs the
   // document's dataflow on load and remounts the canvas once when it completes,
   // so a click inside that window hits a detached frame.
@@ -254,7 +255,7 @@ const browser = await chromium.launch();
 
   const viewer = await browser.newPage();
   await becomeOwner(viewer, BASE, start.token);
-  await viewer.goto(`${BASE}/a/${start.id}`, { waitUntil: 'load' });
+  await viewer.goto(readerUrl(`${BASE}/a/${start.id}`), { waitUntil: 'load' });
   await sleep(2500);
   const watched = await read();
   await api(start.id, start.token, '/edits', {

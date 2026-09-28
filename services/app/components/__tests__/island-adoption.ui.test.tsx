@@ -19,6 +19,9 @@ import type { StoryController, EditorStoryRuntimeProps } from '@/lib/story-runti
 import { STORY_DATA_MESSAGE, STORY_DOCUMENT_MESSAGE, STORY_READER_MODE_MESSAGE } from '@/lib/story-runtime/contract';
 import { updateCompiledStory } from '@/lib/islands/live-update';
 
+const liveFrame = vi.hoisted(() => ({ current: null as null | { nodes: unknown[] } }));
+vi.mock('@/lib/story/use-live-artifact', () => ({ useLiveArtifact: () => liveFrame.current }));
+
 vi.mock('@/lib/islands/live-update', () => ({ updateCompiledStory: vi.fn(async () => 'morphed') }));
 import { captureInitialStory, clearInitialStory } from '@/web/initial-story';
 import { scheduleSpaBoot } from '@/web/idle-boot';
@@ -78,6 +81,7 @@ const compiledProps = () => surfaceProps({
 
 beforeEach(() => {
   setupSurface();
+  liveFrame.current = null;
   interpreters.length = 0;
   layerProps.length = 0;
   window.location.hash = '';
@@ -119,6 +123,19 @@ describe('adopting the compiled page', () => {
     expect(islands.events).toEqual(['edit', 'dispose']);
     expect(story.isConnected).toBe(false);
     expect(screen.getByLabelText('Artifact viewport').querySelector('[data-interpreter]')).not.toBeNull();
+  });
+
+  it('starts editing from the latest live version after a compiled reader update', async () => {
+    servePage();
+    const props = compiledProps();
+    const view = render(<ArtifactShell role="owner"><ArtifactSurface {...props} /></ArtifactShell>);
+    const newer = [{ type: 'element', tag: 'h1', props: {}, children: ['Updated title'] }];
+    liveFrame.current = { nodes: newer };
+    view.rerender(<ArtifactShell role="owner"><ArtifactSurface {...props} /></ArtifactShell>);
+    const edit = document.querySelector<HTMLElement>('[data-mx-reader-rail] [data-mx-reader-action="edit"]')!;
+    await act(async () => { fireEvent.click(edit); await Promise.resolve(); });
+    await waitFor(() => expect(interpreters).toHaveLength(1));
+    expect(interpreters[0]!.data.nodes).toEqual(newer);
   });
 
   it('leaving the page disposes the islands without entering edit mode', async () => {

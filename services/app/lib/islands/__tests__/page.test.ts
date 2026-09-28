@@ -7,12 +7,14 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { startPage, CHROME_HIDDEN_CLASS } from '../page';
 import { STORY_SCROLL_MESSAGE } from '@/lib/story-runtime/contract';
 import { READER_CHROME_HIDDEN_CLASS } from '@/lib/story/reader-chrome';
+import { captureInitialStory, clearInitialStory } from '@/web/initial-story';
 
 class FakeEventSource extends EventTarget {
   static made: FakeEventSource[] = [];
   onmessage: ((e: MessageEvent) => void) | null = null;
   constructor(public url: string) { super(); FakeEventSource.made.push(this); }
-  close() {}
+  closed = false;
+  close() { this.closed = true; }
 }
 
 const page = ({ live = true, module = false } = {}) => {
@@ -76,6 +78,17 @@ describe('startPage', () => {
     page({ module: true });
     stops.push(startPage());
     expect(FakeEventSource.made).toEqual([]);
+  });
+
+  it('closes a static compiled page stream when the app takes over for editing', () => {
+    vi.stubGlobal('EventSource', FakeEventSource);
+    page();
+    stops.push(startPage());
+    captureInitialStory();
+    const source = FakeEventSource.made.at(-1)!;
+    expect(source.closed).toBe(false);
+    clearInitialStory();
+    expect(source.closed).toBe(true);
   });
 
   it('framed: marks <html> mx-framed and holds no stream (the page above does)', () => {

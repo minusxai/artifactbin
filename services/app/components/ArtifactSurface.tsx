@@ -550,11 +550,18 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
   const needsParse = isDocumentFormat && !props.runtime;
   const { module: parser, failed: parseFailed, retry: retryParse } = useOnDemand(updatePartsFeature, needsParse);
   const seedReady = !needsParse || !!parser;
-  const initialRuntimeData = useMemo(() => props.runtime?.data ?? {
-    nodes: parser?.storyUpdateParts(source ?? '')?.nodes ?? [], refData: {},
-    dataflow: dataflow ? {...dataflow, values:{...dataflow.values,...readUrlValues(search,dataflow.flow)}} : undefined,
-    colorMode: readerMode, template, chrome: true,
-  }, [id, seedReady]);
+  const initialRuntimeData = useMemo(() => {
+    const served = props.runtime?.data ?? {
+      nodes: parser?.storyUpdateParts(source ?? '')?.nodes ?? [], refData: {},
+      dataflow: dataflow ? {...dataflow, values:{...dataflow.values,...readUrlValues(search,dataflow.flow)}} : undefined,
+      colorMode: readerMode, template, chrome: true,
+    };
+    // The compiled reader has already adopted live versions in place. When it gives way to
+    // the editor, seed the interpreter from that latest version, not the original HTML.
+    return compiled && editing && live?.nodes
+      ? { ...served, nodes: live.nodes, ...(live.dataflow ? { dataflow: { ...served.dataflow, ...live.dataflow } } : {}) }
+      : served;
+  }, [id, seedReady, editing]);
   const setReaderMode = useCallback((mode: AppearanceMode) => {
     modeOverride.current = mode;
     setReaderModeOverride(mode);
@@ -662,6 +669,7 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
   const beginEdit = useCallback((selectionPath: string | null) => {
     if (window.location.hash === '#edit') return;
     editScroll.current = window.scrollY;
+    if (compiled && !interpreting) setFrameLoaded(false);
     // pushState, not replaceState: entering edit mode is a place you can come
     // BACK from, and the browser's back button is the obvious way to do it. The
     // hashchange listener above turns that navigation into leaving edit mode.
@@ -669,7 +677,7 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
     void navigate(window.location.pathname + window.location.search + '#edit', {state:route.state});
     pushedEdit.current = true;
     setEditing(true);
-  }, []);
+  }, [compiled, interpreting, route.state]);
   const enterEdit = useCallback(() => beginEdit(null), [beginEdit]);
 
   /*

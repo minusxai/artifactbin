@@ -1,6 +1,6 @@
 import { runtimeId } from './runtime-id';
 import { installMx } from './mx';
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ComponentType, type ReactNode } from 'react';
+import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState, type ComponentType, type ReactNode } from 'react';
 import type { StoryDocumentUpdate, StoryIslandData } from './contract';
 import type { QueryTransport } from './store';
 import { createDataflowStore } from './store';
@@ -124,7 +124,7 @@ let loadedPolicy: EditorSheetPolicy | null = null;
 const loadPolicy = (): Promise<EditorSheetPolicy> => import('./editor-sheet').then((module) => (loadedPolicy = module));
 
 /** Top-level artifact body; only authored Iframe/Helmet code creates sandboxed child realms. */
-export function EditorStoryRuntime(props: EditorStoryRuntimeProps): ReactNode {
+function EditorStoryRuntimeView(props: EditorStoryRuntimeProps): ReactNode {
   const root = useRef<HTMLDivElement>(null);
   const portal = useRef<HTMLElement | null>(null);
   const selectionReady = useRef<(() => void) | null>(null);
@@ -368,3 +368,7 @@ export function EditorStoryRuntime(props: EditorStoryRuntimeProps): ReactNode {
     {composition}
   </div></>;
 }
+
+// Comment chrome rerenders after a relation-only write. Controller updates
+// bring real document changes; stable parent props must leave draft DOM alone.
+export const EditorStoryRuntime = memo(EditorStoryRuntimeView);

@@ -1,5 +1,6 @@
 import type { IslandDocument } from '@/lib/islands/contract';
 import { islandDocumentOf } from '@/lib/islands/handover';
+import { PAGE_TAKEOVER_EVENT } from '@/lib/islands/page-lifetime';
 
 /** The compiled story root is captured before the SPA mounts and moved without rerendering. */
 let initialStory: HTMLElement | null = null;
@@ -30,6 +31,7 @@ export function clearInitialStoryOnRoute(pathname: string): void {
 export function didClientNavigateTo(pathname: string): boolean { return navigatedFromInitialPage && pathname === currentRoutePath; }
 export function clearInitialStory(): void {
   if (initialStory) {
+    window.dispatchEvent(new Event(PAGE_TAKEOVER_EVENT));
     islandDocumentOf(initialStory)?.dispose();
     initialStory.remove();
     initialStory = null;
@@ -44,6 +46,7 @@ export function adoptInitialStory(): HTMLElement | null {
   const story = initialStory;
   initialStory = null;
   if (story) {
+    window.dispatchEvent(new Event(PAGE_TAKEOVER_EVENT));
     removeServedChrome();
     revealAppRoot();
   }
