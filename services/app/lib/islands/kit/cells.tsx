@@ -226,9 +226,10 @@ export function CellControl(props: CellControlProps) {
     if (props.tag === 'DatePicker') return <CellDate {...{ authored, label, value, disabled, busy, unavailable, change, commit, valueType, attrs, cls: props.cls }} />;
     return <CellNative {...{ tag: props.tag, authored, label, value, disabled, reason, begin, change, commit, cancel, typed, attrs, cls: props.cls, sessions, identity }}>{props.children}</CellNative>;
   };
-  // The disabled control cannot take focus: its stable wrapper carries the reason (StoryRuntimeApp MutationCellHint).
-  return <><span class="inline-flex w-full" {...{ tabindex: reason() ? '0' : undefined, 'aria-description': reason() ?? undefined }} data-state="closed" data-slot="tooltip-trigger">{control()}</span>
-    <Show when={session()?.error}>{(error) => <span role="alert" class="mx-write-error">{error()}</span>}</Show></>;
+  // The disabled control cannot take focus: its stable wrapper carries the reason (StoryRuntimeApp MutationCellHint),
+  // and holds the refusal of a write beside the control.
+  return <span class="inline-flex w-full" {...{ tabindex: reason() ? '0' : undefined, 'aria-description': reason() ?? undefined }} data-state="closed" data-slot="tooltip-trigger">{control()}
+    <Show when={session()?.error}>{(error) => <span role="alert" class="mx-write-error">{error()}</span>}</Show></span>;
 }
 
 interface Shared {
@@ -338,7 +339,7 @@ function CellSelect(props: Shared & {
     const node = <div ref={popup} {...{ 'data-theme': theme.dataTheme }} class={join(theme.className, POPUP)}
       on:focusout={(e) => { if (!opened) return; const next = e.relatedTarget as Node | null; if (next && (popup?.contains(next) || root?.contains(next))) return; if (multiple()) commitDraft(false); else finish(false); }}
       on:keydown={(e) => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); cancelDraft(); } }}>
-      <div class="border-b border-border p-1.5"><input ref={search} type="text" role="searchbox" aria-label={props.label() ? `Search ${props.label()}` : 'Search options'} placeholder="Type to filter…" value={query()}
+      <div class="border-b border-border p-1.5"><input ref={(el) => { search = el; createEffect(() => el.setAttribute('value', query())); }} type="text" role="searchbox" aria-label={props.label() ? `Search ${props.label()}` : 'Search options'} placeholder="Type to filter…" value={query()}
         on:input={(e) => { const next = e.currentTarget.value; setQuery(next); setActive(matches(next.trim().toLocaleLowerCase()) ? 0 : -1); }} on:keydown={onSearchKey}
         class="h-8 w-full min-w-36 rounded-sm border border-input bg-background px-2 text-sm text-foreground outline-none placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring/50" /></div>
       {/* Mouse down keeps focus in the search box (WebKit does not focus a pressed button). */}
