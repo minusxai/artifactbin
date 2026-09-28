@@ -1,7 +1,7 @@
 /**
  * THE DECK'S CHROME BEHAVIOUR (`@mx/deck`, a compiled page's `behaviors: ['deck']`), with NO
- * framework. The rail and the present bar are static server HTML (their thumbnails are big and never
- * change); this only tracks the active slide on scroll, marks `aria-current`, pages on clicks and
+ * framework. The rail and the present bar are server HTML; this tracks the active slide on scroll,
+ * keeps thumbnail text leaves in sync, marks `aria-current`, pages on clicks and
  * keys, and toggles fullscreen — what StoryRuntimeApp's SlideRail, PresentBar and useSlideChrome do
  * in React. The markup it drives is the compiler's static deck chrome: `.mx-rail .mx-rail-row`,
  * `.mx-present` (with its labelled buttons and `.mx-present-count`) and `[data-mx-slide]` slides.
@@ -21,13 +21,41 @@ import { ISLANDS_READY_EVENT } from './contract';
 export const RAIL_THUMB_ATTR = 'data-mx-thumb';
 
 export function startDeck(doc: Document = document, win: Window = window): () => void {
-  for (const held of doc.querySelectorAll<HTMLTemplateElement>(`.mx-rail template[${RAIL_THUMB_ATTR}]`)) held.replaceWith(doc.importNode(held.content, true));
+  const revealThumbs = () => {
+    for (const held of doc.querySelectorAll<HTMLTemplateElement>(`.mx-rail template[${RAIL_THUMB_ATTR}]`)) held.replaceWith(doc.importNode(held.content, true));
+  };
+  revealThumbs();
   // The document's slides, NOT the rail's miniatures (a thumbnail renders a real slide, stamps included):
   // StoryRuntimeApp documentSlides.
   const slides = () => [...doc.querySelectorAll<HTMLElement>('.mx-doc [data-mx-slide]')];
   const rows = () => [...doc.querySelectorAll<HTMLElement>('.mx-rail .mx-rail-row')];
   const bar = () => doc.querySelector<HTMLElement>('.mx-present');
   const present = () => bar()?.querySelector<HTMLElement>('[aria-label="Present"],[aria-label="Exit presentation"]') ?? null;
+  const column = () => doc.querySelector<HTMLElement>('.mx-doc');
+  const syncPreview = () => {
+    const currentColumn = column();
+    const live = new Map([...currentColumn?.querySelectorAll<HTMLElement>('[data-mx-ast]') ?? []].map((node) => [node.getAttribute('data-mx-ast'), node]));
+    const previewSlides = [...doc.querySelectorAll<HTMLElement>('.mx-rail [data-mx-slide]')];
+    const liveSlides = [...currentColumn?.querySelectorAll<HTMLElement>('[data-mx-slide]') ?? []];
+    for (const preview of doc.querySelectorAll<HTMLElement>('.mx-rail [data-mx-ast]')) {
+      const railSlide = preview.closest<HTMLElement>('[data-mx-slide]');
+      const index = railSlide ? previewSlides.indexOf(railSlide) : -1;
+      const path = preview.getAttribute('data-mx-ast') ?? '';
+      const railBase = railSlide?.getAttribute('data-mx-ast') ?? '';
+      const docBase = liveSlides[index]?.getAttribute('data-mx-ast') ?? '';
+      const source = live.get(railBase && docBase && path.startsWith(railBase) ? docBase + path.slice(railBase.length) : path);
+      if (!source || source.tagName !== preview.tagName || source.children.length || preview.children.length) continue;
+      if (preview.innerHTML !== source.innerHTML) preview.innerHTML = source.innerHTML;
+    }
+  };
+  syncPreview();
+  const previewObserver = new MutationObserver(syncPreview);
+  const observeColumn = () => {
+    previewObserver.disconnect();
+    const currentColumn = column();
+    if (currentColumn) previewObserver.observe(currentColumn, { subtree: true, childList: true, characterData: true, attributes: true });
+  };
+  observeColumn();
   let active = 0;
   const cleanups: Array<() => void> = [];
   const on = <K extends string>(target: EventTarget | null | undefined, type: K, listener: (event: Event) => void, options?: AddEventListenerOptions) => {
@@ -66,6 +94,9 @@ export function startDeck(doc: Document = document, win: Window = window): () =>
     }
   });
   on(doc, 'mx:deck-morphed', (event) => {
+    revealThumbs();
+    observeColumn();
+    syncPreview();
     const id = (event as CustomEvent<{ slideId?: string | null }>).detail?.slideId;
     const index = id ? slides().findIndex((slide) => slide.id === id) : -1;
     if (index >= 0) active = index;
@@ -93,7 +124,7 @@ export function startDeck(doc: Document = document, win: Window = window): () =>
     doc.documentElement.setAttribute(READER_READY_ATTR, '');
     doc.dispatchEvent(new Event(ISLANDS_READY_EVENT));
   }
-  return () => { for (const cleanup of cleanups.splice(0)) cleanup(); };
+  return () => { previewObserver?.disconnect(); for (const cleanup of cleanups.splice(0)) cleanup(); };
 }
 
 if (typeof document !== 'undefined' && typeof window !== 'undefined' && document.querySelector('.mx-rail')) startDeck();

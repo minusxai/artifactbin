@@ -35,7 +35,7 @@ describe('buildIslands', () => {
     first = await buildIslands({ outDir });
   }, 120_000);
   it('names every specifier a compiled page may import', () => {
-    expect(ISLAND_SPECIFIERS).toEqual(expect.arrayContaining(['@mx/rt', '@mx/boot', '@mx/deck', ...KIT_FAMILIES.map((f) => `@mx/kit/${f}`)]));
+    expect(ISLAND_SPECIFIERS).toEqual(expect.arrayContaining(['@mx/rt', '@mx/boot', '@mx/deck', '@mx/row-class', ...KIT_FAMILIES.map((f) => `@mx/kit/${f}`)]));
     expect(ISLAND_SPECIFIERS.filter((s) => s.startsWith('solid-js')), 'generated code reaches Solid only through @mx/rt').toEqual([]);
   });
 
@@ -59,10 +59,19 @@ describe('buildIslands', () => {
     expect(again.ssr).toEqual(first.ssr);
   });
 
+  it('ships an optional, content-addressed glyph catalog without React in the reader graph', () => {
+    const url = first.manifest['@mx/glyphs'];
+    expect(url).toMatch(/^\/islands\/glyphs-[0-9a-f]{16}\.js$/);
+    expect(first.files[url].imports).toEqual([]);
+    const source = readFileSync(path.join(outDir, url.slice('/islands/'.length)), 'utf8');
+    expect(source).toContain('CircleQuestionMark');
+    expect(source).toContain('Check');
+  });
+
   it('writes the server half: one file, a namespace per runtime and kit specifier, only Solid external, no lazy engine', () => {
     const { ssr } = first;
     expect(ssr.url).toMatch(/^\/islands\/ssr-[0-9a-f]{16}\.js$/);
-    expect(Object.keys(ssr.exports).sort()).toEqual(['@mx/rt', ...KIT_FAMILIES.map((f) => `@mx/kit/${f}`)].sort());
+    expect(Object.keys(ssr.exports).sort()).toEqual(['@mx/rt', '@mx/row-class', ...KIT_FAMILIES.map((f) => `@mx/kit/${f}`)].sort());
     const text = readFileSync(path.join(outDir, ssr.url.slice('/islands/'.length)), 'utf8');
     const specifiers = [...new Set([...text.matchAll(/^import\s[^;]*?from\s*["']([^"']+)["']/gm)].map((m) => m[1]))].sort();
     expect(specifiers.every((s) => /^solid-js(\/web|\/store)?$/.test(s)), specifiers.join(', ')).toBe(true);

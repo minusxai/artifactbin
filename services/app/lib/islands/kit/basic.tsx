@@ -1,5 +1,5 @@
 /* @jsxImportSource solid-js */
-import { Show, createSignal, onCleanup, splitProps, type JSX } from 'solid-js';
+import { Show, createEffect, createSignal, onCleanup, splitProps, type JSX } from 'solid-js';
 import { isServer } from 'solid-js/web';
 import { refName, resolveBindings, rowBound, type BindingSource, type Row, type Scalar } from '@/lib/story/dataflow';
 import { VIEWER_ID } from '@/lib/story/builtins';
@@ -7,8 +7,44 @@ import { refusalText } from '@/lib/story/sign-in-required';
 import { useIsland } from '../context';
 import type { IslandContext } from '../contract';
 import type { RowScope } from '../rt';
+import { substituteRow } from '@/lib/story/row-scope';
+import { URL_ATTRS, URL_LIST_ATTRS, urlListUrls } from '@/lib/jsx/url-attrs';
+import { commentMetadata, instanceDomId } from '@/lib/story/repeat-identity';
+import { iconGlyphKey, FALLBACK_ICON_KEY, type GlyphMap } from '@/lib/story-ui/icon-contract';
+
 import { createRowActions } from '@/lib/story-runtime/row-actions';
 import { ACCESS_PENDING, hydratedRead } from './store-read';
+
+// Mirrors lib/jsx/validate hasDangerousScheme without importing the validator into the browser kit.
+// eslint-disable-next-line no-control-regex -- browsers remove controls and spaces within URL schemes
+const dangerous = (url: string) => /^(?:javascript:|vbscript:|data:(?!image\/))/i.test(url.replace(/[\x00-\x20]/g, ''));
+const IDREF_ATTRS = 'for aria-labelledby aria-describedby aria-controls aria-owns headers list form'.split(' ');
+
+/** Substitute and scope attributes only for the row components that use them. */
+export function rowAttrs(attrs: Readonly<Record<string, unknown>>, row: Record<string, unknown> | null | undefined, scope?: RowScope | null): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const [name, raw] of Object.entries(attrs)) {
+    const lower = name.toLowerCase();
+    const value = row && lower !== 'id' ? substituteRow(raw, row) : raw;
+    if (value === null || value === undefined || value === false) continue;
+    if (typeof value === 'string' && (URL_LIST_ATTRS.has(lower) ? urlListUrls(value, lower).some(dangerous) : URL_ATTRS.has(lower) && dangerous(value))) continue;
+    out[name] = value === true ? '' : String(value);
+  }
+  if (scope) {
+    const key = ['repeat', scope.owner, scope.durable ? typeof scope.key : 'index', scope.key];
+    if (!scope.durable) delete out['data-mx-ast'];
+    if (typeof out.id === 'string') {
+      if (scope.durable) Object.assign(out, commentMetadata(scope.owner, { kind: 'repeat', scopes: [{ nodeId: scope.owner, key: scope.key as string | number }], templateNodeId: out.id }));
+      out.id = instanceDomId(key, out.id);
+    }
+    for (const attr of IDREF_ATTRS) {
+      const v = out[attr];
+      if (typeof v === 'string') out[attr] = v.split(/\s+/).map((id) => (scope.ids.includes(id) ? instanceDomId(key, id) : id)).join(' ');
+    }
+    if (typeof out.href === 'string' && out.href.startsWith('#') && scope.ids.includes(out.href.slice(1))) out.href = '#' + instanceDomId(key, out.href.slice(1));
+  }
+  return out;
+}
 
 /**
  * lib/story/comment-target isCommentKey (the interpreter's validRowKey), restated: importing it from a kit
@@ -23,6 +59,37 @@ type DivProps = JSX.HTMLAttributes<HTMLDivElement>;
 type SpanProps = JSX.HTMLAttributes<HTMLSpanElement>;
 
 export function Badge(props: SpanProps & { variant?: string }) { const { variant = 'default', ...rest } = props; return <span data-slot="badge" data-variant={variant} {...rest} />; }
+export function Progress(props: DivProps & { value?: number | string }) {
+  const [own, rest] = splitProps(props, ['value']);
+  const valid = () => typeof own.value === 'number' && Number.isFinite(own.value) && own.value >= 0 && own.value <= 100;
+  const state = () => valid() ? (own.value === 100 ? 'complete' : 'loading') : 'indeterminate';
+  return <div data-slot="progress" role="progressbar" aria-valuenow={valid() ? own.value : undefined} aria-valuemin="0" aria-valuemax="100" data-state={state()} data-value={valid() ? own.value : undefined} data-max="100" {...rest}>
+    <div data-slot="progress-indicator" data-state={state()} data-value={valid() ? own.value : undefined} data-max="100" class="h-full w-full flex-1 bg-primary transition-all" style={{ transform: `translateX(-${100 - (Number(own.value) || 0)}%)` }} />
+  </div>;
+}
+const catalogs = new Map<string, Promise<GlyphMap>>();
+function loadGlyphCatalog(url: string): Promise<GlyphMap> {
+  let loading = catalogs.get(url);
+  if (!loading) {
+    loading = import(/* @vite-ignore */ url).then((module: { glyphs?: GlyphMap }) => module.glyphs ?? {});
+    catalogs.set(url, loading);
+    loading.catch(() => catalogs.delete(url));
+  }
+  return loading;
+}
+export function Icon(props: JSX.SvgSVGAttributes<SVGSVGElement> & { name: string; glyphs: GlyphMap; catalogUrl?: string }) {
+  const [own, rest] = splitProps(props, ['name', 'glyphs', 'catalogUrl', 'class']);
+  const [catalog, setCatalog] = createSignal<GlyphMap>({});
+  createEffect(() => {
+    const key = iconGlyphKey(String(own.name));
+    if (!own.glyphs[key] && !catalog()[key] && own.catalogUrl) void loadGlyphCatalog(own.catalogUrl).then(setCatalog);
+  });
+  const glyph = () => own.glyphs[iconGlyphKey(String(own.name))] ?? catalog()[iconGlyphKey(String(own.name))] ?? own.glyphs[FALLBACK_ICON_KEY] ?? catalog()[FALLBACK_ICON_KEY];
+  const accessible = Object.keys(rest).some((key) => key.startsWith('aria-') || key === 'role' || key === 'title');
+  return <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+    class={['lucide', glyph()?.cls, own.class ?? 'inline-block size-4 shrink-0 align-[-0.125em]'].filter(Boolean).join(' ')}
+    aria-hidden={accessible ? undefined : 'true'} data-slot="icon" {...rest} innerHTML={glyph()?.inner ?? ''} />;
+}
 export function Alert(props: DivProps & { variant?: string }) { const { variant: _variant, ...rest } = props; return <div data-slot="alert" role="alert" {...rest} />; }
 export function AlertTitle(props: DivProps) { return <div data-slot="alert-title" {...props} />; }
 export function AlertDescription(props: DivProps) { return <div data-slot="alert-description" {...props} />; }
