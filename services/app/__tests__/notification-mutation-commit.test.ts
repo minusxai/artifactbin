@@ -5,6 +5,9 @@ import {POST as mutate} from '@/app/api/artifacts/[id]/mutate/route';
 import {getArtifactById} from '@/lib/artifacts';
 import {getDb} from '@/lib/db';
 import {mintToken} from '@/lib/tokens';
+import {notificationJobStore} from '@/lib/notification-runtime';
+import {evaluateNotificationQuery} from '@/lib/notification-query';
+import {createNotificationWorker} from '@/lib/notification-worker';
 import {loadDatasetRows} from '@/lib/story/dataset-store';
 
 useAppHarness();
@@ -14,7 +17,7 @@ async function fixture(){
  const created=await create(request('/api/artifacts',{method:'POST',token:token.token,json:{dataset:[{n:0}],access:'readwrite'}}));
  expect(created.status).toBe(201);const dataset=await created.json();
  const declarations=`<Import name="tasks" src="ref:${dataset.id}" /><Mutation name="increment">{\`update tasks.rows set n=n+$amount\`}</Mutation>`;
- const docResponse=await create(request('/api/artifacts',{method:'POST',token:token.token,json:{markup:`<Helmet>${declarations}<Notify name="counter_status" on="increment">{\`select null as "to", 'Counter is current' as message from tasks.rows\`}</Notify></Helmet><p>Counter</p>`}}));
+ const docResponse=await create(request('/api/artifacts',{method:'POST',token:token.token,json:{markup:`<Helmet>${declarations}<Notify name="counter_status" on="increment">{\`select null as "to", 'Counter is ' || cast(n as integer) as message from tasks.rows\`}</Notify></Helmet><p>Counter</p>`}}));
  expect(docResponse.status,await docResponse.clone().text()).toBe(201);const doc=await docResponse.json();
  const db=await getDb();
  const send=(key:string)=>mutate(request(`/api/artifacts/${doc.id}/mutate`,{method:'POST',token:token.token,headers:{'Idempotency-Key':key},json:{name:'increment',args:{amount:1}}}),{params:Promise.resolve({id:doc.id})});
@@ -60,4 +63,18 @@ it('refuses to commit the mutation if its durable trigger cannot be stored',asyn
   expect((await db.query('SELECT id FROM notification_jobs')).rows).toEqual([]);
   expect((await db.query('SELECT response FROM mutation_receipts')).rows.every(row=>row.response===null)).toBe(true);
  } finally {await db.query('ALTER TABLE notification_jobs DROP CONSTRAINT mxmx_test_notification_enqueue');}
+});
+
+it('evaluates current data after commit and durably completes an empty-recipient result once',async()=>{
+ const {db,send}=await fixture();
+ const first=await send('mxmx_test_notification_current');expect(first.status).toBe(200);const result=await first.json();
+ const second=await send('mxmx_test_notification_later');expect(second.status).toBe(200);
+ const store=await notificationJobStore();
+ const worker=createNotificationWorker({store,evaluator:{evaluate:evaluateNotificationQuery}});
+ expect(await worker.drainOnce()).toBe(true);
+ expect(await worker.drainOnce()).toBe(true);
+ expect(await worker.drainOnce()).toBe(false);
+ const jobs=await db.query('SELECT status,plan FROM notification_jobs WHERE mutation_run_id=$1',[result.mutationRunId]);
+ expect(jobs.rows).toEqual([{status:'completed',plan:expect.objectContaining({rows:[{recipientIds:[],message:'Counter is 2'}]})}]);
+ expect((await db.query('SELECT id FROM mutation_notifications')).rows).toEqual([]);
 });
