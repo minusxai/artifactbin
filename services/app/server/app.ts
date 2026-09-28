@@ -26,7 +26,7 @@ import type { PreparedStoryRuntime } from '@/lib/story/prepared-runtime';
 import { inlineStoryHtml } from '@/lib/story/inline-story-html';
 import { escapeHtml } from '@/lib/story/reader-chrome';
 import { APP_BAR_H } from '@/lib/story/edit-bar';
-import { Hono } from 'hono';
+import { Hono, type Context } from 'hono';
 import { serveStatic } from '@hono/node-server/serve-static';
 import { offlineExtrasAsset, offlineExtrasEncoded } from '@/lib/offline/bundle.server';
 import { actorReceiver, isPublicAssetRequest, publicAssetResponse } from '@artifactbin/utils';
@@ -52,6 +52,7 @@ import { GITHUB_EXTERNAL_URL } from '@/lib/github-star';
 import { createDocumentPreloader, createListingPreloader, createReaderPreloader, listingPage } from './reader-preloads';
 import { artifactPageAnswer, type InitialStory } from '@/lib/artifact-page';
 import { enablePreparedPageWarmups } from '@/lib/story/prepared-page.server';
+import { enableSnapshotRevalidations } from '@/lib/compiled-page/snapshots.server';
 import { mountBuildAssets } from './build-assets';
 import { compressDynamic, dynamicEncoding, precompressedStatic, variantResponse } from './content-encoding';
 import { customHostBoundary } from './custom-host';
@@ -60,6 +61,9 @@ import { THEME_BOOTSTRAP_HASH } from '@/lib/theme-bootstrap';
 import { canonicalDocumentUrl } from '@/lib/custom-domains';
 import { APP_SHELL_FONT_PRELOADS } from '@/lib/app-fonts';
 import { fontPreloadTags } from '@/lib/story/first-screen-fonts';
+import { DOCUMENT_MODULE_PATH, ISLANDS_PATH } from '@/lib/compiled-page/contract';
+import { createModuleStore, createSpeculationRulesStore } from '@/lib/compiled-page/modules.server';
+import { SPECULATION_RULES_CONTENT_TYPE, SPECULATION_RULES_PATH } from '@/lib/compiled-page/speculation';
 
 /**
  * The `<link rel="help">` and `<meta name="afbin">` an agent that fetched any page reads, on the caller's
@@ -324,6 +328,8 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
   const app = new Hono();
   // A serving process prepares each new head for its readers after the write commits (lib/story/prepared-page.server).
   enablePreparedPageWarmups();
+  // …and revalidates the guest snapshots a write made stale (lib/compiled-page/snapshots.server).
+  enableSnapshotRevalidations();
   // Transport identity must be attached before any app middleware or route
   // asks viewer.ts who is calling.
   if (opts.actorSecret) actorReceiver(opts.actorSecret).mount(app);
@@ -484,6 +490,35 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
 
   // Static: content-addressed trees are immutable; everything else is served plainly.
   app.use('/story/*', async (c, next) => { await next(); c.header('cache-control', IMMUTABLE); c.header('access-control-allow-origin', '*'); });
+  /*
+   * The compiled reader's code (docs/phase2-architecture.md §9), all content-addressed: the shared
+   * island chunks under public/islands/ (served by the public mount below), and the per-document
+   * modules and speculation-rule files the module store wrote (lib/compiled-page/modules.server).
+   * Immutable only when found — a miss must stay a plain, uncached 404. ACAO because a /raw copy has
+   * an opaque origin, so its module fetches are cross-origin.
+   */
+  app.use(`${ISLANDS_PATH}/*`, async (c, next) => {
+    await next();
+    if (c.res.status !== 200) return;
+    c.header('cache-control', IMMUTABLE);
+    c.header('access-control-allow-origin', '*');
+  });
+  const islandModules = createModuleStore();
+  const speculationRules = createSpeculationRulesStore();
+  const islandFile = (c: Context, bytes: Uint8Array, contentType: string): Response => new Response(c.req.method === 'HEAD' ? null : new Uint8Array(bytes), {
+    status: 200, headers: { 'content-type': contentType, 'content-length': String(bytes.byteLength), 'x-content-type-options': 'nosniff' },
+  });
+  // Only a path the store could have written is looked up: 16 lowercase hex and the one extension.
+  app.on(['GET', 'HEAD'], `${DOCUMENT_MODULE_PATH}/:file`, async (c) => {
+    const sha = /^([0-9a-f]{16})\.js$/.exec(c.req.param('file'))?.[1];
+    const bytes = sha ? await islandModules.get(sha) : null;
+    return bytes ? islandFile(c, bytes, 'text/javascript; charset=utf-8') : c.notFound();
+  });
+  app.on(['GET', 'HEAD'], `${SPECULATION_RULES_PATH}/:file`, async (c) => {
+    const sha = /^([0-9a-f]{16})\.json$/.exec(c.req.param('file'))?.[1];
+    const bytes = sha ? await speculationRules.get(sha) : null;
+    return bytes ? islandFile(c, bytes, SPECULATION_RULES_CONTENT_TYPE) : c.notFound();
+  });
   /*
    * The offline file's code-view extras (lib/offline/extras): the source editor and prettier,
    * content-addressed like /story/*, and loaded from a file:// page (a `null`
