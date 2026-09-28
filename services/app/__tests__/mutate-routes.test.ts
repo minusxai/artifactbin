@@ -63,6 +63,20 @@ beforeEach(async () => {
 });
 
 describe('POST /a/<id>/mutate — the document\'s door', () => {
+  it('a browser operation key recovers the same reply without repeating the write', async () => {
+    const {ds, doc} = await poll();
+    const body = {mutation:'vote',args:{choice:'ramen'},operationKey:'browser-operation-once-0001'};
+    const first = await mutate(doc, body);
+    expect(first.status, await first.clone().text()).toBe(200);
+    const saved = await first.json();
+    const replay = await mutate(doc, body);
+    expect(await replay.json()).toEqual(saved);
+    expect((await getArtifactById(ds))!.version).toBe(2);
+    const mismatch = await mutate(doc, {...body,args:{choice:'tacos'}});
+    expect(mismatch.status).toBe(409);
+    expect((await mismatch.json()).error).toBe('idempotency_mismatch');
+  });
+
   it('an authenticated owner of a public document runs a declared mutation; the dataset gains a version and its queries see the row', async () => {
     const { ds, doc } = await poll();
     const before = (await getArtifactById(ds))!;

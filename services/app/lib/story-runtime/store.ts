@@ -382,6 +382,10 @@ export function createDataflowStore(
           if (!m) throw new Error(`this document declares no <Mutation name="${name}">`);
           const request = mutationRequestFor(m, { values, ...(row ? { row } : {}), ...(Object.hasOwn(values, '_value') ? { value: values._value } : {}), ...(localTables ? { localTables } : {}) });
           const call = writeCalls.get(id);
+          const notifying = (flow as typeof flow & {notifications?:Array<{on:string}>}).notifications?.some(rule=>rule.on===name);
+          if(call?.request.operationKey)request.operationKey=call.request.operationKey;
+          else if(notifying)request.operationKey=crypto.randomUUID();
+          if(notifying||request.operationKey)request.tz=call?.request.tz??localZone();
           if (call) call.request = request;
           answer = writeThrough(m, request);
         } catch (error) { answer = Promise.reject(error); }

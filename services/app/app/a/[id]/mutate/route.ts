@@ -1,3 +1,5 @@
+import {durableMutation,type MutationReceipt} from '@/lib/mutation-receipt';
+import {adaptMutationOperationReply,mutationInitiator,normalizeMutationOperation} from '@/lib/mutation-operation';
 import { canReadArtifact, getArtifactById, runDocumentMutation } from '@/lib/artifacts';
 import { refusesCrossSite } from '@/lib/auth';
 import { json, readJson } from '@/lib/http';
@@ -34,8 +36,10 @@ export async function POST(request: Request, ctx: { params: Promise<{ id: string
   const parsed = parseMutationRequest(body);
   if (parsed instanceof Response) return parsed;
 
-  const result = await runDocumentMutation(artifact, parsed, {userId:actor.viewer?.userId ?? null,tokenId:actor.tokenId,email:actor.viewer?.email});
+  const work=async(receipt?:MutationReceipt):Promise<Response>=>{
+  const result = await runDocumentMutation(artifact, parsed, {userId:actor.viewer?.userId ?? null,tokenId:actor.tokenId,email:actor.viewer?.email},receipt);
   if (!result.ok) {
+    if(String(result.reason)==='operation_key_required')return json({error:'operation_key_required'},400,CORS);
     switch (result.reason) {
       case 'unknown_mutation':
         return json({ error: 'unknown_mutation', detail: `this document declares no <Mutation name="${parsed.mutation}">` }, 400, CORS);
@@ -71,6 +75,15 @@ export async function POST(request: Request, ctx: { params: Promise<{ id: string
     200,
     CORS,
   );
+  };
+  const key=parsed.operationKey??request.headers.get('Idempotency-Key');
+  if(!key||(!actor.viewer?.userId&&!actor.tokenId))return work();
+  const principal={userId:actor.viewer?.userId??null,tokenId:actor.tokenId!};
+  const reply=await durableMutation(principal,request.url,key,normalizeMutationOperation({documentId:id,...parsed}),async receipt=>{const response=await work(receipt);return {status:response.status,body:await response.json()};},{initiator:mutationInitiator(principal,request.headers.has('Authorization')?'agent':'human')});
+  const adapted=adaptMutationOperationReply(reply,'browser');
+  // Older non-Notify writes store the dataset-shaped success in their atomic receipt.
+  if(adapted.status===200&&typeof adapted.body.id==='string')adapted.body={ok:true,dataset:adapted.body.id,version:adapted.body.version,affected:adapted.body.affected,rowCount:adapted.body.rowCount};
+  return json(adapted.body,adapted.status,CORS);
 }
 
 /**
@@ -84,7 +97,7 @@ export async function OPTIONS(_request: Request, _ctx: { params: Promise<{ id: s
     headers: {
       ...CORS,
       'Access-Control-Allow-Methods': 'POST, OPTIONS',
-      'Access-Control-Allow-Headers': 'Content-Type',
+      'Access-Control-Allow-Headers': 'Content-Type, Idempotency-Key',
       'Access-Control-Max-Age': '600',
     },
   });
