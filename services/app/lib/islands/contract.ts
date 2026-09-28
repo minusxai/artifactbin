@@ -14,6 +14,7 @@ import type { MutationRequest } from '@/lib/story/mutation-request';
 import type { DataflowStore, MutationAnswer } from '@/lib/story-runtime/store';
 import type { ServedResults, StoredMermaidImage, StoryViewer } from '@/lib/story-runtime/contract';
 import type { PersonCard } from '@artifactbin/contracts';
+import type { VizEnvelope } from '@/lib/validation/atlas-schemas';
 
 /* ────────────────────────────────────────────────────────────────────────────
  * What an island receives
@@ -61,6 +62,35 @@ export interface IslandContext extends IslandData, IslandWrites {
   writes: WriteStatusFeed;
   /** The underlying store — for the SPA and the author script; islands read through the accessors above. */
   store(): DataflowStore | null;
+  /**
+   * Where an island's overlay (Dialog, Popover, Tooltip content) portals: the first-party trusted
+   * UI container (components/TrustedUi) when the page has one — the same destination today's React
+   * kit uses — else null, and the overlay renders in place. Read when the overlay opens.
+   */
+  trustedPortal(): HTMLElement | null;
+  /** The lazy chart module (lib/islands/chart): Vega and lib/viz load on the first call, once per page. */
+  loadChart(): Promise<IslandChartModule>;
+}
+
+/* ────────────────────────────────────────────────────────────────────────────
+ * Charts drawn in the browser (a `<Question>` whose table changed, or on interaction)
+ * ──────────────────────────────────────────────────────────────────────────── */
+
+export interface IslandChartInput {
+  /** The chart box (the island's `data-mx-chart-slot` element); its server drawing is replaced once the view renders. */
+  element: HTMLElement;
+  envelope: VizEnvelope;
+  rows: TableResult['rows'];
+}
+
+export interface IslandChart {
+  /** New rows for the same spec: re-fed without a rebuild. */
+  update?(rows: TableResult['rows']): void;
+  destroy(): void;
+}
+
+export interface IslandChartModule {
+  mountChart(input: IslandChartInput): IslandChart;
 }
 
 /* ────────────────────────────────────────────────────────────────────────────
