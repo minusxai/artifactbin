@@ -85,15 +85,16 @@ describe('createFetchTransport', () => {
     await expect(createFetchTransport('/a/x/query', vi.fn(async () => new Response('{}', { status: 404 }))).people!(['usr_a'])).rejects.toThrow('404');
   });
 
-  it('hold(): GETs one import\'s rows by its name, credential-free, and refuses what the door refuses', async () => {
+  it('hold(): POSTs one import\'s name to the scoped door — a dataset\'s rows are no URL\'s business — credential-free, and refuses what the door refuses', async () => {
     const rows = { rows: { rows: [{ a: 1 }], columns: [{ name: 'a', type: 'number' }] } };
     const f = vi.fn(async () => ok({ tables: rows }));
     const t = createFetchTransport('/a/abc123/query', f);
     await expect(t.hold!('sales')).resolves.toEqual(rows);
-    const { u, init, q } = requestOf(f);
-    expect(u.pathname).toBe('/a/abc123/query');
-    expect(q).toEqual({ hold: 'sales' });
-    expect(init?.credentials).toBe('omit');
+    const [url, init] = f.mock.calls[0] as unknown as [string, RequestInit];
+    expect(url).toBe('/a/abc123/query');
+    // A simple request (text/plain, no credential): the POST door answers it with the anonymous read and CORS `*`, as the GET door does.
+    expect(init).toMatchObject({ method: 'POST', credentials: 'omit', headers: { 'Content-Type': 'text/plain' } });
+    expect(JSON.parse(String(init.body))).toEqual({ hold: 'sales' });
     const refused = createFetchTransport('/a/abc123/query', vi.fn(async () => new Response('{"error":"not_holdable"}', { status: 404 })));
     await expect(refused.hold!('sales')).rejects.toThrow('404');
   });

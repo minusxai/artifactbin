@@ -27,7 +27,7 @@ import { substituteRow } from '@/lib/story/row-scope';
 import { commentMetadata, instanceDomId } from '@/lib/story/repeat-identity';
 import type { CompiledDataflow } from '@/lib/story/compiled-dataflow';
 import type { DataflowState, Row, Scalar, TableResult } from '@/lib/story/dataflow';
-import type { DataflowStore } from '@/lib/story-runtime/store';
+import { ACCESS_PENDING, type DataflowStore } from '@/lib/story-runtime/store';
 import type { ServedResults, StoredMermaidImage } from '@/lib/story-runtime/contract';
 import type { PersonCard } from '@artifactbin/contracts';
 import { IslandProvider, useIsland } from './context';
@@ -126,6 +126,8 @@ export function createIslandRuntime(
   /** A counter per table, bumped when the data store REPLACES that table's result (a run landed). */
   const [versions, setVersions] = createStore<Record<string, number>>({});
   const [viewer, setViewer] = createSignal<IslandViewer>(data.viewer ?? null);
+  /** Every store change: what the write checks (`mutationUnavailable`, `mutating`) re-read on. */
+  const [checks, touch] = createSignal(undefined, { equals: false });
   const drawings = data.mermaidImages ?? {};
   let lastTables: Record<string, TableResult> = {};
 
@@ -142,6 +144,7 @@ export function createIslandRuntime(
       setState('errors', reconcile(snap.errors));
       setState('pending', reconcile(pending));
       setState('people', reconcile(snap.people ?? {}));
+      touch();
     });
   };
   sync();
@@ -173,6 +176,9 @@ export function createIslandRuntime(
       return { dataset: ref ?? '' };
     },
     writesUnavailable: () => data.readOnly ?? null,
+    // The server renders without a transport: it says what today's served page says until the check answers.
+    mutationUnavailable: (name) => { checks(); return store && !isServer ? store.mutationUnavailable(name) : ACCESS_PENDING; },
+    mutating: (name) => { checks(); return !!store?.mutating().has(name); },
     viewer,
     drawings: () => drawings,
     writes: (options.writes ?? (() => EMPTY_WRITE_FEED))(store),

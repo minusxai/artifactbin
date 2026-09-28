@@ -260,6 +260,8 @@ export async function artifactPageAnswer(request: Request, id: string, options: 
       // Any held credential: an account session, or the connection a guest owner holds. Either one is
       // who the write check and a private query answer for, so the page uses the credentialed doors.
       signedIn: kind !== 'none',
+      // The page queries its POST door as this request's reader: what they may hold, the page runs itself.
+      holder: { userId: actor.viewer?.userId ?? null, tokenId: actor.tokenId ?? null, email: actor.viewer?.email ?? null },
       doors: {
         queryUrl: queryPath(artifact.id),
         ...(!at && declaresMutations(row.source) ? { mutateUrl: mutatePath(artifact.id) } : {}),
