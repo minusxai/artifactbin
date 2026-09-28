@@ -95,3 +95,4 @@ it('mutation run jobs and one recipient result per run belong to the app',()=>{
  expect(renderedSchema().schema).toContain('CREATE UNIQUE INDEX IF NOT EXISTS idx_mutation_notifications_run_recipient ON app.mutation_notifications (mutation_run_id, recipient_id)');
  expect(renderedSchema().schema).toContain('context JSONB');
 });
+it('artifact-specific consent lives on the existing app relation',()=>{expect(declared()['app.relations']).toBe('app');expect(renderedSchema().schema).toContain('explicit_join BOOLEAN NOT NULL DEFAULT false');});

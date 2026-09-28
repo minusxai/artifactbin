@@ -544,6 +544,8 @@ const RELATIONS: Table = {
     { name: 'status', type: 'TEXT', notNull: true, default: "'accepted'" },
     { name: 'direction', type: 'TEXT', notNull: true, default: "'request'" },
     { name: 'initiated_by', type: 'TEXT' },
+    /** Artifact-specific self consent; automatic invitations never set this. */
+    { name: 'explicit_join', type: 'BOOLEAN', notNull: true, default: 'false' },
     { name: 'accepted_at', type: 'TIMESTAMPTZ' },
     { name: 'revision', type: 'INTEGER', notNull: true, default: '1' },
   ],

@@ -997,6 +997,7 @@ CREATE TABLE IF NOT EXISTS app.relations (
   status TEXT NOT NULL DEFAULT 'accepted',
   direction TEXT NOT NULL DEFAULT 'request',
   initiated_by TEXT,
+  explicit_join BOOLEAN NOT NULL DEFAULT false,
   accepted_at TIMESTAMPTZ,
   revision INTEGER NOT NULL DEFAULT 1,
   PRIMARY KEY (subject_kind, subject_id, verb, object_kind, object_id)
@@ -1021,6 +1022,8 @@ ALTER TABLE app.relations ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 
 ALTER TABLE app.relations ADD COLUMN IF NOT EXISTS direction TEXT NOT NULL DEFAULT 'request';
 
 ALTER TABLE app.relations ADD COLUMN IF NOT EXISTS initiated_by TEXT;
+
+ALTER TABLE app.relations ADD COLUMN IF NOT EXISTS explicit_join BOOLEAN NOT NULL DEFAULT false;
 
 ALTER TABLE app.relations ADD COLUMN IF NOT EXISTS accepted_at TIMESTAMPTZ;
 
