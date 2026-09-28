@@ -88,6 +88,18 @@ describe('tabs', () => {
       expect(host.querySelector('#c2')?.hasAttribute('style')).toBe(false);
     } finally { host.remove(); await react.unmount(); }
   });
+  it('in a document that runs queries, the active panel drops its mount style after the first frame, as today\'s reader does when the results land', async () => {
+    const withQueries = { ...fakeIsland(), store: () => ({ flow: { queries: [{ name: 'q' }] } }) as never };
+    const host = document.createElement('div');
+    const dispose = render(() => <IslandProvider value={withQueries}>{view()}</IslandProvider>, host);
+    const plain = mount(view);
+    try {
+      expect(host.querySelector('#c1')?.getAttribute('style')).toBe('animation-duration:0s');
+      await frame();
+      expect(host.querySelector('#c1')?.getAttribute('style')).toBe('');
+      expect(plain.host.querySelector('#c1')?.getAttribute('style'), 'no queries: nothing re-renders today, the mount style stays').toBe('animation-duration:0s');
+    } finally { dispose(); plain.dispose(); }
+  });
   it('keyboard: focusing the tablist moves to the active tab; Shift+Tab takes the tablist out of the tab order until focus leaves', () => {
     const { host } = mount(view);
     document.body.append(host);
