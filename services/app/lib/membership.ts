@@ -29,7 +29,7 @@ async function account(actor: RoleActor, artifact: ArtifactRow) {
   if (!user || user.kind==='guest') fail('Sign in to participate');
   return actor.userId!;
 }
-const memberFields = 'm.user_id,u.username,u.name,m.status,m.direction,m.initiated_by,m.joined_at';
+const memberFields = 'm.user_id,u.username,u.name,m.status,m.direction,m.initiated_by,m.joined_at,m.explicit_join';
 export async function membershipState(actor: RoleActor, id: string): Promise<MembershipState> {
   const {role,artifact}=await opened(actor,id), db=await getDb();
   const rows=(await db.query<ArtifactMember>(`SELECT ${memberFields} FROM ${JOIN_RELATIONS} m JOIN users u ON u.id=m.user_id WHERE m.artifact_id=$1 AND (m.status='accepted' OR m.user_id=$2 OR ($3 AND m.status='pending')) ORDER BY m.joined_at NULLS LAST,u.username`,[id,actor.userId,canEdit(role)])).rows;
