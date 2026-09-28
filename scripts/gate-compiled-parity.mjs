@@ -23,7 +23,9 @@
  *  - A structural mismatch (tag or element-child count) is reported and that
  *    subtree is not descended.
  *  - Served-element survival and DOM mutations during hydration are reported for
- *    both sides; the compiled side must keep every served element.
+ *    both sides; the compiled side must keep every served element except an undrawn
+ *    Mermaid figure's placeholder, which both pages replace with the drawing
+ *    (lib/compiled-parity-diff survivalOf, the one exemption).
  *  - One interaction sequence on the kit fixture (a tab, an accordion), compared again.
  *
  * Fixtures: the page-speed set (scripts/fixtures/page-speed) and the kitchen sink
@@ -41,7 +43,7 @@ import { createChecker } from './lib/assert.mjs';
 import { startDocument, pageHeaders } from './lib/start-doc.mjs';
 import { publishPageSpeedFixtures } from './fixtures/page-speed/index.mjs';
 import { kitchenSinkMarkup } from './lib/kitchen-sink-doc.mjs';
-import { diffTrees as diff } from './lib/compiled-parity-diff.mjs';
+import { diffTrees as diff, survivalOf } from './lib/compiled-parity-diff.mjs';
 
 const B = process.argv[2] ?? 'http://localhost:3030';
 const check = createChecker('compiled-parity');
@@ -60,7 +62,10 @@ const PROBE = () => {
   // (hydration) runs before DCL. The parser only ever INSERTS, so attribute, text and removal
   // records are always script work; insertions count only after DCL.
   const s = (window.__sv = { served: [], mutations: 0, mutated: [], dcl: false });
-  const tag = (n) => { if (n.nodeType !== 1 || n.__served) return; n.__served = true; s.served.push(n); for (const c of n.querySelectorAll('*')) if (!c.__served) { c.__served = true; s.served.push(c); } };
+  // An undrawn Mermaid figure's placeholder, noted as parsed (lib/compiled-parity-diff survivalOf: the one exemption).
+  const undrawn = (n) => { const p = n.closest('p[role="status"]'); return !!p && !!p.parentElement?.matches('figure[data-mx-mermaid-state="pending"]'); };
+  const mark = (n) => { n.__served = true; n.__undrawnMermaid = undrawn(n); s.served.push(n); };
+  const tag = (n) => { if (n.nodeType !== 1 || n.__served) return; mark(n); for (const c of n.querySelectorAll('*')) if (!c.__served) mark(c); };
   const inStory = (t) => t.closest?.('#mx-story-root') || t.parentElement?.closest?.('#mx-story-root');
   new MutationObserver((l) => {
     for (const m of l) {
@@ -149,7 +154,9 @@ try {
       const response = await page.goto(`${B}/a/${f.id}/raw?reader=${route}`, { waitUntil: 'load' });
       const served = response?.headers()[READER_HEADER] ?? 'absent';
       await settle(page);
-      const survival = await page.evaluate(() => { const s = window.__sv; const root = document.getElementById('mx-story-root'); return { served: s.served.length, survived: s.served.filter((n) => n.isConnected && root.contains(n)).length, mutations: s.mutations, mutated: s.mutated }; });
+      const survival = await page.evaluate(() => { const s = window.__sv; const root = document.getElementById('mx-story-root'); return { records: s.served.map((n) => ({ kept: n.isConnected && root.contains(n), undrawnMermaid: !!n.__undrawnMermaid })), mutations: s.mutations, mutated: s.mutated }; });
+      Object.assign(survival, survivalOf(survival.records));
+      delete survival.records;
       const tree = await page.evaluate(SNAPSHOT, STYLE);
       let after = null;
       if (INTERACTIONS[f.key]) { await INTERACTIONS[f.key](page); after = await page.evaluate(SNAPSHOT, STYLE); }
@@ -165,7 +172,7 @@ try {
       check(d[kind].length === 0, `${f.key}: no ${kind} differences (${d[kind].length}${d[kind].length ? `: ${d[kind].slice(0, 3).join(' | ')}` : ''})`);
     }
     const s = snaps.compiled.survival;
-    check(s.served > 0 && s.survived === s.served, `${f.key}: every served element survives hydration on the compiled page (${s.survived}/${s.served})`);
+    check(s.ok, `${f.key}: every served element survives hydration on the compiled page (${s.survived}/${s.served}${s.exempt ? `, ${s.exempt} in an undrawn Mermaid placeholder` : ''})`);
     check.note(`${f.key}: DOM mutations during hydration — legacy ${snaps.legacy.survival.mutations}, compiled ${s.mutations}${s.mutated.length ? ` (${s.mutated.join(', ')})` : ''}`);
     check(snaps.compiled.errors.length === 0, `${f.key}: no page errors on the compiled page (${snaps.compiled.errors[0] ?? 'clean'})`);
     if (snaps.legacy.after && snaps.compiled.after) {

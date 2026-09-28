@@ -4,7 +4,7 @@
  * page — the same rule as the unit helper (services/app/lib/islands/__tests__/kit-parity.ts).
  */
 import { describe, expect, it } from 'vitest';
-import { diffTrees } from '../lib/compiled-parity-diff.mjs';
+import { diffTrees, survivalOf } from '../lib/compiled-parity-diff.mjs';
 
 const el = (attrs = {}, refs = {}, kids = []) => ({ tag: 'button', attrs, refs, style: { color: 'red' }, box: [0, 0, 10, 10], text: '', kids });
 const legacyTab = (controls, status) => [el({ role: 'tab', 'aria-controls': controls }, { 'aria-controls': status })];
@@ -38,5 +38,20 @@ describe('diffTrees', () => {
     const b = [{ ...el({}, {}, []), text: 'x', style: { color: 'blue' }, box: [0, 0, 11, 10] }];
     const d = diffTrees(a, b);
     expect([d.structure.length, d.text.length, d.style.length, d.box.length]).toEqual([1, 1, 1, 1]);
+  });
+});
+
+describe('survivalOf', () => {
+  const kept = { kept: true, undrawnMermaid: false };
+  it('passes when every served element is kept', () => {
+    expect(survivalOf([kept, kept])).toMatchObject({ served: 2, survived: 2, exempt: 0, ok: true });
+  });
+  it('excuses only an undrawn Mermaid placeholder that was replaced', () => {
+    expect(survivalOf([kept, { kept: false, undrawnMermaid: true }])).toMatchObject({ served: 2, survived: 1, exempt: 1, ok: true });
+    expect(survivalOf([kept, { kept: false, undrawnMermaid: false }])).toMatchObject({ survived: 1, exempt: 0, ok: false });
+    expect(survivalOf([{ kept: false, undrawnMermaid: true }, { kept: false, undrawnMermaid: false }]).ok).toBe(false);
+  });
+  it('fails a page that served nothing', () => {
+    expect(survivalOf([]).ok).toBe(false);
   });
 });

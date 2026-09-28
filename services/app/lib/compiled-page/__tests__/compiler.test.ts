@@ -192,6 +192,40 @@ describe('unit parity with today\'s render', () => {
     expect(dom(page.html).querySelector('#m')?.getAttribute('class')).toContain('flex h-full w-full flex-col');
     expect(columnParity(page.html, source)).toEqual([]);
   });
+  it('a kit component served around an island writes its class as React does (no trailing space, no empty class)', async () => {
+    const source = '<Helmet><Value name="who" type="string" default="Ada" /></Helmet><Card id="c"><CardContent id="cc" className="gap-4"><p id="p">{$who}</p></CardContent></Card>';
+    const page = await compilePage(await inputOf(source), loadCompilerBuild());
+    const react = new JSDOM(`<div>${reactRender(source)}</div>`).window.document;
+    for (const id of ['c', 'cc']) expect(dom(page.html).querySelector(`#${id}`)?.getAttribute('class'), id).toBe(react.querySelector(`#${id}`)?.getAttribute('class'));
+    expect(page.html).not.toMatch(/ class="[^"]* "/);
+  });
+  it('serves bound controls as today\'s live reader serves them: no binding stamp, no read-only flag, a textarea\'s value as its content', async () => {
+    const page = await compilePage(await inputOf('<Helmet><Value name="note" type="string" default="Two &amp; more" /><Value name="n" type="number" default={3} /></Helmet><div id="w"><Textarea label="Note" value="$note" id="ta" /><Input label="N" value="$n" id="in" /><Slider label="S" value="$n" min={0} max={10} id="sl" /></div>'), loadCompilerBuild());
+    const root = dom(page.html);
+    expect(page.html).not.toContain('data-mx-bound');
+    expect(root.querySelectorAll('[readonly]')).toHaveLength(0);
+    const textarea = root.querySelector('textarea')!;
+    expect(textarea.hasAttribute('value')).toBe(false);
+    expect(textarea.textContent).toBe('Two & more');
+    expect(root.querySelector('#in input')?.getAttribute('value')).toBe('3');
+  });
+  it('a guest\'s person components are served with the fallback\'s class, merged with the author\'s as today', async () => {
+    const page = await compilePage(await inputOf('<div id="w"><User userId="$_me.id" fallback="a guest" className="text-red-500" id="u" /><UserImage userId="$_me.id" size="lg" fallback="no picture" id="i" /></div>'), loadCompilerBuild());
+    const root = dom(page.html);
+    expect(root.querySelector('#u')?.getAttribute('class')).toBe('text-red-500');
+    expect(root.querySelector('#u')?.textContent).toBe('a guest');
+    expect(root.querySelector('#i')?.getAttribute('class')).toBe('text-muted-foreground');
+  });
+  it('writing a spread class as React does never moves hydration keys: the children still render after their element', async () => {
+    const source = `function Box(p) { return <span data-slot="box" {...p} />; }
+function Leaf() { return <i>leaf</i>; }
+export function render(withClass) { return renderToString(() => withClass ? <Box class="x y"><Leaf /><Leaf /></Box> : <Box><Leaf /><Leaf /></Box>, { renderId: 's0-' }); }
+import { renderToString } from 'solid-js/web';`;
+    const mod = await evaluateModule(await transformSolid(source, { generate: 'ssr', hydratable: true }), ssrImportTable(), 'test/keys.js') as { render: (withClass: boolean) => string };
+    const keys = (html: string) => [...html.matchAll(/data-hk="([^"]+)"/g)].map((m) => m[1]);
+    expect(keys(mod.render(true))).toEqual(keys(mod.render(false)));
+    expect(mod.render(true)).toContain('class="x y"');
+  });
   it('deck: the compiled column is today\'s render; the rail and present bar sit around it', async () => {
     const source = fixture('deck.jsx');
     const page = await compilePage(await inputOf(source, 'deck'), loadCompilerBuild());
