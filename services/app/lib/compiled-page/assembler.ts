@@ -36,6 +36,7 @@ import { fontPreloadTags } from '@/lib/story/first-screen-fonts';
 import { inlineStoryElement } from '@/lib/story/inline-story-html';
 import { escapeHtml, renderReaderChrome } from '@/lib/story/reader-chrome';
 import { APP_BAR_H } from '@/lib/story/edit-bar';
+import { APP_FONT_FACES, APP_SHELL_FONT_PRELOADS } from '@/lib/app-fonts';
 import { DOCUMENT_ROOT_CSS } from '@/lib/story/document-styles';
 import {
   CHART_SLOT_ATTR, CHART_STATE_ATTR, ISLAND_DATA_ID, SIGNED_IN_HINT_ATTR, SPA_IDLE_ATTR, SPECULATION_RULES_HEADER,
@@ -58,6 +59,10 @@ export const assembleReaderPage: AssembleReaderPage = (input: AssembleInput): As
   const behaviorSrcs = unique(compiled.behaviors.map((behavior) => behaviorUrl(build, behavior)).filter((url): url is string => !!url));
   const prefetch = unique(compiled.links.prefetch.filter(isNavigable));
   const rules = speculationRulesOf(compiled.links.prerender);
+  // The app shell normally defines this body face in shell.css. A compiled first paint
+  // runs before that stylesheet, while Mermaid measures sequence labels against body.
+  const appMonoFaces = spa ? APP_FONT_FACES.filter((face) => face.family === 'JetBrains Mono Variable' && face.style === 'normal')
+    .map((face) => `@font-face{font-family:"${face.family}";font-style:${face.style};font-display:${face.display};font-weight:${face.weight};src:url("${face.url}") format("${face.format}");${face.unicodeRange ? `unicode-range:${face.unicodeRange};` : ''}}`).join('') : '';
 
   const head =
     '<meta charset="utf-8">'
@@ -69,13 +74,13 @@ export const assembleReaderPage: AssembleReaderPage = (input: AssembleInput): As
     + (chrome ? '' : '<base target="_top">')
     + `<title>${escapeHtml(input.title)}</title>`
     + headMetadata(input.head)
-    + fontPreloadTags(input.fontPreloads)
+    + fontPreloadTags(unique([...input.fontPreloads, ...(spa ? APP_SHELL_FONT_PRELOADS : [])]))
     + islandPreloads.map(modulePreload).join('')
     + prefetch.map((href) => `<link rel="prefetch" href="${escapeHtml(href)}" as="document">`).join('')
     + (input.sheets
       // Today's standalone document's sheets, exactly (lib/story/document-styles).
       ? `<style>${DOCUMENT_ROOT_CSS}</style>` + input.sheets.map((sheet) => styleTag(sheet.attr, sheet.css)).join('')
-      : '<style>:root{--mx-vh:100vh}body{margin:0}</style>')
+      : `<style>${appMonoFaces}:root{--mx-vh:100vh${spa ? ';--font-mono:"JetBrains Mono Variable",ui-monospace,"SF Mono",Menlo,monospace' : ''}}body{margin:0${spa ? ';font-size:14px;font-family:var(--font-mono)' : ''}}</style>`)
     + (chrome ? styleTag('data-mx-chrome', STORY_CHROME_CSS) : '')
     // The page the app adopts (/a/:id): its bar is the top of the page from a phone's width up, so the
     // story reserves it before first paint and the app's arrival moves nothing. On <body>: the story

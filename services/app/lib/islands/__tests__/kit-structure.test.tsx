@@ -148,6 +148,22 @@ describe('accordion', () => {
 });
 
 describe('dialog', () => {
+  it('writes an authored boolean open value when its trigger and close controls are used', () => {
+    const [open, setOpen] = createSignal(false);
+    const host = document.createElement('div');
+    document.body.append(host);
+    const dispose = render(() => <IslandProvider value={{ ...fakeIsland(), value: () => open(), setValue: (_name, next) => setOpen(next === true) }}>
+      <Dialog open={'$sprint_open' as never}><DialogTrigger id="open-sprint">Add Sprint</DialogTrigger><DialogContent aria-label="Add sprint"><DialogClose>Cancel</DialogClose></DialogContent></Dialog>
+    </IslandProvider>, host);
+    try {
+      expect(host.querySelector('[role="dialog"]')).toBeNull();
+      host.querySelector<HTMLButtonElement>('#open-sprint')!.click();
+      expect(open()).toBe(true);
+      expect(host.querySelector('[role="dialog"]')).not.toBeNull();
+      host.querySelector<HTMLButtonElement>('dialog button')!.click();
+      expect(open()).toBe(false);
+    } finally { dispose(); host.remove(); }
+  });
   it('trigger conventions match, opening renders a modal dialog, close returns to the served DOM', () => {
     const { host, dispose } = mount(() => <Dialog><DialogTrigger id="trigger" wrapsControl={true}><Button id="add" class={cls('Button')}>Add task</Button></DialogTrigger><DialogContent aria-label="Add a task" class={cls('DialogContent')}><DialogClose class={cls('DialogClose')}>Cancel</DialogClose></DialogContent></Dialog>);
     document.body.append(host);

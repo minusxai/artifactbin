@@ -61,6 +61,60 @@ beforeEach(() => { document.documentElement.setAttribute('data-mx-ready', ''); e
 afterEach(() => { document.documentElement.removeAttribute('data-mx-ready'); vi.restoreAllMocks(); });
 
 describe('Mermaid, drawn by the reader', () => {
+  it('reads the document mode while a compiled island is mounted detached', async () => {
+    fakeCanvas();
+    document.documentElement.classList.add('dark');
+    const host = document.createElement('div');
+    const island = fakeIsland();
+    let dispose!: () => void;
+    try {
+      dispose = render(() => <IslandProvider value={island}><Mermaid code={CODE} colorMode="light" /></IslandProvider>, host);
+      await vi.waitFor(() => expect(engine.renderMermaid).toHaveBeenCalled());
+      expect(engine.renderMermaid.mock.calls[0]?.[1].dark).toBe(true);
+    } finally { dispose?.(); document.documentElement.classList.remove('dark'); }
+  });
+  it('redraws after a detached island joins a themed story root', async () => {
+    fakeCanvas();
+    const root = themed();
+    root.classList.add('dark');
+    const host = document.createElement('div');
+    const island = fakeIsland();
+    let dispose!: () => void;
+    try {
+      dispose = render(() => <IslandProvider value={island}><Mermaid code={CODE} colorMode="light" /></IslandProvider>, host);
+      await vi.waitFor(() => expect(engine.renderMermaid).toHaveBeenCalled());
+      root.append(host);
+      await vi.waitFor(() => expect(engine.renderMermaid.mock.calls.at(-1)?.[1].dark).toBe(true));
+    } finally { dispose?.(); root.remove(); }
+  });
+  it('waits for a per-visit mode override before the first engine draw', async () => {
+    fakeCanvas();
+    document.documentElement.setAttribute('data-mx-reader-mode', 'dark');
+    const host = themed();
+    host.classList.add('light');
+    const island = fakeIsland();
+    let dispose!: () => void;
+    try {
+      dispose = render(() => <IslandProvider value={island}><Mermaid code={CODE} colorMode="light" /></IslandProvider>, host);
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      expect(engine.renderMermaid).not.toHaveBeenCalled();
+      host.classList.replace('light', 'dark');
+      await vi.waitFor(() => expect(engine.renderMermaid.mock.calls.at(-1)?.[1].dark).toBe(true));
+      expect(engine.renderMermaid).toHaveBeenCalledTimes(1);
+    } finally { dispose?.(); host.remove(); document.documentElement.removeAttribute('data-mx-reader-mode'); }
+  });
+  it('uses the live reader mode after the document theme changes', async () => {
+    fakeCanvas();
+    const host = themed();
+    const island = fakeIsland();
+    let dispose!: () => void;
+    try {
+      dispose = render(() => <IslandProvider value={island}><Mermaid code={CODE} colorMode="light" /></IslandProvider>, host);
+      await vi.waitFor(() => expect(engine.renderMermaid).toHaveBeenCalled());
+      host.classList.add('dark');
+      await vi.waitFor(() => expect(engine.renderMermaid.mock.calls.at(-1)?.[1].dark).toBe(true));
+    } finally { dispose?.(); host.remove(); }
+  });
   it('hands Mermaid the theme as hex, resolved through the canvas as React does', async () => {
     fakeCanvas();
     const both = await mountBoth();
@@ -94,6 +148,73 @@ describe('Mermaid, drawn by the reader', () => {
 
 describe('Mermaid, from a stored drawing', () => {
   const stored = { [mermaidImageKey(CODE, 'light')]: { src: '/assets/mermaid/abc.svg', type: 'flowchart-v2', width: 856.234375, height: 120, palette: 'p' } };
+  it('selects the stored image for a persisted reader mode override before the root changes', async () => {
+    document.documentElement.setAttribute('data-mx-reader-mode', 'dark');
+    const host = themed();
+    host.classList.add('light');
+    const island = fakeIsland();
+    island.drawings = () => ({
+      [mermaidImageKey(CODE, 'light')]: { ...stored[mermaidImageKey(CODE, 'light')] },
+      [mermaidImageKey(CODE, 'dark')]: { src: '/assets/mermaid/dark.svg', type: 'flowchart-v2', width: 800, height: 110, palette: 'd' },
+    }) as never;
+    let dispose!: () => void;
+    try {
+      dispose = render(() => <IslandProvider value={island}><Mermaid code={CODE} colorMode="light" /></IslandProvider>, host);
+      await vi.waitFor(() => expect(host.querySelector('img')?.getAttribute('src')).toBe('/assets/mermaid/dark.svg'));
+      host.classList.replace('light', 'dark');
+      await vi.waitFor(() => expect(document.documentElement.hasAttribute('data-mx-reader-mode')).toBe(false));
+      host.classList.replace('dark', 'light');
+      await vi.waitFor(() => expect(host.querySelector('img')?.getAttribute('src')).toBe('/assets/mermaid/abc.svg'));
+    } finally { dispose?.(); host.remove(); document.documentElement.removeAttribute('data-mx-reader-mode'); }
+  });
+  it('switches stored images with the reader mode', async () => {
+    const host = themed();
+    host.classList.add('light');
+    const island = fakeIsland();
+    island.drawings = () => ({
+      [mermaidImageKey(CODE, 'light')]: { ...stored[mermaidImageKey(CODE, 'light')] },
+      [mermaidImageKey(CODE, 'dark')]: { src: '/assets/mermaid/dark.svg', type: 'flowchart-v2', width: 800, height: 110, palette: 'd' },
+    }) as never;
+    let dispose!: () => void;
+    try {
+      dispose = render(() => <IslandProvider value={island}><Mermaid code={CODE} colorMode="light" /></IslandProvider>, host);
+      expect(host.querySelector('img')?.getAttribute('src')).toBe('/assets/mermaid/abc.svg');
+      host.classList.replace('light', 'dark');
+      await vi.waitFor(() => expect(host.querySelector('img')?.getAttribute('src')).toBe('/assets/mermaid/dark.svg'));
+    } finally { dispose?.(); host.remove(); }
+  });
+  it('selects the dark stored image on first mount inside a dark story', async () => {
+    const host = themed();
+    host.classList.add('dark');
+    const island = fakeIsland();
+    island.drawings = () => ({
+      [mermaidImageKey(CODE, 'light')]: { ...stored[mermaidImageKey(CODE, 'light')] },
+      [mermaidImageKey(CODE, 'dark')]: { src: '/assets/mermaid/dark.svg', type: 'flowchart-v2', width: 800, height: 110, palette: 'd' },
+    }) as never;
+    let dispose!: () => void;
+    try {
+      dispose = render(() => <IslandProvider value={island}><Mermaid code={CODE} colorMode="light" /></IslandProvider>, host);
+      await vi.waitFor(() => expect(host.querySelector('img')?.getAttribute('src')).toBe('/assets/mermaid/dark.svg'));
+    } finally { dispose?.(); host.remove(); }
+  });
+  it('uses the story root mode when a nested author element has a mode class', async () => {
+    const story = themed();
+    story.setAttribute('data-mx-inline-story', '');
+    story.classList.add('dark');
+    const nested = document.createElement('div');
+    nested.classList.add('light');
+    story.append(nested);
+    const island = fakeIsland();
+    island.drawings = () => ({
+      [mermaidImageKey(CODE, 'light')]: { ...stored[mermaidImageKey(CODE, 'light')] },
+      [mermaidImageKey(CODE, 'dark')]: { src: '/assets/mermaid/dark.svg', type: 'flowchart-v2', width: 800, height: 110, palette: 'd' },
+    }) as never;
+    let dispose!: () => void;
+    try {
+      dispose = render(() => <IslandProvider value={island}><Mermaid code={CODE} colorMode="light" /></IslandProvider>, nested);
+      await vi.waitFor(() => expect(nested.querySelector('img')?.getAttribute('src')).toBe('/assets/mermaid/dark.svg'));
+    } finally { dispose?.(); story.remove(); }
+  });
   it('uses the dark page before the island host is mounted, even when compiled props began light', async () => {
     const host = themed();
     host.setAttribute('data-mx-inline-story', '');

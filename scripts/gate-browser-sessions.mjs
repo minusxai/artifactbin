@@ -8,8 +8,10 @@ import { spawn } from 'node:child_process';
 import { fixtureFetch as fetch } from './lib/fixture-http.mjs';
 import { connectAgent } from './lib/cli-connection.mjs';
 import { containmentExpectation, containmentObserved } from './lib/session-containment.mjs';
+import { compiledReader } from './lib/gate-reader.mjs';
 
 const base = process.argv[2] ?? 'http://localhost:3030';
+const readerQuery = compiledReader ? '?reader=compiled' : '';
 const token = (await connectAgent(base)).token;
 const scratch = await mkdtemp(path.join(tmpdir(), 'afbin-sessions-gate-'));
 const headers = { Authorization: `Bearer ${token}`, 'content-type': 'application/json' };
@@ -49,7 +51,7 @@ try {
   }
   const first = await cli(['script', 'new'], `
     const opened = await Promise.all(${JSON.stringify(artifacts)}.map(async id => {
-      const page = await context.newPage(); await page.goto('/a/'+id);
+      const page = await context.newPage(); await page.goto('/a/'+id+${JSON.stringify(readerQuery)});
       await page.waitForFunction(() => Boolean(window.mx));
       return page;
     }));
@@ -99,7 +101,7 @@ try {
   const agentMarkup = '<Helmet><Value name="region" default="East"/><Value name="taskTitle" default="untouched"/><Value name="tasks" type="table" value={[{title:"Existing"}]}/><Query name="sales">{`select $region || \' total\' as name, case when $region=\'West\' then 200 else 100 end as revenue`}</Query><Mutation name="addTask">{`insert into tasks (title) values ($taskTitle)`}</Mutation></Helmet><h1>Agent transfer fixture</h1><Iframe title="Agent widget" height={240}><select id="region" aria-label="Region"><option value="East">East</option><option value="West">West</option></select><table><tbody id="rows"/></table><input id="label" aria-label="Task title"/><button id="add">Add task</button><p id="error"/><script>{'+JSON.stringify(widgetSource)+'}</script></Iframe>';
   const published = await fetch(`${base}/api/artifacts`, {method:'POST',headers,body:JSON.stringify({markup:agentMarkup})});
   const agentArtifact = await published.json(); assert(agentArtifact.id,JSON.stringify(agentArtifact));
-  const openSource = (await readFile(new URL('./fixtures/mx-agent/open.js',import.meta.url),'utf8')).replace('/a/sales01','/a/'+agentArtifact.id);
+  const openSource = (await readFile(new URL('./fixtures/mx-agent/open.js',import.meta.url),'utf8')).replace('/a/sales01','/a/'+agentArtifact.id+readerQuery);
   const opened = await cli(['script','new'],openSource); ids.push(opened.session_id);
   assert.equal(opened.status,'completed',JSON.stringify(opened));
   const agentPageId = opened.pages[0].page_id;

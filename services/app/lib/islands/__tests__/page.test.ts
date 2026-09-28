@@ -30,6 +30,7 @@ afterEach(() => {
   FakeEventSource.made = [];
   window.name = '';
   document.documentElement.classList.remove('mx-framed', 'dark');
+  document.documentElement.removeAttribute('data-mx-reader-mode');
   vi.unstubAllGlobals();
 });
 
@@ -60,12 +61,14 @@ describe('startPage', () => {
     expect(document.documentElement.classList.contains('dark')).toBe(true);
     expect(document.documentElement.classList.contains('light')).toBe(false);
     expect(document.getElementById('mx-story-root')!.className).toBe('dark');
+    expect(document.documentElement.getAttribute('data-mx-reader-mode')).toBe('dark');
     expect(window.name, 'the override is per visit: it stays for the next reload').toContain('"mode":"dark"');
 
     window.name = '';
     page();
     stops.push(startPage());
     expect(document.documentElement.className).toBe('light');
+    expect(document.documentElement.hasAttribute('data-mx-reader-mode')).toBe(false);
   });
 
   it('holds the live stream of a page with no island module, and leaves it to boot on one that has', () => {

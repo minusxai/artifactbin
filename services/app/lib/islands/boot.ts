@@ -42,6 +42,9 @@ import { createWriteStatusFeed } from './writes';
 import { installStatus } from './kit/status';
 import { loadChart } from './chart';
 
+/** Page behaviour installs a cleanup here; boot owns its lifetime. */
+const PUBLIC_MX_KEY = '__mxPublicApi';
+
 /**
  * One island of the per-document module: its hydration key prefix (`IslandRef.renderId`), its component,
  * and its KEY — a digest of the island's definition (the compiler's `islandKey`), equal across versions
@@ -220,6 +223,7 @@ export function boot(input: IslandModule | readonly IslandEntry[], win: Window =
   let ready = false;
   let disposed = false;
   let stopAuthor = () => {};
+  const uninstallMx = () => (root as HTMLElement & { [PUBLIC_MX_KEY]?: () => void })[PUBLIC_MX_KEY]?.();
   let authorGeneration = 0;
   const restartAuthor = async (source: string | null) => {
     const generation = ++authorGeneration;
@@ -237,6 +241,7 @@ export function boot(input: IslandModule | readonly IslandEntry[], win: Window =
     setMode: (next) => {
       if (disposed || next === mode || next === 'read') return;
       stopAuthor();
+      uninstallMx();
       // The interpreter owns edits and their live updates. A version ping from this compiled
       // lifetime must not reload the page while its editor is saving a new source.
       stopLive();
@@ -250,6 +255,7 @@ export function boot(input: IslandModule | readonly IslandEntry[], win: Window =
       if (disposed) return;
       disposed = true;
       stopAuthor();
+      uninstallMx();
       disposeIslands();
       stopLive();
       stopUrl();

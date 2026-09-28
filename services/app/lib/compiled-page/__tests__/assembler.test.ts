@@ -30,6 +30,12 @@ const input = (over: Partial<AssembleInput> = {}): AssembleInput => ({
 const dom = (page: { html: string }) => new JSDOM(page.html).window.document;
 
 describe('assembleReaderPage', () => {
+  it('uses the app reader body font before the idle app shell loads', () => {
+    const app = assembleReaderPage(input({ spa: { entry: '/assets/main-abc.js', preload: [] } }));
+    expect(app.html).toContain('body{margin:0;font-size:14px;font-family:var(--font-mono)}');
+    expect(app.html).toContain('--font-mono:"JetBrains Mono Variable",ui-monospace,"SF Mono",Menlo,monospace');
+    expect(app.html).toContain('@font-face{font-family:"JetBrains Mono Variable"');
+  });
   it('serves the outline beside the column with legacy markup before the SPA loads', () => {
     const entries = [{ level: 2 as const, title: 'One & all', path: '0.0' }, { level: 3 as const, title: 'Part', path: '0.1' }];
     const page = assembleReaderPage(input({ compiled: compiled({ outline: entries, outlinePlan: true }), story: '<div class="mx-doc"><h2 data-mx-ast="0.0">One &amp; all</h2></div>' }));

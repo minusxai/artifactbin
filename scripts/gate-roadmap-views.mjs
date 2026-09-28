@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { chromium } from 'playwright';
 import { createEditableTableFixture } from './lib/editable-table-fixture.mjs';
 import { startDocument, becomeOwner } from './lib/start-doc.mjs';
+import { readerUrl } from './lib/gate-reader.mjs';
 const base = process.argv[2] ?? 'http://localhost:3030';
 const rows = Array.from({length:15}, (_,i) => ({id:i+1,item:`Task ${i+1}`,owner:'TBD',hours:2,depends_on:i===1 || i===2 ? '["1"]' : '[]',tags:'[]',status:'backlog',sprint:''}));
 const fixture = await createEditableTableFixture(base, 15, {workspace:true,rows,seed:await startDocument(base)});
@@ -12,7 +13,7 @@ try {
   const ownerPage = await browser.newPage({viewport:{width:1450,height:950}});
   ownerPage.on('pageerror', error => console.error(error.message));
   await becomeOwner(ownerPage,base,fixture.token);
-  await ownerPage.goto(fixture.url);
+  await ownerPage.goto(readerUrl(fixture.url));
   await ownerPage.locator('[data-mx-inline-story]').waitFor();
   let page = await artifactDocument(ownerPage);
   const switchView = async name => {
@@ -29,7 +30,8 @@ try {
   await switchView('Sprint');
   await ownerPage.waitForFunction(()=>new URLSearchParams(location.search).get('$view_mode')==='sprint');
   await page.locator('#view-sprint').getByLabel('Add Sprint',{exact:true}).click();
-  const dialog=ownerPage.locator('[data-mx-inline-story]').getByRole('dialog',{name:'Add sprint'});
+  // Once the app adopts the island root, its dialog uses the trusted UI portal outside the story.
+  const dialog=ownerPage.getByRole('dialog',{name:'Add sprint'});
   await dialog.waitFor();
   await page.getByLabel('Sprint name',{exact:true}).fill('Planning week');
   await page.getByLabel('Sprint deadline',{exact:true}).fill('2026-09-14');
@@ -39,7 +41,7 @@ try {
   await page.locator('#view-sprint').getByLabel('Add Sprint',{exact:true}).click();
   await page.getByLabel('Sprint name',{exact:true}).fill(' planning WEEK ');
   await page.getByLabel('Create sprint',{exact:true}).click();
-  const refusal=page.getByRole('alert');await refusal.waitFor();
+  const refusal=dialog.getByRole('alert');await refusal.waitFor();
   assert.match(await refusal.textContent(),/affected|changed|mutation/i);
   assert.equal(await dialog.isVisible(),true);
   await page.getByLabel('Cancel sprint',{exact:true}).click();

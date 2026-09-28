@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import { chromium } from 'playwright';
 import { becomeOwner, startDocument } from './lib/start-doc.mjs';
 import { startMailSink, loginViaEmail } from './lib/mail-login.mjs';
+import { compiledReader } from './lib/gate-reader.mjs';
 
 const base = process.argv[2] ?? 'http://localhost:3030';
 const first = await startDocument(base);
@@ -21,7 +22,7 @@ try {
     new URL(response.url()).pathname === `/api/page/artifact/${id}/view` && response.request().method() === 'POST');
   const initialView = viewReport(first.id);
   await page.goto(`${base}/a/${first.id}`);
-  await page.locator('body > #root [data-mx-inline-story]').waitFor();
+  await page.locator(compiledReader ? 'body > [data-mx-inline-story]' : 'body > #root [data-mx-inline-story]').waitFor();
   await page.getByLabel('Artifact A', { exact: true }).waitFor();
   assert.equal((await initialView).status(), 204, 'initial inline reader records a view');
   assert.equal(await page.evaluate(() => document.querySelector('[aria-label="Artifact A"]')?.getRootNode() === document), true, 'artifact is in top-level DOM');
@@ -29,14 +30,24 @@ try {
   const nextView = viewReport(second.id);
   await page.getByLabel('Next artifact', { exact: true }).click();
   await page.getByLabel('Artifact B', { exact: true }).waitFor();
-  assert.equal((await nextView).status(), 204, 'client navigation records the next document view');
-  assert.equal(await page.evaluate(() => window.__navigationProbe), 'same-document', 'artifact to artifact is client navigation');
+  assert.equal((await nextView).status(), 204, 'navigation records the next document view');
+  assert.equal(await page.evaluate(() => window.__navigationProbe), compiledReader ? undefined : 'same-document', 'navigation keeps the expected document lifetime');
   assert.equal(await page.getByLabel('Artifact A', { exact: true }).count(), 0, 'old body removed');
   assert.equal(await page.evaluate(() => getComputedStyle(document.body).getPropertyValue('--mx-navigation-probe').trim()), '', 'old author stylesheet removed');
   await page.getByLabel('Go home', { exact: true }).click();
   await page.waitForURL(`${base}/login`);
   await page.getByRole('textbox', { name: 'Email', exact: true }).waitFor();
-  assert.equal(await page.evaluate(() => window.__navigationProbe), 'same-document', 'artifact to app is client navigation');
+  assert.equal(await page.evaluate(() => window.__navigationProbe), compiledReader ? undefined : 'same-document', 'artifact to app keeps the expected document lifetime');
+  if (compiledReader) {
+    // The compiled reader is HTML-first and waits for chrome intent before loading the SPA (§7.1).
+    // These document links therefore navigate normally; Back and Forward still restore visible pages.
+    await page.goBack();
+    await page.getByLabel('Artifact B', { exact: true }).waitFor();
+    await page.goBack();
+    await page.getByLabel('Artifact A', { exact: true }).waitFor();
+    await page.goForward();
+    await page.getByLabel('Artifact B', { exact: true }).waitFor();
+  } else {
   const heldArtifact = [];
   const holdArtifact = (route) => { heldArtifact.push(route); };
   await page.route(`**/api/page/artifact/${second.id}`, holdArtifact);
@@ -56,6 +67,7 @@ try {
   await page.goForward();
   await page.getByLabel('Artifact B', { exact: true }).waitFor();
   assert.equal(await page.evaluate(() => window.__navigationProbe), 'same-document', 'forward retains browser document');
+  }
   // The real shared shelf's LIST links used to force target=_blank. Checking
   // hand-authored links above alone could never catch that regression.
   await becomeOwner(page, base, first.token);
