@@ -16,7 +16,7 @@ import { compileWithLoader, type CompileResult, type SchemaLoader } from './comp
  * Bump the revision when compiled semantics change: every stored record then
  * reads as stale and recompiles.
  */
-const PARSED_ARTIFACT_COMPILER_REVISION = 'sqlite-compiled-1';
+const PARSED_ARTIFACT_COMPILER_REVISION = 'sqlite-compiled-notify-2';
 
 /**
  * The door's compiled record rides on the prepared meta under this SYMBOL:
@@ -44,6 +44,11 @@ const compiledSchema = z.object({
     ...span, name, engine: z.enum(['sqlite', 'postgres']), source: z.string().optional(), sql: z.string(), params: z.array(z.string()), reads,
     columns: z.array(z.object({ name: z.string(), type: columnType.nullable() }).strict()),
   }).strict()),
+  notifications: z.array(z.object({
+    ...span, name, on: name, sql: z.string(), engine: z.literal('sqlite'), params: z.array(z.string()),
+    parameterTypes: z.record(z.string(), columnType.nullable()), reads,
+    relations: z.array(z.object({ schema: z.string(), table: z.string() }).strict()),
+  }).strict()).optional(),
   mutations: z.array(z.object({
     ...span, name, sql: z.string(),
     target: z.union([z.object({ import: z.string(), table: z.string() }).strict(), z.object({ local: z.string() }).strict()]),
@@ -52,6 +57,12 @@ const compiledSchema = z.object({
     expectedAffected: z.number().int().nonnegative().optional(), reset: z.array(z.string()).optional(),
   }).strict()),
 }).strict() as unknown as z.ZodType<CompiledDataflow>;
+
+/** Strict executable snapshot admission, shared by stored metadata and durable jobs. */
+export function parseCompiledDataflow(value: unknown): CompiledDataflow | null {
+  const parsed = compiledSchema.safeParse(value);
+  return parsed.success ? parsed.data : null;
+}
 
 interface ParsedArtifactMetadataV2 {
   schemaVersion: 2;
@@ -74,13 +85,14 @@ const hash = (source: string) => createHash('sha256').update(source).digest('hex
 function rebind(compiled: CompiledDataflow, source: string): CompiledDataflow | null {
   const flow = declarationsOf(source);
   if (!flow) return null;
-  const spans = new Map<string, { start: number; end: number; sql: string }>([...flow.queries, ...flow.mutations].map((d) => [d.name, d]));
+  const spans = new Map<string, { start: number; end: number; sql: string }>([...flow.queries, ...flow.mutations, ...(flow.notifications ?? [])].map((d) => [d.name, d]));
   const same = flow.imports.length === compiled.imports.length && flow.imports.every((i, n) => compiled.imports[n]?.name === i.name && compiled.imports[n]?.ref === i.ref)
     && flow.values.length === compiled.values.length && flow.queries.length === compiled.queries.length && flow.mutations.length === compiled.mutations.length
-    && [...compiled.queries, ...compiled.mutations].every((d) => spans.has(d.name));
+    && (flow.notifications?.length ?? 0) === (compiled.notifications?.length ?? 0)
+    && [...compiled.queries, ...compiled.mutations, ...(compiled.notifications ?? [])].every((d) => spans.has(d.name));
   if (!same) return null;
   const at = <T extends { name: string; start: number; end: number }>(d: T): T => ({ ...d, start: spans.get(d.name)!.start, end: spans.get(d.name)!.end });
-  return { ...compiled, queries: compiled.queries.map(at), mutations: compiled.mutations.map(at) };
+  return { ...compiled, queries: compiled.queries.map(at), mutations: compiled.mutations.map(at), ...(compiled.notifications ? { notifications: compiled.notifications.map(at) } : {}) };
 }
 
 /** The stored record, when it is current for this source; null otherwise. */
@@ -89,7 +101,7 @@ export function storedCompiledDataflow(meta: unknown, source: string): CompiledD
   const parsed = metadataSchema.safeParse(raw);
   if (!parsed.success || parsed.data.sourceHash !== hash(source)) return null;
   const { compiled } = parsed.data;
-  const declarations = [...compiled.queries, ...compiled.mutations];
+  const declarations = [...compiled.queries, ...compiled.mutations, ...(compiled.notifications ?? [])];
   const names = [...compiled.imports, ...compiled.values, ...declarations].map((d) => d.name);
   if (!declarations.every((d) => d.start <= d.end && d.end <= source.length) || new Set(names).size !== names.length) return null;
   return compiled;

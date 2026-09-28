@@ -59,6 +59,7 @@ export function storyUpdateParts(source: string, assets?: AssetLookup): StoryUpd
       values: content.values.map((v) => ({ ...v, start: 0, end: 0 })),
       queries: content.queries.map((q) => ({ ...q, start: 0, end: 0 })),
       mutations: content.mutations.map((m) => ({ ...m, start: 0, end: 0 })),
+      ...(content.notifications?.length ? { notifications: content.notifications.map((n) => ({ ...n, start: 0, end: 0 })) } : {}),
     }),
   };
 }

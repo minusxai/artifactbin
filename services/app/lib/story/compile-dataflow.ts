@@ -28,8 +28,8 @@ import { isQueryFailure } from '@artifactbin/contracts';
 import type { JsxNode, ValidationError } from '@/lib/jsx';
 import { sqlExtensions } from '@/lib/sql/extensions';
 import { BUILTIN_TABLES, builtinInput, isBuiltinTable, rowField, VIEWER, VIEWER_ID } from './builtins';
-import type { BuiltinInput, BuiltinTable, CompiledDataflow, CompiledImport, CompiledMutation, CompiledQuery, CompiledReads, CompiledValue } from './compiled-dataflow';
-import { ARGS_ATTR, bindingMap, MUTATION_TAG, QUERY_TAG, refName, scalarMatches, SET_ATTR, type Dataflow, type MutationDecl, type QueryDecl } from './dataflow';
+import type { BuiltinInput, BuiltinTable, CompiledDataflow, CompiledImport, CompiledMutation, CompiledNotify, CompiledQuery, CompiledReads, CompiledValue } from './compiled-dataflow';
+import { ARGS_ATTR, bindingMap, MUTATION_TAG, NOTIFY_TAG, QUERY_TAG, refName, scalarMatches, SET_ATTR, type Dataflow, type MutationDecl, type QueryDecl } from './dataflow';
 import { analyzeRowScopes } from './row-scope';
 import { dateCastRefusal, editDistance, withSqliteHint } from './sqlite-hints';
 
@@ -192,6 +192,13 @@ export function compileDataflow(flow: Dataflow, ctx: CompileContext, body?: JsxN
   for (const v of flow.values) kinds.set(v.name.toLowerCase(), v.kind === 'scalar' ? 'scalar' : 'table');
   for (const q of flow.queries) kinds.set(q.name.toLowerCase(), 'query');
   for (const m of flow.mutations) kinds.set(m.name.toLowerCase(), 'mutation');
+  const allNames = [...flow.imports, ...flow.values, ...flow.queries, ...flow.mutations, ...(flow.notifications ?? [])];
+  const names = new Set<string>();
+  for (const declaration of allNames) {
+    const key = declaration.name.toLowerCase();
+    if (names.has(key)) errors.push(at(declaration, NOTIFY_TAG, `"${declaration.name}" is declared twice in <Helmet>`));
+    names.add(key);
+  }
   const types = scalarTypes(flow);
 
   // Imports: a dataset's tables, or a folder's listing, under the import's name.
@@ -447,7 +454,71 @@ export function compileDataflow(flow: Dataflow, ctx: CompileContext, body?: JsxN
     };
   }
 
-  let compiled: CompiledDataflow = { imports, values, queries: ordered, mutations };
+  // Notifications have their own invocation scope. They are never placed in the
+  // reactive query graph, and may only read saved mutation inputs and platform context.
+  const notifications: CompiledNotify[] = [];
+  for (const n of flow.notifications ?? []) {
+    const fail = (message: string) => errors.push(at(n, NOTIFY_TAG, `<Notify name="${n.name}"> ${message}`));
+    const mutation = mutations.find((m) => m.name === n.on);
+    if (!mutation) { fail(`on="${n.on}" must name a compiled persistent Mutation`); continue; }
+    if ('local' in mutation.target) { fail(`on="${n.on}" names a local mutation; notifications require a persistent mutation`); continue; }
+    const { sql, fields, now, casts } = rewriteBuiltinFields(n.sql);
+    const cast = dateCastRefusal(casts);
+    if (cast) { fail(cast); continue; }
+    let analysis: StatementAnalysis;
+    try { analysis = ctx.engine.analyze(sql, [...base, ...queryRelations()]); }
+    catch (e) { fail(withSqliteHint(errorText(e), sql)); continue; }
+    if (analysis.kind !== 'select') { fail('must be one read-only SELECT returning to and message'); continue; }
+    if (analysis.columns.length !== 2 || !analysis.columns.some((c) => c.name === 'to') || !analysis.columns.some((c) => c.name === 'message')) {
+      fail('must return exactly the columns to and message'); continue;
+    }
+    const invalidType = analysis.columns.find((c) => {
+      const type = originType(c);
+      return type !== null && type !== 'string' && !(c.name === 'to' && type === 'user');
+    });
+    if (invalidType) { fail(`column ${invalidType.name} must contain ${invalidType.name === 'to' ? 'user IDs or null' : 'text'}`); continue; }
+    if (now && analysis.functions.some((f) => DATE_FUNCTIONS.has(f))) { fail("reads the clock with 'now'; use the saved $_now"); continue; }
+    const { reads, params } = readsOf(analysis, fields, 'mutation', n, NOTIFY_TAG, n.name);
+    const relations = new Map<string, { schema: string; table: string }>();
+    const collectRelations = (a: StatementAnalysis) => {
+      for (const r of a.reads) {
+        const i = imports.find((i) => i.name.toLowerCase() === r.schema.toLowerCase());
+        if (!i) continue;
+        const table = i.tables.find((t) => t.name.toLowerCase() === r.table.toLowerCase());
+        if (table) relations.set(`${i.name}\0${table.name}`, { schema: i.name, table: table.name });
+      }
+    };
+    collectRelations(analysis);
+    const dependencyNames = new Set<string>();
+    const visit = (queryName: string) => {
+      if (dependencyNames.has(queryName)) return;
+      dependencyNames.add(queryName);
+      const q = compiledQueries.get(queryName.toLowerCase());
+      if (!q || q.engine !== 'sqlite') { fail(`dependency ${queryName} has unsupported source lineage; only stored imported tables are supported`); return; }
+      for (const param of q.params) if (!params.includes(param)) params.push(param);
+      for (const key of ['imports', 'values', 'builtins'] as const) {
+        for (const item of q.reads[key]) if (!(reads[key] as string[]).includes(item)) (reads[key] as string[]).push(item);
+      }
+      const a = analyses.get(queryName.toLowerCase());
+      if (a) collectRelations(a);
+      for (const upstream of q.reads.queries) visit(upstream);
+    };
+    for (const query of reads.queries) visit(query);
+    reads.queries = ordered.filter((q) => dependencyNames.has(q.name)).map((q) => q.name);
+    for (const value of reads.values) if (tableValues.has(value.toLowerCase())) fail(`reads local table Value ${value}; notification jobs cannot read browser state`);
+    if (reads.builtins.includes('_members')) fail('reads _members, whose membership source lineage is not supported for notification jobs');
+    const parameterTypes: CompiledNotify['parameterTypes'] = {};
+    for (const param of params) {
+      const argument = mutation.args.find((a) => a.name === param);
+      const builtin = builtinInput(param);
+      if (argument) parameterTypes[param] = argument.type;
+      else if (builtin?.source === 'platform') parameterTypes[param] = builtin.type;
+      else fail(`binds $${param}, which is not a saved argument of Mutation ${mutation.name} or a supported platform input`);
+    }
+    notifications.push({ name: n.name, on: n.on, engine: 'sqlite', sql, params, parameterTypes, reads, relations: [...relations.values()], start: n.start, end: n.end });
+  }
+
+  let compiled: CompiledDataflow = { imports, values, queries: ordered, mutations, ...(notifications.length ? { notifications } : {}) };
   if (body && !errors.length) {
     const bound = checkBindings(compiled, body);
     errors.push(...bound.errors);

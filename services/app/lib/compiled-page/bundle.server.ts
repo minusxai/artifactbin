@@ -33,7 +33,7 @@ import * as solidStore from 'solid-js/store';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import vm from 'node:vm';
-import type { CompiledDataflow } from '@/lib/story/compiled-dataflow';
+import { readerDataflow, type CompiledDataflow } from '@/lib/story/compiled-dataflow';
 import type { Scalar } from '@/lib/story/dataflow';
 import { ISLANDS_MANIFEST_PATH } from './build.server';
 import { DOCUMENT_MODULE_RE, type CompilerBuild, type IslandRenderData, type ModuleRef, type ModuleStore } from './contract';
@@ -358,7 +358,7 @@ export async function renderSkeleton(skeleton: string, imports?: SsrImports): Pr
 function ssrSource(islands: string, skeletonHtml: string, flow: CompiledDataflow | null): string {
   return `${islands}import { renderToString as $renderToString } from 'solid-js/web';
 const $skeleton = ${lit(skeletonHtml)};
-const $flow = JSON.parse(${lit(JSON.stringify(flow))});
+const $flow = JSON.parse(${lit(JSON.stringify(readerDataflow(flow)))});
 export function render(data) {
   const runtime = rt.createIslandRuntime({ dataflow: $flow ? { flow: $flow, values: data.values, ...(data.results ? { results: data.results } : {}) } : null, mermaidImages: data.mermaidImages, viewer: null }, rt.createDataflowStore);
   try {
@@ -383,7 +383,7 @@ export function render(data) {
  * version's compiled dataflow when it declares data (the page's data island carries no flow).
  */
 const browserSource = (islands: string, flow: CompiledDataflow | null): string => flow
-  ? `${islands}import { boot as $boot } from '@mx/boot';\nconst FLOW = JSON.parse(${lit(JSON.stringify(flow))});\n$boot({ ISLANDS, FLOW });\n`
+  ? `${islands}import { boot as $boot } from '@mx/boot';\nconst FLOW = JSON.parse(${lit(JSON.stringify(readerDataflow(flow)))});\n$boot({ ISLANDS, FLOW });\n`
   : `${islands}import { boot as $boot } from '@mx/boot';\n$boot(ISLANDS);\n`;
 
 interface ManifestFiles { files?: Record<string, { imports?: string[] }> }
