@@ -36,8 +36,9 @@ import vm from 'node:vm';
 import type { CompiledDataflow } from '@/lib/story/compiled-dataflow';
 import type { Scalar } from '@/lib/story/dataflow';
 import { ISLANDS_MANIFEST_PATH } from './build.server';
-import type { CompilerBuild, IslandRenderData, ModuleRef, ModuleStore } from './contract';
+import { DOCUMENT_MODULE_RE, type CompilerBuild, type IslandRenderData, type ModuleRef, type ModuleStore } from './contract';
 import type { GeneratedSources } from './codegen-safety';
+import { objectStore, ObjectUnavailable, type ObjectStore } from '@/lib/object-store';
 import { createModuleStore } from './modules.server';
 import { contentSha } from './speculation';
 
@@ -248,6 +249,34 @@ export async function defaultSsrImports(code: string, root = process.cwd()): Pro
   return ssrImportTable(islands);
 }
 
+/**
+ * Where SSR modules live: an object-store prefix NO route serves. An SSR module carries the whole
+ * page's HTML (a private document's included), so it never sits beside the browser modules the
+ * public `/islands/d/<sha>.js` route reads (`islands/<sha>`); its ref's `url` is this object key.
+ */
+export const SSR_MODULE_PREFIX = 'islands-ssr';
+
+/** SSR modules over the object store, content-addressed like the browser modules, under `SSR_MODULE_PREFIX`. */
+export function createSsrModuleStore(objects: ObjectStore = objectStore()): ModuleStore {
+  return {
+    async put(bytes, imports) {
+      const sha = contentSha(bytes);
+      const key = `${SSR_MODULE_PREFIX}/${sha}`;
+      await objects.put(key, Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength), 'text/javascript');
+      return { sha, url: key, bytes: bytes.byteLength, imports: [...imports] };
+    },
+    async get(sha) {
+      if (!DOCUMENT_MODULE_RE.test(sha)) return null;
+      try {
+        return await objects.get(`${SSR_MODULE_PREFIX}/${sha}`);
+      } catch (error) {
+        if (error instanceof ObjectUnavailable) return null;
+        throw error;
+      }
+    },
+  };
+}
+
 /** A stored SSR module, loaded: `render(data)` → the whole story HTML with the islands rendered from `data`. */
 export interface SsrModule { render(data: IslandRenderData): string }
 
@@ -265,7 +294,7 @@ export async function ssrModuleOf(code: string, name: string, imports?: SsrImpor
  * evaluated once per sha in this process. Rejects with `IslandSsrUnavailable` when the shared build
  * has no server half for what it imports.
  */
-export function loadSsrModule(ref: ModuleRef, store: ModuleStore = createModuleStore(), imports?: SsrImports): Promise<SsrModule> {
+export function loadSsrModule(ref: ModuleRef, store: ModuleStore = createSsrModuleStore(), imports?: SsrImports): Promise<SsrModule> {
   let loaded = ssrModules.get(ref.sha);
   if (!loaded) {
     loaded = (async () => {
@@ -356,7 +385,10 @@ export interface BuildOptions {
   flow: CompiledDataflow | null;
   /** The declared state `html` renders the islands in. */
   values: Record<string, Scalar>;
+  /** The browser modules' store (served at `/islands/d/<sha>.js`). */
   store?: ModuleStore;
+  /** The SSR modules' store (never served; `createSsrModuleStore`). */
+  ssrStore?: ModuleStore;
   /** The server import table (tests); the default is this process's Solid and the shared build's server half. */
   imports?: SsrImports;
 }
@@ -370,13 +402,14 @@ export async function buildDocumentModules(sources: GeneratedSources & { islandR
   const skeletonHtml = await renderSkeleton(sources.skeleton, options.imports);
   if (!sources.islandRefs.length) return { html: skeletonHtml, module: null, ssr: null };
   const store = options.store ?? createModuleStore();
+  const ssrStore = options.ssrStore ?? createSsrModuleStore();
   const browser = await browserModuleCode(sources.islands, options.build, options.flow);
   const ssrCode = await ssrModuleCode(sources.islands, skeletonHtml, options.flow);
   const loaded = await ssrModuleOf(ssrCode, contentSha(ssrCode), options.imports);
   const html = loaded.render({ values: options.values, results: null, mermaidImages: {}, drawings: {} });
   const [module, ssr] = await Promise.all([
     store.put(new TextEncoder().encode(browser.code), browser.imports),
-    store.put(new TextEncoder().encode(ssrCode), await importsOf(ssrCode)),
+    ssrStore.put(new TextEncoder().encode(ssrCode), await importsOf(ssrCode)),
   ]);
   return { html, module, ssr };
 }

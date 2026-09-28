@@ -214,7 +214,10 @@ describe('the island path, over a stand-in server half', () => {
     // Target 2's per-document share (the brief: ≤ 5 KB br for the kit fixture); measured 2283 B raw / 614 B br.
     expect(br, `kit per-document module: ${bytes.byteLength} B raw, ${br} B br`).toBeLessThanOrEqual(5 * 1024);
 
-    const ssr = await loadSsrModule(built.ssr!, store, imports);
+    // The SSR module holds the whole page: it is stored where no route serves it, never beside the browser module.
+    expect(built.ssr!.url).toBe(`islands-ssr/${built.ssr!.sha}`);
+    expect(await store.get(built.ssr!.sha)).toBeNull();
+    const ssr = await loadSsrModule(built.ssr!, undefined, imports);
     expect(ssr.render({ values: {}, results: null, mermaidImages: {}, drawings: {} })).toBe(built.html);
     const again = await buildDocumentModules(generate(input), { build, flow: input.flow, values: declaredValues(input.flow), imports, store });
     expect(again.module!.sha).toBe(module.sha);

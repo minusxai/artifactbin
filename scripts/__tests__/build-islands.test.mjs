@@ -46,7 +46,7 @@ describe('buildIslands', () => {
       expect(url, specifier).toMatch(/^\/islands\/[\w-]+-[0-9a-f]{8,}\.js$/);
       expect(existsSync(path.join(outDir, url.slice('/islands/'.length))), `${specifier} → ${url} exists`).toBe(true);
     }
-    expect(JSON.parse(readFileSync(path.join(outDir, 'manifest.json'), 'utf8'))).toEqual({ build: first.build, manifest: first.manifest, files: expect.any(Object) });
+    expect(JSON.parse(readFileSync(path.join(outDir, 'manifest.json'), 'utf8'))).toEqual({ build: first.build, manifest: first.manifest, files: expect.any(Object), ssr: first.ssr });
     // Exactly one Solid: its DOM runtime (the event-delegation key is a string literal in solid-js/web) is in one chunk.
     const withSolidWeb = Object.keys(first.files).filter((url) => readFileSync(path.join(outDir, url.slice('/islands/'.length)), 'utf8').includes('_$DX_DELEGATE'));
     expect(withSolidWeb).toHaveLength(1);
@@ -56,6 +56,19 @@ describe('buildIslands', () => {
       : await buildIslands({ outDir: mkdtempSync(path.join(tmpdir(), 'islands-build-')) });
     expect(again.build).toBe(first.build);
     expect(again.manifest).toEqual(first.manifest);
+    expect(again.ssr).toEqual(first.ssr);
+  });
+
+  it('writes the server half: one file, a namespace per runtime and kit specifier, only Solid external, no lazy engine', () => {
+    const { ssr } = first;
+    expect(ssr.url).toMatch(/^\/islands\/ssr-[0-9a-f]{16}\.js$/);
+    expect(Object.keys(ssr.exports).sort()).toEqual(['@mx/rt', ...KIT_FAMILIES.map((f) => `@mx/kit/${f}`)].sort());
+    const text = readFileSync(path.join(outDir, ssr.url.slice('/islands/'.length)), 'utf8');
+    const specifiers = [...new Set([...text.matchAll(/^import\s[^;]*?from\s*["']([^"']+)["']/gm)].map((m) => m[1]))].sort();
+    expect(specifiers.every((s) => /^solid-js(\/web|\/store)?$/.test(s)), specifiers.join(', ')).toBe(true);
+    for (const name of Object.values(ssr.exports)) expect(text, name).toMatch(new RegExp(`\\b${name}\\b`));
+    // The lazy engines (Vega, Mermaid, React behind them) are browser-only stubs here.
+    expect(text.length).toBeLessThan(512 * 1024);
   });
 
   it('keeps the shared runtime under the interactive budget: solid + rt + store bridge ≤ 28 KB brotli', async () => {

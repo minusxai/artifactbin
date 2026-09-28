@@ -208,19 +208,23 @@ const overlayDigest = (input: ReaderOverlay): string => sha(canonical({ ...reade
  * same build in a loop. The page's speculation rules are stored with it, so the header never names a
  * missing file.
  */
-async function compiledFor(page: PreparedPage, refData: ReaderIslandInput['refData'], compiler: NonNullable<ReturnType<typeof compilerBuild>>): Promise<StoredCompile> {
+async function compiledFor(row: ArtifactRow, page: PreparedPage, refData: ReaderIslandInput['refData'], compiler: NonNullable<ReturnType<typeof compilerBuild>>): Promise<StoredCompile> {
   const build = compiler.build;
   if (!build) return { build: 'none', error: compiler.error ?? 'no island build', reason: 'compile-error' };
   try {
     // Imported on first compile, not at the top: the compiler carries Babel, Solid and today's React
     // kit (it renders static components at compile time), and this module sits under lib/artifacts,
     // which every tool that reads artifacts loads (the CLI's teaching build among them). A process
-    // that never compiles (`FLAG__COMPILED_READER=off`) never loads any of it.
-    const { compilePage } = await import('@/lib/compiled-page/compiler');
+    // that never compiles (`FLAG__COMPILED_READER=off`) never loads any of it. The snapshot store
+    // imports this module, so its access helper is reached the same way (no import cycle at load).
+    const [{ compilePage }, { anonymousAccessFacts }] = await Promise.all([import('@/lib/compiled-page/compiler'), import('@/lib/compiled-page/snapshots.server')]);
+    const flow = page.declared?.flow ?? null;
     const compiled = await compilePage({
       nodes: page.data.nodes, colorMode: page.data.colorMode, template: page.data.template ?? null, chrome: page.data.chrome !== false,
       ...(page.data.glyphs ? { glyphs: page.data.glyphs } : {}),
-      refData: refData ?? {}, flow: page.declared?.flow ?? null, build: build.id,
+      refData: refData ?? {}, flow, build: build.id,
+      // The plan snapshots key on: the anonymous reader's admission, decided as the snapshot store decides it.
+      ...(flow ? { access: await anonymousAccessFacts(row, flow) } : {}),
     }, build);
     if (compiled.unported.length) return { build: build.id, error: `unported: ${compiled.unported.join(', ')}`, reason: 'unported', unported: compiled.unported };
     await createSpeculationRulesStore().put(compiled.links.prerender);
@@ -269,7 +273,7 @@ async function build(row: ArtifactRow, at: ArchivedRender | null, origin: string
   // The anonymous reader's render, whoever asked first.
   const anonymous = await readerInputFor(row, page, { at, viewer: null, search: '', origin });
   page.ssr = { overlay: overlayDigest(anonymous), html: renderStory(page, anonymous) };
-  if (compiler) page.compiled = await compiledFor(page, anonymous.refData, compiler);
+  if (compiler) page.compiled = await compiledFor(row, page, anonymous.refData, compiler);
   return page;
 }
 

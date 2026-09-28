@@ -15,10 +15,12 @@ import { claimToken, createUser, ensureUsername } from '@/lib/users';
 import { drainPreparedPageWarmups, enablePreparedPageWarmups } from '@/lib/story/prepared-page.server';
 import { setCompiledReaderFlagForTests } from '@/lib/compiled-page/reader-mode';
 import { loadCompilerBuild } from '@/lib/compiled-page/build.server';
-import type { StoredCompile } from '@/lib/compiled-page/contract';
+import { DOCUMENT_MODULE_PATH, type CompiledPage, type StoredCompile } from '@/lib/compiled-page/contract';
+import { createAppServer } from '@/server/app';
 
 vi.mock('@/auth', () => ({ auth: async () => null }));
 const harness = useAppHarness();
+const app = createAppServer({ indexHtml: async () => '<!doctype html><html><head><title>x</title></head><body><div id="root"></div></body></html>' });
 const FIXTURES = path.resolve(process.cwd(), '../../scripts/fixtures/page-speed');
 const fixture = (name: string) => readFileSync(path.join(FIXTURES, name), 'utf8');
 
@@ -58,6 +60,17 @@ describe('the compiled page on the prepared page', () => {
     const { key, compiled } = await stored(id);
     expect(compiled).toBeUndefined();
     expect(key.endsWith(':off')).toBe(true);
+  });
+
+  it('a page with islands: the browser module is served, the SSR module (the whole page) never is', async () => {
+    setCompiledReaderFlagForTests('shadow');
+    const id = await publish(fixture('kit.jsx'));
+    const compiled = (await stored(id)).compiled as CompiledPage;
+    expect(compiled.html).toContain('role="tablist"');
+    expect(compiled.module!.url).toBe(`${DOCUMENT_MODULE_PATH}/${compiled.module!.sha}.js`);
+    expect((await app.request(compiled.module!.url)).status).toBe(200);
+    expect(compiled.ssr!.url).toBe(`islands-ssr/${compiled.ssr!.sha}`);
+    expect((await app.request(`${DOCUMENT_MODULE_PATH}/${compiled.ssr!.sha}.js`)).status).toBe(404);
   });
 
   it('a version the compiler refuses stores the failure with its reason, not a page', async () => {

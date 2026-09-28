@@ -3,7 +3,7 @@
  *
  * Server half (fixtures/compiled-island.server.ts, a plain node process so Solid's server entries
  * are the ones node resolves, as in the server bundle): the compiler generates the island, its SSR
- * module renders it over the runtime's SERVER build (`createIslandRuntime` + `withIsland`, as
+ * module renders it over the shared build's server half (`createIslandRuntime` + `withIsland`, as
  * `render(data)` does).
  *
  * Browser half (here, jsdom): the same generated source compiled `generate: 'dom'` with
@@ -25,7 +25,7 @@ const SOURCE = '<Helmet><Value name="region" type="string" default="West" /></He
 
 interface ServerHalf { html: string; islands: string; islandRefs: IslandRef[]; flow: CompiledDataflow }
 function serverHalf(source: string): ServerHalf {
-  const out = execFileSync(path.join(ROOT, 'node_modules/.bin/tsx'), ['--tsconfig', 'tsconfig.json', 'services/app/lib/islands/__tests__/fixtures/compiled-island.server.ts', source], { cwd: ROOT, maxBuffer: 64 * 1024 * 1024 });
+  const out = execFileSync(path.join(ROOT, 'node_modules/.bin/tsx'), ['--tsconfig', path.join(ROOT, 'tsconfig.json'), 'lib/islands/__tests__/fixtures/compiled-island.server.ts', source], { cwd: path.join(ROOT, 'services/app'), maxBuffer: 64 * 1024 * 1024 });
   return JSON.parse(out.toString('utf8')) as ServerHalf;
 }
 

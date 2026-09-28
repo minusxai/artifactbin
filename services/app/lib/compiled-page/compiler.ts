@@ -493,10 +493,10 @@ export async function compilePage(input: CompileInput, build: CompilerBuild): Pr
   const generated = generate(input);
   const unknown = generated.behaviors.filter((b) => !build.manifest[b]);
   if (unknown.length) throw new Error(`compile: the island build carries no ${unknown.join(', ')}`);
-  // The plan is classified with NO access facts: every dataset read is `viewer` until the serve path
-  // plans with the run's own anonymous admission (snapshots.server anonymousAccessFacts). Conservative
-  // by construction: this plan can never put a private answer in a guest snapshot.
-  const plan = input.flow ? planOf(input.flow, { datasets: {} }) : null;
+  // Classified with the anonymous reader's admission the caller decided (snapshots.server
+  // anonymousAccessFacts), so this is the plan snapshots key on; without it no dataset is admitted and
+  // every query that reads one is `viewer` — never a private answer in a guest snapshot.
+  const plan = input.flow ? planOf(input.flow, input.access ?? { datasets: {} }) : null;
   const links = input.nodes.length ? linkHintsOf(input.nodes, { origins: deploymentOrigins() }) : EMPTY_LINK_HINTS;
   const base = {
     build: build.id, islands: generated.islandRefs, behaviors: generated.behaviors, plan, links,
