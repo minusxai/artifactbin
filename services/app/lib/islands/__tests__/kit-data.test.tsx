@@ -30,6 +30,31 @@ describe('Number', () => {
 });
 
 describe('Select', () => {
+  it('writes a chosen literal option immediately', () => {
+    const ctx = fakeIsland({ region: 'West' }); ctx.setValue = vi.fn();
+    const { host, dispose } = mount(ctx, () => <Select label="Region" value="$region" options={['West','East']} />);
+    (host.querySelector('[aria-haspopup="listbox"]') as HTMLButtonElement).click();
+    ([...document.querySelectorAll('[role="option"]')].find(x => x.textContent === 'East') as HTMLButtonElement).click();
+    expect(ctx.setValue).toHaveBeenCalledWith('region', 'East', undefined);
+    dispose();
+  });
+  it('opens a searchable list', () => {
+    const ctx = fakeIsland({ region: 'West' }); ctx.setValue = vi.fn();
+    const { host, dispose } = mount(ctx, () => <Select label="Region" value="$region" options={['West','East']} />);
+    (host.querySelector('[aria-haspopup="listbox"]') as HTMLButtonElement).click();
+    expect(document.querySelector('[role="searchbox"]')).toBeTruthy();
+    dispose();
+  });
+  it('places its popup in a trusted portal, or in place when none exists', () => {
+    for (const portal of [null, document.createElement('div')]) {
+      const ctx = fakeIsland({ region: 'West' }); ctx.trustedPortal = () => portal;
+      const { host, dispose } = mount(ctx, () => <Select label="Region" value="$region" options={['West','East']} />);
+      host.querySelector<HTMLButtonElement>('[aria-haspopup="listbox"]')!.click();
+      expect((portal ?? host).querySelector('[role="listbox"]')).toBeTruthy();
+      if (portal) expect(host.querySelector('[role="listbox"]')).toBeNull();
+      dispose();
+    }
+  });
   it('offers the options table and writes the chosen value', () => {
     const ctx = island(); ctx.setValue = vi.fn();
     const { host } = mount(ctx, () => <Select label="Region" value="$region" options="$regions" placeholder="All regions" id="G2uA" />);

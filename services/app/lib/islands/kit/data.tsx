@@ -1,9 +1,9 @@
 /* @jsxImportSource solid-js */
 /** The data-bound kit. The island context is the sole source of live tables and values. */
 import { createEffect, createMemo, createSignal, For, on, onCleanup, onMount, Show } from 'solid-js';
-import { Portal } from 'solid-js/web';
 import { createVirtualizer } from '@tanstack/solid-virtual';
 import { useIsland } from '../context';
+import { TrustedOverlay } from './trusted-overlay';
 import { refName } from '@/lib/story/dataflow';
 import { aggregateNumber, type NumberAgg } from '@/lib/story/number-aggregation';
 import { numberFormatter } from '@/lib/story/number-format';
@@ -33,30 +33,47 @@ export function Number(props: { data: unknown; col?: string; agg?: NumberAgg; pr
 }
 
 interface SelectProps { label?: string; value?: unknown; options?: unknown; placeholder?: string; className?: string; id?: string; disabled?: boolean; [key: `data-${string}`]: unknown }
-export function Select(props: SelectProps) {
-  const island = useIsland();
-  const [open, setOpen] = createSignal(false);
-  const [query, setQuery] = createSignal('');
+const selectClass = 'mx-control relative inline-flex flex-col gap-1.5 align-top';
+const selectJoin = (...values: (string | false | undefined)[]) => values.filter(Boolean).join(' ');
+const CHEVRON = <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="size-4 shrink-0 opacity-50" aria-hidden="true"><path d="m6 9 6 6 6-6" /></svg>;
+const CHECK = <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="size-3.5 shrink-0" aria-hidden="true"><path d="M20 6 9 17l-5-5" /></svg>;
+export function Select(p: SelectProps) {
+  const island = useIsland(); const [open,setOpen] = createSignal(false); const [query,setQuery] = createSignal(''); const [highlight,setHighlight] = createSignal(-1);
+  const valueName = () => nameOf(p.value);
+  const optionsName = () => nameOf(p.options);
+  const active = () => !!valueName() && Object.hasOwn(island.values(), valueName()) && p.disabled !== true;
+  const current = () => valueName() ? island.value(valueName()) == null ? null : String(island.value(valueName())) : typeof p.value === 'string' ? p.value : typeof p.value === 'number' ? String(p.value) : null;
   const options = createMemo(() => {
-    const name = nameOf(props.options);
+    const name = optionsName();
     if (name) {
       const table = island.table(name);
       const [valueCol, labelCol] = table?.columns ?? [];
-      return table?.rows.map(row => ({ value: String(row[valueCol?.name ?? ''] ?? ''), label: String(row[labelCol?.name ?? valueCol?.name ?? ''] ?? '') })) ?? [];
+      return table && valueCol ? table.rows.map(row => ({ value: String(row[valueCol.name] ?? ''), label: String(row[labelCol?.name ?? valueCol.name] ?? row[valueCol.name] ?? '') })) : [];
     }
-    return Array.isArray(props.options) ? props.options.map(option => typeof option === 'object' && option !== null ? { value: String(option.value ?? ''), label: String(option.label ?? option.value ?? '') } : { value: String(option), label: String(option) }) : [];
+    return Array.isArray(p.options) ? p.options.map(option => typeof option === 'object' && option !== null ? { value: String(option.value ?? ''), label: String(option.label ?? option.value ?? '') } : { value: String(option), label: String(option) }) : [];
   });
-  const bound = () => [['value', props.value], ['options', props.options]].map(([key, value]) => nameOf(value) ? `${key}:$${nameOf(value)}` : '').filter(Boolean).join(' ');
-  const value = () => { const name = nameOf(props.value); return String(name ? island.value(name) ?? '' : props.value ?? ''); };
-  const entries = () => [{ value: '', label: props.placeholder ?? 'All' }, ...options()];
-  const filtered = () => entries().filter(option => `${option.label} ${option.value}`.toLocaleLowerCase().includes(query().trim().toLocaleLowerCase()));
-  const selected = () => entries().find(option => option.value === value())?.label ?? value();
-  const choose = (next: string) => { const name = nameOf(props.value); if (name) island.setValue(name, next || null, undefined); setOpen(false); setQuery(''); };
-  return <div {...rootProps(props)} data-mx-bound={bound() || undefined} class={`mx-control relative inline-flex flex-col gap-1.5 align-top${props.className ? ` ${props.className}` : ''}`}>
-    <Show when={props.label}><span class="flex items-baseline gap-3 text-[11px] font-medium uppercase tracking-wider text-muted-foreground"><span>{props.label}</span></span></Show>
-    <div class="relative min-w-0"><button type="button" aria-label={props.label} aria-haspopup="listbox" aria-expanded={open()} disabled={props.disabled} onClick={() => setOpen(!open())} class="inline-flex w-full items-center justify-between gap-2 rounded-md text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50 h-9 min-w-36 border border-input bg-background px-3 shadow-xs hover:bg-muted/40"><span class={`truncate${value() ? '' : ' text-muted-foreground'}`}>{selected()}</span><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="size-4 shrink-0 opacity-50" aria-hidden="true"><path d="m6 9 6 6 6-6" /></svg></button></div>
-    <Show when={open()}><Portal><div class="rounded-md border border-border bg-popover text-popover-foreground shadow-md" style={{ position: 'fixed', 'z-index': 50 }}><div class="border-b border-border p-1.5"><input type="text" role="searchbox" aria-label={props.label ? `Search ${props.label}` : 'Search options'} placeholder="Type to filter…" value={query()} onInput={event => setQuery(event.currentTarget.value)} class="h-8 w-full min-w-36 rounded-sm border border-input bg-background px-2 text-sm text-foreground outline-none placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring/50" /></div><div role="listbox" aria-label={props.label} class="max-h-56 overflow-y-auto p-1"><For each={filtered()}>{option => <button type="button" role="option" aria-selected={option.value === value()} aria-label={option.label} onClick={() => choose(option.value)} class="flex w-full cursor-pointer items-center justify-between gap-3 rounded-sm px-2 py-1.5 text-left text-sm"><span class="truncate">{option.label}</span><Show when={option.value === value()}><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="size-3.5 shrink-0" aria-hidden="true"><path d="M20 6 9 17l-5-5" /></svg></Show></button>}</For></div></div></Portal></Show>
-  </div>;
+  const label = () => current() === null ? p.placeholder ?? 'All' : options().find(o => o.value === current())?.label ?? current();
+  const entries = () => [...(valueName() ? [{ value: null, label: p.placeholder ?? 'All' }] : []), ...options()];
+  const filtered = () => entries().filter(o => o.label.toLowerCase().includes(query().toLowerCase()));
+  const choose = (value: string | null) => { if (valueName()) island.setValue(valueName(),value,undefined); setOpen(false); setQuery(''); };
+  const bound = () => [valueName() ? `value:${p.value}` : '', optionsName() ? `options:${p.options}` : ''].filter(Boolean).join(' ') || undefined;
+  let root!: HTMLDivElement;
+  return <div {...rootProps(p)} data-mx-bound={bound()} class={selectJoin(selectClass,p.className)}>
+    <Show when={p.label}><span class="flex items-baseline gap-3 text-[11px] font-medium uppercase tracking-wider text-muted-foreground"><span>{p.label}</span></span></Show>
+    <div ref={root} class="relative min-w-0"><button type="button" aria-label={p.label} aria-haspopup="listbox" aria-expanded={open()} disabled={!active()} on:click={() => setOpen(!open())}
+      class="inline-flex h-9 min-w-36 w-full items-center justify-between gap-2 rounded-md border border-input bg-background px-3 text-sm shadow-xs transition-colors hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50">
+      <span class={selectJoin('truncate',current() === null && 'text-muted-foreground')}>{label()}</span>{CHEVRON}</button>
+      <TrustedOverlay open={open}><Show when={open()}><div class="rounded-md border border-border bg-popover text-popover-foreground shadow-md" style={{position:'fixed', 'z-index':50, left:`${root.getBoundingClientRect().left}px`, top:`${root.getBoundingClientRect().bottom + 4}px`, width:`${Math.max(root.getBoundingClientRect().width,200)}px`}}>
+        <div class="border-b border-border p-1.5"><input type="text" role="searchbox" aria-label={p.label ? `Search ${p.label}` : 'Search options'} placeholder="Type to filter…" value={query()}
+          on:input={e => { const q = e.currentTarget.value; setQuery(q); setHighlight(filtered().length ? 0 : -1); }}
+          class="h-8 w-full min-w-36 rounded-sm border border-input bg-background px-2 text-sm text-foreground outline-none placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring/50" /></div>
+        <div role="listbox" aria-label={p.label} class="max-h-56 overflow-y-auto p-1"><For each={filtered()}>{(o,i) => <button type="button" role="option" aria-label={o.label} aria-selected={o.value === current()}
+          on:click={() => choose(o.value)} on:mouseenter={() => setHighlight(i())}
+          class={selectJoin('flex w-full cursor-pointer items-center justify-between gap-3 rounded-sm px-2 py-1.5 text-left text-sm',i() === highlight() && 'bg-accent text-accent-foreground',o.value === null && o.value !== current() && 'text-muted-foreground')}>
+          <span class="truncate">{o.label}</span><Show when={o.value === current()}>{CHECK}</Show></button>}</For>
+          <Show when={filtered().length === 0}><div role="status" class="px-2 py-3 text-center text-sm text-muted-foreground">No matches</div></Show></div>
+      </div></Show></TrustedOverlay>
+    </div></div>;
 }
 
 interface ColumnTemplate { col: string; props: Record<string, unknown>; nodes: unknown[]; path: string }

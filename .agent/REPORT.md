@@ -1,5 +1,13 @@
 # w2-kit-data handoff
 
+## Select ownership resolution (2026-09-28)
+
+Select now has one island implementation and one compiler recipe, both in the data family. The searchable listbox, button, option roles, attributes, classes, and chevron/check icons came from the controls family. The data family's table-column option resolution and nullable placeholder are preserved. Its popup uses `trustedPortal()` when available and otherwise renders inside the host. Controls no longer exports Select or claims its recipe; the Select interaction assertions moved to the data tests.
+
+Observed red: the new placement test failed against the previous data Select, which always portaled to `document.body`. The table-option test also caught a missing nullable placeholder during integration; it was restored.
+
+Final checks: the requested controls, data, structure, recipes, and context island files passed (5 files, 80 tests). `npm run build:islands -w services/app` passed (build `cb088187238c990f`, 133 chunks). `npm run validate` passed. No push or PR.
+
 Branch: `split-p2-w2-kit-data`. Local commits only; no push, PR, or merge.
 Runtime follow-up commit: `Wire Question to lazy island chart runtime` (single-line subject).
 
