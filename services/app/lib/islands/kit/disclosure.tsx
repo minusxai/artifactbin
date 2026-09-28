@@ -3,6 +3,7 @@ import { createContext, createEffect, createRenderEffect, createSignal, createUn
 import { collapsibleStyle } from './collapsible-style';
 import { Portal, isServer } from 'solid-js/web';
 import { useIsland } from '../context';
+import { deferEngine } from '../defer-engine';
 import type { Align, Placed, Side } from './popper';
 import { TrustedOverlay } from './trusted-overlay';
 
@@ -123,11 +124,11 @@ function TooltipPopper(p: { ctx: TooltipState; side?: Side; align?: Align; sideO
     wrapper.style.zIndex = getComputedStyle(content).zIndex;
     let live = true;
     let stop = () => {};
-    void import('./popper').then(({ placePopper }) => {
+    const cancel = deferEngine(wrapper, () => { void import('./popper').then(({ placePopper }) => {
       if (!live) return;
       stop = placePopper(anchor, wrapper, arrow, { side: p.side ?? 'top', align: p.align ?? 'center', sideOffset: p.sideOffset ?? 6, collisionPadding: 8, arrowWidth: 10, arrowHeight: 5, onPlaced: ctx.setPlaced });
-    });
-    onCleanup(() => { live = false; stop(); ctx.setPlaced(undefined); });
+    }); });
+    onCleanup(() => { live = false; cancel(); stop(); ctx.setPlaced(undefined); });
   });
   const side = () => ctx.placed()?.side ?? 'top';
   return <div data-mx-theme-host="">
