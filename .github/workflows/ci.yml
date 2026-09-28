@@ -275,11 +275,10 @@ jobs:
           key: install-v4-${{ runner.os }}-${{ runner.arch }}-node22-${{ hashFiles('.ci-cache-key/install.json', 'services/app/scripts/copy-assets.mjs', 'services/cli/scripts/prepare-pty.mjs') }}
       - if: steps.install.outputs.cache-hit != 'true'
         run: npm ci
-      # Build the Vite SPA, document runtime and bundled Hono server.
-      - run: npm run build
-      # …and the CLI bundle, here rather than in every gate shard: the gates drive `afbin` against
-      # the servers they boot, and this job is already the one that builds.
+      # The CLI host build already builds the app SPA and document runtime. Do it once here;
+      # the gates drive this CLI bundle against the server bundled immediately afterward.
       - run: npm run build -w services/cli
+      - run: node scripts/build-server.mjs dist/server.mjs
       # ONE BUILD FOR THE WHOLE RUN. Each of the six gate shards used to rebuild these same bytes
       # for itself (`npm run build` ~7s, `npm run build -w services/cli` ~22s, measured on run
       # 35335620538) while this job produced them and threw them away. Compression is off: the
