@@ -237,6 +237,7 @@ export async function buildIslands({ outDir = DEFAULT_OUT_DIR } = {}) {
   const files = {};
   const manifest = {};
   const outputs = Object.entries(result.metafile.outputs);
+  const outputInputs = {};
   for (const [oldName, { file, newName }] of [...byOldName].sort(([a], [b]) => a.localeCompare(b))) {
     const text = rewrite(file.text);
     const stale = [...text.matchAll(/["']\.\/([\w-]+\.js)["']/g)].map((m) => m[1]).filter((n) => byOldName.has(n));
@@ -249,6 +250,7 @@ export async function buildIslands({ outDir = DEFAULT_OUT_DIR } = {}) {
       ...sizes(bytes),
       imports: meta.imports.filter((i) => i.kind === 'import-statement').map((i) => url(byOldName.get(path.basename(i.path)).newName)),
     };
+    outputInputs[url(newName)] = Object.entries(meta.inputs).filter(([, input]) => input.bytesInOutput > 0).map(([name]) => name);
     const entry = meta.entryPoint && ENTRIES.find((e) => meta.entryPoint === toPosix(path.relative(ROOT, e.file())));
     if (entry) manifest[entry.specifier] = url(newName);
   }
@@ -272,7 +274,7 @@ export async function buildIslands({ outDir = DEFAULT_OUT_DIR } = {}) {
   const sortedFiles = Object.fromEntries(Object.keys(files).sort().map((k) => [k, files[k]]));
   const build = buildId(sortedManifest, ssr, inputs);
   fs.writeFileSync(path.join(outDir, 'manifest.json'), JSON.stringify({ build, manifest: sortedManifest, files: sortedFiles, ssr }, null, 1) + '\n');
-  return { build, manifest: sortedManifest, files: sortedFiles, ssr, closure: (urls) => closureOf(sortedFiles, urls), inputs };
+  return { build, manifest: sortedManifest, files: sortedFiles, ssr, closure: (urls) => closureOf(sortedFiles, urls), inputs, outputInputs, metafile: result.metafile };
 }
 
 /**
