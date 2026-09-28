@@ -188,7 +188,7 @@ export function boot(input: IslandModule | readonly IslandEntry[], win: Window =
       const dispose = hydrateIsland(renderId, Component, context, root);
       if (dispose) islands.set(renderId, [key, dispose]);
     } catch (error) {
-      console.error(`[islands] ${renderId} did not hydrate`, error);
+      console.error(`[islands] hydrate ${renderId}`, error);
     }
   };
   module.ISLANDS.forEach(hydrate);
@@ -208,7 +208,7 @@ export function boot(input: IslandModule | readonly IslandEntry[], win: Window =
     // Loaded after hydration, off the shared runtime's closure: the marks cover the gap, so nothing is missed.
     void import('./live').then(({ startIslandLive }) => {
       if (!disposed) stopLive = startIslandLive(win, liveId, liveEdit, data.results?.since ?? null);
-    }).catch((error: unknown) => console.error('[islands] the live stream did not load', error));
+    }).catch((error: unknown) => console.error('[islands] live failed', error));
   }
   // The link follows the reader (./url-sync), top-level only: a framed document's address is its frame's.
   let stopUrl = () => {};
@@ -268,7 +268,7 @@ export function boot(input: IslandModule | readonly IslandEntry[], win: Window =
   if (authorScript) {
     void import('./author-host').then(({ startAuthorHost }) => {
       if (!disposed && mode === 'read') stopAuthor = startAuthorHost(authorScript, store, doc);
-    }).catch((error: unknown) => console.error('[islands] the author script host did not load', error));
+    }).catch((error: unknown) => console.error('[islands] author host failed', error));
   }
   return islandDocument;
 }

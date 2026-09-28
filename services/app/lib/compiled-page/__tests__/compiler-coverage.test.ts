@@ -26,6 +26,9 @@ import { IconGlyphProvider } from '@/components/kit/icon';
 import { createElement, Fragment } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { COMPILED_PARITY_FIXTURES } from '../../../../../scripts/fixtures/compiled-parity/index.mjs';
+import { buildGlyphMap } from '@/lib/story/icon-glyphs';
+import { loadSsrModule } from '../bundle.server';
+import { createModuleStore } from '../modules.server';
 
 async function compiledFlow(declared: Dataflow, body: JsxNode[]) {
   const result = compileDataflow(declared, await prepareCompile(declared, async () => null), body);
@@ -182,6 +185,58 @@ describe('the compiled-parity gate\'s wrapper fixtures', () => {
       expect(columnParity(page.html, input, { ...declaredValues(input.flow), rows: ROWS }, ['dk5', 'tb17'])).toEqual([]);
     });
   }
+});
+
+describe('reactive shells match the React reader', () => {
+  it('keeps native boolean attributes live at declared values and in rows', async () => {
+    const source = '<Helmet><Value name="on" type="boolean" default={true} /><Value name="rows" type="table" value={[{"k":"a","off":false},{"k":"b","off":true}]} /></Helmet><div><details id="details" open={$on}><summary>More</summary></details><p id="hidden" hidden={!$on}>Hi</p><For each={$rows} keyBy="k"><button id="row" disabled={$_row.off}>{$_row.k}</button></For></div>';
+    const input = await inputOf(source);
+    const page = await compilePage(input, loadCompilerBuild());
+    expect(columnParity(page.html, input, { on: true, rows: [{ k: 'a', off: false }, { k: 'b', off: true }] })).toEqual([]);
+    expect(dom(page.html).querySelector('#details')?.hasAttribute('open')).toBe(true);
+    expect([...dom(page.html).querySelectorAll('.mx-doc button')].map((b) => b.hasAttribute('disabled'))).toEqual([false, true]);
+    expect(generate(input).islands).toContain('rt.expr');
+  });
+
+  it('substitutes row classes before merging and row leaf props before rendering', async () => {
+    const rows = [{ k: 'a', shade: 'red', p: 20 }, { k: 'b', shade: 'blue', p: 80 }];
+    const source = `<Helmet><Value name="rows" type="table" value={${JSON.stringify(rows)}} /></Helmet><For each={$rows} keyBy="k"><div><Badge id="badge" className="bg-red-500 bg-{$_row.shade}">{$_row.k}</Badge><Progress id="progress" value="{$_row.p}" /></div></For>`;
+    const input = await inputOf(source);
+    const page = await compilePage(input, loadCompilerBuild());
+    expect(columnParity(page.html, input, { rows })).toEqual([]);
+  });
+
+  it('merges a React shell class after each row substitutes its utility', async () => {
+    const rows = [{ k: 'a', pad: 4 }, { k: 'b', pad: 8 }];
+    const source = `<Helmet><Value name="rows" type="table" value={${JSON.stringify(rows)}} /></Helmet><Table><TableBody><For each={$rows} keyBy="k"><TableRow><TableCell id="cell" className="p-{$_row.pad}">{$_row.k}</TableCell></TableRow></For></TableBody></Table>`;
+    const input = await inputOf(source);
+    const page = await compilePage(input, loadCompilerBuild());
+    expect(columnParity(page.html, input, { rows })).toEqual([]);
+  });
+
+  it('resolves the glyph named by each declared row', async () => {
+    const rows = [{ k: 'a', icon: 'check' }, { k: 'b', icon: 'x' }];
+    const source = `<Helmet><Value name="rows" type="table" value={${JSON.stringify(rows)}} /></Helmet><For each={$rows} keyBy="k"><Icon id="icon" name="{$_row.icon}" /></For>`;
+    const input = { ...(await inputOf(source)), glyphs: buildGlyphMap(['check', 'x']) };
+    const page = await compilePage(input, loadCompilerBuild());
+    expect(columnParity(page.html, input, { rows })).toEqual([]);
+    expect([...dom(page.html).querySelectorAll('svg[data-slot="icon"]')]).toHaveLength(2);
+    const code = new TextDecoder().decode((await createModuleStore().get(page.module!.sha))!);
+    expect(code).toContain('glyphs-');
+  });
+
+  it('renders a live rail miniature from the current values', async () => {
+    const source = '<Helmet><Value name="who" type="string" default="Ada" /></Helmet><SlideDeck><Slide title="One"><h1 id="who">Hello {$who}</h1></Slide><Slide title="Two"><p>Two</p></Slide><Slide title="Three"><p>Three</p></Slide></SlideDeck>';
+    const input = await inputOf(source, 'deck');
+    const page = await compilePage(input, loadCompilerBuild());
+    const rail = dom(page.html).querySelector('.mx-rail-thumb')!;
+    expect(rail.textContent).toContain('Hello Ada');
+    expect(page.behaviors).toContain('@mx/deck');
+    expect(page.module, 'the rail needs the data store to follow value changes').not.toBeNull();
+    const ssr = await loadSsrModule(page.ssr!);
+    const changed = ssr.render({ values: { who: 'Grace' }, results: null, mermaidImages: {}, drawings: {} });
+    expect(dom(changed).querySelector('.mx-rail-thumb')?.textContent).toContain('Hello Grace');
+  });
 });
 
 describe('the static part of a large document', () => {
