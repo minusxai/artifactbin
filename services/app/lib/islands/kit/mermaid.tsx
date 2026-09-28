@@ -1,7 +1,6 @@
 /* @jsxImportSource solid-js */
 import { Show, createEffect, createSignal, on, onCleanup, onMount, type JSX } from 'solid-js';
 import { mermaidImageKey, mermaidSourceError } from '@/lib/story-ui/mermaid-source';
-import { readerMode } from '@/lib/story-runtime/reader-mode';
 import { useIsland } from '../context';
 import { deferEngine } from '../defer-engine';
 import type { MermaidImage } from '@/components/kit/mermaid-render';
@@ -18,6 +17,9 @@ type Props = { code: string; title?: string; colorMode?: 'light' | 'dark'; image
 const join = (...v: (string | false | undefined)[]) => v.filter(Boolean).join(' ');
 /** The prose image's inline style as React's server renderer writes `{ width, maxWidth: '100%', height: 'auto' }`. */
 const servedStyle = (image: MermaidImage) => [image.width !== undefined ? `width:${image.width}px` : '', 'max-width:100%', 'height:auto'].filter(Boolean).join(';');
+/** Set by @mx/page before this island's module runs; a capture has no page override. */
+const pageMode = (): 'light' | 'dark' | null => typeof document === 'undefined'
+  ? null : document.documentElement.getAttribute('data-mx-reader-mode') as 'light' | 'dark' | null;
 
 export function Mermaid(p: Props) {
   const island = useIsland();
@@ -31,12 +33,14 @@ export function Mermaid(p: Props) {
     revision();
     const themed = host?.closest('[data-mx-inline-story]') ?? host?.closest('.dark, .light');
     const modeRoot = themed ?? (typeof document !== 'undefined' ? document.documentElement : null);
-    return modeRoot?.classList.contains('dark') ? 'dark' : modeRoot?.classList.contains('light') ? 'light' : p.colorMode ?? 'light';
+    const mode = modeRoot?.classList.contains('dark') ? 'dark' : modeRoot?.classList.contains('light') ? 'light' : p.colorMode ?? 'light';
+    if (host?.isConnected && mode === pageMode()) document.documentElement.removeAttribute('data-mx-reader-mode');
+    return mode;
   };
   const imageKey = () => {
     if (invalid()) return null;
     const mode = liveMode();
-    const override = typeof window === 'undefined' ? null : readerMode(window);
+    const override = pageMode();
     return p.imageKey ?? mermaidImageKey(p.code, override ?? mode);
   };
   const stored = () => { const key = imageKey(); const offered = key ? island.drawings()[key] : undefined; return offered && offered.src !== refused() ? offered : undefined; };
@@ -49,24 +53,14 @@ export function Mermaid(p: Props) {
   let host!: HTMLElement; let img: HTMLImageElement | undefined;
 
   onMount(() => {
-    // Only a CHANGED value redraws (a re-stamp with the same theme does not).
-    const observer = new MutationObserver(records => {
-      if (records.some(record => record.oldValue !== (record.target as Element).getAttribute(record.attributeName ?? ''))) setRevision(n => n + 1);
+    let disposed = false;
+    let stopMode = () => {};
+    const modeAtMount = liveMode();
+    // The late watcher compares the mode it finds with this first sample before deciding to resample.
+    void import('./mermaid-mode').then(({ watchMermaidMode }) => {
+      if (!disposed) stopMode = watchMermaidMode(host, () => setRevision(n => n + 1), () => liveMode() !== modeAtMount);
     });
-    const watchAncestors = () => {
-      for (let element = host.parentElement; element; element = element.parentElement) {
-        observer.observe(element, { attributes: true, attributeOldValue: true, attributeFilter: ['data-theme', 'data-color-mode', 'class'] });
-      }
-    };
-    const attach = new MutationObserver(() => {
-      if (!host.isConnected) return;
-      attach.disconnect();
-      watchAncestors();
-      setRevision(n => n + 1);
-    });
-    if (host.isConnected) watchAncestors();
-    else attach.observe(document.documentElement, { childList: true, subtree: true });
-    onCleanup(() => { observer.disconnect(); attach.disconnect(); });
+    onCleanup(() => { disposed = true; stopMode(); });
     // JSX evaluates the stored-image key before its figure ref is assigned.
     // Resample once with the mounted host, so an initial dark page does not keep the light drawing.
     setRevision(n => n + 1);
@@ -82,7 +76,7 @@ export function Mermaid(p: Props) {
       if (bad) return;
       // The page module may apply a same-tab colour override after this island mounts.
       // Avoid priming Mermaid's module with the old palette before that class flip.
-      const override = typeof window === 'undefined' ? null : readerMode(window);
+      const override = pageMode();
       if (override && mode !== override) return;
       let live = true;
       setResult(null);

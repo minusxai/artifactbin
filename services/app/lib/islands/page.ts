@@ -28,9 +28,8 @@ import { wireOutline } from '@/lib/story-runtime/outline-nav';
 import { markScrollableTables } from '@/lib/story-runtime/table-scroll';
 import { startIslandLive } from './live';
 import { ISLANDS_READY_EVENT, ISLAND_DOCUMENT_KEY, type IslandHost } from './contract';
-import type { MxApi } from '@artifactbin/contracts';
 
-/** The private root handle boot removes on edit/dispose; repeated here to keep boot out of page's chunk. */
+/** The private root cleanup boot calls on edit/dispose; repeated here to keep boot out of page's chunk. */
 const PUBLIC_MX_KEY = '__mxPublicApi';
 import { PAGE_TAKEOVER_EVENT } from './page-lifetime';
 
@@ -66,6 +65,10 @@ export function startPage(doc: Document = document, win: Window = window): () =>
   if (framed) html.classList.add('mx-framed');
 
   const mode = readerMode(win);
+  // The page runs before the document module: islands can read this mode without loading
+  // the window.name envelope parser into every kit-family bundle.
+  if (mode) html.setAttribute('data-mx-reader-mode', mode);
+  else html.removeAttribute('data-mx-reader-mode');
   if (mode) {
     for (const el of [html, doc.querySelector<HTMLElement>(STORY_ROOT_SELECTOR)]) {
       el?.classList.toggle('dark', mode === 'dark');
@@ -83,7 +86,10 @@ export function startPage(doc: Document = document, win: Window = window): () =>
     void import('./mx-host').then(({ publicMxFor }) => {
       if (!store.disposed && island.mode() === 'read' && root.isConnected) {
         const api = publicMxFor(store);
-        (root as IslandHost & { [PUBLIC_MX_KEY]?: MxApi })[PUBLIC_MX_KEY] = api;
+        (root as IslandHost & { [PUBLIC_MX_KEY]?: () => void })[PUBLIC_MX_KEY] = () => {
+          if (win.mx === api) delete win.mx;
+          delete (root as IslandHost & { [PUBLIC_MX_KEY]?: () => void })[PUBLIC_MX_KEY];
+        };
         win.mx = api;
       }
     }).catch((error: unknown) => console.error('[islands] the public mx API did not load', error));

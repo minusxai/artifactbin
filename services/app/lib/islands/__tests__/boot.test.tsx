@@ -132,6 +132,17 @@ describe('boot', () => {
     stopPage();
   });
 
+  it('releases the public mx API when the compiled document enters edit mode', async () => {
+    page(snapshot);
+    const stopPage = startPage();
+    booted = boot({ ISLANDS: [['s0-', Total]], FLOW: flow });
+    await vi.waitFor(() => expect(window.mx).toBeDefined());
+    const installed = window.mx;
+    booted.setMode('edit');
+    expect(window.mx).not.toBe(installed);
+    stopPage();
+  });
+
   it('accepts ISLANDS alone for a module whose islands read no data', () => {
     page(snapshot);
     booted = boot([['s0-', Total]]);

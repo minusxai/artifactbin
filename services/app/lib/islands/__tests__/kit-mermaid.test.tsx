@@ -89,7 +89,7 @@ describe('Mermaid, drawn by the reader', () => {
   });
   it('waits for a per-visit mode override before the first engine draw', async () => {
     fakeCanvas();
-    window.name = 'mx:doc:{"mode":"dark"}';
+    document.documentElement.setAttribute('data-mx-reader-mode', 'dark');
     const host = themed();
     host.classList.add('light');
     const island = fakeIsland();
@@ -101,7 +101,7 @@ describe('Mermaid, drawn by the reader', () => {
       host.classList.replace('light', 'dark');
       await vi.waitFor(() => expect(engine.renderMermaid.mock.calls.at(-1)?.[1].dark).toBe(true));
       expect(engine.renderMermaid).toHaveBeenCalledTimes(1);
-    } finally { dispose?.(); host.remove(); window.name = ''; }
+    } finally { dispose?.(); host.remove(); document.documentElement.removeAttribute('data-mx-reader-mode'); }
   });
   it('uses the live reader mode after the document theme changes', async () => {
     fakeCanvas();
@@ -149,7 +149,7 @@ describe('Mermaid, drawn by the reader', () => {
 describe('Mermaid, from a stored drawing', () => {
   const stored = { [mermaidImageKey(CODE, 'light')]: { src: '/assets/mermaid/abc.svg', type: 'flowchart-v2', width: 856.234375, height: 120, palette: 'p' } };
   it('selects the stored image for a persisted reader mode override before the root changes', async () => {
-    window.name = 'mx:doc:{"mode":"dark"}';
+    document.documentElement.setAttribute('data-mx-reader-mode', 'dark');
     const host = themed();
     host.classList.add('light');
     const island = fakeIsland();
@@ -161,7 +161,11 @@ describe('Mermaid, from a stored drawing', () => {
     try {
       dispose = render(() => <IslandProvider value={island}><Mermaid code={CODE} colorMode="light" /></IslandProvider>, host);
       await vi.waitFor(() => expect(host.querySelector('img')?.getAttribute('src')).toBe('/assets/mermaid/dark.svg'));
-    } finally { dispose?.(); host.remove(); window.name = ''; }
+      host.classList.replace('light', 'dark');
+      await vi.waitFor(() => expect(document.documentElement.hasAttribute('data-mx-reader-mode')).toBe(false));
+      host.classList.replace('dark', 'light');
+      await vi.waitFor(() => expect(host.querySelector('img')?.getAttribute('src')).toBe('/assets/mermaid/abc.svg'));
+    } finally { dispose?.(); host.remove(); document.documentElement.removeAttribute('data-mx-reader-mode'); }
   });
   it('switches stored images with the reader mode', async () => {
     const host = themed();

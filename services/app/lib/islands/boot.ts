@@ -30,7 +30,6 @@
 import type { Component } from 'solid-js';
 import type { CompiledDataflow } from '@/lib/story/compiled-dataflow';
 import type { PageEngine } from '@/lib/story-runtime/page-engine';
-import type { MxApi } from '@artifactbin/contracts';
 import { createDataflowStore } from '@/lib/story-runtime/store';
 import { createIslandDocumentTransport } from './document-transport';
 import { STORY_DATA_HOOK } from '@/lib/story-runtime/contract';
@@ -43,7 +42,7 @@ import { createWriteStatusFeed } from './writes';
 import { installStatus } from './kit/status';
 import { loadChart } from './chart';
 
-/** Page behaviour installs the public API here; boot owns its lifetime. */
+/** Page behaviour installs a cleanup here; boot owns its lifetime. */
 const PUBLIC_MX_KEY = '__mxPublicApi';
 
 /**
@@ -223,11 +222,7 @@ export function boot(input: IslandModule | readonly IslandEntry[], win: Window =
   let ready = false;
   let disposed = false;
   let stopAuthor = () => {};
-  const uninstallMx = () => {
-    const publicMx = (root as HTMLElement & { [PUBLIC_MX_KEY]?: MxApi })[PUBLIC_MX_KEY];
-    if (publicMx && win.mx === publicMx) delete win.mx;
-    delete (root as HTMLElement & { [PUBLIC_MX_KEY]?: MxApi })[PUBLIC_MX_KEY];
-  };
+  const uninstallMx = () => (root as HTMLElement & { [PUBLIC_MX_KEY]?: () => void })[PUBLIC_MX_KEY]?.();
   let authorGeneration = 0;
   const restartAuthor = async (source: string | null) => {
     const generation = ++authorGeneration;
