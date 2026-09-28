@@ -18,6 +18,7 @@ import type { StoryController, EditorStoryRuntimeProps } from '@/lib/story-runti
 import { STORY_DATA_MESSAGE } from '@/lib/story-runtime/contract';
 import { captureInitialStory, clearInitialStory } from '@/web/initial-story';
 import { scheduleSpaBoot } from '@/web/idle-boot';
+import { compiledReaderUpdates } from '@/lib/story-runtime/compiled-reader-update';
 
 const interpreters: EditorStoryRuntimeProps[] = [];
 vi.mock('@/lib/story-runtime/EditorStoryRuntime', () => ({
@@ -82,6 +83,7 @@ beforeEach(() => {
 afterEach(() => {
   clearInitialStory();
   window.location.hash = '';
+  vi.restoreAllMocks();
   vi.unstubAllGlobals();
 });
 
@@ -126,13 +128,29 @@ describe('adopting the compiled page', () => {
     expect(story.isConnected).toBe(false);
   });
 
-  it('a newer version hands the document to the interpreter', async () => {
+  it('a newer version reloads the compiled document without mounting the interpreter', async () => {
+    const reload = vi.spyOn(compiledReaderUpdates, 'reload').mockImplementation(() => {});
     const { islands } = servePage();
     const view = render(<ArtifactSurface {...compiledProps()} />);
     view.rerender(<ArtifactSurface {...compiledProps()} version={2} />);
     await act(async () => { await Promise.resolve(); });
+    expect(reload).toHaveBeenCalledOnce();
+    expect(interpreters).toHaveLength(0);
+    expect(islands.events).toEqual([]);
+  });
+
+  it('keeps the editor interpreter while an edit session receives a newer version', async () => {
+    const reload = vi.spyOn(compiledReaderUpdates, 'reload').mockImplementation(() => {});
+    servePage();
+    const view = render(<ArtifactShell role="owner"><ArtifactSurface {...compiledProps()} /></ArtifactShell>);
+    expect(reload).not.toHaveBeenCalled();
+    const edit = document.querySelector<HTMLElement>('[data-mx-reader-rail] [data-mx-reader-action="edit"]')!;
+    await act(async () => { fireEvent.click(edit); await Promise.resolve(); });
+    await waitFor(() => expect(interpreters).toHaveLength(1));
+    reload.mockClear();
+    view.rerender(<ArtifactShell role="owner"><ArtifactSurface {...compiledProps()} version={2} /></ArtifactShell>);
     expect(interpreters).toHaveLength(1);
-    expect(islands.events).toEqual(['dispose']);
+    expect(reload).not.toHaveBeenCalled();
   });
 
   it('a dataset wakeup re-runs the islands\' queries on their store', () => {

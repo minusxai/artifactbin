@@ -67,6 +67,7 @@ import type { StoryIslandDataflow } from '@/lib/story-runtime/contract';
 import { IslandStory } from '@/components/IslandStory';
 import { initialDocumentStory, initialIslandDocument, initialStoryIsCompiled } from '@/web/initial-story';
 import { takeChromeIntent } from '@/web/idle-boot';
+import { compiledReaderUpdates } from '@/lib/story-runtime/compiled-reader-update';
 
 // Dataset controls are a format-specific boundary. Text readers must not
 // preload their query/editor dependencies through the common artifact shell.
@@ -330,7 +331,7 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
    * islands running, adopted AS IT IS (components/IslandStory) — never hydrated, never drawn again.
    * Read once, by the surface the page was served for (web/initial-story clears it on any other
    * route). The interpreter (EditorStoryRuntime) takes over, for good, only when the document must
-   * become something the islands cannot: an editor's draft, or a newer version.
+   * become an editor's draft. A newer reader version reloads the compiled page.
    */
   const [servedCompiled] = useState(initialStoryIsCompiled);
   const [compiled] = useState(() => {
@@ -338,7 +339,12 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
     return story ? { story, islands: initialIslandDocument() } : null;
   });
   const [interpreting, setInterpreting] = useState(!compiled);
-  const handOver = useCallback(() => setInterpreting(true), []);
+  const reloadRequested = useRef(false);
+  const reloadReader = useCallback(() => {
+    if (reloadRequested.current) return;
+    reloadRequested.current = true;
+    compiledReaderUpdates.reload();
+  }, []);
 
   const intentDone = useRef(false);
   useEffect(() => {
@@ -517,9 +523,12 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
   // Signal changes update this document's store and route, never its initial
   // seed. Only a new artifact identity receives a new runtime and URL seed.
   const initialRuntimeVersion = useMemo(() => version, [id]);
-  // Edit mode or a newer version: the islands give way to the interpreter (a render-time adjustment, so no frame shows both).
-  if (!interpreting && (editing || !!live?.nodes || version > initialRuntimeVersion)) setInterpreting(true);
+  // Only editing gives way to the interpreter (a render-time adjustment, so no frame shows both).
+  if (!interpreting && editing) setInterpreting(true);
   const islandsLive = !!compiled && !interpreting && !!props.runtime;
+  useEffect(() => {
+    if (islandsLive && !editing && (!!live?.nodes || version > initialRuntimeVersion)) reloadReader();
+  }, [islandsLive, editing, live?.nodes, version, initialRuntimeVersion, reloadReader]);
   // Edit mode begins: the islands are unmounted (`setMode('edit')`) before IslandStory disposes them
   // (a microtask after this commit) and the interpreter the editor drives is already in their place.
   useLayoutEffect(() => { if (editing) compiled?.islands?.setMode('edit'); }, [editing, compiled]);
@@ -1013,7 +1022,7 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
             islands={compiled.islands}
             nodes={props.runtime!.data.nodes}
             onController={onController}
-            onStale={handOver}
+            onStale={reloadReader}
           /> : seedReady ? <EditorStoryRuntime
             key={id}
             data={initialRuntimeData}
