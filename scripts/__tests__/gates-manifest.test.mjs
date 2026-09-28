@@ -12,7 +12,7 @@ import { describe, expect, it } from 'vitest';
 import { readdirSync, readFileSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import path from 'node:path';
-import { GATE_RUNNERS, GATE_SPECS, checkManifest, gateNamesOnDisk, specFor, browsersFor, shardWeight } from '../gates.manifest.mjs';
+import { COMPILED_LEGS, GATE_RUNNERS, GATE_SPECS, checkLegs, checkManifest, compiledLegNames, gateNamesOnDisk, gateOf, specFor, browsersFor, shardWeight } from '../gates.manifest.mjs';
 import { parseShard, shardOf } from '../gates.shard.mjs';
 
 const SCRIPTS = path.resolve(import.meta.dirname, '..');
@@ -87,7 +87,8 @@ describe('the rows tell the truth about their sources', () => {
     // No gate is special-cased by NAME in the runner: that is what the fields are for.
     expect(runner).not.toMatch(/gate\.name\s*===\s*'/);
     const listed = execFileSync(process.execPath, [path.join(SCRIPTS, 'gates.mjs'), '--list'], { encoding: 'utf8' }).trim().split('\n').sort();
-    expect(listed).toEqual(onDisk);
+    // Every gate, and the compiled legs that are not disabled.
+    expect(listed).toEqual([...onDisk, ...compiledLegNames()].sort());
   });
 
   it('8. every gate reports through the one verdict dialect, or asserts and throws', () => {
@@ -169,9 +170,43 @@ it('balances the extra cross-browser setup without extending any test timeout', 
 });
 
 it('prints the same browser plan used by shard selection without starting servers', () => {
-  for (let index = 1; index <= 6; index++) {
-    const selected = shardOf(onDisk, {index, total: 6}, shardWeight);
-    const output = execFileSync(process.execPath, [path.join(SCRIPTS, 'gates.mjs'), '--browsers', `--shard=${index}/6`], {encoding: 'utf8'}).trim();
+  const set = [...onDisk, ...compiledLegNames()];
+  for (let index = 1; index <= 7; index++) {
+    const selected = shardOf(set, {index, total: 7}, shardWeight);
+    const output = execFileSync(process.execPath, [path.join(SCRIPTS, 'gates.mjs'), '--browsers', `--shard=${index}/7`], {encoding: 'utf8'}).trim();
     expect(output).toBe(browsersFor(selected).join(' '));
   }
+});
+
+describe('the compiled legs (w3-behaviour)', () => {
+  it('each leg names one gate on disk, carries a measured timeout, and a disabled one says why', () => {
+    expect(() => checkLegs(onDisk)).not.toThrow();
+    expect(() => checkLegs(['live-data'], [{ gate: 'live-data', timeoutMs: 60_000 }, { gate: 'nope', timeoutMs: 60_000 }])).toThrow(/no gate for: nope/);
+    expect(() => checkLegs(['a'], [{ gate: 'a', timeoutMs: 60_000 }, { gate: 'a', timeoutMs: 60_000 }])).toThrow(/named twice: a/);
+    for (const leg of COMPILED_LEGS) {
+      expect(Number.isInteger(leg.timeoutMs) && leg.timeoutMs >= 60_000 && leg.timeoutMs % 10_000 === 0, leg.gate).toBe(true);
+      if (leg.disabled !== undefined) expect(leg.disabled.length, leg.gate).toBeGreaterThan(20);
+    }
+    // The brief's behavioural set is wired, enabled or with its reason.
+    expect(COMPILED_LEGS.map((leg) => leg.gate).sort()).toEqual(['dataflow', 'export-slice', 'full-kit', 'hydration', 'layout-shift', 'live-data', 'live-reader', 'reader-chrome']);
+  });
+
+  it('a leg is its gate\'s row under its own name and timeout, and the default set leaves disabled legs out', () => {
+    const leg = specFor('live-reader@compiled');
+    expect(leg).toMatchObject({ name: 'live-reader@compiled', needsMail: specFor('live-reader').needsMail, timeoutMs: COMPILED_LEGS.find((l) => l.gate === 'live-reader').timeoutMs });
+    expect(gateOf('live-reader@compiled')).toBe('live-reader');
+    expect(() => specFor('fonts@compiled')).toThrow(/no compiled leg/);
+    expect(compiledLegNames()).not.toContain('dataflow@compiled');
+    expect(compiledLegNames({ all: true })).toContain('dataflow@compiled');
+  });
+
+  it('every leg\'s gate reads GATE_READER (its own switch or scripts/lib/gate-reader)', () => {
+    for (const leg of COMPILED_LEGS.filter((l) => !l.disabled && l.gate !== 'export-slice')) expect(source(leg.gate), leg.gate).toMatch(/GATE_READER|lib\/gate-reader\.mjs/);
+  });
+
+  it('the runner runs a leg with GATE_READER=compiled on servers booted with the compiled reader on', () => {
+    const runner = readFileSync(path.join(SCRIPTS, 'gates.mjs'), 'utf8');
+    expect(runner).toMatch(/isCompiledLeg\(gate\.name\) \? \{ GATE_READER: 'compiled' \}/);
+    expect(runner).toMatch(/bootPool\('on'/);
+  });
 });
