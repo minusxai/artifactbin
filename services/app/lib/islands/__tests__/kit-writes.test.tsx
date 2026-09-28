@@ -203,6 +203,22 @@ describe('a row action\'s state is the document\'s, not the button\'s (today\'s 
     third.dispose();
   });
 
+  it('a `set=`-only button in a row is no row action: it sets the row\'s values, with or without a durable key (the booking day pick)', () => {
+    const s = fakeStore();
+    const { host, dispose } = mount(islandOn(s.store), () => <>
+      <Button set={{ day: { ref: '_row.day' } }} row={{ day: '2026-10-01' }} rowScope={{ owner: 'days', key: '2026-10-01', durable: true, ids: [] }}>Thu 1</Button>
+      <Button set={{ day: { ref: '_row.day' } }} row={{ day: '2026-10-02' }} rowScope={{ owner: 'days', key: 1, durable: false, ids: [] }}>Fri 2</Button>
+    </>);
+    const [thu, fri] = [...host.querySelectorAll('button')];
+    expect(host.querySelector('[role="alert"]')).toBeNull();
+    thu!.click();
+    expect(s.store.setValues).toHaveBeenLastCalledWith({ day: '2026-10-01' });
+    fri!.click();
+    expect(s.store.setValues).toHaveBeenLastCalledWith({ day: '2026-10-02' });
+    expect(s.store.mutate).not.toHaveBeenCalled();
+    dispose();
+  });
+
   it('each row, and each document, has its own', () => {
     const s = fakeStore({ access: { done: null } });
     const island = islandOn(s.store);

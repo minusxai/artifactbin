@@ -79,7 +79,8 @@ export function Button(props: ButtonProps) {
   const unavailable = hydratedRead(() => (name ? island.mutationUnavailable(name) : null), { value: name ? ACCESS_PENDING : null });
   const [error, setError] = createSignal<string | null>(null);
   const alert = <Show when={error()}><span role="alert" class="mx-write-error">{error()}</span></Show>;
-  if (row) {
+  // A row ACTION is a row's `run=` (the interpreter's rowAction); a `set=`-only button in a row just sets its row's values.
+  if (row && name) {
     const scope = own.rowScope;
     if (!scope?.durable || !stableRowKey(scope.key)) return <span role="alert">Row actions require a stable row key</span>;
     // The interpreter's row action identity: the repeat, the row's key, the button's node, its mutation.
