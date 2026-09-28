@@ -171,7 +171,8 @@ async function bootServer(index, mailOutbox, authSecret) {
       DATASET__ALLOW_PRIVATE_NETWORKS: 'true',
       // The compiled reader is compiled and served on request (`?reader=compiled`) while readers keep
       // today's renderer, so gate-compiled-parity compares the two (docs/phase2-architecture.md §10).
-      FLAG__COMPILED_READER: 'shadow',
+      // A run may ask for another setting (`on`) through the environment (scripts/gate-container.mjs forwards it).
+      FLAG__COMPILED_READER: process.env.FLAG__COMPILED_READER || 'shadow',
       ...(mailOutbox ? { EMAIL__DEV_OUTBOX_PATH: mailOutbox } : {}),
     },
   });

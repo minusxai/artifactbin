@@ -288,6 +288,27 @@ describe('the compiled capture', () => {
   });
 });
 
+describe('the viewer overlay door', () => {
+  it('is named only when the version has a viewer-scope query, on /raw and on the app page', async () => {
+    const who = await owner();
+    const sales = await publish(who.token, { title: 'Perf sales', dataset: fixture('sales.csv') });
+    const shared = await publish(who.token, { title: 'Perf C dashboard', markup: fixture('dashboard.jsx').replaceAll('{{sales}}', sales), template: 'dashboard' });
+    const mine = await publish(who.token, { title: 'Perf C dashboard, mine', template: 'dashboard',
+      markup: fixture('dashboard.jsx').replaceAll('{{sales}}', sales).replace('</Helmet>', '  <Query name="mine">{`select $_me.id as me`}</Query>\n</Helmet>') });
+    const doors = async (path: string, init?: RequestInit) => {
+      const res = path.includes('/raw') ? await rawRoute(request(path), params(path.split('/')[2]!)) : await app.request(path, init);
+      expect(res.headers.get(READER_MODE_HEADER)).toBe('compiled');
+      return JSON.parse(new JSDOM(await res.text()).window.document.getElementById('mx-story-data')?.textContent ?? '{}') as { viewerUrl?: string; queryUrl?: string };
+    };
+    const html = { headers: { accept: 'text/html' } };
+    expect(await doors(`/a/${shared}/raw?reader=compiled`)).not.toHaveProperty('viewerUrl');
+    expect((await doors(`/a/${shared}?reader=compiled`, html)).queryUrl).toBe(`/a/${shared}/query`);
+    expect(await doors(`/a/${shared}?reader=compiled`, html)).not.toHaveProperty('viewerUrl');
+    expect((await doors(`/a/${mine}/raw?reader=compiled`)).viewerUrl).toBe(`/a/${mine}/viewer`);
+    expect((await doors(`/a/${mine}?reader=compiled`, html)).viewerUrl).toBe(`/a/${mine}/viewer`);
+  });
+});
+
 describe('withBodyAttributes', () => {
   it('splices at the real head/body boundary, past a stylesheet that spells the boundary', () => {
     const html = '<!doctype html><html><head><title>t</title><style data-mx-story-css>p::after{content:"</head><body>"}</style></head><body><p>x</p></body></html>';

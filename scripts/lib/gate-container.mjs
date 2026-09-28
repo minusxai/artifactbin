@@ -132,8 +132,12 @@ export function containerName(worktree, pid) {
  *   runner is gone, so a killed runner cannot leave a container behind.
  * - No AUTH__SECRET is passed: scripts/gates.mjs mints one per run when none is set, which is the
  *   shape of CI's per-run secret.
+ * - The reader switches ride in from the runner's environment when set (`FORWARDED_ENV`): the server's
+ *   `FLAG__COMPILED_READER` (scripts/gates.mjs defaults it to `shadow`) and the gates' `GATE_READER`,
+ *   so a compiled leg runs in a container exactly as it would in CI.
  */
-export function dockerRunArgs({ name, image, volume, worktree, cpus, memory, servers, gates }) {
+export const FORWARDED_ENV = ['FLAG__COMPILED_READER', 'GATE_READER'];
+export function dockerRunArgs({ name, image, volume, worktree, cpus, memory, servers, gates, env = {} }) {
   return [
     'run', '--rm', '-i', '--init',
     '--name', name,
@@ -145,6 +149,7 @@ export function dockerRunArgs({ name, image, volume, worktree, cpus, memory, ser
     '-v', `${worktree}:${INSIDE.src}:ro`,
     '-v', `${volume}:${INSIDE.deps}`,
     '-e', 'DATASET__ALLOW_PRIVATE_NETWORKS=true',
+    ...FORWARDED_ENV.flatMap((key) => (env[key] ? ['-e', `${key}=${env[key]}`] : [])),
     '-w', INSIDE.src,
     image,
     'node', `${INSIDE.src}/scripts/gate-container.mjs`, '--inside', '--servers', String(servers), ...gates,

@@ -342,7 +342,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
           doors: capture ? null : {
             queryUrl: queryPath(artifact.id),
             ...(!at && declaresMutations(row.source) ? { mutateUrl: mutatePath(artifact.id) } : {}),
-            ...(domain ? {} : { viewerUrl: VIEWER_OVERLAY_PATH(artifact.id) }),
+            viewerUrl: VIEWER_OVERLAY_PATH(artifact.id),
             assetsUrl: assetsPath(artifact.id),
           },
           ...(at ? { readOnly: archivedReadOnly(at.version) } : {}),

@@ -134,7 +134,7 @@ async function host({ cpus, memory, servers, gates }) {
   console.log(`gate slot ${slot.index}/${slots} (waited ${waited}); container ${name}: ${cpus} CPUs, ${memory}, ${servers} server(s), gates: ${gates.join(' ')}`);
 
   const started = Date.now();
-  const child = spawn('docker', dockerRunArgs({ name, image: tag, volume, worktree: ROOT, cpus, memory, servers, gates }), {
+  const child = spawn('docker', dockerRunArgs({ name, image: tag, volume, worktree: ROOT, cpus, memory, servers, gates, env: process.env }), {
     stdio: ['pipe', 'inherit', 'inherit'],
   });
   child.stdin.on('error', () => { /* the container ended first */ });

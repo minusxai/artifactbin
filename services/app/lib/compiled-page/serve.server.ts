@@ -331,7 +331,7 @@ export async function compiledPageFor(row: ArtifactRow, page: PreparedPage, read
       colorMode,
       // A capture's answers ride as the snapshot the page starts from: the islands then ask for nothing.
       snapshot: reader.results ? { ...(served ?? emptySnapshot(row)), results: reader.results } : served,
-      overlay: { values, mermaidImages, signedIn: reader.signedIn, doors: reader.doors, readOnly: reader.readOnly ?? null },
+      overlay: { values, mermaidImages, signedIn: reader.signedIn, doors: doorsFor(compiled, reader.doors), readOnly: reader.readOnly ?? null },
       chrome: reader.chrome,
       spa: reader.spa,
       build,
@@ -347,6 +347,16 @@ export async function compiledPageFor(row: ArtifactRow, page: PreparedPage, read
     logOnce(row, 'compile-error', error instanceof Error ? error.message : String(error));
     return fallback('compile-error');
   }
+}
+
+/**
+ * The page's doors as the compiled page uses them: the viewer overlay's only when the version's plan
+ * has a viewer-scope query, so the page never asks a door the server has nothing to answer on.
+ */
+function doorsFor(compiled: CompiledPage, doors: CompiledReaderRequest['doors']): CompiledReaderRequest['doors'] {
+  if (!doors?.viewerUrl || compiled.plan?.queries.some((q) => q.scope === 'viewer')) return doors;
+  const { viewerUrl: _unused, ...rest } = doors;
+  return rest;
 }
 
 /** The snapshot shell a capture's own run rides in (never stored). */
