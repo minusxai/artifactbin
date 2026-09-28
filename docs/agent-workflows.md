@@ -77,7 +77,7 @@ exit status is the gates', and the container is removed afterwards, also when th
 - **Caches.** Dependencies install once per `afbin-gate-deps-<key>` volume, keyed like CI's install
   cache, and are copied into each container; the `afbin-gate:*` image is built once per Playwright
   version. Both persist; nothing else does. Remove stale ones with
-  `docker volume ls -q --filter label=afbin.gate-container=1`.
+  `docker volume ls -q --filter label=afbin.gate-container=1 | xargs docker volume rm`.
 - **Not in a container:** `postgres-datasets` starts Postgres through the host's Docker, which the
   container cannot reach; the runner refuses it by name and PR CI runs it.
 - The worktree must be under `$HOME`, which Colima shares. The gates run as root in the container:
