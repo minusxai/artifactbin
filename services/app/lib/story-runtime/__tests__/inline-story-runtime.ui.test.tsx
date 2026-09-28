@@ -133,3 +133,14 @@ describe('inline artifact runtime lifetime', () => {
     expect(document.querySelector('[aria-label="Artifact heading"]')).toBeNull();
   });
 });
+
+it('keeps notification run recovery discoverable in the compatibility reader and disposes its indicator',async()=>{
+ const initial=data('Notifying reader');
+ initial.dataflow={flow:await compiledOf('<Import name="tasks" src="ref:dataset" /><Mutation name="change">{`UPDATE tasks.rows SET n=n+1`}</Mutation><Notify name="notice" on="change">{`SELECT null AS "to", \'Changed\' AS message`}</Notify>',{dataset:[{name:'n',type:'number'}]}),state:{values:{},tables:{},errors:{},mutationAccess:{change:null}}};
+ const view=render(<InlineStoryRuntime data={initial} transport={{...transport,run:async()=>({tables:{},errors:{},mutationAccess:{change:null}}),mutate:async()=>({dataset:'dataset',mutationRunId:'notification-run'})}} onController={()=>{}}/>);
+ await act(async()=>{await window.mx!.mutate('change',{});});
+ const link=await screen.findByRole('link',{name:'Notification status (change)'});
+ expect(link.getAttribute('href')).toContain('/notifications?run=notification-run');
+ expect(document.querySelector('[data-mx-write-status-host]')).not.toBeNull();
+ view.unmount();expect(document.querySelector('[data-mx-write-status-host]')).toBeNull();
+});
