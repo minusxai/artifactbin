@@ -55,8 +55,7 @@
  */
 import { parseFragment } from 'parse5';
 import { createHash } from 'node:crypto';
-import { holdableImports, type ArtifactRow } from '@/lib/artifacts';
-import { discoverOutline, hasOutline } from '@/lib/story-runtime/outline';
+import { holdableImports, type ArtifactRow, type RoleActor } from '@/lib/artifacts';
 import type { ArchivedRender } from '@/lib/archived-version';
 import { mermaidImagesFor } from '@/lib/mermaid-images/store';
 import type { ServedResults, StoredMermaidImage } from '@/lib/story-runtime/contract';
@@ -91,6 +90,14 @@ export interface CompiledReaderRequest {
   signedIn: boolean;
   /** Where the page queries, writes and fetches its overlay; null on a capture. */
   doors: AssembleOverlay['doors'];
+  /** The managed `<Iframe>`'s asset door (AssembleOverlay.managedAssets), or none without an asset origin. */
+  managedAssets?: AssembleOverlay['managedAssets'];
+  /**
+   * The reader whose holdings the page's own SQLite engine answers for (lib/artifacts holdableImports,
+   * IslandPageData.hold): the one the page's query door answers — the app page's request actor, `/raw`'s
+   * anonymous reader (`null`), as today's reader decides it. Absent: the page holds nothing.
+   */
+  holder?: RoleActor | null;
   /** An archived render's read-only reason. */
   readOnly?: string | null;
   /** The document's live identity (`<body data-mx-live-id data-mx-live-edit>`); null on a capture or an archived render. */
@@ -118,7 +125,6 @@ export interface CompiledReaderRequest {
    * Default true.
    */
   documentChrome?: boolean;
-  capture?: boolean;
 }
 
 export type CompiledReaderAnswer =
@@ -143,7 +149,8 @@ let policyOverride: FallbackPolicy | null = null;
 /** A test's override for its file; the product never calls it. */
 export function setFallbackPolicyForTests(policy: FallbackPolicy | null): void { policyOverride = policy; }
 /**
- * The standalone reader is gone; compiled requests wait for a current compile.
+ * THE SWITCH. `legacy` until Wave 4 deletes today's reader; w4-flip-docs removes this function, its
+ * override and every `legacy` branch below, leaving `compiled-only` as the only behaviour.
  */
 export function fallbackPolicy(): FallbackPolicy { return policyOverride ?? 'compiled-only'; }
 
@@ -395,8 +402,10 @@ export async function compiledPageFor(row: ArtifactRow, page: PreparedPage, read
         : Promise.resolve({}),
       // A capture brings its own settled run; an archived version and a version that cannot run have no snapshot.
       reader.results !== undefined || reader.at || !flow || page.declared?.state ? Promise.resolve(null) : snapshotFor(row, compiled, flow, values),
-      flow && !reader.signedIn ? holdableImports(row, flow, null) : Promise.resolve([]),
+      // What the page's engine may hold, for the door it queries through (today's reader asks on every render).
+      flow && reader.doors && reader.holder !== undefined ? holdableImports(row, flow, reader.holder) : Promise.resolve([]),
     ]);
+    const sqliteWasm = hold.length ? build.sqliteWasm ?? null : null;
     // The live stream picks up from the snapshot's marks (served-results.server `since`): a write between
     // the snapshot and the page's stream reaches the page as the ordinary `data` frame.
     const served: DataSnapshot | null = snapshot
@@ -410,14 +419,11 @@ export async function compiledPageFor(row: ArtifactRow, page: PreparedPage, read
 
     const colorMode = reader.colorMode ?? page.data.colorMode;
     const bare = reader.documentChrome === false;
-    const outline = !bare && (page.data.template === 'editorial' || page.data.template === 'plan') && hasOutline(page.data.nodes)
-      ? discoverOutline(page.data.nodes) : [];
     const behaviors = [...new Set([...(reader.behaviors ?? []), ...compiled.behaviors])].filter((b) => !(bare && b === DECK_BEHAVIOR));
     const assembled = assembleReaderPage({
       compiled: { ...compiled, behaviors },
+      documentChrome: !bare,
       story: bare ? withoutDeckChrome(story) : story,
-      outline,
-      capture: reader.capture ?? false,
       css: page.css,
       fontPreloads: [...page.fontPreloads, ...(reader.chromeFonts ?? [])],
       title: page.title,
@@ -425,7 +431,7 @@ export async function compiledPageFor(row: ArtifactRow, page: PreparedPage, read
       colorMode,
       // A capture's answers ride as the snapshot the page starts from: the islands then ask for nothing.
       snapshot: reader.results ? { ...(served ?? emptySnapshot(row)), results: reader.results } : served,
-      overlay: { values, hold, mermaidImages, signedIn: reader.signedIn, doors: doorsFor(compiled, reader.doors), readOnly: reader.readOnly ?? null },
+      overlay: { values, mermaidImages, signedIn: reader.signedIn, doors: doorsFor(compiled, reader.doors), managedAssets: reader.managedAssets ?? null, readOnly: reader.readOnly ?? null, hold, sqliteWasm },
       chrome: reader.chrome,
       spa: reader.spa,
       build,

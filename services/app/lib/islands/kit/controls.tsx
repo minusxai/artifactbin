@@ -3,6 +3,7 @@ import { For, Show, createEffect, createSignal, untrack, type JSX } from 'solid-
 import { format as d3format } from 'd3-format';
 import { Portal } from 'solid-js/web';
 import { refName, type Scalar, type TableResult } from '@/lib/story/dataflow';
+import { coerceScalarInput } from '@/lib/story/scalar-input';
 import { useIsland } from '../context';
 
 type Props = Record<string, unknown>;
@@ -105,16 +106,19 @@ export function DatePicker(p: Props) {
 /** Native fields keep their tag and authored attributes; only declared bindings are intercepted. */
 export function BoundNative(p: Props & { tag: 'input' | 'select' | 'textarea'; bind?: Record<string,string>; children?: JSX.Element }) {
   const island = useIsland(); const { tag,bind,children,...attrs } = p; const name = bind?.value ?? bind?.checked; const value = () => name ? island.value(name) : p.value;
-  const nullable = () => { const n = bind?.value; if (!n) return false; const decl = island.store()?.flow.values.find(v => v.kind === 'scalar' && v.name === n); return (decl?.default ?? null) === null; };
-  const update = (e: Event) => { if (!name) return; const el = e.currentTarget as HTMLInputElement; island.setValue(name,bind?.checked ? el.checked : tag === 'select' && nullable() && el.value === '' ? null : el.value,tag === 'select' || bind?.checked ? undefined : { debounce: 250 }); };
+  // Today's NativeBoundControl coerces to the bound Value's declared type: an empty choice is null (how
+  // `$region is null` means "all"), a number field a number.
+  const update = (e: Event) => { if (!name) return; const el = e.currentTarget as HTMLInputElement; const type = island.store()?.flow.values.find(v => v.kind === 'scalar' && v.name === name)?.type;
+    island.setValue(name,bind?.checked ? el.checked : coerceScalarInput(type, el.value),tag === 'select' || bind?.checked ? undefined : { debounce: 250 }); };
   if (tag === 'select') {
     // Today's NativeBoundControl: a query-bound select lists its rows (first column the value, second the
     // label), after an "All" entry when the bound Value may be null; authored options follow.
     const table = () => bind?.options ? island.table(bind.options) : undefined;
+    const nullable = () => { const n = bind?.value; if (!n) return false; const decl = island.store()?.flow.values.find(v => v.kind === 'scalar' && v.name === n); return (decl?.default ?? null) === null; };
     const rows = () => { const t = table(); const [valueCol, labelCol] = t?.columns ?? []; return t && valueCol ? t.rows.map(row => { const v = String(row[valueCol.name] ?? ''); return { value: v, label: labelCol ? String(row[labelCol.name] ?? v) : v }; }) : []; };
     let select!: HTMLSelectElement; createEffect(() => { rows(); select.value = String(value() ?? ''); });
     return <select ref={select} {...attrs as JSX.SelectHTMLAttributes<HTMLSelectElement>} onChange={update}>
-      <Show when={table() && nullable()}><option value="" selected={value() == null}>All</option></Show><For each={rows()}>{o => <option value={o.value} selected={o.value === String(value() ?? '')}>{o.label}</option>}</For>{children}</select>;
+      <Show when={table() && nullable()}><option value="">All</option></Show><For each={rows()}>{o => <option value={o.value}>{o.label}</option>}</For>{children}</select>;
   }
   if (tag === 'textarea') return <textarea {...attrs as JSX.TextareaHTMLAttributes<HTMLTextAreaElement>} value={String(value() ?? '')} onInput={update}>{children}</textarea>;
   return <input {...attrs as JSX.InputHTMLAttributes<HTMLInputElement>} value={String(value() ?? '')} checked={bind?.checked ? value() === true : undefined} onInput={update} onChange={bind?.checked ? update : undefined} />;

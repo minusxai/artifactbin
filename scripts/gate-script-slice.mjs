@@ -314,6 +314,7 @@ check(await afterRealm.evaluate("document.querySelectorAll('#script-made').lengt
     const wrapperCsp = wrapper.headers.get('content-security-policy') ?? '';
     check(wrapper.status === 200 && wrapperCsp.includes('sandbox allow-scripts') && wrapperCsp.includes("frame-src 'none'"),
       'the author-script wrapper answers at /author-frame under its own sandbox policy');
+    check((await fetch(`${BASE}/story/author-frame`)).status === 404, 'the retired /story/author-frame alias is absent');
   }
   const f4 = await artifactDocument(p4, { timeout: 20000 });
   const settled = await f4.waitForFunction(

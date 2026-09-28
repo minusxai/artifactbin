@@ -74,19 +74,6 @@ async function compiled(values: Record<string, unknown>) {
 }
 
 describe('bound controls, as today\'s live reader renders them', () => {
-  it('writes null when a nullable query select returns to All', async () => {
-    const flow = await compiledSource(HELMET + BODY, { abc123: [{ name: 'region', type: 'string' }] });
-    const setValue = vi.fn();
-    const island = { ...fakeIsland(), value: () => 'EU', table: () => REGIONS, store: () => ({ flow }), setValue } as never;
-    const host = document.createElement('div');
-    const dispose = render(() => <IslandProvider value={island}><BoundNative tag="select" bind={{ value: 'region', options: 'regions' }} aria-label="Region" /></IslandProvider>, host);
-    try {
-      const select = host.querySelector('select')!;
-      select.value = '';
-      select.dispatchEvent(new Event('change', { bubbles: true }));
-      expect(setValue).toHaveBeenCalledWith('region', null, undefined);
-    } finally { dispose(); }
-  });
   for (const [label, values] of [['defaults', {}], ['chosen values', { region: 'EU', min_rev: 1200, title: 'Hello', note: 'Two\nlines', compare: true }]] as const) {
     it(`${label}: every control is byte for byte today's`, async () => {
       const react = await legacy(values);
@@ -159,5 +146,37 @@ describe('people, as today\'s live adapters render them', () => {
         expect(raw(solidHost.firstElementChild!), `${label} ${size}`).toEqual(raw(reactHost.firstElementChild!));
       } finally { dispose(); await act(async () => root.unmount()); }
     }
+  });
+});
+
+describe('a bound native control writes the bound Value\'s declared type, as today\'s NativeBoundControl coerces', () => {
+  it('an empty choice is null (the "All" entry: `$region is null` in SQL), a number field a number, a text field its text', async () => {
+    const flow = await compiledSource('<Helmet><Value name="region" type="string" /><Value name="n" type="number" default={1} /><Value name="q" type="string" default="" /></Helmet><div />');
+    const values: Record<string, unknown> = { region: 'EU', n: 1, q: '' };
+    const setValue = vi.fn();
+    const island = { ...fakeIsland(), values: () => values, value: (name: string) => values[name], table: (name: string) => (name === 'regions' ? REGIONS : undefined), store: () => ({ flow }), setValue } as never;
+    const host = document.createElement('div');
+    document.body.append(host);
+    const dispose = render(() => <IslandProvider value={island}>
+      <BoundNative tag="select" bind={{ value: 'region', options: 'regions' }} aria-label="Region" />
+      <BoundNative tag="input" bind={{ value: 'n' }} type="number" aria-label="N" />
+      <BoundNative tag="input" bind={{ value: 'q' }} aria-label="Q" />
+    </IslandProvider>, host);
+    const select = host.querySelector('select')!;
+    select.value = '';
+    select.dispatchEvent(new Event('change', { bubbles: true }));
+    expect(setValue).toHaveBeenLastCalledWith('region', null, undefined);
+    select.value = 'NA';
+    select.dispatchEvent(new Event('change', { bubbles: true }));
+    expect(setValue).toHaveBeenLastCalledWith('region', 'NA', undefined);
+    const [n, q] = [...host.querySelectorAll('input')];
+    n!.value = '42';
+    n!.dispatchEvent(new Event('input', { bubbles: true }));
+    expect(setValue).toHaveBeenLastCalledWith('n', 42, { debounce: 250 });
+    q!.value = 'ramen';
+    q!.dispatchEvent(new Event('input', { bubbles: true }));
+    expect(setValue).toHaveBeenLastCalledWith('q', 'ramen', { debounce: 250 });
+    dispose();
+    host.remove();
   });
 });

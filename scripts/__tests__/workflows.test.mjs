@@ -109,6 +109,16 @@ describe('ci.yml: one build, shared with the gates', () => {
     // The build the CLI job would repeat is still its own; only the gates read this artifact.
     expect(ci.jobs.build.steps.map((step) => step.run)).toContain('npm run build -w services/cli');
   });
+  it('builds the app once through the CLI host and still bundles the gate server', () => {
+    const commands = ci.jobs.build.steps.map((step) => step.run);
+    const cli = commands.indexOf('npm run build -w services/cli');
+    const server = commands.indexOf('node scripts/build-server.mjs dist/server.mjs');
+    expect(readFileSync(path.join(root, 'services/cli/scripts/build-host.mjs'), 'utf8'))
+      .toContain("'build','-w','services/app'");
+    expect(commands).not.toContain('npm run build');
+    expect(cli).toBeGreaterThan(-1);
+    expect(server).toBeGreaterThan(cli);
+  });
 });
 
 describe('source host compatibility matrix', () => {

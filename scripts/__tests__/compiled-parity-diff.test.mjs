@@ -47,10 +47,9 @@ describe('survivalOf', () => {
   it('passes when every served element is kept', () => {
     expect(survivalOf([kept, kept])).toMatchObject({ served: 2, survived: 2, exempt: 0, ok: true });
   });
-  it('excuses an undrawn Mermaid placeholder, an Avatar fallback, or a deck thumbnail template with its slide in place', () => {
+  it('excuses only an undrawn Mermaid placeholder or an Avatar fallback its loaded image replaced', () => {
     expect(survivalOf([kept, lost({ undrawnMermaid: true })])).toMatchObject({ served: 2, survived: 1, exempt: 1, ok: true });
     expect(survivalOf([kept, lost({ avatarReplaced: true })])).toMatchObject({ served: 2, survived: 1, exempt: 1, ok: true });
-    expect(survivalOf([kept, lost({ thumbReplaced: true })])).toMatchObject({ served: 2, survived: 1, exempt: 1, ok: true });
     expect(survivalOf([kept, lost()])).toMatchObject({ survived: 1, exempt: 0, ok: false });
     expect(survivalOf([lost({ avatarReplaced: true }), lost()]).ok).toBe(false);
   });

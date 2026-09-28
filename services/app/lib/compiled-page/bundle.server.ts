@@ -38,6 +38,7 @@ import type { Scalar } from '@/lib/story/dataflow';
 import { ISLANDS_MANIFEST_PATH } from './build.server';
 import { DOCUMENT_MODULE_RE, type CompilerBuild, type IslandRenderData, type ModuleRef, type ModuleStore } from './contract';
 import type { GeneratedSources } from './codegen-safety';
+import { syncRailPreview } from './rail-preview.server';
 import { objectStore, ObjectUnavailable, type ObjectStore } from '@/lib/object-store';
 import { createModuleStore } from './modules.server';
 import { contentSha } from './speculation';
@@ -311,7 +312,8 @@ const ssrModules = new Map<string, Promise<SsrModule>>();
 export async function ssrModuleOf(code: string, name: string, imports?: SsrImports): Promise<SsrModule> {
   const exports = await evaluateModule(code, imports ?? await defaultSsrImports(code), `mx-ssr/${name}.js`);
   if (typeof exports.render !== 'function') throw new Error(`island SSR: ${name} exports no render`);
-  return exports as unknown as SsrModule;
+  const module = exports as unknown as SsrModule;
+  return { ...module, render: (data) => syncRailPreview(module.render(data)) };
 }
 
 /**

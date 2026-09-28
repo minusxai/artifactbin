@@ -1,11 +1,10 @@
 /* @jsxImportSource solid-js */
 import { Show, createContext, createEffect, createSignal, splitProps, onCleanup, useContext, type JSX } from 'solid-js';
-import { isServer } from 'solid-js/web';
 import { refName, resolveBindings, type BindingSource } from '@/lib/story/dataflow';
 import { refusalText } from '@/lib/story/sign-in-required';
 import { useIsland } from '../context';
 import { TrustedOverlay } from './trusted-overlay';
-import { ACCESS_PENDING, storeRead } from './store-read';
+import { ACCESS_PENDING, hydratedRead } from './store-read';
 
 type DialogState = { open: () => boolean; setOpen: (value: boolean) => void; trigger: () => HTMLElement | null; setTrigger: (value: HTMLElement | null) => void; busy: () => boolean; setBusy: (value: boolean) => void };
 const Context = createContext<DialogState>();
@@ -37,7 +36,7 @@ export function DialogClose(props: TriggerProps) {
  */
 function MutationForm(props: { name: string; args: unknown; stacked: boolean; children: JSX.Element }) {
   const ctx = state(); const island = useIsland(); const store = island.store();
-  const unavailable = storeRead(store, () => (isServer ? ACCESS_PENDING : store ? store.mutationUnavailable(props.name) : ACCESS_PENDING), { value: ACCESS_PENDING });
+  const unavailable = hydratedRead(() => island.mutationUnavailable(props.name), { value: ACCESS_PENDING });
   const [error, setError] = createSignal<string | null>(null);
   let submitting = false;
   const read = () => props.args && typeof props.args === 'object' && store

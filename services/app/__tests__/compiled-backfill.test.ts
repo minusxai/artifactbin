@@ -114,15 +114,14 @@ describe('backfillCompiledPages', () => {
     for (const version of archived) expect(after[`${id}/v:${version}`], `v:${version}`).toBe(loadCompilerBuild().id);
   });
 
-  it('warms pages even when the reader flag is off, because standalone has been removed', async () => {
+  it('stops on a server that does not compile, rather than report a no-op as done', async () => {
     const token = await owner();
     await publish(token, { title: 'off', markup: '<p>Off</p>', visibility: 'public' });
     setCompiledReaderFlagForTests('off');
     try {
       const off = server();
-      const report = await backfillCompiledPages({ db: await harness.db(), base: BASE, fetch: off.fetch, mintKey: (a) => mintExportKey(a) });
-      expect(report.errors).toEqual([]);
-      expect(off.asked.length).toBeGreaterThanOrEqual(1);
+      await expect(backfillCompiledPages({ db: await harness.db(), base: BASE, fetch: off.fetch, mintKey: (a) => mintExportKey(a) })).rejects.toThrow(/does not serve the compiled reader/);
+      expect(off.asked).toHaveLength(1);
     } finally {
       setCompiledReaderFlagForTests('shadow');
     }

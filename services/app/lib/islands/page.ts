@@ -10,9 +10,7 @@
  *     storage, so this is the only thing that survives a same-tab reload.
  *  3. Top-level, on a page with NO island module (prose, a deck without islands): the document's
  *     own live stream (./live). A page with islands has `boot` hold it, seeded from its snapshot.
- *  4. Framed: relays scroll samples and accepts the parent's colour choice; every copy wires its
- *     own chrome, scrollable tables and outline.
- *  5. Top-level: puts the reader back where a live reload left them, held against a settling layout
+ *  4. Top-level: puts the reader back where a live reload left them, held against a settling layout
  *     and released the moment they take over (lib/story-runtime/anchor-restore).
  *  5. On the app page (`/a/:id`, which loads this too): the SERVED reader chrome follows today's rule
  *     (lib/story-runtime/reader-chrome-policy) — shown on load, hidden by a scroll down, revealed by a
@@ -25,10 +23,9 @@ import { ISLAND_DATA_ID } from '@/lib/compiled-page/contract';
 import { applyAnchor } from '@/lib/story-runtime/anchor';
 import { holdAnchor } from '@/lib/story-runtime/anchor-restore';
 import { readerMode, takeReloadAnchor } from '@/lib/story-runtime/reader-mode';
-import { STORY_READER_MODE_MESSAGE, STORY_SCROLL_MESSAGE, type StoryReaderModeMessage, type StoryScrollMessage } from '@/lib/story-runtime/contract';
-import { applyReaderChoice, wireReaderChrome } from '@/lib/story-runtime/reader-chrome-actions';
-import { markScrollableTables } from '@/lib/story-runtime/table-scroll';
+import { chromeAfterSample, type ChromeState } from '@/lib/story-runtime/reader-chrome-policy';
 import { wireOutline } from '@/lib/story-runtime/outline-nav';
+import { markScrollableTables } from '@/lib/story-runtime/table-scroll';
 import { startIslandLive } from './live';
 
 const STORY_ROOT_SELECTOR = '[data-mx-inline-story]';
@@ -37,6 +34,25 @@ const STORY_ROOT_SELECTOR = '[data-mx-inline-story]';
  * renderer and has no place in a reader chunk (page.test pins the two equal).
  */
 export const CHROME_HIDDEN_CLASS = 'mx-reader-chrome--hidden';
+
+/** The served chrome's visibility, sampled once per frame, until the element leaves the page (the app took over). */
+function followChrome(win: Window, doc: Document, chrome: HTMLElement): () => void {
+  let state: ChromeState | null = null;
+  let queued = false;
+  const stop = () => { win.removeEventListener('scroll', schedule); win.removeEventListener('resize', schedule); };
+  const sample = () => {
+    queued = false;
+    if (!chrome.isConnected) { stop(); return; }
+    state = chromeAfterSample(state, { scrollY: Math.max(0, win.scrollY), viewportHeight: win.innerHeight, documentHeight: doc.documentElement.scrollHeight });
+    chrome.classList.toggle(CHROME_HIDDEN_CLASS, !state.visible);
+    chrome.setAttribute('data-mx-reader-state', state.visible ? 'shown' : 'hidden');
+  };
+  function schedule() { if (!queued) { queued = true; win.requestAnimationFrame(sample); } }
+  win.addEventListener('scroll', schedule, { passive: true });
+  win.addEventListener('resize', schedule);
+  sample();
+  return stop;
+}
 
 export function startPage(doc: Document = document, win: Window = window): () => void {
   const html = doc.documentElement;
@@ -50,43 +66,17 @@ export function startPage(doc: Document = document, win: Window = window): () =>
       el?.classList.toggle('light', mode !== 'dark');
     }
   }
-  const chrome = wireReaderChrome(win, doc);
   const stops: Array<() => void> = [];
-  if (chrome) stops.push(() => chrome.destroy());
-  markScrollableTables(doc);
-  wireOutline(doc);
-  if (framed) {
-    const parent = win.parent;
-    const atBottom = () => win.innerHeight + Math.max(0, win.scrollY) >= doc.documentElement.scrollHeight - 4;
-    let queued = false;
-    const post = () => {
-      queued = false;
-      parent.postMessage({
-        type: STORY_SCROLL_MESSAGE,
-        scrollY: Math.max(0, win.scrollY),
-        atBottom: atBottom(),
-        gutter: Math.max(0, win.innerWidth - doc.documentElement.clientWidth),
-      } satisfies StoryScrollMessage, '*');
-    };
-    const scroll = () => {
-      if (queued) return;
-      queued = true;
-      win.requestAnimationFrame(post);
-    };
-    const message = (event: MessageEvent<StoryReaderModeMessage>) => {
-      if (event.source !== parent || event.data?.type !== STORY_READER_MODE_MESSAGE) return;
-      if (event.data.mode === 'light' || event.data.mode === 'dark') applyReaderChoice(win, doc, event.data.mode);
-    };
-    win.addEventListener('scroll', scroll, { passive: true });
-    win.addEventListener('message', message);
-    post();
-    return () => { win.removeEventListener('scroll', scroll); win.removeEventListener('message', message); for (const stop of stops.splice(0)) stop(); };
-  }
-
+  // These document affordances also run inside a frame, like the legacy page entry.
+  stops.push(markScrollableTables(doc), wireOutline(doc));
+  if (framed) return () => { for (const stop of stops.splice(0)) stop(); };
   const id = doc.body?.getAttribute('data-mx-live-id');
   const editId = doc.body?.getAttribute('data-mx-live-edit');
   const hasModule = !!doc.getElementById(ISLAND_DATA_ID);
   if (id && editId && !hasModule && typeof (win as { EventSource?: unknown }).EventSource === 'function') stops.push(startIslandLive(win, id, editId));
+
+  const chrome = doc.querySelector<HTMLElement>('body > [data-mx-reader-chrome]');
+  if (chrome) stops.push(followChrome(win, doc, chrome));
 
   const kept = takeReloadAnchor(win);
   if (kept) stops.push(holdAnchor(win, kept, applyAnchor));

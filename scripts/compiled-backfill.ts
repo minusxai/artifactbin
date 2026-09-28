@@ -61,7 +61,11 @@ async function main() {
       ...(values.timeout ? { timeoutMs: Number(values.timeout) * 1000 } : {}),
       log: (line) => console.log(line),
     });
-    if (values['dry-run']) return;
+    if (values['dry-run']) {
+      console.log(`dry run: ${report.considered} version(s) considered, ~${report.done} already compiled by build ${report.build ?? '(none stored)'}; nothing warmed`);
+      return;
+    }
+    if (!report.considered) { console.log('no live document versions: nothing to warm'); return; }
     const fallbacks = Object.entries(report.fallbacks).map(([reason, n]) => `${reason} ${n}`).join(', ') || 'none';
     console.log(`warmed ${report.warmed} of ${report.considered} version(s) (${report.done} already stored): ${report.compiled} compiled, fallbacks ${fallbacks}, ${report.errors.length} error(s)`);
     for (const e of report.errors.slice(0, 20)) console.log(`  error ${e.id}${e.head ? '' : ` v${e.version}`}: ${e.error}`);

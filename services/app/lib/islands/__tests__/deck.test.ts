@@ -20,6 +20,26 @@ const deck = (withData: boolean) => {
 };
 
 describe('startDeck', () => {
+  it('updates a rail text leaf when the live slide changes', async () => {
+    document.body.innerHTML = '<div class="mx-deck"><nav class="mx-rail"><button class="mx-rail-row"><span class="mx-rail-thumb"><h1 data-mx-ast="0.0">Hello Ada</h1></span></button></nav><div class="mx-doc"><section data-mx-slide=""><h1 data-mx-ast="0.0">Hello Ada</h1></section></div></div>';
+    const stop = startDeck();
+    document.querySelector('.mx-doc h1')!.textContent = 'Hello Grace';
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(document.querySelector('.mx-rail-thumb h1')?.textContent).toBe('Hello Grace');
+    stop();
+  });
+  it('syncs thumbnails and count after morph replaces the rail, column, and present bar', async () => {
+    document.body.innerHTML = '<div class="mx-deck"><nav class="mx-rail"><button class="mx-rail-row"><section data-mx-slide="" data-mx-ast="0"><h1 data-mx-ast="0.0">old</h1></section></button></nav><div class="mx-doc"><section id="first" data-mx-slide="" data-mx-ast="0"><h1 data-mx-ast="0.0">old</h1></section></div><div class="mx-present"><span class="mx-present-count"></span></div></div>';
+    const stop = startDeck();
+    document.querySelector('.mx-deck')!.innerHTML = '<nav class="mx-rail"><button class="mx-rail-row"><section data-mx-slide="" data-mx-ast="1"><h1 data-mx-ast="1.0">stale</h1></section></button></nav><div class="mx-doc"><section id="second" data-mx-slide="" data-mx-ast="2"><h1 data-mx-ast="2.0">fresh</h1></section></div><div class="mx-present"><span class="mx-present-count"></span></div>';
+    document.dispatchEvent(new CustomEvent('mx:deck-morphed', { detail: { slideId: 'second' } }));
+    expect(document.querySelector('.mx-present-count')?.textContent).toBe('1 / 1');
+    expect(document.querySelector('.mx-rail h1')?.textContent).toBe('fresh');
+    document.querySelector('.mx-doc h1')!.textContent = 'newer';
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(document.querySelector('.mx-rail h1')?.textContent).toBe('newer');
+    stop();
+  });
   it('follows the scroll position, pages on the rail, the bar and the keys, and ignores keys typed into a field', () => {
     const { slides, scrolled, rows } = deck(false);
     slides.forEach((s, i) => { s.getBoundingClientRect = () => ({ top: i === 0 ? -900 : i === 1 ? 10 : 900 }) as DOMRect; });
@@ -54,6 +74,23 @@ describe('startDeck', () => {
     const stop = startDeck();
     expect(document.querySelector('.mx-present-count')?.textContent).toBe('1 / 3');
     expect(rows.map((r) => r.getAttribute('aria-current'))).toEqual(['true', 'false', 'false']);
+    stop();
+  });
+
+  it('refreshes the rail and current slide after an in-place version update', () => {
+    const { slides } = deck(false);
+    slides.forEach((slide, i) => { slide.id = `slide-${i}`; slide.getBoundingClientRect = () => ({ top: i === 1 ? 10 : 900 }) as DOMRect; });
+    const stop = startDeck();
+    const rail = document.querySelector('.mx-rail')!;
+    rail.insertAdjacentHTML('afterbegin', '<button class="mx-rail-row" aria-label="Go to inserted">new</button>');
+    document.querySelector('.mx-doc')!.insertAdjacentHTML('afterbegin', '<section id="inserted" data-mx-slide="">new</section>');
+    document.dispatchEvent(new CustomEvent('mx:deck-morphed', { detail: { slideId: 'slide-1' } }));
+    expect([...rail.querySelectorAll('.mx-rail-row')].map((row) => row.getAttribute('aria-current'))).toEqual(['false', 'false', 'true', 'false']);
+    expect(document.querySelector('.mx-present-count')?.textContent).toBe('3 / 4');
+    const inserted = document.getElementById('inserted')!;
+    inserted.scrollIntoView = vi.fn();
+    rail.querySelector<HTMLElement>('.mx-rail-row')!.click();
+    expect(inserted.scrollIntoView).toHaveBeenCalledTimes(1);
     stop();
   });
 

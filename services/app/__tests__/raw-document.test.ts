@@ -41,7 +41,7 @@ describe('/a/:id/raw compiled markup', () => {
     expect(html).not.toContain('type="text/mx-author"');
   });
 
-  it('scopes the sandbox to this document and admits the island SQLite engine', async () => {
+  it('scopes the sandbox to this document and admits the island SQLite engine when needed', async () => {
     const id = await publish('<Helmet><Value name="region" type="string" default="north" /></Helmet><select value="$region"><option value="north">north</option></select>');
     const response = await raw(id);
     expect(response.headers.get('Content-Security-Policy')).toBe(markupCsp(BASE, id, undefined, { compiled: true }));
@@ -51,7 +51,7 @@ describe('/a/:id/raw compiled markup', () => {
     expect(csp).not.toMatch(/script-src[^;]*'unsafe-inline'/);
     expect(csp).toContain('sandbox allow-scripts');
     const html = await response.text();
-    expect(island(html)?.sqliteWasm).toBe(loadCompilerBuild().sqliteWasm);
+    expect(island(html)?.sqliteWasm).toBeUndefined();
     expect(loadCompilerBuild().sqliteWasm).toMatch(/^\/islands\/sqlite3-[0-9a-f]{16}\.wasm$/);
     expect(response.headers.get('Cache-Control')).toBe('no-store');
     expect(response.headers.get('X-Content-Type-Options')).toBe('nosniff');

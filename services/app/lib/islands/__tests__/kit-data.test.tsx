@@ -6,9 +6,10 @@
  * table's rows and writes its value, a DataTable renders rows and sorts, a Question shows its
  * server-drawn chart until its table changes and loads Vega only then.
  */
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { render } from 'solid-js/web';
 import { createSignal } from 'solid-js';
+import { createStore } from 'solid-js/store';
 import { parityOf } from './kit-parity';
 import { IslandProvider } from '../context';
 import { fakeIsland } from './context.test';
@@ -25,6 +26,8 @@ const regions: TableResult = { rows: [{ region: 'East' }, { region: 'West' }], c
 const parityData = { tables: { monthly, regions }, values: { region: 'West' } };
 const island = () => { const i = fakeIsland({ region: 'West' }); i.table = (n) => (n === 'monthly' ? monthly : n === 'regions' ? regions : undefined); i.tableSnapshot = i.table; return i; };
 const mount = (ctx = island(), view: () => import('solid-js').JSX.Element) => { const host = document.createElement('div'); document.body.append(host); const unmount = render(() => <IslandProvider value={ctx}>{view()}</IslandProvider>, host); return { host, dispose: () => { unmount(); host.remove(); } }; };
+beforeEach(() => document.documentElement.setAttribute('data-mx-ready', ''));
+afterEach(() => document.documentElement.removeAttribute('data-mx-ready'));
 
 describe('Number', () => {
   it('aggregates and formats like today\'s InlineNumber', () => {
@@ -79,6 +82,49 @@ describe('Select', () => {
 });
 
 describe('DataTable', () => {
+  it('shows the matching row when a filter shrinks a scrolled virtual table', async () => {
+    const height = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'clientHeight');
+    Object.defineProperty(HTMLElement.prototype, 'clientHeight', { configurable: true, get() { return (this as HTMLElement).classList.contains('overflow-auto') ? 420 : 0; } });
+    try {
+      const ctx = fakeIsland();
+      const all: TableResult = { rows: Array.from({ length: 500 }, (_, i) => ({ id: i + 1, item: `Item ${i + 1}` })), columns: [{ name: 'id', type: 'number' }, { name: 'item', type: 'string' }] };
+      const [table, setTable] = createSignal(all);
+      ctx.table = ctx.tableSnapshot = () => table();
+      const { host, dispose } = mount(ctx, () => <DataTable data="$tasks" rowKey="id" height={420} />);
+      const scroll = host.querySelector<HTMLElement>('.overflow-auto')!;
+      scroll.scrollTop = 16117; scroll.dispatchEvent(new Event('scroll'));
+      setTable({ ...all, rows: [all.rows[499]!] });
+      await vi.waitFor(() => expect(host.querySelector('tbody')?.textContent).toContain('Item 500'));
+      await vi.waitFor(() => expect(scroll.scrollTop).toBe(0));
+      dispose();
+    } finally {
+      if (height) Object.defineProperty(HTMLElement.prototype, 'clientHeight', height);
+      else Reflect.deleteProperty(HTMLElement.prototype, 'clientHeight');
+    }
+  });
+  it('shows a user card that arrives after the row, then follows its updated handle', async () => {
+    const ctx = fakeIsland();
+    const [people, setPeople] = createSignal<Record<string, { name: string; handle: string; image: null }>>({});
+    ctx.people = () => people();
+    ctx.table = ctx.tableSnapshot = () => ({ rows: [{ id: 1, assignee: 'usr_1' }], columns: [{ name: 'id', type: 'number' }, { name: 'assignee', type: 'user' }] });
+    const { host, dispose } = mount(ctx, () => <DataTable data="$tasks" rowKey="id" />);
+    expect(host.querySelector('tbody')?.textContent).toContain('Unknown person');
+    setPeople({ usr_1: { name: 'Native User', handle: 'mxmx_test_native_user', image: null } });
+    await vi.waitFor(() => expect(host.querySelector('tbody')?.textContent).toContain('@mxmx_test_native_user'));
+    setPeople({ usr_1: { name: 'Native User', handle: 'new_handle', image: null } });
+    await vi.waitFor(() => expect(host.querySelector('tbody')?.textContent).toContain('@new_handle'));
+    dispose();
+  });
+  it('replaces an initially empty user cell after a write updates the row in place', async () => {
+    const ctx = fakeIsland();
+    const [rows, setRows] = createStore([{ id: 1, completed_by: null as string | null }]);
+    ctx.people = () => ({ usr_1: { name: 'Native User', handle: 'mxmx_test_native_user', image: null } });
+    ctx.table = ctx.tableSnapshot = () => ({ rows, columns: [{ name: 'id', type: 'number' }, { name: 'completed_by', type: 'user' }] });
+    const { host, dispose } = mount(ctx, () => <DataTable data="$tasks" rowKey="id" />);
+    setRows(0, 'completed_by', 'usr_1');
+    await vi.waitFor(() => expect(host.querySelector('tbody')?.textContent).toContain('@mxmx_test_native_user'));
+    dispose();
+  });
   it('renders the rows and header of its table and matches today\'s DOM', () => {
     const { host } = mount(undefined, () => <DataTable data="$monthly" height="300px" id="dIQl" />);
     expect(host.querySelectorAll('tbody tr')).toHaveLength(2);
@@ -98,8 +144,7 @@ describe('Question', () => {
     expect(host.querySelector('[data-mx-chart-state="ready"] svg[data-drawn]')).toBeTruthy();
     expect(loadChart).not.toHaveBeenCalled();
     host.querySelector('[data-mx-chart-state]')!.dispatchEvent(new Event('pointerenter', { bubbles: true }));
-    await Promise.resolve();
-    expect(loadChart).toHaveBeenCalledTimes(1);
+    await vi.waitFor(() => expect(loadChart).toHaveBeenCalledTimes(1));
   });
   it('loads after a new table snapshot lands after boot', async () => {
     const ctx = island();
@@ -120,8 +165,7 @@ describe('Question', () => {
     const { host, dispose } = mount(ctx, () => <Question data="$monthly" viz={{ kind: 'vega-lite', spec: { mark: 'line' } }} drawn={{ svg: '<svg></svg>', table: 'monthly', rows: 'r1' }} />);
     expect(ctx.loadChart).not.toHaveBeenCalled();
     host.querySelector('[data-mx-chart-state]')!.dispatchEvent(new Event('pointerenter', { bubbles: true }));
-    await Promise.resolve();
-    expect(ctx.loadChart).toHaveBeenCalledTimes(1);
+    await vi.waitFor(() => expect(ctx.loadChart).toHaveBeenCalledTimes(1));
     expect(mountChart).toHaveBeenCalledWith({
       element: host.querySelector('[role="graphics-document"]'),
       envelope: { version: 2, source: { kind: 'vega-lite', grammar: 'vega-lite@6', spec: { mark: 'line' } }, dataBindings: null, viewParams: null, interactions: null, assets: null },
@@ -231,9 +275,21 @@ describe('data widget parity with the live reader', () => {
     expect(host.querySelectorAll('#t [aria-label="Data table"] tbody tr')).toHaveLength(2);
   });
 
-  it('Question draws a chart the server did not draw at once, as today\'s reader draws every chart', async () => {
+  it('Question draws a chart the server did not draw after readiness', async () => {
     const loadChart = vi.fn(async () => ({ mountChart: () => ({ destroy() {} }) }));
     mount(undefined, () => <Question data="$monthly" viz={chart} chart={loadChart} />);
+    await vi.waitFor(() => expect(loadChart).toHaveBeenCalledTimes(1));
+  });
+
+  it('Question leaves the placeholder and keeps Vega unloaded until reader readiness', async () => {
+    document.documentElement.removeAttribute('data-mx-ready');
+    const loadChart = vi.fn(async () => ({ mountChart: () => ({ destroy() {} }) }));
+    const { host } = mount(undefined, () => <Question data="$monthly" viz={chart} chart={loadChart} />);
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    expect(loadChart).not.toHaveBeenCalled();
+    expect(host.querySelector('[data-mx-chart-state]')?.getAttribute('data-mx-chart-state')).toBe('pending');
+    document.documentElement.setAttribute('data-mx-ready', '');
+    document.dispatchEvent(new Event('mx:ready'));
     await vi.waitFor(() => expect(loadChart).toHaveBeenCalledTimes(1));
   });
 

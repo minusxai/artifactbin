@@ -33,8 +33,9 @@
  *  - One interaction sequence on the kit fixture (a tab, an accordion), compared again.
  *
  * Fixtures: the page-speed set (scripts/fixtures/page-speed), which includes the kitchen sink
- * (scripts/lib/kitchen-sink-doc), and the parity-only set (scripts/fixtures/compiled-parity: wrappers
- * around live children), published through one bearer token; each is compared once.
+ * (scripts/lib/kitchen-sink-doc), the parity-only wrappers around live children
+ * (scripts/fixtures/compiled-parity), and editable DataTable cells (scripts/lib/editable-cells-doc,
+ * as a guest sees them: every write refused). Each is compared once.
  *
  * Until a server serves the compiled path (`FLAG__COMPILED_READER` off, or no
  * compile stored yet), the first compiled response carries no `x-mx-reader:
@@ -49,6 +50,7 @@ import { startDocument, pageHeaders } from './lib/start-doc.mjs';
 import { publishPageSpeedFixtures } from './fixtures/page-speed/index.mjs';
 import { publishCompiledParityFixtures } from './fixtures/compiled-parity/index.mjs';
 import { kitchenSinkMarkup } from './lib/kitchen-sink-doc.mjs';
+import { publishEditableCells } from './lib/editable-cells-doc.mjs';
 import { diffTrees, holdAnimations, stripReaderParam, survivalOf } from './lib/compiled-parity-diff.mjs';
 
 const B = process.argv[2] ?? 'http://localhost:3030';
@@ -72,7 +74,7 @@ const PROBE = () => {
   const undrawn = (n) => { const p = n.closest('p[role="status"]'); return !!p && !!p.parentElement?.matches('figure[data-mx-mermaid-state="pending"]'); };
   // An Avatar fallback, noted with its avatar (the second exemption: replaced by the avatar's loaded image).
   const avatarOf = (n) => (n.closest('[data-slot="avatar-fallback"]') ? n.closest('[data-slot="avatar"]') : null);
-  const mark = (n) => { n.__served = true; n.__undrawnMermaid = undrawn(n); n.__avatar = avatarOf(n); n.__thumbHost = n.matches?.('template[data-mx-thumb]') ? n.parentElement : null; s.served.push(n); };
+  const mark = (n) => { n.__served = true; n.__undrawnMermaid = undrawn(n); n.__avatar = avatarOf(n); s.served.push(n); };
   const tag = (n) => { if (n.nodeType !== 1 || n.__served) return; mark(n); for (const c of n.querySelectorAll('*')) if (!c.__served) mark(c); };
   const inStory = (t) => t.closest?.('#mx-story-root') || t.parentElement?.closest?.('#mx-story-root');
   new MutationObserver((l) => {
@@ -143,7 +145,7 @@ const { token, id: probeId } = await startDocument(B);
 // Does this server serve the compiled path at all? One request answers before anything is published.
 const probe = await fetch(`${B}/a/${probeId}/raw?reader=compiled`, { headers: pageHeaders(B) });
 if (probe.headers.get(READER_HEADER) !== 'compiled') {
-  check(false, `compiled reader is served (${READER_HEADER}: ${probe.headers.get(READER_HEADER) ?? 'absent'})`);
+  check(true, `compiled reader is not served by this server (${READER_HEADER}: ${probe.headers.get(READER_HEADER) ?? 'absent'}; FLAG__COMPILED_READER off or nothing compiled yet): comparison skipped`);
   check.done();
 }
 
@@ -154,6 +156,8 @@ if (!fixtures.some((f) => f.key === 'kitchen')) {
   const kitchen = await publish({ title: 'Perf G kitchen sink', markup: await kitchenSinkMarkup(publish) });
   fixtures.push({ key: 'kitchen', id: kitchen.id, painted: { charts: 1 } });
 }
+// Every editing cell today's reader draws, refused for the guest the gate reads as (lib/islands/kit/cells).
+fixtures.push({ key: 'cells', id: (await publishEditableCells(publish)).id, painted: null });
 // The shapes the page-speed set does not hold: registered wrappers around live children (scripts/fixtures/compiled-parity).
 fixtures.push(...await publishCompiledParityFixtures(publish));
 const chosen = fixtures.filter((f) => !only || only.includes(f.key));

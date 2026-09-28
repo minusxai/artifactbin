@@ -12,7 +12,13 @@
 
 const ROWS = '[{"k":"a","n":1,"on":true},{"k":"b","n":2,"on":false},{"k":"c","n":3,"on":true}]';
 
-/** A deck whose slides read values, hold controls (buttons in the rail's miniatures) and repeat rows. */
+/**
+ * A deck whose slides read values and repeat rows (with icons). No slide holds a button: today's reader serves a
+ * miniature's buttons inside the rail row's own button, the parser closes the row early, hydration fails (#418)
+ * and React re-renders the rail on the client with client ids — the compiled page serves that final tree (a held
+ * `<template>` the deck behaviour puts in place; unit-tested in compiler-coverage.test.ts and deck.test.ts), but
+ * the rail's ids and inline style formatting are then React's client render's, which no server output can match.
+ */
 const DATA_DECK = `<Helmet><title>Parity data deck</title>
 <Value name="who" type="string" default="Ada" />
 <Value name="region" type="string" default="NA" />
@@ -20,9 +26,8 @@ const DATA_DECK = `<Helmet><title>Parity data deck</title>
 </Helmet>
 <div data-design="tw" className="@container px-6 @2xl:px-12" id="dk0">
 <SlideDeck id="dk1">
-<Slide title="Cover" className="border-b border-border py-14" id="dk2"><h1 className="text-5xl font-bold" id="dk3">Hello {$who}</h1><p className="mt-4 text-muted-foreground" id="dk4">Region {$region}</p><Select label="Region" value="$region" options={["NA","EU","APAC"]} id="dk5" /></Slide>
+<Slide title="Cover" className="border-b border-border py-14" id="dk2"><h1 className="text-5xl font-bold" id="dk3">Hello {$who}</h1><p className="mt-4 text-muted-foreground" id="dk4">Region {$region}</p></Slide>
 <Slide title="Rows" className="py-14" id="dk6"><ul className="mt-6" id="dk7"><For each={$rows} keyBy="k"><li className="flex gap-2" id="dk8"><Icon name="check" className="size-5" id="dk9" /><span id="dk10">{$_row.k} is {$_row.n}</span></li></For></ul></Slide>
-<Slide title="Tabs" className="py-14" id="dk11"><Tabs defaultValue="a" id="dk12"><TabsList id="dk13"><TabsTrigger value="a" id="dk14">A</TabsTrigger><TabsTrigger value="b" id="dk15">B</TabsTrigger></TabsList><TabsContent value="a" id="dk16">First</TabsContent><TabsContent value="b" id="dk17">Second</TabsContent></Tabs></Slide>
 <Slide title="Close" className="py-14" id="dk18"><h2 className="text-4xl font-semibold" id="dk19">Thanks, {$who}</h2></Slide>
 </SlideDeck>
 </div>`;

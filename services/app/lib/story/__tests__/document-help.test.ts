@@ -10,6 +10,7 @@ const compiled: CompiledPage = {
   build: build.id, html: '<h1>Hello</h1>', islands: [], module: null, ssr: null,
   behaviors: [], plan: null, links: { prefetch: [], prerender: [] },
   kit: { skeleton: [], islands: [] }, reactStatic: [], unported: [], partial: [], authorScript: null,
+  outline: [], outlinePlan: false,
 };
 const doc = (head: AssembleHead | null = null): string => {
   const input: AssembleInput = {

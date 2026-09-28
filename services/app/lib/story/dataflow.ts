@@ -274,13 +274,7 @@ export function resolveRefTemplate(value: string, get: (name: string) => Scalar 
  * control components), so a slider yields a number, a switch a boolean, and
  * the empty string is null (which is how `$x is null` in SQL means "all").
  */
-export function coerceScalarInput(type: ValueType | undefined, raw: string): Scalar {
-  if (raw === '') return null;
-  if (type === 'number') { const n = Number(raw); return Number.isFinite(n) ? n : null; }
-  if (type === 'boolean') return raw === 'true';
-  if (type === 'timestamp') return isTimestamp(raw) ? normalizeTimestamp(raw) : null;
-  return raw;
-}
+export { coerceScalarInput } from './scalar-input';
 
 /** What a reference position expects: a table, a scalar, or (on `run=`) a mutation. */
 type RefKind = 'table' | 'scalar' | 'mutation';

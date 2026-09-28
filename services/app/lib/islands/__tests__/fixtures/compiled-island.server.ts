@@ -30,7 +30,7 @@ const store: ModuleStore = {
 const generated = generate({ nodes: parsed.nodes, colorMode: 'light', template: null, chrome: true, refData: {}, flow });
 const built = await buildDocumentModules(generated, {
   // `--shipped`: the shared island build's real manifest, for islands that import kit families.
-  build: process.argv[3] === '--shipped' ? loadCompilerBuild() : { id: 'test', manifest: { '@mx/rt': '/islands/rt.js', '@mx/boot': '/islands/boot.js' } },
+  build: process.argv[3] === '--shipped' ? loadCompilerBuild() : { id: 'test', manifest: { '@mx/rt': '/islands/rt.js', '@mx/boot': '/islands/boot.js', '@mx/kit/basic': '/islands/kit-basic.js' } },
   flow, values: declaredValues(flow), store, ssrStore: store,
 });
 process.stdout.write(JSON.stringify({ html: built.html, islands: generated.islands, islandRefs: generated.islandRefs, flow }));

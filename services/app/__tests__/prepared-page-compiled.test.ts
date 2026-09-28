@@ -2,7 +2,7 @@
  * THE COMPILE BESIDE THE PREPARED PAGE (docs/phase2-architecture.md §2.1, §6; lib/story/prepared-page.server
  * `PreparedPage.compiled`): a deployment that compiles (`FLAG__COMPILED_READER=shadow|on`) stores the
  * version's compiled page — or its recorded failure — in the same row as the prepared page, keyed with
- * the compiler build. Every flag value compiles once the standalone reader is gone. Real publish handler on the harness's
+ * the compiler build; one that does not (`off`) stores none. Real publish handler on the harness's
  * isolated database.
  */
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
@@ -27,7 +27,7 @@ const fixture = (name: string) => readFileSync(path.join(FIXTURES, name), 'utf8'
 // Publish warms the head's prepared page after commit (warmPreparedPage), as the server does.
 beforeAll(() => enablePreparedPageWarmups());
 afterEach(() => setCompiledReaderFlagForTests(null));
-const UNPORTED = '<Helmet><Value name="rows" type="table" value={[{"k":"a"}]} /></Helmet><ul id="l"><For each={$rows} keyBy="k"><li id="i"><Separator id="s" /></li></For></ul>';
+const WAS_UNPORTED = '<Helmet><Value name="rows" type="table" value={[{"k":"a"}]} /></Helmet><ul id="l"><For each={$rows} keyBy="k"><li id="i"><Separator id="s" /></li></For></ul>';
 
 async function publish(markup: string): Promise<string> {
   const user = await ensureUsername(await createUser({ email: `mxmx_test_compile_${Math.random().toString(36).slice(2, 8)}@example.com` }));
@@ -54,12 +54,12 @@ describe('the compiled page on the prepared page', () => {
     expect(key.endsWith(`:${loadCompilerBuild().id}`)).toBe(true);
   });
 
-  it('off: a publish still stores the compile after standalone removal', async () => {
+  it('off: a publish stores no compile', async () => {
     setCompiledReaderFlagForTests('off');
     const id = await publish(fixture('prose.jsx'));
     const { key, compiled } = await stored(id);
-    expect(compiled).toMatchObject({ build: loadCompilerBuild().id, unported: [] });
-    expect(key.endsWith(`:${loadCompilerBuild().id}`)).toBe(true);
+    expect(compiled).toBeUndefined();
+    expect(key.endsWith(':off')).toBe(true);
   });
 
   it('a page with islands: the browser module is served, the SSR module (the whole page) never is', async () => {
@@ -73,12 +73,15 @@ describe('the compiled page on the prepared page', () => {
     expect((await app.request(`${DOCUMENT_MODULE_PATH}/${compiled.ssr!.sha}.js`)).status).toBe(404);
   });
 
-  it('a nested Separator compiles as a shell inside a repeated row', async () => {
+  it('a version the compiler used to refuse (a registered component with no Solid port, in a row) stores its whole page', async () => {
     setCompiledReaderFlagForTests('shadow');
-    // The compiler coverage pass can render this registered component in a React shell.
-    const id = await publish(UNPORTED);
-    const { compiled } = await stored(id);
+    // w3-compiler-coverage: such a component compiles as a React shell with its row attributes filled per row, so
+    // no stored document is refused (`unported`) any more; the refusal door in compiledFor stays for the contract.
+    const id = await publish(WAS_UNPORTED);
+    const compiled = (await stored(id)).compiled as CompiledPage;
     expect(compiled).toMatchObject({ build: loadCompilerBuild().id, unported: [] });
-    expect((compiled as CompiledPage).html).toContain('data-slot="separator"');
+    expect('error' in compiled).toBe(false);
+    expect(compiled.reactStatic).toContain('Separator');
+    expect(compiled.html).toContain('data-slot="separator"');
   });
 });

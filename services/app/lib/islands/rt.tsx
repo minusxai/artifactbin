@@ -1,7 +1,7 @@
 /* @jsxImportSource solid-js */
 /**
  * THE ISLAND RUNTIME (`@mx/rt`, docs/phase2-architecture.md §2.3, §4.1): what every compiled island
- * of one document runs on, and the ONE module generated island code imports.
+ * of one document runs on. Generated islands also import kit helpers when their markup needs them.
  *
  * - The document's data is the EXISTING react-free store (lib/story-runtime/store), bridged into
  *   one Solid store per document with `reconcile`, so a result that changes one cell re-runs only
@@ -20,14 +20,13 @@
 import { batch, createComponent, createMemo, createRoot, createSignal, For, Show } from 'solid-js';
 import type { Component, JSX } from 'solid-js';
 import { createStore, reconcile } from 'solid-js/store';
-import { hydrate, isServer } from 'solid-js/web';
-import { evaluateReactive, type ReactiveExpression } from '@/lib/jsx/reactive';
-import { URL_ATTRS, URL_LIST_ATTRS, urlListUrls } from '@/lib/jsx/url-attrs';
+import { hydrate, insert as solidInsert, isServer } from 'solid-js/web';
+import type { ReactiveExpression } from '@/lib/jsx/reactive';
+import { evaluateReactive } from '@/lib/jsx/reactive-eval';
 import { substituteRow } from '@/lib/story/row-scope';
-import { commentMetadata, instanceDomId, keyedRowsError } from '@/lib/story/repeat-identity';
 import type { CompiledDataflow } from '@/lib/story/compiled-dataflow';
 import type { DataflowState, Row, Scalar, TableResult } from '@/lib/story/dataflow';
-import type { DataflowStore } from '@/lib/story-runtime/store';
+import { ACCESS_PENDING, type DataflowStore } from '@/lib/story-runtime/store';
 import type { ServedResults, StoredMermaidImage } from '@/lib/story-runtime/contract';
 import type { PersonCard } from '@artifactbin/contracts';
 import { IslandProvider, useIsland } from './context';
@@ -126,6 +125,8 @@ export function createIslandRuntime(
   /** A counter per table, bumped when the data store REPLACES that table's result (a run landed). */
   const [versions, setVersions] = createStore<Record<string, number>>({});
   const [viewer, setViewer] = createSignal<IslandViewer>(data.viewer ?? null);
+  /** Every store change: what the write checks (`mutationUnavailable`, `mutating`) re-read on. */
+  const [checks, touch] = createSignal(undefined, { equals: false });
   const drawings = data.mermaidImages ?? {};
   let lastTables: Record<string, TableResult> = {};
 
@@ -142,12 +143,13 @@ export function createIslandRuntime(
       setState('errors', reconcile(snap.errors));
       setState('pending', reconcile(pending));
       setState('people', reconcile(snap.people ?? {}));
+      touch();
     });
   };
   sync();
   const unsubscribe = store?.subscribe(sync) ?? (() => {});
 
-  const noData = () => new Error('this document declares no data');
+  const noData = () => new Error('no data declared');
   const context: IslandContext = {
     values: () => state.values,
     value: (name) => state.values[name],
@@ -173,12 +175,15 @@ export function createIslandRuntime(
       return { dataset: ref ?? '' };
     },
     writesUnavailable: () => data.readOnly ?? null,
+    // The server renders without a transport: it says what today's served page says until the check answers.
+    mutationUnavailable: (name) => { checks(); return store && !isServer ? store.mutationUnavailable(name) : ACCESS_PENDING; },
+    mutating: (name) => { checks(); return !!store?.mutating().has(name); },
     viewer,
     drawings: () => drawings,
     writes: (options.writes ?? (() => EMPTY_WRITE_FEED))(store),
     store: () => store,
     trustedPortal: options.trustedPortal ?? (() => trustedPortalOf()),
-    loadChart: options.loadChart ?? (() => Promise.reject(new Error('charts are drawn in the browser'))),
+    loadChart: options.loadChart ?? (() => Promise.reject(new Error('browser chart only'))),
   };
 
   return {
@@ -241,44 +246,6 @@ export const text = (e: ReactiveExpression, row?: Record<string, unknown>, islan
 /** A static value with `$_row.f` references filled from `row` (lib/story/row-scope). */
 export const sub = <T,>(value: T, row: Record<string, unknown>): T => substituteRow(value, row);
 
-// Mirrors lib/jsx/validate hasDangerousScheme (importing validate.ts would drag its whole top level
-// into the shared chunk): browsers strip control characters and spaces inside the scheme.
-const DANGEROUS_URL = /^(javascript|vbscript|data):/i;
-const SAFE_DATA_URL = /^data:image\//i;
-// eslint-disable-next-line no-control-regex -- deliberately mirrors browser scheme normalization
-const dangerous = (url: string) => { const n = url.replace(/[\x00-\x20]/g, ''); return DANGEROUS_URL.test(n) && !SAFE_DATA_URL.test(n); };
-const IDREF_ATTRS = ['for', 'aria-labelledby', 'aria-describedby', 'aria-controls', 'aria-owns', 'headers', 'list', 'form'];
-
-/**
- * The attributes of an element inside a row template, resolved for one row (the interpreter's
- * rawBuildProps + scopeProps): `$_row.f` filled, a dangerous URL dropped PER ROW, author ids and
- * the idrefs naming them rewritten to the row's instance, comment metadata on durable rows.
- */
-export function rowAttrs(attrs: Readonly<Record<string, unknown>>, row: Record<string, unknown> | null | undefined, scope?: RowScope | null): Record<string, string> {
-  const out: Record<string, string> = {};
-  for (const [name, raw] of Object.entries(attrs)) {
-    const lower = name.toLowerCase();
-    const value = row && lower !== 'id' ? substituteRow(raw, row) : raw;
-    if (value === null || value === undefined || value === false) continue;
-    if (typeof value === 'string' && (URL_LIST_ATTRS.has(lower) ? urlListUrls(value, lower).some(dangerous) : URL_ATTRS.has(lower) && dangerous(value))) continue;
-    out[name] = value === true ? '' : String(value);
-  }
-  if (scope) {
-    const key = ['repeat', scope.owner, scope.durable ? typeof scope.key : 'index', scope.key];
-    if (!scope.durable) delete out['data-mx-ast'];
-    if (typeof out.id === 'string') {
-      if (scope.durable) Object.assign(out, commentMetadata(scope.owner, { kind: 'repeat', scopes: [{ nodeId: scope.owner, key: scope.key as string | number }], templateNodeId: out.id }));
-      out.id = instanceDomId(key, out.id);
-    }
-    for (const attr of IDREF_ATTRS) {
-      const v = out[attr];
-      if (typeof v === 'string') out[attr] = v.split(/\s+/).map((id) => (scope.ids.includes(id) ? instanceDomId(key, id) : id)).join(' ');
-    }
-    if (typeof out.href === 'string' && out.href.startsWith('#') && scope.ids.includes(out.href.slice(1))) out.href = '#' + instanceDomId(key, out.href.slice(1));
-  }
-  return out;
-}
-
 export interface RepeatProps {
   /** The table (or table value) whose rows repeat. */
   name: string;
@@ -307,10 +274,8 @@ export function Repeat(props: RepeatProps): JSX.Element {
     const source: unknown = island.table(props.name)?.rows ?? island.values()[props.name] ?? [];
     return Array.isArray(source) ? (source as Row[]) : [];
   });
-  const error = createMemo(() => props.keyBy ? keyedRowsError(rows(), props.keyBy, 'keyBy') : null);
   const body = () => (
-    error() ? (props.svg ? <text role="alert">{error()}</text> : <span role="alert">{error()}</span>)
-      : <For each={rows()}>{(row, index) => props.children(row, { owner: props.owner ?? '', key: props.keyBy ? row[props.keyBy] : index(), durable: !!props.keyBy, ids: props.ids ?? [] })}</For>
+    <For each={rows()}>{(row, index) => props.children(row, { owner: props.owner ?? '', key: props.keyBy ? row[props.keyBy] : index(), durable: !!props.keyBy, ids: props.ids ?? [] })}</For>
   );
   if (props.tableParts) return body();
   const attrs = Object.fromEntries(Object.entries(props).filter(([k]) => !REPEAT_PROPS.has(k)));
@@ -365,14 +330,20 @@ export function hydrateIsland(renderId: string, Component: Component, context: I
       // An island may render siblings of its root (a button and its refusal): those are the island's own
       // (their key has its prefix), never handed back as static siblings, and its output stays LIVE (the
       // accessor, not a snapshot of it) so a sibling that comes and goes is inserted and removed.
-      return [...host.childNodes].filter((node) => node === root || !(node as Element).getAttribute?.('data-hk')?.startsWith(renderId)).map((node) => (node === root ? (Array.isArray(output) ? live : output) : node)) as JSX.Element;
+      const children = [...host.childNodes].filter((node) => node === root || !(node as Element).getAttribute?.('data-hk')?.startsWith(renderId));
+      return (() => children.map((node) => node === root ? (typeof live === 'function' ? (live as () => unknown)() : live) : node)) as unknown as JSX.Element;
     }), host, { renderId });
   } catch {
     // Solid's development build refuses to create nodes while hydrating (a mismatch); render the
     // island fresh instead, as the production build does on its own.
     disposeIsland();
     output = undefined;
-    createRoot(mount);
+    createRoot((dispose) => {
+      mount(dispose);
+      // A non-hydratable or mismatched root still needs Solid's insertion effect: a
+      // one-time replacement would strand a later placeholder-to-content switch.
+      solidInsert(host, () => live as JSX.Element, root.nextSibling, [root]);
+    });
   }
   if (output instanceof Node && output !== root && !output.isConnected && root.parentNode === host) host.replaceChild(output, root);
   return disposeIsland;

@@ -36,6 +36,8 @@ import { ProfileListing } from '@/web/pages/ProfileIndex';
 import { attachDomain, removeDomain, setDomainResolver, verifyDomain, type DomainResolver } from '@/lib/custom-domains';
 import { mintToken } from '@/lib/tokens';
 import { getDb } from '@/lib/db';
+import { setCompiledReaderFlagForTests } from '@/lib/compiled-page/reader-mode';
+import { drainPreparedPageWarmups } from '@/lib/story/prepared-page.server';
 import { objectKey, objectStore } from '@/lib/object-store';
 import { urlHash } from '@/lib/story/asset-url';
 import { claimToken, createUser, setUsername } from '@/lib/users';
@@ -105,7 +107,7 @@ async function world() {
 const noCookie = (res: Response) => expect(res.headers.get('set-cookie')).toBeNull();
 
 beforeEach(() => { settings.target = 'domains.example.test'; settings.session = ''; });
-afterEach(() => { setDomainResolver(null); });
+afterEach(() => { setDomainResolver(null); setCompiledReaderFlagForTests(null); });
 
 describe('the home page on a verified host', () => {
   it('lists the owner\'s public root documents, server-rendered with links and the footer, and nothing private', async () => {
@@ -380,11 +382,25 @@ describe('everything else on a verified host is 404', () => {
     noCookie(viewer);
     for (const id of [w.quiet.id, w.theirs.id, w.secret.id]) expect((await app().request(`${HOST}/a/${id}/viewer`)).status, id).toBe(404);
     // The author-script wrapper, at its address and (until wave 4) its old one under /story/.
-    for (const wrapper of ['/author-frame']) {
+    for (const wrapper of ['/author-frame', '/story/author-frame']) {
       const answer = await app().request(`${HOST}${wrapper}?artifact=${w.post.id}`);
       expect(answer.status, wrapper).toBe(200);
       expect(answer.headers.get('content-security-policy'), wrapper).toContain('sandbox allow-scripts');
     }
+  });
+
+  it('serves the live story fragment for the owner\'s public post as a guest', async () => {
+    setCompiledReaderFlagForTests('on');
+    const w = await world();
+    await drainPreparedPageWarmups();
+    const fragment = await app().request(`${HOST}/a/${w.post.id}/story`, { headers: { cookie: 'authjs.session-token=forged' } });
+    expect(fragment.status, await fragment.clone().text()).toBe(200);
+    expect(await fragment.text()).toContain('Hello from my blog');
+    noCookie(fragment);
+    for (const id of [w.quiet.id, w.theirs.id, w.secret.id]) {
+      expect((await app().request(`${HOST}/a/${id}/story`)).status, id).toBe(404);
+    }
+    expect((await app().request(`${HOST}/a/${w.post.id}/story`, { method: 'POST' })).status).toBe(404);
   });
 
   it('admits a query POST only with the reader\'s local tables', async () => {

@@ -358,7 +358,7 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
   // Its home page links the stylesheets THIS page links, read from the same shell.
   app.use('*', customHostBoundary({ stylesheets: async (url) => linkedStylesheets(await index(url)) }));
   const assetsOrigin = ASSETS_ORIGIN;
-  // The fixed author-script wrapper is separate from the content-addressed islands.
+  // The author-script wrapper is a standalone, sandboxed endpoint.
   app.get(AUTHOR_FRAME_PATH, c => authorFrameResponse(c.req.raw, assetsOrigin, baseUrl(c.req.raw)));
   if (assetsOrigin) app.use('*', async (c, next) => {
     const incoming = new URL(c.req.url);
@@ -611,9 +611,6 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
     });
   });
   app.use('/libraries/*', async (c, next) => { await next(); c.header('cache-control', 'public, max-age=3600'); c.header('access-control-allow-origin', '*'); });
-  // Opaque-origin /raw frames import these modules and fetch the page engine's wasm.
-  // Every file is content-addressed; both requests need CORS and immutable caching.
-  app.use('/islands/*', async (c, next) => { await next(); if (c.res.status < 400) c.header('cache-control', IMMUTABLE); c.header('access-control-allow-origin', '*'); });
   app.use('/fonts/*', async (c, next) => { await next(); c.header('cache-control', IMMUTABLE); c.header('access-control-allow-origin', '*'); });
   app.use('/geojson/*', async (c, next) => { await next(); c.header('cache-control', 'public, max-age=86400'); c.header('access-control-allow-origin', '*'); });
   app.use('/assets/*', async (c, next) => { await next(); c.header('cache-control', IMMUTABLE); });
@@ -656,7 +653,7 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
     c.header('cache-control', 'no-store');
   });
   if(existsSync(cliReleaseDir)) app.use('/chat/releases/*', serveStatic({ root: path.relative(process.cwd(), cliReleaseDir) || '.', rewriteRequestPath: (p) => p.replace(/^\/chat\/releases\/[^/]+\//, '/'), onFound: () => {}, onNotFound: () => {} }));
-  // Content-addressed islands and the compatibility libraries carry build-time brotli/gzip siblings.
+  // Content-addressed trees (/story, /libraries) carry build-time brotli/gzip siblings (server/content-encoding).
   app.use('/*', precompressedStatic({ root: path.relative(process.cwd(), publicDir) || '.', onFound: () => {}, onNotFound: () => {} }));
 
   app.on(['GET', 'HEAD'], '/', async c => {
