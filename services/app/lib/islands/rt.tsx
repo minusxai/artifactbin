@@ -20,7 +20,7 @@
 import { batch, createComponent, createMemo, createRoot, createSignal, For, Show } from 'solid-js';
 import type { Component, JSX } from 'solid-js';
 import { createStore, reconcile } from 'solid-js/store';
-import { hydrate, isServer } from 'solid-js/web';
+import { hydrate, insert as solidInsert, isServer } from 'solid-js/web';
 import { evaluateReactive, type ReactiveExpression } from '@/lib/jsx/reactive';
 import { URL_ATTRS, URL_LIST_ATTRS, urlListUrls } from '@/lib/jsx/url-attrs';
 import { substituteRow } from '@/lib/story/row-scope';
@@ -388,14 +388,20 @@ export function hydrateIsland(renderId: string, Component: Component, context: I
       // An island may render siblings of its root (a button and its refusal): those are the island's own
       // (their key has its prefix), never handed back as static siblings, and its output stays LIVE (the
       // accessor, not a snapshot of it) so a sibling that comes and goes is inserted and removed.
-      return [...host.childNodes].filter((node) => node === root || !(node as Element).getAttribute?.('data-hk')?.startsWith(renderId)).map((node) => (node === root ? (Array.isArray(output) ? live : output) : node)) as JSX.Element;
+      const children = [...host.childNodes].filter((node) => node === root || !(node as Element).getAttribute?.('data-hk')?.startsWith(renderId));
+      return (() => children.map((node) => node === root ? (typeof live === 'function' ? (live as () => unknown)() : live) : node)) as unknown as JSX.Element;
     }), host, { renderId });
   } catch {
     // Solid's development build refuses to create nodes while hydrating (a mismatch); render the
     // island fresh instead, as the production build does on its own.
     disposeIsland();
     output = undefined;
-    createRoot(mount);
+    createRoot((dispose) => {
+      mount(dispose);
+      // A non-hydratable or mismatched root still needs Solid's insertion effect: a
+      // one-time replacement would strand a later placeholder-to-content switch.
+      solidInsert(host, () => live as JSX.Element, root.nextSibling, [root]);
+    });
   }
   if (output instanceof Node && output !== root && !output.isConnected && root.parentNode === host) host.replaceChild(output, root);
   return disposeIsland;

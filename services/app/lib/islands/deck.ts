@@ -13,7 +13,15 @@
 import { ISLAND_DATA_ID, READER_READY_ATTR } from '@/lib/compiled-page/contract';
 import { ISLANDS_READY_EVENT } from './contract';
 
+/**
+ * A rail miniature the compiler served inert (compiler RAIL_THUMB_ATTR, the same name): one that holds a button
+ * cannot be parsed inside the rail row's button, so it arrives in a `<template>` and is put in place here —
+ * the tree today's rail renders.
+ */
+export const RAIL_THUMB_ATTR = 'data-mx-thumb';
+
 export function startDeck(doc: Document = document, win: Window = window): () => void {
+  for (const held of doc.querySelectorAll<HTMLTemplateElement>(`.mx-rail template[${RAIL_THUMB_ATTR}]`)) held.replaceWith(doc.importNode(held.content, true));
   // The document's slides, NOT the rail's miniatures (a thumbnail renders a real slide, stamps included):
   // StoryRuntimeApp documentSlides.
   const slides = () => [...doc.querySelectorAll<HTMLElement>('.mx-doc [data-mx-slide]')];
