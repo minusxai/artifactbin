@@ -448,7 +448,10 @@ jobs:
       # postgres-datasets drives a real Dockerised Postgres; pulling the image
       # before the run keeps that cost out of the gate's own timeout budget.
       - name: pull the Postgres image the datasets gate needs
-        run: docker pull postgres:17-alpine
+        run: |
+          if node scripts/gates.mjs --selected --shard=${{ matrix.shard }}/7 | rg -q '^postgres-datasets$'; then
+            docker pull postgres:17-alpine
+          fi
       - name: Prepare isolated browser session workers
         run: |
           sudo apt-get update
