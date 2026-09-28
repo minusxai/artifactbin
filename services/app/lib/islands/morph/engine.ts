@@ -85,6 +85,10 @@ export async function morphStory(win: Window, options: MorphOptions = {}): Promi
   // A deck's rail and present bar are bound once by its behaviour (lib/islands/deck): a changed deck reloads.
   if (root.querySelector('.mx-rail') || nextRoot.querySelector('.mx-rail')) throw refuse('a deck is redrawn by a reload');
 
+  // The author's script runs in its own sandboxed realm against this page's store (../author-host), started
+  // once by `boot`: a version that changes it is drawn by a reload.
+  if (authorScriptOf(doc) !== authorScriptOf(next)) throw refuse('the author script changed');
+
   const oldModule = moduleUrl(doc);
   const newModule = moduleUrl(next);
   // Content-addressed chunks: another boot URL is another island build, whose islands would run on a second Solid.
@@ -173,6 +177,16 @@ async function fetchFragment(win: Window, url: string, fetchFn: NonNullable<Morp
     }
     if (!response.ok) throw refuse(`the story fragment answered ${response.status}`);
     return new DOMParser().parseFromString(await response.text(), 'text/html');
+  }
+}
+
+/** The version's author script, as its data island names it (IslandPageData.authorScript), or null. */
+function authorScriptOf(doc: Document): string | null {
+  try {
+    const data = JSON.parse(doc.getElementById(ISLAND_DATA_ID)?.textContent || 'null') as { authorScript?: unknown } | null;
+    return typeof data?.authorScript === 'string' && data.authorScript ? data.authorScript : null;
+  } catch {
+    return null;
   }
 }
 

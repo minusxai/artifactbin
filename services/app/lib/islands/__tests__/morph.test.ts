@@ -280,12 +280,14 @@ describe('the live morph', () => {
     expect($('lede')!.textContent).toBe('landed');
   });
 
-  it('refuses what it cannot draw in place: an unreadable fragment, another island build, a deck', async () => {
+  it('refuses what it cannot draw in place: an unreadable fragment, another island build, a deck, a new author script', async () => {
     load(served({ edit: 'e1' }));
     start();
     await expect(morph(window, { fetch: answer('not found', 404) })).rejects.toBeInstanceOf(MorphRefused);
     await expect(morph(window, { fetch: answer(served({ edit: 'e2', module: '/islands/d/9999999999999999.js', boot: '/islands/boot-2222.js' })) })).rejects.toThrow(/island build/);
     await expect(morph(window, { fetch: answer(served({ edit: 'e2', extra: '<nav class="mx-rail"></nav>' })) })).rejects.toThrow(/deck/);
+    const scripted = served({ edit: 'e2' }).replace('"readOnly":null', '"readOnly":null,"authorScript":"mx.set(1)"');
+    await expect(morph(window, { fetch: answer(scripted) }), 'the author\'s realm is started once, by boot').rejects.toThrow(/author script/);
     expect($('lede')!.textContent, 'a refusal changes nothing').toBe('the first version');
   });
 });
