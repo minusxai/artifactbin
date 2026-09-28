@@ -22,34 +22,16 @@ import { defaultDatasetGrants } from '@artifactbin/utils';
 import { drainPreparedPageWarmups } from '@/lib/story/prepared-page.server';
 import { compiledForRow, getArtifactById } from '@/lib/artifacts';
 import { resetLiveSubscriptions } from '@/lib/story/live';
-// SWAP BACK when w1-planners merges: `import { planOf } from '@/lib/compiled-page/plan';` and delete the inline planOf below.
-import { mutationTargetRef } from '@/lib/story/compiled-flow';
-import type { CompiledDataflow } from '@/lib/story/compiled-dataflow';
+import { planOf } from '@/lib/compiled-page/plan';
 import { updateSharingFor } from '@/lib/artifacts';
 import { createSnapshotStore, drainSnapshotRevalidations, enableSnapshotRevalidations, snapshotKeyFor, snapshotStore } from '@/lib/compiled-page/snapshots.server';
-import { SNAPSHOT_INPUT_SETS_PER_ARTIFACT, SNAPSHOT_MAX_AGE_MS, type DataPlan, type DatasetAccessFacts } from '@/lib/compiled-page/contract';
+import { SNAPSHOT_INPUT_SETS_PER_ARTIFACT, SNAPSHOT_MAX_AGE_MS } from '@/lib/compiled-page/contract';
 
 vi.mock('@/auth', () => ({ auth: async () => null }));
 const harness = useAppHarness();
 // A serving process turns background revalidation on at its composition root; this file is one.
 enableSnapshotRevalidations();
 
-/**
- * TEMPORARY stand-in for w1-planners' `planOf` (lib/compiled-page/plan), which has not merged: enough of it
- * for these fixtures, where every import is admitted to the anonymous reader and no query reads `_me`/`_tz`.
- */
-function planOf(flow: CompiledDataflow, access: DatasetAccessFacts): DataPlan {
-  const refOf = (name: string) => flow.imports.find((i) => i.name === name)?.ref;
-  const shared = flow.queries.filter((q) => q.reads.imports.every((name) => access.datasets[refOf(name) ?? '']?.anonymousRead));
-  return {
-    queries: flow.queries.map((q) => ({ name: q.name, scope: shared.includes(q) ? 'shared' as const : 'viewer' as const, reads: q.reads, because: '' })),
-    values: flow.values.map((v) => ({ name: v.name, default: v.default, keysSnapshot: shared.some((q) => q.reads.values.includes(v.name)) })),
-    mutations: flow.mutations.map((m) => ({ name: m.name, dataset: mutationTargetRef(flow, m), placement: 'server' as const })),
-    datasets: [...new Set(shared.flatMap((q) => [...q.reads.imports.map(refOf), q.source]).filter((id): id is string => !!id))].sort(),
-    readsMembers: shared.some((q) => q.reads.builtins.includes('_members')),
-    postgres: shared.some((q) => q.engine === 'postgres'),
-  };
-}
 const params = (id: string) => ({ params: Promise.resolve({ id }) });
 const FIXTURES = path.resolve(process.cwd(), '../../scripts/fixtures/page-speed');
 const fixture = (name: string) => readFileSync(path.join(FIXTURES, name), 'utf8');
@@ -306,5 +288,22 @@ describe('the probe\'s write paths', () => {
     // An outside put carrying them is stripped too.
     await store.put({ ...snap, results: { ...snap.results, mutationAccess: { add: null }, people: {}, userOptions: {} } });
     expect(Object.keys((await store.get(key))!.snapshot.results).sort()).toEqual(['errors', 'tables']);
+  });
+
+  it('forgets a key whose plan the head no longer has, and revalidates from a caller\'s recipe', async () => {
+    const d = await dashboard();
+    const { plan } = await planFor(d.id);
+    const store = createSnapshotStore();
+    const key = snapshotKeyFor(d.id, 'head', plan, { region: 'West' });
+    // The caller's recipe is enough on its own (the serve path holds the plan and values).
+    expect((await createSnapshotStore().revalidate(key, { plan, values: { region: 'West' } }))!.key).toEqual(key);
+    expect((await store.get(key))!.fresh).toBe(true);
+    // A republish that adds a per-viewer query changes the plan: the old key is left behind for good.
+    const markup = fixture('dashboard.jsx').replaceAll('{{sales}}', d.sales).replace('</Helmet>', '  <Query name="mine">{`select $_me.id as me`}</Query>\n</Helmet>');
+    const edited = await putArtifactRoute(await observedRequest(`/api/artifacts/${d.id}`, { method: 'PUT', token: d.token, json: { markup } }), params(d.id));
+    expect(edited.status, await edited.clone().text()).toBe(200);
+    expect(snapshotKeyFor(d.id, 'head', (await planFor(d.id)).plan, { region: 'West' }).planKey).not.toBe(key.planKey);
+    expect(await store.revalidate(key)).toBeNull();
+    expect(await store.get(key)).toBeNull();
   });
 });

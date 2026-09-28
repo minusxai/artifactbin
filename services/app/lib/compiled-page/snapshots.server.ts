@@ -39,23 +39,34 @@
  * on (`enableSnapshotRevalidations`); a script or a unit test writing a
  * dataset gets no work behind its back.
  *
- * WHAT A KEY RE-RUNS. The contract's key carries digests only, so the plan and
- * the input values it was derived from are remembered when the key is made
- * (`snapshotKeyFor`, a bounded registry) and stored with the snapshot, so a
- * write after a restart still revalidates the head it invalidated.
+ * WHAT A KEY RE-RUNS. The contract's key carries digests only, so the input
+ * values it was derived from are remembered when the key is made
+ * (`snapshotKeyFor`, a bounded registry, or the caller's `recipe`) and stored
+ * with the snapshot, so a write after a restart still revalidates the head it
+ * invalidated. The plan is recomputed from the head every time (`planOf` over
+ * `anonymousAccessFacts`): a key whose plan the head no longer has is
+ * forgotten, never re-run.
  */
 import { createHash } from 'node:crypto';
-import { canReadArtifact, dataflowForRow, getArtifactById } from '@/lib/artifacts';
+import { canReadArtifact, compiledForRow, dataflowForRow, getArtifactById, type ArtifactRow } from '@/lib/artifacts';
+import { grantsOf, grantsPermitRead } from '@/lib/datasets/policy/grants';
+import type { CompiledDataflow } from '@/lib/story/compiled-dataflow';
+import { dataRefs } from '@/lib/story/compiled-flow';
+import { planOf } from './plan';
 import { getDb } from '@/lib/db';
 import { DatasetError } from '@/lib/datasets/errors';
 import type { Scalar } from '@/lib/story/dataflow';
 import { marksOf } from '@/lib/story/served-results.server';
+import { preparedPageFor } from '@/lib/story/prepared-page.server';
+import { PUBLIC_BASE_URL } from '@/lib/config';
+import { drawSnapshotCharts } from './charts.server';
 import type { ServedResults } from '@/lib/story-runtime/contract';
 import {
   SNAPSHOT_INPUT_SETS_PER_ARTIFACT,
   SNAPSHOT_MAX_AGE_MS,
   type DataPlan,
   type DataSnapshot,
+  type DatasetAccessFacts,
   type DrawnChart,
   type SnapshotKey,
   type SnapshotRead,
@@ -88,11 +99,9 @@ function keyedValues(plan: DataPlan, values: Readonly<Record<string, Scalar | un
   return Object.fromEntries(plan.values.filter((v) => v.keysSnapshot).map((v) => [v.name, Object.hasOwn(values, v.name) ? (values[v.name] ?? null) : v.default]));
 }
 
+
 /** What a key re-runs: the plan and the keyed input values it was made from. */
-interface Recipe {
-  plan: DataPlan;
-  values: Record<string, Scalar>;
-}
+type Recipe = { plan: DataPlan; values: Record<string, Scalar> };
 
 const keyString = (key: SnapshotKey): string => `${key.artifactId}\u0000${key.slot}\u0000${key.planKey}\u0000${key.inputsKey}`;
 
@@ -207,21 +216,43 @@ async function forget(key: SnapshotKey): Promise<void> {
 const pick = <T>(from: Record<string, T> | undefined, names: ReadonlySet<string>): Record<string, T> =>
   Object.fromEntries(Object.entries(from ?? {}).filter(([name]) => names.has(name)));
 
-async function revalidateKey(key: SnapshotKey): Promise<DataSnapshot | null> {
+/**
+ * The access facts `planOf` needs for this document's data, decided with the run's own admission for the
+ * anonymous principal through THIS document (contract `DatasetAccessFacts`): a dataset with grants admits
+ * the guest when its grants permit the read, one without when it is not private. One helper, so every
+ * caller that keys a snapshot (this store, the serve path) derives the same plan and the same `planKey`.
+ */
+export async function anonymousAccessFacts(document: ArtifactRow, flow: CompiledDataflow): Promise<DatasetAccessFacts> {
+  const refs = dataRefs(flow, flow.values.flatMap((v) => (v.source ? [v.source] : [])));
+  const datasets: Record<string, { anonymousRead: boolean }> = {};
+  for (const ref of refs) {
+    const dataset = await getArtifactById(ref);
+    const anonymousRead = !!dataset && (grantsOf(dataset) ? await grantsPermitRead(dataset, { userId: null, tokenId: null }, document) : dataset.visibility !== 'private');
+    datasets[ref] = { anonymousRead };
+  }
+  return { datasets };
+}
+
+async function revalidateKey(key: SnapshotKey, given?: Recipe): Promise<DataSnapshot | null> {
   // An archived version is readable only through its editors' history scope (lib/archived-version
   // `archivedVersionForActor` refuses a null actor), so no anonymous snapshot of one can exist.
   if (key.slot !== 'head') return null;
+  if (given) remember(key, { plan: given.plan, values: keyedValues(given.plan, given.values) });
   const stored = await storedRow(key);
   const recipe = recipes.get(keyString(key)) ?? stored?.snapshot?.recipe ?? null;
   if (!recipe) return null;
-  const { plan, values } = recipe;
-  const shared = plan.queries.filter((q) => q.scope === 'shared').map((q) => q.name);
+  const { values } = recipe;
   const row = await getArtifactById(key.artifactId);
   // The anonymous door's own admission: a document a guest cannot read has no guest snapshot.
-  if (!row || row.format !== 'markup' || !shared.length || !(await canReadArtifact(row, null))) return null;
-  // TODO(w1-planners planOf): recompute this head's plan (`planOf(flow, anonymous access facts)`) and, when its
-  // digest is not `key.planKey`, forget the row and answer null. Until then a plan whose shared queries the head
-  // no longer declares is the one mismatch detectable here.
+  if (!row || row.format !== 'markup' || !(await canReadArtifact(row, null))) return null;
+  // The head's plan NOW: a republish or an access change that moves the plan leaves this key behind for good.
+  const flow = await compiledForRow(row);
+  const plan = flow ? planOf(flow, await anonymousAccessFacts(row, flow)) : null;
+  const shared = plan?.queries.filter((q) => q.scope === 'shared').map((q) => q.name) ?? [];
+  if (!plan || digest(plan) !== key.planKey || !shared.length) {
+    await forget(key);
+    return null;
+  }
   // Marked BEFORE the run: a write after this is caught by the next comparison, never lost.
   const current = await marksOf([...plan.datasets, row.id]);
   const marks = Object.fromEntries(plan.datasets.map((id) => [id, current.get(id) ?? NO_MARK]));
@@ -240,20 +271,13 @@ async function revalidateKey(key: SnapshotKey): Promise<DataSnapshot | null> {
     throw error;
   }
   if (!ran) return null;
-  const declared = new Set(ran.flow.queries.map((q) => q.name));
-  if (shared.some((name) => !declared.has(name))) {
-    await forget(key);
-    return null;
-  }
   const answered = new Set(shared);
   const { state } = ran;
   // The shared queries' tables and errors, and NOTHING else the run attaches: its mutation access, user
   // options and person cards are computed for whoever the run is for (the viewer overlay's to answer).
   const results = sharedResults({ tables: pick(state.tables, answered), errors: pick(state.errors, answered) });
-  // TODO(w1-planners drawSnapshotCharts): draw the version's <Question> charts from `results` —
-  // `drawSnapshotCharts(page.data.nodes, results, { colorMode: page.data.colorMode })` over
-  // `preparedPageFor(row, null, PUBLIC_BASE_URL)` — once charts.server.ts has merged.
-  const drawings: Record<string, DrawnChart> = {};
+  const { page } = await preparedPageFor(row, null, PUBLIC_BASE_URL);
+  const drawings = await drawSnapshotCharts(page.data.nodes, results, { colorMode: page.data.colorMode });
   const snapshot: DataSnapshot = {
     key: { artifactId: key.artifactId, slot: key.slot, planKey: key.planKey, inputsKey: key.inputsKey },
     marks,
@@ -360,7 +384,7 @@ export function createSnapshotStore(): SnapshotStore {
       return pending;
     },
 
-    revalidate: revalidateKey,
+    revalidate: (key, recipe) => revalidateKey(key, recipe),
   };
 }
 

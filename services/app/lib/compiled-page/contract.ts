@@ -295,7 +295,7 @@ export const SNAPSHOT_INPUT_SETS_PER_ARTIFACT = 16;
 
 export interface SnapshotRead {
   snapshot: DataSnapshot;
-  /** Marks equal to the current ones, and inside the age bound for a Postgres plan. */
+  /** Marks (datasets and the document) equal to the current ones, and inside SNAPSHOT_MAX_AGE_MS. */
   fresh: boolean;
 }
 
@@ -318,8 +318,10 @@ export interface SnapshotStore {
    * Re-run the shared queries at this key's inputs with anonymous admission
    * (the same run as `POST /a/:id/query`), draw the charts, store and return
    * the new snapshot; null when the version cannot be snapshotted any more.
+   * `recipe` is the plan and input values the key was made from, when the
+   * caller holds them (else the store's own record of the key).
    */
-  revalidate(key: SnapshotKey): Promise<DataSnapshot | null>;
+  revalidate(key: SnapshotKey, recipe?: { plan: DataPlan; values: Record<string, Scalar> }): Promise<DataSnapshot | null>;
 }
 
 /* ────────────────────────────────────────────────────────────────────────────

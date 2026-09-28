@@ -109,7 +109,7 @@ export async function marksOf(ids: readonly string[]): Promise<Map<string, strin
 const TOKEN_PART = /^([A-Za-z0-9]+)\.([A-Za-z0-9_-]{12})$/;
 
 /** `id.mark~id.mark` — what a page hands its live stream (`?since=`). */
-const tokenOf = (marks: Map<string, string>): string => [...marks].sort(([a], [b]) => a.localeCompare(b)).map(([id, mark]) => `${id}.${mark}`).join('~');
+export const tokenOf = (marks: Map<string, string>): string => [...marks].sort(([a], [b]) => a.localeCompare(b)).map(([id, mark]) => `${id}.${mark}`).join('~');
 
 /**
  * The datasets among `followed` whose mark has moved since `since` (a token a
