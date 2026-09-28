@@ -2,6 +2,10 @@
  * THE COMPILED PAGE BEHAVES LIKE TODAY'S (w3-behaviour). Real routes, the harness's database, the
  * reader switch in shadow for this file.
  *
+ * - A compiled `/a/:id` page with no island module (prose) still holds the document's live stream, keeps
+ *   the reader's place across the reload a new version delivers, and carries their mode: the page's own
+ *   behaviour (`@mx/page`), the same one a `/raw` copy runs. An interactive page loads it too (its
+ *   reload keeps the place); the islands' module holds the stream there.
  * - A reader who holds a credential for the document — an account session, or a held connection (the
  *   guest owner who made it) — gets the page's credentialed doors (`signedIn` in the data island), so
  *   the store's write check answers for them, as today's reader page does; a guest does not.
@@ -15,6 +19,7 @@ import { mintToken } from '@/lib/tokens';
 import { drainPreparedPageWarmups } from '@/lib/story/prepared-page.server';
 import { setCompiledReaderFlagForTests } from '@/lib/compiled-page/reader-mode';
 import { ISLAND_DATA_ID, READER_MODE_HEADER } from '@/lib/compiled-page/contract';
+import { loadCompilerBuild } from '@/lib/compiled-page/build.server';
 import type { IslandPageData } from '@/lib/islands/contract';
 
 vi.mock('@/auth', () => ({ auth: async () => null }));
@@ -53,5 +58,24 @@ describe('a held connection is a credentialed reader on the compiled app page', 
     const data = islandData(await held.text());
     expect(data.signedIn).toBe(true);
     expect(data.mutateUrl).toBe(`/a/${id}/mutate`);
+  });
+});
+
+describe('the compiled app page holds its own live stream until the app loads', () => {
+  it('a prose page (no island module) loads the page behaviour and names its live identity; so does an interactive one', async () => {
+    const t = await mintToken('behaviour');
+    const prose = await publish(t.token, { title: 'Prose', markup: '<div><h1>Prose</h1><p>Just words.</p></div>' });
+    const page = await app.request(`/a/${prose}?reader=compiled`, { headers: { accept: 'text/html' } });
+    expect(page.headers.get(READER_MODE_HEADER)).toBe('compiled');
+    const doc = new JSDOM(await page.text()).window.document;
+    const scripts = [...doc.querySelectorAll('script[type="module"]')].map((s) => s.getAttribute('src'));
+    expect(scripts).toContain(loadCompilerBuild().manifest['@mx/page']);
+    expect(doc.getElementById(ISLAND_DATA_ID), 'no island module on a prose page').toBeNull();
+    expect(doc.body.getAttribute('data-mx-live-id')).toBe(prose);
+    expect(doc.body.getAttribute('data-mx-live-edit')).toBeTruthy();
+
+    const kit = await publish(t.token, { title: 'Tabs', markup: '<Tabs defaultValue="a"><TabsList><TabsTrigger value="a">A</TabsTrigger><TabsTrigger value="b">B</TabsTrigger></TabsList><TabsContent value="a">One</TabsContent><TabsContent value="b">Two</TabsContent></Tabs>' });
+    const interactive = new JSDOM(await (await app.request(`/a/${kit}?reader=compiled`, { headers: { accept: 'text/html' } })).text()).window.document;
+    expect([...interactive.querySelectorAll('script[type="module"]')].map((s) => s.getAttribute('src'))).toContain(loadCompilerBuild().manifest['@mx/page']);
   });
 });

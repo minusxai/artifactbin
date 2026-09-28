@@ -268,6 +268,10 @@ export async function artifactPageAnswer(request: Request, id: string, options: 
       },
       ...(at ? { readOnly: archivedReadOnly(at.version) } : {}),
       live: at ? null : { id: artifact.id, editId: artifact.edit_id },
+      // The page's own behaviour (lib/islands/page), as a /raw copy runs it: the live stream of a page with
+      // no islands (the app loads on intent, so until then the page holds it), the reader's place across
+      // the reload a new version delivers, and their mode.
+      behaviors: ['page'],
       chrome: await readerChromeFor({ artifact, row, role, kind, actor, at, author: authorMark, likeCount, liked, follow, openAnnotations, hasInvitedUsers: ownerScope ? hasInvitedUsers : undefined, ground: design.colorMode ?? prepared.page.data.colorMode }),
       chromeFonts: readerChromeFonts({ theme: prepared.page.base.theme, docFonts: prepared.page.base.fonts, importedFaces: prepared.page.base.faces }).map((face) => face.url),
       spa: options.page!.spa,
