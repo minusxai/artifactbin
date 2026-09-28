@@ -1,15 +1,15 @@
 /** Transaction-only authorization shared by query execution, result commit and disclosure. */
-import {createHash} from 'node:crypto';
-import {notificationRuleSourceIds} from './notification-context';
+import {notificationRuleSourceIds,notificationRevision as hash} from './notification-context';
 import {hasExplicitNotificationMembership} from './notification-membership';
 import {grantsOf,grantsPermitRead,readThrough} from './datasets/policy/grants';
-const hash=(value:unknown)=>createHash('sha256').update(JSON.stringify(value)).digest('hex');
 import type {MutationNotificationJobInput,MutationNotificationPlan,NotificationSource,Queryable,MutationInitiator} from '@artifactbin/contracts';
 import type {ArtifactRow,RoleActor} from './artifacts';
 import {hasDocumentEditorAccess} from './document-policy';
 import {catalogOf} from './datasets/catalog';
 import {PUBLIC_BASE_URL} from './config';
 import {NotificationExecutionError} from './notification-error';
+import {resolveDatasetConnection} from './datasets/secrets';
+import {DatasetError} from './datasets/errors';
 
 interface Account {id:string;email:string|null;kind:string;expires_at:string|null}
 interface LiveToken {id:string;user_id:string|null;expires_at:string|null;audience:string|null;scope:string|null}
@@ -42,6 +42,8 @@ export async function notificationArtifactAuthority(tx:Queryable,id:string):Prom
 }
 async function sourceReadable(tx:Queryable,source:NotificationArtifactAuthority,document:NotificationArtifactAuthority,identity:Identity):Promise<boolean>{
  if(source.row.format!=='dataset'||!await readThrough(tx,document.row,identity.actor))return false;
+ const connection=catalogOf(source.row)?.connection;
+ if(connection){try{await resolveDatasetConnection(connection,undefined,source.row.id,tx);}catch(error){if(error instanceof DatasetError)throw denied();throw error;}}
  return grantsOf(source.row)?grantsPermitRead(source.row,identity.actor,document.row,tx):readThrough(tx,source.row,identity.actor);
 }
 export async function notificationExecutionFence(tx:Queryable,input:MutationNotificationJobInput):Promise<MutationNotificationPlan['executionFence']>{
