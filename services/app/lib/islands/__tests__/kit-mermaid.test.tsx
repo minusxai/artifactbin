@@ -46,7 +46,9 @@ async function mountBoth(drawings: Record<string, unknown> = {}) {
   island.drawings = () => drawings as never;
   let dispose!: () => void;
   await act(async () => { dispose = render(() => <IslandProvider value={island}><Mermaid code={CODE} colorMode="light" id="m" /></IslandProvider>, solid); });
-  const settle = () => act(async () => { for (let i = 0; i < 5; i++) await new Promise((r) => setTimeout(r, 0)); });
+  // Both sides draw asynchronously (a dynamic import, then the engine): settle until neither is still drawing.
+  const drawing = () => [react, solid].some((host) => host.querySelector('[role="status"]'));
+  const settle = async () => { await vi.waitFor(() => { if (drawing()) throw new Error('still drawing'); }, { timeout: 5000 }); await act(async () => { await new Promise((r) => setTimeout(r, 0)); }); };
   await settle();
   return {
     react, solid, settle,
