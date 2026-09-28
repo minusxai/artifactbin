@@ -1,8 +1,7 @@
 /**
- * The island build's Solid toolchain (scripts/build-islands.mjs `solidPlugin`): the contract's
- * `solid-js/web` / `solid-js/store` resolve to Solid 2.0, the JSX transform emits code the PINNED
- * runtime runs (a transform from another release candidate renders but drops event handlers), and
- * the graph holds exactly one Solid.
+ * The island build's Solid toolchain (scripts/build-islands.mjs `solidPlugin`): babel-preset-solid emits
+ * code the PINNED runtime renders and updates (a transform out of step with the runtime renders but
+ * drops event handlers), the output is hydratable, and the graph holds exactly one Solid.
  */
 import { describe, expect, it } from 'vitest';
 import esbuild from 'esbuild';
@@ -37,11 +36,11 @@ describe('solidPlugin', () => {
     }
   });
 
-  it('resolves the contract specifiers to one Solid 2.0 and emits hydratable code for the build', async () => {
+  it('resolves one Solid and emits hydratable code for the build', async () => {
     const out = await bundle({ generate: 'dom', hydratable: true });
     const packages = new Set(Object.keys(out.metafile.inputs).map((i) => /node_modules\/((?:@[^/]+\/)?[^/]+)\//.exec(i)?.[1]).filter(Boolean));
-    expect([...packages].filter((p) => /solid/.test(p)).sort()).toEqual(['@solidjs/signals', '@solidjs/web', 'solid-js']);
-    expect(Object.keys(out.metafile.inputs).some((i) => i.endsWith('lib/islands/solid-store.ts'))).toBe(true);
+    expect([...packages].filter((p) => /solid/.test(p)).sort()).toEqual(['solid-js']);
+    expect(Object.keys(out.metafile.inputs).some((i) => i.endsWith('node_modules/solid-js/store/dist/store.js'))).toBe(true);
     expect(out.outputFiles[0].text).toMatch(/getNextElement|claimElement/);
   });
 });

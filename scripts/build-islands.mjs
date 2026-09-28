@@ -1,5 +1,5 @@
 /**
- * THE SHARED ISLAND BUILD (docs/phase2-architecture.md §1, §3). Once per deploy: Solid 2.0, the island
+ * THE SHARED ISLAND BUILD (docs/phase2-architecture.md §1, §3). Once per deploy: Solid 1.9, the island
  * runtime (`@mx/rt`, `@mx/boot`), the deck behaviour (`@mx/deck`) and every kit family
  * (`@mx/kit/<family>`, lib/islands/contract `KIT_FAMILIES`) become ONE module graph, split into
  * content-addressed browser chunks under services/app/public/islands/, with
@@ -16,11 +16,8 @@
  *
  *   node scripts/build-islands.mjs [--cache] [--out <dir>]
  *
- * THE SOLID SPECIFIERS. Pages import Solid as `solid-js`, `solid-js/web` and `solid-js/store` (the
- * contract's names). Solid 2.0 publishes the renderer as `@solidjs/web` and folds the store into
- * `solid-js`, so scripts/lib/solid-aliases.mjs maps the two subpaths; the islands vitest project uses
- * the same map and lib/islands/solid-compat.d.ts types it. The JSX transform is `@solidjs/babel-plugin` (Solid
- * 2.0's successor to babel-preset-solid), the one the islands vitest project runs too.
+ * THE SOLID TRANSFORM is babel-preset-solid (dom, hydratable) over lib/islands `.tsx`/`.jsx`, the
+ * preset the islands vitest project runs too (through vite-plugin-solid).
  */
 import { transformAsync } from '@babel/core';
 import esbuild from 'esbuild';
@@ -30,7 +27,6 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import zlib from 'node:zlib';
 import { precompressTree, describePrecompression } from './lib/precompress.mjs';
-import { SOLID_ALIASES } from './lib/solid-aliases.mjs';
 
 const ROOT = path.resolve(import.meta.dirname, '..');
 const APP = path.join(ROOT, 'services/app');
@@ -69,7 +65,7 @@ const ENTRIES = [
 export const ISLAND_SPECIFIERS = Object.freeze(ENTRIES.map((e) => e.specifier));
 
 /**
- * esbuild plugin: the Solid specifiers, the `@mx/*` modules, and Solid's JSX transform over
+ * esbuild plugin: the page entries, the `@mx/*` modules, and Solid's JSX transform over
  * lib/islands `.tsx`/`.jsx` (TypeScript stripped by esbuild first, JSX kept for Babel). A React file
  * reached from an island would be compiled as React; `buildIslands` refuses a graph containing React.
  */
@@ -79,7 +75,6 @@ export function solidPlugin({ generate = 'dom', hydratable = true } = {}) {
     setup(build) {
       build.onResolve({ filter: /^mx-entry:/ }, (args) => ({ path: args.path.slice('mx-entry:'.length), namespace: 'mx-entry' }));
       build.onLoad({ filter: /.*/, namespace: 'mx-entry' }, (args) => ({ contents: ENTRIES.find((e) => e.specifier === args.path).source, loader: 'js', resolveDir: ISLANDS_SRC }));
-      build.onResolve({ filter: /^solid-js\/(web|store)$/ }, (args) => build.resolve(SOLID_ALIASES[args.path], { kind: args.kind, resolveDir: ISLANDS_SRC }));
       build.onResolve({ filter: /^@mx\/(rt|boot|deck|kit\/[a-z-]+)$/ }, (args) => {
         const entry = ENTRIES.find((e) => e.specifier === args.path);
         if (!entry) return { errors: [{ text: `build-islands: unknown island specifier ${args.path}` }] };
@@ -91,7 +86,7 @@ export function solidPlugin({ generate = 'dom', hydratable = true } = {}) {
         const stripped = (await esbuild.transform(source, { loader: args.path.endsWith('.tsx') ? 'tsx' : 'jsx', jsx: 'preserve', sourcefile: args.path })).code;
         const out = await transformAsync(stripped, {
           filename: args.path, babelrc: false, configFile: false, sourceType: 'module', compact: false,
-          plugins: [['@solidjs/babel-plugin', { generate, hydratable }]],
+          presets: [['babel-preset-solid', { generate, hydratable }]],
         });
         return { contents: out.code, loader: 'js', resolveDir: path.dirname(args.path) };
       });
@@ -209,7 +204,7 @@ function buildId(manifest, graphInputs) {
 }
 
 /** What the `--cache` marker keys on: this script, the lockfile, and every repository file the last build read. */
-const toolHash = () => sha256(Buffer.concat([fs.readFileSync(new URL(import.meta.url)), fs.readFileSync(path.join(ROOT, 'scripts/lib/precompress.mjs')), fs.readFileSync(path.join(ROOT, 'scripts/lib/solid-aliases.mjs')), fs.readFileSync(path.join(ROOT, 'package-lock.json'))]));
+const toolHash = () => sha256(Buffer.concat([fs.readFileSync(new URL(import.meta.url)), fs.readFileSync(path.join(ROOT, 'scripts/lib/precompress.mjs')), fs.readFileSync(path.join(ROOT, 'package-lock.json'))]));
 const sourceHashes = (rels) => Object.fromEntries(rels.map((rel) => [rel, fs.existsSync(path.join(ROOT, rel)) ? sha256(fs.readFileSync(path.join(ROOT, rel))) : null]));
 const trackedSources = (inputs) => [...new Set([
   ...listFiles(ISLANDS_SRC).filter((f) => !f.split(path.sep).includes('__tests__')).map((f) => toPosix(path.relative(ROOT, f))),

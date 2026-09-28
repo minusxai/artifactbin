@@ -1,9 +1,8 @@
 import path from 'path';
 import { generateTeaching } from './scripts/lib/generate-teaching.mjs';
-import { SOLID_ALIASES } from './scripts/lib/solid-aliases.mjs';
 import { defineConfig } from 'vitest/config';
 import react from '@vitejs/plugin-react';
-import solid from '@solidjs/vite-plugin';
+import solid from 'vite-plugin-solid';
 import yaml from '@rollup/plugin-yaml';
 
 // Discovery imports source consumers before global setup runs.
@@ -11,8 +10,6 @@ generateTeaching();
 
 // The island tests (Solid, lib/islands): jsdom, the Solid JSX transform, never the React one. Every
 // other project matches `lib/**/__tests__` too, so they exclude this glob.
-// Exact-match keys, so `solid-js` itself is untouched.
-const SOLID_SPECIFIERS = Object.entries(SOLID_ALIASES).map(([specifier, replacement]) => ({ find: new RegExp(`^${specifier}$`), replacement }));
 const ISLAND_TESTS = 'services/app/lib/islands/**/__tests__/**/*.test.{ts,tsx}';
 
 // API exercises route handlers and persistence; Node covers libraries, services,
@@ -127,15 +124,12 @@ export default defineConfig({
       },
       {
         // Solid files under lib/islands carry `/* @jsxImportSource solid-js */` (the root tsconfig
-        // stays react-jsx) and are compiled by the same Babel plugin the island build uses
-        // (@solidjs/babel-plugin via `compiler: 'babel'`, not the plugin's default native compiler).
-        // One difference: tests render client-side (`hydratable` off), the build emits hydratable
-        // code. Only lib/islands goes through Solid's transform; the React kit a parity test imports
-        // keeps Vite's own (react-jsx) transform. The contract's Solid-1 specifiers resolve to Solid
-        // 2.0 through the same map as scripts/build-islands.mjs (scripts/lib/solid-aliases.mjs).
+        // stays react-jsx) and are compiled by babel-preset-solid, the transform the island build
+        // uses. One difference: tests render client-side (`hydratable` off), the build emits
+        // hydratable code. Only lib/islands goes through Solid's transform; the React kit a parity
+        // test imports keeps Vite's own (react-jsx) transform.
         extends: true,
-        plugins: [solid({ compiler: 'babel', include: ['services/app/lib/islands/**/*.{tsx,jsx}'], solid: { sourceNames: false } })],
-        resolve: { alias: SOLID_SPECIFIERS },
+        plugins: [solid({ include: ['services/app/lib/islands/**/*.{tsx,jsx}'], hot: false })],
         test: {
           name: 'islands',
           environment: 'jsdom',

@@ -1,6 +1,6 @@
 // DESTINATION: scripts/__tests__/build-islands.test.mjs
 /**
- * The shared island build (scripts/build-islands.mjs): once per deploy, Solid 2.0, the runtime and
+ * The shared island build (scripts/build-islands.mjs): once per deploy, Solid 1.9, the runtime and
  * every kit family become content-addressed chunks under services/app/public/islands with a
  * manifest and a build id (docs/phase2-architecture.md §1, §3; lib/compiled-page/contract CompilerBuild).
  */
@@ -14,13 +14,13 @@ const ROOT = path.resolve(import.meta.dirname, '../..');
 const KIT_FAMILIES = ['basic', 'tabs', 'accordion', 'dialog', 'disclosure', 'controls', 'data', 'files', 'people', 'mermaid'];
 
 describe('the toolchain', () => {
-  it('pins Solid 2.x and the Babel plugin of the same release (Solid 2.0 replaced babel-preset-solid with @solidjs/babel-plugin)', () => {
+  it('pins Solid 1.9 and a matching babel preset', () => {
     const solid = JSON.parse(readFileSync(path.join(ROOT, 'node_modules/solid-js/package.json'), 'utf8'));
-    expect(solid.version).toMatch(/^2\./);
+    expect(solid.version).toMatch(/^1\.9\./);
     const lock = JSON.parse(readFileSync(path.join(ROOT, 'package-lock.json'), 'utf8'));
-    const preset = lock.packages['node_modules/@solidjs/babel-plugin'];
-    expect(preset, '@solidjs/babel-plugin is pinned in the lockfile').toBeTruthy();
-    expect(preset.version).toBe(solid.version);
+    const preset = lock.packages['node_modules/babel-preset-solid'];
+    expect(preset, 'babel-preset-solid is pinned in the lockfile').toBeTruthy();
+    expect(preset.version).toMatch(/^1\.9\./);
   });
 });
 

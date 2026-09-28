@@ -3,18 +3,16 @@
  * through `useIsland()`; the runtime (rt.ts) and tests supply it with `IslandProvider`. One context per
  * document, shared by every island in it.
  *
- * Plain `.ts` (no JSX): Solid 2.0 context objects are components themselves, so the provider is a
- * `createComponent` call and this module needs no JSX transform.
+ * Plain `.ts` (no JSX): the provider is a `createComponent` call, so this module needs no JSX transform.
  */
 import { createComponent, createContext, useContext } from 'solid-js';
-import type { Element as SolidElement } from 'solid-js';
+import type { JSX } from 'solid-js';
 import type { IslandContext } from './contract';
 
-/** `null` default, never `undefined`: Solid 2.0's `useContext` throws its own anonymous error for a context with no default. */
 const Island = createContext<IslandContext | null>(null);
 
-export function IslandProvider(props: { value: IslandContext; children?: SolidElement }): SolidElement {
-  return createComponent(Island, {
+export function IslandProvider(props: { value: IslandContext; children?: JSX.Element }): JSX.Element {
+  return createComponent(Island.Provider, {
     get value() { return props.value; },
     get children() { return props.children; },
   });
