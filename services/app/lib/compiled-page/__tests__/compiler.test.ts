@@ -149,6 +149,9 @@ describe('unit parity with today\'s render', () => {
     const page = await compilePage(await inputOf(source, 'deck'), loadCompilerBuild());
     expect(columnParity(page.html, source)).toEqual([]);
     expect(dom(page.html).querySelectorAll('nav.mx-rail button.mx-rail-row')).toHaveLength(8);
+    // What the deck behaviour (@mx/deck startDeck) binds to.
+    expect(dom(page.html).querySelectorAll('.mx-doc [data-mx-slide]')).toHaveLength(8);
+    expect([...dom(page.html).querySelectorAll('.mx-present button')].map((b) => b.getAttribute('aria-label'))).toEqual(['Previous slide', 'Next slide', 'Present']);
     expect(dom(page.html).querySelector('.mx-present-count')?.textContent).toBe('1 / 8');
   });
 });
@@ -163,6 +166,7 @@ const STAND_IN = {
   '@mx/rt': `import { createContext } from 'solid-js';
 const Island = createContext(null);
 export function IslandProvider(props) { return <Island.Provider value={props.value}>{props.children}</Island.Provider>; }
+export const withIsland = (Component, context) => <IslandProvider value={context}><Component /></IslandProvider>;
 export function createIslandRuntime(data, createStore) { return { context: { values: () => data.dataflow ? data.dataflow.values : {} }, store: createStore, dispose() {} }; }
 export const createDataflowStore = null;`,
   '@mx/kit/tabs': `export function Tabs(props) { return <div data-slot="tabs" class={props.class} id={props.id} data-mx-ast={props['data-mx-ast']} data-default={props.defaultValue}>{props.children}</div>; }
@@ -203,6 +207,8 @@ describe('the island path, over a stand-in server half', () => {
     const bytes = (await store.get(module.sha))!;
     const text = new TextDecoder().decode(bytes);
     expect(text).not.toMatch(/from\s*["'](@mx\/|solid-js)/);
+    // Solid's DOM helpers come through the runtime's one import surface, never the whole solid-js/web chunk.
+    expect(text).not.toContain(build.manifest['solid-js/web']);
     const br = brotliCompressSync(bytes).byteLength;
     // Target 2's per-document share (the brief: ≤ 5 KB br for the kit fixture); measured 2283 B raw / 614 B br.
     expect(br, `kit per-document module: ${bytes.byteLength} B raw, ${br} B br`).toBeLessThanOrEqual(5 * 1024);

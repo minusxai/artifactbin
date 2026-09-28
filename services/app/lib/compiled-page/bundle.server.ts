@@ -53,10 +53,10 @@ export interface SolidTarget { generate: 'dom' | 'ssr'; hydratable: boolean }
  * `<`, `>`, U+2028 or U+2029 — author text stays inert even where a module's text is inspected or
  * embedded, not only where it is parsed.
  */
-export async function transformSolid(source: string, target: SolidTarget, options: { minify?: boolean; rewrite?: (specifier: string) => string } = {}): Promise<string> {
+export async function transformSolid(source: string, target: SolidTarget, options: { minify?: boolean; rewrite?: (specifier: string) => string; moduleName?: string } = {}): Promise<string> {
   const out = await transformAsync(source, {
     filename: 'document.jsx', babelrc: false, configFile: false, sourceType: 'module', compact: false, comments: false,
-    presets: [[solidPreset, { generate: target.generate, hydratable: target.hydratable }]],
+    presets: [[solidPreset, { generate: target.generate, hydratable: target.hydratable, ...(options.moduleName ? { moduleName: options.moduleName } : {}) }]],
   });
   if (!out?.code) throw new Error('compile: the Solid transform produced nothing');
   // The preset adds its own imports as it finishes; rewrite and escape on the finished module.
@@ -297,12 +297,14 @@ function ssrSource(islands: string, skeletonHtml: string, flow: CompiledDataflow
 const $skeleton = ${lit(skeletonHtml)};
 const $flow = JSON.parse(${lit(JSON.stringify(flow))});
 export function render(data) {
-  const runtime = rt.createIslandRuntime({ dataflow: $flow ? { flow: $flow, values: data.values, ...(data.results ? { results: data.results } : {}) } : null, mermaidImages: data.mermaidImages, drawings: data.drawings, viewer: null }, rt.createDataflowStore);
+  const runtime = rt.createIslandRuntime({ dataflow: $flow ? { flow: $flow, values: data.values, ...(data.results ? { results: data.results } : {}) } : null, mermaidImages: data.mermaidImages, viewer: null }, rt.createDataflowStore);
   try {
     let html = $skeleton;
     ISLANDS.forEach(([renderId, Island], n) => {
+      // Wrapped exactly as the browser's hydrateIsland wraps it (rt.withIsland): the wrapper's
+      // component levels are part of Solid's hydration keys.
       // Solid's server spread writes \`class="<value> "\` (a trailing space for classList); the kit's classes never end in one.
-      const island = $renderToString(() => <rt.IslandProvider value={runtime.context}><Island /></rt.IslandProvider>, { renderId }).replace(/ class="([^"]*) "/g, ' class="$1"');
+      const island = $renderToString(() => rt.withIsland(Island, runtime.context), { renderId }).replace(/ class="([^"]*) "/g, ' class="$1"');
       html = html.replace('<mx-slot data-i="' + n + '"></mx-slot>', () => island);
     });
     return html;
@@ -313,8 +315,13 @@ export function render(data) {
 `;
 }
 
-/** The browser module's source: the islands, handed to the shared runtime's boot. */
-const browserSource = (islands: string): string => `${islands}import { boot as $boot } from '@mx/boot';\n$boot(ISLANDS);\n`;
+/**
+ * The browser module's source: the islands, handed to the shared runtime's boot — with the
+ * version's compiled dataflow when it declares data (the page's data island carries no flow).
+ */
+const browserSource = (islands: string, flow: CompiledDataflow | null): string => flow
+  ? `${islands}import { boot as $boot } from '@mx/boot';\nconst FLOW = JSON.parse(${lit(JSON.stringify(flow))});\n$boot({ ISLANDS, FLOW });\n`
+  : `${islands}import { boot as $boot } from '@mx/boot';\n$boot(ISLANDS);\n`;
 
 interface ManifestFiles { files?: Record<string, { imports?: string[] }> }
 let filesCache: { build: string; files: Record<string, { imports?: string[] }> } | null = null;
@@ -363,7 +370,7 @@ export async function buildDocumentModules(sources: GeneratedSources & { islandR
   const skeletonHtml = await renderSkeleton(sources.skeleton, options.imports);
   if (!sources.islandRefs.length) return { html: skeletonHtml, module: null, ssr: null };
   const store = options.store ?? createModuleStore();
-  const browser = await browserModuleCode(sources.islands, options.build);
+  const browser = await browserModuleCode(sources.islands, options.build, options.flow);
   const ssrCode = await ssrModuleCode(sources.islands, skeletonHtml, options.flow);
   const loaded = await ssrModuleOf(ssrCode, contentSha(ssrCode), options.imports);
   const html = loaded.render({ values: options.values, results: null, mermaidImages: {}, drawings: {} });
@@ -375,10 +382,12 @@ export async function buildDocumentModules(sources: GeneratedSources & { islandR
 }
 
 /** The per-document browser module: DOM-compiled, imports bound to the shared chunks, compacted. `imports` is its static closure. */
-export async function browserModuleCode(islands: string, build: CompilerBuild): Promise<{ code: string; imports: string[] }> {
+export async function browserModuleCode(islands: string, build: CompilerBuild, flow: CompiledDataflow | null = null): Promise<{ code: string; imports: string[] }> {
   const direct = new Set<string>();
-  const code = await transformSolid(browserSource(islands), { generate: 'dom', hydratable: true }, {
-    minify: true,
+  // `moduleName: '@mx/rt'`: Solid's DOM helpers come from the runtime's one import surface, never
+  // from the whole `solid-js/web` chunk.
+  const code = await transformSolid(browserSource(islands, flow), { generate: 'dom', hydratable: true }, {
+    minify: true, moduleName: '@mx/rt',
     rewrite: (specifier) => {
       const url = build.manifest[specifier];
       if (!url) throw new Error(`compile: the island build has no ${specifier}`);
