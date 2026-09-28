@@ -54,8 +54,13 @@ import { displayTitle } from '@/lib/story/title';
 import { CARD_RENDER_GENERATION } from '@/lib/export-card';
 import type { StoryThemeName } from '@/lib/validation/atlas-schemas';
 import { catalogOf,publicCatalogOf } from '@/lib/datasets/catalog';
-import { ASSETS_ORIGIN, PUBLIC_BASE_URL } from '@/lib/config';
+import { ASSETS_ORIGIN, COMPILED_READER, PUBLIC_BASE_URL } from '@/lib/config';
 import { canonicalDocumentUrl, domainPostUrl, servesDocument } from '@/lib/custom-domains';
+import { READER_FALLBACK_HEADER, READER_MODE_HEADER, VIEWER_OVERLAY_PATH, type ReaderFallbackReason } from '@/lib/compiled-page/contract';
+import { currentCompiledReaderFlag, readerModeFor } from '@/lib/compiled-page/reader-mode';
+import { compiledPageFor, domainFooter } from '@/lib/compiled-page/serve.server';
+import { preparedPageFor } from '@/lib/story/prepared-page.server';
+import { documentStyleSheets } from '@/lib/story/document-styles';
 
 // The markup document's policy — per document, built in lib/story/markup-csp:
 // content-independent except for the ONE connect-src that admits exactly this
@@ -310,6 +315,77 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
       // Nor on an archived render: a comment anchors to text in the CURRENT
       // document, and these paragraphs may not be there any more.
       const commenting = !domain && !at && new URL(request.url).searchParams.get('comment') === '1';
+      /*
+       * WHICH RENDERER (docs/phase2-architecture.md §10): the deployment's switch
+       * and the request's `?reader=` (never on a domain post). The owner's
+       * editing and commenting copies are today's runtime whatever the switch
+       * says: the compiled page runs no editor. A compiled answer returns here,
+       * before any of today's per-request work; a fallback falls through to
+       * today's renderer unchanged and says why (`x-mx-reader-fallback`).
+       */
+      const compiledMode = readerModeFor(currentCompiledReaderFlag(COMPILED_READER), new URL(request.url).search, { domainPost: !!domain }) === 'compiled' && !editable && !commenting;
+      let readerFallback: ReaderFallbackReason | null = null;
+      if (compiledMode) {
+        const capture = byExportKey && !chrome;
+        const prepared = await preparedPageFor(artifact, at, base);
+        const flow = prepared.page.declared?.flow ?? null;
+        // The exporter photographs this page: its run is settled, and carries whoever asked (see the
+        // capture's run below) — never the guest snapshot's rows, never cached.
+        const ran = capture && flow && !prepared.page.declared?.state
+          ? await dataflowForRow(row, { values: readUrlValues(new URL(request.url).search, flow), viewer: { userId: viewer?.userId ?? null, tokenId: actor.tokenId ?? null, email: viewer?.email ?? null } })
+          : null;
+        const answer = await compiledPageFor(prepared.row, prepared.page, {
+          at,
+          search: new URL(request.url).search,
+          drawings: domain || engineRequested(request.url) ? null : 'document',
+          colorMode: byExportKey && !domain ? captureColor(request.url) : null,
+          signedIn: actor.credential === 'session' && !!viewer?.userId,
+          doors: capture ? null : {
+            queryUrl: queryPath(artifact.id),
+            ...(!at && declaresMutations(row.source) ? { mutateUrl: mutatePath(artifact.id) } : {}),
+            viewerUrl: VIEWER_OVERLAY_PATH(artifact.id),
+            assetsUrl: assetsPath(artifact.id),
+          },
+          ...(at ? { readOnly: archivedReadOnly(at.version) } : {}),
+          live: chrome && !at ? { id: artifact.id, editId: artifact.edit_id } : null,
+          chrome: null,
+          spa: null,
+          // The page's own behaviour (lib/islands/page): framing, the reader's colour override, the live
+          // stream of a page with no islands, the scroll a live reload keeps. Never on a capture.
+          behaviors: capture ? [] : ['page'],
+          // `chrome=0` draws the document without its own chrome (a deck's rail and present bar), as today's does.
+          documentChrome: chrome,
+          head: chrome
+            ? {
+              description: row.description,
+              canonical: domain ? domainPostUrl(domain.hostname, artifact) : await canonicalDocumentUrl(artifact),
+              social: { title: displayTitle(row), description: row.description, image: `${domain ? PUBLIC_BASE_URL.replace(/\/+$/, '') : base}/a/${artifact.id}/export?mode=card&v=${artifact.version}&r=${CARD_RENDER_GENERATION}` },
+              help: reader ? agentDiscovery(base) : null,
+            }
+            : null,
+          ...(ran ? { results: { tables: ran.state.tables, errors: ran.state.errors, ...(ran.state.userOptions ? { userOptions: ran.state.userOptions, people: ran.state.people ?? {} } : {}) } } : {}),
+          // Its style rides in the sheets, where today's document has it.
+          footer: domain ? { html: domainFooter(`${PUBLIC_BASE_URL.replace(/\/+$/, '')}/a/${artifact.id}`).html, css: '' } : null,
+          // Today's standalone document's stylesheets, byte for byte (lib/story/document-styles).
+          sheets: documentStyleSheets({
+            compiledCss, chrome, bare: !!domain, theme: design.theme,
+            importedFaces: prepared.page.base.faces, docFonts: prepared.page.base.fonts, authorCss: prepared.page.authorCss,
+          }),
+        });
+        if (answer.mode === 'compiled') {
+          return new Response(answer.html, {
+            status: 200,
+            headers: {
+              'Content-Type': 'text/html; charset=utf-8',
+              'Content-Security-Policy': markupCsp(base, artifact.id, ASSETS_ORIGIN ?? undefined, { compiled: true }),
+              ...answer.headers,
+              [READER_MODE_HEADER]: 'compiled',
+              ...COMMON,
+            },
+          });
+        }
+        readerFallback = answer.fallback;
+      }
       // `none` whenever the link grants no more than a guest already has, which
       // is every ordinary public document — see lib/share-roles roleBehindLogin.
       const behindLogin = roleBehindLogin(linkRoleOf(artifact));
@@ -564,6 +640,8 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
           'Content-Type': 'text/html; charset=utf-8',
           'Content-Security-Policy': markupCsp(base, artifact.id, ASSETS_ORIGIN ?? undefined),
       ...(reader ? { Link: `<${agentDiscovery(base).url}>; rel="help"` } : {}),
+          [READER_MODE_HEADER]: 'legacy',
+          ...(readerFallback ? { [READER_FALLBACK_HEADER]: readerFallback } : {}),
           ...COMMON,
         },
       });

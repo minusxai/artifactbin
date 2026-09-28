@@ -12,12 +12,14 @@
  *   /a/<id>/events, /events/frame   GET
  *   /a/<id>/resolve                 GET/HEAD
  *   /a/<id>/assets                  GET
+ *   /a/<id>/viewer                  GET (the compiled reader's viewer overlay, as a guest)
  *   GET/HEAD /a/<id>/raw            an image, file or PDF one of the owner's public posts embeds
  *   GET/HEAD /assets/<sha>          our copy of a web image one of those posts names
  *   GET/HEAD /a/<id>/export?format=jpg&mode=card   a public post's card, the home page's thumbnail
  *   GET/HEAD /api/users/<owner>/avatar              the owner's picture, the home page's hero
  *   GET/HEAD /assets/<name>.css|.woff2              the app's built stylesheet and fonts, never its script
  *   /story, /fonts, /webfonts, /libraries, /geojson, /favicon.ico   the static runtime
+ *   GET /author-frame               the fixed author-script wrapper (its bytes are the same for every document)
  *
  * Every `/a/<id>` route and every post is scoped to the OWNER's PUBLIC markup
  * documents — the app's own doors also admit unlisted ones to anyone, so that
@@ -52,11 +54,17 @@ import { GET as webAssetGet } from '@/app/assets/[hash]/route';
 import { GET as exportGet } from '@/app/a/[id]/export/route';
 import { GET as avatarGet } from '@/app/api/users/[id]/avatar/route';
 import { GET as profileGet } from '@/app/api/page/profile/[user]/[[...path]]/route';
+import { ROUTES } from './routes.generated';
 
 type Handler = (request: Request, ctx: { params: Promise<{ id: string }> }) => Promise<Response> | Response;
 
-/** Static trees the served document and its runtime load from; passed on to the app's own static handlers. */
-const STATIC = /^\/(?:story|fonts|webfonts|libraries|geojson)\/|^\/favicon\.ico$/;
+/**
+ * Static trees the served document and its runtime load from; passed on to the app's own static handlers.
+ * `/islands/` is the compiled reader's code (docs/phase2-architecture.md §9): the shared chunks, and the
+ * per-document modules and speculation rules the module store serves — all content-addressed, all public.
+ * `/author-frame` is the author-script wrapper (lib/story-runtime/author-frame): fixed bytes, no document data.
+ */
+const STATIC = /^\/(?:story|fonts|webfonts|libraries|geojson|islands)\/|^\/favicon\.ico$|^\/author-frame$/;
 /** The app's built stylesheet and its fonts, at the address the app page links them or the manifest-checked one; never a script. */
 const buildStyle = (path: string): boolean => {
   const asset = path.startsWith(`${BUILD_ASSET_PATH}/`) ? path.slice(BUILD_ASSET_PATH.length) : path;
@@ -183,6 +191,10 @@ async function documentRoute(request: Request, id: string, route: string, ownerI
     case 'events/frame': return get ? call(eventsFrameGet, await asGuest(request), id) : notFound();
     case 'resolve': return get || method === 'HEAD' ? call(resolveGet, await asGuest(request), id) : notFound();
     case 'assets': return get ? call(assetsGet, await asGuest(request), id) : notFound();
+    case 'viewer': {
+      const viewerGet = viewerRoute();
+      return get && viewerGet ? call(viewerGet, await asGuest(request), id) : notFound();
+    }
     default: return notFound();
   }
 }
@@ -247,7 +259,16 @@ async function embedded(request: Request, path: string, ownerId: string): Promis
   return null;
 }
 
-const DOCUMENT_ROUTE = /^\/a\/([^/]+)\/(query|mutate|events|events\/frame|resolve|assets)$/;
+const DOCUMENT_ROUTE = /^\/a\/([^/]+)\/(query|mutate|events|events\/frame|resolve|assets|viewer)$/;
+
+/**
+ * The compiled reader's viewer-overlay door (`GET /a/<id>/viewer`, docs/phase2-architecture.md §4.1),
+ * found in the app's route table by its path, so this boundary serves it exactly when the app has it.
+ * A domain post's reader is always a guest: the door answers them as it answers any guest.
+ */
+const VIEWER_ROUTE_DIR = '/a/[id]/viewer';
+const viewerRoute = (): Handler | null =>
+  (ROUTES.find((route) => route.dir === VIEWER_ROUTE_DIR)?.module as { GET?: Handler } | undefined)?.GET ?? null;
 
 /**
  * The boundary as Hono middleware. Mounted before every other route, so a

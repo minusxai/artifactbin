@@ -23,6 +23,7 @@ import { dataflowOf, splitHelmet } from '@/lib/story/helmet';
 import type { Dataflow } from '@/lib/story/dataflow';
 import type { JsxNode } from '@/lib/jsx';
 import { parseJsx } from '@/lib/jsx';
+import { STORY_UI_COMPONENTS } from '@/lib/story-ui/registry';
 
 const FIXTURES = path.resolve(process.cwd(), '../../scripts/fixtures/page-speed');
 const fixture = (name: string) => readFileSync(path.join(FIXTURES, name), 'utf8');
@@ -77,7 +78,7 @@ describe('compilePage', () => {
     expect(page.plan!.queries.map((q) => q.name)).toEqual(['regions', 'monthly', 'by_product']);
     expect(page.islands.flatMap((i) => i.kit)).toEqual(expect.arrayContaining(['Select', 'Number', 'Question', 'DataTable']));
     expect(page.islands.every((i) => i.readsData)).toBe(true);
-    expect(dom(page.html).querySelector(`[${CHART_SLOT_ATTR}="AVkX"]`)).toBeTruthy();
+    expect(dom(page.html).querySelector('#AVkX')?.hasAttribute(CHART_SLOT_ATTR)).toBe(false);
   });
 
   it('deck: no islands, the rail and present bar rendered, the deck behaviour named', async () => {
@@ -94,10 +95,40 @@ describe('compilePage', () => {
     expect(a.module!.sha).toBe(b.module!.sha);
   });
 
-  it('refuses a version that needs an unported interactive component, naming it', async () => {
-    const page = await compilePage(await inputOf('<div><DeckGL id="map" /></div>'), loadCompilerBuild());
-    expect(page.partial).toContain('DeckGL');
-    expect(page.unported).toEqual([]);
+  it('ports every registered component: none is served with its behaviour missing (partial) or refused (unported)', () => {
+    // w3-behaviour: the managed <Iframe> and the <DeckGL> map were the last partial ones; each is an island now.
+    for (const tag of Object.keys(STORY_UI_COMPONENTS)) {
+      const { nodes } = parseJsx(`<div><${tag} id="x" /></div>`) as { nodes: JsxNode[] };
+      let generated: ReturnType<typeof generate>;
+      // A part that only renders inside its parent (AvatarImage outside Avatar) is not a component a page holds alone.
+      try { generated = generate({ nodes, colorMode: 'light', template: null, chrome: true, refData: {}, flow: null }); } catch (error) { if (/must be used within/.test(String(error))) continue; throw error; }
+      expect({ tag, partial: generated.partial, unported: generated.unported }).toEqual({ tag, partial: [], unported: [] });
+    }
+  });
+
+  it('compiles <Iframe> and <DeckGL> as islands in the data family, served as today\'s boxes', async () => {
+    const source = '<div><Iframe title="Gallery" height={120} id="f" className="my-4"><p>Hello</p><script>{`document.body.dataset.ok = "1"`}</script></Iframe><DeckGL id="map" className="rounded" title="Countries" height="320px" basemap="none" layers={[{"@@type":"ScatterplotLayer","getPosition":"@@=[lng, lat]"}]} /></div>';
+    const page = await compilePage(await inputOf(source), loadCompilerBuild());
+    expect(page.partial).toEqual([]);
+    expect(page.islands.map((i) => i.kit)).toEqual([['Iframe'], ['DeckGL']]);
+    const html = dom(page.html);
+    const frame = html.querySelector('#f')!;
+    // Attributes compared as sets (shapeOf keeps data-mx-ast out; it is asserted on its own).
+    expect(frame.getAttribute('data-mx-ast')).toBe('0.0');
+    expect(shapeOf(frame.outerHTML)).toEqual(shapeOf('<div id="f" class="my-4" data-mx-managed-frame="" aria-label="Gallery" style="height:120px;width:100%"><div style="height:100%"></div></div>'));
+    // Today's runtime adapter: the identity on the outer box, the author's class on the map's own box, the stand-in inside.
+    const map = html.querySelector('#map')!;
+    expect(map.getAttribute('data-mx-ast')).toBe('0.1');
+    expect(shapeOf(map.outerHTML)).toEqual(shapeOf('<div id="map"><div class="rounded"><div class="w-full rounded-md bg-muted" style="height:320px" aria-busy="true" aria-label="Countries"></div></div></div>'));
+    // The frame's author content reaches the island only as data: compiled at publish (lib/story/managed-iframe), never as markup.
+    expect(page.html).not.toContain('Hello');
+  });
+
+  it('an <Iframe> whose content is refused renders nothing, as the interpreter does', async () => {
+    const page = await compilePage(await inputOf('<div><Iframe title="x" height={120}><iframe src="https://x.test" /></Iframe><p id="after">after</p></div>'), loadCompilerBuild());
+    expect(page.islands).toEqual([]);
+    expect(dom(page.html).querySelector('[data-mx-managed-frame]')).toBeNull();
+    expect(dom(page.html).querySelector('#after')).toBeTruthy();
   });
 });
 
@@ -117,6 +148,33 @@ describe('the kit table', () => {
     const imports = await defaultSsrImports(families.map((spec, i) => `import * as k${i} from ${JSON.stringify(spec)};`).join('\n'));
     const missing = Object.entries(KIT).filter(([tag, meta]) => typeof imports(`@mx/kit/${meta.mod}`)[tag] !== 'function').map(([tag, meta]) => `${tag} (@mx/kit/${meta.mod})`);
     expect(missing).toEqual([]);
+  });
+});
+
+describe('a version with an author script', () => {
+  const SCRIPT = 'mx.set({ n: 1 })';
+  it('carries the script as data and boots even with no island: a module with ISLANDS = [], no SSR module, the skeleton as its story', async () => {
+    const build = loadCompilerBuild();
+    const input = { ...(await inputOf(fixture('prose.jsx'))), authorScript: SCRIPT };
+    const page = await compilePage(input, build);
+    expect(page.authorScript).toBe(SCRIPT);
+    expect(page.islands).toEqual([]);
+    expect(page.module, 'the page must start its store and the author host').not.toBeNull();
+    expect(page.module!.imports).toEqual(expect.arrayContaining([build.manifest['@mx/boot']]));
+    expect(page.ssr, 'no island renders data: the stored html is the story').toBeNull();
+    expect(page.html).toBe((await compilePage(await inputOf(fixture('prose.jsx')), build)).html);
+    const code = new TextDecoder().decode((await createModuleStore().get(page.module!.sha))!);
+    expect(code, 'the author code is never part of a module served under /islands/d/').not.toContain('mx.set');
+  });
+
+  it('keeps it beside the islands of a version that has them, and none when it has none', async () => {
+    const build = loadCompilerBuild();
+    const kit = await compilePage({ ...(await inputOf(fixture('kit.jsx'))), authorScript: SCRIPT }, build);
+    expect(kit.authorScript).toBe(SCRIPT);
+    expect(kit.module).not.toBeNull();
+    const plain = await compilePage(await inputOf(fixture('prose.jsx')), build);
+    expect(plain.authorScript).toBeNull();
+    expect(plain.module).toBeNull();
   });
 });
 
@@ -174,6 +232,57 @@ describe('unit parity with today\'s render', () => {
   it('prose: the compiled column is today\'s render', async () => {
     const source = fixture('prose.jsx');
     expect(columnParity((await compilePage(await inputOf(source), loadCompilerBuild())).html, source)).toEqual([]);
+  });
+  it('kit: the served tabs are Radix\'s server render (tablist and tabs -1, the active panel\'s mount style as React writes it)', async () => {
+    const source = fixture('kit.jsx');
+    const page = await compilePage(await inputOf(source), loadCompilerBuild());
+    const root = dom(page.html);
+    expect(root.querySelector('[role="tablist"]')?.getAttribute('tabindex')).toBe('-1');
+    expect([...root.querySelectorAll('[role="tab"]')].map((t) => t.getAttribute('tabindex'))).toEqual(['-1', '-1']);
+    expect([...root.querySelectorAll('[role="tabpanel"]')].map((p) => p.getAttribute('style'))).toEqual(['animation-duration:0s', null]);
+    const react = new JSDOM(`<div>${reactRender(source)}</div>`).window.document;
+    expect([...react.querySelectorAll('[role="tabpanel"]')].map((p) => p.getAttribute('style'))).toEqual(['animation-duration:0s', null]);
+    expect(react.querySelector('[role="tablist"]')?.getAttribute('tabindex')).toBe('-1');
+  });
+  it('mermaid in a grid tile: the served figure is today\'s tile render (the tile owns the size)', async () => {
+    const source = '<Grid cols={12} id="g"><GridItem x={0} y={0} w={6} h={4} id="gi"><Mermaid code="flowchart LR\n  A --> B" title="Flow" id="m" /></GridItem></Grid>';
+    const page = await compilePage(await inputOf(source), loadCompilerBuild());
+    expect(dom(page.html).querySelector('#m')?.getAttribute('class')).toContain('flex h-full w-full flex-col');
+    expect(columnParity(page.html, source)).toEqual([]);
+  });
+  it('a kit component served around an island writes its class as React does (no trailing space, no empty class)', async () => {
+    const source = '<Helmet><Value name="who" type="string" default="Ada" /></Helmet><Card id="c"><CardContent id="cc" className="gap-4"><p id="p">{$who}</p></CardContent></Card>';
+    const page = await compilePage(await inputOf(source), loadCompilerBuild());
+    const react = new JSDOM(`<div>${reactRender(source)}</div>`).window.document;
+    for (const id of ['c', 'cc']) expect(dom(page.html).querySelector(`#${id}`)?.getAttribute('class'), id).toBe(react.querySelector(`#${id}`)?.getAttribute('class'));
+    expect(page.html).not.toMatch(/ class="[^"]* "/);
+  });
+  it('serves bound controls as today\'s live reader serves them: no binding stamp, no read-only flag, a textarea\'s value as its content', async () => {
+    const page = await compilePage(await inputOf('<Helmet><Value name="note" type="string" default="Two &amp; more" /><Value name="n" type="number" default={3} /></Helmet><div id="w"><Textarea label="Note" value="$note" id="ta" /><Input label="N" value="$n" id="in" /><Slider label="S" value="$n" min={0} max={10} id="sl" /></div>'), loadCompilerBuild());
+    const root = dom(page.html);
+    expect(page.html).not.toContain('data-mx-bound');
+    expect(root.querySelectorAll('[readonly]')).toHaveLength(0);
+    const textarea = root.querySelector('textarea')!;
+    expect(textarea.hasAttribute('value')).toBe(false);
+    expect(textarea.textContent).toBe('Two & more');
+    expect(root.querySelector('#in input')?.getAttribute('value')).toBe('3');
+  });
+  it('a guest\'s person components are served with the fallback\'s class, merged with the author\'s as today', async () => {
+    const page = await compilePage(await inputOf('<div id="w"><User userId="$_me.id" fallback="a guest" className="text-red-500" id="u" /><UserImage userId="$_me.id" size="lg" fallback="no picture" id="i" /></div>'), loadCompilerBuild());
+    const root = dom(page.html);
+    expect(root.querySelector('#u')?.getAttribute('class')).toBe('text-red-500');
+    expect(root.querySelector('#u')?.textContent).toBe('a guest');
+    expect(root.querySelector('#i')?.getAttribute('class')).toBe('text-muted-foreground');
+  });
+  it('writing a spread class as React does never moves hydration keys: the children still render after their element', async () => {
+    const source = `function Box(p) { return <span data-slot="box" {...p} />; }
+function Leaf() { return <i>leaf</i>; }
+export function render(withClass) { return renderToString(() => withClass ? <Box class="x y"><Leaf /><Leaf /></Box> : <Box><Leaf /><Leaf /></Box>, { renderId: 's0-' }); }
+import { renderToString } from 'solid-js/web';`;
+    const mod = await evaluateModule(await transformSolid(source, { generate: 'ssr', hydratable: true }), ssrImportTable(), 'test/keys.js') as { render: (withClass: boolean) => string };
+    const keys = (html: string) => [...html.matchAll(/data-hk="([^"]+)"/g)].map((m) => m[1]);
+    expect(keys(mod.render(true))).toEqual(keys(mod.render(false)));
+    expect(mod.render(true)).toContain('class="x y"');
   });
   it('deck: the compiled column is today\'s render; the rail and present bar sit around it', async () => {
     const source = fixture('deck.jsx');

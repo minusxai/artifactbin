@@ -8,6 +8,8 @@ import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { drawChart, drawSnapshotCharts } from '../charts.server';
+import { DRAWING_CLASS } from '@/lib/islands/chart';
+import { STORY_UI_RECIPE_BASE, STORY_UI_RECIPE_CLASSES } from '@/lib/story-ui/recipe-classes';
 import { prepareStoryParts } from '@/lib/story/prepare-runtime.server';
 
 const rows = [{ month: '2025-01-01', revenue: 120 }, { month: '2025-02-01', revenue: 160 }];
@@ -34,6 +36,20 @@ describe('drawChart', () => {
     const light = await drawChart({ viz: { kind: 'vega-lite', spec }, table: { rows, columns }, width: 600, height: 300, colorMode: 'light' });
     const dark = await drawChart({ viz: { kind: 'vega-lite', spec }, table: { rows, columns }, width: 600, height: 300, colorMode: 'dark' });
     expect(light.svg).not.toBe(dark.svg);
+  });
+});
+
+describe('drawChart fits the box it is served in', () => {
+  it('draws a responsive SVG: out of flow and the full size of its chart box, scaled by its viewBox, so it never sizes the box', async () => {
+    const drawn = await drawChart({ viz: { kind: 'vega-lite', spec }, table: { rows, columns }, width: 600, height: 300, colorMode: 'light' });
+    const root = /^<svg[^>]*>/.exec(drawn.svg)![0];
+    expect(root).toMatch(/viewBox="0 0 600 300"/);
+    expect(/\bclass="([^"]*)"/.exec(root)?.[1]?.split(' ')).toEqual(expect.arrayContaining(['marks', ...DRAWING_CLASS.split(' ')]));
+    expect(DRAWING_CLASS.split(' ')).toEqual(['absolute', 'inset-0', 'size-full']);
+  });
+  it('uses only utilities every reader sheet keeps (the recipe base, whatever tags the document uses)', () => {
+    const base = STORY_UI_RECIPE_BASE.map((i) => STORY_UI_RECIPE_CLASSES[i]);
+    for (const token of DRAWING_CLASS.split(' ')) expect(base, token).toContain(token);
   });
 });
 

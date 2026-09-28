@@ -1,6 +1,6 @@
 /**
  * THE SHARED ISLAND BUILD (docs/phase2-architecture.md §1, §3). Once per deploy: Solid 1.9, the island
- * runtime (`@mx/rt`, `@mx/boot`), the deck behaviour (`@mx/deck`) and every kit family
+ * runtime (`@mx/rt`, `@mx/boot`), the deck and page behaviours (`@mx/deck`, `@mx/page`) and every kit family
  * (`@mx/kit/<family>`, lib/islands/contract `KIT_FAMILIES`) become ONE module graph, split into
  * content-addressed browser chunks under services/app/public/islands/, with
  *
@@ -62,9 +62,54 @@ const ENTRIES = [
   { specifier: '@mx/rt', name: 'rt', file: () => islandModule('rt') },
   { specifier: '@mx/boot', name: 'boot', file: () => islandModule('boot') },
   { specifier: '@mx/deck', name: 'deck', file: () => islandModule('deck') },
+  // The compiled /raw page's own behaviour: framing, the reader's colour override, the live stream and the scroll restore.
+  { specifier: '@mx/page', name: 'page', file: () => islandModule('page') },
   ...KIT_FAMILIES.map((family) => ({ specifier: `@mx/kit/${family}`, name: `kit-${family}`, file: () => islandModule(`kit/${family}`) })),
 ];
 export const ISLAND_SPECIFIERS = Object.freeze(ENTRIES.map((e) => e.specifier));
+
+/**
+ * LAZY BEHAVIOURS BUILT ON THEIR OWN. A framework-free engine an island loads on mount (the managed
+ * `<Iframe>`'s author realm) shares most of its modules with the runtime (the store, the dataflow
+ * grammar). Split with the graph, it would re-partition the runtime's chunks (esbuild groups files by
+ * the entries that reach them) and grow every interactive page's rt+boot closure for a behaviour few
+ * pages have. So it is bundled ALONE — self-contained, its shared code copied in, no Solid — and the
+ * island's `import('<request>')` is rewritten to its content-addressed file beside the chunks. Only a
+ * module that needs no Solid may be listed: it runs outside the one Solid the islands share.
+ */
+const STANDALONE_LAZY = [
+  { request: './embed/frame-engine', name: 'frame-engine', file: () => path.join(ISLANDS_SRC, 'kit/embed/frame-engine.ts') },
+  // The version's author script (lib/islands/author-host), loaded by boot only when the page data names one.
+  { request: './author-host', name: 'author-host', file: () => path.join(ISLANDS_SRC, 'author-host.ts') },
+];
+
+async function buildStandaloneLazy() {
+  return Promise.all(STANDALONE_LAZY.map(async (lazy) => {
+    const result = await esbuild.build({
+      absWorkingDir: ROOT, entryPoints: [lazy.file()], write: false, bundle: true, format: 'esm', platform: 'browser', target: 'es2022',
+      minify: true, metafile: true, alias: { '@': APP }, define: { 'process.env.NODE_ENV': '"production"' }, logLevel: 'error',
+    });
+    const inputs = Object.keys(result.metafile.inputs);
+    const solid = inputs.filter((i) => /node_modules\/solid-js\//.test(i));
+    if (solid.length) throw new Error(`build-islands: the standalone ${lazy.name} reached Solid (${solid[0]}); it must be framework-free`);
+    const bytes = Buffer.from(result.outputFiles[0].text);
+    return { ...lazy, bytes, fileName: `${lazy.name}-${sha256(bytes).slice(0, 16)}.js`, inputs };
+  }));
+}
+
+/** esbuild plugin: an island's `import()` of a standalone lazy behaviour → its built file, beside the chunks. */
+const standaloneLazyPlugin = (built) => ({
+  name: 'mx-standalone-lazy',
+  setup(build) {
+    build.onResolve({ filter: /^\.\/(?:embed\/)?[\w-]+$/ }, (args) => {
+      if (args.kind !== 'dynamic-import') return undefined;
+      // By the module it names, so a same-named request elsewhere is never taken for it.
+      const target = path.resolve(path.dirname(args.importer), args.path);
+      const lazy = built.find((b) => b.request === args.path && b.file().replace(/\.tsx?$/, '') === target);
+      return lazy ? { path: `./${lazy.fileName}`, external: true } : undefined;
+    });
+  },
+});
 
 /**
  * esbuild plugin: the `@mx/*` modules and Solid's JSX transform over
@@ -75,7 +120,7 @@ export function solidPlugin({ generate = 'dom', hydratable = true } = {}) {
   return {
     name: 'mx-solid',
     setup(build) {
-      build.onResolve({ filter: /^@mx\/(rt|boot|deck|kit\/[a-z-]+)$/ }, (args) => {
+      build.onResolve({ filter: /^@mx\/(rt|boot|deck|page|kit\/[a-z-]+)$/ }, (args) => {
         const entry = ENTRIES.find((e) => e.specifier === args.path);
         if (!entry) return { errors: [{ text: `build-islands: unknown island specifier ${args.path}` }] };
         return { path: entry.file() };
@@ -125,6 +170,7 @@ export async function buildIslands({ outDir = DEFAULT_OUT_DIR } = {}) {
   const entryPoints = ENTRIES.map((e) => ({ in: e.file(), out: e.name }));
   // The browser graph and the server half are independent builds of the same sources: run them together.
   const serverHalf = buildServerHalf();
+  const standalone = await buildStandaloneLazy();
   const result = await esbuild.build({
     absWorkingDir: ROOT,
     entryPoints,
@@ -142,12 +188,12 @@ export async function buildIslands({ outDir = DEFAULT_OUT_DIR } = {}) {
     alias: { '@': APP },
     define: { 'process.env.NODE_ENV': '"production"' },
     logLevel: 'error',
-    plugins: [solidPlugin({ generate: 'dom', hydratable: true })],
+    plugins: [standaloneLazyPlugin(standalone), solidPlugin({ generate: 'dom', hydratable: true })],
   });
 
   const ssrHalf = await serverHalf;
   // Exactly one framework: an island that reached a React file would carry a second runtime.
-  const inputs = [...new Set([...Object.keys(result.metafile.inputs), ...ssrHalf.inputs])].sort();
+  const inputs = [...new Set([...Object.keys(result.metafile.inputs), ...ssrHalf.inputs, ...standalone.flatMap((b) => b.inputs)])].sort();
   const react = inputs.filter((i) => /node_modules\/(react|react-dom)\//.test(i));
   if (react.length) throw new Error(`build-islands: React reached the island graph (${react.slice(0, 3).join(', ')})`);
 
@@ -182,6 +228,10 @@ export async function buildIslands({ outDir = DEFAULT_OUT_DIR } = {}) {
     };
     const entry = meta.entryPoint && ENTRIES.find((e) => meta.entryPoint === toPosix(path.relative(ROOT, e.file())));
     if (entry) manifest[entry.specifier] = url(newName);
+  }
+  for (const lazy of standalone) {
+    fs.writeFileSync(path.join(outDir, lazy.fileName), lazy.bytes);
+    files[url(lazy.fileName)] = { ...sizes(lazy.bytes), imports: [] };
   }
   const missing = ISLAND_SPECIFIERS.filter((s) => !manifest[s]);
   if (missing.length) throw new Error(`build-islands: no chunk for ${missing.join(', ')}`);

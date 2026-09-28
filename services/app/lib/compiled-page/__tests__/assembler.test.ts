@@ -17,7 +17,7 @@ const compiled = (over: Partial<CompiledPage> = {}): CompiledPage => ({
   islands: [{ renderId: 's0-', path: '0.1', kit: ['Select'], readsData: true }],
   module: { sha: 'a'.repeat(16), url: '/islands/d/aaaaaaaaaaaaaaaa.js', bytes: 512, imports: ['/islands/rt-4444dddd.js', '/islands/web-2222bbbb.js'] },
   ssr: { sha: 'c'.repeat(16), url: '/islands/d/cccccccccccccccc.js', bytes: 700, imports: [] },
-  behaviors: [], plan: null, links: { prefetch: ['/a/Btruq6'], prerender: ['/a/Btruq6'] }, kit: { skeleton: [], islands: ['Select'] }, reactStatic: ['Card'], unported: [], partial: [],
+  behaviors: [], plan: null, links: { prefetch: ['/a/Btruq6'], prerender: ['/a/Btruq6'] }, kit: { skeleton: [], islands: ['Select'] }, reactStatic: ['Card'], unported: [], partial: [], authorScript: null,
   ...over,
 });
 const snapshot: DataSnapshot = { key: { artifactId: 'X34b00', slot: 'head', planKey: 'p', inputsKey: 'i' }, marks: { sales: 'm' }, results: { tables: { monthly: { rows: [{ revenue: 1 }], columns: [{ name: 'revenue', type: 'number' }] } }, errors: {} }, drawings: { AVkX: { svg: '<svg data-drawn="1"></svg>', table: 'monthly', rows: 'r' } }, computedAt: 1, build: build.id };
@@ -74,6 +74,19 @@ describe('assembleReaderPage', () => {
     expect(still.getElementById(ISLAND_DATA_ID)).toBeNull();
   });
 
+  it('carries the version\'s author script as inert data only: in the JSON island, escaped, never as a script', () => {
+    const script = 'mx.set({n:1}); "</script><script>alert(1)</script>" \u2028';
+    const page = assembleReaderPage(input({ compiled: compiled({ authorScript: script }) }));
+    const doc = dom(page);
+    expect(JSON.parse(doc.getElementById(ISLAND_DATA_ID)!.textContent!).authorScript).toBe(script);
+    expect(page.html).not.toContain('</script><script>alert');
+    expect(page.html.split('mx.set({n:1})')).toHaveLength(2);
+    for (const el of doc.querySelectorAll('script')) if (el.type !== 'application/json') expect(el.textContent, el.outerHTML).toBe('');
+    expect(doc.querySelectorAll('script:not([type="application/json"]):not([src])')).toHaveLength(0);
+    // A version without one names none.
+    expect(JSON.parse(dom(assembleReaderPage(input())).getElementById(ISLAND_DATA_ID)!.textContent!)).not.toHaveProperty('authorScript');
+  });
+
   it('puts the snapshot\'s drawing in its chart slot and marks it ready; leaves the skeleton when none is stored', () => {
     const drawn = dom(assembleReaderPage(input())).querySelector(`[${CHART_SLOT_ATTR}="AVkX"]`)!;
     expect(drawn.getAttribute('data-mx-chart-state')).toBe('ready');
@@ -102,6 +115,24 @@ describe('assembleReaderPage', () => {
     expect(page.headers[SPECULATION_RULES_HEADER]).toMatch(/^"\/islands\/s\/[0-9a-f]{16}\.json"$/);
     const none = assembleReaderPage(input({ compiled: compiled({ links: { prefetch: [], prerender: [] } }) }));
     expect(none.headers[SPECULATION_RULES_HEADER]).toBeUndefined();
+  });
+
+  it('writes the live identity on <body>, escaped, and none when the input has none', () => {
+    const live = dom(assembleReaderPage(input({ live: { id: 'X34b00', editId: 'e"1' } })));
+    expect(live.body.getAttribute('data-mx-live-id')).toBe('X34b00');
+    expect(live.body.getAttribute('data-mx-live-edit')).toBe('e"1');
+    const captured = dom(assembleReaderPage(input()));
+    expect(captured.body.hasAttribute('data-mx-live-id')).toBe(false);
+    expect(captured.body.hasAttribute('data-mx-live-edit')).toBe(false);
+  });
+
+  it('places a footer after the story root, never inside it, with its CSS in the head', () => {
+    const doc = dom(assembleReaderPage(input({ footer: { html: '<footer data-mx-domain-footer="">Made with <a href="https://app.example/a/X34b00">artifactbin</a></footer>', css: '[data-mx-domain-footer]{opacity:.65}' } })));
+    const footer = doc.querySelector('[data-mx-domain-footer]')!;
+    expect(footer.parentElement).toBe(doc.body);
+    expect(doc.getElementById('mx-story-root')!.contains(footer)).toBe(false);
+    expect(doc.getElementById('mx-story-root')!.compareDocumentPosition(footer) & 4 /* FOLLOWING */).toBeTruthy();
+    expect([...doc.head.querySelectorAll('style')].some((s) => s.textContent?.includes('[data-mx-domain-footer]{opacity:.65}'))).toBe(true);
   });
 
   it('never lets a title, a value or a drawing break out of its element', () => {

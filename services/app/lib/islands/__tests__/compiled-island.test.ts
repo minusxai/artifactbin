@@ -62,4 +62,34 @@ describe('a compiled island through the runtime', () => {
     runtime.dispose();
     host.remove();
   });
+
+  it("serves a <For> wrapper's inline style as React writes it and hands it to hydration as an attribute", () => {
+    // React's server renderer writes `min-height:1px`; today's hydration leaves a served attribute alone.
+    const server = serverHalf('<Helmet><Value name="rows" type="table" value={[{"k":"a"},{"k":"b"}]} /></Helmet><div id="w"><For each={$rows} keyBy="k" id="f"><p id="i">{$_row.k}</p></For></div>');
+    const host = document.createElement('div');
+    host.innerHTML = server.html;
+    expect(host.querySelector('#w > div')?.getAttribute('style')).toBe('min-height:1px');
+    // As `attr:style`, Solid's hydration keeps the served string (setAttribute skips a hydrating node);
+    // as `style`, it would rewrite it through the CSSOM (`min-height: 1px;`) — see the next case.
+    expect(server.islands).toContain('attr:style={"min-height:1px"}');
+    expect(server.islands).not.toMatch(/\sstyle=\{"min-height:1px"\}/);
+  });
+
+  it('a spread `attr:style` survives hydration byte for byte, where a spread `style` is rewritten', () => {
+    const flow: CompiledDataflow = { imports: [], mutations: [], queries: [], values: [] };
+    const tmpl = rt.template('<div id="x"></div>');
+    const hydrateWith = (key: string) => {
+      const host = document.createElement('div');
+      host.innerHTML = '<div data-hk="s0-0000" id="x" style="min-height:1px"></div>';
+      document.body.append(host);
+      const served = host.firstElementChild;
+      const runtime = rt.createIslandRuntime({ dataflow: { flow } }, (df) => createDataflowStore(df));
+      const dispose = rt.hydrateIsland('s0-', () => { const el = rt.getNextElement(tmpl); rt.spread(el, { [key]: 'min-height:1px' }, false, false); return el; }, runtime.context, host);
+      const out = { adopted: host.firstElementChild === served, style: host.firstElementChild?.getAttribute('style') };
+      dispose?.(); runtime.dispose(); host.remove();
+      return out;
+    };
+    expect(hydrateWith('attr:style')).toEqual({ adopted: true, style: 'min-height:1px' });
+    expect(hydrateWith('style')).toEqual({ adopted: true, style: 'min-height: 1px;' });
+  });
 });

@@ -42,6 +42,20 @@ import { lazyCodeOf } from '@/lib/story/lazy-code';
 import { firstHeadingTitle } from '@/lib/story/title';
 import { isStartPlaceholder } from '@/lib/start-placeholder';
 import type { LazyCode } from '@/lib/story/lazy-code';
+import type { ArtifactRow } from '@/lib/artifacts';
+import { COMPILED_READER } from '@/lib/config';
+import { VIEWER_OVERLAY_PATH, type AssembleInput, type ReaderFallbackReason } from '@/lib/compiled-page/contract';
+import { currentCompiledReaderFlag, readerModeFor } from '@/lib/compiled-page/reader-mode';
+import { compiledPageFor } from '@/lib/compiled-page/serve.server';
+import { agentDiscovery } from '@/lib/agent-discovery';
+import { canonicalDocumentUrl } from '@/lib/custom-domains';
+import { CARD_RENDER_GENERATION } from '@/lib/export-card';
+import { readerChromeFonts } from '@/lib/story/first-screen-fonts';
+import { declaresMutations } from '@/lib/story/helmet';
+import { assetsPath, mutatePath, queryPath } from '@/lib/story/markup-csp';
+import { archivedReadOnly } from '@/lib/archived-version';
+import type { ReaderChromeInput } from '@/lib/story/reader-chrome';
+import { displayTitle } from '@/lib/story/title';
 
 /** The story the app page inlines for this answer (server/app withInitialStory). */
 export interface InitialStory {
@@ -53,23 +67,50 @@ export interface InitialStory {
   starter: boolean;
 }
 
+/**
+ * The HTML-FIRST page (docs/phase2-architecture.md §2.2, §7): the whole document the compiled
+ * reader's assembler made for this request — the story, the server-rendered reader chrome and the
+ * app's idle entry — which the app page serves as it is, with the page data beside it.
+ */
+export interface CompiledStory {
+  html: string;
+  headers: Readonly<Record<string, string>>;
+}
+
 export interface ArtifactPageAnswer {
   status: number;
   body: unknown;
   story?: InitialStory;
+  /** The compiled page, when this request is served by the compiled reader. */
+  compiled?: CompiledStory;
+  /** Which renderer answered a document's page, and why a compiled request fell back (the page's `x-mx-reader` headers). */
+  reader?: { mode: 'compiled' | 'legacy'; fallback?: ReaderFallbackReason };
+}
+
+/** What the app page (never the JSON door) hands the answer. */
+export interface ArtifactPageOptions {
+  /**
+   * The row the caller already fetched AND admitted for this very request (server/app
+   * documentPreparation): the answer neither fetches it again nor decides admission again — one row
+   * fetch and one access check per view.
+   */
+  admitted?: ArtifactRow;
+  /** The app page: the reader mode is decided here, and a compiled page is assembled with the app's idle entry. */
+  page?: { spa: AssembleInput['spa'] };
 }
 
 const notFound = (): ArtifactPageAnswer => ({ status: 404, body: { error: 'not_found' } });
 
-export async function artifactPageAnswer(request: Request, id: string): Promise<ArtifactPageAnswer> {
+export async function artifactPageAnswer(request: Request, id: string, options: ArtifactPageOptions = {}): Promise<ArtifactPageAnswer> {
   if (!ID_RE.test(id)) return notFound();
-  const artifact = await getArtifactById(id);
+  const admitted = options.admitted?.id === id ? options.admitted : null;
+  const artifact = admitted ?? await getArtifactById(id);
   if (!artifact) return notFound();
   const search = new URL(request.url).searchParams;
   const key = search.get('key');
   const exporting = verifyExportKey(artifact.id, key ?? undefined);
   const actor = await sessionActor(request);
-  if (!exporting && !(await canReadArtifact(artifact, actor.viewer))) return notFound();
+  if (!admitted && !exporting && !(await canReadArtifact(artifact, actor.viewer))) return notFound();
   if (!ARTIFACT_FORMATS.includes(artifact.format as ArtifactFormat)) return notFound();
 
   const role = await roleFor(artifact, actor);
@@ -166,6 +207,15 @@ export async function artifactPageAnswer(request: Request, id: string): Promise<
   void social.catch(() => {});
   const prepared = isDoc ? await preparedPageFor(artifact, at, baseUrl(request)) : null;
   const row = prepared?.row ?? await servedRow(artifact, at);
+  /*
+   * WHICH RENDERER (docs/phase2-architecture.md §10), for the app page only: the switch and the
+   * request's `?reader=`. A capture, the editor's own address and a starter's instructions are
+   * today's page whatever it says — the compiled page photographs nothing here and runs no editor.
+   */
+  const starterDoc = isDoc && isStartPlaceholder(row.source ?? null, artifact.version);
+  const compiledMode = !!options.page && !!prepared && !exporting && !starterDoc
+    && !new URL(request.url).pathname.endsWith('/edit')
+    && readerModeFor(currentCompiledReaderFlag(COMPILED_READER), new URL(request.url).search) === 'compiled';
 
   const meta = (row.meta ?? {}) as {
     theme?: StoryThemeName | null; colorMode?: 'light' | 'dark' | null; compiledCss?: string | null;
@@ -177,23 +227,70 @@ export async function artifactPageAnswer(request: Request, id: string): Promise<
   const design = resolveStoredStoryDesign(meta.theme, capturedColor ?? meta.colorMode);
   // A document's sheet is its prepared page's; the data tiers keep their stored one.
   const compiledCss = isDoc ? null : meta.compiledCss ?? null;
-  const [served, [author, forkedFrom, liked, likeCount, following, followCount, openAnnotations, dataPreview]] = await Promise.all([
-    // What only this request decides, over the stored version.
-    prepared ? servedPage(prepared.row, prepared.page, {
-      at, search: new URL(request.url).search, origin: baseUrl(request),
-      // This version's stored diagram drawings, unless the engine was asked for by name (`?mermaid=engine`).
-      drawings: engineRequested(request.url) ? 'engine' : 'stored',
-      colorMode: capturedColor,
-      viewer: { userId: actor.viewer?.userId ?? null, tokenId: actor.tokenId ?? null, email: actor.viewer?.email ?? null },
-      // The first results, as the page's own query door (POST, this session) would answer them.
-      results: { admit: actor.viewer },
-    }) : Promise.resolve(null),
+  // What only this request decides, over the stored version. On the compiled page without this
+  // reader's first results: its rows are the guest snapshot's, and this reader's arrive after paint.
+  const servedFor = (results: boolean) => (prepared ? servedPage(prepared.row, prepared.page, {
+    at, search: new URL(request.url).search, origin: baseUrl(request),
+    // This version's stored diagram drawings, unless the engine was asked for by name (`?mermaid=engine`).
+    drawings: engineRequested(request.url) ? 'engine' : 'stored',
+    colorMode: capturedColor,
+    viewer: { userId: actor.viewer?.userId ?? null, tokenId: actor.tokenId ?? null, email: actor.viewer?.email ?? null },
+    // The first results, as the page's own query door (POST, this session) would answer them.
+    ...(results ? { results: { admit: actor.viewer } } : {}),
+  }) : Promise.resolve(null));
+  const [firstServed, [author, forkedFrom, liked, likeCount, following, followCount, openAnnotations, dataPreview]] = await Promise.all([
+    servedFor(!compiledMode),
     social,
   ]);
+  let served = firstServed;
   const authorUsername = author?.username ?? null;
   const ownerScope = role === 'owner' ? actorForArtifacts(actor) : null;
   const hasInvitedUsers = ownerScope ? ((await getArtifactFor(ownerScope, id))?.shares?.length ?? 0) > 0 : false;
-  const starter = isDoc && isStartPlaceholder(row.source ?? null, artifact.version);
+  const starter = starterDoc;
+  const authorMark = { username: authorUsername, id: author?.id ?? null, image: author ? avatarUrl(author) : null, forkedFrom };
+  const follow = artifact.user_id && artifact.user_id !== viewerId ? { userId: artifact.user_id, following, count: followCount } : null;
+
+  let compiled: CompiledStory | null = null;
+  let reader: ArtifactPageAnswer['reader'] = prepared ? { mode: 'legacy' } : undefined;
+  if (compiledMode && prepared) {
+    const answer = await compiledPageFor(prepared.row, prepared.page, {
+      at,
+      search: new URL(request.url).search,
+      drawings: engineRequested(request.url) ? null : 'inline',
+      // Any held credential: an account session, or the connection a guest owner holds. Either one is
+      // who the write check and a private query answer for, so the page uses the credentialed doors.
+      signedIn: kind !== 'none',
+      doors: {
+        queryUrl: queryPath(artifact.id),
+        ...(!at && declaresMutations(row.source) ? { mutateUrl: mutatePath(artifact.id) } : {}),
+        viewerUrl: VIEWER_OVERLAY_PATH(artifact.id),
+        assetsUrl: assetsPath(artifact.id),
+      },
+      ...(at ? { readOnly: archivedReadOnly(at.version) } : {}),
+      live: at ? null : { id: artifact.id, editId: artifact.edit_id },
+      // The page's own behaviour (lib/islands/page), as a /raw copy runs it: the live stream of a page with
+      // no islands (the app loads on intent, so until then the page holds it), the reader's place across
+      // the reload a new version delivers, and their mode.
+      behaviors: ['page'],
+      chrome: await readerChromeFor({ artifact, row, role, kind, actor, at, author: authorMark, likeCount, liked, follow, openAnnotations, hasInvitedUsers: ownerScope ? hasInvitedUsers : undefined, ground: design.colorMode ?? prepared.page.data.colorMode }),
+      chromeFonts: readerChromeFonts({ theme: prepared.page.base.theme, docFonts: prepared.page.base.fonts, importedFaces: prepared.page.base.faces }).map((face) => face.url),
+      spa: options.page!.spa,
+      head: {
+        description: row.description,
+        canonical: await canonicalDocumentUrl(artifact),
+        social: { title: prepared.page.title, description: row.description, image: `${baseUrl(request)}/a/${artifact.id}/export?mode=card&r=${CARD_RENDER_GENERATION}` },
+        help: agentDiscovery(baseUrl(request)),
+      },
+    });
+    if (answer.mode === 'compiled') {
+      compiled = { html: answer.html, headers: answer.headers };
+      reader = { mode: 'compiled' };
+    } else {
+      // Today's page for this request, exactly as it would have been, and the reason it is.
+      served = await servedFor(true);
+      reader = { mode: 'legacy', fallback: answer.fallback };
+    }
+  }
   const surface = {
     captureKey: exporting ? key : null,
     id: artifact.id,
@@ -202,7 +299,7 @@ export async function artifactPageAnswer(request: Request, id: string): Promise<
     visibility: artifact.visibility,
     ...(ownerScope ? { hasInvitedUsers } : {}),
     title: row.title,
-    author: { username: authorUsername, id: author?.id ?? null, image: author ? avatarUrl(author) : null, forkedFrom },
+    author: authorMark,
     ...(served ? {
       runtime: served.runtime,
       // What the reader's chrome derived from the source: the document's own
@@ -252,14 +349,14 @@ export async function artifactPageAnswer(request: Request, id: string): Promise<
     like: { liked, count: likeCount },
     // The follow control is keyed by the AUTHOR's id. Null for an anonymous
     // document, and for the owner, who has nobody here to follow.
-    follow: artifact.user_id && artifact.user_id !== viewerId
-      ? { userId: artifact.user_id, following, count: followCount }
-      : null,
+    follow,
     // A document's runtime carries its sheet once, isolated; the data tiers carry their stored one.
     surface,
   };
+  if (compiled) return { status: 200, body, compiled, reader };
   return {
     status: 200, body,
+    ...(reader ? { reader } : {}),
     ...(served && prepared ? { story: {
       html: served.storyHtml, title: served.runtime.title, fontPreloads: served.runtime.fontPreloads ?? [],
       // A diagram drawn from its stored SVG runs no engine: its kind's code is not preloaded.
@@ -275,4 +372,41 @@ export async function artifactPageAnswer(request: Request, id: string): Promise<
 export async function artifactPageResponse(request: Request, id: string): Promise<Response> {
   const answer = await artifactPageAnswer(request, id);
   return answer.status === 200 ? json(answer.body, 200, { 'Cache-Control': 'no-store' }) : json(answer.body, answer.status);
+}
+
+/**
+ * THE READER CHROME the HTML-first page draws on the server (lib/story/reader-chrome): the same
+ * input the app's own chrome (components/ArtifactSurface → InlineReaderChrome) builds from this
+ * answer once it adopts the page, so the takeover changes no pixel of it. Its Edit control is what the
+ * page's loader reads a writer by (web/idle-boot `capabilityOf`).
+ */
+async function readerChromeFor(facts: {
+  artifact: ArtifactRow; row: ArtifactRow; role: Awaited<ReturnType<typeof roleFor>>; kind: 'account' | 'anon' | 'none';
+  actor: Awaited<ReturnType<typeof sessionActor>>; at: { version: number; head: number } | null;
+  author: ReaderChromeInput['author']; likeCount: number; liked: boolean;
+  follow: { following: boolean; count: number } | null; openAnnotations: number; hasInvitedUsers?: boolean; ground: 'light' | 'dark';
+}): Promise<ReaderChromeInput> {
+  const { artifact, row, role, at } = facts;
+  const owner = role === 'owner' && !at;
+  const person = facts.kind === 'account' && facts.actor.viewer?.userId ? await getUserById(facts.actor.viewer.userId) : null;
+  return {
+    artifactId: artifact.id,
+    ground: facts.ground,
+    share: owner,
+    archived: at ? { version: at.version, head: at.head } : null,
+    visibility: artifact.visibility,
+    ...(facts.hasInvitedUsers === undefined ? {} : { hasInvitedUsers: facts.hasInvitedUsers }),
+    title: displayTitle({ title: row.title, source: row.source }),
+    forkBusy: false,
+    author: facts.author,
+    viewer: person ? { id: person.id, name: person.username || person.email || '', image: avatarUrl(person) } : null,
+    edit: canEdit(role) && !at,
+    ownerBreadcrumb: owner,
+    panels: false,
+    reactions: {
+      like: { count: facts.likeCount, liked: facts.liked, href: '#' },
+      follow: facts.follow ? { following: facts.follow.following, count: facts.follow.count, href: '#' } : null,
+      comment: { count: facts.openAnnotations, href: '#' },
+    },
+  };
 }

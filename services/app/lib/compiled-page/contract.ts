@@ -75,6 +75,12 @@ export interface CompileInput {
   access?: DatasetAccessFacts;
   /** The compiler build this compile is made with (see `CompilerBuild`). */
   build: string;
+  /**
+   * The version's own `<Helmet><script>` (prepared page `authorScript`), or null/absent for none. It is
+   * carried through to `CompiledPage.authorScript`, and a version with one always gets a browser module
+   * (`ISLANDS = []` when it has no island): the page's store and the author's session start in `boot`.
+   */
+  authorScript?: string | null;
 }
 
 /** One island: a subtree that runs in the browser. */
@@ -148,6 +154,15 @@ export interface CompiledPage {
   unported: string[];
   /** Components rendered statically whose BEHAVIOUR is not ported yet (`Iframe`, `DeckGL`): served, reported. */
   partial: string[];
+  /**
+   * The version's author script, or null. DATA, never code of this page: the assembler writes it into
+   * the page's JSON data island (`IslandPageData.authorScript`, inert under `script-src 'self'`), and
+   * `boot` loads the lazy author host only then, which hands it to the sandboxed `allow-scripts`
+   * frame over a MessagePort (lib/story-runtime/author-script). It is never part of a module, so it is
+   * never served under `/islands/d/` nor runs in the top-level document. A compile carrying no
+   * author-script field (an older one) must not serve a version that has a script (serve.server).
+   */
+  authorScript: string | null;
 }
 
 /** A stored compile that failed: the read never retries the same build in a loop. */
@@ -329,9 +344,11 @@ export interface SnapshotStore {
    * (the same run as `POST /a/:id/query`), draw the charts, store and return
    * the new snapshot; null when the version cannot be snapshotted any more.
    * `recipe` is the plan and input values the key was made from, when the
-   * caller holds them (else the store's own record of the key).
+   * caller holds them (else the store's own record of the key), and the
+   * compiler build the plan came from, which the snapshot records (else the
+   * build already stored for the key).
    */
-  revalidate(key: SnapshotKey, recipe?: { plan: DataPlan; values: Record<string, Scalar> }): Promise<DataSnapshot | null>;
+  revalidate(key: SnapshotKey, recipe?: { plan: DataPlan; values: Record<string, Scalar>; build?: string }): Promise<DataSnapshot | null>;
 }
 
 /* ────────────────────────────────────────────────────────────────────────────
@@ -416,6 +433,23 @@ export interface AssembleInput {
    * Null where a path emits none (captures, the offline file).
    */
   head: AssembleHead | null;
+  /**
+   * The document's live identity, written on `<body>` as `data-mx-live-id` / `data-mx-live-edit`: the
+   * island runtime holds the document's live stream only when both are present. Null or absent on a
+   * capture, an archived version and the offline file.
+   */
+  live?: { id: string; editId: string } | null;
+  /**
+   * A line of page furniture after the story root (and after the chrome), never inside it: a domain
+   * post's attribution back to the app. Its CSS joins the head's styles.
+   */
+  footer?: { html: string; css: string } | null;
+  /**
+   * A document served BY ITSELF (`/raw`, a domain post, a capture) carries today's standalone
+   * document's stylesheets, byte for byte (lib/story/document-styles), in place of `css`: the story is
+   * the page, and Mermaid reads `--font-mono`'s text into the palette that names a stored drawing.
+   */
+  sheets?: ReadonlyArray<{ attr: string; css: string }> | null;
 }
 
 /** The head metadata of an assembled page (see AssembleInput.head). */
@@ -444,10 +478,11 @@ export const SPECULATION_RULES_HEADER = 'Speculation-Rules';
 /** The element ids and attributes the assembled page and the runtime agree on. */
 export const ISLAND_DATA_ID = 'mx-story-data';
 /**
- * A `<Question>` island's chart box in the compiled HTML, by the question's node
- * id (or path): the assembler puts the snapshot's SVG inside it and marks it
- * `data-mx-chart-state="ready"`; an island re-draws only when its table changes
- * or the reader interacts (Vega loads then).
+ * A `<Question>` island's inner drawing box in the compiled HTML, by the question's
+ * node id (or path) — the ASSEMBLER's handle only: it puts the snapshot's SVG
+ * inside the box and marks it `data-mx-chart-state="ready"`. The island removes
+ * the attribute when it mounts (the served DOM then matches today's), and
+ * re-draws only when its table changes or the reader interacts (Vega loads then).
  */
 export const CHART_SLOT_ATTR = 'data-mx-chart-slot';
 /** A chart slot's drawing state, set by the assembler and updated by the island runtime (`drawn`, `pending`, `live`). */

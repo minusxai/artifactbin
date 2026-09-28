@@ -154,3 +154,28 @@ export function createDocumentPreloader(webDir: string, mermaidModulesFile = MER
     return inject(html, [...(needs.chart ? chart : []), ...needs.mermaid.flatMap(kind => mermaid[kind] ?? []), ...image]);
   };
 }
+
+/**
+ * THE HTML-FIRST PAGE'S APP ENTRY (docs/phase2-architecture.md §2.2, §7): the small module the
+ * compiled reader page tags `data-mx-spa-idle` (web/spa-idle.ts, its own Vite entry), which loads
+ * the app only when it is wanted, and its static closure to `modulepreload`. Null when this build has
+ * no such entry: the page is then the document and its islands without the app.
+ */
+export const SPA_IDLE_ENTRY = 'spa-idle.ts';
+export function createSpaEntry(webDir: string): () => { entry: string; preload: string[] } | null {
+  let cached: { entry: string; preload: string[] } | null | undefined;
+  return () => {
+    if (cached !== undefined) return cached;
+    try {
+      const manifest = readManifest(webDir);
+      const chunk = manifest[SPA_IDLE_ENTRY];
+      if (!chunk) throw Error('no app idle entry');
+      const hints = closureHints(manifest, [SPA_IDLE_ENTRY]).filter((hint) => !hint.style);
+      cached = { entry: `/${chunk.file}`, preload: hints.map((hint) => hint.href).filter((href) => href !== `/${chunk.file}`) };
+    } catch {
+      console.warn('[reader] the app idle entry is not in the build manifest; compiled pages load no app');
+      cached = null;
+    }
+    return cached;
+  };
+}

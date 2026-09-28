@@ -46,6 +46,7 @@ import { readIntent, stripIntent } from '@/lib/intent';
 import { loginHref } from '@/lib/login-href';
 import { refusedForSignIn } from '@/lib/story/sign-in-required';
 import PageChrome, { PageControls, PageMenu, requestPageChrome, type AppearanceMode } from '@/components/PageChrome';
+import { openPageChromeOnceMounted } from '@/components/page-chrome-state';
 import { useIsPhoneViewport } from '@/components/MobileSheet';
 /* The editing bar's height is RESERVED by this page, never measured — and it
  * comes from a leaf module, because importing it from the editor would put the
@@ -505,8 +506,11 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
 
   const transportFactory = useCallback(() => backend.queryTransport(), [backend]);
   const [frameLoaded, setFrameLoaded] = useState(false);
+  /** The reader's own mode, for a runtime that mounts after they chose it (the interpreter taking over an adopted compiled page). */
+  const modeOverride = useRef<AppearanceMode | null>(null);
   const onController = useCallback((controller: InlineStoryController | null) => {
     runtimeRef.current = controller;
+    if (controller && modeOverride.current) controller.send({ type: STORY_READER_MODE_MESSAGE, mode: modeOverride.current });
     if (controller && earlyData.current.length) {
       const datasets = [...new Set(earlyData.current)];
       earlyData.current = [];
@@ -534,6 +538,7 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
     colorMode: readerMode, template, chrome: true,
   }, [id, seedReady]);
   const setReaderMode = useCallback((mode: AppearanceMode) => {
+    modeOverride.current = mode;
     setReaderModeOverride(mode);
     runtimeRef.current?.send({ type: STORY_READER_MODE_MESSAGE, mode });
   }, []);
@@ -940,7 +945,8 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
     const intent = takeChromeIntent();
     if (!intent) return;
     if (intent === 'share') { if (owner) setSharingOpen(true); }
-    else if (intent === 'notifications') requestPageChrome('notifications');
+    // This effect runs as the app mounts, before the panels that answer a request have: kept until they do.
+    else if (intent === 'notifications' || intent === 'controls' || intent === 'menu') openPageChromeOnceMounted(intent);
     else onChromeAction(intent);
   }, []);
 

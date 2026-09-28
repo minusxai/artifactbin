@@ -14,7 +14,7 @@ import { loginRedirectTarget } from '@/lib/safe-redirect';
  * The request is held in AsyncLocalStorage for the duration of each handler
  * (lib/request-context), which is how `publicOrigin()` and analytics see it.
  */
-import {agentDiscovery,agentDiscoveryHead,withAgentDiscoveryTail} from '@/lib/agent-discovery';
+import {agentDiscovery,agentDiscoveryHead,agentDiscoveryTail,withAgentDiscoveryTail} from '@/lib/agent-discovery';
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { createGithubResponse } from './external/github';
@@ -47,21 +47,24 @@ import { publicRefAssetResponse } from '@/lib/public-ref-assets';
 import { mountRoutes } from './api';
 import { ROUTES } from './routes.generated';
 import { authorFrameResponse } from './author-frame';
-import { AUTHOR_FRAME_PATH } from '@/lib/story-runtime/author-frame';
+import { AUTHOR_FRAME_PATH, LEGACY_AUTHOR_FRAME_PATH } from '@/lib/story-runtime/author-frame';
 import { GITHUB_EXTERNAL_URL } from '@/lib/github-star';
-import { createDocumentPreloader, createListingPreloader, createReaderPreloader, listingPage } from './reader-preloads';
-import { artifactPageAnswer, type InitialStory } from '@/lib/artifact-page';
+import { createDocumentPreloader, createListingPreloader, createReaderPreloader, createSpaEntry, listingPage } from './reader-preloads';
+import { artifactPageAnswer, type ArtifactPageAnswer, type CompiledStory, type InitialStory } from '@/lib/artifact-page';
+import type { ArtifactRow } from '@/lib/artifacts';
 import { enablePreparedPageWarmups } from '@/lib/story/prepared-page.server';
 import { enableSnapshotRevalidations } from '@/lib/compiled-page/snapshots.server';
 import { mountBuildAssets } from './build-assets';
-import { compressDynamic, dynamicEncoding, precompressedStatic, variantResponse } from './content-encoding';
+import { compressDynamic, dynamicEncoding, precompressedStatic, variantResponse, type EncodedVariants } from './content-encoding';
+import zlib from 'node:zlib';
+import { promisify } from 'node:util';
 import { customHostBoundary } from './custom-host';
 import { linkedStylesheets } from '@/lib/custom-domain-home';
 import { THEME_BOOTSTRAP_HASH } from '@/lib/theme-bootstrap';
 import { canonicalDocumentUrl } from '@/lib/custom-domains';
 import { APP_SHELL_FONT_PRELOADS } from '@/lib/app-fonts';
 import { fontPreloadTags } from '@/lib/story/first-screen-fonts';
-import { DOCUMENT_MODULE_PATH, ISLANDS_PATH } from '@/lib/compiled-page/contract';
+import { DOCUMENT_MODULE_PATH, ISLANDS_PATH, READER_FALLBACK_HEADER, READER_MODE_HEADER } from '@/lib/compiled-page/contract';
 import { createModuleStore, createSpeculationRulesStore } from '@/lib/compiled-page/modules.server';
 import { SPECULATION_RULES_CONTENT_TYPE, SPECULATION_RULES_PATH } from '@/lib/compiled-page/speculation';
 
@@ -255,6 +258,8 @@ const APP_SECURITY_HEADERS = {
   'permissions-policy': 'camera=(), microphone=(), geolocation=()',
 };
 const IMMUTABLE = 'public, max-age=31536000, immutable';
+const brotliCompress = promisify(zlib.brotliCompress);
+const gzipCompress = promisify(zlib.gzip);
 
 export interface AppServerOptions {
   /** Split deployment only: verify the transport header and attach its actor. */
@@ -324,6 +329,15 @@ const apiNotFound = (c: { req: { raw: Request } }) => {
   }, 404, { 'Cache-Control': 'no-store' });
 };
 
+/** A document row this request already fetched and admitted (documentPreparation), and its canonical path when it was computed. */
+interface Admitted { row: ArtifactRow; canonicalPath?: string }
+/** The document page's reader headers (docs/phase2-architecture.md §6): which renderer answered, and why a compiled request fell back. */
+const readerHeaders = (reader: ArtifactPageAnswer['reader'] | undefined): Record<string, string> => (reader
+  ? { [READER_MODE_HEADER]: reader.mode, ...(reader.fallback ? { [READER_FALLBACK_HEADER]: reader.fallback } : {}) }
+  : {});
+/** The agent pointer's tail as the assembler ends a page with it (lib/agent-discovery). */
+const agentDiscoveryTailOf = (origin: string): string => agentDiscoveryTail(agentDiscovery(origin));
+
 export function createAppServer(opts: AppServerOptions = {}): Hono {
   const app = new Hono();
   // A serving process prepares each new head for its readers after the write commits (lib/story/prepared-page.server).
@@ -344,7 +358,8 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
   // Its home page links the stylesheets THIS page links, read from the same shell.
   app.use('*', customHostBoundary({ stylesheets: async (url) => linkedStylesheets(await index(url)) }));
   const assetsOrigin = ASSETS_ORIGIN;
-  app.get(AUTHOR_FRAME_PATH, c => authorFrameResponse(c.req.raw, assetsOrigin, baseUrl(c.req.raw)));
+  // The author-script wrapper, ahead of the /story/* and /islands/* middleware; its old address answers too until wave 4.
+  for (const wrapper of [AUTHOR_FRAME_PATH, LEGACY_AUTHOR_FRAME_PATH]) app.get(wrapper, c => authorFrameResponse(c.req.raw, assetsOrigin, baseUrl(c.req.raw)));
   if (assetsOrigin) app.use('*', async (c, next) => {
     const incoming = new URL(c.req.url);
     if (incoming.host !== new URL(assetsOrigin).host && baseUrl(c.req.raw) !== assetsOrigin) return next();
@@ -371,6 +386,11 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
   const preloadListing = opts.indexHtml ? (html: string) => html : createListingPreloader(webDir);
   // …and per document, the lazy code THIS document runs: its chart module, its Mermaid kinds.
   const preloadDocument = opts.indexHtml ? (html: string) => html : createDocumentPreloader(webDir);
+  /*
+   * The HTML-first page's app entry (web/spa-idle.ts): from the build's manifest in production; in
+   * development Vite serves the web root's sources as they are, the entry by its own path.
+   */
+  const spaEntry = opts.indexHtml ? () => ({ entry: '/spa-idle.ts', preload: [] as string[] }) : createSpaEntry(webDir);
   app.get(GITHUB_EXTERNAL_URL, createGithubResponse());
   const publicDir = opts.publicDir ?? path.resolve('public');
   const cliReleaseDir = opts.cliReleaseDir ?? path.resolve(publicDir, '..', '..', 'cli', 'dist');
@@ -381,12 +401,14 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
    * no fetch round trip, no chrome settling, no address healing a beat later.
    * The endpoints stay the truth; this is the same data, arriving earlier.
    */
-  const page = async (c: { req: { raw: Request; url: string } }, status?: 200 | 404, canonical?: string, address?: string) => {
+  const page = async (c: { req: { raw: Request; url: string } }, status?: 200 | 404, canonical?: string, address?: string, admitted?: Admitted) => {
     // A document served at a non-canonical address is rendered AS its canonical address (see documentAddress).
     const url = address ? new URL(address + new URL(c.req.url).search, c.req.url).href : c.req.url;
-    const html = await index(url);
-    const found = await bootstrapFor(c.req.raw, new URL(url).pathname);
+    const found = await bootstrapFor(c.req.raw, new URL(url).pathname, admitted);
     const data = found ? { ...found.data, ...(address ? { address } : {}) } : null;
+    // The compiled reader's HTML-first page: the assembler's whole document, the page data beside it.
+    if (found?.compiled && data) return compiledPage(c, found.compiled, data, status ?? 200);
+    const html = await index(url);
     // An @-address whose profile resolves to NOTHING is a miss, and a miss is
     // 404 as a STATUS (the rule documents already live by) — the SPA is still
     // the body, so the person sees the app's own 404 page rather than a
@@ -419,6 +441,27 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
       'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store', ...APP_SECURITY_HEADERS,
       ...(opts.devHmrPort !== undefined ? { 'content-security-policy': developmentAppCsp(c.req.url, opts.devHmrPort) } : {}),
       ...(story ? { Link: `<${baseUrl(c.req.raw)}/llms.txt>; rel="help"` } : {}),
+      ...readerHeaders(found?.reader),
+    } }));
+  };
+
+  /**
+   * THE HTML-FIRST PAGE (docs/phase2-architecture.md §2.2, §7): the compiled reader's document as the
+   * assembler made it — the story, the server-rendered chrome, the app's idle entry — under the app's
+   * own policy, with the page data the app reads when it adopts the page. The data rides as the body's
+   * own element before the agent pointer's tail, which stays the page's last line.
+   */
+  const compiledPage = (c: { req: { raw: Request; url: string } }, compiled: CompiledStory, data: unknown, code: 200 | 404) => {
+    const tail = agentDiscoveryTailOf(baseUrl(c.req.raw));
+    const end = compiled.html.endsWith(`${tail}</body></html>`) ? compiled.html.length - `${tail}</body></html>`.length : compiled.html.lastIndexOf('</body>');
+    // The sheet rides once, in the page's head (web/initial-story reads it back): not in the page data too.
+    const bootstrap = `<script type="application/json" id="${BOOTSTRAP_ID}">${safeJson(withoutInlinedSheet(data))}</script>`;
+    const html = `${compiled.html.slice(0, end)}${bootstrap}${compiled.html.slice(end)}`;
+    return compressDynamic(c.req.raw, new Response(html, { status: code, headers: {
+      'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store', ...APP_SECURITY_HEADERS,
+      ...(opts.devHmrPort !== undefined ? { 'content-security-policy': developmentAppCsp(c.req.url, opts.devHmrPort) } : {}),
+      ...compiled.headers,
+      ...readerHeaders({ mode: 'compiled' }),
     } }));
   };
 
@@ -432,25 +475,39 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
    * is one round trip and one visible settle. A document's answer comes with
    * the story its runtime renders (lib/artifact-page), which the page inlines.
    */
-  async function bootstrapFor(request: Request, pathname = new URL(request.url).pathname): Promise<{ data: { path: string; profile?: unknown; artifact?: unknown }; story?: InitialStory } | null> {
+  type Bootstrap = { data: { path: string; profile?: unknown; artifact?: unknown }; story?: InitialStory; compiled?: CompiledStory; reader?: ArtifactPageAnswer['reader'] };
+  /** The document parts of an answer the page serves: today's inline story, or the compiled page, and which. */
+  const documentParts = (answer: ArtifactPageAnswer | null): Omit<Bootstrap, 'data'> => (answer ? {
+    ...(answer.story ? { story: answer.story } : {}),
+    ...(answer.compiled ? { compiled: answer.compiled } : {}),
+    ...(answer.reader ? { reader: answer.reader } : {}),
+  } : {});
+  async function bootstrapFor(request: Request, pathname = new URL(request.url).pathname, admitted?: Admitted): Promise<Bootstrap | null> {
     // The ORIGINAL request answers, whatever path it is rendered as: its actor rides on the object (utils inProcess).
     const url = { pathname };
     const segments = url.pathname.split('/').filter(Boolean);
+    // The row documentPreparation already fetched and admitted for this request rides along: one fetch, one check.
     const document = async (id: string) => {
-      const answer = await runWithRequest(request, () => artifactPageAnswer(request, id));
+      const answer = await runWithRequest(request, () => artifactPageAnswer(request, id, { ...(admitted ? { admitted: admitted.row } : {}), page: { spa: spaEntry() } }));
       return answer.status === 200 ? answer : null;
     };
     if (segments.at(-1) === 'edit') segments.pop();
     if (segments[0] === 'a' && segments.length === 2) {
       const artifact = await document(segments[1]!);
-      return artifact ? { data: { path: url.pathname, artifact: artifact.body }, ...(artifact.story ? { story: artifact.story } : {}) } : null;
+      return artifact ? { data: { path: url.pathname, artifact: artifact.body }, ...documentParts(artifact) } : null;
     }
     if (segments[0]?.startsWith('@')) {
-      const res = profileData ? await runWithRequest(request, () => profileData(request, { params: Promise.resolve({ user: segments[0]!, ...(segments.length > 1 ? { path: segments.slice(1).join('/') } : {}) }) })) : null;
-      const profile = res?.ok ? await res.json() as { kind?: string; id?: string } : null;
+      /*
+       * The document's own canonical address, already fetched and admitted for this request: the
+       * resolution is the profile route's own answer for it (`{ kind: 'artifact', id }`), without a
+       * second fetch of the row or a second admission.
+       */
+      const own = admitted?.canonicalPath !== undefined && `/${segments.join('/')}` === admitted.canonicalPath;
+      const res = own || !profileData ? null : await runWithRequest(request, () => profileData(request, { params: Promise.resolve({ user: segments[0]!, ...(segments.length > 1 ? { path: segments.slice(1).join('/') } : {}) }) }));
+      const profile = own ? { kind: 'artifact', id: admitted!.row.id } : res?.ok ? await res.json() as { kind?: string; id?: string } : null;
       if (!profile) return null;
       const artifact = profile.kind === 'artifact' && profile.id ? await document(profile.id) : null;
-      return { data: { path: url.pathname, profile, ...(artifact ? { artifact: artifact.body } : {}) }, ...(artifact?.story ? { story: artifact.story } : {}) };
+      return { data: { path: url.pathname, profile, ...(artifact ? { artifact: artifact.body } : {}) }, ...documentParts(artifact) };
     }
     return null;
   }
@@ -471,7 +528,7 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
    * viewer who cannot read it; a valid export key skips the healing, because a
    * capture must stay at the address it was handed.
    */
-  const documentPreparation = async (request: Request): Promise<{ status: 200 | 404; address?: string; canonical?: string }> => {
+  const documentPreparation = async (request: Request): Promise<{ status: 200 | 404; address?: string; canonical?: string; admitted?: Admitted }> => {
     const url = new URL(request.url);
     const found = candidateDocument(url.pathname);
     if (!found) return { status: 200 };
@@ -479,13 +536,15 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
     if (!row) return { status: 404 };
     // A key skips canonical healing, but only a valid key admits the page.
     const key = url.searchParams.get('key');
-    if (!url.pathname.endsWith('/edit') && key && verifyExportKey(row.id, key)) return { status: 200 };
+    if (!url.pathname.endsWith('/edit') && key && verifyExportKey(row.id, key)) return { status: 200, admitted: { row } };
     const actor = await sessionActor(request).catch(() => null);
     if (url.pathname.endsWith('/edit') && (!actor || !canEdit(await roleFor(row, actor)))) return { status: 404 };
     if (!(await canReadArtifact(row, actor?.viewer ?? null))) return { status: 404 };
-    if (url.searchParams.has('key')) return { status: 200 };
-    const canonical = canonicalArtifactPath(row, await ownerUsername(row.user_id)) + (url.pathname.endsWith('/edit') ? '/edit' : '');
-    return { status: 200, canonical: await canonicalDocumentUrl(row), ...(canonical !== url.pathname ? { address: canonical } : {}) };
+    // Admitted, by this request's own actor: the page's answer reuses the row and this decision.
+    if (url.searchParams.has('key')) return { status: 200, admitted: { row } };
+    const canonicalPath = canonicalArtifactPath(row, await ownerUsername(row.user_id));
+    const canonical = canonicalPath + (url.pathname.endsWith('/edit') ? '/edit' : '');
+    return { status: 200, admitted: { row, canonicalPath }, canonical: await canonicalDocumentUrl(row), ...(canonical !== url.pathname ? { address: canonical } : {}) };
   };
 
   // Static: content-addressed trees are immutable; everything else is served plainly.
@@ -505,19 +564,40 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
   });
   const islandModules = createModuleStore();
   const speculationRules = createSpeculationRulesStore();
-  const islandFile = (c: Context, bytes: Uint8Array, contentType: string): Response => new Response(c.req.method === 'HEAD' ? null : new Uint8Array(bytes), {
-    status: 200, headers: { 'content-type': contentType, 'content-length': String(bytes.byteLength), 'x-content-type-options': 'nosniff' },
-  });
+  /*
+   * Brotli like every other text response (the precompressed /islands chunks, the pages): these bytes
+   * are content-addressed and never change, so each is encoded ONCE, at the highest quality, and the
+   * encodings kept (bounded) — target 2 is measured in brotli bytes. Encoding runs on zlib's pool.
+   */
+  const ISLAND_ENCODINGS_KEPT = 512;
+  const islandEncodings = new Map<string, Promise<EncodedVariants>>();
+  const encodedIsland = (key: string, bytes: Buffer): Promise<EncodedVariants> => {
+    let encoded = islandEncodings.get(key);
+    if (!encoded) {
+      encoded = Promise.all([
+        brotliCompress(bytes, { params: { [zlib.constants.BROTLI_PARAM_QUALITY]: zlib.constants.BROTLI_MAX_QUALITY, [zlib.constants.BROTLI_PARAM_MODE]: zlib.constants.BROTLI_MODE_TEXT, [zlib.constants.BROTLI_PARAM_SIZE_HINT]: bytes.byteLength } }),
+        gzipCompress(bytes, { level: zlib.constants.Z_BEST_COMPRESSION }),
+      ]).then(([br, gzip]) => ({ br, gzip }));
+      encoded.catch(() => islandEncodings.delete(key));
+      islandEncodings.set(key, encoded);
+      while (islandEncodings.size > ISLAND_ENCODINGS_KEPT) islandEncodings.delete(islandEncodings.keys().next().value!);
+    }
+    return encoded;
+  };
+  const islandFile = async (c: Context, key: string, bytes: Uint8Array, contentType: string): Promise<Response> => {
+    const body = Buffer.from(bytes);
+    return variantResponse(c, body, await encodedIsland(key, body), { 'content-type': contentType, 'x-content-type-options': 'nosniff' });
+  };
   // Only a path the store could have written is looked up: 16 lowercase hex and the one extension.
   app.on(['GET', 'HEAD'], `${DOCUMENT_MODULE_PATH}/:file`, async (c) => {
     const sha = /^([0-9a-f]{16})\.js$/.exec(c.req.param('file'))?.[1];
     const bytes = sha ? await islandModules.get(sha) : null;
-    return bytes ? islandFile(c, bytes, 'text/javascript; charset=utf-8') : c.notFound();
+    return bytes ? islandFile(c, `d/${sha}`, bytes, 'text/javascript; charset=utf-8') : c.notFound();
   });
   app.on(['GET', 'HEAD'], `${SPECULATION_RULES_PATH}/:file`, async (c) => {
     const sha = /^([0-9a-f]{16})\.json$/.exec(c.req.param('file'))?.[1];
     const bytes = sha ? await speculationRules.get(sha) : null;
-    return bytes ? islandFile(c, bytes, SPECULATION_RULES_CONTENT_TYPE) : c.notFound();
+    return bytes ? islandFile(c, `s/${sha}`, bytes, SPECULATION_RULES_CONTENT_TYPE) : c.notFound();
   });
   /*
    * The offline file's code-view extras (lib/offline/extras): the source editor and prettier,
@@ -612,11 +692,11 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
     // Canonical readers share the app document so its router can transition
     // without changing security policy. Only /raw and exports retain the
     // standalone top-level sandbox; authored scripts still run in Iframes.
-    const { status, address, canonical } = await runWithRequest(c.req.raw, () => documentPreparation(c.req.raw));
+    const { status, address, canonical, admitted } = await runWithRequest(c.req.raw, () => documentPreparation(c.req.raw));
     // Admission's 404 is final; its 200 can mean "not a document
     // address" — a pretty path under an unknown handle still misses, and
     // page() derives that from the profile resolution it already ran.
-    return page(c, status === 404 ? 404 : undefined, canonical, address);
+    return page(c, status === 404 ? 404 : undefined, canonical, address, admitted);
   };
 
   app.get('/a/:id/edit', documentAddress);

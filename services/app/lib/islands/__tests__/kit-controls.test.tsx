@@ -23,7 +23,10 @@ import { Mermaid } from '../kit/mermaid';
 const mount = (island = fakeIsland(), view: () => import('solid-js').JSX.Element) => { const host = document.createElement('div'); const dispose = render(() => <IslandProvider value={island}>{view()}</IslandProvider>, host); return { host, dispose }; };
 
 describe('controls', () => {
-  it('Input, Textarea, Segmented, Slider, Switch and DatePicker match today\'s render', () => {
+  // The compiled page runs the LIVE controls, so its reference is the runtime's live face (kit-controls-live.test.tsx,
+  // byte for byte). Against the registry's STATIC face below, exactly the two differences between the faces remain:
+  // the static face stamps its bindings (`data-mx-bound`) and marks a writer-less field read-only.
+  it('Input, Textarea, Segmented, Slider, Switch and DatePicker match today\'s static face except where the live face differs', () => {
     const { host } = mount(undefined, () => <>
       <Input label="Name" placeholder="Your name" value="$name" id="in" />
       <Textarea label="Notes" rows={3} value="$notes" id="ta" />
@@ -32,7 +35,14 @@ describe('controls', () => {
       <Switch label="On" checked="$on" id="sw" />
       <DatePicker label="When" value="$when" id="dp" />
     </>);
-    expect(parityOf('<Input label="Name" placeholder="Your name" value="$name" id="in" /><Textarea label="Notes" rows={3} value="$notes" id="ta" /><Segmented label="Size" value="$size" options={["S","M","L"]} id="seg" /><Slider label="Amount" value="$amount" min={0} max={10} step={1} id="sl" /><Switch label="On" checked="$on" id="sw" /><DatePicker label="When" value="$when" id="dp" />', host)).toEqual([]);
+    expect(parityOf('<Input label="Name" placeholder="Your name" value="$name" id="in" /><Textarea label="Notes" rows={3} value="$notes" id="ta" /><Segmented label="Size" value="$size" options={["S","M","L"]} id="seg" /><Slider label="Amount" value="$amount" min={0} max={10} step={1} id="sl" /><Switch label="On" checked="$on" id="sw" /><DatePicker label="When" value="$when" id="dp" />', host)).toEqual([
+      '/0<div> @data-mx-bound: "value:$name" vs undefined', '/0<div>/1<input> @readonly: "" vs undefined',
+      '/1<div> @data-mx-bound: "value:$notes" vs undefined', '/1<div>/1<textarea> @readonly: "" vs undefined',
+      '/2<div> @data-mx-bound: "value:$size" vs undefined',
+      '/3<div> @data-mx-bound: "value:$amount" vs undefined', '/3<div>/1<input> @readonly: "" vs undefined',
+      '/4<div> @data-mx-bound: "checked:$on" vs undefined',
+      '/5<div> @data-mx-bound: "value:$when" vs undefined',
+    ]);
   });
 
   it('a control writes its value through the island, debounced for typing and at once for a switch', () => {
@@ -101,11 +111,16 @@ describe('people and files', () => {
 });
 
 describe('mermaid', () => {
-  it('draws from the stored drawing when one exists and marks itself ready without loading the engine', () => {
+  // A stored drawing is a StoredMermaidImage (story-runtime/contract: an image `src`, never inline SVG), shown as
+  // today's React Mermaid shows it: an <img>, `ready` once it has loaded (kit-mermaid.test.tsx holds the full parity).
+  it('draws from the stored drawing when one exists and marks itself ready once it loads, without loading the engine', () => {
     const island = fakeIsland();
-    island.drawings = () => ({ 'k:light': { svg: '<svg data-stored="1"></svg>', width: 100, height: 50 } as never });
+    island.drawings = () => ({ 'k:light': { src: '/assets/mermaid/k.svg', type: 'flowchart-v2', width: 100, height: 50, palette: 'p' } });
     const { host } = mount(island, () => <Mermaid code="graph TD; A-->B" colorMode="light" imageKey="k:light" id="m" />);
-    expect(host.querySelector('[data-mx-mermaid-state="ready"] svg[data-stored]')).toBeTruthy();
+    const img = host.querySelector('figure img[src="/assets/mermaid/k.svg"]');
+    expect(img).toBeTruthy();
+    img!.dispatchEvent(new Event('load'));
+    expect(host.querySelector('figure')?.getAttribute('data-mx-mermaid-state')).toBe('ready');
   });
 });
 

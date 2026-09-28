@@ -39,8 +39,10 @@ import { REF_ATTRS, carriesRef, refName, type Scalar } from '@/lib/story/dataflo
 import { resolveRefProps } from '@/lib/story/ref-data';
 import { discoverSlides, MIN_SLIDES_FOR_RAIL } from '@/lib/story-runtime/slides';
 import { createPreviewIdentityAllocator } from '@/lib/story-runtime/preview-identity';
-import { PUBLIC_BASE_URL } from '@/lib/config';
+import { ASSETS_ORIGIN, PUBLIC_BASE_URL } from '@/lib/config';
+import { compileManagedIframe } from '@/lib/story/managed-iframe';
 import { RECIPES, cn } from '@/lib/islands/kit/recipes';
+import { peopleClasses } from '@/lib/islands/kit/recipes/people';
 import type { GeneratedSources } from './codegen-safety';
 import { CHART_SLOT_ATTR, EMPTY_LINK_HINTS, type CompileInput, type CompiledPage, type CompilerBuild, type IslandRef } from './contract';
 import { linkHintsOf } from './links';
@@ -80,8 +82,8 @@ interface KitMeta {
   island?: true;
   /** API props: handed to the component; everything else is a DOM attribute. */
   api?: readonly string[];
-  /** `identity`: the DOM carries only the node's identity (id, data-mx-ast) — a store adapter. */
-  dom?: 'identity';
+  /** `identity`: the DOM carries only the node's identity (id, data-mx-ast) — a store adapter; `box`: the identity and the author's class. */
+  dom?: 'identity' | 'box';
   /** Honours the GridItem it sits in. */
   grid?: true;
   /** Its children are its spec, not content. */
@@ -100,7 +102,7 @@ export const KIT: Readonly<Record<string, KitMeta>> = {
   DataTable: { mod: 'data', island: true, api: ['data', 'columns', 'sort', 'height', 'sticky', 'rowKey', 'templates'], dom: 'identity', grid: true, noChildren: true },
   Files: { mod: 'files', island: true, api: ['data', 'variant', 'glyphs'], dom: 'identity' },
   Select: { mod: 'data', island: true, api: ['label', 'placeholder', 'value', 'options'] },
-  Button: { mod: 'basic', api: ['variant', 'size'] },
+  Button: { mod: 'basic', api: ['variant', 'size', 'run', 'set', 'args'] },
   Mermaid: { mod: 'mermaid', island: true, api: ['code', 'title', 'colorMode'], grid: true },
   Input: { mod: 'controls', island: true, api: ['label', 'placeholder', 'value', 'type', 'min', 'max', 'step', 'aria-label'] },
   Textarea: { mod: 'controls', island: true, api: ['label', 'placeholder', 'value', 'rows', 'aria-label'] },
@@ -113,14 +115,19 @@ export const KIT: Readonly<Record<string, KitMeta>> = {
   PopoverHeader: { mod: 'disclosure' }, PopoverTitle: { mod: 'disclosure' }, PopoverDescription: { mod: 'disclosure' },
   TooltipProvider: { mod: 'disclosure', island: true }, Tooltip: { mod: 'disclosure', island: true, api: ['defaultOpen'] }, TooltipTrigger: { mod: 'disclosure' }, TooltipContent: { mod: 'disclosure' },
   Avatar: { mod: 'disclosure', island: true, api: ['size'] }, AvatarImage: { mod: 'disclosure' }, AvatarFallback: { mod: 'disclosure' }, AvatarBadge: { mod: 'disclosure' }, AvatarGroup: { mod: 'disclosure' }, AvatarGroupCount: { mod: 'disclosure' },
-  User: { mod: 'people', island: true, api: ['userId', 'fallback', 'avatar', 'link'] }, UserImage: { mod: 'people', island: true, api: ['userId', 'fallback', 'size', 'decorative'] }, UserHandle: { mod: 'people', island: true, api: ['userId', 'fallback', 'link'] }, SignIn: { mod: 'people', island: true },
-  Dialog: { mod: 'dialog', island: true, api: ['defaultOpen'] }, DialogTrigger: { mod: 'dialog', api: ['wrapsControl', 'disabled'] }, DialogClose: { mod: 'dialog', api: ['wrapsControl', 'disabled'] }, DialogContent: { mod: 'dialog' },
+  // A person's class depends on whom it resolves to in the browser (a guest's fallback, a card): every state's class
+  // is evaluated here (recipes/people peopleClasses) and handed to the port as `classes`.
+  User: { mod: 'people', island: true, api: ['userId', 'fallback', 'avatar', 'link', 'classes'] }, UserImage: { mod: 'people', island: true, api: ['userId', 'fallback', 'size', 'decorative', 'classes'] }, UserHandle: { mod: 'people', island: true, api: ['userId', 'fallback', 'link', 'classes'] }, SignIn: { mod: 'people', island: true },
+  // Embeds with behaviour in a lazy chunk (lib/islands/kit/embed): today's managed frame and map.
+  Iframe: { mod: 'data', island: true, api: ['title', 'height', 'compiled', 'assetsOrigin'], dom: 'box', noChildren: true },
+  DeckGL: { mod: 'data', island: true, api: ['data', 'layers', 'basemap', 'initialViewState', 'tooltip', 'legend', 'title', 'height', 'colorMode'], dom: 'box', grid: true },
+  Dialog: { mod: 'dialog', island: true, api: ['defaultOpen'] }, DialogTrigger: { mod: 'dialog', api: ['wrapsControl', 'disabled'] }, DialogClose: { mod: 'dialog', api: ['wrapsControl', 'disabled'] }, DialogContent: { mod: 'dialog', api: ['run', 'args', 'stacked'] },
 };
 /** The rail's miniature stubs its embeds (StoryRuntimeApp PREVIEW_REGISTRY). */
 const PREVIEW_EMBEDS: Readonly<Record<string, string>> = { Question: 'chart', Number: '#', DataTable: 'table', Video: 'video' };
 const PREVIEW_STYLE = { display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%', height: '100%', minHeight: 120, border: '1px solid var(--border, rgba(128,128,128,0.35))', borderRadius: 6, background: 'color-mix(in srgb, var(--muted-foreground, gray) 6%, transparent)', font: '500 11px/1 var(--font-mono, ui-monospace, monospace)', letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--muted-foreground, graytext)' };
-/** Components whose HTML the React kit renders at compile time but whose BEHAVIOUR is not ported (reported as partial). */
-const PARTIAL: ReadonlySet<string> = new Set(['Iframe', 'DeckGL']);
+/** Components whose HTML the React kit renders at compile time but whose BEHAVIOUR is not ported (reported as partial). None: every registered component with behaviour has its island. */
+const PARTIAL: ReadonlySet<string> = new Set<string>([]);
 /** Registered tags that render nothing (declarations, templates). */
 const INERT: ReadonlySet<string> = new Set(['Helmet', 'Value', 'Query', 'Import', 'Mutation', 'Column']);
 /** Registered components with behaviour: always an island root when ported (and the partial ones, which the browser would run). */
@@ -194,6 +201,9 @@ function readsDataNode(node: JsxNode): boolean {
 }
 
 const isTableParts = (node: JsxElement): boolean => node.children.every((c) => (c.type === 'text' ? !c.value.trim() : c.type === 'element' && ['tr', 'td', 'th'].includes(c.tag)));
+
+/** The managed frame's author content compiled as inert data (lib/story/managed-iframe), or null when it is refused. */
+const managedFrameOf = (node: JsxElement) => { try { return compileManagedIframe(node); } catch { return null; } };
 
 /* ────────────────────────────────────────────────────────────────────────────
  * The generator
@@ -298,6 +308,8 @@ export function generate(input: GenerateInput): Generated {
       return `<rt.When test={${json(node.control.test)}} row={${ctx.row ?? 'undefined'}}${node.control.kind === 'conditional' ? ` fallback={<>${no}</>}` : ''}>{<>${yes}</>}</rt.When>`;
     }
     if (INERT.has(node.tag)) return '';
+    // A managed frame whose content is refused renders nothing (the interpreter's renderNode), island or not.
+    if (node.tag === 'Iframe' && !ctx.row && managedFrameOf(node) === null) return '';
     // An island root in the skeleton: rendered by its own island component, spliced in by the server.
     if (mode === 'static' && !ctx.preview && !PARTIAL.has(node.tag) && needsBrowser(node) && (selfDynamic(node) || mustPromote(node))) {
       const island: IslandBuild = { id: islands.length, path, source: '', kit: new Set(), readsData: !!input.flow && readsDataNode(node) };
@@ -325,6 +337,8 @@ export function generate(input: GenerateInput): Generated {
       const props = rawBuildProps(node.attributes, true, node.tag, path, undefined, {});
       // Decided here, never read from the author (interpreter BUTTON_TRIGGERS).
       if (node.tag === 'DialogTrigger' || node.tag === 'DialogClose') props.wrapsControl = wrapsControl(node);
+      // Today's dialog stacks its fields (and its mutation form is `display:contents`) only without an author class.
+      if (node.tag === 'DialogContent') props.stacked = !(typeof props.className === 'string' && props.className);
       // The runtime registry hands Mermaid the document's colour mode (StoryRuntimeApp RUNTIME_REGISTRY).
       if (node.tag === 'Mermaid') props.colorMode = input.colorMode ?? 'light';
       // <Column> children ARE the column spec (interpreter DataTable templates → parseColumnSpecs(templates.map(t => t.props))).
@@ -336,24 +350,38 @@ export function generate(input: GenerateInput): Generated {
         }
       }
       if (node.tag === 'Files') props.glyphs = input.glyphs ?? {};
+      if (node.tag === 'Iframe') {
+        // The interpreter's rules (renderNode): refused inside a row, and invalid content renders nothing.
+        if (ctx.row) return `<div role="alert">{${lit('DataTable and Iframe must be outside For templates')}}</div>`;
+        props.compiled = managedFrameOf(node);
+        if (ASSETS_ORIGIN) props.assetsOrigin = ASSETS_ORIGIN;
+      }
+      // The runtime hands the map the document's colour mode (StoryRuntimeApp RUNTIME_REGISTRY DeckGL).
+      if (node.tag === 'DeckGL') props.colorMode = input.colorMode ?? 'light';
+      const classes = peopleClasses(node.tag, props);
+      if (classes) props.classes = classes;
       const viz = props.viz as { recipe?: unknown } | undefined;
       if (node.tag === 'Question' && typeof viz?.recipe === 'string' && viz.recipe.startsWith('ref:')) props.recipeData = refData[viz.recipe.slice(4)] ?? null;
       const api: Props = Object.fromEntries((meta.api ?? []).filter((k) => props[k] !== undefined).map((k) => [k, props[k]]));
       // Class strings come from the recipes index AT COMPILE TIME: readers never download cva or tailwind-merge.
       const recipe = RECIPES[node.tag];
-      const cls = meta.dom === 'identity' ? null : recipe ? cn(recipe({ ...props })) : typeof props.className === 'string' ? props.className : null;
+      // In a fixed grid's tile the tile owns the size (components/kit/grid GridItemContext): the recipe and the port both know.
+      const inGrid = !!(meta.grid && ctx.grid && !ctx.grid.flow);
+      const cls = meta.dom === 'identity' ? null : recipe ? cn(recipe({ ...props, ...(inGrid ? { inGridItem: true } : {}) })) : typeof props.className === 'string' ? props.className : null;
       let dom: Props = { ...props };
       for (const k of [...(meta.api ?? []), 'className']) delete dom[k];
       if (ctx.preview) dom = (ctx.preview(createElement('div', dom), node, path) as ReactElement<Props>).props;
-      if (meta.dom === 'identity') dom = Object.fromEntries(Object.entries(dom).filter(([k]) => k === 'id' || k === AST));
+      if (meta.dom) dom = Object.fromEntries(Object.entries(dom).filter(([k]) => k === 'id' || k === AST));
       // A `<Question>`'s chart box: the assembler puts the snapshot's drawing inside it (contract CHART_SLOT_ATTR).
       if (node.tag === 'Question') dom[CHART_SLOT_ATTR] = typeof dom.id === 'string' && dom.id ? dom.id : path;
-      if (meta.grid && ctx.grid && !ctx.grid.flow) api.inGridItem = true;
+      if (inGrid) api.inGridItem = true;
       const attrs = domAttrs('div', dom).filter(([n]) => n !== 'class');
       const apiJsx = Object.entries(api).map(([k, v]) => ` ${safeAttr(k)}={${typeof v === 'string' ? lit(v) : json(v)}}`).join('');
       const clsJsx = cls ? ` class={${lit(cls)}}` : '';
       const tag = safeTag(node.tag);
-      if (ctx.row) return `<${tag}${apiJsx}${clsJsx} {...rt.rowAttrs(${json(Object.fromEntries(attrs))}, ${ctx.row}, ${ctx.scope})}>${children()}</${tag}>`;
+      // A row action writes with its row (interpreter rowAction → StoryRuntimeApp RuntimeRowAction).
+      const rowJsx = node.tag === 'Button' && (api.run !== undefined || api.set !== undefined) ? ` row={${ctx.row}} rowScope={${ctx.scope}}` : '';
+      if (ctx.row) return `<${tag}${apiJsx}${rowJsx}${clsJsx} {...rt.rowAttrs(${json(Object.fromEntries(attrs))}, ${ctx.row}, ${ctx.scope})}>${children()}</${tag}>`;
       return `<${tag}${apiJsx}${clsJsx}${attrsJsx(attrs)}>${meta.noChildren ? '' : children()}</${tag}>`;
     }
     const lower = node.tag.toLowerCase();
@@ -415,7 +443,11 @@ export function generate(input: GenerateInput): Generated {
     const svg = !!ctx.svg;
     const style = svg ? {} : { style: { minHeight: 1, ...((wrapper.style && typeof wrapper.style === 'object' ? wrapper.style : {}) as Props) } };
     const { className, ...rest } = wrapper;
-    const attrs = domAttrs(svg ? 'g' : 'div', { ...rest, ...(className ? { className } : {}), ...style, id: ownerId || undefined });
+    // The wrapper's style goes to rt.Repeat as `attr:style`: its spread then SETS the attribute (skipped while
+    // hydrating), keeping React's served `min-height:1px` byte for byte. A spread `style` would be rewritten
+    // through the CSSOM (`min-height: 1px;`) during hydration, which today's page never does.
+    const attrs = domAttrs(svg ? 'g' : 'div', { ...rest, ...(className ? { className } : {}), ...style, id: ownerId || undefined })
+      .map(([n, v]): Attr => [n === 'style' ? 'attr:style' : n, v]);
     const suffix = path.replace(/\./g, '_');
     const row = `row${suffix}`;
     const scope = `scope${suffix}`;
@@ -500,8 +532,11 @@ export async function compilePage(input: CompileInput, build: CompilerBuild): Pr
   const base = {
     build: build.id, islands: generated.islandRefs, behaviors: generated.behaviors, plan, links,
     kit: generated.kit, reactStatic: generated.reactStatic, unported: generated.unported, partial: generated.partial,
+    // Data for the page's JSON island, never module code (contract CompiledPage.authorScript).
+    authorScript: input.authorScript || null,
   };
   if (generated.unported.length) return { ...base, html: '', module: null, ssr: null };
-  const built = await buildDocumentModules(generated, { build, flow: input.flow, values: declaredValues(input.flow) });
+  // A version with an author script boots even with no island: its store and its author host start there.
+  const built = await buildDocumentModules(generated, { build, flow: input.flow, values: declaredValues(input.flow), boot: !!base.authorScript });
   return { ...base, html: built.html, module: built.module, ssr: built.ssr };
 }

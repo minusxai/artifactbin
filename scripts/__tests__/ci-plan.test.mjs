@@ -554,16 +554,16 @@ describe('CI job shape', () => {
     }
   });
 
-  it('fans the gate set over six runners and pulls the Postgres image the datasets gate drives', () => {
+  it('fans the gate set over seven runners and pulls the Postgres image the datasets gate drives', () => {
     const { jobs } = ci();
-    expect(jobs.gates.strategy.matrix.shard).toEqual([1, 2, 3, 4, 5, 6]);
+    expect(jobs.gates.strategy.matrix.shard).toEqual([1, 2, 3, 4, 5, 6, 7]);
     const run = jobs.gates.steps.find((step) => step.name === 'every gate, two servers');
     expect(run.run).toContain('--servers=2');
-    expect(run.run).toContain('--shard=${{ matrix.shard }}/6');
+    expect(run.run).toContain('--shard=${{ matrix.shard }}/7');
     const browser = jobs.gates.steps.find((step) => step.id === 'playwright');
     expect(browser.with.key).toContain("hashFiles('node_modules/playwright-core/browsers.json')");
     const selection = jobs.gates.steps.find(step => step.id === 'gate-browsers');
-    expect(selection.run).toContain('--browsers --shard=${{ matrix.shard }}/6');
+    expect(selection.run).toContain('--browsers --shard=${{ matrix.shard }}/7');
     const install = jobs.gates.steps.find(step => step.name === 'Install selected gate browsers');
     expect(install.env.BROWSERS).toBe('${{ steps.gate-browsers.outputs.browsers }}');
     expect(install.run).toContain('"$BROWSERS" != chromium');

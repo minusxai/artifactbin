@@ -222,7 +222,7 @@ async function compiledFor(row: ArtifactRow, page: PreparedPage, refData: Reader
     const compiled = await compilePage({
       nodes: page.data.nodes, colorMode: page.data.colorMode, template: page.data.template ?? null, chrome: page.data.chrome !== false,
       ...(page.data.glyphs ? { glyphs: page.data.glyphs } : {}),
-      refData: refData ?? {}, flow, build: build.id,
+      refData: refData ?? {}, flow, build: build.id, authorScript: page.authorScript,
       // The plan snapshots key on: the anonymous reader's admission, decided as the snapshot store decides it.
       ...(flow ? { access: await anonymousAccessFacts(row, flow) } : {}),
     }, build);
@@ -309,6 +309,31 @@ export async function preparedPageFor(stored: ArtifactRow, at: ArchivedRender | 
     console.warn('[prepared-page] write-back failed', row.id, slot, error);
   }
   return { row, page };
+}
+
+/**
+ * RECOMPILE A STORED PAGE with this deployment's compiler (docs/phase2-architecture.md §6): the
+ * stored compile is from another build, or no island build could be read when it was made. The
+ * compile (or its recorded failure) is written back beside the page — only onto the entry this read
+ * was served from (the same key), so a newer entry written meanwhile is never overwritten with an
+ * older version's compile. Null when this deployment does not compile. The serve path
+ * (lib/compiled-page/serve.server) races it against its inline budget; a compile that loses the race
+ * still lands here and the next read is a hit.
+ */
+export async function recompilePage(row: ArtifactRow, at: ArchivedRender | null, page: PreparedPage): Promise<StoredCompile | null> {
+  const compiler = compilerBuild();
+  if (!compiler) return null;
+  const compiled = await compiledFor(row, page, await refDataForRow(row), compiler);
+  try {
+    const db = await getDb();
+    await db.query(
+      `UPDATE prepared_pages SET page = jsonb_set(page, '{compiled}', $4::jsonb), updated_at = now() WHERE artifact_id = $1 AND slot = $2 AND page_key = $3`,
+      [row.id, slotOf(at), keyOf(row, compiler), JSON.stringify(compiled)],
+    );
+  } catch (error) {
+    console.warn('[prepared-page] compile write-back failed', row.id, error);
+  }
+  return compiled;
 }
 
 /**

@@ -177,7 +177,32 @@ export async function evaluateModule(code: string, imports: SsrImports, filename
   return fn(imports);
 }
 
-const SOLID: Readonly<Record<string, Record<string, unknown>>> = { 'solid-js': solid, 'solid-js/web': solidWeb, 'solid-js/store': solidStore };
+/**
+ * Solid's server spread (`ssrElement`) writes `class="<class> <className> "` — a trailing space, and
+ * `class=""` for an absent value — where React writes the value as given and omits an absent one. The
+ * kit spreads its authored props, so every server render (skeleton, islands, the kit's own server half)
+ * goes through this: the class value React would write, handed to Solid as `attr:class`, which it
+ * writes verbatim. Hydration leaves a served class alone, and a client render sets `className` exactly.
+ */
+type SsrElement = (tag: string, props: unknown, children: unknown, needsId: boolean) => unknown;
+const solidSsrElement = solidWeb.ssrElement as unknown as SsrElement;
+export const ssrElementReactClass: SsrElement = (tag, props, children, needsId) => {
+  const given = (typeof props === 'function' ? (props as () => unknown)() : props ?? {}) as Record<string, unknown>;
+  if ('classList' in given || !('class' in given || 'className' in given)) return solidSsrElement(tag, given, children, needsId);
+  const values = [given.class, given.className].filter((v) => v !== undefined && v !== null && v !== false);
+  const exact: Record<string, unknown> = {};
+  for (const key of Object.keys(given)) {
+    if (key === 'class' || key === 'className') {
+      if (values.length && !('attr:class' in exact)) exact['attr:class'] = values.join(' ');
+      continue;
+    }
+    // The descriptor, not the value: a `children` getter must run inside ssrElement, AFTER it takes the element's
+    // hydration key, or the children's components shift every key the browser expects.
+    Object.defineProperty(exact, key, Object.getOwnPropertyDescriptor(given, key)!);
+  }
+  return solidSsrElement(tag, exact, children, needsId);
+};
+const SOLID: Readonly<Record<string, Record<string, unknown>>> = { 'solid-js': solid, 'solid-js/web': { ...solidWeb, ssrElement: ssrElementReactClass }, 'solid-js/store': solidStore };
 
 /** An import table of this process's Solid plus the given namespaces (a test's stand-in server half). */
 export function ssrImportTable(extra: Readonly<Record<string, Record<string, unknown>>> = {}): SsrImports {
@@ -332,8 +357,8 @@ export function render(data) {
     ISLANDS.forEach(([renderId, Island], n) => {
       // Wrapped exactly as the browser's hydrateIsland wraps it (rt.withIsland): the wrapper's
       // component levels are part of Solid's hydration keys.
-      // Solid's server spread writes \`class="<value> "\` (a trailing space for classList); the kit's classes never end in one.
-      const island = $renderToString(() => rt.withIsland(Island, runtime.context), { renderId }).replace(/ class="([^"]*) "/g, ' class="$1"');
+      // Classes come out as React writes them: the injected Solid's ssrElement (ssrElementReactClass).
+      const island = $renderToString(() => rt.withIsland(Island, runtime.context), { renderId });
       html = html.replace('<mx-slot data-i="' + n + '"></mx-slot>', () => island);
     });
     return html;
@@ -391,17 +416,28 @@ export interface BuildOptions {
   ssrStore?: ModuleStore;
   /** The server import table (tests); the default is this process's Solid and the shared build's server half. */
   imports?: SsrImports;
+  /**
+   * Build the browser module even when the version has no island (`ISLANDS = []`): its page must still
+   * boot — a version with an author script starts the store and the author host there. No SSR module
+   * then: with no island, nothing in the story renders data, so the skeleton's HTML is the story.
+   */
+  boot?: boolean;
 }
 
 /**
  * Build one version's modules from its generated sources: the skeleton rendered to HTML; with
  * islands, the browser and SSR modules stored and `html` rendered through the SSR module in the
- * declared state. A version with no island has neither module.
+ * declared state. A version with no island has neither module — unless it must boot (`boot`), when it
+ * has the browser module alone.
  */
 export async function buildDocumentModules(sources: GeneratedSources & { islandRefs: readonly unknown[] }, options: BuildOptions): Promise<DocumentModules> {
   const skeletonHtml = await renderSkeleton(sources.skeleton, options.imports);
-  if (!sources.islandRefs.length) return { html: skeletonHtml, module: null, ssr: null };
+  if (!sources.islandRefs.length && !options.boot) return { html: skeletonHtml, module: null, ssr: null };
   const store = options.store ?? createModuleStore();
+  if (!sources.islandRefs.length) {
+    const browser = await browserModuleCode(sources.islands, options.build, options.flow);
+    return { html: skeletonHtml, module: await store.put(new TextEncoder().encode(browser.code), browser.imports), ssr: null };
+  }
   const ssrStore = options.ssrStore ?? createSsrModuleStore();
   const browser = await browserModuleCode(sources.islands, options.build, options.flow);
   const ssrCode = await ssrModuleCode(sources.islands, skeletonHtml, options.flow);

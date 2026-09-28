@@ -11,6 +11,8 @@ import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 import { mintToken } from '@/lib/tokens';
 import { STORY_ISLAND_ID } from '@/lib/story-runtime/contract';
 import { storyRuntimeSrc } from '@/lib/story/runtime-asset';
+import { setCompiledReaderFlagForTests } from '@/lib/compiled-page/reader-mode';
+import { drainPreparedPageWarmups } from '@/lib/story/prepared-page.server';
 
 const BASE = 'http://localhost:3000';
 const harness = useAppHarness();
@@ -43,6 +45,27 @@ const markupCspFor = (id: string) => [
   // Only this origin's own pages may FRAME a document. A third-party framer
   // becomes `window.parent`, and the parent is who the runtime takes edit-mode
   // and document-replacement commands from.
+  "frame-ancestors 'self'",
+  'sandbox allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox allow-top-navigation-by-user-activation',
+].join('; ');
+
+/**
+ * THE COMPILED READER'S policy (docs/phase2-architecture.md §9): the same sandbox and the same
+ * per-document doors, with two differences and no others — `script-src` admits NO inline script
+ * (`'self'` first: the page runs same-origin files only, its data is an `application/json` island),
+ * and `connect-src` adds the document's own viewer-overlay door (`/a/<id>/viewer`, fetched after paint).
+ */
+const compiledCspFor = (id: string) => [
+  "default-src 'none'",
+  `script-src 'self' 'wasm-unsafe-eval' ${BASE}/libraries/`,
+  "style-src 'unsafe-inline'",
+  "img-src 'self' data: blob:",
+  "font-src 'self' data:",
+  "media-src 'self' data: blob:",
+  "frame-src 'self'",
+  `connect-src ${BASE}/a/${id}/query ${BASE}/a/${id}/events ${BASE}/a/${id}/events/frame ${BASE}/a/${id}/mutate ${BASE}/a/${id}/resolve ${BASE}/a/${id}/viewer ${BASE}/geojson/ ${BASE}/basemap/ ${BASE}/story/ ${BASE}/fonts/ blob: data:`,
+  "form-action 'none'",
+  "base-uri 'none'",
   "frame-ancestors 'self'",
   'sandbox allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox allow-top-navigation-by-user-activation',
 ].join('; ');
@@ -96,6 +119,25 @@ describe('/a/<id>/raw for markup rows', () => {
     expect(fwd.headers.get('Content-Security-Policy')).toContain(`connect-src https://artifactbin.dev/a/${id}/query`);
     expect(res.headers.get('Cache-Control')).toBe('no-store');
     expect(res.headers.get('X-Content-Type-Options')).toBe('nosniff');
+  });
+
+  it('carries the exact COMPILED policy on a compiled response: no inline script, the viewer door added, nothing else changed', async () => {
+    setCompiledReaderFlagForTests('shadow');
+    try {
+      const id = await publish('<h1>Hello</h1><p>x</p>');
+      await drainPreparedPageWarmups();
+      const res = await serveArtifact(request(`/a/${id}/raw?reader=compiled`), params({ id }));
+      expect(res.headers.get('x-mx-reader')).toBe('compiled');
+      expect(res.headers.get('Content-Security-Policy')).toBe(compiledCspFor(id));
+      expect(res.headers.get('Cache-Control')).toBe('no-store');
+      expect(res.headers.get('X-Content-Type-Options')).toBe('nosniff');
+      // …and today's renderer, asked for by name on the same deployment, keeps today's policy exactly.
+      const legacy = await serveArtifact(request(`/a/${id}/raw?reader=legacy`), params({ id }));
+      expect(legacy.headers.get('x-mx-reader')).toBe('legacy');
+      expect(legacy.headers.get('Content-Security-Policy')).toBe(markupCspFor(id));
+    } finally {
+      setCompiledReaderFlagForTests(null);
+    }
   });
 
   it('names its own query url in the island, so the top-level document can fetch its re-runs — and a document that declares data hydrates even with no component (its bound control needs the store)', async () => {

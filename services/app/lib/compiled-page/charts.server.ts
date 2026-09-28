@@ -32,6 +32,7 @@ import { isInteractiveMapEnvelope } from '@/lib/viz/interactive-map';
 import { computeFacetLayoutPlan, computeLegendPlan, computeXLabelAngle, createVegaView, resolveEnvelopeSpec, toVegaSpec } from '@/lib/viz/render-vega';
 import type { ServedResults } from '@/lib/story-runtime/contract';
 import type { DrawnChart } from './contract';
+import { DRAWING_CLASS } from '@/lib/islands/chart';
 
 /** The width a snapshot draws at when nothing says how wide the slot is (render-vega's headless default). */
 export const SNAPSHOT_CHART_WIDTH = 640;
@@ -146,6 +147,21 @@ function scopeIds(svg: string): string {
   return inTags((id) => `${prefix}-${index(id)}`);
 }
 
+/**
+ * The drawing as it is served: the root `<svg>` fills its chart box instead of sizing it
+ * (`DRAWING_CLASS`; its viewBox scales the marks). The server draws at the question's nominal size,
+ * and the page may make the box smaller (a fixed-height card, a grid cell) or wider; a drawing in the
+ * flow would hold the box at its own size until the island redrew it, and the page would move.
+ * Its `width`/`height` attributes stay as the size it was drawn at.
+ */
+function responsive(svg: string): string {
+  return svg.replace(/^<svg\b([^>]*)>/, (root, attrs: string) => {
+    const cls = /\sclass="([^"]*)"/.exec(attrs);
+    const merged = [...(cls?.[1] ? cls[1].split(/\s+/) : []), ...DRAWING_CLASS.split(' ')].join(' ');
+    return cls ? root.replace(cls[0], ` class="${merged}"`) : `<svg class="${merged}"${attrs}>`;
+  });
+}
+
 /** Draw one chart (contract `DrawnChart`). Throws when the chart cannot be drawn faithfully on the server. */
 export async function drawChart(input: DrawChartInput): Promise<DrawnChart> {
   const { table, width, height, colorMode } = input;
@@ -181,7 +197,7 @@ export async function drawChart(input: DrawChartInput): Promise<DrawnChart> {
     if (!facetLayout) view.width(width).height(height);
     await view.runAsync();
     if (errors.length) throw errors[0] instanceof Error ? errors[0] : new Error(String(errors[0]));
-    const svg = scopeIds(await view.toSVG());
+    const svg = responsive(scopeIds(await view.toSVG()));
     if (!svgIsSafe(svg)) throw new Error('the drawing carries markup a reader page may not');
     return { svg, table: input.name ?? '', rows: rowsDigest(table.rows) };
   } finally {

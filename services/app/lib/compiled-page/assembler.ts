@@ -12,7 +12,8 @@
  *     the serve path's render, placed verbatim and never re-rendered here —
  *     with the snapshot's server-drawn charts put into their slots;
  *   - the island data as `<script type="application/json" id="mx-story-data">`,
- *     every `<`, `>`, U+2028 and U+2029 escaped, only on a page that boots;
+ *     every `<`, `>`, U+2028 and U+2029 escaped, only on a page that boots — the
+ *     version's author script among it, as data for the sandboxed author frame;
  *   - the per-document module, its shared closure preloaded, and the idle SPA
  *     entry — every script a same-origin `src`, so the page runs under
  *     `script-src 'self'` with NO inline script at all;
@@ -31,6 +32,8 @@ import { STORY_ROOT_ID } from '@/lib/story-runtime/contract';
 import { fontPreloadTags } from '@/lib/story/first-screen-fonts';
 import { inlineStoryElement } from '@/lib/story/inline-story-html';
 import { escapeHtml, renderReaderChrome } from '@/lib/story/reader-chrome';
+import { APP_BAR_H } from '@/lib/story/edit-bar';
+import { DOCUMENT_ROOT_CSS } from '@/lib/story/document-styles';
 import {
   CHART_SLOT_ATTR, CHART_STATE_ATTR, ISLAND_DATA_ID, SIGNED_IN_HINT_ATTR, SPA_IDLE_ATTR, SPECULATION_RULES_HEADER,
   type AssembleHead, type AssembleInput, type AssembleReaderPage, type AssembledPage, type CompilerBuild, type DrawnChart,
@@ -62,13 +65,23 @@ export const assembleReaderPage: AssembleReaderPage = (input: AssembleInput): As
     + fontPreloadTags(input.fontPreloads)
     + islandPreloads.map(modulePreload).join('')
     + prefetch.map((href) => `<link rel="prefetch" href="${escapeHtml(href)}" as="document">`).join('')
-    + '<style>:root{--mx-vh:100vh}body{margin:0}</style>'
+    + (input.sheets
+      // Today's standalone document's sheets, exactly (lib/story/document-styles).
+      ? `<style>${DOCUMENT_ROOT_CSS}</style>` + input.sheets.map((sheet) => styleTag(sheet.attr, sheet.css)).join('')
+      : '<style>:root{--mx-vh:100vh}body{margin:0}</style>')
     + (chrome ? styleTag('data-mx-chrome', STORY_CHROME_CSS) : '')
-    + (input.css ? styleTag('data-mx-story-css', input.css) : '');
+    // The page the app adopts (/a/:id): its bar is the top of the page from a phone's width up, so the
+    // story reserves it before first paint and the app's arrival moves nothing. On <body>: the story
+    // root is the body's own child (a rule on the root itself does not hold).
+    + (spa ? styleTag('data-mx-app-reserve', `@media(min-width:640px){body:has(> [data-mx-inline-story]){padding-top:${APP_BAR_H}px}}`) : '')
+    + (input.css && !input.sheets ? styleTag('data-mx-story-css', input.css) : '')
+    + (input.footer?.css ? styleTag('data-mx-footer-css', input.footer.css) : '');
 
   const body =
     story
     + (chrome ? renderReaderChrome(chrome) : '')
+    // Page furniture after the story root, never inside it: the hydrated tree never sees it.
+    + (input.footer?.html ?? '')
     + (module ? `<script type="application/json" id="${ISLAND_DATA_ID}">${scriptJson(islandData(input))}</script>` : '')
     + behaviorSrcs.map((src) => moduleScript(src)).join('')
     + (module ? moduleScript(module.url) : '')
@@ -77,8 +90,11 @@ export const assembleReaderPage: AssembleReaderPage = (input: AssembleInput): As
     + (help ? agentDiscoveryTail(help) : '');
 
   const html =
-    `<!doctype html><html class="${escapeHtml(input.colorMode)}"${overlay.signedIn ? ` ${SIGNED_IN_HINT_ATTR}=""` : ''}>`
-    + `<head>${head}</head><body>${body}</body></html>`;
+    `<!doctype html><html class="${escapeHtml(input.colorMode)}"`
+    // The standalone document's sheets name the theme on the DOCUMENT element (`:root:where([data-theme])`).
+    + (input.sheets && input.theme ? ` data-theme="${escapeHtml(input.theme)}"` : '')
+    + `${overlay.signedIn ? ` ${SIGNED_IN_HINT_ATTR}=""` : ''}>`
+    + `<head>${head}</head><body${liveAttrs(input.live ?? null)}>${body}</body></html>`;
 
   const headers: Record<string, string> = {};
   if (rules) headers[SPECULATION_RULES_HEADER] = `"${rules.url}"`;
@@ -92,6 +108,10 @@ export const assembleReaderPage: AssembleReaderPage = (input: AssembleInput): As
  * ────────────────────────────────────────────────────────────────────────── */
 
 const unique = (urls: readonly string[]): string[] => [...new Set(urls)];
+
+/** The document's live identity on `<body>`, which the island runtime's boot opens the live stream from. */
+const liveAttrs = (live: AssembleInput['live']): string =>
+  (live ? ` data-mx-live-id="${escapeHtml(live.id)}" data-mx-live-edit="${escapeHtml(live.editId)}"` : '');
 
 /**
  * `crossorigin` on every module fetch, script and preload alike: a `/raw` copy
@@ -145,6 +165,9 @@ function islandData(input: AssembleInput): IslandPageData {
     signedIn: overlay.signedIn,
     mermaidImages: overlay.mermaidImages,
     readOnly: overlay.readOnly ?? null,
+    // The version's author script rides as DATA (escaped by scriptJson), for boot's lazy author host to
+    // hand to its sandboxed frame; it is never a script of this page (contract CompiledPage.authorScript).
+    ...(input.compiled.authorScript ? { authorScript: input.compiled.authorScript } : {}),
   };
 }
 

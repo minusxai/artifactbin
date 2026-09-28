@@ -107,4 +107,12 @@ describe('dockerRunArgs', () => {
     expect(args.slice(args.indexOf('afbin-gate:pw1-abc') + 1)).toEqual(['node', `${INSIDE.src}/scripts/gate-container.mjs`, '--inside', '--servers', '2', 'hydration', 'fonts']);
     expect(args.filter((_, i) => args[i - 1] === '-e')).toEqual(['DATASET__ALLOW_PRIVATE_NETWORKS=true']);
   });
+
+  it('forwards the reader switches from the runner\'s environment, and nothing else from it', () => {
+    const forwarded = dockerRunArgs({
+      name: 'n', image: 'afbin-gate:pw1-abc', volume: 'v', worktree: '/w', cpus: 4, memory: '8g', servers: 2, gates: ['compiled-parity'],
+      env: { FLAG__COMPILED_READER: 'on', GATE_READER: 'compiled', AUTH__SECRET: 'never', HOME: '/Users/me' },
+    });
+    expect(forwarded.filter((_, i) => forwarded[i - 1] === '-e')).toEqual(['DATASET__ALLOW_PRIVATE_NETWORKS=true', 'FLAG__COMPILED_READER=on', 'GATE_READER=compiled']);
+  });
 });

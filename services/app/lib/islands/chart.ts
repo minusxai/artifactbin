@@ -1,6 +1,7 @@
 /**
- * THE LAZY CHART MODULE. A `<Question>` island's chart slot (`data-mx-chart-slot`) arrives drawn by
- * the server; Vega loads in the browser only when the chart must be drawn here — its table changed
+ * THE LAZY CHART MODULE. A `<Question>` island's drawing box arrives drawn by the server (the
+ * assembler finds it by `data-mx-chart-slot`, its handle only — the island removes the attribute on
+ * mount); Vega loads in the browser only when the chart must be drawn here — its table changed
  * since the drawing, or the reader interacts (docs/phase2-architecture.md §2.4). `loadChart` imports
  * the controller chunk (chart-controller.ts: Vega and lib/viz) on the first call, once per page;
  * nothing here imports Vega statically. Islands reach it as `IslandContext.loadChart` (boot injects it).
@@ -8,6 +9,15 @@
 import type { DrawnChart } from '@/lib/compiled-page/contract';
 import type { IslandChartModule } from './contract';
 import { rowsDigest } from './digest';
+
+/**
+ * The classes a server drawing's root `<svg>` carries (charts.server `drawChart`): out of flow and the
+ * full size of its chart box, scaled by its viewBox. The box then has exactly the size today's reader
+ * gives it — its own layout, never the drawing's nominal height — from the first paint, so nothing
+ * moves when the island hydrates or when Vega later draws the chart at the box's size. Utilities of
+ * the recipe base, so every reader sheet compiles them.
+ */
+export const DRAWING_CLASS = 'absolute inset-0 size-full';
 
 let controller: Promise<IslandChartModule> | null = null;
 

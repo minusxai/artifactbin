@@ -36,7 +36,7 @@ import path from 'node:path';
 import readline from 'node:readline';
 import { fileURLToPath } from 'node:url';
 import { checkGates, containerName, depsVolume, dockerfile, dockerRunArgs, imageTag, INSIDE, parseArgs } from './lib/gate-container.mjs';
-import { gateNamesOnDisk } from './gates.manifest.mjs';
+import { compiledLegNames, gateNamesOnDisk } from './gates.manifest.mjs';
 import { acquireSlot, parseMemory, slotCount } from './lib/gate-slots.mjs';
 import { normalisedLock } from './lib/lock-fingerprint.mjs';
 
@@ -95,7 +95,8 @@ function sourceFiles() {
 }
 
 async function host({ cpus, memory, servers, gates }) {
-  const known = gateNamesOnDisk(readdirSync(HERE));
+  // A compiled leg (`<gate>@compiled`, gates.manifest COMPILED_LEGS) runs like a gate, on its own compiled-reader servers.
+  const known = [...gateNamesOnDisk(readdirSync(HERE)), ...compiledLegNames({ all: true })];
   let engine;
   let tag;
   let volume;
@@ -134,7 +135,7 @@ async function host({ cpus, memory, servers, gates }) {
   console.log(`gate slot ${slot.index}/${slots} (waited ${waited}); container ${name}: ${cpus} CPUs, ${memory}, ${servers} server(s), gates: ${gates.join(' ')}`);
 
   const started = Date.now();
-  const child = spawn('docker', dockerRunArgs({ name, image: tag, volume, worktree: ROOT, cpus, memory, servers, gates }), {
+  const child = spawn('docker', dockerRunArgs({ name, image: tag, volume, worktree: ROOT, cpus, memory, servers, gates, env: process.env }), {
     stdio: ['pipe', 'inherit', 'inherit'],
   });
   child.stdin.on('error', () => { /* the container ended first */ });
