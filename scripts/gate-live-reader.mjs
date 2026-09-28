@@ -20,6 +20,7 @@ import {fixtureFetch as fetch} from './lib/fixture-http.mjs';
 import { chromium } from 'playwright';
 import { startDocument } from './lib/start-doc.mjs';
 import { openArtifactControls, revealReaderChrome } from './lib/reveal-chrome.mjs';
+import { legacyOnly, readerUrl } from './lib/gate-reader.mjs';
 
 const BASE = process.argv[2] ?? 'http://localhost:3030';
 const check = createChecker('live-reader');
@@ -62,7 +63,7 @@ const browser = await chromium.launch();
   const page = await ctx.newPage({ viewport: { width: 1200, height: 900 } });
   let reloads = 0;
   page.on('framenavigated', (f) => { if (f === page.mainFrame()) reloads++; });
-  await page.goto(`${BASE}/a/${doc.id}`, { waitUntil: 'load' });
+  await page.goto(readerUrl(`${BASE}/a/${doc.id}`), { waitUntil: 'load' });
   await page.waitForFunction(() => /the first version/.test(document.body.textContent ?? ''), null, { timeout: 20000 });
   check(await servedTopLevel(page), 'the reader gets the document itself, not the app shell');
   await sleep(3000);
@@ -88,8 +89,13 @@ const browser = await chromium.launch();
     chartKept: document.querySelector('[aria-label="Question embed"] svg, [aria-label="Question embed"] canvas')?.__probe ?? null,
   }));
   check(/THE AGENT REWROTE THIS/.test(after.text), "the reader sees the agent's write, with no reload of their own");
-  check(reloads === loadsBefore, `and the page was never navigated to do it (${reloads - loadsBefore})`);
-  check(before.chart && after.chartKept === 'keep', 'the chart kept its rendered element through the update');
+  // The compiled page cannot re-render its static parts in the browser: until the app has adopted it, a
+  // new version is a reload that keeps the reader's place (lib/islands/live); once adopted, the app's
+  // interpreter draws the new version afresh (components/IslandStory, docs/phase2-architecture.md §7.3).
+  legacyOnly(check, 'a new version reloads the compiled page (place kept, checked below) rather than re-rendering it in place', () => {
+    check(reloads === loadsBefore, `and the page was never navigated to do it (${reloads - loadsBefore})`);
+    check(before.chart && after.chartKept === 'keep', 'the chart kept its rendered element through the update');
+  });
   check(Math.abs(after.y - before.y) < 60, `and the reader kept their place (${before.y} → ${after.y})`);
   await ctx.close();
 }
@@ -99,7 +105,7 @@ const browser = await chromium.launch();
   const doc = await publish(prose('the first version'));
   const ctx = await browser.newContext();
   const page = await ctx.newPage({ viewport: { width: 1200, height: 900 } });
-  await page.goto(`${BASE}/a/${doc.id}`, { waitUntil: 'load' });
+  await page.goto(readerUrl(`${BASE}/a/${doc.id}`), { waitUntil: 'load' });
   await page.waitForFunction(() => /the first version/.test(document.body.textContent ?? ''), null, { timeout: 20000 });
   await sleep(2000);
   await page.evaluate(() => window.scrollTo(0, Math.round((document.documentElement.scrollHeight - window.innerHeight) * 0.45)));
@@ -121,7 +127,7 @@ const browser = await chromium.launch();
   const doc = await publish(withChart('mode probe'));
   const ctx = await browser.newContext();
   const page = await ctx.newPage({ viewport: { width: 1200, height: 900 } });
-  await page.goto(`${BASE}/a/${doc.id}`, { waitUntil: 'load' });
+  await page.goto(readerUrl(`${BASE}/a/${doc.id}`), { waitUntil: 'load' });
   await page.waitForFunction(() => /mode probe/.test(document.body.textContent ?? ''), null, { timeout: 20000 });
   await sleep(2500);
   check(await page.evaluate(() => document.querySelector("[data-mx-inline-story]:not([data-mx-initial-story])").classList.contains('light')), 'an unthemed document opens in the author default (light)');
@@ -145,7 +151,7 @@ const browser = await chromium.launch();
   const doc = await publish(prose('mode prose probe'));
   const ctx = await browser.newContext();
   const page = await ctx.newPage({ viewport: { width: 1200, height: 900 } });
-  await page.goto(`${BASE}/a/${doc.id}`, { waitUntil: 'load' });
+  await page.goto(readerUrl(`${BASE}/a/${doc.id}`), { waitUntil: 'load' });
   await page.waitForFunction(() => /mode prose probe/.test(document.body.textContent ?? ''), null, { timeout: 20000 });
   await sleep(2000);
   await revealReaderChrome(page);

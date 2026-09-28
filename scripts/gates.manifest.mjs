@@ -90,6 +90,48 @@ export const GATE_SPECS = Object.freeze([
 ]);
 
 /**
+ * THE COMPILED LEGS (docs/phase2-architecture.md §10, w3-behaviour). The behavioural gates run a second
+ * time against the compiled reader: the leg `<gate>@compiled` is the same file, run with
+ * `GATE_READER=compiled` against servers booted with `FLAG__COMPILED_READER=on` (every reader page is the
+ * compiled one wherever a compile exists), so wave 4 deletes the legacy reader behind gates that already
+ * pass without it. A leg is sharded and timed like any gate (its own `timeoutMs`, measured the same way).
+ *
+ * A `disabled` leg is wired — `--only=<gate>@compiled` runs it — but not in the default set, with the
+ * reason it cannot pass yet. Every leg names a gate on disk (`checkLegs`).
+ *
+ * @typedef {object} CompiledLeg
+ * @property {string} gate          the gate it runs again (`gate-<gate>.mjs`)
+ * @property {number} timeoutMs     the runner kills the leg past this
+ * @property {string} [disabled]    why the leg is not in the default set yet
+ */
+export const COMPILED = '@compiled';
+
+/** @type {readonly CompiledLeg[]} */
+export const COMPILED_LEGS = Object.freeze([
+  { gate: 'live-data', timeoutMs: 60_000 },
+  { gate: 'full-kit', timeoutMs: 90_000 },
+  { gate: 'export-slice', timeoutMs: 60_000 },
+  { gate: 'layout-shift', timeoutMs: 140_000 },
+  { gate: 'live-reader', timeoutMs: 70_000 },
+  { gate: 'hydration', timeoutMs: 190_000, disabled: 'its takeover legs 1–3 assert React hydrating the legacy inline story; the compiled takeover (leg 4) already runs in the plain gate on ?reader=compiled' },
+  { gate: 'reader-chrome', timeoutMs: 110_000, disabled: 'the compiled app page\'s served chrome has no reveal-on-scroll rule and opens no settings panel until the app loads (lib/story-runtime/reader-chrome-actions runs on today\'s documents only)' },
+  { gate: 'dataflow', timeoutMs: 60_000, disabled: 'the compiled page runs no in-browser SQLite engine yet (IslandPageData carries no `hold`/`sqliteWasm`): six checks assert the page engine' },
+]);
+
+/** `<gate>@compiled` → `<gate>`; a gate name is itself. */
+export const gateOf = (name) => (name.endsWith(COMPILED) ? name.slice(0, -COMPILED.length) : name);
+export const isCompiledLeg = (name) => name.endsWith(COMPILED);
+/** The legs a default run includes, by name. */
+export const compiledLegNames = ({ all = false } = {}) => COMPILED_LEGS.filter((leg) => all || !leg.disabled).map((leg) => `${leg.gate}${COMPILED}`);
+
+/** Every leg names a gate on disk, once. Throws naming the strays. @param {readonly string[]} diskNames */
+export function checkLegs(diskNames, legs = COMPILED_LEGS) {
+  const stray = legs.filter((leg) => !diskNames.includes(leg.gate)).map((leg) => leg.gate);
+  const twice = legs.map((leg) => leg.gate).filter((gate, i, all) => all.indexOf(gate) !== i);
+  if (stray.length || twice.length) throw new Error(`Compiled legs do not match disk (${[stray.length ? `no gate for: ${stray.join(', ')}` : '', twice.length ? `named twice: ${twice.join(', ')}` : ''].filter(Boolean).join('; ')})`);
+}
+
+/**
  * Scripts named `gate-*.mjs` that RUN gates rather than being one: scripts/gate-container.mjs runs a
  * set in a Linux container. Discovery leaves them out, so they need no row and never run as a gate.
  */
@@ -122,11 +164,14 @@ export function checkManifest(diskNames, specs) {
   throw new Error(`Gate manifest does not match disk (${facts.join('; ')})`);
 }
 
-/** The row for one gate, or throws naming it. @param {string} name */
+/** The row for one gate (a compiled leg: its gate's row, with the leg's name and timeout), or throws naming it. @param {string} name */
 export function specFor(name) {
-  const spec = GATE_SPECS.find((candidate) => candidate.name === name);
+  const spec = GATE_SPECS.find((candidate) => candidate.name === gateOf(name));
   if (!spec) throw new Error(`Gate manifest has no row for: ${name}`);
-  return spec;
+  if (!isCompiledLeg(name)) return spec;
+  const leg = COMPILED_LEGS.find((candidate) => candidate.gate === spec.name);
+  if (!leg) throw new Error(`Gate manifest has no compiled leg for: ${name}`);
+  return { ...spec, name, timeoutMs: leg.timeoutMs };
 }
 
 /** Browser installation plan for exactly the gates this runner will execute. */

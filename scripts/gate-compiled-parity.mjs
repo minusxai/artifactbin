@@ -111,8 +111,10 @@ const SNAPSHOT = (STYLE) => {
   return root ? [...root.children].filter((c) => c.tagName !== 'LINK').map(walk) : [];
 };
 
+// Both readers are captured settled: no chart, busy box or Mermaid figure still drawing (a figure the version has
+// no stored drawing for draws in the browser on either reader, and the capture must not race it).
 const settle = async (page) => {
-  await page.waitForFunction(() => { const r = document.getElementById('mx-story-root'); return r && !r.querySelector('[data-mx-chart-state="pending"],[aria-busy="true"]'); }, null, { timeout: 30000 }).catch(() => {});
+  await page.waitForFunction(() => { const r = document.getElementById('mx-story-root'); return r && !r.querySelector('[data-mx-chart-state="pending"],[aria-busy="true"],[data-mx-mermaid-state="pending"]'); }, null, { timeout: 30000 }).catch(() => {});
   await page.waitForTimeout(1500);
 };
 
