@@ -88,3 +88,5 @@ it('artifact heads and archived versions have no content column',()=>{
   expect(sql).toContain(`ALTER TABLE app.${table} DROP COLUMN IF EXISTS content`);
  }
 });
+
+it('artifact-specific consent lives on the existing app relation',()=>{expect(declared()['app.relations']).toBe('app');expect(renderedSchema().schema).toContain('explicit_join BOOLEAN NOT NULL DEFAULT false');});

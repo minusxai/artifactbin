@@ -1,3 +1,4 @@
+import {backfillExplicitJoins} from './relation-state';
 /**
  * Database adapter: PGLite (embedded, default) or Postgres — selected by ONE
  * env, `DATABASE_URL`, via scheme dispatch (lib/database-url parseDatabaseUrl).
@@ -326,6 +327,7 @@ async function createDb(): Promise<Db> {
 async function applyBackfills(db: Db): Promise<void> {
   const { backfillUserKinds } = await import('./testusers');
   await backfillUserKinds(db);
+  await backfillExplicitJoins(db);
   // Existing likes/follows predate lifecycle fields. Membership has no legacy migration.
   await db.query("UPDATE relations SET initiated_by=coalesce(initiated_by,subject_id),accepted_at=coalesce(accepted_at,created_at),status=CASE WHEN deleted_at IS NULL THEN status ELSE 'left' END WHERE verb IN ('like','follow') AND initiated_by IS NULL");
 }
