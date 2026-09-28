@@ -211,6 +211,17 @@ function DataGrid(props: DataTableProps & { table: TableResult }) {
   });
   // Rows are keyed by the row object, so the rows served with the page are the rows of the virtual window.
   const placed = createMemo(() => new Map(visible().map(v => [v.row, v])));
+  // Reconciliation can keep a row proxy while moving a different key into it. A key change must
+  // rebuild the row's comment metadata; same-key content still updates through reactive cell reads.
+  const instances = new WeakMap<Row, Map<unknown, { row: Row; key: unknown }>>();
+  const rendered = createMemo(() => visible().map(({ row }) => {
+    const key = props.rowKey ? row[props.rowKey] : row;
+    let keys = instances.get(row);
+    if (!keys) { keys = new Map(); instances.set(row, keys); }
+    let instance = keys.get(key);
+    if (!instance) { instance = { row, key }; keys.set(key, instance); }
+    return instance;
+  }));
   // Today's switch: virtual once mounted with a measured height, whatever the row count; the header
   // widths are read while the served table's auto layout is still on screen.
   onMount(() => { if (scroll?.clientHeight) { setMeasured([...scroll.querySelectorAll('thead th')].map(th => th.getBoundingClientRect().width)); setVirtual(true); } });
@@ -233,12 +244,13 @@ function DataGrid(props: DataTableProps & { table: TableResult }) {
           <For each={resolved()}>{column => <th {...attr('id', templateOf(column.col)?.id ?? (typeof templateOf(column.col)?.props?.id === 'string' ? templateOf(column.col)!.props!.id as string : undefined))} {...attr('data-mx-ast', templateOf(column.col)?.path)} scope="col" aria-label={`Sort by ${column.title}`} aria-sort={sort()?.col === column.col ? sort()?.dir === 'asc' ? 'ascending' : 'descending' : 'none'} {...attr('title', column.type === 'string' && !(table()?.columns ?? []).some(k => k.name === column.col) ? `"${column.col}" is not a column of this table` : undefined)} onClick={() => cycle(column.col)} class="cursor-pointer select-none whitespace-nowrap px-3 py-2 font-bold" style={css({ 'text-align': column.align, width: column.width ? `${column.width}px` : undefined })}>{column.title}<Show when={sort()?.col === column.col}><span aria-hidden="true" class="ml-1 opacity-70">{sort()?.dir === 'asc' ? '▲' : '▼'}</span></Show></th>}</For>
         </tr></thead>
         <tbody {...attr('style', virtual() ? css({ display: 'block', height: `${virtualizer.getTotalSize()}px`, position: 'relative' }) : undefined)}><Show when={ordered().length} fallback={<tr {...attr('style', virtual() ? css({ display: 'block' }) : undefined)}><td colSpan={Math.max(1, resolved().length)} class="block px-3 py-6 text-center text-muted-foreground">no rows</td></tr>}>
-          <For each={visible().map(v => v.row)}>{row => {
+          <For each={rendered()}>{instance => {
+            const row = instance.row;
             const at = () => placed().get(row);
             const index = () => at()?.index ?? 0;
             let el!: HTMLTableRowElement;
             createEffect(() => { if (virtual() && at()) virtualizer.measureElement(el); });
-            return <tr ref={el} {...rowMeta(row)} data-index={index()} class="border-b border-border/50 transition-colors hover:bg-muted/30" {...attr('style', at()?.start == null ? undefined : css({ ...rowGrid(), position: 'absolute', top: '0px', left: '0px', transform: `translateY(${at()!.start}px)` }))}><For each={resolved()}>{column => { const value = row[column.col]; const bar = barFraction(value, column); const tint = cellTint(value, column); return <td {...rowMeta(row, column.col)} class={`relative whitespace-nowrap px-3 py-1.5 align-middle${column.type === 'number' ? ' tabular-nums' : ''}`} style={css({ 'text-align': column.align, width: column.width ? `${column.width}px` : undefined, background: tint ?? undefined })}><Show when={bar !== null}><span data-bar="" aria-hidden="true" class="pointer-events-none absolute inset-y-1 left-1 rounded-sm opacity-25" style={css({ width: `${Math.round((bar ?? 0) * 100)}%`, background: typeof column.bar === 'object' && column.bar.color ? column.bar.color : 'var(--chart-1)' })} /></Show><span class="relative">{cell(value, column, row, index())}</span></td>; }}</For></tr>;
+          return <tr ref={el} {...rowMeta(row)} data-index={index()} class="border-b border-border/50 transition-colors hover:bg-muted/30" {...attr('style', at()?.start == null ? undefined : css({ ...rowGrid(), position: 'absolute', top: '0px', left: '0px', transform: `translateY(${at()!.start}px)` }))}><For each={resolved()}>{column => { const value = () => row[column.col]; const bar = () => barFraction(value(), column); const tint = () => cellTint(value(), column); return <td {...rowMeta(row, column.col)} class={`relative whitespace-nowrap px-3 py-1.5 align-middle${column.type === 'number' ? ' tabular-nums' : ''}`} style={css({ 'text-align': column.align, width: column.width ? `${column.width}px` : undefined, background: tint() ?? undefined })}><Show when={bar() !== null}><span data-bar="" aria-hidden="true" class="pointer-events-none absolute inset-y-1 left-1 rounded-sm opacity-25" style={css({ width: `${Math.round((bar() ?? 0) * 100)}%`, background: typeof column.bar === 'object' && column.bar.color ? column.bar.color : 'var(--chart-1)' })} /></Show><span class="relative">{cell(value(), column, row, index())}</span></td>; }}</For></tr>;
           }}</For>
         </Show></tbody>
       </table>

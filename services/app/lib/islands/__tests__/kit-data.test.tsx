@@ -9,6 +9,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { render } from 'solid-js/web';
 import { createSignal } from 'solid-js';
+import { createStore, reconcile } from 'solid-js/store';
 import { parityOf } from './kit-parity';
 import { IslandProvider } from '../context';
 import { fakeIsland } from './context.test';
@@ -133,6 +134,23 @@ describe('Question', () => {
 });
 
 describe('DataTable behavior', () => {
+  it('updates a comment target when a reconciled row proxy changes its key', () => {
+    const ctx = island();
+    const [state, setState] = createStore({ rows: [{ key: 'a', customer: 'Alice' }, { key: 'b', customer: 'Bob' }] });
+    ctx.table = () => ({ rows: state.rows, columns: [{ name: 'key', type: 'string' }, { name: 'customer', type: 'string' }] });
+    const { host, dispose } = mount(ctx, () => <DataTable data="$monthly" rowKey="key" id="orders" />);
+    const target = (name: string) => {
+      const cell = [...host.querySelectorAll('td')].find(node => node.textContent === name)!;
+      return JSON.parse(cell.getAttribute('data-mx-comment-target')!).rowKey;
+    };
+    expect(target('Alice')).toBe('a');
+    setState('rows', reconcile([{ key: 'b', customer: 'Bob updated' }, { key: 'a', customer: 'Alice updated' }], { merge: true }));
+    expect([...host.querySelectorAll('td')].map(node => node.textContent)).toContain('Alice updated');
+    expect(target('Alice updated')).toBe('a');
+    setState('rows', reconcile([{ key: 'b', customer: 'Bob updated' }], { merge: true }));
+    expect(host.textContent).not.toContain('Alice updated');
+    dispose();
+  });
   it('switches a measured long table from static rows to a virtual window', () => {
     const height = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'clientHeight');
     Object.defineProperty(HTMLElement.prototype, 'clientHeight', { configurable: true, get() { return 300; } });

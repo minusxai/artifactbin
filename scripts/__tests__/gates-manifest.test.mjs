@@ -171,9 +171,9 @@ it('balances the extra cross-browser setup without extending any test timeout', 
 
 it('prints the same browser plan used by shard selection without starting servers', () => {
   const set = [...onDisk, ...compiledLegNames()];
-  for (let index = 1; index <= 7; index++) {
-    const selected = shardOf(set, {index, total: 7}, shardWeight);
-    const output = execFileSync(process.execPath, [path.join(SCRIPTS, 'gates.mjs'), '--browsers', `--shard=${index}/7`], {encoding: 'utf8'}).trim();
+  for (let index = 1; index <= 8; index++) {
+    const selected = shardOf(set, {index, total: 8}, shardWeight);
+    const output = execFileSync(process.execPath, [path.join(SCRIPTS, 'gates.mjs'), '--browsers', `--shard=${index}/8`], {encoding: 'utf8'}).trim();
     expect(output).toBe(browsersFor(selected).join(' '));
   }
 });
@@ -188,7 +188,7 @@ describe('the compiled legs (w3-behaviour)', () => {
       if (leg.disabled !== undefined) expect(leg.disabled.length, leg.gate).toBeGreaterThan(20);
     }
     // The brief's behavioural set is wired, enabled or with its reason.
-    expect(COMPILED_LEGS.map((leg) => leg.gate).sort()).toEqual(['dataflow', 'export-slice', 'full-kit', 'hydration', 'layout-shift', 'live-data', 'live-reader', 'reader-chrome']);
+    expect(COMPILED_LEGS.map((leg) => leg.gate).sort()).toEqual(['annotations', 'collab-edit', 'comment-targets', 'dataflow', 'editor-v2', 'export-slice', 'full-kit', 'hydration', 'inplace-edit', 'layout-shift', 'live-data', 'live-reader', 'reader-chrome']);
   });
 
   it('a leg is its gate\'s row under its own name and timeout, and the default set leaves disabled legs out', () => {

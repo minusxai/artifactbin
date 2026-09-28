@@ -25,6 +25,7 @@ import { holdAnchor } from '@/lib/story-runtime/anchor-restore';
 import { readerMode, takeReloadAnchor } from '@/lib/story-runtime/reader-mode';
 import { chromeAfterSample, type ChromeState } from '@/lib/story-runtime/reader-chrome-policy';
 import { startIslandLive } from './live';
+import { PAGE_TAKEOVER_EVENT } from './page-lifetime';
 
 const STORY_ROOT_SELECTOR = '[data-mx-inline-story]';
 /**
@@ -77,7 +78,12 @@ export function startPage(doc: Document = document, win: Window = window): () =>
 
   const kept = takeReloadAnchor(win);
   if (kept) stops.push(holdAnchor(win, kept, applyAnchor));
-  return () => { for (const stop of stops.splice(0)) stop(); };
+  const stop = () => {
+    win.removeEventListener(PAGE_TAKEOVER_EVENT, stop);
+    for (const release of stops.splice(0)) release();
+  };
+  win.addEventListener(PAGE_TAKEOVER_EVENT, stop, { once: true });
+  return stop;
 }
 
 if (typeof document !== 'undefined' && typeof window !== 'undefined') startPage();

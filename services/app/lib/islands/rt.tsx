@@ -313,8 +313,27 @@ export function Repeat(props: RepeatProps): JSX.Element {
     const source: unknown = island.table(props.name)?.rows ?? island.values()[props.name] ?? [];
     return Array.isArray(source) ? (source as Row[]) : [];
   });
+  // A reconciled store can retain a row proxy while changing its key. Give that key a distinct
+  // For identity so the row's compiled scope and comment target are built again.
+  const instances = new WeakMap<Row, Map<unknown, { row: Row; key: unknown }>>();
+  const keyedRows = createMemo(() => rows().map(row => {
+    const key = row[props.keyBy!];
+    let keys = instances.get(row);
+    if (!keys) {
+      keys = new Map();
+      instances.set(row, keys);
+    }
+    let instance = keys.get(key);
+    if (!instance) {
+      instance = { row, key };
+      keys.set(key, instance);
+    }
+    return instance;
+  }));
   const body = () => (
-    <For each={rows()}>{(row, index) => props.children(row, { owner: props.owner ?? '', key: props.keyBy ? row[props.keyBy] : index(), durable: !!props.keyBy, ids: props.ids ?? [] })}</For>
+    props.keyBy
+      ? <For each={keyedRows()}>{instance => props.children(instance.row, { owner: props.owner ?? '', key: instance.key, durable: true, ids: props.ids ?? [] })}</For>
+      : <For each={rows()}>{(row, index) => props.children(row, { owner: props.owner ?? '', key: index(), durable: false, ids: props.ids ?? [] })}</For>
   );
   if (props.tableParts) return body();
   const attrs = Object.fromEntries(Object.entries(props).filter(([k]) => !REPEAT_PROPS.has(k)));

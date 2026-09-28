@@ -342,6 +342,8 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
   });
   const [interpreting, setInterpreting] = useState(!compiled);
   const handOver = useCallback(() => setInterpreting(true), []);
+  const editReadingY = useRef<number | null>(null);
+  const exitReadingY = useRef<number | null>(null);
 
   const intentDone = useRef(false);
   useEffect(() => {
@@ -506,6 +508,18 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
 
   const transportFactory = useCallback(() => backend.queryTransport(), [backend]);
   const [frameLoaded, setFrameLoaded] = useState(false);
+  useLayoutEffect(() => {
+    if (!editing || !interpreting || !frameLoaded || editReadingY.current === null) return;
+    const y = editReadingY.current;
+    editReadingY.current = null;
+    window.requestAnimationFrame(() => window.scrollTo(0, y));
+  }, [editing, interpreting, frameLoaded]);
+  useLayoutEffect(() => {
+    if (editing || exitReadingY.current === null) return;
+    const y = exitReadingY.current;
+    exitReadingY.current = null;
+    window.requestAnimationFrame(() => window.scrollTo(0, y));
+  }, [editing]);
   /** The reader's own mode, for a runtime that mounts after they chose it (the interpreter taking over an adopted compiled page). */
   const modeOverride = useRef<AppearanceMode | null>(null);
   const onController = useCallback((controller: InlineStoryController | null) => {
@@ -639,6 +653,8 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
 
   const beginEdit = useCallback((selectionPath: string | null) => {
     if (window.location.hash === '#edit') return;
+    if (compiled) editReadingY.current = window.scrollY;
+    if (compiled && !interpreting) setFrameLoaded(false);
     // pushState, not replaceState: entering edit mode is a place you can come
     // BACK from, and the browser's back button is the obvious way to do it. The
     // hashchange listener above turns that navigation into leaving edit mode.
@@ -646,7 +662,7 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
     void navigate(window.location.pathname + window.location.search + '#edit', {state:route.state});
     pushedEdit.current = true;
     setEditing(true);
-  }, []);
+  }, [compiled, interpreting, route.state]);
   const enterEdit = useCallback(() => beginEdit(null), [beginEdit]);
 
   /*
@@ -722,6 +738,7 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
     // LANDED on #edit — a deep link from the dashboard, a shared url — there is
     // nothing of ours to pop, and going back would leave the app entirely.
     setInitialEditSelectionPath(null);
+    if (compiled) exitReadingY.current = window.scrollY;
     if (pushedEdit.current) {
       pushedEdit.current = false;
       history.back();
