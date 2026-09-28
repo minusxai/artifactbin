@@ -164,8 +164,11 @@ check(pageErrors.length === 0, `no page errors${pageErrors.length ? `: ${pageErr
 const islandChunks = () => requests.filter((u) => new URL(u).pathname.startsWith('/islands/'));
 if (compiledReader) {
   const before = islandChunks().length;
-  await frame.locator('[data-mx-chart-state]').first().hover();
-  const drawn = await frame.waitForFunction(() => document.querySelector('[data-mx-chart-state]')?.getAttribute('data-mx-chart-state') === 'ready' && !document.querySelector('[data-mx-chart-state] svg.absolute.inset-0'), null, { timeout: 20000 }).then(() => true, () => false);
+  // The first chart the server drew (its drawing fills the box: lib/islands/chart DRAWING_CLASS), reached for.
+  const served = frame.locator('[data-mx-chart-state="ready"]:has(> svg.absolute.inset-0)').first();
+  await served.evaluate((el) => { el.dataset.gateReached = '1'; }).catch(() => {});
+  await served.hover().catch(() => {});
+  const drawn = await frame.waitForFunction(() => { const el = document.querySelector('[data-gate-reached]'); return !!el && el.getAttribute('data-mx-chart-state') === 'ready' && !el.querySelector(':scope > svg.absolute.inset-0') && !!el.querySelector('canvas, svg'); }, null, { timeout: 20000 }).then(() => true, () => false);
   check(drawn, `a chart document drew with the lazy chart module once the reader reached for a chart (${islandChunks().length - before} island chunks after the reach)`);
 } else check(requests.some((u) => /\/(?:story\/chunks\/|assets\/)?VegaChart[-.]/.test(u) || /\/VegaChart\.tsx(?:\?|$)/.test(u)), 'a chart document fetched the lazy chart chunk');
 
