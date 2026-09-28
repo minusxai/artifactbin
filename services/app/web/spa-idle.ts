@@ -5,6 +5,9 @@
  * is fetched at all. The app then adopts the live island document (web/initial-story,
  * components/IslandStory) instead of drawing the page again.
  */
+// The dev server's React refresh preamble, which web/index.html gets from Vite and this page does
+// not (it is the server's HTML): empty in a build, so a production page carries none of it.
+import '@vitejs/plugin-react/preamble';
 import stylesheet from './shell.css?url';
 import { startSpaIdle } from './idle-boot';
 
