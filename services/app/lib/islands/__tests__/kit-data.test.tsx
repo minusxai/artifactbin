@@ -60,3 +60,20 @@ describe('Question', () => {
     expect(loadChart).toHaveBeenCalledTimes(1);
   });
 });
+
+// The compiler writes these classes before hydration; compare them with today's roots.
+import { RECIPES } from '../kit/recipes/data';
+import { reactRender, shapeOf } from './kit-parity';
+
+describe('data class recipes', () => {
+  for (const tag of ['Select', 'DataTable'] as const) {
+    it(`${tag} preserves its root class and merges author classes`, () => {
+      for (const author of ['', ' ring-2 px-4']) {
+        const props = { className: author.trim() };
+        const markup = `<${tag} label="Region" className="${author.trim()}" />`;
+        const expected = shapeOf(reactRender(markup))[0]?.attrs.class;
+        expect(RECIPES[tag]?.(props).split(/\s+/).sort().join(' ')).toBe(expected);
+      }
+    });
+  }
+});

@@ -22,17 +22,14 @@
  */
 import { createHash } from 'node:crypto';
 import type { JsxAttribute, JsxNode } from '@/lib/jsx';
-import type { VizEnvelope } from '@/lib/validation/atlas-schemas';
 import { refName, type TableResult } from '@/lib/story/dataflow';
-import { columnVizKind } from '@/lib/story/dataset-shape';
 import { CHART_VIZ_KINDS } from '@/lib/story/lazy-code';
 import type { RefDataMap } from '@/lib/story/ref-data';
 import { questionEmbedHeightPx } from '@/lib/data/story/question-height';
-import { materializeFileRecipe } from '@/lib/viz/recipe-file';
 import { inferVizColumnsFromRows } from '@/lib/viz/query-data';
+import { questionEnvelope } from '@/lib/viz/chart-envelope';
 import { isInteractiveMapEnvelope } from '@/lib/viz/interactive-map';
 import { computeFacetLayoutPlan, computeLegendPlan, computeXLabelAngle, createVegaView, resolveEnvelopeSpec, toVegaSpec } from '@/lib/viz/render-vega';
-import type { VizResultColumn } from '@/lib/viz/types';
 import type { ServedResults } from '@/lib/story-runtime/contract';
 import type { DrawnChart } from './contract';
 
@@ -63,35 +60,6 @@ export interface DrawChartInput {
  */
 export function rowsDigest(rows: readonly Record<string, unknown>[]): string {
   return createHash('sha256').update(JSON.stringify(rows)).digest('hex').slice(0, 16);
-}
-
-/** QuestionEmbed's envelope for a chart kind (its native, shipped-recipe and `ref:` recipe branches). */
-function envelopeOf(viz: Record<string, unknown>, columns: TableResult['columns'], refData: RefDataMap | undefined): VizEnvelope {
-  const kind = viz.kind;
-  if (kind === 'vega-lite' || kind === 'vega') {
-    return { version: 2, source: { kind, grammar: kind === 'vega-lite' ? 'vega-lite@6' : 'vega@6', spec: viz.spec ?? {} } } as unknown as VizEnvelope;
-  }
-  if (kind === 'recipe' && typeof viz.recipe === 'string' && !viz.recipe.startsWith('ref:')) {
-    return {
-      version: 2,
-      source: {
-        kind: 'recipe',
-        recipe: viz.recipe,
-        bindings: viz.bindings ?? {},
-        params: (viz.params ?? null) as Record<string, unknown> | null,
-        columnFormats: (viz.columnFormats ?? null) as Record<string, unknown> | null,
-      },
-    } as unknown as VizEnvelope;
-  }
-  if (kind === 'recipe' && typeof viz.recipe === 'string') {
-    const resolved = refData?.[viz.recipe.slice(4)];
-    if (resolved?.kind !== 'viz') throw new Error('recipe unavailable');
-    const cols: VizResultColumn[] = columns.map((c) => ({ name: c.name, kind: columnVizKind(c.type) }));
-    const m = materializeFileRecipe(resolved.recipe, (viz.bindings ?? {}) as Record<string, string | string[]>, (viz.params ?? null) as Record<string, unknown> | null, cols);
-    if (!m.ok) throw new Error(`recipe error: ${m.error}`);
-    return { version: 2, source: { kind: m.engine, grammar: m.engine === 'vega-lite' ? 'vega-lite@6' : 'vega@6', spec: m.spec } } as unknown as VizEnvelope;
-  }
-  throw new Error(`not a chart viz kind: ${String(kind)}`);
 }
 
 /**
@@ -182,7 +150,8 @@ function scopeIds(svg: string): string {
 export async function drawChart(input: DrawChartInput): Promise<DrawnChart> {
   const { table, width, height, colorMode } = input;
   // vega and vega-lite mutate the specs they are handed, and `viz` is the prepared page's shared attribute JSON.
-  const envelope = envelopeOf(JSON.parse(JSON.stringify(input.viz)) as Record<string, unknown>, table.columns, input.refData);
+  const envelope = questionEnvelope(JSON.parse(JSON.stringify(input.viz)) as Record<string, unknown>, table.columns, input.refData);
+  if ('error' in envelope) throw new Error(envelope.error);
   if (isInteractiveMapEnvelope(envelope)) throw new Error('an interactive map draws street tiles in the browser');
   const resolved = resolveEnvelopeSpec(envelope, inferVizColumnsFromRows(table.rows));
   if (!resolved.ok) throw new Error(resolved.error);
