@@ -55,8 +55,12 @@ import { GET as profileGet } from '@/app/api/page/profile/[user]/[[...path]]/rou
 
 type Handler = (request: Request, ctx: { params: Promise<{ id: string }> }) => Promise<Response> | Response;
 
-/** Static trees the served document and its runtime load from; passed on to the app's own static handlers. */
-const STATIC = /^\/(?:story|fonts|webfonts|libraries|geojson)\/|^\/favicon\.ico$/;
+/**
+ * Static trees the served document and its runtime load from; passed on to the app's own static handlers.
+ * `/islands/` is the compiled reader's code (docs/phase2-architecture.md §9): the shared chunks, and the
+ * per-document modules and speculation rules the module store serves — all content-addressed, all public.
+ */
+const STATIC = /^\/(?:story|fonts|webfonts|libraries|geojson|islands)\/|^\/favicon\.ico$/;
 /** The app's built stylesheet and its fonts, at the address the app page links them or the manifest-checked one; never a script. */
 const buildStyle = (path: string): boolean => {
   const asset = path.startsWith(`${BUILD_ASSET_PATH}/`) ? path.slice(BUILD_ASSET_PATH.length) : path;

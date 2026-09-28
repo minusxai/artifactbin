@@ -312,6 +312,31 @@ export async function preparedPageFor(stored: ArtifactRow, at: ArchivedRender | 
 }
 
 /**
+ * RECOMPILE A STORED PAGE with this deployment's compiler (docs/phase2-architecture.md §6): the
+ * stored compile is from another build, or no island build could be read when it was made. The
+ * compile (or its recorded failure) is written back beside the page — only onto the entry this read
+ * was served from (the same key), so a newer entry written meanwhile is never overwritten with an
+ * older version's compile. Null when this deployment does not compile. The serve path
+ * (lib/compiled-page/serve.server) races it against its inline budget; a compile that loses the race
+ * still lands here and the next read is a hit.
+ */
+export async function recompilePage(row: ArtifactRow, at: ArchivedRender | null, page: PreparedPage): Promise<StoredCompile | null> {
+  const compiler = compilerBuild();
+  if (!compiler) return null;
+  const compiled = await compiledFor(row, page, await refDataForRow(row), compiler);
+  try {
+    const db = await getDb();
+    await db.query(
+      `UPDATE prepared_pages SET page = jsonb_set(page, '{compiled}', $4::jsonb), updated_at = now() WHERE artifact_id = $1 AND slot = $2 AND page_key = $3`,
+      [row.id, slotOf(at), keyOf(row, compiler), JSON.stringify(compiled)],
+    );
+  } catch (error) {
+    console.warn('[prepared-page] compile write-back failed', row.id, error);
+  }
+  return compiled;
+}
+
+/**
  * THE READER'S RUNTIME for one request: the stored version under this
  * request's overlay. `storyHtml` renders only when the overlay differs from
  * the one the stored render was made with.

@@ -169,6 +169,9 @@ async function bootServer(index, mailOutbox, authSecret) {
       // The PostgreSQL gate likewise uses a disposable loopback database,
       // matching the CI browser-gate environment rather than production.
       DATASET__ALLOW_PRIVATE_NETWORKS: 'true',
+      // The compiled reader is compiled and served on request (`?reader=compiled`) while readers keep
+      // today's renderer, so gate-compiled-parity compares the two (docs/phase2-architecture.md §10).
+      FLAG__COMPILED_READER: 'shadow',
       ...(mailOutbox ? { EMAIL__DEV_OUTBOX_PATH: mailOutbox } : {}),
     },
   });
