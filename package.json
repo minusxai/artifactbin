@@ -35,10 +35,10 @@
     "postinstall": "node services/cli/scripts/generate-teaching.mjs"
   },
   "dependencies": {
+    "@artifactbin/auth": "0.1.0",
     "@artifactbin/browser": "0.1.0",
     "@artifactbin/contracts": "0.1.0",
     "@artifactbin/events": "0.1.0",
-    "@artifactbin/auth": "0.1.0",
     "@artifactbin/sql": "0.1.0",
     "@artifactbin/utils": "0.1.0",
     "@electric-sql/pglite": "0.4.6",
@@ -53,6 +53,7 @@
   },
   "devDependencies": {
     "@rollup/plugin-yaml": "5.0.0",
+    "@solidjs/vite-plugin": "3.0.0-next.46",
     "@tailwindcss/vite": "4.3.3",
     "@types/node": "^22.13.0",
     "@types/pg": "8.16.0",
@@ -77,5 +78,10 @@
     "services/auth",
     "services/cli",
     "services/test-support"
-  ]
+  ],
+  "overrides": {
+    "better-auth": {
+      "solid-js": "2.0.0-rc.10"
+    }
+  }
 }
