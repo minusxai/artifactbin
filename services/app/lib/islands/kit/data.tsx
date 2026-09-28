@@ -161,14 +161,14 @@ export function DataTable(props: DataTableProps) {
   }>
     {/* Cell sessions show saving on an editable table; only a read-only table dims while it refreshes. */}
     <div {...rootProps(props)} aria-label="DataTable embed" aria-busy={busy() ? 'true' : 'false'} {...attr('class', busy() && !props.templates?.length ? 'mx-busy' : undefined)} {...attr('attr:style', wrapper())}>
-      <DataGrid {...props} table={table()!} />
+      <DataGrid {...props} table={table} />
     </div>
   </Show>;
 }
 
-function DataGrid(props: DataTableProps & { table: TableResult }) {
+function DataGrid(props: DataTableProps & { table: () => TableResult | undefined }) {
   const island = useIsland();
-  const table = () => props.table;
+  const table = props.table;
   const owner = typeof props.id === 'string' ? props.id : undefined;
   const [sort, setSort] = createSignal<SortSpec | null>(parseSortSpec(props.sort));
   const [extra, setExtra] = createSignal<Row[]>([]);
@@ -228,6 +228,17 @@ function DataGrid(props: DataTableProps & { table: TableResult }) {
   });
   // Rows are keyed by the row object, so the rows served with the page are the rows of the virtual window.
   const placed = createMemo(() => new Map(visible().map(v => [v.row, v])));
+  // Reconciliation can keep a row proxy while moving a different key into it. A key change must
+  // rebuild the row's comment metadata; same-key content still updates through reactive cell reads.
+  const instances = new WeakMap<Row, Map<unknown, { row: Row; key: unknown }>>();
+  const rendered = createMemo(() => visible().map(({ row }) => {
+    const key = props.rowKey ? row[props.rowKey] : row;
+    let keys = instances.get(row);
+    if (!keys) { keys = new Map(); instances.set(row, keys); }
+    let instance = keys.get(key);
+    if (!instance) { instance = { row, key }; keys.set(key, instance); }
+    return instance;
+  }));
   // Today's switch: virtual once mounted with a measured height, whatever the row count; the header
   // widths are read while the served table's auto layout is still on screen.
   onMount(() => { if (scroll?.clientHeight) { setMeasured([...scroll.querySelectorAll('thead th')].map(th => th.getBoundingClientRect().width)); setVirtual(true); } });
@@ -253,7 +264,8 @@ function DataGrid(props: DataTableProps & { table: TableResult }) {
           <For each={resolved()}>{column => <th {...attr('id', templateOf(column.col)?.id ?? (typeof templateOf(column.col)?.props?.id === 'string' ? templateOf(column.col)!.props!.id as string : undefined))} {...attr('data-mx-ast', templateOf(column.col)?.path)} scope="col" aria-label={`Sort by ${column.title}`} aria-sort={sort()?.col === column.col ? sort()?.dir === 'asc' ? 'ascending' : 'descending' : 'none'} {...attr('title', column.type === 'string' && !(table()?.columns ?? []).some(k => k.name === column.col) ? `"${column.col}" is not a column of this table` : undefined)} onClick={() => cycle(column.col)} class="cursor-pointer select-none whitespace-nowrap px-3 py-2 font-bold" style={css({ 'text-align': column.align, width: column.width ? `${column.width}px` : undefined })}>{column.title}<Show when={sort()?.col === column.col}><span aria-hidden="true" class="ml-1 opacity-70">{sort()?.dir === 'asc' ? '▲' : '▼'}</span></Show></th>}</For>
         </tr></thead>
         <tbody {...attr('style', virtual() ? css({ display: 'block', height: `${virtualizer.getTotalSize()}px`, position: 'relative' }) : undefined)}><Show when={ordered().length} fallback={<tr {...attr('style', virtual() ? css({ display: 'block' }) : undefined)}><td colSpan={Math.max(1, resolved().length)} class="block px-3 py-6 text-center text-muted-foreground">no rows</td></tr>}>
-          <For each={visible().map(v => v.row)}>{row => {
+          <For each={rendered()}>{instance => {
+            const row = instance.row;
             const at = () => placed().get(row);
             const index = () => at()?.index ?? 0;
             let el!: HTMLTableRowElement;

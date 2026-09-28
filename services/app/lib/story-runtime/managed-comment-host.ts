@@ -5,8 +5,14 @@ import { canonicalQuote, parseAnnotationRange, isTargetRange, type AnnotationRec
 
 type Host = { element: HTMLElement; generation: string; send(state: ManagedCommentState): void; state: ManagedCommentState };
 type Consumer = { state(host: HTMLElement): Omit<ManagedCommentState, 'generation' | 'type'>; receive(host: HTMLElement, event: ManagedCommentEvent): void };
-const registries = new WeakMap<Document, {hosts: Set<Host>; consumer: Consumer | null}>();
-const registry = (doc: Document) => { let r = registries.get(doc); if (!r) {r = {hosts: new Set(), consumer: null}; registries.set(doc, r);} return r; };
+type Registry = { hosts: Set<Host>; consumer: Consumer | null };
+// The compiled island build and the SPA are separate bundles. Their module singletons differ, but
+// both run in this trusted document realm; the document owns their shared host/consumer registry.
+const REGISTRY_KEY = Symbol.for('artifactbin.managed-comments');
+const registry = (doc: Document) => {
+  const holder = doc as Document & Record<symbol, Registry | undefined>;
+  return holder[REGISTRY_KEY] ?? (holder[REGISTRY_KEY] = { hosts: new Set(), consumer: null });
+};
 const disabled = (): Omit<ManagedCommentState, 'generation' | 'type'> => ({enabled:false,picking:false,canComment:false,pins:[],openId:null,hoverId:null,selection:null});
 const rect = (value: unknown): value is AnnotationRect => {
   if (!value || typeof value !== 'object') return false;

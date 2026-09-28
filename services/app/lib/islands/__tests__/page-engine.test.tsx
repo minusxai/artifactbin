@@ -49,6 +49,9 @@ const FLOW_ME = await compiledOf(
   + '<Query name="mine">{`select coalesce($_me.id, \'nobody\') as who, count(*) as n from sales_data.rows where $region is null or region = $region`}</Query>',
   { Sales0001: COLUMNS },
 );
+const FLOW_LOCAL = await compiledOf('<Value name="drafts" type="table" value={[{"id":1}]} />'
+  + '<Query name="draft_count">{`select count(*) as n from drafts`}</Query>'
+  + '<Mutation name="add">{`insert into drafts values ((select max(id)+1 from drafts))`}</Mutation>');
 const HELD = ['regions_data', 'sales_data'];
 
 function Total() {
@@ -104,6 +107,16 @@ afterEach(() => {
 const engineReady = (imports: string[] = HELD, flow = FLOW) => vi.waitFor(() => expect(engines[0]?.ready(flow, imports)).toBe(true), { timeout: 15_000, interval: 20 });
 
 describe('the page engine on a compiled page', () => {
+  it('starts SQLite for a local table with no held import and keeps its writes in the page', async () => {
+    const net = network();
+    page({ ...SERVED, hold: [], results: { tables: { draft_count: table([{ n: 1 }], [{ name: 'n', type: 'number' }]) }, errors: {} } });
+    booted = boot({ ISLANDS: [], FLOW: FLOW_LOCAL });
+    await engineReady([], FLOW_LOCAL);
+    const before = net.calls.length;
+    await booted.store!.mutate('add');
+    await vi.waitFor(() => expect(booted!.context.table('draft_count')?.rows[0]?.n).toBe(2));
+    expect(net.calls.slice(before)).toEqual([]);
+  });
   it('loads behind the first paint, holds the dataset through ONE scoped POST, and answers a control change in the page', async () => {
     const net = network();
     page(SERVED);
@@ -191,8 +204,8 @@ describe('the page engine on a compiled page', () => {
     expect(net.holds()[0]!.init, 'the signed-in page holds through the session door').toMatchObject({ method: 'POST', credentials: 'same-origin' });
   });
 
-  it('a page that may hold nothing, or has no wasm, never loads the engine: every change is the server\'s', async () => {
-    for (const data of [{ ...SERVED, hold: [] }, { ...SERVED, sqliteWasm: undefined }]) {
+  it('a page with no wasm never loads the engine: every change is the server\'s', async () => {
+    for (const data of [{ ...SERVED, hold: [], sqliteWasm: undefined }, { ...SERVED, sqliteWasm: undefined }]) {
       const net = network();
       page(data);
       booted = boot({ ISLANDS: [['s0-', Total]], FLOW });

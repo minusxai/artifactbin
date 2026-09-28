@@ -12,7 +12,7 @@ import { describe, expect, it } from 'vitest';
 import { readdirSync, readFileSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import path from 'node:path';
-import { COMPILED_LEGS, GATE_RUNNERS, GATE_SPECS, checkLegs, checkManifest, compiledLegNames, gateNamesOnDisk, gateOf, specFor, browsersFor, shardWeight } from '../gates.manifest.mjs';
+import { COMPILED_LEGS, GATE_RUNNERS, GATE_SPECS, ISOLATED_GATES, checkLegs, checkManifest, compiledLegNames, gateNamesOnDisk, gateOf, specFor, browsersFor, shardWeight } from '../gates.manifest.mjs';
 import { parseShard, shardOf } from '../gates.shard.mjs';
 
 const SCRIPTS = path.resolve(import.meta.dirname, '..');
@@ -172,21 +172,28 @@ it('balances the extra cross-browser setup without extending any test timeout', 
 it('prints the same browser and Postgres plans used by shard selection without starting servers', () => {
   const set = [...onDisk, ...compiledLegNames()];
   for (let index = 1; index <= 11; index++) {
-    const selected = shardOf(set, {index, total: 11}, shardWeight);
+    const selected = shardOf(set, {index, total: 11}, shardWeight, { isolated: ISOLATED_GATES });
     const output = execFileSync(process.execPath, [path.join(SCRIPTS, 'gates.mjs'), '--browsers', `--shard=${index}/11`], {encoding: 'utf8'}).trim();
     expect(output).toBe(browsersFor(selected).join(' '));
     const postgres = execFileSync(process.execPath, [path.join(SCRIPTS, 'gates.mjs'), '--needs-postgres', `--shard=${index}/11`], {encoding: 'utf8'}).trim();
     expect(postgres).toBe(String(selected.some((name) => gateOf(name) === 'postgres-datasets')));
   }
-  expect(Array.from({length: 11}, (_, offset) => shardOf(set, {index: offset + 1, total: 11}, shardWeight))
+  expect(Array.from({length: 11}, (_, offset) => shardOf(set, {index: offset + 1, total: 11}, shardWeight, { isolated: ISOLATED_GATES }))
     .find((shard) => shard.includes('editor-v2'))).toEqual(['editor-v2']);
+});
+
+it('gives the gates that lost parallel races an exclusive CI runner', () => {
+  const set = [...onDisk, ...compiledLegNames()];
+  const shards = Array.from({ length: 11 }, (_, offset) => shardOf(set, { index: offset + 1, total: 11 }, shardWeight, { isolated: ISOLATED_GATES }));
+  for (const name of ISOLATED_GATES) expect(shards.find(shard => shard.includes(name))).toEqual([name]);
+  expect(shards.flat().sort()).toEqual(set.slice().sort());
 });
 
 it('prints the selected gate names for shard-specific CI setup without starting servers', () => {
   const set = [...onDisk, ...compiledLegNames()];
   const selected = [];
   for (let index = 1; index <= 11; index++) {
-    const expected = shardOf(set, { index, total: 11 }, shardWeight);
+    const expected = shardOf(set, { index, total: 11 }, shardWeight, { isolated: ISOLATED_GATES });
     const output = execFileSync(process.execPath, [path.join(SCRIPTS, 'gates.mjs'), '--selected', `--shard=${index}/11`], { encoding: 'utf8' }).trim().split('\n');
     expect(output).toEqual(expected);
     selected.push(...output);
@@ -216,7 +223,7 @@ describe('the compiled legs (w3-behaviour)', () => {
       if (leg.disabled !== undefined) expect(leg.disabled.length, leg.gate).toBeGreaterThan(20);
     }
     // The brief's behavioural set is wired, enabled or with its reason.
-    expect(COMPILED_LEGS.map((leg) => leg.gate).sort()).toEqual(['dataflow', 'editable-table', 'export-slice', 'full-kit', 'hydration', 'layout-shift', 'live-data', 'live-reader', 'reader-chrome', 'reading-chrome']);
+    expect(COMPILED_LEGS.map((leg) => leg.gate).sort()).toEqual(['annotations', 'collab-edit', 'comment-targets', 'dataflow', 'editable-table', 'editor-v2', 'export-slice', 'full-kit', 'hydration', 'image-upload', 'inplace-edit', 'layout-shift', 'libraries', 'live-data', 'live-reader', 'local-sql-state', 'postgres-datasets', 'reader-chrome', 'reading-chrome', 'row-images', 'web-assets']);
   });
 
   it('a leg is its gate\'s row under its own name and timeout, and the default set leaves disabled legs out', () => {
@@ -230,7 +237,9 @@ describe('the compiled legs (w3-behaviour)', () => {
   });
 
   it('every leg\'s gate reads GATE_READER (its own switch or scripts/lib/gate-reader)', () => {
-    for (const leg of COMPILED_LEGS.filter((l) => !l.disabled && l.gate !== 'export-slice')) expect(source(leg.gate), leg.gate).toMatch(/GATE_READER|lib\/gate-reader\.mjs/);
+    // These gates exercise the same user-visible assertions under either reader flag.
+    const unchanged = new Set(['image-upload', 'libraries', 'postgres-datasets']);
+    for (const leg of COMPILED_LEGS.filter((l) => !l.disabled && l.gate !== 'export-slice' && !unchanged.has(l.gate))) expect(source(leg.gate), leg.gate).toMatch(/GATE_READER|lib\/gate-reader\.mjs/);
   });
 
   it('the runner runs a leg with GATE_READER=compiled on servers booted with the compiled reader on', () => {

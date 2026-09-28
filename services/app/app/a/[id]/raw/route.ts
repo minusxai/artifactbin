@@ -375,7 +375,8 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
           signedIn: actor.credential === 'session' && !!viewer?.userId,
           // A sandboxed copy's doors carry no credential (its origin is opaque): it holds what anyone may, as today's /raw does.
           holder: null,
-          doors: capture ? null : {
+          // A capture's rows are settled, but its managed iframe still needs the scoped asset door.
+          doors: capture ? { queryUrl: '', assetsUrl: `${assetsPath(artifact.id)}?key=${encodeURIComponent(key!)}` } : {
             queryUrl: queryPath(artifact.id),
             ...(!at && declaresMutations(row.source) ? { mutateUrl: mutatePath(artifact.id) } : {}),
             viewerUrl: VIEWER_OVERLAY_PATH(artifact.id),

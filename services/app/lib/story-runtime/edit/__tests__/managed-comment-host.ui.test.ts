@@ -4,6 +4,21 @@ import type { ManagedCommentState } from '../../managed-comment-contract';
 
 afterEach(() => {document.body.innerHTML='';});
 describe('managed comment host boundary', () => {
+  it('shares the host and consumer between independently bundled module instances', async () => {
+    const host = document.createElement('div');
+    document.body.append(host);
+    const states: ManagedCommentState[] = [];
+    const connection = connectManagedComments(host, state => states.push(state));
+    vi.resetModules();
+    const other = await import('../../managed-comment-host');
+    const binding = other.bindManagedComments(document, {
+      state: () => ({ enabled: true, picking: true, canComment: true, pins: [], openId: null, hoverId: null, selection: null }),
+      receive: vi.fn(),
+    });
+    expect(states.at(-1)).toMatchObject({ enabled: true, picking: true });
+    binding.dispose();
+    connection.dispose();
+  });
   it('replays state to late frames and rejects forged generations, IDs and geometry', () => {
     const host=document.createElement('div');document.body.append(host);
     vi.spyOn(host,'getBoundingClientRect').mockReturnValue({x:100,y:200,width:400,height:300} as DOMRect);

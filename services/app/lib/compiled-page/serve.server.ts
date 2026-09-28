@@ -414,7 +414,7 @@ export async function compiledPageFor(row: ArtifactRow, page: PreparedPage, read
       // What the page's engine may hold, for the door it queries through (today's reader asks on every render).
       flow && reader.doors && reader.holder !== undefined ? holdableImports(row, flow, reader.holder) : Promise.resolve([]),
     ]);
-    // Local tables use the page engine even when no imported dataset is holdable.
+    // Local tables need the page engine even without a holdable import.
     const sqliteWasm = flow && reader.doors && (hold.length || flow.values.some((value) => value.kind === 'table'))
       ? build.sqliteWasm ?? null : null;
     // The live stream picks up from the snapshot's marks (served-results.server `since`): a write between

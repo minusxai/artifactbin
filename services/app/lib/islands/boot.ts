@@ -157,13 +157,12 @@ export function boot(input: IslandModule | readonly IslandEntry[], win: Window =
    * `$_me` is bound to the reader the door answers for — nobody on a guest page; on a signed-in page
    * whose data names the reader, the one the overlay names, and until it has, the server answers.
    */
-  const hold = transport?.hold;
   const readsMe = !!flow && [...flow.queries, ...flow.mutations].some((node) => node.reads.builtins.some((b) => b === '_me' || b.startsWith('_me.')));
   let identified = !(data.signedIn && readsMe);
   let viewerId: string | null = null;
-  const page = flow && hold && data.sqliteWasm
+  const page = flow && transport?.hold && data.sqliteWasm
     ? {
-      engine: lazyEngine(() => import('./sqlite-engine').then((m) => m.pageEngine(data.sqliteWasm!, (name) => hold.call(transport, name))), () => identified),
+      engine: lazyEngine(() => import('./sqlite-engine').then((m) => m.pageEngine(data.sqliteWasm!, (name) => transport!.hold!(name))), () => identified),
       get userId() { return viewerId; },
     }
     : null;
@@ -210,7 +209,7 @@ export function boot(input: IslandModule | readonly IslandEntry[], win: Window =
     // From the snapshot's marks: a dataset written since the snapshot was taken re-runs at once (live.ts).
     // Loaded after hydration, off the shared runtime's closure: the marks cover the gap, so nothing is missed.
     void import('./live').then(({ startIslandLive }) => {
-      if (!disposed) stopLive = startIslandLive(win, liveId, liveEdit, data.results?.since ?? null);
+      if (!disposed && mode === 'read') stopLive = startIslandLive(win, liveId, liveEdit, data.results?.since ?? null);
     }).catch((error: unknown) => console.error('[islands] live failed', error));
   }
   // The link follows the reader (./url-sync), top-level only: a framed document's address is its frame's.
@@ -238,6 +237,9 @@ export function boot(input: IslandModule | readonly IslandEntry[], win: Window =
     setMode: (next) => {
       if (disposed || next === mode || next === 'read') return;
       stopAuthor();
+      // The interpreter owns edits and their live updates. A version ping from this compiled
+      // lifetime must not reload the page while its editor is saving a new source.
+      stopLive();
       disposeIslands();
       mode = next;
       emit({ type: 'mode', mode });
@@ -273,6 +275,8 @@ export function boot(input: IslandModule | readonly IslandEntry[], win: Window =
   doc.documentElement.setAttribute(READER_READY_ATTR, '');
   emit({ type: 'ready' });
   doc.dispatchEvent(new Event(ISLANDS_READY_EVENT));
+  // A local table has no import to trigger the engine's normal hold path.
+  if (page && !data.hold?.length) page.engine.prepare(flow!, []);
 
   // The author's script, never in this document: its host (and the sandboxed frame) load only when the version has one.
   const authorScript = typeof data.authorScript === 'string' && data.authorScript ? data.authorScript : null;
