@@ -162,6 +162,8 @@ function islandData(input: AssembleInput): IslandPageData {
     results: input.snapshot?.results ?? null,
     ...(overlay.doors ?? {}),
     signedIn: overlay.signedIn,
+    hold: [...(overlay.hold ?? [])],
+    ...(overlay.sqliteWasm ? { sqliteWasm: overlay.sqliteWasm } : {}),
     mermaidImages: overlay.mermaidImages,
     readOnly: overlay.readOnly ?? null,
   };

@@ -1,5 +1,5 @@
 /* @jsxImportSource solid-js */
-import { Show, createSignal, splitProps, type JSX } from 'solid-js';
+import { Show, createSignal, onCleanup, splitProps, type JSX } from 'solid-js';
 import { isServer } from 'solid-js/web';
 import { refName, resolveBindings, rowBound, type BindingSource, type Row, type Scalar } from '@/lib/story/dataflow';
 import { VIEWER_ID } from '@/lib/story/builtins';
@@ -7,7 +7,8 @@ import { refusalText } from '@/lib/story/sign-in-required';
 import { useIsland } from '../context';
 import type { IslandContext } from '../contract';
 import type { RowScope } from '../rt';
-import { ACCESS_PENDING, storeRead } from './store-read';
+import { createRowActions } from '@/lib/story-runtime/row-actions';
+import { ACCESS_PENDING, hydratedRead } from './store-read';
 
 /**
  * lib/story/comment-target isCommentKey (the interpreter's validRowKey), restated: importing it from a kit
@@ -41,6 +42,18 @@ const scalarRow = (row: Row): Record<string, Scalar> => Object.fromEntries(Objec
 const messageOf = (e: unknown) => (e instanceof Error ? e.message : 'that did not save');
 
 /**
+ * Each document's row actions (today's RowActionsContext, lib/story-runtime/row-actions): a row's write
+ * in flight, and its refusal, belong to the document, so they outlive the button — a row reordered,
+ * filtered or scrolled out of a virtual window and back is still busy, and a second click writes nothing.
+ */
+const rowActions = new WeakMap<IslandContext, ReturnType<typeof createRowActions>>();
+const rowActionsOf = (island: IslandContext) => {
+  let actions = rowActions.get(island);
+  if (!actions) rowActions.set(island, actions = createRowActions());
+  return actions;
+};
+
+/**
  * `<Button>`, and live: `run="$add" set={{…}} args={{…}}` (today's ButtonAdapter / RuntimeRowAction in
  * lib/story-runtime/StoryRuntimeApp). A click first sets the page values `set=` names, in one step, then
  * performs the named `<Mutation>` with `args=`. While it is in flight the button is `aria-busy` and
@@ -62,26 +75,30 @@ export function Button(props: ButtonProps) {
   }
   const row = own.row ?? null;
   const read = (map: unknown) => { const b = bindings(map, row); return b ? resolveBindings(b, (ref) => (ref === VIEWER_ID ? viewerId(island) : store.getValue(ref))) : undefined; };
-  // The server render has no transport: it says what today's served page says until the check answers.
-  const unavailable = storeRead(store, () => (name ? (isServer ? ACCESS_PENDING : store.mutationUnavailable(name)) : null), { value: name ? ACCESS_PENDING : null });
+  // The server render has no transport: the context says what today's served page says until the check answers.
+  const unavailable = hydratedRead(() => (name ? island.mutationUnavailable(name) : null), { value: name ? ACCESS_PENDING : null });
   const [error, setError] = createSignal<string | null>(null);
   const alert = <Show when={error()}><span role="alert" class="mx-write-error">{error()}</span></Show>;
   if (row) {
     const scope = own.rowScope;
     if (!scope?.durable || !stableRowKey(scope.key)) return <span role="alert">Row actions require a stable row key</span>;
-    const [pending, setPending] = createSignal(false);
+    // The interpreter's row action identity: the repeat, the row's key, the button's node, its mutation.
+    const identity = JSON.stringify([scope.owner, typeof scope.key, scope.key, (rest as Record<string, unknown>)['data-mx-ast'] ?? '', own.run]);
+    const actions = rowActionsOf(island);
+    const [state, setState] = createSignal(actions.get(identity), { equals: false });
+    if (!isServer) onCleanup(actions.subscribe(() => setState(actions.get(identity))));
+    const pending = () => !!state()?.pending;
     const click = () => {
       if (!name || unavailable() !== null || pending() || rest.disabled === true) return;
       const snapshot = scalarRow(row);
       const values = read(own.set);
       if (values) store.setValues(values);
-      setError(null); setPending(true);
-      store.mutate(name, read(own.args) ?? {}, snapshot).catch((e: unknown) => setError(messageOf(e))).finally(() => setPending(false));
+      void actions.run(identity, () => store.mutate(name, read(own.args) ?? {}, snapshot));
     };
     return <><button data-slot="button" data-variant={variant} data-size={size} {...rest} type="button" disabled={unavailable() !== null || pending() || rest.disabled === true}
-      aria-busy={pending() || undefined} aria-description={refusalText(unavailable()) ?? undefined} on:click={click} />{alert}</>;
+      aria-busy={pending() || undefined} aria-description={refusalText(unavailable()) ?? undefined} on:click={click} /><Show when={state()?.error}><span role="alert" class="mx-write-error">{state()?.error}</span></Show></>;
   }
-  const busy = storeRead(store, () => !!name && store.mutating().has(name));
+  const busy = () => !!name && island.mutating(name);
   const click = () => {
     setError(null);
     const values = read(own.set);

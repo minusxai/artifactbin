@@ -14,7 +14,11 @@
  * - `<Segmented>` offers "All" only when the bound Value's declared default is null.
  */
 import { describe, expect, it, vi } from 'vitest';
+import { createComputed, createRoot, createSignal } from 'solid-js';
 import { render } from 'solid-js/web';
+import { createIslandRuntime } from '../rt';
+import { createDataflowStore, type QueryTransport } from '@/lib/story-runtime/store';
+import { compiledOf } from '@/test/helpers/compiled';
 import { IslandProvider } from '../context';
 import { fakeIsland } from './context.test';
 import { Button, stableRowKey } from '../kit/basic';
@@ -60,7 +64,16 @@ function fakeStore(opts: { access?: Record<string, string | null>; values?: Reco
   };
 }
 
-const islandOn = (store: DataflowStore, viewer: IslandContext['viewer'] = () => null, values: Record<string, string> = {}): IslandContext => ({ ...fakeIsland(values), store: () => store, viewer });
+/** The fake store's write checks as the runtime's context answers them: re-read on every store change. */
+const islandOn = (store: DataflowStore, viewer: IslandContext['viewer'] = () => null, values: Record<string, string> = {}): IslandContext => {
+  const [tick, setTick] = createSignal(0, { equals: false });
+  store.subscribe(() => setTick(0));
+  return {
+    ...fakeIsland(values), store: () => store, viewer,
+    mutationUnavailable: (name) => { tick(); return store.mutationUnavailable(name); },
+    mutating: (name) => { tick(); return store.mutating().has(name); },
+  };
+};
 const mount = (island: IslandContext, view: () => import('solid-js').JSX.Element) => {
   const host = document.createElement('div');
   document.body.append(host);
@@ -147,6 +160,97 @@ describe('<Button run> on the island store', () => {
     expect(s.store.mutate).toHaveBeenCalledWith('done', { id: 7 }, { id: 7, title: 'x' });
     expect(host.querySelector('span[role="alert"]')?.textContent).toBe('Row actions require a stable row key');
     dispose();
+  });
+});
+
+describe('a row action\'s state is the document\'s, not the button\'s (today\'s RuntimeRowAction)', () => {
+  const row = { id: 7, title: 'x' };
+  const scope = { owner: 'f', key: 7, durable: true, ids: [] };
+  const RowButton = () => <Button run="$done" args={{ id: { ref: '_row.id' } }} row={row} rowScope={scope} data-mx-ast="0.1">Done</Button>;
+
+  it('a row re-rendered while its write is in flight is still busy, and a second click does not write again', async () => {
+    const s = fakeStore({ access: { done: null } });
+    const island = islandOn(s.store);
+    const first = mount(island, () => <RowButton />);
+    first.host.querySelector('button')!.click();
+    expect(s.store.mutate).toHaveBeenCalledTimes(1);
+    first.dispose();
+
+    // The row came back (reordered, filtered, scrolled into a virtual window): a new button, the same row action.
+    const again = mount(island, () => <RowButton />);
+    const button = again.host.querySelector('button')!;
+    expect(button.getAttribute('aria-busy')).toBe('true');
+    expect(button.disabled).toBe(true);
+    button.click();
+    expect(s.store.mutate).toHaveBeenCalledTimes(1);
+
+    s.settle(new Error('the dataset is closed'));
+    await flush();
+    expect(button.hasAttribute('aria-busy')).toBe(false);
+    expect(button.disabled).toBe(false);
+    expect(again.host.querySelector('[role="alert"]')?.textContent).toBe('the dataset is closed');
+    again.dispose();
+
+    // …and the refusal outlives the button too, until the next attempt clears it.
+    const third = mount(island, () => <RowButton />);
+    expect(third.host.querySelector('[role="alert"]')?.textContent).toBe('the dataset is closed');
+    third.host.querySelector('button')!.click();
+    expect(third.host.querySelector('[role="alert"]')).toBeNull();
+    expect(s.store.mutate).toHaveBeenCalledTimes(2);
+    third.dispose();
+  });
+
+  it('each row, and each document, has its own', () => {
+    const s = fakeStore({ access: { done: null } });
+    const island = islandOn(s.store);
+    const other = { ...row, id: 8 };
+    const { host, dispose } = mount(island, () => <>
+      <RowButton />
+      <Button run="$done" row={other} rowScope={{ ...scope, key: 8 }} data-mx-ast="0.1">Done</Button>
+    </>);
+    const [a, b] = [...host.querySelectorAll('button')];
+    a!.click();
+    expect(a!.getAttribute('aria-busy')).toBe('true');
+    expect(b!.hasAttribute('aria-busy')).toBe(false);
+    dispose();
+
+    const elsewhere = mount(islandOn(s.store), () => <RowButton />);
+    expect(elsewhere.host.querySelector('button')!.hasAttribute('aria-busy'), 'another document\'s row actions are its own').toBe(false);
+    elsewhere.dispose();
+  });
+});
+
+describe('the island context\'s write checks (rt createIslandRuntime)', () => {
+  it('mutationUnavailable and mutating follow the store: pending until the check answers, busy while a write is in flight', async () => {
+    const flow = await compiledOf('<Import name="votes" src="ref:Votes0001" /><Mutation name="add">{`insert into votes.rows (choice) values (\'x\')`}</Mutation>', { Votes0001: [{ name: 'choice', type: 'string' }] });
+    let release!: () => void;
+    const transport: QueryTransport = {
+      run: async () => ({ tables: {}, errors: {}, mutationAccess: { add: null } }),
+      page: async () => ({ rows: [], columns: [] }),
+      mutate: () => new Promise((resolve) => { release = () => resolve({ dataset: 'Votes0001' }); }),
+    };
+    const runtime = createIslandRuntime({ dataflow: { flow } }, (input) => createDataflowStore(input, { transport, debounceMs: 0 }));
+    const seen: Array<[string | null, boolean]> = [];
+    const stop = createRoot((dispose) => {
+      createComputed(() => seen.push([runtime.context.mutationUnavailable('add'), runtime.context.mutating('add')]));
+      return dispose;
+    });
+    expect(seen.at(-1)).toEqual([ACCESS_PENDING, false]);
+    runtime.store!.start();
+    await vi.waitFor(() => expect(seen.at(-1)).toEqual([null, false]));
+    const write = runtime.context.mutate({ mutation: 'add', args: {} });
+    await vi.waitFor(() => expect(seen.at(-1)).toEqual([null, true]));
+    release();
+    await write;
+    await vi.waitFor(() => expect(seen.at(-1)).toEqual([null, false]));
+    stop();
+    runtime.dispose();
+  });
+
+  it('with no store, and while the server renders, a write check is pending', () => {
+    const runtime = createIslandRuntime({}, () => { throw new Error('no data'); });
+    expect(runtime.context.mutationUnavailable('add')).toBe(ACCESS_PENDING);
+    expect(runtime.context.mutating('add')).toBe(false);
   });
 });
 

@@ -79,6 +79,8 @@ export const ISLAND_SPECIFIERS = Object.freeze(ENTRIES.map((e) => e.specifier));
  */
 const STANDALONE_LAZY = [
   { request: './embed/frame-engine', name: 'frame-engine', file: () => path.join(ISLANDS_SRC, 'kit/embed/frame-engine.ts') },
+  // The page's own SQLite engine (today's page engine and the SQLite core), loaded by boot behind the first paint.
+  { request: './sqlite-engine', name: 'sqlite-engine', file: () => path.join(ISLANDS_SRC, 'sqlite-engine.ts') },
 ];
 
 async function buildStandaloneLazy() {
@@ -99,7 +101,7 @@ async function buildStandaloneLazy() {
 const standaloneLazyPlugin = (built) => ({
   name: 'mx-standalone-lazy',
   setup(build) {
-    build.onResolve({ filter: /^\.\/embed\/[\w-]+$/ }, (args) => {
+    build.onResolve({ filter: new RegExp(`^(${built.map((b) => b.request.replace(/[.*+?^${}()|[\]\\/]/g, '\\$&')).join('|')})$`) }, (args) => {
       const lazy = built.find((b) => b.request === args.path && args.kind === 'dynamic-import');
       return lazy ? { path: `./${lazy.fileName}`, external: true } : undefined;
     });

@@ -45,6 +45,14 @@ export interface IslandWrites {
   mutate(request: MutationRequest): Promise<MutationAnswer>;
   /** Why writes are refused on this render (an archived version, a capture), or null. */
   writesUnavailable(): string | null;
+  /**
+   * Why THIS `<Mutation>` cannot be made by this reader now (the store's write check: a guest's `$_me`
+   * write, a closed dataset, `ACCESS_PENDING` while the check is in flight, and on the server), or null.
+   * Reactive: re-read whenever the store changes.
+   */
+  mutationUnavailable(name: string): string | null;
+  /** Whether a write of this `<Mutation>` is in flight (the store's `mutating()`). Reactive. */
+  mutating(name: string): boolean;
 }
 
 /**
@@ -194,8 +202,20 @@ export interface IslandPageData {
   mutateUrl?: string;
   viewerUrl?: string;
   assetsUrl?: string;
-  /** The non-secret "signed in" hint: viewer-dependent islands show a neutral placeholder rather than guest content. */
+  /**
+   * The request holds a credential for this document (session or held connection): the page's doors
+   * carry it, and viewer-dependent islands show a neutral placeholder rather than guest content until
+   * the viewer overlay names the reader. A non-secret hint, never the identity.
+   */
   signedIn: boolean;
+  /**
+   * The imports this page may hold in full (lib/artifacts holdableImports, for the door the page queries
+   * through), by name: what its own SQLite engine answers once loaded (lib/story/placement). Empty: the
+   * page runs nothing itself.
+   */
+  hold: string[];
+  /** The SQLite engine's wasm, content-addressed (StoryIslandData.sqliteWasm); present only when `hold` is not empty. */
+  sqliteWasm?: string;
   mermaidImages: Readonly<Record<string, StoredMermaidImage>>;
   readOnly: string | null;
 }
