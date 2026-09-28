@@ -29,7 +29,6 @@ import { STORY_READER_MODE_MESSAGE, STORY_SCROLL_MESSAGE, type StoryReaderModeMe
 import { applyReaderChoice, wireReaderChrome } from '@/lib/story-runtime/reader-chrome-actions';
 import { markScrollableTables } from '@/lib/story-runtime/table-scroll';
 import { wireOutline } from '@/lib/story-runtime/outline-nav';
-import { chromeAfterSample, type ChromeState } from '@/lib/story-runtime/reader-chrome-policy';
 import { startIslandLive } from './live';
 
 const STORY_ROOT_SELECTOR = '[data-mx-inline-story]';
@@ -38,25 +37,6 @@ const STORY_ROOT_SELECTOR = '[data-mx-inline-story]';
  * renderer and has no place in a reader chunk (page.test pins the two equal).
  */
 export const CHROME_HIDDEN_CLASS = 'mx-reader-chrome--hidden';
-
-/** The served chrome's visibility, sampled once per frame, until the element leaves the page (the app took over). */
-function followChrome(win: Window, doc: Document, chrome: HTMLElement): () => void {
-  let state: ChromeState | null = null;
-  let queued = false;
-  const stop = () => { win.removeEventListener('scroll', schedule); win.removeEventListener('resize', schedule); };
-  const sample = () => {
-    queued = false;
-    if (!chrome.isConnected) { stop(); return; }
-    state = chromeAfterSample(state, { scrollY: Math.max(0, win.scrollY), viewportHeight: win.innerHeight, documentHeight: doc.documentElement.scrollHeight });
-    chrome.classList.toggle(CHROME_HIDDEN_CLASS, !state.visible);
-    chrome.setAttribute('data-mx-reader-state', state.visible ? 'shown' : 'hidden');
-  };
-  function schedule() { if (!queued) { queued = true; win.requestAnimationFrame(sample); } }
-  win.addEventListener('scroll', schedule, { passive: true });
-  win.addEventListener('resize', schedule);
-  sample();
-  return stop;
-}
 
 export function startPage(doc: Document = document, win: Window = window): () => void {
   const html = doc.documentElement;
@@ -70,7 +50,9 @@ export function startPage(doc: Document = document, win: Window = window): () =>
       el?.classList.toggle('light', mode !== 'dark');
     }
   }
-  wireReaderChrome(win, doc);
+  const chrome = wireReaderChrome(win, doc);
+  const stops: Array<() => void> = [];
+  if (chrome) stops.push(() => chrome.destroy());
   markScrollableTables(doc);
   wireOutline(doc);
   if (framed) {
@@ -98,17 +80,13 @@ export function startPage(doc: Document = document, win: Window = window): () =>
     win.addEventListener('scroll', scroll, { passive: true });
     win.addEventListener('message', message);
     post();
-    return () => { win.removeEventListener('scroll', scroll); win.removeEventListener('message', message); };
+    return () => { win.removeEventListener('scroll', scroll); win.removeEventListener('message', message); for (const stop of stops.splice(0)) stop(); };
   }
 
-  const stops: Array<() => void> = [];
   const id = doc.body?.getAttribute('data-mx-live-id');
   const editId = doc.body?.getAttribute('data-mx-live-edit');
   const hasModule = !!doc.getElementById(ISLAND_DATA_ID);
   if (id && editId && !hasModule && typeof (win as { EventSource?: unknown }).EventSource === 'function') stops.push(startIslandLive(win, id, editId));
-
-  const chrome = doc.querySelector<HTMLElement>('body > [data-mx-reader-chrome]');
-  if (chrome) stops.push(followChrome(win, doc, chrome));
 
   const kept = takeReloadAnchor(win);
   if (kept) stops.push(holdAnchor(win, kept, applyAnchor));

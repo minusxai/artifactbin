@@ -1,7 +1,7 @@
 /**
  * Bundles the OFFLINE FILE's code (lib/offline/entry.tsx) — what a downloaded
  * `.html` carries in `#afbin-code` (lib/offline/file-html) — to
- * lib/story-runtime/dist/offline/, which ships with the server exactly like
+ * lib/build-assets/offline/, which ships with the server exactly like
  * the SSR bundle beside it. lib/offline/bundle.server.ts reads it back.
  *
  * ONE entry, TWO bundles, because Mermaid alone is about as large as
@@ -43,8 +43,7 @@
  * Always minified production code: it is a download, never a dev asset.
  *
  * `--cache` skips the build when nothing that feeds it changed (the same
- * contract as build-story-runtime.mjs, which invokes this before its own
- * cache check so a runtime cache hit does not skip it).
+ * contract as build-server-reader.mjs, which invokes this before its own build.
  */
 import esbuild from 'esbuild';
 import crypto from 'node:crypto';
@@ -58,7 +57,7 @@ import { compile, optimize } from '@tailwindcss/node';
 import { Scanner } from '@tailwindcss/oxide';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const outdir = path.join(root, 'lib/story-runtime/dist/offline');
+const outdir = path.join(root, 'lib/build-assets/offline');
 const markerPath = path.join(outdir, '.build-cache.json');
 const manifestPath = path.join(outdir, 'manifest.json');
 const cache = process.argv.includes('--cache');

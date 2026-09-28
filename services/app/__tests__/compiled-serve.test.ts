@@ -393,8 +393,8 @@ describe('a version with an author script', () => {
     expect(res.headers.get(READER_FALLBACK_HEADER)).toBe('unported');
   });
 
-  it('its wrapper answers at its own address and, until wave 4, the old one: fixed bytes under their own sandbox CSP', async () => {
-    for (const wrapper of ['/author-frame', '/story/author-frame']) {
+  it('its wrapper answers at its own address: fixed bytes under their own sandbox CSP', async () => {
+    for (const wrapper of ['/author-frame']) {
       const res = await app.request(wrapper);
       expect(res.status, wrapper).toBe(200);
       const csp = res.headers.get('content-security-policy')!;
@@ -426,4 +426,3 @@ describe('the viewer overlay door', () => {
     expect((await doors(`/a/${mine}?reader=compiled`, html)).viewerUrl).toBe(`/a/${mine}/viewer`);
   });
 });
-

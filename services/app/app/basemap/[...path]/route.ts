@@ -6,7 +6,7 @@
  *
  * maplibre-gl is a build dependency, absent from the production image, so the
  * worker is served from the copy the story-runtime build places beside the SSR
- * bundle (scripts/build-story-runtime.mjs), located as lib/story/ssr.server does.
+ * bundle (scripts/build-server-reader.mjs), located as lib/story/ssr.server does.
  */
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
@@ -16,7 +16,7 @@ export async function GET(_request: Request, ctx: { params: Promise<{ path: stri
   const { path: raw } = await ctx.params;
   const upstreamPath = typeof raw === 'string' ? raw : raw.join('/');
   if (upstreamPath === 'worker.js') {
-    const file = path.join(process.cwd(), 'lib', 'story-runtime', 'dist', 'maplibre-gl-csp-worker.js');
+    const file = path.join(process.cwd(), 'lib', 'build-assets', 'maplibre-gl-csp-worker.js');
     return new Response(await readFile(file), { headers: { 'Content-Type': 'text/javascript', 'Cache-Control': 'public, max-age=86400' } });
   }
   if (!BASEMAP_ALLOWED.some(re => re.test(upstreamPath))) return new Response('not found', { status: 404 });

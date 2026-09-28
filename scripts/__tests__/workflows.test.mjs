@@ -84,7 +84,7 @@ describe('ci.yml: one build, shared with the gates', () => {
     expect(uploaded).toEqual(expect.arrayContaining([
       'dist',
       'services/app/dist',
-      'services/app/lib/story-runtime/dist',
+      'services/app/lib/build-assets',
       'services/app/public/story',
       'services/app/public/islands',
       'services/app/public/libraries',

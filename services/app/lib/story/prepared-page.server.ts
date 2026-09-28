@@ -134,7 +134,7 @@ function buildId(): string {
   if (staticBuild && !IS_DEV) return staticBuild;
   const hash = createHash('sha256');
   const read = (file: string) => { try { hash.update(readFileSync(file)); } catch { hash.update(`missing:${file}`); } };
-  read(path.join(process.cwd(), 'lib', 'story-runtime', 'dist', 'story-ssr.cjs'));
+  read(path.join(process.cwd(), 'lib', 'build-assets', 'story-ssr.cjs'));
   read(fileURLToPath(import.meta.url));
   if (IS_DEV) hash.update(String(BOOT));
   return (staticBuild = hash.digest('hex').slice(0, 16));

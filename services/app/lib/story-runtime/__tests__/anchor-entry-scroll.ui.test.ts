@@ -12,7 +12,7 @@
  * So the sample carries the answer instead of the ingredients: the document
  * measures its own end, with the same 4px slack the page uses for its own.
  *
- * In jsdom `window.parent === window`, so the module reads as top-level and
+ * In jsdom `window.parent === window`, so the compiled page reads as top-level and
  * posts nothing. Faking the parent BEFORE the import is the whole setup —
  * these are module-eval side effects, so import order is the arrangement.
  */
@@ -45,20 +45,20 @@ afterEach(() => set(window, 'parent', window));
 describe('the framed scroll sample', () => {
   it('carries the offset and says the document is not at its end', async () => {
     const posts = framed(500, 4000);
-    await import('@/lib/story-runtime/anchor-entry');
+    await import('@/lib/islands/page');
     expect(posts.at(-1)).toEqual({ type: STORY_SCROLL_MESSAGE, scrollY: 500, atBottom: false, gutter: 15 });
   });
 
   it('says the document IS at its end, with the same 4px slack the page uses', async () => {
     // 3196 + 800 = 3996, which is 4000 - 4: the last scrollable pixel.
     const posts = framed(3196, 4000);
-    await import('@/lib/story-runtime/anchor-entry');
+    await import('@/lib/islands/page');
     expect(posts.at(-1)).toEqual({ type: STORY_SCROLL_MESSAGE, scrollY: 3196, atBottom: true, gutter: 15 });
   });
 
   it('samples once at load and again on every scroll', async () => {
     const posts = framed(0, 4000);
-    await import('@/lib/story-runtime/anchor-entry');
+    await import('@/lib/islands/page');
     expect(posts).toHaveLength(1);
     set(window, 'scrollY', 900);
     window.dispatchEvent(new Event('scroll'));

@@ -1,0 +1,42 @@
+/** Exercise the compiled reader's real preparation, compiler and assembler in focused tests. */
+import { assembleReaderPage } from '../assembler';
+import { loadCompilerBuild } from '../build.server';
+import { compilePage } from '../compiler';
+import { loadSsrModule } from '../bundle.server';
+import type { AssembleHead, AssembleOverlay } from '../contract';
+import { prepareStoryParts, type PrepareStoryInput } from '@/lib/story/prepare-runtime.server';
+import { documentStyleSheets } from '@/lib/story/document-styles';
+
+export interface DocumentCase extends PrepareStoryInput {
+  head?: AssembleHead | null;
+  overlay?: AssembleOverlay;
+  footer?: { html: string; css: string } | null;
+}
+
+export async function compiledDocument(input: DocumentCase): Promise<string> {
+  const parts = await prepareStoryParts(input);
+  const build = loadCompilerBuild();
+  const colorMode = parts.mode;
+  const compiled = await compilePage({
+    nodes: parts.runtime.data.nodes, colorMode, template: input.template ?? null,
+    chrome: input.chrome ?? true, glyphs: parts.runtime.data.glyphs,
+    refData: input.refData, flow: input.dataflow?.flow ?? null,
+    authorScript: parts.runtime.authorScript, build: build.id,
+  }, build);
+  const overlay = input.overlay ?? { values: {}, mermaidImages: {}, signedIn: false, doors: null };
+  const story = compiled.ssr && Object.keys(overlay.values).length
+    ? (await loadSsrModule(compiled.ssr)).render({ values: overlay.values, results: null, mermaidImages: overlay.mermaidImages, drawings: {} })
+    : compiled.html;
+  return assembleReaderPage({
+    compiled, story, css: '', fontPreloads: parts.runtime.fontPreloads ?? [],
+    title: parts.runtime.title, theme: input.theme, colorMode, snapshot: null,
+    overlay,
+    chrome: null, spa: null, build, head: input.head ?? null, footer: input.footer ?? null,
+    documentChrome: input.chrome ?? true,
+    sheets: documentStyleSheets({
+      compiledCss: input.compiledCss, chrome: input.chrome ?? true, bare: !!input.footer,
+      theme: input.theme, importedFaces: parts.importedFaces, docFonts: parts.docFonts,
+      authorCss: parts.runtime.authorCss,
+    }),
+  }).html;
+}

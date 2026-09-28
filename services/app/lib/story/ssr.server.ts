@@ -8,7 +8,7 @@ let cached: StorySsrBundle | null = null;
 /** Shared prebuilt renderer; never import the browser entry into the app. */
 export function loadStorySsr(): StorySsrBundle {
   const req = createRequire(pathToFileURL(path.join(process.cwd(), 'package.json')).href);
-  const file = path.join(process.cwd(), 'lib', 'story-runtime', 'dist', 'story-ssr.cjs');
+  const file = path.join(process.cwd(), 'lib', 'build-assets', 'story-ssr.cjs');
   if (IS_DEV) delete req.cache[req.resolve(file)];
   else if (cached) return cached;
   const bundle = req(file) as StorySsrBundle;
