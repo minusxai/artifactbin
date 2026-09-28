@@ -37,6 +37,20 @@ describe('drawChart', () => {
   });
 });
 
+describe('drawChart leaves its input alone', () => {
+  it('draws a native vega spec without mutating the viz it was handed (the prepared page\'s shared JSON)', async () => {
+    const viz = { kind: 'vega', spec: {
+      width: 300, height: 200, data: [{ name: 'main' }],
+      scales: [{ name: 'x', type: 'band', domain: { data: 'main', field: 'product' }, range: 'width' }, { name: 'y', type: 'linear', domain: { data: 'main', field: 'revenue' }, range: 'height' }],
+      marks: [{ type: 'rect', from: { data: 'main' }, encode: { enter: { x: { scale: 'x', field: 'product' }, width: { scale: 'x', band: 1 }, y: { scale: 'y', field: 'revenue' }, y2: { scale: 'y', value: 0 } } } }],
+    } };
+    const before = JSON.stringify(viz);
+    const drawn = await drawChart({ viz, table: { rows: [{ product: 'a', revenue: 1 }, { product: 'b', revenue: 2 }], columns: [] }, width: 300, height: 200, colorMode: 'light' });
+    expect(drawn.svg).toMatch(/^<svg/);
+    expect(JSON.stringify(viz)).toBe(before);
+  });
+});
+
 describe('drawChart refuses what it cannot draw safely or faithfully', () => {
   const bar = { mark: 'bar', encoding: { x: { field: 'product', type: 'nominal' }, y: { field: 'revenue', type: 'quantitative' } } };
   const barColumns = [{ name: 'product', type: 'string' as const }, { name: 'revenue', type: 'number' as const }];

@@ -186,7 +186,8 @@ function scopeIds(svg: string): string {
 /** Draw one chart (contract `DrawnChart`). Throws when the chart cannot be drawn faithfully on the server. */
 export async function drawChart(input: DrawChartInput): Promise<DrawnChart> {
   const { table, width, height, colorMode } = input;
-  const envelope = envelopeOf(input.viz, table.columns, input.refData);
+  // vega and vega-lite mutate the specs they are handed, and `viz` is the prepared page's shared attribute JSON.
+  const envelope = envelopeOf(JSON.parse(JSON.stringify(input.viz)) as Record<string, unknown>, table.columns, input.refData);
   if (isInteractiveMapEnvelope(envelope)) throw new Error('an interactive map draws street tiles in the browser');
   const resolved = resolveEnvelopeSpec(envelope, inferVizColumnsFromRows(table.rows));
   if (!resolved.ok) throw new Error(resolved.error);
