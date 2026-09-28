@@ -8,7 +8,10 @@ export function createIslandDocumentTransport(win: Window, queryUrl: string | un
     // The framed reader retains the parent's session. It can wait for the relay module
     // on its first request; all requests share one instance and its message listeners.
     const relay = import('@/lib/story-runtime/relay-transport').then(({ createRelayTransport }) => createRelayTransport(parent, appOrigin, win));
+    // A held public import is fetched through the document's scoped POST door; query and write calls stay relayed.
+    const held = queryUrl ? createFetchTransport(queryUrl) : null;
     return {
+      ...(held?.hold ? { hold: held.hold } : {}),
       run: async (...args) => (await relay).run(...args),
       page: async (...args) => (await relay).page(...args),
       mutate: async (...args) => (await relay).mutate!(...args),

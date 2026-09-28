@@ -92,9 +92,9 @@ const CHANGED_OUTSIDE = 'Changed outside the file';
 const HISTORY_REASON = 'Version history lives on artifactbin. Open the live version.';
 const NOTHING_TO_SAVE = 'No changes to save';
 
-const manifest = JSON.parse(readFileSync(path.join(APP, 'lib/story-runtime/dist/offline/manifest.json'), 'utf8'));
+const manifest = JSON.parse(readFileSync(path.join(APP, 'lib/build-assets/offline/manifest.json'), 'utf8'));
 // The extras this build serves, as a download names them (their hash changes with every build, so the fixture carries none).
-const extrasCode = readFileSync(path.join(APP, 'lib/story-runtime/dist/offline', manifest.extras.file));
+const extrasCode = readFileSync(path.join(APP, 'lib/build-assets/offline', manifest.extras.file));
 const file = parseArtifactFile({
   ...JSON.parse(readFileSync(path.join(ROOT, 'scripts/fixtures/offline-file/artifact-file.json'), 'utf8')),
   extras: { path: manifest.extras.path, integrity: manifest.extras.integrity },
@@ -122,7 +122,7 @@ async function serveOrigin(context, mode) {
  * carry; mermaid proves the larger bundle also loads and runs under the CSP.
  */
 const files = Object.keys(manifest.bundles).map((kind) => {
-  const code = readFileSync(path.join(APP, 'lib/story-runtime/dist/offline', manifest.bundles[kind].file)).toString('base64');
+  const code = readFileSync(path.join(APP, 'lib/build-assets/offline', manifest.bundles[kind].file)).toString('base64');
   const htmlPath = path.join(work, `Regional sales (${kind}).html`);
   writeFileSync(htmlPath, renderArtifactFileHtml({ file: { ...file, bundle: kind }, code }));
   console.log(`${kind} file: ${(Buffer.byteLength(readFileSync(htmlPath)) / 1024).toFixed(0)} KB`);

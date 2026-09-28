@@ -15,7 +15,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { ListingColumn, NothingHere } from '@/components/Listing';
 import { ProfileListing, type ProfileListingData } from '@/components/ProfileListing';
 import { escapeHtml } from '@/lib/story/reader-chrome';
-import { DOMAIN_FOOTER_TEXT } from '@/lib/story/document';
+import { DOMAIN_FOOTER_TEXT } from '@/lib/story/document-styles';
 import { THEME_BOOTSTRAP_HASH, THEME_BOOTSTRAP_SCRIPT } from '@/lib/theme-bootstrap';
 
 export interface DomainHomeInput {

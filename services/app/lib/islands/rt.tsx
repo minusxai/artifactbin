@@ -24,6 +24,7 @@ import { hydrate, insert as solidInsert, isServer } from 'solid-js/web';
 import type { ReactiveExpression } from '@/lib/jsx/reactive';
 import { evaluateReactive } from '@/lib/jsx/reactive-eval';
 import { substituteRow } from '@/lib/story/row-scope';
+import { keyedRowsError } from '@/lib/story/row-key';
 import type { CompiledDataflow } from '@/lib/story/compiled-dataflow';
 import type { DataflowState, Row, Scalar, TableResult } from '@/lib/story/dataflow';
 import { ACCESS_PENDING, type DataflowStore } from '@/lib/story-runtime/store';
@@ -65,6 +66,7 @@ export interface IslandDataflowInput {
 
 /** What one document's runtime starts from. */
 export interface IslandRuntimeData {
+  assetsUrl?: string;
   /** The store's input; absent or null for a document that declares no data (tabs, a diagram). */
   dataflow?: IslandDataflowInput | null;
   /** The version's stored Mermaid drawings (lib/mermaid-images). */
@@ -168,6 +170,7 @@ export function createIslandRuntime(
 
   const noData = () => new Error('no data declared');
   const context: IslandContext = {
+    assetsUrl: () => data.assetsUrl ?? null,
     values: () => state.values,
     value: (name) => state.values[name],
     // A reconciled result can retain the table and row-array proxies across a
@@ -304,11 +307,12 @@ export function Repeat({ name, keyBy, owner, ids, tableParts, svg, children, ...
     instances.set(row, next);
     return next;
   });
-  const body = () => (
-    keyBy
+  const error = createMemo(() => keyBy ? keyedRowsError(rows(), keyBy, 'keyBy') : null);
+  const body = () => error()
+    ? (svg ? <text role="alert">{error()}</text> : <span role="alert">{error()}</span>)
+    : keyBy
       ? <For each={keyedRows()}>{instance => children(instance.row, { owner: owner || '', key: instance.key, durable: true, ids: ids || [] })}</For>
-      : <For each={rows()}>{(row, index) => children(row, { owner: owner || '', key: index(), durable: false, ids: ids || [] })}</For>
-  );
+      : <For each={rows()}>{(row, index) => children(row, { owner: owner || '', key: index(), durable: false, ids: ids || [] })}</For>;
   return tableParts ? body() : svg ? <g {...attrs}>{body()}</g> : <div {...attrs}>{body()}</div>;
 }
 

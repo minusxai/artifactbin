@@ -1,4 +1,3 @@
-import {savedMentionStates} from '@/lib/membership';
 /**
  * GET /a/:id/raw — the artifact's own bytes (the standalone document for
  * markup, JSON/image bytes for the data tiers), a SUB-PATH of the one
@@ -20,14 +19,13 @@ import {savedMentionStates} from '@/lib/membership';
  */
 import {agentDiscovery} from '@/lib/agent-discovery';
 import { archivedReadOnly, archivedVersionFor, servedRow } from '@/lib/archived-version';
-import { canReadArtifact, dataflowForRow, declarationsForRow, getArtifactById, holdableImports, linkRoleOf, refDataForRow, viewerIdentityFor } from '@/lib/artifacts';
+import { canReadArtifact, dataflowForRow, getArtifactById, linkRoleOf, type ArtifactRow } from '@/lib/artifacts';
 import { withIntent, type Intent } from '@/lib/intent';
 import { count, has } from '@/lib/relations';
 import { countOpenAnnotations } from '@/lib/annotations';
-import { isCookieCredential, roleFor } from '@/lib/viewer';
-import { canAnnotate } from '@/lib/share-roles';
+import { roleFor, type RequestActor } from '@/lib/viewer';
+import { canAnnotate, canEdit, roleBehindLogin } from '@/lib/share-roles';
 import { forkedFromCredit } from '@/lib/story/fork-credit.server';
-import { roleBehindLogin } from '@/lib/share-roles';
 import { trackEvent } from '@/lib/analytics';
 import { requestOrSessionActor } from '@/lib/viewer';
 import { verifyExportKey } from '@/lib/export-key';
@@ -39,29 +37,27 @@ import { Readable } from 'node:stream';
 import { loadImage } from '@/lib/story/image-store';
 import { serveStoredFile } from '@/lib/story/file-store';
 import { loadPdfStream, pdfFilename, pdfMetaOf } from '@/lib/story/pdf-store';
-import { webAssetsForSource } from '@/lib/web-assets';
-import { buildStoryDocument } from '@/lib/story/document';
 import { captureColor, engineRequested } from '@/lib/mermaid-images/store';
 import { resolveStoredStoryDesign } from '@/lib/data/story/story-themes';
 import { currentStoryCss } from '@/lib/data/story/story-css.server';
 import { declaresMutations } from '@/lib/story/helmet';
-import { assetsPath, resolvePath, markupCsp, mutatePath, queryPath } from '@/lib/story/markup-csp';
+import { assetsPath, markupCsp, mutatePath, queryPath } from '@/lib/story/markup-csp';
 import { readUrlValues } from '@/lib/story/url-values';
-import { storyRuntimeAssets } from '@/lib/story/runtime-asset';
 import { getUserById } from '@/lib/users';
 import { avatarUrl } from '@/lib/avatars';
 import { displayTitle } from '@/lib/story/title';
 import { CARD_RENDER_GENERATION } from '@/lib/export-card';
 import type { StoryThemeName } from '@/lib/validation/atlas-schemas';
 import { catalogOf,publicCatalogOf } from '@/lib/datasets/catalog';
-import { ASSETS_ORIGIN, COMPILED_READER, PUBLIC_BASE_URL } from '@/lib/config';
+import { ASSETS_ORIGIN, PUBLIC_BASE_URL } from '@/lib/config';
 import { canonicalDocumentUrl, domainPostUrl, servesDocument } from '@/lib/custom-domains';
-import { READER_FALLBACK_HEADER, READER_MODE_HEADER, VIEWER_OVERLAY_PATH, type ReaderFallbackReason } from '@/lib/compiled-page/contract';
+import { READER_MODE_HEADER, VIEWER_OVERLAY_PATH } from '@/lib/compiled-page/contract';
 import type { StorySurface } from '@/lib/compiled-page/story-fragment';
-import { currentCompiledReaderFlag, readerModeFor } from '@/lib/compiled-page/reader-mode';
 import { compiledPageFor, domainFooter } from '@/lib/compiled-page/serve.server';
 import { preparedPageFor } from '@/lib/story/prepared-page.server';
 import { documentStyleSheets } from '@/lib/story/document-styles';
+import type { ReaderChromeInput } from '@/lib/story/reader-chrome';
+import { readerChromeFonts } from '@/lib/story/first-screen-fonts';
 
 // The markup document's policy — per document, built in lib/story/markup-csp:
 // content-independent except for the ONE connect-src that admits exactly this
@@ -75,17 +71,53 @@ const COMMON = {
 
 const NOT_FOUND = '<!doctype html><meta charset="utf-8"><title>Not found</title><h1>Not found</h1>';
 
-/**
- * A story fragment the compiled path could not give: 409 while the version is still being compiled (off
- * the write's path — the page asks again), else 422 naming why; either way the page reloads in the end.
- */
-function storyFragmentRefused(reason: ReaderFallbackReason | null): Response {
-  const transient = reason === 'not-compiled' || reason === 'over-budget';
-  return new Response(JSON.stringify({ error: 'not_compiled', ...(reason ? { fallback: reason } : {}) }), {
-    status: transient ? 409 : 422,
-    headers: { 'Content-Type': 'application/json; charset=utf-8', 'Access-Control-Allow-Origin': '*', ...(reason ? { [READER_FALLBACK_HEADER]: reason } : {}), ...COMMON },
-  });
+/** Request-specific reader furniture around the compiled story. */
+async function rawChrome(row: ArtifactRow, actor: RequestActor, at: { version: number; head: number } | null, ground: 'light' | 'dark'): Promise<ReaderChromeInput> {
+  const viewerId = actor.viewer?.userId ?? null;
+  const role = await roleFor(row, actor);
+  const [creator, source, reader, likes, liked, follows, following, comments] = await Promise.all([
+    row.user_id ? getUserById(row.user_id) : Promise.resolve(null),
+    forkedFromCredit(row.forked_from),
+    actor.credential === 'session' && viewerId ? getUserById(viewerId) : Promise.resolve(null),
+    count('like', row.id),
+    viewerId ? has(viewerId, 'like', row.id) : Promise.resolve(false),
+    row.user_id && row.user_id !== viewerId ? count('follow', row.user_id) : Promise.resolve(0),
+    viewerId && row.user_id && row.user_id !== viewerId ? has(viewerId, 'follow', row.user_id) : Promise.resolve(false),
+    canAnnotate(role) ? countOpenAnnotations(row.id) : Promise.resolve(0),
+  ]);
+  const door = (intent: Intent) => viewerId
+    ? `/a/${row.id}${withIntent('', intent)}`
+    : `/login?callbackUrl=${encodeURIComponent(`/a/${row.id}${withIntent('', intent)}`)}`;
+  const unlock = roleBehindLogin(linkRoleOf(row));
+  return {
+    artifactId: row.id, title: displayTitle(row), ground, visibility: row.visibility,
+    author: creator ? { username: creator.username ?? null, id: creator.id, image: avatarUrl(creator), forkedFrom: source } : { username: null, forkedFrom: source },
+    viewer: reader ? { id: reader.id, name: reader.username || reader.email || '', image: avatarUrl(reader) } : null,
+    ownerBreadcrumb: role === 'owner' && !at, share: role === 'owner' && !at,
+    archived: at ? { version: at.version, head: at.head } : null,
+    edit: canEdit(role) && !at,
+    reactions: at ? null : {
+      like: { count: likes, liked, href: door('like') },
+      follow: row.user_id && row.user_id !== viewerId ? { count: follows, following, href: door('follow') } : null,
+      comment: { count: comments, href: door('comment') },
+    },
+    signIn: !at && !viewerId && (unlock === 'commenter' || unlock === 'editor')
+      ? { unlocks: unlock, callbackUrl: `/a/${row.id}${withIntent('', 'comment')}` } : null,
+    login: !viewerId ? { href: `/login?callbackUrl=${encodeURIComponent(`/a/${row.id}`)}` } : null,
+    fork: at ? null : { href: door('fork') },
+  };
 }
+
+
+/**
+ * A POST ON ITS OWNER'S CUSTOM DOMAIN (server/custom-host). Only the host
+ * boundary sets it — the router passes params alone — so no request can ask
+ * for this mode. It renders the reader copy with no reader chrome and no doors,
+ * a footer back to the app, and a self-canonical on the domain; every
+ * capture, archive and editing switch on the URL is ignored.
+ */
+export interface DomainPost { hostname: string; ownerId: string }
+
 const notFound = () =>
   new Response(NOT_FOUND, { status: 404, headers: { 'Content-Type': 'text/html; charset=utf-8', ...COMMON } });
 
@@ -323,40 +355,10 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
       const base = byExportKey && !chrome ? new URL(request.url).origin : baseUrl(request);
       // The managed <Iframe>'s asset door, one rule for both renderers: a capture's verified key rides in it.
       const managedAssets = ASSETS_ORIGIN ? { origin: ASSETS_ORIGIN, resolveUrl: `${base}${assetsPath(artifact.id)}${byExportKey ? `?key=${encodeURIComponent(key!)}` : ''}` } : null;
-      /*
-       * ?edit=1 — the OWNER's copy. In-place editing is the runtime, and a
-       * document of pure prose ships none; asking for it here means pressing
-       * edit costs one message instead of a reload. Grants nothing: the read
-       * ACL above has already decided who may see this at all.
-       */
-      // Never on an archived render: there is nothing here to write back TO —
-      // the head has moved on — so the editor would be an invitation to lose work.
-      const editable = !domain && !at && new URL(request.url).searchParams.get('edit') === '1';
-      /*
-       * ?comment=1 — a COMMENTER's copy. Commenting happens in the frame (only
-       * the document can see a Selection at an opaque origin) but needs no
-       * editor, and asking for `edit` bought one: the whole hydration runtime,
-       * on a page of prose, to draw a tint. Grants nothing either — the read
-       * ACL above has already decided who may see this at all.
-       */
-      // Nor on an archived render: a comment anchors to text in the CURRENT
-      // document, and these paragraphs may not be there any more.
-      const commenting = !domain && !at && new URL(request.url).searchParams.get('comment') === '1';
-      /*
-       * WHICH RENDERER (docs/phase2-architecture.md §10): the deployment's switch
-       * and the request's `?reader=` (never on a domain post). The owner's
-       * editing and commenting copies are today's runtime whatever the switch
-       * says: the compiled page runs no editor. A compiled answer returns here,
-       * before any of today's per-request work; a fallback falls through to
-       * today's renderer unchanged and says why (`x-mx-reader-fallback`).
-       */
-      const compiledMode = readerModeFor(currentCompiledReaderFlag(COMPILED_READER), new URL(request.url).search, { domainPost: !!domain }) === 'compiled' && !editable && !commenting;
-      // A fragment is the compiled page's or nothing: the page that asked reloads onto today's renderer.
-      if (fragment && !compiledMode) return storyFragmentRefused(null);
+      // Every admitted document read is compiled, including live story fragments.
       /** The app page's story (lib/artifact-page) differs from this copy in its sheet and its drawings, never in its story. */
       const appStory = fragment?.surface === 'app';
-      let readerFallback: ReaderFallbackReason | null = null;
-      if (compiledMode) {
+      {
         const capture = byExportKey && !chrome;
         const prepared = await preparedPageFor(artifact, at, base);
         const flow = prepared.page.declared?.flow ?? null;
@@ -370,7 +372,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
           search: new URL(request.url).search,
           drawings: domain || engineRequested(request.url) ? null : appStory ? 'inline' : 'document',
           colorMode: byExportKey && !domain ? captureColor(request.url) : null,
-          signedIn: appStory ? isCookieCredential(actor) : actor.credential === 'session' && !!viewer?.userId,
+          signedIn: actor.credential === 'session' && !!viewer?.userId,
           // A sandboxed copy's doors carry no credential (its origin is opaque): it holds what anyone may, as today's /raw does.
           holder: null,
           // A capture's rows are settled, but its managed iframe still needs the scoped asset door.
@@ -380,16 +382,19 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
             viewerUrl: VIEWER_OVERLAY_PATH(artifact.id),
             assetsUrl: assetsPath(artifact.id),
           },
+          ...(capture ? { assetsUrl: `${assetsPath(artifact.id)}?key=${encodeURIComponent(key!)}` } : {}),
           managedAssets,
           ...(at ? { readOnly: archivedReadOnly(at.version) } : {}),
           live: chrome && !at ? { id: artifact.id, editId: artifact.edit_id } : null,
-          chrome: null,
+          chrome: reader && !fragment ? await rawChrome(artifact, actor, at, design.colorMode ?? prepared.page.data.colorMode) : null,
+          chromeFonts: reader && !fragment ? readerChromeFonts({ theme: prepared.page.base.theme, docFonts: prepared.page.base.fonts, importedFaces: prepared.page.base.faces }).map((face) => face.url) : [],
           spa: null,
           // The page's own behaviour (lib/islands/page): framing, the reader's colour override, the live
           // stream of a page with no islands, the scroll a live reload keeps. Never on a capture.
           behaviors: capture ? [] : ['page'],
           // `chrome=0` draws the document without its own chrome (a deck's rail and present bar), as today's does.
           documentChrome: chrome,
+          capture: !chrome,
           head: chrome
             ? {
               description: row.description,
@@ -429,268 +434,12 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
             headers: { 'Content-Type': 'text/html; charset=utf-8', [READER_MODE_HEADER]: 'compiled', ...COMMON },
           });
         }
-        if (fragment) return storyFragmentRefused(answer.fallback);
-        readerFallback = answer.fallback;
+        // The serve boundary reports a compiled failure; no legacy renderer remains.
+        return new Response('<!doctype html><meta charset="utf-8"><title>Unavailable</title><h1>This document could not be rendered</h1>', {
+          status: 500,
+          headers: { 'Content-Type': 'text/html; charset=utf-8', [READER_MODE_HEADER]: 'compiled', ...COMMON },
+        });
       }
-      // `none` whenever the link grants no more than a guest already has, which
-      // is every ordinary public document — see lib/share-roles roleBehindLogin.
-      const behindLogin = roleBehindLogin(linkRoleOf(artifact));
-      const signInUnlocks = behindLogin === 'commenter' || behindLogin === 'editor' ? behindLogin : null;
-      /*
-       * PAINT FIRST. A reader gets the DECLARATIONS and no rows: the document
-       * arrives at final geometry immediately and fetches its own data through
-       * the queryUrl its island names. Running the SQL here was ~90ms of a
-       * ~100ms render and 231 KB of a 365 KB page on a real dashboard, all of
-       * it spent before the reader could see anything.
-       *
-       * The capture render (`chrome=0`) is the one that must still be settled
-       * rather than fast — /export photographs this frame, and a photograph of
-       * a skeleton previews nothing.
-       */
-      /*
-       * THE READER'S OWN SELECTION, carried in the link (`?$region=west` —
-       * lib/story/url-values). It is read from the DECLARATIONS, which the
-       * reader path needs anyway, so a link naming a value the document does
-       * not declare, or a value its type refuses, costs nothing and changes
-       * nothing: the document falls back to what its author declared. The
-       * server's own keys on this URL (`key`, `chrome`, `edit`, `comment`,
-       * `v`) carry no `$` and a Value can never be named with one, so a
-       * selection cannot shadow them.
-       *
-       * Where it goes differs by which render this is, and that is the whole
-       * of it:
-       *  - the READER (chrome=1) gets the values on the island's THIRD
-       *    dataflow field, values with no rows. Seeding through `state`
-       *    instead would say "somebody already ran the queries" and cancel
-       *    paint-first's first run, leaving every chart on its skeleton.
-       *  - the CAPTURE (chrome=0) is the render that must be SETTLED rather
-       *    than fast — /export photographs it — so its selection is threaded
-       *    into the run itself and the rows it carries are the selected ones.
-       */
-      const declared = await declarationsForRow(row);
-      const search = new URL(request.url).search;
-      const urlValues = declared ? readUrlValues(search, declared.flow) : {};
-      const hasUrlValues = Object.keys(urlValues).length > 0;
-      const [assetUrls, refData, dataflow, creator, forkedFrom, readerIdentity, readerRow] = await Promise.all([
-        // Our copies of the web URLs this document names (lib/web-assets): the
-        // served <img> points at them, with the box and the blur the row
-        // recorded, and the reader's browser reaches no third party.
-        webAssetsForSource(row.source),
-        // A capture takes the full copy of every image: /export photographs
-        // this frame, and a `sizes` hint against a headless viewport is how an
-        // og card ends up showing the 640px one.
-        refDataForRow(row, { capture: !chrome }),
-        chrome
-          // A top-level reader queries through the ANONYMOUS GET door, so what it
-          // may hold is decided for nobody in particular.
-          ? (declared ? holdableImports(row, declared.flow, null).then((hold) => ({ ...declared, ...(hasUrlValues ? { values: urlValues } : {}), hold })) : Promise.resolve(declared))
-          // The CAPTURE's run carries whoever asked for it, which matters for
-          // any document reading a folder's children (`ref_<folderId>` is a
-          // per-viewer table). The TOKEN travels beside the account:
-          // sessionActor answers an account session as a viewer and the agent
-          // cookie as a bare token, and an unclaimed row is owned by its token
-          // — the viewer alone would photograph a stranger's view of it.
-          : dataflowForRow(row, { values: urlValues, viewer: { userId: viewer?.userId ?? null, tokenId: actor.tokenId ?? null, email: viewer?.email ?? null } }),
-        // The author's row, once: their handle (the byline) and their picture.
-        reader && artifact.user_id ? getUserById(artifact.user_id) : Promise.resolve(null),
-        reader ? forkedFromCredit(artifact.forked_from) : Promise.resolve(null),
-        /*
-         * WHO IS READING — `$_me` in markup, and the name a <User> shows.
-         *
-         * A CAPTURE deliberately asks for nobody. The exporter photographs this
-         * page in a browser with no session, so a capture is a guest render
-         * already; pinning that here as well is what keeps `/export`'s
-         * viewer-independent cache key honest — one reader's document can never
-         * be photographed into an image another reader is served.
-         */
-        chrome ? viewerIdentityFor(artifact, viewer?.userId ?? null) : Promise.resolve(null),
-        /*
-         * THE READER'S FACE on the rail's menu trigger — for a signed-in
-         * ACCOUNT only (the app bar's rule: an agent cookie or a bearer is not
-         * a person signed in), and never on a capture, for the same reason as
-         * above. It makes these bytes per-viewer; the markup is `no-store`.
-         */
-        reader && actor.credential === 'session' && viewer?.userId ? getUserById(viewer.userId) : Promise.resolve(null),
-      ]);
-      const creatorUsername = creator?.username ?? null;
-      const runtime = storyRuntimeAssets();
-      /*
-       * THE DOORS. A top-level document holds no session, so like, follow and
-       * comment are ASKS it carries: a viewer's go straight back to this
-       * document with the intent, and the shell performs it; a stranger's go
-       * through login first. The same shape the fork door has always had.
-       */
-      const door = (kind: Intent) => (viewer
-        ? `/a/${artifact.id}${withIntent('', kind)}`
-        : `/login?callbackUrl=${encodeURIComponent(`/a/${artifact.id}${withIntent('', kind)}`)}`);
-      const viewerId = viewer?.userId ?? null;
-      const role = await roleFor(artifact, actor);
-      const ownerBreadcrumb = reader && role === 'owner';
-      /*
-       * AN ARCHIVED RENDER HAS NO DOORS. Like, follow and comment all act on
-       * the artifact as it is now, and offering them beside bytes that are no
-       * longer the document is how a reader ends up commenting on a paragraph
-       * nobody can see. The rail draws none of them (lib/story/reader-chrome).
-       */
-      const reactions = reader && !at
-        ? {
-          like: { count: await count('like', artifact.id), liked: viewerId ? await has(viewerId, 'like', artifact.id) : false, href: door('like') },
-          follow: artifact.user_id && artifact.user_id !== viewerId
-            ? { following: viewerId ? await has(viewerId, 'follow', artifact.user_id) : false, count: await count('follow', artifact.user_id), href: door('follow') }
-            : null,
-          // Unresolved threads — the number, not the words, and only for someone
-          // who may take part (the page hands the count to the same people).
-          comment: { count: canAnnotate(role) ? await countOpenAnnotations(artifact.id) : 0, href: door('comment') },
-        }
-        : null;
-      const html = await buildStoryDocument({
-        reactions,
-        ownerBreadcrumb,
-        assetUrls,
-        chrome,
-        editable,
-        commenting,
-        // The one line an archived render carries: which version this is, out
-        // of how many, and that it cannot be changed.
-        archived: at ? { version: at.version, head: at.head } : null,
-        // Unfurl cards, for the reader path where this document IS the page.
-        // Never on a capture render: that is the exporter shooting this frame.
-        social: chrome
-          ? {
-            title: displayTitle(row),
-            description: row.description,
-            // ABSOLUTE: this document IS the page a crawler fetches, and a
-            // relative og:image is resolved by some scrapers against the page
-            // URL and by others not at all. baseUrl reads the forwarding
-            // headers, so behind the proxy this is the public origin — never
-            // the container's.
-            // A custom domain serves no /export: its card is photographed on the app.
-            image: `${domain ? PUBLIC_BASE_URL.replace(/\/+$/, '') : base}/a/${artifact.id}/export?mode=card&v=${artifact.version}&r=${CARD_RENDER_GENERATION}`,
-          }
-          : null,
-    help: reader ? agentDiscovery(base) : null,
-        author: reader ? { username: creatorUsername, id: creator?.id ?? null, image: creator ? avatarUrl(creator) : null, forkedFrom } : null,
-        readerFace: readerRow ? { id: readerRow.id, name: readerRow.username || viewer?.email || readerRow.email || '', image: avatarUrl(readerRow) } : null,
-        /*
-         * THE WAY IN. A guest — no account, so ANONYMOUS_CEILING holds them at
-         * `viewer` — on a link its owner set to `can comment` or `can edit` is
-         * someone who has been invited and not told. The decision is the
-         * route's because only here are the viewer and the row both in hand;
-         * lib/story/document is handed the verdict and says it.
-         *
-         * Not a widening: this changes no ACL and buys no runtime. After they
-         * sign in, effectiveRole finds the link role by itself and the shell
-         * follows — the path a signed-in stranger takes.
-         */
-        signIn: reader && !at && !viewer && signInUnlocks
-          // Back to the document AND back to what the door offered: someone who
-          // logged in to comment returns to an open conversation rather than to
-          // a document that has forgotten why they left (lib/intent).
-          ? { unlocks: signInUnlocks, callbackUrl: `/a/${artifact.id}${withIntent('', 'comment')}` }
-          : null,
-        /*
-         * FORK — on every chrome-bearing markup document, because a reader may
-         * fork anything they can READ and the door decides on exactly that.
-         *
-         * The two hrefs differ by one thing: whether this request had a viewer.
-         * With one, the shell is a navigation away and can be told what to do
-         * on arrival; without one, the shell is behind /login, so the ask rides
-         * through the login door and comes back on the other side. Either way
-         * the document only carries the ASK — it is sandboxed at an opaque
-         * origin and holds no session, so it could not POST the fork itself.
-         */
-        edit: reader && editable,
-        login: reader && !viewer ? { href: `/login?callbackUrl=${encodeURIComponent(`/a/${artifact.id}`)}` } : null,
-        // Forking an archived version is a copy of something that is not this
-        // document — out of scope for the read-only view, so the door is shut.
-        fork: reader && !at ? { href: viewer ? `/a/${artifact.id}${withIntent('', 'fork')}` : `/login?callbackUrl=${encodeURIComponent(`/a/${artifact.id}${withIntent('', 'fork')}`)}` } : null,
-        source: row.source ?? '',
-        compiledCss,
-        theme: design.theme,
-        template: meta.template ?? null,
-        colorMode: design.colorMode,
-        refData,
-        dataflow,
-        title: ownerBreadcrumb ? displayTitle(row) : row.title,
-        // Content-addressed, from the build's own manifest: the URL has to
-        // change when the bytes do, because services/app/server/app.ts caches everything
-        // under /story/ for a year. Null when there is no build — a document
-        // that does not hydrate still reads (lib/story/runtime-asset).
-        runtimeSrc: runtime.entry,
-        anchorSrc: runtime.anchor,
-        commentSrc: runtime.comment,
-        // …with the whole static closure of each: the entry's shared chunks, the
-        // chart chunk's d3, and per Mermaid kind the engine, the diagram and its
-        // layout — each preloaded only by a document that will run it.
-        runtimeDeps: runtime.entryDeps,
-        lazyChunks: runtime.lazy.flatMap((chunk) => [chunk, ...runtime.lazyDeps[chunk] ?? []]),
-        mermaidChunks: runtime.mermaid,
-        // Where this document fetches its re-runs when it IS the page (the
-        // reader path); inside a parent the relay is chosen instead.
-        queryUrl: queryPath(artifact.id),
-        resolveUrl: `${base}${resolvePath(artifact.id)}`,
-        libraryOrigin: base,
-        ...(managedAssets ? { managedAssets } : {}),
-        /*
-         * …and where it imports an image URL only its reader can compute (a
-         * bound <img src="$pick">). Unconditional, unlike mutateUrl: a source
-         * can appear in the DOM without the document declaring it — an author
-         * script, a table column — and the endpoint answers under this
-         * document's own read ACL either way.
-         *
-         * A CAPTURE carries the exporter's key in that address, because a
-         * markup document is photographed from THIS page top-level (lib/export
-         * — `raw?chrome=0&key=`), in a browser with no session and with no
-         * parent to relay through: the address is the only thing left that can
-         * present a credential, and without it a private document's og image
-         * photographs its alt text. Only a key this route VERIFIED is echoed,
-         * so nothing a caller invents ever reaches the document.
-         */
-        mentionStatuses:await savedMentionStates(artifact),
-        assetsUrl: byExportKey ? `${assetsPath(artifact.id)}?key=${encodeURIComponent(key!)}` : assetsPath(artifact.id),
-        // Only a document that declares a write gets a write URL: a document
-        // that cannot write should not carry the address of a door it never
-        // opens. An ARCHIVED render never does — it is not the document any
-        // write would land on — and it says so by name instead (`readOnly`).
-        ...(!at && declaresMutations(row.source) ? { mutateUrl: mutatePath(artifact.id) } : {}),
-        /*
-         * WHY EVERY WRITE IS REFUSED HERE, in the words the button shows.
-         * Dropping `mutateUrl` alone leaves the runtime saying "This view
-         * cannot save changes" — true, and about the wrong thing. This travels
-         * on the island instead, so a `<Button run=…>` is disabled with
-         * "Version N is read-only" before anyone presses it and `mx.describe()`
-         * reports it as the unavailable reason.
-         */
-        ...(at ? { readOnly: archivedReadOnly(at.version) } : {}),
-        // A capture gets none: it has no reader, and a document that adopted an
-        // edit mid-shot would be photographed halfway between two versions.
-        // Nor does an archived render: the live stream carries the HEAD's
-        // edits, and adopting them would quietly turn version N into version M.
-        live: chrome && !at ? { id: artifact.id, editId: artifact.edit_id } : null,
-        viewer: readerIdentity,
-        // On its domain: no chrome at all, a footer back to the app, canonical to itself.
-        bare: domain ? { footerHref: `${PUBLIC_BASE_URL.replace(/\/+$/, '')}/a/${artifact.id}` } : null,
-        // A capture needs none; every reader copy names the address to index it under.
-        canonical: domain ? domainPostUrl(domain.hostname, artifact) : chrome ? await canonicalDocumentUrl(artifact) : null,
-        /*
-         * THIS VERSION'S PRERENDERED DIAGRAMS (lib/mermaid-images), drawn from
-         * stored SVG with no Mermaid code. Not on a custom domain (its host
-         * serves no stored drawings), and not when the engine was asked for by
-         * name (`?mermaid=engine` — what the harvest itself loads).
-         */
-        mermaidImageLookup: domain || engineRequested(request.url) ? null : { artifactId: artifact.id, version: at?.version ?? artifact.version, surface: 'document', head: !at, visibility: artifact.visibility },
-      });
-      return new Response(html, {
-        status: 200,
-        headers: {
-          'Content-Type': 'text/html; charset=utf-8',
-          'Content-Security-Policy': markupCsp(base, artifact.id, ASSETS_ORIGIN ?? undefined),
-      ...(reader ? { Link: `<${agentDiscovery(base).url}>; rel="help"` } : {}),
-          [READER_MODE_HEADER]: 'legacy',
-          ...(readerFallback ? { [READER_FALLBACK_HEADER]: readerFallback } : {}),
-          ...COMMON,
-        },
-      });
     }
 
     /*

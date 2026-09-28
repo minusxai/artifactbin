@@ -19,7 +19,6 @@
     "test": "node scripts/check-local.mjs test",
     "test:all": "npm test -w services/app && npm test -w services/cli",
     "test:integration": "vitest run --project=integration",
-    "build:runtime": "npm run build:runtime -w services/app",
     "test:api": "npm run test:api -w services/app",
     "test:node": "npm run test:node -w services/app",
     "test:ui": "npm run test:ui -w services/app",

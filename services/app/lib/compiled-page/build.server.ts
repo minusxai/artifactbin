@@ -25,7 +25,7 @@ let cached: { text: string; build: CompilerBuild } | null = null;
 
 /** Validate the manifest the build wrote; a malformed one is an error, never a build a compile could key on. */
 function parse(text: string, file: string): CompilerBuild {
-  const raw = JSON.parse(text) as { build?: unknown; manifest?: unknown };
+  const raw = JSON.parse(text) as { build?: unknown; manifest?: unknown; sqliteWasm?: unknown };
   if (typeof raw.build !== 'string' || !BUILD_ID_RE.test(raw.build)) throw new Error(`island build: ${file} has no 16-hex build id`);
   if (!raw.manifest || typeof raw.manifest !== 'object' || Array.isArray(raw.manifest)) throw new Error(`island build: ${file} has no manifest`);
   const manifest: Record<string, string> = {};
@@ -34,7 +34,8 @@ function parse(text: string, file: string): CompilerBuild {
     if (typeof url !== 'string' || !url.startsWith('/islands/')) throw new Error(`island build: ${file} maps ${specifier} outside /islands/`);
     manifest[specifier] = url;
   }
-  return Object.freeze({ id: raw.build, manifest: Object.freeze(manifest) });
+  if (raw.sqliteWasm !== undefined && (typeof raw.sqliteWasm !== 'string' || !/^\/islands\/sqlite3-[0-9a-f]{16}\.wasm$/.test(raw.sqliteWasm))) throw new Error(`island build: ${file} has an invalid SQLite wasm URL`);
+  return Object.freeze({ id: raw.build, manifest: Object.freeze(manifest), ...(raw.sqliteWasm ? { sqliteWasm: raw.sqliteWasm } : {}) });
 }
 
 /** The shared island build this server serves with. Throws when the build has not been run (`node scripts/build-islands.mjs`). */

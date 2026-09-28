@@ -1,8 +1,8 @@
 /**
  * The dataflow at render: dataflowForRow resolves the datasets a document's
  * SQL names by ownership, runs the queries, and the served document's JSON
- * island carries the declarations + state — while the datasets themselves are
- * NOT inlined (only their query results are).
+ * island carries the first query result and URL values — while the datasets themselves are
+ * NOT inlined. Declarations live in the compiled document module.
  */
 import { describe, expect, it } from 'vitest';
 import { GET as rawRoute } from '@/app/a/[id]/raw/route';
@@ -10,7 +10,8 @@ import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 import { dataflowForRow, getArtifactById } from '@/lib/artifacts';
 
 
-import { STORY_ISLAND_ID, type StoryIslandData } from '@/lib/story-runtime/contract';
+import { ISLAND_DATA_ID } from '@/lib/compiled-page/contract';
+import type { IslandPageData } from '@/lib/islands/contract';
 import { mintToken } from '@/lib/tokens';
 import { claimToken, createUser } from '@/lib/users';
 import { agentCookie, useAppHarness, request } from '@/__tests__/harness';
@@ -23,11 +24,11 @@ const create = async (token: string, body: Record<string, unknown>) =>
 
 const ROWS = [{ region: 'EU', revenue: 837 }, { region: 'NA', revenue: 1200 }, { region: 'EU', revenue: 3 }];
 
-const island = (html: string): StoryIslandData => {
-  const open = html.indexOf(`id="${STORY_ISLAND_ID}"`);
+const island = (html: string): IslandPageData => {
+  const open = html.indexOf(`id="${ISLAND_DATA_ID}"`);
   const start = html.indexOf('>', open) + 1;
   const end = html.indexOf('</script>', start);
-  return JSON.parse(html.slice(start, end)) as StoryIslandData;
+  return JSON.parse(html.slice(start, end)) as IslandPageData;
 };
 
 const DOC = (ds: string) =>
@@ -74,7 +75,7 @@ describe('dataflowForRow', () => {
 });
 
 describe('the served document', () => {
-  it('carries the declarations in its island and inlines neither the dataset nor the query results', async () => {
+  it('carries its first query result but not the source dataset', async () => {
     const t = await mintToken('t');
     const ds = ((await (await create(t.token, { dataset: ROWS })).json()) as { id: string }).id;
     const doc = ((await (await create(t.token, { markup: DOC(ds) })).json()) as { id: string }).id;
@@ -82,22 +83,18 @@ describe('the served document', () => {
     expect(res.status).toBe(200);
     const html = await res.text();
     const data = island(html);
-    expect(data.dataflow?.flow.values.map((v) => v.name)).toEqual(['region']);
-    // Paint first: the reader's copy carries no rows at all — not the dataset,
-    // and not the aggregate the query would have made of it. The document asks
-    // for those itself, through the queryUrl beside them here.
-    expect(data.dataflow?.state).toBeUndefined();
-    expect(html).not.toContain('"revenue":840');
+    expect(data.values).toEqual({});
+    expect(data.results?.tables.sales?.rows).toEqual([{ region: 'EU', revenue: 840 }, { region: 'NA', revenue: 1200 }]);
     // The raw dataset (three rows, one of them revenue 3) never reaches the page.
     expect(html).not.toContain('"revenue":3}');
-    expect(data.refData[ds]).toBeUndefined();
+    expect(JSON.stringify(data)).not.toContain(`ref:${ds}`);
   });
 
   it('carries no dataflow for a document without declarations', async () => {
     const t = await mintToken('t');
     const doc = ((await (await create(t.token, { markup: '<div><Badge>plain</Badge></div>' })).json()) as { id: string }).id;
     const html = await (await rawRoute(request(`/a/${doc}/raw`), params({ id: doc }))).text();
-    expect(island(html).dataflow).toBeUndefined();
+    expect(html).not.toContain(`id="${ISLAND_DATA_ID}"`);
   });
 
   /*
@@ -119,14 +116,15 @@ describe('the served document', () => {
     const doc = ((await (await create(t.token, { markup: '<p>Reading as <User userId="$_me.id" /></p>', visibility: 'public' })).json()) as { id: string }).id;
 
     const signedIn = island(await (await rawRoute(request(`/a/${doc}/raw`, { cookie }), params({ id: doc }))).text());
-    expect(signedIn.viewer).toEqual({ id: user.id, card: { name: 'Ada', handle: null, image: null } });
-    // The display name, never an email — the same rule a DataTable user cell follows.
-    expect(JSON.stringify(signedIn.viewer)).not.toContain('@');
+    // A claimed agent token is not an app session; no viewer identity rides in the island.
+    expect(signedIn.signedIn).toBe(false);
+    expect(JSON.stringify(signedIn)).not.toContain(user.id);
+    expect(JSON.stringify(signedIn)).not.toContain('@');
 
     const guest = island(await (await rawRoute(request(`/a/${doc}/raw`), params({ id: doc }))).text());
-    expect(guest.viewer).toBeUndefined();
+    expect(guest.signedIn).toBe(false);
 
     const capture = island(await (await rawRoute(request(`/a/${doc}/raw?chrome=0`, { cookie }), params({ id: doc }))).text());
-    expect(capture.viewer).toBeUndefined();
+    expect(JSON.stringify(capture)).not.toContain(user.id);
   });
 });

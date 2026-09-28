@@ -1,7 +1,7 @@
 /**
  * The offline bundles as the download reads them: built by
  * scripts/build-offline.mjs (run by the test global setup through
- * build-story-runtime), gzip+base64 as `#afbin-code` stores them.
+ * build-server-reader), gzip+base64 as `#afbin-code` stores them.
  */
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
@@ -12,7 +12,7 @@ import { describe, expect, it } from 'vitest';
 import { createAppServer } from '@/server/app';
 import { offlineBundle, offlineExtrasAsset, offlineExtrasRef } from '../bundle.server';
 
-const manifest = JSON.parse(readFileSync(path.join(process.cwd(), 'lib/story-runtime/dist/offline/manifest.json'), 'utf8')) as {
+const manifest = JSON.parse(readFileSync(path.join(process.cwd(), 'lib/build-assets/offline/manifest.json'), 'utf8')) as {
   bundles: Record<'core' | 'mermaid', { sha256: string; raw: number; gzip: number }>;
   extras: { file: string; path: string; integrity: string; sha256: string; raw: number };
 };
@@ -55,7 +55,7 @@ describe('the extras (the source editor and prettier), loaded on demand', () => 
       for (const marker of ['cm-scroller', 'prettier-ignore']) expect(text, `${kind}: ${marker}`).not.toContain(marker);
       expect(text).toContain('globalThis.__afbinExtras');
     }
-    const extras = readFileSync(path.join(process.cwd(), 'lib/story-runtime/dist/offline', manifest.extras.file), 'utf8');
+    const extras = readFileSync(path.join(process.cwd(), 'lib/build-assets/offline', manifest.extras.file), 'utf8');
     for (const marker of ['cm-scroller', 'prettier-ignore', '__afbinExtras']) expect(extras).toContain(marker);
     // No React of its own: the file's bundle keeps components/SourceEditor, which mounts this engine.
     expect(extras).not.toContain('react.transitional.element');

@@ -153,7 +153,7 @@ describe('scripts/dev-app.mjs', () => {
    */
   const shimDir = mkdtempSync(path.join(os.tmpdir(), 'dev-app-shim-'));
   const shimOut = path.join(shimDir, 'spawned.json');
-  const manifest = path.join(APP_ROOT, 'public/story/manifest.json');
+  const manifest = path.join(APP_ROOT, 'public/islands/manifest.json');
   let manifestModified: number;
   let res: ReturnType<typeof spawnSync>;
   let spawned: { argv: string[]; cwd: string; env: Record<string, string | null> };

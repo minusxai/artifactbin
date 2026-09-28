@@ -6,13 +6,15 @@
  */
 import { describe, expect, it } from 'vitest';
 import { createAppServer } from '@/server/app';
+import { readFileSync } from 'node:fs';
 
 const app = createAppServer({ indexHtml: async () => '<!doctype html><div id="root">SPA</div>' });
 const cacheOf = async (path: string) => (await app.request(path)).headers.get('cache-control');
 
 describe('static cache headers', () => {
   it('serves the content-addressed trees immutable for a year, CORS-open', async () => {
-    for (const path of ['/fonts/anything.woff2', '/story/entry-ABC123.js']) {
+    const manifest = JSON.parse(readFileSync('public/islands/manifest.json', 'utf8')) as { manifest: Record<string,string> };
+    for (const path of ['/fonts/anything.woff2', manifest.manifest['@mx/boot']!]) {
       expect(await cacheOf(path), path).toContain('immutable');
       expect((await app.request(path)).headers.get('access-control-allow-origin'), path).toBe('*');
     }

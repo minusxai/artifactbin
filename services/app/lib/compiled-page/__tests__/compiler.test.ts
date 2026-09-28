@@ -68,7 +68,7 @@ describe('compilePage', () => {
   it('routes row image attributes through the image helper after row substitution', async () => {
     const source = '<Helmet><Value name="covers" type="table" value={[{"id":1,"cover_ref":"ref:Abc123"}]} /></Helmet><For each={$covers}><img src="$_row.cover_ref" alt="cover" /></For>';
     const generated = generate(await inputOf(source));
-    expect(generated.islands).toContain('rowImageAttrs($rowAttrs(');
+    expect(generated.islands).toContain('BoundImage template={"$_row.cover_ref"}');
     expect(generated.islandRefs.flatMap((island) => island.kit)).not.toContain('rowImageAttrs');
   });
   it('stores the legacy outline decision and heading paths with the version', async () => {

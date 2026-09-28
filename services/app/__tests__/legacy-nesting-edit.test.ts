@@ -23,12 +23,12 @@ import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 import { POST as mintTokenRoute } from '@/app/api/tokens/route';
 
 
-import { buildStoryDocument } from '@/lib/story/document';
+import { GET as rawRoute } from '@/app/a/[id]/raw/route';
 import { useAppHarness, request } from '@/__tests__/harness';
 
 const harness = useAppHarness();
 
-const params = (p: Record<string, string>) => ({ params: Promise.resolve(p) });
+const params = (p: { id: string }) => ({ params: Promise.resolve(p) });
 
 /** The shape as it is STORED on production today — a `<p>` holding divs. */
 const LEGACY =
@@ -63,10 +63,7 @@ describe('a document stored before the nesting rule existed', () => {
     // Precondition: the fixture really is non-canonical, or this file proves nothing.
     expect(rows[0].source).toContain('<p className="mx-auto mt-7 max-w-2xl text-justify">');
 
-    const html = await buildStoryDocument({
-      source: rows[0].source, compiledCss: null, theme: null, colorMode: null,
-      refData: {}, title: 'legacy', runtimeSrc: '/story/entry-X.js',
-    });
+    const html = await rawRoute(request(`/a/${id}/raw`), params({ id })).then((res) => res.text());
     expect(html).not.toMatch(/<p[^>]*class="[^"]*text-justify/);
     expect(html).toMatch(/<div[^>]*class="[^"]*text-justify/);
   });

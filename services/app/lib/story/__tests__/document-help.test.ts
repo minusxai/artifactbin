@@ -1,47 +1,48 @@
-/**
- * DISCOVER: a served artifact tells an agent how to operate it. An agent given a pasted link
- * fetches the document and finds, in <head>, a `<link rel="help">` to the one-pager and a one-line
- * `<meta name="afbin">` naming the CLI and its install one-liner. Measured motivation: the docs route records
- * an agent spending seven 4xx probes guessing endpoints when given a bare link.
- */
+/** Agent discovery in the compiled reader's assembled document. */
 import { describe, expect, it } from 'vitest';
 import { AGENT_HELP_TITLE } from '@/lib/agent-discovery';
-import { buildStoryDocument, type StoryDocumentInput } from '@/lib/story/document';
+import { assembleReaderPage } from '@/lib/compiled-page/assembler';
+import type { AssembleHead, AssembleInput, CompiledPage } from '@/lib/compiled-page/contract';
 
 const HELP = { url: 'https://x.test/llms.txt', instruction: 'afbin: a CLI to operate artifacts. Install: curl -fsSL https://x.test/chat/install.sh | sh' };
-const doc = (over: Partial<StoryDocumentInput> = {}): Promise<string> =>
-  buildStoryDocument({
-    source: '<h1 className="text-4xl">Hello</h1>',
-    compiledCss: null,
-    theme: null,
-    colorMode: null,
-    refData: {},
-    title: 'Stored title',
-    runtimeSrc: '/story-runtime.js',
-    ...over,
-  });
+const build = { id: 'b'.repeat(16), manifest: {} };
+const compiled: CompiledPage = {
+  build: build.id, html: '<h1>Hello</h1>', islands: [], module: null, ssr: null,
+  behaviors: [], plan: null, links: { prefetch: [], prerender: [] },
+  kit: { skeleton: [], islands: [] }, reactStatic: [], unported: [], partial: [], authorScript: null,
+  outline: [], outlinePlan: false,
+};
+const doc = (head: AssembleHead | null = null): string => {
+  const input: AssembleInput = {
+    compiled, story: compiled.html, css: '', fontPreloads: [], title: 'Stored title',
+    theme: null, colorMode: 'light', snapshot: null,
+    overlay: { values: {}, mermaidImages: {}, signedIn: false, doors: null },
+    chrome: null, spa: null, build, head,
+  };
+  return assembleReaderPage(input).html;
+};
 const head = (html: string) => html.slice(0, html.indexOf('</head>'));
 
-describe('the agent help pointer in <head>', () => {
-  it('renders a help link and a one-line afbin meta when the platform passes them', async () => {
-    const h = head(await doc({ help: HELP }));
+const withHelp = (help: AssembleHead['help']): AssembleHead => ({ social: { title: 'Stored title', image: 'https://x.test/card' }, help });
+
+describe('the compiled document agent pointer', () => {
+  it('renders a help link and a one-line afbin meta when the platform passes them', () => {
+    const h = head(doc(withHelp(HELP)));
     expect(h).toContain(`<link rel="help" href="https://x.test/llms.txt" title="${AGENT_HELP_TITLE}">`);
-    expect(h).toContain('<meta name="afbin" content="afbin: a CLI to operate artifacts. Install: curl -fsSL https://x.test/chat/install.sh | sh">');
+    expect(h).toContain(`<meta name="afbin" content="${HELP.instruction}">`);
   });
-  it('escapes the URLs like every other head value', async () => {
-    const h = head(await doc({ help: { url: 'https://x.test/llms.txt?a=1&b=2', instruction: HELP.instruction } }));
-    expect(h).toContain('href="https://x.test/llms.txt?a=1&amp;b=2"');
+  it('escapes the URL like every other head value', () => {
+    expect(head(doc(withHelp({ ...HELP, url: 'https://x.test/llms.txt?a=1&b=2' })))).toContain('href="https://x.test/llms.txt?a=1&amp;b=2"');
   });
-  it('renders nothing of it when help is absent or null', async () => {
-    for (const html of [await doc(), await doc({ help: null })]) {
+  it('renders nothing when help is absent or null', () => {
+    for (const html of [doc(), doc(withHelp(null))]) {
       expect(head(html)).not.toContain('rel="help"');
       expect(head(html)).not.toContain('name="afbin"');
     }
   });
-  it('comes after the social tags and before the first script', async () => {
-    const h = head(await doc({ help: HELP }));
-    const link = h.indexOf('rel="help"');
-    expect(link).toBeGreaterThan(h.indexOf('<title>'));
-    expect(link).toBeLessThan(h.indexOf('<script>'));
+  it('comes before the page title and no inline script follows it', () => {
+    const h = head(doc(withHelp(HELP)));
+    expect(h.indexOf('rel="help"')).toBeLessThan(h.indexOf('<title>'));
+    expect(h).not.toContain('<script');
   });
 });

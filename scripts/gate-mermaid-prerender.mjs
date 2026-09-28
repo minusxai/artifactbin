@@ -69,7 +69,8 @@ const publish = async (markup, title, extra = {}) => {
 async function harvested(id, ms = 170_000) {
   for (const end = Date.now() + ms; Date.now() < end;) {
     const html = await (await fetch(`${B}/a/${id}/raw`)).text();
-    if (html.includes('"mermaidImages"')) return true;
+    // The compiled page always serializes an empty map; wait for a stored drawing, not the field.
+    if (/"mermaidImages":\{"[^"]+":/.test(html)) return true;
     await new Promise((resolve) => setTimeout(resolve, 1000));
   }
   return false;
