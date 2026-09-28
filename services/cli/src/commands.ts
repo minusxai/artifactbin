@@ -47,11 +47,11 @@ export const flags: Record<string,Flag> = {
  harness:{value:'NAME',repeat:true,description:'Select a skill installation target: claude, codex, pi, opencode; repeat to select several, or use none.'},
  access:{value:'ACCESS',description:'Publish or change a dataset\'s row access: read (the default) or readwrite, which a document writing to it requires.'},
  policy:{value:'POLICY',description:'Grant dataset row writes: viewers-write lets everyone who can view it insert, update and delete rows; none removes the grant.'},
- write:{description:'Execute a dataset row mutation explicitly; otherwise queries only read.'},
+ write:{description:'Execute a named document mutation or a dataset row mutation; otherwise only read.'},
  param:{value:'NAME=VALUE',repeat:true,description:'Bind a named scalar parameter; repeat for distinct names.'},
  email:{value:'EMAIL',description:'Sign in by email OTP without opening a browser; use on remote or headless machines.'},
  otp:{value:'CODE',description:'Complete email login with the six-digit code; requires --email and does not send another code.'},
- name:{value:'NAME',description:'Select a named query/table, or name a remote terminal session.'},
+ name:{value:'NAME',description:'Select a named query, mutation or table, or name a remote terminal session.'},
 };
 /** Resource kinds are one vocabulary; each command accepts the subset it can address. */
 export const RESOURCE_TYPES=['artifact','folder','dataset','file','profile','session'] as const;
@@ -73,7 +73,7 @@ export const commands: Command[] = [
  {name:'add',usage:'<path> [<path> ...]',description:'Assign stable account-scoped identities to local files without publishing.',min:1,max:Infinity,flags:[],examples:['afbin add sales.csv report.jsx --json']},
  {name:'mv',usage:'<from> <to>',description:'Move a registered local file while retaining its identity.',min:2,max:2,flags:[],examples:['afbin mv sales.csv data.csv']},
  {name:'preview',usage:'<path> [<path> ...]',description:'Preview and edit local JSX files without publishing. Directories select their JSX files.',min:1,max:Infinity,flags:['port','share'],examples:['afbin preview report.jsx appendix.jsx','afbin preview . --share']},
- {name:'query',usage:'<ref> [<ref> ...]',description:'Read dataset rows or execute a declared query; local files run locally.',min:1,max:Infinity,flags:['input','name','param','limit','cursor','remote','write','dry-run','output','format'],examples:['afbin query sales.csv','afbin query sales.csv --input report.sql --param minimum=10']},
+ {name:'query',usage:'<ref> [<ref> ...]',description:'Read dataset rows or declared queries; --write runs a named mutation or dataset SQL.',min:1,max:Infinity,flags:['input','name','param','limit','cursor','remote','write','dry-run','output','format'],examples:['afbin query sales.csv','afbin query report123 --name tasks','afbin query report123 --write --name change_status --param task_id=1 --param status=Done']},
  {name:'pull',usage:'[<ref> ...]',description:'Retrieve artifacts or account resources and reconcile tracked files.',min:0,max:Infinity,flags:['type','output','format','dry-run','force'],examples:['afbin pull abc123 --output report.jsx','afbin pull report.jsx@2','afbin pull --type profile']},
  {name:'fork',usage:'<ref> [<ref> ...]',description:'Create a distinct private local draft from a resource; publish it later with push. --as gives the copy to a test user instead.',min:1,max:Infinity,flags:['type','output','as','dry-run'],examples:['afbin fork abc123 --output copy.jsx','afbin fork report.jsx --dry-run','afbin fork abc123 --as tu_9fA2b --json']},
  {name:'export',usage:'<ref> [<ref> ...]',description:'Export one image of the whole document, every slide stacked; --page picks one slide; --format html saves the offline file (one .html that opens, edits and comments without a connection); data and original bytes too.',min:1,max:Infinity,flags:['type','format','output','name','page','og','refresh','force','dry-run'],examples:['afbin export abc123 --output report.png','afbin export abc123 --format html --output report.html','afbin export sales.csv --format json --output -']},
