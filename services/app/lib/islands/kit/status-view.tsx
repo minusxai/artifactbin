@@ -41,6 +41,7 @@ function Indicator(props: { statuses: () => readonly WriteStatus[]; dismiss: (id
           <Show when={now() !== 'failed'}>
             <span class="text-muted-foreground">{now() === 'saving' ? 'Saving…' : 'Saved'}</span>
           </Show>
+          <For each={props.statuses().filter(status=>status.mutationRunId)}>{status=><div class="flex items-center gap-2"><a target="_blank" rel="noopener" class="underline" href={new URL(`/notifications?run=${encodeURIComponent(status.mutationRunId!)}`,import.meta.url).href}>Notification status ({status.mutation})</a><button type="button" aria-label={`Dismiss notification status for ${status.mutation}`} onClick={()=>props.dismiss(status.id)}>×</button></div>}</For>
           <For each={failed()}>
             {(status) => (
               <div role="alert" data-mx-write-failed={String(status.id)} class="flex items-start gap-2">

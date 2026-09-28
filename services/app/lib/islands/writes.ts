@@ -28,8 +28,8 @@ export function createWriteStatusFeed(store: DataflowStore | null): WriteStatusF
     for (const listener of [...listeners]) listener(statuses);
   };
   const without = (id: number) => {
-    const timer = timers.get(id);
-    if (timer !== undefined) { clearTimeout(timer); timers.delete(id); }
+    clearTimeout(timers.get(id));
+    timers.delete(id);
     return statuses.filter((s) => s.id !== id);
   };
   const replace = (id: number, next: WriteStatus) => publish(statuses.map((s) => (s.id === id ? next : s)));
@@ -42,27 +42,21 @@ export function createWriteStatusFeed(store: DataflowStore | null): WriteStatusF
   };
 
   const onWrite = (event: StoreWriteEvent) => {
-    switch (event.type) {
-      case 'write':
-        publish([...statuses, { id: event.id, mutation: event.name, state: 'saving', startedAt: Date.now() }]);
-        return;
-      case 'written': {
-        const current = statuses.find((s) => s.id === event.id);
-        if (!current) return;
-        replace(event.id, { id: current.id, mutation: current.mutation, state: 'saved', startedAt: current.startedAt });
-        timers.set(event.id, setTimeout(() => { timers.delete(event.id); publish(without(event.id)); }, SAVED_STATUS_TTL_MS));
-        return;
-      }
-      case 'writeFailed': {
-        const current = statuses.find((s) => s.id === event.id);
-        if (!current) return;
-        const code = codeOf(event.error);
-        replace(event.id, {
-          id: current.id, mutation: current.mutation, state: 'failed', startedAt: current.startedAt,
-          error: { message: messageOf(event.error), ...(code ? { code } : {}), retry: () => retry(event.id, event.request) },
-        });
-      }
+    if(event.type==='write'){
+      publish([...statuses,{id:event.id,mutation:event.name,state:'saving',startedAt:Date.now()}]);
+      return;
     }
+    const current=statuses.find(s=>s.id===event.id);
+    if(!current)return;
+    if(event.type==='written'){
+      replace(event.id,{...current,state:'saved',mutationRunId:event.mutationRunId});
+      if(!event.mutationRunId)timers.set(event.id,setTimeout(()=>publish(without(event.id)),SAVED_STATUS_TTL_MS));
+      return;
+    }
+    replace(event.id,{
+      ...current,state:'failed',
+      error:{message:messageOf(event.error),code:codeOf(event.error),retry:()=>retry(event.id,event.request)},
+    });
   };
   store?.subscribeWrites(onWrite);
 
@@ -70,7 +64,7 @@ export function createWriteStatusFeed(store: DataflowStore | null): WriteStatusF
     current: () => statuses,
     subscribe: (listener) => { listeners.add(listener); return () => { listeners.delete(listener); }; },
     dismiss: (id) => {
-      if (statuses.some((s) => s.id === id && s.state === 'failed')) publish(without(id));
+      if (statuses.some((s) => s.id === id && (s.state === 'failed'||s.mutationRunId))) publish(without(id));
     },
   };
 }

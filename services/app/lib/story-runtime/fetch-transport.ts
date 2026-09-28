@@ -90,9 +90,9 @@ export function createFetchTransport(queryUrl: string, fetchFn: FetchLike = (i, 
       ? {
         mutate: async (request: import('@/lib/story/mutation-request').MutationRequest) => {
           const res = await post(mutateUrl, { tz: localZone(), ...request });
-          const body = (await res.json().catch(() => ({}))) as { ok?: boolean; dataset?: string; local?: import('@/lib/story/local-state').LocalMutationResult; error?: string; detail?: string };
+          const body = (await res.json().catch(() => ({}))) as { ok?: boolean; dataset?: string; mutationRunId?:string; local?: import('@/lib/story/local-state').LocalMutationResult; error?: string; detail?: string };
           if (!res.ok || !body.ok) throw new Error(body.detail ?? body.error ?? `write failed (${res.status})`);
-          return { dataset: body.dataset ?? '', ...(body.local ? { local: body.local } : {}) };
+          return { dataset: body.dataset ?? '', local: body.local, mutationRunId: body.mutationRunId };
         },
       }
       : {}),

@@ -195,7 +195,11 @@ async function main(): Promise<void> {
    * on it, and a browser that is down only means readers draw with the engine.
    */
   const { startMermaidHarvester } = await import('@/lib/mermaid-images/harvester');
-  startMermaidHarvester();
+  const stopHarvester = startMermaidHarvester();
+  // All process entry points start the same durable jobs/outbox lifecycle.
+  // This import stays after env + service initialization, as do the other app imports.
+  const { startAppBackgroundTasks } = await import('@/lib/app-background-tasks');
+  const stopBackgroundTasks = await startAppBackgroundTasks(db);
 
   const app = createAppServer({
     webDir: path.resolve('dist/web'),
@@ -259,6 +263,16 @@ async function main(): Promise<void> {
     console.error('[boot] listener failed:', error);
     process.exit(1);
   });
+  const { installShutdown } = await import('@/lib/shutdown');
+  installShutdown({ steps: [
+    stopBackgroundTasks,
+    stopHarvester,
+    () => services().events.close?.() ?? Promise.resolve(),
+    () => new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve())),
+    async () => { await vite?.close(); },
+    () => db.close(),
+  ] });
+
   server.listen(port, () => {
     console.log(`[boot] ${appOnly ? 'app-only' : 'auth + app'} on ${baseURL} (${dev ? 'dev' : 'production'}, db ${raw.kind})`);
     if (hmrPort !== null) console.log(`[boot] vite hmr websocket on ws://localhost:${hmrPort} (defaults to APP__PORT + 1; APP__HMR_PORT overrides)`);

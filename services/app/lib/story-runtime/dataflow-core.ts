@@ -82,7 +82,7 @@ export type CoreEvent =
   | { type: 'replace'; graph: RuntimeGraph; state?: DataflowState }
   | { type: 'write'; id: number; name: string; overrides?: Record<string, Scalar>; row?: Record<string, Scalar> }
   | { type: 'written'; id: number; name: string; answer: MutationAnswer }
-  | { type: 'writeFailed'; id: number; name: string; error: unknown }
+  | { type: 'writeFailed'; id: number; name: string; error: unknown; answer?: never }
   /** Something the shell owns changed (the transport): readers must look again. */
   | { type: 'touch' }
   /** Cards for people the page's own results name (lib/story-runtime/store asks the door). */
@@ -94,7 +94,7 @@ export type CoreEffect =
   | { type: 'run'; at: Versions; only: string[]; values: Record<string, Scalar>; localTables?: Record<string, Row[]> }
   /** Perform a write. `localTables` is present exactly for a local write. */
   | { type: 'write'; id: number; name: string; values: Record<string, Scalar>; row?: Record<string, Scalar>; localTables?: Record<string, Row[]> }
-  | { type: 'settle'; id: number; outcome: { ok: true } | { ok: false; error: unknown } }
+  | { type: 'settle'; id: number; outcome: { ok: true; answer?: MutationAnswer } | { ok: false; error: unknown } }
   | { type: 'notify' };
 
 // ── the graph, as nodes ─────────────────────────────────────────────────────
@@ -255,7 +255,7 @@ function reduce(state: CoreState, event: CoreEvent, effects: CoreEffect[]): Core
     // The document is gone; a write that was already on the wire still answers its caller.
     if (event.type === 'written' || event.type === 'writeFailed') {
       effects.push(event.type === 'written' && state.localHead?.id !== event.id
-        ? { type: 'settle', id: event.id, outcome: { ok: true } }
+        ? { type: 'settle', id: event.id, outcome: { ok: true, answer: event.answer } }
         : { type: 'settle', id: event.id, outcome: { ok: false, error: event.type === 'writeFailed' ? event.error : new Error(LOCAL_CHANGED) } });
     }
     return state;
@@ -531,7 +531,7 @@ function written(
   const decl = state.graph.mutations.find((m) => m.name === event.name);
   const busy = { ...state.busy };
   release(busy, event.name);
-  const settle = (error?: unknown) => effects.push({ type: 'settle', id: event.id, outcome: error === undefined ? { ok: true } : { ok: false, error } });
+  const settle = (error?: unknown) => effects.push({ type: 'settle', id: event.id, outcome: error === undefined ? { ok: true, answer: event.answer } : { ok: false, error } });
 
   if (state.localHead?.id === event.id) {
     const head = state.localHead;
