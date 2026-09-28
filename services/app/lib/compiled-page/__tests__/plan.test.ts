@@ -72,6 +72,40 @@ describe('planOf', () => {
     expect(plan.mutations).toEqual([{ name: 'add', dataset: 'SALES1', placement: expect.stringMatching(/^(optimistic|server)$/) }, { name: 'local', dataset: null, placement: 'optimistic' }]);
   });
 
+  it('never shares on missing evidence: an unknown dataset, an unresolved import, a sourceless Postgres query, an undeclared upstream', () => {
+    const plan = planOf(flow([
+      query('unknown_ds', { imports: ['other'] }),
+      query('no_fact', { imports: ['x'] }),
+      query('pg_nosource', {}, { engine: 'postgres' }),
+      query('orphan', { queries: ['missing'] }),
+    ], { imports: [{ name: 'x', ref: 'NOFACT', tables: [] }] }), facts);
+    expect(Object.fromEntries(plan.queries.map((q) => [q.name, q.scope]))).toEqual({ unknown_ds: 'viewer', no_fact: 'viewer', pg_nosource: 'viewer', orphan: 'viewer' });
+    expect(plan.queries.find((q) => q.name === 'no_fact')!.because).toContain('NOFACT');
+    expect(plan.datasets).toEqual([]);
+  });
+
+  it('the _me table, a row or edited-value built-in and a people value are viewer scope', () => {
+    const plan = planOf(flow([
+      query('me_table', { builtins: ['_me'] }),
+      query('role', { builtins: ['_me.role'] }),
+      query('row', { builtins: ['_row.id'] }),
+      query('picked', { imports: ['sales'], values: ['who'] }),
+      query('picker', { imports: ['sales'], values: ['pick'] }),
+    ], { values: [{ name: 'who', kind: 'scalar', type: 'user', default: null }, { name: 'pick', kind: 'scalar', type: 'string', default: null, source: 'SALES1', column: 'owner' }] }), facts);
+    expect(plan.queries.every((q) => q.scope === 'viewer')).toBe(true);
+    expect(plan.values.every((v) => !v.keysSnapshot)).toBe(true);
+  });
+
+  it('a viewer or Postgres query sets no shared flag: only shared queries count toward postgres, _members and datasets', () => {
+    const plan = planOf(flow([query('pg', {}, { engine: 'postgres', source: 'PGX' }), query('members_me', { builtins: ['_members', '_me.id'] })]), { datasets: { PGX: { anonymousRead: false } } });
+    expect(plan).toMatchObject({ postgres: false, readsMembers: false, datasets: [] });
+  });
+
+  it('a query downstream of a page query is page even when it also reads a private dataset', () => {
+    const plan = planOf(flow([query('zoned', { builtins: ['_tz'] }), query('both', { queries: ['zoned'], imports: ['s'] })]), facts);
+    expect(plan.queries.map((q) => q.scope)).toEqual(['page', 'page']);
+  });
+
   it('is pure and deterministic', () => {
     const f = flow([query('regions', { imports: ['sales'] })]);
     expect(JSON.stringify(planOf(f, facts))).toBe(JSON.stringify(planOf(f, facts)));

@@ -99,10 +99,89 @@ function envelopeOf(viz: Record<string, unknown>, columns: TableResult['columns'
   throw new Error(`not a chart viz kind: ${String(kind)}`);
 }
 
-/** Markup that must never reach a reader's HTML from a drawing. */
-const UNSAFE_SVG = /<script|<foreignObject|<[^>]*\son[a-z-]*\s*=\s*["']|javascript:/i;
+/**
+ * The elements vega's SVG writer emits for the charts a snapshot draws. Anything
+ * else — a script, a foreign object, a link, an image that would fetch from a
+ * guest's browser, or an element an unescaped author string produced — refuses
+ * the drawing.
+ */
+const SVG_ELEMENTS: ReadonlySet<string> = new Set([
+  'svg', 'g', 'path', 'rect', 'line', 'text', 'tspan', 'circle', 'ellipse', 'polygon', 'polyline',
+  'defs', 'clippath', 'lineargradient', 'radialgradient', 'stop', 'pattern', 'title', 'desc',
+]);
+/** A tag, its quoted attributes skipped as units so an attribute's escaped text is never read as markup. */
+const TAG = /<\s*(\/?)\s*([^\s/>"'=]+)((?:\s+[^\s/>"'=]+(?:\s*=\s*(?:"[^"]*"|'[^']*'|[^\s"'>]+))?)*)\s*\/?\s*>/g;
+const ATTR = /\s+([^\s/>"'=]+)(?:\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'>]+)))?/g;
+
+/**
+ * Whether a drawing is safe to put in every reader's HTML: only the elements
+ * above, no event-handler attribute, no URL-bearing attribute, and no `<` left
+ * outside a well-formed tag (text is vega-escaped, so a stray one means an
+ * author string escaped it).
+ */
+function svgIsSafe(svg: string): boolean {
+  let covered = 0;
+  for (const tag of svg.matchAll(TAG)) {
+    if (svg.slice(covered, tag.index).includes('<')) return false;
+    covered = tag.index + tag[0].length;
+    if (!SVG_ELEMENTS.has(tag[2]!.toLowerCase())) return false;
+    for (const attr of (tag[3] ?? '').matchAll(ATTR)) {
+      const name = attr[1]!.toLowerCase();
+      if (name.startsWith('on') || name === 'href' || name.endsWith(':href') || name === 'src' || name === 'style') return false;
+    }
+  }
+  return !svg.slice(covered).includes('<');
+}
 /** A CSS custom property the server cannot resolve (render-vega would need the page's computed style). */
 const CSS_VAR = /var\(--/;
+
+/**
+ * What a compiled spec needs that a server drawing must not do: a link (`href`,
+ * which vega sanitises asynchronously and, headless, rejects UNHANDLED for a
+ * refused URL — a process-level failure) or an image mark (a fetch).
+ */
+function needsBrowser(node: unknown): string | null {
+  if (Array.isArray(node)) {
+    for (const item of node) {
+      const found = needsBrowser(item);
+      if (found) return found;
+    }
+    return null;
+  }
+  if (!node || typeof node !== 'object') return null;
+  const record = node as Record<string, unknown>;
+  if (record.type === 'image') return 'an image mark loads its images in the browser';
+  for (const [key, value] of Object.entries(record)) {
+    if (key === 'href') return 'linked marks navigate in the browser';
+    const found = needsBrowser(value);
+    if (found) return found;
+  }
+  return null;
+}
+
+const ID_REF = /\bid="([^"]+)"|url\(#([^)"]+)\)/g;
+
+/**
+ * Vega names clip paths and gradients from process-wide counters (`clip7`,
+ * `gradient_3`), so the same chart drawn twice differs, and two charts inlined
+ * in one page can point at each other's definitions. Every id is renamed to a
+ * prefix taken from the drawing itself (with its ids blanked) plus its order:
+ * the same chart always gets the same ids, and different charts different ones.
+ */
+function scopeIds(svg: string): string {
+  const order = new Map<string, number>();
+  const index = (id: string) => {
+    if (!order.has(id)) order.set(id, order.size);
+    return order.get(id)!;
+  };
+  // Only inside tags: text content may hold `"` and could read like an id.
+  const inTags = (rewrite: (id: string) => string) => svg.replace(/<[^<>]*>/g, (tag) =>
+    tag.replace(ID_REF, (_m, id?: string, ref?: string) => (id !== undefined ? `id="${rewrite(id)}"` : `url(#${rewrite(ref!)})`)));
+  const blanked = inTags((id) => String(index(id)));
+  if (!order.size) return svg;
+  const prefix = `mxc${createHash('sha256').update(blanked).digest('hex').slice(0, 10)}`;
+  return inTags((id) => `${prefix}-${index(id)}`);
+}
 
 /** Draw one chart (contract `DrawnChart`). Throws when the chart cannot be drawn faithfully on the server. */
 export async function drawChart(input: DrawChartInput): Promise<DrawnChart> {
@@ -118,6 +197,8 @@ export async function drawChart(input: DrawChartInput): Promise<DrawnChart> {
   const facetLayout = vl ? computeFacetLayoutPlan(vl, table.rows, width, height) : null;
   const { vegaSpec, parserConfig } = toVegaSpec(resolved, colorMode, { legendPlan, xLabelAngle, facetLayout, categoryRange: input.palette ?? null });
   if (CSS_VAR.test(JSON.stringify(vegaSpec))) throw new Error('the spec reads a CSS custom property only the page can resolve');
+  const browserOnly = needsBrowser(vegaSpec);
+  if (browserOnly) throw new Error(browserOnly);
   const view = createVegaView(vegaSpec, table.rows, { renderer: 'none', width, height, facetLayout, ...(parserConfig ? { parserConfig } : {}) });
   // Vega LOGS dataflow errors instead of rejecting (VegaChart promotes them the same way).
   const errors: unknown[] = [];
@@ -135,8 +216,8 @@ export async function drawChart(input: DrawChartInput): Promise<DrawnChart> {
     if (!facetLayout) view.width(width).height(height);
     await view.runAsync();
     if (errors.length) throw errors[0] instanceof Error ? errors[0] : new Error(String(errors[0]));
-    const svg = await view.toSVG();
-    if (UNSAFE_SVG.test(svg)) throw new Error('the drawing carries markup a reader page may not');
+    const svg = scopeIds(await view.toSVG());
+    if (!svgIsSafe(svg)) throw new Error('the drawing carries markup a reader page may not');
     return { svg, table: input.name ?? '', rows: rowsDigest(table.rows) };
   } finally {
     view.finalize();
@@ -171,13 +252,14 @@ export async function drawSnapshotCharts(nodes: JsxNode[], results: Pick<ServedR
       const path = prefix === null ? String(i) : `${prefix}.${i}`;
       if (node.type !== 'element') return;
       if (node.isComponent && node.tag === 'Question') {
-        const viz = staticAttr(node, 'viz');
+        const raw = staticAttr(node, 'viz');
+        const viz = raw && typeof raw === 'object' && !Array.isArray(raw) ? raw as Record<string, unknown> : null;
         const name = refName(staticAttr(node, 'data'));
-        if (viz && typeof viz === 'object' && !Array.isArray(viz) && typeof viz.kind === 'string' && CHART_VIZ_KINDS.has(viz.kind) && name && results.tables[name]) {
+        if (viz && typeof viz.kind === 'string' && CHART_VIZ_KINDS.has(viz.kind) && name && results.tables[name]) {
           const id = staticAttr(node, 'id');
           const titled = typeof staticAttr(node, 'title') === 'string' && staticAttr(node, 'title') !== '';
           const height = questionEmbedHeightPx(staticAttr(node, 'height'), false) - (titled ? TITLE_BAR_PX : 0);
-          jobs.push({ key: typeof id === 'string' && id ? id : path, name, viz: viz as Record<string, unknown>, height });
+          jobs.push({ key: typeof id === 'string' && id ? id : path, name, viz, height });
         }
       }
       walk(node.children, path);
