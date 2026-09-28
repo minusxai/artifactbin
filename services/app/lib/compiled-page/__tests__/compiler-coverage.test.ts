@@ -205,6 +205,14 @@ describe('reactive shells match the React reader', () => {
     expect(columnParity(page.html, input, { rows })).toEqual([]);
   });
 
+  it('merges a React shell class after each row substitutes its utility', async () => {
+    const rows = [{ k: 'a', pad: 4 }, { k: 'b', pad: 8 }];
+    const source = `<Helmet><Value name="rows" type="table" value={${JSON.stringify(rows)}} /></Helmet><Table><TableBody><For each={$rows} keyBy="k"><TableRow><TableCell id="cell" className="p-{$_row.pad}">{$_row.k}</TableCell></TableRow></For></TableBody></Table>`;
+    const input = await inputOf(source);
+    const page = await compilePage(input, loadCompilerBuild());
+    expect(columnParity(page.html, input, { rows })).toEqual([]);
+  });
+
   it('resolves the glyph named by each declared row', async () => {
     const rows = [{ k: 'a', icon: 'check' }, { k: 'b', icon: 'x' }];
     const source = `<Helmet><Value name="rows" type="table" value={${JSON.stringify(rows)}} /></Helmet><For each={$rows} keyBy="k"><Icon id="icon" name="{$_row.icon}" /></For>`;

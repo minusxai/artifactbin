@@ -394,9 +394,22 @@ export function generate(input: GenerateInput): Generated {
     }
     const children = (): string => node.children.map((c, i) => emit(c, `${path}.${i}`, mode, ctx)).join('');
     const row = ctx.row;
+    const authoredClass = node.attributes.find((a) => a.name === 'className' || a.name === 'class')?.value;
+    const rowClassTemplate = row && authoredClass?.static && typeof authoredClass.json === 'string' ? authoredClass.json : null;
+    const withoutClass = rowClassTemplate === null ? '' : reactStaticHtml({ ...node, attributes: node.attributes.filter((a) => a.name !== 'className' && a.name !== 'class'), children: holed ? [hole] : [] }, path, ctx);
+    const baseClass = (/\bclass="([^"]*)"/.exec(withoutClass)?.[1] ?? '')
+      .replace(/&quot;/g, '"').replace(/&#x27;/g, "'").replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&');
+    let first = true;
     return htmlToJsx(html, !!ctx.svg, {
       ...(holed ? { hole: children } : {}),
-      ...(row ? { attrs: (attrs: Attr[]) => ` {...rt.rowAttrs(${json(Object.fromEntries(attrs))}, ${row}, ${ctx.scope})}` } : {}),
+      ...(row ? { attrs: (attrs: Attr[]) => {
+        const root = first; first = false;
+        if (root && rowClassTemplate !== null) {
+          usesRowClass = true;
+          return ` {...rt.rowAttrs(${json(Object.fromEntries(attrs.filter(([name]) => name !== 'class')))}, ${row}, ${ctx.scope})} class={$rowClass(${lit(baseClass)}, ${lit(rowClassTemplate)}, ${row})}`;
+        }
+        return ` {...rt.rowAttrs(${json(Object.fromEntries(attrs))}, ${row}, ${ctx.scope})}`;
+      } } : {}),
     });
   }
 

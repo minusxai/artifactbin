@@ -416,6 +416,10 @@ export interface AssembleOverlay {
   doors: { queryUrl: string; mutateUrl?: string; viewerUrl?: string; assetsUrl: string } | null;
   /** An archived version's read-only reason (lib/archived-version); absent for the head. */
   readOnly?: string | null;
+  /** The imports the page may hold for the door it queries through (IslandPageData.hold); absent: none. */
+  hold?: readonly string[];
+  /** The page's SQLite engine wasm (IslandPageData.sqliteWasm), when `hold` is not empty. */
+  sqliteWasm?: string | null;
 }
 
 export interface AssembleInput {

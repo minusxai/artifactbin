@@ -19,6 +19,7 @@ import { createEffect, createMemo, createSignal, For, Match, on, onCleanup, onMo
 import { isServer } from 'solid-js/web';
 import { createVirtualizer } from '@tanstack/solid-virtual';
 import { useIsland } from '../context';
+import { deferEngine } from '../defer-engine';
 import { TrustedOverlay } from './trusted-overlay';
 import { refName, type TableResult } from '@/lib/story/dataflow';
 import { aggregateNumber, type NumberAgg } from '@/lib/story/number-aggregation';
@@ -361,17 +362,19 @@ function ChartSlot(props: { slot?: string; table: string; envelope: () => VizEnv
   let controller: IslandChart | undefined;
   let started = false;
   let disposed = false;
+  let cancelDraw = () => {};
   let drawing: Promise<DrawnChart | null> = Promise.resolve(null);
-  const draw = async () => {
+  const draw = () => {
     if (started) return;
     started = true;
-    // A render is in flight from here (render-readiness takes over once the view is built).
     const before = el.getAttribute(CHART_STATE_ATTR);
     el.setAttribute(CHART_STATE_ATTR, 'pending');
-    let module: IslandChartModule;
-    try { module = await (props.chart ?? island.loadChart)(); } catch { if (before) el.setAttribute(CHART_STATE_ATTR, before); started = false; return; } // a failed chunk fetch: keep what is shown; the next trigger retries
-    if (disposed) return;
-    controller = module.mountChart({ element: el, envelope: props.envelope(), rows: props.rows() });
+    cancelDraw = deferEngine(el, () => { void (async () => {
+      let module: IslandChartModule;
+      try { module = await (props.chart ?? island.loadChart)(); } catch { if (before) el.setAttribute(CHART_STATE_ATTR, before); started = false; return; } // a failed chunk fetch: keep what is shown; the next trigger retries
+      if (disposed) return;
+      controller = module.mountChart({ element: el, envelope: props.envelope(), rows: props.rows() });
+    })(); });
   };
   onMount(() => {
     el.removeAttribute(CHART_SLOT_ATTR);
@@ -387,7 +390,7 @@ function ChartSlot(props: { slot?: string; table: string; envelope: () => VizEnv
     if (started) return;
     void drawing.then(async current => { if (!started && !disposed && !(await drawingIsCurrent(current, rows))) void draw(); });
   }, { defer: true }));
-  onCleanup(() => { disposed = true; controller?.destroy(); });
+  onCleanup(() => { disposed = true; cancelDraw(); controller?.destroy(); });
   return <div ref={el} {...attr(CHART_SLOT_ATTR, isServer ? props.slot : undefined)} {...{ [CHART_STATE_ATTR]: 'pending' }} aria-label={chartLabel(props.envelope())} class="h-full w-full overflow-hidden [&_.vega-embed]:block [&_svg]:block" {...VEGA_CONTAINER} style="cursor: default;" onPointerEnter={() => void draw()} onClick={() => void draw()} />;
 }
 

@@ -3,7 +3,8 @@ import { createContext, createEffect, createRenderEffect, createSignal, createUn
 import { collapsibleStyle } from './collapsible-style';
 import { Portal, isServer } from 'solid-js/web';
 import { useIsland } from '../context';
-import { placePopper, type Align, type Placed, type Side } from './popper';
+import { deferEngine } from '../defer-engine';
+import type { Align, Placed, Side } from './popper';
 import { TrustedOverlay } from './trusted-overlay';
 
 type State = { open: () => boolean; setOpen: (value: boolean) => void; contentId: string; panelId: () => string; setPanelId: (id: string) => void };
@@ -121,8 +122,13 @@ function TooltipPopper(p: { ctx: TooltipState; side?: Side; align?: Align; sideO
   onMount(() => {
     const anchor = ctx.trigger(); if (!anchor) return;
     wrapper.style.zIndex = getComputedStyle(content).zIndex;
-    const stop = placePopper(anchor, wrapper, arrow, { side: p.side ?? 'top', align: p.align ?? 'center', sideOffset: p.sideOffset ?? 6, collisionPadding: 8, arrowWidth: 10, arrowHeight: 5, onPlaced: ctx.setPlaced });
-    onCleanup(() => { stop(); ctx.setPlaced(undefined); });
+    let live = true;
+    let stop = () => {};
+    const cancel = deferEngine(wrapper, () => { void import('./popper').then(({ placePopper }) => {
+      if (!live) return;
+      stop = placePopper(anchor, wrapper, arrow, { side: p.side ?? 'top', align: p.align ?? 'center', sideOffset: p.sideOffset ?? 6, collisionPadding: 8, arrowWidth: 10, arrowHeight: 5, onPlaced: ctx.setPlaced });
+    }); });
+    onCleanup(() => { live = false; cancel(); stop(); ctx.setPlaced(undefined); });
   });
   const side = () => ctx.placed()?.side ?? 'top';
   return <div data-mx-theme-host="">

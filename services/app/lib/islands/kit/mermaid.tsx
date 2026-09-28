@@ -2,6 +2,7 @@
 import { Show, createEffect, createSignal, on, onCleanup, onMount, type JSX } from 'solid-js';
 import { mermaidImageKey, mermaidSourceError } from '@/lib/story-ui/mermaid-source';
 import { useIsland } from '../context';
+import { deferEngine } from '../defer-engine';
 import type { MermaidImage } from '@/components/kit/mermaid-render';
 import type { Drawn } from '@/lib/mermaid-images/reader-draw';
 
@@ -47,14 +48,14 @@ export function Mermaid(p: Props) {
     createEffect(on([() => p.code, () => p.colorMode, invalid, revision, storedSrc], ([code, colorMode, bad, , servedSrc]) => {
       if (bad) return;
       let live = true;
-      onCleanup(() => { live = false; });
       setResult(null);
       if (servedSrc) return;
       // Intentional lazy boundary: a stored drawing never loads the drawing helpers or Mermaid.
-      void import('@/lib/mermaid-images/reader-draw').then(m => m.drawForReader(host, code, colorMode === 'dark', () => live)).then(
+      const cancel = deferEngine(host, () => { void import('@/lib/mermaid-images/reader-draw').then(m => m.drawForReader(host, code, colorMode === 'dark', () => live)).then(
         drawn => { if (live && drawn) setResult({ code, ...drawn }); },
         () => { if (live) setResult({ code, error: 'Could not render this diagram. Check its Mermaid syntax.' }); },
-      );
+      ); });
+      onCleanup(() => { live = false; cancel(); });
     }));
     // An image that finished (or failed) before hydration fired its event into nothing: read its own state.
     createEffect(on([src, storedSrc], ([source, servedSrc]) => {

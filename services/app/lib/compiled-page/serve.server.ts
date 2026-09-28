@@ -55,7 +55,8 @@
  */
 import { parseFragment } from 'parse5';
 import { createHash } from 'node:crypto';
-import type { ArtifactRow } from '@/lib/artifacts';
+import { holdableImports, type ArtifactRow, type RoleActor } from '@/lib/artifacts';
+import { storyRuntimeAssets } from '@/lib/story/runtime-asset';
 import type { ArchivedRender } from '@/lib/archived-version';
 import { mermaidImagesFor } from '@/lib/mermaid-images/store';
 import type { ServedResults, StoredMermaidImage } from '@/lib/story-runtime/contract';
@@ -91,6 +92,12 @@ export interface CompiledReaderRequest {
   signedIn: boolean;
   /** Where the page queries, writes and fetches its overlay; null on a capture. */
   doors: AssembleOverlay['doors'];
+  /**
+   * The reader whose holdings the page's own SQLite engine answers for (lib/artifacts holdableImports,
+   * IslandPageData.hold): the one the page's query door answers — the app page's request actor, `/raw`'s
+   * anonymous reader (`null`), as today's reader decides it. Absent: the page holds nothing.
+   */
+  holder?: RoleActor | null;
   /** An archived render's read-only reason. */
   readOnly?: string | null;
   /** The document's live identity (`<body data-mx-live-id data-mx-live-edit>`); null on a capture or an archived render. */
@@ -389,13 +396,16 @@ export async function compiledPageFor(row: ArtifactRow, page: PreparedPage, read
 
     const flow = page.declared?.flow ?? null;
     const values = flow ? readUrlValues(reader.search, flow) : {};
-    const [mermaidImages, snapshot] = await Promise.all([
+    const [mermaidImages, snapshot, hold] = await Promise.all([
       reader.drawings
         ? mermaidImagesFor({ artifactId: row.id, version: reader.at?.version ?? row.version, surface: reader.drawings, head: !reader.at, visibility: row.visibility }, page.data.nodes)
         : Promise.resolve({}),
       // A capture brings its own settled run; an archived version and a version that cannot run have no snapshot.
       reader.results !== undefined || reader.at || !flow || page.declared?.state ? Promise.resolve(null) : snapshotFor(row, compiled, flow, values),
+      // What the page's engine may hold, for the door it queries through (today's reader asks on every render).
+      flow && reader.doors && reader.holder !== undefined ? holdableImports(row, flow, reader.holder) : Promise.resolve([]),
     ]);
+    const sqliteWasm = hold.length ? storyRuntimeAssets().sqlite : null;
     // The live stream picks up from the snapshot's marks (served-results.server `since`): a write between
     // the snapshot and the page's stream reaches the page as the ordinary `data` frame.
     const served: DataSnapshot | null = snapshot
@@ -420,7 +430,7 @@ export async function compiledPageFor(row: ArtifactRow, page: PreparedPage, read
       colorMode,
       // A capture's answers ride as the snapshot the page starts from: the islands then ask for nothing.
       snapshot: reader.results ? { ...(served ?? emptySnapshot(row)), results: reader.results } : served,
-      overlay: { values, mermaidImages, signedIn: reader.signedIn, doors: doorsFor(compiled, reader.doors), readOnly: reader.readOnly ?? null },
+      overlay: { values, mermaidImages, signedIn: reader.signedIn, doors: doorsFor(compiled, reader.doors), readOnly: reader.readOnly ?? null, hold, sqliteWasm },
       chrome: reader.chrome,
       spa: reader.spa,
       build,
