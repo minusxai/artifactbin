@@ -341,14 +341,16 @@ export function generate(input: GenerateInput): Generated {
       const api: Props = Object.fromEntries((meta.api ?? []).filter((k) => props[k] !== undefined).map((k) => [k, props[k]]));
       // Class strings come from the recipes index AT COMPILE TIME: readers never download cva or tailwind-merge.
       const recipe = RECIPES[node.tag];
-      const cls = meta.dom === 'identity' ? null : recipe ? cn(recipe({ ...props })) : typeof props.className === 'string' ? props.className : null;
+      // In a fixed grid's tile the tile owns the size (components/kit/grid GridItemContext): the recipe and the port both know.
+      const inGrid = !!(meta.grid && ctx.grid && !ctx.grid.flow);
+      const cls = meta.dom === 'identity' ? null : recipe ? cn(recipe({ ...props, ...(inGrid ? { inGridItem: true } : {}) })) : typeof props.className === 'string' ? props.className : null;
       let dom: Props = { ...props };
       for (const k of [...(meta.api ?? []), 'className']) delete dom[k];
       if (ctx.preview) dom = (ctx.preview(createElement('div', dom), node, path) as ReactElement<Props>).props;
       if (meta.dom === 'identity') dom = Object.fromEntries(Object.entries(dom).filter(([k]) => k === 'id' || k === AST));
       // A `<Question>`'s chart box: the assembler puts the snapshot's drawing inside it (contract CHART_SLOT_ATTR).
       if (node.tag === 'Question') dom[CHART_SLOT_ATTR] = typeof dom.id === 'string' && dom.id ? dom.id : path;
-      if (meta.grid && ctx.grid && !ctx.grid.flow) api.inGridItem = true;
+      if (inGrid) api.inGridItem = true;
       const attrs = domAttrs('div', dom).filter(([n]) => n !== 'class');
       const apiJsx = Object.entries(api).map(([k, v]) => ` ${safeAttr(k)}={${typeof v === 'string' ? lit(v) : json(v)}}`).join('');
       const clsJsx = cls ? ` class={${lit(cls)}}` : '';

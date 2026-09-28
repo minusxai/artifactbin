@@ -186,6 +186,12 @@ describe('unit parity with today\'s render', () => {
     expect([...react.querySelectorAll('[role="tabpanel"]')].map((p) => p.getAttribute('style'))).toEqual(['animation-duration:0s', null]);
     expect(react.querySelector('[role="tablist"]')?.getAttribute('tabindex')).toBe('-1');
   });
+  it('mermaid in a grid tile: the served figure is today\'s tile render (the tile owns the size)', async () => {
+    const source = '<Grid cols={12} id="g"><GridItem x={0} y={0} w={6} h={4} id="gi"><Mermaid code="flowchart LR\n  A --> B" title="Flow" id="m" /></GridItem></Grid>';
+    const page = await compilePage(await inputOf(source), loadCompilerBuild());
+    expect(dom(page.html).querySelector('#m')?.getAttribute('class')).toContain('flex h-full w-full flex-col');
+    expect(columnParity(page.html, source)).toEqual([]);
+  });
   it('deck: the compiled column is today\'s render; the rail and present bar sit around it', async () => {
     const source = fixture('deck.jsx');
     const page = await compilePage(await inputOf(source, 'deck'), loadCompilerBuild());
