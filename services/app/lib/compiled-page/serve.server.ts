@@ -10,14 +10,14 @@
  * it says so).
  *
  * THE STEPS, each of which may end in a fallback that names its reason:
- *  0. A version with an author script (a managed frame the island runtime does
- *     not host yet) → `unported`: a page must be whole.
  *  1. The stored compile. None → `not-compiled`. A recorded failure of THIS
  *     build → its own reason (`compile-error`, `unported`). A compile (or a
  *     failure) from another build, or made when no island build could be read
  *     (`build: 'none'`) → recompile inline under COMPILE_INLINE_BUDGET_MS; over
  *     it → `over-budget` (the detached compile still writes back, so the next
- *     read is a hit), a failed recompile → its reason.
+ *     read is a hit), a failed recompile → its reason. A version's author script
+ *     is served by the compiled page (the lazy author host, lib/islands/author-host);
+ *     a compile that does not carry it → `unported`: a page must be whole.
  *  2. The data. Only the head of a document a guest may read has a guest
  *     snapshot (an archived version is its editors' alone). A FRESH snapshot
  *     (marks equal, young) is served. A stale one younger than
@@ -298,15 +298,15 @@ export async function compiledPageFor(row: ArtifactRow, page: PreparedPage, read
       logOnce(row, 'build-mismatch', error instanceof Error ? error.message : String(error));
       return fallback('build-mismatch');
     }
-    // An author's own script runs in a managed frame the island runtime does not host yet: a page
-    // must be whole, so the version is today's renderer's until it does (spec §6, `unported`).
-    if (page.authorScript) {
-      logOnce(row, 'unported', 'the version carries an author script');
-      return fallback('unported');
-    }
     const usable = await compiledOf(row, page, reader.at, build);
     if ('reason' in usable) return fallback(usable.reason);
     const compiled = usable.page;
+    // The author's script runs from the compiled page's data (boot's lazy author host). A compile that
+    // does not carry this version's script would serve the page without it: a page must be whole.
+    if ((page.authorScript || null) !== (compiled.authorScript || null)) {
+      logOnce(row, 'unported', 'the stored compile does not carry the version\'s author script');
+      return fallback('unported');
+    }
 
     const flow = page.declared?.flow ?? null;
     const values = flow ? readUrlValues(reader.search, flow) : {};

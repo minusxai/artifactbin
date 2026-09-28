@@ -218,4 +218,10 @@ export interface IslandPageData {
   sqliteWasm?: string;
   mermaidImages: Readonly<Record<string, StoredMermaidImage>>;
   readOnly: string | null;
+  /**
+   * The version's author script (CompiledPage.authorScript), present only when it has one: `boot`
+   * then loads the lazy author host, which runs it in the sandboxed author frame against this page's
+   * store — never in this document.
+   */
+  authorScript?: string | null;
 }

@@ -49,7 +49,11 @@ origin so it can't touch the app's storage. Documents are always
 self-contained — but you don't have to make them so by hand.
 
 Author scripts run in a second opaque child reached through the fixed
-`/story/author-frame` wrapper, never in the visible renderer. A bounded
+`/author-frame` wrapper, never in the visible renderer. The page carries the
+script only as data (inside its JSON data island, which is not script under
+the page's `script-src`); the page's runtime hands it to the child over a
+MessagePort after the wrapper loads, and the wrapper answers under its own
+policy (`sandbox allow-scripts`, no framing, no forms). A bounded
 MessagePort exposes only declared values, query refreshes and permitted
 dataset mutations. Managed `<Iframe>` assets are imported through the
 document-scoped resolver and served anonymously from `APP__ASSETS_ORIGIN`;

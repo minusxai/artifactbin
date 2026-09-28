@@ -75,6 +75,12 @@ export interface CompileInput {
   access?: DatasetAccessFacts;
   /** The compiler build this compile is made with (see `CompilerBuild`). */
   build: string;
+  /**
+   * The version's own `<Helmet><script>` (prepared page `authorScript`), or null/absent for none. It is
+   * carried through to `CompiledPage.authorScript`, and a version with one always gets a browser module
+   * (`ISLANDS = []` when it has no island): the page's store and the author's session start in `boot`.
+   */
+  authorScript?: string | null;
 }
 
 /** One island: a subtree that runs in the browser. */
@@ -148,6 +154,15 @@ export interface CompiledPage {
   unported: string[];
   /** Components rendered statically whose BEHAVIOUR is not ported yet (`Iframe`, `DeckGL`): served, reported. */
   partial: string[];
+  /**
+   * The version's author script, or null. DATA, never code of this page: the assembler writes it into
+   * the page's JSON data island (`IslandPageData.authorScript`, inert under `script-src 'self'`), and
+   * `boot` loads the lazy author host only then, which hands it to the sandboxed `allow-scripts`
+   * frame over a MessagePort (lib/story-runtime/author-script). It is never part of a module, so it is
+   * never served under `/islands/d/` nor runs in the top-level document. A compile carrying no
+   * author-script field (an older one) must not serve a version that has a script (serve.server).
+   */
+  authorScript: string | null;
 }
 
 /** A stored compile that failed: the read never retries the same build in a loop. */

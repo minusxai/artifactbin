@@ -416,17 +416,28 @@ export interface BuildOptions {
   ssrStore?: ModuleStore;
   /** The server import table (tests); the default is this process's Solid and the shared build's server half. */
   imports?: SsrImports;
+  /**
+   * Build the browser module even when the version has no island (`ISLANDS = []`): its page must still
+   * boot — a version with an author script starts the store and the author host there. No SSR module
+   * then: with no island, nothing in the story renders data, so the skeleton's HTML is the story.
+   */
+  boot?: boolean;
 }
 
 /**
  * Build one version's modules from its generated sources: the skeleton rendered to HTML; with
  * islands, the browser and SSR modules stored and `html` rendered through the SSR module in the
- * declared state. A version with no island has neither module.
+ * declared state. A version with no island has neither module — unless it must boot (`boot`), when it
+ * has the browser module alone.
  */
 export async function buildDocumentModules(sources: GeneratedSources & { islandRefs: readonly unknown[] }, options: BuildOptions): Promise<DocumentModules> {
   const skeletonHtml = await renderSkeleton(sources.skeleton, options.imports);
-  if (!sources.islandRefs.length) return { html: skeletonHtml, module: null, ssr: null };
+  if (!sources.islandRefs.length && !options.boot) return { html: skeletonHtml, module: null, ssr: null };
   const store = options.store ?? createModuleStore();
+  if (!sources.islandRefs.length) {
+    const browser = await browserModuleCode(sources.islands, options.build, options.flow);
+    return { html: skeletonHtml, module: await store.put(new TextEncoder().encode(browser.code), browser.imports), ssr: null };
+  }
   const ssrStore = options.ssrStore ?? createSsrModuleStore();
   const browser = await browserModuleCode(sources.islands, options.build, options.flow);
   const ssrCode = await ssrModuleCode(sources.islands, skeletonHtml, options.flow);
