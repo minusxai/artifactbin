@@ -25,6 +25,7 @@ import type { JsxAttribute, JsxNode } from '@/lib/jsx';
 import type { VizEnvelope } from '@/lib/validation/atlas-schemas';
 import { refName, type TableResult } from '@/lib/story/dataflow';
 import { columnVizKind } from '@/lib/story/dataset-shape';
+import { CHART_VIZ_KINDS } from '@/lib/story/lazy-code';
 import type { RefDataMap } from '@/lib/story/ref-data';
 import { questionEmbedHeightPx } from '@/lib/data/story/question-height';
 import { materializeFileRecipe } from '@/lib/viz/recipe-file';
@@ -34,12 +35,6 @@ import { computeFacetLayoutPlan, computeLegendPlan, computeXLabelAngle, createVe
 import type { VizResultColumn } from '@/lib/viz/types';
 import type { ServedResults } from '@/lib/story-runtime/contract';
 import type { DrawnChart } from './contract';
-
-/**
- * The `viz.kind`s whose QuestionEmbed branch draws a Vega chart
- * (lib/story/lazy-code CHART_VIZ_KINDS, not exported there; see the report's contract request).
- */
-const CHART_VIZ_KINDS: ReadonlySet<string> = new Set(['vega', 'vega-lite', 'recipe']);
 
 /** The width a snapshot draws at when nothing says how wide the slot is (render-vega's headless default). */
 export const SNAPSHOT_CHART_WIDTH = 640;
