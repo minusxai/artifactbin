@@ -9,10 +9,15 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { render } from 'solid-js/web';
 import { IslandProvider } from '../context';
 import { fakeIsland } from './context.test';
-import { Iframe, DeckGL } from '../kit/data';
+import { Iframe, DeckGL } from '../kit/embed';
+import * as dataFamily from '../kit/data';
+import { KIT_FAMILIES } from '../contract';
 import type { IslandContext } from '../contract';
 import type { DataflowStore } from '@/lib/story-runtime/store';
 import type { TableResult } from '@/lib/story/dataflow';
+import { pageAssetDoor } from '../kit/embed/frame-engine';
+import { ISLAND_DATA_ID } from '@/lib/compiled-page/contract';
+import { STORY_ASSET_MESSAGE } from '@/lib/story-runtime/contract';
 
 vi.mock('../kit/embed/deck-engine', () => ({
   mountDeckEngine: (box: HTMLElement, props: { rows: () => readonly Record<string, unknown>[]; height: number }) => {
@@ -28,7 +33,7 @@ vi.mock('../kit/embed/deck-engine', () => ({
 const until = async (ok: () => boolean) => { for (let i = 0; i < 100 && !ok(); i++) await new Promise((r) => setTimeout(r, 10)); };
 let cleanup: (() => void) | null = null;
 beforeEach(() => document.documentElement.setAttribute('data-mx-ready', ''));
-afterEach(() => { cleanup?.(); cleanup = null; document.documentElement.removeAttribute('data-mx-ready'); });
+afterEach(() => { cleanup?.(); cleanup = null; document.documentElement.removeAttribute('data-mx-ready'); document.getElementById(ISLAND_DATA_ID)?.remove(); vi.unstubAllGlobals(); });
 const mount = (island: IslandContext, view: () => import('solid-js').JSX.Element) => {
   const host = document.createElement('div');
   document.body.append(host);
@@ -45,6 +50,14 @@ const store = (): DataflowStore => ({
   getState: () => ({ values: {}, tables: {}, errors: {} }),
   pending: () => new Set(),
 }) as unknown as DataflowStore;
+
+describe('the embed family', () => {
+  it('is its own kit family: the data family no longer carries the embeds', () => {
+    expect(KIT_FAMILIES).toContain('embed');
+    expect(Object.keys(dataFamily)).not.toContain('Iframe');
+    expect(Object.keys(dataFamily)).not.toContain('DeckGL');
+  });
+});
 
 describe('<Iframe>', () => {
   it('draws today\'s managed frame box, then mounts one sandboxed author realm in it, and removes it with the island', async () => {
@@ -69,6 +82,59 @@ describe('<Iframe>', () => {
     const { host } = mount(island, () => <Iframe title="x" height={100} compiled={{ html: '<img src="https://img.example/a.png">', scripts: [] }} />);
     await until(() => !!host.querySelector('[role="alert"]'));
     expect(host.querySelector('[role="alert"]')?.textContent).toMatch(/assets are not configured/);
+  });
+});
+
+/** The page's data island (contract IslandPageData), as the assembler writes it. */
+const pageData = (extra: Record<string, unknown>) => {
+  const script = document.createElement('script');
+  script.type = 'application/json';
+  script.id = ISLAND_DATA_ID;
+  script.textContent = JSON.stringify({ values: {}, results: null, signedIn: false, mermaidImages: {}, readOnly: null, ...extra });
+  document.body.append(script);
+};
+const DOOR = { origin: 'https://assets.example.test', resolveUrl: 'https://app.example.test/a/Abc123/assets' };
+const HASHED = `https://assets.example.test/assets/${'a'.repeat(64)}`;
+
+describe('the frame\'s asset door (IslandPageData.managedAssets)', () => {
+  it('top-level, resolves the author content\'s assets through the page\'s own door with the page\'s credentials', async () => {
+    pageData({ managedAssets: DOOR });
+    const fetchMock = vi.fn(async (_url: string, _init?: RequestInit) => new Response(JSON.stringify({ url: HASHED }), { status: 200, headers: { 'content-type': 'application/json' } }));
+    vi.stubGlobal('fetch', fetchMock);
+    const island = { ...fakeIsland(), store: () => store() };
+    const { host } = mount(island, () => <Iframe title="Gallery" height={100} compiled={{ html: '<img src="https://img.example/a.png">', scripts: [] }} />);
+    await until(() => !!host.querySelector('iframe') || !!host.querySelector('[role="alert"]'));
+    expect(host.querySelector('[role="alert"]')).toBeNull();
+    expect(host.querySelector('iframe')).toBeTruthy();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const [url, init] = fetchMock.mock.calls[0]!;
+    expect(url).toBe(`${DOOR.resolveUrl}?u=${encodeURIComponent('https://img.example/a.png')}&kind=image`);
+    expect(init).toMatchObject({ credentials: 'same-origin', redirect: 'error' });
+  });
+
+  it('reads the door from the page, not from the island: a page without one refuses, as today\'s frame does', async () => {
+    pageData({ assetsUrl: '/a/Abc123/assets' });
+    const island = { ...fakeIsland(), store: () => store() };
+    const { host } = mount(island, () => <Iframe title="x" height={100} assetsOrigin="https://assets.example.test" compiled={{ html: '<img src="https://img.example/a.png">', scripts: [] }} />);
+    await until(() => !!host.querySelector('[role="alert"]'));
+    expect(host.querySelector('[role="alert"]')?.textContent).toMatch(/assets are not configured/);
+  });
+
+  it('framed, asks the parent page through the relay (document-transport\'s rule: present exactly when framed)', async () => {
+    pageData({ managedAssets: DOOR });
+    const posted: unknown[] = [];
+    const parent = { postMessage: (message: unknown, origin: string) => posted.push([message, origin]) };
+    const listeners: Array<(e: MessageEvent) => void> = [];
+    const framed = { parent, self: null, addEventListener: (_type: string, listener: (e: MessageEvent) => void) => listeners.push(listener) } as unknown as Window;
+    const door = pageAssetDoor(document, framed, 'https://app.example.test');
+    expect(door.assets).toEqual(DOOR);
+    expect(door.importAsset).toBeTypeOf('function');
+    const answer = door.importAsset!('https://img.example/a.png', 'image');
+    expect(posted).toEqual([[{ type: STORY_ASSET_MESSAGE, id: 1, url: 'https://img.example/a.png', kind: 'image' }, 'https://app.example.test']]);
+    for (const listener of listeners) listener({ source: parent, origin: 'https://app.example.test', data: { type: 'mx:asset-result', id: 1, url: HASHED } } as unknown as MessageEvent);
+    await expect(answer).resolves.toEqual({ url: HASHED, image: undefined });
+    // Top-level there is no relay: the resolver fetches the door itself.
+    expect(pageAssetDoor(document, window, 'https://app.example.test').importAsset).toBeUndefined();
   });
 });
 

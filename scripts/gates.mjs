@@ -92,6 +92,13 @@ if (selected.length === 0) {
   process.exit(2);
 }
 
+// CI setup needs the same shard selection as execution: only the shard with
+// postgres-datasets pulls its image before the browser gates start.
+if (args.includes('--selected')) {
+  for (const gate of selected) console.log(gate.name);
+  process.exit(0);
+}
+
 // Provisioning uses the same discovery and shard selection as execution, without booting hosts.
 if (args.includes('--browsers')) {
   console.log(browsersFor(selected.map(gate => gate.name)).join(' '));

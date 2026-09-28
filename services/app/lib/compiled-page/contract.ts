@@ -419,6 +419,12 @@ export interface AssembleOverlay {
   signedIn: boolean;
   /** Where the page queries, writes and fetches its overlay (lib/story/markup-csp paths); absent on a capture. */
   doors: { queryUrl: string; mutateUrl?: string; viewerUrl?: string; assetsUrl: string } | null;
+  /**
+   * The managed `<Iframe>`'s asset door for this request (islands contract `IslandPageData.managedAssets`):
+   * beside `doors` because a capture has no doors and still resolves its frames' assets with its key.
+   * Absent or null without an asset origin.
+   */
+  managedAssets?: { origin: string; resolveUrl: string } | null;
   /** An archived version's read-only reason (lib/archived-version); absent for the head. */
   readOnly?: string | null;
   /** The imports the page may hold for the door it queries through (IslandPageData.hold); absent: none. */

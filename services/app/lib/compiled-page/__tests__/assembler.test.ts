@@ -145,6 +145,16 @@ describe('assembleReaderPage', () => {
     expect([...doc.head.querySelectorAll('style')].some((s) => s.textContent?.includes('[data-mx-domain-footer]{opacity:.65}'))).toBe(true);
   });
 
+  it('writes the managed asset door into the data island only when the request has one (IslandPageData.managedAssets)', () => {
+    const door = { origin: 'https://assets.example.test', resolveUrl: 'https://app.example.test/a/X34b00/assets?key=k' };
+    const data = (overlay: AssembleInput['overlay']) => JSON.parse(dom(assembleReaderPage(input({ overlay }))).getElementById(ISLAND_DATA_ID)!.textContent!);
+    expect(data({ ...input().overlay, managedAssets: door }).managedAssets).toEqual(door);
+    // A capture has no doors, and still its door: the frame it photographs resolves assets with the capture's key.
+    expect(data({ ...input().overlay, doors: null, managedAssets: door }).managedAssets).toEqual(door);
+    expect(data(input().overlay)).not.toHaveProperty('managedAssets');
+    expect(data({ ...input().overlay, managedAssets: null })).not.toHaveProperty('managedAssets');
+  });
+
   it('never lets a title, a value or a drawing break out of its element', () => {
     const page = assembleReaderPage(input({ title: '</title><script>alert(1)</script>', overlay: { ...input().overlay, values: { region: '</script><script>alert(2)</script>' } } }));
     expect(page.html).not.toContain('<script>alert(1)');

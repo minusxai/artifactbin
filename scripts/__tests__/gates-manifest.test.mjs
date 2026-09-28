@@ -178,6 +178,18 @@ it('prints the same browser plan used by shard selection without starting server
   }
 });
 
+it('prints the selected gate names for shard-specific CI setup without starting servers', () => {
+  const set = [...onDisk, ...compiledLegNames()];
+  const selected = [];
+  for (let index = 1; index <= 7; index++) {
+    const expected = shardOf(set, { index, total: 7 }, shardWeight);
+    const output = execFileSync(process.execPath, [path.join(SCRIPTS, 'gates.mjs'), '--selected', `--shard=${index}/7`], { encoding: 'utf8' }).trim().split('\n');
+    expect(output).toEqual(expected);
+    selected.push(...output);
+  }
+  expect(selected.filter((name) => name === 'postgres-datasets')).toHaveLength(1);
+});
+
 describe('the compiled legs (w3-behaviour)', () => {
   it('each leg names one gate on disk, carries a measured timeout, and a disabled one says why', () => {
     expect(() => checkLegs(onDisk)).not.toThrow();
@@ -188,7 +200,7 @@ describe('the compiled legs (w3-behaviour)', () => {
       if (leg.disabled !== undefined) expect(leg.disabled.length, leg.gate).toBeGreaterThan(20);
     }
     // The brief's behavioural set is wired, enabled or with its reason.
-    expect(COMPILED_LEGS.map((leg) => leg.gate).sort()).toEqual(['dataflow', 'export-slice', 'full-kit', 'hydration', 'layout-shift', 'live-data', 'live-reader', 'reader-chrome', 'reading-chrome']);
+    expect(COMPILED_LEGS.map((leg) => leg.gate).sort()).toEqual(['dataflow', 'editable-table', 'export-slice', 'full-kit', 'hydration', 'layout-shift', 'live-data', 'live-reader', 'reader-chrome', 'reading-chrome']);
   });
 
   it('a leg is its gate\'s row under its own name and timeout, and the default set leaves disabled legs out', () => {
