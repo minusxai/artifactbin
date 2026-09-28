@@ -13,19 +13,23 @@ import { drainPreparedPageWarmups } from '@/lib/story/prepared-page.server';
 import { getDb } from '@/lib/db';
 
 useAppHarness();
-it('shares the server canonical/status row read while keeping bootstrap admission independent', async () => {
+// One row fetch and one access check per view (docs/phase2-architecture.md §2.2): the page's admission
+// (server/app documentPreparation) hands its row to the bootstrap answer instead of the answer deciding again.
+it('shares the server canonical/status row read AND its admission with the bootstrap answer', async () => {
   const token = await mintToken('server-preparation');
   const created = await createArtifact(request('/api/artifacts', { method: 'POST', token: token.token, json: { markup: '<p>Server preparation</p>' } }));
   expect(created.status).toBe(201);
   const { id } = await created.json();
   const read = vi.spyOn(artifacts, 'getArtifactById');
+  const admitted = vi.spyOn(artifacts, 'canReadArtifact');
   try {
     const app = createAppServer({ indexHtml: async () => '<head></head><body><div id="root"></div></body>' });
     const response = await app.request(`/a/${id}`);
     expect(response.status).toBe(200);
     expect(await response.text()).toContain('Server preparation');
-    expect(read.mock.calls.filter(([value]) => value === id)).toHaveLength(2);
-  } finally { read.mockRestore(); }
+    expect(read.mock.calls.filter(([value]) => value === id)).toHaveLength(1);
+    expect(admitted.mock.calls.filter(([row]) => row.id === id)).toHaveLength(1);
+  } finally { read.mockRestore(); admitted.mockRestore(); }
 });
 it('reuses its admitted browser identity for session display instead of touching the token again', async () => {
   const token = await mintToken('identity-preparation');
