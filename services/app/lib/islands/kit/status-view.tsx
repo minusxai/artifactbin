@@ -17,8 +17,6 @@ import type { WriteState, WriteStatus, WriteStatusFeed } from '../contract';
 /** The indicator's own element (the status element inside carries WRITE_STATUS_ATTR), for the SPA and tests to find its mount. */
 export const WRITE_STATUS_HOST_ATTR = 'data-mx-write-status-host';
 
-type Dismissable = WriteStatusFeed & { dismiss?(id: number): void };
-
 /** The one word the indicator shows for the whole feed: a failure outranks a save in flight, which outranks a landed one. */
 export function overallWriteState(statuses: readonly WriteStatus[]): WriteState | null {
   if (!statuses.length) return null;
@@ -78,18 +76,11 @@ function Indicator(props: { statuses: () => readonly WriteStatus[]; dismiss: (id
 export function mountStatus(feed: WriteStatusFeed, root: HTMLElement): () => void {
   const doc = root.ownerDocument;
   const [statuses, setStatuses] = createSignal<readonly WriteStatus[]>(feed.current());
-  /** Dismissed here when the feed cannot forget one itself (a feed without `dismiss`). */
-  const [hidden, setHidden] = createSignal<ReadonlySet<number>>(new Set());
-  const dismiss = (id: number) => {
-    const own = (feed as Dismissable).dismiss;
-    if (own) own(id); else setHidden((h) => new Set([...h, id]));
-  };
-  const visible = () => statuses().filter((s) => !hidden().has(s.id));
   const host = doc.createElement('div');
   host.setAttribute(WRITE_STATUS_HOST_ATTR, '');
   (doc.body ?? root).appendChild(host);
   const unsubscribe = feed.subscribe((next) => setStatuses(next));
-  const dispose = render(() => <Indicator statuses={visible} dismiss={dismiss} />, host);
+  const dispose = render(() => <Indicator statuses={statuses} dismiss={(id) => feed.dismiss(id)} />, host);
   return () => {
     unsubscribe();
     dispose();

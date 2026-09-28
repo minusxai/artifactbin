@@ -113,6 +113,8 @@ export interface WriteStatus {
 export interface WriteStatusFeed {
   current(): readonly WriteStatus[];
   subscribe(listener: (statuses: readonly WriteStatus[]) => void): () => void;
+  /** The reader puts a `failed` status away without retrying it; a status in any other state is left alone. */
+  dismiss(id: number): void;
 }
 
 /** How long a `saved` status stays in the feed before it is dropped. */

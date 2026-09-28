@@ -15,8 +15,9 @@
  * only the islands that read a changed table. Then `seam.setViewer` moves `viewer()` from the
  * `{ hinted: true }` placeholder to the identity (or null).
  *
- * Signed in, it stays current: when a query it answered stops being current (a value it reads moved,
- * the live stream named a dataset it reads) it asks again at the new values.
+ * After it, a signed-in page's re-runs (a value moved, the live stream named a dataset) are the
+ * transport's: boot gives a signed-in page the session-carrying transport (lib/story-runtime/
+ * fetch-transport `session`), so they answer for this reader without asking the overlay again.
  *
  * Failure (§6): the islands keep the guest snapshot and the signed-in placeholder, and the request is
  * retried a few times with backoff; a 4xx is an answer (no access any more), not a failure to retry.
@@ -106,17 +107,10 @@ export function loadViewerOverlay(context: IslandContext, data: IslandPageData, 
   const viewerUrl = data.viewerUrl;
   const carries = store && flow ? carriesFor(flow, store) : () => true;
 
-  /** The queries the overlay answered last: when one stops being current, a signed-in page asks again. */
-  let answered: string[] = [];
-  let inFlight = false;
-  let again = false;
   let attempt = 0;
-  let signedIn = false;
 
   const send = () => {
     if (store?.disposed) return;
-    inFlight = true;
-    again = false;
     // Taken as the request leaves: an input that moves before the answer lands keeps its own run.
     const land = store?.expectAnswer();
     const exact = carries();
@@ -127,7 +121,6 @@ export function loadViewerOverlay(context: IslandContext, data: IslandPageData, 
         return (await res.json()) as ViewerOverlay;
       })
       .then((overlay) => {
-        inFlight = false;
         attempt = 0;
         if (store?.disposed) return;
         const results = overlay.results ?? { tables: {}, errors: {} };
@@ -139,31 +132,16 @@ export function loadViewerOverlay(context: IslandContext, data: IslandPageData, 
             ...(results.people ? { people: results.people } : {}),
           });
         }
-        answered = [...Object.keys(results.tables ?? {}), ...Object.keys(results.errors ?? {})];
-        const viewer = identityOf(overlay);
-        signedIn = viewer !== null;
         // After the rows: a viewer-scope island leaves its placeholder straight for this reader's content.
-        seam.setViewer(viewer);
-        if (again) send();
+        seam.setViewer(identityOf(overlay));
       })
       .catch((error: unknown) => {
-        inFlight = false;
         const status = (error as { status?: number }).status;
         if (status !== undefined && status >= 400 && status < 500) return;
         const wait = VIEWER_OVERLAY_RETRY_MS[attempt++];
         if (wait !== undefined) env.setTimeout(send, wait);
       });
   };
-
-  // A signed-in reader's answers follow the page: the transport answers for a guest, so what the
-  // overlay answered is asked again (and supersedes the guest's run) whenever it stops being current.
-  store?.subscribe(() => {
-    if (!signedIn || !answered.length || store.disposed) return;
-    const pending = store.pending();
-    if (!answered.some((name) => pending.has(name))) return;
-    if (inFlight) { again = true; return; }
-    send();
-  });
 
   send();
 }

@@ -5,6 +5,13 @@
  * sandboxed document has an opaque origin and sends no cookie, and the route
  * never reads one, so this can only ever return what anyone could fetch.
  *
+ * SESSION MODE (`{ session: true }`): a compiled reader page served to a
+ * SIGNED-IN reader (lib/islands/boot, the page's signed-in hint). Its answers
+ * and writes are the reader's, so every request goes to the POST doors with
+ * `credentials: 'same-origin'` — the doors that read the session, exactly as
+ * the app's own authenticated transport does. A guest page keeps the
+ * anonymous GET above, unchanged.
+ *
  * The relay (relay-transport.ts) stays the transport INSIDE a parent page:
  * the page holds the session a private document's queries need. The choice
  * is made once, by document-transport.ts. React-free.
@@ -20,15 +27,24 @@ export type FetchLike = (input: string, init?: RequestInit) => Promise<Response>
 
 type QueryAnswer = Pick<DataflowState, 'tables' | 'errors' | 'mutationAccess' | 'userOptions' | 'people'>;
 
-export function createFetchTransport(queryUrl: string, fetchFn: FetchLike = (i, init) => fetch(i, init), mutateUrl?: string): QueryTransport {
+export interface FetchTransportOptions {
+  /** The page is signed in: every request goes to the session-reading POST doors with the session (see above). */
+  session?: boolean;
+}
+
+export function createFetchTransport(queryUrl: string, fetchFn: FetchLike = (i, init) => fetch(i, init), mutateUrl?: string, options: FetchTransportOptions = {}): QueryTransport {
+  const session = !!options.session;
+  const credentials: RequestCredentials = session ? 'same-origin' : 'omit';
+  const post = (url: string, body: unknown) => fetchFn(url, { method: 'POST', credentials, headers: { 'Content-Type': 'text/plain' }, body: JSON.stringify(body) });
   const ask = async (request: Record<string, unknown>): Promise<QueryAnswer> => {
     const localTables = request.localTables;
     const carriesLocalTables = !!localTables && typeof localTables === 'object' && Object.keys(localTables).length > 0;
     // Local table snapshots can be large, so they use a simple text/plain
-    // POST rather than a bounded URL. Ordinary queries remain GETs.
+    // POST rather than a bounded URL. Ordinary queries remain GETs — except
+    // with the session, which only the POST door reads.
     const sep = queryUrl.includes('?') ? '&' : '?';
-    const res = carriesLocalTables
-      ? await fetchFn(queryUrl, { method: 'POST', credentials: 'omit', headers: {'Content-Type': 'text/plain'}, body: JSON.stringify(request) })
+    const res = carriesLocalTables || session
+      ? await post(queryUrl, request)
       : await fetchFn(`${queryUrl}${sep}${QUERY_REQUEST_PARAM}=${encodeURIComponent(JSON.stringify(request))}`, { method: 'GET', credentials: 'omit' });
     if (!res.ok) throw new Error(`query failed (${res.status})`);
     const body = (await res.json()) as Partial<QueryAnswer>;
@@ -37,13 +53,15 @@ export function createFetchTransport(queryUrl: string, fetchFn: FetchLike = (i, 
   return {
     run: (values, only, localTables) => ask({ values, only, tz: localZone(), ...(localTables ? { localTables } : {}) }),
     hold: async (name) => {
-      const res = await fetchFn(`${queryUrl}${queryUrl.includes('?') ? '&' : '?'}${QUERY_REQUEST_PARAM}=${encodeURIComponent(JSON.stringify({ hold: name }))}`, { method: 'GET', credentials: 'omit' });
+      const res = session
+        ? await post(queryUrl, { hold: name })
+        : await fetchFn(`${queryUrl}${queryUrl.includes('?') ? '&' : '?'}${QUERY_REQUEST_PARAM}=${encodeURIComponent(JSON.stringify({ hold: name }))}`, { method: 'GET', credentials: 'omit' });
       if (!res.ok) throw new Error(`hold failed (${res.status})`);
       return ((await res.json()) as { tables: ImportTables[string] }).tables;
     },
     // A POST like a large local-table run: a batch of ids would outgrow a URL. `text/plain` keeps it a simple request.
     people: async (ids) => {
-      const res = await fetchFn(queryUrl, { method: 'POST', credentials: 'omit', headers: { 'Content-Type': 'text/plain' }, body: JSON.stringify({ people: ids }) });
+      const res = await post(queryUrl, { people: ids });
       if (!res.ok) throw new Error(`people failed (${res.status})`);
       return ((await res.json()) as { people: Record<string, PersonCard> }).people;
     },
@@ -56,6 +74,7 @@ export function createFetchTransport(queryUrl: string, fetchFn: FetchLike = (i, 
     /*
      * The WRITE, when this document is the page: a POST of the mutation request
      * (lib/story/mutation-request) to the one write URL its CSP admits.
+     * With the session (a signed-in page), it carries it: the write is the reader's.
      *
      * `text/plain` deliberately — that keeps it a SIMPLE request, so an opaque
      * origin needs no preflight (the route parses the body as JSON either
@@ -66,12 +85,7 @@ export function createFetchTransport(queryUrl: string, fetchFn: FetchLike = (i, 
     ...(mutateUrl
       ? {
         mutate: async (request: import('@/lib/story/mutation-request').MutationRequest) => {
-          const res = await fetchFn(mutateUrl, {
-            method: 'POST',
-            credentials: 'omit',
-            headers: { 'Content-Type': 'text/plain' },
-            body: JSON.stringify({ tz: localZone(), ...request }),
-          });
+          const res = await post(mutateUrl, { tz: localZone(), ...request });
           const body = (await res.json().catch(() => ({}))) as { ok?: boolean; dataset?: string; local?: import('@/lib/story/local-state').LocalMutationResult; error?: string; detail?: string };
           if (!res.ok || !body.ok) throw new Error(body.detail ?? body.error ?? `write failed (${res.status})`);
           return { dataset: body.dataset ?? '', ...(body.local ? { local: body.local } : {}) };

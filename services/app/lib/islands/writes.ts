@@ -12,19 +12,13 @@
 import type { DataflowStore, StoreWriteEvent } from '@/lib/story-runtime/store';
 import { SAVED_STATUS_TTL_MS, type WriteStatus, type WriteStatusFeed } from './contract';
 
-/** The feed, plus the reader's way to put a failure away without retrying it. */
-export interface DismissableWriteStatusFeed extends WriteStatusFeed {
-  /** Drop one `failed` status (the indicator's dismiss); a status in any other state is left alone. */
-  dismiss(id: number): void;
-}
-
 const messageOf = (error: unknown): string => (error instanceof Error ? error.message : typeof error === 'string' ? error : 'The change was not saved.');
 const codeOf = (error: unknown): string | undefined => {
   const code = error && typeof error === 'object' ? (error as { code?: unknown }).code : undefined;
   return typeof code === 'string' ? code : undefined;
 };
 
-export function createWriteStatusFeed(store: DataflowStore | null): DismissableWriteStatusFeed {
+export function createWriteStatusFeed(store: DataflowStore | null): WriteStatusFeed {
   let statuses: readonly WriteStatus[] = [];
   const listeners = new Set<(statuses: readonly WriteStatus[]) => void>();
   const timers = new Map<number, ReturnType<typeof setTimeout>>();

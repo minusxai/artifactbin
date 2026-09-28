@@ -86,7 +86,7 @@ describe('the viewer overlay', () => {
     expect(hasViewerScope(refused, null), 'without guest answers only the reads can tell').toBe(false);
   });
 
-  it('a signed-in page asks once at its $ values, lands the reader\'s rows over the guest run still in flight, then names the reader', async () => {
+  it('a signed-in page asks once at its $ values, lands the reader\'s rows over the run still in flight, then names the reader', async () => {
     const { fetchMock, take } = doors();
     vi.stubGlobal('fetch', fetchMock);
     page({ ...served, signedIn: true });
@@ -94,6 +94,7 @@ describe('the viewer overlay', () => {
     expect(text(), 'the placeholder, never guest content').toBe('…hinted');
 
     const guestRun = take('query');
+    expect(guestRun.init, 'a signed-in page\'s own runs carry the session to the POST door').toMatchObject({ method: 'POST', credentials: 'same-origin' });
     const overlay = take('viewer');
     expect(overlay.url).toBe('/a/abc/viewer?$region=West');
     expect(overlay.init).toMatchObject({ method: 'GET', credentials: 'same-origin' });
@@ -107,22 +108,28 @@ describe('the viewer overlay', () => {
     expect(text(), 'the guest\'s answer, asked before the overlay landed, does not land over it').toBe('u1-Westu1');
   });
 
-  it('a signed-in page asks again when a value its viewer rows read moves', async () => {
-    const { fetchMock, take } = doors();
+  it('after the overlay, a signed-in page re-runs through the session door, and a guest page through the anonymous one', async () => {
+    const { fetchMock, take, waiting } = doors();
     vi.stubGlobal('fetch', fetchMock);
     page({ ...served, signedIn: true });
     booted = boot({ ISLANDS: [['s0-', Me]], FLOW: withMe });
-    take('query').answer({ tables: { me: table('guest-West') }, errors: {} });
+    take('query').answer({ tables: { me: table('u1-West') }, errors: {} });
     take('viewer').answer({ viewer: { id: 'u1' }, results: { tables: { me: table('u1-West') }, errors: {} }, hold: [] });
     await vi.waitFor(() => expect(text()).toBe('u1-Westu1'));
 
     booted.context.setValue('region', 'East');
-    const again = take('viewer');
-    expect(again.url).toBe('/a/abc/viewer?$region=East');
-    const guestEast = take('query');
-    guestEast.answer({ tables: { me: table('guest-East') }, errors: {} });
-    again.answer({ viewer: { id: 'u1' }, results: { tables: { me: table('u1-East') }, errors: {} }, hold: [] });
+    const rerun = take('query');
+    expect(rerun.init).toMatchObject({ method: 'POST', credentials: 'same-origin' });
+    expect(JSON.parse(String(rerun.init?.body))).toMatchObject({ only: ['me'], values: { region: 'East' } });
+    expect(waiting.filter((w) => w.url.startsWith('/a/abc/viewer')), 'the overlay is not asked again').toEqual([]);
+    rerun.answer({ tables: { me: table('u1-East') }, errors: {} });
     await vi.waitFor(() => expect(text()).toBe('u1-Eastu1'));
+    booted.dispose();
+
+    page({ ...served, signedIn: false });
+    booted = boot({ ISLANDS: [['s0-', Me]], FLOW: withMe });
+    const guest = take('query');
+    expect(guest.init).toMatchObject({ method: 'GET', credentials: 'omit' });
   });
 
   it('keeps the placeholder while the overlay fails, and retries after a wait', async () => {
@@ -152,6 +159,41 @@ describe('the viewer overlay', () => {
     take('viewer').answer({ error: 'not_found' }, 404);
     await vi.advanceTimersByTimeAsync(VIEWER_OVERLAY_RETRY_MS.reduce((a, b) => a + b, 0) + 1);
     expect(fetchMock.mock.calls.filter(([url]) => url.startsWith('/a/abc/viewer'))).toHaveLength(1);
+  });
+});
+
+describe('island writes', () => {
+  const writing: CompiledDataflow = {
+    imports: [{ name: 'd', ref: 'DS1', tables: [{ name: 'rows', columns: [{ name: 'n', type: 'number' }] }] }],
+    values: [region], queries: [],
+    mutations: [{ name: 'add', sql: 'insert into d.rows values ($region)', target: { import: 'd', table: 'rows' }, args: [{ name: 'region', type: 'string' }], reads: { imports: ['d'], queries: [], values: ['region'], builtins: [] }, start: 0, end: 0 }],
+  } as CompiledDataflow;
+  const writes = (signedIn: boolean) => ({ ...served, results: { tables: {}, errors: {} }, mutateUrl: '/a/abc/mutate', signedIn });
+
+  it('sends a click made before the write check answers, with the session on a signed-in page, and reports it saved', async () => {
+    const { fetchMock, waiting } = doors();
+    vi.stubGlobal('fetch', fetchMock);
+    page(writes(true));
+    booted = boot({ ISLANDS: [], FLOW: writing });
+    expect(booted.store?.mutationUnavailable('add'), 'the check has not answered yet').toBe('Checking edit access…');
+    const done = booted.context.mutate({ mutation: 'add', args: {} });
+    const write = waiting.find((w) => w.url === '/a/abc/mutate');
+    expect(write, 'the write was sent, not refused').toBeTruthy();
+    expect(write!.init).toMatchObject({ method: 'POST', credentials: 'same-origin' });
+    expect(JSON.parse(String(write!.init?.body))).toMatchObject({ mutation: 'add', args: { region: 'West' } });
+    expect(booted.context.writes.current().map((w) => w.state)).toEqual(['saving']);
+    write!.answer({ ok: true, dataset: 'DS1' });
+    await expect(done).resolves.toEqual({ dataset: 'DS1' });
+    expect(booted.context.writes.current().map((w) => w.state)).toEqual(['saved']);
+  });
+
+  it('keeps a guest page\'s write anonymous', () => {
+    const { fetchMock, waiting } = doors();
+    vi.stubGlobal('fetch', fetchMock);
+    page(writes(false));
+    booted = boot({ ISLANDS: [], FLOW: writing });
+    void booted.context.mutate({ mutation: 'add', args: {} }).catch(() => {});
+    expect(waiting.find((w) => w.url === '/a/abc/mutate')?.init).toMatchObject({ method: 'POST', credentials: 'omit' });
   });
 });
 
