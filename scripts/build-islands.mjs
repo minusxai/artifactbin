@@ -83,6 +83,8 @@ const STANDALONE_LAZY = [
   { request: './author-host', name: 'author-host', file: () => path.join(ISLANDS_SRC, 'author-host.ts') },
   // The page's own SQLite engine (today's page engine and the SQLite core), loaded by boot behind the first paint.
   { request: './sqlite-engine', name: 'sqlite-engine', file: () => path.join(ISLANDS_SRC, 'sqlite-engine.ts') },
+  // The link following the reader (today's url-values-sync), loaded by boot after hydration.
+  { request: './url-sync', name: 'url-sync', file: () => path.join(ISLANDS_SRC, 'url-sync.ts') },
 ];
 
 async function buildStandaloneLazy() {

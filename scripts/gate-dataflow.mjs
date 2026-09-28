@@ -278,7 +278,8 @@ check((await uf.textContent('[aria-label="Live number"]')) === '$10', 'and the n
 const upRuns = upQueries.filter((q) => q.body?.hold === undefined);
 // The selected numbers arrived in the HTML (lib/story/served-results.server): the page asks for nothing to show them.
 check(upRuns.length === 0, `the document's first rows came with the page, for the selection: no run request (${upRuns.length} run request(s))`);
-check((await (await fetch(readerUrl(`${B}/a/${udoc.id}?$region=west`), { headers: { accept: 'text/html' } })).text()).includes('"results":{"tables":{'), 'and the served page carries those results for the linked selection');
+// Key order is the store's: a compiled page's guest snapshot comes back from JSONB, which puts `errors` first.
+check(/"results":\{(?:"errors":\{\},)?"tables":\{"/.test(await (await fetch(readerUrl(`${B}/a/${udoc.id}?$region=west`), { headers: { accept: 'text/html' } })).text()), 'and the served page carries those results for the linked selection');
 check(!upErrors.some((e) => /hydrat/i.test(e)), 'no hydration error: the SSR control and the hydrated store agree by construction');
 // (b) the address follows the reader
 await uf.selectOption('select[aria-label="Region"]', 'east');

@@ -21,6 +21,8 @@
  * 8. when the page may hold data (`hold`, `sqliteWasm`): gives the store the page's own SQLite engine
  *    (./sqlite-engine, bundled alone and loaded behind the first paint — the store asks for it once the
  *    first run is on its way), so what the reader holds is answered in the page, as today's reader does.
+ * 9. top-level only: the link follows the reader — a moved `<Value>` rewrites the page's own `$` params
+ *    (./url-sync, today's url-values-sync), loaded after hydration.
  *
  * The viewer overlay, the write status feed and its indicator are wave-3 seams (viewer.ts,
  * writes.ts, kit/status.tsx): this file calls them and their owners replace those files.
@@ -182,6 +184,9 @@ export function boot(input: IslandModule | readonly IslandEntry[], win: Window =
       if (!disposed) stopLive = startIslandLive(win, liveId, liveEdit, data.results?.since ?? null);
     }).catch((error: unknown) => console.error('[islands] the live stream did not load', error));
   }
+  // The link follows the reader (./url-sync), top-level only: a framed document's address is its frame's.
+  let stopUrl = () => {};
+  if (store && win.parent === win) void import('./url-sync').then(({ startUrlSync }) => { if (!disposed) stopUrl = startUrlSync(win, store); }, () => {});
 
   let mode: IslandDocumentMode = 'read';
   let ready = false;
@@ -207,6 +212,7 @@ export function boot(input: IslandModule | readonly IslandEntry[], win: Window =
       stopAuthor();
       disposeIslands();
       stopLive();
+      stopUrl();
       if (store && hooks[STORY_DATA_HOOK]) delete hooks[STORY_DATA_HOOK];
       stopStatus();
       stopWrites();
