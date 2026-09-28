@@ -131,7 +131,7 @@ describe('the HTML-first reader page', () => {
     expect(storyText(html)).toContain('$744,503');
     // The same text as today with every <style> removed and each chart slot's contents excluded on both sides:
     // the compiled page draws the snapshot's chart where today's says `loading chart…` (an intended improvement).
-    const slots = [...doc.querySelectorAll('#mx-story-root [data-mx-chart-slot]')].map((slot) => slot.id).filter(Boolean);
+    const slots = [...doc.querySelectorAll('#mx-story-root [data-mx-chart-slot]')].map((slot) => slot.closest('[aria-label="Question embed"]')?.id).filter((id): id is string => !!id);
     const textOf = (root: Element | null) => {
       if (!root) return '';
       for (const s of root.querySelectorAll('style, script')) s.remove();

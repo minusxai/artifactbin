@@ -463,10 +463,11 @@ export const SPECULATION_RULES_HEADER = 'Speculation-Rules';
 /** The element ids and attributes the assembled page and the runtime agree on. */
 export const ISLAND_DATA_ID = 'mx-story-data';
 /**
- * A `<Question>` island's chart box in the compiled HTML, by the question's node
- * id (or path): the assembler puts the snapshot's SVG inside it and marks it
- * `data-mx-chart-state="ready"`; an island re-draws only when its table changes
- * or the reader interacts (Vega loads then).
+ * A `<Question>` island's inner drawing box in the compiled HTML, by the question's
+ * node id (or path) — the ASSEMBLER's handle only: it puts the snapshot's SVG
+ * inside the box and marks it `data-mx-chart-state="ready"`. The island removes
+ * the attribute when it mounts (the served DOM then matches today's), and
+ * re-draws only when its table changes or the reader interacts (Vega loads then).
  */
 export const CHART_SLOT_ATTR = 'data-mx-chart-slot';
 /** A chart slot's drawing state, set by the assembler and updated by the island runtime (`drawn`, `pending`, `live`). */

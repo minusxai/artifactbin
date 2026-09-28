@@ -77,7 +77,7 @@ describe('compilePage', () => {
     expect(page.plan!.queries.map((q) => q.name)).toEqual(['regions', 'monthly', 'by_product']);
     expect(page.islands.flatMap((i) => i.kit)).toEqual(expect.arrayContaining(['Select', 'Number', 'Question', 'DataTable']));
     expect(page.islands.every((i) => i.readsData)).toBe(true);
-    expect(dom(page.html).querySelector(`[${CHART_SLOT_ATTR}="AVkX"]`)).toBeTruthy();
+    expect(dom(page.html).querySelector('#AVkX')?.hasAttribute(CHART_SLOT_ATTR)).toBe(false);
   });
 
   it('deck: no islands, the rail and present bar rendered, the deck behaviour named', async () => {
