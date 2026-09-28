@@ -27,3 +27,23 @@ it('only one concurrent claimant wins and a revoked token cannot inspect or retr
 it.each(['notification_access_revoked','notification_source_invalid'])('preserves safe classified execution error %s and rejects oversized plans before materialization',async(code)=>{const {db,store}=await fixture();await db.transaction(tx=>store.enqueue(tx,[input]));const claim=(await store.claim())!;await expect(store.complete(claim,{...plan,rows:Array.from({length:1001},()=>plan.rows[0]!)})).rejects.toMatchObject({code:'notification_capacity',retryable:false});expect((await db.query('SELECT * FROM mutation_notifications')).rows).toEqual([]);await store.fail(claim,code,false);const status=await store.status(input.initiator.principal,claim.jobId);expect(status?.error_code).toBe(code);expect(Object.keys(status!)).toEqual(['id','mutation_run_id','notification_name','status','attempts','error_code','next_attempt_at']);});
 it('materializes the bounded 2000-recipient plan with batched inserts',async()=>{const {db,store}=await fixture();await db.transaction(tx=>store.enqueue(tx,[{...input,initiator:{...input.initiator,execution:'agent'}}]));const claim=(await store.claim())!;const start=performance.now();expect(await store.complete(claim,{...plan,rows:Array.from({length:1000},(_,ordinal)=>({recipientIds:['alice','bob'],message:`Result ${ordinal}`}))})).toBe(true);expect((await db.query<{count:number}>('SELECT count(*)::int AS count FROM mutation_notifications')).rows[0]!.count).toBe(2000);expect((await db.query<{count:number}>('SELECT count(*)::int AS count FROM event_outbox')).rows[0]!.count).toBe(2000);console.info(`Notification bounded fanout: 2000 rows and events, ${(performance.now()-start).toFixed(0)}ms PGLite`);});
 it('erases disposable origin jobs, output and pending delivery with the account',async()=>{const {db,store}=await fixture();await db.query("UPDATE users SET kind='testuser' WHERE id IN ('alice','bob')");await db.transaction(tx=>store.enqueue(tx,[input]));const claim=(await store.claim())!;await store.complete(claim,plan);expect((await db.query('SELECT * FROM mutation_notifications')).rows).toHaveLength(1);await eraseTestUser('alice');expect((await db.query('SELECT * FROM notification_jobs')).rows).toEqual([]);expect((await db.query('SELECT * FROM mutation_notifications')).rows).toEqual([]);expect((await db.query('SELECT * FROM event_outbox')).rows).toEqual([]);});
+it('lets the frozen initiating account inspect and retry a token-run job without trusting token reassignment',async()=>{
+ const {db,store}=await fixture();
+ await db.query("INSERT INTO tokens(id,token_hash,user_id) VALUES('token','hash','alice')");
+ const tokenInput={...input,initiator:{...input.initiator,principal:{kind:'token' as const,id:'token'}}};
+ await db.transaction(tx=>store.enqueue(tx,[tokenInput]));
+ const claim=(await store.claim())!;
+ await store.fail(claim,'notification_source_invalid',false);
+ await db.query("UPDATE tokens SET user_id='reader' WHERE id='token'");
+ expect(await store.status({kind:'user',id:'reader'},claim.jobId)).toBeNull();
+ expect(await store.retry({kind:'user',id:'reader'},claim.jobId)).toBe(false);
+ expect((await store.status({kind:'user',id:'alice'},claim.jobId))?.status).toBe('failed');
+ expect(await store.list({kind:'user',id:'alice'},'run1')).toHaveLength(1);
+ expect(await store.retry({kind:'user',id:'alice'},claim.jobId)).toBe(true);
+ const retry=(await store.claim())!;
+ expect(retry.input).toEqual(tokenInput);
+ await store.fail(retry,'notification_access_revoked',false);
+ await db.query("UPDATE users SET expires_at='2025-01-01' WHERE id='alice'");
+ expect(await store.status({kind:'user',id:'alice'},claim.jobId)).toBeNull();
+ expect(await store.retry({kind:'user',id:'alice'},claim.jobId)).toBe(false);
+});
