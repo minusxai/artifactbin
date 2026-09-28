@@ -558,6 +558,13 @@ export function generate(input: GenerateInput): Generated {
     }
     const lower = node.tag.toLowerCase();
     const tag = safeTag(SVG_TAG_CASE[lower] ?? lower);
+    // The image source is data, including URL templates. Its first paint and live value use the same asset door.
+    const imageSource = lower === 'img' && !node.isComponent ? node.attributes.find((a) => a.name.toLowerCase() === 'src') : undefined;
+    if (imageSource?.value.static && typeof imageSource.value.json === 'string'
+      && (refName(imageSource.value.json) || carriesRef(imageSource.value.json))) {
+      const props = rawBuildProps(node.attributes.filter((a) => a !== imageSource), false, node.tag, path, undefined, {});
+      return `<rt.BoundImage template={${lit(imageSource.value.json)}} attrs={${json(Object.fromEntries(domAttrs(tag, props)))}}${ctx.row ? ` row={${ctx.row}}` : ''} />`;
+    }
     // A `$`-bound native form control (interpreter boundAttrs → StoryRuntimeApp NativeBoundControl).
     const boundTable = ['input', 'select', 'textarea'].includes(lower) ? REF_ATTRS.html[lower] : null;
     const boundAttrs = boundTable ? node.attributes.filter((a) => boundTable[a.name.toLowerCase()] && a.value.static && refName(a.value.json)) : [];

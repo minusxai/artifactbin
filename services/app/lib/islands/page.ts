@@ -26,6 +26,7 @@ import { readerMode, takeReloadAnchor } from '@/lib/story-runtime/reader-mode';
 import { chromeAfterSample, type ChromeState } from '@/lib/story-runtime/reader-chrome-policy';
 import { wireOutline } from '@/lib/story-runtime/outline-nav';
 import { markScrollableTables } from '@/lib/story-runtime/table-scroll';
+import { STORY_SCROLL_MESSAGE, type StoryScrollMessage } from '@/lib/story-runtime/contract';
 import { startIslandLive } from './live';
 
 const STORY_ROOT_SELECTOR = '[data-mx-inline-story]';
@@ -34,6 +35,24 @@ const STORY_ROOT_SELECTOR = '[data-mx-inline-story]';
  * renderer and has no place in a reader chunk (page.test pins the two equal).
  */
 export const CHROME_HIDDEN_CLASS = 'mx-reader-chrome--hidden';
+
+/** Report a framed reader's scroll to the shell, which cannot inspect an opaque frame. */
+function relayFrameScroll(win: Window, doc: Document): () => void {
+  let queued = false;
+  const post = () => {
+    queued = false;
+    const scrollY = Math.max(0, win.scrollY);
+    win.parent.postMessage({
+      type: STORY_SCROLL_MESSAGE, scrollY,
+      atBottom: win.innerHeight + scrollY >= doc.documentElement.scrollHeight - 4,
+      gutter: Math.max(0, win.innerWidth - doc.documentElement.clientWidth),
+    } satisfies StoryScrollMessage, '*');
+  };
+  const schedule = () => { if (!queued) { queued = true; win.requestAnimationFrame(post); } };
+  win.addEventListener('scroll', schedule, { passive: true });
+  post();
+  return () => win.removeEventListener('scroll', schedule);
+}
 
 /** The served chrome's visibility, sampled once per frame, until the element leaves the page (the app took over). */
 function followChrome(win: Window, doc: Document, chrome: HTMLElement): () => void {
@@ -69,7 +88,10 @@ export function startPage(doc: Document = document, win: Window = window): () =>
   const stops: Array<() => void> = [];
   // These document affordances also run inside a frame, like the legacy page entry.
   stops.push(markScrollableTables(doc), wireOutline(doc));
-  if (framed) return () => { for (const stop of stops.splice(0)) stop(); };
+  if (framed) {
+    stops.push(relayFrameScroll(win, doc));
+    return () => { for (const stop of stops.splice(0)) stop(); };
+  }
   const id = doc.body?.getAttribute('data-mx-live-id');
   const editId = doc.body?.getAttribute('data-mx-live-edit');
   const hasModule = !!doc.getElementById(ISLAND_DATA_ID);

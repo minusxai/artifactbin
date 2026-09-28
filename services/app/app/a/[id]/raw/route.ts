@@ -381,6 +381,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
             viewerUrl: VIEWER_OVERLAY_PATH(artifact.id),
             assetsUrl: assetsPath(artifact.id),
           },
+          ...(capture ? { assetsUrl: `${assetsPath(artifact.id)}?key=${encodeURIComponent(key!)}` } : {}),
           managedAssets,
           ...(at ? { readOnly: archivedReadOnly(at.version) } : {}),
           live: chrome && !at ? { id: artifact.id, editId: artifact.edit_id } : null,
@@ -392,6 +393,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
           behaviors: capture ? [] : ['page'],
           // `chrome=0` draws the document without its own chrome (a deck's rail and present bar), as today's does.
           documentChrome: chrome,
+          capture: !chrome,
           head: chrome
             ? {
               description: row.description,

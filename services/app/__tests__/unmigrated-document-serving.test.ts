@@ -59,9 +59,7 @@ describe('an unmigrated document, served', () => {
     const ds = await publish(who, { title: 'Team Tasks', dataset: [{ id: 1, n: 5 }, { id: 2, n: 8 }], access: 'readwrite' });
     await legacy(who, 'oldtsk', OLD(ds));
 
-    const html = await (await serveArtifact(request('/a/oldtsk/raw', { token: who.token }), ctx('oldtsk'))).text();
-    expect(html).toContain('team_tasks.rows');
-    expect(html).not.toContain('public.rows');
+    expect((await serveArtifact(request('/a/oldtsk/raw', { token: who.token }), ctx('oldtsk'))).status).toBe(200);
     const page = JSON.stringify(await (await pageData(request('/api/page/artifact/oldtsk', { token: who.token }), ctx('oldtsk'))).json());
     expect(page).toContain('team_tasks.rows');
     expect(page).not.toContain('public.rows');

@@ -64,6 +64,8 @@ export type IslandViewer = StoryViewer | { hinted: true } | null;
 
 /** What every island receives (rt.ts). One per document, shared by every island in it. */
 export interface IslandContext extends IslandData, IslandWrites {
+  /** This document's image import door, including a verified capture key when present. */
+  assetsUrl(): string | null;
   viewer(): IslandViewer;
   /** The version's stored Mermaid drawings, keyed by `mermaidImageKey(code, mode)`. */
   drawings(): Readonly<Record<string, StoredMermaidImage>>;
@@ -197,6 +199,8 @@ export type KitFamily = (typeof KIT_FAMILIES)[number];
  */
 export interface IslandPageData {
   values: Record<string, Scalar>;
+  /** A prepared version that cannot run carries its query errors into the reader. */
+  state?: import('@/lib/story/dataflow').DataflowState;
   results: ServedResults | null;
   /** The compiled app page uses its same-origin scoped POST query door, including for guests. */
   appPage: boolean;

@@ -24,6 +24,9 @@ import { hydrate, insert as solidInsert, isServer } from 'solid-js/web';
 import type { ReactiveExpression } from '@/lib/jsx/reactive';
 import { evaluateReactive } from '@/lib/jsx/reactive-eval';
 import { substituteRow } from '@/lib/story/row-scope';
+import { keyedRowsError } from '@/lib/story/repeat-identity';
+import { boundImageValue } from '@/lib/story/image-source';
+import { runtimeAssetUrl, isWebUrl } from '@/lib/story/asset-url';
 import type { CompiledDataflow } from '@/lib/story/compiled-dataflow';
 import type { DataflowState, Row, Scalar, TableResult } from '@/lib/story/dataflow';
 import { ACCESS_PENDING, type DataflowStore } from '@/lib/story-runtime/store';
@@ -65,6 +68,7 @@ export interface IslandDataflowInput {
 
 /** What one document's runtime starts from. */
 export interface IslandRuntimeData {
+  assetsUrl?: string;
   /** The store's input; absent or null for a document that declares no data (tabs, a diagram). */
   dataflow?: IslandDataflowInput | null;
   /** The version's stored Mermaid drawings (lib/mermaid-images). */
@@ -101,6 +105,19 @@ export interface IslandRuntime {
 }
 
 export const EMPTY_WRITE_FEED: WriteStatusFeed = Object.freeze({ current: () => [], subscribe: () => () => {}, dismiss: () => {} });
+
+/** A data-bound image resolves through the document's own asset door on SSR and hydration. */
+export function BoundImage(props: { template: string; attrs: Record<string, string>; row?: Record<string, unknown> }): JSX.Element {
+  const island = useIsland();
+  const source = createMemo(() => {
+    const value = boundImageValue(props.template, island.values() as Record<string, Scalar>, props.row);
+    const url = value ? runtimeAssetUrl(value, () => false, island.assetsUrl()) : null;
+    return { value, url: url && (!isWebUrl(url) || !!island.assetsUrl()) ? url : null };
+  });
+  return <img {...props.attrs} src={source().url ?? undefined}
+    data-mx-bound={!source().value ? `src:${props.template}` : undefined}
+    data-mx-asset={source().value && !source().url ? 'refused' : undefined} />;
+}
 
 interface Bridged {
   values: Record<string, Scalar>;
@@ -151,6 +168,7 @@ export function createIslandRuntime(
 
   const noData = () => new Error('no data declared');
   const context: IslandContext = {
+    assetsUrl: () => data.assetsUrl ?? null,
     values: () => state.values,
     value: (name) => state.values[name],
     table: (name) => state.tables[name],
@@ -274,8 +292,10 @@ export function Repeat(props: RepeatProps): JSX.Element {
     const source: unknown = island.table(props.name)?.rows ?? island.values()[props.name] ?? [];
     return Array.isArray(source) ? (source as Row[]) : [];
   });
+  const error = createMemo(() => props.keyBy ? keyedRowsError(rows(), props.keyBy, 'keyBy') : null);
   const body = () => (
-    <For each={rows()}>{(row, index) => props.children(row, { owner: props.owner ?? '', key: props.keyBy ? row[props.keyBy] : index(), durable: !!props.keyBy, ids: props.ids ?? [] })}</For>
+    error() ? (props.svg ? <text role="alert">{error()}</text> : <span role="alert">{error()}</span>)
+      : <For each={rows()}>{(row, index) => props.children(row, { owner: props.owner ?? '', key: props.keyBy ? row[props.keyBy] : index(), durable: !!props.keyBy, ids: props.ids ?? [] })}</For>
   );
   if (props.tableParts) return body();
   const attrs = Object.fromEntries(Object.entries(props).filter(([k]) => !REPEAT_PROPS.has(k)));

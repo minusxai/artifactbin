@@ -113,6 +113,10 @@ export interface CompiledReaderRequest {
    * snapshot, rendered into the story and never cached — they were computed for whoever asked.
    */
   results?: ServedResults | null;
+  /** Export captures use full-size image bytes and no responsive srcset. */
+  capture?: boolean;
+  /** A capture's verified image import door without opening a query door. */
+  assetsUrl?: string;
   /** A domain post's attribution line (lib/story/document's bare footer), after the story. */
   footer?: { html: string; css: string } | null;
   /** A document served by itself: today's standalone stylesheets, byte for byte (AssembleInput.sheets). */
@@ -307,6 +311,8 @@ const sorted = (record: Readonly<Record<string, unknown>>): Array<[string, unkno
 
 interface StoryInput {
   values: Record<string, Scalar>;
+  state?: import('@/lib/story/dataflow').DataflowState;
+  assetsUrl?: string;
   results: ServedResults | null;
   mermaidImages: Readonly<Record<string, StoredMermaidImage>>;
   drawings: DataSnapshot['drawings'];
@@ -315,10 +321,10 @@ interface StoryInput {
 }
 
 async function storyOf(compiled: CompiledPage, input: StoryInput): Promise<string> {
-  const plain = !input.results && !Object.keys(input.values).length && !Object.keys(input.mermaidImages).length;
+  const plain = !input.state && !input.assetsUrl && !input.results && !Object.keys(input.values).length && !Object.keys(input.mermaidImages).length;
   if (!compiled.ssr || plain) return compiled.html;
   const cacheKey = input.resultsId === null && input.results ? null
-    : `${compiled.build}:${compiled.ssr.sha}:${input.resultsId ?? '-'}:${digest(sorted(input.values))}:${digest(sorted(input.mermaidImages))}`;
+    : `${compiled.build}:${compiled.ssr.sha}:${input.resultsId ?? '-'}:${digest(sorted(input.values))}:${digest(input.state ?? null)}:${digest(sorted(input.mermaidImages))}:${input.assetsUrl ?? ''}`;
   const cached = cacheKey ? renders.get(cacheKey) : undefined;
   if (cached !== undefined) {
     renders.delete(cacheKey!);
@@ -330,7 +336,7 @@ async function storyOf(compiled: CompiledPage, input: StoryInput): Promise<strin
   // (the same boundary prepared-page.server keeps for the compiler).
   const { loadSsrModule } = await import('./bundle.server');
   const module = await loadSsrModule(compiled.ssr);
-  const html = module.render({ values: input.values, results: input.results, mermaidImages: input.mermaidImages, drawings: input.drawings });
+  const html = module.render({ values: input.values, state: input.state, assetsUrl: input.assetsUrl, results: input.results, mermaidImages: input.mermaidImages, drawings: input.drawings });
   if (cacheKey) {
     renders.set(cacheKey, html);
     while (renders.size > RENDERS_KEPT) renders.delete(renders.keys().next().value!);
@@ -413,7 +419,7 @@ export async function compiledPageFor(row: ArtifactRow, page: PreparedPage, read
       : null;
     const results = reader.results ?? served?.results ?? null;
     const story = await storyOf(compiled, {
-      values, results, mermaidImages, drawings: served?.drawings ?? {},
+      values, state: page.declared?.state, results, assetsUrl: reader.assetsUrl ?? reader.doors?.assetsUrl, mermaidImages, drawings: served?.drawings ?? {},
       resultsId: served ? `${keyString(served.key)}:${served.computedAt}` : null,
     });
 
@@ -422,8 +428,9 @@ export async function compiledPageFor(row: ArtifactRow, page: PreparedPage, read
     const behaviors = [...new Set([...(reader.behaviors ?? []), ...compiled.behaviors])].filter((b) => !(bare && b === DECK_BEHAVIOR));
     const assembled = assembleReaderPage({
       compiled: { ...compiled, behaviors },
+      capture: reader.capture,
       documentChrome: !bare,
-      story: bare ? withoutDeckChrome(story) : story,
+      story: reader.capture ? story.replace(/<img\b[^>]*>/g, (tag) => tag.replace(/\s(?:srcSet|srcset|sizes)="[^"]*"/g, '')) : bare ? withoutDeckChrome(story) : story,
       css: page.css,
       fontPreloads: [...page.fontPreloads, ...(reader.chromeFonts ?? [])],
       title: page.title,
@@ -431,7 +438,7 @@ export async function compiledPageFor(row: ArtifactRow, page: PreparedPage, read
       colorMode,
       // A capture's answers ride as the snapshot the page starts from: the islands then ask for nothing.
       snapshot: reader.results ? { ...(served ?? emptySnapshot(row)), results: reader.results } : served,
-      overlay: { values, mermaidImages, signedIn: reader.signedIn, doors: doorsFor(compiled, reader.doors), managedAssets: reader.managedAssets ?? null, readOnly: reader.readOnly ?? null, hold, sqliteWasm },
+      overlay: { values, state: page.declared?.state, mermaidImages, signedIn: reader.signedIn, doors: doorsFor(compiled, reader.doors), ...(reader.assetsUrl ? { assetsUrl: reader.assetsUrl } : {}), managedAssets: reader.managedAssets ?? null, readOnly: reader.readOnly ?? null, hold, sqliteWasm },
       chrome: reader.chrome,
       spa: reader.spa,
       build,
