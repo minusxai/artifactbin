@@ -249,6 +249,7 @@ try {
     return result.body;
   };
   const trigger = await checked(owner, '/api/my/artifacts', 'POST', {
+    access: 'readwrite',
     markup: '<Dataset kind="stored"><Table schema="public" name="rows" columns={[{"name":"id","type":"number"},{"name":"recipient","type":"string"}]} rows={[{"id":1,"recipient":"initial"}]} /></Dataset>',
   }, 201);
   const nativeModel = `select ARRAY[$recipient, $recipient]::text[] as "to", format('West total %s', total) as message from models.region_totals where region = 'west'`;
