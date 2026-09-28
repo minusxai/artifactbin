@@ -64,11 +64,14 @@ export const assembleReaderPage: AssembleReaderPage = (input: AssembleInput): As
     + prefetch.map((href) => `<link rel="prefetch" href="${escapeHtml(href)}" as="document">`).join('')
     + '<style>:root{--mx-vh:100vh}body{margin:0}</style>'
     + (chrome ? styleTag('data-mx-chrome', STORY_CHROME_CSS) : '')
-    + (input.css ? styleTag('data-mx-story-css', input.css) : '');
+    + (input.css ? styleTag('data-mx-story-css', input.css) : '')
+    + (input.footer?.css ? styleTag('data-mx-footer-css', input.footer.css) : '');
 
   const body =
     story
     + (chrome ? renderReaderChrome(chrome) : '')
+    // Page furniture after the story root, never inside it: the hydrated tree never sees it.
+    + (input.footer?.html ?? '')
     + (module ? `<script type="application/json" id="${ISLAND_DATA_ID}">${scriptJson(islandData(input))}</script>` : '')
     + behaviorSrcs.map((src) => moduleScript(src)).join('')
     + (module ? moduleScript(module.url) : '')
@@ -78,7 +81,7 @@ export const assembleReaderPage: AssembleReaderPage = (input: AssembleInput): As
 
   const html =
     `<!doctype html><html class="${escapeHtml(input.colorMode)}"${overlay.signedIn ? ` ${SIGNED_IN_HINT_ATTR}=""` : ''}>`
-    + `<head>${head}</head><body>${body}</body></html>`;
+    + `<head>${head}</head><body${liveAttrs(input.live ?? null)}>${body}</body></html>`;
 
   const headers: Record<string, string> = {};
   if (rules) headers[SPECULATION_RULES_HEADER] = `"${rules.url}"`;
@@ -92,6 +95,10 @@ export const assembleReaderPage: AssembleReaderPage = (input: AssembleInput): As
  * ────────────────────────────────────────────────────────────────────────── */
 
 const unique = (urls: readonly string[]): string[] => [...new Set(urls)];
+
+/** The document's live identity on `<body>`, which the island runtime's boot opens the live stream from. */
+const liveAttrs = (live: AssembleInput['live']): string =>
+  (live ? ` data-mx-live-id="${escapeHtml(live.id)}" data-mx-live-edit="${escapeHtml(live.editId)}"` : '');
 
 /**
  * `crossorigin` on every module fetch, script and preload alike: a `/raw` copy

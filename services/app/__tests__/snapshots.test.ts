@@ -105,6 +105,16 @@ describe('revalidate and get', () => {
     expect(read.snapshot.results).toEqual(made.results);
   });
 
+  it('records the compiler build its caller names, and keeps it when a later revalidation names none', async () => {
+    const { id } = await dashboard();
+    const { plan } = await planFor(id);
+    const store = createSnapshotStore();
+    const key = snapshotKeyFor(id, 'head', plan, { region: null });
+    expect((await store.revalidate(key, { plan, values: { region: null }, build: 'abcdef0123456789' }))!.build).toBe('abcdef0123456789');
+    expect((await store.get(key))!.snapshot.build).toBe('abcdef0123456789');
+    expect((await store.revalidate(key))!.build, 'the background worker names no build').toBe('abcdef0123456789');
+  });
+
   it('is stale after the dataset is replaced through PUT (the marks rule), and fresh again after revalidation', async () => {
     const d = await dashboard();
     const { plan } = await planFor(d.id);

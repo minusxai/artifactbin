@@ -21,7 +21,6 @@ import { setCompiledReaderFlagForTests } from '@/lib/compiled-page/reader-mode';
 import { READER_FALLBACK_HEADER, READER_MODE_HEADER, SPA_IDLE_ATTR } from '@/lib/compiled-page/contract';
 import * as artifacts from '@/lib/artifacts';
 import { updateSharingFor } from '@/lib/artifacts';
-import { withBodyAttributes } from '@/lib/compiled-page/serve.server';
 import { mintExportKey } from '@/lib/export-key';
 
 vi.mock('@/auth', () => ({ auth: async () => null }));
@@ -245,6 +244,7 @@ describe('the reader switch at its edges', () => {
       expect(post.headers.get(READER_MODE_HEADER)).toBe('compiled');
       const doc = new JSDOM(await post.text()).window.document;
       expect(doc.querySelector('[data-mx-domain-footer] a')?.getAttribute('href')).toMatch(new RegExp(`/a/${id}$`));
+      expect(doc.querySelector('#mx-story-root [data-mx-domain-footer]'), 'the attribution is outside the story root').toBeNull();
       expect(doc.body.getAttribute('data-mx-live-id')).toBe(id);
     } finally {
       setCompiledReaderFlagForTests('shadow');
@@ -319,11 +319,3 @@ describe('the viewer overlay door', () => {
   });
 });
 
-describe('withBodyAttributes', () => {
-  it('splices at the real head/body boundary, past a stylesheet that spells the boundary', () => {
-    const html = '<!doctype html><html><head><title>t</title><style data-mx-story-css>p::after{content:"</head><body>"}</style></head><body><p>x</p></body></html>';
-    const out = withBodyAttributes(html, { 'data-mx-live-id': 'a"b' });
-    expect(out).toContain('content:"</head><body>"');
-    expect(out).toContain('</style></head><body data-mx-live-id="a&quot;b"><p>x</p>');
-  });
-});

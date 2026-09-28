@@ -32,8 +32,8 @@
  *     (build, snapshot, values, drawings), never keyed on rows; with none, the
  *     stored `compiled.html` is the story verbatim. A capture renders from its
  *     own settled run and is never cached.
- *  4. The assembler, and what the assembler has no input for (the live
- *     identity on `<body>`; a domain post's footer) spliced at its fixed seams.
+ *  4. The assembler, with the request's live identity and a domain post's
+ *     footer as its inputs.
  *
  * Any other throw is a `compile-error` fallback: a reader never gets a 500
  * because the compiled path failed.
@@ -150,7 +150,7 @@ const keyString = (key: SnapshotKey): string => `${key.artifactId}\u0000${key.sl
 
 /** One revalidation per key in this process: concurrent readers of a stale or missing snapshot share it. */
 const inflight = new Map<string, Promise<DataSnapshot | null>>();
-function revalidation(key: SnapshotKey, recipe: { plan: NonNullable<CompiledPage['plan']>; values: Record<string, Scalar> }): Promise<DataSnapshot | null> {
+function revalidation(key: SnapshotKey, recipe: { plan: NonNullable<CompiledPage['plan']>; values: Record<string, Scalar>; build: string }): Promise<DataSnapshot | null> {
   const k = keyString(key);
   let running = inflight.get(k);
   if (!running) {
@@ -182,7 +182,7 @@ async function snapshotFor(row: ArtifactRow, compiled: CompiledPage, flow: NonNu
   const plan = compiled.plan;
   if (!plan || !plan.queries.some((q) => q.scope === 'shared') || row.visibility === 'private') return null;
   const key = snapshotKeyFor(row.id, 'head', plan, values);
-  const recipe = { plan, values };
+  const recipe = { plan, values, build: compiled.build };
   const read = await snapshotStore.get(key);
   if (read?.fresh) return read.snapshot;
   if (read && Date.now() - read.snapshot.computedAt <= SNAPSHOT_MAX_AGE_MS) {
@@ -252,37 +252,6 @@ export const domainFooter = (href: string): { html: string; css: string } => ({
   css: DOMAIN_FOOTER_CSS,
 });
 
-/* ──────────────────────────────────────────────────────────────────────────
- * Step 4: what the assembler has no input for
- * ────────────────────────────────────────────────────────────────────────── */
-
-/**
- * Attributes on the assembled page's `<body>`. The assembler writes `<head>…</head><body>` with every
- * head value escaped, so the only place the sequence can appear early is inside a head `<style>`
- * (the version's CSS, whose `</style` the assembler strips): walk the head skipping each style block
- * and splice at the real boundary.
- */
-export function withBodyAttributes(html: string, attrs: Readonly<Record<string, string>>): string {
-  const entries = Object.entries(attrs);
-  if (!entries.length) return html;
-  const BOUNDARY = '</head><body>';
-  let at = html.indexOf('<head>');
-  if (at < 0) throw new Error('compiled page: no <head>');
-  for (;;) {
-    const style = html.indexOf('<style', at);
-    const boundary = html.indexOf(BOUNDARY, at);
-    if (boundary < 0) throw new Error('compiled page: no <body>');
-    if (style < 0 || boundary < style) {
-      const open = boundary + '</head>'.length;
-      const written = entries.map(([name, value]) => ` ${name}="${escapeHtml(value)}"`).join('');
-      return `${html.slice(0, open)}<body${written}>${html.slice(open + '<body>'.length)}`;
-    }
-    const close = html.indexOf('</style>', style);
-    if (close < 0) throw new Error('compiled page: an unclosed <style> in the head');
-    at = close + '</style>'.length;
-  }
-}
-
 /**
  * THE COMPILED PAGE for one admitted request over one prepared version, or the reason this request
  * is served by today's renderer instead.
@@ -323,8 +292,8 @@ export async function compiledPageFor(row: ArtifactRow, page: PreparedPage, read
     const colorMode = reader.colorMode ?? page.data.colorMode;
     const assembled = assembleReaderPage({
       compiled,
-      story: reader.footer ? story + reader.footer.html : story,
-      css: [page.css, reader.footer?.css, reader.pageCss].filter(Boolean).join('\n'),
+      story,
+      css: [page.css, reader.pageCss].filter(Boolean).join('\n'),
       fontPreloads: [...page.fontPreloads, ...(reader.chromeFonts ?? [])],
       title: page.title,
       theme: page.theme,
@@ -336,11 +305,10 @@ export async function compiledPageFor(row: ArtifactRow, page: PreparedPage, read
       spa: reader.spa,
       build,
       head: reader.head,
+      live: reader.live,
+      footer: reader.footer ?? null,
     });
-    const html = reader.live
-      ? withBodyAttributes(assembled.html, { 'data-mx-live-id': reader.live.id, 'data-mx-live-edit': reader.live.editId })
-      : assembled.html;
-    return { mode: 'compiled', html, headers: assembled.headers };
+    return { mode: 'compiled', html: assembled.html, headers: assembled.headers };
   } catch (error) {
     // `IslandSsrUnavailable` (the shared build has no server half for a kit module) and every other
     // failure of this path: today's renderer answers, never a 500.
