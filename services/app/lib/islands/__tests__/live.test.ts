@@ -6,7 +6,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { boot } from '../boot';
 import { islandLiveUrl, startIslandLive } from '../live';
-import { STORY_DATA_HOOK } from '@/lib/story-runtime/contract';
+import { STORY_ADOPT_HOOK, STORY_DATA_HOOK } from '@/lib/story-runtime/contract';
 import type { IslandDocument } from '../contract';
 
 class FakeEventSource extends EventTarget {
@@ -23,6 +23,7 @@ afterEach(() => {
   booted = null;
   FakeEventSource.made = [];
   delete (window as unknown as Record<string, unknown>)[STORY_DATA_HOOK];
+  delete (window as unknown as Record<string, unknown>)[STORY_ADOPT_HOOK];
   document.body.removeAttribute('data-mx-live-id');
   document.body.removeAttribute('data-mx-live-edit');
   vi.unstubAllGlobals();
@@ -54,6 +55,19 @@ describe('the island live stream', () => {
 
     stop();
     expect(source!.closed).toBe(true);
+  });
+
+  it('leaves a new version to the app once it has adopted the page (no reload under it)', () => {
+    vi.stubGlobal('EventSource', FakeEventSource);
+    const reload = vi.fn();
+    const win = new Proxy(window, { get: (target, key) => (key === 'location' ? { reload } : Reflect.get(target, key, target)) });
+    const stop = startIslandLive(win, 'abc', 'e1');
+    const [source] = FakeEventSource.made;
+    // components/IslandStory installs the adopt hook when the app takes the page: it holds the stream now.
+    (window as unknown as Record<string, unknown>)[STORY_ADOPT_HOOK] = () => {};
+    source!.onmessage!(new MessageEvent('message', { data: JSON.stringify({ editId: 'e2', version: 2 }) }));
+    expect(reload).not.toHaveBeenCalled();
+    stop();
   });
 
   it('boot opens the stream from the served snapshot\'s `since`', async () => {

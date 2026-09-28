@@ -13,7 +13,11 @@
  * 5. marks `<html data-mx-ready>` and fires `mx:ready` on `document` — also when there are no
  *    islands, so a page with a module always signals ready;
  * 6. top-level only: holds the document's live stream (./live, from the snapshot's `since`) and
- *    re-runs exactly the queries reading a dataset a `data` frame names (`store.invalidateDatasets`).
+ *    re-runs exactly the queries reading a dataset a `data` frame names (`store.invalidateDatasets`);
+ * 7. when the page data names the version's author script, loads the lazy author host (./author-host,
+ *    a standalone chunk) and runs the script in its sandboxed frame against this store, after the
+ *    islands have hydrated — as today's runtime runs it after its first commit. Edit mode and dispose
+ *    revoke it (the editor starts its own).
  *
  * The viewer overlay, the write status feed and its indicator are wave-3 seams (viewer.ts,
  * writes.ts, kit/status.tsx): this file calls them and their owners replace those files.
@@ -130,6 +134,7 @@ export function boot(input: IslandModule | readonly IslandEntry[], win: Window =
   let mode: IslandDocumentMode = 'read';
   let ready = false;
   let disposed = false;
+  let stopAuthor = () => {};
   const islandDocument: IslandDocument = {
     root,
     store,
@@ -137,6 +142,7 @@ export function boot(input: IslandModule | readonly IslandEntry[], win: Window =
     mode: () => mode,
     setMode: (next) => {
       if (disposed || next === mode || next === 'read') return;
+      stopAuthor();
       disposeIslands();
       mode = next;
       emit({ type: 'mode', mode });
@@ -146,6 +152,7 @@ export function boot(input: IslandModule | readonly IslandEntry[], win: Window =
     dispose: () => {
       if (disposed) return;
       disposed = true;
+      stopAuthor();
       disposeIslands();
       stopLive();
       if (store && hooks[STORY_DATA_HOOK]) delete hooks[STORY_DATA_HOOK];
@@ -168,5 +175,13 @@ export function boot(input: IslandModule | readonly IslandEntry[], win: Window =
   doc.documentElement.setAttribute(READER_READY_ATTR, '');
   emit({ type: 'ready' });
   doc.dispatchEvent(new Event(ISLANDS_READY_EVENT));
+
+  // The author's script, never in this document: its host (and the sandboxed frame) load only when the version has one.
+  const authorScript = typeof data.authorScript === 'string' && data.authorScript ? data.authorScript : null;
+  if (authorScript) {
+    void import('./author-host').then(({ startAuthorHost }) => {
+      if (!disposed && mode === 'read') stopAuthor = startAuthorHost(authorScript, store, doc);
+    }).catch((error: unknown) => console.error('[islands] the author script host did not load', error));
+  }
   return islandDocument;
 }

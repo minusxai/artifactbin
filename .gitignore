@@ -54,6 +54,7 @@ services/app/public/libraries/
 
 # agent worktrees (local only)
 .claude/worktrees/
+.agent/
 
 # The install cache key CI derives from the lockfile (`node scripts/ci.mjs lock-fingerprint`).
 .ci-cache-key/

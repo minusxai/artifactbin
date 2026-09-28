@@ -351,15 +351,19 @@ export function hydrateIsland(renderId: string, Component: Component, context: I
   g._$HY ??= { events: [], completed: new WeakSet(), r: {} };
   let disposeIsland: () => void = () => {};
   let output: unknown;
+  let live: unknown;
   const mount = (dispose: () => void) => {
     disposeIsland = dispose;
-    output = withIsland(Component, context);
+    output = live = withIsland(Component, context);
     while (typeof output === 'function') output = (output as () => unknown)();
   };
   try {
     hydrate(() => createRoot((dispose) => {
       mount(dispose);
-      return [...host.childNodes].map((node) => (node === root ? output : node)) as JSX.Element;
+      // An island may render siblings of its root (a button and its refusal): those are the island's own
+      // (their key has its prefix), never handed back as static siblings, and its output stays LIVE (the
+      // accessor, not a snapshot of it) so a sibling that comes and goes is inserted and removed.
+      return [...host.childNodes].filter((node) => node === root || !(node as Element).getAttribute?.('data-hk')?.startsWith(renderId)).map((node) => (node === root ? (Array.isArray(output) ? live : output) : node)) as JSX.Element;
     }), host, { renderId });
   } catch {
     // Solid's development build refuses to create nodes while hydrating (a mismatch); render the

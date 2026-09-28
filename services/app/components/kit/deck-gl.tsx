@@ -6,14 +6,11 @@
  */
 import { useEffect, useState, type ComponentType } from 'react';
 import type { DeckEngineProps } from './deck-gl-engine';
+import { deckGlHeight } from '@/lib/viz/deck-height';
 
 export type DeckGLMapProps = Omit<DeckEngineProps, 'height'> & { height?: number | string };
 
-const DEFAULT_HEIGHT = 420;
-
-/** The map box's height in px for an authored `height` — shared with any stand-in that must hold the same space. */
-export const deckGlHeight = (height: unknown): number =>
-  typeof height === 'number' ? height : Number.parseInt(String(height ?? DEFAULT_HEIGHT), 10) || DEFAULT_HEIGHT;
+export { deckGlHeight } from '@/lib/viz/deck-height';
 
 /**
  * The editor's node identity (`id`, `data-mx-ast`) lands on the map's own box,

@@ -26,7 +26,7 @@ import net from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { GATE_SPECS, checkManifest, gateNamesOnDisk, specFor, browsersFor, shardWeight } from './gates.manifest.mjs';
+import { GATE_SPECS, checkLegs, checkManifest, compiledLegNames, gateNamesOnDisk, gateOf, isCompiledLeg, specFor, browsersFor, shardWeight } from './gates.manifest.mjs';
 import { resolveServers, runSecret } from './gates.servers.mjs';
 import { parseShard, shardOf } from './gates.shard.mjs';
 import { loadDotEnv } from './lib/dev-env.mjs';
@@ -55,21 +55,30 @@ try {
 }
 
 /** Every gate on disk, by short name (`gate-visibility.mjs` → `visibility`). */
-const GATES = gateNamesOnDisk(readdirSync(HERE)).map((name) => ({ name, file: `gate-${name}.mjs` }));
+const DISK = gateNamesOnDisk(readdirSync(HERE)).map((name) => ({ name, file: `gate-${name}.mjs` }));
 
 try {
-  checkManifest(GATES.map((gate) => gate.name), GATE_SPECS);
+  checkManifest(DISK.map((gate) => gate.name), GATE_SPECS);
+  checkLegs(DISK.map((gate) => gate.name));
 } catch (error) {
   console.error(String(error));
   process.exit(2);
 }
+
+/**
+ * The set: every gate, then its compiled leg where it has one (`<gate>@compiled`, gates.manifest
+ * COMPILED_LEGS) — the same file, run against the compiled reader. A disabled leg runs only when named.
+ */
+const legsOf = (names) => names.map((name) => ({ name, file: `gate-${gateOf(name)}.mjs` }));
+const GATES = [...DISK, ...legsOf(compiledLegNames())];
+const EVERY = [...DISK, ...legsOf(compiledLegNames({ all: true }))];
 
 if (args.includes('--list')) {
   for (const g of GATES) console.log(g.name);
   process.exit(0);
 }
 
-const chosen = only ? GATES.filter((g) => only.includes(g.name)) : GATES;
+const chosen = only ? EVERY.filter((g) => only.includes(g.name)) : GATES;
 // The shard is taken AFTER --only, so `--only=a,b --shard=1/2` means "half of
 // those two" rather than "whichever of them fell in shard 1 of the whole set".
 const selected = shard
@@ -79,7 +88,7 @@ const selected = shard
     })()
   : chosen;
 if (selected.length === 0) {
-  console.error(`No gate matched --only=${only?.join(',')}. Known: ${GATES.map((g) => g.name).join(', ')}`);
+  console.error(`No gate matched --only=${only?.join(',')}. Known: ${EVERY.map((g) => g.name).join(', ')}`);
   process.exit(2);
 }
 
@@ -121,7 +130,7 @@ const scratch = path.join(os.tmpdir(), `artifact-gates-${process.pid}`);
  * secret, the mail endpoint, S3 if the caller set one — is inherited, because
  * a gate run is only as honest as the environment it runs against.
  */
-async function bootServer(index, mailOutbox, authSecret) {
+async function bootServer(index, mailOutbox, authSecret, readerFlag = process.env.FLAG__COMPILED_READER || 'shadow') {
   if (!existsSync(BUNDLE)) {
     console.error(`--servers needs a build: ${path.relative(ROOT, BUNDLE)} is missing. Run \`npm run build\`.`);
     process.exit(2);
@@ -172,7 +181,8 @@ async function bootServer(index, mailOutbox, authSecret) {
       // The compiled reader is compiled and served on request (`?reader=compiled`) while readers keep
       // today's renderer, so gate-compiled-parity compares the two (docs/phase2-architecture.md §10).
       // A run may ask for another setting (`on`) through the environment (scripts/gate-container.mjs forwards it).
-      FLAG__COMPILED_READER: process.env.FLAG__COMPILED_READER || 'shadow',
+      // The compiled legs' servers boot with `on` (every reader page compiled wherever a compile exists).
+      FLAG__COMPILED_READER: readerFlag,
       ...(mailOutbox ? { EMAIL__DEV_OUTBOX_PATH: mailOutbox } : {}),
     },
   });
@@ -204,20 +214,23 @@ for (const signal of ['SIGINT', 'SIGTERM', 'SIGHUP']) {
   process.on(signal, () => { kill('SIGKILL'); process.exit(130); });
 }
 
-let targets = bases;
 const needsMail = selected.some((gate) => specFor(gate.name).needsMail);
 const mailOutbox = needsMail && servers > 0 ? path.join(scratch, 'dev-mail.jsonl') : null;
+let authSecret = null;
 if (servers > 0) {
   // The servers this boots are the real thing: they want the auth secret, the
   // mail key and whatever store the caller configured, all of which live where
   // `npm run dev` finds them.
   loadDotEnv();
-  const authSecret = runSecret(process.env);
-  process.stdout.write(`booting ${servers} server(s)${serversFrom === 'default' ? ' (one per core, capped — pass --servers=N to choose, or a base URL to drive a server you already have)' : ''}`);
-  targets = await Promise.all(Array.from({ length: servers }, (_, i) => bootServer(i, mailOutbox, authSecret)));
-  console.log(` — ${targets.join(' ')}\n`);
+  authSecret = runSecret(process.env);
 }
-if (targets.length === 0) {
+/** One pool of `servers` servers (`readerFlag`: the compiled reader switch, `on` for the compiled legs' pool). */
+async function bootPool(readerFlag, offset) {
+  const pool = await Promise.all(Array.from({ length: servers }, (_, i) => bootServer(offset + i, mailOutbox, authSecret, readerFlag)));
+  console.log(`booted ${servers} server(s)${readerFlag === 'on' ? ' with the compiled reader on' : ''}${serversFrom === 'default' ? ' (one per core, capped — pass --servers=N to choose, or a base URL to drive a server you already have)' : ''} — ${pool.join(' ')}\n`);
+  return pool;
+}
+if (servers === 0 && bases.length === 0) {
   console.error('Nothing to drive: pass base URLs, or --servers=N with N > 0.');
   process.exit(2);
 }
@@ -231,7 +244,8 @@ const run = (gate, base, timeoutMs) => new Promise((resolve) => {
   const started_at = Date.now();
   const child = spawn(process.execPath, [path.join(HERE, gate.file), base], {
     stdio: ['ignore', 'pipe', 'pipe'],
-    env: { ...process.env, ...(mailOutbox ? { EMAIL__DEV_OUTBOX_PATH: mailOutbox } : {}) },
+    // A compiled leg is its gate told which reader it drives (every gate reads GATE_READER).
+    env: { ...process.env, ...(mailOutbox ? { EMAIL__DEV_OUTBOX_PATH: mailOutbox } : {}), ...(isCompiledLeg(gate.name) ? { GATE_READER: 'compiled' } : {}) },
   });
   let output = '';
   let settled = false;
@@ -264,70 +278,99 @@ const withinSerialGroup = (serialGroup, task) => {
   return current;
 };
 
-/*
- * SAY HOW WIDE THE RUN IS, BEFORE IT RUNS. A serial pass and a parallel one differ by an order of magnitude
- * in wall-clock and by nothing at all in output, so a log that does not say which it was cannot be read
- * afterwards — and the failure mode this guards is silent: a `--servers=1` somewhere upstream turns a
- * three-minute set into half an hour and looks exactly like a slow machine.
- */
-console.log(`gates: ${targets.length} server(s), ${selected.length} gate(s)${serversFrom === 'default' ? ' (default: one per core, capped at 6 — --servers=1 is serial, for debugging)' : ''}\n`);
-const queue = [...selected];
 const failed = [];
+const retried = [];
 const timings = [];
 const wall = Date.now();
+let widest = 0;
 
-/** One worker per server, each pulling the next gate — so a slow gate delays
- *  only its own worker and the set finishes when the last one does. */
-await Promise.all(targets.map(async (base) => {
-  for (let gate = queue.shift(); gate; gate = queue.shift()) {
-    const spec = specFor(gate.name);
-    const { ok, output, seconds } = await withinSerialGroup(
-      spec.serialGroup,
-      () => run(gate, base, spec.timeoutMs),
-    );
-    timings.push({ name: gate.name, seconds });
-    if (!ok) failed.push(gate.name);
-    console.log(`──────── ${gate.name} ${ok ? '' : 'FAILED '}(${seconds.toFixed(0)}s) ────────`);
-    console.log(output.trimEnd());
-    console.log('');
-  }
-}));
-
-/*
- * A gate that failed under load gets ONE more turn, ALONE.
- *
- * Fanning out is what made the set affordable, and it costs something real:
- * four browsers and four servers on one machine, so a gate with a 10-second
- * wait in it can lose that race and fail for no reason of its own. Two
- * consecutive full runs each failed exactly one gate, and a DIFFERENT one,
- * and both passed alone — that is contention, not a broken contract.
- *
- * Retrying blindly would hide a real intermittent bug, so the retry is
- * REPORTED: a gate that needed it is named in the summary, and a gate that
- * fails twice fails. CI runs this, so the verdict has to be worth trusting in
- * both directions — no red for a lost race, no green that quietly swallowed
- * a genuine flake.
+/**
+ * A worker: the server a gate runs against, and the one a compiled leg does (booted with the compiled
+ * reader on). Driving servers someone else started, both are that server.
+ * @typedef {{ plain: string, compiled: string }} Worker
  */
-const retried = [];
-if (failed.length > 0 && targets.length > 1) {
-  console.log(`\n──────── retrying ${failed.length} gate(s) alone ────────`);
-  for (const name of [...failed]) {
-    const gate = selected.find((g) => g.name === name);
-    const spec = specFor(gate.name);
-    const { ok, output, seconds } = await run(gate, targets[0], spec.timeoutMs);
-    if (!ok) { console.log(output.trimEnd()); continue; }
-    failed.splice(failed.indexOf(name), 1);
-    retried.push(name);
-    console.log(`  ${name} passed alone in ${seconds.toFixed(0)}s — it lost the race, not the contract`);
+/** @param {Worker} worker @param {{ name: string }} gate */
+const serverFor = (worker, gate) => (isCompiledLeg(gate.name) ? worker.compiled : worker.plain);
+
+/** Run `gates` over `workers`: one queue, each worker pulling the next gate, then one retry alone for what failed under load. */
+async function runSet(gates, workers) {
+  widest = Math.max(widest, workers.length);
+  /*
+   * SAY HOW WIDE THE RUN IS, BEFORE IT RUNS. A serial pass and a parallel one differ by an order of magnitude
+   * in wall-clock and by nothing at all in output, so a log that does not say which it was cannot be read
+   * afterwards — and the failure mode this guards is silent: a `--servers=1` somewhere upstream turns a
+   * three-minute set into half an hour and looks exactly like a slow machine.
+   */
+  console.log(`gates: ${workers.length} server(s), ${gates.length} gate(s)${serversFrom === 'default' ? ' (default: one per core, capped at 6 — --servers=1 is serial, for debugging)' : ''}\n`);
+  const queue = [...gates];
+  const setFailed = [];
+  /** One worker per server, each pulling the next gate — so a slow gate delays
+   *  only its own worker and the set finishes when the last one does. */
+  await Promise.all(workers.map(async (worker) => {
+    for (let gate = queue.shift(); gate; gate = queue.shift()) {
+      const spec = specFor(gate.name);
+      const { ok, output, seconds } = await withinSerialGroup(
+        spec.serialGroup,
+        () => run(gate, serverFor(worker, gate), spec.timeoutMs),
+      );
+      timings.push({ name: gate.name, seconds });
+      if (!ok) setFailed.push(gate.name);
+      console.log(`──────── ${gate.name} ${ok ? '' : 'FAILED '}(${seconds.toFixed(0)}s) ────────`);
+      console.log(output.trimEnd());
+      console.log('');
+    }
+  }));
+
+  /*
+   * A gate that failed under load gets ONE more turn, ALONE.
+   *
+   * Fanning out is what made the set affordable, and it costs something real:
+   * four browsers and four servers on one machine, so a gate with a 10-second
+   * wait in it can lose that race and fail for no reason of its own. Two
+   * consecutive full runs each failed exactly one gate, and a DIFFERENT one,
+   * and both passed alone — that is contention, not a broken contract.
+   *
+   * Retrying blindly would hide a real intermittent bug, so the retry is
+   * REPORTED: a gate that needed it is named in the summary, and a gate that
+   * fails twice fails. CI runs this, so the verdict has to be worth trusting in
+   * both directions — no red for a lost race, no green that quietly swallowed
+   * a genuine flake.
+   */
+  if (setFailed.length > 0 && workers.length > 1) {
+    console.log(`\n──────── retrying ${setFailed.length} gate(s) alone ────────`);
+    for (const name of [...setFailed]) {
+      const gate = gates.find((g) => g.name === name);
+      const spec = specFor(gate.name);
+      const { ok, output, seconds } = await run(gate, serverFor(workers[0], gate), spec.timeoutMs);
+      if (!ok) { console.log(output.trimEnd()); continue; }
+      setFailed.splice(setFailed.indexOf(name), 1);
+      retried.push(name);
+      console.log(`  ${name} passed alone in ${seconds.toFixed(0)}s — it lost the race, not the contract`);
+    }
   }
+  failed.push(...setFailed);
 }
+
+const hasLegs = selected.some((gate) => isCompiledLeg(gate.name));
+let workers;
+if (servers > 0) {
+  // A compiled leg runs on a server that serves the compiled page to every reader: each worker holds one
+  // of those beside its ordinary server, booted together, so the legs share the workers' queue rather than
+  // waiting for the rest of the set to finish. An idle server costs next to nothing.
+  const [plainPool, compiledPool] = await Promise.all([bootPool(undefined, 0), hasLegs ? bootPool('on', servers) : Promise.resolve([])]);
+  workers = plainPool.map((plain, i) => ({ plain, compiled: compiledPool[i] ?? plain }));
+} else {
+  // Driving servers someone else started: they serve whatever reader they were started with.
+  workers = bases.map((base) => ({ plain: base, compiled: base }));
+}
+await runSet(selected, workers);
 
 // The servers are OURS and they outlive the last gate: node keeps running
 // while a spawned child is attached, so the set would finish and then hang.
 await stopAll();
 
 console.log('════════ gates ════════');
-console.log(`${selected.length - failed.length}/${selected.length} passed in ${((Date.now() - wall) / 1000).toFixed(0)}s wall-clock across ${targets.length} server(s)`);
+console.log(`${selected.length - failed.length}/${selected.length} passed in ${((Date.now() - wall) / 1000).toFixed(0)}s wall-clock across ${widest} server(s)`);
 if (retried.length) console.log(`needed a retry alone (contention, not a fault): ${retried.join(', ')}`);
 // The slowest few, because the set's wall time is now the slowest WORKER's —
 // and one long gate is what a worker's queue ends up waiting on.

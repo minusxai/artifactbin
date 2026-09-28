@@ -10,14 +10,14 @@
  * it says so).
  *
  * THE STEPS, each of which may end in a fallback that names its reason:
- *  0. A version with an author script (a managed frame the island runtime does
- *     not host yet) → `unported`: a page must be whole.
  *  1. The stored compile. None → `not-compiled`. A recorded failure of THIS
  *     build → its own reason (`compile-error`, `unported`). A compile (or a
  *     failure) from another build, or made when no island build could be read
  *     (`build: 'none'`) → recompile inline under COMPILE_INLINE_BUDGET_MS; over
  *     it → `over-budget` (the detached compile still writes back, so the next
- *     read is a hit), a failed recompile → its reason.
+ *     read is a hit), a failed recompile → its reason. A version's author script
+ *     is served by the compiled page (the lazy author host, lib/islands/author-host);
+ *     a compile that does not carry it → `unported`: a page must be whole.
  *  2. The data. Only the head of a document a guest may read has a guest
  *     snapshot (an archived version is its editors' alone). A FRESH snapshot
  *     (marks equal, young) is served. A stale one younger than
@@ -40,6 +40,7 @@
  * Any other throw is a `compile-error` fallback: a reader never gets a 500
  * because the compiled path failed.
  */
+import { parseFragment } from 'parse5';
 import { createHash } from 'node:crypto';
 import type { ArtifactRow } from '@/lib/artifacts';
 import type { ArchivedRender } from '@/lib/archived-version';
@@ -98,6 +99,12 @@ export interface CompiledReaderRequest {
   sheets?: AssembleInput['sheets'];
   /** Behaviour chunks this path adds to the version's own (`page`: the compiled /raw page's behaviour, lib/islands/page). */
   behaviors?: readonly string[];
+  /**
+   * `false`: the document without its own chrome — a deck's slide rail and present bar and their
+   * behaviour (`@mx/deck`) — as today's renderer draws `/raw?chrome=0` (StoryRuntimeApp `chrome`).
+   * Default true.
+   */
+  documentChrome?: boolean;
 }
 
 export type CompiledReaderAnswer =
@@ -246,6 +253,25 @@ async function storyOf(compiled: CompiledPage, input: StoryInput): Promise<strin
   return html;
 }
 
+/**
+ * The story without a deck's own chrome: the compiler wraps a deck's column as
+ * `<div class="mx-deck"><nav class="mx-rail">…</nav><div class="mx-doc">…</div><div class="mx-present">…</div></div>`;
+ * this keeps the column exactly as served (sliced by the parser's source offsets, never re-serialised) and
+ * drops the rest. A story that is not a deck comes back as it is.
+ */
+export function withoutDeckChrome(story: string): string {
+  const fragment = parseFragment(story, { sourceCodeLocationInfo: true }) as unknown as { childNodes: Located[] };
+  const deck = fragment.childNodes.find((n) => n.tagName === 'div' && classOf(n) === 'mx-deck');
+  const column = deck?.childNodes?.find((n) => n.tagName === 'div' && classOf(n) === 'mx-doc');
+  const [whole, kept] = [deck?.sourceCodeLocation, column?.sourceCodeLocation];
+  if (!whole || !kept) return story;
+  return story.slice(0, whole.startOffset) + story.slice(kept.startOffset, kept.endOffset) + story.slice(whole.endOffset);
+}
+interface Located { tagName?: string; attrs?: Array<{ name: string; value: string }>; childNodes?: Located[]; sourceCodeLocation?: { startOffset: number; endOffset: number } }
+const classOf = (node: Located): string | undefined => node.attrs?.find((a) => a.name === 'class')?.value;
+/** The deck's framework-free behaviour chunk (the compiler's `DECK_BEHAVIOR`). */
+const DECK_BEHAVIOR = '@mx/deck';
+
 /** A DOMAIN POST's one line of attribution (its style: lib/story/document-styles DOMAIN_FOOTER_CSS). */
 export const domainFooter = (href: string): { html: string; css: string } => ({
   html: `<footer data-mx-domain-footer="">${DOMAIN_FOOTER_TEXT} <a href="${escapeHtml(href)}" rel="noopener">artifactbin</a></footer>`,
@@ -265,15 +291,15 @@ export async function compiledPageFor(row: ArtifactRow, page: PreparedPage, read
       logOnce(row, 'build-mismatch', error instanceof Error ? error.message : String(error));
       return fallback('build-mismatch');
     }
-    // An author's own script runs in a managed frame the island runtime does not host yet: a page
-    // must be whole, so the version is today's renderer's until it does (spec §6, `unported`).
-    if (page.authorScript) {
-      logOnce(row, 'unported', 'the version carries an author script');
-      return fallback('unported');
-    }
     const usable = await compiledOf(row, page, reader.at, build);
     if ('reason' in usable) return fallback(usable.reason);
     const compiled = usable.page;
+    // The author's script runs from the compiled page's data (boot's lazy author host). A compile that
+    // does not carry this version's script would serve the page without it: a page must be whole.
+    if ((page.authorScript || null) !== (compiled.authorScript || null)) {
+      logOnce(row, 'unported', 'the stored compile does not carry the version\'s author script');
+      return fallback('unported');
+    }
 
     const flow = page.declared?.flow ?? null;
     const values = flow ? readUrlValues(reader.search, flow) : {};
@@ -296,9 +322,11 @@ export async function compiledPageFor(row: ArtifactRow, page: PreparedPage, read
     });
 
     const colorMode = reader.colorMode ?? page.data.colorMode;
+    const bare = reader.documentChrome === false;
+    const behaviors = [...new Set([...(reader.behaviors ?? []), ...compiled.behaviors])].filter((b) => !(bare && b === DECK_BEHAVIOR));
     const assembled = assembleReaderPage({
-      compiled: reader.behaviors?.length ? { ...compiled, behaviors: [...new Set([...reader.behaviors, ...compiled.behaviors])] } : compiled,
-      story,
+      compiled: { ...compiled, behaviors },
+      story: bare ? withoutDeckChrome(story) : story,
       css: page.css,
       fontPreloads: [...page.fontPreloads, ...(reader.chromeFonts ?? [])],
       title: page.title,
