@@ -56,13 +56,13 @@ describe('the island live stream', () => {
     expect(source!.closed).toBe(true);
   });
 
-  it('boot opens the stream from the served snapshot\'s `since`', () => {
+  it('boot opens the stream from the served snapshot\'s `since`', async () => {
     vi.stubGlobal('EventSource', FakeEventSource);
     document.body.innerHTML = '<div data-mx-inline-story="" id="mx-story-root"><p>static</p></div>'
       + `<script type="application/json" id="mx-story-data">${JSON.stringify({ values: {}, results: { tables: {}, errors: {}, since: 'DS1.aaaaaaaaaaaa' }, signedIn: false, mermaidImages: {}, readOnly: null })}</script>`;
     document.body.setAttribute('data-mx-live-id', 'abc');
     document.body.setAttribute('data-mx-live-edit', 'e1');
     booted = boot({ ISLANDS: [] });
-    expect(FakeEventSource.made.map((s) => s.url)).toEqual(['/a/abc/events?since=DS1.aaaaaaaaaaaa']);
+    await vi.waitFor(() => expect(FakeEventSource.made.map((s) => s.url)).toEqual(['/a/abc/events?since=DS1.aaaaaaaaaaaa']));
   });
 });

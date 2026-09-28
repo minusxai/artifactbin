@@ -429,6 +429,12 @@ export interface AssembleInput {
    * post's attribution back to the app. Its CSS joins the head's styles.
    */
   footer?: { html: string; css: string } | null;
+  /**
+   * A document served BY ITSELF (`/raw`, a domain post, a capture) carries today's standalone
+   * document's stylesheets, byte for byte (lib/story/document-styles), in place of `css`: the story is
+   * the page, and Mermaid reads `--font-mono`'s text into the palette that names a stored drawing.
+   */
+  sheets?: ReadonlyArray<{ attr: string; css: string }> | null;
 }
 
 /** The head metadata of an assembled page (see AssembleInput.head). */
@@ -457,10 +463,11 @@ export const SPECULATION_RULES_HEADER = 'Speculation-Rules';
 /** The element ids and attributes the assembled page and the runtime agree on. */
 export const ISLAND_DATA_ID = 'mx-story-data';
 /**
- * A `<Question>` island's chart box in the compiled HTML, by the question's node
- * id (or path): the assembler puts the snapshot's SVG inside it and marks it
- * `data-mx-chart-state="ready"`; an island re-draws only when its table changes
- * or the reader interacts (Vega loads then).
+ * A `<Question>` island's inner drawing box in the compiled HTML, by the question's
+ * node id (or path) — the ASSEMBLER's handle only: it puts the snapshot's SVG
+ * inside the box and marks it `data-mx-chart-state="ready"`. The island removes
+ * the attribute when it mounts (the served DOM then matches today's), and
+ * re-draws only when its table changes or the reader interacts (Vega loads then).
  */
 export const CHART_SLOT_ATTR = 'data-mx-chart-slot';
 /** A chart slot's drawing state, set by the assembler and updated by the island runtime (`drawn`, `pending`, `live`). */

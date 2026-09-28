@@ -57,7 +57,7 @@ describe('page-speed fixtures', () => {
     const published = await publishPageSpeedFixtures(async body => { bodies.push(body); return { id: `id${bodies.length}` }; });
     expect(bodies[0]).toMatchObject({ title: 'Perf sales', visibility: 'unlisted' });
     expect(bodies[0].dataset.split('\n')[0]).toBe('month,region,product,revenue,units');
-    expect(published.map(f => f.key)).toEqual(['prose', 'kit', 'dashboard', 'deck', 'mermaid', 'mermaid-industry']);
+    expect(published.map(f => f.key)).toEqual(['prose', 'kit', 'dashboard', 'deck', 'mermaid', 'mermaid-industry', 'kitchen']);
     // The same diagram in a theme's web fonts: the drawing a stored copy is made of (the plain one draws in system fonts).
     const themed = bodies.find(body => body.title === 'Perf F mermaid, industry theme');
     expect(themed.theme).toBe('industry');
@@ -69,6 +69,13 @@ describe('page-speed fixtures', () => {
     expect(dashboard.markup).not.toContain('{{sales}}');
     expect(bodies.find(body => body.title === 'Perf D deck').template).toBe('deck');
     expect(PAGE_SPEED_FIXTURES.find(f => f.key === 'mermaid').painted).toEqual({ diagrams: 1 });
+    const kitchen = bodies.find(body => body.title === 'Perf G kitchen sink');
+    const beforeKitchen = bodies.slice(0, bodies.indexOf(kitchen));
+    for (const field of ['dataset', 'viz', 'image', 'pdf']) {
+      const index = beforeKitchen.findIndex(body => body.title.startsWith('kit ') && body[field]);
+      expect(index, `${field} is published before the kitchen sink`).toBeGreaterThanOrEqual(0);
+      expect(kitchen.markup).toContain(`ref:id${index + 1}`);
+    }
   });
 });
 

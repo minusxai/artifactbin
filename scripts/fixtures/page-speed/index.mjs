@@ -1,12 +1,14 @@
 /**
  * The document shapes the page-speed lab (scripts/performance-loads.mjs)
  * views: prose, a few kit components, a dashboard (CSV dataset + queries +
- * charts), a deck and a Mermaid diagram, plain and in a theme. Markup is stored without frontmatter;
+ * charts), a deck, a Mermaid diagram (plain and in a theme), and the kitchen sink.
+ * Markup is stored without frontmatter;
  * the dashboard's `ref:{{sales}}` is replaced with the id of the dataset
  * published from sales.csv.
  */
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
+import { kitchenSinkMarkup } from '../../lib/kitchen-sink-doc.mjs';
 
 const here = import.meta.dirname;
 const read = (file) => readFileSync(path.join(here, file), 'utf8');
@@ -22,6 +24,7 @@ export const PAGE_SPEED_FIXTURES = [
   // which a stored drawing cannot carry: it always draws with the engine. This one is what a stored
   // drawing (services/app lib/mermaid-images) is made of.
   { key: 'mermaid-industry', title: 'Perf F mermaid, industry theme', template: null, theme: 'industry', file: 'mermaid.jsx', painted: { diagrams: 1 } },
+  { key: 'kitchen', title: 'Perf G kitchen sink', template: null, painted: { charts: 1 } },
 ];
 
 /**
@@ -32,7 +35,11 @@ export async function publishPageSpeedFixtures(publish, visibility = 'unlisted')
   const sales = await publish({ title: 'Perf sales', dataset: read('sales.csv'), visibility });
   const published = [];
   for (const fixture of PAGE_SPEED_FIXTURES) {
-    const markup = read(fixture.file).replaceAll('{{sales}}', sales.id);
+    const markup = fixture.key === 'kitchen'
+      // The seed checks for unresolved {{...}} placeholders; JSX object props
+      // from the source use the same bytes, so space their braces equivalently.
+      ? (await kitchenSinkMarkup(publish)).replaceAll('={{', '={ {')
+      : read(fixture.file).replaceAll('{{sales}}', sales.id);
     const made = await publish({ title: fixture.title, markup, visibility, ...(fixture.template ? { template: fixture.template } : {}), ...(fixture.theme ? { theme: fixture.theme } : {}) });
     published.push({ ...fixture, id: made.id });
   }

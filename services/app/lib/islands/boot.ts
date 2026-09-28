@@ -22,7 +22,6 @@ import type { Component } from 'solid-js';
 import type { CompiledDataflow } from '@/lib/story/compiled-dataflow';
 import { createDataflowStore } from '@/lib/story-runtime/store';
 import { createDocumentTransport } from '@/lib/story-runtime/document-transport';
-import { startIslandLive } from './live';
 import { STORY_DATA_HOOK } from '@/lib/story-runtime/contract';
 import { ISLAND_DATA_ID, READER_READY_ATTR } from '@/lib/compiled-page/contract';
 import { ISLANDS_READY_EVENT, type IslandDocument, type IslandDocumentMode, type IslandEvent, type IslandPageData, type IslandViewer } from './contract';
@@ -122,7 +121,10 @@ export function boot(input: IslandModule | readonly IslandEntry[], win: Window =
   if (win.parent === win && typeof (win as { EventSource?: unknown }).EventSource === 'function' && liveId && liveEdit) {
     if (store) hooks[STORY_DATA_HOOK] = (datasets: string[]) => store.invalidateDatasets(datasets);
     // From the snapshot's marks: a dataset written since the snapshot was taken re-runs at once (live.ts).
-    stopLive = startIslandLive(win, liveId, liveEdit, data.results?.since ?? null);
+    // Loaded after hydration, off the shared runtime's closure: the marks cover the gap, so nothing is missed.
+    void import('./live').then(({ startIslandLive }) => {
+      if (!disposed) stopLive = startIslandLive(win, liveId, liveEdit, data.results?.since ?? null);
+    }).catch((error: unknown) => console.error('[islands] the live stream did not load', error));
   }
 
   let mode: IslandDocumentMode = 'read';

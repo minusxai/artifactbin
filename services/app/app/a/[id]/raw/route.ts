@@ -60,6 +60,7 @@ import { READER_FALLBACK_HEADER, READER_MODE_HEADER, VIEWER_OVERLAY_PATH, type R
 import { currentCompiledReaderFlag, readerModeFor } from '@/lib/compiled-page/reader-mode';
 import { compiledPageFor, domainFooter } from '@/lib/compiled-page/serve.server';
 import { preparedPageFor } from '@/lib/story/prepared-page.server';
+import { documentStyleSheets } from '@/lib/story/document-styles';
 
 // The markup document's policy — per document, built in lib/story/markup-csp:
 // content-independent except for the ONE connect-src that admits exactly this
@@ -361,7 +362,13 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
             }
             : null,
           ...(ran ? { results: { tables: ran.state.tables, errors: ran.state.errors, ...(ran.state.userOptions ? { userOptions: ran.state.userOptions, people: ran.state.people ?? {} } : {}) } } : {}),
-          footer: domain ? domainFooter(`${PUBLIC_BASE_URL.replace(/\/+$/, '')}/a/${artifact.id}`) : null,
+          // Its style rides in the sheets, where today's document has it.
+          footer: domain ? { html: domainFooter(`${PUBLIC_BASE_URL.replace(/\/+$/, '')}/a/${artifact.id}`).html, css: '' } : null,
+          // Today's standalone document's stylesheets, byte for byte (lib/story/document-styles).
+          sheets: documentStyleSheets({
+            compiledCss, chrome, bare: !!domain, theme: design.theme,
+            importedFaces: prepared.page.base.faces, docFonts: prepared.page.base.fonts, authorCss: prepared.page.authorCss,
+          }),
         });
         if (answer.mode === 'compiled') {
           return new Response(answer.html, {

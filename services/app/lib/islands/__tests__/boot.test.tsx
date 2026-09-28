@@ -118,7 +118,8 @@ describe('boot', () => {
     vi.stubGlobal('fetch', fetchMock);
 
     booted = boot({ ISLANDS: [['s0-', Total]], FLOW: flow });
-    expect(sources.map((s) => s.url)).toEqual(['/a/abc/events']);
+    // The live stream loads after hydration (boot imports it lazily, off the shared runtime's closure).
+    await vi.waitFor(() => expect(sources.map((s) => s.url)).toEqual(['/a/abc/events']));
     expect(fetchMock, 'the snapshot answered every query: nothing runs at start').not.toHaveBeenCalled();
 
     sources[0]!.dispatchEvent(new MessageEvent('data', { data: JSON.stringify({ datasets: ['OTHER'] }) }));

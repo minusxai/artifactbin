@@ -131,7 +131,7 @@ describe('the HTML-first reader page', () => {
     expect(storyText(html)).toContain('$744,503');
     // The same text as today with every <style> removed and each chart slot's contents excluded on both sides:
     // the compiled page draws the snapshot's chart where today's says `loading chart…` (an intended improvement).
-    const slots = [...doc.querySelectorAll('#mx-story-root [data-mx-chart-slot]')].map((slot) => slot.id).filter(Boolean);
+    const slots = [...doc.querySelectorAll('#mx-story-root [data-mx-chart-slot]')].map((slot) => slot.closest('[aria-label="Question embed"]')?.id).filter((id): id is string => !!id);
     const textOf = (root: Element | null) => {
       if (!root) return '';
       for (const s of root.querySelectorAll('style, script')) s.remove();
@@ -309,6 +309,33 @@ describe('the compiled capture', () => {
     expect(res.headers.get(READER_MODE_HEADER)).toBe('compiled');
     const stored = await (await harness.db()).query('SELECT 1 FROM data_snapshots WHERE artifact_id = $1', [id]);
     expect(stored.rows).toHaveLength(0);
+  });
+});
+
+describe('the compiled /raw page carries today\'s stylesheets byte for byte', () => {
+  it('every fixture: the same style tags, in the same order, with the same text, and the theme on <html>', async () => {
+    const who = await owner();
+    const sales = await publish(who.token, { title: 'Perf sales', dataset: fixture('sales.csv') });
+    const fixtures = [
+      { title: 'Perf A prose', markup: fixture('prose.jsx') },
+      { title: 'Perf B kit', markup: fixture('kit.jsx') },
+      { title: 'Perf C dashboard', markup: fixture('dashboard.jsx').replaceAll('{{sales}}', sales), template: 'dashboard' },
+      { title: 'Perf D deck', markup: fixture('deck.jsx'), template: 'deck' },
+      { title: 'Perf E mermaid', markup: fixture('mermaid.jsx') },
+      { title: 'Perf F mermaid, industry theme', markup: fixture('mermaid.jsx'), theme: 'industry' },
+    ];
+    const sheets = (html: string) => [...new JSDOM(html).window.document.head.querySelectorAll('style')]
+      .map((style) => `${[...style.attributes].map((a) => a.name).join(' ')}|${style.textContent}`);
+    for (const f of fixtures) {
+      const id = await publish(who.token, f);
+      const legacy = await (await raw(id, '?reader=legacy')).text();
+      const compiled = await raw(id, '?reader=compiled');
+      expect(compiled.headers.get(READER_MODE_HEADER), f.title).toBe('compiled');
+      const html = await compiled.text();
+      expect(sheets(html), f.title).toEqual(sheets(legacy));
+      expect(new JSDOM(html).window.document.documentElement.getAttribute('data-theme'), f.title)
+        .toBe(new JSDOM(legacy).window.document.documentElement.getAttribute('data-theme'));
+    }
   });
 });
 

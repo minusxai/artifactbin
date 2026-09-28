@@ -32,13 +32,9 @@ import { AUTHOR_SCRIPT_TYPE, STORY_HELLO_MESSAGE, STORY_VALUES_HOOK, STORY_ISLAN
 import type { JsxNode } from '@/lib/jsx';
 import { lazyCodeOf, type LazyCode } from './lazy-code';
 import type { RefDataMap } from '@/lib/story/ref-data';
-import { STORY_CHROME_CSS, STORY_COLUMN_CSS, STORY_EMBED_CSS, STORY_TABLE_CSS } from '@/lib/story-runtime/chrome-css';
-import { STORY_BARE_TYPOGRAPHY_CSS } from '@/lib/story-surface/bare-typography';
-import { STORY_BARE_CONTROLS_CSS } from '@/lib/story-surface/bare-controls';
 import { STORY_ROOT_ATTR } from '@/lib/story-surface';
 import { escapeHtml, renderReaderChrome, type ReaderForkedFrom, type ReaderPerson, type ReaderReactions } from '@/lib/story/reader-chrome';
-import { getStoryFontCss, storyFontFaceCss, STORY_FONTS_ATTR } from '@/lib/data/story/story-fonts';
-import { documentFontCss } from './document-fonts';
+import { DOCUMENT_ROOT_CSS, documentStyleSheets, styleTag } from './document-styles';
 import type { StoryThemeName } from '@/lib/validation/atlas-schemas';
 import type { MermaidImageLookup } from '@/lib/mermaid-images/store';
 
@@ -384,14 +380,9 @@ const MODE_PRELUDE =
  * colour and face and only quiets them.
  */
 export const DOMAIN_FOOTER_TEXT = 'Made with';
-const DOMAIN_FOOTER_CSS = '[data-mx-domain-footer]{box-sizing:border-box;max-width:100%;margin:0;padding:40px 16px 48px;text-align:center;font-size:13px;line-height:1.5;opacity:.65}'
-  + '[data-mx-domain-footer] a{color:inherit;text-decoration:underline;text-underline-offset:2px}';
 const domainFooter = (href: string): string =>
   `<footer data-mx-domain-footer="">${DOMAIN_FOOTER_TEXT} <a href="${escapeHtml(href)}" rel="noopener">artifactbin</a></footer>`;
 
-/** `</style` inside CSS would close the tag early; CSS has no use for the sequence. */
-const styleTag = (attr: string, css: string): string =>
-  `<style ${attr}>${css.replace(/<\/style/gi, '')}</style>`;
 
 export async function buildStoryDocument(input: StoryDocumentInput): Promise<string> {
   const { source, compiledCss, theme, runtimeSrc, anchorSrc, commentSrc, live = null, chrome = true, social = null, help = null, signIn = null, fork = null, bare = null, canonical = null } = input;
@@ -463,33 +454,10 @@ export async function buildStoryDocument(input: StoryDocumentInput): Promise<str
     ...(readerChrome ? readerChromeFonts({ theme, docFonts, importedFaces }).map((face) => face.url) : []),
   ]);
 
-  const styles = [
-    '<style>:root { --mx-vh: 100vh; } body { margin: 0; }</style>',
-    compiledCss ? styleTag('data-mx-tw', compiledCss) : '',
-    styleTag('data-mx-bare-type', STORY_BARE_TYPOGRAPHY_CSS),
-    // A bare form control looks like a form control: preflight strips its
-    // border and padding, and nothing else styles it back
-    // (lib/story-surface/bare-controls).
-    styleTag('data-mx-bare-controls', STORY_BARE_CONTROLS_CSS),
-    // The document's own navigation (deck rail, outline, reading column) keeps its
-    // styles on a bare page too; only the reader chrome's MARKUP is withheld.
-    chrome ? styleTag('data-mx-chrome', STORY_CHROME_CSS) : '',
-    bare ? styleTag('data-mx-domain-footer', DOMAIN_FOOTER_CSS) : '',
-    styleTag('data-mx-embed', STORY_EMBED_CSS),
-    // Every table its own scroll box, every document, capture included: a
-    // table is a table either way (lib/story-runtime/chrome-css STORY_TABLE_CSS).
-    styleTag('data-mx-tables', STORY_TABLE_CSS),
-    // The column the document is measured in — capture included, for the same
-    // reason (STORY_COLUMN_CSS): it decides what the authored `@container`
-    // utilities resolve against, so a capture without it lays out differently.
-    styleTag('data-mx-column', STORY_COLUMN_CSS),
-    styleTag(STORY_FONTS_ATTR, getStoryFontCss(theme ?? undefined)),
-    // Imported faces and the slot override LAST among the font styles: the
-    // document's own ask beats the theme it otherwise keeps entirely.
-    importedFaces.length ? styleTag('data-mx-webfonts', storyFontFaceCss(importedFaces)) : '',
-    documentFontCss(docFonts) ? styleTag('data-mx-font-vars', documentFontCss(docFonts)) : '',
-    helmet.style ? styleTag('data-mx-author', helmet.style) : '',
-  ].join('');
+  // One source with the compiled reader (lib/story/document-styles): the same tags, order and text.
+  const styles = `<style>${DOCUMENT_ROOT_CSS}</style>`
+    + documentStyleSheets({ compiledCss, chrome, bare: !!bare, theme, importedFaces, docFonts, authorCss: helmet.style || null })
+      .map((sheet) => styleTag(sheet.attr, sheet.css)).join('');
 
   // A document with no components has nothing to hydrate (see needsRuntime) —
   // unless it declares data: a `$`-bound native control is live only with the

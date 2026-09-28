@@ -32,6 +32,7 @@ import { fontPreloadTags } from '@/lib/story/first-screen-fonts';
 import { inlineStoryElement } from '@/lib/story/inline-story-html';
 import { escapeHtml, renderReaderChrome } from '@/lib/story/reader-chrome';
 import { APP_BAR_H } from '@/lib/story/edit-bar';
+import { DOCUMENT_ROOT_CSS } from '@/lib/story/document-styles';
 import {
   CHART_SLOT_ATTR, CHART_STATE_ATTR, ISLAND_DATA_ID, SIGNED_IN_HINT_ATTR, SPA_IDLE_ATTR, SPECULATION_RULES_HEADER,
   type AssembleHead, type AssembleInput, type AssembleReaderPage, type AssembledPage, type CompilerBuild, type DrawnChart,
@@ -63,13 +64,16 @@ export const assembleReaderPage: AssembleReaderPage = (input: AssembleInput): As
     + fontPreloadTags(input.fontPreloads)
     + islandPreloads.map(modulePreload).join('')
     + prefetch.map((href) => `<link rel="prefetch" href="${escapeHtml(href)}" as="document">`).join('')
-    + '<style>:root{--mx-vh:100vh}body{margin:0}</style>'
+    + (input.sheets
+      // Today's standalone document's sheets, exactly (lib/story/document-styles).
+      ? `<style>${DOCUMENT_ROOT_CSS}</style>` + input.sheets.map((sheet) => styleTag(sheet.attr, sheet.css)).join('')
+      : '<style>:root{--mx-vh:100vh}body{margin:0}</style>')
     + (chrome ? styleTag('data-mx-chrome', STORY_CHROME_CSS) : '')
     // The page the app adopts (/a/:id): its bar is the top of the page from a phone's width up, so the
     // story reserves it before first paint and the app's arrival moves nothing. On <body>: the story
     // root is the body's own child (a rule on the root itself does not hold).
     + (spa ? styleTag('data-mx-app-reserve', `@media(min-width:640px){body:has(> [data-mx-inline-story]){padding-top:${APP_BAR_H}px}}`) : '')
-    + (input.css ? styleTag('data-mx-story-css', input.css) : '')
+    + (input.css && !input.sheets ? styleTag('data-mx-story-css', input.css) : '')
     + (input.footer?.css ? styleTag('data-mx-footer-css', input.footer.css) : '');
 
   const body =
@@ -85,7 +89,10 @@ export const assembleReaderPage: AssembleReaderPage = (input: AssembleInput): As
     + (help ? agentDiscoveryTail(help) : '');
 
   const html =
-    `<!doctype html><html class="${escapeHtml(input.colorMode)}"${overlay.signedIn ? ` ${SIGNED_IN_HINT_ATTR}=""` : ''}>`
+    `<!doctype html><html class="${escapeHtml(input.colorMode)}"`
+    // The standalone document's sheets name the theme on the DOCUMENT element (`:root:where([data-theme])`).
+    + (input.sheets && input.theme ? ` data-theme="${escapeHtml(input.theme)}"` : '')
+    + `${overlay.signedIn ? ` ${SIGNED_IN_HINT_ATTR}=""` : ''}>`
     + `<head>${head}</head><body${liveAttrs(input.live ?? null)}>${body}</body></html>`;
 
   const headers: Record<string, string> = {};
