@@ -64,3 +64,12 @@ it('keeps conversation updates focused on the comment rather than membership',as
  expect(await screen.findByRole('link',{name:'@sam replied and resolved your comment in Tasks'})).toHaveAttribute('href','/a/abc123?thread=ann1');
  expect(screen.queryByText('You’ve joined this artefact.')).toBeNull();
 });
+it('lets an automatically accepted member explicitly join without leaving',async()=>{
+ let explicit=false;
+ const fetch=vi.fn(async(_url:string,options?:RequestInit)=>{if(options?.method==='POST')explicit=true;return Response.json({members:[],pending:[],self:{status:'accepted',direction:'invitation',explicit_join:explicit},canManage:false,canInvite:false});});
+ vi.stubGlobal('fetch',fetch);render(<ArtifactPeople artifactId="abc123" initialOpen/>);
+ fireEvent.click(await screen.findByRole('button',{name:'Join artefact'}));
+ await waitFor(()=>expect(fetch.mock.calls.some(([,o])=>o?.body===JSON.stringify({action:'join'}))).toBe(true));
+ expect(await screen.findByText('You’re a member')).toBeVisible();
+ expect(screen.queryByRole('button',{name:'Join artefact'})).toBeNull();
+});

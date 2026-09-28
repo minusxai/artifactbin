@@ -29,17 +29,7 @@ export function createRelayTransport(target: Window, appOrigin: string, source: 
   // `clear` rather than a bare timer handle: a request owns its timeout AND its
   // retries, and every path that finishes it has to drop all of them.
   const waiting = new Map<number, { resolve: (r: Extract<StoryQueryResult, { tables: unknown }>) => void; reject: (e: Error) => void; clear: () => void }>();
-  source.addEventListener('message', (e: MessageEvent) => {
-    if (e.source !== target || e.origin !== appOrigin) return;
-    const data = e.data as StoryQueryResult | undefined;
-    if (!data || typeof data !== 'object' || data.type !== STORY_QUERY_RESULT_MESSAGE) return;
-    const w = waiting.get(data.id);
-    if (!w) return;
-    waiting.delete(data.id);
-    w.clear();
-    if ('error' in data) w.reject(new Error(data.error));
-    else w.resolve(data);
-  });
+
   /*
    * A postMessage nobody is listening for yet is not queued — it is GONE, and
    * with one send per request that meant waiting out the timeout with empty
@@ -70,17 +60,6 @@ export function createRelayTransport(target: Window, appOrigin: string, source: 
    */
   let writeSeq = 0;
   const writers = new Map<number, { resolve: (r: import('./store').MutationAnswer) => void; reject: (e: Error) => void; timer: ReturnType<typeof setTimeout> }>();
-  source.addEventListener('message', (e: MessageEvent) => {
-    if (e.source !== target || e.origin !== appOrigin) return;
-    const data = e.data as StoryMutateResult | undefined;
-    if (!data || typeof data !== 'object' || data.type !== STORY_MUTATE_RESULT_MESSAGE) return;
-    const w = writers.get(data.id);
-    if (!w) return;
-    writers.delete(data.id);
-    clearTimeout(w.timer);
-    if (data.ok) w.resolve({ dataset: data.dataset, ...(data.local ? { local: data.local } : {}) });
-    else w.reject(new Error(data.error));
-  });
 
   /**
    * The ASSET half. Its own message type and waiter map, for the reason the
@@ -94,15 +73,40 @@ export function createRelayTransport(target: Window, appOrigin: string, source: 
    */
   let assetSeq = 0;
   const importers = new Map<number, { settle: (r: ImageAssetAnswer) => void; clear: () => void }>();
+
+  // All three channels share the same trust boundary; their waiter maps remain separate.
   source.addEventListener('message', (e: MessageEvent) => {
     if (e.source !== target || e.origin !== appOrigin) return;
-    const data = e.data as StoryAssetResult | undefined;
-    if (!data || typeof data !== 'object' || data.type !== STORY_ASSET_RESULT_MESSAGE) return;
-    const w = importers.get(data.id);
-    if (!w) return;
-    importers.delete(data.id);
-    w.clear();
-    w.settle('url' in data ? { url: data.url, image:data.image } : { refused: data.refused });
+    const data = e.data as StoryQueryResult | StoryMutateResult | StoryAssetResult | undefined;
+    if (!data || typeof data !== 'object') return;
+    switch (data.type) {
+      case STORY_QUERY_RESULT_MESSAGE: {
+        const w = waiting.get(data.id);
+        if (!w) return;
+        waiting.delete(data.id);
+        w.clear();
+        if ('error' in data) w.reject(new Error(data.error));
+        else w.resolve(data);
+        return;
+      }
+      case STORY_MUTATE_RESULT_MESSAGE: {
+        const w = writers.get(data.id);
+        if (!w) return;
+        writers.delete(data.id);
+        clearTimeout(w.timer);
+        if (data.ok) w.resolve({ dataset: data.dataset, local: data.local, mutationRunId: data.mutationRunId });
+        else w.reject(new Error(data.error));
+        return;
+      }
+      case STORY_ASSET_RESULT_MESSAGE: {
+        const w = importers.get(data.id);
+        if (!w) return;
+        importers.delete(data.id);
+        w.clear();
+        w.settle('url' in data ? { url: data.url, image:data.image } : { refused: data.refused });
+        return;
+      }
+    }
   });
 
   return {

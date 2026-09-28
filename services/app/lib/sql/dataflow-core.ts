@@ -37,7 +37,7 @@ export interface RunDataflowOptions {
   tz?: string;
   localTables?: Record<string, Row[]>;
   /** Run a connected Postgres query inside its database; params by SQL name. */
-  sourceQuery?: (query: CompiledQuery, params: Record<string, Scalar>, types: Record<string, ColumnType>, page?: QueryPage) => Promise<TableResult>;
+  sourceQuery?: (query: CompiledQuery, params: Record<string, Scalar>, types: Record<string, ColumnType>, page?: QueryPage, timeoutMs?: number) => Promise<TableResult>;
   /** Override the declared defaults (a reader's current selections). Unknown names are ignored. */
   values?: Record<string, Scalar>;
   /** Trusted saved arguments for a headless execution; ordinary overrides remain declared-only. */
@@ -92,7 +92,7 @@ export async function evaluateDataflow(engine: DataflowEngine, flow: CompiledDat
       let result: TableResult;
       if (query.source) {
         if (!opts.sourceQuery) throw new DataflowResultError('query');
-        result = await opts.sourceQuery(query, params, paramTypes, {limit:opts.limit ?? DISPLAY_ROWS,offset:0});
+        result = await opts.sourceQuery(query, params, paramTypes, {limit:opts.limit ?? DISPLAY_ROWS,offset:0},timeoutMs);
       } else {
         if (query.reads.imports.some(name => !imports[name])) throw new DataflowResultError('query');
         const output = await engine.run({tables:inputs,imports:Object.fromEntries(query.reads.imports.map(name=>[name,imports[name]!])),queries:[{name:query.name,sql:query.sql}],params,paramTypes,limit:opts.limit ?? DISPLAY_ROWS,timeoutMs});
@@ -100,6 +100,7 @@ export async function evaluateDataflow(engine: DataflowEngine, flow: CompiledDat
         if (!table || isQueryFailure(table)) throw new DataflowResultError(table && 'timedOut' in table && table.timedOut ? 'timeout' : 'query');
         result = table;
       }
+      if(opts.timeoutMs !== undefined && performance.now()-started > opts.timeoutMs) throw new DataflowResultError('timeout');
       if(result.truncated || result.rows.length > (opts.limit ?? DISPLAY_ROWS) || (result.totalRows !== undefined && result.totalRows > result.rows.length)) throw new DataflowResultError('capacity');
       bytes += new TextEncoder().encode(JSON.stringify(result.rows)).byteLength;
       if(opts.resultBytes !== undefined && bytes > opts.resultBytes) throw new DataflowResultError('capacity');

@@ -61,12 +61,12 @@ describe('relay transport — mutate', () => {
   });
   it('posts the mutation request to the parent, at the app origin, and resolves with the dataset written', async () => {
     const { transport, posted, answer } = setup();
-    const done = transport.mutate!({ mutation: 'vote', args: { choice: 'tacos' } });
+    const done = transport.mutate!({ mutation: 'vote', args: { choice: 'tacos' }, operationKey:'saved-operation-key' });
     expect(posted).toHaveLength(1);
     expect(posted[0].origin).toBe(ORIGIN);
-    expect(posted[0].message).toMatchObject({ type: STORY_MUTATE_MESSAGE, request: { mutation: 'vote', args: { choice: 'tacos' } } });
-    answer({ type: STORY_MUTATE_RESULT_MESSAGE, id: posted[0].message.id, ok: true, dataset: 'k3Pq9z', version: 2, affected: 1 });
-    await expect(done).resolves.toEqual({ dataset: 'k3Pq9z' });
+    expect(posted[0].message).toMatchObject({ type: STORY_MUTATE_MESSAGE, request: { mutation: 'vote', args: { choice: 'tacos' }, operationKey:'saved-operation-key' } });
+    answer({ type: STORY_MUTATE_RESULT_MESSAGE, id: posted[0].message.id, ok: true, dataset: 'k3Pq9z', version: 2, affected: 1, mutationRunId:'run' });
+    await expect(done).resolves.toEqual({ dataset: 'k3Pq9z',mutationRunId:'run' });
   });
 
   it('posts the current local table snapshot to the parent', async () => {

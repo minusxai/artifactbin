@@ -1,4 +1,4 @@
-import { executeDocumentQueries } from './sql/document-queries';
+import { executeDocumentQueries, type DocumentQuerySourceMode } from './sql/document-queries';
 import type {DocumentUpdate} from '@artifactbin/contracts';
 import {commitDocumentUpdate} from './story/document-update-write';
 import {queueMermaidHarvest} from './mermaid-images/store';
@@ -27,7 +27,9 @@ import { ACCOUNT_REACH_SQL, isLinkOnlyActor, userKindOf } from '@/lib/user-kinds
 // time, and the alternative — a second place that decides what a KIND may do —
 // is the thing lib/capabilities exists to prevent.
 import { can, refusalFor, type CapabilityActor, type CapabilityRefusal } from '@/lib/capabilities';
-import type { MutationReceipt } from './mutation-receipt';
+import {pinMutationContext, type MutationReceipt} from './mutation-receipt';
+import {notificationContextSnapshot} from './notification-context';
+import type {MutationNotificationJobInput,MutationInitiator} from '@artifactbin/contracts';
 import {sourceChanges} from './story/source-changes';
 import {reserveCreation,completeCreation,type CreationOperation} from './creation-ledger';
 import {artifactState} from './artifact-state';
@@ -2097,11 +2099,11 @@ export const writerFor = (doc: Pick<ArtifactRow, 'token_id' | 'user_id'>): Token
  * source, so a caller can never write anything the author did not publish.
  */
 type DocumentMutationOutcome =
-  | { ok: true; dataset: ArtifactRow; affected: number; rowCount: number }
+  | { ok: true; dataset: ArtifactRow; affected: number; rowCount: number; mutationRunId?: string }
   | { ok: true; local: LocalMutationResult }
   | {
       ok: false;
-      reason: 'policy_denied' | 'unknown_mutation' | WriteRefusal | 'dataset_full' | 'invalid_sql' | 'contended' | 'row_changed' | 'row_not_unique' | 'invalid_row';
+      reason: 'operation_key_required' | 'policy_denied' | 'unknown_mutation' | WriteRefusal | 'dataset_full' | 'invalid_sql' | 'contended' | 'row_changed' | 'row_not_unique' | 'invalid_row';
       detail?: string;
       /** The machine-readable half of the one refusal a reader can act on (lib/story/sign-in-required). */
       code?: typeof SIGN_IN_REQUIRED;
@@ -2128,6 +2130,12 @@ export async function runDocumentMutation(
   const flow = compiled?.compiled ?? null;
   const m = flow?.mutations.find((x) => x.name === request.mutation);
   if (!flow || !m) return { ok: false, reason: 'unknown_mutation' };
+  const notificationRules=flow.notifications?.filter(rule=>rule.on===m.name)??[];
+  if(notificationRules.length){
+    if(!actor.userId&&!actor.tokenId)return {ok:false,reason:'policy_denied',code:SIGN_IN_REQUIRED,detail:'Sign in to run actions with notifications'};
+    if(!receipt?.runId)return {ok:false,reason:'operation_key_required',detail:'Preserve an operation key for this action and its retries'};
+  }
+
 
   /*
    * THE GUEST IS ANSWERED FIRST — before the shape of the call is judged.
@@ -2192,13 +2200,29 @@ export async function runDocumentMutation(
       return {ok: false, reason: 'invalid_sql', detail: error instanceof Error ? error.message : 'Local mutation failed'};
     }
   }
+  let notificationJob:MutationNotificationJobInput|undefined;
+  if(notificationRules.length&&receipt?.runId){
+    const snapshot=notificationContextSnapshot(flow);
+    const initiator:MutationInitiator=receipt.initiator??{
+      principal:actor.tokenId?{kind:'token',id:actor.tokenId}:{kind:'user',id:actor.userId!},
+      execution:actor.tokenId?'agent':'human',agentLabel:null,
+    };
+    notificationJob={
+      origin:{mutationRunId:receipt.runId,documentId:doc.id,documentEditId:doc.edit_id,
+        documentVersion:doc.version,mutationName:m.name},
+      initiator,rules:notificationRules.map(rule=>({name:rule.name,on:rule.on,sql:rule.sql,...(rule.source?{source:rule.source}:{})})),
+      bindings:bound.bindings,...snapshot,
+    };
+    await pinMutationContext(receipt,{documentId:doc.id,documentEditId:doc.edit_id,mutation:m,bindings:bound.bindings,notificationJob});
+  }
   const target = m.target as { import: string; table: string };
   const result = await mutateDataset(dataset, actor, m.sql, params, {
     target: { schema: target.import, table: target.table }, paramTypes, reads: mutationReads(flow, m, { imports, userId: actor.userId ?? null, members }),
     expectedAffected: m.expectedAffected, document:{id:doc.id,editId:doc.edit_id}, ...(receipt ? { receipt } : {}),
+    ...(notificationJob?{notificationJob}:{}),
   });
   if (isMutationRefused(result)) return { ok: false, reason: result.reason, detail: result.detail, ...(result.code ? { code: result.code } : {}) };
-  return { ok: true, dataset: result.row, affected: result.affected, rowCount: result.rowCount };
+  return { ok: true, dataset: result.row, affected: result.affected, rowCount: result.rowCount, ...(result.mutationRunId?{mutationRunId:result.mutationRunId}:{}) };
 }
 
 /** Whether a statement reads the viewer: `$_me.id`, or the one-row `_me` table. */
@@ -2529,22 +2553,23 @@ interface DataflowRunOptions {
  * identity would hand a stranger the owner's private children. A connected
  * database resolves to its catalog, which its queries run inside.
  */
-type DatasetResolver = (id: string) => Promise<RefData | null>;
+type DatasetResolver = (id: string, mode?: DocumentQuerySourceMode) => Promise<RefData | null>;
 
 /** What a resolved ref contributes to the run: its tables by import name, or the catalog a query runs inside. */
 type RefData = { tables: ImportTables[string]; catalog?: import('@/lib/datasets/types').DatasetCatalog };
 
 /** A resolved ref row → its data, under the viewer whose run this is. */
-export async function tableForRef(r: ArtifactRow | null, viewer: RoleActor | null, document?:ArtifactRow): Promise<RefData | null> {
+export async function tableForRef(r: ArtifactRow | null, viewer: RoleActor | null, document?:ArtifactRow, loadRows=true): Promise<RefData | null> {
   if (!r) return null;
   if (r.format === 'folder') {
+    if (!loadRows) return {tables:{}};
     return { tables: { rows: await childrenTableFor(r, { userId: viewer?.userId ?? null, email: viewer?.email ?? null, tokenId: viewer?.tokenId ?? null }) } };
   }
   if (r.format !== 'dataset') return null; // wrong kind → the query reports the missing table
   if(grantsOf(r)&&!(await grantsPermitRead(r,viewer??{userId:null,tokenId:null},document)))return null;
   const catalog=catalogOf(r);
   if(!catalog)return null; // missing storage is unavailable data, never an empty computed source
-  if(catalog.kind==='postgres')return { tables: {}, catalog };
+  if(!loadRows||catalog.kind==='postgres')return { tables: {}, catalog };
   try {
     return { tables: await importedRows(catalog), catalog };
   } catch { return null; } // the query reports the missing table
@@ -2554,8 +2579,8 @@ export async function tableForRef(r: ArtifactRow | null, viewer: RoleActor | nul
  * anything link-readable — render-time must resolve whatever the publish door
  * admitted (getLinkReadableArtifact), or an accepted ref serves broken. The
  * VIEWER is separate and rides through: reach is the document's, rows are theirs. */
-const datasetResolverForRow = (row: ArtifactRow, viewer: RoleActor | null): DatasetResolver => async (id) =>
-  tableForRef(await importedArtifactFor(row, id), viewer, row);
+const datasetResolverForRow = (row: ArtifactRow, viewer: RoleActor | null): DatasetResolver => async (id,mode) =>
+  tableForRef(await importedArtifactFor(row, id), viewer, row, mode===undefined||mode==='import');
 
 /** The artifact a document's import names, by the document's own reach. */
 const importedArtifactFor = async (row: ArtifactRow, id: string): Promise<ArtifactRow | null> =>
@@ -2654,8 +2679,8 @@ export async function nameablePeople(row: ArtifactRow, viewer: RoleActor | null,
 }
 
 /** A bearer/session actor's scope — the editor running a DRAFT's queries. Reach and viewer are the same person here. */
-export const datasetResolverForActor = (actor: TokenActor): DatasetResolver => async (id) =>
-  tableForRef((await getArtifactFor(actor, id)) ?? (await getLinkReadableArtifact(id)), { userId: actor.userId, tokenId: actor.tokenId });
+export const datasetResolverForActor = (actor: TokenActor): DatasetResolver => async (id,mode) =>
+  tableForRef((await getArtifactFor(actor, id)) ?? (await getLinkReadableArtifact(id)), { userId: actor.userId, tokenId: actor.tokenId },undefined,mode===undefined||mode==='import');
 
 /** The rows of the named imports, resolved; an import that does not resolve is left out, and its readers report the missing table. */
 async function importsFor(flow: CompiledDataflow, names: Iterable<string>, resolve: DatasetResolver): Promise<ImportTables> {

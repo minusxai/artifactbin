@@ -84,3 +84,14 @@ it('keeps preferences out of history and activity out of settings',async()=>{
  view.rerender(<NotificationProvider><PeopleInbox compact/></NotificationProvider>);
  expect(await screen.findAllByRole('listitem')).toHaveLength(6);
 });
+
+it('renders combined mutation messages in one card with trusted actor identity',async()=>{
+ vi.stubGlobal('EventSource',class{close=vi.fn();});
+ vi.stubGlobal('fetch',vi.fn(async()=>Response.json({autoAccept:true,blocks:[],next:null,unread:1,notifications:[{id:'run-card',kind:'mutation',artifact_id:'doc',title:'Tasks',actor:{kind:'user',userId:'bob',person:{name:'Bob',handle:'bob',image:null},viaAgent:true},messages:['Task is Done','Review is ready'],mutation_run_id:'run',mutation_name:'change',revision:1,read_at:null,created_at:'2026-09-23T10:00:00Z'}]})));
+ const view=render(<NotificationProvider><PeopleInbox/></NotificationProvider>);
+ expect(await screen.findByText('Task is Done')).toBeVisible();
+ expect(screen.getByText('Review is ready')).toBeVisible();
+ expect(screen.getByRole('link',{name:'Bob'})).toHaveAttribute('href','/people/bob');
+ expect(view.container.querySelectorAll('[data-notification-id]')).toHaveLength(1);
+ expect(screen.getByText(/via agent/)).toBeVisible();
+});

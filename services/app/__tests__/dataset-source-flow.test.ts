@@ -124,13 +124,18 @@ it('uses catalog table names at the direct mutation HTTP boundary and refuses im
  expect((await rows.json()).rows).toEqual([{n:2}]);
 });
 
-it('refuses the retired source= form and DuckDB SQL at publish, by name',async()=>{
+it('executes stored source queries and still refuses DuckDB-only SQL at publish, by name',async()=>{
  const token=await mintToken('legacy query owner');
  const ds=await create(request('/api/artifacts',{method:'POST',token:token.token,json:{dataset:[{hours:1},{hours:2},{hours:3},{hours:10}]}}));
  expect(ds.status,await ds.clone().text()).toBe(201);const id=(await ds.json()).id;
  const publish=async(helmet:string)=>{const r=await create(request('/api/artifacts',{method:'POST',token:token.token,json:{markup:`<Helmet>${helmet}</Helmet><DataTable data="$legacy" />`}}));expect(r.status).toBe(400);return JSON.stringify(await r.json());};
- // A stored dataset is imported, never queried with source=: the refusal names the Import to write.
- expect(await publish(`<Query name="legacy" source="ref:${id}">{\`select median(hours) as median from public.rows\`}</Query>`)).toMatch(/Import/);
+ // source= uses the dataset's own catalog, for stored as well as connected datasets.
+ const stored=await create(request('/api/artifacts',{method:'POST',token:token.token,json:{markup:`<Helmet><Query name="legacy" source="ref:${id}">{\`select median(hours) as median from public.rows\`}</Query></Helmet><DataTable data="$legacy" />`}}));
+ expect(stored.status,await stored.clone().text()).toBe(201);
+ const documentId=(await stored.json()).id;
+ const result=await query(request(`/a/${documentId}/query`,{method:'POST',token:token.token,json:{only:['legacy']}}),ctx(documentId));
+ expect(result.status,await result.clone().text()).toBe(200);
+ expect((await result.json()).tables.legacy.rows).toEqual([{median:2.5}]);
  // DuckDB-only syntax is SQLite's own refusal of the statement, located at the Query.
  expect(await publish(`<Import name="legacy_data" src="ref:${id}" /><Query name="legacy">{\`select median(hours::double) as median from legacy_data.rows\`}</Query>`)).toMatch(/<Query name=\\"legacy\\">.*unrecognized token/);
 });

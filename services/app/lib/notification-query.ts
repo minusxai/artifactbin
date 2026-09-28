@@ -3,20 +3,22 @@ import {NOTIFICATION_QUERY_LIMITS,type MutationNotificationJobInput,type Mutatio
 import {NotificationExecutionError} from './notification-error';
 import {notificationQueryContext,notificationRuleSourceIds} from './notification-context';
 import {notificationArtifactAuthority,notificationExecutionFence,notificationExecutionSource,notificationPrincipal} from './notification-authority';
-import {executeDocumentQueries,type DocumentQuerySource} from './sql/document-queries';
+import {executeDocumentQueries,type DocumentQuerySource,type DocumentQuerySourceMode} from './sql/document-queries';
+import {selectQueries} from './story/compiled-flow';
+import {platformValues} from './story/builtins';
 import {DataflowResultError} from './sql/dataflow-core';
 import {getDb} from './db';
-import {tableForRef,acceptedMembers} from './artifacts';
+import {tableForRef,acceptedMembers,type RoleActor} from './artifacts';
 import type {Row} from './story/dataflow';
 export interface NotificationQueryDependencies {
  load(input:MutationNotificationJobInput):Promise<{
-  executionFence:MutationNotificationPlan['executionFence'];members:Row[];
-  resolve(ref:string):Promise<DocumentQuerySource|null>;
+  executionFence:MutationNotificationPlan['executionFence'];members:Row[];actor:RoleActor;
+  resolve(ref:string,mode?:DocumentQuerySourceMode):Promise<DocumentQuerySource|null>;
   receipt(ref:string):NotificationSource|undefined;
   authorize():Promise<void>;
  }>;
 }
-/** Validate the entire result before returning any candidate; SQL row ordinals remain distinct. */
+/** Validate the entire result before returning any candidate; the job store aggregates recipients across rules. */
 export function normalizeNotificationResult(table:TableResult):MutationNotificationPlan['rules'][number]['rows'] {
  const limits=NOTIFICATION_QUERY_LIMITS;
  if(table.truncated||table.rows.length>limits.rows||(table.totalRows!==undefined&&table.totalRows>table.rows.length))throw new NotificationExecutionError('notification_capacity');
@@ -41,10 +43,13 @@ export async function evaluateNotificationQuery(input:MutationNotificationJobInp
  const started=performance.now();
  try{
   for(const rule of rules){
+   const logical={...input.bindings.values,...platformValues(input.bindings)};
+   const selected=selectQueries({...flow,queries:[...flow.queries,rule]},{only:[rule.name]});
+   if(selected.some(query=>query.params.some(name=>!Object.hasOwn(logical,name))))throw new NotificationExecutionError('notification_bindings_invalid');
    const timeoutMs=Math.floor(NOTIFICATION_QUERY_LIMITS.timeoutMs-(performance.now()-started));
    if(timeoutMs<1)throw new NotificationExecutionError('notification_query_timeout');
    const {state}=await executeDocumentQueries({...flow,queries:[...flow.queries,rule]},context.resolve,{
-    only:[rule.name],members:context.members,userId:input.bindings.userId,now:input.bindings.now,tz:input.bindings.tz,
+    only:[rule.name],actor:context.actor,members:context.members,userId:input.bindings.userId,now:input.bindings.now,tz:input.bindings.tz,
     bindings:input.bindings,refresh:true,sourceFence:true,completeResults:true,limit:NOTIFICATION_QUERY_LIMITS.rows,
     resultBytes:NOTIFICATION_QUERY_LIMITS.resultBytes,timeoutMs,authorize:context.authorize,
    });
@@ -73,15 +78,15 @@ async function loadNotificationQuery(input:MutationNotificationJobInput){
   const current=await db.transaction(tx=>notificationExecutionFence(tx,input));
   if(JSON.stringify(current)!==JSON.stringify(initial.executionFence))throw new NotificationExecutionError('notification_authority_changed',true);
  };
- return {executionFence:initial.executionFence,members:await acceptedMembers(input.origin.documentId),authorize,
+ return {executionFence:initial.executionFence,actor:initial.principal.actor,members:await acceptedMembers(input.origin.documentId),authorize,
   receipt:(id:string)=>receipts.get(id),
-  resolve:async(id:string)=>{
+  resolve:async(id:string,mode?:DocumentQuerySourceMode)=>{
    const source=await db.transaction(tx=>notificationExecutionSource(tx,input,id));
    const prior=receipts.get(id);
    if(prior&&prior.schemaRevision!==source.receipt.schemaRevision)throw new NotificationExecutionError('notification_schema_changed');
    if(prior&&prior.authorityRevision!==source.receipt.authorityRevision)throw new NotificationExecutionError('notification_authority_changed',true);
    receipts.set(id,source.receipt);
-   return tableForRef(source.row,initial.principal.actor,initial.document.row);
+   return tableForRef(source.row,initial.principal.actor,initial.document.row,mode===undefined||mode==='import');
   },
  };
 }

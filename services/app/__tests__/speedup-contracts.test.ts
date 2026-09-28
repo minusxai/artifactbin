@@ -6,7 +6,7 @@ import { POST as createArtifact } from '@/app/api/artifacts/route';
 import { PUT as replaceArtifact } from '@/app/api/artifacts/[id]/route';
 import { getArtifactById } from '@/lib/artifacts';
 import { mintToken } from '@/lib/tokens';
-import { readCompiledDataflow, storedCompiledDataflow } from '@/lib/story/parsed-artifact-metadata';
+import { COMPILED_DATAFLOW, finalizeArtifactMetadata, readCompiledDataflow, storedCompiledDataflow } from '@/lib/story/parsed-artifact-metadata';
 import { compiledSource } from '@/test/helpers/compiled';
 
 useAppHarness();
@@ -31,7 +31,7 @@ it('create and full replace persist a manifest of the exact final stamped source
 
 it('malformed, missing and stale manifest data is reconstructed from canonical source', async () => {
   const expected=await compiledSource(source);
-  const record={schemaVersion:2,compilerRevision:'sqlite-compiled-1',sourceHash:createHash('sha256').update(source).digest('hex'),compiled:expected};
+  const record=finalizeArtifactMetadata('markup',source,{[COMPILED_DATAFLOW]:expected}).parsedArtifact as Record<string,unknown>;
   expect(storedCompiledDataflow({parsedArtifact:record},source)).toEqual(expected);
   for(const parsedArtifact of [null,{...record,schemaVersion:999},{...record,compiled:{values:'bad'}},{...record,sourceHash:'stale'},{...record,compilerRevision:'old'}]) {
     expect(storedCompiledDataflow({parsedArtifact},source)).toBeNull();

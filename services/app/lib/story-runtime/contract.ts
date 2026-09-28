@@ -501,7 +501,7 @@ export interface StoryMutateRequest {
 }
 
 export type StoryMutateResult =
-  | { type: typeof STORY_MUTATE_RESULT_MESSAGE; id: number; ok: true; dataset: string; version: number; affected: number; local?: LocalMutationResult }
+  | { type: typeof STORY_MUTATE_RESULT_MESSAGE; id: number; ok: true; dataset: string; mutationRunId?:string; version: number; affected: number; local?: LocalMutationResult }
   | { type: typeof STORY_MUTATE_RESULT_MESSAGE; id: number; ok: false; error: string };
 
 /**

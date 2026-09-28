@@ -1,3 +1,4 @@
+import {hasExplicitNotificationMembership} from '@/lib/notification-membership';
 import {setRelationState} from '@/lib/relation-state';
 import {has,count,linked} from '@/lib/relations';
 import {createAnnotationFor} from '@/lib/annotations';
@@ -181,4 +182,35 @@ it('does not treat pending follows as followers or autoaccept invitations',async
  expect(await mentionCandidates(w.actor(w.owner),'a1B2c3','member_bob')).toEqual([]);
  await changeMembership(w.actor(w.owner),'a1B2c3',{action:'invite',usernames:['@member_bob']});
  expect((await membershipState(w.actor(w.bob),'a1B2c3')).self?.status).toBe('pending');
+});
+
+it('requires artifact-specific consent even after an autoaccepted invitation',async()=>{
+ const w=await world();
+ const eligible=()=>hasExplicitNotificationMembership(w.db,'a1B2c3',w.bob.id);
+ expect(await eligible()).toBe(false);
+ await link(w.bob.id,'follow',w.owner.id);
+ await changeMembership(w.actor(w.owner),'a1B2c3',{action:'invite',usernames:['@member_bob']});
+ expect(await eligible()).toBe(false);
+ await changeMembership(w.actor(w.bob),'a1B2c3',{action:'accept'});
+ expect(await eligible()).toBe(true);
+ await changeMembership(w.actor(w.bob),'a1B2c3',{action:'leave'});
+ expect(await eligible()).toBe(false);
+ await changeMembership(w.actor(w.owner),'a1B2c3',{action:'invite',usernames:['@member_bob']});
+ expect(await eligible()).toBe(false);
+ await changeMembership(w.actor(w.bob),'a1B2c3',{action:'join'});
+ expect(await eligible()).toBe(true);
+});
+it('records self requests and explicit invitation acceptance without granting pending eligibility',async()=>{
+ const w=await world();
+ const eligible=(id:string)=>hasExplicitNotificationMembership(w.db,'a1B2c3',id);
+ await changeMembership(w.actor(w.owner),'a1B2c3',{action:'join'});
+ expect(await eligible(w.owner.id)).toBe(true);
+ await changeMembership(w.actor(w.bob),'a1B2c3',{action:'join'});
+ expect(await eligible(w.bob.id)).toBe(false);
+ await changeMembership(w.actor(w.owner),'a1B2c3',{action:'approve',userId:w.bob.id});
+ expect(await eligible(w.bob.id)).toBe(true);
+ await changeMembership(w.actor(w.owner),'a1B2c3',{action:'invite',usernames:['@member_eve']});
+ expect(await eligible(w.eve.id)).toBe(false);
+ await changeMembership(w.actor(w.eve),'a1B2c3',{action:'accept'});
+ expect(await eligible(w.eve.id)).toBe(true);
 });
