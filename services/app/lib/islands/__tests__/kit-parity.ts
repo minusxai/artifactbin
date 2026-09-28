@@ -8,7 +8,7 @@
  *
  * Owned by the toolchain track; every kit family's tests import it.
  */
-import { createElement, Fragment } from 'react';
+import { createElement, Fragment, type ComponentType } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { JSDOM } from 'jsdom';
 import { parseJsx } from '@/lib/jsx';
@@ -16,12 +16,39 @@ import type { JsxNode } from '@/lib/jsx';
 import { renderStoryNodes } from '@/lib/story-ui/interpreter';
 import { STORY_UI_COMPONENTS } from '@/lib/story-ui/registry';
 import { IconGlyphProvider } from '@/components/kit/icon';
+import InlineNumber from '@/components/views/story/InlineNumber';
+import QuestionEmbed from '@/components/views/story/QuestionEmbed';
+import { SelectControl, normalizeControlOptions } from '@/components/kit/controls';
+import { DataTable } from '@/components/kit/data-table';
+import { parseColumnSpecs, parseSortSpec } from '@/lib/story/data-table';
+import { refName, type Scalar, type TableResult } from '@/lib/story/dataflow';
+
+export interface ParityData { tables?: Record<string, TableResult>; values?: Record<string, Scalar> }
 
 /** The reader's render of `markup` today: the interpreter over the parsed nodes, to static markup. */
-export function reactRender(markup: string): string {
+export function reactRender(markup: string, data?: ParityData): string {
   const parsed = parseJsx(markup) as { nodes?: JsxNode[]; errors?: unknown[] };
   if (!parsed.nodes || parsed.errors?.length) throw new Error(`markup does not parse: ${JSON.stringify(parsed.errors)}`);
-  return renderToStaticMarkup(createElement(IconGlyphProvider, { value: {} }, createElement(Fragment, null, renderStoryNodes(parsed.nodes, { values: {}, components: STORY_UI_COMPONENTS }))))
+  const components = data ? { ...STORY_UI_COMPONENTS,
+    Number: (props: Record<string, unknown>) => createElement('span', { id: props.id as string, 'aria-busy': false }, createElement(InlineNumber, { data: props.data, ...props, tables: data.tables })),
+    Question: (props: Record<string, unknown>) => createElement(QuestionEmbed, { data: props.data, viz: props.viz as Record<string, unknown>, ...props, tables: data.tables, colorMode: 'light' }),
+    Select: (props: Record<string, unknown>) => {
+      const valueName = refName(props.value);
+      const optionName = refName(props.options);
+      return createElement(SelectControl, { label: props.label as string, placeholder: props.placeholder as string, className: props.className as string,
+        options: normalizeControlOptions(props.options, optionName ? data.tables?.[optionName] : undefined),
+        value: valueName ? String(data.values?.[valueName] ?? '') : String(props.value ?? ''), nullable: true,
+        onChange: () => {}, bound: [valueName && `value:$${valueName}`, optionName && `options:$${optionName}`].filter(Boolean).join(' '),
+        rest: { id: props.id },
+      });
+    },
+    DataTable: (props: Record<string, unknown>) => {
+      const table = data.tables?.[refName(props.data) ?? ''];
+      return createElement(DataTable as ComponentType<Record<string, unknown>>, { rows: table?.rows, columns: table?.columns, spec: parseColumnSpecs(props.columns), sort: parseSortSpec(props.sort), height: props.height as string,
+        className: props.className as string, id: props.id as string });
+    },
+  } : STORY_UI_COMPONENTS;
+  return renderToStaticMarkup(createElement(IconGlyphProvider, { value: {} }, createElement(Fragment, null, renderStoryNodes(parsed.nodes, { values: data?.values ?? {}, components }))))
     .replace(/<link rel="preload"[^>]*>/g, '').replace(/<!-- -->/g, '');
 }
 
@@ -39,7 +66,7 @@ export function shapeOf(html: string | Element): Shape[] {
     const attrs: Record<string, string> = {};
     for (const a of el.attributes) {
       if (DROP.has(a.name)) continue;
-      attrs[a.name] = a.name === 'class' ? [...new Set(a.value.split(/\s+/).filter(Boolean))].sort().join(' ') : IDREF.has(a.name) ? norm(a.value) : a.value;
+      attrs[a.name] = a.name === 'class' ? [...new Set(a.value.split(/\s+/).filter(Boolean))].sort().join(' ') : a.name === 'style' ? a.value.split(';').map(part => part.trim().replace(/\s*:\s*/, ':')).filter(Boolean).sort().join(';') : IDREF.has(a.name) ? norm(a.value) : a.value;
     }
     return { tag: el.tagName.toLowerCase(), attrs, text: [...el.childNodes].filter((n) => n.nodeType === 3).map((n) => n.textContent).join(''), kids: [...el.children].map(walk) };
   };
@@ -73,4 +100,4 @@ export function diffShapes(a: Shape[], b: Shape[], path = '', reactIds?: Set<str
 }
 
 /** Parity of a Solid render (an element, or its HTML) against today's render of `markup`. */
-export const parityOf = (markup: string, solid: string | Element): string[] => diffShapes(shapeOf(reactRender(markup)), shapeOf(solid));
+export const parityOf = (markup: string, solid: string | Element, data?: ParityData): string[] => diffShapes(shapeOf(reactRender(markup, data)), shapeOf(solid));

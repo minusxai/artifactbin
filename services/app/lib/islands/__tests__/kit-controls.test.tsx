@@ -15,7 +15,7 @@ import { RECIPES as filesRecipes } from '../kit/recipes/files';
 import { RECIPES as mermaidRecipes } from '../kit/recipes/mermaid';
 import { IslandProvider } from '../context';
 import { fakeIsland } from './context.test';
-import { Input, Textarea, Select, Segmented, Slider, Switch, DatePicker, BoundNative } from '../kit/controls';
+import { Input, Textarea, Segmented, Slider, Switch, DatePicker, BoundNative } from '../kit/controls';
 import { User, UserHandle, SignIn } from '../kit/people';
 import { Files } from '../kit/files';
 import { Mermaid } from '../kit/mermaid';
@@ -46,22 +46,17 @@ describe('controls', () => {
     expect(island.setValue).toHaveBeenCalledWith('on', true, undefined);
   });
 
-  it('Select and Segmented write chosen values immediately', () => {
-    const island = fakeIsland({ region: 'West', size: 'S' }); island.setValue = vi.fn();
-    const { host, dispose } = mount(island, () => <><Select label="Region" value="$region" options={['West','East']} /><Segmented label="Size" value="$size" options={['S','M']} /></>);
-    (host.querySelector('[aria-haspopup="listbox"]') as HTMLButtonElement).click();
-    ([...document.querySelectorAll('[role="option"]')].find(x => x.textContent === 'East') as HTMLButtonElement).click();
-    expect(island.setValue).toHaveBeenCalledWith('region', 'East', undefined);
+  it('Segmented writes chosen values immediately', () => {
+    const island = fakeIsland({ size: 'S' }); island.setValue = vi.fn();
+    const { host, dispose } = mount(island, () => <Segmented label="Size" value="$size" options={['S','M']} />);
     ([...host.querySelectorAll('[role="group"] button')].find(x => x.textContent === 'M') as HTMLButtonElement).click();
     expect(island.setValue).toHaveBeenCalledWith('size', 'M', undefined);
     dispose();
   });
 
-  it('Select opens a searchable list and DatePicker opens a calendar', () => {
-    const island = fakeIsland({ region: 'West', when: '2026-09-28' }); island.setValue = vi.fn();
-    const { host, dispose } = mount(island, () => <><Select label="Region" value="$region" options={['West','East']} /><DatePicker label="When" value="$when" /></>);
-    (host.querySelector('[aria-haspopup="listbox"]') as HTMLButtonElement).click();
-    expect(document.querySelector('[role="searchbox"]')).toBeTruthy();
+  it('DatePicker opens a calendar', () => {
+    const island = fakeIsland({ when: '2026-09-28' }); island.setValue = vi.fn();
+    const { host, dispose } = mount(island, () => <DatePicker label="When" value="$when" />);
     (host.querySelector('[aria-haspopup="dialog"]') as HTMLButtonElement).click();
     const date = document.querySelector('[role="dialog"] [aria-label="2026-09-29"]') as HTMLButtonElement;
     expect(date).toBeTruthy(); date.click();
@@ -119,7 +114,6 @@ describe('class recipes', () => {
   const cases: [string, Record<string, (p: Record<string, unknown>) => string>, string, Record<string, unknown>][] = [
     ['Input', controlsRecipes, '<Input />', {}],
     ['Textarea', controlsRecipes, '<Textarea />', {}],
-    ['Select', controlsRecipes, '<Select />', {}],
     ['Slider', controlsRecipes, '<Slider />', {}],
     ['Switch', controlsRecipes, '<Switch />', {}],
     ['DatePicker', controlsRecipes, '<DatePicker />', {}],

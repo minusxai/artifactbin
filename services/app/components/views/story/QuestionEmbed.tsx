@@ -12,12 +12,10 @@
  */
 import dynamic from '@/lib/dynamic';
 import { format as d3format } from 'd3-format';
-import { materializeFileRecipe } from '@/lib/viz/recipe-file';
-import type { VizResultColumn } from '@/lib/viz/types';
-import { columnVizKind, type DatasetColumn } from '@/lib/story/dataset-shape';
+import type { DatasetColumn } from '@/lib/story/dataset-shape';
 import { refName, type TableResult } from '@/lib/story/dataflow';
 import type { RefDataMap } from '@/lib/story/ref-data';
-import type { VizEnvelope } from '@/lib/validation/atlas-schemas';
+import { questionEnvelope } from '@/lib/viz/chart-envelope';
 
 /**
  * The ONE loading lockup every embed state speaks: a spinning ring over a mono
@@ -150,49 +148,8 @@ export default function QuestionEmbed({ data, viz, title, colorMode, tables, tab
     );
   }
 
-  // The minusx envelope is VERSIONED: { version: 2, source: {kind, grammar, spec} }
-  // (resolveEnvelopeSpec reads envelope.source) — the markup's viz attr is the
-  // SOURCE shorthand; wrap it here.
-  let envelope: VizEnvelope | null = null;
-  if (kind === 'vega-lite' || kind === 'vega') {
-    const grammar = kind === 'vega-lite' ? 'vega-lite@6' : 'vega@6';
-    envelope = { version: 2, source: { kind, grammar, spec: viz?.spec ?? {} } } as unknown as VizEnvelope;
-  } else if (kind === 'recipe' && typeof viz?.recipe === 'string' && !viz.recipe.startsWith('ref:')) {
-    // A SHIPPED registry recipe (minusx/trend@1, …): the envelope carries the
-    // reference and resolveEnvelopeSpec materializes it inside VegaChart —
-    // deliberately NOT resolved here, which would drag the template registry
-    // into the entry every reader downloads (it lives in the chart chunk).
-    envelope = {
-      version: 2,
-      source: {
-        kind: 'recipe',
-        recipe: viz.recipe,
-        bindings: viz?.bindings ?? {},
-        params: (viz?.params ?? null) as Record<string, unknown> | null,
-        columnFormats: (viz?.columnFormats ?? null) as Record<string, unknown> | null,
-      },
-    } as unknown as VizEnvelope;
-  } else if (kind === 'recipe') {
-    const recipeRef = viz?.recipe;
-    let recipe = null;
-    if (typeof recipeRef === 'string' && recipeRef.startsWith('ref:')) {
-      const r = refData?.[recipeRef.slice(4)];
-      if (r?.kind === 'viz') recipe = r.recipe;
-    }
-    if (!recipe) return empty('recipe unavailable — falling back');
-    const cols: VizResultColumn[] = resolved.columns.map((c) => ({ name: c.name, kind: columnVizKind(c.type) }));
-    const m = materializeFileRecipe(recipe, (viz?.bindings ?? {}) as Record<string, string | string[]>, (viz?.params ?? null) as Record<string, unknown> | null, cols);
-    if (!m.ok) return empty(`recipe error: ${m.error}`);
-    envelope = {
-      version: 2,
-      source: {
-        kind: m.engine,
-        grammar: m.engine === 'vega-lite' ? 'vega-lite@6' : 'vega@6',
-        spec: m.spec,
-      },
-    } as unknown as VizEnvelope;
-  }
-  if (!envelope) return empty(`unknown viz kind "${kind}"`);
+  const envelope = questionEnvelope(viz ?? {}, resolved.columns, refData);
+  if ('error' in envelope) return empty(envelope.error);
 
   return (
     <div className="flex h-full w-full flex-col" aria-label="Question embed body" data-mx-chart-state={name && isPending(pendingTables,name) ? 'pending' : undefined}>

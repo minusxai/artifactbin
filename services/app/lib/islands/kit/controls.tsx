@@ -64,30 +64,6 @@ export function Slider(p: Props) {
     on:input={e => { const n = nameOf(p); if (n) island.setValue(n,Number(e.currentTarget.value),undefined); }}
     class="h-1.5 w-44 cursor-pointer appearance-none rounded-full bg-border disabled:cursor-not-allowed disabled:opacity-50 [&::-webkit-slider-thumb]:size-4 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-primary [&::-webkit-slider-thumb]:shadow-sm [&::-moz-range-thumb]:size-4 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:border-0 [&::-moz-range-thumb]:bg-primary" /></Shell>;
 }
-const CHEVRON = <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="size-4 shrink-0 opacity-50" aria-hidden="true"><path d="m6 9 6 6 6-6" /></svg>;
-const CHECK = <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="size-3.5 shrink-0" aria-hidden="true"><path d="M20 6 9 17l-5-5" /></svg>;
-export function Select(p: Props) {
-  const island = useIsland(); const [open,setOpen] = createSignal(false); const [query,setQuery] = createSignal(''); const [highlight,setHighlight] = createSignal(-1);
-  const current = () => choiceValue(p); const label = () => current() === null ? str(p.placeholder) ?? 'All' : options(p).find(o => o.value === current())?.label ?? current();
-  const entries = () => [...(nameOf(p) && current() === null ? [{ value: null, label: str(p.placeholder) ?? 'All' }] : []), ...options(p)];
-  const filtered = () => entries().filter(o => o.label.toLowerCase().includes(query().toLowerCase()));
-  const choose = (value: string | null) => { const n = nameOf(p); if (n) island.setValue(n,value,undefined); setOpen(false); setQuery(''); };
-  let root!: HTMLDivElement;
-  return <Shell authored={p}><div ref={root} class="relative min-w-0"><button type="button" aria-label={str(p.label)} aria-haspopup="listbox" aria-expanded={open()} disabled={!active(p)} on:click={() => setOpen(!open())}
-    class="inline-flex h-9 min-w-36 w-full items-center justify-between gap-2 rounded-md border border-input bg-background px-3 text-sm shadow-xs transition-colors hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50">
-    <span class={join('truncate',current() === null && 'text-muted-foreground')}>{label()}</span>{CHEVRON}</button>
-    <Show when={open()}><Portal mount={root.ownerDocument.body}><div class="rounded-md border border-border bg-popover text-popover-foreground shadow-md" style={{position:'fixed', 'z-index':50, left:`${root.getBoundingClientRect().left}px`, top:`${root.getBoundingClientRect().bottom + 4}px`, width:`${Math.max(root.getBoundingClientRect().width,200)}px`}}>
-      <div class="border-b border-border p-1.5"><input type="text" role="searchbox" aria-label={p.label ? `Search ${p.label}` : 'Search options'} placeholder="Type to filter…" value={query()}
-        on:input={e => { const q = e.currentTarget.value; setQuery(q); setHighlight(filtered().length ? 0 : -1); }}
-        class="h-8 w-full min-w-36 rounded-sm border border-input bg-background px-2 text-sm text-foreground outline-none placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring/50" /></div>
-      <div role="listbox" aria-label={str(p.label)} class="max-h-56 overflow-y-auto p-1"><For each={filtered()}>{(o,i) => <button type="button" role="option" aria-label={o.label} aria-selected={o.value === current()}
-        on:click={() => choose(o.value)} on:mouseenter={() => setHighlight(i())}
-        class={join('flex w-full cursor-pointer items-center justify-between gap-3 rounded-sm px-2 py-1.5 text-left text-sm',i() === highlight() && 'bg-accent text-accent-foreground',o.value === null && o.value !== current() && 'text-muted-foreground')}>
-        <span class="truncate">{o.label}</span><Show when={o.value === current()}>{CHECK}</Show></button>}</For>
-        <Show when={filtered().length === 0}><div role="status" class="px-2 py-3 text-center text-sm text-muted-foreground">No matches</div></Show></div>
-    </div></Portal></Show>
-  </div></Shell>;
-}
 const CALENDAR = <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="size-4 shrink-0 opacity-50" aria-hidden="true"><path d="M8 2v4"/><path d="M16 2v4"/><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M3 10h18"/></svg>;
 const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
 const DOW = ['S','M','T','W','T','F','S'];
