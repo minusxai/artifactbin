@@ -411,7 +411,9 @@ jobs:
       # Chromium libraries ship on the runner. Firefox/WebKit need additional system
       # packages even on a browser-cache hit; install them only on shards that use them.
       - id: gate-browsers
-        run: echo "browsers=$(node scripts/gates.mjs --browsers --shard=${{ matrix.shard }}/8)" >> "$GITHUB_OUTPUT"
+        run: |
+          echo "browsers=$(node scripts/gates.mjs --browsers --shard=${{ matrix.shard }}/8)" >> "$GITHUB_OUTPUT"
+          echo "postgres=$(node scripts/gates.mjs --needs-postgres --shard=${{ matrix.shard }}/8)" >> "$GITHUB_OUTPUT"
       - name: Install selected gate browsers
         env:
           BROWSERS: ${{ steps.gate-browsers.outputs.browsers }}
@@ -447,10 +449,10 @@ jobs:
       # legs add ~530s of weight to ~5440s. Seven shards put the slowest gate job at 249–250s
       # on PR #166; eight lowers the heaviest planned shard from 870s to 770s.
       #
-      # postgres-datasets is on shard 8 (scripts/gates.shard.mjs). Pull only
-      # there, before its gate timeout starts.
+      # The gate runner selects the shard on this host; pull Postgres only when
+      # that selection includes postgres-datasets, before its gate timeout starts.
       - name: pull the Postgres image the datasets gate needs
-        if: matrix.shard == 8
+        if: steps.gate-browsers.outputs.postgres == 'true'
         run: docker pull postgres:17-alpine
       - name: Prepare isolated browser session workers
         run: |

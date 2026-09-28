@@ -580,6 +580,7 @@ describe('CI job shape', () => {
     expect(browser.with.key).toContain("hashFiles('node_modules/playwright-core/browsers.json')");
     const selection = jobs.gates.steps.find(step => step.id === 'gate-browsers');
     expect(selection.run).toContain('--browsers --shard=${{ matrix.shard }}/8');
+    expect(selection.run).toContain('--needs-postgres --shard=${{ matrix.shard }}/8');
     const install = jobs.gates.steps.find(step => step.name === 'Install selected gate browsers');
     expect(install.env.BROWSERS).toBe('${{ steps.gate-browsers.outputs.browsers }}');
     expect(install.run).toContain('"$BROWSERS" != chromium');
@@ -588,9 +589,8 @@ describe('CI job shape', () => {
     // postgres-datasets stays a browser gate (it boots the whole app); the image is pulled once, before the run.
     const pulls = jobs.gates.steps.filter((step) => /docker pull postgres:17-alpine/.test(step.run ?? ''));
     expect(pulls).toHaveLength(1);
-    expect(pulls[0].if).toBe('matrix.shard == 8');
+    expect(pulls[0].if).toBe("steps.gate-browsers.outputs.postgres == 'true'");
     const names = [...gateNamesOnDisk(readdirSync(path.join(root, 'scripts'))), ...compiledLegNames()];
-    expect(shardOf(names, { index: 8, total: 8 }, shardWeight)).toContain('postgres-datasets');
     const heaviest = (count) => Math.max(...Array.from({ length: count }, (_, offset) =>
       shardOf(names, { index: offset + 1, total: count }, shardWeight).reduce((sum, name) => sum + shardWeight(name), 0)));
     expect(heaviest(8)).toBeLessThan(heaviest(7));
