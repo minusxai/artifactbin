@@ -199,7 +199,7 @@ export function browsersFor(names) {
 }
 
 /** Gates whose first attempt must not race another gate on the same CI runner. */
-export const ISOLATED_GATES = Object.freeze(['editor-v2', 'hydration', 'offline-file']);
+export const ISOLATED_GATES = Object.freeze(['editor-v2', 'hydration', 'offline-file', 'editor-v2@compiled']);
 
 /**
  * Cross-browser system setup measured 91s on CI run 35740918148. Match the

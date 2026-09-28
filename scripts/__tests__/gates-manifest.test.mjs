@@ -171,20 +171,21 @@ it('balances the extra cross-browser setup without extending any test timeout', 
 
 it('prints the same browser and Postgres plans used by shard selection without starting servers', () => {
   const set = [...onDisk, ...compiledLegNames()];
-  for (let index = 1; index <= 13; index++) {
-    const selected = shardOf(set, {index, total: 13}, shardWeight, { isolated: ISOLATED_GATES });
-    const output = execFileSync(process.execPath, [path.join(SCRIPTS, 'gates.mjs'), '--browsers', `--shard=${index}/13`], {encoding: 'utf8'}).trim();
+  for (let index = 1; index <= 14; index++) {
+    const selected = shardOf(set, {index, total: 14}, shardWeight, { isolated: ISOLATED_GATES });
+    const output = execFileSync(process.execPath, [path.join(SCRIPTS, 'gates.mjs'), '--browsers', `--shard=${index}/14`], {encoding: 'utf8'}).trim();
     expect(output).toBe(browsersFor(selected).join(' '));
-    const postgres = execFileSync(process.execPath, [path.join(SCRIPTS, 'gates.mjs'), '--needs-postgres', `--shard=${index}/13`], {encoding: 'utf8'}).trim();
+    const postgres = execFileSync(process.execPath, [path.join(SCRIPTS, 'gates.mjs'), '--needs-postgres', `--shard=${index}/14`], {encoding: 'utf8'}).trim();
     expect(postgres).toBe(String(selected.some((name) => gateOf(name) === 'postgres-datasets')));
   }
-  expect(Array.from({length: 13}, (_, offset) => shardOf(set, {index: offset + 1, total: 13}, shardWeight, { isolated: ISOLATED_GATES }))
+  expect(Array.from({length: 14}, (_, offset) => shardOf(set, {index: offset + 1, total: 14}, shardWeight, { isolated: ISOLATED_GATES }))
     .find((shard) => shard.includes('editor-v2'))).toEqual(['editor-v2']);
 });
 
 it('gives the gates that lost parallel races an exclusive CI runner', () => {
   const set = [...onDisk, ...compiledLegNames()];
-  const shards = Array.from({ length: 13 }, (_, offset) => shardOf(set, { index: offset + 1, total: 13 }, shardWeight, { isolated: ISOLATED_GATES }));
+  expect(ISOLATED_GATES).toContain('editor-v2@compiled');
+  const shards = Array.from({ length: 14 }, (_, offset) => shardOf(set, { index: offset + 1, total: 14 }, shardWeight, { isolated: ISOLATED_GATES }));
   for (const name of ISOLATED_GATES) expect(shards.find(shard => shard.includes(name))).toEqual([name]);
   expect(shards.flat().sort()).toEqual(set.slice().sort());
 });
@@ -192,9 +193,9 @@ it('gives the gates that lost parallel races an exclusive CI runner', () => {
 it('prints the selected gate names for shard-specific CI setup without starting servers', () => {
   const set = [...onDisk, ...compiledLegNames()];
   const selected = [];
-  for (let index = 1; index <= 13; index++) {
-    const expected = shardOf(set, { index, total: 13 }, shardWeight, { isolated: ISOLATED_GATES });
-    const output = execFileSync(process.execPath, [path.join(SCRIPTS, 'gates.mjs'), '--selected', `--shard=${index}/13`], { encoding: 'utf8' }).trim().split('\n');
+  for (let index = 1; index <= 14; index++) {
+    const expected = shardOf(set, { index, total: 14 }, shardWeight, { isolated: ISOLATED_GATES });
+    const output = execFileSync(process.execPath, [path.join(SCRIPTS, 'gates.mjs'), '--selected', `--shard=${index}/14`], { encoding: 'utf8' }).trim().split('\n');
     expect(output).toEqual(expected);
     selected.push(...output);
   }
