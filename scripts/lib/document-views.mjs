@@ -43,7 +43,10 @@ export function documentViewProbe() {
    */
   const ready = () => { if (state.ready === null) state.ready = performance.now(); };
   document.addEventListener('mx:ready', ready);
-  document.addEventListener('DOMContentLoaded', () => { if (!document.querySelector('script[type="module"]')) ready(); });
+  // The idle SPA and standalone behavior scripts are modules too. A page with
+  // no island data has no hydration boot to signal ready; modules have loaded
+  // by DOMContentLoaded, so this is the static page's byte boundary.
+  document.addEventListener('DOMContentLoaded', () => { if (!document.getElementById('mx-story-data')) ready(); });
   try {
     new PerformanceObserver(list => { for (const entry of list.getEntries()) if (entry.name === 'first-contentful-paint') state.fcp = entry.startTime; }).observe({ type: 'paint', buffered: true });
     new PerformanceObserver(list => { for (const entry of list.getEntries()) state.lcp = entry.startTime; }).observe({ type: 'largest-contentful-paint', buffered: true });
@@ -53,6 +56,7 @@ export function documentViewProbe() {
   const check = () => {
     // Set by a per-tab init script (measureDocumentView), which runs before any page script.
     if (!state.configured && window.__documentViewConfig) { Object.assign(state, window.__documentViewConfig, { configured: true }); }
+    if (document.documentElement.hasAttribute('data-mx-ready')) ready();
     if (state.view && !takeoverSeen) {
       const owned = document.querySelector('body > #root [data-mx-inline-story] > :not(style)');
       if (owned && !document.querySelector('[data-mx-initial-story]')) { takeoverSeen = true; stamp('takeover'); requestAnimationFrame(() => requestAnimationFrame(ready)); }
@@ -66,16 +70,21 @@ export function documentViewProbe() {
     }
   };
   state.check = check;
-  new MutationObserver(check).observe(document, { subtree: true, childList: true, attributes: true, attributeFilter: ['data-mx-chart-state', 'data-mx-mermaid-state'] });
+  new MutationObserver(check).observe(document, { subtree: true, childList: true, attributes: true, attributeFilter: ['data-mx-chart-state', 'data-mx-mermaid-state', 'data-mx-ready'] });
 }
 
 /** The lab's throttling (scripts/performance-loads.mjs `conditions`). */
 export const LAB_THROTTLE = { latencyMs: 80, downloadMbps: 10, uploadMbps: 5, cpuSlowdown: 4 };
 
+/** The size lab keeps the same network byte accounting with one unthrottled view. */
+export const documentMeasurementMode = sizeOnly => sizeOnly
+  ? { runs: 1, throttle: null, sizeOnly: true }
+  : { runs: 5, throttle: LAB_THROTTLE, sizeOnly: false };
+
 const kindOf = ({ type }) => type === 'Document' ? 'html' : type === 'Script' ? 'js' : type === 'Stylesheet' ? 'css' : 'other';
 
-/** One cold, throttled view of `url` in a fresh tab of `context`. */
-export async function measureDocumentView(context, url, { route, painted, throttle = LAB_THROTTLE, timeoutMs = 60_000 }) {
+/** One cold view of `url` in a fresh tab of `context`; size mode skips throttling and timing waits. */
+export async function measureDocumentView(context, url, { route, painted, throttle = LAB_THROTTLE, sizeOnly = false, timeoutMs = 60_000 }) {
   const page = await context.newPage();
   try {
     const cdp = await context.newCDPSession(page);
@@ -98,12 +107,12 @@ export async function measureDocumentView(context, url, { route, painted, thrott
     await page.addInitScript(({ view, want }) => { window.__documentViewConfig = { view, want }; }, { view: route === 'view', want: painted });
     await page.goto(url, { waitUntil: 'load', timeout: timeoutMs });
     await page.evaluate(() => window.__documentView.check());
-    const ready = await page.waitForFunction(() => {
+    const ready = await page.waitForFunction((sizeOnly) => {
       const s = window.__documentView;
-      return (!s.view || s.takeover !== null) && (!s.want || s.painted !== null);
-    }, null, { timeout: timeoutMs }).then(() => true, () => false);
+      return sizeOnly ? s.ready !== null : (!s.view || s.takeover !== null) && (!s.want || s.painted !== null);
+    }, sizeOnly, { timeout: timeoutMs }).then(() => true, () => false);
     // Late resources (chart chunks, fonts) and the LCP candidate settle.
-    await page.waitForTimeout(1000);
+    if (!sizeOnly) await page.waitForTimeout(1000);
     const measured = await page.evaluate(() => {
       const s = window.__documentView;
       // Resource timing names every script and when it finished, even at the opaque origin (where its sizes read zero).
@@ -169,7 +178,7 @@ export async function canonicalView(base, id, fetchImpl = fetch) {
  * `runs` cold views of every fixture on both routes, interleaved per repetition
  * so drift in the runner affects every cell alike.
  */
-export async function measureDocumentViews({ browser, base, fixtures, runs, throttle = LAB_THROTTLE, log = () => {} }) {
+export async function measureDocumentViews({ browser, base, fixtures, runs, throttle = LAB_THROTTLE, sizeOnly = false, log = () => {} }) {
   const context = await browser.newContext({ viewport: { width: 1440, height: 1000 } });
   await context.addInitScript(documentViewProbe);
   const views = [];
@@ -179,7 +188,7 @@ export async function measureDocumentViews({ browser, base, fixtures, runs, thro
     for (let repetition = 0; repetition < runs; repetition++) {
       for (const { fixture, view, raw } of views) {
         for (const route of ['view', 'raw']) {
-          const sample = await measureDocumentView(context, route === 'view' ? view : raw, { route, painted: fixture.painted, throttle });
+          const sample = await measureDocumentView(context, route === 'view' ? view : raw, { route, painted: sizeOnly ? null : fixture.painted, throttle, sizeOnly, timeoutMs: sizeOnly ? 15_000 : 60_000 });
           samples.push({ fixture: fixture.key, repetition, ...sample });
           log(`${fixture.key} ${route} #${repetition}: fcp ${Math.round(sample.fcp ?? -1)} takeover ${Math.round(sample.takeover ?? -1)} painted ${Math.round(sample.painted ?? -1)}${sample.ready ? '' : ' (TIMED OUT)'}`);
         }
