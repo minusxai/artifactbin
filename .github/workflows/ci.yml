@@ -240,7 +240,7 @@ jobs:
           key: install-v4-${{ runner.os }}-${{ runner.arch }}-node22-${{ hashFiles('.ci-cache-key/install.json', 'services/app/scripts/copy-assets.mjs', 'services/cli/scripts/prepare-pty.mjs') }}
       - if: steps.install.outputs.cache-hit != 'true'
         run: npm ci
-      - run: npx vitest run --project=ui --shard=${{ matrix.shard }}/2
+      - run: npx vitest run --project=ui --project=islands --shard=${{ matrix.shard }}/2
 
   # The BUILD catches what tsc and vitest cannot: a route the generated table
   # has not seen, an import that only resolves under the bundler, a SPA module
@@ -298,6 +298,7 @@ jobs:
             services/app/dist
             services/app/lib/story-runtime/dist
             services/app/public/story
+            services/app/public/islands
             services/app/public/libraries
             services/app/server/routes.generated.ts
             services/cli/dist

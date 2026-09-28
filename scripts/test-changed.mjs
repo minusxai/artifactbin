@@ -12,7 +12,7 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 export const DEFAULT_CAP = 50;
-const PROJECTS = ['--project=api', '--project=node', '--project=ui'];
+const PROJECTS = ['--project=api', '--project=node', '--project=ui', '--project=islands'];
 const TEST_FILE = /\.test\.(?:[cm]?[jt]s|tsx|jsx)$/;
 export const shouldRunCli = (files) => files.some(f => f.startsWith('services/cli/'));
 export const overCap = (count, cap, all) => !all && count > cap;
@@ -84,7 +84,7 @@ export function main(argv = process.argv.slice(2)) {
   const args = [...PROJECTS, ...(files ? vitestFiles : base ? ['--changed', base] : ['--changed'])];
   const affected = files && !vitestFiles.length ? [] : discover(args);
   if (files && files.some(f => !cliFiles.includes(f) && !affected.some(a => path.resolve(a) === path.resolve(f)))) {
-    throw new Error('A requested test was not discovered in the local api/node/ui projects. Heavy tests belong on CI.');
+    throw new Error('A requested test was not discovered in the local api/node/ui/islands projects. Heavy tests belong on CI.');
   }
   const total = affected.length + cliFiles.length;
   if (dry) { console.log(JSON.stringify({ vitest: affected, cli: cliFiles, total, cap }, null, 2)); return 0; }

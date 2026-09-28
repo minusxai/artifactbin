@@ -2,16 +2,23 @@ import path from 'path';
 import { generateTeaching } from './scripts/lib/generate-teaching.mjs';
 import { defineConfig } from 'vitest/config';
 import react from '@vitejs/plugin-react';
+import solid from 'vite-plugin-solid';
 import yaml from '@rollup/plugin-yaml';
 
 // Discovery imports source consumers before global setup runs.
 generateTeaching();
 
+// The island tests (Solid, lib/islands): jsdom, the Solid JSX transform, never the React one. Every
+// other project matches `lib/**/__tests__` too, so they exclude this glob.
+const ISLAND_TESTS = 'services/app/lib/islands/**/__tests__/**/*.test.{ts,tsx}';
+
 // API exercises route handlers and persistence; Node covers libraries, services,
-// scripts and eval harnesses; UI uses jsdom. The CLI has its own Node test runner.
+// scripts and eval harnesses; UI uses jsdom; Islands is the Solid half of the reader (jsdom,
+// vite-plugin-solid). The CLI has its own Node test runner. React's plugin is per project, not
+// root-level, because project plugins ADD to the root's and the islands project must run without it.
 export default defineConfig({
   root: import.meta.dirname,
-  plugins: [react(), yaml()],
+  plugins: [yaml()],
   resolve: {
     alias: {
       '@': path.resolve(import.meta.dirname, 'services/app'),
@@ -44,6 +51,7 @@ export default defineConfig({
     projects: [
       {
         extends: true,
+        plugins: [react()],
         test: {
           name: 'api',
           environment: 'node',
@@ -54,6 +62,7 @@ export default defineConfig({
       },
       {
         extends: true,
+        plugins: [react()],
         test: {
           name: 'node',
           environment: 'node',
@@ -68,6 +77,7 @@ export default defineConfig({
           exclude: [
             '**/node_modules/**',
             '**/*.ui.test.{ts,tsx}',
+            ISLAND_TESTS,
             'services/app/lib/datasets/__tests__/postgres.test.ts',
             'services/app/lib/datasets/__tests__/notebook-postgres.test.ts',
             'services/browser/__tests__/contract.test.ts',
@@ -87,6 +97,7 @@ export default defineConfig({
         // env/globalSetup via `extends`, the shared setup file — so the moved
         // tests behave identically; only the include set differs.
         extends: true,
+        plugins: [react()],
         test: {
           name: 'integration',
           environment: 'node',
@@ -102,12 +113,29 @@ export default defineConfig({
       },
       {
         extends: true,
+        plugins: [react()],
         test: {
           name: 'ui',
           environment: 'jsdom',
           include: ['services/app/lib/**/__tests__/**/*.ui.test.{ts,tsx}', 'services/app/components/**/__tests__/**/*.ui.test.{ts,tsx}', 'services/app/__tests__/**/*.ui.test.{ts,tsx}', 'services/app/web/**/__tests__/**/*.ui.test.{ts,tsx}'],
-          exclude: ['**/node_modules/**'],
+          exclude: ['**/node_modules/**', ISLAND_TESTS],
           setupFiles: ['./services/app/test/setup/vitest.setup.ts', './services/app/test/setup/vitest.setup.ui.ts', './services/app/test/setup/router.tsx'],
+        },
+      },
+      {
+        // Solid files under lib/islands carry `/* @jsxImportSource solid-js */` (the root tsconfig
+        // stays react-jsx) and are compiled by babel-preset-solid, the transform the island build
+        // uses. One difference: tests render client-side (`hydratable` off), the build emits
+        // hydratable code. Only lib/islands goes through Solid's transform; the React kit a parity
+        // test imports keeps Vite's own (react-jsx) transform.
+        extends: true,
+        plugins: [solid({ include: ['services/app/lib/islands/**/*.{tsx,jsx}'], hot: false })],
+        test: {
+          name: 'islands',
+          environment: 'jsdom',
+          include: [ISLAND_TESTS],
+          exclude: ['**/node_modules/**'],
+          setupFiles: ['./services/app/test/setup/vitest.setup.ts'],
         },
       },
     ],

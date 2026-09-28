@@ -35,10 +35,10 @@
     "postinstall": "node services/cli/scripts/generate-teaching.mjs"
   },
   "dependencies": {
+    "@artifactbin/auth": "0.1.0",
     "@artifactbin/browser": "0.1.0",
     "@artifactbin/contracts": "0.1.0",
     "@artifactbin/events": "0.1.0",
-    "@artifactbin/auth": "0.1.0",
     "@artifactbin/sql": "0.1.0",
     "@artifactbin/utils": "0.1.0",
     "@electric-sql/pglite": "0.4.6",
@@ -63,6 +63,7 @@
     "tsx": "4.23.11",
     "typescript": "5.9.3",
     "vite": "8.2.2",
+    "vite-plugin-solid": "2.11.14",
     "vitest": "4.1.11",
     "yaml": "2.9.0",
     "zod": "4.5.2"
