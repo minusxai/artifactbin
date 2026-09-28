@@ -180,7 +180,7 @@ export function boot(input: IslandModule | readonly IslandEntry[], win: Window =
     // From the snapshot's marks: a dataset written since the snapshot was taken re-runs at once (live.ts).
     // Loaded after hydration, off the shared runtime's closure: the marks cover the gap, so nothing is missed.
     void import('./live').then(({ startIslandLive }) => {
-      if (!disposed) stopLive = startIslandLive(win, liveId, liveEdit, data.results?.since ?? null);
+      if (!disposed && mode === 'read') stopLive = startIslandLive(win, liveId, liveEdit, data.results?.since ?? null);
     }).catch((error: unknown) => console.error('[islands] the live stream did not load', error));
   }
   // The link follows the reader (./url-sync), top-level only: a framed document's address is its frame's.
@@ -199,6 +199,10 @@ export function boot(input: IslandModule | readonly IslandEntry[], win: Window =
     setMode: (next) => {
       if (disposed || next === mode || next === 'read') return;
       stopAuthor();
+      // The interpreter owns edits and their live updates. A version ping from this compiled
+      // lifetime must not reload the page while its editor is saving a new source.
+      stopLive();
+      stopLive = () => {};
       disposeIslands();
       mode = next;
       emit({ type: 'mode', mode });

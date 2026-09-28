@@ -132,8 +132,9 @@ describe('boot', () => {
     expect(url.startsWith('https://app.example/a/abc/query?')).toBe(true);
     expect(JSON.parse(new URL(url).searchParams.get('q')!)).toMatchObject({ only: ['total'], values: { region: 'West' } });
 
+    booted.setMode('edit');
+    expect(sources[0]!.closed, 'the compiled stream cannot reload an active editor').toBe(true);
     booted.dispose();
-    expect(sources[0]!.closed).toBe(true);
     booted = null;
   });
 
