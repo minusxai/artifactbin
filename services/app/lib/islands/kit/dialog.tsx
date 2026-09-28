@@ -11,11 +11,11 @@ const Context = createContext<DialogState>();
 const state = () => { const ctx = useContext(Context); if (!ctx) throw new Error('Dialog child outside Dialog'); return ctx; };
 export function Dialog(props: JSX.HTMLAttributes<HTMLSpanElement> & { open?: boolean | string; defaultOpen?: boolean; onOpenChange?: (open: boolean) => void }) {
   const island = useIsland();
-  const boundName = typeof props.open === 'string' ? refName(props.open) : null;
   const [local, setLocal] = createSignal(!!props.defaultOpen); const [trigger, setTrigger] = createSignal<HTMLElement | null>(null); const [busy, setBusy] = createSignal(false);
+  const name = refName(props.open);
   const ctx: DialogState = {
-    open: () => boundName ? island.value(boundName) === true : typeof props.open === 'boolean' ? props.open : local(),
-    setOpen: next => { setLocal(next); if (boundName) island.setValue(boundName, next); props.onOpenChange?.(next); },
+    open: () => name ? island.value(name) === true : typeof props.open === 'boolean' ? props.open : local(),
+    setOpen: next => { if (name) island.setValue(name, next); else setLocal(next); props.onOpenChange?.(next); },
     trigger, setTrigger, busy, setBusy,
   };
   const [localProps, rest] = splitProps(props, ['open', 'defaultOpen', 'onOpenChange', 'children']);
@@ -68,7 +68,14 @@ export function DialogContent(props: JSX.DialogHtmlAttributes<HTMLDialogElement>
   const { run: _run, args: _args, stacked: _stacked, onSubmitMutation: _onSubmitMutation, unavailable: _unavailable, conflictMessage: _conflictMessage, onKeyDown: _onKeyDown, ...rest } = props;
   const mutation = typeof props.run === 'string' ? refName(props.run) : null;
   createEffect(() => {
-    if (ctx.open()) { if (!dialog.open) { if (typeof dialog.showModal === 'function') dialog.showModal(); else dialog.setAttribute('open', ''); } openedDialog = dialog; }
+    if (ctx.open()) {
+      if (!dialog.open) { if (typeof dialog.showModal === 'function') dialog.showModal(); else dialog.setAttribute('open', ''); }
+      openedDialog = dialog;
+      // React and native dialog focus differ inside a framed reader; honor the authored field after opening.
+      requestAnimationFrame(() => {
+        if (dialog.open) (dialog.querySelector<HTMLElement>('[autofocus]') ?? dialog.querySelector<HTMLElement>('input:not([disabled]),textarea:not([disabled]),select:not([disabled])'))?.focus();
+      });
+    }
     else if (openedDialog?.open) { if (typeof openedDialog.close === 'function') openedDialog.close(); else openedDialog.removeAttribute('open'); openedDialog = null; queueMicrotask(() => ctx.trigger()?.focus()); }
   });
   onCleanup(() => { if (openedDialog?.open && typeof openedDialog.close === 'function') openedDialog.close(); });

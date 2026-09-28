@@ -133,10 +133,10 @@ it('keeps artifact dialogs out of the global modal layer, with keyboard and back
 });
 
 
-it('preserves the field focus chosen by native show for an artifact dialog', () => {
+it('focuses the first field when native show leaves an artifact dialog focused on its container', () => {
   const show = vi.spyOn(HTMLDialogElement.prototype, 'show').mockImplementation(function(this: HTMLDialogElement) {
     this.open = true;
-    this.querySelector<HTMLInputElement>('input')?.focus();
+    this.focus();
   });
   try {
     render(<ArtifactDialogScope><Dialog><DialogTrigger>Open focused</DialogTrigger><DialogContent aria-label="Focused"><input aria-label="Draft" autoFocus /><DialogClose>Close focused</DialogClose></DialogContent></Dialog></ArtifactDialogScope>);

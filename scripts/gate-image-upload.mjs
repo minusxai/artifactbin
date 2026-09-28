@@ -252,12 +252,13 @@ const browser = await chromium.launch();
   const frame = await documentFrame(page);
 
   await page.evaluate(() => navigator.clipboard.writeText('PASTED_TEXT_OK'));
-  const para = await frame.$('p');
+  // The editor replaces the paragraph node after a text edit; keep a locator that resolves the current one.
+  const para = frame.locator('p').filter({ hasText: 'START' }).first();
   await para.click();
   await page.waitForTimeout(400);
   await page.keyboard.press(PASTE);
   await page.waitForTimeout(1200);
-  const text = await frame.evaluate(() => document.querySelector('p')?.textContent ?? '');
+  const text = await para.textContent() ?? '';
   check(text.includes('PASTED_TEXT_OK'), `a real text paste lands in the paragraph (got ${JSON.stringify(text)})`);
   check(text.includes('START'), 'and it did not replace what was already there');
 
@@ -397,6 +398,7 @@ const browser = await chromium.launch();
   const original = imgTag(await stored());
   await openEditor(page, { id: doc.id, token: st.token });
   const frame = await documentFrame(page);
+  await frame.evaluate(() => { window.__gateRootBeforeDrop = document.querySelector('[data-mx-inline-story]'); });
 
   // 7a. drop onto the image
   const marked = await frame.evaluate((b64) => {
@@ -412,6 +414,9 @@ const browser = await chromium.launch();
   check(marked === 'Drop to replace', `dragging a file over an image says it will replace it (${marked})`);
   const dropped = await waitReplaced(srcOf(original));
   const afterDrop = await stored();
+  await page.waitForTimeout(1000);
+  check(await frame.evaluate(() => window.__gateRootBeforeDrop === document.querySelector('[data-mx-inline-story]')),
+    'the editor stays mounted after the image save');
   check(srcOf(dropped) !== srcOf(original) && /^ref:/.test(srcOf(dropped) ?? ''), `a drop onto the image changes its src (${srcOf(original)} → ${srcOf(dropped)})`);
   check(idOf(dropped) && idOf(dropped) === idOf(original), 'and it is the same node: the id is kept');
   check(dropped.includes('alt="the original"') && dropped.includes('w-40 rounded-xl'), 'with its alt text and classes');
@@ -426,8 +431,9 @@ const browser = await chromium.launch();
     const blob = await new Promise((res) => canvas.toBlob(res, 'image/png'));
     await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
   });
-  await (await frame.$('[data-mx-inline-story] img[alt="the original"]')).click();
-  await page.waitForTimeout(400);
+  const selectedImage = frame.locator('[data-mx-inline-story] img[alt="the original"]');
+  await selectedImage.click();
+  await frame.waitForFunction(() => document.querySelector('[data-mx-inline-story] img[alt="the original"]')?.getAttribute('data-mx-selected') === 'block');
   await page.keyboard.press(PASTE);
   const pasted = await waitReplaced(srcOf(dropped));
   const afterPaste = await stored();

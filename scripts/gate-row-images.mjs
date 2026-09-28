@@ -4,6 +4,7 @@ import sharp from 'sharp';
 import {fixtureFetch as fetch} from './lib/fixture-http.mjs';
 import {startDocument,becomeOwner} from './lib/start-doc.mjs';
 import {artifactDocument} from './lib/artifact-document.mjs';
+import { compiledReader } from './lib/gate-reader.mjs';
 import {createChecker} from './lib/assert.mjs';
 
 const base=process.argv[2]??'http://localhost:3030';
@@ -64,8 +65,8 @@ try {
  await page.waitForFunction(()=>[...document.querySelectorAll('#root [aria-label="Gallery"] img')].every(i=>i.naturalWidth>0),null,{timeout:15000});
  check(!requests.some(url=>url.includes('$_row')||url.includes('%24_row')),'no literal row-binding URL requested');
  check(!errors.some(e=>/50000|hydration|#418/.test(e)),'no expansion or hydration errors');
- const guest=await browser.newPage();await guest.goto(`${base}/a/${doc.id}`);await artifactDocument(guest);
- await guest.waitForFunction(()=>[...document.querySelectorAll('#root [aria-label="Gallery"] img')].length===2&&[...document.querySelectorAll('#root [aria-label="Gallery"] img')].every(i=>i.naturalWidth>0));
+ const guest=await browser.newPage();await guest.goto(`${base}/a/${doc.id}`);if(!compiledReader)await artifactDocument(guest);
+ await guest.waitForFunction(()=>{const images=[...document.querySelector('[aria-label="Gallery"]')?.querySelectorAll('img')??[]];return images.length===2&&images.every(i=>i.naturalWidth>0);});
  check(true,'signed-out reader decodes both permitted images');await guest.close();
 
  // Captures use the standalone opaque-origin document, without a parent asset relay.
@@ -94,12 +95,12 @@ try {
  const lazy=await create({markup:`<Helmet><Import name="covers_data" src="ref:${lazyData.id}" /><Query name="covers">{\`select * from covers_data.rows\`}</Query></Helmet><For each={$covers} keyBy="id"><article className="h-96"><img src="$_row.cover_ref" alt="$_row.title" loading="lazy" width={180} height={240}/></article></For>`});
  const probe=await browser.newPage({viewport:{width:1000,height:700}});const fetched=new Set();let metadata=0;
  probe.on('request',r=>{const u=new URL(r.url());if(r.resourceType()==='image'&&/^\/a\/[^/]+\/raw$/.test(u.pathname))fetched.add(u.pathname);if(u.pathname.endsWith('/assets')&&r.resourceType()!=='image')metadata++;});
- await probe.goto(`${base}/a/${lazy.id}`);await artifactDocument(probe);
- await probe.waitForFunction(()=>document.querySelector('#root article img')?.naturalWidth>0);
+ await probe.goto(`${base}/a/${lazy.id}`);if(!compiledReader)await artifactDocument(probe);
+ await probe.waitForFunction(()=>document.querySelector('article img')?.naturalWidth>0);
  await probe.waitForTimeout(500);
  const initial=fetched.size;check(initial>0&&initial<distinct.length,`lazy gallery initially downloads ${initial}/${distinct.length} image assets (${metadata} metadata requests)`);
- await probe.locator('#root article').last().scrollIntoViewIfNeeded();
- await probe.waitForFunction(()=>[...document.querySelectorAll('#root article img')].at(-1)?.naturalWidth>0);
+ await probe.locator('article').last().scrollIntoViewIfNeeded();
+ await probe.waitForFunction(()=>[...document.querySelectorAll('article img')].at(-1)?.naturalWidth>0);
  check(fetched.size>initial,'scrolling downloads additional image bytes');
  await probe.close();await page.close();
 }finally{await browser.close();}
