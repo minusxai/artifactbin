@@ -11,7 +11,7 @@
  * relay, the editor's authenticated path — so they cannot drift. The builder
  * is browser-safe; the parser answers the server's 400s.
  */
-import type { ColumnType } from '@artifactbin/contracts';
+import type { ColumnType, MutationNotificationBindings } from '@artifactbin/contracts';
 import { platformValues, rowField, type PlatformInputs } from './builtins';
 import type { CompiledDataflow, CompiledMutation } from './compiled-dataflow';
 import { bindParams, bindTypes, initialValues, mutationParams } from './compiled-flow';
@@ -19,6 +19,7 @@ import { DECL_NAME_RE, scalarMatches, type Row, type Scalar } from './dataflow';
 import { parseLocalTables } from './local-tables';
 
 export interface MutationRequest {
+  operationKey?: string;
   mutation: string;
   /** The mutation's arguments, by name. */
   args: Record<string, Scalar>;
@@ -66,14 +67,15 @@ function scalars(value: unknown, what: string, error: string): Record<string, Sc
 }
 
 export function parseMutationRequest(body: Record<string, unknown>): MutationRequest | Response {
-  const allowed = ['mutation', 'args', 'row', 'value', 'tz', 'localTables'];
+  const allowed = ['mutation', 'args', 'row', 'value', 'tz', 'localTables', 'operationKey'];
   const unknown = Object.keys(body).filter((key) => !allowed.includes(key));
   if (unknown.length) return refuse('unknown_mutation_fields', [`Unknown fields: ${unknown.join(', ')}. A write is {"mutation": "<name>", "args": {…}, "row"?: {…}, "value"?: …}; it never carries SQL.`]);
+  if(body.operationKey!==undefined&&(typeof body.operationKey!=='string'||!/^[A-Za-z0-9_-]{16,128}$/.test(body.operationKey)))return refuse('invalid_idempotency_key', ['operationKey must be 16–128 letters, digits, underscores or hyphens']);
   const name = body.mutation;
   if (typeof name !== 'string' || !DECL_NAME_RE.test(name)) return refuse('invalid_mutation', ['mutation must be the name of a <Mutation> the document declares']);
   const args = body.args === undefined ? {} : scalars(body.args, 'argument', 'invalid_args');
   if (args instanceof Response) return args;
-  const out: MutationRequest = { mutation: name, args };
+  const out: MutationRequest = { mutation: name, args, ...(body.operationKey?{operationKey:body.operationKey as string}:{}) };
   if (body.row !== undefined) {
     const row = scalars(body.row, 'row field', 'invalid_row');
     if (row instanceof Response) return row;
@@ -95,7 +97,7 @@ export function parseMutationRequest(body: Record<string, unknown>): MutationReq
 }
 
 export type MutationBinding =
-  | { ok: true; params: Record<string, Scalar>; paramTypes: Record<string, ColumnType> }
+  | { ok: true; params: Record<string, Scalar>; paramTypes: Record<string, ColumnType>; bindings: MutationNotificationBindings }
   | { ok: false; reason: 'invalid_sql' | 'invalid_row'; detail: string };
 
 /**
@@ -157,5 +159,5 @@ export function bindMutationRequest(flow: CompiledDataflow, m: CompiledMutation,
   } else if (request.value !== undefined) return badRow('this mutation does not accept a value');
   Object.assign(logical, platformValues(platform));
   const names = mutationParams(m);
-  return { ok: true, params: bindParams(names, logical), paramTypes: bindTypes(names, types) };
+  return { ok: true, params: bindParams(names, logical), paramTypes: bindTypes(names, types), bindings:{values:logical,types:{...Object.fromEntries(Object.entries(types).filter((entry):entry is [string,ColumnType]=>entry[1]!==null)), '_me.id':'user',_now:'timestamp',_tz:'string'},...platform} };
 }
