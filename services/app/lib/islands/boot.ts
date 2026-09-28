@@ -31,7 +31,7 @@ import type { Component } from 'solid-js';
 import type { CompiledDataflow } from '@/lib/story/compiled-dataflow';
 import type { PageEngine } from '@/lib/story-runtime/page-engine';
 import { createDataflowStore } from '@/lib/story-runtime/store';
-import { createDocumentTransport } from '@/lib/story-runtime/document-transport';
+import { createIslandDocumentTransport } from './document-transport';
 import { STORY_DATA_HOOK } from '@/lib/story-runtime/contract';
 import { ISLAND_DATA_ID, READER_READY_ATTR } from '@/lib/compiled-page/contract';
 import { ISLAND_DOCUMENT_KEY, ISLANDS_READY_EVENT, type IslandDocument, type IslandDocumentMode, type IslandEvent, type IslandHost, type IslandPageData, type IslandViewer } from './contract';
@@ -148,7 +148,7 @@ export function boot(input: IslandModule | readonly IslandEntry[], win: Window =
 
   // A signed-in reader's queries and writes are theirs: the transport carries the session to the
   // doors that read it. A guest page keeps the anonymous GET door (lib/story-runtime/fetch-transport).
-  const transport = flow ? createDocumentTransport(win, data.queryUrl, appOrigin(), undefined, data.mutateUrl, { session: data.signedIn }) : null;
+  const transport = flow ? createIslandDocumentTransport(win, data.queryUrl, appOrigin(), data.mutateUrl, data.signedIn) : null;
   /*
    * The page's own engine, when this page may hold data and its door can fetch it (the relay cannot):
    * `$_me` is bound to the reader the door answers for — nobody on a guest page; on a signed-in page
