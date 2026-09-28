@@ -6,6 +6,7 @@ import {artifactState} from '@/lib/artifact-state';
 import {completeMutationReceipt,type MutationReceipt} from '@/lib/mutation-receipt';
 import {completeDocumentMutationReceipt} from '@/lib/mutation-operation';
 import {notificationJobStore} from '@/lib/notification-runtime';
+import {lockNotificationExecution} from '@/lib/notification-authority';
 import type {MutationNotificationJobInput} from '@artifactbin/contracts';
 import {throttlePublicMutation} from '@/lib/datasets/policy/usage';
 import {mutationPolicy,recheckMutation,canUseDataPolicy,policyReaderSql,type MutationDocument} from '@/lib/datasets/policy';
@@ -191,6 +192,8 @@ export async function mutateDataset(
     // the edit protocol), and wake every document reading this dataset.
     const v2=!!grantsOf(current);
     const commit=async(tx:Queryable)=>{
+     const notificationInput=guard.notificationJobs?.[0];
+     if(notificationInput)await lockNotificationExecution(tx,notificationInput);
      if(v2)await assertGrantCommit(tx,current,actor,guard.document);
      await validateUserWrites(tx,columns,out.userWrites??[],actor.userId);
      if(guard.expectedState){

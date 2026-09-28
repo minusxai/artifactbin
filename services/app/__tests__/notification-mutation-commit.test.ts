@@ -4,6 +4,7 @@ import {POST as create} from '@/app/api/artifacts/route';
 import {POST as mutate} from '@/app/api/artifacts/[id]/mutate/route';
 import {getArtifactById} from '@/lib/artifacts';
 import {getDb} from '@/lib/db';
+import {services,setServices} from '@/lib/services';
 import {mintToken} from '@/lib/tokens';
 import {notificationJobStore} from '@/lib/notification-runtime';
 import {evaluateNotificationQuery} from '@/lib/notification-query';
@@ -12,16 +13,16 @@ import {loadDatasetRows} from '@/lib/story/dataset-store';
 
 useAppHarness();
 
-async function fixture(){
+async function fixture(notificationSql=`select null as "to", 'Counter is ' || cast(n as integer) as message from tasks.rows`){
  const token=await mintToken('mxmx_test_notify_commit');
  const created=await create(request('/api/artifacts',{method:'POST',token:token.token,json:{dataset:[{n:0}],access:'readwrite'}}));
  expect(created.status).toBe(201);const dataset=await created.json();
  const declarations=`<Import name="tasks" src="ref:${dataset.id}" /><Mutation name="increment">{\`update tasks.rows set n=n+$amount\`}</Mutation>`;
- const docResponse=await create(request('/api/artifacts',{method:'POST',token:token.token,json:{markup:`<Helmet>${declarations}<Notify name="counter_status" on="increment">{\`select null as "to", 'Counter is ' || cast(n as integer) as message from tasks.rows\`}</Notify></Helmet><p>Counter</p>`}}));
+ const docResponse=await create(request('/api/artifacts',{method:'POST',token:token.token,json:{markup:`<Helmet>${declarations}<Notify name="counter_status" on="increment">{\`${notificationSql}\`}</Notify></Helmet><p>Counter</p>`}}));
  expect(docResponse.status,await docResponse.clone().text()).toBe(201);const doc=await docResponse.json();
  const db=await getDb();
  const send=(key:string)=>mutate(request(`/api/artifacts/${doc.id}/mutate`,{method:'POST',token:token.token,headers:{'Idempotency-Key':key},json:{name:'increment',args:{amount:1}}}),{params:Promise.resolve({id:doc.id})});
- return {db,dataset,doc,send};
+ return {db,dataset,doc,send,token};
 }
 
 it('commits a discoverable run and one durable rule job; request replay never increments twice',async()=>{
@@ -77,4 +78,34 @@ it('evaluates current data after commit and durably completes an empty-recipient
  const jobs=await db.query('SELECT status,plan FROM notification_jobs WHERE mutation_run_id=$1',[result.mutationRunId]);
  expect(jobs.rows).toEqual([{status:'completed',plan:expect.objectContaining({rows:[{recipientIds:[],message:'Counter is 2'}]})}]);
  expect((await db.query('SELECT id FROM mutation_notifications')).rows).toEqual([]);
+});
+
+it('keeps a successful write when output fails, then retries the original job against repaired current data',async()=>{
+ const {db,dataset,send}=await fixture(`select null as "to", case when n=1 then '' else 'Repaired' end as message from tasks.rows`);
+ const first=await send('mxmx_test_notification_repair');expect(first.status).toBe(200);const result=await first.json();
+ const store=await notificationJobStore();
+ const worker=createNotificationWorker({store,evaluator:{evaluate:evaluateNotificationQuery}});
+ await worker.drainOnce();
+ expect(await loadDatasetRows((await getArtifactById(dataset.id))!)).toEqual([{n:1}]);
+ const failed=(await db.query('SELECT id,status,error_code,input FROM notification_jobs WHERE mutation_run_id=$1',[result.mutationRunId])).rows[0]!;
+ expect(failed).toMatchObject({status:'failed',error_code:'notification_output_invalid'});
+ const repaired=await send('mxmx_test_notification_repair_current');expect(repaired.status).toBe(200);
+ expect(await store.retry(failed.input.initiator.principal,failed.id)).toBe(true);
+ while(await worker.drainOnce()) { /* Drain the two bounded pending jobs. */ }
+ const completed=(await db.query('SELECT status,plan,input FROM notification_jobs WHERE id=$1',[failed.id])).rows[0]!;
+ expect(completed.status).toBe('completed');
+ expect(completed.plan.rows).toEqual([{recipientIds:[],message:'Repaired'}]);
+ expect(completed.input).toEqual(failed.input);
+ expect(await loadDatasetRows((await getArtifactById(dataset.id))!)).toEqual([{n:2}]);
+});
+
+it('refuses the winning commit if the initiating credential was revoked during SQL execution',async()=>{
+ const {db,dataset,send,token}=await fixture();
+ const sql=services().sql;
+ setServices({sql:{...sql,async mutate(input){const result=await sql.mutate(input);await db.query('UPDATE tokens SET deleted_at=now() WHERE id=$1',[token.id]);return result;}}});
+ try {
+  try {await send('mxmx_test_notification_revoked_during_write');} catch { /* Revocation refuses the pending write. */ }
+  expect(await loadDatasetRows((await getArtifactById(dataset.id))!)).toEqual([{n:0}]);
+  expect((await db.query('SELECT id FROM notification_jobs')).rows).toEqual([]);
+ } finally {setServices({sql});}
 });

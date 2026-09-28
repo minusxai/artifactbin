@@ -60,6 +60,13 @@ export async function notificationExecutionFence(tx:Queryable,input:MutationNoti
  if(principal.actor.userId!==input.bindings.userId||document.row.format!=='markup'||!readable(document,principal))throw denied();
  return {principalRevision:principal.revision,documentRevision:document.revision,contextRevision:input.contextRevision};
 }
+/** Fence the initiating credential through the mutation commit, including revocation during SQL. */
+export async function lockNotificationExecution(tx:Queryable,input:MutationNotificationJobInput):Promise<void>{
+ const principal=input.initiator.principal;
+ if(principal.kind==='token')await tx.query('SELECT id FROM tokens WHERE id=$1 FOR SHARE',[principal.id]);
+ if(input.bindings.userId)await tx.query('SELECT id FROM users WHERE id=$1 FOR SHARE',[input.bindings.userId]);
+ await notificationExecutionFence(tx,input);
+}
 /** Author delegation matches saved-document reads; V2 grants always use the actual initiator. */
 export async function notificationExecutionSource(tx:Queryable,input:MutationNotificationJobInput,id:string):Promise<NotificationArtifactAuthority>{
  const principal=await notificationPrincipal(tx,input.initiator.principal),document=await notificationArtifactAuthority(tx,input.origin.documentId),source=await notificationArtifactAuthority(tx,id);
