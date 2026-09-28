@@ -187,7 +187,7 @@ export const ISLANDS_READY_EVENT = 'mx:ready';
  * ids and `data-mx-ast` paths verbatim, closed content rendered (hidden), never
  * omitted. The families, one module each under lib/islands/kit/:
  */
-export const KIT_FAMILIES = ['basic', 'tabs', 'accordion', 'dialog', 'disclosure', 'controls', 'data', 'files', 'people', 'mermaid'] as const;
+export const KIT_FAMILIES = ['basic', 'tabs', 'accordion', 'dialog', 'disclosure', 'controls', 'data', 'files', 'people', 'mermaid', 'embed', 'cells'] as const;
 export type KitFamily = (typeof KIT_FAMILIES)[number];
 
 /**
@@ -202,6 +202,12 @@ export interface IslandPageData {
   mutateUrl?: string;
   viewerUrl?: string;
   assetsUrl?: string;
+  /**
+   * The managed `<Iframe>`'s asset door (lib/story-runtime/managed-assets ManagedAssetsConfig): the
+   * deployment's asset origin and this page's absolute import door (with a capture's verified export key),
+   * exactly as today's island carries it. Absent without an asset origin; a frame then refuses external assets.
+   */
+  managedAssets?: { origin: string; resolveUrl: string };
   /**
    * The request holds a credential for this document (session or held connection): the page's doors
    * carry it, and viewer-dependent islands show a neutral placeholder rather than guest content until
