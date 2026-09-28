@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import yaml from 'yaml';
 import { describe, expect, it } from 'vitest';
-import { documentViewsMarkdown, median, summarizeDocumentViews, waitForStoredDiagrams } from '../lib/document-views.mjs';
+import { documentViewsMarkdown, median, summarizeDocumentViews, waitForStoredDiagrams, documentMeasurementMode } from '../lib/document-views.mjs';
 import { PAGE_SPEED_FIXTURES, publishPageSpeedFixtures } from '../fixtures/page-speed/index.mjs';
 import { loadsSummary, reportMarkdown } from '../performance-report.mjs';
 
@@ -26,16 +26,16 @@ describe('the page-speed workflow', () => {
     expect(ciText).not.toContain('performance-loads');
     expect(ciText).not.toContain('page-speed');
     for (const job of Object.values(ci.jobs)) expect(job.needs ?? []).not.toContain('lab');
-    expect(Object.keys(workflow.jobs)).toEqual(['lab']);
+    expect(Object.keys(workflow.jobs)).toEqual(['measure', 'report']);
   });
 
   it('only reads the repository and posts no PR comment', () => {
     expect(workflow.permissions).toEqual({ contents: 'read' });
-    expect(workflow.jobs.lab.permissions).toBeUndefined();
+    expect(workflow.jobs.measure.permissions).toBeUndefined();
     expect(workflowText).not.toMatch(/gh pr comment|pull-requests:\s*write|issues:\s*write|createComment/);
-    const steps = workflow.jobs.lab.steps.map(step => step.run ?? '').join('\n');
+    const steps = workflow.jobs.report.steps.map(step => step.run ?? '').join('\n');
     expect(steps).toContain('GITHUB_STEP_SUMMARY');
-    expect(workflow.jobs.lab.steps.some(step => String(step.uses).startsWith('actions/upload-artifact@'))).toBe(true);
+    expect(workflow.jobs.measure.steps.some(step => String(step.uses).startsWith('actions/upload-artifact@'))).toBe(true);
   });
 
   it('pins every action to a full commit SHA', () => {
@@ -44,10 +44,28 @@ describe('the page-speed workflow', () => {
     for (const ref of refs) expect(ref).toMatch(/@[0-9a-f]{40}$/);
   });
 
-  it('measures both builds with the head script', () => {
-    const runs = workflow.jobs.lab.steps.map(step => step.run ?? '');
-    expect(runs).toContain('node scripts/performance-loads.mjs .perf-base page-speed/base.json');
-    expect(runs).toContain('node scripts/performance-loads.mjs . page-speed/head.json');
+  it('measures base and head in parallel, then reports their artifacts', () => {
+    expect(workflow.jobs.measure.strategy.matrix.revision).toEqual(['base', 'head']);
+    const runs = workflow.jobs.measure.steps.map(step => step.run ?? '').join('\n');
+    expect(runs).toContain('node scripts/performance-loads.mjs');
+    expect(runs).toContain('--size-only');
+    expect(workflow.jobs.report.needs).toEqual(['measure']);
+    expect(workflow.jobs.report.steps.some(step => String(step.uses).startsWith('actions/download-artifact@'))).toBe(true);
+    expect(workflow.jobs.report.steps.map(step => step.run ?? '').join('\n')).toContain('node scripts/size-targets.mjs page-speed/head.json --markdown');
+  });
+
+  it('keeps full timing measurements on a manual run, while PRs use size only', () => {
+    expect(workflow.on.workflow_dispatch).toBeDefined();
+    const runs = workflow.jobs.measure.steps.map(step => step.run ?? '').join('\n');
+    expect(workflow.jobs.measure.steps.find(step => step.name === 'Measure selected revision').env.EVENT).toContain('github.event_name');
+    expect(runs).toContain('if [ "$EVENT" = workflow_dispatch ]');
+  });
+});
+
+describe('size-only document measurements', () => {
+  it('uses one unthrottled pass per fixture and route', () => {
+    expect(documentMeasurementMode(true)).toEqual({ runs: 1, throttle: null, sizeOnly: true });
+    expect(documentMeasurementMode(false)).toEqual({ runs: 5, throttle: { latencyMs: 80, downloadMbps: 10, uploadMbps: 5, cpuSlowdown: 4 }, sizeOnly: false });
   });
 });
 
@@ -132,5 +150,13 @@ describe('the lab report', () => {
     expect(text).toContain('`bbbbbbbbbbbb` → head `aaaaaaaaaaaa`');
     expect(text).toContain('| deck | view |');
     expect(text).toContain('| home | cold | 1000 (±0) | 50 (±0) | 2.0 (±0.0) |');
+  });
+
+  it('labels a one-pass size report and omits app-load timing', () => {
+    const documents = { conditions: { mode: 'size-only', runs: 1 }, summary: summarizeDocumentViews([sample('prose', 'view')]) };
+    const text = reportMarkdown({ revision: 'a'.repeat(40), documents }, { revision: 'b'.repeat(40), documents });
+    expect(text).toContain('one unthrottled pass');
+    expect(text).toContain('JS before ready gz KB');
+    expect(text).not.toContain('### App loads');
   });
 });
