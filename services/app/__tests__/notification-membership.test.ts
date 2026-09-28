@@ -1,0 +1,13 @@
+import {expect,it} from 'vitest';
+import {useAppHarness} from './harness';
+import {getDb} from '@/lib/db';
+import {hasExplicitNotificationMembership} from '@/lib/notification-membership';
+useAppHarness();
+it('does not treat an automatically accepted invitation as explicit artifact consent',async()=>{
+ const db=await getDb();
+ await db.query("INSERT INTO relations(subject_kind,subject_id,verb,object_kind,object_id,status,direction,initiated_by,accepted_at) VALUES('user','recipient','join','artifact','document','accepted','invitation','sender',now())");
+ expect(await hasExplicitNotificationMembership(db,'document','recipient')).toBe(false);
+});
+it('read access without a joined relation never qualifies',async()=>{
+ expect(await hasExplicitNotificationMembership(await getDb(),'publicdoc','recipient')).toBe(false);
+});

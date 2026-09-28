@@ -35,3 +35,5 @@ export * from './membership';
 export * from './document-operation';
 
 export * from './document-update';
+
+export * from './mutation-notifications';
