@@ -73,8 +73,10 @@ export function App(): JSX.Element {
       <Route path="/notifications" component={NotificationsPage} />
       <Route path="/account" component={AccountPage} />
       <Route path="/docs-human" component={DocsPage} />
-      <Route path="/:user/:alias" component={DocumentPage} />
       <Route path="/:user" component={ProfilePage} />
+      {/* Every pretty alias — a document, a folder, a dataset's /edit — is ONE route (solid/pages/Profile.tsx
+        * ProfileAliasRoute); a sibling `/:user/:alias` route here would overlap it and win first for
+        * every one-segment alias regardless of what it actually names. */}
       <Route path="/:user/*rest" component={ProfileAliasRoute} />
       <Route path="*404" component={NotFoundPage} />
     </Router>

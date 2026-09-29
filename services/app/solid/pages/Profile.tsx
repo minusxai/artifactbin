@@ -9,14 +9,17 @@ import { refusedForSignIn } from '@/lib/story/sign-in-required';
 import { loginHref } from '../shared/login-href';
 import { pageDataChanged } from '@/web/page-data-events';
 import { takeBootstrap } from '@/web/bootstrap';
+import { initialDocumentStory } from '@/web/initial-story';
 import { Avatar } from '../components/Avatar';
 import { usePageData } from '../web/use-page-data';
 import { NotFoundPage } from './NotFound';
 
 // Lazy, like every other route chunk (solid/App.tsx): a profile visit should not download the
-// folder listing or the (large) dataset editor until an alias actually resolves to one.
+// folder listing, the (large) dataset editor, or the compiled-document reader until an alias
+// actually resolves to one.
 const FolderRoute = lazy(() => import('./Folder').then((m) => ({ default: m.FolderRoute })));
 const DatasetEditorPage = lazy(() => import('./DatasetEditor').then((m) => ({ default: m.DatasetEditorPage })));
+const DocumentPage = lazy(() => import('./Document').then((m) => ({ default: m.DocumentPage })));
 
 interface ProfileAnswer {
   kind: 'public-profile' | 'redirect' | 'artifact';
@@ -53,14 +56,19 @@ export function ProfilePage(): JSX.Element {
 }
 
 /**
- * `/:user/*` — a pretty artifact alias, e.g. `/@user/<id>-slug[/edit]` (also reached by address
- * healing: server/app documentPreparation renders a `/a/<id>[/edit]` request at this address once
- * its owner has a username). Resolution is id-anchored, same grammar as web/pages/Profile.tsx's React
- * twin (lib/urls parsePrettyPath) — the difference is what Solid does once it has the id: a folder
- * renders here; anything else (a non-edit surface, e.g. markup or a dataset's read view) crosses to
- * the React reader via FolderRoute's own `replaceDocument` fallback. "Nesting is not in the address"
- * (see the profile API's own doc comment): a rest path that fails to parse as an id is a uniform 404,
- * never a listing — there is no profile sub-page below the handle.
+ * `/:user/*` — every pretty artifact alias, e.g. `/@user/<id>-slug[/edit]` (also reached by address
+ * healing: server/app documentPreparation renders a `/a/<id>[/edit]` request at this address once its
+ * owner has a username). The ONE route for this shape — a sibling route keyed on a single named
+ * segment would overlap it and, being listed first, win the match for every one-segment alias
+ * (folders included), same as `/a/:id` does with `ArtifactRoute` in solid/App.tsx.
+ *
+ * Resolution is id-anchored, same grammar as web/pages/Profile.tsx's React twin (lib/urls
+ * parsePrettyPath) — the difference is what Solid does once it has the id: `initialDocumentStory()`
+ * (the same discriminator `ArtifactRoute` uses for `/a/:id`) says whether THIS load served a compiled
+ * document, so a folder renders here directly and a document defers to the compiled reader
+ * (`DocumentPage`) instead of guessing from the URL shape alone. "Nesting is not in the address" (see
+ * the profile API's own doc comment): a rest path that fails to parse as an id is a uniform 404, never
+ * a listing — there is no profile sub-page below the handle.
  */
 export function ProfileAliasRoute(): JSX.Element {
   const params = useParams<{ user: string; rest?: string }>();
@@ -71,7 +79,9 @@ export function ProfileAliasRoute(): JSX.Element {
   const id = createMemo(() => parsePrettyPath(artifactViewPath(params.rest ?? '').split('/').filter(Boolean))?.id ?? null);
   return <Show when={!bare()} fallback={<ProfilePage />}>
     <Show when={id()} fallback={<NotFoundPage />}>
-      {resolvedId => <Show when={editing()} fallback={<FolderRoute id={resolvedId()} />}><DatasetEditorPage artifactId={resolvedId()} /></Show>}
+      {resolvedId => <Show when={editing()} fallback={
+        <Show when={initialDocumentStory()} fallback={<FolderRoute id={resolvedId()} />}><DocumentPage /></Show>
+      }><DatasetEditorPage artifactId={resolvedId()} /></Show>}
     </Show>
   </Show>;
 }
