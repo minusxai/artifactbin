@@ -19,6 +19,8 @@ const visibleHtml = (html: string): string => {
   root.querySelectorAll('[data-mx-theme-host]').forEach(node => node.parentElement?.remove());
   root.querySelectorAll('pre').forEach(node => { if (node.firstChild?.nodeType === 3) node.firstChild.textContent = node.firstChild.textContent?.replace(/^\n+/, '') ?? ''; });
   root.querySelectorAll('[data-hk]').forEach(node => node.removeAttribute('data-hk'));
+  // The delegated dialog close marker is internal; it does not change visible reader output.
+  root.querySelectorAll('[data-mx-dialog-close]').forEach(node => node.removeAttribute('data-mx-dialog-close'));
   for (const node of root.querySelectorAll<HTMLElement>('[id],[aria-controls],[aria-labelledby],[aria-describedby]')) {
     for (const name of ['id', 'aria-controls', 'aria-labelledby', 'aria-describedby']) {
       const value = node.getAttribute(name);

@@ -59,7 +59,13 @@ export const assembleReaderPage: AssembleReaderPage = (input: AssembleInput): As
   const help = input.head?.help ?? null;
   const module = compiled.module;
 
-  const { story: storySource, moduleData, literals } = splitModuleData(input.story);
+  const rendered = splitModuleData(input.story);
+  // Request-specific SSR replaces visible HTML, while immutable browser carriers still belong
+  // to the compiled module and may exist only in its stored first render.
+  const compiledData = input.story === compiled.html ? rendered : splitModuleData(compiled.html);
+  const { story: storySource } = rendered;
+  const moduleData = rendered.moduleData ?? compiledData.moduleData;
+  const literals = rendered.literals || compiledData.literals;
   const storyHtml = fillChartSlots(storySource, input.snapshot?.drawings ?? {});
   const withOutline = input.documentChrome !== false && compiled.outline?.length
     ? `<div class="${compiled.outlinePlan ? 'mx-reading mx-reading--plan' : 'mx-reading'}">${renderOutlineRail(compiled.outline)}${storyHtml}</div>`

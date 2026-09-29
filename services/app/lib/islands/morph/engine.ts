@@ -462,12 +462,19 @@ export async function hydrateDraftIslands(
   if (module.FLOW && running.store && JSON.stringify(module.FLOW) !== JSON.stringify(running.store.flow))
     running.store.replaceFlow({ flow: module.FLOW });
   for (const entry of module.ISLANDS) {
-    // Editing paints the server draft and retains stable component DOM. Hydrating the whole
-    // browser tree here would replace static runs with its empty NoHydration placeholders.
-    if (entry[0] === 'd-' && running.mode?.() === 'edit') continue;
     const element = unitsOf(root, [entry[0]]).get(entry[0])?.[0];
     if (!element || (entry[0] !== 'd-' && (stableIds.has(element.id) || stablePaths.has(element.getAttribute(AST_PATH_ATTR) ?? '')))) continue;
     seam.hydrate(entry);
+    if (entry[0] === 'd-' && running.mode?.() === 'edit') {
+      const draft = preview.querySelector<HTMLElement>(STORY_ROOT_SELECTOR);
+      if (!draft) continue;
+      // The browser tree owns only keyed runs. Restore the server's static runs after
+      // hydration while keeping every newly hydrated component at its authored path.
+      const live = draft.querySelectorAll<HTMLElement>(`[${AST_PATH_ATTR}][${HK}]`);
+      const ids = new Set([...stableIds, ...[...live].map((node) => node.id).filter(Boolean)]);
+      const paths = new Set([...stablePaths, ...[...live].map((node) => node.getAttribute(AST_PATH_ATTR)).filter((path): path is string => !!path)]);
+      morphDraftDom(root, draft, ids, paths);
+    }
   }
 }
 
