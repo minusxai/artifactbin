@@ -209,7 +209,7 @@ export interface AppServerOptions {
   /** Where the built SPA lives (dist/web). In dev, `index` is answered by Vite instead. */
   webDir?: string;
   /** Dev: how index.html is produced (Vite transforms it); prod: read from webDir. */
-  indexHtml?: (url: string, status?: 200 | 404) => Promise<string>;
+  indexHtml?: (url: string, status?: 200 | 404, artifactFormat?: string) => Promise<string>;
   /** Dev: Vite's connect middleware, mounted before everything else for its own assets. */
   devMiddleware?: (req: import('node:http').IncomingMessage, res: import('node:http').ServerResponse, next: () => void) => void;
   /** Dev only: the Vite socket port resolved by the server composition. */
@@ -290,7 +290,7 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
   const webDir = opts.webDir ?? path.resolve('dist/web');
   let indexCache: string | null = null;
   const index = async (url: string, status?: 200 | 404, artifactFormat?: string): Promise<string> => {
-    if (opts.indexHtml) return opts.indexHtml(url, status);
+    if (opts.indexHtml) return opts.indexHtml(url, status, artifactFormat);
     if (isSolidPage(new URL(url).pathname, status, artifactFormat)) return readFileSync(path.join(webDir, 'trash.html'), 'utf8');
     return (indexCache ??= readFileSync(path.join(webDir, 'index.html'), 'utf8'));
   };

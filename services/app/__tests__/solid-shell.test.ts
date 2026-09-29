@@ -11,7 +11,9 @@ const dirs: string[] = [];
 afterEach(() => { for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true }); });
 
 it('serves the Solid entry for ported routes, while React owns other URLs', async () => {
-  for (const route of ['/assets', '/datasets/new', '/files/new']) expect(isSolidPage(route)).toBe(true);
+  for (const route of ['/', '/assets', '/datasets/new', '/files/new']) expect(isSolidPage(route)).toBe(true);
+  expect(isSolidPage('/a/fold01', 200, 'folder')).toBe(true);
+  expect(isSolidPage('/a/doc01', 200, 'markup')).toBe(false);
   expect(isSolidPage('/a/data01/edit', 200, 'dataset')).toBe(true);
   expect(isSolidPage('/a/doc01/edit', 200, 'markup')).toBe(false);
   expect(isSolidPage('/@cee')).toBe(true);

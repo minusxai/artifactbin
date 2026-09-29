@@ -57,13 +57,13 @@ export function PageChrome(): JSX.Element {
     window.addEventListener('keydown', escape);
     onCleanup(() => window.removeEventListener('keydown', escape));
   });
-  const menuLink = (href: string, name: string) => <a href={href} rel={['/trash', '/login', '/start', '/welcome', '/notifications', '/account', '/docs-human'].includes(href) ? undefined : 'external'} aria-label={name} class={MENU_ITEM} onClick={close}>{name}</a>;
+  const menuLink = (href: string, name: string) => <a href={href} rel={['/', '/assets', '/trash', '/login', '/start', '/welcome', '/notifications', '/account', '/docs-human'].includes(href) ? undefined : 'external'} aria-label={name} class={MENU_ITEM} onClick={close}>{name}</a>;
   return <>
     <header aria-label="Page bar" class="sticky top-0 z-40 flex h-11 items-center gap-2 border-b border-edge bg-surface/85 px-3 backdrop-blur-md sm:gap-3">
-      <a href="/" rel="external" aria-label="Home" class="flex h-9 w-9 shrink-0 items-center justify-center rounded-[8px] no-underline transition-colors hover:bg-raised"><img src="/logo-128.png" alt="" style={{ width: `${CHROME_IDENTITY.logoSize}px`, height: `${CHROME_IDENTITY.logoSize}px` }} /></a>
-      <a href="/" rel="external" class="min-w-0 truncate font-mono text-[13px] font-medium text-fg no-underline hover:text-accent sm:hidden">artifactbin</a>
+      <a href="/" aria-label="Home" class="flex h-9 w-9 shrink-0 items-center justify-center rounded-[8px] no-underline transition-colors hover:bg-raised"><img src="/logo-128.png" alt="" style={{ width: `${CHROME_IDENTITY.logoSize}px`, height: `${CHROME_IDENTITY.logoSize}px` }} /></a>
+      <a href="/" class="min-w-0 truncate font-mono text-[13px] font-medium text-fg no-underline hover:text-accent sm:hidden">artifactbin</a>
       <nav aria-label="Current page" class="hidden min-w-0 items-center gap-2 font-mono text-fg sm:flex" style={{ 'font-size': `${CHROME_IDENTITY.fontSize}px`, 'font-weight': CHROME_IDENTITY.fontWeight }}>
-        <a href="/" rel="external" class={`shrink-0 no-underline hover:text-accent ${crumbs().length ? 'text-muted' : 'font-semibold text-fg'}`}>artifactbin</a>
+        <a href="/" class={`shrink-0 no-underline hover:text-accent ${crumbs().length ? 'text-muted' : 'font-semibold text-fg'}`}>artifactbin</a>
         <Show when={!crumbs().length}><span aria-hidden="true" class="text-faint">·</span><span class="truncate font-normal text-muted">Google Docs for agents</span></Show>
         <For each={crumbs()}>{crumb => <span class="flex min-w-0 items-center gap-2"><ChevronRight size={14} class="shrink-0 text-faint" aria-hidden="true" /><Show when={crumb.href} fallback={<span class="min-w-0 truncate font-semibold text-fg">{crumb.label}</span>}><a href={crumb.href} class="shrink-0 text-muted no-underline hover:text-accent">{crumb.label}</a></Show></span>}</For>
       </nav>

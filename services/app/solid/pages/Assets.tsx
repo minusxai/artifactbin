@@ -7,7 +7,9 @@ import FileUp from 'lucide-solid/icons/file-up';
 import ChevronLeft from 'lucide-solid/icons/chevron-left';
 import ChevronRight from 'lucide-solid/icons/chevron-right';
 import type { AssetSelection, WorkspaceAssets } from '@/lib/workspace-inventory';
+import type { ShelfRow } from '@/lib/shelf';
 import { MicroLabel, PANEL, FormatBadge, timeAgo } from '../components/ui';
+import { RowActions } from '../components/Shelf';
 import { usePageData } from '../web/use-page-data';
 import { useSession } from '../web/session';
 
@@ -26,6 +28,7 @@ export function AssetsPage(): JSX.Element {
   });
   const page = usePageData<WorkspaceAssets>(key, { enabled: () => Boolean(session()?.user) });
   const [previous, setPrevious] = createSignal<{ owner: string; data: WorkspaceAssets } | null>(null);
+  const [removed, setRemoved] = createSignal<string[]>([]);
   createEffect(() => { const data = page.data(); const owner = session()?.user?.id; if (data && owner) setPrevious({ owner, data }); });
   const data = () => page.data() ?? (previous()?.owner === session()?.user?.id ? previous()?.data ?? null : null);
   const selected = () => selection();
@@ -53,8 +56,8 @@ export function AssetsPage(): JSX.Element {
           <For each={data()?.visibilities ?? []}>{(visibility) => <button type="button" aria-label={`Filter ${visibility}`} aria-pressed={selected().visibilities.includes(visibility)} onClick={() => toggle('visibilities', visibility)} class="rounded-full border border-edge px-2 py-0.5 font-mono text-[10px] text-muted">{visibility}</button>}</For>
         </div>
         <Show when={(data()?.assets.length ?? 0) > 0 || selected().query || selected().formats.length || selected().visibilities.length} fallback={<p class="px-4 py-8 text-center font-mono text-xs text-faint">no assets yet</p>}>
-          <table class="w-full border-collapse text-left text-sm"><thead><tr><th class="px-4 py-2">title</th><th class="px-4 py-2">type</th><th class="px-4 py-2">updated</th></tr></thead><tbody>
-            <For each={data()?.assets ?? []}>{(asset) => <tr class="border-t border-edge"><td class="px-4 py-3"><a aria-label={`Open ${asset.title ?? 'Untitled'}`} href={asset.url} class="font-semibold text-fg hover:text-accent">{asset.title ?? 'Untitled'}</a></td><td class="px-4 py-3"><FormatBadge format={asset.format} /></td><td class="px-4 py-3 font-mono text-xs text-muted">{timeAgo(asset.updated_at)}</td></tr>}</For>
+          <table class="w-full border-collapse text-left text-sm"><thead><tr><th class="px-4 py-2">title</th><th class="px-4 py-2">type</th><th class="px-4 py-2">updated</th><th class="px-4 py-2" /></tr></thead><tbody>
+            <For each={(data()?.assets ?? []).filter(asset => !removed().includes(asset.id))}>{(asset) => <tr class="border-t border-edge"><td class="px-4 py-3"><a aria-label={`Open ${asset.title ?? 'Untitled'}`} href={asset.url} class="font-semibold text-fg hover:text-accent">{asset.title ?? 'Untitled'}</a></td><td class="px-4 py-3"><FormatBadge format={asset.format} /></td><td class="px-4 py-3 font-mono text-xs text-muted">{timeAgo(asset.updated_at)}</td><td class="px-4 py-3"><RowActions row={asset as ShelfRow} level="full" folders={(data()?.folders ?? []) as ShelfRow[]} childCount={0} showEdit={false} onRemoved={id => setRemoved(current => [...current, id])} onChanged={() => void page.refresh(true)} /></td></tr>}</For>
           </tbody></table>
           <Show when={pageCount() > 1}><div class="flex items-center justify-between border-t border-edge px-4 py-2"><span aria-label="Page range" class="font-mono text-[10px] text-faint">{pageIndex() * (data()?.perPage ?? 50) + 1}-{Math.min((pageIndex() + 1) * (data()?.perPage ?? 50), data()?.total ?? 0)} of {data()?.total}</span><span class="flex gap-2"><button type="button" aria-label="Previous page" disabled={pageIndex() === 0} onClick={() => setSelection((current) => ({ ...current, page: pageIndex() - 1 }))}><ChevronLeft size={14} /></button><button type="button" aria-label="Next page" disabled={pageIndex() + 1 >= pageCount()} onClick={() => setSelection((current) => ({ ...current, page: pageIndex() + 1 }))}><ChevronRight size={14} /></button></span></div></Show>
         </Show>

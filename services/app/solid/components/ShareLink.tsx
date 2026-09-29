@@ -9,8 +9,8 @@ interface SharingState {
   writtenBy?: Array<{ id: string; title: string | null; mutations: string[] }>;
 }
 /** Sharing edits stay on the scoped artifact endpoint; copied links contain no secret or query. */
-export default function ShareLink(props: { artifactId?: string; title?: string; format?: string; datasetKind?: DatasetCatalog['kind']; editable?: boolean; class?: string; url?: string }): JSX.Element {
-  const [open, setOpen] = createSignal(false);
+export default function ShareLink(props: { artifactId?: string; title?: string; format?: string; datasetKind?: DatasetCatalog['kind']; editable?: boolean; class?: string; url?: string; startOpen?: boolean; onClose?: () => void }): JSX.Element {
+  const [open, setOpen] = createSignal(Boolean(props.startOpen));
   const [state, setState] = createSignal<SharingState | null>(null);
   const [email, setEmail] = createSignal('');
   const [error, setError] = createSignal('');
@@ -32,10 +32,10 @@ export default function ShareLink(props: { artifactId?: string; title?: string; 
   const postgres = () => props.format === 'dataset' && (props.datasetKind === 'postgres' || state()?.datasetKind === 'postgres');
   const showWrites = () => props.format === 'dataset' && state() && !postgres() && state()?.policyVersion !== 2;
   return <>
-    <button type="button" aria-label="Share" class={props.class} onClick={() => canManage() ? setOpen(true) : copyLink()}>{copied() ? 'copied' : state() ? `share: ${state()!.visibility}` : 'Share'}</button>
+    <Show when={!props.startOpen}><button type="button" aria-label="Share" class={props.class} onClick={() => canManage() ? setOpen(true) : copyLink()}>{copied() ? 'copied' : state() ? `share: ${state()!.visibility}` : 'Share'}</button></Show>
     <Show when={open()}><div role="dialog" aria-modal="true" aria-label="Sharing" class="fixed inset-0 z-50 grid place-items-center bg-black/60 p-4">
       <div class="max-h-[90vh] w-full max-w-lg space-y-4 overflow-auto rounded-xl border border-edge bg-surface p-6 text-sm text-fg">
-        <div class="flex justify-between"><h2 class="text-lg font-semibold">Sharing {props.title}</h2><button type="button" aria-label="Close sharing" onClick={() => setOpen(false)}>Close</button></div>
+        <div class="flex justify-between"><h2 class="text-lg font-semibold">Sharing {props.title}</h2><button type="button" aria-label="Close sharing" onClick={() => { setOpen(false); props.onClose?.(); }}>Close</button></div>
         <button type="button" aria-label="Copy link" onClick={copyLink} class="w-full rounded border border-edge p-2">{copied() ? 'copied' : 'copy link'}</button>
         <div class="flex gap-1"><For each={(['public', 'unlisted', 'private'] as const).filter(value => value !== 'private' || state()?.canPrivate !== false)}>{visibility =>
           <button type="button" aria-label={`Make ${visibility}`} aria-pressed={state()?.visibility === visibility} disabled={!state()} onClick={() => void update({ visibility })} class="flex-1 rounded border border-edge p-2 aria-pressed:border-accent">{visibility}</button>
