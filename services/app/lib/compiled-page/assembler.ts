@@ -59,7 +59,13 @@ export const assembleReaderPage: AssembleReaderPage = (input: AssembleInput): As
   const help = input.head?.help ?? null;
   const module = compiled.module;
 
-  const { story: storySource, moduleData } = splitModuleData(input.story);
+  const rendered = splitModuleData(input.story);
+  // Request-specific SSR replaces visible HTML, while immutable browser carriers still belong
+  // to the compiled module and may exist only in its stored first render.
+  const compiledData = input.story === compiled.html ? rendered : splitModuleData(compiled.html);
+  const { story: storySource } = rendered;
+  const moduleData = rendered.moduleData ?? compiledData.moduleData;
+  const literals = rendered.literals || compiledData.literals;
   const storyHtml = fillChartSlots(storySource, input.snapshot?.drawings ?? {});
   const withOutline = input.documentChrome !== false && compiled.outline?.length
     ? `<div class="${compiled.outlinePlan ? 'mx-reading mx-reading--plan' : 'mx-reading'}">${renderOutlineRail(compiled.outline)}${storyHtml}</div>`
@@ -102,6 +108,7 @@ export const assembleReaderPage: AssembleReaderPage = (input: AssembleInput): As
 
   const body =
     story
+    + literals
     + (chrome ? renderReaderChrome(chrome) : '')
     // Page furniture after the story root, never inside it: the hydrated tree never sees it.
     + (input.footer?.html ?? '')
@@ -133,15 +140,23 @@ export const assembleReaderPage: AssembleReaderPage = (input: AssembleInput): As
 const unique = (urls: readonly string[]): string[] => [...new Set(urls)];
 
 /** The version's large constants travel with either stored HTML or snapshot SSR, then into the page's one JSON island. */
-function splitModuleData(story: string): { story: string; moduleData: unknown[] | null } {
+function splitModuleData(story: string): { story: string; moduleData: unknown[] | null; literals: string } {
   const open = '<script type="application/json" data-mx-module-data>';
   const start = story.lastIndexOf(open);
-  if (start < 0) return { story, moduleData: null };
-  const tail = story.slice(start + open.length);
-  if (!tail.endsWith('</script>')) return { story, moduleData: null };
-  const parsed: unknown = JSON.parse(tail.slice(0, -'</script>'.length));
-  if (!parsed || typeof parsed !== 'object' || !('moduleData' in parsed) || !Array.isArray(parsed.moduleData)) throw new Error('assembler: invalid module data');
-  return { story: story.slice(0, start), moduleData: parsed.moduleData };
+  let moduleData: unknown[] | null = null;
+  if (start >= 0) {
+    const tail = story.slice(start + open.length);
+    if (tail.endsWith('</script>')) {
+      const parsed: unknown = JSON.parse(tail.slice(0, -'</script>'.length));
+      if (!parsed || typeof parsed !== 'object' || !('moduleData' in parsed) || !Array.isArray(parsed.moduleData)) throw new Error('assembler: invalid module data');
+      moduleData = parsed.moduleData;
+      story = story.slice(0, start);
+    }
+  }
+  // Browser literals are immutable module data, never visible story text.
+  const carrier = /<script type="application\/json" data-mx-island-literals="[0-9a-f]{16}">[\s\S]*?<\/script>/g;
+  const literals = [...story.matchAll(carrier)].map((match) => match[0]).join('');
+  return { story: story.replace(carrier, ''), moduleData, literals };
 }
 
 /** The document's live identity on `<body>`, which the island runtime's boot opens the live stream from. */
