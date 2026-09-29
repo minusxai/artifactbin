@@ -157,6 +157,23 @@ describe('the instruction is consumed, and only it', () => {
 const mutationFlow: NonNullable<ArtifactSurfaceProps['dataflow']> = {flow:await compiledOf('<Import name="data" src="ref:data01" /><Mutation name="save">{`delete from data.rows`}</Mutation>',{data01:[{name:'id',type:'string'}]})};
 const localFlow=await compiledOf('<Value name="cart" type="table" value={[{"id":"a"}]} /><Mutation name="clear">{`delete from cart`}</Mutation>');
 describe('membership in the reader breadcrumb',()=>{
+ it('offers Join from the compiled page runtime and shows the pending request',async()=>{
+  let requested=false;
+  const state={members:[],pending:[],self:null,canManage:false,canInvite:false};
+  vi.stubGlobal('fetch',vi.fn(async(_url:string,options?:RequestInit)=>{
+   if(options?.method==='POST')requested=true;
+   return new Response(JSON.stringify(requested?{...state,self:{status:'pending',direction:'request',explicit_join:true}}:state));
+  }));
+  at('/a/story1',{accountSession:true,runtime:{
+   data:{nodes:[],refData:{},colorMode:'light',chrome:true,dataflow:mutationFlow},
+   base:{chrome:true,theme:null,faces:[],fonts:{slots:{},families:[]}},
+   authorScript:null,theme:null,title:'Tasks',
+  }},'commenter');
+  fireEvent.click(await screen.findByRole('button',{name:'Join artefact'}));
+  expect(await screen.findByRole('button',{name:'Pending — view request'})).toBeInTheDocument();
+  expect(fetch).toHaveBeenCalledWith('/api/my/artifacts/story1/members',expect.objectContaining({method:'POST',body:JSON.stringify({action:'join'})}));
+ });
+
  it('sends signed-out Join through login with the return intent',async()=>{
   at('/a/story1', {dataflow:mutationFlow,accountSession:false});
   fireEvent.click(screen.getByRole('button',{name:'Join artefact'}));
