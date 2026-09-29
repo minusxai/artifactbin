@@ -5,7 +5,7 @@ import { Route, Router } from '@solidjs/router';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 
 let mockRole = 'commenter';
-vi.mock('@/web/bootstrap', () => ({ takeBootstrap: () => ({ kind: 'account', role: mockRole, surface: { id: 'doc', title: 'A copy', format: 'markup', version: 3, author: { forkedFrom: { label: 'Source document', href: '/a/source' } } } }) }));
+vi.mock('@/web/bootstrap', () => ({ takeBootstrap: () => ({ kind: 'account', role: mockRole, surface: { id: 'doc12345', title: 'A copy', format: 'markup', version: 3, author: { forkedFrom: { label: 'Source document', href: '/a/source' } } } }) }));
 vi.mock('@/web/initial-story', () => ({ adoptInitialStory: () => null }));
 
 import { DocumentPage, readerProvenancePath } from '../pages/Document';
@@ -19,7 +19,7 @@ beforeEach(() => {
     return Response.json({});
   }));
 });
-afterEach(() => { cleanup(); document.body.replaceChildren(); window.history.replaceState(null, '', '/'); vi.unstubAllGlobals(); });
+afterEach(() => { cleanup(); document.body.replaceChildren(); window.history.replaceState(null, '', '/'); vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 
 function mount(path = '/a/doc') {
   window.history.replaceState(null, '', path);

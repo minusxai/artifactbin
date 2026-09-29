@@ -56,8 +56,11 @@ export function DocumentPage(): JSX.Element {
   const location = useLocation();
   const { session } = useSession();
   const page = takeBootstrap<DocumentAnswer>(location.pathname, 'artifact');
-  const idFromPath = /^\/a\/([^/]+)/.exec(location.pathname)?.[1] ?? null;
-  const id = page?.surface?.id ?? (idFromPath && ARTIFACT_ID_PATTERN.test(idFromPath) ? idFromPath : null);
+  // Both sources ultimately come back off DOM text (the embedded bootstrap script, or the URL the
+  // browser is showing), so every consumer downstream — including an <a href> — sees only a value
+  // that has passed the artifact id's own allowlisted shape.
+  const rawId = page?.surface?.id ?? /^\/a\/([^/]+)/.exec(location.pathname)?.[1] ?? null;
+  const id = rawId && ARTIFACT_ID_PATTERN.test(rawId) ? rawId : null;
   const role = () => page?.role ?? 'viewer';
   const archivedNow = () => !!page?.archived;
   const isOwner = () => canGovern(role()) && !archivedNow();
@@ -70,6 +73,8 @@ export function DocumentPage(): JSX.Element {
   const [panel, setPanel] = createSignal<'controls' | 'menu' | null>(null);
   const [fork, setFork] = createSignal(false);
   const [mode, setMode] = createSignal<'light' | 'dark'>('light');
+  /** Edit mode is still React's (the Solid editor runtime is not wired up yet): hand off to /a/<id>/edit. */
+  const goToEdit = () => window.location.assign(location.pathname.replace(/\/edit$/, '') + '/edit');
   let adoptedStory: HTMLElement | null = null;
   let host!: HTMLDivElement;
   const chooseMode = (next: 'light' | 'dark') => {
@@ -114,6 +119,7 @@ export function DocumentPage(): JSX.Element {
       } else if (name === 'fork') setFork(true);
       else if (name === 'share') void sharing.share();
       else if (name === 'notifications') window.location.assign('/notifications');
+      else if (name === 'edit' && editable()) goToEdit();
     };
     const click = (event: MouseEvent) => {
       const target = (event.target as Element).closest<HTMLElement>('[data-mx-reader-action],[data-mx-reader-trigger],[data-mx-mode-choice]');
@@ -164,7 +170,7 @@ export function DocumentPage(): JSX.Element {
           owner={isOwner()} canEdit={editable()} canAnnotate={annotatable()} accountSession={accountSession()}
           like={page?.like ?? { liked: false, count: 0 }} commentsOpen={railOpen()} onCommentsChange={setRailOpen}
           openAnnotations={openAnnotationCount()} forkedFrom={page?.surface?.author?.forkedFrom ?? null}
-          onEdit={() => window.location.assign(location.pathname.replace(/\/edit$/, '') + '/edit')}
+          onEdit={goToEdit}
           onDeleted={isOwner() ? () => window.location.assign('/') : undefined} />
       </section></Show>
       <Show when={panel() === 'menu'}><nav aria-label="Menu" class="mx-reader-panel mx-reader-panel--menu"><a class="mx-reader-brand" href="/"><img src="/logo-128.png" alt="" />artifactbin</a><a href="/">Artifacts</a><a href="/account">Account</a><a href="/docs-human">Human Docs</a></nav></Show>
