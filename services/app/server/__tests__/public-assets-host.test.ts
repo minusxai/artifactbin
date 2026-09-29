@@ -103,6 +103,7 @@ it('production composition bypasses identity only for manifest-listed files and 
  writeFileSync(path.join(dir, '.vite/manifest.json'), JSON.stringify({ main: { file: 'assets/app-test.js' } }));
  writeFileSync(path.join(dir, 'assets/app-test.js'), 'public build');
  writeFileSync(path.join(dir, 'index.html'), '<html><head></head><body><div id="root"></div></body></html>');
+ writeFileSync(path.join(dir, 'trash.html'), '<html><head></head><body><div id="root"></div><script src="/solid-entry.tsx"></script></body></html>');
  const token = await mintToken('build-admission-private');
  const row = await createArtifact(token.id, null, { title: 'private', description: null, visibility: 'private', format: 'markup', source: '<p>private content</p>', meta: {} });
  const secret = 'build-admission-transport-secret', app = createAppServer({ webDir: dir, actorSecret: secret });

@@ -14,18 +14,11 @@ export function routeLoading(url: Pick<URL, 'pathname' | 'search'>): { identity:
     const [user, ...rest] = path.slice(1).split('/');
     return { identity: path, code: [routePages.ProfilePage], key: `/api/page/profile/${encodeURIComponent(user)}${rest.length ? '/' + rest.join('/') : ''}` };
   }
-  const app: Record<string, { code: typeof routePages.AccountPage; key?: string }> = {
+  const app: Record<string, { code: typeof routePages.HomePage; key?: string }> = {
     '/': { code: routePages.HomePage, key: '/api/page/home?part=core' },
-    '/notifications': { code: routePages.NotificationsPage },
-    '/account': { code: routePages.AccountPage, key: '/api/page/account' },
     // Custom fallback/error loaders stay with their pages. Copying those here
     // would change retry semantics; code loading still overlaps their route.
     '/assets': { code: routePages.AssetsPage }, '/chat': { code: routePages.ChatPage },
-    '/login': { code: routePages.LoginPage },
-    '/start': { code: routePages.StartPage },
-    // Its data is /api/my/profile, which the page owns; only the code warms here.
-    '/welcome': { code: routePages.WelcomePage },
-    '/docs-human': { code: routePages.DocsPage },
   };
   const match = app[path] ?? (path.startsWith('/datasets/') ? { code: routePages.DatasetEditorPage } : null);
   return match ? { identity: path, ...match, code: [match.code] } : null;
