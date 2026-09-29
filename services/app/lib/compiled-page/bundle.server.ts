@@ -31,7 +31,7 @@ import * as solid from 'solid-js';
 import * as solidWeb from 'solid-js/web';
 import * as solidStore from 'solid-js/store';
 import { readFileSync } from 'node:fs';
-import { brotliCompressSync } from 'node:zlib';
+import { brotliCompressSync, constants as zlibConstants } from 'node:zlib';
 import path from 'node:path';
 import vm from 'node:vm';
 import { readerDataflow, type CompiledDataflow } from '@/lib/story/compiled-dataflow';
@@ -87,75 +87,6 @@ function escapeLiterals(): PluginObj {
       TemplateElement(p) { p.node.value = { ...p.node.value, raw: escapeRaw(p.node.value.raw) }; },
     },
   };
-}
-
-/** Move Solid's DOM factories into inert HTML. The module keeps only their content addresses. */
-async function externalizeDomTemplates(code: string): Promise<{ code: string; templates: Map<string, string> }> {
-  const templates = new Map<string, string>();
-  const out = await transformAsync(code, {
-    filename: 'document.js', babelrc: false, configFile: false, sourceType: 'module', compact: true, comments: false,
-    plugins: [({ types: t }: { types: typeof BabelTypes }): PluginObj => ({
-      visitor: {
-        Program(p) {
-          const names = new Set<string>();
-          for (const statement of p.node.body) {
-            if (!t.isImportDeclaration(statement)) continue;
-            for (const spec of statement.specifiers) {
-              if (t.isImportSpecifier(spec) && t.isIdentifier(spec.imported, { name: 'template' })) {
-                names.add(spec.local.name);
-                spec.imported = t.identifier('templateFromPage');
-              }
-            }
-          }
-          if (!names.size) return;
-          p.traverse({ CallExpression(call) {
-            if (!t.isIdentifier(call.node.callee) || !names.has(call.node.callee.name)) return;
-            const first = call.node.arguments[0];
-            const markup = t.isStringLiteral(first) ? first.value
-              : t.isTemplateLiteral(first) && first.expressions.length === 0 ? first.quasis[0]?.value.cooked : undefined;
-            if (markup === undefined || markup === null) throw new Error('compile: Solid template must be a literal');
-            const key = contentSha(markup);
-            templates.set(key, markup);
-            call.node.arguments[0] = t.stringLiteral(key);
-          } });
-        },
-      },
-    })],
-  });
-  if (!out?.code) throw new Error('compile: template extraction produced nothing');
-  return { code: out.code, templates };
-}
-
-/** Author-derived text and attributes are page data too; only import specifiers stay as JS literals. */
-async function externalizeLiterals(code: string): Promise<{ code: string; literals: string[]; key: string }> {
-  const literals: string[] = [];
-  const indexes = new Map<string, number>();
-  const out = await transformAsync(code, {
-    filename: 'document.js', babelrc: false, configFile: false, sourceType: 'module', compact: true, comments: false,
-    plugins: [({ types: t }: { types: typeof BabelTypes }): PluginObj => ({ visitor: {
-      StringLiteral(p) {
-        if (p.parentPath.isImportDeclaration() && p.key === 'source') return;
-        if (p.parentPath.isObjectProperty() && p.key === 'key' && !p.parentPath.node.computed) return;
-        if (p.parentPath.isMemberExpression() && p.key === 'property' && !p.parentPath.node.computed) return;
-        let index = indexes.get(p.node.value);
-        if (index === undefined) { index = literals.push(p.node.value) - 1; indexes.set(p.node.value, index); }
-        p.replaceWith(t.memberExpression(t.identifier('$mxL'), t.numericLiteral(index), true));
-        p.skip();
-      },
-      TemplateLiteral(p) {
-        if (p.node.expressions.length !== 0) return;
-        const value = p.node.quasis[0]?.value.cooked;
-        if (value === undefined || value === null) return;
-        let index = indexes.get(value);
-        if (index === undefined) { index = literals.push(value) - 1; indexes.set(value, index); }
-        p.replaceWith(t.memberExpression(t.identifier('$mxL'), t.numericLiteral(index), true));
-        p.skip();
-      },
-    } })],
-  });
-  if (!out?.code) throw new Error('compile: literal extraction produced nothing');
-  const key = contentSha(JSON.stringify(literals));
-  return { code: literals.length ? `const $mxL=JSON.parse(document.querySelector('script[data-mx-island-literals="${key}"]').textContent);\n${out.code}` : out.code, literals, key };
 }
 
 const literalsHtml = (key: string, literals: readonly string[]): string =>
@@ -520,7 +451,7 @@ export interface BuildOptions {
  * declared state. A version with no island has neither module — unless it must boot (`boot`), when it
  * has the browser module alone.
  */
-export async function buildDocumentModules(sources: GeneratedSources & { islandRefs: readonly unknown[]; statics?: readonly string[]; browserIslands?: string; moduleData?: readonly string[] }, options: BuildOptions): Promise<DocumentModules> {
+export async function buildDocumentModules(sources: GeneratedSources & { islandRefs: readonly unknown[]; statics?: readonly string[]; browserIslands?: string; moduleData?: readonly string[]; staticTexts?: Readonly<Record<string, string>> }, options: BuildOptions): Promise<DocumentModules> {
   const renderedSkeleton = spliceStatics(await renderSkeleton(sources.skeleton, options.imports), sources.statics ?? []);
   if (!sources.islandRefs.length && !options.boot) return { html: renderedSkeleton, module: null, ssr: null, templateBrBytes: null };
   const moduleData = [...(sources.moduleData ?? [])];
@@ -536,17 +467,17 @@ export async function buildDocumentModules(sources: GeneratedSources & { islandR
   const store = options.store ?? createModuleStore();
   const templateStore = options.templateStore ?? createTemplateResourceStore();
   if (!sources.islandRefs.length) {
-    const browser = await browserModuleCode(browserWithData, options.build, options.flow, flowIndex);
+    const browser = await browserModuleCode(browserWithData, options.build, options.flow, flowIndex, sources.staticTexts);
     const templateBrBytes = templateBytes(browser.templates);
     const url = browser.templates.size ? await templateStore.put(Object.fromEntries(browser.templates)) : null;
     return { html: renderedSkeleton + literalsHtml(browser.literalKey, browser.literals) + moduleDataTag, module: await store.put(new TextEncoder().encode(withTemplateResource(browser.code, url, options.build, templateBrBytes, !!options.flow)), browser.imports), ssr: null, templateBrBytes };
   }
   const ssrStore = options.ssrStore ?? createSsrModuleStore();
-  const browser = await browserModuleCode(browserWithData, options.build, options.flow, flowIndex);
+  const browser = await browserModuleCode(browserWithData, options.build, options.flow, flowIndex, sources.staticTexts);
   const templateBrBytes = templateBytes(browser.templates);
   const templateUrl = browser.templates.size ? await templateStore.put(Object.fromEntries(browser.templates)) : null;
   const skeletonHtml = renderedSkeleton + literalsHtml(browser.literalKey, browser.literals) + moduleDataTag;
-  const ssrCode = await ssrModuleCode(sources.islands, skeletonHtml, options.flow);
+  const ssrCode = await ssrModuleCode(sources.islands, skeletonHtml, options.flow, sources.staticTexts);
   const loaded = await ssrModuleOf(ssrCode, contentSha(ssrCode), options.imports);
   const html = loaded.render({ values: options.values, results: null, mermaidImages: {}, drawings: {} });
   const [module, ssr] = await Promise.all([
@@ -557,7 +488,7 @@ export async function buildDocumentModules(sources: GeneratedSources & { islandR
 }
 
 const templateBytes = (templates: Map<string, string>): number | null => templates.size
-  ? brotliCompressSync(JSON.stringify(Object.fromEntries(templates))).byteLength : null;
+  ? brotliCompressSync(JSON.stringify(Object.fromEntries(templates)), { params: { [zlibConstants.BROTLI_PARAM_QUALITY]: 4 } }).byteLength : null;
 
 /** The URL is build-owned data, inserted after author literal extraction. */
 function withTemplateResource(code: string, url: string | null, build: CompilerBuild, brBytes: number | null, hasFlow: boolean): string {
@@ -572,7 +503,7 @@ function withTemplateResource(code: string, url: string | null, build: CompilerB
 }
 
 /** The per-document browser module: DOM-compiled, imports bound to the shared chunks, compacted. `imports` is its static closure. */
-export async function browserModuleCode(islands: string, build: CompilerBuild, flow: CompiledDataflow | null = null, flowIndex?: number): Promise<{ code: string; imports: string[]; templates: Map<string, string>; literals: string[]; literalKey: string }> {
+export async function browserModuleCode(islands: string, build: CompilerBuild, flow: CompiledDataflow | null = null, flowIndex?: number, staticTexts: Readonly<Record<string, string>> = {}): Promise<{ code: string; imports: string[]; templates: Map<string, string>; literals: string[]; literalKey: string }> {
   const direct = new Set<string>();
   // `moduleName: '@mx/rt'`: Solid's DOM helpers come from the runtime's one import surface, never
   // from the whole `solid-js/web` chunk.
@@ -585,11 +516,87 @@ export async function browserModuleCode(islands: string, build: CompilerBuild, f
       return url;
     },
   });
-  const extracted = await externalizeDomTemplates(compiled);
-  const { code, literals, key } = await externalizeLiterals(extracted.code);
-  return { code, templates: extracted.templates, literals, literalKey: key, imports: closureOf(build, [...direct].sort()) };
+  const extracted = await externalizeDomCode(compiled);
+  for (const [key, markup] of extracted.templates) extracted.templates.set(key, restoreStaticText(markup, staticTexts));
+  return { code: extracted.code, templates: extracted.templates, literals: extracted.literals, literalKey: extracted.key, imports: closureOf(build, [...direct].sort()) };
+}
+
+/** Extract templates and author literals while Babel holds a single parsed AST. */
+async function externalizeDomCode(source: string): Promise<{ code: string; templates: Map<string, string>; literals: string[]; key: string }> {
+  const templates = new Map<string, string>();
+  const literals: string[] = [];
+  const indexes = new Map<string, number>();
+  const out = await transformAsync(source, {
+    filename: 'document.js', babelrc: false, configFile: false, sourceType: 'module', compact: true, comments: false,
+    plugins: [({ types: t }: { types: typeof BabelTypes }): PluginObj => ({ visitor: { Program(p) {
+      const names = new Set<string>();
+      for (const statement of p.node.body) {
+        if (!t.isImportDeclaration(statement)) continue;
+        for (const spec of statement.specifiers) if (t.isImportSpecifier(spec) && t.isIdentifier(spec.imported, { name: 'template' })) {
+          names.add(spec.local.name);
+          spec.imported = t.identifier('templateFromPage');
+        }
+      }
+      if (names.size) p.traverse({ CallExpression(call) {
+        if (!t.isIdentifier(call.node.callee) || !names.has(call.node.callee.name)) return;
+        const first = call.node.arguments[0];
+        const markup = t.isStringLiteral(first) ? first.value
+          : t.isTemplateLiteral(first) && first.expressions.length === 0 ? first.quasis[0]?.value.cooked : undefined;
+        if (markup === undefined || markup === null) throw new Error('compile: Solid template must be a literal');
+        const key = contentSha(markup);
+        templates.set(key, markup);
+        call.node.arguments[0] = t.stringLiteral(key);
+      } });
+      const indexOf = (value: string): number => {
+        let index = indexes.get(value);
+        if (index === undefined) { index = literals.push(value) - 1; indexes.set(value, index); }
+        return index;
+      };
+      p.traverse({
+        StringLiteral(value) {
+          if (value.parentPath.isImportDeclaration() && value.key === 'source') return;
+          if (value.parentPath.isObjectProperty() && value.key === 'key' && !value.parentPath.node.computed) return;
+          if (value.parentPath.isMemberExpression() && value.key === 'property' && !value.parentPath.node.computed) return;
+          value.replaceWith(t.memberExpression(t.identifier('$mxL'), t.numericLiteral(indexOf(value.node.value)), true));
+          value.skip();
+        },
+        TemplateLiteral(value) {
+          if (value.node.expressions.length !== 0) return;
+          const text = value.node.quasis[0]?.value.cooked;
+          if (text === undefined || text === null) return;
+          value.replaceWith(t.memberExpression(t.identifier('$mxL'), t.numericLiteral(indexOf(text)), true));
+          value.skip();
+        },
+      });
+    } } })],
+  });
+  if (!out?.code) throw new Error('compile: document extraction produced nothing');
+  const key = contentSha(JSON.stringify(literals));
+  return { code: literals.length ? `const $mxL=JSON.parse(document.querySelector('script[data-mx-island-literals="${key}"]').textContent);\n${out.code}` : out.code, templates, literals, key };
 }
 
 /** The per-document SSR module: the islands compiled for the server and `render(data)` over the skeleton's HTML. */
-export const ssrModuleCode = (islands: string, skeletonHtml: string, flow: CompiledDataflow | null): Promise<string> =>
-  transformSolid(ssrSource(islands, skeletonHtml, flow), { generate: 'ssr', hydratable: true });
+export const ssrModuleCode = async (islands: string, skeletonHtml: string, flow: CompiledDataflow | null, staticTexts: Readonly<Record<string, string>> = {}): Promise<string> => {
+  const code = await transformSolid(ssrSource(islands, skeletonHtml, flow), { generate: 'ssr', hydratable: true });
+  return restoreStaticText(code, staticTexts, true);
+};
+
+const htmlText = (value: string): string => value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+const jsStringText = (value: string): string => value
+  .replace(/\\/g, '\\\\')
+  .replace(/"/g, '\\"')
+  .replace(/'/g, "\\'")
+  .replace(/`/g, '\\`')
+  .replace(/\$\{/g, '\\${')
+  .replace(/[\u0000-\u001f\u007f]/g, (char) => `\\u${char.charCodeAt(0).toString(16).padStart(4, '0')}`)
+  .replace(/\u2028/g, '\\u2028')
+  .replace(/\u2029/g, '\\u2029');
+function restoreStaticText(value: string, texts: Readonly<Record<string, string>>, code = false): string {
+  if (!Object.keys(texts).length) return value;
+  return value.replace(/MXSTATIC[0-9a-f]{16}\d+END/g, (marker) => {
+    const raw = texts[marker];
+    if (raw === undefined) return marker;
+    const html = htmlText(raw);
+    return code ? jsStringText(html) : html;
+  });
+}
