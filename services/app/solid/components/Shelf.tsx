@@ -6,6 +6,9 @@ import Inbox from 'lucide-solid/icons/inbox';
 import GridIcon from 'lucide-solid/icons/layout-grid';
 import ListIcon from 'lucide-solid/icons/list';
 import Search from 'lucide-solid/icons/search';
+import Globe from 'lucide-solid/icons/globe';
+import Lock from 'lucide-solid/icons/lock';
+import EyeOff from 'lucide-solid/icons/eye-off';
 import Pencil from 'lucide-solid/icons/pencil';
 import FolderInput from 'lucide-solid/icons/folder-input';
 import Trash2 from 'lucide-solid/icons/trash-2';
@@ -126,7 +129,7 @@ export default function Shelf(props: Props): JSX.Element {
             <div class="folder-cover-tab"><span class="truncate font-mono text-[10px] tabular-nums">{childCount(row.id) ? `${childCount(row.id)} artifact${childCount(row.id) === 1 ? '' : 's'}` : 'empty folder'}</span></div>
             <div class="folder-cover-back" />
             <Show when={!papers().length}><div class="folder-cover-empty" aria-hidden="true"><Inbox size={28} /></div></Show>
-            <Show when={props.showVisibility !== false}><span class="folder-cover-visibility absolute left-2 top-[27px] z-[3]"><Visibility row={row} /></span></Show>
+            <Show when={props.showVisibility !== false && row.visibility}><span aria-label={`${nameOf(row)} is ${row.visibility}`} class="folder-cover-visibility absolute left-2 top-[27px] z-[3] rounded bg-slate-700/75 p-1 text-white"><Show when={row.visibility === 'public'} fallback={<Show when={row.visibility === 'private'} fallback={<EyeOff size={12} />}><Lock size={12} /></Show>}><Globe size={12} /></Show></span></Show>
             <div class="folder-cover-papers" style={{ '--paper-width': papers().length > 2 ? '48%' : '61%' }}><For each={papers()}>{(item, index) => <div class="folder-cover-paper" style={{ '--paper-position': index() / Math.max(1, papers().length - 1) }}><img src={`/a/${item.id}/export?format=jpg&mode=card&v=${item.version}&r=${CARD_RENDER_GENERATION}`} alt="" loading="lazy" /></div>}</For></div>
             <div class="folder-cover-front"><span class="min-w-0 flex-1 truncate pr-2 font-mono text-[13px] font-semibold">{nameOf(row)}</span><span class="relative z-[3] ml-auto"><RowActions row={row} level={props.actions ?? 'none'} folders={folders()} childCount={childCount(row.id)} onRemoved={remove} onChanged={() => setRevision(value => value + 1)} /></span></div>
           </div>
