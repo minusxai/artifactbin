@@ -24,6 +24,8 @@ export async function packCompiledBrowserModule(
     module?: Uint8Array;
     sharedDir?: string;
     template?: (sha: string) => Promise<Uint8Array | null>;
+    /** Swap the network reader boot for the snapshot-only file boot. */
+    offline?: { sqlite: boolean; chart: boolean };
   } = {},
 ): Promise<PackedCompiledModule | null> {
   if (!page.module) return null;
@@ -41,14 +43,28 @@ export async function packCompiledBrowserModule(
   const inlineSource = source.replace(TEMPLATE, 'null');
   const allowed = new Set(Object.values(page.sharedBuild?.manifest ?? {}));
   for (const url of page.module.imports) allowed.add(url);
+  const bootUrl = page.sharedBuild?.manifest['@mx/boot'];
+  const rtUrl = page.sharedBuild?.manifest['@mx/rt'];
   const sharedDir = options.sharedDir ?? path.join(process.cwd(), 'public', 'islands');
   const result = await esbuild.build({
     stdin: { contents: inlineSource, resolveDir: sharedDir, sourcefile: 'offline-compiled-entry.js', loader: 'js' },
     bundle: true, write: false, format: 'iife', platform: 'browser', target: 'es2022', minify: true,
+    alias: { '@': process.cwd() },
+    define: {
+      __AFBIN_OFFLINE_SQLITE__: String(options.offline?.sqlite ?? false),
+      __AFBIN_OFFLINE_CHART__: String(options.offline?.chart ?? false),
+      'process.env.NODE_ENV': '"production"',
+    },
     plugins: [{
       name: 'pinned-offline-islands',
       setup(build) {
         build.onResolve({ filter: /.*/ }, (args) => {
+          if (options.offline && args.path === '@/lib/islands/rt' && args.importer.endsWith('/compiled-boot.ts')) {
+            if (!rtUrl) throw new Error('offline: the compiled build has no runtime');
+            return { path: rtUrl, namespace: 'pinned-island' };
+          }
+          if (!args.path.startsWith('/islands/') && !args.path.startsWith('./')) return undefined;
+          if (args.namespace !== 'pinned-island' && !args.importer.endsWith('offline-compiled-entry.js')) return undefined;
           const absolute = args.path.startsWith('/islands/') ? args.path
             : args.path.startsWith('./') && args.importer.startsWith('/islands/')
               ? `/islands/${path.posix.basename(args.path)}` : null;
@@ -59,6 +75,9 @@ export async function packCompiledBrowserModule(
           // Relative imports are part of the pinned, content-addressed parent's
           // immutable graph. Admit their own relative imports by the same rule.
           allowed.add(absolute);
+          if (options.offline && absolute === bootUrl) {
+            return { path: path.join(process.cwd(), 'lib/offline/compiled-boot.ts') };
+          }
           return { path: absolute, namespace: 'pinned-island' };
         });
         build.onLoad({ filter: /.*/, namespace: 'pinned-island' }, async (args) => {

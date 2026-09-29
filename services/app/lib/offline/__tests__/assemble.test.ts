@@ -5,6 +5,7 @@
  * island names a server door.
  */
 import { describe, expect, it } from 'vitest';
+import { Script } from 'node:vm';
 import { useAppHarness, request } from '@/__tests__/harness';
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 import { PUT as replaceRoute } from '@/app/api/artifacts/[id]/route';
@@ -19,6 +20,7 @@ import { mintToken } from '@/lib/tokens';
 import { claimToken, createUser } from '@/lib/users';
 import type { TableResult } from '@/lib/story/dataflow';
 import { assembleArtifactFile } from '../assemble.server';
+import { packCompiledBrowserModule } from '../compiled-bundle.server';
 import { parseArtifactFile, type ArtifactFile } from '../file-format';
 
 useAppHarness();
@@ -134,6 +136,16 @@ describe('access', () => {
 });
 
 describe('the snapshot', () => {
+  it('packs the actual compiled dashboard module and its pinned shared chunks as a classic script', async () => {
+    const w = await world();
+    const file = await download(w.doc, w.owner.actor);
+    const packed = await packCompiledBrowserModule(file.compiled!, { offline: { sqlite: true, chart: false } });
+    expect(packed?.code.length).toBeGreaterThan(0);
+    expect(packed?.code).not.toMatch(/^\s*(?:import|export)\s/m);
+    expect(() => new Script(packed!.code)).not.toThrow();
+    // This fixture's Question is a table, not a Vega visualization.
+    expect(packed?.code.includes('Axes cannot be shared in concatenated')).toBe(false);
+  });
   it('carries the rows of every import the downloader may hold, so their queries run live and nothing is precomputed for them', async () => {
     const w = await world();
     const file = await download(w.doc, w.owner.actor);
