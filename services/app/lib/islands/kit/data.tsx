@@ -21,6 +21,7 @@ import type { createDataVirtualizer } from './data-virtualizer';
 import { useIsland } from '../context';
 import { deferEngine } from '../defer-engine';
 import { TrustedOverlay } from './trusted-overlay';
+import { popupDismiss } from './popup-dismiss';
 import { refName, type TableResult } from '@/lib/story/dataflow';
 import { aggregateNumber, type NumberAgg } from '@/lib/story/number-aggregation';
 import { numberFormatter } from '@/lib/story/number-format';
@@ -80,7 +81,7 @@ export function Select(p: SelectProps) {
     if (name) {
       const table = island.table(name);
       const [valueCol, labelCol] = table?.columns ?? [];
-      return table && valueCol ? table.rows.map(row => ({ value: String(row[valueCol.name] ?? ''), label: String(row[labelCol?.name ?? valueCol.name] ?? row[valueCol.name] ?? '') })) : [];
+      return table && valueCol ? table.rows.filter(row => row[valueCol.name] !== null && row[valueCol.name] !== undefined && row[valueCol.name] !== '').map(row => ({ value: String(row[valueCol.name]), label: String(row[labelCol?.name ?? valueCol.name] ?? row[valueCol.name]) })) : [];
     }
     return Array.isArray(p.options) ? p.options.map(option => typeof option === 'object' && option !== null ? { value: String(option.value ?? ''), label: String(option.label ?? option.value ?? '') } : { value: String(option), label: String(option) }) : [];
   });
@@ -88,14 +89,15 @@ export function Select(p: SelectProps) {
   const entries = () => [...(valueName() ? [{ value: null, label: p.placeholder ?? 'All' }] : []), ...options()];
   const filtered = () => entries().filter(o => o.label.toLowerCase().includes(query().toLowerCase()));
   const choose = (value: string | null) => { if (valueName()) island.setValue(valueName(),value,undefined); setOpen(false); setQuery(''); };
-  let root!: HTMLDivElement;
+  let root!: HTMLDivElement; let trigger!: HTMLButtonElement; let popup: HTMLDivElement | undefined;
+  const announce = popupDismiss(open, () => setOpen(false), () => trigger, () => popup);
   // No `data-mx-bound` stamp: that marks today's STATIC render of a bound control; the live SelectAdapter never writes it.
   return <div {...rootProps(p)} class={selectJoin(selectClass,p.className)}>
     <Show when={p.label}><span class="flex items-baseline gap-3 text-[11px] font-medium uppercase tracking-wider text-muted-foreground"><span>{p.label}</span></span></Show>
-    <div ref={root} class="relative min-w-0"><button type="button" aria-label={p.label} aria-haspopup="listbox" aria-expanded={open()} disabled={!active()} on:click={() => setOpen(!open())}
+    <div ref={root} class="relative min-w-0"><button ref={trigger} type="button" aria-label={p.label} aria-haspopup="listbox" aria-expanded={open()} disabled={!active()} on:click={() => { if (!open()) announce(); setOpen(!open()); }}
       class={SELECT_TRIGGER}>
       <span class={selectJoin('truncate',current() === null && 'text-muted-foreground')}>{label()}</span><CHEVRON /></button>
-      <TrustedOverlay open={open}><Show when={open()}><div class="rounded-md border border-border bg-popover text-popover-foreground shadow-md" style={{position:'fixed', 'z-index':50, left:`${root.getBoundingClientRect().left}px`, top:`${root.getBoundingClientRect().bottom + 4}px`, width:`${Math.max(root.getBoundingClientRect().width,200)}px`}}>
+      <TrustedOverlay open={open}><Show when={open()}><div ref={popup} data-theme={root.closest<HTMLElement>('[data-theme]')?.dataset.theme} class="rounded-md border border-border bg-popover text-popover-foreground shadow-md" style={{position:'fixed', 'z-index':50, left:`${root.getBoundingClientRect().left}px`, top:`${root.getBoundingClientRect().bottom + 4}px`, width:`${Math.max(root.getBoundingClientRect().width,200)}px`, '--popover': getComputedStyle(root).getPropertyValue('--popover'), '--popover-foreground': getComputedStyle(root).getPropertyValue('--popover-foreground'), '--border': getComputedStyle(root).getPropertyValue('--border')}}>
         <div class="border-b border-border p-1.5"><input type="text" role="searchbox" aria-label={p.label ? `Search ${p.label}` : 'Search options'} placeholder="Type to filter…" value={query()}
           on:input={e => { const q = e.currentTarget.value; setQuery(q); setHighlight(filtered().length ? 0 : -1); }}
           class="h-8 w-full min-w-36 rounded-sm border border-input bg-background px-2 text-sm text-foreground outline-none placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring/50" /></div>

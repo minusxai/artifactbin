@@ -45,6 +45,7 @@ describe('Solid shell', () => {
     window.history.replaceState(null, '', '/nowhere?x=1');
     render(() => <App />);
     expect(await screen.findByRole('main', { name: 'Not found' })).toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByRole('banner', { name: 'Page bar' })).not.toBeInTheDocument());
     expect(screen.getByLabelText('Back to artifacts')).toHaveAttribute('href', '/');
     await waitFor(() => expect(screen.getByLabelText('Sign in')).toHaveAttribute('href', `/login?callbackUrl=${encodeURIComponent('/nowhere?x=1')}`));
   });

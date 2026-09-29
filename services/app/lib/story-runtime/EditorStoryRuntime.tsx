@@ -255,11 +255,15 @@ function EditorStoryRuntimeView(props: EditorStoryRuntimeProps): ReactNode {
           // Every edit re-isolates the sheet here: have the policy in hand before the first keystroke.
           if (!loadedPolicy) void loadPolicy().then((module) => { if (!disposed) setPolicy(module); }).catch(() => {});
           // Editing is deliberately lazy: readers do not download the editor.
-          void import('./edit/session').then(({ createFrameEditSession }) => {
-            if (disposed || !editRequested || !root.current) return;
-            editRef.current = createFrameEditSession({ win: window, root: root.current, channel, requestRender: render });
-            render();
-          }).catch(error => { if (!disposed) console.error('Failed to load artifact editor', error); }).finally(() => { editLoading = false; });
+          // This tree still renders through React (StoryRuntimeApp), so it is the
+          // one caller that fills the session's React render seam (./edit/session-decorate).
+          void Promise.all([import('./edit/session'), import('./edit/session-decorate')]).then(
+            ([{ createFrameEditSession }, { createEditSessionDecorator }]) => {
+              if (disposed || !editRequested || !root.current) return;
+              editRef.current = createFrameEditSession({ win: window, root: root.current, channel, requestRender: render, decorateFactory: createEditSessionDecorator });
+              render();
+            },
+          ).catch(error => { if (!disposed) console.error('Failed to load artifact editor', error); }).finally(() => { editLoading = false; });
           return;
         }
         if (command.type === STORY_ANNOTATIONS_MESSAGE) {

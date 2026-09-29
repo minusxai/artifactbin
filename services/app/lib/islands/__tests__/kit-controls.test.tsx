@@ -74,6 +74,22 @@ describe('controls', () => {
     dispose();
   });
 
+  it('DatePicker closes on an outside pointer and Escape', () => {
+    const { host, dispose } = mount(fakeIsland({ when: '2026-09-28' }), () => <DatePicker label="When" value="$when" />);
+    document.body.append(host);
+    try {
+      const trigger = host.querySelector<HTMLButtonElement>('[aria-haspopup="dialog"]')!;
+      trigger.click();
+      expect(trigger.getAttribute('aria-expanded')).toBe('true');
+      document.body.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
+      expect(trigger.getAttribute('aria-expanded')).toBe('false');
+      expect(document.activeElement).toBe(trigger);
+      trigger.click();
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+      expect(trigger.getAttribute('aria-expanded')).toBe('false');
+    } finally { dispose(); host.remove(); }
+  });
+
   it('a $-bound native field reads and writes the value', () => {
     const island = fakeIsland({ region: 'West' });
     island.setValue = vi.fn();

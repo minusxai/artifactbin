@@ -13,6 +13,7 @@ import { parseJsx, type JsxNode } from '@/lib/jsx';
 import { renderStoryNodes } from '@/lib/story-ui/interpreter';
 import type { PristineChannel } from '@/lib/story-runtime/pristine';
 import { createFrameEditSession } from '@/lib/story-runtime/edit/session';
+import { createEditSessionDecorator } from '@/lib/story-runtime/edit/session-decorate';
 import { Video } from '@/components/kit/video';
 import type { ReactElement } from 'react';
 
@@ -61,7 +62,7 @@ const live: Array<{ dispose(): void }> = [];
 export function mount(src = SRC, requestRender = vi.fn(), options: { root?: boolean } = {}) {
   const nodes = nodesOf(src);
   const root = options.root ? document.body.appendChild(document.createElement('div')) : undefined;
-  const session = createFrameEditSession({ win: window, channel: env.channel, requestRender, root });
+  const session = createFrameEditSession({ win: window, channel: env.channel, requestRender, root, decorateFactory: createEditSessionDecorator });
   live.push(session);
   session.setNodes(nodes);
   const view = render(<>{renderStoryNodes(nodes, { components: COMPONENTS, decorateElement: session.decorate })}</>, root ? { container: root } : {});
