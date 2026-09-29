@@ -1,3 +1,5 @@
+import type { ArtifactRole } from './share-roles';
+
 /**
  * The document shell now serves readers and commenters (solid/document/AnnotationLayer carries
  * the annotation rail both need). Editor and owner stay on React: browser gates proved those

@@ -377,7 +377,16 @@ export async function artifactPageAnswer(request: Request, id: string, options: 
   };
 }
 
-/** The JSON door (app/api/page/artifact/[id]). */
+/**
+ * The JSON door (app/api/page/artifact/[id]).
+ *
+ * NOT wired to `options.page`, on purpose for now: `compiledMode` (above) skips `servedFor` —
+ * the live `tables`/`since` payload served-results.test.ts and every data-tier reader depend on —
+ * for EVERY role, not only the ones Document.tsx now admits. Naming the Solid entry from this
+ * door needs compiledMode to stay role-aware without dropping that payload for React's still-owned
+ * roles; that is follow-up work, not a one-line change (verified: passing `page` here broke
+ * served-results.test.ts and prepared-page.test.ts's cache-hit assertion).
+ */
 export async function artifactPageResponse(request: Request, id: string): Promise<Response> {
   const answer = await artifactPageAnswer(request, id);
   return answer.status === 200 ? json(answer.body, 200, { 'Cache-Control': 'no-store' }) : json(answer.body, answer.status);
