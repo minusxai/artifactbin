@@ -12,9 +12,13 @@
 import { createHash } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
-import { brotliDecompressSync, gunzipSync } from 'node:zlib';
+import { brotliDecompressSync, gunzipSync, gzipSync } from 'node:zlib';
+import { packCompiledBrowserModule } from './compiled-bundle.server';
+import type { ArtifactFile } from './file-format';
+import type { ArtifactFileParts } from './file-html';
+import type { JsxNode } from '@/lib/jsx';
 
-export type OfflineBundleKind = 'core' | 'mermaid';
+export type OfflineBundleKind = 'core' | 'mermaid' | 'solid';
 
 interface OfflineBundleManifest {
   bundles: Record<OfflineBundleKind, { file: string; sha256: string; raw: number; gzip: number }>;
@@ -47,6 +51,27 @@ export function offlineBundle(kind: OfflineBundleKind): Promise<string> {
     bundle.catch(() => { if (loaded.get(kind) === bundle) loaded.delete(kind); });
   }
   return bundle;
+}
+
+/** The exact inline resources a newly downloaded Solid file needs. */
+export async function offlineFileParts(file: ArtifactFile): Promise<ArtifactFileParts> {
+  const code = await offlineBundle(file.bundle);
+  if (file.bundle !== 'solid' || !file.compiled) return { file, code };
+  const sqlite = !!file.island.dataflow?.hold?.length;
+  // A compiled Question can be a table; those have no Vega drawing to update.
+  const hasChart = (nodes: JsxNode[]): boolean => nodes.some((node) => node.type === 'element' && (
+    (node.tag === 'Question' && node.attributes.some((attribute) => attribute.name === 'viz'
+      && attribute.value.static && typeof attribute.value.json === 'object' && attribute.value.json !== null
+      && 'kind' in attribute.value.json && attribute.value.json.kind === 'vega-lite')) || hasChart(node.children)
+  ));
+  const chart = file.compiled.kit.islands.includes('Question') && hasChart(file.island.nodes);
+  const packed = await packCompiledBrowserModule(file.compiled, { offline: { sqlite, chart } });
+  const wasmUrl = file.compiled.sharedBuild?.sqliteWasm;
+  const wasmName = /^\/islands\/(sqlite3-[0-9a-f]{16}\.wasm)$/.exec(wasmUrl ?? '')?.[1];
+  if (sqlite && !wasmName) throw new Error('offline: the compiled build has no SQLite engine');
+  const wasm = wasmName && sqlite ? (await readFile(path.join(process.cwd(), 'public', 'islands', wasmName))).toString('base64') : undefined;
+  return { file, code, ...(packed ? { compiledCode: gzipSync(packed.code, { level: 9 }).toString('base64'), templates: packed.templates } : {}),
+    ...(wasm ? { wasm } : {}) };
 }
 
 /** A read that is not cached when it fails: the next download tries again (a build may have landed since). */

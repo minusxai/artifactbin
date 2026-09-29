@@ -121,7 +121,7 @@ export interface ArtifactFile {
   /** Ids of threads and replies created in a file and not yet on the server. */
   localIds: string[];
   /** Which offline bundle this file carries. */
-  bundle: 'core' | 'mermaid';
+  bundle: 'core' | 'mermaid' | 'solid';
   /** Code view's source editor and prettier, loaded on demand; absent in a file that cannot load them. */
   extras?: ArtifactFileExtras | null;
   /**
@@ -201,7 +201,7 @@ function isWellFormed(v: Json): boolean {
     && Array.isArray(v.journal) && v.journal.every(isEdit)
     && Array.isArray(v.threads) && v.threads.every(isObject)
     && isStringList(v.localIds)
-    && (v.bundle === 'core' || v.bundle === 'mermaid')
+    && (v.bundle === 'core' || v.bundle === 'mermaid' || v.bundle === 'solid')
     && isExtras(v.extras)
     && (v.derivedFrom === undefined || isString(v.derivedFrom));
 }

@@ -19,6 +19,15 @@ describe('renderArtifactFileHtml', () => {
     expect(doc.querySelector('[data-mx-inline-story] [data-mx-ast="0"]')?.textContent).toBe('Compiled sales');
   });
 
+  it('round-trips the packed compiled script and optional SQLite bytes for Save', () => {
+    const parts = { file, code: 'H4sIAAAAAAAAA0tMTgYAQGCRmgQAAAA=', compiledCode: 'H4sIAAAAAAAAA0tMTgYAQGCRmgQAAAA=', wasm: 'AA==', templates: { a: '<div>offline</div>' } };
+    const doc = parse(renderArtifactFileHtml(parts));
+    expect(readArtifactFileParts(doc)).toEqual(parts);
+    expect(doc.querySelector('#afbin-compiled-code')?.textContent).toBe(parts.compiledCode);
+    expect(doc.querySelector('#afbin-wasm')?.textContent).toBe(parts.wasm);
+    expect(doc.querySelector<HTMLTemplateElement>('template[data-mx-island-template="a"]')?.content.textContent).toBe(parts.templates.a);
+  });
+
   it('cannot be broken out of by document content', () => {
     const doc = parse(html);
     // the title contains `</script><script>alert(1)</script>`: it must stay data

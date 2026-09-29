@@ -353,7 +353,7 @@ export async function assembleArtifactFile(input: AssembleArtifactFileInput): Pr
     ...inlined,
     journal: [],
     localIds: [],
-    bundle: /<Mermaid[\s/>]/.test(source) ? 'mermaid' : 'core',
+    bundle: 'solid',
     extras: await offlineExtrasRef(),
     // The island and stylesheets above were built from exactly this source.
     derivedFrom: sourceDigest(source),

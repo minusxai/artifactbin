@@ -8,7 +8,7 @@ import { requestOrSessionActor } from '@/lib/viewer';
 import { baseUrl, json } from '@/lib/http';
 import { ID_RE } from '@/lib/ids';
 import { assembleArtifactFile } from '@/lib/offline/assemble.server';
-import { offlineBundle } from '@/lib/offline/bundle.server';
+import { offlineFileParts } from '@/lib/offline/bundle.server';
 import { renderArtifactFileHtml } from '@/lib/offline/file-html';
 
 /** A filename every OS accepts, from the document's title. */
@@ -30,7 +30,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
     if (file.refused === 'too_large') return json({ error: 'too_large', message: file.message }, 413);
     return json({ error: 'not_found' }, 404);
   }
-  const html = renderArtifactFileHtml({ file, code: await offlineBundle(file.bundle) });
+  const html = renderArtifactFileHtml(await offlineFileParts(file));
   const name = fileName(file.metadata.title);
   return new Response(html, {
     headers: {

@@ -55,13 +55,14 @@ import { precompressFile } from '../../../scripts/lib/precompress.mjs';
 import { createRequire } from 'node:module';
 import { compile, optimize } from '@tailwindcss/node';
 import { Scanner } from '@tailwindcss/oxide';
+import { transformAsync } from '@babel/core';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const outdir = path.join(root, 'lib/build-assets/offline');
 const markerPath = path.join(outdir, '.build-cache.json');
 const manifestPath = path.join(outdir, 'manifest.json');
 const cache = process.argv.includes('--cache');
-const KINDS = /** @type {const} */ (['core', 'mermaid']);
+const KINDS = /** @type {const} */ (['core', 'mermaid', 'solid']);
 /** The extras and their build-time brotli/gzip siblings (server/content-encoding serves them). */
 const EXTRAS_OR_SIBLING = /^extras-[0-9a-f]{16}\.js(?:\.br|\.gz)?$/;
 
@@ -156,6 +157,27 @@ async function build() {
       b.onLoad({ filter: /.*/, namespace: 'offline-extras' }, (args) => ({ loader: 'js', contents: fromExtras(EXTRAS_MODULES[args.path]) }));
     },
   };
+  const solidTransform = {
+    name: 'offline-solid-transform',
+    setup(b) {
+      b.onLoad({ filter: /\.[jt]sx$/ }, async (args) => {
+        if (!args.path.startsWith(path.join(root, 'solid') + path.sep) && args.path !== path.join(root, 'lib/offline/solid-entry.tsx')) return undefined;
+        const source = fs.readFileSync(args.path, 'utf8');
+        const stripped = (await esbuild.transform(source, { loader: args.path.endsWith('.tsx') ? 'tsx' : 'jsx', jsx: 'preserve', sourcefile: args.path })).code;
+        const out = await transformAsync(stripped, { filename: args.path, babelrc: false, configFile: false, sourceType: 'module', compact: false,
+          presets: [['babel-preset-solid', { generate: 'dom', hydratable: false }]] });
+        return { contents: out.code, loader: 'js', resolveDir: path.dirname(args.path) };
+      });
+    },
+  };
+  const gridKernelStub = {
+    name: 'offline-grid-kernel-react-stub',
+    setup(b) {
+      b.onResolve({ filter: /^react$/ }, (args) => args.importer.includes('/react-grid-layout/build/')
+        ? { path: 'react', namespace: 'offline-grid-react' } : undefined);
+      b.onLoad({ filter: /.*/, namespace: 'offline-grid-react' }, () => ({ contents: 'module.exports = {};', loader: 'js' }));
+    },
+  };
   const stubs = (kind) => ({
     name: `offline-stubs-${kind}`,
     setup(b) {
@@ -207,8 +229,8 @@ async function build() {
     }),
     ...KINDS.map((kind) => esbuild.build({
       ...common,
-      entryPoints: [path.join(root, 'lib/offline/entry.tsx')],
-      plugins: [extrasStubs, stubs(kind)],
+      entryPoints: [path.join(root, kind === 'solid' ? 'lib/offline/solid-entry.tsx' : 'lib/offline/entry.tsx')],
+      plugins: [extrasStubs, stubs(kind), ...(kind === 'solid' ? [gridKernelStub, solidTransform] : [])],
       outfile: path.join(outdir, `${kind}.js`),
     })),
   ]);
@@ -217,6 +239,12 @@ async function build() {
     const leaked = packagesIn(result, /node_modules\/(@codemirror|@lezer|prettier)\//);
     if (leaked.length) throw new Error(`build-offline: ${KINDS[i]} must not bundle CodeMirror or prettier (they load on demand from the extras): ${leaked.slice(0, 3).join(', ')}`);
   });
+  const reactInSolid = packagesIn(results[KINDS.indexOf('solid')], /node_modules\/(react|react-dom|scheduler)\//);
+  if (reactInSolid.length) {
+    const inputs = results[KINDS.indexOf('solid')].metafile.inputs;
+    const importers = Object.entries(inputs).flatMap(([name, meta]) => meta.imports.filter((item) => /node_modules\/(react|react-dom|scheduler)\//.test(item.path)).map(() => name));
+    throw new Error(`build-offline: Solid bundle reached React through ${importers.slice(0, 8).join(', ')}`);
+  }
   const reactInExtras = packagesIn(extrasResult, /node_modules\/(react|react-dom|scheduler)\//);
   if (reactInExtras.length) throw new Error(`build-offline: the extras must not bundle React: ${reactInExtras.slice(0, 3).join(', ')}`);
 

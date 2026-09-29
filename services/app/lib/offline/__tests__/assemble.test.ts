@@ -159,7 +159,7 @@ describe('the snapshot', () => {
     expect(file.snapshot.variants).toEqual([]);
     expect(file.snapshot.frozen).toEqual([]);
     expect(file.metadata).toMatchObject({ title: 'Sales' });
-    expect(file).toMatchObject({ origin: ORIGIN, liveUrl: `${ORIGIN}/a/${w.doc}`, journal: [], localIds: [], bundle: 'core' });
+    expect(file).toMatchObject({ origin: ORIGIN, liveUrl: `${ORIGIN}/a/${w.doc}`, journal: [], localIds: [], bundle: 'solid' });
     expect(file.base.source).toBe(file.source);
     expect(file.downloadedBy).not.toContain('@');
     expect(file.compiled?.html).toContain('Sales');
@@ -254,7 +254,7 @@ describe('a self-contained file', () => {
   it('says a Mermaid document needs the mermaid bundle', async () => {
     const owner = await account('mermaid');
     const id = await create(owner.token.token, { markup: '<Mermaid title="Flow" code={"flowchart TD\\n A[Draft] --> B[Saved]"} />' });
-    expect((await download(id, owner.actor)).bundle).toBe('mermaid');
+    expect((await download(id, owner.actor)).bundle).toBe('solid');
   });
 
   it('refuses a file past the size cap with the size in the message', async () => {
