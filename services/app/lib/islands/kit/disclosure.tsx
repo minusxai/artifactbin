@@ -5,7 +5,7 @@ import { Portal, isServer } from 'solid-js/web';
 import { useIsland } from '../context';
 import { deferEngine } from '../defer-engine';
 import type { Align, Placed, Side } from './popper';
-import { TrustedOverlay, overlayDestination } from './trusted-overlay';
+import { TrustedOverlay, overlayDestination, storyPortalHost } from './trusted-overlay';
 import { popupDismiss } from './popup-dismiss';
 
 type State = { open: () => boolean; setOpen: (value: boolean) => void; contentId: string; panelId: () => string; setPanelId: (id: string) => void };
@@ -131,7 +131,7 @@ export function TooltipContent(props: JSX.HTMLAttributes<HTMLDivElement> & { sid
     onCleanup(() => { document.removeEventListener(TOOLTIP_OPEN, onOtherOpen); document.removeEventListener('keydown', onKey); window.removeEventListener('scroll', onScroll, { capture: true }); });
   });
   return <Show when={ctx.open() && !isServer}>
-    <Portal mount={overlayDestination(island) ?? document.body}><TooltipPopper ctx={ctx} side={local.side} align={local.align} sideOffset={local.sideOffset} rest={rest}>{local.children}</TooltipPopper></Portal>
+    <Portal mount={overlayDestination(island) ?? document.body}>{storyPortalHost(<TooltipPopper ctx={ctx} side={local.side} align={local.align} sideOffset={local.sideOffset} rest={rest}>{local.children}</TooltipPopper>)}</Portal>
   </Show>;
 }
 /** The portaled content: placed once ITS OWN elements exist (a portal renders after hydration, so never from the owner's mount). */
