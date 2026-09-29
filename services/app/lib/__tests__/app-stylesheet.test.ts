@@ -46,6 +46,9 @@ describe('the compiled app stylesheet', () => {
     for (const rule of ['.block', '.absolute', '.h-full', '.inset-0']) {
       expect(css, `${rule} must be in the app stylesheet`).toContain(rule);
     }
+    // Chat's desktop split is declared in the Solid route source, not the React tree.
+    expect(css).toContain('.md\\:flex-row');
+    expect(css).toContain('.md\\:w-80');
   }, 60_000);
 
   it('does not carry what a test merely TALKS about', async () => {

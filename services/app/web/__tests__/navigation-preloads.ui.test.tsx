@@ -37,7 +37,8 @@ it('route mapping shares artifact/folder keys, keeps static routes data-free, an
   expect(map('/@alice')?.key).toBe('/api/page/profile/%40alice');
   expect(map('/')?.key).toBe('/api/page/home?part=core');
   for(const path of ['/trash','/login','/start','/welcome','/notifications','/account']) expect(map(path)).toBeNull();
-  for(const path of ['/chat','/assets']) expect(map(path)?.key).toBeUndefined();
+  expect(map('/chat')).toBeNull();
+  expect(map('/assets')?.key).toBeUndefined();
   for(const path of ['/a/ABC123/raw','/api/query','/docs','/api/auth/callback','/not-an-app']) expect(map(path)).toBeNull();
 });
 

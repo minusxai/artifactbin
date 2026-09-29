@@ -28,7 +28,7 @@ it('serves the Solid entry for ported routes, while React owns other URLs', asyn
     expect(await response.text()).toContain('/solid-entry.tsx');
   }
   const chat = await app.request('http://localhost/chat', { headers: accept });
-  expect(await chat.text()).toContain('/main.tsx');
+  expect(await chat.text()).toContain('/solid-entry.tsx');
   const missing = await app.request('http://localhost/definitely-missing', { headers: accept });
   expect(missing.status).toBe(404);
   expect(await missing.text()).toContain('/solid-entry.tsx');
