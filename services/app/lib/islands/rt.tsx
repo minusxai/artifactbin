@@ -52,15 +52,75 @@ export {
 export { IslandProvider } from './context';
 export { createDataflowStore } from '@/lib/story-runtime/store';
 
-/** Clone a browser template carried by the served page, using Solid's template calling convention. */
+/** Pinned document modules select their own immutable resource, including during a live morph. */
+let templateResourceUrl: string | null = null;
+const templateResources = new Map<string, Readonly<Record<string, string>>>();
+const templateLoads = new Map<string, Promise<void>>();
+
+export function configureTemplateResource(url: string | null): void { templateResourceUrl = url; }
+export function currentTemplateResource(): string | null { return templateResourceUrl; }
+
+/** Deduplicated, retryable fetch. No author markup is evaluated as code. */
+export function loadTemplateResource(url: string = templateResourceUrl ?? ''): Promise<void> {
+  if (!url) return Promise.resolve();
+  if (templateResources.has(url)) return Promise.resolve();
+  const pending = templateLoads.get(url);
+  if (pending) return pending;
+  const loading = fetch(url).then(async (response) => {
+    if (!response.ok) throw new Error(`island templates: HTTP ${response.status}`);
+    const data: unknown = await response.json();
+    if (!data || typeof data !== 'object' || Array.isArray(data) || !Object.values(data).every((v) => typeof v === 'string')) {
+      throw new Error('invalid island templates');
+    }
+    templateResources.set(url, data as Record<string, string>);
+  }).catch((error: unknown) => {
+    templateLoads.delete(url);
+    throw error;
+  });
+  templateLoads.set(url, loading);
+  return loading;
+}
+
+/** Hold the first reader action until the cold factories are available, then replay it once. */
+export function installTemplateInteractionGate(root: Element, doc: Document = document, onLoaded: () => void = () => {}): () => void {
+  const url = templateResourceUrl;
+  if (!url || templateResources.has(url)) return () => {};
+  const kinds = ['click', 'keydown', 'input', 'change'];
+  let stopped = false;
+  const capture = (event: Event) => {
+    const target = event.target;
+    if (stopped || templateResources.has(url) || !(target instanceof Node) || !root.contains(target)) return;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    void loadTemplateResource(url).then(() => {
+      onLoaded();
+      if (stopped || !target.isConnected) return;
+      const Replay = event.constructor as { new(type: string, init: Event): Event };
+      const replay = new Replay(event.type, event);
+      target.dispatchEvent(replay);
+    }).catch((error: unknown) => console.error('[islands] templates failed', error));
+  };
+  for (const kind of kinds) doc.addEventListener(kind, capture, true);
+  return () => { stopped = true; for (const kind of kinds) doc.removeEventListener(kind, capture, true); };
+}
+
+/** Clone a browser template only when Solid creates a new node; hydration adopts served nodes. */
 export function templateFromPage(key: string, isImportNode?: boolean, isSVG?: boolean, isMathML?: boolean): (() => Node) & { cloneNode: () => Node } {
-  const source = document.querySelector(`template[data-mx-island-template="${key}"]`);
-  if (!source) throw new Error(`island template ${key} is absent from the page`);
-  const markup = (source as HTMLTemplateElement).content.textContent ?? '';
-  if (!markup) throw new Error(`island template ${key} is empty`);
+  const url = templateResourceUrl;
   // The pinned Solid implementation accepts MathML and attaches cloneNode; its declarations omit both.
   const factory = solidTemplate as unknown as (html: string, importNode?: boolean, svg?: boolean, mathML?: boolean) => (() => Node) & { cloneNode: () => Node };
-  return factory(markup, isImportNode, isSVG, isMathML);
+  let made: ReturnType<typeof factory> | null = null;
+  const clone = () => {
+    if (!made) {
+      // Older pinned modules still use the page bank. New modules carry the resource URL.
+      const source = !url ? document.querySelector(`template[data-mx-island-template="${key}"]`) : null;
+      const markup = url ? templateResources.get(url)?.[key] : (source as HTMLTemplateElement | null)?.content.textContent;
+      if (!markup) throw new Error(`island template ${key} is unavailable`);
+      made = factory(markup, isImportNode, isSVG, isMathML);
+    }
+    return made();
+  };
+  return Object.assign(clone, { cloneNode: clone });
 }
 
 /* ────────────────────────────────────────────────────────────────────────────

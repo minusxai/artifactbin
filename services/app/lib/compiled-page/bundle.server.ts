@@ -40,7 +40,7 @@ import { DOCUMENT_MODULE_RE, type CompilerBuild, type IslandRenderData, type Mod
 import type { GeneratedSources } from './codegen-safety';
 import { syncRailPreview } from './rail-preview.server';
 import { objectStore, ObjectUnavailable, type ObjectStore } from '@/lib/object-store';
-import { createModuleStore } from './modules.server';
+import { createModuleStore, createTemplateResourceStore } from './modules.server';
 import { contentSha } from './speculation';
 
 /* ────────────────────────────────────────────────────────────────────────────
@@ -124,9 +124,6 @@ async function externalizeDomTemplates(code: string): Promise<{ code: string; te
   if (!out?.code) throw new Error('compile: template extraction produced nothing');
   return { code: out.code, templates };
 }
-
-const templateHtml = (templates: ReadonlyMap<string, string>): string => [...templates].map(([key, markup]) =>
-  `<template data-mx-island-template="${key}">${markup.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</template>`).join('');
 
 /** Author-derived text and attributes are page data too; only import specifiers stay as JS literals. */
 async function externalizeLiterals(code: string): Promise<{ code: string; literals: string[]; key: string }> {
@@ -501,6 +498,8 @@ export interface BuildOptions {
   values: Record<string, Scalar>;
   /** The browser modules' store (served at `/islands/d/<sha>.js`). */
   store?: ModuleStore;
+  /** Injectable content-addressed resource store for browser-only DOM factories. */
+  templateStore?: ReturnType<typeof createTemplateResourceStore>;
   /** The SSR modules' store (never served; `createSsrModuleStore`). */
   ssrStore?: ModuleStore;
   /** The server import table (tests); the default is this process's Solid and the shared build's server half. */
@@ -533,21 +532,32 @@ export async function buildDocumentModules(sources: GeneratedSources & { islandR
     ? `const $moduleData = JSON.parse(document.getElementById("mx-story-data").textContent).moduleData;\n${browserIslands}`
     : browserIslands;
   const store = options.store ?? createModuleStore();
+  const templateStore = options.templateStore ?? createTemplateResourceStore();
   if (!sources.islandRefs.length) {
     const browser = await browserModuleCode(browserWithData, options.build, options.flow, flowIndex);
-    return { html: renderedSkeleton + templateHtml(browser.templates) + literalsHtml(browser.literalKey, browser.literals) + moduleDataTag, module: await store.put(new TextEncoder().encode(browser.code), browser.imports), ssr: null };
+    const url = browser.templates.size ? await templateStore.put(Object.fromEntries(browser.templates)) : null;
+    return { html: renderedSkeleton + literalsHtml(browser.literalKey, browser.literals) + moduleDataTag, module: await store.put(new TextEncoder().encode(withTemplateResource(browser.code, url, options.build)), browser.imports), ssr: null };
   }
   const ssrStore = options.ssrStore ?? createSsrModuleStore();
   const browser = await browserModuleCode(browserWithData, options.build, options.flow, flowIndex);
-  const skeletonHtml = renderedSkeleton + templateHtml(browser.templates) + literalsHtml(browser.literalKey, browser.literals) + moduleDataTag;
+  const templateUrl = browser.templates.size ? await templateStore.put(Object.fromEntries(browser.templates)) : null;
+  const skeletonHtml = renderedSkeleton + literalsHtml(browser.literalKey, browser.literals) + moduleDataTag;
   const ssrCode = await ssrModuleCode(sources.islands, skeletonHtml, options.flow);
   const loaded = await ssrModuleOf(ssrCode, contentSha(ssrCode), options.imports);
   const html = loaded.render({ values: options.values, results: null, mermaidImages: {}, drawings: {} });
   const [module, ssr] = await Promise.all([
-    store.put(new TextEncoder().encode(browser.code), browser.imports),
+    store.put(new TextEncoder().encode(withTemplateResource(browser.code, templateUrl, options.build)), browser.imports),
     ssrStore.put(new TextEncoder().encode(ssrCode), await importsOf(ssrCode)),
   ]);
   return { html, module, ssr };
+}
+
+/** The URL is build-owned data, inserted after author literal extraction. */
+function withTemplateResource(code: string, url: string | null, build: CompilerBuild): string {
+  if (!url) return code;
+  const rt = build.manifest['@mx/rt'];
+  if (!rt) throw new Error('compile: the island build has no @mx/rt');
+  return `import {configureTemplateResource as $mxTemplates} from ${JSON.stringify(rt)};\n$mxTemplates(${JSON.stringify(url)});\n${code}`;
 }
 
 /** The per-document browser module: DOM-compiled, imports bound to the shared chunks, compacted. `imports` is its static closure. */

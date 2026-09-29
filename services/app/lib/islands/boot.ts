@@ -35,7 +35,7 @@ import { createIslandDocumentTransport } from './document-transport';
 import { STORY_DATA_HOOK } from '@/lib/story-runtime/contract';
 import { ISLAND_DATA_ID, READER_READY_ATTR } from '@/lib/compiled-page/contract';
 import { ISLAND_DOCUMENT_KEY, ISLANDS_READY_EVENT, type IslandDocument, type IslandDocumentMode, type IslandEvent, type IslandHost, type IslandPageData, type IslandViewer } from './contract';
-import { createIslandRuntime, hydrateIsland } from './rt';
+import { createIslandRuntime, hydrateIsland, installTemplateInteractionGate, loadTemplateResource, currentTemplateResource } from './rt';
 import { installIslandDocument } from './handover';
 import { createWriteStatusFeed } from './writes';
 import { loadChart } from './chart';
@@ -71,6 +71,8 @@ export interface IslandMorphSeam {
   hydrate(entry: IslandEntry): void;
   /** Every module this document has run, by its `ISLANDS` (a cached re-import runs no `boot`). */
   readonly modules: WeakMap<readonly IslandEntry[], IslandModule>;
+  /** Load the incoming module's immutable DOM factories before changing the old tree. */
+  prepareTemplates(): Promise<void>;
   /** Set by the engine while it imports a newer version's module: that module's `boot` hands it in here. */
   take?: (module: IslandModule) => void;
   /** Replace only the sandboxed author realm after a version changes its source. */
@@ -148,6 +150,9 @@ export function boot(input: IslandModule | readonly IslandEntry[], win: Window =
   const running = (root as IslandHost)[ISLAND_DOCUMENT_KEY] as MorphableIslandDocument | undefined;
   if (running?.morph?.take) { running.morph.take(module); return running; }
   const data = readPageData(doc);
+  const templateUrl = currentTemplateResource();
+  let startHydration = () => {};
+  const stopTemplateGate = installTemplateInteractionGate(root, doc, () => startHydration());
   const flow = module.FLOW ?? null;
 
   // A signed-in reader's queries and writes are theirs: the transport carries the session to the
@@ -194,7 +199,6 @@ export function boot(input: IslandModule | readonly IslandEntry[], win: Window =
       console.error(`[islands] hydrate ${renderId}`, error);
     }
   };
-  module.ISLANDS.forEach(hydrate);
   const disposeIslands = () => { const all = [...islands.values()]; islands.clear(); for (const [, dispose] of all) dispose(); };
 
   const stopWrites = context.writes.subscribe((statuses) => emit({ type: 'writes', statuses }));
@@ -231,7 +235,7 @@ export function boot(input: IslandModule | readonly IslandEntry[], win: Window =
     if (generation === authorGeneration && !disposed && mode === 'read') stopAuthor = startAuthorHost(source, store, doc);
   };
   const islandDocument: MorphableIslandDocument = {
-    morph: { islands, hydrate, modules: new WeakMap([[module.ISLANDS, module]]), restartAuthor },
+    morph: { islands, hydrate, modules: new WeakMap([[module.ISLANDS, module]]), prepareTemplates: () => loadTemplateResource(), restartAuthor },
     root,
     store,
     context,
@@ -252,6 +256,7 @@ export function boot(input: IslandModule | readonly IslandEntry[], win: Window =
     dispose: () => {
       if (disposed) return;
       disposed = true;
+      stopTemplateGate();
       stopAuthor();
       uninstallMx();
       disposeIslands();
@@ -266,10 +271,20 @@ export function boot(input: IslandModule | readonly IslandEntry[], win: Window =
   };
   installIslandDocument(root, islandDocument);
 
-  ready = true;
-  doc.documentElement.setAttribute(READER_READY_ATTR, '');
-  emit({ type: 'ready' });
-  doc.dispatchEvent(new Event(ISLANDS_READY_EVENT));
+  startHydration = () => {
+    if (disposed || ready) return;
+    module.ISLANDS.forEach(hydrate);
+    ready = true;
+    doc.documentElement.setAttribute(READER_READY_ATTR, '');
+    emit({ type: 'ready' });
+    doc.dispatchEvent(new Event(ISLANDS_READY_EVENT));
+  };
+  // A cold resource is fetched at idle or the first reader action, never by module evaluation.
+  if (templateUrl) {
+    const prefetch = () => { if (!disposed) void loadTemplateResource(templateUrl).then(startHydration, () => {}); };
+    if (typeof win.requestIdleCallback === 'function') win.requestIdleCallback(prefetch, { timeout: 1 });
+    else win.setTimeout(prefetch, 0);
+  } else startHydration();
   // Identity and viewer-scoped rows arrive after the guest page is ready.
   void import('./viewer').then(({ loadViewerOverlay }) => {
     if (disposed) return;
