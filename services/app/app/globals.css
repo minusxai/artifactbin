@@ -82,6 +82,21 @@
   --font-serif: var(--font-cormorant), 'EB Garamond', Georgia, serif;
 }
 
+/* Kit overlays enter TrustedUi's shadow root, where document styles are absent.
+ * Resolve their semantic colors through the app palette at the element, so
+ * light/dark changes keep working without importing author CSS into the boundary. */
+@theme inline {
+  --color-popover: var(--color-surface);
+  --color-popover-foreground: var(--color-fg);
+  --color-background: var(--color-bg);
+  --color-foreground: var(--color-fg);
+  --color-border: var(--color-edge);
+  --color-input: var(--color-edge-bright);
+  --color-muted-foreground: var(--color-muted);
+  --color-accent-foreground: var(--color-bg);
+  --color-ring: var(--color-accent);
+}
+
 /* Editor chrome uses the app palette for its document's current mode. */
 [data-app-appearance='light'] {
   --color-bg: #f6f7f8;
@@ -252,6 +267,31 @@ body {
   }
 }
 
+/* Document jackets share the folders' material and caption/action band. */
+.artifact-cover {
+  position: relative; isolation: isolate; height: 156px; width: 100%;
+  border: 1px solid var(--color-edge-bright); border-radius: 7px;
+  background: var(--color-surface); color: var(--color-fg);
+  box-shadow: 0 2px 3px #00000008;
+}
+.artifact-cover:hover, .artifact-cover:focus-within {
+  z-index: 20;
+}
+.artifact-cover-link { position: absolute; inset: 0; z-index: 2; border-radius: 7px; cursor: pointer; }
+.artifact-cover-link:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 3px; }
+.artifact-cover-preview { position: absolute; inset: 0 0 51px; overflow: hidden; border-radius: 6px 6px 0 0; }
+.artifact-cover-preview img { width: 100%; height: 100%; object-fit: cover; object-position: top; }
+.artifact-cover-fold {
+  position: absolute; top: -1px; right: -1px; width: 20px; height: 20px; z-index: 1;
+  background: linear-gradient(45deg, var(--color-edge) 0 50%, var(--color-bg) 51%);
+  border-bottom-left-radius: 4px;
+}
+.artifact-cover-visibility { position: absolute; top: 8px; left: 8px; z-index: 3; }
+.artifact-cover-front {
+  position: absolute; inset: auto -1px -1px; min-height: 52px; display: flex; align-items: center; gap: 8px;
+  padding: 8px 10px; background: var(--color-raised);
+  border: 1px solid var(--color-edge-bright); border-radius: 0 0 7px 7px;
+}
 /* A folder sleeve, with document previews peeking above its front edge. */
 .folder-cover {
   --folder-back: #dceef8; --folder-front: #b8dcef; --folder-edge: #91bdd5; --folder-ink: #367797;
