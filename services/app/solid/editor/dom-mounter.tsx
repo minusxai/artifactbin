@@ -120,6 +120,20 @@ export function mountCompiledEditRegions(root: HTMLElement, nodes: JsxNode[], ca
     const disposeSolid = render(() => <GridEdit cols={cols} rowHeight={gridRowHeight(staticProp(node, 'rowHeight'))}
       tiles={tiles} onLayout={(rects) => callbacks.onLayout?.(rects)} renderFlow={() => <span />} />, overlay);
     for (const grip of overlay.querySelectorAll<HTMLElement>('.mx-grid-grip,.mx-grid-resize')) grip.style.pointerEvents = 'auto';
+    // The overlay tile itself is `pointer-events:none` (only its grip/resize are `auto`), so it can
+    // never match `:hover` — the REAL compiled tile underneath it is what the pointer actually lands
+    // on. Mirror its hover onto the overlay tile's class so CSS can reveal that tile's grip from it,
+    // matching react-grid-layout's own hover-anywhere-on-the-tile affordance.
+    for (const tile of tiles) {
+      const realTile = at(tile.path);
+      const overlayTile = overlay.querySelector<HTMLElement>(`[data-mx-grid-tile="${CSS.escape(tile.key)}"]`);
+      if (!realTile || !overlayTile) continue;
+      const enter = () => overlayTile.classList.add('mx-grid-hover');
+      const leave = () => overlayTile.classList.remove('mx-grid-hover');
+      realTile.addEventListener('pointerenter', enter);
+      realTile.addEventListener('pointerleave', leave);
+      cleanups.push(() => { realTile.removeEventListener('pointerenter', enter); realTile.removeEventListener('pointerleave', leave); });
+    }
     cleanups.push(() => { disposeSolid(); overlay.remove(); grid.style.position = oldPosition; });
   };
   const visit = (siblings: JsxNode[], parentPath: string) => {
