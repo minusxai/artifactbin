@@ -883,3 +883,41 @@ jobs:
           compression-level: 0
           if-no-files-found: error
           retention-days: 14
+
+  # notify-consumers.yml used to do this via `workflow_run: [ci], completed` — correct, but it waits
+  # for THIS ENTIRE WORKFLOW to be marked completed and then pays a second cold-start (a fresh queued
+  # job on a brand-new runner): together that cost ~46s of the merge→production chain (product merge
+  # 17:12:45 → Update Submodule start 17:14:09, run 36603331879/36603413942) for one `gh api` POST.
+  # Doing it as a job HERE removes that hop entirely: `needs` gives the identical "only if every real
+  # job passed" gate (skipped jobs do not count as failures; only a failure/cancellation does), no
+  # `if: always()` here so a genuine failure upstream skips this job the normal way, and it runs
+  # alongside `timings`/`release-cli` instead of waiting on a separate workflow's roundtrip.
+  notify-consumer:
+    name: notify the configured consumer repository
+    needs:
+      [
+        plan,
+        checks,
+        node,
+        ui,
+        build,
+        api,
+        gates,
+        cli,
+        cli-preview,
+        test,
+        reference-compatibility
+      ]
+    if: success() && github.event_name == 'push' && vars.CONSUMER_REPOSITORY != ''
+    runs-on: ubuntu-latest
+    permissions: {}
+    steps:
+      - name: Notify the configured consumer of the exact tested revision
+        env:
+          GH_TOKEN: ${{ secrets.CONSUMER_DISPATCH_TOKEN }}
+          CONSUMER: ${{ vars.CONSUMER_REPOSITORY }}
+          SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          [[ "$SHA" =~ ^[a-f0-9]{40}$ ]]
+          jq -n --arg sha "$SHA" '{event_type:"toolkit-updated",client_payload:{sha:$sha}}' | gh api "repos/$CONSUMER/dispatches" --input -
