@@ -57,7 +57,7 @@ export function SelectMenu(props: {
         onOpenChange={(next) => (next ? openList() : setOpen(false))}
         label={`${props.ariaLabel} options`}
         role="listbox"
-        class="max-h-64 overflow-y-auto py-1"
+        class="z-[200] max-h-64 overflow-y-auto rounded-[4px] py-1"
         onPanelKeyDown={onKeyDown}
         trigger={(attrs) => (
           <button

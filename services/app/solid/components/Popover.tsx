@@ -118,7 +118,7 @@ function PopoverPanel(p: {
           aria-label={p.label}
           data-story-floating=""
           onKeyDown={p.onKeyDown}
-          class={`rounded-[6px] border border-edge bg-surface p-2 shadow-lg ${p.class ?? ''}`}
+          class={`border border-edge bg-surface shadow-lg ${p.class ?? ''}`}
         >
           {p.children}
         </div>
