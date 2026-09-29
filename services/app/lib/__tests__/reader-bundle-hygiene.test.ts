@@ -204,7 +204,7 @@ const ROUTE_ENTRIES = ['web/main.tsx', 'web/pages/Artifact.tsx', 'web/pages/Prof
  * reader never parses CSS.
  */
 const ROUTE_FORBIDDEN_PACKAGES = ['acorn', 'acorn-jsx', 'typebox', 'css-tree', 'source-map-js', ...FORBIDDEN];
-const ROUTE_FORBIDDEN_FILES = ['components/ShareLink.tsx', 'components/AnnotationLayer.tsx', 'web/pages/Folder.tsx', 'lib/jsx/parse.ts'];
+const ROUTE_FORBIDDEN_FILES = ['components/ShareLink.tsx', 'components/AnnotationLayer.tsx', 'lib/jsx/parse.ts'];
 
 describe('reader route bundle hygiene', () => {
   const reach = walk(ROUTE_ENTRIES);

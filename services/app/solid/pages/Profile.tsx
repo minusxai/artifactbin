@@ -2,7 +2,7 @@
 import { createMemo, createSignal, For, Show, type JSX } from 'solid-js';
 import { Navigate, useLocation, useParams } from '@solidjs/router';
 import { Folder, LayoutGrid, List, Search } from 'lucide-solid';
-import { canonicalArtifactPath } from '@/lib/urls';
+import { artifactViewPath, canonicalArtifactPath, parsePrettyPath } from '@/lib/urls';
 import { buildShelf, groupShelfByRecency, type ShelfRow } from '@/lib/shelf';
 import type { ProfileSocial } from '@/lib/profile-social';
 import { refusedForSignIn } from '@/lib/story/sign-in-required';
@@ -12,6 +12,8 @@ import { takeBootstrap } from '@/web/bootstrap';
 import { Avatar } from '../components/Avatar';
 import { usePageData } from '../web/use-page-data';
 import { NotFoundPage } from './NotFound';
+import { FolderRoute } from './Folder';
+import { DatasetEditorPage } from './DatasetEditor';
 
 interface ProfileAnswer {
   kind: 'public-profile' | 'redirect' | 'artifact';
@@ -44,6 +46,30 @@ export function ProfilePage(): JSX.Element {
         <Show when={answer().files?.length} fallback={<p class="reveal font-mono text-sm text-muted"><span class="text-accent">$</span> nothing here yet<span class="caret text-accent">▍</span></p>}><ProfileShelf handle={answer().handle!} rows={answer().files!} /></Show>
       </main>
     </Show>}
+  </Show>;
+}
+
+/**
+ * `/:user/*` — a pretty artifact alias, e.g. `/@user/<id>-slug[/edit]` (also reached by address
+ * healing: server/app documentPreparation renders a `/a/<id>[/edit]` request at this address once
+ * its owner has a username). Resolution is id-anchored, same grammar as web/pages/Profile.tsx's React
+ * twin (lib/urls parsePrettyPath) — the difference is what Solid does once it has the id: a folder
+ * renders here; anything else (a non-edit surface, e.g. markup or a dataset's read view) crosses to
+ * the React reader via FolderRoute's own `replaceDocument` fallback. "Nesting is not in the address"
+ * (see the profile API's own doc comment): a rest path that fails to parse as an id is a uniform 404,
+ * never a listing — there is no profile sub-page below the handle.
+ */
+export function ProfileAliasRoute(): JSX.Element {
+  const params = useParams<{ user: string; rest?: string }>();
+  const location = useLocation();
+  // A trailing slash (`/@user/`) is the bare handle, same as `/@user` — not a rest path.
+  const bare = createMemo(() => !(params.rest ?? '').split('/').filter(Boolean).length);
+  const editing = createMemo(() => /\/edit\/?$/.test(location.pathname));
+  const id = createMemo(() => parsePrettyPath(artifactViewPath(params.rest ?? '').split('/').filter(Boolean))?.id ?? null);
+  return <Show when={!bare()} fallback={<ProfilePage />}>
+    <Show when={id()} fallback={<NotFoundPage />}>
+      {resolvedId => <Show when={editing()} fallback={<FolderRoute id={resolvedId()} />}><DatasetEditorPage artifactId={resolvedId()} /></Show>}
+    </Show>
   </Show>;
 }
 

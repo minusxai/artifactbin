@@ -273,7 +273,7 @@ describe('the cache key names the renderer', () => {
  * A FOLDER IS PHOTOGRAPHED ON THE APP PAGE, BECAUSE THAT IS WHERE ITS LISTING IS.
  *
  * A folder has no document. Its listing is app data — answered by the page
- * endpoint, inlined into the HTML, drawn by web/pages/Folder — so the camera is
+ * endpoint, inlined into the HTML, drawn by solid/pages/Folder — so the camera is
  * sent to `/a/<id>?key=` with `main` as its target, exactly the path the data
  * tiers already take. A valid `?key=` skips canonical healing (server/app
  * `documentPreparation`), so the camera stays at the address it was handed, and

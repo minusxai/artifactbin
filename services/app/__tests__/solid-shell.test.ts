@@ -19,6 +19,15 @@ it('serves the Solid entry for ported routes, while React owns other URLs', asyn
   expect(isSolidPage('/@cee')).toBe(true);
   expect(isSolidPage('/@cee/doc-id')).toBe(false);
   expect(isSolidPage('/a/doc-id')).toBe(false);
+  // A folder or dataset served at its OWNED pretty address (server/app documentPreparation heals
+  // /a/<id> to /@user/<id>-slug for any format once the owner has a username) is Solid too — not just
+  // the bare /a/<id> shape.
+  expect(isSolidPage('/@cee/fold01-my-folder', 200, 'folder')).toBe(true);
+  expect(isSolidPage('/@cee/fold01', 200, 'folder')).toBe(true);
+  expect(isSolidPage('/@cee/data01-my-dataset/edit', 200, 'dataset')).toBe(true);
+  expect(isSolidPage('/@cee/doc01-my-doc', 200, 'markup')).toBe(false);
+  expect(isSolidPage('/@cee/doc01-my-doc/edit', 200, 'markup')).toBe(false);
+  expect(isSolidPage('/@cee/not-an-id-shape', 200, 'folder')).toBe(false);
   expect(isSolidPage('/missing', 404)).toBe(true);
   const dir = mkdtempSync(path.join(tmpdir(), 'afbin-shell-'));
   dirs.push(dir);

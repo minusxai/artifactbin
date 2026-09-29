@@ -1,22 +1,16 @@
 /**
- * One dataset-editor fixture for the four
- * `web/__tests__/dataset-{catalog-viewer,editor-*}.ui.test.tsx` files: the same PostgreSQL catalog,
- * the same routed `DatasetEditorPage`, and one fetch stub standing in for
- * discovery, secrets, notebook previews, sharing, policy and save.
+ * One dataset fixture for `web/__tests__/dataset-catalog-viewer.ui.test.tsx` (the still-React-owned
+ * reader view, `components/DatasetCatalogView` — a dataset's non-edit address stays React; only its
+ * `/edit` address is Solid, see lib/solid-routes isSolidPage): the same PostgreSQL catalog and one
+ * fetch stub standing in for discovery, secrets, notebook previews, sharing, policy and save.
+ * The editor itself is ported to Solid (solid/pages/DatasetEditor, fixture at solid/test/dataset-catalog).
  *
  * Every knob a case needs to turn lives on `state` rather than in a module
  * `let`, because an imported binding cannot be assigned to. `state` is reset
  * by `installDatasetFetch()`, which each file calls from its own `beforeEach`.
- *
- * The `@/web/session` mock stays in the test files: `vi.mock` is hoisted per
- * file, and the two cases that depend on a missing session are written where
- * they fail loudly if it were ever not installed.
  */
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, screen } from '@testing-library/react';
 import { vi } from 'vitest';
-import { MemoryRouter, Route, Routes } from 'react-router';
-import { DatasetEditorPage } from '@/web/pages/DatasetEditor';
-import { parseDatasetDefinition } from '@/lib/datasets/definition';
 import type { DatasetCatalog } from '@/lib/datasets/types';
 
 export const connection = { host: 'db.example.com', port: 5432, database: 'analytics', username: 'reader', ssl: true, passwordSecretId: 'secret-1' };
@@ -65,30 +59,5 @@ export function installDatasetFetch() {
   }));
 }
 
-export function editor(edit = false) {
-  render(<MemoryRouter initialEntries={[edit ? '/a/data-1/edit' : '/datasets/new']}><Routes><Route path="/login" element={<p aria-label="Dataset login">Log in</p>} /><Route path="/datasets/new" element={<DatasetEditorPage />} /><Route path="/a/:id/edit" element={<DatasetEditorPage />} /><Route path="/a/:id" element={<p aria-label="Saved dataset">Saved</p>} /></Routes></MemoryRouter>);
-}
-
 export const change = (label: string, value: string) => fireEvent.change(screen.getByLabelText(label), { target: { value } });
 export const click = (label: string) => fireEvent.click(screen.getByLabelText(label));
-
-export async function discover() {
-  click('PostgreSQL');
-  for (const [label, value] of [['Host', connection.host], ['Database', 'analytics'], ['Username', 'reader'], ['Password', 'private-password']]) change(label, value);
-  click('Test and discover');
-  await screen.findByLabelText('Expose table sales.orders');
-}
-
-export async function selectOrders() {
-  await discover(); click('Toggle table sales.orders'); click('Expose column sales.orders.id'); change('Default schema', 'sales');
-}
-
-export async function addCell(name: string, sql: string, index = 1) {
-  click('Add notebook cell'); change(`Cell name ${index}`, name); change(`Cell SQL ${index}`, sql); click(`Run cell ${index}`);
-  await screen.findByLabelText(`Cell preview ${index}`);
-}
-
-export function savedDefinition() {
-  const write = state.calls.find(c => c.url.startsWith('/api/my/artifacts') && c.method !== 'GET');
-  return write ? parseDatasetDefinition(write.body.dataset) : undefined;
-}
