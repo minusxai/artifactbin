@@ -59,6 +59,14 @@ describe('Select', () => {
     expect(document.querySelector('[role="listbox"]')?.parentElement?.className).toContain('bg-popover');
     dispose();
   });
+  it('adds no null choice without a placeholder, so a document\'s own "All" row is the only one', () => {
+    const ctx = fakeIsland({ department: 'All departments' });
+    ctx.table = () => ({ rows: [{ value: 'All departments', label: 'All departments' }, { value: 'Police', label: 'Police' }], columns: [{ name: 'value', type: 'string' }, { name: 'label', type: 'string' }] });
+    const { host, dispose } = mount(ctx, () => <Select label="Department" value="$department" options="$department_options" />);
+    host.querySelector<HTMLButtonElement>('[aria-haspopup="listbox"]')!.click();
+    expect([...document.querySelectorAll('[role="option"]')].map(option => option.getAttribute('aria-label'))).toEqual(['All departments', 'Police']);
+    dispose();
+  });
   it('closes on another select, outside pointer, and Escape, restoring trigger focus', () => {
     const ctx = fakeIsland({ department: null as unknown as string, job: null as unknown as string });
     const { host, dispose } = mount(ctx, () => <><Select label="Department" value="$department" options={['Police']} /><Select label="Job title" value="$job" options={['Officer']} /></>);
