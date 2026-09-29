@@ -1,5 +1,5 @@
 /* @jsxImportSource solid-js */
-import { createSignal, For, onCleanup, onMount, Show, type JSX } from 'solid-js';
+import { createSignal, onCleanup, onMount, Show, type JSX } from 'solid-js';
 import { useLocation } from '@solidjs/router';
 import { startIslandLive } from '@/lib/islands/live';
 import { islandDocumentOf } from '@/lib/islands/handover';
@@ -14,10 +14,24 @@ import { takeChromeIntent } from '@/web/idle-boot';
 import { adoptInitialStory } from '@/web/initial-story';
 import { useSession } from '../web/session';
 import { NotFoundPage } from './NotFound';
-import { readAnnotationPages } from '@/lib/annotation-pages';
 import type { AnnotationWire } from '@/lib/annotations';
+import { canAnnotate as canAnnotateRole, canEdit as canEditRole, canGovern, type ArtifactRole } from '@/lib/share-roles';
+import { DocumentActions } from '../document/DocumentActions';
+import { AnnotationLayer } from '../document/AnnotationLayer';
+import { ForkConfirm } from '../document/ForkArtifact';
+import { APP_BAR_H } from '@/lib/story/edit-bar';
 
-interface DocumentAnswer { role: string; kind: string; surface?: { id: string; title: string | null; format: string; archived?: unknown; author?: { forkedFrom?: { label: string; href: string | null } | null } | null }; like?: { liked: boolean; count: number }; follow?: { userId: string; following: boolean; count: number } | null }
+interface DocumentAnswer {
+  role: ArtifactRole; kind: string;
+  surface?: {
+    id: string; title: string | null; format: string; version: number;
+    openAnnotations?: number; accountSession?: boolean; anonSession?: boolean;
+    author?: { forkedFrom?: { label: string; href: string | null } | null } | null;
+  };
+  archived?: { version: number; head: number } | null;
+  like?: { liked: boolean; count: number };
+  follow?: { userId: string; following: boolean; count: number } | null;
+}
 
 export function readerProvenancePath(href: string | null | undefined): string | null {
   return href && /^\/(?:a\/[^/?#]+|@[^/?#]+\/[^/?#]+)$/.test(href) ? href : null;
@@ -42,17 +56,18 @@ export function DocumentPage(): JSX.Element {
   const { session } = useSession();
   const page = takeBootstrap<DocumentAnswer>(location.pathname, 'artifact');
   const id = page?.surface?.id ?? /^\/a\/([^/]+)/.exec(location.pathname)?.[1] ?? null;
+  const role = () => page?.role ?? 'viewer';
+  const archivedNow = () => !!page?.archived;
+  const isOwner = () => canGovern(role()) && !archivedNow();
+  const editable = () => canEditRole(role()) && !archivedNow();
+  const annotatable = () => canAnnotateRole(role()) && !archivedNow();
   const [ready, setReady] = createSignal(false);
-  const [comments, setComments] = createSignal(false);
-  const [threads, setThreads] = createSignal<AnnotationWire[] | null>(null);
-  const [commentError, setCommentError] = createSignal(false);
+  const [railOpen, setRailOpen] = createSignal(false);
+  const [annotationItems, setAnnotationItems] = createSignal<AnnotationWire[] | null>(null);
+  const openAnnotationCount = () => annotationItems()?.filter((row) => row.status === 'open').length ?? page?.surface?.openAnnotations ?? 0;
   const [panel, setPanel] = createSignal<'controls' | 'menu' | null>(null);
   const [fork, setFork] = createSignal(false);
-  const [busy, setBusy] = createSignal(false);
-  const [forkError, setForkError] = createSignal<string | null>(null);
   const [mode, setMode] = createSignal<'light' | 'dark'>('light');
-  let forkInFlight = false;
-  const commentsAbort = new AbortController();
   let adoptedStory: HTMLElement | null = null;
   let host!: HTMLDivElement;
   const chooseMode = (next: 'light' | 'dark') => {
@@ -92,12 +107,8 @@ export function DocumentPage(): JSX.Element {
         control?.setAttribute('aria-label', name === 'like' ? next ? 'Unlike' : 'Like' : `${next ? 'Unfollow' : 'Follow'} @${control.getAttribute('data-mx-author') ?? ''}`);
         const count = control?.querySelector('[data-mx-reader-count]'); if (count) count.textContent = answer.count > 0 ? String(answer.count) : '';
       } else if (name === 'comment') {
-        if (page.kind !== 'account' && session()?.kind !== 'account') { window.location.assign(loginHref(window.location, 'comment')); return; }
-        const open = !comments();
-        setComments(open);
-        if (open) void readAnnotationPages(`/api/my/artifacts/${encodeURIComponent(id)}/annotations`, { signal: commentsAbort.signal })
-          .then((rows) => { setThreads(rows); setCommentError(false); })
-          .catch(() => { if (!commentsAbort.signal.aborted) setCommentError(true); });
+        if (!annotatable()) { window.location.assign(loginHref(window.location, 'comment')); return; }
+        setRailOpen((open) => !open);
       } else if (name === 'fork') setFork(true);
       else if (name === 'share') void sharing.share();
       else if (name === 'notifications') window.location.assign('/notifications');
@@ -125,7 +136,7 @@ export function DocumentPage(): JSX.Element {
     let frame = 0;
     const sample = () => {
       frame = 0;
-      const visible = panel() !== null || comments() || fork() || (chromeState = chromeAfterSample(chromeState, {
+      const visible = panel() !== null || railOpen() || fork() || (chromeState = chromeAfterSample(chromeState, {
         scrollY: Math.max(0, window.scrollY), viewportHeight: window.innerHeight, documentHeight: document.documentElement.scrollHeight,
       })).visible;
       chrome.classList.toggle(READER_CHROME_HIDDEN_CLASS, !visible);
@@ -138,29 +149,28 @@ export function DocumentPage(): JSX.Element {
     const liveId = document.body.getAttribute('data-mx-live-id');
     const editId = document.body.getAttribute('data-mx-live-edit');
     const stopLive = !islandDocumentOf(story) && liveId && editId && typeof EventSource === 'function' ? startIslandLive(window, liveId, editId) : null;
-    onCleanup(() => { commentsAbort.abort(); chrome.removeEventListener('click', click); window.removeEventListener('keydown', escape); window.removeEventListener('scroll', schedule); window.removeEventListener('resize', schedule); window.cancelAnimationFrame(frame); stopLive?.(); sharing.dispose(); islandDocumentOf(story)?.dispose(); });
+    onCleanup(() => { chrome.removeEventListener('click', click); window.removeEventListener('keydown', escape); window.removeEventListener('scroll', schedule); window.removeEventListener('resize', schedule); window.cancelAnimationFrame(frame); stopLive?.(); sharing.dispose(); islandDocumentOf(story)?.dispose(); });
   });
-  const forkNow = async () => {
-    if (!id || forkInFlight) return;
-    if (page?.kind !== 'account' && session()?.kind !== 'account') { window.location.assign(loginHref(window.location, 'fork')); return; }
-    forkInFlight = true;
-    setBusy(true);
-    try {
-      const response = await fetch(`/api/my/artifacts/${id}/fork`, { method: 'POST', credentials: 'same-origin' });
-      const answer = await response.json().catch(() => ({})) as { url?: string; error?: string; details?: string[] };
-      if (response.status === 201 && answer.url) { const copy = new URL(answer.url, window.location.href); window.location.assign(copy.pathname + copy.search); return; }
-      setForkError(answer.details?.join(' ') ?? answer.error ?? `Could not fork (${response.status}).`);
-    } catch { setForkError('Could not fork. Retry.'); }
-    finally { forkInFlight = false; setBusy(false); }
-  };
+  const accountSession = () => page?.kind === 'account' || session()?.kind === 'account';
+  const currentVersion = () => page?.archived?.version ?? page?.surface?.version ?? 0;
   return <Show when={id && page} fallback={<NotFoundPage />}>
     <div ref={host} aria-label="Artifact viewport" />
     <Show when={panel()}>
       <button type="button" aria-label="Close page controls" class="mx-reader-scrim" onClick={() => setPanel(null)} />
-      <Show when={panel() === 'controls'}><section aria-label="Artifact controls" class="mx-reader-panel mx-reader-panel--controls"><h2>artifact controls</h2><h3>appearance</h3><div class="mx-reader-modes" role="group" aria-label="Color mode"><button type="button" aria-label="Light mode" aria-pressed={mode() === 'light'} onClick={() => chooseMode('light')}>light</button><button type="button" aria-label="Dark mode" aria-pressed={mode() === 'dark'} onClick={() => chooseMode('dark')}>dark</button></div><Show when={page?.surface?.author?.forkedFrom}><h3>this document</h3><span class="mx-reader-forked" data-mx-forked-from>forked from <Show when={page?.surface?.author?.forkedFrom?.href} fallback={page?.surface?.author?.forkedFrom?.label}><a href="#" aria-label="Open the artifact this was forked from" onClick={(event) => { event.preventDefault(); const path = readerProvenancePath(page?.surface?.author?.forkedFrom?.href); if (path) window.location.pathname = path; }}>{page?.surface?.author?.forkedFrom?.label}</a></Show></span></Show></section></Show>
+      <Show when={panel() === 'controls'}><section aria-label="Artifact controls" class="mx-reader-panel mx-reader-panel--controls"><h2>artifact controls</h2><h3>appearance</h3><div class="mx-reader-modes" role="group" aria-label="Color mode"><button type="button" aria-label="Light mode" aria-pressed={mode() === 'light'} onClick={() => chooseMode('light')}>light</button><button type="button" aria-label="Dark mode" aria-pressed={mode() === 'dark'} onClick={() => chooseMode('dark')}>dark</button></div>
+        <DocumentActions id={id!} title={page?.surface?.title ?? 'Untitled'} version={currentVersion()} archived={archivedNow()}
+          owner={isOwner()} canEdit={editable()} canAnnotate={annotatable()} accountSession={accountSession()}
+          like={page?.like ?? { liked: false, count: 0 }} commentsOpen={railOpen()} onCommentsChange={setRailOpen}
+          openAnnotations={openAnnotationCount()} forkedFrom={page?.surface?.author?.forkedFrom ?? null}
+          onEdit={() => window.location.assign(location.pathname.replace(/\/edit$/, '') + '/edit')}
+          onDeleted={isOwner() ? () => window.location.assign('/') : undefined} />
+      </section></Show>
       <Show when={panel() === 'menu'}><nav aria-label="Menu" class="mx-reader-panel mx-reader-panel--menu"><a class="mx-reader-brand" href="/"><img src="/logo-128.png" alt="" />artifactbin</a><a href="/">Artifacts</a><a href="/account">Account</a><a href="/docs-human">Human Docs</a></nav></Show>
     </Show>
-    <Show when={ready() && comments()}><aside aria-label="Comments" class="fixed right-0 top-12 z-50 max-h-[80vh] w-80 overflow-auto border border-edge bg-surface p-4 shadow-xl"><button type="button" aria-label="Close comments" onClick={() => setComments(false)}>Close</button><h2>Comments</h2><Show when={commentError()}><p role="alert">Could not load comments.</p></Show><Show when={threads() === null && !commentError()}><p role="status">Loading comments…</p></Show><Show when={threads()?.length === 0}><p>No open comments.</p></Show><For each={threads() ?? []}>{thread => <article class="mt-4 border-t border-edge pt-3"><p class="text-xs text-muted">{thread.snippet}</p><For each={thread.thread}>{comment => <p class="mt-2 text-sm">{comment.body}</p>}</For></article>}</For></aside></Show>
-    <Show when={fork()}><div role="dialog" aria-label="Fork this artifact?" class="fixed inset-0 z-50 flex items-center justify-center bg-black/40"><div class="rounded border border-edge bg-surface p-6"><h2>Fork this artifact?</h2><p>A copy of “{page?.surface?.title ?? 'this artifact'}” will be added to your artifacts.</p><Show when={forkError()}><p role="alert">{forkError()}</p></Show><button type="button" aria-label="Cancel fork" onClick={() => setFork(false)}>Cancel</button><button type="button" aria-label="Confirm fork" disabled={busy()} onClick={() => void forkNow()}>Fork and open copy</button></div></div></Show>
+    <Show when={ready() && annotatable() && id}>
+      <AnnotationLayer id={id!} railOpen={railOpen()} onRailOpenChange={setRailOpen} showViewComments={annotatable()}
+        pickOnOpen={false} onAnnotationsChange={setAnnotationItems} topOffset={APP_BAR_H} />
+    </Show>
+    <Show when={fork() && id}><ForkConfirm id={id!} title={page?.surface?.title ?? 'this artifact'} onClose={() => setFork(false)} /></Show>
   </Show>;
 }

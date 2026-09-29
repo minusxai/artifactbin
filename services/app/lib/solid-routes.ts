@@ -1,8 +1,8 @@
 import type { ArtifactRole } from './share-roles';
 
-/** The document shell changes for view-only readers. Commenters still need the annotation layer. */
+/** The document shell serves every admitted role — viewer, commenter, editor, owner — for a live markup document; a capture render and every other role/format keep the React reader (edit mode is still React's until the Solid editor runtime lands). */
 export function solidDocumentReader(role: ArtifactRole, format: string, capture: boolean): boolean {
-  return !capture && format === 'markup' && role === 'viewer';
+  return !capture && format === 'markup' && role !== 'none';
 }
 
 /** Candidate Solid routes. Admitted document roles select their idle entry at serve time. */
