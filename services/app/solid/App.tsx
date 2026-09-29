@@ -69,7 +69,7 @@ export function App(): JSX.Element {
       <Route path="/notifications" component={NotificationsPage} />
       <Route path="/account" component={AccountPage} />
       <Route path="/docs-human" component={DocsPage} />
-      <Route path="/:user/:alias" component={DocumentPage} />
+      <Route path="/:user/:alias" component={ArtifactRoute} />
       <Route path="/:user" component={ProfilePage} />
       <Route path="*404" component={NotFoundPage} />
     </Router>

@@ -67,8 +67,9 @@ interface ArtifactAnswer { folder?: FolderData; role: ArtifactRole; workspace?: 
 /** The server chose this entry after admitting a folder. A client link to a document crosses entries. */
 export function FolderRoute(): JSX.Element {
   const params = useParams<{ id: string }>();
-  const url = () => `/api/page/artifact/${params.id}`;
-  const page = usePageData<ArtifactAnswer>(url, { seed: () => takeBootstrap<ArtifactAnswer>(window.location.pathname, 'artifact') });
+  const initial = takeBootstrap<ArtifactAnswer>(window.location.pathname, 'artifact');
+  const url = () => `/api/page/artifact/${params.id ?? initial?.folder?.id ?? ''}`;
+  const page = usePageData<ArtifactAnswer>(url, { seed: () => initial });
   createEffect(() => { if (page.data()?.surface) replaceDocument(window.location.pathname + window.location.search + window.location.hash); });
   return <Show when={page.data()?.folder} fallback={<main aria-label="Loading folder" class={`${PAGE_COLUMN} mt-8 pb-24`}><Show when={page.error()} fallback="Loading folder…"><button type="button" aria-label="Retry folder" onClick={() => void page.refresh(true)}>Could not load folder. Retry</button></Show></main>}>
     {folder => <FolderPage folder={folder()} role={page.data()!.role} workspace={page.data()?.workspace} ownerUsername={page.data()?.ownerUsername} />}
