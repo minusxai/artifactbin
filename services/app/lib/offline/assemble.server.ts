@@ -34,6 +34,7 @@ import { VARIANT_CONTENT_TYPE } from '@/lib/images/optimise';
 import type { JsxNode } from '@/lib/jsx';
 import { savedMentionStates } from '@/lib/membership';
 import { isCompileFailure } from '@/lib/compiled-page/contract';
+import { loadSsrModule } from '@/lib/compiled-page/bundle.server';
 import { preparedPageFor } from '@/lib/story/prepared-page.server';
 import { objectStore } from '@/lib/object-store';
 import type { StoryIslandData } from '@/lib/story-runtime/contract';
@@ -287,6 +288,11 @@ export async function assembleArtifactFile(input: AssembleArtifactFileInput): Pr
    */
   const named = Object.keys(held).length ? await nameablePeople(row, actor) : {};
   const state = ran ? { ...ran.state, ...(Object.keys(named).length ? { people: { ...named, ...ran.state.people } } : {}) } : EMPTY_STATE;
+  const renderedCompiled = compiled.ssr
+    ? { ...compiled, html: (await loadSsrModule(compiled.ssr, undefined, undefined, compiled.sharedBuild?.ssr)).render({
+      values: state.values, state, results: state, mermaidImages: {}, drawings: {},
+    }) }
+    : compiled;
   const placement = ran ? placeDataflow(ran.flow, Object.keys(held)) : null;
   const serverQueries = new Set(Object.entries(placement?.queries ?? {}).filter(([, where]) => where === 'server').map(([name]) => name));
   const { variants, frozen } = ran
@@ -318,7 +324,7 @@ export async function assembleArtifactFile(input: AssembleArtifactFileInput): Pr
         author: parts.runtime.authorCss ? await inliner.css(parts.runtime.authorCss) : null,
       },
       island: JSON.parse(await inliner.json(JSON.stringify(island))) as StoryIslandData,
-      compiled: JSON.parse(await inliner.json(JSON.stringify(compiled))) as NonNullable<ArtifactFile['compiled']>,
+      compiled: JSON.parse(await inliner.json(JSON.stringify(renderedCompiled))) as NonNullable<ArtifactFile['compiled']>,
       snapshot: JSON.parse(await inliner.json(JSON.stringify(snapshot))) as ArtifactFile['snapshot'],
       threads: JSON.parse(await inliner.json(JSON.stringify(threads))) as AnnotationWire[],
     };

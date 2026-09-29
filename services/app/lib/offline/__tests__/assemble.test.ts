@@ -152,6 +152,7 @@ describe('the snapshot', () => {
     expect(file.downloadedBy).not.toContain('@');
     expect(file.compiled?.html).toContain('Sales');
     expect(file.compiled?.html).toContain('data-mx-ast');
+    expect(file.compiled?.html).toContain('>307</td>');
   });
 
   it('precomputes one variant per region only for the queries that stay on the server, and freezes their free-text filter', async () => {

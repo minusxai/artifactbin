@@ -21,6 +21,7 @@
  * (lib/offline/extras) — so a forgotten fetch fails closed instead of calling home.
  */
 import { agentDiscovery, agentDiscoveryHead, afbinInstallCommand } from '@/lib/agent-discovery-tags';
+import { inlineStoryElement } from '@/lib/compiled-page/story-element';
 import { ArtifactFileError, parseArtifactFile, type ArtifactFile } from './file-format';
 
 /** The file's origin as a CSP source (scheme://host[:port]), or null when it is not an http(s) origin. */
@@ -128,13 +129,14 @@ export function renderArtifactFileHtml(parts: ArtifactFileParts): string {
   if (!BASE64.test(parts.code)) throw new ArtifactFileError('The offline bundle is not base64.');
   const { file } = parts;
   const title = escapeHtml(file.metadata.title);
+  const compiledStory = file.compiled ? inlineStoryElement(file.compiled.html, file.metadata.colorMode ?? 'light', file.metadata.theme) : '';
   // `source` right after `format`: the first "source" in the text is the one to edit, not `base.source`.
   const { format, source, ...rest } = file;
   return `<!doctype html>\n<!-- ${commentSafe(artifactFileAgentNote(file))} -->\n<html lang="en">\n<head>\n<meta charset="utf-8">\n`
     + `<meta http-equiv="Content-Security-Policy" content="${escapeHtml(artifactFileCsp(file.origin))}">\n`
     + '<meta name="viewport" content="width=device-width,initial-scale=1">\n'
     + `<title>${title}</title>\n${agentDiscoveryHead(agentDiscovery(file.origin))}\n<style>${BOOT_CSS}</style>\n</head>\n<body>\n`
-    + `<div id="${ARTIFACT_FILE_IDS.root}"><p id="${ARTIFACT_FILE_IDS.boot}" role="status">Opening ${title}\u2026</p></div>\n`
+    + `<div id="${ARTIFACT_FILE_IDS.root}">${compiledStory}<p id="${ARTIFACT_FILE_IDS.boot}" role="status">Opening ${title}\u2026</p></div>\n`
     + `<script type="application/json" id="${ARTIFACT_FILE_IDS.file}">${scriptSafeJson({ format, source, ...rest })}</script>\n`
     + `<script type="application/octet-stream" id="${ARTIFACT_FILE_IDS.code}">${parts.code}</script>\n`
     + `<script>${ARTIFACT_FILE_BOOT}</script>\n</body>\n</html>\n`;
