@@ -26,6 +26,22 @@ it('shows only immediate children and keeps the root shelf separate', () => {
   expect(screen.getByLabelText('Open Doc root')).toHaveAttribute('rel', 'external');
 });
 
+it.each(['public', 'unlisted', 'private'] as const)('shows %s as an accessible icon and keeps artifact actions separate from navigation', async (visibility) => {
+  render(() => <Shelf rows={[doc('one', { visibility })]} actions="full" />);
+  const badge = screen.getByLabelText(`Doc one is ${visibility}`);
+  expect(badge.querySelector('svg')).not.toBeNull();
+  expect(badge.textContent).toBe('');
+  fireEvent.focus(badge);
+  expect(await screen.findByRole('tooltip')).toHaveTextContent(visibility);
+  expect(screen.getByRole('tooltip').querySelector('span')?.style.bottom).toBe('0px');
+  fireEvent.blur(badge);
+  expect(screen.getByRole('link', { name: 'Open Doc one' })).toHaveAttribute('href', '/a/one');
+  const menu = screen.getByRole('button', { name: 'More actions for Doc one' });
+  expect(menu.closest('a')).toBeNull();
+  fireEvent.click(menu);
+  expect(screen.getByRole('button', { name: 'Delete Doc one' })).toBeInTheDocument();
+});
+
 it('creates a child folder at the selected location', async () => {
   render(() => <Shelf rows={[]} scopeParentId="fold01" parentId="fold01" actions="full" canCreateFolders />);
   fireEvent.click(screen.getByLabelText('New folder'));
@@ -42,6 +58,8 @@ it('switches list and grid and keeps search accessible', () => {
   fireEvent.input(screen.getByLabelText('Search artifacts'), { target: { value: 'one' } });
   expect(screen.getByLabelText('Open Doc one')).toBeInTheDocument();
   expect(screen.queryByLabelText('Open Doc two')).toBeNull();
+  fireEvent.click(screen.getByLabelText('List view'));
+  expect(screen.getByLabelText('Open Doc one').querySelector('img')).toHaveAttribute('src', expect.stringContaining('/a/one/export?'));
 });
 
 it('opens an artifact from its grid thumbnail while keeping secondary actions separate', () => {
