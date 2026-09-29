@@ -35,7 +35,7 @@ import { createIslandDocumentTransport } from './document-transport';
 import { STORY_DATA_HOOK } from '@/lib/story-runtime/contract';
 import { ISLAND_DATA_ID, READER_READY_ATTR } from '@/lib/compiled-page/contract';
 import { ISLAND_DOCUMENT_KEY, ISLANDS_READY_EVENT, type IslandDocument, type IslandDocumentMode, type IslandEvent, type IslandHost, type IslandPageData, type IslandViewer } from './contract';
-import { createIslandRuntime, hydrateIsland, installTemplateInteractionGate, loadTemplateResource, currentTemplateResource, TemplateUnavailableError } from './rt';
+import { createIslandRuntime, hydrateDocument, hydrateIsland, installTemplateInteractionGate, loadTemplateResource, currentTemplateResource, TemplateUnavailableError } from './rt';
 import { installIslandDocument } from './handover';
 import { createWriteStatusFeed } from './writes';
 import { loadChart } from './chart';
@@ -142,8 +142,10 @@ function lazyEngine(load: () => Promise<PageEngine>, identified: () => boolean):
  * `ISLANDS` alone is accepted for a module whose islands read no data (the compiler's first shape);
  * a module with data passes `{ ISLANDS, FLOW }`.
  */
-export function boot(input: IslandModule | readonly IslandEntry[], win: Window = window): IslandDocument {
-  const module: IslandModule = Array.isArray(input) ? { ISLANDS: input as readonly IslandEntry[] } : (input as IslandModule);
+export function boot(input: IslandModule | { TREE: Component; FLOW?: CompiledDataflow | null } | readonly IslandEntry[], win: Window = window): IslandDocument {
+  const module: IslandModule = Array.isArray(input) ? { ISLANDS: input as readonly IslandEntry[] }
+    : 'TREE' in input ? { ISLANDS: [['d-', input.TREE]], FLOW: input.FLOW }
+      : (input as IslandModule);
   const doc = win.document;
   const root = doc.querySelector<HTMLElement>(STORY_ROOT_SELECTOR) ?? doc.body;
   // A newer version's module, imported by the morph engine: handed to the running document, never booted twice.
@@ -194,7 +196,7 @@ export function boot(input: IslandModule | readonly IslandEntry[], win: Window =
   const islands: IslandMorphSeam['islands'] = new Map();
   const hydrate = ([renderId, Component, key]: IslandEntry) => {
     try {
-      const dispose = hydrateIsland(renderId, Component, context, root);
+      const dispose = renderId === 'd-' ? hydrateDocument(Component, context, root) : hydrateIsland(renderId, Component, context, root);
       if (dispose) islands.set(renderId, [key, dispose]);
     } catch (error) {
       if (error instanceof TemplateUnavailableError && templateUrl) {

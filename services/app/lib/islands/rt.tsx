@@ -44,7 +44,7 @@ import { template as solidTemplate } from 'solid-js/web';
  */
 export {
   addEventListener, className, classList, createComponent, delegateEvents, effect, getNextElement,
-  getNextMarker, getNextMatch, getOwner, insert, memo, mergeProps, NoHydration, runHydrationEvents,
+  getNextMarker, getNextMatch, getOwner, insert, memo, mergeProps, Hydration, NoHydration, runHydrationEvents,
   setAttribute, setAttributeNS, setBoolAttribute, setProperty, setStyleProperty, spread, style,
   template, use,
 } from 'solid-js/web';
@@ -457,4 +457,22 @@ export function hydrateIsland(renderId: string, Component: Component, context: I
   }
   if (output instanceof Node && output !== root && !output.isConnected && root.parentNode === host) host.replaceChild(output, root);
   return disposeIsland;
+}
+
+/** Hydrate the one generated document tree while preserving version-owned script siblings. */
+export function hydrateDocument(Component: Component, context: IslandContext, parent: ParentNode = document): (() => void) | null {
+  if (isServer) return null;
+  const root = parent.querySelector('.mx-deck, .mx-doc');
+  const host = root?.parentNode as (Element & ParentNode) | null | undefined;
+  if (!root || !host) return null;
+  const g = globalThis as { _$HY?: { events: unknown[]; completed: WeakSet<object>; r: Record<string, unknown> } };
+  g._$HY ??= { events: [], completed: new WeakSet(), r: {} };
+  let disposeTree: () => void = () => {};
+  hydrate(() => createRoot((dispose) => {
+    disposeTree = dispose;
+    const live = withIsland(Component, context);
+    const children = [...host.childNodes];
+    return children.map((node) => node === root ? live : node) as JSX.Element;
+  }), host, { renderId: 'd-' });
+  return disposeTree;
 }

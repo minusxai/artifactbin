@@ -24,7 +24,6 @@
  * Ported from the prototype (scripts/probe/solid/compile.mjs). Pure and deterministic for one input.
  */
 import { rawBuildProps, wrapsControl, templateIds } from '@/lib/story-ui/interpreter-primitives';
-import { STORY_UI_COMPONENT_NAME_LIST } from '@/lib/story-ui/component-names';
 import { STORY_SVG_TAGS } from '@/lib/story-ui/component-names';
 import { gridCols, gridRowHeight, gridItemRect, gridRows } from '@/lib/story-ui/grid-layout';
 import { ICON_BASE_CLASS } from '@/lib/story-ui/icon-contract';
@@ -42,7 +41,6 @@ import { PUBLIC_BASE_URL } from '@/lib/config';
 import { compileManagedIframe } from '@/lib/story/managed-iframe';
 import { RECIPES, cn } from '@/lib/islands/kit/recipes';
 import { peopleClasses } from '@/lib/islands/kit/recipes/people';
-import { readerDataflow } from '@/lib/story/compiled-dataflow';
 import type { GeneratedSources } from './codegen-safety';
 import { CHART_SLOT_ATTR, EMPTY_LINK_HINTS, MIN_HANDOVER_CONTRACT, type CompileInput, type CompiledPage, type CompilerBuild, type IslandRef } from './contract';
 import { linkHintsOf } from './links';
@@ -97,7 +95,7 @@ export const KIT: Readonly<Record<string, KitMeta>> = {
   Badge: { mod: 'basic', api: ['variant'] }, Alert: { mod: 'basic', api: ['variant'] }, AlertTitle: { mod: 'basic' }, AlertDescription: { mod: 'basic' },
   Progress: { mod: 'basic', api: ['value'] }, Icon: { mod: 'basic', api: ['name', 'glyphs', 'catalogUrl'] },
   Card: { mod: 'basic' }, CardHeader: { mod: 'basic' }, CardTitle: { mod: 'basic' }, CardDescription: { mod: 'basic' }, CardAction: { mod: 'basic' }, CardContent: { mod: 'basic' }, CardFooter: { mod: 'basic' },
-  Tabs: { mod: 'tabs', island: true, api: ['defaultValue', 'value', 'orientation', 'dir'] }, TabsList: { mod: 'tabs', api: ['variant'] }, TabsTrigger: { mod: 'tabs', api: ['value', 'disabled'] }, TabsContent: { mod: 'tabs', api: ['value'] },
+  Tabs: { mod: 'tabs', island: true, api: ['defaultValue', 'value', 'orientation', 'dir'] }, TabsList: { mod: 'tabs', api: ['variant'] }, TabsTrigger: { mod: 'tabs', api: ['value', 'disabled'] }, TabsContent: { mod: 'tabs', api: ['value', 'forceMount'] },
   Accordion: { mod: 'accordion', island: true, api: ['type', 'collapsible', 'defaultValue', 'value', 'orientation'] }, AccordionItem: { mod: 'accordion', api: ['value', 'disabled'] }, AccordionTrigger: { mod: 'accordion' }, AccordionContent: { mod: 'accordion' },
   // Store adapters (StoryRuntimeApp): the DOM carries only the node's identity (id, data-mx-ast).
   Number: { mod: 'data', island: true, api: ['data', 'col', 'agg', 'prefix', 'suffix', 'format'], dom: 'identity' },
@@ -133,7 +131,6 @@ export const KIT: Readonly<Record<string, KitMeta>> = {
 /** The rail's miniature stubs its embeds (StoryRuntimeApp PREVIEW_REGISTRY). */
 const PREVIEW_EMBEDS: Readonly<Record<string, string>> = { Question: 'chart', Number: '#', DataTable: 'table', Video: 'video' };
 const PREVIEW_STYLE = { display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%', height: '100%', minHeight: 120, border: '1px solid var(--border, rgba(128,128,128,0.35))', borderRadius: 6, background: 'color-mix(in srgb, var(--muted-foreground, gray) 6%, transparent)', font: '500 11px/1 var(--font-mono, ui-monospace, monospace)', letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--muted-foreground, graytext)' };
-const REGISTERED = new Set<string>(STORY_UI_COMPONENT_NAME_LIST);
 /** Components whose HTML the React kit renders at compile time but whose BEHAVIOUR is not ported (reported as partial). None: every registered component with behaviour has its island. */
 const PARTIAL: ReadonlySet<string> = new Set<string>([]);
 /** Registered tags that render nothing (declarations, templates). */
@@ -197,13 +194,6 @@ function readsDataNode(node: JsxNode): boolean {
   return node.children.some(readsDataNode);
 }
 
-/**
- * A component tag the reader draws nothing for (legacy markup such as `<Param>`): in neither the reader's
- * registry (StoryRuntimeApp RUNTIME_REGISTRY: the story registry plus the kit's store adapters) nor a
- * declaration, nor a structural node — the interpreter's renderNode returns null for it.
- */
-const unregistered = (node: JsxElement): boolean => node.isComponent && !node.control && !INERT.has(node.tag) && !REGISTERED.has(node.tag) && !KIT[node.tag];
-
 const isTableParts = (node: JsxElement): boolean => node.children.every((c) => (c.type === 'text' ? !c.value.trim() : c.type === 'element' && ['tr', 'td', 'th'].includes(c.tag)));
 
 /** The managed frame's author content compiled as inert data (lib/story/managed-iframe), or null when it is refused. */
@@ -213,7 +203,7 @@ const managedFrameOf = (node: JsxElement) => { try { return compileManagedIframe
  * The generator
  * ──────────────────────────────────────────────────────────────────────────── */
 
-type Mode = 'static' | 'island';
+type Mode = 'static' | 'island' | 'browser';
 interface IslandBuild { id: number; path: string; source: string; kit: Set<string>; readsData: boolean }
 interface Ctx {
   /** The JS name of the row in scope (inside a `<For>`), and its scope's. */
@@ -228,6 +218,8 @@ interface Ctx {
   preview?: { rewrite: (props: Props) => Props; values: Record<string, Scalar> };
   /** The island being emitted, for its kit accounting. */
   island?: IslandBuild;
+  /** Structural kit descendants of a live component must remain hydratable. */
+  liveKit?: boolean;
 }
 
 /** What one generation produced: the sources and what they used. */
@@ -251,7 +243,6 @@ export function generate(input: GenerateInput): Generated {
   const jsxAttrs = (attrs: Attr[]): string => attrs.map(([n, v]) => ` ${safeAttr(n)}={${v === '' && /^(?:disabled|checked|selected|readOnly|hidden|open|multiple|required|inert|autoFocus|reversed)$/i.test(n) ? 'true' : lit(v)}}`).join('');
   const refData = input.refData ?? {};
   const nodes = input.nodes ?? [];
-  const islands: IslandBuild[] = [];
   const partial = new Set<string>();
   const unported = new Set<string>();
   const kitUsed = { skeleton: new Set<string>(), islands: new Set<string>() };
@@ -293,13 +284,10 @@ export function generate(input: GenerateInput): Generated {
   const needsBrowser = (node: JsxNode): boolean => {
     const known = needs.get(node);
     if (known !== undefined) return known;
-    const value = !(isElement(node) && unregistered(node)) && (selfDynamic(node) || (isElement(node) && node.children.some(needsBrowser)));
+    const value = selfDynamic(node) || (isElement(node) && node.children.some(needsBrowser));
     needs.set(node, value);
     return value;
   };
-  /** An element whose dynamic child cannot be its own island root (text, expression, control, a wrapper-less For) must be the island itself. */
-  const mustPromote = (node: JsxElement): boolean =>
-    node.children.some((c) => needsBrowser(c) && (!isElement(c) || !!c.control || (c.tag === 'For' && isTableParts(c))));
 
   // Structured author data never becomes an object literal: each value is a module constant parsed
   // from a string literal — one per emission site, never shared by content, so the module's shape
@@ -310,7 +298,7 @@ export function generate(input: GenerateInput): Generated {
     return `$d${data.length - 1}`;
   };
   const useKit = (tag: string, mode: Mode, ctx: Ctx): void => {
-    (mode === 'static' ? kitUsed.skeleton : kitUsed.islands).add(tag);
+    (mode === 'browser' ? kitUsed.islands : kitUsed.skeleton).add(tag);
     ctx.island?.kit.add(tag);
   };
 
@@ -318,6 +306,7 @@ export function generate(input: GenerateInput): Generated {
   function emit(node: JsxNode, path: string, mode: Mode, ctx: Ctx): string {
     if (node.type === 'text') {
       if (ctx.row && /\{\s*\$_row\./.test(node.value)) return `{rt.sub(${lit(node.value)}, ${ctx.row})}`;
+      if (!ctx.row && !ctx.preview && node.value) return mode === 'browser' ? '<rt.NoHydration />' : `<rt.NoHydration>${node.value.length <= 1024 && /\r|\n/.test(node.value) ? `{${lit(node.value)}}` : staticText(node.value)}</rt.NoHydration>`;
       return node.value === '' ? '' : (node.value.length <= 1024 && /\r|\n/.test(node.value) ? `{${lit(node.value)}}` : staticText(node.value));
     }
     if (node.type === 'expression') {
@@ -331,7 +320,7 @@ export function generate(input: GenerateInput): Generated {
         return field ? `{String(${ctx.row}[${lit(field)}] ?? '')}` : '';
       }
       const v = node.value.json;
-      return typeof v === 'string' || typeof v === 'number' ? `{${lit(String(v))}}` : '';
+      return typeof v === 'string' || typeof v === 'number' ? mode === 'browser' ? '<rt.NoHydration />' : `<rt.NoHydration>{${lit(String(v))}}</rt.NoHydration>` : '';
     }
     if (node.control) {
       if (node.control.kind === 'fragment') return `<>${node.children.map((c, i) => emit(c, `${path}.${i}`, mode, ctx)).join('')}</>`;
@@ -345,22 +334,16 @@ export function generate(input: GenerateInput): Generated {
       return `<rt.When test={${json(node.control.test)}} row={${ctx.row ?? 'undefined'}}${node.control.kind === 'conditional' ? ` fallback={<>${no}</>}` : ''}>{<>${yes}</>}</rt.When>`;
     }
     if (INERT.has(node.tag)) return '';
-    // An unregistered component (legacy markup such as `<Param>`) renders nothing, as the interpreter's renderNode does.
-    if (unregistered(node)) return '';
     // A managed frame whose content is refused renders nothing (the interpreter's renderNode), island or not.
     if (node.tag === 'Iframe' && !ctx.row && managedFrameOf(node) === null) return '';
-    // In the default path, a static subtree of the skeleton is today's React render, carried as
-    // HTML and spliced in after the skeleton renders: no JSX re-parse, no Babel, no Solid render of static markup —
-    // most of a large document's compile. Never inside an island (hydration walks its template) and never across a
-    // Grid (a compile-time macro, emitGrid).
-    // An island root in the skeleton: rendered by its own island component, spliced in by the server.
-    if (mode === 'static' && !ctx.preview && !PARTIAL.has(node.tag) && needsBrowser(node) && (selfDynamic(node) || mustPromote(node))) {
-      const island: IslandBuild = { id: islands.length, path, source: '', kit: new Set(), readsData: !!input.flow && readsDataNode(node) };
-      islands.push(island);
-      island.source = emitElement(node, path, 'island', { row: null, svg: !!ctx.svg, grid: ctx.grid, island });
-      return `<mx-slot data-i={${lit(String(island.id))}}></mx-slot>`;
-    }
-    return emitElement(node, path, mode, ctx);
+    // Both builds keep the same tree of hydration boundaries. Static descendants are
+    // server markup only; the browser emits an empty boundary at the same position.
+    // A live control is emitted as a sibling of these boundaries, never inside one.
+    if (!ctx.preview && !ctx.row && !needsBrowser(node) && !(ctx.liveKit && !!KIT[node.tag]))
+      return mode === 'browser' ? '<rt.NoHydration />' : `<rt.NoHydration>${emitElement(node, path, mode, ctx)}</rt.NoHydration>`;
+    const live = selfDynamic(node) || !!ctx.liveKit && !!KIT[node.tag];
+    const element = emitElement(node, path, mode, { ...ctx, liveKit: ctx.liveKit || !!KIT[node.tag] && live });
+    return element;
   }
 
   function emitElement(node: JsxElement, path: string, mode: Mode, ctx: Ctx): string {
@@ -386,6 +369,7 @@ export function generate(input: GenerateInput): Generated {
       if (!meta) { unported.add(node.tag); return `<div data-mx-unported={${lit(node.tag)}} data-mx-ast={${lit(path)}}></div>`; }
       useKit(node.tag, mode, ctx);
       const props = rawBuildProps(node.attributes, true, node.tag, path, undefined, ctx.preview?.values ?? {});
+      if (node.tag === 'TabsContent' && !ctx.preview) props.forceMount = true;
       if (ctx.preview) Object.assign(props, ctx.preview.rewrite(props));
       if (node.tag === 'Video' || node.tag === 'File') Object.assign(props, resolveRefProps(node, props, refData));
       // Decided here, never read from the author (interpreter BUTTON_TRIGGERS).
@@ -620,6 +604,7 @@ export function generate(input: GenerateInput): Generated {
 
   // The column wrapper the runtime always draws (StoryRuntimeApp: `.mx-doc`).
   const body = nodes.map((n, i) => emit(n, String(i), 'static', { row: null })).join('');
+  const browserBody = nodes.map((n, i) => emit(n, String(i), 'browser', { row: null })).join('');
   // A DECK's chrome (StoryRuntimeApp SlideRail/PresentBar): static HTML at compile time, thumbnails
   // included; its behaviour is the framework-free `@mx/deck` chunk.
   const slides = input.chrome !== false ? discoverSlides(nodes) : [];
@@ -650,27 +635,24 @@ export function generate(input: GenerateInput): Generated {
   };
   const dataConsts = data.map((text, i) => `const $d${i} = JSON.parse(${lit(text)});\n`).join('');
   const moduleData: string[] = [];
-  const browserUses = new Set(islands.flatMap((island) => [...island.source.matchAll(/\$d(\d+)\b/g)].map((match) => Number(match[1]))));
+  const browserRoot = deck ? `<div class="mx-deck"><rt.NoHydration /><div class="mx-doc">${browserBody}</div><rt.NoHydration /></div>` : `<div class="mx-doc">${browserBody}</div>`;
+  const browserUses = new Set([...browserRoot.matchAll(/\$d(\d+)\b/g)].map((match) => Number(match[1])));
   const browserConsts = data.map((value, i) => {
     if (!browserUses.has(i)) return '';
     if (value.length <= 1024) return `const $d${i} = JSON.parse(${lit(value)});\n`;
     const index = moduleData.push(value) - 1;
     return `const $d${i} = $moduleData[${index}];\n`;
   }).join('');
-  // The skeleton imports only what it renders with; the islands module always carries the runtime.
-  const skeleton = deck
-    ? `import * as rt from '@mx/rt';\n${kitImports(kitUsed.skeleton)}${dataConsts}const $previewFlow = JSON.parse(${lit(JSON.stringify(input.flow ? readerDataflow(input.flow) : null))});\nconst $previewValues = JSON.parse(${lit(JSON.stringify(declaredValues(input.flow)))});\nexport default function Skeleton() { const runtime = rt.createIslandRuntime({ dataflow: $previewFlow ? { flow: $previewFlow, values: $previewValues } : null, viewer: null }, rt.createDataflowStore); return rt.withIsland(() => ${root}, runtime.context); }\n`
-    : `${kitImports(kitUsed.skeleton)}${dataConsts}export default function Skeleton() { return ${root}; }\n`;
-  const usesRowAttrs = islands.some((isl) => isl.source.includes('$rowAttrs('));
-  const islandsSource = `import * as rt from '@mx/rt';\n${usesRowAttrs ? "import { rowAttrs as $rowAttrs } from '@mx/kit/basic';\n" : ''}${usesRowClass ? "import { rowClass as $rowClass } from '@mx/row-class';\n" : ''}${kitImports(kitUsed.islands)}${dataConsts}`
-    + islands.map((isl) => `export function I${isl.id}() { return ${isl.source}; }\n`).join('')
-    + `export const ISLANDS = [${islands.map((isl) => `[${lit(`s${isl.id}-`)}, I${isl.id}, ${lit(islandKey(isl.source, data))}]`).join(', ')}];\n`;
+  const usesRowAttrs = root.includes('$rowAttrs(') || browserRoot.includes('$rowAttrs(');
+  const rowImports = `${usesRowAttrs ? "import { rowAttrs as $rowAttrs } from '@mx/kit/basic';\n" : ''}${usesRowClass ? "import { rowClass as $rowClass } from '@mx/row-class';\n" : ''}`;
+  const skeleton = `import * as rt from '@mx/rt';\n${rowImports}${kitImports(kitUsed.skeleton)}${dataConsts}export function Document() { return ${root}; }\n`;
+  const browserSource = `import * as rt from '@mx/rt';\n${rowImports}${kitImports(kitUsed.islands)}${dataConsts}export function Document() { return ${browserRoot}; }\n`;
   return {
     skeleton,
-    islands: islandsSource,
-    browserIslands: dataConsts ? islandsSource.replace(dataConsts, `${moduleData.length ? 'const $moduleData = JSON.parse(document.getElementById("mx-story-data").textContent).moduleData;\n' : ''}${browserConsts}`) : islandsSource,
+    islands: skeleton,
+    browserIslands: dataConsts ? browserSource.replace(dataConsts, `${moduleData.length ? 'const $moduleData = JSON.parse(document.getElementById("mx-story-data").textContent).moduleData;\n' : ''}${browserConsts}`) : browserSource,
     moduleData,
-    islandRefs: islands.map((isl) => ({ renderId: `s${isl.id}-`, path: isl.path, kit: [...isl.kit].sort(), readsData: isl.readsData })),
+    islandRefs: nodes.some(needsBrowser) ? [{ renderId: 'd-', path: '0', kit: [...kitUsed.islands].sort(), readsData: !!input.flow && nodes.some(readsDataNode) }] : [],
     kit: { skeleton: [...kitUsed.skeleton].sort(), islands: [...kitUsed.islands].sort() },
     reactStatic: [],
     unported: [...unported].sort(),
