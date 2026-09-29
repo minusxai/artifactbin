@@ -210,17 +210,18 @@ jobs:
           PATH="$GITHUB_WORKSPACE/node_modules/.cache/cli-prebuilt-node:$PATH" npm test -w services/cli
 
   # jsdom setup dominates the ui project (~110s serial on a 4-vCPU runner —
-  # the environment boots per test file), so it shards like api does.
+  # the environment boots per test file), so it shards like api does. Two shards ran 186s and 119s
+  # on run 36608202961 — over the ~150s per-job target — so it splits three ways.
   ui:
     needs: [ plan ]
     if: needs.plan.outputs.ui == 'true'
-    name: ui tests (${{ matrix.shard }}/2)
+    name: ui tests (${{ matrix.shard }}/3)
     runs-on: ubuntu-latest
     timeout-minutes: 10
     strategy:
       fail-fast: false
       matrix:
-        shard: [ 1, 2 ]
+        shard: [ 1, 2, 3 ]
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
@@ -241,7 +242,7 @@ jobs:
           key: install-v4-${{ runner.os }}-${{ runner.arch }}-node22-${{ hashFiles('.ci-cache-key/install.json', 'services/app/scripts/copy-assets.mjs', 'services/cli/scripts/prepare-pty.mjs') }}
       - if: steps.install.outputs.cache-hit != 'true'
         run: npm ci
-      - run: npx vitest run --project=ui --project=islands --shard=${{ matrix.shard }}/2
+      - run: npx vitest run --project=ui --project=islands --shard=${{ matrix.shard }}/3
 
   # The BUILD catches what tsc and vitest cannot: a route the generated table
   # has not seen, an import that only resolves under the bundler, a SPA module
@@ -315,18 +316,19 @@ jobs:
           if-no-files-found: error
 
   # On PRs #158 and #159, five shards spent up to 215s in Vitest and 25s
-  # provisioning Chromium. Eight spreads the growing API file set while the
-  # independent runners keep the run's critical path at the slowest shard.
+  # provisioning Chromium. Eight spread the growing API file set while the
+  # independent runners kept the run's critical path at the slowest shard; by run 36608202961 the
+  # slowest of eight was 188s (shard 3) — over the ~150s per-job target — so it splits ten ways.
   api:
     needs: [ plan ]
     if: needs.plan.outputs.api == 'true'
-    name: api tests (${{ matrix.shard }}/8)
+    name: api tests (${{ matrix.shard }}/10)
     runs-on: ubuntu-latest
     timeout-minutes: 10
     strategy:
       fail-fast: false
       matrix:
-        shard: [ 1, 2, 3, 4, 5, 6, 7, 8 ]
+        shard: [ 1, 2, 3, 4, 5, 6, 7, 8, 9, 10 ]
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
@@ -363,22 +365,32 @@ jobs:
         run: npx playwright install --with-deps chromium
       - if: steps.playwright.outputs.cache-hit == 'true'
         run: npx playwright install chromium
-      - run: npx vitest run --project=api --shard=${{ matrix.shard }}/8
+      - run: npx vitest run --project=api --shard=${{ matrix.shard }}/10
 
   # THE SHARDS RUN WHAT `build` BUILT. Every shard used to build the app and the CLI for itself —
-  # the same bytes, six times over, in a job that already had to wait for nothing. It waits for
-  # `build` now (21s of job, of which 8s is the build itself on run 35335620538) and downloads the
-  # one artifact instead.
+  # the same bytes, twelve times over, in a job that already had to wait for nothing. Rather than
+  # rebuild (the app build alone is over a minute now — the old 7s+22s self-build estimate is stale),
+  # this job downloads the one artifact `build` produces. It no longer serialises behind that job to
+  # get it: `needs: [plan]` only, so its own setup (checkout, install, Playwright, sandbox prep — the
+  # steps above this note) runs AT THE SAME TIME as `build` assembles the artifact, instead of after.
+  # "Wait for the build job" below blocks on `build`'s status from the Actions API — not on the `needs`
+  # graph — so this job starts as soon as `plan` does and only pays whatever of `build`'s time isn't
+  # already covered by its own setup, and fails promptly (not after a 30-minute timeout) if `build`
+  # itself fails. Measured on run 36608202961: build 107s, this job's setup ~47s — worth ~47s of
+  # overlap per shard, on the run's own critical path.
   gates:
-    needs: [ plan, build ]
+    needs: [ plan ]
     if: needs.plan.outputs.gates == 'true'
-    name: browser gates (${{ matrix.shard }}/12)
+    name: browser gates (${{ matrix.shard }}/16)
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    permissions:
+      contents: read
+      actions: read
     strategy:
       fail-fast: false
       matrix:
-        shard: [ 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12 ]
+        shard: [ 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16 ]
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
@@ -411,8 +423,8 @@ jobs:
       # packages even on a browser-cache hit; install them only on shards that use them.
       - id: gate-browsers
         run: |
-          echo "browsers=$(node scripts/gates.mjs --browsers --shard=${{ matrix.shard }}/12)" >> "$GITHUB_OUTPUT"
-          echo "postgres=$(node scripts/gates.mjs --needs-postgres --shard=${{ matrix.shard }}/12)" >> "$GITHUB_OUTPUT"
+          echo "browsers=$(node scripts/gates.mjs --browsers --shard=${{ matrix.shard }}/16)" >> "$GITHUB_OUTPUT"
+          echo "postgres=$(node scripts/gates.mjs --needs-postgres --shard=${{ matrix.shard }}/16)" >> "$GITHUB_OUTPUT"
       - name: Install selected gate browsers
         env:
           BROWSERS: ${{ steps.gate-browsers.outputs.browsers }}
@@ -424,31 +436,10 @@ jobs:
             deps+=(--with-deps)
           fi
           npx playwright install "${deps[@]}" "${selected_engines[@]}"
-      # WHAT `build` BUILT: the SPA, the document runtime and its public assets, the generated route
-      # table, the bundled server these shards boot (scripts/gates.mjs runs dist/server.mjs, not a
-      # dev server) and the CLI bundle the conformance gates drive. ~40 MB, stored uncompressed, in
-      # place of the 29s of `npm run build` + `npm run build -w services/cli` every shard used to
-      # repeat (7s + 22s, run 35335620538). It lands at the workspace root, which is where the
-      # builds would have written it.
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
-        with:
-          name: app-build
-      # The runner boots the servers with one protected per-run mail outbox.
-      # Two servers within each of the fourteen runners. The
-      # within-machine fan-out bottomed out at 192s on four vCPUs; the shard is
-      # balanced by each gate's measured weight, not by count, so no one runner
-      # ends up holding every slow gate (scripts/gates.shard.mjs). More than two
-      # shards: the set ran 213s and ~170s of gate work in two shards on main run
-      # 34697938970, and further shards divide that work rather than the machine.
-      #
-      #
-
-      # Twelve shards keep the one compiled gate set under 240 s per job, with
-      # editor-v2, hydration and offline-file on separate runners.
-
-      #
       # The gate runner selects the shard on this host; pull Postgres only when
       # that selection includes postgres-datasets, before its gate timeout starts.
+      # Neither this nor the sandbox prep below needs anything `build` produces, so both run
+      # while `build` is still assembling its artifact rather than after waiting for it.
       - name: pull the Postgres image the datasets gate needs
         if: steps.gate-browsers.outputs.postgres == 'true'
         run: docker pull postgres:17-alpine
@@ -460,8 +451,47 @@ jobs:
           echo '+cpu +memory +pids' | sudo tee /sys/fs/cgroup/afbin-sessions/cgroup.subtree_control
           sudo chown -R "$USER" /sys/fs/cgroup/afbin-sessions
           sudo chown "$USER" /sys/fs/cgroup/cgroup.procs
+      # Everything above this line needs nothing `build` produces, so it already ran while `build`
+      # was still assembling its artifact. This is the one step that actually needs `build` to have
+      # finished — polled from the Actions API (see the job-level note) rather than a `needs: [build]`
+      # dependency, so a slow `build` costs this job only the part of its time this setup did not
+      # already cover, and a failed `build` fails this job within seconds instead of a 30-minute hang.
+      - name: Wait for the build job
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          for _ in $(seq 1 150); do
+            status=$(gh api --paginate \
+              "repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/attempts/${GITHUB_RUN_ATTEMPT}/jobs?per_page=100" \
+              --jq '.jobs[] | select(.name == "build") | (.status + " " + (.conclusion // "-"))')
+            case "$status" in
+              "completed success") exit 0 ;;
+              completed*) echo "::error::the build job did not succeed: ${status}" >&2; exit 1 ;;
+              "") echo "::error::no build job found on this run" >&2; exit 1 ;;
+            esac
+            sleep 4
+          done
+          echo "::error::timed out waiting for the build job" >&2
+          exit 1
+      # WHAT `build` BUILT: the SPA, the document runtime and its public assets, the generated route
+      # table, the bundled server these shards boot (scripts/gates.mjs runs dist/server.mjs, not a
+      # dev server) and the CLI bundle the conformance gates drive. ~40 MB, stored uncompressed. It
+      # lands at the workspace root, which is where the build would have written it.
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: app-build
+      # The runner boots the servers with one protected per-run mail outbox.
+      # Two servers within each of the fourteen runners. The
+      # within-machine fan-out bottomed out at 192s on four vCPUs; the shard is
+      # balanced by each gate's measured weight, not by count, so no one runner
+      # ends up holding every slow gate (scripts/gates.shard.mjs). More than two
+      # shards: the set ran 213s and ~170s of gate work in two shards on main run
+      # 34697938970, and further shards divide that work rather than the machine.
+      #
+      # Sixteen shards (up from twelve) keep the one compiled gate set comfortably under budget, with
+      # editor-v2, hydration and offline-file on separate runners.
       - name: every gate, two servers
-        run: node scripts/gates.mjs --servers=2 --shard=${{ matrix.shard }}/12
+        run: node scripts/gates.mjs --servers=2 --shard=${{ matrix.shard }}/16
         env:
           AUTH__SECRET: gates-ci-${{ github.run_id }}
           DATASET__ALLOW_PRIVATE_NETWORKS: 'true'

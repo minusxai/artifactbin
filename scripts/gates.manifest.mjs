@@ -136,6 +136,15 @@ export function browsersFor(names) {
 /** Gates whose first attempt needs a runner to itself when the matrix has room. */
 export const ISOLATED_GATES = Object.freeze(['editor-v2', 'hydration', 'offline-file']);
 
+/**
+ * The gate matrix's total shard count in `.github/workflows/ci.yml` (the `gates` job): the one
+ * place `scripts/gates.mjs` decides isolation is worth reserving whole bins for, rather than on
+ * every ad hoc `--shard=i/n` (a local `--shard=1/2` should not starve itself of two bins for gates
+ * it may not even be running). Keep this in step with the workflow's shard count — the test in
+ * scripts/__tests__/ci-plan.test.mjs checks the matrix against it.
+ */
+export const CI_GATE_SHARDS = 16;
+
 
 /**
  * Cross-browser system setup measured 91s on CI run 35740918148. Match the
