@@ -7,6 +7,7 @@ import type { StoryController } from '@/lib/story-runtime/contract';
 import { fireEvent, render } from '../../__tests__/helpers';
 import { AnnotationLayer } from '../AnnotationLayer';
 import { createSignal } from 'solid-js';
+import { positionedComments } from '../AnnotationPreview';
 
 const thread = { id: 'ann1', status: 'open', snippet: 'Selected passage', thread: [{ id: 'c1', body: 'First comment', author: { label: 'Ana' }, created_at: new Date().toISOString() }] } as AnnotationWire;
 const backend = (overrides: Partial<ArtifactBackend> = {}) => ({
@@ -73,7 +74,7 @@ it('places floating annotation markers at their reported document geometry', asy
     runtimeRef={{ current: runtime }} sessionNonce="private" showViewComments />);
   await waitFor(() => expect(send).toHaveBeenCalledWith(expect.objectContaining({ type: 'mx:annotations', pins: [expect.objectContaining({ id: 'ann1' })] })));
   receive?.({ type: 'mx:annotation-layout', nonce: 'private', positions: [{ id: 'ann1', rect: { x: 10, y: 20, width: 50, height: 20 }, status: 'exact' }] });
-  expect(view.getByRole('button', { name: 'Open annotation ann1' })).toHaveStyle({ top: '60px' });
+  expect(view.getByRole('button', { name: 'Open annotation conversation by Ana, 1 message' }).closest('[data-annotation-id]')).toHaveStyle({ top: '60px' });
 });
 
 it('folds a conversation to its summary and remembers the fold across remounts', async () => {
@@ -173,4 +174,24 @@ it('Escape cancels a draft and clears the document selection', () => {
   fireEvent.keyDown(window, { key: 'Escape' });
   expect(view.queryByRole('dialog', { name: 'Annotation composer' })).toBeNull();
   expect(send).toHaveBeenCalledWith({ type: 'mx:select', path: null });
+});
+
+it('spaces adjacent floating markers and expands reply context on hover', async () => {
+  const second = { ...thread, id: 'ann2', thread: [{ ...thread.thread[0], id: 'c2', body: 'Second thread' }] } as AnnotationWire;
+  const placed = positionedComments([thread, second], {
+    ann1: { x: 0, y: 20, width: 10, height: 10 }, ann2: { x: 0, y: 22, width: 10, height: 10 },
+  }, { top: 40, height: 600 }, 800);
+  expect(placed.map(item => item.top)).toEqual([60, 102]);
+  const withReply = { ...thread, anchor: { path: '0', key: 'k' }, thread: [thread.thread[0], { ...thread.thread[0], id: 'reply', body: 'More context', author: { ...thread.thread[0].author, label: 'Bob' } }] } as AnnotationWire;
+  const send = vi.fn(); let receive: ((data: unknown) => void) | undefined;
+  const runtime = { send, subscribe: (callback: (data: unknown) => void) => { receive = callback; return () => {}; }, getViewportRect: () => ({ left: 0, top: 40, width: 800, height: 600 }) } as unknown as StoryController;
+  const view = render(() => <AnnotationLayer id="abc" backend={backend({ listAnnotations: vi.fn(async () => [withReply]) })} railOpen={false} onRailOpenChange={() => {}}
+    runtimeRef={{ current: runtime }} sessionNonce="private" showViewComments />);
+  await waitFor(() => expect(send).toHaveBeenCalledWith(expect.objectContaining({ pins: [expect.objectContaining({ id: 'ann1' })] })));
+  receive?.({ type: 'mx:annotation-layout', nonce: 'private', positions: [{ id: 'ann1', rect: { x: 0, y: 20, width: 10, height: 10 } }] });
+  const card = view.getByRole('button', { name: 'Open annotation conversation by Ana, 2 messages' }).closest('[data-annotation-id]')!;
+  fireEvent.mouseEnter(card);
+  expect(view.getByText('First comment')).toBeTruthy();
+  fireEvent.click(view.getByRole('button', { name: 'Expand replies' }));
+  expect(view.getByText('More context')).toBeTruthy();
 });

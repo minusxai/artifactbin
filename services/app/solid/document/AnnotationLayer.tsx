@@ -14,6 +14,9 @@ import { isFolded, readFolds, toggleFold, unfold } from '@/lib/comment-folds';
 import { parseMarkdownLite, plainText } from '@/lib/markdown-lite';
 import { hasReplyText, remoteWorkLabel, replyMentionPrefix } from '@/lib/remote-reply';
 import { createCommentCapture } from './CommentCapture';
+import { AnnotationPreview, AuthorMark, CommentTime, positionedComments } from './AnnotationPreview';
+import { ScreenshotEditor, type ScreenshotDrawing } from './ScreenshotEditor';
+import { CommentScreenshot } from './CommentScreenshot';
 
 export interface AnnotationLayerProps {
   id: string; backend?: ArtifactBackend; railOpen: boolean; onRailOpenChange: (open: boolean) => void;
@@ -28,6 +31,7 @@ export interface AnnotationLayerProps {
 export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
   const backend = props.backend ?? createHttpBackend(props.id);
   const capture = createCommentCapture(backend, props.editId);
+  const screenshotExport: { current: (() => Promise<ScreenshotDrawing>) | null } = { current: null };
   const [items, setItems] = createSignal<AnnotationWire[]>([]);
   const [resolved, setResolved] = createSignal<AnnotationWire[]>([]);
   const [selection, setSelection] = createSignal<StoryEditSelection | null>(props.initialSelection ?? null);
@@ -43,6 +47,7 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
   const [pick, setPick] = createSignal<'select' | null>(props.pickRequested ? 'select' : null);
   const [hoverId, setHoverId] = createSignal<string | null>(null);
   const [anchorRects, setAnchorRects] = createSignal<Record<string, StoryEditRect>>({});
+  let threadsRoot: HTMLDivElement | undefined;
   createEffect(() => {
     if (props.railOpen && !selection() && !openId() && props.pickOnOpen !== false && !props.editId && !props.railSheet) setPick('select');
     else if (!props.railOpen && !selection()) setPick(null);
@@ -133,7 +138,8 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
     if (!target.nodeId) { setError('Wait for this change to save before commenting. Your draft is still here.'); return; }
     setBusy(true); setError('');
     try {
-      const attachmentId = await capture.stage();
+      if (capture.draft() && !screenshotExport.current) throw new Error('The screenshot is still loading. Please try again.');
+      const attachmentId = await capture.stage(capture.draft() ? await screenshotExport.current!() : undefined);
       const signature = JSON.stringify([target, draft(), attachmentId]);
       if (mutation.signature !== signature) mutation = { signature, key: crypto.randomUUID() };
       const row = await backend.createAnnotation({ path: target.path, node_id: target.nodeId, body: draft(), ...(target.quote ? { quote: target.quote } : {}), ...(target.range ? { range: target.range } : {}), ...(attachmentId ? { attachment_id: attachmentId, edit_id: capture.draft()!.editId } : {}) }, mutation.key);
@@ -158,23 +164,35 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
     setFolds(unfold(props.id, { threads: [id], comments: row?.thread.at(-1) ? [row.thread.at(-1)!.id] : [] }));
     props.onRailOpenChange(true);
   };
+  createEffect(() => {
+    const id = openId();
+    if (!id || !props.railOpen) return;
+    const frame = requestAnimationFrame(() => {
+      const target = Array.from(threadsRoot?.querySelectorAll<HTMLElement>('[data-thread-id]') ?? []).find(node => node.dataset.threadId === id);
+      target?.scrollIntoView?.({ block: 'start', inline: 'nearest' });
+      const comments = target?.querySelectorAll<HTMLElement>('[data-comment-id]');
+      comments?.[comments.length - 1]?.scrollIntoView?.({ block: 'nearest', inline: 'nearest' });
+    });
+    onCleanup(() => cancelAnimationFrame(frame));
+  });
   const foldThread = (id: string) => setFolds(toggleFold(props.id, 'threads', id));
   const foldComment = (id: string) => setFolds(toggleFold(props.id, 'comments', id));
   const preview = (body: string) => plainText(parseMarkdownLite(body));
-  const thread = (row: AnnotationWire) => <article aria-label={`Annotation ${row.id}`} class="rounded border border-edge bg-surface p-3 text-sm">
+  const thread = (row: AnnotationWire) => <article aria-label={`Annotation ${row.id}`} data-thread-id={row.id} class="rounded border border-edge bg-surface p-3 text-sm">
     <For each={row.remote_work ?? []}>{work => <p role="status"><a href={`/chat?session=${work.sessionId}`} target="_blank" rel="noopener noreferrer">@{work.name}</a> {remoteWorkLabel(work)}</p>}</For>
     <Show when={isFolded(folds(), 'threads', row.id)} fallback={<>
       <div class="mb-2 flex items-center gap-2"><button type="button" aria-label="Fold thread" onClick={() => foldThread(row.id)}>⌄</button><p class="text-xs text-muted">{row.quote ?? row.snippet}</p></div>
       <Show when={row.orphaned}><p>This passage was removed from the document.</p></Show>
       <Show when={!row.orphaned && row.quote_found === false && row.quote}><p>{row.quote} · These words have since been edited.</p></Show>
-      <For each={openId() === row.id ? row.thread : row.thread.slice(0, 1)}>{comment => <div class="mb-2 min-w-0 break-words">
+      <For each={openId() === row.id ? row.thread : row.thread.slice(0, 1)}>{(comment, index) => <div data-comment-id={comment.id} class="mb-2 min-w-0 break-words">
         <span role="button" tabindex="0" aria-label={isFolded(folds(), 'comments', comment.id) ? 'Expand comment' : 'Collapse comment'}
           aria-expanded={!isFolded(folds(), 'comments', comment.id)}
           onClick={() => foldComment(comment.id)} onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); foldComment(comment.id); } }}
-          class="mr-2 cursor-pointer text-xs text-muted">{comment.author.label}</span>
+          class="mr-2 inline-flex cursor-pointer items-center gap-2 text-xs text-muted"><span aria-label={`${comment.author.label ?? 'You'} avatar`} class="size-[22px]"><AuthorMark author={comment.author} /></span>{comment.author.label}<CommentTime iso={comment.created_at} /></span>
         <Show when={isFolded(folds(), 'comments', comment.id)} fallback={<CommentMarkdown text={comment.body} />}>
           <p class="truncate font-sans">{preview(comment.body).split('\n', 1)[0]}</p>
         </Show>
+        <Show when={index() === 0 && row.image}><CommentScreenshot image={row.image!} /></Show>
       </div>}</For>
       <Show when={openId() !== row.id}><button type="button" aria-label={row.status === 'resolved' ? 'Show resolved conversation' : 'Open annotation thread'} onClick={() => openThread(row.id)}>open →</button></Show>
       <Show when={row.status === 'resolved' && openId() === row.id}><button type="button" aria-label="Hide resolved conversation" onClick={() => setOpenId(null)}>↑</button></Show>
@@ -190,23 +208,22 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
     <Show when={pick()}><div role="status" aria-label="Select tool active" class="fixed z-30 rounded border border-edge bg-surface px-3 py-2 text-xs shadow" style={{ top: `${(props.topOffset ?? 0) + 12}px`, left: '50%' }}>tap a block or drag an area to comment<button type="button" aria-label="Cancel picking" onClick={() => setPick(null)} class="ml-2">×</button></div></Show>
     <Show when={selection()}><aside role="dialog" aria-label="Annotation composer" class="fixed bottom-4 left-1/2 z-40 w-80 -translate-x-1/2 rounded border border-edge bg-surface p-3 shadow-lg"><p class="mb-2 text-xs text-muted">{selection()?.quote ?? 'Comment on selection'}</p>
       <Show when={capture.busy()}><p role="status">Preparing screenshot…</p></Show>
+      <Show when={capture.draft()}>{current => <ScreenshotEditor image={current().image} initialStrokes={current().strokes} exportRef={screenshotExport} busy={busy()} onRetake={() => void capture.start()} />}</Show>
       <Show when={capture.required() && !capture.draft() && !capture.busy()}><div class="mb-2 rounded border border-edge bg-raised p-2 text-xs"><p role="alert">{capture.error() || 'A screenshot is required for this selection.'}</p><button type="button" onClick={() => void capture.start()}>Retry screenshot</button><label>Upload screenshot<input aria-label="Upload screenshot" type="file" accept="image/png,image/jpeg,image/webp" onChange={event => { const file = event.currentTarget.files?.[0]; if (file) void capture.upload(file); }} /></label><button type="button" onClick={capture.skip}>Continue without screenshot</button></div></Show>
       <CommentMarkdownField label="New comment" value={draft()} onChange={setDraft} onSubmit={() => void post()} backend={backend} artifactId={props.id} /><div class="flex justify-end gap-2"><button type="button" aria-label="Cancel comment" onClick={() => { setSelection(null); capture.reset(); props.onSelectionConsumed?.(); }}>Cancel</button><button type="button" aria-label="Post comment" disabled={busy() || capture.busy() || (capture.required() && !capture.draft()) || !draft().trim()} onClick={() => void post()}>Post</button></div></aside></Show>
     <AnnotationRail open={props.railOpen} onClose={() => props.onRailOpenChange(false)} topOffset={props.topOffset} rightInset={props.rightInset} host={props.railHost} sheet={props.railSheet} picking={pick() !== null} onSelect={() => {
       if (pick()) { setPick(null); capture.reset(); } else { setPick('select'); void capture.start(); }
     }}>
-      <For each={items()}>{thread}</For>
-      <Show when={items().length === 0}><p class="px-2 py-3 text-xs text-muted">no comments yet.</p></Show>
-      <button type="button" aria-label="Show resolved comments" onClick={() => void loadResolved()}>{showResolved() ? 'hide resolved' : 'show resolved'}</button>
-      <Show when={showResolved()}><div role="separator" aria-label="resolved" /><For each={resolved()}>{thread}</For></Show>
+      <div ref={threadsRoot}>
+        <For each={items()}>{thread}</For>
+        <Show when={items().length === 0}><p class="px-2 py-3 text-xs text-muted">no comments yet.</p></Show>
+        <button type="button" aria-label="Show resolved comments" onClick={() => void loadResolved()}>{showResolved() ? 'hide resolved' : 'show resolved'}</button>
+        <Show when={showResolved()}><div role="separator" aria-label="resolved" /><For each={resolved()}>{thread}</For></Show>
+      </div>
     </AnnotationRail>
-    <Show when={!props.railOpen && props.showViewComments && items().length > 0}><div data-capture-chrome aria-label="Open annotation comments" class="pointer-events-none fixed inset-0 z-20"><For each={items()}>{row => {
-      const position = () => anchorRects()[row.id];
-      const rect = () => props.runtimeRef ? documentRect({ runtimeRef: props.runtimeRef }) : undefined;
-      return <button type="button" aria-label={`Open annotation ${row.id}`} onClick={() => openThread(row.id)} onMouseEnter={() => setHoverId(row.id)} onMouseLeave={() => setHoverId(null)}
-        style={position() ? { top: `${(rect()?.top ?? 0) + position()!.y}px` } : { top: '50%' }}
-        class="pointer-events-auto absolute right-3 rounded-full border border-edge bg-surface px-2 py-1 text-xs shadow">{row.thread[0]?.author.label ?? 'comment'}</button>;
-    }}</For></div></Show>
+    <Show when={!props.railOpen && props.showViewComments && items().length > 0}><div data-capture-chrome aria-label="Open annotation comments" class="pointer-events-none fixed inset-0 z-20"><For each={positionedComments(items(), anchorRects(), props.runtimeRef ? documentRect({ runtimeRef: props.runtimeRef }) ?? { top: 0, height: innerHeight } : { top: 0, height: innerHeight }, innerHeight)}>{placed =>
+      <AnnotationPreview row={placed.annotation} top={placed.top} hovered={hoverId() === placed.annotation.id} onHover={setHoverId} onOpen={() => openThread(placed.annotation.id)} />
+    }</For></div></Show>
     <Show when={error()}><p role="alert" class="fixed bottom-2 left-2 z-50 rounded border border-danger bg-surface px-3 py-2 text-xs text-danger">{error()}</p></Show>
     <Show when={deleting()}>{id => <ConfirmDialog title="Delete annotation?" description="This comment and its replies will be deleted." action="Delete annotation" confirmLabel="Confirm delete annotation" danger busy={busy()} onCancel={() => setDeleting(null)} onConfirm={() => void remove(id())} />}</Show>
   </>;

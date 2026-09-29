@@ -96,7 +96,7 @@ export function DocumentSharing(props: {
           <Show when={!state() && !error()}><p role="status">loading…</p></Show>
           <Show when={state()}>{current => <>
             <div class="flex gap-1"><For each={(['public', 'unlisted', 'private'] as const).filter(value => value !== 'private' || current().canPrivate !== false)}>{visibility =>
-              <button type="button" aria-label={`Make ${visibility}`} aria-pressed={current().visibility === visibility} onClick={() => void put({ visibility })} class="flex-1 whitespace-nowrap rounded border border-edge px-2 py-2.5 aria-pressed:border-accent">{visibility}</button>
+              <button type="button" aria-label={`Make ${visibility}`} aria-pressed={current().visibility === visibility} onClick={() => void put({ visibility })} class="flex-1 whitespace-nowrap rounded border border-edge px-2 py-2.5 aria-pressed:border-accent aria-pressed:bg-accent-soft">{visibility}</button>
             }</For></div>
             <Show when={current().visibility !== 'private'}><div class="mt-2 flex items-center justify-between gap-2"><span>Anyone with the link</span><RolePicker label="Link role" value={current().linkRole ?? 'viewer'} onChange={role => void put({ linkRole: role })} /></div></Show>
             <section class="mt-5 border-t border-edge pt-4" aria-label="People"><h3 class="mb-1 uppercase tracking-wider text-faint">People</h3>
