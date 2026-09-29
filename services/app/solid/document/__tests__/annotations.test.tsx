@@ -102,13 +102,13 @@ it('folds a conversation to its summary and remembers the fold across remounts',
   const first = render(() => <AnnotationLayer id="abc-fold" backend={service} railOpen onRailOpenChange={() => {}}
     pickOnOpen={false} />);
   await waitFor(() => expect(first.getByText('First comment')).toBeTruthy());
-  fireEvent.click(first.getByRole('button', { name: 'Fold thread' }));
+  fireEvent.click(first.getByRole('button', { name: 'Collapse thread' }));
   expect(first.queryByText('Second reply')).toBeNull();
   expect(first.getByText('1 reply')).toBeTruthy();
   first.unmount();
   const second = render(() => <AnnotationLayer id="abc-fold" backend={service} railOpen onRailOpenChange={() => {}}
     pickOnOpen={false} />);
-  await waitFor(() => expect(second.getByRole('button', { name: 'Unfold thread' })).toBeTruthy());
+  await waitFor(() => expect(second.getByRole('button', { name: 'Expand thread' })).toBeTruthy());
   expect(second.queryByText('Second reply')).toBeNull();
 });
 

@@ -8,15 +8,16 @@ import { loginHref } from '@/lib/login-href';
 import { documentRect, sendDocument, subscribeDocument, type DocumentRuntimeRef } from '@/lib/story-runtime/document-endpoint';
 import { isEditFrameMessage, STORY_ANNOTATIONS_MESSAGE, STORY_ANNOTATION_PIN_MESSAGE, STORY_ANNOTATION_LAYOUT_MESSAGE, STORY_ANNOTATION_HOVER_MESSAGE, STORY_SELECTION_ACTION_MESSAGE, STORY_SELECTION_MESSAGE, STORY_SELECT_MESSAGE, type StoryAnnotationsMessage, type StoryEditRect, type StoryEditSelection } from '@/lib/story-runtime/contract';
 import { AnnotationRail } from './AnnotationRail';
-import { CommentMarkdown, CommentMarkdownField } from './CommentMarkdown';
+import { CommentMarkdownField } from './CommentMarkdown';
 import { ConfirmDialog } from '../components/ConfirmDialog';
 import { isFolded, readFolds, toggleFold, unfold } from '@/lib/comment-folds';
 import { parseMarkdownLite, plainText } from '@/lib/markdown-lite';
 import { hasReplyText, remoteWorkLabel, replyMentionPrefix } from '@/lib/remote-reply';
 import { createCommentCapture } from './CommentCapture';
-import { AnnotationPreview, AuthorMark, CommentTime, positionedComments } from './AnnotationPreview';
+import { AnnotationPreview, AuthorIdentity, CommentTime, positionedComments, replyParticipants } from './AnnotationPreview';
 import { ScreenshotEditor, type ScreenshotDrawing } from './ScreenshotEditor';
 import { CommentScreenshot } from './CommentScreenshot';
+import { CommentFoldingBody } from './CommentFoldingBody';
 import { positionedComposer } from './AnnotationComposerPosition';
 import { remoteMention } from '@/lib/remote-reply';
 import { APP_BAR_H, RIGHT_RAIL_W } from '@/lib/story/edit-bar';
@@ -49,6 +50,9 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
   const [showResolved, setShowResolved] = createSignal(false);
   const [deleting, setDeleting] = createSignal<string | null>(null);
   const [openId, setOpenId] = createSignal<string | null>(null);
+  const [justOpenedId, setJustOpenedId] = createSignal<string | null>(null);
+  const [menuOpen, setMenuOpen] = createSignal<string | null>(null);
+  let menuRoot: HTMLDivElement | undefined;
   let mutation = { signature: '', key: '' };
   const [folds, setFolds] = createSignal(readFolds(props.id));
   const [pick, setPick] = createSignal<'select' | null>(props.pickRequested ? 'select' : null);
@@ -104,6 +108,14 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
     });
   });
   createEffect(() => { props.onAnnotationsChange?.(items()); });
+  createEffect(() => {
+    if (!menuOpen()) return;
+    const dismiss = (event: PointerEvent) => { if (!menuRoot || !event.composedPath().includes(menuRoot)) setMenuOpen(null); };
+    const escape = (event: KeyboardEvent) => { if (event.key === 'Escape') setMenuOpen(null); };
+    document.addEventListener('pointerdown', dismiss);
+    document.addEventListener('keydown', escape);
+    onCleanup(() => { document.removeEventListener('pointerdown', dismiss); document.removeEventListener('keydown', escape); });
+  });
   createEffect(() => {
     if (!props.sessionNonce || !props.runtimeRef) return;
     const expandedResolved = resolved().find(row => row.id === openId());
@@ -190,6 +202,7 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
       else setRecentResolved(previous => { const next = { ...previous }; delete next[id]; return next; });
       if (body.reply) setReply(previous => ({ ...previous, [id]: replyMentionPrefix(answer.thread) }));
       if (answer.status === 'resolved') setOpenId(null);
+      else if (body.reopen) { setOpenId(id); setJustOpenedId(id); }
     } catch (cause) { setError(cause instanceof Error ? cause.message : 'Could not update this comment.'); }
     finally { setBusy(false); }
   };
@@ -212,7 +225,7 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
       if (mutation.signature !== signature) mutation = { signature, key: crypto.randomUUID() };
       const row = await backend.createAnnotation({ path: target.path, node_id: target.nodeId, body: draft(), ...(target.quote ? { quote: target.quote } : {}), ...(target.range ? { range: target.range } : {}), ...(attachmentId ? { attachment_id: attachmentId, edit_id: capture.draft()!.editId } : {}) }, mutation.key);
       setItems(previous => [...previous.filter(item => item.id !== row.id), row]);
-      setDraft(''); setSelection(null); capture.reset(); props.onSelectionConsumed?.();
+      setDraft(''); setSelection(null); capture.reset(); props.onSelectionConsumed?.(); setOpenId(row.id); setJustOpenedId(row.id);
       sendDocument({ runtimeRef: props.runtimeRef }, { type: STORY_SELECT_MESSAGE, path: null });
     } catch (cause) {
       if (cause instanceof BackendRequestError && cause.signInRequired) location.assign(loginHref(location, 'comment'));
@@ -228,6 +241,7 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
     openedForThread = true;
     setPick(null);
     setOpenId(id);
+    setJustOpenedId(id);
     const row = [...items(), ...resolved()].find(item => item.id === id);
     if (row?.status === 'resolved') setShowResolved(true);
     if (row) setReply(previous => previous[id] !== undefined ? previous : { ...previous, [id]: replyMentionPrefix(row.thread) });
@@ -300,31 +314,38 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
     }, 100);
     onCleanup(() => clearInterval(timer));
   });
-  const thread = (row: AnnotationWire) => <article aria-label={`Annotation ${row.id}`} data-thread-id={row.id} class="rounded border border-edge bg-surface p-3 text-sm">
-    <For each={row.remote_work ?? []}>{work => <p role="status"><a href={`/chat?session=${work.sessionId}`} target="_blank" rel="noopener noreferrer">@{work.name}</a> {remoteWorkLabel(work)}</p>}</For>
+  const thread = (row: AnnotationWire) => <article aria-label={row.status === 'resolved' ? 'Resolved annotation thread' : 'Annotation thread'} data-thread-id={row.id} data-hovered={hoverId() === row.id ? 'true' : undefined}
+    onMouseEnter={() => setHoverId(row.id)} onMouseLeave={() => setHoverId(null)}
+    onClick={event => { if (openId() !== row.id && !isFolded(folds(), 'threads', row.id) && !(event.target as Element).closest('a, button, textarea, input, [role="button"]')) openThread(row.id); }}
+    class={`shrink-0 overflow-hidden rounded border border-edge bg-comment text-sm ${row.status === 'resolved' ? 'opacity-55 hover:opacity-100 focus-within:opacity-100' : ''} ${openId() === row.id || hoverId() === row.id ? 'border-edge-bright bg-comment-hover' : ''}`}>
+    <For each={(row.remote_work ?? []).filter((work, index, all) => !all.slice(index + 1).some(next => next.sessionId === work.sessionId))}>{work => <p role="status" class="border-b border-edge px-3 py-1.5"><a href={`/chat?session=${work.sessionId}`} target="_blank" rel="noopener noreferrer">@{work.name}</a> {remoteWorkLabel(work)}</p>}</For>
     <Show when={isFolded(folds(), 'threads', row.id)} fallback={<>
-      <div class="mb-2 flex items-center gap-2"><button type="button" aria-label="Fold thread" onClick={() => foldThread(row.id)}>⌄</button><p class="text-xs text-muted">{row.snippet}</p></div>
+      <div class="mb-2 flex items-center gap-2 px-3 pt-2"><button type="button" aria-label="Collapse thread" aria-expanded="true" onClick={() => foldThread(row.id)}>⌄</button><p class="text-xs text-muted">{row.snippet}</p></div>
       <Show when={row.orphaned}><div><Show when={openId() === row.id && (row.quote ?? row.snippet)}><p>{row.quote ?? row.snippet}</p></Show><p>This passage was removed from the document.</p></div></Show>
       <Show when={!row.orphaned && openId() === row.id && row.quote_found === false && row.quote}><div><p>{row.quote}</p><p>These words have since been edited.</p></div></Show>
-      <For each={openId() === row.id ? row.thread : row.thread.slice(0, 1)}>{(comment, index) => <div data-comment-id={comment.id} class="mb-2 min-w-0 break-words">
-        <span role="button" tabindex="0" aria-label={isFolded(folds(), 'comments', comment.id) ? 'Expand comment' : 'Collapse comment'}
-          aria-expanded={!isFolded(folds(), 'comments', comment.id)}
-          onClick={() => foldComment(comment.id)} onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); foldComment(comment.id); } }}
-          class="mr-2 inline-flex cursor-pointer items-center gap-2 text-xs text-muted"><span aria-label={`${comment.author.label ?? 'You'} avatar`} class="size-[22px]"><AuthorMark author={comment.author} /></span>{comment.author.label}<CommentTime iso={comment.created_at} /></span>
-        <Show when={isFolded(folds(), 'comments', comment.id)} fallback={<CommentMarkdown text={comment.body} />}>
+      <For each={openId() === row.id ? row.thread : row.thread.slice(0, 1)}>{(comment, index) => <div data-comment-id={comment.id} class="mb-2 min-w-0 break-words px-3 scroll-mb-14 sm:scroll-mb-0">
+        <div class="mb-1.5 flex min-w-0 items-center gap-2"><span role={openId() === row.id ? 'button' : undefined} tabindex={openId() === row.id ? 0 : undefined} aria-label={openId() === row.id ? isFolded(folds(), 'comments', comment.id) ? 'Expand comment' : 'Collapse comment' : undefined}
+          aria-expanded={openId() === row.id ? !isFolded(folds(), 'comments', comment.id) : undefined}
+          onClick={event => { if (openId() === row.id && !(event.target as Element).closest('a, button')) foldComment(comment.id); }} onKeyDown={event => { if (openId() === row.id && (event.key === 'Enter' || event.key === ' ')) { event.preventDefault(); foldComment(comment.id); } }}
+          class="mr-2 inline-flex min-w-0 flex-1 cursor-pointer items-center gap-2 text-xs text-muted"><AuthorIdentity author={comment.author} /><CommentTime iso={comment.created_at} /></span>
+          <Show when={index() === 0 && row.status === 'open'}><button type="button" aria-label="Resolve annotation" disabled={busy()} onClick={() => void act(row.id, { resolve: true })}>✓</button></Show>
+          <Show when={index() === 0 && row.status === 'resolved' && openId() === row.id}><button type="button" aria-label="Hide resolved conversation" onClick={() => setOpenId(null)}>↑</button></Show>
+          <Show when={index() === 0 && (row.status === 'open' || openId() === row.id)}><div ref={menuRoot} class="relative"><button type="button" aria-label="Annotation actions" aria-expanded={menuOpen() === row.id} onClick={() => setMenuOpen(value => value === row.id ? null : row.id)}>⋮</button>
+            <Show when={menuOpen() === row.id}><div role="menu" aria-label="Annotation action menu" class="absolute right-0 top-6 z-20 min-w-24 border border-edge bg-surface p-1 shadow-lg"><button type="button" role="menuitem" aria-label="Delete annotation" onClick={() => { setMenuOpen(null); setDeleting(row.id); }}>delete</button></div></Show>
+          </div></Show></div>
+        <Show when={isFolded(folds(), 'comments', comment.id)} fallback={openId() === row.id ? <CommentFoldingBody text={comment.body} foldable={!(justOpenedId() === row.id && index() === row.thread.length - 1)} /> : <p class="line-clamp-2 font-sans">{preview(comment.body)}</p>}>
           <p class="truncate font-sans">{preview(comment.body).split('\n', 1)[0]}</p>
         </Show>
         <Show when={index() === 0 && row.image}><CommentScreenshot image={row.image!} /></Show>
       </div>}</For>
-      <Show when={openId() !== row.id}><button type="button" aria-label={row.status === 'resolved' ? 'Show resolved conversation' : 'Open annotation thread'} onClick={() => openThread(row.id)}>open →</button></Show>
-      <Show when={row.status === 'resolved' && openId() === row.id}><button type="button" aria-label="Hide resolved conversation" onClick={() => setOpenId(null)}>↑</button></Show>
+      <Show when={openId() !== row.id}><button type="button" aria-label={row.status === 'resolved' ? 'Show resolved conversation' : 'Open annotation thread'} onClick={() => openThread(row.id)} class="flex w-full justify-between border-t border-edge px-3 py-1.5"><span><Show when={replyParticipants(row.thread).length}><span aria-label={`Reply participants: ${replyParticipants(row.thread).map(author => author.label ?? 'Agent').join(', ')}`}><For each={replyParticipants(row.thread)}>{author => <span>{author.label}</span>}</For></span></Show>+{Math.max(0, row.thread.length - 1)} more</span><span>open →</span></button></Show>
     </>}>
-      <button type="button" aria-label="Unfold thread" onClick={() => foldThread(row.id)}>› {row.snippet}</button>
+      <button type="button" aria-label="Expand thread" aria-expanded="false" onClick={() => foldThread(row.id)}>› {row.snippet}</button>
       <p class="truncate font-sans">{row.thread[0] ? preview(row.thread[0].body).split('\n', 1)[0] : ''}</p>
       <p>{Math.max(0, row.thread.length - 1)} {row.thread.length === 2 ? 'reply' : 'replies'}</p>
     </Show>
-    <div class="flex gap-2 text-xs"><Show when={row.status === 'open'} fallback={<button type="button" aria-label="Reopen annotation" disabled={busy()} onClick={() => void act(row.id, { reopen: true })}>reopen</button>}><button type="button" aria-label="Resolve annotation" disabled={busy()} onClick={() => void act(row.id, { resolve: true })}>resolve</button></Show><button type="button" aria-label="Delete annotation" disabled={busy()} onClick={() => setDeleting(row.id)}>delete</button></div>
-    <Show when={row.status === 'open' && openId() === row.id}><form class="mt-2" onSubmit={event => { event.preventDefault(); if (hasReplyText(reply()[row.id] ?? '')) void act(row.id, { reply: reply()[row.id] }); }}><CommentMarkdownField label={`Reply to annotation ${row.id}`} value={reply()[row.id] ?? ''} onChange={value => setReply(previous => ({ ...previous, [row.id]: value }))} onSubmit={() => { if (hasReplyText(reply()[row.id] ?? '')) void act(row.id, { reply: reply()[row.id] }); }} previewLabel="Reply preview" previewToggleLabel="Preview reply" backend={backend} artifactId={props.id} /><button type="submit" aria-label="Send reply" disabled={busy() || !hasReplyText(reply()[row.id] ?? '')}>reply</button></form></Show>
+    <Show when={row.status === 'resolved' && openId() === row.id}><button type="button" aria-label="Reopen annotation" disabled={busy()} onClick={() => void act(row.id, { reopen: true })}>↺ reopen</button></Show>
+    <Show when={row.status === 'open' && openId() === row.id}><form class="mt-2 border-t border-edge px-3 py-2" onSubmit={event => { event.preventDefault(); if (hasReplyText(reply()[row.id] ?? '')) void act(row.id, { reply: reply()[row.id] }); }}><CommentMarkdownField label={`Reply to annotation ${row.id}`} value={reply()[row.id] ?? ''} onChange={value => setReply(previous => ({ ...previous, [row.id]: value }))} onSubmit={() => { if (hasReplyText(reply()[row.id] ?? '')) void act(row.id, { reply: reply()[row.id] }); }} previewLabel="Reply preview" previewToggleLabel="Preview reply" backend={backend} artifactId={props.id} placeholder="reply…" rows={2} /><div class="flex justify-end gap-2"><button type="button" aria-label="Cancel reply" onClick={() => { setReply(previous => ({ ...previous, [row.id]: '' })); setOpenId(null); }} class="bg-transparent px-2 py-1">cancel</button><button type="submit" aria-label="Send reply" disabled={busy() || !hasReplyText(reply()[row.id] ?? '')} class="border border-accent bg-accent px-2 py-1 text-bg">reply</button></div></form></Show>
   </article>;
   return <>
     <Show when={pick()}><div role="status" aria-label="Select tool active" class="fixed z-30 rounded border border-edge bg-surface px-3 py-2 text-xs shadow" style={{ top: `${Math.max(props.topOffset ?? 0, frameArea().top, props.railSheet ? APP_BAR_H : 0) + 12}px`, left: `${frameArea().left + frameArea().width / 2}px`, transform: 'translateX(-50%)' }}>tap a block or drag an area to comment<button type="button" aria-label="Cancel picking" onClick={() => setPick(null)} class="ml-2">×</button></div></Show>
