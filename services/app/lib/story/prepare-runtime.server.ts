@@ -4,7 +4,7 @@ import { storyBodyFor } from './body';
 import { assetLookupFrom } from './asset-url';
 import { EMPTY_HELMET_CONTENT } from './helmet';
 import { resolveStoryMode } from '@/lib/data/story/story-themes';
-import { loadStorySsr } from './ssr.server';
+import { glyphsForNodes } from './icon-glyphs';
 import { documentFonts } from './document-fonts';
 import { storyBaseCss, type StoryBaseCssRecipe } from './story-base-css';
 import { webFontAssets } from '@/lib/webfonts';
@@ -83,7 +83,7 @@ export async function prepareStoryParts(input: PrepareStoryInput) {
   const helmet = split?.content ?? EMPTY_HELMET_CONTENT;
   const mode = resolveStoryMode(input.theme, input.colorMode);
   const title = helmet.title?.trim() || input.title || 'artifact';
-  const glyphs = split ? loadStorySsr().glyphsForNodes(split.body) : {};
+  const glyphs = split ? glyphsForNodes(split.body) : {};
   // The version's prerendered diagrams, when the route asked for them (never an offline file or a draft).
   const mermaidImages = input.mermaidImages ?? (split && input.mermaidImageLookup ? await mermaidImagesFor(input.mermaidImageLookup, split.body) : undefined);
   const docFonts = documentFonts(helmet);
