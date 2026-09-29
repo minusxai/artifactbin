@@ -3,7 +3,6 @@ import {act,cleanup,fireEvent,render,screen,waitFor,within} from '@testing-libra
 import {TrustedUi} from '../TrustedUi';
 import {PageControls} from '../PageChrome';
 import {openPageChromeOnceMounted,requestPageChrome} from '../page-chrome-state';
-import {NotificationSettings} from '../NotificationSettings';
 import {PeopleInbox} from '../PeopleInbox';
 import {NotificationProvider,NotificationBell,NotificationMenu} from '../NotificationCenter';
 const identity=vi.hoisted(()=>({session:{kind:'account',user:{id:'alice'}} as {kind:string;user:{id:string}}|null}));
@@ -71,20 +70,6 @@ it('uses the settings panel system, toggles, and stays in the trusted navigation
  expect(ui.queryByRole('dialog',{name:'Notifications'})).toBeNull();
  expect(ui.getByRole('dialog',{name:'Page controls'})).toBeVisible();
 });
-it('keeps preferences out of history and activity out of settings',async()=>{
- vi.stubGlobal('EventSource',class{close=vi.fn();});
- const notifications=Array.from({length:8},(_,i)=>({id:`n${i}`,artifact_id:'doc',kind:'reply',sender_id:'bob',username:'bob',title:`Task ${i}`,source:'comment:ann1',revision:1,created_at:'2026-09-23T10:00:00Z',read_at:null}));
- vi.stubGlobal('fetch',vi.fn(async(url:string)=>new Response(JSON.stringify(url.endsWith('/email')?{enabled:false}:{autoAccept:true,blocks:[],next:null,unread:8,notifications}))));
- const view=render(<NotificationProvider><NotificationSettings/></NotificationProvider>);
- expect(await screen.findByRole('checkbox')).toBeChecked();
- expect(screen.queryByText('Task 0')).toBeNull();
- view.rerender(<NotificationProvider><PeopleInbox/></NotificationProvider>);
- expect(await screen.findAllByRole('listitem')).toHaveLength(8);
- expect(screen.queryByRole('checkbox')).toBeNull();
- view.rerender(<NotificationProvider><PeopleInbox compact/></NotificationProvider>);
- expect(await screen.findAllByRole('listitem')).toHaveLength(6);
-});
-
 it('renders combined mutation messages in one card with trusted actor identity',async()=>{
  vi.stubGlobal('EventSource',class{close=vi.fn();});
  vi.stubGlobal('fetch',vi.fn(async()=>Response.json({autoAccept:true,blocks:[],next:null,unread:1,notifications:[{id:'run-card',kind:'mutation',artifact_id:'doc',title:'Tasks',actor:{kind:'user',userId:'bob',person:{name:'Bob',handle:'bob',image:null},viaAgent:true},messages:['Task is Done','Review is ready'],mutation_run_id:'run',mutation_name:'change',revision:1,read_at:null,created_at:'2026-09-23T10:00:00Z'}]})));

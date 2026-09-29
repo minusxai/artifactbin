@@ -52,29 +52,23 @@ export function createReaderPreloader(webDir: string): ReaderPreloader {
 }
 
 /**
- * The LISTING pages behind the same addresses: a folder (`/a/<id>` answered
- * with a listing) and a profile's index (`/@handle`). Their pages are chunks of
- * their own so a document's reader never downloads them; when the server
- * already knows the address is one of these, it preloads that chunk beside the
- * route instead of letting the browser discover it a round trip later.
+ * A folder's listing is a separate React chunk, kept out of document readers.
+ * The public profile index uses the Solid entry and its own route chunk.
  */
 const LISTING_ENTRIES = {
   folder: ['pages/Profile.tsx', 'pages/Artifact.tsx', 'pages/Folder.tsx'],
-  'profile-index': ['pages/Profile.tsx', 'pages/ProfileIndex.tsx'],
 } as const;
 export type ListingPage = keyof typeof LISTING_ENTRIES;
 
 /** Which listing page the server's inlined answer (server/app `bootstrapFor`) draws, if any. */
 export function listingPage(data: { profile?: unknown; artifact?: unknown } | null): ListingPage | null {
   if ((data?.artifact as { folder?: unknown } | undefined)?.folder) return 'folder';
-  if (!data?.artifact && (data?.profile as { kind?: unknown } | undefined)?.kind === 'public-profile') return 'profile-index';
   return null;
 }
 
 export function createListingPreloader(webDir: string): (html: string, page: ListingPage) => string {
   const folder = createEntryPreloader(webDir, LISTING_ENTRIES.folder);
-  const profile = createEntryPreloader(webDir, LISTING_ENTRIES['profile-index']);
-  return (html, page) => (page === 'folder' ? folder : profile)(html);
+  return (html, _page) => folder(html);
 }
 
 /** Preload only a page’s selected entries and their static dependencies. */

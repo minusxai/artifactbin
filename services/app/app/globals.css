@@ -16,10 +16,12 @@
  */
 @source "../components";
 @source "../web";
+@source "../solid";
 @source "../lib";
 @source not "../components/**/__tests__/**";
 @source not "../lib/**/__tests__/**";
 @source not "../web/**/__tests__/**";
+@source not "../solid/**/__tests__/**";
 @source not "../**/*.test.ts";
 @source not "../**/*.test.tsx";
 

@@ -42,6 +42,7 @@ import { authorFrameResponse } from './author-frame';
 import { AUTHOR_FRAME_PATH } from '@/lib/story-runtime/author-frame';
 import { GITHUB_EXTERNAL_URL } from '@/lib/github-star';
 import { createListingPreloader, createSpaEntry, listingPage } from './reader-preloads';
+import { isSolidPage } from '@/lib/solid-routes';
 import { artifactPageAnswer, type ArtifactPageAnswer, type CompiledStory } from '@/lib/artifact-page';
 import type { ArtifactRow } from '@/lib/artifacts';
 import { enablePreparedPageWarmups } from '@/lib/story/prepared-page.server';
@@ -208,7 +209,7 @@ export interface AppServerOptions {
   /** Where the built SPA lives (dist/web). In dev, `index` is answered by Vite instead. */
   webDir?: string;
   /** Dev: how index.html is produced (Vite transforms it); prod: read from webDir. */
-  indexHtml?: (url: string) => Promise<string>;
+  indexHtml?: (url: string, status?: 200 | 404) => Promise<string>;
   /** Dev: Vite's connect middleware, mounted before everything else for its own assets. */
   devMiddleware?: (req: import('node:http').IncomingMessage, res: import('node:http').ServerResponse, next: () => void) => void;
   /** Dev only: the Vite socket port resolved by the server composition. */
@@ -288,9 +289,9 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
   if (opts.actorSecret) actorReceiver(opts.actorSecret).mount(app);
   const webDir = opts.webDir ?? path.resolve('dist/web');
   let indexCache: string | null = null;
-  const index = async (url: string): Promise<string> => {
-    if (opts.indexHtml) return opts.indexHtml(url);
-    if (new URL(url).pathname === '/trash') return readFileSync(path.join(webDir, 'trash.html'), 'utf8');
+  const index = async (url: string, status?: 200 | 404): Promise<string> => {
+    if (opts.indexHtml) return opts.indexHtml(url, status);
+    if (isSolidPage(new URL(url).pathname, status)) return readFileSync(path.join(webDir, 'trash.html'), 'utf8');
     return (indexCache ??= readFileSync(path.join(webDir, 'index.html'), 'utf8'));
   };
   // A verified custom domain is answered by its own boundary before any app
@@ -346,7 +347,6 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
     const data = found ? { ...found.data, ...(address ? { address } : {}) } : null;
     // The compiled reader's HTML-first page: the assembler's whole document, the page data beside it.
     if (found?.compiled && data) return compiledPage(c, found.compiled, data, status ?? 200);
-    const html = await index(url);
     // An @-address whose profile resolves to NOTHING is a miss, and a miss is
     // 404 as a STATUS (the rule documents already live by) — the SPA is still
     // the body, so the person sees the app's own 404 page rather than a
@@ -354,6 +354,7 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
     // document handlers pass their admission's 404 explicitly).
     const miss = data === null && new URL(url).pathname.split('/').filter(Boolean)[0]?.startsWith('@');
     const code = status ?? (miss ? 404 : 200);
+    const html = await index(url, code);
     // A dead end is answered in the language the caller asked in: a browser
     // gets the app's own 404 page, anything else (curl's `*/*`, a fetch tool)
     // gets the refusal that names the way on.

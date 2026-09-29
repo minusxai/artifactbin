@@ -16,7 +16,6 @@ import { REFRESH_EVENT } from '@/lib/navigation';
 import { router as routerDouble, resetRouter } from '@/test/setup/router';
 import { HomePage as ActualHomePage } from '@/web/pages/Home';
 import { SessionProvider } from '@/web/session';
-import { ProfilePage } from '@/web/pages/Profile';
 
 const HomePage = () => <SessionProvider><ActualHomePage /></SessionProvider>;
 const homeResponse = () => ({ accountId: 'usr_c', sparklines: {}, ...(home as object) });
@@ -29,19 +28,12 @@ const doc = (id: string) => ({
   id, url: `/a/${id}`, title: `Doc ${id}`, description: null, format: 'markup', version: 1,
   visibility: 'public', parent_id: null, ancestor_ids: [], updated_at: '2026-08-20T00:00:00.000Z', views: 0, sparkline: null,
 });
-const profileDoc = (id: string) => ({
-  id, title: `Doc ${id}`, format: 'markup', version: 1, visibility: 'public', folder: '',
-  created_at: '2026-08-20T00:00:00.000Z', updated_at: '2026-08-20T00:00:00.000Z',
-});
-
 let home: unknown;
-let profile: unknown;
 
 beforeEach(() => {
   vi.stubGlobal('fetch', vi.fn(async (url: string) => {
     if (String(url).includes('/api/page/session')) return new Response(JSON.stringify(sessionResponse()), { status: 200 });
     if (String(url).includes('/api/page/home')) return new Response(JSON.stringify(homeResponse()), { status: 200 });
-    if (String(url).includes('/api/page/profile')) return new Response(JSON.stringify(profile), { status: 200 });
     return new Response('{}', { status: 200 });
   }));
 });
@@ -61,20 +53,13 @@ describe('the homepage workspace and profile column', () => {
     expect(within(screen.getByRole('menu', { name: 'Create menu' })).getByRole('menuitem', { name: 'Dataset' })).toHaveAttribute('href', '/datasets/new');
   });
 
-  it('widens a populated home for the dashboard rail while keeping profiles focused', async () => {
+  it('widens a populated home for the dashboard rail', async () => {
     home = { signedIn: true, artifacts: [doc('a'), doc('b')], viewsOverTime: [], shared: [] };
-    profile = { kind: 'public-profile', handle: 'cee', files: [profileDoc('a')], email: 'c@x.io', authed: true, anon: false };
 
     const dash = render(<MemoryRouter><HomePage /></MemoryRouter>);
     await waitFor(() => expect(mainWidth(dash.container)).toBe('max-w-[80rem]'));
     expect(screen.getByLabelText('Home workspace')).toBeInTheDocument();
     expect(screen.getByLabelText('Dashboard rail')).toBeInTheDocument();
-    cleanup();
-
-    const prof = render(<MemoryRouter initialEntries={['/@cee']}><Routes><Route path="/:user/*" element={<ProfilePage />} /></Routes></MemoryRouter>);
-    // The profile's index is its own chunk: measure the listing, not its pending frame.
-    await waitFor(() => { expect(screen.queryByLabelText('Loading page')).toBeNull(); expect(mainWidth(prof.container)).toBeDefined(); }, { timeout: 5000 });
-    expect(mainWidth(prof.container)).toBe('max-w-4xl');
   });
 
 
@@ -276,22 +261,4 @@ describe('claiming across the empty \u2192 full flip', () => {
     // THE RULE: the flip does not take the answer with it.
     expect(screen.getByLabelText('Claim result')).toHaveTextContent(/Added/);
   });
-});
-
-const atProfile = () =>
-  render(<MemoryRouter initialEntries={['/@cee']}><Routes><Route path="/:user/*" element={<ProfilePage />} /></Routes></MemoryRouter>);
-
-describe('a profile', () => {
-  it('renders only the public shelf for the files it lists', async () => {
-    profile = { kind: 'public-profile', handle: 'cee', files: [profileDoc('a'), profileDoc('b')], email: 'c@x.io', authed: true, anon: false };
-    // Mounted under the app's own route: ProfilePage reads `:user` from it,
-    // and a bare mount reads nothing — which the typo guard answers with 404.
-    atProfile();
-    await waitFor(() => expect(screen.getByText('Doc a')).toBeInTheDocument());
-    expect(screen.getByText('Doc b')).toBeInTheDocument();
-    expect(screen.getByLabelText('Artifact grid')).toBeInTheDocument();
-    expect(screen.queryByLabelText('Dashboard')).toBeNull();
-    expect(screen.queryByLabelText('Assets')).toBeNull();
-  });
-
 });

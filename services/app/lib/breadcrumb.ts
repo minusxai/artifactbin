@@ -37,6 +37,7 @@ const PAGE_NAMES: Record<string, string> = {
   '/account': 'account',
   '/tokens': 'tokens',
   '/login': 'log in',
+  '/trash': 'trash',
 };
 
 /** A profile path — `/@handle`, optionally with a document (and any decoration) after it. */

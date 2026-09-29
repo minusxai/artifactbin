@@ -1,0 +1,90 @@
+/* @jsxImportSource solid-js */
+import '@testing-library/jest-dom/vitest';
+import { cleanup, fireEvent, render, screen, waitFor } from '@solidjs/testing-library';
+import { createMemoryHistory, MemoryRouter, Route } from '@solidjs/router';
+import { afterEach, expect, it, vi } from 'vitest';
+
+const { write, scrollPages, scrollLines, scrollToBottom } = vi.hoisted(() => ({
+  scrollPages: vi.fn(), scrollLines: vi.fn(), scrollToBottom: vi.fn(),
+  write: vi.fn((data: string, callback?: () => void) => { if (data) callback?.(); }),
+}));
+vi.mock('@xterm/xterm', () => ({ Terminal: class {
+  cols = 80; rows = 24; write = write; scrollPages = scrollPages; scrollLines = scrollLines; scrollToBottom = scrollToBottom;
+  loadAddon() {} open() {} resize() {} reset() {} dispose() {} onData() { return { dispose() {} }; }
+} }));
+vi.mock('@xterm/addon-fit', () => ({ FitAddon: class { proposeDimensions() { return { cols: 80, rows: 24 }; } } }));
+
+import { ChatPage } from '@/solid/pages/Chat';
+
+function open(session: string) {
+  const history = createMemoryHistory();
+  history.set({ value: `/chat?session=${session}`, replace: true });
+  render(() => <MemoryRouter history={history}><Route path="/chat" component={ChatPage} /></MemoryRouter>);
+}
+
+afterEach(() => { cleanup(); vi.unstubAllGlobals(); write.mockClear(); window.history.replaceState(null, '', '/'); });
+
+it('keeps polling through empty terminal frames and renders later output', async () => {
+  vi.stubGlobal('ResizeObserver', class { observe() {} disconnect() {} });
+  const session = { id: 'test', name: 'Demo', harness: 'claude', machine: 'laptop', online: true, controller: 'local', cols: 80, rows: 24, exitCode: null };
+  let calls = 0;
+  vi.stubGlobal('fetch', vi.fn(async (url: string) => ({ ok: true, json: async () => url === '/api/remote/sessions' ? { sessions: [session] } : ++calls === 1 ? { session, seq: 1, snapshot: '', frames: [] } : { session, seq: 2, frames: [{ seq: 2, cols: 80, rows: 24, data: 'later output' }] } })));
+  open('test');
+  await waitFor(() => expect(write).toHaveBeenCalledWith('later output', expect.any(Function)), { timeout: 2000 });
+  expect(write).not.toHaveBeenCalledWith('', expect.any(Function));
+});
+
+it('shows an ended session without terminal input controls', async () => {
+  vi.stubGlobal('ResizeObserver', class { observe() {} disconnect() {} });
+  const session = { id: 'done', name: 'Claude', harness: 'claude', machine: 'laptop', online: false, controller: 'local', cols: 80, rows: 24, exitCode: 0 };
+  vi.stubGlobal('fetch', vi.fn(async (url: string) => ({ ok: true, json: async () => url === '/api/remote/sessions' ? { sessions: [session] } : { session, seq: 1, snapshot: '', frames: [] } })));
+  open('done');
+  expect(await screen.findByText(/Session ended \(exit 0\)/)).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Remove session' })).toBeEnabled();
+  expect(screen.queryByRole('textbox', { name: 'Message to agent' })).toBeNull();
+  expect(screen.getByText('claude · Ended')).toBeInTheDocument();
+});
+
+it('retries failed polls, clears reconnecting on recovery, and scrolls without sending input', async () => {
+  vi.stubGlobal('ResizeObserver', class { observe() {} disconnect() {} });
+  const session = { id: 'retry', name: 'Retry', harness: 'claude', machine: 'laptop', online: true, controller: 'local', cols: 80, rows: 24, exitCode: null };
+  let polls = 0;
+  const fetch = vi.fn(async (url: string) => { if (url === '/api/remote/sessions') return { ok: true, json: async () => ({ sessions: [session] }) }; polls++; if (polls <= 2) throw new TypeError('Failed to fetch'); return { ok: true, json: async () => ({ session, seq: 1, snapshot: 'recovered output', frames: [] }) }; });
+  vi.stubGlobal('fetch', fetch);
+  open('retry');
+  await waitFor(() => expect(screen.getAllByRole('status').map(el => el.textContent).join(' ')).toContain('Reconnecting'));
+  await waitFor(() => expect(write).toHaveBeenCalledWith('recovered output', expect.any(Function)), { timeout: 3000 });
+  await waitFor(() => expect(screen.queryByText(/Retrying automatically/)).toBeNull());
+  fireEvent.click(screen.getByRole('button', { name: 'Scroll up' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Scroll down' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Latest output' }));
+  expect(scrollPages).toHaveBeenCalledWith(-1); expect(scrollPages).toHaveBeenCalledWith(1); expect(scrollToBottom).toHaveBeenCalled();
+  const terminal = screen.getByLabelText('Remote terminal');
+  fireEvent.touchStart(terminal, { touches: [{ clientY: 100 }] });
+  fireEvent.touchMove(terminal, { touches: [{ clientY: 52 }] });
+  expect(scrollLines).toHaveBeenCalledWith(3);
+  fireEvent.touchMove(terminal, { touches: [{ clientY: 116 }] });
+  expect(scrollLines).toHaveBeenCalledWith(-4);
+  expect(fetch.mock.calls.every(call => !((call as unknown[])[1] as RequestInit)?.body)).toBe(true);
+});
+
+it('reloads a snapshot when relay generation changes even if the sequence is reused', async () => {
+  vi.stubGlobal('ResizeObserver', class { observe() {} disconnect() {} });
+  const session = { id: 'gen', name: 'Generation', harness: 'shell', machine: 'laptop', online: true, controller: 'local', cols: 80, rows: 24, exitCode: null };
+  const urls: string[] = [];
+  vi.stubGlobal('fetch', vi.fn(async (url: string) => { if (url === '/api/remote/sessions') return { ok: true, json: async () => ({ sessions: [session] }) }; urls.push(url); const n = urls.length; return { ok: true, json: async () => ({ session, seq: 1, generation: n === 1 ? 'old' : 'new', frames: [], ...(n === 1 ? { snapshot: 'old screen' } : url.endsWith('since=-1') ? { snapshot: 'restored screen' } : {}) }) }; }));
+  open('gen');
+  await waitFor(() => expect(write).toHaveBeenCalledWith('restored screen', expect.any(Function)));
+  expect(urls.slice(0, 3)).toEqual(['/api/remote/sessions/gen?since=-1', '/api/remote/sessions/gen?since=1', '/api/remote/sessions/gen?since=-1']);
+});
+
+it.each([true, false])('uses stop only for online managed agents (online=%s)', async (online) => {
+  vi.stubGlobal('ResizeObserver', class { observe() {} disconnect() {} });
+  const session = { id: 'managed', name: 'Review', harness: 'codex', managed: true, online, activity: 'unknown', exitCode: null, cols: 80, rows: 24 };
+  const fetch = vi.fn(async (url: string, options?: RequestInit) => ({ ok: true, json: async () => options?.method === 'DELETE' || options?.method === 'POST' ? { ok: true } : url === '/api/remote/sessions' ? { sessions: [session] } : { session, seq: 0, frames: [] } }));
+  vi.stubGlobal('fetch', fetch);
+  open('managed');
+  fireEvent.click(await screen.findByRole('button', { name: online ? 'Stop agent' : 'Remove agent' }));
+  await waitFor(() => expect(fetch).toHaveBeenCalledWith('/api/remote/sessions/managed', expect.objectContaining({ method: online ? 'POST' : 'DELETE' })));
+  if (!online) await waitFor(() => expect(screen.queryByRole('button', { name: 'Open Review' })).toBeNull());
+});
