@@ -5,6 +5,7 @@
  * while a query runs, and what replaces a thread that stops answering.
  */
 import { describe, expect, it } from 'vitest';
+import { execFileSync } from 'node:child_process';
 import { serveSql } from '@artifactbin/sql';
 import { createSql } from '@artifactbin/sql/local';
 import { createSqliteSql } from '@artifactbin/sql/sqlite';
@@ -69,4 +70,16 @@ describe('a thread that stops answering', () => {
       expect(answers.map((a) => (a.q as unknown as { rows: Array<{ i: number }> }).rows[0]!.i)).toEqual([0, 1, 2, 3, 4, 5]);
     } finally { await pool.close(); }
   });
+});
+
+it('loads the source engine in a plain development Node process', () => {
+  const source = new URL('../src/pool.ts', import.meta.url).href;
+  const output = execFileSync(process.execPath, ['--import', 'tsx', '--eval', `
+    void import(${JSON.stringify(source)}).then(async ({ createSqlitePool }) => {
+      const pool = createSqlitePool({}, { workers: 1 });
+      try { console.log(JSON.stringify(await pool.run({ tables: {}, params: {}, queries: [{ name: 'q', sql: 'select 1 as n' }] }))); }
+      finally { await pool.close(); }
+    });
+  `], { encoding: 'utf8', timeout: 20_000 });
+  expect(JSON.parse(output)).toMatchObject({ q: { rows: [{ n: 1 }] } });
 });

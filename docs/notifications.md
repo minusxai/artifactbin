@@ -2,7 +2,7 @@
 
 ## State and history
 
-`relations` owns user→artefact likes and joins and user→user follows. A pair has
+`relations` owns user→artifact likes and joins and user→user follows. A pair has
 one row keyed by subject kind/ID, verb and object kind/ID. Its lifecycle is
 `pending`, `accepted`, `dismissed` or `left`, with `direction` (`request` or
 `invitation`), `initiated_by`, `accepted_at` and `revision`. `deleted_at` is set
@@ -28,14 +28,14 @@ joined with the required read access. Agent replies notify the human account eve
 when they share an identity. Replies notify the thread's participants and saved
 mention recipients, excluding blocks. Reply plus resolution is one source event
 and one conversation notification per recipient. Reopening is a new event.
-Membership, comment and artefact access remain separate checks; inbox reads and
+Membership, comment and artifact access remain separate checks; inbox reads and
 email eligibility recheck access rather than trusting an old event.
 
 ## One notification experience
 
 The global provider owns the authenticated inbox and one live stream. The bell
 uses the same exclusive panel controller and desktop/mobile surface as settings;
-on artefacts it lives inside the existing trusted navigation boundary. Opening
+on artifacts it lives inside the existing trusted navigation boundary. Opening
 settings/profile closes notifications, and pressing the bell toggles it.
 
 The menu shows recent notifications and links to `/notifications` (history) and

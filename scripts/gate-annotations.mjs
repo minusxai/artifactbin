@@ -256,6 +256,7 @@ const run = async () => {
     // Clicked-until-it-takes, like every other in-frame click here: the edit
     // chunk and the frame's re-render after the agent's PUT both land a beat
     // after the mode does, and a click in that beat selects nothing.
+    await page.getByRole('tab', { name: 'Selection', exact: true }).click();
     const para = frame.locator('#figure');
     const toolbar = page.locator('[aria-label="Typography toolbar"]');
     const editorSelected = await until(async () => {

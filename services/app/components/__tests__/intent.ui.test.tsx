@@ -169,14 +169,14 @@ describe('membership in the reader breadcrumb',()=>{
    base:{chrome:true,theme:null,faces:[],fonts:{slots:{},families:[]}},
    authorScript:null,theme:null,title:'Tasks',
   }},'commenter');
-  fireEvent.click(await screen.findByRole('button',{name:'Join artefact'}));
+  fireEvent.click(await screen.findByRole('button',{name:'Join artifact'}));
   expect(await screen.findByRole('button',{name:'Pending — view request'})).toBeInTheDocument();
   expect(fetch).toHaveBeenCalledWith('/api/my/artifacts/story1/members',expect.objectContaining({method:'POST',body:JSON.stringify({action:'join'})}));
  });
 
  it('sends signed-out Join through login with the return intent',async()=>{
   at('/a/story1', {dataflow:mutationFlow,accountSession:false});
-  fireEvent.click(screen.getByRole('button',{name:'Join artefact'}));
+  fireEvent.click(screen.getByRole('button',{name:'Join artifact'}));
   await waitFor(()=>expect(window.location.pathname).toBe('/login'));
   expect(decodeURIComponent(window.location.search)).toContain('intent=join');
  });
@@ -191,6 +191,6 @@ describe('membership in the reader breadcrumb',()=>{
  });
  it('does not offer membership for a document with only local mutations',()=>{
   at('/a/story1',{dataflow:{flow:localFlow}});
-  expect(screen.queryByRole('button',{name:'Join artefact'})).toBeNull();
+  expect(screen.queryByRole('button',{name:'Join artifact'})).toBeNull();
  });
 });

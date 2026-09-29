@@ -28,9 +28,9 @@ export function useArtifactMembership(artifactId:string,enabled:boolean,revision
    const action=current.self?.status==='pending'&&current.self.direction==='invitation'?'accept':'join';
    const response=await fetch(endpoint,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action})});
    const result=await response.json();
-   if(!response.ok||!Array.isArray(result.members)||!Array.isArray(result.pending))throw Error(result.detail??'Could not join artefact');
+   if(!response.ok||!Array.isArray(result.members)||!Array.isArray(result.pending))throw Error(result.detail??'Could not join artifact');
    setState(result);onChange();
-  }catch(e){setError(e instanceof Error?e.message:'Could not join artefact');}
+  }catch(e){setError(e instanceof Error?e.message:'Could not join artifact');}
   finally{busy.current=false;}
  },[endpoint,onChange,read]);
  return {status:state?.self?.status==='accepted'&&state.self.explicit_join?'joined' as const:state?.self?.status==='pending'?'pending' as const:'join' as const,join,error};

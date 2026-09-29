@@ -27,7 +27,7 @@ export interface DatasetPrincipal {
   tokenId: string | null;
 }
 
-/** Constructed by the server; the saved artefact context is never request input. */
+/** Constructed by the server; the saved artifact context is never request input. */
 export interface DatasetGrantContext {
   caller: DatasetPrincipal;
   owner: DatasetPrincipal;

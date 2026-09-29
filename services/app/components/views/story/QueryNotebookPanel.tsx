@@ -348,43 +348,26 @@ export default function QueryNotebookPanel({ cells, onSqlChange, onSpotlight, fo
         {datasets.length > 0 && (
           <section aria-label="Datasets" className="mb-6">
             <h2 className="mb-2 font-mono text-[11px] uppercase tracking-wide text-faint">datasets</h2>
-            <div className="flex flex-col gap-2">
-              {datasets.map((group) => (
-                <div key={group.key} className="rounded-[4px] border border-edge p-3">
-                  {/* The dataset is a REFERENCE, so it behaves like one: it opens. */}
-                  <a
-                    href={`/a/${group.key}`}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="font-mono text-[12px] text-accent underline-offset-2 hover:underline"
-                  >
-                    {titles[group.key] ?? group.key}
-                  </a>
-                  {titles[group.key] && <p className="font-mono text-[10px] text-faint">{group.key}</p>}
-                  <p className="mt-1 font-sans text-[11px] text-muted">
-                    read by {group.cells.length} {group.cells.length === 1 ? 'query' : 'queries'} ·{' '}
-                    {group.cells.map((c) => c.name).join(', ')}
-                  </p>
-                  {(() => {
+            <div className="overflow-x-auto rounded-[4px] border border-edge">
+              <table aria-label="Datasets" className="w-full border-collapse text-left font-mono text-xs">
+                <thead className="bg-raised text-[11px] text-muted">
+                  <tr>{['Dataset', 'Rows', 'Columns', 'Used by'].map(label => <th key={label} scope="col" className="border-b border-edge px-3 py-2 font-medium">{label}</th>)}</tr>
+                </thead>
+                <tbody>
+                  {datasets.map(group => {
                     const shape = shapes[group.key];
-                    if (!shape) return <p className="mt-2 font-mono text-[11px] text-faint">reading its shape…</p>;
-                    if (shape.error) return <p className="mt-2 font-mono text-[11px] text-faint">shape unavailable — {shape.error}</p>;
-                    return (
-                      <div className="mt-2">
-                        <p className="font-mono text-[10px] uppercase tracking-wide text-faint">
-                          public.rows · {shape.columns.length} columns
-                          {shape.rows !== null && ` · ${new Intl.NumberFormat().format(shape.rows)} rows`}
-                        </p>
-                        <div className="mt-1 flex flex-wrap gap-1">
-                          {shape.columns.map((c) => (
-                            <span key={c} className="rounded-[3px] bg-raised px-1.5 py-0.5 font-mono text-[10px] text-muted">{c}</span>
-                          ))}
-                        </div>
-                      </div>
-                    );
-                  })()}
-                </div>
-              ))}
+                    return <tr key={group.key} className="border-b border-edge align-top last:border-b-0">
+                      <th scope="row" className="px-3 py-3 text-left font-normal">
+                        <a href={`/a/${group.key}`} target="_blank" rel="noreferrer" className="text-accent underline-offset-2 hover:underline">{titles[group.key] ?? group.key}</a>
+                        {titles[group.key] && <p className="mt-1 text-[10px] text-faint">{group.key}</p>}
+                      </th>
+                      <td className="whitespace-nowrap px-3 py-3 tabular-nums text-muted">{shape?.rows !== null && shape?.rows !== undefined ? new Intl.NumberFormat().format(shape.rows) : '—'}</td>
+                      <td className="px-3 py-3 text-muted">{!shape ? 'reading its shape…' : shape.error ? `shape unavailable — ${shape.error}` : shape.columns.join(', ')}</td>
+                      <td className="px-3 py-3 text-muted">{group.cells.map(cell => cell.name).join(', ')}</td>
+                    </tr>;
+                  })}
+                </tbody>
+              </table>
             </div>
           </section>
         )}

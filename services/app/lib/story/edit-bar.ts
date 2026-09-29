@@ -1,20 +1,5 @@
-/**
- * The contextual editing toolbar's height, RESERVED by the page rather than
- * measured. Document actions (44), formatting and selection context (36),
- * then an 8px gap before the document.
- *
- * Its own module because the page needs the number in view mode too — and
- * importing it from the editor would pull the editor (the source editor, the panels, the
- * whole chart inspector) into the graph of every reader who will never open it.
- */
-export const EDIT_BAR_H = 88;
-
-/**
- * Just the document-actions row. The formatting row below it belongs to the
- * APP view — there is nothing on a page to select while you are reading SQL or
- * source — so those views draw the bar one row tall and start this much lower.
- */
-export const EDIT_BAR_ROW_H = 44;
+/** A single document-actions row. Appearance and formatting live in the Selection panel. */
+export const EDIT_BAR_H = 44;
 
 /** The page's own bar, drawn above the editor bar in edit mode (components/PageChrome AppBar). */
 export const APP_BAR_H = 44;

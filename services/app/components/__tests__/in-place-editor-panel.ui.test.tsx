@@ -1,7 +1,7 @@
 /**
- * THE EDIT PANEL: one right panel for the whole edit session on a wide window,
+ * THE EDIT PANEL: one right panel for the App view on a wide window,
  * bottom sheets below the breakpoint. What must hold is that nothing inside the
- * session changes the width the page reserves — only the collapse button — and
+ * App selection changes the width the page reserves, and
  * that a selection fills the panel without taking it over.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
@@ -18,7 +18,7 @@ vi.mock(import('@/components/TrustedUi'), async (importOriginal) => ({
   useTrustedPortalContainer: () => undefined,
 }));
 
-import { installEditorFrame, teardownEditorFrame, mount, fromFrame, selection, editorElement } from '@/test/helpers/in-place-editor';
+import { installEditorFrame, teardownEditorFrame, mount, fromFrame, selection, editorElement, art, lastQueued } from '@/test/helpers/in-place-editor';
 
 const chart = () => selection({ kind: 'embed', tag: 'Question', path: '0.2', rect: { x: 10, y: 400, width: 300, height: 200 } });
 const setWidth = (width: number) => Object.defineProperty(window, 'innerWidth', { value: width, configurable: true });
@@ -36,7 +36,40 @@ afterEach(() => {
 });
 
 describe('the edit panel on a wide window', () => {
-  it('is open from entry, and nothing in the session changes the width it asks for', async () => {
+  it('edits the title in the breadcrumb host through the existing save queue', () => {
+    const titleHost = document.createElement('span');
+    document.body.append(titleHost);
+    const view = mount({ titleHost });
+    try {
+      const input = within(titleHost).getByRole('textbox', { name: 'Title' });
+      expect(within(screen.getByLabelText('Editor toolbar')).queryByLabelText('Title')).toBeNull();
+      fireEvent.change(input, { target: { value: 'Renamed document' } });
+      expect(lastQueued()).toMatchObject({ title: 'Renamed document' });
+    } finally {
+      view.unmount();
+      titleHost.remove();
+    }
+  });
+
+  it('groups document appearance above selection formatting in the panel', async () => {
+    mount({ art: { ...art, template: 'editorial' } });
+    const panel = within(screen.getByLabelText('Edit panel'));
+    const header = within(screen.getByLabelText('Editor toolbar'));
+    for (const label of ['Theme', 'Template', 'Color mode']) {
+      expect(panel.getByLabelText(label)).toBeTruthy();
+      expect(header.queryByLabelText(label)).toBeNull();
+    }
+    expect(panel.getByRole('separator')).toBeTruthy();
+    expect(screen.getByLabelText('Editor toolbar')).toHaveStyle({ height: '44px' });
+    await fromFrame({ type: STORY_SELECTION_MESSAGE, selection: selection() });
+    expect(panel.getByLabelText('Typography toolbar')).toBeTruthy();
+    expect(header.queryByLabelText('Typography toolbar')).toBeNull();
+    expect(panel.queryByText('Select a chart, image or block to see its settings.')).toBeNull();
+    expect(header.getByLabelText('Undo')).toBeTruthy();
+    expect(header.getByRole('button', { name: 'Insert' })).toBeTruthy();
+  });
+
+  it('is open from entry, and selections keep the width stable in App', async () => {
     const widths: number[] = [];
     const onCommentsOpenChange = vi.fn();
     const view = mount({ onRightInsetChange: (px) => widths.push(px), onCommentsOpenChange });
@@ -52,8 +85,6 @@ describe('the edit panel on a wide window', () => {
     expect(onCommentsOpenChange).toHaveBeenLastCalledWith(true);
     view.rerender(editorElement({ onRightInsetChange: (px) => widths.push(px), onCommentsOpenChange, commentsOpen: true }));
     await fromFrame({ type: STORY_SELECTION_MESSAGE, selection: chart() });
-    fireEvent.click(screen.getByLabelText('Edit the source'));
-    fireEvent.click(screen.getByLabelText('Edit on the page'));
 
     // Every value ever reported, not just the last: a 320 → 0 → 320 flicker
     // inside one act is exactly the jump this panel exists to remove.
@@ -218,6 +249,18 @@ describe('the edit panel on a wide window', () => {
     expect(screen.getByLabelText('Expand panel')).toBeTruthy();
   });
 
+  it('uses view tabs and orders Insert, Undo, Redo, Done in the action group', () => {
+    mount();
+    const views = screen.getByRole('tablist', { name: 'Editor view' });
+    const app = within(views).getByRole('tab', { name: 'Edit on the page' });
+    expect(app).toHaveAttribute('aria-selected', 'true');
+    fireEvent.keyDown(app, { key: 'ArrowRight' });
+    expect(within(views).getByRole('tab', { name: 'Edit the source' })).toHaveAttribute('aria-selected', 'true');
+    fireEvent.click(app);
+    const actions = within(screen.getByLabelText('Document actions')).getAllByRole('button');
+    expect(actions.map(button => button.getAttribute('aria-label'))).toEqual(['Insert', 'Undo', 'Redo', 'Exit edit mode']);
+  });
+
   it('puts the app / code switch in the editor toolbar', () => {
     mount();
     const toolbar = screen.getByLabelText('Editor toolbar');
@@ -247,8 +290,11 @@ describe('below the panel breakpoint', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Edit chart' }));
     const sheet = screen.getByRole('dialog', { name: 'Selection settings' });
     expect(within(sheet).getByLabelText('Chart inspector')).toBeTruthy();
-    // The chart's top lands just under the bars (44 + 88 + 8).
-    expect(scrollBy).toHaveBeenCalledWith({ top: 400 - 140, behavior: 'smooth' });
+    expect(within(sheet).getByLabelText('Theme')).toBeTruthy();
+    expect(within(sheet).getByLabelText('Typography toolbar')).toBeTruthy();
+    expect(within(screen.getByLabelText('Editor toolbar')).queryByLabelText('Typography toolbar')).toBeNull();
+    // The chart's top lands just under the bars (44 + 44 + 8).
+    expect(scrollBy).toHaveBeenCalledWith({ top: 400 - 96, behavior: 'smooth' });
 
     fireEvent.click(within(sheet).getByLabelText('Close selection settings'));
     expect(screen.queryByRole('dialog', { name: 'Selection settings' })).toBeNull();
@@ -293,7 +339,7 @@ describe('below the panel breakpoint', () => {
     setWidth(390);
     mount();
     for (const name of ['Edit on the page', 'Edit the source']) {
-      const button = screen.getByRole('button', { name });
+      const button = screen.getByRole('tab', { name });
       const label = [...button.querySelectorAll('span')].find((el) => el.textContent);
       expect(label?.className).toMatch(/\bhidden\b.*\bsm:inline\b/);
     }
@@ -307,5 +353,55 @@ describe('below the panel breakpoint', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Show comments' }));
     expect(onCommentsOpenChange).toHaveBeenLastCalledWith(true);
     expect(screen.queryByRole('dialog', { name: 'Version history' })).toBeNull();
+  });
+});
+
+
+describe('reference and sharing views', () => {
+  it('reserves a sidebar only in App and restores its collapsed state when returning', () => {
+    const widths: number[] = [];
+    mount({ onRightInsetChange: px => widths.push(px), sharingContent: <button>Manage sharing</button>, art: { ...art, markup: '<Helmet><Query name="q">{`select 1 as n`}</Query></Helmet><p>Sample</p>' } });
+    fireEvent.click(screen.getByLabelText('Collapse panel'));
+    for (const name of ['Edit the source', 'Show data', 'Show files', 'Show sharing']) {
+      fireEvent.click(screen.getByRole('tab', { name }));
+      expect(screen.queryByLabelText('Edit panel')).toBeNull();
+      expect(screen.queryByLabelText('Expand panel')).toBeNull();
+      expect(widths.at(-1)).toBe(0);
+      for (const action of ['Insert', 'Undo', 'Redo']) expect(screen.queryByRole('button', { name: action })).toBeNull();
+      expect(screen.getByRole('button', { name: 'Exit edit mode' })).toBeVisible();
+      fireEvent.click(screen.getByRole('tab', { name: 'Edit on the page' }));
+      expect(screen.getByLabelText('Expand panel')).toBeTruthy();
+      expect(widths.at(-1)).toBe(44);
+    }
+  });
+
+  it('lists other referenced files with types and links, excluding datasets', () => {
+    mount({ art: { ...art, refs: [
+      { id: 'data01', kind: 'dataset', title: 'Sales' },
+      { id: 'image1', kind: 'image', title: 'Cover image' },
+      { id: 'pdf001', kind: 'pdf', title: 'Notes' },
+      { id: 'image1', kind: 'image', title: 'Cover image' },
+    ] } });
+    fireEvent.click(screen.getByRole('tab', { name: 'Show files' }));
+    const table = within(screen.getByRole('table', { name: 'Referenced files' }));
+    expect(table.getAllByRole('row')).toHaveLength(3);
+    expect(table.getByRole('link', { name: 'Cover image' })).toHaveAttribute('href', '/a/image1');
+    expect(table.getByText('Image')).toBeTruthy();
+    expect(table.getByText('PDF')).toBeTruthy();
+    expect(table.queryByText('Sales')).toBeNull();
+    expect(screen.getByRole('tab', { name: 'Edit on the page' })).toHaveAttribute('aria-selected', 'false');
+    fireEvent.click(screen.getByRole('tab', { name: 'Edit on the page' }));
+    expect(screen.queryByRole('table', { name: 'Referenced files' })).toBeNull();
+  });
+
+  it('offers an empty Files view and sharing controls without a second overlay', () => {
+    mount({ sharingContent: <button>Manage test sharing</button> });
+    fireEvent.click(screen.getByRole('tab', { name: 'Show files' }));
+    expect(screen.getByText('No referenced files.')).toBeTruthy();
+    fireEvent.click(screen.getByRole('tab', { name: 'Show sharing' }));
+    expect(within(screen.getByLabelText('Sharing settings')).getByRole('button', { name: 'Manage test sharing' })).toBeTruthy();
+    expect(screen.queryByLabelText('Files')).toBeNull();
+    fireEvent.click(screen.getByRole('tab', { name: 'Edit the source' }));
+    expect(screen.queryByLabelText('Sharing settings')).toBeNull();
   });
 });

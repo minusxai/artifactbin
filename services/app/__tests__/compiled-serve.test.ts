@@ -508,7 +508,7 @@ it('renders Join in the initial HTML for persistent mutations before the app loa
  const response=await app.request(`/a/${id}`,{headers:{accept:'text/html'}});
  expect(response.status).toBe(200);
  const doc=new JSDOM(await response.text()).window.document;
- expect(doc.querySelector('[data-mx-reader-action="membership"]')?.getAttribute('aria-label')).toBe('Join artefact');
+ expect(doc.querySelector('[data-mx-reader-action="membership"]')?.getAttribute('aria-label')).toBe('Join artifact');
 });
 
  it('renders the notification bell on the initial signed-in reader page',async()=>{

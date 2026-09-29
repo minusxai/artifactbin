@@ -42,9 +42,9 @@ export interface SqlPoolOptions {
 function workerEntry(): { url: URL; execArgv?: string[] } {
   const bundled = new URL('./pool-worker.mjs', import.meta.url);
   if (existsSync(fileURLToPath(bundled))) return { url: bundled };
-  const source = new URL('./pool-worker.ts', import.meta.url);
-  // Running from source: the thread needs the same TypeScript loader its parent has.
-  return { url: source, ...(process.execArgv.some((a) => a.includes('tsx')) ? {} : { execArgv: [...process.execArgv, '--import', 'tsx'] }) };
+  // Register inside the worker: inherited --import flags do not reliably
+  // install tsx's resolver before Node's native TypeScript loading begins.
+  return { url: new URL('./pool-worker-dev.mjs', import.meta.url), execArgv: [] };
 }
 
 type DistributiveOmit<T, K extends PropertyKey> = T extends unknown ? Omit<T, K> : never;
