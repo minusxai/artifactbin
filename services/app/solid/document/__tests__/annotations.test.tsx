@@ -6,6 +6,7 @@ import type { ArtifactBackend } from '@/lib/artifact-backend/types';
 import type { StoryController } from '@/lib/story-runtime/contract';
 import { fireEvent, render } from '../../__tests__/helpers';
 import { AnnotationLayer } from '../AnnotationLayer';
+import { createSignal } from 'solid-js';
 
 const thread = { id: 'ann1', status: 'open', snippet: 'Selected passage', thread: [{ id: 'c1', body: 'First comment', author: { label: 'Ana' }, created_at: new Date().toISOString() }] } as AnnotationWire;
 const backend = (overrides: Partial<ArtifactBackend> = {}) => ({
@@ -132,4 +133,17 @@ it('requires a screenshot after an explicit Select pick on a versioned document 
   await waitFor(() => expect(view.getByRole('button', { name: 'Continue without screenshot' })).toBeTruthy());
   fireEvent.click(view.getByRole('button', { name: 'Continue without screenshot' }));
   expect(view.getByRole('button', { name: 'Post comment' })).toBeEnabled();
+});
+
+it('subscribes when a lazy document runtime becomes ready after the layer mounts', async () => {
+  const send = vi.fn(); let receive: ((data: unknown) => void) | undefined;
+  const runtime = { send, subscribe: (callback: (data: unknown) => void) => { receive = callback; return () => {}; }, getViewportRect: () => ({ left: 0, top: 0, width: 800, height: 600 }) } as unknown as StoryController;
+  const runtimeRef = { current: null as StoryController | null };
+  let ready!: (nonce: string) => void;
+  const opened = vi.fn();
+  render(() => { const [nonce, setNonce] = createSignal<string | null>(null); ready = setNonce; return <AnnotationLayer id="abc" backend={backend()} railOpen={false} onRailOpenChange={opened} runtimeRef={runtimeRef} sessionNonce={nonce()} />; });
+  runtimeRef.current = runtime; ready('private');
+  await waitFor(() => expect(send).toHaveBeenCalledWith(expect.objectContaining({ type: 'mx:annotations' })));
+  receive?.({ type: 'mx:annotation-pin', nonce: 'private', id: 'ann1', rect: { x: 0, y: 0, width: 1, height: 1 } });
+  expect(opened).toHaveBeenCalledWith(true);
 });

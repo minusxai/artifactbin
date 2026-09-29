@@ -65,9 +65,13 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
     const controller = new AbortController();
     void backend.listAnnotations(undefined, { signal: controller.signal }).then(rows => { if (!controller.signal.aborted) setItems(rows); }).catch(cause => { if (!controller.signal.aborted) setError(cause instanceof Error ? cause.message : 'Could not load comments.'); });
     onCleanup(() => controller.abort());
-    if (props.runtimeRef && props.sessionNonce) {
-      const unsubscribe = subscribeDocument({ runtimeRef: props.runtimeRef }, event => {
-        if (!props.sessionNonce || !isEditFrameMessage(event.data, props.sessionNonce)) return;
+  });
+  createEffect(() => {
+    const nonce = props.sessionNonce;
+    const runtimeRef = props.runtimeRef;
+    if (runtimeRef && nonce) {
+      const unsubscribe = subscribeDocument({ runtimeRef }, event => {
+        if (!isEditFrameMessage(event.data, nonce)) return;
         if (event.data.type === STORY_ANNOTATION_PIN_MESSAGE) { openThread(event.data.id); }
         if (event.data.type === STORY_ANNOTATION_HOVER_MESSAGE) setHoverId(event.data.id);
         if (event.data.type === STORY_ANNOTATION_LAYOUT_MESSAGE) setAnchorRects(Object.fromEntries(event.data.positions.map(position => [position.id, position.rect])));
@@ -77,7 +81,7 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
           if (event.data.selection) {
             setSelection(event.data.selection); setOpenId(null);
             const rect = event.data.selection.captureRect ?? event.data.selection.rect;
-            const viewport = props.runtimeRef ? documentRect({ runtimeRef: props.runtimeRef }) : undefined;
+            const viewport = documentRect({ runtimeRef });
             void capture.capture({ ...rect, x: rect.x + (viewport?.left ?? 0), y: rect.y + (viewport?.top ?? 0) });
           } else capture.reset();
         } else if (event.data.type === STORY_SELECTION_MESSAGE && selection()) {
@@ -88,7 +92,7 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
       });
       onCleanup(() => {
         unsubscribe();
-        sendDocument({ runtimeRef: props.runtimeRef }, { type: STORY_ANNOTATIONS_MESSAGE, mode: 'off', pins: [], openId: null, hoverId: null } satisfies StoryAnnotationsMessage);
+        sendDocument({ runtimeRef }, { type: STORY_ANNOTATIONS_MESSAGE, mode: 'off', pins: [], openId: null, hoverId: null } satisfies StoryAnnotationsMessage);
       });
     }
   });
