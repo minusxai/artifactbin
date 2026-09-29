@@ -157,19 +157,13 @@ check(pageErrors.length === 0, `no page errors${pageErrors.length ? `: ${pageErr
 // 3b. the chart module is LAZY: a prose document must not download it
 //     (vega is ~1 MB; the old reader bundle kept it behind a dynamic import
 //     and the unified document must not regress that).
-// The compiled page draws its charts on the server and loads Vega only when a chart must be drawn in the
-// browser — its rows changed, or the reader reaches for it (docs/phase2-architecture.md §2.4). So on the
-// compiled leg the positive control is that interaction: the chart module arrives as an island chunk then,
-// not before, and the chart is redrawn by it.
+// The compiled page draws its charts on the server and starts Vega after reader readiness and
+// visibility (or idle), while the server drawing remains visible. The positive control is that
+// a chart on this page becomes interactive without input; prose still fetches no chart chunk.
 const islandChunks = () => requests.filter((u) => new URL(u).pathname.startsWith('/islands/'));
 if (compiledReader) {
-  const before = islandChunks().length;
-  // The first chart the server drew (its drawing fills the box: lib/islands/chart DRAWING_CLASS), reached for.
-  const served = frame.locator('[data-mx-chart-state="ready"]:has(> svg.absolute.inset-0)').first();
-  await served.evaluate((el) => { el.dataset.gateReached = '1'; }).catch(() => {});
-  await served.hover().catch(() => {});
-  const drawn = await frame.waitForFunction(() => { const el = document.querySelector('[data-gate-reached]'); return !!el && el.getAttribute('data-mx-chart-state') === 'ready' && !el.querySelector(':scope > svg.absolute.inset-0') && !!el.querySelector('canvas, svg'); }, null, { timeout: 20000 }).then(() => true, () => false);
-  check(drawn, `a chart document drew with the lazy chart module once the reader reached for a chart (${islandChunks().length - before} island chunks after the reach)`);
+  const drawn = await frame.waitForFunction(() => [...document.querySelectorAll('[data-mx-chart-state="ready"]')].some(el => !el.querySelector(':scope > svg.absolute.inset-0') && !!el.querySelector('canvas, svg')), null, { timeout: 20000 }).then(() => true, () => false);
+  check(drawn, `a chart document loaded the lazy chart module after reader readiness without input (${islandChunks().length} island chunks)`);
 } else check(requests.some((u) => /\/(?:story\/chunks\/|assets\/)?VegaChart[-.]/.test(u) || /\/VegaChart\.tsx(?:\?|$)/.test(u)), 'a chart document fetched the lazy chart chunk');
 
 // 4. the font resolved INSIDE the opaque frame

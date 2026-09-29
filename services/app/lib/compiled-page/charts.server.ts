@@ -33,9 +33,8 @@ import { computeFacetLayoutPlan, computeLegendPlan, computeXLabelAngle, createVe
 import type { ServedResults } from '@/lib/story-runtime/contract';
 import type { DrawnChart } from './contract';
 import { DRAWING_CLASS } from '@/lib/islands/chart';
+import { gridCols, gridItemRect, gridRowHeight } from '@/lib/story-ui/grid-layout';
 
-/** The width a snapshot draws at when nothing says how wide the slot is (render-vega's headless default). */
-export const SNAPSHOT_CHART_WIDTH = 640;
 /** QuestionEmbed's title bar (`px-3 py-2 text-sm` + a 1px border): the chart below it gets the rest of the embed's height. */
 const TITLE_BAR_PX = 37;
 
@@ -177,6 +176,15 @@ export async function drawChart(input: DrawChartInput): Promise<DrawnChart> {
   const xLabelAngle = vl ? computeXLabelAngle(vl, table.rows, width) : null;
   const facetLayout = vl ? computeFacetLayoutPlan(vl, table.rows, width, height) : null;
   const { vegaSpec, parserConfig } = toVegaSpec(resolved, colorMode, { legendPlan, xLabelAngle, facetLayout, categoryRange: input.palette ?? null });
+  // Vega-Lite compiles `width: 'container'` into a signal whose `init` falls
+  // back to 300 without a DOM container. Seed that signal before parse: a
+  // post-run resize retains stale axis ticks in the SVG scenegraph.
+  if (!facetLayout) for (const signal of vegaSpec.signals ?? []) {
+    if ('init' in signal && typeof signal.init === 'string' && signal.init.includes('containerSize()')) {
+      if (signal.name === 'width') signal.init = String(width);
+      if (signal.name === 'height') signal.init = String(height);
+    }
+  }
   if (CSS_VAR.test(JSON.stringify(vegaSpec))) throw new Error('the spec reads a CSS custom property only the page can resolve');
   const browserOnly = needsBrowser(vegaSpec);
   if (browserOnly) throw new Error(browserOnly);
@@ -191,10 +199,9 @@ export async function drawChart(input: DrawChartInput): Promise<DrawnChart> {
     debug() { return this; },
   } as never);
   try {
-    // A `width: 'container'` spec sizes from its container on the first run; headless
-    // there is none, so the size is applied after it and the view runs again.
-    await view.runAsync();
-    if (!facetLayout) view.width(width).height(height);
+    // createVegaView applies the slot dimensions before the first run, exactly
+    // as the browser controller does. Running a second time leaves stale axis
+    // labels in Vega's SVG scenegraph for container-sized temporal charts.
     await view.runAsync();
     if (errors.length) throw errors[0] instanceof Error ? errors[0] : new Error(String(errors[0]));
     const svg = responsive(scopeIds(await view.toSVG()));
@@ -215,8 +222,51 @@ export interface SnapshotChartOptions {
   colorMode: 'light' | 'dark';
   refData?: RefDataMap;
   palette?: string[] | null;
-  /** Default `SNAPSHOT_CHART_WIDTH`. */
+  /** Override the desktop document width for a known caller. */
   width?: number;
+  /** The reading wrapper's bounded width for plan documents. */
+  template?: string | null;
+}
+
+/**
+ * Desktop chart-slot geometry. The reader's `.mx-doc` has no width limit except
+ * for plan (1120px); at the common 1440px viewport, authored padding and Grid
+ * geometry decide the chart slot. Narrow viewports and arbitrary CSS can still
+ * resize it, so the SVG remains responsive and Vega measures its actual slot.
+ */
+function chartLayout(ancestors: readonly JsxNode[], options: SnapshotChartOptions): { width: number; tileHeight?: number } {
+  let width = options.width ?? (options.template === 'plan' ? 1120 : 1440);
+  let tileHeight: number | undefined;
+  let cols = 12;
+  let rowHeight = 86;
+  let flow = false;
+  for (const node of ancestors) {
+    if (node.type !== 'element') continue;
+    const className = String(staticAttr(node, 'className') ?? staticAttr(node, 'class') ?? '');
+    const classes = className.split(/\s+/);
+    const maxWidths: Record<string, number> = { 'max-w-sm': 384, 'max-w-md': 448, 'max-w-lg': 512, 'max-w-xl': 576, 'max-w-2xl': 672, 'max-w-3xl': 768, 'max-w-4xl': 896, 'max-w-5xl': 1024, 'max-w-6xl': 1152, 'max-w-7xl': 1280 };
+    for (const token of classes) if (maxWidths[token] !== undefined) width = Math.min(width, maxWidths[token]);
+    const padding = (prefix: string) => classes.reduce((size, token) => {
+      const match = new RegExp(`^(?:${prefix}-|@2xl:${prefix}-)(\\d+)$`).exec(token);
+      return match ? Number(match[1]) * 4 : size;
+    }, 0);
+    const pad = padding('px') || padding('p');
+    width -= 2 * pad;
+    if (node.tag === 'Grid') {
+      cols = gridCols(staticAttr(node, 'cols'));
+      rowHeight = gridRowHeight(staticAttr(node, 'rowHeight'));
+      flow = staticAttr(node, 'mode') === 'flow';
+    } else if (node.tag === 'GridItem') {
+      const rect = gridItemRect({ w: staticAttr(node, 'w'), h: staticAttr(node, 'h') }, cols);
+      width = Math.floor(width * rect.w / cols) - 6;
+      if (!flow) tileHeight = rect.h * rowHeight - 6;
+    } else if (node.tag === 'Card') {
+      width -= 2; // border
+    } else if (node.tag === 'CardContent' && pad === 0 && !classes.includes('px-0')) {
+      width -= 48;
+    }
+  }
+  return { width: Math.max(80, Math.floor(width)), ...(tileHeight === undefined ? {} : { tileHeight }) };
 }
 
 /**
@@ -227,8 +277,8 @@ export interface SnapshotChartOptions {
  * draws it in the browser.
  */
 export async function drawSnapshotCharts(nodes: JsxNode[], results: Pick<ServedResults, 'tables' | 'errors'>, options: SnapshotChartOptions): Promise<Record<string, DrawnChart>> {
-  const jobs: Array<{ key: string; name: string; viz: Record<string, unknown>; height: number }> = [];
-  const walk = (list: readonly JsxNode[], prefix: string | null) => {
+  const jobs: Array<{ key: string; name: string; viz: Record<string, unknown>; height: number; width: number }> = [];
+  const walk = (list: readonly JsxNode[], prefix: string | null, ancestors: readonly JsxNode[]) => {
     list.forEach((node, i) => {
       const path = prefix === null ? String(i) : `${prefix}.${i}`;
       if (node.type !== 'element') return;
@@ -239,14 +289,15 @@ export async function drawSnapshotCharts(nodes: JsxNode[], results: Pick<ServedR
         if (viz && typeof viz.kind === 'string' && CHART_VIZ_KINDS.has(viz.kind) && name && results.tables[name]) {
           const id = staticAttr(node, 'id');
           const titled = typeof staticAttr(node, 'title') === 'string' && staticAttr(node, 'title') !== '';
-          const height = questionEmbedHeightPx(staticAttr(node, 'height'), false) - (titled ? TITLE_BAR_PX : 0);
-          jobs.push({ key: typeof id === 'string' && id ? id : path, name, viz, height });
+          const layout = chartLayout(ancestors, options);
+          const height = (layout.tileHeight ?? questionEmbedHeightPx(staticAttr(node, 'height'), false)) - (titled ? TITLE_BAR_PX : 0);
+          jobs.push({ key: typeof id === 'string' && id ? id : path, name, viz, height, width: layout.width });
         }
       }
-      walk(node.children, path);
+      walk(node.children, path, [...ancestors, node]);
     });
   };
-  walk(nodes, null);
+  walk(nodes, null, []);
   const drawings: Record<string, DrawnChart> = {};
   for (const job of jobs) {
     if (Object.hasOwn(drawings, job.key)) continue;
@@ -254,7 +305,7 @@ export async function drawSnapshotCharts(nodes: JsxNode[], results: Pick<ServedR
     try {
       drawings[job.key] = await drawChart({
         viz: job.viz, table, name: job.name, colorMode: options.colorMode,
-        width: options.width ?? SNAPSHOT_CHART_WIDTH, height: job.height,
+        width: job.width, height: job.height,
         ...(options.refData ? { refData: options.refData } : {}),
         ...(options.palette !== undefined ? { palette: options.palette } : {}),
       });
