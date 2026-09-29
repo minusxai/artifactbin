@@ -13,11 +13,11 @@
  */
 import { describe, expect, it, vi } from 'vitest';
 import { execFileSync } from 'node:child_process';
+import { pathToFileURL } from 'node:url';
 import path from 'node:path';
 import * as rt from '../rt';
-import * as basic from '../kit/basic';
-import * as dialog from '../kit/dialog';
-import { evaluateModule, transformSolid } from '@/lib/compiled-page/bundle.server';
+import { evaluateModule } from '@/lib/compiled-page/bundle.server';
+import { loadCompilerBuild } from '@/lib/compiled-page/build.server';
 import type { CompiledDataflow } from '@/lib/story/compiled-dataflow';
 import type { IslandRef } from '@/lib/compiled-page/contract';
 import { createDataflowStore } from '@/lib/story-runtime/store';
@@ -27,9 +27,13 @@ const ROOT = path.resolve(import.meta.dirname, '../../../../..');
 const SOURCE = '<Helmet><Value name="region" type="string" default="West" /></Helmet><div id="w"><h2 id="h">Static heading</h2><p id="r">{$region}</p><p id="after">Static after</p></div>';
 
 interface ServerHalf { html: string; islands: string; browserCode: string; templateResource: string | null; islandRefs: IslandRef[]; flow: CompiledDataflow }
-function serverHalf(source: string): ServerHalf {
-  const out = execFileSync(path.join(ROOT, 'node_modules/.bin/tsx'), ['--tsconfig', path.join(ROOT, 'tsconfig.json'), 'lib/islands/__tests__/fixtures/compiled-island.server.ts', source], { cwd: path.join(ROOT, 'services/app'), maxBuffer: 64 * 1024 * 1024 });
+function serverHalf(source: string, shipped = false): ServerHalf {
+  const out = execFileSync(path.join(ROOT, 'node_modules/.bin/tsx'), ['--tsconfig', path.join(ROOT, 'tsconfig.json'), 'lib/islands/__tests__/fixtures/compiled-island.server.ts', source, ...(shipped ? ['--shipped'] : [])], { cwd: path.join(ROOT, 'services/app'), maxBuffer: 64 * 1024 * 1024 });
   return JSON.parse(out.toString('utf8')) as ServerHalf;
+}
+async function shipped(spec: string): Promise<Record<string, unknown>> {
+  const url = loadCompilerBuild().manifest[spec]!;
+  return import(/* @vite-ignore */ pathToFileURL(path.join(ROOT, 'services/app/public', url)).href) as Promise<Record<string, unknown>>;
 }
 
 describe('a compiled island through the runtime', () => {
@@ -77,16 +81,16 @@ describe('a compiled island through the runtime', () => {
     const served = host.querySelector('#static');
     expect(server.browserCode).not.toContain('Served static content');
     expect(host.querySelector('[data-mx-island-template]')).toBeNull();
-    const fetch = vi.fn(() => Promise.resolve({ ok: true, json: () => JSON.parse(server.templateResource!) }));
+    const fetch = vi.fn();
     vi.stubGlobal('fetch', fetch);
-    let islands: Array<[string, () => unknown]> = [];
+    let tree: () => unknown = () => null;
     await evaluateModule(server.browserCode, spec => {
       if (spec === '/islands/rt.js') return rt as unknown as Record<string, unknown>;
-      if (spec === '/islands/boot.js') return { boot: (value: typeof islands | { ISLANDS: typeof islands }) => { islands = Array.isArray(value) ? value : value.ISLANDS; } };
+      if (spec === '/islands/boot.js') return { boot: (value: { TREE: () => unknown }) => { tree = value.TREE; } };
       throw new Error(`unexpected island import ${spec}`);
     }, 'test/shipped.js');
     const runtime = rt.createIslandRuntime({ dataflow: { flow: server.flow, values: { name: 'Ada' } } }, df => createDataflowStore(df));
-    const dispose = rt.hydrateIsland(islands[0]![0], islands[0]![1] as never, runtime.context, host);
+    const dispose = rt.hydrateDocument(tree as never, runtime.context, host);
     expect(fetch).not.toHaveBeenCalled();
     expect(host.querySelector('#static')).toBe(served);
     runtime.context.setValue('name', 'Grace');
@@ -94,47 +98,52 @@ describe('a compiled island through the runtime', () => {
     dispose?.(); runtime.dispose(); host.remove(); vi.unstubAllGlobals();
   });
   it('opens a dialog from the shipped module after hydration', async () => {
-    const server = serverHalf('<Dialog><DialogTrigger>Open dialog</DialogTrigger><DialogContent aria-label="Test dialog"><p>Dialog body</p><DialogClose>Close</DialogClose></DialogContent></Dialog>');
+    const server = serverHalf('<Dialog><DialogTrigger>Open dialog</DialogTrigger><DialogContent aria-label="Test dialog"><p>Dialog body</p><DialogClose>Close</DialogClose></DialogContent></Dialog>', true);
     const host = document.createElement('div'); host.innerHTML = server.html; document.body.append(host);
-    const fetch = vi.fn(() => Promise.resolve({ ok: true, json: () => JSON.parse(server.templateResource!) }));
+    const fetch = vi.fn();
     vi.stubGlobal('fetch', fetch);
-    let islands: Array<[string, () => unknown]> = [];
+    const [shippedRt, shippedDialog] = await Promise.all([shipped('@mx/rt'), shipped('@mx/kit/dialog')]);
+    let tree: () => unknown = () => null;
     await evaluateModule(server.browserCode, spec => {
-      if (spec === '/islands/rt.js') return rt as unknown as Record<string, unknown>;
-      if (spec === '/islands/kit-dialog.js') return dialog as unknown as Record<string, unknown>;
-      if (spec === '/islands/boot.js') return { boot: (value: typeof islands | { ISLANDS: typeof islands }) => { islands = Array.isArray(value) ? value : value.ISLANDS; } };
+      if (spec.includes('/rt-')) return shippedRt;
+      if (spec.includes('/kit-dialog-')) return shippedDialog;
+      if (spec.includes('/boot-')) return { boot: (value: { TREE: () => unknown }) => { tree = value.TREE; } };
       throw new Error(`unexpected island import ${spec}`);
     }, 'test/dialog-shipped.js');
-    const runtime = rt.createIslandRuntime({ dataflow: { flow: server.flow } }, df => createDataflowStore(df));
+    const runtime = (shippedRt.createIslandRuntime as typeof rt.createIslandRuntime)({ dataflow: { flow: server.flow } }, shippedRt.createDataflowStore as typeof createDataflowStore);
     expect(fetch).not.toHaveBeenCalled();
-    await rt.loadTemplateResource();
-    const dispose = rt.hydrateIsland(islands[0]![0], islands[0]![1] as never, runtime.context, host);
+    const dispose = (shippedRt.hydrateDocument as typeof rt.hydrateDocument)(tree as never, runtime.context, host);
     host.querySelector('button')?.click();
     expect(host.querySelector('[aria-label="Test dialog"]')?.hasAttribute('open')).toBe(true);
-    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(fetch).not.toHaveBeenCalled();
     dispose?.(); runtime.dispose(); host.remove(); vi.unstubAllGlobals();
   });
   it('removes an adopted keyed row when the bridged table shrinks', async () => {
-    const server = serverHalf('<Helmet><Value name="rows" type="table" value={[{"k":"a","label":"Alice"},{"k":"b","label":"Bob"},{"k":"c","label":"Carla"}]} /><Query name="ordered">{`select * from rows order by label`}</Query></Helmet><div id="w"><For each={$ordered} keyBy="k" id="f"><p>{$_row.label}</p></For></div>');
+    const server = serverHalf('<Helmet><Value name="rows" type="table" value={[{"k":"a","label":"Alice"},{"k":"b","label":"Bob"},{"k":"c","label":"Carla"}]} /><Query name="ordered">{`select * from rows order by label`}</Query></Helmet><div id="w"><For each={$ordered} keyBy="k" id="f"><p>{$_row.label}</p></For></div>', true);
     const host = document.createElement('div');
     host.innerHTML = server.html;
     document.body.append(host);
-    const code = await transformSolid(server.islands, { generate: 'dom', hydratable: true }, { moduleName: '@mx/rt' });
-    const { ISLANDS } = await evaluateModule(code, spec => {
-      if (spec === '@mx/rt') return rt as unknown as Record<string, unknown>;
-      if (spec === '@mx/kit/basic') return basic as unknown as Record<string, unknown>;
+    let tree: () => unknown = () => null;
+    const [shippedRt, shippedBasic] = await Promise.all([shipped('@mx/rt'), shipped('@mx/kit/basic')]);
+    await evaluateModule(server.browserCode, spec => {
+      if (spec.includes('/rt-')) return shippedRt;
+      if (spec.includes('/kit-basic-')) return shippedBasic;
+      if (spec.includes('/boot-')) return { boot: (value: { TREE: () => unknown }) => { tree = value.TREE; } };
       throw new Error(`unexpected island import ${spec}`);
-    }, 'test/rows.js') as { ISLANDS: Array<[string, () => unknown]> };
+    }, 'test/rows.js');
     const columns = [{ name: 'k', type: 'string' as const }, { name: 'label', type: 'string' as const }];
-    let rows = [{ k: 'a', label: 'Alice' }, { k: 'b', label: 'Bob' }, { k: 'c', label: 'Carla' }];
+    let rows: Array<{ k: string; label: string }> = [];
     const table = { columns, rows };
     let notify = () => {};
     const store = {
       getState: () => ({ values: {}, tables: { rows: table, ordered: table }, errors: {}, people: {} }),
       pending: () => [], subscribe: (fn: () => void) => { notify = fn; return () => {}; }, dispose: () => {},
     } as unknown as DataflowStore;
-    const runtime = rt.createIslandRuntime({ dataflow: { flow: server.flow } }, () => store);
-    const disposers = ISLANDS.map(([id, Island]) => rt.hydrateIsland(id, Island as never, runtime.context, host));
+    const runtime = (shippedRt.createIslandRuntime as typeof rt.createIslandRuntime)({ dataflow: { flow: server.flow } }, () => store);
+    const dispose = (shippedRt.hydrateDocument as typeof rt.hydrateDocument)(tree as never, runtime.context, host);
+    rows = [{ k: 'a', label: 'Alice' }, { k: 'b', label: 'Bob' }, { k: 'c', label: 'Carla' }];
+    table.rows = rows;
+    notify();
     expect(host.querySelector('#f')?.textContent).toContain('Alice');
     const cards = () => [...host.querySelectorAll('#f p')].map(node => node.textContent);
     rows = [{ k: 'c', label: 'Carla' }, { k: 'b', label: 'Bob' }, { k: 'a', label: 'Alice' }];
@@ -150,30 +159,30 @@ describe('a compiled island through the runtime', () => {
     notify();
     expect(runtime.context.table('ordered')?.rows).toHaveLength(2);
     expect(cards()).toEqual(['Carla', 'Bob']);
-    for (const dispose of disposers) dispose?.();
+    dispose?.();
     runtime.dispose(); host.remove();
   });
   it('server-renders with the runtime, then hydrates in place: root adopted, siblings untouched, values live', async () => {
     const server = serverHalf(SOURCE);
-    expect(server.islandRefs).toEqual([{ renderId: 's0-', path: '1.1', kit: [], readsData: true }]);
+    // The deleted per-island path is represented by a single document root.
+    expect(server.islandRefs).toEqual([{ renderId: 'd-', path: '0', kit: [], readsData: true }]);
     expect(server.html).not.toContain('<mx-slot');
 
     const host = document.createElement('div');
     host.innerHTML = server.html;
     document.body.append(host);
     const [heading, served, after] = ['#h', '#r', '#after'].map((s) => host.querySelector(s));
-    // withIsland's component levels are in the key: the island root is `<renderId>0000` in Solid 1.9.
-    expect(served?.getAttribute('data-hk')).toBe('s0-0000');
+    expect(host.querySelector('.mx-doc')?.getAttribute('data-hk')).toBe('d-0000');
     expect(served?.textContent).toBe('West');
 
-    const code = await transformSolid(server.islands, { generate: 'dom', hydratable: true }, { moduleName: '@mx/rt' });
-    const { ISLANDS } = await evaluateModule(code, (spec) => {
-      if (spec === '@mx/rt') return rt as unknown as Record<string, unknown>;
+    let tree: () => unknown = () => null;
+    await evaluateModule(server.browserCode, (spec) => {
+      if (spec === '/islands/rt.js') return rt as unknown as Record<string, unknown>;
+      if (spec === '/islands/boot.js') return { boot: (value: { TREE: () => unknown }) => { tree = value.TREE; } };
       throw new Error(`the island module imports ${spec}, not only the runtime`);
-    }, 'test/islands.js') as { ISLANDS: Array<[string, () => unknown]> };
+    }, 'test/islands.js');
     const runtime = rt.createIslandRuntime({ dataflow: { flow: server.flow, values: { region: 'West' } }, viewer: null }, (df) => createDataflowStore(df));
-    const [renderId, Island] = ISLANDS[0]!;
-    const dispose = rt.hydrateIsland(renderId, Island as never, runtime.context, host);
+    const dispose = rt.hydrateDocument(tree as never, runtime.context, host);
 
     expect(dispose).toBeTypeOf('function');
     expect(host.querySelector('#h')).toBe(heading);

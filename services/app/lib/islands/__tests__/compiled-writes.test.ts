@@ -15,14 +15,15 @@ import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { evaluateModule, transformSolid } from '@/lib/compiled-page/bundle.server';
+import { evaluateModule } from '@/lib/compiled-page/bundle.server';
+import { loadCompilerBuild } from '@/lib/compiled-page/build.server';
 import type { CompiledDataflow } from '@/lib/story/compiled-dataflow';
 import type { IslandRef } from '@/lib/compiled-page/contract';
 
 const ROOT = path.resolve(import.meta.dirname, '../../../../..');
 const PUBLIC = path.join(ROOT, 'services/app/public');
 
-interface ServerHalf { html: string; islands: string; islandRefs: IslandRef[]; flow: CompiledDataflow }
+interface ServerHalf { html: string; islands: string; browserCode: string; islandRefs: IslandRef[]; flow: CompiledDataflow }
 function serverHalf(source: string): ServerHalf {
   const out = execFileSync(path.join(ROOT, 'node_modules/.bin/tsx'), ['--tsconfig', path.join(ROOT, 'tsconfig.json'), 'lib/islands/__tests__/fixtures/compiled-island.server.ts', source, '--shipped'], { cwd: path.join(ROOT, 'services/app'), maxBuffer: 64 * 1024 * 1024 });
   return JSON.parse(out.toString('utf8')) as ServerHalf;
@@ -45,6 +46,13 @@ describe('a compiled <Button run> through the shipped runtime', () => {
     const host = document.createElement('div');
     host.innerHTML = server.html;
     document.body.append(host);
+    expect(host.querySelector('script[data-mx-island-literals]')).not.toBeNull();
+    const literalKey = /data-mx-island-literals="([0-9a-f]{16})"/.exec(server.browserCode)?.[1];
+    expect(host.querySelector(`script[data-mx-island-literals="${literalKey}"]`)).not.toBeNull();
+    const pageData = document.createElement('script');
+    pageData.id = 'mx-story-data'; pageData.type = 'application/json';
+    pageData.textContent = host.querySelector('script[data-mx-module-data]')?.textContent ?? '{}';
+    document.body.append(pageData);
     const served = host.querySelector('#b')!;
     expect(served.hasAttribute('disabled')).toBe(true);
     expect(served.getAttribute('aria-description')).toBe('Checking edit access…');
@@ -52,10 +60,10 @@ describe('a compiled <Button run> through the shipped runtime', () => {
     expect(host.textContent).not.toContain('Checking edit access…');
 
     const rt = await shipped('@mx/rt');
-    const code = await transformSolid(server.islands, { generate: 'dom', hydratable: true }, { moduleName: '@mx/rt' });
     const kits = new Map<string, Record<string, unknown>>();
-    for (const spec of new Set([...server.islands.matchAll(/from "(@mx\/kit\/[a-z-]+)"/g)].map((m) => m[1]!))) kits.set(spec, await shipped(spec));
-    const { ISLANDS } = await evaluateModule(code, (spec) => (spec === '@mx/rt' ? rt : kits.get(spec) ?? (() => { throw new Error(`unexpected import ${spec}`); })()), 'test/islands.js') as { ISLANDS: Array<[string, unknown]> };
+    for (const spec of new Set([...server.islands.matchAll(/from "(@mx\/kit\/[a-z-]+)"/g)].map((m) => m[1]!))) kits.set(loadCompilerBuild().manifest[spec]!, await shipped(spec));
+    let tree: unknown = null;
+    await evaluateModule(server.browserCode, (spec) => spec === loadCompilerBuild().manifest['@mx/rt'] ? rt : spec === loadCompilerBuild().manifest['@mx/boot'] ? { boot: (value: { TREE: unknown }) => { tree = value.TREE; } } : kits.get(spec) ?? (() => { throw new Error(`unexpected import ${spec}`); })(), 'test/islands.js');
     // The page's doors, answered here: the write check allows `add`, and a write is recorded.
     const written: unknown[] = [];
     const transport = {
@@ -66,7 +74,7 @@ describe('a compiled <Button run> through the shipped runtime', () => {
     const runtime = (rt.createIslandRuntime as (d: unknown, s: (i: unknown) => unknown) => { context: unknown; store: { start(): void; dispose(): void } | null; dispose(): void })(
       { dataflow: { flow: server.flow }, viewer: null }, (input) => (rt.createDataflowStore as (i: unknown, o: unknown) => unknown)(input, { transport }));
     runtime.store?.start();
-    const disposers = ISLANDS.map(([renderId, Island]) => (rt.hydrateIsland as (r: string, c: unknown, x: unknown, p: ParentNode) => (() => void) | null)(renderId, Island, runtime.context, host));
+    const dispose = (rt.hydrateDocument as (c: unknown, x: unknown, p: ParentNode) => (() => void) | null)(tree, runtime.context, host);
     const button = host.querySelector<HTMLButtonElement>('#b')!;
     for (let i = 0; i < 50 && button.disabled; i++) await new Promise((r) => setTimeout(r, 20));
     expect(button, 'the served button is adopted').toBe(served);
@@ -90,8 +98,9 @@ describe('a compiled <Button run> through the shipped runtime', () => {
     }
     expect(written).toHaveLength(4);
     expect(written.map(request => (request as { mutation: string }).mutation)).toEqual(['add', 'add2', 'add3', 'add4']);
-    for (const dispose of disposers) dispose?.();
+    dispose?.();
     runtime.dispose();
+    pageData.remove();
     host.remove();
   });
 });
