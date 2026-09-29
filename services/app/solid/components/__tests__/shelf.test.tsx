@@ -22,6 +22,7 @@ it('shows only immediate children and keeps the root shelf separate', () => {
   expect(screen.getByLabelText('Open folder Reports')).toBeInTheDocument();
   expect(screen.getByLabelText('Open Doc root')).toBeInTheDocument();
   expect(screen.queryByLabelText('Open Doc child')).toBeNull();
+  expect(screen.getByLabelText('Open Doc root')).toHaveAttribute('rel', 'external');
 });
 
 it('creates a child folder at the selected location', async () => {
