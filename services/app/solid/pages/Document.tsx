@@ -20,6 +20,7 @@ import { DocumentActions } from '../document/DocumentActions';
 import { AnnotationLayer } from '../document/AnnotationLayer';
 import { ForkConfirm } from '../document/ForkArtifact';
 import { APP_BAR_H } from '@/lib/story/edit-bar';
+import { ARTIFACT_ID_PATTERN } from '@artifactbin/contracts';
 
 interface DocumentAnswer {
   role: ArtifactRole; kind: string;
@@ -55,7 +56,8 @@ export function DocumentPage(): JSX.Element {
   const location = useLocation();
   const { session } = useSession();
   const page = takeBootstrap<DocumentAnswer>(location.pathname, 'artifact');
-  const id = page?.surface?.id ?? /^\/a\/([^/]+)/.exec(location.pathname)?.[1] ?? null;
+  const idFromPath = /^\/a\/([^/]+)/.exec(location.pathname)?.[1] ?? null;
+  const id = page?.surface?.id ?? (idFromPath && ARTIFACT_ID_PATTERN.test(idFromPath) ? idFromPath : null);
   const role = () => page?.role ?? 'viewer';
   const archivedNow = () => !!page?.archived;
   const isOwner = () => canGovern(role()) && !archivedNow();
