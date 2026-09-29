@@ -58,6 +58,7 @@
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { brotliCompressSync, gunzipSync } from 'node:zlib';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -606,6 +607,51 @@ for (const [engineName, engine] of ENGINES) {
   }
 }
 console.log(`downloads: ${Object.entries(downloads).map(([engineName, scheme]) => `${engineName} ${scheme}:`).join(', ')}`);
+
+// The compiled page decides which engines travel with each file. A prose
+// document has no browser module; a Mermaid document can draw without SQLite
+// or Vega. Both must still open from file:// under the same network refusal.
+for (const [label, markup] of [
+  ['prose', '<h1>Offline prose</h1><p>A file that needs no document engine.</p>'],
+  ['mermaid', '<h1>Offline diagram</h1><Mermaid title="Flow" code={"flowchart TD\\n A[Draft] --> B[Saved]"} />'],
+]) {
+  const id = await publish({ markup, visibility: 'unlisted' });
+  const response = await fetch(`${BASE}/a/${id}/download`, { headers: { Authorization: `Bearer ${token}` } });
+  assert.equal(response.status, 200, await response.clone().text());
+  const html = await response.text();
+  const code = /<script type="application\/octet-stream" id="afbin-compiled-code">([^<]*)<\/script>/.exec(html)?.[1];
+  const packed = code ? gunzipSync(Buffer.from(code, 'base64')).toString('utf8') : '';
+  assert.equal(!!code, label === 'mermaid', `${label}: compiled document module`);
+  assert.doesNotMatch(html, /id="afbin-wasm"/, `${label}: no SQLite engine`);
+  assert.doesNotMatch(packed, /Axes cannot be shared in concatenated/, `${label}: no Vega engine`);
+  if (label === 'mermaid') assert.match(packed, /mermaidAPI/, 'Mermaid carries its drawing engine');
+  const target = path.join(work, `${label}.html`);
+  writeFileSync(target, html);
+  console.log(`${label} file: ${Buffer.byteLength(html)} raw / ${brotliCompressSync(html).length} br bytes`);
+  for (const [engineName, engine] of ENGINES) {
+    const browser = await engine.launch();
+    try {
+      const context = await browser.newContext();
+      await serveOrigin(context, 'offline');
+      const page = await context.newPage();
+      const requests = [], pageErrors = [], csp = [];
+      page.on('request', request => { if (!/^(file|data):/.test(request.url())) requests.push(request.url()); });
+      page.on('pageerror', error => pageErrors.push(String(error)));
+      await page.addInitScript(() => document.addEventListener('securitypolicyviolation', event => {
+        window.__cspViolations ??= [];
+        window.__cspViolations.push(`${event.violatedDirective} ${event.blockedURI}`);
+      }));
+      await page.goto(pathToFileURL(target).href);
+      await expect(page.getByRole('heading', { name: label === 'prose' ? 'Offline prose' : 'Offline diagram' })).toBeVisible({ timeout: 20_000 });
+      if (label === 'mermaid') await expect(page.locator('[data-mx-mermaid-state="ready"]')).toHaveCount(1, { timeout: 20_000 });
+      csp.push(...await page.evaluate(() => window.__cspViolations ?? []));
+      assert.deepEqual(requests, [], `${engineName} ${label}: network requests`);
+      assert.deepEqual(pageErrors, [], `${engineName} ${label}: page errors`);
+      assert.deepEqual(csp, [], `${engineName} ${label}: CSP violations`);
+      console.log(`${engineName} ${label}: offline paint, 0 requests, 0 CSP violations, 0 page errors`);
+    } finally { await browser.close(); }
+  }
+}
 
 if (failures.length) throw new AggregateError(failures, 'Offline file checks failed');
 console.log(`offline file gate passed in chromium, firefox and webkit with the ${files.map((f) => f.kind).join(' and ')} bundle; editing, comments, Save, code view offline and online, and agent-edited files`);
