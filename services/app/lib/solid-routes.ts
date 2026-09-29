@@ -1,14 +1,20 @@
 import type { ArtifactRole } from './share-roles';
 
 /**
- * The document shell now serves readers and commenters (solid/document/AnnotationLayer carries
- * the annotation rail both need). Editor and owner stay on React: browser gates proved those
- * roles need machinery Document.tsx does not mount yet — CLI/agent mutation via the managed
- * iframe on write-capable sessions, the owner's share dialog and in-place editing (gate-managed-
- * iframe, gate-testusers, gate-collab-edit, gate-inplace-edit). Widen further once that lands.
+ * The document shell changes only for view-only readers for now. The root gap, traced to source:
+ * Document.tsx ADOPTS the compiled document's DOM but never mounts anything that establishes a
+ * StoryController for it (React's IslandStory does that, via createFrameEditSession +
+ * mountCompiledEditRegions, only when it is actively mounted). Without a controller,
+ * lib/story-runtime/document-endpoint's `sendDocument`/`subscribeDocument` have nothing to
+ * reach — so every capability gated on it is inert: the owner/editor managed iframe (CLI/agent
+ * `window.mx` mutation), in-place editing, AND a commenter's own selection bubble ("select text to
+ * comment" — solid/document/AnnotationLayer's `runtimeRef`/`sessionNonce` path). Browser gates
+ * confirmed the owner/editor half (gate-managed-iframe, gate-testusers, gate-collab-edit,
+ * gate-inplace-edit); gate-link-access's commenter selection-bubble step depends on the same
+ * missing controller. Widen once a Solid controller-establishing mount exists.
  */
 export function solidDocumentReader(role: ArtifactRole, format: string, capture: boolean): boolean {
-  return !capture && format === 'markup' && (role === 'viewer' || role === 'commenter');
+  return !capture && format === 'markup' && role === 'viewer';
 }
 
 /** Candidate Solid routes. Admitted document roles select their idle entry at serve time. */

@@ -24,13 +24,12 @@ it('serves the Solid entry for ported routes, while React owns other URLs', asyn
   expect(isSolidPage('/a/doc-id')).toBe(true);
   expect(isSolidPage('/a/doc-id/edit')).toBe(false);
   expect(solidDocumentReader('viewer', 'markup', false)).toBe(true);
-  expect(solidDocumentReader('commenter', 'markup', false)).toBe(true);
+  expect(solidDocumentReader('commenter', 'markup', false)).toBe(false);
   expect(solidDocumentReader('editor', 'markup', false)).toBe(false);
   expect(solidDocumentReader('owner', 'markup', false)).toBe(false);
   expect(solidDocumentReader('none', 'markup', false)).toBe(false);
   expect(solidDocumentReader('viewer', 'folder', false)).toBe(false);
   expect(solidDocumentReader('viewer', 'markup', true)).toBe(false);
-  expect(solidDocumentReader('commenter', 'markup', true)).toBe(false);
   expect(isSolidPage('/missing', 404)).toBe(true);
   const dir = mkdtempSync(path.join(tmpdir(), 'afbin-shell-'));
   dirs.push(dir);
