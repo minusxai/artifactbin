@@ -927,9 +927,15 @@ jobs:
   # job on a brand-new runner): together that cost ~46s of the merge→production chain (product merge
   # 17:12:45 → Update Submodule start 17:14:09, run 36603331879/36603413942) for one `gh api` POST.
   # Doing it as a job HERE removes that hop entirely: `needs` gives the identical "only if every real
-  # job passed" gate (skipped jobs do not count as failures; only a failure/cancellation does), no
-  # `if: always()` here so a genuine failure upstream skips this job the normal way, and it runs
-  # alongside `timings`/`release-cli` instead of waiting on a separate workflow's roundtrip.
+  # job passed" gate, no `if: always()` here so a genuine failure upstream skips this job the normal
+  # way, and it runs alongside `timings`/`release-cli` instead of waiting on a separate workflow's
+  # roundtrip.
+  #
+  # `success()`, not `!contains(needs.*.result,'failure')`, was the first attempt here and it never
+  # actually dispatched (run 36616833422, a clean push with everything green): `cli`/`cli-preview`/
+  # `reference-compatibility` are SKIPPED on most merges — nothing in the diff touched the CLI — and
+  # `success()` treats a skipped dependency the same as a failed one, so this job cascaded to skipped
+  # on the ordinary case and only would have fired on the rare push that ran the whole matrix.
   notify-consumer:
     name: notify the configured consumer repository
     needs:
@@ -946,7 +952,9 @@ jobs:
         test,
         reference-compatibility
       ]
-    if: success() && github.event_name == 'push' && vars.CONSUMER_REPOSITORY != ''
+    if: >-
+      !cancelled() && !contains(needs.*.result, 'failure') &&
+      github.event_name == 'push' && vars.CONSUMER_REPOSITORY != ''
     runs-on: ubuntu-latest
     permissions: {}
     steps:

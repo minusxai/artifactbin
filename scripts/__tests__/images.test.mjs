@@ -69,8 +69,8 @@ describe('runtime dependency closure', () => {
     it('browser-only map packages are pinned build dependencies, excluded from runtime installs', () => {
       const { dependencies = {}, devDependencies = {} } = pkg('services/app/package.json');
       const mapPackages = [
-        '@deck.gl/aggregation-layers', '@deck.gl/core', '@deck.gl/layers', '@deck.gl/mapbox', '@deck.gl/react',
-        'h3-js', 'maplibre-gl', 'react-map-gl',
+        '@deck.gl/aggregation-layers', '@deck.gl/core', '@deck.gl/layers', '@deck.gl/mapbox',
+        'h3-js', 'maplibre-gl',
       ];
       for (const dep of mapPackages) {
         expect(dependencies, dep).not.toHaveProperty(dep);

@@ -4,12 +4,17 @@
  * and props, interpreted accessors), never from the authored JSON directly, so
  * stored content that predates validation still cannot reach deck.gl.
  *
+ * Draws with `@deck.gl/core` and `maplibre-gl` directly — the same framework-free
+ * approach as the compiled page's Solid island (lib/islands/kit/embed/deck-engine):
+ * no `@deck.gl/react` or `react-map-gl` wrapper. `DeckView`/`BaseMapView` below hand-build
+ * the exact DOM those libraries would have produced, so nothing downstream (styling,
+ * captures) sees a different shape.
+ *
  * With a basemap, MapLibre draws the OpenFreeMap style and deck draws INTO its
  * GL context (interleaved): Chrome caps a page near 16 contexts, and a document
  * may hold many maps. Without one, deck draws alone.
  */
-import { DeckGL } from '@deck.gl/react';
-import { Map as BaseMap, useControl } from 'react-map-gl/maplibre';
+import { Deck } from '@deck.gl/core';
 import { MapboxOverlay } from '@deck.gl/mapbox';
 // @ts-expect-error The CSP build ships no typings of its own; it is the default build's twin.
 import maplibregl from 'maplibre-gl/dist/maplibre-gl-csp';
@@ -25,15 +30,6 @@ import {
 // MapLibre may not spawn a blob: worker under the document CSP; it loads a same-origin script.
 maplibregl.setWorkerUrl(BASEMAP_WORKER_URL);
 
-type HoverHandler = (info: PickingInfo, event: { srcEvent: Event }) => void;
-/** deck draws into MapLibre's own GL context: one context per map. */
-function DeckOverlay({ layers, onHover }: { layers: unknown[]; onHover: HoverHandler }) {
-  const overlay = useControl(() => new MapboxOverlay({ interleaved: true, layers: [] }));
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  overlay.setProps({ layers: layers as any, onHover: onHover as never });
-  return null;
-}
-
 export interface DeckEngineProps {
   rows: Row[];
   layers: unknown;
@@ -44,6 +40,89 @@ export interface DeckEngineProps {
   legend?: boolean;
   title?: string;
   height: number;
+}
+
+type HoverHandler = (info: PickingInfo, event: { srcEvent: Event }) => void;
+interface ViewProps { layers: unknown[]; view: MapViewState; move: (next: MapViewState, byReader?: boolean) => void; onHover: HoverHandler }
+
+/** deck alone: today's @deck.gl/react `DeckGL` wrapper (`#deckgl-wrapper` > `.deck-events-root` > canvas, `.deck-widgets-root`), hand-built. */
+function DeckView({ layers, view, move, onHover }: ViewProps) {
+  const container = useRef<HTMLDivElement>(null);
+  const canvas = useRef<HTMLCanvasElement>(null);
+  const deck = useRef<InstanceType<typeof Deck> | null>(null);
+  const latest = useRef({ layers, view, move, onHover });
+  latest.current = { layers, view, move, onHover };
+  useEffect(() => {
+    const d = new Deck({
+      widgets: [], style: null, width: '100%', height: '100%', parent: container.current!, canvas: canvas.current!, controller: true,
+      layers: latest.current.layers as never, viewState: latest.current.view,
+      onViewStateChange: ({ viewState, interactionState }) => {
+        latest.current.move(viewState as MapViewState, Object.values(interactionState ?? {}).some(Boolean));
+        return viewState;
+      },
+      onHover: ((info: PickingInfo, event: { srcEvent: Event }) => latest.current.onHover(info, event)) as never,
+    });
+    deck.current = d;
+    return () => { deck.current = null; d.finalize(); };
+    // Deck is constructed once; prop updates flow through setProps below.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  useEffect(() => { deck.current?.setProps({ layers: layers as never, viewState: view }); }, [layers, view]);
+  return (
+    <div id="deckgl-wrapper" ref={container} style={{ position: 'absolute', zIndex: 0, left: 0, top: 0, width: '100%', height: '100%' }}>
+      <div className="deck-events-root" style={{ width: '100%', height: '100%' }}><canvas id="deckgl-overlay" ref={canvas} style={{ left: 0, top: 0 }} /></div>
+      <div className="deck-widgets-root" />
+    </div>
+  );
+}
+
+/** MapLibre with deck in its GL context: today's react-map-gl `Map` container (`position:relative`, then `[mapboxgl-children]`), hand-built. */
+function BaseMapView({ style, title, layers, view, move, onHover }: ViewProps & { style: 'light' | 'dark'; title: string }) {
+  const container = useRef<HTMLDivElement>(null);
+  const map = useRef<InstanceType<typeof maplibregl.Map> | null>(null);
+  const overlay = useRef<MapboxOverlay | null>(null);
+  const syncing = useRef(false);
+  const [mounted, setMounted] = useState(false);
+  const latest = useRef({ layers, view, move, onHover });
+  latest.current = { layers, view, move, onHover };
+  useEffect(() => {
+    const at = latest.current.view;
+    const m = new maplibregl.Map({
+      container: container.current!, style: basemapStyleUrl(style), center: [at.longitude, at.latitude], zoom: at.zoom, pitch: at.pitch, bearing: at.bearing,
+      attributionControl: false,
+      // MapLibre names its canvas region "Map"; a document with several maps needs each one's own name.
+      locale: { 'Map.Title': title },
+      transformRequest: basemapTransformRequest,
+    });
+    const ov = new MapboxOverlay({ interleaved: true, layers: [] });
+    m.addControl(ov);
+    m.on('move', (event: { originalEvent?: unknown }) => {
+      if (syncing.current) return;
+      const c = m.getCenter();
+      latest.current.move({ longitude: c.lng, latitude: c.lat, zoom: m.getZoom(), pitch: m.getPitch(), bearing: m.getBearing() }, !!event.originalEvent);
+    });
+    map.current = m;
+    overlay.current = ov;
+    setMounted(true);
+    return () => { map.current = null; overlay.current = null; m.remove(); };
+    // A basemap style swap remounts the map (a new `style` prop is a fresh key upstream).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [style]);
+  useEffect(() => { overlay.current?.setProps({ layers: layers as never, onHover: onHover as never }); }, [layers, onHover]);
+  useEffect(() => {
+    const m = map.current;
+    if (!m) return;
+    const c = m.getCenter();
+    if (c.lng === view.longitude && c.lat === view.latitude && m.getZoom() === view.zoom && m.getPitch() === view.pitch && m.getBearing() === view.bearing) return;
+    syncing.current = true;
+    m.jumpTo({ center: [view.longitude, view.latitude], zoom: view.zoom, pitch: view.pitch, bearing: view.bearing });
+    syncing.current = false;
+  }, [view]);
+  return (
+    <div ref={container} style={{ position: 'relative', width: '100%', height: '100%' }}>
+      {mounted && <div {...{ 'mapboxgl-children': '' }} style={{ height: '100%' }} />}
+    </div>
+  );
 }
 
 export function DeckEngine({ rows, layers, basemap = 'auto', colorMode, initialViewState, tooltip = true, legend = true, title = 'Map', height }: DeckEngineProps) {
@@ -100,15 +179,9 @@ export function DeckEngine({ rows, layers, basemap = 'auto', colorMode, initialV
     <div ref={box} role="figure" aria-label={title} className={MAP_CLASSES.figure} style={{ height }}
       onPointerLeave={() => { if (box.current) hideVegaTooltip(box.current.ownerDocument); }}>
       {style ? (
-        <BaseMap mapLib={maplibregl} {...view} onMove={e => move(e.viewState as MapViewState, !!e.originalEvent)} attributionControl={false}
-          // MapLibre names its canvas region "Map"; a document with several maps needs each one's own name.
-          locale={{ 'Map.Title': title }}
-          mapStyle={basemapStyleUrl(style)} transformRequest={basemapTransformRequest}>
-          <DeckOverlay layers={layerList} onHover={onHover} />
-        </BaseMap>
+        <BaseMapView style={style} title={title} layers={layerList} view={view} move={move} onHover={onHover} />
       ) : (
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        <DeckGL viewState={view} controller onViewStateChange={({ viewState, interactionState }) => move(viewState as MapViewState, Object.values(interactionState ?? {}).some(Boolean))} layers={layerList as any} onHover={onHover as never} />
+        <DeckView layers={layerList} view={view} move={move} onHover={onHover} />
       )}
       <MapControls onZoomIn={() => zoomBy(1)} onZoomOut={() => zoomBy(-1)} onReset={reset} />
       {legend && scales.length > 0 && <MapLegend scales={scales} />}
