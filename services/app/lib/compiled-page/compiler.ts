@@ -203,7 +203,7 @@ const managedFrameOf = (node: JsxElement) => { try { return compileManagedIframe
  * The generator
  * ──────────────────────────────────────────────────────────────────────────── */
 
-type Mode = 'static' | 'island' | 'browser';
+type Mode = 'static' | 'browser';
 interface IslandBuild { id: number; path: string; source: string; kit: Set<string>; readsData: boolean }
 interface Ctx {
   /** The JS name of the row in scope (inside a `<For>`), and its scope's. */
@@ -349,7 +349,7 @@ export function generate(input: GenerateInput): Generated {
 
   function emitElement(node: JsxElement, path: string, mode: Mode, ctx: Ctx): string {
     const children = (inner: Ctx = ctx): string => node.children.map((c, i) => emit(c, `${path}.${i}`, mode, inner)).join('');
-    if (node.tag === 'For') return emitFor(node, path, ctx);
+    if (node.tag === 'For') return emitFor(node, path, mode, ctx);
     if (node.tag === 'Grid' || node.tag === 'GridItem') return emitGrid(node, path, mode, ctx);
     // A control with `run` in a column's content is an editing cell (interpreter renderNode → cellControl).
     const run = node.attributes.find((a) => a.name === 'run');
@@ -390,7 +390,7 @@ export function generate(input: GenerateInput): Generated {
             const ids = [...templateIds(columns[k]![0].children)];
             return { col: c.col, id: typeof c.id === 'string' ? c.id : undefined, path: c[AST], ...(ids.length ? { ids } : {}) };
           });
-          cellsJsx = emitCells(columns, path, ctx);
+          cellsJsx = emitCells(columns, path, mode, ctx);
         }
       }
       if (node.tag === 'Files' || node.tag === 'Icon') props.glyphs = glyphs;
@@ -503,13 +503,13 @@ export function generate(input: GenerateInput): Generated {
    * A DataTable's column content (interpreter DataTable renderCell): one function per `<Column>`, aligned with
    * `templates`, a hole where the column draws nothing; each renders the content for one row and its CellScope.
    */
-  function emitCells(columns: ReadonlyArray<readonly [JsxElement, number]>, path: string, ctx: Ctx): string {
+  function emitCells(columns: ReadonlyArray<readonly [JsxElement, number]>, path: string, mode: Mode, ctx: Ctx): string {
     const fns = columns.map(([column, i]) => {
       if (!hasContent(column.children)) return 'undefined';
       const cpath = `${path}.${i}`;
       const suffix = cpath.replace(/\./g, '_');
       const inner: Ctx = { row: `row${suffix}`, scope: `cell${suffix}`, cell: true, svg: false, island: ctx.island };
-      return `(${inner.row}, ${inner.scope}) => <>${column.children.map((c, k) => emit(c, `${cpath}.${k}`, 'island', inner)).join('')}</>`;
+      return `(${inner.row}, ${inner.scope}) => <>${column.children.map((c, k) => emit(c, `${cpath}.${k}`, mode, inner)).join('')}</>`;
     });
     return fns.some((f) => f !== 'undefined') ? ` cells={[${fns.join(', ')}]}` : '';
   }
@@ -570,7 +570,7 @@ export function generate(input: GenerateInput): Generated {
     return `<div${jsxAttrs(attrs)}>${node.children.map((c, i) => emit(c, `${path}.${i}`, mode, ctx)).join('')}</div>`;
   }
 
-  function emitFor(node: JsxElement, path: string, ctx: Ctx): string {
+  function emitFor(node: JsxElement, path: string, mode: Mode, ctx: Ctx): string {
     const each = node.attributes.find((a) => a.name === 'each');
     const name = each && !each.value.static && each.value.reactive?.kind === 'signal' ? each.value.reactive.name : null;
     if (!name) return `<div role="alert">{"For requires each={$table}"}</div>`;
@@ -598,7 +598,7 @@ export function generate(input: GenerateInput): Generated {
     const suffix = path.replace(/\./g, '_');
     const row = `row${suffix}`;
     const scope = `scope${suffix}`;
-    const body = node.children.map((c, i) => emit(c, `${path}.${i}`, 'island', { ...ctx, row, scope })).join('');
+    const body = node.children.map((c, i) => emit(c, `${path}.${i}`, mode, { ...ctx, row, scope })).join('');
     const keyJsx = keyBy?.static ? ` keyBy={${lit(keyBy.json)}}` : '';
     return `<rt.Repeat name={${lit(name)}}${keyJsx} owner={${lit(ownerId)}} ids={${json([...templateIds(node.children)])}}${isTableParts(node) ? ' tableParts={true}' : ''}${svg ? ' svg={true}' : ''}${jsxAttrs(attrs)}>{(${row}, ${scope}) => <>${body}</>}</rt.Repeat>`;
   }
