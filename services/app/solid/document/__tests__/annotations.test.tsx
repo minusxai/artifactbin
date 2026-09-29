@@ -73,3 +73,47 @@ it('places floating annotation markers at their reported document geometry', asy
   receive?.({ type: 'mx:annotation-layout', nonce: 'private', positions: [{ id: 'ann1', rect: { x: 10, y: 20, width: 50, height: 20 }, status: 'exact' }] });
   expect(view.getByRole('button', { name: 'Open annotation ann1' })).toHaveStyle({ top: '60px' });
 });
+
+it('folds a conversation to its summary and remembers the fold across remounts', async () => {
+  const service = backend({ listAnnotations: vi.fn(async () => [{ ...thread, thread: [...thread.thread, { ...thread.thread[0], id: 'c2', body: 'Second reply' }] }]) });
+  const first = render(() => <AnnotationLayer id="abc-fold" backend={service} railOpen onRailOpenChange={() => {}}
+    pickOnOpen={false} />);
+  await waitFor(() => expect(first.getByText('First comment')).toBeTruthy());
+  fireEvent.click(first.getByRole('button', { name: 'Fold thread' }));
+  expect(first.queryByText('Second reply')).toBeNull();
+  expect(first.getByText('1 reply')).toBeTruthy();
+  first.unmount();
+  const second = render(() => <AnnotationLayer id="abc-fold" backend={service} railOpen onRailOpenChange={() => {}}
+    pickOnOpen={false} />);
+  await waitFor(() => expect(second.getByRole('button', { name: 'Unfold thread' })).toBeTruthy());
+  expect(second.queryByText('Second reply')).toBeNull();
+});
+
+it('opens a resolved conversation and sends its pin only while expanded', async () => {
+  const send = vi.fn();
+  const runtime = { send, subscribe: () => () => {} } as unknown as StoryController;
+  const resolved = { ...thread, status: 'resolved', anchor: { path: '0', key: 'k' } } as AnnotationWire;
+  const service = backend({ listAnnotations: vi.fn(async (status?: string) => status === 'resolved' ? [resolved] : []) });
+  const view = render(() => <AnnotationLayer id="abc" backend={service} railOpen onRailOpenChange={() => {}}
+    runtimeRef={{ current: runtime }} sessionNonce="private" />);
+  fireEvent.click(view.getByRole('button', { name: 'Show resolved comments' }));
+  await waitFor(() => expect(view.getByRole('button', { name: 'Show resolved conversation' })).toBeTruthy());
+  expect(send.mock.calls.at(-1)?.[0]).toMatchObject({ pins: [] });
+  fireEvent.click(view.getByRole('button', { name: 'Show resolved conversation' }));
+  await waitFor(() => expect(send.mock.calls.at(-1)?.[0]).toMatchObject({ openId: 'ann1', pins: [expect.objectContaining({ id: 'ann1' })] }));
+});
+
+it('prefills the linked agent in a reply and preserves the draft after a failed send', async () => {
+  const linked = { ...thread, thread: [{ ...thread.thread[0], author: { ...thread.thread[0].author, kind: 'human' }, body: `Ask [@Codex](/chat?session=${'a'.repeat(64)}) to check` }] } as AnnotationWire;
+  const service = backend({ listAnnotations: vi.fn(async () => [linked]), actOnAnnotation: vi.fn(async () => { throw new Error('Could not send reply'); }) });
+  const view = render(() => <AnnotationLayer id="abc" backend={service} railOpen onRailOpenChange={() => {}} pickOnOpen={false} />);
+  await waitFor(() => expect(view.getByRole('button', { name: 'Open annotation thread' })).toBeTruthy());
+  fireEvent.click(view.getByRole('button', { name: 'Open annotation thread' }));
+  const reply = view.getByRole('textbox', { name: 'Reply to annotation ann1' });
+  expect(reply).toHaveValue('@Codex ');
+  expect(view.getByRole('button', { name: 'Send reply' })).toBeDisabled();
+  fireEvent.input(reply, { target: { value: '@Codex Please check' } });
+  fireEvent.click(view.getByRole('button', { name: 'Send reply' }));
+  await waitFor(() => expect(view.getByRole('alert')).toHaveTextContent('Could not send reply'));
+  expect(reply).toHaveValue('@Codex Please check');
+});

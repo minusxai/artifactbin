@@ -1,6 +1,7 @@
 /* @jsxImportSource solid-js */
 import { createSignal, For, Show, type JSX } from 'solid-js';
 import { parseMarkdownLite, wrapSelection, type MdInline, type MdMarker, type MdNode } from '@/lib/markdown-lite';
+import { mentionDraft } from '@/lib/mention-draft';
 
 function inline(nodes: MdInline[]): JSX.Element {
   return <For each={nodes}>{node => {
@@ -47,17 +48,18 @@ export function CommentMarkdownField(props: {
   const [previewing, setPreviewing] = createSignal(false);
   const apply = (marker: MdMarker) => {
     if (!field) return;
-    const next = wrapSelection(props.value, field.selectionStart, field.selectionEnd, marker);
+    const projected = mentionDraft(props.value);
+    const next = wrapSelection(props.value, projected.toRaw(field.selectionStart), projected.toRaw(field.selectionEnd, 'end'), marker);
     props.onChange(next.text);
-    queueMicrotask(() => { field?.focus(); field?.setSelectionRange(next.start, next.end); });
+    queueMicrotask(() => { field?.focus(); const nextDraft = mentionDraft(next.text); field?.setSelectionRange(nextDraft.toDisplay(next.start), nextDraft.toDisplay(next.end)); });
   };
   return <div class="min-w-0">
     <div role="toolbar" aria-label={`${props.label} formatting`} class="mb-1 flex gap-1">
       <For each={MARKERS}>{([marker, name]) => <button type="button" aria-label={name} disabled={previewing()} onMouseDown={event => event.preventDefault()} onClick={() => apply(marker)}>{name}</button>}</For>
       <button type="button" aria-label={props.previewToggleLabel ?? 'Preview comment'} aria-pressed={previewing()} onClick={() => setPreviewing(value => !value)}>{previewing() ? 'edit' : 'preview'}</button>
     </div>
-    <Show when={previewing()} fallback={<textarea ref={field} aria-label={props.label} value={props.value} rows={props.rows ?? 3} placeholder={props.placeholder}
-      onInput={event => props.onChange(event.currentTarget.value)}
+    <Show when={previewing()} fallback={<textarea ref={field} aria-label={props.label} value={mentionDraft(props.value).text} rows={props.rows ?? 3} placeholder={props.placeholder}
+      onInput={event => { const draft = mentionDraft(props.value); props.onChange(draft.edit(event.currentTarget.value, event.currentTarget.selectionStart)); }}
       onKeyDown={event => { if (!(event.metaKey || event.ctrlKey)) return; if (event.key === 'Enter') { event.preventDefault(); props.onSubmit?.(); } else { const marker = KEYS[event.key.toLowerCase()]; if (marker) { event.preventDefault(); apply(marker); } } }}
       class="w-full rounded border border-edge bg-bg p-2 text-sm" />}>
       <CommentMarkdown text={props.value} label={props.previewLabel ?? 'Comment preview'} class="min-h-12 rounded border border-edge bg-surface p-2" />
