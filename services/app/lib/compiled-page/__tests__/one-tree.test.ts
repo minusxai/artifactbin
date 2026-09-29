@@ -54,4 +54,10 @@ describe('one document tree', () => {
     }
     for (const text of ['Accordion prose', 'Collapsible prose', 'Popover prose', 'Tooltip prose']) expect(generated.browserIslands).not.toContain(text);
   });
+
+  it('keeps the browser module stable when only static prose around a chart changes', () => {
+    const before = generate(input('<p id="lede">First</p><Question data="$rows" viz={{kind:"vega-lite", spec:{mark:"bar"}}} />'));
+    const after = generate(input('<p id="lede">Second</p><Question data="$rows" viz={{kind:"vega-lite", spec:{mark:"bar"}}} />'));
+    expect(after.browserIslands).toBe(before.browserIslands);
+  });
 });

@@ -42,7 +42,7 @@ const tick = () => new Promise((r) => setTimeout(r, 0));
 describe('a compiled <Button run> through the shipped runtime', () => {
   it('serves today\'s pending state, drops the refusal once the check answers, and writes on click', async () => {
     const server = serverHalf('<Helmet><Value name="drafts" type="table" value={[{"id":1}]} /><Query name="n">{`select count(*) as c from drafts`}</Query>'
-      + '<Mutation name="add">{`insert into drafts values (2)`}</Mutation><Mutation name="add2">{`insert into drafts values (3)`}</Mutation><Mutation name="add3">{`insert into drafts values (4)`}</Mutation><Mutation name="add4">{`insert into drafts values (5)`}</Mutation></Helmet><div id="w"><p id="before">Static</p><Button run="$add" id="b">Add</Button><Button run="$add2" id="b2">Add 2</Button><Button run="$add3" id="b3">Add 3</Button><Button run="$add4" id="b4">Add 4</Button><p id="c">{$n.c}</p></div>');
+      + '<Mutation name="add">{`insert into drafts values (2)`}</Mutation><Mutation name="add2">{`insert into drafts values (3)`}</Mutation><Mutation name="add3">{`insert into drafts values (4)`}</Mutation><Mutation name="add4">{`insert into drafts values (5)`}</Mutation><Mutation name="complete">{`update drafts set id=10 where id=$_row.id`}</Mutation></Helmet><div id="w"><p id="before">Static</p><Button run="$add" id="b">Add</Button><Button run="$add2" id="b2">Add 2</Button><Button run="$add3" id="b3">Add 3</Button><Button run="$add4" id="b4">Add 4</Button><For each={$drafts} keyBy="id"><Button run="$complete" aria-label="Complete row">Complete</Button></For><p id="c">{$n.c}</p></div>');
     const host = document.createElement('div');
     host.innerHTML = server.html;
     document.body.append(host);
@@ -67,7 +67,7 @@ describe('a compiled <Button run> through the shipped runtime', () => {
     // The page's doors, answered here: the write check allows `add`, and a write is recorded.
     const written: unknown[] = [];
     const transport = {
-      run: async () => ({ tables: {}, errors: {}, mutationAccess: { add: null, add2: null, add3: null, add4: null } }),
+      run: async () => ({ tables: {}, errors: {}, mutationAccess: { add: null, add2: null, add3: null, add4: null, complete: null } }),
       page: async () => ({ rows: [], columns: [] }),
       mutate: async (request: unknown) => { written.push(request); return { dataset: 'local' }; },
     };
@@ -96,8 +96,13 @@ describe('a compiled <Button run> through the shipped runtime', () => {
       next.click();
       await tick();
     }
-    expect(written).toHaveLength(4);
-    expect(written.map(request => (request as { mutation: string }).mutation)).toEqual(['add', 'add2', 'add3', 'add4']);
+    const rowButton = host.querySelector<HTMLButtonElement>('[aria-label="Complete row"]')!;
+    for (let i = 0; i < 50 && rowButton.disabled; i++) await new Promise((r) => setTimeout(r, 20));
+    rowButton.click();
+    await tick();
+    expect(written).toHaveLength(5);
+    expect(written.map(request => (request as { mutation: string }).mutation)).toEqual(['add', 'add2', 'add3', 'add4', 'complete']);
+    expect((written[4] as { row: { id: number } }).row.id).toBe(1);
     dispose?.();
     runtime.dispose();
     pageData.remove();

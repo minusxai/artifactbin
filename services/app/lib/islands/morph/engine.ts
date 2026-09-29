@@ -139,7 +139,7 @@ export async function morphStory(win: Window, options: MorphOptions = {}): Promi
 
   const override = options.mode?.() ?? readerMode(win);
   syncAttributes(root, nextRoot, override);
-  morphChildren(root, nextRoot, { keep, oldUnits, used: new Set(), kept: new Set([...keep.values()].filter((rid) => rid !== 'd-').flatMap((rid) => oldUnits.get(rid) ?? [])) });
+  morphChildren(root, nextRoot, { keep, oldUnits, used: new Set(), kept: new Set([...keep.values()].filter((rid) => rid !== 'd-').flatMap((rid) => oldUnits.get(rid) ?? [])), preserveCharts: !!newModule && newModule === oldModule });
 
   syncHead(doc, next, { adopted: !!options.adopted, override });
   const data = next.getElementById(ISLAND_DATA_ID);
@@ -317,6 +317,8 @@ interface MorphContext {
   used: Set<Node>;
   /** Every node of a kept island: moved into place, never removed with its old parent. */
   kept: ReadonlySet<Node>;
+  /** The same browser module still owns live chart drawings after a prose-only edit. */
+  preserveCharts: boolean;
 }
 
 type Movable = Element & { moveBefore?: (node: Node, child: Node | null) => void };
@@ -365,8 +367,15 @@ function morphChildren(from: Element, to: Element, ctx: MorphContext): void {
     const match = byOwnId && !ctx.used.has(byOwnId) ? byOwnId : softMatch(at, next, ctx, nextIds);
     if (match && !ctx.used.has(match) && sameKind(match, next)) {
       if (match.nodeType === 1) {
-        syncAttributes(match as Element, next as Element, null);
-        morphChildren(match as Element, next as Element, ctx);
+        const oldElement = match as Element;
+        const newElement = next as Element;
+        const sameChart = ctx.preserveCharts && oldElement.getAttribute('aria-label') === 'Question embed'
+          && newElement.getAttribute('aria-label') === 'Question embed'
+          && oldElement.getAttribute(AST_PATH_ATTR) === newElement.getAttribute(AST_PATH_ATTR);
+        if (!sameChart) {
+          syncAttributes(oldElement, newElement, null);
+          morphChildren(oldElement, newElement, ctx);
+        }
       } else if (match.nodeValue !== next.nodeValue) {
         match.nodeValue = next.nodeValue;
       }

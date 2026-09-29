@@ -133,6 +133,16 @@ describe('the live morph', () => {
     doc.context.setValue('region', 'North');
     expect($('live')?.textContent).toBe('B:North');
   });
+  it('keeps a live chart drawing when only prose changes in the same one-tree module', async () => {
+    const chart = (page: string, content: string) => page.replace('<b id="live"', `<div id="chart" data-mx-ast="0.1b" aria-label="Question embed"><div aria-label="Chart">${content}</div></div><b id="live"`);
+    load(chart(treePage('e1', '/islands/d/aaaaaaaaaaaaaaaa.js', 'first'), '<svg id="drawing"></svg>'));
+    const doc = boot({ TREE: TREE_A, FLOW: flow }) as MorphableIslandDocument;
+    booted = doc;
+    const drawing = $('drawing');
+    await morph(window, { fetch: answer(chart(treePage('e2', '/islands/d/aaaaaaaaaaaaaaaa.js', 'second'), '<div aria-label="Chart placeholder"></div>')), importModule: vi.fn() });
+    expect($('lede')?.textContent).toBe('second');
+    expect($('drawing')).toBe(drawing);
+  });
   it('a static edit: every node keeps its identity, the text changes in place, the islands keep running', async () => {
     load(served({ edit: 'e1' }));
     const doc = start();
