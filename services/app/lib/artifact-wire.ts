@@ -830,7 +830,7 @@ export async function respondToMutate(
   if (refusal) {
     return json({
       error: 'dataset_read_only',
-      details: [grantsOf(dataset)?'No grant allows this direct write. Use an allowed saved artefact action, or ask a dataset editor to add a user grant for this operation. See afbin help apps.':`${id} is read-only — publish it writable: afbin push <file> --type dataset --access readwrite (API: PUT here, or PATCH /api/my/artifacts/${id})`],
+      details: [grantsOf(dataset)?'No grant allows this direct write. Use an allowed saved artifact action, or ask a dataset editor to add a user grant for this operation. See afbin help apps.':`${id} is read-only — publish it writable: afbin push <file> --type dataset --access readwrite (API: PUT here, or PATCH /api/my/artifacts/${id})`],
     }, 403);
   }
 

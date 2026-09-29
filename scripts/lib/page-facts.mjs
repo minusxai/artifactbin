@@ -22,7 +22,7 @@ export const servedTopLevel = async (page) => (await page.locator(ARTIFACT_FRAME
 
 /**
  * How many pixels the page scrolls sideways (0 when it does not). A phone
- * layout that overflows by one pixel is a real fault and a rounding artefact
+ * layout that overflows by one pixel is a real fault and a rounding artifact
  * is not, so the caller compares against a threshold it chooses.
  * @param {import('playwright').Page} page
  */

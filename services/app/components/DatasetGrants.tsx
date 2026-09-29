@@ -2,8 +2,8 @@ import type { DatasetAction, DatasetGrant, DatasetGrantPolicy, DatasetGrantSelec
 import { Button } from './ui';
 const actions:DatasetAction[]=['read','insert','update','delete'];
 const presets:Array<{label:string;description:string;grant:DatasetGrant}>=[
- {label:'Public reads',description:'Anyone can read this dataset, including forked artefacts. Private sharing still limits access.',grant:{actions:['read'],from:{user:'*'}}},
- {label:"Owner’s artefacts can change data",description:'Accepted members can run saved actions in artefacts owned by this dataset’s owner.',grant:{actions:['insert','update','delete'],from:{artifactOwner:'$owner'}}},
+ {label:'Public reads',description:'Anyone can read this dataset, including forked artifacts. Private sharing still limits access.',grant:{actions:['read'],from:{user:'*'}}},
+ {label:"Owner’s artifacts can change data",description:'Accepted members can run saved actions in artifacts owned by this dataset’s owner.',grant:{actions:['insert','update','delete'],from:{artifactOwner:'$owner'}}},
 ];
 const same=(a:DatasetGrant,b:DatasetGrant)=>a.actions.length===b.actions.length&&a.actions.every(action=>b.actions.includes(action))&&(['user','artifact','artifactOwner'] as const).every(key=>a.from[key]===b.from[key]);
 const input='w-full rounded-lg border border-edge bg-surface px-3 py-2 text-sm';
@@ -18,9 +18,9 @@ export function DatasetGrants({value,onChange,people=[],artifacts=[]}:{people?:A
    <legend className="px-1 text-xs text-muted">Allow rule {i+1}</legend>
    <div className="flex flex-wrap gap-4">{actions.map(action=><label key={action} className="flex items-center gap-2 text-sm"><input type="checkbox" checked={grant.actions.includes(action)} onChange={e=>replace(i,{...grant,actions:e.target.checked?[...grant.actions,action]:grant.actions.filter(a=>a!==action)})}/>{action}</label>)}</div>
    {(['user','artifact','artifactOwner'] as const).map(key=><div key={key} className="grid gap-2 sm:grid-cols-2">
-    <label className="flex items-center gap-2 text-xs"><input type="checkbox" checked={grant.from[key]!==undefined} onChange={e=>{const from:DatasetGrantSelector={...grant.from};if(e.target.checked)from[key]='*';else delete from[key];replace(i,{...grant,from});}}/>{key==='user'?'Acting user':key==='artifact'?'Saved artefact':'Artefact owner'}</label>
+    <label className="flex items-center gap-2 text-xs"><input type="checkbox" checked={grant.from[key]!==undefined} onChange={e=>{const from:DatasetGrantSelector={...grant.from};if(e.target.checked)from[key]='*';else delete from[key];replace(i,{...grant,from});}}/>{key==='user'?'Acting user':key==='artifact'?'Saved artifact':'artifact owner'}</label>
     {grant.from[key]!==undefined&&<select className={input} aria-label={`Rule ${i+1} ${key}`} value={grant.from[key]} onChange={e=>replace(i,{...grant,from:{...grant.from,[key]:e.target.value}})}>
-      <option value="*">{key==='artifact'?'Any artefact':'Anyone'}</option>
+      <option value="*">{key==='artifact'?'Any artifact':'Anyone'}</option>
       {key!=='artifact'&&<option value="$owner">Dataset owner</option>}
       {key==='artifact'?artifacts.map(a=><option key={a.id} value={a.id}>{a.title??a.id}</option>):people.map(p=><option key={p.user_id} value={p.user_id}>{p.username?`@${p.username}`:p.name??p.user_id}</option>)}
       {grant.from[key]!=='*'&&grant.from[key]!=='$owner'&&!(key==='artifact'?artifacts.some(a=>a.id===grant.from[key]):people.some(p=>p.user_id===grant.from[key]))&&<option value={grant.from[key]}>{grant.from[key]}</option>}
