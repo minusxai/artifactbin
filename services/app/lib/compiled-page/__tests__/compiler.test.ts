@@ -12,7 +12,7 @@ import { JSDOM } from 'jsdom';
 import { brotliCompressSync } from 'node:zlib';
 import { compilePage, compileSources, declaredValues, generate, KIT } from '../compiler';
 import { browserModuleCode, buildDocumentModules, defaultSsrImports, evaluateModule, loadSsrModule, renderSkeleton, ssrImportTable, ssrModuleCode, transformSolid, type SsrImports } from '../bundle.server';
-import { createModuleStore } from '../modules.server';
+import { createModuleStore, createTemplateResourceStore } from '../modules.server';
 import { shapeOf, diffShapes, reactRender } from '@/lib/islands/__tests__/kit-parity';
 import { loadCompilerBuild } from '../build.server';
 import { malformedTagDocument, namedHazardsDocument, structureIndependent } from '../codegen-safety';
@@ -49,14 +49,16 @@ async function inputOf(source: string, template: string | null = null): Promise<
 const dom = (html: string) => new JSDOM(`<div id="r">${html}</div>`).window.document.getElementById('r')!;
 
 describe('compilePage', () => {
-  it('keeps large island markup in inert page templates instead of the browser module', async () => {
+  it('keeps large island markup in the rendered story and a lazy resource, not the browser module', async () => {
     const marker = 'panel-content-' + 'A'.repeat(50_000);
     const input = await inputOf(`<Tabs defaultValue="one"><TabsList><TabsTrigger value="one">One</TabsTrigger><TabsTrigger value="two">Two</TabsTrigger></TabsList><TabsContent value="one"><p>${marker}</p></TabsContent><TabsContent value="two"><p>Second panel</p></TabsContent></Tabs>`);
     const store = createModuleStore();
     const built = await buildDocumentModules(generate(input), { build: loadCompilerBuild(), flow: input.flow, values: declaredValues(input.flow), store });
     const browser = new TextDecoder().decode((await store.get(built.module!.sha))!);
-    expect(built.html).toContain('data-mx-island-template');
+    expect(built.html).not.toContain('data-mx-island-template');
     expect(built.html).toContain(marker);
+    expect(built.html.split(marker)).toHaveLength(2);
+    expect(Buffer.byteLength(built.html)).toBeLessThan(Buffer.byteLength(marker) + 20_000);
     expect(browser).not.toContain(marker);
     expect(browser).not.toContain('Second panel');
     expect(brotliCompressSync(browser).byteLength).toBeLessThan(4_000);
@@ -65,28 +67,46 @@ describe('compilePage', () => {
     let seed = 0x4d595df4;
     const letter = () => { seed ^= seed << 13; seed ^= seed >>> 17; seed ^= seed << 5; return 'abcdefghijklmnopqrstuvwxyz'[(seed >>> 0) % 26]; };
     const blocks = Array.from({ length: 180 }, (_, i) => `<p>${i}:${Array.from({ length: 18_000 }, letter).join('')}</p>`).join('');
-    const input = await inputOf(`<Tabs defaultValue="one"><TabsList><TabsTrigger value="one">One</TabsTrigger><TabsTrigger value="two">Two</TabsTrigger></TabsList><TabsContent value="one">Ready</TabsContent><TabsContent value="two">${blocks}</TabsContent></Tabs>`);
+    const input = await inputOf(`<Helmet><Value name="selection" type="string" default="one" /></Helmet><Tabs defaultValue="one"><TabsList><TabsTrigger value="one">One</TabsTrigger><TabsTrigger value="two">Two</TabsTrigger></TabsList><TabsContent value="one">Ready</TabsContent><TabsContent value="two">${blocks}</TabsContent></Tabs>`);
     const store = createModuleStore();
     const generated = generate(input);
     const built = await buildDocumentModules(generated, { build: loadCompilerBuild(), flow: input.flow, values: declaredValues(input.flow), store });
     const bytes = (await store.get(built.module!.sha))!;
     expect(Buffer.byteLength(blocks)).toBeGreaterThan(3_000_000);
     expect(brotliCompressSync(generated.islands).byteLength).toBeGreaterThan(100_000);
-    expect(dom(built.html).querySelectorAll('template[data-mx-island-template]').length).toBeGreaterThan(0);
-    expect([...dom(built.html).querySelectorAll('template[data-mx-island-template]')].some((node) => (node as HTMLTemplateElement).content.textContent?.includes(blocks.slice(3, 120)))).toBe(true);
+    expect(dom(built.html).querySelectorAll('template[data-mx-island-template]')).toHaveLength(0);
+    expect(built.html).not.toContain(blocks.slice(3, 120));
+    expect(Buffer.byteLength(built.html)).toBeLessThan(50_000);
+    expect(brotliCompressSync(built.html).byteLength).toBeLessThan(15_000);
+    const url = /\/islands\/t\/([0-9a-f]{16})\.json/.exec(new TextDecoder().decode(bytes))?.[1];
+    expect(url).toBeTruthy();
+    const resource = await createTemplateResourceStore().get(url!);
+    expect(new TextDecoder().decode(resource!)).toContain(blocks.slice(3, 120));
     expect(brotliCompressSync(bytes).byteLength).toBeLessThan(4_000);
+    expect(built.templateBrBytes).toBeGreaterThan(16_384);
+    expect(new TextDecoder().decode(bytes)).not.toContain('requestIdleCallback');
   }, 120_000);
-  it('escapes hostile template closers in the served inert bank', async () => {
+  it('records a small factory resource and schedules its dataflow page to fetch after boot', async () => {
+    const input = await inputOf('<Helmet><Value name="name" type="string" default="Ada" /></Helmet><p>{$name}</p>');
+    const store = createModuleStore();
+    const built = await buildDocumentModules(generate(input), { build: loadCompilerBuild(), flow: input.flow, values: declaredValues(input.flow), store });
+    const browser = new TextDecoder().decode((await store.get(built.module!.sha))!);
+    expect(built.templateBrBytes).toBeLessThan(16_384);
+    expect(browser).toContain('requestIdleCallback');
+  });
+  it('keeps hostile template closers inert in the resource', async () => {
     const input = await inputOf('<Tabs defaultValue="one"><TabsList><TabsTrigger value="one">One</TabsTrigger><TabsTrigger value="two">Two</TabsTrigger></TabsList><TabsContent value="one">safe</TabsContent><TabsContent value="two"><p>&lt;/template&gt;&lt;script&gt;alert(1)&lt;/script&gt;</p></TabsContent></Tabs>');
     const store = createModuleStore();
     const built = await buildDocumentModules(generate(input), { build: loadCompilerBuild(), flow: input.flow, values: declaredValues(input.flow), store });
-    expect(built.html).toContain('data-mx-island-template');
+    expect(built.html).not.toContain('data-mx-island-template');
     const root = dom(built.html);
-    const banks = [...root.querySelectorAll('template[data-mx-island-template]')] as HTMLTemplateElement[];
     const literals = JSON.parse(root.querySelector('script[data-mx-island-literals]')!.textContent!) as string[];
-    expect([...banks.map((bank) => bank.content.textContent ?? ''), ...literals].join('')).toContain('alert(1)');
+    const browser = new TextDecoder().decode((await store.get(built.module!.sha))!);
+    const url = /\/islands\/t\/([0-9a-f]{16})\.json/.exec(browser)?.[1];
+    const resource = JSON.parse(new TextDecoder().decode((await createTemplateResourceStore().get(url!))!)) as Record<string, string>;
+    expect([...Object.values(resource), ...literals].join('')).toContain('alert(1)');
     expect(built.html).not.toContain('</template><script>alert(1)</script>');
-    expect(new TextDecoder().decode((await store.get(built.module!.sha))!)).not.toContain('alert(1)');
+    expect(browser).not.toContain('alert(1)');
   });
   it('moves only large used hoisted props into page data', async () => {
     const note = 'literal-prop-' + 'x'.repeat(2_000);

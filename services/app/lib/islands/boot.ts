@@ -35,7 +35,7 @@ import { createIslandDocumentTransport } from './document-transport';
 import { STORY_DATA_HOOK } from '@/lib/story-runtime/contract';
 import { ISLAND_DATA_ID, READER_READY_ATTR } from '@/lib/compiled-page/contract';
 import { ISLAND_DOCUMENT_KEY, ISLANDS_READY_EVENT, type IslandDocument, type IslandDocumentMode, type IslandEvent, type IslandHost, type IslandPageData, type IslandViewer } from './contract';
-import { createIslandRuntime, hydrateIsland } from './rt';
+import { createIslandRuntime, hydrateIsland, installTemplateInteractionGate, loadTemplateResource, currentTemplateResource, TemplateUnavailableError } from './rt';
 import { installIslandDocument } from './handover';
 import { createWriteStatusFeed } from './writes';
 import { loadChart } from './chart';
@@ -71,6 +71,8 @@ export interface IslandMorphSeam {
   hydrate(entry: IslandEntry): void;
   /** Every module this document has run, by its `ISLANDS` (a cached re-import runs no `boot`). */
   readonly modules: WeakMap<readonly IslandEntry[], IslandModule>;
+  /** Load the incoming module's immutable DOM factories before changing the old tree. */
+  prepareTemplates(): Promise<void>;
   /** Set by the engine while it imports a newer version's module: that module's `boot` hands it in here. */
   take?: (module: IslandModule) => void;
   /** Replace only the sandboxed author realm after a version changes its source. */
@@ -148,7 +150,12 @@ export function boot(input: IslandModule | readonly IslandEntry[], win: Window =
   const running = (root as IslandHost)[ISLAND_DOCUMENT_KEY] as MorphableIslandDocument | undefined;
   if (running?.morph?.take) { running.morph.take(module); return running; }
   const data = readPageData(doc);
+  const templateUrl = currentTemplateResource();
   const flow = module.FLOW ?? null;
+  // An unserved query can populate an empty island on the first store tick. Its Solid
+  // computation runs asynchronously, outside hydrateIsland's per-island catch, so secure
+  // its factories before starting that tick while the other islands are already ready.
+  const coldQueryIsland = !data.results && root.querySelector('[data-hk]:empty');
 
   // A signed-in reader's queries and writes are theirs: the transport carries the session to the
   // doors that read it. A guest page keeps the anonymous GET door (lib/story-runtime/fetch-transport).
@@ -179,7 +186,6 @@ export function boot(input: IslandModule | readonly IslandEntry[], win: Window =
     { writes: createWriteStatusFeed, loadChart },
   );
   const { context, store } = runtime;
-  store?.start();
 
   const listeners = new Set<(event: IslandEvent) => void>();
   const emit = (event: IslandEvent) => { for (const listener of [...listeners]) listener(event); };
@@ -191,10 +197,15 @@ export function boot(input: IslandModule | readonly IslandEntry[], win: Window =
       const dispose = hydrateIsland(renderId, Component, context, root);
       if (dispose) islands.set(renderId, [key, dispose]);
     } catch (error) {
-      console.error(`[islands] hydrate ${renderId}`, error);
+      if (error instanceof TemplateUnavailableError && templateUrl) {
+        void loadTemplateResource(templateUrl).then(() => {
+          if (!disposed && mode === 'read') hydrate([renderId, Component, key]);
+        }, (failure: unknown) => {
+          console.error('[islands] templates failed', failure);
+        });
+      } else console.error('[islands] hydrate failed', error);
     }
   };
-  module.ISLANDS.forEach(hydrate);
   const disposeIslands = () => { const all = [...islands.values()]; islands.clear(); for (const [, dispose] of all) dispose(); };
 
   const stopWrites = context.writes.subscribe((statuses) => emit({ type: 'writes', statuses }));
@@ -220,6 +231,8 @@ export function boot(input: IslandModule | readonly IslandEntry[], win: Window =
   let mode: IslandDocumentMode = 'read';
   let ready = false;
   let disposed = false;
+  // Creation-capable controls hold their first action; other served controls run immediately.
+  const stopTemplateGate = installTemplateInteractionGate(root, doc);
   let stopAuthor = () => {};
   const uninstallMx = () => (root as HTMLElement & { [PUBLIC_MX_KEY]?: () => void })[PUBLIC_MX_KEY]?.();
   let authorGeneration = 0;
@@ -231,7 +244,7 @@ export function boot(input: IslandModule | readonly IslandEntry[], win: Window =
     if (generation === authorGeneration && !disposed && mode === 'read') stopAuthor = startAuthorHost(source, store, doc);
   };
   const islandDocument: MorphableIslandDocument = {
-    morph: { islands, hydrate, modules: new WeakMap([[module.ISLANDS, module]]), restartAuthor },
+    morph: { islands, hydrate, modules: new WeakMap([[module.ISLANDS, module]]), prepareTemplates: () => loadTemplateResource(), restartAuthor },
     root,
     store,
     context,
@@ -252,6 +265,7 @@ export function boot(input: IslandModule | readonly IslandEntry[], win: Window =
     dispose: () => {
       if (disposed) return;
       disposed = true;
+      stopTemplateGate();
       stopAuthor();
       uninstallMx();
       disposeIslands();
@@ -266,31 +280,34 @@ export function boot(input: IslandModule | readonly IslandEntry[], win: Window =
   };
   installIslandDocument(root, islandDocument);
 
-  ready = true;
-  doc.documentElement.setAttribute(READER_READY_ATTR, '');
-  emit({ type: 'ready' });
-  doc.dispatchEvent(new Event(ISLANDS_READY_EVENT));
-  // Identity and viewer-scoped rows arrive after the guest page is ready.
-  void import('./viewer').then(({ loadViewerOverlay }) => {
-    if (disposed) return;
-    loadViewerOverlay(context, data, {
-      setViewer: (viewer: IslandViewer) => {
-        viewerId = viewer && 'id' in viewer ? viewer.id : null;
-        identified = true;
-        runtime.setViewer(viewer);
-        emit({ type: 'overlay', viewer: viewer && 'id' in viewer ? viewer : null });
-      },
-    });
-  }).catch((error: unknown) => console.error('[islands] viewer overlay did not load', error));
-  // Writes retain their status in the feed; the indicator can attach after hydration.
-  void import('./kit/status').then(({ installStatus }) => {
-    if (!disposed) stopStatus = installStatus(context.writes, root);
-  }).catch((error: unknown) => console.error('[islands] write status did not load', error));
-  // A local table has no import to trigger the engine's normal hold path.
-  if (page && !data.hold?.length) page.engine.prepare(flow!, []);
-
-  // The author's script, never in this document: its host (and the sandboxed frame) load only when the version has one.
-  const authorScript = typeof data.authorScript === 'string' && data.authorScript ? data.authorScript : null;
-  if (authorScript) void restartAuthor(authorScript).catch((error: unknown) => console.error('[islands] author host failed', error));
+  {
+    module.ISLANDS.forEach(hydrate);
+    ready = true;
+    doc.documentElement.setAttribute(READER_READY_ATTR, '');
+    emit({ type: 'ready' });
+    doc.dispatchEvent(new Event(ISLANDS_READY_EVENT));
+    if (coldQueryIsland && templateUrl) {
+      void loadTemplateResource(templateUrl).then(() => { if (!disposed && mode === 'read') store?.start(); },
+        (error: unknown) => console.error('[islands] templates failed', error));
+    } else store?.start();
+    // Identity and viewer-scoped rows arrive after the guest page is ready.
+    void import('./viewer').then(({ loadViewerOverlay }) => {
+      if (disposed) return;
+      loadViewerOverlay(context, data, {
+        setViewer: (viewer: IslandViewer) => {
+          viewerId = viewer && 'id' in viewer ? viewer.id : null;
+          identified = true;
+          runtime.setViewer(viewer);
+          emit({ type: 'overlay', viewer: viewer && 'id' in viewer ? viewer : null });
+        },
+      });
+    }).catch((error: unknown) => console.error('[islands] viewer overlay did not load', error));
+    void import('./kit/status').then(({ installStatus }) => {
+      if (!disposed) stopStatus = installStatus(context.writes, root);
+    }).catch((error: unknown) => console.error('[islands] write status did not load', error));
+    if (page && !data.hold?.length) page.engine.prepare(flow!, []);
+    const authorScript = typeof data.authorScript === 'string' && data.authorScript ? data.authorScript : null;
+    if (authorScript) void restartAuthor(authorScript).catch((error: unknown) => console.error('[islands] author host failed', error));
+  }
   return islandDocument;
 }

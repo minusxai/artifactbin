@@ -84,7 +84,7 @@ describe('assembleReaderPage', () => {
   });
 
   it('emits no inline script: the data rides as JSON and every script has a same-origin src', () => {
-    const doc = dom(assembleReaderPage(input({ spa: { entry: '/assets/main-abc.js', preload: ['/assets/vendor-def.js'] }, chrome: { artifactId: 'X34b00', title: 't', author: null } })));
+    const doc = dom(assembleReaderPage(input({ compiled: compiled({ templateBrBytes: 1300 }), spa: { entry: '/assets/main-abc.js', preload: ['/assets/vendor-def.js'] }, chrome: { artifactId: 'X34b00', title: 't', author: null } })));
     for (const script of doc.querySelectorAll('script')) {
       if (script.type === 'application/json') continue;
       expect(script.type, script.outerHTML).toBe('module');
@@ -93,6 +93,7 @@ describe('assembleReaderPage', () => {
     }
     const data = JSON.parse(doc.getElementById(ISLAND_DATA_ID)!.textContent!);
     expect(data.values).toEqual({ region: 'West' });
+    expect(data.templateBrBytes).toBe(1300);
     expect(data.results.tables.monthly.rows).toEqual([{ revenue: 1 }]);
     expect(data.queryUrl).toBe('/a/X34b00/query');
     expect(data.viewerUrl).toBe('/a/X34b00/viewer');

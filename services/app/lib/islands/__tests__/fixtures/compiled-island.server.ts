@@ -8,6 +8,7 @@
  */
 import { generate, declaredValues } from '@/lib/compiled-page/compiler';
 import { buildDocumentModules } from '@/lib/compiled-page/bundle.server';
+import { createTemplateResourceStore } from '@/lib/compiled-page/modules.server';
 import { loadCompilerBuild } from '@/lib/compiled-page/build.server';
 import type { ModuleRef, ModuleStore } from '@/lib/compiled-page/contract';
 import { parseJsx, type JsxNode } from '@/lib/jsx';
@@ -33,4 +34,7 @@ const built = await buildDocumentModules(generated, {
   build: process.argv[3] === '--shipped' ? loadCompilerBuild() : { id: 'test', manifest: { '@mx/rt': '/islands/rt.js', '@mx/boot': '/islands/boot.js', '@mx/kit/basic': '/islands/kit-basic.js', '@mx/kit/dialog': '/islands/kit-dialog.js' } },
   flow, values: declaredValues(flow), store, ssrStore: store,
 });
-process.stdout.write(JSON.stringify({ html: built.html, islands: generated.islands, browserCode: new TextDecoder().decode(stored.get(built.module!.sha)), islandRefs: generated.islandRefs, flow }));
+const browserCode = new TextDecoder().decode(stored.get(built.module!.sha));
+const templateSha = /\/islands\/t\/([0-9a-f]{16})\.json/.exec(browserCode)?.[1];
+const templateResource = templateSha ? new TextDecoder().decode((await createTemplateResourceStore().get(templateSha))!) : null;
+process.stdout.write(JSON.stringify({ html: built.html, islands: generated.islands, browserCode, templateResource, islandRefs: generated.islandRefs, flow }));

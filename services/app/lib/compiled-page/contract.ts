@@ -144,6 +144,8 @@ export interface CompiledPage {
   islands: IslandRef[];
   /** The browser module (`generate: 'dom'`), or null when the version has no islands. */
   module: ModuleRef | null;
+  /** Brotli bytes of this version's inert template resource, for a small-resource reader hint. */
+  templateBrBytes?: number | null;
   /**
    * The SERVER module (`generate: 'ssr'`, hydratable) of the same islands, stored
    * like the browser module: `export function render(data: IslandRenderData): string`

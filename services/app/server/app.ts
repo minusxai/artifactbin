@@ -57,7 +57,7 @@ import { canonicalDocumentUrl } from '@/lib/custom-domains';
 import { APP_SHELL_FONT_PRELOADS } from '@/lib/app-fonts';
 import { fontPreloadTags } from '@/lib/story/first-screen-fonts';
 import { DOCUMENT_MODULE_PATH, ISLANDS_PATH, READER_FALLBACK_HEADER, READER_MODE_HEADER } from '@/lib/compiled-page/contract';
-import { createModuleStore, createSpeculationRulesStore } from '@/lib/compiled-page/modules.server';
+import { createModuleStore, createSpeculationRulesStore, createTemplateResourceStore, TEMPLATE_RESOURCE_PATH } from '@/lib/compiled-page/modules.server';
 import { retainedIslandFile } from '@/lib/compiled-page/shared-builds.server';
 import { SPECULATION_RULES_CONTENT_TYPE, SPECULATION_RULES_PATH } from '@/lib/compiled-page/speculation';
 
@@ -495,6 +495,7 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
     c.header('access-control-allow-origin', '*');
   });
   const islandModules = createModuleStore();
+  const islandTemplates = createTemplateResourceStore();
   const speculationRules = createSpeculationRulesStore();
   /*
    * Brotli like every other text response (the precompressed /islands chunks, the pages): these bytes
@@ -525,6 +526,11 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
     const sha = /^([0-9a-f]{16})\.js$/.exec(c.req.param('file'))?.[1];
     const bytes = sha ? await islandModules.get(sha) : null;
     return bytes ? islandFile(c, `d/${sha}`, bytes, 'text/javascript; charset=utf-8') : c.notFound();
+  });
+  app.on(['GET', 'HEAD'], `${TEMPLATE_RESOURCE_PATH}/:file`, async (c) => {
+    const sha = /^([0-9a-f]{16})\.json$/.exec(c.req.param('file'))?.[1];
+    const bytes = sha ? await islandTemplates.get(sha) : null;
+    return bytes ? islandFile(c, `t/${sha}`, bytes, 'application/json; charset=utf-8') : c.notFound();
   });
   app.on(['GET', 'HEAD'], `${SPECULATION_RULES_PATH}/:file`, async (c) => {
     const sha = /^([0-9a-f]{16})\.json$/.exec(c.req.param('file'))?.[1];
