@@ -2,6 +2,8 @@
 import { createSignal, For, Show, type JSX } from 'solid-js';
 import { parseMarkdownLite, wrapSelection, type MdInline, type MdMarker, type MdNode } from '@/lib/markdown-lite';
 import { mentionDraft } from '@/lib/mention-draft';
+import type { ArtifactBackend } from '@/lib/artifact-backend/types';
+import { CommentMentionPicker, type MentionKeyboard } from './CommentMentionPicker';
 
 function inline(nodes: MdInline[]): JSX.Element {
   return <For each={nodes}>{node => {
@@ -43,9 +45,21 @@ const KEYS: Record<string, MdMarker> = { b: 'bold', i: 'italic', e: 'code' };
 export function CommentMarkdownField(props: {
   label: string; value: string; onChange: (value: string) => void; onSubmit?: () => void;
   placeholder?: string; rows?: number; previewLabel?: string; previewToggleLabel?: string;
+  backend?: ArtifactBackend; artifactId?: string;
 }): JSX.Element {
   let field: HTMLTextAreaElement | undefined;
+  let keyboard: MentionKeyboard | null = null;
   const [previewing, setPreviewing] = createSignal(false);
+  const [mention, setMention] = createSignal<{ start: number; end: number; query: string } | null>(null);
+  const canMention = () => props.backend && !(props.backend.unavailable('remoteSessions') && props.backend.unavailable('mentions'));
+  const chooseMention = (text: string) => {
+    const current = mention();
+    if (!current) return;
+    const next = props.value.slice(0, current.start) + text + props.value.slice(current.end);
+    props.onChange(next);
+    setMention(null);
+    queueMicrotask(() => { field?.focus(); const at = mentionDraft(next).toDisplay(current.start + text.length); field?.setSelectionRange(at, at); });
+  };
   const apply = (marker: MdMarker) => {
     if (!field) return;
     const projected = mentionDraft(props.value);
@@ -58,9 +72,25 @@ export function CommentMarkdownField(props: {
       <For each={MARKERS}>{([marker, name]) => <button type="button" aria-label={name} disabled={previewing()} onMouseDown={event => event.preventDefault()} onClick={() => apply(marker)}>{name}</button>}</For>
       <button type="button" aria-label={props.previewToggleLabel ?? 'Preview comment'} aria-pressed={previewing()} onClick={() => setPreviewing(value => !value)}>{previewing() ? 'edit' : 'preview'}</button>
     </div>
+    <Show when={mention()}>{current => props.backend && <CommentMentionPicker backend={props.backend} artifactId={props.artifactId} query={current().query} onSelect={chooseMention} onReady={handle => { keyboard = handle; }} />}</Show>
     <Show when={previewing()} fallback={<textarea ref={field} aria-label={props.label} value={mentionDraft(props.value).text} rows={props.rows ?? 3} placeholder={props.placeholder}
-      onInput={event => { const draft = mentionDraft(props.value); props.onChange(draft.edit(event.currentTarget.value, event.currentTarget.selectionStart)); }}
-      onKeyDown={event => { if (!(event.metaKey || event.ctrlKey)) return; if (event.key === 'Enter') { event.preventDefault(); props.onSubmit?.(); } else { const marker = KEYS[event.key.toLowerCase()]; if (marker) { event.preventDefault(); apply(marker); } } }}
+      onInput={event => {
+        const display = event.currentTarget.value, caret = event.currentTarget.selectionStart;
+        const draft = mentionDraft(props.value);
+        const raw = draft.edit(display, caret);
+        props.onChange(raw);
+        const match = display.slice(0, caret).match(/(?:^|\s)@([^\s@\[\]]*)$/);
+        setMention(canMention() && match ? { start: mentionDraft(raw).toRaw(caret - match[1].length - 1), end: mentionDraft(raw).toRaw(caret, 'end'), query: match[1] } : null);
+      }}
+      onKeyDown={event => {
+        if (mention() && !(event.metaKey || event.ctrlKey)) {
+          if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); setMention(null); return; }
+          if (keyboard?.keyDown(event.key)) { event.preventDefault(); event.stopPropagation(); return; }
+        }
+        if (!(event.metaKey || event.ctrlKey)) return;
+        if (event.key === 'Enter') { event.preventDefault(); props.onSubmit?.(); }
+        else { const marker = KEYS[event.key.toLowerCase()]; if (marker) { event.preventDefault(); apply(marker); } }
+      }}
       class="w-full rounded border border-edge bg-bg p-2 text-sm" />}>
       <CommentMarkdown text={props.value} label={props.previewLabel ?? 'Comment preview'} class="min-h-12 rounded border border-edge bg-surface p-2" />
     </Show>

@@ -10,7 +10,8 @@ import { AnnotationLayer } from '../AnnotationLayer';
 const thread = { id: 'ann1', status: 'open', snippet: 'Selected passage', thread: [{ id: 'c1', body: 'First comment', author: { label: 'Ana' }, created_at: new Date().toISOString() }] } as AnnotationWire;
 const backend = (overrides: Partial<ArtifactBackend> = {}) => ({
   listAnnotations: vi.fn(async () => [thread]), actOnAnnotation: vi.fn(async () => ({ ...thread, status: 'resolved' })),
-  createAnnotation: vi.fn(async () => thread), deleteAnnotation: vi.fn(async () => {}), ...overrides,
+  createAnnotation: vi.fn(async () => thread), deleteAnnotation: vi.fn(async () => {}), unavailable: vi.fn(() => null),
+  remoteSessions: vi.fn(async () => ({ sessions: [] })), members: vi.fn(async () => ({ people: [] })), ...overrides,
 }) as unknown as ArtifactBackend;
 afterEach(() => vi.unstubAllGlobals());
 
@@ -35,7 +36,7 @@ it('keeps a draft when the annotation write fails', async () => {
 
 it('posts only pin locations to the document runtime and opens the rail on pin click', async () => {
   const send = vi.fn(); let receive: ((data: unknown) => void) | undefined;
-  const runtime = { send, subscribe: (callback: (data: unknown) => void) => { receive = callback; return () => {}; } } as unknown as StoryController;
+  const runtime = { send, subscribe: (callback: (data: unknown) => void) => { receive = callback; return () => {}; }, getViewportRect: () => ({ left: 0, top: 0, width: 800, height: 600 }) } as unknown as StoryController;
   const located = { ...thread, orphaned: false, anchor: { path: '0', key: 'anchor-key' } } as AnnotationWire;
   const open = vi.fn();
   render(() => <AnnotationLayer id="abc" backend={backend({ listAnnotations: vi.fn(async () => [located]) })} railOpen={false} onRailOpenChange={open}
@@ -49,7 +50,7 @@ it('posts only pin locations to the document runtime and opens the rail on pin c
 
 it('opens a one-shot Select pick from the rail and composes on the frame selection', async () => {
   const send = vi.fn(); let receive: ((data: unknown) => void) | undefined;
-  const runtime = { send, subscribe: (callback: (data: unknown) => void) => { receive = callback; return () => {}; } } as unknown as StoryController;
+  const runtime = { send, subscribe: (callback: (data: unknown) => void) => { receive = callback; return () => {}; }, getViewportRect: () => ({ left: 0, top: 0, width: 800, height: 600 }) } as unknown as StoryController;
   const service = backend();
   const view = render(() => <AnnotationLayer id="abc" backend={service} railOpen onRailOpenChange={() => {}}
     runtimeRef={{ current: runtime }} sessionNonce="private" />);
@@ -116,4 +117,19 @@ it('prefills the linked agent in a reply and preserves the draft after a failed 
   fireEvent.click(view.getByRole('button', { name: 'Send reply' }));
   await waitFor(() => expect(view.getByRole('alert')).toHaveTextContent('Could not send reply'));
   expect(reply).toHaveValue('@Codex Please check');
+});
+
+it('requires a screenshot after an explicit Select pick on a versioned document and permits explicit text-only fallback', async () => {
+  const send = vi.fn(); let receive: ((data: unknown) => void) | undefined;
+  const runtime = { send, subscribe: (callback: (data: unknown) => void) => { receive = callback; return () => {}; }, getViewportRect: () => ({ left: 0, top: 0, width: 800, height: 600 }) } as unknown as StoryController;
+  const service = backend({ unavailable: vi.fn(() => null) });
+  const view = render(() => <AnnotationLayer id="abc" editId="edit-current" backend={service} railOpen onRailOpenChange={() => {}}
+    runtimeRef={{ current: runtime }} sessionNonce="private" />);
+  fireEvent.click(view.getByRole('button', { name: 'Select' }));
+  receive?.({ type: 'mx:selection', nonce: 'private', selection: { kind: 'text', path: '0', nodeId: 'node1', tag: 'p', rect: { x: 1, y: 2, width: 30, height: 20 }, className: '', style: '', ancestors: [] } });
+  fireEvent.input(view.getByRole('textbox', { name: 'New comment' }), { target: { value: 'Explicit fallback' } });
+  expect(view.getByRole('button', { name: 'Post comment' })).toBeDisabled();
+  await waitFor(() => expect(view.getByRole('button', { name: 'Continue without screenshot' })).toBeTruthy());
+  fireEvent.click(view.getByRole('button', { name: 'Continue without screenshot' }));
+  expect(view.getByRole('button', { name: 'Post comment' })).toBeEnabled();
 });

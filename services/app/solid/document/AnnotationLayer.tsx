@@ -13,6 +13,7 @@ import { ConfirmDialog } from '../components/ConfirmDialog';
 import { isFolded, readFolds, toggleFold, unfold } from '@/lib/comment-folds';
 import { parseMarkdownLite, plainText } from '@/lib/markdown-lite';
 import { hasReplyText, remoteWorkLabel, replyMentionPrefix } from '@/lib/remote-reply';
+import { createCommentCapture } from './CommentCapture';
 
 export interface AnnotationLayerProps {
   id: string; backend?: ArtifactBackend; railOpen: boolean; onRailOpenChange: (open: boolean) => void;
@@ -26,6 +27,7 @@ export interface AnnotationLayerProps {
 /** The page owns the active selection; the layer owns comments and draft state. */
 export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
   const backend = props.backend ?? createHttpBackend(props.id);
+  const capture = createCommentCapture(backend, props.editId);
   const [items, setItems] = createSignal<AnnotationWire[]>([]);
   const [resolved, setResolved] = createSignal<AnnotationWire[]>([]);
   const [selection, setSelection] = createSignal<StoryEditSelection | null>(props.initialSelection ?? null);
@@ -72,7 +74,12 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
         if (event.data.type === STORY_SELECTION_ACTION_MESSAGE && event.data.action === 'select' && props.pickOnOpen !== false) setPick('select');
         if (event.data.type === STORY_SELECTION_MESSAGE && pick()) {
           setPick(null);
-          if (event.data.selection) { setSelection(event.data.selection); setOpenId(null); }
+          if (event.data.selection) {
+            setSelection(event.data.selection); setOpenId(null);
+            const rect = event.data.selection.captureRect ?? event.data.selection.rect;
+            const viewport = props.runtimeRef ? documentRect({ runtimeRef: props.runtimeRef }) : undefined;
+            void capture.capture({ ...rect, x: rect.x + (viewport?.left ?? 0), y: rect.y + (viewport?.top ?? 0) });
+          } else capture.reset();
         } else if (event.data.type === STORY_SELECTION_MESSAGE && selection()) {
           const reported = event.data.selection;
           setSelection(previous => reported && previous?.nodeId && reported.nodeId === previous.nodeId
@@ -106,13 +113,14 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
   };
   const post = async () => {
     const target = selection();
-    if (!target || !draft().trim() || busy()) return;
+    if (!target || !draft().trim() || busy() || capture.busy() || (capture.required() && !capture.draft())) return;
     if (!target.nodeId) { setError('Wait for this change to save before commenting. Your draft is still here.'); return; }
     setBusy(true); setError('');
     try {
-      const row = await backend.createAnnotation({ path: target.path, node_id: target.nodeId, body: draft(), ...(target.quote ? { quote: target.quote } : {}), ...(target.range ? { range: target.range } : {}) }, crypto.randomUUID());
+      const imageId = await capture.stage();
+      const row = await backend.createAnnotation({ path: target.path, node_id: target.nodeId, body: draft(), ...(target.quote ? { quote: target.quote } : {}), ...(target.range ? { range: target.range } : {}), ...(imageId ? { image_id: imageId } : {}) }, crypto.randomUUID());
       setItems(previous => [...previous.filter(item => item.id !== row.id), row]);
-      setDraft(''); setSelection(null); props.onSelectionConsumed?.();
+      setDraft(''); setSelection(null); capture.reset(); props.onSelectionConsumed?.();
     } catch (cause) {
       if (cause instanceof BackendRequestError && cause.signInRequired) location.assign(loginHref(location, 'comment'));
       else setError(cause instanceof Error ? cause.message : 'Could not save the comment. Your draft is still here.');
@@ -157,12 +165,17 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
       <p>{Math.max(0, row.thread.length - 1)} {row.thread.length === 2 ? 'reply' : 'replies'}</p>
     </Show>
     <div class="flex gap-2 text-xs"><Show when={row.status === 'open'} fallback={<button type="button" aria-label="Reopen annotation" disabled={busy()} onClick={() => void act(row.id, { reopen: true })}>reopen</button>}><button type="button" aria-label="Resolve annotation" disabled={busy()} onClick={() => void act(row.id, { resolve: true })}>resolve</button></Show><button type="button" aria-label="Delete annotation" disabled={busy()} onClick={() => setDeleting(row.id)}>delete</button></div>
-    <Show when={row.status === 'open' && openId() === row.id}><form class="mt-2" onSubmit={event => { event.preventDefault(); if (hasReplyText(reply()[row.id] ?? '')) void act(row.id, { reply: reply()[row.id] }); }}><CommentMarkdownField label={`Reply to annotation ${row.id}`} value={reply()[row.id] ?? ''} onChange={value => setReply(previous => ({ ...previous, [row.id]: value }))} onSubmit={() => { if (hasReplyText(reply()[row.id] ?? '')) void act(row.id, { reply: reply()[row.id] }); }} previewLabel="Reply preview" previewToggleLabel="Preview reply" /><button type="submit" aria-label="Send reply" disabled={busy() || !hasReplyText(reply()[row.id] ?? '')}>reply</button></form></Show>
+    <Show when={row.status === 'open' && openId() === row.id}><form class="mt-2" onSubmit={event => { event.preventDefault(); if (hasReplyText(reply()[row.id] ?? '')) void act(row.id, { reply: reply()[row.id] }); }}><CommentMarkdownField label={`Reply to annotation ${row.id}`} value={reply()[row.id] ?? ''} onChange={value => setReply(previous => ({ ...previous, [row.id]: value }))} onSubmit={() => { if (hasReplyText(reply()[row.id] ?? '')) void act(row.id, { reply: reply()[row.id] }); }} previewLabel="Reply preview" previewToggleLabel="Preview reply" backend={backend} artifactId={props.id} /><button type="submit" aria-label="Send reply" disabled={busy() || !hasReplyText(reply()[row.id] ?? '')}>reply</button></form></Show>
   </article>;
   return <>
     <Show when={pick()}><div role="status" aria-label="Select tool active" class="fixed z-30 rounded border border-edge bg-surface px-3 py-2 text-xs shadow" style={{ top: `${(props.topOffset ?? 0) + 12}px`, left: '50%' }}>tap a block or drag an area to comment<button type="button" aria-label="Cancel picking" onClick={() => setPick(null)} class="ml-2">×</button></div></Show>
-    <Show when={selection()}><aside role="dialog" aria-label="Annotation composer" class="fixed bottom-4 left-1/2 z-40 w-80 -translate-x-1/2 rounded border border-edge bg-surface p-3 shadow-lg"><p class="mb-2 text-xs text-muted">{selection()?.quote ?? 'Comment on selection'}</p><CommentMarkdownField label="New comment" value={draft()} onChange={setDraft} onSubmit={() => void post()} /><div class="flex justify-end gap-2"><button type="button" aria-label="Cancel comment" onClick={() => { setSelection(null); props.onSelectionConsumed?.(); }}>Cancel</button><button type="button" aria-label="Post comment" disabled={busy() || !draft().trim()} onClick={() => void post()}>Post</button></div></aside></Show>
-    <AnnotationRail open={props.railOpen} onClose={() => props.onRailOpenChange(false)} topOffset={props.topOffset} rightInset={props.rightInset} host={props.railHost} sheet={props.railSheet} picking={pick() !== null} onSelect={() => setPick(current => current ? null : 'select')}>
+    <Show when={selection()}><aside role="dialog" aria-label="Annotation composer" class="fixed bottom-4 left-1/2 z-40 w-80 -translate-x-1/2 rounded border border-edge bg-surface p-3 shadow-lg"><p class="mb-2 text-xs text-muted">{selection()?.quote ?? 'Comment on selection'}</p>
+      <Show when={capture.busy()}><p role="status">Preparing screenshot…</p></Show>
+      <Show when={capture.required() && !capture.draft() && !capture.busy()}><div class="mb-2 rounded border border-edge bg-raised p-2 text-xs"><p role="alert">{capture.error() || 'A screenshot is required for this selection.'}</p><button type="button" onClick={() => void capture.start()}>Retry screenshot</button><label>Upload screenshot<input aria-label="Upload screenshot" type="file" accept="image/png,image/jpeg,image/webp" onChange={event => { const file = event.currentTarget.files?.[0]; if (file) void capture.upload(file); }} /></label><button type="button" onClick={capture.skip}>Continue without screenshot</button></div></Show>
+      <CommentMarkdownField label="New comment" value={draft()} onChange={setDraft} onSubmit={() => void post()} backend={backend} artifactId={props.id} /><div class="flex justify-end gap-2"><button type="button" aria-label="Cancel comment" onClick={() => { setSelection(null); capture.reset(); props.onSelectionConsumed?.(); }}>Cancel</button><button type="button" aria-label="Post comment" disabled={busy() || capture.busy() || (capture.required() && !capture.draft()) || !draft().trim()} onClick={() => void post()}>Post</button></div></aside></Show>
+    <AnnotationRail open={props.railOpen} onClose={() => props.onRailOpenChange(false)} topOffset={props.topOffset} rightInset={props.rightInset} host={props.railHost} sheet={props.railSheet} picking={pick() !== null} onSelect={() => {
+      if (pick()) { setPick(null); capture.reset(); } else { setPick('select'); void capture.start(); }
+    }}>
       <For each={items()}>{thread}</For>
       <Show when={items().length === 0}><p class="px-2 py-3 text-xs text-muted">no comments yet.</p></Show>
       <button type="button" aria-label="Show resolved comments" onClick={() => void loadResolved()}>{showResolved() ? 'hide resolved' : 'show resolved'}</button>
