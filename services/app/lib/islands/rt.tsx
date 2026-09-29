@@ -62,7 +62,6 @@ export function currentTemplateResource(): string | null { return templateResour
 
 /** Signals that this island needs its pinned factory before hydration can finish. */
 export class TemplateUnavailableError extends Error {
-  constructor(key: string) { super(`island template ${key} is unavailable`); }
 }
 
 /** Deduplicated, retryable fetch. No author markup is evaluated as code. */
@@ -87,22 +86,21 @@ export function loadTemplateResource(url: string = templateResourceUrl ?? ''): P
 }
 
 /** Hold the first reader action until the cold factories are available, then replay it once. */
-export function installTemplateInteractionGate(root: Element, doc: Document = document, onLoaded: () => void = () => {}, shouldGate: (target: Node) => boolean = () => true): () => void {
+export function installTemplateInteractionGate(root: Element, doc: Document = document): () => void {
   const url = templateResourceUrl;
   if (!url || templateResources.has(url)) return () => {};
   const kinds = ['click', 'keydown', 'input', 'change'];
   let stopped = false;
   const capture = (event: Event) => {
     const target = event.target;
-    if (stopped || templateResources.has(url) || !(target instanceof Node) || !root.contains(target) || !shouldGate(target)) return;
+    if (stopped || templateResources.has(url) || !(target instanceof Node) || !root.contains(target)) return;
+    const element = target instanceof Element ? target : target.parentElement;
+    if (!element?.closest('[role=tab],[aria-haspopup],[data-slot]')) return;
     event.preventDefault();
     event.stopImmediatePropagation();
     void loadTemplateResource(url).then(() => {
-      onLoaded();
       if (stopped || !target.isConnected) return;
-      const Replay = event.constructor as { new(type: string, init: Event): Event };
-      const replay = new Replay(event.type, event);
-      target.dispatchEvent(replay);
+      target.dispatchEvent(new (event.constructor as { new(type: string, init: Event): Event })(event.type, event));
     }).catch((error: unknown) => console.error('[islands] templates failed', error));
   };
   for (const kind of kinds) doc.addEventListener(kind, capture, true);
@@ -120,7 +118,7 @@ export function templateFromPage(key: string, isImportNode?: boolean, isSVG?: bo
       // Older pinned modules still use the page bank. New modules carry the resource URL.
       const source = !url ? document.querySelector(`template[data-mx-island-template="${key}"]`) : null;
       const markup = url ? templateResources.get(url)?.[key] : (source as HTMLTemplateElement | null)?.content.textContent;
-      if (!markup) throw new TemplateUnavailableError(key);
+      if (!markup) throw new TemplateUnavailableError(`island template ${key} is unavailable`);
       made = factory(markup, isImportNode, isSVG, isMathML);
     }
     return made();

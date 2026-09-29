@@ -37,17 +37,16 @@ describe('a compiled island through the runtime', () => {
     const url = '/islands/t/aaaaaaaaaaaaaaaa.json';
     rt.configureTemplateResource(url);
     const host = document.createElement('div');
-    host.innerHTML = '<button type="button">Open</button><p>Served</p>';
+    host.innerHTML = '<button type="button" role="tab">Open</button><p>Served</p>';
     document.body.append(host);
     let actions = 0;
-    let hydrated = 0;
     host.querySelector('button')!.addEventListener('click', () => { actions++; });
     const fetch = vi.fn()
       .mockResolvedValueOnce({ ok: false, status: 503 })
       .mockResolvedValue({ ok: true, json: () => ({ cold: '<p>cold</p>' }) });
     vi.stubGlobal('fetch', fetch);
     const log = vi.spyOn(console, 'error').mockImplementation(() => {});
-    const stop = rt.installTemplateInteractionGate(host, document, () => { hydrated++; });
+    const stop = rt.installTemplateInteractionGate(host, document);
     host.querySelector('button')!.click();
     await vi.waitFor(() => expect(fetch).toHaveBeenCalledTimes(1));
     await vi.waitFor(() => expect(log).toHaveBeenCalledTimes(1));
@@ -56,7 +55,6 @@ describe('a compiled island through the runtime', () => {
     host.querySelector('button')!.click();
     await vi.waitFor(() => expect(actions).toBe(1));
     expect(fetch).toHaveBeenCalledTimes(2);
-    expect(hydrated).toBe(1);
     host.querySelector('button')!.click();
     expect(actions).toBe(2);
     expect(fetch).toHaveBeenCalledTimes(2);

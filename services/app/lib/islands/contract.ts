@@ -201,6 +201,8 @@ export type KitFamily = (typeof KIT_FAMILIES)[number];
  */
 export interface IslandPageData {
   values: Record<string, Scalar>;
+  /** Brotli bytes of the pinned DOM factory resource; absent for older compiles. */
+  templateBrBytes?: number | null;
   /** A prepared version that cannot run carries its query errors into the reader. */
   state?: import('@/lib/story/dataflow').DataflowState;
   results: ServedResults | null;

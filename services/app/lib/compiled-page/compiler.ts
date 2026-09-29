@@ -815,5 +815,5 @@ export async function compilePage(input: CompileInput, build: CompilerBuild): Pr
   if (generated.unported.length) return { ...base, html: '', module: null, ssr: null };
   // A version with an author script boots even with no island: its store and its author host start there.
   const built = await buildDocumentModules(generated, { build, flow: input.flow, values: declaredValues(input.flow), boot: !!base.authorScript });
-  return { ...base, html: built.html, module: built.module, ssr: built.ssr };
+  return { ...base, html: built.html, module: built.module, ssr: built.ssr, templateBrBytes: built.templateBrBytes };
 }

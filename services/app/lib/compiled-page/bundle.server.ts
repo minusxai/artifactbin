@@ -31,6 +31,7 @@ import * as solid from 'solid-js';
 import * as solidWeb from 'solid-js/web';
 import * as solidStore from 'solid-js/store';
 import { readFileSync } from 'node:fs';
+import { brotliCompressSync } from 'node:zlib';
 import path from 'node:path';
 import vm from 'node:vm';
 import type { CompiledDataflow } from '@/lib/story/compiled-dataflow';
@@ -489,6 +490,7 @@ export interface DocumentModules {
   html: string;
   module: ModuleRef | null;
   ssr: ModuleRef | null;
+  templateBrBytes: number | null;
 }
 
 export interface BuildOptions {
@@ -520,7 +522,7 @@ export interface BuildOptions {
  */
 export async function buildDocumentModules(sources: GeneratedSources & { islandRefs: readonly unknown[]; statics?: readonly string[]; browserIslands?: string; moduleData?: readonly string[] }, options: BuildOptions): Promise<DocumentModules> {
   const renderedSkeleton = spliceStatics(await renderSkeleton(sources.skeleton, options.imports), sources.statics ?? []);
-  if (!sources.islandRefs.length && !options.boot) return { html: renderedSkeleton, module: null, ssr: null };
+  if (!sources.islandRefs.length && !options.boot) return { html: renderedSkeleton, module: null, ssr: null, templateBrBytes: null };
   const moduleData = [...(sources.moduleData ?? [])];
   const flowJson = options.flow ? JSON.stringify(options.flow) : null;
   const flowIndex = flowJson && flowJson.length > 1024 ? moduleData.push(flowJson) - 1 : undefined;
@@ -535,29 +537,38 @@ export async function buildDocumentModules(sources: GeneratedSources & { islandR
   const templateStore = options.templateStore ?? createTemplateResourceStore();
   if (!sources.islandRefs.length) {
     const browser = await browserModuleCode(browserWithData, options.build, options.flow, flowIndex);
+    const templateBrBytes = templateBytes(browser.templates);
     const url = browser.templates.size ? await templateStore.put(Object.fromEntries(browser.templates)) : null;
-    return { html: renderedSkeleton + literalsHtml(browser.literalKey, browser.literals) + moduleDataTag, module: await store.put(new TextEncoder().encode(withTemplateResource(browser.code, url, options.build)), browser.imports), ssr: null };
+    return { html: renderedSkeleton + literalsHtml(browser.literalKey, browser.literals) + moduleDataTag, module: await store.put(new TextEncoder().encode(withTemplateResource(browser.code, url, options.build, templateBrBytes, !!options.flow)), browser.imports), ssr: null, templateBrBytes };
   }
   const ssrStore = options.ssrStore ?? createSsrModuleStore();
   const browser = await browserModuleCode(browserWithData, options.build, options.flow, flowIndex);
+  const templateBrBytes = templateBytes(browser.templates);
   const templateUrl = browser.templates.size ? await templateStore.put(Object.fromEntries(browser.templates)) : null;
   const skeletonHtml = renderedSkeleton + literalsHtml(browser.literalKey, browser.literals) + moduleDataTag;
   const ssrCode = await ssrModuleCode(sources.islands, skeletonHtml, options.flow);
   const loaded = await ssrModuleOf(ssrCode, contentSha(ssrCode), options.imports);
   const html = loaded.render({ values: options.values, results: null, mermaidImages: {}, drawings: {} });
   const [module, ssr] = await Promise.all([
-    store.put(new TextEncoder().encode(withTemplateResource(browser.code, templateUrl, options.build)), browser.imports),
+    store.put(new TextEncoder().encode(withTemplateResource(browser.code, templateUrl, options.build, templateBrBytes, !!options.flow)), browser.imports),
     ssrStore.put(new TextEncoder().encode(ssrCode), await importsOf(ssrCode)),
   ]);
-  return { html, module, ssr };
+  return { html, module, ssr, templateBrBytes };
 }
 
+const templateBytes = (templates: Map<string, string>): number | null => templates.size
+  ? brotliCompressSync(JSON.stringify(Object.fromEntries(templates))).byteLength : null;
+
 /** The URL is build-owned data, inserted after author literal extraction. */
-function withTemplateResource(code: string, url: string | null, build: CompilerBuild): string {
+function withTemplateResource(code: string, url: string | null, build: CompilerBuild, brBytes: number | null, hasFlow: boolean): string {
   if (!url) return code;
   const rt = build.manifest['@mx/rt'];
   if (!rt) throw new Error('compile: the island build has no @mx/rt');
-  return `import {configureTemplateResource as $mxTemplates} from ${JSON.stringify(rt)};\n$mxTemplates(${JSON.stringify(url)});\n${code}`;
+  const small = hasFlow && brBytes !== null && brBytes < 16_384;
+  const prefetch = small
+    ? `\nconst $mxPreload=()=>{void $mxLoad(${JSON.stringify(url)}).catch(()=>{})};\nif(typeof requestIdleCallback==='function')requestIdleCallback($mxPreload,{timeout:1});else setTimeout($mxPreload,0);`
+    : '';
+  return `import {configureTemplateResource as $mxTemplates${small ? ',loadTemplateResource as $mxLoad' : ''}} from ${JSON.stringify(rt)};\n$mxTemplates(${JSON.stringify(url)});\n${code}${prefetch}`;
 }
 
 /** The per-document browser module: DOM-compiled, imports bound to the shared chunks, compacted. `imports` is its static closure. */

@@ -67,7 +67,7 @@ describe('compilePage', () => {
     let seed = 0x4d595df4;
     const letter = () => { seed ^= seed << 13; seed ^= seed >>> 17; seed ^= seed << 5; return 'abcdefghijklmnopqrstuvwxyz'[(seed >>> 0) % 26]; };
     const blocks = Array.from({ length: 180 }, (_, i) => `<p>${i}:${Array.from({ length: 18_000 }, letter).join('')}</p>`).join('');
-    const input = await inputOf(`<Tabs defaultValue="one"><TabsList><TabsTrigger value="one">One</TabsTrigger><TabsTrigger value="two">Two</TabsTrigger></TabsList><TabsContent value="one">Ready</TabsContent><TabsContent value="two">${blocks}</TabsContent></Tabs>`);
+    const input = await inputOf(`<Helmet><Value name="selection" type="string" default="one" /></Helmet><Tabs defaultValue="one"><TabsList><TabsTrigger value="one">One</TabsTrigger><TabsTrigger value="two">Two</TabsTrigger></TabsList><TabsContent value="one">Ready</TabsContent><TabsContent value="two">${blocks}</TabsContent></Tabs>`);
     const store = createModuleStore();
     const generated = generate(input);
     const built = await buildDocumentModules(generated, { build: loadCompilerBuild(), flow: input.flow, values: declaredValues(input.flow), store });
@@ -83,7 +83,17 @@ describe('compilePage', () => {
     const resource = await createTemplateResourceStore().get(url!);
     expect(new TextDecoder().decode(resource!)).toContain(blocks.slice(3, 120));
     expect(brotliCompressSync(bytes).byteLength).toBeLessThan(4_000);
+    expect(built.templateBrBytes).toBeGreaterThan(16_384);
+    expect(new TextDecoder().decode(bytes)).not.toContain('requestIdleCallback');
   }, 120_000);
+  it('records a small factory resource and schedules its dataflow page to fetch after boot', async () => {
+    const input = await inputOf('<Helmet><Value name="name" type="string" default="Ada" /></Helmet><p>{$name}</p>');
+    const store = createModuleStore();
+    const built = await buildDocumentModules(generate(input), { build: loadCompilerBuild(), flow: input.flow, values: declaredValues(input.flow), store });
+    const browser = new TextDecoder().decode((await store.get(built.module!.sha))!);
+    expect(built.templateBrBytes).toBeLessThan(16_384);
+    expect(browser).toContain('requestIdleCallback');
+  });
   it('keeps hostile template closers inert in the resource', async () => {
     const input = await inputOf('<Tabs defaultValue="one"><TabsList><TabsTrigger value="one">One</TabsTrigger><TabsTrigger value="two">Two</TabsTrigger></TabsList><TabsContent value="one">safe</TabsContent><TabsContent value="two"><p>&lt;/template&gt;&lt;script&gt;alert(1)&lt;/script&gt;</p></TabsContent></Tabs>');
     const store = createModuleStore();
