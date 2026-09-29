@@ -11,7 +11,7 @@ import path from 'node:path';
 import { buildIslands, ISLAND_SPECIFIERS } from '../build-islands.mjs';
 
 const ROOT = path.resolve(import.meta.dirname, '../..');
-const KIT_FAMILIES = ['basic', 'tabs', 'accordion', 'dialog', 'disclosure', 'controls', 'data', 'files', 'people', 'mermaid', 'embed', 'cells'];
+const KIT_FAMILIES = ['basic', 'tabs', 'accordion', 'dialog', 'disclosure', 'controls', 'data', 'files', 'people', 'mermaid', 'embed', 'cells', 'static'];
 
 describe('the toolchain', () => {
   it('pins Solid 1.9 and a matching babel preset', () => {

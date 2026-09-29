@@ -1,8 +1,8 @@
 /**
  * THE CHART CONTROLLER — a `<Question>` chart as a FRAMEWORK-FREE controller over lib/viz (what
  * components/viz/VegaChart does inside React effects). Never imported statically: `chart.ts` loads
- * it on demand, so Vega arrives only when a chart must be drawn in the browser (its table changed,
- * or the reader interacts; docs/phase2-architecture.md §2.4).
+ * it on demand, so Vega arrives after reader readiness and chart visibility, a table change,
+ * or a reader interaction.
  *
  * Builds the view, re-feeds rows, follows resizes and speaks the readiness contract
  * (`data-mx-chart-state`) through lib/viz/render-readiness. Not ported from VegaChart (parity gaps):

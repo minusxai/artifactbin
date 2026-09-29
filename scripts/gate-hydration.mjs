@@ -25,22 +25,30 @@ const READER_HEADER = 'x-mx-reader';
  * captured at DOMContentLoaded, before the app can have run — and every script the page fetches.
  */
 const COMPILED_PROBE = () => {
-  const state = (window.__compiledTakeover = { story: null, served: [] });
+  const state = (window.__compiledTakeover = { story: null, served: [], staticNodes: [] });
   document.addEventListener('DOMContentLoaded', () => {
     const story = document.querySelector('body > [data-mx-inline-story]');
     if (!story) return;
     state.story = story;
     state.served = [...story.querySelectorAll('*')];
+    state.staticNodes = [...story.querySelectorAll('[data-mx-ast]')]
+      .filter((node) => !node.closest('[data-hk^="s"]'))
+      .map((node) => ({ node, attrs: [...node.attributes].map((attr) => [attr.name, attr.value]),
+        text: [...node.childNodes].filter((child) => child.nodeType === Node.TEXT_NODE).map((child) => child.textContent).join('') }));
   });
 };
 const COMPILED_VERDICT = () => {
-  const { story, served } = window.__compiledTakeover ?? { story: null, served: [] };
+  const { story, served, staticNodes } = window.__compiledTakeover ?? { story: null, served: [], staticNodes: [] };
   const root = document.getElementById('root');
   return {
     captured: !!story, served: served.length,
     adopted: !!story && !!root && !root.hidden && root.contains(story),
     same: !!story && document.querySelector('#root [data-mx-inline-story]') === story,
     lost: story ? served.filter((n) => !story.contains(n)).length : -1,
+    staticNodes: staticNodes.length,
+    staticChanged: staticNodes.filter(({ node, attrs, text }) => !story?.contains(node)
+      || JSON.stringify([...node.attributes].map((attr) => [attr.name, attr.value])) !== JSON.stringify(attrs)
+      || [...node.childNodes].filter((child) => child.nodeType === Node.TEXT_NODE).map((child) => child.textContent).join('') !== text).length,
     reactOwned: story ? [story, ...served].filter((n) => Object.keys(n).some((k) => k.startsWith('__reactFiber$'))).length : -1,
     mode: story?.__mxIslands?.mode?.() ?? null,
     servedChrome: !!document.querySelector('body > [data-mx-reader-chrome]'),
@@ -59,7 +67,7 @@ async function compiledServed(path) {
   return served ?? 'absent';
 }
 
-async function runCompiledTakeover({ ownerContext, ownerPage, anonymous, kit }) {
+async function runCompiledTakeover({ ownerContext, ownerPage, anonymous, kit, fixtures }) {
   const kitPath = `/a/${kit.id}`;
   const served = await compiledServed(kitPath);
   if (served !== 'compiled') {
@@ -155,6 +163,23 @@ async function runCompiledTakeover({ ownerContext, ownerPage, anonymous, kit }) 
       'edit: the reloaded compiled page shows the edit');
     await reloaded.close();
   }
+
+  // Every page-speed lab fixture keeps its server-rendered static AST nodes, attributes, and direct text
+  // through the compiled island boot and app adoption. Dynamic island descendants are checked by the
+  // existing takeover and full-kit gates; their hydration attributes are owned by Solid.
+  for (const fixture of fixtures) {
+    const path = `/a/${fixture.id}`;
+    const header = await compiledServed(path);
+    check(header === 'compiled', `static hydration ${fixture.key}: compiled response (${header})`);
+    if (header !== 'compiled') continue;
+    const { page, errors } = await open(ownerContext, path);
+    const adopted = await waitFor(page, `(${COMPILED_VERDICT})().adopted`, 30000);
+    const verdict = await page.evaluate(COMPILED_VERDICT);
+    check(adopted && verdict.staticNodes > 0 && verdict.staticChanged === 0,
+      `static hydration ${fixture.key}: ${verdict.staticNodes} static nodes retained attributes and direct text (${verdict.staticChanged} changed)`);
+    check(errors.length === 0, `static hydration ${fixture.key}: no page errors (${errors[0] ?? ''})`);
+    await page.close();
+  }
 }
 
 try {
@@ -167,7 +192,7 @@ try {
   const kit = fixtures.find((fixture) => fixture.key === 'kit');
   const anonymous = await browser.newContext({ viewport: { width: 1400, height: 900 } });
   await githubWidgetFixture(anonymous);
-  await runCompiledTakeover({ ownerContext, ownerPage, anonymous, kit });
+  await runCompiledTakeover({ ownerContext, ownerPage, anonymous, kit, fixtures });
 
   await anonymous.close();
   await ownerContext.close();

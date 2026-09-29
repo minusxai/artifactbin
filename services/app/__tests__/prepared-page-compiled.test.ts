@@ -60,14 +60,15 @@ describe('the compiled page on the prepared page', () => {
     expect((await app.request(`${DOCUMENT_MODULE_PATH}/${compiled.ssr!.sha}.js`)).status).toBe(404);
   });
 
-  it('a version the compiler used to refuse (a registered component with no Solid port, in a row) stores its whole page', async () => {
-    // w3-compiler-coverage: such a component compiles as a React shell with its row attributes filled per row, so
-    // no stored document is refused (`unported`) any more; the refusal door in compiledFor stays for the contract.
+  it('a static component inside a row compiles with the Solid kit and stores its whole page', async () => {
+    // The row's Separator is a Solid kit component and its attributes are filled for each row.
+    // The refusal door in compiledFor remains for genuinely unported components.
     const id = await publish(WAS_UNPORTED);
     const compiled = (await stored(id)).compiled as CompiledPage;
     expect(compiled).toMatchObject({ build: loadCompilerBuild().id, unported: [] });
     expect('error' in compiled).toBe(false);
-    expect(compiled.reactStatic).toContain('Separator');
+    expect(compiled.reactStatic).toEqual([]);
+    expect(compiled.kit.islands).toContain('Separator');
     expect(compiled.html).toContain('data-slot="separator"');
   });
 });

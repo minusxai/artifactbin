@@ -24,6 +24,9 @@ export interface IconGlyph {
 /** Resolved glyphs by `iconGlyphKey` — the size of one document's usage. */
 export type GlyphMap = Record<string, IconGlyph>;
 
+/** Sized text-small by default; an authored size class wins in the kit. */
+export const ICON_BASE_CLASS = 'inline-block size-4 shrink-0 align-[-0.125em]';
+
 /**
  * The lucide site names icons in kebab-case ('chart-bar'); the icon map's keys are
  * PascalCase ('ChartBar'). Both spellings are accepted from authors, so both must

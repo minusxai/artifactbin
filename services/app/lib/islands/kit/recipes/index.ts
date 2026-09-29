@@ -17,6 +17,7 @@ import { RECIPES as files } from './files';
 import { RECIPES as mermaid } from './mermaid';
 import { RECIPES as people } from './people';
 import { RECIPES as tabs } from './tabs';
+import { RECIPES as staticKit } from './static';
 import type { KitFamily } from '../../contract';
 
 export { cn } from './cn';
@@ -24,7 +25,7 @@ export { cn } from './cn';
 /** One component's recipe: its props → the class string its root element carries. */
 export type Recipe = (props: Record<string, unknown>) => string;
 
-const FAMILIES: Readonly<Record<KitFamily, Readonly<Record<string, Recipe>>>> = { basic, tabs, accordion, dialog, disclosure, controls, data, files, people, mermaid, embed, cells };
+const FAMILIES: Readonly<Record<KitFamily, Readonly<Record<string, Recipe>>>> = { basic, tabs, accordion, dialog, disclosure, controls, data, files, people, mermaid, embed, cells, static: staticKit };
 
 function merge(families: typeof FAMILIES): Readonly<Record<string, Recipe>> {
   const merged: Record<string, Recipe> = {};
