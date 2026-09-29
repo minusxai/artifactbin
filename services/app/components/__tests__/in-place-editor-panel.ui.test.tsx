@@ -1,7 +1,7 @@
 /**
- * THE EDIT PANEL: one right panel for the whole edit session on a wide window,
+ * THE EDIT PANEL: one right panel for the App view on a wide window,
  * bottom sheets below the breakpoint. What must hold is that nothing inside the
- * session changes the width the page reserves — only the collapse button — and
+ * App selection changes the width the page reserves, and
  * that a selection fills the panel without taking it over.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
@@ -69,7 +69,7 @@ describe('the edit panel on a wide window', () => {
     expect(header.getByRole('button', { name: 'Insert' })).toBeTruthy();
   });
 
-  it('is open from entry, and nothing in the session changes the width it asks for', async () => {
+  it('is open from entry, and selections keep the width stable in App', async () => {
     const widths: number[] = [];
     const onCommentsOpenChange = vi.fn();
     const view = mount({ onRightInsetChange: (px) => widths.push(px), onCommentsOpenChange });
@@ -85,8 +85,6 @@ describe('the edit panel on a wide window', () => {
     expect(onCommentsOpenChange).toHaveBeenLastCalledWith(true);
     view.rerender(editorElement({ onRightInsetChange: (px) => widths.push(px), onCommentsOpenChange, commentsOpen: true }));
     await fromFrame({ type: STORY_SELECTION_MESSAGE, selection: chart() });
-    fireEvent.click(screen.getByLabelText('Edit the source'));
-    fireEvent.click(screen.getByLabelText('Edit on the page'));
 
     // Every value ever reported, not just the last: a 320 → 0 → 320 flicker
     // inside one act is exactly the jump this panel exists to remove.
@@ -355,5 +353,55 @@ describe('below the panel breakpoint', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Show comments' }));
     expect(onCommentsOpenChange).toHaveBeenLastCalledWith(true);
     expect(screen.queryByRole('dialog', { name: 'Version history' })).toBeNull();
+  });
+});
+
+
+describe('reference and sharing views', () => {
+  it('reserves a sidebar only in App and restores its collapsed state when returning', () => {
+    const widths: number[] = [];
+    mount({ onRightInsetChange: px => widths.push(px), sharingContent: <button>Manage sharing</button>, art: { ...art, markup: '<Helmet><Query name="q">{`select 1 as n`}</Query></Helmet><p>Sample</p>' } });
+    fireEvent.click(screen.getByLabelText('Collapse panel'));
+    for (const name of ['Edit the source', 'Show data', 'Show files', 'Show sharing']) {
+      fireEvent.click(screen.getByRole('tab', { name }));
+      expect(screen.queryByLabelText('Edit panel')).toBeNull();
+      expect(screen.queryByLabelText('Expand panel')).toBeNull();
+      expect(widths.at(-1)).toBe(0);
+      for (const action of ['Insert', 'Undo', 'Redo']) expect(screen.queryByRole('button', { name: action, exact: true })).toBeNull();
+      expect(screen.getByRole('button', { name: 'Exit edit mode' })).toBeVisible();
+      fireEvent.click(screen.getByRole('tab', { name: 'Edit on the page' }));
+      expect(screen.getByLabelText('Expand panel')).toBeTruthy();
+      expect(widths.at(-1)).toBe(44);
+    }
+  });
+
+  it('lists other referenced files with types and links, excluding datasets', () => {
+    mount({ art: { ...art, refs: [
+      { id: 'data01', kind: 'dataset', title: 'Sales' },
+      { id: 'image1', kind: 'image', title: 'Cover image' },
+      { id: 'pdf001', kind: 'pdf', title: 'Notes' },
+      { id: 'image1', kind: 'image', title: 'Cover image' },
+    ] } });
+    fireEvent.click(screen.getByRole('tab', { name: 'Show files' }));
+    const table = within(screen.getByRole('table', { name: 'Referenced files' }));
+    expect(table.getAllByRole('row')).toHaveLength(3);
+    expect(table.getByRole('link', { name: 'Cover image' })).toHaveAttribute('href', '/a/image1');
+    expect(table.getByText('Image')).toBeTruthy();
+    expect(table.getByText('PDF')).toBeTruthy();
+    expect(table.queryByText('Sales')).toBeNull();
+    expect(screen.getByRole('tab', { name: 'Edit on the page' })).toHaveAttribute('aria-selected', 'false');
+    fireEvent.click(screen.getByRole('tab', { name: 'Edit on the page' }));
+    expect(screen.queryByRole('table', { name: 'Referenced files' })).toBeNull();
+  });
+
+  it('offers an empty Files view and sharing controls without a second overlay', () => {
+    mount({ sharingContent: <button>Manage test sharing</button> });
+    fireEvent.click(screen.getByRole('tab', { name: 'Show files' }));
+    expect(screen.getByText('No referenced files.')).toBeTruthy();
+    fireEvent.click(screen.getByRole('tab', { name: 'Show sharing' }));
+    expect(within(screen.getByLabelText('Sharing settings')).getByRole('button', { name: 'Manage test sharing' })).toBeTruthy();
+    expect(screen.queryByLabelText('Files')).toBeNull();
+    fireEvent.click(screen.getByRole('tab', { name: 'Edit the source' }));
+    expect(screen.queryByLabelText('Sharing settings')).toBeNull();
   });
 });

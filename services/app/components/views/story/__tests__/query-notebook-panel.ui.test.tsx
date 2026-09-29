@@ -4,7 +4,7 @@
  * a cell commits its SQL on blur or ⌘⏎, and the document stays the source of
  * truth.
  */
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { fireEvent, render, screen, within } from '@testing-library/react';
 import QueryNotebookPanel from '../QueryNotebookPanel';
 import type { QueryCell } from '@/lib/story/query-notebook';
@@ -19,6 +19,7 @@ const COLUMNS = [{ name: 'region', type: 'string' as const }, { name: 'revenue',
 
 let onSqlChange: ReturnType<typeof vi.fn<(name: string, sql: string) => void>>;
 beforeEach(() => { onSqlChange = vi.fn<(name: string, sql: string) => void>(); });
+afterEach(() => vi.restoreAllMocks());
 
 const panel = (cells: QueryCell[]) => render(<QueryNotebookPanel cells={cells} onSqlChange={onSqlChange} />, { wrapper: httpBackendWrapper('doc1') });
 const sqlField = (name: string) => screen.getByLabelText(`Query $${name} SQL`) as HTMLTextAreaElement;
@@ -141,5 +142,38 @@ describe('editing a cell', () => {
     fireEvent.change(sqlField('sales'), { target: { value: '   ' } });
     fireEvent.blur(sqlField('sales'));
     expect(onSqlChange).not.toHaveBeenCalled();
+  });
+});
+
+
+describe('the dataset summary table', () => {
+  it('shows one row per dataset above the query editors, with its own metadata', async () => {
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async () => new Response(JSON.stringify({ columns: COLUMNS, totalRows: 1200, rows: [] })));
+    render(<QueryNotebookPanel cells={[
+      cell({ source: 'sales1' }),
+      cell({ name: 'totals', source: 'sales1' }),
+      cell({ name: 'visits', source: 'traffic1' }),
+      cell({ name: 'derived', source: null }),
+    ]} titles={{ sales1: 'Sales', traffic1: 'Traffic' }} onSqlChange={onSqlChange} />, { wrapper: httpBackendWrapper('doc1') });
+    const table = screen.getByRole('table', { name: 'Datasets' });
+    expect(within(table).getAllByRole('columnheader').map(h => h.textContent)).toEqual(['Dataset', 'Rows', 'Columns', 'Used by']);
+    expect(within(table).getAllByRole('row')).toHaveLength(3);
+    const sales = within(table).getByRole('link', { name: 'Sales' });
+    expect(sales).toHaveAttribute('href', '/a/sales1');
+    const row = within(sales.closest('tr')!);
+    expect(await row.findByText('1,200')).toBeTruthy();
+    expect(row.getByText('region, revenue')).toBeTruthy();
+    expect(row.getByText('sales, totals')).toBeTruthy();
+    expect(sqlField('visits')).toBeTruthy();
+    expect(table.compareDocumentPosition(screen.getByLabelText('Queries')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it('keeps unavailable datasets in the table without inventing row counts', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify({ error: 'Access denied' }), { status: 403 }));
+    panel([cell({ source: 'private1' })]);
+    const table = screen.getByRole('table', { name: 'Datasets' });
+    expect(await within(table).findByText('shape unavailable — Access denied')).toBeTruthy();
+    expect(within(table).queryByText('0')).toBeNull();
+    expect(sqlField('sales')).toBeTruthy();
   });
 });

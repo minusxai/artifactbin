@@ -23,7 +23,7 @@ import { LoadFailure } from '@/components/LoadFailure';
 /** The one ShareLink download: the idle warm, a trigger's hover and the mount all share it. */
 export const shareLinkFeature = onDemand(() => import('@/components/ShareLink'));
 
-type ShareLinkProps = ComponentProps<typeof ShareLink> & { variant: 'menu' | 'dialog' };
+type ShareLinkProps = ComponentProps<typeof ShareLink> & { variant: 'menu' | 'dialog' | 'embedded' };
 
 export default function ShareLinkOnDemand(props: ShareLinkProps) {
   const { module, failed, retry } = useOnDemand(shareLinkFeature);
@@ -35,11 +35,11 @@ export default function ShareLinkOnDemand(props: ShareLinkProps) {
   }
   const failure = failed ? <LoadFailure what="sharing" onRetry={retry} /> : null;
   const busyPanel = (onClose: () => void) => (
-    <SharePanel busy title={shareTitle(props.title, props.format)} onClose={onClose}>
+    <SharePanel embedded={props.variant === 'embedded'} busy title={shareTitle(props.title, props.format)} onClose={onClose}>
       {failure ?? <SharePanelSkeleton socialPreview={!!props.onSocialPreview} />}
     </SharePanel>
   );
-  if (props.variant === 'dialog') return busyPanel(() => props.onClose?.());
+  if (props.variant === 'dialog' || props.variant === 'embedded') return busyPanel(() => props.onClose?.());
   const Pending = VISIBILITY_ICONS.private;
   return (
     <span className="relative block">

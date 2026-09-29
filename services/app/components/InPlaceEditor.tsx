@@ -25,11 +25,11 @@ import type { EditorSelectionChange } from '@/lib/editor-v2/bookmark';
  * framed-document compatibility path through the same endpoint contract.
  */
 import { sendDocument, type DocumentRuntimeRef } from '@/lib/story-runtime/document-endpoint';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import SourceEditor from '@/components/SolidSourceEditorPane';
 import { editBlock } from '@/lib/editor-v2/block-edit';
 import { SourceHistory } from '@/lib/editor-v2/history';
-import { ChartColumn, Check, Code, Database, Hash, History, MessageSquare, Undo2, Redo2, Paintbrush, SlidersHorizontal, Workflow, X } from 'lucide-react';
+import { ChartColumn, Check, Code, Database, Files, Share2, Hash, History, MessageSquare, Undo2, Redo2, Paintbrush, SlidersHorizontal, Workflow, X } from 'lucide-react';
 import { TrustedUi } from '@/components/TrustedUi';
 
 import ThemePicker, { ModeChip, TemplateChip } from '@/components/ThemePicker';
@@ -43,6 +43,7 @@ import VizEditorPanel from '@/components/views/story/VizEditorPanel';
 import NumberEditorPanel from '@/components/views/story/NumberEditorPanel';
 import MermaidEditorPanel from '@/components/views/story/MermaidEditorPanel';
 import QueryNotebookPanel from '@/components/views/story/QueryNotebookPanel';
+import ReferenceFilesPanel from '@/components/views/story/ReferenceFilesPanel';
 import { StoryToolbarMenu } from '@/components/views/story/StoryToolbarMenu';
 import StoryFormatToolbar from '@/components/views/story/StoryFormatToolbar';
 import MarkdownPasteDialog from '@/components/views/story/MarkdownPasteDialog';
@@ -161,10 +162,13 @@ export default function InPlaceEditor({
   onCommentsOpenChange,
   onCommentsHost,
   titleHost = null,
+  sharingContent,
 }: {
   art: EditorArtifact;
   /** Breadcrumb slot owned by the page; without one, title lives in document settings. */
   titleHost?: HTMLElement | null;
+  /** The page owns sharing authority and supplies its existing controls. */
+  sharingContent?: ReactNode;
   /** Optional standalone document frame compatibility ref; the active page uses runtimeRef. */
   frameRef?: { current: HTMLIFrameElement | null };
   runtimeRef?: DocumentRuntimeRef;
@@ -251,7 +255,8 @@ export default function InPlaceEditor({
     return () => window.removeEventListener('keydown', onKey);
   }, [onComment]);
   /** The right rail's query notebook (components/views/story/QueryNotebookPanel). */
-  const [queriesOpen, setQueriesOpen] = useState(false);
+  const [contentView, setContentView] = useState<'data' | 'files' | 'sharing' | null>(null);
+  const queriesOpen = contentView === 'data';
   /** The cell the notebook lands on when opened FROM an embed's inspector; null once the rail has gone. */
   const [queryFocus, setQueryFocus] = useState<string | null>(null);
   /** True from the moment a draft-data run is sent until its answer lands — the notebook's "running…". */
@@ -762,14 +767,15 @@ export default function InPlaceEditor({
     setQueryFocus(null);
   }, [notebookVisible, spotlight]);
   const barH = EDIT_BAR_H;
-  /*
-   * THE ONE WIDTH the page is told about: the panel's, which nothing in the
-   * session changes but collapse / expand (and a window crossing the
-   * breakpoint). Not a selection, not a tab on an open panel, not a preview
-   * or the code view — each of those used to move the document sideways,
-   * usually right under whatever the pointer was reaching for.
-   */
-  const panelWidth = wide ? editPanelWidth(collapsed) : 0;
+  // Only App reserves canvas space for selection, history and comments.
+  // Switching views preserves the user's collapsed-panel preference.
+  const appView = mode === 'design' && contentView === null;
+  const panelWidth = wide && appView ? editPanelWidth(collapsed) : 0;
+  useEffect(() => {
+    if (appView) return;
+    setSheet(null);
+    if (commentsOpen) onCommentsOpenChange?.(false);
+  }, [appView, commentsOpen, onCommentsOpenChange]);
   // Through a ref: a caller passing a fresh callback each render must not get
   // a 0 from the old one's cleanup — that is the flicker this width exists to prevent.
   const onRightInsetChangeRef = useRef(onRightInsetChange);
@@ -903,7 +909,7 @@ export default function InPlaceEditor({
     (name: string) => {
       select(null);
       setQueryFocus(name);
-      setQueriesOpen(true);
+      setContentView('data');
     },
     [select],
   );
@@ -1124,7 +1130,7 @@ export default function InPlaceEditor({
     </>
   );
   const insertionControls = (
-    <StoryToolbarMenu label="Insert" open={imageMenuOpen} onOpenChange={setImageMenuOpen}>
+    <StoryToolbarMenu label={wide ? 'Insert' : '+'} name="Insert" open={imageMenuOpen} onOpenChange={setImageMenuOpen}>
       <div className="flex w-44 flex-col">
         <button
           type="button"
@@ -1193,7 +1199,7 @@ export default function InPlaceEditor({
     </section>
   ) : null;
 
-  const formatControls = selection && mode === 'design' && !preview && !notebookVisible ? (
+  const formatControls = selection && mode === 'design' && !preview && contentView === null ? (
     <StoryFormatToolbar layout="panel" artifactId={art.id}
       selection={selection}
       onApply={edit.applyFormat}
@@ -1409,7 +1415,7 @@ export default function InPlaceEditor({
       )}
       <header
         aria-label="Editor toolbar"
-        className="fixed z-30 grid grid-cols-[minmax(0,1fr)_auto] grid-rows-[44px] items-center gap-x-2 border-b border-edge bg-surface px-3"
+        className="fixed z-30 grid grid-cols-[minmax(0,1fr)_auto] grid-rows-[44px] items-center gap-x-1 border-b border-edge bg-surface px-2 sm:gap-x-2 sm:px-3"
         style={{ top: barTop, height: barH, left: 0, right: rightInset }}
       >
         {/* View and editing actions scroll independently while Done stays visible. */}
@@ -1417,12 +1423,12 @@ export default function InPlaceEditor({
 
           {/*
             * WHAT YOU ARE EDITING: app and code are two renderings of the
-            * document, data is the queries it reads — three views of ONE
-            * document, so choosing any of them leaves the other two. First of
+            * document; Data, Files and Sharing are views of its supporting
+            * resources and access settings. Choosing one leaves the others. First of
             * the document-wide choices, so a narrow
             * bar that scrolls this row still shows it.
             */}
-          <div role="tablist" aria-label="Editor view" className="flex h-11 shrink-0 items-stretch gap-1" onKeyDown={(event) => {
+          <div role="tablist" aria-label="Editor view" className="flex h-11 shrink-0 items-stretch sm:gap-1" onKeyDown={(event) => {
             if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
             const tabs = Array.from(event.currentTarget.querySelectorAll<HTMLButtonElement>('[role="tab"]'));
             const current = tabs.indexOf(event.target as HTMLButtonElement);
@@ -1434,7 +1440,7 @@ export default function InPlaceEditor({
             {/* Icon-only on a phone, where every control in this row must fit; the names stay. */}
             {(
               [
-                ['design', 'App', <Paintbrush key="d" size={12} />, mode === 'design' && !queriesOpen],
+                ['design', 'App', <Paintbrush key="d" size={12} />, mode === 'design' && contentView === null],
                 ['code', 'Code', <Code key="c" size={12} />, mode === 'code'],
               ] as const
             ).map(([m, label, icon, active]) => (
@@ -1447,7 +1453,7 @@ export default function InPlaceEditor({
                 tabIndex={active ? 0 : -1}
                 onClick={() => {
                   chooseMode(m);
-                  setQueriesOpen(false);
+                  setContentView(null);
                 }}
                 className={`inline-flex h-11 cursor-pointer items-center gap-2 border-b-2 px-2 font-mono text-sm font-semibold transition-colors sm:px-4 ${
                   active ? 'border-accent text-accent' : 'border-transparent text-muted hover:bg-raised hover:text-fg'
@@ -1467,7 +1473,7 @@ export default function InPlaceEditor({
                 aria-selected={queriesOpen}
                 tabIndex={queriesOpen ? 0 : -1}
                 onClick={() => {
-                  setQueriesOpen(true);
+                  setContentView('data');
                   chooseMode('design');
                   // The notebook is a view over the document: nothing on the page is selected under it.
                   if (!queriesOpen) edit.select(null);
@@ -1481,15 +1487,27 @@ export default function InPlaceEditor({
               </button>
               </Tooltip>
             )}
+            {([
+              { view: 'files', label: 'Files', Icon: Files },
+              ...(sharingContent ? [{ view: 'sharing' as const, label: 'Sharing', Icon: Share2 }] : []),
+            ] as const).map(({ view, label, Icon }) => (
+              <Tooltip key={view} content={label}>
+                <button type="button" role="tab" aria-label={`Show ${label.toLowerCase()}`} aria-selected={contentView === view} tabIndex={contentView === view ? 0 : -1}
+                  onClick={() => { setContentView(view); chooseMode('design'); edit.select(null); }}
+                  className={`inline-flex h-11 cursor-pointer items-center gap-2 border-b-2 px-2 font-mono text-sm font-semibold transition-colors sm:px-4 ${contentView === view ? 'border-accent text-accent' : 'border-transparent text-muted hover:bg-raised hover:text-fg'}`}>
+                  <Icon size={12} /><span className="hidden sm:inline">{label}</span>
+                </button>
+              </Tooltip>
+            ))}
           </div>
 
         </div>
 
-        <div aria-label="Document actions" className="flex shrink-0 items-center gap-1.5 sm:gap-2">
+        <div aria-label="Document actions" className="flex shrink-0 items-center sm:gap-2">
           <span role="status" className="hidden text-xs text-muted lg:inline">
             {live.status || (live.pending ? 'Saving…' : `v${live.version} · Saved`)}
           </span>
-          {wide && inspectable && inspector && InspectIcon && (
+          {wide && appView && inspectable && inspector && InspectIcon && (
             <Tooltip content={`${INSPECT_LABEL[inspector]} settings`}>
               <button
                 type="button"
@@ -1505,7 +1523,7 @@ export default function InPlaceEditor({
           {/* Below the panel breakpoint the panel's tabs are these three, each a
               bottom sheet. The selection one IS Edit chart while a chart is
               selected: one control, not two beside each other on a phone. */}
-          {!wide && (
+          {!wide && appView && (
             <>
               <Tooltip content={inspectable && inspector ? `${INSPECT_LABEL[inspector]} settings` : 'selection settings'}>
                 <button
@@ -1553,8 +1571,8 @@ export default function InPlaceEditor({
               )}
             </>
           )}
-          {mode === 'design' && insertionControls}
-          <div aria-label="Editing history" className="flex items-center">{historyControls}</div>
+          {appView && insertionControls}
+          {appView && <div aria-label="Editing history" className="flex items-center">{historyControls}</div>}
           <Tooltip content="done editing">
             <button
               type="button"
@@ -1611,12 +1629,12 @@ export default function InPlaceEditor({
 
       {/*
         * THE PANEL (wide) or its SHEETS (narrow). The inspector, the version list
-        * and the comments rail are one column that is there for the whole
-        * session, so selecting a chart fills it instead of opening it — the
+        * and the comments rail share one column in App, so selecting a
+        * chart fills it instead of opening it — the
         * document never moves under the pointer. The page decides whether the
         * column comes out of the document's margin or its width.
         */}
-      {wide && (
+      {wide && appView && (
         <EditPanel
           top={barTop + barH}
           tab={panelTab}
@@ -1645,7 +1663,7 @@ export default function InPlaceEditor({
           )}
         </EditPanel>
       )}
-      {!wide && sheet === 'selection' && (
+      {!wide && appView && sheet === 'selection' && (
         <TrustedUi overlay layer="navigation">
           <MobileSheet
             label="Selection settings"
@@ -1671,14 +1689,12 @@ export default function InPlaceEditor({
         </TrustedUi>
       )}
 
-      {/* The query notebook: a VIEW over the document, like the source pane — it
-          ends at the panel's edge and reserves nothing, so opening it moves no
-          width. Design mode only: in code mode the SQL is already on screen. */}
+      {/* Data keeps a quiet right gutter on desktop, without an inspector. */}
       {notebookVisible && (
         <aside
           aria-label="Data"
           className="fixed bottom-0 z-20 overflow-y-auto bg-surface p-4"
-          style={{ top: barTop + barH, left: 0, right: panelWidth }}
+          style={{ top: barTop + barH, left: 0, right: 0, paddingRight: wide ? editPanelWidth(false) + 16 : 16 }}
         >
           <QueryNotebookPanel
             cells={queryNotebook}
@@ -1690,7 +1706,13 @@ export default function InPlaceEditor({
         </aside>
       )}
 
-      {!wide && sheet === 'history' && (
+      {mode === 'design' && !preview && (contentView === 'files' || contentView === 'sharing') && (
+        <aside aria-label={contentView === 'files' ? 'Files' : 'Sharing settings'} className="fixed bottom-0 z-20 overflow-y-auto bg-surface p-4 sm:p-6" style={{ top: barTop + barH, left: 0, right: panelWidth }}>
+          {contentView === 'files' ? <ReferenceFilesPanel refs={art.refs ?? []} /> : sharingContent}
+        </aside>
+      )}
+
+      {!wide && appView && sheet === 'history' && (
         // The open sheet must receive clicks ABOVE the reader's navigation
         // rail; without this wrapper a trusted-ui layer swallows them.
         <TrustedUi overlay layer="navigation">
