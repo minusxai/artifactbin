@@ -7,9 +7,15 @@ import { afterEach, expect, it, vi } from 'vitest';
 vi.mock('@/web/bootstrap', () => ({ takeBootstrap: () => ({ kind: 'account', role: 'commenter', surface: { id: 'doc', title: 'A copy', format: 'markup', author: { forkedFrom: { label: 'Source document', href: '/a/source' } } } }) }));
 vi.mock('@/web/initial-story', () => ({ adoptInitialStory: () => null }));
 
-import { DocumentPage } from '../pages/Document';
+import { DocumentPage, readerProvenancePath } from '../pages/Document';
 
 afterEach(() => { cleanup(); document.body.replaceChildren(); window.history.replaceState(null, '', '/'); });
+
+it('keeps provenance navigation on an internal artifact path', () => {
+  expect(readerProvenancePath('/a/source')).toBe('/a/source');
+  expect(readerProvenancePath('javascript:alert(1)')).toBeNull();
+  expect(readerProvenancePath('//outside.example/a/source')).toBeNull();
+});
 
 it('opens the reader settings and phone menu and applies document mode to the adopted story', () => {
   window.history.replaceState(null, '', '/a/doc');
