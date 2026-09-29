@@ -66,7 +66,7 @@ it('forks even an owners written dataset independently and resets memberships',a
  expect(fork.artifact.source).toContain(`ref:${fork.datasets[0].id}`);
  expect((await getArtifactById(fork.datasets[0].id))?.dataset_policy).toMatchObject({allow:expect.arrayContaining([{actions:['insert'],from:{artifact:fork.artifact.id}}])});
 });
-it('provides accepted membership as a read-only current-artefact table',async()=>{
+it('provides accepted membership as a read-only current-artifact table',async()=>{
  const owner=await createUser({email:'mxmx_test_members_table@example.com'});
  const token=await mintToken('mxmx_test_members_table');await claimToken(owner.id,token.token);
  const res=await create(request('/api/artifacts',{method:'POST',token:token.token,json:{visibility:'public',markup:'<Helmet><Query name="people">{`select user_id, joined_at from _members`}</Query></Helmet><Table source="$people"/>'}}));

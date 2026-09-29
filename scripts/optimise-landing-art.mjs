@@ -10,7 +10,7 @@
  * Same stance as lib/images/optimise.ts, which does this for UPLOADS: cap the
  * edge, convert to WebP, and never return something worse than what was given.
  * The difference is only WHEN — these are repo assets, so the conversion is a
- * committed artefact rather than a publish-time step, and it runs by hand:
+ * committed artifact rather than a publish-time step, and it runs by hand:
  *
  *     node scripts/optimise-landing-art.mjs
  *
