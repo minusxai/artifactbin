@@ -150,6 +150,8 @@ describe('the snapshot', () => {
     expect(file).toMatchObject({ origin: ORIGIN, liveUrl: `${ORIGIN}/a/${w.doc}`, journal: [], localIds: [], bundle: 'core' });
     expect(file.base.source).toBe(file.source);
     expect(file.downloadedBy).not.toContain('@');
+    expect(file.compiled?.html).toContain('Sales');
+    expect(file.compiled?.html).toContain('data-mx-ast');
   });
 
   it('precomputes one variant per region only for the queries that stay on the server, and freezes their free-text filter', async () => {

@@ -16,6 +16,7 @@
  * this file is trusted by the server: a sync re-validates all of it.
  */
 import type { AnnotationWire } from '@/lib/annotations';
+import type { CompiledPage } from '@/lib/compiled-page/contract';
 import type { StoryIslandData } from '@/lib/story-runtime/contract';
 import type { DataflowState, Scalar, TableResult } from '@/lib/story/dataflow';
 import type { ImportTables } from '@/lib/story/compiled-flow';
@@ -111,6 +112,8 @@ export interface ArtifactFile {
   css: ArtifactFileCss;
   /** The runtime island for `source`, with no server URLs (queryUrl, mutateUrl, assetsUrl …) and images as data: URIs. */
   island: StoryIslandData;
+  /** Version-owned compiled reader output, retained for the file's Solid reader. */
+  compiled?: CompiledPage;
   snapshot: ArtifactFileSnapshot;
   journal: ArtifactFileEdit[];
   /** Server threads visible to the downloader, plus threads and replies made in a file. */

@@ -33,6 +33,8 @@ import { getDb } from '@/lib/db';
 import { VARIANT_CONTENT_TYPE } from '@/lib/images/optimise';
 import type { JsxNode } from '@/lib/jsx';
 import { savedMentionStates } from '@/lib/membership';
+import { isCompileFailure } from '@/lib/compiled-page/contract';
+import { preparedPageFor } from '@/lib/story/prepared-page.server';
 import { objectStore } from '@/lib/object-store';
 import type { StoryIslandData } from '@/lib/story-runtime/contract';
 import type { DataflowState } from '@/lib/story/dataflow';
@@ -229,6 +231,9 @@ export async function assembleArtifactFile(input: AssembleArtifactFileInput): Pr
   if (at === 'not_found') return refuse('not_found', `Version ${input.version} of this document is not available to you.`);
   const row: ArtifactRow = await servedRow(artifact, at);
   const source = row.source ?? '';
+  const { page } = await preparedPageFor(artifact, at, origin);
+  const compiled = page.compiled && !isCompileFailure(page.compiled) ? page.compiled : null;
+  if (!compiled) throw new Error(`offline file: compiled page unavailable for ${artifact.id}`);
 
   const meta = row.meta as { theme?: string | null; template?: string | null; colorMode?: 'light' | 'dark' | null; compiledCss?: string | null; cssCompileVersion?: string | null };
   const design = resolveStoredStoryDesign(meta.theme, meta.colorMode);
@@ -304,7 +309,7 @@ export async function assembleArtifactFile(input: AssembleArtifactFileInput): Pr
   const imageRefs = new Set(Object.entries(refData).filter(([, r]) => r.kind === 'image').map(([id]) => id));
   const inliner = new Inliner(origin, imageRefs, maxFileBytes);
   const snapshot = { at: new Date().toISOString(), state, held, variants, frozen };
-  let inlined: { css: ArtifactFile['css']; island: StoryIslandData; snapshot: ArtifactFile['snapshot']; threads: AnnotationWire[] };
+  let inlined: { css: ArtifactFile['css']; island: StoryIslandData; compiled: NonNullable<ArtifactFile['compiled']>; snapshot: ArtifactFile['snapshot']; threads: AnnotationWire[] };
   try {
     inlined = {
       css: {
@@ -313,6 +318,7 @@ export async function assembleArtifactFile(input: AssembleArtifactFileInput): Pr
         author: parts.runtime.authorCss ? await inliner.css(parts.runtime.authorCss) : null,
       },
       island: JSON.parse(await inliner.json(JSON.stringify(island))) as StoryIslandData,
+      compiled: JSON.parse(await inliner.json(JSON.stringify(compiled))) as NonNullable<ArtifactFile['compiled']>,
       snapshot: JSON.parse(await inliner.json(JSON.stringify(snapshot))) as ArtifactFile['snapshot'],
       threads: JSON.parse(await inliner.json(JSON.stringify(threads))) as AnnotationWire[],
     };
