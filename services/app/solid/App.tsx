@@ -18,6 +18,7 @@ const NotificationsPage = lazy(() => import('./pages/Notifications').then((m) =>
 const AccountPage = lazy(() => import('./pages/Account').then((m) => ({ default: m.AccountPage })));
 const DocsPage = lazy(() => import('./pages/Docs').then((m) => ({ default: m.DocsPage })));
 const ProfilePage = lazy(() => import('./pages/Profile').then((m) => ({ default: m.ProfilePage })));
+const ProfileAliasRoute = lazy(() => import('./pages/Profile').then((m) => ({ default: m.ProfileAliasRoute })));
 const HomePage = lazy(() => import('./pages/Home').then((m) => ({ default: m.HomePage })));
 const FolderRoute = lazy(() => import('./pages/Folder').then((m) => ({ default: m.FolderRoute })));
 const AssetsPage = lazy(() => import('./pages/Assets').then((m) => ({ default: m.AssetsPage })));
@@ -72,8 +73,11 @@ export function App(): JSX.Element {
       <Route path="/notifications" component={NotificationsPage} />
       <Route path="/account" component={AccountPage} />
       <Route path="/docs-human" component={DocsPage} />
-      <Route path="/:user/:alias" component={DocumentPage} />
       <Route path="/:user" component={ProfilePage} />
+      {/* Every pretty alias — a document, a folder, a dataset's /edit — is ONE route (solid/pages/Profile.tsx
+        * ProfileAliasRoute); a sibling `/:user/:alias` route here would overlap it and win first for
+        * every one-segment alias regardless of what it actually names. */}
+      <Route path="/:user/*rest" component={ProfileAliasRoute} />
       <Route path="*404" component={NotFoundPage} />
     </Router>
   );

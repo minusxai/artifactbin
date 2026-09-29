@@ -3,7 +3,7 @@
  * document's `<Query>`, computed on the server for ONE viewer.
  *
  * This is the power feature under the folder page rather than the folder page
- * itself: the page is app chrome now (web/pages/Folder, over `folderPageFor`),
+ * itself: the page is app chrome now (solid/pages/Folder, over `folderPageFor`),
  * and what survives here is that ANY document may list a folder's contents —
  * `<Query name="q">{`select * from ref_<folderId>`}</Query>` bound with
  * `<Files data="$q" />` — filtered and ordered however its author likes.

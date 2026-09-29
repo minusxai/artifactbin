@@ -1,4 +1,4 @@
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, expect, it, vi } from 'vitest';
 import { createMemoryRouter, RouterProvider } from 'react-router';
 import { ArtifactPage } from '../pages/Artifact';
@@ -9,7 +9,6 @@ import { readerNavigation } from '../reader-navigation';
 
 vi.mock('@/components/ArtifactShell', () => ({ default: ({ children }: { children: React.ReactNode }) => children }));
 vi.mock('@/components/ArtifactSurface', () => ({ default: ({ id, search, title }: { id: string; search: string; title?: string }) => <div aria-label="surface" data-title={title}>{id}{search}</div> }));
-vi.mock('../pages/DatasetEditor', () => ({DatasetEditorPage: ({onSaved}:{onSaved?:()=>Promise<unknown>}) => <button onClick={()=>void onSaved?.()}>Save test dataset</button>}));
 vi.mock('../bootstrap', () => ({ takeBootstrap: vi.fn(() => null) }));
 vi.mock('../Shell', () => ({ ShellFrame: ({children}: {children: React.ReactNode}) => <><header aria-label="Page bar">artifactbin</header>{children}</> }));
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
@@ -127,16 +126,21 @@ it('direct and pretty artifact routes share the mounted surface during canonical
 });
 
 
-it('refreshes the artifact after a dataset save before returning to its reader', async () => {
-  let title='Before';
-  const fetcher=vi.fn(async()=>({ok:true,json:async()=>({canonical:'/a/abc123',role:'editor',kind:'account',surface:{id:'abc123',format:'dataset',title}})}));
-  vi.stubGlobal('fetch',fetcher);
-  const router=createMemoryRouter([{path:'*',element:<ArtifactPage id="abc123"/>}],{initialEntries:['/a/abc123/edit']});
-  render(<RouterProvider router={router}/>);
-  const save=await screen.findByRole('button',{name:'Save test dataset'});
-  title='After';
-  fireEvent.click(save);
-  await waitFor(()=>expect(fetcher).toHaveBeenCalledTimes(2));
-  await act(async()=>{await router.navigate('/a/abc123');});
-  expect(await screen.findByLabelText('surface')).toHaveAttribute('data-title','After');
+/**
+ * Solid owns every folder and every dataset edit address (lib/solid-routes isSolidPage) — a fresh
+ * load never lands here with `folder` set or `surface.format === 'dataset'` while editing. The only
+ * way it could is an in-app link that soft-navigated across that boundary; a reload lands it on the
+ * entry that does own it, rather than this page trying to render a page it no longer carries.
+ */
+it.each([
+  ['a folder', '/a/fold01', { canonical: '/a/fold01', role: 'viewer', kind: 'none', folder: { id: 'fold01' } }],
+  ["a dataset's edit route", '/a/data01/edit', { canonical: '/a/data01/edit', role: 'editor', kind: 'account', surface: { id: 'data01', format: 'dataset' } }],
+])('crosses %s to the entry that owns it instead of rendering it here', async (_label, path, body) => {
+  vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, json: async () => body })));
+  const reload = vi.fn();
+  vi.stubGlobal('location', { ...window.location, reload });
+  const router = createMemoryRouter([{ path: '*', element: <ArtifactPage id={path.split('/')[2]} /> }], { initialEntries: [path] });
+  render(<RouterProvider router={router} />);
+  await waitFor(() => expect(reload).toHaveBeenCalled());
+  expect(screen.queryByLabelText('surface')).not.toBeInTheDocument();
 });

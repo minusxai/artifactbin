@@ -86,7 +86,9 @@ export function Select(p: SelectProps) {
     return Array.isArray(p.options) ? p.options.map(option => typeof option === 'object' && option !== null ? { value: String(option.value ?? ''), label: String(option.label ?? option.value ?? '') } : { value: String(option), label: String(option) }) : [];
   });
   const label = () => current() === null ? p.placeholder ?? 'All' : options().find(o => o.value === current())?.label ?? current();
-  const entries = () => [...(valueName() ? [{ value: null, label: p.placeholder ?? 'All' }] : []), ...options()];
+  // An authored placeholder is the null choice (`$x is null` in SQL); without one the popup lists only the
+  // authored options, so a document that adds its own "All" row doesn't get a second one.
+  const entries = () => [...(valueName() && p.placeholder !== undefined ? [{ value: null, label: p.placeholder }] : []), ...options()];
   const filtered = () => entries().filter(o => o.label.toLowerCase().includes(query().toLowerCase()));
   const choose = (value: string | null) => { if (valueName()) island.setValue(valueName(),value,undefined); setOpen(false); setQuery(''); };
   let root!: HTMLDivElement; let trigger!: HTMLButtonElement; let popup: HTMLDivElement | undefined;
