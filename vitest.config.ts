@@ -11,6 +11,9 @@ generateTeaching();
 // The island tests (Solid, lib/islands): jsdom, the Solid JSX transform, never the React one. Every
 // other project matches `lib/**/__tests__` too, so they exclude this glob.
 const ISLAND_TESTS = 'services/app/lib/islands/**/__tests__/**/*.test.{ts,tsx}';
+// The Solid editor modules (services/app/solid): the same Solid transform and jsdom, run by the
+// islands project because scripts/test-changed.mjs discovers only api/node/ui/islands.
+const SOLID_TESTS = 'services/app/solid/**/__tests__/**/*.test.{ts,tsx}';
 
 // API exercises route handlers and persistence; Node covers libraries, services,
 // scripts and eval harnesses; UI uses jsdom; Islands is the Solid half of the reader (jsdom,
@@ -129,11 +132,11 @@ export default defineConfig({
         // hydratable code. Only lib/islands goes through Solid's transform; the React kit a parity
         // test imports keeps Vite's own (react-jsx) transform.
         extends: true,
-        plugins: [solid({ include: ['services/app/lib/islands/**/*.{tsx,jsx}'], hot: false })],
+        plugins: [solid({ include: ['services/app/lib/islands/**/*.{tsx,jsx}', 'services/app/solid/**/*.{tsx,jsx}'], hot: false })],
         test: {
           name: 'islands',
           environment: 'jsdom',
-          include: [ISLAND_TESTS],
+          include: [ISLAND_TESTS, SOLID_TESTS],
           exclude: ['**/node_modules/**'],
           setupFiles: ['./services/app/test/setup/vitest.setup.ts'],
         },
