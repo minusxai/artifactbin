@@ -39,5 +39,7 @@ const built = await buildDocumentModules(generated, {
   flow, values: declaredValues(flow), store, ssrStore: store,
 });
 const ssr = await loadSsrModule(built.ssr!, store);
-const html = ssr.render({ values: declaredValues(flow), results: JSON.parse(process.argv[4]!), mermaidImages: {}, drawings: {} });
-process.stdout.write(JSON.stringify({ html, islands: generated.islands, islandRefs: generated.islandRefs, flow }));
+const carriers = [...built.html.matchAll(/<script type="application\/json"[^>]*>[\s\S]*?<\/script>/g)].map((match) => match[0]).join('');
+const html = ssr.render({ values: declaredValues(flow), results: JSON.parse(process.argv[4]!), mermaidImages: {}, drawings: {} }) + carriers;
+const browserCode = new TextDecoder().decode(stored.get(built.module!.sha));
+process.stdout.write(JSON.stringify({ html, islands: generated.islands, browserCode, islandRefs: generated.islandRefs, flow }));

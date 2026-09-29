@@ -29,7 +29,7 @@ import { ACCESS_PENDING } from '../kit/store-read';
 import { ACCESS_PENDING as STORE_ACCESS_PENDING } from '@/lib/story-runtime/store';
 import { validRowKey } from '@/lib/story/repeat-identity';
 import { Segmented } from '../kit/controls';
-import { Dialog, DialogContent, DialogTrigger } from '../kit/dialog';
+import { Dialog, DialogClose, DialogContent, DialogTrigger } from '../kit/dialog';
 import type { IslandContext } from '../contract';
 import type { DataflowStore } from '@/lib/story-runtime/store';
 import type { CompiledDataflow } from '@/lib/story/compiled-dataflow';
@@ -304,6 +304,26 @@ describe('<Segmented> options', () => {
 
 describe('<DialogContent run> on the island store', () => {
   const open = (host: HTMLElement) => { (host.querySelector('button') as HTMLButtonElement).click(); return document.querySelector('dialog') as HTMLDialogElement; };
+
+  it('closes a native modal in its trusted portal before moving it home', () => {
+    const portal = document.createElement('div'); document.body.append(portal);
+    const island = { ...islandOn(fakeStore().store), trustedPortal: () => portal };
+    const { host, dispose } = mount(island, () => <Dialog><DialogTrigger>Open</DialogTrigger><DialogContent aria-label="Sprint"><DialogClose aria-label="Cancel sprint">Cancel</DialogClose></DialogContent></Dialog>);
+    const dialog = host.querySelector('dialog')!;
+    let closedInPortal = false;
+    dialog.showModal = () => dialog.setAttribute('open', '');
+    dialog.close = () => { closedInPortal = portal.contains(dialog); dialog.removeAttribute('open'); };
+    host.querySelector('button')!.click();
+    expect(portal.contains(dialog)).toBe(true);
+    // A served close button may be adopted before its own Solid listener attaches.
+    const close = portal.querySelector<HTMLButtonElement>('[aria-label="Cancel sprint"]')!;
+    const servedClose = close.cloneNode(true) as HTMLButtonElement;
+    close.replaceWith(servedClose);
+    servedClose.click();
+    expect(closedInPortal).toBe(true);
+    expect(host.contains(dialog)).toBe(true);
+    dispose(); portal.remove();
+  });
 
   it('a guest\'s identity write: the form\'s fields are disabled and it says why, as today\'s dialog does', () => {
     const s = fakeStore({ access: { mine: 'sign_in_required' } });

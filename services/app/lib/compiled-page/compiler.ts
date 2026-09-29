@@ -24,7 +24,6 @@
  * Ported from the prototype (scripts/probe/solid/compile.mjs). Pure and deterministic for one input.
  */
 import { rawBuildProps, wrapsControl, templateIds } from '@/lib/story-ui/interpreter-primitives';
-import { STORY_UI_COMPONENT_NAME_LIST } from '@/lib/story-ui/component-names';
 import { STORY_SVG_TAGS } from '@/lib/story-ui/component-names';
 import { gridCols, gridRowHeight, gridItemRect, gridRows } from '@/lib/story-ui/grid-layout';
 import { ICON_BASE_CLASS } from '@/lib/story-ui/icon-contract';
@@ -42,7 +41,6 @@ import { PUBLIC_BASE_URL } from '@/lib/config';
 import { compileManagedIframe } from '@/lib/story/managed-iframe';
 import { RECIPES, cn } from '@/lib/islands/kit/recipes';
 import { peopleClasses } from '@/lib/islands/kit/recipes/people';
-import { readerDataflow } from '@/lib/story/compiled-dataflow';
 import type { GeneratedSources } from './codegen-safety';
 import { CHART_SLOT_ATTR, EMPTY_LINK_HINTS, MIN_HANDOVER_CONTRACT, type CompileInput, type CompiledPage, type CompilerBuild, type IslandRef } from './contract';
 import { linkHintsOf } from './links';
@@ -97,8 +95,8 @@ export const KIT: Readonly<Record<string, KitMeta>> = {
   Badge: { mod: 'basic', api: ['variant'] }, Alert: { mod: 'basic', api: ['variant'] }, AlertTitle: { mod: 'basic' }, AlertDescription: { mod: 'basic' },
   Progress: { mod: 'basic', api: ['value'] }, Icon: { mod: 'basic', api: ['name', 'glyphs', 'catalogUrl'] },
   Card: { mod: 'basic' }, CardHeader: { mod: 'basic' }, CardTitle: { mod: 'basic' }, CardDescription: { mod: 'basic' }, CardAction: { mod: 'basic' }, CardContent: { mod: 'basic' }, CardFooter: { mod: 'basic' },
-  Tabs: { mod: 'tabs', island: true, api: ['defaultValue', 'value', 'orientation', 'dir'] }, TabsList: { mod: 'tabs', api: ['variant'] }, TabsTrigger: { mod: 'tabs', api: ['value', 'disabled'] }, TabsContent: { mod: 'tabs', api: ['value'] },
-  Accordion: { mod: 'accordion', island: true, api: ['type', 'collapsible', 'defaultValue', 'value', 'orientation'] }, AccordionItem: { mod: 'accordion', api: ['value', 'disabled'] }, AccordionTrigger: { mod: 'accordion' }, AccordionContent: { mod: 'accordion' },
+  Tabs: { mod: 'tabs', island: true, api: ['defaultValue', 'value', 'orientation', 'dir'] }, TabsList: { mod: 'tabs', api: ['variant'] }, TabsTrigger: { mod: 'tabs', api: ['value', 'disabled'] }, TabsContent: { mod: 'tabs', api: ['value', 'forceMount'] },
+  Accordion: { mod: 'accordion', island: true, api: ['type', 'collapsible', 'defaultValue', 'value', 'orientation'] }, AccordionItem: { mod: 'accordion', api: ['value', 'disabled'] }, AccordionTrigger: { mod: 'accordion' }, AccordionContent: { mod: 'accordion', api: ['forceMount'] },
   // Store adapters (StoryRuntimeApp): the DOM carries only the node's identity (id, data-mx-ast).
   Number: { mod: 'data', island: true, api: ['data', 'col', 'agg', 'prefix', 'suffix', 'format'], dom: 'identity' },
   Question: { mod: 'data', island: true, api: ['data', 'viz', 'title', 'height', 'recipeData'], dom: 'identity', grid: true },
@@ -113,10 +111,10 @@ export const KIT: Readonly<Record<string, KitMeta>> = {
   Slider: { mod: 'controls', island: true, api: ['label', 'value', 'min', 'max', 'step', 'format', 'prefix', 'suffix'] },
   Switch: { mod: 'controls', island: true, api: ['label', 'checked'] },
   DatePicker: { mod: 'controls', island: true, api: ['label', 'value', 'min', 'max'] },
-  Collapsible: { mod: 'disclosure', island: true, api: ['defaultOpen', 'open', 'disabled'] }, CollapsibleTrigger: { mod: 'disclosure' }, CollapsibleContent: { mod: 'disclosure' },
-  Popover: { mod: 'disclosure', island: true, api: ['defaultOpen'] }, PopoverTrigger: { mod: 'disclosure' }, PopoverContent: { mod: 'disclosure' }, PopoverAnchor: { mod: 'disclosure' },
+  Collapsible: { mod: 'disclosure', island: true, api: ['defaultOpen', 'open', 'disabled'] }, CollapsibleTrigger: { mod: 'disclosure' }, CollapsibleContent: { mod: 'disclosure', api: ['forceMount'] },
+  Popover: { mod: 'disclosure', island: true, api: ['defaultOpen'] }, PopoverTrigger: { mod: 'disclosure' }, PopoverContent: { mod: 'disclosure', api: ['forceMount'] }, PopoverAnchor: { mod: 'disclosure' },
   PopoverHeader: { mod: 'disclosure' }, PopoverTitle: { mod: 'disclosure' }, PopoverDescription: { mod: 'disclosure' },
-  TooltipProvider: { mod: 'disclosure', island: true }, Tooltip: { mod: 'disclosure', island: true, api: ['defaultOpen'] }, TooltipTrigger: { mod: 'disclosure' }, TooltipContent: { mod: 'disclosure' },
+  TooltipProvider: { mod: 'disclosure', island: true }, Tooltip: { mod: 'disclosure', island: true, api: ['defaultOpen'] }, TooltipTrigger: { mod: 'disclosure' }, TooltipContent: { mod: 'disclosure', api: ['forceMount'] },
   Avatar: { mod: 'disclosure', island: true, api: ['size'] }, AvatarImage: { mod: 'disclosure' }, AvatarFallback: { mod: 'disclosure' }, AvatarBadge: { mod: 'disclosure' }, AvatarGroup: { mod: 'disclosure' }, AvatarGroupCount: { mod: 'disclosure' },
   // A person's class depends on whom it resolves to in the browser (a guest's fallback, a card): every state's class
   // is evaluated here (recipes/people peopleClasses) and handed to the port as `classes`.
@@ -133,7 +131,6 @@ export const KIT: Readonly<Record<string, KitMeta>> = {
 /** The rail's miniature stubs its embeds (StoryRuntimeApp PREVIEW_REGISTRY). */
 const PREVIEW_EMBEDS: Readonly<Record<string, string>> = { Question: 'chart', Number: '#', DataTable: 'table', Video: 'video' };
 const PREVIEW_STYLE = { display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%', height: '100%', minHeight: 120, border: '1px solid var(--border, rgba(128,128,128,0.35))', borderRadius: 6, background: 'color-mix(in srgb, var(--muted-foreground, gray) 6%, transparent)', font: '500 11px/1 var(--font-mono, ui-monospace, monospace)', letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--muted-foreground, graytext)' };
-const REGISTERED = new Set<string>(STORY_UI_COMPONENT_NAME_LIST);
 /** Components whose HTML the React kit renders at compile time but whose BEHAVIOUR is not ported (reported as partial). None: every registered component with behaviour has its island. */
 const PARTIAL: ReadonlySet<string> = new Set<string>([]);
 /** Registered tags that render nothing (declarations, templates). */
@@ -197,13 +194,6 @@ function readsDataNode(node: JsxNode): boolean {
   return node.children.some(readsDataNode);
 }
 
-/**
- * A component tag the reader draws nothing for (legacy markup such as `<Param>`): in neither the reader's
- * registry (StoryRuntimeApp RUNTIME_REGISTRY: the story registry plus the kit's store adapters) nor a
- * declaration, nor a structural node — the interpreter's renderNode returns null for it.
- */
-const unregistered = (node: JsxElement): boolean => node.isComponent && !node.control && !INERT.has(node.tag) && !REGISTERED.has(node.tag) && !KIT[node.tag];
-
 const isTableParts = (node: JsxElement): boolean => node.children.every((c) => (c.type === 'text' ? !c.value.trim() : c.type === 'element' && ['tr', 'td', 'th'].includes(c.tag)));
 
 /** The managed frame's author content compiled as inert data (lib/story/managed-iframe), or null when it is refused. */
@@ -213,7 +203,7 @@ const managedFrameOf = (node: JsxElement) => { try { return compileManagedIframe
  * The generator
  * ──────────────────────────────────────────────────────────────────────────── */
 
-type Mode = 'static' | 'island';
+type Mode = 'static' | 'browser';
 interface IslandBuild { id: number; path: string; source: string; kit: Set<string>; readsData: boolean }
 interface Ctx {
   /** The JS name of the row in scope (inside a `<For>`), and its scope's. */
@@ -228,6 +218,10 @@ interface Ctx {
   preview?: { rewrite: (props: Props) => Props; values: Record<string, Scalar> };
   /** The island being emitted, for its kit accounting. */
   island?: IslandBuild;
+  /** Structural kit descendants of a live component must remain hydratable. */
+  liveKit?: boolean;
+  /** The subtree may be created after the first hydration (a conditional branch). */
+  branch?: boolean;
 }
 
 /** What one generation produced: the sources and what they used. */
@@ -251,14 +245,13 @@ export function generate(input: GenerateInput): Generated {
   const jsxAttrs = (attrs: Attr[]): string => attrs.map(([n, v]) => ` ${safeAttr(n)}={${v === '' && /^(?:disabled|checked|selected|readOnly|hidden|open|multiple|required|inert|autoFocus|reversed)$/i.test(n) ? 'true' : lit(v)}}`).join('');
   const refData = input.refData ?? {};
   const nodes = input.nodes ?? [];
-  const islands: IslandBuild[] = [];
   const partial = new Set<string>();
   const unported = new Set<string>();
   const kitUsed = { skeleton: new Set<string>(), islands: new Set<string>() };
   const staticTexts: Record<string, string> = {};
-  const staticText = (value: string): string => {
+  const staticText = (value: string, noHydration = false): string => {
     if (value.length <= 1024) return jsxLiteral(value);
-    const marker = `MXSTATIC${contentSha(value)}${Object.keys(staticTexts).length}END`;
+    const marker = `${noHydration ? 'MXSTATICTEXT' : 'MXSTATIC'}${contentSha(value)}${Object.keys(staticTexts).length}END`;
     staticTexts[marker] = value;
     return marker;
   };
@@ -293,13 +286,11 @@ export function generate(input: GenerateInput): Generated {
   const needsBrowser = (node: JsxNode): boolean => {
     const known = needs.get(node);
     if (known !== undefined) return known;
-    const value = !(isElement(node) && unregistered(node)) && (selfDynamic(node) || (isElement(node) && node.children.some(needsBrowser)));
+    if (isElement(node) && node.tag === 'Iframe' && managedFrameOf(node) === null) return false;
+    const value = selfDynamic(node) || (isElement(node) && node.children.some(needsBrowser));
     needs.set(node, value);
     return value;
   };
-  /** An element whose dynamic child cannot be its own island root (text, expression, control, a wrapper-less For) must be the island itself. */
-  const mustPromote = (node: JsxElement): boolean =>
-    node.children.some((c) => needsBrowser(c) && (!isElement(c) || !!c.control || (c.tag === 'For' && isTableParts(c))));
 
   // Structured author data never becomes an object literal: each value is a module constant parsed
   // from a string literal — one per emission site, never shared by content, so the module's shape
@@ -310,7 +301,7 @@ export function generate(input: GenerateInput): Generated {
     return `$d${data.length - 1}`;
   };
   const useKit = (tag: string, mode: Mode, ctx: Ctx): void => {
-    (mode === 'static' ? kitUsed.skeleton : kitUsed.islands).add(tag);
+    (mode === 'browser' ? kitUsed.islands : kitUsed.skeleton).add(tag);
     ctx.island?.kit.add(tag);
   };
 
@@ -318,6 +309,7 @@ export function generate(input: GenerateInput): Generated {
   function emit(node: JsxNode, path: string, mode: Mode, ctx: Ctx): string {
     if (node.type === 'text') {
       if (ctx.row && /\{\s*\$_row\./.test(node.value)) return `{rt.sub(${lit(node.value)}, ${ctx.row})}`;
+      if (!ctx.row && !ctx.preview && !ctx.branch && node.value) return mode === 'browser' ? '<rt.NoHydration />' : `<rt.NoHydration>${node.value.length <= 1024 && /\r|\n/.test(node.value) ? `{${lit(node.value)}}` : staticText(node.value, true)}</rt.NoHydration>`;
       return node.value === '' ? '' : (node.value.length <= 1024 && /\r|\n/.test(node.value) ? `{${lit(node.value)}}` : staticText(node.value));
     }
     if (node.type === 'expression') {
@@ -331,7 +323,7 @@ export function generate(input: GenerateInput): Generated {
         return field ? `{String(${ctx.row}[${lit(field)}] ?? '')}` : '';
       }
       const v = node.value.json;
-      return typeof v === 'string' || typeof v === 'number' ? `{${lit(String(v))}}` : '';
+      return typeof v === 'string' || typeof v === 'number' ? ctx.branch ? `{${lit(String(v))}}` : mode === 'browser' ? '<rt.NoHydration />' : `<rt.NoHydration>{${lit(String(v))}}</rt.NoHydration>` : '';
     }
     if (node.control) {
       if (node.control.kind === 'fragment') return `<>${node.children.map((c, i) => emit(c, `${path}.${i}`, mode, ctx)).join('')}</>`;
@@ -340,32 +332,27 @@ export function generate(input: GenerateInput): Generated {
         const yes = Boolean(evaluateReactive(node.control.test, ctx.preview.values));
         return node.control.kind === 'and' && !yes ? '' : emit(node.children[yes ? 0 : 1]!, `${path}.${yes ? 0 : 1}`, mode, ctx);
       }
-      const yes = emit(node.children[0]!, `${path}.0`, mode, ctx);
-      const no = emit(node.children[1]!, `${path}.1`, mode, ctx);
+      const yes = emit(node.children[0]!, `${path}.0`, mode, { ...ctx, branch: true });
+      const no = emit(node.children[1]!, `${path}.1`, mode, { ...ctx, branch: true });
       return `<rt.When test={${json(node.control.test)}} row={${ctx.row ?? 'undefined'}}${node.control.kind === 'conditional' ? ` fallback={<>${no}</>}` : ''}>{<>${yes}</>}</rt.When>`;
     }
     if (INERT.has(node.tag)) return '';
-    // An unregistered component (legacy markup such as `<Param>`) renders nothing, as the interpreter's renderNode does.
-    if (unregistered(node)) return '';
     // A managed frame whose content is refused renders nothing (the interpreter's renderNode), island or not.
     if (node.tag === 'Iframe' && !ctx.row && managedFrameOf(node) === null) return '';
-    // In the default path, a static subtree of the skeleton is today's React render, carried as
-    // HTML and spliced in after the skeleton renders: no JSX re-parse, no Babel, no Solid render of static markup —
-    // most of a large document's compile. Never inside an island (hydration walks its template) and never across a
-    // Grid (a compile-time macro, emitGrid).
-    // An island root in the skeleton: rendered by its own island component, spliced in by the server.
-    if (mode === 'static' && !ctx.preview && !PARTIAL.has(node.tag) && needsBrowser(node) && (selfDynamic(node) || mustPromote(node))) {
-      const island: IslandBuild = { id: islands.length, path, source: '', kit: new Set(), readsData: !!input.flow && readsDataNode(node) };
-      islands.push(island);
-      island.source = emitElement(node, path, 'island', { row: null, svg: !!ctx.svg, grid: ctx.grid, island });
-      return `<mx-slot data-i={${lit(String(island.id))}}></mx-slot>`;
-    }
-    return emitElement(node, path, mode, ctx);
+    // Both builds keep the same tree of hydration boundaries. Static descendants are
+    // server markup only; the browser emits an empty boundary at the same position.
+    // A live control is emitted as a sibling of these boundaries, never inside one.
+    // A branch absent from SSR must carry its static descendants in the browser to appear later.
+    if (!ctx.preview && !ctx.row && !ctx.branch && !needsBrowser(node) && !(ctx.liveKit && !!KIT[node.tag]))
+      return mode === 'browser' ? '<rt.NoHydration />' : `<rt.NoHydration>${emitElement(node, path, mode, ctx)}</rt.NoHydration>`;
+    const live = selfDynamic(node) || !!ctx.liveKit && !!KIT[node.tag];
+    const element = emitElement(node, path, mode, { ...ctx, liveKit: ctx.liveKit || !!KIT[node.tag] && live });
+    return element;
   }
 
   function emitElement(node: JsxElement, path: string, mode: Mode, ctx: Ctx): string {
     const children = (inner: Ctx = ctx): string => node.children.map((c, i) => emit(c, `${path}.${i}`, mode, inner)).join('');
-    if (node.tag === 'For') return emitFor(node, path, ctx);
+    if (node.tag === 'For') return emitFor(node, path, mode, ctx);
     if (node.tag === 'Grid' || node.tag === 'GridItem') return emitGrid(node, path, mode, ctx);
     // A control with `run` in a column's content is an editing cell (interpreter renderNode → cellControl).
     const run = node.attributes.find((a) => a.name === 'run');
@@ -386,6 +373,7 @@ export function generate(input: GenerateInput): Generated {
       if (!meta) { unported.add(node.tag); return `<div data-mx-unported={${lit(node.tag)}} data-mx-ast={${lit(path)}}></div>`; }
       useKit(node.tag, mode, ctx);
       const props = rawBuildProps(node.attributes, true, node.tag, path, undefined, ctx.preview?.values ?? {});
+      if (!ctx.preview && ['TabsContent', 'AccordionContent', 'CollapsibleContent', 'PopoverContent', 'TooltipContent'].includes(node.tag)) props.forceMount = true;
       if (ctx.preview) Object.assign(props, ctx.preview.rewrite(props));
       if (node.tag === 'Video' || node.tag === 'File') Object.assign(props, resolveRefProps(node, props, refData));
       // Decided here, never read from the author (interpreter BUTTON_TRIGGERS).
@@ -405,7 +393,7 @@ export function generate(input: GenerateInput): Generated {
             const ids = [...templateIds(columns[k]![0].children)];
             return { col: c.col, id: typeof c.id === 'string' ? c.id : undefined, path: c[AST], ...(ids.length ? { ids } : {}) };
           });
-          cellsJsx = emitCells(columns, path, ctx);
+          cellsJsx = emitCells(columns, path, mode, ctx);
         }
       }
       if (node.tag === 'Files' || node.tag === 'Icon') props.glyphs = glyphs;
@@ -483,6 +471,9 @@ export function generate(input: GenerateInput): Generated {
     const patch = resolveRefProps(node, props, refData);
     if (patch) props = { ...props, ...patch };
     if (ctx.preview) props = ctx.preview.rewrite(props);
+    // A static wrapper with live descendants is already served. Its id may be minted
+    // anew by an edit; leaving it to the DOM keeps the browser module reusable.
+    if (mode === 'browser' && !ctx.row && !ctx.liveKit && !ctx.branch && !selfDynamic(node) && needsBrowser(node)) delete props.id;
     const selectedValue = lower === 'select' ? props.defaultValue ?? props.value : undefined;
     const inner = lower === 'svg' ? { ...ctx, svg: true } : selectedValue !== undefined ? { ...ctx, selectValue: String(selectedValue) } : ctx;
     const reactive = ctx.preview ? [] : node.attributes.filter((a) => !a.value.static && REACTIVE_BOOLEAN_PROPS.has(a.name) && isReactiveExpression(a.value.reactive));
@@ -501,9 +492,6 @@ export function generate(input: GenerateInput): Generated {
     if (VOID.test(lower)) return open.replace(/>$/, ' />');
     if (lower === 'textarea' && (props.defaultValue !== undefined || props.value !== undefined)) return `${open}{${lit(String(props.defaultValue ?? props.value))}}</${tag}>`;
     const content = children(inner);
-    const first = node.children[0];
-    const firstText = first?.type === 'text' ? first.value : first?.type === 'expression' && first.value.static ? first.value.json : null;
-    if (lower === 'pre' && typeof firstText === 'string' && firstText.startsWith('\n')) return `${open}{${lit('\n')}}${content}</${tag}>`;
     return `${open}${content}</${tag}>`;
   }
 
@@ -518,13 +506,13 @@ export function generate(input: GenerateInput): Generated {
    * A DataTable's column content (interpreter DataTable renderCell): one function per `<Column>`, aligned with
    * `templates`, a hole where the column draws nothing; each renders the content for one row and its CellScope.
    */
-  function emitCells(columns: ReadonlyArray<readonly [JsxElement, number]>, path: string, ctx: Ctx): string {
+  function emitCells(columns: ReadonlyArray<readonly [JsxElement, number]>, path: string, mode: Mode, ctx: Ctx): string {
     const fns = columns.map(([column, i]) => {
       if (!hasContent(column.children)) return 'undefined';
       const cpath = `${path}.${i}`;
       const suffix = cpath.replace(/\./g, '_');
       const inner: Ctx = { row: `row${suffix}`, scope: `cell${suffix}`, cell: true, svg: false, island: ctx.island };
-      return `(${inner.row}, ${inner.scope}) => <>${column.children.map((c, k) => emit(c, `${cpath}.${k}`, 'island', inner)).join('')}</>`;
+      return `(${inner.row}, ${inner.scope}) => <>${column.children.map((c, k) => emit(c, `${cpath}.${k}`, mode, inner)).join('')}</>`;
     });
     return fns.some((f) => f !== 'undefined') ? ` cells={[${fns.join(', ')}]}` : '';
   }
@@ -585,7 +573,7 @@ export function generate(input: GenerateInput): Generated {
     return `<div${jsxAttrs(attrs)}>${node.children.map((c, i) => emit(c, `${path}.${i}`, mode, ctx)).join('')}</div>`;
   }
 
-  function emitFor(node: JsxElement, path: string, ctx: Ctx): string {
+  function emitFor(node: JsxElement, path: string, mode: Mode, ctx: Ctx): string {
     const each = node.attributes.find((a) => a.name === 'each');
     const name = each && !each.value.static && each.value.reactive?.kind === 'signal' ? each.value.reactive.name : null;
     if (!name) return `<div role="alert">{"For requires each={$table}"}</div>`;
@@ -613,13 +601,14 @@ export function generate(input: GenerateInput): Generated {
     const suffix = path.replace(/\./g, '_');
     const row = `row${suffix}`;
     const scope = `scope${suffix}`;
-    const body = node.children.map((c, i) => emit(c, `${path}.${i}`, 'island', { ...ctx, row, scope })).join('');
+    const body = node.children.map((c, i) => emit(c, `${path}.${i}`, mode, { ...ctx, row, scope })).join('');
     const keyJsx = keyBy?.static ? ` keyBy={${lit(keyBy.json)}}` : '';
     return `<rt.Repeat name={${lit(name)}}${keyJsx} owner={${lit(ownerId)}} ids={${json([...templateIds(node.children)])}}${isTableParts(node) ? ' tableParts={true}' : ''}${svg ? ' svg={true}' : ''}${jsxAttrs(attrs)}>{(${row}, ${scope}) => <>${body}</>}</rt.Repeat>`;
   }
 
   // The column wrapper the runtime always draws (StoryRuntimeApp: `.mx-doc`).
   const body = nodes.map((n, i) => emit(n, String(i), 'static', { row: null })).join('');
+  const browserBody = nodes.map((n, i) => emit(n, String(i), 'browser', { row: null })).join('');
   // A DECK's chrome (StoryRuntimeApp SlideRail/PresentBar): static HTML at compile time, thumbnails
   // included; its behaviour is the framework-free `@mx/deck` chunk.
   const slides = input.chrome !== false ? discoverSlides(nodes) : [];
@@ -640,7 +629,7 @@ export function generate(input: GenerateInput): Generated {
       const thumb = hasButton(slide.node) ? `<template ${RAIL_THUMB_ATTR}="">${miniature}</template>` : miniature;
       return `<button type="button" class="mx-rail-row" aria-label={${lit(`Go to slide ${slide.index + 1}: ${slide.title}`)}} aria-current={${lit(String(slide.index === 0))}}><span class="mx-rail-label"><span class="mx-rail-index">{${lit(String(slide.index + 1))}}</span><span class="mx-rail-title">{${lit(slide.title)}}</span></span><span class="mx-rail-thumb" aria-hidden="true"><div style="--mx-vh:800px">${thumb}</div></span></button>`;
     }).join('');
-    root = `<div class="mx-deck"><nav class="mx-rail" aria-label="Slides">${rail}</nav>${root}<div class="mx-present" aria-label="Slide controls"><button type="button" aria-label="Previous slide">{"‹"}</button><span class="mx-present-count" aria-label="Slide position">{${lit(`1 / ${slides.length}`)}}</span><button type="button" aria-label="Next slide">{"›"}</button><button type="button" aria-label="Present">{"present"}</button></div></div>`;
+    root = `<div class="mx-deck"><rt.NoHydration><nav class="mx-rail" aria-label="Slides">${rail}</nav></rt.NoHydration>${root}<rt.NoHydration><div class="mx-present" aria-label="Slide controls"><button type="button" aria-label="Previous slide">{"‹"}</button><span class="mx-present-count" aria-label="Slide position">{${lit(`1 / ${slides.length}`)}}</span><button type="button" aria-label="Next slide">{"›"}</button><button type="button" aria-label="Present">{"present"}</button></div></rt.NoHydration></div>`;
   }
 
   const kitImports = (set: Set<string>): string => {
@@ -650,27 +639,24 @@ export function generate(input: GenerateInput): Generated {
   };
   const dataConsts = data.map((text, i) => `const $d${i} = JSON.parse(${lit(text)});\n`).join('');
   const moduleData: string[] = [];
-  const browserUses = new Set(islands.flatMap((island) => [...island.source.matchAll(/\$d(\d+)\b/g)].map((match) => Number(match[1]))));
+  const browserRoot = deck ? `<div class="mx-deck"><rt.NoHydration /><div class="mx-doc">${browserBody}</div><rt.NoHydration /></div>` : `<div class="mx-doc">${browserBody}</div>`;
+  const browserUses = new Set([...browserRoot.matchAll(/\$d(\d+)\b/g)].map((match) => Number(match[1])));
   const browserConsts = data.map((value, i) => {
     if (!browserUses.has(i)) return '';
     if (value.length <= 1024) return `const $d${i} = JSON.parse(${lit(value)});\n`;
     const index = moduleData.push(value) - 1;
     return `const $d${i} = $moduleData[${index}];\n`;
   }).join('');
-  // The skeleton imports only what it renders with; the islands module always carries the runtime.
-  const skeleton = deck
-    ? `import * as rt from '@mx/rt';\n${kitImports(kitUsed.skeleton)}${dataConsts}const $previewFlow = JSON.parse(${lit(JSON.stringify(input.flow ? readerDataflow(input.flow) : null))});\nconst $previewValues = JSON.parse(${lit(JSON.stringify(declaredValues(input.flow)))});\nexport default function Skeleton() { const runtime = rt.createIslandRuntime({ dataflow: $previewFlow ? { flow: $previewFlow, values: $previewValues } : null, viewer: null }, rt.createDataflowStore); return rt.withIsland(() => ${root}, runtime.context); }\n`
-    : `${kitImports(kitUsed.skeleton)}${dataConsts}export default function Skeleton() { return ${root}; }\n`;
-  const usesRowAttrs = islands.some((isl) => isl.source.includes('$rowAttrs('));
-  const islandsSource = `import * as rt from '@mx/rt';\n${usesRowAttrs ? "import { rowAttrs as $rowAttrs } from '@mx/kit/basic';\n" : ''}${usesRowClass ? "import { rowClass as $rowClass } from '@mx/row-class';\n" : ''}${kitImports(kitUsed.islands)}${dataConsts}`
-    + islands.map((isl) => `export function I${isl.id}() { return ${isl.source}; }\n`).join('')
-    + `export const ISLANDS = [${islands.map((isl) => `[${lit(`s${isl.id}-`)}, I${isl.id}, ${lit(islandKey(isl.source, data))}]`).join(', ')}];\n`;
+  const usesRowAttrs = root.includes('$rowAttrs(') || browserRoot.includes('$rowAttrs(');
+  const rowImports = `${usesRowAttrs ? "import { rowAttrs as $rowAttrs } from '@mx/kit/basic';\n" : ''}${usesRowClass ? "import { rowClass as $rowClass } from '@mx/row-class';\n" : ''}`;
+  const skeleton = `import * as rt from '@mx/rt';\n${rowImports}${kitImports(kitUsed.skeleton)}${dataConsts}export function Document() { return ${root}; }\n`;
+  const browserSource = `import * as rt from '@mx/rt';\n${rowImports}${kitImports(kitUsed.islands)}${dataConsts}export function Document() { return ${browserRoot}; }\n`;
   return {
     skeleton,
-    islands: islandsSource,
-    browserIslands: dataConsts ? islandsSource.replace(dataConsts, `${moduleData.length ? 'const $moduleData = JSON.parse(document.getElementById("mx-story-data").textContent).moduleData;\n' : ''}${browserConsts}`) : islandsSource,
+    islands: skeleton,
+    browserIslands: dataConsts ? browserSource.replace(dataConsts, `${moduleData.length ? 'const $moduleData = JSON.parse(document.getElementById("mx-story-data").textContent).moduleData;\n' : ''}${browserConsts}`) : browserSource,
     moduleData,
-    islandRefs: islands.map((isl) => ({ renderId: `s${isl.id}-`, path: isl.path, kit: [...isl.kit].sort(), readsData: isl.readsData })),
+    islandRefs: nodes.some(needsBrowser) ? [{ renderId: 'd-', path: '0', kit: [...kitUsed.islands].sort(), readsData: !!input.flow && nodes.some(readsDataNode) }] : [],
     kit: { skeleton: [...kitUsed.skeleton].sort(), islands: [...kitUsed.islands].sort() },
     reactStatic: [],
     unported: [...unported].sort(),
@@ -678,25 +664,6 @@ export function generate(input: GenerateInput): Generated {
     behaviors: deck ? [DECK_BEHAVIOR] : [],
     staticTexts,
   };
-}
-
-/**
- * AN ISLAND'S KEY: a digest of its definition — its generated source with every hoisted constant
- * (`$d<n>`, numbered by position in the whole module) replaced by the data it names — so two versions'
- * islands have the same key exactly when they are the same island, wherever the rest of the document
- * moved. The live morph (lib/islands/morph/engine) keeps a running island whose key a new version
- * carries again. Its AST paths are part of the definition: an island that moved is drawn afresh.
- * FNV-1a over two lanes (64 bits, hex): an identity, not a secret.
- */
-export function islandKey(source: string, data: readonly string[]): string {
-  const text = source.replace(/\$d(\d+)\b/g, (whole, n: string) => data[Number(n)] ?? whole);
-  let a = 0x811c9dc5, b = 0xcbf29ce4;
-  for (let i = 0; i < text.length; i++) {
-    const c = text.charCodeAt(i);
-    a = Math.imul(a ^ c, 0x01000193) >>> 0;
-    b = Math.imul(b ^ c, 0x01000197) >>> 0;
-  }
-  return a.toString(16).padStart(8, '0') + b.toString(16).padStart(8, '0');
 }
 
 /* ────────────────────────────────────────────────────────────────────────────

@@ -19,7 +19,9 @@ const source = process.argv[2]!;
 const parsed = parseJsx(source) as { nodes: JsxNode[] };
 const { content, body } = splitHelmet(parsed.nodes);
 const declared = dataflowOf(content);
-const compiled = compileDataflow(declared, await prepareCompile(declared, async () => null), body);
+const compiled = compileDataflow(declared, await prepareCompile(declared, async ref => ref === 'Data01'
+  ? { kind: 'dataset', tables: [{ name: 'rows', columns: [{ name: 'month', type: 'date' }, { name: 'region', type: 'string' }, { name: 'revenue', type: 'number' }] }] }
+  : null), body);
 if (!compiled.ok) throw new Error(compiled.errors.map((e) => e.message).join('; '));
 const flow = compiled.compiled;
 
