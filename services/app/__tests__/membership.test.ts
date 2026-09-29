@@ -65,7 +65,7 @@ it('rechecks access before approving and refuses anonymous participation', async
   await w.db.query("UPDATE artifacts SET visibility='private',sharing_revision=sharing_revision+1 WHERE id='a1B2c3'");
   await expect(changeMembership(w.actor(w.owner),'a1B2c3',{action:'approve',userId:w.bob.id})).rejects.toThrow(/access/i);
 });
-it('caps outstanding requests across artefacts and frees slots on withdrawal', async () => {
+it('caps outstanding requests across artifacts and frees slots on withdrawal', async () => {
   const w=await world();
   for(let i=0;i<30;i++) {
     const id=`cap${String(i).padStart(3,'0')}`;
@@ -152,7 +152,7 @@ it('keeps mention autocomplete restricted while explicit invitations can find no
  expect(await mentionCandidates(w.actor(w.owner),'a1B2c3','member_bob','invite')).toEqual([expect.objectContaining({user_id:w.bob.id})]);
 });
 
-it('does not let a new artefact bypass a dismissed invitation',async()=>{
+it('does not let a new artifact bypass a dismissed invitation',async()=>{
  const w=await world();
  await changeMembership(w.actor(w.owner),'a1B2c3',{action:'invite',usernames:['@member_bob']});
  await changeMembership(w.actor(w.bob),'a1B2c3',{action:'dismiss'});

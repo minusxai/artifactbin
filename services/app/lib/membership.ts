@@ -143,7 +143,7 @@ export async function isArtifactMember(id:string,userId:string|null,tx?:Queryabl
   return !!userId && accepted(tx??await getDb(),id,userId);
 }
 
-/** The saved artefact is already locked by the caller. Shared by UI, CLI and saved mentions. */
+/** The saved artifact is already locked by the caller. Shared by UI, CLI and saved mentions. */
 export async function invitePeople(tx:Queryable,artifact:ArtifactRow,actor:RoleActor,targets:string[],source?:string,explicitInvitation=false):Promise<void>{
  const sender=actor.userId;if(!sender)return fail('Sign in to mention people');
  await lockMembershipUsers(tx,[sender,...targets]);
@@ -173,7 +173,7 @@ export async function invitePeople(tx:Queryable,artifact:ArtifactRow,actor:RoleA
  await tx.query("SELECT pg_notify('artifact_' || lower($1), 'members')",[artifact.id]);
 }
 
-/** Caller must establish read access to this artefact before exposing these public tag states. */
+/** Caller must establish read access to this artifact before exposing these public tag states. */
 export async function savedMentionStates(artifact:ArtifactRow){
  const db=await getDb();
   const savedText=[artifact.source??'',...(await db.query<{body:string}>('SELECT body FROM annotations WHERE artifact_id=$1 AND deleted_at IS NULL',[artifact.id])).rows.map(r=>r.body)].join('\n');

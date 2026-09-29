@@ -20,10 +20,10 @@ function NotificationRow({item:n,busy,onRead,onRespond,onBlock}:{item:InboxItem;
  return <li data-notification-id={n.id} className={`relative flex gap-3 px-3 py-3.5 ${n.read_at?'':'bg-accent-soft/40'}`}>
   <div className="pt-0.5"><Avatar image={null} initial={n.username??'?'} userId={n.sender_id} size={32}/></div>
   <div className="min-w-0 flex-1">
-   <a className="block break-words text-sm leading-5 text-fg hover:text-accent" href={destination(n)} onClick={onRead}><span className="font-semibold">@{n.username??'someone'}</span>{' '}{actionText[n.kind]??'mentioned you in'}{n.kind!=='follow'&&<> <span className="font-semibold">{n.title??'Untitled artefact'}</span></>}</a>
+   <a className="block break-words text-sm leading-5 text-fg hover:text-accent" href={destination(n)} onClick={onRead}><span className="font-semibold">@{n.username??'someone'}</span>{' '}{actionText[n.kind]??'mentioned you in'}{n.kind!=='follow'&&<> <span className="font-semibold">{n.title??'Untitled artifact'}</span></>}</a>
    {n.created_at&&<time dateTime={n.created_at} className="mt-1 block text-xs text-muted">{timeAgo(n.created_at)}</time>}
    {n.status==='pending'&&invitation&&<div className="mt-2 flex gap-2"><Button disabled={busy} onClick={()=>onRespond(n.direction==='request'?'approve':'accept')}>{n.direction==='request'?'Approve request':'Accept invitation'}</Button><Button variant="ghost" disabled={busy} onClick={()=>onRespond('dismiss')}>Dismiss</Button></div>}
-   {n.status==='accepted'&&invitation&&<div className="mt-2 space-y-1"><p role="status" className="flex items-start gap-1 text-xs leading-5 text-accent"><Check size={14} className="mt-0.5 shrink-0"/>{n.kind==='request'?'Approved — this person has joined the artefact.':n.kind==='invitation'?'Accepted — you’ve joined this artefact.':'You’ve joined this artefact.'}</p><a onClick={onRead} className="text-xs text-muted underline underline-offset-2 hover:text-fg" href={`/a/${n.artifact_id}`}>Open artefact</a></div>}
+   {n.status==='accepted'&&invitation&&<div className="mt-2 space-y-1"><p role="status" className="flex items-start gap-1 text-xs leading-5 text-accent"><Check size={14} className="mt-0.5 shrink-0"/>{n.kind==='request'?'Approved — this person has joined the artifact.':n.kind==='invitation'?'Accepted — you’ve joined this artifact.':'You’ve joined this artifact.'}</p><a onClick={onRead} className="text-xs text-muted underline underline-offset-2 hover:text-fg" href={`/a/${n.artifact_id}`}>Open artifact</a></div>}
   </div>
   <div className="flex shrink-0 flex-col items-center gap-2 pt-1">
    {!n.read_at&&<span aria-label="Unread" className="h-1.5 w-1.5 rounded-full bg-accent"/>}
@@ -38,7 +38,7 @@ function MutationRow({item:n,busy,onRead,onBlock}:{item:Extract<InboxItem,{kind:
  return <li data-notification-id={n.id} className={`relative flex gap-3 px-3 py-3.5 ${n.read_at?'':'bg-accent-soft/40'}`}>
   {person&&<Avatar image={person.person.image} initial={label} userId={person.userId} size={32}/>}
   <div className="min-w-0 flex-1"><p className="text-xs text-muted"><span>Triggered by</span>{' '}{person?<a href={`/people/${person.userId}`} className="font-semibold">{label}</a>:<span>{label}</span>}{person?.viaAgent?' via agent':''}</p>
-   <a href={`/a/${n.artifact_id}`} onClick={onRead} className="block break-words text-sm"><span className="block space-y-1">{n.messages.map((message,index)=><span key={index} className="block">{message}</span>)}</span><span className="mt-1 block text-xs text-muted">{n.title??'Untitled artefact'}</span></a>
+   <a href={`/a/${n.artifact_id}`} onClick={onRead} className="block break-words text-sm"><span className="block space-y-1">{n.messages.map((message,index)=><span key={index} className="block">{message}</span>)}</span><span className="mt-1 block text-xs text-muted">{n.title??'Untitled artifact'}</span></a>
    {n.created_at&&<time dateTime={n.created_at} className="text-xs text-muted">{timeAgo(n.created_at)}</time>}
   </div>
   <div>{!n.read_at&&<span aria-label="Unread" className="block h-1.5 w-1.5 rounded-full bg-accent"/>}{person&&<RowMenu name={`notification from ${label}`} items={[{label:`Block ${label}`,text:'Block sender',icon:<ShieldBan size={13}/>,disabled:busy,onSelect:onBlock}]}/>}</div>

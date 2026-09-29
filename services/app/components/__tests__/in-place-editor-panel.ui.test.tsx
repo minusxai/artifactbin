@@ -367,7 +367,7 @@ describe('reference and sharing views', () => {
       expect(screen.queryByLabelText('Edit panel')).toBeNull();
       expect(screen.queryByLabelText('Expand panel')).toBeNull();
       expect(widths.at(-1)).toBe(0);
-      for (const action of ['Insert', 'Undo', 'Redo']) expect(screen.queryByRole('button', { name: action, exact: true })).toBeNull();
+      for (const action of ['Insert', 'Undo', 'Redo']) expect(screen.queryByRole('button', { name: action })).toBeNull();
       expect(screen.getByRole('button', { name: 'Exit edit mode' })).toBeVisible();
       fireEvent.click(screen.getByRole('tab', { name: 'Edit on the page' }));
       expect(screen.getByLabelText('Expand panel')).toBeTruthy();
