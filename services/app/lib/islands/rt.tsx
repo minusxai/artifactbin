@@ -408,6 +408,11 @@ export const withIsland = (Component: Component, context: IslandContext): JSX.El
 /** A compiler-generated hydration key prefix (`s<i>-`); anything else never reaches a selector. */
 const RENDER_ID = /^[\w-]+$/;
 
+const ensureHydration = (): void => {
+  const g = globalThis as { _$HY?: { events: unknown[]; completed: WeakSet<object>; r: Record<string, unknown> } };
+  g._$HY ??= { events: [], completed: new WeakSet(), r: {} };
+};
+
 /**
  * Hydrate one island in place. Its root is the first element under `parent` whose hydration key
  * starts with `renderId`; the root's parent's other children are handed back to Solid as
@@ -423,8 +428,7 @@ export function hydrateIsland(renderId: string, Component: Component, context: I
   const root = parent.querySelector(`[data-hk^="${renderId}"]`);
   const host = root?.parentNode as (Element & ParentNode) | null | undefined;
   if (!root || !host) return null;
-  const g = globalThis as { _$HY?: { events: unknown[]; completed: WeakSet<object>; r: Record<string, unknown> } };
-  g._$HY ??= { events: [], completed: new WeakSet(), r: {} };
+  ensureHydration();
   let disposeIsland: () => void = () => {};
   let output: unknown;
   let live: unknown;
@@ -461,18 +465,5 @@ export function hydrateIsland(renderId: string, Component: Component, context: I
 
 /** Hydrate the one generated document tree while preserving version-owned script siblings. */
 export function hydrateDocument(Component: Component, context: IslandContext, parent: ParentNode = document): (() => void) | null {
-  if (isServer) return null;
-  const root = parent.querySelector('.mx-deck, .mx-doc');
-  const host = root?.parentNode as (Element & ParentNode) | null | undefined;
-  if (!root || !host) return null;
-  const g = globalThis as { _$HY?: { events: unknown[]; completed: WeakSet<object>; r: Record<string, unknown> } };
-  g._$HY ??= { events: [], completed: new WeakSet(), r: {} };
-  let disposeTree: () => void = () => {};
-  hydrate(() => createRoot((dispose) => {
-    disposeTree = dispose;
-    const live = withIsland(Component, context);
-    const children = [...host.childNodes];
-    return children.map((node) => node === root ? live : node) as JSX.Element;
-  }), host, { renderId: 'd-' });
-  return disposeTree;
+  return hydrateIsland('d-', Component, context, parent);
 }

@@ -492,9 +492,6 @@ export function generate(input: GenerateInput): Generated {
     if (VOID.test(lower)) return open.replace(/>$/, ' />');
     if (lower === 'textarea' && (props.defaultValue !== undefined || props.value !== undefined)) return `${open}{${lit(String(props.defaultValue ?? props.value))}}</${tag}>`;
     const content = children(inner);
-    const first = node.children[0];
-    const firstText = first?.type === 'text' ? first.value : first?.type === 'expression' && first.value.static ? first.value.json : null;
-    if (lower === 'pre' && typeof firstText === 'string' && firstText.startsWith('\n')) return `${open}{${lit('\n')}}${content}</${tag}>`;
     return `${open}${content}</${tag}>`;
   }
 
