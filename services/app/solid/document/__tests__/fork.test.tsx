@@ -14,7 +14,7 @@ it('previews copied datasets and opens the copy on this origin', async () => {
   vi.stubGlobal('fetch', fetcher);
   const view = render(() => <ForkArtifact id="abc" title="Report" navigate={navigate} />);
   fireEvent.click(view.getByRole('button', { name: 'Fork artifact' }));
-  await waitFor(() => expect(view.getByLabelText('Datasets this fork copies')).toHaveTextContent('Its dataset “tab” will be copied too'));
+  await waitFor(() => expect(screen.getByLabelText('Datasets this fork copies')).toHaveTextContent('Its dataset “tab” will be copied too'));
   fireEvent.click(screen.getByRole('button', { name: 'Confirm fork' }));
   await waitFor(() => expect(navigate).toHaveBeenCalledWith('/@owner/copy?x=1'));
 });
@@ -29,8 +29,8 @@ it('deduplicates refusal details and preserves location for sign in', async () =
   const view = render(() => <ForkArtifact id="abc" navigate={navigate} />);
   fireEvent.click(view.getByRole('button', { name: 'Fork artifact' }));
   fireEvent.click(screen.getByRole('button', { name: 'Confirm fork' }));
-  await waitFor(() => expect(view.getByLabelText('Fork refused').textContent).toContain('bad ref'));
-  expect(view.getByLabelText('Fork refused').textContent!.split('bad ref')).toHaveLength(2);
+  await waitFor(() => expect(screen.getByLabelText('Fork refused').textContent).toContain('bad ref'));
+  expect(screen.getByLabelText('Fork refused').textContent!.split('bad ref')).toHaveLength(2);
   expect(navigate).not.toHaveBeenCalled();
   vi.stubGlobal('fetch', vi.fn(async (_url: unknown, init?: RequestInit) => init?.body
     ? Response.json({ datasets: [] })
