@@ -309,7 +309,7 @@ export function generate(input: GenerateInput): Generated {
   function emit(node: JsxNode, path: string, mode: Mode, ctx: Ctx): string {
     if (node.type === 'text') {
       if (ctx.row && /\{\s*\$_row\./.test(node.value)) return `{rt.sub(${lit(node.value)}, ${ctx.row})}`;
-      if (!ctx.row && !ctx.preview && node.value) return mode === 'browser' ? '<rt.NoHydration />' : `<rt.NoHydration>${node.value.length <= 1024 && /\r|\n/.test(node.value) ? `{${lit(node.value)}}` : staticText(node.value, true)}</rt.NoHydration>`;
+      if (!ctx.row && !ctx.preview && !ctx.branch && node.value) return mode === 'browser' ? '<rt.NoHydration />' : `<rt.NoHydration>${node.value.length <= 1024 && /\r|\n/.test(node.value) ? `{${lit(node.value)}}` : staticText(node.value, true)}</rt.NoHydration>`;
       return node.value === '' ? '' : (node.value.length <= 1024 && /\r|\n/.test(node.value) ? `{${lit(node.value)}}` : staticText(node.value));
     }
     if (node.type === 'expression') {
@@ -323,7 +323,7 @@ export function generate(input: GenerateInput): Generated {
         return field ? `{String(${ctx.row}[${lit(field)}] ?? '')}` : '';
       }
       const v = node.value.json;
-      return typeof v === 'string' || typeof v === 'number' ? mode === 'browser' ? '<rt.NoHydration />' : `<rt.NoHydration>{${lit(String(v))}}</rt.NoHydration>` : '';
+      return typeof v === 'string' || typeof v === 'number' ? ctx.branch ? `{${lit(String(v))}}` : mode === 'browser' ? '<rt.NoHydration />' : `<rt.NoHydration>{${lit(String(v))}}</rt.NoHydration>` : '';
     }
     if (node.control) {
       if (node.control.kind === 'fragment') return `<>${node.children.map((c, i) => emit(c, `${path}.${i}`, mode, ctx)).join('')}</>`;
@@ -342,7 +342,8 @@ export function generate(input: GenerateInput): Generated {
     // Both builds keep the same tree of hydration boundaries. Static descendants are
     // server markup only; the browser emits an empty boundary at the same position.
     // A live control is emitted as a sibling of these boundaries, never inside one.
-    if (!ctx.preview && !ctx.row && !needsBrowser(node) && !(ctx.liveKit && !!KIT[node.tag]))
+    // A branch absent from SSR must carry its static descendants in the browser to appear later.
+    if (!ctx.preview && !ctx.row && !ctx.branch && !needsBrowser(node) && !(ctx.liveKit && !!KIT[node.tag]))
       return mode === 'browser' ? '<rt.NoHydration />' : `<rt.NoHydration>${emitElement(node, path, mode, ctx)}</rt.NoHydration>`;
     const live = selfDynamic(node) || !!ctx.liveKit && !!KIT[node.tag];
     const element = emitElement(node, path, mode, { ...ctx, liveKit: ctx.liveKit || !!KIT[node.tag] && live });

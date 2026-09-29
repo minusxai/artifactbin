@@ -19,6 +19,20 @@ const fixture = (source: string): { html: string; browserCode: string; flow: Com
 ).toString('utf8'));
 
 describe('one tree SSR to hydrate', () => {
+  it('mounts static content when a false server branch becomes true in the browser', async () => {
+    const server = fixture('<Helmet><Value name="open" type="boolean" default={false} /></Helmet><section id="case">{$open && <p aria-label="Positive">positive</p>}</section>');
+    const host = document.createElement('div'); host.innerHTML = server.html; document.body.append(host);
+    let tree: Component | null = null;
+    await evaluateModule(server.browserCode, spec => spec.includes('/rt-') ? rt as unknown as Record<string, unknown>
+      : spec.includes('/boot-') ? { boot: (module: { TREE: Component }) => { tree = module.TREE; } }
+      : (() => { throw new Error(`unexpected import ${spec}`); })(), 'test/one-tree-branch.js');
+    const runtime = rt.createIslandRuntime({ dataflow: { flow: server.flow, values: { open: false } } }, df => createDataflowStore(df));
+    const dispose = rt.hydrateDocument(tree!, runtime.context, host);
+    expect(host.querySelector('[aria-label="Positive"]')).toBeNull();
+    runtime.context.setValue('open', true);
+    expect(host.querySelector('[aria-label="Positive"]')?.textContent).toBe('positive');
+    dispose?.(); runtime.dispose(); host.remove();
+  });
   it('adopts static siblings and updates the live expression with aligned keys', async () => {
     const server = fixture('<Helmet><Value name="name" type="string" default="Ada" /></Helmet><h1 id="heading">Static heading</h1><p id="live">{$name}</p><footer id="end">Static footer</footer>');
     const host = document.createElement('div');
