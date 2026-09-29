@@ -139,7 +139,7 @@ export async function morphStory(win: Window, options: MorphOptions = {}): Promi
 
   const override = options.mode?.() ?? readerMode(win);
   syncAttributes(root, nextRoot, override);
-  morphChildren(root, nextRoot, { keep, oldUnits, used: new Set(), kept: new Set([...keep.values()].flatMap((rid) => oldUnits.get(rid) ?? [])) });
+  morphChildren(root, nextRoot, { keep, oldUnits, used: new Set(), kept: new Set([...keep.values()].filter((rid) => rid !== 'd-').flatMap((rid) => oldUnits.get(rid) ?? [])) });
 
   syncHead(doc, next, { adopted: !!options.adopted, override });
   const data = next.getElementById(ISLAND_DATA_ID);
