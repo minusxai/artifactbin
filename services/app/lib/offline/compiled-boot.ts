@@ -155,11 +155,10 @@ export function boot(input: OfflineIslandModule | { TREE: Component; FLOW?: Comp
   const frozen = new Set(file.snapshot.frozen);
   const setValue = runtime.context.setValue;
   runtime.context.setValue = (name, value, options) => { if (!frozen.has(name)) setValue(name, value, options); };
-  // A one-tree module's single wrapped entry stands for every compiled island: stale-flow
-  // withholds it when any of them reads data (matching the per-island check for the old shape).
-  const readsData = (index: number) => module.TREE
-    ? (file.compiled?.islands ?? []).some((island) => island.readsData)
-    : !!file.compiled?.islands[index]?.readsData;
+  // A one-tree module has no per-region root to withhold (compiled.islands' one entry names no
+  // data-mx-ast the story carries): hydrate it and let the store's own unran-query errors
+  // (snapshot-current.ts) show through the data components, as a live page's do.
+  const readsData = (index: number) => module.TREE ? false : !!file.compiled?.islands[index]?.readsData;
   const disposers = module.ISLANDS.map(([id, component], index) => staleFlow && readsData(index)
     ? null : hydrateIsland(id, component, runtime.context, root)).filter((stop): stop is () => void => !!stop);
   const unfreeze = freezeControls(root, file.island.nodes, frozen);
