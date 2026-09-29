@@ -7,6 +7,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { startPage, CHROME_HIDDEN_CLASS } from '../page';
 import { READER_CHROME_HIDDEN_CLASS } from '@/lib/story/reader-chrome';
 import { captureInitialStory, clearInitialStory } from '@/web/initial-story';
+import { PAGE_TAKEOVER_EVENT } from '@/lib/islands/page-lifetime';
 
 class FakeEventSource extends EventTarget {
   static made: FakeEventSource[] = [];
@@ -26,10 +27,12 @@ const page = ({ live = true, module = false } = {}) => {
 const stops: Array<() => void> = [];
 
 afterEach(() => {
+  vi.useRealTimers();
   for (const stop of stops.splice(0)) stop();
   FakeEventSource.made = [];
   window.name = '';
   document.documentElement.classList.remove('mx-framed', 'dark');
+  document.documentElement.removeAttribute('data-mx-reader-mode');
   vi.unstubAllGlobals();
 });
 
@@ -60,12 +63,14 @@ describe('startPage', () => {
     expect(document.documentElement.classList.contains('dark')).toBe(true);
     expect(document.documentElement.classList.contains('light')).toBe(false);
     expect(document.getElementById('mx-story-root')!.className).toBe('dark');
+    expect(document.documentElement.getAttribute('data-mx-reader-mode')).toBe('dark');
     expect(window.name, 'the override is per visit: it stays for the next reload').toContain('"mode":"dark"');
 
     window.name = '';
     page();
     stops.push(startPage());
     expect(document.documentElement.className).toBe('light');
+    expect(document.documentElement.hasAttribute('data-mx-reader-mode')).toBe(false);
   });
 
   it('holds the live stream of a page with no island module, and leaves it to boot on one that has', () => {
@@ -110,6 +115,23 @@ describe('startPage', () => {
     stops.push(startPage());
     expect(scrollTo).toHaveBeenCalledWith({ top: 700 });
     expect(window.name, 'one reload, one restore').not.toContain('anchor');
+  });
+
+  it('keeps restoring the reader position while the SPA takes over a settling page', () => {
+    vi.useFakeTimers();
+    page({ live: false });
+    const target = document.querySelector<HTMLElement>('[data-mx-ast="1"]')!;
+    let top = 500;
+    target.getBoundingClientRect = () => ({ top, height: 400, width: 100 }) as DOMRect;
+    const scrollTo = vi.spyOn(window, 'scrollTo').mockImplementation(() => {});
+    window.name = 'mx:doc:' + JSON.stringify({ anchor: { path: '1', fraction: 0.5 } });
+    stops.push(startPage());
+    const before = scrollTo.mock.calls.length;
+    window.dispatchEvent(new Event(PAGE_TAKEOVER_EVENT));
+    top = 537;
+    vi.advanceTimersByTime(100);
+    expect(scrollTo.mock.calls.length).toBeGreaterThan(before);
+    vi.useRealTimers();
   });
 });
 

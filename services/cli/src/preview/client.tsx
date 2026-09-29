@@ -1,7 +1,7 @@
 /** File-session shell; rendering and in-place editing remain shared with hosted artifacts. */
 import {useCallback,useEffect,useRef,useState} from 'react';
 import {createRoot} from 'react-dom/client';
-import {InlineStoryRuntime,type InlineStoryController} from '../../../app/lib/story-runtime/InlineStoryRuntime';
+import {EditorStoryRuntime,type StoryController} from '../../../app/lib/story-runtime/EditorStoryRuntime';
 import {parseJsx,type JsxNode} from '../../../app/lib/jsx';
 import {splitHelmet} from '../../../app/lib/story/helmet';
 import {useInPlaceEdit} from '../../../app/lib/story/use-in-place-edit';
@@ -28,7 +28,7 @@ function App({initial}:{initial:Document}){
  const [editing,setEditing]=useState(false),[nonce,setNonce]=useState<string|null>(null);
  const [comments,setComments]=useState<Comment[]>([]),[name,setName]=useState(localStorage.getItem('afbin-preview-name')??''),[text,setText]=useState(''),[node,setNode]=useState('');
  const [files,setFiles]=useState<string[]>([]);
- const runtimeRef=useRef<InlineStoryController|null>(null),sourceRef=useRef(source),dirty=useRef(false),revision=useRef(initial.revision);
+ const runtimeRef=useRef<StoryController|null>(null),sourceRef=useRef(source),dirty=useRef(false),revision=useRef(initial.revision);
  sourceRef.current=source;
  const adopt=(next:Document)=>{
   revision.current=next.revision;sourceRef.current=next.body;setDocument(next);setSource(next.body);
@@ -39,7 +39,7 @@ function App({initial}:{initial:Document}){
   const parsed=parseJsx(next);if(parsed.ok)runtimeRef.current?.update({type:STORY_DOCUMENT_MESSAGE,nodes:splitHelmet(parsed.nodes).body});
   setStatus('Unsaved');
  }});
- const onController=useCallback((controller:InlineStoryController|null)=>{runtimeRef.current=controller;setNonce(controller?.nonce??null);},[]);
+ const onController=useCallback((controller:StoryController|null)=>{runtimeRef.current=controller;setNonce(controller?.nonce??null);},[]);
  const [transport]=useState<QueryTransport>(()=>({run:async(values,only)=>{try{return await api('/query',{file,values,only});}finally{setReady(true);}},page:async(values,name,page)=>{
   const result=await api('/query',{file,values,only:[name],page:{name,...page}});return result.tables[name];
  }}));
@@ -72,12 +72,12 @@ function App({initial}:{initial:Document}){
   await api('/comments',{file,node:anchor,name:name.trim(),text:text.trim()});
   localStorage.setItem('afbin-preview-name',name.trim());setText('');setStatus('Comment saved');
  });
- if(capture)return <div data-afbin-export-ready={ready?'':undefined}><InlineStoryRuntime data={document.data} prepared={document.prepared} authorScript={document.prepared?.authorScript} transport={transport} onController={onController}/></div>;
+ if(capture)return <div data-afbin-export-ready={ready?'':undefined}><EditorStoryRuntime data={document.data} prepared={document.prepared} authorScript={document.prepared?.authorScript} transport={transport} onController={onController}/></div>;
  return <main>
   <header className="afbin-tools"><strong>Artifactbin preview</strong><nav aria-label="Files">{files.map(path=><a key={path} aria-current={path===file?'page':undefined} href={'/workspace/'+path.split('/').map(encodeURIComponent).join('/')}>{path}</a>)}</nav>
    <p role="status" aria-live="polite">{status}</p><button onClick={toggle}>{editing?'Stop editing':'Edit document'}</button><button onClick={()=>action(save)}>Save file</button>
   </header>
-  <InlineStoryRuntime data={document.data} prepared={document.prepared} authorScript={document.prepared?.authorScript} transport={transport} onController={onController}/>
+  <EditorStoryRuntime data={document.data} prepared={document.prepared} authorScript={document.prepared?.authorScript} transport={transport} onController={onController}/>
   <section className="afbin-tools" aria-label="Source and comments">
    <label>Source<textarea aria-label="Source" rows={8} value={source} onChange={event=>{dirty.current=true;sourceRef.current=event.target.value;setSource(event.target.value);setStatus('Unsaved');}}/></label>
    <h2>Comments</h2><label>Your name<input aria-label="Name" value={name} onChange={event=>setName(event.target.value)}/></label>

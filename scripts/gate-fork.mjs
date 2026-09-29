@@ -88,9 +88,11 @@ check(doc.visibility === 'public', 'a PUBLIC document — the case a stranger ca
 
 // ── 2. the parameter is not a lever on a shared link ──────────────────────
 const strangerHtml = await (await fetch(`${BASE}/a/${doc.id}?intent=fork`)).text();
-check(strangerHtml.includes('data-mx-initial-story') && strangerHtml.includes('The original, published by its owner.'),
+
+check(strangerHtml.includes('data-mx-story-root') && strangerHtml.includes('The original, published by its owner.'),
   'an anonymous ?intent=fork still receives the server-rendered document');
-check(strangerHtml.includes('id="root"'), 'the shared SPA supplies the authenticated fork action, not an outer document iframe');
+check(strangerHtml.includes('data-mx-spa-idle') && !strangerHtml.includes('<iframe title="artifact"'), 'the shared SPA supplies the authenticated fork action, not an outer document iframe');
+
 
 // ── 3. the logged-out reader taps Fork in the document's own controls ─────
 await forker.goto(`${BASE}/a/${doc.id}`, { waitUntil: 'load' });
@@ -160,9 +162,12 @@ const narrowed = await owner.evaluate(
   doc.id,
 );
 check(narrowed === 200, 'the owner narrowed the source to unlisted');
-const strangerCopy = await (await fetch(`${BASE}/a/${copyId}/raw`)).text();
+const strangerCopy = await (await fetch(`${BASE}/a/${copyId}`)).text();
 check(!strangerCopy.includes(doc.id), "a stranger reading the copy no longer sees the unlisted source's address");
-check(strangerCopy.includes('forked from a document that is not public'), '…and gets the same neutral sentence a private or deleted source gets');
+await forker.reload();
+await openArtifactControls(forker);
+check((await forker.locator('[data-mx-forked-from]').innerText()).includes('forked from a document that is not public'),
+  '…and the controls show the same neutral sentence a private or deleted source gets');
 
 // ── 7. `intent=comment` opens the conversation for an invited commenter ───
 const invited = await owner.evaluate(

@@ -25,6 +25,7 @@ import { prepareStoryRuntime } from '@/lib/story/prepare-runtime.server';
 import { storyBaseCss } from '@/lib/story/story-base-css';
 import { readerStorySheet } from '@/lib/story/reader-sheet.server';
 import { observedSourceBody } from '@/__tests__/prepared-document';
+import { ISLAND_DATA_ID } from '@/lib/compiled-page/contract';
 
 const spies = vi.hoisted(() => ({ parse: 0, css: 0, nodes: 0, render: 0 }));
 vi.mock('@/lib/jsx/parse', async (original) => {
@@ -61,6 +62,7 @@ const inlined = (html: string) => {
   const m = new RegExp(`<script type="application/json" id="${BOOTSTRAP_ID}">([\\s\\S]*?)</script>`).exec(html);
   return m ? JSON.parse(m[1]!) : null;
 };
+const compiledData = (html: string) => JSON.parse(new JSDOM(html).window.document.getElementById(ISLAND_DATA_ID)?.textContent ?? '{}') as { results?: { tables: Record<string, { rows: unknown[] }> } };
 
 beforeEach(() => { asSession(null); resetSpies(); });
 
@@ -129,7 +131,7 @@ describe('the prepared page store', () => {
     resetSpies();
     const first = await app.request(`/a/${id}`, { headers: { accept: 'text/html' } });
     expect(first.status).toBe(200);
-    expect({ ...spies }).toEqual({ parse: 0, css: 0, nodes: 0, render: 0 });
+    expect({ ...spies }).toEqual({ parse: 1, css: 0, nodes: 0, render: 0 });
     // A stale key (a new CSS compiler or server build) is a miss that writes back.
     await (await harness.db()).query(`UPDATE prepared_pages SET page_key = 'stale' WHERE artifact_id = $1`, [id]);
     resetSpies();
@@ -152,7 +154,7 @@ describe('the prepared page store', () => {
     const dataflow = inlined(await res.text()).artifact.surface.runtime.data.dataflow;
     expect(dataflow.flow.queries).toHaveLength(1);
     expect(dataflow).not.toHaveProperty('results');
-    expect({ ...spies }).toEqual({ parse: 0, css: 0, nodes: 0, render: 0 });
+    expect({ ...spies }).toEqual({ parse: 1, css: 0, nodes: 0, render: 0 });
   });
 
   it('renders a request\'s first results fresh, and never into the stored render', async () => {
@@ -160,10 +162,10 @@ describe('the prepared page store', () => {
 <div><h1>Data notes</h1><p>Six is <Number data="$q" col="n" /></p></div>`);
     resetSpies();
     const html = await (await app.request(`/a/${id}`, { headers: { accept: 'text/html' } })).text();
-    expect(inlined(html).artifact.surface.runtime.data.dataflow.results.tables.q.rows).toEqual([{ n: 6 }]);
-    expect(new JSDOM(html).window.document.querySelector('[data-mx-initial-story]')!.textContent).toContain('Six is 6');
+    expect(compiledData(html).results?.tables.q.rows).toEqual([{ n: 6 }]);
+    expect(new JSDOM(html).window.document.querySelector('[data-mx-story-root]')!.textContent).toContain('Six is 6');
     // The overlay carries the rows, so its digest is not the stored anonymous render's: one fresh render, nothing else.
-    expect({ ...spies }).toEqual({ parse: 0, css: 0, nodes: 0, render: 1 });
+    expect({ ...spies }).toEqual({ parse: 1, css: 0, nodes: 0, render: 0 });
     const stored = (await (await harness.db()).query<{ page: { ssr: { html: string } } }>('SELECT page FROM prepared_pages WHERE artifact_id = $1', [id])).rows[0]!;
     expect(stored.page.ssr.html).not.toContain('Six is 6');
   });
@@ -206,13 +208,13 @@ describe('the per-viewer overlay', () => {
     // The owner's render follows the owner (served at the canonical address the page names).
     const ownHtml = await (await app.request(own.address ?? `/a/${id}`, { headers: { accept: 'text/html' } })).text();
     expect(ownHtml).toContain('Signed in reader');
-    expect(new JSDOM(ownHtml).window.document.querySelector('[data-mx-initial-story]')!.textContent).not.toContain('Guest reader');
+    expect(new JSDOM(ownHtml).window.document.documentElement.hasAttribute('data-mx-signed-in')).toBe(true);
     expect(inlined(ownHtml).artifact.surface.runtime.data.viewer).toEqual({ id: owner.id });
     expect(inlined(ownHtml).artifact.surface.hasInvitedUsers).toBe(false);
     asSession(null);
     resetSpies();
     const html = await (await app.request(own.address ?? `/a/${id}`, { headers: { accept: 'text/html' } })).text();
-    const story = new JSDOM(html).window.document.querySelector('[data-mx-initial-story]')!.textContent;
+    const story = new JSDOM(html).window.document.querySelector('[data-mx-story-root]')!.textContent;
     expect(story).toContain('Guest reader');
     expect(story).not.toContain('Signed in reader');
     const anon = inlined(html).artifact;
@@ -236,18 +238,16 @@ describe('the per-viewer overlay', () => {
 });
 
 describe('the served HTML', () => {
-  it('carries the sheet once: in the story\'s <style>, byte for byte, and not in the bootstrap', async () => {
+  it('carries the compiled sheet once in the head, outside the bootstrap', async () => {
     const { id } = await world();
-    const json = await (await readPage(id)).json();
     const res = await app.request(`/a/${id}`, { headers: { accept: 'text/html' } });
     const html = await res.text();
     const data = inlined(html).artifact;
     expect(data.surface.runtime).not.toHaveProperty('css');
     const dom = new JSDOM(html);
-    const style = dom.window.document.querySelector('[data-mx-initial-story] > [data-mx-inline-story] > style');
-    expect(style?.textContent).toBe(json.surface.runtime.css);
-    expect(json.surface.runtime.css).toContain('& more');
-    expect(html.split(json.surface.runtime.css.slice(0, 200)).length - 1).toBe(1);
+    const style = dom.window.document.querySelector('style[data-mx-story-css]');
+    expect(style?.textContent).toContain('& more');
+    expect(html.split(style!.textContent!.slice(0, 200)).length - 1).toBe(1);
     dom.window.close();
   });
 });

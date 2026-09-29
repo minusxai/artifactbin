@@ -4,6 +4,8 @@ import { createMemoryRouter, RouterProvider } from 'react-router';
 import { ArtifactPage } from '../pages/Artifact';
 import { ProfilePage } from '../pages/Profile';
 import { takeBootstrap } from '../bootstrap';
+import { captureInitialStory, clearInitialStoryOnRoute } from '../initial-story';
+import { readerNavigation } from '../reader-navigation';
 
 vi.mock('@/components/ArtifactShell', () => ({ default: ({ children }: { children: React.ReactNode }) => children }));
 vi.mock('@/components/ArtifactSurface', () => ({ default: ({ id, search, title }: { id: string; search: string; title?: string }) => <div aria-label="surface" data-title={title}>{id}{search}</div> }));
@@ -61,6 +63,41 @@ it('changing an already-loaded artifact fetches its own data; signals do not ref
   expect(screen.getByLabelText('surface')).toBe(surface);
   expect(surface).toHaveTextContent('two?$count=3');
   expect(fetchMock).toHaveBeenCalledTimes(2);
+});
+
+it('loads a client-navigated markup reader as a full compiled document', async () => {
+  window.history.replaceState(null, '', '/a/one');
+  captureInitialStory();
+  const open = vi.spyOn(readerNavigation, 'open').mockImplementation(() => {});
+  const fetcher = vi.fn().mockResolvedValueOnce(response('one')).mockResolvedValue({ ok: true, json: async () => ({ canonical: '/a/two', role: 'viewer', kind: 'none', surface: { id: 'two', format: 'markup' } }) });
+  vi.stubGlobal('fetch', fetcher);
+  const router = createMemoryRouter([{ path: '/a/:id', element: <ArtifactPage /> }], { initialEntries: ['/a/one'] });
+  const unsubscribe = router.subscribe(state => clearInitialStoryOnRoute(state.location.pathname));
+  render(<RouterProvider router={router} />);
+  await screen.findByLabelText('surface');
+  await act(async () => { await router.navigate('/a/two?$region=west#chart'); });
+  await waitFor(() => expect(open).toHaveBeenCalledWith('/a/two?$region=west#chart'));
+  expect(screen.queryByLabelText('surface')).toBeNull();
+  unsubscribe();
+  window.history.replaceState(null, '', '/');
+});
+
+it('keeps a profile artifact address for full document navigation', async () => {
+  window.history.replaceState(null, '', '/');
+  captureInitialStory();
+  const open = vi.spyOn(readerNavigation, 'open').mockImplementation(() => {});
+  const address = '/@owner/abc123-title?$region=west#chart';
+  vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: async () => ({ canonical: '/a/abc123', role: 'viewer', kind: 'none', surface: { id: 'abc123', format: 'markup' } }) }));
+  const router = createMemoryRouter([
+    { path: '/', element: <p>Home</p> },
+    { path: '/:user/*', element: <ProfilePage /> },
+  ], { initialEntries: ['/'] });
+  const unsubscribe = router.subscribe(state => clearInitialStoryOnRoute(state.location.pathname));
+  render(<RouterProvider router={router} />);
+  await act(async () => { await router.navigate(address); });
+  await waitFor(() => expect(open).toHaveBeenCalledWith(address));
+  expect(router.state.location.pathname).toBe('/@owner/abc123-title');
+  unsubscribe();
 });
 
 it('canonicalization commits through the router and retains state, query and hash', async () => {

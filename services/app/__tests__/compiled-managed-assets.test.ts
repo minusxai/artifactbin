@@ -5,7 +5,7 @@
  * version's module, so one compile serves every host and every capture key. A capture carries its
  * verified export key in the door, as today's does; a deployment without an asset origin carries none.
  */
-import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { JSDOM } from 'jsdom';
 
 const settings = vi.hoisted(() => ({ assets: 'https://assets.example.test' as string | null }));
@@ -22,7 +22,6 @@ import { createAppServer } from '@/server/app';
 import { mintToken } from '@/lib/tokens';
 import { claimToken, createUser, ensureUsername } from '@/lib/users';
 import { drainPreparedPageWarmups } from '@/lib/story/prepared-page.server';
-import { setCompiledReaderFlagForTests } from '@/lib/compiled-page/reader-mode';
 import { ISLAND_DATA_ID, READER_MODE_HEADER } from '@/lib/compiled-page/contract';
 import { mintExportKey } from '@/lib/export-key';
 
@@ -30,8 +29,6 @@ useAppHarness();
 const params = (id: string) => ({ params: Promise.resolve({ id }) });
 const app = createAppServer({ indexHtml: async () => '<!doctype html><html><head><title>x</title></head><body><div id="root"></div></body></html>' });
 
-beforeAll(() => setCompiledReaderFlagForTests('shadow'));
-afterAll(() => setCompiledReaderFlagForTests(null));
 
 const FRAME = '<div><Iframe title="Gallery" height={100}><img src="https://img.example/a.png" alt="a" /></Iframe></div>';
 

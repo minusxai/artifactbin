@@ -89,20 +89,28 @@ try {
   // speed, and keeps unrelated lazy editor/chart bundles out of the preload.
   const coldContext=await browser.newContext({ignoreHTTPSErrors:true}),cold=await coldContext.newPage();
   const shell=await mainFetch(backend+'/a/'+seed.id).then(response=>response.text());
-  const entry=/<script[^>]+src="([^"]+)"/.exec(shell)?.[1];assert(entry,'built app entry exists');
+
+  const entry=/<script[^>]+src="([^"]+)"[^>]+data-mx-spa-idle=""/.exec(shell)?.[1];assert(entry,'built app entry exists');
+
   let releaseEntry;
   const entryHeld=new Promise(resolve=>{releaseEntry=resolve;});
   await cold.route(base+entry,async route=>{await entryHeld;await route.continue();});
   const requested=new Set();cold.on('request',request=>requested.add(new URL(request.url()).pathname));
   try {
     await cold.goto(base+'/a/'+seed.id,{waitUntil:'commit'});
-    for(const name of ['Profile','Artifact','InlineStoryRuntime']) {
-      const loaded=()=>[...requested].some(url=>new RegExp('/assets/'+name+'-[^/]+\\.js$').test(url));
+
+    const hinted=[...shell.matchAll(/<link rel="modulepreload" href="([^"]+)"/g)].map(([,url])=>url);
+    const readerModules=hinted.filter(url=>/\/islands\/(?:d\/|boot-)/.test(url));
+    assert(readerModules.some(url=>/\/islands\/d\//.test(url)) && readerModules.some(url=>/\/islands\/boot-/.test(url)),
+      'compiled document and boot are discoverable in HTML');
+    for(const url of readerModules) {
+      const loaded=()=>requested.has(url);
       for(let attempt=0;attempt<100&&!loaded();attempt++)await new Promise(resolve=>setTimeout(resolve,20));
-      assert(loaded(),name+' requested before app entry executes');
+      assert(loaded(),url+' requested before the first entry executes');
     }
     assert(![...requested].some(url=>/\/(?:ArtifactEditor|VegaChart)-/.test(url)),'editor and chart remain lazy');
-    console.log('Reader Profile, Artifact and InlineStoryRuntime discovered before app execution');
+    console.log('Compiled document and island boot discovered before entry execution');
+
   } finally {releaseEntry();await cold.unrouteAll({behavior:'wait'});await coldContext.close();}
   const context=await browser.newContext({ignoreHTTPSErrors:true,viewport:{width:900,height:700}}),page=await context.newPage();
   await becomeOwner(page,base,seed.token);

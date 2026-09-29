@@ -36,11 +36,11 @@ describe('the fixtures', () => {
 
 describe('the lab run', () => {
   const loads = readFileSync(path.join(root, 'scripts/performance-loads.mjs'), 'utf8');
-  it('boots the measured server with the compiled reader on, so the head measures Phase 2', () => {
-    expect(loads).toMatch(/FLAG__COMPILED_READER:\s*'on'/);
+  it('boots the measured server without a legacy reader switch, so the head measures Phase 2', () => {
+    expect(loads).not.toContain('FLAG__COMPILED_READER');
   });
   it('the workflow judges the size targets on the head', () => {
     const workflow = readFileSync(path.join(root, '.github/workflows/page-speed.yml'), 'utf8');
-    expect(workflow).toContain('node scripts/size-targets.mjs page-speed/head.json --markdown');
+    expect(workflow).toContain('node scripts/size-targets.mjs page-speed/head.json --markdown --strict');
   });
 });

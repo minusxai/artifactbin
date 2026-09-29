@@ -4,10 +4,10 @@
  *
  *  - `frozenValues` (store): a Value whose control must stay put, with the
  *    reason the reader is shown in place of the control working;
- *  - `writesUnavailable` (InlineStoryRuntime → store): one reason that refuses
+ *  - `writesUnavailable` (EditorStoryRuntime → store): one reason that refuses
  *    every write on this render, so a button never waits on an access check
  *    that has no one to answer it;
- *  - `components` (InlineStoryRuntime → StoryRuntimeApp): registry overrides,
+ *  - `components` (EditorStoryRuntime → StoryRuntimeApp): registry overrides,
  *    how a map or managed frame becomes a same-size placeholder.
  */
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
@@ -16,7 +16,7 @@ import type { JsxNode } from '@/lib/jsx';
 import { splitHelmet } from '@/lib/story/helmet';
 import { parseJsxOrThrow } from '@/test/helpers/jsx';
 import { compiledSource } from '@/test/helpers/compiled';
-import { InlineStoryRuntime } from '../InlineStoryRuntime';
+import { EditorStoryRuntime } from '../EditorStoryRuntime';
 import { StoryRuntimeApp } from '../StoryRuntimeApp';
 import { ACCESS_PENDING, createDataflowStore } from '../store';
 import type { StoryIslandData } from '../contract';
@@ -96,12 +96,12 @@ describe('controls bound to a frozen Value', () => {
   });
 });
 
-describe('InlineStoryRuntime offline seams', () => {
+describe('EditorStoryRuntime offline seams', () => {
   const transport = { run: vi.fn(async () => ({ tables: {}, errors: {} })), page: vi.fn(async () => ({ rows: [], columns: [] })) };
 
   it('writesUnavailable names the refusal on every write button instead of an access check', async () => {
     const data = island('<Button run="$add">Add</Button>');
-    render(<InlineStoryRuntime data={data} transport={transport} writesUnavailable="Saving needs a connection." onController={() => {}} />);
+    render(<EditorStoryRuntime data={data} transport={transport} writesUnavailable="Saving needs a connection." onController={() => {}} />);
     const button = await screen.findByRole('button', { name: 'Add' });
     expect(button).toBeDisabled();
     expect(button).toHaveAttribute('aria-description', 'Saving needs a connection.');
@@ -110,20 +110,20 @@ describe('InlineStoryRuntime offline seams', () => {
   });
 
   it('frozenValues reaches the store the runtime creates', async () => {
-    render(<InlineStoryRuntime data={island('<Input label="Note" value="$note" />')} transport={transport} frozenValues={{ note: REASON }} onController={() => {}} />);
+    render(<EditorStoryRuntime data={island('<Input label="Note" value="$note" />')} transport={transport} frozenValues={{ note: REASON }} onController={() => {}} />);
     expect(await screen.findByRole('textbox', { name: 'Note' })).toBeDisabled();
   });
 
   it('components replace a registry entry and receive its authored props', async () => {
     const Placeholder = (props: Record<string, unknown>) => <div role="note" aria-label="map stand-in">height {String(props.height)}</div>;
     const components = { DeckGL: Placeholder };
-    render(<InlineStoryRuntime data={island('<DeckGL data="$regions" height={240} layers={[]} />')} transport={transport} components={components} onController={() => {}} />);
+    render(<EditorStoryRuntime data={island('<DeckGL data="$regions" height={240} layers={[]} />')} transport={transport} components={components} onController={() => {}} />);
     await waitFor(() => expect(screen.getByRole('note', { name: 'map stand-in' })).toHaveTextContent('height 240'));
   });
 
   it('without the seams a mutation button still waits on the access check (online unchanged)', async () => {
     const pending = { ...transport, run: vi.fn(() => new Promise<never>(() => {})), mutate: vi.fn() };
-    render(<InlineStoryRuntime data={island('<Button run="$add">Add</Button>')} transport={pending} onController={() => {}} />);
+    render(<EditorStoryRuntime data={island('<Button run="$add">Add</Button>')} transport={pending} onController={() => {}} />);
     expect(await screen.findByRole('button', { name: 'Add' })).toHaveAttribute('aria-description', ACCESS_PENDING);
   });
 });

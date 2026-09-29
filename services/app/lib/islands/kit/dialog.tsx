@@ -14,7 +14,7 @@ export function Dialog(props: JSX.HTMLAttributes<HTMLSpanElement> & { open?: boo
   const [local, setLocal] = createSignal(!!props.defaultOpen); const [trigger, setTrigger] = createSignal<HTMLElement | null>(null); const [busy, setBusy] = createSignal(false);
   const name = refName(props.open);
   const ctx: DialogState = {
-    open: () => name ? Boolean(island.value(name)) : typeof props.open === 'boolean' ? props.open : local(),
+    open: () => name ? island.value(name) === true : typeof props.open === 'boolean' ? props.open : local(),
     setOpen: next => { if (name) island.setValue(name, next); else setLocal(next); props.onOpenChange?.(next); },
     trigger, setTrigger, busy, setBusy,
   };

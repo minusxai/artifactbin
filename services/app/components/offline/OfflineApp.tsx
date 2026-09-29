@@ -2,7 +2,7 @@
  * THE OFFLINE FILE'S PAGE — what a downloaded `.html` mounts
  * (lib/offline/entry.tsx): read it, edit it, comment on it, save it, send it on.
  *
- * The same InlineStoryRuntime the app renders a document with, fed from the
+ * The same EditorStoryRuntime the app renders a document with, fed from the
  * file instead of the server:
  *  - rows come from the snapshot (lib/offline/snapshot-transport), so a filter
  *    the download precomputed still works and one it did not says so;
@@ -36,9 +36,9 @@
  * editor (components/SourceEditorTools).
  */
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ComponentType, type ReactNode } from 'react';
-import { InlineStoryRuntime, type InlineStoryController } from '@/lib/story-runtime/InlineStoryRuntime';
+import { EditorStoryRuntime, type StoryController } from '@/lib/story-runtime/EditorStoryRuntime';
 // The file carries RAW sheets and can fetch nothing: the CSS policy is bundled with it, not loaded on demand.
-import * as inlineSheet from '@/lib/story-runtime/inline-sheet';
+import * as inlineSheet from '@/lib/story-runtime/editor-sheet';
 import {
   STORY_SELECTION_ACTION_MESSAGE, STORY_SELECTION_ACTIONS_MESSAGE, isEditFrameMessage,
   type StoryEditSelection, type StoryIslandData, type StorySelectionActionsMessage,
@@ -242,7 +242,7 @@ function useOfflineSourceTools(file: ArtifactFile): SourceEditorTools {
 }
 
 function OfflineSurface({ file, restored, invalid, code, fileName }: { file: ArtifactFile; restored: boolean; invalid: string | null; code: string; fileName: string }) {
-  const runtimeRef = useRef<InlineStoryController | null>(null);
+  const runtimeRef = useRef<StoryController | null>(null);
   const [sessionNonce, setSessionNonce] = useState<string | null>(null);
 
   // ── who is writing ────────────────────────────────────────────────────────
@@ -318,7 +318,7 @@ function OfflineSurface({ file, restored, invalid, code, fileName }: { file: Art
    * command is given them back on the way through (fileAssetInliner).
    */
   const inlineAssets = useMemo(() => fileAssetInliner(file), [file]);
-  const onController = useCallback((next: InlineStoryController | null) => {
+  const onController = useCallback((next: StoryController | null) => {
     runtimeRef.current = next && { ...next, send: (command: unknown) => next.send(inlineAssets(command)) };
     setSessionNonce(next?.nonce ?? null);
   }, [inlineAssets]);
@@ -428,7 +428,7 @@ function OfflineSurface({ file, restored, invalid, code, fileName }: { file: Art
         </OfflineTopBar>
         <main aria-label={file.metadata.title} style={{ background: DOCUMENT_GROUND[data.colorMode === 'dark' ? 'dark' : 'light'], minHeight: '100vh', paddingTop: topOffset, paddingRight: rightInset, paddingBottom: editing && !wideEdit ? '50vh' : 0 }}>
           {invalid && <InvalidSourceBanner error={invalid} />}
-          <InlineStoryRuntime
+          <EditorStoryRuntime
             sheetPolicy={inlineSheet}
             data={data}
             prepared={prepared}

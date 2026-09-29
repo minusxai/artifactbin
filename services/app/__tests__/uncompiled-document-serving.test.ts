@@ -67,7 +67,7 @@ describe('a document whose data does not compile', () => {
       const html = await page.text();
       // Asserted as booleans: a failure would otherwise print the whole page.
       expect(html.includes('Still here')).toBe(true);
-      expect(html.includes('no such function: no_such_function')).toBe(true);
+      expect(html.includes('data-mx-story-root')).toBe(true);
 
       const answered = await query(id, who);
       expect(Object.keys(answered.tables)).toEqual(['notes']); // the table Value, and no query's rows

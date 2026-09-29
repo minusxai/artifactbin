@@ -19,9 +19,8 @@ import { routePages } from '../route-pages';
 import { canEdit } from '@/lib/share-roles';
 import { NotFoundPage } from './NotFound';
 import { useArtifactView } from '../use-artifact-view';
-
-// Reached through this page's own chunk, so the entry names no module of its own for it (web/route-pages).
-export { preloadInlineStoryRuntime } from '@/components/ArtifactSurface';
+import { didClientNavigateTo, initialStoryIsCompiled } from '../initial-story';
+import { readerNavigation } from '../reader-navigation';
 
 /**
  * A folder is a LISTING, never a document: its page (and the shelf, table and
@@ -74,14 +73,21 @@ function ArtifactDocument({ id }: { id: string }) {
   // Decode once at consumption, regardless of whether JSON came from SSR,
   // a cached navigation, or a network read. The cache keeps the compact shape.
   const page = useMemo(() => transport ? decodePage(transport) : null, [transport]);
+  const needsReaderDocument = !!page?.surface && page.surface.format === 'markup' && !page.surface.captureKey
+    && !editingRoute && !initialStoryIsCompiled() && didClientNavigateTo(location.pathname);
+  useEffect(() => {
+    if (needsReaderDocument) readerNavigation.open(location.pathname + search + location.hash);
+  }, [needsReaderDocument, location.pathname, location.hash, search]);
   useArtifactView(id, page?.surface?.format === 'markup' && !page.surface.captureKey && (!editingRoute || canEdit(page.role)));
   useEffect(() => {
     // The address heals to the canonical one — after the ACL, which the fetch already passed.
+    if (needsReaderDocument) return;
     if (page && !page.surface?.captureKey && page.canonical + (editingRoute ? '/edit' : '') !== location.pathname) {
       void navigate(page.canonical + (editingRoute ? '/edit' : '') + search + location.hash, { replace: true, state: location.state });
     }
-  }, [page, editingRoute, search, location.pathname, location.hash, location.state, navigate]);
+  }, [page, needsReaderDocument, editingRoute, search, location.pathname, location.hash, location.state, navigate]);
   if (page === null) return error ? <NotFoundPage /> : <PageLoading />;
+  if (needsReaderDocument) return <PageLoading />;
   if (editingRoute && !canEdit(page.role)) return <NotFoundPage />;
   if (editingRoute && page.surface?.format === 'dataset') {
     const { DatasetEditorPage } = routePages;

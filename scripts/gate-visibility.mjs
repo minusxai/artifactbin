@@ -83,11 +83,13 @@ check(strangerResp.status() === 404, 'the same doc is a uniform 404 logged out')
 
 // ── 2. pretty URLs self-heal in the location bar ──────────────────────────
 await page.goto(`${BASE}/a/${doc.id}`, { waitUntil: 'load' });
+await page.waitForURL(`${BASE}/@${username}/${doc.id}-cookie-proof`, { timeout: 20000 }).catch(() => {});
 check(
   page.url() === `${BASE}/@${username}/${doc.id}-cookie-proof`,
   `/a/<id> healed to the canonical pretty URL (${new URL(page.url()).pathname})`,
 );
 await page.goto(`${BASE}/@totally_wrong/${doc.id}-stale-name`, { waitUntil: 'load' });
+await page.waitForURL(`${BASE}/@${username}/${doc.id}-cookie-proof`, { timeout: 20000 }).catch(() => {});
 check(page.url().includes(`/@${username}/${doc.id}-cookie-proof`), 'a mangled pretty URL heals by id');
 
 // ── 3. ShareLink flips visibility from the page ────────────────────────────

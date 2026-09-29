@@ -37,10 +37,11 @@ import { ISLAND_DATA_ID, READER_READY_ATTR } from '@/lib/compiled-page/contract'
 import { ISLAND_DOCUMENT_KEY, ISLANDS_READY_EVENT, type IslandDocument, type IslandDocumentMode, type IslandEvent, type IslandHost, type IslandPageData, type IslandViewer } from './contract';
 import { createIslandRuntime, hydrateIsland } from './rt';
 import { installIslandDocument } from './handover';
-import { loadViewerOverlay } from './viewer';
 import { createWriteStatusFeed } from './writes';
-import { installStatus } from './kit/status';
 import { loadChart } from './chart';
+
+/** Page behaviour installs a cleanup here; boot owns its lifetime. */
+const PUBLIC_MX_KEY = '__mxPublicApi';
 
 /**
  * One island of the per-document module: its hydration key prefix (`IslandRef.renderId`), its component,
@@ -197,7 +198,7 @@ export function boot(input: IslandModule | readonly IslandEntry[], win: Window =
   const disposeIslands = () => { const all = [...islands.values()]; islands.clear(); for (const [, dispose] of all) dispose(); };
 
   const stopWrites = context.writes.subscribe((statuses) => emit({ type: 'writes', statuses }));
-  const stopStatus = installStatus(context.writes, root);
+  let stopStatus = () => {};
 
   // The document's own live stream, top-level only (framed, the page above holds it and posts in).
   const hooks = win as unknown as Record<string, unknown>;
@@ -220,6 +221,7 @@ export function boot(input: IslandModule | readonly IslandEntry[], win: Window =
   let ready = false;
   let disposed = false;
   let stopAuthor = () => {};
+  const uninstallMx = () => (root as HTMLElement & { [PUBLIC_MX_KEY]?: () => void })[PUBLIC_MX_KEY]?.();
   let authorGeneration = 0;
   const restartAuthor = async (source: string | null) => {
     const generation = ++authorGeneration;
@@ -237,6 +239,7 @@ export function boot(input: IslandModule | readonly IslandEntry[], win: Window =
     setMode: (next) => {
       if (disposed || next === mode || next === 'read') return;
       stopAuthor();
+      uninstallMx();
       // The interpreter owns edits and their live updates. A version ping from this compiled
       // lifetime must not reload the page while its editor is saving a new source.
       stopLive();
@@ -250,6 +253,7 @@ export function boot(input: IslandModule | readonly IslandEntry[], win: Window =
       if (disposed) return;
       disposed = true;
       stopAuthor();
+      uninstallMx();
       disposeIslands();
       stopLive();
       stopUrl();
@@ -262,19 +266,26 @@ export function boot(input: IslandModule | readonly IslandEntry[], win: Window =
   };
   installIslandDocument(root, islandDocument);
 
-  loadViewerOverlay(context, data, {
-    setViewer: (viewer: IslandViewer) => {
-      viewerId = viewer && 'id' in viewer ? viewer.id : null;
-      identified = true;
-      runtime.setViewer(viewer);
-      emit({ type: 'overlay', viewer: viewer && 'id' in viewer ? viewer : null });
-    },
-  });
-
   ready = true;
   doc.documentElement.setAttribute(READER_READY_ATTR, '');
   emit({ type: 'ready' });
   doc.dispatchEvent(new Event(ISLANDS_READY_EVENT));
+  // Identity and viewer-scoped rows arrive after the guest page is ready.
+  void import('./viewer').then(({ loadViewerOverlay }) => {
+    if (disposed) return;
+    loadViewerOverlay(context, data, {
+      setViewer: (viewer: IslandViewer) => {
+        viewerId = viewer && 'id' in viewer ? viewer.id : null;
+        identified = true;
+        runtime.setViewer(viewer);
+        emit({ type: 'overlay', viewer: viewer && 'id' in viewer ? viewer : null });
+      },
+    });
+  }).catch((error: unknown) => console.error('[islands] viewer overlay did not load', error));
+  // Writes retain their status in the feed; the indicator can attach after hydration.
+  void import('./kit/status').then(({ installStatus }) => {
+    if (!disposed) stopStatus = installStatus(context.writes, root);
+  }).catch((error: unknown) => console.error('[islands] write status did not load', error));
   // A local table has no import to trigger the engine's normal hold path.
   if (page && !data.hold?.length) page.engine.prepare(flow!, []);
 

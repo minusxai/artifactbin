@@ -13,6 +13,7 @@ import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { fixtureFetch as fetch } from './lib/fixture-http.mjs';
 import { startMailSink } from './lib/mail-login.mjs';
+import { readerUrl } from './lib/gate-reader.mjs';
 
 const base = process.argv[2] ?? 'http://localhost:3030';
 const origin = new URL(base).origin;
@@ -71,7 +72,8 @@ try {
     delete_permissions: [{ role: 'viewer', permission: { filter: {} } }] })) };
   const granted = await api('PATCH', `/api/artifacts/${ds.json.id}`, { policy, expectedPolicyRevision: 0 });
   assert.equal(granted.status, 200, JSON.stringify(granted.json));
-  const page = (await readFile(new URL('../services/app/__tests__/fixtures/splitwise-2RbE7f.jsx', import.meta.url), 'utf8')).replaceAll('ref:hf8fYY', `ref:${ds.json.id}`);
+  const page = (await readFile(new URL('../services/app/__tests__/fixtures/splitwise-2RbE7f.jsx', import.meta.url), 'utf8')).replaceAll('ref:hf8fYY', `ref:${ds.json.id}`)
+    + '\n<Iframe title="Agent driver" height={100}><script>{`void 0;`}</script></Iframe>';
   const doc = await api('POST', '/api/artifacts', { markup: page, visibility: 'unlisted', title: 'Splitwise tracker' });
   assert.equal(doc.status, 201, JSON.stringify(doc.json));
   const original = doc.json.id;
@@ -91,15 +93,17 @@ try {
   // The test user joins its COPY through the page, and is refused BY NAME on the original —
   // including a mutate issued the instant `window.mx` exists (the permission answer is awaited).
   const joined = await cli(['sessions', 'script', 'new', '--as', testuser.id], `
-    const page = await context.newPage(); const nav = await page.goto('/a/${copy}');
-    const ready = await page.waitForFunction(() => Boolean(window.mx), null, { timeout: 15000 }).then(() => true).catch(() => false);
+    const page = await context.newPage(); const nav = await page.goto(${JSON.stringify(readerUrl(`/a/${copy}`))});
+    const driver = page.frameLocator('iframe[title="Agent driver"]').frameLocator('iframe').locator('body');
+    const ready = await driver.evaluate(async () => { for (let n = 0; n < 150; n++) { if (window.mx) return true; await new Promise(resolve => setTimeout(resolve, 100)); } return false; }).catch(() => false);
     if (!ready) return { debug: { status: nav?.status(), url: page.url(), body: (await page.content()).slice(0, 1500) } };
-    const receipt = await page.evaluate(() => mx.mutate('join', {}));
+    const receipt = await driver.evaluate(() => mx.mutate('join', {}));
     await page.getByRole('button', { name: 'Join this tab' }).waitFor();
-    const balances = await page.evaluate(() => mx.read(['balances'], {wait:true}));
-    const real = await context.newPage(); await real.goto('/a/${original}');
-    await real.waitForFunction(() => Boolean(window.mx));
-    const refused = await real.evaluate(async () => { try { await mx.mutate('join', {}); return null; } catch (e) { return { code: e.code, message: e.message }; } });
+    const balances = await driver.evaluate(() => mx.read(['balances'], {wait:true}));
+    const real = await context.newPage(); await real.goto(${JSON.stringify(readerUrl(`/a/${original}`))});
+    const realDriver = real.frameLocator('iframe[title="Agent driver"]').frameLocator('iframe').locator('body');
+    await realDriver.evaluate(async () => { for (let n = 0; n < 150; n++) { if (window.mx) return; await new Promise(resolve => setTimeout(resolve, 100)); } throw new Error('managed driver did not start'); });
+    const refused = await realDriver.evaluate(async () => { try { await mx.mutate('join', {}); return null; } catch (e) { return { code: e.code, message: e.message }; } });
     await output.image(await page.screenshot());
     return { receipt, people: balances.signals.balances.value.rows.map(r => r.person), refused };
   `);
@@ -112,10 +116,11 @@ try {
 
   // The account looks at the copy: the test user is named, and joining works for the account too.
   const mine = await cli(['sessions', 'script', 'new'], `
-    const page = await context.newPage(); await page.goto('/a/${copy}');
-    await page.waitForFunction(() => Boolean(window.mx));
-    await page.evaluate(() => mx.mutate('join', {}));
-    const snapshot = await page.evaluate(() => mx.read(['balances'], {wait:true}));
+    const page = await context.newPage(); await page.goto(${JSON.stringify(readerUrl(`/a/${copy}`))});
+    const driver = page.frameLocator('iframe[title="Agent driver"]').frameLocator('iframe').locator('body');
+    await driver.evaluate(async () => { for (let n = 0; n < 150; n++) { if (window.mx) return; await new Promise(resolve => setTimeout(resolve, 100)); } throw new Error('managed driver did not start'); });
+    await driver.evaluate(() => mx.mutate('join', {}));
+    const snapshot = await driver.evaluate(() => mx.read(['balances'], {wait:true}));
     const names = await page.locator('[data-mx-user], td').allInnerTexts().catch(() => []);
     const body = await page.locator('body').innerText();
     return { people: snapshot.signals.balances.value.rows.map(r => r.person), body };

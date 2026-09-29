@@ -19,6 +19,7 @@
  * Framework-free and tiny: it is the whole of the entry the assembler tags `data-mx-spa-idle`
  * (web/spa-idle.ts).
  */
+import { reportInitialArtifactView } from './artifact-view-report';
 
 /** Who is reading, as far as the loader is concerned: writers prefetch on idle, readers wait for intent. */
 export type SpaCapability = 'reader' | 'writer';
@@ -185,6 +186,7 @@ export interface SpaIdleOptions {
 export function startSpaIdle({ load, stylesheet, idleMs = 1500, win = window }: SpaIdleOptions): SpaBoot {
   const doc = win.document;
   stampSavedTheme(win);
+  reportInitialArtifactView(win);
   const schedule = scheduleSpaBoot(() => prepareAppShell(doc, stylesheet).then(load), { idleMs, capability: capabilityOf(doc), win });
   if (wantsAppNow(win.location)) schedule.boot();
   return schedule;

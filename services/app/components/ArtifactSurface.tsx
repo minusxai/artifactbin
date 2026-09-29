@@ -25,7 +25,7 @@ import { datasetQuerySnippet } from '@/lib/story/dataset-usage';
 import dynamic, { onDemand, useOnDemand, whenIdle } from '@/lib/dynamic';
 import { MessageSquare, Pencil } from 'lucide-react';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import type { InlineStoryController } from '@/lib/story-runtime/InlineStoryRuntime';
+import type { StoryController } from '@/lib/story-runtime/EditorStoryRuntime';
 import { createHttpBackend } from '@/lib/artifact-backend/http';
 import { ArtifactBackendProvider } from '@/lib/artifact-backend/context';
 import { subscribeDocument } from '@/lib/story-runtime/document-endpoint';
@@ -67,6 +67,9 @@ import type { StoryThemeName } from '@/lib/validation/story-theme-names';
 import type { StoryIslandDataflow } from '@/lib/story-runtime/contract';
 import { IslandStory } from '@/components/IslandStory';
 import { islandDocumentOf } from '@/lib/islands/handover';
+import { reloadKeepingPlace } from '@/lib/islands/live-update';
+import { currentAnchor } from '@/lib/story-runtime/anchor';
+import { writeReloadAnchor } from '@/lib/story-runtime/reader-mode';
 import { initialDocumentStory, initialIslandDocument, initialStoryIsCompiled } from '@/web/initial-story';
 import { takeChromeIntent } from '@/web/idle-boot';
 
@@ -77,9 +80,7 @@ const DatasetCatalogView = dynamic(() => import('@/components/DatasetCatalogView
   loading: () => <p role="status" className="mt-4 text-sm text-muted">Loading dataset…</p>,
 });
 
-const InlineStoryRuntime = dynamic(() => import('@/lib/story-runtime/InlineStoryRuntime').then(module => ({default:module.InlineStoryRuntime})), { ssr: false });
-/** The document runtime's code, which a document address awaits before the app's first render (web/main). */
-export const preloadInlineStoryRuntime = (): Promise<void> => InlineStoryRuntime.preload();
+const EditorStoryRuntime = dynamic(() => import('@/lib/story-runtime/EditorStoryRuntime').then(module => ({default:module.EditorStoryRuntime})), { ssr: false });
 const ArtifactEditor = dynamic(() => import('@/components/ArtifactEditor'), {
   ssr: false,
   loading: () => <p className="mt-10 text-center text-xs text-faint">loading the editor…</p>,
@@ -230,7 +231,8 @@ const selectionActionCapabilities = (canEdit: boolean, canAnnotate: boolean, inV
 });
 
 export default function ArtifactSurface(props: ArtifactSurfaceProps) {
-  const runtimeRef = useRef<InlineStoryController | null>(null);
+  const runtimeRef = useRef<StoryController | null>(null);
+  const editScroll = useRef<number | null>(null);
   const route = useLocation();
   const navigate = useNavigate();
   const [copiedRef, setCopiedRef] = useState(false);
@@ -241,6 +243,7 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
   const readerFace = useMemo(() => person ? { id: person.id, name: person.username || person.email || '', image: person.image } : null, [person]);
   const { id, editId, format, title, source = null, dataPreview, columns, bytes: fileBytes = 0, pages: filePages = null, compiledCss, theme, colorMode, template, refs, dataflow = null, search = '', accountSession = false, anonSession = false, version, openAnnotations = 0, like = { liked: false, count: 0 }, follow = null } = props;
   const [editing, setEditing] = useState(false);
+  const editedCompiledPage = useRef(false);
   /** A view-mode text selection asks edit mode to open on its containing node. */
   const [initialEditSelectionPath, setInitialEditSelectionPath] = useState<string | null>(null);
   /**
@@ -333,7 +336,7 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
    * THE COMPILED PAGE'S DOCUMENT (docs/phase2-architecture.md §7): the served story root with its
    * islands running, adopted AS IT IS (components/IslandStory) — never hydrated, never drawn again.
    * Read once, by the surface the page was served for (web/initial-story clears it on any other
-   * route). The interpreter (InlineStoryRuntime) takes over, for good, only when the document must
+   * route). The interpreter (EditorStoryRuntime) takes over, for good, only when the document must
    * become something the islands cannot: an editor's draft. A newer version is drawn in place over the
    * islands (IslandStory → lib/islands/live-update), never by the interpreter.
    */
@@ -343,8 +346,13 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
     return story ? { story, islands: initialIslandDocument() } : null;
   });
   const [interpreting, setInterpreting] = useState(!compiled);
-  const editReadingY = useRef<number | null>(null);
-  const exitReadingY = useRef<number | null>(null);
+  useEffect(() => {
+    if (!compiled) return;
+    if (editing) { editedCompiledPage.current = true; return; }
+    // The compiled island document cannot re-enter read mode after the editor
+    // disposes its islands. Return to the compiled page at the reader's place.
+    if (editedCompiledPage.current) reloadKeepingPlace(window);
+  }, [editing, compiled]);
 
   const intentDone = useRef(false);
   useEffect(() => {
@@ -472,6 +480,11 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
   const canPreview = shownSource !== null || needsEditorPart;
   // A served document's placeholder test was answered on the server; a live source answers it here.
   const showStarter = !editing && !props.captureKey && (shownSource !== null ? isStartPlaceholder(shownSource, live?.version ?? version) : !!props.starter);
+  // The starter has no compiled story to morph. Its first agent edit becomes a
+  // real document, so open that version through the compiled reader route.
+  useEffect(() => {
+    if (props.starter && !compiled && !editing && live?.format === 'markup' && !showStarter) reloadKeepingPlace(window);
+  }, [props.starter, compiled, editing, live, showStarter]);
   // What the row actually holds — null when nobody has named it. The editor's
   // field must seed from THIS, so an inherited name never becomes an explicit
   // one just because someone opened the editor.
@@ -509,22 +522,15 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
 
   const transportFactory = useCallback(() => backend.queryTransport(), [backend]);
   const [frameLoaded, setFrameLoaded] = useState(false);
-  useLayoutEffect(() => {
-    if (!editing || !interpreting || !frameLoaded || editReadingY.current === null) return;
-    const y = editReadingY.current;
-    editReadingY.current = null;
-    window.requestAnimationFrame(() => window.scrollTo(0, y));
-  }, [editing, interpreting, frameLoaded]);
-  useLayoutEffect(() => {
-    if (editing || exitReadingY.current === null) return;
-    const y = exitReadingY.current;
-    exitReadingY.current = null;
-    window.requestAnimationFrame(() => window.scrollTo(0, y));
-  }, [editing]);
   /** The reader's own mode, for a runtime that mounts after they chose it (the interpreter taking over an adopted compiled page). */
   const modeOverride = useRef<AppearanceMode | null>(null);
-  const onController = useCallback((controller: InlineStoryController | null) => {
+  const onController = useCallback((controller: StoryController | null) => {
     runtimeRef.current = controller;
+    if (controller && editScroll.current !== null) {
+      const y = editScroll.current;
+      editScroll.current = null;
+      requestAnimationFrame(() => requestAnimationFrame(() => window.scrollTo(0, y)));
+    }
     if (controller && modeOverride.current) controller.send({ type: STORY_READER_MODE_MESSAGE, mode: modeOverride.current });
     if (controller && earlyData.current.length) {
       const datasets = [...new Set(earlyData.current)];
@@ -609,6 +615,10 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
   useEffect(() => {
     const sync = () => {
       if (route.pathname.endsWith('/edit') || window.location.hash === '#edit') { setEditing(true); return; }
+      if (compiled) {
+        const anchor = currentAnchor(window);
+        if (anchor) writeReloadAnchor(window, anchor);
+      }
       setInitialEditSelectionPath(null);
       // Leaving edit mode UNMOUNTS the editor, and its pending save is a timer
       // inside it — the unmount cancels the save. `done` drains before it calls
@@ -621,7 +631,7 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
     sync();
     window.addEventListener('hashchange', sync);
     return () => window.removeEventListener('hashchange', sync);
-  }, [route.hash, route.pathname]);
+  }, [route.hash, route.pathname, compiled]);
 
   /*
    * Fetch the editor bundle for permitted document editors while they read, so pressing edit
@@ -663,7 +673,7 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
 
   const beginEdit = useCallback((selectionPath: string | null) => {
     if (window.location.hash === '#edit') return;
-    if (compiled) editReadingY.current = window.scrollY;
+    editScroll.current = window.scrollY;
     if (compiled && !interpreting) setFrameLoaded(false);
     // pushState, not replaceState: entering edit mode is a place you can come
     // BACK from, and the browser's back button is the obvious way to do it. The
@@ -748,7 +758,10 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
     // LANDED on #edit — a deep link from the dashboard, a shared url — there is
     // nothing of ours to pop, and going back would leave the app entirely.
     setInitialEditSelectionPath(null);
-    if (compiled) exitReadingY.current = window.scrollY;
+    if (compiled) {
+      const anchor = currentAnchor(window);
+      if (anchor) writeReloadAnchor(window, anchor);
+    }
     if (pushedEdit.current) {
       pushedEdit.current = false;
       history.back();
@@ -756,7 +769,7 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
       void navigate(window.location.pathname.replace(/\/edit$/, '') + window.location.search, {replace:true, state:route.state});
       setEditing(false);
     }
-  }, []);
+  }, [compiled]);
 
   // A capability-gated selection bubble inside the document runtime asks the page
   // to enter a mode. The nonce makes this a runtime request, not author code.
@@ -1048,7 +1061,7 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
             islands={compiled.islands}
             nodes={props.runtime!.data.nodes}
             onController={onController}
-          /> : seedReady ? <InlineStoryRuntime
+          /> : editing && seedReady ? <EditorStoryRuntime
             key={id}
             data={initialRuntimeData}
             transportFactory={transportFactory}
@@ -1056,8 +1069,6 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
             authorScript={props.runtime?.authorScript}
             rawSheets={needsEditorPart ? rawSheets : undefined}
             onController={onController}
-            // A compiled story is never React's to hydrate: the interpreter draws afresh (and clears it, web/initial-story).
-            hydrateInitialStory={!servedCompiled}
           /> : parseFailed && <TrustedUi><LoadFailure what="the document" onRetry={retryParse} className="p-4" /></TrustedUi>}
           </div>
         </div>

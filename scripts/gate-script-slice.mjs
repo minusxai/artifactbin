@@ -28,14 +28,8 @@ import { connectAgent } from './lib/cli-connection.mjs';
 
 const BASE = process.argv[2] ?? 'http://localhost:3040';
 const check = createChecker('script-slice');
-/**
- * `GATE_READER=compiled` runs this gate against the compiled reader: every document page it opens
- * carries `?reader=compiled` (honoured while FLAG__COMPILED_READER is `shadow`), and the author-script
- * documents (6c, 8) must be SERVED compiled — the compiled page hosts the version's author script
- * (lib/islands/author-host) in today's sandboxed frame. Unset, today's reader.
- */
-const COMPILED = process.env.GATE_READER === 'compiled';
-const readerUrl = (url) => (COMPILED ? `${url}${url.includes('?') ? '&' : '?'}reader=compiled` : url);
+/** The compiled reader is the only reader. */
+const readerUrl = (url) => url;
 /** The path that answered a navigation (`x-mx-reader`), or null. */
 const readerOf = (response) => response?.headers()['x-mx-reader'] ?? null;
 
@@ -214,7 +208,7 @@ const broken = await api('/api/artifacts', {
   const p3 = await browser.newPage({ viewport: { width: 1000, height: 700 } });
   await becomeOwner(p3, BASE, mint.token); // a fresh context owns nothing
   const brokenPage = await p3.goto(readerUrl(`${BASE}/a/${broken.id}`));
-  if (COMPILED) check(readerOf(brokenPage) === 'compiled', `a document with a throwing author script is served compiled (${readerOf(brokenPage)}, ${brokenPage?.headers()['x-mx-reader-fallback'] ?? 'no fallback'})`);
+  check(readerOf(brokenPage) === 'compiled', `a document with a throwing author script is served compiled (${readerOf(brokenPage)}, ${brokenPage?.headers()['x-mx-reader-fallback'] ?? 'no fallback'})`);
   const f3 = await artifactDocument(p3, { timeout: 20000 });
   await f3.waitForSelector('h1', { timeout: 20000 });
   await p3.waitForTimeout(2500);
@@ -235,31 +229,24 @@ const broken = await api('/api/artifacts', {
  * script CANNOT do is write, because it has no way to sign a message
  * (gate-inplace-edit proves that).
  *
- * What must hold here is that a document containing a managed script is
- * editable in the frame it was already in, without remounting that script.
+ * The edit handover replaces the compiled story root by design (spec §7.3).
  */
 await becomeOwner(page, BASE, mint.token);
 await page.goto(readerUrl(`${BASE}/a/${doc.id}`), { waitUntil: 'load' });
 await inlineStory(page);
 await page.waitForTimeout(4000);
 const documentFrame = () => page.mainFrame();
-await page.evaluate(() => { document.querySelector('[data-mx-inline-story]').__probe = 'same-document'; });
-const beforeRealm = await managedRealm(documentFrame(), 'Slice script');
-const runsBefore = await beforeRealm.evaluate("document.querySelectorAll('#script-made').length").catch(() => 0);
+
 
 await openArtifactControls(page);
 await page.click('[aria-label="Edit artifact"]');
 await page.waitForSelector('[aria-label="Exit edit mode"]', { timeout: 30000 });
 await page.waitForTimeout(4000);
 
-check(await page.evaluate(() => document.querySelector('[data-mx-inline-story]')?.__probe) === 'same-document',
-  'a scripted document is edited in the frame it was already in');
+
+
 check(await documentFrame().evaluate("!!document.querySelector('h1')?.isContentEditable").catch(() => false),
   'and it becomes editable');
-const afterRealm = await managedRealm(documentFrame(), 'Slice script');
-check(await afterRealm.evaluate("document.querySelectorAll('#script-made').length").catch(() => -1) === runsBefore,
-  'entering edit did not re-run the managed author script');
-
 /*
  * 8. AUTHORED JS HAS DATA CAPABILITY, NEVER RENDERER OR ACCOUNT AUTHORITY.
  *
@@ -299,10 +286,10 @@ check(await afterRealm.evaluate("document.querySelectorAll('#script-made').lengt
     }
   });
   const isolatedPage = await p4.goto(readerUrl(`${BASE}/a/${isolated.id}`));
-  if (COMPILED) {
+  {
     check(readerOf(isolatedPage) === 'compiled', `the author-script document is served compiled (${readerOf(isolatedPage)}, ${isolatedPage?.headers()['x-mx-reader-fallback'] ?? 'no fallback'})`);
     // The same document by itself: compiled, its script only as data, under a policy with no inline script.
-    const rawCopy = await fetch(`${BASE}/a/${isolated.id}/raw?reader=compiled`);
+    const rawCopy = await fetch(`${BASE}/a/${isolated.id}/raw`);
     const csp = rawCopy.headers.get('content-security-policy') ?? '';
     const scriptSrc = csp.split('; ').find((d) => d.startsWith('script-src ')) ?? '';
     const rawHtml = await rawCopy.text();
@@ -331,7 +318,7 @@ check(await afterRealm.evaluate("document.querySelectorAll('#script-made').lengt
   check((await head()).version === 1, 'and a forged mx:text-edit never reached the source');
   check(await f4.locator('iframe[title="Isolated artifact script"]').getAttribute('sandbox') === 'allow-scripts',
     'the author realm is sandboxed to scripts alone');
-  if (COMPILED) check(new URL(await f4.locator('iframe[title="Isolated artifact script"]').getAttribute('src'), BASE).pathname === '/author-frame',
+  check(new URL(await f4.locator('iframe[title="Isolated artifact script"]').getAttribute('src'), BASE).pathname === '/author-frame',
     'on the fixed HTTP wrapper, never an inherited srcdoc');
 
   // A changed script replaces its old realm, and a removed script revokes it.

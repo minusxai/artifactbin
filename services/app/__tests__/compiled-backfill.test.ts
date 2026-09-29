@@ -5,7 +5,7 @@
  * already stored, and reports the census from the database. Real routes and the harness's database; the
  * server is the app's own handler, reached as the script reaches it over HTTP.
  */
-import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { useAppHarness, request } from '@/__tests__/harness';
 import { observedRequest } from '@/__tests__/conditional-request';
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
@@ -14,7 +14,6 @@ import { createAppServer } from '@/server/app';
 import { mintToken } from '@/lib/tokens';
 import { claimToken, createUser, ensureUsername } from '@/lib/users';
 import { drainPreparedPageWarmups } from '@/lib/story/prepared-page.server';
-import { setCompiledReaderFlagForTests } from '@/lib/compiled-page/reader-mode';
 import { loadCompilerBuild } from '@/lib/compiled-page/build.server';
 import { mintExportKey } from '@/lib/export-key';
 import { backfillCompiledPages, type BackfillOptions } from '@/lib/compiled-page/backfill.server';
@@ -24,8 +23,6 @@ const harness = useAppHarness();
 const app = createAppServer({ indexHtml: async () => '<!doctype html><html><head><title>x</title></head><body><div id="root"></div></body></html>' });
 const BASE = 'http://localhost';
 
-afterAll(() => setCompiledReaderFlagForTests(null));
-beforeAll(() => setCompiledReaderFlagForTests('shadow'));
 
 async function publish(token: string, body: Record<string, unknown>): Promise<string> {
   const made = await createArtifactRoute(request('/api/artifacts', { method: 'POST', token, json: body }));
@@ -61,7 +58,7 @@ describe('backfillCompiledPages', () => {
     ];
     const db = await harness.db();
     await db.query(`UPDATE prepared_pages SET page = jsonb_set(page, '{compiled,build}', '"0000000000000000"'), page_key = regexp_replace(page_key, ':[^:]+$', ':0000000000000000') WHERE artifact_id = $1`, [stale]);
-    // Prepared while the deployment compiled nothing (its key names the switch `off`).
+    // A prepared page with its stored compile removed.
     await db.query(`UPDATE prepared_pages SET page = page - 'compiled', page_key = regexp_replace(page_key, ':[^:]+$', ':off') WHERE artifact_id = $1`, [missing]);
     await db.query(`DELETE FROM prepared_pages WHERE artifact_id = $1`, [never]);
     // A dry run reads and counts: nothing is requested, nothing written.
@@ -79,7 +76,7 @@ describe('backfillCompiledPages', () => {
     expect(report.errors).toEqual([]);
     expect(report.fallbacks).toEqual({});
     // Every request is the reader's door with a key: never the capture (`chrome=0`), never a session.
-    for (const url of first.asked) expect(new URL(url).searchParams.get('reader')).toBe('compiled');
+    for (const url of first.asked) expect(new URL(url).searchParams.has('reader')).toBe(false);
     for (const url of first.asked) expect(new URL(url).searchParams.has('chrome')).toBe(false);
     const warmedIds = first.asked.map((url) => new URL(url).pathname.split('/')[2]);
     for (const id of [stale, missing, never]) expect(warmedIds).toContain(id);
@@ -114,17 +111,5 @@ describe('backfillCompiledPages', () => {
     for (const version of archived) expect(after[`${id}/v:${version}`], `v:${version}`).toBe(loadCompilerBuild().id);
   });
 
-  it('still compiles when the retained reader flag says off', async () => {
-    const token = await owner();
-    await publish(token, { title: 'off', markup: '<p>Off</p>', visibility: 'public' });
-    setCompiledReaderFlagForTests('off');
-    try {
-      const off = server();
-      const report = await backfillCompiledPages({ db: await harness.db(), base: BASE, fetch: off.fetch, mintKey: (a) => mintExportKey(a) });
-      expect(report.errors).toEqual([]);
-      expect(off.asked).toHaveLength(1);
-    } finally {
-      setCompiledReaderFlagForTests('shadow');
-    }
-  });
+
 });

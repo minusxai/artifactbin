@@ -12,6 +12,7 @@ import { capabilityOf, startSpaIdle, stampSavedTheme, takeChromeIntent } from '.
 import { clearInitialStory } from '../initial-story';
 import { THEME_BOOTSTRAP_SCRIPT } from '@/lib/theme-bootstrap';
 import { installIslandDocument, islandDocumentOf } from '@/lib/islands/handover';
+import { reportInitialArtifactView, initialViewWasReported } from '../artifact-view-report';
 import type { IslandDocument } from '@/lib/islands/contract';
 
 const fakeDocument = (root: HTMLElement): IslandDocument & { disposed: number; modes: string[] } => {
@@ -45,6 +46,20 @@ describe('scheduleSpaBoot', () => {
     scheduleSpaBoot(load, { idleMs: 2000 });
     vi.advanceTimersByTime(2001);
     expect(load).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('compiled first view', () => {
+  it('reports the visible document before the app loads and marks it for React deduplication', () => {
+    const fetcher = vi.fn(async () => new Response(null, { status: 204 }));
+    vi.stubGlobal('fetch', fetcher);
+    window.history.replaceState(null, '', '/a/first');
+    reportInitialArtifactView(window);
+    expect(fetcher).toHaveBeenCalledWith('/api/page/artifact/first/view', expect.objectContaining({ method: 'POST' }));
+    expect(initialViewWasReported(document, 'first')).toBe(true);
+    expect(initialViewWasReported(document, 'second')).toBe(false);
+    vi.unstubAllGlobals();
+    window.history.replaceState(null, '', '/');
   });
 });
 

@@ -43,10 +43,23 @@ and shares do not, and the original is never touched. The copy's footer says whe
 source only when that source is `public`, since `unlisted` exists to be listed
 nowhere.
 
-Pages run behind a strict CSP: inline script/style allowed, **all external
-network blocked**, and a `sandbox` directive gives each artifact an opaque
+Pages run behind a strict CSP: styles are allowed, executable inline scripts
+are refused on compiled standalone pages, **all external network blocked**,
+and a `sandbox` directive gives each artifact an opaque
 origin so it can't touch the app's storage. Documents are always
 self-contained — but you don't have to make them so by hand.
+
+**Compiled reader.** Published documents are prepared as static HTML with
+small interactive islands. `/a/<id>` serves that HTML with reader chrome;
+`/a/<id>/raw`, custom-domain posts and exports use the same assembled document
+without app chrome. The response identifies the served path with
+`x-mx-reader: compiled`. A missing, stale or refused compile is recompiled
+within the read budget or returns a failure with its reason in
+`x-mx-reader-fallback`; access checks run before the response. A prose page
+needs no island module.
+Interactive pages load only their needed same-origin, content-addressed chunks.
+The compiled standalone page uses `script-src 'self'`: its data is inert JSON,
+not executable inline script, and author strings never become generated code.
 
 Author scripts run in a second opaque child reached through the fixed
 `/author-frame` wrapper, never in the visible renderer. The page carries the

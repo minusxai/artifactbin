@@ -143,6 +143,7 @@ export function createFrameEditSession({
   let nodes: JsxNode[] = [];
   let nodesContent = JSON.stringify(nodes);
   let active: ActiveHost | null = null;
+  let pendingTextPath: string | null = null;
   let selectedPath: string | null = null;
   /**
    * TYPING (a caret in text: no outline, no handles) or BLOCK SELECTED (the
@@ -315,18 +316,19 @@ export function createFrameEditSession({
   };
 
   /** Send what a host now holds, if the user really changed it. */
-  const commitHost = (host: ActiveHost | null) => {
-    if (!host || !host.userEdited) return;
+  const commitHost = (host: ActiveHost | null): boolean => {
+    if (!host || !host.userEdited) return false;
     const innerHtml = channel.innerHtmlOf(host.el);
-    if (innerHtml === host.snapshot) return;
+    if (innerHtml === host.snapshot) return false;
     host.snapshot = innerHtml;
     host.userEdited = false;
     reportTyping(false);
     post({ type: STORY_TEXT_EDIT_MESSAGE, path: host.path, innerHtml });
+    return true;
   };
 
   const hostSession = {
-    isEditing: (path: string) => active?.path === path,
+    isEditing: (path: string) => active?.path === path || pendingTextPath === path,
     onFocus(path: string, el: HTMLElement) {
       lastView = null;
       active = { path, el, snapshot: channel.innerHtmlOf(el), userEdited: false };
@@ -339,9 +341,9 @@ export function createFrameEditSession({
     onBlur(_path: string) {
       const host = active;
       active = null;
-      commitHost(host);
+      pendingTextPath = commitHost(host) && host ? host.path : null;
       reportTyping(false);
-      requestRender(); // the focus guard is released; let React reconcile again
+      requestRender(); // Keep a changed host's DOM until its source update reaches the runtime.
     },
   };
 
@@ -953,6 +955,7 @@ export function createFrameEditSession({
         return;
       }
       nodesContent = nextContent;
+      pendingTextPath = null;
       chrome.cancel();
       blockSelection.clear();
       nodes = next;

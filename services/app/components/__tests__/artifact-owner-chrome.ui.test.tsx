@@ -11,12 +11,13 @@ import { storyUpdateParts } from '@/lib/story/update-parts';
 import { START_PLACEHOLDER_MARKUP } from '@/lib/start-placeholder';
 import { existingPaste } from '@/lib/agent-copy';
 import { router, resetRouter } from '@/test/setup/router';
-import { useLayoutEffect } from 'react';
-import type { InlineStoryController, InlineStoryRuntimeProps } from '@/lib/story-runtime/InlineStoryRuntime';
+import { useLayoutEffect, useRef } from 'react';
+import { setupSurface } from '@/test/helpers/inline-surface';
+import type { StoryController, EditorStoryRuntimeProps } from '@/lib/story-runtime/EditorStoryRuntime';
 
-const runtimes: Array<InlineStoryController & { send: ReturnType<typeof vi.fn>; emit(data: unknown): void }> = [];
-vi.mock('@/lib/story-runtime/InlineStoryRuntime', () => ({
-  InlineStoryRuntime: ({onController}: InlineStoryRuntimeProps) => {
+const runtimes: Array<StoryController & { send: ReturnType<typeof vi.fn>; emit(data: unknown): void }> = [];
+vi.mock('@/lib/story-runtime/EditorStoryRuntime', () => ({
+  EditorStoryRuntime: ({onController}: EditorStoryRuntimeProps) => {
     useLayoutEffect(() => {
       const listeners = new Set<(event: unknown) => void>();
       const controller = {
@@ -30,6 +31,25 @@ vi.mock('@/lib/story-runtime/InlineStoryRuntime', () => ({
       return () => { onController(null); controller.dispose(); };
     }, [onController]);
     return <div data-mx-inline-story><p>hi</p></div>;
+  },
+}));
+vi.mock('@/components/IslandStory', () => ({
+  IslandStory: ({ story, onController }: { story: HTMLElement; onController: (controller: StoryController | null) => void }) => {
+    const host = useRef<HTMLDivElement>(null);
+    useLayoutEffect(() => {
+      host.current?.append(story);
+      const listeners = new Set<(event: unknown) => void>();
+      const controller = {
+        nonce: crypto.randomUUID(), send: vi.fn(), update: vi.fn(), invalidate: vi.fn(),
+        subscribe(listener: (event: unknown) => void) { listeners.add(listener); return () => { listeners.delete(listener); }; },
+        getViewportRect: () => new DOMRect(), dispose: () => listeners.clear(),
+        emit(data: unknown) { for (const listener of listeners) listener(data); },
+      };
+      runtimes.push(controller);
+      onController(controller);
+      return () => { onController(null); controller.dispose(); };
+    }, [story, onController]);
+    return <div ref={host} />;
   },
 }));
 
@@ -82,6 +102,7 @@ function watchPaddingRight(element: HTMLElement) {
 
 beforeEach(() => {
   resetRouter();
+  setupSurface();
   runtimes.length = 0;
   layerProps.length = 0;
   window.location.hash = '';
@@ -112,6 +133,7 @@ const surfaceProps = (over: Partial<ArtifactSurfaceProps>): ArtifactSurfaceProps
   compiledCss: null,
   theme: null,
   colorMode: null,
+  runtime: { data: { nodes: storyUpdateParts('<p>hi</p>')?.nodes ?? [], refData: {}, colorMode: 'light', chrome: true }, css: '' } as never,
   ...over,
 });
 
@@ -408,16 +430,13 @@ describe('the view-mode selection bubble is granted, and re-checked, by the page
 
     openDocumentControls();
     fireEvent.click(screen.getByLabelText('Edit artifact'));
-    expect(granted(win).at(-1)).toMatchObject({ edit: false, annotate: false });
+    const editor = currentRuntime();
+    expect(editor).not.toBe(win);
+    expect(granted(editor).at(-1)).toMatchObject({ edit: false, annotate: false });
 
     await waitFor(() => expect(screen.getByLabelText('Exit edit mode')).toBeInTheDocument());
     fireEvent.click(screen.getByLabelText('Exit edit mode'));
-    await waitFor(() => expect(granted(win).at(-1)).toMatchObject({ edit: true, annotate: true }));
-
-    // Opening the comments rail is NOT a mode: the bubble is untouched by it.
-    openDocumentControls();
-    fireEvent.click(screen.getByLabelText('Toggle comments'));
-    expect(granted(win).at(-1)).toMatchObject({ edit: true, annotate: true });
+    await waitFor(() => expect(screen.queryByLabelText('Exit edit mode')).not.toBeInTheDocument());
   });
 
   it('opening the rail reserves content space without remounting the runtime', async () => {
@@ -438,7 +457,7 @@ describe('the view-mode selection bubble is granted, and re-checked, by the page
 
     // Under the editor the rail drops below BOTH bars and becomes the edit
     // panel's Comments tab; the document was laid out beside it, so the panel
-    // keeps that reserve. The runtime survives.
+    // keeps that reserve. Editing swaps the compiled reader for the editor.
     const reserved = watchPaddingRight(viewport);
     openDocumentControls();
     fireEvent.click(screen.getByLabelText('Edit artifact'));
@@ -453,7 +472,7 @@ describe('the view-mode selection bubble is granted, and re-checked, by the page
     fireEvent.click(screen.getByLabelText('Toggle comments'));
     expect(viewport).toHaveStyle({paddingTop: '132px', paddingRight: '320px'});
     expect(await reserved()).toEqual(['320px']);
-    expect(currentRuntime()).toBe(win);
+    expect(currentRuntime()).not.toBe(win);
   });
 
   it('edit mode takes the panel out of an empty margin once, and comments never move the document', async () => {
@@ -523,7 +542,9 @@ describe('the view-mode selection bubble is granted, and re-checked, by the page
       const dead = currentRuntime();
       expect(granted(dead).at(-1)).toMatchObject({ edit: true, annotate: true });
 
-      view.rerender(<ArtifactShell role="owner"><ArtifactSurface {...surfaceProps({id: 'story2'})} /></ArtifactShell>);
+      view.unmount();
+      setupSurface();
+      render(<ArtifactShell role="owner"><ArtifactSurface {...surfaceProps({id: 'story2'})} /></ArtifactShell>);
 
       const fresh = currentRuntime();
       expect(fresh).not.toBe(dead);

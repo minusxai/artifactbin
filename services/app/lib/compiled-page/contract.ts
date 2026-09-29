@@ -11,7 +11,7 @@
  * Owners (one per module; see the parallel plan):
  *   compiler.ts         compilePage            w2-compiler
  *   modules.server.ts   ModuleStore            w1-assembler
- *   reader-mode.ts      readerModeFor          step 0 (landed)
+ *   reader-mode.ts      compiledReaderForView w4-flip-docs
  *   plan.ts             planOf                 w1-planners
  *   snapshots.server.ts SnapshotStore          w1-snapshots
  *   charts.server.ts    drawn charts           w1-planners
@@ -19,28 +19,18 @@
  *   links.ts            linkHintsOf            w1-planners
  */
 import type { JsxNode } from '@/lib/jsx';
-import type { OutlineEntry } from '@/lib/story-runtime/outline';
 import type { CompiledDataflow, CompiledReads } from '@/lib/story/compiled-dataflow';
 import type { Scalar } from '@/lib/story/dataflow';
 import type { RefDataMap } from '@/lib/story/ref-data';
 import type { GlyphMap } from '@/lib/story-ui/icon-contract';
 import type { ReaderChromeInput } from '@/lib/story/reader-chrome';
+import type { OutlineEntry } from '@/lib/story-runtime/outline';
 import type { ServedResults, StoredMermaidImage, StoryViewer } from '@/lib/story-runtime/contract';
 import type { AgentDiscovery } from '@/lib/agent-discovery-tags';
 
 /* ────────────────────────────────────────────────────────────────────────────
- * The reader mode switch and how a response names its path
+ * How a response names its reader path
  * ──────────────────────────────────────────────────────────────────────────── */
-
-/** `FLAG__COMPILED_READER` (lib/config COMPILED_READER). */
-export type CompiledReaderFlag = 'off' | 'shadow' | 'on';
-export const COMPILED_READER_FLAGS: readonly CompiledReaderFlag[] = ['off', 'shadow', 'on'];
-
-/** Which renderer answers one request. */
-export type ReaderMode = 'compiled' | 'legacy';
-
-/** The query parameter a request may carry (`?reader=compiled|legacy`), honoured only when the flag is not `off`. */
-export const READER_MODE_PARAM = 'reader';
 
 /**
  * Every document response names the path that produced it, so the parity gate
@@ -200,6 +190,7 @@ export const isCompileFailure = (stored: StoredCompile): stored is CompileFailur
 
 /** What the SSR module renders the islands from: the declared dataflow plus a snapshot's answers, and the version's drawings. */
 export interface IslandRenderData {
+  colorMode?: 'light' | 'dark';
   values: Record<string, Scalar>;
   state?: import('@/lib/story/dataflow').DataflowState;
   assetsUrl?: string;

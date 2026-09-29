@@ -49,6 +49,50 @@ async function inputOf(source: string, template: string | null = null): Promise<
 const dom = (html: string) => new JSDOM(`<div id="r">${html}</div>`).window.document.getElementById('r')!;
 
 describe('compilePage', () => {
+  it('keeps notification definitions out of externalized reader flow data', async () => {
+    const source = `<Helmet><Import name="sales" src="ref:SALES1" /><Value name="padding" type="string" default="${'x'.repeat(2000)}" /><Mutation name="change">{\`UPDATE sales.rows SET revenue = revenue + 1\`}</Mutation><Notify name="server_notice" on="change">{\`SELECT null AS "to", 'private-notification-sql' AS message\`}</Notify></Helmet><p>Public content</p>`;
+    const input = await inputOf(source);
+    const store = createModuleStore();
+    const built = await buildDocumentModules(generate(input), { build: loadCompilerBuild(), flow: input.flow, values: declaredValues(input.flow), imports: await standInImports(), store, boot: true });
+    expect(built.html).toContain('data-mx-module-data');
+    const readerFlow = JSON.parse(dom(built.html).querySelector('[data-mx-module-data]')!.textContent!).moduleData.at(-1);
+    expect(readerFlow.notifications).toBeUndefined();
+    expect(readerFlow.mutations[0].notifies).toBe(true);
+    const browser = new TextDecoder().decode((await store.get(built.module!.sha))!);
+    for (const output of [built.html, browser]) {
+      expect(output).not.toContain('server_notice');
+      expect(output).not.toContain('private-notification-sql');
+    }
+  });
+
+  it('moves only large used hoisted props into page data', async () => {
+    const note = 'literal-prop-' + 'x'.repeat(2_000);
+    const generated = generate(await inputOf(`<Question id="q" viz={{kind:"table",note:${JSON.stringify(note)}}} />`));
+    expect(generated.moduleData).toContain(JSON.stringify({ kind: 'table', note }));
+    expect(generated.browserIslands).not.toContain(note);
+    expect(generated.islands).toContain(note);
+  });
+  it('measures the synthetic 10 MB table module before and after', async () => {
+    const rows = Array.from({ length: 100 }, (_, i) => ({ label: `row ${i}: ${'x'.repeat(100_000)}` }));
+    const input = await inputOf(`<Helmet><Value name="rows" type="table" value={${JSON.stringify(rows)}} /></Helmet><For each={$rows}><p>$_row.label</p></For>`);
+    const generated = generate(input);
+    const build = loadCompilerBuild();
+    const before = await browserModuleCode(generated.islands, build, input.flow);
+    const flowIndex = generated.moduleData.length;
+    const islands = generated.moduleData.length ? generated.browserIslands : `const $moduleData = JSON.parse(document.getElementById("mx-story-data").textContent).moduleData;\n${generated.browserIslands}`;
+    const after = await browserModuleCode(islands, build, input.flow, flowIndex);
+    expect(Buffer.byteLength(JSON.stringify(rows))).toBeGreaterThan(10_000_000);
+    expect(Buffer.byteLength(before.code)).toBeGreaterThan(10_000_000);
+    expect(Buffer.byteLength(after.code)).toBeLessThan(4_000);
+  });
+  it('keeps a large literal table out of the browser module and carries it in the page', async () => {
+    const rows = Array.from({ length: 120 }, (_, i) => ({ label: `row ${i}: ${'x'.repeat(180)}` }));
+    const source = `<Helmet><Value name="rows" type="table" value={${JSON.stringify(rows)}} /></Helmet><For each={$rows}><p>$_row.label</p></For>`;
+    const page = await compilePage(await inputOf(source), loadCompilerBuild());
+    expect(page.module).not.toBeNull();
+    expect(page.module!.bytes).toBeLessThan(4_000);
+    expect(page.html).toContain(rows[0]!.label);
+  });
   it('compiles a native Value input as a live binding', async () => {
     const source = '<Helmet><Value name="region" type="string" default="west" /></Helmet><input aria-label="Region" value="$region" />';
     const generated = generate(await inputOf(source));

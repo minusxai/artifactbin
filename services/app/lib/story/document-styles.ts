@@ -19,9 +19,9 @@ import { documentFontCss, type DocumentFonts } from './document-fonts';
 export const DOCUMENT_ROOT_CSS = ':root { --mx-vh: 100vh; } body { margin: 0; }';
 
 /** A domain post's one line of attribution: theme-neutral, it inherits the document's colour and face and only quiets them. */
+export const DOMAIN_FOOTER_TEXT = 'Made with';
 export const DOMAIN_FOOTER_CSS = '[data-mx-domain-footer]{box-sizing:border-box;max-width:100%;margin:0;padding:40px 16px 48px;text-align:center;font-size:13px;line-height:1.5;opacity:.65}'
   + '[data-mx-domain-footer] a{color:inherit;text-decoration:underline;text-underline-offset:2px}';
-export const DOMAIN_FOOTER_TEXT = 'Made with';
 
 export interface DocumentStylesInput {
   /** The version's compiled Tailwind (lib/data/story/story-css.server currentStoryCss), or none. */

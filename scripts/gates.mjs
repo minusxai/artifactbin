@@ -3,7 +3,6 @@
  * Run the browser gates as a SET.
  *
  *   node scripts/gates.mjs [base-url ...] [--only=a,b] [--list] [--servers=N] [--shard=i/n]
- *   node scripts/gates.mjs --browsers|--needs-postgres --shard=i/n
  *
  * The set is DISCOVERED from disk — a new `scripts/gate-*.mjs` joins by
  * existing — and every gate must have a row in gates.manifest.mjs, which says
@@ -27,7 +26,7 @@ import net from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { GATE_SPECS, ISOLATED_GATES, checkLegs, checkManifest, compiledLegNames, gateNamesOnDisk, gateOf, isCompiledLeg, specFor, browsersFor, shardWeight } from './gates.manifest.mjs';
+import { GATE_SPECS, ISOLATED_GATES, checkManifest, gateNamesOnDisk, specFor, browsersFor, shardWeight } from './gates.manifest.mjs';
 import { resolveServers, runSecret } from './gates.servers.mjs';
 import { parseShard, shardOf } from './gates.shard.mjs';
 import { loadDotEnv } from './lib/dev-env.mjs';
@@ -56,48 +55,32 @@ try {
 }
 
 /** Every gate on disk, by short name (`gate-visibility.mjs` → `visibility`). */
-const DISK = gateNamesOnDisk(readdirSync(HERE)).map((name) => ({ name, file: `gate-${name}.mjs` }));
+const GATES = gateNamesOnDisk(readdirSync(HERE)).map((name) => ({ name, file: `gate-${name}.mjs` }));
 
 try {
-  checkManifest(DISK.map((gate) => gate.name), GATE_SPECS);
-  checkLegs(DISK.map((gate) => gate.name));
+  checkManifest(GATES.map((gate) => gate.name), GATE_SPECS);
 } catch (error) {
   console.error(String(error));
   process.exit(2);
 }
-
-/**
- * The set: every gate, then its compiled leg where it has one (`<gate>@compiled`, gates.manifest
- * COMPILED_LEGS) — the same file, run against the compiled reader. A disabled leg runs only when named.
- */
-const legsOf = (names) => names.map((name) => ({ name, file: `gate-${gateOf(name)}.mjs` }));
-const GATES = [...DISK, ...legsOf(compiledLegNames())];
-const EVERY = [...DISK, ...legsOf(compiledLegNames({ all: true }))];
 
 if (args.includes('--list')) {
   for (const g of GATES) console.log(g.name);
   process.exit(0);
 }
 
-const chosen = only ? EVERY.filter((g) => only.includes(g.name)) : GATES;
+const chosen = only ? GATES.filter((g) => only.includes(g.name)) : GATES;
 // The shard is taken AFTER --only, so `--only=a,b --shard=1/2` means "half of
 // those two" rather than "whichever of them fell in shard 1 of the whole set".
 const selected = shard
   ? (() => {
-      const names = shardOf(chosen.map((g) => g.name), shard, shardWeight, { isolated: shard.total === 11 ? ISOLATED_GATES : [] });
+      const names = shardOf(chosen.map((g) => g.name), shard, shardWeight, { isolated: shard.total === 12 ? ISOLATED_GATES : [] });
       return chosen.filter((g) => names.includes(g.name));
     })()
   : chosen;
 if (selected.length === 0) {
-  console.error(`No gate matched --only=${only?.join(',')}. Known: ${EVERY.map((g) => g.name).join(', ')}`);
+  console.error(`No gate matched --only=${only?.join(',')}. Known: ${GATES.map((g) => g.name).join(', ')}`);
   process.exit(2);
-}
-
-// CI setup needs the same shard selection as execution: only the shard with
-// postgres-datasets pulls its image before the browser gates start.
-if (args.includes('--selected')) {
-  for (const gate of selected) console.log(gate.name);
-  process.exit(0);
 }
 
 // Provisioning uses the same discovery and shard selection as execution, without booting hosts.
@@ -106,7 +89,7 @@ if (args.includes('--browsers')) {
   process.exit(0);
 }
 if (args.includes('--needs-postgres')) {
-  console.log(selected.some((gate) => gateOf(gate.name) === 'postgres-datasets'));
+  console.log(selected.map((gate) => gate.name).includes('postgres-datasets'));
   process.exit(0);
 }
 
@@ -142,7 +125,7 @@ const scratch = path.join(os.tmpdir(), `artifact-gates-${process.pid}`);
  * secret, the mail endpoint, S3 if the caller set one — is inherited, because
  * a gate run is only as honest as the environment it runs against.
  */
-async function bootServer(index, mailOutbox, authSecret, readerFlag = process.env.FLAG__COMPILED_READER || 'shadow') {
+async function bootServer(index, mailOutbox, authSecret) {
   if (!existsSync(BUNDLE)) {
     console.error(`--servers needs a build: ${path.relative(ROOT, BUNDLE)} is missing. Run \`npm run build\`.`);
     process.exit(2);
@@ -190,11 +173,7 @@ async function bootServer(index, mailOutbox, authSecret, readerFlag = process.en
       // The PostgreSQL gate likewise uses a disposable loopback database,
       // matching the CI browser-gate environment rather than production.
       DATASET__ALLOW_PRIVATE_NETWORKS: 'true',
-      // The compiled reader is compiled and served on request (`?reader=compiled`) while readers keep
-      // today's renderer, so gate-compiled-parity compares the two (docs/phase2-architecture.md §10).
-      // A run may ask for another setting (`on`) through the environment (scripts/gate-container.mjs forwards it).
-      // The compiled legs' servers boot with `on` (every reader page compiled wherever a compile exists).
-      FLAG__COMPILED_READER: readerFlag,
+
       ...(mailOutbox ? { EMAIL__DEV_OUTBOX_PATH: mailOutbox } : {}),
     },
   });
@@ -236,10 +215,10 @@ if (servers > 0) {
   loadDotEnv();
   authSecret = runSecret(process.env);
 }
-/** One pool of `servers` servers (`readerFlag`: the compiled reader switch, `on` for the compiled legs' pool). */
-async function bootPool(readerFlag, offset) {
-  const pool = await Promise.all(Array.from({ length: servers }, (_, i) => bootServer(offset + i, mailOutbox, authSecret, readerFlag)));
-  console.log(`booted ${servers} server(s)${readerFlag === 'on' ? ' with the compiled reader on' : ''}${serversFrom === 'default' ? ' (one per core, capped — pass --servers=N to choose, or a base URL to drive a server you already have)' : ''} — ${pool.join(' ')}\n`);
+/** Boot one pool of isolated compiled-reader servers. */
+async function bootPool() {
+  const pool = await Promise.all(Array.from({ length: servers }, (_, i) => bootServer(i, mailOutbox, authSecret)));
+  console.log(`booted ${servers} server(s)${serversFrom === 'default' ? ' (one per core, capped — pass --servers=N to choose, or a base URL to drive a server you already have)' : ''} — ${pool.join(' ')}\n`);
   return pool;
 }
 if (servers === 0 && bases.length === 0) {
@@ -256,8 +235,7 @@ const run = (gate, base, timeoutMs) => new Promise((resolve) => {
   const started_at = Date.now();
   const child = spawn(process.execPath, [path.join(HERE, gate.file), base], {
     stdio: ['ignore', 'pipe', 'pipe'],
-    // A compiled leg is its gate told which reader it drives (every gate reads GATE_READER).
-    env: { ...process.env, ...(mailOutbox ? { EMAIL__DEV_OUTBOX_PATH: mailOutbox } : {}), ...(isCompiledLeg(gate.name) ? { GATE_READER: 'compiled' } : {}) },
+    env: { ...process.env, ...(mailOutbox ? { EMAIL__DEV_OUTBOX_PATH: mailOutbox } : {}) },
   });
   let output = '';
   let settled = false;
@@ -296,14 +274,6 @@ const timings = [];
 const wall = Date.now();
 let widest = 0;
 
-/**
- * A worker: the server a gate runs against, and the one a compiled leg does (booted with the compiled
- * reader on). Driving servers someone else started, both are that server.
- * @typedef {{ plain: string, compiled: string }} Worker
- */
-/** @param {Worker} worker @param {{ name: string }} gate */
-const serverFor = (worker, gate) => (isCompiledLeg(gate.name) ? worker.compiled : worker.plain);
-
 /** Run `gates` over `workers`: one queue, each worker pulling the next gate, then one retry alone for what failed under load. */
 async function runSet(gates, workers) {
   widest = Math.max(widest, workers.length);
@@ -323,7 +293,7 @@ async function runSet(gates, workers) {
       const spec = specFor(gate.name);
       const { ok, output, seconds } = await withinSerialGroup(
         spec.serialGroup,
-        () => run(gate, serverFor(worker, gate), spec.timeoutMs),
+        () => run(gate, worker, spec.timeoutMs),
       );
       timings.push({ name: gate.name, seconds });
       if (!ok) setFailed.push(gate.name);
@@ -353,7 +323,7 @@ async function runSet(gates, workers) {
     for (const name of [...setFailed]) {
       const gate = gates.find((g) => g.name === name);
       const spec = specFor(gate.name);
-      const { ok, output, seconds } = await run(gate, serverFor(workers[0], gate), spec.timeoutMs);
+      const { ok, output, seconds } = await run(gate, workers[0], spec.timeoutMs);
       if (!ok) { console.log(output.trimEnd()); continue; }
       setFailed.splice(setFailed.indexOf(name), 1);
       retried.push(name);
@@ -363,18 +333,7 @@ async function runSet(gates, workers) {
   failed.push(...setFailed);
 }
 
-const hasLegs = selected.some((gate) => isCompiledLeg(gate.name));
-let workers;
-if (servers > 0) {
-  // A compiled leg runs on a server that serves the compiled page to every reader: each worker holds one
-  // of those beside its ordinary server, booted together, so the legs share the workers' queue rather than
-  // waiting for the rest of the set to finish. An idle server costs next to nothing.
-  const [plainPool, compiledPool] = await Promise.all([bootPool(undefined, 0), hasLegs ? bootPool('on', servers) : Promise.resolve([])]);
-  workers = plainPool.map((plain, i) => ({ plain, compiled: compiledPool[i] ?? plain }));
-} else {
-  // Driving servers someone else started: they serve whatever reader they were started with.
-  workers = bases.map((base) => ({ plain: base, compiled: base }));
-}
+const workers = servers > 0 ? await bootPool() : bases;
 await runSet(selected, workers);
 
 // The servers are OURS and they outlive the last gate: node keeps running

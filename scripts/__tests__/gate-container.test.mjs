@@ -49,7 +49,6 @@ describe('checkGates', () => {
 
   it('refuses a gate that needs the host’s Docker, with the reason, and only gates that exist', () => {
     expect(() => checkGates(['postgres-datasets'], known)).toThrow(/postgres-datasets cannot run in a gate container: it starts its own Postgres/);
-    expect(() => checkGates(['postgres-datasets@compiled'], [...known, 'postgres-datasets@compiled'])).toThrow(/postgres-datasets@compiled cannot run in a gate container: it starts its own Postgres/);
     for (const name of Object.keys(CONTAINER_REFUSALS)) expect(known).toContain(name);
   });
 });
@@ -109,11 +108,4 @@ describe('dockerRunArgs', () => {
     expect(args.filter((_, i) => args[i - 1] === '-e')).toEqual(['DATASET__ALLOW_PRIVATE_NETWORKS=true']);
   });
 
-  it('forwards the reader switches from the runner\'s environment, and nothing else from it', () => {
-    const forwarded = dockerRunArgs({
-      name: 'n', image: 'afbin-gate:pw1-abc', volume: 'v', worktree: '/w', cpus: 4, memory: '8g', servers: 2, gates: ['compiled-parity'],
-      env: { FLAG__COMPILED_READER: 'on', GATE_READER: 'compiled', AUTH__SECRET: 'never', HOME: '/Users/me' },
-    });
-    expect(forwarded.filter((_, i) => forwarded[i - 1] === '-e')).toEqual(['DATASET__ALLOW_PRIVATE_NETWORKS=true', 'FLAG__COMPILED_READER=on', 'GATE_READER=compiled']);
-  });
 });

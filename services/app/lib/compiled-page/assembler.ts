@@ -33,9 +33,10 @@ import { STORY_CHROME_CSS } from '@/lib/story-runtime/chrome-css';
 import { OutlineRail } from '@/lib/story-runtime/outline-rail';
 import { STORY_ROOT_ID } from '@/lib/story-runtime/contract';
 import { fontPreloadTags } from '@/lib/story/first-screen-fonts';
-import { inlineStoryElement } from '@/lib/story/inline-story-html';
+import { inlineStoryElement } from '@/lib/compiled-page/story-element';
 import { escapeHtml, renderReaderChrome } from '@/lib/story/reader-chrome';
 import { APP_BAR_H } from '@/lib/story/edit-bar';
+import { APP_FONT_FACES, APP_SHELL_FONT_PRELOADS } from '@/lib/app-fonts';
 import { DOCUMENT_ROOT_CSS } from '@/lib/story/document-styles';
 import {
   CHART_SLOT_ATTR, CHART_STATE_ATTR, ISLAND_DATA_ID, SIGNED_IN_HINT_ATTR, SPA_IDLE_ATTR, SPECULATION_RULES_HEADER,
@@ -48,7 +49,8 @@ export const assembleReaderPage: AssembleReaderPage = (input: AssembleInput): As
   const help = input.head?.help ?? null;
   const module = compiled.module;
 
-  const storyHtml = fillChartSlots(input.story, input.snapshot?.drawings ?? {});
+  const { story: storySource, moduleData } = splitModuleData(input.story);
+  const storyHtml = fillChartSlots(storySource, input.snapshot?.drawings ?? {});
   const withOutline = input.documentChrome !== false && compiled.outline?.length
     ? `<div class="${compiled.outlinePlan ? 'mx-reading mx-reading--plan' : 'mx-reading'}">${renderToStaticMarkup(createElement(OutlineRail, { entries: compiled.outline }))}${storyHtml}</div>`
     : storyHtml;
@@ -58,6 +60,10 @@ export const assembleReaderPage: AssembleReaderPage = (input: AssembleInput): As
   const behaviorSrcs = unique(compiled.behaviors.map((behavior) => behaviorUrl(build, behavior)).filter((url): url is string => !!url));
   const prefetch = unique(compiled.links.prefetch.filter(isNavigable));
   const rules = speculationRulesOf(compiled.links.prerender);
+  // The app shell normally defines this body face in shell.css. A compiled first paint
+  // runs before that stylesheet, while Mermaid measures sequence labels against body.
+  const appMonoFaces = spa ? APP_FONT_FACES.filter((face) => face.family === 'JetBrains Mono Variable' && face.style === 'normal')
+    .map((face) => `@font-face{font-family:"${face.family}";font-style:${face.style};font-display:${face.display};font-weight:${face.weight};src:url("${face.url}") format("${face.format}");${face.unicodeRange ? `unicode-range:${face.unicodeRange};` : ''}}`).join('') : '';
 
   const head =
     '<meta charset="utf-8">'
@@ -69,13 +75,13 @@ export const assembleReaderPage: AssembleReaderPage = (input: AssembleInput): As
     + (chrome ? '' : '<base target="_top">')
     + `<title>${escapeHtml(input.title)}</title>`
     + headMetadata(input.head)
-    + fontPreloadTags(input.fontPreloads)
+    + fontPreloadTags(unique([...input.fontPreloads, ...(spa ? APP_SHELL_FONT_PRELOADS : [])]), Boolean(spa))
     + islandPreloads.map(modulePreload).join('')
     + prefetch.map((href) => `<link rel="prefetch" href="${escapeHtml(href)}" as="document">`).join('')
     + (input.sheets
       // Today's standalone document's sheets, exactly (lib/story/document-styles).
       ? `<style>${DOCUMENT_ROOT_CSS}</style>` + input.sheets.map((sheet) => styleTag(sheet.attr, sheet.css)).join('')
-      : '<style>:root{--mx-vh:100vh}body{margin:0}</style>')
+      : `<style>${appMonoFaces}:root{--mx-vh:100vh${spa ? ';--font-mono:"JetBrains Mono Variable",ui-monospace,"SF Mono",Menlo,monospace' : ''}}body{margin:0${spa ? ';font-size:14px;font-family:var(--font-mono)' : ''}}</style>`)
     + (chrome ? styleTag('data-mx-chrome', STORY_CHROME_CSS) : '')
     // The page the app adopts (/a/:id): its bar is the top of the page from a phone's width up, so the
     // story reserves it before first paint and the app's arrival moves nothing. On <body>: the story
@@ -89,7 +95,7 @@ export const assembleReaderPage: AssembleReaderPage = (input: AssembleInput): As
     + (chrome ? renderReaderChrome(chrome) : '')
     // Page furniture after the story root, never inside it: the hydrated tree never sees it.
     + (input.footer?.html ?? '')
-    + (module ? `<script type="application/json" id="${ISLAND_DATA_ID}">${scriptJson(islandData(input))}</script>` : '')
+    + (module ? `<script type="application/json" id="${ISLAND_DATA_ID}">${scriptJson({ ...islandData(input), ...(moduleData ? { moduleData } : {}) })}</script>` : '')
     + behaviorSrcs.map((src) => moduleScript(src)).join('')
     + (module ? moduleScript(module.url) : '')
     + (spa ? unique(spa.preload).map(modulePreload).join('') + moduleScript(spa.entry, ` ${SPA_IDLE_ATTR}=""`) : '')
@@ -115,6 +121,18 @@ export const assembleReaderPage: AssembleReaderPage = (input: AssembleInput): As
  * ────────────────────────────────────────────────────────────────────────── */
 
 const unique = (urls: readonly string[]): string[] => [...new Set(urls)];
+
+/** The version's large constants travel with either stored HTML or snapshot SSR, then into the page's one JSON island. */
+function splitModuleData(story: string): { story: string; moduleData: unknown[] | null } {
+  const open = '<script type="application/json" data-mx-module-data>';
+  const start = story.lastIndexOf(open);
+  if (start < 0) return { story, moduleData: null };
+  const tail = story.slice(start + open.length);
+  if (!tail.endsWith('</script>')) return { story, moduleData: null };
+  const parsed: unknown = JSON.parse(tail.slice(0, -'</script>'.length));
+  if (!parsed || typeof parsed !== 'object' || !('moduleData' in parsed) || !Array.isArray(parsed.moduleData)) throw new Error('assembler: invalid module data');
+  return { story: story.slice(0, start), moduleData: parsed.moduleData };
+}
 
 /** The document's live identity on `<body>`, which the island runtime's boot opens the live stream from. */
 const liveAttrs = (live: AssembleInput['live']): string =>
