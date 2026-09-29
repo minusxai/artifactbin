@@ -24,6 +24,21 @@ restricted recipient joins but cannot read one required source. Notifications
 must neither invite nor join any of these people. Record membership before and
 after writes. Use `npm run dev:otp -- EMAIL` for local login; never log credentials.
 
+## Test your own notifications
+
+Sign in, explicitly join the document, have the owner approve the request, and
+receive dataset edit access. Choose a Task ID and click **Assign selected task to
+me**; verify your account appears as assignee and the status becomes Todo. Click
+**Complete selected task** or **Complete this row**, then open the notification
+bell. Each completion produces one item containing the status and review messages,
+including when the recipient is the person performing the action. Assign again to
+reset the task and repeat. Both completion buttons use the same notified mutation.
+
+Before handoff, exercise both buttons as a joined non-owner in a real browser,
+verify one new inbox item per completion and persistence after refresh. Preserve
+other users' rows by reserving a separate QA row. Seeing enabled buttons or a
+completed job alone is not evidence of inbox delivery.
+
 ## Deterministic checks
 
 1. Named `tasks_list` read shows seven Todo rows. Named `change_status` for task 1

@@ -30,10 +30,10 @@ visibility: unlisted
   <Value name="scratch" type="table" value={[{"id":1,"value":"initial"}]} />
   <Query name="tasks_list">{\`select *, '' as action from tasks.rows order by id\`}</Query>
   <Query name="scratch_list">{\`select * from scratch\`}</Query>
+  <Mutation name="assign_to_me" expectedAffected={1}>{\`update tasks.rows set assignee = $_me.id, status = 'Todo' where id = $task_id\`}</Mutation>
   <Mutation name="change_status" expectedAffected={1}>{\`update tasks.rows set status = $status where id = $task_id and status = $expected_status\`}</Mutation>
   <Mutation name="bulk_status">{\`update tasks.rows set status = $status where status = $expected_status\`}</Mutation>
   <Mutation name="zero_match">{\`update tasks.rows set status = $status where id = $task_id\`}</Mutation>
-  <Mutation name="row_complete" expectedAffected={1}>{\`update tasks.rows set status = 'Done' where id = $_row.id\`}</Mutation>
   <Mutation name="local_edit">{\`update scratch set value = 'changed'\`}</Mutation>
   <Mutation name="repairable" expectedAffected={1}>{\`update tasks.rows set status = $status where id = $task_id\`}</Mutation>
   <Notify name="task_status" on="change_status">{\`select assignee as "to", 'Task ' || title || ' is now ' || status as message from tasks.rows where id = $task_id\`}</Notify>
@@ -48,11 +48,13 @@ visibility: unlisted
 </Helmet>
 <div className="mx-auto max-w-5xl px-6 py-10">
   <h1 className="text-3xl font-semibold">Mutation notifications</h1>
-  <p>One notification combines distinct messages for each joined recipient. Named actions also work headlessly.</p>
+  <p>Choose a task ID, assign it to yourself, then complete it using either completion button. Open the notification bell to see one item containing both messages. Assigning again resets the task to Todo so you can repeat the test.</p>
+  <label>Task ID <input aria-label="Task ID" type="number" value="$task_id" min="1" /></label>
+  <Button run="$assign_to_me">Assign selected task to me</Button>
   <Select label="New status" value="$status" options={["Todo","Done"]} />
   <Button run="$change_status">Complete selected task</Button>
   <Button run="$bulk_status">Complete matching tasks</Button>
-  <DataTable data="$tasks_list" rowKey="id"><Column col="id" /><Column col="title" /><Column col="status" /><Column col="assignee" /><Column col="action"><Button run="$row_complete">Complete this row</Button></Column></DataTable>
+  <DataTable data="$tasks_list" rowKey="id"><Column col="id" /><Column col="title" /><Column col="status" /><Column col="assignee" /><Column col="action"><Button run="$change_status" args={{task_id:"$_row.id",status:"Done",expected_status:"$_row.status"}}>Complete this row</Button></Column></DataTable>
   <h2 className="mt-8 text-xl">Local state</h2>
   <Button run="$local_edit">Change local value</Button>
   <DataTable data="$scratch_list" />

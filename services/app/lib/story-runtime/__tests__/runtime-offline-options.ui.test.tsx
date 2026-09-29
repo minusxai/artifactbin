@@ -105,7 +105,9 @@ describe('EditorStoryRuntime offline seams', () => {
     const button = await screen.findByRole('button', { name: 'Add' });
     expect(button).toBeDisabled();
     expect(button).toHaveAttribute('aria-description', 'Saving needs a connection.');
-    expect(screen.getByText('Saving needs a connection.')).toBeInTheDocument();
+    expect(screen.queryByText('Saving needs a connection.')).toBeNull();
+    fireEvent.click(button.closest('[data-slot="tooltip-trigger"]')!);
+    expect(await screen.findByRole('tooltip')).toHaveTextContent('Saving needs a connection.');
     expect(screen.queryByText(ACCESS_PENDING)).toBeNull();
   });
 

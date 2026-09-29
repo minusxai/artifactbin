@@ -69,7 +69,9 @@ describe('OfflineApp', () => {
     const button = await screen.findByRole('button', { name: 'Add a row' });
     expect(button).toBeDisabled();
     expect(button).toHaveAttribute('aria-description', OFFLINE_MUTATION_REASON);
-    expect(screen.getByText(OFFLINE_MUTATION_REASON)).toBeInTheDocument();
+    expect(screen.queryByText(OFFLINE_MUTATION_REASON)).toBeNull();
+    fireEvent.click(button.closest('[data-slot="tooltip-trigger"]')!);
+    expect(await screen.findByRole('tooltip')).toHaveTextContent(OFFLINE_MUTATION_REASON);
     // one debounce later, still the offline reason, never the pending check
     await act(async () => { await new Promise((resolve) => setTimeout(resolve, 200)); });
     expect(screen.queryByText(ACCESS_PENDING)).toBeNull();

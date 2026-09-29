@@ -8,6 +8,9 @@ import {PUT as sharing} from '@/app/api/my/artifacts/[id]/sharing/route';
 import {POST as mutate} from '@/app/a/[id]/mutate/route';
 import {GET as jobs} from '@/app/api/notification-runs/[runId]/jobs/route';
 import {GET as inbox} from '@/app/api/my/people/route';
+import {notificationDemoDataset,notificationDemoDocument} from '../../../scripts/fixtures/mutation-notifications.mjs';
+import {getArtifactById} from '@/lib/artifacts';
+import {loadDatasetRows} from '@/lib/story/dataset-store';
 import {createUser} from '@/lib/users';
 import {executeCatalog} from '@/lib/datasets/execute';
 import {notificationJobStore} from '@/lib/notification-runtime';
@@ -61,4 +64,38 @@ it('uses the gate create/join/approve/mutate/job/inbox payloads, including suppr
  await share(model.id,'unlisted');expect(await received(suppressed.runId)).toEqual([]);
  const invalid=await publish(notificationDocumentPayload({...fixture,invalid:true}));await join(invalid.id);
  const failed=await run(invalid.id);expect(failed.job.status).toBe('failed');expect(await received(failed.runId)).toEqual([]);
+});
+
+it('lets a joined non-owner assign a demo task to themselves and receive one notification from either completion button',async()=>{
+ vi.mocked(executeCatalog).mockImplementation((await vi.importActual<typeof import('@/lib/datasets/execute')>('@/lib/datasets/execute')).executeCatalog);
+ const owner=await createUser({email:'mxmx_test_demo_owner@example.com'}),reader=await createUser({email:'mxmx_test_demo_reader@example.com'});
+ const actor=(user:typeof owner):Actor=>({credential:'session',userId:user.id,email:user.email!,emailVerified:true});
+ const ownerActor=actor(owner),readerActor=actor(reader);
+ const body=async(response:Response,status=200)=>{expect(response.status,await response.clone().text()).toBe(status);return response.json();};
+ const context=(id:string)=>({params:Promise.resolve({id})});
+ const publish=async(json:unknown)=>body(await create(request('/api/my/artifacts',{method:'POST',origin:'same',actor:ownerActor,json})),201);
+ const dataset=await publish({access:'readwrite',dataset:notificationDemoDataset({assignee:null,nonmember:null,pending:null,left:null,outsider:null})});
+ await body(await sharing(request(`/api/my/artifacts/${dataset.id}/sharing`,{method:'PUT',origin:'same',actor:ownerActor,json:{visibility:'unlisted',shares:[{email:reader.email,role:'editor'}]}}),context(dataset.id)));
+ const markup=notificationDemoDocument(dataset.id).split('---\n').at(-1)!;
+ const document=await publish({markup,visibility:'unlisted'});
+ await body(await membership(request(`/api/my/artifacts/${document.id}/members`,{method:'POST',origin:'same',actor:readerActor,json:{action:'join'}}),context(document.id)));
+ await body(await membership(request(`/api/my/artifacts/${document.id}/members`,{method:'POST',origin:'same',actor:ownerActor,json:{action:'approve',userId:reader.id}}),context(document.id)));
+ const worker=createNotificationWorker({store:await notificationJobStore(),evaluator:{evaluate:evaluateNotificationQuery}});
+ // Read the actual buttons' named actions from the published fixture; an unnotified alternative must fail this test.
+ const action=(label:string)=>markup.match(new RegExp('<Button run="\\$([^" ]+)"[^>]*>'+label+'</Button>'))?.[1];
+ expect(action('Assign selected task to me')).toBe('assign_to_me');
+ for(const label of ['Complete selected task','Complete this row']){
+  const run=async(mutation:string,args:Record<string,unknown>)=>body(await mutate(request(`/a/${document.id}/mutate`,{method:'POST',origin:'same',actor:readerActor,json:{mutation,args,operationKey:crypto.randomUUID()}}),context(document.id)));
+  await run('assign_to_me',{task_id:1});
+  const saved=await loadDatasetRows((await getArtifactById(dataset.id))!);
+  expect(saved[0]).toMatchObject({assignee:reader.id,status:'Todo'});
+  const completed=await run(action(label)!,{task_id:1,status:'Done',expected_status:'Todo'});
+  expect(completed).toMatchObject({affected:1,mutationRunId:expect.any(String)});
+  expect(await worker.drainOnce()).toBe(true);
+  const result=await body(await inbox(request('/api/my/people',{actor:readerActor})));
+  const received=result.notifications.filter((n:{kind:string;mutation_run_id?:string})=>n.kind==='mutation'&&n.mutation_run_id===completed.mutationRunId);
+  expect(received).toHaveLength(1);
+  expect([...received[0].messages].sort()).toEqual(['Please review Review pricing','Task Review pricing is now Done']);
+  expect(await worker.drainOnce()).toBe(false);
+ }
 });

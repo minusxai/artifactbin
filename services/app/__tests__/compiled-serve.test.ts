@@ -12,6 +12,7 @@ import { useAppHarness, request } from '@/__tests__/harness';
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 import { GET as rawRoute } from '@/app/a/[id]/raw/route';
 import { createAppServer } from '@/server/app';
+import { artifactPageAnswer } from '@/lib/artifact-page';
 import { mintToken } from '@/lib/tokens';
 import { claimToken, createUser, ensureUsername } from '@/lib/users';
 import { drainPreparedPageWarmups } from '@/lib/story/prepared-page.server';
@@ -442,4 +443,14 @@ it('renders Join in the initial HTML for persistent mutations before the app loa
  expect(response.status).toBe(200);
  const doc=new JSDOM(await response.text()).window.document;
  expect(doc.querySelector('[data-mx-reader-action="membership"]')?.getAttribute('aria-label')).toBe('Join artefact');
+});
+
+ it('renders the notification bell on the initial signed-in reader page',async()=>{
+ const who=await owner(),reader=await owner();
+ const id=await publish(who.token,{markup:'<h1>Tasks</h1>'});
+ const answer=await artifactPageAnswer(request(`/a/${id}`,{actor:{credential:'session',userId:reader.user.id,email:reader.user.email!,emailVerified:true}}),id,{page:{spa:null}});
+ expect(answer.status).toBe(200);
+ expect(answer.compiled).toBeDefined();
+ const doc=new JSDOM(answer.compiled!.html).window.document;
+ expect(doc.querySelector('[data-mx-reader-action="notifications"]')?.getAttribute('aria-label')).toBe('Notifications');
 });

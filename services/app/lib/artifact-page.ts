@@ -407,6 +407,8 @@ async function readerChromeFor(facts: {
   return {
     artifactId: artifact.id,
     membership,
+    // Keep the inbox reachable before the app loads; the live provider supplies the unread badge.
+    notifications: person ? {unread:0} : undefined,
     ground: facts.ground,
     share: owner,
     archived: at ? { version: at.version, head: at.head } : null,
