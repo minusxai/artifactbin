@@ -184,7 +184,6 @@ export function boot(input: IslandModule | readonly IslandEntry[], win: Window =
     { writes: createWriteStatusFeed, loadChart },
   );
   const { context, store } = runtime;
-  store?.start();
 
   const listeners = new Set<(event: IslandEvent) => void>();
   const emit = (event: IslandEvent) => { for (const listener of [...listeners]) listener(event); };
@@ -278,6 +277,25 @@ export function boot(input: IslandModule | readonly IslandEntry[], win: Window =
     doc.documentElement.setAttribute(READER_READY_ATTR, '');
     emit({ type: 'ready' });
     doc.dispatchEvent(new Event(ISLANDS_READY_EVENT));
+    store?.start();
+    // Identity and viewer-scoped rows arrive after the guest page is ready.
+    void import('./viewer').then(({ loadViewerOverlay }) => {
+      if (disposed) return;
+      loadViewerOverlay(context, data, {
+        setViewer: (viewer: IslandViewer) => {
+          viewerId = viewer && 'id' in viewer ? viewer.id : null;
+          identified = true;
+          runtime.setViewer(viewer);
+          emit({ type: 'overlay', viewer: viewer && 'id' in viewer ? viewer : null });
+        },
+      });
+    }).catch((error: unknown) => console.error('[islands] viewer overlay did not load', error));
+    void import('./kit/status').then(({ installStatus }) => {
+      if (!disposed) stopStatus = installStatus(context.writes, root);
+    }).catch((error: unknown) => console.error('[islands] write status did not load', error));
+    if (page && !data.hold?.length) page.engine.prepare(flow!, []);
+    const authorScript = typeof data.authorScript === 'string' && data.authorScript ? data.authorScript : null;
+    if (authorScript) void restartAuthor(authorScript).catch((error: unknown) => console.error('[islands] author host failed', error));
   };
   // A cold resource is fetched at idle or the first reader action, never by module evaluation.
   if (templateUrl) {
@@ -285,27 +303,5 @@ export function boot(input: IslandModule | readonly IslandEntry[], win: Window =
     if (typeof win.requestIdleCallback === 'function') win.requestIdleCallback(prefetch, { timeout: 1 });
     else win.setTimeout(prefetch, 0);
   } else startHydration();
-  // Identity and viewer-scoped rows arrive after the guest page is ready.
-  void import('./viewer').then(({ loadViewerOverlay }) => {
-    if (disposed) return;
-    loadViewerOverlay(context, data, {
-      setViewer: (viewer: IslandViewer) => {
-        viewerId = viewer && 'id' in viewer ? viewer.id : null;
-        identified = true;
-        runtime.setViewer(viewer);
-        emit({ type: 'overlay', viewer: viewer && 'id' in viewer ? viewer : null });
-      },
-    });
-  }).catch((error: unknown) => console.error('[islands] viewer overlay did not load', error));
-  // Writes retain their status in the feed; the indicator can attach after hydration.
-  void import('./kit/status').then(({ installStatus }) => {
-    if (!disposed) stopStatus = installStatus(context.writes, root);
-  }).catch((error: unknown) => console.error('[islands] write status did not load', error));
-  // A local table has no import to trigger the engine's normal hold path.
-  if (page && !data.hold?.length) page.engine.prepare(flow!, []);
-
-  // The author's script, never in this document: its host (and the sandboxed frame) load only when the version has one.
-  const authorScript = typeof data.authorScript === 'string' && data.authorScript ? data.authorScript : null;
-  if (authorScript) void restartAuthor(authorScript).catch((error: unknown) => console.error('[islands] author host failed', error));
   return islandDocument;
 }

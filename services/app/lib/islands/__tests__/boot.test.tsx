@@ -12,6 +12,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Show } from 'solid-js';
 import { boot } from '../boot';
+import { configureTemplateResource } from '../rt';
 import { startPage } from '../page';
 import { islandDocumentOf } from '../handover';
 import { useIsland } from '../context';
@@ -47,9 +48,30 @@ afterEach(() => {
   document.body.removeAttribute('data-mx-live-id');
   document.body.removeAttribute('data-mx-live-edit');
   vi.unstubAllGlobals();
+  configureTemplateResource(null);
 });
 
 describe('boot', () => {
+  it('starts cold queries only after the template resource permits hydration and ready', async () => {
+    const url = '/islands/t/bbbbbbbbbbbbbbbb.json';
+    configureTemplateResource(url);
+    page({ ...snapshot, results: null, queryUrl: '/a/abc/query' });
+    let answer!: (response: Response) => void;
+    const requests: Array<{ url: string; ready: boolean }> = [];
+    vi.stubGlobal('fetch', vi.fn((input: string | URL | Request) => {
+      const requested = String(input);
+      requests.push({ url: requested, ready: document.documentElement.hasAttribute('data-mx-ready') });
+      return requested === url ? new Promise<Response>((resolve) => { answer = resolve; })
+        : Promise.resolve(Response.json({ tables: { total: { rows: [{ n: 42 }], columns: [{ name: 'n', type: 'number' }] } }, errors: {} }));
+    }));
+    booted = boot({ ISLANDS: [['s0-', Total]], FLOW: flow });
+    await vi.waitFor(() => expect(requests.some((request) => request.url === url)).toBe(true));
+    expect(document.documentElement.hasAttribute('data-mx-ready')).toBe(false);
+    expect(requests).toEqual([{ url, ready: false }]);
+    answer(Response.json({}));
+    await vi.waitFor(() => expect(requests.some((request) => request.url.includes('/a/abc/query'))).toBe(true));
+    expect(requests.find((request) => request.url.includes('/a/abc/query'))?.ready).toBe(true);
+  });
   it('replaces cold DataTable and Question placeholders when their query answers, including a multi-root island', async () => {
     const cold = { ...snapshot, results: null, queryUrl: '/a/abc/query' };
     document.body.innerHTML = '<div data-mx-inline-story="" id="mx-story-root">'

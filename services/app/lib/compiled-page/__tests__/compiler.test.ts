@@ -57,6 +57,8 @@ describe('compilePage', () => {
     const browser = new TextDecoder().decode((await store.get(built.module!.sha))!);
     expect(built.html).not.toContain('data-mx-island-template');
     expect(built.html).toContain(marker);
+    expect(built.html.split(marker)).toHaveLength(2);
+    expect(Buffer.byteLength(built.html)).toBeLessThan(Buffer.byteLength(marker) + 20_000);
     expect(browser).not.toContain(marker);
     expect(browser).not.toContain('Second panel');
     expect(brotliCompressSync(browser).byteLength).toBeLessThan(4_000);
