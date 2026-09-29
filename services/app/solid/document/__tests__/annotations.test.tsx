@@ -50,6 +50,26 @@ it('posts only pin locations to the document runtime and opens the rail on pin c
   expect(open).toHaveBeenCalledWith(true);
 });
 
+it('opens the containing thread for a linked reply and scrolls within its own rail', async () => {
+  const linked = { ...thread, thread: [...thread.thread, { ...thread.thread[0], id: 'c2', body: 'Linked reply' }] } as AnnotationWire;
+  const scrolled: Element[] = [];
+  const original = Element.prototype.scrollIntoView;
+  Element.prototype.scrollIntoView = function () { scrolled.push(this); };
+  try {
+    let link!: (target: string | null) => void;
+    const view = render(() => {
+      const [target, setTarget] = createSignal<string | null>(null);
+      const [railOpen, setRailOpen] = createSignal(false);
+      link = setTarget;
+      return <AnnotationLayer id="abc" backend={backend({ listAnnotations: vi.fn(async () => [linked]) })} railOpen={railOpen()} onRailOpenChange={setRailOpen} linkTarget={target()} />;
+    });
+    link('c2');
+    await waitFor(() => expect(view.getByText('Linked reply')).toBeTruthy());
+    await waitFor(() => expect(scrolled.some(node => (node as HTMLElement).dataset.commentId === 'c2')).toBe(true));
+    expect(view.getByLabelText('Annotation sidebar').querySelector('[data-thread-id="ann1"]')).toBeTruthy();
+  } finally { Element.prototype.scrollIntoView = original; }
+});
+
 it('opens a one-shot Select pick from the rail and composes on the frame selection', async () => {
   const send = vi.fn(); let receive: ((data: unknown) => void) | undefined;
   const runtime = { send, subscribe: (callback: (data: unknown) => void) => { receive = callback; return () => {}; }, getViewportRect: () => ({ left: 0, top: 0, width: 800, height: 600 }) } as unknown as StoryController;
@@ -104,6 +124,56 @@ it('opens a resolved conversation and sends its pin only while expanded', async 
   expect(send.mock.calls.at(-1)?.[0]).toMatchObject({ pins: [] });
   fireEvent.click(view.getByRole('button', { name: 'Show resolved conversation' }));
   await waitFor(() => expect(send.mock.calls.at(-1)?.[0]).toMatchObject({ openId: 'ann1', pins: [expect.objectContaining({ id: 'ann1' })] }));
+});
+
+it('keeps an expanded thread visible when another viewer resolves it', async () => {
+  const send = vi.fn();
+  const runtime = { send, subscribe: () => () => {} } as unknown as StoryController;
+  const located = { ...thread, anchor: { path: '0', key: 'k' } } as AnnotationWire;
+  const resolvedElsewhere = { ...located, status: 'resolved' } as AnnotationWire;
+  const service = backend({ listAnnotations: vi.fn(async (status?: string) => status === 'resolved' ? [resolvedElsewhere] : [located]) });
+  let changeLive!: (rows: AnnotationWire[]) => void;
+  const view = render(() => {
+    const [live, setLive] = createSignal<AnnotationWire[]>([located]);
+    changeLive = setLive;
+    return <AnnotationLayer id="abc" backend={service} railOpen onRailOpenChange={() => {}} pickOnOpen={false}
+      runtimeRef={{ current: runtime }} sessionNonce="private" liveAnnotations={live()} />;
+  });
+  fireEvent.click(view.getByRole('button', { name: 'Open annotation thread' }));
+  changeLive([]);
+  await waitFor(() => expect(service.listAnnotations).toHaveBeenCalledWith('resolved'));
+  await waitFor(() => expect(send.mock.calls.at(-1)?.[0]).toMatchObject({ openId: 'ann1', pins: [expect.objectContaining({ id: 'ann1' })] }));
+  await waitFor(() => expect(view.getByRole('button', { name: 'Reopen annotation' })).toBeTruthy());
+});
+
+it('shows an orphaned passage only while its resolved conversation is expanded', async () => {
+  const gone = { ...thread, status: 'resolved', anchor: null, orphaned: true, quote: 'Original passage', quote_found: false } as AnnotationWire;
+  const service = backend({ listAnnotations: vi.fn(async (status?: string) => status === 'resolved' ? [gone] : []) });
+  const view = render(() => <AnnotationLayer id="abc" backend={service} railOpen onRailOpenChange={() => {}} pickOnOpen={false} />);
+  fireEvent.click(view.getByRole('button', { name: 'Show resolved comments' }));
+  await waitFor(() => expect(view.getByRole('button', { name: 'Show resolved conversation' })).toBeTruthy());
+  expect(view.queryByText('Original passage')).toBeNull();
+  fireEvent.click(view.getByRole('button', { name: 'Show resolved conversation' }));
+  expect(view.getByText('Original passage')).toBeTruthy();
+  expect(view.getByText('This passage was removed from the document.')).toBeTruthy();
+});
+
+it('shows edited-away words when opened but does not repeat a live passage', async () => {
+  const edited = { ...thread, status: 'resolved', anchor: { path: '0', key: 'k' }, quote: 'Older words', quote_found: false } as AnnotationWire;
+  const service = backend({ listAnnotations: vi.fn(async (status?: string) => status === 'resolved' ? [edited] : []) });
+  const view = render(() => <AnnotationLayer id="abc" backend={service} railOpen onRailOpenChange={() => {}} pickOnOpen={false} />);
+  fireEvent.click(view.getByRole('button', { name: 'Show resolved comments' }));
+  await waitFor(() => expect(view.getByRole('button', { name: 'Show resolved conversation' })).toBeTruthy());
+  fireEvent.click(view.getByRole('button', { name: 'Show resolved conversation' }));
+  expect(view.getByText('Older words')).toBeTruthy();
+  expect(view.getByText('These words have since been edited.')).toBeTruthy();
+  view.unmount();
+  const live = { ...edited, quote_found: true } as AnnotationWire;
+  const again = render(() => <AnnotationLayer id="abc" backend={backend({ listAnnotations: vi.fn(async (status?: string) => status === 'resolved' ? [live] : []) })} railOpen onRailOpenChange={() => {}} pickOnOpen={false} />);
+  fireEvent.click(again.getByRole('button', { name: 'Show resolved comments' }));
+  await waitFor(() => expect(again.getByRole('button', { name: 'Show resolved conversation' })).toBeTruthy());
+  fireEvent.click(again.getByRole('button', { name: 'Show resolved conversation' }));
+  expect(again.queryByText('Older words')).toBeNull();
 });
 
 it('prefills the linked agent in a reply and preserves the draft after a failed send', async () => {

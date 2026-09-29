@@ -5,6 +5,7 @@ import { SHARE_ROLES, SHARE_ROLE_LABEL, type ShareEntry, type ShareRole } from '
 import type { SharingPatch, Visibility } from '@/lib/artifacts';
 import type { SharingVerdict } from '@/lib/visibility-icons';
 import { CARD_RENDER_GENERATION } from '@/lib/export-card';
+import { Tooltip } from '../components/Tooltip';
 
 interface SharingState {
   visibility: Visibility; linkRole: ShareRole; shares: ShareEntry[]; canPrivate?: boolean;
@@ -34,6 +35,11 @@ export function DocumentSharing(props: {
   const [error, setError] = createSignal('');
   const [copied, setCopied] = createSignal(false);
   const [previewStatus, setPreviewStatus] = createSignal<'loading' | 'ready' | 'error'>('loading');
+  createEffect(() => {
+    if (!copied()) return;
+    const timer = setTimeout(() => setCopied(false), 1500);
+    onCleanup(() => clearTimeout(timer));
+  });
   const endpoint = `/api/my/artifacts/${encodeURIComponent(props.id)}/sharing`;
   const close = () => { setOpen(false); props.onClose?.(); };
   const copy = () => {
@@ -96,11 +102,15 @@ export function DocumentSharing(props: {
           <Show when={!state() && !error()}><p role="status">loading…</p></Show>
           <Show when={state()}>{current => <>
             <div class="flex gap-1"><For each={(['public', 'unlisted', 'private'] as const).filter(value => value !== 'private' || current().canPrivate !== false)}>{visibility =>
-              <button type="button" aria-label={`Make ${visibility}`} aria-pressed={current().visibility === visibility} onClick={() => void put({ visibility })} class="flex-1 whitespace-nowrap rounded border border-edge px-2 py-2.5 aria-pressed:border-accent aria-pressed:bg-accent-soft">{visibility}</button>
+              <Tooltip content={visibility === 'private' ? 'only you and invited emails' : visibility === 'public' ? 'anyone with the link · listed on your profile' : 'anyone with the link · not listed anywhere'}>
+                <button type="button" aria-label={`Make ${visibility}`} aria-pressed={current().visibility === visibility} onClick={() => void put({ visibility })} class={`flex-1 whitespace-nowrap rounded border px-2 py-2.5 ${current().visibility === visibility ? 'border-accent/40 bg-accent-soft text-accent' : 'border-edge text-muted hover:border-edge-bright hover:text-fg'}`}>{visibility}</button>
+              </Tooltip>
             }</For></div>
             <Show when={current().visibility !== 'private'}><div class="mt-2 flex items-center justify-between gap-2"><span>Anyone with the link</span><RolePicker label="Link role" value={current().linkRole ?? 'viewer'} onChange={role => void put({ linkRole: role })} /></div></Show>
             <section class="mt-5 border-t border-edge pt-4" aria-label="People"><h3 class="mb-1 uppercase tracking-wider text-faint">People</h3>
-              <For each={current().shares}>{person => <div class="flex items-center justify-between gap-2 py-0.5"><span class="min-w-0 truncate">{person.email}</span><div class="flex items-center gap-1"><RolePicker label={`Role for ${person.email}`} value={person.role} onChange={role => void put({ shares: current().shares.map(entry => entry.email === person.email ? { ...entry, role } : entry) })} /><button type="button" aria-label={`Remove ${person.email}`} onClick={() => void put({ shares: current().shares.filter(entry => entry.email !== person.email) })}>×</button></div></div>}</For>
+              <For each={current().shares}>{person => <div class="flex items-center justify-between gap-2 py-0.5"><span class="min-w-0 truncate">{person.email}</span><div class="flex items-center gap-1"><Tooltip content="already viewable by link" disabled={current().visibility === 'private' || person.role === 'editor'}>
+                <span data-slot={current().visibility !== 'private' && person.role !== 'editor' ? 'tooltip-trigger' : undefined}><RolePicker label={`Role for ${person.email}`} value={person.role} onChange={role => void put({ shares: current().shares.map(entry => entry.email === person.email ? { ...entry, role } : entry) })} /></span>
+              </Tooltip><button type="button" aria-label={`Remove ${person.email}`} onClick={() => void put({ shares: current().shares.filter(entry => entry.email !== person.email) })}>×</button></div></div>}</For>
               <form class="mt-1 flex gap-1" onSubmit={event => { event.preventDefault(); const address = email().trim(); if (address) { void put({ shares: [...current().shares, { email: address, role: 'viewer' }] }); setEmail(''); } }}><input aria-label="Invite email" type="email" value={email()} onInput={event => setEmail(event.currentTarget.value)} placeholder="email@example.com" class="min-w-0 flex-1 rounded border border-edge bg-bg px-2 py-1" /><button type="submit" aria-label="Add email" class="rounded border border-edge px-2 py-1">add</button></form>
             </section>
           </>}</Show>

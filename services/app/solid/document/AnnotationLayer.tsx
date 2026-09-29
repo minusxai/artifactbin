@@ -25,6 +25,7 @@ export interface AnnotationLayerProps {
   topOffset?: number; rightInset?: number; railHost?: HTMLElement; railSheet?: boolean;
   runtimeRef?: DocumentRuntimeRef; sessionNonce?: string | null; showViewComments?: boolean;
   pickOnOpen?: boolean; pickRequested?: boolean; editId?: string; panelWidth?: number;
+  linkTarget?: string | null;
 }
 
 /** The page owns the active selection; the layer owns comments and draft state. */
@@ -47,12 +48,28 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
   const [pick, setPick] = createSignal<'select' | null>(props.pickRequested ? 'select' : null);
   const [hoverId, setHoverId] = createSignal<string | null>(null);
   const [anchorRects, setAnchorRects] = createSignal<Record<string, StoryEditRect>>({});
+  const [linkTarget, setLinkTarget] = createSignal<string | null>(props.linkTarget ?? (typeof location === 'undefined' ? null : new URLSearchParams(location.search).get('comment') ?? new URLSearchParams(location.search).get('thread')));
+  let followedLink: string | null = null;
+  let soughtResolved: string | null = null;
   let threadsRoot: HTMLDivElement | undefined;
+  createEffect(() => { if (props.linkTarget !== undefined) setLinkTarget(props.linkTarget); });
+  onMount(() => {
+    const navigate = () => { if (props.linkTarget === undefined) setLinkTarget(new URLSearchParams(location.search).get('comment') ?? new URLSearchParams(location.search).get('thread')); };
+    window.addEventListener('popstate', navigate);
+    onCleanup(() => window.removeEventListener('popstate', navigate));
+  });
   createEffect(() => {
     if (props.railOpen && !selection() && !openId() && props.pickOnOpen !== false && !props.editId && !props.railSheet) setPick('select');
     else if (!props.railOpen && !selection()) setPick(null);
   });
-  createEffect(() => { if (props.liveAnnotations) setItems(props.liveAnnotations); });
+  createEffect(() => {
+    const live = props.liveAnnotations;
+    if (!live) return;
+    const expanded = openId();
+    const disappeared = expanded && items().some(row => row.id === expanded) && !live.some(row => row.id === expanded);
+    setItems(live);
+    if (disappeared) void backend.listAnnotations('resolved').then(rows => { setResolved(rows); if (rows.some(row => row.id === expanded)) setShowResolved(true); }).catch(() => {});
+  });
   createEffect(() => { props.onAnnotationsChange?.(items()); });
   createEffect(() => {
     if (!props.sessionNonce || !props.runtimeRef) return;
@@ -165,13 +182,28 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
     props.onRailOpenChange(true);
   };
   createEffect(() => {
+    const target = linkTarget();
+    if (!target || target === followedLink) return;
+    const row = [...items(), ...resolved()].find(item => item.id === target || item.thread.some(comment => comment.id === target));
+    if (row) {
+      followedLink = target;
+      if (row.status === 'resolved') setShowResolved(true);
+      openThread(row.id);
+      setFolds(unfold(props.id, { threads: [row.id], comments: [target] }));
+    } else if (target !== soughtResolved) {
+      soughtResolved = target;
+      void backend.listAnnotations('resolved').then(rows => setResolved(rows)).catch(() => {});
+    }
+  });
+  createEffect(() => {
     const id = openId();
+    const targetComment = linkTarget();
     if (!id || !props.railOpen) return;
     const frame = requestAnimationFrame(() => {
       const target = Array.from(threadsRoot?.querySelectorAll<HTMLElement>('[data-thread-id]') ?? []).find(node => node.dataset.threadId === id);
       target?.scrollIntoView?.({ block: 'start', inline: 'nearest' });
-      const comments = target?.querySelectorAll<HTMLElement>('[data-comment-id]');
-      comments?.[comments.length - 1]?.scrollIntoView?.({ block: 'nearest', inline: 'nearest' });
+      const comments = Array.from(target?.querySelectorAll<HTMLElement>('[data-comment-id]') ?? []);
+      (comments.find(comment => comment.dataset.commentId === targetComment) ?? comments.at(-1))?.scrollIntoView?.({ block: 'nearest', inline: 'nearest' });
     });
     onCleanup(() => cancelAnimationFrame(frame));
   });
@@ -181,9 +213,9 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
   const thread = (row: AnnotationWire) => <article aria-label={`Annotation ${row.id}`} data-thread-id={row.id} class="rounded border border-edge bg-surface p-3 text-sm">
     <For each={row.remote_work ?? []}>{work => <p role="status"><a href={`/chat?session=${work.sessionId}`} target="_blank" rel="noopener noreferrer">@{work.name}</a> {remoteWorkLabel(work)}</p>}</For>
     <Show when={isFolded(folds(), 'threads', row.id)} fallback={<>
-      <div class="mb-2 flex items-center gap-2"><button type="button" aria-label="Fold thread" onClick={() => foldThread(row.id)}>⌄</button><p class="text-xs text-muted">{row.quote ?? row.snippet}</p></div>
-      <Show when={row.orphaned}><p>This passage was removed from the document.</p></Show>
-      <Show when={!row.orphaned && row.quote_found === false && row.quote}><p>{row.quote} · These words have since been edited.</p></Show>
+      <div class="mb-2 flex items-center gap-2"><button type="button" aria-label="Fold thread" onClick={() => foldThread(row.id)}>⌄</button><p class="text-xs text-muted">{row.snippet}</p></div>
+      <Show when={row.orphaned}><div><Show when={openId() === row.id && (row.quote ?? row.snippet)}><p>{row.quote ?? row.snippet}</p></Show><p>This passage was removed from the document.</p></div></Show>
+      <Show when={!row.orphaned && openId() === row.id && row.quote_found === false && row.quote}><div><p>{row.quote}</p><p>These words have since been edited.</p></div></Show>
       <For each={openId() === row.id ? row.thread : row.thread.slice(0, 1)}>{(comment, index) => <div data-comment-id={comment.id} class="mb-2 min-w-0 break-words">
         <span role="button" tabindex="0" aria-label={isFolded(folds(), 'comments', comment.id) ? 'Expand comment' : 'Collapse comment'}
           aria-expanded={!isFolded(folds(), 'comments', comment.id)}
