@@ -709,7 +709,8 @@ jobs:
         cli,
         cli-preview,
         test,
-        reference-compatibility
+        reference-compatibility,
+        notify-consumer
       ]
     if: always()
     # A summary on main, a gate on a pull request.
