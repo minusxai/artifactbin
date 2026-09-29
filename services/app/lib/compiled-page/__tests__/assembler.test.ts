@@ -30,6 +30,16 @@ const input = (over: Partial<AssembleInput> = {}): AssembleInput => ({
 const dom = (page: { html: string }) => new JSDOM(page.html).window.document;
 
 describe('assembleReaderPage', () => {
+  it('moves version constants into the one inert page data island, including hostile text', () => {
+    const value = '</script><script>alert(1)</script>';
+    const carrier = `<script type="application/json" data-mx-module-data>${JSON.stringify({ moduleData: [{ value }] }).replaceAll('<', '\\u003c').replaceAll('>', '\\u003e')}</script>`;
+    const page = assembleReaderPage(input({ story: `<div class="mx-doc"><p>visible</p></div>${carrier}` }));
+    const doc = dom(page);
+    expect(doc.querySelector('[data-mx-module-data]')).toBeNull();
+    expect(doc.querySelector('#mx-story-root p')?.textContent).toBe('visible');
+    expect(JSON.parse(doc.getElementById(ISLAND_DATA_ID)!.textContent!).moduleData).toEqual([{ value }]);
+    expect(page.html).not.toContain('</script><script>alert');
+  });
   it('uses the app reader body font before the idle app shell loads', () => {
     const app = assembleReaderPage(input({ spa: { entry: '/assets/main-abc.js', preload: [] } }));
     expect(app.html).toContain('body{margin:0;font-size:14px;font-family:var(--font-mono)}');

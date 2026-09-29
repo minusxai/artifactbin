@@ -384,8 +384,8 @@ export function render(data) {
  * The browser module's source: the islands, handed to the shared runtime's boot — with the
  * version's compiled dataflow when it declares data (the page's data island carries no flow).
  */
-const browserSource = (islands: string, flow: CompiledDataflow | null): string => flow
-  ? `${islands}import { boot as $boot } from '@mx/boot';\nconst FLOW = JSON.parse(${lit(JSON.stringify(flow))});\n$boot({ ISLANDS, FLOW });\n`
+const browserSource = (islands: string, flow: CompiledDataflow | null, flowIndex?: number): string => flow
+  ? `${islands}import { boot as $boot } from '@mx/boot';\nconst FLOW = ${flowIndex === undefined ? `JSON.parse(${lit(JSON.stringify(flow))})` : `$moduleData[${flowIndex}]`};\n$boot({ ISLANDS, FLOW });\n`
   : `${islands}import { boot as $boot } from '@mx/boot';\n$boot(ISLANDS);\n`;
 
 interface ManifestFiles { files?: Record<string, { imports?: string[] }> }
@@ -441,16 +441,27 @@ export interface BuildOptions {
  * declared state. A version with no island has neither module — unless it must boot (`boot`), when it
  * has the browser module alone.
  */
-export async function buildDocumentModules(sources: GeneratedSources & { islandRefs: readonly unknown[]; statics?: readonly string[] }, options: BuildOptions): Promise<DocumentModules> {
-  const skeletonHtml = spliceStatics(await renderSkeleton(sources.skeleton, options.imports), sources.statics ?? []);
-  if (!sources.islandRefs.length && !options.boot) return { html: skeletonHtml, module: null, ssr: null };
+export async function buildDocumentModules(sources: GeneratedSources & { islandRefs: readonly unknown[]; statics?: readonly string[]; browserIslands?: string; moduleData?: readonly string[] }, options: BuildOptions): Promise<DocumentModules> {
+  const renderedSkeleton = spliceStatics(await renderSkeleton(sources.skeleton, options.imports), sources.statics ?? []);
+  if (!sources.islandRefs.length && !options.boot) return { html: renderedSkeleton, module: null, ssr: null };
+  const moduleData = [...(sources.moduleData ?? [])];
+  const flowJson = options.flow ? JSON.stringify(options.flow) : null;
+  const flowIndex = flowJson && flowJson.length > 1024 ? moduleData.push(flowJson) - 1 : undefined;
+  const moduleDataTag = moduleData.length
+    ? `<script type="application/json" data-mx-module-data>${escapeRaw(JSON.stringify({ moduleData: moduleData.map((value) => JSON.parse(value) as unknown) }))}</script>`
+    : '';
+  const skeletonHtml = renderedSkeleton + moduleDataTag;
+  const browserIslands = sources.browserIslands ?? sources.islands;
+  const browserWithData = flowIndex !== undefined && !sources.moduleData?.length
+    ? `const $moduleData = JSON.parse(document.getElementById("mx-story-data").textContent).moduleData;\n${browserIslands}`
+    : browserIslands;
   const store = options.store ?? createModuleStore();
   if (!sources.islandRefs.length) {
-    const browser = await browserModuleCode(sources.islands, options.build, options.flow);
+    const browser = await browserModuleCode(browserWithData, options.build, options.flow, flowIndex);
     return { html: skeletonHtml, module: await store.put(new TextEncoder().encode(browser.code), browser.imports), ssr: null };
   }
   const ssrStore = options.ssrStore ?? createSsrModuleStore();
-  const browser = await browserModuleCode(sources.islands, options.build, options.flow);
+  const browser = await browserModuleCode(browserWithData, options.build, options.flow, flowIndex);
   const ssrCode = await ssrModuleCode(sources.islands, skeletonHtml, options.flow);
   const loaded = await ssrModuleOf(ssrCode, contentSha(ssrCode), options.imports);
   const html = loaded.render({ values: options.values, results: null, mermaidImages: {}, drawings: {} });
@@ -462,11 +473,11 @@ export async function buildDocumentModules(sources: GeneratedSources & { islandR
 }
 
 /** The per-document browser module: DOM-compiled, imports bound to the shared chunks, compacted. `imports` is its static closure. */
-export async function browserModuleCode(islands: string, build: CompilerBuild, flow: CompiledDataflow | null = null): Promise<{ code: string; imports: string[] }> {
+export async function browserModuleCode(islands: string, build: CompilerBuild, flow: CompiledDataflow | null = null, flowIndex?: number): Promise<{ code: string; imports: string[] }> {
   const direct = new Set<string>();
   // `moduleName: '@mx/rt'`: Solid's DOM helpers come from the runtime's one import surface, never
   // from the whole `solid-js/web` chunk.
-  const code = await transformSolid(browserSource(islands, flow), { generate: 'dom', hydratable: true }, {
+  const code = await transformSolid(browserSource(islands, flow, flowIndex), { generate: 'dom', hydratable: true }, {
     minify: true, moduleName: '@mx/rt',
     rewrite: (specifier) => {
       const url = build.manifest[specifier];
