@@ -4,6 +4,7 @@ import { ErrorBoundary, lazy, Suspense, type JSX } from 'solid-js';
 import { Route, Router, type RouteSectionProps } from '@solidjs/router';
 import { SessionProvider } from './web/session';
 import { PageChrome } from './components/PageChrome';
+import { OnboardingGate } from './components/OnboardingGate';
 import { InboxProvider } from './web/notifications';
 
 const TrashPage = lazy(() => import('./pages/Trash').then((m) => ({ default: m.TrashPage })));
@@ -15,6 +16,11 @@ const NotificationsPage = lazy(() => import('./pages/Notifications').then((m) =>
 const AccountPage = lazy(() => import('./pages/Account').then((m) => ({ default: m.AccountPage })));
 const DocsPage = lazy(() => import('./pages/Docs').then((m) => ({ default: m.DocsPage })));
 const ProfilePage = lazy(() => import('./pages/Profile').then((m) => ({ default: m.ProfilePage })));
+const HomePage = lazy(() => import('./pages/Home').then((m) => ({ default: m.HomePage })));
+const FolderRoute = lazy(() => import('./pages/Folder').then((m) => ({ default: m.FolderRoute })));
+const AssetsPage = lazy(() => import('./pages/Assets').then((m) => ({ default: m.AssetsPage })));
+const DatasetEditorPage = lazy(() => import('./pages/DatasetEditor').then((m) => ({ default: m.DatasetEditorPage })));
+const FileUploadPage = lazy(() => import('./pages/FileUpload').then((m) => ({ default: m.FileUploadPage })));
 const ChatPage = lazy(() => import('./pages/Chat').then((m) => ({ default: m.ChatPage })));
 
 function PendingPage(): JSX.Element {
@@ -25,10 +31,12 @@ function Root(props: RouteSectionProps): JSX.Element {
   return (
     <SessionProvider>
     <InboxProvider>
+    <OnboardingGate>
       <PageChrome />
       <ErrorBoundary fallback={(_, reset) => <main class="mx-auto max-w-5xl px-4 py-10" role="alert">Could not load this page. <button aria-label="Retry loading page" onClick={reset}>Retry</button></main>}>
         <Suspense fallback={<PendingPage />}>{props.children}</Suspense>
       </ErrorBoundary>
+    </OnboardingGate>
     </InboxProvider>
     </SessionProvider>
   );
@@ -37,7 +45,13 @@ function Root(props: RouteSectionProps): JSX.Element {
 export function App(): JSX.Element {
   return (
     <Router root={Root}>
+      <Route path="/" component={HomePage} />
+      <Route path="/a/:id" component={FolderRoute} />
       <Route path="/trash" component={TrashPage} />
+      <Route path="/assets" component={AssetsPage} />
+      <Route path="/datasets/new" component={DatasetEditorPage} />
+      <Route path="/files/new" component={FileUploadPage} />
+      <Route path="/a/:id/edit" component={DatasetEditorPage} />
       <Route path="/chat" component={ChatPage} />
       <Route path="/login" component={LoginPage} />
       <Route path="/start" component={StartPage} />

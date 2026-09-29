@@ -72,7 +72,8 @@ export default function RowMenu(props: { name: string; items: RowMenuItem[] }): 
                   disabled={item().disabled}
                   class={`flex w-full items-center gap-2 rounded-[4px] px-2 py-1 text-left text-muted disabled:cursor-not-allowed disabled:text-faint disabled:hover:bg-transparent enabled:cursor-pointer enabled:hover:bg-raised ${item().danger ? 'enabled:hover:text-danger' : 'enabled:hover:text-fg'}`}
                   onClick={() => {
-                    box.querySelector<HTMLButtonElement>('button')?.focus();
+                    // Callers may open a dialog and move focus there; focusing the
+                    // trigger first recursively reopens its tooltip during disposal.
                     setOpen(false);
                     item().onSelect();
                   }}
