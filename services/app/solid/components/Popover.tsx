@@ -35,7 +35,7 @@ export function Popover(props: {
   /** Extra classes on the panel surface. */
   class?: string;
   /** role="listbox" for a select-style panel; omitted (plain group) for a menu of controls. */
-  role?: JSX.AriaAttributes['role'];
+  role?: 'listbox';
   onPanelKeyDown?: (event: KeyboardEvent) => void;
   children: JSX.Element;
 }): JSX.Element {
@@ -74,7 +74,7 @@ function PopoverPanel(p: {
   align: Align;
   sideOffset: number;
   class?: string;
-  role?: JSX.AriaAttributes['role'];
+  role?: 'listbox';
   onKeyDown?: (event: KeyboardEvent) => void;
   onClose: () => void;
   children: JSX.Element;
