@@ -52,6 +52,9 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
   let mutation = { signature: '', key: '' };
   const [folds, setFolds] = createSignal(readFolds(props.id));
   const [pick, setPick] = createSignal<'select' | null>(props.pickRequested ? 'select' : null);
+  let lastRailOpen = false;
+  let openedForThread = false;
+  let sheetAwayForPick = false;
   const [hoverId, setHoverId] = createSignal<string | null>(null);
   const [anchorRects, setAnchorRects] = createSignal<Record<string, StoryEditRect>>({});
   const [linkTarget, setLinkTarget] = createSignal<string | null>(props.linkTarget ?? (typeof location === 'undefined' ? null : new URLSearchParams(location.search).get('comment') ?? new URLSearchParams(location.search).get('thread')));
@@ -65,8 +68,13 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
     onCleanup(() => window.removeEventListener('popstate', navigate));
   });
   createEffect(() => {
-    if (props.railOpen && !selection() && !openId() && props.pickOnOpen !== false && !props.editId && !props.railSheet) setPick('select');
-    else if (!props.railOpen && !selection()) setPick(null);
+    const railOpen = props.railOpen;
+    const canPick = props.pickOnOpen !== false;
+    if (!canPick) { setPick(null); sheetAwayForPick = false; }
+    else if (railOpen && !lastRailOpen && !selection() && !openId() && !openedForThread && !props.railSheet && !props.editId) setPick('select');
+    else if (!railOpen && lastRailOpen && !sheetAwayForPick) setPick(null);
+    if (railOpen && !lastRailOpen) openedForThread = false;
+    lastRailOpen = railOpen;
   });
   createEffect(() => {
     const live = props.liveAnnotations;
@@ -108,6 +116,7 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
   });
   createEffect(() => {
     if (!props.initialSelection) return;
+    setPick(null);
     setSelection(props.initialSelection);
   });
   createEffect(() => {
@@ -157,8 +166,11 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
           } else capture.reset();
         } else if (event.data.type === STORY_SELECTION_MESSAGE && selection()) {
           const reported = event.data.selection;
-          setSelection(previous => reported && previous?.nodeId && reported.nodeId === previous.nodeId
-            ? { ...reported, quote: previous.quote, range: previous.range } : reported);
+          setSelection(previous => {
+            const next = reported && previous?.nodeId && reported.nodeId === previous.nodeId
+              ? { ...reported, ...(previous.quote ? { quote: previous.quote } : {}), ...(previous.range ? { range: previous.range } : {}) } : reported;
+            return JSON.stringify(previous) === JSON.stringify(next) ? previous : next;
+          });
         }
       });
       onCleanup(() => {
@@ -213,6 +225,7 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
     catch (cause) { setError(cause instanceof Error ? cause.message : 'Could not load resolved comments.'); }
   };
   const openThread = (id: string) => {
+    openedForThread = true;
     setPick(null);
     setOpenId(id);
     const row = [...items(), ...resolved()].find(item => item.id === id);
@@ -322,7 +335,8 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
       <div class="mb-2 flex gap-1 text-xs"><For each={[...(selection()?.ancestors.slice(-2) ?? []), ...(selection() ? [{ path: selection()!.path, tag: selection()!.tag, hint: '' }] : [])]}>{crumb => <Show when={crumb.path !== selection()?.path} fallback={<span>{crumb.tag}</span>}><button type="button" aria-label={`Select ${crumb.tag}`} onClick={() => sendDocument({ runtimeRef: props.runtimeRef }, { type: STORY_SELECT_MESSAGE, path: crumb.path })}>{crumb.tag}</button></Show>}</For></div>
       <CommentMarkdownField label="New comment" value={draft()} onChange={editDraft} onSubmit={() => void post()} backend={backend} artifactId={props.id} placeholder="Add a comment for your agent…" rows={4} /><div class="flex justify-end gap-2"><button type="button" aria-label="Cancel comment" onClick={cancelComposer} class="bg-transparent px-2 py-1">Cancel</button><button type="button" aria-label="Post comment" disabled={busy() || capture.busy() || (capture.required() && !capture.draft()) || !hasReplyText(draft())} onClick={() => void post()} class="border border-accent bg-accent px-2 py-1 text-bg">Post</button></div></aside></Show>
     <AnnotationRail open={props.railOpen} onClose={() => props.onRailOpenChange(false)} topOffset={props.topOffset} rightInset={props.rightInset} host={props.railHost} sheet={props.railSheet} picking={pick() !== null} onSelect={() => {
-      if (pick()) { setPick(null); capture.reset(); } else { setPick('select'); void capture.start(); }
+      if (pick()) { setPick(null); capture.reset(); sheetAwayForPick = false; }
+      else { setPick('select'); void capture.start(); if (props.railSheet) { sheetAwayForPick = true; props.onRailOpenChange(false); } }
     }}>
       <div ref={threadsRoot}>
         <For each={items()}>{thread}</For>
