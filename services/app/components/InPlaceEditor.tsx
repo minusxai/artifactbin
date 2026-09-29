@@ -1,4 +1,5 @@
 'use client';
+import { createPortal } from 'react-dom';
 import type {DocumentGraph} from '@artifactbin/contracts';
 
 import type { EditorSelectionChange } from '@/lib/editor-v2/bookmark';
@@ -33,7 +34,7 @@ import { TrustedUi } from '@/components/TrustedUi';
 
 import ThemePicker, { ModeChip, TemplateChip } from '@/components/ThemePicker';
 import { Tooltip } from '@/components/Tooltip';
-import { APP_BAR_H, EDIT_BAR_H, EDIT_BAR_ROW_H } from '@/lib/story/edit-bar';
+import { APP_BAR_H, EDIT_BAR_H } from '@/lib/story/edit-bar';
 import MobileSheet, { useIsPhoneViewport } from '@/components/MobileSheet';
 import EditPanel, { SELECTION_HINT, type EditPanelTab } from '@/components/EditPanel';
 import { editPanelWidth, readEditPanelCollapsed, useWideEditViewport, writeEditPanelCollapsed } from '@/lib/story/use-edit-panel';
@@ -159,8 +160,11 @@ export default function InPlaceEditor({
   commentsOpen = false,
   onCommentsOpenChange,
   onCommentsHost,
+  titleHost = null,
 }: {
   art: EditorArtifact;
+  /** Breadcrumb slot owned by the page; without one, title lives in document settings. */
+  titleHost?: HTMLElement | null;
   /** Optional standalone document frame compatibility ref; the active page uses runtimeRef. */
   frameRef?: { current: HTMLIFrameElement | null };
   runtimeRef?: DocumentRuntimeRef;
@@ -757,14 +761,7 @@ export default function InPlaceEditor({
     spotlight([]);
     setQueryFocus(null);
   }, [notebookVisible, spotlight]);
-  /*
-   * "Select an element to format" is an instruction you cannot follow from the
-   * source or the query notebook — there is no page there to select on. So the
-   * app view draws both rows and every other view draws one, and the panes
-   * below start at whichever height the bar actually is.
-   */
-  const formattingRow = mode === 'design' && !notebookVisible;
-  const barH = formattingRow ? EDIT_BAR_H : EDIT_BAR_ROW_H;
+  const barH = EDIT_BAR_H;
   /*
    * THE ONE WIDTH the page is told about: the panel's, which nothing in the
    * session changes but collapse / expand (and a window crossing the
@@ -1152,9 +1149,9 @@ export default function InPlaceEditor({
   );
 
   /*
-   * THE SELECTION TAB'S BODY — the inspector for the selected embed, or the
-   * hint. The same body on a wide window's panel and in a narrow window's sheet.
-   * No delete here: the selection toolbar offers it for EVERY selection
+   * THE SELECTION TAB'S BODY — document appearance, then contextual controls.
+   * The same body serves the wide panel and the narrow sheet.
+   * No delete in the inspector: the selection toolbar offers it for EVERY selection
    * (lib/story/selection-toolbar ALWAYS_OFFERED), and a second trash an inch
    * from `close` was the one people hit by mistake. The inspector inspects;
    * the toolbar acts on the node.
@@ -1162,7 +1159,7 @@ export default function InPlaceEditor({
   const InspectIcon = inspector ? INSPECT_ICON[inspector] : null;
   /** An embed whose inspector can show now: the toolbar offers Edit chart / number / diagram. */
   const inspectable = !!inspector && mode === 'design' && !preview;
-  const selectionBody = inspector && mode === 'design' && !preview ? (
+  const inspectorBody = inspector && mode === 'design' && !preview ? (
     <section aria-label={INSPECTOR_LABEL[inspector]}>
       <div className="mb-3 flex items-center justify-between">
         <span className="font-mono text-[11px] uppercase tracking-wide text-faint">{inspector}</span>
@@ -1194,12 +1191,95 @@ export default function InPlaceEditor({
         <MermaidEditorPanel embed={mermaidEmbed!} onChange={onMermaidChange} />
       )}
     </section>
-  ) : (
-    <p className="px-1 py-2 font-sans text-xs text-muted">{SELECTION_HINT}</p>
+  ) : null;
+
+  const formatControls = selection && mode === 'design' && !preview && !notebookVisible ? (
+    <StoryFormatToolbar layout="panel" artifactId={art.id}
+      selection={selection}
+      onApply={edit.applyFormat}
+      onApplyLink={edit.applyLink}
+      onApplyInline={edit.applyInline}
+      onAutoHeight={() =>
+        commitStructural(
+          editBlock(sourceRef.current, {
+            kind: 'auto-height',
+            path: selection.path,
+          }),
+        )
+      }
+      onSelect={edit.select}
+      onDelete={deleteSelected}
+      onComment={onComment}
+      image={imageControls}
+    />
+  ) : null;
+  const titleEditor = (
+    <input
+      aria-label="Title"
+      value={title}
+      onChange={(e) => {
+        setTitle(e.target.value);
+        queue({ title: e.target.value });
+      }}
+      placeholder="untitled"
+      style={{ width: `${Math.max(8, Math.min(title.length + 2, 48))}ch`, maxWidth: '100%' }}
+      className="min-w-0 rounded-[4px] border border-transparent bg-transparent px-1.5 py-1 font-mono text-xs font-semibold text-fg hover:border-edge focus:border-edge-bright focus:outline-none"
+    />
+  );
+  const selectionBody = (
+    <>
+      <section aria-label="Document appearance" className="flex flex-col items-start gap-2 px-1 py-2">
+        <h3 className="mb-1 font-mono text-[11px] uppercase tracking-wide text-faint">Document</h3>
+        {!titleHost && titleEditor}
+        <ThemePicker
+          value={theme}
+          colorMode={colorMode}
+          onPick={(t) => {
+            setTheme(t);
+            queue({ theme: t });
+            // The document carries its own design attributes; tell it directly
+            // rather than making it wait for the save to come back around. With
+            // no author pick the MODE follows the new theme's declared default.
+            sendDocument(
+              { frameRef, runtimeRef },
+              {
+                type: 'mx:document',
+                nodes: storyUpdateParts(sourceRef.current, HELD_ASSETS)?.nodes ?? [],
+                source: sourceRef.current,
+                theme: t,
+                colorMode: colorMode ?? storyThemeDefaultMode(t) ?? 'light',
+              },
+            );
+          }}
+        />
+        <TemplateChip template={art.template} />
+        {/* The AUTHOR'S DEFAULT mode, beside the theme it composes with. Every
+          theme carries both palettes, so this is meaningful for every
+          document; "theme default" stores an explicit null so the mode
+          follows a later theme switch. Readers can still flip their own view. */}
+        <ModeChip
+          mode={colorMode}
+          themeDefault={storyThemeDefaultMode(theme) ?? 'light'}
+          onPick={(next) => {
+            setColorMode(next);
+            const effective = next ?? storyThemeDefaultMode(theme) ?? 'light';
+            colorModeRef.current = effective;
+            queue({ colorMode: next });
+            showInDocument(sourceRef.current, { colorMode: effective });
+          }}
+        />
+      </section>
+      <hr className="my-3 border-edge" />
+      {formatControls}
+      {inspectorBody ? <div className="mt-3">{inspectorBody}</div> : !formatControls ? (
+        <p className="px-1 py-2 font-sans text-xs text-muted">{SELECTION_HINT}</p>
+      ) : null}
+    </>
   );
 
   return (
     <div className="contents" data-app-appearance={surfaceMode}>
+      {titleHost && createPortal(titleEditor, titleHost)}
       {/* The double-click picker: a file chosen here replaces the image that was double-clicked. */}
       <input
         ref={replaceInputRef}
@@ -1329,50 +1409,48 @@ export default function InPlaceEditor({
       )}
       <header
         aria-label="Editor toolbar"
-        className={`fixed z-30 grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-2 bg-surface px-3 ${
-          formattingRow ? 'grid-rows-[44px_44px]' : 'grid-rows-[44px]'
-        }`}
+        className="fixed z-30 grid grid-cols-[minmax(0,1fr)_auto] grid-rows-[44px] items-center gap-x-2 border-b border-edge bg-surface px-3"
         style={{ top: barTop, height: barH, left: 0, right: rightInset }}
       >
-        {/* Settings scroll independently; mode, history and Done stay visible.
-            The formatting row below owns its own overflow and portalled menus. */}
+        {/* View and editing actions scroll independently while Done stays visible. */}
         <div className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto sm:gap-2">
-          <input
-            aria-label="Title"
-            value={title}
-            onChange={(e) => {
-              setTitle(e.target.value);
-              queue({ title: e.target.value });
-            }}
-            placeholder="untitled"
-            className="w-0 min-w-[3.5rem] flex-1 rounded-[4px] border border-transparent bg-transparent px-1.5 py-1 font-mono text-xs font-semibold text-fg hover:border-edge focus:border-edge-bright focus:outline-none sm:w-48 sm:flex-none sm:shrink-0"
-          />
+
           {/*
             * WHAT YOU ARE EDITING: app and code are two renderings of the
             * document, data is the queries it reads — three views of ONE
             * document, so choosing any of them leaves the other two. First of
-            * the document-wide choices (theme and mode follow), so a narrow
+            * the document-wide choices, so a narrow
             * bar that scrolls this row still shows it.
             */}
-          <div role="group" aria-label="Editor view" className="flex shrink-0 items-center rounded-[4px] border border-edge p-0.5">
+          <div role="tablist" aria-label="Editor view" className="flex h-11 shrink-0 items-stretch gap-1" onKeyDown={(event) => {
+            if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+            const tabs = Array.from(event.currentTarget.querySelectorAll<HTMLButtonElement>('[role="tab"]'));
+            const current = tabs.indexOf(event.target as HTMLButtonElement);
+            const index = event.key === 'Home' ? 0 : event.key === 'End' ? tabs.length - 1 : (current + (event.key === 'ArrowRight' ? 1 : -1) + tabs.length) % tabs.length;
+            event.preventDefault();
+            tabs[index]?.focus();
+            tabs[index]?.click();
+          }}>
             {/* Icon-only on a phone, where every control in this row must fit; the names stay. */}
             {(
               [
-                ['design', 'app', <Paintbrush key="d" size={12} />, mode === 'design' && !queriesOpen],
-                ['code', 'code', <Code key="c" size={12} />, mode === 'code'],
+                ['design', 'App', <Paintbrush key="d" size={12} />, mode === 'design' && !queriesOpen],
+                ['code', 'Code', <Code key="c" size={12} />, mode === 'code'],
               ] as const
             ).map(([m, label, icon, active]) => (
               <Tooltip key={m} content={m === 'design' ? 'edit on the page' : 'edit the source'}>
               <button
                 type="button"
                 aria-label={m === 'design' ? 'Edit on the page' : 'Edit the source'}
-                aria-pressed={active}
+                role="tab"
+                aria-selected={active}
+                tabIndex={active ? 0 : -1}
                 onClick={() => {
                   chooseMode(m);
                   setQueriesOpen(false);
                 }}
-                className={`inline-flex h-6 cursor-pointer items-center gap-1 rounded-[3px] px-1 font-mono text-[11px] sm:px-1.5 ${
-                  active ? 'bg-accent-soft text-accent' : 'text-muted hover:bg-raised hover:text-fg'
+                className={`inline-flex h-11 cursor-pointer items-center gap-2 border-b-2 px-2 font-mono text-sm font-semibold transition-colors sm:px-4 ${
+                  active ? 'border-accent text-accent' : 'border-transparent text-muted hover:bg-raised hover:text-fg'
                 }`}
               >
                 {icon}
@@ -1385,60 +1463,26 @@ export default function InPlaceEditor({
               <button
                 type="button"
                 aria-label="Show data"
-                aria-pressed={queriesOpen}
+                role="tab"
+                aria-selected={queriesOpen}
+                tabIndex={queriesOpen ? 0 : -1}
                 onClick={() => {
-                  setQueriesOpen((v) => !v);
+                  setQueriesOpen(true);
                   chooseMode('design');
                   // The notebook is a view over the document: nothing on the page is selected under it.
                   if (!queriesOpen) edit.select(null);
                 }}
-                className={`inline-flex h-6 cursor-pointer items-center gap-1 rounded-[3px] px-1 font-mono text-[11px] sm:px-1.5 ${
-                  queriesOpen ? 'bg-accent-soft text-accent' : 'text-muted hover:bg-raised hover:text-fg'
+                className={`inline-flex h-11 cursor-pointer items-center gap-2 border-b-2 px-2 font-mono text-sm font-semibold transition-colors sm:px-4 ${
+                  queriesOpen ? 'border-accent text-accent' : 'border-transparent text-muted hover:bg-raised hover:text-fg'
                 }`}
               >
                 <Database size={12} />
-                <span className="hidden sm:inline">data</span>
+                <span className="hidden sm:inline">Data</span>
               </button>
               </Tooltip>
             )}
           </div>
-          <ThemePicker
-            value={theme}
-            colorMode={colorMode}
-            onPick={(t) => {
-              setTheme(t);
-              queue({ theme: t });
-              // The document carries its own design attributes; tell it directly
-              // rather than making it wait for the save to come back around. With
-              // no author pick the MODE follows the new theme's declared default.
-              sendDocument(
-                { frameRef, runtimeRef },
-                {
-                  type: 'mx:document',
-                  nodes: storyUpdateParts(sourceRef.current, HELD_ASSETS)?.nodes ?? [],
-                  source: sourceRef.current,
-                  theme: t,
-                  colorMode: colorMode ?? storyThemeDefaultMode(t) ?? 'light',
-                },
-              );
-            }}
-          />
-          <TemplateChip template={art.template} />
-          {/* The AUTHOR'S DEFAULT mode, beside the theme it composes with. Every
-            theme carries both palettes, so this is meaningful for every
-            document; "theme default" stores an explicit null so the mode
-            follows a later theme switch. Readers can still flip their own view. */}
-          <ModeChip
-            mode={colorMode}
-            themeDefault={storyThemeDefaultMode(theme) ?? 'light'}
-            onPick={(next) => {
-              setColorMode(next);
-              const effective = next ?? storyThemeDefaultMode(theme) ?? 'light';
-              colorModeRef.current = effective;
-              queue({ colorMode: next });
-              showInDocument(sourceRef.current, { colorMode: effective });
-            }}
-          />
+
         </div>
 
         <div aria-label="Document actions" className="flex shrink-0 items-center gap-1.5 sm:gap-2">
@@ -1509,6 +1553,8 @@ export default function InPlaceEditor({
               )}
             </>
           )}
+          {mode === 'design' && insertionControls}
+          <div aria-label="Editing history" className="flex items-center">{historyControls}</div>
           <Tooltip content="done editing">
             <button
               type="button"
@@ -1525,45 +1571,7 @@ export default function InPlaceEditor({
             </button>
           </Tooltip>
         </div>
-        {formattingRow && (
-        <div className="col-span-2 min-w-0 self-start">
-          {selection && mode === 'design' ? (
-            <StoryFormatToolbar artifactId={art.id}
-              selection={selection}
-              onApply={edit.applyFormat}
-              onApplyLink={edit.applyLink}
-              onApplyInline={edit.applyInline}
-              onAutoHeight={() =>
-                commitStructural(
-                  editBlock(sourceRef.current, {
-                    kind: 'auto-height',
-                    path: selection.path,
-                  }),
-                )
-              }
-              historyControls={historyControls}
-              insertionControls={insertionControls}
-              onSelect={edit.select}
-              onDelete={deleteSelected}
-              onComment={onComment}
-              image={imageControls}
-            />
-          ) : (
-            <div className="flex flex-col">
-              <div
-                aria-label="Primary formatting controls"
-                className="flex h-9 items-center gap-1 overflow-x-auto rounded-lg bg-raised px-2"
-              >
-                {historyControls}
-                <span className="shrink-0 px-2 text-[11px] text-muted">
-                  {mode === 'design' ? 'Select an element to format' : 'Editing source'}
-                </span>
-                {mode === 'design' && insertionControls}
-              </div>
-            </div>
-          )}
-        </div>
-        )}
+
       </header>
 
       {imageError && (

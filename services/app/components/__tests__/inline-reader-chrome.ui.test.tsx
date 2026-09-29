@@ -117,3 +117,19 @@ it('steps off a phone while editing, where its rail would sit over the document;
  view.rerender(<InlineReaderChrome input={input} pinned onAction={vi.fn()} />);
  expect(root).not.toHaveClass('mx-reader-chrome--editing');
 });
+
+it('provides a stable breadcrumb editor slot across chrome updates and restores the reader title', () => {
+ const onTitleHost=vi.fn();
+ const input={artifactId:'story1',title:'Title',author:null};
+ const view=render(<InlineReaderChrome input={input} editing onTitleHost={onTitleHost} onAction={vi.fn()} />);
+ const host=onTitleHost.mock.calls.at(-1)?.[0] as HTMLElement;
+ expect(host).toBeInstanceOf(HTMLElement);
+ const field=document.createElement('input');
+ host.append(field);
+ view.rerender(<InlineReaderChrome input={{...input,title:'Renamed'}} editing onTitleHost={onTitleHost} onAction={vi.fn()} />);
+ expect(onTitleHost.mock.calls.at(-1)?.[0]).toBe(host);
+ expect(host).toContainElement(field);
+ view.rerender(<InlineReaderChrome input={{...input,title:'Renamed'}} onTitleHost={onTitleHost} onAction={vi.fn()} />);
+ expect(onTitleHost).toHaveBeenLastCalledWith(null);
+ expect(view.container.querySelector('.mx-reader-title')).toHaveTextContent('Renamed');
+});

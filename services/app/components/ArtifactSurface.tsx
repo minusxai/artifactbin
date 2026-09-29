@@ -243,6 +243,7 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
   const readerFace = useMemo(() => person ? { id: person.id, name: person.username || person.email || '', image: person.image } : null, [person]);
   const { id, editId, format, title, source = null, dataPreview, columns, bytes: fileBytes = 0, pages: filePages = null, compiledCss, theme, colorMode, template, refs, dataflow = null, search = '', accountSession = false, anonSession = false, version, openAnnotations = 0, like = { liked: false, count: 0 }, follow = null } = props;
   const [editing, setEditing] = useState(false);
+  const [titleHost, setTitleHost] = useState<HTMLElement | null>(null);
   const editedCompiledPage = useRef(false);
   const exitAnchor = useRef<ScrollAnchor | null>(null);
   const exitScroll = useRef<number | null>(null);
@@ -1011,7 +1012,7 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
     return (
       <ArtifactBackendProvider backend={backend}>
         <TrustedUi overlay layer="navigation">
-        <InlineReaderChrome onIntent={warmFor} onShare={owner ? () => setSharingOpen(true) : undefined} pinned={editing || railOpen} editing={editing} input={{artifactId:id, ground:readerMode, editing, membership:hasDataMutations?membership.status:undefined, share:owner, archived, visibility:sharingVerdict?.id === id ? sharingVerdict.visibility : props.visibility, hasInvitedUsers:sharingVerdict?.id === id ? sharingVerdict.hasInvitedUsers : props.hasInvitedUsers, title:shownTitle, forkBusy:false, author:props.author ?? null, viewer:readerFace, edit:canEdit, ownerBreadcrumb:owner, reactions:{like:{...likeRef.current,href:'#'},follow:followRef.current ? {...followRef.current,href:'#'} : null,comment:{count:openAnnotationCount,href:'#'}}}} onAction={onChromeAction} />
+        <InlineReaderChrome onTitleHost={editing && !phone ? setTitleHost : undefined} onIntent={warmFor} onShare={owner ? () => setSharingOpen(true) : undefined} pinned={editing || railOpen} editing={editing} input={{artifactId:id, ground:readerMode, editing, membership:hasDataMutations?membership.status:undefined, share:owner, archived, visibility:sharingVerdict?.id === id ? sharingVerdict.visibility : props.visibility, hasInvitedUsers:sharingVerdict?.id === id ? sharingVerdict.hasInvitedUsers : props.hasInvitedUsers, title:shownTitle, forkBusy:false, author:props.author ?? null, viewer:readerFace, edit:canEdit, ownerBreadcrumb:owner, reactions:{like:{...likeRef.current,href:'#'},follow:followRef.current ? {...followRef.current,href:'#'} : null,comment:{count:openAnnotationCount,href:'#'}}}} onAction={onChromeAction} />
         {membership.error && <div role="alert" className="fixed left-4 top-16 z-50 rounded-lg border border-edge bg-surface p-3 text-sm text-danger">{membership.error}</div>}
         {sharingOpen && <ShareLink version={live?.version ?? version} onSharingChange={onSharingChange} artifactId={id} title={shownTitle} owner={owner} editable={canEdit} format={format} datasetKind={shownCatalog?.kind} variant="dialog" className="" onClose={() => setSharingOpen(false)} onSocialPreview={canPreview && format === 'markup' ? () => { setSharingOpen(false); setSocialPreviewOpen(true); } : undefined} />}
         {editing ? (
@@ -1132,6 +1133,7 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
             commentsOpen={railOpen}
             onCommentsOpenChange={canAnnotate ? setRailOpen : undefined}
             onCommentsHost={setCommentsHost}
+            titleHost={phone ? null : titleHost}
           />
         )}
         {forkAsked && <ForkConfirm id={id} title={shownTitle} onClose={() => setForkAsked(false)} />}

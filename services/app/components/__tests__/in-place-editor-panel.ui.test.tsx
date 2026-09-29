@@ -18,7 +18,7 @@ vi.mock(import('@/components/TrustedUi'), async (importOriginal) => ({
   useTrustedPortalContainer: () => undefined,
 }));
 
-import { installEditorFrame, teardownEditorFrame, mount, fromFrame, selection, editorElement } from '@/test/helpers/in-place-editor';
+import { installEditorFrame, teardownEditorFrame, mount, fromFrame, selection, editorElement, art, lastQueued } from '@/test/helpers/in-place-editor';
 
 const chart = () => selection({ kind: 'embed', tag: 'Question', path: '0.2', rect: { x: 10, y: 400, width: 300, height: 200 } });
 const setWidth = (width: number) => Object.defineProperty(window, 'innerWidth', { value: width, configurable: true });
@@ -36,6 +36,39 @@ afterEach(() => {
 });
 
 describe('the edit panel on a wide window', () => {
+  it('edits the title in the breadcrumb host through the existing save queue', () => {
+    const titleHost = document.createElement('span');
+    document.body.append(titleHost);
+    const view = mount({ titleHost });
+    try {
+      const input = within(titleHost).getByRole('textbox', { name: 'Title' });
+      expect(within(screen.getByLabelText('Editor toolbar')).queryByLabelText('Title')).toBeNull();
+      fireEvent.change(input, { target: { value: 'Renamed document' } });
+      expect(lastQueued()).toMatchObject({ title: 'Renamed document' });
+    } finally {
+      view.unmount();
+      titleHost.remove();
+    }
+  });
+
+  it('groups document appearance above selection formatting in the panel', async () => {
+    mount({ art: { ...art, template: 'editorial' } });
+    const panel = within(screen.getByLabelText('Edit panel'));
+    const header = within(screen.getByLabelText('Editor toolbar'));
+    for (const label of ['Theme', 'Template', 'Color mode']) {
+      expect(panel.getByLabelText(label)).toBeTruthy();
+      expect(header.queryByLabelText(label)).toBeNull();
+    }
+    expect(panel.getByRole('separator')).toBeTruthy();
+    expect(screen.getByLabelText('Editor toolbar')).toHaveStyle({ height: '44px' });
+    await fromFrame({ type: STORY_SELECTION_MESSAGE, selection: selection() });
+    expect(panel.getByLabelText('Typography toolbar')).toBeTruthy();
+    expect(header.queryByLabelText('Typography toolbar')).toBeNull();
+    expect(panel.queryByText('Select a chart, image or block to see its settings.')).toBeNull();
+    expect(header.getByLabelText('Undo')).toBeTruthy();
+    expect(header.getByRole('button', { name: 'Insert' })).toBeTruthy();
+  });
+
   it('is open from entry, and nothing in the session changes the width it asks for', async () => {
     const widths: number[] = [];
     const onCommentsOpenChange = vi.fn();
@@ -218,6 +251,18 @@ describe('the edit panel on a wide window', () => {
     expect(screen.getByLabelText('Expand panel')).toBeTruthy();
   });
 
+  it('uses view tabs and orders Insert, Undo, Redo, Done in the action group', () => {
+    mount();
+    const views = screen.getByRole('tablist', { name: 'Editor view' });
+    const app = within(views).getByRole('tab', { name: 'Edit on the page' });
+    expect(app).toHaveAttribute('aria-selected', 'true');
+    fireEvent.keyDown(app, { key: 'ArrowRight' });
+    expect(within(views).getByRole('tab', { name: 'Edit the source' })).toHaveAttribute('aria-selected', 'true');
+    fireEvent.click(app);
+    const actions = within(screen.getByLabelText('Document actions')).getAllByRole('button');
+    expect(actions.map(button => button.getAttribute('aria-label'))).toEqual(['Insert', 'Undo', 'Redo', 'Exit edit mode']);
+  });
+
   it('puts the app / code switch in the editor toolbar', () => {
     mount();
     const toolbar = screen.getByLabelText('Editor toolbar');
@@ -247,8 +292,11 @@ describe('below the panel breakpoint', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Edit chart' }));
     const sheet = screen.getByRole('dialog', { name: 'Selection settings' });
     expect(within(sheet).getByLabelText('Chart inspector')).toBeTruthy();
-    // The chart's top lands just under the bars (44 + 88 + 8).
-    expect(scrollBy).toHaveBeenCalledWith({ top: 400 - 140, behavior: 'smooth' });
+    expect(within(sheet).getByLabelText('Theme')).toBeTruthy();
+    expect(within(sheet).getByLabelText('Typography toolbar')).toBeTruthy();
+    expect(within(screen.getByLabelText('Editor toolbar')).queryByLabelText('Typography toolbar')).toBeNull();
+    // The chart's top lands just under the bars (44 + 44 + 8).
+    expect(scrollBy).toHaveBeenCalledWith({ top: 400 - 96, behavior: 'smooth' });
 
     fireEvent.click(within(sheet).getByLabelText('Close selection settings'));
     expect(screen.queryByRole('dialog', { name: 'Selection settings' })).toBeNull();
@@ -293,7 +341,7 @@ describe('below the panel breakpoint', () => {
     setWidth(390);
     mount();
     for (const name of ['Edit on the page', 'Edit the source']) {
-      const button = screen.getByRole('button', { name });
+      const button = screen.getByRole('tab', { name });
       const label = [...button.querySelectorAll('span')].find((el) => el.textContent);
       expect(label?.className).toMatch(/\bhidden\b.*\bsm:inline\b/);
     }

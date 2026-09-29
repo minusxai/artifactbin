@@ -56,7 +56,7 @@ interface EditorSeed {
   dataflow?: StoryIslandDataflow | null;
 }
 
-export default function ArtifactEditor({ seed, onExit, flushRef, frameRef, runtimeRef, sessionNonce, initialSelectionPath = null, onComment, onRightInsetChange, rightInset = 0, commentsOpen, onCommentsOpenChange, onCommentsHost }: {
+export default function ArtifactEditor({ seed, onExit, flushRef, frameRef, runtimeRef, sessionNonce, initialSelectionPath = null, onComment, onRightInsetChange, rightInset = 0, commentsOpen, onCommentsOpenChange, onCommentsHost, titleHost }: {
   /** The artifact being edited; its requests go through the ArtifactBackendProvider above. */
   id: string;
   seed?: EditorSeed;
@@ -76,6 +76,7 @@ export default function ArtifactEditor({ seed, onExit, flushRef, frameRef, runti
   commentsOpen?: boolean;
   onCommentsOpenChange?: (open: boolean) => void;
   onCommentsHost?: (host: HTMLElement | null) => void;
+  titleHost?: HTMLElement | null;
   rightInset?: number;
   /**
    * Where the mounted editor publishes its drain, so the page can empty it
@@ -214,6 +215,7 @@ export default function ArtifactEditor({ seed, onExit, flushRef, frameRef, runti
       commentsOpen={commentsOpen}
       onCommentsOpenChange={onCommentsOpenChange}
       onCommentsHost={onCommentsHost}
+      titleHost={titleHost}
     />
   );
 }
