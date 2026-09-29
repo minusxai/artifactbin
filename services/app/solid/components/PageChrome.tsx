@@ -1,5 +1,5 @@
 /* @jsxImportSource solid-js */
-import { createEffect, createSignal, For, onCleanup, Show, type JSX } from 'solid-js';
+import { createContext, createEffect, createSignal, For, onCleanup, Show, useContext, type JSX, type Setter } from 'solid-js';
 /** Shared Solid app chrome. One owner closes one panel before another opens. */
 import { Bell, ChevronRight, CircleUser, LogIn, LogOut, Moon, SlidersVertical, Sun, X } from 'lucide-solid';
 import { useLocation } from '@solidjs/router';
@@ -25,6 +25,9 @@ export default function ArtifactPageChrome(props: { authed: boolean; anon: boole
 }
 
 type Panel = 'menu' | 'controls' | 'notifications' | null;
+/** A route may suppress the app bar while it owns the whole viewport (the 404 page). */
+export const ChromeVisibilityContext = createContext<Setter<boolean>>();
+export function useChromeVisibility(): Setter<boolean> | undefined { return useContext(ChromeVisibilityContext); }
 const BAR_BUTTON = 'flex h-9 w-9 cursor-pointer items-center justify-center rounded-[8px] border-0 bg-transparent text-muted transition-colors hover:bg-raised hover:text-fg';
 const MENU_ITEM = 'flex w-full items-center gap-3 rounded-[5px] border-0 bg-transparent px-3 py-3 text-left font-mono text-sm no-underline text-muted hover:bg-raised hover:text-fg sm:py-2 sm:text-xs';
 

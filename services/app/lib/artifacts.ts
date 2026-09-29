@@ -47,7 +47,6 @@ import {DatasetError} from '@/lib/datasets/errors';
  * account works ACCOUNT-WIDE (user_id scope), an anonymous token reaches only
  * what it created (token_id scope).
  */
-import { cache } from 'react';
 import { trackEvent } from './analytics';
 import { sourceWithoutAnchors } from './annotation-anchors';
 import { ALLOW_PUBLIC_VISIBILITY, ARTIFACT_QUOTA_PER_TOKEN } from './config';
@@ -932,15 +931,11 @@ async function listArtifactsScoped(scope: Scope): Promise<ArtifactSummary[]> {
  * Unscoped read for the public serving paths (/a/<id> and its sub-routes).
  * The id is an ADDRESS, not a credential — whether this viewer may see the
  * row is the caller's decision (the visibility ACL), made before serving.
- *
- * Request-memoized (React cache), so a page that resolves the same row twice in
- * one render pays the lookup once. Outside a React render (route handlers,
- * tests) cache() is a pass-through, so it can never serve a stale row.
  */
-export const getArtifactById = cache(async (id: string): Promise<ArtifactRow | null> => {
+export async function getArtifactById(id: string): Promise<ArtifactRow | null> {
   const db = await getDb();
   return loadArtifactDocument<ArtifactRow>(db,`SELECT * FROM artifacts WHERE id = $1 AND ${LIVE_ARTIFACT_SQL}`, [id]);
-});
+}
 
 interface VersionSummary {
   version: number;

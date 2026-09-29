@@ -1,9 +1,9 @@
 /* @jsxImportSource solid-js */
 /** Solid owns the entire Trash route. Other destinations load their React document. */
-import { ErrorBoundary, lazy, Suspense, type JSX } from 'solid-js';
+import { createSignal, ErrorBoundary, lazy, Show, Suspense, type JSX } from 'solid-js';
 import { Route, Router, type RouteSectionProps } from '@solidjs/router';
 import { SessionProvider } from './web/session';
-import { PageChrome } from './components/PageChrome';
+import { ChromeVisibilityContext, PageChrome } from './components/PageChrome';
 import { OnboardingGate } from './components/OnboardingGate';
 import { InboxProvider } from './web/notifications';
 
@@ -29,14 +29,17 @@ function PendingPage(): JSX.Element {
 }
 
 function Root(props: RouteSectionProps): JSX.Element {
+  const [showChrome, setShowChrome] = createSignal(true);
   return (
     <SessionProvider>
     <InboxProvider>
     <OnboardingGate>
-      <PageChrome />
-      <ErrorBoundary fallback={(_, reset) => <main class="mx-auto max-w-5xl px-4 py-10" role="alert">Could not load this page. <button aria-label="Retry loading page" onClick={reset}>Retry</button></main>}>
-        <Suspense fallback={<PendingPage />}>{props.children}</Suspense>
-      </ErrorBoundary>
+      <ChromeVisibilityContext.Provider value={setShowChrome}>
+        <Show when={showChrome()}><PageChrome /></Show>
+        <ErrorBoundary fallback={(_, reset) => <main class="mx-auto max-w-5xl px-4 py-10" role="alert">Could not load this page. <button aria-label="Retry loading page" onClick={reset}>Retry</button></main>}>
+          <Suspense fallback={<PendingPage />}>{props.children}</Suspense>
+        </ErrorBoundary>
+      </ChromeVisibilityContext.Provider>
     </OnboardingGate>
     </InboxProvider>
     </SessionProvider>

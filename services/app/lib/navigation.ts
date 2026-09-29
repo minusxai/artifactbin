@@ -3,16 +3,14 @@
 import { useEffect } from 'react';
 import { useLocation, useNavigate, useSearchParams as useRRSearchParams } from 'react-router';
 import { isClientRoute } from '@/web/NavigationBoundary';
+import { REFRESH_EVENT } from '@/web/page-data-events';
 
 /**
  * `refresh()` — "re-read what this page shows", the one call with no
- * react-router equivalent. The obvious translation (`navigate(0)`) is
- * `history.go(0)`, a FULL RELOAD, which throws
- * away exactly the state the caller had just set (the claim banner's result,
- * measured: it never painted). So it is an event instead: the pages that hold
- * fetched data listen and re-fetch, and nothing else moves.
+ * react-router equivalent (see web/page-data-events for why it is an event,
+ * not a reload).
  */
-export const REFRESH_EVENT = 'mx:refresh';
+export { REFRESH_EVENT };
 
 /** Re-fetch this page's data when something changes it. Runs on mount too if `now`. */
 export function useRefreshable(reload: () => void): void {
