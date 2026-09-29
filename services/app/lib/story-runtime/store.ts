@@ -347,10 +347,18 @@ export function createDataflowStore(
     switch (effect.type) {
       case 'notify': for (const l of [...listeners]) l(); return;
       case 'settle': {
-        const call = writes.get(effect.id);
-        writes.delete(effect.id);
-        if (call) emitWrite(effect.outcome.ok ? { type: 'written', id: effect.id, name: call.name, mutationRunId: effect.outcome.answer?.mutationRunId } : { type: 'writeFailed', id: effect.id, name: call.name, error: effect.outcome.error, request: call.request });
-        if (effect.outcome.ok) call?.resolve?.(); else call?.reject?.(effect.outcome.error);
+        const { id, outcome } = effect;
+        const call = writes.get(id);
+        writes.delete(id);
+        if (!call) return;
+        const event = { id, name: call.name };
+        if (outcome.ok) {
+          emitWrite({ ...event, type: 'written', mutationRunId: outcome.answer?.mutationRunId });
+          call.resolve?.();
+        } else {
+          emitWrite({ ...event, type: 'writeFailed', error: outcome.error, request: call.request });
+          call.reject?.(outcome.error);
+        }
         return;
       }
       case 'run': {
@@ -380,10 +388,10 @@ export function createDataflowStore(
           const m = flow.mutations.find((x) => x.name === name);
           if (!m) throw new Error(`this document declares no <Mutation name="${name}">`);
           const request = mutationRequestFor(m, { values, ...(row ? { row } : {}), ...(Object.hasOwn(values, '_value') ? { value: values._value } : {}), ...(localTables ? { localTables } : {}) });
-          const call = writes.get(id);
-          if (m.notifies || call?.request.operationKey) {
-            request.operationKey = call?.request.operationKey || crypto.randomUUID();
-            request.tz = call?.request.tz ?? localZone();
+          const call = writes.get(id), previous = call?.request;
+          if (m.notifies || previous?.operationKey) {
+            request.operationKey = previous?.operationKey || crypto.randomUUID();
+            request.tz = previous?.tz ?? localZone();
           }
           if (call) call.request = request;
           answer = writeThrough(m, request);
