@@ -76,10 +76,10 @@ function selectOptions(state: DataflowState, raw: unknown, field: string, isUser
 }
 
 /** The disabled input cannot receive focus; its stable wrapper explains why. */
-function MutationCellHint({reason,children}:{reason:string|null;children:ReactNode}) {
+function MutationCellHint({reason,children,fullWidth=true}:{reason:string|null;children:ReactNode;fullWidth?:boolean}) {
   const [open,setOpen]=useState(false);
   return <Tooltip content={reason} open={!!reason && open} onOpenChange={setOpen}>
-    <span className="inline-flex w-full" tabIndex={reason ? 0 : undefined} aria-description={reason ?? undefined}>{children}</span>
+    <span className={fullWidth ? "inline-flex w-full" : "inline-flex"} tabIndex={reason ? 0 : undefined} aria-description={reason ?? undefined} onClick={() => { if(reason) setOpen(true); }}><span style={{display:"contents",pointerEvents:reason ? "none" : undefined}}>{children}</span></span>
   </Tooltip>;
 }
 
@@ -126,7 +126,7 @@ function RuntimeRowAction({props, row, identity, children}: RowActionProps) {
   const unavailable = useSyncExternalStore(store?.subscribe ?? NO_SUBSCRIBE, () => name && store ? store.mutationUnavailable(name) : 'Checking edit access…', () => 'Checking edit access…');
   const {run: _run, set, args, ...rest} = props;
   return <>
-    <Button {...rest} type="button" disabled={!chrome || !actions || unavailable !== null || state?.pending || props.disabled === true}
+    <MutationCellHint reason={refusalText(unavailable)} fullWidth={false}><Button {...rest} type="button" disabled={!chrome || !actions || unavailable !== null || state?.pending || props.disabled === true}
       aria-busy={state?.pending || undefined} aria-description={refusalText(unavailable) ?? undefined}
       onClick={() => {
         if (!chrome || !actions || !store || !name || unavailable !== null || props.disabled === true) return;
@@ -134,7 +134,7 @@ function RuntimeRowAction({props, row, identity, children}: RowActionProps) {
         const values = read(set);
         if (values) store.setValues(values);
         void actions.run(identity, () => store.mutate(name, read(args) ?? {}, snapshot));
-      }}>{children}</Button>
+      }}>{children}</Button></MutationCellHint>
     {state?.error ? <span role="alert" className="mx-write-error">{state.error}</span> : null}
   </>;
 }
@@ -698,7 +698,7 @@ function ButtonAdapter(props: Record<string, unknown>) {
   if (!store || (!name && !set)) return <Button {...(rest as Record<string, unknown>)} run={props.run} set={set}>{children as ReactNode}</Button>;
   return (
     <>
-      <Button
+      <MutationCellHint reason={refusalText(unavailable)} fullWidth={false}><Button
         {...(rest as Record<string, unknown>)}
         aria-busy={busy || undefined}
         disabled={!chrome || busy || unavailable !== null || rest.disabled === true}
@@ -711,8 +711,7 @@ function ButtonAdapter(props: Record<string, unknown>) {
         }}
       >
         {children as ReactNode}
-      </Button>
-      {unavailable ? <span className="text-xs text-muted-foreground">{refusalText(unavailable)}</span> : null}
+      </Button></MutationCellHint>
       {error ? <span role="alert" className="mx-write-error">{error}</span> : null}
     </>
   );

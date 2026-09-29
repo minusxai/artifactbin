@@ -14,6 +14,7 @@ import { chromium } from 'playwright';
 import { becomeOwner, startDocument } from './lib/start-doc.mjs';
 import { loginViaEmail, startMailSink } from './lib/mail-login.mjs';
 import { compiledReader } from './lib/gate-reader.mjs';
+import { notificationDocumentPayload, notificationMutationPayload } from './fixtures/postgres-notifications.mjs';
 
 const base = process.argv[2] ?? 'http://localhost:3030';
 const log = label => console.log(`  ok ${label}`);
@@ -237,6 +238,67 @@ try {
   const finalMetadata = await ownerApi(owner, `/api/my/artifacts/${modelDatasetId}`); secretFree(finalMetadata.body);
   assert.ok(finalMetadata.body.meta.catalog.tables.some(table => table.name === 'region_totals'));
   log('manual refresh reads an external database update; model metadata stays credential-free');
+  // Notifications use the very same native catalog interface as Query. Writes
+  // still target a stored dataset: PostgreSQL mutations are not supported.
+  const recipient = await browser.newPage();
+  await loginViaEmail(recipient, base, sink, `mxmx_test_pg_notify_${Date.now()}@example.com`);
+  const recipientId = (await ownerApi(recipient, '/api/page/session')).body.user.id;
+  const checked = async (page, path, method = 'GET', data, status = 200) => {
+    const result = await ownerApi(page, path, method, data);
+    secretFree(result.body);
+    assert.equal(result.status, status, `${method} ${path}: ${JSON.stringify(result.body)}`);
+    return result.body;
+  };
+  const trigger = await checked(owner, '/api/my/artifacts', 'POST', {
+    access: 'readwrite',
+    dataset: '<Dataset kind="stored"><Table schema="public" name="rows" columns={[{"name":"id","type":"number"},{"name":"recipient","type":"string"}]} rows={[{"id":1,"recipient":"initial"}]} /></Dataset>',
+  }, 201);
+  // The stored import is also a required readable source.
+  await checked(owner, `/api/my/artifacts/${trigger.id}/sharing`, 'PUT', { visibility: 'unlisted' });
+  const notice = await checked(owner, '/api/my/artifacts', 'POST', notificationDocumentPayload({triggerId:trigger.id,recipientId,modelDatasetId,datasetId}), 201);
+  await checked(recipient, `/api/my/artifacts/${notice.id}/members`, 'POST', { action: 'join' });
+  await checked(owner, `/api/my/artifacts/${notice.id}/members`, 'POST', { action: 'approve', userId: recipientId });
+  const run = async (documentId = notice.id) => {
+    const result = await checked(owner, `/a/${documentId}/mutate`, 'POST', notificationMutationPayload(recipientId));
+    assert.equal(typeof result.mutationRunId, 'string');
+    return result.mutationRunId;
+  };
+  const settled = async runId => {
+    const deadline = Date.now() + 12_000;
+    while (Date.now() < deadline) {
+      const { jobs } = await checked(owner, `/api/notification-runs/${runId}/jobs`);
+      assert.equal(jobs.length, 1, 'one durable job evaluates every linked rule');
+      if (['completed', 'failed'].includes(jobs[0].status)) return jobs[0];
+      await delay(100);
+    }
+    throw new Error(`Notification run ${runId} did not settle`);
+  };
+  const inbox = async runId => (await checked(recipient, '/api/my/people')).notifications.filter(item => item.kind === 'mutation' && item.mutation_run_id === runId);
+  const successRun = await run();
+  const successJob = await settled(successRun);
+  assert.equal(successJob.status, 'completed');
+  assert.deepEqual([...successJob.notification_names].sort(), ['duplicate_notice', 'model_notice', 'physical_notice']);
+  const delivered = await inbox(successRun);
+  assert.equal(delivered.length, 1, 'one recipient gets one item across three rules and duplicate array entries');
+  assert.deepEqual([...delivered[0].messages].sort(), ['Order 1', 'West total 155']);
+  log('native PostgreSQL arrays, native concatenation, and chained notebook models combine distinct messages once per recipient/run');
+
+  await checked(owner, `/api/my/artifacts/${modelDatasetId}/sharing`, 'PUT', { visibility: 'private' });
+  assert.equal((await inbox(successRun)).length, 0, 'disclosure rechecks the current native source authority');
+  const deniedRun = await run();
+  assert.equal((await settled(deniedRun)).status, 'completed');
+  assert.equal((await inbox(deniedRun)).length, 0, 'one unreadable source suppresses the whole combined item');
+  await checked(owner, `/api/my/artifacts/${modelDatasetId}/sharing`, 'PUT', { visibility: 'unlisted' });
+  assert.equal((await inbox(deniedRun)).length, 0, 'restoring source access does not backfill a suppressed run');
+  log('current native-source authority gates both delivery and disclosure');
+
+  const invalidNotice = await checked(owner, '/api/my/artifacts', 'POST', notificationDocumentPayload({triggerId:trigger.id,recipientId,modelDatasetId,datasetId,invalid:true}), 201);
+  await checked(recipient, `/api/my/artifacts/${invalidNotice.id}/members`, 'POST', { action: 'join' });
+  await checked(owner, `/api/my/artifacts/${invalidNotice.id}/members`, 'POST', { action: 'approve', userId: recipientId });
+  const invalidRun = await run(invalidNotice.id);
+  assert.equal((await settled(invalidRun)).status, 'failed', 'JSON text is not a typed recipient list');
+  assert.equal((await inbox(invalidRun)).length, 0, 'a failed rule publishes no partial messages from successful sibling rules');
+  log('PostgreSQL JSON text fails the job without partial sibling-rule delivery');
   console.log('\nall good');
 } finally {
   try {

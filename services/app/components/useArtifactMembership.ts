@@ -33,5 +33,5 @@ export function useArtifactMembership(artifactId:string,enabled:boolean,revision
   }catch(e){setError(e instanceof Error?e.message:'Could not join artefact');}
   finally{busy.current=false;}
  },[endpoint,onChange,read]);
- return {status:state?.self?.status==='accepted'?'joined' as const:state?.self?.status==='pending'?'pending' as const:'join' as const,join,error};
+ return {status:state?.self?.status==='accepted'&&state.self.explicit_join?'joined' as const:state?.self?.status==='pending'?'pending' as const:'join' as const,join,error};
 }

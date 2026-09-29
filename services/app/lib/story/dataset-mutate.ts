@@ -1,9 +1,14 @@
+import {NotificationExecutionError} from '@/lib/notification-error';
 import {artifactQuery} from '@/lib/artifact-document';
 import { grantsOf, assertGrantCommit } from '@/lib/datasets/policy/grants';
 import {validateUserWrites} from '@/lib/datasets/user-fields';
 import {DatasetError} from '@/lib/datasets/errors';
 import {artifactState} from '@/lib/artifact-state';
 import {completeMutationReceipt,type MutationReceipt} from '@/lib/mutation-receipt';
+import {completeDocumentMutationReceipt} from '@/lib/mutation-operation';
+import {notificationJobStore} from '@/lib/notification-runtime';
+import {lockNotificationExecution} from '@/lib/notification-authority';
+import type {MutationNotificationJobInput} from '@artifactbin/contracts';
 import {throttlePublicMutation} from '@/lib/datasets/policy/usage';
 import {mutationPolicy,recheckMutation,canUseDataPolicy,policyReaderSql,type MutationDocument} from '@/lib/datasets/policy';
 import {catalogOf,importedTables} from '@/lib/datasets/catalog';
@@ -88,6 +93,7 @@ interface MutationApplied {
   affected: number;
   /** Rows the dataset holds afterwards. */
   rowCount: number;
+  mutationRunId?: string;
 }
 
 export const isMutationRefused = (r: MutationApplied | MutationRefused): r is MutationRefused => 'reason' in r;
@@ -110,10 +116,12 @@ export async function mutateDataset(
   actor: RoleActor,
   sql: string,
   params: Record<string, Scalar> = {},
-  guard: Pick<MutationInput, 'expectedAffected' | 'paramTypes' | 'reads'> & {target?:{schema:string;table:string};document?:MutationDocument;receipt?:MutationReceipt;expectedState?:string} = {},
+  guard: Pick<MutationInput, 'expectedAffected' | 'paramTypes' | 'reads'> & {target?:{schema:string;table:string};document?:MutationDocument;receipt?:MutationReceipt;expectedState?:string;notificationJob?:MutationNotificationJobInput} = {},
 ): Promise<MutationApplied | MutationRefused> {
   if(Object.hasOwn(params,paramSqlName('_me.id'))&&!actor.userId)return {reason:'policy_denied',detail:'$_me.id requires a logged-in user',code:SIGN_IN_REQUIRED};
   const db = await getDb();
+  const jobs=guard.notificationJob?await notificationJobStore():null;
+  const mutationRunId=guard.notificationJob?.origin.mutationRunId;
   const scope = editorScope({userId:actor.userId,tokenId:actor.tokenId ?? ''});
   const invocation=mutationInvocation({dataset,actor,document:guard.document,db,recheckAccess:async()=>{await recheckMutation(dataset,actor,guard.document);}});
   if(guard.document && await canUseDataPolicy(dataset,actor) && await canWriteDataset(dataset,actor)){
@@ -185,6 +193,8 @@ export async function mutateDataset(
     // the edit protocol), and wake every document reading this dataset.
     const v2=!!grantsOf(current);
     const commit=async(tx:Queryable)=>{
+     const notificationInput=guard.notificationJob;
+     if(notificationInput)await lockNotificationExecution(tx,notificationInput);
      if(v2)await assertGrantCommit(tx,current,actor,guard.document);
      await validateUserWrites(tx,columns,out.userWrites??[],actor.userId);
      if(guard.expectedState){
@@ -237,12 +247,22 @@ export async function mutateDataset(
     );
 
      const committed=result.rows[0];
-     if(committed&&guard.receipt)await completeMutationReceipt(tx,guard.receipt,{status:200,body:{id:committed.id,version:committed.version,affected:out.affected,rowCount:out.rows.length}});
+     if(committed){
+      if(jobs)await jobs.enqueue(tx,guard.notificationJob!);
+      if(guard.receipt){
+       if(guard.document)await completeDocumentMutationReceipt(tx,guard.receipt,{datasetId:committed.id,datasetEditId:committed.edit_id,version:committed.version,affected:out.affected,rowCount:out.rows.length,...(mutationRunId?{mutationRunId}:{})});
+       else await completeMutationReceipt(tx,guard.receipt,{status:200,body:{id:committed.id,version:committed.version,affected:out.affected,rowCount:out.rows.length}});
+      }
+     }
      return result;
     };
     let updated;
-    try { updated=v2||guard.receipt||guard.expectedState||columns.some(c=>c.type==='user')?await db.transaction(commit):await commit(db); }
-    catch(error) { if(error instanceof DatasetError)return {reason:'policy_denied',detail:error.message}; throw error; }
+    try { updated=jobs||v2||guard.receipt||guard.expectedState||columns.some(c=>c.type==='user')?await db.transaction(commit):await commit(db); }
+    catch(error) {
+     if(error instanceof NotificationExecutionError && error.code==='notification_access_revoked')return {reason:'policy_denied',detail:'Your access changed before the action could be saved.'};
+     if(error instanceof DatasetError)return {reason:'policy_denied',detail:error.message};
+     throw error;
+    }
 
     const row = updated.rows[0];
     if (row) {
@@ -251,7 +271,7 @@ export async function mutateDataset(
       // (lib/compiled-page/snapshots.server). Beside the NOTIFY, never awaited, never failing the write —
       // freshness is decided on read by the marks, this only lets a head revalidate before anyone asks.
       void snapshotStore.invalidate(row.id).catch((error) => console.warn('[snapshots] invalidate failed', row.id, error));
-      return { row, affected: out.affected, rowCount: out.rows.length };
+      return { row, affected: out.affected, rowCount: out.rows.length,...(mutationRunId?{mutationRunId}:{}) };
     }
     // Lost the CAS. Re-run against what landed — see the module doc: for DML
     // that is the same statement, not a merge.

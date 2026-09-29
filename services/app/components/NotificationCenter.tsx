@@ -32,13 +32,17 @@ export function NotificationProvider({children}:{children:ReactNode}){
 /** Lives beside settings/profile inside the same trusted navigation boundary. */
 export function NotificationMenu(){
  const value=useNotifications();const {session}=useSession();
+ // A cold reader can request the inbox before SessionProvider has resolved.
+ // Mount the intent consumer only when it can show the panel, so that request is not lost.
+ if(!value||session?.kind!=='account')return null;
+ return <SignedInNotificationMenu value={value}/>;
+}
+function SignedInNotificationMenu({value}:{value:NonNullable<ReturnType<typeof useNotifications>>}){
  const [open,setOpen]=useState(false);
  useExclusiveLayer(open,setOpen);
  useOpenOnRequest('notifications',open,setOpen);
  useEffect(()=>{announcePanel('notifications',open);return()=>announcePanel('notifications',false);},[open]);
- useEffect(()=>{if(session?.kind!=='account')setOpen(false);},[session?.kind]);
  const close=useCallback(()=>setOpen(false),[]);
- if(!value||session?.kind!=='account')return null;
  return <PagePanel open={open} label="Notifications" onClose={close} header={null} wide><NotificationContext.Provider value={{...value,close}}><NotificationPanel onClose={close}/></NotificationContext.Provider></PagePanel>;
 }
 function NotificationPanel({onClose}:{onClose:()=>void}){

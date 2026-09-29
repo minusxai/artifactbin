@@ -1,3 +1,4 @@
+import { membershipState } from '@/lib/membership';
 import { publicCatalogOf } from '@/lib/datasets/catalog';
 /**
  * The owner/editor SHELL's props for one document — everything ArtifactDocument
@@ -276,7 +277,7 @@ export async function artifactPageAnswer(request: Request, id: string, options: 
       // no islands (the app loads on intent, so until then the page holds it), the reader's place across
       // the reload a new version delivers, and their mode.
       behaviors: ['page'],
-      chrome: await readerChromeFor({ artifact, row, role, kind, actor, at, author: authorMark, likeCount, liked, follow, openAnnotations, hasInvitedUsers: ownerScope ? hasInvitedUsers : undefined, ground: design.colorMode ?? prepared.page.data.colorMode }),
+      chrome: await readerChromeFor({ hasDataMutations: prepared.page.declared?.flow.mutations.some(m => 'import' in m.target) === true, artifact, row, role, kind, actor, at, author: authorMark, likeCount, liked, follow, openAnnotations, hasInvitedUsers: ownerScope ? hasInvitedUsers : undefined, ground: design.colorMode ?? prepared.page.data.colorMode }),
       chromeFonts: readerChromeFonts({ theme: prepared.page.base.theme, docFonts: prepared.page.base.fonts, importedFaces: prepared.page.base.faces }).map((face) => face.url),
       spa: options.page!.spa,
       head: {
@@ -388,6 +389,7 @@ export async function artifactPageResponse(request: Request, id: string): Promis
  * page's loader reads a writer by (web/idle-boot `capabilityOf`).
  */
 async function readerChromeFor(facts: {
+  hasDataMutations: boolean;
   artifact: ArtifactRow; row: ArtifactRow; role: Awaited<ReturnType<typeof roleFor>>; kind: 'account' | 'anon' | 'none';
   actor: Awaited<ReturnType<typeof sessionActor>>; at: { version: number; head: number } | null;
   author: ReaderChromeInput['author']; likeCount: number; liked: boolean;
@@ -395,9 +397,18 @@ async function readerChromeFor(facts: {
 }): Promise<ReaderChromeInput> {
   const { artifact, row, role, at } = facts;
   const owner = role === 'owner' && !at;
+  let membership: ReaderChromeInput['membership'];
+  if (!at && facts.hasDataMutations) {
+    const actor = actorForArtifacts(facts.actor);
+    const self = actor?.userId ? (await membershipState(actor, artifact.id)).self : null;
+    membership = self?.status === 'accepted' && self.explicit_join ? 'joined' : self?.status === 'pending' ? 'pending' : 'join';
+  }
   const person = facts.kind === 'account' && facts.actor.viewer?.userId ? await getUserById(facts.actor.viewer.userId) : null;
   return {
     artifactId: artifact.id,
+    membership,
+    // Keep the inbox reachable before the app loads; the live provider supplies the unread badge.
+    notifications: person ? {unread:0} : undefined,
     ground: facts.ground,
     share: owner,
     archived: at ? { version: at.version, head: at.head } : null,

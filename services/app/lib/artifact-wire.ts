@@ -1,3 +1,4 @@
+import {documentMutationReply,adaptMutationOperationReply} from './mutation-operation';
 import {parseDocumentUpdate} from '@artifactbin/contracts';
 import {applyEditFor} from './artifacts';
 import {readableArtifact} from './artifact-read';
@@ -785,6 +786,7 @@ async function respondToDeclaredMutation(actor: TokenActor, id: string, body: Re
   const result = await runDocumentMutation(row, parsed, { userId: actor.userId, tokenId: actor.tokenId }, receipt);
   if (!result.ok) {
     switch (result.reason) {
+      case 'operation_key_required': return json({error:'operation_key_required',detail:result.detail},400);
       case 'unknown_mutation': return json({ error: 'unknown_mutation', details: [`this document declares no <Mutation name="${String(body.name)}">`] }, 400);
       case 'invalid_row': return json({ error: 'invalid_row', details: [result.detail ?? ''] }, 400);
       case 'row_changed': case 'row_not_unique': return json({ error: result.reason, details: [result.detail ?? ''] }, 409);
@@ -796,7 +798,8 @@ async function respondToDeclaredMutation(actor: TokenActor, id: string, body: Re
     }
   }
   if ('local' in result) return json({ ok: true, local: result.local });
-  return json({ id: result.dataset.id, version: result.dataset.version, affected: result.affected, rowCount: result.rowCount });
+  const reply=adaptMutationOperationReply(documentMutationReply({datasetId:result.dataset.id,datasetEditId:result.dataset.edit_id,version:result.dataset.version,affected:result.affected,rowCount:result.rowCount,...(result.mutationRunId?{mutationRunId:result.mutationRunId}:{})}),'api');
+  return json(reply.body,reply.status);
 }
 /**
  * The owner's dataset write door: one INSERT/UPDATE/DELETE against a dataset

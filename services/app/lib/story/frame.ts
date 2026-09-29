@@ -1,3 +1,4 @@
+import { readerDataflow } from './compiled-dataflow';
 /**
  * THE LIVE FRAME — stateless and complete.
  *
@@ -88,8 +89,8 @@ async function build(stored: ArtifactRow): Promise<LiveFrame> {
     authorScript: parts?.authorScript ?? null,
     ...(parts ? { nodes: parts.nodes } : {}),
     declarations: parts?.declarations ?? null,
-    ...(declared?.state ? { dataflow: { flow: declared.flow, state: declared.state } }
-      : declared && declared.flow.queries.length + declared.flow.values.length > 0 ? { dataflow: { flow: declared.flow } } : {}),
+    ...(declared?.state ? { dataflow: { flow: readerDataflow(declared.flow), state: declared.state } }
+      : declared && declared.flow.queries.length + declared.flow.values.length > 0 ? { dataflow: { flow: readerDataflow(declared.flow) } } : {}),
     datasets: row.format === 'markup' ? await datasetsForDocument(row) : [],
     theme: design.theme,
     colorMode: design.colorMode,

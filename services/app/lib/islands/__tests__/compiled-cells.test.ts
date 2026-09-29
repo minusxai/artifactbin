@@ -217,7 +217,7 @@ describe('editable cells on the compiled page', () => {
     const alert = cellOf(host, 'tbl', 'status')!.querySelector('[role="alert"]')!;
     expect([alert.className, alert.textContent]).toEqual(['mx-write-error', 'row_changed']);
     // Inside the hint, after the control, as today's cell draws it (MutationCellHint holds the control and the refusal).
-    expect(alert.parentElement?.getAttribute('data-slot')).toBe('tooltip-trigger');
+    expect(alert.closest('[data-slot="tooltip-trigger"]')).not.toBeNull();
     expect(alert.previousElementSibling).toBe(root());
     expect(root().hasAttribute('aria-busy')).toBe(false);
     expect(root().querySelector('.truncate')!.textContent, 'the draft is kept').toBe('active');

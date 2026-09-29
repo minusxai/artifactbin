@@ -48,7 +48,8 @@ describe('a compiled <Button run> through the shipped runtime', () => {
     const served = host.querySelector('#b')!;
     expect(served.hasAttribute('disabled')).toBe(true);
     expect(served.getAttribute('aria-description')).toBe('Checking edit access…');
-    expect(served.nextElementSibling?.textContent).toBe('Checking edit access…');
+    expect(served.closest('[data-slot="tooltip-trigger"]')?.getAttribute('aria-description')).toBe('Checking edit access…');
+    expect(host.textContent).not.toContain('Checking edit access…');
 
     const rt = await shipped('@mx/rt');
     const code = await transformSolid(server.islands, { generate: 'dom', hydratable: true }, { moduleName: '@mx/rt' });
@@ -74,7 +75,7 @@ describe('a compiled <Button run> through the shipped runtime', () => {
     expect(button.disabled).toBe(false);
     expect(button.hasAttribute('aria-description')).toBe(false);
     expect([...host.querySelectorAll('span')].filter((s) => /Checking edit access/.test(s.textContent ?? ''))).toEqual([]);
-    expect(host.querySelector('#before')?.nextElementSibling).toBe(button);
+    expect(host.querySelector('#before')?.nextElementSibling?.contains(button)).toBe(true);
 
     const writes: string[] = [];
     (runtime.store as unknown as { subscribeWrites(fn: (e: { type: string; name: string }) => void): void }).subscribeWrites((e) => writes.push(`${e.type}:${e.name}`));
