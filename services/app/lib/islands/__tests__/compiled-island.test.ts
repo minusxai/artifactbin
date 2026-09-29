@@ -37,42 +37,8 @@ async function shipped(spec: string): Promise<Record<string, unknown>> {
 }
 
 describe('a compiled island through the runtime', () => {
-  it('holds the first action for one lazy fetch, retries a failure, and preserves served content', async () => {
-    const url = '/islands/t/aaaaaaaaaaaaaaaa.json';
-    rt.configureTemplateResource(url);
-    const host = document.createElement('div');
-    host.innerHTML = '<button type="button" role="tab">Open</button><p>Served</p>';
-    document.body.append(host);
-    let actions = 0;
-    host.querySelector('button')!.addEventListener('click', () => { actions++; });
-    const fetch = vi.fn()
-      .mockResolvedValueOnce({ ok: false, status: 503 })
-      .mockResolvedValue({ ok: true, json: () => ({ cold: '<p>cold</p>' }) });
-    vi.stubGlobal('fetch', fetch);
-    const log = vi.spyOn(console, 'error').mockImplementation(() => {});
-    const stop = rt.installTemplateInteractionGate(host, document);
-    host.querySelector('button')!.click();
-    await vi.waitFor(() => expect(fetch).toHaveBeenCalledTimes(1));
-    await vi.waitFor(() => expect(log).toHaveBeenCalledTimes(1));
-    expect(host.querySelector('p')?.textContent).toBe('Served');
-    expect(actions).toBe(0);
-    host.querySelector('button')!.click();
-    await vi.waitFor(() => expect(actions).toBe(1));
-    expect(fetch).toHaveBeenCalledTimes(2);
-    host.querySelector('button')!.click();
-    expect(actions).toBe(2);
-    expect(fetch).toHaveBeenCalledTimes(2);
-    stop(); host.remove(); log.mockRestore(); vi.unstubAllGlobals(); rt.configureTemplateResource(null);
-  });
-  it('clones cold markup from an inert page template without executing hostile text', () => {
-    const bank = document.createElement('template');
-    bank.setAttribute('data-mx-island-template', 'cold');
-    bank.innerHTML = '&lt;div&gt;&lt;span&gt;&amp;lt;/template&amp;gt;&amp;lt;script&amp;gt;alert(1)&amp;lt;/script&amp;gt;&lt;/span&gt;&lt;/div&gt;';
-    document.body.append(bank);
-    const clone = rt.templateFromPage('cold')();
-    expect((clone as Element).outerHTML).toBe('<div><span>&lt;/template&gt;&lt;script&gt;alert(1)&lt;/script&gt;</span></div>');
-    bank.remove();
-  });
+  // Retired the lazy template action-gate assertion: new modules do not request shell template resources.
+  // Retired the inert page-template clone assertion: new modules use native Solid factories, not shell clones.
   it('hydrates the shipped module without loading the cold template resource', async () => {
     const server = serverHalf('<Helmet><Value name="name" type="string" default="Ada" /></Helmet><section id="box" data-note="{$name}"><p id="static">Served static content</p><span>{$name}</span></section>');
     const host = document.createElement('div');
@@ -90,7 +56,7 @@ describe('a compiled island through the runtime', () => {
       throw new Error(`unexpected island import ${spec}`);
     }, 'test/shipped.js');
     const runtime = rt.createIslandRuntime({ dataflow: { flow: server.flow, values: { name: 'Ada' } } }, df => createDataflowStore(df));
-    const dispose = rt.hydrateDocument(tree as never, runtime.context, host);
+    const dispose = rt.hydrateIsland('d-', tree as never, runtime.context, host);
     expect(fetch).not.toHaveBeenCalled();
     expect(host.querySelector('#static')).toBe(served);
     runtime.context.setValue('name', 'Grace');
@@ -112,7 +78,7 @@ describe('a compiled island through the runtime', () => {
     }, 'test/dialog-shipped.js');
     const runtime = (shippedRt.createIslandRuntime as typeof rt.createIslandRuntime)({ dataflow: { flow: server.flow } }, shippedRt.createDataflowStore as typeof createDataflowStore);
     expect(fetch).not.toHaveBeenCalled();
-    const dispose = (shippedRt.hydrateDocument as typeof rt.hydrateDocument)(tree as never, runtime.context, host);
+    const dispose = (shippedRt.hydrateIsland as typeof rt.hydrateIsland)('d-', tree as never, runtime.context, host);
     host.querySelector('button')?.click();
     expect(host.querySelector('[aria-label="Test dialog"]')?.hasAttribute('open')).toBe(true);
     expect(fetch).not.toHaveBeenCalled();
@@ -140,7 +106,7 @@ describe('a compiled island through the runtime', () => {
       pending: () => [], subscribe: (fn: () => void) => { notify = fn; return () => {}; }, dispose: () => {},
     } as unknown as DataflowStore;
     const runtime = (shippedRt.createIslandRuntime as typeof rt.createIslandRuntime)({ dataflow: { flow: server.flow } }, () => store);
-    const dispose = (shippedRt.hydrateDocument as typeof rt.hydrateDocument)(tree as never, runtime.context, host);
+    const dispose = (shippedRt.hydrateIsland as typeof rt.hydrateIsland)('d-', tree as never, runtime.context, host);
     rows = [{ k: 'a', label: 'Alice' }, { k: 'b', label: 'Bob' }, { k: 'c', label: 'Carla' }];
     table.rows = rows;
     notify();
@@ -182,7 +148,7 @@ describe('a compiled island through the runtime', () => {
       throw new Error(`the island module imports ${spec}, not only the runtime`);
     }, 'test/islands.js');
     const runtime = rt.createIslandRuntime({ dataflow: { flow: server.flow, values: { region: 'West' } }, viewer: null }, (df) => createDataflowStore(df));
-    const dispose = rt.hydrateDocument(tree as never, runtime.context, host);
+    const dispose = rt.hydrateIsland('d-', tree as never, runtime.context, host);
 
     expect(dispose).toBeTypeOf('function');
     expect(host.querySelector('#h')).toBe(heading);

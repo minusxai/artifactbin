@@ -74,7 +74,7 @@ describe('a compiled <Button run> through the shipped runtime', () => {
     const runtime = (rt.createIslandRuntime as (d: unknown, s: (i: unknown) => unknown) => { context: unknown; store: { start(): void; dispose(): void } | null; dispose(): void })(
       { dataflow: { flow: server.flow }, viewer: null }, (input) => (rt.createDataflowStore as (i: unknown, o: unknown) => unknown)(input, { transport }));
     runtime.store?.start();
-    const dispose = (rt.hydrateDocument as (c: unknown, x: unknown, p: ParentNode) => (() => void) | null)(tree, runtime.context, host);
+    const dispose = (rt.hydrateIsland as (r: string, c: unknown, x: unknown, p: ParentNode) => (() => void) | null)('d-', tree, runtime.context, host);
     const button = host.querySelector<HTMLButtonElement>('#b')!;
     for (let i = 0; i < 50 && button.disabled; i++) await new Promise((r) => setTimeout(r, 20));
     expect(button, 'the served button is adopted').toBe(served);

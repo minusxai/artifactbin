@@ -27,7 +27,7 @@ describe('one tree SSR to hydrate', () => {
       : spec.includes('/boot-') ? { boot: (module: { TREE: Component }) => { tree = module.TREE; } }
       : (() => { throw new Error(`unexpected import ${spec}`); })(), 'test/one-tree-branch.js');
     const runtime = rt.createIslandRuntime({ dataflow: { flow: server.flow, values: { open: false } } }, df => createDataflowStore(df));
-    const dispose = rt.hydrateDocument(tree!, runtime.context, host);
+    const dispose = rt.hydrateIsland('d-', tree!, runtime.context, host);
     expect(host.querySelector('[aria-label="Positive"]')).toBeNull();
     runtime.context.setValue('open', true);
     expect(host.querySelector('[aria-label="Positive"]')?.textContent).toBe('positive');
@@ -52,7 +52,7 @@ describe('one tree SSR to hydrate', () => {
     }, 'test/one-tree.js');
     expect(tree).not.toBeNull();
     const runtime = rt.createIslandRuntime({ dataflow: { flow: server.flow, values: { name: 'Ada' } } }, df => createDataflowStore(df));
-    const dispose = rt.hydrateDocument(tree!, runtime.context, host);
+    const dispose = rt.hydrateIsland('d-', tree!, runtime.context, host);
     expect(dispose).toBeTypeOf('function');
     expect(host.querySelector('#heading')).toBe(heading);
     expect(host.querySelector('#live')).toBe(live);
@@ -91,7 +91,7 @@ describe('one tree SSR to hydrate', () => {
       throw new Error(`unexpected import ${spec}`);
     }, 'test/one-tree-kit.js');
     const runtime = (shippedRt.createIslandRuntime as typeof rt.createIslandRuntime)({ dataflow: { flow: server.flow, values: { flag: false } } }, shippedRt.createDataflowStore as typeof createDataflowStore);
-    const dispose = (shippedRt.hydrateDocument as typeof rt.hydrateDocument)(tree!, runtime.context, host);
+    const dispose = (shippedRt.hydrateIsland as typeof rt.hydrateIsland)('d-', tree!, runtime.context, host);
     expect(dispose).toBeTypeOf('function');
     expect(host.querySelector('#row-1099')).toBe(last);
     expect(host.querySelector('#first')).toBe(first);
@@ -133,7 +133,7 @@ describe('one tree SSR to hydrate', () => {
     const shippedRt = modules.get(loadCompilerBuild().manifest['@mx/rt']!)!;
     const portal = document.createElement('div'); document.body.append(portal);
     const runtime = (shippedRt.createIslandRuntime as typeof rt.createIslandRuntime)({ dataflow: { flow: server.flow, values: {} } }, shippedRt.createDataflowStore as typeof createDataflowStore, { trustedPortal: () => portal });
-    (shippedRt.hydrateDocument as typeof rt.hydrateDocument)(tree!, runtime.context, host);
+    (shippedRt.hydrateIsland as typeof rt.hydrateIsland)('d-', tree!, runtime.context, host);
     const dialogText = host.querySelector('dialog p');
     expect(dialogText?.textContent).toContain('Dialog content opened from the gallery.');
     [...host.querySelectorAll<HTMLButtonElement>('button')].find(button => button.textContent === 'Open dialog')!.click();

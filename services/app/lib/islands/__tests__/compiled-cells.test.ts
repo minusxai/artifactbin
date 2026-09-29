@@ -114,7 +114,7 @@ async function page(refusal: string | null): Promise<Page> {
   const runtime = (rt.createIslandRuntime as (d: unknown, s: (i: unknown) => unknown) => { context: unknown; store: { start(): void; invalidateDatasets(ids: string[]): void } | null; dispose(): void })(
     { dataflow: { flow: server.flow, values: {}, results: SNAPSHOT }, viewer: null }, (input) => (rt.createDataflowStore as (i: unknown, o: unknown) => unknown)(input, { transport }));
   runtime.store?.start();
-  const disposeTree = (rt.hydrateDocument as (c: unknown, x: unknown, p: ParentNode) => (() => void) | null)(tree, runtime.context, host);
+  const disposeTree = (rt.hydrateIsland as (r: string, c: unknown, x: unknown, p: ParentNode) => (() => void) | null)('d-', tree, runtime.context, host);
   markHydrated();
   await until(() => !!host.querySelector('[aria-label="Item 1"]'), 'the first row\'s cells');
   const result = { host, written, settle, refresh: () => runtime.store?.invalidateDatasets(['CELLS1']), dispose: () => { disposeTree?.(); runtime.dispose(); pageData.remove(); host.remove(); } };

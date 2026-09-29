@@ -105,7 +105,6 @@ export async function morphStory(win: Window, options: MorphOptions = {}): Promi
     if (incoming.FLOW && !store) throw refuse('the new version declares data the running islands have no store for');
     // The new module selected its own pinned resource. Fetch before touching the adopted tree:
     // a failure leaves the old document intact for the caller's reload path.
-    await seam.prepareTemplates();
   }
 
   // The islands to keep (new render id → old), and the ones to let go.
