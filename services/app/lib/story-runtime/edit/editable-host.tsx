@@ -20,7 +20,7 @@
  */
 import { cloneElement, memo, type FocusEvent, type FormEvent, type ReactElement } from 'react';
 
-interface EditableHostSession {
+export interface EditableHostSession {
   isEditing(path: string): boolean;
   onFocus(path: string, el: HTMLElement): void;
   onInput(path: string): void;

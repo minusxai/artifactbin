@@ -111,7 +111,7 @@ async function build() {
   const compiler = await appCompiler();
   const { candidates, files: scanned } = scanAppSources(compiler);
   const css = optimize(compiler.build(candidates), { minify: true }).code;
-  const MAP_PACKAGES = /^(@deck\.gl\/|@luma\.gl\/|@loaders\.gl\/|react-map-gl|maplibre-gl$|maplibre-gl\/|h3-js$)/;
+  const MAP_PACKAGES = /^(@deck\.gl\/|@luma\.gl\/|@loaders\.gl\/|maplibre-gl$|maplibre-gl\/|h3-js$)/;
   /*
    * The editor compiles a draft's stylesheet IN the file (lib/offline/file-backend
    * → compileStoryCss) against the Tailwind sheets embedded here, exactly as the

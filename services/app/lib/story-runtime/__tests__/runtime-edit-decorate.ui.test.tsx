@@ -17,6 +17,7 @@ import { render } from '@testing-library/react';
 import { parseJsx, type JsxNode } from '@/lib/jsx';
 import { StoryRuntimeApp } from '../StoryRuntimeApp';
 import { createFrameEditSession } from '../edit/session';
+import { createEditSessionDecorator } from '../edit/session-decorate';
 import type { PristineChannel } from '../pristine';
 
 const nodesOf = (src: string): JsxNode[] => {
@@ -41,7 +42,7 @@ const REF_DATA = { img123: { kind: 'image' as const, url: '/a/img123/raw' } };
 
 describe('edit mode decorates the element the reader sees', () => {
   it('keeps ref: props resolved, and still makes the video non-interactive', () => {
-    const session = createFrameEditSession({ win: window, channel, requestRender: vi.fn() });
+    const session = createFrameEditSession({ win: window, channel, requestRender: vi.fn(), decorateFactory: createEditSessionDecorator });
     try {
       const nodes = nodesOf(SRC);
       session.setNodes(nodes);

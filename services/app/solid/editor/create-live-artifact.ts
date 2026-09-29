@@ -1,0 +1,111 @@
+/**
+ * Solid twin of lib/story/use-live-artifact: subscribe a mounted page to its
+ * artifact's live document (`GET /a/<id>/events`).
+ *
+ * The server's stream carries a current head ping; the complete document is
+ * fetched from /events/frame after a newer ping. EventSource reconnects and
+ * the ping plus frame fetch self-heal a dropped connection.
+ *
+ * The returned accessor reads null until a frame arrives that differs from
+ * what the page was server-rendered with, so the first paint is never
+ * disturbed.
+ *
+ * The highest version seen is tracked per CONNECTION rather than per accepted
+ * frame: the server builds frames asynchronously, so they can overtake each
+ * other, and the floor must keep counting even for frames this primitive
+ * decides not to surface. See `isOwnFrame`.
+ *
+ * `options` is read LIVE (a Solid props object, not a spread copy): the
+ * subscription itself only re-opens when `backend`/`id`/`initialEditId`/
+ * `initialVersion`/`enabled` change (the `on([...])` dependency list below,
+ * React's old dependency array made explicit) — `isOwnFrame`/`onData`/
+ * `onAnnotations`/`since` are read fresh inside the subscription's callbacks
+ * with no ref-mirroring needed, since a live getter already reads the latest.
+ */
+import { createEffect, createSignal, on, onCleanup, type Accessor } from 'solid-js';
+import type { AnnotationWire } from '@/lib/annotations';
+import type { ArtifactBackend } from '@/lib/artifact-backend/types';
+import type { ArtifactDataEvent, ArtifactLiveEvent } from '@/lib/story/live';
+
+export interface LiveArtifactOptions {
+  /** Where the stream comes from; a backend without `live` is simply never subscribed. */
+  backend: ArtifactBackend;
+  id: string;
+  initialEditId: string;
+  initialVersion: number;
+  enabled?: boolean;
+  /**
+   * "This frame is the echo of a write I made" — the editor's own accepted
+   * writes come back down the stream carrying the whole document, and it has
+   * already applied them locally.
+   */
+  isOwnFrame?: (editId: string) => boolean;
+  /** A DATASET under this document changed (a named `data` frame — see app/a/[id]/events). */
+  onData?: (event: ArtifactDataEvent) => void;
+  /** The ANNOTATIONS on this document changed (owner-credentialed connections only). */
+  onAnnotations?: (annotations: AnnotationWire[]) => void;
+  /** Where the stream picks up (ServedResults.since), read when the stream opens. */
+  since?: string;
+}
+
+export function createLiveArtifact(options: LiveArtifactOptions): Accessor<ArtifactLiveEvent | null> {
+  // Keep the artifact id beside the frame: this primitive can be reused across
+  // navigation, and a high version from the previous id must never win.
+  const [live, setLive] = createSignal<{ id: string; frame: ArtifactLiveEvent } | null>(null);
+
+  createEffect(
+    on(
+      [() => options.backend, () => options.id, () => options.initialEditId, () => options.initialVersion, () => options.enabled ?? true],
+      ([backend, id, initialEditId, initialVersion, enabled]) => {
+        if (!enabled || backend.unavailable('live')) return;
+        /** Highest version this connection has SEEN — including frames it dropped. */
+        let seenVersion = initialVersion;
+        let alive = true;
+        let annotationsRequest: AbortController | undefined;
+        /*
+         * The stream carries PINGS; the document is fetched. A ping names the
+         * head (`{editId, version, by}`), and the frame — complete, cached per
+         * (id, edit_id) on the server — comes from ./events/frame under the
+         * same ACL this page already passed. Ordering: a stale frame (an older
+         * version arriving after a newer one) is dropped by version.
+         */
+        const unsubscribe = backend.live(
+          {
+            onPing: (ping) => {
+              if (!Number.isInteger(ping.version)) return;
+              if (ping.version < Math.max(initialVersion, seenVersion)) return;
+              seenVersion = ping.version;
+              if (options.isOwnFrame?.(ping.editId)) return;
+              if (ping.version === initialVersion && ping.editId === initialEditId) return;
+              void backend
+                .liveFrame()
+                .then((frame) => {
+                  if (!alive || !frame || frame.version < seenVersion) return;
+                  setLive({ id, frame: { ...frame, by: frame.by ?? ping.by } });
+                })
+                .catch(() => { /* a failed fetch is a dropped wakeup; the next ping retries */ });
+            },
+            onData: (frame) => {
+              if (!Array.isArray(frame.datasets) || frame.datasets.length === 0) return;
+              options.onData?.(frame);
+            },
+            // Annotations are a PING too: the owner's page refetches the list.
+            onAnnotations: () => {
+              if (!options.onAnnotations) return;
+              annotationsRequest?.abort();
+              annotationsRequest = new AbortController();
+              void backend
+                .listAnnotations('open', { signal: annotationsRequest.signal })
+                .then((annotations) => { if (alive) options.onAnnotations?.(annotations); })
+                .catch(() => { /* next ping */ });
+            },
+          },
+          options.since ? { since: options.since } : undefined,
+        );
+        onCleanup(() => { alive = false; annotationsRequest?.abort(); unsubscribe(); });
+      },
+    ),
+  );
+
+  return () => (live()?.id === options.id && live()!.frame.version > options.initialVersion ? live()!.frame : null);
+}
