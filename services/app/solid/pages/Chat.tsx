@@ -5,9 +5,9 @@ import { useSearchParams } from '@solidjs/router';
 import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import '@xterm/xterm/css/xterm.css';
-import { Check, Copy } from 'lucide-solid';
 import type { RemoteSessionInfo, RemoteView } from '../../../contracts/src/remote';
 import { Tooltip } from '../components/Tooltip';
+import { Button } from '../components/ui';
 import { usePageData } from '../web/use-page-data';
 
 class RemoteRequestError extends Error {
@@ -181,10 +181,10 @@ function CopyCommand(props: { label: string; command: string }): JSX.Element {
   createEffect(() => { if (!copied()) return; const timer = setTimeout(() => setCopied(false), 2000); onCleanup(() => clearTimeout(timer)); });
   return <div><p class="mb-2 text-sm font-medium">{props.label}</p><div class="flex items-start gap-2 rounded border border-edge bg-surface p-3">
     <code class="min-w-0 flex-1 whitespace-pre-wrap break-words text-xs">{props.command}</code>
-    <Tooltip content={copied() ? 'Copied' : `Copy ${props.label.toLowerCase()}`}><button type="button" aria-label={`Copy ${props.label.toLowerCase()}`} class="shrink-0" onClick={async () => {
+    <Tooltip content={copied() ? 'Copied' : `Copy ${props.label.toLowerCase()}`}><Button type="button" aria-label={`Copy ${props.label.toLowerCase()}`} class="shrink-0" onClick={async () => {
       try { await navigator.clipboard.writeText(props.command); setCopied(true); setError(''); }
       catch { setError('Could not copy. Select and copy the command above.'); }
-    }}><Show when={copied()} fallback={<Copy size={16} />}><Check size={16} /></Show></button></Tooltip>
+    }}><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><Show when={copied()} fallback={<><rect x="8" y="8" width="12" height="12" rx="2" /><path d="M16 8V4a1 1 0 0 0-1-1H4a1 1 0 0 0-1 1v11a1 1 0 0 0 1 1h4" /></>}><path d="m5 12 4 4L19 6" /></Show></svg></Button></Tooltip>
   </div><span class="sr-only" role="status">{copied() ? 'Copied to clipboard' : ''}</span><Show when={error()}><p role="alert" class="mt-1 text-xs text-muted">{error()}</p></Show></div>;
 }
 
