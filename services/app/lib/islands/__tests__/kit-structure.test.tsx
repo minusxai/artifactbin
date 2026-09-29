@@ -19,6 +19,7 @@ import { IconGlyphProvider } from '@/components/kit/icon';
 import { IslandProvider } from '../context';
 import { fakeIsland } from './context.test';
 import { Badge, Alert, AlertTitle, AlertDescription, Card, CardHeader, CardTitle, CardContent, Button, Icon } from '../kit/basic';
+import { Progress, Separator } from '../kit/static/misc';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '../kit/tabs';
 import { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from '../kit/accordion';
 import { Dialog, DialogTrigger, DialogContent, DialogClose } from '../kit/dialog';
@@ -64,6 +65,19 @@ describe('basic', () => {
       <Card id="c" class={cls('Card')}><CardHeader id="ch" class={cls('CardHeader')}><CardTitle id="ct" class={cls('CardTitle')}>Title</CardTitle></CardHeader><CardContent id="cc" class={cls('CardContent')}><Button id="btn" variant="outline" class={cls('Button', { variant: 'outline' })}>Go</Button></CardContent></Card>
     </>);
     expect(parityOf('<Badge id="b" variant="secondary">beta</Badge><Alert id="a"><AlertTitle id="at">Heads up</AlertTitle><AlertDescription id="ad">Text.</AlertDescription></Alert><Card id="c"><CardHeader id="ch"><CardTitle id="ct">Title</CardTitle></CardHeader><CardContent id="cc"><Button id="btn" variant="outline">Go</Button></CardContent></Card>', host)).toEqual([]);
+  });
+});
+
+describe('progress and separator', () => {
+  it('a value renders Radix\'s loading/complete state and aria-valuenow, matching today\'s render', () => {
+    const { host } = mount(() => <>
+      <Progress id="p1" value={42} class={cls('Progress', {})} />
+      <Progress id="p2" value={100} class={cls('Progress', {})} />
+      <Progress id="p3" class={cls('Progress', {})} />
+      <Separator id="s1" class={cls('Separator', {})} />
+      <Separator id="s2" orientation="vertical" decorative={false} class={cls('Separator', {})} />
+    </>);
+    expect(parityOf('<Progress id="p1" value={42} /><Progress id="p2" value={100} /><Progress id="p3" /><Separator id="s1" /><Separator id="s2" orientation="vertical" decorative={false} />', host)).toEqual([]);
   });
 });
 
