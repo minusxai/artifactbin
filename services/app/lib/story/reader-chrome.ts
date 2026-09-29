@@ -93,6 +93,8 @@ export interface ReaderPerson {
 }
 
 export interface ReaderChromeInput {
+  /** Omit actions that the embedding host cannot perform; hosted readers keep all controls by default. */
+  hideActions?: readonly ('like' | 'fork' | 'settings' | 'profile')[];
   notifications?: {unread:number};
   /** SPA controls are mounted separately in TrustedUi; raw documents retain their own panels. */
   panels?: boolean;
@@ -336,7 +338,7 @@ export function renderReaderChrome(input: ReaderChromeInput): string {
     + '<img src="/logo-128.png" alt=""></a>'
     + '<div class="mx-reader-rail" data-mx-reader-rail>'
     + (editing ? '' : `<span data-mx-github-star class="mx-reader-github">${githubStarMarkup()}</span>`)
-    + (!reading ? '' : action(
+    + (!reading || input.hideActions?.includes('like') ? '' : action(
       'like',
       reactions?.like.liked ? 'Unlike' : 'Like',
       ICON_HEART,
@@ -352,12 +354,12 @@ export function renderReaderChrome(input: ReaderChromeInput): string {
       reactions ? ` data-mx-href="${escapeHtml(reactions.comment.href)}"` : '',
       `<span class="mx-reader-count" data-mx-reader-count="comment">${reactions && reactions.comment.count > 0 ? reactions.comment.count : ''}</span>`,
     ))
-    + (!reading ? '' : input.panels === false ? action('fork', 'Fork artifact', ICON_FORK, input.forkBusy ? ' disabled aria-busy="true"' : '') : fork ? renderFork(fork) : '')
+    + (!reading || input.hideActions?.includes('fork') ? '' : input.panels === false ? action('fork', 'Fork artifact', ICON_FORK, input.forkBusy ? ' disabled aria-busy="true"' : '') : fork ? renderFork(fork) : '')
     + (edit ? action('edit', 'Edit', ICON_PENCIL) : '')
     + (input.share ? action('share', 'Share', `<span data-mx-visibility="${input.visibility ?? 'private'}" data-mx-sharing-icon="${sharingIcon}">${ICON(visibilityIconPaths(sharingIcon))}</span>`, '', '<span class="mx-reader-share-text">Share</span>') : '')
     + (viewer && input.notifications ? action('notifications','Notifications',ICON('<path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9"/><path d="M10 21h4"/>'),'',input.notifications.unread?'<span aria-label="Unread notifications" style="position:absolute;right:4px;top:4px;width:7px;height:7px;border-radius:50%;background:#dc2626"></span>':''):'')
-    + trigger('controls', 'Open artifact controls', ICON_SLIDERS, 'settings', 'Artifact settings')
-    + (viewer ? faceTrigger(viewer) : trigger('menu', 'Open menu', ICON_PROFILE, 'profile', 'Profile'))
+    + (input.hideActions?.includes('settings') ? '' : trigger('controls', 'Open artifact controls', ICON_SLIDERS, 'settings', 'Artifact settings'))
+    + (input.hideActions?.includes('profile') ? '' : viewer ? faceTrigger(viewer) : trigger('menu', 'Open menu', ICON_PROFILE, 'profile', 'Profile'))
     + '</div>'
     + byline
     // WHICH VERSION THIS IS — fixed, never a control, and the only thing an

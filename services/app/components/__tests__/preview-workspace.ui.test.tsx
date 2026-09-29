@@ -53,3 +53,14 @@ it('capture mode renders the document without editor or comment chrome',()=>{
  expect(screen.getByText('Live document')).toBeTruthy();
  expect(screen.queryByLabelText('Editor toolbar')).toBeNull();
 });
+
+it('omits hosted account controls in local editing and reading modes',async()=>{
+ render(<PreviewWorkspace initial={initial} file="report.jsx"/>);
+ await screen.findByLabelText('Editor toolbar');
+ const absent=()=>{for(const name of ['Like','Fork artifact','Open artifact controls','Open menu'])expect(screen.queryByRole('button',{name})).toBeNull();};
+ absent();
+ fireEvent.click(screen.getByRole('button',{name:'Exit edit mode'}));
+ await waitFor(()=>expect(screen.queryByLabelText('Editor toolbar')).toBeNull());
+ absent();
+ expect(screen.getByRole('button',{name:'Edit'})).toBeTruthy();
+});

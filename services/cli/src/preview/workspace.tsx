@@ -67,7 +67,7 @@ export function PreviewWorkspace({initial,file,capture=false}:{initial:PreviewDo
  return <ArtifactBackendProvider backend={backend}>
   <TrustedUi overlay layer="navigation">
    <InlineReaderChrome editing={editing} pinned={editing||railOpen} onTitleHost={editing&&!phone?setTitleHost:undefined}
-    input={{artifactId:id,title:document.metadata?.title??file,ground:initial.data.colorMode,author:null,ownerBreadcrumb:true,edit:true,editing,viewer:{id:'local-preview',name:'Local preview',image:null},reactions:{like:{count:0,liked:false,href:'#'},follow:null,comment:{count,href:'#'}}}}
+    input={{hideActions:['like','fork','settings','profile'],artifactId:id,title:document.metadata?.title??file,ground:initial.data.colorMode,author:null,ownerBreadcrumb:true,edit:true,editing,viewer:{id:'local-preview',name:'Local preview',image:null},reactions:{like:{count:0,liked:false,href:'#'},follow:null,comment:{count,href:'#'}}}}
     onAction={action=>{if(action==='edit'){if(editing)void finish();else setEditing(true);}if(action==='comment')setRailOpen(open=>!open);}}/>
   </TrustedUi>
   <main aria-label="Artifact viewport" style={{minHeight:'100vh',paddingTop:top,paddingRight:right,paddingBottom:editing&&!wide?'50vh':0}}>{runtime}</main>
