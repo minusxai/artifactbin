@@ -6,10 +6,13 @@ import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import { mermaidDispatch, mermaidKindModules } from './mermaid-graph.mjs';
 import { preparationInputs, fingerprintInputs } from './preparation-fingerprint.mjs';
+import { readLucideIcons } from './lucide-icons.mjs';
 
 const root = path.resolve(import.meta.dirname, '..');
 const output = path.join(root, 'lib/build-assets');
 fs.mkdirSync(output, { recursive: true });
+// Older checkouts produced a React SSR artifact here. It is no longer a server input.
+fs.rmSync(path.join(output, 'story-ssr.cjs'), { force: true });
 fs.writeFileSync(path.join(output, 'prepared-sources.sha256'), `${fingerprintInputs(path.resolve(root, '../..'), await preparationInputs(path.resolve(root, '../..')))}\n`);
 
 await import('./build-offline.mjs');
@@ -26,23 +29,8 @@ const modules = mermaidKindModules(MERMAID_DIAGRAMS, mermaidDispatch(
 ));
 fs.writeFileSync(path.join(output, 'mermaid-modules.json'), JSON.stringify({ kinds: modules }, null, 2) + '\n');
 
-// The editor and publish-time reactStatic compiler still render React on the server.
-// Their CJS boundary is loaded by lib/story/ssr.server.ts, never sent to a reader.
-await esbuild.build({
-  entryPoints: [path.join(root, 'lib/story-runtime/ssr-entry.tsx')],
-  outfile: path.join(output, 'story-ssr.cjs'),
-  bundle: true, minify: true, jsx: 'automatic', format: 'cjs', platform: 'node',
-  define: { 'process.env.NODE_ENV': '"production"' },
-  alias: { '@': root },
-  external: ['vega', 'vega-lite', 'vega-embed', 'vega-interpreter', 'canvas'],
-  plugins: [{
-    name: 'server-map-engine-stub',
-    setup(build) {
-      build.onResolve({ filter: /\/deck-gl-engine$/ }, () => ({ path: 'deck-gl-engine', namespace: 'server-stub' }));
-      build.onLoad({ filter: /.*/, namespace: 'server-stub' }, () => ({ contents: 'export function DeckEngine() { return null; }', loader: 'js' }));
-    },
-  }],
-});
+// Lucide's icon data: the icon packages are browser dependencies, so the server reads this copy.
+fs.writeFileSync(path.join(output, 'lucide-icons.json'), JSON.stringify(readLucideIcons(root)));
 
 // MapLibre's worker is a build dependency; the server serves this copy.
 const require = createRequire(path.join(root, 'package.json'));

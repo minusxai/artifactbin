@@ -25,6 +25,7 @@ import { FILE_GLYPH_NAMES } from '@/lib/story-ui/file-glyphs';
 import { buildGlyphMap, scanIcons, glyphsForNodes } from '@/lib/story/icon-glyphs';
 import { cn } from '@/components/kit/cn';
 import { parseJsx } from '@/lib/jsx';
+import { readFileSync } from 'node:fs';
 
 /** Kebab and Pascal spellings, a digit-bearing name, and the unknown-name fallback. */
 const NAMES = ['chart-column', 'circle-check', 'CircleCheck', 'grid-2x2', 'triangle-alert'];
@@ -114,5 +115,14 @@ describe('icon glyphs', () => {
   it('resolves only what the document asked for', () => {
     // The whole point: a map the size of the document's usage, not of lucide.
     expect(Object.keys(buildGlyphMap(['chart-column']))).toEqual(['ChartColumn']);
+  });
+});
+
+describe('the server reads icon data from the build, never from the icon packages', () => {
+  it('loads no icon package at run time (the production server does not install them)', () => {
+    const source = readFileSync(new URL('../icon-glyphs.ts', import.meta.url), 'utf8');
+    expect(source).not.toMatch(/lucide-(react|solid)/);
+    expect(source).not.toMatch(/createRequire|require\.resolve/);
+    expect(source).toContain('lib/build-assets/lucide-icons.json');
   });
 });

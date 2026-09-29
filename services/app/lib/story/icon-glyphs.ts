@@ -11,28 +11,27 @@
  * glyphs a document actually uses; those travel in the island beside `refData` and
  * the client renders them from data (components/kit/icon).
  *
- * This module is reached only through the SSR bundle (lib/story-runtime/ssr-entry),
- * which lib/story/ssr.server loads with createRequire from a prebuilt file OUTSIDE
- * the app's module graph — so the client components it renders never enter the
- * server's own graph.
- *
- * The glyph is extracted by RENDERING lucide's own component and keeping what is
- * inside its <svg>, rather than reaching for the `__iconNode` data: that data is not
- * re-exported from the package barrel (1600 modules would collide on the name), and
- * rendering is what guarantees the client's copy is byte-identical to what lucide
- * would have emitted — which is the whole safety property here, since a document is
- * rendered twice and a differing tree is a hydration mismatch. Guarded by
- * lib/story/__tests__/icon-glyphs.test.tsx.
- */
-import { createElement } from 'react';
-import { renderToStaticMarkup } from 'react-dom/server';
-import { icons } from 'lucide-react';
+ * Lucide's path data is extracted at build time (scripts/lucide-icons.mjs, written by
+ * scripts/build-server-reader.mjs to lib/build-assets/lucide-icons.json): the icon
+ * packages are browser dependencies and the production server does not install them.
+ * Read lazily, on the first document that draws an icon. Guarded by
+ * lib/story/__tests__/icon-glyphs.test.tsx. */
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
 import type { JsxNode } from '@/lib/jsx';
 import { iconGlyphKey, FALLBACK_ICON_KEY, type GlyphMap, type IconGlyph } from '@/lib/story-ui/icon-contract';
 import { FILE_GLYPH_NAMES } from '@/lib/story-ui/file-glyphs';
 
-const SVG_OPEN = /^<svg\b[^>]*>/;
-const CLASS_ATTR = /\bclass="([^"]*)"/;
+type LucideIcon = { name: string; nodes: Array<[string, Record<string, string>]> };
+let icons: Record<string, LucideIcon> | null = null;
+const lucideIcons = (): Record<string, LucideIcon> =>
+  (icons ??= JSON.parse(readFileSync(path.join(process.cwd(), 'lib/build-assets/lucide-icons.json'), 'utf8')) as Record<string, LucideIcon>);
+const escapeAttribute = (value: string): string => value.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/'/g, '&#x27;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+function sourceFor(key: string): LucideIcon {
+  const all = lucideIcons();
+  return all[key] ?? all[FALLBACK_ICON_KEY]!;
+}
 
 /**
  * Render one lucide glyph and split it into the parts the client re-assembles.
@@ -44,18 +43,15 @@ const resolved = new Map<string, IconGlyph>();
 function resolveGlyph(name: string): IconGlyph {
   const key = iconGlyphKey(name);
   const hit = resolved.get(key);
-  // A glyph never changes, and a document renders on every request (no caching
-  // above this), so resolving one twice is pure waste. Grows to at most the number
+  // A glyph never changes, so resolving one twice is pure waste. Grows to at most the number
   // of DISTINCT icons this process has served, never freed — the icon set is the
   // only ceiling, and it is a fixed ~1600 entries of small strings.
   if (hit) return hit;
-  const Glyph = (icons as Record<string, React.ComponentType>)[key]
-    ?? (icons as Record<string, React.ComponentType>)[FALLBACK_ICON_KEY];
-  const markup = renderToStaticMarkup(createElement(Glyph));
-  const open = markup.match(SVG_OPEN)?.[0] ?? '';
-  // `lucide lucide-grid2x2 lucide-grid-2x2` — everything after the bare marker.
-  const cls = (open.match(CLASS_ATTR)?.[1] ?? '').split(/\s+/).filter((c) => c && c !== 'lucide').join(' ');
-  const glyph: IconGlyph = { cls, inner: markup.slice(open.length).replace(/<\/svg>$/, '') };
+  const { name: resolvedName, nodes } = sourceFor(key);
+  const canonical = resolvedName.replace(/-(?=\d)/g, '');
+  const cls = [`lucide-${canonical}`, ...(canonical === resolvedName ? [] : [`lucide-${resolvedName}`])].join(' ');
+  const inner = nodes.map(([tag, attrs]) => `<${tag}${Object.entries(attrs).filter(([attr]) => attr !== 'key').map(([attr, value]) => ` ${attr}="${escapeAttribute(value)}"`).join('')}></${tag}>`).join('');
+  const glyph: IconGlyph = { cls, inner };
   resolved.set(key, glyph);
   return glyph;
 }

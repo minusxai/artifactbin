@@ -131,11 +131,13 @@ describe('a published Mermaid document', () => {
     expect(data.dataflow?.results?.tables.q?.rows).toEqual([{ n: 42 }]);
     const drawing = data.mermaidImages?.[mermaidImageKey(FLOW, 'light')];
     expect(drawing?.src).toMatch(/^\/assets\/mermaid\//);
-    const html = answer.story!.html();
+    const compiledAnswer = await artifactPageAnswer(reader(`/a/${id}`), id, { page: { spa: null } });
+    const html = compiledAnswer.compiled!.html;
     expect(html).toContain('aria-label="Live number">42<');
     expect(html).toContain(`src="${drawing!.src}"`);
-    const stored = (await (await getDb()).query<{ page: { ssr: { html: string } } }>(`SELECT page FROM prepared_pages WHERE artifact_id = $1 AND slot = 'head'`, [id])).rows[0]!;
-    expect(stored.page.ssr.html).not.toContain('aria-label="Live number">42<');
+    const stored = (await (await getDb()).query<{ page: { ssr?: unknown; compiled?: { html?: string } } }>(`SELECT page FROM prepared_pages WHERE artifact_id = $1 AND slot = 'head'`, [id])).rows[0]!;
+    expect(stored.page.ssr).toBeUndefined();
+    expect(stored.page.compiled?.html).not.toContain('aria-label="Live number">42<');
   });
 
   it('queues a harvest after its commit, and the harvested version is drawn from stored SVG on both reader paths', async () => {
@@ -215,7 +217,8 @@ describe('a published Mermaid document', () => {
     const stored = images?.[mermaidImageKey(FLOW, 'light')];
     expect(stored?.palette).toBe(PALETTE.inline);
     // The served story itself carries the stored drawing, and the page names no engine code for it.
-    expect(next.story!.html()).toContain(`src="${stored!.src}"`);
+    const compiledNext = await artifactPageAnswer(reader(`/a/${id}`), id, { page: { spa: null } });
+    expect(compiledNext.compiled!.html).toContain(`src="${stored!.src}"`);
     expect(next.story!.lazyCode.mermaid).toEqual([]);
     expect(next.story!.lazyCode.mermaidImages).toEqual([stored!.src]);
     // Asked for by name, the engine draws as before.
