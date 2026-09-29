@@ -105,3 +105,19 @@ it('does not offer private visibility to an anonymous owner', async () => {
   await waitFor(() => expect(screen.getByRole('button', { name: 'Make public' })).toBeTruthy());
   expect(screen.queryByRole('button', { name: 'Make private' })).toBeNull();
 });
+
+it('offers social preview to an editor without sharing controls and keeps the editor reachable on image failure', () => {
+  const edit = vi.fn(); const fetcher = vi.fn(); vi.stubGlobal('fetch', fetcher);
+  const view = render(() => <DocumentSharing id="abc" title="Report" owner={false} onSocialPreview={edit} version={3} />);
+  fireEvent.click(view.getByRole('button', { name: 'Share' }));
+  expect(screen.getByRole('dialog', { name: 'Sharing' })).toBeTruthy();
+  expect(screen.queryByRole('button', { name: 'Make public' })).toBeNull();
+  expect(fetcher).not.toHaveBeenCalled();
+  const image = screen.getByAltText('Current social preview');
+  expect(image.getAttribute('src')).toContain('/a/abc/export?format=jpg&mode=card&v=3&');
+  fireEvent.error(image);
+  expect(screen.getByText('Preview unavailable')).toBeTruthy();
+  fireEvent.click(screen.getByRole('button', { name: 'Edit social preview' }));
+  expect(edit).toHaveBeenCalledOnce();
+  expect(screen.queryByRole('dialog', { name: 'Sharing' })).toBeNull();
+});

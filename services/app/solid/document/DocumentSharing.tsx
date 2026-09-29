@@ -4,6 +4,7 @@ import { Portal } from 'solid-js/web';
 import { SHARE_ROLES, SHARE_ROLE_LABEL, type ShareEntry, type ShareRole } from '@/lib/share-roles';
 import type { SharingPatch, Visibility } from '@/lib/artifacts';
 import type { SharingVerdict } from '@/lib/visibility-icons';
+import { CARD_RENDER_GENERATION } from '@/lib/export-card';
 
 interface SharingState {
   visibility: Visibility; linkRole: ShareRole; shares: ShareEntry[]; canPrivate?: boolean;
@@ -24,6 +25,7 @@ export function DocumentSharing(props: {
   id: string; title: string; owner: boolean; editable?: boolean; url?: string;
   variant?: 'chip' | 'menu' | 'dialog'; onClose?: () => void;
   onSharingChange?: (verdict: SharingVerdict) => void;
+  onSocialPreview?: () => void; version?: number;
 }): JSX.Element {
   const canManage = () => props.owner || Boolean(props.editable);
   const [open, setOpen] = createSignal(props.variant === 'dialog');
@@ -31,6 +33,7 @@ export function DocumentSharing(props: {
   const [email, setEmail] = createSignal('');
   const [error, setError] = createSignal('');
   const [copied, setCopied] = createSignal(false);
+  const [previewStatus, setPreviewStatus] = createSignal<'loading' | 'ready' | 'error'>('loading');
   const endpoint = `/api/my/artifacts/${encodeURIComponent(props.id)}/sharing`;
   const close = () => { setOpen(false); props.onClose?.(); };
   const copy = () => {
@@ -59,6 +62,7 @@ export function DocumentSharing(props: {
     const current = state();
     if (current) props.onSharingChange?.({ visibility: current.visibility, hasInvitedUsers: current.shares.length > 0 });
   });
+  createEffect(() => { void props.version; setPreviewStatus('loading'); });
   createEffect(() => {
     if (!open()) return;
     const previous = document.body.style.overflow;
@@ -69,7 +73,7 @@ export function DocumentSharing(props: {
   });
   return <>
     <Show when={props.variant !== 'dialog'}>
-      <button type="button" aria-label="Share" onClick={() => canManage() ? setOpen(true) : copy()} class={props.variant === 'menu' ? 'flex w-full px-2 py-2 text-left font-mono text-xs text-muted hover:bg-raised' : 'rounded border border-edge px-2 py-1 text-xs'}>
+      <button type="button" aria-label="Share" onClick={() => canManage() || props.onSocialPreview ? setOpen(true) : copy()} class={props.variant === 'menu' ? 'flex w-full px-2 py-2 text-left font-mono text-xs text-muted hover:bg-raised' : 'rounded border border-edge px-2 py-1 text-xs'}>
         {copied() ? 'copied' : state() ? `share: ${state()!.visibility}` : 'Share'}
       </button>
     </Show>
@@ -79,7 +83,16 @@ export function DocumentSharing(props: {
         <header class="flex items-start gap-4 border-b border-edge px-4 py-4 sm:px-6"><div class="min-w-0 flex-1"><h2 class="break-words text-base font-semibold">Share “{props.title}”</h2><p class="mt-1 text-faint">Manage access, invite people, or copy the link.</p></div><button type="button" aria-label="Close sharing" onClick={close}>×</button></header>
         <div class="overflow-y-auto px-4 py-4 sm:px-6 sm:py-5">
           <button type="button" aria-label="Copy link" onClick={copy} class="mb-4 w-full rounded border border-edge bg-raised px-3 py-2.5">{copied() ? 'copied' : 'copy link'}</button>
+          <Show when={props.onSocialPreview}><figure class="mx-auto mb-5 w-full max-w-xs"><figcaption class="mb-2 text-center text-muted">Social preview</figcaption>
+            <div class="relative aspect-[40/21] w-full overflow-hidden rounded border border-edge bg-raised">
+              <Show when={previewStatus() !== 'ready'}><div role="status" class="absolute inset-0 flex items-center justify-center">{previewStatus() === 'loading' ? 'Loading preview…' : 'Preview unavailable'}</div></Show>
+              <Show when={previewStatus() !== 'error'}><img alt="Current social preview" src={`/a/${encodeURIComponent(props.id)}/export?format=jpg&mode=card&v=${props.version ?? 0}&r=${CARD_RENDER_GENERATION}`}
+                onLoad={() => setPreviewStatus('ready')} onError={() => setPreviewStatus('error')} class="h-full w-full object-contain" /></Show>
+              <button type="button" aria-label="Edit social preview" onClick={() => { close(); props.onSocialPreview?.(); }} class="absolute right-2 top-2 rounded border border-edge bg-surface px-2 py-1">edit</button>
+            </div>
+          </figure></Show>
           <Show when={error()}><p role="alert" class="text-danger">{error()}</p></Show>
+          <Show when={canManage()}>
           <Show when={!state() && !error()}><p role="status">loading…</p></Show>
           <Show when={state()}>{current => <>
             <div class="flex gap-1"><For each={(['public', 'unlisted', 'private'] as const).filter(value => value !== 'private' || current().canPrivate !== false)}>{visibility =>
@@ -91,6 +104,7 @@ export function DocumentSharing(props: {
               <form class="mt-1 flex gap-1" onSubmit={event => { event.preventDefault(); const address = email().trim(); if (address) { void put({ shares: [...current().shares, { email: address, role: 'viewer' }] }); setEmail(''); } }}><input aria-label="Invite email" type="email" value={email()} onInput={event => setEmail(event.currentTarget.value)} placeholder="email@example.com" class="min-w-0 flex-1 rounded border border-edge bg-bg px-2 py-1" /><button type="submit" aria-label="Add email" class="rounded border border-edge px-2 py-1">add</button></form>
             </section>
           </>}</Show>
+          </Show>
         </div>
       </section>
     </div></Portal></Show>
