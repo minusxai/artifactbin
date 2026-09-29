@@ -141,6 +141,9 @@ describe('server.ts --app-only', () => {
     const page = await fetchChecked(`${base}/`);
     expect(page.status).toBe(200);
     expect(await page.text()).toContain('/@vite/client'); // transformed by the dev chain, not a stale build
+    const login = await fetchChecked(`${base}/login`);
+    expect(login.status).toBe(200);
+    expect(await login.text()).toContain('/solid-entry.tsx');
     expect((await fetchChecked(`${base}/llms.txt`)).status).toBe(200);
   }, 120_000);
 });
