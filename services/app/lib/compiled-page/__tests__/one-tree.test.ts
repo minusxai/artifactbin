@@ -54,6 +54,14 @@ describe('one document tree', () => {
     }
     for (const text of ['Accordion prose', 'Collapsible prose', 'Popover prose', 'Tooltip prose']) expect(generated.browserIslands).not.toContain(text);
   });
+  it('serves direct text inside a closed accordion panel', async () => {
+    const source = '<Accordion defaultValue="a"><AccordionItem value="a"><AccordionTrigger>First</AccordionTrigger><AccordionContent>Open by default.</AccordionContent></AccordionItem><AccordionItem value="b"><AccordionTrigger>Second</AccordionTrigger><AccordionContent>Collapsed until clicked.</AccordionContent></AccordionItem></Accordion>';
+    const generated = generate(input(source));
+    const built = await buildDocumentModules(generated, { build: loadCompilerBuild(), flow: null, values: {} });
+    const host = new JSDOM(`<div>${built.html}</div>`).window.document.body;
+    const panel = host.querySelectorAll('[data-slot="accordion-content"]')[1];
+    expect(panel?.textContent).toContain('Collapsed until clicked.');
+  });
 
   it('keeps the browser module stable when only static prose around a chart changes', () => {
     const before = generate(input('<p id="lede">First</p><Question data="$rows" viz={{kind:"vega-lite", spec:{mark:"bar"}}} />'));

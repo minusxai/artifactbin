@@ -98,6 +98,7 @@ describe('one tree SSR to hydrate', () => {
     const source = kitchenSinkMarkup({ dataset: 'Data01', recipe: 'Viz001', image: 'Image1', pdf: 'Paper1' });
     const server = fixture(source);
     const host = document.createElement('div'); host.innerHTML = server.html; document.body.append(host);
+    expect(host.querySelectorAll<HTMLElement>('[data-slot="accordion-content"]')[1]?.textContent).toContain('Collapsed until clicked.');
     const pageData = host.querySelector('script[data-mx-module-data]')?.cloneNode(true) as HTMLScriptElement | undefined;
     if (pageData) { pageData.id = 'mx-story-data'; document.body.append(pageData); }
     for (const match of server.browserCode.matchAll(/document\.querySelector\(['"]([^'"]+)['"]\)/g)) {
@@ -126,6 +127,11 @@ describe('one tree SSR to hydrate', () => {
     expect(portal.querySelector('dialog button')?.textContent).toBe('Close');
     portal.querySelector<HTMLButtonElement>('dialog button')!.click();
     expect(host.querySelector('dialog p')).toBe(dialogText);
+    const secondPanel = host.querySelectorAll<HTMLElement>('[data-slot="accordion-content"]')[1]!;
+    expect(secondPanel.textContent).toContain('Collapsed until clicked.');
+    [...host.querySelectorAll<HTMLButtonElement>('button')].find(button => button.textContent?.includes('Accordion section B'))!.click();
+    expect(secondPanel.hidden).toBe(false);
+    expect(secondPanel.textContent).toContain('Collapsed until clicked.');
     runtime.dispose(); host.remove(); pageData?.remove(); portal.remove();
   });
 });
