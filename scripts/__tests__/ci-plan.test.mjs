@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { execFile, execFileSync, spawnSync } from 'node:child_process';
 import { promisify } from 'node:util';
-import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -377,6 +377,143 @@ describe('GitHub CI adapter', () => {
     }
   });
 
+  /** A one-file GitHub Actions artifact zip, the shape `readArtifactJson` unzips. */
+  const artifactZip = (dir, fileName, content) => {
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(path.join(dir, fileName), JSON.stringify(content));
+    const zipPath = path.join(dir, 'artifact.zip');
+    execFileSync('zip', ['-q', '-j', zipPath, path.join(dir, fileName)], { cwd: dir });
+    return readFileSync(zipPath);
+  };
+
+  /** Serves a tree-miss and one patch match (its zip content given as `record`), everything else 404. */
+  const patchServer = (patchId, artifactId, zipBytes) => createServer((request, response) => {
+    const url = new URL(request.url, 'http://localhost');
+    const name = url.searchParams.get('name');
+    if (url.pathname === '/repos/minusxai/artifactbin/actions/artifacts' && name?.startsWith('tested-tree-')) {
+      response.writeHead(200, { 'content-type': 'application/json' });
+      response.end(JSON.stringify({ artifacts: [] }));
+    } else if (url.pathname === '/repos/minusxai/artifactbin/actions/artifacts' && name === `tested-patch-${patchId}`) {
+      response.writeHead(200, { 'content-type': 'application/json' });
+      response.end(JSON.stringify({ artifacts: [{ id: artifactId, expired: false }] }));
+    } else if (url.pathname === `/repos/minusxai/artifactbin/actions/artifacts/${artifactId}/zip`) {
+      response.writeHead(200, { 'content-type': 'application/zip' });
+      response.end(zipBytes);
+    } else {
+      response.writeHead(404, { 'content-type': 'application/json' });
+      response.end(JSON.stringify({ artifacts: [] }));
+    }
+  });
+
+  it('reuses a tested patch when a moved base leaves its own files untouched (a moved-base merge)', async () => {
+    const cwd = mkdtempSync(path.join(tmpdir(), 'ci-patch-reuse-'));
+    const zipDir = mkdtempSync(path.join(tmpdir(), 'ci-patch-zip-'));
+    try {
+      const git = (...args) => execFileSync('git', args, { cwd, encoding: 'utf8' }).trim();
+      git('init', '-q', '-b', 'main');
+      git('config', 'user.name', 'CI fixture');
+      git('config', 'user.email', 'mxmx_test_ci@example.com');
+      mkdirSync(path.join(cwd, 'services/app'), { recursive: true });
+      mkdirSync(path.join(cwd, 'services/cli'), { recursive: true });
+      writeFileSync(path.join(cwd, 'services/app/existing.ts'), 'export const existing = 1;\n');
+      git('add', '.'); git('commit', '-q', '-m', 'base');
+      const base = git('rev-parse', 'HEAD');
+
+      // PR A, tested by an earlier run against `base` alone: adds services/app/x.ts.
+      writeFileSync(path.join(cwd, 'services/app/x.ts'), 'export const x = 1;\n');
+      git('add', '.'); git('commit', '-q', '-m', 'PR A: add x');
+      const patchDiff = execFileSync('git', ['diff', '--no-renames', `${base}..HEAD`], { cwd, encoding: 'utf8' });
+      const [patchId] = execFileSync('git', ['patch-id', '--stable'], { input: patchDiff, encoding: 'utf8' }).trim().split(/\s+/);
+      git('reset', '-q', '--hard', base);
+
+      // PR B merges FIRST, moving main's tip: a disjoint CLI file.
+      writeFileSync(path.join(cwd, 'services/cli/y.ts'), 'export const y = 1;\n');
+      git('add', '.'); git('commit', '-q', '-m', 'PR B: add y');
+      const before = git('rev-parse', 'HEAD');
+
+      // PR A's squash-merge onto the new tip: the identical patch, applied past B.
+      writeFileSync(path.join(cwd, 'services/app/x.ts'), 'export const x = 1;\n');
+      git('add', '.'); git('commit', '-q', '-m', 'PR A merged after B');
+      const head = git('rev-parse', 'HEAD');
+      expect(execFileSync('git', ['diff', '--no-renames', `${before}..${head}`], { cwd, encoding: 'utf8' })).toBe(patchDiff);
+
+      const zipBytes = artifactZip(zipDir, 'tested-patch.json', { run_id: 4242, base });
+      const api = patchServer(patchId, 900, zipBytes);
+      await new Promise((resolve) => api.listen(0, '127.0.0.1', resolve));
+      try {
+        const env = {
+          CI__EVENT: 'push', CI__BEFORE_SHA: before, CI__HEAD_SHA: head,
+          GITHUB_REPOSITORY: 'minusxai/artifactbin', GH_TOKEN: 'mxmx_test_token',
+          GITHUB_API_URL: `http://127.0.0.1:${api.address().port}`,
+        };
+        // Disjoint: B never touched services/app/x.ts. Safe to skip re-testing A's own patch.
+        const reused = await planOutputServed(cwd, env);
+        expect(reused['source-run']).toBe('4242');
+        for (const job of CI_JOBS) expect(reused[job], job).toBe('false');
+      } finally {
+        api.close();
+      }
+    } finally {
+      rmSync(cwd, { recursive: true, force: true });
+      rmSync(zipDir, { recursive: true, force: true });
+    }
+  });
+
+  it('does not reuse a patch match whose tested base is not even history this push descends from', async () => {
+    const cwd = mkdtempSync(path.join(tmpdir(), 'ci-patch-unrelated-'));
+    const zipDir = mkdtempSync(path.join(tmpdir(), 'ci-patch-zip2-'));
+    try {
+      const git = (...args) => execFileSync('git', args, { cwd, encoding: 'utf8' }).trim();
+      git('init', '-q', '-b', 'main');
+      git('config', 'user.name', 'CI fixture');
+      git('config', 'user.email', 'mxmx_test_ci@example.com');
+      mkdirSync(path.join(cwd, 'services/app'), { recursive: true });
+      writeFileSync(path.join(cwd, 'services/app/existing.ts'), 'export const existing = 1;\n');
+      git('add', '.'); git('commit', '-q', '-m', 'base');
+      const base = git('rev-parse', 'HEAD');
+
+      // PR A, tested by an earlier run against `base`.
+      writeFileSync(path.join(cwd, 'services/app/x.ts'), 'export const x = 1;\n');
+      git('add', '.'); git('commit', '-q', '-m', 'PR A: add x');
+      const patchDiff = execFileSync('git', ['diff', '--no-renames', `${base}..HEAD`], { cwd, encoding: 'utf8' });
+      const [patchId] = execFileSync('git', ['patch-id', '--stable'], { input: patchDiff, encoding: 'utf8' }).trim().split(/\s+/);
+
+      // An UNRELATED history — this push's own lineage never contains `base` at all (imagine a
+      // repository migration, a force-push, or simply a patch-id collision): the tested patch's base
+      // is not an ancestor of this push's own base, so it must not stand in even though the resulting
+      // edit (adding the same file, same bytes) is byte-for-byte identical and the patch id matches.
+      git('checkout', '-q', '--orphan', 'disconnected');
+      execFileSync('git', ['rm', '-rf', '-q', '.'], { cwd });
+      writeFileSync(path.join(cwd, 'unrelated.txt'), 'unrelated root\n');
+      git('add', '.'); git('commit', '-q', '-m', 'an unrelated root');
+      const before = git('rev-parse', 'HEAD');
+      mkdirSync(path.join(cwd, 'services/app'), { recursive: true });
+      writeFileSync(path.join(cwd, 'services/app/x.ts'), 'export const x = 1;\n');
+      git('add', '.'); git('commit', '-q', '-m', 'the same edit, unrelated lineage');
+      const head = git('rev-parse', 'HEAD');
+      expect(execFileSync('git', ['diff', '--no-renames', `${before}..${head}`], { cwd, encoding: 'utf8' })).toBe(patchDiff);
+
+      const zipBytes = artifactZip(zipDir, 'tested-patch.json', { run_id: 4242, base });
+      const api = patchServer(patchId, 901, zipBytes);
+      await new Promise((resolve) => api.listen(0, '127.0.0.1', resolve));
+      try {
+        const env = {
+          CI__EVENT: 'push', CI__BEFORE_SHA: before, CI__HEAD_SHA: head,
+          GITHUB_REPOSITORY: 'minusxai/artifactbin', GH_TOKEN: 'mxmx_test_token',
+          GITHUB_API_URL: `http://127.0.0.1:${api.address().port}`,
+        };
+        const retested = await planOutputServed(cwd, env);
+        expect(retested['source-run']).toBe('');
+        expect(retested.node).toBe('true');
+      } finally {
+        api.close();
+      }
+    } finally {
+      rmSync(cwd, { recursive: true, force: true });
+      rmSync(zipDir, { recursive: true, force: true });
+    }
+  });
+
   it('asks checks to refuse a CLI change that carries no bump, and prints the fix', () => {
     const cwd = mkdtempSync(path.join(tmpdir(), 'ci-cli-bump-'));
     try {
@@ -430,6 +567,43 @@ describe('GitHub CI adapter', () => {
       });
       expect(JSON.parse(readFileSync(path.join(cwd, 'tested-run/tested-run.json'), 'utf8'))).toEqual({ run_id: 4242 });
       expect(readFileSync(summary, 'utf8')).toContain(`tree ${tree} tested by run 4242\n`);
+      // A push never records a patch — it is testing a PR's, not minting one — so the second call
+      // above (a push shape: no CI__EVENT, no CI__BASE_SHA) wrote no patch-id and no patch file.
+      expect(readFileSync(output, 'utf8')).toContain('patch-id=\n');
+      expect(existsSync(path.join(cwd, 'tested-patch'))).toBe(false);
+    } finally { rmSync(cwd, { recursive: true, force: true }); }
+  });
+
+  it('records a pull request\'s patch too, base and all, keyed by content so a moved base still finds it', () => {
+    const cwd = mkdtempSync(path.join(tmpdir(), 'ci-record-patch-'));
+    try {
+      const git = (...args) => execFileSync('git', args, { cwd, encoding: 'utf8' }).trim();
+      git('init', '-q', '-b', 'main');
+      git('config', 'user.name', 'CI fixture');
+      git('config', 'user.email', 'mxmx_test_ci@example.com');
+      writeFileSync(path.join(cwd, 'file.txt'), 'one');
+      git('add', '.'); git('commit', '-q', '-m', 'base');
+      const base = git('rev-parse', 'HEAD');
+      mkdirSync(path.join(cwd, 'services/app'), { recursive: true });
+      writeFileSync(path.join(cwd, 'services/app/x.ts'), 'export const x = 1;\n');
+      git('add', '.'); git('commit', '-q', '-m', 'a PR');
+      const head = git('rev-parse', 'HEAD');
+      const output = path.join(cwd, 'outputs');
+      execFileSync(process.execPath, [script, 'record-tree'], {
+        cwd, encoding: 'utf8',
+        env: { ...process.env, GITHUB_OUTPUT: output, GITHUB_STEP_SUMMARY: '', GITHUB_RUN_ID: '55', CI__EVENT: 'pull_request', CI__BASE_SHA: base },
+      });
+      const outputs = readOutputs(output);
+      expect(outputs['patch-id']).toMatch(/^[0-9a-f]{40}$/);
+      expect(JSON.parse(readFileSync(path.join(cwd, 'tested-patch/tested-patch.json'), 'utf8')))
+        .toEqual({ run_id: 55, base });
+      // Rebuilt as a push would see it — the same file addition, applied straight onto `base` rather
+      // than through the PR's three-dot range — the patch id is identical: it is content, not notation.
+      const diff = execFileSync('git', ['diff', '--no-renames', `${base}...${head}`], { cwd, encoding: 'utf8' });
+      const rebuilt = execFileSync('git', ['diff', '--no-renames', `${base}..${head}`], { cwd, encoding: 'utf8' });
+      expect(rebuilt).toBe(diff);
+      const [patchId] = execFileSync('git', ['patch-id', '--stable'], { input: diff, encoding: 'utf8' }).trim().split(/\s+/);
+      expect(patchId).toBe(outputs['patch-id']);
     } finally { rmSync(cwd, { recursive: true, force: true }); }
   });
 
@@ -696,6 +870,16 @@ describe('CI job shape', () => {
     expect(tree.with.name).toBe('tested-tree-${{ steps.tree.outputs.tree }}');
     const run = jobs.test.steps.find((step) => step.with?.name === 'tested-run');
     expect(run.if).toContain("github.event_name == 'push'");
+    // The patch a moved-base push can still recognise (scripts/ci.mjs `patchGapIsSafe`) needs the
+    // PR's own base and full history to diff against it — a shallow, single-commit checkout has neither.
+    expect(record.env.CI__EVENT).toBe('${{ github.event_name }}');
+    expect(record.env.CI__BASE_SHA).toBe('${{ github.event.pull_request.base.sha }}');
+    const checkout = jobs.test.steps.find((step) => step.uses?.startsWith('actions/checkout'));
+    expect(checkout.with['fetch-depth']).toBe(0);
+    const patch = jobs.test.steps.find((step) => (step.with?.name ?? '').startsWith('tested-patch-'));
+    expect(patch.if).toBe("steps.tree.outputs.patch-id != ''");
+    expect(patch.with.name).toBe('tested-patch-${{ steps.tree.outputs.patch-id }}');
+    expect(jobs.test.steps.indexOf(patch)).toBeGreaterThan(jobs.test.steps.indexOf(record));
   });
 });
 

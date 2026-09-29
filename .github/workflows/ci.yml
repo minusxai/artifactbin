@@ -537,7 +537,11 @@ jobs:
       ]
     if: always()
     steps:
+      # Full history: recording the patch (below) diffs against the PR's base commit, which a
+      # shallow, single-commit checkout would not have fetched.
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          fetch-depth: 0
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: 22
@@ -546,11 +550,15 @@ jobs:
           CI__NEEDS: ${{ toJSON(needs) }}
         run: node scripts/ci.mjs check
       # On a pull request the checkout is refs/pull/N/merge — the tree a squash merge produces, which
-      # is the tree the push to main will carry.
+      # is the tree the push to main will carry, PROVIDED no other PR moves the base in between. When
+      # one does, the tree no longer matches, but the PATCH (recorded here too, when this is a pull
+      # request) still can: scripts/ci.mjs `plan`, `patchGapIsSafe`.
       - name: Record the tested tree
         id: tree
         env:
           CI__SOURCE_RUN: ${{ needs.plan.outputs.source-run }}
+          CI__EVENT: ${{ github.event_name }}
+          CI__BASE_SHA: ${{ github.event.pull_request.base.sha }}
         run: node scripts/ci.mjs record-tree
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
@@ -558,6 +566,16 @@ jobs:
           path: tested-tree/tested-tree.json
           # Longer than any merge window: the lookup that reads this runs when the PR merges, and an
           # expired artifact is no evidence (scripts/ci.mjs filters them out) — it is a full matrix.
+          retention-days: 14
+          overwrite: true
+      # THE PATCH THIS PULL REQUEST TESTED, keyed by its base and content — not its tree, which a
+      # later, unrelated merge can change out from under it. A push whose exact tree misses (another
+      # PR merged first) looks this up by `git patch-id`, invariant to that moved base.
+      - if: steps.tree.outputs.patch-id != ''
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: tested-patch-${{ steps.tree.outputs.patch-id }}
+          path: tested-patch/tested-patch.json
           retention-days: 14
           overwrite: true
       # WHICH RUN HOLDS THE BINARIES, for `release-cli.yml`: this run when it built them, the run
