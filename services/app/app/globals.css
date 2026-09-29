@@ -82,6 +82,21 @@
   --font-serif: var(--font-cormorant), 'EB Garamond', Georgia, serif;
 }
 
+/* Kit overlays enter TrustedUi's shadow root, where document styles are absent.
+ * Resolve their semantic colors through the app palette at the element, so
+ * light/dark changes keep working without importing author CSS into the boundary. */
+@theme inline {
+  --color-popover: var(--color-surface);
+  --color-popover-foreground: var(--color-fg);
+  --color-background: var(--color-bg);
+  --color-foreground: var(--color-fg);
+  --color-border: var(--color-edge);
+  --color-input: var(--color-edge-bright);
+  --color-muted-foreground: var(--color-muted);
+  --color-accent-foreground: var(--color-bg);
+  --color-ring: var(--color-accent);
+}
+
 /* Editor chrome uses the app palette for its document's current mode. */
 [data-app-appearance='light'] {
   --color-bg: #f6f7f8;

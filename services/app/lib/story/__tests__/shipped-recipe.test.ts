@@ -34,6 +34,14 @@ const doc = (viz: string) =>
   `<Question data="$trend" viz={${viz}} height="300px" />`;
 
 describe('shipped registry recipes at the publish door', () => {
+  it('accepts point maps without optional destination, size, or color bindings', async () => {
+    const result = await checkDocumentData(
+      doc('{"kind":"recipe","recipe":"minusx/point-map@1","bindings":{"lat":"revenue","lng":"revenue"}}'),
+      load,
+    );
+    expect(result).toMatchObject({ ok: true });
+  });
+
   it('refuses an array on a single-column slot at publish, not at render — agents write "value":["col"] for single-value', async () => {
     const bad = await checkDocumentData(doc('{"kind":"recipe","recipe":"minusx/single-value@1","bindings":{"value":["revenue"]}}'), load);
     expect(bad.ok).toBe(false);
