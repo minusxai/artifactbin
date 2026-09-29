@@ -109,7 +109,14 @@ export function DocumentPage(): JSX.Element {
     chrome.addEventListener('click', click);
     const escape = (event: KeyboardEvent) => { if (event.key === 'Escape') setPanel(null); };
     window.addEventListener('keydown', escape);
-    const intent = takeChromeIntent(); if (intent) void action(intent);
+    const intent = takeChromeIntent();
+    const address = new URL(window.location.href);
+    const carried = address.searchParams.get('intent');
+    if (carried) {
+      address.searchParams.delete('intent');
+      window.history.replaceState(window.history.state, '', address.pathname + address.search + address.hash);
+    }
+    if (intent || carried) void action(intent ?? carried!);
     let chromeState: ChromeState | null = null;
     let frame = 0;
     const sample = () => {

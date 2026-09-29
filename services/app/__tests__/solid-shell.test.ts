@@ -14,6 +14,9 @@ it('serves the Solid entry for ported routes, while React owns other URLs', asyn
   for (const route of ['/', '/assets', '/datasets/new', '/files/new']) expect(isSolidPage(route)).toBe(true);
   expect(isSolidPage('/a/fold01', 200, 'folder')).toBe(true);
   expect(isSolidPage('/a/doc01', 200, 'markup')).toBe(false);
+  expect(isSolidPage('/a/data01', 200, 'dataset')).toBe(false);
+  expect(isSolidPage('/@cee/data01', 200, 'dataset')).toBe(false);
+  expect(isSolidPage('/@cee/fold01', 200, 'folder')).toBe(false);
   expect(isSolidPage('/a/data01/edit', 200, 'dataset')).toBe(true);
   expect(isSolidPage('/a/doc01/edit', 200, 'markup')).toBe(false);
   expect(isSolidPage('/@cee')).toBe(true);
@@ -21,7 +24,7 @@ it('serves the Solid entry for ported routes, while React owns other URLs', asyn
   expect(isSolidPage('/a/doc-id')).toBe(true);
   expect(isSolidPage('/a/doc-id/edit')).toBe(false);
   expect(solidDocumentReader('viewer', 'markup', false)).toBe(true);
-  expect(solidDocumentReader('commenter', 'markup', false)).toBe(true);
+  expect(solidDocumentReader('commenter', 'markup', false)).toBe(false);
   expect(solidDocumentReader('editor', 'markup', false)).toBe(false);
   expect(solidDocumentReader('owner', 'markup', false)).toBe(false);
   expect(solidDocumentReader('viewer', 'folder', false)).toBe(false);

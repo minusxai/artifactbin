@@ -39,3 +39,13 @@ it('opens the current comments in the document rail', async () => {
   expect(await screen.findByText('Please add the source.')).toBeInTheDocument();
   expect(screen.getByRole('complementary', { name: 'Comments' })).toHaveTextContent('A useful point');
 });
+
+it('opens a carried fork intent after login and consumes the query parameter', () => {
+  window.history.replaceState(null, '', '/a/doc?intent=fork');
+  const story = document.createElement('main'); story.setAttribute('data-mx-inline-story', '');
+  const chrome = document.createElement('div'); chrome.setAttribute('data-mx-reader-chrome', '');
+  document.body.append(story, chrome);
+  render(() => <Router><Route path="/a/:id" component={DocumentPage} /></Router>);
+  expect(screen.getByRole('dialog', { name: 'Fork this artifact?' })).toBeInTheDocument();
+  expect(window.location.search).toBe('');
+});
