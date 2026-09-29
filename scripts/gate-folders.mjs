@@ -322,6 +322,20 @@ const trash = await owner.evaluate(async () => (await (await fetch('/api/page/tr
 const inTrash = new Set((trash.files ?? []).map((f) => f.id));
 check(inTrash.has(folder.id) && inTrash.has(seen.id), 'and both are listed in the trash');
 
+// The Trash route is a separate Solid entry. Exercise its browser handoff and
+// restore action after arriving from the React shelf.
+await owner.goto(`${BASE}/trash`, { waitUntil: 'load' });
+const trashTable = owner.getByRole('table');
+await trashTable.getByText('Field Notes 2026').first().waitFor({ timeout: 20000 });
+check((await trashTable.innerText()).includes('Field Notes 2026'), 'the Solid Trash route renders the deleted folder');
+await owner.getByRole('button', { name: 'More actions for Field Notes 2026' }).click();
+await Promise.all([
+  owner.waitForResponse((r) => r.url().endsWith(`/api/my/artifacts/${folder.id}/restore`) && r.status() === 200, { timeout: 15000 }),
+  owner.getByRole('button', { name: 'Restore Field Notes 2026' }).click(),
+]);
+await trashTable.getByText('Field Notes 2026').first().waitFor({ state: 'detached', timeout: 15000 });
+check(true, 'the Solid route restores the folder and updates its table');
+
 check(errors.length === 0, `no page error on either render of the listing${errors.length ? ` — ${errors[0]}` : ''}`);
 
 await browser.close();

@@ -6,7 +6,7 @@ import { routePages } from './route-pages';
 import { NavigationPreloads } from './navigation-preloads';
 import { OnboardingGate } from './OnboardingGate';
 
-const { NotificationsPage, ChatPage, AccountPage, AssetsPage, DatasetEditorPage, FileUploadPage, DocsPage, HomePage, LoginPage, NotFoundPage, ProfilePage, StartPage, TrashPage, WelcomePage } = routePages;
+const { NotificationsPage, ChatPage, AccountPage, AssetsPage, DatasetEditorPage, FileUploadPage, DocsPage, HomePage, LoginPage, NotFoundPage, ProfilePage, StartPage, WelcomePage } = routePages;
 
 export function App() {
   return (
@@ -29,7 +29,6 @@ export function App() {
           <Route path="/datasets/new" element={<DatasetEditorPage />} />
           <Route path="/files/new" element={<FileUploadPage />} />
           <Route path="/tokens" element={<Navigate to="/account" replace />} />
-          <Route path="/trash" element={<TrashPage />} />
           {/* `/docs` and below are the agent surface, served by the server's
             * docs route — the SPA must not claim them. */}
           <Route path="/docs-human" element={<DocsPage />} />
