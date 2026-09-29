@@ -15,6 +15,7 @@ const NotificationsPage = lazy(() => import('./pages/Notifications').then((m) =>
 const AccountPage = lazy(() => import('./pages/Account').then((m) => ({ default: m.AccountPage })));
 const DocsPage = lazy(() => import('./pages/Docs').then((m) => ({ default: m.DocsPage })));
 const ProfilePage = lazy(() => import('./pages/Profile').then((m) => ({ default: m.ProfilePage })));
+const ChatPage = lazy(() => import('./pages/Chat').then((m) => ({ default: m.ChatPage })));
 
 function PendingPage(): JSX.Element {
   return <main aria-label="Loading page" role="status" aria-busy="true" class="mx-auto max-w-5xl px-4 py-10"><span class="sr-only">Loading page…</span><div aria-hidden="true" class="h-7 w-48 rounded bg-raised" /></main>;
@@ -37,6 +38,7 @@ export function App(): JSX.Element {
   return (
     <Router root={Root}>
       <Route path="/trash" component={TrashPage} />
+      <Route path="/chat" component={ChatPage} />
       <Route path="/login" component={LoginPage} />
       <Route path="/start" component={StartPage} />
       <Route path="/welcome" component={WelcomePage} />

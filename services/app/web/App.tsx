@@ -7,7 +7,7 @@ import { NavigationPreloads } from './navigation-preloads';
 import { OnboardingGate } from './OnboardingGate';
 import { useEffect } from 'react';
 
-const { ChatPage, AssetsPage, DatasetEditorPage, FileUploadPage, HomePage, NotFoundPage, ProfilePage } = routePages;
+const { AssetsPage, DatasetEditorPage, FileUploadPage, HomePage, NotFoundPage, ProfilePage } = routePages;
 
 /** A guarded React navigation to a Solid-owned URL completes as a document navigation. */
 function LeaveToSolid() {
@@ -28,7 +28,7 @@ export function App() {
         <Route path="/start" element={<LeaveToSolid />} />
         <Route element={<Shell />}>
           <Route path="/login" element={<LeaveToSolid />} />
-          <Route path="/chat" element={<ChatPage />} />
+          <Route path="/chat" element={<LeaveToSolid />} />
           <Route path="/notifications" element={<LeaveToSolid />} />
           <Route path="/account" element={<LeaveToSolid />} />
           <Route path="/welcome" element={<LeaveToSolid />} />
