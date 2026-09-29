@@ -11,10 +11,12 @@ import { gridCols, gridItemRect, gridRowHeight } from '@/lib/story-ui/grid-layou
 import type { StoryLayoutRect } from '@/lib/story-runtime/contract';
 import { FlowEditor } from '@/solid/editor/FlowEditor';
 import { GridEdit, type GridTile } from '@/solid/editor/GridEdit';
+import { discoverSlides } from '@/lib/story-runtime/slides';
 
 export interface CompiledEditCallbacks {
   onFlow(path: string, expected: string, replacement: string, group?: string, selection?: EditorSelectionChange): void;
   onLayout?(rects: StoryLayoutRect[]): void;
+  onSlideTitle?(path: string, title: string): void;
   onError?(message: string): void;
   onBusy?(busy: boolean): void;
   onView?(view: EditorView | null): void;
@@ -32,6 +34,53 @@ const isBlock = (node: JsxNode): boolean => node.type === 'element'
 /** One region replaces only its authored prose siblings; adjacent compiled islands keep their DOM identity. */
 export function mountCompiledEditRegions(root: HTMLElement, nodes: JsxNode[], callbacks: CompiledEditCallbacks): CompiledEditMount {
   const cleanups: Array<() => void> = [];
+  const railRows = root.querySelectorAll<HTMLElement>('.mx-rail .mx-rail-row');
+  discoverSlides(nodes).forEach((slide, index) => {
+    const row = railRows[index];
+    const label = row?.querySelector<HTMLElement>('.mx-rail-label');
+    const title = label?.querySelector<HTMLElement>('.mx-rail-title');
+    if (!label || !title) return;
+    const control = root.ownerDocument.createElement('span');
+    control.className = 'mx-rail-rename';
+    control.setAttribute('role', 'button');
+    control.tabIndex = 0;
+    control.setAttribute('aria-label', `Edit slide ${index + 1} title`);
+    control.textContent = '✎';
+    let activeInput: HTMLInputElement | null = null;
+    const open = (event: Event) => {
+      event.stopPropagation();
+      if (activeInput) return;
+      const input = root.ownerDocument.createElement('input');
+      activeInput = input;
+      input.className = 'mx-rail-title';
+      input.setAttribute('aria-label', `Slide ${index + 1} title`);
+      input.value = title.textContent ?? '';
+      title.replaceWith(input);
+      control.hidden = true;
+      let done = false;
+      const finish = (save: boolean) => {
+        if (done) return;
+        done = true;
+        if (save) callbacks.onSlideTitle?.(slide.path, input.value);
+        title.textContent = save ? input.value : title.textContent;
+        input.replaceWith(title);
+        activeInput = null;
+        control.hidden = false;
+      };
+      input.addEventListener('click', (e) => e.stopPropagation());
+      input.addEventListener('blur', () => finish(true));
+      input.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); finish(true); }
+        if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); finish(false); }
+      });
+      input.focus();
+    };
+    const key = (event: KeyboardEvent) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); open(event); } };
+    control.addEventListener('click', open);
+    control.addEventListener('keydown', key);
+    label.append(control);
+    cleanups.push(() => { activeInput?.replaceWith(title); control.remove(); });
+  });
   const at = (path: string): HTMLElement | null => root.querySelector<HTMLElement>(`[data-mx-ast="${CSS.escape(path)}"]`);
   const staticProp = (node: JsxNode, name: string): unknown => {
     const value = node.type === 'element' ? node.attributes.find((attr) => attr.name === name)?.value : undefined;

@@ -12,6 +12,7 @@ import type { StoryThemeName } from '@/lib/validation/atlas-schemas';
 import { STORY_THEME_NAMES } from '@/lib/validation/story-theme-names';
 import { collectExternalAssetUrls } from '@/lib/story/external-images';
 import { lookupWebAssets } from '@/lib/web-assets';
+import { collectRefUses } from '@/lib/story/refs';
 
 const MAX_SOURCE_LENGTH = 1024 * 1024;
 const NO_STORE = { 'Cache-Control': 'no-store' };
@@ -34,7 +35,11 @@ export async function POST(request: Request, ctx: { params: Promise<{ id: string
     ? body.theme as StoryThemeName | null : meta.theme;
   const colorMode = body.colorMode === 'light' || body.colorMode === 'dark' ? body.colorMode : meta.colorMode;
   const design = resolveStoredStoryDesign(theme, colorMode);
-  const draft = { ...artifact, source: body.source };
+  // The source can introduce an uploaded image before the next save has written
+  // its reference graph. Resolve only references the editor can actually read.
+  const uses = collectRefUses(body.source);
+  const refs = uses ? [...new Map(uses.map((use) => [use.id, { id: use.id, kind: use.kind }])).values()] : [];
+  const draft = { ...artifact, source: body.source, meta: { ...(artifact.meta ?? {}), refs } };
   try {
     const [compiledCss, dataflow, refData, assetUrls] = await Promise.all([
       compileStoryCss(body.source, { force: true }),

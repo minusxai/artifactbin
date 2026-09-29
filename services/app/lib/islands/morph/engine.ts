@@ -417,6 +417,49 @@ export function morphDraftDom(root: HTMLElement, next: HTMLElement, stableCompon
   morphChildren(root, next, { keep, oldUnits, used: new Set(), kept, stableElementIds: stableComponentIds, stableElementPaths: stableComponentPaths });
 }
 
+/** Release only changed draft islands before their compiled roots are morphed. */
+export function disposeChangedDraftIslands(root: HTMLElement, stableIds: ReadonlySet<string>, stablePaths: ReadonlySet<string>): void {
+  const running = (root as IslandHost)[ISLAND_DOCUMENT_KEY] as MorphableIslandDocument | undefined;
+  const seam = running?.morph;
+  if (!seam) return;
+  for (const [rid, [, dispose]] of [...seam.islands]) {
+    const element = unitsOf(root, [rid]).get(rid)?.[0];
+    if (element && (stableIds.has(element.id) || stablePaths.has(element.getAttribute(AST_PATH_ATTR) ?? ''))) continue;
+    seam.islands.delete(rid);
+    dispose();
+  }
+}
+
+/** Boot newly compiled draft islands on the existing store after their static DOM is in place. */
+export async function hydrateDraftIslands(
+  win: Window,
+  root: HTMLElement,
+  preview: Document,
+  stableIds: ReadonlySet<string>,
+  stablePaths: ReadonlySet<string>,
+  importModule: NonNullable<MorphDependencies['importModule']> = defaultImport,
+): Promise<void> {
+  const running = (root as IslandHost)[ISLAND_DOCUMENT_KEY] as MorphableIslandDocument | undefined;
+  const seam = running?.morph;
+  const script = moduleScript(preview);
+  if (!seam || !script) return;
+  const url = new URL(script.getAttribute('src')!, win.document.baseURI).href;
+  const literals = preview.querySelector<HTMLScriptElement>('script[data-mx-island-literals]');
+  const carrier = literals ? win.document.importNode(literals, true) : null;
+  if (carrier) win.document.body.append(carrier);
+  let module: IslandModule;
+  try { module = await takeModule(seam, url, importModule); }
+  finally { carrier?.remove(); }
+  await seam.prepareTemplates();
+  if (module.FLOW && running.store && JSON.stringify(module.FLOW) !== JSON.stringify(running.store.flow))
+    running.store.replaceFlow({ flow: module.FLOW });
+  for (const entry of module.ISLANDS) {
+    const element = unitsOf(root, [entry[0]]).get(entry[0])?.[0];
+    if (!element || stableIds.has(element.id) || stablePaths.has(element.getAttribute(AST_PATH_ATTR) ?? '')) continue;
+    seam.hydrate(entry);
+  }
+}
+
 /** A new node that matched nothing: an element is built through the morph, so a kept island inside it still lands. */
 function fresh(doc: Document, next: Node, ctx: MorphContext): Node {
   if (next.nodeType !== 1) return doc.importNode(next, false);

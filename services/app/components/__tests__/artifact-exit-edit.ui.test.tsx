@@ -146,10 +146,11 @@ describe('coming back from edit mode', () => {
     goEdit();
     await waitFor(() => expect(screen.queryByLabelText('Editor stub')).not.toBeNull());
     scroll.mockClear();
+    surfaceSpies.reload.mockClear();
     leaveEdit();
-    expect(surfaceSpies.reload).not.toHaveBeenCalled();
     await waitFor(() => expect(surfaceSpies.reload).toHaveBeenCalled());
     expect(scroll).toHaveBeenCalledWith(0, 718);
+    expect(scroll.mock.invocationCallOrder.at(-1)!).toBeLessThan(surfaceSpies.reload.mock.invocationCallOrder.at(-1)!);
   });
 
   it('does not retain a loader after the first runtime mount', async () => {

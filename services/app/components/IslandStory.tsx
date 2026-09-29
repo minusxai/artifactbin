@@ -23,8 +23,8 @@
  */
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import type { IslandDocument } from '@/lib/islands/contract';
-import { serializeJsx, type JsxNode } from '@/lib/jsx';
-import { splitHelmet } from '@/lib/story/helmet';
+import { serializeJsx } from '@/lib/jsx/serialize';
+import type { JsxNode } from '@/lib/jsx/types';
 import type { StoryController } from '@/lib/story-runtime/contract';
 import type { FrameEditSession } from '@/lib/story-runtime/edit/session';
 import type { FrameAnnotateSession } from '@/lib/story-runtime/edit/annotate';
@@ -145,7 +145,7 @@ function createIslandController({ win, root, islands, nodes: served, portal, id,
   let draftSequence = 0;
   let lastDraftSource: string | null = null;
   let quietDraftTimer: number | null = null;
-  let pendingDraft: { root: HTMLElement; sheet: HTMLStyleElement | null; nodes: JsxNode[]; source: string; stableIds: Set<string>; stablePaths: Set<string>; sequence: number } | null = null;
+  let pendingDraft: { document: Document; root: HTMLElement; sheet: HTMLStyleElement | null; nodes: JsxNode[]; source: string; stableIds: Set<string>; stablePaths: Set<string>; sequence: number } | null = null;
   const componentIds = (source: JsxNode[]): Map<string, string> => {
     const found = new Map<string, string>();
     const visit = (items: JsxNode[]) => { for (const item of items) {
@@ -154,7 +154,7 @@ function createIslandController({ win, root, islands, nodes: served, portal, id,
       if (item.isComponent && id?.static && typeof id.json === 'string') found.set(id.json, serializeJsx([item]));
       visit(item.children);
     } };
-    visit(splitHelmet(source).body);
+    visit(source);
     return found;
   };
   const stableIdsFor = (next: JsxNode[], previous = nodes): Set<string> => {
@@ -169,7 +169,7 @@ function createIslandController({ win, root, islands, nodes: served, portal, id,
       if (item.isComponent) found.set(path, serializeJsx([item]));
       visit(item.children, path);
     }); };
-    visit(splitHelmet(source).body);
+    visit(source);
     return found;
   };
   const stablePathsFor = (next: JsxNode[], previous = nodes): Set<string> => {
@@ -183,14 +183,16 @@ function createIslandController({ win, root, islands, nodes: served, portal, id,
   const applyDraft = async (allowFocused = false) => {
     const pending = pendingDraft;
     if (!pending || (focusedRegion() && (!allowFocused || !edit?.canApplyDraft())) || disposed || !editRequested || pending.sequence !== draftSequence) return;
-    const { morphDraftDom } = await import('@/lib/islands/morph/engine');
+    const { disposeChangedDraftIslands, hydrateDraftIslands, morphDraftDom } = await import('@/lib/islands/morph/engine');
     if (disposed || !editRequested || pending.sequence !== draftSequence || pendingDraft !== pending) return;
     pendingDraft = null;
     if (quietDraftTimer !== null) { win.clearTimeout(quietDraftTimer); quietDraftTimer = null; }
     const sheet = docSheet(win.document);
     if (pending.sheet && sheet) sheet.textContent = pending.sheet.textContent;
     edit?.unmountCompiledDom();
+    disposeChangedDraftIslands(root, pending.stableIds, pending.stablePaths);
     morphDraftDom(root, pending.root, pending.stableIds, pending.stablePaths);
+    await hydrateDraftIslands(win, root, pending.document, pending.stableIds, pending.stablePaths);
     nodes = pending.nodes;
     lastDraftSource = pending.source;
     edit?.setNodes(nodes);
@@ -295,7 +297,7 @@ function createIslandController({ win, root, islands, nodes: served, portal, id,
           const { storyUpdateParts } = await import('@/lib/story/update-parts');
           const before = baseline ? storyUpdateParts(baseline)?.nodes ?? nodes : nodes;
           const after = storyUpdateParts(source)?.nodes ?? command.nodes;
-          pendingDraft = { root: nextRoot, sheet: next.querySelector<HTMLStyleElement>('style[data-mx-story-css]'), nodes: command.nodes, source,
+          pendingDraft = { document: next, root: nextRoot, sheet: next.querySelector<HTMLStyleElement>('style[data-mx-story-css]'), nodes: command.nodes, source,
             stableIds: stableIdsFor(after, before), stablePaths: stablePathsFor(after, before), sequence };
           await applyDraft();
           if (pendingDraft?.sequence === sequence && quietDraftTimer === null) {

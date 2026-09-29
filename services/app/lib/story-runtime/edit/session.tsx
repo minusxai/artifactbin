@@ -848,6 +848,7 @@ export function createFrameEditSession({
           post({ type: STORY_FLOW_EDIT_MESSAGE, path, expected, replacement, group, selection });
         },
         onLayout(rects) { post({ type: STORY_LAYOUT_EDIT_MESSAGE, rects }); },
+        onSlideTitle(path, title) { post({ type: STORY_SLIDE_TITLE_MESSAGE, path, title }); },
         onError(message) { post({ type: 'mx:edit-error', message }); },
         onBusy: reportTyping,
         onView(view) {

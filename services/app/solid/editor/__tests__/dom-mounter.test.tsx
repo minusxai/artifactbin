@@ -6,6 +6,23 @@ import { TextSelection } from 'prosemirror-state';
 import type { EditorView } from 'prosemirror-view';
 
 describe('compiled DOM edit mounter', () => {
+  it('renames a compiled deck slide through the rail edit control', () => {
+    const root = document.createElement('div');
+    root.innerHTML = '<nav class="mx-rail"><button class="mx-rail-row"><span class="mx-rail-label"><span class="mx-rail-title">One</span></span></button><button class="mx-rail-row"><span class="mx-rail-label"><span class="mx-rail-title">Two</span></span></button></nav>';
+    document.body.append(root);
+    const source = '<Deck><Slide title="One"><p>One</p></Slide><Slide title="Two"><p>Two</p></Slide></Deck>';
+    const onSlideTitle = vi.fn();
+    const mounted = mountCompiledEditRegions(root, parseJsxOrThrow(source).nodes, { onFlow: vi.fn(), onSlideTitle });
+    const control = root.querySelector<HTMLElement>('[aria-label="Edit slide 2 title"]')!;
+    expect(control).not.toBeNull();
+    control.click();
+    const input = root.querySelector<HTMLInputElement>('[aria-label="Slide 2 title"]')!;
+    input.value = 'Renamed two';
+    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    expect(onSlideTitle).toHaveBeenCalledWith('0.1', 'Renamed two');
+    mounted.dispose();
+    root.remove();
+  });
   it('makes stamped text hosts editable and reports only their own input', () => {
     const root = document.createElement('div');
     root.innerHTML = '<div data-mx-ast="0"><button data-mx-ast="0.0">Label</button><div data-mx-ast="0.1">Other</div></div>';

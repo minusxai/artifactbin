@@ -13,6 +13,28 @@ useAppHarness();
 const params = (id: string) => ({ params: Promise.resolve({ id }) });
 
 describe('the editor draft preview door', () => {
+  it('resolves a newly uploaded image before the draft has been saved', async () => {
+    const { token } = await mintToken('draft-preview-image');
+    const user = await ensureUsername(await createUser({ email: `mxmx_test_draft_image_${Math.random().toString(36).slice(2, 8)}@example.com` }));
+    await claimToken(user.id, token);
+    const image = await createArtifact(request('/api/artifacts', { method: 'POST', token, json: {
+      image: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==',
+    } }));
+    expect(image.status).toBe(201);
+    const imageId = ((await image.json()) as { id: string }).id;
+    const made = await createArtifact(request('/api/artifacts', { method: 'POST', token, json: {
+      title: 'Draft', markup: '<div><p>Before</p></div>', visibility: 'private',
+    } }));
+    const id = ((await made.json()) as { id: string }).id;
+    const row = (await getArtifactById(id))!;
+    const answer = await preview(request(`/a/${id}/draft-preview`, { method: 'POST', token, json: {
+      editId: row.edit_id, source: `<div><p>Before</p><img src="ref:${imageId}" /></div>`,
+    } }), params(id));
+    expect(answer.status).toBe(200);
+    const document = new JSDOM(((await answer.json()) as { html: string }).html).window.document;
+    expect(document.querySelector('img')?.getAttribute('src')).toContain(`/a/${imageId}/raw`);
+    expect((await getArtifactById(id))?.source).not.toContain(imageId);
+  });
   it('renders a query document through its matching server island build', async () => {
     const { token } = await mintToken('draft-preview-query');
     const user = await ensureUsername(await createUser({ email: `mxmx_test_draft_query_${Math.random().toString(36).slice(2, 8)}@example.com` }));
