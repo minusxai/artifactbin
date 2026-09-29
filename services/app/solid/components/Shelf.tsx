@@ -37,7 +37,21 @@ const nameOf = (row: ShelfRow) => row.title ?? row.id;
 const VISIBILITIES = ['public', 'unlisted', 'private'];
 
 function Visibility(props: { row: ShelfRow }): JSX.Element {
-  return <Show when={props.row.visibility}><span aria-label={`${nameOf(props.row)} is ${props.row.visibility}`} class="shrink-0 rounded border border-edge px-1.5 py-0.5 font-mono text-[10px] text-muted">{props.row.visibility}</span></Show>;
+  return <Show when={props.row.visibility}><Tooltip content={props.row.visibility}><span role="img" tabIndex={0} aria-label={`${nameOf(props.row)} is ${props.row.visibility}`} class="relative z-10 inline-flex shrink-0 rounded bg-slate-700/75 p-1 text-white"><Show when={props.row.visibility === 'public'} fallback={<Show when={props.row.visibility === 'private'} fallback={<EyeOff size={12} />}><Lock size={12} /></Show>}><Globe size={12} /></Show></span></Tooltip></Show>;
+}
+
+/** One document jacket: preview, caption and independent actions share the same surface. */
+function ArtifactCover(props: { row: ShelfRow; showVisibility: boolean; children: JSX.Element }): JSX.Element {
+  return <div class="artifact-cover">
+    <a href={props.row.url} rel="external" aria-label={`Open ${nameOf(props.row)}`} class="artifact-cover-link" />
+    <div class="artifact-cover-preview"><img src={`/a/${props.row.id}/export?format=jpg&mode=card&v=${props.row.version}&r=${CARD_RENDER_GENERATION}`} alt="" loading="lazy" /></div>
+    <span class="artifact-cover-fold" aria-hidden="true" />
+    <Show when={props.showVisibility}><div class="artifact-cover-visibility"><Visibility row={props.row} /></div></Show>
+    <div class="artifact-cover-front">
+      <span class="min-w-0 flex-1 line-clamp-2 font-mono text-[12px] font-semibold leading-4">{nameOf(props.row)}</span>
+      <span class="relative z-[3] inline-flex shrink-0">{props.children}</span>
+    </div>
+  </div>;
 }
 
 export function RowActions(props: { row: ShelfRow; level: Actions; folders: ShelfRow[]; childCount: number; onRemoved: (id: string) => void; onChanged: () => void; showEdit?: boolean }): JSX.Element {
@@ -136,7 +150,23 @@ export default function Shelf(props: Props): JSX.Element {
         </Show>
       </li>;
     }}</For></ul></section></Show>
-    <Show when={docs().length}><section aria-label="Artifacts"><div class="mb-2"><MicroLabel>artifacts</MicroLabel></div><ul aria-label={view() === 'grid' ? 'Artifact grid' : 'Artifact list'} class={view() === 'grid' ? 'grid grid-cols-2 gap-3 lg:grid-cols-4' : 'flex flex-col gap-2'}><For each={docs()}>{row => <li class={`group relative ${view() === 'grid' ? 'rounded-md border border-edge bg-surface p-2' : `${PANEL} flex items-center gap-3 px-3 py-2`}`}><Show when={view() === 'grid'}><div class="relative mb-2 aspect-[4/3] overflow-hidden rounded bg-raised"><img src={`/a/${row.id}/export?format=jpg&mode=card&v=${row.version}&r=${CARD_RENDER_GENERATION}`} alt="" loading="lazy" class="h-full w-full object-cover" /><Show when={props.showVisibility !== false}><span class="gallery-fade-visibility absolute left-2 top-2"><Visibility row={row} /></span></Show><div class="gallery-fade absolute inset-x-0 bottom-0 flex items-center justify-end gap-1 bg-surface/80 p-1"><RowActions row={row} level={props.actions ?? 'none'} folders={folders()} childCount={0} onRemoved={remove} onChanged={() => setRevision(value => value + 1)} /></div></div></Show><a href={row.url} rel="external" aria-label={`Open ${nameOf(row)}`} class={`${view() === 'grid' ? 'line-clamp-2' : 'min-w-0 flex-1 truncate'} font-mono text-sm font-medium text-fg hover:text-accent`}>{nameOf(row)}</a><Show when={view() === 'list'}><Show when={props.showVisibility !== false}><Visibility row={row} /></Show><span class="font-mono text-[10px] text-faint">{timeAgo(row.updated_at)}</span><RowActions row={row} level={props.actions ?? 'none'} folders={folders()} childCount={0} onRemoved={remove} onChanged={() => setRevision(value => value + 1)} /></Show></li>}</For></ul></section></Show>
+    <Show when={docs().length}><section aria-label="Artifacts">
+      <div class="mb-2"><MicroLabel>artifacts</MicroLabel></div>
+      <ul aria-label={view() === 'grid' ? 'Artifact grid' : 'Artifact list'} class={view() === 'grid' ? 'grid grid-cols-2 gap-3 lg:grid-cols-4' : 'flex flex-col gap-2'}>
+        <For each={docs()}>{row => <li class={view() === 'grid' ? 'group relative min-w-0 rounded-md p-3 hover:bg-raised/60' : `group relative ${PANEL} flex items-center gap-3 px-3 py-2`}>
+          <Show when={view() === 'grid'} fallback={<>
+            <a href={row.url} rel="external" aria-label={`Open ${nameOf(row)}`} class="flex min-w-0 flex-1 items-center gap-2 font-mono text-sm font-medium text-fg hover:text-accent"><img src={`/a/${row.id}/export?format=jpg&mode=card&v=${row.version}&r=${CARD_RENDER_GENERATION}`} alt="" width={24} height={24} loading="lazy" class="size-6 shrink-0 rounded-sm border border-edge bg-raised object-cover object-top" /><span class="truncate">{nameOf(row)}</span></a>
+            <Show when={props.showVisibility !== false}><Visibility row={row} /></Show>
+            <span class="font-mono text-[10px] text-faint">{timeAgo(row.updated_at)}</span>
+            <RowActions row={row} level={props.actions ?? 'none'} folders={folders()} childCount={0} onRemoved={remove} onChanged={() => setRevision(value => value + 1)} />
+          </>}>
+            <ArtifactCover row={row} showVisibility={props.showVisibility !== false}>
+              <RowActions row={row} level={props.actions ?? 'none'} folders={folders()} childCount={0} onRemoved={remove} onChanged={() => setRevision(value => value + 1)} />
+            </ArtifactCover>
+          </Show>
+        </li>}</For>
+      </ul>
+    </section></Show>
     <Show when={view() === 'list' && shelf().documents.length > 10}><div class="mt-3 flex justify-between font-mono text-xs"><span aria-label="Page range">{page() * 10 + 1}-{Math.min((page() + 1) * 10, shelf().documents.length)} of {shelf().documents.length}</span><span class="flex gap-2"><button type="button" aria-label="Previous page" disabled={page() === 0} onClick={() => setPage(value => value - 1)}>Previous</button><button type="button" aria-label="Next page" disabled={(page() + 1) * 10 >= shelf().documents.length} onClick={() => setPage(value => value + 1)}>Next</button></span></div></Show>
     <Show when={!shelf().folders.length && !shelf().documents.length && (query() || filters().length)}><p aria-label="No matches" class="font-mono text-xs text-faint">nothing matches the active {query() ? 'search' : 'filters'}</p></Show>
   </div>;

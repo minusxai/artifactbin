@@ -23,7 +23,7 @@ import { trustedPortalOf } from '@/lib/islands/trusted-portal';
 const TOOLTIP_OPEN = 'app-tooltip.open';
 const provider = { closedAt: 0 };
 const ARROW_TRANSFORM: Record<Side, string> = { top: 'translateY(100%)', right: 'translateY(50%) rotate(90deg) translateX(-50%)', bottom: 'rotate(180deg)', left: 'translateY(50%) rotate(-90deg) translateX(50%)' };
-const OPPOSITE: Record<Side, Side> = { top: 'bottom', right: 'left', bottom: 'top', left: 'right' };
+const ARROW_ORIGIN: Record<Side, string> = { top: 'center', right: '0 0', bottom: 'center 0', left: '100% 0' };
 
 export function Tooltip(props: { content: JSX.Element; children: JSX.Element; side?: Side; disabled?: boolean }): JSX.Element {
   const child = resolveChildren(() => props.children);
@@ -98,7 +98,7 @@ function TooltipPopper(p: { anchor: HTMLElement | undefined; id: string; side: S
       <div role="tooltip" id={p.id} data-side={p.placed()?.side} data-slot="tooltip-content" data-story-floating=""
         class="pointer-events-none z-[100] w-max max-w-[min(28rem,calc(100vw-1rem))] whitespace-normal rounded-md border border-edge-bright bg-surface px-2.5 py-1.5 text-left text-xs leading-normal text-fg shadow-md">
         {p.children}
-        <span ref={arrow} style={{ position: 'absolute', left: p.placed()?.arrowX !== undefined ? `${p.placed()!.arrowX}px` : undefined, top: p.placed()?.arrowY !== undefined ? `${p.placed()!.arrowY}px` : undefined, [OPPOSITE[side()]]: '0px', transform: ARROW_TRANSFORM[side()], visibility: p.placed()?.hideArrow ? 'hidden' : undefined }}>
+        <span ref={arrow} style={{ position: 'absolute', left: side() === 'right' ? '0px' : p.placed()?.arrowX !== undefined ? `${p.placed()!.arrowX}px` : undefined, top: side() === 'bottom' ? '0px' : p.placed()?.arrowY !== undefined ? `${p.placed()!.arrowY}px` : undefined, right: side() === 'left' ? '0px' : undefined, bottom: side() === 'top' ? '0px' : undefined, 'transform-origin': ARROW_ORIGIN[side()], transform: ARROW_TRANSFORM[side()], visibility: p.placed()?.hideArrow ? 'hidden' : undefined }}>
           <svg stroke="var(--color-edge-bright)" stroke-width="1" stroke-linejoin="round" class="z-[100] fill-surface" width="10" height="5" viewBox="0 0 30 10" preserveAspectRatio="none" style={{ display: 'block' }}><polygon points="0,0 30,0 15,10" /></svg>
         </span>
       </div>
