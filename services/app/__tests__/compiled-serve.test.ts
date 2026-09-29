@@ -5,11 +5,14 @@
  * `/a/:id` is HTML-first. Real routes and the harness's database.
  */
 import { describe, expect, it, vi } from 'vitest';
-import { readFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { JSDOM } from 'jsdom';
 import { useAppHarness, request } from '@/__tests__/harness';
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
+import { PUT as putArtifactRoute } from '@/app/api/artifacts/[id]/route';
+import { observedRequest } from '@/__tests__/conditional-request';
 import { GET as rawRoute } from '@/app/a/[id]/raw/route';
 import { createAppServer } from '@/server/app';
 import { mintToken } from '@/lib/tokens';
@@ -84,7 +87,7 @@ describe('the reader mode on /raw', () => {
     expect(stored.page.compiled?.html).toContain('role="tablist"');
   });
 
-  it('a compile from another build is recompiled inline or falls back, and says which', async () => {
+  it('a compile from another build keeps serving without being replaced', async () => {
     const who = await owner();
     const id = await publish(who.token, { title: 'Perf B kit', markup: fixture('kit.jsx') });
     const db = await harness.db();
@@ -93,7 +96,70 @@ describe('the reader mode on /raw', () => {
     expect(res.status).toBe(200);
     const mode = res.headers.get(READER_MODE_HEADER);
     expect(mode).toBe('compiled');
-    expect((await db.query<{ build: string }>(`SELECT page->'compiled'->>'build' AS build FROM prepared_pages WHERE artifact_id = $1`, [id])).rows[0]!.build).not.toBe('0000000000000000');
+    expect((await db.query<{ build: string }>(`SELECT page->'compiled'->>'build' AS build FROM prepared_pages WHERE artifact_id = $1`, [id])).rows[0]!.build).toBe('0000000000000000');
+  });
+
+  it('server and compiler version changes preserve a stored compile; an edit makes a new one', async () => {
+    const who = await owner();
+    const id = await publish(who.token, { title: 'Pinned', markup: '<h1>First</h1>' });
+    const db = await harness.db();
+    const original = (await db.query<{ page_key: string; build: string }>(
+      `SELECT page_key, island_build AS build FROM prepared_pages WHERE artifact_id = $1`, [id],
+    )).rows[0]!;
+    await db.query(`UPDATE prepared_pages SET compiler_version = 'older-compiler', island_build = 'older-island' WHERE artifact_id = $1`, [id]);
+    const served = await raw(id);
+    expect(served.status).toBe(200);
+    expect(storyText(await served.text())).toContain('First');
+    expect((await db.query<{ page_key: string; compiler_version: string; island_build: string }>(
+      `SELECT page_key, compiler_version, island_build FROM prepared_pages WHERE artifact_id = $1`, [id],
+    )).rows[0]).toMatchObject({ page_key: original.page_key, compiler_version: 'older-compiler', island_build: 'older-island' });
+    const edited = await putArtifactRoute(await observedRequest(`/api/artifacts/${id}`, { method: 'PUT', token: who.token, json: { markup: '<h1>Second</h1>' } }), params(id));
+    expect(edited.status).toBe(200);
+    await drainPreparedPageWarmups();
+    const changed = (await db.query<{ page_key: string; island_build: string }>(
+      `SELECT page_key, island_build FROM prepared_pages WHERE artifact_id = $1`, [id],
+    )).rows[0]!;
+    expect(changed.page_key).not.toBe(original.page_key);
+    expect(changed.island_build).toBe(original.build);
+  });
+
+  it('a hand-bumped minimum recompiles the stored page', async () => {
+    const who = await owner();
+    const id = await publish(who.token, { title: 'Format', markup: '<h1>Format</h1>' });
+    const db = await harness.db();
+    await db.query(`UPDATE prepared_pages SET page_format = 0 WHERE artifact_id = $1`, [id]);
+    expect((await raw(id)).status).toBe(200);
+    expect((await db.query<{ page_format: number }>('SELECT page_format FROM prepared_pages WHERE artifact_id = $1', [id])).rows[0]!.page_format).toBe(3);
+    await db.query(`UPDATE prepared_pages SET handover_contract = 0 WHERE artifact_id = $1`, [id]);
+    expect((await raw(id)).status).toBe(200);
+    expect((await db.query<{ handover_contract: number }>('SELECT handover_contract FROM prepared_pages WHERE artifact_id = $1', [id])).rows[0]!.handover_contract).toBe(1);
+  });
+
+  it('serves an older recorded island build and its retained chunks after a newer deploy', async () => {
+    const who = await owner();
+    const id = await publish(who.token, { title: 'Older build', markup: fixture('kit.jsx') });
+    const db = await harness.db();
+    const moduleUrl = (await db.query<{ page: { compiled: { module: { url: string } } } }>(
+      'SELECT page FROM prepared_pages WHERE artifact_id = $1', [id],
+    )).rows[0]!.page.compiled.module.url;
+    const sharedUrl = loadCompilerBuild().manifest['@mx/boot']!;
+    await db.query(`UPDATE prepared_pages SET page = jsonb_set(jsonb_set(page, '{compiled,build}', '"older-build"'), '{compiled,sharedBuild,id}', '"older-build"'), island_build = 'older-build' WHERE artifact_id = $1`, [id]);
+    const response = await raw(id);
+    expect(response.status).toBe(200);
+    expect(await response.text()).toContain(moduleUrl);
+    expect((await db.query<{ island_build: string }>('SELECT island_build FROM prepared_pages WHERE artifact_id = $1', [id])).rows[0]!.island_build).toBe('older-build');
+    const adopting = await app.request(`/a/${id}`, { headers: { accept: 'text/html' } });
+    expect(await adopting.text()).toContain(SPA_IDLE_ATTR);
+    await db.query(`UPDATE prepared_pages SET page = jsonb_set(page, '{compiled,handoverContract}', '2'::jsonb) WHERE artifact_id = $1`, [id]);
+    const fullNavigation = await app.request(`/a/${id}`, { headers: { accept: 'text/html' } });
+    expect(await fullNavigation.text()).not.toContain(SPA_IDLE_ATTR);
+    const emptyPublic = mkdtempSync(path.join(os.tmpdir(), 'island-deploy-'));
+    try {
+      const nextServer = createAppServer({ publicDir: emptyPublic, indexHtml: async () => '<!doctype html><div id="root"></div>' });
+      const asset = await nextServer.request(sharedUrl);
+      expect(asset.status).toBe(200);
+      expect((await asset.arrayBuffer()).byteLength).toBeGreaterThan(0);
+    } finally { rmSync(emptyPublic, { recursive: true, force: true }); }
   });
 
   it('a recorded compile failure reports an unavailable page', async () => {
@@ -396,8 +462,8 @@ describe('a version with an author script', () => {
     const id = await publish(who.token, { title: 'Scripted', markup: SCRIPTED });
     await (await harness.db()).query(`UPDATE prepared_pages SET page = page #- '{compiled,authorScript}' WHERE artifact_id = $1`, [id]);
     const res = await raw(id, '?reader=compiled');
-    expect(res.headers.get(READER_MODE_HEADER)).toBe('compiled');
-    expect(authorOnly(await res.text()).data?.authorScript).toBe('document.body.dataset.ran = "1";');
+    expect(res.status).toBe(500);
+    expect(await res.text()).toContain('could not be rendered');
   });
 
   it('its wrapper answers at its own address: fixed bytes under their own sandbox CSP', async () => {

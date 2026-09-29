@@ -43,7 +43,7 @@ export const READER_FALLBACK_HEADER = 'x-mx-reader-fallback';
 /**
  * Why a compiled read could not be served as stored (spec §6). While today's renderer exists
  * (serve.server `fallbackPolicy()` = `legacy`) each one serves it for the request. After Wave 4
- * (`compiled-only`, spec §6.1): `not-compiled` and `build-mismatch` compile inline and wait,
+ * (`compiled-only`, spec §6): a missing compile or one below a compatibility minimum compiles inline,
  * `over-budget` is never an answer (the budget only marks a slow compile), `compile-error` is a
  * reported 500, and `unported` is never reached (every registered component compiles).
  */
@@ -104,15 +104,21 @@ export interface ModuleRef {
   imports: string[];
 }
 
-/** The compiler's identity: what a stored compile is keyed by (spec §3, §6). */
+/** The exact shared assets a stored compile uses (spec §3, §6). */
 export interface CompilerBuild {
-  /** Digest of the compiler bundle, the shared island manifest and the kit sources; joins `prepared_pages.page_key`. */
+  /** Digest of the shared island build; recorded separately from `prepared_pages.page_key`. */
   id: string;
   /** The shared build's manifest: import specifier (`@mx/rt`, `@mx/kit/tabs`, `solid-js/web`) → content-addressed URL. */
   manifest: Readonly<Record<string, string>>;
   /** Content-addressed SQLite engine fetched only when the reader runs a page query. */
   sqliteWasm?: string;
+  /** Content-addressed server half and its exported namespaces, retained with this build. */
+  ssr?: { url: string; exports: Readonly<Record<string, string>> };
 }
+
+/** Manually raise these only when an older stored page cannot be read or handed over safely. */
+export const MIN_PAGE_FORMAT = 3;
+export const MIN_HANDOVER_CONTRACT = 1;
 
 /**
  * Everything the compiler produces for one version. Stored beside the prepared
@@ -120,6 +126,10 @@ export interface CompilerBuild {
  */
 export interface CompiledPage {
   build: string;
+  /** The exact shared URLs this version's browser and server modules use. */
+  sharedBuild?: CompilerBuild;
+  /** App adoption contract; an app that does not know this version leaves navigation as full loads. */
+  handoverContract?: number;
   /** Version-owned navigation, decided from the same nodes and template as the legacy reader. */
   outline: readonly OutlineEntry[];
   /** The plan template uses the wider reading wrapper. */

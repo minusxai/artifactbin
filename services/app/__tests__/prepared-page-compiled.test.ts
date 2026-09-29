@@ -47,7 +47,7 @@ describe('the compiled page on the prepared page', () => {
     const { key, compiled } = await stored(id);
     expect(compiled).toMatchObject({ build: loadCompilerBuild().id, islands: [], module: null, ssr: null, unported: [] });
     expect((compiled as { html: string }).html).toContain('A plain prose document');
-    expect(key.endsWith(`:${loadCompilerBuild().id}`)).toBe(true);
+    expect(key).toMatch(/^v:\d+$/);
   });
 
   it('a page with islands: the browser module is served, the SSR module (the whole page) never is', async () => {
