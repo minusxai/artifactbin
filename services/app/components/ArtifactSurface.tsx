@@ -420,7 +420,7 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
   const backend = useMemo(() => createHttpBackend(id), [id]);
   // The served first results' mark (lib/story/served-results.server): the stream reports what moved since.
   const live = useLiveArtifact(backend, id, editId, version, !editing, undefined, onLiveData, setLiveAnnotations, props.runtime?.data.dataflow?.results?.since);
-  const hasDataMutations = format === 'markup' && !archived && (live?.dataflow?.flow ?? dataflow?.flow)?.mutations.some(m => 'import' in m.target) === true;
+  const hasDataMutations = format === 'markup' && !archived && (live?.dataflow?.flow ?? dataflow?.flow ?? props.runtime?.data.dataflow?.flow)?.mutations.some(m => 'import' in m.target) === true;
   const membershipChanged=useCallback(()=>onLiveData({datasets:['_members']}),[onLiveData]);
   const membership=useArtifactMembership(id,hasDataMutations,membershipRevision,membershipChanged);
   const joinArtifact=()=>{

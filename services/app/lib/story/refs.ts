@@ -16,7 +16,7 @@ import {REFERENCE_POSITIONS} from './reference-positions';
 import { urlListUrls } from '@/lib/jsx/url-attrs';
 import { videoEmbedUrl } from '@/lib/story-ui/video-embed';
 import { collectFieldRefs, collectDerivedFieldNames, hasUnverifiableTransform } from '@/lib/viz/field-refs';
-import { IMPORT_TAG, QUERY_TAG, carriesRef, parseImportDecl, parseQueryDecl, refName } from './dataflow';
+import { IMPORT_TAG, QUERY_TAG, NOTIFY_TAG, parseNotifyDecl, carriesRef, parseImportDecl, parseQueryDecl, refName } from './dataflow';
 import type { DatasetColumn } from './data-tiers';
 import type { VizRecipeBinding, VizRecipeContent } from '@/lib/validation/atlas-schemas';
 import { isNumberFormat, NUMBER_FORMAT_HINT } from './number-format';
@@ -103,8 +103,8 @@ export function collectRefUses(source: string): RefUse[] | null {
       if (i.ok) uses.push({ id: i.decl.ref, kind: 'dataset', via: 'sql' });
       return;
     }
-    if (el.isComponent && tag === QUERY_TAG) {
-      const q = parseQueryDecl(el);
+    if (el.isComponent && (tag === QUERY_TAG || tag === NOTIFY_TAG)) {
+      const q = tag === NOTIFY_TAG ? parseNotifyDecl(el) : parseQueryDecl(el);
       if (q.ok && q.decl.source) uses.push({ id: q.decl.source, kind: 'dataset', via: 'sql' });
       return;
     }

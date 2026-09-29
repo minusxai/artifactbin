@@ -49,6 +49,22 @@ async function inputOf(source: string, template: string | null = null): Promise<
 const dom = (html: string) => new JSDOM(`<div id="r">${html}</div>`).window.document.getElementById('r')!;
 
 describe('compilePage', () => {
+  it('keeps notification definitions out of externalized reader flow data', async () => {
+    const source = `<Helmet><Import name="sales" src="ref:SALES1" /><Value name="padding" type="string" default="${'x'.repeat(2000)}" /><Mutation name="change">{\`UPDATE sales.rows SET revenue = revenue + 1\`}</Mutation><Notify name="server_notice" on="change">{\`SELECT null AS "to", 'private-notification-sql' AS message\`}</Notify></Helmet><p>Public content</p>`;
+    const input = await inputOf(source);
+    const store = createModuleStore();
+    const built = await buildDocumentModules(generate(input), { build: loadCompilerBuild(), flow: input.flow, values: declaredValues(input.flow), imports: await standInImports(), store, boot: true });
+    expect(built.html).toContain('data-mx-module-data');
+    const readerFlow = JSON.parse(dom(built.html).querySelector('[data-mx-module-data]')!.textContent!).moduleData.at(-1);
+    expect(readerFlow.notifications).toBeUndefined();
+    expect(readerFlow.mutations[0].notifies).toBe(true);
+    const browser = new TextDecoder().decode((await store.get(built.module!.sha))!);
+    for (const output of [built.html, browser]) {
+      expect(output).not.toContain('server_notice');
+      expect(output).not.toContain('private-notification-sql');
+    }
+  });
+
   it('keeps large island markup in the rendered story and a lazy resource, not the browser module', async () => {
     const marker = 'panel-content-' + 'A'.repeat(50_000);
     const input = await inputOf(`<Tabs defaultValue="one"><TabsList><TabsTrigger value="one">One</TabsTrigger><TabsTrigger value="two">Two</TabsTrigger></TabsList><TabsContent value="one"><p>${marker}</p></TabsContent><TabsContent value="two"><p>Second panel</p></TabsContent></Tabs>`);

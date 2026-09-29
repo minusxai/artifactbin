@@ -29,7 +29,7 @@ async function account(actor: RoleActor, artifact: ArtifactRow) {
   if (!user || user.kind==='guest') fail('Sign in to participate');
   return actor.userId!;
 }
-const memberFields = 'm.user_id,u.username,u.name,m.status,m.direction,m.initiated_by,m.joined_at';
+const memberFields = 'm.user_id,u.username,u.name,m.status,m.direction,m.initiated_by,m.joined_at,m.explicit_join';
 export async function membershipState(actor: RoleActor, id: string): Promise<MembershipState> {
   const {role,artifact}=await opened(actor,id), db=await getDb();
   const rows=(await db.query<ArtifactMember>(`SELECT ${memberFields} FROM ${JOIN_RELATIONS} m JOIN users u ON u.id=m.user_id WHERE m.artifact_id=$1 AND (m.status='accepted' OR m.user_id=$2 OR ($3 AND m.status='pending')) ORDER BY m.joined_at NULLS LAST,u.username`,[id,actor.userId,canEdit(role)])).rows;
@@ -58,7 +58,7 @@ export async function mentionCandidates(actor: RoleActor, id: string, query: str
     AND NOT EXISTS(SELECT 1 FROM user_blocks b WHERE (b.user_id=$1 AND b.blocked_user_id=u.id) OR (b.user_id=u.id AND b.blocked_user_id=$1))
     ORDER BY u.username LIMIT 30`,[actor.userId,id,query.replace(/^@/,'').replace(/[\\%_]/g,'\\$&')+'%',purpose==='invite'])).rows;
 }
-interface StoredMember {status:MembershipStatus;direction:MembershipDirection;initiated_by:string;revision:number}
+interface StoredMember {status:MembershipStatus;direction:MembershipDirection;initiated_by:string;revision:number;explicit_join:boolean}
 /** One transaction owns the pair, the account's 30-slot budget, and its notification receipts. */
 export async function changeMembership(actor: RoleActor, id: string, input: MembershipInput): Promise<MembershipState> {
   const {artifact,role}=await opened(actor,id), userId=await account(actor,artifact), db=await getDb();
@@ -99,9 +99,15 @@ export async function changeMembership(actor: RoleActor, id: string, input: Memb
         await invitePeople(tx,current,actor,[target],undefined,true);continue;
       }
       if(await blocked(tx,userId,target))fail('Person is not eligible for this invitation');
-      const previous=(await tx.query<StoredMember>(`SELECT status,direction,initiated_by,revision FROM ${JOIN_RELATIONS} WHERE artifact_id=$1 AND user_id=$2`,[id,target])).rows[0];
+      const previous=(await tx.query<StoredMember>(`SELECT status,direction,initiated_by,revision,explicit_join FROM ${JOIN_RELATIONS} WHERE artifact_id=$1 AND user_id=$2`,[id,target])).rows[0];
       let status:MembershipStatus, direction:MembershipDirection=previous?.direction??'request',initiator=previous?.initiated_by??userId;
+      let explicitJoin=previous?.explicit_join??false;
+      if(previous?.status==='accepted'&&!explicitJoin&&(input.action==='join'||input.action==='accept')){
+        await setRelationState(tx,target,'join',id,{status:'accepted',direction,initiatedBy:initiator,revision:previous.revision+1,explicitJoin:true});
+        continue;
+      }
       if(input.action==='join') {
+        explicitJoin=true;
         if(previous?.status==='accepted'||(previous?.status==='pending'&&!canEdit(role)))continue;
         initiator=userId;
         direction='request';
@@ -116,6 +122,7 @@ export async function changeMembership(actor: RoleActor, id: string, input: Memb
         if(previous.direction==='invitation' && (input.action!=='accept'||target!==userId))fail('Only the recipient can accept an invitation');
         if(previous.direction==='request' && (input.action!=='approve'||!canEdit(role)))fail('Only owners and editors can approve a request');
         status='accepted';
+        explicitJoin=input.action==='accept'||explicitJoin;
       } else {
         if(!previous||previous.status==='left'||previous.status==='dismissed')continue;
         if(input.action==='dismiss'&&previous.status!=='pending')fail('Only pending requests can be dismissed',409);
@@ -124,7 +131,7 @@ export async function changeMembership(actor: RoleActor, id: string, input: Memb
       if(previous?.status==='pending'&&previous.direction==='invitation'&&(status==='dismissed'||status==='left'))
         await tx.query("UPDATE member_notifications SET kind='dismissed' WHERE artifact_id=$1 AND user_id=$2 AND sender_id=$3 AND kind='invitation'",[id,target,previous.initiated_by]);
       const revision=(previous?.revision??0)+1;
-      await setRelationState(tx,target,'join',id,{status,direction,initiatedBy:initiator,revision});
+      await setRelationState(tx,target,'join',id,{status,direction,initiatedBy:initiator,revision,explicitJoin});
       await recordEvent(tx,{kind:'user',id:userId},status==='pending'?'join_requested':status==='accepted'?'joined':status==='left'?'left':'invitation_dismissed',{kind:'artifact',id},{user_id:target,revision});
     }
     await tx.query("SELECT pg_notify('artifact_' || lower($1), 'members')",[id]);
@@ -147,7 +154,7 @@ export async function invitePeople(tx:Queryable,artifact:ArtifactRow,actor:RoleA
   if(target===sender)continue;
   const recipient=identities.find(u=>u.id===target);
   if(!recipient||recipient.kind==='guest'||(recipient.kind==='testuser'&&identities.find(u=>u.id===artifact.user_id)?.kind!=='testuser')||await blocked(tx,sender,target))return fail('Person is not eligible for this invitation');
-  const previous=(await tx.query<StoredMember>(`SELECT status,direction,initiated_by,revision FROM ${JOIN_RELATIONS} WHERE artifact_id=$1 AND user_id=$2`,[artifact.id,target])).rows[0];
+  const previous=(await tx.query<StoredMember>(`SELECT status,direction,initiated_by,revision,explicit_join FROM ${JOIN_RELATIONS} WHERE artifact_id=$1 AND user_id=$2`,[artifact.id,target])).rows[0];
   const follower=await follows(tx,target,sender);
   if(!explicitInvitation&&!follower&&previous?.status!=='accepted')fail('Person is not eligible for this invitation');
   if(!(await readThrough(tx,artifact,{userId:target,tokenId:null})))fail('Give this person access before mentioning them');

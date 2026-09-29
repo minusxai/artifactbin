@@ -18,6 +18,10 @@ import type { DataflowState, Row, Scalar } from '@/lib/story/dataflow';
 import type { DatasetColumn } from '@/lib/story/dataset-shape';
 import { localTableOverrides } from '@/lib/story/local-tables';
 
+export class DataflowResultError extends Error {
+  constructor(readonly reason: 'capacity' | 'timeout' | 'query') { super(`Document query ${reason}: complete results required`); }
+}
+
 interface DataflowEngine { run: SqlService['run'] }
 
 export type { ImportTables } from '@/lib/story/compiled-flow';
@@ -33,14 +37,19 @@ export interface RunDataflowOptions {
   tz?: string;
   localTables?: Record<string, Row[]>;
   /** Run a connected Postgres query inside its database; params by SQL name. */
-  sourceQuery?: (query: CompiledQuery, params: Record<string, Scalar>, types: Record<string, ColumnType>, page?: QueryPage) => Promise<TableResult>;
+  sourceQuery?: (query: CompiledQuery, params: Record<string, Scalar>, types: Record<string, ColumnType>, page?: QueryPage, timeoutMs?: number) => Promise<TableResult>;
   /** Override the declared defaults (a reader's current selections). Unknown names are ignored. */
   values?: Record<string, Scalar>;
+  /** Trusted saved arguments for a headless execution; ordinary overrides remain declared-only. */
+  bindings?: { values: Record<string, Scalar>; types: Record<string, ColumnType> };
   /** Run only these queries (and what they read) — a re-run after a value change. */
   only?: Iterable<string>;
   /** The rows each query ships (DISPLAY_ROWS by default); a downstream query still reads the whole result. */
   limit?: number;
   timeoutMs?: number;
+  /** Require complete bounded intermediates for a durable consumer. */
+  completeResults?: boolean;
+  resultBytes?: number;
   /** Read a WINDOW of one query (a table scrolling past the cap); implies `only: [page.name]`. */
   page?: { name: string } & QueryPage;
 }
@@ -54,8 +63,8 @@ export interface RunDataflowOptions {
 export async function evaluateDataflow(engine: DataflowEngine, flow: CompiledDataflow, imports: ImportTables, opts: RunDataflowOptions = {}): Promise<DataflowState> {
   const values = initialValues(flow);
   for (const [k, v] of Object.entries(opts.values ?? {})) if (Object.hasOwn(values, k)) values[k] = v;
-  const logical: Record<string, Scalar> = { ...values, ...platformValues({ userId: opts.userId ?? null, now: opts.now ?? new Date().toISOString(), tz: opts.tz ?? 'UTC' }) };
-  const types: Record<string, ColumnType> = valueTypes(flow);
+  const logical: Record<string, Scalar> = { ...values, ...opts.bindings?.values, ...platformValues({ userId: opts.userId ?? null, now: opts.now ?? new Date().toISOString(), tz: opts.tz ?? 'UTC' }) };
+  const types: Record<string, ColumnType> = { ...valueTypes(flow), ...opts.bindings?.types };
 
   const tables: DataflowState['tables'] = {};
   const errors: DataflowState['errors'] = {};
@@ -73,8 +82,35 @@ export async function evaluateDataflow(engine: DataflowEngine, flow: CompiledDat
   const queries = selectQueries(flow, opts);
   if (queries.length === 0) return { values, tables, errors };
 
+  if (opts.completeResults) {
+    const started = performance.now();
+    let bytes = 0;
+    for (const query of queries) {
+      const timeoutMs = opts.timeoutMs === undefined ? undefined : Math.floor(opts.timeoutMs - (performance.now() - started));
+      if (timeoutMs !== undefined && timeoutMs < 1) throw new DataflowResultError('timeout');
+      const params = bindParams(query.params, logical), paramTypes = bindTypes(query.params, types);
+      let result: TableResult;
+      if (query.source) {
+        if (!opts.sourceQuery) throw new DataflowResultError('query');
+        result = await opts.sourceQuery(query, params, paramTypes, {limit:opts.limit ?? DISPLAY_ROWS,offset:0},timeoutMs);
+      } else {
+        if (query.reads.imports.some(name => !imports[name])) throw new DataflowResultError('query');
+        const output = await engine.run({tables:inputs,imports:Object.fromEntries(query.reads.imports.map(name=>[name,imports[name]!])),queries:[{name:query.name,sql:query.sql}],params,paramTypes,limit:opts.limit ?? DISPLAY_ROWS,timeoutMs});
+        const table = output[query.name];
+        if (!table || isQueryFailure(table)) throw new DataflowResultError(table && 'timedOut' in table && table.timedOut ? 'timeout' : 'query');
+        result = table;
+      }
+      if(opts.timeoutMs !== undefined && performance.now()-started > opts.timeoutMs) throw new DataflowResultError('timeout');
+      if(result.truncated || result.rows.length > (opts.limit ?? DISPLAY_ROWS) || (result.totalRows !== undefined && result.totalRows > result.rows.length)) throw new DataflowResultError('capacity');
+      bytes += new TextEncoder().encode(JSON.stringify(result.rows)).byteLength;
+      if(opts.resultBytes !== undefined && bytes > opts.resultBytes) throw new DataflowResultError('capacity');
+      tables[query.name] = inputs[query.name] = typedResult(query.columns,result);
+    }
+    return {values,tables,errors};
+  }
+
   // Connected databases first: nothing they read is computed here.
-  await Promise.all(queries.filter((q) => q.engine === 'postgres').map(async (q) => {
+  await Promise.all(queries.filter((q) => !!q.source).map(async (q) => {
     try {
       if (!opts.sourceQuery) throw new Error(`the connected database ref:${q.source} is not reachable from here`);
       const page = opts.page?.name === q.name ? opts.page : undefined;
@@ -87,7 +123,7 @@ export async function evaluateDataflow(engine: DataflowEngine, flow: CompiledDat
   // An import the caller could not resolve (deleted, or no longer readable) is named, not run into.
   const unavailable = new Map(flow.imports.filter((i) => !Object.hasOwn(imports, i.name)).map((i) => [i.name, i.ref]));
   const local_ = queries.filter((q) => {
-    if (q.engine !== 'sqlite') return false;
+    if (q.source) return false;
     const missing = q.reads.imports.find((name) => unavailable.has(name));
     if (missing) errors[q.name] = `<Query name="${q.name}"> reads ${missing} (ref:${unavailable.get(missing)}), which is unavailable — deleted, or no longer readable here`;
     return !missing;

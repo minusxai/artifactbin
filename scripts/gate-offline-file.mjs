@@ -202,7 +202,11 @@ for (const { kind, url } of files) for (const [engine_, engine] of [['chromium',
     const add = page.getByRole('button', { name: 'Add a row' });
     await expect(add).toBeDisabled();
     await expect(add).toHaveAttribute('aria-description', OFFLINE_MUTATION_REASON);
-    await expect(page.getByText(OFFLINE_MUTATION_REASON, { exact: true })).toBeVisible();
+    await expect(page.getByText(OFFLINE_MUTATION_REASON, { exact: true })).toHaveCount(0);
+    await page.locator('[data-slot="tooltip-trigger"]').filter({has:add}).click();
+    await expect(page.getByRole('tooltip')).toHaveText(OFFLINE_MUTATION_REASON);
+    await page.keyboard.press('Escape');
+    await expect(page.getByRole('tooltip')).toHaveCount(0);
     await expect(page.getByText('Checking edit access…')).toHaveCount(0);
 
     // Nothing left the file.

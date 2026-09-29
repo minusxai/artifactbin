@@ -3,7 +3,7 @@
  *
  * The declarations signature is the load-bearing part: it decides whether the
  * stream has to run the document's SQL again. Too sensitive and every sentence
- * an agent types costs a DuckDB run; not sensitive enough and a reader keeps
+ * an agent types costs a query run; not sensitive enough and a reader keeps
  * querying a document that no longer exists.
  */
 import { describe, expect, it } from 'vitest';
@@ -53,6 +53,23 @@ describe('storyUpdateParts', () => {
     expect(b).not.toBe(a);
   });
 
+  it('signs Notify SQL, linkage and source while ignoring prose and source offsets', () => {
+    const notify = '<Notify name="status_changed" on="change" source="ref:Tasks001">{`select assignee as "to", \'Changed\' as message from public.rows`}</Notify>';
+    const sign = (declaration: string, before = '<p>Before</p>') => storyUpdateParts(`${before}${doc(declaration, '<p>After</p>')}`)!.declarations;
+    const original = sign(notify);
+    expect(sign(notify, '<p>A longer introduction</p>')).toBe(original);
+    for (const edited of [
+      notify.replace('Changed', 'Assigned'),
+      notify.replace('on="change"', 'on="assign"'),
+      notify.replace('ref:Tasks001', 'ref:Tasks002'),
+      '',
+    ]) expect(sign(edited)).not.toBe(original);
+    expect(JSON.parse(original).notifications).toEqual([{
+      name: 'status_changed', on: 'change', source: 'Tasks001',
+      sql: 'select assignee as "to", \'Changed\' as message from public.rows', start: 0, end: 0,
+    }]);
+  });
+
   it('applies the same nesting repair the served document does', () => {
     // <p> cannot hold a <div>: the parser would close the paragraph and the
     // update would describe a different tree than a reload.
@@ -69,7 +86,7 @@ describe('storyUpdateParts', () => {
     const signed = JSON.parse(parts.declarations) as { values: Array<{ name: string }>; queries: Array<{ name: string }> };
     expect(signed.values.map((v) => v.name)).toEqual(['region']);
     expect(signed.queries.map((q) => q.name)).toEqual(['sales']);
-    expect(JSON.parse(storyUpdateParts('<p>no helmet</p>')!.declarations)).toEqual({ imports: [], values: [], queries: [], mutations: [] });
+    expect(JSON.parse(storyUpdateParts('<p>no helmet</p>')!.declarations)).toEqual({ imports: [], values: [], queries: [], mutations: [], notifications: [] });
   });
 
   it('handles a document with no Helmet at all', () => {

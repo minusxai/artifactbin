@@ -119,6 +119,8 @@ export interface WriteStatus {
   mutation: string;
   state: WriteState;
   startedAt: number;
+  /** Successful notifying run; stays discoverable until the reader dismisses it. */
+  mutationRunId?: string;
   /** When `failed`: the server's reason and a way to try the same write again. A refused change stays visible and marked. */
   error?: { message: string; code?: string; retry(): void };
 }
@@ -127,7 +129,7 @@ export interface WriteStatus {
 export interface WriteStatusFeed {
   current(): readonly WriteStatus[];
   subscribe(listener: (statuses: readonly WriteStatus[]) => void): () => void;
-  /** The reader puts a `failed` status away without retrying it; a status in any other state is left alone. */
+  /** The reader puts a failed status or a saved notifying run away without retrying it. */
   dismiss(id: number): void;
 }
 

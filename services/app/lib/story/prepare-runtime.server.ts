@@ -1,3 +1,4 @@
+import { readerDataflow } from './compiled-dataflow';
 import type { PreparedStoryRuntime } from './prepared-runtime';
 import { storyBodyFor } from './body';
 import { assetLookupFrom } from './asset-url';
@@ -56,7 +57,7 @@ export function readerIslandData(input: ReaderIslandInput): Omit<StoryIslandData
   const sqliteWasm = input.dataflow?.hold ? loadCompilerBuild().sqliteWasm : undefined;
   return {
     refData: input.refData,
-    ...(input.dataflow ? { dataflow: input.dataflow } : {}),
+    ...(input.dataflow ? { dataflow: { ...input.dataflow, flow: readerDataflow(input.dataflow.flow) } } : {}),
     // The remaining inline app reader runs held queries with the same wasm the compiled islands use.
     ...(sqliteWasm ? { sqliteWasm } : {}),
     // WHO IS READING — carried even when the document declares nothing, because

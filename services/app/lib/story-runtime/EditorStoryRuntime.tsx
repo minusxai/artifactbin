@@ -22,6 +22,7 @@ import { TrustedUi, useTrustedPortalContainer } from '@/components/TrustedUi';
 import { InlineStoryComposition, type InlineStoryWiring } from './inline-composition';
 import { wireOutline } from './outline-nav';
 import { markScrollableTables } from './table-scroll';
+import { createWriteStatusFeed } from '@/lib/islands/writes';
 import { syncValuesToUrl } from './url-values-sync';
 
 function SelectionPortal({ready}:{ready:(element:HTMLElement | null)=>void}) {
@@ -172,6 +173,17 @@ function EditorStoryRuntimeView(props: EditorStoryRuntimeProps): ReactNode {
     let selectionFactory: typeof import('./edit/selection-actions').createFrameSelectionActions | null = null;
     let annotationCommand: Parameters<FrameAnnotateSession['update']>[0] | null = null;
     let selectionCommand: Parameters<FrameSelectionActions['update']>[0] | null = null;
+    const writeFeed = createWriteStatusFeed(store);
+    let statusLoading = false, stopWriteStatus = () => {};
+    // The editor uses React: keep its view lazy, while sharing the
+    // framework-free feed with Solid. A page that never notifies loads no status view.
+    const stopStatusUpdates = writeFeed.subscribe(statuses => {
+      if (statusLoading || !statuses.some(status => status.mutationRunId)) return;
+      statusLoading = true;
+      void import('./notification-run-status').then(({mountNotificationRunStatus}) => {
+        if (!disposed && root.current) stopWriteStatus = mountNotificationRunStatus(writeFeed, root.current);
+      }).catch(error => { statusLoading = false; console.error('Failed to load notification status', error); });
+    });
     const listeners = new Set<(event: unknown) => void>();
     const nonce = runtimeId();
     const emit = (event: unknown) => { if (!disposed) for (const listener of [...listeners]) listener(event); };
@@ -309,7 +321,7 @@ function EditorStoryRuntimeView(props: EditorStoryRuntimeProps): ReactNode {
         if (selectionReady.current === ensureSelection) selectionReady.current = null;
         listeners.clear();
         stopValues();
-        stopOutline(); stopTables();
+        stopOutline(); stopTables(); stopStatusUpdates(); stopWriteStatus();
         author.dispose();
         editRef.current?.dispose(); editRef.current = null;
         annotate?.dispose(); selection?.dispose();

@@ -15,6 +15,7 @@ import { PUT as putArtifactRoute } from '@/app/api/artifacts/[id]/route';
 import { observedRequest } from '@/__tests__/conditional-request';
 import { GET as rawRoute } from '@/app/a/[id]/raw/route';
 import { createAppServer } from '@/server/app';
+import { artifactPageAnswer } from '@/lib/artifact-page';
 import { mintToken } from '@/lib/tokens';
 import { claimToken, createUser, ensureUsername } from '@/lib/users';
 import { drainPreparedPageWarmups } from '@/lib/story/prepared-page.server';
@@ -498,4 +499,24 @@ describe('the viewer overlay door', () => {
     expect((await doors(`/a/${mine}/raw?reader=compiled`)).viewerUrl).toBe(`/a/${mine}/viewer`);
     expect((await doors(`/a/${mine}?reader=compiled`, html)).viewerUrl).toBe(`/a/${mine}/viewer`);
   });
+});
+
+it('renders Join in the initial HTML for persistent mutations before the app loads',async()=>{
+ const who=await owner();
+ const dataset=await publish(who.token,{dataset:[{n:1}],access:'readwrite'});
+ const id=await publish(who.token,{markup:`<Helmet><Import name="tasks" src="ref:${dataset}" /><Mutation name="change">{\`update tasks.rows set n=n+1\`}</Mutation></Helmet><h1>Tasks</h1><Button run="$change">Change</Button>`});
+ const response=await app.request(`/a/${id}`,{headers:{accept:'text/html'}});
+ expect(response.status).toBe(200);
+ const doc=new JSDOM(await response.text()).window.document;
+ expect(doc.querySelector('[data-mx-reader-action="membership"]')?.getAttribute('aria-label')).toBe('Join artefact');
+});
+
+ it('renders the notification bell on the initial signed-in reader page',async()=>{
+ const who=await owner(),reader=await owner();
+ const id=await publish(who.token,{markup:'<h1>Tasks</h1>'});
+ const answer=await artifactPageAnswer(request(`/a/${id}`,{actor:{credential:'session',userId:reader.user.id,email:reader.user.email!,emailVerified:true}}),id,{page:{spa:null}});
+ expect(answer.status).toBe(200);
+ expect(answer.compiled).toBeDefined();
+ const doc=new JSDOM(answer.compiled!.html).window.document;
+ expect(doc.querySelector('[data-mx-reader-action="notifications"]')?.getAttribute('aria-label')).toBe('Notifications');
 });

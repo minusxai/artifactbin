@@ -47,6 +47,11 @@ const PLACEHOLDERS: Record<string, Placeholder> = {
     ],
     rows: [{ id: 1, item: 'Plan', owner: 'TBD', hours: null, depends_on: '[]', tags: '[]', status: 'backlog', sprint: '' }],
   },
+  /** The notification example has its own explicit task schema. */
+  ntf123: {
+    columns: [{ name: 'id', type: 'number' }, { name: 'title', type: 'string' }, { name: 'status', type: 'string' }, { name: 'assignee', type: 'user' }],
+    rows: [{ id: 1, title: 'Review pricing', status: 'Todo', assignee: null }],
+  },
   /** Tasks with user fields. */
   tsk123: {
     columns: [

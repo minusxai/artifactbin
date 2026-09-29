@@ -34,7 +34,7 @@ import { readFileSync } from 'node:fs';
 import { brotliCompressSync } from 'node:zlib';
 import path from 'node:path';
 import vm from 'node:vm';
-import type { CompiledDataflow } from '@/lib/story/compiled-dataflow';
+import { readerDataflow, type CompiledDataflow } from '@/lib/story/compiled-dataflow';
 import type { Scalar } from '@/lib/story/dataflow';
 import { ISLANDS_MANIFEST_PATH } from './build.server';
 import { DOCUMENT_MODULE_RE, type CompilerBuild, type IslandRenderData, type ModuleRef, type ModuleStore } from './contract';
@@ -436,7 +436,7 @@ export async function renderSkeleton(skeleton: string, imports?: SsrImports): Pr
 function ssrSource(islands: string, skeletonHtml: string, flow: CompiledDataflow | null): string {
   return `${islands}import { renderToString as $renderToString } from 'solid-js/web';
 const $skeleton = ${lit(skeletonHtml)};
-const $flow = JSON.parse(${lit(JSON.stringify(flow))});
+const $flow = JSON.parse(${lit(JSON.stringify(flow ? readerDataflow(flow) : null))});
 export function render(data) {
   const runtime = rt.createIslandRuntime({ dataflow: $flow ? { flow: $flow, values: data.values, ...(data.state ? { state: data.state } : {}), ...(data.results ? { results: data.results } : {}) } : null, assetsUrl: data.assetsUrl, mermaidImages: data.mermaidImages, viewer: null }, rt.createDataflowStore);
   try {
@@ -461,7 +461,7 @@ export function render(data) {
  * version's compiled dataflow when it declares data (the page's data island carries no flow).
  */
 const browserSource = (islands: string, flow: CompiledDataflow | null, flowIndex?: number): string => flow
-  ? `${islands}import { boot as $boot } from '@mx/boot';\nconst FLOW = ${flowIndex === undefined ? `JSON.parse(${lit(JSON.stringify(flow))})` : `$moduleData[${flowIndex}]`};\n$boot({ ISLANDS, FLOW });\n`
+  ? `${islands}import { boot as $boot } from '@mx/boot';\nconst FLOW = ${flowIndex === undefined ? `JSON.parse(${lit(JSON.stringify(readerDataflow(flow)))})` : `$moduleData[${flowIndex}]`};\n$boot({ ISLANDS, FLOW });\n`
   : `${islands}import { boot as $boot } from '@mx/boot';\n$boot(ISLANDS);\n`;
 
 interface ManifestFiles { files?: Record<string, { imports?: string[] }> }
@@ -524,7 +524,7 @@ export async function buildDocumentModules(sources: GeneratedSources & { islandR
   const renderedSkeleton = spliceStatics(await renderSkeleton(sources.skeleton, options.imports), sources.statics ?? []);
   if (!sources.islandRefs.length && !options.boot) return { html: renderedSkeleton, module: null, ssr: null, templateBrBytes: null };
   const moduleData = [...(sources.moduleData ?? [])];
-  const flowJson = options.flow ? JSON.stringify(options.flow) : null;
+  const flowJson = options.flow ? JSON.stringify(readerDataflow(options.flow)) : null;
   const flowIndex = flowJson && flowJson.length > 1024 ? moduleData.push(flowJson) - 1 : undefined;
   const moduleDataTag = moduleData.length
     ? `<script type="application/json" data-mx-module-data>${escapeRaw(JSON.stringify({ moduleData: moduleData.map((value) => JSON.parse(value) as unknown) }))}</script>`

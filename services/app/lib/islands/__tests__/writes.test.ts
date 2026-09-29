@@ -37,18 +37,20 @@ describe('createWriteStatusFeed', () => {
     settle({ dataset: 'DS1' });
     await done;
     expect(feed.current().map((s) => s.state)).toEqual(['saved']);
+    feed.dismiss(feed.current()[0]!.id);
+    expect(feed.current().map((s) => s.state), 'ordinary saved entries leave only when their timer expires').toEqual(['saved']);
     vi.advanceTimersByTime(SAVED_STATUS_TTL_MS + 1);
     expect(feed.current()).toEqual([]);
     expect(seen).toEqual([['add:saving'], ['add:saved'], []]);
   });
 
   it('keeps a failed write marked with the server\'s reason and retries the same write on request', async () => {
-    const mutate = vi.fn<() => Promise<{ dataset: string }>>().mockRejectedValueOnce(new Error('Sign in to add a row')).mockResolvedValueOnce({ dataset: 'DS1' });
+    const mutate = vi.fn<() => Promise<{ dataset: string }>>().mockRejectedValueOnce(Object.assign(new Error('Sign in to add a row'), {code:'access_denied'})).mockResolvedValueOnce({ dataset: 'DS1' });
     const store = storeWith(mutate);
     const feed = createWriteStatusFeed(store);
     await store.mutate({ mutation: 'add', args: {} } as never).catch(() => {});
     const [failed] = feed.current();
-    expect(failed).toMatchObject({ mutation: 'add', state: 'failed', error: { message: 'Sign in to add a row' } });
+    expect(failed).toMatchObject({ mutation: 'add', state: 'failed', error: { message: 'Sign in to add a row', code:'access_denied' } });
     vi.advanceTimersByTime(SAVED_STATUS_TTL_MS * 10);
     expect(feed.current(), 'a failure never vanishes on its own').toHaveLength(1);
     failed!.error!.retry();
@@ -56,4 +58,12 @@ describe('createWriteStatusFeed', () => {
     expect(mutate).toHaveBeenCalledTimes(2);
     expect(feed.current().filter((s) => s.state === 'failed')).toEqual([]);
   });
+});
+
+it('retains a notifying saved run for status discovery until explicitly dismissed',async()=>{
+ const store=storeWith(async()=>({dataset:'DS1',mutationRunId:'run-1'}));
+ const feed=createWriteStatusFeed(store);await store.mutate({mutation:'add',args:{}} as never);
+ expect(feed.current()[0]).toMatchObject({state:'saved',mutationRunId:'run-1'});
+ vi.advanceTimersByTime(SAVED_STATUS_TTL_MS+1);expect(feed.current()).toHaveLength(1);
+ feed.dismiss(feed.current()[0]!.id);expect(feed.current()).toEqual([]);
 });

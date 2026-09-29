@@ -22,7 +22,9 @@ publisher persists facts in `events.events` and uses the delivery ledger for
 retryable subscribers. No new activity store, bus or activity-feed UI is added.
 Observational telemetry can still use best-effort `emit`.
 
-A human's self-actions stay silent. Agent replies notify the human account even
+A human's own comment and membership actions stay silent. Mutation notifications
+include the actor when the Notify query selects them and they have explicitly
+joined with the required read access. Agent replies notify the human account even
 when they share an identity. Replies notify the thread's participants and saved
 mention recipients, excluding blocks. Reply plus resolution is one source event
 and one conversation notification per recipient. Reopening is a new event.

@@ -1,10 +1,11 @@
+import {adaptMutationOperationReply,mutationInitiator,normalizeMutationOperation} from '@/lib/mutation-operation';
 import {MembershipError} from '../membership';
 import {grantsOf,grantsPermitWrite} from '../datasets/policy/grants';
 import {tokenActorForRequest} from '@/lib/viewer';
 import {readableArtifact} from '@/lib/artifact-read';
 import {canAnnotate} from '@/lib/share-roles';
 import {durableMutation} from '@/lib/mutation-receipt';
-import {getArtifactFor,getArtifactById} from '@/lib/artifacts';
+import {getArtifactFor,getArtifactById,canReadArtifact} from '@/lib/artifacts';
 import {ownedArtifactState} from '@/lib/trash';
 import {sessionOwnedBy} from '@/lib/remote/resource';
 /**
@@ -32,7 +33,7 @@ import { OPERATIONS, type OpContext, type Operation, type OpReply } from './regi
  * precisely the retry the receipt exists to answer.
  */
 const AUTHORIZED: Record<string, (actor: TokenActor, input: Record<string, unknown>) => Promise<boolean>> = {
-  mutate_dataset: async (actor, input) => {const row=await getArtifactById(String(input.id));return !!row&&(grantsOf(row)?await grantsPermitWrite(row,actor)||!!await getArtifactFor(actor,row.id):!!await getArtifactFor(actor,row.id));},
+  mutate_dataset: async (actor, input) => {const row=await getArtifactById(String(input.id));return !!row&&(input.name?await canReadArtifact(row,actor.userId?{userId:actor.userId,email:null}:null)||row.token_id===actor.tokenId:grantsOf(row)?await grantsPermitWrite(row,actor)||!!await getArtifactFor(actor,row.id):!!await getArtifactFor(actor,row.id));},
   annotate: async (actor, input) => {
     const access = await readableArtifact(actor, String(input.id));
     return !!access && canAnnotate(access.role);
@@ -83,7 +84,9 @@ export async function runOperation(
   const authorize=AUTHORIZED[name];
   if(authorize&&key){
     if(!await authorize(actor,input))return json({error:'not_found'},404);
-    const result=await durableMutation(actor,ctx.base,key,{name,input},receipt=>operation(name).run({...ctx,mutationReceipt:receipt},input));
+    const payload=name==='mutate_dataset'&&typeof input.name==='string'?normalizeMutationOperation({documentId:String(input.id),mutation:input.name,args:(input.args??{}) as Record<string,string|number|boolean|null>,...(input.row!==undefined?{row:input.row as Record<string,string|number|boolean|null>}:{}),...(input.value!==undefined?{value:input.value as string|number|boolean|null}:{}),...(typeof input.tz==='string'?{tz:input.tz}:{}),...(typeof input.expectedState==='string'?{expectedState:input.expectedState}:{})}):{name,input};
+    const saved=await durableMutation(actor,ctx.base,key,payload,receipt=>operation(name).run({...ctx,mutationReceipt:receipt},input),{initiator:mutationInitiator(actor,'agent',author.kind==='agent'?author.label:null)});
+    const result=adaptMutationOperationReply(saved,'api');
     const terminal=!['operation_pending','outcome_unknown','idempotency_mismatch','invalid_idempotency_key'].includes(String(result.body.error));
     return opResponse({...result,...(terminal?{headers:{'X-Artifactbin-Mutation-Receipt':key}}:{})});
   }
