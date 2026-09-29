@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, expect, it } from 'vitest';
 import { createAppServer } from '@/server/app';
-import { isSolidPage } from '@/lib/solid-routes';
+import { isSolidPage, solidDocumentReader } from '@/lib/solid-routes';
 import { useAppHarness } from './harness';
 
 useAppHarness();
@@ -17,8 +17,15 @@ it('serves the Solid entry for ported routes, while React owns other URLs', asyn
   expect(isSolidPage('/a/data01/edit', 200, 'dataset')).toBe(true);
   expect(isSolidPage('/a/doc01/edit', 200, 'markup')).toBe(false);
   expect(isSolidPage('/@cee')).toBe(true);
-  expect(isSolidPage('/@cee/doc-id')).toBe(false);
-  expect(isSolidPage('/a/doc-id')).toBe(false);
+  expect(isSolidPage('/@cee/doc-id')).toBe(true);
+  expect(isSolidPage('/a/doc-id')).toBe(true);
+  expect(isSolidPage('/a/doc-id/edit')).toBe(false);
+  expect(solidDocumentReader('viewer', 'markup', false)).toBe(true);
+  expect(solidDocumentReader('commenter', 'markup', false)).toBe(true);
+  expect(solidDocumentReader('editor', 'markup', false)).toBe(false);
+  expect(solidDocumentReader('owner', 'markup', false)).toBe(false);
+  expect(solidDocumentReader('viewer', 'folder', false)).toBe(false);
+  expect(solidDocumentReader('viewer', 'markup', true)).toBe(false);
   expect(isSolidPage('/missing', 404)).toBe(true);
   const dir = mkdtempSync(path.join(tmpdir(), 'afbin-shell-'));
   dirs.push(dir);
