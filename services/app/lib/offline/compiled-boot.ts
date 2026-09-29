@@ -8,7 +8,7 @@ import type { PageEngine } from '@/lib/story-runtime/page-engine';
 import type { CompiledDataflow } from '@/lib/story/compiled-dataflow';
 import { createIslandRuntime, hydrateIsland } from '@/lib/islands/rt';
 import { createSnapshotTransport } from './snapshot-transport';
-import { OFFLINE_FILTER_REASON, OFFLINE_MUTATION_REASON, type ArtifactFile } from './file-format';
+import { OFFLINE_FILTER_REASON, OFFLINE_MUTATION_REASON, sourceDigest, type ArtifactFile } from './file-format';
 
 declare const __AFBIN_OFFLINE_SQLITE__: boolean;
 declare const __AFBIN_OFFLINE_CHART__: boolean;
@@ -65,6 +65,7 @@ export function boot(input: OfflineIslandModule | OfflineIslandModule['ISLANDS']
     },
   } : null;
   const holds = file.island.dataflow?.hold ?? [];
+  const staleFlow = !!file.compiledFlowDigest && file.compiledFlowDigest !== sourceDigest(JSON.stringify(file.island.dataflow?.flow ?? null));
   const page = __AFBIN_OFFLINE_SQLITE__ && flow && holds.length && transport
     ? { engine: lazyEngine(() => import('./compiled-sqlite').then(({ offlinePageEngine }) => offlinePageEngine(transport.hold))), userId: null }
     : null;
@@ -77,7 +78,8 @@ export function boot(input: OfflineIslandModule | OfflineIslandModule['ISLANDS']
   }), {
     ...(__AFBIN_OFFLINE_CHART__ ? { loadChart: () => import('@/lib/islands/chart').then(({ loadChart }) => loadChart()) } : {}),
   });
-  const disposers = module.ISLANDS.map(([id, component]) => hydrateIsland(id, component, runtime.context, root)).filter((stop): stop is () => void => !!stop);
+  const disposers = module.ISLANDS.map(([id, component], index) => staleFlow && file.compiled?.islands[index]?.readsData
+    ? null : hydrateIsland(id, component, runtime.context, root)).filter((stop): stop is () => void => !!stop);
   window.__afbinOfflineStore = runtime.store;
   window.__afbinOfflineDispose = () => { for (const stop of disposers) stop(); runtime.dispose(); };
   runtime.store?.start();

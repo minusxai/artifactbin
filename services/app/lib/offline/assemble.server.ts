@@ -354,6 +354,7 @@ export async function assembleArtifactFile(input: AssembleArtifactFileInput): Pr
     journal: [],
     localIds: [],
     bundle: 'solid',
+    compiledFlowDigest: sourceDigest(JSON.stringify(island.dataflow?.flow ?? null)),
     extras: await offlineExtrasRef(),
     // The island and stylesheets above were built from exactly this source.
     derivedFrom: sourceDigest(source),

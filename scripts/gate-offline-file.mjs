@@ -66,9 +66,12 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import esbuild from 'esbuild';
 import { chromium, firefox, webkit } from 'playwright';
 import { expect } from 'playwright/test';
+import { connectAgent } from './lib/cli-connection.mjs';
+import { fixtureFetch as fetch } from './lib/fixture-http.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const APP = path.join(ROOT, 'services/app');
+const BASE = process.argv[2] ?? 'http://localhost:3030';
 const work = path.join(os.tmpdir(), `afbin-offline-gate-${process.pid}`);
 mkdirSync(work, { recursive: true });
 process.on('exit', () => rmSync(work, { recursive: true, force: true }));
@@ -95,10 +98,30 @@ const NOTHING_TO_SAVE = 'No changes to save';
 const manifest = JSON.parse(readFileSync(path.join(APP, 'lib/build-assets/offline/manifest.json'), 'utf8'));
 // The extras this build serves, as a download names them (their hash changes with every build, so the fixture carries none).
 const extrasCode = readFileSync(path.join(APP, 'lib/build-assets/offline', manifest.extras.file));
-const file = parseArtifactFile({
-  ...JSON.parse(readFileSync(path.join(ROOT, 'scripts/fixtures/offline-file/artifact-file.json'), 'utf8')),
-  extras: { path: manifest.extras.path, integrity: manifest.extras.integrity },
-});
+const token = (await connectAgent(BASE)).token;
+const headers = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
+const publish = async (body) => {
+  const response = await fetch(`${BASE}/api/artifacts`, { method: 'POST', headers, body: JSON.stringify(body) });
+  const answer = await response.json();
+  assert.equal(response.status, 201, JSON.stringify(answer));
+  return answer.id;
+};
+const fixture = JSON.parse(readFileSync(path.join(ROOT, 'scripts/fixtures/offline-file/artifact-file.json'), 'utf8'));
+const rows = fixture.snapshot.held.sales_data.rows.rows;
+const salesId = await publish({ dataset: rows, visibility: 'unlisted', access: 'read' });
+const targetsId = await publish({ dataset: rows, visibility: 'unlisted', access: 'read' });
+const source = readFileSync(path.join(ROOT, 'scripts/fixtures/offline-file/dashboard.jsx'), 'utf8')
+  .replace('ref:Ds1a2b', `ref:${salesId}`).replace('ref:Tg9z8y', `ref:${targetsId}`);
+const documentId = await publish({ markup: source, visibility: 'unlisted' });
+const download = await fetch(`${BASE}/a/${documentId}/download`, { headers: { Authorization: `Bearer ${token}` } });
+assert.equal(download.status, 200, await download.clone().text());
+const exported = await download.text();
+const file = parseArtifactFile(JSON.parse(/<script type="application\/json" id="afbin-file">([\s\S]*?)<\/script>/.exec(exported)[1]));
+// The second dataset is intentionally not held by this copy. Its free-text
+// filter is frozen while the first import remains live in SQLite.
+file.snapshot.frozen = ['note'];
+delete file.snapshot.held.targets_data;
+file.island.dataflow.hold = ['sales_data'];
 const extrasUrl = new URL(manifest.extras.path, file.origin).href;
 console.log(`extras: ${(manifest.extras.raw / 1024).toFixed(0)} KB raw at ${extrasUrl}`);
 
@@ -121,11 +144,12 @@ async function serveOrigin(context, mode) {
  * Both bundles open the same Mermaid-free fixture: core is what this file would
  * carry; mermaid proves the larger bundle also loads and runs under the CSP.
  */
-const files = Object.keys(manifest.bundles).map((kind) => {
-  const code = readFileSync(path.join(APP, 'lib/build-assets/offline', manifest.bundles[kind].file)).toString('base64');
+const files = ['solid'].map((kind) => {
   const htmlPath = path.join(work, `Regional sales (${kind}).html`);
-  writeFileSync(htmlPath, renderArtifactFileHtml({ file: { ...file, bundle: kind }, code }));
-  console.log(`${kind} file: ${(Buffer.byteLength(readFileSync(htmlPath)) / 1024).toFixed(0)} KB`);
+  const html = exported.replace(/(<script type="application\/json" id="afbin-file">)([\s\S]*?)(<\/script>)/,
+    (_all, open, _json, close) => `${open}${JSON.stringify(file).replace(/</g, '\\u003c')}${close}`);
+  writeFileSync(htmlPath, html);
+  console.log(`${kind} file: ${(Buffer.byteLength(html) / 1024).toFixed(0)} KB`);
   return { kind, url: pathToFileURL(htmlPath).href };
 });
 console.log(`CSP: ${artifactFileCsp(file.origin)}`);
@@ -234,7 +258,7 @@ for (const { kind, url } of files) for (const [engine_, engine] of [['chromium',
 }
 // ── editing, commenting and saving, from file:// ──────────────────────────────
 
-const core = files.find((f) => f.kind === 'core');
+const core = files.find((f) => f.kind === 'solid');
 const headingId = /<h1 [^>]*id="([^"]+)"/.exec(file.source)[1];
 const ENGINES = [['chromium', chromium], ['firefox', firefox], ['webkit', webkit]];
 const downloads = {};

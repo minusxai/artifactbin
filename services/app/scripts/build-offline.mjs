@@ -62,7 +62,7 @@ const outdir = path.join(root, 'lib/build-assets/offline');
 const markerPath = path.join(outdir, '.build-cache.json');
 const manifestPath = path.join(outdir, 'manifest.json');
 const cache = process.argv.includes('--cache');
-const KINDS = /** @type {const} */ (['core', 'mermaid', 'solid']);
+const KINDS = /** @type {const} */ (['solid']);
 /** The extras and their build-time brotli/gzip siblings (server/content-encoding serves them). */
 const EXTRAS_OR_SIBLING = /^extras-[0-9a-f]{16}\.js(?:\.br|\.gz)?$/;
 
@@ -147,9 +147,6 @@ async function build() {
   const extrasStubs = {
     name: 'offline-extras-stubs',
     setup(b) {
-      // The file:// editor retains its offline-capable React pane. The site loads the Solid pane;
-      // bundling that site-only adapter into a single-script offline file would pull in Solid JSX.
-      b.onResolve({ filter: /\/components\/SolidSourceEditorPane$/ }, () => ({ path: path.join(root, 'components/SourceEditorPane.tsx') }));
       // CodeMirror's packages compare their own instances, so the file never
       // imports them one by one: the engine module arrives whole from the extras.
       b.onResolve({ filter: /\/source-editor\/codemirror$/ }, () => ({ path: 'source-editor/codemirror', namespace: 'offline-extras' }));
@@ -185,15 +182,11 @@ async function build() {
       b.onLoad({ filter: /.*/, namespace: 'offline-node' }, (args) => ({ loader: 'js', contents: NODE_STUBS[args.path] }));
       b.onResolve({ filter: /\/deck-gl-engine$/ }, () => ({ path: 'deck-gl-engine', namespace: 'offline-stub' }));
       b.onResolve({ filter: MAP_PACKAGES }, (args) => ({ path: args.path, namespace: 'offline-stub' }));
-      if (kind === 'core') b.onResolve({ filter: /\/mermaid-render$/ }, () => ({ path: 'mermaid-render', namespace: 'offline-stub' }));
       b.onLoad({ filter: /.*/, namespace: 'offline-stub' }, (args) => ({
         loader: 'js',
         contents: args.path === 'deck-gl-engine'
           ? 'export function DeckEngine() { return null; }'
-          : args.path === 'mermaid-render'
-            // The server picks the mermaid bundle for any document with a diagram; this is unreachable in a core file.
-            ? 'export function renderMermaid() { return Promise.reject(new Error("This file was saved without diagram support.")); }'
-            : 'export default {};',
+          : 'export default {};',
       }));
     },
   });
@@ -211,8 +204,6 @@ async function build() {
       'import.meta.url': 'globalThis.__AFBIN_MODULE_URL__',
       'import.meta.hot': 'undefined',
       __AFBIN_APP_CSS__: JSON.stringify(css),
-      // The file's SQLite engine (lib/offline/sqlite-wasm): file:// fetches nothing, so the wasm rides inside.
-      __AFBIN_SQLITE_WASM__: JSON.stringify(fs.readFileSync(createRequire(path.join(root, '../sql/package.json')).resolve('@sqlite.org/sqlite-wasm/sqlite3.wasm')).toString('base64')),
       ...tailwindDefine,
     },
     logOverride: { 'empty-import-meta': 'error' },
@@ -229,8 +220,8 @@ async function build() {
     }),
     ...KINDS.map((kind) => esbuild.build({
       ...common,
-      entryPoints: [path.join(root, kind === 'solid' ? 'lib/offline/solid-entry.tsx' : 'lib/offline/entry.tsx')],
-      plugins: [extrasStubs, stubs(kind), ...(kind === 'solid' ? [gridKernelStub, solidTransform] : [])],
+      entryPoints: [path.join(root, 'lib/offline/solid-entry.tsx')],
+      plugins: [extrasStubs, stubs(kind), gridKernelStub, solidTransform],
       outfile: path.join(outdir, `${kind}.js`),
     })),
   ]);

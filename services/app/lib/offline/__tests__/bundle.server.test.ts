@@ -13,12 +13,13 @@ import { createAppServer } from '@/server/app';
 import { offlineBundle, offlineExtrasAsset, offlineExtrasRef } from '../bundle.server';
 
 const manifest = JSON.parse(readFileSync(path.join(process.cwd(), 'lib/build-assets/offline/manifest.json'), 'utf8')) as {
-  bundles: Record<'core' | 'mermaid', { sha256: string; raw: number; gzip: number }>;
+  bundles: Record<'solid', { sha256: string; raw: number; gzip: number }>;
   extras: { file: string; path: string; integrity: string; sha256: string; raw: number };
 };
 
 describe('offlineBundle', () => {
-  it.each(['core', 'mermaid'] as const)('answers the %s bundle as gzip+base64 of exactly the built code', async (kind) => {
+  it('answers the Solid bundle as gzip+base64 of exactly the built code', async () => {
+    const kind = 'solid';
     const code = gunzipSync(Buffer.from(await offlineBundle(kind), 'base64'));
     expect(code.length).toBe(manifest.bundles[kind].raw);
     expect(createHash('sha256').update(code).digest('hex')).toBe(manifest.bundles[kind].sha256);
@@ -28,31 +29,26 @@ describe('offlineBundle', () => {
   });
 
   it('computes each bundle once per process', () => {
-    expect(offlineBundle('core')).toBe(offlineBundle('core'));
+    expect(offlineBundle('solid')).toBe(offlineBundle('solid'));
   });
 
-  it('keeps Mermaid out of the core bundle', async () => {
-    // Checked on the code itself: once the editor joined both bundles, a size ratio no longer said this.
-    const code = async (kind: 'core' | 'mermaid') => gunzipSync(Buffer.from(await offlineBundle(kind), 'base64')).toString('utf8');
-    const [core, mermaid] = [await code('core'), await code('mermaid')];
-    for (const marker of ['mermaidAPI', 'flowchart-v2']) {
-      expect(mermaid).toContain(marker);
-      expect(core).not.toContain(marker);
+  it('keeps document engines and React out of the common Solid editor', async () => {
+    const code = gunzipSync(Buffer.from(await offlineBundle('solid'), 'base64')).toString('utf8');
+    for (const marker of ['mermaidAPI', 'flowchart-v2', 'Axes cannot be shared in concatenated', 'sqlite3.wasm', 'react.transitional.element']) {
+      expect(code).not.toContain(marker);
     }
-    expect(core).toContain('This file was saved without diagram support.');
-    // Mermaid is still megabytes a document without a diagram does not carry.
-    expect(manifest.bundles.mermaid.raw - manifest.bundles.core.raw).toBeGreaterThan(3 * 1024 * 1024);
+    expect(manifest.bundles.solid.raw).toBeLessThan(2 * 1024 * 1024);
   });
 });
 
 describe('the extras (the source editor and prettier), loaded on demand', () => {
-  const code = async (kind: 'core' | 'mermaid') => gunzipSync(Buffer.from(await offlineBundle(kind), 'base64')).toString('utf8');
+  const code = async () => gunzipSync(Buffer.from(await offlineBundle('solid'), 'base64')).toString('utf8');
 
   it('are not in either bundle a file carries: those read them off the global the extras set', async () => {
-    for (const kind of ['core', 'mermaid'] as const) {
-      const text = await code(kind);
+    {
+      const text = await code();
       // CodeMirror's editor core and prettier's printer, by strings only they contain.
-      for (const marker of ['cm-scroller', 'prettier-ignore']) expect(text, `${kind}: ${marker}`).not.toContain(marker);
+      for (const marker of ['cm-scroller', 'prettier-ignore']) expect(text, `solid: ${marker}`).not.toContain(marker);
       expect(text).toContain('globalThis.__afbinExtras');
     }
     const extras = readFileSync(path.join(process.cwd(), 'lib/build-assets/offline', manifest.extras.file), 'utf8');
@@ -70,7 +66,7 @@ describe('the extras (the source editor and prettier), loaded on demand', () => 
     expect(ref.integrity).toBe(`sha384-${createHash('sha384').update(bytes!).digest('base64')}`);
     expect(bytes!.length).toBe(manifest.extras.raw);
     expect(await offlineExtrasAsset('extras-0000000000000000.js')).toBeNull();
-    expect(await offlineExtrasAsset('core.js.gz')).toBeNull();
+    expect(await offlineExtrasAsset('solid.js.gz')).toBeNull();
     expect(await offlineExtrasAsset('../manifest.json')).toBeNull();
   });
 

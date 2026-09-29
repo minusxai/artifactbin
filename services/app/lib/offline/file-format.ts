@@ -114,6 +114,8 @@ export interface ArtifactFile {
   island: StoryIslandData;
   /** Version-owned compiled reader output, retained for the file's Solid reader. */
   compiled?: CompiledPage;
+  /** The flow baked into the compiled browser module, retained across local edits. */
+  compiledFlowDigest?: string;
   snapshot: ArtifactFileSnapshot;
   journal: ArtifactFileEdit[];
   /** Server threads visible to the downloader, plus threads and replies made in a file. */

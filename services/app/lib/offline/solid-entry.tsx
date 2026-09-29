@@ -7,7 +7,7 @@ import { mountCompiledEditRegions, type CompiledEditMount } from '@/solid/editor
 import { createLiveEditsCore, type LiveEditsCore } from '@/solid/shared/live-edits-core';
 import { createFileBackend, rebuildArtifactFile, sourceChangedOutside } from './file-backend';
 import { createExtrasLoader, extrasScriptUrl, FORMATTING_OFFLINE, RICH_EDITOR_OFFLINE } from './extras';
-import { OFFLINE_ASSET_REASON, OFFLINE_QUERY_REASON, type ArtifactFile } from './file-format';
+import { OFFLINE_ASSET_REASON, OFFLINE_QUERY_REASON, sourceDigest, type ArtifactFile } from './file-format';
 import { ARTIFACT_FILE_IDS, readArtifactFileParts, type ArtifactFileParts } from './file-html';
 import { clearDraft, readDraft, readName, writeDraft, writeName } from './local-state';
 import { saveArtifactFile, suggestedFileName, type SaveHandle } from './save-file';
@@ -164,7 +164,7 @@ function OfflineShell(props: Opened) {
   };
   createEffect(markAnnotations);
   const selectionChanged = () => {
-    if (editing()) return;
+    if (editing() || commenting()) return;
     const selection = window.getSelection();
     if (!selection || selection.isCollapsed || !selection.toString().trim()) { setSelected(null); return; }
     const node = selection.anchorNode?.parentElement?.closest<HTMLElement>('[id][data-mx-ast]');
@@ -182,7 +182,7 @@ function OfflineShell(props: Opened) {
     void import('@/lib/format-jsx-preview').then(({ formatJsxPreview }) => formatJsxPreview(source())).then((result) => { setFormattedText(result); setFormatted(true); });
   };
   const style = document.createElement('style');
-  style.textContent = [__AFBIN_APP_CSS__, file().css.base, file().css.compiled, file().css.author,
+  style.textContent = [typeof __AFBIN_APP_CSS__ === 'string' ? __AFBIN_APP_CSS__ : '', file().css.base, file().css.compiled, file().css.author,
     'body{margin:0;padding-top:42px}#afbin-chrome{position:fixed;inset:0 0 auto;z-index:1000;background:var(--surface,#fff);border-bottom:1px solid #aaa} [data-mx-annotated]{outline:2px solid #e8a93a}'].filter(Boolean).join('\n');
   document.head.append(style);
   onCleanup(() => style.remove());
@@ -227,7 +227,10 @@ function OfflineShell(props: Opened) {
   </div>;
 }
 
-async function open(): Promise<void> {
+let mountedDispose: (() => void) | null = null;
+export function disposeSolidOfflineFile(): void { mountedDispose?.(); mountedDispose = null; }
+export async function mountSolidOfflineFile(): Promise<void> {
+  disposeSolidOfflineFile();
   const parts = readArtifactFileParts(document);
   const rebuilt = sourceChangedOutside(parts.file) ? await rebuildArtifactFile(parts.file, readName()) : { file: parts.file, rebuilt: false, error: null };
   const draft = readDraft(parts.file);
@@ -246,12 +249,22 @@ async function open(): Promise<void> {
     else clearDraft(parts.file);
   }
   window.__afbinOfflineFile = opened.file;
-  render(() => <OfflineShell parts={{ ...parts, file: opened.file }} invalid={opened.error} restored={opened.rebuilt} />, host);
+  if (opened.file.compiledFlowDigest && opened.file.compiledFlowDigest !== sourceDigest(JSON.stringify(opened.file.island.dataflow?.flow ?? null))) {
+    const story = document.querySelector<HTMLElement>('[data-mx-inline-story]');
+    for (const island of opened.file.compiled?.islands ?? []) {
+      if (!island.readsData) continue;
+      const target = story?.querySelector<HTMLElement>(`[data-mx-ast="${island.path}"]`);
+      if (target) target.textContent = OFFLINE_QUERY_REASON;
+    }
+  }
+  mountedDispose = render(() => <OfflineShell parts={{ ...parts, file: opened.file }} invalid={opened.error} restored={opened.rebuilt} />, host);
   document.getElementById(ARTIFACT_FILE_IDS.boot)?.remove();
 }
 
-window.__afbinOfflineReady = open().catch((error: unknown) => {
-  const status = document.getElementById(ARTIFACT_FILE_IDS.boot);
-  if (status) { status.setAttribute('role', 'alert'); status.textContent = error instanceof Error ? error.message : 'This file could not be opened.'; }
-  throw error;
-});
+if (document.getElementById(ARTIFACT_FILE_IDS.code)) {
+  window.__afbinOfflineReady = mountSolidOfflineFile().catch((error: unknown) => {
+    const status = document.getElementById(ARTIFACT_FILE_IDS.boot);
+    if (status) { status.setAttribute('role', 'alert'); status.textContent = error instanceof Error ? error.message : 'This file could not be opened.'; }
+    throw error;
+  });
+}

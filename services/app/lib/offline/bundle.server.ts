@@ -18,7 +18,7 @@ import type { ArtifactFile } from './file-format';
 import type { ArtifactFileParts } from './file-html';
 import type { JsxNode } from '@/lib/jsx';
 
-export type OfflineBundleKind = 'core' | 'mermaid' | 'solid';
+export type OfflineBundleKind = 'solid';
 
 interface OfflineBundleManifest {
   bundles: Record<OfflineBundleKind, { file: string; sha256: string; raw: number; gzip: number }>;
@@ -55,8 +55,9 @@ export function offlineBundle(kind: OfflineBundleKind): Promise<string> {
 
 /** The exact inline resources a newly downloaded Solid file needs. */
 export async function offlineFileParts(file: ArtifactFile): Promise<ArtifactFileParts> {
-  const code = await offlineBundle(file.bundle);
-  if (file.bundle !== 'solid' || !file.compiled) return { file, code };
+  if (file.bundle !== 'solid') throw new Error('offline: a legacy file must be migrated before export');
+  const code = await offlineBundle('solid');
+  if (!file.compiled) return { file, code };
   const sqlite = !!file.island.dataflow?.hold?.length;
   // A compiled Question can be a table; those have no Vega drawing to update.
   const hasChart = (nodes: JsxNode[]): boolean => nodes.some((node) => node.type === 'element' && (
