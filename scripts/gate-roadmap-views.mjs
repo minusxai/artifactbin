@@ -48,6 +48,7 @@ try {
   assert.match(refusal,/affected|changed|mutation/i,`missing refusal: ${await dialog.textContent()}`);
   assert.equal(await dialog.isVisible(),true);
   await page.getByLabel('Cancel sprint',{exact:true}).click();
+  await dialog.waitFor({state:'hidden'});
   await switchView('Table');
   await ownerPage.waitForFunction(()=>new URLSearchParams(location.search).get('$view_mode')!=='sprint');
   await page.getByLabel('Sprint 1',{exact:true}).click();

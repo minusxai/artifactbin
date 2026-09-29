@@ -71,6 +71,8 @@ describe('Select', () => {
       host.querySelector<HTMLButtonElement>('[aria-haspopup="listbox"]')!.click();
       expect((portal ?? host).querySelector('[role="listbox"]')).toBeTruthy();
       if (portal) expect(host.querySelector('[role="listbox"]')).toBeNull();
+      (portal ?? host).querySelector<HTMLButtonElement>('[role="option"]')!.click();
+      expect((portal ?? host).querySelector('[role="listbox"]')).toBeNull();
       dispose();
     }
   });
