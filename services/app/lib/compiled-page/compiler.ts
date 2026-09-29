@@ -4,9 +4,8 @@
  * One document version (its parsed nodes, as the prepared page holds them) → Solid JSX sources:
  *
  *   skeleton   the whole story, rendered on the server WITHOUT hydration: its static parts become
- *              HTML at compile time and never reach a reader as JavaScript. Every static subtree —
- *              registered components included — is rendered by TODAY's React interpreter and kit
- *              (parity by construction) and carried as static JSX.
+ *              HTML at compile time and never reach a reader as JavaScript. Every static subtree,
+ *              including registered components and deck rail previews, uses Solid JSX.
  *   islands    every subtree that must run in the browser (interactive kit components, data-bound
  *              embeds, `$` expressions, `<For>`, conditionals), one component per island, compiled
  *              twice by bundle.server: SSR (hydratable) for the server string, DOM (hydratable) for
@@ -18,24 +17,19 @@
  * `JSON.parse(<lit>)`, so it is a string literal too, never an object literal the author shapes. Tag
  * and attribute NAMES come only from the validated AST and are re-checked against a strict grammar
  * (`safeTag`/`safeAttr`); a name outside it refuses the compile. Props are computed by the
- * interpreter's own `rawBuildProps` (dangerous schemes, handlers and denied attributes dropped exactly
- * as today) and serialised by React's server renderer (`domAttrs`), so a static element's attributes
- * are byte-identical to today's render. Reactive expressions travel as data and are evaluated by the
+ * interpreter's `rawBuildProps` (dangerous schemes, handlers and denied attributes dropped exactly
+ * as today) and serialized by framework-free `reactAttrs`. Reactive expressions travel as data and are evaluated by the
  * runtime with lib/jsx/reactive. `codegen-safety.ts structureIndependent` is the proof.
  *
  * Ported from the prototype (scripts/probe/solid/compile.mjs). Pure and deterministic for one input.
  */
-import { createElement, cloneElement, type ReactElement } from 'react';
-import { renderToStaticMarkup } from 'react-dom/server';
-import { parseFragment } from 'parse5';
-import { renderStoryNodes, rawBuildProps, wrapsControl, templateIds, type StoryInterpreterOptions } from '@/lib/story-ui/interpreter';
-import { STORY_UI_COMPONENTS } from '@/lib/story-ui/registry';
+import { rawBuildProps, wrapsControl, templateIds } from '@/lib/story-ui/interpreter-primitives';
+import { STORY_UI_COMPONENT_NAME_LIST } from '@/lib/story-ui/component-names';
 import { STORY_SVG_TAGS } from '@/lib/story-ui/component-names';
 import { gridCols, gridRowHeight, gridItemRect, gridRows } from '@/lib/story-ui/grid-layout';
-import { IconGlyphProvider, ICON_BASE_CLASS } from '@/components/kit/icon';
+import { ICON_BASE_CLASS } from '@/lib/story-ui/icon-contract';
 import { buildGlyphMap } from '@/lib/story/icon-glyphs';
-import { isReactiveExpression, REACTIVE_BOOLEAN_PROPS } from '@/lib/jsx/reactive';
-import { shellRest } from '@/components/kit/controls';
+import { evaluateReactive, isReactiveExpression, REACTIVE_BOOLEAN_PROPS } from '@/lib/jsx/reactive';
 import { parseRowRef } from '@/lib/story/row-scope';
 import type { JsxElement, JsxNode } from '@/lib/jsx';
 import { REF_ATTRS, carriesRef, refName, type Scalar } from '@/lib/story/dataflow';
@@ -43,17 +37,19 @@ import { resolveRefProps } from '@/lib/story/ref-data';
 import { substituteRow } from '@/lib/story/row-scope';
 import { discoverSlides, MIN_SLIDES_FOR_RAIL } from '@/lib/story-runtime/slides';
 import { discoverOutline, hasOutline } from '@/lib/story-runtime/outline';
-import { createPreviewIdentityAllocator } from '@/lib/story-runtime/preview-identity';
+import { createPreviewPropsAllocator } from '@/lib/story-runtime/preview-props';
 import { PUBLIC_BASE_URL } from '@/lib/config';
 import { compileManagedIframe } from '@/lib/story/managed-iframe';
 import { RECIPES, cn } from '@/lib/islands/kit/recipes';
 import { peopleClasses } from '@/lib/islands/kit/recipes/people';
+import { readerDataflow } from '@/lib/story/compiled-dataflow';
 import type { GeneratedSources } from './codegen-safety';
 import { CHART_SLOT_ATTR, EMPTY_LINK_HINTS, MIN_HANDOVER_CONTRACT, type CompileInput, type CompiledPage, type CompilerBuild, type IslandRef } from './contract';
 import { linkHintsOf } from './links';
 import { planOf } from './plan';
 import { buildDocumentModules } from './bundle.server';
 import { contentSha } from './speculation';
+import { reactAttrs } from './static-solid/attrs';
 
 /* ────────────────────────────────────────────────────────────────────────────
  * Literals and names: the only doors author text has into generated code
@@ -129,15 +125,15 @@ export const KIT: Readonly<Record<string, KitMeta>> = {
   Iframe: { mod: 'embed', island: true, api: ['title', 'height', 'compiled'], dom: 'box', noChildren: true },
   DeckGL: { mod: 'embed', island: true, api: ['data', 'layers', 'basemap', 'initialViewState', 'tooltip', 'legend', 'title', 'height', 'colorMode'], dom: 'box', grid: true },
   Dialog: { mod: 'dialog', island: true, api: ['defaultOpen', 'open'] }, DialogTrigger: { mod: 'dialog', api: ['wrapsControl', 'disabled'] }, DialogClose: { mod: 'dialog', api: ['wrapsControl', 'disabled'] }, DialogContent: { mod: 'dialog', api: ['run', 'args', 'stacked'] },
+  Table: { mod: 'static' }, TableHeader: { mod: 'static' }, TableBody: { mod: 'static' }, TableFooter: { mod: 'static' }, TableRow: { mod: 'static' }, TableHead: { mod: 'static' }, TableCell: { mod: 'static' }, TableCaption: { mod: 'static' },
+  Separator: { mod: 'static', api: ['orientation', 'decorative'] }, Skeleton: { mod: 'static' },
+  Breadcrumb: { mod: 'static' }, BreadcrumbList: { mod: 'static' }, BreadcrumbItem: { mod: 'static' }, BreadcrumbLink: { mod: 'static' }, BreadcrumbPage: { mod: 'static' }, BreadcrumbSeparator: { mod: 'static' }, BreadcrumbEllipsis: { mod: 'static' },
+  SlideDeck: { mod: 'static' }, Slide: { mod: 'static', api: ['title'] }, Video: { mod: 'static', api: ['src', 'poster', 'title', 'interactive'] }, File: { mod: 'static', api: ['src', 'title', 'name', 'bytes', 'pages', 'interactive'] },
 };
 /** The rail's miniature stubs its embeds (StoryRuntimeApp PREVIEW_REGISTRY). */
 const PREVIEW_EMBEDS: Readonly<Record<string, string>> = { Question: 'chart', Number: '#', DataTable: 'table', Video: 'video' };
 const PREVIEW_STYLE = { display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%', height: '100%', minHeight: 120, border: '1px solid var(--border, rgba(128,128,128,0.35))', borderRadius: 6, background: 'color-mix(in srgb, var(--muted-foreground, gray) 6%, transparent)', font: '500 11px/1 var(--font-mono, ui-monospace, monospace)', letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--muted-foreground, graytext)' };
-/** The rail's miniature registry (StoryRuntimeApp PREVIEW_REGISTRY): today's static kit with each embed a labelled box. */
-const PREVIEW_COMPONENTS: StoryInterpreterOptions['components'] = {
-  ...STORY_UI_COMPONENTS,
-  ...Object.fromEntries(Object.entries(PREVIEW_EMBEDS).map(([tag, label]) => [tag, () => createElement('div', { style: PREVIEW_STYLE }, label)])),
-};
+const REGISTERED = new Set<string>(STORY_UI_COMPONENT_NAME_LIST);
 /** Components whose HTML the React kit renders at compile time but whose BEHAVIOUR is not ported (reported as partial). None: every registered component with behaviour has its island. */
 const PARTIAL: ReadonlySet<string> = new Set<string>([]);
 /** Registered tags that render nothing (declarations, templates). */
@@ -155,12 +151,12 @@ const CELL_CONTROLS: ReadonlySet<string> = new Set(['Select', 'DatePicker', 'inp
 const NATIVE_CELL = 'w-full min-w-0 rounded-md border border-transparent bg-transparent px-2 py-1 text-sm outline-none transition-colors hover:border-border focus:border-ring focus:ring-2 focus:ring-ring/20 disabled:opacity-50';
 /** What the editing cell reads of its authored props at run time (the rest are its element's attributes). */
 const CELL_API = ['value', 'label', 'aria-label', 'placeholder', 'options', 'multiple', 'allowCreate', 'valueFormat', 'nullable', 'exclude', 'min', 'max', 'type', 'args', 'disabled'];
+/** The authored control props that remain on its static wrapper. */
+const shellRest = ({ label: _label, placeholder: _placeholder, className: _className, value: _value, options: _options, multiple: _multiple, allowCreate: _allowCreate, valueFormat: _valueFormat, checked: _checked, min: _min, max: _max, step: _step, format: _format, prefix: _prefix, suffix: _suffix, disabled: _disabled, children: _children, ...rest }: Props): Props => rest;
 /** A column's content that draws something (components/kit/data-table: whitespace alone is no template). */
 const hasContent = (nodes: JsxNode[]): boolean => nodes.some((n) => n.type !== 'text' || !!n.value.trim());
 /** A rail miniature served inert, put in place by the deck behaviour (lib/islands/deck RAIL_THUMB_ATTR, the same name). */
 const RAIL_THUMB_ATTR = 'data-mx-thumb';
-/** The skeleton's placeholder for a static subtree's HTML (bundle.server STATIC_SLOT, the same name). */
-const STATIC_SLOT = 'mx-static';
 /** The deck's framework-free behaviour chunk, by its manifest specifier. */
 const DECK_BEHAVIOR = '@mx/deck';
 
@@ -168,49 +164,9 @@ const DECK_BEHAVIOR = '@mx/deck';
  * Static HTML → JSX
  * ──────────────────────────────────────────────────────────────────────────── */
 
-/** React props → the element's attributes exactly as React's server renderer writes them. */
-export function domAttrs(tag: string, props: Props): Attr[] {
-  const { children: _children, dangerouslySetInnerHTML: _html, ...rest } = props;
-  // React 19 writes resource hints (`<link rel=preload as=image>`) BEFORE an <img>; the element's own tag is the one named.
-  const html = renderToStaticMarkup(createElement(tag, rest)).replace(/^(<link\b[^>]*>)+/, '');
-  const start = html.slice(0, html.indexOf('>') + 1);
-  const attrs: Attr[] = [];
-  for (const m of start.matchAll(/\s([^\s=/>]+)(?:="([^"]*)")?/g)) {
-    attrs.push([m[1]!, (m[2] ?? '').replace(/&quot;/g, '"').replace(/&#x27;/g, "'").replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&')]);
-  }
-  return attrs;
-}
 // Keep literal DOM attributes in JSX so Solid can optimize static elements.
 // Entity encoding keeps author text inert in generated source.
 const jsxLiteral = (value: string): string => value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/\{/g, '&#123;').replace(/\}/g, '&#125;').replace(/\u2028/g, '&#8232;').replace(/\u2029/g, '&#8233;');
-const attrsJsx = (attrs: Attr[]): string => attrs.map(([n, v]) => ` ${safeAttr(n)}={${lit(v)}}`).join('');
-const staticAttrsJsx = (attrs: Attr[]): string => attrs.map(([n, v]) => ` ${safeAttr(n)}="${jsxLiteral(v)}"`).join('');
-
-interface P5Node { nodeName: string; tagName?: string; value?: string; attrs?: Array<{ name: string; value: string; prefix?: string }>; childNodes?: P5Node[]; content?: { childNodes: P5Node[] } }
-
-/** The element a SHELL's children are spliced at (a `<template>`: the HTML parser keeps it in place inside a table). */
-const HOLE_ATTR = 'data-mx-hole';
-
-/** How `htmlToJsx` writes a shell: the hole's content, and each element's attributes (a row template's go through `$rowAttrs`). */
-interface HtmlToJsxOptions { hole?: () => string; attrs?: (attrs: Attr[]) => string }
-
-/** Static HTML (from React's server renderer) → Solid JSX with every value a string literal. */
-export function htmlToJsx(html: string, svg = false, options: HtmlToJsxOptions = {}): string {
-  const frag = parseFragment(svg ? `<svg>${html}</svg>` : html) as unknown as P5Node;
-  const nodes = svg ? frag.childNodes?.[0]?.childNodes ?? [] : frag.childNodes ?? [];
-  const walk = (n: P5Node): string => {
-    if (n.nodeName === '#text') return n.value ? (/\r|\n/.test(n.value) ? `{${lit(n.value)}}` : jsxLiteral(n.value)) : '';
-    if (n.nodeName === '#comment' || !n.tagName) return '';
-    if (options.hole && n.tagName === 'template' && n.attrs?.some((a) => a.name === HOLE_ATTR)) return options.hole();
-    const tag = safeTag(n.tagName);
-    const pairs = (n.attrs ?? []).map((a): Attr => [safeAttr(a.prefix ? `${a.prefix}:${a.name}` : a.name), a.value]);
-    const attrs = options.attrs ? options.attrs(pairs) : staticAttrsJsx(pairs);
-    const kids = ((n.tagName === 'template' ? n.content?.childNodes : n.childNodes) ?? []).map(walk).join('');
-    return VOID.test(tag) ? `<${tag}${attrs} />` : `<${tag}${attrs}>${kids}</${tag}>`;
-  };
-  return nodes.map(walk).join('');
-}
-
 /* ────────────────────────────────────────────────────────────────────────────
  * Which nodes need the browser
  * ──────────────────────────────────────────────────────────────────────────── */
@@ -246,7 +202,7 @@ function readsDataNode(node: JsxNode): boolean {
  * registry (StoryRuntimeApp RUNTIME_REGISTRY: the story registry plus the kit's store adapters) nor a
  * declaration, nor a structural node — the interpreter's renderNode returns null for it.
  */
-const unregistered = (node: JsxElement): boolean => node.isComponent && !node.control && !INERT.has(node.tag) && !STORY_UI_COMPONENTS[node.tag] && !KIT[node.tag];
+const unregistered = (node: JsxElement): boolean => node.isComponent && !node.control && !INERT.has(node.tag) && !REGISTERED.has(node.tag) && !KIT[node.tag];
 
 const isTableParts = (node: JsxElement): boolean => node.children.every((c) => (c.type === 'text' ? !c.value.trim() : c.type === 'element' && ['tr', 'td', 'th'].includes(c.tag)));
 
@@ -257,7 +213,6 @@ const managedFrameOf = (node: JsxElement) => { try { return compileManagedIframe
  * The generator
  * ──────────────────────────────────────────────────────────────────────────── */
 
-type Decorate = NonNullable<StoryInterpreterOptions['decorateElement']>;
 type Mode = 'static' | 'island';
 interface IslandBuild { id: number; path: string; source: string; kit: Set<string>; readsData: boolean }
 interface Ctx {
@@ -265,11 +220,12 @@ interface Ctx {
   row: string | null;
   scope?: string;
   svg?: boolean;
+  selectValue?: string | null;
   grid?: { cols: number; flow: boolean };
   /** Inside a DataTable column's content: `scope` names the row's CellScope, and attributes resolve through `cellAttrs`. */
   cell?: boolean;
   /** The deck rail's thumbnail decoration. */
-  preview?: Decorate;
+  preview?: { rewrite: (props: Props) => Props; values: Record<string, Scalar> };
   /** The island being emitted, for its kit accounting. */
   island?: IslandBuild;
 }
@@ -285,25 +241,20 @@ export interface Generated extends GeneratedSources {
   unported: string[];
   partial: string[];
   behaviors: string[];
-  /**
-   * The skeleton's static subtrees as today's React render, in order: the skeleton holds a
-   * `<mx-static data-i="n">` for each, which bundle.server splices after rendering it (`spliceStatics`).
-   */
-  statics: string[];
 }
 
 /** One version's facts the generator reads (CompileInput without the build). */
 type GenerateInput = Omit<CompileInput, 'build'> & { glyphCatalogUrl?: string };
 
 export function generate(input: GenerateInput): Generated {
+  const elementAttrs = reactAttrs;
+  const jsxAttrs = (attrs: Attr[]): string => attrs.map(([n, v]) => ` ${safeAttr(n)}={${v === '' && /^(?:disabled|checked|selected|readOnly|hidden|open|multiple|required|inert|autoFocus|reversed)$/i.test(n) ? 'true' : lit(v)}}`).join('');
   const refData = input.refData ?? {};
   const nodes = input.nodes ?? [];
   const islands: IslandBuild[] = [];
-  const reactStatic = new Set<string>();
   const partial = new Set<string>();
   const unported = new Set<string>();
   const kitUsed = { skeleton: new Set<string>(), islands: new Set<string>() };
-  const statics: string[] = [];
   const staticTexts: Record<string, string> = {};
   const staticText = (value: string): string => {
     if (value.length <= 1024) return jsxLiteral(value);
@@ -338,27 +289,6 @@ export function generate(input: GenerateInput): Generated {
   nodes.forEach(visitRowIcons);
   const glyphs = rowIconNames.size ? { ...input.glyphs, ...buildGlyphMap(rowIconNames) } : input.glyphs ?? {};
   let usesRowClass = false;
-  /** A skeleton static subtree's HTML, carried beside the skeleton (never through JSX, Babel and Solid's server renderer). */
-  const staticSlot = (html: string): string => { statics.push(html); return `<${STATIC_SLOT} data-i={${lit(String(statics.length - 1))}}></${STATIC_SLOT}>`; };
-  /**
-   * A static subtree's names, checked as the JSX path checks them (a tag outside the grammar refuses the compile;
-   * React drops a malformed attribute name itself), and the registered components it renders, reported.
-   */
-  const accountStatic = (node: JsxNode): void => {
-    if (!isElement(node)) return;
-    if (node.isComponent) { if (STORY_UI_COMPONENTS[node.tag]) reactStatic.add(node.tag); } else if (!node.control) safeTag(node.tag);
-    node.children.forEach(accountStatic);
-  };
-  const grids = new WeakMap<JsxNode, boolean>();
-  /** Does this subtree hold a Grid (a compile-time macro, emitted by emitGrid)? */
-  const holdsGrid = (node: JsxNode): boolean => {
-    if (!isElement(node)) return false;
-    const known = grids.get(node);
-    if (known !== undefined) return known;
-    const value = node.tag === 'Grid' || node.tag === 'GridItem' || node.children.some(holdsGrid);
-    grids.set(node, value);
-    return value;
-  };
   const needs = new WeakMap<JsxNode, boolean>();
   const needsBrowser = (node: JsxNode): boolean => {
     const known = needs.get(node);
@@ -384,68 +314,6 @@ export function generate(input: GenerateInput): Generated {
     ctx.island?.kit.add(tag);
   };
 
-  /**
-   * Render one subtree with the React kit (the interpreter, its registry, the glyph provider), with its real AST
-   * paths. `render` picks the registry and the values: the static kit at no values by default; the rail's
-   * miniature registry at the declared values for a slide thumbnail.
-   */
-  function reactStaticHtml(node: JsxElement, path: string, ctx: Ctx, render: { components: StoryInterpreterOptions['components']; values: Record<string, unknown> } = { components: STORY_UI_COMPONENTS, values: {} }): string {
-    const prefix = path.split('.');
-    // The runtime's own decoration (StoryRuntimeApp decorateElement): `ref:` sources resolved, then the path rebased.
-    const rebase: Decorate = (element, n, p) => {
-      const patch = resolveRefProps(n, element.props as Props, refData);
-      return cloneElement(element as ReactElement<Props>, { ...(patch ?? {}), [AST]: [...prefix, ...p.split('.').slice(1)].join('.') });
-    };
-    const decorate: Decorate = ctx.preview ? (element, n, p) => ctx.preview!(rebase(element, n, p) as ReactElement, n, p) : rebase;
-    // React's hoisted image preloads are dropped: a compiled page names its preloads in the head.
-    return renderToStaticMarkup(createElement(IconGlyphProvider, { value: glyphs }, renderStoryNodes([node], { values: render.values, components: render.components, decorateElement: decorate })))
-      .replace(/<link rel="preload"[^>]*>/g, '');
-  }
-  const reactStaticJsx = (node: JsxElement, path: string, ctx: Ctx): string => htmlToJsx(reactStaticHtml(node, path, ctx), !!ctx.svg);
-
-  /**
-   * A registered component with no Solid port that the browser must reach INTO (it holds an island, a `$`
-   * value, or sits in a row): a container with no behaviour of its own, so it compiles as a SHELL. Today's
-   * React kit renders the component at compile time around a hole, and its children compile into the hole
-   * — islands inside hydrate, static parts stay HTML. Its own props are rendered without a row, so a row
-   * template (`{$_row.f}`) stays literal in its attributes and `$rowAttrs` fills it per row, exactly as a
-   * native element in a row is compiled. A component that draws no children (an `<Icon>`'s glyph) is its
-   * shell alone, as today's render drops them too.
-   */
-  function shellJsx(node: JsxElement, path: string, mode: Mode, ctx: Ctx): string {
-    reactStatic.add(node.tag);
-    const hole: JsxElement = { type: 'element', tag: 'template', isComponent: false, attributes: [{ name: HOLE_ATTR, value: { static: true, json: '' }, start: node.start, end: node.start }], children: [], selfClosing: true, start: node.start, end: node.start };
-    let html: string;
-    let holed = node.children.length > 0;
-    try {
-      html = reactStaticHtml({ ...node, children: holed ? [hole] : [] }, path, ctx);
-    } catch (error) {
-      if (!holed) throw error;
-      // A component whose element carries markup of its own cannot also take children (React refuses both).
-      holed = false;
-      html = reactStaticHtml({ ...node, children: [] }, path, ctx);
-    }
-    const children = (): string => node.children.map((c, i) => emit(c, `${path}.${i}`, mode, ctx)).join('');
-    const row = ctx.row;
-    const authoredClass = node.attributes.find((a) => a.name === 'className' || a.name === 'class')?.value;
-    const rowClassTemplate = row && authoredClass?.static && typeof authoredClass.json === 'string' ? authoredClass.json : null;
-    const withoutClass = rowClassTemplate === null ? '' : reactStaticHtml({ ...node, attributes: node.attributes.filter((a) => a.name !== 'className' && a.name !== 'class'), children: holed ? [hole] : [] }, path, ctx);
-    const baseClass = (/\bclass="([^"]*)"/.exec(withoutClass)?.[1] ?? '')
-      .replace(/&quot;/g, '"').replace(/&#x27;/g, "'").replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&');
-    let first = true;
-    return htmlToJsx(html, !!ctx.svg, {
-      ...(holed ? { hole: children } : {}),
-      ...(row ? { attrs: (attrs: Attr[]) => {
-        const root = first; first = false;
-        if (root && rowClassTemplate !== null) {
-          usesRowClass = true;
-          return ` {...${rowAttrsFn(mode, ctx)}(${json(Object.fromEntries(attrs.filter(([name]) => name !== 'class')))}, ${row}, ${ctx.scope})} class={$rowClass(${lit(baseClass)}, ${lit(rowClassTemplate)}, ${row})}`;
-        }
-        return ` {...${rowAttrsFn(mode, ctx)}(${json(Object.fromEntries(attrs))}, ${row}, ${ctx.scope})}`;
-      } } : {}),
-    });
-  }
-
   /** Emit one node as a JSX child. */
   function emit(node: JsxNode, path: string, mode: Mode, ctx: Ctx): string {
     if (node.type === 'text') {
@@ -454,6 +322,10 @@ export function generate(input: GenerateInput): Generated {
     }
     if (node.type === 'expression') {
       if (!node.value.static) {
+        if (ctx.preview) {
+          const value = isReactiveExpression(node.value.reactive) ? evaluateReactive(node.value.reactive, ctx.preview.values, undefined) : null;
+          return typeof value === 'string' || typeof value === 'number' ? `{${lit(String(value))}}` : '';
+        }
         if (isReactiveExpression(node.value.reactive)) return `{rt.text(${json(node.value.reactive)}, ${ctx.row ?? 'undefined'})}`;
         const field = ctx.row ? /^\s*\$_row\.([A-Za-z_]\w*)\s*$/.exec(node.source)?.[1] : null;
         return field ? `{String(${ctx.row}[${lit(field)}] ?? '')}` : '';
@@ -464,6 +336,10 @@ export function generate(input: GenerateInput): Generated {
     if (node.control) {
       if (node.control.kind === 'fragment') return `<>${node.children.map((c, i) => emit(c, `${path}.${i}`, mode, ctx)).join('')}</>`;
       if (!isReactiveExpression(node.control.test) || node.children.length !== 2) return '';
+      if (ctx.preview) {
+        const yes = Boolean(evaluateReactive(node.control.test, ctx.preview.values));
+        return node.control.kind === 'and' && !yes ? '' : emit(node.children[yes ? 0 : 1]!, `${path}.${yes ? 0 : 1}`, mode, ctx);
+      }
       const yes = emit(node.children[0]!, `${path}.0`, mode, ctx);
       const no = emit(node.children[1]!, `${path}.1`, mode, ctx);
       return `<rt.When test={${json(node.control.test)}} row={${ctx.row ?? 'undefined'}}${node.control.kind === 'conditional' ? ` fallback={<>${no}</>}` : ''}>{<>${yes}</>}</rt.When>`;
@@ -473,13 +349,12 @@ export function generate(input: GenerateInput): Generated {
     if (unregistered(node)) return '';
     // A managed frame whose content is refused renders nothing (the interpreter's renderNode), island or not.
     if (node.tag === 'Iframe' && !ctx.row && managedFrameOf(node) === null) return '';
-    // A static subtree of the SKELETON is today's React render (the interpreter, parity by construction), carried as
+    // In the default path, a static subtree of the skeleton is today's React render, carried as
     // HTML and spliced in after the skeleton renders: no JSX re-parse, no Babel, no Solid render of static markup —
     // most of a large document's compile. Never inside an island (hydration walks its template) and never across a
     // Grid (a compile-time macro, emitGrid).
-    if (mode === 'static' && !ctx.row && !needsBrowser(node) && !holdsGrid(node)) { accountStatic(node); return staticSlot(reactStaticHtml(node, path, ctx)); }
     // An island root in the skeleton: rendered by its own island component, spliced in by the server.
-    if (mode === 'static' && !PARTIAL.has(node.tag) && needsBrowser(node) && (selfDynamic(node) || mustPromote(node))) {
+    if (mode === 'static' && !ctx.preview && !PARTIAL.has(node.tag) && needsBrowser(node) && (selfDynamic(node) || mustPromote(node))) {
       const island: IslandBuild = { id: islands.length, path, source: '', kit: new Set(), readsData: !!input.flow && readsDataNode(node) };
       islands.push(island);
       island.source = emitElement(node, path, 'island', { row: null, svg: !!ctx.svg, grid: ctx.grid, island });
@@ -499,18 +374,20 @@ export function generate(input: GenerateInput): Generated {
       if (CELL_CONTROLS.has(cellTag)) return emitCellControl(node, cellTag, path, mode, ctx);
       if (!node.isComponent) return '';
     }
-    if (ctx.preview && PREVIEW_EMBEDS[node.tag]) return `<div${attrsJsx(domAttrs('div', { style: PREVIEW_STYLE }))}>{${lit(PREVIEW_EMBEDS[node.tag])}}</div>`;
+    if (ctx.preview && PREVIEW_EMBEDS[node.tag]) return `<div${jsxAttrs(elementAttrs('div', { style: PREVIEW_STYLE }))}>{${lit(PREVIEW_EMBEDS[node.tag])}}</div>`;
+    if (ctx.preview && (node.tag === 'Input' || node.tag === 'Select' || node.tag === 'Switch')) {
+      const previewTag = `Preview${node.tag}`;
+      useKit(previewTag, mode, ctx);
+      const props = ctx.preview.rewrite(rawBuildProps(node.attributes, true, node.tag, path, undefined, ctx.preview.values));
+      return `<${previewTag} p={${json(props)}} />`;
+    }
     if (node.isComponent) {
-      const meta = KIT[node.tag];
-      // A STATIC registered component: today's React kit renders it AT COMPILE TIME (parity by
-      // construction) and its HTML becomes static JSX — in the skeleton whether or not the Solid kit
-      // ports it, inside an island when it has no port. Nothing of it ever reaches a reader as code.
-      const staticHere = !ctx.row && !!STORY_UI_COMPONENTS[node.tag] && (!needsBrowser(node) || PARTIAL.has(node.tag));
-      if (staticHere && (!meta || mode === 'static')) { (PARTIAL.has(node.tag) ? partial : reactStatic).add(node.tag); return reactStaticJsx(node, path, ctx); }
-      if (!meta && STORY_UI_COMPONENTS[node.tag]) return shellJsx(node, path, mode, ctx);
+      const meta = node.tag === 'Progress' ? { ...KIT.Progress!, mod: 'static' } : KIT[node.tag];
       if (!meta) { unported.add(node.tag); return `<div data-mx-unported={${lit(node.tag)}} data-mx-ast={${lit(path)}}></div>`; }
       useKit(node.tag, mode, ctx);
-      const props = rawBuildProps(node.attributes, true, node.tag, path, undefined, {});
+      const props = rawBuildProps(node.attributes, true, node.tag, path, undefined, ctx.preview?.values ?? {});
+      if (ctx.preview) Object.assign(props, ctx.preview.rewrite(props));
+      if (node.tag === 'Video' || node.tag === 'File') Object.assign(props, resolveRefProps(node, props, refData));
       // Decided here, never read from the author (interpreter BUTTON_TRIGGERS).
       if (node.tag === 'DialogTrigger' || node.tag === 'DialogClose') props.wrapsControl = wrapsControl(node);
       // Today's dialog stacks its fields (and its mutation form is `display:contents`) only without an author class.
@@ -556,7 +433,7 @@ export function generate(input: GenerateInput): Generated {
       // A `<Question>`'s chart box: the assembler puts the snapshot's drawing inside it (contract CHART_SLOT_ATTR).
       if (node.tag === 'Question') dom[CHART_SLOT_ATTR] = typeof dom.id === 'string' && dom.id ? dom.id : path;
       if (inGrid) api.inGridItem = true;
-      const attrs = domAttrs('div', dom).filter(([n]) => n !== 'class');
+      const attrs = elementAttrs('div', dom).filter(([n]) => n !== 'class');
       const apiJsx = Object.entries(api).map(([k, v]) => ` ${safeAttr(k)}={${typeof v === 'string' ? ctx.row ? `rt.sub(${lit(v)}, ${ctx.row})` : lit(v) : json(v)}}`).join('');
       const authorClass = typeof props.className === 'string' ? props.className : '';
       const rowClass = !!ctx.row && !!authorClass;
@@ -565,11 +442,11 @@ export function generate(input: GenerateInput): Generated {
       const clsJsx = rowClass
         ? ` class={$rowClass(${lit(rowBase)}, ${lit(authorClass)}, ${ctx.row})}`
         : cls ? ` class={${lit(cls)}}` : '';
-      const tag = safeTag(node.tag);
+      const tag = safeTag(node.tag === 'Skeleton' ? 'StaticSkeleton' : node.tag);
       // A row action writes with its row (interpreter rowAction → StoryRuntimeApp RuntimeRowAction).
       const rowJsx = node.tag === 'Button' && (api.run !== undefined || api.set !== undefined) ? ` row={${ctx.row}} rowScope={${ctx.scope}}` : '';
       if (ctx.row) return `<${tag}${apiJsx}${rowJsx}${clsJsx} {...${rowAttrsFn(mode, ctx)}(${json(Object.fromEntries(attrs))}, ${ctx.row}, ${ctx.scope})}>${children()}</${tag}>`;
-      return `<${tag}${apiJsx}${cellsJsx}${clsJsx}${attrsJsx(attrs)}>${meta.noChildren ? '' : children()}</${tag}>`;
+      return `<${tag}${apiJsx}${cellsJsx}${clsJsx}${jsxAttrs(attrs)}>${meta.noChildren ? '' : children()}</${tag}>`;
     }
     const lower = node.tag.toLowerCase();
     const tag = safeTag(SVG_TAG_CASE[lower] ?? lower);
@@ -577,32 +454,57 @@ export function generate(input: GenerateInput): Generated {
     const source = lower === 'img' && !node.isComponent ? node.attributes.find((a) => a.name.toLowerCase() === 'src') : undefined;
     if (source?.value.static && typeof source.value.json === 'string'
       && (refName(source.value.json) || parseRowRef(source.value.json) || carriesRef(source.value.json))) {
+      if (ctx.preview) {
+        const rest = rawBuildProps(node.attributes.filter((a) => a !== source), false, node.tag, path, undefined, ctx.preview.values);
+        return `<img${jsxAttrs(elementAttrs('img', { ...rest, 'data-mx-bound': `src:${source.value.json}` }))} />`;
+      }
       useKit('BoundImage', mode, ctx);
       const props = rawBuildProps(node.attributes.filter((a) => a !== source), false, node.tag, path, undefined, {});
-      const attrs = json(Object.fromEntries(domAttrs(tag, props)));
+      const attrs = json(Object.fromEntries(elementAttrs(tag, props)));
       return `<BoundImage template={${lit(source.value.json)}} props={${ctx.row ? `${rowAttrsFn(mode, ctx)}(${attrs}, ${ctx.row}, ${ctx.scope})` : attrs}}${ctx.row ? ` row={${ctx.row}}` : ''} />`;
     }
     // A `$`-bound native form control (interpreter boundAttrs → StoryRuntimeApp NativeBoundControl).
     const boundTable = ['input', 'select', 'textarea'].includes(lower) ? REF_ATTRS.html[lower] : null;
     const boundAttrs = boundTable ? node.attributes.filter((a) => boundTable[a.name.toLowerCase()] && a.value.static && refName(a.value.json)) : [];
     if (boundAttrs.length) {
+      if (ctx.preview) {
+        const bind = Object.entries(Object.fromEntries(boundAttrs.map((a) => [a.name.toLowerCase(), refName(a.value.static ? a.value.json : null)])))
+          .map(([name, value]) => `${name}:$${value}`).join(' ');
+        const props = rawBuildProps(node.attributes.filter((a) => !boundAttrs.includes(a)), false, node.tag, path, undefined, ctx.preview.values);
+        const attrs = jsxAttrs(elementAttrs(tag, { ...props, disabled: true, 'data-mx-bound': bind }));
+        return VOID.test(lower) ? `<${tag}${attrs} />` : `<${tag}${attrs}>${children()}</${tag}>`;
+      }
       useKit('BoundNative', mode, ctx);
       const bind = Object.fromEntries(boundAttrs.map((a) => [a.name.toLowerCase(), refName(a.value.static ? a.value.json : null)]));
       const props = rawBuildProps(node.attributes.filter((a) => !boundAttrs.includes(a)), false, node.tag, path, undefined, {});
-      return `<BoundNative tag={${lit(lower)}} bind={${json(bind)}}${attrsJsx(domAttrs(tag, props))}>${children()}</BoundNative>`;
+      return `<BoundNative tag={${lit(lower)}} bind={${json(bind)}}${jsxAttrs(elementAttrs(tag, props))}>${children()}</BoundNative>`;
     }
-    let props = rawBuildProps(node.attributes, false, node.tag, path, undefined, {});
+    let props = rawBuildProps(node.attributes, false, node.tag, path, undefined, ctx.preview?.values ?? {});
     const patch = resolveRefProps(node, props, refData);
     if (patch) props = { ...props, ...patch };
-    const inner = lower === 'svg' ? { ...ctx, svg: true } : ctx;
-    const attrs = domAttrs(tag, props);
-    const reactive = node.attributes.filter((a) => !a.value.static && REACTIVE_BOOLEAN_PROPS.has(a.name) && isReactiveExpression(a.value.reactive));
+    if (ctx.preview) props = ctx.preview.rewrite(props);
+    const selectedValue = lower === 'select' ? props.defaultValue ?? props.value : undefined;
+    const inner = lower === 'svg' ? { ...ctx, svg: true } : selectedValue !== undefined ? { ...ctx, selectValue: String(selectedValue) } : ctx;
+    const reactive = ctx.preview ? [] : node.attributes.filter((a) => !a.value.static && REACTIVE_BOOLEAN_PROPS.has(a.name) && isReactiveExpression(a.value.reactive));
+    const reactiveNames = new Set(reactive.map((a) => a.name.toLowerCase()));
+    const attrs = elementAttrs(tag, props).filter(([name]) => !reactiveNames.has(name.toLowerCase()));
+    if (lower === 'option' && ctx.selectValue !== undefined) {
+      const value = props.value ?? node.children.map((child) => child.type === 'text' ? child.value : '').join('');
+      const i = attrs.findIndex(([name]) => name === 'selected');
+      if (i >= 0) attrs.splice(i, 1);
+      if (String(value) === ctx.selectValue) attrs.push(['selected', '']);
+    }
     const booleanJsx = reactive.map((a) => ` {...(rt.expr(${json(a.value.static ? null : a.value.reactive)}, ${ctx.row ?? 'undefined'}) ? { ${safeAttr(a.name)}: true } : {})}`).join('');
     if (ctx.row && lower === 'img') (mode === 'static' ? kitUsed.skeleton : kitUsed.islands).add('rowImageAttrs');
     const rowAttrs = ctx.row ? `${rowAttrsFn(mode, ctx)}(${json(Object.fromEntries(attrs))}, ${ctx.row}, ${ctx.scope})` : '';
-    const open = ctx.row ? `<${tag} {...${lower === 'img' ? `rowImageAttrs(${rowAttrs})` : rowAttrs}}${booleanJsx}>` : `<${tag}${staticAttrsJsx(attrs)}${booleanJsx}>`;
+    const open = ctx.row ? `<${tag} {...${lower === 'img' ? `rowImageAttrs(${rowAttrs})` : rowAttrs}}${booleanJsx}>` : `<${tag}${jsxAttrs(attrs)}${booleanJsx}>`;
     if (VOID.test(lower)) return open.replace(/>$/, ' />');
-    return `${open}${children(inner)}</${tag}>`;
+    if (lower === 'textarea' && (props.defaultValue !== undefined || props.value !== undefined)) return `${open}{${lit(String(props.defaultValue ?? props.value))}}</${tag}>`;
+    const content = children(inner);
+    const first = node.children[0];
+    const firstText = first?.type === 'text' ? first.value : first?.type === 'expression' && first.value.static ? first.value.json : null;
+    if (lower === 'pre' && typeof firstText === 'string' && firstText.startsWith('\n')) return `${open}{${lit('\n')}}${content}</${tag}>`;
+    return `${open}${content}</${tag}>`;
   }
 
   /** An element's attributes in a row: a `<For>` row's through the basic kit, a table cell's through the cell scope. */
@@ -646,10 +548,10 @@ export function generate(input: GenerateInput): Generated {
     let attrs: Attr[];
     let cls: string;
     if (tag === 'Select' || tag === 'DatePicker') {
-      attrs = domAttrs('div', shellRest(rest));
+      attrs = elementAttrs('div', shellRest(rest));
       cls = cn('mx-control relative inline-flex flex-col gap-1.5 align-top', cn('flex w-full min-w-0', author));
     } else {
-      attrs = domAttrs(tag, rest);
+      attrs = elementAttrs(tag, rest);
       cls = cn(NATIVE_CELL, tag === 'textarea' ? 'min-h-8 resize-y' : 'h-8', props.type === 'number' && 'text-right tabular-nums', author);
     }
     const children = node.children.map((c, i) => emit(c, `${path}.${i}`, mode, ctx)).join('');
@@ -658,7 +560,8 @@ export function generate(input: GenerateInput): Generated {
 
   /** Grid/GridItem are compile-time macros: layout arithmetic done here, plain HTML out (components/kit/grid). */
   function emitGrid(node: JsxElement, path: string, mode: Mode, ctx: Ctx): string {
-    const props = rawBuildProps(node.attributes, true, node.tag, path, undefined, {});
+    const raw = rawBuildProps(node.attributes, true, node.tag, path, undefined, ctx.preview?.values ?? {});
+    const props = ctx.preview ? ctx.preview.rewrite(raw) : raw;
     const { className, style, cols, rowHeight, mode: gridMode, x, y, w, h, minHeight, editing: _editing, ...rest } = props;
     const styleObject = (style && typeof style === 'object' ? style : {}) as Props;
     const classString = typeof className === 'string' ? className : undefined;
@@ -668,18 +571,18 @@ export function generate(input: GenerateInput): Generated {
       const items = node.children.flatMap((c, i) => (isElement(c) && c.tag === 'GridItem' ? [[c, i] as const] : []));
       const rows = gridRows(items.map(([c]) => gridItemRect(rawBuildProps(c.attributes, true, 'GridItem', '', undefined, {}) as Parameters<typeof gridItemRect>[0], nCols)));
       const flow = gridMode === 'flow';
-      const outer = domAttrs('div', { className: cn('@container w-full', classString), style: { ...styleObject, '--g-cols': String(nCols), '--g-rh': `${rh}px`, '--g-rows': String(rows) }, ...rest });
+      const outer = elementAttrs('div', { className: cn('@container w-full', classString), style: { ...styleObject, '--g-cols': String(nCols), '--g-rh': `${rh}px`, '--g-rows': String(rows) }, ...rest });
       const inner = flow ? 'grid w-full grid-cols-[repeat(var(--g-cols),minmax(0,1fr))] items-start @max-2xl:grid-cols-1' : 'relative w-full h-[calc(var(--g-rows)*var(--g-rh))] @max-2xl:h-auto';
       const kids = items.map(([c, i]) => emit(c, `${path}.${i}`, mode, { ...ctx, grid: { cols: nCols, flow } })).join('');
-      return `<div${attrsJsx(outer)}><div class={${lit(inner)}}>${kids}</div></div>`;
+      return `<div${jsxAttrs(outer)}><div class={${lit(inner)}}>${kids}</div></div>`;
     }
     const flow = ctx.grid?.flow ?? false;
     const nCols = ctx.grid?.cols ?? 12;
     const rect = gridItemRect({ x, y, w, h } as Parameters<typeof gridItemRect>[0], nCols);
     const cls = cn(flow ? 'min-w-0 p-[3px] col-span-[var(--gi-w)] min-h-[var(--gi-min-h)] @max-2xl:col-span-1' : 'overflow-hidden p-[3px]', flow ? 'relative' : 'absolute left-[calc(var(--gi-x)/var(--g-cols)*100%)] top-[calc(var(--gi-y)*var(--g-rh))] w-[calc(var(--gi-w)/var(--g-cols)*100%)] h-[calc(var(--gi-h)*var(--g-rh))] @max-2xl:static @max-2xl:w-full', classString);
     const minH = flow && typeof minHeight === 'number' && Number.isFinite(minHeight) ? Math.max(0, Math.min(10000, minHeight)) : 0;
-    const attrs = domAttrs('div', { className: cls, style: { ...styleObject, '--gi-min-h': `${minH}px`, '--gi-x': String(rect.x), '--gi-y': String(rect.y), '--gi-w': String(rect.w), '--gi-h': String(rect.h) }, ...rest });
-    return `<div${attrsJsx(attrs)}>${node.children.map((c, i) => emit(c, `${path}.${i}`, mode, ctx)).join('')}</div>`;
+    const attrs = elementAttrs('div', { className: cls, style: { ...styleObject, '--gi-min-h': `${minH}px`, '--gi-x': String(rect.x), '--gi-y': String(rect.y), '--gi-w': String(rect.w), '--gi-h': String(rect.h) }, ...rest });
+    return `<div${jsxAttrs(attrs)}>${node.children.map((c, i) => emit(c, `${path}.${i}`, mode, ctx)).join('')}</div>`;
   }
 
   function emitFor(node: JsxElement, path: string, ctx: Ctx): string {
@@ -688,6 +591,15 @@ export function generate(input: GenerateInput): Generated {
     if (!name) return `<div role="alert">{"For requires each={$table}"}</div>`;
     const keyBy = node.attributes.find((a) => a.name === 'keyBy')?.value;
     const owner = node.attributes.find((a) => a.name === 'id')?.value;
+    if (ctx.preview) {
+      if (isTableParts(node)) return '';
+      const wrapper = rawBuildProps(node.attributes.filter((a) => a.name !== 'each' && a.name !== 'keyBy'), true, node.tag, path, undefined, ctx.preview.values);
+      const ownerId = owner?.static && typeof owner.json === 'string' ? owner.json : '';
+      const props = ctx.preview.rewrite({ ...wrapper, id: ownerId || undefined,
+        ...(!ctx.svg ? { style: { minHeight: 1, ...((wrapper.style && typeof wrapper.style === 'object' ? wrapper.style : {}) as Props) } } : {}) });
+      const tag = ctx.svg ? 'g' : 'div';
+      return `<${tag}${jsxAttrs(elementAttrs(tag, props))}></${tag}>`;
+    }
     const wrapper = rawBuildProps(node.attributes.filter((a) => a.name !== 'each' && a.name !== 'keyBy'), true, node.tag, path, undefined, {});
     const ownerId = owner?.static && typeof owner.json === 'string' ? owner.json : '';
     const svg = !!ctx.svg;
@@ -696,14 +608,14 @@ export function generate(input: GenerateInput): Generated {
     // The wrapper's style goes to rt.Repeat as `attr:style`: its spread then SETS the attribute (skipped while
     // hydrating), keeping React's served `min-height:1px` byte for byte. A spread `style` would be rewritten
     // through the CSSOM (`min-height: 1px;`) during hydration, which today's page never does.
-    const attrs = domAttrs(svg ? 'g' : 'div', { ...rest, ...(className ? { className } : {}), ...style, id: ownerId || undefined })
+    const attrs = elementAttrs(svg ? 'g' : 'div', { ...rest, ...(className ? { className } : {}), ...style, id: ownerId || undefined })
       .map(([n, v]): Attr => [n === 'style' ? 'attr:style' : n, v]);
     const suffix = path.replace(/\./g, '_');
     const row = `row${suffix}`;
     const scope = `scope${suffix}`;
     const body = node.children.map((c, i) => emit(c, `${path}.${i}`, 'island', { ...ctx, row, scope })).join('');
     const keyJsx = keyBy?.static ? ` keyBy={${lit(keyBy.json)}}` : '';
-    return `<rt.Repeat name={${lit(name)}}${keyJsx} owner={${lit(ownerId)}} ids={${json([...templateIds(node.children)])}}${isTableParts(node) ? ' tableParts={true}' : ''}${svg ? ' svg={true}' : ''}${attrsJsx(attrs)}>{(${row}, ${scope}) => <>${body}</>}</rt.Repeat>`;
+    return `<rt.Repeat name={${lit(name)}}${keyJsx} owner={${lit(ownerId)}} ids={${json([...templateIds(node.children)])}}${isTableParts(node) ? ' tableParts={true}' : ''}${svg ? ' svg={true}' : ''}${jsxAttrs(attrs)}>{(${row}, ${scope}) => <>${body}</>}</rt.Repeat>`;
   }
 
   // The column wrapper the runtime always draws (StoryRuntimeApp: `.mx-doc`).
@@ -714,16 +626,18 @@ export function generate(input: GenerateInput): Generated {
   const deck = slides.length >= MIN_SLIDES_FOR_RAIL;
   let root = `<div class="mx-doc">${body}</div>`;
   if (deck) {
-    const allocate = createPreviewIdentityAllocator(nodes, '_R_1_');
+    const allocate = createPreviewPropsAllocator(nodes, '_R_1_');
     const previewValues = declaredValues(input.flow);
+    const buttonTags = new Set(['button', 'input', 'select', 'textarea', 'Button', 'TabsTrigger', 'AccordionTrigger', 'CollapsibleTrigger', 'PopoverTrigger', 'DialogTrigger', 'DialogClose', 'Switch', 'Segmented', 'Select', 'DatePicker', 'Input', 'Textarea', 'Slider']);
+    const hasButton = (node: JsxNode): boolean => isElement(node) && (buttonTags.has(node.tag) || node.children.some(hasButton));
     const rail = slides.map((slide) => {
-      // Drawn as today's rail draws it (StoryRuntimeApp SlideRail): the interpreter over the miniature registry at
-      // the declared values, whatever the slide holds — a miniature never hydrates.
-      const html = reactStaticHtml(slide.node, '0', { row: null, preview: allocate([slide.node], slide.path) }, { components: PREVIEW_COMPONENTS, values: previewValues });
+      // The same Solid skeleton renderer draws a miniature with declared values and rail-local IDs.
+      const preview: Ctx['preview'] = { rewrite: allocate([slide.node], slide.path), values: previewValues };
+      const miniature = emit(slide.node, '0', 'static', { row: null, preview });
       // A miniature holding a button sits in the rail row's own button: parsed in place, the inner button would close
       // the row. Served inert in a `<template>` (a parser scope boundary) and put in place by the deck behaviour
       // (lib/islands/deck RAIL_THUMB_ATTR), so the rail ends as the tree today's rail renders.
-      const thumb = /<button\b/i.test(html) ? `<template ${RAIL_THUMB_ATTR}="">${staticSlot(html)}</template>` : staticSlot(html);
+      const thumb = hasButton(slide.node) ? `<template ${RAIL_THUMB_ATTR}="">${miniature}</template>` : miniature;
       return `<button type="button" class="mx-rail-row" aria-label={${lit(`Go to slide ${slide.index + 1}: ${slide.title}`)}} aria-current={${lit(String(slide.index === 0))}}><span class="mx-rail-label"><span class="mx-rail-index">{${lit(String(slide.index + 1))}}</span><span class="mx-rail-title">{${lit(slide.title)}}</span></span><span class="mx-rail-thumb" aria-hidden="true"><div style="--mx-vh:800px">${thumb}</div></span></button>`;
     }).join('');
     root = `<div class="mx-deck"><nav class="mx-rail" aria-label="Slides">${rail}</nav>${root}<div class="mx-present" aria-label="Slide controls"><button type="button" aria-label="Previous slide">{"‹"}</button><span class="mx-present-count" aria-label="Slide position">{${lit(`1 / ${slides.length}`)}}</span><button type="button" aria-label="Next slide">{"›"}</button><button type="button" aria-label="Present">{"present"}</button></div></div>`;
@@ -731,8 +645,8 @@ export function generate(input: GenerateInput): Generated {
 
   const kitImports = (set: Set<string>): string => {
     const byMod: Record<string, string[]> = {};
-    for (const tag of set) (byMod[tag === 'BoundNative' ? 'controls' : tag === 'BoundImage' ? 'image' : tag === 'rowImageAttrs' ? 'files' : CELL_EXPORTS.has(tag) ? 'cells' : KIT[tag]!.mod] ??= []).push(tag);
-    return Object.entries(byMod).sort(([a], [b]) => a.localeCompare(b)).map(([mod, tags]) => `import { ${tags.sort().map(safeProp).join(', ')} } from ${lit(`@mx/kit/${safeTag(mod)}`)};\n`).join('');
+    for (const tag of set) (byMod[tag.startsWith('Preview') ? 'static' : tag === 'BoundNative' ? 'controls' : tag === 'BoundImage' ? 'image' : tag === 'rowImageAttrs' ? 'files' : CELL_EXPORTS.has(tag) ? 'cells' : tag === 'Progress' ? 'static' : KIT[tag]!.mod] ??= []).push(tag);
+    return Object.entries(byMod).sort(([a], [b]) => a.localeCompare(b)).map(([mod, tags]) => `import { ${tags.sort().map((tag) => tag === 'Skeleton' ? 'Skeleton as StaticSkeleton' : safeProp(tag)).join(', ')} } from ${lit(`@mx/kit/${safeTag(mod)}`)};\n`).join('');
   };
   const dataConsts = data.map((text, i) => `const $d${i} = JSON.parse(${lit(text)});\n`).join('');
   const moduleData: string[] = [];
@@ -744,7 +658,9 @@ export function generate(input: GenerateInput): Generated {
     return `const $d${i} = $moduleData[${index}];\n`;
   }).join('');
   // The skeleton imports only what it renders with; the islands module always carries the runtime.
-  const skeleton = `${kitImports(kitUsed.skeleton)}${dataConsts}export default function Skeleton() { return ${root}; }\n`;
+  const skeleton = deck
+    ? `import * as rt from '@mx/rt';\n${kitImports(kitUsed.skeleton)}${dataConsts}const $previewFlow = JSON.parse(${lit(JSON.stringify(input.flow ? readerDataflow(input.flow) : null))});\nconst $previewValues = JSON.parse(${lit(JSON.stringify(declaredValues(input.flow)))});\nexport default function Skeleton() { const runtime = rt.createIslandRuntime({ dataflow: $previewFlow ? { flow: $previewFlow, values: $previewValues } : null, viewer: null }, rt.createDataflowStore); return rt.withIsland(() => ${root}, runtime.context); }\n`
+    : `${kitImports(kitUsed.skeleton)}${dataConsts}export default function Skeleton() { return ${root}; }\n`;
   const usesRowAttrs = islands.some((isl) => isl.source.includes('$rowAttrs('));
   const islandsSource = `import * as rt from '@mx/rt';\n${usesRowAttrs ? "import { rowAttrs as $rowAttrs } from '@mx/kit/basic';\n" : ''}${usesRowClass ? "import { rowClass as $rowClass } from '@mx/row-class';\n" : ''}${kitImports(kitUsed.islands)}${dataConsts}`
     + islands.map((isl) => `export function I${isl.id}() { return ${isl.source}; }\n`).join('')
@@ -756,11 +672,10 @@ export function generate(input: GenerateInput): Generated {
     moduleData,
     islandRefs: islands.map((isl) => ({ renderId: `s${isl.id}-`, path: isl.path, kit: [...isl.kit].sort(), readsData: isl.readsData })),
     kit: { skeleton: [...kitUsed.skeleton].sort(), islands: [...kitUsed.islands].sort() },
-    reactStatic: [...reactStatic].sort(),
+    reactStatic: [],
     unported: [...unported].sort(),
     partial: [...partial].sort(),
     behaviors: deck ? [DECK_BEHAVIOR] : [],
-    statics,
     staticTexts,
   };
 }

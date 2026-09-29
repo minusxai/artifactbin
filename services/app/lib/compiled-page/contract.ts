@@ -55,6 +55,7 @@ export type ReaderFallbackReason = 'not-compiled' | 'compile-error' | 'build-mis
 
 /** What the compiler reads: the prepared page's version-owned inputs, nothing per reader. */
 export interface CompileInput {
+  /** Research probe: render static skeleton content with Solid SSR. Production defaults to React. */
   nodes: JsxNode[];
   colorMode: 'light' | 'dark';
   template: string | null;
@@ -164,7 +165,7 @@ export interface CompiledPage {
   links: LinkHints;
   /** Kit components rendered by the Solid kit, by where they render. */
   kit: { skeleton: string[]; islands: string[] };
-  /** Static components rendered by today's React kit at compile time (they ship no code). */
+  /** Legacy reporting field. Solid renders all static components, so this is empty. */
   reactStatic: string[];
   /**
    * Registered components the compile could not place: a non-empty list refuses the compile (fallback).

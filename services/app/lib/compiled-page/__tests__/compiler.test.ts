@@ -222,13 +222,14 @@ describe('compilePage', () => {
     expect(page.build).toBe(loadCompilerBuild().id);
   });
 
-  it('kit: the tabs and the accordion are islands with a module; the cards render statically with React', async () => {
+  it('kit: the tabs and accordion are islands while the cards render with the Solid skeleton', async () => {
     const page = await compilePage(await inputOf(fixture('kit.jsx')), loadCompilerBuild());
     expect(page.islands.length).toBeGreaterThanOrEqual(2);
     expect(page.islands.flatMap((i) => i.kit)).toEqual(expect.arrayContaining(['Tabs', 'Accordion']));
     expect(page.module).toMatchObject({ url: expect.stringMatching(/^\/islands\/d\/[0-9a-f]{16}\.js$/), bytes: expect.any(Number) });
     expect(page.module!.imports.some((u) => u === loadCompilerBuild().manifest['@mx/rt'])).toBe(true);
-    expect(page.reactStatic).toEqual(expect.arrayContaining(['Card']));
+    expect(page.reactStatic).toEqual([]);
+    expect(page.kit.skeleton).toContain('Card');
     const root = dom(page.html);
     expect(root.querySelector('[role="tablist"]')).toBeTruthy();
     expect(root.querySelector('[data-hk]')).toBeTruthy();
@@ -415,7 +416,8 @@ describe('no refusal', () => {
     expect(page.unported).toEqual([]);
     expect(page.module).not.toBeNull();
     expect(page.ssr).not.toBeNull();
-    expect(page.reactStatic).toContain('Separator');
+    expect(page.reactStatic).toEqual([]);
+    expect(page.kit.islands).toContain('Separator');
     expect([...dom(page.html).querySelectorAll('li [data-slot="separator"]')]).toHaveLength(2);
   });
 });
@@ -550,7 +552,11 @@ describe('the island path, over a stand-in server half', () => {
     const build = loadCompilerBuild();
     const input = await inputOf(fixture('kit.jsx'));
     const generated = generate(input);
-    const imports = await standInImports();
+    const standIns = await standInImports();
+    const staticKit = await defaultSsrImports(await transformSolid(generated.skeleton, { generate: 'ssr', hydratable: false }));
+    const imports: SsrImports = (spec) => {
+      try { return standIns(spec); } catch { return staticKit(spec); }
+    };
     const store = createModuleStore();
     const built = await buildDocumentModules(generated, { build, flow: input.flow, values: declaredValues(input.flow), imports, store });
     const root = dom(built.html);
