@@ -10,12 +10,7 @@ import { takeBootstrap } from '../bootstrap';
 import { useLocation, useNavigate, useParams } from 'react-router';
 import ArtifactShell from '@/components/ArtifactShell';
 import ArtifactSurface from '@/components/ArtifactSurface';
-import type { AccountWorkspace } from '@/lib/workspace';
-import { ShellFrame } from '@/web/Shell';
 import { PageLoading } from '@/web/PageLoading';
-import type { FolderPage as FolderView } from './Folder';
-import { lazyPage } from '../lazy-page';
-import { routePages } from '../route-pages';
 import { canEdit } from '@/lib/share-roles';
 import { NotFoundPage } from './NotFound';
 import { useArtifactView } from '../use-artifact-view';
@@ -23,35 +18,23 @@ import { didClientNavigateTo, initialStoryIsCompiled } from '../initial-story';
 import { readerNavigation } from '../reader-navigation';
 
 /**
- * A folder is a LISTING, never a document: its page (and the shelf, table and
- * JSX write-back it carries) is its own chunk, so no reader of a document
- * downloads it (lib/__tests__/reader-bundle-hygiene). The server preloads it
- * beside this page when the address is a folder (server/app `page`), and the
- * route-code boundary retries a failed download on an explicit gesture.
- */
-const FolderPage = lazyPage<Parameters<typeof FolderView>[0]>(() => import('./Folder').then(m => ({ default: m.FolderPage })));
-
-/**
- * ONE ADDRESS, TWO PAGES, and `folder` is the discriminator.
- *
- * `/a/<id>` names any artifact, and a FOLDER has no document behind it — no
- * source or sheet — so the endpoint answers it with a listing
- * instead of a `surface`, and this page hands that to the folder page. The
- * discriminator is the block's PRESENCE rather than a `kind` field, because
- * `kind` here already means the browser credential (account | anon) and a
- * second meaning for the word is how a payload starts lying about itself.
+ * `/a/<id>[/edit]` and the pretty `/@user/...` alias both admit here, but ONLY for a document a
+ * markup reader can show. Solid owns every folder and every dataset edit address at either shape
+ * (lib/solid-routes isSolidPage; server/app documentPreparation heals BOTH shapes to whichever HTML
+ * entry owns the resolved format), so a fresh load never lands here with `folder` set or with
+ * `surface.format === 'dataset'` while editing. The only way it could is an in-app link that soft-
+ * navigated across that boundary instead of a full one — reload lands it on the entry that does own it.
  */
 type Page =
-  | { canonical: string; role: Parameters<typeof ArtifactShell>[0]['role']; kind: string; folder: Parameters<typeof FolderView>[0]['folder']; workspace?: AccountWorkspace; ownerUsername?: string | null; surface?: undefined }
-  | { canonical: string; role: Parameters<typeof ArtifactShell>[0]['role']; kind: string; like?: { liked: boolean; count: number }; follow?: { userId: string; following: boolean; count: number } | null;
-      /** `?version=N` on this page's own address, resolved by the endpoint (lib/archived-version). Absent for the head. */
-      archived?: { version: number; head: number };
-      surface: Parameters<typeof ArtifactSurface>[0]; folder?: undefined };
+  { canonical: string; role: Parameters<typeof ArtifactShell>[0]['role']; kind: string; like?: { liked: boolean; count: number }; follow?: { userId: string; following: boolean; count: number } | null;
+    /** `?version=N` on this page's own address, resolved by the endpoint (lib/archived-version). Absent for the head. */
+    archived?: { version: number; head: number };
+    surface: Parameters<typeof ArtifactSurface>[0]; folder?: unknown };
 
-/** The wire shape: a document's surface carries no raw sheet and its dataflow only inside its runtime (lib/story/page-transport). */
-type TransportPage = Extract<Page, { folder: unknown }> | (Omit<Extract<Page, { surface: object }>, 'surface'> & { surface: object });
+/** The wire shape: a document's surface carries no raw sheet and its dataflow only inside its runtime (lib/story/page-transport). A `folder` answer (see the type doc above) carries no surface at all. */
+type TransportPage = Omit<Page, 'surface'> & { surface?: object };
 function decodePage(page: TransportPage): Page {
-  return page.folder ? page : { ...page, surface: expandSurface<Parameters<typeof ArtifactSurface>[0]>(page.surface) };
+  return page.folder ? (page as Page) : { ...page, surface: expandSurface<Parameters<typeof ArtifactSurface>[0]>(page.surface!) };
 }
 
 export function ArtifactPage({ id: given }: { id?: string } = {}) {
@@ -75,6 +58,12 @@ function ArtifactDocument({ id }: { id: string }) {
   const page = useMemo(() => transport ? decodePage(transport) : null, [transport]);
   const needsReaderDocument = !!page?.surface && page.surface.format === 'markup' && !page.surface.captureKey
     && !editingRoute && !initialStoryIsCompiled() && didClientNavigateTo(location.pathname);
+  // Solid owns this address's shell (a folder, or a dataset's edit route) but an in-app link soft-
+  // navigated here instead of loading it fresh. A reload lands on the entry that does own it.
+  const crossesToSolid = !!page && (!!page.folder || (editingRoute && page.surface?.format === 'dataset'));
+  useEffect(() => {
+    if (crossesToSolid) window.location.reload();
+  }, [crossesToSolid]);
   useEffect(() => {
     if (needsReaderDocument) readerNavigation.open(location.pathname + search + location.hash);
   }, [needsReaderDocument, location.pathname, location.hash, search]);
@@ -88,18 +77,8 @@ function ArtifactDocument({ id }: { id: string }) {
   }, [page, needsReaderDocument, editingRoute, search, location.pathname, location.hash, location.state, navigate]);
   if (page === null) return error ? <NotFoundPage /> : <PageLoading />;
   if (needsReaderDocument) return <PageLoading />;
+  if (crossesToSolid) return <PageLoading />;
   if (editingRoute && !canEdit(page.role)) return <NotFoundPage />;
-  if (editingRoute && page.surface?.format === 'dataset') {
-    const { DatasetEditorPage } = routePages;
-    return <DatasetEditorPage artifactId={id} onSaved={() => refresh(true)} />;
-  }
-  // A folder is a listing, not a document: no ArtifactShell and no surface
-  // (there is no inline story runtime). Every folder gets the normal PAGE frame;
-  // account-wide dashboard data is still supplied only to its owner.
-  if (page.folder) {
-    const folder = <FolderPage folder={page.folder} role={page.role} workspace={page.workspace} ownerUsername={page.ownerUsername} />;
-    return <ShellFrame hideBreadcrumb>{folder}</ShellFrame>;
-  }
   return (
     <ArtifactShell role={page.role}>
       {error && <button aria-label="Retry artifact" disabled={location.hash === '#edit'} onClick={() => void refresh(true)}>Could not refresh artifact. {location.hash === '#edit' ? 'Finish editing to retry.' : 'Retry'}</button>}

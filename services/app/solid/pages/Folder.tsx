@@ -64,10 +64,15 @@ function ForTrail(props: { folder: FolderData }): JSX.Element {
 }
 
 interface ArtifactAnswer { folder?: FolderData; role: ArtifactRole; workspace?: AccountWorkspace; ownerUsername?: string | null; surface?: unknown }
-/** The server chose this entry after admitting a folder. A client link to a document crosses entries. */
-export function FolderRoute(): JSX.Element {
+/**
+ * The server chose this entry after admitting a folder. A client link to a document crosses entries.
+ * `id` lets a pretty-path alias route (solid/pages/Profile.tsx) hand in the id it parsed from the
+ * address, rather than every caller needing its own `/a/:id`-shaped route param.
+ */
+export function FolderRoute(props: { id?: string } = {}): JSX.Element {
   const params = useParams<{ id: string }>();
-  const url = () => `/api/page/artifact/${params.id}`;
+  const id = () => props.id ?? params.id;
+  const url = () => `/api/page/artifact/${id()}`;
   const page = usePageData<ArtifactAnswer>(url, { seed: () => takeBootstrap<ArtifactAnswer>(window.location.pathname, 'artifact') });
   createEffect(() => { if (page.data()?.surface) replaceDocument(window.location.pathname + window.location.search + window.location.hash); });
   return <Show when={page.data()?.folder} fallback={<main aria-label="Loading folder" class={`${PAGE_COLUMN} mt-8 pb-24`}><Show when={page.error()} fallback="Loading folder…"><button type="button" aria-label="Retry folder" onClick={() => void page.refresh(true)}>Could not load folder. Retry</button></Show></main>}>
