@@ -30,6 +30,15 @@ const input = (over: Partial<AssembleInput> = {}): AssembleInput => ({
 const dom = (page: { html: string }) => new JSDOM(page.html).window.document;
 
 describe('assembleReaderPage', () => {
+  it('keeps inert island banks while moving the trailing module data carrier', () => {
+    const story = '<div class="mx-doc">visible</div><template data-mx-island-template="abc">&lt;p&gt;later&lt;/p&gt;</template><script type="application/json" data-mx-island-literals="def">["label"]</script><script type="application/json" data-mx-module-data>{"moduleData":[{"rows":[1]}]}</script>';
+    const page = assembleReaderPage(input({ story }));
+    const doc = dom(page);
+    expect(doc.querySelector('template[data-mx-island-template="abc"]')).toBeTruthy();
+    expect(doc.querySelector('script[data-mx-island-literals="def"]')).toBeTruthy();
+    expect(doc.querySelector('script[data-mx-module-data]')).toBeNull();
+    expect(JSON.parse(doc.getElementById(ISLAND_DATA_ID)!.textContent!).moduleData).toEqual([{ rows: [1] }]);
+  });
   it('moves version constants into the one inert page data island, including hostile text', () => {
     const value = '</script><script>alert(1)</script>';
     const carrier = `<script type="application/json" data-mx-module-data>${JSON.stringify({ moduleData: [{ value }] }).replaceAll('<', '\\u003c').replaceAll('>', '\\u003e')}</script>`;

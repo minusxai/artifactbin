@@ -51,6 +51,24 @@ export {
 export { IslandProvider } from './context';
 export { createDataflowStore } from '@/lib/story-runtime/store';
 
+/** Clone a browser template carried by the served page, using Solid's template calling convention. */
+export function templateFromPage(key: string, isImportNode?: boolean, isSVG?: boolean, isMathML?: boolean): (() => Node) & { cloneNode: () => Node } {
+  let node: Node | undefined;
+  const create = (): Node => {
+    const source = document.querySelector(`template[data-mx-island-template="${key}"]`);
+    if (!source) throw new Error(`island template ${key} is absent from the page`);
+    const markup = (source as HTMLTemplateElement).content.textContent ?? '';
+    const parsed = isMathML ? document.createElementNS('http://www.w3.org/1998/Math/MathML', 'template') : document.createElement('template');
+    parsed.innerHTML = markup;
+    const content = parsed as HTMLTemplateElement;
+    const first = isSVG ? content.content.firstChild?.firstChild : isMathML ? parsed.firstChild : content.content.firstChild;
+    if (!first) throw new Error(`island template ${key} is empty`);
+    return first;
+  };
+  const clone = () => isImportNode ? document.importNode(node ?? (node = create()), true) : (node ?? (node = create())).cloneNode(true);
+  return Object.assign(clone, { cloneNode: clone });
+}
+
 /* ────────────────────────────────────────────────────────────────────────────
  * The store bridge
  * ──────────────────────────────────────────────────────────────────────────── */

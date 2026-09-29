@@ -16,6 +16,7 @@ import { execFileSync } from 'node:child_process';
 import path from 'node:path';
 import * as rt from '../rt';
 import * as basic from '../kit/basic';
+import * as dialog from '../kit/dialog';
 import { evaluateModule, transformSolid } from '@/lib/compiled-page/bundle.server';
 import type { CompiledDataflow } from '@/lib/story/compiled-dataflow';
 import type { IslandRef } from '@/lib/compiled-page/contract';
@@ -25,13 +26,59 @@ import type { DataflowStore } from '@/lib/story-runtime/store';
 const ROOT = path.resolve(import.meta.dirname, '../../../../..');
 const SOURCE = '<Helmet><Value name="region" type="string" default="West" /></Helmet><div id="w"><h2 id="h">Static heading</h2><p id="r">{$region}</p><p id="after">Static after</p></div>';
 
-interface ServerHalf { html: string; islands: string; islandRefs: IslandRef[]; flow: CompiledDataflow }
+interface ServerHalf { html: string; islands: string; browserCode: string; islandRefs: IslandRef[]; flow: CompiledDataflow }
 function serverHalf(source: string): ServerHalf {
   const out = execFileSync(path.join(ROOT, 'node_modules/.bin/tsx'), ['--tsconfig', path.join(ROOT, 'tsconfig.json'), 'lib/islands/__tests__/fixtures/compiled-island.server.ts', source], { cwd: path.join(ROOT, 'services/app'), maxBuffer: 64 * 1024 * 1024 });
   return JSON.parse(out.toString('utf8')) as ServerHalf;
 }
 
 describe('a compiled island through the runtime', () => {
+  it('clones cold markup from an inert page template without executing hostile text', () => {
+    const bank = document.createElement('template');
+    bank.setAttribute('data-mx-island-template', 'cold');
+    bank.innerHTML = '&lt;div&gt;&lt;span&gt;&amp;lt;/template&amp;gt;&amp;lt;script&amp;gt;alert(1)&amp;lt;/script&amp;gt;&lt;/span&gt;&lt;/div&gt;';
+    document.body.append(bank);
+    const clone = rt.templateFromPage('cold')();
+    expect((clone as Element).outerHTML).toBe('<div><span>&lt;/template&gt;&lt;script&gt;alert(1)&lt;/script&gt;</span></div>');
+    bank.remove();
+  });
+  it('hydrates the shipped module using markup kept in page templates', async () => {
+    const server = serverHalf('<Helmet><Value name="name" type="string" default="Ada" /></Helmet><section id="box" data-note="{$name}"><p id="static">Served static content</p><span>{$name}</span></section>');
+    const host = document.createElement('div');
+    host.innerHTML = server.html;
+    document.body.append(host);
+    const served = host.querySelector('#static');
+    expect(server.browserCode).not.toContain('Served static content');
+    expect(host.querySelector('[data-mx-island-template]')).toBeTruthy();
+    let islands: Array<[string, () => unknown]> = [];
+    await evaluateModule(server.browserCode, spec => {
+      if (spec === '/islands/rt.js') return rt as unknown as Record<string, unknown>;
+      if (spec === '/islands/boot.js') return { boot: (value: typeof islands | { ISLANDS: typeof islands }) => { islands = Array.isArray(value) ? value : value.ISLANDS; } };
+      throw new Error(`unexpected island import ${spec}`);
+    }, 'test/shipped.js');
+    const runtime = rt.createIslandRuntime({ dataflow: { flow: server.flow, values: { name: 'Ada' } } }, df => createDataflowStore(df));
+    const dispose = rt.hydrateIsland(islands[0]![0], islands[0]![1] as never, runtime.context, host);
+    expect(host.querySelector('#static')).toBe(served);
+    runtime.context.setValue('name', 'Grace');
+    expect(host.querySelector('#box')?.textContent).toContain('Grace');
+    dispose?.(); runtime.dispose(); host.remove();
+  });
+  it('opens a dialog from the shipped module after hydration', async () => {
+    const server = serverHalf('<Dialog><DialogTrigger>Open dialog</DialogTrigger><DialogContent aria-label="Test dialog"><p>Dialog body</p><DialogClose>Close</DialogClose></DialogContent></Dialog>');
+    const host = document.createElement('div'); host.innerHTML = server.html; document.body.append(host);
+    let islands: Array<[string, () => unknown]> = [];
+    await evaluateModule(server.browserCode, spec => {
+      if (spec === '/islands/rt.js') return rt as unknown as Record<string, unknown>;
+      if (spec === '/islands/kit-dialog.js') return dialog as unknown as Record<string, unknown>;
+      if (spec === '/islands/boot.js') return { boot: (value: typeof islands | { ISLANDS: typeof islands }) => { islands = Array.isArray(value) ? value : value.ISLANDS; } };
+      throw new Error(`unexpected island import ${spec}`);
+    }, 'test/dialog-shipped.js');
+    const runtime = rt.createIslandRuntime({ dataflow: { flow: server.flow } }, df => createDataflowStore(df));
+    const dispose = rt.hydrateIsland(islands[0]![0], islands[0]![1] as never, runtime.context, host);
+    host.querySelector('button')?.click();
+    expect(host.querySelector('[aria-label="Test dialog"]')?.hasAttribute('open')).toBe(true);
+    dispose?.(); runtime.dispose(); host.remove();
+  });
   it('removes an adopted keyed row when the bridged table shrinks', async () => {
     const server = serverHalf('<Helmet><Value name="rows" type="table" value={[{"k":"a","label":"Alice"},{"k":"b","label":"Bob"},{"k":"c","label":"Carla"}]} /><Query name="ordered">{`select * from rows order by label`}</Query></Helmet><div id="w"><For each={$ordered} keyBy="k" id="f"><p>{$_row.label}</p></For></div>');
     const host = document.createElement('div');

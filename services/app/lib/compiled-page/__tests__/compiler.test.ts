@@ -49,6 +49,46 @@ async function inputOf(source: string, template: string | null = null): Promise<
 const dom = (html: string) => new JSDOM(`<div id="r">${html}</div>`).window.document.getElementById('r')!;
 
 describe('compilePage', () => {
+  it('keeps large island markup in inert page templates instead of the browser module', async () => {
+    const marker = 'panel-content-' + 'A'.repeat(50_000);
+    const input = await inputOf(`<Tabs defaultValue="one"><TabsList><TabsTrigger value="one">One</TabsTrigger><TabsTrigger value="two">Two</TabsTrigger></TabsList><TabsContent value="one"><p>${marker}</p></TabsContent><TabsContent value="two"><p>Second panel</p></TabsContent></Tabs>`);
+    const store = createModuleStore();
+    const built = await buildDocumentModules(generate(input), { build: loadCompilerBuild(), flow: input.flow, values: declaredValues(input.flow), store });
+    const browser = new TextDecoder().decode((await store.get(built.module!.sha))!);
+    expect(built.html).toContain('data-mx-island-template');
+    expect(built.html).toContain(marker);
+    expect(browser).not.toContain(marker);
+    expect(browser).not.toContain('Second panel');
+    expect(brotliCompressSync(browser).byteLength).toBeLessThan(4_000);
+  });
+  it('keeps a multi-megabyte unopened panel out of the browser module', async () => {
+    let seed = 0x4d595df4;
+    const letter = () => { seed ^= seed << 13; seed ^= seed >>> 17; seed ^= seed << 5; return 'abcdefghijklmnopqrstuvwxyz'[(seed >>> 0) % 26]; };
+    const blocks = Array.from({ length: 180 }, (_, i) => `<p>${i}:${Array.from({ length: 18_000 }, letter).join('')}</p>`).join('');
+    const input = await inputOf(`<Tabs defaultValue="one"><TabsList><TabsTrigger value="one">One</TabsTrigger><TabsTrigger value="two">Two</TabsTrigger></TabsList><TabsContent value="one">Ready</TabsContent><TabsContent value="two">${blocks}</TabsContent></Tabs>`);
+    const store = createModuleStore();
+    const generated = generate(input);
+    const before = await transformSolid(generated.islands, { generate: 'dom', hydratable: true }, { minify: true, moduleName: '@mx/rt' });
+    const built = await buildDocumentModules(generated, { build: loadCompilerBuild(), flow: input.flow, values: declaredValues(input.flow), store });
+    const bytes = (await store.get(built.module!.sha))!;
+    expect(Buffer.byteLength(blocks)).toBeGreaterThan(3_000_000);
+    expect(brotliCompressSync(before).byteLength).toBeGreaterThan(100_000);
+    expect(dom(built.html).querySelectorAll('template[data-mx-island-template]').length).toBeGreaterThan(0);
+    expect([...dom(built.html).querySelectorAll('template[data-mx-island-template]')].some((node) => (node as HTMLTemplateElement).content.textContent?.includes(blocks.slice(3, 120)))).toBe(true);
+    expect(brotliCompressSync(bytes).byteLength).toBeLessThan(4_000);
+  });
+  it('escapes hostile template closers in the served inert bank', async () => {
+    const input = await inputOf('<Tabs defaultValue="one"><TabsList><TabsTrigger value="one">One</TabsTrigger><TabsTrigger value="two">Two</TabsTrigger></TabsList><TabsContent value="one">safe</TabsContent><TabsContent value="two"><p>&lt;/template&gt;&lt;script&gt;alert(1)&lt;/script&gt;</p></TabsContent></Tabs>');
+    const store = createModuleStore();
+    const built = await buildDocumentModules(generate(input), { build: loadCompilerBuild(), flow: input.flow, values: declaredValues(input.flow), store });
+    expect(built.html).toContain('data-mx-island-template');
+    const root = dom(built.html);
+    const banks = [...root.querySelectorAll('template[data-mx-island-template]')] as HTMLTemplateElement[];
+    const literals = JSON.parse(root.querySelector('script[data-mx-island-literals]')!.textContent!) as string[];
+    expect([...banks.map((bank) => bank.content.textContent ?? ''), ...literals].join('')).toContain('alert(1)');
+    expect(built.html).not.toContain('</template><script>alert(1)</script>');
+    expect(new TextDecoder().decode((await store.get(built.module!.sha))!)).not.toContain('alert(1)');
+  });
   it('moves only large used hoisted props into page data', async () => {
     const note = 'literal-prop-' + 'x'.repeat(2_000);
     const generated = generate(await inputOf(`<Question id="q" viz={{kind:"table",note:${JSON.stringify(note)}}} />`));
@@ -61,12 +101,12 @@ describe('compilePage', () => {
     const input = await inputOf(`<Helmet><Value name="rows" type="table" value={${JSON.stringify(rows)}} /></Helmet><For each={$rows}><p>$_row.label</p></For>`);
     const generated = generate(input);
     const build = loadCompilerBuild();
-    const before = await browserModuleCode(generated.islands, build, input.flow);
+    const before = await transformSolid(`${generated.islands}\nconst FLOW=JSON.parse(${JSON.stringify(JSON.stringify(input.flow))});`, { generate: 'dom', hydratable: true }, { minify: true, moduleName: '@mx/rt' });
     const flowIndex = generated.moduleData.length;
     const islands = generated.moduleData.length ? generated.browserIslands : `const $moduleData = JSON.parse(document.getElementById("mx-story-data").textContent).moduleData;\n${generated.browserIslands}`;
     const after = await browserModuleCode(islands, build, input.flow, flowIndex);
     expect(Buffer.byteLength(JSON.stringify(rows))).toBeGreaterThan(10_000_000);
-    expect(Buffer.byteLength(before.code)).toBeGreaterThan(10_000_000);
+    expect(Buffer.byteLength(before)).toBeGreaterThan(10_000_000);
     expect(Buffer.byteLength(after.code)).toBeLessThan(4_000);
   });
   it('keeps a large literal table out of the browser module and carries it in the page', async () => {
@@ -76,6 +116,7 @@ describe('compilePage', () => {
     expect(page.module).not.toBeNull();
     expect(page.module!.bytes).toBeLessThan(4_000);
     expect(page.html).toContain(rows[0]!.label);
+    expect(page.html).toMatch(/<script type="application\/json" data-mx-module-data>[\s\S]*<\/script>$/);
   });
   it('compiles a native Value input as a live binding', async () => {
     const source = '<Helmet><Value name="region" type="string" default="west" /></Helmet><input aria-label="Region" value="$region" />';
@@ -191,7 +232,7 @@ describe('compilePage', () => {
     expect(map.getAttribute('data-mx-ast')).toBe('0.1');
     expect(shapeOf(map.outerHTML)).toEqual(shapeOf('<div id="map"><div class="rounded"><div class="w-full rounded-md bg-muted" style="height:320px" aria-busy="true" aria-label="Countries"></div></div></div>'));
     // The frame's author content reaches the island only as data: compiled at publish (lib/story/managed-iframe), never as markup.
-    expect(page.html).not.toContain('Hello');
+    expect(dom(page.html).querySelector('#f')?.textContent).not.toContain('Hello');
   });
 
   it('compiles a DataTable column\'s content per row, and a control with run there as today\'s editing cell', async () => {
