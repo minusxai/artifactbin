@@ -30,7 +30,7 @@ import { rowAttrs } from './basic';
 import { useIsland } from '../context';
 import type { IslandContext } from '../contract';
 import { ACCESS_PENDING, hydratedRead } from './store-read';
-import { Tooltip, TooltipContent, TooltipSpanTrigger } from './disclosure';
+import { MutationHint } from './disclosure';
 
 /** Where one cell sits: what the DataTable hands each column's content, per row. */
 export interface CellScope {
@@ -230,10 +230,9 @@ export function CellControl(props: CellControlProps) {
   };
   // The disabled control cannot take focus: its stable wrapper carries the reason (StoryRuntimeApp MutationCellHint),
   // and holds the refusal of a write beside the control.
-  return <Tooltip open={reason() ? undefined : false}><TooltipSpanTrigger class="inline-flex w-full" {...{ tabindex: reason() ? '0' : undefined, 'aria-description': reason() ?? undefined }}>{control()}
-    <Show when={session()?.error}>{(error) => <span role="alert" class="mx-write-error">{error()}</span>}</Show></TooltipSpanTrigger>
-    <TooltipContent class="pointer-events-none z-[100] w-max max-w-[min(28rem,calc(100vw-1rem))] whitespace-normal rounded-md bg-foreground px-2.5 py-1.5 text-left text-xs leading-normal text-background shadow-md">{reason()}</TooltipContent>
-  </Tooltip>;
+  return <MutationHint reason={reason()} fullWidth>{control()}
+    <Show when={session()?.error}>{(error) => <span role="alert" class="mx-write-error">{error()}</span>}</Show>
+  </MutationHint>;
 }
 
 interface Shared {

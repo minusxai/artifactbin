@@ -5,7 +5,7 @@
  * SegmentedAdapter), on the island's store:
  *
  * - `<Button run>` follows the store's write check: a guest's `$_me` write is disabled and says
- *   "Unavailable while signed out." (as its accessible description and beside it), an allowed one
+ *   "Unavailable while signed out." (as its accessible description and in an interaction tooltip), an allowed one
  *   performs the `<Mutation>` with `set=` applied first and `args=` resolved at the click, busy while
  *   it is in flight, and a refusal is shown in a `role="alert"`.
  * - In a `<For>` row the button writes with the row, and refuses without a durable row key; its write in
@@ -92,7 +92,15 @@ describe('<Button run> on the island store', () => {
     const button = host.querySelector('button')!;
     expect(button.disabled).toBe(true);
     expect(button.getAttribute('aria-description')).toBe('Unavailable while signed out.');
-    expect(button.nextElementSibling?.outerHTML).toBe('<span class="text-xs text-muted-foreground">Unavailable while signed out.</span>');
+    expect(host.textContent).toBe('Vote as me');
+    const trigger = button.closest('[data-slot="tooltip-trigger"]') as HTMLElement;
+    expect(trigger?.tabIndex).toBe(0);
+    trigger.focus();
+    expect(document.querySelector('[role="tooltip"]')?.textContent).toContain('Unavailable while signed out.');
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+    expect(document.querySelector('[role="tooltip"]')).toBeNull();
+    trigger.click();
+    expect(document.querySelector('[role="tooltip"]')?.textContent).toContain('Unavailable while signed out.');
     button.click();
     expect(s.store.mutate).not.toHaveBeenCalled();
     dispose();

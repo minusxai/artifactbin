@@ -2422,7 +2422,7 @@ async function mutationAccessFor(doc: ArtifactRow, flow: CompiledDataflow, state
       try{await grantContext(dataset,actor,{id:doc.id,editId:doc.edit_id});}
       catch(error){return [m.name,!actor.userId?SIGN_IN_REQUIRED:error instanceof Error?error.message:'Join this artefact to use its actions'];}
     }
-    if(!dataset||await canWriteDataset(dataset,actor,{id:doc.id,editId:doc.edit_id}))return [m.name,'This action requires dataset view access and a writable dataset with a matching data policy.'];
+    if(!dataset||await canWriteDataset(dataset,actor,{id:doc.id,editId:doc.edit_id}))return [m.name,'You don’t have permission to edit this data.'];
     if(!dataset.dataset_policy)return [m.name,guestOf(m,null)];
     try {
       const target=m.target as {import:string;table:string};

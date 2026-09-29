@@ -108,7 +108,7 @@ export function TooltipSpanTrigger(props: JSX.HTMLAttributes<HTMLSpanElement>) {
   }));
   return <span ref={el => { span = el; ctx.setTrigger(el); }} data-state={ctx.state()} data-slot="tooltip-trigger" {...props}
     on:pointermove={e => { if (e.pointerType !== 'touch' && !movedOpen) { ctx.enter(); movedOpen = true; } }} on:pointerleave={() => { ctx.leave(); movedOpen = false; }}
-    on:focus={() => ctx.openNow()} on:blur={() => ctx.close()} on:pointerdown={() => ctx.close()}>{props.children}</span>;
+    on:focus={() => ctx.openNow()} on:blur={() => ctx.close()} on:click={() => ctx.openNow()}>{props.children}</span>;
 }
 const ARROW_TRANSFORM: Record<Side, string> = { top: 'translateY(100%)', right: 'translateY(50%) rotate(90deg) translateX(-50%)', bottom: 'rotate(180deg)', left: 'translateY(50%) rotate(-90deg) translateX(50%)' };
 const ARROW_ORIGIN: Record<Side, string> = { top: '', right: '0 0', bottom: 'center 0', left: '100% 0' };
@@ -196,3 +196,13 @@ export function AvatarFallback(props: JSX.HTMLAttributes<HTMLSpanElement>) {
 export function AvatarBadge(props: JSX.HTMLAttributes<HTMLSpanElement>) { return <span data-slot="avatar-badge" {...props} />; }
 export function AvatarGroup(props: JSX.HTMLAttributes<HTMLDivElement>) { return <div data-slot="avatar-group" {...props} />; }
 export function AvatarGroupCount(props: JSX.HTMLAttributes<HTMLDivElement>) { return <div data-slot="avatar-group-count" {...props} />; }
+
+/** Reuses the reader tooltip; the stable anchor keeps disabled controls reachable by keyboard and touch. */
+export function MutationHint(props: { reason: string | null; fullWidth?: boolean; children: JSX.Element }) {
+  return <Tooltip open={props.reason ? undefined : false}>
+    <TooltipSpanTrigger class={props.fullWidth ? 'inline-flex w-full' : 'inline-flex'} tabindex={props.reason ? '0' : undefined} aria-description={props.reason ?? undefined}>
+      <span style={{ display: 'contents', 'pointer-events': props.reason ? 'none' : undefined }}>{props.children}</span>
+    </TooltipSpanTrigger>
+    <TooltipContent class="pointer-events-none z-[100] w-max max-w-[min(28rem,calc(100vw-1rem))] whitespace-normal rounded-md bg-foreground px-2.5 py-1.5 text-left text-xs leading-normal text-background shadow-md">{props.reason}</TooltipContent>
+  </Tooltip>;
+}

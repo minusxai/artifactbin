@@ -4,6 +4,7 @@ import { isServer } from 'solid-js/web';
 import { refName, resolveBindings, rowBound, type BindingSource, type Row, type Scalar } from '@/lib/story/dataflow';
 import { VIEWER_ID } from '@/lib/story/builtins';
 import { refusalText } from '@/lib/story/sign-in-required';
+import { MutationHint } from './disclosure';
 import { useIsland } from '../context';
 import type { IslandContext } from '../contract';
 import type { RowScope } from '../rt';
@@ -125,7 +126,7 @@ const rowActionsOf = (island: IslandContext) => {
  * lib/story-runtime/StoryRuntimeApp). A click first sets the page values `set=` names, in one step, then
  * performs the named `<Mutation>` with `args=`. While it is in flight the button is `aria-busy` and
  * disabled; a write the reader may not make (a guest's `$_me` write, a closed dataset, a check still in
- * flight) is disabled with the reason as its accessible description and beside it; a refusal is shown in
+ * flight) is disabled with the reason as its accessible description and in a tooltip; a refusal is shown in
  * a `role="alert"`. In a `<For>` row it writes with the row, as a row action does.
  */
 export function Button(props: ButtonProps) {
@@ -163,16 +164,17 @@ export function Button(props: ButtonProps) {
       if (values) store.setValues(values);
       void actions.run(identity, () => store.mutate(name, read(own.args) ?? {}, snapshot));
     };
-    return <><button data-slot="button" data-variant={variant} data-size={size} {...rest} type="button" disabled={unavailable() !== null || pending() || rest.disabled === true}
-      aria-busy={pending() || undefined} aria-description={refusalText(unavailable()) ?? undefined} on:click={click} /><Show when={state()?.error}><span role="alert" class="mx-write-error">{state()?.error}</span></Show></>;
+    return <><MutationHint reason={refusalText(unavailable())}><button data-slot="button" data-variant={variant} data-size={size} {...rest} type="button" disabled={unavailable() !== null || pending() || rest.disabled === true}
+      aria-busy={pending() || undefined} aria-description={refusalText(unavailable()) ?? undefined} on:click={click} /></MutationHint><Show when={state()?.error}><span role="alert" class="mx-write-error">{state()?.error}</span></Show></>;
   }
   const busy = () => !!name && island.mutating(name);
   const click = () => {
+    if (unavailable() !== null || busy() || rest.disabled === true) return;
     setError(null);
     const values = read(own.set);
     if (values) store.setValues(values);
     if (name) store.mutate(name, read(own.args)).catch((e: unknown) => setError(messageOf(e)));
   };
-  return <><button data-slot="button" data-variant={variant} data-size={size} {...rest} aria-busy={busy() || undefined} disabled={busy() || unavailable() !== null || rest.disabled === true}
-    aria-description={refusalText(unavailable()) ?? undefined} on:click={click} /><Show when={unavailable()}><span class="text-xs text-muted-foreground">{refusalText(unavailable())}</span></Show>{alert}</>;
+  return <><MutationHint reason={refusalText(unavailable())}><button data-slot="button" data-variant={variant} data-size={size} {...rest} aria-busy={busy() || undefined} disabled={busy() || unavailable() !== null || rest.disabled === true}
+    aria-description={refusalText(unavailable()) ?? undefined} on:click={click} /></MutationHint>{alert}</>;
 }
