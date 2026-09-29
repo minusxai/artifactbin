@@ -68,11 +68,10 @@ describe('compilePage', () => {
     const input = await inputOf(`<Tabs defaultValue="one"><TabsList><TabsTrigger value="one">One</TabsTrigger><TabsTrigger value="two">Two</TabsTrigger></TabsList><TabsContent value="one">Ready</TabsContent><TabsContent value="two">${blocks}</TabsContent></Tabs>`);
     const store = createModuleStore();
     const generated = generate(input);
-    const before = await transformSolid(generated.islands, { generate: 'dom', hydratable: true }, { minify: true, moduleName: '@mx/rt' });
     const built = await buildDocumentModules(generated, { build: loadCompilerBuild(), flow: input.flow, values: declaredValues(input.flow), store });
     const bytes = (await store.get(built.module!.sha))!;
     expect(Buffer.byteLength(blocks)).toBeGreaterThan(3_000_000);
-    expect(brotliCompressSync(before).byteLength).toBeGreaterThan(100_000);
+    expect(brotliCompressSync(generated.islands).byteLength).toBeGreaterThan(100_000);
     expect(dom(built.html).querySelectorAll('template[data-mx-island-template]').length).toBeGreaterThan(0);
     expect([...dom(built.html).querySelectorAll('template[data-mx-island-template]')].some((node) => (node as HTMLTemplateElement).content.textContent?.includes(blocks.slice(3, 120)))).toBe(true);
     expect(brotliCompressSync(bytes).byteLength).toBeLessThan(4_000);
