@@ -10,6 +10,7 @@ import { brotliCompressSync } from 'node:zlib';
 import { pathToFileURL } from 'node:url';
 import { loadCompilerBuild } from '@/lib/compiled-page/build.server';
 import { kitchenSinkMarkup } from '@/lib/story/kitchen-sink';
+import { morphDraftDom } from '../morph/engine';
 
 const ROOT = path.resolve(import.meta.dirname, '../../../../..');
 const fixture = (source: string): { html: string; browserCode: string; flow: CompiledDataflow } => JSON.parse(execFileSync(
@@ -19,6 +20,31 @@ const fixture = (source: string): { html: string; browserCode: string; flow: Com
 ).toString('utf8'));
 
 describe('one tree SSR to hydrate', () => {
+  it('keeps authored prose present while a draft replaces a hydrated document tree', async () => {
+    const before = fixture('<Helmet><Value name="flag" type="boolean" default={false} /></Helmet><p id="f6">Before</p><p id="live">{$flag ? "On" : "Off"}</p>');
+    const after = fixture('<Helmet><Value name="flag" type="boolean" default={false} /></Helmet><p id="f6">EDITED IN PLACE</p><p id="live">{$flag ? "On" : "Off"}</p>');
+    const host = document.createElement('div'); host.innerHTML = before.html; document.body.append(host);
+    const next = document.createElement('div'); next.innerHTML = after.html;
+    const treeOf = async (code: string, id: string): Promise<Component> => {
+      let tree: Component | null = null;
+      await evaluateModule(code, spec => spec.includes('/rt-') ? rt as unknown as Record<string, unknown>
+        : spec.includes('/boot-') ? { boot: (module: { TREE: Component }) => { tree = module.TREE; } }
+        : (() => { throw new Error(`unexpected import ${spec}`); })(), id);
+      return tree!;
+    };
+    const runtime = rt.createIslandRuntime({ dataflow: { flow: before.flow, values: { flag: false } } }, df => createDataflowStore(df));
+    const painted = host.querySelector('[data-hk^="d-"]')!;
+    const paintCopy = painted.cloneNode(true);
+    const dispose = rt.hydrateIsland('d-', await treeOf(before.browserCode, 'test/draft-before.js'), runtime.context, host);
+    dispose?.();
+    painted.replaceWith(paintCopy);
+    morphDraftDom(host, next, new Set(), new Set());
+    const disposeDraft = rt.hydrateIsland('d-', await treeOf(after.browserCode, 'test/draft-after.js'), runtime.context, host);
+    expect(host.querySelector('#f6')?.textContent).toBe('EDITED IN PLACE');
+    expect(host.querySelector('#live')?.textContent).toBe('Off');
+    disposeDraft?.(); runtime.dispose(); host.remove();
+  });
+
   it('mounts static content when a false server branch becomes true in the browser', async () => {
     const server = fixture('<Helmet><Value name="open" type="boolean" default={false} /></Helmet><section id="case">{$open && <p aria-label="Positive">positive</p>}</section>');
     const host = document.createElement('div'); host.innerHTML = server.html; document.body.append(host);

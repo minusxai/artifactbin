@@ -462,6 +462,9 @@ export async function hydrateDraftIslands(
   if (module.FLOW && running.store && JSON.stringify(module.FLOW) !== JSON.stringify(running.store.flow))
     running.store.replaceFlow({ flow: module.FLOW });
   for (const entry of module.ISLANDS) {
+    // Editing paints the server draft and retains stable component DOM. Hydrating the whole
+    // browser tree here would replace static runs with its empty NoHydration placeholders.
+    if (entry[0] === 'd-' && running.mode?.() === 'edit') continue;
     const element = unitsOf(root, [entry[0]]).get(entry[0])?.[0];
     if (!element || (entry[0] !== 'd-' && (stableIds.has(element.id) || stablePaths.has(element.getAttribute(AST_PATH_ATTR) ?? '')))) continue;
     seam.hydrate(entry);
