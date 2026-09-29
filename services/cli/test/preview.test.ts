@@ -7,6 +7,7 @@ import {join} from 'node:path';
 import {serializeJsx} from '../../app/lib/jsx';
 import {runCli} from '../src/dispatch';
 import {startPreview} from '../src/preview/session';
+import {prepareClientDocumentUpdate} from '../../app/lib/story/document-update-client';
 
 test('file session HTTP saves reject stale revisions, preserve published metadata, query real data and persist comments',async()=>{
  const root=await mkdtemp(join(tmpdir(),'preview-http-'));
@@ -69,6 +70,33 @@ test('inline preview comments preserve selections and accept only real body anch
   assert.equal((await post({...comment,range:{v:99}})).status,400);
   assert.equal((await post({...comment,quote:123})).status,400);
   assert.equal((await post({...comment,file:'unselected.jsx'})).status,403);
+ }finally{await session?.close();await rm(root,{recursive:true,force:true});}
+});
+
+test('production editor protocol saves local graph edits and rejects stale file writes',async()=>{
+ const root=await mkdtemp(join(tmpdir(),'preview-editor-'));let session:Awaited<ReturnType<typeof startPreview>>|undefined;
+ try{
+  await writeFile(join(root,'report.jsx'),'---\nid: abc123\nhead_version: 9\n---\n<p id="text">Draft</p>');
+  session=await startPreview({root,home:join(root,'home'),files:['report.jsx']});
+  const call=async(operation:string,args:object={})=>(await fetch(session!.url+'/editor',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({file:'report.jsx',operation,...args})})).json();
+  const head=await call('load');assert.ok(head.document,'loads the production document graph');
+  const update=prepareClientDocumentUpdate({document:head.document,version:head.version,meta:{theme:null,template:null,colorMode:null},title:head.title},{source:'<p id="text">Edited</p>',metadata:{title:'Local title'}});
+  const saved=await call('commit',{edit_id:head.edit_id,document_update:update});
+  assert.equal(saved.ok,true);assert.match(await readFile(join(root,'report.jsx'),'utf8'),/head_version: 9/);
+  assert.match(await readFile(join(root,'report.jsx'),'utf8'),/title: Local title/);
+  const thread=await call('annotations.create',{input:{node_id:'text',body:'Review this'},key:'once'});
+  assert.equal(thread.thread[0].body,'Review this');
+  assert.equal((await call('annotations.create',{input:{node_id:'text',body:'Review this'},key:'once'})).id,thread.id);
+  const reply=await call('annotations.act',{id:thread.id,input:{reply:'Done',resolve:true}});
+  assert.equal(reply.thread.length,2);assert.equal(reply.status,'resolved');
+  assert.equal((await call('annotations.list',{status:'open'})).length,0);
+  assert.equal((await call('annotations.list',{status:'resolved'}))[0].anchor.nodeId,'text');
+  assert.equal((await call('commit',{edit_id:head.edit_id,document_update:update})).status,409);
+  const fresh=await call('load');await writeFile(join(root,'report.jsx'),'<p id="text">External</p>');
+  assert.equal((await call('commit',{edit_id:fresh.edit_id,document_update:update})).status,409);
+  assert.match(await readFile(join(root,'report.jsx'),'utf8'),/External/);
+  await session.close();session=await startPreview({root,home:join(root,'home'),files:['report.jsx']});
+  assert.equal((await call('annotations.list',{status:'resolved'}))[0].thread.length,2);
  }finally{await session?.close();await rm(root,{recursive:true,force:true});}
 });
 
@@ -164,5 +192,18 @@ test('an image tracked as typed YAML serves its source bytes',async()=>{
   const response=await fetch(session.url+'/remote/img001');
   assert.equal(response.status,200);assert.equal(response.headers.get('content-type'),'image/png');
   assert.deepEqual(Buffer.from(await response.arrayBuffer()),png);
+ }finally{await session?.close();await rm(root,{recursive:true,force:true});}
+});
+
+ test('preview serves the production logo and sandboxed author wrapper',async()=>{
+ const root=await mkdtemp(join(tmpdir(),'preview-chrome-'));let session:Awaited<ReturnType<typeof startPreview>>|undefined;
+ try{
+  await writeFile(join(root,'report.jsx'),'<p>Draft</p>');await writeFile(join(root,'logo-128.png'),'logo');
+  session=await startPreview({root,files:['report.jsx'],home:join(root,'home'),publicAssets:root});
+  const logo=await fetch(session.url+'/logo-128.png');assert.equal(logo.status,200);assert.equal(await logo.text(),'logo');
+  const frame=await fetch(session.url+'/author-frame');assert.equal(frame.status,200);
+  assert.match(frame.headers.get('content-security-policy')??'',/sandbox allow-scripts;/);
+  assert.doesNotMatch(frame.headers.get('content-security-policy')??'',/allow-same-origin/);
+  assert.match(await frame.text(),/<!doctype html>/i);
  }finally{await session?.close();await rm(root,{recursive:true,force:true});}
 });

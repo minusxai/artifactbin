@@ -1,69 +1,55 @@
-import {useEffect} from 'react';
-import {EditorView} from '@codemirror/view';
+/** Preview mounts the production chrome; storage protocol is exercised by CLI HTTP tests. */
+import {useEffect,type ReactNode} from 'react';
 import {act,fireEvent,render,screen,waitFor,cleanup} from '@testing-library/react';
 import {afterEach,beforeEach,expect,it,vi} from 'vitest';
 import {PreviewWorkspace} from '../../../cli/src/preview/workspace';
 import type {StoryController} from '@/lib/story-runtime/contract';
 import {parseJsx} from '@/lib/jsx';
-
-const state=vi.hoisted(()=>({listeners:new Set<(event:unknown)=>void>(),send:vi.fn(),update:vi.fn(),mounts:0}));
+import {createDocumentGraph} from '@/lib/story/document-graph';
+const state=vi.hoisted(()=>({listeners:new Set<(event:unknown)=>void>(),send:vi.fn(),mounts:0}));
+vi.mock('@/components/TrustedUi',async original=>({...await original<object>(),TrustedUi:({children}:{children:ReactNode})=>children,useTrustedPortalContainer:()=>undefined}));
 vi.mock('@/lib/story-runtime/EditorStoryRuntime',()=>({EditorStoryRuntime:({onController}:{onController:(value:StoryController|null)=>void})=>{
- useEffect(()=>{state.mounts++;onController({nonce:'test',send:state.send,update:state.update,subscribe:listener=>{state.listeners.add(listener);return()=>{state.listeners.delete(listener);};},invalidate:()=>{},dispose:()=>{},getViewportRect:()=>new DOMRect()});return()=>onController(null);},[onController]);
+ useEffect(()=>{state.mounts++;onController({nonce:'test',send:state.send,update:()=>{},subscribe:listener=>{state.listeners.add(listener);return()=>{state.listeners.delete(listener);};},invalidate:()=>{},dispose:()=>{},getViewportRect:()=>new DOMRect(0,88,1000,800)});return()=>onController(null);},[onController]);
  return <div>Live document</div>;
 }}));
-vi.mock('@/lib/story/use-in-place-edit',()=>({useInPlaceEdit:()=>({commitPending:async()=>{},isUserEditing:()=>false})}));
+vi.mock('@/lib/story/use-in-place-edit',()=>({useInPlaceEdit:()=>({selection:null,ready:true,commitPending:async()=>{},isUserEditing:()=>false,select:()=>{},spotlight:()=>{},pushDocument:()=>{},applyFormat:()=>{},applyLink:()=>{},applyInline:()=>{}})}));
+vi.mock('@/lib/story/use-live-edits',()=>({FLUSH_DEBOUNCE_MS:500,useLiveEdits:()=>({state:{version:1,editId:'one',status:'',pending:false},queue:()=>{},flushNow:async()=>{},adoptRemote:()=>false,isOwnEdit:()=>false})}));
+vi.mock('@/components/SolidSourceEditorPane',()=>({default:({value}:{value:string})=><textarea aria-label="Markup source" defaultValue={value}/>}));
 const body='<p id="intro">Hello world</p>';
 const parsed=parseJsx(body);if(!parsed.ok)throw Error('fixture');
-const initial={body,revision:'one',data:{nodes:parsed.nodes,refData:{},assetsUrl:'/image',chrome:true,colorMode:'light' as const}};
-let stored=body;
-let reject=false;
-let writes:Record<string,unknown>[]=[];
+const initial={body,revision:'one',metadata:{title:'Local document'},data:{nodes:parsed.nodes,refData:{},assetsUrl:'/image',chrome:true,colorMode:'light' as const}};
+const head={document:createDocumentGraph(body,1),id:'local-preview',title:'Local document',markup:body,theme:null,template:null,colorMode:null,version:1,edit_id:'one'};
 beforeEach(()=>{
- state.mounts=0;state.listeners.clear();state.send.mockClear();stored=body;reject=false;writes=[];
- vi.stubGlobal('fetch',vi.fn(async(path:string,options?:RequestInit)=>{
+ state.mounts=0;state.listeners.clear();state.send.mockClear();localStorage.clear();Object.defineProperty(window,'innerWidth',{value:1440,configurable:true});
+ vi.stubGlobal('fetch',vi.fn(async(_path:string,options?:RequestInit)=>{
   const input=options?.body?JSON.parse(String(options.body)):null;
-  let result:unknown=[];let ok=true;
-  if(path==='/files')result=['report.jsx'];
-  if(path.startsWith('/document'))result={...initial,body:stored};
-  if(path==='/save'){ok=!reject;if(ok){stored=input.body;result={...initial,body:stored,revision:'two'};}else result={error:'File changed; draft retained'};}
-  if(path==='/comments'&&input){writes.push(input);result={...input,id:'comment1'};}
-  return {ok,json:async()=>result};
+  return {ok:true,json:async()=>input?.operation==='load'?head:input?.operation==='css'?{css:''}:input?.operation==='queries'?{tables:{},errors:{}}:[]};
  }));
 });
 afterEach(()=>{cleanup();vi.unstubAllGlobals();});
-it('keeps the app mounted across tabs and saves code before returning to App',async()=>{
+it('uses the production editor tabs, insert menu and selection panel, keeping the app mounted in Code',async()=>{
  render(<PreviewWorkspace initial={initial} file="report.jsx"/>);
- fireEvent.click(screen.getByRole('tab',{name:'Code'}));
- const source=await screen.findByRole('textbox',{name:'Markup source'});
- const view=EditorView.findFromDOM(source)!;
- act(()=>view.dispatch({changes:{from:0,to:view.state.doc.length,insert:'<p id="intro">New words</p>'}}));
- fireEvent.click(screen.getByRole('tab',{name:'App'}));
- await waitFor(()=>expect(screen.getByRole('tab',{name:'App'})).toHaveAttribute('aria-selected','true'));
- expect(state.mounts).toBe(1);expect(stored).toContain('New words');
+ await screen.findByLabelText('Editor toolbar');
+ expect(screen.getByRole('button',{name:'Insert'})).toBeTruthy();
+ expect(screen.getByLabelText('Theme')).toBeTruthy();
+ expect(screen.getByRole('tab',{name:'Selection'})).toBeTruthy();
+ fireEvent.click(screen.getByRole('tab',{name:'Edit the source'}));
+ await screen.findByRole('textbox',{name:'Markup source'});
+ expect(state.mounts).toBe(1);
+ expect(screen.queryByText('Edit in place')).toBeNull();
 });
-it('retains a code draft and stays on Code when a save is refused',async()=>{
+it('opens the production inline composer from selected content without asking for a name',async()=>{
  render(<PreviewWorkspace initial={initial} file="report.jsx"/>);
- fireEvent.click(screen.getByRole('tab',{name:'Code'}));
- const source=await screen.findByRole('textbox',{name:'Markup source'});
- const view=EditorView.findFromDOM(source)!;
- act(()=>view.dispatch({changes:{from:0,to:view.state.doc.length,insert:'<p>Keep this draft</p>'}}));
- reject=true;
- fireEvent.click(screen.getByRole('tab',{name:'App'}));
- await screen.findByText('File changed; draft retained');
- expect(screen.getByRole('tab',{name:'Code'})).toHaveAttribute('aria-selected','true');
- expect(view.state.doc.toString()).toBe('<p>Keep this draft</p>');
+ await screen.findByLabelText('Editor toolbar');
+ await act(async()=>{for(const listener of state.listeners)listener({type:'mx:selection-action',nonce:'test',action:'annotate',selection:{nodeId:'intro',path:'0',kind:'text',tag:'p',rect:{x:100,y:200,width:300,height:30},className:'',style:'',ancestors:[],quote:'Hello'}});});
+ await screen.findByRole('dialog',{name:'Annotation composer'});
+ expect(screen.getByRole('textbox',{name:'Annotation comment'})).toBeTruthy();
+ expect(screen.queryByRole('textbox',{name:'Your name'})).toBeNull();
+ fireEvent.click(screen.getByRole('button',{name:'Cancel annotation'}));
+ await waitFor(()=>expect(screen.queryByRole('dialog',{name:'Annotation composer'})).toBeNull());
 });
-it('creates a comment from a runtime selection without an element dropdown',async()=>{
- render(<PreviewWorkspace initial={initial} file="report.jsx"/>);
- fireEvent.click(screen.getByRole('button',{name:/Comments/}));
- fireEvent.click(screen.getByRole('button',{name:'Select content'}));
- await waitFor(()=>expect(screen.getByRole('button',{name:'Select content'})).toHaveAttribute('aria-pressed','true'));
- const selection={nodeId:'intro',path:'0',kind:'text',tag:'p',rect:{x:0,y:0,width:100,height:20},className:'',style:'',ancestors:[],quote:'Hello'};
- await act(async()=>{for(const listener of state.listeners)listener({type:'mx:selection',nonce:'test',selection});});
- fireEvent.change(screen.getByRole('textbox',{name:'Your name'}),{target:{value:'Sam'}});
- fireEvent.change(screen.getByRole('textbox',{name:'Comment'}),{target:{value:'More detail'}});
- fireEvent.click(screen.getByRole('button',{name:'Post comment'}));
- await waitFor(()=>expect(writes).toHaveLength(1));
- expect(writes[0]).toMatchObject({node:'intro',quote:'Hello',text:'More detail'});
- expect(screen.queryByRole('combobox',{name:'Comment anchor'})).toBeNull();
+it('capture mode renders the document without editor or comment chrome',()=>{
+ render(<PreviewWorkspace initial={initial} file="report.jsx" capture/>);
+ expect(screen.getByText('Live document')).toBeTruthy();
+ expect(screen.queryByLabelText('Editor toolbar')).toBeNull();
 });
