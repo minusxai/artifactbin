@@ -33,6 +33,7 @@ import type { PersonCard } from '@artifactbin/contracts';
 import { IslandProvider, useIsland } from './context';
 import type { IslandChartModule, IslandContext, IslandViewer, WriteStatusFeed } from './contract';
 import { trustedPortalOf } from './trusted-portal';
+import { template as solidTemplate } from 'solid-js/web';
 
 /*
  * THE GENERATED-CODE SURFACE. Islands are compiled with `moduleName: '@mx/rt'`, so every DOM
@@ -50,6 +51,17 @@ export {
 /** For the SSR module's `render(data)`, which builds the same runtime without a transport. */
 export { IslandProvider } from './context';
 export { createDataflowStore } from '@/lib/story-runtime/store';
+
+/** Clone a browser template carried by the served page, using Solid's template calling convention. */
+export function templateFromPage(key: string, isImportNode?: boolean, isSVG?: boolean, isMathML?: boolean): (() => Node) & { cloneNode: () => Node } {
+  const source = document.querySelector(`template[data-mx-island-template="${key}"]`);
+  if (!source) throw new Error(`island template ${key} is absent from the page`);
+  const markup = (source as HTMLTemplateElement).content.textContent ?? '';
+  if (!markup) throw new Error(`island template ${key} is empty`);
+  // The pinned Solid implementation accepts MathML and attaches cloneNode; its declarations omit both.
+  const factory = solidTemplate as unknown as (html: string, importNode?: boolean, svg?: boolean, mathML?: boolean) => (() => Node) & { cloneNode: () => Node };
+  return factory(markup, isImportNode, isSVG, isMathML);
+}
 
 /* ────────────────────────────────────────────────────────────────────────────
  * The store bridge

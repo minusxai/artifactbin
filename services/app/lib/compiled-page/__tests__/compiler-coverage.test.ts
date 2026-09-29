@@ -222,7 +222,8 @@ describe('reactive shells match the React reader', () => {
     expect(columnParity(page.html, input, { rows })).toEqual([]);
     expect([...dom(page.html).querySelectorAll('svg[data-slot="icon"]')]).toHaveLength(2);
     const code = new TextDecoder().decode((await createModuleStore().get(page.module!.sha))!);
-    expect(code).toContain('glyphs-');
+    expect(code).toContain('data-mx-island-literals');
+    expect(dom(page.html).querySelector('script[data-mx-island-literals]')?.textContent).toContain('glyphs-');
   });
 
   it('renders a live rail miniature from the current values', async () => {
