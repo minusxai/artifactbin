@@ -3,7 +3,7 @@
 import * as React from "react"
 
 import { cn } from "./cn"
-import { iconGlyphKey, FALLBACK_ICON_KEY, type GlyphMap } from "@/lib/story-ui/icon-contract"
+import { iconGlyphKey, FALLBACK_ICON_KEY, ICON_BASE_CLASS, type GlyphMap } from "@/lib/story-ui/icon-contract"
 
 /**
  * The glyphs available to this render, resolved server-side and carried in the
@@ -23,7 +23,7 @@ const GlyphContext = React.createContext<GlyphMap>({})
 export const IconGlyphProvider = GlyphContext.Provider
 
 /** Sized text-small by default; an authored size-* class wins via cn(). */
-export const ICON_BASE_CLASS = "inline-block size-4 shrink-0 align-[-0.125em]"
+export { ICON_BASE_CLASS } from "@/lib/story-ui/icon-contract"
 
 /*
  * The <svg> attributes lucide uses, in the order lucide writes them. Both matter:

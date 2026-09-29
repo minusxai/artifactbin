@@ -26,11 +26,9 @@
  * bytes must never race the ones the first screen paints with.
  */
 import { agentDiscoveryHead, agentDiscoveryTail } from '@/lib/agent-discovery';
-import { createElement } from 'react';
-import { renderToStaticMarkup } from 'react-dom/server';
 import type { IslandPageData } from '@/lib/islands/contract';
 import { STORY_CHROME_CSS } from '@/lib/story-runtime/chrome-css';
-import { OutlineRail } from '@/lib/story-runtime/outline-rail';
+import type { OutlineEntry } from '@/lib/story-runtime/outline';
 import { STORY_ROOT_ID } from '@/lib/story-runtime/contract';
 import { fontPreloadTags } from '@/lib/story/first-screen-fonts';
 import { inlineStoryElement } from '@/lib/compiled-page/story-element';
@@ -44,6 +42,18 @@ import {
 } from './contract';
 import { isNavigable, speculationRulesOf } from './speculation';
 
+/** The first-paint outline has no event handlers; the app attaches navigation after adoption. */
+function renderOutlineRail(entries: readonly OutlineEntry[]): string {
+  let section = 0;
+  const rows = entries.map((entry) => {
+    if (entry.level === 2) section++;
+    const label = entry.level === 2 ? `Go to section ${section}: ${entry.title}` : `Go to ${entry.title}`;
+    const cls = entry.level === 3 ? 'mx-outline-row mx-outline-sub' : 'mx-outline-row';
+    return `<button type="button" class="${cls}" aria-label="${escapeHtml(label)}" data-mx-target="${escapeHtml(entry.path)}">${escapeHtml(entry.title)}</button>`;
+  }).join('');
+  return `<nav class="mx-outline" aria-label="Contents"><div class="mx-outline-label">Contents</div>${rows}</nav>`;
+}
+
 export const assembleReaderPage: AssembleReaderPage = (input: AssembleInput): AssembledPage => {
   const { compiled, overlay, chrome, spa, build } = input;
   const help = input.head?.help ?? null;
@@ -52,7 +62,7 @@ export const assembleReaderPage: AssembleReaderPage = (input: AssembleInput): As
   const { story: storySource, moduleData } = splitModuleData(input.story);
   const storyHtml = fillChartSlots(storySource, input.snapshot?.drawings ?? {});
   const withOutline = input.documentChrome !== false && compiled.outline?.length
-    ? `<div class="${compiled.outlinePlan ? 'mx-reading mx-reading--plan' : 'mx-reading'}">${renderToStaticMarkup(createElement(OutlineRail, { entries: compiled.outline }))}${storyHtml}</div>`
+    ? `<div class="${compiled.outlinePlan ? 'mx-reading mx-reading--plan' : 'mx-reading'}">${renderOutlineRail(compiled.outline)}${storyHtml}</div>`
     : storyHtml;
   const story = storyElement(withOutline, input.colorMode, input.theme);
 

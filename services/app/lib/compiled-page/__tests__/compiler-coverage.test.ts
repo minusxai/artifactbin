@@ -165,7 +165,8 @@ describe('a wrapper is today\'s render around its compiled children', () => {
     const page = await compilePage(await inputOf(source), loadCompilerBuild());
     expect(page.unported).toEqual([]);
     expect(page.islands.flatMap((i) => i.kit)).toContain('Switch');
-    expect(page.reactStatic).toEqual(expect.arrayContaining(['Table', 'TableBody', 'TableRow', 'TableCell']));
+    expect(page.reactStatic).toEqual([]);
+    expect(page.kit.skeleton).toEqual(expect.arrayContaining(['Table', 'TableBody', 'TableRow', 'TableCell']));
     const cell = dom(page.html).querySelector('td#c')!;
     expect(cell.getAttribute('data-slot')).toBe('table-cell');
     expect(cell.querySelector('[data-hk]')).toBeTruthy();
@@ -241,15 +242,15 @@ describe('reactive shells match the React reader', () => {
 });
 
 describe('the static part of a large document', () => {
-  it('is today\'s React render carried as HTML beside the skeleton, never through the skeleton module, and spliced whole', async () => {
+  it('renders a large static subtree through the Solid skeleton', async () => {
     const rows = Array.from({ length: 400 }, (_, i) => `<TableRow><TableCell className="font-mono">row ${i} &amp; "q" 'a' &lt;b&gt;</TableCell><TableCell>${i}</TableCell></TableRow>`).join('');
     const source = `<Helmet><Value name="q" type="string" default="Ada" /></Helmet><div id="w"><h1 id="h">Big</h1><Table id="t"><TableBody>${rows}</TableBody></Table><p id="live">Hello {$q}</p><mx-static data-i="0" id="own"></mx-static></div>`;
     const input = await inputOf(source);
     const generated = generate(input);
-    // The static markup is not in the module: the skeleton holds placeholders, the rows are in `statics`.
-    expect(generated.skeleton).not.toContain('row 399');
-    expect(generated.statics.join('')).toContain('row 399');
-    expect(generated.reactStatic).toEqual(expect.arrayContaining(['Table', 'TableBody', 'TableRow', 'TableCell']));
+    expect(generated.skeleton).toContain('row 399');
+    expect(generated.skeleton).not.toContain('<mx-static data-i=');
+    expect(generated.kit.skeleton).toEqual(expect.arrayContaining(['Table', 'TableBody', 'TableRow', 'TableCell']));
+    expect(generated.reactStatic).toEqual([]);
     const page = await compilePage(input, loadCompilerBuild());
     expect(page.html).not.toMatch(/<mx-static data-i="\d+"><\/mx-static>/);
     // An author's own element of that name is theirs, not a placeholder.
