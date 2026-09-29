@@ -55,6 +55,8 @@ export type IslandEntry = readonly [renderId: string, component: Component, key?
 export interface IslandModule {
   /** Every island, in document order. */
   ISLANDS: readonly IslandEntry[];
+  /** Single-tree modules expose their component for cached re-imports during a morph. */
+  TREE?: Component;
   /** The version's compiled dataflow (the islands' data), or null/absent when they read none. */
   FLOW?: CompiledDataflow | null;
 }
@@ -71,6 +73,7 @@ export interface IslandMorphSeam {
   hydrate(entry: IslandEntry): void;
   /** Every module this document has run, by its `ISLANDS` (a cached re-import runs no `boot`). */
   readonly modules: WeakMap<readonly IslandEntry[], IslandModule>;
+  readonly trees: WeakMap<Component, IslandModule>;
   /** Load the incoming module's immutable DOM factories before changing the old tree. */
   prepareTemplates(): Promise<void>;
   /** Set by the engine while it imports a newer version's module: that module's `boot` hands it in here. */
@@ -144,7 +147,7 @@ function lazyEngine(load: () => Promise<PageEngine>, identified: () => boolean):
  */
 export function boot(input: IslandModule | { TREE: Component; FLOW?: CompiledDataflow | null } | readonly IslandEntry[], win: Window = window): IslandDocument {
   const module: IslandModule = Array.isArray(input) ? { ISLANDS: input as readonly IslandEntry[] }
-    : 'TREE' in input ? { ISLANDS: [['d-', input.TREE]], FLOW: input.FLOW }
+    : 'TREE' in input && input.TREE ? { ISLANDS: [['d-', input.TREE]], TREE: input.TREE, FLOW: input.FLOW }
       : (input as IslandModule);
   const doc = win.document;
   const root = doc.querySelector<HTMLElement>(STORY_ROOT_SELECTOR) ?? doc.body;
@@ -246,7 +249,7 @@ export function boot(input: IslandModule | { TREE: Component; FLOW?: CompiledDat
     if (generation === authorGeneration && !disposed && mode === 'read') stopAuthor = startAuthorHost(source, store, doc);
   };
   const islandDocument: MorphableIslandDocument = {
-    morph: { islands, hydrate, modules: new WeakMap([[module.ISLANDS, module]]), prepareTemplates: () => loadTemplateResource(), restartAuthor },
+    morph: { islands, hydrate, modules: new WeakMap([[module.ISLANDS, module]]), trees: new WeakMap(module.TREE ? [[module.TREE, module]] : []), prepareTemplates: () => loadTemplateResource(), restartAuthor },
     root,
     store,
     context,

@@ -258,14 +258,14 @@ function syncModuleRecord(doc: Document, next: Document): void {
  */
 async function takeModule(seam: IslandMorphSeam, url: string, importModule: NonNullable<MorphDependencies['importModule']>): Promise<IslandModule> {
   let taken: IslandModule | null = null;
-  seam.take = (module) => { taken = module; seam.modules.set(module.ISLANDS, module); };
-  let exports: { ISLANDS?: readonly IslandEntry[] } | null;
+  seam.take = (module) => { taken = module; seam.modules.set(module.ISLANDS, module); if (module.TREE) seam.trees.set(module.TREE, module); };
+  let exports: { ISLANDS?: readonly IslandEntry[]; TREE?: IslandEntry[1] } | null;
   try {
-    exports = (await importModule(url)) as { ISLANDS?: readonly IslandEntry[] } | null;
+    exports = (await importModule(url)) as { ISLANDS?: readonly IslandEntry[]; TREE?: IslandEntry[1] } | null;
   } finally {
     delete seam.take;
   }
-  const module = taken ?? (exports?.ISLANDS ? seam.modules.get(exports.ISLANDS) : undefined);
+  const module = taken ?? (exports?.ISLANDS ? seam.modules.get(exports.ISLANDS) : exports?.TREE ? seam.trees.get(exports.TREE) : undefined);
   if (!module) throw refuse('the new version\'s module did not hand in its islands');
   return module;
 }
@@ -279,7 +279,9 @@ function renderIdOf(node: Node): string | null {
   if (node.nodeType !== 1) return null;
   const key = (node as Element).getAttribute(HK);
   const dash = key ? key.indexOf('-') : -1;
-  return dash > 0 ? key!.slice(0, dash + 1) : null;
+  const renderId = dash > 0 ? key!.slice(0, dash + 1) : null;
+  // The d- key covers the whole document; its descendants are ordinary morphable nodes.
+  return renderId === 'd-' ? null : renderId;
 }
 
 /** Each island's top-level nodes (its root first), by render id: what hydration handed the island. */

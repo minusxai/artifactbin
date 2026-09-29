@@ -247,9 +247,9 @@ export function generate(input: GenerateInput): Generated {
   const unported = new Set<string>();
   const kitUsed = { skeleton: new Set<string>(), islands: new Set<string>() };
   const staticTexts: Record<string, string> = {};
-  const staticText = (value: string): string => {
+  const staticText = (value: string, noHydration = false): string => {
     if (value.length <= 1024) return jsxLiteral(value);
-    const marker = `MXSTATIC${contentSha(value)}${Object.keys(staticTexts).length}END`;
+    const marker = `${noHydration ? 'MXSTATICTEXT' : 'MXSTATIC'}${contentSha(value)}${Object.keys(staticTexts).length}END`;
     staticTexts[marker] = value;
     return marker;
   };
@@ -284,6 +284,7 @@ export function generate(input: GenerateInput): Generated {
   const needsBrowser = (node: JsxNode): boolean => {
     const known = needs.get(node);
     if (known !== undefined) return known;
+    if (isElement(node) && node.tag === 'Iframe' && managedFrameOf(node) === null) return false;
     const value = selfDynamic(node) || (isElement(node) && node.children.some(needsBrowser));
     needs.set(node, value);
     return value;
@@ -306,7 +307,7 @@ export function generate(input: GenerateInput): Generated {
   function emit(node: JsxNode, path: string, mode: Mode, ctx: Ctx): string {
     if (node.type === 'text') {
       if (ctx.row && /\{\s*\$_row\./.test(node.value)) return `{rt.sub(${lit(node.value)}, ${ctx.row})}`;
-      if (!ctx.row && !ctx.preview && node.value) return mode === 'browser' ? '<rt.NoHydration />' : `<rt.NoHydration>${node.value.length <= 1024 && /\r|\n/.test(node.value) ? `{${lit(node.value)}}` : staticText(node.value)}</rt.NoHydration>`;
+      if (!ctx.row && !ctx.preview && node.value) return mode === 'browser' ? '<rt.NoHydration />' : `<rt.NoHydration>${node.value.length <= 1024 && /\r|\n/.test(node.value) ? `{${lit(node.value)}}` : staticText(node.value, true)}</rt.NoHydration>`;
       return node.value === '' ? '' : (node.value.length <= 1024 && /\r|\n/.test(node.value) ? `{${lit(node.value)}}` : staticText(node.value));
     }
     if (node.type === 'expression') {
@@ -369,7 +370,7 @@ export function generate(input: GenerateInput): Generated {
       if (!meta) { unported.add(node.tag); return `<div data-mx-unported={${lit(node.tag)}} data-mx-ast={${lit(path)}}></div>`; }
       useKit(node.tag, mode, ctx);
       const props = rawBuildProps(node.attributes, true, node.tag, path, undefined, ctx.preview?.values ?? {});
-      if (node.tag === 'TabsContent' && !ctx.preview) props.forceMount = true;
+      if (!ctx.preview && ['TabsContent', 'AccordionContent', 'CollapsibleContent', 'PopoverContent', 'TooltipContent'].includes(node.tag)) props.forceMount = true;
       if (ctx.preview) Object.assign(props, ctx.preview.rewrite(props));
       if (node.tag === 'Video' || node.tag === 'File') Object.assign(props, resolveRefProps(node, props, refData));
       // Decided here, never read from the author (interpreter BUTTON_TRIGGERS).

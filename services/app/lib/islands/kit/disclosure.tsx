@@ -24,11 +24,12 @@ export function CollapsibleTrigger(props: JSX.ButtonHTMLAttributes<HTMLButtonEle
   onMount(() => createEffect(() => { const id = ctx.open() ? ctx.panelId() : null; if (id) button.setAttribute('aria-controls', id); else button.removeAttribute('aria-controls'); }));
   return <button ref={button} type="button" aria-controls={ctx.open() ? ctx.panelId() : undefined} aria-expanded={ctx.open()} data-state={ctx.open() ? 'open' : 'closed'} data-slot="collapsible-trigger" on:click={() => ctx.setOpen(!ctx.open())} {...props} />;
 }
-export function CollapsibleContent(props: JSX.HTMLAttributes<HTMLDivElement>) {
+export function CollapsibleContent(props: JSX.HTMLAttributes<HTMLDivElement> & { forceMount?: boolean }) {
   const ctx = useContext(CollapsibleContext)!; let node: HTMLDivElement | undefined;
   if (props.id) ctx.setPanelId(props.id);
   collapsibleStyle(() => node, ctx.open);
-  return <div ref={node} id={props.id ?? ctx.contentId} data-state={ctx.open() ? 'open' : 'closed'} data-slot="collapsible-content" hidden={!ctx.open()} {...props}>{ctx.open() ? props.children : null}</div>;
+  const [local, rest] = splitProps(props, ['forceMount', 'children']);
+  return <div ref={node} id={props.id ?? ctx.contentId} data-state={ctx.open() ? 'open' : 'closed'} data-slot="collapsible-content" hidden={!ctx.open()} {...rest}>{local.forceMount || ctx.open() ? local.children : null}</div>;
 }
 export function Popover(props: JSX.HTMLAttributes<HTMLSpanElement> & { open?: boolean; defaultOpen?: boolean; onOpenChange?: (value: boolean) => void }) {
   const ctx = makeState(props); return <PopoverContext.Provider value={ctx}>{props.children}</PopoverContext.Provider>;

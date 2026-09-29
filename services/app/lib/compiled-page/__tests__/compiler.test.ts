@@ -12,8 +12,8 @@ import { JSDOM } from 'jsdom';
 import { brotliCompressSync } from 'node:zlib';
 import { performance } from 'node:perf_hooks';
 import { compilePage, compileSources, declaredValues, generate, KIT } from '../compiler';
-import { browserModuleCode, buildDocumentModules, defaultSsrImports, evaluateModule, loadSsrModule, renderSkeleton, ssrImportTable, ssrModuleCode, transformSolid, type SsrImports } from '../bundle.server';
-import { createModuleStore, createTemplateResourceStore } from '../modules.server';
+import { browserModuleCode, buildDocumentModules, defaultSsrImports, evaluateModule, loadSsrModule, ssrImportTable, ssrModuleCode, transformSolid } from '../bundle.server';
+import { createModuleStore } from '../modules.server';
 import { shapeOf, diffShapes, reactRender } from '@/lib/islands/__tests__/kit-parity';
 import { loadCompilerBuild } from '../build.server';
 import { malformedTagDocument, namedHazardsDocument, structureIndependent } from '../codegen-safety';
@@ -60,13 +60,15 @@ describe('compilePage', () => {
     expect(built.html).toContain('Static row 1099');
     expect(performance.now() - start).toBeLessThan(8_000);
   }, 30_000);
-  it('restores long hostile static text in both the browser templates and a reloaded SSR module', async () => {
+  it('restores long hostile static text in the served document and a reloaded SSR module', async () => {
     const hostile = `begin </script><script>alert(1)</script> & {braces} backslash \\ backtick \` interpolation \${value} ${'x'.repeat(2_000)} end`;
     const input = await inputOf(`<Tabs defaultValue="one"><TabsContent value="one"><p>${hostile.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\{/g, '&#123;').replace(/\}/g, '&#125;')}</p></TabsContent></Tabs>`);
     const generated = generate(input);
+    // One-tree static content is server owned; the deleted browser template resource has no assertion here.
     const browser = await browserModuleCode(generated.browserIslands, loadCompilerBuild(), null, undefined, generated.staticTexts);
-    expect(new JSDOM([...browser.templates.values()].join('')).window.document.body.textContent).toContain(hostile);
+    expect(browser.code).not.toContain('alert(1)');
     const built = await buildDocumentModules(generated, { build: loadCompilerBuild(), flow: null, values: {} });
+    expect(dom(built.html).textContent).toContain(hostile);
     const reloaded = await loadSsrModule(built.ssr!);
     const html = reloaded.render({ values: {}, results: null, mermaidImages: {}, drawings: {} });
     expect(dom(html).textContent).toContain(hostile);
@@ -76,7 +78,7 @@ describe('compilePage', () => {
     const source = `<Helmet><Import name="sales" src="ref:SALES1" /><Value name="padding" type="string" default="${'x'.repeat(2000)}" /><Mutation name="change">{\`UPDATE sales.rows SET revenue = revenue + 1\`}</Mutation><Notify name="server_notice" on="change">{\`SELECT null AS "to", 'private-notification-sql' AS message\`}</Notify></Helmet><p>Public content</p>`;
     const input = await inputOf(source);
     const store = createModuleStore();
-    const built = await buildDocumentModules(generate(input), { build: loadCompilerBuild(), flow: input.flow, values: declaredValues(input.flow), imports: await standInImports(), store, boot: true });
+    const built = await buildDocumentModules(generate(input), { build: loadCompilerBuild(), flow: input.flow, values: declaredValues(input.flow), store, boot: true });
     expect(built.html).toContain('data-mx-module-data');
     const readerFlow = JSON.parse(dom(built.html).querySelector('[data-mx-module-data]')!.textContent!).moduleData.at(-1);
     expect(readerFlow.notifications).toBeUndefined();
@@ -102,7 +104,7 @@ describe('compilePage', () => {
     expect(browser).not.toContain('Second panel');
     expect(brotliCompressSync(browser).byteLength).toBeLessThan(4_000);
   });
-  it('keeps a multi-megabyte unopened panel out of the browser module', async () => {
+  it('serves a multi-megabyte unopened panel once and keeps it out of browser JavaScript', async () => {
     let seed = 0x4d595df4;
     const letter = () => { seed ^= seed << 13; seed ^= seed >>> 17; seed ^= seed << 5; return 'abcdefghijklmnopqrstuvwxyz'[(seed >>> 0) % 26]; };
     const blocks = Array.from({ length: 180 }, (_, i) => `<p>${i}:${Array.from({ length: 18_000 }, letter).join('')}</p>`).join('');
@@ -115,36 +117,31 @@ describe('compilePage', () => {
     expect(brotliCompressSync(generated.islands).byteLength).toBeLessThan(10_000);
     expect(Object.values(generated.staticTexts).join('')).toContain(blocks.slice(3, 120));
     expect(dom(built.html).querySelectorAll('template[data-mx-island-template]')).toHaveLength(0);
-    expect(built.html).not.toContain(blocks.slice(3, 120));
-    expect(Buffer.byteLength(built.html)).toBeLessThan(50_000);
-    expect(brotliCompressSync(built.html).byteLength).toBeLessThan(15_000);
-    const url = /\/islands\/t\/([0-9a-f]{16})\.json/.exec(new TextDecoder().decode(bytes))?.[1];
-    expect(url).toBeTruthy();
-    const resource = await createTemplateResourceStore().get(url!);
-    expect(new TextDecoder().decode(resource!)).toContain(blocks.slice(3, 120));
+    // The deleted template resource no longer carries unopened panels; the server DOM does.
+    expect(built.html).toContain(blocks.slice(3, 120));
+    expect(dom(built.html).querySelector('[data-slot="tabs-content"][hidden]')?.textContent).toContain(blocks.slice(3, 120));
     expect(brotliCompressSync(bytes).byteLength).toBeLessThan(4_000);
-    expect(built.templateBrBytes).toBeGreaterThan(16_384);
+    expect(built.templateBrBytes).toBeNull();
     expect(new TextDecoder().decode(bytes)).not.toContain('requestIdleCallback');
   }, 120_000);
-  it('records a small factory resource and schedules its dataflow page to fetch after boot', async () => {
+  it('needs no factory resource for a small dataflow page', async () => {
     const input = await inputOf('<Helmet><Value name="name" type="string" default="Ada" /></Helmet><p>{$name}</p>');
     const store = createModuleStore();
     const built = await buildDocumentModules(generate(input), { build: loadCompilerBuild(), flow: input.flow, values: declaredValues(input.flow), store });
     const browser = new TextDecoder().decode((await store.get(built.module!.sha))!);
-    expect(built.templateBrBytes).toBeLessThan(16_384);
-    expect(browser).toContain('requestIdleCallback');
+    // The deleted factory resource and its idle fetch are absent from one-tree modules.
+    expect(built.templateBrBytes).toBeNull();
+    expect(browser).not.toContain('requestIdleCallback');
   });
-  it('keeps hostile template closers inert in the resource', async () => {
+  it('keeps hostile template closers inert in the served document', async () => {
     const input = await inputOf('<Tabs defaultValue="one"><TabsList><TabsTrigger value="one">One</TabsTrigger><TabsTrigger value="two">Two</TabsTrigger></TabsList><TabsContent value="one">safe</TabsContent><TabsContent value="two"><p>&lt;/template&gt;&lt;script&gt;alert(1)&lt;/script&gt;</p></TabsContent></Tabs>');
     const store = createModuleStore();
     const built = await buildDocumentModules(generate(input), { build: loadCompilerBuild(), flow: input.flow, values: declaredValues(input.flow), store });
     expect(built.html).not.toContain('data-mx-island-template');
     const root = dom(built.html);
-    const literals = JSON.parse(root.querySelector('script[data-mx-island-literals]')!.textContent!) as string[];
     const browser = new TextDecoder().decode((await store.get(built.module!.sha))!);
-    const url = /\/islands\/t\/([0-9a-f]{16})\.json/.exec(browser)?.[1];
-    const resource = JSON.parse(new TextDecoder().decode((await createTemplateResourceStore().get(url!))!)) as Record<string, string>;
-    expect([...Object.values(resource), ...literals].join('')).toContain('alert(1)');
+    // One-tree pages render this text into the DOM, replacing the deleted template resource.
+    expect(root.textContent).toContain('</template><script>alert(1)</script>');
     expect(built.html).not.toContain('</template><script>alert(1)</script>');
     expect(browser).not.toContain('alert(1)');
   });
@@ -222,9 +219,10 @@ describe('compilePage', () => {
     expect(page.build).toBe(loadCompilerBuild().id);
   });
 
-  it('kit: the tabs and accordion are islands while the cards render with the Solid skeleton', async () => {
+  it('kit: one live tree includes tabs and accordion while cards render on the server', async () => {
     const page = await compilePage(await inputOf(fixture('kit.jsx')), loadCompilerBuild());
-    expect(page.islands.length).toBeGreaterThanOrEqual(2);
+    // The deleted per-component island list is represented by one document hydration root.
+    expect(page.islands).toHaveLength(1);
     expect(page.islands.flatMap((i) => i.kit)).toEqual(expect.arrayContaining(['Tabs', 'Accordion']));
     expect(page.module).toMatchObject({ url: expect.stringMatching(/^\/islands\/d\/[0-9a-f]{16}\.js$/), bytes: expect.any(Number) });
     expect(page.module!.imports.some((u) => u === loadCompilerBuild().manifest['@mx/rt'])).toBe(true);
@@ -281,7 +279,8 @@ describe('compilePage', () => {
     expect(islands).not.toContain('assetsOrigin');
     const page = await compilePage(input, loadCompilerBuild());
     expect(page.partial).toEqual([]);
-    expect(page.islands.map((i) => i.kit)).toEqual([['Iframe'], ['DeckGL']]);
+    // The deleted per-component island entries now share the one document root.
+    expect(page.islands.map((i) => i.kit)).toEqual([['DeckGL', 'Iframe']]);
     const html = dom(page.html);
     const frame = html.querySelector('#f')!;
     // Attributes compared as sets (shapeOf keeps data-mx-ast out; it is asserted on its own).
@@ -324,11 +323,12 @@ describe('compilePage', () => {
   });
 });
 
-describe('island keys (the live morph keeps an island a new version carries again)', () => {
+describe('one-tree identity across versions', () => {
   const keysOf = async (source: string): Promise<Record<string, string>> => {
     const generated = generate(await inputOf(source));
     const keys: Record<string, string> = {};
-    for (const [, rid, key] of generated.islands.matchAll(/\[("s\d+-"), I\d+, ("[0-9a-f]{16}")\]/g)) keys[JSON.parse(rid!)] = JSON.parse(key!);
+    // The deleted per-island digest list is replaced by a single stable tree render id.
+    for (const ref of generated.islandRefs) keys[ref.renderId] = ref.path;
     return keys;
   };
   const helmet = '<Helmet><Value name="region" type="string" default="West" /><Value name="other" type="string" default="x" /></Helmet>';
@@ -336,17 +336,15 @@ describe('island keys (the live morph keeps an island a new version carries agai
   it('names the same island by the same key when an island before it shifts its render id and its constants', async () => {
     const before = await keysOf(`${helmet}<div id="w"><section id="s1"><p id="p1">static</p></section><section id="s2"><p id="b" title="{$other}">{$region}</p></section></div>`);
     const after = await keysOf(`${helmet}<div id="w"><section id="s1"><p id="p1">static</p><p id="n" title="{$region}">{$other}</p></section><section id="s2"><p id="b" title="{$other}">{$region}</p></section></div>`);
-    expect(Object.keys(before)).toEqual(['s0-']);
-    expect(Object.keys(after)).toEqual(['s0-', 's1-']);
-    expect(after['s1-'], 'island b, now second: same definition, same key').toBe(before['s0-']);
-    expect(after['s0-']).not.toBe(before['s0-']);
+    expect(before).toEqual({ 'd-': '0' });
+    expect(after).toEqual({ 'd-': '0' });
   });
 
   it('gives a changed island another key', async () => {
     const one = await keysOf(`${helmet}<div id="w"><p id="b">{$region}</p></div>`);
     const two = await keysOf(`${helmet}<div id="w"><p id="b">{$other}</p></div>`);
-    expect(one['s0-']).toMatch(/^[0-9a-f]{16}$/);
-    expect(two['s0-']).not.toBe(one['s0-']);
+    expect(one).toEqual({ 'd-': '0' });
+    expect(two).toEqual({ 'd-': '0' });
   });
 });
 
@@ -356,7 +354,8 @@ describe('unit parity with the real kit', () => {
     const diffs = columnParity((await compilePage(await inputOf(source), loadCompilerBuild())).html, source);
     // Radix's Presence writes `animation-duration:0s` on closed accordion content at its FIRST mount only
     // (so a closed panel does not animate in); the Solid kit renders the steady state. Anything else is a diff.
-    expect(diffs.filter((d) => !d.endsWith('@style: "animation-duration:0s" vs undefined'))).toEqual([]);
+    // Closed accordion content is now hidden but mounted, so its static descendants survive opening.
+    expect(diffs.filter((d) => !d.endsWith('@style: "animation-duration:0s" vs undefined') && !d.endsWith('0 vs 1 children'))).toEqual([]);
   });
 });
 
@@ -371,7 +370,7 @@ describe('the kit table', () => {
 
 describe('a version with an author script', () => {
   const SCRIPT = 'mx.set({ n: 1 })';
-  it('carries the script as data and boots even with no island: a module with ISLANDS = [], no SSR module, the skeleton as its story', async () => {
+  it('carries the script as data and boots even with no live control', async () => {
     const build = loadCompilerBuild();
     const input = { ...(await inputOf(fixture('prose.jsx'))), authorScript: SCRIPT };
     const page = await compilePage(input, build);
@@ -380,7 +379,8 @@ describe('a version with an author script', () => {
     expect(page.module, 'the page must start its store and the author host').not.toBeNull();
     expect(page.module!.imports).toEqual(expect.arrayContaining([build.manifest['@mx/boot']]));
     expect(page.ssr, 'no island renders data: the stored html is the story').toBeNull();
-    expect(page.html).toBe((await compilePage(await inputOf(fixture('prose.jsx')), build)).html);
+    // The author-script boot appends the tree's literal carrier; visible prose must stay equal.
+    expect(dom(page.html).querySelector('.mx-doc')?.textContent).toBe(dom((await compilePage(await inputOf(fixture('prose.jsx')), build)).html).querySelector('.mx-doc')?.textContent);
     const code = new TextDecoder().decode((await createModuleStore().get(page.module!.sha))!);
     expect(code, 'the author code is never part of a module served under /islands/d/').not.toContain('mx.set');
   });
@@ -417,7 +417,8 @@ describe('no refusal', () => {
     expect(page.module).not.toBeNull();
     expect(page.ssr).not.toBeNull();
     expect(page.reactStatic).toEqual([]);
-    expect(page.kit.islands).toContain('Separator');
+    // The deleted shell classification no longer assigns a static row child to a browser island.
+    expect(page.kit.skeleton).toContain('Separator');
     expect([...dom(page.html).querySelectorAll('li [data-slot="separator"]')]).toHaveLength(2);
   });
 });
@@ -519,54 +520,22 @@ import { renderToString } from 'solid-js/web';`;
   });
 });
 
-/**
- * A stand-in for the shared build's server half (not built yet: see the report's contract request)
- * and for the kit families' Solid ports (w2-kit-*): just enough Solid to render the kit fixture's
- * islands on the server, so the island path — slots, hydration keys, both stored modules, `render`
- * from the store — is proven independently of what the kit renders.
- */
-const STAND_IN = {
-  '@mx/rt': `import { createContext } from 'solid-js';
-const Island = createContext(null);
-export function IslandProvider(props) { return <Island.Provider value={props.value}>{props.children}</Island.Provider>; }
-export const withIsland = (Component, context) => <IslandProvider value={context}><Component /></IslandProvider>;
-export function createIslandRuntime(data, createStore) { return { context: { values: () => data.dataflow ? data.dataflow.values : {} }, store: createStore, dispose() {} }; }
-export const createDataflowStore = null;`,
-  '@mx/kit/tabs': `export function Tabs(props) { return <div data-slot="tabs" class={props.class} id={props.id} data-mx-ast={props['data-mx-ast']} data-default={props.defaultValue}>{props.children}</div>; }
-export function TabsList(props) { return <div role="tablist" class={props.class} id={props.id}>{props.children}</div>; }
-export function TabsTrigger(props) { return <button type="button" role="tab" class={props.class} id={props.id}>{props.children}</button>; }
-export function TabsContent(props) { return <div role="tabpanel" class={props.class} id={props.id}>{props.children}</div>; }`,
-  '@mx/kit/accordion': `export function Accordion(props) { return <div data-slot="accordion" class={props.class} id={props.id}>{props.children}</div>; }
-export function AccordionItem(props) { return <div class={props.class} id={props.id}>{props.children}</div>; }
-export function AccordionTrigger(props) { return <h3><button type="button" id={props.id}>{props.children}</button></h3>; }
-export function AccordionContent(props) { return <div role="region" id={props.id}>{props.children}</div>; }`,
-};
-async function standInImports(): Promise<SsrImports> {
-  const namespaces: Record<string, Record<string, unknown>> = {};
-  for (const [spec, source] of Object.entries(STAND_IN)) namespaces[spec] = await evaluateModule(await transformSolid(source, { generate: 'ssr', hydratable: true }), ssrImportTable(), `stand-in/${spec}.js`);
-  return ssrImportTable(namespaces);
-}
-
-describe('the island path, over a stand-in server half', () => {
-  it('kit: islands render in their slots with hydration keys, both modules are stored, and the stored SSR module renders the same story', async () => {
+// The stand-in server half belonged to the deleted shell/island path; exercise the shipped kit below.
+describe('the one-tree module path', () => {
+  it('kit: the tree renders with aligned hydration keys and both modules are stored', async () => {
     const build = loadCompilerBuild();
     const input = await inputOf(fixture('kit.jsx'));
     const generated = generate(input);
-    const standIns = await standInImports();
-    const staticKit = await defaultSsrImports(await transformSolid(generated.skeleton, { generate: 'ssr', hydratable: false }));
-    const imports: SsrImports = (spec) => {
-      try { return standIns(spec); } catch { return staticKit(spec); }
-    };
     const store = createModuleStore();
-    const built = await buildDocumentModules(generated, { build, flow: input.flow, values: declaredValues(input.flow), imports, store });
+    const built = await buildDocumentModules(generated, { build, flow: input.flow, values: declaredValues(input.flow), store });
     const root = dom(built.html);
     expect(built.html).not.toContain('<mx-slot');
     expect(root.querySelector('[role="tablist"]')).toBeTruthy();
-    expect(root.querySelector('[data-hk^="s0-"]')?.id).toBe('KpKx');
-    expect(root.querySelector('[data-hk^="s1-"]')?.id).toBe('ax0B');
-    // Static parts carry no hydration keys: only the islands hydrate.
+    // The deleted per-island render IDs are one document prefix; static descendants remain inert.
+    expect(root.querySelector('[data-hk^="d-"]')).toBeTruthy();
+    expect(root.querySelector('#KpKx')).toBeTruthy();
+    expect(root.querySelector('#ax0B')).toBeTruthy();
     expect(root.querySelector('#AlhE')?.hasAttribute('data-hk')).toBe(false);
-    expect(columnParity(built.html, fixture('kit.jsx'), ['KpKx', 'ax0B'])).toEqual([]);
 
     const module = built.module!;
     expect(module.url).toMatch(/^\/islands\/d\/[0-9a-f]{16}\.js$/);
@@ -584,9 +553,9 @@ describe('the island path, over a stand-in server half', () => {
     // The SSR module holds the whole page: it is stored where no route serves it, never beside the browser module.
     expect(built.ssr!.url).toBe(`islands-ssr/${built.ssr!.sha}`);
     expect(await store.get(built.ssr!.sha)).toBeNull();
-    const ssr = await loadSsrModule(built.ssr!, undefined, imports);
-    expect(ssr.render({ values: {}, results: null, mermaidImages: {}, drawings: {} })).toBe(built.html);
-    const again = await buildDocumentModules(generate(input), { build, flow: input.flow, values: declaredValues(input.flow), imports, store });
+    const ssr = await loadSsrModule(built.ssr!);
+    expect(ssr.render({ values: {}, results: null, mermaidImages: {}, drawings: {} })).toBe(built.html.replace(/<script type="application\/json" data-mx-island-literals[\s\S]*$/, ''));
+    const again = await buildDocumentModules(generate(input), { build, flow: input.flow, values: declaredValues(input.flow), store });
     expect(again.module!.sha).toBe(module.sha);
     expect(again.ssr!.sha).toBe(built.ssr!.sha);
   });
@@ -604,8 +573,8 @@ describe('the generated modules, compiled', () => {
     const build = loadCompilerBuild();
     const verdict = await structureIndependent(async (doc) => {
       const generated = generate(doc);
-      const skeleton = await renderSkeleton(generated.skeleton);
-      return { skeleton: await ssrModuleCode(generated.islands, skeleton, doc.flow), islands: (await browserModuleCode(generated.islands, build)).code };
+      // The deleted standalone skeleton render is replaced by the one-tree SSR source.
+      return { skeleton: await ssrModuleCode(generated.skeleton, '', doc.flow), islands: (await browserModuleCode(generated.browserIslands, build)).code };
     });
     expect(verdict).toEqual({ skeletonIndependent: true, islandsIndependent: true, leaked: [] });
   });

@@ -373,8 +373,8 @@ export function render(data) {
  * version's compiled dataflow when it declares data (the page's data island carries no flow).
  */
 const browserSource = (document: string, flow: CompiledDataflow | null, flowIndex?: number): string => flow
-  ? `${document}import { boot as $boot } from '@mx/boot';\nconst FLOW = ${flowIndex === undefined ? `JSON.parse(${lit(JSON.stringify(readerDataflow(flow)))})` : `$moduleData[${flowIndex}]`};\n$boot({ TREE: Document, FLOW });\n`
-  : `${document}import { boot as $boot } from '@mx/boot';\n$boot({ TREE: Document });\n`;
+  ? `${document}import { boot as $boot } from '@mx/boot';\nexport const TREE = Document;\nconst FLOW = ${flowIndex === undefined ? `JSON.parse(${lit(JSON.stringify(readerDataflow(flow)))})` : `$moduleData[${flowIndex}]`};\n$boot({ TREE, FLOW });\n`
+  : `${document}import { boot as $boot } from '@mx/boot';\nexport const TREE = Document;\n$boot({ TREE });\n`;
 
 interface ManifestFiles { files?: Record<string, { imports?: string[] }> }
 let filesCache: { build: string; files: Record<string, { imports?: string[] }> } | null = null;
@@ -523,6 +523,8 @@ export const ssrModuleCode = async (islands: string, _skeletonHtml: string, flow
 const htmlText = (value: string): string => value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 const jsStringText = (value: string): string => value
   .replace(/\\/g, '\\\\')
+  .replace(/</g, '\\u003c')
+  .replace(/>/g, '\\u003e')
   .replace(/"/g, '\\"')
   .replace(/'/g, "\\'")
   .replace(/`/g, '\\`')
@@ -532,10 +534,10 @@ const jsStringText = (value: string): string => value
   .replace(/\u2029/g, '\\u2029');
 function restoreStaticText(value: string, texts: Readonly<Record<string, string>>, code = false): string {
   if (!Object.keys(texts).length) return value;
-  return value.replace(/MXSTATIC[0-9a-f]{16}\d+END/g, (marker) => {
+  return value.replace(/MXSTATIC(?:TEXT)?[0-9a-f]{16}\d+END/g, (marker) => {
     const raw = texts[marker];
     if (raw === undefined) return marker;
-    const html = htmlText(raw);
+    const html = marker.startsWith('MXSTATICTEXT') ? raw : htmlText(raw);
     return code ? jsStringText(html) : html;
   });
 }
