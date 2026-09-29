@@ -68,12 +68,17 @@ async function stored(predicate, label) {
   return value;
 }
 async function range(startId, start, endId = startId, end = start) {
+  await page.evaluate(async (id) => {
+    const node = document.getElementById(id);
+    if (!node) throw Error(`Missing editor range node: ${id}`);
+    node.scrollIntoView({ block: 'nearest' });
+    await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+  }, startId);
   await page.evaluate(
     ({ startId, start, endId, end }) => {
       const a = document.getElementById(startId),
         b = document.getElementById(endId);
       if (!a || !b) throw Error(`Missing editor range node: ${startId} or ${endId}`);
-      a.scrollIntoView({ block: 'nearest' });
       const text = (element, index) => {
         const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT);
         let node;
