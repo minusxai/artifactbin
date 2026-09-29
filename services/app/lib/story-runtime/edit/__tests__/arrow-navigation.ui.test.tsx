@@ -13,6 +13,7 @@ import { fireEvent, render } from '@testing-library/react';
 import type { EditorView } from 'prosemirror-view';
 import { renderStoryNodes } from '@/lib/story-ui/interpreter';
 import { createFrameEditSession } from '@/lib/story-runtime/edit/session';
+import { createEditSessionDecorator } from '@/lib/story-runtime/edit/session-decorate';
 import { STORY_SELECTION_MESSAGE } from '@/lib/story-runtime/contract';
 import {
   adjacentRegion,
@@ -294,6 +295,7 @@ describe('the edit session wires it in', () => {
   const mountFlows = () => {
     const nodes = nodesOf('<div><p>one</p><Question /><p>two</p></div>');
     const session = createFrameEditSession({
+      decorateFactory: createEditSessionDecorator,
       win: window,
       requestRender: () => {},
       channel: { nonce: 'x'.repeat(32), post: () => {}, innerHtmlOf: (el) => el.innerHTML },
