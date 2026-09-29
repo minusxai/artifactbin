@@ -100,6 +100,19 @@ describe('Select', () => {
       dispose();
     }
   });
+  it('keeps compiled popups in the document that owns their story CSS', () => {
+    const story = document.createElement('div'); story.setAttribute('data-mx-inline-story', '');
+    const css = document.createElement('style'); css.setAttribute('data-mx-story-css', ''); css.textContent = '.bg-popover { background-color: white; }';
+    const portal = document.createElement('div');
+    document.body.append(story, css);
+    const ctx = fakeIsland({ region: 'West' }); ctx.trustedPortal = () => portal;
+    const { host, dispose } = mount(ctx, () => <Select label="Region" value="$region" options={['West', 'East']} />);
+    try {
+      host.querySelector<HTMLButtonElement>('[aria-haspopup="listbox"]')!.click();
+      expect(document.body.querySelector('[role="listbox"]')).toBeTruthy();
+      expect(portal.querySelector('[role="listbox"]')).toBeNull();
+    } finally { dispose(); story.remove(); css.remove(); }
+  });
   it('offers the options table and writes the chosen value', () => {
     const ctx = island(); ctx.setValue = vi.fn();
     const { host } = mount(ctx, () => <Select label="Region" value="$region" options="$regions" placeholder="All regions" id="G2uA" />);
