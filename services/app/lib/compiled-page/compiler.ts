@@ -271,6 +271,8 @@ interface Ctx {
 
 /** What one generation produced: the sources and what they used. */
 export interface Generated extends GeneratedSources {
+  browserIslands: string;
+  moduleData: string[];
   islandRefs: IslandRef[];
   kit: { skeleton: string[]; islands: string[] };
   reactStatic: string[];
@@ -720,6 +722,14 @@ export function generate(input: GenerateInput): Generated {
     return Object.entries(byMod).sort(([a], [b]) => a.localeCompare(b)).map(([mod, tags]) => `import { ${tags.sort().map(safeProp).join(', ')} } from ${lit(`@mx/kit/${safeTag(mod)}`)};\n`).join('');
   };
   const dataConsts = data.map((text, i) => `const $d${i} = JSON.parse(${lit(text)});\n`).join('');
+  const moduleData: string[] = [];
+  const browserUses = new Set(islands.flatMap((island) => [...island.source.matchAll(/\$d(\d+)\b/g)].map((match) => Number(match[1]))));
+  const browserConsts = data.map((value, i) => {
+    if (!browserUses.has(i)) return '';
+    if (value.length <= 1024) return `const $d${i} = JSON.parse(${lit(value)});\n`;
+    const index = moduleData.push(value) - 1;
+    return `const $d${i} = $moduleData[${index}];\n`;
+  }).join('');
   // The skeleton imports only what it renders with; the islands module always carries the runtime.
   const skeleton = `${kitImports(kitUsed.skeleton)}${dataConsts}export default function Skeleton() { return ${root}; }\n`;
   const usesRowAttrs = islands.some((isl) => isl.source.includes('$rowAttrs('));
@@ -729,6 +739,8 @@ export function generate(input: GenerateInput): Generated {
   return {
     skeleton,
     islands: islandsSource,
+    browserIslands: dataConsts ? islandsSource.replace(dataConsts, `${moduleData.length ? 'const $moduleData = JSON.parse(document.getElementById("mx-story-data").textContent).moduleData;\n' : ''}${browserConsts}`) : islandsSource,
+    moduleData,
     islandRefs: islands.map((isl) => ({ renderId: `s${isl.id}-`, path: isl.path, kit: [...isl.kit].sort(), readsData: isl.readsData })),
     kit: { skeleton: [...kitUsed.skeleton].sort(), islands: [...kitUsed.islands].sort() },
     reactStatic: [...reactStatic].sort(),

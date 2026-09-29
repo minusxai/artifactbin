@@ -49,7 +49,8 @@ export const assembleReaderPage: AssembleReaderPage = (input: AssembleInput): As
   const help = input.head?.help ?? null;
   const module = compiled.module;
 
-  const storyHtml = fillChartSlots(input.story, input.snapshot?.drawings ?? {});
+  const { story: storySource, moduleData } = splitModuleData(input.story);
+  const storyHtml = fillChartSlots(storySource, input.snapshot?.drawings ?? {});
   const withOutline = input.documentChrome !== false && compiled.outline?.length
     ? `<div class="${compiled.outlinePlan ? 'mx-reading mx-reading--plan' : 'mx-reading'}">${renderToStaticMarkup(createElement(OutlineRail, { entries: compiled.outline }))}${storyHtml}</div>`
     : storyHtml;
@@ -94,7 +95,7 @@ export const assembleReaderPage: AssembleReaderPage = (input: AssembleInput): As
     + (chrome ? renderReaderChrome(chrome) : '')
     // Page furniture after the story root, never inside it: the hydrated tree never sees it.
     + (input.footer?.html ?? '')
-    + (module ? `<script type="application/json" id="${ISLAND_DATA_ID}">${scriptJson(islandData(input))}</script>` : '')
+    + (module ? `<script type="application/json" id="${ISLAND_DATA_ID}">${scriptJson({ ...islandData(input), ...(moduleData ? { moduleData } : {}) })}</script>` : '')
     + behaviorSrcs.map((src) => moduleScript(src)).join('')
     + (module ? moduleScript(module.url) : '')
     + (spa ? unique(spa.preload).map(modulePreload).join('') + moduleScript(spa.entry, ` ${SPA_IDLE_ATTR}=""`) : '')
@@ -120,6 +121,18 @@ export const assembleReaderPage: AssembleReaderPage = (input: AssembleInput): As
  * ────────────────────────────────────────────────────────────────────────── */
 
 const unique = (urls: readonly string[]): string[] => [...new Set(urls)];
+
+/** The version's large constants travel with either stored HTML or snapshot SSR, then into the page's one JSON island. */
+function splitModuleData(story: string): { story: string; moduleData: unknown[] | null } {
+  const open = '<script type="application/json" data-mx-module-data>';
+  const start = story.lastIndexOf(open);
+  if (start < 0) return { story, moduleData: null };
+  const tail = story.slice(start + open.length);
+  if (!tail.endsWith('</script>')) return { story, moduleData: null };
+  const parsed: unknown = JSON.parse(tail.slice(0, -'</script>'.length));
+  if (!parsed || typeof parsed !== 'object' || !('moduleData' in parsed) || !Array.isArray(parsed.moduleData)) throw new Error('assembler: invalid module data');
+  return { story: story.slice(0, start), moduleData: parsed.moduleData };
+}
 
 /** The document's live identity on `<body>`, which the island runtime's boot opens the live stream from. */
 const liveAttrs = (live: AssembleInput['live']): string =>
