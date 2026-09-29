@@ -289,9 +289,9 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
   if (opts.actorSecret) actorReceiver(opts.actorSecret).mount(app);
   const webDir = opts.webDir ?? path.resolve('dist/web');
   let indexCache: string | null = null;
-  const index = async (url: string, status?: 200 | 404): Promise<string> => {
+  const index = async (url: string, status?: 200 | 404, artifactFormat?: string): Promise<string> => {
     if (opts.indexHtml) return opts.indexHtml(url, status);
-    if (isSolidPage(new URL(url).pathname, status)) return readFileSync(path.join(webDir, 'trash.html'), 'utf8');
+    if (isSolidPage(new URL(url).pathname, status, artifactFormat)) return readFileSync(path.join(webDir, 'trash.html'), 'utf8');
     return (indexCache ??= readFileSync(path.join(webDir, 'index.html'), 'utf8'));
   };
   // A verified custom domain is answered by its own boundary before any app
@@ -354,7 +354,7 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
     // document handlers pass their admission's 404 explicitly).
     const miss = data === null && new URL(url).pathname.split('/').filter(Boolean)[0]?.startsWith('@');
     const code = status ?? (miss ? 404 : 200);
-    const html = await index(url, code);
+    const html = await index(url, code, admitted?.row.format);
     // A dead end is answered in the language the caller asked in: a browser
     // gets the app's own 404 page, anything else (curl's `*/*`, a fetch tool)
     // gets the refusal that names the way on.

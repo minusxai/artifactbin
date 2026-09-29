@@ -7,7 +7,7 @@ import { NavigationPreloads } from './navigation-preloads';
 import { OnboardingGate } from './OnboardingGate';
 import { useEffect } from 'react';
 
-const { ChatPage, AssetsPage, DatasetEditorPage, FileUploadPage, HomePage, NotFoundPage, ProfilePage } = routePages;
+const { ChatPage, HomePage, NotFoundPage, ProfilePage } = routePages;
 
 /** A guarded React navigation to a Solid-owned URL completes as a document navigation. */
 function LeaveToSolid() {
@@ -32,9 +32,9 @@ export function App() {
           <Route path="/notifications" element={<LeaveToSolid />} />
           <Route path="/account" element={<LeaveToSolid />} />
           <Route path="/welcome" element={<LeaveToSolid />} />
-          <Route path="/assets" element={<AssetsPage />} />
-          <Route path="/datasets/new" element={<DatasetEditorPage />} />
-          <Route path="/files/new" element={<FileUploadPage />} />
+          <Route path="/assets" element={<LeaveToSolid />} />
+          <Route path="/datasets/new" element={<LeaveToSolid />} />
+          <Route path="/files/new" element={<LeaveToSolid />} />
           <Route path="/tokens" element={<Navigate to="/account" replace />} />
           {/* `/docs` and below are the agent surface, served by the server's
             * docs route — the SPA must not claim them. */}
