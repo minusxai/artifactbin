@@ -163,7 +163,7 @@ export function Button(props: ButtonProps) {
       if (values) store.setValues(values);
       void actions.run(identity, () => store.mutate(name, read(own.args) ?? {}, snapshot));
     };
-    return <><button data-slot="button" data-variant={variant} data-size={size} {...rest} type="button" disabled={unavailable() !== null || pending() || rest.disabled === true}
+    return <><button data-slot="button" data-variant={variant} data-size={size} data-mx-template-action="" {...rest} type="button" disabled={unavailable() !== null || pending() || rest.disabled === true}
       aria-busy={pending() || undefined} aria-description={refusalText(unavailable()) ?? undefined} on:click={click} /><Show when={state()?.error}><span role="alert" class="mx-write-error">{state()?.error}</span></Show></>;
   }
   const busy = () => !!name && island.mutating(name);
@@ -173,6 +173,6 @@ export function Button(props: ButtonProps) {
     if (values) store.setValues(values);
     if (name) store.mutate(name, read(own.args)).catch((e: unknown) => setError(messageOf(e)));
   };
-  return <><button data-slot="button" data-variant={variant} data-size={size} {...rest} aria-busy={busy() || undefined} disabled={busy() || unavailable() !== null || rest.disabled === true}
+  return <><button data-slot="button" data-variant={variant} data-size={size} data-mx-template-action="" {...rest} aria-busy={busy() || undefined} disabled={busy() || unavailable() !== null || rest.disabled === true}
     aria-description={refusalText(unavailable()) ?? undefined} on:click={click} /><Show when={unavailable()}><span class="text-xs text-muted-foreground">{refusalText(unavailable())}</span></Show>{alert}</>;
 }

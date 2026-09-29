@@ -60,6 +60,11 @@ const templateLoads = new Map<string, Promise<void>>();
 export function configureTemplateResource(url: string | null): void { templateResourceUrl = url; }
 export function currentTemplateResource(): string | null { return templateResourceUrl; }
 
+/** Signals that this island needs its pinned factory before hydration can finish. */
+export class TemplateUnavailableError extends Error {
+  constructor(key: string) { super(`island template ${key} is unavailable`); }
+}
+
 /** Deduplicated, retryable fetch. No author markup is evaluated as code. */
 export function loadTemplateResource(url: string = templateResourceUrl ?? ''): Promise<void> {
   if (!url) return Promise.resolve();
@@ -82,14 +87,14 @@ export function loadTemplateResource(url: string = templateResourceUrl ?? ''): P
 }
 
 /** Hold the first reader action until the cold factories are available, then replay it once. */
-export function installTemplateInteractionGate(root: Element, doc: Document = document, onLoaded: () => void = () => {}): () => void {
+export function installTemplateInteractionGate(root: Element, doc: Document = document, onLoaded: () => void = () => {}, shouldGate: (target: Node) => boolean = () => true): () => void {
   const url = templateResourceUrl;
   if (!url || templateResources.has(url)) return () => {};
   const kinds = ['click', 'keydown', 'input', 'change'];
   let stopped = false;
   const capture = (event: Event) => {
     const target = event.target;
-    if (stopped || templateResources.has(url) || !(target instanceof Node) || !root.contains(target)) return;
+    if (stopped || templateResources.has(url) || !(target instanceof Node) || !root.contains(target) || !shouldGate(target)) return;
     event.preventDefault();
     event.stopImmediatePropagation();
     void loadTemplateResource(url).then(() => {
@@ -115,7 +120,7 @@ export function templateFromPage(key: string, isImportNode?: boolean, isSVG?: bo
       // Older pinned modules still use the page bank. New modules carry the resource URL.
       const source = !url ? document.querySelector(`template[data-mx-island-template="${key}"]`) : null;
       const markup = url ? templateResources.get(url)?.[key] : (source as HTMLTemplateElement | null)?.content.textContent;
-      if (!markup) throw new Error(`island template ${key} is unavailable`);
+      if (!markup) throw new TemplateUnavailableError(key);
       made = factory(markup, isImportNode, isSVG, isMathML);
     }
     return made();
@@ -439,11 +444,12 @@ export function hydrateIsland(renderId: string, Component: Component, context: I
       const children = [...host.childNodes].filter((node) => node === root || !(node as Element).getAttribute?.('data-hk')?.startsWith(renderId));
       return (() => children.map((node) => node === root ? (typeof live === 'function' ? (live as () => unknown)() : live) : node)) as unknown as JSX.Element;
     }), host, { renderId });
-  } catch {
+  } catch (error) {
     // Solid's development build refuses to create nodes while hydrating (a mismatch); render the
     // island fresh instead, as the production build does on its own.
     disposeIsland();
     output = undefined;
+    if (error instanceof TemplateUnavailableError) throw error;
     createRoot((dispose) => {
       mount(dispose);
       // A non-hydratable or mismatched root still needs Solid's insertion effect: a
