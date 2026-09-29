@@ -21,7 +21,9 @@ import {confinedPath,stageFiles,recoverFiles} from '../journal';
 import {digest,atomicWrite} from '../files';
 import {parseJsx} from '../../../app/lib/jsx';
 import {splitHelmet} from '../../../app/lib/story/helmet';
-import {stampNodeIds} from '../../../app/lib/story/node-ids';
+import {stampNodeIds,nodeIndex} from '../../../app/lib/story/node-ids';
+import {parseAnnotationRange} from '../../../app/lib/story/annotation-range';
+import type {PreviewComment} from './comments';
 import {localInputPath,readLocalDataset,type LocalDataset} from './local-inputs';
 import {CliError} from '../errors';
 import type {Scalar} from '../../../contracts/src/index';
@@ -37,7 +39,6 @@ export async function startPreview(options:{root:string;files:string[];home:stri
  const allowed=new Set(options.files),resources=new Set<string>();
  for(const file of options.files)for(const path of await previewGraph(root,file,options.localFiles)){if(path.toLowerCase().endsWith('.jsx'))allowed.add(path);else resources.add(path);}
  await mkdir(home,{recursive:true});
- type Comment={id:string;file:string;node:string;name:string;text:string};
  let queue:Promise<unknown>=Promise.resolve();
  const serial=<T,>(run:()=>Promise<T>):Promise<T>=>{const next=queue.then(run);queue=next.catch(()=>{});return next;};
  const pathFor=async(file:string)=>{if(!allowed.has(file))throw new Refusal(403,'File is not selected');return confinedPath(root,join(root,file));};
@@ -103,7 +104,7 @@ export async function startPreview(options:{root:string;files:string[];home:stri
   const file=workspaceFile??target.searchParams.get('file')??options.files[0]!;
   if(req.method==='GET'&&target.pathname==='/'){res.writeHead(302,{Location:'/workspace/'+file.split('/').map(encodeURIComponent).join('/')+(options.capture?'?capture=1':'')});return res.end();}
   if(req.method==='GET'&&target.pathname==='/document'){const {flow:_flow,declared:_declared,...document}=await read(file);return json(document);}
-  if(req.method==='GET'&&target.pathname==='/comments'){await pathFor(file);return json(comments.list<Comment>(root,'preview-comment').map(row=>row.value).filter(comment=>comment.file===file));}
+  if(req.method==='GET'&&target.pathname==='/comments'){await pathFor(file);return json(comments.list<PreviewComment>(root,'preview-comment').map(row=>row.value).filter(comment=>comment.file===file));}
   if(req.method==='GET'&&(target.pathname==='/resource'||workspaceFile&&resources.has(file))){if(!resources.has(file))throw new Refusal(403,'Resource not selected');res.setHeader('Content-Type',fileContentType(file)??'application/octet-stream');return res.end(await readFile(await confinedPath(root,join(root,file))));}
   if(req.method==='GET'&&/^\/a\/[A-Za-z0-9]{6,12}$/.test(target.pathname)){
    const local=options.localFiles?.[target.pathname.slice(3)];
@@ -153,12 +154,13 @@ export async function startPreview(options:{root:string;files:string[];home:stri
    if(target.pathname==='/comments'){
     const current=await read(input.file);
     // Comments refer to durable authored node IDs, never a transient DOM position.
-    if(typeof input.node!=='string'||!current.body.includes(`id="${input.node}"`)||typeof input.name!=='string'||!input.name.trim()||input.name.length>100||typeof input.text!=='string'||!input.text.trim()||input.text.length>10000)throw new Refusal(400,'Invalid comment');
-    const comment={id:randomUUID(),file:input.file,node:input.node,name:input.name,text:input.text};
+    const range=input.range==null?null:parseAnnotationRange(input.range);
+    if(typeof input.node!=='string'||!nodeIndex(current.body).has(input.node)||typeof input.name!=='string'||!input.name.trim()||input.name.length>100||typeof input.text!=='string'||!input.text.trim()||input.text.length>10000||input.range!=null&&!range||input.quote!==undefined&&(typeof input.quote!=='string'||input.quote.length>10000))throw new Refusal(400,'Invalid comment');
+    const comment:PreviewComment={id:randomUUID(),file:input.file,node:input.node,name:input.name.trim(),text:input.text.trim(),...(input.quote!==undefined?{quote:input.quote}:{}),range};
     comments.put(root,'preview-comment',comment.id,comment);return json(comment);
    }
   }
-  if(req.method==='GET'&&(target.pathname==='/'||workspaceFile)){await pathFor(file);const directory=dirname(file);const base='/workspace/'+(directory==='.'?'':directory.split('/').map(encodeURIComponent).join('/')+'/');res.setHeader('Content-Type','text/html');return res.end(`<!doctype html><html><head><meta charset="utf-8"><base href="${base}"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Artifactbin preview</title><style>.afbin-tools{font:14px system-ui,sans-serif;padding:20px;background:#f8fafc;color:#0f172a;border-bottom:1px solid #cbd5e1}.afbin-tools nav{display:flex;gap:16px;flex-wrap:wrap;margin:12px 0}.afbin-tools label{display:block;margin:12px 0}.afbin-tools input,.afbin-tools textarea,.afbin-tools select{display:block;box-sizing:border-box;max-width:100%;padding:8px;border:1px solid #94a3b8;border-radius:4px;background:white;color:#0f172a}.afbin-tools textarea{width:100%;font:13px ui-monospace,monospace}.afbin-tools button{padding:8px 12px;margin-right:8px;cursor:pointer}</style></head><body><div id="root"></div><script type="module" src="/bundle/client.js"></script></body></html>`);}
+  if(req.method==='GET'&&(target.pathname==='/'||workspaceFile)){await pathFor(file);const directory=dirname(file);const base='/workspace/'+(directory==='.'?'':directory.split('/').map(encodeURIComponent).join('/')+'/');res.setHeader('Content-Type','text/html');return res.end(`<!doctype html><html><head><meta charset="utf-8"><base href="${base}"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Artifactbin preview</title></head><body><div id="root"></div><script type="module" src="/bundle/client.js"></script></body></html>`);}
   if(req.method==='GET'&&target.pathname.startsWith('/bundle/')&&options.assets){
    const path=await confinedPath(options.assets,target.pathname.slice('/bundle/'.length));
    if(!relative(options.assets,path).endsWith('.js'))throw new Refusal(403,'Not a script');

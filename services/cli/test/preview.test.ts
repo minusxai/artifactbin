@@ -53,6 +53,25 @@ test('preview dispatch selects a foreground file session without a server connec
  }finally{await rm(root,{recursive:true,force:true});}
 });
 
+test('inline preview comments preserve selections and accept only real body anchors',async()=>{
+ const root=await mkdtemp(join(tmpdir(),'preview-comments-'));let session:Awaited<ReturnType<typeof startPreview>>|undefined;
+ try{
+  await writeFile(join(root,'report.jsx'),'<Helmet><style>{`/* id="fake" */`}</style></Helmet><p id="words">Selected words</p>');
+  session=await startPreview({root,home:join(root,'home'),files:['report.jsx']});
+  const range={v:1,parts:[{rel:'',start:0,end:8,text:'Selected'}]};
+  const post=(body:unknown)=>fetch(session!.url+'/comments',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)});
+  const comment={file:'report.jsx',node:'words',name:'Sam',text:'Clarify this',quote:'Selected',range};
+  assert.equal((await post(comment)).status,200);
+  await session.close();session=await startPreview({root,home:join(root,'home'),files:['report.jsx']});
+  const stored=await(await fetch(session.url+'/comments?file=report.jsx')).json();
+  assert.deepEqual(stored[0].range,range);assert.equal(stored[0].quote,'Selected');
+  assert.equal((await post({...comment,node:'fake'})).status,400);
+  assert.equal((await post({...comment,range:{v:99}})).status,400);
+  assert.equal((await post({...comment,quote:123})).status,400);
+  assert.equal((await post({...comment,file:'unselected.jsx'})).status,403);
+ }finally{await session?.close();await rm(root,{recursive:true,force:true});}
+});
+
 test('capture sessions run local queries but refuse file saves and comments',async()=>{
  const root=await mkdtemp(join(tmpdir(),'capture-http-'));let session:Awaited<ReturnType<typeof startPreview>>|undefined;
  try{
