@@ -6,7 +6,7 @@
  * answer is readable from the `/raw` copy's opaque origin; a fragment is never a view and never today's
  * renderer. Real routes, the harness's database, the flag in `shadow` for this file.
  */
-import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { JSDOM } from 'jsdom';
@@ -17,7 +17,6 @@ import { GET as storyRoute } from '@/app/a/[id]/story/route';
 import { mintToken } from '@/lib/tokens';
 import { claimToken, createUser, ensureUsername } from '@/lib/users';
 import { drainPreparedPageWarmups } from '@/lib/story/prepared-page.server';
-import { setCompiledReaderFlagForTests } from '@/lib/compiled-page/reader-mode';
 import { READER_MODE_HEADER } from '@/lib/compiled-page/contract';
 import { storyFragmentUrl } from '@/lib/compiled-page/story-fragment';
 
@@ -27,8 +26,6 @@ const params = (id: string) => ({ params: Promise.resolve({ id }) });
 const FIXTURES = path.resolve(process.cwd(), '../../scripts/fixtures/page-speed');
 const fixture = (name: string) => readFileSync(path.join(FIXTURES, name), 'utf8');
 
-beforeAll(() => setCompiledReaderFlagForTests('shadow'));
-afterAll(() => setCompiledReaderFlagForTests(null));
 
 async function publish(body: Record<string, unknown>): Promise<{ id: string; token: string }> {
   const { token } = await mintToken('story');

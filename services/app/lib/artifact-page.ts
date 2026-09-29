@@ -45,6 +45,8 @@ import type { LazyCode } from '@/lib/story/lazy-code';
 import type { ArtifactRow } from '@/lib/artifacts';
 import { ASSETS_ORIGIN } from '@/lib/config';
 import { VIEWER_OVERLAY_PATH, type AssembleInput, type ReaderFallbackReason } from '@/lib/compiled-page/contract';
+
+
 import { CompiledPageFailed, compiledPageFor } from '@/lib/compiled-page/serve.server';
 import { agentDiscovery } from '@/lib/agent-discovery';
 import { canonicalDocumentUrl } from '@/lib/custom-domains';
@@ -206,14 +208,13 @@ export async function artifactPageAnswer(request: Request, id: string, options: 
   void social.catch(() => {});
   const prepared = isDoc ? await preparedPageFor(artifact, at, baseUrl(request)) : null;
   const row = prepared?.row ?? await servedRow(artifact, at);
-  /*
-   * WHICH RENDERER (docs/phase2-architecture.md §10), for the app page only: the switch and the
-   * request's `?reader=`. A capture, the editor's own address and a starter's instructions are
-   * today's page whatever it says — the compiled page photographs nothing here and runs no editor.
-   */
+  // Captures, the editor's address and starter instructions use their dedicated
+  // paths; document reader views use the prepared compiled page (§10).
   const starterDoc = isDoc && isStartPlaceholder(row.source ?? null, artifact.version);
+
   const compiledMode = !!options.page && !!prepared && (!exporting || engineRequested(request.url)) && !starterDoc
     && !new URL(request.url).pathname.endsWith('/edit');
+
 
   const meta = (row.meta ?? {}) as {
     theme?: StoryThemeName | null; colorMode?: 'light' | 'dark' | null; compiledCss?: string | null;

@@ -3,9 +3,9 @@
  * `fallbackPolicy`). With the standalone renderer deleted (`compiled-only`), a missing compile or one from another
  * build is compiled inline and waited for, the inline budget only decides whether that is logged as
  * slow, and a compile that fails is a reported 500. Real routes, the harness's database, the reader
- * flag at `shadow` and the inline budget at zero for this file (every inline compile is "over budget").
+ * inline budget at zero for this file (every inline compile is "over budget").
  */
-import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { JSDOM } from 'jsdom';
@@ -16,7 +16,6 @@ import { createAppServer } from '@/server/app';
 import { mintToken } from '@/lib/tokens';
 import { claimToken, createUser, ensureUsername } from '@/lib/users';
 import { drainPreparedPageWarmups } from '@/lib/story/prepared-page.server';
-import { setCompiledReaderFlagForTests } from '@/lib/compiled-page/reader-mode';
 import { READER_FALLBACK_HEADER, READER_MODE_HEADER } from '@/lib/compiled-page/contract';
 import { compiledPageFailures, fallbackPolicy, setFallbackPolicyForTests } from '@/lib/compiled-page/serve.server';
 
@@ -29,8 +28,6 @@ const app = createAppServer({ indexHtml: async () => '<!doctype html><html><head
 const FIXTURES = path.resolve(process.cwd(), '../../scripts/fixtures/page-speed');
 const fixture = (name: string) => readFileSync(path.join(FIXTURES, name), 'utf8');
 
-beforeAll(() => setCompiledReaderFlagForTests('shadow'));
-afterAll(() => setCompiledReaderFlagForTests(null));
 afterEach(() => setFallbackPolicyForTests(null));
 
 async function owner() {

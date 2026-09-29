@@ -1,7 +1,6 @@
 # Phase 2 architecture: compile every published document to a tiny Data→UI app
 
-Status: contracts and gates landed (step 0); every module below is built by the tracks in the
-parallel plan (`.agent/phase2/PLAN.md`, sixteen tracks in four waves). The approved proposal is `https://app.artifactbin.dev/a/R9gGaO`; its TL;DR and three
+Status: shipped. The modules below describe the compiled reader and its rollout. The approved proposal is `https://app.artifactbin.dev/a/R9gGaO`; its TL;DR and three
 size targets are the scope. Its "Future work" list is out of scope.
 
 Targets (brotli/wire bytes, checked by `scripts/size-targets.mjs` against the page-speed lab):
@@ -12,12 +11,12 @@ Targets (brotli/wire bytes, checked by `scripts/size-targets.mjs` against the pa
 | 2 | JS before ready, interactive pages (kit, dashboard, every component) | 275–300 KB | ≤ 85 KB |
 | 3 | Production prose page, total transferred | 481 KB | ≤ 200 KB |
 
-Owner decisions, not reopened here: publish-time compiler to Solid islands; Solid 2.0; a vendored
+Owner decisions, not reopened here: publish-time compiler to Solid islands; Solid 1.9; a vendored
 interactive kit with Radix DOM conventions (no solid-ui/Kobalte dependency); static components render
 at publish with today's React kit until Phase 3; snapshot-first data (minutes-old is fine), guest-only
 snapshots, viewer data after paint; optimistic writes with a saving/saved/failed indicator;
 prefetch/prerender of linked artifacts; one output for every reader path (`/raw` stays, no separate
-runtime); no CDN/edge work; every milestone deletes what it replaces.
+runtime); every milestone deletes what it replaces.
 
 ## 1. Module map
 
@@ -30,21 +29,21 @@ is typed against the existing react-free store (`lib/story-runtime/store`), neve
 |--------|------|----------------|-------|
 | Compiler | `lib/compiled-page/compiler.ts` | `compilePage(input) → CompiledPage`: the parsed version → static HTML with islands spliced in, one per-document module source, island refs, data plan, link hints. Pure and deterministic for one compiler build. | w2-compiler |
 | Codegen safety harness | `lib/compiled-page/codegen-safety.ts` | `shapeOf` (AST with every literal blanked), the hostile string set, `hostileDocument` and `structureIndependent` — the test harness the compiler is proven with. Landed in step 0. | step 0 |
-| Shared island build | `scripts/build-islands.mjs` → `public/islands/` | Once per deploy: `solid-js`, the runtime and each kit module as content-addressed browser chunks + `public/islands/manifest.json` (specifier → URL) + the compiler build id. Same shape as `scripts/build-story-runtime.mjs`, which it replaces in w4-delete-standalone. | w1-toolchain |
+| Shared island build | `scripts/build-islands.mjs` → `public/islands/` | Once per deploy: `solid-js`, the runtime and each kit module as content-addressed browser chunks + `public/islands/manifest.json` (specifier → URL) + the compiler build id. Replaces the standalone story runtime build (#175). | w1-toolchain |
 | Module store | `lib/compiled-page/modules.server.ts` + `GET /islands/d/:sha.js` | The per-document module's bytes, content-addressed in the object store (`lib/object-store`), served immutable under `script-src 'self'`. | w1-assembler |
 | Compiled page store | `lib/story/prepared-page.server.ts` (`PreparedPage.compiled`) | The compiled artifact is stored WITH the prepared page, in the same row and under the same key discipline plus the compiler build id. A read whose stored compile is from another build recompiles inline (budgeted) or falls back. | w2-compiler |
-| Reader mode switch | `lib/config.ts` `COMPILED_READER`; `lib/compiled-page/reader-mode.ts` | `FLAG__COMPILED_READER=off\|shadow\|on` plus `?reader=compiled\|legacy` (honoured only when the flag is not `off`, never on a custom-domain post). Landed in step 0. | step 0 |
+| Reader selection | `lib/compiled-page/reader-mode.ts` | Compiled documents serve by default; editing and commenting views use their dedicated paths. | w4-flip-docs |
 | Data plan | `lib/compiled-page/plan.ts` | `planOf(flow, access) → DataPlan`: every query classified `shared` / `viewer` / `page` from the compiled dataflow's reads and the datasets' access facts; the datasets a snapshot depends on; the values that key a snapshot. Pure. | w1-planners |
 | Snapshot store | `lib/compiled-page/snapshots.server.ts` + `app.data_snapshots` | Guest snapshots keyed by version + plan + inputs; marks of every dataset read; freshness decided on read by comparing marks (the correctness rule) and eagerly by the dataset write hook (the optimisation); background revalidation; server-drawn charts stored with the snapshot. | w1-snapshots |
 | Server chart drawing | `lib/compiled-page/charts.server.ts` | A `<Question>` drawn to SVG from a snapshot with vega on the server; Vega loads in the browser only on interaction. | w1-planners |
 | Reader page assembler | `lib/compiled-page/assembler.ts` | `assembleReaderPage(input) → string`: ONE function for `/a/:id` (server-rendered chrome, SPA loaded on idle) and `/raw` (no chrome, no SPA), custom domains, exports, the offline file and the CLI preview. Replaces `lib/story/document.ts` assembly and `server/app withInitialStory`. | w1-assembler (wired by w3-serve) |
 | Island runtime | `lib/islands/rt.ts(x)`, `lib/islands/boot.ts` | What every island receives (`IslandContext`): data accessors, values, `mutate`, viewer overlay, write status feed, revalidation patching. Bridges the existing react-free store into Solid's store. | w2-runtime (viewer/writes: w3-viewer-writes) |
-| Interactive kit | `lib/islands/kit/*.tsx` | Vendored Solid components with Radix DOM conventions, one file per family, byte-for-byte the DOM today's kit renders (the parity gate is the definition). | w2-kit-structure, w2-kit-controls, w2-kit-data |
+| Interactive kit | `lib/islands/kit/*.tsx` | Vendored Solid components with Radix DOM conventions, one file per family, the intended reader DOM pinned by component tests. | w2-kit-structure, w2-kit-controls, w2-kit-data |
 | Viewer overlay door | `GET /a/:id/viewer` | After paint: the viewer's identity, the `viewer`-scope results, mutation access, holdable imports — the same admission as `POST /a/:id/query`. | w3-viewer-writes |
 | SPA handover | `web/initial-story.ts`, `components/ArtifactSurface.tsx`, `lib/islands/handover.ts` | The React app adopts the live island document without re-rendering it (`IslandDocument`); edit mode disposes the islands and mounts today's editor. | w3-handover |
 | Link hints | `lib/compiled-page/links.ts` | `<a href>` to same-deployment artifacts, collected at compile → `<link rel=prefetch>` and speculation rules emitted by the assembler. | w1-planners |
-| Parity gate | `scripts/gate-compiled-parity.mjs` | Element-by-element comparison of the compiled render against today's renderer on the page-speed fixtures and the kitchen sink. Landed in step 0; skips with a reason until a server serves the compiled path. | step 0 |
-| Size targets | `scripts/size-targets.mjs`, `scripts/lib/document-views.mjs` (`jsBeforeReady`) | The three targets, pass/fail per target from a lab result JSON; non-blocking in `page-speed.yml` until w4-flip-docs flips it. Landed in step 0. | step 0 → w4-flip-docs |
+| Handover gate | `scripts/gate-hydration.mjs` | Checks that the compiled story survives island hydration and app adoption, then yields to the editor. | w4-flip-docs |
+| Size targets | `scripts/size-targets.mjs`, `scripts/lib/document-views.mjs` (`jsBeforeReady`) | The three targets, pass/fail per target from a lab result JSON; blocking in `page-speed.yml`. | step 0 → w4-flip-docs |
 
 Routes translate results to HTTP; every module above returns data or a string and never a `Response`.
 
@@ -79,7 +78,7 @@ revalidate ► server: dataset write → marks move → snapshot stale → backg
 ### 2.1 Publish → compile
 
 `warmPreparedPage` already prepares the head after every commit, off the write's path. w2-compiler extends
-`build()` so that, when `COMPILED_READER !== 'off'`, the prepared page also carries `compiled`.
+`build()` so that the prepared page also carries `compiled`.
 Compilation is pure over the prepared page's inputs (`nodes`, `glyphs`, `colorMode`, `template`,
 `chrome`, the stored `CompiledDataflow`, `refData` for `ref:` sources) and the compiler build id. A
 compile error is stored as `compiled: { build, error }` so the read path never retries in a loop and
@@ -283,54 +282,23 @@ not committed — established:
 
 ## 6. Failure and fallback
 
-- Compile error at warm time → `compiled: { build, error }` stored; the read serves today's renderer
-  and logs once per version. A later deploy (new build id) retries.
-- Read miss on `compiled.build` (deploy lag: the page was compiled by the previous build; the shared
-  chunk URLs it imports are still served because chunks are content-addressed and never deleted
-  during a rolling deploy) → recompile inline under `COMPILE_INLINE_BUDGET_MS`; over budget or on error
-  → today's renderer for this request, the warm-up queue recompiles.
-- `unported` components in a version → the compile is refused (a page must be whole) → today's
-  renderer. Since w3-compiler-coverage the set is empty: a registered component with no Solid port
-  (`Slide`, `SlideDeck`, `Icon`, the `Table` family, …) that holds an island, a `$` value or a row
-  compiles as a SHELL — today's React kit renders it at compile time around a hole its compiled
-  children fill (a row's attributes filled per row by `rt.rowAttrs`) — and an unregistered legacy tag
-  (`<Param>`) renders nothing, as the interpreter does. `compiler-coverage.test.ts` asserts every
-  registered component has a compile path in every context.
-- Snapshot missing or too old → the request runs the shared queries within `SERVED_RESULTS_BUDGET_MS`
-  exactly as served results do today; otherwise declarations without rows and the page fetches.
-- Module store unavailable → the module URL 404s → the page is static HTML with inert islands; the
-  runtime's `boot` reports and the reader still reads the document. The assembler never inlines the
-  module (CSP), so this is the accepted degradation.
-- Viewer overlay failure → islands keep the guest snapshot with the "signed in" placeholder for
-  viewer-scope parts and a retry.
+A prepared page stores the compiled result or a recorded compile failure with the compiler build id.
+A read with a missing or outdated compile recompiles inline, shared by concurrent readers for that
+version. `COMPILE_INLINE_BUDGET_MS` records a slow compile; it does not select another renderer.
+If compilation still fails, `/raw` returns a reported 500 and the app page raises
+`CompiledPageFailed`. The response names the reason in `x-mx-reader-fallback`; a successful
+response names `x-mx-reader: compiled`. Access is checked before either result.
 
-Every fallback is observable: the response carries `x-mx-reader: compiled | legacy` and an
-`x-mx-reader-fallback: <reason>` when a compiled path fell back, which is what the parity gate and the
-size check read.
+An unported component cannot produce a partial reader page. The compiler covers registered
+components through a Solid island or a static shell. A missing module leaves the served HTML
+readable while its interactive parts remain inert; the runtime reports the load failure. A failed
+viewer overlay leaves its neutral placeholder and can retry. If a snapshot is missing or stale,
+the request tries shared queries within `SERVED_RESULTS_BUDGET_MS` and otherwise serves the
+declarations for the island to refresh after paint.
 
-### 6.1 The fallback contract after Wave 4
-
-Today's renderer is the fallback above only while it exists. The contract without it is implemented
-now, behind one switch in `lib/compiled-page/serve.server.ts`, `fallbackPolicy()`: it returns
-`legacy` (everything above) until Wave 4, and w4-flip-docs deletes the switch and every `legacy`
-branch, leaving `compiled-only`:
-
-| Reason | `legacy` (today) | `compiled-only` (after Wave 4) |
-|--------|------------------|--------------------------------|
-| `not-compiled` | today's renderer | compile inline and wait; one compile per version shared by concurrent readers |
-| `build-mismatch` | recompile under the budget, else today's renderer | compile inline and wait |
-| `over-budget` | today's renderer; the detached compile writes back | never an answer: the budget only decides whether the inline compile is logged as slow |
-| `compile-error` | today's renderer, logged once per version | a 500 (`CompiledReaderAnswer` `{ mode: 'failed' }`; `/raw` answers it, the app page throws `CompiledPageFailed`), reported on every occurrence (`console.error`, `compiledPageFailures()`); it must stay at zero (the census: 0) |
-| `unported` | today's renderer | never reached: the set is empty (above); a stored compile missing the version's author script is recompiled once, then a 500 |
-
-The routes already translate `failed`, so the deletion track removes only the `legacy` branches and
-the switch.
-
-Backfill after a deploy: `scripts/compiled-backfill.ts` (its header is the runbook). A prepared page is
-keyed by the serving process's own build, so the script only decides what to warm and the RUNNING
-server prepares and compiles each version through its reader door (`/a/<id>/raw?reader=compiled`,
-admitted by a one-minute export key); it resumes by the key suffix this deployment stores, and ends
-with the census read from the database.
+Backfill after a deploy uses `scripts/compiled-backfill.ts`. The running server prepares each
+version through `/a/<id>/raw`, admitted by a short-lived export key; the script resumes from the
+stored build suffix and ends with a database census.
 
 ## 7. Coexistence with the React app and the editor
 
@@ -398,59 +366,45 @@ reader's URL); the hint set is computed from the compiled page and carried by th
 - The module store serves only content-addressed paths it wrote; a request for an unknown hash is a
   404, never a compile.
 
-## 10. Reader mode switch and rollout
+## 10. Reader selection
 
-`FLAG__COMPILED_READER` (audited in `lib/config.ts`):
-
-- `off` (default, and main today): nothing compiles; `?reader=` is ignored.
-- `shadow`: every prepared page is compiled and stored, snapshots are prepared, but readers get
-  today's renderer unless the request says `?reader=compiled`. The parity gate runs against
-  `?reader=compiled`; the size check reads a lab run with `?reader=compiled`. The gate servers boot
-  in `shadow` (one line in `scripts/gates.mjs`'s server environment, w3-serve).
-- `on`: readers get the compiled page wherever a compile exists; `?reader=legacy` is the escape
-  hatch for a gate or a bug report until w4-delete-* removes the legacy path.
-
-`readerModeFor(flag, search, { domainPost })` is pure and tested. The custom-domain post path ignores
-`?reader=` like every other URL switch there.
+Prepared documents compile with the deployed island build. Reader requests use the compiled page
+where its stored build matches. Editing and commenting views keep their dedicated editing paths.
+Every document response names its path with `x-mx-reader`; when a compile cannot serve, the
+response includes `x-mx-reader-fallback` with the reason (§6). No deployment flag or reader query
+parameter selects another runtime.
 
 ## 11. What gets deleted, and when
 
-The owner's rule is "every milestone deletes what it replaces in the same PR". A switch-gated rollout
-cannot delete the legacy path while the flag still serves it, so the plan states the exception once:
-waves 1–3 add the compiled path behind the flag and delete nothing; wave 4 flips the default to `on`
-and deletes the legacy reader in the same wave, the flip PR merging last (`.agent/phase2/PLAN.md`). Line counts
-are `wc -l` on main today, not the proposal's round numbers.
+The legacy reader was removed in wave 4. The standalone and inline deletion PRs precede
+the reader flag removal. The line counts below were measured before deletion.
 
 | What | Lines | Replaced by | Deleted in |
 |------|-------|-------------|-----------|
-| `lib/story/document.ts` (standalone assembly) | 665 | assembler | w4-delete-standalone |
-| `lib/story/inline-story-html.ts` | 31 | assembler | w4-delete-inline |
-| `server/app.ts withInitialStory`, `withoutInlinedSheet` | ~60 | assembler | w4-delete-inline |
-| `lib/story-runtime/entry.tsx` (the /story runtime) | 464 | shared island build | w4-delete-standalone |
-| `lib/story-runtime/InlineStoryRuntime.tsx` | 478 | handover | w4-delete-inline |
-| `lib/story-runtime/live-entry.ts`, `anchor-entry.ts`, `comment-entry.ts` | 147 + 123 + 124 | runtime chunks | w4-delete-standalone |
-| `scripts/build-story-runtime.mjs`, `story-runtime-graph.mjs`, `lib/story/runtime-asset.ts`, `public/story/` | 420 + 112 + 158 | `scripts/build-islands.mjs` | w4-delete-standalone |
-| `lib/story-runtime/inline-sheet.ts` (browser CSS work) | 40 | server-only isolation | w4-delete-inline |
-| runtime class merging in the reader (`tailwind-merge`/`clsx`/`cva` in reader chunks) | 9.0 KB gz | classes resolved at publish | w4-delete-inline |
-| `lib/story/served-results.server.ts` | 173 | snapshots | w3-serve folds it into the snapshot's cold path (not duplicated); the file goes with w4-delete-standalone |
-| Radix wrappers used only by the reader | per component | vendored kit | w4-delete-inline (the editor's use stays until Phase 3) |
+| `lib/story/document.ts` (standalone assembly) | 665 | assembler | #175 |
+| `lib/story/inline-story-html.ts` | 31 | assembler | #177 |
+| `server/app.ts withInitialStory`, `withoutInlinedSheet` | ~60 | assembler | #177 |
+| `lib/story-runtime/entry.tsx` (the /story runtime) | 464 | shared island build | #175 |
+| `lib/story-runtime/InlineStoryRuntime.tsx` | 478 | handover | #177 |
+| `lib/story-runtime/live-entry.ts`, `anchor-entry.ts`, `comment-entry.ts` | 147 + 123 + 124 | runtime chunks | #175 |
+| `scripts/build-story-runtime.mjs`, `story-runtime-graph.mjs`, `lib/story/runtime-asset.ts`, `public/story/` | 420 + 112 + 158 | `scripts/build-islands.mjs` | #175 |
+| `lib/story-runtime/inline-sheet.ts` (browser CSS work) | 40 | server-only isolation | #177 |
+| runtime class merging in the reader (`tailwind-merge`/`clsx`/`cva` in reader chunks) | 9.0 KB gz | classes resolved at publish | #177 |
+| `lib/story/served-results.server.ts` | 173 | snapshots | #175 |
+| Radix wrappers used only by the reader | per component | vendored kit | #177 (the editor's use stays until Phase 3) |
+| reader flag and `?reader=` selection | — | one compiled reader path | #183 |
 
 `StoryRuntimeApp.tsx`, the interpreter and the registry stay for the editor's drafts and for
 static-component rendering at publish until Phase 3.
 
 ## 12. Gates and the size targets
 
-- `scripts/gate-compiled-parity.mjs`: publishes the page-speed fixtures and the kitchen sink through
-  a bearer token, loads `/a/:id/raw` (legacy, `?reader=legacy`) and `/a/:id/raw?reader=compiled` in
-  fresh contexts, and compares `#mx-story-root` element by element (tags, attributes with generated
-  ids normalised, idref resolution, direct text, 25 computed styles, border boxes on a 0.5 px grid),
-  plus served-element survival and DOM mutations during hydration, and one interaction sequence on
-  the kit fixture. Any difference outside the documented exclusions fails. When the server answers
-  without `x-mx-reader: compiled`, it records one passing check naming the reason and exits 0.
+- `scripts/gate-hydration.mjs`: checks the compiled story's served elements, island hydration,
+  app adoption and edit handover. `x-mx-reader` confirms the compiled response.
 - `scripts/size-targets.mjs <lab.json>`: target 1 from `jsBeforeReady` on prose and deck (view route),
   target 2 from `jsBeforeReady` on kit, dashboard and kitchen (view route), target 3 from the total
-  wire bytes of prose (view route); one line per target, `pass`/`fail`/`no data`; exit 0 unless
-  `--strict`. `page-speed.yml` runs it on the head result into the job summary. w4-flip-docs adds `--strict`.
+  wire bytes of prose (view route); one line per target, `pass`/`fail`/`no data`; `--strict` fails on
+  a missed target. `page-speed.yml` runs it on the head result into the job summary with `--strict`.
 - `jsBeforeReady` joins the page's resource timing (names and `responseEnd`, available at the opaque
   origin even though sizes are not) to the CDP wire bytes per URL; ready is: view → takeover, raw →
   the `mx:ready` event, or DOMContentLoaded when the page has no module script. Unit: wire bytes as the
@@ -459,12 +413,11 @@ static-component rendering at publish until Phase 3.
 
 ## 13. Assumptions
 
-A1. Solid 2.0 ships in time (rc.10 on 27 Sep 2026). The kit and runtime are written against 2.0's API;
-    if 2.0 slips, w1-toolchain pins the last rc and w4-flip-docs bumps. The ~13 KB is budgeted in target 2.
+A1. Solid 1.9 is the stable version used by the kit and runtime. Its measured browser cost is
+    budgeted in target 2.
 A2. The prototype's compiler (`scripts/probe/solid/compile.mjs`, ~320 lines) ports to TypeScript with
-    the same inputs; its measured parity (0 structure/text/style/box diffs on prose, kit, dashboard,
-    deck, mermaid; attribute diffs are inline-style formatting) holds after the port because the parity
-    gate is the same comparison.
+    the same inputs; its measured parity on prose, kit, dashboard, deck and mermaid is retained by
+    component and browser journey checks.
 A3. React's server renderer stays available at publish for static components (`renderToStaticMarkup`
     in the compiler) until Phase 3 — the app already depends on react-dom/server.
 A4. The object store (`lib/object-store`) is the right home for per-document module bytes: content-

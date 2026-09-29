@@ -30,7 +30,7 @@ OSS contains no proxy or request-rate policy. Production composes its own
 proxy around the same application and shared authentication modules.
 
 Both derive the port the same way (`APP__PORT`, else the port in
-`APP__PUBLIC_BASE_URL`, else 3030) and prebuild the story runtime before
+`APP__PUBLIC_BASE_URL`, else 3030) and prebuild the shared islands before
 booting. One process per port per data dir: PGLite (the default dev database)
 may be owned by exactly one process, so a second checkout changes its port in
 `.env` rather than sharing the dir.

@@ -8,7 +8,7 @@ import { fileURLToPath } from 'node:url';
 import yaml from 'yaml';
 import { createServer } from 'node:http';
 import { CI_JOBS, CI_MODULES, CLI_BUMP_REFUSAL, VERSION_BUMP_FILES, checkCiResults, cliBumpRequired, isVersionOnlyBump, planCi } from '../lib/ci-plan.mjs';
-import { ISOLATED_GATES, compiledLegNames, gateNamesOnDisk, shardWeight } from '../gates.manifest.mjs';
+import { ISOLATED_GATES, gateNamesOnDisk, shardWeight } from '../gates.manifest.mjs';
 import { shardOf } from '../gates.shard.mjs';
 
 /** Built and proved only for a release: the four-platform binaries (the Intel proofs consume its artifact) and the distributions gate. */
@@ -529,12 +529,12 @@ describe('CI avoids superseded work and duplicate integration setup', () => {
     expect(builds[0].if).toBe("matrix.shard == 3 && needs.plan.outputs.cli-tests == 'true'");
     expect(jobs.node.steps.indexOf(builds[0])).toBeLessThan(jobs.node.steps.findIndex(step => (step.run ?? '').includes('npm test -w services/cli')));
   });
-  it('spreads the API test files over seven shards without dropping a shard', () => {
+  it('spreads the API test files over eight shards without dropping a shard', () => {
     const { jobs } = yaml.parse(readFileSync(path.join(root, '.github/workflows/ci.yml'), 'utf8'));
-    expect(jobs.api.strategy.matrix.shard).toEqual([1, 2, 3, 4, 5, 6, 7]);
-    expect(jobs.api.name).toBe('api tests (${{ matrix.shard }}/7)');
+    expect(jobs.api.strategy.matrix.shard).toEqual([1, 2, 3, 4, 5, 6, 7, 8]);
+    expect(jobs.api.name).toBe('api tests (${{ matrix.shard }}/8)');
     expect(jobs.api.steps.find(step => (step.run ?? '').includes('vitest run --project=api')).run)
-      .toBe('npx vitest run --project=api --shard=${{ matrix.shard }}/7');
+      .toBe('npx vitest run --project=api --shard=${{ matrix.shard }}/8');
   });
 });
 
@@ -570,17 +570,17 @@ describe('CI job shape', () => {
     }
   });
 
-  it('fans the gate set over fourteen runners and pulls Postgres only for its assigned shard', () => {
+  it('fans the gate set over twelve runners and pulls Postgres only for its assigned shard', () => {
     const { jobs } = ci();
-    expect(jobs.gates.strategy.matrix.shard).toEqual(Array.from({ length: 14 }, (_, index) => index + 1));
+    expect(jobs.gates.strategy.matrix.shard).toEqual(Array.from({ length: 12 }, (_, index) => index + 1));
     const run = jobs.gates.steps.find((step) => step.name === 'every gate, two servers');
     expect(run.run).toContain('--servers=2');
-    expect(run.run).toContain('--shard=${{ matrix.shard }}/14');
+    expect(run.run).toContain('--shard=${{ matrix.shard }}/12');
     const browser = jobs.gates.steps.find((step) => step.id === 'playwright');
     expect(browser.with.key).toContain("hashFiles('node_modules/playwright-core/browsers.json')");
     const selection = jobs.gates.steps.find(step => step.id === 'gate-browsers');
-    expect(selection.run).toContain('--browsers --shard=${{ matrix.shard }}/14');
-    expect(selection.run).toContain('--needs-postgres --shard=${{ matrix.shard }}/14');
+    expect(selection.run).toContain('--browsers --shard=${{ matrix.shard }}/12');
+    expect(selection.run).toContain('--needs-postgres --shard=${{ matrix.shard }}/12');
     const install = jobs.gates.steps.find(step => step.name === 'Install selected gate browsers');
     expect(install.env.BROWSERS).toBe('${{ steps.gate-browsers.outputs.browsers }}');
     expect(install.run).toContain('"$BROWSERS" != chromium');
@@ -590,12 +590,12 @@ describe('CI job shape', () => {
     const pulls = jobs.gates.steps.filter((step) => /docker pull postgres:17-alpine/.test(step.run ?? ''));
     expect(pulls).toHaveLength(1);
     expect(pulls[0].if).toBe("steps.gate-browsers.outputs.postgres == 'true'");
-    const names = [...gateNamesOnDisk(readdirSync(path.join(root, 'scripts'))), ...compiledLegNames()];
-    const heaviestShared = (count, isolated) => Math.max(...Array.from({ length: count }, (_, offset) =>
-      shardOf(names, { index: offset + 1, total: count }, shardWeight, { isolated }))
-      .filter((shard) => !shard.some((name) => isolated.includes(name)))
-      .map((shard) => shard.reduce((sum, name) => sum + shardWeight(name), 0)));
-    expect(heaviestShared(14, ISOLATED_GATES)).toBeLessThan(heaviestShared(13, ISOLATED_GATES.filter((name) => name !== 'editor-v2@compiled')));
+
+    const names = gateNamesOnDisk(readdirSync(path.join(root, 'scripts')));
+    const heaviest = (count) => Math.max(...Array.from({ length: count }, (_, offset) =>
+      shardOf(names, { index: offset + 1, total: count }, shardWeight, { isolated: count === 12 ? ISOLATED_GATES : [] }).reduce((sum, name) => sum + shardWeight(name), 0)));
+    expect(heaviest(12)).toBeLessThanOrEqual(heaviest(11));
+
     expect(jobs.gates.steps.indexOf(pulls[0])).toBeLessThan(jobs.gates.steps.indexOf(run));
     const sessions = jobs.gates.steps.find((step) => step.name === 'Prepare isolated browser session workers');
     expect(sessions.run).toContain('sudo apt-get install -y bubblewrap ||');

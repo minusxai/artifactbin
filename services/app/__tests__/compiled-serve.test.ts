@@ -1,12 +1,10 @@
 // DESTINATION: services/app/__tests__/compiled-serve.test.ts
 /**
- * SERVING THE COMPILED PAGE (docs/phase2-architecture.md §2.2, §6, §10): the reader mode switch decides
- * the path per request; a compiled response names itself (`x-mx-reader`), carries the same story text
- * as today's renderer, emits no inline script and drops `'unsafe-inline'` from the raw CSP; `/a/:id` is
- * HTML-first; a stale or failed compile falls back to today's renderer and says why. Real routes, the
- * harness's database, the flag overridden for this file.
+ * SERVING THE COMPILED PAGE (docs/phase2-architecture.md §2.2, §6, §10): a compiled response
+ * names itself (`x-mx-reader`), emits no inline script and drops `'unsafe-inline'` from the raw CSP;
+ * `/a/:id` is HTML-first. Real routes and the harness's database.
  */
-import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { JSDOM } from 'jsdom';
@@ -17,7 +15,6 @@ import { createAppServer } from '@/server/app';
 import { mintToken } from '@/lib/tokens';
 import { claimToken, createUser, ensureUsername } from '@/lib/users';
 import { drainPreparedPageWarmups } from '@/lib/story/prepared-page.server';
-import { setCompiledReaderFlagForTests } from '@/lib/compiled-page/reader-mode';
 import { READER_FALLBACK_HEADER, READER_MODE_HEADER, SPA_IDLE_ATTR } from '@/lib/compiled-page/contract';
 import * as artifacts from '@/lib/artifacts';
 import { updateSharingFor } from '@/lib/artifacts';
@@ -31,8 +28,6 @@ const app = createAppServer({ indexHtml: async () => '<!doctype html><html><head
 const FIXTURES = path.resolve(process.cwd(), '../../scripts/fixtures/page-speed');
 const fixture = (name: string) => readFileSync(path.join(FIXTURES, name), 'utf8');
 
-beforeAll(() => setCompiledReaderFlagForTests('shadow'));
-afterAll(() => setCompiledReaderFlagForTests(null));
 
 async function owner() {
   const user = await ensureUsername(await createUser({ email: `mxmx_test_serve_${Math.random().toString(36).slice(2, 8)}@example.com` }));
@@ -126,10 +121,12 @@ describe('the HTML-first reader page', () => {
     const capture = new JSDOM(await (await raw(id, '?reader=compiled&chrome=0')).text()).window.document;
     expect(capture.querySelector('.mx-outline')).toBeNull();
   });
-  it('/a/:id serves the same compiled story text as /raw, with server chrome and the SPA on idle', async () => {
+
+  it('/a/:id serves the story with server chrome and the SPA on idle, and the same text as /raw', async () => {
     const who = await owner();
     const id = await publish(who.token, { title: 'Perf C dashboard', markup: fixture('dashboard.jsx').replaceAll('{{sales}}', await publish(who.token, { title: 'Perf sales', dataset: fixture('sales.csv') })), template: 'dashboard' });
-    const rawHtml = await (await raw(id, '?reader=compiled')).text();
+    const rawHtml = await (await raw(id)).text();
+
     const res = await app.request(`/a/${id}?reader=compiled`, { headers: { accept: 'text/html' } });
     expect(res.headers.get(READER_MODE_HEADER)).toBe('compiled');
     const html = await res.text();
@@ -139,7 +136,9 @@ describe('the HTML-first reader page', () => {
     expect(doc.querySelector(`script[type="module"][${SPA_IDLE_ATTR}]`)).toBeTruthy();
     expect(doc.querySelector('[data-mx-artifact-id]')).toBeTruthy();
     expect(storyText(html)).toContain('$744,503');
-    // The same reader-visible text in both compiled routes, excluding chart slots and styles.
+
+    // Both compiled surfaces carry the same story text after chart slots are excluded.
+
     const slots = [...doc.querySelectorAll('#mx-story-root [data-mx-chart-slot]')].map((slot) => slot.closest('[aria-label="Question embed"]')?.id).filter((id): id is string => !!id);
     const textOf = (root: Element | null) => {
       if (!root) return '';
@@ -189,7 +188,9 @@ describe('one row fetch and one access check per compiled view', () => {
       expect(page.headers.get(READER_MODE_HEADER)).toBe('compiled');
       expect(ofDocument()).toEqual({ fetches: 1, checks: 1 });
 
-      // A prose page also reuses the page's admission.
+
+      // A prose app page also reuses its one admission decision.
+
       const prose = await publish(who.token, { title: 'Perf A prose', markup: fixture('prose.jsx') });
       fetched.mockClear(); checked.mockClear();
       const prosePage = await app.request(`/a/${prose}`, { headers: { accept: 'text/html' } });
@@ -218,24 +219,21 @@ describe('the guest snapshot never outlives the guest\'s access', () => {
   });
 });
 
-describe('the reader switch at its edges', () => {
-  it('off: the retained flag cannot send either route to the deleted reader', async () => {
+
+describe('the one reader path', () => {
+  it('/raw and the app page both serve compiled prose', async () => {
+
     const who = await owner();
     const id = await publish(who.token, { title: 'Perf A prose', markup: fixture('prose.jsx') });
-    setCompiledReaderFlagForTests('off');
-    try {
       const res = await raw(id, '?reader=compiled');
       expect(res.headers.get(READER_MODE_HEADER)).toBe('compiled');
       expect(res.headers.get(READER_FALLBACK_HEADER)).toBeNull();
       expect(res.headers.get('content-security-policy')).toMatch(/script-src 'self'/);
       const page = await app.request(`/a/${id}?reader=compiled`, { headers: { accept: 'text/html' } });
       expect(page.headers.get(READER_MODE_HEADER)).toBe('compiled');
-      const doc = new JSDOM(await page.text()).window.document;
-      expect(doc.querySelector('#mx-story-root')).toBeTruthy();
-      expect(doc.querySelector('[data-mx-initial-story]')).toBeNull();
-    } finally {
-      setCompiledReaderFlagForTests('shadow');
-    }
+
+      expect(new JSDOM(await page.text()).window.document.querySelector('#mx-story-root')).toBeTruthy();
+
   });
 
   it('a domain post and the owner\'s editing copy use the compiled /raw response', async () => {
@@ -252,8 +250,7 @@ describe('the reader switch at its edges', () => {
   it('on: readers get the compiled page everywhere, including a legacy query and a domain post', async () => {
     const who = await owner();
     const id = await publish(who.token, { title: 'Perf B kit', markup: fixture('kit.jsx') });
-    setCompiledReaderFlagForTests('on');
-    try {
+    {
       expect((await raw(id)).headers.get(READER_MODE_HEADER)).toBe('compiled');
       expect((await raw(id, '?reader=legacy')).headers.get(READER_MODE_HEADER)).toBe('compiled');
       const post = await rawRoute(request(`/a/${id}/raw?reader=legacy`), { params: Promise.resolve({ id }), domain: { hostname: 'blog.example.com', ownerId: who.user.id } });
@@ -262,8 +259,6 @@ describe('the reader switch at its edges', () => {
       expect(doc.querySelector('[data-mx-domain-footer] a')?.getAttribute('href')).toMatch(new RegExp(`/a/${id}$`));
       expect(doc.querySelector('#mx-story-root [data-mx-domain-footer]'), 'the attribution is outside the story root').toBeNull();
       expect(doc.body.getAttribute('data-mx-live-id')).toBe(id);
-    } finally {
-      setCompiledReaderFlagForTests('shadow');
     }
   });
 

@@ -332,7 +332,7 @@ async function storyOf(compiled: CompiledPage, input: StoryInput): Promise<strin
     return cached;
   }
   // Loaded on the first compiled read, not at the top: the SSR loader carries Babel and Solid's
-  // server build, which a process serving today's renderer (`FLAG__COMPILED_READER=off`) never needs
+  // server build, which a process without a usable compiled page never needs
   // (the same boundary prepared-page.server keeps for the compiler).
   const { loadSsrModule } = await import('./bundle.server');
   const module = await loadSsrModule(compiled.ssr);

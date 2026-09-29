@@ -25,7 +25,6 @@ import { runNextMermaidHarvest, startMermaidHarvester } from '@/lib/mermaid-imag
 import { MERMAID_RENDER_ENGINE } from '@/lib/mermaid-images/engine';
 import { queueMermaidBackfill } from '@/lib/mermaid-images/store';
 import { documentEditBody } from './prepared-document';
-import { setCompiledReaderFlagForTests } from '@/lib/compiled-page/reader-mode';
 import { drainPreparedPageWarmups } from '@/lib/story/prepared-page.server';
 
 useAppHarness();
@@ -105,8 +104,6 @@ const head = (html: string) => html.split('</head>')[0];
 
 describe('a published Mermaid document', () => {
   it('serves a harvested drawing from the compiled document', async () => {
-    setCompiledReaderFlagForTests('shadow');
-    try {
       const { browser } = drawingBrowser([FLOW]);
       setServices({ browser });
       const { id } = await publish([FLOW]);
@@ -118,9 +115,6 @@ describe('a published Mermaid document', () => {
       const src = island(html).mermaidImages?.[mermaidImageKey(FLOW, 'light')]?.src;
       expect(src).toMatch(/^\/assets\/mermaid\//);
       expect(html).toContain(`src="${src}"`);
-    } finally {
-      setCompiledReaderFlagForTests(null);
-    }
   });
   it('carries its stored drawings AND a data document\'s first results in one overlay, rendered fresh and never stored', async () => {
     const { browser } = drawingBrowser([FLOW]);

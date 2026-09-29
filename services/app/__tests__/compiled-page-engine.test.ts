@@ -10,7 +10,7 @@
  *
  * Real routes, the harness's database, the reader switch in shadow for this file.
  */
-import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { JSDOM } from 'jsdom';
 import { useAppHarness, request } from '@/__tests__/harness';
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
@@ -19,7 +19,6 @@ import { createAppServer } from '@/server/app';
 import { mintToken } from '@/lib/tokens';
 import { claimToken, createUser, ensureUsername } from '@/lib/users';
 import { drainPreparedPageWarmups } from '@/lib/story/prepared-page.server';
-import { setCompiledReaderFlagForTests } from '@/lib/compiled-page/reader-mode';
 import { ISLAND_DATA_ID, READER_MODE_HEADER } from '@/lib/compiled-page/contract';
 import { loadCompilerBuild } from '@/lib/compiled-page/build.server';
 import type { IslandPageData } from '@/lib/islands/contract';
@@ -29,7 +28,6 @@ vi.mock('@/auth', () => ({ auth: async () => (sessionUser.id ? { user: { id: ses
 useAppHarness();
 const app = createAppServer({ indexHtml: async () => '<!doctype html><html><head><title>x</title></head><body><div id="root"></div></body></html>' });
 
-beforeAll(() => setCompiledReaderFlagForTests('shadow'));
 const asSession = (u: { id: string; email: string } | null) => { sessionUser.id = u?.id ?? ''; sessionUser.email = u?.email ?? ''; };
 beforeEach(() => asSession(null));
 async function account() {
@@ -37,7 +35,6 @@ async function account() {
   const t = await mintToken('page-engine'); await claimToken(user.id, t.token);
   return { user, token: t.token, session: { id: user.id, email: user.email ?? '' } };
 }
-afterAll(() => setCompiledReaderFlagForTests(null));
 
 async function create(token: string, body: Record<string, unknown>): Promise<string> {
   const made = await createArtifactRoute(request('/api/artifacts', { method: 'POST', token, json: { visibility: 'unlisted', ...body } }));
